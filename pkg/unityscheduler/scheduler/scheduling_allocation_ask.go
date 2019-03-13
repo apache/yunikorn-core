@@ -17,8 +17,8 @@ limitations under the License.
 package scheduler
 
 import (
-    "github.com/universal-scheduler/scheduler-spec/lib/go/si"
-    "github.com/universal-scheduler/yunikorn-scheduler/pkg/unityscheduler/common/resources"
+    "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/common/resources"
     "sync"
 )
 

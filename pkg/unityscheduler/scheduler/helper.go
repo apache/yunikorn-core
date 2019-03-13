@@ -16,7 +16,7 @@ limitations under the License.
 
 package scheduler
 
-import "github.com/universal-scheduler/yunikorn-scheduler/pkg/unityscheduler/api"
+import "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/api"
 
 const (
     defaultJobId = "_default_job_"

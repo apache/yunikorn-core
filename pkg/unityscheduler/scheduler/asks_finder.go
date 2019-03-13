@@ -18,7 +18,7 @@ package scheduler
 
 import (
     "github.com/golang/glog"
-    "github.com/universal-scheduler/yunikorn-scheduler/pkg/unityscheduler/common/resources"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/common/resources"
 )
 
 // Find next set of allocation asks for scheduler to place

@@ -1,6 +1,6 @@
 package rmevent
 
-import "github.com/universal-scheduler/scheduler-spec/lib/go/si"
+import "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
 
 type RMNewAllocationsEvent struct {
     RMId        string

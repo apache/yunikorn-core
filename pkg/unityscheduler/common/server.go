@@ -34,7 +34,7 @@ package common
 
 import (
     "fmt"
-    "github.com/universal-scheduler/scheduler-spec/lib/go/si"
+    "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
     "net"
     "os"
     "strings"

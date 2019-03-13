@@ -64,7 +64,7 @@ YuniKorn consists of the following components:
 ## Github Repos
 
 - Scheduler Interface:
-  + Link: https://github.com/universal-scheduler/si-spec/
+  + Link: https://github.infra.cloudera.com/yunikorn/scheduler-interface
   + Purpose: Define the common scheduler interface.
 - Scheduler Shims (TODO)
 

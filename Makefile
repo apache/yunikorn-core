@@ -1,4 +1,4 @@
-REPO=github.com/universal-scheduler/yunikorn-scheduler/pkg
+REPO=github.infra.cloudera.com/yunikorn/yunikorn-core/pkg
 
 .PHONY: all simplescheduler
 

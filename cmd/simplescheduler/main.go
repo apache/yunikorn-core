@@ -4,7 +4,6 @@ package main
 
 import (
     "flag"
-    "github.com/leftnoteasy/uscheduler/pkg/simplescheduler-this-is-junk-code"
     "os"
 )
 
@@ -24,6 +23,6 @@ func main() {
 }
 
 func handle() {
-    scheduler := &simplescheduler_this_is_junk_code.SimpleScheduler{}
+    scheduler := &SimpleScheduler{}
     scheduler.Run("tcp://localhost:3333")
 }

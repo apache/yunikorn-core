@@ -20,9 +20,9 @@ import (
     "errors"
     "fmt"
     "github.com/golang/glog"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/common"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/common/configs"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/common/resources"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
     "strconv"
 )
 

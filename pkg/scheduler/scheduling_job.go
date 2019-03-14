@@ -17,8 +17,8 @@ limitations under the License.
 package scheduler
 
 import (
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/cache"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/common/resources"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
 )
 
 type SchedulingJob struct {

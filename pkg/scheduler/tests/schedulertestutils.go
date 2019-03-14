@@ -2,10 +2,10 @@ package tests
 
 import (
     "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/cache"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/common/resources"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/common/strings"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/scheduler"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/strings"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/scheduler"
     "testing"
     "time"
 )

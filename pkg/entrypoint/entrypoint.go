@@ -1,10 +1,10 @@
 package entrypoint
 
 import (
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/cache"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/handler"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/rmproxy"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/scheduler"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/handler"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/rmproxy"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/scheduler"
 )
 
 func StartAllServices() (*rmproxy.RMProxy, *cache.ClusterInfo, *scheduler.Scheduler) {

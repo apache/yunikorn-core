@@ -19,7 +19,7 @@ package scheduler
 import (
     "context"
     "github.com/golang/glog"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/common"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common"
     "math/rand"
     "sync/atomic"
 )

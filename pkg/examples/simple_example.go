@@ -2,9 +2,9 @@ package examples
 
 import (
     "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/common/configs"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/entrypoint"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/scheduler/tests"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/entrypoint"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/scheduler/tests"
 )
 
 func exampleOfRunYourOwnRM() {

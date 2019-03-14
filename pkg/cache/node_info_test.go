@@ -17,8 +17,8 @@ limitations under the License.
 package cache
 
 import (
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/api"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/common/resources"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/api"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
     "testing"
 )
 

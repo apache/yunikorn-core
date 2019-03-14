@@ -2,7 +2,7 @@ package commonevents
 
 import (
     "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/common/resources"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
 )
 
 type RemoveRMPartitionsEvent struct {

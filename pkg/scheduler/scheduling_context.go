@@ -19,7 +19,7 @@ package scheduler
 import (
     "errors"
     "fmt"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/cache"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache"
     "sync"
 )
 

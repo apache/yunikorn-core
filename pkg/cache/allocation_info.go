@@ -18,9 +18,9 @@ package cache
 
 import (
     "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/common"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/common/commonevents"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/common/resources"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/commonevents"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
 )
 
 /* Related to Allocation */

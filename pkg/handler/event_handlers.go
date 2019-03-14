@@ -1,7 +1,7 @@
 package handler
 
 import (
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/unityscheduler/common/commonevents"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/commonevents"
 )
 
 type EventHandlers struct {

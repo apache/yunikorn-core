@@ -284,8 +284,7 @@ func (m *PartitionInfo) addNewAllocationForSchedulingAllocation(proposal *common
 func (m *PartitionInfo) GetNewAllocationUuid() string {
     // Retry to make sure uuid is correct
     for {
-        auuid, _ := uuid.NewV4()
-        allocationUuid := auuid.String()
+        allocationUuid := uuid.NewV4().String()
         if m.allocations[allocationUuid] == nil {
             return allocationUuid
         }

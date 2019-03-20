@@ -69,7 +69,7 @@ YuniKorn consists of the following components:
 - Scheduler Shims:
   + k8s-shim: https://github.infra.cloudera.com/yunikorn/k8s-shim
 - Scheduler UI
-  + Link: 
+  + Link: https://github.infra.cloudera.com/yunikorn/yunikorn-web
 
 ## How to build
 

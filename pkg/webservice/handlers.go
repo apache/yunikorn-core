@@ -18,6 +18,7 @@ package webservice
 import (
 	"encoding/json"
 	"github.com/golang/glog"
+	"github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache"
 	"github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/webservice/dao"
 	"net/http"
 	"strconv"
@@ -50,6 +51,27 @@ func GetClusterInfo(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewEncoder(w).Encode(clustersInfo); err != nil {
 			panic(err)
 		}
+	}
+}
+
+func GetJobsInfo(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+
+	var jobsDao []*dao.JobDAOInfo
+	lists := gClusterInfo.ListPartitions()
+	for _, k := range lists {
+		glog.Info(k)
+
+		partition := gClusterInfo.GetPartition(k)
+		jobList := partition.GetJobs()
+		for _, job := range jobList {
+			jobDao := getJobJson(job)
+			jobsDao = append(jobsDao, jobDao)
+		}
+	}
+
+	if err := json.NewEncoder(w).Encode(jobsDao); err != nil {
+		panic(err)
 	}
 }
 
@@ -91,4 +113,32 @@ func getPartitionJson(name string) *dao.PartitionDAOInfo {
 	partitionInfo.Queues = queueDAOInfo
 
 	return partitionInfo
+}
+
+func getJobJson(job *cache.JobInfo) *dao.JobDAOInfo {
+	var allocationInfos []dao.AllocationDAOInfo
+	allocations := job.GetAllAllocations()
+	for _, alloc := range allocations {
+		allocInfo := dao.AllocationDAOInfo{
+			AllocationKey:    alloc.AllocationProto.AllocationKey,
+			AllocationTags:   alloc.AllocationProto.AllocationTags,
+			Uuid:             alloc.AllocationProto.Uuid,
+			ResourcePerAlloc: alloc.AllocationProto.ResourcePerAlloc.String(),
+			Priority:         alloc.AllocationProto.Priority.String(),
+			QueueName:        alloc.AllocationProto.QueueName,
+			NodeId:           alloc.AllocationProto.NodeId,
+			JobId:            alloc.AllocationProto.JobId,
+			Partition:        alloc.AllocationProto.Partition,
+		}
+		allocationInfos = append(allocationInfos, allocInfo)
+	}
+
+	return &dao.JobDAOInfo{
+		JobID:          job.JobId,
+		UsedResource:   job.AllocatedResource.String(),
+		Partition:      job.Partition,
+		QueueName:      job.QueueName,
+		SubmissionTime: job.SubmissionTime,
+		Allocations:    allocationInfos,
+	}
 }

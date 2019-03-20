@@ -39,4 +39,10 @@ var routes = Routes{
 		"/ws/v1/clusters",
 		GetClusterInfo,
 	},
+	Route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/apps",
+		GetJobsInfo,
+	},
 }

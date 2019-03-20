@@ -384,7 +384,7 @@ func (m *PartitionInfo) GetQueueInfos() []dao.QueueDAOInfo {
     return queueInfos
 }
 
-func  GetChildQueueInfos(info *QueueInfo) []dao.QueueDAOInfo {
+func GetChildQueueInfos(info *QueueInfo) []dao.QueueDAOInfo {
     var infos []dao.QueueDAOInfo
     for _, v := range info.children {
         queue := dao.QueueDAOInfo{}
@@ -419,4 +419,12 @@ func (m *PartitionInfo) GetTotalNodeCount() int {
     m.lock.RLock()
     defer m.lock.RUnlock()
     return len(m.nodes)
+}
+
+func (m *PartitionInfo) GetJobs() []*JobInfo {
+    var jobList []*JobInfo
+    for _, job := range m.jobs {
+        jobList = append(jobList, job)
+    }
+    return jobList
 }

@@ -101,3 +101,14 @@ func (m *JobInfo) CleanupAllAllocations() []*AllocationInfo {
 
     return allocationsToRelease
 }
+
+func (m *JobInfo) GetAllAllocations() []*AllocationInfo {
+    m.lock.RLock()
+    defer m.lock.RUnlock()
+
+    var allocations []*AllocationInfo
+    for _, alloc := range m.allocations {
+        allocations = append(allocations, alloc)
+    }
+    return allocations
+}

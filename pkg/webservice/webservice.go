@@ -80,6 +80,6 @@ func (m *WebService) StartWebApp() {
 
 func NewWebApp(clusterInfo *cache.ClusterInfo) *WebService {
 	m := &WebService{}
-	gClusterInfo = clusterInfo;
-	return m;
+	gClusterInfo = clusterInfo
+	return m
 }

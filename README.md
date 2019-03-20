@@ -66,7 +66,10 @@ YuniKorn consists of the following components:
 - Scheduler Interface:
   + Link: https://github.infra.cloudera.com/yunikorn/scheduler-interface
   + Purpose: Define the common scheduler interface.
-- Scheduler Shims (TODO)
+- Scheduler Shims:
+  + k8s-shim: https://github.infra.cloudera.com/yunikorn/k8s-shim
+- Scheduler UI
+  + Link: 
 
 ## How to build
 
@@ -79,4 +82,6 @@ Steps:
 
 ## How to use 
 
-TODO: Link to a user doc. (weiwei/sunil)
+The simplest way to run YuniKorn is to leverage our pre-built docker images.
+YuniKorn could be easily deployed to Kubernetes with a yaml file, running as a customized scheduler.
+Then you can run workloads with this scheduler. Read more docs [here](./markdown/userguide.md).

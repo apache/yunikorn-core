@@ -423,6 +423,16 @@ func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
     }
 }
 
+func (m *ClusterInfo) ListPartitions() []string {
+    m.lock.RLock()
+    defer m.lock.RUnlock()
+    var partitions []string
+    for k := range m.partitions {
+        partitions = append(partitions, k)
+    }
+    return partitions
+}
+
 // Implement methods for Cache events
 func (m *ClusterInfo) HandleEvent(ev interface{}) {
     switch v := ev.(type) {

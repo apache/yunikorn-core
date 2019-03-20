@@ -21,6 +21,7 @@ import (
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/handler"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/rmproxy"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/scheduler"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/webservice"
 )
 
 func StartAllServices() (*rmproxy.RMProxy, *cache.ClusterInfo, *scheduler.Scheduler) {
@@ -36,6 +37,7 @@ func startAllServicesWithParameters(manualSchedule bool) (*rmproxy.RMProxy, *cac
     cache := cache.NewClusterInfo()
     scheduler := scheduler.NewScheduler(cache)
     proxy := rmproxy.NewRMProxy()
+    webapp := webservice.NewWebApp(cache)
 
     eventHandler := handler.EventHandlers{
         CacheEventHandler:     cache,
@@ -47,6 +49,7 @@ func startAllServicesWithParameters(manualSchedule bool) (*rmproxy.RMProxy, *cac
     cache.StartService(eventHandler)
     scheduler.StartService(eventHandler, manualSchedule)
     proxy.StartService(eventHandler)
+    webapp.StartWebApp()
 
     return proxy, cache, scheduler
 }

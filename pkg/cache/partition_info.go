@@ -25,6 +25,8 @@ import (
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache/cacheevent"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/commonevents"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/webservice/dao"
+    "strings"
     "sync"
 )
 
@@ -358,4 +360,63 @@ func (m *PartitionInfo) CopyNodeInfos() []*NodeInfo {
     }
 
     return out
+}
+
+func (m *PartitionInfo) GetQueueInfos() []dao.QueueDAOInfo {
+    m.lock.RLock()
+    defer m.lock.RUnlock()
+
+    //out := make([]*QueueInfo, len(m.queues))
+    var queueInfos []dao.QueueDAOInfo
+
+    info := dao.QueueDAOInfo{}
+    info.QueueName = m.Root.Name
+    info.Status = "RUNNING"
+    info.Capacities = dao.QueueCapacity{
+        Capacity:     strings.Trim(m.Root.GuaranteedResource.String(), "map"),
+        MaxCapacity:  strings.Trim(m.Root.GuaranteedResource.String(), "map"),
+        UsedCapacity: strings.Trim(m.Root.AllocatedResource.String(), "map"),
+        AbsUsedCapacity: "20",
+    }
+    info.ChildQueues = GetChildQueueInfos(m.Root)
+    queueInfos = append(queueInfos, info)
+
+    return queueInfos
+}
+
+func  GetChildQueueInfos(info *QueueInfo) []dao.QueueDAOInfo {
+    var infos []dao.QueueDAOInfo
+    for _, v := range info.children {
+        queue := dao.QueueDAOInfo{}
+        queue.QueueName = v.Name
+        queue.Status = "RUNNING"
+        queue.Capacities = dao.QueueCapacity{
+            Capacity:     strings.Trim(v.GuaranteedResource.String(), "map"),
+            MaxCapacity:  strings.Trim(v.GuaranteedResource.String(), "map"),
+            UsedCapacity: strings.Trim(v.AllocatedResource.String(), "map"),
+            AbsUsedCapacity: "20",
+        }
+        queue.ChildQueues = GetChildQueueInfos(v)
+        infos = append(infos, queue)
+    }
+
+    return infos
+}
+
+func (m *PartitionInfo) GetTotalJobCount() int {
+    m.lock.RLock()
+    defer m.lock.RUnlock()
+    return len(m.jobs)
+}
+
+func (m *PartitionInfo) GetTotalAllocationCount() int {
+    m.lock.RLock()
+    defer m.lock.RUnlock()
+    return len(m.allocations)
+}
+
+func (m *PartitionInfo) GetTotalNodeCount() int {
+    m.lock.RLock()
+    defer m.lock.RUnlock()
+    return len(m.nodes)
 }

@@ -42,7 +42,6 @@ type QueueInfo struct {
     GuaranteedResource *resources.Resource
     AllocatedResource  *resources.Resource
     Parent             *QueueInfo
-    IsLeafQueue        bool // Allocation can be directly assigned under leaf queue only
 
     // Private fields need protection
     children   map[string]*QueueInfo // Only for direct children
@@ -51,15 +50,19 @@ type QueueInfo struct {
     lock sync.RWMutex
 }
 
-func NewQueueInfo(name string, parent *QueueInfo) (*QueueInfo) {
+func NewQueueInfo(name string, parent *QueueInfo) *QueueInfo {
     q := &QueueInfo{Name: name, Parent: parent}
+    q.FullQualifiedPath = name
     if parent != nil {
         q.FullQualifiedPath = parent.FullQualifiedPath + "." + name
     }
-    q.IsLeafQueue = true
     q.children = make(map[string]*QueueInfo)
     q.AllocatedResource = resources.NewResource()
     return q
+}
+
+func (m *QueueInfo) IsLeafQueue() bool {
+    return m.children == nil || len(m.children) == 0
 }
 
 func (m *QueueInfo) IncAllocatedResource(alloc *resources.Resource) {

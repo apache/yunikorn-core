@@ -35,9 +35,9 @@ type PartitionConfig struct {
 
 type QueueConfig struct {
     Name       string
-    Children   []string
     Resources  Resources
     Properties map[string]string
+    Queues      []QueueConfig
 }
 
 type Resources struct {

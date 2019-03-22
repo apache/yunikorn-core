@@ -50,57 +50,27 @@ func updateClusterInfoFromConfig(clusterInfo *ClusterInfo, conf *configs.Schedul
     return updatedPartitions, nil
 }
 
-func updatePartitionInfoFromConfig(partitionInfo *PartitionInfo, conf *configs.PartitionConfig) (error) {
-    // first make a map of queue name to config
-    queueConfigMap := make(map[string]configs.QueueConfig)
-
-    for _, v := range conf.Queues {
-        if _, ok := queueConfigMap[v.Name]; ok {
-            return errors.New(fmt.Sprintf("Queue=%s, is duplicated in config.", v.Name))
-        }
-        queueConfigMap[v.Name] = v
-    }
-
-    // Then initialize queues on partitions
-    queuesMap := partitionInfo.queues
-    for queueName, queueConfig := range queueConfigMap {
-        queueInfo := NewQueueInfo(queueName, nil)
-        if err := updateQueueInfoFromConfig(queueInfo, &queueConfig); err != nil {
+func updatePartitionInfoFromConfig(partitionInfo *PartitionInfo, conf *configs.PartitionConfig) error {
+    for _, q := range conf.Queues {
+        queueInfo := NewQueueInfo(q.Name, nil)
+        if err := updateQueueInfo(queueInfo, &q); err != nil {
             return err
         }
-
-        queuesMap[queueName] = queueInfo
-    }
-
-    // Make connections of queue
-    for queueName, queueConfig := range queueConfigMap {
-        queue := queuesMap[queueName]
-
-        for _, childName := range queueConfig.Children {
-            var childQueue *QueueInfo
-            if childQueue = queuesMap[childName]; childQueue == nil {
-                return errors.New(fmt.Sprintf("Defined child queue=%s under parent=%s, but child queue=%s not defined", childName, queueConfig.Name, childName))
-            }
-
-            if queue.children[childName] != nil {
-                return errors.New(fmt.Sprintf("Defined duplicated child queue=%s, under parent=%s", childName, queueName))
-            }
-
-            queue.children[childName] = childQueue
-            queue.IsLeafQueue = false
-
-            if childQueue.Parent != nil {
-                return errors.New(fmt.Sprintf("Multiple queue defined queue=%s as children, please double check", childName))
-            }
-            childQueue.Parent = queue
+        partitionInfo.queues[queueInfo.Name] = queueInfo
+        if queueInfo.Parent == nil {
+            partitionInfo.Root = queueInfo
         }
     }
 
     // get root queue
     // Root queue must be existed
-    partitionInfo.Root = queuesMap["root"]
     if partitionInfo.Root == nil {
         return errors.New("failed to find root queue, it must be defined")
+    }
+
+    // ensure there is only one root
+    if len(partitionInfo.queues) > 1 {
+        return errors.New("each partition can have and only have 1 root queue defined")
     }
 
     // Check loop in the queue
@@ -109,16 +79,36 @@ func updatePartitionInfoFromConfig(partitionInfo *PartitionInfo, conf *configs.P
         return err
     }
 
-    // From root queue it can reach all queues
-    if len(visited) != len(queuesMap) {
-        return errors.New("size of visited queue from root is not same as defined queue, " +
-            "it could be caused by some queue is not be able to reach from root")
-    }
-
     // Check resource configurations
     if err := checkResourceConfigurationsForQueue(partitionInfo.Root, nil); err != nil {
         return err
     }
+    return nil
+}
+
+func updateQueueInfo(queueInfo *QueueInfo, conf *configs.QueueConfig) error {
+    // update queue configs
+    if err := updateQueueInfoFromConfig(queueInfo, conf); err != nil {
+        return err
+    }
+
+    // recursively update child queue info
+    children := make(map[string]*QueueInfo)
+    queueInfo.children = children
+    for _, child := range conf.Queues {
+        // under same parent, dup queue names are disallowed
+        if qn, ok := children[child.Name]; ok {
+            return errors.New(fmt.Sprintf(
+                "duplicate queue name is found under same parent, queue name: %s",
+                qn.FullQualifiedPath))
+        }
+        childQueue := NewQueueInfo(child.Name, queueInfo)
+        children[child.Name] = childQueue
+        if err := updateQueueInfo(childQueue, &child); err != nil {
+            return err
+        }
+    }
+
     return nil
 }
 
@@ -173,9 +163,9 @@ func checkResourceConfigurationsForQueue(cur *QueueInfo, parent *QueueInfo) erro
 }
 
 // There should not loop in the queues
-func recursiveCheckQueue(root *QueueInfo, visited map[string]bool) (error) {
+func recursiveCheckQueue(root *QueueInfo, visited map[string]bool) error {
     if visited[root.Name] {
-        return errors.New("detected loop in queue hierachy definition from config, please double check")
+        return errors.New("detected loop in queue hierarchy definition from config, please double check")
     }
 
     visited[root.Name] = true
@@ -220,8 +210,26 @@ func updateQueueInfoFromConfig(queueInfo *QueueInfo, conf *configs.QueueConfig) 
 
     // Update Properties
     queueInfo.Properties = conf.Properties
+    if queueInfo.Parent != nil && queueInfo.Parent.Properties != nil {
+        queueInfo.Properties = mergeProperties(queueInfo.Parent.Properties, conf.Properties)
+    }
 
     return nil
+}
+
+func mergeProperties(parent map[string]string, child map[string]string) map[string]string {
+    merged := make(map[string]string)
+    if parent != nil && len(parent) > 0 {
+        for key, value := range parent {
+            merged[key] = value
+        }
+    }
+    if child != nil && len(child) > 0 {
+        for key, value := range child {
+            merged[key] = value
+        }
+    }
+    return merged
 }
 
 // This function should be called by scheduler to invoke

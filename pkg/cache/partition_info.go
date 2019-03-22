@@ -224,7 +224,7 @@ func (m *PartitionInfo) addNewAllocation(alloc *commonevents.AllocationProposal)
         return nil, errors.New(fmt.Sprintf("Failed to find job=%s", alloc.JobId))
     }
 
-    if queue, ok = m.queues[alloc.QueueName]; !ok {
+    if queue = m.getQueue(alloc.QueueName); queue == nil {
         return nil, errors.New(fmt.Sprintf("Failed to find queue=%s", alloc.QueueName))
     }
 
@@ -427,4 +427,25 @@ func (m *PartitionInfo) GetJobs() []*JobInfo {
         jobList = append(jobList, job)
     }
     return jobList
+}
+
+func (m *PartitionInfo) getQueue(name string) *QueueInfo {
+    // get queue by full qualified name
+    return m.getQueueInternal(m.queues, name)
+}
+
+func (m *PartitionInfo) getQueueInternal(queues map[string]*QueueInfo, name string) *QueueInfo {
+    // get queue by full qualified name
+    for _, queue := range queues {
+        if queue.FullQualifiedPath == name {
+            return queue
+        }
+        // check children
+        if queue.children != nil && len(queue.children) > 0 {
+            if q := m.getQueueInternal(queue.children, name); q != nil {
+                return q
+            }
+        }
+    }
+    return nil
 }

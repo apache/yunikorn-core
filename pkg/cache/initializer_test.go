@@ -528,3 +528,114 @@ partitions:
     assert.Equal(t, a.Properties["job.default.type"], "batch")
     assert.Equal(t, b.Properties["job.default.type"], "batch")
 }
+
+func TestQueueNameValidation(t *testing.T) {
+    data := `
+partitions:
+  -
+    name: default
+    queues:
+      -
+        name: root
+        queues:
+          -
+            name: a.b.c
+`
+    assertErrorFromInitialization(t, data)
+
+    data = `
+partitions:
+  -
+    name: default
+    queues:
+      -
+        name: root
+        queues:
+          -
+            name: a%bc
+`
+    assertErrorFromInitialization(t, data)
+
+    data = `
+partitions:
+  -
+    name: default
+    queues:
+      -
+        name: root
+        queues:
+          -
+            name: this_is_a_too_long_queue_name
+`
+    assertErrorFromInitialization(t, data)
+
+    data = `
+partitions:
+  -
+    name: default
+    queues:
+      -
+        name: root
+        queues:
+          -
+            name: queue_abc_123
+`
+    assertNoErrorFromInitialization(t, data)
+
+    data = `
+partitions:
+  -
+    name: default
+    queues:
+      -
+        name: root
+        queues:
+          -
+            name: queue-a-b-c
+`
+    assertNoErrorFromInitialization(t, data)
+
+    data = `
+partitions:
+  -
+    name: default
+    queues:
+      -
+        name: root
+        queues:
+          -
+            name: level1
+            queues:
+              -
+                name: level2
+                queues:
+                 -
+                   name: level3
+                   queues:
+                    -
+                      name: level4
+`
+    assertNoErrorFromInitialization(t, data)
+
+    data = `
+partitions:
+  -
+    name: default
+    queues:
+      -
+        name: root
+        queues:
+          -
+            name: level1
+            queues:
+              -
+                name: level2
+                queues:
+                 -
+                   name: level3
+                   queues:
+                    -
+                      name: invalid$%)
+`
+    assertErrorFromInitialization(t, data)
+}

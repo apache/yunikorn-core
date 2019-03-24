@@ -23,6 +23,7 @@ import (
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
+    "regexp"
     "strconv"
 )
 
@@ -62,6 +63,9 @@ func updatePartitionInfoFromConfig(partitionInfo *PartitionInfo, conf *configs.P
         }
     }
 
+    // populate flat full-qualified-queue-name to queue mapping
+    partitionInfo.initQueues(partitionInfo.Root)
+
     // get root queue
     // Root queue must be existed
     if partitionInfo.Root == nil {
@@ -87,6 +91,13 @@ func updatePartitionInfoFromConfig(partitionInfo *PartitionInfo, conf *configs.P
 }
 
 func updateQueueInfo(queueInfo *QueueInfo, conf *configs.QueueConfig) error {
+    reg := regexp.MustCompile("^[a-zA-Z0-9_-]{1,16}$")
+    // check queue name
+    if !reg.MatchString(conf.Name) {
+        return errors.New(fmt.Sprintf("invalid queue name %s, name must only have alphabets," +
+            " numbers, - or _, and no longer than 16 chars", conf.Name))
+    }
+
     // update queue configs
     if err := updateQueueInfoFromConfig(queueInfo, conf); err != nil {
         return err

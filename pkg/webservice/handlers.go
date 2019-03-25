@@ -22,6 +22,7 @@ import (
 	"github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/webservice/dao"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 func GetQueueInfo(w http.ResponseWriter, r *http.Request) {
@@ -123,7 +124,7 @@ func getJobJson(job *cache.JobInfo) *dao.JobDAOInfo {
 			AllocationKey:    alloc.AllocationProto.AllocationKey,
 			AllocationTags:   alloc.AllocationProto.AllocationTags,
 			Uuid:             alloc.AllocationProto.Uuid,
-			ResourcePerAlloc: alloc.AllocationProto.ResourcePerAlloc.String(),
+			ResourcePerAlloc: strings.Trim(alloc.AllocationProto.ResourcePerAlloc.String(), "map"),
 			Priority:         alloc.AllocationProto.Priority.String(),
 			QueueName:        alloc.AllocationProto.QueueName,
 			NodeId:           alloc.AllocationProto.NodeId,
@@ -135,7 +136,7 @@ func getJobJson(job *cache.JobInfo) *dao.JobDAOInfo {
 
 	return &dao.JobDAOInfo{
 		JobID:          job.JobId,
-		UsedResource:   job.AllocatedResource.String(),
+		UsedResource:   strings.Trim(job.AllocatedResource.String(), "map"),
 		Partition:      job.Partition,
 		QueueName:      job.QueueName,
 		SubmissionTime: job.SubmissionTime,

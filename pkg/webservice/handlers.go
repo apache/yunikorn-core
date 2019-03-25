@@ -124,7 +124,7 @@ func getJobJson(job *cache.JobInfo) *dao.JobDAOInfo {
 			AllocationKey:    alloc.AllocationProto.AllocationKey,
 			AllocationTags:   alloc.AllocationProto.AllocationTags,
 			Uuid:             alloc.AllocationProto.Uuid,
-			ResourcePerAlloc: strings.Trim(alloc.AllocationProto.ResourcePerAlloc.String(), "map"),
+			ResourcePerAlloc: strings.Trim(alloc.AllocatedResource.String(), "map"),
 			Priority:         alloc.AllocationProto.Priority.String(),
 			QueueName:        alloc.AllocationProto.QueueName,
 			NodeId:           alloc.AllocationProto.NodeId,

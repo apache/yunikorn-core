@@ -36,9 +36,6 @@ func TestConfigSerde(t *testing.T) {
                             "acl": "abc",
                             "x":   "y",
                         },
-                        Children: []string{
-                            "a1", "a2",
-                        },
                         Resources: Resources{
                             Guaranteed: map[string]string{
                                 "a": "100",
@@ -46,6 +43,34 @@ func TestConfigSerde(t *testing.T) {
                             Max: map[string]string{
 
                             },
+                        },
+                        Queues: []QueueConfig{
+                            {
+                                Name: "a1",
+                                Properties: map[string]string{},
+                                Resources: Resources{
+                                    Guaranteed: map[string]string{
+                                        "memory": "100",
+                                    },
+                                    Max: map[string]string{
+                                        "cpu": "10",
+                                    },
+                                },
+                                Queues: []QueueConfig{},
+                            }, {
+                                Name: "a2",
+                                Properties: map[string]string{},
+                                Resources: Resources{
+                                    Guaranteed: map[string]string{
+                                        "memory": "200",
+                                    },
+                                    Max: map[string]string{
+                                        "cpu": "20",
+                                    },
+                                },
+                                Queues: []QueueConfig{},
+                            },
+
                         },
                     },
                     {
@@ -54,9 +79,6 @@ func TestConfigSerde(t *testing.T) {
                             "acl": "abc",
                             "x":   "y",
                         },
-                        Children: []string{
-                            "b1", "b2",
-                        },
                         Resources: Resources{
                             Guaranteed: map[string]string{
                                 "a": "100",
@@ -65,42 +87,31 @@ func TestConfigSerde(t *testing.T) {
 
                             },
                         },
-                    },
-                },
-            },
-            {
-                Name: "gpu",
-                Queues: []QueueConfig{
-                    {
-                        Name: "a1",
-                        Properties: map[string]string{
-                            "acl": "abc",
-                            "x":   "y",
-                        },
-                        Children: []string{},
-                        Resources: Resources{
-                            Guaranteed: map[string]string{
-                                "a": "100",
-                            },
-                            Max: map[string]string{
-
-                            },
-                        },
-                    },
-                    {
-                        Name: "b1",
-                        Properties: map[string]string{
-                            "acl": "abc",
-                            "x":   "y",
-                        },
-                        Children: []string{
-                            "b1", "b2",
-                        },
-                        Resources: Resources{
-                            Guaranteed: map[string]string{
-                            },
-                            Max: map[string]string{
-
+                        Queues: []QueueConfig{
+                            {
+                                Name: "b1",
+                                Properties: map[string]string{},
+                                Resources: Resources{
+                                    Guaranteed: map[string]string{
+                                        "memory": "10",
+                                    },
+                                    Max: map[string]string{
+                                        "cpu": "1",
+                                    },
+                                },
+                                Queues: []QueueConfig{},
+                            }, {
+                                Name: "b2",
+                                Properties: map[string]string{},
+                                Resources: Resources{
+                                    Guaranteed: map[string]string{
+                                        "memory": "20",
+                                    },
+                                    Max: map[string]string{
+                                        "cpu": "2",
+                                    },
+                                },
+                                Queues: []QueueConfig{},
                             },
                         },
                     },
@@ -145,9 +156,6 @@ partitions:
         properties:
           acl: abc
           x: y
-        children:
-          - a1
-          - a2
         resources:
           guaranteed:
             a: 100
@@ -155,6 +163,15 @@ partitions:
           max:
             a: 200
             b: 300
+        queues:
+          -
+            name: a1
+            properties:
+              acl: a1bc
+          -
+            name: a2
+            properties:
+              acl: a2bc
       -
         name: b
         properties:
@@ -171,17 +188,11 @@ partitions:
         properties:
           acl: abc
           x: y
-        children:
-          - a1
-          - a2
       -
         name: b1
         properties:
           acl: abc
           x: y
-        children:
-          - b1
-          - b2
 `
 
     dir, err := ioutil.TempDir("", "test-scheduler-config")
@@ -202,8 +213,16 @@ partitions:
         t.Errorf("error: %v", err)
     }
 
-    if conf.Partitions[0].Name != "default" || conf.Partitions[0].Queues[1].Children[0] != "b1" {
+    if conf.Partitions[0].Name != "default" {
         t.Errorf("Failed to load conf from file %v", conf)
+    }
+
+    if len(conf.Partitions[0].Queues) != 2 || len(conf.Partitions[0].Queues) != 2 {
+        t.Errorf("Failed to load queues from file %v", conf)
+    }
+
+    if conf.Partitions[0].Queues[0].Queues[0].Name != "a1" {
+        t.Errorf("Failed to load queues from file %v", conf)
     }
 
     if conf.Partitions[0].Queues[0].Resources.Guaranteed["a"] != "100" {

@@ -39,8 +39,6 @@ partitions:
     queues:
       -
         name: root
-        children:
-          - a
         resources:
           guaranteed:
             memory: 200
@@ -48,15 +46,16 @@ partitions:
           max:
             memory: 200
             vcore: 20
-      -
-        name: a
-        resources:
-          guaranteed:
-            memory: 100
-            vcore: 10
-          max:
-            memory: 150
-            vcore: 20
+        queues:
+          -
+            name: a
+            resources:
+              guaranteed:
+                memory: 100
+                vcore: 10
+              max:
+                memory: 150
+                vcore: 20
 `
     configs.MockSchedulerConfigByData([]byte(configData))
     mockRM := NewMockRMCallbackHandler(t)
@@ -81,7 +80,7 @@ partitions:
     assert.Assert(t, 200 == schedulerQueueRoot.CachedQueueInfo.MaxResource.Resources[resources.MEMORY])
 
     // Check scheduling queue a
-    schedulerQueueA := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("a", "[rm:123]default")
+    schedulerQueueA := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.a", "[rm:123]default")
     assert.Assert(t, 150 == schedulerQueueA.CachedQueueInfo.MaxResource.Resources[resources.MEMORY])
 
     // Register a node, and add jobs
@@ -117,7 +116,7 @@ partitions:
         NewJobs: []*si.AddJobRequest{
             {
                 JobId:         "job-1",
-                QueueName:     "a",
+                QueueName:     "root.a",
                 PartitionName: "",
             },
         },
@@ -146,7 +145,7 @@ partitions:
                     },
                 },
                 MaxAllocations: 2,
-                QueueName:      "a",
+                QueueName:      "root.a",
                 JobId:          "job-1",
             },
         },
@@ -192,7 +191,7 @@ partitions:
                     },
                 },
                 MaxAllocations: 2,
-                QueueName:      "a",
+                QueueName:      "root.a",
                 JobId:          "job-1",
             },
             {
@@ -204,7 +203,7 @@ partitions:
                     },
                 },
                 MaxAllocations: 2,
-                QueueName:      "a",
+                QueueName:      "root.a",
                 JobId:          "job-1",
             },
         },
@@ -308,8 +307,6 @@ partitions:
     queues:
       -
         name: root
-        children:
-          - a
         resources:
           guaranteed:
             memory: 200
@@ -317,15 +314,16 @@ partitions:
           max:
             memory: 200
             vcore: 20
-      -
-        name: a
-        resources:
-          guaranteed:
-            memory: 100
-            vcore: 10
-          max:
-            memory: 150
-            vcore: 20
+        queues:
+          -
+            name: a
+            resources:
+              guaranteed:
+                memory: 100
+                vcore: 10
+              max:
+                memory: 150
+                vcore: 20
 `
     configs.MockSchedulerConfigByData([]byte(configData))
     mockRM := NewMockRMCallbackHandler(t)
@@ -374,7 +372,7 @@ partitions:
         NewJobs: []*si.AddJobRequest{
             {
                 JobId:         "job-1",
-                QueueName:     "a",
+                QueueName:     "root.a",
                 PartitionName: "",
             },
         },
@@ -385,7 +383,7 @@ partitions:
     schedulerQueueRoot := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root", "[rm:123]default")
 
     // Check scheduling queue a
-    schedulerQueueA := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("a", "[rm:123]default")
+    schedulerQueueA := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.a", "[rm:123]default")
 
     if nil != err {
         t.Error(err.Error())
@@ -409,7 +407,7 @@ partitions:
                     },
                 },
                 MaxAllocations: 20,
-                QueueName:      "a",
+                QueueName:      "root.a",
                 JobId:          "job-1",
             },
         },
@@ -444,21 +442,19 @@ partitions:
     queues:
       -
         name: root
-        children:
-          - a
-          - b
-      -
-        name: a
-        resources:
-          guaranteed:
-            memory: 100
-            vcore: 10
-      -
-        name: b
-        resources:
-          guaranteed:
-            memory: 100
-            vcore: 10
+        queues:
+          -
+            name: a
+            resources:
+              guaranteed:
+                memory: 100
+                vcore: 10
+          -
+            name: b
+            resources:
+              guaranteed:
+                memory: 100
+                vcore: 10
 `
     configs.MockSchedulerConfigByData([]byte(configData))
     mockRM := NewMockRMCallbackHandler(t)
@@ -507,12 +503,12 @@ partitions:
         NewJobs: []*si.AddJobRequest{
             {
                 JobId:         "job-1",
-                QueueName:     "a",
+                QueueName:     "root.a",
                 PartitionName: "",
             },
             {
                 JobId:         "job-2",
-                QueueName:     "b",
+                QueueName:     "root.b",
                 PartitionName: "",
             },
         },
@@ -523,10 +519,10 @@ partitions:
     schedulerQueueRoot := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root", "[rm:123]default")
 
     // Check scheduling queue a
-    schedulerQueueA := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("a", "[rm:123]default")
+    schedulerQueueA := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.a", "[rm:123]default")
 
     // Check scheduling queue b
-    schedulerQueueB := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("b", "[rm:123]default")
+    schedulerQueueB := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.b", "[rm:123]default")
 
     if nil != err {
         t.Error(err.Error())
@@ -551,7 +547,7 @@ partitions:
                     },
                 },
                 MaxAllocations: 20,
-                QueueName:      "a",
+                QueueName:      "root.a",
                 JobId:          "job-1",
             },
             {
@@ -563,7 +559,7 @@ partitions:
                     },
                 },
                 MaxAllocations: 20,
-                QueueName:      "b",
+                QueueName:      "root.b",
                 JobId:          "job-2",
             },
         },
@@ -600,23 +596,21 @@ partitions:
     queues:
       -
         name: root
-        children:
-          - a
-          - b
-      -
-        name: a
-        properties:
-          job.sort.policy: fair
-        resources:
-          guaranteed:
-            memory: 100
-            vcore: 10
-      -
-        name: b
-        resources:
-          guaranteed:
-            memory: 100
-            vcore: 10
+        queues:
+          -
+            name: a
+            properties:
+              job.sort.policy: fair
+            resources:
+              guaranteed:
+                memory: 100
+                vcore: 10
+          -
+            name: b
+            resources:
+              guaranteed:
+                memory: 100
+                vcore: 10
 `
     configs.MockSchedulerConfigByData([]byte(configData))
     mockRM := NewMockRMCallbackHandler(t)
@@ -665,12 +659,12 @@ partitions:
         NewJobs: []*si.AddJobRequest{
             {
                 JobId:         "job-1",
-                QueueName:     "a",
+                QueueName:     "root.a",
                 PartitionName: "",
             },
             {
                 JobId:         "job-2",
-                QueueName:     "a",
+                QueueName:     "root.a",
                 PartitionName: "",
             },
         },
@@ -681,10 +675,10 @@ partitions:
     schedulerQueueRoot := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root", "[rm:123]default")
 
     // Check scheduling queue a
-    schedulerQueueA := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("a", "[rm:123]default")
+    schedulerQueueA := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.a", "[rm:123]default")
 
     // Check scheduling queue b
-    schedulerQueueB := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("b", "[rm:123]default")
+    schedulerQueueB := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.b", "[rm:123]default")
 
     if nil != err {
         t.Error(err.Error())
@@ -713,7 +707,7 @@ partitions:
                     },
                 },
                 MaxAllocations: 20,
-                QueueName:      "a",
+                QueueName:      "root.a",
                 JobId:          "job-1",
             },
             {
@@ -725,7 +719,7 @@ partitions:
                     },
                 },
                 MaxAllocations: 20,
-                QueueName:      "b",
+                QueueName:      "root.b",
                 JobId:          "job-2",
             },
         },

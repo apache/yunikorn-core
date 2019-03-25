@@ -55,10 +55,10 @@ type SchedulingQueue struct {
 
 func NewSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo) *SchedulingQueue {
     schedulingQueue := &SchedulingQueue{}
-    schedulingQueue.Name = cacheQueueInfo.Name
+    schedulingQueue.Name = cacheQueueInfo.FullQualifiedPath
     schedulingQueue.CachedQueueInfo = cacheQueueInfo
     schedulingQueue.MayAllocatedResource = resources.NewResource()
-    schedulingQueue.IsLeafQueue = cacheQueueInfo.IsLeafQueue
+    schedulingQueue.IsLeafQueue = cacheQueueInfo.IsLeafQueue()
     schedulingQueue.childrenQueues = make(map[string]*SchedulingQueue)
     schedulingQueue.jobs = make(map[string]*SchedulingJob)
     schedulingQueue.PendingResource = resources.NewResource()
@@ -121,8 +121,8 @@ func (m *SchedulingQueue) GetFlatChildrenQueues(allQueues map[string]*Scheduling
     // add self
     allQueues[m.Name] = m
 
-    for childName, child := range m.childrenQueues {
-        allQueues[childName] = child
+    for _, child := range m.childrenQueues {
+        allQueues[child.Name] = child
         child.GetFlatChildrenQueues(allQueues)
     }
 }

@@ -41,7 +41,7 @@ type PartitionInfo struct {
     RMId string
 
     // Private fields need protection
-    queues      map[string]*QueueInfo
+    queues      map[string]*QueueInfo // all children
     allocations map[string]*AllocationInfo
     nodes       map[string]*NodeInfo
     jobs        map[string]*JobInfo
@@ -224,7 +224,7 @@ func (m *PartitionInfo) addNewAllocation(alloc *commonevents.AllocationProposal)
         return nil, errors.New(fmt.Sprintf("Failed to find job=%s", alloc.JobId))
     }
 
-    if queue, ok = m.queues[alloc.QueueName]; !ok {
+    if queue = m.getQueue(alloc.QueueName); queue == nil {
         return nil, errors.New(fmt.Sprintf("Failed to find queue=%s", alloc.QueueName))
     }
 
@@ -427,4 +427,19 @@ func (m *PartitionInfo) GetJobs() []*JobInfo {
         jobList = append(jobList, job)
     }
     return jobList
+}
+
+func (m *PartitionInfo) initQueues(queue *QueueInfo) {
+    if queue != nil {
+        m.queues[queue.FullQualifiedPath] = queue
+        if queue.children != nil && len(queue.children) > 0 {
+            for _, value := range queue.children {
+                m.initQueues(value)
+            }
+        }
+    }
+}
+
+func (m *PartitionInfo) getQueue(name string) *QueueInfo {
+    return m.queues[name]
 }

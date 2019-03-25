@@ -122,8 +122,8 @@ func (m *ClusterInfo) addJobToPartition(jobInfo *JobInfo, failIfExist bool) erro
 
     // check if queue exist, and it is a leaf queue
     // TODO. add acl check
-    queue := partitionInfo.queues[jobInfo.QueueName]
-    if queue == nil || !queue.IsLeafQueue {
+    queue := partitionInfo.getQueue(jobInfo.QueueName)
+    if queue == nil || !queue.IsLeafQueue() {
         return errors.New(fmt.Sprintf("failed to submit job=%s to queue=%s, partitio=%s, because queue doesn't exist or queue is not leaf queue", jobInfo.JobId,
             jobInfo.QueueName, jobInfo.Partition))
     }

@@ -94,7 +94,7 @@ partitions:
 
     // Check default partition
     defaultPartition := clusterInfo.partitions["[rm-123]default"]
-    assert.Equal(t, 1, len(defaultPartition.queues))
+    assert.Equal(t, 3, len(defaultPartition.queues))
     rootQueue := defaultPartition.queues["root"]
     assert.Equal(t, 2, len(rootQueue.children))
     assert.Assert(t, resources.Equals(createResource(100, 2), rootQueue.GuaranteedResource))
@@ -505,7 +505,7 @@ partitions:
     }
 
     assert.Equal(t, len(clusterInfo.partitions), 1)
-    assert.Equal(t, len(clusterInfo.partitions["[rm-123]default"].queues), 1)
+    assert.Equal(t, len(clusterInfo.partitions["[rm-123]default"].queues), 3)
 
     root := clusterInfo.partitions["[rm-123]default"].queues["root"]
     a := root.children["a"]
@@ -636,6 +636,26 @@ partitions:
                    queues:
                     -
                       name: invalid$%)
+`
+    assertErrorFromInitialization(t, data)
+}
+
+func TestMultipleRootQueuesUnderOnePartition(t *testing.T) {
+    data := `
+partitions:
+  -
+    name: default
+    queues:
+      -
+        name: root1
+        queues:
+          -
+            name: root1-queue
+      -
+        name: root2
+        queues:
+          -
+            name: root2-queue
 `
     assertErrorFromInitialization(t, data)
 }

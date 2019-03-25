@@ -41,8 +41,7 @@ type PartitionInfo struct {
     RMId string
 
     // Private fields need protection
-    queues      map[string]*QueueInfo // direct children
-    allQueues   map[string]*QueueInfo // all children
+    queues      map[string]*QueueInfo // all children
     allocations map[string]*AllocationInfo
     nodes       map[string]*NodeInfo
     jobs        map[string]*JobInfo
@@ -57,7 +56,6 @@ func newPartitionInfo(name string) *PartitionInfo {
     p := &PartitionInfo{Name: name}
     p.allocations = make(map[string]*AllocationInfo)
     p.queues = make(map[string]*QueueInfo)
-    p.allQueues = make(map[string]*QueueInfo)
     p.nodes = make(map[string]*NodeInfo)
     p.jobs = make(map[string]*JobInfo)
     p.TotalPartitionResource = resources.NewResource()
@@ -433,7 +431,7 @@ func (m *PartitionInfo) GetJobs() []*JobInfo {
 
 func (m *PartitionInfo) initQueues(queue *QueueInfo) {
     if queue != nil {
-        m.allQueues[queue.FullQualifiedPath] = queue
+        m.queues[queue.FullQualifiedPath] = queue
         if queue.children != nil && len(queue.children) > 0 {
             for _, value := range queue.children {
                 m.initQueues(value)
@@ -443,5 +441,5 @@ func (m *PartitionInfo) initQueues(queue *QueueInfo) {
 }
 
 func (m *PartitionInfo) getQueue(name string) *QueueInfo {
-    return m.allQueues[name]
+    return m.queues[name]
 }

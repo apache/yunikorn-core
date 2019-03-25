@@ -52,14 +52,16 @@ func updateClusterInfoFromConfig(clusterInfo *ClusterInfo, conf *configs.Schedul
 }
 
 func updatePartitionInfoFromConfig(partitionInfo *PartitionInfo, conf *configs.PartitionConfig) error {
+    // ensure there is only one root
+    if len(conf.Queues) > 1 {
+        return errors.New("each partition can have and only have 1 root queue defined")
+    }
+
     for _, q := range conf.Queues {
         queueInfo := NewQueueInfo(q.Name, nil)
+        partitionInfo.Root = queueInfo
         if err := updateQueueInfo(queueInfo, &q); err != nil {
             return err
-        }
-        partitionInfo.queues[queueInfo.Name] = queueInfo
-        if queueInfo.Parent == nil {
-            partitionInfo.Root = queueInfo
         }
     }
 
@@ -70,11 +72,6 @@ func updatePartitionInfoFromConfig(partitionInfo *PartitionInfo, conf *configs.P
     // Root queue must be existed
     if partitionInfo.Root == nil {
         return errors.New("failed to find root queue, it must be defined")
-    }
-
-    // ensure there is only one root
-    if len(partitionInfo.queues) > 1 {
-        return errors.New("each partition can have and only have 1 root queue defined")
     }
 
     // Check loop in the queue

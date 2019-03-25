@@ -78,7 +78,7 @@ Prerequisite:
 
 Steps: 
 - Run `dep ensure -update` to update dependencies
-- TODO: What we need to do? (weiwei/sunil)
+- Run `make test` to run all unit tests
 
 ## How to use 
 

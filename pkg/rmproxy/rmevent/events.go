@@ -25,8 +25,8 @@ type RMNewAllocationsEvent struct {
 
 type RMApplicationUpdateEvent struct {
     RMId                 string
-    AcceptedApplications []*si.AcceptedJob
-    RejectedApplications []*si.RejectedJob
+    AcceptedApplications []*si.AcceptedApplication
+    RejectedApplications []*si.RejectedApplication
 }
 
 type RMRejectedAllocationAskEvent struct {

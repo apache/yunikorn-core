@@ -86,7 +86,7 @@ func newSingleAllocationProposal(alloc *SchedulingAllocation) *cacheevent.Alloca
         AllocationProposals: []*commonevents.AllocationProposal{
             {
                 NodeId:            alloc.NodeId,
-                ApplicationId:     alloc.SchedulingAsk.JobId,
+                ApplicationId:     alloc.SchedulingAsk.ApplicationId,
                 QueueName:         alloc.SchedulingAsk.AskProto.QueueName,
                 AllocatedResource: alloc.SchedulingAsk.AllocatedResource,
                 AllocationKey:     alloc.SchedulingAsk.AskProto.AllocationKey,
@@ -167,9 +167,9 @@ func (m *Scheduler) updateSchedulingRequest(schedulingAsk *SchedulingAllocationA
     defer m.lock.Unlock()
 
     // Get SchedulingApplication
-    schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(schedulingAsk.JobId, schedulingAsk.PartitionName)
+    schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(schedulingAsk.ApplicationId, schedulingAsk.PartitionName)
     if schedulingApp == nil {
-        return errors.New(fmt.Sprintf("Cannot find scheduling-app=%s, for allocation=%s", schedulingAsk.JobId, schedulingAsk.AskProto.AllocationKey))
+        return errors.New(fmt.Sprintf("Cannot find scheduling-app=%s, for allocation=%s", schedulingAsk.ApplicationId, schedulingAsk.AskProto.AllocationKey))
     }
 
     // Succeeded
@@ -211,17 +211,17 @@ func (m *Scheduler) addNewApplication(info *cache.ApplicationInfo) error {
     return nil
 }
 
-func (m *Scheduler) removeApplication(request *si.RemoveJobRequest) error {
+func (m *Scheduler) removeApplication(request *si.RemoveApplicationRequest) error {
     m.lock.Lock()
     defer m.lock.Unlock()
 
-    _, err := m.clusterSchedulingContext.RemoveSchedulingApplication(request.JobId, request.PartitionName)
+    _, err := m.clusterSchedulingContext.RemoveSchedulingApplication(request.ApplicationId, request.PartitionName)
 
     if err != nil {
         return err
     }
 
-    glog.V(2).Infof("Removed app=%s from partition=%s", request.JobId, request.PartitionName)
+    glog.V(2).Infof("Removed app=%s from partition=%s", request.ApplicationId, request.PartitionName)
     return nil
 }
 
@@ -249,7 +249,7 @@ func (m *Scheduler) processAllocationReleaseByAllocationKey(allocationAsksToRele
 
     // For all Requests
     for _, toRelease := range allocationAsksToRelease {
-        schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(toRelease.JobId, toRelease.PartitionName)
+        schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(toRelease.ApplicationId, toRelease.PartitionName)
         if nil != schedulingApp {
             delta, _ := schedulingApp.Requests.RemoveAllocationAsk(toRelease.Allocationkey)
             if delta != nil {
@@ -261,7 +261,7 @@ func (m *Scheduler) processAllocationReleaseByAllocationKey(allocationAsksToRele
             }
 
             glog.V(2).Infof("Removed allocation=%s from app=%s, reduced pending resource=%v, message=%s",
-                toRelease.Allocationkey, toRelease.JobId, delta, toRelease.Message)
+                toRelease.Allocationkey, toRelease.ApplicationId, delta, toRelease.Message)
         }
     }
 }
@@ -321,10 +321,10 @@ func (m *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerAp
             err := m.removeApplication(app)
 
             if err != nil {
-                glog.V(0).Infof("Failed when remove app=%s, partition=%s, error=%s", app.JobId, app.PartitionName, err)
+                glog.V(0).Infof("Failed when remove app=%s, partition=%s, error=%s", app.ApplicationId, app.PartitionName, err)
                 continue
             }
-            m.EventHandlers.CacheEventHandler.HandleEvent(&cacheevent.RemovedApplicationEvent{ApplicationId: app.JobId, PartitionName: app.PartitionName})
+            m.EventHandlers.CacheEventHandler.HandleEvent(&cacheevent.RemovedApplicationEvent{ApplicationId: app.ApplicationId, PartitionName: app.PartitionName})
         }
     }
 }

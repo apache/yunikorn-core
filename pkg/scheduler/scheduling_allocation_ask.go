@@ -29,7 +29,7 @@ type SchedulingAllocationAsk struct {
     // Extracted info
     AllocatedResource  *resources.Resource
     PendingRepeatAsk   int32
-    JobId              string
+    ApplicationId      string
     PartitionName      string
     NormalizedPriority int32
 
@@ -42,7 +42,7 @@ func NewSchedulingAllocationAsk(ask *si.AllocationAsk) *SchedulingAllocationAsk 
         AskProto:          ask,
         AllocatedResource: resources.NewResourceFromProto(ask.ResourceAsk),
         PendingRepeatAsk:  ask.MaxAllocations,
-        JobId:             ask.JobId,
+        ApplicationId:     ask.ApplicationId,
         PartitionName:     ask.PartitionName,
         // TODO, normalize priority from ask
     }

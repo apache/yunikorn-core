@@ -73,11 +73,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:f33c2608bcad702a08968b3dc401249c6475588a0112212bfa96a0dadf584d6c"
+  digest = "1:28ac8679fc56c348c97b9e0e200fd4c904a37350cec3d22ac64450f971310999"
   name = "github.infra.cloudera.com/yunikorn/scheduler-interface"
   packages = ["lib/go/si"]
   pruneopts = "UT"
-  revision = "199be046a781be94b4ad6b40d9c2e01f74229b6e"
+  revision = "9bb21b5bf114150d3df4da2cef174851cabedf53"
 
 [[projects]]
   branch = "master"
@@ -93,7 +93,7 @@
     "trace",
   ]
   pruneopts = "UT"
-  revision = "e3b2ff56ed879efa686c9d09ed74f9bfe42f1a1d"
+  revision = "15845e8f865bdabdefb6e7da65b4d9e8de5e94ef"
 
 [[projects]]
   branch = "master"

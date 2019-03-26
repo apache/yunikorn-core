@@ -32,7 +32,7 @@ type SchedulerAllocationUpdatesEvent struct {
 type SchedulerApplicationsUpdateEvent struct {
     // Type is *cache.ApplicationInfo, avoid cycle imports
     AddedApplications   []interface{}
-    RemovedApplications []*si.RemoveJobRequest
+    RemovedApplications []*si.RemoveApplicationRequest
 }
 
 type SchedulerUpdatePartitionsConfigEvent struct {

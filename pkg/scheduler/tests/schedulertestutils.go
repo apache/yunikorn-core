@@ -46,8 +46,8 @@ func NewMockRMCallbackHandler(t *testing.T) *MockRMCallbackHandler {
 func (m *MockRMCallbackHandler) RecvUpdateResponse(response *si.UpdateResponse) error {
     m.t.Logf("---- Received Update=%s", strings.PrettyPrintStruct(response))
 
-    for _, app := range response.AcceptedJobs {
-        m.acceptedApplications[app.JobId] = true
+    for _, app := range response.AcceptedApplications {
+        m.acceptedApplications[app.ApplicationId] = true
     }
 
     for _, node := range response.AcceptedNodes {

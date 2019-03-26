@@ -107,8 +107,8 @@ func (m *RMProxy) processApplicationUpdateEvent(event *rmevent.RMApplicationUpda
         return
     }
     response := &si.UpdateResponse{
-        RejectedJobs: event.RejectedApplications,
-        AcceptedJobs: event.AcceptedApplications,
+        RejectedApplications: event.RejectedApplications,
+        AcceptedApplications: event.AcceptedApplications,
     }
 
     m.processUpdateResponse(event.RMId, response)
@@ -238,8 +238,8 @@ func normalizeUpdateRequestByRMId(request *si.UpdateRequest) {
     }
 
     // Update New apps
-    if len(request.NewJobs) > 0 {
-        for _, app := range request.NewJobs {
+    if len(request.NewApplications) > 0 {
+        for _, app := range request.NewApplications {
             app.PartitionName = common.GetNormalizedPartitionName(app.PartitionName, request.RmId)
         }
     }
@@ -253,8 +253,8 @@ func normalizeUpdateRequestByRMId(request *si.UpdateRequest) {
     }
 
     // Update Remove apps
-    if len(request.RemoveJobs) > 0 {
-        for _, app := range request.RemoveJobs {
+    if len(request.RemoveApplications) > 0 {
+        for _, app := range request.RemoveApplications {
             app.PartitionName = common.GetNormalizedPartitionName(app.PartitionName, request.RmId)
         }
     }

@@ -113,9 +113,9 @@ partitions:
                 },
             },
         },
-        NewJobs: []*si.AddJobRequest{
+        NewApplications: []*si.AddApplicationRequest{
             {
-                JobId:         "app-1",
+                ApplicationId:         "app-1",
                 QueueName:     "root.a",
                 PartitionName: "",
             },
@@ -146,7 +146,7 @@ partitions:
                 },
                 MaxAllocations: 2,
                 QueueName:      "root.a",
-                JobId:          "app-1",
+                ApplicationId:  "app-1",
             },
         },
         RmId: "rm:123",
@@ -192,7 +192,7 @@ partitions:
                 },
                 MaxAllocations: 2,
                 QueueName:      "root.a",
-                JobId:          "app-1",
+                ApplicationId:  "app-1",
             },
             {
                 AllocationKey: "alloc-3",
@@ -204,7 +204,7 @@ partitions:
                 },
                 MaxAllocations: 2,
                 QueueName:      "root.a",
-                JobId:          "app-1",
+                ApplicationId:  "app-1",
             },
         },
         RmId: "rm:123",
@@ -249,7 +249,7 @@ partitions:
     for _, v := range mockRM.Allocations {
         updateRequest.Releases.AllocationsToRelease = append(updateRequest.Releases.AllocationsToRelease, &si.AllocationReleaseRequest{
             Uuid:          v.Uuid,
-            JobId:         v.JobId,
+            ApplicationId: v.ApplicationId,
             PartitionName: v.Partition,
         })
     }
@@ -278,7 +278,7 @@ partitions:
         Releases: &si.AllocationReleasesRequest{
             AllocationAsksToRelease: []*si.AllocationAskReleaseRequest{
                 {
-                    JobId:         "app-1",
+                    ApplicationId: "app-1",
                     PartitionName: "default",
                 },
             },
@@ -369,11 +369,11 @@ partitions:
                 },
             },
         },
-        NewJobs: []*si.AddJobRequest{
+        NewApplications: []*si.AddApplicationRequest{
             {
-                JobId:         "app-1",
-                QueueName:     "root.a",
-                PartitionName: "",
+                ApplicationId:   "app-1",
+                QueueName:       "root.a",
+                PartitionName:   "",
             },
         },
         RmId: "rm:123",
@@ -408,7 +408,7 @@ partitions:
                 },
                 MaxAllocations: 20,
                 QueueName:      "root.a",
-                JobId:          "app-1",
+                ApplicationId:  "app-1",
             },
         },
         RmId: "rm:123",
@@ -500,14 +500,14 @@ partitions:
                 },
             },
         },
-        NewJobs: []*si.AddJobRequest{
+        NewApplications: []*si.AddApplicationRequest{
             {
-                JobId:         "app-1",
+                ApplicationId: "app-1",
                 QueueName:     "root.a",
                 PartitionName: "",
             },
             {
-                JobId:         "app-2",
+                ApplicationId: "app-2",
                 QueueName:     "root.b",
                 PartitionName: "",
             },
@@ -548,7 +548,7 @@ partitions:
                 },
                 MaxAllocations: 20,
                 QueueName:      "root.a",
-                JobId:          "app-1",
+                ApplicationId:  "app-1",
             },
             {
                 AllocationKey: "alloc-1",
@@ -560,7 +560,7 @@ partitions:
                 },
                 MaxAllocations: 20,
                 QueueName:      "root.b",
-                JobId:          "app-2",
+                ApplicationId:  "app-2",
             },
         },
         RmId: "rm:123",
@@ -656,14 +656,14 @@ partitions:
                 },
             },
         },
-        NewJobs: []*si.AddJobRequest{
+        NewApplications: []*si.AddApplicationRequest{
             {
-                JobId:         "app-1",
+                ApplicationId: "app-1",
                 QueueName:     "root.a",
                 PartitionName: "",
             },
             {
-                JobId:         "app-2",
+                ApplicationId: "app-2",
                 QueueName:     "root.a",
                 PartitionName: "",
             },
@@ -708,7 +708,7 @@ partitions:
                 },
                 MaxAllocations: 20,
                 QueueName:      "root.a",
-                JobId:          "app-1",
+                ApplicationId:  "app-1",
             },
             {
                 AllocationKey: "alloc-1",
@@ -720,7 +720,7 @@ partitions:
                 },
                 MaxAllocations: 20,
                 QueueName:      "root.b",
-                JobId:          "app-2",
+                ApplicationId:  "app-2",
             },
         },
         RmId: "rm:123",

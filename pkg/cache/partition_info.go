@@ -270,7 +270,7 @@ func (m *PartitionInfo) addNewAllocation(alloc *commonevents.AllocationProposal)
 func (m *PartitionInfo) addNewAllocationForNodeReportedAllocation(allocation *si.Allocation) (*AllocationInfo, error) {
     return m.addNewAllocation(&commonevents.AllocationProposal{
         NodeId:            allocation.NodeId,
-        ApplicationId:     allocation.JobId,
+        ApplicationId:     allocation.ApplicationId,
         QueueName:         allocation.QueueName,
         AllocatedResource: resources.NewResourceFromProto(allocation.ResourcePerAlloc),
         AllocationKey:     allocation.AllocationKey,

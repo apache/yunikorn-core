@@ -44,7 +44,7 @@ func NewAllocationInfo(uuid string, alloc *commonevents.AllocationProposal) *All
             QueueName:        alloc.QueueName,
             NodeId:           alloc.NodeId,
             Partition:        common.GetPartitionNameWithoutClusterId(alloc.PartitionName),
-            JobId:            alloc.ApplicationId,
+            ApplicationId:    alloc.ApplicationId,
         },
         ApplicationId:     alloc.ApplicationId,
         AllocatedResource: alloc.AllocatedResource,

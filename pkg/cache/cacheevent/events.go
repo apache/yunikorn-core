@@ -72,7 +72,7 @@ func NewReleaseAllocationEventFromProto(proto []*si.AllocationReleaseRequest) *R
     for _, req := range proto {
         event.AllocationsToRelease = append(event.AllocationsToRelease, &ReleaseAllocation{
             Uuid:          req.Uuid,
-            ApplicationId: req.JobId,
+            ApplicationId: req.ApplicationId,
             PartitionName: req.PartitionName,
             Message:       req.Message,
             ReleaseType:   si.AllocationReleaseResponse_STOPPED_BY_RM,

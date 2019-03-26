@@ -21,6 +21,6 @@ type AllocationDAOInfo struct {
 	Priority         string            `json:"priority"`
 	QueueName        string            `json:"queueName"`
 	NodeId           string            `json:"nodeId"`
-	JobId            string            `json:"jobId"`
+	ApplicationId    string            `json:"jobId"`
 	Partition        string            `json:"partition"`
 }

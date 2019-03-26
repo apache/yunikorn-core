@@ -115,9 +115,9 @@ partitions:
     // Different from kubernetes, we need app for allocation ask. You can put all pod requests under the same app.
     // app name can be anything non-empty. Partition name can be empty (and internally becomes "default").
     err = proxy.Update(&si.UpdateRequest{
-        NewJobs: []*si.AddJobRequest{
+        NewApplications: []*si.AddApplicationRequest{
             {
-                JobId:         "app-1",
+                ApplicationId: "app-1",
                 QueueName:     "a",
                 PartitionName: "",
             },
@@ -145,7 +145,7 @@ partitions:
                 },
                 MaxAllocations: 20,
                 QueueName:      "a",
-                JobId:          "app-1",
+                ApplicationId:  "app-1",
             },
         },
         RmId: "rm:123",

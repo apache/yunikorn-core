@@ -143,18 +143,18 @@ func (m *ClusterInfo) addPartition(name string, info *PartitionInfo) {
 }
 
 func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateRequest) {
-    if len(request.NewJobs) > 0 || len(request.RemoveJobs) > 0 {
+    if len(request.NewApplications) > 0 || len(request.RemoveApplications) > 0 {
         addedAppInfos := make([]*ApplicationInfo, 0)
-        acceptedApps := make([]*si.AcceptedJob, 0)
-        rejectedApps := make([]*si.RejectedJob, 0)
+        acceptedApps := make([]*si.AcceptedApplication, 0)
+        rejectedApps := make([]*si.RejectedApplication, 0)
 
-        for _, app := range request.NewJobs {
-            appInfo := NewApplicationInfo(app.JobId, app.PartitionName, app.QueueName)
+        for _, app := range request.NewApplications {
+            appInfo := NewApplicationInfo(app.ApplicationId, app.PartitionName, app.QueueName)
             if err := m.addApplicationToPartition(appInfo, true); err != nil {
-                rejectedApps = append(rejectedApps, &si.RejectedJob{JobId: app.JobId, Reason: err.Error()})
+                rejectedApps = append(rejectedApps, &si.RejectedApplication{ApplicationId: app.ApplicationId, Reason: err.Error()})
             }
             addedAppInfos = append(addedAppInfos, appInfo)
-            acceptedApps = append(acceptedApps, &si.AcceptedJob{JobId: app.JobId})
+            acceptedApps = append(acceptedApps, &si.AcceptedApplication{ApplicationId: app.ApplicationId})
         }
 
         // Respond to RMProxy
@@ -172,7 +172,7 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
         // Send message to Scheduler
         m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerApplicationsUpdateEvent{
             AddedApplications:   addedAppInfosInterface,
-            RemovedApplications: request.RemoveJobs})
+            RemovedApplications: request.RemoveApplications})
     }
 }
 
@@ -196,11 +196,11 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
             }
 
             // if app info doesn't exist, reject the request
-            if partitionContext.getApplication(req.JobId) == nil {
+            if partitionContext.getApplication(req.ApplicationId) == nil {
                 rejectedAsks = append(rejectedAsks,
                     &si.RejectedAllocationAsk{
                         AllocationKey: allocationKey,
-                        Reason:        fmt.Sprintf("Failed to find app=%s for allocation=%s", req.JobId, allocationKey),
+                        Reason:        fmt.Sprintf("Failed to find app=%s for allocation=%s", req.ApplicationId, allocationKey),
                     })
             }
         }

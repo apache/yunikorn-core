@@ -71,7 +71,7 @@ func (m *PartitionSchedulingContext) RemoveSchedulingApplication(appId string, p
 
     // Remove from applications map
     if m.applications[appId] == nil {
-        return nil, errors.New(fmt.Sprintf("Removing app=%s to partition=%s, but job is non-existed.", appId, partitionName))
+        return nil, errors.New(fmt.Sprintf("Removing app=%s to partition=%s, but application is non-existed.", appId, partitionName))
     }
     schedulingApp := m.applications[appId]
     delete(m.applications, appId)
@@ -80,7 +80,7 @@ func (m *PartitionSchedulingContext) RemoveSchedulingApplication(appId string, p
     schedulingQueue := m.queues[schedulingApp.ApplicationInfo.QueueName]
     if schedulingQueue == nil {
         // This is not normal
-        panic(fmt.Sprintf("Failed to find queue=%s for app=%s while removing job", schedulingApp.ApplicationInfo.QueueName, schedulingApp.ApplicationInfo.ApplicationId))
+        panic(fmt.Sprintf("Failed to find queue=%s for app=%s while removing application", schedulingApp.ApplicationInfo.QueueName, schedulingApp.ApplicationInfo.ApplicationId))
     }
     schedulingApp.ParentQueue = schedulingQueue
     schedulingQueue.RemoveSchedulingApplication(schedulingApp)

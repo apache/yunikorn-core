@@ -94,7 +94,7 @@ func sortApplicationsFromQueue(leafQueue *SchedulingQueue) []*SchedulingApplicat
 }
 
 // sort scheduling Requests from a app
-func (m *Scheduler) findMayAllocationFromJob(schedulingRequests *SchedulingRequests,
+func (m *Scheduler) findMayAllocationFromApplication(schedulingRequests *SchedulingRequests,
     headroom *resources.Resource, curStep uint64, selectedPendingAskByAllocationKey map[string]int32) *SchedulingAllocationAsk {
     schedulingRequests.lock.RLock()
     defer schedulingRequests.lock.RUnlock()
@@ -153,7 +153,7 @@ func (m *Scheduler) findNextAllocationAskCandidate(
         if queue.IsLeafQueue {
             sortedApps := sortApplicationsFromQueue(queue)
             for _, app := range sortedApps {
-                if ask := m.findMayAllocationFromJob(app.Requests, newHeadroom, curStep, selectedPendingAskByAllocationKey); ask != nil {
+                if ask := m.findMayAllocationFromApplication(app.Requests, newHeadroom, curStep, selectedPendingAskByAllocationKey); ask != nil {
                     app.MayAllocatedResource = resources.Add(app.MayAllocatedResource, ask.AllocatedResource)
                     queue.MayAllocatedResource = resources.Add(queue.MayAllocatedResource, ask.AllocatedResource)
                     return ask

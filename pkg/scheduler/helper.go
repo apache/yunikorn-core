@@ -23,7 +23,7 @@ const (
     defaultPartitionName = "_default_partition_"
 )
 
-func GetJobIdFromTags(tags map[string]string) string {
+func GetApplicationIdFromTags(tags map[string]string) string {
     appId := tags[api.APPLICATION_ID]
 
     if appId == "" {

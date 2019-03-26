@@ -67,7 +67,7 @@ func (m *SchedulingRequests) AddAllocationAsk(ask *SchedulingAllocationAsk) (*re
 
 // Update AllocationAsk #repeat, when delta > 0, increase repeat by delta, when delta < 0, decrease repeat by -delta
 // Returns error when allocationKey doesn't exist, or illegal delta specified.
-// Return change of pending resources, it will be used to update queues, jobs, etc.
+// Return change of pending resources, it will be used to update queues, applications, etc.
 func (m *SchedulingRequests) UpdateAllocationAskRepeat(allocationKey string, delta int32) (*resources.Resource, error) {
     m.lock.Lock()
     defer m.lock.Unlock()

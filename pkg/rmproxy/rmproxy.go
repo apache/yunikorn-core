@@ -102,13 +102,13 @@ func (m *RMProxy) processAllocationUpdateEvent(event *rmevent.RMNewAllocationsEv
     m.processUpdateResponse(event.RMId, response)
 }
 
-func (m *RMProxy) processJobUpdateEvent(event *rmevent.RMJobUpdateEvent) {
-    if len(event.RejectedJobs) == 0 && len(event.AcceptedJobs) == 0 {
+func (m *RMProxy) processApplicationUpdateEvent(event *rmevent.RMApplicationUpdateEvent) {
+    if len(event.RejectedApplications) == 0 && len(event.AcceptedApplications) == 0 {
         return
     }
     response := &si.UpdateResponse{
-        RejectedJobs: event.RejectedJobs,
-        AcceptedJobs: event.AcceptedJobs,
+        RejectedJobs: event.RejectedApplications,
+        AcceptedJobs: event.AcceptedApplications,
     }
 
     m.processUpdateResponse(event.RMId, response)
@@ -154,8 +154,8 @@ func (m *RMProxy) handleRMEvents() {
         switch v := ev.(type) {
         case *rmevent.RMNewAllocationsEvent:
             m.processAllocationUpdateEvent(v)
-        case *rmevent.RMJobUpdateEvent:
-            m.processJobUpdateEvent(v)
+        case *rmevent.RMApplicationUpdateEvent:
+            m.processApplicationUpdateEvent(v)
         case *rmevent.RMReleaseAllocationEvent:
             m.processRMReleaseAllocationEvent(v)
         case *rmevent.RMRejectedAllocationAskEvent:
@@ -237,10 +237,10 @@ func normalizeUpdateRequestByRMId(request *si.UpdateRequest) {
         }
     }
 
-    // Update New jobs
+    // Update New apps
     if len(request.NewJobs) > 0 {
-        for _, job := range request.NewJobs {
-            job.PartitionName = common.GetNormalizedPartitionName(job.PartitionName, request.RmId)
+        for _, app := range request.NewJobs {
+            app.PartitionName = common.GetNormalizedPartitionName(app.PartitionName, request.RmId)
         }
     }
 
@@ -252,10 +252,10 @@ func normalizeUpdateRequestByRMId(request *si.UpdateRequest) {
         }
     }
 
-    // Update Remove Job
+    // Update Remove apps
     if len(request.RemoveJobs) > 0 {
-        for _, job := range request.RemoveJobs {
-            job.PartitionName = common.GetNormalizedPartitionName(job.PartitionName, request.RmId)
+        for _, app := range request.RemoveJobs {
+            app.PartitionName = common.GetNormalizedPartitionName(app.PartitionName, request.RmId)
         }
     }
 

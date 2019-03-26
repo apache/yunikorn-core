@@ -112,12 +112,12 @@ partitions:
     }
 
     // (IMPORTANT)
-    // Different from kubernetes, we need job for allocation ask. You can put all pod requests under the same job.
-    // job name can be anything non-empty. Partition name can be empty (and internally becomes "default").
+    // Different from kubernetes, we need app for allocation ask. You can put all pod requests under the same app.
+    // app name can be anything non-empty. Partition name can be empty (and internally becomes "default").
     err = proxy.Update(&si.UpdateRequest{
         NewJobs: []*si.AddJobRequest{
             {
-                JobId:         "job-1",
+                JobId:         "app-1",
                 QueueName:     "a",
                 PartitionName: "",
             },
@@ -130,7 +130,7 @@ partitions:
     }
 
     // Refer to schedulertestutils.go:30
-    // You need to check job accepted by scheduler before proceed.
+    // You need to check app accepted by scheduler before proceed.
 
     // Send request
     err = proxy.Update(&si.UpdateRequest{
@@ -145,7 +145,7 @@ partitions:
                 },
                 MaxAllocations: 20,
                 QueueName:      "a",
-                JobId:          "job-1",
+                JobId:          "app-1",
             },
         },
         RmId: "rm:123",

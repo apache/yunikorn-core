@@ -23,10 +23,10 @@ type RMNewAllocationsEvent struct {
     Allocations []*si.Allocation
 }
 
-type RMJobUpdateEvent struct {
-    RMId         string
-    AcceptedJobs []*si.AcceptedJob
-    RejectedJobs []*si.RejectedJob
+type RMApplicationUpdateEvent struct {
+    RMId                 string
+    AcceptedApplications []*si.AcceptedJob
+    RejectedApplications []*si.RejectedJob
 }
 
 type RMRejectedAllocationAskEvent struct {

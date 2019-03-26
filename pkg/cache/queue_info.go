@@ -24,8 +24,8 @@ import (
 const (
     ROOT_QUEUE = "root"
 
-    // How to sort job, valid options are fair / fifo
-    JOB_SORT_POLICY = "job.sort.policy"
+    // How to sort applications, valid options are fair / fifo
+    APPLICATION_SORT_POLICY = "application.sort.policy"
 )
 
 /* Related to queues */

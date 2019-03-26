@@ -21,18 +21,18 @@ import (
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
 )
 
-type SchedulingJob struct {
-    JobInfo     *cache.JobInfo
-    Requests    *SchedulingRequests
-    ParentQueue *SchedulingQueue
+type SchedulingApplication struct {
+    ApplicationInfo *cache.ApplicationInfo
+    Requests        *SchedulingRequests
+    ParentQueue     *SchedulingQueue
 
     // Maybe allocated, set by scheduler
     MayAllocatedResource *resources.Resource
 }
 
-func NewSchedulingJob(jobInfo *cache.JobInfo) *SchedulingJob {
-    return &SchedulingJob{
-        JobInfo:  jobInfo,
-        Requests: NewSchedulingRequests(),
+func NewSchedulingApplication(appInfo *cache.ApplicationInfo) *SchedulingApplication {
+    return &SchedulingApplication{
+        ApplicationInfo: appInfo,
+        Requests:        NewSchedulingRequests(),
     }
 }

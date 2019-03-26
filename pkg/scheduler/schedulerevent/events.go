@@ -28,11 +28,11 @@ type SchedulerAllocationUpdatesEvent struct {
     ToReleases          *si.AllocationReleasesRequest
 }
 
-// From Cache, update about jobs.
-type SchedulerJobsUpdateEvent struct {
-    // Type is *cache.JobInfo, avoid cycle imports
-    AddedJobs   []interface{}
-    RemovedJobs []*si.RemoveJobRequest
+// From Cache, update about apps.
+type SchedulerApplicationsUpdateEvent struct {
+    // Type is *cache.ApplicationInfo, avoid cycle imports
+    AddedApplications   []interface{}
+    RemovedApplications []*si.RemoveJobRequest
 }
 
 type SchedulerUpdatePartitionsConfigEvent struct {

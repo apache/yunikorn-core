@@ -69,7 +69,7 @@ func TestNodeInfo(t *testing.T) {
         t.Errorf("Failed to update attributes")
     }
 
-    node.AddAllocation(CreateMockAllocationInfo("job1", resources.MockResource(100, 200), "1", "queue-1", "node-1"))
+    node.AddAllocation(CreateMockAllocationInfo("app1", resources.MockResource(100, 200), "1", "queue-1", "node-1"))
     if nil == node.GetAllocation("1") {
         t.Errorf("Failed to add allocations")
     }
@@ -78,7 +78,7 @@ func TestNodeInfo(t *testing.T) {
         t.Errorf("Failed to add allocations")
     }
 
-    node.AddAllocation(CreateMockAllocationInfo("job1", resources.MockResource(20, 200), "2", "queue-1", "node-1"))
+    node.AddAllocation(CreateMockAllocationInfo("app1", resources.MockResource(20, 200), "2", "queue-1", "node-1"))
     if nil == node.GetAllocation("2") {
         t.Errorf("Failed to add allocations")
     }

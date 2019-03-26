@@ -21,8 +21,8 @@ import (
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
 )
 
-func CreateMockAllocationInfo(jobId string, res *resources.Resource, uuid string, queueName string, nodeId string) *AllocationInfo {
-    info := &AllocationInfo{JobId: jobId, AllocatedResource: res,
+func CreateMockAllocationInfo(appId string, res *resources.Resource, uuid string, queueName string, nodeId string) *AllocationInfo {
+    info := &AllocationInfo{ApplicationId: appId, AllocatedResource: res,
         AllocationProto: &si.Allocation{Uuid: uuid, QueueName: queueName, NodeId: nodeId}}
     return info
 }

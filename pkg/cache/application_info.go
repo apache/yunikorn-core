@@ -22,9 +22,9 @@ import (
     "time"
 )
 
-/* Related to Jobs */
-type JobInfo struct {
-    JobId string
+/* Related to applications */
+type ApplicationInfo struct {
+    ApplicationId string
 
     AllocatedResource *resources.Resource
 
@@ -42,15 +42,15 @@ type JobInfo struct {
     lock sync.RWMutex
 }
 
-func (m *JobInfo) GetAllocation(uuid string) *AllocationInfo {
+func (m *ApplicationInfo) GetAllocation(uuid string) *AllocationInfo {
     m.lock.RLock()
     defer m.lock.RUnlock()
 
     return m.allocations[uuid]
 }
 
-func NewJobInfo(jobId string, partition, queueName string) *JobInfo {
-    j := &JobInfo{JobId: jobId}
+func NewApplicationInfo(appId string, partition, queueName string) *ApplicationInfo {
+    j := &ApplicationInfo{ApplicationId: appId}
     j.AllocatedResource = resources.NewResource()
     j.allocations = make(map[string]*AllocationInfo)
     j.Partition = partition
@@ -59,10 +59,10 @@ func NewJobInfo(jobId string, partition, queueName string) *JobInfo {
     return j
 }
 
-func (m *JobInfo) NewJobInfo(jobId string) {
+func (m *ApplicationInfo) NewApplicationInfo(appId string) {
 }
 
-func (m *JobInfo) AddAllocation(info *AllocationInfo) {
+func (m *ApplicationInfo) AddAllocation(info *AllocationInfo) {
     m.lock.Lock()
     defer m.lock.Unlock()
 
@@ -70,14 +70,14 @@ func (m *JobInfo) AddAllocation(info *AllocationInfo) {
     m.AllocatedResource = resources.Add(m.AllocatedResource, info.AllocatedResource)
 }
 
-func (m *JobInfo) RemoveAllocation(uuid string) *AllocationInfo {
+func (m *ApplicationInfo) RemoveAllocation(uuid string) *AllocationInfo {
     m.lock.Lock()
     defer m.lock.Unlock()
 
     alloc := m.allocations[uuid]
 
     if alloc != nil {
-        // When job has the allocation, update map, and update allocated resource of the job
+        // When app has the allocation, update map, and update allocated resource of the app
         m.AllocatedResource = resources.Sub(m.AllocatedResource, alloc.AllocatedResource)
         delete(m.allocations, uuid)
         return alloc
@@ -86,7 +86,7 @@ func (m *JobInfo) RemoveAllocation(uuid string) *AllocationInfo {
     return nil
 }
 
-func (m *JobInfo) CleanupAllAllocations() []*AllocationInfo {
+func (m *ApplicationInfo) CleanupAllAllocations() []*AllocationInfo {
     allocationsToRelease := make([]*AllocationInfo, 0)
 
     m.lock.Lock()
@@ -95,14 +95,14 @@ func (m *JobInfo) CleanupAllAllocations() []*AllocationInfo {
     for _, alloc := range m.allocations {
         allocationsToRelease = append(allocationsToRelease, alloc)
     }
-    // cleanup allocated resource for job
+    // cleanup allocated resource for app
     m.AllocatedResource = resources.NewResource()
     m.allocations = make(map[string]*AllocationInfo)
 
     return allocationsToRelease
 }
 
-func (m *JobInfo) GetAllAllocations() []*AllocationInfo {
+func (m *ApplicationInfo) GetAllAllocations() []*AllocationInfo {
     m.lock.RLock()
     defer m.lock.RUnlock()
 

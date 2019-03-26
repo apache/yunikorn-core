@@ -64,7 +64,7 @@ func sortSubqueuesFromQueue(parentQueue *SchedulingQueue) []*SchedulingQueue {
     // Copy children
     sortedQueues := make([]*SchedulingQueue, 0)
     for _, v := range parentQueue.childrenQueues {
-        // Only look at job when pending-res > 0
+        // Only look at app when pending-res > 0
         if resources.StrictlyGreaterThanZero(v.PendingResource) {
             sortedQueues = append(sortedQueues, v)
         }
@@ -75,25 +75,25 @@ func sortSubqueuesFromQueue(parentQueue *SchedulingQueue) []*SchedulingQueue {
     return sortedQueues
 }
 
-func sortJobsFromQueue(leafQueue *SchedulingQueue) []*SchedulingJob {
+func sortApplicationsFromQueue(leafQueue *SchedulingQueue) []*SchedulingApplication {
     leafQueue.lock.RLock()
     defer leafQueue.lock.RUnlock()
 
     // Copy children
-    sortedJobs := make([]*SchedulingJob, 0)
-    for _, v := range leafQueue.jobs {
-        // Only look at job when pending-res > 0
+    sortedApps := make([]*SchedulingApplication, 0)
+    for _, v := range leafQueue.applications {
+        // Only look at app when pending-res > 0
         if resources.StrictlyGreaterThanZero(v.Requests.TotalPendingResource) {
-            sortedJobs = append(sortedJobs, v)
+            sortedApps = append(sortedApps, v)
         }
     }
 
-    SortJobs(sortedJobs, leafQueue.JobSortType, leafQueue.CachedQueueInfo.GuaranteedResource)
+    SortApplications(sortedApps, leafQueue.ApplicationSortType, leafQueue.CachedQueueInfo.GuaranteedResource)
 
-    return sortedJobs
+    return sortedApps
 }
 
-// sort scheduling Requests from a job
+// sort scheduling Requests from a app
 func (m *Scheduler) findMayAllocationFromJob(schedulingRequests *SchedulingRequests,
     headroom *resources.Resource, curStep uint64, selectedPendingAskByAllocationKey map[string]int32) *SchedulingAllocationAsk {
     schedulingRequests.lock.RLock()
@@ -151,10 +151,10 @@ func (m *Scheduler) findNextAllocationAskCandidate(
         }
 
         if queue.IsLeafQueue {
-            sortedJobs := sortJobsFromQueue(queue)
-            for _, job := range sortedJobs {
-                if ask := m.findMayAllocationFromJob(job.Requests, newHeadroom, curStep, selectedPendingAskByAllocationKey); ask != nil {
-                    job.MayAllocatedResource = resources.Add(job.MayAllocatedResource, ask.AllocatedResource)
+            sortedApps := sortApplicationsFromQueue(queue)
+            for _, app := range sortedApps {
+                if ask := m.findMayAllocationFromJob(app.Requests, newHeadroom, curStep, selectedPendingAskByAllocationKey); ask != nil {
+                    app.MayAllocatedResource = resources.Add(app.MayAllocatedResource, ask.AllocatedResource)
                     queue.MayAllocatedResource = resources.Add(queue.MayAllocatedResource, ask.AllocatedResource)
                     return ask
                 }
@@ -183,8 +183,8 @@ func (m *Scheduler) resetMayAllocations(partitionContext *PartitionSchedulingCon
 func (m *Scheduler) resetMayAllocationsForQueue(queue *SchedulingQueue) {
     queue.MayAllocatedResource = queue.CachedQueueInfo.AllocatedResource
     if queue.IsLeafQueue {
-        for _, job := range queue.jobs {
-            job.MayAllocatedResource = job.JobInfo.AllocatedResource
+        for _, app := range queue.applications {
+            app.MayAllocatedResource = app.ApplicationInfo.AllocatedResource
         }
     } else {
         for _, child := range queue.childrenQueues {

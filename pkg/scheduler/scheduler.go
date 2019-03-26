@@ -86,7 +86,7 @@ func newSingleAllocationProposal(alloc *SchedulingAllocation) *cacheevent.Alloca
         AllocationProposals: []*commonevents.AllocationProposal{
             {
                 NodeId:            alloc.NodeId,
-                JobId:             alloc.SchedulingAsk.JobId,
+                ApplicationId:     alloc.SchedulingAsk.JobId,
                 QueueName:         alloc.SchedulingAsk.AskProto.QueueName,
                 AllocatedResource: alloc.SchedulingAsk.AllocatedResource,
                 AllocationKey:     alloc.SchedulingAsk.AskProto.AllocationKey,
@@ -166,15 +166,15 @@ func (m *Scheduler) updateSchedulingRequest(schedulingAsk *SchedulingAllocationA
     m.lock.Lock()
     defer m.lock.Unlock()
 
-    // Get SchedulingJob
-    schedulingJob := m.clusterSchedulingContext.GetSchedulingJob(schedulingAsk.JobId, schedulingAsk.PartitionName)
-    if schedulingJob == nil {
-        return errors.New(fmt.Sprintf("Cannot find scheduling-job=%s, for allocation=%s", schedulingAsk.JobId, schedulingAsk.AskProto.AllocationKey))
+    // Get SchedulingApplication
+    schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(schedulingAsk.JobId, schedulingAsk.PartitionName)
+    if schedulingApp == nil {
+        return errors.New(fmt.Sprintf("Cannot find scheduling-app=%s, for allocation=%s", schedulingAsk.JobId, schedulingAsk.AskProto.AllocationKey))
     }
 
     // Succeeded
-    if pendingDelta, err := schedulingJob.Requests.AddAllocationAsk(schedulingAsk); err == nil {
-        m.updateQueuePendingResources(schedulingJob.ParentQueue, pendingDelta)
+    if pendingDelta, err := schedulingApp.Requests.AddAllocationAsk(schedulingAsk); err == nil {
+        m.updateQueuePendingResources(schedulingApp.ParentQueue, pendingDelta)
         return nil
     } else {
         return err
@@ -185,43 +185,43 @@ func (m *Scheduler) updateSchedulingRequestPendingAskByDelta(allocProposal *comm
     m.lock.Lock()
     defer m.lock.Unlock()
 
-    // Get SchedulingJob
-    schedulingJob := m.clusterSchedulingContext.GetSchedulingJob(allocProposal.JobId, allocProposal.PartitionName)
-    if schedulingJob == nil {
-        return errors.New(fmt.Sprintf("Cannot find scheduling-job=%s, for allocation=%s", allocProposal.JobId, allocProposal.AllocationKey))
+    // Get SchedulingApplication
+    schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(allocProposal.ApplicationId, allocProposal.PartitionName)
+    if schedulingApp == nil {
+        return errors.New(fmt.Sprintf("Cannot find scheduling-app=%s, for allocation=%s", allocProposal.ApplicationId, allocProposal.AllocationKey))
     }
 
     // Succeeded
-    if pendingDelta, err := schedulingJob.Requests.UpdateAllocationAskRepeat(allocProposal.AllocationKey, deltaPendingAsk); err == nil {
-        m.updateQueuePendingResources(schedulingJob.ParentQueue, pendingDelta)
+    if pendingDelta, err := schedulingApp.Requests.UpdateAllocationAskRepeat(allocProposal.AllocationKey, deltaPendingAsk); err == nil {
+        m.updateQueuePendingResources(schedulingApp.ParentQueue, pendingDelta)
         return nil
     } else {
         return err
     }
 }
 
-// When a new job added, invoked by external
-func (m *Scheduler) addNewJob(info *cache.JobInfo) error {
-    schedulingJob := NewSchedulingJob(info)
+// When a new app added, invoked by external
+func (m *Scheduler) addNewApplication(info *cache.ApplicationInfo) error {
+    schedulingApp := NewSchedulingApplication(info)
 
-    if err := m.clusterSchedulingContext.AddSchedulingJob(schedulingJob); err != nil {
+    if err := m.clusterSchedulingContext.AddSchedulingApplication(schedulingApp); err != nil {
         return err
     }
 
     return nil
 }
 
-func (m *Scheduler) removeJob(request *si.RemoveJobRequest) error {
+func (m *Scheduler) removeApplication(request *si.RemoveJobRequest) error {
     m.lock.Lock()
     defer m.lock.Unlock()
 
-    _, err := m.clusterSchedulingContext.RemoveSchedulingJob(request.JobId, request.PartitionName)
+    _, err := m.clusterSchedulingContext.RemoveSchedulingApplication(request.JobId, request.PartitionName)
 
     if err != nil {
         return err
     }
 
-    glog.V(2).Infof("Removed job=%s from partition=%s", request.JobId, request.PartitionName)
+    glog.V(2).Infof("Removed app=%s from partition=%s", request.JobId, request.PartitionName)
     return nil
 }
 
@@ -249,18 +249,18 @@ func (m *Scheduler) processAllocationReleaseByAllocationKey(allocationAsksToRele
 
     // For all Requests
     for _, toRelease := range allocationAsksToRelease {
-        schedulingJob := m.clusterSchedulingContext.GetSchedulingJob(toRelease.JobId, toRelease.PartitionName)
-        if nil != schedulingJob {
-            delta, _ := schedulingJob.Requests.RemoveAllocationAsk(toRelease.Allocationkey)
+        schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(toRelease.JobId, toRelease.PartitionName)
+        if nil != schedulingApp {
+            delta, _ := schedulingApp.Requests.RemoveAllocationAsk(toRelease.Allocationkey)
             if delta != nil {
-                schedulingQueue := schedulingJob.ParentQueue
+                schedulingQueue := schedulingApp.ParentQueue
                 for schedulingQueue != nil {
                     schedulingQueue.IncPendingResource(delta)
                     schedulingQueue = schedulingQueue.Parent
                 }
             }
 
-            glog.V(2).Infof("Removed allocation=%s from job=%s, reduced pending resource=%v, message=%s",
+            glog.V(2).Infof("Removed allocation=%s from app=%s, reduced pending resource=%v, message=%s",
                 toRelease.Allocationkey, toRelease.JobId, delta, toRelease.Message)
         }
     }
@@ -306,25 +306,25 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
     }
 }
 
-func (m *Scheduler) processJobUpdateEvent(ev *schedulerevent.SchedulerJobsUpdateEvent) {
-    if len(ev.AddedJobs) > 0 {
-        for _, j := range ev.AddedJobs {
-            job := j.(*cache.JobInfo)
-            if err := m.addNewJob(job); err != nil {
-                m.EventHandlers.CacheEventHandler.HandleEvent(&cacheevent.RejectedNewJobEvent{JobId: job.JobId, Reason: err.Error()})
+func (m *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerApplicationsUpdateEvent) {
+    if len(ev.AddedApplications) > 0 {
+        for _, j := range ev.AddedApplications {
+            app := j.(*cache.ApplicationInfo)
+            if err := m.addNewApplication(app); err != nil {
+                m.EventHandlers.CacheEventHandler.HandleEvent(&cacheevent.RejectedNewApplicationEvent{ApplicationId: app.ApplicationId, Reason: err.Error()})
             }
         }
     }
 
-    if len(ev.RemovedJobs) > 0 {
-        for _, job := range ev.RemovedJobs {
-            err := m.removeJob(job)
+    if len(ev.RemovedApplications) > 0 {
+        for _, app := range ev.RemovedApplications {
+            err := m.removeApplication(app)
 
             if err != nil {
-                glog.V(0).Infof("Failed when remove job=%s, partition=%s, error=%s", job.JobId, job.PartitionName, err)
+                glog.V(0).Infof("Failed when remove app=%s, partition=%s, error=%s", app.JobId, app.PartitionName, err)
                 continue
             }
-            m.EventHandlers.CacheEventHandler.HandleEvent(&cacheevent.RemovedJobEvent{JobId: job.JobId, PartitionName: job.PartitionName})
+            m.EventHandlers.CacheEventHandler.HandleEvent(&cacheevent.RemovedApplicationEvent{ApplicationId: app.JobId, PartitionName: app.PartitionName})
         }
     }
 }
@@ -380,8 +380,8 @@ func (m *Scheduler) handleSchedulerEvent() {
         switch v := ev.(type) {
         case *schedulerevent.SchedulerAllocationUpdatesEvent:
             m.processAllocationUpdateEvent(v)
-        case *schedulerevent.SchedulerJobsUpdateEvent:
-            m.processJobUpdateEvent(v)
+        case *schedulerevent.SchedulerApplicationsUpdateEvent:
+            m.processApplicationUpdateEvent(v)
         case *commonevents.RemoveRMPartitionsEvent:
             m.removePartitionsBelongToRM(v)
         case *schedulerevent.SchedulerUpdatePartitionsConfigEvent:

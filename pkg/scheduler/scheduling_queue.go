@@ -39,13 +39,13 @@ type SchedulingQueue struct {
 
     childrenQueues map[string]*SchedulingQueue // Only for direct children, parent queue only
 
-    jobs map[string]*SchedulingJob // only for leaf queue
+    applications map[string]*SchedulingApplication // only for leaf queue
 
     // Total pending resource
     PendingResource *resources.Resource
 
-    // How jobs are sorted (leaf queue only)
-    JobSortType SortType
+    // How applications are sorted (leaf queue only)
+    ApplicationSortType SortType
 
     // How sub queues are sorted (parent queue only)
     QueueSortType SortType
@@ -60,14 +60,14 @@ func NewSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo) *SchedulingQueue {
     schedulingQueue.MayAllocatedResource = resources.NewResource()
     schedulingQueue.IsLeafQueue = cacheQueueInfo.IsLeafQueue()
     schedulingQueue.childrenQueues = make(map[string]*SchedulingQueue)
-    schedulingQueue.jobs = make(map[string]*SchedulingJob)
+    schedulingQueue.applications = make(map[string]*SchedulingApplication)
     schedulingQueue.PendingResource = resources.NewResource()
 
     // TODO, make them configurable
-    if cacheQueueInfo.Properties[cache.JOB_SORT_POLICY] == "fair" {
-        schedulingQueue.JobSortType = FAIR_SORT_POLICY
+    if cacheQueueInfo.Properties[cache.APPLICATION_SORT_POLICY] == "fair" {
+        schedulingQueue.ApplicationSortType = FAIR_SORT_POLICY
     } else {
-        schedulingQueue.JobSortType = FIFO_SORT_POLICY
+        schedulingQueue.ApplicationSortType = FIFO_SORT_POLICY
     }
     schedulingQueue.QueueSortType = FAIR_SORT_POLICY
 
@@ -96,18 +96,18 @@ func (m *SchedulingQueue) DecPendingResource(delta *resources.Resource) {
     m.PendingResource = resources.Sub(m.PendingResource, delta)
 }
 
-func (m *SchedulingQueue) AddSchedulingJob(job *SchedulingJob) {
+func (m *SchedulingQueue) AddSchedulingApplication(app *SchedulingApplication) {
     m.lock.Lock()
     defer m.lock.Unlock()
 
-    m.jobs[job.JobInfo.JobId] = job
+    m.applications[app.ApplicationInfo.ApplicationId] = app
 }
 
-func (m *SchedulingQueue) RemoveSchedulingJob(job *SchedulingJob) {
+func (m *SchedulingQueue) RemoveSchedulingApplication(app *SchedulingApplication) {
     m.lock.Lock()
     defer m.lock.Unlock()
 
-    delete(m.jobs, job.JobInfo.JobId)
+    delete(m.applications, app.ApplicationInfo.ApplicationId)
 }
 
 func (m *SchedulingQueue) GetFlatChildrenQueues(allQueues map[string]*SchedulingQueue) {

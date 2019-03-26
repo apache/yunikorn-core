@@ -41,10 +41,10 @@ type PartitionInfo struct {
     RMId string
 
     // Private fields need protection
-    queues      map[string]*QueueInfo // all children
-    allocations map[string]*AllocationInfo
-    nodes       map[string]*NodeInfo
-    jobs        map[string]*JobInfo
+    queues       map[string]*QueueInfo // all children
+    allocations  map[string]*AllocationInfo
+    nodes        map[string]*NodeInfo
+    applications map[string]*ApplicationInfo
 
     // Total node resources
     TotalPartitionResource *resources.Resource
@@ -57,7 +57,7 @@ func newPartitionInfo(name string) *PartitionInfo {
     p.allocations = make(map[string]*AllocationInfo)
     p.queues = make(map[string]*QueueInfo)
     p.nodes = make(map[string]*NodeInfo)
-    p.jobs = make(map[string]*JobInfo)
+    p.applications = make(map[string]*ApplicationInfo)
     p.TotalPartitionResource = resources.NewResource()
 
     return p
@@ -100,15 +100,15 @@ func (m *PartitionInfo) removeNode(nodeId string) {
 
     for _, alloc := range node.GetAllAllocations() {
         var queue *QueueInfo = nil
-        // get job and update
-        if job := m.jobs[alloc.JobId]; job != nil {
-            if alloc := job.RemoveAllocation(alloc.AllocationProto.Uuid); alloc == nil {
-                panic(fmt.Sprintf("Failed to get allocation=%s from job=%s when node=%s being removed, this shouldn't happen.", alloc.AllocationProto.Uuid, alloc.JobId,
+        // get app and update
+        if app := m.applications[alloc.ApplicationId]; app != nil {
+            if alloc := app.RemoveAllocation(alloc.AllocationProto.Uuid); alloc == nil {
+                panic(fmt.Sprintf("Failed to get allocation=%s from app=%s when node=%s being removed, this shouldn't happen.", alloc.AllocationProto.Uuid, alloc.ApplicationId,
                     node.NodeId))
             }
-            queue = job.LeafQueue
+            queue = app.LeafQueue
         } else {
-            panic(fmt.Sprintf("Failed to getjob=%s when node=%s being removed, this shouldn't happen.", alloc.JobId, node.NodeId))
+            panic(fmt.Sprintf("Failed to getApp=%s when node=%s being removed, this shouldn't happen.", alloc.ApplicationId, node.NodeId))
         }
 
         // get queue and update
@@ -128,18 +128,18 @@ func (m *PartitionInfo) removeNode(nodeId string) {
     delete(m.nodes, nodeId)
 }
 
-func (m *PartitionInfo) addNewJob(info *JobInfo) {
+func (m *PartitionInfo) addNewApplication(info *ApplicationInfo) {
     m.lock.Lock()
     defer m.lock.Unlock()
 
-    m.jobs[info.JobId] = info
+    m.applications[info.ApplicationId] = info
 }
 
-func (m *PartitionInfo) getJob(jobId string) *JobInfo {
+func (m *PartitionInfo) getApplication(appId string) *ApplicationInfo {
     m.lock.RLock()
     m.lock.RUnlock()
 
-    return m.jobs[jobId]
+    return m.applications[appId]
 }
 
 // Visible by tests
@@ -151,26 +151,26 @@ func (m *PartitionInfo) GetNode(nodeId string) *NodeInfo {
 }
 
 // Returns removed allocations
-func (m *PartitionInfo) releaseAllocationsForJob(toRelease *cacheevent.ReleaseAllocation) []*AllocationInfo {
+func (m *PartitionInfo) releaseAllocationsForApplication(toRelease *cacheevent.ReleaseAllocation) []*AllocationInfo {
     m.lock.Lock()
     m.lock.Unlock()
 
     allocationsToRelease := make([]*AllocationInfo, 0)
 
-    // First delete from job
+    // First delete from app
     var queue *QueueInfo = nil
-    if job := m.jobs[toRelease.JobId]; job != nil {
-        // when uuid not specified, remove all allocations from the job
+    if app := m.applications[toRelease.ApplicationId]; app != nil {
+        // when uuid not specified, remove all allocations from the app
         if toRelease.Uuid == "" {
-            for _, alloc := range job.CleanupAllAllocations() {
+            for _, alloc := range app.CleanupAllAllocations() {
                 allocationsToRelease = append(allocationsToRelease, alloc)
             }
         } else {
-            if alloc := job.RemoveAllocation(toRelease.Uuid); alloc != nil {
+            if alloc := app.RemoveAllocation(toRelease.Uuid); alloc != nil {
                 allocationsToRelease = append(allocationsToRelease, alloc)
             }
         }
-        queue = job.LeafQueue
+        queue = app.LeafQueue
     }
 
     if len(allocationsToRelease) == 0 {
@@ -210,9 +210,9 @@ func (m *PartitionInfo) addNewAllocation(alloc *commonevents.AllocationProposal)
     defer m.lock.Unlock()
 
     // Check if allocation violates any resource restriction, or allocate on a
-    // non-existent jobs or nodes.
+    // non-existent applications or nodes.
     var node *NodeInfo
-    var job *JobInfo
+    var app *ApplicationInfo
     var queue *QueueInfo
     var ok bool
 
@@ -220,8 +220,8 @@ func (m *PartitionInfo) addNewAllocation(alloc *commonevents.AllocationProposal)
         return nil, errors.New(fmt.Sprintf("Failed to find node=%s", alloc.NodeId))
     }
 
-    if job, ok = m.jobs[alloc.JobId]; !ok {
-        return nil, errors.New(fmt.Sprintf("Failed to find job=%s", alloc.JobId))
+    if app, ok = m.applications[alloc.ApplicationId]; !ok {
+        return nil, errors.New(fmt.Sprintf("Failed to find app=%s", alloc.ApplicationId))
     }
 
     if queue = m.getQueue(alloc.QueueName); queue == nil {
@@ -231,9 +231,9 @@ func (m *PartitionInfo) addNewAllocation(alloc *commonevents.AllocationProposal)
     // If new allocation go beyond node's total resource?
     newNodeResource := resources.Add(node.AllocatedResource, alloc.AllocatedResource)
     if !resources.FitIn(node.TotalResource, newNodeResource) {
-        return nil, errors.New(fmt.Sprintf("Cannot allocate resource=[%s] from job=%s on "+
+        return nil, errors.New(fmt.Sprintf("Cannot allocate resource=[%s] from app=%s on "+
             "node=%s because resource exceeded total available, allocated+new=%s, total=%s",
-            alloc.AllocatedResource, alloc.JobId, node.NodeId, newNodeResource, node.TotalResource))
+            alloc.AllocatedResource, alloc.ApplicationId, node.NodeId, newNodeResource, node.TotalResource))
     }
 
     // If new allocation go beyond any of queue's max resource?
@@ -241,9 +241,9 @@ func (m *PartitionInfo) addNewAllocation(alloc *commonevents.AllocationProposal)
     for q != nil {
         newQueueResource := resources.Add(q.AllocatedResource, alloc.AllocatedResource)
         if q.MaxResource != nil && !resources.FitIn(q.MaxResource, newQueueResource) {
-            return nil, errors.New(fmt.Sprintf("Cannot allocate resource=[%s] from job=%s on "+
+            return nil, errors.New(fmt.Sprintf("Cannot allocate resource=[%s] from app=%s on "+
                 "queue=%s because resource exceeded total available, allocated+new=%s, total=%s",
-                alloc.AllocatedResource, alloc.JobId, queue.Name, newQueueResource, queue.MaxResource))
+                alloc.AllocatedResource, alloc.ApplicationId, queue.Name, newQueueResource, queue.MaxResource))
         }
         q = q.Parent
     }
@@ -259,7 +259,7 @@ func (m *PartitionInfo) addNewAllocation(alloc *commonevents.AllocationProposal)
 
     node.AddAllocation(allocation)
 
-    job.AddAllocation(allocation)
+    app.AddAllocation(allocation)
 
     m.allocations[allocation.AllocationProto.Uuid] = allocation
 
@@ -270,7 +270,7 @@ func (m *PartitionInfo) addNewAllocation(alloc *commonevents.AllocationProposal)
 func (m *PartitionInfo) addNewAllocationForNodeReportedAllocation(allocation *si.Allocation) (*AllocationInfo, error) {
     return m.addNewAllocation(&commonevents.AllocationProposal{
         NodeId:            allocation.NodeId,
-        JobId:             allocation.JobId,
+        ApplicationId:     allocation.JobId,
         QueueName:         allocation.QueueName,
         AllocatedResource: resources.NewResourceFromProto(allocation.ResourcePerAlloc),
         AllocationKey:     allocation.AllocationKey,
@@ -293,23 +293,23 @@ func (m *PartitionInfo) GetNewAllocationUuid() string {
     }
 }
 
-func (m *PartitionInfo) RemoveJob(jobId string) (*JobInfo, []*AllocationInfo) {
+func (m *PartitionInfo) RemoveApplication(appId string) (*ApplicationInfo, []*AllocationInfo) {
     m.lock.Lock()
     defer m.lock.Unlock()
 
-    if job := m.jobs[jobId]; job != nil {
-        // Remove job from cache
-        delete(m.jobs, jobId)
+    if app := m.applications[appId]; app != nil {
+        // Remove app from cache
+        delete(m.applications, appId)
 
         // Total allocated
-        totalJobAllocated := job.AllocatedResource
+        totalAppAllocated := app.AllocatedResource
 
         // Get all allocations
-        allocations := job.CleanupAllAllocations()
+        allocations := app.CleanupAllAllocations()
 
-        // No allocations of the job, just return
+        // No allocations of the app, just return
         if len(allocations) == 0 {
-            return job, allocations
+            return app, allocations
         }
 
         for _, alloc := range allocations {
@@ -333,15 +333,15 @@ func (m *PartitionInfo) RemoveJob(jobId string) (*JobInfo, []*AllocationInfo) {
         }
 
         // Update queues
-        queue := job.LeafQueue
+        queue := app.LeafQueue
         for queue != nil {
-            queue.AllocatedResource = resources.Sub(queue.AllocatedResource, totalJobAllocated)
+            queue.AllocatedResource = resources.Sub(queue.AllocatedResource, totalAppAllocated)
             queue = queue.Parent
         }
 
-        glog.V(2).Infof("Removed job=%s from partition=%s, total-allocated=%s", job.JobId, job.Partition, totalJobAllocated)
+        glog.V(2).Infof("Removed app=%s from partition=%s, total-allocated=%s", app.ApplicationId, app.Partition, totalAppAllocated)
 
-        return job, allocations
+        return app, allocations
     }
 
     return nil, make([]*AllocationInfo, 0)
@@ -403,10 +403,10 @@ func GetChildQueueInfos(info *QueueInfo) []dao.QueueDAOInfo {
     return infos
 }
 
-func (m *PartitionInfo) GetTotalJobCount() int {
+func (m *PartitionInfo) GetTotalApplicationCount() int {
     m.lock.RLock()
     defer m.lock.RUnlock()
-    return len(m.jobs)
+    return len(m.applications)
 }
 
 func (m *PartitionInfo) GetTotalAllocationCount() int {
@@ -421,12 +421,12 @@ func (m *PartitionInfo) GetTotalNodeCount() int {
     return len(m.nodes)
 }
 
-func (m *PartitionInfo) GetJobs() []*JobInfo {
-    var jobList []*JobInfo
-    for _, job := range m.jobs {
-        jobList = append(jobList, job)
+func (m *PartitionInfo) GetApplications() []*ApplicationInfo {
+    var appList []*ApplicationInfo
+    for _, app := range m.applications {
+        appList = append(appList, app)
     }
-    return jobList
+    return appList
 }
 
 func (m *PartitionInfo) initQueues(queue *QueueInfo) {

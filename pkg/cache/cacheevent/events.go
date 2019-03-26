@@ -52,13 +52,13 @@ type ReleaseProposal struct {
     Message        string
 }
 
-type RejectedNewJobEvent struct {
-    JobId  string
-    Reason string
+type RejectedNewApplicationEvent struct {
+    ApplicationId string
+    Reason        string
 }
 
-type RemovedJobEvent struct {
-    JobId         string
+type RemovedApplicationEvent struct {
+    ApplicationId string
     PartitionName string
 }
 
@@ -72,7 +72,7 @@ func NewReleaseAllocationEventFromProto(proto []*si.AllocationReleaseRequest) *R
     for _, req := range proto {
         event.AllocationsToRelease = append(event.AllocationsToRelease, &ReleaseAllocation{
             Uuid:          req.Uuid,
-            JobId:         req.JobId,
+            ApplicationId: req.JobId,
             PartitionName: req.PartitionName,
             Message:       req.Message,
             ReleaseType:   si.AllocationReleaseResponse_STOPPED_BY_RM,
@@ -86,10 +86,10 @@ func NewReleaseAllocationEventFromProto(proto []*si.AllocationReleaseRequest) *R
 type ReleaseAllocation struct {
     // optional, when this is set, only release allocation by given uuid.
     Uuid string
-    // when this is set, filter allocations by job id.
-    // empty value will filter allocations don't belong to job.
-    // when job id is set and uuid not set, release all allocations under the job id.
-    JobId string
+    // when this is set, filter allocations by app id.
+    // empty value will filter allocations don't belong to app.
+    // when app id is set and uuid not set, release all allocations under the app id.
+    ApplicationId string
     // Which partition to release, required.
     PartitionName string
     // For human-readable

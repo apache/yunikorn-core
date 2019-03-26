@@ -42,7 +42,7 @@ type EventHandler interface {
 
 type AllocationProposal struct {
     NodeId            string
-    JobId             string
+    ApplicationId     string
     QueueName         string
     AllocatedResource *resources.Resource
     AllocationKey     string

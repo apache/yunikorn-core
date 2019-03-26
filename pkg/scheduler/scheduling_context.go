@@ -34,66 +34,66 @@ func NewClusterSchedulingContext() *ClusterSchedulingContext {
 }
 
 type PartitionSchedulingContext struct {
-    jobs   map[string]*SchedulingJob
-    queues map[string]*SchedulingQueue
-    Root   *SchedulingQueue
-    RmId   string
+    applications map[string]*SchedulingApplication
+    queues       map[string]*SchedulingQueue
+    Root         *SchedulingQueue
+    RmId         string
 
     lock sync.RWMutex
 }
 
-func (m *PartitionSchedulingContext) AddSchedulingJob(schedulingJob *SchedulingJob) error {
+func (m *PartitionSchedulingContext) AddSchedulingApplication(schedulingApp *SchedulingApplication) error {
     m.lock.Lock()
     defer m.lock.Unlock()
 
-    // Add to jobs
-    jobId := schedulingJob.JobInfo.JobId
-    if m.jobs[jobId] != nil {
-        return errors.New(fmt.Sprintf("Adding job=%s to partition=%s, but job already existed.", jobId, schedulingJob.JobInfo.Partition))
+    // Add to applications
+    appId := schedulingApp.ApplicationInfo.ApplicationId
+    if m.applications[appId] != nil {
+        return errors.New(fmt.Sprintf("Adding app=%s to partition=%s, but app already existed.", appId, schedulingApp.ApplicationInfo.Partition))
     }
 
-    m.jobs[jobId] = schedulingJob
+    m.applications[appId] = schedulingApp
 
-    // Put job under queue
-    schedulingQueue := m.queues[schedulingJob.JobInfo.QueueName]
+    // Put app under queue
+    schedulingQueue := m.queues[schedulingApp.ApplicationInfo.QueueName]
     if schedulingQueue == nil {
-        return errors.New(fmt.Sprintf("Failed to find queue=%s for job=%s", schedulingJob.JobInfo.QueueName, schedulingJob.JobInfo.JobId))
+        return errors.New(fmt.Sprintf("Failed to find queue=%s for app=%s", schedulingApp.ApplicationInfo.QueueName, schedulingApp.ApplicationInfo.ApplicationId))
     }
-    schedulingJob.ParentQueue = schedulingQueue
-    schedulingQueue.AddSchedulingJob(schedulingJob)
+    schedulingApp.ParentQueue = schedulingQueue
+    schedulingQueue.AddSchedulingApplication(schedulingApp)
 
     return nil
 }
 
-func (m *PartitionSchedulingContext) RemoveSchedulingJob(jobId string, partitionName string) (*SchedulingJob, error) {
+func (m *PartitionSchedulingContext) RemoveSchedulingApplication(appId string, partitionName string) (*SchedulingApplication, error) {
     m.lock.Lock()
     defer m.lock.Unlock()
 
-    // Remove from jobs map
-    if m.jobs[jobId] == nil {
-        return nil, errors.New(fmt.Sprintf("Removing job=%s to partition=%s, but job is non-existed.", jobId, partitionName))
+    // Remove from applications map
+    if m.applications[appId] == nil {
+        return nil, errors.New(fmt.Sprintf("Removing app=%s to partition=%s, but job is non-existed.", appId, partitionName))
     }
-    schedulingJob := m.jobs[jobId]
-    delete(m.jobs, jobId)
+    schedulingApp := m.applications[appId]
+    delete(m.applications, appId)
 
-    // Remove job under queue
-    schedulingQueue := m.queues[schedulingJob.JobInfo.QueueName]
+    // Remove app under queue
+    schedulingQueue := m.queues[schedulingApp.ApplicationInfo.QueueName]
     if schedulingQueue == nil {
         // This is not normal
-        panic(fmt.Sprintf("Failed to find queue=%s for job=%s while removing job", schedulingJob.JobInfo.QueueName, schedulingJob.JobInfo.JobId))
+        panic(fmt.Sprintf("Failed to find queue=%s for app=%s while removing job", schedulingApp.ApplicationInfo.QueueName, schedulingApp.ApplicationInfo.ApplicationId))
     }
-    schedulingJob.ParentQueue = schedulingQueue
-    schedulingQueue.RemoveSchedulingJob(schedulingJob)
+    schedulingApp.ParentQueue = schedulingQueue
+    schedulingQueue.RemoveSchedulingApplication(schedulingApp)
 
     // Update pending resource of queues
-    totalPending := schedulingJob.Requests.TotalPendingResource
-    queue := schedulingJob.ParentQueue
+    totalPending := schedulingApp.Requests.TotalPendingResource
+    queue := schedulingApp.ParentQueue
     for queue != nil {
         queue.DecPendingResource(totalPending)
         queue = queue.Parent
     }
 
-    return schedulingJob, nil
+    return schedulingApp, nil
 }
 
 // Visible by tests
@@ -104,15 +104,15 @@ func (m *PartitionSchedulingContext) GetQueue(queueName string) *SchedulingQueue
     return m.queues[queueName]
 }
 
-func (m *PartitionSchedulingContext) getJob(jobId string) *SchedulingJob {
+func (m *PartitionSchedulingContext) getApplication(appId string) *SchedulingApplication {
     m.lock.RLock()
     defer m.lock.RUnlock()
 
-    return m.jobs[jobId]
+    return m.applications[appId]
 }
 
 func newPartitionSchedulingContext(rmId string) *PartitionSchedulingContext {
-    return &PartitionSchedulingContext{jobs: make(map[string]*SchedulingJob), queues: make(map[string]*SchedulingQueue), RmId: rmId}
+    return &PartitionSchedulingContext{applications: make(map[string]*SchedulingApplication), queues: make(map[string]*SchedulingQueue), RmId: rmId}
 }
 
 func (m *ClusterSchedulingContext) GetPartitionSchedulingContext(partitionName string) *PartitionSchedulingContext {
@@ -121,12 +121,12 @@ func (m *ClusterSchedulingContext) GetPartitionSchedulingContext(partitionName s
     return m.partitions[partitionName]
 }
 
-func (m *ClusterSchedulingContext) GetSchedulingJob(jobId string, partitionName string) *SchedulingJob {
+func (m *ClusterSchedulingContext) GetSchedulingApplication(appId string, partitionName string) *SchedulingApplication {
     m.lock.RLock()
     defer m.lock.RUnlock()
 
     if partition := m.partitions[partitionName]; partition != nil {
-        return partition.getJob(jobId)
+        return partition.getApplication(appId)
     }
 
     return nil
@@ -144,36 +144,36 @@ func (m *ClusterSchedulingContext) GetSchedulingQueue(queueName string, partitio
     return nil
 }
 
-func (m *ClusterSchedulingContext) AddSchedulingJob(schedulingJob *SchedulingJob) error {
-    partitionName := schedulingJob.JobInfo.Partition
-    jobId := schedulingJob.JobInfo.JobId
+func (m *ClusterSchedulingContext) AddSchedulingApplication(schedulingApp *SchedulingApplication) error {
+    partitionName := schedulingApp.ApplicationInfo.Partition
+    appId := schedulingApp.ApplicationInfo.ApplicationId
 
     m.lock.Lock()
     defer m.lock.Unlock()
 
     if partition := m.partitions[partitionName]; partition != nil {
-        if err := partition.AddSchedulingJob(schedulingJob); err != nil {
+        if err := partition.AddSchedulingApplication(schedulingApp); err != nil {
             return err
         }
     } else {
-        return errors.New(fmt.Sprintf("Failed to find partition=%s while adding job=%s", partitionName, jobId))
+        return errors.New(fmt.Sprintf("Failed to find partition=%s while adding app=%s", partitionName, appId))
     }
 
     return nil
 }
 
-func (m *ClusterSchedulingContext) RemoveSchedulingJob(jobId string, partitionName string) (*SchedulingJob, error) {
+func (m *ClusterSchedulingContext) RemoveSchedulingApplication(appId string, partitionName string) (*SchedulingApplication, error) {
     m.lock.Lock()
     defer m.lock.Unlock()
 
     if partition := m.partitions[partitionName]; partition != nil {
-        schedulingJob, err := partition.RemoveSchedulingJob(jobId, partitionName)
+        schedulingApp, err := partition.RemoveSchedulingApplication(appId, partitionName)
         if err != nil {
             return nil, err
         }
-        return schedulingJob, nil
+        return schedulingApp, nil
     } else {
-        return nil, errors.New(fmt.Sprintf("Failed to find partition=%s while remove job=%s", partitionName, jobId))
+        return nil, errors.New(fmt.Sprintf("Failed to find partition=%s while remove app=%s", partitionName, appId))
     }
 }
 

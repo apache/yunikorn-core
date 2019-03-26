@@ -69,12 +69,12 @@ func (m *ClusterInfo) handleSchedulerEvents() {
         switch v := ev.(type) {
         case *cacheevent.AllocationProposalBundleEvent:
             m.processAllocationProposalEvent(v)
-        case *cacheevent.RejectedNewJobEvent:
-            m.processRejectedJobEvent(v)
+        case *cacheevent.RejectedNewApplicationEvent:
+            m.processRejectedApplicationEvent(v)
         case *cacheevent.ReleaseAllocationsEvent:
             m.processAllocationReleasesRequest(v)
-        case *cacheevent.RemovedJobEvent:
-            m.processRemovedJob(v)
+        case *cacheevent.RemovedApplicationEvent:
+            m.processRemovedApplication(v)
         case *commonevents.RemoveRMPartitionsEvent:
             m.processRemoveRMPartitionsEvent(v)
         default:
@@ -103,18 +103,18 @@ func (m *ClusterInfo) GetPartition(name string) *PartitionInfo {
     return m.partitions[name]
 }
 
-func (m *ClusterInfo) addJobToPartition(jobInfo *JobInfo, failIfExist bool) error {
+func (m *ClusterInfo) addApplicationToPartition(appInfo *ApplicationInfo, failIfExist bool) error {
     m.lock.Lock()
     defer m.lock.Unlock()
 
-    partitionInfo := m.partitions[jobInfo.Partition]
+    partitionInfo := m.partitions[appInfo.Partition]
     if partitionInfo == nil {
-        return errors.New(fmt.Sprintf("failed to add job=%s to partition=%s, partition doesn't exist", jobInfo.JobId, jobInfo.Partition))
+        return errors.New(fmt.Sprintf("failed to add app=%s to partition=%s, partition doesn't exist", appInfo.ApplicationId, appInfo.Partition))
     }
 
-    if j := partitionInfo.jobs[jobInfo.JobId]; j != nil {
+    if j := partitionInfo.applications[appInfo.ApplicationId]; j != nil {
         if failIfExist {
-            return errors.New(fmt.Sprintf("Job=%s already existed in partition=%s", jobInfo.JobId, jobInfo.Partition))
+            return errors.New(fmt.Sprintf("App=%s already existed in partition=%s", appInfo.ApplicationId, appInfo.Partition))
         } else {
             return nil
         }
@@ -122,16 +122,16 @@ func (m *ClusterInfo) addJobToPartition(jobInfo *JobInfo, failIfExist bool) erro
 
     // check if queue exist, and it is a leaf queue
     // TODO. add acl check
-    queue := partitionInfo.getQueue(jobInfo.QueueName)
+    queue := partitionInfo.getQueue(appInfo.QueueName)
     if queue == nil || !queue.IsLeafQueue() {
-        return errors.New(fmt.Sprintf("failed to submit job=%s to queue=%s, partitio=%s, because queue doesn't exist or queue is not leaf queue", jobInfo.JobId,
-            jobInfo.QueueName, jobInfo.Partition))
+        return errors.New(fmt.Sprintf("failed to submit app=%s to queue=%s, partitio=%s, because queue doesn't exist or queue is not leaf queue", appInfo.ApplicationId,
+            appInfo.QueueName, appInfo.Partition))
     }
 
-    // All checked, job can be added.
-    partitionInfo.jobs[jobInfo.JobId] = jobInfo
+    // All checked, app can be added.
+    partitionInfo.applications[appInfo.ApplicationId] = appInfo
 
-    jobInfo.LeafQueue = queue
+    appInfo.LeafQueue = queue
 
     return nil
 }
@@ -142,37 +142,37 @@ func (m *ClusterInfo) addPartition(name string, info *PartitionInfo) {
     m.partitions[name] = info
 }
 
-func (m *ClusterInfo) processJobUpdateFromRMUpdate(request *si.UpdateRequest) {
+func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateRequest) {
     if len(request.NewJobs) > 0 || len(request.RemoveJobs) > 0 {
-        addedJobInfos := make([]*JobInfo, 0)
-        acceptedJobs := make([]*si.AcceptedJob, 0)
-        rejectedJobs := make([]*si.RejectedJob, 0)
+        addedAppInfos := make([]*ApplicationInfo, 0)
+        acceptedApps := make([]*si.AcceptedJob, 0)
+        rejectedApps := make([]*si.RejectedJob, 0)
 
-        for _, job := range request.NewJobs {
-            jobInfo := NewJobInfo(job.JobId, job.PartitionName, job.QueueName)
-            if err := m.addJobToPartition(jobInfo, true); err != nil {
-                rejectedJobs = append(rejectedJobs, &si.RejectedJob{JobId: job.JobId, Reason: err.Error()})
+        for _, app := range request.NewJobs {
+            appInfo := NewApplicationInfo(app.JobId, app.PartitionName, app.QueueName)
+            if err := m.addApplicationToPartition(appInfo, true); err != nil {
+                rejectedApps = append(rejectedApps, &si.RejectedJob{JobId: app.JobId, Reason: err.Error()})
             }
-            addedJobInfos = append(addedJobInfos, jobInfo)
-            acceptedJobs = append(acceptedJobs, &si.AcceptedJob{JobId: job.JobId})
+            addedAppInfos = append(addedAppInfos, appInfo)
+            acceptedApps = append(acceptedApps, &si.AcceptedJob{JobId: app.JobId})
         }
 
         // Respond to RMProxy
-        m.EventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMJobUpdateEvent{
-            RMId:         request.RmId,
-            AcceptedJobs: acceptedJobs,
-            RejectedJobs: rejectedJobs,
+        m.EventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMApplicationUpdateEvent{
+            RMId:                 request.RmId,
+            AcceptedApplications: acceptedApps,
+            RejectedApplications: rejectedApps,
         })
 
-        addedJobInfosInterface := make([]interface{}, 0)
-        for _, j := range addedJobInfos {
-            addedJobInfosInterface = append(addedJobInfosInterface, j)
+        addedAppInfosInterface := make([]interface{}, 0)
+        for _, j := range addedAppInfos {
+            addedAppInfosInterface = append(addedAppInfosInterface, j)
         }
 
         // Send message to Scheduler
-        m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerJobsUpdateEvent{
-            AddedJobs:   addedJobInfosInterface,
-            RemovedJobs: request.RemoveJobs})
+        m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerApplicationsUpdateEvent{
+            AddedApplications:   addedAppInfosInterface,
+            RemovedApplications: request.RemoveJobs})
     }
 }
 
@@ -186,7 +186,7 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
         for _, req := range request.Asks {
             allocationKey := req.AllocationKey
 
-            // try to get JobInfo
+            // try to get ApplicationInfo
             partitionContext := m.GetPartition(req.PartitionName)
             if partitionContext == nil {
                 msg := fmt.Sprintf("Failed to find partition=%s, for ask %s", req.PartitionName, allocationKey)
@@ -195,12 +195,12 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
                 continue
             }
 
-            // if job info doesn't exist, reject the request
-            if partitionContext.getJob(req.JobId) == nil {
+            // if app info doesn't exist, reject the request
+            if partitionContext.getApplication(req.JobId) == nil {
                 rejectedAsks = append(rejectedAsks,
                     &si.RejectedAllocationAsk{
                         AllocationKey: allocationKey,
-                        Reason:        fmt.Sprintf("Failed to find job=%s for allocation=%s", req.JobId, allocationKey),
+                        Reason:        fmt.Sprintf("Failed to find app=%s for allocation=%s", req.JobId, allocationKey),
                     })
             }
         }
@@ -211,7 +211,7 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
             RejectedAllocationAsks: rejectedAsks,
         })
 
-        // Send new asks, added jobs, and new release allocation requests to scheduler
+        // Send new asks, added applications, and new release allocation requests to scheduler
         m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
             NewAsks:    request.Asks,
             ToReleases: request.Releases,
@@ -268,8 +268,8 @@ func (m *ClusterInfo) processRMUpdateEvent(event *cacheevent.RMUpdateRequestEven
 
     /* Order of following operations are important, don't change unless carefully thought*/
 
-    // Add / remove job requested by RM.
-    m.processJobUpdateFromRMUpdate(request)
+    // Add / remove app requested by RM.
+    m.processApplicationUpdateFromRMUpdate(request)
 
     // Add new request, release allocation, cancel request
     m.processNewAndReleaseAllocationRequests(request)
@@ -336,7 +336,7 @@ func (m *ClusterInfo) processAllocationProposalEvent(event *cacheevent.Allocatio
     }
 }
 
-func (m *ClusterInfo) processRejectedJobEvent(event *cacheevent.RejectedNewJobEvent) {
+func (m *ClusterInfo) processRejectedApplicationEvent(event *cacheevent.RejectedNewApplicationEvent) {
     panic("implement me")
 }
 
@@ -371,7 +371,7 @@ func (m *ClusterInfo) processAllocationReleasesRequest(event *cacheevent.Release
 
     for _, toReleaseAllocation := range event.AllocationsToRelease {
         if partition := m.partitions[toReleaseAllocation.PartitionName]; partition != nil {
-            releasedAllocations := partition.releaseAllocationsForJob(toReleaseAllocation)
+            releasedAllocations := partition.releaseAllocationsForApplication(toReleaseAllocation)
             m.notifyRMAllocationReleased(common.GetRMIdFromPartitionName(toReleaseAllocation.PartitionName), releasedAllocations, toReleaseAllocation.ReleaseType,
                 toReleaseAllocation.Message)
         }
@@ -401,16 +401,16 @@ func (m *ClusterInfo) processRemoveRMPartitionsEvent(event *commonevents.RemoveR
     }
 }
 
-func (m *ClusterInfo) processRemovedJob(event *cacheevent.RemovedJobEvent) {
+func (m *ClusterInfo) processRemovedApplication(event *cacheevent.RemovedApplicationEvent) {
     // Hold write lock of cache
     m.lock.Lock()
     defer m.lock.Unlock()
 
     if partition := m.GetPartition(event.PartitionName); partition != nil {
-        _, allocations := partition.RemoveJob(event.JobId)
+        _, allocations := partition.RemoveApplication(event.ApplicationId)
 
         m.notifyRMAllocationReleased(common.GetRMIdFromPartitionName(event.PartitionName), allocations, si.AllocationReleaseResponse_STOPPED_BY_RM,
-            fmt.Sprintf("Job=%s Removed", event.JobId))
+            fmt.Sprintf("App=%s Removed", event.ApplicationId))
     }
 }
 
@@ -438,13 +438,13 @@ func (m *ClusterInfo) HandleEvent(ev interface{}) {
     switch v := ev.(type) {
     case *cacheevent.AllocationProposalBundleEvent:
         enqueueAndCheckFull(m.pendingSchedulerEvents, v)
-    case *cacheevent.RejectedNewJobEvent:
+    case *cacheevent.RejectedNewApplicationEvent:
         enqueueAndCheckFull(m.pendingSchedulerEvents, v)
     case *cacheevent.ReleaseAllocationsEvent:
         enqueueAndCheckFull(m.pendingSchedulerEvents, v)
     case *commonevents.RemoveRMPartitionsEvent:
         enqueueAndCheckFull(m.pendingSchedulerEvents, v)
-    case *cacheevent.RemovedJobEvent:
+    case *cacheevent.RemovedApplicationEvent:
         enqueueAndCheckFull(m.pendingSchedulerEvents, v)
     case *cacheevent.RMUpdateRequestEvent:
         enqueueAndCheckFull(m.pendingRmEvents, v)

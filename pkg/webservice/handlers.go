@@ -55,23 +55,23 @@ func GetClusterInfo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func GetJobsInfo(w http.ResponseWriter, r *http.Request) {
+func GetApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
-	var jobsDao []*dao.JobDAOInfo
+	var appsDao []*dao.ApplicationDAOInfo
 	lists := gClusterInfo.ListPartitions()
 	for _, k := range lists {
 		glog.Info(k)
 
 		partition := gClusterInfo.GetPartition(k)
-		jobList := partition.GetJobs()
-		for _, job := range jobList {
-			jobDao := getJobJson(job)
-			jobsDao = append(jobsDao, jobDao)
+		appList := partition.GetApplications()
+		for _, app := range appList {
+			appDao := getApplicationJson(app)
+			appsDao = append(appsDao, appDao)
 		}
 	}
 
-	if err := json.NewEncoder(w).Encode(jobsDao); err != nil {
+	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
 		panic(err)
 	}
 }
@@ -88,12 +88,12 @@ func writeHeaders(w http.ResponseWriter) {
 func getClusterJson(name string) *dao.ClusterDAOInfo {
 	clusterInfo := &dao.ClusterDAOInfo{}
 	partitionContext := gClusterInfo.GetPartition(name)
-	clusterInfo.TotalJobs = strconv.Itoa(partitionContext.GetTotalJobCount())
+	clusterInfo.TotalJobs = strconv.Itoa(partitionContext.GetTotalApplicationCount())
 	clusterInfo.TotalContainers = strconv.Itoa(partitionContext.GetTotalAllocationCount())
 	clusterInfo.TotalNodes = strconv.Itoa(partitionContext.GetTotalNodeCount())
 	clusterInfo.ClusterName = "kubernetes"
 
-	clusterInfo.RunningJobs = strconv.Itoa(partitionContext.GetTotalJobCount())
+	clusterInfo.RunningJobs = strconv.Itoa(partitionContext.GetTotalApplicationCount())
 	clusterInfo.RunningContainers = strconv.Itoa(partitionContext.GetTotalAllocationCount())
 	clusterInfo.ActiveNodes = strconv.Itoa(partitionContext.GetTotalNodeCount())
 
@@ -116,9 +116,9 @@ func getPartitionJson(name string) *dao.PartitionDAOInfo {
 	return partitionInfo
 }
 
-func getJobJson(job *cache.JobInfo) *dao.JobDAOInfo {
+func getApplicationJson(app *cache.ApplicationInfo) *dao.ApplicationDAOInfo {
 	var allocationInfos []dao.AllocationDAOInfo
-	allocations := job.GetAllAllocations()
+	allocations := app.GetAllAllocations()
 	for _, alloc := range allocations {
 		allocInfo := dao.AllocationDAOInfo{
 			AllocationKey:    alloc.AllocationProto.AllocationKey,
@@ -134,12 +134,12 @@ func getJobJson(job *cache.JobInfo) *dao.JobDAOInfo {
 		allocationInfos = append(allocationInfos, allocInfo)
 	}
 
-	return &dao.JobDAOInfo{
-		JobID:          job.JobId,
-		UsedResource:   strings.Trim(job.AllocatedResource.String(), "map"),
-		Partition:      job.Partition,
-		QueueName:      job.QueueName,
-		SubmissionTime: job.SubmissionTime,
+	return &dao.ApplicationDAOInfo{
+		ApplicationId:  app.ApplicationId,
+		UsedResource:   strings.Trim(app.AllocatedResource.String(), "map"),
+		Partition:      app.Partition,
+		QueueName:      app.QueueName,
+		SubmissionTime: app.SubmissionTime,
 		Allocations:    allocationInfos,
 	}
 }

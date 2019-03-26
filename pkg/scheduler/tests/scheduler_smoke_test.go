@@ -83,7 +83,7 @@ partitions:
     schedulerQueueA := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.a", "[rm:123]default")
     assert.Assert(t, 150 == schedulerQueueA.CachedQueueInfo.MaxResource.Resources[resources.MEMORY])
 
-    // Register a node, and add jobs
+    // Register a node, and add apps
     err = proxy.Update(&si.UpdateRequest{
         NewSchedulableNodes: []*si.NewNodeInfo{
             {
@@ -115,7 +115,7 @@ partitions:
         },
         NewJobs: []*si.AddJobRequest{
             {
-                JobId:         "job-1",
+                JobId:         "app-1",
                 QueueName:     "root.a",
                 PartitionName: "",
             },
@@ -127,12 +127,12 @@ partitions:
         t.Error(err.Error())
     }
 
-    waitForAcceptedJobs(mockRM, "job-1", 1000)
+    waitForAcceptedApplications(mockRM, "app-1", 1000)
     waitForAcceptedNodes(mockRM, "node-1:1234", 1000)
     waitForAcceptedNodes(mockRM, "node-2:1234", 1000)
 
-    // Get scheduling job
-    schedulingJob := scheduler.GetClusterSchedulingContext().GetSchedulingJob("job-1", "[rm:123]default")
+    // Get scheduling app
+    schedulingApp := scheduler.GetClusterSchedulingContext().GetSchedulingApplication("app-1", "[rm:123]default")
 
     err = proxy.Update(&si.UpdateRequest{
         Asks: []*si.AllocationAsk{
@@ -146,7 +146,7 @@ partitions:
                 },
                 MaxAllocations: 2,
                 QueueName:      "root.a",
-                JobId:          "job-1",
+                JobId:          "app-1",
             },
         },
         RmId: "rm:123",
@@ -160,7 +160,7 @@ partitions:
     // Both pending memory = 10 * 2 = 20;
     waitForPendingResource(t, schedulerQueueA, 20, 1000)
     waitForPendingResource(t, schedulerQueueRoot, 20, 1000)
-    waitForPendingResourceForJob(t, schedulingJob, 20, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp, 20, 1000)
 
     scheduler.SingleStepSchedule(16)
 
@@ -169,12 +169,12 @@ partitions:
     // Make sure pending resource updated to 0
     waitForPendingResource(t, schedulerQueueA, 0, 1000)
     waitForPendingResource(t, schedulerQueueRoot, 0, 1000)
-    waitForPendingResourceForJob(t, schedulingJob, 0, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp, 0, 1000)
 
-    // Check allocated resources of queues, jobs
+    // Check allocated resources of queues, apps
     assert.Assert(t, schedulerQueueA.CachedQueueInfo.AllocatedResource.Resources[resources.MEMORY] == 20)
     assert.Assert(t, schedulerQueueRoot.CachedQueueInfo.AllocatedResource.Resources[resources.MEMORY] == 20)
-    assert.Assert(t, schedulingJob.JobInfo.AllocatedResource.Resources[resources.MEMORY] == 20)
+    assert.Assert(t, schedulingApp.ApplicationInfo.AllocatedResource.Resources[resources.MEMORY] == 20)
 
     // Check allocated resources of nodes
     waitForNodesAllocatedResource(t, cache, "[rm:123]default", []string{"node-1:1234", "node-2:1234"}, 20, 1000)
@@ -192,7 +192,7 @@ partitions:
                 },
                 MaxAllocations: 2,
                 QueueName:      "root.a",
-                JobId:          "job-1",
+                JobId:          "app-1",
             },
             {
                 AllocationKey: "alloc-3",
@@ -204,7 +204,7 @@ partitions:
                 },
                 MaxAllocations: 2,
                 QueueName:      "root.a",
-                JobId:          "job-1",
+                JobId:          "app-1",
             },
         },
         RmId: "rm:123",
@@ -218,9 +218,9 @@ partitions:
     // Both pending memory = 50 * 2 + 100 * 2 = 300;
     waitForPendingResource(t, schedulerQueueA, 300, 1000)
     waitForPendingResource(t, schedulerQueueRoot, 300, 1000)
-    waitForPendingResourceForJob(t, schedulingJob, 300, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp, 300, 1000)
 
-    // Now job-1 uses 20 resource, and queue-a's max = 150, so it can get two 50 container allocated.
+    // Now app-1 uses 20 resource, and queue-a's max = 150, so it can get two 50 container allocated.
     scheduler.SingleStepSchedule(16)
 
     waitForAllocations(mockRM, 4, 1000)
@@ -228,12 +228,12 @@ partitions:
     // Check pending resource, should be 200 now.
     waitForPendingResource(t, schedulerQueueA, 200, 1000)
     waitForPendingResource(t, schedulerQueueRoot, 200, 1000)
-    waitForPendingResourceForJob(t, schedulingJob, 200, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp, 200, 1000)
 
-    // Check allocated resources of queues, jobs
+    // Check allocated resources of queues, apps
     assert.Assert(t, schedulerQueueA.CachedQueueInfo.AllocatedResource.Resources[resources.MEMORY] == 120)
     assert.Assert(t, schedulerQueueRoot.CachedQueueInfo.AllocatedResource.Resources[resources.MEMORY] == 120)
-    assert.Assert(t, schedulingJob.JobInfo.AllocatedResource.Resources[resources.MEMORY] == 120)
+    assert.Assert(t, schedulingApp.ApplicationInfo.AllocatedResource.Resources[resources.MEMORY] == 120)
 
     // Check allocated resources of nodes
     waitForNodesAllocatedResource(t, cache, "[rm:123]default", []string{"node-1:1234", "node-2:1234"}, 120, 1000)
@@ -266,19 +266,19 @@ partitions:
     // Check pending resource, should be 200 (same)
     waitForPendingResource(t, schedulerQueueA, 200, 1000)
     waitForPendingResource(t, schedulerQueueRoot, 200, 1000)
-    waitForPendingResourceForJob(t, schedulingJob, 200, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp, 200, 1000)
 
-    // Check allocated resources of queues, jobs should be 0 now
+    // Check allocated resources of queues, apps should be 0 now
     assert.Assert(t, schedulerQueueA.CachedQueueInfo.AllocatedResource.Resources[resources.MEMORY] == 0)
     assert.Assert(t, schedulerQueueRoot.CachedQueueInfo.AllocatedResource.Resources[resources.MEMORY] == 0)
-    assert.Assert(t, schedulingJob.JobInfo.AllocatedResource.Resources[resources.MEMORY] == 0)
+    assert.Assert(t, schedulingApp.ApplicationInfo.AllocatedResource.Resources[resources.MEMORY] == 0)
 
     // Release asks
     err = proxy.Update(&si.UpdateRequest{
         Releases: &si.AllocationReleasesRequest{
             AllocationAsksToRelease: []*si.AllocationAskReleaseRequest{
                 {
-                    JobId:         "job-1",
+                    JobId:         "app-1",
                     PartitionName: "default",
                 },
             },
@@ -292,7 +292,7 @@ partitions:
     // Check pending resource
     waitForPendingResource(t, schedulerQueueA, 0, 1000)
     waitForPendingResource(t, schedulerQueueRoot, 0, 1000)
-    waitForPendingResourceForJob(t, schedulingJob, 0, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp, 0, 1000)
 }
 
 func TestBasicSchedulerAutoAllocation(t *testing.T) {
@@ -339,7 +339,7 @@ partitions:
         t.Error(err.Error())
     }
 
-    // Register a node, and add jobs
+    // Register a node, and add apps
     err = proxy.Update(&si.UpdateRequest{
         NewSchedulableNodes: []*si.NewNodeInfo{
             {
@@ -371,7 +371,7 @@ partitions:
         },
         NewJobs: []*si.AddJobRequest{
             {
-                JobId:         "job-1",
+                JobId:         "app-1",
                 QueueName:     "root.a",
                 PartitionName: "",
             },
@@ -389,12 +389,12 @@ partitions:
         t.Error(err.Error())
     }
 
-    waitForAcceptedJobs(mockRM, "job-1", 1000)
+    waitForAcceptedApplications(mockRM, "app-1", 1000)
     waitForAcceptedNodes(mockRM, "node-1:1234", 1000)
     waitForAcceptedNodes(mockRM, "node-2:1234", 1000)
 
-    // Get scheduling job
-    schedulingJob := scheduler.GetClusterSchedulingContext().GetSchedulingJob("job-1", "[rm:123]default")
+    // Get scheduling app
+    schedulingApp := scheduler.GetClusterSchedulingContext().GetSchedulingApplication("app-1", "[rm:123]default")
 
     err = proxy.Update(&si.UpdateRequest{
         Asks: []*si.AllocationAsk{
@@ -408,7 +408,7 @@ partitions:
                 },
                 MaxAllocations: 20,
                 QueueName:      "root.a",
-                JobId:          "job-1",
+                JobId:          "app-1",
             },
         },
         RmId: "rm:123",
@@ -419,12 +419,12 @@ partitions:
     // Make sure pending resource updated to 0
     waitForPendingResource(t, schedulerQueueA, 50, 1000)
     waitForPendingResource(t, schedulerQueueRoot, 50, 1000)
-    waitForPendingResourceForJob(t, schedulingJob, 50, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp, 50, 1000)
 
-    // Check allocated resources of queues, jobs
+    // Check allocated resources of queues, apps
     assert.Assert(t, schedulerQueueA.CachedQueueInfo.AllocatedResource.Resources[resources.MEMORY] == 150)
     assert.Assert(t, schedulerQueueRoot.CachedQueueInfo.AllocatedResource.Resources[resources.MEMORY] == 150)
-    assert.Assert(t, schedulingJob.JobInfo.AllocatedResource.Resources[resources.MEMORY] == 150)
+    assert.Assert(t, schedulingApp.ApplicationInfo.AllocatedResource.Resources[resources.MEMORY] == 150)
 
     // Check allocated resources of nodes
     waitForNodesAllocatedResource(t, cache, "[rm:123]default", []string{"node-1:1234", "node-2:1234"}, 150, 1000)
@@ -470,7 +470,7 @@ partitions:
         t.Error(err.Error())
     }
 
-    // Register a node, and add jobs
+    // Register a node, and add apps
     err = proxy.Update(&si.UpdateRequest{
         NewSchedulableNodes: []*si.NewNodeInfo{
             {
@@ -502,12 +502,12 @@ partitions:
         },
         NewJobs: []*si.AddJobRequest{
             {
-                JobId:         "job-1",
+                JobId:         "app-1",
                 QueueName:     "root.a",
                 PartitionName: "",
             },
             {
-                JobId:         "job-2",
+                JobId:         "app-2",
                 QueueName:     "root.b",
                 PartitionName: "",
             },
@@ -528,13 +528,13 @@ partitions:
         t.Error(err.Error())
     }
 
-    waitForAcceptedJobs(mockRM, "job-1", 1000)
-    waitForAcceptedJobs(mockRM, "job-2", 1000)
+    waitForAcceptedApplications(mockRM, "app-1", 1000)
+    waitForAcceptedApplications(mockRM, "app-2", 1000)
     waitForAcceptedNodes(mockRM, "node-1:1234", 1000)
     waitForAcceptedNodes(mockRM, "node-2:1234", 1000)
 
-    // Get scheduling job
-    // schedulingJob := scheduler.GetClusterSchedulingContext().GetSchedulingJob("job-1", "[rm:123]default")
+    // Get scheduling app
+    // schedulingApp := scheduler.GetClusterSchedulingContext().GetSchedulingApplication("app-1", "[rm:123]default")
 
     err = proxy.Update(&si.UpdateRequest{
         Asks: []*si.AllocationAsk{
@@ -548,7 +548,7 @@ partitions:
                 },
                 MaxAllocations: 20,
                 QueueName:      "root.a",
-                JobId:          "job-1",
+                JobId:          "app-1",
             },
             {
                 AllocationKey: "alloc-1",
@@ -560,7 +560,7 @@ partitions:
                 },
                 MaxAllocations: 20,
                 QueueName:      "root.b",
-                JobId:          "job-2",
+                JobId:          "app-2",
             },
         },
         RmId: "rm:123",
@@ -584,7 +584,7 @@ partitions:
     waitForPendingResource(t, schedulerQueueRoot, 200, 1000)
 }
 
-func TestFairnessAllocationForJobs(t *testing.T) {
+func TestFairnessAllocationForApplications(t *testing.T) {
     // Start all tests
     proxy, _, scheduler := entrypoint.StartAllServicesWithManualScheduler()
 
@@ -600,7 +600,7 @@ partitions:
           -
             name: a
             properties:
-              job.sort.policy: fair
+              application.sort.policy: fair
             resources:
               guaranteed:
                 memory: 100
@@ -626,7 +626,7 @@ partitions:
         t.Error(err.Error())
     }
 
-    // Register a node, and add jobs
+    // Register a node, and add applications
     err = proxy.Update(&si.UpdateRequest{
         NewSchedulableNodes: []*si.NewNodeInfo{
             {
@@ -658,12 +658,12 @@ partitions:
         },
         NewJobs: []*si.AddJobRequest{
             {
-                JobId:         "job-1",
+                JobId:         "app-1",
                 QueueName:     "root.a",
                 PartitionName: "",
             },
             {
-                JobId:         "job-2",
+                JobId:         "app-2",
                 QueueName:     "root.a",
                 PartitionName: "",
             },
@@ -684,17 +684,17 @@ partitions:
         t.Error(err.Error())
     }
 
-    waitForAcceptedJobs(mockRM, "job-1", 1000)
-    waitForAcceptedJobs(mockRM, "job-2", 1000)
+    waitForAcceptedApplications(mockRM, "app-1", 1000)
+    waitForAcceptedApplications(mockRM, "app-2", 1000)
     waitForAcceptedNodes(mockRM, "node-1:1234", 1000)
     waitForAcceptedNodes(mockRM, "node-2:1234", 1000)
 
-    // Get scheduling job
-    schedulingJob1 := scheduler.GetClusterSchedulingContext().GetSchedulingJob("job-1", "[rm:123]default")
-    schedulingJob2 := scheduler.GetClusterSchedulingContext().GetSchedulingJob("job-2", "[rm:123]default")
+    // Get scheduling app
+    schedulingApp1 := scheduler.GetClusterSchedulingContext().GetSchedulingApplication("app-1", "[rm:123]default")
+    schedulingApp2 := scheduler.GetClusterSchedulingContext().GetSchedulingApplication("app-2", "[rm:123]default")
 
-    // Get scheduling job
-    // schedulingJob := scheduler.GetClusterSchedulingContext().GetSchedulingJob("job-1", "[rm:123]default")
+    // Get scheduling app
+    // schedulingApp := scheduler.GetClusterSchedulingContext().GetSchedulingApplication("app-1", "[rm:123]default")
 
     err = proxy.Update(&si.UpdateRequest{
         Asks: []*si.AllocationAsk{
@@ -708,7 +708,7 @@ partitions:
                 },
                 MaxAllocations: 20,
                 QueueName:      "root.a",
-                JobId:          "job-1",
+                JobId:          "app-1",
             },
             {
                 AllocationKey: "alloc-1",
@@ -720,7 +720,7 @@ partitions:
                 },
                 MaxAllocations: 20,
                 QueueName:      "root.b",
-                JobId:          "job-2",
+                JobId:          "app-2",
             },
         },
         RmId: "rm:123",
@@ -729,8 +729,8 @@ partitions:
     waitForPendingResource(t, schedulerQueueA, 400, 1000)
     waitForPendingResource(t, schedulerQueueB, 0, 1000)
     waitForPendingResource(t, schedulerQueueRoot, 400, 1000)
-    waitForPendingResourceForJob(t, schedulingJob1, 200, 1000)
-    waitForPendingResourceForJob(t, schedulingJob2, 200, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp1, 200, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp2, 200, 1000)
 
     for i := 0; i < 20; i++ {
         scheduler.SingleStepSchedule(1)
@@ -743,10 +743,10 @@ partitions:
     waitForPendingResource(t, schedulerQueueA, 200, 1000)
     waitForPendingResource(t, schedulerQueueB, 0, 1000)
     waitForPendingResource(t, schedulerQueueRoot, 200, 1000)
-    waitForPendingResourceForJob(t, schedulingJob1, 100, 1000)
-    waitForPendingResourceForJob(t, schedulingJob2, 100, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp1, 100, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp2, 100, 1000)
 
-    // Both jobs got 100 resources,
-    assert.Assert(t, schedulingJob1.JobInfo.AllocatedResource.Resources[resources.MEMORY] == 100)
-    assert.Assert(t, schedulingJob2.JobInfo.AllocatedResource.Resources[resources.MEMORY] == 100)
+    // Both apps got 100 resources,
+    assert.Assert(t, schedulingApp1.ApplicationInfo.AllocatedResource.Resources[resources.MEMORY] == 100)
+    assert.Assert(t, schedulingApp2.ApplicationInfo.AllocatedResource.Resources[resources.MEMORY] == 100)
 }

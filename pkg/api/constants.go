@@ -31,7 +31,7 @@ const (
 
 // Constants for allocation attribtues
 const (
-    JOB_ID          = "si.io/job-id"
+    APPLICATION_ID  = "si.io/application-id"
     CONTAINER_IMAGE = "si.io/container-image"
     CONTAINER_PORTS = "si.io/container-ports"
 )

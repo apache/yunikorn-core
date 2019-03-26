@@ -21,7 +21,7 @@ import (
     "sort"
 )
 
-// Sort queues, jobs, etc.
+// Sort queues, apps, etc.
 
 type SortType int32
 
@@ -42,7 +42,7 @@ func SortQueue(queues []*SchedulingQueue, sortType SortType) {
     }
 }
 
-func SortJobs(queues []*SchedulingJob, sortType SortType, globalResource *resources.Resource) {
+func SortApplications(queues []*SchedulingApplication, sortType SortType, globalResource *resources.Resource) {
     if sortType == FAIR_SORT_POLICY {
         sort.SliceStable(queues, func(i, j int) bool {
             l := queues[i]
@@ -55,7 +55,7 @@ func SortJobs(queues []*SchedulingJob, sortType SortType, globalResource *resour
         sort.SliceStable(queues, func(i, j int) bool {
             l := queues[i]
             r := queues[j]
-            return l.JobInfo.SubmissionTime < r.JobInfo.SubmissionTime
+            return l.ApplicationInfo.SubmissionTime < r.ApplicationInfo.SubmissionTime
         })
     }
 }

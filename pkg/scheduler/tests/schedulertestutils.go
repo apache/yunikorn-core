@@ -29,25 +29,25 @@ import (
 type MockRMCallbackHandler struct {
     t *testing.T
 
-    acceptedJobs  map[string]bool
-    acceptedNodes map[string]bool
-    Allocations   map[string]*si.Allocation
+    acceptedApplications map[string]bool
+    acceptedNodes        map[string]bool
+    Allocations          map[string]*si.Allocation
 }
 
 func NewMockRMCallbackHandler(t *testing.T) *MockRMCallbackHandler {
     return &MockRMCallbackHandler{
-        t:             t,
-        acceptedJobs:  make(map[string]bool),
-        acceptedNodes: make(map[string]bool),
-        Allocations:   make(map[string]*si.Allocation),
+        t:                    t,
+        acceptedApplications: make(map[string]bool),
+        acceptedNodes:        make(map[string]bool),
+        Allocations:          make(map[string]*si.Allocation),
     }
 }
 
 func (m *MockRMCallbackHandler) RecvUpdateResponse(response *si.UpdateResponse) error {
     m.t.Logf("---- Received Update=%s", strings.PrettyPrintStruct(response))
 
-    for _, job := range response.AcceptedJobs {
-        m.acceptedJobs[job.JobId] = true
+    for _, app := range response.AcceptedJobs {
+        m.acceptedApplications[app.JobId] = true
     }
 
     for _, node := range response.AcceptedNodes {
@@ -65,17 +65,17 @@ func (m *MockRMCallbackHandler) RecvUpdateResponse(response *si.UpdateResponse) 
     return nil
 }
 
-func waitForAcceptedJobs(m *MockRMCallbackHandler, jobId string, timeoutMs int) {
+func waitForAcceptedApplications(m *MockRMCallbackHandler, appId string, timeoutMs int) {
     var i = 0
     for {
         i++
-        if !m.acceptedJobs[jobId] {
+        if !m.acceptedApplications[appId] {
             time.Sleep(time.Duration(100 * time.Millisecond))
         } else {
             return
         }
         if i*100 >= timeoutMs {
-            m.t.Fatalf("Failed to wait AcceptedJobs.")
+            m.t.Fatalf("Failed to wait AcceptedApplications.")
             return
         }
     }
@@ -113,17 +113,17 @@ func waitForPendingResource(t *testing.T, queue *scheduler.SchedulingQueue, memo
     }
 }
 
-func waitForPendingResourceForJob(t *testing.T, job *scheduler.SchedulingJob, memory resources.Quantity, timeoutMs int) {
+func waitForPendingResourceForApplication(t *testing.T, app *scheduler.SchedulingApplication, memory resources.Quantity, timeoutMs int) {
     var i = 0
     for {
         i++
-        if job.Requests.TotalPendingResource.Resources[resources.MEMORY] != memory {
+        if app.Requests.TotalPendingResource.Resources[resources.MEMORY] != memory {
             time.Sleep(time.Duration(100 * time.Millisecond))
         } else {
             return
         }
         if i*100 >= timeoutMs {
-            t.Fatalf("Failed to wait pending resource, expected=%v, actual=%v", memory, job.Requests.TotalPendingResource.Resources[resources.MEMORY])
+            t.Fatalf("Failed to wait pending resource, expected=%v, actual=%v", memory, app.Requests.TotalPendingResource.Resources[resources.MEMORY])
             return
         }
     }

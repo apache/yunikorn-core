@@ -1,11 +1,11 @@
 package dao
 
-type JobsDAOInfo struct {
-	Jobs []JobDAOInfo `json:"jobs"`
+type ApplicationsDAOInfo struct {
+	Applications []ApplicationDAOInfo `json:"jobs"`
 }
 
-type JobDAOInfo struct {
-	JobID          string              `json:"jobID"`
+type ApplicationDAOInfo struct {
+	ApplicationId  string              `json:"jobID"`
 	UsedResource   string              `json:"usedResource"`
 	Partition      string              `json:"partition"`
 	QueueName      string              `json:"queueName"`

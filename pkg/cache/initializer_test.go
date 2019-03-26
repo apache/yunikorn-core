@@ -50,12 +50,12 @@ partitions:
             name: a
             properties:
               x: 345
-              job.sort.policy: fair
+              application.sort.policy: fair
           -
             name: b
             properties:
               x: 345
-              job.sort.policy: fifo
+              application.sort.policy: fifo
             resources:
               guaranteed:
                 memory: 50
@@ -104,7 +104,7 @@ partitions:
     // check root.a queue in default partition
     assert.Equal(t, rootQueue.children["a"], defaultPartition.queues["root"].children["a"])
     assert.Equal(t, "345", rootQueue.children["a"].Properties["x"])
-    assert.Equal(t, "fair", rootQueue.children["a"].Properties["job.sort.policy"])
+    assert.Equal(t, "fair", rootQueue.children["a"].Properties["application.sort.policy"])
     assert.Assert(t, resources.Equals(resources.NewResource(), defaultPartition.queues["root"].children["a"].GuaranteedResource))
     assert.Assert(t, resources.Equals(createResource(200, 2), defaultPartition.queues["root"].children["a"].MaxResource))
     assert.Assert(t, rootQueue == defaultPartition.queues["root"].children["a"].Parent)
@@ -113,7 +113,7 @@ partitions:
     // check root.b queue in default partition
     assert.Equal(t, rootQueue.children["b"], defaultPartition.queues["root"].children["b"])
     assert.Equal(t, "345", rootQueue.children["b"].Properties["x"])
-    assert.Equal(t, "fifo", rootQueue.children["b"].Properties["job.sort.policy"])
+    assert.Equal(t, "fifo", rootQueue.children["b"].Properties["application.sort.policy"])
     assert.Assert(t, resources.Equals(createResource(50, 1), defaultPartition.queues["root"].children["b"].GuaranteedResource))
     assert.Assert(t, resources.Equals(createResource(100, 1), defaultPartition.queues["root"].children["b"].MaxResource))
     assert.Assert(t, rootQueue == defaultPartition.queues["root"].children["a"].Parent)
@@ -219,12 +219,12 @@ partitions:
             name: a
             properties:
               x: 345
-              job.sort.policy: fair
+              application.sort.policy: fair
           -
             name: a
             properties:
               x: 345
-              job.sort.policy: fifo
+              application.sort.policy: fifo
 `
     assertErrorFromInitialization(t, data)
 }
@@ -471,8 +471,8 @@ partitions:
       -
         name: root
         properties:
-          job.default.priority: 1
-          job.default.type: "batch"
+          application.default.priority: 1
+          application.default.type: "batch"
         resources:
           guaranteed:
             memory: 100
@@ -481,7 +481,7 @@ partitions:
           -
             name: a
             properties:
-              job.default.priority: 2
+              application.default.priority: 2
               a.self: 000
             resources:
               guaranteed:
@@ -490,7 +490,7 @@ partitions:
           -
             name: b
             properties:
-              job.default.priority: 3
+              application.default.priority: 3
               b.self: 999
             resources:
               guaranteed:
@@ -516,17 +516,17 @@ partitions:
     assert.Equal(t, len(b.Properties), 3)
 
     // property not defined at child queue, overwrite the parent value
-    assert.Equal(t, root.Properties["job.default.priority"], "1")
-    assert.Equal(t, a.Properties["job.default.priority"], "2")
-    assert.Equal(t, b.Properties["job.default.priority"], "3")
+    assert.Equal(t, root.Properties["application.default.priority"], "1")
+    assert.Equal(t, a.Properties["application.default.priority"], "2")
+    assert.Equal(t, b.Properties["application.default.priority"], "3")
 
     // properties only defined in child queue
     assert.Equal(t, a.Properties["a.self"], "000")
     assert.Equal(t, b.Properties["b.self"], "999")
 
     // property not defined at child queue, directly inherited from parent
-    assert.Equal(t, a.Properties["job.default.type"], "batch")
-    assert.Equal(t, b.Properties["job.default.type"], "batch")
+    assert.Equal(t, a.Properties["application.default.type"], "batch")
+    assert.Equal(t, b.Properties["application.default.type"], "batch")
 }
 
 func TestQueueNameValidation(t *testing.T) {

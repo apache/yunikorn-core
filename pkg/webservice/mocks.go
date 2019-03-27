@@ -78,19 +78,19 @@ func getDummyPartitionJson() *dao.PartitionDAOInfo {
 func getDummyClusterJson() []dao.ClusterDAOInfo {
 	clustersInfo := []dao.ClusterDAOInfo{
 		{
-			ClusterName:       "k8s",
-			ActiveNodes:       "2",
-			CompletedJobs:     "10",
-			FailedContainers:  "10",
-			FailedJobs:        "10",
-			PendingContainers: "10",
-			PendingJobs:       "10",
-			RunningContainers: "10",
-			RunningJobs:       "10",
-			TotalContainers:   "10",
-			TotalJobs:         "10",
-			TotalNodes:        "10",
-			FailedNodes:       "0",
+			ClusterName:           "k8s",
+			ActiveNodes:           "2",
+			CompletedApplications: "10",
+			FailedContainers:      "10",
+			FailedApplications:    "10",
+			PendingContainers:     "10",
+			PendingApplications:   "10",
+			RunningContainers:     "10",
+			RunningApplications:   "10",
+			TotalContainers:       "10",
+			TotalApplications:     "10",
+			TotalNodes:            "10",
+			FailedNodes:           "0",
 		},
 	}
 	return clustersInfo

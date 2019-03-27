@@ -88,12 +88,12 @@ func writeHeaders(w http.ResponseWriter) {
 func getClusterJson(name string) *dao.ClusterDAOInfo {
 	clusterInfo := &dao.ClusterDAOInfo{}
 	partitionContext := gClusterInfo.GetPartition(name)
-	clusterInfo.TotalJobs = strconv.Itoa(partitionContext.GetTotalApplicationCount())
+	clusterInfo.TotalApplications = strconv.Itoa(partitionContext.GetTotalApplicationCount())
 	clusterInfo.TotalContainers = strconv.Itoa(partitionContext.GetTotalAllocationCount())
 	clusterInfo.TotalNodes = strconv.Itoa(partitionContext.GetTotalNodeCount())
 	clusterInfo.ClusterName = "kubernetes"
 
-	clusterInfo.RunningJobs = strconv.Itoa(partitionContext.GetTotalApplicationCount())
+	clusterInfo.RunningApplications = strconv.Itoa(partitionContext.GetTotalApplicationCount())
 	clusterInfo.RunningContainers = strconv.Itoa(partitionContext.GetTotalAllocationCount())
 	clusterInfo.ActiveNodes = strconv.Itoa(partitionContext.GetTotalNodeCount())
 

@@ -16,17 +16,17 @@ limitations under the License.
 package dao
 
 type ClusterDAOInfo struct {
-	ClusterName       string `json:"clustername"`
-	TotalJobs         string `json:"totalJobs"`
-	FailedJobs        string `json:"failedJobs"`
-	PendingJobs       string `json:"pendingJobs"`
-	RunningJobs       string `json:"runningJobs"`
-	CompletedJobs     string `json:"completedJobs"`
-	TotalContainers   string `json:"totalContainers"`
-	FailedContainers  string `json:"failedContainers"`
-	PendingContainers string `json:"pendingContainers"`
-	RunningContainers string `json:"runningContainers"`
-	ActiveNodes       string `json:"activeNodes"`
-	TotalNodes        string `json:"totalNodes"`
-	FailedNodes       string `json:"failedNodes"`
+	ClusterName           string `json:"clusterName"`
+	TotalApplications     string `json:"totalApplications"`
+	FailedApplications    string `json:"failedApplications"`
+	PendingApplications   string `json:"pendingApplications"`
+	RunningApplications   string `json:"runningApplications"`
+	CompletedApplications string `json:"completedApplications"`
+	TotalContainers       string `json:"totalContainers"`
+	FailedContainers      string `json:"failedContainers"`
+	PendingContainers     string `json:"pendingContainers"`
+	RunningContainers     string `json:"runningContainers"`
+	ActiveNodes           string `json:"activeNodes"`
+	TotalNodes            string `json:"totalNodes"`
+	FailedNodes           string `json:"failedNodes"`
 }

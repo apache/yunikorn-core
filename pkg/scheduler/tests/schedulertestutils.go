@@ -30,6 +30,7 @@ type MockRMCallbackHandler struct {
     t *testing.T
 
     acceptedApplications map[string]bool
+    rejectedApplications map[string]bool
     acceptedNodes        map[string]bool
     Allocations          map[string]*si.Allocation
 }
@@ -38,6 +39,7 @@ func NewMockRMCallbackHandler(t *testing.T) *MockRMCallbackHandler {
     return &MockRMCallbackHandler{
         t:                    t,
         acceptedApplications: make(map[string]bool),
+        rejectedApplications: make(map[string]bool),
         acceptedNodes:        make(map[string]bool),
         Allocations:          make(map[string]*si.Allocation),
     }
@@ -48,6 +50,10 @@ func (m *MockRMCallbackHandler) RecvUpdateResponse(response *si.UpdateResponse) 
 
     for _, app := range response.AcceptedApplications {
         m.acceptedApplications[app.ApplicationId] = true
+    }
+
+    for _, app := range response.RejectedApplications {
+        m.rejectedApplications[app.ApplicationId] = true
     }
 
     for _, node := range response.AcceptedNodes {
@@ -76,6 +82,22 @@ func waitForAcceptedApplications(m *MockRMCallbackHandler, appId string, timeout
         }
         if i*100 >= timeoutMs {
             m.t.Fatalf("Failed to wait AcceptedApplications.")
+            return
+        }
+    }
+}
+
+func waitForRejectedApplications(m *MockRMCallbackHandler, appId string, timeoutMs int) {
+    var i = 0
+    for {
+        i++
+        if !m.rejectedApplications[appId] || m.acceptedApplications[appId] {
+            time.Sleep(time.Duration(100 * time.Millisecond))
+        } else {
+            return
+        }
+        if i*100 >= timeoutMs {
+            m.t.Fatalf("Failed to wait RejectedApplications.")
             return
         }
     }

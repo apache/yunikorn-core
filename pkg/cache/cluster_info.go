@@ -152,9 +152,10 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
             appInfo := NewApplicationInfo(app.ApplicationId, app.PartitionName, app.QueueName)
             if err := m.addApplicationToPartition(appInfo, true); err != nil {
                 rejectedApps = append(rejectedApps, &si.RejectedApplication{ApplicationId: app.ApplicationId, Reason: err.Error()})
+            } else {
+                acceptedApps = append(acceptedApps, &si.AcceptedApplication{ApplicationId: app.ApplicationId})
+                addedAppInfos = append(addedAppInfos, appInfo)
             }
-            addedAppInfos = append(addedAppInfos, appInfo)
-            acceptedApps = append(acceptedApps, &si.AcceptedApplication{ApplicationId: app.ApplicationId})
         }
 
         // Respond to RMProxy
@@ -164,15 +165,17 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
             RejectedApplications: rejectedApps,
         })
 
-        addedAppInfosInterface := make([]interface{}, 0)
-        for _, j := range addedAppInfos {
-            addedAppInfosInterface = append(addedAppInfosInterface, j)
-        }
+        if len(addedAppInfos) > 0 {
+            addedAppInfosInterface := make([]interface{}, 0)
+            for _, j := range addedAppInfos {
+                addedAppInfosInterface = append(addedAppInfosInterface, j)
+            }
 
-        // Send message to Scheduler
-        m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerApplicationsUpdateEvent{
-            AddedApplications:   addedAppInfosInterface,
-            RemovedApplications: request.RemoveApplications})
+            // Send message to Scheduler
+            m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerApplicationsUpdateEvent{
+                AddedApplications:   addedAppInfosInterface,
+                RemovedApplications: request.RemoveApplications})
+        }
     }
 }
 
@@ -337,7 +340,8 @@ func (m *ClusterInfo) processAllocationProposalEvent(event *cacheevent.Allocatio
 }
 
 func (m *ClusterInfo) processRejectedApplicationEvent(event *cacheevent.RejectedNewApplicationEvent) {
-    panic("implement me")
+    // rejected apps will not be added into cache, so there is nothing to do here for now.
+    // we might revisit this if we further support app states in the cache.
 }
 
 func (m *ClusterInfo) notifyRMAllocationReleased(rmId string, released []*AllocationInfo, terminationType si.AllocationReleaseResponse_TerminationType, message string) {

@@ -311,7 +311,18 @@ func (m *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerAp
         for _, j := range ev.AddedApplications {
             app := j.(*cache.ApplicationInfo)
             if err := m.addNewApplication(app); err != nil {
+                // update cache
                 m.EventHandlers.CacheEventHandler.HandleEvent(&cacheevent.RejectedNewApplicationEvent{ApplicationId: app.ApplicationId, Reason: err.Error()})
+                // notify RM proxy about rejected apps
+                rejectedApps := make([]*si.RejectedApplication, 0)
+                m.EventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMApplicationUpdateEvent{
+                    RMId:                 common.GetRMIdFromPartitionName(app.Partition),
+                    AcceptedApplications: nil,
+                    RejectedApplications: append(rejectedApps, &si.RejectedApplication{
+                        ApplicationId: app.ApplicationId,
+                        Reason:        err.Error(),
+                    }),
+                })
             }
         }
     }

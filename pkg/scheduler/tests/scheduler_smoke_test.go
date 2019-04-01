@@ -750,3 +750,106 @@ partitions:
     assert.Assert(t, schedulingApp1.ApplicationInfo.AllocatedResource.Resources[resources.MEMORY] == 100)
     assert.Assert(t, schedulingApp2.ApplicationInfo.AllocatedResource.Resources[resources.MEMORY] == 100)
 }
+
+func TestRejectApplications(t *testing.T) {
+    // Start all tests
+    proxy, _, _ := entrypoint.StartAllServicesWithManualScheduler()
+
+    // Register RM
+    configData := `
+partitions:
+  -
+    name: default
+    queues:
+      -
+        name: root
+        queues:
+          -
+            name: a
+            properties:
+              application.sort.policy: fair
+            resources:
+              guaranteed:
+                memory: 100
+                vcore: 10
+          -
+            name: b
+            resources:
+              guaranteed:
+                memory: 100
+                vcore: 10
+`
+    configs.MockSchedulerConfigByData([]byte(configData))
+    mockRM := NewMockRMCallbackHandler(t)
+
+    _, err := proxy.RegisterResourceManager(
+        &si.RegisterResourceManagerRequest{
+            RmId:        "rm:123",
+            PolicyGroup: "policygroup",
+            Version:     "0.0.2",
+        }, mockRM)
+
+    if err != nil {
+        t.Error(err.Error())
+    }
+
+    // Register a node, and add applications
+    err = proxy.Update(&si.UpdateRequest{
+        NewSchedulableNodes: []*si.NewNodeInfo{
+            {
+                NodeId: "node-1:1234",
+                Attributes: map[string]string{
+                    "si.io/hostname": "node-1",
+                    "si.io/rackname": "rack-1",
+                },
+                SchedulableResource: &si.Resource{
+                    Resources: map[string]*si.Quantity{
+                        "memory": {Value: 100},
+                        "vcore":  {Value: 20},
+                    },
+                },
+            },
+            {
+                NodeId: "node-2:1234",
+                Attributes: map[string]string{
+                    "si.io/hostname": "node-1",
+                    "si.io/rackname": "rack-1",
+                },
+                SchedulableResource: &si.Resource{
+                    Resources: map[string]*si.Quantity{
+                        "memory": {Value: 100},
+                        "vcore":  {Value: 20},
+                    },
+                },
+            },
+        },
+        RmId: "rm:123",
+    })
+
+    waitForAcceptedNodes(mockRM, "node-1:1234", 1000)
+    waitForAcceptedNodes(mockRM, "node-2:1234", 1000)
+
+    err = proxy.Update(&si.UpdateRequest{
+        NewApplications: []*si.AddApplicationRequest{
+           {
+               ApplicationId: "app-1",
+               QueueName:     "root.non-exist-queue",
+           },
+        },
+        RmId: "rm:123",
+    })
+
+    waitForRejectedApplications(mockRM, "app-1", 1000)
+
+    err = proxy.Update(&si.UpdateRequest{
+        NewApplications: []*si.AddApplicationRequest{
+            {
+                ApplicationId: "app-1",
+                QueueName:     "root.a",
+            },
+        },
+        RmId: "rm:123",
+    })
+
+    waitForAcceptedApplications(mockRM, "app-1", 1000)
+}

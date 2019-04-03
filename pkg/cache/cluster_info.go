@@ -194,7 +194,10 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
             if partitionContext == nil {
                 msg := fmt.Sprintf("Failed to find partition=%s, for ask %s", req.PartitionName, allocationKey)
                 glog.V(2).Infoln(msg)
-                rejectedAsks = append(rejectedAsks, &si.RejectedAllocationAsk{AllocationKey: allocationKey, Reason: msg})
+                rejectedAsks = append(rejectedAsks, &si.RejectedAllocationAsk{
+                    AllocationKey: allocationKey,
+                    ApplicationId: req.ApplicationId,
+                    Reason: msg})
                 continue
             }
 
@@ -203,6 +206,7 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
                 rejectedAsks = append(rejectedAsks,
                     &si.RejectedAllocationAsk{
                         AllocationKey: allocationKey,
+                        ApplicationId: req.ApplicationId,
                         Reason:        fmt.Sprintf("Failed to find app=%s for allocation=%s", req.ApplicationId, allocationKey),
                     })
             }

@@ -292,7 +292,10 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
             rmId = common.GetRMIdFromPartitionName(ask.PartitionName)
             schedulingAsk := NewSchedulingAllocationAsk(ask)
             if err := m.updateSchedulingRequest(schedulingAsk); err != nil {
-                rejectedAsks = append(rejectedAsks, &si.RejectedAllocationAsk{AllocationKey: schedulingAsk.AskProto.AllocationKey, Reason: err.Error()})
+                rejectedAsks = append(rejectedAsks, &si.RejectedAllocationAsk{
+                    AllocationKey: schedulingAsk.AskProto.AllocationKey,
+                    ApplicationId: schedulingAsk.ApplicationId,
+                    Reason: err.Error()})
             }
         }
 

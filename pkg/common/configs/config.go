@@ -22,6 +22,7 @@ import (
     "gopkg.in/yaml.v2"
     "io/ioutil"
     "log"
+    "os"
     "path"
 )
 
@@ -63,9 +64,16 @@ func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) 
 func loadSchedulerConfigFromFile(policyGroup string) (*SchedulerConfig, error) {
     var filePath string
     if configDir, ok := ConfigMap[SchedulerConfigPath]; ok {
+        // if scheduler config path is explicitly set, load conf from there
         filePath = path.Join(configDir, fmt.Sprintf("%s.yaml", policyGroup))
     } else {
-        filePath = DefaultSchedulerConfigPath
+        // if scheduler config path is not explicitly set
+        // first try to load from default dir
+        filePath = path.Join(DefaultSchedulerConfigPath, fmt.Sprintf("%s.yaml", policyGroup))
+        if _, err := os.Stat(filePath); err != nil {
+            // then try to load from current directory
+            filePath = fmt.Sprintf("%s.yaml", policyGroup)
+        }
     }
     glog.V(3).Infof("loading configuration from path %s", filePath)
     buf, err := ioutil.ReadFile(filePath)

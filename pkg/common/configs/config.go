@@ -75,7 +75,7 @@ func loadSchedulerConfigFromFile(policyGroup string) (*SchedulerConfig, error) {
             filePath = fmt.Sprintf("%s.yaml", policyGroup)
         }
     }
-    glog.V(3).Infof("loading configuration from path %s", filePath)
+    glog.Infof("loading configuration from path %s", filePath)
     buf, err := ioutil.ReadFile(filePath)
     if err != nil {
         log.Fatalf("error: %v", err)

@@ -299,3 +299,9 @@ func (m *RMProxy) Update(request *si.UpdateRequest) error {
 
     return nil
 }
+
+// Triggers scheduler to reload configuration and apply the changes on-the-fly to the scheduler itself.
+func (m *RMProxy) ReloadConfiguration() error {
+    // TODO implement hot refresh
+    return nil
+}

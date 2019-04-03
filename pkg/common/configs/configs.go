@@ -17,7 +17,8 @@ limitations under the License.
 package configs
 
 const (
-    SCHEDULER_CONFIG_PATH = "scheduler-config-path"
+    SchedulerConfigPath  = "scheduler-config-path"
+    DefaultSchedulerConfigPath = "/etc/yunikorn"
 )
 
 var ConfigMap = make(map[string]string)

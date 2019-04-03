@@ -206,7 +206,7 @@ partitions:
     }
 
     // Read from tmp
-    ConfigMap[SCHEDULER_CONFIG_PATH] = dir
+    ConfigMap[SchedulerConfigPath] = dir
     conf, err := SchedulerConfigLoader("test-scheduler-config")
 
     if err != nil {

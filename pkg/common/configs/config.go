@@ -18,6 +18,7 @@ package configs
 
 import (
     "fmt"
+    "github.com/golang/glog"
     "gopkg.in/yaml.v2"
     "io/ioutil"
     "log"
@@ -60,8 +61,14 @@ func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) 
 }
 
 func loadSchedulerConfigFromFile(policyGroup string) (*SchedulerConfig, error) {
-    path := path.Join(ConfigMap[SCHEDULER_CONFIG_PATH], fmt.Sprintf("%s.yaml", policyGroup))
-    buf, err := ioutil.ReadFile(path)
+    var filePath string
+    if configDir, ok := ConfigMap[SchedulerConfigPath]; ok {
+        filePath = path.Join(configDir, fmt.Sprintf("%s.yaml", policyGroup))
+    } else {
+        filePath = DefaultSchedulerConfigPath
+    }
+    glog.V(3).Infof("loading configuration from path %s", filePath)
+    buf, err := ioutil.ReadFile(filePath)
     if err != nil {
         log.Fatalf("error: %v", err)
         return nil, err

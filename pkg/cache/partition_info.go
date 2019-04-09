@@ -24,15 +24,13 @@ import (
     "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache/cacheevent"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/commonevents"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/webservice/dao"
     "strings"
     "sync"
 )
 
-const (
-    DEFAULT_PARTITION = "default"
-)
 
 /* Related to partitions */
 type PartitionInfo struct {
@@ -41,7 +39,6 @@ type PartitionInfo struct {
     RMId string
 
     // Private fields need protection
-    queues       map[string]*QueueInfo // all children
     allocations  map[string]*AllocationInfo
     nodes        map[string]*NodeInfo
     applications map[string]*ApplicationInfo
@@ -52,47 +49,83 @@ type PartitionInfo struct {
     lock sync.RWMutex
 }
 
-func newPartitionInfo(name string) *PartitionInfo {
-    p := &PartitionInfo{Name: name}
+// Create a new partition from scratch based on a validated configuration.
+// If teh configuration did not pass validation and is processed weird errors could occur.
+func NewPartitionInfo(partition configs.PartitionConfig, rmId string) (*PartitionInfo, error) {
+    p := &PartitionInfo{
+        Name: partition.Name,
+        RMId: rmId,
+    }
     p.allocations = make(map[string]*AllocationInfo)
-    p.queues = make(map[string]*QueueInfo)
     p.nodes = make(map[string]*NodeInfo)
     p.applications = make(map[string]*ApplicationInfo)
     p.TotalPartitionResource = resources.NewResource()
+    glog.V(0).Infof("Creating partition %s for RM %s", p.Name, p.RMId)
 
-    return p
+    // Setup the queue structure: root first it should be the only queue at this level
+    // Add the rest of the queue structure recursively
+    queueConf := partition.Queues[0]
+    root, err := NewManagedQueue(queueConf, nil)
+    err = addQueueInfo(queueConf.Queues, root)
+    if err != nil {
+        return nil, err
+    }
+    p.Root = root
+    glog.V(0).Infof("Added queue structure to partition %s", p.Name)
+
+    //TODO add placement rules and users
+    return p, nil
 }
 
-func (m *PartitionInfo) addNewNode(node *NodeInfo, existingAllocations []*si.Allocation) error {
-    m.lock.Lock()
-    defer m.lock.Unlock()
+// Process the config structure and create a queue info tree for this partition
+func addQueueInfo(conf []configs.QueueConfig, parent *QueueInfo) error {
+    // create the queue at this level
+    for _, queueConf := range conf {
+        parent, err := NewManagedQueue(queueConf, parent)
+        if err != nil {
+            return err
+        }
+        // recursive create the queues below
+        if len(queueConf.Queues) > 0 {
+            err := addQueueInfo(queueConf.Queues, parent)
+            if err != nil {
+                return err
+            }
+        }
+    }
+    return nil
+}
 
-    if node := m.nodes[node.NodeId]; node != nil {
+func (pi *PartitionInfo) addNewNode(node *NodeInfo, existingAllocations []*si.Allocation) error {
+    pi.lock.Lock()
+    defer pi.lock.Unlock()
+
+    if node := pi.nodes[node.NodeId]; node != nil {
         return errors.New(fmt.Sprintf("Same node=%s existed in partition=%s while adding new node, please double check.", node.NodeId, node.Partition))
     }
 
-    m.nodes[node.NodeId] = node
+    pi.nodes[node.NodeId] = node
 
     // Add allocations
     if len(existingAllocations) > 0 {
         for _, alloc := range existingAllocations {
-            if _, err := m.addNewAllocationForNodeReportedAllocation(alloc); err != nil {
+            if _, err := pi.addNewAllocationForNodeReportedAllocation(alloc); err != nil {
                 return err
             }
         }
     }
 
-    m.TotalPartitionResource = resources.Add(m.TotalPartitionResource, node.TotalResource)
-    m.Root.MaxResource = m.TotalPartitionResource
+    pi.TotalPartitionResource = resources.Add(pi.TotalPartitionResource, node.TotalResource)
+    pi.Root.MaxResource = pi.TotalPartitionResource
 
     return nil
 }
 
-func (m *PartitionInfo) removeNode(nodeId string) {
-    m.lock.Lock()
-    defer m.lock.Unlock()
+func (pi *PartitionInfo) removeNode(nodeId string) {
+    pi.lock.Lock()
+    defer pi.lock.Unlock()
 
-    node := m.nodes[nodeId]
+    node := pi.nodes[nodeId]
     if node == nil {
         glog.V(2).Infof("Trying to remove node=%s, but it is not part of cache", nodeId)
         return
@@ -101,7 +134,7 @@ func (m *PartitionInfo) removeNode(nodeId string) {
     for _, alloc := range node.GetAllAllocations() {
         var queue *QueueInfo = nil
         // get app and update
-        if app := m.applications[alloc.ApplicationId]; app != nil {
+        if app := pi.applications[alloc.ApplicationId]; app != nil {
             if alloc := app.RemoveAllocation(alloc.AllocationProto.Uuid); alloc == nil {
                 panic(fmt.Sprintf("Failed to get allocation=%s from app=%s when node=%s being removed, this shouldn't happen.", alloc.AllocationProto.Uuid, alloc.ApplicationId,
                     node.NodeId))
@@ -120,46 +153,46 @@ func (m *PartitionInfo) removeNode(nodeId string) {
         glog.V(2).Infof("Remove allocation=%s from node=%s when node is removing", alloc.AllocationProto.Uuid, node.NodeId)
     }
 
-    m.TotalPartitionResource = resources.Sub(m.TotalPartitionResource, node.TotalResource)
-    m.Root.MaxResource = m.TotalPartitionResource
+    pi.TotalPartitionResource = resources.Sub(pi.TotalPartitionResource, node.TotalResource)
+    pi.Root.MaxResource = pi.TotalPartitionResource
 
     // Remove node from nodes
     glog.V(0).Infof("Node=%s is removed from cache", node.NodeId)
-    delete(m.nodes, nodeId)
+    delete(pi.nodes, nodeId)
 }
 
-func (m *PartitionInfo) addNewApplication(info *ApplicationInfo) {
-    m.lock.Lock()
-    defer m.lock.Unlock()
+func (pi *PartitionInfo) addNewApplication(info *ApplicationInfo) {
+    pi.lock.Lock()
+    defer pi.lock.Unlock()
 
-    m.applications[info.ApplicationId] = info
+    pi.applications[info.ApplicationId] = info
 }
 
-func (m *PartitionInfo) getApplication(appId string) *ApplicationInfo {
-    m.lock.RLock()
-    m.lock.RUnlock()
+func (pi *PartitionInfo) getApplication(appId string) *ApplicationInfo {
+    pi.lock.RLock()
+    defer pi.lock.RUnlock()
 
-    return m.applications[appId]
+    return pi.applications[appId]
 }
 
 // Visible by tests
-func (m *PartitionInfo) GetNode(nodeId string) *NodeInfo {
-    m.lock.RLock()
-    m.lock.RUnlock()
+func (pi *PartitionInfo) GetNode(nodeId string) *NodeInfo {
+    pi.lock.RLock()
+    defer pi.lock.RUnlock()
 
-    return m.nodes[nodeId]
+    return pi.nodes[nodeId]
 }
 
 // Returns removed allocations
-func (m *PartitionInfo) releaseAllocationsForApplication(toRelease *cacheevent.ReleaseAllocation) []*AllocationInfo {
-    m.lock.Lock()
-    m.lock.Unlock()
+func (pi *PartitionInfo) releaseAllocationsForApplication(toRelease *cacheevent.ReleaseAllocation) []*AllocationInfo {
+    pi.lock.Lock()
+    defer pi.lock.Unlock()
 
     allocationsToRelease := make([]*AllocationInfo, 0)
 
     // First delete from app
     var queue *QueueInfo = nil
-    if app := m.applications[toRelease.ApplicationId]; app != nil {
+    if app := pi.applications[toRelease.ApplicationId]; app != nil {
         // when uuid not specified, remove all allocations from the app
         if toRelease.Uuid == "" {
             for _, alloc := range app.CleanupAllAllocations() {
@@ -182,7 +215,7 @@ func (m *PartitionInfo) releaseAllocationsForApplication(toRelease *cacheevent.R
 
     for _, alloc := range allocationsToRelease {
         // remove from nodes
-        node := m.nodes[alloc.AllocationProto.NodeId]
+        node := pi.nodes[alloc.AllocationProto.NodeId]
         if node == nil || node.GetAllocation(alloc.AllocationProto.Uuid) == nil {
             panic(fmt.Sprintf("Failed locate node=%s for allocation=%s", alloc.AllocationProto.NodeId, alloc.AllocationProto.Uuid))
         }
@@ -198,16 +231,16 @@ func (m *PartitionInfo) releaseAllocationsForApplication(toRelease *cacheevent.R
 
     // Update global allocation list
     for _, alloc := range allocationsToRelease {
-        delete(m.allocations, alloc.AllocationProto.Uuid)
+        delete(pi.allocations, alloc.AllocationProto.Uuid)
 
     }
 
     return allocationsToRelease
 }
 
-func (m *PartitionInfo) addNewAllocation(alloc *commonevents.AllocationProposal) (*AllocationInfo, error) {
-    m.lock.Lock()
-    defer m.lock.Unlock()
+func (pi *PartitionInfo) addNewAllocation(alloc *commonevents.AllocationProposal) (*AllocationInfo, error) {
+    pi.lock.Lock()
+    defer pi.lock.Unlock()
 
     // Check if allocation violates any resource restriction, or allocate on a
     // non-existent applications or nodes.
@@ -216,15 +249,15 @@ func (m *PartitionInfo) addNewAllocation(alloc *commonevents.AllocationProposal)
     var queue *QueueInfo
     var ok bool
 
-    if node, ok = m.nodes[alloc.NodeId]; !ok {
+    if node, ok = pi.nodes[alloc.NodeId]; !ok {
         return nil, errors.New(fmt.Sprintf("Failed to find node=%s", alloc.NodeId))
     }
 
-    if app, ok = m.applications[alloc.ApplicationId]; !ok {
+    if app, ok = pi.applications[alloc.ApplicationId]; !ok {
         return nil, errors.New(fmt.Sprintf("Failed to find app=%s", alloc.ApplicationId))
     }
 
-    if queue = m.getQueue(alloc.QueueName); queue == nil {
+    if queue = pi.getQueue(alloc.QueueName); queue == nil {
         return nil, errors.New(fmt.Sprintf("Failed to find queue=%s", alloc.QueueName))
     }
 
@@ -249,7 +282,7 @@ func (m *PartitionInfo) addNewAllocation(alloc *commonevents.AllocationProposal)
     }
 
     // Start allocation
-    allocationUuid := m.GetNewAllocationUuid()
+    allocationUuid := pi.GetNewAllocationUuid()
     allocation := NewAllocationInfo(allocationUuid, alloc)
     q = queue
     for q != nil {
@@ -261,14 +294,14 @@ func (m *PartitionInfo) addNewAllocation(alloc *commonevents.AllocationProposal)
 
     app.AddAllocation(allocation)
 
-    m.allocations[allocation.AllocationProto.Uuid] = allocation
+    pi.allocations[allocation.AllocationProto.Uuid] = allocation
 
     return allocation, nil
 
 }
 
-func (m *PartitionInfo) addNewAllocationForNodeReportedAllocation(allocation *si.Allocation) (*AllocationInfo, error) {
-    return m.addNewAllocation(&commonevents.AllocationProposal{
+func (pi *PartitionInfo) addNewAllocationForNodeReportedAllocation(allocation *si.Allocation) (*AllocationInfo, error) {
+    return pi.addNewAllocation(&commonevents.AllocationProposal{
         NodeId:            allocation.NodeId,
         ApplicationId:     allocation.ApplicationId,
         QueueName:         allocation.QueueName,
@@ -279,27 +312,27 @@ func (m *PartitionInfo) addNewAllocationForNodeReportedAllocation(allocation *si
     })
 }
 
-func (m *PartitionInfo) addNewAllocationForSchedulingAllocation(proposal *commonevents.AllocationProposal) (*AllocationInfo, error) {
-    return m.addNewAllocation(proposal)
+func (pi *PartitionInfo) addNewAllocationForSchedulingAllocation(proposal *commonevents.AllocationProposal) (*AllocationInfo, error) {
+    return pi.addNewAllocation(proposal)
 }
 
-func (m *PartitionInfo) GetNewAllocationUuid() string {
+func (pi *PartitionInfo) GetNewAllocationUuid() string {
     // Retry to make sure uuid is correct
     for {
         allocationUuid := uuid.NewV4().String()
-        if m.allocations[allocationUuid] == nil {
+        if pi.allocations[allocationUuid] == nil {
             return allocationUuid
         }
     }
 }
 
-func (m *PartitionInfo) RemoveApplication(appId string) (*ApplicationInfo, []*AllocationInfo) {
-    m.lock.Lock()
-    defer m.lock.Unlock()
+func (pi *PartitionInfo) RemoveApplication(appId string) (*ApplicationInfo, []*AllocationInfo) {
+    pi.lock.Lock()
+    defer pi.lock.Unlock()
 
-    if app := m.applications[appId]; app != nil {
+    if app := pi.applications[appId]; app != nil {
         // Remove app from cache
-        delete(m.applications, appId)
+        delete(pi.applications, appId)
 
         // Total allocated
         totalAppAllocated := app.AllocatedResource
@@ -316,14 +349,14 @@ func (m *PartitionInfo) RemoveApplication(appId string) (*ApplicationInfo, []*Al
             uuid := alloc.AllocationProto.Uuid
 
             // Remove from partition cache
-            if globalAlloc := m.allocations[uuid]; globalAlloc == nil {
+            if globalAlloc := pi.allocations[uuid]; globalAlloc == nil {
                 panic(fmt.Sprintf("Failed to find allocation=%s from global cache", uuid))
             } else {
-                delete(m.allocations, uuid)
+                delete(pi.allocations, uuid)
             }
 
             // Remove from node
-            node := m.nodes[alloc.AllocationProto.NodeId]
+            node := pi.nodes[alloc.AllocationProto.NodeId]
             if node == nil {
                 panic(fmt.Sprintf("Failed to find node=%s for allocation=%s", alloc.AllocationProto.NodeId, uuid))
             }
@@ -335,7 +368,7 @@ func (m *PartitionInfo) RemoveApplication(appId string) (*ApplicationInfo, []*Al
         // Update queues
         queue := app.LeafQueue
         for queue != nil {
-            queue.AllocatedResource = resources.Sub(queue.AllocatedResource, totalAppAllocated)
+            queue.DecAllocatedResource(totalAppAllocated)
             queue = queue.Parent
         }
 
@@ -347,14 +380,14 @@ func (m *PartitionInfo) RemoveApplication(appId string) (*ApplicationInfo, []*Al
     return nil, make([]*AllocationInfo, 0)
 }
 
-func (m *PartitionInfo) CopyNodeInfos() []*NodeInfo {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
+func (pi *PartitionInfo) CopyNodeInfos() []*NodeInfo {
+    pi.lock.RLock()
+    defer pi.lock.RUnlock()
 
-    out := make([]*NodeInfo, len(m.nodes))
+    out := make([]*NodeInfo, len(pi.nodes))
 
     var i = 0
-    for _, v := range m.nodes {
+    for _, v := range pi.nodes {
         out[i] = v
         i++
     }
@@ -362,28 +395,35 @@ func (m *PartitionInfo) CopyNodeInfos() []*NodeInfo {
     return out
 }
 
-func (m *PartitionInfo) GetQueueInfos() []dao.QueueDAOInfo {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
+// TODO fix this:
+// should only return one element, only a root queue
+// remove hard coded values and unknown AbsUsedCapacity
+// map status to the draining flag
+func (pi *PartitionInfo) GetQueueInfos() []dao.QueueDAOInfo {
+    pi.lock.RLock()
+    defer pi.lock.RUnlock()
 
-    //out := make([]*QueueInfo, len(m.queues))
     var queueInfos []dao.QueueDAOInfo
 
     info := dao.QueueDAOInfo{}
-    info.QueueName = m.Root.Name
+    info.QueueName = pi.Root.Name
     info.Status = "RUNNING"
     info.Capacities = dao.QueueCapacity{
-        Capacity:     strings.Trim(m.Root.GuaranteedResource.String(), "map"),
-        MaxCapacity:  strings.Trim(m.Root.GuaranteedResource.String(), "map"),
-        UsedCapacity: strings.Trim(m.Root.AllocatedResource.String(), "map"),
+        Capacity:     strings.Trim(pi.Root.GuaranteedResource.String(), "map"),
+        MaxCapacity:  strings.Trim(pi.Root.GuaranteedResource.String(), "map"),
+        UsedCapacity: strings.Trim(pi.Root.AllocatedResource.String(), "map"),
         AbsUsedCapacity: "20",
     }
-    info.ChildQueues = GetChildQueueInfos(m.Root)
+    info.ChildQueues = GetChildQueueInfos(pi.Root)
     queueInfos = append(queueInfos, info)
 
     return queueInfos
 }
 
+// TODO fix this:
+// should only return one element, only a root queue
+// remove hard coded values and unknown AbsUsedCapacity
+// map status to the draining flag
 func GetChildQueueInfos(info *QueueInfo) []dao.QueueDAOInfo {
     var infos []dao.QueueDAOInfo
     for _, v := range info.children {
@@ -403,43 +443,101 @@ func GetChildQueueInfos(info *QueueInfo) []dao.QueueDAOInfo {
     return infos
 }
 
-func (m *PartitionInfo) GetTotalApplicationCount() int {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
-    return len(m.applications)
+func (pi *PartitionInfo) GetTotalApplicationCount() int {
+    pi.lock.RLock()
+    defer pi.lock.RUnlock()
+    return len(pi.applications)
 }
 
-func (m *PartitionInfo) GetTotalAllocationCount() int {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
-    return len(m.allocations)
+func (pi *PartitionInfo) GetTotalAllocationCount() int {
+    pi.lock.RLock()
+    defer pi.lock.RUnlock()
+    return len(pi.allocations)
 }
 
-func (m *PartitionInfo) GetTotalNodeCount() int {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
-    return len(m.nodes)
+func (pi *PartitionInfo) GetTotalNodeCount() int {
+    pi.lock.RLock()
+    defer pi.lock.RUnlock()
+    return len(pi.nodes)
 }
 
-func (m *PartitionInfo) GetApplications() []*ApplicationInfo {
+func (pi *PartitionInfo) GetApplications() []*ApplicationInfo {
+    pi.lock.RLock()
+    defer pi.lock.RUnlock()
     var appList []*ApplicationInfo
-    for _, app := range m.applications {
+    for _, app := range pi.applications {
         appList = append(appList, app)
     }
     return appList
 }
 
-func (m *PartitionInfo) initQueues(queue *QueueInfo) {
-    if queue != nil {
-        m.queues[queue.FullQualifiedPath] = queue
-        if queue.children != nil && len(queue.children) > 0 {
-            for _, value := range queue.children {
-                m.initQueues(value)
-            }
+// Get the queue from the structure based on the fully qualified name.
+// The name is not syntax checked and must be valid.
+// Returns nil if the queue is not found otherwise the queue object.
+func (pi *PartitionInfo) getQueue(name string) *QueueInfo {
+    pi.lock.RLock()
+    defer pi.lock.RUnlock()
+    // start at the root
+    queue := pi.Root
+    part := strings.Split(strings.ToLower(name), DOT)
+    // short circuit the root queue
+    if len(part) == 1 {
+        return queue
+    }
+    // walk over the parts going down towards the requested queue
+    for i := 1;  i < len(part); i++ {
+        // if child not found break out and return
+        if queue = queue.children[part[i]]; queue == nil {
+            break
         }
     }
+    return queue
 }
 
-func (m *PartitionInfo) getQueue(name string) *QueueInfo {
-    return m.queues[name]
+// Update the queues in the partition based on the reloaded and checked config
+func (pi *PartitionInfo) updatePartitionQueues(partition configs.PartitionConfig) error {
+    pi.lock.RLock()
+    defer pi.lock.RUnlock()
+    // start at the root: there is only one queue
+    queueConf := partition.Queues[0]
+    root := pi.getQueue(queueConf.Name)
+    err := root.updateQueueProps(queueConf)
+    if err != nil {
+        return err
+    }
+    return pi.updateQueues(queueConf.Queues, root)
+}
+
+// Update the passed in queues and then do this recursively for the children
+func (pi *PartitionInfo) updateQueues(config []configs.QueueConfig, parent *QueueInfo) error {
+    // get the name of the passed in queue
+    parentPath := parent.GetQueuePath() + DOT
+    // keep track of which children we have updated
+    visited := map[string]bool{}
+    // walk over the queues recursively
+    for _, queueConfig := range config {
+        pathName :=  parentPath + queueConfig.Name
+        queue := pi.getQueue(pathName)
+        var err error
+        if queue == nil {
+            queue, err = NewManagedQueue(queueConfig, parent)
+        } else {
+            err = queue.updateQueueProps(queueConfig)
+        }
+        if err != nil {
+            return  err
+        }
+        err = pi.updateQueues(queueConfig.Queues, queue)
+        if err != nil {
+            return  err
+        }
+        visited[queueConfig.Name] = true
+    }
+    // remove all children that were not visited
+    for childName, childQueue := range parent.children {
+        if !visited[childName] {
+            childQueue.MarkQueueForRemoval()
+        }
+    }
+    return nil
 }

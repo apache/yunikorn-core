@@ -55,7 +55,7 @@ type SchedulingQueue struct {
 
 func NewSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo) *SchedulingQueue {
     schedulingQueue := &SchedulingQueue{}
-    schedulingQueue.Name = cacheQueueInfo.FullQualifiedPath
+    schedulingQueue.Name = cacheQueueInfo.GetQueuePath()
     schedulingQueue.CachedQueueInfo = cacheQueueInfo
     schedulingQueue.MayAllocatedResource = resources.NewResource()
     schedulingQueue.IsLeafQueue = cacheQueueInfo.IsLeafQueue()
@@ -64,7 +64,7 @@ func NewSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo) *SchedulingQueue {
     schedulingQueue.PendingResource = resources.NewResource()
 
     // TODO, make them configurable
-    if cacheQueueInfo.Properties[cache.APPLICATION_SORT_POLICY] == "fair" {
+    if cacheQueueInfo.Properties[cache.ApplicationSortPolicy] == "fair" {
         schedulingQueue.ApplicationSortType = FAIR_SORT_POLICY
     } else {
         schedulingQueue.ApplicationSortType = FIFO_SORT_POLICY

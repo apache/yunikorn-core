@@ -301,7 +301,27 @@ func (m *RMProxy) Update(request *si.UpdateRequest) error {
 }
 
 // Triggers scheduler to reload configuration and apply the changes on-the-fly to the scheduler itself.
-func (m *RMProxy) ReloadConfiguration() error {
-    // TODO implement hot refresh
+func (m *RMProxy) ReloadConfiguration(rmId string) error {
+    m.lock.RLock()
+    defer m.lock.RUnlock()
+    c := make(chan *commonevents.Result, 0)
+
+    glog.V(0).Infof("Configuration for RM %s update started", rmId)
+
+    // Update the existing RM
+    go func() {
+        m.EventHandlers.CacheEventHandler.HandleEvent(
+            &commonevents.ConfigUpdateRMEvent{
+                RmId: rmId,
+                Channel: c,
+        })
+    }()
+
+    // Wait from channel
+    result := <-c
+    glog.V(0).Infof("Configuration for RM %s update finished with result: %v", rmId, result)
+    if !result.Succeeded {
+        return errors.New(result.Reason)
+    }
     return nil
 }

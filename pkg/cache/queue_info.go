@@ -17,74 +17,250 @@ limitations under the License.
 package cache
 
 import (
+    "fmt"
+    "github.com/golang/glog"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
+    "strings"
     "sync"
 )
 
 const (
-    ROOT_QUEUE = "root"
-
+    DOT = "."
     // How to sort applications, valid options are fair / fifo
-    APPLICATION_SORT_POLICY = "application.sort.policy"
+    ApplicationSortPolicy = "application.sort.policy"
 )
 
 /* Related to queues */
 type QueueInfo struct {
-    Name string
+    Name               string
 
-    // Full qualified path include parents (split by ".")
-    FullQualifiedPath string
+    MaxResource        *resources.Resource // When not set, max = nil
+    GuaranteedResource *resources.Resource // When not set, Guaranteed == 0
+    AllocatedResource  *resources.Resource // set based on allocation
 
-    // When not set, max = nil
-    MaxResource *resources.Resource
-
-    // When not set, Guaranteed == 0
-    GuaranteedResource *resources.Resource
-    AllocatedResource  *resources.Resource
     Parent             *QueueInfo
 
-    // Private fields need protection
-    children   map[string]*QueueInfo // Only for direct children
     Properties map[string]string     // this should be treated as immutable
 
-    lock sync.RWMutex
+    // Private fields need protection
+    isLeaf     bool                  // this is a leaf queue or not (i.e. parent)
+    isManaged  bool                  // queue is part of the config, not auto created
+    isDraining bool                  // a managed queue that has been removed, cannot accept new applications
+    children   map[string]*QueueInfo // list of direct children
+    lock       sync.RWMutex          // lock for updating the queue
 }
 
-func NewQueueInfo(name string, parent *QueueInfo) *QueueInfo {
-    q := &QueueInfo{Name: name, Parent: parent}
-    q.FullQualifiedPath = name
-    if parent != nil {
-        q.FullQualifiedPath = parent.FullQualifiedPath + "." + name
+// Create a new queue from the configuration object.
+// The configuration is validated before we call this: we should not see any errors.
+func NewManagedQueue(conf configs.QueueConfig, parent *QueueInfo) (*QueueInfo, error) {
+    qi := &QueueInfo{Name: strings.ToLower(conf.Name),
+        Parent: parent,
+        isManaged: true,
+        isLeaf: !conf.Parent,
+        AllocatedResource: resources.NewResource()}
+
+    err := qi.updateQueueProps(conf)
+    if err != nil {
+        return nil, fmt.Errorf("queue creation failed: %s", err)
     }
-    q.children = make(map[string]*QueueInfo)
-    q.AllocatedResource = resources.NewResource()
-    return q
+
+    // add the queue in the structure
+    if parent != nil {
+        err := parent.AddChildQueue(qi)
+        if err != nil {
+            return nil, fmt.Errorf("queue creation failed: %s", err)
+        }
+    }
+
+    return qi, nil
 }
 
-func (m *QueueInfo) IsLeafQueue() bool {
-    return m.children == nil || len(m.children) == 0
+// Create a new queue unmanaged queue
+// Rule base queue which might not fit in the structure or fail parsing
+func NewUnmanagedQueue(name string, leaf bool, parent *QueueInfo) (*QueueInfo, error) {
+    // name might not be checked do it here
+    if !configs.QueueNameRegExp.MatchString(name) {
+        return nil, fmt.Errorf("invalid queue name %s, a name must only have alphanumeric characters," +
+            " - or _, and be no longer than 16 characters", name)
+    }
+    // create the object
+    qi := &QueueInfo{Name: strings.ToLower(name),
+        Parent: parent,
+        isLeaf: leaf,
+        AllocatedResource: resources.NewResource()}
+    // TODO set resources on unmanaged queues
+    // add the queue in the structure
+    if parent != nil {
+        err := parent.AddChildQueue(qi)
+        if err != nil {
+            return nil, fmt.Errorf("queue creation failed: %s", err)
+        }
+    }
+    return qi, nil
 }
 
-func (m *QueueInfo) IncAllocatedResource(alloc *resources.Resource) {
-    m.lock.Lock()
-    defer m.lock.Unlock()
-    m.AllocatedResource = resources.Add(m.AllocatedResource, alloc)
+// Return if this is a leaf queue or not
+func (qi *QueueInfo) IsLeafQueue() bool {
+    return qi.isLeaf
 }
 
-func (m *QueueInfo) DecAllocatedResource(alloc *resources.Resource) {
-    m.lock.Lock()
-    defer m.lock.Unlock()
-    m.AllocatedResource = resources.Sub(m.AllocatedResource, alloc)
+// Get the fully qualified path name
+func (qi *QueueInfo) GetQueuePath() string {
+    if qi.Parent == nil {
+        return qi.Name
+    } else {
+        return qi.Parent.GetQueuePath() + DOT + qi.Name
+    }
 }
 
-func (m *QueueInfo) GetCopyOfChildren() map[string]*QueueInfo {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
+// Add a new child queue to this queue
+// - can only add to a non leaf queue
+// - cannot add when the queue is marked for deletion
+// - if this is the first child initialise
+func (qi *QueueInfo) AddChildQueue(child *QueueInfo) error {
+    qi.lock.Lock()
+    defer qi.lock.Unlock()
+    if qi.isLeaf {
+        return fmt.Errorf("cannot add a child queue to a leaf queue: %s", qi.Name)
+    }
+    if qi.isDraining {
+        return fmt.Errorf("cannot add a child queue when queue is marked for deletion: %s", qi.Name)
+    }
+    // add the child (init if needed)
+    if qi.children == nil {
+        qi.children = make(map[string]*QueueInfo)
+    }
+    qi.children[child.Name] = child
+    return nil
+}
+
+// Increment the allocated resources for this queue
+func (qi *QueueInfo) IncAllocatedResource(alloc *resources.Resource) {
+    qi.lock.Lock()
+    defer qi.lock.Unlock()
+    qi.AllocatedResource = resources.Add(qi.AllocatedResource, alloc)
+}
+
+// Decrement the allocated resources for this queue
+func (qi *QueueInfo) DecAllocatedResource(alloc *resources.Resource) {
+    qi.lock.Lock()
+    defer qi.lock.Unlock()
+    qi.AllocatedResource = resources.Sub(qi.AllocatedResource, alloc)
+}
+
+func (qi *QueueInfo) GetCopyOfChildren() map[string]*QueueInfo {
+    qi.lock.RLock()
+    defer qi.lock.RUnlock()
 
     copy := make(map[string]*QueueInfo)
-    for k, v := range m.children {
+    for k, v := range qi.children {
         copy[k] = v
     }
 
     return copy
+}
+
+// Remove a child from the list of children
+// No checks are performed: if the child has been removed already it is a noop.
+// This may only be called by the queue removal itself on the registered parent.
+// Queue removal is always a bottom up action: leafs first then the parent.
+func (qi *QueueInfo) RemoveChildQueue(name string) {
+    qi.lock.Lock()
+    defer qi.lock.Unlock()
+    delete(qi.children, strings.ToLower(name))
+}
+
+// Remove the queue from the structure.
+// Since nothing is allocated there shouldn't be anything referencing this queue any more.
+// The real removal is removing the queue from the parent's child list
+func (qi *QueueInfo) RemoveQueue() bool {
+    qi.lock.Lock()
+    defer qi.lock.Unlock()
+    // cannot remove a managed queue that is not marked for deletion
+    if qi.isManaged && !qi.isDraining {
+        return false
+    }
+    // cannot remove a queue that has children or allocated resources
+    if len(qi.children) > 0 || !resources.IsZero(qi.AllocatedResource) {
+        return false
+    }
+    qi.Parent.RemoveChildQueue(qi.Name)
+    return true
+}
+
+// Mark the managed queue for removal from the system.
+// This can be executed multiple times and is only effective the first time.
+func (qi *QueueInfo) MarkQueueForRemoval() {
+    // need to lock for write as we don't want to add a queue while marking for removal
+    qi.lock.Lock()
+    defer qi.lock.Unlock()
+    // Mark the managed queue for deletion: it is removed from the config let it drain.
+    // Also mark all the managed children for deletion.
+    if qi.isManaged {
+        qi.isDraining = true
+        if qi.children != nil || len(qi.children) > 0 {
+            for _, child := range qi.children {
+                child.MarkQueueForRemoval()
+            }
+        }
+    }
+}
+
+// Update an existing managed queue based on the updated configuration
+func (qi *QueueInfo) updateQueueProps(conf configs.QueueConfig) error {
+
+    // Change from unmanaged to managed
+    if !qi.isManaged {
+        glog.V(0).Infof("changed unmanaged queue to managed: %s", qi.GetQueuePath())
+        qi.isManaged = true
+    }
+
+    // Make sure the parent flag is set correctly: config might expect auto parent type creation
+    if len(conf.Queues) > 0 {
+        qi.isLeaf = false
+    }
+
+    // Load the max resources
+    maxResource, err := resources.NewResourceFromConf(conf.Resources.Max)
+    if err != nil {
+        glog.V(2).Infof("parsing failed on max resources this should not happen: %v", err)
+        return err
+    }
+    if len(maxResource.Resources) != 0 {
+        qi.MaxResource = maxResource
+    }
+
+    // Load the guaranteed resources
+    guaranteedResource, err := resources.NewResourceFromConf(conf.Resources.Guaranteed)
+    if err != nil {
+        glog.V(2).Infof("parsing failed on max resources this should not happen: %v", err)
+        return err
+    }
+    if len(guaranteedResource.Resources) != 0 {
+        qi.GuaranteedResource = guaranteedResource
+    }
+
+    // Update Properties
+    qi.Properties = conf.Properties
+    if qi.Parent != nil && qi.Parent.Properties != nil {
+        qi.Properties = mergeProperties(qi.Parent.Properties, conf.Properties)
+    }
+
+    return nil
+}
+
+func mergeProperties(parent map[string]string, child map[string]string) map[string]string {
+    merged := make(map[string]string)
+    if parent != nil && len(parent) > 0 {
+        for key, value := range parent {
+            merged[key] = value
+        }
+    }
+    if child != nil && len(child) > 0 {
+        for key, value := range child {
+            merged[key] = value
+        }
+    }
+    return merged
 }

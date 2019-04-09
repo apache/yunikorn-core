@@ -31,6 +31,11 @@ type RegisterRMEvent struct {
     Channel chan *Result
 }
 
+type ConfigUpdateRMEvent struct {
+    RmId    string
+    Channel chan *Result
+}
+
 type Result struct {
     Succeeded bool
     Reason    string

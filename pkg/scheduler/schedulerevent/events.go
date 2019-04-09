@@ -40,3 +40,9 @@ type SchedulerUpdatePartitionsConfigEvent struct {
     UpdatedPartitions []interface{}
     ResultChannel     chan *commonevents.Result
 }
+
+type SchedulerDeletePartitionsConfigEvent struct {
+    // Type is *cache.PartitionInfo, avoid cycle imports
+    DeletePartitions []interface{}
+    ResultChannel     chan *commonevents.Result
+}

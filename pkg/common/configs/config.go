@@ -21,30 +21,73 @@ import (
     "github.com/golang/glog"
     "gopkg.in/yaml.v2"
     "io/ioutil"
-    "log"
     "os"
     "path"
 )
 
+// The configuration can contain multiple partitions. Each partition contains the queue definition for a logical
+// set of scheduler resources.
 type SchedulerConfig struct {
     Partitions []PartitionConfig
 }
 
 type PartitionConfig struct {
-    Name   string
-    Queues []QueueConfig
-}
+    Name           string
+    Queues         []QueueConfig
+    PlacementRules []PlacementRule `yaml:",omitempty" json:",omitempty"`
+    Users          []User          `yaml:",omitempty" json:",omitempty"`}
 
+// The queue object for each queue:
+// - the name of the queue
+// - a resources object to specify resource limits on the queue
+// - a set of properties, exact definition of what can be set is not part of the yaml
+// - a list of sub or child queues
 type QueueConfig struct {
-    Name       string
-    Resources  Resources
-    Properties map[string]string
-    Queues      []QueueConfig
+    Name            string
+    Parent          bool              `yaml:",omitempty" json:",omitempty"`
+    Resources       Resources         `yaml:",omitempty" json:",omitempty"`
+    Properties      map[string]string `yaml:",omitempty" json:",omitempty"`
+    AdminACL        string            `yaml:",omitempty" json:",omitempty"`
+    SubmitACL       string            `yaml:",omitempty" json:",omitempty"`
+    MaxApplications uint64            `yaml:",omitempty" json:",omitempty"`
+    Queues          []QueueConfig     `yaml:",omitempty" json:",omitempty"`
 }
 
+// The resource limits to set on the queue. The definition allows for an unlimited number of types to be used.
+// The mapping to "known" resources is not handled here.
+// - guaranteed resources
+// - max resources
 type Resources struct {
-    Guaranteed map[string]string
-    Max        map[string]string
+    Guaranteed map[string]string `yaml:",omitempty" json:",omitempty"`
+    Max        map[string]string `yaml:",omitempty" json:",omitempty"`
+}
+
+// The queue placement rule definition
+// - the name of the rule
+// - create flag: can the rule create a queue
+// - user and group filter to be applied on the callers
+// - rule link to allow setting a rule to generate the parent
+type PlacementRule struct {
+    Name   string
+    Create bool           `yaml:",omitempty" json:",omitempty"`
+    Filter Filter         `yaml:",omitempty" json:",omitempty"`
+    Parent *PlacementRule `yaml:",omitempty" json:",omitempty"`
+}
+
+// The user and group filter for a rule.
+// - type of filter (allow or deny filter)
+// - comma separated list of users to filter
+// - comma separated list of groups to filter
+type Filter struct {
+    Type   string
+    Users  []string `yaml:",omitempty" json:",omitempty"`
+    Groups []string `yaml:",omitempty" json:",omitempty"`
+}
+
+type User struct {
+    Name            string
+    MaxResources    map[string]string `yaml:",omitempty" json:",omitempty"`
+    MaxApplications uint64            `yaml:",omitempty" json:",omitempty"`
 }
 
 type LoadSchedulerConfigFunc func(policyGroup string) (*SchedulerConfig, error)
@@ -54,11 +97,17 @@ func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) 
     conf := &SchedulerConfig{}
     err := yaml.Unmarshal(content, conf)
     if err != nil {
-        log.Fatalf("error: %v", err)
+        glog.V(2).Infof("Queue configuration parsing failed, error: %s", err)
         return nil, err
     }
-
-    return conf, nil
+    glog.V(0).Info("Queue configuration parsing finished")
+    // validate the config
+    err = Validate(conf)
+    if err != nil {
+        glog.V(0).Infof("Queue configuration validation failed: %s", err)
+        return nil, err
+    }
+    return conf, err
 }
 
 func loadSchedulerConfigFromFile(policyGroup string) (*SchedulerConfig, error) {
@@ -78,9 +127,10 @@ func loadSchedulerConfigFromFile(policyGroup string) (*SchedulerConfig, error) {
     glog.Infof("loading configuration from path %s", filePath)
     buf, err := ioutil.ReadFile(filePath)
     if err != nil {
-        log.Fatalf("error: %v", err)
+        glog.V(2).Infof("Queue configuration file failed to load: %s", err)
         return nil, err
     }
+    glog.V(0).Info("Queue configuration loaded from file")
     return LoadSchedulerConfigFromByteArray(buf)
 }
 

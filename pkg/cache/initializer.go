@@ -17,109 +17,142 @@ limitations under the License.
 package cache
 
 import (
-    "errors"
     "fmt"
     "github.com/golang/glog"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
-    "regexp"
-    "strconv"
 )
 
-// Return updated partition names
-func updateClusterInfoFromConfig(clusterInfo *ClusterInfo, conf *configs.SchedulerConfig, rmId string) ([]*PartitionInfo, error) {
+// Create partition info objects from the configuration to set in the cluster.
+// - The cluster must not have any partitions set (checked in the caller)
+// - A validated config must be passed in.
+func createPartitionInfos(clusterInfo *ClusterInfo, conf *configs.SchedulerConfig, rmId string) ([]*PartitionInfo, error) {
     updatedPartitions := make([]*PartitionInfo, 0)
     for _, p := range conf.Partitions {
-        partitionName := common.GetNormalizedPartitionName(p.Name, rmId)
-
-        if clusterInfo.GetPartition(partitionName) != nil {
-            return []*PartitionInfo{}, errors.New(fmt.Sprintf("Partition=%s is already defined in scheduler config", p.Name))
-        }
-
-        partition := newPartitionInfo(partitionName)
-        if err := updatePartitionInfoFromConfig(partition, &p); err != nil {
+        partition, err := newPartitionInfo(p, rmId)
+        if err != nil {
             return []*PartitionInfo{}, err
         }
+
+        partitionName := common.GetNormalizedPartitionName(p.Name, rmId)
 
         clusterInfo.addPartition(partitionName, partition)
         updatedPartitions = append(updatedPartitions, partition)
 
-        glog.V(0).Infof("Added partition=%s to cluster", partitionName)
+        glog.V(0).Infof("Added partition %s to cluster", partitionName)
     }
 
     return updatedPartitions, nil
 }
 
-func updatePartitionInfoFromConfig(partitionInfo *PartitionInfo, conf *configs.PartitionConfig) error {
-    // ensure there is only one root
-    if len(conf.Queues) > 1 {
-        return errors.New("each partition can have and only have 1 root queue defined")
+// Create the mew partition configuration and ass all of them to the cluster.
+// This function may only be called by the scheduler when a RM registers.
+// It creates a new PartitionInfo from scratch and does not merge the configurations.
+func SetClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmId string, policyGroup string) ([]*PartitionInfo, error) {
+    // we should not have any partitions set at this point
+    if len(clusterInfo.partitions) > 0 {
+        return []*PartitionInfo{}, fmt.Errorf("RM %s has been registerd before, active partitions %d", rmId, len(clusterInfo.partitions))
+    }
+    // load the config this returns a validated configuration
+    conf, err := configs.SchedulerConfigLoader(policyGroup)
+    if err != nil {
+        return []*PartitionInfo{}, err
     }
 
-    for _, q := range conf.Queues {
-        queueInfo := NewQueueInfo(q.Name, nil)
-        partitionInfo.Root = queueInfo
-        if err := updateQueueInfo(queueInfo, &q); err != nil {
-            return err
-        }
+    updatedPartitions, err := createPartitionInfos(clusterInfo, conf, rmId)
+
+    if err != nil {
+        return []*PartitionInfo{}, err
     }
 
-    // populate flat full-qualified-queue-name to queue mapping
-    partitionInfo.initQueues(partitionInfo.Root)
-
-    // get root queue
-    // Root queue must be existed
-    if partitionInfo.Root == nil {
-        return errors.New("failed to find root queue, it must be defined")
-    }
-
-    // Check loop in the queue
-    visited := make(map[string]bool)
-    if err := recursiveCheckQueue(partitionInfo.Root, visited); err != nil {
-        return err
-    }
-
-    // Check resource configurations
-    if err := checkResourceConfigurationsForQueue(partitionInfo.Root, nil); err != nil {
-        return err
-    }
-    return nil
+    return updatedPartitions, nil
 }
 
-func updateQueueInfo(queueInfo *QueueInfo, conf *configs.QueueConfig) error {
-    reg := regexp.MustCompile("^[a-zA-Z0-9_-]{1,16}$")
-    // check queue name
-    if !reg.MatchString(conf.Name) {
-        return errors.New(fmt.Sprintf("invalid queue name %s, name must only have alphabets," +
-            " numbers, - or _, and no longer than 16 chars", conf.Name))
+// Update the existing cluster info:
+// - add new partitions
+// - update existing partitions
+// - remove deleted partitions
+// updates and add internally are processed differently outside of this method they are the same.
+func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmId string) ([]*PartitionInfo, []*PartitionInfo, error) {
+    // we must have partitions set at this point
+    if len(clusterInfo.partitions) == 0 {
+        return []*PartitionInfo{}, []*PartitionInfo{}, fmt.Errorf("RM %s has no active partitions, make sure it is registered", rmId)
+    }
+    // load the config this returns a validated configuration
+    conf, err := configs.SchedulerConfigLoader(clusterInfo.policyGroup)
+    if err != nil {
+        return []*PartitionInfo{}, []*PartitionInfo{}, err
     }
 
-    // update queue configs
-    if err := updateQueueInfoFromConfig(queueInfo, conf); err != nil {
-        return err
-    }
+    // Start updating the config is OK and should pass setting on the cluster
+    glog.V(0).Infof("Updating partitions from config in the cluster for RM %s", rmId)
+    // keep track of the deleted and updated partitions
+    updatedPartitions := make([]*PartitionInfo, 0)
+    visited := map[string]bool{}
+    // walk over the partitions in the config: update existing ones
+    for _, p := range conf.Partitions {
+        partitionName := common.GetNormalizedPartitionName(p.Name, rmId)
+        part, ok := clusterInfo.partitions[partitionName]
+        if ok {
+            // make sure the new info passes all checks
+            _, err = newPartitionInfo(p, rmId)
+            if err != nil {
+                return []*PartitionInfo{}, []*PartitionInfo{}, err
+            }
+            // checks passed perform the real update
+            glog.V(0).Infof("Updating partition %s in the cluster", partitionName)
+            err = part.updatePartitionQueues(p)
+            if err != nil {
+                return []*PartitionInfo{}, []*PartitionInfo{}, err
+            }
+        } else {
+            // not found: new partition, no checks needed
+            glog.V(0).Infof("Added partition %s in the cluster", partitionName)
 
-    // recursively update child queue info
-    children := make(map[string]*QueueInfo)
-    queueInfo.children = children
-    for _, child := range conf.Queues {
-        // under same parent, dup queue names are disallowed
-        if qn, ok := children[child.Name]; ok {
-            return errors.New(fmt.Sprintf(
-                "duplicate queue name is found under same parent, queue name: %s",
-                qn.FullQualifiedPath))
+            part, err = newPartitionInfo(p, rmId)
+            if err != nil {
+                return []*PartitionInfo{}, []*PartitionInfo{}, err
+            }
         }
-        childQueue := NewQueueInfo(child.Name, queueInfo)
-        children[child.Name] = childQueue
-        if err := updateQueueInfo(childQueue, &child); err != nil {
-            return err
-        }
+        // add it to the partitions to update
+        updatedPartitions = append(updatedPartitions, part)
+        visited[p.Name] = true
     }
 
-    return nil
+    // get the removed partitions
+    deletedPartitions := make([]*PartitionInfo, 0)
+    for _, part := range clusterInfo.partitions {
+        if !visited[part.Name] {
+            partitionName := common.GetNormalizedPartitionName(part.Name, rmId)
+            clusterInfo.removePartition(partitionName)
+            deletedPartitions = append(deletedPartitions, part)
+            glog.V(0).Infof("Removed partition %s from the cluster", partitionName)
+        }
+    }
+    return updatedPartitions, deletedPartitions, nil
 }
 
+// Create a new checked PartitionInfo
+// convenience method that wraps creation and checking the settings.
+func newPartitionInfo(part configs.PartitionConfig, rmId string) (*PartitionInfo, error) {
+
+    partition, err := NewPartitionInfo(part, rmId)
+    if err != nil {
+        return nil, err
+    }
+    // sanity check the partition and the queues below it now that we have a full setup
+    err = checkResourceConfigurationsForQueue(partition.Root, nil)
+    if err != nil {
+        return nil, err
+    }
+    return partition, nil
+}
+
+// Check the queue resource configuration settings.
+// - child or children cannot have higher maximum or guaranteed limits than parents
+// - children (added together) cannot have a higher guaranteed setting than a parent
+// TODO add maximum number of running applications
 func checkResourceConfigurationsForQueue(cur *QueueInfo, parent *QueueInfo) error {
     // If cur has children, make sure sum of children's guaranteed <= cur.guaranteed
     if len(cur.children) > 0 {
@@ -137,7 +170,7 @@ func checkResourceConfigurationsForQueue(cur *QueueInfo, parent *QueueInfo) erro
 
         if cur.GuaranteedResource != nil {
             if !resources.FitIn(cur.GuaranteedResource, sum) {
-                return errors.New(fmt.Sprintf("Queue=%s, guaranteed-resource=%v < sum of children guarantees=%v", cur.Name, cur.GuaranteedResource, sum))
+                return fmt.Errorf("queue %s has guaranteed-resources (%v) smaller than sum of children guaranteed resources (%v)", cur.Name, cur.GuaranteedResource, sum)
             }
         } else {
             cur.GuaranteedResource = sum
@@ -158,100 +191,14 @@ func checkResourceConfigurationsForQueue(cur *QueueInfo, parent *QueueInfo) erro
     if cur.MaxResource != nil {
         if parent != nil && parent.MaxResource != nil {
             if !resources.FitIn(parent.MaxResource, cur.MaxResource) {
-                return errors.New(fmt.Sprintf("Queue=%s, max-resource=%v, not fitin parent's max=%v", cur.Name, cur.MaxResource, parent.MaxResource))
+                return fmt.Errorf("queue %s has max resources (%v) set larger than parent's max resources (%v)", cur.Name, cur.MaxResource, parent.MaxResource)
             }
         }
 
         if !resources.FitIn(cur.MaxResource, cur.GuaranteedResource) {
-            return errors.New(fmt.Sprintf("Queue=%s, max-resource=%v < guaranteed-resource=%v", cur.Name, cur.MaxResource, cur.GuaranteedResource))
+            return fmt.Errorf("queue %s has max resources (%v) set smaller than guaranteed resources (%v)", cur.Name, cur.MaxResource, cur.GuaranteedResource)
         }
     }
 
     return nil
-}
-
-// There should not loop in the queues
-func recursiveCheckQueue(root *QueueInfo, visited map[string]bool) error {
-    if visited[root.Name] {
-        return errors.New("detected loop in queue hierarchy definition from config, please double check")
-    }
-
-    visited[root.Name] = true
-
-    for _, child := range root.children {
-        if err := recursiveCheckQueue(child, visited); err != nil {
-            return err
-        }
-    }
-
-    return nil
-}
-
-func getResourceFromMap(configMap map[string]string) (*resources.Resource, error) {
-    resMap := make(map[string]resources.Quantity)
-    for k, v := range configMap {
-        intValue, err := strconv.ParseInt(v, 10, 64)
-        if err != nil {
-            return nil, err
-        }
-        resMap[k] = resources.Quantity(intValue)
-    }
-    return resources.NewResourceFromMap(resMap), nil
-}
-
-func updateQueueInfoFromConfig(queueInfo *QueueInfo, conf *configs.QueueConfig) error {
-    guaranteed, err := getResourceFromMap(conf.Resources.Guaranteed)
-    if err != nil {
-        return err
-    }
-    if 0 != len(guaranteed.Resources) {
-        queueInfo.GuaranteedResource = guaranteed
-    }
-
-    max, err := getResourceFromMap(conf.Resources.Max)
-    if err != nil {
-        return err
-    }
-    if 0 != len(max.Resources) {
-        queueInfo.MaxResource = max
-    }
-
-    // Update Properties
-    queueInfo.Properties = conf.Properties
-    if queueInfo.Parent != nil && queueInfo.Parent.Properties != nil {
-        queueInfo.Properties = mergeProperties(queueInfo.Parent.Properties, conf.Properties)
-    }
-
-    return nil
-}
-
-func mergeProperties(parent map[string]string, child map[string]string) map[string]string {
-    merged := make(map[string]string)
-    if parent != nil && len(parent) > 0 {
-        for key, value := range parent {
-            merged[key] = value
-        }
-    }
-    if child != nil && len(child) > 0 {
-        for key, value := range child {
-            merged[key] = value
-        }
-    }
-    return merged
-}
-
-// This function should be called by scheduler to invoke
-func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmId string, policyGroup string) ([]*PartitionInfo, error) {
-    conf, err := configs.SchedulerConfigLoader(policyGroup)
-    if err != nil {
-        return []*PartitionInfo{}, err
-    }
-
-    updatedPartitions, err := updateClusterInfoFromConfig(clusterInfo, conf, rmId)
-
-    if err != nil {
-        return []*PartitionInfo{}, err
-    }
-
-    return updatedPartitions, nil
 }

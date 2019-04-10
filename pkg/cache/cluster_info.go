@@ -33,8 +33,9 @@ import (
 )
 
 type ClusterInfo struct {
-    partitions map[string]*PartitionInfo
-    lock       sync.RWMutex
+    partitions  map[string]*PartitionInfo
+    lock        sync.RWMutex
+    policyGroup string
 
     // Event queues
     pendingRmEvents        chan interface{}
@@ -91,6 +92,8 @@ func (m *ClusterInfo) handleRMEvents() {
             m.processRMUpdateEvent(v)
         case *commonevents.RegisterRMEvent:
             m.processRMRegistrationEvent(v)
+        case *commonevents.ConfigUpdateRMEvent:
+            m.processRMConfigUpdateEvent(v)
         default:
             panic(fmt.Sprintf("%s is not an acceptable type for RM event.", reflect.TypeOf(v).String()))
         }
@@ -140,6 +143,12 @@ func (m *ClusterInfo) addPartition(name string, info *PartitionInfo) {
     m.lock.Lock()
     defer m.lock.Unlock()
     m.partitions[name] = info
+}
+
+func (m *ClusterInfo) removePartition(name string) {
+    m.lock.Lock()
+    defer m.lock.Unlock()
+    delete(m.partitions, name)
 }
 
 func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateRequest) {
@@ -289,7 +298,28 @@ func (m *ClusterInfo) processRMUpdateEvent(event *cacheevent.RMUpdateRequestEven
 }
 
 func (m *ClusterInfo) processRMRegistrationEvent(event *commonevents.RegisterRMEvent) {
-    updatedPartitions, err := UpdateClusterInfoFromConfigFile(m, event.RMRegistrationRequest.RmId, event.RMRegistrationRequest.PolicyGroup)
+    updatedPartitions, err := SetClusterInfoFromConfigFile(m, event.RMRegistrationRequest.RmId, event.RMRegistrationRequest.PolicyGroup)
+    if err != nil {
+        event.Channel <- &commonevents.Result{Succeeded: false, Reason: err.Error()}
+    }
+
+    updatedPartitionsInterfaces := make([]interface{}, 0)
+    for _, u := range updatedPartitions {
+        updatedPartitionsInterfaces = append(updatedPartitionsInterfaces, u)
+    }
+
+    // Keep track of the config, cannot be changed for this RM
+    m.policyGroup = event.RMRegistrationRequest.PolicyGroup
+
+    // Send updated partitions to scheduler
+    m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerUpdatePartitionsConfigEvent{
+        UpdatedPartitions: updatedPartitionsInterfaces,
+        ResultChannel:     event.Channel,
+    })
+}
+
+func (m *ClusterInfo) processRMConfigUpdateEvent(event *commonevents.ConfigUpdateRMEvent) {
+    updatedPartitions, deletedPartitions, err := UpdateClusterInfoFromConfigFile(m, event.RmId)
     if err != nil {
         event.Channel <- &commonevents.Result{Succeeded: false, Reason: err.Error()}
     }
@@ -302,6 +332,17 @@ func (m *ClusterInfo) processRMRegistrationEvent(event *commonevents.RegisterRME
     // Send updated partitions to scheduler
     m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerUpdatePartitionsConfigEvent{
         UpdatedPartitions: updatedPartitionsInterfaces,
+        ResultChannel:     event.Channel,
+    })
+
+    deletedPartitionsInterfaces := make([]interface{}, 0)
+    for _, u := range deletedPartitions {
+        deletedPartitionsInterfaces = append(deletedPartitionsInterfaces, u)
+    }
+
+    // Send deleted partitions to the scheduler
+    m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerDeletePartitionsConfigEvent{
+        DeletePartitions: deletedPartitionsInterfaces,
         ResultChannel:     event.Channel,
     })
 }
@@ -457,6 +498,8 @@ func (m *ClusterInfo) HandleEvent(ev interface{}) {
     case *cacheevent.RMUpdateRequestEvent:
         enqueueAndCheckFull(m.pendingRmEvents, v)
     case *commonevents.RegisterRMEvent:
+        enqueueAndCheckFull(m.pendingRmEvents, v)
+    case *commonevents.ConfigUpdateRMEvent:
         enqueueAndCheckFull(m.pendingRmEvents, v)
     default:
         panic(fmt.Sprintf("Received unexpected event type = %s", reflect.TypeOf(v).String()))

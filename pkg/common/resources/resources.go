@@ -21,6 +21,7 @@ import (
     "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
     "math"
     "sort"
+    "strconv"
 )
 
 // const keys
@@ -49,6 +50,21 @@ func NewResourceFromProto(proto *si.Resource) *Resource {
 
 func NewResourceFromMap(m map[string]Quantity) *Resource {
     return &Resource{Resources: m}
+}
+
+// Create a new resource from the config map.
+// The config map must have been checked before being applied. The check here is just for safety so we do not crash.
+// TODO support size modifiers
+func NewResourceFromConf(configMap map[string]string) (*Resource, error) {
+    res := NewResource()
+    for key, strVal := range configMap {
+        intValue, err := strconv.ParseInt(strVal, 10, 64)
+        if err != nil {
+            return nil, err
+        }
+        res.Resources[key] = Quantity(intValue)
+    }
+    return res, nil
 }
 
 // No unit defined here for better performance
@@ -309,4 +325,16 @@ func ComponentWiseMin(left *Resource, right *Resource) *Resource {
         out.Resources[k] = minQuantity(v, left.Resources[k])
     }
     return out
+}
+
+// Check that the whole resource is zero
+func IsZero(zero *Resource) bool {
+    if zero != nil {
+        for _, v := range zero.Resources {
+            if v > 0 {
+                return false
+            }
+        }
+    }
+    return true
 }

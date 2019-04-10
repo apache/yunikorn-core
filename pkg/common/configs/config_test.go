@@ -18,6 +18,7 @@ package configs
 
 import (
     "encoding/json"
+    "fmt"
     "gopkg.in/yaml.v2"
     "io/ioutil"
     "path"
@@ -32,6 +33,7 @@ func TestConfigSerde(t *testing.T) {
                 Queues: []QueueConfig{
                     {
                         Name: "a",
+                        Parent: true,
                         Properties: map[string]string{
                             "acl": "abc",
                             "x":   "y",
@@ -75,6 +77,7 @@ func TestConfigSerde(t *testing.T) {
                     },
                     {
                         Name: "b",
+                        Parent: true,
                         Properties: map[string]string{
                             "acl": "abc",
                             "x":   "y",
@@ -120,120 +123,334 @@ func TestConfigSerde(t *testing.T) {
         },
     }
 
-    d, err := yaml.Marshal(&conf)
+    // convert the object to yaml
+    yamlConf, err := yaml.Marshal(&conf)
     if err != nil {
-        t.Errorf("error: %v", err)
+        t.Errorf("error marshalling yaml config: %v", err)
     }
+    t.Logf(string(yamlConf))
 
-    t.Logf(string(d))
-
+    // unmarshal what we have just created
     newConf := SchedulerConfig{}
-
-    err = yaml.Unmarshal(d, &newConf)
-
+    err = yaml.Unmarshal(yamlConf, &newConf)
     if err != nil {
-        t.Errorf("error: %v", err)
+        t.Errorf("error unmarshalling serde yaml: %v", err)
     }
 
-    a, _ := json.Marshal(newConf)
-    b, _ := json.Marshal(conf)
-
-    if string(a) != string(b) {
-        t.Error("issue in compare")
-        t.Errorf("original=[%s]", a)
-        t.Errorf("serde   =[%s]", b)
+    // marshal as json and we still should get the same objects
+    jsonConf, err := json.Marshal(conf)
+    t.Logf(string(jsonConf))
+    if err != nil {
+        t.Errorf("error marshalling json from config: %v", err)
     }
+
+    jsonConf2, err := json.Marshal(newConf)
+    if err != nil {
+        t.Errorf("error marshalling json config from serde yaml config: %v", err)
+    }
+
+    if string(jsonConf) != string(jsonConf2) {
+        t.Error("json marshaled strings differ:")
+        t.Errorf("original=[%s]", jsonConf)
+        t.Errorf("serde   =[%s]", jsonConf2)
+    }
+}
+
+func CreateConfig (data string) (*SchedulerConfig, error) {
+    dir, err := ioutil.TempDir("", "test-scheduler-config")
+    if err != nil {
+        return nil, fmt.Errorf("failed to create temp dir: %v", err)
+    }
+
+    err = ioutil.WriteFile(path.Join(dir, "test-scheduler-config.yaml"), []byte(data), 0644)
+    if err != nil {
+        return nil, fmt.Errorf("failed to write config file: %v", err)
+    }
+    // Read the file and build the config
+    ConfigMap[SchedulerConfigPath] = dir
+    return SchedulerConfigLoader("test-scheduler-config")
 }
 
 func TestLoadQueueConfig(t *testing.T) {
     data := `
 partitions:
-  -
-    name: default
+  - name: default
     queues:
-      -
-        name: a
-        properties:
-          acl: abc
-          x: y
-        resources:
-          guaranteed:
-            a: 100
-            b: 200
-          max:
-            a: 200
-            b: 300
+      - name: root
         queues:
-          -
-            name: a1
+          - name: production
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 100}
+          - name: test
             properties:
-              acl: a1bc
-          -
-            name: a2
-            properties:
-              acl: a2bc
-      -
-        name: b
-        properties:
-          acl: abc
-          x: y
-        children:
-          - b1
-          - b2
-  -
-    name: gpu
+              something: withAvalue
+            resources:
+              guaranteed:
+                memory: 200
+                vcore: 2
+              max:
+                memory: 3000
+                vcore: 30
+          - name: sandbox
+            parent: true
+            submitacl: " sandbox"
+            resources:
+              guaranteed:
+                memory: 400
+                vcore: 4
+              max:
+                memory: 5000
+                vcore: 50
+    placementrules:
+      - name: User
+        create: true
+        parent:
+          name: Group
+          create: false
+        filter:
+          type: allow
+          groups:
+            - sandbox
+      - name: Provided
+        create: true
+    users:
+      - name: user1
+        maxresources: {memory: 10000, vcore: 10}
+        maxapplications: 7
+      - name: user2
+        maxapplications: 10
+  - name: gpu
     queues:
-      -
-        name: a1
-        properties:
-          acl: abc
-          x: y
-      -
-        name: b1
-        properties:
-          acl: abc
-          x: y
+      - name: production
+        adminacl: "admin admin"
+        maxapplications: 10
+      - name: test
+        submitacl: "*"
+        resources:
+          max: {memory: 1000, vcore: 10}
 `
 
-    dir, err := ioutil.TempDir("", "test-scheduler-config")
+    // create the config and process it
+    conf, err := CreateConfig(data)
     if err != nil {
-        t.Errorf("error: %v", err)
-    }
-
-    err = ioutil.WriteFile(path.Join(dir, "test-scheduler-config.yaml"), []byte(data), 0644)
-    if err != nil {
-        t.Errorf("error: %v", err)
-    }
-
-    // Read from tmp
-    ConfigMap[SchedulerConfigPath] = dir
-    conf, err := SchedulerConfigLoader("test-scheduler-config")
-
-    if err != nil {
-        t.Errorf("error: %v", err)
+        t.Errorf("loading failed with error: %v", err)
     }
 
     if conf.Partitions[0].Name != "default" {
-        t.Errorf("Failed to load conf from file %v", conf)
+        t.Errorf("default partition not found in config: %v", conf)
     }
 
-    if len(conf.Partitions[0].Queues) != 2 || len(conf.Partitions[0].Queues) != 2 {
-        t.Errorf("Failed to load queues from file %v", conf)
+    // gone through validation: both 1 top level queues
+    if len(conf.Partitions[0].Queues) != 1 || len(conf.Partitions[1].Queues) != 1 {
+        t.Errorf("failed to load queues from file %v", conf)
     }
 
-    if conf.Partitions[0].Queues[0].Queues[0].Name != "a1" {
-        t.Errorf("Failed to load queues from file %v", conf)
+    // root.sandbox queue
+    if conf.Partitions[0].Queues[0].Queues[2].Name != "sandbox" {
+        t.Errorf("failed to load sub queues from file %v", conf)
     }
 
-    if conf.Partitions[0].Queues[0].Resources.Guaranteed["a"] != "100" {
-        t.Errorf("Failed to load guranteed resource from file %v", conf)
+    // root.production queue
+    if conf.Partitions[0].Queues[0].Queues[0].Resources.Guaranteed["memory"] != "1000" {
+        t.Errorf("failed to load guranteed resource from file %v", conf)
     }
 
-    if conf.Partitions[0].Queues[0].Resources.Max["a"] != "200" {
-        t.Errorf("Failed to load guranteed resource from file %v", conf)
+    // root.test queue
+    if conf.Partitions[0].Queues[0].Queues[1].Resources.Max["vcore"] != "30" {
+        t.Errorf("failed to load max resource from file %v", conf)
     }
 
-    if conf.Partitions[1].Queues[0].Resources.Max != nil {
-        t.Errorf("Failed to load guranteed resource from file %v", conf)
+    // root.test queue
+    if len(conf.Partitions[0].Queues[0].Queues[1].Properties) == 0 {
+        t.Errorf("failed to load properties from file %v", conf)
+    }
+
+    // gpu.production
+    if conf.Partitions[1].Queues[0].Queues[0].Name != "production" {
+        t.Errorf("failed to load 2nd partition queues from file %v", conf)
+    }
+
+    // gpu.production
+    if conf.Partitions[1].Queues[0].Queues[0].AdminACL != "admin admin" {
+        t.Errorf("failed to load admin ACL from file %v", conf)
+    }
+
+    // gpu.production
+    if conf.Partitions[1].Queues[0].Queues[1].SubmitACL != "*" {
+        t.Errorf("failed to load submit ACL from file %v", conf)
+    }
+}
+
+func TestDeepQueueHierarchy(t *testing.T) {
+    data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        queues:
+          - name: level1
+            queues:
+              - name: level2
+                queues:
+                  - name: level3
+                    queues:
+                      - name: level4
+                        queues:
+                          - name: level5
+`
+    // create the config and process it
+    // validate the config and check after the update
+    conf, err := CreateConfig(data)
+    if err != nil {
+        t.Errorf("deep queue hierarchy test should not have failed: %v", err)
+    }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        queues:
+          - name: level1
+            queues:
+              - name: level2
+                queues:
+                  - name: level3
+                    queues:
+                      - name: level4
+                        queues:
+                          - name: $$$$
+`
+    // create the config and process it
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("deep queue hierarchy test should have failed: %v", conf)
+    }
+}
+
+func TestParsePartitionFail(t *testing.T) {
+    data := `
+partitions:
+  - name: default
+`
+    // create the config and process it
+    // validate the config and check after the update
+    conf, err := CreateConfig(data)
+    if err == nil {
+        t.Errorf("no queue config parsing should have failed: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+  - name: default
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("multiple default partitions parsing should have failed: %v", conf)
+    }
+}
+
+func TestParseQueueFail(t *testing.T) {
+    data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        resources:
+          max: {memory: 10000, vcore: 100}
+`
+    // validate the config and check after the update
+    conf, err := CreateConfig(data)
+    if err == nil {
+        t.Errorf("resource limit on root queue parsing should have failed: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: test
+      - name: test
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("duplicate queue names parsing should have failed: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: this-name-is-too-long
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("too long queue name parsing should have failed: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: no.in-name
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("dot in queue names parsing should have failed: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: special-$-name
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("special char in queue names parsing should have failed: %v", conf)
+    }
+}
+
+func TestParseResourceFail(t *testing.T) {
+data := `
+partitions:
+  - name: default
+    queues:
+      - name: test
+        resources:
+          max:
+            memory: text
+`
+    // validate the config and check after the update
+    conf, err := CreateConfig(data)
+    if err == nil {
+        t.Errorf("resource not a number queue parsing should have failed: %v", conf)
+    }
+}
+
+func TestParseACLFail(t *testing.T) {
+    data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        adminacl: "users groups something_to_fail_it"
+`
+    // validate the config and check after the update
+    conf, err := CreateConfig(data)
+    if err == nil {
+        t.Errorf("3 fields in ACL queue parsing should have failed: %v", conf)
     }
 }

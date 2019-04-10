@@ -1,0 +1,55 @@
+partitions:
+  - name: default
+    queues:
+      - name: root
+        queues:
+          - name: advertisement
+            resources:
+              guaranteed:
+                {memory: 500000, vcore: 50000}
+              max:
+                {memory: 800000, vcore: 80000}
+          - name: search
+            resources:
+              guaranteed:
+                memory: 400000
+                vcore: 40000
+              max:
+                memory: 600000
+                vcore: 60000
+          - name: sandbox
+            parent: true
+            submitacl: " sandbox"
+            resources:
+              guaranteed:
+                memory: 100000
+                vcore: 10000
+              max:
+                memory: 100000
+                vcore: 10000
+    placementrules:
+      - name: User
+        create: true
+        parent:
+          name: Group
+          create: false
+        filter:
+          type: allow
+          groups:
+            - sandbox
+      - name: Provided
+        create: true
+    users:
+      - name: user1
+        maxresources: {memory: 10000, vcore: 10}
+        maxapplications: 1
+      - name: user2
+        maxapplications: 10
+  - name: gpu
+    - name: production
+      adminacl: "admin admin"
+      maxapplications: 10
+    - name: test
+      properties:
+        acl: abc
+        x: y

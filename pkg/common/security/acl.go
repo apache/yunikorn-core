@@ -26,6 +26,7 @@ import (
 const (
     WildCard = "*"
     Separator = ","
+    Space = " "
 )
 
 var nameRegExp = regexp.MustCompile("^[a-z_]([a-z0-9_-]{0,31}|[a-z0-9_-]{0,30}\\$)$")
@@ -97,14 +98,13 @@ func (a *ACL) setGroups(groupList []string) {
 func NewACL(aclStr string) (*ACL, error) {
     acl := &ACL{}
     // before trimming check
-    // trim and check for wildcard
-    aclStr = strings.TrimSpace(aclStr)
-    acl.setAllAllowed(aclStr)
     // should have no more than two groups defined
-    fields := strings.Fields(aclStr)
+    fields := strings.Split(aclStr, Space)
     if len(fields) > 2 {
         return nil, fmt.Errorf("multiple spaces found in ACL: '%s'", aclStr)
     }
+    // trim and check for wildcard
+    acl.setAllAllowed(aclStr)
     // an empty ACL is a deny
     if len(fields) == 0 {
         return acl, nil

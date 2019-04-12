@@ -382,8 +382,8 @@ partitions:
             properties:
               x: 345
             resources:
-              guaranteed: {memory: 50, vcore: 1}
-              max: {memory: 100, vcore: 1}
+              guaranteed: {memory: 100, vcore: 10}
+              max: {memory: 200, vcore: 20}
           - name: new-queue
 `
     configs.MockSchedulerConfigByData([]byte(data))
@@ -404,7 +404,7 @@ partitions:
     assert.Equal(t, 3, len(rootQueue.children))
     assert.Equal(t, rootQueue.IsLeafQueue(), false)
     prodQueue = defaultPartition.getQueue("root.production")
-    if !prodQueue.isDraining {
+    if !prodQueue.IsDraining() {
         t.Errorf("Failed removing the production queue in default partition")
         return
     }
@@ -420,5 +420,11 @@ partitions:
     }
     if len(testQueue.Properties) != 1 {
         t.Errorf("Failed parsing the properties on test queue in default partition")
+    }
+    if testQueue.GuaranteedResource.Resources["memory"] != 100{
+        t.Errorf("Failed parsing GuaranteedResource settings on test queue in default partition")
+    }
+    if testQueue.MaxResource.Resources["vcore"] != 20{
+        t.Errorf("Failed parsing MaxResource settings on test queue in default partition")
     }
 }

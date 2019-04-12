@@ -19,6 +19,7 @@ package scheduler
 import (
     "errors"
     "fmt"
+    "github.com/golang/glog"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache"
     "sync"
 )
@@ -30,7 +31,9 @@ type ClusterSchedulingContext struct {
 }
 
 func NewClusterSchedulingContext() *ClusterSchedulingContext {
-    return &ClusterSchedulingContext{partitions: make(map[string]*PartitionSchedulingContext)}
+    return &ClusterSchedulingContext{
+        partitions: make(map[string]*PartitionSchedulingContext),
+    }
 }
 
 type PartitionSchedulingContext struct {
@@ -42,20 +45,37 @@ type PartitionSchedulingContext struct {
     lock sync.RWMutex
 }
 
-func (m *PartitionSchedulingContext) AddSchedulingApplication(schedulingApp *SchedulingApplication) error {
-    m.lock.Lock()
-    defer m.lock.Unlock()
+// Create a new partitioning scheduling context
+func newPartitionSchedulingContext(rmId string) *PartitionSchedulingContext {
+    return &PartitionSchedulingContext{
+        applications: make(map[string]*SchedulingApplication),
+        queues:       make(map[string]*SchedulingQueue),
+        RmId:         rmId,
+    }
+}
+
+func (psc *PartitionSchedulingContext) updatePartitionSchedulingContext(info *cache.PartitionInfo) {
+    root := psc.Root
+    // update the root queue properties
+    root.updateSchedulingQueueProperties(info.Root.Properties)
+    // update the rest of the queues recursively
+    root.updateSchedulingQueueInfo(info.Root.GetCopyOfChildren(), root)
+}
+
+func (psc *PartitionSchedulingContext) AddSchedulingApplication(schedulingApp *SchedulingApplication) error {
+    psc.lock.Lock()
+    defer psc.lock.Unlock()
 
     // Add to applications
     appId := schedulingApp.ApplicationInfo.ApplicationId
-    if m.applications[appId] != nil {
+    if psc.applications[appId] != nil {
         return errors.New(fmt.Sprintf("Adding app=%s to partition=%s, but app already existed.", appId, schedulingApp.ApplicationInfo.Partition))
     }
 
-    m.applications[appId] = schedulingApp
+    psc.applications[appId] = schedulingApp
 
     // Put app under queue
-    schedulingQueue := m.queues[schedulingApp.ApplicationInfo.QueueName]
+    schedulingQueue := psc.queues[schedulingApp.ApplicationInfo.QueueName]
     if schedulingQueue == nil {
         return errors.New(fmt.Sprintf("Failed to find queue=%s for app=%s", schedulingApp.ApplicationInfo.QueueName, schedulingApp.ApplicationInfo.ApplicationId))
     }
@@ -65,19 +85,19 @@ func (m *PartitionSchedulingContext) AddSchedulingApplication(schedulingApp *Sch
     return nil
 }
 
-func (m *PartitionSchedulingContext) RemoveSchedulingApplication(appId string, partitionName string) (*SchedulingApplication, error) {
-    m.lock.Lock()
-    defer m.lock.Unlock()
+func (psc *PartitionSchedulingContext) RemoveSchedulingApplication(appId string, partitionName string) (*SchedulingApplication, error) {
+    psc.lock.Lock()
+    defer psc.lock.Unlock()
 
     // Remove from applications map
-    if m.applications[appId] == nil {
+    if psc.applications[appId] == nil {
         return nil, errors.New(fmt.Sprintf("Removing app=%s to partition=%s, but application is non-existed.", appId, partitionName))
     }
-    schedulingApp := m.applications[appId]
-    delete(m.applications, appId)
+    schedulingApp := psc.applications[appId]
+    delete(psc.applications, appId)
 
     // Remove app under queue
-    schedulingQueue := m.queues[schedulingApp.ApplicationInfo.QueueName]
+    schedulingQueue := psc.queues[schedulingApp.ApplicationInfo.QueueName]
     if schedulingQueue == nil {
         // This is not normal
         panic(fmt.Sprintf("Failed to find queue=%s for app=%s while removing application", schedulingApp.ApplicationInfo.QueueName, schedulingApp.ApplicationInfo.ApplicationId))
@@ -97,35 +117,32 @@ func (m *PartitionSchedulingContext) RemoveSchedulingApplication(appId string, p
 }
 
 // Visible by tests
-func (m *PartitionSchedulingContext) GetQueue(queueName string) *SchedulingQueue {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
+// TODO need to think about this: maintaining the flat map might not scale with dynamic queues
+func (psc *PartitionSchedulingContext) GetQueue(queueName string) *SchedulingQueue {
+    psc.lock.RLock()
+    defer psc.lock.RUnlock()
 
-    return m.queues[queueName]
+    return psc.queues[queueName]
 }
 
-func (m *PartitionSchedulingContext) getApplication(appId string) *SchedulingApplication {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
+func (psc *PartitionSchedulingContext) getApplication(appId string) *SchedulingApplication {
+    psc.lock.RLock()
+    defer psc.lock.RUnlock()
 
-    return m.applications[appId]
+    return psc.applications[appId]
 }
 
-func newPartitionSchedulingContext(rmId string) *PartitionSchedulingContext {
-    return &PartitionSchedulingContext{applications: make(map[string]*SchedulingApplication), queues: make(map[string]*SchedulingQueue), RmId: rmId}
+func (csc *ClusterSchedulingContext) GetPartitionSchedulingContext(partitionName string) *PartitionSchedulingContext {
+    csc.lock.RLock()
+    defer csc.lock.RUnlock()
+    return csc.partitions[partitionName]
 }
 
-func (m *ClusterSchedulingContext) GetPartitionSchedulingContext(partitionName string) *PartitionSchedulingContext {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
-    return m.partitions[partitionName]
-}
+func (csc *ClusterSchedulingContext) GetSchedulingApplication(appId string, partitionName string) *SchedulingApplication {
+    csc.lock.RLock()
+    defer csc.lock.RUnlock()
 
-func (m *ClusterSchedulingContext) GetSchedulingApplication(appId string, partitionName string) *SchedulingApplication {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
-
-    if partition := m.partitions[partitionName]; partition != nil {
+    if partition := csc.partitions[partitionName]; partition != nil {
         return partition.getApplication(appId)
     }
 
@@ -133,73 +150,105 @@ func (m *ClusterSchedulingContext) GetSchedulingApplication(appId string, partit
 }
 
 // Visible by tests
-func (m *ClusterSchedulingContext) GetSchedulingQueue(queueName string, partitionName string) *SchedulingQueue {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
+func (csc *ClusterSchedulingContext) GetSchedulingQueue(queueName string, partitionName string) *SchedulingQueue {
+    csc.lock.RLock()
+    defer csc.lock.RUnlock()
 
-    if partition := m.partitions[partitionName]; partition != nil {
+    if partition := csc.partitions[partitionName]; partition != nil {
         return partition.GetQueue(queueName)
     }
 
     return nil
 }
 
-func (m *ClusterSchedulingContext) AddSchedulingApplication(schedulingApp *SchedulingApplication) error {
+func (csc *ClusterSchedulingContext) AddSchedulingApplication(schedulingApp *SchedulingApplication) error {
     partitionName := schedulingApp.ApplicationInfo.Partition
     appId := schedulingApp.ApplicationInfo.ApplicationId
 
-    m.lock.Lock()
-    defer m.lock.Unlock()
+    csc.lock.Lock()
+    defer csc.lock.Unlock()
 
-    if partition := m.partitions[partitionName]; partition != nil {
+    if partition := csc.partitions[partitionName]; partition != nil {
         if err := partition.AddSchedulingApplication(schedulingApp); err != nil {
             return err
         }
     } else {
-        return errors.New(fmt.Sprintf("Failed to find partition=%s while adding app=%s", partitionName, appId))
+        return fmt.Errorf("failed to find partition=%s while adding app=%s", partitionName, appId)
     }
 
     return nil
 }
 
-func (m *ClusterSchedulingContext) RemoveSchedulingApplication(appId string, partitionName string) (*SchedulingApplication, error) {
-    m.lock.Lock()
-    defer m.lock.Unlock()
+func (csc *ClusterSchedulingContext) RemoveSchedulingApplication(appId string, partitionName string) (*SchedulingApplication, error) {
+    csc.lock.Lock()
+    defer csc.lock.Unlock()
 
-    if partition := m.partitions[partitionName]; partition != nil {
+    if partition := csc.partitions[partitionName]; partition != nil {
         schedulingApp, err := partition.RemoveSchedulingApplication(appId, partitionName)
         if err != nil {
             return nil, err
         }
         return schedulingApp, nil
     } else {
-        return nil, errors.New(fmt.Sprintf("Failed to find partition=%s while remove app=%s", partitionName, appId))
+        return nil, fmt.Errorf("failed to find partition=%s while remove app=%s", partitionName, appId)
     }
 }
 
-func (m *ClusterSchedulingContext) updateSchedulingPartitions(partitions []*cache.PartitionInfo) error {
-    m.lock.Lock()
-    defer m.lock.Unlock()
+// Update the scheduler's partition list based on the processed config
+// - updates existing partitions and the queues linked
+// - add new partitions including queues
+// updates and add internally are processed differently outside of this method they are the same.
+func (csc *ClusterSchedulingContext) updateSchedulingPartitions(partitions []*cache.PartitionInfo) error {
+    csc.lock.Lock()
+    defer csc.lock.Unlock()
+    glog.V(3).Infof("Updating scheduler context, %d partitions changed", len(partitions))
 
+    // Walk over the updated partitions
     for _, updatedPartition := range partitions {
-        if partition := m.partitions[updatedPartition.Name]; partition != nil {
-            return errors.New(fmt.Sprintf("Update partition is not supported yet, partition=%s existed.", updatedPartition.Name))
+        partition := csc.partitions[updatedPartition.Name]
+        if partition != nil {
+            glog.V(3).Infof("Updating existing scheduling partition: %s", updatedPartition.Name)
+            // the partition details don't need updating just the queues
+            partition.updatePartitionSchedulingContext(updatedPartition)
+            // redo the flat map as queues might have been added/removed
+            partition.queues = make(map[string]*SchedulingQueue)
+            partition.Root.GetFlatChildrenQueues(partition.queues)
+        } else {
+            glog.V(3).Infof("Creating new scheduling partition: %s", updatedPartition.Name)
+            // create a new partition and add the queues
+            newPartition := newPartitionSchedulingContext(updatedPartition.RMId)
+            newPartition.Root = NewSchedulingQueueInfo(updatedPartition.Root, nil)
+            newPartition.Root.GetFlatChildrenQueues(newPartition.queues)
+
+            csc.partitions[updatedPartition.Name] = newPartition
         }
     }
-
-    for _, updatedPartition := range partitions {
-        newPartition := newPartitionSchedulingContext(updatedPartition.RMId)
-        newPartition.Root = NewSchedulingQueueInfo(updatedPartition.Root)
-        newPartition.Root.GetFlatChildrenQueues(newPartition.queues)
-
-        m.partitions[updatedPartition.Name] = newPartition
-    }
-
     return nil
 }
 
-func (m *ClusterSchedulingContext) RemoveSchedulingPartition(partitionName string) {
-    m.lock.Lock()
-    defer m.lock.Unlock()
-    delete(m.partitions, partitionName)
+// TODO can only proceed if the partition is empty
+// Remove the partition from the scheduler (triggered before RM registration)
+func (csc *ClusterSchedulingContext) RemoveSchedulingPartition(partitionName string) {
+    csc.lock.Lock()
+    defer csc.lock.Unlock()
+    delete(csc.partitions, partitionName)
+}
+
+// Remove the partition from the scheduler based on a configuration change
+// No resources can be used and the underlying partition should not be running
+func (csc *ClusterSchedulingContext) deleteSchedulingPartitions(partitions []*cache.PartitionInfo) error {
+    csc.lock.Lock()
+    defer csc.lock.Unlock()
+
+    // Walk over the deleted partitions
+    for _, updatedPartition := range partitions {
+        partition := csc.partitions[updatedPartition.Name]
+        if partition != nil {
+            glog.V(1).Infof("Marking scheduling partition for deletion: %s", updatedPartition.Name)
+            // TODO really clean up
+        } else {
+            return fmt.Errorf("failed to find partition that should have been deleted ")
+        }
+    }
+    return nil
 }

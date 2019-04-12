@@ -17,6 +17,7 @@ limitations under the License.
 package scheduler
 
 import (
+    "github.com/golang/glog"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
     "sync"
@@ -24,105 +25,142 @@ import (
 
 // Represents Queue inside Scheduler
 type SchedulingQueue struct {
-    CachedQueueInfo *cache.QueueInfo
+    Name                 string              // Fully qualified path for the queue
+    CachedQueueInfo      *cache.QueueInfo    // link back to the queue in the cache
+    MayAllocatedResource *resources.Resource // Maybe allocated, set by scheduler
+    PartitionResource    *resources.Resource // For fairness calculation
+    Parent               *SchedulingQueue    // link back to the parent in the scheduler
+    PendingResource      *resources.Resource // Total pending resource
 
-    Name string
-
-    // Maybe allocated, set by scheduler
-    MayAllocatedResource *resources.Resource
-
-    // For fairness calculation
-    PartitionResource *resources.Resource
-
-    Parent      *SchedulingQueue
-    IsLeafQueue bool // Allocation can be directly assigned under leaf queue only
+    ApplicationSortType  SortType            // How applications are sorted (leaf queue only)
+    QueueSortType        SortType            // How sub queues are sorted (parent queue only)
 
     childrenQueues map[string]*SchedulingQueue // Only for direct children, parent queue only
-
-    applications map[string]*SchedulingApplication // only for leaf queue
-
-    // Total pending resource
-    PendingResource *resources.Resource
-
-    // How applications are sorted (leaf queue only)
-    ApplicationSortType SortType
-
-    // How sub queues are sorted (parent queue only)
-    QueueSortType SortType
+    applications   map[string]*SchedulingApplication // only for leaf queue
 
     lock sync.RWMutex
 }
 
-func NewSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo) *SchedulingQueue {
-    schedulingQueue := &SchedulingQueue{}
-    schedulingQueue.Name = cacheQueueInfo.GetQueuePath()
-    schedulingQueue.CachedQueueInfo = cacheQueueInfo
-    schedulingQueue.MayAllocatedResource = resources.NewResource()
-    schedulingQueue.IsLeafQueue = cacheQueueInfo.IsLeafQueue()
-    schedulingQueue.childrenQueues = make(map[string]*SchedulingQueue)
-    schedulingQueue.applications = make(map[string]*SchedulingApplication)
-    schedulingQueue.PendingResource = resources.NewResource()
+func NewSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo, parent *SchedulingQueue) *SchedulingQueue {
+    sq := &SchedulingQueue{}
+    sq.Name = cacheQueueInfo.GetQueuePath()
+    sq.CachedQueueInfo = cacheQueueInfo
+    sq.Parent = parent
+    sq.MayAllocatedResource = resources.NewResource()
+    sq.childrenQueues = make(map[string]*SchedulingQueue)
+    sq.applications = make(map[string]*SchedulingApplication)
+    sq.PendingResource = resources.NewResource()
 
-    // TODO, make them configurable
-    if cacheQueueInfo.Properties[cache.ApplicationSortPolicy] == "fair" {
-        schedulingQueue.ApplicationSortType = FAIR_SORT_POLICY
-    } else {
-        schedulingQueue.ApplicationSortType = FIFO_SORT_POLICY
-    }
-    schedulingQueue.QueueSortType = FAIR_SORT_POLICY
+    // update the properties
+    sq.updateSchedulingQueueProperties(cacheQueueInfo.Properties)
 
+    // initialise the child queues based what is in the cached copy
     for childName, childQueue := range cacheQueueInfo.GetCopyOfChildren() {
-        newChildQueue := NewSchedulingQueueInfo(childQueue)
-        newChildQueue.Parent = schedulingQueue
-        schedulingQueue.childrenQueues[childName] = newChildQueue
+        newChildQueue := NewSchedulingQueueInfo(childQueue, sq)
+        sq.childrenQueues[childName] = newChildQueue
     }
 
-    return schedulingQueue
+    return sq
+}
+
+// Update the properties for the scheduling queue based on the current cached configuration
+func (sq *SchedulingQueue) updateSchedulingQueueProperties(prop map[string]string) {
+    // set the defaults, override with what is in the configured properties
+    sq.ApplicationSortType = FIFO_SORT_POLICY
+    sq.QueueSortType = FAIR_SORT_POLICY
+    // walk over all properties and process
+    if prop != nil {
+        for key, value := range prop {
+            if key == cache.ApplicationSortPolicy  && value == "fair" {
+                sq.ApplicationSortType = FAIR_SORT_POLICY
+            }
+            // for now skip the rest just log them
+            glog.V(5).Infof("queue property skip: %s, %s", key, value)
+        }
+    }
+}
+
+// Update the queue properties and the child queues for the queue after a configuration update.
+// New child queues will be added.
+// Child queues that are removed from the configuration have been changed to a draining state and will not be scheduled.
+// They are not removed until the queue is really empty, no action must be taken here.
+func (sq *SchedulingQueue) updateSchedulingQueueInfo(info map[string]*cache.QueueInfo, parent *SchedulingQueue) {
+    sq.lock.Lock()
+    defer sq.lock.Unlock()
+    // initialise the child queues based on what is in the cached copy
+    for childName, childQueue := range info {
+        child := sq.childrenQueues[childName]
+        // create a new queue if it does not exist
+        if child == nil {
+            child = NewSchedulingQueueInfo(childQueue, parent)
+            parent.childrenQueues[childName] = child
+        } else {
+            child.updateSchedulingQueueProperties(childQueue.Properties)
+        }
+        child.updateSchedulingQueueInfo(childQueue.GetCopyOfChildren(), child)
+    }
 }
 
 // Update pending resource of this queue
-func (m *SchedulingQueue) IncPendingResource(delta *resources.Resource) {
-    m.lock.Lock()
-    defer m.lock.Unlock()
+func (sq *SchedulingQueue) IncPendingResource(delta *resources.Resource) {
+    sq.lock.Lock()
+    defer sq.lock.Unlock()
 
-    m.PendingResource = resources.Add(m.PendingResource, delta)
+    sq.PendingResource = resources.Add(sq.PendingResource, delta)
 }
 
 // Remove pending resource of this queue
-func (m *SchedulingQueue) DecPendingResource(delta *resources.Resource) {
-    m.lock.Lock()
-    defer m.lock.Unlock()
+func (sq *SchedulingQueue) DecPendingResource(delta *resources.Resource) {
+    sq.lock.Lock()
+    defer sq.lock.Unlock()
 
-    m.PendingResource = resources.Sub(m.PendingResource, delta)
+    sq.PendingResource = resources.Sub(sq.PendingResource, delta)
 }
 
-func (m *SchedulingQueue) AddSchedulingApplication(app *SchedulingApplication) {
-    m.lock.Lock()
-    defer m.lock.Unlock()
+func (sq *SchedulingQueue) AddSchedulingApplication(app *SchedulingApplication) {
+    sq.lock.Lock()
+    defer sq.lock.Unlock()
 
-    m.applications[app.ApplicationInfo.ApplicationId] = app
+    sq.applications[app.ApplicationInfo.ApplicationId] = app
 }
 
-func (m *SchedulingQueue) RemoveSchedulingApplication(app *SchedulingApplication) {
-    m.lock.Lock()
-    defer m.lock.Unlock()
+func (sq *SchedulingQueue) RemoveSchedulingApplication(app *SchedulingApplication) {
+    sq.lock.Lock()
+    defer sq.lock.Unlock()
 
-    delete(m.applications, app.ApplicationInfo.ApplicationId)
+    delete(sq.applications, app.ApplicationInfo.ApplicationId)
 }
 
-func (m *SchedulingQueue) GetFlatChildrenQueues(allQueues map[string]*SchedulingQueue) {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
-
-    if m == nil {
-        return
-    }
+// Create a flat queue structure at this level
+func (sq *SchedulingQueue) GetFlatChildrenQueues(allQueues map[string]*SchedulingQueue) {
+    sq.lock.RLock()
+    defer sq.lock.RUnlock()
 
     // add self
-    allQueues[m.Name] = m
+    allQueues[sq.Name] = sq
 
-    for _, child := range m.childrenQueues {
+    for _, child := range sq.childrenQueues {
         allQueues[child.Name] = child
         child.GetFlatChildrenQueues(allQueues)
     }
+}
+
+// Is this queue a leaf or not (i.e parent)
+// link back to the underlying queue object to prevent out of sync types
+func (sq *SchedulingQueue) isLeafQueue() bool {
+    return sq.CachedQueueInfo.IsLeafQueue()
+}
+
+// Queue status methods reflecting the underlying queue object state
+// link back to the underlying queue object to prevent out of sync states
+func (sq *SchedulingQueue) isRunning() bool {
+    return sq.CachedQueueInfo.IsRunning()
+}
+
+func (sq *SchedulingQueue) isDraining() bool {
+    return sq.CachedQueueInfo.IsDraining()
+}
+
+func (sq *SchedulingQueue) isStopped() bool {
+    return sq.CachedQueueInfo.IsStopped()
 }

@@ -93,7 +93,8 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmId string) ([]*
     // walk over the partitions in the config: update existing ones
     for _, p := range conf.Partitions {
         partitionName := common.GetNormalizedPartitionName(p.Name, rmId)
-        part, ok := clusterInfo.partitions[partitionName]
+        p.Name = partitionName
+        part, ok := clusterInfo.partitions[p.Name]
         if ok {
             // make sure the new info passes all checks
             _, err = newPartitionInfo(p, rmId)
@@ -111,6 +112,7 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmId string) ([]*
             glog.V(0).Infof("Added partition %s in the cluster", partitionName)
 
             part, err = newPartitionInfo(p, rmId)
+            clusterInfo.addPartition(partitionName, part)
             if err != nil {
                 return []*PartitionInfo{}, []*PartitionInfo{}, err
             }
@@ -120,14 +122,14 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmId string) ([]*
         visited[p.Name] = true
     }
 
-    // get the removed partitions
+    // get the removed partitions, mark them as deleted
     deletedPartitions := make([]*PartitionInfo, 0)
     for _, part := range clusterInfo.partitions {
         if !visited[part.Name] {
-            partitionName := common.GetNormalizedPartitionName(part.Name, rmId)
-            clusterInfo.removePartition(partitionName)
+            part.state = deleted
+            clusterInfo.removePartition(part.Name)
             deletedPartitions = append(deletedPartitions, part)
-            glog.V(0).Infof("Removed partition %s from the cluster", partitionName)
+            glog.V(0).Infof("Removed partition %s from the cluster", part.Name)
         }
     }
     return updatedPartitions, deletedPartitions, nil

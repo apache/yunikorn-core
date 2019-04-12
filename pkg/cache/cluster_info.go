@@ -342,7 +342,7 @@ func (m *ClusterInfo) processRMConfigUpdateEvent(event *commonevents.ConfigUpdat
 
     // Send deleted partitions to the scheduler
     m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerDeletePartitionsConfigEvent{
-        DeletePartitions: deletedPartitionsInterfaces,
+        DeletePartitions:  deletedPartitionsInterfaces,
         ResultChannel:     event.Channel,
     })
 }

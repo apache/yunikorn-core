@@ -42,6 +42,7 @@ type PartitionInfo struct {
     allocations  map[string]*AllocationInfo
     nodes        map[string]*NodeInfo
     applications map[string]*ApplicationInfo
+    state        partitionState
 
     // Total node resources
     TotalPartitionResource *resources.Resource
@@ -55,6 +56,7 @@ func NewPartitionInfo(partition configs.PartitionConfig, rmId string) (*Partitio
     p := &PartitionInfo{
         Name: partition.Name,
         RMId: rmId,
+        state: active,
     }
     p.allocations = make(map[string]*AllocationInfo)
     p.nodes = make(map[string]*NodeInfo)
@@ -541,4 +543,26 @@ func (pi *PartitionInfo) updateQueues(config []configs.QueueConfig, parent *Queu
         }
     }
     return nil
+}
+
+// Partition states for a partition indirectly leveraged by the scheduler
+// - new application can only be assigned in a running state
+// - new allocation should only be made in a running state
+// - in a stopped state nothing may change on the partition
+// NOTE: states could be expanded and should not be referenced directly outside the PartitionInfo
+const (
+    active partitionState = iota
+    deleted
+)
+
+type partitionState int
+
+// Is the partition running and can be used in scheduling
+func (pi *PartitionInfo) IsRunning() bool {
+    return pi.state == active
+}
+
+// Is the partition
+func (pi *PartitionInfo) IsStopped() bool {
+    return pi.state == deleted
 }

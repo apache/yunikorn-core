@@ -57,29 +57,37 @@ func (m *Scheduler) findAllocationAsks(partitionContext *PartitionSchedulingCont
     return mayAllocateList
 }
 
+// Return a sorted copy of the queues for this parent queue.
+// Only queues with a pending resource request are considered. The queues are sorted using the
+// sorting type for the parent queue.
+// Stopped queues will be filtered out at a later stage.
 func sortSubqueuesFromQueue(parentQueue *SchedulingQueue) []*SchedulingQueue {
     parentQueue.lock.RLock()
     defer parentQueue.lock.RUnlock()
 
-    // Copy children
+    // Create a copy of the queues with pending resources
     sortedQueues := make([]*SchedulingQueue, 0)
     for _, v := range parentQueue.childrenQueues {
-        // Only look at app when pending-res > 0
+        // Only look at queue when pending-res > 0
         if resources.StrictlyGreaterThanZero(v.PendingResource) {
             sortedQueues = append(sortedQueues, v)
         }
     }
 
+    // Sort the queues
     SortQueue(sortedQueues, parentQueue.QueueSortType)
 
     return sortedQueues
 }
 
+// Return a sorted copy of the applications in the queue.
+// Only applications with a pending resource request are considered. The applications are sorted using the
+// sorting type for the leaf queue they are in.
 func sortApplicationsFromQueue(leafQueue *SchedulingQueue) []*SchedulingApplication {
     leafQueue.lock.RLock()
     defer leafQueue.lock.RUnlock()
 
-    // Copy children
+    // Create a copy of the applications with pending resources
     sortedApps := make([]*SchedulingApplication, 0)
     for _, v := range leafQueue.applications {
         // Only look at app when pending-res > 0
@@ -88,6 +96,7 @@ func sortApplicationsFromQueue(leafQueue *SchedulingQueue) []*SchedulingApplicat
         }
     }
 
+    // Sort the applications
     SortApplications(sortedApps, leafQueue.ApplicationSortType, leafQueue.CachedQueueInfo.GuaranteedResource)
 
     return sortedApps
@@ -132,6 +141,11 @@ func (m *Scheduler) findNextAllocationAskCandidate(
     curStep uint64,
     selectedPendingAskByAllocationKey map[string]int32) *SchedulingAllocationAsk {
     for _, queue := range sortedQueueCandidates {
+        // skip stopped queues: running and draining queues are allowed
+        if queue.isStopped() {
+            glog.V(4).Infof("Skip queue=%s because it is not running", queue.Name)
+            continue
+        }
         // Is it need any resource?
         if !resources.StrictlyGreaterThanZero(queue.PendingResource) {
             glog.V(4).Infof("Skip queue=%s because it has no pending resource", queue.Name)
@@ -150,7 +164,7 @@ func (m *Scheduler) findNextAllocationAskCandidate(
             newHeadroom = resources.Sub(maxResource, queue.MayAllocatedResource)
         }
 
-        if queue.IsLeafQueue {
+        if queue.isLeafQueue() {
             sortedApps := sortApplicationsFromQueue(queue)
             for _, app := range sortedApps {
                 if ask := m.findMayAllocationFromApplication(app.Requests, newHeadroom, curStep, selectedPendingAskByAllocationKey); ask != nil {
@@ -182,7 +196,7 @@ func (m *Scheduler) resetMayAllocations(partitionContext *PartitionSchedulingCon
 
 func (m *Scheduler) resetMayAllocationsForQueue(queue *SchedulingQueue) {
     queue.MayAllocatedResource = queue.CachedQueueInfo.AllocatedResource
-    if queue.IsLeafQueue {
+    if queue.isLeafQueue() {
         for _, app := range queue.applications {
             app.MayAllocatedResource = app.ApplicationInfo.AllocatedResource
         }

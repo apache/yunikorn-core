@@ -102,4 +102,8 @@ func TestFitIn(t *testing.T) {
     assertFitIn(t, MockResource(2, 2, 2), MockResource(0, 0, 0), true)
     assertFitIn(t, MockResource(0, 2, 2), MockResource(2, 0, 0), false)
     assertFitIn(t, MockResource(0, 0, 2), MockResource(2, 2, 2), false)
+
+    // check nil for either smaller or larger (should be seen as an empty resource
+    assertFitIn(t, MockResource(1, 1, 1), nil, true)
+    assertFitIn(t, nil, MockResource(1, 1, 1), false)
 }

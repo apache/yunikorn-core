@@ -31,22 +31,23 @@ const (
     ApplicationSortPolicy = "application.sort.policy"
 )
 
-/* Related to queues */
+// The queue structure as used throughout the scheduler
 type QueueInfo struct {
     Name               string
 
     MaxResource        *resources.Resource // When not set, max = nil
     GuaranteedResource *resources.Resource // When not set, Guaranteed == 0
     AllocatedResource  *resources.Resource // set based on allocation
+    Parent             *QueueInfo          // link to the parent queue
 
-    Parent             *QueueInfo
-
-    Properties map[string]string     // this should be treated as immutable
+    Properties map[string]string     // this should be treated as immutable the value is a merge of parent(s)
+                                     // properties with the config for this queue only manipulated during creation
+                                     // of the queue or via a queue configuration update
 
     // Private fields need protection
     isLeaf     bool                  // this is a leaf queue or not (i.e. parent)
     isManaged  bool                  // queue is part of the config, not auto created
-    isDraining bool                  // a managed queue that has been removed, cannot accept new applications
+    state      queueState            // the state of the queue for scheduling
     children   map[string]*QueueInfo // list of direct children
     lock       sync.RWMutex          // lock for updating the queue
 }
@@ -58,7 +59,9 @@ func NewManagedQueue(conf configs.QueueConfig, parent *QueueInfo) (*QueueInfo, e
         Parent: parent,
         isManaged: true,
         isLeaf: !conf.Parent,
-        AllocatedResource: resources.NewResource()}
+        state: running,
+        AllocatedResource: resources.NewResource(),
+    }
 
     err := qi.updateQueueProps(conf)
     if err != nil {
@@ -88,8 +91,10 @@ func NewUnmanagedQueue(name string, leaf bool, parent *QueueInfo) (*QueueInfo, e
     qi := &QueueInfo{Name: strings.ToLower(name),
         Parent: parent,
         isLeaf: leaf,
-        AllocatedResource: resources.NewResource()}
-    // TODO set resources on unmanaged queues
+        state: running,
+        AllocatedResource: resources.NewResource(),
+    }
+    // TODO set resources and properties on unmanaged queues
     // add the queue in the structure
     if parent != nil {
         err := parent.AddChildQueue(qi)
@@ -124,7 +129,7 @@ func (qi *QueueInfo) AddChildQueue(child *QueueInfo) error {
     if qi.isLeaf {
         return fmt.Errorf("cannot add a child queue to a leaf queue: %s", qi.Name)
     }
-    if qi.isDraining {
+    if qi.IsDraining() {
         return fmt.Errorf("cannot add a child queue when queue is marked for deletion: %s", qi.Name)
     }
     // add the child (init if needed)
@@ -140,12 +145,20 @@ func (qi *QueueInfo) IncAllocatedResource(alloc *resources.Resource) {
     qi.lock.Lock()
     defer qi.lock.Unlock()
     qi.AllocatedResource = resources.Add(qi.AllocatedResource, alloc)
+    if qi.MaxResource != nil && !resources.FitIn(qi.AllocatedResource, qi.MaxResource) {
+        glog.V(2).Infof("Allocation (%v) puts queue %s over maximum allocation (%v)",
+            alloc, qi.GetQueuePath(), qi.MaxResource)
+    }
 }
 
 // Decrement the allocated resources for this queue
 func (qi *QueueInfo) DecAllocatedResource(alloc *resources.Resource) {
     qi.lock.Lock()
     defer qi.lock.Unlock()
+    if alloc != nil &&  !resources.FitIn(qi.AllocatedResource, alloc) {
+        glog.V(2).Infof("Released allocation (%v) is larger than queue %s allocation (%v)",
+            alloc, qi.GetQueuePath(), qi.AllocatedResource)
+    }
     qi.AllocatedResource = resources.Sub(qi.AllocatedResource, alloc)
 }
 
@@ -153,12 +166,12 @@ func (qi *QueueInfo) GetCopyOfChildren() map[string]*QueueInfo {
     qi.lock.RLock()
     defer qi.lock.RUnlock()
 
-    copy := make(map[string]*QueueInfo)
+    children := make(map[string]*QueueInfo)
     for k, v := range qi.children {
-        copy[k] = v
+        children[k] = v
     }
 
-    return copy
+    return children
 }
 
 // Remove a child from the list of children
@@ -177,8 +190,8 @@ func (qi *QueueInfo) RemoveChildQueue(name string) {
 func (qi *QueueInfo) RemoveQueue() bool {
     qi.lock.Lock()
     defer qi.lock.Unlock()
-    // cannot remove a managed queue that is not marked for deletion
-    if qi.isManaged && !qi.isDraining {
+    // cannot remove a managed queue that is is running
+    if qi.isManaged && qi.IsRunning() {
         return false
     }
     // cannot remove a queue that has children or allocated resources
@@ -191,6 +204,7 @@ func (qi *QueueInfo) RemoveQueue() bool {
 
 // Mark the managed queue for removal from the system.
 // This can be executed multiple times and is only effective the first time.
+// This is a noop on an unmanaged queue
 func (qi *QueueInfo) MarkQueueForRemoval() {
     // need to lock for write as we don't want to add a queue while marking for removal
     qi.lock.Lock()
@@ -198,7 +212,8 @@ func (qi *QueueInfo) MarkQueueForRemoval() {
     // Mark the managed queue for deletion: it is removed from the config let it drain.
     // Also mark all the managed children for deletion.
     if qi.isManaged {
-        qi.isDraining = true
+        glog.V(0).Infof("marking managed queue %s for deletion", qi.GetQueuePath())
+        qi.state = draining
         if qi.children != nil || len(qi.children) > 0 {
             for _, child := range qi.children {
                 child.MarkQueueForRemoval()
@@ -250,6 +265,7 @@ func (qi *QueueInfo) updateQueueProps(conf configs.QueueConfig) error {
     return nil
 }
 
+// Merge the properties for the queue. This is only called when updating the queue from the configuration.
 func mergeProperties(parent map[string]string, child map[string]string) map[string]string {
     merged := make(map[string]string)
     if parent != nil && len(parent) > 0 {
@@ -263,4 +279,33 @@ func mergeProperties(parent map[string]string, child map[string]string) map[stri
         }
     }
     return merged
+}
+
+// Queue states for a queue indirectly leveraged by the scheduler
+// - new application can only be assigned in a running state
+// - new allocation should only be made in a draining and running state
+// - in a stopped state nothing may change on the queue
+// NOTE: states could be expanded and should not be referenced directly outside the QueueInfo
+const (
+    running queueState = iota
+    draining
+    stopped
+)
+
+type queueState int
+
+// Is the queue marked for deletion and can only handle existing application requests.
+// No new applications will be accepted.
+func (qi *QueueInfo) IsDraining() bool {
+    return qi.state == draining
+}
+
+// Is the queue in a normal active state.
+func (qi *QueueInfo) IsRunning() bool {
+    return qi.state == running
+}
+
+// Is the queue stopped, not active in scheduling at all.
+func (qi *QueueInfo) IsStopped() bool {
+    return qi.state == stopped
 }

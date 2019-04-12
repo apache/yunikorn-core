@@ -26,6 +26,122 @@ import (
     "time"
 )
 
+// Test scheduler reconfiguration
+func TestConfigScheduler(t *testing.T) {
+    // Start all tests
+    proxy, cache, scheduler := entrypoint.StartAllServicesWithManualScheduler()
+
+    // Register RM
+    configData := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        queues:
+          - name: base
+            resources:
+              guaranteed: {memory: 100, vcore: 10}
+              max: {memory: 150, vcore: 20}
+          - name: tobedeleted
+`
+    configs.MockSchedulerConfigByData([]byte(configData))
+    mockRM := NewMockRMCallbackHandler(t)
+
+    _, err := proxy.RegisterResourceManager(
+        &si.RegisterResourceManagerRequest{
+            RmId:        "rm:123",
+            PolicyGroup: "policygroup",
+            Version:     "0.0.2",
+        }, mockRM)
+
+    if err != nil {
+        t.Errorf("configuration load failed: %v", err)
+    }
+
+    // Check queues of cache and scheduler.
+    partitionInfo := cache.GetPartition("[rm:123]default")
+    assert.Assert(t, nil == partitionInfo.Root.MaxResource)
+
+    // Check scheduling queue root
+    schedulerQueueRoot := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root", "[rm:123]default")
+    assert.Assert(t, nil == schedulerQueueRoot.CachedQueueInfo.MaxResource)
+
+    // Check scheduling queue root.base
+    schedulerQueue := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.base", "[rm:123]default")
+    assert.Assert(t, 150 == schedulerQueue.CachedQueueInfo.MaxResource.Resources[resources.MEMORY])
+
+    // Check the queue which will be removed
+    schedulerQueue = scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.tobedeleted", "[rm:123]default")
+    if !schedulerQueue.CachedQueueInfo.IsRunning() {
+        t.Errorf("child queue root.tobedeleted is not in running state")
+    }
+
+    configData = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        queues:
+          - name: base
+            resources:
+              guaranteed: {memory: 500, vcore: 250}
+              max: {memory: 1000, vcore: 500}
+          - name: tobeadded
+            properties:
+              something: withAvalue
+  - name: gpu
+    queues:
+      - name: production
+      - name: test
+        properties:
+          gpu: test queue property
+`
+    configs.MockSchedulerConfigByData([]byte(configData))
+    err = proxy.ReloadConfiguration("rm:123")
+
+    if err != nil {
+        t.Errorf("configuration reload failed: %v", err)
+    }
+
+    // Check queues of cache and scheduler.
+    partitionInfo = cache.GetPartition("[rm:123]default")
+    assert.Assert(t, nil == partitionInfo.Root.MaxResource)
+
+    // Check scheduling queue root
+    schedulerQueueRoot = scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root", "[rm:123]default")
+    assert.Assert(t, nil == schedulerQueueRoot.CachedQueueInfo.MaxResource)
+
+    // Check scheduling queue root.base
+    schedulerQueue = scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.base", "[rm:123]default")
+    assert.Assert(t, 1000 == schedulerQueue.CachedQueueInfo.MaxResource.Resources[resources.MEMORY])
+    assert.Assert(t, 250 == schedulerQueue.CachedQueueInfo.GuaranteedResource.Resources[resources.VCORE])
+
+    // check the removed queue state
+    schedulerQueue = scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.tobedeleted", "[rm:123]default")
+    if !schedulerQueue.CachedQueueInfo.IsDraining() {
+        t.Errorf("child queue root.tobedeleted is not in draining state")
+    }
+    // check the newly added queue
+    schedulerQueue = scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.tobeadded", "[rm:123]default")
+    if schedulerQueue == nil {
+        t.Errorf("scheduling queue root.tobeadded is not found")
+    }
+
+    // Check queues of cache and scheduler for the newly added partition
+    partitionInfo = cache.GetPartition("[rm:123]gpu")
+    assert.Assert(t, nil == partitionInfo.Root.MaxResource)
+
+    // Check scheduling queue root
+    schedulerQueueRoot = scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root", "[rm:123]gpu")
+    assert.Assert(t, nil == schedulerQueueRoot.CachedQueueInfo.MaxResource)
+
+    // Check scheduling queue root.production
+    schedulerQueue = scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.production", "[rm:123]gpu")
+    if schedulerQueue == nil {
+        t.Errorf("New partition: scheduling queue root.production is not found")
+    }
+}
+
 // Test basic interactions from rm proxy to cache and to scheduler.
 func TestBasicScheduler(t *testing.T) {
     // Start all tests

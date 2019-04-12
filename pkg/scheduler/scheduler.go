@@ -388,6 +388,30 @@ func (m *Scheduler) processUpdatePartitionConfigsEvent(event *schedulerevent.Sch
     }
 }
 
+func (m *Scheduler) processDeletePartitionConfigsEvent(event *schedulerevent.SchedulerDeletePartitionsConfigEvent) {
+    m.partitionChangeLock.Lock()
+    m.partitionChangeLock.Unlock()
+
+    m.lock.Lock()
+    m.lock.Unlock()
+
+    partitions := make([]*cache.PartitionInfo, 0)
+    for _, p := range event.DeletePartitions {
+        partitions = append(partitions, p.(*cache.PartitionInfo))
+    }
+
+    if err := m.clusterSchedulingContext.deleteSchedulingPartitions(partitions); err != nil {
+        event.ResultChannel <- &commonevents.Result{
+            Succeeded: false,
+            Reason:    err.Error(),
+        }
+    } else {
+        event.ResultChannel <- &commonevents.Result{
+            Succeeded: true,
+        }
+    }
+}
+
 func (m *Scheduler) handleSchedulerEvent() {
     for {
         ev := <-m.pendingSchedulerEvents
@@ -401,7 +425,7 @@ func (m *Scheduler) handleSchedulerEvent() {
         case *schedulerevent.SchedulerUpdatePartitionsConfigEvent:
             m.processUpdatePartitionConfigsEvent(v)
         case *schedulerevent.SchedulerDeletePartitionsConfigEvent:
-            // TODO handle this event
+            m.processDeletePartitionConfigsEvent(v)
         default:
             panic(fmt.Sprintf("%s is not an acceptable type for Scheduler event.", reflect.TypeOf(v).String()))
         }

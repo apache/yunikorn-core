@@ -43,6 +43,6 @@ type SchedulerUpdatePartitionsConfigEvent struct {
 
 type SchedulerDeletePartitionsConfigEvent struct {
     // Type is *cache.PartitionInfo, avoid cycle imports
-    DeletePartitions []interface{}
+    DeletePartitions  []interface{}
     ResultChannel     chan *commonevents.Result
 }

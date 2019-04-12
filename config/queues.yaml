@@ -1,5 +1,23 @@
 partitions:
   - name: default
+    placementrules:
+      - name: User
+        create: true
+        parent:
+          name: Group
+          create: false
+        filter:
+          type: allow
+          groups:
+            - sandbox
+      - name: Provided
+        create: true
+    users:
+      - name: user1
+        maxresources: {memory: 10000, vcore: 10}
+        maxapplications: 1
+      - name: user2
+        maxapplications: 10
     queues:
       - name: root
         queues:
@@ -27,24 +45,6 @@ partitions:
               max:
                 memory: 100000
                 vcore: 10000
-    placementrules:
-      - name: User
-        create: true
-        parent:
-          name: Group
-          create: false
-        filter:
-          type: allow
-          groups:
-            - sandbox
-      - name: Provided
-        create: true
-    users:
-      - name: user1
-        maxresources: {memory: 10000, vcore: 10}
-        maxapplications: 1
-      - name: user2
-        maxapplications: 10
   - name: gpu
     - name: production
       adminacl: "admin admin"

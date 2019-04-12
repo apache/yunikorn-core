@@ -37,18 +37,9 @@ partitions:
   -
     name: default
     queues:
-      -
-        name: root
-        resources:
-          guaranteed:
-            memory: 200
-            vcore: 20
-          max:
-            memory: 200
-            vcore: 20
+      - name: root
         queues:
-          -
-            name: a
+          - name: a
             resources:
               guaranteed:
                 memory: 100
@@ -73,11 +64,11 @@ partitions:
 
     // Check queues of cache and scheduler.
     partitionInfo := cache.GetPartition("[rm:123]default")
-    assert.Assert(t, 200 == partitionInfo.Root.MaxResource.Resources[resources.MEMORY])
+    assert.Assert(t, nil == partitionInfo.Root.MaxResource)
 
     // Check scheduling queue root
     schedulerQueueRoot := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root", "[rm:123]default")
-    assert.Assert(t, 200 == schedulerQueueRoot.CachedQueueInfo.MaxResource.Resources[resources.MEMORY])
+    assert.Assert(t, nil == schedulerQueueRoot.CachedQueueInfo.MaxResource)
 
     // Check scheduling queue a
     schedulerQueueA := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.a", "[rm:123]default")
@@ -305,18 +296,9 @@ partitions:
   -
     name: default
     queues:
-      -
-        name: root
-        resources:
-          guaranteed:
-            memory: 200
-            vcore: 20
-          max:
-            memory: 200
-            vcore: 20
+      - name: root
         queues:
-          -
-            name: a
+          - name: a
             resources:
               guaranteed:
                 memory: 100

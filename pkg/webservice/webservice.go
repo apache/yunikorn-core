@@ -73,7 +73,7 @@ func (m *WebService) StartWebApp() {
 	go func() {
 		httpError := http.ListenAndServe(":9080", router)
 		if httpError != nil {
-			glog.Errorf("While serving HTTP: ", httpError)
+			glog.Errorf("While serving HTTP: %v", httpError)
 		}
 	}()
 }

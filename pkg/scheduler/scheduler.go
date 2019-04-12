@@ -27,6 +27,8 @@ import (
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/commonevents"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/handler"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/metrics"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/queue-metrics"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/rmproxy/rmevent"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/scheduler/schedulerevent"
     "reflect"
@@ -59,6 +61,7 @@ type Scheduler struct {
 }
 
 func NewScheduler(clusterInfo *cache.ClusterInfo) *Scheduler {
+    metrics.Register()
     m := &Scheduler{}
     m.clusterInfo = clusterInfo
     m.missedOpportunities = make(map[string]uint64)
@@ -145,6 +148,9 @@ func (m *Scheduler) SingleStepSchedule(nAlloc int) {
 
         // Do preemption according to failedCandidate
         m.preemptForAllocationAskCandidates(failedCandidate)
+
+        // Update failed metrics
+        //metrics.AllocationScheduleFailures.Add(float64(len(failedCandidate)));
     }
 }
 
@@ -208,6 +214,7 @@ func (m *Scheduler) addNewApplication(info *cache.ApplicationInfo) error {
         return err
     }
 
+    metrics.ApplicationsSubmitted.Inc();
     return nil
 }
 

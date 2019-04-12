@@ -26,6 +26,7 @@ import (
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/commonevents"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/metrics"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/webservice/dao"
     "strings"
     "sync"
@@ -252,20 +253,24 @@ func (pi *PartitionInfo) addNewAllocation(alloc *commonevents.AllocationProposal
     var ok bool
 
     if node, ok = pi.nodes[alloc.NodeId]; !ok {
+        metrics.AllocationScheduleErrors.Inc()
         return nil, errors.New(fmt.Sprintf("Failed to find node=%s", alloc.NodeId))
     }
 
     if app, ok = pi.applications[alloc.ApplicationId]; !ok {
+        metrics.AllocationScheduleErrors.Inc()
         return nil, errors.New(fmt.Sprintf("Failed to find app=%s", alloc.ApplicationId))
     }
 
     if queue = pi.getQueue(alloc.QueueName); queue == nil {
+        metrics.AllocationScheduleErrors.Inc()
         return nil, errors.New(fmt.Sprintf("Failed to find queue=%s", alloc.QueueName))
     }
 
     // If new allocation go beyond node's total resource?
     newNodeResource := resources.Add(node.AllocatedResource, alloc.AllocatedResource)
     if !resources.FitIn(node.TotalResource, newNodeResource) {
+        metrics.AllocationScheduleFailures.Inc()
         return nil, errors.New(fmt.Sprintf("Cannot allocate resource=[%s] from app=%s on "+
             "node=%s because resource exceeded total available, allocated+new=%s, total=%s",
             alloc.AllocatedResource, alloc.ApplicationId, node.NodeId, newNodeResource, node.TotalResource))
@@ -276,6 +281,7 @@ func (pi *PartitionInfo) addNewAllocation(alloc *commonevents.AllocationProposal
     for q != nil {
         newQueueResource := resources.Add(q.AllocatedResource, alloc.AllocatedResource)
         if q.MaxResource != nil && !resources.FitIn(q.MaxResource, newQueueResource) {
+            metrics.AllocationScheduleFailures.Inc()
             return nil, errors.New(fmt.Sprintf("Cannot allocate resource=[%s] from app=%s on "+
                 "queue=%s because resource exceeded total available, allocated+new=%s, total=%s",
                 alloc.AllocatedResource, alloc.ApplicationId, queue.Name, newQueueResource, queue.MaxResource))
@@ -297,6 +303,8 @@ func (pi *PartitionInfo) addNewAllocation(alloc *commonevents.AllocationProposal
     app.AddAllocation(allocation)
 
     pi.allocations[allocation.AllocationProto.Uuid] = allocation
+
+    metrics.AllocationScheduleSuccesses.Inc()
 
     return allocation, nil
 

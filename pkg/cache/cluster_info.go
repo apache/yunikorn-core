@@ -27,6 +27,7 @@ import (
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/strings"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/handler"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/metrics"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/rmproxy/rmevent"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/scheduler/schedulerevent"
     "reflect"
@@ -174,8 +175,12 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
         for _, app := range request.NewApplications {
             appInfo := NewApplicationInfo(app.ApplicationId, app.PartitionName, app.QueueName)
             if err := m.addApplicationToPartition(appInfo, true); err != nil {
+                metrics.TotalApplicationsRejected.Inc()
                 rejectedApps = append(rejectedApps, &si.RejectedApplication{ApplicationId: app.ApplicationId, Reason: err.Error()})
             } else {
+                // Update metrics with accepted applications
+                metrics.TotalApplicationsRunning.Inc()
+                metrics.TotalApplicationsAdded.Inc()
                 acceptedApps = append(acceptedApps, &si.AcceptedApplication{ApplicationId: app.ApplicationId})
                 addedAppInfos = append(addedAppInfos, appInfo)
             }
@@ -193,6 +198,11 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
             for _, j := range addedAppInfos {
                 addedAppInfosInterface = append(addedAppInfosInterface, j)
             }
+
+            // Update metrics with removed applications
+            metrics.TotalApplicationsRunning.Sub(float64(len(request.RemoveApplications)))
+            // ToDO: need to improve this once we have state in YuniKorn for apps.
+            metrics.TotalApplicationsCompleted.Add(float64(len(request.RemoveApplications)))
 
             // Send message to Scheduler
             m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerApplicationsUpdateEvent{
@@ -273,6 +283,8 @@ func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
                     errorMessage := fmt.Sprintf("Failures when add new node, removing the node, error=%s", err)
                     glog.Warning(errorMessage)
                     partition.removeNode(node.NodeId)
+                    // Remove nodes from active nodes counter
+                    metrics.ActiveNodes.Dec()
                     rejectedNodes = append(rejectedNodes, &si.RejectedNode{NodeId: node.NodeId, Reason: errorMessage})
                     continue
                 }
@@ -284,6 +296,8 @@ func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
             }
         }
 
+        metrics.FailedNodes.Add(float64(len(rejectedNodes)))
+        metrics.ActiveNodes.Add(float64(len(acceptedNodes)))
         m.EventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMNodeUpdateEvent{
             RMId:          request.RmId,
             AcceptedNodes: acceptedNodes,

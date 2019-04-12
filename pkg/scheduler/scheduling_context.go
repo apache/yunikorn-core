@@ -20,7 +20,6 @@ import (
     "errors"
     "fmt"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common"
     "sync"
 )
 
@@ -193,8 +192,7 @@ func (m *ClusterSchedulingContext) updateSchedulingPartitions(partitions []*cach
         newPartition.Root = NewSchedulingQueueInfo(updatedPartition.Root)
         newPartition.Root.GetFlatChildrenQueues(newPartition.queues)
 
-        name := common.GetNormalizedPartitionName(updatedPartition.Name, updatedPartition.RMId)
-        m.partitions[name] = newPartition
+        m.partitions[updatedPartition.Name] = newPartition
     }
 
     return nil

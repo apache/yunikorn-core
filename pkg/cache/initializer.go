@@ -30,12 +30,12 @@ import (
 func createPartitionInfos(clusterInfo *ClusterInfo, conf *configs.SchedulerConfig, rmId string) ([]*PartitionInfo, error) {
     updatedPartitions := make([]*PartitionInfo, 0)
     for _, p := range conf.Partitions {
+        partitionName := common.GetNormalizedPartitionName(p.Name, rmId)
+        p.Name = partitionName
         partition, err := newPartitionInfo(p, rmId)
         if err != nil {
             return []*PartitionInfo{}, err
         }
-
-        partitionName := common.GetNormalizedPartitionName(p.Name, rmId)
 
         clusterInfo.addPartition(partitionName, partition)
         updatedPartitions = append(updatedPartitions, partition)

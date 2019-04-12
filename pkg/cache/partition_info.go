@@ -474,9 +474,10 @@ func (pi *PartitionInfo) GetApplications() []*ApplicationInfo {
 // Get the queue from the structure based on the fully qualified name.
 // The name is not syntax checked and must be valid.
 // Returns nil if the queue is not found otherwise the queue object.
+//
+// NOTE: this is a lock free call. It should only be called holding a PartitionInfo lock or
+// a ClusterInfo lock. If access outside is needed a locked version must be introduced.
 func (pi *PartitionInfo) getQueue(name string) *QueueInfo {
-    pi.lock.RLock()
-    defer pi.lock.RUnlock()
     // start at the root
     queue := pi.Root
     part := strings.Split(strings.ToLower(name), DOT)

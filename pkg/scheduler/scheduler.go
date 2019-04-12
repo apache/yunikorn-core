@@ -400,6 +400,8 @@ func (m *Scheduler) handleSchedulerEvent() {
             m.removePartitionsBelongToRM(v)
         case *schedulerevent.SchedulerUpdatePartitionsConfigEvent:
             m.processUpdatePartitionConfigsEvent(v)
+        case *schedulerevent.SchedulerDeletePartitionsConfigEvent:
+            // TODO handle this event
         default:
             panic(fmt.Sprintf("%s is not an acceptable type for Scheduler event.", reflect.TypeOf(v).String()))
         }

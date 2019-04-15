@@ -302,8 +302,11 @@ func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
             }
         }
 
-        m.metrics.AddFailedNodes(len(rejectedNodes))
-        m.metrics.AddActiveNodes(len(acceptedNodes))
+
+        nrejectedNodes := len(rejectedNodes)
+        nacceptedNodes := len(acceptedNodes)
+        m.metrics.AddFailedNodes(nrejectedNodes)
+        m.metrics.AddActiveNodes(nacceptedNodes)
         m.EventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMNodeUpdateEvent{
             RMId:          request.RmId,
             AcceptedNodes: acceptedNodes,

@@ -29,8 +29,10 @@ import (
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/handler"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/rmproxy/rmevent"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/scheduler/schedulerevent"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/schedulermetrics"
     "reflect"
     "sync"
+    "time"
 )
 
 // Responsibility of this class is, get status from SchedulerCache, and
@@ -55,15 +57,19 @@ type Scheduler struct {
 
     pendingSchedulerEvents chan interface{}
 
+    // Reference to scheduler metrics
+    metrics schedulermetrics.CoreSchedulerMetrics
+
     step uint64
 }
 
-func NewScheduler(clusterInfo *cache.ClusterInfo) *Scheduler {
+func NewScheduler(clusterInfo *cache.ClusterInfo, metrics schedulermetrics.CoreSchedulerMetrics) *Scheduler {
     m := &Scheduler{}
     m.clusterInfo = clusterInfo
     m.missedOpportunities = make(map[string]uint64)
     m.clusterSchedulingContext = NewClusterSchedulingContext()
     m.pendingSchedulerEvents = make(chan interface{}, 1024*1024)
+    m.metrics = metrics
 
     return m
 }
@@ -107,6 +113,7 @@ func (m *Scheduler) SingleStepSchedule(nAlloc int) {
     m.partitionChangeLock.RUnlock()
 
     for partition, partitionContext := range m.clusterSchedulingContext.partitions {
+        schedulingStart := time.Now()
         // Following steps:
         // - According to resource usage, find next N allocation Requests, N could be
         //   mini-batch because we don't want the process takes too long. And this
@@ -145,6 +152,9 @@ func (m *Scheduler) SingleStepSchedule(nAlloc int) {
 
         // Do preemption according to failedCandidate
         m.preemptForAllocationAskCandidates(failedCandidate)
+
+        // Update  metrics
+        m.metrics.ObserveSchedulingLatency(schedulingStart)
     }
 }
 

@@ -34,8 +34,8 @@ func StartAllServicesWithManualScheduler() (*rmproxy.RMProxy, *cache.ClusterInfo
 }
 
 func startAllServicesWithParameters(manualSchedule bool) (*rmproxy.RMProxy, *cache.ClusterInfo, *scheduler.Scheduler) {
-    cache := cache.NewClusterInfo()
-    scheduler := scheduler.NewScheduler(cache)
+    cache, metrics := cache.NewClusterInfo()
+    scheduler := scheduler.NewScheduler(cache, metrics)
     proxy := rmproxy.NewRMProxy()
     webapp := webservice.NewWebApp(cache)
 

@@ -125,9 +125,9 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Help:      "Number of applications submitted, by the result.",
 		}, []string{"result"})
 	// ApplicationsPending counts how many apps are in pending state.
-	s.totalApplicationsAdded = s.scheduleAllocations.With(prometheus.Labels{"result": "added"})
+	s.totalApplicationsAdded = s.scheduleApplications.With(prometheus.Labels{"result": "added"})
 	// ApplicationsSubmitted counts how many apps are submitted.
-	s.totalApplicationsRejected = s.scheduleAllocations.With(prometheus.Labels{"result": "rejected"})
+	s.totalApplicationsRejected = s.scheduleApplications.With(prometheus.Labels{"result": "rejected"})
 	s.totalApplicationsRunning = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Subsystem: SchedulerSubsystem,
@@ -181,7 +181,6 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			prometheus.MustRegister(metric)
 		}
 	})
-
 
 	// Expose the registered metrics via HTTP.
 	http.Handle("/metrics", promhttp.Handler())
@@ -302,6 +301,7 @@ func (m *SchedulerMetrics) IncActiveNodes() {
 }
 
 func (m *SchedulerMetrics) AddActiveNodes(value int) {
+	glog.Infof("Adding active nodes to YuniKorn:", value)
 	m.activeNodes.Add(float64(value))
 }
 
@@ -323,6 +323,7 @@ func (m *SchedulerMetrics) IncFailedNodes() {
 }
 
 func (m *SchedulerMetrics) AddFailedNodes(value int) {
+	glog.Infof("Adding failed nodes to YuniKorn:", value)
 	m.failedNodes.Add(float64(value))
 }
 

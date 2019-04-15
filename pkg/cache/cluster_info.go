@@ -58,7 +58,7 @@ func NewClusterInfo() *ClusterInfo {
         pendingSchedulerEvents: make(chan interface{}, 1024*1024),
     }
 
-    schedulermetrics.InitSchedulerMetrics()
+    clusterInfo.metrics = schedulermetrics.InitSchedulerMetrics()
 
     return clusterInfo
 }
@@ -302,11 +302,8 @@ func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
             }
         }
 
-
-        nrejectedNodes := len(rejectedNodes)
-        nacceptedNodes := len(acceptedNodes)
-        m.metrics.AddFailedNodes(nrejectedNodes)
-        m.metrics.AddActiveNodes(nacceptedNodes)
+        m.metrics.AddFailedNodes(len(rejectedNodes))
+        m.metrics.AddActiveNodes(len(acceptedNodes))
         m.EventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMNodeUpdateEvent{
             RMId:          request.RmId,
             AcceptedNodes: acceptedNodes,

@@ -79,7 +79,7 @@ func NewManagedQueue(conf configs.QueueConfig, parent *QueueInfo) (*QueueInfo, e
         }
     }
 
-    queuemetrics.InitQueueMetrics(conf.Name)
+    qi.metrics = queuemetrics.InitQueueMetrics(conf.Name)
     return qi, nil
 }
 
@@ -107,7 +107,7 @@ func NewUnmanagedQueue(name string, leaf bool, parent *QueueInfo) (*QueueInfo, e
         }
     }
 
-    queuemetrics.InitQueueMetrics(name)
+    qi.metrics = queuemetrics.InitQueueMetrics(name)
     return qi, nil
 }
 

@@ -85,6 +85,9 @@ type CoreSchedulerMetrics interface {
 	DecFailedNodes()
 	SubFailedNodes(value int)
 	SetFailedNodes(value int)
+
+	//latency change
+	ObserveSchedulingLatency(start time.Time)
 }
 
 // All core metrics variables to be declared in this struct
@@ -100,7 +103,7 @@ type SchedulerMetrics struct  {
 	totalApplicationsCompleted prometheus.Gauge
 	activeNodes prometheus.Gauge
 	failedNodes prometheus.Gauge
-	schedulingLatency *prometheus.SummaryVec
+	schedulingLatency prometheus.Histogram
 }
 
 // Initialize scheduler metrics
@@ -155,17 +158,14 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Help:      "failed nodes",
 		})
 
-	s.schedulingLatency = prometheus.NewSummaryVec(
-		prometheus.SummaryOpts{
+	s.schedulingLatency = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
 			Subsystem: SchedulerSubsystem,
-			Name:      SchedulingLatencyName,
-			Help:      "Scheduling latency in seconds split by sub-parts of the scheduling operation",
-			// Make the sliding window of 5h.
-			MaxAge: 5 * time.Hour,
+			Name:      "scheduling_latency_seconds",
+			Help:      "scheduling latency in seconds",
+			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 15),
 		},
-		[]string{"operation"},
 	)
-
 	var metricsList = []prometheus.Collector{
 		s.scheduleAllocations,
 		s.scheduleApplications,
@@ -210,6 +210,10 @@ func SinceInMicroseconds(start time.Time) float64 {
 // SinceInSeconds gets the time since the specified start in seconds.
 func SinceInSeconds(start time.Time) float64 {
 	return time.Since(start).Seconds()
+}
+
+func (m *SchedulerMetrics) ObserveSchedulingLatency(start time.Time) {
+	m.schedulingLatency.Observe(SinceInSeconds(start))
 }
 
 // Define and implement all the metrics ops for Prometheus.

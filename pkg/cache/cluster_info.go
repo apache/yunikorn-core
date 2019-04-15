@@ -51,7 +51,7 @@ type ClusterInfo struct {
     metrics schedulermetrics.CoreSchedulerMetrics
 }
 
-func NewClusterInfo() *ClusterInfo {
+func NewClusterInfo() (*ClusterInfo, schedulermetrics.CoreSchedulerMetrics) {
     clusterInfo := &ClusterInfo{
         partitions:             make(map[string]*PartitionInfo),
         pendingRmEvents:        make(chan interface{}, 1024*1024),
@@ -60,7 +60,7 @@ func NewClusterInfo() *ClusterInfo {
 
     clusterInfo.metrics = schedulermetrics.InitSchedulerMetrics()
 
-    return clusterInfo
+    return clusterInfo, clusterInfo.metrics
 }
 
 // Start service

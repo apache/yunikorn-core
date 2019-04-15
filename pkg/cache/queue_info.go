@@ -21,7 +21,7 @@ import (
     "github.com/golang/glog"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/queue-metrics"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/queuemetrics"
     "strings"
     "sync"
 )
@@ -45,7 +45,7 @@ type QueueInfo struct {
                                      // properties with the config for this queue only manipulated during creation
                                      // of the queue or via a queue configuration update
 
-    metrics *queue_metrics.QueueMetrics
+    metrics queuemetrics.CoreQueueMetrics
 
     // Private fields need protection
     isLeaf     bool                  // this is a leaf queue or not (i.e. parent)
@@ -79,7 +79,7 @@ func NewManagedQueue(conf configs.QueueConfig, parent *QueueInfo) (*QueueInfo, e
         }
     }
 
-    qi.metrics = queue_metrics.NewQueueMetrics(conf.Name)
+    queuemetrics.InitQueueMetrics(conf.Name)
     return qi, nil
 }
 
@@ -107,7 +107,7 @@ func NewUnmanagedQueue(name string, leaf bool, parent *QueueInfo) (*QueueInfo, e
         }
     }
 
-    qi.metrics = queue_metrics.NewQueueMetrics(name)
+    queuemetrics.InitQueueMetrics(name)
     return qi, nil
 }
 

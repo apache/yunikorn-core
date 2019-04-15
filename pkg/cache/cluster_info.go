@@ -27,9 +27,9 @@ import (
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/strings"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/handler"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/metrics"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/rmproxy/rmevent"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/scheduler/schedulerevent"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/schedulermetrics"
     "reflect"
     "sync"
 )
@@ -46,6 +46,9 @@ type ClusterInfo struct {
 
     // RM Event Handler
     EventHandlers handler.EventHandlers
+
+    // Reference to scheduler metrics
+    metrics schedulermetrics.CoreSchedulerMetrics
 }
 
 func NewClusterInfo() *ClusterInfo {
@@ -54,6 +57,8 @@ func NewClusterInfo() *ClusterInfo {
         pendingRmEvents:        make(chan interface{}, 1024*1024),
         pendingSchedulerEvents: make(chan interface{}, 1024*1024),
     }
+
+    schedulermetrics.InitSchedulerMetrics()
 
     return clusterInfo
 }
@@ -157,6 +162,7 @@ func (m *ClusterInfo) addApplicationToPartition(appInfo *ApplicationInfo, failIf
 func (m *ClusterInfo) addPartition(name string, info *PartitionInfo) {
     m.lock.Lock()
     defer m.lock.Unlock()
+    info.metrics = m.metrics
     m.partitions[name] = info
 }
 
@@ -175,12 +181,12 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
         for _, app := range request.NewApplications {
             appInfo := NewApplicationInfo(app.ApplicationId, app.PartitionName, app.QueueName)
             if err := m.addApplicationToPartition(appInfo, true); err != nil {
-                metrics.TotalApplicationsRejected.Inc()
+                m.metrics.IncTotalApplicationsRejected()
                 rejectedApps = append(rejectedApps, &si.RejectedApplication{ApplicationId: app.ApplicationId, Reason: err.Error()})
             } else {
                 // Update metrics with accepted applications
-                metrics.TotalApplicationsRunning.Inc()
-                metrics.TotalApplicationsAdded.Inc()
+                m.metrics.IncTotalApplicationsAdded()
+                m.metrics.IncTotalApplicationsRunning()
                 acceptedApps = append(acceptedApps, &si.AcceptedApplication{ApplicationId: app.ApplicationId})
                 addedAppInfos = append(addedAppInfos, appInfo)
             }
@@ -200,9 +206,9 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
             }
 
             // Update metrics with removed applications
-            metrics.TotalApplicationsRunning.Sub(float64(len(request.RemoveApplications)))
+            m.metrics.SubTotalApplicationsRunning(len(request.RemoveApplications))
             // ToDO: need to improve this once we have state in YuniKorn for apps.
-            metrics.TotalApplicationsCompleted.Add(float64(len(request.RemoveApplications)))
+            m.metrics.AddTotalApplicationsCompleted(len(request.RemoveApplications))
 
             // Send message to Scheduler
             m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerApplicationsUpdateEvent{
@@ -284,7 +290,7 @@ func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
                     glog.Warning(errorMessage)
                     partition.removeNode(node.NodeId)
                     // Remove nodes from active nodes counter
-                    metrics.ActiveNodes.Dec()
+                    m.metrics.DecActiveNodes()
                     rejectedNodes = append(rejectedNodes, &si.RejectedNode{NodeId: node.NodeId, Reason: errorMessage})
                     continue
                 }
@@ -296,8 +302,8 @@ func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
             }
         }
 
-        metrics.FailedNodes.Add(float64(len(rejectedNodes)))
-        metrics.ActiveNodes.Add(float64(len(acceptedNodes)))
+        m.metrics.AddFailedNodes(len(rejectedNodes))
+        m.metrics.AddActiveNodes(len(acceptedNodes))
         m.EventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMNodeUpdateEvent{
             RMId:          request.RmId,
             AcceptedNodes: acceptedNodes,

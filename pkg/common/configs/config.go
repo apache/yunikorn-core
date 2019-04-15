@@ -29,6 +29,7 @@ import (
 // set of scheduler resources.
 type SchedulerConfig struct {
     Partitions []PartitionConfig
+    Checksum   []byte
 }
 
 type PartitionConfig struct {
@@ -91,10 +92,11 @@ type User struct {
 }
 
 type LoadSchedulerConfigFunc func(policyGroup string) (*SchedulerConfig, error)
+type ResolveConfigurationFileFunc func(policyGroup string) string
 
 // Visible by tests
-func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) {
-    conf := &SchedulerConfig{}
+func LoadSchedulerConfigFromByteArray(content []byte, checkSum []byte) (*SchedulerConfig, error) {
+    conf := &SchedulerConfig{Checksum: checkSum}
     err := yaml.Unmarshal(content, conf)
     if err != nil {
         glog.V(2).Infof("Queue configuration parsing failed, error: %s", err)
@@ -111,6 +113,26 @@ func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) 
 }
 
 func loadSchedulerConfigFromFile(policyGroup string) (*SchedulerConfig, error) {
+    filePath := resolveConfigurationFileFunc(policyGroup)
+    glog.Infof("loading configuration from path %s", filePath)
+    buf, err := ioutil.ReadFile(filePath)
+    if err != nil {
+        glog.V(2).Infof("Queue configuration file failed to load: %s", err)
+        return nil, err
+    }
+    glog.V(0).Info("Queue configuration loaded from file")
+
+    // calculate checksum
+    checkSum, err := FileCheckSummer(filePath)
+    if err != nil {
+        // checksum failed
+        return nil, err
+    }
+
+    return LoadSchedulerConfigFromByteArray(buf, checkSum)
+}
+
+func resolveConfigurationFileFunc(policyGroup string) string {
     var filePath string
     if configDir, ok := ConfigMap[SchedulerConfigPath]; ok {
         // if scheduler config path is explicitly set, load conf from there
@@ -124,15 +146,10 @@ func loadSchedulerConfigFromFile(policyGroup string) (*SchedulerConfig, error) {
             filePath = fmt.Sprintf("%s.yaml", policyGroup)
         }
     }
-    glog.Infof("loading configuration from path %s", filePath)
-    buf, err := ioutil.ReadFile(filePath)
-    if err != nil {
-        glog.V(2).Infof("Queue configuration file failed to load: %s", err)
-        return nil, err
-    }
-    glog.V(0).Info("Queue configuration loaded from file")
-    return LoadSchedulerConfigFromByteArray(buf)
+    return filePath
 }
+
+var FileResolver ResolveConfigurationFileFunc = resolveConfigurationFileFunc
 
 // Default loader, can be updated by tests
 var SchedulerConfigLoader LoadSchedulerConfigFunc = loadSchedulerConfigFromFile

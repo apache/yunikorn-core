@@ -44,7 +44,7 @@ partitions:
               max: {memory: 150, vcore: 20}
           - name: tobedeleted
 `
-    configs.MockSchedulerConfigByData([]byte(configData))
+    configs.MockSchedulerConfigByDataWithChecksum([]byte(configData), []byte("v0"))
     mockRM := NewMockRMCallbackHandler(t)
 
     _, err := proxy.RegisterResourceManager(
@@ -96,8 +96,12 @@ partitions:
         properties:
           gpu: test queue property
 `
-    configs.MockSchedulerConfigByData([]byte(configData))
+    configs.FileCheckSummer = func(path string) (bytes []byte, e error) {return []byte("v1"), nil}
+    configs.MockSchedulerConfigByDataWithChecksum([]byte(configData), []byte("v1"))
     err = proxy.ReloadConfiguration("rm:123")
+
+    // wait until configuration reloaded
+    waitForCacheState(t, cache, []byte("v1"), 10000)
 
     if err != nil {
         t.Errorf("configuration reload failed: %v", err)

@@ -304,24 +304,23 @@ func (m *RMProxy) Update(request *si.UpdateRequest) error {
 func (m *RMProxy) ReloadConfiguration(rmId string) error {
     m.lock.RLock()
     defer m.lock.RUnlock()
-    c := make(chan *commonevents.Result, 0)
 
+    // Trigger an update event, this is not immediately updating configuration,
+    // the actual reload happens when scheduler detects configuration file changes
     glog.V(0).Infof("Configuration for RM %s update started", rmId)
-
-    // Update the existing RM
-    go func() {
-        m.EventHandlers.CacheEventHandler.HandleEvent(
-            &commonevents.ConfigUpdateRMEvent{
-                RmId: rmId,
-                Channel: c,
+    c := make(chan *commonevents.Result, 0)
+    m.EventHandlers.CacheEventHandler.HandleEvent(
+        &commonevents.ConfigUpdateRMEvent{
+            RmId:    rmId,
+            Channel: c,
         })
+
+    // logging the result asynchronously
+    go func() {
+        // Wait from channel
+        result := <-c
+        glog.V(0).Infof("Configuration for RM %s update finished with result: %v", rmId, result)
     }()
 
-    // Wait from channel
-    result := <-c
-    glog.V(0).Infof("Configuration for RM %s update finished with result: %v", rmId, result)
-    if !result.Succeeded {
-        return errors.New(result.Reason)
-    }
     return nil
 }

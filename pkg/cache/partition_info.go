@@ -397,6 +397,13 @@ func (pi *PartitionInfo) CopyNodeInfos() []*NodeInfo {
     return out
 }
 
+func checkAndSetResource(resource *resources.Resource) string {
+    if resource != nil {
+        return strings.Trim(resource.String(), "map")
+    }
+    return ""
+}
+
 // TODO fix this:
 // should only return one element, only a root queue
 // remove hard coded values and unknown AbsUsedCapacity
@@ -411,9 +418,9 @@ func (pi *PartitionInfo) GetQueueInfos() []dao.QueueDAOInfo {
     info.QueueName = pi.Root.Name
     info.Status = "RUNNING"
     info.Capacities = dao.QueueCapacity{
-        Capacity:     strings.Trim(pi.Root.GuaranteedResource.String(), "map"),
-        MaxCapacity:  strings.Trim(pi.Root.GuaranteedResource.String(), "map"),
-        UsedCapacity: strings.Trim(pi.Root.AllocatedResource.String(), "map"),
+        Capacity:     checkAndSetResource(pi.Root.GuaranteedResource),
+        MaxCapacity:  checkAndSetResource(pi.Root.MaxResource),
+        UsedCapacity: checkAndSetResource(pi.Root.AllocatedResource),
         AbsUsedCapacity: "20",
     }
     info.ChildQueues = GetChildQueueInfos(pi.Root)
@@ -433,9 +440,9 @@ func GetChildQueueInfos(info *QueueInfo) []dao.QueueDAOInfo {
         queue.QueueName = v.Name
         queue.Status = "RUNNING"
         queue.Capacities = dao.QueueCapacity{
-            Capacity:     strings.Trim(v.GuaranteedResource.String(), "map"),
-            MaxCapacity:  strings.Trim(v.GuaranteedResource.String(), "map"),
-            UsedCapacity: strings.Trim(v.AllocatedResource.String(), "map"),
+            Capacity:     checkAndSetResource(v.GuaranteedResource),
+            MaxCapacity:  checkAndSetResource(v.MaxResource),
+            UsedCapacity: checkAndSetResource(v.AllocatedResource),
             AbsUsedCapacity: "20",
         }
         queue.ChildQueues = GetChildQueueInfos(v)

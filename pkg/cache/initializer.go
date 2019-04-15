@@ -28,6 +28,9 @@ import (
 // - The cluster must not have any partitions set (checked in the caller)
 // - A validated config must be passed in.
 func createPartitionInfos(clusterInfo *ClusterInfo, conf *configs.SchedulerConfig, rmId string) ([]*PartitionInfo, error) {
+    // cluster info has versions,
+    // this is determined by the checksum of the configuration file
+    clusterInfo.configChecksum = conf.Checksum
     updatedPartitions := make([]*PartitionInfo, 0)
     for _, p := range conf.Partitions {
         partitionName := common.GetNormalizedPartitionName(p.Name, rmId)
@@ -132,6 +135,10 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmId string) ([]*
             glog.V(0).Infof("Removed partition %s from the cluster", part.Name)
         }
     }
+
+    // once changes are updated to the cache, make sure checksum is also updated
+    clusterInfo.SetConfigChecksum(conf.Checksum)
+
     return updatedPartitions, deletedPartitions, nil
 }
 

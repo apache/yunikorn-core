@@ -17,6 +17,7 @@ limitations under the License.
 package tests
 
 import (
+    "bytes"
     "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
@@ -184,6 +185,23 @@ func waitForNodesAllocatedResource(t *testing.T, cache *cache.ClusterInfo, parti
         }
         if i*100 >= timeoutMs {
             t.Fatalf("Failed to wait Allocations")
+            return
+        }
+    }
+}
+
+func waitForCacheState(t *testing.T, cache *cache.ClusterInfo, checksum []byte, timeoutMs int) {
+    var i = 0
+    for {
+        i++
+        if bytes.Equal(cache.GetConfigChecksum(), checksum) {
+            return
+        } else {
+            time.Sleep(time.Duration(100 * time.Millisecond))
+        }
+
+        if i*100 >= timeoutMs {
+            t.Fatalf("Failed to wait for cache state")
             return
         }
     }

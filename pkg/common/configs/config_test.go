@@ -121,6 +121,7 @@ func TestConfigSerde(t *testing.T) {
                 },
             },
         },
+        Checksum: []byte(""),
     }
 
     // convert the object to yaml

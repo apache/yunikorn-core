@@ -24,6 +24,7 @@ import (
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache/cacheevent"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/commonevents"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/strings"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/handler"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/rmproxy/rmevent"
@@ -33,9 +34,10 @@ import (
 )
 
 type ClusterInfo struct {
-    partitions  map[string]*PartitionInfo
-    lock        sync.RWMutex
-    policyGroup string
+    partitions     map[string]*PartitionInfo
+    lock           sync.RWMutex
+    policyGroup    string
+    configChecksum []byte
 
     // Event queues
     pendingRmEvents        chan interface{}
@@ -104,6 +106,18 @@ func (m *ClusterInfo) GetPartition(name string) *PartitionInfo {
     m.lock.RLock()
     defer m.lock.RUnlock()
     return m.partitions[name]
+}
+
+func (m *ClusterInfo) GetConfigChecksum() []byte {
+    m.lock.RLock()
+    defer m.lock.RUnlock()
+    return m.configChecksum
+}
+
+func (m *ClusterInfo) SetConfigChecksum(checksum []byte) {
+    m.lock.Lock()
+    defer m.lock.Unlock()
+    m.configChecksum = checksum
 }
 
 func (m *ClusterInfo) addApplicationToPartition(appInfo *ApplicationInfo, failIfExist bool) error {
@@ -319,32 +333,47 @@ func (m *ClusterInfo) processRMRegistrationEvent(event *commonevents.RegisterRME
 }
 
 func (m *ClusterInfo) processRMConfigUpdateEvent(event *commonevents.ConfigUpdateRMEvent) {
-    updatedPartitions, deletedPartitions, err := UpdateClusterInfoFromConfigFile(m, event.RmId)
+    // instead of in-place reloading, we create a configWatch to inspect on configuration file state,
+    // once config file is updated, then trigger reload operation for the scheduler.
+    // if there is multiple reload being called, they are queued up in the configWatcher callbacks.
+    // that is to ensure eventually configuration is reloaded as demand.
+    confFile := configs.FileResolver(m.policyGroup)
+    configWatcher := configs.GetConfigWatcher(m.configChecksum, confFile)
+
+    // the callback is the actual reload
+    err := configWatcher.AddCallback(func() {
+        updatedPartitions, deletedPartitions, err := UpdateClusterInfoFromConfigFile(m, event.RmId)
+        if err != nil {
+            event.Channel <- &commonevents.Result{Succeeded: false, Reason: err.Error()}
+        }
+
+        // TODO inconsistent risk. What if cache updated but updating scheduler context failed?
+
+        updatedPartitionsInterfaces := make([]interface{}, 0)
+        for _, u := range updatedPartitions {
+            updatedPartitionsInterfaces = append(updatedPartitionsInterfaces, u)
+        }
+
+        // Send updated partitions to scheduler
+        m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerUpdatePartitionsConfigEvent{
+            UpdatedPartitions: updatedPartitionsInterfaces,
+            ResultChannel:     event.Channel,
+        })
+
+        deletedPartitionsInterfaces := make([]interface{}, 0)
+        for _, u := range deletedPartitions {
+            deletedPartitionsInterfaces = append(deletedPartitionsInterfaces, u)
+        }
+
+        // Send deleted partitions to the scheduler
+        m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerDeletePartitionsConfigEvent{
+            DeletePartitions:  deletedPartitionsInterfaces,
+            ResultChannel:     event.Channel,
+        })
+    })
     if err != nil {
-        event.Channel <- &commonevents.Result{Succeeded: false, Reason: err.Error()}
+        glog.V(1).Infof(err.Error())
     }
-
-    updatedPartitionsInterfaces := make([]interface{}, 0)
-    for _, u := range updatedPartitions {
-        updatedPartitionsInterfaces = append(updatedPartitionsInterfaces, u)
-    }
-
-    // Send updated partitions to scheduler
-    m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerUpdatePartitionsConfigEvent{
-        UpdatedPartitions: updatedPartitionsInterfaces,
-        ResultChannel:     event.Channel,
-    })
-
-    deletedPartitionsInterfaces := make([]interface{}, 0)
-    for _, u := range deletedPartitions {
-        deletedPartitionsInterfaces = append(deletedPartitionsInterfaces, u)
-    }
-
-    // Send deleted partitions to the scheduler
-    m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerDeletePartitionsConfigEvent{
-        DeletePartitions:  deletedPartitionsInterfaces,
-        ResultChannel:     event.Channel,
-    })
 }
 
 func (m *ClusterInfo) processAllocationProposalEvent(event *cacheevent.AllocationProposalBundleEvent) {

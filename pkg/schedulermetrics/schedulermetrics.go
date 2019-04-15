@@ -306,7 +306,7 @@ func (m *SchedulerMetrics) IncActiveNodes() {
 }
 
 func (m *SchedulerMetrics) AddActiveNodes(value int) {
-	glog.Infof("Adding active nodes to YuniKorn:", value)
+	glog.Infof("Adding active nodes to YuniKorn:%d,%f", value, float64(value))
 	m.activeNodes.Add(float64(value))
 }
 
@@ -328,7 +328,7 @@ func (m *SchedulerMetrics) IncFailedNodes() {
 }
 
 func (m *SchedulerMetrics) AddFailedNodes(value int) {
-	glog.Infof("Adding failed nodes to YuniKorn:", value)
+	glog.Infof("Adding failed nodes to YuniKorn:%d,%f", value, float64(value))
 	m.failedNodes.Add(float64(value))
 }
 

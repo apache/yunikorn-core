@@ -17,7 +17,11 @@ limitations under the License.
 package schedulermetrics
 
 import (
+	"flag"
+	"github.com/golang/glog"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"net/http"
 	"sync"
 	"time"
 )
@@ -28,6 +32,9 @@ const (
 	// SchedulingLatencyName - scheduler latency metric name
 	SchedulingLatencyName = "scheduling_duration_seconds"
 )
+
+var addr = flag.String("0.0.0.0", ":8888", "The address to listen on for HTTP requests.")
+
 
 // Declare all core metrics ops in this interface
 type CoreSchedulerMetrics interface {
@@ -174,6 +181,12 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			prometheus.MustRegister(metric)
 		}
 	})
+
+
+	// Expose the registered metrics via HTTP.
+	http.Handle("/metrics", promhttp.Handler())
+	error := http.ListenAndServe(*addr, nil)
+	glog.Error(error)
 
 	return s
 }

@@ -184,8 +184,13 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 
 	// Expose the registered metrics via HTTP.
 	http.Handle("/metrics", promhttp.Handler())
-	error := http.ListenAndServe(*addr, nil)
-	glog.Error(error)
+	glog.Info("Metrics started at port=9090")
+	go func() {
+		httpError := http.ListenAndServe(":9090", nil)
+		if httpError != nil {
+			glog.Errorf("While serving HTTP: %v", httpError)
+		}
+	}()
 
 	return s
 }

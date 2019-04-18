@@ -18,17 +18,16 @@ package common
 
 import (
     "fmt"
-    "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
     "net"
     "os"
     "strings"
     "sync"
 
-    "github.com/golang/glog"
-    "google.golang.org/grpc"
+    "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
 
-    "github.com/kubernetes-csi/csi-lib-utils/protosanitizer"
+    "github.com/golang/glog"
     "golang.org/x/net/context"
+    "google.golang.org/grpc"
 )
 
 // Defines Non blocking GRPC server interfaces
@@ -84,16 +83,22 @@ func ParseEndpoint(ep string) (string, string, error) {
     return "", "", fmt.Errorf("Invalid endpoint: %v", ep)
 }
 
+// Logging unary interceptor function to log every RPC call
 func logGRPC(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
     glog.V(3).Infof("GRPC call: %s", info.FullMethod)
-    glog.V(5).Infof("GRPC request: %s", protosanitizer.StripSecrets(req))
+    glog.V(5).Infof("GRPC request: %+v", req)
     resp, err := handler(ctx, req)
     if err != nil {
         glog.Errorf("GRPC error: %v", err)
     } else {
-        glog.V(5).Infof("GRPC response: %s", protosanitizer.StripSecrets(resp))
+        glog.V(5).Infof("GRPC response: %+v", resp)
     }
     return resp, err
+}
+
+// Returns unary interceptor that will be used to intercept the execution of a unary RPC on the gRPC server
+func withServerUnaryInterceptor() grpc.ServerOption {
+    return grpc.UnaryInterceptor(logGRPC)
 }
 
 func (s *nonBlockingGRPCServer) serve(endpoint string, ss si.SchedulerServer) {
@@ -115,10 +120,7 @@ func (s *nonBlockingGRPCServer) serve(endpoint string, ss si.SchedulerServer) {
         glog.Fatalf("Failed to listen: %v", err)
     }
 
-    opts := []grpc.ServerOption{
-        grpc.UnaryInterceptor(logGRPC),
-    }
-    server := grpc.NewServer(opts...)
+    server := grpc.NewServer(withServerUnaryInterceptor())
     s.server = server
 
     if ss != nil {
@@ -127,6 +129,8 @@ func (s *nonBlockingGRPCServer) serve(endpoint string, ss si.SchedulerServer) {
 
     glog.Infof("Listening for connections on address: %#v", listener.Addr())
 
-    server.Serve(listener)
+    if err := server.Serve(listener); err != nil {
+        glog.Fatalf("failed to serve: %v", err)
+    }
 
 }

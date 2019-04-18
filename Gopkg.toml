@@ -19,10 +19,6 @@
   version = "1.10.0"
 
 [[constraint]]
-  name = "github.com/kubernetes-csi/csi-lib-utils"
-  version = "0.2.0"
-
-[[constraint]]
   name = "gotest.tools"
   version = "2.3.0"
 

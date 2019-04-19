@@ -25,3 +25,7 @@
 [[constraint]]
   name = "github.com/satori/go.uuid"
   version = "v1.2.0"
+
+[[constraint]]
+  name = "github.com/prometheus/client_golang"
+  version = "0.9.2"

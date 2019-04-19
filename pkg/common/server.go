@@ -18,16 +18,14 @@ package common
 
 import (
     "fmt"
+    "github.com/golang/glog"
+    "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
+    "golang.org/x/net/context"
+    "google.golang.org/grpc"
     "net"
     "os"
     "strings"
     "sync"
-
-    "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
-
-    "github.com/golang/glog"
-    "golang.org/x/net/context"
-    "google.golang.org/grpc"
 )
 
 // Defines Non blocking GRPC server interfaces

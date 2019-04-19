@@ -58,7 +58,7 @@ func NewClusterInfo() (*ClusterInfo, schedulermetrics.CoreSchedulerMetrics) {
         pendingSchedulerEvents: make(chan interface{}, 1024*1024),
     }
 
-    clusterInfo.metrics = schedulermetrics.InitSchedulerMetrics()
+    clusterInfo.metrics = schedulermetrics.GetInstance()
 
     return clusterInfo, clusterInfo.metrics
 }

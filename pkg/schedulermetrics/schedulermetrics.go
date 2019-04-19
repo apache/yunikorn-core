@@ -35,6 +35,10 @@ const (
 
 var addr = flag.String("0.0.0.0", ":8888", "The address to listen on for HTTP requests.")
 
+// singleton instance of SchedulerMetrics
+var instance *SchedulerMetrics
+var once sync.Once
+
 
 // Declare all core metrics ops in this interface
 type CoreSchedulerMetrics interface {
@@ -106,8 +110,16 @@ type SchedulerMetrics struct  {
 	schedulingLatency prometheus.Histogram
 }
 
+// Gets singleton instance of SchedulerMetrics
+func GetInstance() *SchedulerMetrics {
+	once.Do(func() {
+		instance = initSchedulerMetrics()
+	})
+	return instance
+}
+
 // Initialize scheduler metrics
-func InitSchedulerMetrics() *SchedulerMetrics {
+func initSchedulerMetrics() *SchedulerMetrics {
 	s := &SchedulerMetrics{}
 	s.scheduleAllocations = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -175,13 +187,11 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 		s.activeNodes,
 		s.failedNodes,
 	}
-	// Register the metrics.
-	registerMetrics.Do(func() {
-		for _, metric := range metricsList {
-			prometheus.MustRegister(metric)
-		}
-	})
 
+	// Register the metrics.
+	for _, metric := range metricsList {
+		prometheus.MustRegister(metric)
+	}
 	// Expose the registered metrics via HTTP.
 	http.Handle("/metrics", promhttp.Handler())
 	glog.Info("Metrics started at port=9090")
@@ -194,8 +204,6 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 
 	return s
 }
-
-var registerMetrics sync.Once
 
 // Reset resets metrics
 func Reset() {

@@ -16,32 +16,38 @@ limitations under the License.
 
 package configs
 
-import (
-    "crypto/sha256"
-    "io"
-    "os"
-)
+import "sync"
 
 const (
     SchedulerConfigPath  = "scheduler-config-path"
     DefaultSchedulerConfigPath = "/etc/yunikorn"
 )
 
-type CheckSumFn func(path string) ([]byte, error)
+var ConfigMap map[string]string
+var ConfigContext *SchedulerConfigContext
 
-var ConfigMap = make(map[string]string)
-var FileCheckSummer = checkSum
+func init() {
+    ConfigMap = make(map[string]string)
+    ConfigContext = &SchedulerConfigContext{
+        configs: make(map[string]*SchedulerConfig),
+        lock: &sync.RWMutex{},
+    }
+}
 
-// returns sha256 checksum of a given file
-func checkSum(path string) ([]byte, error) {
-    f, err := os.Open(path)
-    if err != nil {
-        return nil, err
-    }
-    defer f.Close()
-    h := sha256.New()
-    if _, err := io.Copy(h, f); err != nil {
-        return nil, err
-    }
-    return h.Sum(nil), err
+// scheduler config context provides thread-safe access for scheduler configurations
+type SchedulerConfigContext struct {
+    configs map[string]*SchedulerConfig
+    lock *sync.RWMutex
+}
+
+func (ctx *SchedulerConfigContext) Set(policyGroup string, config *SchedulerConfig) {
+    ctx.lock.Lock()
+    defer ctx.lock.Unlock()
+    ctx.configs[policyGroup] = config
+}
+
+func (ctx *SchedulerConfigContext) Get(policyGroup string) *SchedulerConfig {
+    ctx.lock.RLock()
+    defer ctx.lock.RUnlock()
+    return ctx.configs[policyGroup]
 }

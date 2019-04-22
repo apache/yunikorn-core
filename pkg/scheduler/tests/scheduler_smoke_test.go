@@ -17,7 +17,9 @@ limitations under the License.
 package tests
 
 import (
+    "bytes"
     "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/entrypoint"
@@ -44,7 +46,7 @@ partitions:
               max: {memory: 150, vcore: 20}
           - name: tobedeleted
 `
-    configs.MockSchedulerConfigByDataWithChecksum([]byte(configData), []byte("v0"))
+    configs.MockSchedulerConfigByData([]byte(configData))
     mockRM := NewMockRMCallbackHandler(t)
 
     _, err := proxy.RegisterResourceManager(
@@ -57,6 +59,9 @@ partitions:
     if err != nil {
         t.Errorf("configuration load failed: %v", err)
     }
+
+    // memorize the checksum of current configs
+    configChecksum := configs.ConfigContext.Get("policygroup").Checksum
 
     // Check queues of cache and scheduler.
     partitionInfo := cache.GetPartition("[rm:123]default")
@@ -96,16 +101,17 @@ partitions:
         properties:
           gpu: test queue property
 `
-    configs.FileCheckSummer = func(path string) (bytes []byte, e error) {return []byte("v1"), nil}
-    configs.MockSchedulerConfigByDataWithChecksum([]byte(configData), []byte("v1"))
+    configs.MockSchedulerConfigByData([]byte(configData))
     err = proxy.ReloadConfiguration("rm:123")
-
-    // wait until configuration reloaded
-    waitForCacheState(t, cache, []byte("v1"), 10000)
 
     if err != nil {
         t.Errorf("configuration reload failed: %v", err)
     }
+
+    // wait until configuration is reloaded
+    common.WaitFor(1*time.Second, 5*time.Second, func() bool {
+        return !bytes.Equal(configs.ConfigContext.Get("policygroup").Checksum, configChecksum)
+    })
 
     // Check queues of cache and scheduler.
     partitionInfo = cache.GetPartition("[rm:123]default")

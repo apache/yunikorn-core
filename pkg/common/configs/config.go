@@ -17,6 +17,7 @@ limitations under the License.
 package configs
 
 import (
+    "crypto/sha256"
     "fmt"
     "github.com/golang/glog"
     "gopkg.in/yaml.v2"
@@ -92,11 +93,10 @@ type User struct {
 }
 
 type LoadSchedulerConfigFunc func(policyGroup string) (*SchedulerConfig, error)
-type ResolveConfigurationFileFunc func(policyGroup string) string
 
 // Visible by tests
-func LoadSchedulerConfigFromByteArray(content []byte, checkSum []byte) (*SchedulerConfig, error) {
-    conf := &SchedulerConfig{Checksum: checkSum}
+func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) {
+    conf := &SchedulerConfig{}
     err := yaml.Unmarshal(content, conf)
     if err != nil {
         glog.V(2).Infof("Queue configuration parsing failed, error: %s", err)
@@ -109,6 +109,9 @@ func LoadSchedulerConfigFromByteArray(content []byte, checkSum []byte) (*Schedul
         glog.V(0).Infof("Queue configuration validation failed: %s", err)
         return nil, err
     }
+
+    h := sha256.New()
+    conf.Checksum = h.Sum(content)
     return conf, err
 }
 
@@ -122,14 +125,7 @@ func loadSchedulerConfigFromFile(policyGroup string) (*SchedulerConfig, error) {
     }
     glog.V(0).Info("Queue configuration loaded from file")
 
-    // calculate checksum
-    checkSum, err := FileCheckSummer(filePath)
-    if err != nil {
-        // checksum failed
-        return nil, err
-    }
-
-    return LoadSchedulerConfigFromByteArray(buf, checkSum)
+    return LoadSchedulerConfigFromByteArray(buf)
 }
 
 func resolveConfigurationFileFunc(policyGroup string) string {
@@ -148,8 +144,6 @@ func resolveConfigurationFileFunc(policyGroup string) string {
     }
     return filePath
 }
-
-var FileResolver ResolveConfigurationFileFunc = resolveConfigurationFileFunc
 
 // Default loader, can be updated by tests
 var SchedulerConfigLoader LoadSchedulerConfigFunc = loadSchedulerConfigFromFile

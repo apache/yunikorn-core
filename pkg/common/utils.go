@@ -19,6 +19,7 @@ package common
 import (
     "fmt"
     "strings"
+    "time"
 )
 
 func GetNormalizedPartitionName(partitionName string, rmId string) string {
@@ -44,4 +45,20 @@ func GetPartitionNameWithoutClusterId(partitionName string) string {
         return partitionName[idx+1:]
     }
     return partitionName
+}
+
+func WaitFor(interval time.Duration, timeout time.Duration, condition func() bool) error {
+    deadline := time.Now().Add(timeout)
+    for {
+        if time.Now().After(deadline) {
+            return fmt.Errorf("timeout waiting for condition")
+        }
+        if condition() {
+            return nil
+        } else {
+            time.Sleep(interval)
+            continue
+        }
+
+    }
 }

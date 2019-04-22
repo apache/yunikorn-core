@@ -30,7 +30,6 @@ import (
 func createPartitionInfos(clusterInfo *ClusterInfo, conf *configs.SchedulerConfig, rmId string) ([]*PartitionInfo, error) {
     // cluster info has versions,
     // this is determined by the checksum of the configuration file
-    clusterInfo.configChecksum = conf.Checksum
     updatedPartitions := make([]*PartitionInfo, 0)
     for _, p := range conf.Partitions {
         partitionName := common.GetNormalizedPartitionName(p.Name, rmId)
@@ -63,6 +62,9 @@ func SetClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmId string, policyG
         return []*PartitionInfo{}, err
     }
 
+    // update global scheduler configs
+    configs.ConfigContext.Set(policyGroup, conf)
+
     updatedPartitions, err := createPartitionInfos(clusterInfo, conf, rmId)
 
     if err != nil {
@@ -87,6 +89,9 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmId string) ([]*
     if err != nil {
         return []*PartitionInfo{}, []*PartitionInfo{}, err
     }
+
+    // update global scheduler configs
+    configs.ConfigContext.Set(clusterInfo.policyGroup, conf)
 
     // Start updating the config is OK and should pass setting on the cluster
     glog.V(0).Infof("Updating partitions from config in the cluster for RM %s", rmId)
@@ -135,9 +140,6 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmId string) ([]*
             glog.V(0).Infof("Removed partition %s from the cluster", part.Name)
         }
     }
-
-    // once changes are updated to the cache, make sure checksum is also updated
-    clusterInfo.SetConfigChecksum(conf.Checksum)
 
     return updatedPartitions, deletedPartitions, nil
 }

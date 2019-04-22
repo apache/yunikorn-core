@@ -25,10 +25,12 @@ import (
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache/cacheevent"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/commonevents"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/handler"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/rmproxy/rmevent"
     "reflect"
     "sync"
+    "time"
 )
 
 // Gateway to talk to ResourceManager (behind grpc/API of scheduler-interface)
@@ -39,6 +41,10 @@ type RMProxy struct {
     pendingRMEvents chan interface{}
 
     rmIdToCallback map[string]api.ResourceManagerCallback
+
+    // config version is tracked per RM,
+    // it is used to determine if configs need to be reloaded
+    rmIdToConfigWatcher map[string]*configs.ConfigWatcher
 
     lock sync.RWMutex
 }
@@ -62,8 +68,9 @@ func (m *RMProxy) HandleEvent(ev interface{}) {
 
 func NewRMProxy() *RMProxy {
     rm := &RMProxy{
-        rmIdToCallback:  make(map[string]api.ResourceManagerCallback),
-        pendingRMEvents: make(chan interface{}, 1024*1024),
+        rmIdToCallback:      make(map[string]api.ResourceManagerCallback),
+        rmIdToConfigWatcher: make(map[string]*configs.ConfigWatcher),
+        pendingRMEvents:     make(chan interface{}, 1024*1024),
     }
     return rm
 }
@@ -206,6 +213,15 @@ func (m *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerReq
     // Wait from channel
     result := <-c
     if result.Succeeded {
+        // create a config watcher for this RM
+        // config watcher will only be started when a reload is triggered
+        // it is configured with a expiration time, and will be auto exit once that reaches
+        configWatcher := configs.CreateConfigWatcher(request.RmId, request.PolicyGroup, 60 * time.Second)
+        configWatcher.RegisterCallback(&ConfigurationReloader{
+            rmId:    request.RmId,
+            rmProxy: m,
+        })
+        m.rmIdToConfigWatcher[request.RmId] = configWatcher
         m.rmIdToCallback[request.RmId] = callback
         return &si.RegisterResourceManagerResponse{}, nil
     } else {
@@ -305,22 +321,36 @@ func (m *RMProxy) ReloadConfiguration(rmId string) error {
     m.lock.RLock()
     defer m.lock.RUnlock()
 
-    // Trigger an update event, this is not immediately updating configuration,
-    // the actual reload happens when scheduler detects configuration file changes
-    glog.V(0).Infof("Configuration for RM %s update started", rmId)
+    if cw, ok := m.rmIdToConfigWatcher[rmId]; !ok {
+        // if configWatcher is not found for this RM
+        return fmt.Errorf("failed to reload configuration, because RM %s is unknown to the scheduler", rmId)
+    } else {
+        // ensure configWatcher is running
+        // configWatcher is only triggered to run when the reload is called,
+        // it might be stopped when reload is done or expires, so it needs to
+        // be re-triggered when there is new reload call coming. This is a
+        // noop if the config watcher is already running.
+        cw.Run()
+    }
+    return nil
+}
+
+// actual configuration reloader
+type ConfigurationReloader struct {
+    rmId string
+    rmProxy *RMProxy
+}
+
+func (cr ConfigurationReloader) DoReloadConfiguration() error {
     c := make(chan *commonevents.Result, 0)
-    m.EventHandlers.CacheEventHandler.HandleEvent(
+    cr.rmProxy.EventHandlers.CacheEventHandler.HandleEvent(
         &commonevents.ConfigUpdateRMEvent{
-            RmId:    rmId,
+            RmId:    cr.rmId,
             Channel: c,
         })
-
-    // logging the result asynchronously
-    go func() {
-        // Wait from channel
-        result := <-c
-        glog.V(0).Infof("Configuration for RM %s update finished with result: %v", rmId, result)
-    }()
-
+    result := <-c
+    if !result.Succeeded {
+        return fmt.Errorf("failed to update configuration for RM %s, result: %v", cr.rmId, result)
+    }
     return nil
 }

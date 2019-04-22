@@ -18,6 +18,7 @@ package configs
 
 import (
 	"fmt"
+	"github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common"
 	"gotest.tools/assert"
 	"testing"
 	"time"
@@ -25,122 +26,113 @@ import (
 
 // test singleton
 func TestGetConfigWatcher(t *testing.T) {
-	sum := []byte("abc")
-	cw0 := GetConfigWatcher(sum, "file")
-	cw1 := GetConfigWatcher(sum, "file")
+	cw0 := GetInstance()
+	cw1 := GetInstance()
 	assert.Equal(t, cw0, cw1)
+}
+
+type FakeConfigReloader struct {
+	timesOfReload int
+}
+
+func (r *FakeConfigReloader) DoReloadConfiguration() error {
+	r.timesOfReload++
+	fmt.Printf("reload configuration")
+	return nil
 }
 
 // this test simulates a file stays same for some time and then changes,
 // it verifies the callback is not triggered until file state changes.
 func TestTriggerCallback(t *testing.T) {
-	// reset configWatcher before each test
-	checkSumChan := make(chan int)
-	callbackChan := make(chan int)
-
-	// simulate file state stays same
-	FileCheckSummer = func(path string) (bytes []byte, e error) {
-		checkSumChan <- 0
-		return []byte("abc"), nil
+	var timesOfChecksum int
+	// init context
+	ConfigContext.Set("p-group", &SchedulerConfig{Checksum: []byte("abc")})
+	SchedulerConfigLoader = func(policyGroup string) (config *SchedulerConfig, e error) {
+		timesOfChecksum++
+		return &SchedulerConfig{Checksum: []byte("abc")}, nil
 	}
 
-	// the original checksum
-	sum := []byte("abc")
-	cw := newInstance(sum, "file")
+	// the original Checksum
+	cw := CreateConfigWatcher("rm-id", "p-group", 3*time.Second)
+	reloader := &FakeConfigReloader{}
+	cw.RegisterCallback(reloader)
 
-	// add a callback, this is triggered when state changes
-	err := cw.AddCallback(func() {
-		callbackChan <- 0
-	})
-	assert.Assert(t, err == nil)
+	// verify initial fields are correct
+	assert.Equal(t, cw.rmId, "rm-id")
+	assert.Equal(t, cw.policyGroup, "p-group")
+	assert.Assert(t, cw.reloader != nil)
 
-	// wait until checksum being called for 3 times,
-	// ensure that callback is still not invoked
-	wait(t, checkSumChan, 3, 10*time.Second)
-	assert.Equal(t, len(callbackChan), 0)
+	// only run once
+	cw.runOnce()
+
+	// verify version is not changed
+	assert.Equal(t, timesOfChecksum, 1)
+	assert.Equal(t, reloader.timesOfReload, 0)
 
 	// simulate file state changes
-	FileCheckSummer = func(path string) (bytes []byte, e error) {
-		checkSumChan <- 0
-		return []byte("bcd"), nil
+	SchedulerConfigLoader = func(policyGroup string) (config *SchedulerConfig, e error) {
+		timesOfChecksum++
+		return &SchedulerConfig{Checksum: []byte("bcd")}, nil
 	}
 
-	wait(t, checkSumChan, 1, 10*time.Second)
-	assert.Equal(t, len(configWatcher.callbacks), 0)
+	cw.runOnce()
+
+	// verify when config state is changed,
+	// callback is called and version is updated in config watcher
+	assert.Equal(t, timesOfChecksum, 2)
+	assert.Equal(t, reloader.timesOfReload, 1)
 }
 
-func TestMultipleCallbacks(t *testing.T) {
-	// reset configWatcher before each test
-	configWatcher = nil
-
-	checkSumChan := make(chan int, 10)
-	callbackChan := make(chan int, 10)
-
-	// simulate file state changes
-	FileCheckSummer = func(path string) (bytes []byte, e error) {
-		checkSumChan <- 0
-		return []byte("bcd"), nil
+func TestRegister(t *testing.T) {
+	SchedulerConfigLoader = func(policyGroup string) (config *SchedulerConfig, e error) {
+		return nil, fmt.Errorf("error")
 	}
 
-	sum := []byte("abc")
-	cw := newInstance(sum, "file")
+	cw := CreateConfigWatcher("rm-id", "p-group", 3*time.Second)
+	reloader := &FakeConfigReloader{}
+	cw.RegisterCallback(reloader)
 
-	var i int
-	for i = 0; i < 10; i++ {
-		err := cw.AddCallback(func() {
-			callbackChan <- 0
-		})
-		assert.Assert(t, err == nil)
-	}
-
-	// verify all callbacks should be called
-	wait(t, checkSumChan, 10, 30*time.Second)
-	wait(t, callbackChan, 10, 30*time.Second)
-	assert.Equal(t, len(configWatcher.callbacks), 0)
+	assert.Equal(t, cw.reloader, reloader)
 }
 
-func TestCheckSumFailure(t *testing.T) {
+func TestChecksumFailure(t *testing.T) {
 	// reset configWatcher before each test
 	configWatcher = nil
+	MockSchedulerConfigByData([]byte("abc"))
 
-	callbackExecuted := false
-	checkSumChan := make(chan int)
-	callbackChan := make(chan int)
+	cw := CreateConfigWatcher("rm-id", "p-group", 3*time.Second)
+	reloader := &FakeConfigReloader{}
+	cw.RegisterCallback(reloader)
 
-	FileCheckSummer = func(path string) (bytes []byte, e error) {
-		checkSumChan <- 0
-		return nil, fmt.Errorf("this is a failure")
+	// verify initial fields are correct
+	assert.Equal(t, cw.rmId, "rm-id")
+	assert.Equal(t, cw.policyGroup, "p-group")
+	assert.Assert(t, cw.reloader != nil)
+
+	// simulate failed to parse configuration version
+	SchedulerConfigLoader = func(policyGroup string) (config *SchedulerConfig, e error) {
+		return nil, fmt.Errorf("error")
 	}
 
-	sum := []byte("abc")
-	cw := newInstance(sum, "file")
+	// verify callback is not called due to the failure
+	assert.Equal(t, cw.runOnce(), false)
+	assert.Equal(t, reloader.timesOfReload, 0)
+}
 
-	err := cw.AddCallback(func() {
-		callbackExecuted = true
-		callbackChan <- 0
+func TestConfigWatcherExpiration(t *testing.T) {
+	// init conf
+	ConfigContext.Set("p-group", &SchedulerConfig{Checksum: []byte("abc")})
+	// simulate configuration never changes
+	SchedulerConfigLoader = func(policyGroup string) (config *SchedulerConfig, e error) {
+		return &SchedulerConfig{Checksum: []byte("abc")}, nil
+	}
+	cw := CreateConfigWatcher("rm-id", "p-group", 2*time.Second)
+	cw.Run()
+	assert.Equal(t, cw.running, true)
+
+	// short run, after 2 seconds, it should be stopped
+	err := common.WaitFor(1*time.Second, 5*time.Second, func() bool {
+		return cw.running == false
 	})
 	assert.Assert(t, err == nil)
-
-	// check sum should be called once
-	wait(t, checkSumChan, 1, 10*time.Second)
-	assert.Equal(t, len(configWatcher.callbacks), 0)
-
-	// due to the failure in calculating checksum,
-	// callback is ignored
-	assert.Equal(t, callbackExecuted, false)
-}
-
-func wait(t *testing.T, result chan int, expectedSize int, timeout time.Duration) {
-	var actualSize = 0
-	for {
-		select {
-		case <-result:
-			actualSize++
-			if actualSize == expectedSize {
-				return
-			}
-		case <-time.After(timeout):
-			t.Errorf("failed to reach expected state in given time")
-		}
-	}
 }

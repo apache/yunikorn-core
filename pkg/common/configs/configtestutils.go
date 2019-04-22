@@ -18,12 +18,6 @@ package configs
 
 func MockSchedulerConfigByData(data []byte) {
     SchedulerConfigLoader = func(policyGroup string) (config *SchedulerConfig, e error) {
-        return LoadSchedulerConfigFromByteArray(data, []byte(""))
-    }
-}
-
-func MockSchedulerConfigByDataWithChecksum(data []byte, checksum []byte) {
-    SchedulerConfigLoader = func(policyGroup string) (config *SchedulerConfig, e error) {
-        return LoadSchedulerConfigFromByteArray(data, checksum)
+        return LoadSchedulerConfigFromByteArray(data)
     }
 }

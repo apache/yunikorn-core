@@ -18,7 +18,6 @@ package configs
 
 import (
 	"bytes"
-	"errors"
 	"github.com/golang/glog"
 	"sync"
 	"time"
@@ -31,105 +30,104 @@ var once sync.Once
 // it is initiated with a certain expiration time, it will stop running either
 // it detects configuration changes, or the expiration time reaches
 type ConfigWatcher struct {
-	currentCheckSum []byte
-	filePath        string
-	callbacks       chan func()
-	expireTime      time.Duration
-	stopChan        chan int
-	lock            *sync.Mutex
+	rmId        string
+	policyGroup string
+ 	reloader    ConfigReloader
+	expireTime  time.Duration
+	running     bool
+	lock        *sync.Mutex
 }
 
-func GetConfigWatcher(checkSum []byte, file string) *ConfigWatcher {
+// interface for the actual reload function
+type ConfigReloader interface {
+	DoReloadConfiguration() error
+}
+
+func CreateConfigWatcher(rmId string, policyGroup string, expiration time.Duration) *ConfigWatcher {
+	return &ConfigWatcher{
+		rmId:        rmId,
+		policyGroup: policyGroup,
+		expireTime:  expiration,
+		lock:        &sync.Mutex{},
+	}
+}
+
+func GetInstance() *ConfigWatcher {
 	// singleton
 	once.Do(func() {
-		newInstance(checkSum, file)
+		configWatcher = &ConfigWatcher{
+			expireTime:      60 * time.Second,
+			lock:            &sync.Mutex{},
+		}
 	})
 
-	// update checksum if needed
-	if !bytes.Equal(checkSum, configWatcher.currentCheckSum) {
-		configWatcher.lock.Lock()
-		defer configWatcher.lock.Unlock()
-		configWatcher.currentCheckSum = checkSum
-	}
-
 	return configWatcher
 }
 
-// visible for testing
-func newInstance(checkSum []byte, file string) *ConfigWatcher {
-	configWatcher = &ConfigWatcher{
-		currentCheckSum: checkSum,
-		filePath:        file,
-		callbacks:       make(chan func(), 100),
-		expireTime:      60 * time.Second,
-		lock:            &sync.Mutex{},
-	}
-
-	// start the watcher only during the initialization
-	go configWatcher.run()
-	return configWatcher
+func (cw *ConfigWatcher) RegisterCallback(reloader ConfigReloader) {
+	cw.lock.Lock()
+	defer cw.lock.Unlock()
+	cw.reloader = reloader
 }
 
-func (cw *ConfigWatcher) run() {
-	for {
-		select {
-		case callback := <-configWatcher.callbacks:
-			// for each callback, it ensures it gets processed before handling next
-			if configWatcher.waitForStateChange() {
-				// invoke callback once state changes
-				callback()
-			}
-		case <-cw.stopChan:
-			return
-		}
-	}
-}
-
-func (cw *ConfigWatcher) stop() {
-	cw.stopChan <- 0
-}
-
-func (cw *ConfigWatcher) AddCallback(callback func()) error {
+// returns true if config file state remains same,
+// returns false if config file state changes
+func (cw *ConfigWatcher) runOnce() bool {
 	cw.lock.Lock()
 	defer cw.lock.Unlock()
 
-	select {
-	case cw.callbacks <- callback:
-		return nil
-	default:
-		return errors.New("failed to add callback to configWatcher")
+	newConfig, err := SchedulerConfigLoader(cw.policyGroup)
+	if err != nil {
+		glog.V(1).Infof("failed to calculate the checksum of" +
+			" configuration file for policyGroup %s, ignore reloading configuration",
+			cw.policyGroup)
+		return false
+	}
+
+	// acquire the lock to avoid Checksum changed externally
+	same := bytes.Equal(newConfig.Checksum, ConfigContext.Get(cw.policyGroup).Checksum)
+	if same {
+		// check sum equals, file not changed
+		glog.V(1).Infof("configuration file state is not unchanged")
+		time.Sleep(1 * time.Second)
+		return true
+	} else {
+		// when detect state changes, trigger the reload function
+		glog.V(3).Infof("configuration file state changes")
+		if err := cw.reloader.DoReloadConfiguration(); err == nil {
+			glog.V(3).Infof("configuration is successfully reloaded")
+		}
+		return false
 	}
 }
 
-func (cw *ConfigWatcher) waitForStateChange() bool {
-	deadline := time.Now().Add(cw.expireTime)
-	for {
-		sum, err := FileCheckSummer(cw.filePath)
-		if err != nil {
-			// failed to calculate check sum, retry...
-			glog.V(1).Infof("encounter error while calculating checksum for file %s," +
-				" ignore reloading configuration to avoid loading malicious configuration",
-				cw.filePath)
-			return false
-		}
+// if configWatcher is not running, kick-off running it
+// if configWatcher is already running, this is a noop
+func (cw *ConfigWatcher) Run() {
+	if !cw.running {
+		cw.running = true
+		ticker := time.NewTicker(1 * time.Second)
+		quit := make(chan bool)
+		go func() {
+			for {
+				select {
+				case <- ticker.C:
+					if !cw.runOnce() {
+						cw.running = false
+						return
+					}
+				case <- quit:
+					cw.running = false
+					ticker.Stop()
+					return
+				}
+			}
+		}()
 
-		if time.Now().After(deadline) {
-			glog.V(1).Infof("config watcher expired, configuration reload attempt is aborted")
-			return false
-		}
-
-		// acquire the lock to avoid checksum changed externally
-		cw.lock.Lock()
-		same := bytes.Equal(sum, cw.currentCheckSum)
-		cw.lock.Unlock()
-		if same {
-			// check sum equals, file not changed
-			glog.V(1).Infof("configuration file state is not unchanged, checksum: %s",
-				string(cw.currentCheckSum))
-			time.Sleep(1 * time.Second)
-			continue
-		}
-
-		return true
+		time.AfterFunc(cw.expireTime, func() {
+			quit <- true
+		})
+	} else {
+		glog.V(3).Infof("config watcher is already running")
 	}
 }

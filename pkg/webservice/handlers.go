@@ -141,5 +141,6 @@ func getApplicationJson(app *cache.ApplicationInfo) *dao.ApplicationDAOInfo {
 		QueueName:      app.QueueName,
 		SubmissionTime: app.SubmissionTime,
 		Allocations:    allocationInfos,
+		State:          app.GetApplicationState(),
 	}
 }

@@ -227,13 +227,18 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
             }
 
             // if app info doesn't exist, reject the request
-            if partitionContext.getApplication(req.ApplicationId) == nil {
+            appInfo := partitionContext.getApplication(req.ApplicationId)
+            if appInfo == nil {
                 rejectedAsks = append(rejectedAsks,
                     &si.RejectedAllocationAsk{
                         AllocationKey: allocationKey,
                         ApplicationId: req.ApplicationId,
                         Reason:        fmt.Sprintf("Failed to find app=%s for allocation=%s", req.ApplicationId, allocationKey),
                     })
+            } else {
+                // start to process allocation asks from this app
+                // transit app's state to running
+                appInfo.HandleApplicationEvent(RunApplication)
             }
         }
 

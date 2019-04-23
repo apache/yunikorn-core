@@ -17,6 +17,8 @@ limitations under the License.
 package cache
 
 import (
+    "github.com/golang/glog"
+    "github.com/looplab/fsm"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
     "sync"
     "time"
@@ -37,6 +39,9 @@ type ApplicationInfo struct {
     // Private fields need protection
     allocations map[string]*AllocationInfo
 
+    // application state machine
+    fsm *fsm.FSM
+
     SubmissionTime int64
 
     lock sync.RWMutex
@@ -56,10 +61,20 @@ func NewApplicationInfo(appId string, partition, queueName string) *ApplicationI
     j.Partition = partition
     j.QueueName = queueName
     j.SubmissionTime = time.Now().UnixNano()
+    j.fsm = fsm.NewFSM(
+        New.String(), fsm.Events{
+            {Name: AcceptApplication.String(), Src: []string{New.String()}, Dst: Accepted.String()},
+            {Name: RejectApplication.String(), Src: []string{New.String()}, Dst: Rejected.String()},
+            {Name: RunApplication.String(), Src: []string{Accepted.String(), Running.String()}, Dst: Running.String()},
+            {Name: CompleteApplication.String(), Src: []string{Running.String()}, Dst: Completed.String()},
+        }, fsm.Callbacks{
+            "enter_state": func(event *fsm.Event) {
+                glog.V(0).Infof(
+                    "application %s transited to state %s from %s, on event %s",
+                    j.ApplicationId, event.Dst, event.Src, event.Event)
+            },
+        })
     return j
-}
-
-func (m *ApplicationInfo) NewApplicationInfo(appId string) {
 }
 
 func (m *ApplicationInfo) AddAllocation(info *AllocationInfo) {
@@ -111,4 +126,12 @@ func (m *ApplicationInfo) GetAllAllocations() []*AllocationInfo {
         allocations = append(allocations, alloc)
     }
     return allocations
+}
+
+func (m *ApplicationInfo) GetApplicationState() string {
+    return m.fsm.Current()
+}
+
+func (m *ApplicationInfo) HandleApplicationEvent(event ApplicationEvent) error {
+    return m.fsm.Event(event.String())
 }

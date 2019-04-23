@@ -19,6 +19,7 @@ package tests
 import (
     "bytes"
     "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
+    cacheInfo "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
@@ -251,6 +252,11 @@ partitions:
     // Get scheduling app
     schedulingApp := scheduler.GetClusterSchedulingContext().GetSchedulingApplication("app-1", "[rm:123]default")
 
+    // Verify app initial state
+    app01, err := getApplicationInfoFromPartition(partitionInfo, "app-1")
+    assert.Assert(t, err == nil)
+    assert.Equal(t, app01.GetApplicationState(), cacheInfo.Accepted.String())
+
     err = proxy.Update(&si.UpdateRequest{
         Asks: []*si.AllocationAsk{
             {
@@ -292,6 +298,9 @@ partitions:
     assert.Assert(t, schedulerQueueA.CachedQueueInfo.AllocatedResource.Resources[resources.MEMORY] == 20)
     assert.Assert(t, schedulerQueueRoot.CachedQueueInfo.AllocatedResource.Resources[resources.MEMORY] == 20)
     assert.Assert(t, schedulingApp.ApplicationInfo.AllocatedResource.Resources[resources.MEMORY] == 20)
+
+    // once we start to process allocation asks from this app, verify the state again
+    assert.Equal(t, app01.GetApplicationState(), cacheInfo.Running.String())
 
     // Check allocated resources of nodes
     waitForNodesAllocatedResource(t, cache, "[rm:123]default", []string{"node-1:1234", "node-2:1234"}, 20, 1000)

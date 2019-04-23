@@ -11,6 +11,7 @@ type ApplicationDAOInfo struct {
 	QueueName      string              `json:"queueName"`
 	SubmissionTime int64               `json:"submissionTime"`
 	Allocations    []AllocationDAOInfo `json:"allocations"`
+	State          string              `json:"applicationState"`
 }
 
 type AllocationDAOInfo struct {

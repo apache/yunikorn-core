@@ -17,6 +17,7 @@ limitations under the License.
 package tests
 
 import (
+    "fmt"
     "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
@@ -187,4 +188,13 @@ func waitForNodesAllocatedResource(t *testing.T, cache *cache.ClusterInfo, parti
             return
         }
     }
+}
+
+func getApplicationInfoFromPartition(partitionInfo *cache.PartitionInfo, appId string) (*cache.ApplicationInfo, error){
+    for _, appInfo := range partitionInfo.GetApplications() {
+        if appInfo.ApplicationId == appId {
+            return appInfo, nil
+        }
+    }
+    return nil, fmt.Errorf("cannot find app %s from cache", appId)
 }

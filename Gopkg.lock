@@ -55,6 +55,14 @@
   version = "v1.7.1"
 
 [[projects]]
+  digest = "1:17e2b99f622792fcc12942bfc0f9089d1532f6dfc40878b44ae145b458fbab30"
+  name = "github.com/looplab/fsm"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "84b5307469f859464403f80919467950a79de1b1"
+  version = "v0.1.0"
+
+[[projects]]
   digest = "1:ff5ebae34cfbf047d505ee150de27e60570e8c394b3b8fdbb720ff6ac71985fc"
   name = "github.com/matttproud/golang_protobuf_extensions"
   packages = ["pbutil"]
@@ -250,6 +258,7 @@
   input-imports = [
     "github.com/golang/glog",
     "github.com/gorilla/mux",
+    "github.com/looplab/fsm",
     "github.com/prometheus/client_golang/prometheus",
     "github.com/prometheus/client_golang/prometheus/promhttp",
     "github.com/satori/go.uuid",

@@ -336,7 +336,11 @@ func (m *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerAp
                         Reason:        err.Error(),
                     }),
                 })
+                // app rejects apps
+                app.HandleApplicationEvent(cache.RejectApplication)
             }
+            // app is accepted by scheduler
+            app.HandleApplicationEvent(cache.AcceptApplication)
         }
     }
 

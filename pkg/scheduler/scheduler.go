@@ -355,7 +355,7 @@ func (m *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerAp
 
 func (m *Scheduler) removePartitionsBelongToRM(event *commonevents.RemoveRMPartitionsEvent) {
     m.partitionChangeLock.Lock()
-    m.partitionChangeLock.Unlock()
+    defer m.partitionChangeLock.Unlock()
 
     partitionToRemove := make(map[string]bool)
 
@@ -376,10 +376,10 @@ func (m *Scheduler) removePartitionsBelongToRM(event *commonevents.RemoveRMParti
 
 func (m *Scheduler) processUpdatePartitionConfigsEvent(event *schedulerevent.SchedulerUpdatePartitionsConfigEvent) {
     m.partitionChangeLock.Lock()
-    m.partitionChangeLock.Unlock()
+    defer m.partitionChangeLock.Unlock()
 
     m.lock.Lock()
-    m.lock.Unlock()
+    defer m.lock.Unlock()
 
     partitions := make([]*cache.PartitionInfo, 0)
     for _, p := range event.UpdatedPartitions {
@@ -400,10 +400,10 @@ func (m *Scheduler) processUpdatePartitionConfigsEvent(event *schedulerevent.Sch
 
 func (m *Scheduler) processDeletePartitionConfigsEvent(event *schedulerevent.SchedulerDeletePartitionsConfigEvent) {
     m.partitionChangeLock.Lock()
-    m.partitionChangeLock.Unlock()
+    defer m.partitionChangeLock.Unlock()
 
     m.lock.Lock()
-    m.lock.Unlock()
+    defer m.lock.Unlock()
 
     partitions := make([]*cache.PartitionInfo, 0)
     for _, p := range event.DeletePartitions {

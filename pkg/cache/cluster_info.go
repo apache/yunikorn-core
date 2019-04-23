@@ -342,6 +342,7 @@ func (m *ClusterInfo) processRMConfigUpdateEvent(event *commonevents.ConfigUpdat
     updatedPartitions, deletedPartitions, err := UpdateClusterInfoFromConfigFile(m, event.RmId)
     if err != nil {
         event.Channel <- &commonevents.Result{Succeeded: false, Reason: err.Error()}
+        return
     }
 
     // TODO inconsistent risk. What if cache updated but updating scheduler context failed?
@@ -352,10 +353,16 @@ func (m *ClusterInfo) processRMConfigUpdateEvent(event *commonevents.ConfigUpdat
     }
 
     // Send updated partitions to scheduler
+    updatePartitionResult := make(chan *commonevents.Result)
     m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerUpdatePartitionsConfigEvent{
         UpdatedPartitions: updatedPartitionsInterfaces,
-        ResultChannel:     event.Channel,
+        ResultChannel:     updatePartitionResult,
     })
+    result := <- updatePartitionResult
+    if !result.Succeeded {
+        event.Channel <- &commonevents.Result{Succeeded: false, Reason: result.Reason}
+        return
+    }
 
     deletedPartitionsInterfaces := make([]interface{}, 0)
     for _, u := range deletedPartitions {
@@ -363,10 +370,19 @@ func (m *ClusterInfo) processRMConfigUpdateEvent(event *commonevents.ConfigUpdat
     }
 
     // Send deleted partitions to the scheduler
+    deletePartitionResult := make(chan *commonevents.Result)
     m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerDeletePartitionsConfigEvent{
         DeletePartitions: deletedPartitionsInterfaces,
-        ResultChannel:    event.Channel,
+        ResultChannel:    deletePartitionResult,
     })
+    result = <- deletePartitionResult
+    if !result.Succeeded {
+        event.Channel <- &commonevents.Result{Succeeded: false, Reason: result.Reason}
+        return
+    }
+
+    // all succeed
+    event.Channel <- &commonevents.Result{Succeeded: true}
 }
 
 func (m *ClusterInfo) processAllocationProposalEvent(event *cacheevent.AllocationProposalBundleEvent) {

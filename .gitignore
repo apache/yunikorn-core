@@ -3,4 +3,5 @@
 .build
 *.swp
 *.a
+_output
 vendor

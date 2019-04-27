@@ -56,3 +56,30 @@ type AllocationProposal struct {
     PartitionName     string
 }
 
+// Message from scheduler about release allocation
+type ReleaseAllocation struct {
+    // optional, when this is set, only release allocation by given uuid.
+    Uuid string
+    // when this is set, filter allocations by app id.
+    // empty value will filter allocations don't belong to app.
+    // when app id is set and uuid not set, release all allocations under the app id.
+    ApplicationId string
+    // Which partition to release, required.
+    PartitionName string
+    // For human-readable
+    Message string
+    // Release type
+    ReleaseType si.AllocationReleaseResponse_TerminationType
+}
+
+func NewReleaseAllocation(uuid string, appId string, partitionName string, message string, releaseType si.AllocationReleaseResponse_TerminationType) *ReleaseAllocation {
+    return &ReleaseAllocation{
+        Uuid: uuid,
+        ApplicationId: appId,
+        PartitionName: partitionName,
+        Message: message,
+        ReleaseType: releaseType,
+    }
+}
+
+

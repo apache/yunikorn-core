@@ -16,16 +16,21 @@ limitations under the License.
 
 package scheduler
 
-import "fmt"
+import (
+    "fmt"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/commonevents"
+)
 
 type SchedulingAllocation struct {
     SchedulingAsk *SchedulingAllocationAsk
     NumAllocation int32
     NodeId        string
+    Releases      []*commonevents.ReleaseAllocation
+    PartitionName string
 }
 
 func NewSchedulingAllocation(ask *SchedulingAllocationAsk, nodeId string) *SchedulingAllocation {
-    return &SchedulingAllocation{SchedulingAsk: ask, NodeId: nodeId, NumAllocation: 1}
+    return &SchedulingAllocation{SchedulingAsk: ask, NodeId: nodeId, NumAllocation: 1, PartitionName: ask.PartitionName}
 }
 
 func (m *SchedulingAllocation) String() string {

@@ -28,7 +28,7 @@ import (
 type ApplicationInfo struct {
     ApplicationId string
 
-    AllocatedResource *resources.Resource
+    allocatedResource *resources.Resource
 
     Partition string
 
@@ -47,6 +47,13 @@ type ApplicationInfo struct {
     lock sync.RWMutex
 }
 
+func (m* ApplicationInfo) GetAllocatedResource() *resources.Resource {
+    m.lock.RLock()
+    defer m.lock.RUnlock()
+
+    return m.allocatedResource
+}
+
 func (m *ApplicationInfo) GetAllocation(uuid string) *AllocationInfo {
     m.lock.RLock()
     defer m.lock.RUnlock()
@@ -56,7 +63,7 @@ func (m *ApplicationInfo) GetAllocation(uuid string) *AllocationInfo {
 
 func NewApplicationInfo(appId string, partition, queueName string) *ApplicationInfo {
     j := &ApplicationInfo{ApplicationId: appId}
-    j.AllocatedResource = resources.NewResource()
+    j.allocatedResource = resources.NewResource()
     j.allocations = make(map[string]*AllocationInfo)
     j.Partition = partition
     j.QueueName = queueName
@@ -82,7 +89,7 @@ func (m *ApplicationInfo) AddAllocation(info *AllocationInfo) {
     defer m.lock.Unlock()
 
     m.allocations[info.AllocationProto.Uuid] = info
-    m.AllocatedResource = resources.Add(m.AllocatedResource, info.AllocatedResource)
+    m.allocatedResource = resources.Add(m.allocatedResource, info.AllocatedResource)
 }
 
 func (m *ApplicationInfo) RemoveAllocation(uuid string) *AllocationInfo {
@@ -93,7 +100,7 @@ func (m *ApplicationInfo) RemoveAllocation(uuid string) *AllocationInfo {
 
     if alloc != nil {
         // When app has the allocation, update map, and update allocated resource of the app
-        m.AllocatedResource = resources.Sub(m.AllocatedResource, alloc.AllocatedResource)
+        m.allocatedResource = resources.Sub(m.allocatedResource, alloc.AllocatedResource)
         delete(m.allocations, uuid)
         return alloc
     }
@@ -111,7 +118,7 @@ func (m *ApplicationInfo) CleanupAllAllocations() []*AllocationInfo {
         allocationsToRelease = append(allocationsToRelease, alloc)
     }
     // cleanup allocated resource for app
-    m.AllocatedResource = resources.NewResource()
+    m.allocatedResource = resources.NewResource()
     m.allocations = make(map[string]*AllocationInfo)
 
     return allocationsToRelease

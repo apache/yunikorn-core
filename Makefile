@@ -21,12 +21,14 @@ REPO=github.infra.cloudera.com/yunikorn/yunikorn-core/pkg
 all: simplescheduler schedulerclient
 
 test:
-	go test ./... -cover
+  # Added -race to detect race conditions
+	go test ./... -cover -race -tags deadlock -v
 	go vet $(REPO)...
 
 simplescheduler:
+  # Added -race to detect race conditions
 	if [ ! -d ./vendor ]; then dep ensure -vendor-only; fi
-	CGO_ENABLED=0 GOOS=darwin go build -a -ldflags '-extldflags "-static"' -o _output/simplescheduler ./cmd/simplescheduler
+	CGO_ENABLED=0 GOOS=darwin go build -race -a -ldflags '-extldflags "-static"' -o _output/simplescheduler ./cmd/simplescheduler
 
 schedulerclient:
 	if [ ! -d ./vendor ]; then dep ensure -vendor-only; fi

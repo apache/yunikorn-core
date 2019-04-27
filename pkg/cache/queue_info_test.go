@@ -60,7 +60,7 @@ func TestQueueInfo(t *testing.T) {
         return
     }
     // allocations should be nil
-    if !resources.IsZero(root.AllocatedResource) {
+    if !resources.IsZero(root.GetAllocatedResource()) {
         t.Errorf("root queue must not have allocations set on create")
         return
     }
@@ -78,8 +78,8 @@ func TestAllocationCalc(t *testing.T) {
     allocation, _ := resources.NewResourceFromConf(res)
     root.IncAllocatedResource(allocation)
     root.DecAllocatedResource(allocation)
-    if !resources.IsZero(root.AllocatedResource) {
-        t.Errorf("root queue allocations are not zero: %v", root.AllocatedResource)
+    if !resources.IsZero(root.GetAllocatedResource()) {
+        t.Errorf("root queue allocations are not zero: %v", root.GetAllocatedResource())
     }
 }
 

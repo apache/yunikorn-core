@@ -21,8 +21,8 @@ import (
     "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/strings"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/scheduler"
+    "sync"
     "testing"
     "time"
 )
@@ -34,6 +34,8 @@ type MockRMCallbackHandler struct {
     rejectedApplications map[string]bool
     acceptedNodes        map[string]bool
     Allocations          map[string]*si.Allocation
+
+    lock sync.RWMutex
 }
 
 func NewMockRMCallbackHandler(t *testing.T) *MockRMCallbackHandler {
@@ -47,7 +49,10 @@ func NewMockRMCallbackHandler(t *testing.T) *MockRMCallbackHandler {
 }
 
 func (m *MockRMCallbackHandler) RecvUpdateResponse(response *si.UpdateResponse) error {
-    m.t.Logf("---- Received Update=%s", strings.PrettyPrintStruct(response))
+    m.lock.Lock()
+    defer m.lock.Unlock()
+
+    // m.t.Logf("---- Received Update=%s", strings.PrettyPrintStruct(response))
 
     for _, app := range response.AcceptedApplications {
         m.acceptedApplications[app.ApplicationId] = true
@@ -76,7 +81,12 @@ func waitForAcceptedApplications(m *MockRMCallbackHandler, appId string, timeout
     var i = 0
     for {
         i++
-        if !m.acceptedApplications[appId] {
+
+        m.lock.RLock()
+        accepted := m.acceptedApplications[appId]
+        m.lock.RUnlock()
+
+        if !accepted {
             time.Sleep(time.Duration(100 * time.Millisecond))
         } else {
             return
@@ -92,7 +102,12 @@ func waitForRejectedApplications(m *MockRMCallbackHandler, appId string, timeout
     var i = 0
     for {
         i++
-        if !m.rejectedApplications[appId] || m.acceptedApplications[appId] {
+
+        m.lock.RLock()
+        wait := !m.rejectedApplications[appId] || m.acceptedApplications[appId]
+        m.lock.RUnlock()
+
+        if wait {
             time.Sleep(time.Duration(100 * time.Millisecond))
         } else {
             return
@@ -108,7 +123,12 @@ func waitForAcceptedNodes(m *MockRMCallbackHandler, nodeId string, timeoutMs int
     var i = 0
     for {
         i++
-        if !m.acceptedNodes[nodeId] {
+
+        m.lock.RLock()
+        accepted := m.acceptedNodes[nodeId]
+        m.lock.RUnlock()
+
+        if !accepted {
             time.Sleep(time.Duration(100 * time.Millisecond))
         } else {
             return
@@ -124,13 +144,13 @@ func waitForPendingResource(t *testing.T, queue *scheduler.SchedulingQueue, memo
     var i = 0
     for {
         i++
-        if queue.PendingResource.Resources[resources.MEMORY] != memory {
+        if queue.GetPendingResource().Resources[resources.MEMORY] != memory {
             time.Sleep(time.Duration(100 * time.Millisecond))
         } else {
             return
         }
         if i*100 >= timeoutMs {
-            t.Fatalf("Failed to wait pending resource, actual = %v, expected = %v", queue.PendingResource.Resources[resources.MEMORY], memory)
+            t.Fatalf("Failed to wait pending resource, actual = %v, expected = %v", queue.GetPendingResource().Resources[resources.MEMORY], memory)
             return
         }
     }
@@ -140,13 +160,13 @@ func waitForPendingResourceForApplication(t *testing.T, app *scheduler.Schedulin
     var i = 0
     for {
         i++
-        if app.Requests.TotalPendingResource.Resources[resources.MEMORY] != memory {
+        if app.Requests.GetPendingResource().Resources[resources.MEMORY] != memory {
             time.Sleep(time.Duration(100 * time.Millisecond))
         } else {
             return
         }
         if i*100 >= timeoutMs {
-            t.Fatalf("Failed to wait pending resource, expected=%v, actual=%v", memory, app.Requests.TotalPendingResource.Resources[resources.MEMORY])
+            t.Fatalf("Failed to wait pending resource, expected=%v, actual=%v", memory, app.Requests.GetPendingResource().Resources[resources.MEMORY])
             return
         }
     }
@@ -156,7 +176,12 @@ func waitForAllocations(m *MockRMCallbackHandler, nAlloc int, timeoutMs int) {
     var i = 0
     for {
         i++
-        if len(m.Allocations) != nAlloc {
+        m.lock.RLock()
+        allocLen := len(m.Allocations)
+        m.lock.RUnlock()
+
+
+        if allocLen != nAlloc {
             time.Sleep(time.Duration(100 * time.Millisecond))
         } else {
             return
@@ -175,7 +200,7 @@ func waitForNodesAllocatedResource(t *testing.T, cache *cache.ClusterInfo, parti
 
         var totalNodeResource resources.Quantity = 0
         for _, nodeId := range nodeIds {
-            totalNodeResource += cache.GetPartition(partitionName).GetNode(nodeId).AllocatedResource.Resources[resources.MEMORY]
+            totalNodeResource += cache.GetPartition(partitionName).GetNode(nodeId).GetAllocatedResource().Resources[resources.MEMORY]
         }
 
         if totalNodeResource != allocatdMemory {

@@ -27,7 +27,7 @@ func newNodeInfoForTest(nodeId string, totalResource *resources.Resource, attrib
 
     m.NodeId = nodeId
     m.TotalResource = totalResource
-    m.AllocatedResource = resources.NewResource()
+    m.allocatedResource = resources.NewResource()
     m.initializeAttribute(attributes)
     m.allocations = make(map[string]*AllocationInfo)
 
@@ -55,7 +55,7 @@ func TestNodeInfo(t *testing.T) {
         t.Errorf("Failed to initialize resource")
     }
 
-    if node.AllocatedResource.Resources["a"] != 0 {
+    if node.GetAllocatedResource().Resources["a"] != 0 {
         t.Errorf("Failed to initialize resource")
     }
 
@@ -74,7 +74,7 @@ func TestNodeInfo(t *testing.T) {
         t.Errorf("Failed to add allocations")
     }
 
-    if !resources.CompareMockResource(node.AllocatedResource, 100, 200) {
+    if !resources.CompareMockResource(node.GetAllocatedResource(), 100, 200) {
         t.Errorf("Failed to add allocations")
     }
 
@@ -83,7 +83,7 @@ func TestNodeInfo(t *testing.T) {
         t.Errorf("Failed to add allocations")
     }
 
-    if !resources.CompareMockResource(node.AllocatedResource, 120, 400) {
+    if !resources.CompareMockResource(node.GetAllocatedResource(), 120, 400) {
         t.Errorf("Failed to add allocations")
     }
 }

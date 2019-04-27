@@ -1,0 +1,216 @@
+/*
+Copyright 2019 The Unity Scheduler Authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+
+package tests
+
+import (
+    "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/entrypoint"
+    "gotest.tools/assert"
+    "testing"
+)
+
+// Test basic interactions from rm proxy to cache and to scheduler.
+func TestBasicPreemption(t *testing.T) {
+    // Start all tests
+    proxy, _, scheduler := entrypoint.StartAllServicesWithManualScheduler()
+
+    // Register RM
+    configData := `
+partitions:
+  -
+    name: default
+    queues:
+      - name: root
+        queues:
+          - name: a
+            resources:
+              guaranteed:
+                memory: 100
+                vcore: 100
+              max:
+                memory: 200
+                vcore: 200
+          - name: b
+            resources:
+              guaranteed:
+                memory: 100
+                vcore: 100
+              max:
+                memory: 200
+                vcore: 200
+`
+    configs.MockSchedulerConfigByData([]byte(configData))
+    mockRM := NewMockRMCallbackHandler(t)
+
+    _, err := proxy.RegisterResourceManager(
+        &si.RegisterResourceManagerRequest{
+            RmId:        "rm:123",
+            PolicyGroup: "policygroup",
+            Version:     "0.0.2",
+        }, mockRM)
+
+    if err != nil {
+        t.Error(err.Error())
+    }
+
+    // Register 2 node, and add apps
+    err = proxy.Update(&si.UpdateRequest{
+        NewSchedulableNodes: []*si.NewNodeInfo{
+            {
+                NodeId: "node-1:1234",
+                Attributes: map[string]string{
+                    "si.io/hostname": "node-1",
+                    "si.io/rackname": "rack-1",
+                },
+                SchedulableResource: &si.Resource{
+                    Resources: map[string]*si.Quantity{
+                        "memory": {Value: 100},
+                        "vcore":  {Value: 100},
+                    },
+                },
+            },
+            {
+                NodeId: "node-2:1234",
+                Attributes: map[string]string{
+                    "si.io/hostname": "node-1",
+                    "si.io/rackname": "rack-1",
+                },
+                SchedulableResource: &si.Resource{
+                    Resources: map[string]*si.Quantity{
+                        "memory": {Value: 100},
+                        "vcore":  {Value: 100},
+                    },
+                },
+            },
+        },
+        NewApplications: []*si.AddApplicationRequest{
+            {
+                ApplicationId: "app-1",
+                QueueName:     "root.a",
+                PartitionName: "",
+            },
+            {
+                ApplicationId: "app-2",
+                QueueName:     "root.b",
+                PartitionName: "",
+            },
+        },
+        RmId: "rm:123",
+    })
+
+    if nil != err {
+        t.Error(err.Error())
+    }
+
+    // Check scheduling queue root
+    schedulerQueueRoot := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root", "[rm:123]default")
+    schedulerQueueA := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.a", "[rm:123]default")
+    schedulerQueueB := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.b", "[rm:123]default")
+
+    waitForAcceptedApplications(mockRM, "app-1", 1000)
+    waitForAcceptedApplications(mockRM, "app-2", 1000)
+    waitForAcceptedNodes(mockRM, "node-1:1234", 1000)
+    waitForAcceptedNodes(mockRM, "node-2:1234", 1000)
+
+    // Get scheduling app
+    schedulingApp1 := scheduler.GetClusterSchedulingContext().GetSchedulingApplication("app-1", "[rm:123]default")
+    schedulingApp2 := scheduler.GetClusterSchedulingContext().GetSchedulingApplication("app-2", "[rm:123]default")
+
+    // Ask (10, 10) resources * 20, which will fulfill the cluster.
+    err = proxy.Update(&si.UpdateRequest{
+        Asks: []*si.AllocationAsk{
+            {
+                AllocationKey: "alloc-1",
+                ResourceAsk: &si.Resource{
+                    Resources: map[string]*si.Quantity{
+                        "memory": {Value: 10},
+                        "vcore":  {Value: 10},
+                    },
+                },
+                MaxAllocations: 20,
+                QueueName:      "root.a",
+                ApplicationId:  "app-1",
+            },
+        },
+        RmId: "rm:123",
+    })
+
+    if nil != err {
+        t.Error(err.Error())
+    }
+
+    // Make sure resource requests arrived queue
+    waitForPendingResource(t, schedulerQueueA, 200, 1000)
+    waitForPendingResource(t, schedulerQueueRoot, 200, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp1, 200, 1000)
+
+    // Try to schedule 40 allocations
+    scheduler.SingleStepScheduleAllocTest(20)
+
+    // We should be able to get 20 allocations.
+    waitForAllocations(mockRM, 20, 1000)
+
+    // Make sure pending resource updated to 0
+    waitForPendingResource(t, schedulerQueueA, 0, 1000)
+
+    // Check allocated resources of queues, apps
+    assert.Assert(t, schedulerQueueA.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 200)
+
+    // Application-2 Ask for 20 resources
+    err = proxy.Update(&si.UpdateRequest{
+        Asks: []*si.AllocationAsk{
+            {
+                AllocationKey: "alloc-2",
+                ResourceAsk: &si.Resource{
+                    Resources: map[string]*si.Quantity{
+                        "memory": {Value: 10},
+                        "vcore":  {Value: 10},
+                    },
+                },
+                MaxAllocations: 100,
+                QueueName:      "root.b",
+                ApplicationId:  "app-2",
+            },
+        },
+        RmId: "rm:123",
+    })
+
+    if nil != err {
+        t.Error(err.Error())
+    }
+
+    waitForPendingResource(t, schedulerQueueB, 1000, 1000)
+
+    // Now app-1 uses 20 resource, and queue-a's max = 150, so it can get two 50 container allocated.
+    scheduler.SingleStepScheduleAllocTest(16)
+
+    // Check pending resource, should be still 1000, nothing will be allocated because cluster is full
+    waitForPendingResource(t, schedulerQueueB, 1000, 1000)
+
+    // Check allocated resources of queue, should be 0
+    assert.Assert(t, schedulerQueueB.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 0)
+
+    // Now we do a preemption.
+    scheduler.SingleStepPreemption()
+
+    // Check pending resource, should be 900 now
+    waitForPendingResource(t, schedulerQueueB, 900, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp2, 900, 1000)
+}

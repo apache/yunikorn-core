@@ -108,7 +108,7 @@ func getPartitionJson(name string) *dao.PartitionDAOInfo {
 
 	partitionInfo.PartitionName = partitionContext.Name
 	partitionInfo.Capacity = dao.PartitionCapacity{
-		Capacity:     partitionContext.TotalPartitionResource.String(),
+		Capacity:     partitionContext.GetTotalPartitionResource().String(),
 		UsedCapacity: "0",
 	}
 	partitionInfo.Queues = queueDAOInfo
@@ -136,7 +136,7 @@ func getApplicationJson(app *cache.ApplicationInfo) *dao.ApplicationDAOInfo {
 
 	return &dao.ApplicationDAOInfo{
 		ApplicationId:  app.ApplicationId,
-		UsedResource:   strings.Trim(app.AllocatedResource.String(), "map"),
+		UsedResource:   strings.Trim(app.GetAllocatedResource().String(), "map"),
 		Partition:      app.Partition,
 		QueueName:      app.QueueName,
 		SubmissionTime: app.SubmissionTime,

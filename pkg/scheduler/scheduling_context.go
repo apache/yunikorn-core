@@ -54,6 +54,17 @@ func newPartitionSchedulingContext(rmId string) *PartitionSchedulingContext {
     }
 }
 
+func (csc *ClusterSchedulingContext) getPartitionMapClone() map[string]*PartitionSchedulingContext {
+    csc.lock.RLock()
+    defer csc.lock.RUnlock()
+
+    newMap := make(map[string]*PartitionSchedulingContext)
+    for k,v := range csc.partitions {
+        newMap[k] = v
+    }
+    return newMap
+}
+
 func (psc *PartitionSchedulingContext) updatePartitionSchedulingContext(info *cache.PartitionInfo) {
     root := psc.Root
     // update the root queue properties
@@ -106,7 +117,7 @@ func (psc *PartitionSchedulingContext) RemoveSchedulingApplication(appId string,
     schedulingQueue.RemoveSchedulingApplication(schedulingApp)
 
     // Update pending resource of queues
-    totalPending := schedulingApp.Requests.TotalPendingResource
+    totalPending := schedulingApp.Requests.GetPendingResource()
     queue := schedulingApp.ParentQueue
     for queue != nil {
         queue.DecPendingResource(totalPending)
@@ -226,12 +237,21 @@ func (csc *ClusterSchedulingContext) updateSchedulingPartitions(partitions []*ca
     return nil
 }
 
-// TODO can only proceed if the partition is empty
-// Remove the partition from the scheduler (triggered before RM registration)
-func (csc *ClusterSchedulingContext) RemoveSchedulingPartition(partitionName string) {
+func (csc *ClusterSchedulingContext) RemoveSchedulingPartitionsByRMId(rmId string) {
     csc.lock.Lock()
     defer csc.lock.Unlock()
-    delete(csc.partitions, partitionName)
+    partitionToRemove := make(map[string]bool)
+
+    // Just remove corresponding partitions
+    for k, partition := range csc.partitions {
+        if partition.RmId == rmId {
+            partitionToRemove[k] = true
+        }
+    }
+
+    for partitionName := range partitionToRemove {
+        delete(csc.partitions, partitionName)
+    }
 }
 
 // Remove the partition from the scheduler based on a configuration change

@@ -29,7 +29,7 @@ import (
 type SchedulingRequests struct {
     // AllocationKey -> allocationInfo
     requests             map[string]*SchedulingAllocationAsk
-    TotalPendingResource *resources.Resource
+    totalPendingResource *resources.Resource
 
     lock sync.RWMutex
 }
@@ -37,8 +37,15 @@ type SchedulingRequests struct {
 func NewSchedulingRequests() *SchedulingRequests {
     return &SchedulingRequests{
         requests:             make(map[string]*SchedulingAllocationAsk),
-        TotalPendingResource: resources.NewResource(),
+        totalPendingResource: resources.NewResource(),
     }
+}
+
+func (m* SchedulingRequests) GetPendingResource() *resources.Resource {
+    m.lock.RLock()
+    defer m.lock.RUnlock()
+
+    return m.totalPendingResource
 }
 
 // Add new or replace
@@ -60,7 +67,7 @@ func (m *SchedulingRequests) AddAllocationAsk(ask *SchedulingAllocationAsk) (*re
     m.requests[ask.AskProto.AllocationKey] = ask
 
     // Update total pending resource
-    m.TotalPendingResource = resources.Add(m.TotalPendingResource, deltaPendingResource)
+    m.totalPendingResource = resources.Add(m.totalPendingResource, deltaPendingResource)
 
     return deltaPendingResource, nil
 }
@@ -78,7 +85,7 @@ func (m *SchedulingRequests) UpdateAllocationAskRepeat(allocationKey string, del
         }
 
         deltaPendingResource := resources.MultiplyBy(ask.AllocatedResource, float64(delta))
-        m.TotalPendingResource = resources.Add(m.TotalPendingResource, deltaPendingResource)
+        m.totalPendingResource = resources.Add(m.totalPendingResource, deltaPendingResource)
         ask.AddPendingAskRepeat(delta)
 
         return deltaPendingResource, nil
@@ -99,7 +106,7 @@ func (m *SchedulingRequests) RemoveAllocationAsk(allocationKey string) (*resourc
 
     if ask := m.requests[allocationKey]; ask != nil {
         deltaPendingResource := resources.MultiplyBy(ask.AllocatedResource, -float64(ask.PendingRepeatAsk))
-        m.TotalPendingResource = resources.Add(m.TotalPendingResource, deltaPendingResource)
+        m.totalPendingResource = resources.Add(m.totalPendingResource, deltaPendingResource)
         delete(m.requests, allocationKey)
         return deltaPendingResource, ask
     }
@@ -122,7 +129,7 @@ func (m *SchedulingRequests) CleanupAllocationAsks() *resources.Resource {
     }
 
     // Cleanup total pending resource
-    m.TotalPendingResource = resources.NewResource()
+    m.totalPendingResource = resources.NewResource()
     m.requests = make(map[string]*SchedulingAllocationAsk)
 
     return deltaPendingResource

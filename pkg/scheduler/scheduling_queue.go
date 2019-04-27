@@ -25,12 +25,13 @@ import (
 
 // Represents Queue inside Scheduler
 type SchedulingQueue struct {
-    Name                 string              // Fully qualified path for the queue
-    CachedQueueInfo      *cache.QueueInfo    // link back to the queue in the cache
-    MayAllocatedResource *resources.Resource // Maybe allocated, set by scheduler
-    PartitionResource    *resources.Resource // For fairness calculation
-    Parent               *SchedulingQueue    // link back to the parent in the scheduler
-    PendingResource      *resources.Resource // Total pending resource
+    Name               string              // Fully qualified path for the queue
+    CachedQueueInfo    *cache.QueueInfo    // link back to the queue in the cache
+    ProposingResource  *resources.Resource // How much resource added for proposing, this is used by queue sort when do candidate selection
+    allocatingResource *resources.Resource // Allocating resource
+    PartitionResource  *resources.Resource // For fairness calculation
+    Parent             *SchedulingQueue    // link back to the parent in the scheduler
+    pendingResource    *resources.Resource // Total pending resource
 
     ApplicationSortType  SortType            // How applications are sorted (leaf queue only)
     QueueSortType        SortType            // How sub queues are sorted (parent queue only)
@@ -46,10 +47,10 @@ func NewSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo, parent *SchedulingQ
     sq.Name = cacheQueueInfo.GetQueuePath()
     sq.CachedQueueInfo = cacheQueueInfo
     sq.Parent = parent
-    sq.MayAllocatedResource = resources.NewResource()
+    sq.ProposingResource = resources.NewResource()
     sq.childrenQueues = make(map[string]*SchedulingQueue)
     sq.applications = make(map[string]*SchedulingApplication)
-    sq.PendingResource = resources.NewResource()
+    sq.pendingResource = resources.NewResource()
 
     // update the properties
     sq.updateSchedulingQueueProperties(cacheQueueInfo.Properties)
@@ -61,6 +62,13 @@ func NewSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo, parent *SchedulingQ
     }
 
     return sq
+}
+
+func (m* SchedulingQueue) GetPendingResource() *resources.Resource{
+    m.lock.RLock()
+    defer m.lock.RUnlock()
+
+    return m.pendingResource
 }
 
 // Update the properties for the scheduling queue based on the current cached configuration
@@ -106,7 +114,7 @@ func (sq *SchedulingQueue) IncPendingResource(delta *resources.Resource) {
     sq.lock.Lock()
     defer sq.lock.Unlock()
 
-    sq.PendingResource = resources.Add(sq.PendingResource, delta)
+    sq.pendingResource = resources.Add(sq.pendingResource, delta)
 }
 
 // Remove pending resource of this queue
@@ -114,7 +122,7 @@ func (sq *SchedulingQueue) DecPendingResource(delta *resources.Resource) {
     sq.lock.Lock()
     defer sq.lock.Unlock()
 
-    sq.PendingResource = resources.Sub(sq.PendingResource, delta)
+    sq.pendingResource = resources.Sub(sq.GetPendingResource(), delta)
 }
 
 func (sq *SchedulingQueue) AddSchedulingApplication(app *SchedulingApplication) {
@@ -163,4 +171,29 @@ func (sq *SchedulingQueue) isDraining() bool {
 
 func (sq *SchedulingQueue) isStopped() bool {
     return sq.CachedQueueInfo.IsStopped()
+}
+
+func (sq *SchedulingQueue) isRoot() bool {
+    return sq.Parent == nil
+}
+
+func (sq *SchedulingQueue) GetAllocatingResource() *resources.Resource {
+    sq.lock.RLock()
+    defer sq.lock.RUnlock()
+
+    return sq.allocatingResource
+}
+
+func (sq *SchedulingQueue) IncAllocatingResource(newAlloc *resources.Resource) {
+    sq.lock.Lock()
+    defer sq.lock.Unlock()
+
+    sq.allocatingResource = resources.Add(sq.allocatingResource, newAlloc)
+}
+
+func (sq *SchedulingQueue) SetAllocatingResource(newAlloc *resources.Resource) {
+    sq.lock.Lock()
+    defer sq.lock.Unlock()
+
+    sq.allocatingResource = newAlloc
 }

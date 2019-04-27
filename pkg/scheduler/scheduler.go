@@ -44,9 +44,13 @@ type Scheduler struct {
 
     clusterSchedulingContext *ClusterSchedulingContext
 
-    // Missed opportunity map
-    // It is designed to be accessed under single goroutine, no lock needed.
-    missedOpportunities map[string]uint64
+    // Wait till next try
+    // (It is designed to be accessed under a single goroutine, no lock needed).
+    // This field has dual purposes:
+    // 1) When a request is picky, scheduler will increase this value for every failed retry. So we don't need to
+    //    look at picky-requests every time.
+    // 2) This also indicate starved requests so preemption can do surgical preemption based on this.
+    waitTillNextTry map[string]uint64
 
     EventHandlers handler.EventHandlers
 
@@ -60,13 +64,16 @@ type Scheduler struct {
     // Reference to scheduler metrics
     metrics schedulermetrics.CoreSchedulerMetrics
 
+    // Preemption context
+    preemptionContext *preemptionContext
+
     step uint64
 }
 
 func NewScheduler(clusterInfo *cache.ClusterInfo, metrics schedulermetrics.CoreSchedulerMetrics) *Scheduler {
     m := &Scheduler{}
     m.clusterInfo = clusterInfo
-    m.missedOpportunities = make(map[string]uint64)
+    m.waitTillNextTry = make(map[string]uint64)
     m.clusterSchedulingContext = NewClusterSchedulingContext()
     m.pendingSchedulerEvents = make(chan interface{}, 1024*1024)
     m.metrics = metrics
@@ -83,6 +90,7 @@ func (m *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 
     if !manualSchedule {
         go m.internalSchedule()
+        go m.internalPreemption()
     }
 }
 
@@ -101,67 +109,23 @@ func newSingleAllocationProposal(alloc *SchedulingAllocation) *cacheevent.Alloca
                 PartitionName:     alloc.SchedulingAsk.PartitionName,
             },
         },
-    }
-}
-
-// Visible by tests
-func (m *Scheduler) SingleStepSchedule(nAlloc int) {
-    m.step++
-
-    // Make sure no change of partitions happen
-    m.partitionChangeLock.RLock()
-    m.partitionChangeLock.RUnlock()
-
-    for partition, partitionContext := range m.clusterSchedulingContext.partitions {
-        schedulingStart := time.Now()
-        // Following steps:
-        // - According to resource usage, find next N allocation Requests, N could be
-        //   mini-batch because we don't want the process takes too long. And this
-        //   runs as single thread.
-        // - According to mini-batched allocation request. Try to allocate. This step
-        //   can be done as multiple thread.
-        // - For asks cannot be assigned, we will do preemption. Again it is done using
-        //   single-thread.
-        candidates := m.findAllocationAsks(partitionContext, nAlloc, m.step)
-
-        // Try to allocate from candidates, returns allocation proposal as well as failed allocation
-        // ask candidates. (For preemption).
-        allocations, failedCandidate := m.tryBatchAllocation(partition, candidates)
-
-        // Send allocations to cache, and pending ask.
-        confirmedAllocations := make([]*SchedulingAllocation, 0)
-        if len(allocations) > 0 {
-            for _, alloc := range allocations {
-                if alloc == nil {
-                    continue
-                }
-
-                proposal := newSingleAllocationProposal(alloc)
-                err := m.updateSchedulingRequestPendingAskByDelta(proposal.AllocationProposals[0], -1)
-                if err == nil {
-                    m.EventHandlers.CacheEventHandler.HandleEvent(newSingleAllocationProposal(alloc))
-                    confirmedAllocations = append(confirmedAllocations, alloc)
-                } else {
-                    glog.V(2).Infof("Issues when trying to send proposal, err=%s", err.Error())
-                }
-            }
-        }
-
-        // Update missed opportunities
-        m.updateMissedOpportunity(confirmedAllocations, candidates)
-
-        // Do preemption according to failedCandidate
-        m.preemptForAllocationAskCandidates(failedCandidate)
-
-        // Update  metrics
-        m.metrics.ObserveSchedulingLatency(schedulingStart)
+        ReleaseProposals: alloc.Releases,
+        PartitionName:    alloc.PartitionName,
     }
 }
 
 // Internal start scheduling service
 func (m *Scheduler) internalSchedule() {
     for {
-        m.SingleStepSchedule(16)
+        m.singleStepSchedule(16, &preemptionParameters{})
+    }
+}
+
+// Internal start preemption service
+func (m *Scheduler) internalPreemption() {
+    for {
+        m.SingleStepPreemption()
+        time.Sleep(1000 * time.Millisecond)
     }
 }
 
@@ -358,33 +322,13 @@ func (m *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerAp
 }
 
 func (m *Scheduler) removePartitionsBelongToRM(event *commonevents.RemoveRMPartitionsEvent) {
-    m.partitionChangeLock.Lock()
-    defer m.partitionChangeLock.Unlock()
-
-    partitionToRemove := make(map[string]bool)
-
-    // Just remove corresponding partitions
-    for k, partition := range m.clusterSchedulingContext.partitions {
-        if partition.RmId == event.RmId {
-            partitionToRemove[k] = true
-        }
-    }
-
-    for partitionName := range partitionToRemove {
-        m.clusterSchedulingContext.RemoveSchedulingPartition(partitionName)
-    }
+    m.clusterSchedulingContext.RemoveSchedulingPartitionsByRMId(event.RmId)
 
     // Send this event to cache
     m.EventHandlers.CacheEventHandler.HandleEvent(event)
 }
 
 func (m *Scheduler) processUpdatePartitionConfigsEvent(event *schedulerevent.SchedulerUpdatePartitionsConfigEvent) {
-    m.partitionChangeLock.Lock()
-    defer m.partitionChangeLock.Unlock()
-
-    m.lock.Lock()
-    defer m.lock.Unlock()
-
     partitions := make([]*cache.PartitionInfo, 0)
     for _, p := range event.UpdatedPartitions {
         partitions = append(partitions, p.(*cache.PartitionInfo))
@@ -403,12 +347,6 @@ func (m *Scheduler) processUpdatePartitionConfigsEvent(event *schedulerevent.Sch
 }
 
 func (m *Scheduler) processDeletePartitionConfigsEvent(event *schedulerevent.SchedulerDeletePartitionsConfigEvent) {
-    m.partitionChangeLock.Lock()
-    defer m.partitionChangeLock.Unlock()
-
-    m.lock.Lock()
-    defer m.lock.Unlock()
-
     partitions := make([]*cache.PartitionInfo, 0)
     for _, p := range event.DeletePartitions {
         partitions = append(partitions, p.(*cache.PartitionInfo))

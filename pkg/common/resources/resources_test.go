@@ -17,6 +17,7 @@ limitations under the License.
 package resources
 
 import (
+    "math"
     "reflect"
     "testing"
 )
@@ -38,8 +39,8 @@ func TestAddSub(t *testing.T) {
     }
 }
 
-func assertComparison(t *testing.T, cluster *Resource, left *Resource, right *Resource, expected int32) {
-    c, _ := Comp(cluster, left, right)
+func assertComparison(t *testing.T, cluster *Resource, left *Resource, right *Resource, expected int) {
+    c := Comp(cluster, left, right)
     if c != expected {
         t.Errorf("Compare %s to %s, expected %d, got %d", left, right, expected, c)
     }
@@ -93,6 +94,57 @@ func TestComp(t *testing.T) {
     assertComparison(t, cluster, MockResource(3, 1, 1), MockResource(3, 1, 0), 1)
     assertComparison(t, cluster, MockResource(3, 1, 1), MockResource(3, 0, 0), 1)
 }
+
+func assertFairness(t *testing.T, cluster *Resource, left *Resource, right *Resource, expected float64) {
+    c := FairnessRatio(left, cluster, right, cluster)
+    if c != expected {
+        t.Errorf("Fairness Ratio %s to %s, expected %f, got %f", left, right, expected, c)
+    }
+}
+
+
+func TestFairnessRatio(t *testing.T) {
+    cluster := MockResource(4, 4, 4)
+
+    // Easy cases
+    assertFairness(t, cluster, MockResource(1, 1, 1), MockResource(1, 1, 1), 1)
+    assertFairness(t, cluster, MockResource(0, 0, 0), MockResource(0, 0, 0), 1)
+    assertFairness(t, cluster, MockResource(2, 2, 2), MockResource(1, 1, 1), 2)
+    assertFairness(t, cluster, MockResource(2, 2, 2), MockResource(0, 0, 0), math.Inf(1))
+
+    // Fair sharing cases
+    assertFairness(t, cluster, MockResource(2, 1, 1), MockResource(2, 1, 1), 1)
+    assertFairness(t, cluster, MockResource(2, 1, 1), MockResource(1, 2, 1), 1)
+    assertFairness(t, cluster, MockResource(2, 1, 1), MockResource(1, 1, 2), 1)
+    assertFairness(t, cluster, MockResource(2, 1, 0), MockResource(0, 1, 2), 1)
+    assertFairness(t, cluster, MockResource(2, 2, 1), MockResource(1, 2, 2), 1)
+    assertFairness(t, cluster, MockResource(2, 2, 1), MockResource(2, 1, 2), 1)
+    assertFairness(t, cluster, MockResource(2, 2, 1), MockResource(2, 2, 1), 1)
+    assertFairness(t, cluster, MockResource(2, 2, 0), MockResource(2, 0, 2), 1)
+    assertFairness(t, cluster, MockResource(3, 2, 1), MockResource(3, 2, 1), 1)
+    assertFairness(t, cluster, MockResource(3, 2, 1), MockResource(3, 1, 2), 1)
+    assertFairness(t, cluster, MockResource(3, 2, 1), MockResource(1, 2, 3), 1)
+    assertFairness(t, cluster, MockResource(3, 2, 1), MockResource(1, 3, 2), 1)
+    assertFairness(t, cluster, MockResource(3, 2, 1), MockResource(2, 1, 3), 1)
+    assertFairness(t, cluster, MockResource(3, 2, 1), MockResource(2, 3, 1), 1)
+    assertFairness(t, cluster, MockResource(2, 1, 1), MockResource(1, 1, 1), 2)
+    assertFairness(t, cluster, MockResource(2, 1, 1), MockResource(1, 1, 0), 2)
+    assertFairness(t, cluster, MockResource(2, 2, 1), MockResource(2, 1, 1), 1)
+    assertFairness(t, cluster, MockResource(2, 2, 1), MockResource(1, 2, 1), 1)
+    assertFairness(t, cluster, MockResource(2, 2, 1), MockResource(1, 1, 2), 1)
+    assertFairness(t, cluster, MockResource(2, 2, 1), MockResource(0, 2, 2), 1)
+    assertFairness(t, cluster, MockResource(2, 2, 2), MockResource(2, 1, 1), 1)
+    assertFairness(t, cluster, MockResource(2, 2, 2), MockResource(1, 2, 1), 1)
+    assertFairness(t, cluster, MockResource(2, 2, 2), MockResource(1, 1, 2), 1)
+    assertFairness(t, cluster, MockResource(2, 2, 2), MockResource(2, 2, 1), 1)
+    assertFairness(t, cluster, MockResource(2, 2, 2), MockResource(2, 1, 2), 1)
+    assertFairness(t, cluster, MockResource(2, 2, 2), MockResource(1, 2, 2), 1)
+    assertFairness(t, cluster, MockResource(3, 2, 1), MockResource(2, 2, 2), 1.5)
+    assertFairness(t, cluster, MockResource(3, 1, 1), MockResource(2, 2, 2), 1.5)
+    assertFairness(t, cluster, MockResource(3, 1, 1), MockResource(3, 1, 0), 1)
+    assertFairness(t, cluster, MockResource(3, 1, 1), MockResource(3, 0, 0), 1)
+}
+
 
 func TestFitIn(t *testing.T) {
     // Easy cases

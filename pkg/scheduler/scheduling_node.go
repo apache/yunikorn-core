@@ -27,25 +27,34 @@ type SchedulingNode struct {
     NodeId   string
 
     // Resource which is allocating (in addition to confirmed, allocated)
-    AllocatingResource *resources.Resource
+    AllocatingResource      *resources.Resource
+    PreemptingResource      *resources.Resource
+    CachedAvailableResource *resources.Resource
 
     lock sync.RWMutex
 }
 
 func NewSchedulingNode(info *cache.NodeInfo) *SchedulingNode {
     return &SchedulingNode{
-        NodeInfo:           info,
-        NodeId:             info.NodeId,
-        AllocatingResource: resources.NewResource(),
+        NodeInfo:                info,
+        NodeId:                  info.NodeId,
+        AllocatingResource:      resources.NewResource(),
+        PreemptingResource:      resources.NewResource(),
+        CachedAvailableResource: info.GetAvailableResource(),
     }
 }
 
-func (m *SchedulingNode) CheckAndAllocateResource(delta *resources.Resource) bool {
+func (m *SchedulingNode) CheckAndAllocateResource(delta *resources.Resource, preemptionPhase bool) bool {
     m.lock.Lock()
     m.lock.Unlock()
     newAllocating := resources.Add(delta, m.AllocatingResource)
 
-    if resources.FitIn(m.NodeInfo.AvailableResource, newAllocating) {
+    avail := m.CachedAvailableResource
+    if preemptionPhase {
+        avail = resources.Add(avail, m.PreemptingResource)
+    }
+
+    if resources.FitIn(avail, newAllocating) {
         m.AllocatingResource = newAllocating
         return true
     }

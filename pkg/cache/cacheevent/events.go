@@ -43,13 +43,9 @@ type RMRegistrationEvent struct {
 // If there're multiple allocations need to be allocated, and there's no
 // relationship between these containers, they should be sent separately.
 type AllocationProposalBundleEvent struct {
+    PartitionName       string
     AllocationProposals []*commonevents.AllocationProposal
-    ReleaseProposals    []*ReleaseProposal
-}
-
-type ReleaseProposal struct {
-    AllocationUuid int64
-    Message        string
+    ReleaseProposals    []*commonevents.ReleaseAllocation
 }
 
 type RejectedNewApplicationEvent struct {
@@ -62,39 +58,22 @@ type RemovedApplicationEvent struct {
     PartitionName string
 }
 
-type ReleaseAllocationsEvent struct {
-    AllocationsToRelease []*ReleaseAllocation
-}
-
 func NewReleaseAllocationEventFromProto(proto []*si.AllocationReleaseRequest) *ReleaseAllocationsEvent {
-    event := &ReleaseAllocationsEvent{AllocationsToRelease: make([]*ReleaseAllocation, 0)}
+    event := &ReleaseAllocationsEvent{AllocationsToRelease: make([]*commonevents.ReleaseAllocation, 0)}
 
     for _, req := range proto {
-        event.AllocationsToRelease = append(event.AllocationsToRelease, &ReleaseAllocation{
-            Uuid:          req.Uuid,
-            ApplicationId: req.ApplicationId,
-            PartitionName: req.PartitionName,
-            Message:       req.Message,
-            ReleaseType:   si.AllocationReleaseResponse_STOPPED_BY_RM,
-        })
+        event.AllocationsToRelease = append(event.AllocationsToRelease, commonevents.NewReleaseAllocation(
+            req.Uuid,
+            req.ApplicationId,
+            req.PartitionName,
+            req.Message,
+            si.AllocationReleaseResponse_STOPPED_BY_RM,
+        ))
     }
 
     return event
 }
 
-// Message from scheduler about release allocation
-type ReleaseAllocation struct {
-    // optional, when this is set, only release allocation by given uuid.
-    Uuid string
-    // when this is set, filter allocations by app id.
-    // empty value will filter allocations don't belong to app.
-    // when app id is set and uuid not set, release all allocations under the app id.
-    ApplicationId string
-    // Which partition to release, required.
-    PartitionName string
-    // For human-readable
-    Message string
-    // Release type
-    ReleaseType si.AllocationReleaseResponse_TerminationType
+type ReleaseAllocationsEvent struct {
+    AllocationsToRelease []*commonevents.ReleaseAllocation
 }
-

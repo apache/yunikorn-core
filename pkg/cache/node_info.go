@@ -27,8 +27,8 @@ import (
 type NodeInfo struct {
     NodeId            string
     TotalResource     *resources.Resource
-    AllocatedResource *resources.Resource
-    AvailableResource *resources.Resource
+    allocatedResource *resources.Resource
+    availableResource *resources.Resource
 
     // Fields for fast access
     Hostname  string
@@ -39,6 +39,20 @@ type NodeInfo struct {
     attributes  map[string]string
     allocations map[string]*AllocationInfo
     lock        sync.RWMutex
+}
+
+func (m* NodeInfo) GetAllocatedResource() *resources.Resource {
+    m.lock.RLock()
+    defer m.lock.RUnlock()
+
+    return m.allocatedResource
+}
+
+func (m* NodeInfo) GetAvailableResource() *resources.Resource {
+    m.lock.RLock()
+    defer m.lock.RUnlock()
+
+    return m.availableResource
 }
 
 func (m *NodeInfo) GetAttribute(key string) string {
@@ -76,10 +90,10 @@ func NewNodeInfo(proto *si.NewNodeInfo) (*NodeInfo, error) {
     m := &NodeInfo{
         NodeId:            proto.NodeId,
         TotalResource:     resources.NewResourceFromProto(proto.SchedulableResource),
-        AllocatedResource: resources.NewResource(),
+        allocatedResource: resources.NewResource(),
         allocations:       make(map[string]*AllocationInfo, 0),
     }
-    m.AvailableResource = m.TotalResource
+    m.availableResource = m.TotalResource
 
     if err := m.initializeAttribute(proto.Attributes); err != nil {
         return nil, err
@@ -93,8 +107,8 @@ func (m *NodeInfo) AddAllocation(info *AllocationInfo) {
     defer m.lock.Unlock()
 
     m.allocations[info.AllocationProto.Uuid] = info
-    m.AllocatedResource = resources.Add(m.AllocatedResource, info.AllocatedResource)
-    m.AvailableResource = resources.Sub(m.TotalResource, m.AllocatedResource)
+    m.allocatedResource = resources.Add(m.allocatedResource, info.AllocatedResource)
+    m.availableResource = resources.Sub(m.TotalResource, m.allocatedResource)
 }
 
 func (m *NodeInfo) RemoveAllocation(uuid string) *AllocationInfo {
@@ -104,8 +118,8 @@ func (m *NodeInfo) RemoveAllocation(uuid string) *AllocationInfo {
     var info *AllocationInfo
     if info = m.allocations[uuid]; info != nil {
         delete(m.allocations, uuid)
-        m.AllocatedResource = resources.Sub(m.AllocatedResource, info.AllocatedResource)
-        m.AvailableResource = resources.Sub(m.TotalResource, m.AllocatedResource)
+        m.allocatedResource = resources.Sub(m.allocatedResource, info.AllocatedResource)
+        m.availableResource = resources.Sub(m.TotalResource, m.allocatedResource)
     }
 
     return info

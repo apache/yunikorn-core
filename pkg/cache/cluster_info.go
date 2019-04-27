@@ -24,7 +24,7 @@ import (
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache/cacheevent"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/commonevents"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/strings"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/handler"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/rmproxy/rmevent"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/scheduler/schedulerevent"
@@ -79,7 +79,7 @@ func (m *ClusterInfo) handleSchedulerEvents() {
         case *cacheevent.RejectedNewApplicationEvent:
             m.processRejectedApplicationEvent(v)
         case *cacheevent.ReleaseAllocationsEvent:
-            m.processAllocationReleasesRequest(v)
+            m.handleAllocationReleasesRequestEvent(v)
         case *cacheevent.RemovedApplicationEvent:
             m.processRemovedApplication(v)
         case *commonevents.RemoveRMPartitionsEvent:
@@ -110,6 +110,13 @@ func (m *ClusterInfo) GetPartition(name string) *PartitionInfo {
     m.lock.RLock()
     defer m.lock.RUnlock()
     return m.partitions[name]
+}
+
+func (m* ClusterInfo) GetTotalPartitionResource(partitionName string) *resources.Resource {
+    if p := m.GetPartition(partitionName); p != nil {
+        return p.GetTotalPartitionResource()
+    }
+    return nil
 }
 
 func (m *ClusterInfo) addApplicationToPartition(appInfo *ApplicationInfo, failIfExist bool) error {
@@ -391,25 +398,28 @@ func (m *ClusterInfo) processRMConfigUpdateEvent(event *commonevents.ConfigUpdat
 }
 
 func (m *ClusterInfo) processAllocationProposalEvent(event *cacheevent.AllocationProposalBundleEvent) {
-    if len(event.AllocationProposals) != 0 && len(event.ReleaseProposals) != 0 {
-        panic(fmt.Sprintf("Received event = %s, we now only support #allocation=1 and #release = 0, for every event, please double check.", strings.PrettyPrintStruct(event)))
-    }
-
     // Hold write lock of cache
     m.lock.Lock()
     defer m.lock.Unlock()
 
-    proposal := event.AllocationProposals[0]
+    partitionInfo := m.partitions[event.PartitionName]
 
-    allocInfo, err := m.partitions[proposal.PartitionName].addNewAllocationForSchedulingAllocation(proposal)
+    // Try to release allocations specified in the bundle
+    m.processAllocationReleases(event.ReleaseProposals)
+
+    // Skip allocation if nothing here.
+    if len(event.AllocationProposals) == 0 {
+        return
+    }
+
+    allocInfo, err := partitionInfo.addNewAllocationForSchedulingAllocation(event.AllocationProposals)
     if err != nil {
         // Send reject event back to scheduler
         m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
-            RejectedAllocations: []*commonevents.AllocationProposal{
-                proposal,
-            },
+            RejectedAllocations: event.AllocationProposals,
         })
     } else {
+        proposal := event.AllocationProposals[0]
         rmId := common.GetRMIdFromPartitionName(proposal.PartitionName)
 
         // Send allocation event to RM.
@@ -417,13 +427,6 @@ func (m *ClusterInfo) processAllocationProposalEvent(event *cacheevent.Allocatio
             Allocations: []*si.Allocation{allocInfo.AllocationProto},
             RMId:        rmId,
         })
-
-        // Send allocation event to Scheduler
-        // TODO
-        //m.EventHandlers.SchedulerEventHandler.HandleEvent(&rmevent.RMNewAllocationsEvent{
-        //    Allocations: []*si.Allocation{allocInfo.AllocationProto},
-        //    RMId:        rmId,
-        //})
     }
 }
 
@@ -452,22 +455,26 @@ func (m *ClusterInfo) notifyRMAllocationReleased(rmId string, released []*Alloca
     m.EventHandlers.RMProxyEventHandler.HandleEvent(releaseEvent)
 }
 
-func (m *ClusterInfo) processAllocationReleasesRequest(event *cacheevent.ReleaseAllocationsEvent) {
-    if len(event.AllocationsToRelease) == 0 {
+func (m *ClusterInfo) processAllocationReleases(toReleases []*commonevents.ReleaseAllocation) {
+    if len(toReleases) == 0 {
         return
     }
 
-    // Hold write lock of cache
-    m.lock.Lock()
-    defer m.lock.Unlock()
-
-    for _, toReleaseAllocation := range event.AllocationsToRelease {
+    for _, toReleaseAllocation := range toReleases {
         if partition := m.partitions[toReleaseAllocation.PartitionName]; partition != nil {
             releasedAllocations := partition.releaseAllocationsForApplication(toReleaseAllocation)
             m.notifyRMAllocationReleased(common.GetRMIdFromPartitionName(toReleaseAllocation.PartitionName), releasedAllocations, toReleaseAllocation.ReleaseType,
                 toReleaseAllocation.Message)
         }
     }
+}
+
+func (m *ClusterInfo) handleAllocationReleasesRequestEvent(event *cacheevent.ReleaseAllocationsEvent) {
+    // Hold write lock of cache
+    m.lock.Lock()
+    defer m.lock.Unlock()
+
+    m.processAllocationReleases(event.AllocationsToRelease)
 }
 
 func (m *ClusterInfo) processRemoveRMPartitionsEvent(event *commonevents.RemoveRMPartitionsEvent) {

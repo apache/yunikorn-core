@@ -89,6 +89,11 @@ func getPreemptionPolicies() []PreemptionPolicy {
 
 // Visible by tests
 func (m *Scheduler) SingleStepPreemption() {
+    // Skip if no preemption needed.
+    if !m.clusterSchedulingContext.NeedPreemption() {
+        return
+    }
+
     m.resetPreemptionContext()
 
     // Do preemption for each policies

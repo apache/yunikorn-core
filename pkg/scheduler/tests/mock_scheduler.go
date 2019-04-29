@@ -25,7 +25,7 @@ import (
     "testing"
 )
 
-var TwoEqualQueueConfig = `
+var TwoEqualQueueConfigEnabledPreemption = `
 partitions:
   -
     name: default
@@ -48,6 +48,8 @@ partitions:
               max:
                 memory: 200
                 vcore: 200
+    preemption:
+      enabled: true
 `
 
 

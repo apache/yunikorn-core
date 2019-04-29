@@ -455,3 +455,30 @@ partitions:
         t.Errorf("3 fields in ACL queue parsing should have failed: %v", conf)
     }
 }
+
+func TestPartitionPreemptionParameter(t *testing.T) {
+    data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+    preemption:
+      enabled: true
+  - name: "partition-0"
+    queues:
+      - name: root
+`
+    // validate the config and check after the update
+    conf, err := CreateConfig(data)
+    if err != nil {
+        t.Errorf("should expect no error %v", err)
+    }
+
+    if !conf.Partitions[0].Preemption.Enabled {
+        t.Error("default partition's preemption should be enabled.")
+    }
+
+    if conf.Partitions[1].Preemption.Enabled {
+        t.Error("partition-0's preemption should NOT be enabled by default")
+    }
+}

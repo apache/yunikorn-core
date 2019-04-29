@@ -27,6 +27,8 @@ import (
 type ClusterSchedulingContext struct {
     partitions map[string]*PartitionSchedulingContext
 
+    needPreemption bool
+
     lock sync.RWMutex
 }
 
@@ -216,6 +218,8 @@ func (csc *ClusterSchedulingContext) updateSchedulingPartitions(partitions []*ca
 
     // Walk over the updated partitions
     for _, updatedPartition := range partitions {
+        csc.needPreemption = csc.needPreemption || updatedPartition.GetPartitionConfig().Preemption.Enabled
+
         partition := csc.partitions[updatedPartition.Name]
         if partition != nil {
             glog.V(3).Infof("Updating existing scheduling partition: %s", updatedPartition.Name)
@@ -271,4 +275,11 @@ func (csc *ClusterSchedulingContext) deleteSchedulingPartitions(partitions []*ca
         }
     }
     return nil
+}
+
+func (csc* ClusterSchedulingContext) NeedPreemption() bool {
+    csc.lock.RLock()
+    defer csc.lock.RUnlock()
+
+    return csc.needPreemption
 }

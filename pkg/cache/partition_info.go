@@ -50,6 +50,9 @@ type PartitionInfo struct {
     // Reference to scheduler metrics
     metrics schedulermetrics.CoreSchedulerMetrics
 
+    // Partition Configs
+    partitionConfig *configs.PartitionConfig
+
     lock sync.RWMutex
 }
 
@@ -77,6 +80,9 @@ func NewPartitionInfo(partition configs.PartitionConfig, rmId string) (*Partitio
     }
     p.Root = root
     glog.V(0).Infof("Added queue structure to partition %s", p.Name)
+
+    // set partition config
+    p.partitionConfig = &partition
 
     //TODO add placement rules and users
     return p, nil
@@ -538,6 +544,8 @@ func (pi *PartitionInfo) updatePartitionQueues(partition configs.PartitionConfig
     if err != nil {
         return err
     }
+    // replace partition config
+    pi.partitionConfig = &partition
     return pi.updateQueues(queueConf.Queues, root)
 }
 
@@ -595,4 +603,10 @@ func (pi *PartitionInfo) IsRunning() bool {
 // Is the partition
 func (pi *PartitionInfo) IsStopped() bool {
     return pi.state == deleted
+}
+
+func (pi* PartitionInfo) GetPartitionConfig() *configs.PartitionConfig {
+    pi.lock.RLock()
+    defer pi.lock.RUnlock()
+    return pi.partitionConfig
 }

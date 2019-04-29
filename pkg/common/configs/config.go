@@ -36,8 +36,14 @@ type SchedulerConfig struct {
 type PartitionConfig struct {
     Name           string
     Queues         []QueueConfig
-    PlacementRules []PlacementRule `yaml:",omitempty" json:",omitempty"`
-    Users          []User          `yaml:",omitempty" json:",omitempty"`}
+    PlacementRules []PlacementRule           `yaml:",omitempty" json:",omitempty"`
+    Users          []User                    `yaml:",omitempty" json:",omitempty"`
+    Preemption     PartitionPreemptionConfig `yaml:",omitempty" json:",omitempty"`
+}
+
+type PartitionPreemptionConfig struct {
+    Enabled bool
+}
 
 // The queue object for each queue:
 // - the name of the queue

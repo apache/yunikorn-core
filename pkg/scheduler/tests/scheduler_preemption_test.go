@@ -28,7 +28,7 @@ import (
 func TestBasicPreemption(t *testing.T) {
     ms := &MockScheduler{}
 
-    ms.Init(t, TwoEqualQueueConfig)
+    ms.Init(t, TwoEqualQueueConfigEnabledPreemption)
 
     scheduler := ms.scheduler
 

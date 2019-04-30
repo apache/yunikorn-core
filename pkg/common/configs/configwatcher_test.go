@@ -128,11 +128,25 @@ func TestConfigWatcherExpiration(t *testing.T) {
 	}
 	cw := CreateConfigWatcher("rm-id", "p-group", 2*time.Second)
 	cw.Run()
-	assert.Equal(t, cw.running, true)
 
 	// short run, after 2 seconds, it should be stopped
-	err := common.WaitFor(1*time.Second, 5*time.Second, func() bool {
-		return cw.running == false
+	assert.Assert(t, waitForStopped(cw) == nil)
+
+	// start again
+	cw.Run()
+	assert.Assert(t, waitForStarted(cw) == nil)
+}
+
+func waitForStarted(cw *ConfigWatcher) error {
+	return common.WaitFor(1*time.Second, 5*time.Second, func() bool {
+		// at most 1 element in solo chan means go routine is running
+		return len(cw.soloChan) == 1
 	})
-	assert.Assert(t, err == nil)
+}
+
+func waitForStopped(cw *ConfigWatcher) error {
+	return common.WaitFor(1*time.Second, 5*time.Second, func() bool {
+		// no element in the solo chan means go routine is not running
+		return len(cw.soloChan) == 0
+	})
 }

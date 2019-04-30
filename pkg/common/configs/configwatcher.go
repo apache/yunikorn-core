@@ -34,7 +34,7 @@ type ConfigWatcher struct {
 	policyGroup string
  	reloader    ConfigReloader
 	expireTime  time.Duration
-	running     bool
+	soloChan   chan interface{}
 	lock        *sync.Mutex
 }
 
@@ -48,6 +48,7 @@ func CreateConfigWatcher(rmId string, policyGroup string, expiration time.Durati
 		rmId:        rmId,
 		policyGroup: policyGroup,
 		expireTime:  expiration,
+		soloChan:    make(chan interface{}, 1),
 		lock:        &sync.Mutex{},
 	}
 }
@@ -104,20 +105,20 @@ func (cw *ConfigWatcher) runOnce() bool {
 // if configWatcher is not running, kick-off running it
 // if configWatcher is already running, this is a noop
 func (cw *ConfigWatcher) Run() {
-	if !cw.running {
-		cw.running = true
+	select {
+	case cw.soloChan <- 0:
 		ticker := time.NewTicker(1 * time.Second)
 		quit := make(chan bool)
 		go func() {
 			for {
 				select {
-				case <- ticker.C:
+				case <-ticker.C:
 					if !cw.runOnce() {
-						cw.running = false
+						<-cw.soloChan
 						return
 					}
-				case <- quit:
-					cw.running = false
+				case <-quit:
+					<-cw.soloChan
 					ticker.Stop()
 					return
 				}
@@ -127,7 +128,7 @@ func (cw *ConfigWatcher) Run() {
 		time.AfterFunc(cw.expireTime, func() {
 			quit <- true
 		})
-	} else {
+	default:
 		glog.V(3).Infof("config watcher is already running")
 	}
 }

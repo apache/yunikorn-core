@@ -38,7 +38,6 @@ type QueueInfo struct {
 
     MaxResource        *resources.Resource // When not set, max = nil
     GuaranteedResource *resources.Resource // When not set, Guaranteed == 0
-    allocatedResource  *resources.Resource // set based on allocation
     Parent             *QueueInfo          // link to the parent queue
 
     Properties map[string]string     // this should be treated as immutable the value is a merge of parent(s)
@@ -48,11 +47,12 @@ type QueueInfo struct {
     metrics queuemetrics.CoreQueueMetrics
 
     // Private fields need protection
-    isLeaf     bool                  // this is a leaf queue or not (i.e. parent)
-    isManaged  bool                  // queue is part of the config, not auto created
-    state      queueState            // the state of the queue for scheduling
-    children   map[string]*QueueInfo // list of direct children
-    lock       sync.RWMutex          // lock for updating the queue
+    allocatedResource  *resources.Resource   // set based on allocation
+    isLeaf             bool                  // this is a leaf queue or not (i.e. parent)
+    isManaged          bool                  // queue is part of the config, not auto created
+    state              queueState            // the state of the queue for scheduling
+    children           map[string]*QueueInfo // list of direct children
+    lock               sync.RWMutex          // lock for updating the queue
 }
 
 // Create a new queue from the configuration object.
@@ -153,26 +153,53 @@ func (qi *QueueInfo) AddChildQueue(child *QueueInfo) error {
     return nil
 }
 
-// Increment the allocated resources for this queue
-func (qi *QueueInfo) IncAllocatedResource(alloc *resources.Resource) {
+// Increment the allocated resources for this queue (recursively)
+// Guard against going over max resources.
+func (qi *QueueInfo) IncAllocatedResource(alloc *resources.Resource) error {
     qi.lock.Lock()
     defer qi.lock.Unlock()
-    qi.allocatedResource = resources.Add(qi.allocatedResource, alloc)
-    if qi.MaxResource != nil && !resources.FitIn(qi.allocatedResource, qi.MaxResource) {
-        glog.V(2).Infof("Allocation (%v) puts queue %s over maximum allocation (%v)",
-            alloc, qi.GetQueuePath(), qi.MaxResource)
+
+    // check this queue: failure stops checks
+    newAllocation := resources.Add(qi.allocatedResource, alloc)
+    if qi.MaxResource != nil && !resources.FitIn(qi.MaxResource, newAllocation) {
+        return fmt.Errorf("allocation (%v) puts queue %s over maximum allocation (%v)",
+                alloc, qi.GetQueuePath(), qi.MaxResource)
+        }
+    // check the parent: need to pass before updating
+    if qi.Parent != nil {
+        if err := qi.Parent.IncAllocatedResource(alloc); err != nil {
+            glog.V(4).Infof("Allocation (%v) puts parent queue over maximum allocation (%v)",
+                alloc, qi.MaxResource)
+            return err
+        }
     }
+    // all OK update this queue
+    qi.allocatedResource = newAllocation
+    return nil
 }
 
-// Decrement the allocated resources for this queue
-func (qi *QueueInfo) DecAllocatedResource(alloc *resources.Resource) {
+// Decrement the allocated resources for this queue (recursively)
+// Guard against going below zero resources.
+func (qi *QueueInfo) DecAllocatedResource(alloc *resources.Resource) error {
     qi.lock.Lock()
     defer qi.lock.Unlock()
+
+    // check this queue: failure stops checks
     if alloc != nil &&  !resources.FitIn(qi.allocatedResource, alloc) {
-        glog.V(2).Infof("Released allocation (%v) is larger than queue %s allocation (%v)",
+        return fmt.Errorf("released allocation (%v) is larger than queue %s allocation (%v)",
             alloc, qi.GetQueuePath(), qi.allocatedResource)
     }
+    // check the parent: need to pass before updating
+    if qi.Parent != nil {
+        if err := qi.Parent.DecAllocatedResource(alloc); err != nil {
+            glog.V(4).Infof("Released allocation (%v) is larger than parent queue allocation (%v)",
+                alloc, qi.MaxResource)
+            return err
+        }
+    }
+    // all OK update the queue
     qi.allocatedResource = resources.Sub(qi.allocatedResource, alloc)
+    return nil
 }
 
 func (qi *QueueInfo) GetCopyOfChildren() map[string]*QueueInfo {

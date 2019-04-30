@@ -162,10 +162,11 @@ func (pi *PartitionInfo) removeNode(nodeId string) {
             panic(fmt.Sprintf("Failed to getApp=%s when node=%s being removed, this shouldn't happen.", alloc.ApplicationId, node.NodeId))
         }
 
-        // get queue and update
-        for queue != nil {
-            queue.DecAllocatedResource(alloc.AllocatedResource)
-            queue = queue.Parent
+        // we should never have an error, cache is in an inconsistent state if this happens
+        if queue != nil {
+            if err := queue.DecAllocatedResource(alloc.AllocatedResource); err != nil {
+                glog.V(0).Infof("Queue failed to release resources from application %s: %v", alloc.ApplicationId, err)
+            }
         }
 
         glog.V(2).Infof("Remove allocation=%s from node=%s when node is removing", alloc.AllocationProto.Uuid, node.NodeId)
@@ -241,10 +242,12 @@ func (pi *PartitionInfo) releaseAllocationsForApplication(toRelease *commonevent
         resources.AddTo(totalReleasedResource, alloc.AllocatedResource)
     }
 
-    // Update queues
-    for queue != nil {
-        queue.DecAllocatedResource(totalReleasedResource)
-        queue = queue.Parent
+    // this nil check is not really needed as we can only reach here with a queue set, IDE complains without this
+    if queue != nil {
+        // we should never have an error, cache is in an inconsistent state if this happens
+        if err := queue.DecAllocatedResource(totalReleasedResource); err != nil {
+            glog.V(0).Infof("Queue failed to release resources fro application %s: %v", toRelease.ApplicationId, err)
+        }
     }
 
     // Update global allocation list
@@ -292,28 +295,17 @@ func (pi *PartitionInfo) addNewAllocation(alloc *commonevents.AllocationProposal
     }
 
     // If new allocation go beyond any of queue's max resource? Only check if when it is allocated instead of node reported.
-    q := queue
     if !nodeReported {
-        for q != nil {
-            newQueueResource := resources.Add(q.GetAllocatedResource(), alloc.AllocatedResource)
-            if q.MaxResource != nil && !resources.FitIn(q.MaxResource, newQueueResource) {
-                pi.metrics.IncScheduledAllocationFailures()
-                return nil, errors.New(fmt.Sprintf("Cannot allocate resource=[%s] from app=%s on "+
-                    "queue=%s because resource exceeded total available, allocated+new=%s, total=%s",
-                    alloc.AllocatedResource, alloc.ApplicationId, queue.Name, newQueueResource, queue.MaxResource))
-            }
-            q = q.Parent
+        if err := queue.IncAllocatedResource(alloc.AllocatedResource); err != nil {
+            pi.metrics.IncScheduledAllocationFailures()
+            return nil, fmt.Errorf("Cannot allocate resource from application %s: %s ",
+                alloc.ApplicationId, err)
         }
     }
 
     // Start allocation
     allocationUuid := pi.GetNewAllocationUuid()
     allocation := NewAllocationInfo(allocationUuid, alloc)
-    q = queue
-    for q != nil {
-        q.IncAllocatedResource(allocation.AllocatedResource)
-        q = q.Parent
-    }
 
     node.AddAllocation(allocation)
 
@@ -396,11 +388,12 @@ func (pi *PartitionInfo) RemoveApplication(appId string) (*ApplicationInfo, []*A
             }
         }
 
-        // Update queues
+        // we should never have an error, cache is in an inconsistent state if this happens
         queue := app.LeafQueue
-        for queue != nil {
-            queue.DecAllocatedResource(totalAppAllocated)
-            queue = queue.Parent
+        if queue != nil {
+            if err := queue.DecAllocatedResource(totalAppAllocated); err != nil {
+                glog.V(0).Infof("Queue failed to release resources from application %s: %v", app.ApplicationId, err)
+            }
         }
 
         glog.V(2).Infof("Removed app=%s from partition=%s, total-allocated=%s", app.ApplicationId, app.Partition, totalAppAllocated)

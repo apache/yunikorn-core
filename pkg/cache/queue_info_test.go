@@ -66,8 +66,7 @@ func TestQueueInfo(t *testing.T) {
     }
 }
 
-
-func TestAllocationCalc(t *testing.T) {
+func TestAllocationCalcRoot(t *testing.T) {
     // create the root
     root, err := createRootQueue()
     if err != nil {
@@ -76,10 +75,66 @@ func TestAllocationCalc(t *testing.T) {
     }
     res := map[string]string{"memory":"100", "vcores":"10"}
     allocation, _ := resources.NewResourceFromConf(res)
-    root.IncAllocatedResource(allocation)
-    root.DecAllocatedResource(allocation)
-    if !resources.IsZero(root.GetAllocatedResource()) {
-        t.Errorf("root queue allocations are not zero: %v", root.GetAllocatedResource())
+    err = root.IncAllocatedResource(allocation)
+    if err != nil {
+        t.Errorf("root queue allocation failed on increment %s", err)
+    }
+    err = root.DecAllocatedResource(allocation)
+    if err != nil {
+        t.Errorf("root queue allocation failed on decrement %s", err)
+    }
+    if !resources.IsZero(root.allocatedResource) {
+        t.Errorf("root queue allocations are not zero: %v", root.allocatedResource)
+    }
+    err = root.DecAllocatedResource(allocation)
+    if err == nil {
+        t.Errorf("root queue allocation should have failed to decrement %s", err)
+    }
+}
+
+func TestAllocationCalcSub(t *testing.T) {
+    // create the root
+    root, err := createRootQueue()
+    if err != nil {
+        t.Errorf("failed to create basic root queue: %v", err)
+        return
+    }
+    parent, err := createManagedQueue(root, "parent", true)
+    if err != nil {
+        t.Errorf("failed to create parent queue: %v", err)
+        return
+    }
+
+    res := map[string]string{"memory":"100", "vcores":"10"}
+    allocation, _ := resources.NewResourceFromConf(res)
+    err = parent.IncAllocatedResource(allocation)
+    if err != nil {
+        t.Errorf("parent queue allocation failed on increment %s", err)
+    }
+    err = parent.DecAllocatedResource(allocation)
+    if err != nil {
+        t.Errorf("parent queue allocation failed on decrement %s", err)
+    }
+    if !resources.IsZero(root.allocatedResource) {
+        t.Errorf("root queue allocations are not zero: %v", root.allocatedResource)
+    }
+    err = root.DecAllocatedResource(allocation)
+    if err == nil {
+        t.Errorf("root queue allocation should have failed to decrement %s", root.allocatedResource)
+    }
+
+    // add to the parent, remove from root and then try to remove from parent: root should complain
+    err = parent.IncAllocatedResource(allocation)
+    if err != nil {
+        t.Errorf("parent queue allocation failed on increment %s", err)
+    }
+    err = root.DecAllocatedResource(allocation)
+    if err != nil {
+        t.Errorf("rot queue allocation failed on decrement %s", err)
+    }
+    err = parent.DecAllocatedResource(allocation)
+    if err == nil {
+        t.Errorf("parent queue allocation should have failed on decrement %v, %v", root.allocatedResource, parent.allocatedResource)
     }
 }
 
@@ -99,7 +154,7 @@ func TestManagedSubQueues(t *testing.T) {
         t.Errorf("parent queue is not marked as a parent")
     }
     if len(root.children) == 0 {
-        t.Errorf("]parent queue is not added to the root queue")
+        t.Errorf("parent queue is not added to the root queue")
     }
     leaf, err := createManagedQueue(parent, "leaf", false)
     if err != nil {
@@ -122,11 +177,17 @@ func TestManagedSubQueues(t *testing.T) {
     // now set some allocation in the parent and try removal again
     res := map[string]string{"memory":"100", "vcores":"10"}
     allocation, _ := resources.NewResourceFromConf(res)
-    parent.IncAllocatedResource(allocation)
+    err = parent.IncAllocatedResource(allocation)
+    if err != nil {
+        t.Errorf("allocation increase failed on parent: %s", err)
+    }
     if parent.RemoveQueue() {
         t.Errorf("parent queue should not have been removed as it has an allocation")
     }
-    parent.DecAllocatedResource(allocation)
+    err = parent.DecAllocatedResource(allocation)
+    if err != nil {
+        t.Errorf("parent queue allocation failed on decrement %s", err)
+    }
     if !parent.RemoveQueue() {
         t.Errorf("parent queue should have been removed and was not")
     }

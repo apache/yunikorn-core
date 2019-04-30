@@ -27,6 +27,7 @@ import (
 // Test basic interactions from rm proxy to cache and to scheduler.
 func TestBasicPreemption(t *testing.T) {
     ms := &MockScheduler{}
+    defer ms.Stop()
 
     ms.Init(t, TwoEqualQueueConfigEnabledPreemption)
 

@@ -24,20 +24,33 @@ import (
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/webservice"
 )
 
-func StartAllServices() (*rmproxy.RMProxy, *cache.ClusterInfo, *scheduler.Scheduler) {
-    return startAllServicesWithParameters(false)
+// options used to control how services are started
+type StartupOptions struct {
+    manualScheduleFlag bool
+    startWebAppFlag bool
+}
+
+func StartAllServices() *ServiceContext {
+    return startAllServicesWithParameters(
+        StartupOptions{
+            manualScheduleFlag: false,
+            startWebAppFlag:    true,
+        })
 }
 
 // Visible by tests
-func StartAllServicesWithManualScheduler() (*rmproxy.RMProxy, *cache.ClusterInfo, *scheduler.Scheduler) {
-    return startAllServicesWithParameters(true)
+func StartAllServicesWithManualScheduler() *ServiceContext {
+    return startAllServicesWithParameters(
+        StartupOptions{
+            manualScheduleFlag: true,
+            startWebAppFlag:    false,
+        })
 }
 
-func startAllServicesWithParameters(manualSchedule bool) (*rmproxy.RMProxy, *cache.ClusterInfo, *scheduler.Scheduler) {
+func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
     cache, metrics := cache.NewClusterInfo()
     scheduler := scheduler.NewScheduler(cache, metrics)
     proxy := rmproxy.NewRMProxy()
-    webapp := webservice.NewWebApp(cache)
 
     eventHandler := handler.EventHandlers{
         CacheEventHandler:     cache,
@@ -47,9 +60,20 @@ func startAllServicesWithParameters(manualSchedule bool) (*rmproxy.RMProxy, *cac
 
     // start services
     cache.StartService(eventHandler)
-    scheduler.StartService(eventHandler, manualSchedule)
+    scheduler.StartService(eventHandler, opts.manualScheduleFlag)
     proxy.StartService(eventHandler)
-    webapp.StartWebApp()
 
-    return proxy, cache, scheduler
+    context := &ServiceContext{
+        RMProxy:   proxy,
+        Cache:     cache,
+        Scheduler: scheduler,
+    }
+
+    if opts.startWebAppFlag {
+        webapp := webservice.NewWebApp(cache)
+        webapp.StartWebApp()
+        context.WebApp = webapp
+    }
+
+    return context
 }

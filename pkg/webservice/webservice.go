@@ -16,6 +16,7 @@ limitations under the License.
 package webservice
 
 import (
+	"context"
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 	"github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache"
@@ -27,6 +28,7 @@ import (
 var gClusterInfo *cache.ClusterInfo
 
 type WebService struct {
+	httpServer  *http.Server
 	clusterInfo *cache.ClusterInfo
 	lock        sync.RWMutex
 }
@@ -68,11 +70,12 @@ func Logger(inner http.Handler, name string, info *cache.ClusterInfo) http.Handl
 
 func (m *WebService) StartWebApp() {
 	router := NewRouter(m.clusterInfo)
+	m.httpServer = &http.Server{Addr: ":9080", Handler: router}
 
 	glog.Info("Webapp started at port=9080")
 	go func() {
-		httpError := http.ListenAndServe(":9080", router)
-		if httpError != nil {
+		httpError := m.httpServer.ListenAndServe()
+		if httpError != nil && httpError != http.ErrServerClosed{
 			glog.Errorf("While serving HTTP: %v", httpError)
 		}
 	}()
@@ -82,4 +85,15 @@ func NewWebApp(clusterInfo *cache.ClusterInfo) *WebService {
 	m := &WebService{}
 	gClusterInfo = clusterInfo
 	return m
+}
+
+func (m *WebService) StopWebApp() error {
+	if m.httpServer != nil {
+		// graceful shutdown in 5 seconds
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return m.httpServer.Shutdown(ctx)
+	}
+
+	return nil
 }

@@ -32,7 +32,11 @@ import (
 // Test scheduler reconfiguration
 func TestConfigScheduler(t *testing.T) {
     // Start all tests
-    proxy, cache, scheduler := entrypoint.StartAllServicesWithManualScheduler()
+    serviceContext := entrypoint.StartAllServicesWithManualScheduler()
+    defer serviceContext.StopAll()
+    proxy := serviceContext.RMProxy
+    cache := serviceContext.Cache
+    scheduler := serviceContext.Scheduler
 
     // Register RM
     configData := `
@@ -156,7 +160,11 @@ partitions:
 // Test basic interactions from rm proxy to cache and to scheduler.
 func TestBasicScheduler(t *testing.T) {
     // Start all tests
-    proxy, cache, scheduler := entrypoint.StartAllServicesWithManualScheduler()
+    serviceContext := entrypoint.StartAllServicesWithManualScheduler()
+    defer serviceContext.StopAll()
+    proxy := serviceContext.RMProxy
+    cache := serviceContext.Cache
+    scheduler := serviceContext.Scheduler
 
     // Register RM
     configData := `
@@ -423,7 +431,11 @@ partitions:
 
 func TestBasicSchedulerAutoAllocation(t *testing.T) {
     // Start all tests
-    proxy, cache, scheduler := entrypoint.StartAllServices()
+    serviceContext := entrypoint.StartAllServices()
+    defer serviceContext.StopAll()
+    proxy := serviceContext.RMProxy
+    cache := serviceContext.Cache
+    scheduler := serviceContext.Scheduler
 
     // Register RM
     configData := `
@@ -549,7 +561,10 @@ partitions:
 
 func TestFairnessAllocationForQueues(t *testing.T) {
     // Start all tests
-    proxy, _, scheduler := entrypoint.StartAllServicesWithManualScheduler()
+    serviceContext := entrypoint.StartAllServicesWithManualScheduler()
+    defer serviceContext.StopAll()
+    proxy := serviceContext.RMProxy
+    scheduler := serviceContext.Scheduler
 
     // Register RM
     configData := `
@@ -703,7 +718,10 @@ partitions:
 
 func TestFairnessAllocationForApplications(t *testing.T) {
     // Start all tests
-    proxy, _, scheduler := entrypoint.StartAllServicesWithManualScheduler()
+    serviceContext := entrypoint.StartAllServicesWithManualScheduler()
+    defer serviceContext.StopAll()
+    proxy := serviceContext.RMProxy
+    scheduler := serviceContext.Scheduler
 
     // Register RM
     configData := `
@@ -870,7 +888,9 @@ partitions:
 
 func TestRejectApplications(t *testing.T) {
     // Start all tests
-    proxy, _, _ := entrypoint.StartAllServicesWithManualScheduler()
+    serviceContext := entrypoint.StartAllServicesWithManualScheduler()
+    defer serviceContext.StopAll()
+    proxy := serviceContext.RMProxy
 
     // Register RM
     configData := `

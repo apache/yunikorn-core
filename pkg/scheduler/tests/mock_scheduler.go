@@ -54,11 +54,12 @@ partitions:
 
 
 type MockScheduler struct {
-    proxy     *rmproxy.RMProxy
-    scheduler *scheduler.Scheduler
-    mockRM    *MockRMCallbackHandler
-    t         *testing.T
-    rmId      string
+    proxy          *rmproxy.RMProxy
+    scheduler      *scheduler.Scheduler
+    mockRM         *MockRMCallbackHandler
+    serviceContext *entrypoint.ServiceContext
+    t              *testing.T
+    rmId           string
 }
 
 func (m *MockScheduler) Init(t *testing.T, config string) {
@@ -66,7 +67,10 @@ func (m *MockScheduler) Init(t *testing.T, config string) {
     m.t = t
 
     // Start all tests
-    m.proxy, _, m.scheduler = entrypoint.StartAllServicesWithManualScheduler()
+    serviceContext := entrypoint.StartAllServicesWithManualScheduler()
+    m.serviceContext = serviceContext
+    m.proxy = serviceContext.RMProxy
+    m.scheduler = serviceContext.Scheduler
 
     configs.MockSchedulerConfigByData([]byte(config))
     m.mockRM = NewMockRMCallbackHandler(t)
@@ -127,4 +131,10 @@ func (m *MockScheduler) AddApp(appId string, queue string, partition string) {
 
 func (m *MockScheduler) GetSchedulingQueue(queue string) *scheduler.SchedulingQueue {
     return m.scheduler.GetClusterSchedulingContext().GetSchedulingQueue(queue, "[rm:123]default")
+}
+
+func (m *MockScheduler) Stop() {
+    if m.serviceContext != nil {
+        m.serviceContext.StopAll()
+    }
 }

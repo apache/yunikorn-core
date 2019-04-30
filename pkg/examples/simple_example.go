@@ -25,7 +25,8 @@ import (
 
 func exampleOfRunYourOwnRM() {
     // Start all tests
-    proxy, _, _ := entrypoint.StartAllServices()
+    serviceContext := entrypoint.StartAllServices()
+    proxy := serviceContext.RMProxy
 
     // Setup queues
     configData := `

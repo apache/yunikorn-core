@@ -298,7 +298,7 @@ func (pi *PartitionInfo) addNewAllocation(alloc *commonevents.AllocationProposal
     if !nodeReported {
         if err := queue.IncAllocatedResource(alloc.AllocatedResource); err != nil {
             pi.metrics.IncScheduledAllocationFailures()
-            return nil, fmt.Errorf("Cannot allocate resource from application %s: %s ",
+            return nil, fmt.Errorf("Cannot allocate resource from application %s: %v ",
                 alloc.ApplicationId, err)
         }
     }

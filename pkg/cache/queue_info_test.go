@@ -77,18 +77,18 @@ func TestAllocationCalcRoot(t *testing.T) {
     allocation, _ := resources.NewResourceFromConf(res)
     err = root.IncAllocatedResource(allocation)
     if err != nil {
-        t.Errorf("root queue allocation failed on increment %s", err)
+        t.Errorf("root queue allocation failed on increment %v", err)
     }
     err = root.DecAllocatedResource(allocation)
     if err != nil {
-        t.Errorf("root queue allocation failed on decrement %s", err)
+        t.Errorf("root queue allocation failed on decrement %v", err)
     }
     if !resources.IsZero(root.allocatedResource) {
         t.Errorf("root queue allocations are not zero: %v", root.allocatedResource)
     }
     err = root.DecAllocatedResource(allocation)
     if err == nil {
-        t.Errorf("root queue allocation should have failed to decrement %s", err)
+        t.Errorf("root queue allocation should have failed to decrement %v", err)
     }
 }
 
@@ -109,28 +109,28 @@ func TestAllocationCalcSub(t *testing.T) {
     allocation, _ := resources.NewResourceFromConf(res)
     err = parent.IncAllocatedResource(allocation)
     if err != nil {
-        t.Errorf("parent queue allocation failed on increment %s", err)
+        t.Errorf("parent queue allocation failed on increment %v", err)
     }
     err = parent.DecAllocatedResource(allocation)
     if err != nil {
-        t.Errorf("parent queue allocation failed on decrement %s", err)
+        t.Errorf("parent queue allocation failed on decrement %v", err)
     }
     if !resources.IsZero(root.allocatedResource) {
         t.Errorf("root queue allocations are not zero: %v", root.allocatedResource)
     }
     err = root.DecAllocatedResource(allocation)
     if err == nil {
-        t.Errorf("root queue allocation should have failed to decrement %s", root.allocatedResource)
+        t.Errorf("root queue allocation should have failed to decrement %v", root.allocatedResource)
     }
 
     // add to the parent, remove from root and then try to remove from parent: root should complain
     err = parent.IncAllocatedResource(allocation)
     if err != nil {
-        t.Errorf("parent queue allocation failed on increment %s", err)
+        t.Errorf("parent queue allocation failed on increment %v", err)
     }
     err = root.DecAllocatedResource(allocation)
     if err != nil {
-        t.Errorf("root queue allocation failed on decrement %s", err)
+        t.Errorf("root queue allocation failed on decrement %v", err)
     }
     err = parent.DecAllocatedResource(allocation)
     if err == nil {
@@ -179,14 +179,14 @@ func TestManagedSubQueues(t *testing.T) {
     allocation, _ := resources.NewResourceFromConf(res)
     err = parent.IncAllocatedResource(allocation)
     if err != nil {
-        t.Errorf("allocation increase failed on parent: %s", err)
+        t.Errorf("allocation increase failed on parent: %v", err)
     }
     if parent.RemoveQueue() {
         t.Errorf("parent queue should not have been removed as it has an allocation")
     }
     err = parent.DecAllocatedResource(allocation)
     if err != nil {
-        t.Errorf("parent queue allocation failed on decrement %s", err)
+        t.Errorf("parent queue allocation failed on decrement %v", err)
     }
     if !parent.RemoveQueue() {
         t.Errorf("parent queue should have been removed and was not")

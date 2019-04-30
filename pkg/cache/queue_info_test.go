@@ -130,7 +130,7 @@ func TestAllocationCalcSub(t *testing.T) {
     }
     err = root.DecAllocatedResource(allocation)
     if err != nil {
-        t.Errorf("rot queue allocation failed on decrement %s", err)
+        t.Errorf("root queue allocation failed on decrement %s", err)
     }
     err = parent.DecAllocatedResource(allocation)
     if err == nil {

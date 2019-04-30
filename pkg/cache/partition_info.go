@@ -246,7 +246,7 @@ func (pi *PartitionInfo) releaseAllocationsForApplication(toRelease *commonevent
     if queue != nil {
         // we should never have an error, cache is in an inconsistent state if this happens
         if err := queue.DecAllocatedResource(totalReleasedResource); err != nil {
-            glog.V(0).Infof("Queue failed to release resources fro application %s: %v", toRelease.ApplicationId, err)
+            glog.V(0).Infof("Queue failed to release resources for application %s: %v", toRelease.ApplicationId, err)
         }
     }
 

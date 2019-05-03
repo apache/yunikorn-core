@@ -15,24 +15,27 @@
 #
 
 REPO=github.infra.cloudera.com/yunikorn/yunikorn-core/pkg
+# when using the -race option must set CGO_ENBLED to 1
+RACE=-race
+CGO_ENABLED=1
+# build on macos by default
+GOOS=darwin
 
 .PHONY: all simplescheduler
 
 all: simplescheduler schedulerclient
 
 test:
-  # Added -race to detect race conditions
-	go test ./... -cover -race -tags deadlock -v
+	go test ./... -cover $(RACE) -tags deadlock -v
 	go vet $(REPO)...
 
 simplescheduler:
-  # Added -race to detect race conditions
 	if [ ! -d ./vendor ]; then dep ensure -vendor-only; fi
-	CGO_ENABLED=0 GOOS=darwin go build -race -a -ldflags '-extldflags "-static"' -o _output/simplescheduler ./cmd/simplescheduler
+	go build $(RACE) -a -ldflags '-extldflags "-static"' -o _output/simplescheduler ./cmd/simplescheduler
 
 schedulerclient:
 	if [ ! -d ./vendor ]; then dep ensure -vendor-only; fi
-	CGO_ENABLED=0 GOOS=darwin go build -a -ldflags '-extldflags "-static"' -o _output/schedulerclient ./cmd/schedulerclient
+	go build $(RACE) -a -ldflags '-extldflags "-static"' -o _output/schedulerclient ./cmd/schedulerclient
 
 clean:
 	go clean -r -x

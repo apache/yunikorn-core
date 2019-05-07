@@ -154,20 +154,22 @@ func (qi *QueueInfo) AddChildQueue(child *QueueInfo) error {
 }
 
 // Increment the allocated resources for this queue (recursively)
-// Guard against going over max resources.
-func (qi *QueueInfo) IncAllocatedResource(alloc *resources.Resource) error {
+// Guard against going over max resources if the
+func (qi *QueueInfo) IncAllocatedResource(alloc *resources.Resource, nodeReported bool) error {
     qi.lock.Lock()
     defer qi.lock.Unlock()
 
-    // check this queue: failure stops checks
+    // check this queue: failure stops checks if the allocation is not part of a node addition
     newAllocation := resources.Add(qi.allocatedResource, alloc)
-    if qi.MaxResource != nil && !resources.FitIn(qi.MaxResource, newAllocation) {
-        return fmt.Errorf("allocation (%v) puts queue %s over maximum allocation (%v)",
+    if !nodeReported {
+        if qi.MaxResource != nil && !resources.FitIn(qi.MaxResource, newAllocation) {
+            return fmt.Errorf("allocation (%v) puts queue %s over maximum allocation (%v)",
                 alloc, qi.GetQueuePath(), qi.MaxResource)
         }
+    }
     // check the parent: need to pass before updating
     if qi.Parent != nil {
-        if err := qi.Parent.IncAllocatedResource(alloc); err != nil {
+        if err := qi.Parent.IncAllocatedResource(alloc, nodeReported); err != nil {
             glog.V(4).Infof("Allocation (%v) puts parent queue over maximum allocation (%v)",
                 alloc, qi.MaxResource)
             return err

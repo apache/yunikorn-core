@@ -134,8 +134,9 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmId string) ([]*
     deletedPartitions := make([]*PartitionInfo, 0)
     for _, part := range clusterInfo.partitions {
         if !visited[part.Name] {
-            part.state = deleted
-            clusterInfo.removePartition(part.Name)
+            part.MarkPartitionForRemoval()
+            // TODO clean up the partition and remove it
+            // clusterInfo.removePartition(part.Name)
             deletedPartitions = append(deletedPartitions, part)
             glog.V(0).Infof("Removed partition %s from the cluster", part.Name)
         }

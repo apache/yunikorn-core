@@ -17,7 +17,6 @@ limitations under the License.
 package cache
 
 import (
-    "errors"
     "fmt"
     "github.com/golang/glog"
     "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
@@ -125,31 +124,10 @@ func (m *ClusterInfo) addApplicationToPartition(appInfo *ApplicationInfo, failIf
 
     partitionInfo := m.partitions[appInfo.Partition]
     if partitionInfo == nil {
-        return errors.New(fmt.Sprintf("failed to add app=%s to partition=%s, partition doesn't exist", appInfo.ApplicationId, appInfo.Partition))
+        return fmt.Errorf("failed to add application %s to partition %s, partition doesn't exist", appInfo.ApplicationId, appInfo.Partition)
     }
 
-    if j := partitionInfo.applications[appInfo.ApplicationId]; j != nil {
-        if failIfExist {
-            return errors.New(fmt.Sprintf("App=%s already existed in partition=%s", appInfo.ApplicationId, appInfo.Partition))
-        } else {
-            return nil
-        }
-    }
-
-    // check if queue exist, and it is a leaf queue
-    // TODO. add acl check
-    queue := partitionInfo.getQueue(appInfo.QueueName)
-    if queue == nil || !queue.IsLeafQueue() {
-        return errors.New(fmt.Sprintf("failed to submit app=%s to queue=%s, partitio=%s, because queue doesn't exist or queue is not leaf queue", appInfo.ApplicationId,
-            appInfo.QueueName, appInfo.Partition))
-    }
-
-    // All checked, app can be added.
-    partitionInfo.applications[appInfo.ApplicationId] = appInfo
-
-    appInfo.LeafQueue = queue
-
-    return nil
+    return partitionInfo.addNewApplication(appInfo, failIfExist)
 }
 
 func (m *ClusterInfo) addPartition(name string, info *PartitionInfo) {
@@ -273,6 +251,8 @@ func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
             if err != nil {
                 errorMessage := fmt.Sprintf("Failed to create node info from request, nodeId=%s, error=%s", node.NodeId, err.Error())
                 glog.Warning(errorMessage)
+                // TODO assess impact of partition metrics (this never hit the partition)
+                m.metrics.IncFailedNodes()
                 rejectedNodes = append(rejectedNodes, &si.RejectedNode{NodeId: node.NodeId, Reason: errorMessage})
                 continue
             }
@@ -284,24 +264,21 @@ func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
                     acceptedNodes = append(acceptedNodes, &si.AcceptedNode{NodeId: node.NodeId})
                     continue
                 } else {
-                    errorMessage := fmt.Sprintf("Failures when add new node, removing the node, error=%s", err)
-                    glog.Warning(errorMessage)
-                    partition.removeNode(node.NodeId)
-                    // Remove nodes from active nodes counter
-                    m.metrics.DecActiveNodes()
+                    errorMessage := fmt.Sprintf("Failure while adding new node, rejected the node, error=%s", err)
+                    glog.V(0).Infof(errorMessage)
                     rejectedNodes = append(rejectedNodes, &si.RejectedNode{NodeId: node.NodeId, Reason: errorMessage})
                     continue
                 }
             } else {
                 errorMessage := fmt.Sprintf("Failed to find partition=%s for new node=%s", nodeInfo.Partition, node.NodeId)
-                glog.Warning(errorMessage)
+                glog.V(0).Infof(errorMessage)
+                // TODO assess impact of partition metrics (this never hit the partition)
+                m.metrics.IncFailedNodes()
                 rejectedNodes = append(rejectedNodes, &si.RejectedNode{NodeId: node.NodeId, Reason: errorMessage})
                 continue
             }
         }
 
-        m.metrics.AddFailedNodes(len(rejectedNodes))
-        m.metrics.AddActiveNodes(len(acceptedNodes))
         m.EventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMNodeUpdateEvent{
             RMId:          request.RmId,
             AcceptedNodes: acceptedNodes,
@@ -412,14 +389,21 @@ func (m *ClusterInfo) processAllocationProposalEvent(event *cacheevent.Allocatio
         return
     }
 
-    allocInfo, err := partitionInfo.addNewAllocationForSchedulingAllocation(event.AllocationProposals)
+    // we currently only support 1 allocation in the list, fail if there are more
+    if len(event.AllocationProposals) != 1 {
+        // Send reject event back to scheduler
+        m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
+            RejectedAllocations: event.AllocationProposals,
+        })
+    }
+    proposal := event.AllocationProposals[0]
+    allocInfo, err := partitionInfo.addNewAllocation(proposal)
     if err != nil {
         // Send reject event back to scheduler
         m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
             RejectedAllocations: event.AllocationProposals,
         })
     } else {
-        proposal := event.AllocationProposals[0]
         rmId := common.GetRMIdFromPartitionName(proposal.PartitionName)
 
         // Send allocation event to RM.

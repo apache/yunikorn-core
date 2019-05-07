@@ -75,7 +75,7 @@ func TestAllocationCalcRoot(t *testing.T) {
     }
     res := map[string]string{"memory":"100", "vcores":"10"}
     allocation, _ := resources.NewResourceFromConf(res)
-    err = root.IncAllocatedResource(allocation)
+    err = root.IncAllocatedResource(allocation, false)
     if err != nil {
         t.Errorf("root queue allocation failed on increment %v", err)
     }
@@ -107,7 +107,7 @@ func TestAllocationCalcSub(t *testing.T) {
 
     res := map[string]string{"memory":"100", "vcores":"10"}
     allocation, _ := resources.NewResourceFromConf(res)
-    err = parent.IncAllocatedResource(allocation)
+    err = parent.IncAllocatedResource(allocation, false)
     if err != nil {
         t.Errorf("parent queue allocation failed on increment %v", err)
     }
@@ -124,7 +124,7 @@ func TestAllocationCalcSub(t *testing.T) {
     }
 
     // add to the parent, remove from root and then try to remove from parent: root should complain
-    err = parent.IncAllocatedResource(allocation)
+    err = parent.IncAllocatedResource(allocation, false)
     if err != nil {
         t.Errorf("parent queue allocation failed on increment %v", err)
     }
@@ -177,7 +177,7 @@ func TestManagedSubQueues(t *testing.T) {
     // now set some allocation in the parent and try removal again
     res := map[string]string{"memory":"100", "vcores":"10"}
     allocation, _ := resources.NewResourceFromConf(res)
-    err = parent.IncAllocatedResource(allocation)
+    err = parent.IncAllocatedResource(allocation, false)
     if err != nil {
         t.Errorf("allocation increase failed on parent: %v", err)
     }

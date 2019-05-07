@@ -111,7 +111,7 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmId string) ([]*
             }
             // checks passed perform the real update
             glog.V(0).Infof("Updating partition %s in the cluster", partitionName)
-            err = part.updatePartitionQueues(p)
+            err = part.updatePartitionDetails(p)
             if err != nil {
                 return []*PartitionInfo{}, []*PartitionInfo{}, err
             }

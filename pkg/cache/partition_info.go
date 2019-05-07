@@ -39,19 +39,16 @@ type PartitionInfo struct {
     RMId string
 
     // Private fields need protection
-    allocations  map[string]*AllocationInfo
-    nodes        map[string]*NodeInfo
-    applications map[string]*ApplicationInfo
-    state        partitionState
-
+    allocations   map[string]*AllocationInfo
+    nodes         map[string]*NodeInfo
+    applications  map[string]*ApplicationInfo
+    state         partitionState
+    isPreemptable bool
     // Total node resources
     totalPartitionResource *resources.Resource
 
     // Reference to scheduler metrics
     metrics schedulermetrics.CoreSchedulerMetrics
-
-    // Partition Configs
-    partitionConfig *configs.PartitionConfig
 
     lock sync.RWMutex
 }
@@ -81,8 +78,8 @@ func NewPartitionInfo(partition configs.PartitionConfig, rmId string) (*Partitio
     p.Root = root
     glog.V(0).Infof("Added queue structure to partition %s", p.Name)
 
-    // set partition config
-    p.partitionConfig = &partition
+    // set preemption needed flag
+    p.isPreemptable = partition.Preemption.Enabled
 
     //TODO add placement rules and users
     return p, nil
@@ -112,6 +109,10 @@ func (pi *PartitionInfo) GetTotalPartitionResource() *resources.Resource {
     defer pi.lock.RUnlock()
 
     return pi.totalPartitionResource
+}
+
+func (pi *PartitionInfo) NeedPreemption() bool {
+    return pi.isPreemptable
 }
 
 func (pi *PartitionInfo) addNewNode(node *NodeInfo, existingAllocations []*si.Allocation) error {
@@ -527,9 +528,11 @@ func (pi *PartitionInfo) getQueue(name string) *QueueInfo {
 }
 
 // Update the queues in the partition based on the reloaded and checked config
-func (pi *PartitionInfo) updatePartitionQueues(partition configs.PartitionConfig) error {
+func (pi *PartitionInfo) updatePartitionDetails(partition configs.PartitionConfig) error {
     pi.lock.RLock()
     defer pi.lock.RUnlock()
+    // update preemption needed flag
+    pi.isPreemptable = partition.Preemption.Enabled
     // start at the root: there is only one queue
     queueConf := partition.Queues[0]
     root := pi.getQueue(queueConf.Name)
@@ -537,8 +540,6 @@ func (pi *PartitionInfo) updatePartitionQueues(partition configs.PartitionConfig
     if err != nil {
         return err
     }
-    // replace partition config
-    pi.partitionConfig = &partition
     return pi.updateQueues(queueConf.Queues, root)
 }
 
@@ -596,10 +597,4 @@ func (pi *PartitionInfo) IsRunning() bool {
 // Is the partition
 func (pi *PartitionInfo) IsStopped() bool {
     return pi.state == deleted
-}
-
-func (pi* PartitionInfo) GetPartitionConfig() *configs.PartitionConfig {
-    pi.lock.RLock()
-    defer pi.lock.RUnlock()
-    return pi.partitionConfig
 }

@@ -218,7 +218,7 @@ func (csc *ClusterSchedulingContext) updateSchedulingPartitions(partitions []*ca
 
     // Walk over the updated partitions
     for _, updatedPartition := range partitions {
-        csc.needPreemption = csc.needPreemption || updatedPartition.GetPartitionConfig().Preemption.Enabled
+        csc.needPreemption = csc.needPreemption || updatedPartition.NeedPreemption()
 
         partition := csc.partitions[updatedPartition.Name]
         if partition != nil {

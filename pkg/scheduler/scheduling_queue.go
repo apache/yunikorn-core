@@ -25,20 +25,19 @@ import (
 
 // Represents Queue inside Scheduler
 type SchedulingQueue struct {
-    Name               string              // Fully qualified path for the queue
-    CachedQueueInfo    *cache.QueueInfo    // link back to the queue in the cache
-    ProposingResource  *resources.Resource // How much resource added for proposing, this is used by queue sort when do candidate selection
-    allocatingResource *resources.Resource // Allocating resource
-    PartitionResource  *resources.Resource // For fairness calculation
-    Parent             *SchedulingQueue    // link back to the parent in the scheduler
-    pendingResource    *resources.Resource // Total pending resource
+    Name                string              // Fully qualified path for the queue
+    CachedQueueInfo     *cache.QueueInfo    // link back to the queue in the cache
+    ProposingResource   *resources.Resource // How much resource added for proposing, this is used by queue sort when do candidate selection
+    PartitionResource   *resources.Resource // For fairness calculation
+    ApplicationSortType SortType            // How applications are sorted (leaf queue only)
+    QueueSortType       SortType            // How sub queues are sorted (parent queue only)
 
-    ApplicationSortType  SortType            // How applications are sorted (leaf queue only)
-    QueueSortType        SortType            // How sub queues are sorted (parent queue only)
-
-    childrenQueues map[string]*SchedulingQueue // Only for direct children, parent queue only
-    applications   map[string]*SchedulingApplication // only for leaf queue
-
+    // Private fields need protection
+    childrenQueues     map[string]*SchedulingQueue       // Only for direct children, parent queue only
+    applications       map[string]*SchedulingApplication // only for leaf queue
+    parent             *SchedulingQueue                  // link back to the parent in the scheduler
+    allocatingResource *resources.Resource               // Allocating resource
+    pendingResource    *resources.Resource               // Total pending resource
     lock sync.RWMutex
 }
 
@@ -46,7 +45,7 @@ func NewSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo, parent *SchedulingQ
     sq := &SchedulingQueue{}
     sq.Name = cacheQueueInfo.GetQueuePath()
     sq.CachedQueueInfo = cacheQueueInfo
-    sq.Parent = parent
+    sq.parent = parent
     sq.ProposingResource = resources.NewResource()
     sq.childrenQueues = make(map[string]*SchedulingQueue)
     sq.applications = make(map[string]*SchedulingApplication)
@@ -64,11 +63,11 @@ func NewSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo, parent *SchedulingQ
     return sq
 }
 
-func (m* SchedulingQueue) GetPendingResource() *resources.Resource{
-    m.lock.RLock()
-    defer m.lock.RUnlock()
+func (sq * SchedulingQueue) GetPendingResource() *resources.Resource{
+    sq.lock.RLock()
+    defer sq.lock.RUnlock()
 
-    return m.pendingResource
+    return sq.pendingResource
 }
 
 // Update the properties for the scheduling queue based on the current cached configuration
@@ -113,6 +112,10 @@ func (sq *SchedulingQueue) updateSchedulingQueueInfo(info map[string]*cache.Queu
 func (sq *SchedulingQueue) IncPendingResource(delta *resources.Resource) {
     sq.lock.Lock()
     defer sq.lock.Unlock()
+    // update the parent
+    if sq.parent != nil {
+        sq.parent.IncPendingResource(delta)
+    }
 
     sq.pendingResource = resources.Add(sq.pendingResource, delta)
 }
@@ -121,6 +124,10 @@ func (sq *SchedulingQueue) IncPendingResource(delta *resources.Resource) {
 func (sq *SchedulingQueue) DecPendingResource(delta *resources.Resource) {
     sq.lock.Lock()
     defer sq.lock.Unlock()
+    // update the parent
+    if sq.parent != nil {
+        sq.parent.DecPendingResource(delta)
+    }
 
     sq.pendingResource = resources.Sub(sq.GetPendingResource(), delta)
 }
@@ -135,8 +142,27 @@ func (sq *SchedulingQueue) AddSchedulingApplication(app *SchedulingApplication) 
 func (sq *SchedulingQueue) RemoveSchedulingApplication(app *SchedulingApplication) {
     sq.lock.Lock()
     defer sq.lock.Unlock()
+    // Update pending resource of this queue and its parents
+    totalPending := app.Requests.GetPendingResource()
+    if !resources.IsZero(totalPending) {
+        sq.pendingResource = resources.Sub(sq.GetPendingResource(), totalPending)
+        sq.parent.DecPendingResource(totalPending)
+    }
 
     delete(sq.applications, app.ApplicationInfo.ApplicationId)
+}
+
+// Get a copy of the child queues
+func (sq *SchedulingQueue) GetCopyOfChildren() map[string]*SchedulingQueue {
+    sq.lock.RLock()
+    defer sq.lock.RUnlock()
+
+    // add self
+    children := make(map[string]*SchedulingQueue)
+    for k, v := range sq.childrenQueues {
+        children[k] = v
+    }
+    return children
 }
 
 // Create a flat queue structure at this level
@@ -151,6 +177,38 @@ func (sq *SchedulingQueue) GetFlatChildrenQueues(allQueues map[string]*Schedulin
         allQueues[child.Name] = child
         child.GetFlatChildrenQueues(allQueues)
     }
+}
+
+// Remove a child queue from this queue.
+// No checks are performed: if the child has been removed already it is a noop.
+// This may only be called by the queue removal itself on the registered parent.
+// Queue removal is always a bottom up action: leafs first then the parent.
+func (sq *SchedulingQueue) removeChildQueue(name string) {
+    sq.lock.RLock()
+    defer sq.lock.RUnlock()
+
+    delete(sq.childrenQueues, name)
+}
+
+// Remove the queue from the structure.
+// Since nothing is allocated there shouldn't be anything referencing this queue any more.
+// The real removal is removing the queue from the parent's child list
+func (sq *SchedulingQueue) RemoveQueue() bool {
+    sq.lock.RLock()
+    defer sq.lock.RUnlock()
+
+    // cannot remove a managed queue that is running
+    if sq.isManaged() && sq.isRunning() {
+        return false
+    }
+    // cannot remove a queue that has children or applications assigned
+    if len(sq.childrenQueues) > 0 || len(sq.applications) > 0 {
+        return false
+    }
+    glog.V(4).Infof("Removing queue: %s", sq.Name)
+    // root is always managed and is the only queue with a nil parent: no need to guard
+    sq.parent.removeChildQueue(sq.Name)
+    return true
 }
 
 // Is this queue a leaf or not (i.e parent)
@@ -173,8 +231,14 @@ func (sq *SchedulingQueue) isStopped() bool {
     return sq.CachedQueueInfo.IsStopped()
 }
 
+// Is this queue managed or not.
+// link back to the underlying queue object to prevent out of sync types
+func (sq *SchedulingQueue) isManaged() bool {
+    return sq.CachedQueueInfo.IsManaged()
+}
+
 func (sq *SchedulingQueue) isRoot() bool {
-    return sq.Parent == nil
+    return sq.parent == nil
 }
 
 func (sq *SchedulingQueue) GetAllocatingResource() *resources.Resource {

@@ -19,11 +19,13 @@ package cache
 import (
     "fmt"
     "github.com/golang/glog"
+    "github.com/looplab/fsm"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/queuemetrics"
     "strings"
     "sync"
+    "time"
 )
 
 const (
@@ -50,7 +52,8 @@ type QueueInfo struct {
     allocatedResource  *resources.Resource   // set based on allocation
     isLeaf             bool                  // this is a leaf queue or not (i.e. parent)
     isManaged          bool                  // queue is part of the config, not auto created
-    state              queueState            // the state of the queue for scheduling
+    stateMachine       *fsm.FSM              // the state of the queue for scheduling
+    stateTime          time.Time             // last time the state was updated (needed for cleanup)
     children           map[string]*QueueInfo // list of direct children
     lock               sync.RWMutex          // lock for updating the queue
 }
@@ -62,7 +65,7 @@ func NewManagedQueue(conf configs.QueueConfig, parent *QueueInfo) (*QueueInfo, e
         Parent:            parent,
         isManaged:         true,
         isLeaf:            !conf.Parent,
-        state:             running,
+        stateMachine:      newObjectState(),
         allocatedResource: resources.NewResource(),
     }
 
@@ -95,7 +98,7 @@ func NewUnmanagedQueue(name string, leaf bool, parent *QueueInfo) (*QueueInfo, e
     qi := &QueueInfo{Name: strings.ToLower(name),
         Parent:            parent,
         isLeaf:            leaf,
-        state:             running,
+        stateMachine:      newObjectState(),
         allocatedResource: resources.NewResource(),
     }
     // TODO set resources and properties on unmanaged queues
@@ -111,6 +114,22 @@ func NewUnmanagedQueue(name string, leaf bool, parent *QueueInfo) (*QueueInfo, e
     return qi, nil
 }
 
+// Handle the state event for the application.
+// The state machine handles the locking.
+func (qi *QueueInfo) HandleQueueEvent(event SchedulingObjectEvent) error {
+    err := qi.stateMachine.Event(event.String(), qi.Name)
+    // err is nil the state transition was done
+    if err == nil {
+        qi.stateTime =time.Now()
+        return nil
+    }
+    // handle the same state transition not nil error (limit of fsm).
+    if err.Error() == "no transition" {
+        return nil
+    }
+    return err
+}
+
 func (qi *QueueInfo) GetAllocatedResource() *resources.Resource {
     qi.lock.RLock()
     defer qi.lock.RUnlock()
@@ -121,6 +140,11 @@ func (qi *QueueInfo) GetAllocatedResource() *resources.Resource {
 // Return if this is a leaf queue or not
 func (qi *QueueInfo) IsLeafQueue() bool {
     return qi.isLeaf
+}
+
+// Return if this is a leaf queue or not
+func (qi *QueueInfo) IsManaged() bool {
+    return qi.isManaged
 }
 
 // Get the fully qualified path name
@@ -220,7 +244,7 @@ func (qi *QueueInfo) GetCopyOfChildren() map[string]*QueueInfo {
 // No checks are performed: if the child has been removed already it is a noop.
 // This may only be called by the queue removal itself on the registered parent.
 // Queue removal is always a bottom up action: leafs first then the parent.
-func (qi *QueueInfo) RemoveChildQueue(name string) {
+func (qi *QueueInfo) removeChildQueue(name string) {
     qi.lock.Lock()
     defer qi.lock.Unlock()
     delete(qi.children, strings.ToLower(name))
@@ -232,7 +256,7 @@ func (qi *QueueInfo) RemoveChildQueue(name string) {
 func (qi *QueueInfo) RemoveQueue() bool {
     qi.lock.Lock()
     defer qi.lock.Unlock()
-    // cannot remove a managed queue that is is running
+    // cannot remove a managed queue that is running
     if qi.isManaged && qi.IsRunning() {
         return false
     }
@@ -240,7 +264,9 @@ func (qi *QueueInfo) RemoveQueue() bool {
     if len(qi.children) > 0 || !resources.IsZero(qi.allocatedResource) {
         return false
     }
-    qi.Parent.RemoveChildQueue(qi.Name)
+    glog.V(4).Infof("Removing queue: %s", qi.Name)
+    // root is always managed and is the only queue with a nil parent: no need to guard
+    qi.Parent.removeChildQueue(qi.Name)
     return true
 }
 
@@ -254,8 +280,10 @@ func (qi *QueueInfo) MarkQueueForRemoval() {
     // Mark the managed queue for deletion: it is removed from the config let it drain.
     // Also mark all the managed children for deletion.
     if qi.isManaged {
-        glog.V(0).Infof("marking managed queue %s for deletion", qi.GetQueuePath())
-        qi.state = draining
+        glog.V(0).Infof("Marking managed queue %s for deletion", qi.GetQueuePath())
+        if err := qi.HandleQueueEvent(Remove); err != nil {
+            glog.V(0).Infof("Failed to mark managed queue %s for deletion; %v", qi.GetQueuePath(), err)
+        }
         if qi.children != nil || len(qi.children) > 0 {
             for _, child := range qi.children {
                 child.MarkQueueForRemoval()
@@ -323,31 +351,18 @@ func mergeProperties(parent map[string]string, child map[string]string) map[stri
     return merged
 }
 
-// Queue states for a queue indirectly leveraged by the scheduler
-// - new application can only be assigned in a running state
-// - new allocation should only be made in a draining and running state
-// - in a stopped state nothing may change on the queue
-// NOTE: states could be expanded and should not be referenced directly outside the QueueInfo
-const (
-    running queueState = iota
-    draining
-    stopped
-)
-
-type queueState int
-
 // Is the queue marked for deletion and can only handle existing application requests.
 // No new applications will be accepted.
 func (qi *QueueInfo) IsDraining() bool {
-    return qi.state == draining
+    return qi.stateMachine.Current() == Draining.String()
 }
 
 // Is the queue in a normal active state.
 func (qi *QueueInfo) IsRunning() bool {
-    return qi.state == running
+    return qi.stateMachine.Current() == Active.String()
 }
 
 // Is the queue stopped, not active in scheduling at all.
 func (qi *QueueInfo) IsStopped() bool {
-    return qi.state == stopped
+    return qi.stateMachine.Current() == Stopped.String()
 }

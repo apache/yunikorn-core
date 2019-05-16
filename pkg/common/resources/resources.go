@@ -515,7 +515,7 @@ func ComponentWiseMax(left *Resource, right *Resource) *Resource {
 func IsZero(zero *Resource) bool {
     if zero != nil {
         for _, v := range zero.Resources {
-            if v > 0 {
+            if v != 0 {
                 return false
             }
         }

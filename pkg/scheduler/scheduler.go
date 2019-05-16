@@ -17,7 +17,6 @@ limitations under the License.
 package scheduler
 
 import (
-    "errors"
     "fmt"
     "github.com/golang/glog"
     "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
@@ -40,9 +39,15 @@ import (
 //
 // Scheduler may maintain its local status which is different from SchedulerCache
 type Scheduler struct {
-    clusterInfo *cache.ClusterInfo
+    // Private fields need protection
+    clusterInfo              *cache.ClusterInfo        // link to the cache object
+    clusterSchedulingContext *ClusterSchedulingContext // main context
+    preemptionContext        *preemptionContext        // Preemption context
+    eventHandlers            handler.EventHandlers     // list of event handlers
+    pendingSchedulerEvents   chan interface{}          // queue for scheduler events
+    lock                     sync.RWMutex
 
-    clusterSchedulingContext *ClusterSchedulingContext
+    metrics schedulermetrics.CoreSchedulerMetrics // Reference to scheduler metrics
 
     // Wait till next try
     // (It is designed to be accessed under a single goroutine, no lock needed).
@@ -52,22 +57,7 @@ type Scheduler struct {
     // 2) This also indicate starved requests so preemption can do surgical preemption based on this.
     waitTillNextTry map[string]uint64
 
-    EventHandlers handler.EventHandlers
-
-    lock sync.RWMutex
-
-    // Any changes to partition, like add/remove partition
-    partitionChangeLock sync.RWMutex
-
-    pendingSchedulerEvents chan interface{}
-
-    // Reference to scheduler metrics
-    metrics schedulermetrics.CoreSchedulerMetrics
-
-    // Preemption context
-    preemptionContext *preemptionContext
-
-    step uint64
+    step uint64 // TODO document this, see ask_finder@findMayAllocationFromApplication
 }
 
 func NewScheduler(clusterInfo *cache.ClusterInfo, metrics schedulermetrics.CoreSchedulerMetrics) *Scheduler {
@@ -83,7 +73,7 @@ func NewScheduler(clusterInfo *cache.ClusterInfo, metrics schedulermetrics.CoreS
 
 // Start service
 func (m *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule bool) {
-    m.EventHandlers = handlers
+    m.eventHandlers = handlers
 
     // Start event handlers
     go m.handleSchedulerEvent()
@@ -129,13 +119,6 @@ func (m *Scheduler) internalPreemption() {
     }
 }
 
-func (m *Scheduler) updateQueuePendingResources(queue *SchedulingQueue, pendingResourceDelta *resources.Resource) {
-    for queue != nil {
-        queue.IncPendingResource(pendingResourceDelta)
-        queue = queue.Parent
-    }
-}
-
 func (m *Scheduler) updateSchedulingRequest(schedulingAsk *SchedulingAllocationAsk) error {
     m.lock.Lock()
     defer m.lock.Unlock()
@@ -143,16 +126,15 @@ func (m *Scheduler) updateSchedulingRequest(schedulingAsk *SchedulingAllocationA
     // Get SchedulingApplication
     schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(schedulingAsk.ApplicationId, schedulingAsk.PartitionName)
     if schedulingApp == nil {
-        return errors.New(fmt.Sprintf("Cannot find scheduling-app=%s, for allocation=%s", schedulingAsk.ApplicationId, schedulingAsk.AskProto.AllocationKey))
+        return fmt.Errorf("cannot find scheduling application %s, for allocation %s", schedulingAsk.ApplicationId, schedulingAsk.AskProto.AllocationKey)
     }
 
-    // Succeeded
-    if pendingDelta, err := schedulingApp.Requests.AddAllocationAsk(schedulingAsk); err == nil {
-        m.updateQueuePendingResources(schedulingApp.ParentQueue, pendingDelta)
-        return nil
-    } else {
-        return err
+    // found now update the pending requests for the queues (if
+    pendingDelta, err := schedulingApp.Requests.AddAllocationAsk(schedulingAsk)
+    if err == nil && !resources.IsZero(pendingDelta) {
+        schedulingApp.queue.IncPendingResource(pendingDelta)
     }
+    return err
 }
 
 func (m *Scheduler) updateSchedulingRequestPendingAskByDelta(allocProposal *commonevents.AllocationProposal, deltaPendingAsk int32) error {
@@ -162,40 +144,33 @@ func (m *Scheduler) updateSchedulingRequestPendingAskByDelta(allocProposal *comm
     // Get SchedulingApplication
     schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(allocProposal.ApplicationId, allocProposal.PartitionName)
     if schedulingApp == nil {
-        return errors.New(fmt.Sprintf("Cannot find scheduling-app=%s, for allocation=%s", allocProposal.ApplicationId, allocProposal.AllocationKey))
+        return fmt.Errorf("cannot find scheduling application %s, for allocation ID %s", allocProposal.ApplicationId, allocProposal.AllocationKey)
     }
 
-    // Succeeded
-    if pendingDelta, err := schedulingApp.Requests.UpdateAllocationAskRepeat(allocProposal.AllocationKey, deltaPendingAsk); err == nil {
-        m.updateQueuePendingResources(schedulingApp.ParentQueue, pendingDelta)
-        return nil
-    } else {
-        return err
+    // found, now update the pending requests for the queues
+    pendingDelta, err := schedulingApp.Requests.UpdateAllocationAskRepeat(allocProposal.AllocationKey, deltaPendingAsk)
+    if err == nil && !resources.IsZero(pendingDelta) {
+        schedulingApp.queue.IncPendingResource(pendingDelta)
     }
+    return err
 }
 
 // When a new app added, invoked by external
 func (m *Scheduler) addNewApplication(info *cache.ApplicationInfo) error {
     schedulingApp := NewSchedulingApplication(info)
 
-    if err := m.clusterSchedulingContext.AddSchedulingApplication(schedulingApp); err != nil {
-        return err
-    }
-
-    return nil
+    return m.clusterSchedulingContext.AddSchedulingApplication(schedulingApp)
 }
 
 func (m *Scheduler) removeApplication(request *si.RemoveApplicationRequest) error {
     m.lock.Lock()
     defer m.lock.Unlock()
 
-    _, err := m.clusterSchedulingContext.RemoveSchedulingApplication(request.ApplicationId, request.PartitionName)
-
-    if err != nil {
+    if _, err := m.clusterSchedulingContext.RemoveSchedulingApplication(request.ApplicationId, request.PartitionName); err != nil {
+        glog.V(2).Infof("Failed removing application %s from partition %s: %v", request.ApplicationId, request.PartitionName, err)
         return err
     }
-
-    glog.V(2).Infof("Removed app=%s from partition=%s", request.ApplicationId, request.PartitionName)
+    glog.V(2).Infof("Removed application %s from partition %s", request.ApplicationId, request.PartitionName)
     return nil
 }
 
@@ -224,14 +199,10 @@ func (m *Scheduler) processAllocationReleaseByAllocationKey(allocationAsksToRele
     // For all Requests
     for _, toRelease := range allocationAsksToRelease {
         schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(toRelease.ApplicationId, toRelease.PartitionName)
-        if nil != schedulingApp {
+        if schedulingApp != nil {
             delta, _ := schedulingApp.Requests.RemoveAllocationAsk(toRelease.Allocationkey)
-            if delta != nil {
-                schedulingQueue := schedulingApp.ParentQueue
-                for schedulingQueue != nil {
-                    schedulingQueue.IncPendingResource(delta)
-                    schedulingQueue = schedulingQueue.Parent
-                }
+            if !resources.IsZero(delta) {
+                schedulingApp.queue.IncPendingResource(delta)
             }
 
             glog.V(2).Infof("Removed allocation=%s from app=%s, reduced pending resource=%v, message=%s",
@@ -255,7 +226,7 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
     // The reason to send to scheduler before cache is, we need to clean up asks otherwise new allocations will be created.
     if ev.ToReleases != nil {
         m.processAllocationReleaseByAllocationKey(ev.ToReleases.AllocationAsksToRelease)
-        m.EventHandlers.CacheEventHandler.HandleEvent(cacheevent.NewReleaseAllocationEventFromProto(ev.ToReleases.AllocationsToRelease))
+        m.eventHandlers.CacheEventHandler.HandleEvent(cacheevent.NewReleaseAllocationEventFromProto(ev.ToReleases.AllocationsToRelease))
     }
 
     if len(ev.NewAsks) > 0 {
@@ -275,7 +246,7 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
 
         // Reject asks to RM Proxy
         if len(rejectedAsks) > 0 {
-            m.EventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMRejectedAllocationAskEvent{
+            m.eventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMRejectedAllocationAskEvent{
                 RejectedAllocationAsks: rejectedAsks,
                 RMId:                   rmId,
             })
@@ -289,10 +260,10 @@ func (m *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerAp
             app := j.(*cache.ApplicationInfo)
             if err := m.addNewApplication(app); err != nil {
                 // update cache
-                m.EventHandlers.CacheEventHandler.HandleEvent(&cacheevent.RejectedNewApplicationEvent{ApplicationId: app.ApplicationId, Reason: err.Error()})
+                m.eventHandlers.CacheEventHandler.HandleEvent(&cacheevent.RejectedNewApplicationEvent{ApplicationId: app.ApplicationId, Reason: err.Error()})
                 // notify RM proxy about rejected apps
                 rejectedApps := make([]*si.RejectedApplication, 0)
-                m.EventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMApplicationUpdateEvent{
+                m.eventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMApplicationUpdateEvent{
                     RMId:                 common.GetRMIdFromPartitionName(app.Partition),
                     AcceptedApplications: nil,
                     RejectedApplications: append(rejectedApps, &si.RejectedApplication{
@@ -301,10 +272,10 @@ func (m *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerAp
                     }),
                 })
                 // app rejects apps
-                app.HandleApplicationEvent(cache.RejectApplication)
+                _ = app.HandleApplicationEvent(cache.RejectApplication)
             }
             // app is accepted by scheduler
-            app.HandleApplicationEvent(cache.AcceptApplication)
+            _ = app.HandleApplicationEvent(cache.AcceptApplication)
         }
     }
 
@@ -313,10 +284,10 @@ func (m *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerAp
             err := m.removeApplication(app)
 
             if err != nil {
-                glog.V(0).Infof("Failed when remove app=%s, partition=%s, error=%s", app.ApplicationId, app.PartitionName, err)
+                glog.V(0).Infof("Failed to remove application %s from partition %s, error: %v", app.ApplicationId, app.PartitionName, err)
                 continue
             }
-            m.EventHandlers.CacheEventHandler.HandleEvent(&cacheevent.RemovedApplicationEvent{ApplicationId: app.ApplicationId, PartitionName: app.PartitionName})
+            m.eventHandlers.CacheEventHandler.HandleEvent(&cacheevent.RemovedApplicationEvent{ApplicationId: app.ApplicationId, PartitionName: app.PartitionName})
         }
     }
 }
@@ -325,7 +296,7 @@ func (m *Scheduler) removePartitionsBelongToRM(event *commonevents.RemoveRMParti
     m.clusterSchedulingContext.RemoveSchedulingPartitionsByRMId(event.RmId)
 
     // Send this event to cache
-    m.EventHandlers.CacheEventHandler.HandleEvent(event)
+    m.eventHandlers.CacheEventHandler.HandleEvent(event)
 }
 
 func (m *Scheduler) processUpdatePartitionConfigsEvent(event *schedulerevent.SchedulerUpdatePartitionsConfigEvent) {

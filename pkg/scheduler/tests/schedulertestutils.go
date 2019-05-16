@@ -92,7 +92,7 @@ func waitForAcceptedApplications(m *MockRMCallbackHandler, appId string, timeout
             return
         }
         if i*100 >= timeoutMs {
-            m.t.Fatalf("Failed to wait AcceptedApplications.")
+            m.t.Fatalf("Failed to wait AcceptedApplications: %s", appId)
             return
         }
     }
@@ -113,7 +113,7 @@ func waitForRejectedApplications(m *MockRMCallbackHandler, appId string, timeout
             return
         }
         if i*100 >= timeoutMs {
-            m.t.Fatalf("Failed to wait RejectedApplications.")
+            m.t.Fatalf("Failed to wait RejectedApplications: %s", appId)
             return
         }
     }
@@ -134,7 +134,7 @@ func waitForAcceptedNodes(m *MockRMCallbackHandler, nodeId string, timeoutMs int
             return
         }
         if i*100 >= timeoutMs {
-            m.t.Fatalf("Failed to wait AcceptedNode.")
+            m.t.Fatalf("Failed to wait AcceptedNode: %s", nodeId)
             return
         }
     }
@@ -150,7 +150,7 @@ func waitForPendingResource(t *testing.T, queue *scheduler.SchedulingQueue, memo
             return
         }
         if i*100 >= timeoutMs {
-            t.Fatalf("Failed to wait pending resource, actual = %v, expected = %v", queue.GetPendingResource().Resources[resources.MEMORY], memory)
+            t.Fatalf("Failed to wait pending resource on queue %s, actual = %v, expected = %v", queue.Name, queue.GetPendingResource().Resources[resources.MEMORY], memory)
             return
         }
     }
@@ -187,7 +187,7 @@ func waitForAllocations(m *MockRMCallbackHandler, nAlloc int, timeoutMs int) {
             return
         }
         if i*100 >= timeoutMs {
-            m.t.Fatalf("Failed to wait Allocations")
+            m.t.Fatalf("Failed to wait Allocations expected %d, got %d", nAlloc, allocLen)
             return
         }
     }
@@ -209,7 +209,7 @@ func waitForNodesAllocatedResource(t *testing.T, cache *cache.ClusterInfo, parti
             return
         }
         if i*100 >= timeoutMs {
-            t.Fatalf("Failed to wait Allocations")
+            t.Fatalf("Failed to wait Allocations on partition %s and node %v", partitionName, nodeIds)
             return
         }
     }

@@ -17,7 +17,6 @@ limitations under the License.
 package cache
 
 import (
-    "github.com/golang/glog"
     "github.com/looplab/fsm"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
     "sync"
@@ -26,119 +25,119 @@ import (
 
 /* Related to applications */
 type ApplicationInfo struct {
-    ApplicationId string
-
-    allocatedResource *resources.Resource
-
-    Partition string
-
-    QueueName string
-
-    LeafQueue *QueueInfo
-
-    // Private fields need protection
-    allocations map[string]*AllocationInfo
-
-    // application state machine
-    fsm *fsm.FSM
-
+    ApplicationId  string
+    Partition      string
+    QueueName      string
     SubmissionTime int64
 
+    // Private fields need protection
+    leafQueue         *QueueInfo                 // link to the leaf queue
+    allocatedResource *resources.Resource        // total allocated resources
+    allocations       map[string]*AllocationInfo // list of all allocations
+    stateMachine      *fsm.FSM                   // application state machine
     lock sync.RWMutex
 }
 
-func (m* ApplicationInfo) GetAllocatedResource() *resources.Resource {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
-
-    return m.allocatedResource
-}
-
-func (m *ApplicationInfo) GetAllocation(uuid string) *AllocationInfo {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
-
-    return m.allocations[uuid]
-}
-
+// Create a new application
 func NewApplicationInfo(appId string, partition, queueName string) *ApplicationInfo {
-    j := &ApplicationInfo{ApplicationId: appId}
-    j.allocatedResource = resources.NewResource()
-    j.allocations = make(map[string]*AllocationInfo)
-    j.Partition = partition
-    j.QueueName = queueName
-    j.SubmissionTime = time.Now().UnixNano()
-    j.fsm = fsm.NewFSM(
-        New.String(), fsm.Events{
-            {Name: AcceptApplication.String(), Src: []string{New.String()}, Dst: Accepted.String()},
-            {Name: RejectApplication.String(), Src: []string{New.String()}, Dst: Rejected.String()},
-            {Name: RunApplication.String(), Src: []string{Accepted.String(), Running.String()}, Dst: Running.String()},
-            {Name: CompleteApplication.String(), Src: []string{Running.String()}, Dst: Completed.String()},
-        }, fsm.Callbacks{
-            "enter_state": func(event *fsm.Event) {
-                glog.V(0).Infof(
-                    "application %s transited to state %s from %s, on event %s",
-                    j.ApplicationId, event.Dst, event.Src, event.Event)
-            },
-        })
-    return j
+    ai := &ApplicationInfo{ApplicationId: appId}
+    ai.allocatedResource = resources.NewResource()
+    ai.allocations = make(map[string]*AllocationInfo)
+    ai.Partition = partition
+    ai.QueueName = queueName
+    ai.SubmissionTime = time.Now().UnixNano()
+    ai.stateMachine = newAppState()
+    return ai
 }
 
-func (m *ApplicationInfo) AddAllocation(info *AllocationInfo) {
-    m.lock.Lock()
-    defer m.lock.Unlock()
+// Return the current allocations for the application.
+func (ai *ApplicationInfo) GetAllAllocations() []*AllocationInfo {
+    ai.lock.RLock()
+    defer ai.lock.RUnlock()
 
-    m.allocations[info.AllocationProto.Uuid] = info
-    m.allocatedResource = resources.Add(m.allocatedResource, info.AllocatedResource)
+    var allocations []*AllocationInfo
+    for _, alloc := range ai.allocations {
+        allocations = append(allocations, alloc)
+    }
+    return allocations
 }
 
-func (m *ApplicationInfo) RemoveAllocation(uuid string) *AllocationInfo {
-    m.lock.Lock()
-    defer m.lock.Unlock()
+// Return the current state for the application.
+// The state machine handles the locking.
+func (ai *ApplicationInfo) GetApplicationState() string {
+    return ai.stateMachine.Current()
+}
 
-    alloc := m.allocations[uuid]
+// Handle the state event for the application.
+// The state machine handles the locking.
+func (ai *ApplicationInfo) HandleApplicationEvent(event ApplicationEvent) error {
+    err := ai.stateMachine.Event(event.String(), ai.ApplicationId);
+    // handle the same state transition not nil error (limit of fsm).
+    if err != nil  && err.Error() == "no transition" {
+        return nil
+    }
+    return err
+}
+
+// Return the total allocated resources for the application.
+func (ai * ApplicationInfo) GetAllocatedResource() *resources.Resource {
+    ai.lock.RLock()
+    defer ai.lock.RUnlock()
+
+    return ai.allocatedResource
+}
+
+// Set the leaf queue the application runs in. Update the queue name also to match as this might be different from the
+// queue that was given when submitting the application.
+func (ai *ApplicationInfo) setQueue(leaf *QueueInfo) {
+    ai.lock.Lock()
+    defer ai.lock.Unlock()
+
+    ai.leafQueue = leaf
+    ai.QueueName = leaf.GetQueuePath()
+}
+
+// Add a new allocation to the application
+func (ai *ApplicationInfo) addAllocation(info *AllocationInfo) {
+    ai.lock.Lock()
+    defer ai.lock.Unlock()
+
+    ai.allocations[info.AllocationProto.Uuid] = info
+    ai.allocatedResource = resources.Add(ai.allocatedResource, info.AllocatedResource)
+}
+
+// Remove a specific allocation from the application.
+// Return the allocation that was removed.
+func (ai *ApplicationInfo) removeAllocation(uuid string) *AllocationInfo {
+    ai.lock.Lock()
+    defer ai.lock.Unlock()
+
+    alloc := ai.allocations[uuid]
 
     if alloc != nil {
         // When app has the allocation, update map, and update allocated resource of the app
-        m.allocatedResource = resources.Sub(m.allocatedResource, alloc.AllocatedResource)
-        delete(m.allocations, uuid)
+        ai.allocatedResource = resources.Sub(ai.allocatedResource, alloc.AllocatedResource)
+        delete(ai.allocations, uuid)
         return alloc
     }
 
     return nil
 }
 
-func (m *ApplicationInfo) CleanupAllAllocations() []*AllocationInfo {
+// Remove all allocations from the application.
+// All allocations that have been removed are returned.
+func (ai *ApplicationInfo) removeAllAllocations() []*AllocationInfo {
     allocationsToRelease := make([]*AllocationInfo, 0)
 
-    m.lock.Lock()
-    defer m.lock.Unlock()
+    ai.lock.Lock()
+    defer ai.lock.Unlock()
 
-    for _, alloc := range m.allocations {
+    for _, alloc := range ai.allocations {
         allocationsToRelease = append(allocationsToRelease, alloc)
     }
     // cleanup allocated resource for app
-    m.allocatedResource = resources.NewResource()
-    m.allocations = make(map[string]*AllocationInfo)
+    ai.allocatedResource = resources.NewResource()
+    ai.allocations = make(map[string]*AllocationInfo)
 
     return allocationsToRelease
-}
-
-func (m *ApplicationInfo) GetAllAllocations() []*AllocationInfo {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
-
-    var allocations []*AllocationInfo
-    for _, alloc := range m.allocations {
-        allocations = append(allocations, alloc)
-    }
-    return allocations
-}
-
-func (m *ApplicationInfo) GetApplicationState() string {
-    return m.fsm.Current()
-}
-
-func (m *ApplicationInfo) HandleApplicationEvent(event ApplicationEvent) error {
-    return m.fsm.Event(event.String())
 }

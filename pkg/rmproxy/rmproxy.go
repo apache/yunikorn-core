@@ -87,7 +87,7 @@ func (m *RMProxy) handleRMRecvUpdateResponseError(rmId string, err error) {
 
 func (m *RMProxy) processUpdateResponse(rmId string, response *si.UpdateResponse) {
     m.lock.RLock()
-    m.lock.RUnlock()
+    defer m.lock.RUnlock()
 
     if callback := m.rmIdToCallback[rmId]; callback != nil {
         if err := callback.RecvUpdateResponse(response); err != nil {

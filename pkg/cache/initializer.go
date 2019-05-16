@@ -34,7 +34,7 @@ func createPartitionInfos(clusterInfo *ClusterInfo, conf *configs.SchedulerConfi
     for _, p := range conf.Partitions {
         partitionName := common.GetNormalizedPartitionName(p.Name, rmId)
         p.Name = partitionName
-        partition, err := newPartitionInfo(p, rmId)
+        partition, err := newPartitionInfo(p, rmId, clusterInfo)
         if err != nil {
             return []*PartitionInfo{}, err
         }
@@ -105,7 +105,7 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmId string) ([]*
         part, ok := clusterInfo.partitions[p.Name]
         if ok {
             // make sure the new info passes all checks
-            _, err = newPartitionInfo(p, rmId)
+            _, err = newPartitionInfo(p, rmId, nil)
             if err != nil {
                 return []*PartitionInfo{}, []*PartitionInfo{}, err
             }
@@ -119,7 +119,7 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmId string) ([]*
             // not found: new partition, no checks needed
             glog.V(0).Infof("Added partition %s in the cluster", partitionName)
 
-            part, err = newPartitionInfo(p, rmId)
+            part, err = newPartitionInfo(p, rmId, clusterInfo)
             clusterInfo.addPartition(partitionName, part)
             if err != nil {
                 return []*PartitionInfo{}, []*PartitionInfo{}, err
@@ -135,10 +135,8 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmId string) ([]*
     for _, part := range clusterInfo.partitions {
         if !visited[part.Name] {
             part.MarkPartitionForRemoval()
-            // TODO clean up the partition and remove it
-            // clusterInfo.removePartition(part.Name)
             deletedPartitions = append(deletedPartitions, part)
-            glog.V(0).Infof("Removed partition %s from the cluster", part.Name)
+            glog.V(0).Infof("Marked partition %s for removal from the cluster", part.Name)
         }
     }
 
@@ -147,9 +145,9 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmId string) ([]*
 
 // Create a new checked PartitionInfo
 // convenience method that wraps creation and checking the settings.
-func newPartitionInfo(part configs.PartitionConfig, rmId string) (*PartitionInfo, error) {
+func newPartitionInfo(part configs.PartitionConfig, rmId string, info *ClusterInfo) (*PartitionInfo, error) {
 
-    partition, err := NewPartitionInfo(part, rmId)
+    partition, err := NewPartitionInfo(part, rmId, info)
     if err != nil {
         return nil, err
     }

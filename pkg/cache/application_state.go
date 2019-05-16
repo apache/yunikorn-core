@@ -16,6 +16,11 @@ limitations under the License.
 
 package cache
 
+import (
+	"github.com/golang/glog"
+	"github.com/looplab/fsm"
+)
+
 // ----------------------------------
 // application events
 // ----------------------------------
@@ -26,10 +31,11 @@ const (
 	RejectApplication
 	RunApplication
 	CompleteApplication
+	KillApplication
 )
 
 func (ae ApplicationEvent) String() string {
-	return [...]string{"AcceptApplication", "RejectApplication", "RunApplication", "CompleteApplication"}[ae]
+	return [...]string{"AcceptApplication", "RejectApplication", "RunApplication", "CompleteApplication", "KillApplication"}[ae]
 }
 
 // ----------------------------------
@@ -43,8 +49,44 @@ const (
 	Rejected
 	Running
 	Completed
+	Killed
 )
 
 func (as ApplicationState) String() string {
-	return [...]string{"New", "Accepted", "Rejected", "Running", "Completed"}[as]
+	return [...]string{"New", "Accepted", "Rejected", "Running", "Completed", "Killed"}[as]
+}
+
+func newAppState() *fsm.FSM {
+	return fsm.NewFSM(
+		New.String(), fsm.Events{
+			{
+				Name: AcceptApplication.String(),
+				Src: []string{New.String()},
+				Dst: Accepted.String(),
+			},{
+				Name: RejectApplication.String(),
+				Src: []string{New.String()},
+				Dst: Rejected.String(),
+			},{
+				Name: RunApplication.String(),
+				Src: []string{Accepted.String(), Running.String()},
+				Dst: Running.String(),
+			},{
+				Name: CompleteApplication.String(),
+				Src: []string{Running.String()},
+				Dst: Completed.String(),
+			},{
+				Name: KillApplication.String(),
+				Src: []string{New.String(), Accepted.String(), Running.String(), Killed.String()},
+				Dst: Killed.String(),
+			},
+		},
+		fsm.Callbacks{
+			"enter_state": func(event *fsm.Event) {
+				glog.V(0).Infof(
+					"Application %s transitioned to state %s from %s, on event %s",
+					event.Args[0], event.Dst, event.Src, event.Event)
+			},
+		},
+	)
 }

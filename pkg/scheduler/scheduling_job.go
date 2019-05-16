@@ -22,12 +22,12 @@ import (
 )
 
 type SchedulingApplication struct {
-    ApplicationInfo *cache.ApplicationInfo
-    Requests        *SchedulingRequests
-    ParentQueue     *SchedulingQueue
+    ApplicationInfo      *cache.ApplicationInfo
+    Requests             *SchedulingRequests
+    MayAllocatedResource *resources.Resource // Maybe allocated, set by scheduler
 
-    // Maybe allocated, set by scheduler
-    MayAllocatedResource *resources.Resource
+    // Private fields need protection
+    queue *SchedulingQueue // queue the application is running in
 }
 
 func NewSchedulingApplication(appInfo *cache.ApplicationInfo) *SchedulingApplication {

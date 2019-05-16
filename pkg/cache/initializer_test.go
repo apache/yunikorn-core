@@ -394,7 +394,7 @@ partitions:
     // Check the partitions: config update just marks as deleted does not do full remove
     assert.Equal(t, 2, len(clusterInfo.partitions))
     gpuPartition = clusterInfo.partitions["[" + rmId + "]gpu"]
-    if gpuPartition == nil  && !gpuPartition.IsStopped() {
+    if gpuPartition != nil  && !gpuPartition.IsDraining() {
         t.Errorf("Failed removing the gpu partition")
         return
     }

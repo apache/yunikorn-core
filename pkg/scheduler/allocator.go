@@ -67,7 +67,7 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
                 proposal := newSingleAllocationProposal(alloc)
                 err := m.updateSchedulingRequestPendingAskByDelta(proposal.AllocationProposals[0], -1)
                 if err == nil {
-                    m.EventHandlers.CacheEventHandler.HandleEvent(newSingleAllocationProposal(alloc))
+                    m.eventHandlers.CacheEventHandler.HandleEvent(newSingleAllocationProposal(alloc))
                     confirmedAllocations = append(confirmedAllocations, alloc)
                 } else {
                     glog.V(2).Infof("Issues when trying to send proposal, err=%s", err.Error())

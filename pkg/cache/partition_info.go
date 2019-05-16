@@ -19,6 +19,7 @@ package cache
 import (
     "fmt"
     "github.com/golang/glog"
+    "github.com/looplab/fsm"
     "github.com/satori/go.uuid"
     "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/commonevents"
@@ -28,6 +29,7 @@ import (
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/webservice/dao"
     "strings"
     "sync"
+    "time"
 )
 
 
@@ -41,21 +43,23 @@ type PartitionInfo struct {
     allocations   map[string]*AllocationInfo   // allocations
     nodes         map[string]*NodeInfo         // nodes registered
     applications  map[string]*ApplicationInfo  // the application list
-    state         partitionState               // state of the partition for scheduling
+    stateMachine  *fsm.FSM                     // the state of the queue for scheduling
+    stateTime     time.Time                    // last time the state was updated (needed for cleanup)
     isPreemptable bool                         // can allocations be preempted
+    clusterInfo   *ClusterInfo                 // link back to the cluster info
     lock          sync.RWMutex                 // lock for updating the partition
     totalPartitionResource *resources.Resource    // Total node resources
     metrics schedulermetrics.CoreSchedulerMetrics // Reference to scheduler metrics
-    partitionConfig *configs.PartitionConfig      // Partition Configs
 }
 
 // Create a new partition from scratch based on a validated configuration.
 // If teh configuration did not pass validation and is processed weird errors could occur.
-func NewPartitionInfo(partition configs.PartitionConfig, rmId string) (*PartitionInfo, error) {
+func NewPartitionInfo(partition configs.PartitionConfig, rmId string, info *ClusterInfo) (*PartitionInfo, error) {
     p := &PartitionInfo{
-        Name: partition.Name,
-        RMId: rmId,
-        state: active,
+        Name:         partition.Name,
+        RMId:         rmId,
+        stateMachine: newObjectState(),
+        clusterInfo:  info,
     }
     p.allocations = make(map[string]*AllocationInfo)
     p.nodes = make(map[string]*NodeInfo)
@@ -100,6 +104,21 @@ func addQueueInfo(conf []configs.QueueConfig, parent *QueueInfo) error {
     return nil
 }
 
+// Handle the state event for the application.
+// The state machine handles the locking.
+func (pi *PartitionInfo) HandlePartitionEvent(event SchedulingObjectEvent) error {
+    err := pi.stateMachine.Event(event.String(), pi.Name)
+    if err == nil {
+        pi.stateTime =time.Now()
+        return nil
+    }
+    // handle the same state transition not nil error (limit of fsm).
+    if err.Error() == "no transition" {
+        return nil
+    }
+    return err
+}
+
 func (pi *PartitionInfo) GetTotalPartitionResource() *resources.Resource {
     pi.lock.RLock()
     defer pi.lock.RUnlock()
@@ -122,7 +141,7 @@ func (pi *PartitionInfo) addNewNode(node *NodeInfo, existingAllocations []*si.Al
 
     glog.V(4).Infof("Trying to add node %s to partition %s", node.NodeId, pi.Name)
 
-    if pi.IsStopped() {
+    if pi.IsDraining() || pi.IsStopped() {
         return fmt.Errorf("partition %s is stopped cannot add a new node %s", pi.Name, node.NodeId)
     }
 
@@ -172,7 +191,7 @@ func (pi *PartitionInfo) addNodeReportedAllocations(allocation *si.Allocation) (
 
 // Remove a node from the partition.
 // This locks the partition and calls the internal unlocked version.
-func (pi *PartitionInfo) removeNode(nodeId string) {
+func (pi *PartitionInfo) RemoveNode(nodeId string) {
     pi.lock.Lock()
     defer pi.lock.Unlock()
 
@@ -199,12 +218,12 @@ func (pi *PartitionInfo) removeNodeInternal(nodeId string) {
         // since we are not locking the node and or application we could have had an update while processing
         if app := pi.applications[alloc.ApplicationId]; app != nil {
             // check allocations on the node
-           if alloc := app.RemoveAllocation(allocID); alloc == nil {
+           if alloc := app.removeAllocation(allocID); alloc == nil {
                 glog.V(0).Infof("Allocation %s not found for application %s while removing node %s, skipping",
                     allocID, app.ApplicationId, node.NodeId)
                 continue
             }
-            queue = app.LeafQueue
+            queue = app.leafQueue
         } else {
             glog.V(0).Infof("Application %s not found while removing node %s, skipping.", alloc.ApplicationId, node.NodeId)
             continue
@@ -239,7 +258,7 @@ func (pi *PartitionInfo) addNewApplication(info *ApplicationInfo, failIfExist bo
     defer pi.lock.Unlock()
 
     glog.V(4).Infof("Trying to add application %s in queue %s to partition %s", info.ApplicationId, info.QueueName, pi.Name)
-    if pi.IsStopped() {
+    if pi.IsDraining() || pi.IsStopped() {
         return fmt.Errorf("partition %s is stopped cannot add a new application %s", pi.Name, info.ApplicationId)
     }
 
@@ -262,7 +281,7 @@ func (pi *PartitionInfo) addNewApplication(info *ApplicationInfo, failIfExist bo
     }
 
     // All checked, app can be added.
-    info.LeafQueue = queue
+    info.leafQueue = queue
     pi.applications[info.ApplicationId] = info
     pi.metrics.IncTotalApplicationsAdded()
 
@@ -310,16 +329,16 @@ func (pi *PartitionInfo) releaseAllocationsForApplication(toRelease *commonevent
         // when uuid not specified, remove all allocations from the app
         if toRelease.Uuid == "" {
             glog.V(4).Infof("Removing all allocations for application %s", app.ApplicationId)
-            for _, alloc := range app.CleanupAllAllocations() {
+            for _, alloc := range app.removeAllAllocations() {
                 allocationsToRelease = append(allocationsToRelease, alloc)
             }
         } else {
             glog.V(4).Infof("Removing allocations for application %s with uuid %s", app.ApplicationId, toRelease.Uuid)
-            if alloc := app.RemoveAllocation(toRelease.Uuid); alloc != nil {
+            if alloc := app.removeAllocation(toRelease.Uuid); alloc != nil {
                 allocationsToRelease = append(allocationsToRelease, alloc)
             }
         }
-        queue = app.LeafQueue
+        queue = app.leafQueue
     }
 
     // If nothing was released then return now: this can happen if the allocation was not found or the application did not
@@ -415,7 +434,7 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
 
     node.AddAllocation(allocation)
 
-    app.AddAllocation(allocation)
+    app.addAllocation(allocation)
 
     pi.allocations[allocation.AllocationProto.Uuid] = allocation
 
@@ -463,7 +482,7 @@ func (pi *PartitionInfo) RemoveApplication(appId string) (*ApplicationInfo, []*A
     totalAppAllocated := app.GetAllocatedResource()
 
     // Remove all allocations from the application
-    allocations := app.CleanupAllAllocations()
+    allocations := app.removeAllAllocations()
 
     // Remove all allocations from nodes/queue
     if len(allocations) != 0 {
@@ -491,7 +510,7 @@ func (pi *PartitionInfo) RemoveApplication(appId string) (*ApplicationInfo, []*A
         }
 
         // we should never have an error, cache is in an inconsistent state if this happens
-        queue := app.LeafQueue
+        queue := app.leafQueue
         if queue != nil {
             if err := queue.DecAllocatedResource(totalAppAllocated); err != nil {
                 glog.V(1).Infof("Queue failed to release resources from application %s: %v", app.ApplicationId, err)
@@ -684,27 +703,34 @@ func (pi *PartitionInfo) updateQueues(config []configs.QueueConfig, parent *Queu
 func (pi *PartitionInfo) MarkPartitionForRemoval() {
     pi.lock.RLock()
     defer pi.lock.RUnlock()
-    pi.state = deleted
+    if err := pi.HandlePartitionEvent(Remove); err != nil {
+        glog.V(0).Infof("Failed to mark partition %s for deletion: %v", pi.Name, err)
+    }
 }
 
-// Partition states for a partition indirectly leveraged by the scheduler
-// - new application can only be assigned in a running state
-// - new allocation should only be made in a running state
-// - in a stopped state nothing may change on the partition
-// NOTE: states could be expanded and should not be referenced directly outside the PartitionInfo
-const (
-    active partitionState = iota
-    deleted
-)
+// The partition has been removed from the configuration and must be removed.
+// This is the cleanup triggered by the exiting scheduler partition. Just unlinking from the cluster should be enough.
+// All other clean up is triggered from the scheduler
+func (pi *PartitionInfo) Remove() {
+    pi.lock.RLock()
+    defer pi.lock.RUnlock()
+    // safeguard
+    if pi.IsDraining() || pi.IsStopped() {
+        pi.clusterInfo.removePartition(pi.Name)
+    }
+}
 
-type partitionState int
 
-// Is the partition running and can be used in scheduling
+// Is the partition marked for deletion and can only handle existing application requests.
+// No new applications will be accepted.
+func (pi *PartitionInfo) IsDraining() bool {
+    return pi.stateMachine.Current() == Draining.String()
+}
+
 func (pi *PartitionInfo) IsRunning() bool {
-    return pi.state == active
+    return pi.stateMachine.Current() == Active.String()
 }
 
-// Is the partition
 func (pi *PartitionInfo) IsStopped() bool {
-    return pi.state == deleted
+    return pi.stateMachine.Current() == Stopped.String()
 }

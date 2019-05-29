@@ -129,7 +129,7 @@ func (sq *SchedulingQueue) DecPendingResource(delta *resources.Resource) {
         sq.parent.DecPendingResource(delta)
     }
 
-    sq.pendingResource = resources.Sub(sq.GetPendingResource(), delta)
+    sq.pendingResource = resources.Sub(sq.pendingResource, delta)
 }
 
 func (sq *SchedulingQueue) AddSchedulingApplication(app *SchedulingApplication) {
@@ -145,7 +145,7 @@ func (sq *SchedulingQueue) RemoveSchedulingApplication(app *SchedulingApplicatio
     // Update pending resource of this queue and its parents
     totalPending := app.Requests.GetPendingResource()
     if !resources.IsZero(totalPending) {
-        sq.pendingResource = resources.Sub(sq.GetPendingResource(), totalPending)
+        sq.pendingResource = resources.Sub(sq.pendingResource, totalPending)
         sq.parent.DecPendingResource(totalPending)
     }
 

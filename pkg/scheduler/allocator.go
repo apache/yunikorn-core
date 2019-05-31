@@ -91,6 +91,10 @@ func (m *Scheduler) regularAllocate(nodes []*SchedulingNode, candidate *Scheduli
     for i := 0; i < len(nodes); i++ {
         idx := (i + startIdx) % nNodes
         node := nodes[idx]
+        if !node.CheckAllocateConditions(candidate.AskProto.AllocationKey) {
+            // skip the node if conditions can not be satisfied
+            continue
+        }
         if node.CheckAndAllocateResource(candidate.AllocatedResource, false /* preemptionPhase */) {
             // return allocation
             return NewSchedulingAllocation(candidate, node.NodeId)

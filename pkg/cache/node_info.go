@@ -26,6 +26,7 @@ import (
 /* Related to nodes */
 type NodeInfo struct {
     NodeId            string
+    RMId              string
     TotalResource     *resources.Resource
     allocatedResource *resources.Resource
     availableResource *resources.Resource

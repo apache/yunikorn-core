@@ -248,6 +248,7 @@ func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
         rejectedNodes := make([]*si.RejectedNode, 0)
         for _, node := range request.NewSchedulableNodes {
             nodeInfo, err := NewNodeInfo(node)
+            nodeInfo.RMId = request.RmId
             if err != nil {
                 errorMessage := fmt.Sprintf("Failed to create node info from request, nodeId=%s, error=%s", node.NodeId, err.Error())
                 glog.Warning(errorMessage)

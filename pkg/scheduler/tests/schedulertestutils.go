@@ -48,6 +48,10 @@ func NewMockRMCallbackHandler(t *testing.T) *MockRMCallbackHandler {
     }
 }
 
+func (m *MockRMCallbackHandler) EvalPredicates(name string, node string) error {
+    return nil
+}
+
 func (m *MockRMCallbackHandler) RecvUpdateResponse(response *si.UpdateResponse) error {
     m.lock.Lock()
     defer m.lock.Unlock()

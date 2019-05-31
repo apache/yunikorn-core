@@ -27,6 +27,7 @@ import (
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/commonevents"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/handler"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/plugins"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/rmproxy/rmevent"
     "reflect"
     "sync"
@@ -223,6 +224,10 @@ func (m *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerReq
         })
         m.rmIdToConfigWatcher[request.RmId] = configWatcher
         m.rmIdToCallback[request.RmId] = callback
+
+        // TODO make sure we recognize plugin capabilities during registration
+        // register plugins (if exists)
+        plugins.RegisterSchedulerPlugin(plugins.PredicatesPluginName, callback)
         return &si.RegisterResourceManagerResponse{}, nil
     } else {
         return nil, errors.New(result.Reason)

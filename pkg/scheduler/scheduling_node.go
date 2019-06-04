@@ -28,7 +28,6 @@ import (
 type SchedulingNode struct {
     NodeInfo *cache.NodeInfo
     NodeId   string
-    RmID     string
 
     // Resource which is allocating (in addition to confirmed, allocated)
     AllocatingResource      *resources.Resource
@@ -45,7 +44,6 @@ func NewSchedulingNode(info *cache.NodeInfo) *SchedulingNode {
         AllocatingResource:      resources.NewResource(),
         PreemptingResource:      resources.NewResource(),
         CachedAvailableResource: info.GetAvailableResource(),
-        RmID:                    info.RMId,
     }
 }
 

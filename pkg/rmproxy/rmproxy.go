@@ -225,9 +225,10 @@ func (m *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerReq
         m.rmIdToConfigWatcher[request.RmId] = configWatcher
         m.rmIdToCallback[request.RmId] = callback
 
-        // TODO make sure we recognize plugin capabilities during registration
-        // register plugins (if exists)
-        plugins.RegisterSchedulerPlugin(plugins.PredicatesPluginName, callback)
+        // RM callback can optionally implement one or more scheduler plugin interfaces,
+        // register scheduler plugin if the callback implements any plugin interface
+        plugins.RegisterSchedulerPlugin(callback)
+
         return &si.RegisterResourceManagerResponse{}, nil
     } else {
         return nil, errors.New(result.Reason)

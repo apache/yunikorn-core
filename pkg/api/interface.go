@@ -31,5 +31,4 @@ type SchedulerApi interface {
 // RM side needs to implement this API
 type ResourceManagerCallback interface {
     RecvUpdateResponse(response *si.UpdateResponse) error
-    EvalPredicates(name string, node string) error
 }

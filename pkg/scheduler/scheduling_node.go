@@ -21,7 +21,6 @@ import (
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/plugins"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/plugins/predicates"
     "sync"
 )
 
@@ -66,22 +65,14 @@ func (m *SchedulingNode) CheckAndAllocateResource(delta *resources.Resource, pre
 
 func (m *SchedulingNode) CheckAllocateConditions(allocId string) bool {
     // this will call shim function...
-    plugin := plugins.GetSchedulerPlugin(plugins.PredicatesPluginName)
-
-    var pp predicates.PredicatePlugin
-    switch t := plugin.(type) {
-    case predicates.PredicatePlugin:
-        pp = t
-    default:
-        return false
+    if plugin := plugins.GetPredicatesPlugin(); plugin != nil {
+        glog.V(4).Infof("eval predicates for allocation(%s) on node(%s)", allocId, m.NodeId)
+        if err := plugin.Predicates(allocId, m.NodeId); err != nil {
+            glog.V(4).Infof("eval predicates for allocation(%s) on node(%s) failed, reason: %s",
+                allocId, m.NodeId, err.Error())
+            return false
+        }
+        return true
     }
-
-    glog.V(4).Infof("eval predicates for allocation(%s) on node(%s)", allocId, m.NodeId)
-    if err := pp.EvalPredicates(allocId, m.NodeId); err != nil {
-        glog.V(4).Infof("eval predicates for allocation(%s) on node(%s) failed, reason: %s",
-            allocId, m.NodeId, err.Error())
-        return false
-    }
-
     return true
 }

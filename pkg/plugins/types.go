@@ -16,27 +16,13 @@ limitations under the License.
 
 package plugins
 
-import (
-	"github.com/golang/glog"
-)
-
-var plugins SchedulerPlugins
-
-func init() {
-	plugins = SchedulerPlugins{}
+type SchedulerPlugins struct {
+	predicatesPlugin PredicatesPlugin
 }
 
-func RegisterSchedulerPlugin(plugin interface{}) {
-	switch t := plugin.(type) {
-	case PredicatesPlugin:
-		glog.V(4).Info("register scheduler plugin, type: PredicatesPlugin")
-		plugins.predicatesPlugin = t
-	default:
-		glog.V(4).Info("type incompatible, there is no scheduler plugin to register")
-	}
+type PredicatesPlugin interface {
+	// RM side implements this API when it can provide plugin for predicates
+	// Run a certain set of predicate functions to determine if a proposed allocation
+	// can be allocated onto a node.
+	Predicates(allocationId string, node string) error
 }
-
-func GetPredicatesPlugin() PredicatesPlugin {
-	return plugins.predicatesPlugin
-}
-

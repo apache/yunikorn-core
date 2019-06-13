@@ -38,6 +38,11 @@ func RegisterSchedulerPlugin(plugin interface{}) {
 		plugins.volumesPlugin = t
 		registered = true
 	}
+	if t, ok := plugin.(ReconcilePlugin); ok {
+		glog.V(4).Info("register scheduler plugin, type: ReconcilePlugin")
+		plugins.reconcilePlugin = t
+		registered = true
+	}
 	if !registered {
 		glog.V(4).Info("no scheduler plugin implemented, none registered")
 	}
@@ -49,4 +54,8 @@ func GetPredicatesPlugin() PredicatesPlugin {
 
 func GetVolumesPlugin() VolumesPlugin {
 	return plugins.volumesPlugin
+}
+
+func GetReconcilePlugin() ReconcilePlugin {
+	return plugins.reconcilePlugin
 }

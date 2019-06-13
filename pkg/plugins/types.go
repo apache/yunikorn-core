@@ -19,6 +19,7 @@ package plugins
 type SchedulerPlugins struct {
 	predicatesPlugin PredicatesPlugin
 	volumesPlugin VolumesPlugin
+	reconcilePlugin ReconcilePlugin
 }
 
 // RM side implements this API when it can provide plugin for predicates.
@@ -35,4 +36,11 @@ type VolumesPlugin interface {
 	VolumesCheck(allocationId string, node string) error
 	//// Bind the volumes after allocation has been confirmed
 	//VolumesBind(allocationId string, node string) error
+}
+
+type ReconcilePlugin interface {
+	// RM side implements this API when it can provide plugin for predicates
+	// Run a certain set of predicate functions to determine if a proposed allocation
+	// can be allocated onto a node.
+	ReSyncSchedulerCache(allocationId string, node string) error
 }

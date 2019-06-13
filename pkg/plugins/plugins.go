@@ -27,12 +27,19 @@ func init() {
 }
 
 func RegisterSchedulerPlugin(plugin interface{}) {
-	switch t := plugin.(type) {
-	case PredicatesPlugin:
+	registered := false
+	if t, ok := plugin.(PredicatesPlugin); ok {
 		glog.V(4).Info("register scheduler plugin, type: PredicatesPlugin")
 		plugins.predicatesPlugin = t
-	default:
-		glog.V(4).Info("type incompatible, there is no scheduler plugin to register")
+		registered = true
+	}
+	if t, ok := plugin.(VolumesPlugin); ok {
+		glog.V(4).Info("register scheduler plugin, type: VolumesPlugin")
+		plugins.volumesPlugin = t
+		registered = true
+	}
+	if !registered {
+		glog.V(4).Info("no scheduler plugin implemented, none registered")
 	}
 }
 
@@ -40,3 +47,6 @@ func GetPredicatesPlugin() PredicatesPlugin {
 	return plugins.predicatesPlugin
 }
 
+func GetVolumesPlugin() VolumesPlugin {
+	return plugins.volumesPlugin
+}

@@ -63,16 +63,30 @@ func (m *SchedulingNode) CheckAndAllocateResource(delta *resources.Resource, pre
     return false
 }
 
+// Checking pre allocation conditions. The pre-allocation conditions are implemented via plugins in the shim.
+// If no plugins are implemented then the check will return true. If multiple plugins are implemented the first failure
+// will stop the checks.
+// The caller must not rely on all plugins being executed.
 func (m *SchedulingNode) CheckAllocateConditions(allocId string) bool {
-    // this will call shim function...
+    // Check the predicates plugin (k8shim)
     if plugin := plugins.GetPredicatesPlugin(); plugin != nil {
-        glog.V(4).Infof("eval predicates for allocation(%s) on node(%s)", allocId, m.NodeId)
+        glog.V(4).Infof("eval predicates for allocation (%s) on node (%s)", allocId, m.NodeId)
         if err := plugin.Predicates(allocId, m.NodeId); err != nil {
-            glog.V(4).Infof("eval predicates for allocation(%s) on node(%s) failed, reason: %s",
+            glog.V(4).Infof("eval predicates for allocation (%s) on node (%s) failed, reason: %s",
                 allocId, m.NodeId, err.Error())
             return false
         }
-        return true
     }
+
+    // Check the volumes plugin (k8shim)
+    if plugin := plugins.GetVolumesPlugin(); plugin != nil {
+        glog.V(4).Infof("eval volumes for allocation (%s) on node (%s)", allocId, m.NodeId)
+        if err := plugin.VolumesCheck(allocId, m.NodeId); err != nil {
+            glog.V(4).Infof("eval volumes for allocation (%s) on node (%s) failed, reason: %s",
+                allocId, m.NodeId, err.Error())
+            return false
+        }
+    }
+    // must be last return in the list
     return true
 }

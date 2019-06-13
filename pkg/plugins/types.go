@@ -18,11 +18,21 @@ package plugins
 
 type SchedulerPlugins struct {
 	predicatesPlugin PredicatesPlugin
+	volumesPlugin VolumesPlugin
 }
 
+// RM side implements this API when it can provide plugin for predicates.
 type PredicatesPlugin interface {
-	// RM side implements this API when it can provide plugin for predicates
 	// Run a certain set of predicate functions to determine if a proposed allocation
 	// can be allocated onto a node.
 	Predicates(allocationId string, node string) error
+}
+
+// RM side implements this API when it can provide plugin for volumes.
+type VolumesPlugin interface {
+	// Run a volume function to determine if a proposed allocation can be allocated onto a node.
+	// Volumes should not be part of the registered predicates list.
+	VolumesCheck(allocationId string, node string) error
+	//// Bind the volumes after allocation has been confirmed
+	//VolumesBind(allocationId string, node string) error
 }

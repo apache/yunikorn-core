@@ -16,6 +16,8 @@ limitations under the License.
 
 package plugins
 
+import "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
+
 type SchedulerPlugins struct {
 	predicatesPlugin PredicatesPlugin
 	volumesPlugin VolumesPlugin
@@ -26,7 +28,7 @@ type SchedulerPlugins struct {
 type PredicatesPlugin interface {
 	// Run a certain set of predicate functions to determine if a proposed allocation
 	// can be allocated onto a node.
-	Predicates(allocationId string, node string) error
+	Predicates(args *si.PredicatesArgs) error
 }
 
 // RM side implements this API when it can provide plugin for volumes.
@@ -42,5 +44,5 @@ type ReconcilePlugin interface {
 	// RM side implements this API when it can provide plugin for predicates
 	// Run a certain set of predicate functions to determine if a proposed allocation
 	// can be allocated onto a node.
-	ReSyncSchedulerCache(allocationId string, node string) error
+	ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error
 }

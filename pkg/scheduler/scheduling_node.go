@@ -18,6 +18,7 @@ package scheduler
 
 import (
     "github.com/golang/glog"
+    "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/plugins"
@@ -71,7 +72,10 @@ func (m *SchedulingNode) CheckAllocateConditions(allocId string) bool {
     // Check the predicates plugin (k8shim)
     if plugin := plugins.GetPredicatesPlugin(); plugin != nil {
         glog.V(4).Infof("eval predicates for allocation (%s) on node (%s)", allocId, m.NodeId)
-        if err := plugin.Predicates(allocId, m.NodeId); err != nil {
+        if err := plugin.Predicates(&si.PredicatesArgs{
+            AllocationKey: allocId,
+            NodeId: m.NodeId,
+        }); err != nil {
             glog.V(4).Infof("eval predicates for allocation (%s) on node (%s) failed, reason: %s",
                 allocId, m.NodeId, err.Error())
             return false

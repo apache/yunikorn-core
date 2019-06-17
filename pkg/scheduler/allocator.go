@@ -19,6 +19,7 @@ package scheduler
 import (
     "context"
     "github.com/golang/glog"
+    "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/plugins"
     "math/rand"
@@ -101,7 +102,14 @@ func (m *Scheduler) regularAllocate(nodes []*SchedulingNode, candidate *Scheduli
             // between core and shim if necessary. This is useful when running multiple allocations
             // in parallel and need to handle inter container affinity and anti-affinity.
             if rp := plugins.GetReconcilePlugin(); rp != nil {
-                if err := rp.ReSyncSchedulerCache(candidate.AskProto.AllocationKey, node.NodeId); err != nil {
+                if err := rp.ReSyncSchedulerCache(&si.ReSyncSchedulerCacheArgs{
+                    AssumedAllocations:    []*si.AssumedAllocation{
+                        {
+                            AllocationKey: candidate.AskProto.AllocationKey,
+                            NodeId:        node.NodeId,
+                        },
+                    },
+                }); err != nil {
                     glog.V(0).Infof("sync cache failed, error: %s", err.Error())
                 }
             }

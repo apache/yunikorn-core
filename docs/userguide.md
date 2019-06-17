@@ -12,20 +12,20 @@ Download [scheduler.yaml](https://github.infra.cloudera.com/yunikorn/k8s-shim/bl
 kubectl create -f scheduler.yaml
 ```
 
-the deployment will run 2 containers from our pre-built docker images in 1 pod,
+The deployment will run 2 containers from our pre-built docker images in 1 pod,
 
 * yunikorn-scheduler-core (scheduler core plus k8s-shim)
 * yunikorn-scheduler-web (web UI)
 
-the pod is deployed as a customized scheduler, it will take the responsibility to schedule pods which explicitly specifies `schedulerName: yunikorn` in pod's spec.
+The pod is deployed as a customized scheduler, it will take the responsibility to schedule pods which explicitly specifies `schedulerName: yunikorn` in pod's spec.
 Here is a [sample yaml file](https://raw.githubusercontent.com/kubernetes/website/master/content/en/examples/admin/sched/pod3.yaml) that specifies scheduler name for a pod.
 
 ## Run workloads with YuniKorn Scheduler
 
-Unlike default Kubernetes scheduler, YuniKorn has `job` notion in order to support batch workloads better.
+Unlike default Kubernetes scheduler, YuniKorn has `application` notion in order to support batch workloads better.
 There are a few ways to run workloads with YuniKorn scheduler
 
-- Add labels `jobId` and `queue` in pod's spec. Pods that has same jobId will be considered as tasks from 1 job.   
+- Add labels `applicationId` and `queue` in pod's spec. Pods that has same applicationId will be considered as tasks from 1 application.   
 
   Here are some examples:
   - [sleep](https://github.infra.cloudera.com/yunikorn/k8s-shim/blob/master/deployments/sleep/sleeppods.yaml): 3 pods simply runs sleep command as a 3 tasks job.
@@ -37,6 +37,6 @@ There are a few ways to run workloads with YuniKorn scheduler
   kubectl create -f sleep.yaml
   ```
 
-- Run Spark on Kubernetes with pod templates, `spark-app-id` is considered as Spark jobId.   
+- Run Spark on Kubernetes with pod templates, `spark-app-id` is considered as Spark applicationId.   
 
   Unfortunately pod-template support is only available in Spark upstream. The full guide of running Spark with YuniKorn can be found [here](https://github.infra.cloudera.com/yunikorn/k8s-shim/blob/master/docs/spark.md).

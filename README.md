@@ -96,7 +96,7 @@ You need to first sign and return an
 and
 [CCLA](https://github.infra.cloudera.com/yunikorn-core/blob/master/CLAs/Cloudera%20CCLA_25APR2018.pdf)
 before we can accept and redistribute your contribution. Once these are submitted you are
-free to start contributing to native-toolchain. Submit these to CLA@cloudera.com.
+free to start contributing to yunikorn-core. Submit these to CLA@cloudera.com.
 
 ### Find
 We use Github issues to track bugs for this project. Find an issue that you would like to

@@ -41,8 +41,8 @@ type VolumesPlugin interface {
 }
 
 type ReconcilePlugin interface {
-	// RM side implements this API when it can provide plugin for predicates
-	// Run a certain set of predicate functions to determine if a proposed allocation
-	// can be allocated onto a node.
+	// RM side implements this API when it can provide plugin for reconciling
+	// Re-sync scheduler cache can sync some in-cache (yunikorn-core side) state changes
+	// to scheduler cache (shim-side), such as assumed allocations.
 	ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error
 }

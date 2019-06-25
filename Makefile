@@ -30,11 +30,9 @@ test:
 	go vet $(REPO)...
 
 simplescheduler:
-	if [ ! -d ./vendor ]; then dep ensure -vendor-only; fi
 	go build $(RACE) -a -ldflags '-extldflags "-static"' -o _output/simplescheduler ./cmd/simplescheduler
 
 schedulerclient:
-	if [ ! -d ./vendor ]; then dep ensure -vendor-only; fi
 	go build $(RACE) -a -ldflags '-extldflags "-static"' -o _output/schedulerclient ./cmd/schedulerclient
 
 clean:

@@ -81,7 +81,6 @@ Prerequisite:
 - Go 1.11+
 
 Steps: 
-- Run `dep ensure -update` to update dependencies
 - Run `make test` to run all unit tests
 
 ## How to use 

@@ -26,9 +26,9 @@ import (
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/commonevents"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/handler"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/metrics"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/rmproxy/rmevent"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/scheduler/schedulerevent"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/schedulermetrics"
     "reflect"
     "sync"
     "time"
@@ -47,7 +47,7 @@ type Scheduler struct {
     pendingSchedulerEvents   chan interface{}          // queue for scheduler events
     lock                     sync.RWMutex
 
-    metrics schedulermetrics.CoreSchedulerMetrics // Reference to scheduler metrics
+    metrics metrics.CoreSchedulerMetrics // Reference to scheduler metrics
 
     // Wait till next try
     // (It is designed to be accessed under a single goroutine, no lock needed).
@@ -60,7 +60,7 @@ type Scheduler struct {
     step uint64 // TODO document this, see ask_finder@findMayAllocationFromApplication
 }
 
-func NewScheduler(clusterInfo *cache.ClusterInfo, metrics schedulermetrics.CoreSchedulerMetrics) *Scheduler {
+func NewScheduler(clusterInfo *cache.ClusterInfo, metrics metrics.CoreSchedulerMetrics) *Scheduler {
     m := &Scheduler{}
     m.clusterInfo = clusterInfo
     m.waitTillNextTry = make(map[string]uint64)

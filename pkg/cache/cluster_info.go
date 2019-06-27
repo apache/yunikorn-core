@@ -25,9 +25,9 @@ import (
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/commonevents"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/handler"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/metrics"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/rmproxy/rmevent"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/scheduler/schedulerevent"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/schedulermetrics"
     "reflect"
     "sync"
 )
@@ -45,17 +45,17 @@ type ClusterInfo struct {
     EventHandlers handler.EventHandlers
 
     // Reference to scheduler metrics
-    metrics schedulermetrics.CoreSchedulerMetrics
+    metrics metrics.CoreSchedulerMetrics
 }
 
-func NewClusterInfo() (*ClusterInfo, schedulermetrics.CoreSchedulerMetrics) {
+func NewClusterInfo() (*ClusterInfo, metrics.CoreSchedulerMetrics) {
     clusterInfo := &ClusterInfo{
         partitions:             make(map[string]*PartitionInfo),
         pendingRmEvents:        make(chan interface{}, 1024*1024),
         pendingSchedulerEvents: make(chan interface{}, 1024*1024),
     }
 
-    clusterInfo.metrics = schedulermetrics.GetInstance()
+    clusterInfo.metrics = metrics.GetInstance()
 
     return clusterInfo, clusterInfo.metrics
 }

@@ -22,7 +22,7 @@ import (
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/commonevents"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/schedulermetrics"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/metrics"
     "testing"
     "time"
 )
@@ -39,7 +39,7 @@ func CreatePartitionInfo(data []byte) (*PartitionInfo, error) {
         return nil, fmt.Errorf("error when loading ParttionInfo from config %v", err)
     }
     // workaround for the metrics until we have separate partition metrics
-    pi.metrics = schedulermetrics.GetInstance()
+    pi.metrics = metrics.GetInstance()
 
     return pi, nil
 }

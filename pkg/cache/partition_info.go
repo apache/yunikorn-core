@@ -25,7 +25,7 @@ import (
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/commonevents"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/schedulermetrics"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/metrics"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/webservice/dao"
     "strings"
     "sync"
@@ -40,16 +40,16 @@ type PartitionInfo struct {
     RMId string
 
     // Private fields need protection
-    allocations   map[string]*AllocationInfo   // allocations
-    nodes         map[string]*NodeInfo         // nodes registered
-    applications  map[string]*ApplicationInfo  // the application list
-    stateMachine  *fsm.FSM                     // the state of the queue for scheduling
-    stateTime     time.Time                    // last time the state was updated (needed for cleanup)
-    isPreemptable bool                         // can allocations be preempted
-    clusterInfo   *ClusterInfo                 // link back to the cluster info
-    lock          sync.RWMutex                 // lock for updating the partition
-    totalPartitionResource *resources.Resource    // Total node resources
-    metrics schedulermetrics.CoreSchedulerMetrics // Reference to scheduler metrics
+    allocations            map[string]*AllocationInfo   // allocations
+    nodes                  map[string]*NodeInfo         // nodes registered
+    applications           map[string]*ApplicationInfo  // the application list
+    stateMachine           *fsm.FSM                     // the state of the queue for scheduling
+    stateTime              time.Time                    // last time the state was updated (needed for cleanup)
+    isPreemptable          bool                         // can allocations be preempted
+    clusterInfo            *ClusterInfo                 // link back to the cluster info
+    lock                   sync.RWMutex                 // lock for updating the partition
+    totalPartitionResource *resources.Resource          // Total node resources
+    metrics                metrics.CoreSchedulerMetrics // Reference to scheduler metrics
 }
 
 // Create a new partition from scratch based on a validated configuration.

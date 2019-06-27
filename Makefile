@@ -14,6 +14,16 @@
 # limitations under the License.
 #
 
+# Check if this is at least GO 1.11 for Go Modules
+GO_VERSION := $(shell go version | awk '$$3 ~ /go1.(10|0-9])/ {print $$3}')
+ifdef GO_VERSION
+$(error Build requires go 1.11 or later)
+endif
+
+# Force Go modules even when checked out inside GOPATH
+GO111MODULE := on
+export GO111MODULE
+
 REPO=github.infra.cloudera.com/yunikorn/yunikorn-core/pkg
 # when using the -race option must set CGO_ENBLED to 1
 RACE=-race

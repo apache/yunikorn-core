@@ -22,7 +22,7 @@ import (
     "github.com/looplab/fsm"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
     "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/queuemetrics"
+    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/metrics"
     "strings"
     "sync"
     "time"
@@ -46,7 +46,7 @@ type QueueInfo struct {
                                      // properties with the config for this queue only manipulated during creation
                                      // of the queue or via a queue configuration update
 
-    metrics queuemetrics.CoreQueueMetrics
+    metrics metrics.CoreQueueMetrics
 
     // Private fields need protection
     allocatedResource  *resources.Resource   // set based on allocation
@@ -82,7 +82,7 @@ func NewManagedQueue(conf configs.QueueConfig, parent *QueueInfo) (*QueueInfo, e
         }
     }
 
-    qi.metrics = queuemetrics.InitQueueMetrics(conf.Name)
+    qi.metrics = metrics.InitQueueMetrics(conf.Name)
     return qi, nil
 }
 
@@ -110,7 +110,7 @@ func NewUnmanagedQueue(name string, leaf bool, parent *QueueInfo) (*QueueInfo, e
         }
     }
 
-    qi.metrics = queuemetrics.InitQueueMetrics(name)
+    qi.metrics = metrics.InitQueueMetrics(name)
     return qi, nil
 }
 

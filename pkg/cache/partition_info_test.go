@@ -18,11 +18,11 @@ package cache
 
 import (
     "fmt"
-    "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/commonevents"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/metrics"
+    "github.com/cloudera/scheduler-interface/lib/go/si"
+    "github.com/cloudera/yunikorn-core/pkg/common/commonevents"
+    "github.com/cloudera/yunikorn-core/pkg/common/configs"
+    "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-core/pkg/metrics"
     "testing"
     "time"
 )

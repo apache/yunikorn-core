@@ -18,7 +18,7 @@ package configs
 
 import (
 	"fmt"
-	"github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common"
+	"github.com/cloudera/yunikorn-core/pkg/common"
 	"gotest.tools/assert"
 	"testing"
 	"time"

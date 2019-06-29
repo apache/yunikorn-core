@@ -18,10 +18,10 @@ package scheduler
 
 import (
     "github.com/golang/glog"
-    "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/plugins"
+    "github.com/cloudera/scheduler-interface/lib/go/si"
+    "github.com/cloudera/yunikorn-core/pkg/cache"
+    "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-core/pkg/plugins"
     "sync"
 )
 

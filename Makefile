@@ -24,7 +24,7 @@ endif
 GO111MODULE := on
 export GO111MODULE
 
-REPO=github.infra.cloudera.com/yunikorn/yunikorn-core/pkg
+REPO=github.com/cloudera/yunikorn-core/pkg
 # when using the -race option must set CGO_ENBLED to 1
 RACE=-race
 CGO_ENABLED=1

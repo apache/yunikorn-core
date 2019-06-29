@@ -19,9 +19,9 @@ package scheduler
 import (
     "context"
     "github.com/golang/glog"
-    "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/plugins"
+    "github.com/cloudera/scheduler-interface/lib/go/si"
+    "github.com/cloudera/yunikorn-core/pkg/common"
+    "github.com/cloudera/yunikorn-core/pkg/plugins"
     "math/rand"
     "sync/atomic"
     "time"

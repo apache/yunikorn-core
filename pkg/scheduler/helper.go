@@ -16,7 +16,7 @@ limitations under the License.
 
 package scheduler
 
-import "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/api"
+import "github.com/cloudera/yunikorn-core/pkg/api"
 
 const (
     defaultApplicationId = "_default_application_"

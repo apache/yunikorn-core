@@ -17,11 +17,11 @@ limitations under the License.
 package tests
 
 import (
-    "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/entrypoint"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/rmproxy"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/scheduler"
+    "github.com/cloudera/scheduler-interface/lib/go/si"
+    "github.com/cloudera/yunikorn-core/pkg/common/configs"
+    "github.com/cloudera/yunikorn-core/pkg/entrypoint"
+    "github.com/cloudera/yunikorn-core/pkg/rmproxy"
+    "github.com/cloudera/yunikorn-core/pkg/scheduler"
     "testing"
 )
 

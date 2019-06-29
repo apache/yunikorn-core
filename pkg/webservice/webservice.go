@@ -19,7 +19,7 @@ import (
 	"context"
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
-	"github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache"
+	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"net/http"
 	"sync"
 	"time"

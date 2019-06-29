@@ -17,8 +17,8 @@ limitations under the License.
 package commonevents
 
 import (
-    "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/scheduler-interface/lib/go/si"
+    "github.com/cloudera/yunikorn-core/pkg/common/resources"
 )
 
 type RemoveRMPartitionsEvent struct {

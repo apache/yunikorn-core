@@ -19,9 +19,9 @@ package cache
 import (
     "fmt"
     "github.com/golang/glog"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-core/pkg/common"
+    "github.com/cloudera/yunikorn-core/pkg/common/configs"
+    "github.com/cloudera/yunikorn-core/pkg/common/resources"
 )
 
 // Create partition info objects from the configuration to set in the cluster.

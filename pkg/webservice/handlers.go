@@ -18,8 +18,8 @@ package webservice
 import (
 	"encoding/json"
 	"github.com/golang/glog"
-	"github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache"
-	"github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/webservice/dao"
+	"github.com/cloudera/yunikorn-core/pkg/cache"
+	"github.com/cloudera/yunikorn-core/pkg/webservice/dao"
 	"net/http"
 	"strconv"
 	"strings"

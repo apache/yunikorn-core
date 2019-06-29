@@ -16,7 +16,7 @@ limitations under the License.
 package webservice
 
 import (
-	"github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/webservice/dao"
+	"github.com/cloudera/yunikorn-core/pkg/webservice/dao"
 )
 
 func getDummyPartitionJson() *dao.PartitionDAOInfo {

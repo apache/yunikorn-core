@@ -18,7 +18,7 @@ package cache
 
 import (
     "github.com/looplab/fsm"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-core/pkg/common/resources"
     "sync"
     "time"
 )

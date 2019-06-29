@@ -19,7 +19,7 @@ package scheduler
 import (
     "fmt"
     "github.com/golang/glog"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/cache"
+    "github.com/cloudera/yunikorn-core/pkg/cache"
     "sync"
 )
 

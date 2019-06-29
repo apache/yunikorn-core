@@ -17,8 +17,8 @@ limitations under the License.
 package schedulerevent
 
 import (
-    "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/commonevents"
+    "github.com/cloudera/scheduler-interface/lib/go/si"
+    "github.com/cloudera/yunikorn-core/pkg/common/commonevents"
 )
 
 // From Cache, update about allocations.

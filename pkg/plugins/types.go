@@ -16,7 +16,7 @@ limitations under the License.
 
 package plugins
 
-import "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
+import "github.com/cloudera/scheduler-interface/lib/go/si"
 
 type SchedulerPlugins struct {
 	predicatesPlugin PredicatesPlugin

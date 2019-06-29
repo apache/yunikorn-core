@@ -17,9 +17,9 @@ limitations under the License.
 package cache
 
 import (
-    "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/api"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/scheduler-interface/lib/go/si"
+    "github.com/cloudera/yunikorn-core/pkg/api"
+    "github.com/cloudera/yunikorn-core/pkg/common/resources"
     "sync"
 )
 

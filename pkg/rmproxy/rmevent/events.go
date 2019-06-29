@@ -16,7 +16,7 @@ limitations under the License.
 
 package rmevent
 
-import "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
+import "github.com/cloudera/scheduler-interface/lib/go/si"
 
 type RMNewAllocationsEvent struct {
     RMId        string

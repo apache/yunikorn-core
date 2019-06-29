@@ -19,7 +19,7 @@ package common
 import (
     "fmt"
     "github.com/golang/glog"
-    "github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
+    "github.com/cloudera/scheduler-interface/lib/go/si"
     "golang.org/x/net/context"
     "google.golang.org/grpc"
     "net"

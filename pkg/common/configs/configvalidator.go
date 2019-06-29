@@ -19,7 +19,7 @@ package configs
 import (
     "fmt"
     "github.com/golang/glog"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/security"
+    "github.com/cloudera/yunikorn-core/pkg/common/security"
     "regexp"
     "strconv"
     "strings"

@@ -17,8 +17,8 @@ limitations under the License.
 package cache
 
 import (
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/configs"
-    "github.infra.cloudera.com/yunikorn/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-core/pkg/common/configs"
+    "github.com/cloudera/yunikorn-core/pkg/common/resources"
     "gotest.tools/assert"
     "testing"
 )

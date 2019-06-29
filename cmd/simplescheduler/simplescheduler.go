@@ -18,7 +18,7 @@ package main
 
 import (
 	"context"
-	"github.infra.cloudera.com/yunikorn/scheduler-interface/lib/go/si"
+	"github.com/cloudera/scheduler-interface/lib/go/si"
 	"io"
 	"log"
 	"time"

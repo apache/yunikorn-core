@@ -2,11 +2,11 @@
 
 Before reading this guide, we assume you either have a Kubernetes cluster, or a local Kubernetes dev environment, e.g MiniKube.
 It is also assumed that `kubectl` is on your path and properly configured.
-Not get there? Here is a [guide](https://github.infra.cloudera.com/yunikorn/k8s-shim/blob/master/docs/env-setup.md) about how to setup a local Kubernetes cluster using docker-desktop.
+Not get there? Here is a [guide](https://github.com/cloudera/k8s-shim/blob/master/docs/env-setup.md) about how to setup a local Kubernetes cluster using docker-desktop.
 
 ## Deploy YuniKorn Scheduler onto Kubernetes Cluster
 
-Download [scheduler.yaml](https://github.infra.cloudera.com/yunikorn/k8s-shim/blob/master/deployments/scheduler/scheduler.yaml) to local, run command:
+Download [scheduler.yaml](https://github.com/cloudera/k8s-shim/blob/master/deployments/scheduler/scheduler.yaml) to local, run command:
 
 ```
 kubectl create -f scheduler.yaml
@@ -28,8 +28,8 @@ There are a few ways to run workloads with YuniKorn scheduler
 - Add labels `applicationId` and `queue` in pod's spec. Pods that has same applicationId will be considered as tasks from 1 application.   
 
   Here are some examples:
-  - [sleep](https://github.infra.cloudera.com/yunikorn/k8s-shim/blob/master/deployments/sleep/sleeppods.yaml): 3 pods simply runs sleep command as a 3 tasks job.
-  - [nginx](https://github.infra.cloudera.com/yunikorn/k8s-shim/blob/master/deployments/nigix/nginxjob.yaml): a single nginx application as a single task job.
+  - [sleep](https://github.com/cloudera/k8s-shim/blob/master/deployments/sleep/sleeppods.yaml): 3 pods simply runs sleep command as a 3 tasks job.
+  - [nginx](https://github.com/cloudera/k8s-shim/blob/master/deployments/nigix/nginxjob.yaml): a single nginx application as a single task job.
    
   Simply deploy them with following command,
    
@@ -39,4 +39,4 @@ There are a few ways to run workloads with YuniKorn scheduler
 
 - Run Spark on Kubernetes with pod templates, `spark-app-id` is considered as Spark applicationId.   
 
-  Unfortunately pod-template support is only available in Spark upstream. The full guide of running Spark with YuniKorn can be found [here](https://github.infra.cloudera.com/yunikorn/k8s-shim/blob/master/docs/spark.md).
+  Unfortunately pod-template support is only available in Spark upstream. The full guide of running Spark with YuniKorn can be found [here](https://github.com/cloudera/k8s-shim/blob/master/docs/spark.md).

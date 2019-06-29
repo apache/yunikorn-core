@@ -66,13 +66,13 @@ YuniKorn consists of the following components:
 The code is spread over multiple repositories.
 
 - Scheduler Interface:
-  + Link: https://github.infra.cloudera.com/yunikorn/scheduler-interface
+  + Link: https://github.com/cloudera/scheduler-interface
   + Purpose: Define the common scheduler interface used by shims and the core scheduler.
 - Scheduler Shims:
-  + k8s-shim: https://github.infra.cloudera.com/yunikorn/k8s-shim
+  + k8s-shim: https://github.com/cloudera/k8s-shim
   + Purpose: Define the Kubernetes scheduler shim 
 - Scheduler UI
-  + Link: https://github.infra.cloudera.com/yunikorn/yunikorn-web
+  + Link: https://github.com/cloudera/yunikorn-web
   + Purpose: Define the YuniKorn web interface
 
 ## How to build
@@ -91,9 +91,10 @@ Then you can run workloads with this scheduler. Read more docs [here](docs/userg
 
 ## How do I contribute code?
 You need to first sign and return an
-[ICLA](https://github.infra.cloudera.com/yunikorn-core/blob/master/CLAs/Cloudera%20ICLA_25APR2018.pdf)
+[ICLA](https://github.com/cloudera/yunikorn-core/blob/master/CLAs/Cloudera%20ICLA_25APR2018.pdf)
+
 and
-[CCLA](https://github.infra.cloudera.com/yunikorn-core/blob/master/CLAs/Cloudera%20CCLA_25APR2018.pdf)
+[CCLA](https://github.com/cloudera/yunikorn-core/blob/master/CLAs/Cloudera%20CCLA_25APR2018.pdf)
 before we can accept and redistribute your contribution. Once these are submitted you are
 free to start contributing to yunikorn-core. Submit these to CLA@cloudera.com.
 

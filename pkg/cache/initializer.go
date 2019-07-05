@@ -43,7 +43,7 @@ func createPartitionInfos(clusterInfo *ClusterInfo, conf *configs.SchedulerConfi
 
         clusterInfo.addPartition(partitionName, partition)
         updatedPartitions = append(updatedPartitions, partition)
-        log.Info("added partition", zap.String("partition", partitionName))
+        log.Logger.Info("added partition", zap.String("partition", partitionName))
     }
 
     return updatedPartitions, nil

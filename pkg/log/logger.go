@@ -18,6 +18,8 @@ package log
 
 import (
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"reflect"
 )
 
 
@@ -27,11 +29,24 @@ func init() {
 	// scheduler-core is always expected to run with a shim. When it runs
 	// with a k8s-shim in a same process. We directly re-use the logger
 	// which is initialized from k8s-shim, via commandline options.
-	if Logger = zap.L(); Logger == nil {
+	if Logger = zap.L(); isNopLogger(Logger) {
 		// If a global logger is not found, this could be either scheduler-core
 		// is running as a deployment mode, or running with another non-go code
 		// shim. In this case, we need to create our own logger.
 		// TODO support log options when a global logger is not there
 		Logger, _= zap.NewDevelopment()
 	}
+}
+
+func IsDebugEnabled() bool {
+	return Logger.Core().Enabled(zapcore.DebugLevel)
+}
+
+// Returns true if the logger is a noop.
+// Logger is a noop means the logger has not been initialized yet.
+// This usually means a global logger is not set in the given context,
+// see more at zap.ReplaceGlobals(). If a shim presets a global logger in
+// the context, yunikorn-core can simply reuse it.
+func isNopLogger(logger *zap.Logger) bool {
+	return reflect.DeepEqual(zap.NewNop(), logger)
 }

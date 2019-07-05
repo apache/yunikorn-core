@@ -18,7 +18,8 @@ package security
 
 import (
     "fmt"
-    "github.com/golang/glog"
+    "github.com/cloudera/yunikorn-core/pkg/log"
+    "go.uber.org/zap"
     "regexp"
     "strings"
 )
@@ -52,7 +53,7 @@ func (a *ACL) setUsers(userList []string) {
     }
     // special case if the user list is just the wildcard
     if len(userList) == 1 && userList[0] == WildCard {
-        glog.V(0).Infof("User list is wildcard, allowing all access")
+        log.Logger.Info("user list is wildcard, allowing all access")
         a.allAllowed = true
         return
     }
@@ -61,7 +62,8 @@ func (a *ACL) setUsers(userList []string) {
         if nameRegExp.MatchString(user) {
             a.users[user] = true
         } else {
-            glog.V(0).Infof("Ignoring user %s in ACL definition ", user)
+            log.Logger.Info("user Ignoring user in ACL definition",
+                zap.String("user", user))
         }
     }
 }
@@ -75,11 +77,11 @@ func (a *ACL) setGroups(groupList []string) {
     }
     // special case if the wildcard was already set
     if a.allAllowed {
-        glog.V(0).Infof("Ignoring group list in ACL: wildcard set")
+        log.Logger.Info("ignoring group list in ACL: wildcard set")
         return
     }
     if len(groupList) == 1 && groupList[0] == WildCard {
-        glog.V(0).Infof("Group list is wildcard, allowing all access")
+        log.Logger.Info("group list is wildcard, allowing all access")
         a.users = make(map[string]bool)
         a.allAllowed = true
         return
@@ -89,7 +91,8 @@ func (a *ACL) setGroups(groupList []string) {
         if nameRegExp.MatchString(group) {
             a.groups[group] = true
         } else {
-            glog.V(0).Infof("Ignoring group %s in ACL ", group)
+            log.Logger.Info("ignoring group in ACL",
+                zap.String("group", group))
         }
     }
 }

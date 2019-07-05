@@ -18,10 +18,11 @@ package scheduler
 
 import (
     "context"
-    "github.com/golang/glog"
     "github.com/cloudera/scheduler-interface/lib/go/si"
     "github.com/cloudera/yunikorn-core/pkg/common"
+    "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/plugins"
+    "go.uber.org/zap"
     "math/rand"
     "sync/atomic"
     "time"
@@ -72,7 +73,8 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
                     m.eventHandlers.CacheEventHandler.HandleEvent(newSingleAllocationProposal(alloc))
                     confirmedAllocations = append(confirmedAllocations, alloc)
                 } else {
-                    glog.V(2).Infof("Issues when trying to send proposal, err=%s", err.Error())
+                    log.Logger.Error("failed to send allocation proposal",
+                        zap.Error(err))
                 }
             }
         }
@@ -110,7 +112,8 @@ func (m *Scheduler) regularAllocate(nodes []*SchedulingNode, candidate *Scheduli
                         },
                     },
                 }); err != nil {
-                    glog.V(0).Infof("sync cache failed, error: %s", err.Error())
+                    log.Logger.Error("failed to sync cache",
+                        zap.Error(err))
                 }
             }
 
@@ -145,7 +148,7 @@ func (m *Scheduler) tryBatchAllocation(partition string, candidates []*Schedulin
     }
     // Sort by MAX_AVAILABLE resources.
     // TODO, this should be configurable.
-    SortNodes(schedulingNodeList, MAX_AVAILABLE_RES)
+    SortNodes(schedulingNodeList, MaxAvailableResources)
 
     ctx, cancel := context.WithCancel(context.Background())
 
@@ -178,12 +181,16 @@ func (m *Scheduler) tryBatchAllocation(partition string, candidates []*Schedulin
 
     // Logging
     if len(allocations) > 0 || len(failedAsks) > 0 {
-        glog.V(2).Infof("Allocated %d allocations, and cannot satisfy %d asks", len(allocations), len(failedAsks))
+        log.Logger.Debug("allocations cannot satisfy asks",
+            zap.Int("numOfAllocations", len(allocations)),
+            zap.Int("numOfFailedAsks", len(failedAsks)))
         if len(allocations) > 0 {
-            glog.V(2).Infof("  Allocations:%v", allocations)
+            log.Logger.Debug("allocations",
+                zap.Any("allocations", allocations))
         }
         if len(failedAsks) > 0 {
-            glog.V(2).Infof("  Rejected-allocation-asks:%v", failedAsks)
+            log.Logger.Debug("rejected-allocation-asks",
+                zap.Any("asks", failedAsks))
         }
     }
 

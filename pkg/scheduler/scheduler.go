@@ -18,7 +18,6 @@ package scheduler
 
 import (
     "fmt"
-    "github.com/golang/glog"
     "github.com/cloudera/scheduler-interface/lib/go/si"
     "github.com/cloudera/yunikorn-core/pkg/cache"
     "github.com/cloudera/yunikorn-core/pkg/cache/cacheevent"
@@ -26,9 +25,11 @@ import (
     "github.com/cloudera/yunikorn-core/pkg/common/commonevents"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
     "github.com/cloudera/yunikorn-core/pkg/handler"
+    "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/metrics"
     "github.com/cloudera/yunikorn-core/pkg/rmproxy/rmevent"
     "github.com/cloudera/yunikorn-core/pkg/scheduler/schedulerevent"
+    "go.uber.org/zap"
     "reflect"
     "sync"
     "time"
@@ -167,19 +168,28 @@ func (m *Scheduler) removeApplication(request *si.RemoveApplicationRequest) erro
     defer m.lock.Unlock()
 
     if _, err := m.clusterSchedulingContext.RemoveSchedulingApplication(request.ApplicationId, request.PartitionName); err != nil {
-        glog.V(2).Infof("Failed removing application %s from partition %s: %v", request.ApplicationId, request.PartitionName, err)
+        log.Logger.Error("failed to remove apps",
+            zap.String("appId", request.ApplicationId),
+            zap.String("partitionName", request.PartitionName),
+            zap.Error(err))
         return err
     }
-    glog.V(2).Infof("Removed application %s from partition %s", request.ApplicationId, request.PartitionName)
+
+    log.Logger.Info("app removed",
+        zap.String("appId", request.ApplicationId),
+        zap.String("partitionName", request.PartitionName))
     return nil
 }
 
 func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
     select {
     case queue <- ev:
-        glog.V(2).Infof("Enqueued event=%s, current queue size=%d", ev, len(queue))
+        log.Logger.Debug("enqueue event",
+            zap.Any("event", ev),
+            zap.Int("currentQueueSize", len(queue)))
     default:
-        panic(fmt.Sprintf("Failed to enqueue event=%s", reflect.TypeOf(ev).String()))
+        log.Logger.DPanic("failed to enqueue event",
+            zap.String("event", reflect.TypeOf(ev).String()))
     }
 }
 
@@ -205,8 +215,11 @@ func (m *Scheduler) processAllocationReleaseByAllocationKey(allocationAsksToRele
                 schedulingApp.queue.IncPendingResource(delta)
             }
 
-            glog.V(2).Infof("Removed allocation=%s from app=%s, reduced pending resource=%v, message=%s",
-                toRelease.Allocationkey, toRelease.ApplicationId, delta, toRelease.Message)
+            log.Logger.Info("release allocation",
+                zap.String("allocation", toRelease.Allocationkey),
+                zap.String("appId", toRelease.ApplicationId),
+                zap.String("deductPendingResource", delta.String()),
+                zap.String("message", toRelease.Message))
         }
     }
 }
@@ -216,7 +229,8 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
         for _, alloc := range ev.RejectedAllocations {
             // Update pending resource back
             if err := m.updateSchedulingRequestPendingAskByDelta(alloc, 1); err != nil {
-                glog.V(2).Infof("Issues when increase pending ask for rejected proposal, error=%s", err)
+                log.Logger.Error("failed to increase pending ask",
+                    zap.Error(err))
             }
         }
     }
@@ -284,7 +298,10 @@ func (m *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerAp
             err := m.removeApplication(app)
 
             if err != nil {
-                glog.V(0).Infof("Failed to remove application %s from partition %s, error: %v", app.ApplicationId, app.PartitionName, err)
+                log.Logger.Error("failed to remove app from partition",
+                    zap.String("appId", app.ApplicationId),
+                    zap.String("partitionName", app.PartitionName),
+                    zap.Error(err))
                 continue
             }
             m.eventHandlers.CacheEventHandler.HandleEvent(&cacheevent.RemovedApplicationEvent{ApplicationId: app.ApplicationId, PartitionName: app.PartitionName})

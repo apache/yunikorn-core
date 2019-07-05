@@ -17,9 +17,11 @@ package webservice
 
 import (
 	"context"
+	"fmt"
 	"github.com/cloudera/yunikorn-core/pkg/cache"
-	"github.com/golang/glog"
+	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/gorilla/mux"
+	"go.uber.org/zap"
 	"net/http"
 	"sync"
 	"time"
@@ -58,13 +60,8 @@ func Logger(inner http.Handler, name string, info *cache.ClusterInfo) http.Handl
 
 		inner.ServeHTTP(w, r)
 
-		glog.Infof(
-			"%s\t%s\t%s\t%s",
-			r.Method,
-			r.RequestURI,
-			name,
-			time.Since(start),
-		)
+		log.Logger.Debug(fmt.Sprintf("%s\t%s\t%s\t%s",
+			r.Method, r.RequestURI, name, time.Since(start)))
 	})
 }
 
@@ -72,11 +69,12 @@ func (m *WebService) StartWebApp() {
 	router := NewRouter(m.clusterInfo)
 	m.httpServer = &http.Server{Addr: ":9080", Handler: router}
 
-	glog.Info("Webapp started at port=9080")
+	log.Logger.Info("web-app started", zap.Int("port", 9080))
 	go func() {
 		httpError := m.httpServer.ListenAndServe()
 		if httpError != nil && httpError != http.ErrServerClosed{
-			glog.Errorf("While serving HTTP: %v", httpError)
+			log.Logger.Error("HTTP serving error",
+				zap.Error(httpError))
 		}
 	}()
 }

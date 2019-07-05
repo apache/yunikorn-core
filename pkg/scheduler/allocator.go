@@ -185,12 +185,20 @@ func (m *Scheduler) tryBatchAllocation(partition string, candidates []*Schedulin
             zap.Int("numOfAllocations", len(allocations)),
             zap.Int("numOfFailedAsks", len(failedAsks)))
         if len(allocations) > 0 {
-            log.Logger.Debug("allocations",
-                zap.Any("allocations", allocations))
+            if log.IsDebugEnabled() {
+                for _, alloc := range allocations {
+                    log.Logger.Debug("allocation",
+                        zap.Any("allocation", alloc.String()))
+                }
+            }
         }
         if len(failedAsks) > 0 {
-            log.Logger.Debug("rejected-allocation-asks",
-                zap.Any("asks", failedAsks))
+            if log.IsDebugEnabled() {
+                for _, allocAsk := range allocations {
+                    log.Logger.Debug("failedAsks",
+                        zap.Any("ask", allocAsk.String()))
+                }
+            }
         }
     }
 

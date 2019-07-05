@@ -17,9 +17,9 @@ package webservice
 
 import (
 	"context"
+	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
-	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"net/http"
 	"sync"
 	"time"

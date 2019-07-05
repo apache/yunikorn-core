@@ -46,7 +46,7 @@ func (manager PartitionManager) Run() {
 
     log.Logger.Info("starting partition manager",
         zap.String("partition", manager.psc.Name),
-        zap.Duration("interval", manager.interval))
+        zap.String("interval", manager.interval.String()))
     // exit only when the partition this manager belongs to exits
     for {
         time.Sleep(manager.interval)

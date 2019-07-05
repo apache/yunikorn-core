@@ -108,7 +108,10 @@ func newSingleAllocationProposal(alloc *SchedulingAllocation) *cacheevent.Alloca
 // Internal start scheduling service
 func (m *Scheduler) internalSchedule() {
     for {
-        m.singleStepSchedule(16, &preemptionParameters{})
+        m.singleStepSchedule(16, &preemptionParameters{
+            crossQueuePreemption: false,
+            blacklistedRequest: make(map[string]bool),
+        })
     }
 }
 

@@ -18,15 +18,15 @@ package cache
 
 import (
     "fmt"
-    "github.com/golang/glog"
-    "github.com/looplab/fsm"
-    "github.com/satori/go.uuid"
     "github.com/cloudera/scheduler-interface/lib/go/si"
     "github.com/cloudera/yunikorn-core/pkg/common/commonevents"
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
     "github.com/cloudera/yunikorn-core/pkg/metrics"
     "github.com/cloudera/yunikorn-core/pkg/webservice/dao"
+    "github.com/golang/glog"
+    "github.com/looplab/fsm"
+    "github.com/satori/go.uuid"
     "strings"
     "sync"
     "time"

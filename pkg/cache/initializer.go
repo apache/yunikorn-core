@@ -18,10 +18,12 @@ package cache
 
 import (
     "fmt"
+    "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/golang/glog"
     "github.com/cloudera/yunikorn-core/pkg/common"
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "go.uber.org/zap"
 )
 
 // Create partition info objects from the configuration to set in the cluster.
@@ -41,8 +43,7 @@ func createPartitionInfos(clusterInfo *ClusterInfo, conf *configs.SchedulerConfi
 
         clusterInfo.addPartition(partitionName, partition)
         updatedPartitions = append(updatedPartitions, partition)
-
-        glog.V(0).Infof("Added partition %s to cluster", partitionName)
+        log.Info("added partition", zap.String("partition", partitionName))
     }
 
     return updatedPartitions, nil

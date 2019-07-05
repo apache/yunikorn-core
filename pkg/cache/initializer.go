@@ -18,11 +18,10 @@ package cache
 
 import (
     "fmt"
-    "github.com/cloudera/yunikorn-core/pkg/log"
-    "github.com/golang/glog"
     "github.com/cloudera/yunikorn-core/pkg/common"
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-core/pkg/log"
     "go.uber.org/zap"
 )
 
@@ -95,7 +94,7 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmId string) ([]*
     configs.ConfigContext.Set(clusterInfo.policyGroup, conf)
 
     // Start updating the config is OK and should pass setting on the cluster
-    glog.V(0).Infof("Updating partitions from config in the cluster for RM %s", rmId)
+    log.Logger.Info("updating partitions", zap.String("rmId", rmId))
     // keep track of the deleted and updated partitions
     updatedPartitions := make([]*PartitionInfo, 0)
     visited := map[string]bool{}
@@ -111,14 +110,14 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmId string) ([]*
                 return []*PartitionInfo{}, []*PartitionInfo{}, err
             }
             // checks passed perform the real update
-            glog.V(0).Infof("Updating partition %s in the cluster", partitionName)
+            log.Logger.Info("updating partitions", zap.String("partitionName", partitionName))
             err = part.updatePartitionDetails(p)
             if err != nil {
                 return []*PartitionInfo{}, []*PartitionInfo{}, err
             }
         } else {
             // not found: new partition, no checks needed
-            glog.V(0).Infof("Added partition %s in the cluster", partitionName)
+            log.Logger.Info("added partitions", zap.String("partitionName", partitionName))
 
             part, err = newPartitionInfo(p, rmId, clusterInfo)
             clusterInfo.addPartition(partitionName, part)
@@ -137,7 +136,8 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmId string) ([]*
         if !visited[part.Name] {
             part.MarkPartitionForRemoval()
             deletedPartitions = append(deletedPartitions, part)
-            glog.V(0).Infof("Marked partition %s for removal from the cluster", part.Name)
+            log.Logger.Info("marked partition for removal",
+                zap.String("partitionName", part.Name))
         }
     }
 

@@ -56,7 +56,7 @@ func (manager PartitionManager) Run() {
             break
         }
         log.Logger.Info("time consumed for queue cleaner",
-            zap.Duration("duration", time.Since(runStart)))
+            zap.String("duration", time.Since(runStart).String()))
     }
     manager.remove()
 }

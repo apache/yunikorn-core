@@ -18,7 +18,8 @@ package configs
 
 import (
 	"bytes"
-	"github.com/golang/glog"
+	"github.com/cloudera/yunikorn-core/pkg/log"
+	"go.uber.org/zap"
 	"sync"
 	"time"
 )
@@ -79,9 +80,8 @@ func (cw *ConfigWatcher) runOnce() bool {
 
 	newConfig, err := SchedulerConfigLoader(cw.policyGroup)
 	if err != nil {
-		glog.V(1).Infof("failed to calculate the checksum of" +
-			" configuration file for policyGroup %s, ignore reloading configuration",
-			cw.policyGroup)
+		log.Logger.Warn("failed to calculate the checksum of configuration file for policyGroup," +
+			"ignore reloading configuration", zap.String("policyGroup", cw.policyGroup))
 		return false
 	}
 
@@ -89,14 +89,14 @@ func (cw *ConfigWatcher) runOnce() bool {
 	same := bytes.Equal(newConfig.Checksum, ConfigContext.Get(cw.policyGroup).Checksum)
 	if same {
 		// check sum equals, file not changed
-		glog.V(1).Infof("configuration file state is not unchanged")
+		log.Logger.Debug("configuration file unchanged")
 		time.Sleep(1 * time.Second)
 		return true
 	} else {
 		// when detect state changes, trigger the reload function
-		glog.V(3).Infof("configuration file state changes")
+		log.Logger.Debug("configuration file changed")
 		if err := cw.reloader.DoReloadConfiguration(); err == nil {
-			glog.V(3).Infof("configuration is successfully reloaded")
+			log.Logger.Debug("configuration is successfully reloaded")
 		}
 		return false
 	}
@@ -129,6 +129,6 @@ func (cw *ConfigWatcher) Run() {
 			quit <- true
 		})
 	default:
-		glog.V(3).Infof("config watcher is already running")
+		log.Logger.Info("config watcher is already running")
 	}
 }

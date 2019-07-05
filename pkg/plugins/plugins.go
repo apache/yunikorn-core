@@ -17,7 +17,8 @@ limitations under the License.
 package plugins
 
 import (
-	"github.com/golang/glog"
+	"github.com/cloudera/yunikorn-core/pkg/log"
+	"go.uber.org/zap"
 )
 
 var plugins SchedulerPlugins
@@ -29,22 +30,25 @@ func init() {
 func RegisterSchedulerPlugin(plugin interface{}) {
 	registered := false
 	if t, ok := plugin.(PredicatesPlugin); ok {
-		glog.V(4).Info("register scheduler plugin, type: PredicatesPlugin")
+		log.Logger.Debug("register scheduler plugin",
+			zap.String("type", "PredicatesPlugin"))
 		plugins.predicatesPlugin = t
 		registered = true
 	}
 	if t, ok := plugin.(VolumesPlugin); ok {
-		glog.V(4).Info("register scheduler plugin, type: VolumesPlugin")
+		log.Logger.Debug("register scheduler plugin",
+			zap.String("type", "VolumesPlugin"))
 		plugins.volumesPlugin = t
 		registered = true
 	}
 	if t, ok := plugin.(ReconcilePlugin); ok {
-		glog.V(4).Info("register scheduler plugin, type: ReconcilePlugin")
+		log.Logger.Debug("register scheduler plugin",
+			zap.String("type", "ReconcilePlugin"))
 		plugins.reconcilePlugin = t
 		registered = true
 	}
 	if !registered {
-		glog.V(4).Info("no scheduler plugin implemented, none registered")
+		log.Logger.Debug("no scheduler plugin implemented, none registered")
 	}
 }
 

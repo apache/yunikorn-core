@@ -18,16 +18,17 @@ package cache
 
 import (
     "fmt"
-    "github.com/golang/glog"
     "github.com/cloudera/scheduler-interface/lib/go/si"
     "github.com/cloudera/yunikorn-core/pkg/cache/cacheevent"
     "github.com/cloudera/yunikorn-core/pkg/common"
     "github.com/cloudera/yunikorn-core/pkg/common/commonevents"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
     "github.com/cloudera/yunikorn-core/pkg/handler"
+    "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/metrics"
     "github.com/cloudera/yunikorn-core/pkg/rmproxy/rmevent"
     "github.com/cloudera/yunikorn-core/pkg/scheduler/schedulerevent"
+    "go.uber.org/zap"
     "reflect"
     "sync"
 )
@@ -203,7 +204,7 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
             partitionContext := m.GetPartition(req.PartitionName)
             if partitionContext == nil {
                 msg := fmt.Sprintf("Failed to find partition=%s, for ask %s", req.PartitionName, allocationKey)
-                glog.V(2).Infoln(msg)
+                log.Logger.Info(msg)
                 rejectedAsks = append(rejectedAsks, &si.RejectedAllocationAsk{
                     AllocationKey: allocationKey,
                     ApplicationId: req.ApplicationId,
@@ -250,7 +251,7 @@ func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
             nodeInfo, err := NewNodeInfo(node)
             if err != nil {
                 errorMessage := fmt.Sprintf("Failed to create node info from request, nodeId=%s, error=%s", node.NodeId, err.Error())
-                glog.Warning(errorMessage)
+                log.Logger.Info(errorMessage)
                 // TODO assess impact of partition metrics (this never hit the partition)
                 m.metrics.IncFailedNodes()
                 rejectedNodes = append(rejectedNodes, &si.RejectedNode{NodeId: node.NodeId, Reason: errorMessage})
@@ -260,18 +261,20 @@ func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
             if partition := m.GetPartition(nodeInfo.Partition); partition != nil {
                 err := partition.addNewNode(nodeInfo, node.ExistingAllocations)
                 if err == nil {
-                    glog.V(0).Infof("Successfully added node=%s, partition=%s", node.NodeId, nodeInfo.Partition)
+                    log.Logger.Info("successfully added node",
+                        zap.String("nodeId", node.NodeId),
+                        zap.String("partition", nodeInfo.Partition))
                     acceptedNodes = append(acceptedNodes, &si.AcceptedNode{NodeId: node.NodeId})
                     continue
                 } else {
                     errorMessage := fmt.Sprintf("Failure while adding new node, rejected the node, error=%s", err)
-                    glog.V(0).Infof(errorMessage)
+                    log.Logger.Warn(errorMessage)
                     rejectedNodes = append(rejectedNodes, &si.RejectedNode{NodeId: node.NodeId, Reason: errorMessage})
                     continue
                 }
             } else {
                 errorMessage := fmt.Sprintf("Failed to find partition=%s for new node=%s", nodeInfo.Partition, node.NodeId)
-                glog.V(0).Infof(errorMessage)
+                log.Logger.Warn(errorMessage)
                 // TODO assess impact of partition metrics (this never hit the partition)
                 m.metrics.IncFailedNodes()
                 rejectedNodes = append(rejectedNodes, &si.RejectedNode{NodeId: node.NodeId, Reason: errorMessage})
@@ -500,9 +503,12 @@ func (m *ClusterInfo) processRemovedApplication(event *cacheevent.RemovedApplica
 func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
     select {
     case queue <- ev:
-        glog.V(2).Infof("Enqueued event=%s, current queue size=%d", ev, len(queue))
+        log.Logger.Info("enqueued event",
+            zap.String("event",  reflect.TypeOf(ev).String()),
+            zap.Int("currentQueueSize", len(queue)))
     default:
-        panic(fmt.Sprintf("Failed to enqueue event=%s", reflect.TypeOf(ev).String()))
+        log.Logger.Panic("failed to enqueue event",
+            zap.String("event", reflect.TypeOf(ev).String()))
     }
 }
 

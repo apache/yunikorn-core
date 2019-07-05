@@ -17,8 +17,9 @@ limitations under the License.
 package cache
 
 import (
-	"github.com/golang/glog"
+	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/looplab/fsm"
+	"go.uber.org/zap"
 )
 
 // ----------------------------------
@@ -83,9 +84,11 @@ func newAppState() *fsm.FSM {
 		},
 		fsm.Callbacks{
 			"enter_state": func(event *fsm.Event) {
-				glog.V(0).Infof(
-					"Application %s transitioned to state %s from %s, on event %s",
-					event.Args[0], event.Dst, event.Src, event.Event)
+				log.Logger.Debug("app state transition",
+					zap.Any("app", event.Args[0]),
+					zap.String("source", event.Src),
+					zap.String("destination", event.Dst),
+					zap.String("event", event.Event))
 			},
 		},
 	)

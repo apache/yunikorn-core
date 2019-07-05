@@ -18,11 +18,12 @@ package cache
 
 import (
     "fmt"
-    "github.com/golang/glog"
-    "github.com/looplab/fsm"
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/metrics"
+    "github.com/looplab/fsm"
+    "go.uber.org/zap"
     "strings"
     "sync"
     "time"
@@ -194,8 +195,10 @@ func (qi *QueueInfo) IncAllocatedResource(alloc *resources.Resource, nodeReporte
     // check the parent: need to pass before updating
     if qi.Parent != nil {
         if err := qi.Parent.IncAllocatedResource(alloc, nodeReported); err != nil {
-            glog.V(4).Infof("Allocation (%v) puts parent queue over maximum allocation (%v)",
-                alloc, qi.MaxResource)
+            log.Logger.Error("parent queue exceeds maximum resource",
+                zap.Any("allocationId", alloc),
+                zap.Any("maxResource", qi.MaxResource),
+                zap.Error(err))
             return err
         }
     }
@@ -218,8 +221,10 @@ func (qi *QueueInfo) DecAllocatedResource(alloc *resources.Resource) error {
     // check the parent: need to pass before updating
     if qi.Parent != nil {
         if err := qi.Parent.DecAllocatedResource(alloc); err != nil {
-            glog.V(4).Infof("Released allocation (%v) is larger than parent queue allocation (%v)",
-                alloc, qi.MaxResource)
+            log.Logger.Error("released allocation is larger than parent queue max resource",
+                zap.Any("allocationId", alloc),
+                zap.Any("maxResource", qi.MaxResource),
+                zap.Error(err))
             return err
         }
     }
@@ -264,7 +269,8 @@ func (qi *QueueInfo) RemoveQueue() bool {
     if len(qi.children) > 0 || !resources.IsZero(qi.allocatedResource) {
         return false
     }
-    glog.V(4).Infof("Removing queue: %s", qi.Name)
+
+    log.Logger.Info("removing queue", zap.String("queue", qi.Name))
     // root is always managed and is the only queue with a nil parent: no need to guard
     qi.Parent.removeChildQueue(qi.Name)
     return true
@@ -280,9 +286,12 @@ func (qi *QueueInfo) MarkQueueForRemoval() {
     // Mark the managed queue for deletion: it is removed from the config let it drain.
     // Also mark all the managed children for deletion.
     if qi.isManaged {
-        glog.V(0).Infof("Marking managed queue %s for deletion", qi.GetQueuePath())
+        log.Logger.Info("marking managed queue for deletion",
+            zap.String("queue", qi.GetQueuePath()))
         if err := qi.HandleQueueEvent(Remove); err != nil {
-            glog.V(0).Infof("Failed to mark managed queue %s for deletion; %v", qi.GetQueuePath(), err)
+            log.Logger.Info("failed to marking managed queue for deletion",
+                zap.String("queue", qi.GetQueuePath()),
+                zap.Error(err))
         }
         if qi.children != nil || len(qi.children) > 0 {
             for _, child := range qi.children {
@@ -297,7 +306,8 @@ func (qi *QueueInfo) updateQueueProps(conf configs.QueueConfig) error {
 
     // Change from unmanaged to managed
     if !qi.isManaged {
-        glog.V(0).Infof("changed unmanaged queue to managed: %s", qi.GetQueuePath())
+        log.Logger.Info("changed un-managed queue to managed",
+            zap.String("queue", qi.GetQueuePath()))
         qi.isManaged = true
     }
 
@@ -309,7 +319,8 @@ func (qi *QueueInfo) updateQueueProps(conf configs.QueueConfig) error {
     // Load the max resources
     maxResource, err := resources.NewResourceFromConf(conf.Resources.Max)
     if err != nil {
-        glog.V(2).Infof("parsing failed on max resources this should not happen: %v", err)
+        log.Logger.Error("parsing failed on max resources this should not happen",
+            zap.Error(err))
         return err
     }
     if len(maxResource.Resources) != 0 {
@@ -319,7 +330,8 @@ func (qi *QueueInfo) updateQueueProps(conf configs.QueueConfig) error {
     // Load the guaranteed resources
     guaranteedResource, err := resources.NewResourceFromConf(conf.Resources.Guaranteed)
     if err != nil {
-        glog.V(2).Infof("parsing failed on max resources this should not happen: %v", err)
+        log.Logger.Error("parsing failed on max resources this should not happen",
+            zap.Error(err))
         return err
     }
     if len(guaranteedResource.Resources) != 0 {

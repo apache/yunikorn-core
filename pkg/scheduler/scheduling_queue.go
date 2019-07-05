@@ -17,9 +17,10 @@ limitations under the License.
 package scheduler
 
 import (
-    "github.com/golang/glog"
     "github.com/cloudera/yunikorn-core/pkg/cache"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-core/pkg/log"
+    "go.uber.org/zap"
     "sync"
 )
 
@@ -73,16 +74,18 @@ func (sq * SchedulingQueue) GetPendingResource() *resources.Resource{
 // Update the properties for the scheduling queue based on the current cached configuration
 func (sq *SchedulingQueue) updateSchedulingQueueProperties(prop map[string]string) {
     // set the defaults, override with what is in the configured properties
-    sq.ApplicationSortType = FIFO_SORT_POLICY
-    sq.QueueSortType = FAIR_SORT_POLICY
+    sq.ApplicationSortType = FifoSortPolicy
+    sq.QueueSortType = FairSortPolicy
     // walk over all properties and process
     if prop != nil {
         for key, value := range prop {
             if key == cache.ApplicationSortPolicy  && value == "fair" {
-                sq.ApplicationSortType = FAIR_SORT_POLICY
+                sq.ApplicationSortType = FairSortPolicy
             }
             // for now skip the rest just log them
-            glog.V(5).Infof("queue property skip: %s, %s", key, value)
+            log.Logger.Debug("queue property skipped",
+                zap.String("key", key),
+                zap.String("value", value))
         }
     }
 }
@@ -205,7 +208,7 @@ func (sq *SchedulingQueue) RemoveQueue() bool {
     if len(sq.childrenQueues) > 0 || len(sq.applications) > 0 {
         return false
     }
-    glog.V(4).Infof("Removing queue: %s", sq.Name)
+
     // root is always managed and is the only queue with a nil parent: no need to guard
     sq.parent.removeChildQueue(sq.Name)
     return true

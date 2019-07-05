@@ -19,7 +19,6 @@ package rmproxy
 import (
     "errors"
     "fmt"
-    "github.com/golang/glog"
     "github.com/cloudera/scheduler-interface/lib/go/si"
     "github.com/cloudera/yunikorn-core/pkg/api"
     "github.com/cloudera/yunikorn-core/pkg/cache/cacheevent"
@@ -27,8 +26,10 @@ import (
     "github.com/cloudera/yunikorn-core/pkg/common/commonevents"
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/handler"
+    "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/plugins"
     "github.com/cloudera/yunikorn-core/pkg/rmproxy/rmevent"
+    "go.uber.org/zap"
     "reflect"
     "sync"
     "time"
@@ -57,9 +58,12 @@ func (m *RMProxy) GetRMEventHandler() commonevents.EventHandler {
 func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
     select {
     case queue <- ev:
-        glog.V(2).Infof("Enqueued event=%s, current queue size=%d", ev, len(queue))
+        log.Logger.Debug("enqueue event",
+            zap.Any("event", ev),
+            zap.Int("currentQueueSize", len(queue)))
     default:
-        panic(fmt.Sprintf("Failed to enqueue event=%s", reflect.TypeOf(ev).String()))
+        log.Logger.Panic("failed to enqueue event",
+            zap.String("event", reflect.TypeOf(ev).String()))
     }
 }
 
@@ -83,7 +87,9 @@ func (m *RMProxy) StartService(handlers handler.EventHandlers) {
 }
 
 func (m *RMProxy) handleRMRecvUpdateResponseError(rmId string, err error) {
-    glog.Errorf("Failed to handle response for RM-Id=%s, error=%s", rmId, err)
+    log.Logger.Error("failed to handle response",
+        zap.String("rmId", rmId),
+        zap.Error(err))
 }
 
 func (m *RMProxy) processUpdateResponse(rmId string, response *si.UpdateResponse) {
@@ -95,7 +101,8 @@ func (m *RMProxy) processUpdateResponse(rmId string, response *si.UpdateResponse
             m.handleRMRecvUpdateResponseError(rmId, err)
         }
     } else {
-        panic(fmt.Sprintf("Failed to find rm-id=%s in rmproxy", rmId))
+        log.Logger.DPanic("RM is not registered",
+            zap.String("rmId", rmId))
     }
 }
 
@@ -197,8 +204,6 @@ func (m *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerReq
             return nil, errors.New(result.Reason)
         }
     }
-
-    glog.V(0).Infof("Partitions associated with RM=%s removed from the cluster", request.RmId)
 
     c = make(chan *commonevents.Result, 0)
 

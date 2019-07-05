@@ -16,11 +16,12 @@ limitations under the License.
 package entrypoint
 
 import (
-	"github.com/golang/glog"
 	"github.com/cloudera/yunikorn-core/pkg/cache"
+	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/cloudera/yunikorn-core/pkg/rmproxy"
 	"github.com/cloudera/yunikorn-core/pkg/scheduler"
 	"github.com/cloudera/yunikorn-core/pkg/webservice"
+	"go.uber.org/zap"
 )
 
 type ServiceContext struct {
@@ -35,7 +36,8 @@ func (s *ServiceContext) StopAll() {
 	// TODO implement stop for services
 	if s.WebApp != nil {
 		if err := s.WebApp.StopWebApp(); err != nil {
-			glog.V(0).Infof("failed to stop web-app %v", err)
+			log.Logger.Error("failed to stop web-app",
+				zap.Error(err))
 		}
 	}
 }

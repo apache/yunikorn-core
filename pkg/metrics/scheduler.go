@@ -18,9 +18,10 @@ package metrics
 
 import (
 	"flag"
-	"github.com/golang/glog"
+	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.uber.org/zap"
 	"net/http"
 	"sync"
 	"time"
@@ -194,11 +195,11 @@ func initSchedulerMetrics() *SchedulerMetrics {
 	}
 	// Expose the registered metrics via HTTP.
 	http.Handle("/metrics", promhttp.Handler())
-	glog.Info("Metrics started at port=9090")
+	log.Logger.Info("metrics started", zap.Int("servicePort", 9090))
 	go func() {
 		httpError := http.ListenAndServe(":9090", nil)
 		if httpError != nil {
-			glog.Errorf("While serving HTTP: %v", httpError)
+			log.Logger.Error("HTTP serving error", zap.Error(httpError))
 		}
 	}()
 
@@ -318,7 +319,6 @@ func (m *SchedulerMetrics) IncActiveNodes() {
 }
 
 func (m *SchedulerMetrics) AddActiveNodes(value int) {
-	glog.Infof("Adding active nodes to YuniKorn:%d,%f", value, float64(value))
 	m.activeNodes.Add(float64(value))
 }
 
@@ -340,7 +340,6 @@ func (m *SchedulerMetrics) IncFailedNodes() {
 }
 
 func (m *SchedulerMetrics) AddFailedNodes(value int) {
-	glog.Infof("Adding failed nodes to YuniKorn:%d,%f", value, float64(value))
 	m.failedNodes.Add(float64(value))
 }
 

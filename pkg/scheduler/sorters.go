@@ -26,13 +26,13 @@ import (
 type SortType int32
 
 const (
-    FAIR_SORT_POLICY = 0
-    FIFO_SORT_POLICY = 1
-    MAX_AVAILABLE_RES = 2
+    FairSortPolicy        = 0
+    FifoSortPolicy        = 1
+    MaxAvailableResources = 2
 )
 
 func SortQueue(queues []*SchedulingQueue, sortType SortType) {
-    if sortType == FAIR_SORT_POLICY {
+    if sortType == FairSortPolicy {
         sort.SliceStable(queues, func(i, j int) bool {
             l := queues[i]
             r := queues[j]
@@ -44,7 +44,7 @@ func SortQueue(queues []*SchedulingQueue, sortType SortType) {
 }
 
 func SortApplications(queues []*SchedulingApplication, sortType SortType, globalResource *resources.Resource) {
-    if sortType == FAIR_SORT_POLICY {
+    if sortType == FairSortPolicy {
         sort.SliceStable(queues, func(i, j int) bool {
             l := queues[i]
             r := queues[j]
@@ -52,7 +52,7 @@ func SortApplications(queues []*SchedulingApplication, sortType SortType, global
             comp := resources.CompFairnessRatio(l.MayAllocatedResource, globalResource, r.MayAllocatedResource, globalResource)
             return comp < 0
         })
-    } else if sortType == FIFO_SORT_POLICY {
+    } else if sortType == FifoSortPolicy {
         sort.SliceStable(queues, func(i, j int) bool {
             l := queues[i]
             r := queues[j]
@@ -62,7 +62,7 @@ func SortApplications(queues []*SchedulingApplication, sortType SortType, global
 }
 
 func SortNodes(nodes []*SchedulingNode, sortType SortType) {
-    if sortType == MAX_AVAILABLE_RES {
+    if sortType == MaxAvailableResources {
         sort.SliceStable(nodes, func(i, j int) bool {
             l := nodes[i]
             r := nodes[j]

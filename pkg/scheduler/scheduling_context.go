@@ -18,8 +18,9 @@ package scheduler
 
 import (
     "fmt"
-    "github.com/golang/glog"
     "github.com/cloudera/yunikorn-core/pkg/cache"
+    "github.com/cloudera/yunikorn-core/pkg/log"
+    "go.uber.org/zap"
     "sync"
 )
 
@@ -111,7 +112,8 @@ func (csc *ClusterSchedulingContext) RemoveSchedulingApplication(appId string, p
 func (csc *ClusterSchedulingContext) updateSchedulingPartitions(partitions []*cache.PartitionInfo) error {
     csc.lock.Lock()
     defer csc.lock.Unlock()
-    glog.V(3).Infof("Updating scheduler context, %d partitions changed", len(partitions))
+    log.Logger.Info("updating scheduler context",
+        zap.Int("numOfPartitionsUpdated", len(partitions)))
 
     // Walk over the updated partitions
     for _, updatedPartition := range partitions {
@@ -119,14 +121,16 @@ func (csc *ClusterSchedulingContext) updateSchedulingPartitions(partitions []*ca
 
         partition := csc.partitions[updatedPartition.Name]
         if partition != nil {
-            glog.V(3).Infof("Updating existing scheduling partition: %s", updatedPartition.Name)
+            log.Logger.Info("updating scheduling partition",
+                zap.String("partitionName", updatedPartition.Name))
             // the partition details don't need updating just the queues
             partition.updatePartitionSchedulingContext(updatedPartition)
             // redo the flat map as queues might have been added/removed
             partition.queues = make(map[string]*SchedulingQueue)
             partition.Root.GetFlatChildrenQueues(partition.queues)
         } else {
-            glog.V(3).Infof("Creating new scheduling partition: %s", updatedPartition.Name)
+            log.Logger.Info("creating scheduling partition",
+                zap.String("partitionName", updatedPartition.Name))
             // create a new partition and add the queues
             root := NewSchedulingQueueInfo(updatedPartition.Root, nil)
             newPartition := newPartitionSchedulingContext(updatedPartition, root)
@@ -172,7 +176,8 @@ func (csc *ClusterSchedulingContext) deleteSchedulingPartitions(partitions []*ca
     for _, deletedPartition := range partitions {
         partition := csc.partitions[deletedPartition.Name]
         if partition != nil {
-            glog.V(1).Infof("Marking scheduling partition for deletion: %s", deletedPartition.Name)
+            log.Logger.Info("marking scheduling partition for deletion",
+                zap.String("partitionName", deletedPartition.Name))
             partition.partitionManager.Stop()
         } else {
             // collect all errors and keep processing

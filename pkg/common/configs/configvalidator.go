@@ -18,8 +18,9 @@ package configs
 
 import (
     "fmt"
-    "github.com/golang/glog"
     "github.com/cloudera/yunikorn-core/pkg/common/security"
+    "github.com/cloudera/yunikorn-core/pkg/log"
+    "go.uber.org/zap"
     "regexp"
     "strconv"
     "strings"
@@ -87,7 +88,9 @@ func checkPlacementRules(partition *PartitionConfig) error {
     if partition.PlacementRules == nil || len(partition.PlacementRules) == 0 {
         return nil
     }
-    glog.V(0).Infof("Checking partition %s placement rule config", partition.Name)
+
+    log.Logger.Debug("checking placement rule config",
+        zap.String("partitionName", partition.Name))
     // TODO check rules
     return nil
 }
@@ -98,7 +101,9 @@ func checkUserDefinition(partition *PartitionConfig) error {
     if partition.Users == nil || len(partition.Users) == 0 {
         return nil
     }
-    glog.V(0).Infof("Checking partition %s users config", partition.Name)
+
+    log.Logger.Debug("checking partition user config",
+        zap.String("partitionName", partition.Name))
     // TODO check users
     return nil
 }
@@ -157,7 +162,9 @@ func checkQueuesStructure(partition *PartitionConfig) error {
     if partition.Queues == nil {
         return fmt.Errorf("queue config is not set")
     }
-    glog.V(0).Infof("Checking partition %s queue config", partition.Name)
+
+    log.Logger.Debug("checking partition queue config",
+        zap.String("partitionName", partition.Name))
 
     // handle no root queue cases
     var insertRoot bool
@@ -176,7 +183,8 @@ func checkQueuesStructure(partition *PartitionConfig) error {
 
     // insert the root queue if not there
     if insertRoot {
-        glog.V(0).Infof("Inserting root queue, found %d top level queues", len(partition.Queues))
+        log.Logger.Debug("inserting root queue",
+            zap.Int("numOfQueues", len(partition.Queues)))
         var rootQueue QueueConfig
         rootQueue.Name = RootQueue
         rootQueue.Parent = true
@@ -221,7 +229,8 @@ func Validate(newConfig *SchedulerConfig) error {
             partition.Name = DefaultPartition
         }
         // check the queue structure
-        glog.V(0).Infof("Checking partition: %s", partition.Name)
+        log.Logger.Debug("checking partition",
+            zap.String("partitionName", partition.Name))
         err := checkQueuesStructure(&partition)
         if err != nil {
             return err

@@ -18,8 +18,9 @@ package common
 
 import (
     "fmt"
-    "github.com/golang/glog"
     "github.com/cloudera/scheduler-interface/lib/go/si"
+    "github.com/cloudera/yunikorn-core/pkg/log"
+    "go.uber.org/zap"
     "golang.org/x/net/context"
     "google.golang.org/grpc"
     "net"
@@ -78,18 +79,21 @@ func ParseEndpoint(ep string) (string, string, error) {
             return s[0], s[1], nil
         }
     }
-    return "", "", fmt.Errorf("Invalid endpoint: %v", ep)
+    return "", "", fmt.Errorf("invalid endpoint: %v", ep)
 }
 
 // Logging unary interceptor function to log every RPC call
 func logGRPC(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-    glog.V(3).Infof("GRPC call: %s", info.FullMethod)
-    glog.V(5).Infof("GRPC request: %+v", req)
+    log.Logger.Debug("GPRC call",
+        zap.String("method", info.FullMethod))
+    log.Logger.Debug("GPRC request",
+        zap.String("request", fmt.Sprintf("%+v", req)))
     resp, err := handler(ctx, req)
     if err != nil {
-        glog.Errorf("GRPC error: %v", err)
+        log.Logger.Debug("GPRC error", zap.Error(err))
     } else {
-        glog.V(5).Infof("GRPC response: %+v", resp)
+        log.Logger.Debug("GPRC response",
+            zap.String("response", fmt.Sprintf("%+v", resp)))
     }
     return resp, err
 }
@@ -103,19 +107,22 @@ func (s *nonBlockingGRPCServer) serve(endpoint string, ss si.SchedulerServer) {
 
     proto, addr, err := ParseEndpoint(endpoint)
     if err != nil {
-        glog.Fatal(err.Error())
+        log.Logger.Fatal("fatal error", zap.Error(err))
     }
 
     if proto == "unix" {
         addr = "/" + addr
         if err := os.Remove(addr); err != nil && !os.IsNotExist(err) {
-            glog.Fatalf("Failed to remove %s, error: %s", addr, err.Error())
+            log.Logger.Fatal("failed to remove unix domain socket",
+                zap.String("uds", addr),
+                zap.Error(err))
         }
     }
 
     listener, err := net.Listen(proto, addr)
     if err != nil {
-        glog.Fatalf("Failed to listen: %v", err)
+        log.Logger.Fatal("failed to listen to address",
+            zap.Error(err))
     }
 
     server := grpc.NewServer(withServerUnaryInterceptor())
@@ -125,10 +132,11 @@ func (s *nonBlockingGRPCServer) serve(endpoint string, ss si.SchedulerServer) {
         si.RegisterSchedulerServer(server, ss)
     }
 
-    glog.Infof("Listening for connections on address: %#v", listener.Addr())
+    log.Logger.Info("listening for connections",
+        zap.String("address", listener.Addr().String()))
 
     if err := server.Serve(listener); err != nil {
-        glog.Fatalf("failed to serve: %v", err)
+        log.Logger.Fatal("failed to serve", zap.Error(err))
     }
 
 }

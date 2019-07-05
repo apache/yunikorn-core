@@ -20,8 +20,9 @@ import (
 	"github.com/cloudera/scheduler-interface/lib/go/si"
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
+	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/cloudera/yunikorn-core/pkg/plugins"
-	"github.com/golang/glog"
+	"go.uber.org/zap"
 	"sync"
 )
 
@@ -71,13 +72,17 @@ func (m *SchedulingNode) CheckAndAllocateResource(delta *resources.Resource, pre
 func (m *SchedulingNode) CheckAllocateConditions(allocId string) bool {
 	// Check the predicates plugin (k8shim)
 	if plugin := plugins.GetPredicatesPlugin(); plugin != nil {
-		glog.V(4).Infof("eval predicates for allocation (%s) on node (%s)", allocId, m.NodeId)
+		log.Logger.Debug("predicates",
+			zap.String("allocationId", allocId),
+			zap.String("nodeId", m.NodeId))
 		if err := plugin.Predicates(&si.PredicatesArgs{
 			AllocationKey: allocId,
 			NodeId:        m.NodeId,
 		}); err != nil {
-			glog.V(4).Infof("eval predicates for allocation (%s) on node (%s) failed, reason: %s",
-				allocId, m.NodeId, err.Error())
+			log.Logger.Debug("running predicates failed",
+				zap.String("allocationId", allocId),
+				zap.String("nodeId", m.NodeId),
+				zap.Error(err))
 			return false
 		}
 	}

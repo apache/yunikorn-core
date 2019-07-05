@@ -17,7 +17,6 @@ package webservice
 
 import (
 	"encoding/json"
-	"github.com/golang/glog"
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/webservice/dao"
 	"net/http"
@@ -30,7 +29,6 @@ func GetQueueInfo(w http.ResponseWriter, r *http.Request) {
 
 	lists := gClusterInfo.ListPartitions()
 	for _, k := range lists {
-		glog.Info(k)
 		partitionInfo := getPartitionJson(k)
 
 		if err := json.NewEncoder(w).Encode(partitionInfo); err != nil {
@@ -44,7 +42,6 @@ func GetClusterInfo(w http.ResponseWriter, r *http.Request) {
 
 	lists := gClusterInfo.ListPartitions()
 	for _, k := range lists {
-		glog.Info(k)
 		clusterInfo := getClusterJson(k)
 		var clustersInfo []dao.ClusterDAOInfo
 		clustersInfo = append(clustersInfo, *clusterInfo)
@@ -61,8 +58,6 @@ func GetApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 	var appsDao []*dao.ApplicationDAOInfo
 	lists := gClusterInfo.ListPartitions()
 	for _, k := range lists {
-		glog.Info(k)
-
 		partition := gClusterInfo.GetPartition(k)
 		appList := partition.GetApplications()
 		for _, app := range appList {

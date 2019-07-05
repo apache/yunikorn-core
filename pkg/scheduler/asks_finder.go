@@ -17,8 +17,9 @@ limitations under the License.
 package scheduler
 
 import (
-    "github.com/golang/glog"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-core/pkg/log"
+    "go.uber.org/zap"
 )
 
 // Find next set of allocation asks for scheduler to place
@@ -184,12 +185,14 @@ func (m *Scheduler) findNextAllocationAskCandidate(
     for _, queue := range sortedQueueCandidates {
         // skip stopped queues: running and draining queues are allowed
         if queue.isStopped() {
-            glog.V(4).Infof("Skip queue=%s because it is not running", queue.Name)
+            log.Logger.Debug("skip non-running queue",
+                zap.String("queueName", queue.Name))
             continue
         }
         // Is it need any resource?
         if !resources.StrictlyGreaterThanZero(queue.GetPendingResource()) {
-            glog.V(4).Infof("Skip queue=%s because it has no pending resource", queue.Name)
+            log.Logger.Debug("skip queue because it has no pending resource",
+                zap.String("queueName", queue.Name))
             continue
         }
 
@@ -204,7 +207,8 @@ func (m *Scheduler) findNextAllocationAskCandidate(
             if preemptionParameters.crossQueuePreemption {
                 // We won't allocate resources if the queue is above its guaranteed resource.
                 if comp := resources.Comp(queue.CachedQueueInfo.GuaranteedResource, queue.ProposingResource, queue.CachedQueueInfo.GuaranteedResource); comp >= 0 {
-                    glog.V(4).Infof("Skip leaf queue=%s because it is already beyond guaranteed", queue.Name)
+                    log.Logger.Debug("skip queue because it is already beyond guaranteed",
+                        zap.String("queueName", queue.Name))
                     continue
                 }
             }

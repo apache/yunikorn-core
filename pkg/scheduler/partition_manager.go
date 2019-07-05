@@ -17,8 +17,9 @@ limitations under the License.
 package scheduler
 
 import (
-    "github.com/golang/glog"
     "github.com/cloudera/yunikorn-core/pkg/cache"
+    "github.com/cloudera/yunikorn-core/pkg/log"
+    "go.uber.org/zap"
     "time"
 )
 
@@ -42,21 +43,22 @@ func (manager PartitionManager) Run() {
     if manager.interval == 0 {
         manager.interval = cleanerInterval * time.Millisecond
     }
-    glog.V(0).Infof("Starting manager for the partition %s, sleep interval: %v", manager.psc.Name, manager.interval)
+
+    log.Logger.Info("starting partition manager",
+        zap.String("partition", manager.psc.Name),
+        zap.Duration("interval", manager.interval))
     // exit only when the partition this manager belongs to exits
     for {
-        glog.V(4).Infof("Queue cleaner sleeping partition %s", manager.psc.Name)
         time.Sleep(manager.interval)
         runStart := time.Now()
         manager.cleanQueues(manager.psc.Root)
         if manager.stop {
             break
         }
-        glog.V(4).Infof("Processing time for queue cleaner: %v", time.Since(runStart))
+        log.Logger.Info("time consumed for queue cleaner",
+            zap.Duration("duration", time.Since(runStart)))
     }
-    glog.V(0).Infof("Exiting queue cleaner for the partition %s", manager.psc.Name)
     manager.remove()
-    glog.V(0).Infof("Exiting manager for the partition %s", manager.psc.Name)
 }
 
 // Set the flag that the will allow the manager to exit.
@@ -80,7 +82,9 @@ func (manager PartitionManager) cleanQueues(schedulingQueue *SchedulingQueue) {
     }
     // when we have done the children (or have none) this schedulingQueue might be removable
     if schedulingQueue.isDraining() || !schedulingQueue.isManaged() {
-        glog.V(4).Infof("Queue cleaner trying to remove scheduling schedulingQueue %s from partition %s", schedulingQueue.Name, manager.psc.Name)
+        log.Logger.Debug("removing scheduling queue",
+            zap.String("queueName", schedulingQueue.Name),
+            zap.String("partitionName", manager.psc.Name))
         // make sure the queue is empty
         if len(schedulingQueue.applications) == 0 {
             // remove the cached queue, if not empty there is a problem since we have no applications left.
@@ -89,13 +93,17 @@ func (manager PartitionManager) cleanQueues(schedulingQueue *SchedulingQueue) {
                 schedulingQueue.RemoveQueue()
                 manager.psc.RemoveQueue(schedulingQueue.Name)
             } else {
-                glog.V(0).Infof("Queue cleaner failed to remove scheduling queue (%s)%s due to existing allocations (%v) and 0 applications assigned",
-                    manager.psc.Name, schedulingQueue.Name, schedulingQueue.CachedQueueInfo.GetAllocatedResource())
+                log.Logger.Debug("failed to remove scheduling queue",
+                    zap.String("schedulingQueue", schedulingQueue.Name),
+                    zap.String("queueAllocatedResource", schedulingQueue.CachedQueueInfo.GetAllocatedResource().String()),
+                    zap.Int("numOfAssignedApps", 0),
+                    zap.String("partitionName", manager.psc.Name))
             }
         } else {
             // TODO time out waiting for draining and removal
-            glog.V(0).Infof("Queue cleaner failed to remove scheduling schedulingQueue (%s)%s due to existing assigned applications",
-                manager.psc.Name, schedulingQueue.Name)
+            log.Logger.Debug("failed to remove scheduling queue due to existing assigned apps",
+                zap.String("schedulingQueue", schedulingQueue.Name),
+                zap.String("partitionName", manager.psc.Name))
         }
     }
 }
@@ -107,13 +115,16 @@ func (manager PartitionManager) cleanQueues(schedulingQueue *SchedulingQueue) {
 // - nodes
 // last action is to remove the cluster links
 func (manager PartitionManager) remove() {
-    glog.V(4).Infof("Marking all queues for removal on partition %s", manager.psc.Name)
+    log.Logger.Info("marking all queues for removal",
+        zap.String("partitionName", manager.psc.Name))
     pi := manager.psc.partition
     // mark all queues for removal
     pi.Root.MarkQueueForRemoval()
     // remove applications: we do not care about return values or issues
     apps := pi.GetApplications()
-    glog.V(4).Infof("Removing all applications (%d total) from partition %s", len(apps), manager.psc.Name)
+    log.Logger.Info("removing all applications from partition",
+        zap.Int("numOfApps",  len(apps)),
+        zap.String("partitionName", manager.psc.Name))
     for i := range apps {
         _ = apps[i].HandleApplicationEvent(cache.KillApplication)
         appId := apps[i].ApplicationId
@@ -122,11 +133,14 @@ func (manager PartitionManager) remove() {
     }
     // remove the nodes
     nodes := pi.CopyNodeInfos()
-    glog.V(4).Infof("Removing all nodes (%d total) from partition %s", len(nodes), manager.psc.Name)
+    log.Logger.Info("removing all nodes from partition",
+        zap.Int("numOfNodes",  len(nodes)),
+        zap.String("partitionName", manager.psc.Name))
     for i := range nodes {
         pi.RemoveNode(nodes[i].NodeId)
     }
-    glog.V(4).Infof("Removing partition from cluster %s", manager.psc.Name)
+    log.Logger.Info("removing partition",
+        zap.String("partitionName", manager.psc.Name))
     // remove the cache object
     pi.Remove()
     // remove the scheduler object

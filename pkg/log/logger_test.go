@@ -19,6 +19,7 @@ package log
 import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"testing"
 )
 
@@ -38,4 +39,28 @@ func TestIsNopLogger(t *testing.T) {
 	zap.ReplaceGlobals(logger)
 	assert.Equal(t, false, isNopLogger(logger))
 	assert.Equal(t, false, isNopLogger(zap.L()))
+}
+
+func TestIsDebugEnabled(t *testing.T) {
+	zapConfigs := zap.Config{
+		Level: zap.NewAtomicLevelAt(zapcore.DebugLevel),
+		Encoding: "console",
+	}
+	if logger, err := zapConfigs.Build(); err != nil {
+		assert.Fail(t, err.Error())
+	} else {
+		Logger = logger
+		assert.Equal(t, true, IsDebugEnabled())
+	}
+
+	zapConfigs = zap.Config{
+		Level: zap.NewAtomicLevelAt(zapcore.InfoLevel),
+		Encoding: "console",
+	}
+	if logger, err := zapConfigs.Build(); err != nil {
+		assert.Fail(t, err.Error())
+	} else {
+		Logger = logger
+		assert.Equal(t, false, IsDebugEnabled())
+	}
 }

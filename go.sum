@@ -61,6 +61,9 @@ github.com/stretchr/objx v0.1.1/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+
 github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXfy6kDkUVs=
 github.com/stretchr/testify v1.3.0 h1:TivCn/peBQ7UY8ooIcPgZFpTNSz0Q2U6UrFlUfqbe0Q=
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
+github.infra.cloudera.com/yunikorn/scheduler-interface v0.0.0-20190617075922-5e5e3ab930e0/go.mod h1:GdGZFhvaBzM01UCbrpJR3AscUYrxLxKv6QJgKriM9Gg=
+github.infra.cloudera.com/yunikorn/yunikorn-core v0.0.0-20190627163643-1666e5a4df90 h1:5ggTtMUUAfN+ayvo/2NhptLWuvDO0cPZ0vw3lWLs0hQ=
+github.infra.cloudera.com/yunikorn/yunikorn-core v0.0.0-20190627163643-1666e5a4df90/go.mod h1:GfnbkkdRxAUHWcjt9h2l6IfQByLEScxYxFbLy68hNiE=
 go.uber.org/atomic v1.4.0 h1:cxzIVoETapQEqDhQu3QfnvXAV4AlzcvUCxkVUFw3+EU=
 go.uber.org/atomic v1.4.0/go.mod h1:gD2HeocX3+yG+ygLZcrzQJaqmWj9AIm7n08wl/qW/PE=
 go.uber.org/multierr v1.1.0 h1:HoEmRHQPVSqub6w2z2d2EOVs2fjyFRGyofhKuyDq0QI=

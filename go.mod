@@ -3,12 +3,13 @@ module github.com/cloudera/yunikorn-core
 go 1.12
 
 require (
-	github.com/cloudera/scheduler-interface v0.0.0-20190617075922-5e5e3ab930e0
+	github.com/cloudera/yunikorn-scheduler-interface v0.0.0-20190709143634-b18608ace3f2
 	github.com/gorilla/mux v1.7.2
 	github.com/looplab/fsm v0.1.0
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/prometheus/client_golang v0.9.4
 	github.com/satori/go.uuid v1.2.0
+	github.com/stretchr/testify v1.3.0
 	go.uber.org/atomic v1.4.0 // indirect
 	go.uber.org/multierr v1.1.0 // indirect
 	go.uber.org/zap v1.10.0

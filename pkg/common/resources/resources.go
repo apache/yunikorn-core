@@ -18,7 +18,7 @@ package resources
 
 import (
     "fmt"
-    "github.com/cloudera/scheduler-interface/lib/go/si"
+    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "math"
     "sort"
     "strconv"

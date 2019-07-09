@@ -18,7 +18,7 @@ package tests
 
 import (
     "bytes"
-    "github.com/cloudera/scheduler-interface/lib/go/si"
+    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     cacheInfo "github.com/cloudera/yunikorn-core/pkg/cache"
     "github.com/cloudera/yunikorn-core/pkg/common"
     "github.com/cloudera/yunikorn-core/pkg/common/configs"

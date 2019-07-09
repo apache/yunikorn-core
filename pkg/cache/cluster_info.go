@@ -18,7 +18,7 @@ package cache
 
 import (
     "fmt"
-    "github.com/cloudera/scheduler-interface/lib/go/si"
+    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "github.com/cloudera/yunikorn-core/pkg/cache/cacheevent"
     "github.com/cloudera/yunikorn-core/pkg/common"
     "github.com/cloudera/yunikorn-core/pkg/common/commonevents"

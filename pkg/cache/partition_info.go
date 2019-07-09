@@ -18,13 +18,13 @@ package cache
 
 import (
     "fmt"
-    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "github.com/cloudera/yunikorn-core/pkg/common/commonevents"
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
     "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/metrics"
     "github.com/cloudera/yunikorn-core/pkg/webservice/dao"
+    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "github.com/looplab/fsm"
     "github.com/satori/go.uuid"
     "go.uber.org/zap"

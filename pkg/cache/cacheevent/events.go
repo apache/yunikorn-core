@@ -17,8 +17,8 @@ limitations under the License.
 package cacheevent
 
 import (
-    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "github.com/cloudera/yunikorn-core/pkg/common/commonevents"
+    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 )
 
 /******************/

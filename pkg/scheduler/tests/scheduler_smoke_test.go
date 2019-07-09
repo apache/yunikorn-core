@@ -18,12 +18,12 @@ package tests
 
 import (
     "bytes"
-    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     cacheInfo "github.com/cloudera/yunikorn-core/pkg/cache"
     "github.com/cloudera/yunikorn-core/pkg/common"
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
     "github.com/cloudera/yunikorn-core/pkg/entrypoint"
+    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "gotest.tools/assert"
     "testing"
     "time"

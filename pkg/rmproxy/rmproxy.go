@@ -19,7 +19,6 @@ package rmproxy
 import (
     "errors"
     "fmt"
-    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "github.com/cloudera/yunikorn-core/pkg/api"
     "github.com/cloudera/yunikorn-core/pkg/cache/cacheevent"
     "github.com/cloudera/yunikorn-core/pkg/common"
@@ -29,6 +28,7 @@ import (
     "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/plugins"
     "github.com/cloudera/yunikorn-core/pkg/rmproxy/rmevent"
+    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "go.uber.org/zap"
     "reflect"
     "sync"

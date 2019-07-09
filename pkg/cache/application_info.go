@@ -17,8 +17,8 @@ limitations under the License.
 package cache
 
 import (
-    "github.com/looplab/fsm"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "github.com/looplab/fsm"
     "sync"
     "time"
 )

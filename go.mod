@@ -3,7 +3,7 @@ module github.com/cloudera/yunikorn-core
 go 1.12
 
 require (
-	github.com/cloudera/yunikorn-scheduler-interface v0.0.0-20190709143634-b18608ace3f2
+	github.com/cloudera/yunikorn-scheduler-interface v0.0.0-20190709152041-3a309600a25f
 	github.com/gorilla/mux v1.7.2
 	github.com/looplab/fsm v0.1.0
 	github.com/prometheus/client_golang v0.9.4

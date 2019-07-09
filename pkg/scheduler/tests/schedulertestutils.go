@@ -18,10 +18,10 @@ package tests
 
 import (
     "fmt"
-    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "github.com/cloudera/yunikorn-core/pkg/cache"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
     "github.com/cloudera/yunikorn-core/pkg/scheduler"
+    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "sync"
     "testing"
     "time"

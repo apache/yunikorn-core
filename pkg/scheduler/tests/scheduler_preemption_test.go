@@ -18,8 +18,8 @@ limitations under the License.
 package tests
 
 import (
-    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "gotest.tools/assert"
     "testing"
 )

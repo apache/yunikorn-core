@@ -8,6 +8,8 @@ github.com/beorn7/perks v1.0.0/go.mod h1:KWe93zE9D1o94FZ5RNwFwVgaQK1VOXiVxmqh+Ce
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
 github.com/cloudera/yunikorn-scheduler-interface v0.0.0-20190709143634-b18608ace3f2 h1:kAdX0uv8hYtb0ULvrwUYgZU+bokbJ0/G2rohjjOwPPM=
 github.com/cloudera/yunikorn-scheduler-interface v0.0.0-20190709143634-b18608ace3f2/go.mod h1:QE7hLVzWYKot7H8eNMnGsphqStSEmSxxU5dgFzI32rk=
+github.com/cloudera/yunikorn-scheduler-interface v0.0.0-20190709152041-3a309600a25f h1:oVW5COe+VPBaS8d1FA30XzOZNJgt3QW1L8Fgo4qthlU=
+github.com/cloudera/yunikorn-scheduler-interface v0.0.0-20190709152041-3a309600a25f/go.mod h1:QE7hLVzWYKot7H8eNMnGsphqStSEmSxxU5dgFzI32rk=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

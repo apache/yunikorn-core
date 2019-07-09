@@ -18,8 +18,8 @@ package common
 
 import (
     "fmt"
-    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "github.com/cloudera/yunikorn-core/pkg/log"
+    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "go.uber.org/zap"
     "golang.org/x/net/context"
     "google.golang.org/grpc"

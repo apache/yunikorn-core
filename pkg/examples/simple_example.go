@@ -17,10 +17,10 @@ limitations under the License.
 package examples
 
 import (
-    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/entrypoint"
     "github.com/cloudera/yunikorn-core/pkg/scheduler/tests"
+    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 )
 
 func exampleOfRunYourOwnRM() {

@@ -66,10 +66,10 @@ YuniKorn consists of the following components:
 The code is spread over multiple repositories.
 
 - Scheduler Interface:
-  + Link: https://github.com/cloudera/scheduler-interface
+  + Link: https://github.com/cloudera/yunikorn-scheduler-interface
   + Purpose: Define the common scheduler interface used by shims and the core scheduler.
 - Scheduler Shims:
-  + k8s-shim: https://github.com/cloudera/k8s-shim
+  + k8s-shim: https://github.com/cloudera/yunikorn-k8shim
   + Purpose: Define the Kubernetes scheduler shim 
 - Scheduler UI
   + Link: https://github.com/cloudera/yunikorn-web

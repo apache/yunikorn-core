@@ -46,7 +46,7 @@ schedulerclient:
 	go build $(RACE) -a -ldflags '-extldflags "-static"' -o _output/schedulerclient ./cmd/schedulerclient
 
 clean:
-	go clean -r -x
+	go clean -r -x ./...
 	-rm -rf _output
 
 

@@ -4,9 +4,9 @@
 
 **yunikorn-scheduler-interface**
 
-* Communication protocols between RM and scheduler-shim
-* gRPC interfaces
-* Scheduler plugin interfaces
+* Communication protocols between RM and scheduler-shim.
+* gRPC interfaces.
+* Scheduler plugin interfaces.
 
 **yunikorn-core**
 
@@ -17,8 +17,9 @@
 * Rich placement constraints support.
 * Automatically map incoming container requests to queues by policies. 
 * Node partition: partition cluster to sub-clusters with dedicated quota/ACL management.
-* Configuration hot-refresh
-* Metrics framework
+* Configuration hot-refresh.
+* Stateful recovery.
+* Metrics framework.
 
 **yunikorn-k8shim**
 
@@ -39,16 +40,17 @@
 
 **yunikorn-core**
 
-* Gang Scheduling
-* Bin-packing
-* Preemption based on fairness at the user/app level
-* Application priority
-* Workload simulator
-* Prometheus integration (phase 2)
-* Grafana integration
+* Gang Scheduling.
+* Bin-packing.
+* Preemption based on fairness at the user/app level.
+* Application priority.
+* Rich scheduler metrics.
+* Workload simulator.
+* Prometheus integration (phase 2).
+* Grafana integration.
 
 **yunikorn-k8shim**
 
-* Placement rules
-* Security support
-* Helm chart deployment support
+* Placement rules.
+* Security support.
+* Helm chart support.

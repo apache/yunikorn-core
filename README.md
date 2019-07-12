@@ -8,17 +8,22 @@
 
 ## Motivations
 
-Scheduler of a container orchestration system, such as YARN and Kubernetes, is a critical component that users rely on to plan resources and manage applications. They have different characters to support different workloads:
+Scheduler of a container orchestration system, such as YARN and Kubernetes, is a critical component that users rely on to plan resources and manage applications.
+They have different characters to support different workloads:
 
-YARN schedulers are optimized for high-throughput, multi-tenant batch workloads. It can scale up to 50k nodes per cluster, and schedule 20k containers per second; On the other side, Kubernetes schedulers are optimized for long-running services, but many features like hierarchical queues to support multi-tenancy better, fairness resource sharing, and preemption etc, are either missing or not mature enough at this point of time.
+YARN schedulers are optimized for high-throughput, multi-tenant batch workloads. 
+It can scale up to 50k nodes per cluster, and schedule 20k containers per second;
+On the other side, Kubernetes schedulers are optimized for long-running services, but many features like hierarchical queues to support multi-tenancy better, fairness resource sharing, and preemption etc, are either missing or not mature enough at this point of time.
 
-However, underneath they are responsible for one same job: the decision maker for resource allocations. We see the need to run services on YARN as well as run jobs on Kubernetes. This motivates us to create a universal scheduler which can work for both YARN and Kubernetes, configured in the same way. And we can maintain the same source code repo in the future.
+However, underneath they are responsible for one same job: the decision maker for resource allocations. We see the need to run services on YARN as well as run jobs on Kubernetes.
+This motivates us to create a universal scheduler which can work for both YARN and Kubernetes, configured in the same way. And we can maintain the same source code repo in the future.
 
-YuniKorn is a generic container scheduler system to help run jobs and deploy services for cloud-native and on-prem use cases at scale. In addition, users will easily deploy YuniKorn easily on Kubernetes via Helm/Daemonset.
+YuniKorn is a generic container scheduler system to help run jobs and deploy services for cloud-native and on-prem use cases at scale.
+In addition, users will easily deploy YuniKorn easily on Kubernetes via Helm/Daemonset.
 
 ## What is YuniKorn
 
-![Architecture](docs/architecture.png)
+![Architecture](docs/images/architecture.png)
 
 The new scheduler just externerize scheduler implementation of YARN and K8s.
 
@@ -56,38 +61,36 @@ Here are some key features of YuniKorn. (Planned)
 
 ## Components
 
-YuniKorn consists of the following components:
-- Scheduler interface: API layer (with GRPC/programming language bindings) which is agnostic to resource management platform like YARN/K8s. 
-- Scheduler core: the brain of the scheduler, which makes placement decisions (Allocate container X on node Y) according to pre configured policies.
-- Resource Manager shims: Built-in support to allow YARN/K8s talks to scheduler interface. Which can be configured on existing clusters without code change.
+YuniKorn consists of the following components spread over multiple code repositories.
 
-## Github Repos
-
-The code is spread over multiple repositories.
-
-- Scheduler Interface:
-  + Link: https://github.com/cloudera/yunikorn-scheduler-interface
+- Scheduler core:
+  + Purpose: Define the brain of the scheduler, which makes placement decisions (Allocate container X on node Y) according to pre configured policies.
+  + Link: [this repository](./)
+- Scheduler interface:
   + Purpose: Define the common scheduler interface used by shims and the core scheduler.
-- Scheduler Shims:
-  + k8s-shim: https://github.com/cloudera/yunikorn-k8shim
-  + Purpose: Define the Kubernetes scheduler shim 
-- Scheduler UI
-  + Link: https://github.com/cloudera/yunikorn-web
+  Contains the API layer (with GRPC/programming language bindings) which is agnostic to resource management platform like YARN/K8s.
+  + Link: [https://github.com/cloudera/yunikorn-scheduler-interface](https://github.com/cloudera/yunikorn-scheduler-interface)
+- Resource Manager shims: 
+  + Purpose: Built-in support to allow YARN/K8s talks to scheduler interface. Which can be configured on existing clusters without code change.
+    + k8s-shim: [https://github.com/cloudera/yunikorn-k8shim](https://github.com/cloudera/yunikorn-k8shim)
+    + Purpose: Define the Kubernetes scheduler shim 
+- Scheduler User Interface
   + Purpose: Define the YuniKorn web interface
+  + Link: [https://github.com/cloudera/yunikorn-web](https://github.com/cloudera/yunikorn-web)
 
-## How to build
+## Building and using Yunikorn
 
-Prerequisite: 
-- Go 1.11+
+The build of Yunikorn differs per component. Each component has its own build scripts.
+Building an integrated image and the build for just the core component is in [this guide](docs/build.md).
 
-Steps: 
-- Run `make test` to run all unit tests
+An detailed overview on how to build each component, separately, is part of the specific component readme.
 
-## How to use 
+## Design documents
+All design documents are located in a central location per component. The core component design documents also contains the design documents for cross component designs.
+[List of design documents](docs/design/design-index.md)
 
-The simplest way to run YuniKorn is to leverage our pre-built docker images.
-YuniKorn could be easily deployed to Kubernetes with a yaml file, running as a customized scheduler.
-Then you can run workloads with this scheduler. Read more docs [here](docs/userguide.md).
+## Road map
+The current road map for the whole project is [here](docs/roadmap.md).  
 
 ## How do I contribute code?
 

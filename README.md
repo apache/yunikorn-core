@@ -1,63 +1,34 @@
 # YuniKorn - A Universal Scheduler
 
-## Why this name
+YuniKorn is a light-weighted, universal resource scheduler for container orchestrator systems.
+It was created to achieve fine-grained resource sharing for various workloads efficiently on a large scale, multi-tenant,
+and cloud-native environment. YuniKorn brings a unified, cross-platform scheduling experience for mixed workloads consists
+of stateless batch workloads and stateful services. Support for but not limited to, YARN and Kubernetes.
 
-- A Universal Scheduler for both YARN and Kubernetes
-- Y for YARN, uni for “unity scheduler”, K for Kubernetes.
-- Pronunciation: `['ju:nikɔ:n]` same as Unicorn
+## Architecture
 
-## Motivations
+![Architecture](docs/images/architecture.jpg)
 
-Scheduler of a container orchestration system, such as YARN and Kubernetes, is a critical component that users rely on to plan resources and manage applications.
-They have different characters to support different workloads:
-
-YARN schedulers are optimized for high-throughput, multi-tenant batch workloads. 
-It can scale up to 50k nodes per cluster, and schedule 20k containers per second;
-On the other side, Kubernetes schedulers are optimized for long-running services, but many features like hierarchical queues to support multi-tenancy better, fairness resource sharing, and preemption etc, are either missing or not mature enough at this point of time.
-
-However, underneath they are responsible for one same job: the decision maker for resource allocations. We see the need to run services on YARN as well as run jobs on Kubernetes.
-This motivates us to create a universal scheduler which can work for both YARN and Kubernetes, configured in the same way. And we can maintain the same source code repo in the future.
-
-YuniKorn is a generic container scheduler system to help run jobs and deploy services for cloud-native and on-prem use cases at scale.
-In addition, users will easily deploy YuniKorn easily on Kubernetes via Helm/Daemonset.
-
-## What is YuniKorn
-
-![Architecture](docs/images/architecture.png)
-
-The new scheduler just externerize scheduler implementation of YARN and K8s.
-
-- Provide a scheduler-interface, which is common scheduling API.
-- Shim-scheduler binding inside YARN/Kubernetes to translate resource requests to scheduler-interface request.
-- Applications on YARN/K8s can use the scheduler w/o modification. Because there’s no change of application protocols.
-
-YuniKorn can run either inside shim scheduler process (by using API) or outside of shim scheduler process (by using GRPC)
-
-### What is NOT YuniKorn
-
-Following are NOT purpose of YuniKorn
-- Be able to run your YARN application (Like Apache Hadoop Mapreduce) on K8s. (Or vice-versa)
+YuniKorn is a platform-neutral scheduler. Core scheduling logic is encapsulated in [yunikorn-core](./), that is decoupled with
+underneath platform by leveraging a common interface [yunikorn-scheduler-interface](https://github.com/cloudera/yunikorn-scheduler-interface).
+To integrate with a platform, a scheduler shim needs to be deployed on the host system, such as [yunikorn-k8shim](https://github.com/cloudera/yunikorn-k8shim) for Kubernetes.
+The underneath platform still manages all resources, but delegates all scheduling decisions to YuniKorn.
 
 ## Key features
 
-Here are some key features of YuniKorn. (Planned)
+Here are some key features of YuniKorn.
 
-- Works across YARN and K8s initially, can add support to other resource management platforms when needed.
-- Multi-tenant use cases
-  + Fairness between queues.
-  + Fairness between apps within queues. 
-  + Guaranteed quotas, maximum quotas for queues/users.
-- Preemption
-  + (Queue/user) quota-based preemption. 
-  + Application-priority-based preemption.
-  + Honor Disruption Budgets?
-- Customized resource types scheduling support. (Like GPU, disk, etc.)
+- Features to support both batch jobs and long-running/stateful services
+- Hierarchy queues with min/max resource quotas.
+- Resource fairness between queues, users and apps.
+- Cross-queue preemption based on fairness.
+- Customized resource types (like GPU) scheduling support.
 - Rich placement constraints support.
-  + Affinity / Anti-affinity for node / containers.
-  + Cardinality. 
-- Automatically map incoming requests to queues by policies. 
-- Works for both short-lived/long-lived batch jobs and services.
-- Serve requests with high volumes. (Targeted to 10k container allocations per second on a cluster with 10k+ nodes).
+- Automatically map incoming container requests to queues by policies. 
+- Node partition: partition cluster to sub-clusters with dedicated quota/ACL management. 
+
+The current road map for the whole project is [here](docs/roadmap.md), where you can find more information about what
+are already supported and future plans.
 
 ## Components
 
@@ -88,9 +59,6 @@ An detailed overview on how to build each component, separately, is part of the 
 ## Design documents
 All design documents are located in a central location per component. The core component design documents also contains the design documents for cross component designs.
 [List of design documents](docs/design/design-index.md)
-
-## Road map
-The current road map for the whole project is [here](docs/roadmap.md).  
 
 ## How do I contribute code?
 

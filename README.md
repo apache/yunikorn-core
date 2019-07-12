@@ -7,13 +7,22 @@ of stateless batch workloads and stateful services. Support for but not limited 
 
 ## Architecture
 
+Following chart illustrates the high-level architecture of YuniKorn.
+
 ![Architecture](docs/images/architecture.jpg)
 
-YuniKorn is a platform-neutral scheduler. Core scheduling logic is encapsulated in [yunikorn-core](./), that is decoupled with
-underneath platform by leveraging a common interface [yunikorn-scheduler-interface](https://github.com/cloudera/yunikorn-scheduler-interface).
-To integrate with a platform, a scheduler shim needs to be deployed on the host system, such as [yunikorn-k8shim](https://github.com/cloudera/yunikorn-k8shim) for Kubernetes.
-The underneath platform still manages all resources, but delegates all scheduling decisions to YuniKorn.
+YuniKorn consists of the following components spread over multiple code repositories.
 
+- _Scheduler core_: Define the brain of the scheduler, which makes placement decisions (Allocate container X on node Y)
+  according to pre configured policies. See more in current repo [yunikorn-core](./).
+- _Scheduler interface_: Define the common scheduler interface used by shims and the core scheduler.
+  Contains the API layer (with GRPC/programming language bindings) which is agnostic to container orchestrator systems like YARN/K8s.
+  See more in [yunikorn-scheduler-interface](https://github.com/cloudera/yunikorn-scheduler-interface).
+- _Resource Manager shims_: Built-in support to allow container orchestrator systems talks to scheduler interface.
+   Which can be configured on existing clusters without code change.
+   Currently, [yunikorn-k8shim](https://github.com/cloudera/yunikorn-k8shim) is available for Kubernetes integration. 
+- _Scheduler User Interface_: Define the YuniKorn web interface for app/queue management.
+   See more in [yunikorn-web](https://github.com/cloudera/yunikorn-web).
 ## Key features
 
 Here are some key features of YuniKorn.
@@ -29,25 +38,6 @@ Here are some key features of YuniKorn.
 
 The current road map for the whole project is [here](docs/roadmap.md), where you can find more information about what
 are already supported and future plans.
-
-## Components
-
-YuniKorn consists of the following components spread over multiple code repositories.
-
-- Scheduler core:
-  + Purpose: Define the brain of the scheduler, which makes placement decisions (Allocate container X on node Y) according to pre configured policies.
-  + Link: [this repository](./)
-- Scheduler interface:
-  + Purpose: Define the common scheduler interface used by shims and the core scheduler.
-  Contains the API layer (with GRPC/programming language bindings) which is agnostic to resource management platform like YARN/K8s.
-  + Link: [https://github.com/cloudera/yunikorn-scheduler-interface](https://github.com/cloudera/yunikorn-scheduler-interface)
-- Resource Manager shims: 
-  + Purpose: Built-in support to allow YARN/K8s talks to scheduler interface. Which can be configured on existing clusters without code change.
-    + k8s-shim: [https://github.com/cloudera/yunikorn-k8shim](https://github.com/cloudera/yunikorn-k8shim)
-    + Purpose: Define the Kubernetes scheduler shim 
-- Scheduler User Interface
-  + Purpose: Define the YuniKorn web interface
-  + Link: [https://github.com/cloudera/yunikorn-web](https://github.com/cloudera/yunikorn-web)
 
 ## Building and using Yunikorn
 

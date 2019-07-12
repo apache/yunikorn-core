@@ -1,6 +1,26 @@
 # YuniKorn Roadmap
 
-## v0.1
+## Next
+
+**yunikorn-core**
+
+* Gang Scheduling.
+* Bin-packing.
+* Preemption based on fairness at the user/app level.
+* Application priority.
+* Rich scheduler metrics.
+* Workload simulator.
+* Prometheus integration (phase 2).
+* Grafana integration.
+
+**yunikorn-k8shim**
+
+* Placement rules.
+* Security support.
+* Helm chart support.
+
+
+## v0.1 (Done)
 
 **yunikorn-scheduler-interface**
 
@@ -32,25 +52,3 @@
 * Cluster overview page with brief info about the cluster.
 * Read-only application view, including app info and task breakdown info.
 * Read-only queue view, displaying queue structure, queue resource, usage info dynamically.
-
-
-## Next
-
-(Priorities TBD)
-
-**yunikorn-core**
-
-* Gang Scheduling.
-* Bin-packing.
-* Preemption based on fairness at the user/app level.
-* Application priority.
-* Rich scheduler metrics.
-* Workload simulator.
-* Prometheus integration (phase 2).
-* Grafana integration.
-
-**yunikorn-k8shim**
-
-* Placement rules.
-* Security support.
-* Helm chart support.

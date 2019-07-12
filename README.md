@@ -14,7 +14,7 @@ Following chart illustrates the high-level architecture of YuniKorn.
 YuniKorn consists of the following components spread over multiple code repositories.
 
 - _Scheduler core_: Define the brain of the scheduler, which makes placement decisions (Allocate container X on node Y)
-  according to pre configured policies. See more in current repo [yunikorn-core](./).
+  according to pre configured policies. See more in current repo [yunikorn-core](https://github.com/cloudera/yunikorn-core).
 - _Scheduler interface_: Define the common scheduler interface used by shims and the core scheduler.
   Contains the API layer (with GRPC/programming language bindings) which is agnostic to container orchestrator systems like YARN/K8s.
   See more in [yunikorn-scheduler-interface](https://github.com/cloudera/yunikorn-scheduler-interface).

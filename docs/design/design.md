@@ -1,4 +1,4 @@
-# Design of Yunikornscheduler
+# Design of YuniKorn scheduler
 
 ## Overall
 

@@ -25,13 +25,14 @@ GO111MODULE := on
 export GO111MODULE
 
 REPO=github.com/cloudera/yunikorn-core/pkg
-# when using the -race option must set CGO_ENBLED to 1
+# when using the -race option CGO_ENABLED is set to 1 (automatically)
+# it breaks cross compilation.
 RACE=-race
-CGO_ENABLED=1
-# build on macos by default
-GOOS=darwin
+# build commands on local os by default, uncomment for cross-compilation
+#GOOS=darwin
+#GOARCH=amd64
 
-.PHONY: all simplescheduler
+.PHONY: all
 
 all: simplescheduler schedulerclient
 
@@ -48,6 +49,3 @@ schedulerclient:
 clean:
 	go clean -r -x ./...
 	-rm -rf _output
-
-
-

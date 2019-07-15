@@ -32,10 +32,26 @@ RACE=-race
 #GOOS=darwin
 #GOARCH=amd64
 
-test:
+.PHONY: common
+common: common-check-license
+
+.PHONY: check-license
+common-check-license:
+	@echo "checking license header"
+	@licRes=$$(for file in $$(find . -type f -iname '*.go' ! -path './vendor/*') ; do \
+               awk 'NR<=3' $$file | grep -Eq "Copyright 2019 Cloudera" || echo $$file; done); \
+       if [ -n "$${licRes}" ]; then \
+               echo "following files have incorrect license header"; echo "$${licRes}"; \
+               exit 1; \
+       fi
+
+.PHONY: test
+test: common
+	@echo "running unit tests"
 	go test ./... -cover $(RACE) -tags deadlock
 	go vet $(REPO)...
 
+.PHONY: clean
 clean:
 	go clean -r -x ./...
 	-rm -rf _output

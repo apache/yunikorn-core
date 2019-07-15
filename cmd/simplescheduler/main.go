@@ -21,17 +21,11 @@ import (
     "os"
 )
 
-func init() {
-    flag.Set("logtostderr", "true")
-}
-
 var (
-    endpoint = flag.String("endpoint", "unix://tmp/csi.sock", "CSI endpoint")
+    endpoint = flag.String("endpoint", "unix://tmp/yunikorn.sock", "YuniKorn endpoint")
 )
 
 func main() {
-    flag.Parse()
-
     handle()
     os.Exit(0)
 }

@@ -35,7 +35,7 @@ RACE=-race
 .PHONY: common
 common: common-check-license
 
-.PHONY: check-license
+.PHONY: common-check-license
 common-check-license:
 	@echo "checking license header"
 	@licRes=$$(for file in $$(find . -type f -iname '*.go' ! -path './vendor/*') ; do \
@@ -44,6 +44,12 @@ common-check-license:
                echo "following files have incorrect license header"; echo "$${licRes}"; \
                exit 1; \
        fi
+
+.PHONY: example
+example: common
+	@echo "building examples"
+	go build $(RACE) -a -ldflags '-extldflags "-static"' -o _output/simplescheduler ./cmd/simplescheduler
+	go build $(RACE) -a -ldflags '-extldflags "-static"' -o _output/schedulerclient ./cmd/schedulerclient
 
 .PHONY: test
 test: common

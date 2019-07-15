@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"github.com/cloudera/yunikorn-core/pkg/common"
 	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 	"io"
 	"log"
@@ -28,14 +29,14 @@ type SimpleScheduler struct {
 }
 
 func (scheduler *SimpleScheduler) Run(endpoint string) {
-	//// Create GRPC servers
-	//ss := newSchedulerServer()
-	//s := common.NewNonBlockingGRPCServer()
-	//s.Start(endpoint, ss)
-	//s.Wait()
+	// Create GRPC servers
+	ss := newSchedulerServer()
+	s := common.NewNonBlockingGRPCServer()
+	s.Start(endpoint, ss)
+	s.Wait()
 }
 
-func newSchedulerServer() (si.SchedulerServer) {
+func newSchedulerServer() si.SchedulerServer {
 	return &SimpleScheduler{}
 }
 

@@ -27,7 +27,8 @@ import (
 // options used to control how services are started
 type StartupOptions struct {
     manualScheduleFlag bool
-    startWebAppFlag bool
+    startWebAppFlag    bool
+    recoveryMode       bool
 }
 
 func StartAllServices() *ServiceContext {
@@ -35,6 +36,7 @@ func StartAllServices() *ServiceContext {
         StartupOptions{
             manualScheduleFlag: false,
             startWebAppFlag:    true,
+            recoveryMode:       false,
         })
 }
 
@@ -44,6 +46,7 @@ func StartAllServicesWithManualScheduler() *ServiceContext {
         StartupOptions{
             manualScheduleFlag: true,
             startWebAppFlag:    false,
+            recoveryMode:       false,
         })
 }
 
@@ -60,7 +63,7 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 
     // start services
     cache.StartService(eventHandler)
-    scheduler.StartService(eventHandler, opts.manualScheduleFlag)
+    scheduler.StartService(eventHandler, opts.manualScheduleFlag, opts.recoveryMode)
     proxy.StartService(eventHandler)
 
     context := &ServiceContext{

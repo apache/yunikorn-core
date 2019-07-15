@@ -109,7 +109,7 @@ If this yaml is deployed on 1 node cluster, expect 1 pod to be started and the o
 ### A volume example
 There are two examples with volumes available. The NFS example does not work on docker desktop and requires [minikube](https://kubernetes.io/docs/tasks/tools/install-minikube/).
 
-CAUTION: Both emaples will generate an unending stream of data in a file called `dates.txt` on the mounted volume. This could cause a disk to fill up and execution time should be limited. 
+CAUTION: Both examples will generate an unending stream of data in a file called `dates.txt` on the mounted volume. This could cause a disk to fill up and execution time should be limited. 
 * create the local volume and volume claim
 ```
 kubectl create -f examples/volumes/local-pv.yaml

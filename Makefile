@@ -32,27 +32,23 @@ RACE=-race
 #GOOS=darwin
 #GOARCH=amd64
 
-.PHONY: common
-common: common-check-license
-
 .PHONY: common-check-license
 common-check-license:
 	@echo "checking license header"
-	@licRes=$$(for file in $$(find . -type f -iname '*.go' ! -path './vendor/*') ; do \
-               awk 'NR<=3' $$file | grep -Eq "Copyright 2019 Cloudera" || echo $$file; done); \
-       if [ -n "$${licRes}" ]; then \
-               echo "following files have incorrect license header"; echo "$${licRes}"; \
-               exit 1; \
-       fi
+	@licRes=$$(grep -Lr --include="*.go" "Copyright 20[1-2][0-9] Cloudera" .) ; \
+	if [ -n "$${licRes}" ]; then \
+		echo "following files have incorrect license header:\n$${licRes}" ; \
+		exit 1; \
+	fi
 
 .PHONY: example
-example: common
+example:
 	@echo "building examples"
 	go build $(RACE) -a -ldflags '-extldflags "-static"' -o _output/simplescheduler ./cmd/simplescheduler
 	go build $(RACE) -a -ldflags '-extldflags "-static"' -o _output/schedulerclient ./cmd/schedulerclient
 
 .PHONY: test
-test: common
+test:
 	@echo "running unit tests"
 	go test ./... -cover $(RACE) -tags deadlock
 	go vet $(REPO)...

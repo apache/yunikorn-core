@@ -17,9 +17,9 @@ limitations under the License.
 package tests
 
 import (
+    "github.com/cloudera/yunikorn-core/pkg/api"
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/entrypoint"
-    "github.com/cloudera/yunikorn-core/pkg/rmproxy"
     "github.com/cloudera/yunikorn-core/pkg/scheduler"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "testing"
@@ -54,7 +54,7 @@ partitions:
 
 
 type MockScheduler struct {
-    proxy          *rmproxy.RMProxy
+    proxy          api.SchedulerApi
     scheduler      *scheduler.Scheduler
     mockRM         *MockRMCallbackHandler
     serviceContext *entrypoint.ServiceContext

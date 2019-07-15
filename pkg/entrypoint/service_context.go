@@ -16,16 +16,16 @@ limitations under the License.
 package entrypoint
 
 import (
+	"github.com/cloudera/yunikorn-core/pkg/api"
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/log"
-	"github.com/cloudera/yunikorn-core/pkg/rmproxy"
 	"github.com/cloudera/yunikorn-core/pkg/scheduler"
 	"github.com/cloudera/yunikorn-core/pkg/webservice"
 	"go.uber.org/zap"
 )
 
 type ServiceContext struct {
-	RMProxy   *rmproxy.RMProxy
+	RMProxy   api.SchedulerApi
 	Cache     *cache.ClusterInfo
 	Scheduler *scheduler.Scheduler
 	WebApp    *webservice.WebService

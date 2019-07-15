@@ -32,19 +32,9 @@ RACE=-race
 #GOOS=darwin
 #GOARCH=amd64
 
-.PHONY: all
-
-all: simplescheduler schedulerclient
-
 test:
-	go test ./... -cover $(RACE) -tags deadlock -v
+	go test ./... -cover $(RACE) -tags deadlock
 	go vet $(REPO)...
-
-simplescheduler:
-	go build $(RACE) -a -ldflags '-extldflags "-static"' -o _output/simplescheduler ./cmd/simplescheduler
-
-schedulerclient:
-	go build $(RACE) -a -ldflags '-extldflags "-static"' -o _output/schedulerclient ./cmd/schedulerclient
 
 clean:
 	go clean -r -x ./...

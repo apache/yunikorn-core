@@ -1,7 +1,7 @@
 # YuniKorn Scheduler build
 
 This build section describes two parts of the build.
-- [build for an integrated image](#integrated-scheduler-image)
+- [build for an integrated image](#Integrated-image-build)
 - [build for this repository](#Core-component-build)
 
 In the current setup the integrated build is part of the kubernetes shim `yunikorn-k8shim`.
@@ -14,6 +14,9 @@ Read the [environment setup guide](env-setup.md) first to setup Docker and Kuber
 
 The dependencies in the projects are managed using [go modules](https://blog.golang.org/using-go-modules).
 Go Modules require at least Go version 1.11 to be installed on the development system.
+
+If you want to modify one of the projects locally and build with your local dependencies you will need to change the module file. 
+Changing dependencies uses mod `replace` directives as explained in the [local build document](build-local.md).  
 
 Prerequisite:
 - Go 1.11+

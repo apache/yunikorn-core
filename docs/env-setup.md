@@ -23,8 +23,7 @@ This means that:
 ### 1.2 Deploy and Access dashboard
 
 After setting up the local kubernetes you need to deploy the dashboard using the following steps: 
-1. Deploy the dashboard   
-`kubectl create -f https://raw.githubusercontent.com/kubernetes/dashboard/master/aio/deploy/recommended/kubernetes-dashboard.yaml`
+1. Follow the instructions in [Kubernetes dashboard doc](https://github.com/kubernetes/dashboard) to deploy the dashboard.
 2. Start the kubernetes proxy in the background from a terminal to get access on the dashboard on the local host:   
 `kubectl proxy &`
 3. Access the dashboard at the following URL: [clickable link](http://localhost:8001/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard:/proxy/#!/login)

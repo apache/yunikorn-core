@@ -37,23 +37,17 @@ At this point you have an environment that will allow you to build an integrated
 
 ### Build image steps
 
-Building a docker image can be triggered by running one of the following two image targets.
+Building a docker image can be triggered by following command.
 
-Build an image that uses a configuration included in the docker image:
 ```
 make image
 ```
-or build an image that uses a kubernetes config map:
-```
-make image_map
-```
-**Note**: it may take few minutes to run this command for the first time, because it needs to download all dependencies.
 
 The image with the build in configuration can be deployed directly on kubernetes. Some sample deployments that can be used are found under [deployments](https://github.com/cloudera/yunikorn-k8shim/tree/master/deployments/scheduler) directory.
 For the deployment that uses a config map you need to set up the ConfigMap in kubernetes.  
 How to deploy the scheduler with a ConfigMap is explained in the [scheduler configuration deployment](configure-scheduler.md) document.
 
-Both image build options will first build the integrated executable and then create the docker image.
+The image build command will first build the integrated executable and then create the docker image.
 The default image tags are not be suitable for deployments to an accessible repository as it uses a hardcoded user and would push to [DockerHub](https://hub.docker.com/r/yunikorn/yunikorn-scheduler-k8s).
 You *must* update the `IMAGE_TAG` variable in the `Makefile` to push to an accessible repository.
 When you update the image tag be aware that the deployment examples given will also need to be updated to reflect the same change.
@@ -66,16 +60,16 @@ The scheduler is fully functional without the web UI.
 
 ### Locally run the integrated scheduler
 
-When you have a local development environment setup you can build and run the scheduler in your local kubernetes environment.
+When you have a local development environment setup you can run the scheduler in your local kubernetes environment.
 This has been tested in a Docker desktop with docker for desktop and Minikube. See the [environment setup guide](env-setup.md) for further details.
 
-### Build steps
-
-The step needed to build a locally running scheduler with kubernetes shim is: 
 ```
 make run
 ```
-It will deploy to the locally configured kubernetes using the users configured configuration located in `$HOME/.kube/config`.
+It will connect with the kubernetes cluster using the users configured configuration located in `$HOME/.kube/config`.
+
+You can also use the same approach to run the scheduler locally but connecting to a remote kubernetes cluster,
+as long as the `$HOME/.kube/config` file is pointing to that remote cluster.
 
 ### How to use 
 

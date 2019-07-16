@@ -1,10 +1,10 @@
 # Deployment of YuniKorn using a ConfigMap
 
-## Build docker image (without conf file)
+## Build docker image
 
-Under project root of the `yunikorn-k8s-shim`, run the command to build an image using the map for the configuration:
+Under project root of the `yunikorn-k8shim`, run the command to build an image using the map for the configuration:
 ```
-make image_map
+make image
 ```
 
 This command will build an image. The image will be tagged with a default version and image tag.
@@ -52,7 +52,7 @@ for reference.
 
 
 ## Deploy the Scheduler
-With the mapped config and the docker image build with the `image_map` target from the make the scheduler can be deployed: 
+The scheduler can be deployed with following command.
 ```
 kubectl create -f deployments/scheduler/scheduler-v0.3.35.yaml
 ```

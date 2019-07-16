@@ -18,7 +18,7 @@ This kubernetes environment can be either local or remote.
 
 - download configuration file if not available on the node to add to kubernetes:
 ```
-curl -o queues.yaml https://github.com/cloudera/yunikorn-k8shim/blob/master/conf/queues.yaml
+curl -o queues.yaml https://raw.githubusercontent.com/cloudera/yunikorn-k8shim/master/conf/queues.yaml
 ```
 - create ConfigMap in kubernetes:
 ```

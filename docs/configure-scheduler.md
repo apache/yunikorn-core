@@ -1,41 +1,58 @@
+# Deployment of YuniKorn using a ConfigMap
+
 ## Build docker image (without conf file)
 
-Under project root, run command
-
+Under project root of the `yunikorn-k8s-shim`, run the command to build an image using the map for the configuration:
 ```
 make image_map
 ```
 
-This command will build an image and push this image to [DockerHub](https://hub.docker.com/r/yunikorn/yunikorn-scheduler-k8s).
+This command will build an image. The image will be tagged with a default version and image tag.
 
-**Note** the default build uses a hardcoded user. You *must* update the `IMAGE_TAG` variable in the `Makefile` to push to a different repository. 
+**Note** the default build uses a hardcoded user and tag. You *must* update the `IMAGE_TAG` variable in the `Makefile` to push to an appropriate repository. 
 
-## Create ConfigMap
+## Create the ConfigMap
 
-This must be done before deploying the scheduler.
+This must be done before deploying the scheduler. It requires a correctly setup kubernetes environment.
+This kubernetes environment can be either local or remote. 
 
+- download configuration file if not available on the node to add to kubernetes:
 ```
-// 1) download configuration file
-$ curl -o queues.yaml https://raw.githubusercontent.com/cloudera/yunikorn-k8shim/master/conf/queues.yaml
-
-// 2) create configmap
-$ kubectl create configmap yunikorn-configs --from-file=queues.yaml
-configmap/yunikorn-configs created
-
-// 3) check configmap
-$ kubectl describe configmaps yunikorn-configs
+curl -o queues.yaml https://raw.githubusercontent.com/cloudera/yunikorn-k8shim/master/conf/queues.yaml
+```
+- create ConfigMap in kubernetes:
+```
+kubectl create configmap yunikorn-configs --from-file=queues.yaml
+```
+- check if the ConfigMap was created correctly:
+```
+kubectl describe configmaps yunikorn-configs
 ```
 
 **Note** if name of the ConfigMap is changed the volume in the scheduler yaml file must be updated to reference the new name otherwise the changes to the configuration will not be picked up. 
 
-## Attach ConfigMap Volume to Scheduler Pod
+## Attach ConfigMap Volume to the Scheduler Pod
 
-This is done in the scheduler yaml file, please look at [scheduler-v0.3.35.yaml](../deployments/scheduler/scheduler-v0.3.35.yaml)
+The ConfigMap is attached to the scheduler as a special volume. First step is to specify where to mount it in the pod:
+```yaml
+  volumeMounts:
+    - name: config-volume
+      mountPath: /etc/yunikorn/
+```
+Second step is t link the mount point back to the configuration map created in kubernetes:
+```yaml
+  volumes:
+    - name: config-volume
+      configMap:
+        name: yunikorn-configs
+``` 
+
+Both steps are part of the scheduler yaml file, an example can be seen at [scheduler-v0.3.5.yaml](https://github.com/cloudera/yunikorn-k8shim/blob/master/deployments/scheduler/scheduler-v0.3.5.yaml)
 for reference.
 
 
 ## Deploy the Scheduler
-
+With the mapped config and the docker image build with the `image_map` target from the make the scheduler can be deployed: 
 ```
 kubectl create -f deployments/scheduler/scheduler-v0.3.35.yaml
 ```

@@ -32,6 +32,9 @@ RACE=-race
 #GOOS=darwin
 #GOARCH=amd64
 
+.PHONY: build
+build: example
+
 .PHONY: common-check-license
 common-check-license:
 	@echo "checking license header"

@@ -2,9 +2,9 @@
 
 Before reading this guide, we assume you either have a Kubernetes cluster, or a local Kubernetes dev environment, e.g MiniKube.
 It is also assumed that `kubectl` is on your path and properly configured.
-Follow this [guide](./env-setup.md) on how to setup a local Kubernetes cluster using docker-desktop.
+Follow this [guide](setup/env-setup.md) on how to setup a local Kubernetes cluster using docker-desktop.
 
-All files mentioned in this user guide are part of the [yunikorn-k8s-shim](https://github.com/cloudera/yunikorn-k8shim) repository.
+All files mentioned in this user guide are part of the [yunikorn-k8shim](https://github.com/cloudera/yunikorn-k8shim) repository.
 They are located in the `deployments` sub directory. The command given assume that you are located in that directory.
 
 ## Setup
@@ -16,19 +16,19 @@ The role is a requirement on the current versions of kubernetes.
 
 ## Deploy the scheduler on k8s
 Before you can deploy the scheduler the image for the scheduler and the web interface must be build with the appropriate tags.
-The procedure on hwo to build the images is explained in the [build document](./build.md).
+The procedure on hwo to build the images is explained in the [build document](./developer-guide.md).
 ```
-kubectl create -f scheduler/scheduler-v0.3.5.yaml
+kubectl create -f scheduler/scheduler.yaml
 ```
 The deployment will run 2 containers from your pre-built docker images in 1 pod,
 
-* yunikorn-scheduler-core (scheduler core plus k8s-shim)
+* yunikorn-scheduler-core (yunikorn scheduler core and shim for K8s)
 * yunikorn-scheduler-web (web UI)
 
 The pod is deployed as a customized scheduler, it will take the responsibility to schedule pods which explicitly specifies `schedulerName: yunikorn` in pod's spec.
 
 ## Access to the web UI
-When the scheduler is deployed the web UI is also deployed in a container.
+When the scheduler is deployed, the web UI is also deployed in a container.
 Port forwarding for the web interface on the standard ports can be turned on via:
 ```
 // UI port
@@ -41,7 +41,7 @@ kubectl port-forward yunikorn-scheduler 9080
 ## Run workloads with YuniKorn Scheduler
 
 Unlike default Kubernetes scheduler, YuniKorn has `application` notion in order to support batch workloads better.
-There are a few ways to run workloads with YuniKorn scheduler
+There are a few ways to run batch workloads with YuniKorn scheduler
 
 - Add labels `applicationId` and `queue` in pod's spec.
 - Pods that have the same applicationId will be considered as tasks from 1 application.
@@ -64,7 +64,7 @@ Not all examples are given here
 A single pod: 
 ```
 // some nginx pods
-kubectl create -f examples/nigix/nginxjob.yaml
+kubectl create -f examples/nigix/nginx.yaml
 ```
 A simple sleep job:
 ```
@@ -73,9 +73,9 @@ kubectl create -f examples/sleep/sleeppods.xml
 ```
 
 ### Running a spark application
-Kubernetes support for Apache Spark is not part of all releases. You must have a current release of Apache Spark with Kubernetes support build in. 
+Kubernetes support for Apache Spark is not part of all releases. You must have a current release of Apache Spark with Kubernetes support built in. 
 
-The `examples/spark` directory contains pod template files for the Apache Spark driver and executor, they can be used if you want to run Spark on k8s using this scheduler.
+The `examples/spark` directory contains pod template files for the Apache Spark driver and executor, they can be used if you want to run Spark on K8s using this scheduler.
 
 * Get latest spark from github (only latest code supports to specify pod template), URL: https://github.com/apache/spark
 * Build spark with Kubernetes support:
@@ -112,9 +112,9 @@ There are two examples with volumes available. The NFS example does not work on 
 CAUTION: Both examples will generate an unending stream of data in a file called `dates.txt` on the mounted volume. This could cause a disk to fill up and execution time should be limited. 
 * create the local volume and volume claim
 ```
-kubectl create -f examples/volumes/local-pv.yaml
+kubectl create -f examples/volume/local-pv.yaml
 ```
 * create the pod that uses the volume
 ```
-kubectl create -f examples/volumes/pod-local.yaml
+kubectl create -f examples/volume/pod-local.yaml
 ```

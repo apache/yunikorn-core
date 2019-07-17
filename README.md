@@ -42,7 +42,7 @@ are already supported and future plans.
 ## Building and using Yunikorn
 
 The build of Yunikorn differs per component. Each component has its own build scripts.
-Building an integrated image and the build for just the core component is in [this guide](docs/build.md).
+Building an integrated image and the build for just the core component is in [this guide](docs/developer-guide.md).
 
 An detailed overview on how to build each component, separately, is part of the specific component readme.
 

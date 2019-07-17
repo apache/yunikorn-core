@@ -10,6 +10,9 @@ Read the [environment setup guide](setup/env-setup.md) first to setup Docker and
 
 ## Build YuniKorn for Kubernetes
 
+Prerequisite:
+- Go 1.11+
+
 You can build the scheduler for Kubernetes from [yunikorn-k8shim](https://github.com/cloudera/yunikorn-k8shim) project.
 The build procedure will built all components into a single executable that can be deployed and running on Kubernetes.
 
@@ -45,10 +48,7 @@ The dependencies in the projects are managed using [go modules](https://blog.gol
 Go Modules require at least Go version 1.11 to be installed on the development system.
 
 If you want to modify one of the projects locally and build with your local dependencies you will need to change the module file. 
-Changing dependencies uses mod `replace` directives as explained in the [local build document](setup/build-local.md).  
-
-Prerequisite:
-- Go 1.11+
+Changing dependencies uses mod `replace` directives as explained in the [local build document](setup/build-local.md).
 
 ## Build the web UI
 
@@ -74,12 +74,6 @@ as long as the `$HOME/.kube/config` file is pointing to that remote cluster.
 The scheduler core, this repository build, by itself does not provide a functional scheduler. 
 It just builds the core scheduler functionality without any resource managers or shims.
 A functional scheduler must have at least one resource manager that registers.
-
-### Dependencies
-The dependencies in the project are managed using [go modules](https://blog.golang.org/using-go-modules).   
-
-Prerequisite:
-- Go 1.11+
 
 ### Build steps
 The core component contains two command line tools: the `simplescheduler` and the `schedulerclient`.

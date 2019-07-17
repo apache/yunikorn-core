@@ -64,7 +64,7 @@ Not all examples are given here
 A single pod: 
 ```
 // some nginx pods
-kubectl create -f examples/nigix/nginx.yaml
+kubectl create -f examples/nginx/nginx.yaml
 ```
 A simple sleep job:
 ```

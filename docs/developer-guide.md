@@ -1,10 +1,8 @@
-# YuniKorn Scheduler build
+# Developer Guide
 
-This build section describes two parts of the build.
-- [build for an integrated image](#Integrated-image-build)
-- [build for this repository](#Core-component-build)
-
-In the current setup the integrated build is part of the kubernetes shim `yunikorn-k8shim`.
+YuniKorn always works with a container orchestrator system. Currently, a Kubernetes shim [yunikorn-k8shim](https://github.com/cloudera/yunikorn-k8shim)
+is provided in our repositories, you can leverage it to develop YuniKorn scheduling features and integrate with Kubernetes.
+This document describes resources how to setup dev environment and how to do the development.
 
 ### Development Environment setup
 
@@ -21,9 +19,17 @@ Changing dependencies uses mod `replace` directives as explained in the [local b
 Prerequisite:
 - Go 1.11+
 
-## Integrated image build
+## Build Scheduler for Kubernetes
 
-The image build requires all components to be built into a single executable that can be deployed and run.
+This build section describes two parts of the build.
+- [build for an integrated image](#Integrated-image-build)
+- [build for this repository](#Core-component-build)
+
+In the current setup the integrated build is part of the kubernetes shim `yunikorn-k8shim`.
+
+### Integrated image build
+
+The image build requires all components to be built into a single executable that can be deployed and running on Kubernetes.
 This build is currently implemented as part of the kubernetes shim project. The following set of build commands are part of the `yunikorn-k8shim` build implementation.
 
 Start the integrated build process by pulling the `yunikorn-k8shim` repository:
@@ -34,7 +40,7 @@ git clone https://github.com/cloudera/yunikorn-k8shim.git
 ```
 At this point you have an environment that will allow you to build an integrated image for the YuniKorn scheduler.
 
-### Build image steps
+#### Build Docker image
 
 Building a docker image can be triggered by following command.
 
@@ -70,12 +76,6 @@ It will connect with the kubernetes cluster using the users configured configura
 You can also use the same approach to run the scheduler locally but connecting to a remote kubernetes cluster,
 as long as the `$HOME/.kube/config` file is pointing to that remote cluster.
 
-### How to use 
-
-The simplest way to run YuniKorn is to leverage our pre-built docker images.
-YuniKorn could be easily deployed to Kubernetes with a yaml file, running as a customized scheduler.
-Then you can run workloads with this scheduler. Example deployments are described in [here](user-guide.md).
-
 ## Core component build
 
 The scheduler core, this repository build, by itself does not provide a functional scheduler. 
@@ -102,3 +102,8 @@ Run all unit tests for the core component:
 make test
 ```
 Any changes made to the core code should not cause any existing tests to fail.
+
+## Design documents
+
+All design documents are located in a central location per component. The core component design documents also contains the design documents for cross component designs.
+[List of design documents](docs/design/design-index.md)

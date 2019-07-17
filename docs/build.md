@@ -28,12 +28,14 @@ This build is currently implemented as part of the kubernetes shim. The followin
 
 Start the integrated build process by pulling the `yunikorn-k8shim` repository:
 ```bash
-mkdir $HOME/yunikorn-k8s-shim/
-cd $HOME/yunikorn-k8s-shim/
-export GOPATH=$HOME/yunikorn-k8s-shim/
+mkdir $HOME/yunikorn-k8shim/
+cd $HOME/yunikorn-k8shim/
+export GOPATH=$HOME/yunikorn-k8shim/
 go get github.com/cloudera/yunikorn-k8shim
 ```
 At this point you have an environment that will allow you to build an integrated image for the YuniKorn scheduler.
+
+Note that if the GOPATH is not set the code repository will be located in the standard location for all other go projects: `$HOME/go`
 
 ### Build image steps
 
@@ -49,7 +51,7 @@ How to deploy the scheduler with a ConfigMap is explained in the [scheduler conf
 
 The image build command will first build the integrated executable and then create the docker image.
 The default image tags are not be suitable for deployments to an accessible repository as it uses a hardcoded user and would push to [DockerHub](https://hub.docker.com/r/yunikorn/yunikorn-scheduler-k8s).
-You *must* update the `IMAGE_TAG` variable in the `Makefile` to push to an accessible repository.
+You *must* update the `TAG` variable in the `Makefile` to push to an accessible repository.
 When you update the image tag be aware that the deployment examples given will also need to be updated to reflect the same change.
 
 ### Build the web UI

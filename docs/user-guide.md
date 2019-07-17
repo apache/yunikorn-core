@@ -5,10 +5,10 @@ It is also assumed that `kubectl` is on your path and properly configured.
 Follow this [guide](setup/env-setup.md) on how to setup a local Kubernetes cluster using docker-desktop.
 
 All files mentioned in this user guide are part of the [yunikorn-k8shim](https://github.com/cloudera/yunikorn-k8shim) repository.
-They are located in the `deployments` sub directory. The command given assume that you are located in that directory.
+They are located in the [deployments](https://github.com/cloudera/yunikorn-k8shim/tree/master/deployments/scheduler) sub directory. The command given assume that you are located in that directory.
 
 ## Setup
-The first step is to create the RBAC role for the scheduler
+The first step is to create the RBAC role for the scheduler, see [yunikorn-rbac.yaml](https://github.com/cloudera/yunikorn-k8shim/blob/master/deployments/scheduler/yunikorn-rbac.yaml)
 ```
 kubectl create -f scheduler/yunikorn-rbac.yaml
 ```
@@ -35,7 +35,7 @@ For more information about how to manage scheduler's configuration via configmap
 
 ## Deploy the scheduler on k8s
 Before you can deploy the scheduler the image for the scheduler and the web interface must be build with the appropriate tags.
-The procedure on how to build the images is explained in the [build document](./developer-guide.md).
+The procedure on how to build the images is explained in the [build document](./developer-guide.md). See [scheduler.yaml](https://github.com/cloudera/yunikorn-k8shim/blob/master/deployments/scheduler/scheduler.yaml)
 ```
 kubectl create -f scheduler/scheduler.yaml
 ```

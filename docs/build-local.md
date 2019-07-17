@@ -11,7 +11,7 @@ The following dependencies exist between the repositories:
 | repository| depends on |
 | --- | --- |
 | yunikorn-core | yunikorn-scheduler-interface | 
-| yunikorn-k8s-shim | yunikorn-scheduler-interface, yunikorn-core |
+| yunikorn-k8shim | yunikorn-scheduler-interface, yunikorn-core |
 | yunikorn-scheduler-interface | none |
 | yunikorn-web | yunikorn-core |
 

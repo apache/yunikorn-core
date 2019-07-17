@@ -54,9 +54,14 @@ for reference.
 ## Deploy the Scheduler
 The scheduler can be deployed with following command.
 ```
-kubectl create -f deployments/scheduler/scheduler-v0.3.35.yaml
+kubectl create -f deployments/scheduler/scheduler.yaml
 ```
 
+## Configuration Hot Refresh
+
+YuniKorn supports to load configuration changes automatically from attached configmap. Simply update the content in the configmap,
+that can be done either via Kubernetes dashboard UI or commandline. _Note_, changes made to the configmap might have some
+delay to be picked up by the scheduler.
 
 
 

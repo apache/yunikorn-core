@@ -14,9 +14,28 @@ kubectl create -f scheduler/yunikorn-rbac.yaml
 ```
 The role is a requirement on the current versions of kubernetes.
 
+## Create the ConfigMap
+
+YuniKorn loads its configuration from a K8s configmap, so it is required to create the configmap before launching the scheduler.
+
+- download a sample configuration file:
+```
+curl -o queues.yaml https://raw.githubusercontent.com/cloudera/yunikorn-k8shim/master/conf/queues.yaml
+```
+- create ConfigMap in kubernetes:
+```
+kubectl create configmap yunikorn-configs --from-file=queues.yaml
+```
+- check if the ConfigMap was created correctly:
+```
+kubectl describe configmaps yunikorn-configs
+```
+
+For more information about how to manage scheduler's configuration via configmap, see more from [here](./setup/configure-scheduler.md).
+
 ## Deploy the scheduler on k8s
 Before you can deploy the scheduler the image for the scheduler and the web interface must be build with the appropriate tags.
-The procedure on hwo to build the images is explained in the [build document](./developer-guide.md).
+The procedure on how to build the images is explained in the [build document](./developer-guide.md).
 ```
 kubectl create -f scheduler/scheduler.yaml
 ```

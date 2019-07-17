@@ -42,6 +42,28 @@ The default image tags are not be suitable for deployments to an accessible repo
 You *must* update the `TAG` variable in the `Makefile` to push to an accessible repository.
 When you update the image tag be aware that the deployment examples given will also need to be updated to reflect the same change.
 
+### Inspect the docker image
+
+The docker image built from previous step has embedded some important build info in image's metadata. You can retrieve
+these info with docker `inspect` command.
+
+```
+docker inspect yunikorn/yunikorn-scheduler-k8s:latest
+```
+
+these info includes git revisions (last commit SHA) for each component, to help you understand which version of the source code
+was shipped by this image. They are listed as docker image `labels`, such as
+
+```
+"Labels": {
+    "BuildTimeStamp": "2019-07-16T23:08:06+0800",
+    "Version": "0.1",
+    "yunikorn-core-revision": "dca66c7e5a9e",
+    "yunikorn-k8shim-revision": "bed60f720b28",
+    "yunikorn-scheduler-interface-revision": "3df392eded1f"
+}
+```
+
 ### Dependencies
 
 The dependencies in the projects are managed using [go modules](https://blog.golang.org/using-go-modules).

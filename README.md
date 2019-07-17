@@ -39,17 +39,13 @@ Here are some key features of YuniKorn.
 The current road map for the whole project is [here](docs/roadmap.md), where you can find more information about what
 are already supported and future plans.
 
-## Building and using Yunikorn
+## How to use
 
-The build of Yunikorn differs per component. Each component has its own build scripts.
-Building an integrated image and the build for just the core component is in [this guide](docs/developer-guide.md).
-
-An detailed overview on how to build each component, separately, is part of the specific component readme.
-
-## Design documents
-All design documents are located in a central location per component. The core component design documents also contains the design documents for cross component designs.
-[List of design documents](docs/design/design-index.md)
+The simplest way to run YuniKorn is to build a docker image and then deployed to Kubernetes with a yaml file,
+running as a customized scheduler. Then you can run workloads with this scheduler.
+See more instructions from [here](./docs/user-guide.md).
 
 ## How do I contribute code?
 
-See how to contribute code from [this guide](docs/how-to-contribute.md).
+To get involved in the development, you can read the developer guide from [here](docs/developer-guide.md),
+and see how to contribute code from [here](docs/how-to-contribute.md).

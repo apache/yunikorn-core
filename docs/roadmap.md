@@ -1,6 +1,6 @@
 # YuniKorn Roadmap
 
-## Next
+## What's next
 
 **yunikorn-core**
 
@@ -20,7 +20,7 @@
 * Helm chart support.
 
 
-## v0.1 (Done)
+## v0.0.1 (Done)
 
 **yunikorn-scheduler-interface**
 

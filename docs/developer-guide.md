@@ -8,7 +8,7 @@ In the current setup the integrated build is part of the kubernetes shim `yuniko
 
 ### Development Environment setup
 
-Read the [environment setup guide](env-setup.md) first to setup Docker and Kubernetes development environment.
+Read the [environment setup guide](setup/env-setup.md) first to setup Docker and Kubernetes development environment.
 
 ### Build dependencies
 
@@ -16,26 +16,23 @@ The dependencies in the projects are managed using [go modules](https://blog.gol
 Go Modules require at least Go version 1.11 to be installed on the development system.
 
 If you want to modify one of the projects locally and build with your local dependencies you will need to change the module file. 
-Changing dependencies uses mod `replace` directives as explained in the [local build document](build-local.md).  
+Changing dependencies uses mod `replace` directives as explained in the [local build document](setup/build-local.md).  
 
 Prerequisite:
 - Go 1.11+
 
 ## Integrated image build
 
-The image build requires all components to be build into a single executable that can be deployed and run.
-This build is currently implemented as part of the kubernetes shim. The following set of build commands are part of the `yunikorn-k8s-shim` build implementation.
+The image build requires all components to be built into a single executable that can be deployed and run.
+This build is currently implemented as part of the kubernetes shim project. The following set of build commands are part of the `yunikorn-k8shim` build implementation.
 
 Start the integrated build process by pulling the `yunikorn-k8shim` repository:
 ```bash
-mkdir $HOME/yunikorn-k8shim/
-cd $HOME/yunikorn-k8shim/
-export GOPATH=$HOME/yunikorn-k8shim/
-go get github.com/cloudera/yunikorn-k8shim
+mkdir $HOME/yunikorn/
+cd $HOME/yunikorn/
+git clone https://github.com/cloudera/yunikorn-k8shim.git
 ```
 At this point you have an environment that will allow you to build an integrated image for the YuniKorn scheduler.
-
-Note that if the GOPATH is not set the code repository will be located in the standard location for all other go projects: `$HOME/go`
 
 ### Build image steps
 
@@ -47,10 +44,10 @@ make image
 
 The image with the build in configuration can be deployed directly on kubernetes. Some sample deployments that can be used are found under [deployments](https://github.com/cloudera/yunikorn-k8shim/tree/master/deployments/scheduler) directory.
 For the deployment that uses a config map you need to set up the ConfigMap in kubernetes.  
-How to deploy the scheduler with a ConfigMap is explained in the [scheduler configuration deployment](configure-scheduler.md) document.
+How to deploy the scheduler with a ConfigMap is explained in the [scheduler configuration deployment](setup/configure-scheduler.md) document.
 
 The image build command will first build the integrated executable and then create the docker image.
-The default image tags are not be suitable for deployments to an accessible repository as it uses a hardcoded user and would push to [DockerHub](https://hub.docker.com/r/yunikorn/yunikorn-scheduler-k8s).
+The default image tags are not be suitable for deployments to an accessible repository as it uses a hardcoded user and would push to Docker Hub with proper credentials.
 You *must* update the `TAG` variable in the `Makefile` to push to an accessible repository.
 When you update the image tag be aware that the deployment examples given will also need to be updated to reflect the same change.
 
@@ -63,7 +60,7 @@ The scheduler is fully functional without the web UI.
 ### Locally run the integrated scheduler
 
 When you have a local development environment setup you can run the scheduler in your local kubernetes environment.
-This has been tested in a Docker desktop with docker for desktop and Minikube. See the [environment setup guide](env-setup.md) for further details.
+This has been tested in a Docker desktop with docker for desktop and Minikube. See the [environment setup guide](setup/env-setup.md) for further details.
 
 ```
 make run

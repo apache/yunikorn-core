@@ -13,7 +13,7 @@ Just simply follow the instruction [here](https://docs.docker.com/docker-for-mac
 
 Once Kubernetes is started in docker desktop, you should see something similar below:
 
-![Kubernetes in Docker Desktop](images/docker-desktop.png)
+![Kubernetes in Docker Desktop](../images/docker-desktop.png)
 
 This means that:
 1. Kubernetes is running.
@@ -38,9 +38,9 @@ The dashboard as deployed in the previous step requires a token or config to sig
 `kubectl -n kube-system describe secret kubernetes-dashboard-token-tf6n8`
 3. Copy the token value which is part of the `Data` section with the tag `token`.
 4. Select the **Token** option in the dashboard web UI:
-![Token Access in dashboard](images/dashboard_token_select.png)
+![Token Access in dashboard](../images/dashboard_token_select.png)
 5. Paste the token value into the input box and sign in:   
-![Token Access in dashboard](images/dashboard_secret.png)
+![Token Access in dashboard](../images/dashboard_secret.png)
 
 ### 1.4 Access remote Kubernetes cluster
 

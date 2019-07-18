@@ -50,3 +50,14 @@ See more instructions from [here](./docs/user-guide.md).
 We welcome any form of contributions, code, documentation or even discussions. To get involved, please read following resources.
 - Before you contributing code or documentation to YuniKorn, please read our [Developer Guide](docs/developer-guide.md).
 - Please read [How to Contribute](docs/how-to-contribute.md) to understand the procedure and guidelines of making contributions.
+
+## Other Resources
+
+YuniKorn demo videos are published to a [Youtube channel](https://www.youtube.com/channel/UCDSJ2z-lEZcjdK27tTj_hGw),
+watch these demo videos may help you to get started with YuniKorn easier.
+
+- [Running YuniKorn on Kubernetes - a 12 minutes Hello-world demo](https://www.youtube.com/watch?v=cCHVFkbHIzo)
+
+Blog posts
+
+- [YuniKorn: a universal resource scheduler](https://blog.cloudera.com/blog/2019/07/yunikorn-a-universal-resource-scheduler/)

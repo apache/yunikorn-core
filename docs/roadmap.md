@@ -19,6 +19,9 @@
 * Security support.
 * Helm chart support.
 
+**yunikorn-web**
+
+* Implement cluster overview page, display overall info about cluster and applications
 
 ## v0.0.1 (Done)
 

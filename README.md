@@ -45,7 +45,8 @@ The simplest way to run YuniKorn is to build a docker image and then deployed to
 running as a customized scheduler. Then you can run workloads with this scheduler.
 See more instructions from [here](./docs/user-guide.md).
 
-## How do I contribute code?
+## How can I get involved?
 
-To get involved in the development, you can read the developer guide from [here](docs/developer-guide.md),
-and see how to contribute code from [here](docs/how-to-contribute.md).
+We welcome any form of contributions, code, documentation or even discussions. To get involved, please read following resources.
+- Before you contributing code or documentation to YuniKorn, please read our [Developer Guide](docs/developer-guide.md).
+- Please read [How to Contribute](docs/how-to-contribute.md) to understand the procedure and guidelines of making contributions.

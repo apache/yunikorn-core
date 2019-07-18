@@ -14,18 +14,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package fsm
+package statemachine
 
-type SchedulerStateEventType string
+type FsmStateEventType string
 
 const (
-	StartScheduler          SchedulerStateEventType = "StartScheduler"
-	RecoverScheduler        SchedulerStateEventType = "RecoverScheduler"
-	RecoverSchedulerSuccess SchedulerStateEventType = "RecoverSchedulerSuccess"
-	RecoverySchedulerFail   SchedulerStateEventType = "RecoverySchedulerFail"
+	StartScheduler          FsmStateEventType = "StartScheduler"
+	RecoverScheduler        FsmStateEventType = "RecoverScheduler"
+	RecoverSchedulerSuccess FsmStateEventType = "RecoverSchedulerSuccess"
+	RecoverySchedulerFail   FsmStateEventType = "RecoverySchedulerFail"
 )
 
-type SchedulerStateEvent struct {
-	EventType SchedulerStateEventType
-	Args []interface{}
+// scheduler state event triggers FSM state transitions
+type FsmStateEvent struct {
+	EventType FsmStateEventType
+	Args      []interface{}
 }

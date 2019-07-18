@@ -14,14 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package fsm
+package statemachine
 
-type SchedulerStateType string
+// defines scheduler states that used by the state machine
+type FsmStateType string
 
 const (
-	New           SchedulerStateType = "New"
-	Running       SchedulerStateType = "Running"
-	Recovering    SchedulerStateType = "Recovering"
-	RecoverFailed SchedulerStateType = "RecoverFailed"
-	Stopped       SchedulerStateType = "Stopped"
+	New           FsmStateType = "New"
+	Running       FsmStateType = "Running"
+	Recovering    FsmStateType = "Recovering"
+	RecoverFailed FsmStateType = "RecoverFailed"
+	Stopped       FsmStateType = "Stopped"
 )

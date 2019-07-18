@@ -21,6 +21,7 @@ import (
     "github.com/cloudera/yunikorn-core/pkg/handler"
     "github.com/cloudera/yunikorn-core/pkg/rmproxy"
     "github.com/cloudera/yunikorn-core/pkg/scheduler"
+    "github.com/cloudera/yunikorn-core/pkg/statemachine"
     "github.com/cloudera/yunikorn-core/pkg/webservice"
 )
 
@@ -28,7 +29,7 @@ import (
 type StartupOptions struct {
     manualScheduleFlag bool
     startWebAppFlag    bool
-    recoveryMode       bool
+    recoveryFlag       bool
 }
 
 func StartAllServices() *ServiceContext {
@@ -36,7 +37,7 @@ func StartAllServices() *ServiceContext {
         StartupOptions{
             manualScheduleFlag: false,
             startWebAppFlag:    true,
-            recoveryMode:       false,
+            recoveryFlag:       false,
         })
 }
 
@@ -46,11 +47,12 @@ func StartAllServicesWithManualScheduler() *ServiceContext {
         StartupOptions{
             manualScheduleFlag: true,
             startWebAppFlag:    false,
-            recoveryMode:       false,
+            recoveryFlag:       false,
         })
 }
 
 func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
+    stateMachine := statemachine.NewSchedulerStateMachine()
     cache, metrics := cache.NewClusterInfo()
     scheduler := scheduler.NewScheduler(cache, metrics)
     proxy := rmproxy.NewRMProxy()
@@ -59,17 +61,20 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
         CacheEventHandler:     cache,
         SchedulerEventHandler: scheduler,
         RMProxyEventHandler:   proxy,
+        FsmEventHandler:       stateMachine,
     }
 
     // start services
+    stateMachine.StartService(opts.recoveryFlag)
     cache.StartService(eventHandler)
-    scheduler.StartService(eventHandler, opts.manualScheduleFlag, opts.recoveryMode)
+    scheduler.StartService(eventHandler, opts.manualScheduleFlag)
     proxy.StartService(eventHandler)
 
     context := &ServiceContext{
-        RMProxy:   proxy,
-        Cache:     cache,
-        Scheduler: scheduler,
+        RMProxy:      proxy,
+        Cache:        cache,
+        Scheduler:    scheduler,
+        StateMachine: stateMachine,
     }
 
     if opts.startWebAppFlag {

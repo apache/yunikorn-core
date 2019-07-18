@@ -14,25 +14,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package fsm
+package statemachine
 
 import (
 	"fmt"
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
+	"reflect"
 	"time"
 )
 
 type SchedulerStateMachine struct {
 	stateMachine *fsm.FSM
-	pendingEvents chan SchedulerStateEvent
+	pendingEvents chan FsmStateEvent
 	stopChan chan interface{}
 }
 
 func NewSchedulerStateMachine() *SchedulerStateMachine{
 	sm := &SchedulerStateMachine{}
-	sm.pendingEvents = make(chan SchedulerStateEvent, 1024)
+	sm.pendingEvents = make(chan FsmStateEvent, 1024)
 	sm.stopChan = make(chan interface{})
 	sm.stateMachine = fsm.NewFSM(string(New),
 		fsm.Events{
@@ -64,16 +65,7 @@ func NewSchedulerStateMachine() *SchedulerStateMachine{
 	return sm
 }
 
-func (sm *SchedulerStateMachine) EnqueueSchedulerStateEvent(event SchedulerStateEvent) error {
-	select {
-	case sm.pendingEvents <- event:
-		return nil
-	default:
-		return fmt.Errorf("failed to enqueue event")
-	}
-}
-
-func (sm *SchedulerStateMachine) startEventHandling() {
+func (sm *SchedulerStateMachine) handleFsmStateEvent() {
 	for {
 		select {
 		case event := <- sm.pendingEvents:
@@ -95,29 +87,41 @@ func (sm *SchedulerStateMachine) startEventHandling() {
 	}
 }
 
-func (sm *SchedulerStateMachine) BlockUntilStarted(recoveryMode bool) {
+// this implements EventHandler interface
+func (sm *SchedulerStateMachine) HandleEvent(ev interface{}) {
+	if event, ok := ev.(FsmStateEvent); ok {
+		enqueueAndCheckFull(sm.pendingEvents, event)
+	} else {
+		log.Logger.Warn("illegal event type, expecting FsmStateEvent",
+			zap.Any("event", ev))
+	}
+}
+
+func enqueueAndCheckFull(queue chan FsmStateEvent, ev FsmStateEvent) {
+	select {
+	case queue <- ev:
+		log.Logger.Debug("enqueue event",
+			zap.Any("event", ev),
+			zap.Int("currentQueueSize", len(queue)))
+	default:
+		log.Logger.DPanic("failed to enqueue event",
+			zap.String("event", reflect.TypeOf(ev).String()))
+	}
+}
+
+func (sm *SchedulerStateMachine) GetCurrentState() string {
+	return sm.stateMachine.Current()
+}
+
+func (sm *SchedulerStateMachine) StartService(recoveryMode bool) {
 	// start to handling events
-	go sm.startEventHandling()
+	go sm.handleFsmStateEvent()
 
 	// trigger start or recovery based on start-up options
 	if recoveryMode {
-		if err := sm.EnqueueSchedulerStateEvent(SchedulerStateEvent{
-			EventType: RecoverScheduler,
-		}); err != nil {
-			log.Logger.Fatal("unable to run scheduler recovery", zap.Error(err))
-		}
+		sm.HandleEvent(FsmStateEvent{EventType: RecoverScheduler})
 	} else {
-		if err := sm.EnqueueSchedulerStateEvent(SchedulerStateEvent{
-			EventType: StartScheduler,
-		}); err != nil {
-			log.Logger.Fatal("unable to start scheduler", zap.Error(err))
-		}
-	}
-
-	// scheduler can only serve requests under Running state
-	// this is a block call until it reaches that state
-	if err := sm.waitForState(time.Duration(10) * time.Minute, Running); err != nil {
-		log.Logger.Fatal("scheduler failed to reach Running state after 10 minutes, failing ...")
+		sm.HandleEvent(FsmStateEvent{EventType: StartScheduler})
 	}
 }
 
@@ -125,8 +129,8 @@ func (sm *SchedulerStateMachine) Stop() {
 	sm.stopChan <- 0
 }
 
-// only used in test
-func (sm *SchedulerStateMachine) waitForState(timeout time.Duration, expectedState SchedulerStateType) error{
+// only used for testing
+func (sm *SchedulerStateMachine) WaitForState(timeout time.Duration, expectedState FsmStateType) error{
 	deadline := time.Now().Add(timeout)
 	for {
 		if time.Now().After(deadline) {

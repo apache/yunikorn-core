@@ -27,7 +27,6 @@ import (
     "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/metrics"
     "github.com/cloudera/yunikorn-core/pkg/rmproxy/rmevent"
-    "github.com/cloudera/yunikorn-core/pkg/scheduler/fsm"
     "github.com/cloudera/yunikorn-core/pkg/scheduler/schedulerevent"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "go.uber.org/zap"
@@ -51,8 +50,6 @@ type Scheduler struct {
 
     metrics metrics.CoreSchedulerMetrics // Reference to scheduler metrics
 
-    stateMachine *fsm.SchedulerStateMachine
-
     // Wait till next try
     // (It is designed to be accessed under a single goroutine, no lock needed).
     // This field has dual purposes:
@@ -71,20 +68,13 @@ func NewScheduler(clusterInfo *cache.ClusterInfo, metrics metrics.CoreSchedulerM
     m.clusterSchedulingContext = NewClusterSchedulingContext()
     m.pendingSchedulerEvents = make(chan interface{}, 1024*1024)
     m.metrics = metrics
-    m.stateMachine = fsm.NewSchedulerStateMachine()
 
     return m
 }
 
 // Start service
-func (m *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule bool, recoveryMode bool) {
+func (m *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule bool) {
     m.eventHandlers = handlers
-
-    // scheduler is blocked until it reaches expected state
-    // for a fresh start, this is a noop
-    // for a recovery, scheduler needs to recovery its state before claiming to be ready
-    // currently, the timeout for recovery is 10 minutes
-    m.stateMachine.BlockUntilStarted(recoveryMode)
 
     // Start event handlers
     go m.handleSchedulerEvent()
@@ -388,9 +378,4 @@ func (m *Scheduler) handleSchedulerEvent() {
 // Visible by tests
 func (m *Scheduler) GetClusterSchedulingContext() *ClusterSchedulingContext {
     return m.clusterSchedulingContext
-}
-
-// Visible by tests
-func (m *Scheduler) GetSchedulerStateMachine() *fsm.SchedulerStateMachine {
-    return m.stateMachine
 }

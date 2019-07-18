@@ -24,4 +24,5 @@ type EventHandlers struct {
     RMProxyEventHandler   commonevents.EventHandler
     CacheEventHandler     commonevents.EventHandler
     SchedulerEventHandler commonevents.EventHandler
+    FsmEventHandler       commonevents.EventHandler
 }

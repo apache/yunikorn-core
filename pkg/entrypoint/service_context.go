@@ -20,17 +20,18 @@ import (
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/cloudera/yunikorn-core/pkg/scheduler"
+	"github.com/cloudera/yunikorn-core/pkg/statemachine"
 	"github.com/cloudera/yunikorn-core/pkg/webservice"
 	"go.uber.org/zap"
 )
 
 type ServiceContext struct {
-	RMProxy   api.SchedulerApi
-	Cache     *cache.ClusterInfo
-	Scheduler *scheduler.Scheduler
-	WebApp    *webservice.WebService
+	RMProxy      api.SchedulerApi
+	Cache        *cache.ClusterInfo
+	Scheduler    *scheduler.Scheduler
+	WebApp       *webservice.WebService
+	StateMachine *statemachine.SchedulerStateMachine
 }
-
 
 func (s *ServiceContext) StopAll() {
 	// TODO implement stop for services

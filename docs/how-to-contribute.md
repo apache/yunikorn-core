@@ -1,5 +1,5 @@
 # How do I contribute code?
-You need to first sign and return an [Individual Contributor License Agreement (ICLA)](https://github.com/cloudera/yunikorn-core/blob/master/CLAs/Cloudera%20ICLA_25APR2018.pdf) before we can accept and redistribute your contribution. Please submit the signed file as pdf format to CLA@cloudera.com.
+You need to first sign and return an [Individual Contributor License Agreement (ICLA)](https://github.com/cloudera/yunikorn-core/blob/master/CLAs/Cloudera%20ICLA_25APR2018.pdf) before we can accept and redistribute your contribution. Please sign and submit to CLA@cloudera.com. When you sign the ICLA document, field **Facsimile** is optional and you can leave it blank.
 
 **IMPORTANT**: Note that you may need to discuss with your employer before signing the ICLA, because your employer may ask you to contribute under your employment role. In this case, you need to sign a [Corporate Contributor License Agreement (CCLA)](https://github.com/cloudera/yunikorn-core/blob/master/CLAs/Cloudera%20CCLA_25APR2018.pdf).
 

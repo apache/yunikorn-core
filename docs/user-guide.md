@@ -52,12 +52,12 @@ When the scheduler is deployed, the web UI is also deployed in a container.
 Port forwarding for the web interface on the standard ports can be turned on via:
 
 ```
-// following command forwards default ports 9889(web UI) and 9080(restful service) of YuniKorn pod to node
 POD=`kubectl get pod -l app=yunikorn -o jsonpath="{.items[0].metadata.name}"` && \
 kubectl port-forward ${POD} 9889 9080
 ```
 
-once this is done, UI can be accessed by: http://localhost:9889.
+`9889` is the default port for Web UI, `9080` is the default port of scheduler's Restful service where web UI retrieves info from.
+Once this is done, web UI will be available at: http://localhost:9889.
 
 ## Run workloads with YuniKorn Scheduler
 

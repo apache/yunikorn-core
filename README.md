@@ -53,19 +53,19 @@ We welcome any form of contributions, code, documentation or even discussions. T
 
 ## Other Resources
 
-Demo videos
+**Demo videos**
 
 - Subscribe to [YuniKorn Youtube Channel](https://www.youtube.com/channel/UCDSJ2z-lEZcjdK27tTj_hGw) to get notification about new demos!
 - [Running YuniKorn on Kubernetes - a 12 minutes Hello-world demo](https://www.youtube.com/watch?v=cCHVFkbHIzo)
 
-Communication Channels
+**Communication channels**
 
 - We use [Slack](https://slack.com/) as our primary collaboration system, you can join us by accessing [this link](https://join.slack.com/t/yunikornworkspace/shared_invite/enQtNzAzMjY0OTI4MjYzLTBmMDdkYTAwNDMwNTE3NWVjZWE1OTczMWE4NDI2Yzg3MmEyZjUyYTZlMDE5M2U4ZjZhNmYyNGFmYjY4ZGYyMGE).
 Currently, we have following channels in the workspace: `#yunikorn-dev` and `#yunikorn-user`.
 - Google Group: https://groups.google.com/d/forum/yunikorn
 - Mailing list: yunikorn@googlegroups.com  
 
-Blog posts
+**Blog posts**
 
 - [YuniKorn: a universal resource scheduler](https://blog.cloudera.com/blog/2019/07/yunikorn-a-universal-resource-scheduler/)
 

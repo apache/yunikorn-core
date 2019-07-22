@@ -61,3 +61,8 @@ watch these demo videos may help you to get started with YuniKorn easier.
 Blog posts
 
 - [YuniKorn: a universal resource scheduler](https://blog.cloudera.com/blog/2019/07/yunikorn-a-universal-resource-scheduler/)
+
+Slack channel
+
+- We use [Slack](https://slack.com/) as our primary collaboration system, you can join us by accessing [this link](https://join.slack.com/t/yunikornworkspace/shared_invite/enQtNzAzMjY0OTI4MjYzLTBmMDdkYTAwNDMwNTE3NWVjZWE1OTczMWE4NDI2Yzg3MmEyZjUyYTZlMDE5M2U4ZjZhNmYyNGFmYjY4ZGYyMGE).
+Currently, we have following channels in the workspace: `#yunikorn-dev` and `#yunikorn-user`.

@@ -27,7 +27,6 @@ func TestStartScheduler(t *testing.T) {
 	defer sm.Stop()
 
 	sm.HandleEvent(FsmStateEvent{EventType: StartScheduler})
-
 	if err := sm.WaitForState(time.Duration(3) * time.Second, Running); err != nil {
 		t.Errorf(err.Error())
 	}
@@ -50,14 +49,12 @@ func TestSchedulerRecoverySuccess(t *testing.T) {
 
 	// trigger recovery
 	sm.HandleEvent(FsmStateEvent{EventType: RecoverScheduler})
-
 	if err := sm.WaitForState(time.Duration(3) * time.Second, Recovering); err != nil {
 		t.Errorf(err.Error())
 	}
 
 	// recover succeed
 	sm.HandleEvent(FsmStateEvent{EventType: RecoverSchedulerSuccess})
-
 	if err := sm.WaitForState(time.Duration(3) * time.Second, Running); err != nil {
 		t.Errorf(err.Error())
 	}
@@ -70,15 +67,12 @@ func TestSchedulerRecoveryFail(t *testing.T) {
 
 	// trigger recovery
 	sm.HandleEvent(FsmStateEvent{EventType: RecoverScheduler})
-
 	if err := sm.WaitForState(time.Duration(3) * time.Second, Recovering); err != nil {
 		t.Errorf(err.Error())
 	}
 
 	// recover succeed
 	sm.HandleEvent(FsmStateEvent{EventType: RecoverySchedulerFail})
-
-
 	if err := sm.WaitForState(time.Duration(3) * time.Second, RecoverFailed); err != nil {
 		t.Errorf(err.Error())
 	}

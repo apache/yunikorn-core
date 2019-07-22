@@ -47,15 +47,17 @@ The deployment will run 2 containers from your pre-built docker images in 1 pod,
 The pod is deployed as a customized scheduler, it will take the responsibility to schedule pods which explicitly specifies `schedulerName: yunikorn` in pod's spec.
 
 ## Access to the web UI
+
 When the scheduler is deployed, the web UI is also deployed in a container.
 Port forwarding for the web interface on the standard ports can be turned on via:
-```
-// UI port
-kubectl port-forward yunikorn-scheduler 9889
 
-// web service port
-kubectl port-forward yunikorn-scheduler 9080
 ```
+// following command forwards default ports 9889(web UI) and 9080(restful service) of YuniKorn pod to node
+POD=`kubectl get pod -l app=yunikorn -o jsonpath="{.items[0].metadata.name}"` && \
+kubectl port-forward ${POD} 9889 9080
+```
+
+once this is done, UI can be accessed by: http://localhost:9889.
 
 ## Run workloads with YuniKorn Scheduler
 

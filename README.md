@@ -36,14 +36,13 @@ Here are some key features of YuniKorn.
 - Automatically map incoming container requests to queues by policies. 
 - Node partition: partition cluster to sub-clusters with dedicated quota/ACL management. 
 
-The current road map for the whole project is [here](docs/roadmap.md), where you can find more information about what
-are already supported and future plans.
+You can find more information about what are already supported and future plans in the [Road Map](docs/roadmap.md),
 
 ## How to use
 
 The simplest way to run YuniKorn is to build a docker image and then deployed to Kubernetes with a yaml file,
 running as a customized scheduler. Then you can run workloads with this scheduler.
-See more instructions from [here](./docs/user-guide.md).
+See more instructions from the [User Guide](./docs/user-guide.md).
 
 ## How can I get involved?
 

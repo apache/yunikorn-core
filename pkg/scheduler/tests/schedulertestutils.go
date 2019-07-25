@@ -33,6 +33,7 @@ type MockRMCallbackHandler struct {
     acceptedApplications map[string]bool
     rejectedApplications map[string]bool
     acceptedNodes        map[string]bool
+    nodeAllocations      map[string][]*si.Allocation
     Allocations          map[string]*si.Allocation
 
     lock sync.RWMutex
@@ -44,6 +45,7 @@ func NewMockRMCallbackHandler(t *testing.T) *MockRMCallbackHandler {
         acceptedApplications: make(map[string]bool),
         rejectedApplications: make(map[string]bool),
         acceptedNodes:        make(map[string]bool),
+        nodeAllocations:      make(map[string][]*si.Allocation),
         Allocations:          make(map[string]*si.Allocation),
     }
 }
@@ -72,6 +74,13 @@ func (m *MockRMCallbackHandler) RecvUpdateResponse(response *si.UpdateResponse) 
 
     for _, alloc := range response.NewAllocations {
         m.Allocations[alloc.Uuid] = alloc
+        if val, ok := m.nodeAllocations[alloc.NodeId]; ok {
+            val = append(val, alloc)
+        } else {
+            nodeAllocations := make([]*si.Allocation, 0)
+            nodeAllocations = append(nodeAllocations, alloc)
+            m.nodeAllocations[alloc.NodeId] = nodeAllocations
+        }
     }
 
     for _, alloc := range response.ReleasedAllocations {

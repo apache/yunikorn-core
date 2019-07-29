@@ -80,18 +80,17 @@ Unknown queue names will cause the pod to be rejected by the YuniKorn scheduler.
 
 All sample deployments can be found under `examples` directory.
 The list of all examples is in the [README](https://github.com/cloudera/yunikorn-k8shim/blob/master/deployments/examples).
-Not all examples are given here
+Not all examples are given here. Further details can be found in that README.
 
-A single pod: 
+A single pod based on a standard nignx image: 
 ```
-// some nginx pods
 kubectl create -f examples/nginx/nginx.yaml
 ```
-A simple sleep job:
+A simple sleep job example:
 ```
-// some pods simply run sleep
 kubectl create -f examples/sleep/sleeppods.xml
 ```
+The files for these examples can be found in the [README nignx](https://github.com/cloudera/yunikorn-k8shim/tree/master/deployments/examples#nignx) and the [README sleep](https://github.com/cloudera/yunikorn-k8shim/tree/master/deployments/examples#sleep) sections.
 
 ### Running a spark application
 Kubernetes support for Apache Spark is not part of all releases. You must have a current release of Apache Spark with Kubernetes support built in. 
@@ -101,7 +100,7 @@ The `examples/spark` directory contains pod template files for the Apache Spark 
 * Get latest spark from github (only latest code supports to specify pod template), URL: https://github.com/apache/spark
 * Build spark with Kubernetes support:
 ```
-./build/mvn -Pyarn -Phadoop-2.7 -Dhadoop.version=2.7.0 -Phive -Pkubernetes -Phive-thriftserver -DskipTests package
+mvn -Pyarn -Phadoop-2.7 -Dhadoop.version=2.7.0 -Phive -Pkubernetes -Phive-thriftserver -DskipTests package
 ```
 * Run spark submit
 ```
@@ -117,7 +116,8 @@ spark-submit --master k8s://http://localhost:8001 --deploy-mode cluster --name s
 Spark uses its own version of the application ID tag called *spark-app-id*. This tags is required for the pods to be recognised as specific spark pods.  
 * examples/spark/driver.yaml
 * examples/spark/executor.yaml
-When you run Spark on Kubernetes with pod templates, *spark-app-id* is considered the applicationId.   
+When you run Spark on Kubernetes with pod templates, *spark-app-id* is considered the applicationId.
+A script to run the spark application and the yaml files are in the [README spark](https://github.com/cloudera/yunikorn-k8shim/tree/master/deployments/examples#spark) section.
 
 ### Affinity scheduling
 The scheduler supports affinity and ati affinity scheduling on kubernetes using predicates:
@@ -126,11 +126,16 @@ kubectl create -f examples/predicates/pod-anti-affinity-example.yaml
 ```
 This deployment ensures 2 pods cannot be co-located together on same node.
 If this yaml is deployed on 1 node cluster, expect 1 pod to be started and the other pod should stay in a pending state.
+More examples on affinity and anti affinity scheduling in the predicates section of the [README predicates](https://github.com/cloudera/yunikorn-k8shim/tree/master/deployments/examples#predicates)
 
-### A volume example
-There are two examples with volumes available. The NFS example does not work on docker desktop and requires [minikube](https://kubernetes.io/docs/tasks/tools/install-minikube/).
+### Volume examples
+There are three examples with volumes available. The NFS example does not work on docker desktop and requires [minikube](https://kubernetes.io/docs/tasks/tools/install-minikube/). 
+The EBS volume requires a kubernetes cluster running on AWS (EKS).
+Further instructions for the volume examples in the section of the [README Volumes](https://github.com/cloudera/yunikorn-k8shim/tree/master/deployments/examples#volumes).
 
-CAUTION: Both examples will generate an unending stream of data in a file called `dates.txt` on the mounted volume. This could cause a disk to fill up and execution time should be limited. 
+CAUTION: All examples will generate an unending stream of data in a file called `dates.txt` on the mounted volume. This could cause a disk to fill up and execution time should be limited. 
+
+#### Local volume
 * create the local volume and volume claim
 ```
 kubectl create -f examples/volume/local-pv.yaml
@@ -139,3 +144,42 @@ kubectl create -f examples/volume/local-pv.yaml
 ```
 kubectl create -f examples/volume/pod-local.yaml
 ```
+
+#### NFS volume
+* create the NFS server
+```
+kubectl create -f nfs-server.yaml
+```
+* get the IP address for the NFS server and update the pod yaml by replacing the existing example IP with the one returned:
+```
+kubectl get services | grep nfs-server | awk '{print $3}'
+```
+* create the pod that uses the volume
+```
+kubectl create -f pod-nfs.yaml
+```
+
+#### EBS volume
+The Volume for the first two examples must be created before you can run the examples. The `VolumeId` must be updated in the yaml files to get this to work.
+To create a volume you can use the command line or web UI:
+```
+aws ec2 create-volume --volume-type gp2 --size 10 --availability-zone us-west-1
+```
+The `VolumeId` is part of the returned information of the create command.
+
+* create the pod that uses a direct volume reference:
+```
+kubectl create -f pod-ebs-direct.yaml
+```
+* create the persistent volume (pv) and a pod that uses a persistent volume claim (pvc) to claim the existing volume:
+```
+kubectl create -f ebs-pv.yaml
+kubectl create -f pod-ebs-exist.yaml
+```
+* create a storage class to allow dynamic provisioning and create the pod that uses this mechanism:
+```
+kubectl create -f storage-class.yaml
+kubectl create -f pod-ebs-dynamic.yaml
+```
+Dynamic provisioning has a number of pre-requisites for it to work, see [Dynamic Volume Provisioning](https://kubernetes.io/docs/concepts/storage/dynamic-provisioning/) in the kubernetes docs. 
+The dynamically created volume will be automatically destroyed as soon as the pod is stopped.

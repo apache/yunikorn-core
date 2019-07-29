@@ -227,7 +227,59 @@ func (m *Scheduler) processAllocationReleaseByAllocationKey(allocationAsksToRele
     }
 }
 
+func (m *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocation, rmId string) {
+    // the recovering of existing allocations looks like a replay of the scheduling process,
+    // in general, a scheduling process takes following steps
+    //  1) add scheduling info to schedulers cache, including app, pending requests etc
+    //  2) Look order partition -> queue -> app
+    //  3) For pending asks of a app, scheduler runs scheduling logic to propose a node
+    //  4) Process the proposal generated in step 3, update data in cache
+    // the recovery is repeating all steps except step 2
+    for _, alloc := range existingAllocations {
+        log.Logger.Info("recovering allocations for app",
+            zap.String("applicationId", alloc.ApplicationId),
+            zap.String("nodeId", alloc.NodeId),
+            zap.String("queueName", alloc.QueueName),
+            zap.String("partition", alloc.Partition),
+            zap.String("allocationId", alloc.Uuid))
+
+        // add scheduling asks
+        schedulingAsk := ConvertFromAllocation(alloc, rmId)
+        if err := m.updateSchedulingRequest(schedulingAsk); err != nil {
+            log.Logger.Warn("failed...", zap.Error(err))
+        }
+
+        // handle allocation proposals
+        if err := m.updateSchedulingRequestPendingAskByDelta(&commonevents.AllocationProposal{
+            NodeId:            alloc.NodeId,
+            ApplicationId:     alloc.ApplicationId,
+            QueueName:         alloc.QueueName,
+            AllocatedResource: resources.NewResourceFromProto(alloc.ResourcePerAlloc),
+            AllocationKey:     alloc.AllocationKey,
+            Tags:              alloc.AllocationTags,
+            Priority:          alloc.Priority,
+            PartitionName:     common.GetNormalizedPartitionName(alloc.Partition, rmId),
+        }, -1); err != nil {
+            log.Logger.Error("failed to increase pending ask",
+                zap.Error(err))
+        }
+    }
+}
+
 func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAllocationUpdatesEvent) {
+    if len(ev.ExistingAllocations) > 0 {
+        // in recovery mode, we only expect existing allocations being reported
+        if len(ev.NewAsks) > 0 || len(ev.RejectedAllocations) > 0 || ev.ToReleases != nil{
+            log.Logger.Warn("illegal SchedulerAllocationUpdatesEvent," +
+                " only existingAllocations can be set exclusively, other info will be skipped",
+                zap.Int("num of existingAllocations", len(ev.ExistingAllocations)),
+                zap.Int("num of rejectedAllocations", len(ev.RejectedAllocations)),
+                zap.Int("num of newAsk", len(ev.NewAsks)))
+        }
+        m.recoverExistingAllocations(ev.ExistingAllocations, ev.RMId)
+        return
+    }
+
     if len(ev.RejectedAllocations) > 0 {
         for _, alloc := range ev.RejectedAllocations {
             // Update pending resource back

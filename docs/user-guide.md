@@ -127,10 +127,13 @@ kubectl create -f examples/predicates/pod-anti-affinity-example.yaml
 This deployment ensures 2 pods cannot be co-located together on same node.
 If this yaml is deployed on 1 node cluster, expect 1 pod to be started and the other pod should stay in a pending state.
 
-### A volume example
-There are two examples with volumes available. The NFS example does not work on docker desktop and requires [minikube](https://kubernetes.io/docs/tasks/tools/install-minikube/).
+### Volume examples
+There are three examples with volumes available. The NFS example does not work on docker desktop and requires [minikube](https://kubernetes.io/docs/tasks/tools/install-minikube/). 
+The EBS volume requires a kubernetes cluster running on AWS (EKS). 
 
-CAUTION: Both examples will generate an unending stream of data in a file called `dates.txt` on the mounted volume. This could cause a disk to fill up and execution time should be limited. 
+CAUTION: All examples will generate an unending stream of data in a file called `dates.txt` on the mounted volume. This could cause a disk to fill up and execution time should be limited. 
+
+#### Local volume
 * create the local volume and volume claim
 ```
 kubectl create -f examples/volume/local-pv.yaml
@@ -139,3 +142,42 @@ kubectl create -f examples/volume/local-pv.yaml
 ```
 kubectl create -f examples/volume/pod-local.yaml
 ```
+
+#### NFS volume
+* create the NFS server
+```
+kubectl create -f nfs-server.yaml
+```
+* get the IP address for the NFS server and update the pod yaml
+```
+kubectl get services
+vi pod-nfs.yaml
+```
+* create the pod that uses the volume
+```
+kubectl create -f pod-nfs.yaml
+```
+
+#### EBS volume
+The Volume for the first two examples must be created before you can run the examples. The `VolumeId` must be updated in the yaml files to get this to work.
+To create a volume you can use the command line or web UI:
+```
+aws ec2 create-volume --volume-type gp2 --size 10 --availability-zone us-west-1
+```
+The `VolumeId` is part of the returned information of the create command.
+
+* create the pod that uses a direct volume reference:
+```
+kubectl create -f pod-ebs-direct.yaml
+```
+* create the volume (pv) and a pod that uses a pvc to claim the existing volume:
+```
+kubectl create -f ebs-pv.yaml
+kubectl create -f pod-ebs-exist.yaml
+```
+* create a storage class to allow auto provisioning and create the pod that uses the mechanism:
+```
+kubectl create -f storage-class.yaml
+kubectl create -f pod-ebs-auto.yaml
+```
+This auto created volume will be auto destroyed as soon as the pod is stopped.

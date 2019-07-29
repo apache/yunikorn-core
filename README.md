@@ -36,7 +36,7 @@ Here are some key features of YuniKorn.
 - Automatically map incoming container requests to queues by policies. 
 - Node partition: partition cluster to sub-clusters with dedicated quota/ACL management. 
 
-You can find more information about what are already supported and future plans in the [Road Map](docs/roadmap.md),
+You can find more information about what are already supported and future plans in the [Road Map](docs/roadmap.md).
 
 ## How to use
 

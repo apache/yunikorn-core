@@ -26,6 +26,8 @@ type SchedulerAllocationUpdatesEvent struct {
     RejectedAllocations []*commonevents.AllocationProposal
     NewAsks             []*si.AllocationAsk
     ToReleases          *si.AllocationReleasesRequest
+    ExistingAllocations []*si.Allocation // optional, only required during recovery
+    RMId                string           // optional, only required during recovery
 }
 
 // From Cache, update about apps.

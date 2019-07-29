@@ -17,6 +17,7 @@ limitations under the License.
 package scheduler
 
 import (
+    "github.com/cloudera/yunikorn-core/pkg/common"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "sync"
@@ -45,6 +46,26 @@ func NewSchedulingAllocationAsk(ask *si.AllocationAsk) *SchedulingAllocationAsk 
         ApplicationId:     ask.ApplicationId,
         PartitionName:     ask.PartitionName,
         // TODO, normalize priority from ask
+    }
+}
+
+func ConvertFromAllocation(allocation *si.Allocation, rmId string) *SchedulingAllocationAsk {
+    partitionWithRMId := common.GetNormalizedPartitionName(allocation.Partition, rmId)
+    return &SchedulingAllocationAsk{
+        AskProto:          &si.AllocationAsk{
+            AllocationKey:                allocation.AllocationKey,
+            ResourceAsk:                  allocation.ResourcePerAlloc,
+            Tags:                         allocation.AllocationTags,
+            Priority:                     allocation.Priority,
+            MaxAllocations:               1,
+            QueueName:                    allocation.QueueName,
+            ApplicationId:                allocation.ApplicationId,
+            PartitionName:                partitionWithRMId,
+        },
+        AllocatedResource: resources.NewResourceFromProto(allocation.ResourcePerAlloc),
+        PendingRepeatAsk:  1,
+        ApplicationId:     allocation.ApplicationId,
+        PartitionName:     partitionWithRMId,
     }
 }
 

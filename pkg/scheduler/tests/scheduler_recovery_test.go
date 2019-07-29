@@ -372,13 +372,27 @@ partitions:
 
 	// verify scheduler cache
 	t.Log("verifying scheduling app")
+	waitForAcceptedApplications(newMockRM, "app-1", 1000)
 	recoveredApp := scheduler.GetClusterSchedulingContext().GetSchedulingApplication("app-1", "[rm:123]default")
 	assert.Assert(t, recoveredApp != nil)
+	assert.Equal(t, recoveredApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
+	assert.Equal(t, recoveredApp.ApplicationInfo.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12))
 
 	// there should be no pending resources
 	assert.Equal(t, recoveredApp.Requests.GetPendingResource().Resources[resources.MEMORY], resources.Quantity(0))
+	assert.Equal(t, recoveredApp.Requests.GetPendingResource().Resources[resources.VCORE], resources.Quantity(0))
 	for _, existingAllocation := range mockRM.Allocations {
-		schedulingAllocation := recoveredApp.Requests.GetSchedulingAllocationAsk(existingAllocation.GetUuid())
+		schedulingAllocation := recoveredApp.Requests.GetSchedulingAllocationAsk(existingAllocation.AllocationKey)
 		assert.Assert(t, schedulingAllocation != nil)
 	}
+
+	t.Log("verifying scheduling queues")
+	recoveredQueueRoot := scheduler.GetClusterSchedulingContext().
+		GetSchedulingQueue("root", "[rm:123]default")
+	recoveredQueue := scheduler.GetClusterSchedulingContext().
+		GetSchedulingQueue("root.a", "[rm:123]default")
+	assert.Equal(t, recoveredQueue.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
+	assert.Equal(t, recoveredQueue.CachedQueueInfo.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12))
+	assert.Equal(t, recoveredQueueRoot.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
+	assert.Equal(t, recoveredQueueRoot.CachedQueueInfo.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12))
 }

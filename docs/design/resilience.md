@@ -18,16 +18,14 @@ previous states on a restart.
 
 ### Workflow
 
-Yunikorn-core state machine
-
-```
-New ---------------------------------> Running
- |                                        ^
- |    Recover                  Success    |
-  ------------> Recovering ---------------
-                    |   Fail
-                     ---------> Failed
-```
+Scheduler core has no notion of "state", which means it does not know if it is under recovering.
+It is too complex to main a series of `scheduler states` in both core and shim, because we must
+keep them in-sync. However, if we live under a simple assumption: **scheduler core only responses
+requests, the correction of requests is ensured by shim according its current state**.
+The design becomes much simpler. This way, the shim maintains a state machine like below. When
+it is under `running` state, it sends new requests to the scheduler core as long as a new one is found;
+when under `recovering` state, it collects previous allocations and send recovery messages to
+the scheduler core, and waiting for recovery to be accomplished.
 
 Shim scheduler state machine
 
@@ -46,8 +44,8 @@ Following chart illustrate how yunikorn-core and shim works together on recovery
 ![Workflow](./resilience-workflow.jpg)
 
 Restart (with recovery) process
-- start yunikorn-core and shim with option "recover"
-- yunikorn-core and shim both enter "recovering" state. Under "recovering" state, yunikorn-core doesn't handle new allocation requests, shim doesn't send new allocation requests
+- start yunikorn shim with option "recover"
+- yunikorn shim enters "recovering" state. Under "recovering" state, the shim only scans existing nodes and allocations, no new scheduling requests will be sent.
 - shim register itself with yunikorn-core
 - shim starts recovering
   - shim detects nodes added from node informer and added them to cache
@@ -62,11 +60,11 @@ Restart (with recovery) process
 - when all nodes are fully recovered, shim transits the state to "running"
 - shim notifies yunikorn-core that recovery is done, then yunikorn-core transits to "running" state.
 
-How shim determines recovery is successful [1]?
-- Shim queries K8s api-server to get how many nodes were available in this cluster. It tracks the recovering status of each node. Once all nodes are recovered, it can claim the recovery is completed.
+### How to determine recovery is complete?
 
-How scheduler-core determines recovery is successful [2]?
-- Scheduler-core has no clue about recovering progress. So it depends on shim to send notification when recovery is done (after [1])
+Shim queries K8s api-server to get how many nodes were available in this cluster. It tracks the recovering status of each node.
+Once all nodes are recovered, it can claim the recovery is completed. This approach requires us to add `recovering` and `recovered`
+states to nodes' state machine in the shim.
 
 ### Node recovery
 
@@ -81,35 +79,4 @@ Like demonstrated on upon diagram,
 - Node0 is still recovering because pod0 is recovering.
 - Node1 is recovered (become schedulable) because all pods on this node have been recovered.
 - Node2 is lost, shim lost contact with this node. If after sometime this node comes back, shim should still try to recover this node.
-
-### Scheduler State Recovery
-
-Scheduler states include 2 parts, `pkg/cache` and `pkg/scheduler`. Both need to be recovered.
-The recovery logic is a reversed order of allocation. For example, shim might send following data
-to yunikorn-core for recovery.
-
-```
-// hand written data
-UpdateRequest {
-  NewSchedulableNodes: []*NewNodeInfo {
-      NodeId:               "node-01",
-      SchedulableResource:  "{memory: 102400mb, vcore: 100}",
-      ExistingAllocations:  []*Allocation {
-        applicationId:      "app-01",
-        queueName:          "test-queue",
-        nodeId:             "node-01",
-        partitionName:      "default",
-        Resource:           "{memory: 1024mb, vcore: 10}",
-      }, {
-        applicationId:      "app-02",
-        queueName:          "test-queue",
-        nodeId:             "node-01",
-        partitionName:      "default",
-        Resource:           "{memory: 1024mb, vcore: 10}",
-      }
-    }
-  }
-}
-
-```
 

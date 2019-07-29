@@ -76,6 +76,7 @@ func (m *MockRMCallbackHandler) RecvUpdateResponse(response *si.UpdateResponse) 
         m.Allocations[alloc.Uuid] = alloc
         if val, ok := m.nodeAllocations[alloc.NodeId]; ok {
             val = append(val, alloc)
+            m.nodeAllocations[alloc.NodeId] = val
         } else {
             nodeAllocations := make([]*si.Allocation, 0)
             nodeAllocations = append(nodeAllocations, alloc)

@@ -287,6 +287,10 @@ func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
             AcceptedNodes: acceptedNodes,
             RejectedNodes: rejectedNodes,
         })
+
+        m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
+            // TODO: notify scheduler to recover its state
+        })
     }
 }
 

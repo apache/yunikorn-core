@@ -26,7 +26,6 @@ import (
 	"testing"
 )
 
-// Test basic interactions from rm proxy to cache and to scheduler.
 func TestSchedulerRecovery(t *testing.T) {
 	// --------------------------------------------------
 	// Phase 1) Fresh start
@@ -395,4 +394,277 @@ partitions:
 	assert.Equal(t, recoveredQueue.CachedQueueInfo.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12))
 	assert.Equal(t, recoveredQueueRoot.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
 	assert.Equal(t, recoveredQueueRoot.CachedQueueInfo.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12))
+}
+
+// test scheduler recovery when shim doesn't report existing application
+// but only include existing allocations of this app.
+func TestSchedulerRecoveryWithoutAppInfo(t *testing.T) {
+	serviceContext := entrypoint.StartAllServicesWithManualScheduler()
+	proxy := serviceContext.RMProxy
+	cache := serviceContext.Cache
+
+	// Register RM
+	configData := `
+partitions:
+  -
+    name: default
+    queues:
+      - name: root
+        queues:
+          - name: a
+            resources:
+              guaranteed:
+                memory: 100
+                vcore: 10
+              max:
+                memory: 150
+                vcore: 20
+`
+	configs.MockSchedulerConfigByData([]byte(configData))
+	mockRM := NewMockRMCallbackHandler(t)
+
+	_, err := proxy.RegisterResourceManager(
+		&si.RegisterResourceManagerRequest{
+			RmId:        "rm:123",
+			PolicyGroup: "policygroup",
+			Version:     "0.0.2",
+		}, mockRM)
+
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	// Register nodes, and add apps
+	// here we only report back existing allocations, without registering applications
+	err = proxy.Update(&si.UpdateRequest{
+		NewSchedulableNodes: []*si.NewNodeInfo{
+			{
+				NodeId: "node-1:1234",
+				Attributes: map[string]string{
+					"si.io/hostname": "node-1",
+					"si.io/rackname": "rack-1",
+				},
+				SchedulableResource: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 100},
+						"vcore":  {Value: 20},
+					},
+				},
+				ExistingAllocations: []*si.Allocation{
+					{
+						AllocationKey: "allocation-key-01",
+						Uuid: "UUID01",
+						ApplicationId: "app-01",
+						Partition: "default",
+						QueueName: "root.a",
+						NodeId: "node-1:1234",
+						ResourcePerAlloc: &si.Resource{
+							Resources: map[string]*si.Quantity{
+								resources.MEMORY: {
+									Value: 1024,
+								},
+								resources.VCORE: {
+									Value: 1,
+								},
+							},
+						},
+
+					},
+				},
+			},
+			{
+				NodeId: "node-2:1234",
+				Attributes: map[string]string{
+					"si.io/hostname": "node-1",
+					"si.io/rackname": "rack-1",
+				},
+				SchedulableResource: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 100},
+						"vcore":  {Value: 20},
+					},
+				},
+			},
+		},
+		RmId: "rm:123",
+	})
+
+	if nil != err {
+		t.Error(err.Error())
+	}
+
+	// waiting for recovery
+	// node-1 should be rejected as some of allocations cannot be recovered
+	waitForRejectedNodes(mockRM, "node-1:1234", 1000)
+	waitForAcceptedNodes(mockRM, "node-2:1234", 1000)
+
+	// verify partition resources
+	partition := cache.GetPartition("[rm:123]default")
+	assert.Equal(t, partition.GetTotalNodeCount(), 1)
+	assert.Equal(t, partition.GetTotalApplicationCount(), 0)
+	assert.Equal(t, partition.GetTotalAllocationCount(), 0)
+	assert.Equal(t, partition.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.MEMORY],
+		resources.Quantity(0))
+
+	// register the node again, with application info attached
+	err = proxy.Update(&si.UpdateRequest{
+		NewSchedulableNodes: []*si.NewNodeInfo{
+			{
+				NodeId: "node-1:1234",
+				Attributes: map[string]string{
+					"si.io/hostname": "node-1",
+					"si.io/rackname": "rack-1",
+				},
+				SchedulableResource: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 100},
+						"vcore":  {Value: 20},
+					},
+				},
+				ExistingAllocations: []*si.Allocation{
+					{
+						AllocationKey: "allocation-key-01",
+						Uuid: "UUID01",
+						ApplicationId: "app-01",
+						Partition: "default",
+						QueueName: "root.a",
+						NodeId: "node-1:1234",
+						ResourcePerAlloc: &si.Resource{
+							Resources: map[string]*si.Quantity{
+								resources.MEMORY: {
+									Value: 100,
+								},
+								resources.VCORE: {
+									Value: 1,
+								},
+							},
+						},
+
+					},
+				},
+			},
+		},
+		NewApplications: []*si.AddApplicationRequest{
+			{
+				ApplicationId: "app-01",
+				QueueName:     "root.a",
+				PartitionName: "",
+			},
+		},
+		RmId: "rm:123",
+	})
+
+	if nil != err {
+		t.Error(err.Error())
+	}
+
+	waitForAcceptedNodes(mockRM, "node-1:1234", 1000)
+
+	assert.Equal(t, partition.GetTotalNodeCount(), 2)
+	assert.Equal(t, partition.GetTotalApplicationCount(), 1)
+	assert.Equal(t, partition.GetTotalAllocationCount(), 1)
+	assert.Equal(t, partition.GetNode("node-1:1234").GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(100))
+	assert.Equal(t, partition.GetNode("node-1:1234").GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(1))
+	assert.Equal(t, partition.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(0))
+	assert.Equal(t, partition.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(0))
+
+	t.Log("verifying scheduling queues")
+	recoveredQueueRoot := serviceContext.Scheduler.GetClusterSchedulingContext().
+		GetSchedulingQueue("root", "[rm:123]default")
+	recoveredQueue := serviceContext.Scheduler.GetClusterSchedulingContext().
+		GetSchedulingQueue("root.a", "[rm:123]default")
+	assert.Equal(t, recoveredQueue.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(100))
+	assert.Equal(t, recoveredQueue.CachedQueueInfo.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(1))
+	assert.Equal(t, recoveredQueueRoot.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(100))
+	assert.Equal(t, recoveredQueueRoot.CachedQueueInfo.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(1))
+}
+
+// test scheduler recovery that only registers nodes and apps
+func TestAppRecovery(t *testing.T) {
+	serviceContext := entrypoint.StartAllServicesWithManualScheduler()
+	proxy := serviceContext.RMProxy
+
+	// Register RM
+	configData := `
+partitions:
+  -
+    name: default
+    queues:
+      - name: root
+        queues:
+          - name: a
+            resources:
+              guaranteed:
+                memory: 100
+                vcore: 10
+              max:
+                memory: 150
+                vcore: 20
+`
+	configs.MockSchedulerConfigByData([]byte(configData))
+	mockRM := NewMockRMCallbackHandler(t)
+
+	_, err := proxy.RegisterResourceManager(
+		&si.RegisterResourceManagerRequest{
+			RmId:        "rm:123",
+			PolicyGroup: "policygroup",
+			Version:     "0.0.2",
+		}, mockRM)
+
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	// Register nodes, and add apps
+	err = proxy.Update(&si.UpdateRequest{
+		NewSchedulableNodes: []*si.NewNodeInfo{
+			{
+				NodeId: "node-1:1234",
+				Attributes: map[string]string{
+					"si.io/hostname": "node-1",
+					"si.io/rackname": "rack-1",
+				},
+				SchedulableResource: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 100},
+						"vcore":  {Value: 20},
+					},
+				},
+			},
+			{
+				NodeId: "node-2:1234",
+				Attributes: map[string]string{
+					"si.io/hostname": "node-1",
+					"si.io/rackname": "rack-1",
+				},
+				SchedulableResource: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 100},
+						"vcore":  {Value: 20},
+					},
+				},
+			},
+		},
+		NewApplications: []*si.AddApplicationRequest{
+			{
+				ApplicationId: "app-1",
+				QueueName:     "root.a",
+				PartitionName: "",
+			},
+		},
+		RmId: "rm:123",
+	})
+
+	if nil != err {
+		t.Error(err.Error())
+	}
+
+	// waiting for recovery
+	waitForAcceptedNodes(mockRM, "node-1:1234", 1000)
+	waitForAcceptedNodes(mockRM, "node-2:1234", 1000)
+
+	app01 := serviceContext.Scheduler.GetClusterSchedulingContext().
+		GetSchedulingApplication("app-1", "[rm:123]default")
+	assert.Equal(t, app01.ApplicationInfo.ApplicationId, "app-1")
+	assert.Equal(t, app01.ApplicationInfo.QueueName, "root.a")
 }

@@ -80,3 +80,48 @@ Like demonstrated on upon diagram,
 - Node1 is recovered (become schedulable) because all pods on this node have been recovered.
 - Node2 is lost, shim lost contact with this node. If after sometime this node comes back, shim should still try to recover this node.
 
+### Requests for recovery
+
+During recovery process, shim needs to collect all known information of applications, nodes and allocations from the underneath
+Resource Manager and use them for recovery.
+
+#### Applications
+
+Existing applications must be recovered first before allocations. Shim needs to scan all existing applications
+from nodes, and add applications info as a list of `AddApplicationRequest` in the `UpdateRequest`. This is same
+as the fresh application submission.
+
+```
+message AddApplicationRequest {
+  string applicationId = 1;
+  string queueName = 2;
+  string partitionName = 3;
+}
+```
+
+#### Nodes and allocations
+
+Once a shim is registered to the scheduler-core, subsequent requests are sent via `UpdateRequest#NewNodeInfo`
+(see more from [si.proto](https://github.com/cloudera/yunikorn-scheduler-interface/blob/master/si.proto)).
+The structure of the messages looks like,
+
+```
+message NewNodeInfo {
+  // nodeID
+  string nodeId = 1;
+  // optional node attributes
+  map<string, string> attributes = 2;
+  // total node resource
+  Resource schedulableResource = 3;
+  // existing allocations on this node
+  repeated Allocation existingAllocations = 4;
+}
+```
+Shim needs to scan all existing allocations on a node and wrap these info up as a `NewNodeInfo`, add that to a
+`UpdateRequest` and then send to scheduler-core.
+
+**Note**: the recovery of existing allocations depend on the existence of applications, which means applications must
+be recovered first. Since scheduler-core handles `UpdateRequest` one by one, it is required that all existing allocations
+in a `UpdateRequest` must from known applications or new applications embedded within the same `UpdateRequest`, which can be
+specified in `NewApplications` field. Scheduler-core ensures `NewApplications` are always processed first.
+

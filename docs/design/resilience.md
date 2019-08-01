@@ -19,7 +19,7 @@ previous states on a restart.
 ### Workflow
 
 Scheduler core has no notion of "state", which means it does not know if it is under recovering.
-It is too complex to main a series of `scheduler states` in both core and shim, because we must
+It is too complex to maintain a series of `scheduler states` in both core and shim, because we must
 keep them in-sync. However, if we live under a simple assumption: **scheduler core only responses
 requests, the correction of requests is ensured by shim according its current state**.
 The design becomes much simpler. This way, the shim maintains a state machine like below. When
@@ -30,13 +30,10 @@ the scheduler core, and waiting for recovery to be accomplished.
 Shim scheduler state machine
 
 ```
-      Register                            Run
-New ------------> Registered ------------------------------> Running
-                      |                                         ^
-                      |     Recover                   Success   |
-                       --------------> Recovering ---------------
-                                           |   Fail
-                                            ---------> Failed
+      Register                 Recover                Success
+New -----------> Registered -----------> Recovering ----------> Running
+                                             |   Fail
+                                              --------> Failed
 ```
 
 Following chart illustrate how yunikorn-core and shim works together on recovery.
@@ -44,12 +41,10 @@ Following chart illustrate how yunikorn-core and shim works together on recovery
 ![Workflow](./resilience-workflow.jpg)
 
 Restart (with recovery) process
-- start yunikorn shim with option "recover"
-- yunikorn shim enters "recovering" state. Under "recovering" state, the shim only scans existing nodes and allocations, no new scheduling requests will be sent.
-- shim register itself with yunikorn-core
-- shim starts recovering
-  - shim detects nodes added from node informer and added them to cache
-  - shim detects pods added from pod informer, filter out the pods that already assigned (scheduled to a node), and added that to cache (allocation in that node)
+- yunikorn-shim registers itself with yunikorn-core
+- shim enters "recovering" state. Under "recovering" state, the shim only scans existing nodes and allocations, no new scheduling requests will be sent.
+  - shim scans existing nodes from api-server and added them to cache
+  - shim scans existing pods from api-server, filter out the pods that already assigned (scheduled to a node), and added that to cache (allocation in that node)
   - shim sends update request to yunikorn-core with the info found in previous steps
 - yunikorn-core handles update requests, the steps should look like a replay of allocation process, including
   - adding node

@@ -247,6 +247,7 @@ func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
     if len(request.NewSchedulableNodes) > 0 {
         acceptedNodes := make([]*si.AcceptedNode, 0)
         rejectedNodes := make([]*si.RejectedNode, 0)
+        existingAllocations := make([]*si.Allocation, 0)
         for _, node := range request.NewSchedulableNodes {
             nodeInfo, err := NewNodeInfo(node)
             if err != nil {
@@ -265,6 +266,7 @@ func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
                         zap.String("nodeId", node.NodeId),
                         zap.String("partition", nodeInfo.Partition))
                     acceptedNodes = append(acceptedNodes, &si.AcceptedNode{NodeId: node.NodeId})
+                    existingAllocations = append(existingAllocations, node.ExistingAllocations...)
                     continue
                 } else {
                     errorMessage := fmt.Sprintf("Failure while adding new node, rejected the node, error=%s", err)
@@ -286,6 +288,12 @@ func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
             RMId:          request.RmId,
             AcceptedNodes: acceptedNodes,
             RejectedNodes: rejectedNodes,
+        })
+
+        // notify the scheduler to recover existing allocations
+        m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
+            ExistingAllocations: existingAllocations,
+            RMId:                request.RmId,
         })
     }
 }

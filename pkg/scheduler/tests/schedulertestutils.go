@@ -33,6 +33,8 @@ type MockRMCallbackHandler struct {
     acceptedApplications map[string]bool
     rejectedApplications map[string]bool
     acceptedNodes        map[string]bool
+    rejectedNodes        map[string]bool
+    nodeAllocations      map[string][]*si.Allocation
     Allocations          map[string]*si.Allocation
 
     lock sync.RWMutex
@@ -44,6 +46,8 @@ func NewMockRMCallbackHandler(t *testing.T) *MockRMCallbackHandler {
         acceptedApplications: make(map[string]bool),
         rejectedApplications: make(map[string]bool),
         acceptedNodes:        make(map[string]bool),
+        rejectedNodes:        make(map[string]bool),
+        nodeAllocations:      make(map[string][]*si.Allocation),
         Allocations:          make(map[string]*si.Allocation),
     }
 }
@@ -70,8 +74,20 @@ func (m *MockRMCallbackHandler) RecvUpdateResponse(response *si.UpdateResponse) 
         m.acceptedNodes[node.NodeId] = true
     }
 
+    for _, node := range response.RejectedNodes {
+        m.rejectedNodes[node.NodeId] = true
+    }
+
     for _, alloc := range response.NewAllocations {
         m.Allocations[alloc.Uuid] = alloc
+        if val, ok := m.nodeAllocations[alloc.NodeId]; ok {
+            val = append(val, alloc)
+            m.nodeAllocations[alloc.NodeId] = val
+        } else {
+            nodeAllocations := make([]*si.Allocation, 0)
+            nodeAllocations = append(nodeAllocations, alloc)
+            m.nodeAllocations[alloc.NodeId] = nodeAllocations
+        }
     }
 
     for _, alloc := range response.ReleasedAllocations {
@@ -130,6 +146,27 @@ func waitForAcceptedNodes(m *MockRMCallbackHandler, nodeId string, timeoutMs int
 
         m.lock.RLock()
         accepted := m.acceptedNodes[nodeId]
+        m.lock.RUnlock()
+
+        if !accepted {
+            time.Sleep(time.Duration(100 * time.Millisecond))
+        } else {
+            return
+        }
+        if i*100 >= timeoutMs {
+            m.t.Fatalf("Failed to wait AcceptedNode: %s", nodeId)
+            return
+        }
+    }
+}
+
+func waitForRejectedNodes(m *MockRMCallbackHandler, nodeId string, timeoutMs int) {
+    var i = 0
+    for {
+        i++
+
+        m.lock.RLock()
+        accepted := m.rejectedNodes[nodeId]
         m.lock.RUnlock()
 
         if !accepted {

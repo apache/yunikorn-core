@@ -668,3 +668,64 @@ partitions:
 	assert.Equal(t, app01.ApplicationInfo.ApplicationId, "app-1")
 	assert.Equal(t, app01.ApplicationInfo.QueueName, "root.a")
 }
+
+// test scheduler recovery that only registers nodes and apps
+func TestAppRecoveryAlone(t *testing.T) {
+	serviceContext := entrypoint.StartAllServicesWithManualScheduler()
+	proxy := serviceContext.RMProxy
+
+	// Register RM
+	configData := `
+partitions:
+  -
+    name: default
+    queues:
+      - name: root
+        queues:
+          - name: a
+            resources:
+              guaranteed:
+                memory: 100
+                vcore: 10
+              max:
+                memory: 150
+                vcore: 20
+`
+	configs.MockSchedulerConfigByData([]byte(configData))
+	mockRM := NewMockRMCallbackHandler(t)
+
+	_, err := proxy.RegisterResourceManager(
+		&si.RegisterResourceManagerRequest{
+			RmId:        "rm:123",
+			PolicyGroup: "policygroup",
+			Version:     "0.0.2",
+		}, mockRM)
+
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	// Register apps alone
+	err = proxy.Update(&si.UpdateRequest{
+		NewApplications: []*si.AddApplicationRequest{
+			{
+				ApplicationId: "app-1",
+				QueueName:     "root.a",
+				PartitionName: "",
+			},
+			{
+				ApplicationId: "app-2",
+				QueueName:     "root.a",
+				PartitionName: "",
+			},
+		},
+		RmId: "rm:123",
+	})
+
+	if nil != err {
+		t.Error(err.Error())
+	}
+
+	waitForAcceptedApplications(mockRM, "app-1", 1000)
+	waitForAcceptedApplications(mockRM, "app-2", 1000)
+}

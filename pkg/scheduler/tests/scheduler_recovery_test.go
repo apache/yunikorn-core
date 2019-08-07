@@ -669,7 +669,7 @@ partitions:
 	assert.Equal(t, app01.ApplicationInfo.QueueName, "root.a")
 }
 
-// test scheduler recovery that only registers nodes and apps
+// test scheduler recovery that only registers apps
 func TestAppRecoveryAlone(t *testing.T) {
 	serviceContext := entrypoint.StartAllServicesWithManualScheduler()
 	proxy := serviceContext.RMProxy

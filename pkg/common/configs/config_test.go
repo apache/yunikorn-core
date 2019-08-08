@@ -32,7 +32,7 @@ func TestConfigSerde(t *testing.T) {
                 Name: "default",
                 Queues: []QueueConfig{
                     {
-                        Name: "a",
+                        Name:   "a",
                         Parent: true,
                         Properties: map[string]string{
                             "acl": "abc",
@@ -42,13 +42,11 @@ func TestConfigSerde(t *testing.T) {
                             Guaranteed: map[string]string{
                                 "a": "100",
                             },
-                            Max: map[string]string{
-
-                            },
+                            Max: map[string]string{},
                         },
                         Queues: []QueueConfig{
                             {
-                                Name: "a1",
+                                Name:       "a1",
                                 Properties: map[string]string{},
                                 Resources: Resources{
                                     Guaranteed: map[string]string{
@@ -60,7 +58,7 @@ func TestConfigSerde(t *testing.T) {
                                 },
                                 Queues: []QueueConfig{},
                             }, {
-                                Name: "a2",
+                                Name:       "a2",
                                 Properties: map[string]string{},
                                 Resources: Resources{
                                     Guaranteed: map[string]string{
@@ -72,11 +70,10 @@ func TestConfigSerde(t *testing.T) {
                                 },
                                 Queues: []QueueConfig{},
                             },
-
                         },
                     },
                     {
-                        Name: "b",
+                        Name:   "b",
                         Parent: true,
                         Properties: map[string]string{
                             "acl": "abc",
@@ -86,13 +83,11 @@ func TestConfigSerde(t *testing.T) {
                             Guaranteed: map[string]string{
                                 "a": "100",
                             },
-                            Max: map[string]string{
-
-                            },
+                            Max: map[string]string{},
                         },
                         Queues: []QueueConfig{
                             {
-                                Name: "b1",
+                                Name:       "b1",
                                 Properties: map[string]string{},
                                 Resources: Resources{
                                     Guaranteed: map[string]string{
@@ -104,7 +99,7 @@ func TestConfigSerde(t *testing.T) {
                                 },
                                 Queues: []QueueConfig{},
                             }, {
-                                Name: "b2",
+                                Name:       "b2",
                                 Properties: map[string]string{},
                                 Resources: Resources{
                                     Guaranteed: map[string]string{
@@ -157,7 +152,7 @@ func TestConfigSerde(t *testing.T) {
     }
 }
 
-func CreateConfig (data string) (*SchedulerConfig, error) {
+func CreateConfig(data string) (*SchedulerConfig, error) {
     dir, err := ioutil.TempDir("", "test-scheduler-config")
     if err != nil {
         return nil, fmt.Errorf("failed to create temp dir: %v", err)
@@ -209,7 +204,7 @@ partitions:
       - name: User
         create: true
         parent:
-          name: Group
+          name: PrimaryGroupName
           create: false
         filter:
           type: allow
@@ -391,7 +386,7 @@ partitions:
 partitions:
   - name: default
     queues:
-      - name: this-name-is-too-long
+      - name: this-name-is-longer-than-sixtyfour-characters-and-thus-fails-parsing
 `
     // validate the config and check after the update
     conf, err = CreateConfig(data)
@@ -425,7 +420,7 @@ partitions:
 }
 
 func TestParseResourceFail(t *testing.T) {
-data := `
+    data := `
 partitions:
   - name: default
     queues:
@@ -480,5 +475,190 @@ partitions:
 
     if conf.Partitions[1].Preemption.Enabled {
         t.Error("partition-0's preemption should NOT be enabled by default")
+    }
+}
+
+func TestParseRule(t *testing.T) {
+    data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+    placementrules:
+      - name: User
+        create: true
+        filter:
+          type: allow
+          users:
+            - test1
+            - test1
+          groups:
+            - test1
+            - test1
+`
+    // validate the config and check after the update
+    conf, err := CreateConfig(data)
+    if err != nil {
+        t.Errorf("rule parsing should not have failed: %v", err)
+    }
+    rule := conf.Partitions[0].PlacementRules[0]
+    if !rule.Create {
+        t.Errorf("Create flag is not set correctly expected 'true' got 'false'")
+    }
+    if rule.Parent != nil {
+        t.Errorf("Parent rule was set incorrectly expected 'nil' got %v", rule.Parent)
+    }
+    if rule.Filter.Type != "allow" {
+        t.Errorf("Filter type set incorrectly expected 'allow' got %v", rule.Filter.Type)
+    }
+    if len(rule.Filter.Groups) != 2 || len(rule.Filter.Users) != 2 {
+        t.Errorf("Failed rule or group filter parsing length should have been 2 for both, got: %v, %v", rule.Filter.Users, rule.Filter.Groups)
+    }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+    placementrules:
+      - name: User
+        create: false
+        parent:
+          name: PrimaryGroup
+          create: false
+          filter:
+            type: allow
+            users:
+              - test1
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err != nil {
+        t.Errorf("rule parsing should not have failed: %v", err)
+    }
+    rule = conf.Partitions[0].PlacementRules[0]
+    if rule.Create {
+        t.Errorf("Create flag is not set correctly expected 'false' got 'true'")
+    }
+    if rule.Parent == nil {
+        t.Errorf("Parent rule was set incorrectly expected 'rule ' got nil")
+    }
+    if rule.Parent.Create {
+        t.Errorf("Create flag is not set correctly expected 'false' got 'true'")
+    }
+    if len(rule.Parent.Filter.Users) != 1 && len(rule.Parent.Filter.Groups) != 0 {
+        t.Errorf("Failed rule or group filter parsing length should have been 1 and 0, got: %v, %v", rule.Filter.Users, rule.Filter.Groups)
+    }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+    placementrules:
+      - name: User
+        filter:
+          users:
+            - test.test
+      - name: PrimaryGroup
+        filter:
+          users:
+            - test1*
+      - name: Something
+        filter:
+          users:
+            - test[1-9]
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err != nil {
+        t.Errorf("rule parsing should not have failed: %v", err)
+    }
+    if len(conf.Partitions[0].PlacementRules) != 3 {
+        t.Errorf("incorrect number of rules returned expected 3 got: %d", len(conf.Partitions[0].PlacementRules))
+    }
+}
+
+func TestParseRuleFail(t *testing.T) {
+    data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+    placementrules:
+      - name: User
+        create: bogus
+`
+    // validate the config and check after the update
+    conf, err := CreateConfig(data)
+    if err == nil {
+        t.Errorf("not a boolean create flag rule parsing should have failed: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+    placementrules:
+      - name: User
+        filter:
+          type: bogus
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("filter type parsing should have failed rule parsing: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+    placementrules:
+      - name: User
+        filter:
+          users: 
+            - 99test
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("user parsing filter should have failed rule parsing: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+    placementrules:
+      - name: User
+        filter:
+          groups:
+            - test@group
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("group parsing filter should have failed rule parsing: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+    placementrules:
+      - name: User
+        filter:
+          users:
+            - test[test
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("user parsing filter should have failed rule parsing: %v", conf)
     }
 }

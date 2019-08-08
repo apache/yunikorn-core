@@ -25,12 +25,12 @@ import (
 )
 
 const (
-    WildCard = "*"
+    WildCard  = "*"
     Separator = ","
-    Space = " "
+    Space     = " "
 )
 
-var nameRegExp = regexp.MustCompile("^[a-z_]([a-z0-9_-]{0,31}|[a-z0-9_-]{0,30}\\$)$")
+var UserNameRegExp = regexp.MustCompile("^[a-z_]([a-z0-9_-]{0,31}|[a-z0-9_-]{0,30}\\$)$")
 
 type ACL struct {
     users      map[string]bool
@@ -59,7 +59,7 @@ func (a *ACL) setUsers(userList []string) {
     }
     // add all users to the map
     for _, user := range userList {
-        if nameRegExp.MatchString(user) {
+        if UserNameRegExp.MatchString(user) {
             a.users[user] = true
         } else {
             log.Logger.Info("user Ignoring user in ACL definition",
@@ -88,7 +88,7 @@ func (a *ACL) setGroups(groupList []string) {
     }
     // add all groups to the map
     for _, group := range groupList {
-        if nameRegExp.MatchString(group) {
+        if UserNameRegExp.MatchString(group) {
             a.groups[group] = true
         } else {
             log.Logger.Info("ignoring group in ACL",

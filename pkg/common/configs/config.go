@@ -84,15 +84,21 @@ type PlacementRule struct {
 }
 
 // The user and group filter for a rule.
-// - type of filter (allow or deny filter)
+// - type of filter (allow or deny filter, empty means allow)
 // - comma separated list of users to filter
 // - comma separated list of groups to filter
+// if the list of users or groups is exactly 1 long it is interpreted as a regular expression
 type Filter struct {
     Type   string
     Users  []string `yaml:",omitempty" json:",omitempty"`
     Groups []string `yaml:",omitempty" json:",omitempty"`
 }
 
+// The user object to specify user limits at different levels in the partition or queues
+// Different limits for the same user may be defined at different levels in the hierarchy
+// - name of the user
+// - maximum resources as a resource object to allow for the user
+// - maximum number of applications the user can have running
 type User struct {
     Name            string
     MaxResources    map[string]string `yaml:",omitempty" json:",omitempty"`

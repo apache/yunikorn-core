@@ -577,6 +577,30 @@ partitions:
     if len(conf.Partitions[0].PlacementRules) != 3 {
         t.Errorf("incorrect number of rules returned expected 3 got: %d", len(conf.Partitions[0].PlacementRules))
     }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+    placementrules:
+      - name: fixed
+        value: default
+      - name: tag
+        value: Just Any value
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err != nil {
+        t.Errorf("rule parsing should not have failed: %v", err)
+    }
+    if len(conf.Partitions[0].PlacementRules) != 2 {
+        t.Errorf("incorrect number of rules returned expected 2 got: %d", len(conf.Partitions[0].PlacementRules))
+    }
+    if conf.Partitions[0].PlacementRules[0].Value != "default" &&
+        conf.Partitions[0].PlacementRules[1].Value != "Just Any value" {
+        t.Errorf("incorrect values set inside the rules: %v", conf.Partitions[0].PlacementRules)
+    }
 }
 
 func TestParseRuleFail(t *testing.T) {

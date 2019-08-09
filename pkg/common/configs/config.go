@@ -76,11 +76,14 @@ type Resources struct {
 // - create flag: can the rule create a queue
 // - user and group filter to be applied on the callers
 // - rule link to allow setting a rule to generate the parent
+// - value a generic value interpreted depending on the rule type (i.e queue name for the "fixed" rule
+// or the application label name for the "tag" rule)
 type PlacementRule struct {
     Name   string
     Create bool           `yaml:",omitempty" json:",omitempty"`
     Filter Filter         `yaml:",omitempty" json:",omitempty"`
     Parent *PlacementRule `yaml:",omitempty" json:",omitempty"`
+    Value  string         `yaml:",omitempty" json:",omitempty"`
 }
 
 // The user and group filter for a rule.

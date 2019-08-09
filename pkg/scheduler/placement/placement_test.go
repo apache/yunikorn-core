@@ -147,13 +147,13 @@ func TestManagerBuildRule(t *testing.T) {
     // two rules in order: cannot use the same rule names as we can not check them
     rules = []configs.PlacementRule{
         {Name: "user"},
-        {Name: "fixed"},
+        {Name: "test"},
     }
     ruleObjs, err = man.buildRules(rules)
     if err != nil || len(ruleObjs) != 2 {
         t.Errorf("rule build should not have failed and created 2 rule, err: %v, rules: %v", err, ruleObjs)
     } else {
-        if ruleObjs[0].getName() != "user" || ruleObjs[1].getName() != "fixed" {
+        if ruleObjs[0].getName() != "user" || ruleObjs[1].getName() != "test" {
             t.Errorf("rule build order is not preserved: %v", ruleObjs)
         }
     }

@@ -17,45 +17,59 @@ limitations under the License.
 package placement
 
 import (
+    "fmt"
     "github.com/cloudera/yunikorn-core/pkg/cache"
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/log"
     "go.uber.org/zap"
 )
 
-// A rule to place an application based on the user name of the submitting user.
-type userRule struct {
+// A rule to place an application based on the a tag on the application.
+// The tag will be part of the application that is submitted. An application can have 0 or more tags.
+// If the tag is present the value will be used as the queue name.
+// NOTE: tags are normalised and only use lower case (not case sensitive)
+type tagRule struct {
     basicRule
+    tagName string
 }
 
-func (ur userRule) getName() string {
-    return "user"
+func (tr tagRule) getName() string {
+    return "tag"
 }
 
-func (ur *userRule) initialise(conf configs.PlacementRule) error {
-    ur.create = conf.Create
-    ur.filter = newFilter(conf.Filter)
+func (tr *tagRule) initialise(conf configs.PlacementRule) error {
+    tr.tagName = normalise(conf.Value)
+    if tr.tagName == "" {
+        return fmt.Errorf("a tag queue rule must have a tag name set")
+    }
+    tr.create = conf.Create
+    tr.filter = newFilter(conf.Filter)
     var err = error(nil)
     if conf.Parent != nil {
-        ur.parent, err = newRule(*conf.Parent)
+        tr.parent, err = newRule(*conf.Parent)
     }
     return err
 }
 
-func (ur userRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
+func (tr tagRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
+    // if the tag is not present we can skipp all other processing
+    tagVal := app.GetTag(tr.tagName)
+    if tagVal == "" {
+        return "", nil
+    }
     // before anything run the filter
-    userName := app.GetUser().User
-    if !ur.filter.allowUser(app.GetUser()) { // TODO
-        log.Logger.Debug("User rule filtered",
+    if !tr.filter.allowUser(app.GetUser()) {
+        log.Logger.Debug("Tag rule filtered",
             zap.String("application", app.ApplicationId),
-            zap.Any("user", app.GetUser()))
+            zap.Any("user", app.GetUser()),
+            zap.String("tagName", tr.tagName))
         return "", nil
     }
     var parentName string
     var err error
     // run the parent rule if set
-    if ur.parent != nil {
-        parentName, err = ur.parent.placeApplication(app, info)
+    if tr.parent != nil {
+        parentName, err = tr.parent.placeApplication(app, info)
         // failed parent rule, fail this rule
         if err != nil {
             return "", err
@@ -69,18 +83,19 @@ func (ur userRule) placeApplication(app *cache.ApplicationInfo, info *cache.Part
     if parentName == "" {
         parentName = configs.RootQueue
     }
-    queueName := parentName + cache.DOT + replaceDot(userName)
-    log.Logger.Debug("User rule intermediate result",
+    queueName := parentName + cache.DOT + replaceDot(tagVal)
+    log.Logger.Debug("Tag rule intermediate result",
         zap.String("application", app.ApplicationId),
         zap.String("queue", queueName))
     // get the queue object
     queue := info.GetQueue(queueName)
     // if we cannot create the queue it must exist, rule does not match otherwise
-    if !ur.create && queue == nil {
+    if !tr.create && queue == nil {
         return "", nil
     }
-    log.Logger.Info("User rule application placed",
+    log.Logger.Info("Tag rule application placed",
         zap.String("application", app.ApplicationId),
         zap.String("queue", queueName))
     return queueName, nil
 }
+

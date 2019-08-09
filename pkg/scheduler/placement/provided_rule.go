@@ -47,23 +47,22 @@ func (pr *providedRule) initialise(conf configs.PlacementRule) error {
 }
 
 func (pr providedRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
-    // before anything run the filter
-    if !pr.filter.allowUser("user", []string{"group"}) { // TODO
-        log.Logger.Debug("Provided rule filtered",
-            zap.String("application", app.ApplicationId),
-            zap.String("user", "user"))
+    // since this is the provided rule we must have a queue in the info already
+    if app.QueueName == "" {
         return "", nil
     }
-    // since this is the specified rule we must have a queue in the info already
-    if app.QueueName == "" {
+    // before anything run the filter
+    if !pr.filter.allowUser(app.GetUser()) {
+        log.Logger.Debug("Provided rule filtered",
+            zap.String("application", app.ApplicationId),
+            zap.Any("user", app.GetUser()))
         return "", nil
     }
     var parentName string
     var err error
-    // if we have a fully qualified queue passed in do not run the parent rule
-    qualified := strings.HasPrefix(app.QueueName, configs.RootQueue+cache.DOT)
     queueName := app.QueueName
-    if !qualified {
+    // if we have a fully qualified queue passed in do not run the parent rule
+    if !strings.HasPrefix(queueName, configs.RootQueue + cache.DOT) {
         // run the parent rule if set
         if pr.parent != nil {
             parentName, err = pr.parent.placeApplication(app, info)

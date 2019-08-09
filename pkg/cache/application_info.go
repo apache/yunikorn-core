@@ -18,7 +18,9 @@ package cache
 
 import (
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-core/pkg/common/security"
     "github.com/looplab/fsm"
+    "strings"
     "sync"
     "time"
 )
@@ -31,6 +33,8 @@ type ApplicationInfo struct {
     SubmissionTime int64
 
     // Private fields need protection
+    user              security.UserGroup         // owner of the application
+    tags              map[string]string          // application tags used in scheduling
     leafQueue         *QueueInfo                 // link to the leaf queue
     allocatedResource *resources.Resource        // total allocated resources
     allocations       map[string]*AllocationInfo // list of all allocations
@@ -39,7 +43,7 @@ type ApplicationInfo struct {
 }
 
 // Create a new application
-func NewApplicationInfo(appId string, partition, queueName string) *ApplicationInfo {
+func NewApplicationInfo(appId, partition, queueName string) *ApplicationInfo {
     ai := &ApplicationInfo{ApplicationId: appId}
     ai.allocatedResource = resources.NewResource()
     ai.allocations = make(map[string]*AllocationInfo)
@@ -47,6 +51,8 @@ func NewApplicationInfo(appId string, partition, queueName string) *ApplicationI
     ai.QueueName = queueName
     ai.SubmissionTime = time.Now().UnixNano()
     ai.stateMachine = newAppState()
+    ai.tags = make(map[string]string, 0) // TODO load tags when added
+    ai.user = security.UserGroup{}       // TODO add user info when added
     return ai
 }
 
@@ -80,7 +86,7 @@ func (ai *ApplicationInfo) HandleApplicationEvent(event ApplicationEvent) error 
 }
 
 // Return the total allocated resources for the application.
-func (ai * ApplicationInfo) GetAllocatedResource() *resources.Resource {
+func (ai *ApplicationInfo) GetAllocatedResource() *resources.Resource {
     ai.lock.RLock()
     defer ai.lock.RUnlock()
 
@@ -140,4 +146,22 @@ func (ai *ApplicationInfo) removeAllAllocations() []*AllocationInfo {
     ai.allocations = make(map[string]*AllocationInfo)
 
     return allocationsToRelease
+}
+
+// get a copy of the user details for the application
+func (ai *ApplicationInfo) GetUser() security.UserGroup {
+    return ai.user
+}
+
+// Get a tag from the application
+// Note: Tags are not case sensitive
+func (ai *ApplicationInfo) GetTag(tag string) string {
+    tagVal := ""
+    for key, val := range ai.tags {
+        if strings.EqualFold(key, tag){
+            tagVal = val
+            break
+        }
+    }
+    return tagVal
 }

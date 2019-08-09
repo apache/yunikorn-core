@@ -18,6 +18,7 @@ package placement
 
 import (
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
+    "github.com/cloudera/yunikorn-core/pkg/common/security"
     "github.com/cloudera/yunikorn-core/pkg/log"
     "go.uber.org/zap"
     "regexp"
@@ -35,7 +36,9 @@ type Filter struct {
 // Check if the user is allowed by the filter
 // First check the user list and then the group list
 // List matching is case sensitive, expression matching might not be (depends on regexp)
-func (filter Filter) allowUser(user string, groups []string) bool {
+func (filter Filter) allowUser(userObj security.UserGroup) bool {
+    user := userObj.User
+    groups := userObj.Groups
     // if nothing is filtered just return the type
     if filter.empty {
         return filter.allow

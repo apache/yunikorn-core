@@ -18,6 +18,7 @@ package placement
 
 import (
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
+    "github.com/cloudera/yunikorn-core/pkg/common/security"
     "testing"
 )
 
@@ -260,16 +261,23 @@ func TestFilterGroup(t *testing.T) {
 
 // test allowing user access with user list
 func TestAllowUser(t *testing.T) {
+    // user object to test with
+    userObj := security.UserGroup{
+        User:   "",
+        Groups: nil,
+    }
     // test deny user list
     conf := configs.Filter{}
     conf.Type = "deny"
     conf.Users = []string{"user1"}
 
     filter := newFilter(conf)
-    if filter.allowUser("user1", []string{""}) {
+    userObj.User = "user1"
+    if filter.allowUser(userObj) {
         t.Error("deny filter did not deny user 'user1' while in list")
     }
-    if !filter.allowUser("user2", []string{""}) {
+    userObj.User = "user2"
+    if !filter.allowUser(userObj) {
         t.Error("deny filter did deny user 'user2' while not in list")
     }
 
@@ -279,10 +287,12 @@ func TestAllowUser(t *testing.T) {
     conf.Users = []string{"user1"}
 
     filter = newFilter(conf)
-    if !filter.allowUser("user1", []string{""}) {
+    userObj.User = "user1"
+    if !filter.allowUser(userObj) {
         t.Error("allow filter did not allow user 'user1' while in list")
     }
-    if filter.allowUser("user2", []string{""}) {
+    userObj.User = "user2"
+    if filter.allowUser(userObj) {
         t.Error("allow filter did allow user 'user1' while not in list")
     }
 
@@ -292,10 +302,12 @@ func TestAllowUser(t *testing.T) {
     conf.Users = []string{"user[0-9]"}
 
     filter = newFilter(conf)
-    if filter.allowUser("user1", []string{""}) {
+    userObj.User = "user1"
+    if filter.allowUser(userObj) {
         t.Error("deny filter did not deny user 'user1' while in expression")
     }
-    if !filter.allowUser("nomatch", []string{""}) {
+    userObj.User = "nomatch"
+    if !filter.allowUser(userObj) {
         t.Error("deny filter did deny user 'nomatch' while not in expression")
     }
 
@@ -305,26 +317,36 @@ func TestAllowUser(t *testing.T) {
     conf.Users = []string{"user[0-9]"}
 
     filter = newFilter(conf)
-    if !filter.allowUser("user1", []string{""}) {
+    userObj.User = "user1"
+    if !filter.allowUser(userObj) {
         t.Error("allow filter did not allow user 'user1' while in expression")
     }
-    if filter.allowUser("nomatch", []string{""}) {
+    userObj.User = "nomatch"
+    if filter.allowUser(userObj) {
         t.Error("allow filter did allow user 'nomatch' while not in expression")
     }
 }
 
 // test allowing user access with group list
 func TestAllowGroup(t *testing.T) {
+    // user object to test with
+    userObj := security.UserGroup{
+        User:   "",
+        Groups: nil,
+    }
+
     // test deny group list
     conf := configs.Filter{}
     conf.Type = "deny"
     conf.Groups = []string{"group1"}
 
     filter := newFilter(conf)
-    if filter.allowUser("", []string{"group1"}) {
+    userObj.Groups = []string{"group1"}
+    if filter.allowUser(userObj) {
         t.Error("deny filter did not deny group 'group1' while in list")
     }
-    if !filter.allowUser("", []string{"group2"}) {
+    userObj.Groups = []string{"group2"}
+    if !filter.allowUser(userObj) {
         t.Error("deny filter did deny group 'group2' while not in list")
     }
 
@@ -334,10 +356,12 @@ func TestAllowGroup(t *testing.T) {
     conf.Groups = []string{"group1"}
 
     filter = newFilter(conf)
-    if !filter.allowUser("", []string{"group1"}) {
+    userObj.Groups = []string{"group1"}
+    if !filter.allowUser(userObj) {
         t.Error("allow filter did not allow group 'group1' while in list")
     }
-    if filter.allowUser("", []string{"group2"}) {
+    userObj.Groups = []string{"group2"}
+    if filter.allowUser(userObj) {
         t.Error("allow filter did allow group 'group2' while not in list")
     }
 
@@ -347,10 +371,12 @@ func TestAllowGroup(t *testing.T) {
     conf.Groups = []string{"group[0-9]"}
 
     filter = newFilter(conf)
-    if filter.allowUser("", []string{"group1"}) {
+    userObj.Groups = []string{"group1"}
+    if filter.allowUser(userObj) {
         t.Error("deny filter did not deny group 'group1' while in expression")
     }
-    if !filter.allowUser("", []string{"nomatch"}) {
+    userObj.Groups = []string{"nomatch"}
+    if !filter.allowUser(userObj) {
         t.Error("deny filter did deny group 'nomatch' while not in expression")
     }
 
@@ -360,23 +386,32 @@ func TestAllowGroup(t *testing.T) {
     conf.Groups = []string{"group[0-9]"}
 
     filter = newFilter(conf)
-    if !filter.allowUser("", []string{"group1"}) {
+    userObj.Groups = []string{"group1"}
+    if !filter.allowUser(userObj) {
         t.Error("allow filter did not allow group 'group1' while in expression")
     }
-    if filter.allowUser("", []string{"nomatch"}) {
+    userObj.Groups = []string{"nomatch"}
+    if filter.allowUser(userObj) {
         t.Error("allow filter did allow group 'nomatch' while not in expression")
     }
 }
 
 // test allowing user access with secondary group list
 func TestAllowSecondaryGroup(t *testing.T) {
+    // user object to test with
+    userObj := security.UserGroup{
+        User:   "",
+        Groups: nil,
+    }
+
     // test deny group list
     conf := configs.Filter{}
     conf.Type = "deny"
     conf.Groups = []string{"group2"}
 
     filter := newFilter(conf)
-    if filter.allowUser("", []string{"nomatch", "group2"}) {
+    userObj.Groups = []string{"nomatch", "group2"}
+    if filter.allowUser(userObj) {
         t.Error("deny filter did not deny second group 'group2' while in list")
     }
 
@@ -386,7 +421,8 @@ func TestAllowSecondaryGroup(t *testing.T) {
     conf.Groups = []string{"group1", "group2"}
 
     filter = newFilter(conf)
-    if !filter.allowUser("", []string{"nomatch", "group2"}) {
+    userObj.Groups = []string{"nomatch", "group2"}
+    if !filter.allowUser(userObj) {
         t.Error("allow filter did not allow second group 'group2' while in list")
     }
 
@@ -396,7 +432,8 @@ func TestAllowSecondaryGroup(t *testing.T) {
     conf.Groups = []string{"group[0-9]"}
 
     filter = newFilter(conf)
-    if filter.allowUser("", []string{"nomatch", "group2"}) {
+    userObj.Groups = []string{"nomatch", "group2"}
+    if filter.allowUser(userObj) {
         t.Error("deny filter did not deny second group 'group2' while in expression")
     }
 
@@ -406,18 +443,25 @@ func TestAllowSecondaryGroup(t *testing.T) {
     conf.Groups = []string{"group[0-9]"}
 
     filter = newFilter(conf)
-    if !filter.allowUser("", []string{"nomatch", "group2"}) {
+    userObj.Groups = []string{"nomatch", "group2"}
+    if !filter.allowUser(userObj) {
         t.Error("allow filter did not allow group 'group2' while in expression")
     }
 }
 
 // test allowing user access with no list
 func TestAllowNoLists(t *testing.T) {
+    // user object to test with
+    userObj := security.UserGroup{
+        User:   "user1",
+        Groups: []string{"group1"},
+    }
+
     // test default behaviour (no filter)
     conf := configs.Filter{}
 
     filter := newFilter(conf)
-    if !filter.allowUser("user1", []string{"group1"}) {
+    if !filter.allowUser(userObj) {
         t.Error("allow filter no config did not allow user")
     }
     // test default allow behaviour (no filter)
@@ -425,7 +469,7 @@ func TestAllowNoLists(t *testing.T) {
     conf.Type = "allow"
 
     filter = newFilter(conf)
-    if !filter.allowUser("user1", []string{"group1"}) {
+    if !filter.allowUser(userObj) {
         t.Error("allow filter type only did not allow user")
     }
     // test default deny behaviour (no filter)
@@ -433,7 +477,7 @@ func TestAllowNoLists(t *testing.T) {
     conf.Type = "deny"
 
     filter = newFilter(conf)
-    if filter.allowUser("user1", []string{"group1"}) {
+    if filter.allowUser(userObj) {
         t.Error("deny filter type only did not deny user")
     }
 }

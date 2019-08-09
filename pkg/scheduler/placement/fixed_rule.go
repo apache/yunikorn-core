@@ -40,10 +40,13 @@ func (fr fixedRule) getName() string {
 }
 
 func (fr *fixedRule) initialise(conf configs.PlacementRule) error {
-    fr.queue = "default"
+    fr.queue = normalise(conf.Value)
+    if fr.queue == "" {
+        return fmt.Errorf("a fixed queue rule must have a queue name set")
+    }
     fr.create = conf.Create
     fr.filter = newFilter(conf.Filter)
-    // if we have a fully qualified queue getName already we should not have a parent
+    // if we have a fully qualified queue name already we should not have a parent
     fr.qualified = strings.HasPrefix(fr.queue, configs.RootQueue)
     if fr.qualified && conf.Parent != nil {
         return fmt.Errorf("cannot have a fixed queue rule with qualified queue getName and a parent rule: %v", conf)
@@ -57,14 +60,11 @@ func (fr *fixedRule) initialise(conf configs.PlacementRule) error {
 
 func (fr fixedRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
     // before anything run the filter
-    if !fr.filter.allowUser("user", []string{"group"}) { // TODO
+    if !fr.filter.allowUser(app.GetUser()) {
         log.Logger.Debug("Fixed rule filtered",
             zap.String("application", app.ApplicationId),
-            zap.String("user", "user"))
-        return "", nil
-    }
-    // since this is the fixed rule we must have a queue set
-    if fr.queue == "" {
+            zap.Any("user", app.GetUser()),
+            zap.String("queueName", fr.queue))
         return "", nil
     }
     var parentName string

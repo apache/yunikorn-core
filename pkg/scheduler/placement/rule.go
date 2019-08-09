@@ -85,6 +85,10 @@ func newRule(conf configs.PlacementRule) (rule, error) {
 	case "provided":
 		tempRule := providedRule{}
 		newRule = &tempRule
+	// rule that uses a tag from the application (like namespace)
+	case "tag":
+		tempRule := tagRule{}
+		newRule = &tempRule
 	// test rule not to be used outside of testing code
 	case "test":
 		tempRule := testRule{}

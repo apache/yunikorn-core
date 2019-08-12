@@ -183,7 +183,7 @@ func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitio
         return nil
     }
 
-    preemptorQueue := preemptionPartitionContext.leafQueues[candidate.AskProto.QueueName]
+    preemptorQueue := preemptionPartitionContext.leafQueues[candidate.QueueName]
     if preemptorQueue == nil {
         return nil
     }

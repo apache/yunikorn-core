@@ -441,7 +441,7 @@ func (m *ClusterInfo) notifyRMAllocationReleased(rmId string, released []*Alloca
     }
     for _, alloc := range released {
         releaseEvent.ReleasedAllocations = append(releaseEvent.ReleasedAllocations, &si.AllocationReleaseResponse{
-            AllocationUUID:  alloc.AllocationProto.Uuid,
+            Uuid:  alloc.AllocationProto.Uuid,
             TerminationType: terminationType,
             Message:         message,
         })

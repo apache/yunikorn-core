@@ -92,10 +92,9 @@ func newSingleAllocationProposal(alloc *SchedulingAllocation) *cacheevent.Alloca
             {
                 NodeId:            alloc.NodeId,
                 ApplicationId:     alloc.SchedulingAsk.ApplicationId,
-                QueueName:         alloc.SchedulingAsk.AskProto.QueueName,
+                QueueName:         alloc.SchedulingAsk.QueueName,
                 AllocatedResource: alloc.SchedulingAsk.AllocatedResource,
                 AllocationKey:     alloc.SchedulingAsk.AskProto.AllocationKey,
-                Tags:              alloc.SchedulingAsk.AskProto.Tags,
                 Priority:          alloc.SchedulingAsk.AskProto.Priority,
                 PartitionName:     alloc.SchedulingAsk.PartitionName,
             },
@@ -133,7 +132,8 @@ func (m *Scheduler) updateSchedulingRequest(schedulingAsk *SchedulingAllocationA
         return fmt.Errorf("cannot find scheduling application %s, for allocation %s", schedulingAsk.ApplicationId, schedulingAsk.AskProto.AllocationKey)
     }
 
-    // found now update the pending requests for the queues (if
+    // found now update the pending requests for the queue that the app is running in
+    schedulingAsk.QueueName = schedulingApp.queue.Name
     pendingDelta, err := schedulingApp.Requests.AddAllocationAsk(schedulingAsk)
     if err == nil && !resources.IsZero(pendingDelta) {
         schedulingApp.queue.IncPendingResource(pendingDelta)
@@ -240,7 +240,7 @@ func (m *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocat
             zap.String("applicationId", alloc.ApplicationId),
             zap.String("nodeId", alloc.NodeId),
             zap.String("queueName", alloc.QueueName),
-            zap.String("partition", alloc.Partition),
+            zap.String("partition", alloc.PartitionName),
             zap.String("allocationId", alloc.Uuid))
 
         // add scheduling asks
@@ -258,7 +258,7 @@ func (m *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocat
             AllocationKey:     alloc.AllocationKey,
             Tags:              alloc.AllocationTags,
             Priority:          alloc.Priority,
-            PartitionName:     common.GetNormalizedPartitionName(alloc.Partition, rmId),
+            PartitionName:     common.GetNormalizedPartitionName(alloc.PartitionName, rmId),
         }, -1); err != nil {
             log.Logger.Error("failed to increase pending ask",
                 zap.Error(err))

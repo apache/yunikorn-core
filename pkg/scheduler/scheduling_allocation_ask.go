@@ -33,6 +33,7 @@ type SchedulingAllocationAsk struct {
     ApplicationId      string
     PartitionName      string
     NormalizedPriority int32
+    QueueName          string
 
     // Lock
     lock sync.RWMutex
@@ -50,7 +51,7 @@ func NewSchedulingAllocationAsk(ask *si.AllocationAsk) *SchedulingAllocationAsk 
 }
 
 func ConvertFromAllocation(allocation *si.Allocation, rmId string) *SchedulingAllocationAsk {
-    partitionWithRMId := common.GetNormalizedPartitionName(allocation.Partition, rmId)
+    partitionWithRMId := common.GetNormalizedPartitionName(allocation.PartitionName, rmId)
     return &SchedulingAllocationAsk{
         AskProto:          &si.AllocationAsk{
             AllocationKey:                allocation.AllocationKey,
@@ -58,10 +59,10 @@ func ConvertFromAllocation(allocation *si.Allocation, rmId string) *SchedulingAl
             Tags:                         allocation.AllocationTags,
             Priority:                     allocation.Priority,
             MaxAllocations:               1,
-            QueueName:                    allocation.QueueName,
             ApplicationId:                allocation.ApplicationId,
             PartitionName:                partitionWithRMId,
         },
+        QueueName:                    allocation.QueueName,
         AllocatedResource: resources.NewResourceFromProto(allocation.ResourcePerAlloc),
         PendingRepeatAsk:  1,
         ApplicationId:     allocation.ApplicationId,

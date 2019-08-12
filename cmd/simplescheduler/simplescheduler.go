@@ -29,7 +29,7 @@ type SimpleScheduler struct {
 }
 
 func (scheduler *SimpleScheduler) Run(endpoint string) {
-	// Create GRPC servers
+	// Create gRPC servers
 	ss := newSchedulerServer()
 	s := common.NewNonBlockingGRPCServer()
 	s.Start(endpoint, ss)

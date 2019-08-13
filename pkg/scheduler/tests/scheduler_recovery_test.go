@@ -391,6 +391,9 @@ partitions:
 	assert.Equal(t, recoveredQueue.CachedQueueInfo.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12))
 	assert.Equal(t, recoveredQueueRoot.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
 	assert.Equal(t, recoveredQueueRoot.CachedQueueInfo.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12))
+
+	// verify app state
+	assert.Equal(t, recoveredApp.ApplicationInfo.GetApplicationState(), "Running")
 }
 
 // test scheduler recovery when shim doesn't report existing application
@@ -725,4 +728,23 @@ partitions:
 
 	waitForAcceptedApplications(mockRM, "app-1", 1000)
 	waitForAcceptedApplications(mockRM, "app-2", 1000)
+
+	// verify app state
+	apps := serviceContext.Cache.GetPartition("[rm:123]default").GetApplications()
+	var app1 *cacheInfo.ApplicationInfo
+	var app2 *cacheInfo.ApplicationInfo
+	for _, app := range apps {
+		if app.ApplicationId == "app-1" {
+			app1 = app
+		}
+
+		if app.ApplicationId == "app-2" {
+			app2 = app
+		}
+	}
+
+	assert.Assert(t, app1 != nil)
+	assert.Assert(t, app2 != nil)
+	assert.Equal(t, app1.GetApplicationState(), "Accepted")
+	assert.Equal(t, app2.GetApplicationState(), "Accepted")
 }

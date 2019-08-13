@@ -176,21 +176,30 @@ func (pi *PartitionInfo) addNewNode(node *NodeInfo, existingAllocations []*si.Al
                 pi.removeNodeInternal(node.NodeId)
                 pi.metrics.IncFailedNodes()
                 return err
-            } else {
-                // if an allocation of a app is accepted,
-                // transit app's state from Accepted to Running
-                if app, ok := pi.applications[alloc.ApplicationId]; ok {
-                    log.Logger.Info("", zap.String("state", app.GetApplicationState()))
-                    if app.GetApplicationState() == Accepted.String() {
-                        if err := app.HandleApplicationEvent(RunApplication); err != nil {
-                            log.Logger.Warn("unable to handle app event - RunApplication",
-                                zap.Error(err))
-                        }
+            }
+        }
+    }
+
+    // Node is accepted, scan all recovered allocations again,
+    // handle state transition. We do this here because we want to
+    // node and its existing allocations might be removed if some allocation
+    // cannot be recovered.
+    if len(existingAllocations) > 0 {
+        // if an allocation of a app is accepted,
+        // transit app's state from Accepted to Running
+        for _, alloc := range existingAllocations {
+            if app, ok := pi.applications[alloc.ApplicationId]; ok {
+                log.Logger.Info("", zap.String("state", app.GetApplicationState()))
+                if app.GetApplicationState() == Accepted.String() {
+                    if err := app.HandleApplicationEvent(RunApplication); err != nil {
+                        log.Logger.Warn("unable to handle app event - RunApplication",
+                            zap.Error(err))
                     }
                 }
             }
         }
     }
+
     // Node is added update the metrics
     pi.metrics.IncActiveNodes()
     log.Logger.Info("added node to partition",

@@ -91,7 +91,7 @@ func (m *MockRMCallbackHandler) RecvUpdateResponse(response *si.UpdateResponse) 
     }
 
     for _, alloc := range response.ReleasedAllocations {
-        delete(m.Allocations, alloc.AllocationUUID)
+        delete(m.Allocations, alloc.Uuid)
     }
 
     return nil

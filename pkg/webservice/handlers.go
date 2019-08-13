@@ -124,7 +124,7 @@ func getApplicationJson(app *cache.ApplicationInfo) *dao.ApplicationDAOInfo {
 			QueueName:        alloc.AllocationProto.QueueName,
 			NodeId:           alloc.AllocationProto.NodeId,
 			ApplicationId:    alloc.AllocationProto.ApplicationId,
-			Partition:        alloc.AllocationProto.Partition,
+			Partition:        alloc.AllocationProto.PartitionName,
 		}
 		allocationInfos = append(allocationInfos, allocInfo)
 	}

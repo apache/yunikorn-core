@@ -276,7 +276,6 @@ partitions:
                     },
                 },
                 MaxAllocations: 2,
-                QueueName:      "root.a",
                 ApplicationId:  "app-1",
             },
         },
@@ -325,7 +324,6 @@ partitions:
                     },
                 },
                 MaxAllocations: 2,
-                QueueName:      "root.a",
                 ApplicationId:  "app-1",
             },
             {
@@ -337,7 +335,6 @@ partitions:
                     },
                 },
                 MaxAllocations: 2,
-                QueueName:      "root.a",
                 ApplicationId:  "app-1",
             },
         },
@@ -384,7 +381,7 @@ partitions:
         updateRequest.Releases.AllocationsToRelease = append(updateRequest.Releases.AllocationsToRelease, &si.AllocationReleaseRequest{
             Uuid:          v.Uuid,
             ApplicationId: v.ApplicationId,
-            PartitionName: v.Partition,
+            PartitionName: v.PartitionName,
         })
     }
 
@@ -536,7 +533,6 @@ partitions:
                     },
                 },
                 MaxAllocations: 20,
-                QueueName:      "root.a",
                 ApplicationId:  "app-1",
             },
         },
@@ -679,7 +675,6 @@ partitions:
                     },
                 },
                 MaxAllocations: 20,
-                QueueName:      "root.a",
                 ApplicationId:  "app-1",
             },
             {
@@ -691,7 +686,6 @@ partitions:
                     },
                 },
                 MaxAllocations: 20,
-                QueueName:      "root.b",
                 ApplicationId:  "app-2",
             },
         },
@@ -842,7 +836,6 @@ partitions:
                     },
                 },
                 MaxAllocations: 20,
-                QueueName:      "root.a",
                 ApplicationId:  "app-1",
             },
             {
@@ -854,7 +847,6 @@ partitions:
                     },
                 },
                 MaxAllocations: 20,
-                QueueName:      "root.b",
                 ApplicationId:  "app-2",
             },
         },

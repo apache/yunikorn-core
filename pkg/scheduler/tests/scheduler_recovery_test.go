@@ -148,7 +148,6 @@ partitions:
 					},
 				},
 				MaxAllocations: 2,
-				QueueName:      "root.a",
 				ApplicationId:  "app-1",
 			},
 		},
@@ -198,7 +197,6 @@ partitions:
 					},
 				},
 				MaxAllocations: 2,
-				QueueName:      "root.a",
 				ApplicationId:  "app-1",
 			},
 			{
@@ -210,7 +208,6 @@ partitions:
 					},
 				},
 				MaxAllocations: 2,
-				QueueName:      "root.a",
 				ApplicationId:  "app-1",
 			},
 		},
@@ -455,7 +452,7 @@ partitions:
 						AllocationKey: "allocation-key-01",
 						Uuid: "UUID01",
 						ApplicationId: "app-01",
-						Partition: "default",
+						PartitionName: "default",
 						QueueName: "root.a",
 						NodeId: "node-1:1234",
 						ResourcePerAlloc: &si.Resource{
@@ -526,7 +523,7 @@ partitions:
 						AllocationKey: "allocation-key-01",
 						Uuid: "UUID01",
 						ApplicationId: "app-01",
-						Partition: "default",
+						PartitionName: "default",
 						QueueName: "root.a",
 						NodeId: "node-1:1234",
 						ResourcePerAlloc: &si.Resource{

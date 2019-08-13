@@ -145,7 +145,6 @@ partitions:
                     },
                 },
                 MaxAllocations: 20,
-                QueueName:      "a",
                 ApplicationId:  "app-1",
             },
         },

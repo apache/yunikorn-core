@@ -169,18 +169,6 @@ func (pi *PartitionInfo) addNewNode(node *NodeInfo, existingAllocations []*si.Al
             zap.String("nodeId", node.NodeId),
             zap.Int("existingAllocations", len(existingAllocations)))
         for _, alloc := range existingAllocations {
-            // if this is to start processing existing allocations for an app,
-            // transit app's state from Accepted to Running
-            if app, ok := pi.applications[alloc.ApplicationId]; ok {
-                log.Logger.Info("", zap.String("state", app.GetApplicationState()))
-                if app.GetApplicationState() == Accepted.String() {
-                    if err := app.HandleApplicationEvent(RunApplication); err != nil {
-                        log.Logger.Warn("unable to handle app event - RunApplication",
-                            zap.Error(err))
-                    }
-                }
-            }
-
             if _, err := pi.addNodeReportedAllocations(alloc); err != nil {
                 log.Logger.Info("failed to add existing allocations",
                     zap.String("nodeId", node.NodeId),
@@ -188,6 +176,18 @@ func (pi *PartitionInfo) addNewNode(node *NodeInfo, existingAllocations []*si.Al
                 pi.removeNodeInternal(node.NodeId)
                 pi.metrics.IncFailedNodes()
                 return err
+            } else {
+                // if an allocation of a app is accepted,
+                // transit app's state from Accepted to Running
+                if app, ok := pi.applications[alloc.ApplicationId]; ok {
+                    log.Logger.Info("", zap.String("state", app.GetApplicationState()))
+                    if app.GetApplicationState() == Accepted.String() {
+                        if err := app.HandleApplicationEvent(RunApplication); err != nil {
+                            log.Logger.Warn("unable to handle app event - RunApplication",
+                                zap.Error(err))
+                        }
+                    }
+                }
             }
         }
     }

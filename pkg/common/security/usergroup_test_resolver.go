@@ -25,8 +25,8 @@ import (
 
 // Get the cache with a test resolver
 // cleaner runs every second
-func GetUserGroupCacheTest() *Cache {
-    return &Cache{
+func GetUserGroupCacheTest() *UserGroupCache {
+    return &UserGroupCache{
         ugs:           map[string]*UserGroup{},
         interval:      time.Second,
         lookup:        lookup,

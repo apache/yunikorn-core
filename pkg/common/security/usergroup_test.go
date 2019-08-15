@@ -135,7 +135,7 @@ func TestGetUserGroupFail(t *testing.T) {
         t.Error("Lookup should have failed: unknown user")
     }
     // ug is partially filled and failed flag is set: error message should show that the cache was returned
-    if err != nil && !strings.Contains(err.Error(), "Cache returned") {
+    if err != nil && !strings.Contains(err.Error(), "cached data returned") {
         t.Errorf("UserGroup not returned from Cache: %v, error: %v", ug, err)
     }
 }

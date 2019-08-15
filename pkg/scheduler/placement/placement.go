@@ -73,6 +73,8 @@ func (m *Manager) UpdateRules(rules []configs.PlacementRule) error {
 
 // Return the state of the placement manager
 func (m *Manager) IsInitialised() bool {
+    m.lock.RLock()
+    defer m.lock.RUnlock()
     return m.initialised
 }
 
@@ -114,11 +116,11 @@ func (m *Manager) buildRules(rules []configs.PlacementRule) ([]rule, error) {
 
 func (m *Manager) PlaceApplication(app *cache.ApplicationInfo) (string, error) {
     // Placement manager not initialised cannot place application, just return
+    m.lock.RLock()
+    defer m.lock.RUnlock()
     if !m.initialised {
         return "", nil
     }
-    m.lock.RLock()
-    defer m.lock.RUnlock()
     var queueName string
     var err error
     for _, checkRule := range m.rules {

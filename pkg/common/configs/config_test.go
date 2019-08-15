@@ -686,3 +686,23 @@ partitions:
         t.Errorf("user parsing filter should have failed rule parsing: %v", conf)
     }
 }
+
+func TestRecurseParent(t *testing.T) {
+    data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+    placementrules:
+      - name: user
+        parent:
+          name: fixed
+          parent:
+            name: provided
+`
+    // validate the config and check after the update
+    conf, err := CreateConfig(data)
+    if err != nil {
+        t.Errorf("recursive parent rule parsing should not have failed: %v", conf)
+    }
+}

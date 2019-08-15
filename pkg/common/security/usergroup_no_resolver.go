@@ -24,8 +24,8 @@ import (
 // Get the cache without a resolver.
 // In k8shim we currently have internal users to K8s which might not resolve against anything.
 // Just echo the object in the correct format based on the user passed in.
-func GetUserGroupNoResolve() *Cache {
-    return &Cache{
+func GetUserGroupNoResolve() *UserGroupCache {
+    return &UserGroupCache{
         ugs:           map[string]*UserGroup{},
         interval:      cleanerInterval * time.Second,
         lookup:        noLookupUser,

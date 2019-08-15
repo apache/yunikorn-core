@@ -48,7 +48,7 @@ type PartitionInfo struct {
     stateTime              time.Time                    // last time the state was updated (needed for cleanup)
     isPreemptable          bool                         // can allocations be preempted
     rules                  *[]configs.PlacementRule     // placement rules to be loaded by the scheduler
-    userGroupCache         *security.Cache              // user cache per partition
+    userGroupCache         *security.UserGroupCache     // user cache per partition
     clusterInfo            *ClusterInfo                 // link back to the cluster info
     lock                   sync.RWMutex                 // lock for updating the partition
     totalPartitionResource *resources.Resource          // Total node resources

@@ -70,31 +70,25 @@ func newRule(conf configs.PlacementRule) (rule, error) {
 	// create the rule from the config
 	var newRule rule
 	var err error
-	// create the new rule fail if the getName is unknown
-	// work around the pointer receiver for initialise.
+	// create the new rule fail if the name is unknown
 	switch normalise(conf.Name) {
 	// rule that uses the user's name as the queue
 	case "user":
-		tempRule := userRule{}
-		newRule = &tempRule
+		newRule = &userRule{}
 	// rule that uses a fixed queue name
 	case "fixed":
-		tempRule := fixedRule{}
-		newRule = &tempRule
+		newRule = &fixedRule{}
 	// rule that uses the queue provided on submit
 	case "provided":
-		tempRule := providedRule{}
-		newRule = &tempRule
+		newRule = &providedRule{}
 	// rule that uses a tag from the application (like namespace)
 	case "tag":
-		tempRule := tagRule{}
-		newRule = &tempRule
+		newRule = &tagRule{}
 	// test rule not to be used outside of testing code
 	case "test":
-		tempRule := testRule{}
-		newRule = &tempRule
+		newRule = &testRule{}
 	default:
-		return nil, fmt.Errorf("unknown rule getName specified %s, failing placement rule config", conf.Name)
+		return nil, fmt.Errorf("unknown rule name specified %s, failing placement rule config", conf.Name)
 	}
 
 	// initialise the rule: do not expect the rule to log errors

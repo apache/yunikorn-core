@@ -22,8 +22,8 @@ import (
 )
 
 // Get the cache and use that to resolve all user requests
-func GetUserGroupCacheOS() *Cache {
-    return &Cache{
+func GetUserGroupCacheOS() *UserGroupCache {
+    return &UserGroupCache{
         ugs:           map[string]*UserGroup{},
         interval:      cleanerInterval * time.Second,
         lookup:        user.Lookup,

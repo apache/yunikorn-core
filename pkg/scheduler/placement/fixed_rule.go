@@ -83,6 +83,13 @@ func (fr fixedRule) placeApplication(app *cache.ApplicationInfo, info *cache.Par
             if parentName == "" {
                 return "", nil
             }
+            // check if this is a parent queue and qualify it
+            if !strings.HasPrefix(parentName, configs.RootQueue + cache.DOT) {
+                parentName = configs.RootQueue + cache.DOT + parentName
+            }
+            if info.GetQueue(parentName).IsLeafQueue() {
+                return "", fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
+            }
         }
         // the parent is set from the rule otherwise set it to the root
         if parentName == "" {

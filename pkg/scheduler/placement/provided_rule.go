@@ -17,6 +17,7 @@ limitations under the License.
 package placement
 
 import (
+    "fmt"
     "github.com/cloudera/yunikorn-core/pkg/cache"
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/log"
@@ -73,6 +74,13 @@ func (pr providedRule) placeApplication(app *cache.ApplicationInfo, info *cache.
             // rule did not return a parent: this could be filter or create flag related
             if parentName == "" {
                 return "", nil
+            }
+            // check if this is a parent queue and qualify it
+            if !strings.HasPrefix(parentName, configs.RootQueue + cache.DOT) {
+                parentName = configs.RootQueue + cache.DOT + parentName
+            }
+            if info.GetQueue(parentName).IsLeafQueue() {
+                return "", fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
             }
         }
         // the parent is set from the rule otherwise set it to the root

@@ -81,7 +81,7 @@ func TestPlaceApp(t *testing.T) {
     }
 }
 
-func TestReplacDot(t *testing.T) {
+func TestReplaceDot(t *testing.T) {
     name := replaceDot("name.name")
     if name != "name_dot_name" {
         t.Errorf("replace dot failed, name: %s, ", name)
@@ -98,4 +98,8 @@ func TestReplacDot(t *testing.T) {
     if name != "_dot_name_dot_" {
         t.Errorf("replace start or end dots failed, name: %s, ", name)
     }
+}
+
+func CreatePartitionInfo(data []byte) (*cache.PartitionInfo, error) {
+    return cache.CreatePartitionInfo(data)
 }

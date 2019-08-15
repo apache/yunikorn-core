@@ -23,7 +23,7 @@ import (
 
 func TestGetUserGroupCache(t *testing.T) {
     // get the cache with the test resolver set
-    testCache := GetUserGroupCacheTest()
+    testCache := GetUserGroupCache("test")
     if testCache == nil {
         t.Fatal("Cache create failed")
     }
@@ -33,7 +33,7 @@ func TestGetUserGroupCache(t *testing.T) {
 }
 
 func TestGetUserGroup(t *testing.T) {
-    testCache := GetUserGroupCacheTest()
+    testCache := GetUserGroupCache("test")
     testCache.resetCache()
     // test cache should be empty now
     if len(testCache.ugs) != 0 {
@@ -48,7 +48,7 @@ func TestGetUserGroup(t *testing.T) {
         t.Errorf("lookup failed which should not have: %t", ug.failed)
     }
     if len(testCache.ugs) != 1 {
-        t.Errorf("cache not updated should have 1 entry %d", len(testCache.ugs))
+        t.Errorf("Cache not updated should have 1 entry %d", len(testCache.ugs))
     }
     // check returned info: 3 groups etc
     if ug.User != "testuser1" || len(ug.Groups) != 2 || ug.resolved == 0 || ug.failed {
@@ -62,12 +62,12 @@ func TestGetUserGroup(t *testing.T) {
     cachedUG.resolved -= 5
     ug, _ = testCache.GetUserGroup("testuser1")
     if ug.resolved != cachedUG.resolved {
-        t.Errorf("User 'testuser1' not returned from cache, resolution time differs: %d got %d", ug.resolved, cachedUG.resolved)
+        t.Errorf("User 'testuser1' not returned from Cache, resolution time differs: %d got %d", ug.resolved, cachedUG.resolved)
     }
 }
 
 func TestBrokenUserGroup(t *testing.T) {
-    testCache := GetUserGroupCacheTest()
+    testCache := GetUserGroupCache("test")
     testCache.resetCache()
     // test cache should be empty now
     if len(testCache.ugs) != 0 {
@@ -104,7 +104,7 @@ func TestBrokenUserGroup(t *testing.T) {
 }
 
 func TestGetUserGroupFail(t *testing.T) {
-    testCache := GetUserGroupCacheTest()
+    testCache := GetUserGroupCache("test")
     testCache.resetCache()
     // test cache should be empty now
     if len(testCache.ugs) != 0 {
@@ -135,13 +135,13 @@ func TestGetUserGroupFail(t *testing.T) {
         t.Error("Lookup should have failed: unknown user")
     }
     // ug is partially filled and failed flag is set: error message should show that the cache was returned
-    if err != nil && !strings.Contains(err.Error(), "cache returned") {
-        t.Errorf("UserGroup not returned from cache: %v, error: %v", ug, err)
+    if err != nil && !strings.Contains(err.Error(), "Cache returned") {
+        t.Errorf("UserGroup not returned from Cache: %v, error: %v", ug, err)
     }
 }
 
 func TestCacheCleanUp(t *testing.T) {
-    testCache := GetUserGroupCacheTest()
+    testCache := GetUserGroupCache("test")
     testCache.resetCache()
     // test cache should be empty now
     if len(testCache.ugs) != 0 {

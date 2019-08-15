@@ -43,17 +43,18 @@ type ApplicationInfo struct {
 }
 
 // Create a new application
-func NewApplicationInfo(appId, partition, queueName string) *ApplicationInfo {
-    ai := &ApplicationInfo{ApplicationId: appId}
-    ai.allocatedResource = resources.NewResource()
-    ai.allocations = make(map[string]*AllocationInfo)
-    ai.Partition = partition
-    ai.QueueName = queueName
-    ai.SubmissionTime = time.Now().UnixNano()
-    ai.stateMachine = newAppState()
-    ai.tags = make(map[string]string, 0) // TODO load tags when added
-    ai.user = security.UserGroup{}       // TODO add user info when added
-    return ai
+func NewApplicationInfo(appId, partition, queueName string, ugi security.UserGroup, tags map[string]string) *ApplicationInfo {
+    return &ApplicationInfo{
+        ApplicationId: appId,
+        Partition: partition,
+        QueueName: queueName,
+        SubmissionTime: time.Now().UnixNano(),
+        tags: tags,
+        user: ugi,
+        allocatedResource: resources.NewResource(),
+        allocations: make(map[string]*AllocationInfo),
+        stateMachine: newAppState(),
+    }
 }
 
 // Return the current allocations for the application.

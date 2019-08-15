@@ -22,6 +22,7 @@ import (
     "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/scheduler/placement"
     "go.uber.org/zap"
+    "strings"
     "sync"
 )
 
@@ -33,7 +34,6 @@ type PartitionSchedulingContext struct {
     // Private fields need protection
     partition        *cache.PartitionInfo              // link back to the partition in the cache
     applications     map[string]*SchedulingApplication // applications assigned to this partition
-    queues           map[string]*SchedulingQueue       // scheduling queues flattened not a hierarchy
     placementManager *placement.Manager                // placement manager for this partition
     partitionManager *PartitionManager                 // manager for this partition
     lock             sync.RWMutex
@@ -44,7 +44,6 @@ type PartitionSchedulingContext struct {
 func newPartitionSchedulingContext(info *cache.PartitionInfo, root *SchedulingQueue) *PartitionSchedulingContext {
     psc := &PartitionSchedulingContext{
         applications: make(map[string]*SchedulingApplication),
-        queues:       make(map[string]*SchedulingQueue),
         Root:         root,
         Name:         info.Name,
         RmId:         info.RMId,
@@ -98,9 +97,10 @@ func (psc *PartitionSchedulingContext) AddSchedulingApplication(schedulingApp *S
         if err != nil {
             return fmt.Errorf("failed to find queue %s for application %s: %v", schedulingApp.ApplicationInfo.QueueName, appId, err)
         }
+
     }
     // find the scheduling queue
-    schedulingQueue := psc.queues[queueName]
+    schedulingQueue := psc.getQueue(queueName)
     if schedulingQueue == nil {
         return fmt.Errorf("failed to find queue %s for application %s", schedulingApp.ApplicationInfo.QueueName, appId)
     }
@@ -123,7 +123,7 @@ func (psc *PartitionSchedulingContext) RemoveSchedulingApplication(appId string)
     delete(psc.applications, appId)
 
     // Remove app under queue
-    schedulingQueue := psc.queues[schedulingApp.ApplicationInfo.QueueName]
+    schedulingQueue := psc.getQueue(schedulingApp.ApplicationInfo.QueueName)
     if schedulingQueue == nil {
         // This is not normal
         panic(fmt.Sprintf("Failed to find queue %s for app=%s while removing application", schedulingApp.ApplicationInfo.QueueName, appId))
@@ -133,21 +133,36 @@ func (psc *PartitionSchedulingContext) RemoveSchedulingApplication(appId string)
     return schedulingApp, nil
 }
 
+// Get the queue from the structure based on the fully qualified name.
+// Wrapper around the unlocked version getQueue()
 // Visible by tests
-// TODO need to think about this: maintaining the flat map might not scale with dynamic queues
-func (psc *PartitionSchedulingContext) GetQueue(queueName string) *SchedulingQueue {
+func (psc *PartitionSchedulingContext) GetQueue(name string) *SchedulingQueue {
     psc.lock.RLock()
     defer psc.lock.RUnlock()
-
-    return psc.queues[queueName]
+    return psc.getQueue(name)
 }
 
-// Remove the queue from the flat map.
-func (psc *PartitionSchedulingContext) RemoveQueue(queueName string) {
-    psc.lock.Lock()
-    defer psc.lock.Unlock()
-
-    delete(psc.queues, queueName)
+// Get the queue from the structure based on the fully qualified name.
+// The name is not syntax checked and must be valid.
+// Returns nil if the queue is not found otherwise the queue object.
+//
+// NOTE: this is a lock free call. It should only be called holding the PartitionSchedulingContext lock.
+func (psc *PartitionSchedulingContext) getQueue(name string) *SchedulingQueue {
+    // start at the root
+    queue := psc.Root
+    part := strings.Split(strings.ToLower(name), cache.DOT)
+    // short circuit the root queue
+    if len(part) == 1 {
+        return queue
+    }
+    // walk over the parts going down towards the requested queue
+    for i := 1; i < len(part); i++ {
+        // if child not found break out and return
+        if queue = queue.childrenQueues[part[i]]; queue == nil {
+            break
+        }
+    }
+    return queue
 }
 
 func (psc *PartitionSchedulingContext) getApplication(appId string) *SchedulingApplication {
@@ -155,4 +170,25 @@ func (psc *PartitionSchedulingContext) getApplication(appId string) *SchedulingA
     defer psc.lock.RUnlock()
 
     return psc.applications[appId]
+}
+
+// Create a scheduling queue with full hierarchy.
+// This is called when a new queue is created from a placement rule. It will not return anything and cannot
+// fail.
+//
+// NOTE: this is a lock free call. It should only be called holding the PartitionSchedulingContext lock.
+func (psc *PartitionSchedulingContext) createSchedulingQueue(name string) {
+    // find the scheduling furthest down the hierarchy that exists
+    schedQueue := name // the scheduling queue that exists
+    cacheQueue := ""   // the cache queue that needs to be created (with children)
+    parent := psc.getQueue(schedQueue)
+    for parent == nil {
+        cacheQueue = schedQueue
+        schedQueue = name[0:strings.LastIndex(name, cache.DOT)]
+        parent = psc.getQueue(schedQueue)
+    }
+    // found the last known scheduling queue,
+    // create the corresponding scheduler queue based on the already created cache queue
+    queue := psc.partition.GetQueue(cacheQueue)
+    NewSchedulingQueueInfo(queue, parent)
 }

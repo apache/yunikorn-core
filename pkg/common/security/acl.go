@@ -98,13 +98,16 @@ func (a *ACL) setGroups(groupList []string) {
 }
 
 // create a new ACL from scratch
-func NewACL(aclStr string) (*ACL, error) {
-    acl := &ACL{}
+func NewACL(aclStr string) (ACL, error) {
+    acl := ACL{}
+    if aclStr == "" {
+        return acl, nil
+    }
     // before trimming check
     // should have no more than two groups defined
     fields := strings.Split(aclStr, Space)
     if len(fields) > 2 {
-        return nil, fmt.Errorf("multiple spaces found in ACL: '%s'", aclStr)
+        return acl, fmt.Errorf("multiple spaces found in ACL: '%s'", aclStr)
     }
     // trim and check for wildcard
     acl.setAllAllowed(aclStr)
@@ -121,17 +124,21 @@ func NewACL(aclStr string) (*ACL, error) {
 }
 
 // Check if the user has access
-func (a *ACL) CheckAccess(user string) (bool, error) {
+func (a ACL) CheckAccess(userObj UserGroup) bool {
     // shortcut allow all
     if a.allAllowed {
-        return true, nil
+        return true
     }
     // if the ACL is not the wildcard we have non nil lists
     // check user access
-    if a.users[user] {
-        return true, nil
+    if a.users[userObj.User] {
+        return true
     }
     // get groups for the user and check them
-    // TODO: resolve groups and check
-    return false, nil
+    for _, group := range userObj.Groups {
+        if a.groups[group] {
+            return true
+        }
+    }
+    return false
 }

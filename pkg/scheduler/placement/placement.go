@@ -22,6 +22,7 @@ import (
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/log"
     "go.uber.org/zap"
+    "strings"
     "sync"
 )
 
@@ -135,16 +136,43 @@ func (m *Manager) PlaceApplication(app *cache.ApplicationInfo) (string, error) {
         if queueName != "" {
             // get the queue object
             queue := m.info.GetQueue(queueName)
-            // Check if the user is allowed to submit to this queueName.
-
             // we create the queueName if it does not exists
             if queue == nil {
+                current := queueName
+                for queue == nil {
+                    current = current[0:strings.LastIndex(current, cache.DOT)]
+                    // check if the queue exist
+                    queue = m.info.GetQueue(current)
+                }
+                // Check if the user is allowed to submit to this queueName, if not next rule
+                if !queue.CheckSubmitAccess(app.GetUser()) {
+                    log.Logger.Debug("Submit access denied on queue",
+                        zap.String("queueName", queue.GetQueuePath()),
+                        zap.String("ruleName", checkRule.getName()),
+                        zap.String("application", app.ApplicationId))
+                    // reset the queue name for the last rule in the chain
+                    queueName = ""
+                    continue
+                }
                 err = m.info.CreateQueues(queueName)
                 // errors can occur when the parent queueName is already a leaf queueName
                 if err != nil {
                     return "", err
                 }
+            } else {
+                // Check if the user is allowed to submit to this queueName, if not next rule
+                if !queue.CheckSubmitAccess(app.GetUser()) {
+                    log.Logger.Debug("Submit access denied on queue",
+                        zap.String("queueName", queueName),
+                        zap.String("ruleName", checkRule.getName()),
+                        zap.String("application", app.ApplicationId))
+                    // reset the queue name for the last rule in the chain
+                    queueName = ""
+                    continue
+                }
             }
+            // we have a queue that allows submitting and can be created: app placed
+            break
         }
     }
     log.Logger.Debug("Rule result for placing application",

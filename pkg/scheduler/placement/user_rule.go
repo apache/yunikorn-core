@@ -17,10 +17,12 @@ limitations under the License.
 package placement
 
 import (
+    "fmt"
     "github.com/cloudera/yunikorn-core/pkg/cache"
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/log"
     "go.uber.org/zap"
+    "strings"
 )
 
 // A rule to place an application based on the user name of the submitting user.
@@ -45,7 +47,7 @@ func (ur *userRule) initialise(conf configs.PlacementRule) error {
 func (ur userRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
     // before anything run the filter
     userName := app.GetUser().User
-    if !ur.filter.allowUser(app.GetUser()) { // TODO
+    if !ur.filter.allowUser(app.GetUser()) {
         log.Logger.Debug("User rule filtered",
             zap.String("application", app.ApplicationId),
             zap.Any("user", app.GetUser()))
@@ -63,6 +65,13 @@ func (ur userRule) placeApplication(app *cache.ApplicationInfo, info *cache.Part
         // rule did not match: this could be filter or create flag related
         if parentName == "" {
             return "", nil
+        }
+        // check if this is a parent queue and qualify it
+        if !strings.HasPrefix(parentName, configs.RootQueue + cache.DOT) {
+            parentName = configs.RootQueue + cache.DOT + parentName
+        }
+        if info.GetQueue(parentName).IsLeafQueue() {
+            return "", fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
         }
     }
     // the parent is set from the rule otherwise set it to the root

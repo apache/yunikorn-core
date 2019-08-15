@@ -17,32 +17,12 @@ limitations under the License.
 package cache
 
 import (
-    "fmt"
     "github.com/cloudera/yunikorn-core/pkg/common/commonevents"
-    "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
-    "github.com/cloudera/yunikorn-core/pkg/metrics"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "testing"
     "time"
 )
-
-func CreatePartitionInfo(data []byte) (*PartitionInfo, error) {
-    // create config from string
-    configs.MockSchedulerConfigByData(data)
-    conf, err := configs.SchedulerConfigLoader("default-policy-group")
-    if err != nil {
-        return nil, fmt.Errorf("error when loading config %v", err)
-    }
-    pi, err := NewPartitionInfo(conf.Partitions[0], "rm1", nil)
-    if err != nil {
-        return nil, fmt.Errorf("error when loading ParttionInfo from config %v", err)
-    }
-    // workaround for the metrics until we have separate partition metrics
-    pi.metrics = metrics.GetInstance()
-
-    return pi, nil
-}
 
 func createAllocation(queue, nodeID, allocID, appID string) *si.Allocation {
     resAlloc := &si.Resource{
@@ -295,7 +275,7 @@ partitions:
     }
 
     // add a new app
-    appInfo := NewApplicationInfo("app-1", "default", "root.default")
+    appInfo := newApplicationInfo("app-1", "default", "root.default")
     err = partition.addNewApplication(appInfo, true)
     if err != nil {
         t.Errorf("add application to partition should not have failed: %v", err)
@@ -312,14 +292,14 @@ partitions:
     }
 
     // add app to a parent queue should fail
-    appInfo = NewApplicationInfo("app-3", "default", "root")
+    appInfo = newApplicationInfo("app-3", "default", "root")
     err = partition.addNewApplication(appInfo, true)
     if err == nil || partition.getApplication("app-3") != nil {
         t.Errorf("add application to parent queue should have failed")
     }
 
     // add app to a non existing queue should fail
-    appInfo = NewApplicationInfo("app-4", "default", "does-not-exist")
+    appInfo = newApplicationInfo("app-4", "default", "does-not-exist")
     err = partition.addNewApplication(appInfo, true)
     if err == nil || partition.getApplication("app-4") != nil {
         t.Errorf("add application to non existing queue should have failed")
@@ -332,7 +312,7 @@ partitions:
     }
     waitForPartitionState(t, partition, Stopped.String(), 1000)
 
-    appInfo = NewApplicationInfo("app-2", "default", "root.default")
+    appInfo = newApplicationInfo("app-2", "default", "root.default")
     err = partition.addNewApplication(appInfo, true)
     if err == nil || partition.getApplication("app-2") != nil {
         t.Errorf("add application on stopped partition should have failed but did not")
@@ -345,7 +325,7 @@ partitions:
         return
     }
     waitForPartitionState(t, partition, Draining.String(), 1000)
-    appInfo = NewApplicationInfo("app-3", "default", "root.default")
+    appInfo = newApplicationInfo("app-3", "default", "root.default")
     err = partition.addNewApplication(appInfo, true)
     if err == nil || partition.getApplication("app-3") != nil {
         t.Errorf("add application on draining partition should have failed but did not")
@@ -371,7 +351,7 @@ partitions:
     // add a new app
     appID := "app-1"
     queueName := "root.default"
-    appInfo := NewApplicationInfo(appID, "default", queueName)
+    appInfo := newApplicationInfo(appID, "default", queueName)
     err = partition.addNewApplication(appInfo, true)
     if err != nil {
         t.Errorf("add application to partition should not have failed: %v", err)
@@ -444,7 +424,7 @@ partitions:
     // add a new app
     appID := "app-1"
     queueName := "root.default"
-    appInfo := NewApplicationInfo(appID, "default", queueName)
+    appInfo := newApplicationInfo(appID, "default", queueName)
     err = partition.addNewApplication(appInfo, true)
     if err != nil {
         t.Errorf("add application to partition should not have failed: %v", err)
@@ -531,7 +511,7 @@ partitions:
     // add a new app that will just sit around to make sure we remove the right one
     appNotRemoved := "will_not_remove"
     queueName := "root.default"
-    appInfo := NewApplicationInfo(appNotRemoved, "default", queueName)
+    appInfo := newApplicationInfo(appNotRemoved, "default", queueName)
     err = partition.addNewApplication(appInfo, true)
     if err != nil {
         t.Errorf("add application to partition should not have failed: %v", err)
@@ -562,7 +542,7 @@ partitions:
 
     // add another new app
     appID := "app-1"
-    appInfo = NewApplicationInfo(appID, "default", queueName)
+    appInfo = newApplicationInfo(appID, "default", queueName)
     err = partition.addNewApplication(appInfo, true)
     if err != nil {
         t.Errorf("add application to partition should not have failed: %v", err)
@@ -613,7 +593,7 @@ partitions:
     // add a new app that will just sit around to make sure we remove the right one
     appNotRemoved := "will_not_remove"
     queueName := "root.default"
-    appInfo := NewApplicationInfo(appNotRemoved, "default", queueName)
+    appInfo := newApplicationInfo(appNotRemoved, "default", queueName)
     err = partition.addNewApplication(appInfo, true)
     if err != nil {
         t.Errorf("add application to partition should not have failed: %v", err)
@@ -669,4 +649,79 @@ partitions:
     if len(partition.allocations) != 0 {
         t.Errorf("removal requests did not remove all allocations: %v", partition.allocations)
     }
+}
+
+func TestCreateQueues(t *testing.T) {
+    data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        queues:
+        - name: default
+`
+
+    partition, err := CreatePartitionInfo([]byte(data))
+    if err != nil {
+        t.Error(err)
+        return
+    }
+    // top level should fail
+    err = partition.CreateQueues("test")
+    if err == nil {
+        t.Errorf("top level queue creation did not fail")
+    }
+
+    // create below leaf
+    err = partition.CreateQueues("root.default.test")
+    if err == nil {
+        t.Errorf("'root.default.test' queue creation did not")
+    }
+
+    // single level create
+    err = partition.CreateQueues("root.test")
+    if err != nil {
+        t.Errorf("'root.test' queue creation failed")
+    }
+    queue := partition.getQueue("root.test")
+    if queue == nil {
+        t.Errorf("'root.test' queue creation failed without error")
+    }
+    if queue != nil && !queue.isLeaf && !queue.isManaged {
+        t.Errorf("'root.test' queue creation failed not created with correct settings: %v", queue)
+    }
+
+    // multiple level create
+    err = partition.CreateQueues("root.parent.test")
+    if err != nil {
+        t.Errorf("'root.parent.test' queue creation failed")
+    }
+    queue = partition.getQueue("root.parent.test")
+    if queue == nil {
+        t.Errorf("'root.parent.test' queue creation failed without error")
+    }
+    if queue != nil && !queue.isLeaf && !queue.isManaged {
+        t.Errorf("'root.parent.test' queue not created with correct settings: %v", queue)
+    }
+    queue = queue.Parent
+    if queue == nil {
+        t.Errorf("'root.parent' queue creation failed: parent is not set correctly")
+    }
+    if queue != nil && queue.isLeaf && !queue.isManaged {
+        t.Errorf("'root.parent' parent queue not created with correct settings: %v", queue)
+    }
+
+    // deep level create
+    err = partition.CreateQueues("root.parent.next.level.test.leaf")
+    if err != nil {
+        t.Errorf("'root.parent.next.level.test.leaf' queue creation failed")
+    }
+    queue = partition.getQueue("root.parent.next.level.test.leaf")
+    if queue == nil {
+        t.Errorf("'root.parent.next.level.test.leaf' queue creation failed without error")
+    }
+    if queue != nil && !queue.isLeaf && !queue.isManaged {
+        t.Errorf("'root.parent.next.level.test.leaf' queue not created with correct settings: %v", queue)
+    }
+
 }

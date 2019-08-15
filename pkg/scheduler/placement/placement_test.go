@@ -19,6 +19,7 @@ package placement
 import (
     "github.com/cloudera/yunikorn-core/pkg/cache"
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
+    "github.com/cloudera/yunikorn-core/pkg/common/security"
     "testing"
 )
 
@@ -32,6 +33,9 @@ func TestManagerNew(t *testing.T) {
     // basic info without rules, manager should not init
     man := NewPlacementManager(&pi)
     if man.initialised {
+        t.Error("Placement manager marked initialised without rules")
+    }
+    if man.IsInitialised() {
         t.Error("Placement manager marked initialised without rules")
     }
     if len(man.rules) != 0 {
@@ -51,10 +55,17 @@ func TestManagerInit(t *testing.T) {
         t.Error("Placement manager marked initialised without rules")
     }
     // try to init with empty list must error
-    rules := []configs.PlacementRule{}
+    var rules []configs.PlacementRule
     err := man.initialise(rules)
     if err == nil || man.initialised {
         t.Error("initialise without rules should have failed")
+    }
+    rules = []configs.PlacementRule{
+        {Name: "unknown"},
+    }
+    err = man.initialise(rules)
+    if err == nil || man.initialised {
+        t.Error("initialise with 'unknown' rule list should have failed")
     }
 
     // init the manager with one rule
@@ -160,4 +171,114 @@ func TestManagerBuildRule(t *testing.T) {
 }
 
 func TestManagerPlaceApp(t *testing.T) {
+    // Create the structure for the test
+    data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        queues:
+          - name: testparent
+            submitacl: "*"
+            queues:
+              - name: testchild
+          - name: fixed
+            submitacl: "other-user "
+            parent: true
+`
+    partInfo, err := CreatePartitionInfo([]byte(data))
+    // basic info without rules, manager should init
+    man := NewPlacementManager(partInfo)
+    if man == nil {
+        t.Fatal("placement manager create failed")
+    }
+    // update the manager
+    rules := []configs.PlacementRule{
+        {Name: "user",
+            Create: false,
+            Parent: &configs.PlacementRule{
+                Name:  "fixed",
+                Value: "testparent"},
+        },
+        {Name: "provided",
+            Create: true},
+        {Name: "tag",
+            Value: "namespace"},
+    }
+    err = man.UpdateRules(rules)
+    if err != nil || !man.initialised {
+        t.Errorf("failed to update existing manager, init state: %t, error: %v", man.initialised, err)
+    }
+    tags := make(map[string]string, 0)
+    user := security.UserGroup{
+        User:   "testchild",
+        Groups: []string{},
+    }
+    appInfo := cache.NewApplicationInfo("app1", "default", "", user, tags)
+    var queueName string
+
+    // user rule existing queue, acl allowed
+    queueName, err = man.PlaceApplication(appInfo)
+    if err != nil || queueName != "root.testparent.testchild" {
+        t.Errorf("leaf exist: app should have been placed in user queue, queue: '%s', error: %v", queueName, err)
+    }
+    user = security.UserGroup{
+        User:   "other-user",
+        Groups: []string{},
+    }
+
+    // user rule new queue: fails on create flag
+    appInfo = cache.NewApplicationInfo("app1", "default", "", user, tags)
+    queueName, err = man.PlaceApplication(appInfo)
+    if err == nil || queueName != "" {
+        t.Errorf("leaf to create, no create flag: app should not have been placed, queue: '%s', error: %v", queueName, err)
+    }
+
+    // provided rule (2nd rule): queue acl allowed, anyone create
+    appInfo = cache.NewApplicationInfo("app1", "default", "root.fixed.leaf", user, tags)
+    queueName, err = man.PlaceApplication(appInfo)
+    if err != nil || queueName != "root.fixed.leaf" {
+        t.Errorf("leave create, acl allow: app should have been placed, queue: '%s', error: %v", queueName, err)
+    }
+
+    // provided rule (2rd): queue acl deny, queue does not exist
+    user = security.UserGroup{
+        User:   "unknown-user",
+        Groups: []string{},
+    }
+    appInfo = cache.NewApplicationInfo("app1", "default", "root.fixed.other", user, tags)
+    queueName, err = man.PlaceApplication(appInfo)
+    if err == nil || queueName != "" {
+        t.Errorf("leaf to create, acl deny: app should not have been placed, queue: '%s', error: %v", queueName, err)
+    }
+
+    // tag rule (3rd) check queue acl deny, queue was created above)
+    tags = map[string]string{"namespace": "root.fixed.leaf"}
+    appInfo = cache.NewApplicationInfo("app1", "default", "", user, tags)
+    queueName, err = man.PlaceApplication(appInfo)
+    if err == nil || queueName != "" {
+        t.Errorf("existing leaf, acl deny: app should not have been placed, queue: '%s', error: %v", queueName, err)
+    }
+
+    // tag rule (3rd) queue acl allow, queue already exists
+    user = security.UserGroup{
+        User:   "other-user",
+        Groups: []string{},
+    }
+    appInfo = cache.NewApplicationInfo("app1", "default", "", user, tags)
+    queueName, err = man.PlaceApplication(appInfo)
+    if err != nil || queueName != "root.fixed.leaf" {
+        t.Errorf("existing leaf, acl allow: app should have been placed, queue: '%s', error: %v", queueName, err)
+    }
+
+    // provided rule (2rd): submit to parent
+    user = security.UserGroup{
+        User:   "other-user",
+        Groups: []string{},
+    }
+    appInfo = cache.NewApplicationInfo("app1", "default", "root.fixed.leaf.leaf", user, tags)
+    queueName, err = man.PlaceApplication(appInfo)
+    if err == nil || queueName != "" {
+        t.Errorf("parent queue: app should not have been placed, queue: '%s', error: %v", queueName, err)
+    }
 }

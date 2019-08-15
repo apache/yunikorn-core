@@ -239,13 +239,7 @@ partitions:
                 },
             },
         },
-        NewApplications: []*si.AddApplicationRequest{
-            {
-                ApplicationId:         "app-1",
-                QueueName:     "root.a",
-                PartitionName: "",
-            },
-        },
+        NewApplications: newAddAppRequest(map[string]string{"app-1":"root.a"}),
         RmId: "rm:123",
     })
 
@@ -495,13 +489,7 @@ partitions:
                 },
             },
         },
-        NewApplications: []*si.AddApplicationRequest{
-            {
-                ApplicationId:   "app-1",
-                QueueName:       "root.a",
-                PartitionName:   "",
-            },
-        },
+        NewApplications: newAddAppRequest(map[string]string{"app-1":"root.a"}),
         RmId: "rm:123",
     })
 
@@ -628,18 +616,7 @@ partitions:
                 },
             },
         },
-        NewApplications: []*si.AddApplicationRequest{
-            {
-                ApplicationId: "app-1",
-                QueueName:     "root.a",
-                PartitionName: "",
-            },
-            {
-                ApplicationId: "app-2",
-                QueueName:     "root.b",
-                PartitionName: "",
-            },
-        },
+        NewApplications: newAddAppRequest(map[string]string{"app-1":"root.a","app-2":"root.b"}),
         RmId: "rm:123",
     })
 
@@ -785,18 +762,7 @@ partitions:
                 },
             },
         },
-        NewApplications: []*si.AddApplicationRequest{
-            {
-                ApplicationId: "app-1",
-                QueueName:     "root.a",
-                PartitionName: "",
-            },
-            {
-                ApplicationId: "app-2",
-                QueueName:     "root.a",
-                PartitionName: "",
-            },
-        },
+        NewApplications: newAddAppRequest(map[string]string{"app-1":"root.a","app-2":"root.a"}),
         RmId: "rm:123",
     })
 
@@ -959,24 +925,14 @@ partitions:
     waitForAcceptedNodes(mockRM, "node-2:1234", 1000)
 
     err = proxy.Update(&si.UpdateRequest{
-        NewApplications: []*si.AddApplicationRequest{
-           {
-               ApplicationId: "app-1",
-               QueueName:     "root.non-exist-queue",
-           },
-        },
+        NewApplications: newAddAppRequest(map[string]string{"app-1":"root.non-exist-queue"}),
         RmId: "rm:123",
     })
 
     waitForRejectedApplications(mockRM, "app-1", 1000)
 
     err = proxy.Update(&si.UpdateRequest{
-        NewApplications: []*si.AddApplicationRequest{
-            {
-                ApplicationId: "app-1",
-                QueueName:     "root.a",
-            },
-        },
+        NewApplications: newAddAppRequest(map[string]string{"app-1":"root.a"}),
         RmId: "rm:123",
     })
 

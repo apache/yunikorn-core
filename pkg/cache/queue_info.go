@@ -20,6 +20,7 @@ import (
     "fmt"
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-core/pkg/common/security"
     "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/metrics"
     "github.com/looplab/fsm"
@@ -50,6 +51,8 @@ type QueueInfo struct {
     metrics metrics.CoreQueueMetrics
 
     // Private fields need protection
+    adminACL          security.ACL         // admin ACL
+    submitACL         security.ACL         // submit ACL
     allocatedResource *resources.Resource   // set based on allocation
     isLeaf            bool                  // this is a leaf queue or not (i.e. parent)
     isManaged         bool                  // queue is part of the config, not auto created
@@ -303,7 +306,20 @@ func (qi *QueueInfo) MarkQueueForRemoval() {
 
 // Update an existing managed queue based on the updated configuration
 func (qi *QueueInfo) updateQueueProps(conf configs.QueueConfig) error {
-
+    // Set the ACLs
+    var err error
+    qi.submitACL, err = security.NewACL(conf.SubmitACL)
+    if err != nil {
+        log.Logger.Error("parsing submit ACL failed this should not happen",
+            zap.Error(err))
+        return err
+    }
+    qi.adminACL, err = security.NewACL(conf.AdminACL)
+    if err != nil {
+        log.Logger.Error("parsing admin ACL failed this should not happen",
+            zap.Error(err))
+        return err
+    }
     // Change from unmanaged to managed
     if !qi.isManaged {
         log.Logger.Info("changed un-managed queue to managed",
@@ -377,4 +393,27 @@ func (qi *QueueInfo) IsRunning() bool {
 // Is the queue stopped, not active in scheduling at all.
 func (qi *QueueInfo) IsStopped() bool {
     return qi.stateMachine.Current() == Stopped.String()
+}
+
+// Check if the user has access to the queue to submit an application recursively.
+// This will check the submit ACL and the admin ACL.
+func (qi *QueueInfo) CheckSubmitAccess(user security.UserGroup) bool {
+    qi.lock.Lock()
+    allow := qi.submitACL.CheckAccess(user) || qi.adminACL.CheckAccess(user)
+    qi.lock.Unlock()
+    if !allow && qi.Parent != nil {
+        allow = qi.Parent.CheckSubmitAccess(user)
+    }
+    return allow
+}
+
+// Check if the user has access to the queue for admin actions recursively.
+func (qi *QueueInfo) CheckAdminAccess(user security.UserGroup) bool {
+    qi.lock.Lock()
+    allow := qi.adminACL.CheckAccess(user)
+    qi.lock.Unlock()
+    if !allow && qi.Parent != nil {
+        allow = qi.Parent.CheckSubmitAccess(user)
+    }
+    return allow
 }

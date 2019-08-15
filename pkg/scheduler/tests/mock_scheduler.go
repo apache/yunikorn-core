@@ -117,6 +117,9 @@ func (m *MockScheduler) AddApp(appId string, queue string, partition string) {
                 ApplicationId: appId,
                 QueueName:     queue,
                 PartitionName: partition,
+                Ugi: &si.UserGroupInformation{
+                    User: "testuser",
+                },
             },
         },
         RmId: m.rmId,

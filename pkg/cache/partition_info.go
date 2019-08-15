@@ -21,6 +21,7 @@ import (
     "github.com/cloudera/yunikorn-core/pkg/common/commonevents"
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-core/pkg/common/security"
     "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/metrics"
     "github.com/cloudera/yunikorn-core/pkg/webservice/dao"
@@ -47,6 +48,7 @@ type PartitionInfo struct {
     stateTime              time.Time                    // last time the state was updated (needed for cleanup)
     isPreemptable          bool                         // can allocations be preempted
     rules                  *[]configs.PlacementRule     // placement rules to be loaded by the scheduler
+    userGroupCache         *security.Cache              // user cache per partition
     clusterInfo            *ClusterInfo                 // link back to the cluster info
     lock                   sync.RWMutex                 // lock for updating the partition
     totalPartitionResource *resources.Resource          // Total node resources
@@ -87,7 +89,10 @@ func NewPartitionInfo(partition configs.PartitionConfig, rmId string, info *Clus
     p.isPreemptable = partition.Preemption.Enabled
 
     p.rules = &partition.PlacementRules
-    // TODO add users
+    // get the user group cache for the partition
+    // TODO get the resolver from the config
+    p.userGroupCache = security.GetUserGroupCache("")
+
     return p, nil
 }
 
@@ -844,18 +849,46 @@ func (pi *PartitionInfo) IsStopped() bool {
 
 // Create the new queue that is returned from a rule.
 // It creates a queue with all parents needed.
-func (pi *PartitionInfo) CreateQueues(name string) error {
-    log.Logger.Debug("Creating new queue structure", zap.String("name", name))
-    queueParts := strings.Split(name, DOT)
+func (pi *PartitionInfo) CreateQueues(queueName string) error {
+    if !strings.HasPrefix(queueName, configs.RootQueue + DOT) {
+        return fmt.Errorf("cannot create queue which is not qualified '%s'", queueName)
+    }
+    log.Logger.Debug("Creating new queue structure", zap.String("queueName", queueName))
     // two step creation process: first check then really create them
+    // start at the root, which we know exists and is a parent
+    current := queueName
+    var toCreate []string
+    parent := pi.getQueue(current)
     log.Logger.Debug("Checking queue creation")
-    for i := len(queueParts); i > 0; i-- {
+    for parent == nil {
+        toCreate = append(toCreate, current[strings.LastIndex(current, DOT)+1:])
+        current = current[0:strings.LastIndex(current, DOT)]
         // check if the queue exist
+        parent = pi.getQueue(current)
     }
-    log.Logger.Debug("Queue can be created, creating queue")
-    for i := len(queueParts); i > 0; i-- {
-        // check if the queue exist
+    // check if it is a parent queue
+    if parent.isLeaf {
+        log.Logger.Debug("Cannot create queue below existing leaf queue",
+            zap.String("requestedQueue", queueName),
+            zap.String("leafQueue", current))
+        return fmt.Errorf("cannot create queue below leaf queue '%s'", current)
     }
-
+    log.Logger.Debug("Queue can be created, creating queue(s)")
+    for i := len(toCreate)-1; i >= 0; i-- {
+        // everything is checked and there should be no errors
+        var err error
+        parent, err = NewUnmanagedQueue(toCreate[i], i == 0, parent)
+        if err != nil {
+            log.Logger.Warn("Queue auto create failed unexpected",
+                zap.String("queueName", queueName),
+                zap.Error(err))
+        }
+    }
     return nil
+}
+
+func (pi *PartitionInfo) convertUGI(ugi *si.UserGroupInformation) (security.UserGroup, error) {
+    pi.lock.RLock()
+    defer pi.lock.RUnlock()
+    return pi.userGroupCache.ConvertUGI(ugi)
 }

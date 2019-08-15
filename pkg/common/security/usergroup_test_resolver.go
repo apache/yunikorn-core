@@ -20,17 +20,19 @@ import (
     "fmt"
     "os/user"
     "strconv"
+    "time"
 )
 
 // Get the cache with a test resolver
 // cleaner runs every second
-func GetUserGroupCacheTest() *cache {
-    c := GetUserGroupCache()
-    // override the resolver part
-    c.lookup = lookup
-    c.lookupGroupId = lookupGroupId
-    c.groupIds = groupIds
-    return c
+func GetUserGroupCacheTest() *Cache {
+    return &Cache{
+        ugs:           map[string]*UserGroup{},
+        interval:      time.Second,
+        lookup:        lookup,
+        lookupGroupId: lookupGroupId,
+        groupIds:      groupIds,
+    }
 }
 
 // test function only

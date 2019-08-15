@@ -125,16 +125,12 @@ func (csc *ClusterSchedulingContext) updateSchedulingPartitions(partitions []*ca
                 zap.String("partitionName", updatedPartition.Name))
             // the partition details don't need updating just the queues
             partition.updatePartitionSchedulingContext(updatedPartition)
-            // redo the flat map as queues might have been added/removed
-            partition.queues = make(map[string]*SchedulingQueue)
-            partition.Root.GetFlatChildrenQueues(partition.queues)
         } else {
             log.Logger.Info("creating scheduling partition",
                 zap.String("partitionName", updatedPartition.Name))
             // create a new partition and add the queues
             root := NewSchedulingQueueInfo(updatedPartition.Root, nil)
             newPartition := newPartitionSchedulingContext(updatedPartition, root)
-            root.GetFlatChildrenQueues(newPartition.queues)
             newPartition.partitionManager = &PartitionManager{
                 psc: newPartition,
                 csc: csc,

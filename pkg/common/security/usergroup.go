@@ -19,6 +19,7 @@ package security
 import (
     "fmt"
     "github.com/cloudera/yunikorn-core/pkg/log"
+    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "go.uber.org/zap"
     "os/user"
     "sync"
@@ -33,11 +34,11 @@ const (
 
 // global variables
 var now time.Time   // One clock to access
-var instance *cache // The instance of the cache
+var instance *Cache // The instance of the cache
 var once sync.Once  // Make sure we can only create the cache once
 
 // Cache for the user entries.
-type cache struct {
+type Cache struct {
     lock     sync.RWMutex
     interval time.Duration
     ugs      map[string]*UserGroup
@@ -55,18 +56,27 @@ type UserGroup struct {
     resolved int64
 }
 
-// Get the cache and use that to resolve all user requests
-func GetUserGroupCache() *cache {
+// Get the resolver for the user and group info.
+// Current setup allows three resolvers:
+// * NO resolver: default, no user or group resolution just return the info (k8s use case)
+// * OS resolver: uses the OS libraries to resolve user and group memberships
+// * Test resolver: fake resolution for testing
+// TODO need to make this fully configurable and look at reflection etc
+func GetUserGroupCache(resolver string) *Cache {
     once.Do(func() {
-        instance = &cache{
-            ugs:           map[string]*UserGroup{},
-            interval:      cleanerInterval * time.Second,
-            lookup:        user.Lookup,
-            lookupGroupId: user.LookupGroupId,
-            groupIds:      wrappedGroupIds,
+        switch resolver {
+        case "test":
+            log.Logger.Info("creating test user group resolver")
+            instance = GetUserGroupCacheTest()
+        case "os":
+            log.Logger.Info("creating OS user group resolver")
+            instance = GetUserGroupCacheOS()
+        default:
+            log.Logger.Info("creating user group Cache without resolver")
+            instance = GetUserGroupNoResolve()
         }
-        instance.lookup = user.Lookup
-        log.Logger.Info("starting user group cache cleaner",
+        instance.ugs = make(map[string]*UserGroup)
+        log.Logger.Info("starting user group Cache cleaner",
             zap.String("cleanerInterval", instance.interval.String()))
         go instance.run()
     })
@@ -74,44 +84,64 @@ func GetUserGroupCache() *cache {
 }
 
 // Run the cleanup in a separate routine
-func (c *cache) run() {
+func (c *Cache) run() {
     for {
         time.Sleep(instance.interval)
         runStart := time.Now()
         c.cleanUpCache()
-        log.Logger.Debug("time consumed cleaning the user cache",
+        log.Logger.Debug("time consumed cleaning the user Cache",
             zap.String("duration", time.Since(runStart).String()))
     }
 }
 
 // Do the real work for the cache cleanup
-func (c *cache) cleanUpCache() {
+func (c *Cache) cleanUpCache() {
     oldest := now.Unix() - poscache
-    oldest_failed := now.Unix() - negcache
+    oldestFailed := now.Unix() - negcache
     // clean up the cache so we do not grow out of bounds
     instance.lock.Lock()
     defer instance.lock.Unlock()
     // walk over the entries in the map and delete the expired ones, cleanup based on the resolved time.
     // Negative cached entries will expire quicker
     for key, val := range c.ugs {
-        if val.resolved < oldest || (val.failed && val.resolved < oldest_failed) {
+        if val.resolved < oldest || (val.failed && val.resolved < oldestFailed) {
             delete(c.ugs, key)
         }
     }
 }
 
 // reset the cached content, test use only
-func (c *cache) resetCache() {
-    log.Logger.Debug("User cache reset")
+func (c *Cache) resetCache() {
+    log.Logger.Debug("User Cache reset")
     instance.lock.Lock()
     defer instance.lock.Unlock()
-    c.ugs = map[string]*UserGroup{}
+    c.ugs = make(map[string]*UserGroup)
+}
+
+func (c *Cache) ConvertUGI(ugi *si.UserGroupInformation) (UserGroup, error) {
+    // check if we have a user to convert
+    if ugi == nil || ugi.User == "" {
+        return UserGroup{}, fmt.Errorf("empty user cannot resolve")
+    }
+    // try to resolve the user if group info is empty otherwise we just convert
+    if ugi.Groups == nil  || len(ugi.Groups) == 0 {
+        return c.GetUserGroup(ugi.User)
+    }
+    // If groups are already present we should just convert
+    newUG := UserGroup{User: ugi.User}
+    for _, group := range ugi.Groups {
+        newUG.Groups = append(newUG.Groups, group)
+    }
+    c.lock.Lock()
+    defer c.lock.Unlock()
+    c.ugs[ugi.User] = &newUG
+    return newUG, nil
 }
 
 // Get the user group information.
 // An error will still return a UserGroup. The Failed flag in the object will be set to true for any
 // The information is cached, negatively and positively.
-func (c *cache) GetUserGroup(userName string) (UserGroup, error) {
+func (c *Cache) GetUserGroup(userName string) (UserGroup, error) {
     // check if we have a user to resolve
     if userName == "" {
         return UserGroup{}, fmt.Errorf("empty user cannot resolve")
@@ -132,7 +162,7 @@ func (c *cache) GetUserGroup(userName string) (UserGroup, error) {
     }
     // if we failed before we could get an object back, return the existing one with an error
     if ug.failed {
-        return *ug, fmt.Errorf("user resolution failed, cache returned: %v", time.Unix(ug.resolved, 0))
+        return *ug, fmt.Errorf("user resolution failed, Cache returned: %v", time.Unix(ug.resolved, 0))
     }
     // resolve if we do not have it in the cache
     // find the user first, then resolve the groups
@@ -168,7 +198,7 @@ func (c *cache) GetUserGroup(userName string) (UserGroup, error) {
 }
 
 // Resolve the groups for the user if the user exists
-func (ug *UserGroup) resolveGroups(osUser *user.User, c *cache) error {
+func (ug *UserGroup) resolveGroups(osUser *user.User, c *Cache) error {
     var groupName *user.Group
     var err = error(nil)
     // resolve the primary group and add it first
@@ -198,9 +228,4 @@ func (ug *UserGroup) resolveGroups(osUser *user.User, c *cache) error {
         }
     }
     return nil
-}
-
-// wrapper function to allow easy testing of the cache
-func wrappedGroupIds(osUser *user.User) ([]string, error) {
-    return osUser.GroupIds()
 }

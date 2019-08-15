@@ -91,7 +91,6 @@ func (manager PartitionManager) cleanQueues(schedulingQueue *SchedulingQueue) {
             if schedulingQueue.CachedQueueInfo.RemoveQueue() {
                 // all OK update the queue hierarchy and partition
                 schedulingQueue.RemoveQueue()
-                manager.psc.RemoveQueue(schedulingQueue.Name)
             } else {
                 log.Logger.Debug("failed to remove scheduling queue",
                     zap.String("schedulingQueue", schedulingQueue.Name),

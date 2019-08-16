@@ -35,7 +35,7 @@ type fixedRule struct {
 // If the queue provided is fully qualified, starts with "root.", the parent rule is skipped and the queue is created as
 // configured. If the queue is not qualified all "." characters will be replaced and the parent rule run before making
 // the queue name fully qualified.
-func (fr fixedRule) getName() string {
+func (fr *fixedRule) getName() string {
     return "fixed"
 }
 
@@ -58,7 +58,7 @@ func (fr *fixedRule) initialise(conf configs.PlacementRule) error {
     return err
 }
 
-func (fr fixedRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
+func (fr *fixedRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
     // before anything run the filter
     if !fr.filter.allowUser(app.GetUser()) {
         log.Logger.Debug("Fixed rule filtered",

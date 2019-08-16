@@ -55,12 +55,12 @@ type basicRule struct {
 
 // Get the parent rule used in testing only,
 // Should not be implemented in rules,
-func (r basicRule) getParent() rule {
+func (r *basicRule) getParent() rule {
 	return r.parent
 }
 
 // Return the name if not overwritten by the rule,
-func (r basicRule) getName() string {
+func (r *basicRule) getName() string {
 	return "unnamed rule"
 }
 

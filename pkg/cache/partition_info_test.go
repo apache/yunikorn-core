@@ -675,7 +675,7 @@ partitions:
     // create below leaf
     err = partition.CreateQueues("root.default.test")
     if err == nil {
-        t.Errorf("'root.default.test' queue creation did not")
+        t.Errorf("'root.default.test' queue creation did not fail")
     }
 
     // single level create

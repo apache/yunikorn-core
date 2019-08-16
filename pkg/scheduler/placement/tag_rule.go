@@ -34,7 +34,7 @@ type tagRule struct {
     tagName string
 }
 
-func (tr tagRule) getName() string {
+func (tr *tagRule) getName() string {
     return "tag"
 }
 
@@ -52,7 +52,7 @@ func (tr *tagRule) initialise(conf configs.PlacementRule) error {
     return err
 }
 
-func (tr tagRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
+func (tr *tagRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
     // if the tag is not present we can skipp all other processing
     tagVal := app.GetTag(tr.tagName)
     if tagVal == "" {

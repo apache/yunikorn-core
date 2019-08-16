@@ -34,7 +34,7 @@ type PartitionSchedulingContext struct {
     // Private fields need protection
     partition        *cache.PartitionInfo              // link back to the partition in the cache
     applications     map[string]*SchedulingApplication // applications assigned to this partition
-    placementManager *placement.Manager                // placement manager for this partition
+    placementManager *placement.AppPlacementManager    // placement manager for this partition
     partitionManager *PartitionManager                 // manager for this partition
     lock             sync.RWMutex
 }

@@ -26,7 +26,7 @@ import (
     "sync"
 )
 
-type Manager struct {
+type AppPlacementManager struct {
     name        string
     info        *cache.PartitionInfo
     rules       []rule
@@ -34,8 +34,8 @@ type Manager struct {
     lock        sync.RWMutex
 }
 
-func NewPlacementManager(info *cache.PartitionInfo) *Manager {
-    m := &Manager{
+func NewPlacementManager(info *cache.PartitionInfo) *AppPlacementManager {
+    m := &AppPlacementManager{
         name: info.Name,
         info: info,
     }
@@ -51,7 +51,7 @@ func NewPlacementManager(info *cache.PartitionInfo) *Manager {
 
 // Update the rules for an active placement manager
 // Note that this will only be called when the manager is created earlier and the config is updated.
-func (m *Manager) UpdateRules(rules []configs.PlacementRule) error {
+func (m *AppPlacementManager) UpdateRules(rules []configs.PlacementRule) error {
     if rules != nil && len(rules) > 0 {
         log.Logger.Info("Building new rule list for placement manager")
         if err := m.initialise(rules); err != nil {
@@ -72,14 +72,14 @@ func (m *Manager) UpdateRules(rules []configs.PlacementRule) error {
 }
 
 // Return the state of the placement manager
-func (m *Manager) IsInitialised() bool {
+func (m *AppPlacementManager) IsInitialised() bool {
     m.lock.RLock()
     defer m.lock.RUnlock()
     return m.initialised
 }
 
 // Initialise the rules from a parsed config.
-func (m *Manager) initialise(rules []configs.PlacementRule) error {
+func (m *AppPlacementManager) initialise(rules []configs.PlacementRule) error {
     log.Logger.Info("Building new rule list for placement manager")
     // build temp list from new config
     tempRules, err := m.buildRules(rules)
@@ -97,7 +97,7 @@ func (m *Manager) initialise(rules []configs.PlacementRule) error {
 // Build the rule set based on the config.
 // If the rule set is correct and can be used the new set is returned.
 // If any error is encountered a nil array is returned and the error set
-func (m *Manager) buildRules(rules []configs.PlacementRule) ([]rule, error) {
+func (m *AppPlacementManager) buildRules(rules []configs.PlacementRule) ([]rule, error) {
     // catch an empty list
     if rules == nil || len(rules) == 0 {
         return nil, fmt.Errorf("placement manager rule list request is empty")
@@ -114,7 +114,7 @@ func (m *Manager) buildRules(rules []configs.PlacementRule) ([]rule, error) {
     return newRules, nil
 }
 
-func (m *Manager) PlaceApplication(app *cache.ApplicationInfo) (string, error) {
+func (m *AppPlacementManager) PlaceApplication(app *cache.ApplicationInfo) (string, error) {
     // Placement manager not initialised cannot place application, just return
     m.lock.RLock()
     defer m.lock.RUnlock()

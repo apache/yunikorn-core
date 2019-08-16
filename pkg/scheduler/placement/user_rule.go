@@ -30,7 +30,7 @@ type userRule struct {
     basicRule
 }
 
-func (ur userRule) getName() string {
+func (ur *userRule) getName() string {
     return "user"
 }
 
@@ -44,7 +44,7 @@ func (ur *userRule) initialise(conf configs.PlacementRule) error {
     return err
 }
 
-func (ur userRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
+func (ur *userRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
     // before anything run the filter
     userName := app.GetUser().User
     if !ur.filter.allowUser(app.GetUser()) {

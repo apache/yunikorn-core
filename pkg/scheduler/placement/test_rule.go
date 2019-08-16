@@ -28,7 +28,7 @@ type testRule struct {
     basicRule
 }
 
-func (tr testRule) getName() string {
+func (tr *testRule) getName() string {
     return "test"
 }
 
@@ -44,7 +44,7 @@ func (tr *testRule) initialise(conf configs.PlacementRule) error {
 }
 
 // Simple test rule that just checks the app passed in and returns fixed queue names.
-func (tr testRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
+func (tr *testRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
     if app == nil {
         return "", fmt.Errorf("nil app passed in")
     }

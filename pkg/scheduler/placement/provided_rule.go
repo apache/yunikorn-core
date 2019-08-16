@@ -33,7 +33,7 @@ type providedRule struct {
     basicRule
 }
 
-func (pr providedRule) getName() string {
+func (pr *providedRule) getName() string {
     return "provided"
 }
 
@@ -47,7 +47,7 @@ func (pr *providedRule) initialise(conf configs.PlacementRule) error {
     return err
 }
 
-func (pr providedRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
+func (pr *providedRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
     // since this is the provided rule we must have a queue in the info already
     if app.QueueName == "" {
         return "", nil

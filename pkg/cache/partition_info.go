@@ -21,6 +21,7 @@ import (
     "github.com/cloudera/yunikorn-core/pkg/common/commonevents"
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-core/pkg/common/security"
     "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/metrics"
     "github.com/cloudera/yunikorn-core/pkg/webservice/dao"
@@ -32,7 +33,6 @@ import (
     "sync"
     "time"
 )
-
 
 /* Related to partitions */
 type PartitionInfo struct {
@@ -47,6 +47,8 @@ type PartitionInfo struct {
     stateMachine           *fsm.FSM                     // the state of the queue for scheduling
     stateTime              time.Time                    // last time the state was updated (needed for cleanup)
     isPreemptable          bool                         // can allocations be preempted
+    rules                  *[]configs.PlacementRule     // placement rules to be loaded by the scheduler
+    userGroupCache         *security.UserGroupCache     // user cache per partition
     clusterInfo            *ClusterInfo                 // link back to the cluster info
     lock                   sync.RWMutex                 // lock for updating the partition
     totalPartitionResource *resources.Resource          // Total node resources
@@ -86,7 +88,11 @@ func NewPartitionInfo(partition configs.PartitionConfig, rmId string, info *Clus
     // set preemption needed flag
     p.isPreemptable = partition.Preemption.Enabled
 
-    //TODO add placement rules and users
+    p.rules = &partition.PlacementRules
+    // get the user group cache for the partition
+    // TODO get the resolver from the config
+    p.userGroupCache = security.GetUserGroupCache("")
+
     return p, nil
 }
 
@@ -114,7 +120,7 @@ func addQueueInfo(conf []configs.QueueConfig, parent *QueueInfo) error {
 func (pi *PartitionInfo) HandlePartitionEvent(event SchedulingObjectEvent) error {
     err := pi.stateMachine.Event(event.String(), pi.Name)
     if err == nil {
-        pi.stateTime =time.Now()
+        pi.stateTime = time.Now()
         return nil
     }
     // handle the same state transition not nil error (limit of fsm).
@@ -131,8 +137,17 @@ func (pi *PartitionInfo) GetTotalPartitionResource() *resources.Resource {
     return pi.totalPartitionResource
 }
 
+// Does the partition allow pre-emption?
 func (pi *PartitionInfo) NeedPreemption() bool {
     return pi.isPreemptable
+}
+
+// Return the config element for the placement rules
+func (pi *PartitionInfo) GetRules() []configs.PlacementRule {
+    if pi.rules == nil {
+        return []configs.PlacementRule{}
+    }
+    return *pi.rules
 }
 
 // Add a new node to the partition.
@@ -256,7 +271,7 @@ func (pi *PartitionInfo) removeNodeInternal(nodeId string) {
         // since we are not locking the node and or application we could have had an update while processing
         if app := pi.applications[alloc.ApplicationId]; app != nil {
             // check allocations on the node
-           if alloc := app.removeAllocation(allocID); alloc == nil {
+            if alloc := app.removeAllocation(allocID); alloc == nil {
                 log.Logger.Info("allocation is not found, skipping removing the node",
                     zap.String("allocationId", allocID),
                     zap.String("appId", app.ApplicationId),
@@ -486,7 +501,8 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
         pi.metrics.IncScheduledAllocationFailures()
         return nil, fmt.Errorf("cannot allocate resource [%v] for application %s on "+
             "node %s because request exceeds available resources, used [%v] node limit [%v]",
-            alloc.AllocatedResource, alloc.ApplicationId, node.NodeId, newNodeResource, node.TotalResource)    }
+            alloc.AllocatedResource, alloc.ApplicationId, node.NodeId, newNodeResource, node.TotalResource)
+    }
 
     // If new allocation go beyond any of queue's max resource? Only check if when it is allocated instead of node reported.
     if err := queue.IncAllocatedResource(alloc.AllocatedResource, nodeReported); err != nil {
@@ -650,9 +666,9 @@ func (pi *PartitionInfo) GetQueueInfos() []dao.QueueDAOInfo {
     info.QueueName = pi.Root.Name
     info.Status = "RUNNING"
     info.Capacities = dao.QueueCapacity{
-        Capacity:     checkAndSetResource(pi.Root.GuaranteedResource),
-        MaxCapacity:  checkAndSetResource(pi.Root.MaxResource),
-        UsedCapacity: checkAndSetResource(pi.Root.GetAllocatedResource()),
+        Capacity:        checkAndSetResource(pi.Root.GuaranteedResource),
+        MaxCapacity:     checkAndSetResource(pi.Root.MaxResource),
+        UsedCapacity:    checkAndSetResource(pi.Root.GetAllocatedResource()),
         AbsUsedCapacity: "20",
     }
     info.ChildQueues = GetChildQueueInfos(pi.Root)
@@ -672,9 +688,9 @@ func GetChildQueueInfos(info *QueueInfo) []dao.QueueDAOInfo {
         queue.QueueName = v.Name
         queue.Status = "RUNNING"
         queue.Capacities = dao.QueueCapacity{
-            Capacity:     checkAndSetResource(v.GuaranteedResource),
-            MaxCapacity:  checkAndSetResource(v.MaxResource),
-            UsedCapacity: checkAndSetResource(v.GetAllocatedResource()),
+            Capacity:        checkAndSetResource(v.GuaranteedResource),
+            MaxCapacity:     checkAndSetResource(v.MaxResource),
+            UsedCapacity:    checkAndSetResource(v.GetAllocatedResource()),
             AbsUsedCapacity: "20",
         }
         queue.ChildQueues = GetChildQueueInfos(v)
@@ -713,11 +729,18 @@ func (pi *PartitionInfo) GetApplications() []*ApplicationInfo {
 }
 
 // Get the queue from the structure based on the fully qualified name.
+// Wrapper around the unlocked version getQueue()
+func (pi *PartitionInfo) GetQueue(name string) *QueueInfo {
+    pi.lock.RLock()
+    defer pi.lock.RUnlock()
+    return pi.getQueue(name)
+}
+
+// Get the queue from the structure based on the fully qualified name.
 // The name is not syntax checked and must be valid.
 // Returns nil if the queue is not found otherwise the queue object.
 //
 // NOTE: this is a lock free call. It should only be called holding the PartitionInfo lock.
-// If access outside is needed a locked version must be introduced.
 func (pi *PartitionInfo) getQueue(name string) *QueueInfo {
     // start at the root
     queue := pi.Root
@@ -727,7 +750,7 @@ func (pi *PartitionInfo) getQueue(name string) *QueueInfo {
         return queue
     }
     // walk over the parts going down towards the requested queue
-    for i := 1;  i < len(part); i++ {
+    for i := 1; i < len(part); i++ {
         // if child not found break out and return
         if queue = queue.children[part[i]]; queue == nil {
             break
@@ -760,7 +783,7 @@ func (pi *PartitionInfo) updateQueues(config []configs.QueueConfig, parent *Queu
     visited := map[string]bool{}
     // walk over the queues recursively
     for _, queueConfig := range config {
-        pathName :=  parentPath + queueConfig.Name
+        pathName := parentPath + queueConfig.Name
         queue := pi.getQueue(pathName)
         var err error
         if queue == nil {
@@ -769,11 +792,11 @@ func (pi *PartitionInfo) updateQueues(config []configs.QueueConfig, parent *Queu
             err = queue.updateQueueProps(queueConfig)
         }
         if err != nil {
-            return  err
+            return err
         }
         err = pi.updateQueues(queueConfig.Queues, queue)
         if err != nil {
-            return  err
+            return err
         }
         visited[queueConfig.Name] = true
     }
@@ -810,7 +833,6 @@ func (pi *PartitionInfo) Remove() {
     }
 }
 
-
 // Is the partition marked for deletion and can only handle existing application requests.
 // No new applications will be accepted.
 func (pi *PartitionInfo) IsDraining() bool {
@@ -823,4 +845,50 @@ func (pi *PartitionInfo) IsRunning() bool {
 
 func (pi *PartitionInfo) IsStopped() bool {
     return pi.stateMachine.Current() == Stopped.String()
+}
+
+// Create the new queue that is returned from a rule.
+// It creates a queue with all parents needed.
+func (pi *PartitionInfo) CreateQueues(queueName string) error {
+    if !strings.HasPrefix(queueName, configs.RootQueue + DOT) {
+        return fmt.Errorf("cannot create queue which is not qualified '%s'", queueName)
+    }
+    log.Logger.Debug("Creating new queue structure", zap.String("queueName", queueName))
+    // two step creation process: first check then really create them
+    // start at the root, which we know exists and is a parent
+    current := queueName
+    var toCreate []string
+    parent := pi.getQueue(current)
+    log.Logger.Debug("Checking queue creation")
+    for parent == nil {
+        toCreate = append(toCreate, current[strings.LastIndex(current, DOT)+1:])
+        current = current[0:strings.LastIndex(current, DOT)]
+        // check if the queue exist
+        parent = pi.getQueue(current)
+    }
+    // check if it is a parent queue
+    if parent.isLeaf {
+        log.Logger.Debug("Cannot create queue below existing leaf queue",
+            zap.String("requestedQueue", queueName),
+            zap.String("leafQueue", current))
+        return fmt.Errorf("cannot create queue below leaf queue '%s'", current)
+    }
+    log.Logger.Debug("Queue can be created, creating queue(s)")
+    for i := len(toCreate)-1; i >= 0; i-- {
+        // everything is checked and there should be no errors
+        var err error
+        parent, err = NewUnmanagedQueue(toCreate[i], i == 0, parent)
+        if err != nil {
+            log.Logger.Warn("Queue auto create failed unexpected",
+                zap.String("queueName", queueName),
+                zap.Error(err))
+        }
+    }
+    return nil
+}
+
+func (pi *PartitionInfo) convertUGI(ugi *si.UserGroupInformation) (security.UserGroup, error) {
+    pi.lock.RLock()
+    defer pi.lock.RUnlock()
+    return pi.userGroupCache.ConvertUGI(ugi)
 }

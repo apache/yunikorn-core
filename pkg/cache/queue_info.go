@@ -20,6 +20,7 @@ import (
     "fmt"
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-core/pkg/common/security"
     "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/metrics"
     "github.com/looplab/fsm"
@@ -30,7 +31,8 @@ import (
 )
 
 const (
-    DOT = "."
+    DOT        = "."
+    DotReplace = "_dot_"
     // How to sort applications, valid options are fair / fifo
     ApplicationSortPolicy = "application.sort.policy"
 )
@@ -38,7 +40,6 @@ const (
 // The queue structure as used throughout the scheduler
 type QueueInfo struct {
     Name               string
-
     MaxResource        *resources.Resource // When not set, max = nil
     GuaranteedResource *resources.Resource // When not set, Guaranteed == 0
     Parent             *QueueInfo          // link to the parent queue
@@ -50,13 +51,15 @@ type QueueInfo struct {
     metrics metrics.CoreQueueMetrics
 
     // Private fields need protection
-    allocatedResource  *resources.Resource   // set based on allocation
-    isLeaf             bool                  // this is a leaf queue or not (i.e. parent)
-    isManaged          bool                  // queue is part of the config, not auto created
-    stateMachine       *fsm.FSM              // the state of the queue for scheduling
-    stateTime          time.Time             // last time the state was updated (needed for cleanup)
-    children           map[string]*QueueInfo // list of direct children
-    lock               sync.RWMutex          // lock for updating the queue
+    adminACL          security.ACL         // admin ACL
+    submitACL         security.ACL         // submit ACL
+    allocatedResource *resources.Resource   // set based on allocation
+    isLeaf            bool                  // this is a leaf queue or not (i.e. parent)
+    isManaged         bool                  // queue is part of the config, not auto created
+    stateMachine      *fsm.FSM              // the state of the queue for scheduling
+    stateTime         time.Time             // last time the state was updated (needed for cleanup)
+    children          map[string]*QueueInfo // list of direct children
+    lock              sync.RWMutex          // lock for updating the queue
 }
 
 // Create a new queue from the configuration object.
@@ -92,8 +95,8 @@ func NewManagedQueue(conf configs.QueueConfig, parent *QueueInfo) (*QueueInfo, e
 func NewUnmanagedQueue(name string, leaf bool, parent *QueueInfo) (*QueueInfo, error) {
     // name might not be checked do it here
     if !configs.QueueNameRegExp.MatchString(name) {
-        return nil, fmt.Errorf("invalid queue name %s, a name must only have alphanumeric characters," +
-            " - or _, and be no longer than 16 characters", name)
+        return nil, fmt.Errorf("invalid queue name %s, a name must only have alphanumeric characters,"+
+            " - or _, and be no longer than 64 characters", name)
     }
     // create the object
     qi := &QueueInfo{Name: strings.ToLower(name),
@@ -121,7 +124,7 @@ func (qi *QueueInfo) HandleQueueEvent(event SchedulingObjectEvent) error {
     err := qi.stateMachine.Event(event.String(), qi.Name)
     // err is nil the state transition was done
     if err == nil {
-        qi.stateTime =time.Now()
+        qi.stateTime = time.Now()
         return nil
     }
     // handle the same state transition not nil error (limit of fsm).
@@ -214,7 +217,7 @@ func (qi *QueueInfo) DecAllocatedResource(alloc *resources.Resource) error {
     defer qi.lock.Unlock()
 
     // check this queue: failure stops checks
-    if alloc != nil &&  !resources.FitIn(qi.allocatedResource, alloc) {
+    if alloc != nil && !resources.FitIn(qi.allocatedResource, alloc) {
         return fmt.Errorf("released allocation (%v) is larger than queue %s allocation (%v)",
             alloc, qi.GetQueuePath(), qi.allocatedResource)
     }
@@ -303,7 +306,20 @@ func (qi *QueueInfo) MarkQueueForRemoval() {
 
 // Update an existing managed queue based on the updated configuration
 func (qi *QueueInfo) updateQueueProps(conf configs.QueueConfig) error {
-
+    // Set the ACLs
+    var err error
+    qi.submitACL, err = security.NewACL(conf.SubmitACL)
+    if err != nil {
+        log.Logger.Error("parsing submit ACL failed this should not happen",
+            zap.Error(err))
+        return err
+    }
+    qi.adminACL, err = security.NewACL(conf.AdminACL)
+    if err != nil {
+        log.Logger.Error("parsing admin ACL failed this should not happen",
+            zap.Error(err))
+        return err
+    }
     // Change from unmanaged to managed
     if !qi.isManaged {
         log.Logger.Info("changed un-managed queue to managed",
@@ -377,4 +393,27 @@ func (qi *QueueInfo) IsRunning() bool {
 // Is the queue stopped, not active in scheduling at all.
 func (qi *QueueInfo) IsStopped() bool {
     return qi.stateMachine.Current() == Stopped.String()
+}
+
+// Check if the user has access to the queue to submit an application recursively.
+// This will check the submit ACL and the admin ACL.
+func (qi *QueueInfo) CheckSubmitAccess(user security.UserGroup) bool {
+    qi.lock.Lock()
+    allow := qi.submitACL.CheckAccess(user) || qi.adminACL.CheckAccess(user)
+    qi.lock.Unlock()
+    if !allow && qi.Parent != nil {
+        allow = qi.Parent.CheckSubmitAccess(user)
+    }
+    return allow
+}
+
+// Check if the user has access to the queue for admin actions recursively.
+func (qi *QueueInfo) CheckAdminAccess(user security.UserGroup) bool {
+    qi.lock.Lock()
+    allow := qi.adminACL.CheckAccess(user)
+    qi.lock.Unlock()
+    if !allow && qi.Parent != nil {
+        allow = qi.Parent.CheckSubmitAccess(user)
+    }
+    return allow
 }

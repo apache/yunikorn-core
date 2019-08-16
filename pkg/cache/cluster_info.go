@@ -151,17 +151,25 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
         rejectedApps := make([]*si.RejectedApplication, 0)
 
         for _, app := range request.NewApplications {
-            appInfo := NewApplicationInfo(app.ApplicationId, app.PartitionName, app.QueueName)
+            // convert and resolve the user: cache can be set per partition
+            ugi, err := m.GetPartition(app.PartitionName).convertUGI(app.Ugi)
+            if err != nil {
+                m.metrics.IncTotalApplicationsRejected()
+                rejectedApps = append(rejectedApps, &si.RejectedApplication{ApplicationId: app.ApplicationId, Reason: err.Error()})
+                continue
+            }
+            // create a new app object
+            appInfo := NewApplicationInfo(app.ApplicationId, app.PartitionName, app.QueueName, ugi, app.Tags)
             if err := m.addApplicationToPartition(appInfo, true); err != nil {
                 m.metrics.IncTotalApplicationsRejected()
                 rejectedApps = append(rejectedApps, &si.RejectedApplication{ApplicationId: app.ApplicationId, Reason: err.Error()})
-            } else {
-                // Update metrics with accepted applications
-                m.metrics.IncTotalApplicationsAdded()
-                m.metrics.IncTotalApplicationsRunning()
-                acceptedApps = append(acceptedApps, &si.AcceptedApplication{ApplicationId: app.ApplicationId})
-                addedAppInfos = append(addedAppInfos, appInfo)
+                continue
             }
+            // Update metrics with accepted applications
+            m.metrics.IncTotalApplicationsAdded()
+            m.metrics.IncTotalApplicationsRunning()
+            acceptedApps = append(acceptedApps, &si.AcceptedApplication{ApplicationId: app.ApplicationId})
+            addedAppInfos = append(addedAppInfos, appInfo)
         }
 
         // Respond to RMProxy

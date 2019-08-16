@@ -18,12 +18,22 @@ package cache
 
 import (
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
+	"github.com/cloudera/yunikorn-core/pkg/common/security"
 	"gotest.tools/assert"
 	"testing"
 )
 
+func newApplicationInfo(appId, partition, queueName string) *ApplicationInfo {
+	user := security.UserGroup{
+		User: "testuser",
+		Groups: []string{},
+	}
+	tags := make(map[string]string, 0)
+	return NewApplicationInfo(appId, partition, queueName, user, tags)
+}
+
 func TestNewApplicationInfo(t *testing.T) {
-	appInfo := NewApplicationInfo("app-00001", "default", "root.a")
+	appInfo := newApplicationInfo("app-00001", "default", "root.a")
 	assert.Equal(t, appInfo.ApplicationId, "app-00001")
 	assert.Equal(t, appInfo.Partition, "default")
 	assert.Equal(t, appInfo.QueueName, "root.a")
@@ -31,7 +41,7 @@ func TestNewApplicationInfo(t *testing.T) {
 }
 
 func TestAllocations(t *testing.T) {
-	appInfo := NewApplicationInfo("app-00001", "default", "root.a")
+	appInfo := newApplicationInfo("app-00001", "default", "root.a")
 
     // nothing allocated
     if !resources.IsZero(appInfo.GetAllocatedResource()) {
@@ -72,7 +82,7 @@ func TestAllocations(t *testing.T) {
 }
 
 func TestQueueUpdate(t *testing.T) {
-	appInfo := NewApplicationInfo("app-00001", "default", "root.a")
+	appInfo := newApplicationInfo("app-00001", "default", "root.a")
 
     queue, _ := NewUnmanagedQueue("test", true, nil)
     appInfo.setQueue(queue)
@@ -81,7 +91,7 @@ func TestQueueUpdate(t *testing.T) {
 
 func TestAcceptStateTransition(t *testing.T) {
 	// Accept only from new
-	appInfo := NewApplicationInfo("app-00001", "default", "root.a")
+	appInfo := newApplicationInfo("app-00001", "default", "root.a")
 	assert.Equal(t, appInfo.GetApplicationState(), New.String())
 
 	// new to accepted
@@ -102,7 +112,7 @@ func TestAcceptStateTransition(t *testing.T) {
 
 func TestRejectTransition(t *testing.T) {
 	// Reject only from new
-	appInfo := NewApplicationInfo("app-00001", "default", "root.a")
+	appInfo := newApplicationInfo("app-00001", "default", "root.a")
 	assert.Equal(t, appInfo.GetApplicationState(), New.String())
 
 	// new to rejected
@@ -121,7 +131,7 @@ func TestRejectTransition(t *testing.T) {
 	assert.Equal(t, appInfo.GetApplicationState(), Rejected.String())
 
 	// Reject fails from all but new
-	appInfo = NewApplicationInfo("app-00002", "default", "root.a")
+	appInfo = newApplicationInfo("app-00002", "default", "root.a")
 	assert.Equal(t, appInfo.GetApplicationState(), New.String())
 	err = appInfo.HandleApplicationEvent(AcceptApplication)
 	assert.Assert(t, err == nil)
@@ -133,7 +143,7 @@ func TestRejectTransition(t *testing.T) {
 
 func TestRunTransition(t *testing.T) {
 	// run from accepted
-	appInfo := NewApplicationInfo("app-00001", "default", "root.a")
+	appInfo := newApplicationInfo("app-00001", "default", "root.a")
 	assert.Equal(t, appInfo.GetApplicationState(), New.String())
 	err := appInfo.HandleApplicationEvent(AcceptApplication)
 	assert.Assert(t, err == nil)
@@ -162,7 +172,7 @@ func TestRunTransition(t *testing.T) {
 
 func TestCompletedTransition(t *testing.T) {
 	// complete only from run
-	appInfo := NewApplicationInfo("app-00001", "default", "root.a")
+	appInfo := newApplicationInfo("app-00001", "default", "root.a")
 	assert.Equal(t, appInfo.GetApplicationState(), New.String())
 	err := appInfo.HandleApplicationEvent(AcceptApplication)
 	assert.Assert(t, err == nil)
@@ -182,7 +192,7 @@ func TestCompletedTransition(t *testing.T) {
 	assert.Equal(t, appInfo.GetApplicationState(), Completed.String())
 
 	// completed fails from all but running
-	appInfo2 := NewApplicationInfo("app-00002", "default", "root.a")
+	appInfo2 := newApplicationInfo("app-00002", "default", "root.a")
 	assert.Equal(t, appInfo2.GetApplicationState(), New.String())
 	err = appInfo.HandleApplicationEvent(CompleteApplication)
 	assert.Assert(t, err != nil)
@@ -192,7 +202,7 @@ func TestCompletedTransition(t *testing.T) {
 
 func TestKilledTransition(t *testing.T) {
 	// complete only from run
-	appInfo := NewApplicationInfo("app-00001", "default", "root.a")
+	appInfo := newApplicationInfo("app-00001", "default", "root.a")
 	assert.Equal(t, appInfo.GetApplicationState(), New.String())
 
 	// new to killed

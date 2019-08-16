@@ -110,16 +110,22 @@ The first rule that matches, i.e. returns a fully qualified queue name, will hal
 Rules provide a fully qualified queue name as the result. To allow for deeper nesting of queues the parent of the queue can be set as part of the rule evaluation. The rule definition should allow a fixed configured fully qualified parent to be specified or it can call a second rule to generate the parent queue.  By default a queue is generated as a child of the root queue.
 
 Example:
+Placing an application submitted by the user _user1_ whom is a member of the groups _user1_ and _companyA_ in a queue based on UserName:
 ```
-Placing an application submitted by the user user1 whom is a member of the groups companyA and test in a queue based on UserName
 Rule name: UserName
-Parent: root.fixedparent
+    Parent: root.fixedparent
 Result: root.fixedparent.user1
 
 Rule name: UserName
-Parent: SecondaryGroup
-	Filter: company*
+    Parent: SecondaryGroup
+	Filter: 
+	    Groups: company.*
 Result: root.companyA.user1
+
+Rule name: UserName
+Filter: 
+    Users: user2,user3
+Result: denied placement
 ```
 The default behaviour for placing an application in a queue, which would do the same as using the queue that is provided during submit, would be a rule that takes the provided queue with the create flag set to false.
 
@@ -134,6 +140,15 @@ Defining placement rules in the configuration requires the following information
     * Create (boolean)
 * Filter:
     * A regular expression or list of users/groups to apply the rule to.
+    
+The filter can be used to allow the rule to be used (default behaviour) or deny the rule to be used. User or groups matching the filter will be either allowed or denied.
+The filter is defined as follow:
+* Type:
+    * Type (string) which can have no value (empty) or "allow" or "deny", case insensitive.
+* Users:
+    * A list of zero or more user names. If the list is exactly one long it will be interpreted as a regular expression.
+* Groups:
+    * A list of zero or more group names. If the list is exactly one long it will be interpreted as a regular expression.
 
 Proposed rules for placing applications would be:
 * Provided: returns the queue provided during the submission

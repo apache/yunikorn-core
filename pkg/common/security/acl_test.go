@@ -17,6 +17,7 @@ limitations under the License.
 package security
 
 import (
+    "gotest.tools/assert"
     "testing"
 )
 
@@ -96,4 +97,39 @@ func TestACLSpecialCase(t *testing.T) {
     if err != nil || len(acl.groups) != 1 {
         t.Errorf("parsing failed for string: 'group,group' acl has incorrect group list: %v", acl)
     }
+}
+
+func TestACLAccess(t *testing.T) {
+    acl, err := NewACL("user1,user2 group1,group2")
+    if err != nil {
+        t.Fatalf("parsing failed for string: 'user1,user2 group1,group2'")
+    }
+    user := UserGroup{User: "", Groups: nil}
+    assert.Assert(t, !acl.CheckAccess(user), "no user, should have been denied")
+    user = UserGroup{User: "user1", Groups: nil}
+    assert.Assert(t, acl.CheckAccess(user), "user1 (no groups) should have been allowed")
+    user = UserGroup{User: "user3", Groups: []string{"group1"}}
+    assert.Assert(t, acl.CheckAccess(user), "group1 should have been allowed")
+    user = UserGroup{User: "user3", Groups: []string{"group3","group1"}}
+    assert.Assert(t, acl.CheckAccess(user), "group1 (2nd group) should have been allowed")
+    user = UserGroup{User: "user3", Groups: []string{"group3"}}
+    assert.Assert(t, !acl.CheckAccess(user), "user3/group3 should have been denied")
+
+    acl, err = NewACL("*")
+    if err != nil {
+        t.Fatalf("parsing failed for string: '*'")
+    }
+    user = UserGroup{User: "", Groups: nil}
+    assert.Assert(t, acl.CheckAccess(user), "no user, wildcard should have been allowed")
+    user = UserGroup{User: "user1", Groups: []string{"group1"}}
+    assert.Assert(t, acl.CheckAccess(user), "user1/group1, wildcard should have been allowed")
+
+    acl, err = NewACL("")
+    if err != nil {
+        t.Fatalf("parsing failed for string: ''")
+    }
+    user = UserGroup{User: "", Groups: nil}
+    assert.Assert(t, !acl.CheckAccess(user), "no user, empty ACL always deny")
+    user = UserGroup{User: "user1", Groups: []string{"group1"}}
+    assert.Assert(t, !acl.CheckAccess(user), "user1/group1, empty ACL always deny")
 }

@@ -25,12 +25,12 @@ import (
 )
 
 const (
-    WildCard = "*"
+    WildCard  = "*"
     Separator = ","
-    Space = " "
+    Space     = " "
 )
 
-var nameRegExp = regexp.MustCompile("^[a-z_]([a-z0-9_-]{0,31}|[a-z0-9_-]{0,30}\\$)$")
+var UserNameRegExp = regexp.MustCompile("^[a-z_]([a-z0-9_-]{0,31}|[a-z0-9_-]{0,30}\\$)$")
 
 type ACL struct {
     users      map[string]bool
@@ -59,7 +59,7 @@ func (a *ACL) setUsers(userList []string) {
     }
     // add all users to the map
     for _, user := range userList {
-        if nameRegExp.MatchString(user) {
+        if UserNameRegExp.MatchString(user) {
             a.users[user] = true
         } else {
             log.Logger.Info("user Ignoring user in ACL definition",
@@ -88,7 +88,7 @@ func (a *ACL) setGroups(groupList []string) {
     }
     // add all groups to the map
     for _, group := range groupList {
-        if nameRegExp.MatchString(group) {
+        if UserNameRegExp.MatchString(group) {
             a.groups[group] = true
         } else {
             log.Logger.Info("ignoring group in ACL",
@@ -98,13 +98,16 @@ func (a *ACL) setGroups(groupList []string) {
 }
 
 // create a new ACL from scratch
-func NewACL(aclStr string) (*ACL, error) {
-    acl := &ACL{}
+func NewACL(aclStr string) (ACL, error) {
+    acl := ACL{}
+    if aclStr == "" {
+        return acl, nil
+    }
     // before trimming check
     // should have no more than two groups defined
     fields := strings.Split(aclStr, Space)
     if len(fields) > 2 {
-        return nil, fmt.Errorf("multiple spaces found in ACL: '%s'", aclStr)
+        return acl, fmt.Errorf("multiple spaces found in ACL: '%s'", aclStr)
     }
     // trim and check for wildcard
     acl.setAllAllowed(aclStr)
@@ -121,17 +124,21 @@ func NewACL(aclStr string) (*ACL, error) {
 }
 
 // Check if the user has access
-func (a *ACL) CheckAccess(user string) (bool, error) {
+func (a ACL) CheckAccess(userObj UserGroup) bool {
     // shortcut allow all
     if a.allAllowed {
-        return true, nil
+        return true
     }
     // if the ACL is not the wildcard we have non nil lists
     // check user access
-    if a.users[user] {
-        return true, nil
+    if a.users[userObj.User] {
+        return true
     }
     // get groups for the user and check them
-    // TODO: resolve groups and check
-    return false, nil
+    for _, group := range userObj.Groups {
+        if a.groups[group] {
+            return true
+        }
+    }
+    return false
 }

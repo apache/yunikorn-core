@@ -27,11 +27,26 @@ import (
 )
 
 const (
-    RootQueue = "root"
+    RootQueue        = "root"
     DefaultPartition = "default"
 )
 
-var QueueNameRegExp = regexp.MustCompile("^[a-zA-Z0-9_-]{1,16}$")
+// A queue can be a username with the dot replaced. Most systems allow a 32 character user name.
+// The queue name must thus allow for at least that length with the replacement of dots.
+var QueueNameRegExp = regexp.MustCompile("^[a-zA-Z0-9_-]{1,64}$")
+
+// User and group name check: systems allow different things POSIX is the base but we need to be lenient and allow more.
+// allow upper and lower case, add the @ and . (dot) and officially no length.
+var UserRegExp = regexp.MustCompile("^[_a-zA-Z][a-zA-Z0-9_.@-]*[$]?$")
+
+// Groups should have a slightly more restrictive regexp (no @ . or $ at the end)
+var GroupRegExp = regexp.MustCompile("^[_a-zA-Z][a-zA-Z0-9_-]*$")
+
+// all characters that make a name different from a regexp
+var SpecialRegExp = regexp.MustCompile("[\\^\\$\\*\\+\\?\\(\\)\\[\\{\\}\\|]")
+
+// The rule maps to a go identifier check that regexp only
+var RuleNameRegExp = regexp.MustCompile("^[_a-zA-Z][a-zA-Z0-9_]*$")
 
 // Check the ACL
 func checkACL(acl string) error {
@@ -62,7 +77,6 @@ func checkResource(res map[string]string) error {
     return nil
 }
 
-
 // Check the resource configuration
 func checkResources(resource Resources) error {
     // check guaranteed resources
@@ -91,7 +105,74 @@ func checkPlacementRules(partition *PartitionConfig) error {
 
     log.Logger.Debug("checking placement rule config",
         zap.String("partitionName", partition.Name))
-    // TODO check rules
+    // top level rule checks, parents are called recursively
+    for _, rule := range partition.PlacementRules {
+        if err := checkPlacementRule(rule); err != nil {
+            return err
+        }
+    }
+    return nil
+}
+
+// Check the specific rule for syntax.
+// The create flag is checked automatically by the config parser and is not checked.
+func checkPlacementRule(rule PlacementRule) error {
+    // name must be valid go as it normally maps 1:1 to an object
+    if !RuleNameRegExp.MatchString(rule.Name) {
+        return fmt.Errorf("invalid rule name %s, a name must be a valid identifier", rule.Name)
+    }
+    // check the parent rule
+    if rule.Parent != nil {
+        if err := checkPlacementRule(*rule.Parent); err != nil {
+            log.Logger.Debug("parent placement rule failed",
+                zap.String("rule", rule.Name),
+                zap.String("parentRule", rule.Parent.Name))
+            return err
+        }
+    }
+    // check filter if given
+    if err := checkPlacementFilter(rule.Filter); err != nil {
+        log.Logger.Debug("placement rule filter failed",
+            zap.String("rule", rule.Name),
+            zap.Any("filter", rule.Filter))
+        return err
+    }
+    return nil
+}
+
+// Check the filter for syntax issues
+// Trickery for the regexp part to make sure we filter out just a name and do not see it as a regexp.
+// If the list is 1 item check if it is a valid user, then compile as a regexp and check for regexp characters.
+// Each check must pass.
+// If the list is more than one item we see all as a name and ignore anything that does not comply when initialising the filter.
+func checkPlacementFilter(filter Filter) error {
+    // empty (equals allow) or the literal "allow" or "deny" (case insensitive)
+    if filter.Type != "" && !strings.EqualFold(filter.Type, "allow") && !strings.EqualFold(filter.Type, "deny") {
+        return fmt.Errorf("invalid rule filter type %s, filter type  must be either '', allow or deny", filter.Type)
+    }
+    // check users and groups: as long as we have 1 good entry we accept it and continue
+    // anything that does not parse in a list of users is ignored (like ACL list)
+    if len(filter.Users) == 1 {
+        // for a length of 1 we could either have regexp or username
+        isUser := UserRegExp.MatchString(filter.Users[0])
+        // if it is not a user name it must be a regexp
+        // two step check: first compile if that fails it is
+        if !isUser {
+            if _, err := regexp.Compile(filter.Users[0]); err != nil || !SpecialRegExp.MatchString(filter.Users[0]) {
+                return fmt.Errorf("invalid rule filter user list is not a proper list or regexp: %v", filter.Users)
+            }
+        }
+    }
+    if len(filter.Groups) == 1 {
+        // for a length of 1 we could either have regexp or groupname
+        isGroup := GroupRegExp.MatchString(filter.Groups[0])
+        // if it is not a group name it must be a regexp
+        if !isGroup {
+            if _, err := regexp.Compile(filter.Groups[0]); err != nil || !SpecialRegExp.MatchString(filter.Groups[0]) {
+                return fmt.Errorf("invalid rule filter group list is not a proper list or regexp: %v", filter.Groups)
+            }
+        }
+    }
     return nil
 }
 
@@ -133,8 +214,8 @@ func checkQueues(queue *QueueConfig, level int) error {
     queueMap := make(map[string]bool)
     for _, queue := range queue.Queues {
         if !QueueNameRegExp.MatchString(queue.Name) {
-            return fmt.Errorf("invalid queue name %s, a name must only have alphanumeric characters," +
-                " - or _, and be no longer than 16 characters", queue.Name)
+            return fmt.Errorf("invalid queue name %s, a name must only have alphanumeric characters,"+
+                " - or _, and be no longer than 64 characters", queue.Name)
         }
         if queueMap[strings.ToLower(queue.Name)] {
             return fmt.Errorf("duplicate queue name found with name %s, level %d", queue.Name, level)
@@ -147,8 +228,8 @@ func checkQueues(queue *QueueConfig, level int) error {
     for _, queue := range queue.Queues {
         err := checkQueues(&queue, level+1)
         if err != nil {
-           return err
-       }
+            return err
+        }
     }
     return nil
 }

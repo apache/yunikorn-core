@@ -110,13 +110,7 @@ partitions:
 				},
 			},
 		},
-		NewApplications: []*si.AddApplicationRequest{
-			{
-				ApplicationId: "app-1",
-				QueueName:     "root.a",
-				PartitionName: "",
-			},
-		},
+		NewApplications: newAddAppRequest(map[string]string{"app-1":"root.a"}),
 		RmId: "rm:123",
 	})
 
@@ -299,13 +293,7 @@ partitions:
 				ExistingAllocations: mockRM.nodeAllocations["node-2:1234"],
 			},
 		},
-		NewApplications: []*si.AddApplicationRequest{
-			{
-				ApplicationId: "app-1",
-				QueueName:     "root.a",
-				PartitionName: "",
-			},
-		},
+		NewApplications: newAddAppRequest(map[string]string{"app-1":"root.a"}),
 		RmId: "rm:123",
 	})
 
@@ -544,13 +532,7 @@ partitions:
 				},
 			},
 		},
-		NewApplications: []*si.AddApplicationRequest{
-			{
-				ApplicationId: "app-01",
-				QueueName:     "root.a",
-				PartitionName: "",
-			},
-		},
+		NewApplications: newAddAppRequest(map[string]string{"app-01":"root.a"}),
 		RmId: "rm:123",
 	})
 
@@ -645,14 +627,8 @@ partitions:
 				},
 			},
 		},
-		NewApplications: []*si.AddApplicationRequest{
-			{
-				ApplicationId: "app-1",
-				QueueName:     "root.a",
-				PartitionName: "",
-			},
-		},
-		RmId: "rm:123",
+		NewApplications: newAddAppRequest(map[string]string{"app-1":"root.a"}),
+		RmId:            "rm:123",
 	})
 
 	if nil != err {
@@ -665,6 +641,7 @@ partitions:
 
 	app01 := serviceContext.Scheduler.GetClusterSchedulingContext().
 		GetSchedulingApplication("app-1", "[rm:123]default")
+	assert.Assert(t, app01 != nil)
 	assert.Equal(t, app01.ApplicationInfo.ApplicationId, "app-1")
 	assert.Equal(t, app01.ApplicationInfo.QueueName, "root.a")
 }
@@ -707,18 +684,7 @@ partitions:
 
 	// Register apps alone
 	err = proxy.Update(&si.UpdateRequest{
-		NewApplications: []*si.AddApplicationRequest{
-			{
-				ApplicationId: "app-1",
-				QueueName:     "root.a",
-				PartitionName: "",
-			},
-			{
-				ApplicationId: "app-2",
-				QueueName:     "root.a",
-				PartitionName: "",
-			},
-		},
+		NewApplications: newAddAppRequest(map[string]string{"app-1":"root.a", "app-2":"root.a"}),
 		RmId: "rm:123",
 	})
 

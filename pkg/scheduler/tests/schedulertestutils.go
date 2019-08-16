@@ -264,3 +264,19 @@ func getApplicationInfoFromPartition(partitionInfo *cache.PartitionInfo, appId s
     }
     return nil, fmt.Errorf("cannot find app %s from cache", appId)
 }
+
+func newAddAppRequest(apps map[string]string) []*si.AddApplicationRequest {
+    var requests []*si.AddApplicationRequest
+    for app, queue := range apps {
+        request := si.AddApplicationRequest{
+            ApplicationId: app,
+            QueueName:     queue,
+            PartitionName: "",
+            Ugi: &si.UserGroupInformation{
+                User: "testuser",
+            },
+        }
+        requests = append(requests, &request)
+    }
+    return requests
+}

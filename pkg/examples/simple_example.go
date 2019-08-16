@@ -121,6 +121,9 @@ partitions:
                 ApplicationId: "app-1",
                 QueueName:     "a",
                 PartitionName: "",
+                Ugi: &si.UserGroupInformation{
+                    User: "testuser",
+                },
             },
         },
         RmId: "rm:123",

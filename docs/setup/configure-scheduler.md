@@ -47,7 +47,7 @@ Second step is t link the mount point back to the configuration map created in k
         name: yunikorn-configs
 ``` 
 
-Both steps are part of the scheduler yaml file, an example can be seen at [scheduler-v0.3.5.yaml](https://github.com/cloudera/yunikorn-k8shim/blob/master/deployments/scheduler/scheduler-v0.3.5.yaml)
+Both steps are part of the scheduler yaml file, an example can be seen at [scheduler.yaml](https://github.com/cloudera/yunikorn-k8shim/blob/master/deployments/scheduler/scheduler.yaml)
 for reference.
 
 

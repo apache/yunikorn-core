@@ -361,7 +361,7 @@ func (m *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerAp
                 _ = app.HandleApplicationEvent(cache.AcceptApplication)
             }
         }
-        // notify RM proxy about apps added adn rejected
+        // notify RM proxy about apps added and rejected
         m.eventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMApplicationUpdateEvent{
             RMId:                 rmID,
             AcceptedApplications: acceptedApps,

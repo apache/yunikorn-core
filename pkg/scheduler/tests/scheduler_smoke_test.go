@@ -44,6 +44,7 @@ partitions:
   - name: default
     queues:
       - name: root
+        submitacl: "*"
         queues:
           - name: base
             resources:
@@ -91,6 +92,7 @@ partitions:
   - name: default
     queues:
       - name: root
+        submitacl: "*"
         queues:
           - name: base
             resources:
@@ -173,6 +175,7 @@ partitions:
     name: default
     queues:
       - name: root
+        submitacl: "*"
         queues:
           - name: a
             resources:
@@ -435,6 +438,7 @@ partitions:
     name: default
     queues:
       - name: root
+        submitacl: "*"
         queues:
           - name: a
             resources:
@@ -556,17 +560,15 @@ partitions:
   -
     name: default
     queues:
-      -
-        name: root
+      - name: root
+        submitacl: "*"
         queues:
-          -
-            name: a
+          - name: a
             resources:
               guaranteed:
                 memory: 100
                 vcore: 10
-          -
-            name: b
+          - name: b
             resources:
               guaranteed:
                 memory: 100
@@ -700,19 +702,17 @@ partitions:
   -
     name: default
     queues:
-      -
-        name: root
+      - name: root
+        submitacl: "*"
         queues:
-          -
-            name: a
+          - name: a
             properties:
               application.sort.policy: fair
             resources:
               guaranteed:
                 memory: 100
                 vcore: 10
-          -
-            name: b
+          - name: b
             resources:
               guaranteed:
                 memory: 100
@@ -856,19 +856,17 @@ partitions:
   -
     name: default
     queues:
-      -
-        name: root
+      - name: root
+        submitacl: "*"
         queues:
-          -
-            name: a
+          - name: a
             properties:
               application.sort.policy: fair
             resources:
               guaranteed:
                 memory: 100
                 vcore: 10
-          -
-            name: b
+          - name: b
             resources:
               guaranteed:
                 memory: 100
@@ -925,16 +923,16 @@ partitions:
     waitForAcceptedNodes(mockRM, "node-2:1234", 1000)
 
     err = proxy.Update(&si.UpdateRequest{
-        NewApplications: newAddAppRequest(map[string]string{"app-1":"root.non-exist-queue"}),
+        NewApplications: newAddAppRequest(map[string]string{"app-reject-1":"root.non-exist-queue"}),
         RmId: "rm:123",
     })
 
-    waitForRejectedApplications(mockRM, "app-1", 1000)
+    waitForRejectedApplications(mockRM, "app-reject-1", 1000)
 
     err = proxy.Update(&si.UpdateRequest{
-        NewApplications: newAddAppRequest(map[string]string{"app-1":"root.a"}),
+        NewApplications: newAddAppRequest(map[string]string{"app-added-2":"root.a"}),
         RmId: "rm:123",
     })
 
-    waitForAcceptedApplications(mockRM, "app-1", 1000)
+    waitForAcceptedApplications(mockRM, "app-added-2", 1000)
 }

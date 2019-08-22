@@ -27,10 +27,10 @@ import (
 
 var TwoEqualQueueConfigEnabledPreemption = `
 partitions:
-  -
-    name: default
+  - name: default
     queues:
       - name: root
+        submitacl: "*"
         queues:
           - name: a
             resources:

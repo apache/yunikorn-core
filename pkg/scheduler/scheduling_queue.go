@@ -19,6 +19,7 @@ package scheduler
 import (
     "github.com/cloudera/yunikorn-core/pkg/cache"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-core/pkg/common/security"
     "github.com/cloudera/yunikorn-core/pkg/log"
     "go.uber.org/zap"
     "sync"
@@ -263,4 +264,17 @@ func (sq *SchedulingQueue) SetAllocatingResource(newAlloc *resources.Resource) {
     defer sq.lock.Unlock()
 
     sq.allocatingResource = newAlloc
+}
+
+// Check if the user has access to the queue to submit an application.
+// This will check the submit ACL and the admin ACL.
+// Calls the cache queue which is doing the real work.
+func (sq *SchedulingQueue) CheckSubmitAccess(user security.UserGroup) bool {
+    return sq.CachedQueueInfo.CheckSubmitAccess(user)
+}
+
+// Check if the user has access to the queue for admin actions.
+// Calls the cache queue which is doing the real work.
+func (sq *SchedulingQueue) CheckAdminAccess(user security.UserGroup) bool {
+    return sq.CachedQueueInfo.CheckAdminAccess(user)
 }

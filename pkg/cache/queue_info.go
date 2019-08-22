@@ -398,9 +398,9 @@ func (qi *QueueInfo) IsStopped() bool {
 // Check if the user has access to the queue to submit an application recursively.
 // This will check the submit ACL and the admin ACL.
 func (qi *QueueInfo) CheckSubmitAccess(user security.UserGroup) bool {
-    qi.lock.Lock()
+    qi.lock.RLock()
     allow := qi.submitACL.CheckAccess(user) || qi.adminACL.CheckAccess(user)
-    qi.lock.Unlock()
+    qi.lock.RUnlock()
     if !allow && qi.Parent != nil {
         allow = qi.Parent.CheckSubmitAccess(user)
     }
@@ -409,11 +409,11 @@ func (qi *QueueInfo) CheckSubmitAccess(user security.UserGroup) bool {
 
 // Check if the user has access to the queue for admin actions recursively.
 func (qi *QueueInfo) CheckAdminAccess(user security.UserGroup) bool {
-    qi.lock.Lock()
+    qi.lock.RLock()
     allow := qi.adminACL.CheckAccess(user)
-    qi.lock.Unlock()
+    qi.lock.RUnlock()
     if !allow && qi.Parent != nil {
-        allow = qi.Parent.CheckSubmitAccess(user)
+        allow = qi.Parent.CheckAdminAccess(user)
     }
     return allow
 }

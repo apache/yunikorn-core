@@ -85,7 +85,7 @@ func TestQueueUpdate(t *testing.T) {
 	appInfo := newApplicationInfo("app-00001", "default", "root.a")
 
     queue, _ := NewUnmanagedQueue("test", true, nil)
-    appInfo.setQueue(queue)
+    appInfo.SetQueue(queue)
     assert.Equal(t, appInfo.QueueName, "test")
 }
 

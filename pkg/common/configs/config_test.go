@@ -449,6 +449,32 @@ partitions:
     if err == nil {
         t.Errorf("3 fields in ACL queue parsing should have failed: %v", conf)
     }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        adminacl: *
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("unescaped wild card ACL queue parsing should have failed: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        adminacl: "user""
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("unbalanced quotes ACL queue parsing should have failed: %v", conf)
+    }
 }
 
 func TestPartitionPreemptionParameter(t *testing.T) {

@@ -90,6 +90,13 @@ func (m *AppPlacementManager) initialise(rules []configs.PlacementRule) error {
         m.rules = tempRules
         // all done manager is initialised
         m.initialised = true
+        if log.IsDebugEnabled() {
+            for rule := range m.rules {
+                log.Logger.Debug("rule set",
+                    zap.Int("ruleNumber", rule),
+                    zap.String("ruleName", m.rules[rule].getName()))
+            }
+        }
     }
     return err
 }
@@ -114,12 +121,12 @@ func (m *AppPlacementManager) buildRules(rules []configs.PlacementRule) ([]rule,
     return newRules, nil
 }
 
-func (m *AppPlacementManager) PlaceApplication(app *cache.ApplicationInfo) (string, error) {
+func (m *AppPlacementManager) PlaceApplication(app *cache.ApplicationInfo) error {
     // Placement manager not initialised cannot place application, just return
     m.lock.RLock()
     defer m.lock.RUnlock()
     if !m.initialised {
-        return "", nil
+        return nil
     }
     var queueName string
     var err error
@@ -132,7 +139,8 @@ func (m *AppPlacementManager) PlaceApplication(app *cache.ApplicationInfo) (stri
             log.Logger.Error("rule execution failed",
                 zap.String("ruleName", checkRule.getName()),
                 zap.Error(err))
-            return "", err
+            app.QueueName = ""
+            return err
         }
         // queueName returned make sure ACL allows access and create the queueName if not exist
         if queueName != "" {
@@ -159,7 +167,8 @@ func (m *AppPlacementManager) PlaceApplication(app *cache.ApplicationInfo) (stri
                 err = m.info.CreateQueues(queueName)
                 // errors can occur when the parent queueName is already a leaf queueName
                 if err != nil {
-                    return "", err
+                    app.QueueName = ""
+                    return err
                 }
             } else {
                 // Check if the user is allowed to submit to this queueName, if not next rule
@@ -182,7 +191,10 @@ func (m *AppPlacementManager) PlaceApplication(app *cache.ApplicationInfo) (stri
         zap.String("queueName", queueName))
     // no more rules to check no queueName found reject placement
     if queueName == "" {
-        return "", fmt.Errorf("application rejected: no rule matched")
+        app.QueueName = ""
+        return fmt.Errorf("application rejected: no placment rule matched")
     }
-    return queueName, nil
+    // Add the queue into the application, overriding what was submitted
+    app.SetQueue(m.info.GetQueue(queueName))
+    return nil
 }

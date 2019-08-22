@@ -24,7 +24,7 @@ Scheduler configuration as currently identified
 * SchedulerACL
 
 Configuration to consider:
-* Assign multiple containers in one go: use case is bin packing, don’t spread an application over large number of nodes. Contrary to current YARN deployment. Needs to become configurable.
+* Assign multiple containers in one go: use case is bin packing, don’t spread an application over large number of nodes. Needs to become configurable.
 * Pre-emption related configuration:
     * threshold: do not pre-empt from a queue if the cluster load is below a certain threshold.
     * Interval: pause between pre-emption checks
@@ -40,7 +40,7 @@ The queue configuration defines queues in a hierarchy: a tree. The base of the t
 
 The root queue reflect the whole cluster. Resource settings on the root queue are not allowed. The resources available to the root queue are calculated based on the registered node resources in the cluster. If resources would be specified on the root limit the cluster would either be artificially limited to a specific size or expect resources to be available that are not there.
 
-Queues in the hierarchy in the tree are separated by the “.” dot character (ASCII 0x2E). This indirectly means that a queue name cannot contain a dot as it interferes with the hierarchy separator. Any queue name in the configuration that contains a dot will cause the configuration to be considered invalid.
+Queues in the hierarchy in the tree are separated by the “.” dot character (ASCII 0x2E). This indirectly means that a queue name itself cannot contain a dot as it interferes with the hierarchy separator. Any queue name in the configuration that contains a dot will cause the configuration to be considered invalid. However we must allow placement rules to create a queue with a dot based input. This 
 
 Not all queues can be used to submit an application to. Applications can only be submitted to a queue which does not have a queue below it. These queues are defined as the _leaf_ queues of the tree. Queues that are not a _leaf_ and thus can contain other queues or child queues are considered _parent_ queues.
 
@@ -99,13 +99,13 @@ Adding user based limits will allow the cluster administrators to control the cl
     * Maximum (resource)
 
 ### Placement Rules definition
-Dynamically placing an application in a queue has been a feature of the schedulers on YARN for a long time. This means that an application when submitted does not have to include a queue to run in. 
+Dynamically placing an application in a queue has been a feature of schedulers for a long time. This means that an application when submitted does not have to include a queue to run in. 
 
 A placement rule will use the application details to place the application in the queue. The outcome of running a placement rule will be a fully qualified queue or a `fail`, which means execute the next rule in the list. Rules will be executed in the order that they are defined.
 
 During the evaluation of the rule the result could be a queue name that contains a dot. This is especially true for user and group names which are POSIX compliant. When a rule generates a partial queue name that contains a dot it must be replaced as it is the separator in the hierarchy. The replacement text will be `_dot_`
 
-The first rule that matches, i.e. returns a fully qualified queue name, will halt the execution of the rules. If the application is not placed at the end of the list of rules the application will be rejected. Rules can return queues that are not defined in the configuration only if the rule allows creation of queues. These queues created by the placement rules are considered _unmanaged_ queues.
+The first rule that matches, i.e. returns a fully qualified queue name, will halt the execution of the rules. If the application is not placed at the end of the list of rules the application will be rejected. Rules can return queues that are not defined in the configuration only if the rule allows creation of queues. These queues created by the placement rules are considered _unmanaged_ queues as they are not managed by the administrator in the configuration.
 
 Rules provide a fully qualified queue name as the result. To allow for deeper nesting of queues the parent of the queue can be set as part of the rule evaluation. The rule definition should allow a fixed configured fully qualified parent to be specified or it can call a second rule to generate the parent queue.  By default a queue is generated as a child of the root queue.
 
@@ -118,7 +118,8 @@ Result: root.fixedparent.user1
 
 Rule name: UserName
     Parent: SecondaryGroup
-	Filter: 
+	Filter:
+        Type: allow
 	    Groups: company.*
 Result: root.companyA.user1
 
@@ -201,8 +202,9 @@ grouplist ::= “” | group { “,” group }
 ```
 
 This definition specifies a wildcard of * which results in access for everyone. If the user list is empty and the group list is empty nobody will have access. This deny all ACL has two possible representations:
-an empty access control list.
-a single space.
+* an empty access control list.
+* a single space.
+
 If there is no access control list is configured access is denied by default.
 ## Shim Configuration
 The shim configuration is highly dependent on the shim implementation. The k8s shim differs from the YARN shim. Currently the k8s shim is configured via command line options but we should not depend on that.

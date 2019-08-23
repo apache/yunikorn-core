@@ -40,7 +40,7 @@ The queue configuration defines queues in a hierarchy: a tree. The base of the t
 
 The root queue reflect the whole cluster. Resource settings on the root queue are not allowed. The resources available to the root queue are calculated based on the registered node resources in the cluster. If resources would be specified on the root limit the cluster would either be artificially limited to a specific size or expect resources to be available that are not there.
 
-Queues in the hierarchy in the tree are separated by the “.” dot character (ASCII 0x2E). This indirectly means that a queue name itself cannot contain a dot as it interferes with the hierarchy separator. Any queue name in the configuration that contains a dot will cause the configuration to be considered invalid. However we must allow placement rules to create a queue with a dot based input. This
+Queues in the hierarchy in the tree are separated by the “.” dot character (ASCII 0x2E). This indirectly means that a queue name itself cannot contain a dot as it interferes with the hierarchy separator. Any queue name in the configuration that contains a dot will cause the configuration to be considered invalid. However we must allow placement rules to create a queue with a dot based input.
 
 Not all queues can be used to submit an application to. Applications can only be submitted to a queue which does not have a queue below it. These queues are defined as the _leaf_ queues of the tree. Queues that are not a _leaf_ and thus can contain other queues or child queues are considered _parent_ queues.
 

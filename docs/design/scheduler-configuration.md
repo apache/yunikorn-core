@@ -12,7 +12,7 @@ Separated from the core scheduler configuration we have one or more shim configu
 Shim configuration must be independent of the core scheduler configuration.
 ## Scheduler Configuration
 Scheduler configuration covers all the configuration needed to start the scheduler and the dependent services. The configuration consists of a simple key value pair. All configuration to start the service must be part of this configuration.
-The scheduler configuration must exclude the queue related configuration. 
+The scheduler configuration must exclude the queue related configuration.
 
 Scheduler configuration as currently identified
 * Bind host
@@ -20,7 +20,7 @@ Scheduler configuration as currently identified
 * Web bind host
 * Web service port
 * SSL config
-* Shims Configured 
+* Shims Configured
 * SchedulerACL
 
 Configuration to consider:
@@ -33,14 +33,14 @@ Configuration to consider:
 On startup the scheduler will load the configuration for the queues from the provided configuration file after initialising the service. If there is no queue configuration provided the scheduler should start up with a simple default configuration which performs a well documented default behaviour.
 Based on the kubernetes definition this configuration could be a configMap  <sup id="s1">[1](#footnote1)</sup> but not a CRD.
 
-The queue configuration is dynamic. Changing the queue configuration must not require a scheduler restart. 
+The queue configuration is dynamic. Changing the queue configuration must not require a scheduler restart.
 Changes should be allowed by either calling the GO based API, the REST based API or by updating the configuration file. Changes made through the API must be persisted in the configuration file. Making changes through an API is not a high priority requirement and could be postponed to a later release.
 
 The queue configuration defines queues in a hierarchy: a tree. The base of the tree is the _root_ queue. The queue configuration must define a single _root_ queue. All queues that are defined in queue configuration are considered _managed_ queues.
 
 The root queue reflect the whole cluster. Resource settings on the root queue are not allowed. The resources available to the root queue are calculated based on the registered node resources in the cluster. If resources would be specified on the root limit the cluster would either be artificially limited to a specific size or expect resources to be available that are not there.
 
-Queues in the hierarchy in the tree are separated by the “.” dot character (ASCII 0x2E). This indirectly means that a queue name itself cannot contain a dot as it interferes with the hierarchy separator. Any queue name in the configuration that contains a dot will cause the configuration to be considered invalid. However we must allow placement rules to create a queue with a dot based input. This 
+Queues in the hierarchy in the tree are separated by the “.” dot character (ASCII 0x2E). This indirectly means that a queue name itself cannot contain a dot as it interferes with the hierarchy separator. Any queue name in the configuration that contains a dot will cause the configuration to be considered invalid. However we must allow placement rules to create a queue with a dot based input. This
 
 Not all queues can be used to submit an application to. Applications can only be submitted to a queue which does not have a queue below it. These queues are defined as the _leaf_ queues of the tree. Queues that are not a _leaf_ and thus can contain other queues or child queues are considered _parent_ queues.
 
@@ -59,7 +59,7 @@ The queue as defined in the configuration will be assigned a queue type. This ca
 
 Access control lists provide a split between submission permission and administration permissions. Submission access to a queue allows an application to be submitted to the queue by the users or groups specified. The administration permissions allows submission to the queue plus the administrative actions. Administrative actions are currently limited to killing an application and moving an application to a different queue.
 
-Access control lists are checked recursively up to the root of the tree starting at the lowest point in the tree. In other words when the access control list of a queue does not allow access the parent queue is checked. The checks are repeated all the way up to the root of the queues.  
+Access control lists are checked recursively up to the root of the tree starting at the lowest point in the tree. In other words when the access control list of a queue does not allow access the parent queue is checked. The checks are repeated all the way up to the root of the queues.
 
 On each queue, except the root queue, the following properties can be set:
 * QueueType:
@@ -99,13 +99,13 @@ Adding user based limits will allow the cluster administrators to control the cl
     * Maximum (resource)
 
 ### Placement Rules definition
-Dynamically placing an application in a queue has been a feature of schedulers for a long time. This means that an application when submitted does not have to include a queue to run in. 
+Schedulers can place an application in a queue dynamically. This means that an application when submitted does not have to include a queue to run in.
 
 A placement rule will use the application details to place the application in the queue. The outcome of running a placement rule will be a fully qualified queue or a `fail`, which means execute the next rule in the list. Rules will be executed in the order that they are defined.
 
 During the evaluation of the rule the result could be a queue name that contains a dot. This is especially true for user and group names which are POSIX compliant. When a rule generates a partial queue name that contains a dot it must be replaced as it is the separator in the hierarchy. The replacement text will be `_dot_`
 
-The first rule that matches, i.e. returns a fully qualified queue name, will halt the execution of the rules. If the application is not placed at the end of the list of rules the application will be rejected. Rules can return queues that are not defined in the configuration only if the rule allows creation of queues. 
+The first rule that matches, i.e. returns a fully qualified queue name, will halt the execution of the rules. If the application is not placed at the end of the list of rules the application will be rejected. Rules can return queues that are not defined in the configuration only if the rule allows creation of queues.
 
 These queues created by the placement rules are considered _unmanaged_ queues as they are not managed by the administrator in the configuration. An administrator cannot influence the _unmanaged_ queue creation or deletion. The scheduler creates the queue when it is needed and removes the queue automatically when it is no longer used.
 
@@ -126,7 +126,7 @@ Rule name: UserName
 Result: root.companyA.user1
 
 Rule name: UserName
-Filter: 
+Filter:
     Users: user2,user3
 Result: denied placement
 ```
@@ -143,7 +143,7 @@ Defining placement rules in the configuration requires the following information
     * Create (boolean)
 * Filter:
     * A regular expression or list of users/groups to apply the rule to.
-    
+  
 The filter can be used to allow the rule to be used (default behaviour) or deny the rule to be used. User or groups matching the filter will be either allowed or denied.
 The filter is defined as follow:
 * Type:
@@ -194,7 +194,7 @@ All ACL types should use the same definition pattern. We should allow at least P
 
 By default access control is enabled and access is denied. The only special case is for the core scheduler which automatically adds the system user, the scheduler process owner, to the scheduler ACL. The scheduler process owner is allowed to make sure that the process owner can use the API to call any administrative actions.
 
-Access control lists give access to the users and groups that have been specified in the list. They do not provide the possibility to explicitly remove or deny access to the users and groups specified in the list. 
+Access control lists give access to the users and groups that have been specified in the list. They do not provide the possibility to explicitly remove or deny access to the users and groups specified in the list.
 
 The access control list is defined as:
 ```
@@ -217,7 +217,7 @@ The full configuration of the K8s shim is still under development.
 ### YARN shim
 The full configuration of the YARN shim is still under development.
 
-# 
+#
 <a id="footnote1">1</a>: https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/#should-i-use-a-configmap-or-a-custom-resource  [↩](#s1)<br>
 <a id="footnote2">2</a>: The set of characters from which portable filenames are constructed.  [↩](#s2)<br>
 ```A B C D E F G H I J K L M N O P Q R S T U V W X Y Z a b c d e f g h i j k l m n o p q r s t u v w x y z 0 1 2 3 4 5 6 7 8 9 . _ -```

@@ -105,7 +105,9 @@ A placement rule will use the application details to place the application in th
 
 During the evaluation of the rule the result could be a queue name that contains a dot. This is especially true for user and group names which are POSIX compliant. When a rule generates a partial queue name that contains a dot it must be replaced as it is the separator in the hierarchy. The replacement text will be `_dot_`
 
-The first rule that matches, i.e. returns a fully qualified queue name, will halt the execution of the rules. If the application is not placed at the end of the list of rules the application will be rejected. Rules can return queues that are not defined in the configuration only if the rule allows creation of queues. These queues created by the placement rules are considered _unmanaged_ queues as they are not managed by the administrator in the configuration.
+The first rule that matches, i.e. returns a fully qualified queue name, will halt the execution of the rules. If the application is not placed at the end of the list of rules the application will be rejected. Rules can return queues that are not defined in the configuration only if the rule allows creation of queues. 
+
+These queues created by the placement rules are considered _unmanaged_ queues as they are not managed by the administrator in the configuration. An administrator cannot influence the _unmanaged_ queue creation or deletion. The scheduler creates the queue when it is needed and removes the queue automatically when it is no longer used.
 
 Rules provide a fully qualified queue name as the result. To allow for deeper nesting of queues the parent of the queue can be set as part of the rule evaluation. The rule definition should allow a fixed configured fully qualified parent to be specified or it can call a second rule to generate the parent queue.  By default a queue is generated as a child of the root queue.
 

@@ -19,9 +19,11 @@ package cache
 import (
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "strconv"
     "testing"
 )
 
+// create the root queue, base for all testing
 func createRootQueue() (*QueueInfo, error) {
     rootConf := configs.QueueConfig{
         Name:  "root",
@@ -32,6 +34,7 @@ func createRootQueue() (*QueueInfo, error) {
     return NewManagedQueue(rootConf, nil)
 }
 
+// wrapper around the create call using the same syntax as an unmanaged queue
 func createManagedQueue(parentQI *QueueInfo, name string, parent bool) (*QueueInfo, error) {
     rootConf := configs.QueueConfig{
         Name:  name,
@@ -42,8 +45,9 @@ func createManagedQueue(parentQI *QueueInfo, name string, parent bool) (*QueueIn
     return NewManagedQueue(rootConf, parentQI)
 }
 
-func createUnManagedQueue(parent *QueueInfo, name string, leaf bool) (*QueueInfo, error) {
-    return NewUnmanagedQueue(name, leaf, parent)
+// wrapper around the create call using the same syntax as a managed queue
+func createUnManagedQueue(parentQI *QueueInfo, name string, parent bool) (*QueueInfo, error) {
+    return NewUnmanagedQueue(name, !parent, parentQI)
 }
 
 // base test for creating a managed queue
@@ -51,18 +55,15 @@ func TestQueueInfo(t *testing.T) {
     // create the root
     root, err := createRootQueue()
     if err != nil {
-        t.Errorf("failed to create basic root queue: %v", err)
-        return
+        t.Fatalf("failed to create basic root queue: %v", err)
     }
     // check the state of the queue
     if !root.isManaged && !root.isLeaf && !root.IsRunning() {
         t.Errorf("root queue status is incorrect")
-        return
     }
     // allocations should be nil
     if !resources.IsZero(root.GetAllocatedResource()) {
         t.Errorf("root queue must not have allocations set on create")
-        return
     }
 }
 
@@ -70,8 +71,7 @@ func TestAllocationCalcRoot(t *testing.T) {
     // create the root
     root, err := createRootQueue()
     if err != nil {
-        t.Errorf("failed to create basic root queue: %v", err)
-        return
+        t.Fatalf("failed to create basic root queue: %v", err)
     }
     res := map[string]string{"memory":"100", "vcores":"10"}
     allocation, _ := resources.NewResourceFromConf(res)
@@ -96,13 +96,11 @@ func TestAllocationCalcSub(t *testing.T) {
     // create the root
     root, err := createRootQueue()
     if err != nil {
-        t.Errorf("failed to create basic root queue: %v", err)
-        return
+        t.Fatalf("failed to create basic root queue: %v", err)
     }
     parent, err := createManagedQueue(root, "parent", true)
     if err != nil {
-        t.Errorf("failed to create parent queue: %v", err)
-        return
+        t.Fatalf("failed to create parent queue: %v", err)
     }
 
     res := map[string]string{"memory":"100", "vcores":"10"}
@@ -142,13 +140,11 @@ func TestManagedSubQueues(t *testing.T) {
     // create the root
     root, err := createRootQueue()
     if err != nil {
-        t.Errorf("failed to create basic root queue: %v", err)
-        return
+        t.Fatalf("failed to create basic root queue: %v", err)
     }
     parent, err := createManagedQueue(root, "parent", true)
     if err != nil {
-        t.Errorf("failed to create parent queue: %v", err)
-        return
+        t.Fatalf("failed to create parent queue: %v", err)
     }
     if parent.isLeaf {
         t.Errorf("parent queue is not marked as a parent")
@@ -158,13 +154,19 @@ func TestManagedSubQueues(t *testing.T) {
     }
     leaf, err := createManagedQueue(parent, "leaf", false)
     if err != nil {
-        t.Errorf("failed to create leaf queue: %v", err)
-        return
+        t.Fatalf("failed to create leaf queue: %v", err)
     }
+    if len(parent.children) == 0 {
+        t.Errorf("leaf queue is not added to the parent queue")
+    }
+    if !leaf.isLeaf || !leaf.isManaged {
+        t.Errorf("leaf queue is not marked as managed leaf")
+    }
+
     // both parent and leaf are marked for removal
     parent.MarkQueueForRemoval()
     if !leaf.IsDraining() || !parent.IsDraining() {
-        t.Errorf("queues are not marked for removal (not in drianing state)")
+        t.Errorf("queues are not marked for removal (not in draining state)")
     }
     // try to remove the parent
     if parent.RemoveQueue() {
@@ -209,5 +211,105 @@ func TestMergeProperties(t *testing.T) {
     merged = mergeProperties(base, change)
     if len(merged) != 3 {
         t.Errorf("merge failed not exactly 3 keys: %v", merged)
+    }
+}
+
+func TestUnManagedSubQueues(t *testing.T) {
+    // create the root
+    root, err := createRootQueue()
+    if err != nil {
+        t.Fatalf("failed to create basic root queue: %v", err)
+    }
+    parent, err := createUnManagedQueue(root, "parent", true)
+    if err != nil {
+        t.Fatalf("failed to create parent queue: %v", err)
+    }
+    if parent.isLeaf {
+        t.Errorf("parent queue is not marked as a parent")
+    }
+    if len(root.children) == 0 {
+        t.Errorf("parent queue is not added to the root queue")
+    }
+    leaf, err := createUnManagedQueue(parent, "leaf", false)
+    if err != nil {
+        t.Fatalf("failed to create leaf queue: %v", err)
+    }
+    if len(parent.children) == 0 {
+        t.Errorf("leaf queue is not added to the parent queue")
+    }
+    if !leaf.isLeaf || leaf.isManaged {
+        t.Errorf("leaf queue is not marked as managed leaf")
+    }
+
+    // try to mark parent and leaf for removal
+    parent.MarkQueueForRemoval()
+    if leaf.IsDraining() || parent.IsDraining() {
+        t.Errorf("queues are marked for removal (draining state not for unmanaged queues)")
+    }
+    // try to remove the parent
+    if parent.RemoveQueue() {
+        t.Errorf("parent queue should not have been removed as it has a child")
+    }
+    // remove the child
+    if !leaf.RemoveQueue() && len(parent.children) != 0 {
+        t.Errorf("leaf queue should have been removed and parent updated and was not")
+    }
+    // now set some allocation in the parent and try removal again
+    res := map[string]string{"memory":"100", "vcores":"10"}
+    allocation, _ := resources.NewResourceFromConf(res)
+    err = parent.IncAllocatedResource(allocation, false)
+    if err != nil {
+        t.Errorf("allocation increase failed on parent: %v", err)
+    }
+    if parent.RemoveQueue() {
+        t.Errorf("parent queue should not have been removed as it has an allocation")
+    }
+    err = parent.DecAllocatedResource(allocation)
+    if err != nil {
+        t.Errorf("parent queue allocation failed on decrement %v", err)
+    }
+    if !parent.RemoveQueue() {
+        t.Errorf("parent queue should have been removed and was not")
+    }
+}
+
+func TestGetChildQueueInfos(t *testing.T) {
+    // create the root
+    root, err := createRootQueue()
+    if err != nil {
+        t.Fatalf("failed to create basic root queue: %v", err)
+    }
+    //
+    parent, err := createManagedQueue(root, "parent-man", true)
+    if err != nil {
+        t.Fatalf("failed to create basic managed parent queue: %v", err)
+    }
+    for i := 0; i < 10; i++ {
+        _, err := createManagedQueue(parent, "leaf-man" + strconv.Itoa(i), false)
+        if err != nil {
+            t.Errorf("failed to create managed queue: %v", err)
+        }
+    }
+    if len(parent.children) != 10 {
+        t.Errorf("managed leaf queues are not added to the parent queue, expected 10 children got %d", len(parent.children))
+    }
+
+    parent, err = createUnManagedQueue(root, "parent-un", true)
+    if err != nil {
+        t.Fatalf("failed to create basic unmanaged parent queue: %v", err)
+    }
+    for i := 0; i < 10; i++ {
+        _, err := createUnManagedQueue(parent, "leaf-un-" + strconv.Itoa(i), false)
+        if err != nil {
+            t.Errorf("failed to create unmanaged queue: %v", err)
+        }
+    }
+    if len(parent.children) != 10 {
+        t.Errorf("unmanaged leaf queues are not added to the parent queue, expected 10 children got %d", len(parent.children))
+    }
+
+    // check the root queue
+    if len(root.children) != 2 {
+        t.Errorf("parent queues are not added to the root queue, expected 2 children got %d", len(root.children))
     }
 }

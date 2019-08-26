@@ -87,6 +87,9 @@ func NewManagedQueue(conf configs.QueueConfig, parent *QueueInfo) (*QueueInfo, e
     }
 
     qi.metrics = metrics.InitQueueMetrics(conf.Name)
+    log.Logger.Debug("queue added",
+        zap.String("queueName", qi.Name),
+        zap.String("queuePath", qi.GetQueuePath()))
     return qi, nil
 }
 

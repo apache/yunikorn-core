@@ -56,7 +56,7 @@ type PartitionInfo struct {
 }
 
 // Create a new partition from scratch based on a validated configuration.
-// If teh configuration did not pass validation and is processed weird errors could occur.
+// If the configuration did not pass validation and is processed weird errors could occur.
 func NewPartitionInfo(partition configs.PartitionConfig, rmId string, info *ClusterInfo) (*PartitionInfo, error) {
     p := &PartitionInfo{
         Name:         partition.Name,
@@ -81,7 +81,7 @@ func NewPartitionInfo(partition configs.PartitionConfig, rmId string, info *Clus
         return nil, err
     }
     p.Root = root
-    log.Logger.Info("queue added",
+    log.Logger.Info("root queue added",
         zap.String("partitionName", p.Name),
         zap.String("rmId", p.RMId))
 

@@ -109,5 +109,5 @@ func normalise(name string) string {
 
 // Replace all dots in the generated queue name before making it a fully qualified name.
 func replaceDot(name string) string {
-	return strings.ReplaceAll(name, cache.DOT, cache.DotReplace)
+	return strings.Replace(name, cache.DOT, cache.DotReplace, -1)
 }

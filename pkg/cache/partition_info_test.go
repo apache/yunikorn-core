@@ -291,20 +291,6 @@ partitions:
         t.Errorf("add same application with failIfExist false should not have failed but did %v", err)
     }
 
-    // add app to a parent queue should fail
-    appInfo = newApplicationInfo("app-3", "default", "root")
-    err = partition.addNewApplication(appInfo, true)
-    if err == nil || partition.getApplication("app-3") != nil {
-        t.Errorf("add application to parent queue should have failed")
-    }
-
-    // add app to a non existing queue should fail
-    appInfo = newApplicationInfo("app-4", "default", "does-not-exist")
-    err = partition.addNewApplication(appInfo, true)
-    if err == nil || partition.getApplication("app-4") != nil {
-        t.Errorf("add application to non existing queue should have failed")
-    }
-
     // mark partition stopped, no new application can be added
     if err = partition.HandlePartitionEvent(Stop); err != nil {
         t.Errorf("partition state change failed: %v", err)

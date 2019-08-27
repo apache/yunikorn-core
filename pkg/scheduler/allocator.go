@@ -30,7 +30,10 @@ import (
 
 // Visible by tests
 func (m *Scheduler) SingleStepScheduleAllocTest(nAlloc int) {
-    m.singleStepSchedule(nAlloc, &preemptionParameters{})
+    m.singleStepSchedule(nAlloc, &preemptionParameters{
+        crossQueuePreemption: false,
+        blacklistedRequest: make(map[string]bool),
+    })
 }
 
 func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionParameters) {

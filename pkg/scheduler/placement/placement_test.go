@@ -215,10 +215,10 @@ partitions:
         Groups: []string{},
     }
     appInfo := cache.NewApplicationInfo("app1", "default", "", user, tags)
-    var queueName string
 
     // user rule existing queue, acl allowed
-    queueName, err = man.PlaceApplication(appInfo)
+    err = man.PlaceApplication(appInfo)
+    queueName := appInfo.QueueName
     if err != nil || queueName != "root.testparent.testchild" {
         t.Errorf("leaf exist: app should have been placed in user queue, queue: '%s', error: %v", queueName, err)
     }
@@ -229,14 +229,16 @@ partitions:
 
     // user rule new queue: fails on create flag
     appInfo = cache.NewApplicationInfo("app1", "default", "", user, tags)
-    queueName, err = man.PlaceApplication(appInfo)
+    err = man.PlaceApplication(appInfo)
+    queueName = appInfo.QueueName
     if err == nil || queueName != "" {
         t.Errorf("leaf to create, no create flag: app should not have been placed, queue: '%s', error: %v", queueName, err)
     }
 
     // provided rule (2nd rule): queue acl allowed, anyone create
     appInfo = cache.NewApplicationInfo("app1", "default", "root.fixed.leaf", user, tags)
-    queueName, err = man.PlaceApplication(appInfo)
+    err = man.PlaceApplication(appInfo)
+    queueName = appInfo.QueueName
     if err != nil || queueName != "root.fixed.leaf" {
         t.Errorf("leave create, acl allow: app should have been placed, queue: '%s', error: %v", queueName, err)
     }
@@ -247,7 +249,8 @@ partitions:
         Groups: []string{},
     }
     appInfo = cache.NewApplicationInfo("app1", "default", "root.fixed.other", user, tags)
-    queueName, err = man.PlaceApplication(appInfo)
+    err = man.PlaceApplication(appInfo)
+    queueName = appInfo.QueueName
     if err == nil || queueName != "" {
         t.Errorf("leaf to create, acl deny: app should not have been placed, queue: '%s', error: %v", queueName, err)
     }
@@ -255,7 +258,8 @@ partitions:
     // tag rule (3rd) check queue acl deny, queue was created above)
     tags = map[string]string{"namespace": "root.fixed.leaf"}
     appInfo = cache.NewApplicationInfo("app1", "default", "", user, tags)
-    queueName, err = man.PlaceApplication(appInfo)
+    err = man.PlaceApplication(appInfo)
+    queueName = appInfo.QueueName
     if err == nil || queueName != "" {
         t.Errorf("existing leaf, acl deny: app should not have been placed, queue: '%s', error: %v", queueName, err)
     }
@@ -266,7 +270,8 @@ partitions:
         Groups: []string{},
     }
     appInfo = cache.NewApplicationInfo("app1", "default", "", user, tags)
-    queueName, err = man.PlaceApplication(appInfo)
+    err = man.PlaceApplication(appInfo)
+    queueName = appInfo.QueueName
     if err != nil || queueName != "root.fixed.leaf" {
         t.Errorf("existing leaf, acl allow: app should have been placed, queue: '%s', error: %v", queueName, err)
     }
@@ -277,7 +282,8 @@ partitions:
         Groups: []string{},
     }
     appInfo = cache.NewApplicationInfo("app1", "default", "root.fixed.leaf.leaf", user, tags)
-    queueName, err = man.PlaceApplication(appInfo)
+    err = man.PlaceApplication(appInfo)
+    queueName = appInfo.QueueName
     if err == nil || queueName != "" {
         t.Errorf("parent queue: app should not have been placed, queue: '%s', error: %v", queueName, err)
     }

@@ -56,7 +56,7 @@ type PartitionInfo struct {
 }
 
 // Create a new partition from scratch based on a validated configuration.
-// If teh configuration did not pass validation and is processed weird errors could occur.
+// If the configuration did not pass validation and is processed weird errors could occur.
 func NewPartitionInfo(partition configs.PartitionConfig, rmId string, info *ClusterInfo) (*PartitionInfo, error) {
     p := &PartitionInfo{
         Name:         partition.Name,
@@ -81,7 +81,7 @@ func NewPartitionInfo(partition configs.PartitionConfig, rmId string, info *Clus
         return nil, err
     }
     p.Root = root
-    log.Logger.Info("queue added",
+    log.Logger.Info("root queue added",
         zap.String("partitionName", p.Name),
         zap.String("rmId", p.RMId))
 
@@ -339,17 +339,9 @@ func (pi *PartitionInfo) addNewApplication(info *ApplicationInfo, failIfExist bo
         }
     }
 
-    // check if queue exist, and it is a leaf queue
-    // TODO. add acl check and placement rules
-    queue := pi.getQueue(info.QueueName)
-    if queue == nil || !queue.IsLeafQueue() {
-        pi.metrics.IncTotalApplicationsRejected()
-        return fmt.Errorf("failed to submit application %s to queue %s, partition %s, because queue doesn't exist or queue is not leaf queue",
-            info.ApplicationId, info.QueueName, pi.Name)
-    }
-
-    // All checked, app can be added.
-    info.leafQueue = queue
+    // queue is checked later and overwritten based on placement rules
+    info.leafQueue = pi.getQueue(info.QueueName)
+    // Add app to the partition
     pi.applications[info.ApplicationId] = info
     pi.metrics.IncTotalApplicationsAdded()
 
@@ -548,6 +540,19 @@ func (pi *PartitionInfo) GetNewAllocationUuid() string {
             return allocationUuid
         }
     }
+}
+
+// Remove a rejected application from the partition.
+// This is just a cleanup, the app has not been scheduled yet.
+func (pi *PartitionInfo) RemoveRejectedApp(appId string) {
+    pi.lock.Lock()
+    defer pi.lock.Unlock()
+
+    log.Logger.Debug("removing rejected app from partition",
+        zap.String("appId", appId),
+        zap.String("partitionName", pi.Name))
+    // Remove app from cache there is nothing to be cleaned up
+    delete(pi.applications, appId)
 }
 
 // Remove the application from the partition.

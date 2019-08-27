@@ -48,11 +48,16 @@ type AllocationProposalBundleEvent struct {
     ReleaseProposals    []*commonevents.ReleaseAllocation
 }
 
+// Applications can be rejected by the scheduler. At that point the application has already been added to
+// the cache and must be removed from the cache.
+// These applications cannot have any allocations or other data linked to it.
 type RejectedNewApplicationEvent struct {
     ApplicationId string
+    PartitionName string
     Reason        string
 }
 
+// The application has finished or failed and is removed by the scheduler.
 type RemovedApplicationEvent struct {
     ApplicationId string
     PartitionName string

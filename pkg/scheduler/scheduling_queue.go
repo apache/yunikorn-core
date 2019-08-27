@@ -19,8 +19,10 @@ package scheduler
 import (
     "github.com/cloudera/yunikorn-core/pkg/cache"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-core/pkg/common/security"
     "github.com/cloudera/yunikorn-core/pkg/log"
     "go.uber.org/zap"
+    "strings"
     "sync"
 )
 
@@ -51,6 +53,12 @@ func NewSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo, parent *SchedulingQ
     sq.childrenQueues = make(map[string]*SchedulingQueue)
     sq.applications = make(map[string]*SchedulingApplication)
     sq.pendingResource = resources.NewResource()
+
+    // we can update the parent as we have a lock on the partition or the cluster when we get here
+    if parent != nil {
+        name := sq.Name[strings.LastIndex(sq.Name, cache.DOT)+1:]
+        parent.childrenQueues[name] = sq
+    }
 
     // update the properties
     sq.updateSchedulingQueueProperties(cacheQueueInfo.Properties)
@@ -103,7 +111,6 @@ func (sq *SchedulingQueue) updateSchedulingQueueInfo(info map[string]*cache.Queu
         // create a new queue if it does not exist
         if child == nil {
             child = NewSchedulingQueueInfo(childQueue, parent)
-            parent.childrenQueues[childName] = child
         } else {
             child.updateSchedulingQueueProperties(childQueue.Properties)
         }
@@ -132,6 +139,7 @@ func (sq *SchedulingQueue) DecPendingResource(delta *resources.Resource) {
         sq.parent.DecPendingResource(delta)
     }
 
+    // TODO we can go negative here, do we really want to do that?
     sq.pendingResource = resources.Sub(sq.pendingResource, delta)
 }
 
@@ -168,34 +176,20 @@ func (sq *SchedulingQueue) GetCopyOfChildren() map[string]*SchedulingQueue {
     return children
 }
 
-// Create a flat queue structure at this level
-func (sq *SchedulingQueue) GetFlatChildrenQueues(allQueues map[string]*SchedulingQueue) {
-    sq.lock.RLock()
-    defer sq.lock.RUnlock()
-
-    // add self
-    allQueues[sq.Name] = sq
-
-    for _, child := range sq.childrenQueues {
-        allQueues[child.Name] = child
-        child.GetFlatChildrenQueues(allQueues)
-    }
-}
-
 // Remove a child queue from this queue.
 // No checks are performed: if the child has been removed already it is a noop.
 // This may only be called by the queue removal itself on the registered parent.
 // Queue removal is always a bottom up action: leafs first then the parent.
 func (sq *SchedulingQueue) removeChildQueue(name string) {
-    sq.lock.RLock()
-    defer sq.lock.RUnlock()
+    sq.lock.Lock()
+    defer sq.lock.Unlock()
 
     delete(sq.childrenQueues, name)
 }
 
 // Remove the queue from the structure.
 // Since nothing is allocated there shouldn't be anything referencing this queue any more.
-// The real removal is removing the queue from the parent's child list
+// The real removal is removing the queue from the parent's child list, use read lock on the queue
 func (sq *SchedulingQueue) RemoveQueue() bool {
     sq.lock.RLock()
     defer sq.lock.RUnlock()
@@ -263,4 +257,17 @@ func (sq *SchedulingQueue) SetAllocatingResource(newAlloc *resources.Resource) {
     defer sq.lock.Unlock()
 
     sq.allocatingResource = newAlloc
+}
+
+// Check if the user has access to the queue to submit an application.
+// This will check the submit ACL and the admin ACL.
+// Calls the cache queue which is doing the real work.
+func (sq *SchedulingQueue) CheckSubmitAccess(user security.UserGroup) bool {
+    return sq.CachedQueueInfo.CheckSubmitAccess(user)
+}
+
+// Check if the user has access to the queue for admin actions.
+// Calls the cache queue which is doing the real work.
+func (sq *SchedulingQueue) CheckAdminAccess(user security.UserGroup) bool {
+    return sq.CachedQueueInfo.CheckAdminAccess(user)
 }

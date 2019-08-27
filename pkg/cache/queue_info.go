@@ -87,6 +87,9 @@ func NewManagedQueue(conf configs.QueueConfig, parent *QueueInfo) (*QueueInfo, e
     }
 
     qi.metrics = metrics.InitQueueMetrics(conf.Name)
+    log.Logger.Debug("queue added",
+        zap.String("queueName", qi.Name),
+        zap.String("queuePath", qi.GetQueuePath()))
     return qi, nil
 }
 
@@ -398,9 +401,9 @@ func (qi *QueueInfo) IsStopped() bool {
 // Check if the user has access to the queue to submit an application recursively.
 // This will check the submit ACL and the admin ACL.
 func (qi *QueueInfo) CheckSubmitAccess(user security.UserGroup) bool {
-    qi.lock.Lock()
+    qi.lock.RLock()
     allow := qi.submitACL.CheckAccess(user) || qi.adminACL.CheckAccess(user)
-    qi.lock.Unlock()
+    qi.lock.RUnlock()
     if !allow && qi.Parent != nil {
         allow = qi.Parent.CheckSubmitAccess(user)
     }
@@ -409,11 +412,11 @@ func (qi *QueueInfo) CheckSubmitAccess(user security.UserGroup) bool {
 
 // Check if the user has access to the queue for admin actions recursively.
 func (qi *QueueInfo) CheckAdminAccess(user security.UserGroup) bool {
-    qi.lock.Lock()
+    qi.lock.RLock()
     allow := qi.adminACL.CheckAccess(user)
-    qi.lock.Unlock()
+    qi.lock.RUnlock()
     if !allow && qi.Parent != nil {
-        allow = qi.Parent.CheckSubmitAccess(user)
+        allow = qi.Parent.CheckAdminAccess(user)
     }
     return allow
 }

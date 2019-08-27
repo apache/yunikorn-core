@@ -187,7 +187,8 @@ func (m *Scheduler) removeApplication(request *si.RemoveApplicationRequest) erro
 func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
     select {
     case queue <- ev:
-        log.Logger.Debug("enqueue event",
+        log.Logger.Debug("enqueued event",
+            zap.String("eventType",  reflect.TypeOf(ev).String()),
             zap.Any("event", ev),
             zap.Int("currentQueueSize", len(queue)))
     default:
@@ -323,29 +324,49 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
     }
 }
 
+// Process application adds and removes that have been processed by the cache.
+// The cache processes the applications and has already filtered out some apps.
+// All apps come from one si.UpdateRequest and thus from one RM.
 func (m *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerApplicationsUpdateEvent) {
     if len(ev.AddedApplications) > 0 {
+        rejectedApps := make([]*si.RejectedApplication, 0)
+        acceptedApps := make([]*si.AcceptedApplication, 0)
+        var rmID string
         for _, j := range ev.AddedApplications {
             app := j.(*cache.ApplicationInfo)
+            rmID = common.GetRMIdFromPartitionName(app.Partition)
             if err := m.addNewApplication(app); err != nil {
+                log.Logger.Debug("rejecting application in scheduler",
+                    zap.String("appId", app.ApplicationId),
+                    zap.String("partitionName", app.Partition),
+                    zap.Error(err))
                 // update cache
-                m.eventHandlers.CacheEventHandler.HandleEvent(&cacheevent.RejectedNewApplicationEvent{ApplicationId: app.ApplicationId, Reason: err.Error()})
-                // notify RM proxy about rejected apps
-                rejectedApps := make([]*si.RejectedApplication, 0)
-                m.eventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMApplicationUpdateEvent{
-                    RMId:                 common.GetRMIdFromPartitionName(app.Partition),
-                    AcceptedApplications: nil,
-                    RejectedApplications: append(rejectedApps, &si.RejectedApplication{
+                m.eventHandlers.CacheEventHandler.HandleEvent(
+                    &cacheevent.RejectedNewApplicationEvent{
                         ApplicationId: app.ApplicationId,
-                        Reason:        err.Error(),
-                    }),
+                        PartitionName: app.Partition,
+                        Reason: err.Error(),
+                    })
+                rejectedApps = append(rejectedApps, &si.RejectedApplication{
+                    ApplicationId: app.ApplicationId,
+                    Reason:        err.Error(),
                 })
-                // app rejects apps
+                // app is rejected by the scheduler
                 _ = app.HandleApplicationEvent(cache.RejectApplication)
+            } else {
+                acceptedApps = append(acceptedApps, &si.AcceptedApplication{
+                    ApplicationId: app.ApplicationId,
+                })
+                // app is accepted by scheduler
+                _ = app.HandleApplicationEvent(cache.AcceptApplication)
             }
-            // app is accepted by scheduler
-            _ = app.HandleApplicationEvent(cache.AcceptApplication)
         }
+        // notify RM proxy about apps added and rejected
+        m.eventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMApplicationUpdateEvent{
+            RMId:                 rmID,
+            AcceptedApplications: acceptedApps,
+            RejectedApplications: rejectedApps,
+        })
     }
 
     if len(ev.RemovedApplications) > 0 {

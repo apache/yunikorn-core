@@ -38,10 +38,10 @@ func TestSchedulerRecovery(t *testing.T) {
 	// Register RM
 	configData := `
 partitions:
-  -
-    name: default
+  - name: default
     queues:
       - name: root
+        submitacl: "*"
         queues:
           - name: a
             resources:
@@ -398,6 +398,7 @@ partitions:
     name: default
     queues:
       - name: root
+        submitacl: "*"
         queues:
           - name: a
             resources:
@@ -569,10 +570,10 @@ func TestAppRecovery(t *testing.T) {
 	// Register RM
 	configData := `
 partitions:
-  -
-    name: default
+  - name: default
     queues:
       - name: root
+        submitacl: "*"
         queues:
           - name: a
             resources:
@@ -654,10 +655,10 @@ func TestAppRecoveryAlone(t *testing.T) {
 	// Register RM
 	configData := `
 partitions:
-  -
-    name: default
+  - name: default
     queues:
       - name: root
+        submitacl: "*"
         queues:
           - name: a
             resources:

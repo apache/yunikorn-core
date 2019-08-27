@@ -19,6 +19,7 @@ package scheduler
 import (
     "fmt"
     "github.com/cloudera/yunikorn-core/pkg/cache"
+    "github.com/cloudera/yunikorn-core/pkg/common/security"
     "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/scheduler/placement"
     "go.uber.org/zap"
@@ -86,26 +87,37 @@ func (psc *PartitionSchedulingContext) AddSchedulingApplication(schedulingApp *S
         return fmt.Errorf("adding application %s to partition %s, but application already existed", appId, psc.Name)
     }
 
-    psc.applications[appId] = schedulingApp
-
-    // Put app under queue
-    // TODO use placement rules in all cases i.e. init placement manager with provided rule always
+    // Put app under the scheduling queue, the app has already been placed in the partition cache
     queueName := schedulingApp.ApplicationInfo.QueueName
     if psc.placementManager.IsInitialised() {
-        var err error
-        queueName, err = psc.placementManager.PlaceApplication(schedulingApp.ApplicationInfo)
+        err := psc.placementManager.PlaceApplication(schedulingApp.ApplicationInfo)
         if err != nil {
-            return fmt.Errorf("failed to find queue %s for application %s: %v", schedulingApp.ApplicationInfo.QueueName, appId, err)
+            return fmt.Errorf("failed to place app in requested queue '%s' for application %s: %v", queueName, appId, err)
         }
-
+        // pull out the queue name from the placement
+        queueName = schedulingApp.ApplicationInfo.QueueName
     }
-    // find the scheduling queue
+    // we have a queue name either from placement or direct
     schedulingQueue := psc.getQueue(queueName)
-    if schedulingQueue == nil {
+    // check if the queue already exist and what we have is a leaf queue with submit access
+    if schedulingQueue != nil &&
+        (!schedulingQueue.isLeafQueue() || !schedulingQueue.CheckSubmitAccess(schedulingApp.ApplicationInfo.GetUser())){
         return fmt.Errorf("failed to find queue %s for application %s", schedulingApp.ApplicationInfo.QueueName, appId)
     }
+    // with placement rules the hierarchy might not exist so try and create it
+    if schedulingQueue == nil {
+        psc.createSchedulingQueue(queueName, schedulingApp.ApplicationInfo.GetUser())
+        // find the scheduling queue: if it still does not exist we fail the app
+        schedulingQueue = psc.getQueue(queueName)
+        if schedulingQueue == nil {
+            return fmt.Errorf("failed to find queue %s for application %s", schedulingApp.ApplicationInfo.QueueName, appId)
+        }
+    }
+
+    // all is OK update the app and partition
     schedulingApp.queue = schedulingQueue
     schedulingQueue.AddSchedulingApplication(schedulingApp)
+    psc.applications[appId] = schedulingApp
 
     return nil
 }
@@ -172,12 +184,11 @@ func (psc *PartitionSchedulingContext) getApplication(appId string) *SchedulingA
     return psc.applications[appId]
 }
 
-// Create a scheduling queue with full hierarchy.
-// This is called when a new queue is created from a placement rule. It will not return anything and cannot
-// fail.
+// Create a scheduling queue with full hierarchy. This is called when a new queue is created from a placement rule.
+// It will not return anything and cannot "fail". A failure is picked up by the queue not existing after this call.
 //
 // NOTE: this is a lock free call. It should only be called holding the PartitionSchedulingContext lock.
-func (psc *PartitionSchedulingContext) createSchedulingQueue(name string) {
+func (psc *PartitionSchedulingContext) createSchedulingQueue(name string, user security.UserGroup) {
     // find the scheduling furthest down the hierarchy that exists
     schedQueue := name // the scheduling queue that exists
     cacheQueue := ""   // the cache queue that needs to be created (with children)
@@ -190,5 +201,21 @@ func (psc *PartitionSchedulingContext) createSchedulingQueue(name string) {
     // found the last known scheduling queue,
     // create the corresponding scheduler queue based on the already created cache queue
     queue := psc.partition.GetQueue(cacheQueue)
+    // if the cache queue does not exist we should fail this create
+    if queue == nil {
+        return
+    }
+    // Check the ACL before we really create
+    // The existing parent scheduling queue is the lowest we need to look at
+    if !parent.CheckSubmitAccess(user) {
+        log.Logger.Debug("Submit access denied by scheduler on queue",
+            zap.String("deniedQueueName", schedQueue),
+            zap.String("requestedQueue", name))
+        return
+    }
+    log.Logger.Debug("Creating scheduling queue(s)",
+        zap.String("parent", schedQueue),
+        zap.String("child", cacheQueue),
+        zap.String("fullPath", name))
     NewSchedulingQueueInfo(queue, parent)
 }

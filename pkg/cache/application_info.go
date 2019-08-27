@@ -96,7 +96,7 @@ func (ai *ApplicationInfo) GetAllocatedResource() *resources.Resource {
 
 // Set the leaf queue the application runs in. Update the queue name also to match as this might be different from the
 // queue that was given when submitting the application.
-func (ai *ApplicationInfo) setQueue(leaf *QueueInfo) {
+func (ai *ApplicationInfo) SetQueue(leaf *QueueInfo) {
     ai.lock.Lock()
     defer ai.lock.Unlock()
 

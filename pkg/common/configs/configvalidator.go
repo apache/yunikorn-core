@@ -67,30 +67,32 @@ func checkACL(acl string) error {
 
 // Temporary convenience method: should use resource package to do this
 // currently no check for the type of resource as long as the value is OK all is OK
-func checkResource(res map[string]string) error {
+func checkResource(res map[string]string) (int64, error) {
+    var totalres int64
     for _, val := range res {
-        _, err := strconv.ParseInt(val, 10, 64)
+        rescount, err := strconv.ParseInt(val, 10, 64)
         if err != nil {
-            return fmt.Errorf("resource parsing failed: %v", err)
+            return 0, fmt.Errorf("resource parsing failed: %v", err)
         }
+        totalres += rescount
     }
-    return nil
+    return totalres, nil
 }
 
 // Check the resource configuration
 func checkResources(resource Resources) error {
     // check guaranteed resources
     if resource.Guaranteed != nil && len(resource.Guaranteed) != 0 {
-        err := checkResource(resource.Guaranteed)
+        _, err := checkResource(resource.Guaranteed)
         if err != nil {
             return err
         }
     }
     // check max resources
     if resource.Max != nil && len(resource.Max) != 0 {
-        err := checkResource(resource.Max)
-        if err != nil {
-            return err
+        total, err := checkResource(resource.Max)
+        if err != nil || total == 0{
+            return fmt.Errorf("max resource total is '%d', or parsing failed: %v", total, err)
         }
     }
     return nil
@@ -176,16 +178,46 @@ func checkPlacementFilter(filter Filter) error {
     return nil
 }
 
-// Check the defined users
-func checkUserDefinition(partition *PartitionConfig) error {
+// Check a single user
+func checkUser(user User) error {
+    if user.Name == "" || !UserRegExp.MatchString(user.Name) {
+        return fmt.Errorf("invalid user name '%s' in user definition", user.Name)
+    }
+    total := int64(-1)
+    var err error
+    // check the resource (if defined)
+    if user.MaxResources != nil && len(user.MaxResources) != 0 {
+        total, err = checkResource(user.MaxResources)
+        if err != nil {
+            log.Logger().Debug("user resource parsing failed",
+                zap.String("user", user.Name),
+                zap.Int64("total", total),
+                zap.Error(err))
+            return err
+        }
+    }
+    // at least some resource should be not null
+    if user.MaxApplications == 0 && total <= 0 {
+        return fmt.Errorf("invalid resource combination for user name '%s' all resource limits are null", user.Name)
+    }
+    return nil
+}
+
+// Check the defined users list
+func checkUsers(users []User, obj string) error {
     // return if nothing defined
-    if partition.Users == nil || len(partition.Users) == 0 {
+    if users == nil || len(users) == 0 {
         return nil
     }
 
-    log.Logger().Debug("checking partition user config",
-        zap.String("partitionName", partition.Name))
-    // TODO check users
+    log.Logger().Debug("checking user configs",
+        zap.String("objName", obj),
+        zap.Int("userList", len(users)))
+    for _, queueUser := range users {
+        if err := checkUser(queueUser); err != nil {
+            return err
+        }
+    }
     return nil
 }
 
@@ -206,6 +238,12 @@ func checkQueues(queue *QueueConfig, level int) error {
         return err
     }
     err = checkACL(queue.SubmitACL)
+    if err != nil {
+        return err
+    }
+
+    // check the users (if defined)
+    err = checkUsers(queue.Users, queue.Name)
     if err != nil {
         return err
     }
@@ -320,7 +358,7 @@ func Validate(newConfig *SchedulerConfig) error {
         if err != nil {
             return err
         }
-        err = checkUserDefinition(&partition)
+        err = checkUsers(partition.Users, partition.Name)
         if err != nil {
             return err
         }

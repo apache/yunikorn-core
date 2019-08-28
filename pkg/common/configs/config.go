@@ -34,6 +34,12 @@ type SchedulerConfig struct {
     Checksum   []byte
 }
 
+// The partition object for each partition:
+// - the name of the partition
+// - a list of sub or child queues
+// - a list of placement rule definition objects
+// - a list of users specifying limits on the partition
+// - the preemption configuration for the partition
 type PartitionConfig struct {
     Name           string
     Queues         []QueueConfig
@@ -49,17 +55,21 @@ type PartitionPreemptionConfig struct {
 // The queue object for each queue:
 // - the name of the queue
 // - a resources object to specify resource limits on the queue
+// - the maximum number of applications that can run in the queue
 // - a set of properties, exact definition of what can be set is not part of the yaml
+// - ACL for submit and or admin access
 // - a list of sub or child queues
+// - a list of users specifying limits on a queue
 type QueueConfig struct {
     Name            string
     Parent          bool              `yaml:",omitempty" json:",omitempty"`
     Resources       Resources         `yaml:",omitempty" json:",omitempty"`
+    MaxApplications uint64            `yaml:",omitempty" json:",omitempty"`
     Properties      map[string]string `yaml:",omitempty" json:",omitempty"`
     AdminACL        string            `yaml:",omitempty" json:",omitempty"`
     SubmitACL       string            `yaml:",omitempty" json:",omitempty"`
-    MaxApplications uint64            `yaml:",omitempty" json:",omitempty"`
     Queues          []QueueConfig     `yaml:",omitempty" json:",omitempty"`
+    Users           []User            `yaml:",omitempty" json:",omitempty"`
 }
 
 // The resource limits to set on the queue. The definition allows for an unlimited number of types to be used.

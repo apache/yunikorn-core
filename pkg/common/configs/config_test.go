@@ -200,24 +200,6 @@ partitions:
               max:
                 memory: 5000
                 vcore: 50
-    placementrules:
-      - name: User
-        create: true
-        parent:
-          name: PrimaryGroupName
-          create: false
-        filter:
-          type: allow
-          groups:
-            - sandbox
-      - name: Provided
-        create: true
-    users:
-      - name: user1
-        maxresources: {memory: 10000, vcore: 10}
-        maxapplications: 7
-      - name: user2
-        maxapplications: 10
   - name: gpu
     queues:
       - name: production
@@ -232,7 +214,7 @@ partitions:
     // create the config and process it
     conf, err := CreateConfig(data)
     if err != nil {
-        t.Errorf("loading failed with error: %v", err)
+        t.Fatalf("loading failed with error: %v", err)
     }
 
     if conf.Partitions[0].Name != "default" {
@@ -434,6 +416,36 @@ partitions:
     if err == nil {
         t.Errorf("resource not a number queue parsing should have failed: %v", conf)
     }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: test
+        resources:
+          max: {memory: }
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("resource not a number queue parsing should have failed: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: test
+        resources:
+          max:
+            memory:
+            vcore:
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("resource not a number queue parsing should have failed: %v", conf)
+    }
 }
 
 func TestParseACLFail(t *testing.T) {
@@ -492,7 +504,7 @@ partitions:
     // validate the config and check after the update
     conf, err := CreateConfig(data)
     if err != nil {
-        t.Errorf("should expect no error %v", err)
+        t.Fatalf("should expect no error %v", err)
     }
 
     if !conf.Partitions[0].Preemption.Enabled {
@@ -525,7 +537,7 @@ partitions:
     // validate the config and check after the update
     conf, err := CreateConfig(data)
     if err != nil {
-        t.Errorf("rule parsing should not have failed: %v", err)
+        t.Fatalf("rule parsing should not have failed: %v", err)
     }
     rule := conf.Partitions[0].PlacementRules[0]
     if !rule.Create {
@@ -560,7 +572,7 @@ partitions:
     // validate the config and check after the update
     conf, err = CreateConfig(data)
     if err != nil {
-        t.Errorf("rule parsing should not have failed: %v", err)
+        t.Fatalf("rule parsing should not have failed: %v", err)
     }
     rule = conf.Partitions[0].PlacementRules[0]
     if rule.Create {
@@ -598,7 +610,7 @@ partitions:
     // validate the config and check after the update
     conf, err = CreateConfig(data)
     if err != nil {
-        t.Errorf("rule parsing should not have failed: %v", err)
+        t.Fatalf("rule parsing should not have failed: %v", err)
     }
     if len(conf.Partitions[0].PlacementRules) != 3 {
         t.Errorf("incorrect number of rules returned expected 3 got: %d", len(conf.Partitions[0].PlacementRules))
@@ -618,7 +630,7 @@ partitions:
     // validate the config and check after the update
     conf, err = CreateConfig(data)
     if err != nil {
-        t.Errorf("rule parsing should not have failed: %v", err)
+        t.Fatalf("rule parsing should not have failed: %v", err)
     }
     if len(conf.Partitions[0].PlacementRules) != 2 {
         t.Errorf("incorrect number of rules returned expected 2 got: %d", len(conf.Partitions[0].PlacementRules))
@@ -730,5 +742,241 @@ partitions:
     conf, err := CreateConfig(data)
     if err != nil {
         t.Errorf("recursive parent rule parsing should not have failed: %v", conf)
+    }
+}
+
+func TestPartitionUsers(t *testing.T) {
+    data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+    users:
+      - name: user1
+        maxresources: {memory: 10000, vcore: 10}
+        maxapplications: 5
+      - name: user2
+        maxapplications: 10
+`
+    // validate the config and check after the update
+    conf, err := CreateConfig(data)
+    if err != nil {
+        t.Fatalf("partition user parsing should not have failed: %v", conf)
+    }
+    // gone through validation: 1 top level queues
+    if len(conf.Partitions[0].Queues) != 1 {
+        t.Errorf("failed to load queue from file %v", conf)
+    }
+    if len(conf.Partitions[0].Queues[0].Users) != 0 {
+        t.Errorf("partition users linked to root queue  %v", conf)
+    }
+
+    // user list
+    if len(conf.Partitions[0].Users) != 2 {
+        t.Errorf("failed to load partition users from file %v", conf)
+    }
+
+    // user1 check
+    userConf := conf.Partitions[0].Users[0]
+    if userConf.Name != "user1" && userConf.MaxApplications != 5 {
+        t.Errorf("failed to load max apps from file %v", userConf)
+    }
+    if len(userConf.MaxResources) != 2 && userConf.MaxResources["memory"] != "10000" {
+        t.Errorf("failed to load max resources from file %v", userConf)
+    }
+
+    userConf = conf.Partitions[0].Users[1]
+    if userConf.MaxResources != nil || len(userConf.MaxResources) != 0 {
+        t.Errorf("loaded max resources that did not exist from file %v", userConf)
+    }
+}
+
+func TestQueueUsers(t *testing.T) {
+    data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        users:
+          - name: user1
+            maxresources: {memory: 10000, vcore: 10}
+            maxapplications: 5
+          - name: user2
+            maxapplications: 10
+`
+    // validate the config and check after the update
+    conf, err := CreateConfig(data)
+    if err != nil {
+        t.Fatalf("queue user parsing should not have failed: %v", conf)
+    }
+    // gone through validation: 1 top level queues
+    if len(conf.Partitions[0].Queues) != 1 {
+        t.Errorf("failed to load queue from file %v", conf)
+    }
+    if len(conf.Partitions[0].Users) != 0 {
+        t.Errorf("root queue users linked to partition %v", conf)
+    }
+
+    // user list
+    if len(conf.Partitions[0].Queues[0].Users) != 2 {
+        t.Errorf("failed to load queue users from file %v", conf)
+    }
+
+    // user1 check
+    userConf := conf.Partitions[0].Queues[0].Users[0]
+    if userConf.Name != "user1" && userConf.MaxApplications != 5 {
+        t.Errorf("failed to load max apps from file %v", userConf)
+    }
+    if len(userConf.MaxResources) != 2 && userConf.MaxResources["memory"] != "10000" {
+        t.Errorf("failed to load max resources from file %v", userConf)
+    }
+
+    userConf = conf.Partitions[0].Queues[0].Users[1]
+    if userConf.MaxResources != nil || len(userConf.MaxResources) != 0 {
+        t.Errorf("loaded max resources that did not exist from file %v", userConf)
+    }
+}
+
+
+func TestComplexUsers(t *testing.T) {
+    data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        users:
+          - name: user.lastname
+            maxapplications: 1
+        queues:
+          - name: level1
+            users:
+              - name: user@domain
+                maxapplications: 10
+            queues:
+              - name: level2
+                users:
+                  - name: user@domain
+                    maxapplications: 1
+`
+    // validate the config and check after the update
+    conf, err := CreateConfig(data)
+    if err != nil {
+        t.Fatalf("queue user parsing should not have failed: %v", conf)
+    }
+    // gone through validation: 1 top level queues
+    if len(conf.Partitions[0].Queues) != 1 {
+        t.Errorf("failed to load queue from file %v", conf)
+    }
+    if len(conf.Partitions[0].Queues[0].Users) != 1 {
+        t.Errorf("root queue users linked to partition %v", conf)
+    }
+
+    // user with dot check
+    userConf := conf.Partitions[0].Queues[0].Users[0]
+    if userConf.Name != "user.lastname" && userConf.MaxApplications != 1 {
+        t.Errorf("failed to load max apps from file %v", userConf)
+    }
+
+    userConf = conf.Partitions[0].Queues[0].Queues[0].Users[0]
+    if userConf.Name != "user@domain" && userConf.MaxApplications != 10 {
+        t.Errorf("failed to load max apps from file %v", userConf)
+    }
+    userConf = conf.Partitions[0].Queues[0].Queues[0].Queues[0].Users[0]
+    if userConf.Name != "user@domain" && userConf.MaxApplications != 1 {
+        t.Errorf("failed to load max apps from file %v", userConf)
+    }
+}
+
+func TestUsersFail(t *testing.T) {
+    data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        users:
+          - name: user1
+            maxresources: {}
+            maxapplications: 0
+`
+    // validate the config and check after the update
+    conf, err := CreateConfig(data)
+    if err == nil {
+        t.Errorf("queue user parsing should have failed: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        users:
+          - name: user2
+            maxapplications: 0
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("queue user parsing should have failed: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        users:
+          - name: user3
+            maxapplications: 0
+            maxresources: {memory: 0}
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("queue user parsing should have failed: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        users:
+          - name: user&
+            maxapplications: 1
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("queue user parsing should have failed: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+    users:
+      - name: user with space
+        maxapplications: 1
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("queue user parsing should have failed: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+    users:
+      - name: user
+        maxresources: {memory: x}
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("queue user parsing should have failed: %v", conf)
     }
 }

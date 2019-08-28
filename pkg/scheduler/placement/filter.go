@@ -150,7 +150,7 @@ func newFilter(conf configs.Filter) Filter {
     if len(conf.Groups) >= 2 {
         for _, group := range conf.Groups {
             // sanity check the entry, do not add if it does not comply
-            if configs.UserRegExp.MatchString(group) {
+            if configs.GroupRegExp.MatchString(group) {
                 filter.groupList[group] = true
             }
         }

@@ -58,6 +58,7 @@ We welcome any form of contributions, code, documentation or even discussions. T
 - [Running YuniKorn on Kubernetes - a 12 minutes Hello-world demo](https://www.youtube.com/watch?v=cCHVFkbHIzo)
 - [YuniKorn configuration hot-refresh introduction](https://www.youtube.com/watch?v=3WOaxoPogDY)
 - [Yunikorn scheduling and volumes on Kubernetes](https://www.youtube.com/watch?v=XDrjOkMp3k4)
+- [Yunikorn placement rules for applications](https://www.youtube.com/watch?v=DfhJLMjaFH0)
 
 **Communication channels**
 

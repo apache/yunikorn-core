@@ -20,6 +20,9 @@ ifdef GO_VERSION
 $(error Build requires go 1.11 or later)
 endif
 
+# Make sure we are in the same directory as the Makefile
+BASE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+
 # Force Go modules even when checked out inside GOPATH
 GO111MODULE := on
 export GO111MODULE
@@ -32,8 +35,8 @@ RACE=-race
 #GOOS=darwin
 #GOARCH=amd64
 
-.PHONY: build
-build: example
+all:
+	$(MAKE) -C $(dir $(BASE_DIR)) build
 
 .PHONY: common-check-license
 common-check-license:
@@ -44,18 +47,25 @@ common-check-license:
 		exit 1; \
 	fi
 
-.PHONY: example
-example:
+# Build the example binaries for dev and test
+.PHONY: commands
+commands:
 	@echo "building examples"
 	go build $(RACE) -a -ldflags '-extldflags "-static"' -o _output/simplescheduler ./cmd/simplescheduler
 	go build $(RACE) -a -ldflags '-extldflags "-static"' -o _output/schedulerclient ./cmd/schedulerclient
 
+# Build binaries for dev and test
+.PHONY: build
+build: commands
+
+# Run the tests after building
 .PHONY: test
 test:
 	@echo "running unit tests"
 	go test ./... -cover $(RACE) -tags deadlock
 	go vet $(REPO)...
 
+# Simple clean of generated files only (no local cleanup).
 .PHONY: clean
 clean:
 	go clean -r -x ./...

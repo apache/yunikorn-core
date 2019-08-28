@@ -31,9 +31,9 @@ const (
 )
 
 // User and group regexp, must allow at least what we allow in the config checks
-// See configs.UserNameRegExp and configs.GroupRegExp
-var UserNameRegExp = regexp.MustCompile("^[_a-zA-Z][a-zA-Z0-9_.@-]*[$]?$")
-var GroupRegExp = regexp.MustCompile("^[_a-zA-Z][a-zA-Z0-9_-]*$")
+// See configs.UserNameRegExp and configs.GroupRegExp in the config validator.
+var userNameRegExp = regexp.MustCompile("^[_a-zA-Z][a-zA-Z0-9_.@-]*[$]?$")
+var groupRegExp = regexp.MustCompile("^[_a-zA-Z][a-zA-Z0-9_-]*$")
 
 type ACL struct {
     users      map[string]bool
@@ -62,7 +62,7 @@ func (a *ACL) setUsers(userList []string) {
     }
     // add all users to the map
     for _, user := range userList {
-        if UserNameRegExp.MatchString(user) {
+        if userNameRegExp.MatchString(user) {
             a.users[user] = true
         } else {
             log.Logger.Info("ignoring user in ACL definition",
@@ -91,7 +91,7 @@ func (a *ACL) setGroups(groupList []string) {
     }
     // add all groups to the map
     for _, group := range groupList {
-        if GroupRegExp.MatchString(group) {
+        if groupRegExp.MatchString(group) {
             a.groups[group] = true
         } else {
             log.Logger.Info("ignoring group in ACL",

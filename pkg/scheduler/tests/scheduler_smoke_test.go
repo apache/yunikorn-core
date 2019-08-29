@@ -939,13 +939,37 @@ partitions:
     waitForAcceptedApplications(mockRM, "app-added-2", 1000)
 }
 
-func TestSchedulingOverCapacity(t *testing.T) {
-    serviceContext := entrypoint.StartAllServicesWithManualScheduler()
-    defer serviceContext.StopAll()
-    proxy := serviceContext.RMProxy
-
-    // Register RM
-    configData := `
+func TestSchedulingOverMaxCapacity(t *testing.T) {
+    var parameters = []struct {
+        name        string
+        configData  string
+        leafQueue   string
+        askMemory   int64
+        askCPU      int64
+        numOfAsk    int32
+    }{
+        {"scheduleOverParentQueueCapacity",
+            `
+partitions:
+  -
+    name: default
+    queues:
+      -
+        name: root
+        submitacl: "*"
+        queues:
+          -
+            name: parent
+            resources:
+              max:
+                memory: 100
+                vcore: 10
+            queues:
+              - name: child-1
+              - name: child-2
+`, "root.parent.child-1", 10, 1, 12},
+        {"scheduleOverLeafQueueCapacity",
+            `
 partitions:
   -
     name: default
@@ -956,118 +980,123 @@ partitions:
         queues:
           -
             name: default
-            properties:
-              application.sort.policy: fair
             resources:
-              guaranteed:
-                memory: 100
-                vcore: 10
               max:
                 memory: 100
                 vcore: 10
-`
-    configs.MockSchedulerConfigByData([]byte(configData))
-    mockRM := NewMockRMCallbackHandler(t)
-
-    _, err := proxy.RegisterResourceManager(
-        &si.RegisterResourceManagerRequest{
-            RmId:        "rm:123",
-            PolicyGroup: "policygroup",
-            Version:     "0.0.2",
-        }, mockRM)
-
-    if err != nil {
-        t.Error(err.Error())
+`, "root.default", 10, 1, 12},
     }
 
-    // Register a node, and add applications
-    err = proxy.Update(&si.UpdateRequest{
-        NewSchedulableNodes: []*si.NewNodeInfo{
-            {
-                NodeId: "node-1:1234",
-                Attributes: map[string]string{
-                    "si.io/hostname": "node-1",
-                    "si.io/rackname": "rack-1",
-                },
-                SchedulableResource: &si.Resource{
-                    Resources: map[string]*si.Quantity{
-                        "memory": {Value: 100},
-                        "vcore":  {Value: 10},
+    for _, param := range parameters {
+        t.Run(param.name, func(t *testing.T) {
+            serviceContext := entrypoint.StartAllServicesWithManualScheduler()
+            defer serviceContext.StopAll()
+
+            configs.MockSchedulerConfigByData([]byte(param.configData))
+            mockRM := NewMockRMCallbackHandler(t)
+            proxy := serviceContext.RMProxy
+
+            _, err := proxy.RegisterResourceManager(
+                &si.RegisterResourceManagerRequest{
+                    RmId:        "rm:123",
+                    PolicyGroup: "policygroup",
+                    Version:     "0.0.2",
+                }, mockRM)
+
+            if err != nil {
+                t.Error(err.Error())
+            }
+
+            // Register a node, and add applications
+            err = proxy.Update(&si.UpdateRequest{
+                NewSchedulableNodes: []*si.NewNodeInfo{
+                    {
+                        NodeId: "node-1:1234",
+                        Attributes: map[string]string{
+                            "si.io/hostname": "node-1",
+                            "si.io/rackname": "rack-1",
+                        },
+                        SchedulableResource: &si.Resource{
+                            Resources: map[string]*si.Quantity{
+                                "memory": {Value: 150},
+                                "vcore":  {Value: 15},
+                            },
+                        },
                     },
                 },
-            },
-        },
-        NewApplications: newAddAppRequest(map[string]string{"app-1":"root.default"}),
-        RmId: "rm:123",
-    })
+                NewApplications: newAddAppRequest(map[string]string{"app-1":param.leafQueue}),
+                RmId: "rm:123",
+            })
 
-    waitForAcceptedNodes(mockRM, "node-1:1234", 1000)
+            waitForAcceptedNodes(mockRM, "node-1:1234", 1000)
 
-    err = proxy.Update(&si.UpdateRequest{
-        Asks: []*si.AllocationAsk{
-            {
-                AllocationKey: "alloc-1",
-                ResourceAsk: &si.Resource{
-                    Resources: map[string]*si.Quantity{
-                        "memory": {Value: 10},
-                        "vcore":  {Value: 1},
+            err = proxy.Update(&si.UpdateRequest{
+                Asks: []*si.AllocationAsk{
+                    {
+                        AllocationKey: "alloc-1",
+                        ResourceAsk: &si.Resource{
+                            Resources: map[string]*si.Quantity{
+                                "memory": {Value: param.askMemory},
+                                "vcore":  {Value: param.askCPU},
+                            },
+                        },
+                        MaxAllocations: param.numOfAsk,
+                        ApplicationId:  "app-1",
                     },
                 },
-                MaxAllocations: 12,
-                ApplicationId:  "app-1",
-            },
-        },
-        RmId: "rm:123",
-    })
+                RmId: "rm:123",
+            })
 
-    schedulingQueue := serviceContext.Scheduler.GetClusterSchedulingContext().
-        GetSchedulingQueue("root.default", "[rm:123]default")
+            schedulingQueue := serviceContext.Scheduler.GetClusterSchedulingContext().
+                GetSchedulingQueue(param.leafQueue, "[rm:123]default")
 
-    waitForPendingResource(t, schedulingQueue, 120, 1000)
+            waitForPendingResource(t, schedulingQueue, 120, 1000)
 
-    for i := 0; i < 20; i++ {
-        serviceContext.Scheduler.SingleStepScheduleAllocTest(1)
-        time.Sleep(time.Duration(100 * time.Millisecond))
-    }
+            for i := 0; i < 20; i++ {
+                serviceContext.Scheduler.SingleStepScheduleAllocTest(1)
+                time.Sleep(time.Duration(100 * time.Millisecond))
+            }
 
-    // 100 memory gets allocated, 20 pending because the capacity is 100
-    waitForPendingResource(t, schedulingQueue, 20, 1000)
-    apps := serviceContext.Cache.GetPartition("[rm:123]default").GetApplications()
-    var app1 *cacheInfo.ApplicationInfo
-    for _, app := range apps {
-        if app.ApplicationId == "app-1" {
-            app1 = app
-        }
-    }
-    assert.Assert(t, app1 != nil)
-    assert.Equal(t, len(app1.GetAllAllocations()), 10)
-    assert.Assert(t, app1.GetAllocatedResource().Resources[resources.MEMORY] == 100)
-    assert.Equal(t, len(mockRM.Allocations), 10)
+            // 100 memory gets allocated, 20 pending because the capacity is 100
+            waitForPendingResource(t, schedulingQueue, 20, 1000)
+            apps := serviceContext.Cache.GetPartition("[rm:123]default").GetApplications()
+            var app1 *cacheInfo.ApplicationInfo
+            for _, app := range apps {
+                if app.ApplicationId == "app-1" {
+                    app1 = app
+                }
+            }
+            assert.Assert(t, app1 != nil)
+            assert.Equal(t, len(app1.GetAllAllocations()), 10)
+            assert.Assert(t, app1.GetAllocatedResource().Resources[resources.MEMORY] == 100)
+            assert.Equal(t, len(mockRM.Allocations), 10)
 
-    // release all allocated allocations
-    allocReleases := make([]*si.AllocationReleaseRequest, 0)
-    for _, alloc := range mockRM.Allocations {
-        allocReleases = append(allocReleases, &si.AllocationReleaseRequest{
-            PartitionName:        "default",
-            ApplicationId:        "app-1",
-            Uuid:                 alloc.Uuid,
-            Message:              "",
+            // release all allocated allocations
+            allocReleases := make([]*si.AllocationReleaseRequest, 0)
+            for _, alloc := range mockRM.Allocations {
+                allocReleases = append(allocReleases, &si.AllocationReleaseRequest{
+                    PartitionName:        "default",
+                    ApplicationId:        "app-1",
+                    Uuid:                 alloc.Uuid,
+                    Message:              "",
+                })
+            }
+
+            err = proxy.Update(&si.UpdateRequest{
+                Releases: &si.AllocationReleasesRequest{
+                    AllocationsToRelease:    allocReleases,
+                },
+                RmId: "rm:123",
+            })
+
+            // schedule again, pending requests should be satisfied now
+            for i := 0; i < 20; i++ {
+                serviceContext.Scheduler.SingleStepScheduleAllocTest(1)
+                time.Sleep(time.Duration(100 * time.Millisecond))
+            }
+
+            waitForPendingResource(t, schedulingQueue, 0, 1000)
+            assert.Equal(t, len(mockRM.Allocations), 2)
         })
     }
-
-    err = proxy.Update(&si.UpdateRequest{
-        Releases: &si.AllocationReleasesRequest{
-            AllocationsToRelease:    allocReleases,
-        },
-        RmId: "rm:123",
-    })
-
-    // schedule again, pending requests should be satisfied now
-    for i := 0; i < 20; i++ {
-        serviceContext.Scheduler.SingleStepScheduleAllocTest(1)
-        time.Sleep(time.Duration(100 * time.Millisecond))
-    }
-
-    waitForPendingResource(t, schedulingQueue, 0, 1000)
-    assert.Equal(t, len(mockRM.Allocations), 2)
 }

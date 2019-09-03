@@ -84,7 +84,7 @@ func newAppState() *fsm.FSM {
 		},
 		fsm.Callbacks{
 			"enter_state": func(event *fsm.Event) {
-				log.Logger.Debug("app state transition",
+				log.Logger().Debug("app state transition",
 					zap.Any("app", event.Args[0]),
 					zap.String("source", event.Src),
 					zap.String("destination", event.Dst),

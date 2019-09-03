@@ -171,14 +171,14 @@ func (m *Scheduler) removeApplication(request *si.RemoveApplicationRequest) erro
     defer m.lock.Unlock()
 
     if _, err := m.clusterSchedulingContext.RemoveSchedulingApplication(request.ApplicationId, request.PartitionName); err != nil {
-        log.Logger.Error("failed to remove apps",
+        log.Logger().Error("failed to remove apps",
             zap.String("appId", request.ApplicationId),
             zap.String("partitionName", request.PartitionName),
             zap.Error(err))
         return err
     }
 
-    log.Logger.Info("app removed",
+    log.Logger().Info("app removed",
         zap.String("appId", request.ApplicationId),
         zap.String("partitionName", request.PartitionName))
     return nil
@@ -187,12 +187,12 @@ func (m *Scheduler) removeApplication(request *si.RemoveApplicationRequest) erro
 func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
     select {
     case queue <- ev:
-        log.Logger.Debug("enqueued event",
+        log.Logger().Debug("enqueued event",
             zap.String("eventType",  reflect.TypeOf(ev).String()),
             zap.Any("event", ev),
             zap.Int("currentQueueSize", len(queue)))
     default:
-        log.Logger.DPanic("failed to enqueue event",
+        log.Logger().DPanic("failed to enqueue event",
             zap.String("event", reflect.TypeOf(ev).String()))
     }
 }
@@ -219,7 +219,7 @@ func (m *Scheduler) processAllocationReleaseByAllocationKey(allocationAsksToRele
                 schedulingApp.queue.IncPendingResource(delta)
             }
 
-            log.Logger.Info("release allocation",
+            log.Logger().Info("release allocation",
                 zap.String("allocation", toRelease.Allocationkey),
                 zap.String("appId", toRelease.ApplicationId),
                 zap.String("deductPendingResource", delta.String()),
@@ -237,7 +237,7 @@ func (m *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocat
     //  4) Process the proposal generated in step 3, update data in cache
     // the recovery is repeating all steps except step 2
     for _, alloc := range existingAllocations {
-        log.Logger.Info("recovering allocations for app",
+        log.Logger().Info("recovering allocations for app",
             zap.String("applicationId", alloc.ApplicationId),
             zap.String("nodeId", alloc.NodeId),
             zap.String("queueName", alloc.QueueName),
@@ -247,7 +247,7 @@ func (m *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocat
         // add scheduling asks
         schedulingAsk := ConvertFromAllocation(alloc, rmId)
         if err := m.updateSchedulingRequest(schedulingAsk); err != nil {
-            log.Logger.Warn("failed...", zap.Error(err))
+            log.Logger().Warn("failed...", zap.Error(err))
         }
 
         // handle allocation proposals
@@ -261,7 +261,7 @@ func (m *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocat
             Priority:          alloc.Priority,
             PartitionName:     common.GetNormalizedPartitionName(alloc.PartitionName, rmId),
         }, -1); err != nil {
-            log.Logger.Error("failed to increase pending ask",
+            log.Logger().Error("failed to increase pending ask",
                 zap.Error(err))
         }
     }
@@ -271,7 +271,7 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
     if len(ev.ExistingAllocations) > 0 {
         // in recovery mode, we only expect existing allocations being reported
         if len(ev.NewAsks) > 0 || len(ev.RejectedAllocations) > 0 || ev.ToReleases != nil{
-            log.Logger.Warn("illegal SchedulerAllocationUpdatesEvent," +
+            log.Logger().Warn("illegal SchedulerAllocationUpdatesEvent," +
                 " only existingAllocations can be set exclusively, other info will be skipped",
                 zap.Int("num of existingAllocations", len(ev.ExistingAllocations)),
                 zap.Int("num of rejectedAllocations", len(ev.RejectedAllocations)),
@@ -285,7 +285,7 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
         for _, alloc := range ev.RejectedAllocations {
             // Update pending resource back
             if err := m.updateSchedulingRequestPendingAskByDelta(alloc, 1); err != nil {
-                log.Logger.Error("failed to increase pending ask",
+                log.Logger().Error("failed to increase pending ask",
                     zap.Error(err))
             }
         }
@@ -336,7 +336,7 @@ func (m *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerAp
             app := j.(*cache.ApplicationInfo)
             rmID = common.GetRMIdFromPartitionName(app.Partition)
             if err := m.addNewApplication(app); err != nil {
-                log.Logger.Debug("rejecting application in scheduler",
+                log.Logger().Debug("rejecting application in scheduler",
                     zap.String("appId", app.ApplicationId),
                     zap.String("partitionName", app.Partition),
                     zap.Error(err))
@@ -374,7 +374,7 @@ func (m *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerAp
             err := m.removeApplication(app)
 
             if err != nil {
-                log.Logger.Error("failed to remove app from partition",
+                log.Logger().Error("failed to remove app from partition",
                     zap.String("appId", app.ApplicationId),
                     zap.String("partitionName", app.PartitionName),
                     zap.Error(err))

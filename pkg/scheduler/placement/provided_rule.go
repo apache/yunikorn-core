@@ -54,7 +54,7 @@ func (pr *providedRule) placeApplication(app *cache.ApplicationInfo, info *cache
     }
     // before anything run the filter
     if !pr.filter.allowUser(app.GetUser()) {
-        log.Logger.Debug("Provided rule filtered",
+        log.Logger().Debug("Provided rule filtered",
             zap.String("application", app.ApplicationId),
             zap.Any("user", app.GetUser()))
         return "", nil
@@ -90,7 +90,7 @@ func (pr *providedRule) placeApplication(app *cache.ApplicationInfo, info *cache
         // Make it a fully qualified queue
         queueName = parentName + cache.DOT + replaceDot(queueName)
     }
-    log.Logger.Debug("Provided rule intermediate result",
+    log.Logger().Debug("Provided rule intermediate result",
         zap.String("application", app.ApplicationId),
         zap.String("queue", queueName))
     // get the queue object
@@ -99,7 +99,7 @@ func (pr *providedRule) placeApplication(app *cache.ApplicationInfo, info *cache
     if !pr.create && queue == nil {
         return "", nil
     }
-    log.Logger.Info("Provided rule application placed",
+    log.Logger().Info("Provided rule application placed",
         zap.String("application", app.ApplicationId),
         zap.String("queue", queueName))
     return queueName, nil

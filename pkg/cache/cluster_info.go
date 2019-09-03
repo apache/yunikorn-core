@@ -133,12 +133,12 @@ func (m *ClusterInfo) HandleEvent(ev interface{}) {
 func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
     select {
     case queue <- ev:
-        log.Logger.Debug("enqueued event",
+        log.Logger().Debug("enqueued event",
             zap.String("eventType", reflect.TypeOf(ev).String()),
             zap.Any("event", ev),
             zap.Int("currentQueueSize", len(queue)))
     default:
-        log.Logger.DPanic("failed to enqueue event",
+        log.Logger().DPanic("failed to enqueue event",
             zap.String("event", reflect.TypeOf(ev).String()))
     }
 }
@@ -202,7 +202,7 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
         partitionInfo := m.GetPartition(app.PartitionName)
         if partitionInfo == nil {
             msg := fmt.Sprintf("Failed to add application %s to partition %s, partition doesn't exist", app.ApplicationId, app.PartitionName)
-            log.Logger.Info(msg)
+            log.Logger().Info(msg)
             rejectedApps = append(rejectedApps, &si.RejectedApplication{
                 ApplicationId: app.ApplicationId,
                 Reason:        msg,
@@ -275,7 +275,7 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
         partitionInfo := m.GetPartition(req.PartitionName)
         if partitionInfo == nil {
             msg := fmt.Sprintf("Failed to find partition %s, for application %s and allocation %s", req.PartitionName, req.ApplicationId, req.AllocationKey)
-            log.Logger.Info(msg)
+            log.Logger().Info(msg)
             rejectedAsks = append(rejectedAsks, &si.RejectedAllocationAsk{
                 AllocationKey: req.AllocationKey,
                 ApplicationId: req.ApplicationId,
@@ -288,7 +288,7 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
         appInfo := partitionInfo.getApplication(req.ApplicationId)
         if appInfo == nil {
             msg := fmt.Sprintf("Failed to find applictaion %s, for allocation %s", req.ApplicationId, req.AllocationKey)
-            log.Logger.Info(msg)
+            log.Logger().Info(msg)
             rejectedAsks = append(rejectedAsks,
                 &si.RejectedAllocationAsk{
                     AllocationKey: req.AllocationKey,
@@ -301,7 +301,7 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
         // transit app's state to running
         err := appInfo.HandleApplicationEvent(RunApplication)
         if err != nil {
-            log.Logger.Debug("Application state change failed",
+            log.Logger().Debug("Application state change failed",
                 zap.Error(err))
         }
     }
@@ -335,7 +335,7 @@ func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
         nodeInfo, err := NewNodeInfo(node)
         if err != nil {
             msg := fmt.Sprintf("Failed to create node info from request, nodeId %s, error %s", node.NodeId, err.Error())
-            log.Logger.Info(msg)
+            log.Logger().Info(msg)
             // TODO assess impact of partition metrics (this never hit the partition)
             m.metrics.IncFailedNodes()
             rejectedNodes = append(rejectedNodes,
@@ -348,7 +348,7 @@ func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
         partition := m.GetPartition(nodeInfo.Partition)
         if partition == nil {
             msg := fmt.Sprintf("Failed to find partition %s for new node %s", nodeInfo.Partition, node.NodeId)
-            log.Logger.Info(msg)
+            log.Logger().Info(msg)
             // TODO assess impact of partition metrics (this never hit the partition)
             m.metrics.IncFailedNodes()
             rejectedNodes = append(rejectedNodes,
@@ -361,7 +361,7 @@ func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
         err = partition.addNewNode(nodeInfo, node.ExistingAllocations)
         if err != nil {
             msg := fmt.Sprintf("Failure while adding new node, node rejectd with error %s", err.Error())
-            log.Logger.Warn(msg)
+            log.Logger().Warn(msg)
             rejectedNodes = append(rejectedNodes,
                 &si.RejectedNode{
                     NodeId: node.NodeId,
@@ -369,7 +369,7 @@ func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
                 })
             continue
         }
-        log.Logger.Info("successfully added node",
+        log.Logger().Info("successfully added node",
             zap.String("nodeId", node.NodeId),
             zap.String("partition", nodeInfo.Partition))
         acceptedNodes = append(acceptedNodes, &si.AcceptedNode{NodeId: node.NodeId})
@@ -490,7 +490,7 @@ func (m *ClusterInfo) processAllocationProposalEvent(event *cacheevent.Allocatio
 
     // we currently only support 1 allocation in the list, fail if there are more
     if len(event.AllocationProposals) != 1 {
-        log.Logger.Info("More than 1 allocation proposal rejected all but first",
+        log.Logger().Info("More than 1 allocation proposal rejected all but first",
             zap.Int("allocPropLength", len(event.AllocationProposals)))
         // Send reject event back to scheduler for all but first
         m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
@@ -550,7 +550,7 @@ func (m *ClusterInfo) processAllocationReleases(toReleases []*commonevents.Relea
     for _, toReleaseAllocation := range toReleases {
         partitionInfo := m.GetPartition(toReleaseAllocation.PartitionName)
         if partitionInfo == nil {
-            log.Logger.Info("Failed to find partition for allocation proposal",
+            log.Logger().Info("Failed to find partition for allocation proposal",
                 zap.String("partitionName", toReleaseAllocation.PartitionName))
             continue
         }
@@ -600,12 +600,12 @@ func (m *ClusterInfo) processRemoveRMPartitionsEvent(event *commonevents.RemoveR
 func (m *ClusterInfo) processRemovedApplication(event *cacheevent.RemovedApplicationEvent) {
     partitionInfo := m.GetPartition(event.PartitionName)
     if partitionInfo == nil {
-        log.Logger.Info("Failed to find partition for allocation proposal",
+        log.Logger().Info("Failed to find partition for allocation proposal",
             zap.String("partitionName", event.PartitionName))
         return
     }
     _, allocations := partitionInfo.RemoveApplication(event.ApplicationId)
-    log.Logger.Info("Removed application from partition",
+    log.Logger().Info("Removed application from partition",
         zap.String("applicationId", event.ApplicationId),
         zap.String("partitionName", event.PartitionName),
         zap.Int("allocationsRemoved", len(allocations)))

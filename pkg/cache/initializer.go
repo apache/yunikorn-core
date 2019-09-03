@@ -42,7 +42,7 @@ func createPartitionInfos(clusterInfo *ClusterInfo, conf *configs.SchedulerConfi
 
         clusterInfo.addPartition(partitionName, partition)
         updatedPartitions = append(updatedPartitions, partition)
-        log.Logger.Info("added partition", zap.String("partition", partitionName))
+        log.Logger().Info("added partition", zap.String("partition", partitionName))
     }
 
     return updatedPartitions, nil
@@ -94,7 +94,7 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmId string) ([]*
     configs.ConfigContext.Set(clusterInfo.policyGroup, conf)
 
     // Start updating the config is OK and should pass setting on the cluster
-    log.Logger.Info("updating partitions", zap.String("rmId", rmId))
+    log.Logger().Info("updating partitions", zap.String("rmId", rmId))
     // keep track of the deleted and updated partitions
     updatedPartitions := make([]*PartitionInfo, 0)
     visited := map[string]bool{}
@@ -110,14 +110,14 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmId string) ([]*
                 return []*PartitionInfo{}, []*PartitionInfo{}, err
             }
             // checks passed perform the real update
-            log.Logger.Info("updating partitions", zap.String("partitionName", partitionName))
+            log.Logger().Info("updating partitions", zap.String("partitionName", partitionName))
             err = part.updatePartitionDetails(p)
             if err != nil {
                 return []*PartitionInfo{}, []*PartitionInfo{}, err
             }
         } else {
             // not found: new partition, no checks needed
-            log.Logger.Info("added partitions", zap.String("partitionName", partitionName))
+            log.Logger().Info("added partitions", zap.String("partitionName", partitionName))
 
             part, err = newPartitionInfo(p, rmId, clusterInfo)
             clusterInfo.addPartition(partitionName, part)
@@ -136,7 +136,7 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmId string) ([]*
         if !visited[part.Name] {
             part.MarkPartitionForRemoval()
             deletedPartitions = append(deletedPartitions, part)
-            log.Logger.Info("marked partition for removal",
+            log.Logger().Info("marked partition for removal",
                 zap.String("partitionName", part.Name))
         }
     }

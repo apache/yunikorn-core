@@ -91,7 +91,7 @@ func (sq *SchedulingQueue) updateSchedulingQueueProperties(prop map[string]strin
                 sq.ApplicationSortType = FairSortPolicy
             }
             // for now skip the rest just log them
-            log.Logger.Debug("queue property skipped",
+            log.Logger().Debug("queue property skipped",
                 zap.String("key", key),
                 zap.String("value", value))
         }

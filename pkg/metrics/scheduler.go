@@ -195,11 +195,11 @@ func initSchedulerMetrics() *SchedulerMetrics {
 	}
 	// Expose the registered metrics via HTTP.
 	http.Handle("/metrics", promhttp.Handler())
-	log.Logger.Info("metrics started", zap.Int("servicePort", 9090))
+	log.Logger().Info("metrics started", zap.Int("servicePort", 9090))
 	go func() {
 		httpError := http.ListenAndServe(":9090", nil)
 		if httpError != nil {
-			log.Logger.Error("HTTP serving error", zap.Error(httpError))
+			log.Logger().Error("HTTP serving error", zap.Error(httpError))
 		}
 	}()
 

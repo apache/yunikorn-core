@@ -46,7 +46,7 @@ func (filter Filter) allowUser(userObj security.UserGroup) bool {
     filteredUser := filter.filterUser(user)
     // if we have found the user in the list stop looking and return
     if filteredUser {
-        log.Logger.Debug("Filter matched user getName", zap.String("user", user))
+        log.Logger().Debug("Filter matched user getName", zap.String("user", user))
         return filteredUser && filter.allow
     }
     // not in the user list, check the groups in the list
@@ -54,7 +54,7 @@ func (filter Filter) allowUser(userObj security.UserGroup) bool {
     for _, group := range groups {
         filteredUser = filter.filterGroup(group)
         if filteredUser {
-            log.Logger.Debug("Filter matched user group", zap.String("group", group))
+            log.Logger().Debug("Filter matched user group", zap.String("group", group))
             return filteredUser && filter.allow
         }
     }
@@ -99,7 +99,7 @@ func newFilter(conf configs.Filter) Filter {
         if configs.SpecialRegExp.MatchString(conf.Users[0]) {
             filter.userExp, err = regexp.Compile(conf.Users[0])
             if err != nil {
-                log.Logger.Debug("Filter user expression does not compile", zap.Any("userFilter", conf.Users))
+                log.Logger().Debug("Filter user expression does not compile", zap.Any("userFilter", conf.Users))
             }
         } else {
             // regexp not found consider this a user, sanity check the entry
@@ -119,14 +119,14 @@ func newFilter(conf configs.Filter) Filter {
             }
         }
         if len(filter.userList) != len(conf.Users) {
-            log.Logger.Info("Filter creation duplicate or invalid users found", zap.Any("userFilter", conf.Users))
+            log.Logger().Info("Filter creation duplicate or invalid users found", zap.Any("userFilter", conf.Users))
         }
         filter.empty = false
     }
 
     // check what we have created
     if len(conf.Users) > 0 && filter.userExp == nil && len(filter.userList) == 0 {
-        log.Logger.Info("Filter creation partially failed (user)", zap.Any("userFilter", conf.Users))
+        log.Logger().Info("Filter creation partially failed (user)", zap.Any("userFilter", conf.Users))
     }
 
     // create the group list or regexp
@@ -135,7 +135,7 @@ func newFilter(conf configs.Filter) Filter {
         if configs.SpecialRegExp.MatchString(conf.Groups[0]) {
             filter.groupExp, err = regexp.Compile(conf.Groups[0])
             if err != nil {
-                log.Logger.Debug("Filter group expression does not compile", zap.Any("groupFilter", conf.Groups))
+                log.Logger().Debug("Filter group expression does not compile", zap.Any("groupFilter", conf.Groups))
             }
         } else {
             // regexp not found consider this a group, sanity check the entry
@@ -155,14 +155,14 @@ func newFilter(conf configs.Filter) Filter {
             }
         }
         if len(filter.groupList) != len(conf.Groups) {
-            log.Logger.Info("Filter creation duplicate or invalid groups found", zap.Any("groupFilter", conf.Groups))
+            log.Logger().Info("Filter creation duplicate or invalid groups found", zap.Any("groupFilter", conf.Groups))
         }
         filter.empty = false
     }
 
     // check what we have created
     if len(conf.Groups) > 0 && filter.groupExp == nil && len(filter.groupList) == 0 {
-        log.Logger.Info("Filter creation partially failed (groups)", zap.Any("groupFilter", conf.Groups))
+        log.Logger().Info("Filter creation partially failed (groups)", zap.Any("groupFilter", conf.Groups))
     }
 
     // log the filter with all details (only at debug)
@@ -178,7 +178,7 @@ func newFilter(conf configs.Filter) Filter {
         } else {
             groupfilter = filter.groupExp.String()
         }
-        log.Logger.Debug("Filter creation passed",
+        log.Logger().Debug("Filter creation passed",
             zap.Bool("allow", filter.allow),
             zap.Bool("empty", filter.empty),
             zap.Any("userList", filter.userList),

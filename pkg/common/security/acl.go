@@ -56,7 +56,7 @@ func (a *ACL) setUsers(userList []string) {
     }
     // special case if the user list is just the wildcard
     if len(userList) == 1 && userList[0] == WildCard {
-        log.Logger.Info("user list is wildcard, allowing all access")
+        log.Logger().Info("user list is wildcard, allowing all access")
         a.allAllowed = true
         return
     }
@@ -65,7 +65,7 @@ func (a *ACL) setUsers(userList []string) {
         if userNameRegExp.MatchString(user) {
             a.users[user] = true
         } else {
-            log.Logger.Info("ignoring user in ACL definition",
+            log.Logger().Info("ignoring user in ACL definition",
                 zap.String("user", user))
         }
     }
@@ -80,11 +80,11 @@ func (a *ACL) setGroups(groupList []string) {
     }
     // special case if the wildcard was already set
     if a.allAllowed {
-        log.Logger.Info("ignoring group list in ACL: wildcard set")
+        log.Logger().Info("ignoring group list in ACL: wildcard set")
         return
     }
     if len(groupList) == 1 && groupList[0] == WildCard {
-        log.Logger.Info("group list is wildcard, allowing all access")
+        log.Logger().Info("group list is wildcard, allowing all access")
         a.users = make(map[string]bool)
         a.allAllowed = true
         return
@@ -94,7 +94,7 @@ func (a *ACL) setGroups(groupList []string) {
         if groupRegExp.MatchString(group) {
             a.groups[group] = true
         } else {
-            log.Logger.Info("ignoring group in ACL",
+            log.Logger().Info("ignoring group in ACL",
                 zap.String("group", group))
         }
     }

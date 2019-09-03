@@ -87,7 +87,7 @@ func NewManagedQueue(conf configs.QueueConfig, parent *QueueInfo) (*QueueInfo, e
     }
 
     qi.metrics = metrics.InitQueueMetrics(conf.Name)
-    log.Logger.Debug("queue added",
+    log.Logger().Debug("queue added",
         zap.String("queueName", qi.Name),
         zap.String("queuePath", qi.GetQueuePath()))
     return qi, nil
@@ -201,7 +201,7 @@ func (qi *QueueInfo) IncAllocatedResource(alloc *resources.Resource, nodeReporte
     // check the parent: need to pass before updating
     if qi.Parent != nil {
         if err := qi.Parent.IncAllocatedResource(alloc, nodeReported); err != nil {
-            log.Logger.Error("parent queue exceeds maximum resource",
+            log.Logger().Error("parent queue exceeds maximum resource",
                 zap.Any("allocationId", alloc),
                 zap.Any("maxResource", qi.MaxResource),
                 zap.Error(err))
@@ -227,7 +227,7 @@ func (qi *QueueInfo) DecAllocatedResource(alloc *resources.Resource) error {
     // check the parent: need to pass before updating
     if qi.Parent != nil {
         if err := qi.Parent.DecAllocatedResource(alloc); err != nil {
-            log.Logger.Error("released allocation is larger than parent queue max resource",
+            log.Logger().Error("released allocation is larger than parent queue max resource",
                 zap.Any("allocationId", alloc),
                 zap.Any("maxResource", qi.MaxResource),
                 zap.Error(err))
@@ -276,7 +276,7 @@ func (qi *QueueInfo) RemoveQueue() bool {
         return false
     }
 
-    log.Logger.Info("removing queue", zap.String("queue", qi.Name))
+    log.Logger().Info("removing queue", zap.String("queue", qi.Name))
     // root is always managed and is the only queue with a nil parent: no need to guard
     qi.Parent.removeChildQueue(qi.Name)
     return true
@@ -292,10 +292,10 @@ func (qi *QueueInfo) MarkQueueForRemoval() {
     // Mark the managed queue for deletion: it is removed from the config let it drain.
     // Also mark all the managed children for deletion.
     if qi.isManaged {
-        log.Logger.Info("marking managed queue for deletion",
+        log.Logger().Info("marking managed queue for deletion",
             zap.String("queue", qi.GetQueuePath()))
         if err := qi.HandleQueueEvent(Remove); err != nil {
-            log.Logger.Info("failed to marking managed queue for deletion",
+            log.Logger().Info("failed to marking managed queue for deletion",
                 zap.String("queue", qi.GetQueuePath()),
                 zap.Error(err))
         }
@@ -313,19 +313,19 @@ func (qi *QueueInfo) updateQueueProps(conf configs.QueueConfig) error {
     var err error
     qi.submitACL, err = security.NewACL(conf.SubmitACL)
     if err != nil {
-        log.Logger.Error("parsing submit ACL failed this should not happen",
+        log.Logger().Error("parsing submit ACL failed this should not happen",
             zap.Error(err))
         return err
     }
     qi.adminACL, err = security.NewACL(conf.AdminACL)
     if err != nil {
-        log.Logger.Error("parsing admin ACL failed this should not happen",
+        log.Logger().Error("parsing admin ACL failed this should not happen",
             zap.Error(err))
         return err
     }
     // Change from unmanaged to managed
     if !qi.isManaged {
-        log.Logger.Info("changed un-managed queue to managed",
+        log.Logger().Info("changed un-managed queue to managed",
             zap.String("queue", qi.GetQueuePath()))
         qi.isManaged = true
     }
@@ -338,7 +338,7 @@ func (qi *QueueInfo) updateQueueProps(conf configs.QueueConfig) error {
     // Load the max resources
     maxResource, err := resources.NewResourceFromConf(conf.Resources.Max)
     if err != nil {
-        log.Logger.Error("parsing failed on max resources this should not happen",
+        log.Logger().Error("parsing failed on max resources this should not happen",
             zap.Error(err))
         return err
     }
@@ -349,7 +349,7 @@ func (qi *QueueInfo) updateQueueProps(conf configs.QueueConfig) error {
     // Load the guaranteed resources
     guaranteedResource, err := resources.NewResourceFromConf(conf.Resources.Guaranteed)
     if err != nil {
-        log.Logger.Error("parsing failed on max resources this should not happen",
+        log.Logger().Error("parsing failed on max resources this should not happen",
             zap.Error(err))
         return err
     }

@@ -36,7 +36,7 @@ func (s *ServiceContext) StopAll() {
 	// TODO implement stop for services
 	if s.WebApp != nil {
 		if err := s.WebApp.StopWebApp(); err != nil {
-			log.Logger.Error("failed to stop web-app",
+			log.Logger().Error("failed to stop web-app",
 				zap.Error(err))
 		}
 	}

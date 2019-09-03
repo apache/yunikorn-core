@@ -80,7 +80,7 @@ func (cw *ConfigWatcher) runOnce() bool {
 
 	newConfig, err := SchedulerConfigLoader(cw.policyGroup)
 	if err != nil {
-		log.Logger.Warn("failed to calculate the checksum of configuration file for policyGroup," +
+		log.Logger().Warn("failed to calculate the checksum of configuration file for policyGroup," +
 			"ignore reloading configuration", zap.String("policyGroup", cw.policyGroup))
 		return false
 	}
@@ -89,14 +89,14 @@ func (cw *ConfigWatcher) runOnce() bool {
 	same := bytes.Equal(newConfig.Checksum, ConfigContext.Get(cw.policyGroup).Checksum)
 	if same {
 		// check sum equals, file not changed
-		log.Logger.Debug("configuration file unchanged")
+		log.Logger().Debug("configuration file unchanged")
 		time.Sleep(1 * time.Second)
 		return true
 	} else {
 		// when detect state changes, trigger the reload function
-		log.Logger.Debug("configuration file changed")
+		log.Logger().Debug("configuration file changed")
 		if err := cw.reloader.DoReloadConfiguration(); err == nil {
-			log.Logger.Debug("configuration is successfully reloaded")
+			log.Logger().Debug("configuration is successfully reloaded")
 		}
 		return false
 	}
@@ -129,6 +129,6 @@ func (cw *ConfigWatcher) Run() {
 			quit <- true
 		})
 	default:
-		log.Logger.Info("config watcher is already running")
+		log.Logger().Info("config watcher is already running")
 	}
 }

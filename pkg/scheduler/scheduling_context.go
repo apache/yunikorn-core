@@ -112,7 +112,7 @@ func (csc *ClusterSchedulingContext) RemoveSchedulingApplication(appId string, p
 func (csc *ClusterSchedulingContext) updateSchedulingPartitions(partitions []*cache.PartitionInfo) error {
     csc.lock.Lock()
     defer csc.lock.Unlock()
-    log.Logger.Info("updating scheduler context",
+    log.Logger().Info("updating scheduler context",
         zap.Int("numOfPartitionsUpdated", len(partitions)))
 
     // Walk over the updated partitions
@@ -121,12 +121,12 @@ func (csc *ClusterSchedulingContext) updateSchedulingPartitions(partitions []*ca
 
         partition := csc.partitions[updatedPartition.Name]
         if partition != nil {
-            log.Logger.Info("updating scheduling partition",
+            log.Logger().Info("updating scheduling partition",
                 zap.String("partitionName", updatedPartition.Name))
             // the partition details don't need updating just the queues
             partition.updatePartitionSchedulingContext(updatedPartition)
         } else {
-            log.Logger.Info("creating scheduling partition",
+            log.Logger().Info("creating scheduling partition",
                 zap.String("partitionName", updatedPartition.Name))
             // create a new partition and add the queues
             root := NewSchedulingQueueInfo(updatedPartition.Root, nil)
@@ -172,7 +172,7 @@ func (csc *ClusterSchedulingContext) deleteSchedulingPartitions(partitions []*ca
     for _, deletedPartition := range partitions {
         partition := csc.partitions[deletedPartition.Name]
         if partition != nil {
-            log.Logger.Info("marking scheduling partition for deletion",
+            log.Logger().Info("marking scheduling partition for deletion",
                 zap.String("partitionName", deletedPartition.Name))
             partition.partitionManager.Stop()
         } else {

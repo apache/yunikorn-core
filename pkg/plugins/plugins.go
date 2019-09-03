@@ -30,25 +30,25 @@ func init() {
 func RegisterSchedulerPlugin(plugin interface{}) {
 	registered := false
 	if t, ok := plugin.(PredicatesPlugin); ok {
-		log.Logger.Debug("register scheduler plugin",
+		log.Logger().Debug("register scheduler plugin",
 			zap.String("type", "PredicatesPlugin"))
 		plugins.predicatesPlugin = t
 		registered = true
 	}
 	if t, ok := plugin.(VolumesPlugin); ok {
-		log.Logger.Debug("register scheduler plugin",
+		log.Logger().Debug("register scheduler plugin",
 			zap.String("type", "VolumesPlugin"))
 		plugins.volumesPlugin = t
 		registered = true
 	}
 	if t, ok := plugin.(ReconcilePlugin); ok {
-		log.Logger.Debug("register scheduler plugin",
+		log.Logger().Debug("register scheduler plugin",
 			zap.String("type", "ReconcilePlugin"))
 		plugins.reconcilePlugin = t
 		registered = true
 	}
 	if !registered {
-		log.Logger.Debug("no scheduler plugin implemented, none registered")
+		log.Logger().Debug("no scheduler plugin implemented, none registered")
 	}
 }
 

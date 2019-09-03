@@ -97,6 +97,17 @@ func (m *MockRMCallbackHandler) RecvUpdateResponse(response *si.UpdateResponse) 
     return nil
 }
 
+func (m *MockRMCallbackHandler) getAllocations() map[string]*si.Allocation {
+    m.lock.RLock()
+    defer m.lock.RUnlock()
+
+    allocations := make(map[string]*si.Allocation)
+    for key, value := range m.Allocations {
+        allocations[key] = value
+    }
+    return allocations
+}
+
 func waitForAcceptedApplications(m *MockRMCallbackHandler, appId string, timeoutMs int) {
     var i = 0
     for {

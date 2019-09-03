@@ -1069,7 +1069,7 @@ partitions:
             assert.Assert(t, app1 != nil)
             assert.Equal(t, len(app1.GetAllAllocations()), 10)
             assert.Assert(t, app1.GetAllocatedResource().Resources[resources.MEMORY] == 100)
-            assert.Equal(t, len(mockRM.Allocations), 10)
+            assert.Equal(t, len(mockRM.getAllocations()), 10)
 
             // release all allocated allocations
             allocReleases := make([]*si.AllocationReleaseRequest, 0)
@@ -1096,7 +1096,7 @@ partitions:
             }
 
             waitForPendingResource(t, schedulingQueue, 0, 1000)
-            assert.Equal(t, len(mockRM.Allocations), 2)
+            assert.Equal(t, len(mockRM.getAllocations()), 2)
         })
     }
 }

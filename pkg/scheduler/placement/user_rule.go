@@ -48,7 +48,7 @@ func (ur *userRule) placeApplication(app *cache.ApplicationInfo, info *cache.Par
     // before anything run the filter
     userName := app.GetUser().User
     if !ur.filter.allowUser(app.GetUser()) {
-        log.Logger.Debug("User rule filtered",
+        log.Logger().Debug("User rule filtered",
             zap.String("application", app.ApplicationId),
             zap.Any("user", app.GetUser()))
         return "", nil
@@ -79,7 +79,7 @@ func (ur *userRule) placeApplication(app *cache.ApplicationInfo, info *cache.Par
         parentName = configs.RootQueue
     }
     queueName := parentName + cache.DOT + replaceDot(userName)
-    log.Logger.Debug("User rule intermediate result",
+    log.Logger().Debug("User rule intermediate result",
         zap.String("application", app.ApplicationId),
         zap.String("queue", queueName))
     // get the queue object
@@ -88,7 +88,7 @@ func (ur *userRule) placeApplication(app *cache.ApplicationInfo, info *cache.Par
     if !ur.create && queue == nil {
         return "", nil
     }
-    log.Logger.Info("User rule application placed",
+    log.Logger().Info("User rule application placed",
         zap.String("application", app.ApplicationId),
         zap.String("queue", queueName))
     return queueName, nil

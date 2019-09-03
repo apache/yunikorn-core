@@ -60,13 +60,13 @@ func (psc *PartitionSchedulingContext) updatePartitionSchedulingContext(info *ca
     defer psc.lock.Unlock()
 
     if psc.placementManager.IsInitialised() {
-        log.Logger.Info("Updating placement manager rules on config reload")
+        log.Logger().Info("Updating placement manager rules on config reload")
         err := psc.placementManager.UpdateRules(info.GetRules())
         if err != nil {
-            log.Logger.Info("New placement rules not activated, config reload failed", zap.Error(err))
+            log.Logger().Info("New placement rules not activated, config reload failed", zap.Error(err))
         }
     } else {
-        log.Logger.Info("Creating new placement manager on config reload")
+        log.Logger().Info("Creating new placement manager on config reload")
         psc.placementManager = placement.NewPlacementManager(info)
     }
     root := psc.Root
@@ -208,12 +208,12 @@ func (psc *PartitionSchedulingContext) createSchedulingQueue(name string, user s
     // Check the ACL before we really create
     // The existing parent scheduling queue is the lowest we need to look at
     if !parent.CheckSubmitAccess(user) {
-        log.Logger.Debug("Submit access denied by scheduler on queue",
+        log.Logger().Debug("Submit access denied by scheduler on queue",
             zap.String("deniedQueueName", schedQueue),
             zap.String("requestedQueue", name))
         return
     }
-    log.Logger.Debug("Creating scheduling queue(s)",
+    log.Logger().Debug("Creating scheduling queue(s)",
         zap.String("parent", schedQueue),
         zap.String("child", cacheQueue),
         zap.String("fullPath", name))

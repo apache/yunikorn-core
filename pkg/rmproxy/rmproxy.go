@@ -58,11 +58,11 @@ func (m *RMProxy) GetRMEventHandler() commonevents.EventHandler {
 func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
     select {
     case queue <- ev:
-        log.Logger.Debug("enqueue event",
+        log.Logger().Debug("enqueue event",
             zap.Any("event", ev),
             zap.Int("currentQueueSize", len(queue)))
     default:
-        log.Logger.Panic("failed to enqueue event",
+        log.Logger().Panic("failed to enqueue event",
             zap.String("event", reflect.TypeOf(ev).String()))
     }
 }
@@ -87,7 +87,7 @@ func (m *RMProxy) StartService(handlers handler.EventHandlers) {
 }
 
 func (m *RMProxy) handleRMRecvUpdateResponseError(rmId string, err error) {
-    log.Logger.Error("failed to handle response",
+    log.Logger().Error("failed to handle response",
         zap.String("rmId", rmId),
         zap.Error(err))
 }
@@ -101,7 +101,7 @@ func (m *RMProxy) processUpdateResponse(rmId string, response *si.UpdateResponse
             m.handleRMRecvUpdateResponseError(rmId, err)
         }
     } else {
-        log.Logger.DPanic("RM is not registered",
+        log.Logger().DPanic("RM is not registered",
             zap.String("rmId", rmId))
     }
 }

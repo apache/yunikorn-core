@@ -73,7 +73,7 @@ func newObjectState() *fsm.FSM {
         },
         fsm.Callbacks{
             "enter_state": func(event *fsm.Event) {
-                log.Logger.Info("object transition",
+                log.Logger().Info("object transition",
                     zap.Any("object", event.Args[0]),
                     zap.String("source", event.Src),
                     zap.String("destination", event.Dst),

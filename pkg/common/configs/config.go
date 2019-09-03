@@ -115,14 +115,14 @@ func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) 
     conf := &SchedulerConfig{}
     err := yaml.Unmarshal(content, conf)
     if err != nil {
-        log.Logger.Error("failed to parse queue configuration",
+        log.Logger().Error("failed to parse queue configuration",
             zap.Error(err))
         return nil, err
     }
     // validate the config
     err = Validate(conf)
     if err != nil {
-        log.Logger.Error("queue configuration validation failed",
+        log.Logger().Error("queue configuration validation failed",
             zap.Error(err))
         return nil, err
     }
@@ -134,11 +134,11 @@ func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) 
 
 func loadSchedulerConfigFromFile(policyGroup string) (*SchedulerConfig, error) {
     filePath := resolveConfigurationFileFunc(policyGroup)
-    log.Logger.Debug("loading configuration",
+    log.Logger().Debug("loading configuration",
         zap.String("configurationPath", filePath))
     buf, err := ioutil.ReadFile(filePath)
     if err != nil {
-        log.Logger.Error("failed to load configuration",
+        log.Logger().Error("failed to load configuration",
             zap.Error(err))
         return nil, err
     }

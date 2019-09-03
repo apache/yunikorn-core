@@ -42,7 +42,7 @@ func NewPlacementManager(info *cache.PartitionInfo) *AppPlacementManager {
     rules := info.GetRules()
     if rules != nil && len(rules) > 0 {
         if err := m.initialise(rules); err != nil {
-            log.Logger.Info("Placement manager created without rules: not active",
+            log.Logger().Info("Placement manager created without rules: not active",
                 zap.Error(err))
         }
     }
@@ -53,9 +53,9 @@ func NewPlacementManager(info *cache.PartitionInfo) *AppPlacementManager {
 // Note that this will only be called when the manager is created earlier and the config is updated.
 func (m *AppPlacementManager) UpdateRules(rules []configs.PlacementRule) error {
     if rules != nil && len(rules) > 0 {
-        log.Logger.Info("Building new rule list for placement manager")
+        log.Logger().Info("Building new rule list for placement manager")
         if err := m.initialise(rules); err != nil {
-            log.Logger.Info("Placement manager rules not reloaded",
+            log.Logger().Info("Placement manager rules not reloaded",
                 zap.Error(err))
             return err
         }
@@ -64,7 +64,7 @@ func (m *AppPlacementManager) UpdateRules(rules []configs.PlacementRule) error {
     if (rules == nil || len(rules) == 0) && m.initialised {
         m.lock.Lock()
         defer m.lock.Unlock()
-        log.Logger.Info("Placement manager rules removed on config reload")
+        log.Logger().Info("Placement manager rules removed on config reload")
         m.initialised = false
         m.rules = make([]rule, 0)
     }
@@ -80,19 +80,19 @@ func (m *AppPlacementManager) IsInitialised() bool {
 
 // Initialise the rules from a parsed config.
 func (m *AppPlacementManager) initialise(rules []configs.PlacementRule) error {
-    log.Logger.Info("Building new rule list for placement manager")
+    log.Logger().Info("Building new rule list for placement manager")
     // build temp list from new config
     tempRules, err := m.buildRules(rules)
     if err == nil {
         m.lock.Lock()
         defer m.lock.Unlock()
-        log.Logger.Info("Activated rule set in placement manager")
+        log.Logger().Info("Activated rule set in placement manager")
         m.rules = tempRules
         // all done manager is initialised
         m.initialised = true
         if log.IsDebugEnabled() {
             for rule := range m.rules {
-                log.Logger.Debug("rule set",
+                log.Logger().Debug("rule set",
                     zap.Int("ruleNumber", rule),
                     zap.String("ruleName", m.rules[rule].getName()))
             }
@@ -131,12 +131,12 @@ func (m *AppPlacementManager) PlaceApplication(app *cache.ApplicationInfo) error
     var queueName string
     var err error
     for _, checkRule := range m.rules {
-        log.Logger.Debug("Executing rule for placing application",
+        log.Logger().Debug("Executing rule for placing application",
             zap.String("ruleName", checkRule.getName()),
             zap.String("application", app.ApplicationId))
         queueName, err = checkRule.placeApplication(app, m.info)
         if err != nil {
-            log.Logger.Error("rule execution failed",
+            log.Logger().Error("rule execution failed",
                 zap.String("ruleName", checkRule.getName()),
                 zap.Error(err))
             app.QueueName = ""
@@ -156,7 +156,7 @@ func (m *AppPlacementManager) PlaceApplication(app *cache.ApplicationInfo) error
                 }
                 // Check if the user is allowed to submit to this queueName, if not next rule
                 if !queue.CheckSubmitAccess(app.GetUser()) {
-                    log.Logger.Debug("Submit access denied on queue",
+                    log.Logger().Debug("Submit access denied on queue",
                         zap.String("queueName", queue.GetQueuePath()),
                         zap.String("ruleName", checkRule.getName()),
                         zap.String("application", app.ApplicationId))
@@ -173,7 +173,7 @@ func (m *AppPlacementManager) PlaceApplication(app *cache.ApplicationInfo) error
             } else {
                 // Check if the user is allowed to submit to this queueName, if not next rule
                 if !queue.CheckSubmitAccess(app.GetUser()) {
-                    log.Logger.Debug("Submit access denied on queue",
+                    log.Logger().Debug("Submit access denied on queue",
                         zap.String("queueName", queueName),
                         zap.String("ruleName", checkRule.getName()),
                         zap.String("application", app.ApplicationId))
@@ -186,7 +186,7 @@ func (m *AppPlacementManager) PlaceApplication(app *cache.ApplicationInfo) error
             break
         }
     }
-    log.Logger.Debug("Rule result for placing application",
+    log.Logger().Debug("Rule result for placing application",
         zap.String("application", app.ApplicationId),
         zap.String("queueName", queueName))
     // no more rules to check no queueName found reject placement

@@ -46,10 +46,10 @@ func TestIsDebugEnabled(t *testing.T) {
 		Level: zap.NewAtomicLevelAt(zapcore.DebugLevel),
 		Encoding: "console",
 	}
-	if logger, err := zapConfigs.Build(); err != nil {
+	if newLogger, err := zapConfigs.Build(); err != nil {
 		assert.Fail(t, err.Error())
 	} else {
-		Logger = logger
+		logger = newLogger
 		assert.Equal(t, true, IsDebugEnabled())
 	}
 
@@ -57,10 +57,10 @@ func TestIsDebugEnabled(t *testing.T) {
 		Level: zap.NewAtomicLevelAt(zapcore.InfoLevel),
 		Encoding: "console",
 	}
-	if logger, err := zapConfigs.Build(); err != nil {
+	if newLogger, err := zapConfigs.Build(); err != nil {
 		assert.Fail(t, err.Error())
 	} else {
-		Logger = logger
+		logger = newLogger
 		assert.Equal(t, false, IsDebugEnabled())
 	}
 }

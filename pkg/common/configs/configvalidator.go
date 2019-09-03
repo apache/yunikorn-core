@@ -103,7 +103,7 @@ func checkPlacementRules(partition *PartitionConfig) error {
         return nil
     }
 
-    log.Logger.Debug("checking placement rule config",
+    log.Logger().Debug("checking placement rule config",
         zap.String("partitionName", partition.Name))
     // top level rule checks, parents are called recursively
     for _, rule := range partition.PlacementRules {
@@ -124,7 +124,7 @@ func checkPlacementRule(rule PlacementRule) error {
     // check the parent rule
     if rule.Parent != nil {
         if err := checkPlacementRule(*rule.Parent); err != nil {
-            log.Logger.Debug("parent placement rule failed",
+            log.Logger().Debug("parent placement rule failed",
                 zap.String("rule", rule.Name),
                 zap.String("parentRule", rule.Parent.Name))
             return err
@@ -132,7 +132,7 @@ func checkPlacementRule(rule PlacementRule) error {
     }
     // check filter if given
     if err := checkPlacementFilter(rule.Filter); err != nil {
-        log.Logger.Debug("placement rule filter failed",
+        log.Logger().Debug("placement rule filter failed",
             zap.String("rule", rule.Name),
             zap.Any("filter", rule.Filter))
         return err
@@ -183,7 +183,7 @@ func checkUserDefinition(partition *PartitionConfig) error {
         return nil
     }
 
-    log.Logger.Debug("checking partition user config",
+    log.Logger().Debug("checking partition user config",
         zap.String("partitionName", partition.Name))
     // TODO check users
     return nil
@@ -244,7 +244,7 @@ func checkQueuesStructure(partition *PartitionConfig) error {
         return fmt.Errorf("queue config is not set")
     }
 
-    log.Logger.Debug("checking partition queue config",
+    log.Logger().Debug("checking partition queue config",
         zap.String("partitionName", partition.Name))
 
     // handle no root queue cases
@@ -264,7 +264,7 @@ func checkQueuesStructure(partition *PartitionConfig) error {
 
     // insert the root queue if not there
     if insertRoot {
-        log.Logger.Debug("inserting root queue",
+        log.Logger().Debug("inserting root queue",
             zap.Int("numOfQueues", len(partition.Queues)))
         var rootQueue QueueConfig
         rootQueue.Name = RootQueue
@@ -310,7 +310,7 @@ func Validate(newConfig *SchedulerConfig) error {
             partition.Name = DefaultPartition
         }
         // check the queue structure
-        log.Logger.Debug("checking partition",
+        log.Logger().Debug("checking partition",
             zap.String("partitionName", partition.Name))
         err := checkQueuesStructure(&partition)
         if err != nil {

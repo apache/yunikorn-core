@@ -72,14 +72,14 @@ func (m *SchedulingNode) CheckAndAllocateResource(delta *resources.Resource, pre
 func (m *SchedulingNode) CheckAllocateConditions(allocId string) bool {
 	// Check the predicates plugin (k8shim)
 	if plugin := plugins.GetPredicatesPlugin(); plugin != nil {
-		log.Logger.Debug("predicates",
+		log.Logger().Debug("predicates",
 			zap.String("allocationId", allocId),
 			zap.String("nodeId", m.NodeId))
 		if err := plugin.Predicates(&si.PredicatesArgs{
 			AllocationKey: allocId,
 			NodeId:        m.NodeId,
 		}); err != nil {
-			log.Logger.Debug("running predicates failed",
+			log.Logger().Debug("running predicates failed",
 				zap.String("allocationId", allocId),
 				zap.String("nodeId", m.NodeId),
 				zap.Error(err))

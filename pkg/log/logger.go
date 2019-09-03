@@ -20,26 +20,27 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"reflect"
+	"sync"
 )
 
+var once sync.Once
+var logger *zap.Logger
 
-var Logger *zap.Logger
-
-func init() {
-	// scheduler-core is always expected to run with a shim. When it runs
-	// with a k8s-shim in a same process. We directly re-use the logger
-	// which is initialized from k8s-shim, via commandline options.
-	if Logger = zap.L(); isNopLogger(Logger) {
-		// If a global logger is not found, this could be either scheduler-core
-		// is running as a deployment mode, or running with another non-go code
-		// shim. In this case, we need to create our own logger.
-		// TODO support log options when a global logger is not there
-		Logger, _= zap.NewDevelopment()
-	}
+func Logger() *zap.Logger {
+	once.Do(func() {
+		if logger = zap.L(); isNopLogger(logger) {
+			// If a global logger is not found, this could be either scheduler-core
+			// is running as a deployment mode, or running with another non-go code
+			// shim. In this case, we need to create our own logger.
+			// TODO support log options when a global logger is not there
+			logger, _= zap.NewDevelopment()
+		}
+	})
+	return logger
 }
 
 func IsDebugEnabled() bool {
-	return Logger.Core().Enabled(zapcore.DebugLevel)
+	return logger.Core().Enabled(zapcore.DebugLevel)
 }
 
 // Returns true if the logger is a noop.

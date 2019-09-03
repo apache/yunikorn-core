@@ -68,7 +68,7 @@ func NewPartitionInfo(partition configs.PartitionConfig, rmId string, info *Clus
     p.nodes = make(map[string]*NodeInfo)
     p.applications = make(map[string]*ApplicationInfo)
     p.totalPartitionResource = resources.NewResource()
-    log.Logger.Info("creating partition",
+    log.Logger().Info("creating partition",
         zap.String("partitionName", p.Name),
         zap.String("rmId", p.RMId))
 
@@ -81,7 +81,7 @@ func NewPartitionInfo(partition configs.PartitionConfig, rmId string, info *Clus
         return nil, err
     }
     p.Root = root
-    log.Logger.Info("root queue added",
+    log.Logger().Info("root queue added",
         zap.String("partitionName", p.Name),
         zap.String("rmId", p.RMId))
 
@@ -159,7 +159,7 @@ func (pi *PartitionInfo) addNewNode(node *NodeInfo, existingAllocations []*si.Al
     pi.lock.Lock()
     defer pi.lock.Unlock()
 
-    log.Logger.Info("add node to partition",
+    log.Logger().Info("add node to partition",
         zap.String("nodeId", node.NodeId),
         zap.String("partition", pi.Name))
 
@@ -180,12 +180,12 @@ func (pi *PartitionInfo) addNewNode(node *NodeInfo, existingAllocations []*si.Al
 
     // Add allocations that exist on the node when added
     if len(existingAllocations) > 0 {
-        log.Logger.Info("add existing allocations",
+        log.Logger().Info("add existing allocations",
             zap.String("nodeId", node.NodeId),
             zap.Int("existingAllocations", len(existingAllocations)))
         for _, alloc := range existingAllocations {
             if _, err := pi.addNodeReportedAllocations(alloc); err != nil {
-                log.Logger.Info("failed to add existing allocations",
+                log.Logger().Info("failed to add existing allocations",
                     zap.String("nodeId", node.NodeId),
                     zap.Int("existingAllocations", len(existingAllocations)))
                 pi.removeNodeInternal(node.NodeId)
@@ -204,10 +204,10 @@ func (pi *PartitionInfo) addNewNode(node *NodeInfo, existingAllocations []*si.Al
         // transit app's state from Accepted to Running
         for _, alloc := range existingAllocations {
             if app, ok := pi.applications[alloc.ApplicationId]; ok {
-                log.Logger.Info("", zap.String("state", app.GetApplicationState()))
+                log.Logger().Info("", zap.String("state", app.GetApplicationState()))
                 if app.GetApplicationState() == Accepted.String() {
                     if err := app.HandleApplicationEvent(RunApplication); err != nil {
-                        log.Logger.Warn("unable to handle app event - RunApplication",
+                        log.Logger().Warn("unable to handle app event - RunApplication",
                             zap.Error(err))
                     }
                 }
@@ -217,7 +217,7 @@ func (pi *PartitionInfo) addNewNode(node *NodeInfo, existingAllocations []*si.Al
 
     // Node is added update the metrics
     pi.metrics.IncActiveNodes()
-    log.Logger.Info("added node to partition",
+    log.Logger().Info("added node to partition",
         zap.String("nodeId", node.NodeId),
         zap.String("partition", pi.Name))
 
@@ -252,13 +252,13 @@ func (pi *PartitionInfo) RemoveNode(nodeId string) {
 // NOTE: this is a lock free call. It should only be called holding the PartitionInfo lock.
 // If access outside is needed a locked version must used, see removeNode
 func (pi *PartitionInfo) removeNodeInternal(nodeId string) {
-    log.Logger.Info("remove node from partition",
+    log.Logger().Info("remove node from partition",
         zap.String("nodeId", nodeId),
         zap.String("partition", pi.Name))
 
     node := pi.nodes[nodeId]
     if node == nil {
-        log.Logger.Debug("not was not found",
+        log.Logger().Debug("not was not found",
             zap.String("nodeId", nodeId),
             zap.String("partitionName", pi.Name))
         return
@@ -272,7 +272,7 @@ func (pi *PartitionInfo) removeNodeInternal(nodeId string) {
         if app := pi.applications[alloc.ApplicationId]; app != nil {
             // check allocations on the node
             if alloc := app.removeAllocation(allocID); alloc == nil {
-                log.Logger.Info("allocation is not found, skipping removing the node",
+                log.Logger().Info("allocation is not found, skipping removing the node",
                     zap.String("allocationId", allocID),
                     zap.String("appId", app.ApplicationId),
                     zap.String("nodeId", node.NodeId))
@@ -280,7 +280,7 @@ func (pi *PartitionInfo) removeNodeInternal(nodeId string) {
             }
             queue = app.leafQueue
         } else {
-            log.Logger.Info("app is not found, skipping removing the node",
+            log.Logger().Info("app is not found, skipping removing the node",
                 zap.String("appId", alloc.ApplicationId),
                 zap.String("nodeId", node.NodeId))
             continue
@@ -289,13 +289,13 @@ func (pi *PartitionInfo) removeNodeInternal(nodeId string) {
         // we should never have an error, cache is in an inconsistent state if this happens
         if queue != nil {
             if err := queue.DecAllocatedResource(alloc.AllocatedResource); err != nil {
-                log.Logger.Warn("failed to release resources from queue",
+                log.Logger().Warn("failed to release resources from queue",
                     zap.String("appId", alloc.ApplicationId),
                     zap.Error(err))
             }
         }
 
-        log.Logger.Info("allocation removed",
+        log.Logger().Info("allocation removed",
             zap.String("allocationId", allocID),
             zap.String("nodeId", node.NodeId))
     }
@@ -307,7 +307,7 @@ func (pi *PartitionInfo) removeNodeInternal(nodeId string) {
     delete(pi.nodes, nodeId)
     pi.metrics.DecActiveNodes()
 
-    log.Logger.Info("node removed",
+    log.Logger().Info("node removed",
         zap.String("partitionName", pi.Name),
         zap.String("nodeId", node.NodeId))
 }
@@ -320,7 +320,7 @@ func (pi *PartitionInfo) addNewApplication(info *ApplicationInfo, failIfExist bo
     pi.lock.Lock()
     defer pi.lock.Unlock()
 
-    log.Logger.Info("adding app to partition",
+    log.Logger().Info("adding app to partition",
         zap.String("appId", info.ApplicationId),
         zap.String("queue", info.QueueName),
         zap.String("partitionName", pi.Name))
@@ -332,7 +332,7 @@ func (pi *PartitionInfo) addNewApplication(info *ApplicationInfo, failIfExist bo
         if failIfExist {
             return fmt.Errorf("application %s already exists in partition %s", info.ApplicationId, pi.Name)
         } else {
-            log.Logger.Info("app already exists in partition",
+            log.Logger().Info("app already exists in partition",
                 zap.String("appId", info.ApplicationId),
                 zap.String("partitionName", pi.Name))
             return nil
@@ -345,7 +345,7 @@ func (pi *PartitionInfo) addNewApplication(info *ApplicationInfo, failIfExist bo
     pi.applications[info.ApplicationId] = info
     pi.metrics.IncTotalApplicationsAdded()
 
-    log.Logger.Info("app added to partition",
+    log.Logger().Info("app added to partition",
         zap.String("appId", info.ApplicationId),
         zap.String("partitionName", pi.Name))
     return nil
@@ -379,10 +379,10 @@ func (pi *PartitionInfo) releaseAllocationsForApplication(toRelease *commonevent
 
     allocationsToRelease := make([]*AllocationInfo, 0)
 
-    log.Logger.Debug("removing allocation from partition",
+    log.Logger().Debug("removing allocation from partition",
         zap.String("partitionName", pi.Name))
     if toRelease == nil {
-        log.Logger.Debug("no allocations removed from partition",
+        log.Logger().Debug("no allocations removed from partition",
             zap.String("partitionName", pi.Name))
         return allocationsToRelease
     }
@@ -392,13 +392,13 @@ func (pi *PartitionInfo) releaseAllocationsForApplication(toRelease *commonevent
     if app := pi.applications[toRelease.ApplicationId]; app != nil {
         // when uuid not specified, remove all allocations from the app
         if toRelease.Uuid == "" {
-            log.Logger.Debug("remove all allocations",
+            log.Logger().Debug("remove all allocations",
                 zap.String("appId", app.ApplicationId))
             for _, alloc := range app.removeAllAllocations() {
                 allocationsToRelease = append(allocationsToRelease, alloc)
             }
         } else {
-            log.Logger.Debug("removing allocations",
+            log.Logger().Debug("removing allocations",
                 zap.String("appId", app.ApplicationId),
                 zap.String("allocationId", toRelease.Uuid))
             if alloc := app.removeAllocation(toRelease.Uuid); alloc != nil {
@@ -411,7 +411,7 @@ func (pi *PartitionInfo) releaseAllocationsForApplication(toRelease *commonevent
     // If nothing was released then return now: this can happen if the allocation was not found or the application did not
     // not have any allocations
     if len(allocationsToRelease) == 0 {
-        log.Logger.Debug("no active allocations found to release",
+        log.Logger().Debug("no active allocations found to release",
             zap.String("appId", toRelease.ApplicationId))
         return allocationsToRelease
     }
@@ -423,7 +423,7 @@ func (pi *PartitionInfo) releaseAllocationsForApplication(toRelease *commonevent
         // remove allocation from node
         node := pi.nodes[alloc.AllocationProto.NodeId]
         if node == nil || node.GetAllocation(alloc.AllocationProto.Uuid) == nil {
-            log.Logger.Info("node is not found for allocation",
+            log.Logger().Info("node is not found for allocation",
                 zap.Any("allocation", alloc))
             continue
         }
@@ -435,7 +435,7 @@ func (pi *PartitionInfo) releaseAllocationsForApplication(toRelease *commonevent
     if queue != nil {
         // we should never have an error, cache is in an inconsistent state if this happens
         if err := queue.DecAllocatedResource(totalReleasedResource); err != nil {
-            log.Logger.Warn("failed to release resources",
+            log.Logger().Warn("failed to release resources",
                 zap.Any("appId", toRelease.ApplicationId),
                 zap.Error(err))
         }
@@ -446,7 +446,7 @@ func (pi *PartitionInfo) releaseAllocationsForApplication(toRelease *commonevent
         delete(pi.allocations, alloc.AllocationProto.Uuid)
     }
 
-    log.Logger.Info("allocation removed",
+    log.Logger().Info("allocation removed",
         zap.Int("numOfAllocationReleased", len(allocationsToRelease)),
         zap.String("partitionName", pi.Name))
     return allocationsToRelease
@@ -458,7 +458,7 @@ func (pi *PartitionInfo) releaseAllocationsForApplication(toRelease *commonevent
 // NOTE: this is a lock free call. It should only be called holding the PartitionInfo lock.
 // If access outside is needed a locked version must used, see addNewAllocation
 func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.AllocationProposal, nodeReported bool) (*AllocationInfo, error) {
-    log.Logger.Debug("adding allocation",
+    log.Logger().Debug("adding allocation",
         zap.String("partitionName", pi.Name))
 
     if pi.IsStopped() {
@@ -515,7 +515,7 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
 
     pi.metrics.IncScheduledAllocationSuccesses()
 
-    log.Logger.Debug("added allocation",
+    log.Logger().Debug("added allocation",
         zap.String("allocationUid", allocationUuid),
         zap.String("partitionName", pi.Name))
     return allocation, nil
@@ -548,7 +548,7 @@ func (pi *PartitionInfo) RemoveRejectedApp(appId string) {
     pi.lock.Lock()
     defer pi.lock.Unlock()
 
-    log.Logger.Debug("removing rejected app from partition",
+    log.Logger().Debug("removing rejected app from partition",
         zap.String("appId", appId),
         zap.String("partitionName", pi.Name))
     // Remove app from cache there is nothing to be cleaned up
@@ -561,13 +561,13 @@ func (pi *PartitionInfo) RemoveApplication(appId string) (*ApplicationInfo, []*A
     pi.lock.Lock()
     defer pi.lock.Unlock()
 
-    log.Logger.Debug("removing app from partition",
+    log.Logger().Debug("removing app from partition",
         zap.String("appId", appId),
         zap.String("partitionName", pi.Name))
 
     app := pi.applications[appId]
     if app == nil {
-        log.Logger.Warn("app not found partition",
+        log.Logger().Warn("app not found partition",
             zap.String("appId", appId),
             zap.String("partitionName", pi.Name))
         return nil, make([]*AllocationInfo, 0)
@@ -583,12 +583,12 @@ func (pi *PartitionInfo) RemoveApplication(appId string) (*ApplicationInfo, []*A
     if len(allocations) != 0 {
         for _, alloc := range allocations {
             uuid := alloc.AllocationProto.Uuid
-            log.Logger.Warn("removing allocations",
+            log.Logger().Warn("removing allocations",
                 zap.String("appId", appId),
                 zap.String("allocationId", uuid))
             // Remove from partition cache
             if globalAlloc := pi.allocations[uuid]; globalAlloc == nil {
-                log.Logger.Warn("unknown allocation: not found in global cache",
+                log.Logger().Warn("unknown allocation: not found in global cache",
                     zap.String("appId", appId),
                     zap.String("allocationId", uuid))
                 continue
@@ -599,13 +599,13 @@ func (pi *PartitionInfo) RemoveApplication(appId string) (*ApplicationInfo, []*A
             // Remove from node
             node := pi.nodes[alloc.AllocationProto.NodeId]
             if node == nil {
-                log.Logger.Warn("unknown node: not found in active node list",
+                log.Logger().Warn("unknown node: not found in active node list",
                     zap.String("appId", appId),
                     zap.String("nodeId", alloc.AllocationProto.NodeId))
                 continue
             }
             if nodeAlloc := node.RemoveAllocation(uuid); nodeAlloc == nil {
-                log.Logger.Warn("allocation not found on node",
+                log.Logger().Warn("allocation not found on node",
                     zap.String("appId", appId),
                     zap.String("allocationId", uuid),
                     zap.String("nodeId", alloc.AllocationProto.NodeId))
@@ -617,7 +617,7 @@ func (pi *PartitionInfo) RemoveApplication(appId string) (*ApplicationInfo, []*A
         queue := app.leafQueue
         if queue != nil {
             if err := queue.DecAllocatedResource(totalAppAllocated); err != nil {
-                log.Logger.Error("failed to release resources for app",
+                log.Logger().Error("failed to release resources for app",
                     zap.String("appId", app.ApplicationId),
                     zap.Error(err))
             }
@@ -626,7 +626,7 @@ func (pi *PartitionInfo) RemoveApplication(appId string) (*ApplicationInfo, []*A
     // Remove app from cache now that everything is cleaned up
     delete(pi.applications, appId)
 
-    log.Logger.Info("app removed from partition",
+    log.Logger().Info("app removed from partition",
         zap.String("appId", app.ApplicationId),
         zap.String("partitionName", app.Partition),
         zap.Any("resourceReleased", totalAppAllocated))
@@ -820,7 +820,7 @@ func (pi *PartitionInfo) MarkPartitionForRemoval() {
     pi.lock.RLock()
     defer pi.lock.RUnlock()
     if err := pi.HandlePartitionEvent(Remove); err != nil {
-        log.Logger.Error("failed to mark partition for deletion",
+        log.Logger().Error("failed to mark partition for deletion",
             zap.String("partitionName", pi.Name),
             zap.Error(err))
     }
@@ -858,13 +858,13 @@ func (pi *PartitionInfo) CreateQueues(queueName string) error {
     if !strings.HasPrefix(queueName, configs.RootQueue + DOT) {
         return fmt.Errorf("cannot create queue which is not qualified '%s'", queueName)
     }
-    log.Logger.Debug("Creating new queue structure", zap.String("queueName", queueName))
+    log.Logger().Debug("Creating new queue structure", zap.String("queueName", queueName))
     // two step creation process: first check then really create them
     // start at the root, which we know exists and is a parent
     current := queueName
     var toCreate []string
     parent := pi.getQueue(current)
-    log.Logger.Debug("Checking queue creation")
+    log.Logger().Debug("Checking queue creation")
     for parent == nil {
         toCreate = append(toCreate, current[strings.LastIndex(current, DOT)+1:])
         current = current[0:strings.LastIndex(current, DOT)]
@@ -873,18 +873,18 @@ func (pi *PartitionInfo) CreateQueues(queueName string) error {
     }
     // check if it is a parent queue
     if parent.isLeaf {
-        log.Logger.Debug("Cannot create queue below existing leaf queue",
+        log.Logger().Debug("Cannot create queue below existing leaf queue",
             zap.String("requestedQueue", queueName),
             zap.String("leafQueue", current))
         return fmt.Errorf("cannot create queue below leaf queue '%s'", current)
     }
-    log.Logger.Debug("Queue can be created, creating queue(s)")
+    log.Logger().Debug("Queue can be created, creating queue(s)")
     for i := len(toCreate)-1; i >= 0; i-- {
         // everything is checked and there should be no errors
         var err error
         parent, err = NewUnmanagedQueue(toCreate[i], i == 0, parent)
         if err != nil {
-            log.Logger.Warn("Queue auto create failed unexpected",
+            log.Logger().Warn("Queue auto create failed unexpected",
                 zap.String("queueName", queueName),
                 zap.Error(err))
         }

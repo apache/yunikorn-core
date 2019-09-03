@@ -61,7 +61,7 @@ func (fr *fixedRule) initialise(conf configs.PlacementRule) error {
 func (fr *fixedRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
     // before anything run the filter
     if !fr.filter.allowUser(app.GetUser()) {
-        log.Logger.Debug("Fixed rule filtered",
+        log.Logger().Debug("Fixed rule filtered",
             zap.String("application", app.ApplicationId),
             zap.Any("user", app.GetUser()),
             zap.String("queueName", fr.queue))
@@ -98,7 +98,7 @@ func (fr *fixedRule) placeApplication(app *cache.ApplicationInfo, info *cache.Pa
         queueName = parentName + cache.DOT + fr.queue
     }
     // Log the result before we really create
-    log.Logger.Debug("Fixed rule intermediate result",
+    log.Logger().Debug("Fixed rule intermediate result",
         zap.String("application", app.ApplicationId),
         zap.String("queue", queueName))
     // get the queue object
@@ -107,7 +107,7 @@ func (fr *fixedRule) placeApplication(app *cache.ApplicationInfo, info *cache.Pa
     if !fr.create && queue == nil {
         return "", nil
     }
-    log.Logger.Info("Fixed rule application placed",
+    log.Logger().Info("Fixed rule application placed",
         zap.String("application", app.ApplicationId),
         zap.String("queue", queueName))
     return queueName, nil

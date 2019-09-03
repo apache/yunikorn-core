@@ -185,13 +185,13 @@ func (m *Scheduler) findNextAllocationAskCandidate(
     for _, queue := range sortedQueueCandidates {
         // skip stopped queues: running and draining queues are allowed
         if queue.isStopped() {
-            log.Logger.Debug("skip non-running queue",
+            log.Logger().Debug("skip non-running queue",
                 zap.String("queueName", queue.Name))
             continue
         }
         // Is it need any resource?
         if !resources.StrictlyGreaterThanZero(queue.GetPendingResource()) {
-            log.Logger.Debug("skip queue because it has no pending resource",
+            log.Logger().Debug("skip queue because it has no pending resource",
                 zap.String("queueName", queue.Name))
             continue
         }
@@ -207,7 +207,7 @@ func (m *Scheduler) findNextAllocationAskCandidate(
             if preemptionParameters.crossQueuePreemption {
                 // We won't allocate resources if the queue is above its guaranteed resource.
                 if comp := resources.Comp(queue.CachedQueueInfo.GuaranteedResource, queue.ProposingResource, queue.CachedQueueInfo.GuaranteedResource); comp >= 0 {
-                    log.Logger.Debug("skip queue because it is already beyond guaranteed",
+                    log.Logger().Debug("skip queue because it is already beyond guaranteed",
                         zap.String("queueName", queue.Name))
                     continue
                 }

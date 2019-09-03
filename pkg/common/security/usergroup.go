@@ -66,17 +66,17 @@ func GetUserGroupCache(resolver string) *UserGroupCache {
     once.Do(func() {
         switch resolver {
         case "test":
-            log.Logger.Info("creating test user group resolver")
+            log.Logger().Info("creating test user group resolver")
             instance = GetUserGroupCacheTest()
         case "os":
-            log.Logger.Info("creating OS user group resolver")
+            log.Logger().Info("creating OS user group resolver")
             instance = GetUserGroupCacheOS()
         default:
-            log.Logger.Info("creating UserGroupCache without resolver")
+            log.Logger().Info("creating UserGroupCache without resolver")
             instance = GetUserGroupNoResolve()
         }
         instance.ugs = make(map[string]*UserGroup)
-        log.Logger.Info("starting UserGroupCache cleaner",
+        log.Logger().Info("starting UserGroupCache cleaner",
             zap.String("cleanerInterval", instance.interval.String()))
         go instance.run()
     })
@@ -89,7 +89,7 @@ func (c *UserGroupCache) run() {
         time.Sleep(instance.interval)
         runStart := time.Now()
         c.cleanUpCache()
-        log.Logger.Debug("time consumed cleaning the UserGroupCache",
+        log.Logger().Debug("time consumed cleaning the UserGroupCache",
             zap.String("duration", time.Since(runStart).String()))
     }
 }
@@ -112,7 +112,7 @@ func (c *UserGroupCache) cleanUpCache() {
 
 // reset the cached content, test use only
 func (c *UserGroupCache) resetCache() {
-    log.Logger.Debug("UserGroupCache reset")
+    log.Logger().Debug("UserGroupCache reset")
     instance.lock.Lock()
     defer instance.lock.Unlock()
     c.ugs = make(map[string]*UserGroup)
@@ -170,7 +170,7 @@ func (c *UserGroupCache) GetUserGroup(userName string) (UserGroup, error) {
     var err = error(nil)
     osUser, err = c.lookup(userName)
     if err != nil {
-        log.Logger.Error("Error resolving user: does not exist",
+        log.Logger().Error("Error resolving user: does not exist",
             zap.String("userName", userName),
             zap.Error(err))
         ug.failed = true
@@ -181,7 +181,7 @@ func (c *UserGroupCache) GetUserGroup(userName string) (UserGroup, error) {
         err = ug.resolveGroups(osUser, c)
         // log a failure and continue
         if err != nil {
-            log.Logger.Error("Error resolving groups for user",
+            log.Logger().Error("Error resolving groups for user",
                 zap.String("userName", userName),
                 zap.Error(err))
             ug.failed = true

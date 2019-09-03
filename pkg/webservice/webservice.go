@@ -60,7 +60,7 @@ func Logger(inner http.Handler, name string, info *cache.ClusterInfo) http.Handl
 
 		inner.ServeHTTP(w, r)
 
-		log.Logger.Debug(fmt.Sprintf("%s\t%s\t%s\t%s",
+		log.Logger().Debug(fmt.Sprintf("%s\t%s\t%s\t%s",
 			r.Method, r.RequestURI, name, time.Since(start)))
 	})
 }
@@ -69,11 +69,11 @@ func (m *WebService) StartWebApp() {
 	router := NewRouter(m.clusterInfo)
 	m.httpServer = &http.Server{Addr: ":9080", Handler: router}
 
-	log.Logger.Info("web-app started", zap.Int("port", 9080))
+	log.Logger().Info("web-app started", zap.Int("port", 9080))
 	go func() {
 		httpError := m.httpServer.ListenAndServe()
 		if httpError != nil && httpError != http.ErrServerClosed{
-			log.Logger.Error("HTTP serving error",
+			log.Logger().Error("HTTP serving error",
 				zap.Error(httpError))
 		}
 	}()

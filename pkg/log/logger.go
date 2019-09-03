@@ -40,6 +40,10 @@ func Logger() *zap.Logger {
 }
 
 func IsDebugEnabled() bool {
+	if logger == nil {
+		// when under development mode
+		return true
+	}
 	return logger.Core().Enabled(zapcore.DebugLevel)
 }
 

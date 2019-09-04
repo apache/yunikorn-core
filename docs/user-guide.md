@@ -7,57 +7,17 @@ Follow this [guide](setup/env-setup.md) on how to setup a local Kubernetes clust
 All files mentioned in this user guide are part of the [yunikorn-k8shim](https://github.com/cloudera/yunikorn-k8shim) repository.
 They are located in the [deployments](https://github.com/cloudera/yunikorn-k8shim/tree/master/deployments/scheduler) sub directory. The command given assume that you are located in that directory.
 
-## Setup
-The first step is to create the RBAC role for the scheduler, see [yunikorn-rbac.yaml](https://github.com/cloudera/yunikorn-k8shim/blob/master/deployments/scheduler/yunikorn-rbac.yaml)
-```
-kubectl create -f scheduler/yunikorn-rbac.yaml
-```
-The role is a requirement on the current versions of kubernetes.
+## Quick Start
 
-## Create the ConfigMap
+The easiest way to get started is to our [helm charts](https://github.com/cloudera/yunikorn-k8shim/tree/master/helm-charts) to deploy YuniKorn on an existing Kubernetes cluster.
 
-YuniKorn loads its configuration from a K8s configmap, so it is required to create the configmap before launching the scheduler.
-
-- download a sample configuration file:
-```
-curl -o queues.yaml https://raw.githubusercontent.com/cloudera/yunikorn-k8shim/master/conf/queues.yaml
-```
-- create ConfigMap in kubernetes:
-```
-kubectl create configmap yunikorn-configs --from-file=queues.yaml
-```
-- check if the ConfigMap was created correctly:
-```
-kubectl describe configmaps yunikorn-configs
+```shell script
+helm install ./yunikorn
 ```
 
-For more information about how to manage scheduler's configuration via configmap, see more from [here](./setup/configure-scheduler.md).
-
-## Deploy the scheduler on k8s
-Before you can deploy the scheduler the image for the scheduler and the web interface must be build with the appropriate tags.
-The procedure on how to build the images is explained in the [build document](./developer-guide.md). See [scheduler.yaml](https://github.com/cloudera/yunikorn-k8shim/blob/master/deployments/scheduler/scheduler.yaml)
-```
-kubectl create -f scheduler/scheduler.yaml
-```
-The deployment will run 2 containers from your pre-built docker images in 1 pod,
-
-* yunikorn-scheduler-core (yunikorn scheduler core and shim for K8s)
-* yunikorn-scheduler-web (web UI)
-
-The pod is deployed as a customized scheduler, it will take the responsibility to schedule pods which explicitly specifies `schedulerName: yunikorn` in pod's spec.
-
-## Access to the web UI
-
-When the scheduler is deployed, the web UI is also deployed in a container.
-Port forwarding for the web interface on the standard ports can be turned on via:
-
-```
-POD=`kubectl get pod -l app=yunikorn -o jsonpath="{.items[0].metadata.name}"` && \
-kubectl port-forward ${POD} 9889 9080
-```
-
-`9889` is the default port for Web UI, `9080` is the default port of scheduler's Restful service where web UI retrieves info from.
-Once this is done, web UI will be available at: http://localhost:9889.
+it will firstly create a `configmap` where stores YuniKorn configuration, and then deploy YuniKorn scheduler
+and web UI containers in a pod as a `deployment`. If you don't want to use helm charts, you can find our step-by-step
+tutorial [here](setup/deployment.md).
 
 ## Run workloads with YuniKorn Scheduler
 

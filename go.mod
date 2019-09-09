@@ -4,7 +4,7 @@ go 1.12
 
 require (
 	cloud.google.com/go v0.45.1 // indirect
-	github.com/cloudera/yunikorn-scheduler-interface v0.0.0-20190909082409-4c6747c90026
+	github.com/cloudera/yunikorn-scheduler-interface v0.0.0-20190909093318-460bed7b4f27
 	github.com/google/btree v1.0.0 // indirect
 	github.com/google/go-cmp v0.3.1 // indirect
 	github.com/google/pprof v0.0.0-20190908185732-236ed259b199 // indirect
@@ -23,12 +23,12 @@ require (
 	go.uber.org/atomic v1.4.0 // indirect
 	go.uber.org/multierr v1.1.0 // indirect
 	go.uber.org/zap v1.10.0
-	golang.org/x/crypto v0.0.0-20190907121410-71b5226ff739 // indirect
+	golang.org/x/crypto v0.0.0-20190909091759-094676da4a83 // indirect
 	golang.org/x/exp v0.0.0-20190829153037-c13cbed26979 // indirect
 	golang.org/x/image v0.0.0-20190902063713-cb417be4ba39 // indirect
 	golang.org/x/mobile v0.0.0-20190830201351-c6da95954960 // indirect
 	golang.org/x/net v0.0.0-20190909003024-a7b16738d86b
-	golang.org/x/sys v0.0.0-20190907184412-d223b2b6db03 // indirect
+	golang.org/x/sys v0.0.0-20190909082730-f460065e899a // indirect
 	golang.org/x/tools v0.0.0-20190909030654-5b82db07426d // indirect
 	google.golang.org/api v0.10.0 // indirect
 	google.golang.org/appengine v1.6.2 // indirect

@@ -231,9 +231,16 @@ func (m *Scheduler) processAllocationReleaseByAllocationKey(
     if allocationsToRelease != nil && len(allocationsToRelease) > 0 {
         toReleaseAllocations :=  make([]*si.ForgotAllocation, len(allocationAsksToRelease))
         for _, toRelease := range allocationsToRelease {
-            toReleaseAllocations = append(toReleaseAllocations, &si.ForgotAllocation{
-                AllocationKey: toRelease.Uuid,
-            })
+            schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(toRelease.ApplicationId, toRelease.PartitionName)
+            if schedulingApp != nil {
+                for _, alloc := range schedulingApp.ApplicationInfo.GetAllAllocations() {
+                    if alloc.AllocationProto.Uuid == toRelease.Uuid {
+                        toReleaseAllocations = append(toReleaseAllocations, &si.ForgotAllocation{
+                            AllocationKey: alloc.AllocationProto.AllocationKey,
+                        })
+                    }
+                }
+            }
         }
 
         // if reconcile plugin is enabled, re-sync the cache now.
@@ -241,16 +248,17 @@ func (m *Scheduler) processAllocationReleaseByAllocationKey(
         // whenever we release an allocation, we must ensure the corresponding pod is successfully
         // removed from external cache, otherwise predicates will run into problems.
         log.Logger().Info(">>>>> processing release allocations")
-        log.Logger().Info(">>>>> forget allocations", zap.Int("size", len(toReleaseAllocations)))
-        if rp := plugins.GetReconcilePlugin(); rp != nil {
-            if err := rp.ReSyncSchedulerCache(&si.ReSyncSchedulerCacheArgs{
-                ForgetAllocations: toReleaseAllocations,
-            }); err != nil {
-                log.Logger().Error("failed to sync cache",
-                    zap.Error(err))
+        if len(toReleaseAllocations) > 0 {
+            log.Logger().Info(">>>>> forget allocations", zap.Int("size", len(toReleaseAllocations)))
+            if rp := plugins.GetReconcilePlugin(); rp != nil {
+                if err := rp.ReSyncSchedulerCache(&si.ReSyncSchedulerCacheArgs{
+                    ForgetAllocations: toReleaseAllocations,
+                }); err != nil {
+                    log.Logger().Error("failed to sync cache",
+                        zap.Error(err))
+                }
             }
         }
-
     }
 
 }

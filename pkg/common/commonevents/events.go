@@ -72,7 +72,7 @@ type ReleaseAllocation struct {
     ReleaseType si.AllocationReleaseResponse_TerminationType
 }
 
-func NewReleaseAllocation(uuid string, appId string, partitionName string, message string, releaseType si.AllocationReleaseResponse_TerminationType) *ReleaseAllocation {
+func NewReleaseAllocation(uuid, appId, partitionName, message string, releaseType si.AllocationReleaseResponse_TerminationType) *ReleaseAllocation {
     return &ReleaseAllocation{
         Uuid: uuid,
         ApplicationId: appId,

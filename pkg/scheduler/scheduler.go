@@ -26,6 +26,7 @@ import (
     "github.com/cloudera/yunikorn-core/pkg/handler"
     "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/metrics"
+    "github.com/cloudera/yunikorn-core/pkg/plugins"
     "github.com/cloudera/yunikorn-core/pkg/rmproxy/rmevent"
     "github.com/cloudera/yunikorn-core/pkg/scheduler/schedulerevent"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
@@ -202,30 +203,56 @@ func (m *Scheduler) HandleEvent(ev interface{}) {
     enqueueAndCheckFull(m.pendingSchedulerEvents, ev)
 }
 
-func (m *Scheduler) processAllocationReleaseByAllocationKey(allocationAsksToRelease []*si.AllocationAskReleaseRequest) {
-    if len(allocationAsksToRelease) == 0 {
-        return
-    }
-
+func (m *Scheduler) processAllocationReleaseByAllocationKey(
+    allocationAsksToRelease []*si.AllocationAskReleaseRequest, allocationsToRelease []*si.AllocationReleaseRequest) {
     m.lock.Lock()
     defer m.lock.Unlock()
 
     // For all Requests
-    for _, toRelease := range allocationAsksToRelease {
-        schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(toRelease.ApplicationId, toRelease.PartitionName)
-        if schedulingApp != nil {
-            delta, _ := schedulingApp.Requests.RemoveAllocationAsk(toRelease.Allocationkey)
-            if !resources.IsZero(delta) {
-                schedulingApp.queue.IncPendingResource(delta)
-            }
 
-            log.Logger().Info("release allocation",
-                zap.String("allocation", toRelease.Allocationkey),
-                zap.String("appId", toRelease.ApplicationId),
-                zap.String("deductPendingResource", delta.String()),
-                zap.String("message", toRelease.Message))
+    if allocationAsksToRelease != nil && len(allocationAsksToRelease) > 0 {
+        for _, toRelease := range allocationAsksToRelease {
+            schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(toRelease.ApplicationId, toRelease.PartitionName)
+            if schedulingApp != nil {
+                delta, _ := schedulingApp.Requests.RemoveAllocationAsk(toRelease.Allocationkey)
+                if !resources.IsZero(delta) {
+                    schedulingApp.queue.IncPendingResource(delta)
+                }
+
+                log.Logger().Info("release allocation",
+                    zap.String("allocation", toRelease.Allocationkey),
+                    zap.String("appId", toRelease.ApplicationId),
+                    zap.String("deductPendingResource", delta.String()),
+                    zap.String("message", toRelease.Message))
+            }
         }
     }
+
+    if allocationsToRelease != nil && len(allocationsToRelease) > 0 {
+        toReleaseAllocations :=  make([]*si.ForgotAllocation, len(allocationAsksToRelease))
+        for _, toRelease := range allocationsToRelease {
+            toReleaseAllocations = append(toReleaseAllocations, &si.ForgotAllocation{
+                AllocationKey: toRelease.Uuid,
+            })
+        }
+
+        // if reconcile plugin is enabled, re-sync the cache now.
+        // this gives the chance for the cache to update its memory about assumed pods
+        // whenever we release an allocation, we must ensure the corresponding pod is successfully
+        // removed from external cache, otherwise predicates will run into problems.
+        log.Logger().Info(">>>>> processing release allocations")
+        log.Logger().Info(">>>>> forget allocations", zap.Int("size", len(toReleaseAllocations)))
+        if rp := plugins.GetReconcilePlugin(); rp != nil {
+            if err := rp.ReSyncSchedulerCache(&si.ReSyncSchedulerCacheArgs{
+                ForgetAllocations: toReleaseAllocations,
+            }); err != nil {
+                log.Logger().Error("failed to sync cache",
+                    zap.Error(err))
+            }
+        }
+
+    }
+
 }
 
 func (m *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocation, rmId string) {
@@ -294,8 +321,10 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
     // When RM asks to remove some allocations, the event will be send to scheduler first, to release pending asks, etc.
     // Then it will be relay to cache to release allocations.
     // The reason to send to scheduler before cache is, we need to clean up asks otherwise new allocations will be created.
+    log.Logger().Info(">>>>> processing to release")
     if ev.ToReleases != nil {
-        m.processAllocationReleaseByAllocationKey(ev.ToReleases.AllocationAsksToRelease)
+        log.Logger().Info(">>>>> to release is not nil", zap.Any("xxx", ev.ToReleases.AllocationAsksToRelease))
+        m.processAllocationReleaseByAllocationKey(ev.ToReleases.AllocationAsksToRelease, ev.ToReleases.AllocationsToRelease)
         m.eventHandlers.CacheEventHandler.HandleEvent(cacheevent.NewReleaseAllocationEventFromProto(ev.ToReleases.AllocationsToRelease))
     }
 

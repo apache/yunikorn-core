@@ -247,9 +247,9 @@ func (m *Scheduler) processAllocationReleaseByAllocationKey(
         // this gives the chance for the cache to update its memory about assumed pods
         // whenever we release an allocation, we must ensure the corresponding pod is successfully
         // removed from external cache, otherwise predicates will run into problems.
-        log.Logger().Info(">>>>> processing release allocations")
         if len(toReleaseAllocations) > 0 {
-            log.Logger().Info(">>>>> forget allocations", zap.Int("size", len(toReleaseAllocations)))
+            log.Logger().Debug("notify cache to forget assumed pods",
+                zap.Int("size", len(toReleaseAllocations)))
             if rp := plugins.GetReconcilePlugin(); rp != nil {
                 if err := rp.ReSyncSchedulerCache(&si.ReSyncSchedulerCacheArgs{
                     ForgetAllocations: toReleaseAllocations,
@@ -329,9 +329,7 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
     // When RM asks to remove some allocations, the event will be send to scheduler first, to release pending asks, etc.
     // Then it will be relay to cache to release allocations.
     // The reason to send to scheduler before cache is, we need to clean up asks otherwise new allocations will be created.
-    log.Logger().Info(">>>>> processing to release")
     if ev.ToReleases != nil {
-        log.Logger().Info(">>>>> to release is not nil", zap.Any("xxx", ev.ToReleases.AllocationAsksToRelease))
         m.processAllocationReleaseByAllocationKey(ev.ToReleases.AllocationAsksToRelease, ev.ToReleases.AllocationsToRelease)
         m.eventHandlers.CacheEventHandler.HandleEvent(cacheevent.NewReleaseAllocationEventFromProto(ev.ToReleases.AllocationsToRelease))
     }

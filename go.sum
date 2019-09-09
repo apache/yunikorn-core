@@ -27,6 +27,8 @@ github.com/cloudera/yunikorn-scheduler-interface v0.0.0-20190909093318-460bed7b4
 github.com/cloudera/yunikorn-scheduler-interface v0.0.0-20190909093318-460bed7b4f27/go.mod h1:QE7hLVzWYKot7H8eNMnGsphqStSEmSxxU5dgFzI32rk=
 github.com/cloudera/yunikorn-scheduler-interface v0.0.0-20190909094343-2fb2aa854b2f h1:L249d7DHCn1yOGubi9nPuXGwUTuU+Q9eD9Ft5FuUEv8=
 github.com/cloudera/yunikorn-scheduler-interface v0.0.0-20190909094343-2fb2aa854b2f/go.mod h1:QE7hLVzWYKot7H8eNMnGsphqStSEmSxxU5dgFzI32rk=
+github.com/cloudera/yunikorn-scheduler-interface v0.0.0-20190909100534-0557527533f6 h1:WSXSGSNe5m8l4vCZlcR6hqpNlRE6zp4jrkROMBfA94M=
+github.com/cloudera/yunikorn-scheduler-interface v0.0.0-20190909100534-0557527533f6/go.mod h1:QE7hLVzWYKot7H8eNMnGsphqStSEmSxxU5dgFzI32rk=
 github.com/creack/pty v1.1.7/go.mod h1:lj5s0c3V2DBrqTV7llrYr5NG6My20zk30Fl46Y7DoTY=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=

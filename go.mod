@@ -4,7 +4,7 @@ go 1.12
 
 require (
 	cloud.google.com/go v0.45.1 // indirect
-	github.com/cloudera/yunikorn-scheduler-interface v0.0.0-20190909094343-2fb2aa854b2f
+	github.com/cloudera/yunikorn-scheduler-interface v0.0.0-20190909100534-0557527533f6
 	github.com/google/btree v1.0.0 // indirect
 	github.com/google/go-cmp v0.3.1 // indirect
 	github.com/google/pprof v0.0.0-20190908185732-236ed259b199 // indirect

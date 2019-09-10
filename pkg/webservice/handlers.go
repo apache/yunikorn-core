@@ -18,11 +18,31 @@ package webservice
 import (
 	"encoding/json"
 	"github.com/cloudera/yunikorn-core/pkg/cache"
+	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/cloudera/yunikorn-core/pkg/webservice/dao"
+	"go.uber.org/zap"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 )
+
+func GetStackInfo(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	var stack = func() []byte {
+		buf := make([]byte, 1024)
+		for {
+			n := runtime.Stack(buf, true)
+			if n < len(buf) {
+				return buf[:n]
+			}
+			buf = make([]byte, 2*len(buf))
+		}
+	}
+	if _, err := w.Write(stack()); err != nil {
+		log.Logger().Error("GetStackInfo error", zap.Error(err))
+	}
+}
 
 func GetQueueInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)

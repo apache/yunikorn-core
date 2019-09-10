@@ -45,4 +45,10 @@ var routes = Routes{
 		"/ws/v1/apps",
 		GetApplicationsInfo,
 	},
+	Route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/stack",
+		GetStackInfo,
+	},
 }

@@ -197,10 +197,12 @@ func (sq *SchedulingQueue) RemoveQueue() bool {
     sq.lock.RLock()
     // cannot remove a managed queue that is running
     if sq.isManaged() && sq.isRunning() {
+        sq.lock.RUnlock()
         return false
     }
     // cannot remove a queue that has children or applications assigned
     if len(sq.childrenQueues) > 0 || len(sq.applications) > 0 {
+        sq.lock.RUnlock()
         return false
     }
     sq.lock.RUnlock()

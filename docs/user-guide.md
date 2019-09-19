@@ -16,7 +16,14 @@ helm install ./yunikorn
 ```
 
 it will firstly create a `configmap` where stores YuniKorn configuration, and then deploy YuniKorn scheduler
-and web UI containers in a pod as a `deployment`. If you don't want to use helm charts, you can find our step-by-step
+and web UI containers in a pod as a `deployment` in the `default` namespace. If you want to deploy YuniKorn to another namespace, you can do following:
+
+```shell script
+kubectl create namespace yunikorn-ns
+helm install ./yunikorn --namespace yunikorn-ns
+```
+
+If you don't want to use helm charts, you can find our step-by-step
 tutorial [here](setup/deployment.md).
 
 ## Run workloads with YuniKorn Scheduler

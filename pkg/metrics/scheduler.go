@@ -18,11 +18,7 @@ package metrics
 
 import (
 	"flag"
-	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.uber.org/zap"
-	"net/http"
 	"sync"
 	"time"
 )
@@ -193,15 +189,6 @@ func initSchedulerMetrics() *SchedulerMetrics {
 	for _, metric := range metricsList {
 		prometheus.MustRegister(metric)
 	}
-	// Expose the registered metrics via HTTP.
-	http.Handle("/metrics", promhttp.Handler())
-	log.Logger().Info("metrics started", zap.Int("servicePort", 9090))
-	go func() {
-		httpError := http.ListenAndServe(":9090", nil)
-		if httpError != nil {
-			log.Logger().Error("HTTP serving error", zap.Error(httpError))
-		}
-	}()
 
 	return s
 }

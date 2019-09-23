@@ -17,129 +17,65 @@ limitations under the License.
 package metrics
 
 import (
+	"fmt"
 	"github.com/prometheus/client_golang/prometheus"
+	"strings"
 	"sync"
 )
 
-const (
-	// 	QueuesSubsystem = "queues_metrics" - subsystem name used by queues
-	QueuesSubsystem = "queues_metrics"
-)
-
-type CoreQueueMetrics interface {
-	// Metrics ops related to ApplicationsAdded
-	IncApplicationsAdded()
-	AddApplicationsAdded(value int)
-
-	// Metrics ops related to ApplicationsAdded
-	IncApplicationsRejected()
-	AddApplicationsRejected(value int)
-
-	// Metrics Ops related to ApplicationsRunning
-	IncApplicationsRunning()
-	AddApplicationsRunning(value int)
-	DecApplicationsRunning()
-	SubApplicationsRunning(value int)
-	SetApplicationsRunning(value int)
-
-	// Metrics Ops related to ApplicationsCompleted
-	IncApplicationsCompleted()
-	AddApplicationsCompleted(value int)
-	DecApplicationsCompleted()
-	SubApplicationsCompleted(value int)
-	SetApplicationsCompleted(value int)
-
-	// Metrics Ops related to QueuePendingResourceMetrics
-	IncQueuePendingResourceMetrics()
-	AddQueuePendingResourceMetrics(value float64)
-	DecQueuePendingResourceMetrics()
-	SubQueuePendingResourceMetrics(value float64)
-	SetQueuePendingResourceMetrics(value float64)
-
-	// Metrics Ops related to queueUsedResourceMetrics
-	IncQueueUsedResourceMetrics()
-	AddQueueUsedResourceMetrics(value float64)
-	DecQueueUsedResourceMetrics()
-	SubQueueUsedResourceMetrics(value float64)
-	SetQueueUsedResourceMetrics(value float64)
-
-	// Metrics Ops related to queueAvailableResourceMetrics
-	IncQueueAvailableResourceMetrics()
-	AddQueueAvailableResourceMetrics(value float64)
-	DecQueueAvailableResourceMetrics()
-	SubQueueAvailableResourceMetrics(value float64)
-	SetQueueAvailableResourceMetrics(value float64)
-}
-
-
 type QueueMetrics struct  {
-	Name string
-	queueAppMetrics  *prometheus.CounterVec
-	applicationsAdded prometheus.Counter
-	applicationsRejected prometheus.Counter
-	applicationsRunning prometheus.Gauge
-	applicationsCompleted prometheus.Gauge
-	queuePendingResourceMetrics prometheus.Gauge
-	queueUsedResourceMetrics prometheus.Gauge
-	queueAvailableResourceMetrics prometheus.Gauge
+	// metrics related to app
+	appMetrics *prometheus.CounterVec
+
+	// metrics related to resource
+	usedResourceMetrics *prometheus.GaugeVec
+	pendingResourceMetrics *prometheus.GaugeVec
+	availableResourceMetrics *prometheus.GaugeVec
 }
 
 var queueRegisterMetrics sync.Once
 
-func InitQueueMetrics(name string) *QueueMetrics {
-	q := &QueueMetrics{Name:name}
+func forQueue(name string) CoreQueueMetrics {
+	q := &QueueMetrics{}
 
 	// Queue Metrics
-	q.queueAppMetrics = prometheus.NewCounterVec(
+	q.appMetrics = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Subsystem: QueuesSubsystem,
-			Name:      "queue_metrics_for_apps",
-			Help:      "Application Metrics related to queues etc.",
-		}, []string{"result"})
+			Namespace: Namespace,
+			Subsystem: substituteQueueName(name),
+			Name:      "app_metrics",
+			Help:      "Application Metrics",
+		}, []string{"state"})
 
-	// ApplicationsAdded counts how many apps are added to YuniKorn.
-	q.applicationsAdded = q.queueAppMetrics.With(prometheus.Labels{"result": "added"})
-	// ApplicationsRejected counts how many apps are rejected in YuniKorn.
-	q.applicationsRejected = q.queueAppMetrics.With(prometheus.Labels{"result": "rejected"})
-	// ApplicationsRunning counts how many apps are running active.
-	q.applicationsRunning = prometheus.NewGauge(
+	q.usedResourceMetrics = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: QueuesSubsystem,
-			Name:      "queue_running_apps",
-			Help:      "active apps",
-		})
-	// ApplicationsCompleted counts how many apps are completed.
-	q.applicationsCompleted = prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Subsystem: QueuesSubsystem,
-			Name:      "queue_completed_apps",
-			Help:      "completed apps",
-		})
+			Namespace: Namespace,
+			Subsystem: substituteQueueName(name),
+			Name:      "used_resource",
+			Help:      "Queue used resource",
+		}, []string{"resource"})
 
-	q.queuePendingResourceMetrics = prometheus.NewGauge(
+	q.pendingResourceMetrics = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: QueuesSubsystem,
-			Name:      "queue_pending_resource_metrics",
-			Help:      "pending resource metrics related to queues etc.",
-		})
-	q.queueUsedResourceMetrics = prometheus.NewGauge(
+			Namespace: Namespace,
+			Subsystem: substituteQueueName(name),
+			Name:      "pending_resource",
+			Help:      "Queue pending resource",
+		}, []string{"resource"})
+
+	q.availableResourceMetrics = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: QueuesSubsystem,
-			Name:      "queue_used_resource_metrics",
+			Namespace: Namespace,
+			Subsystem: substituteQueueName(name),
+			Name:      "used_resource_metrics",
 			Help:      "used resource metrics related to queues etc.",
-		})
-	q.queueAvailableResourceMetrics = prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Subsystem: QueuesSubsystem,
-			Name:      "queue_available_resource_metrics",
-			Help:      "available resource metrics related to queues etc.",
-		})
+		}, []string{"resource"})
 
 	var queueMetricsList = []prometheus.Collector{
-		q.queueAppMetrics,
-		q.queuePendingResourceMetrics,
-		q.queueUsedResourceMetrics,
-		q.queueAvailableResourceMetrics,
+		q.appMetrics,
+		q.usedResourceMetrics,
+		q.pendingResourceMetrics,
+		q.availableResourceMetrics,
 	}
 
 	// Register the metrics.
@@ -152,127 +88,27 @@ func InitQueueMetrics(name string) *QueueMetrics {
 	return q
 }
 
-
-// Define and implement all the metrics ops for Prometheus.
-// Metrics Ops related to applicationsAdded
-func (m *QueueMetrics) IncApplicationsAdded() {
-	m.applicationsAdded.Inc()
+func substituteQueueName(queueName string) string {
+	return fmt.Sprintf("queue_%s",
+		strings.Replace(queueName, ".", "_", -1))
 }
 
-func (m *QueueMetrics) AddApplicationsAdded(value int) {
-	m.applicationsAdded.Add(float64(value))
+func (m *QueueMetrics) IncApplicationsAccepted() {
+	m.appMetrics.With(prometheus.Labels{"state":"accepted"}).Inc()
 }
 
-// Metrics ops related to ApplicationsAdded
 func (m *QueueMetrics) IncApplicationsRejected() {
-	m.applicationsRejected.Inc()
+	m.appMetrics.With(prometheus.Labels{"state":"rejected"}).Inc()
 }
 
-func (m *QueueMetrics) AddApplicationsRejected(value int) {
-	m.applicationsRejected.Add(float64(value))
-}
-
-// Metrics Ops related to ApplicationsRunning
-func (m *QueueMetrics) IncApplicationsRunning() {
-	m.applicationsRunning.Inc()
-}
-
-func (m *QueueMetrics) AddApplicationsRunning(value int) {
-	m.applicationsRunning.Add(float64(value))
-}
-
-func (m *QueueMetrics) DecApplicationsRunning() {
-	m.applicationsRunning.Dec()
-}
-
-func (m *QueueMetrics) SubApplicationsRunning(value int) {
-	m.applicationsRunning.Sub(float64(value))
-}
-
-func (m *QueueMetrics) SetApplicationsRunning(value int) {
-	m.applicationsRunning.Set(float64(value))
-}
-
-// Metrics Ops related to ApplicationsCompleted
 func (m *QueueMetrics) IncApplicationsCompleted() {
-	m.applicationsCompleted.Inc()
+	m.appMetrics.With(prometheus.Labels{"state":"completed"}).Inc()
 }
 
-func (m *QueueMetrics) AddApplicationsCompleted(value int) {
-	m.applicationsCompleted.Add(float64(value))
+func (m *QueueMetrics) AddQueueUsedResourceMetrics(resourceName string, value float64) {
+	m.usedResourceMetrics.With(prometheus.Labels{"resource": resourceName}).Add(value)
 }
 
-func (m *QueueMetrics) DecApplicationsCompleted() {
-	m.applicationsCompleted.Dec()
-}
-
-func (m *QueueMetrics) SubApplicationsCompleted(value int) {
-	m.applicationsCompleted.Sub(float64(value))
-}
-
-func (m *QueueMetrics) SetApplicationsCompleted(value int) {
-	m.applicationsCompleted.Set(float64(value))
-}
-
-// Metrics Ops related to QueuePendingResourceMetrics
-func (m *QueueMetrics) IncQueuePendingResourceMetrics() {
-	m.queuePendingResourceMetrics.Inc()
-}
-
-func (m *QueueMetrics) AddQueuePendingResourceMetrics(value float64) {
-	m.queuePendingResourceMetrics.Add(float64(value))
-}
-
-func (m *QueueMetrics) DecQueuePendingResourceMetrics() {
-	m.queuePendingResourceMetrics.Dec()
-}
-
-func (m *QueueMetrics) SubQueuePendingResourceMetrics(value float64) {
-	m.queuePendingResourceMetrics.Sub(float64(value))
-}
-
-func (m *QueueMetrics) SetQueuePendingResourceMetrics(value float64) {
-	m.queuePendingResourceMetrics.Set(float64(value))
-}
-
-// Metrics Ops related to queueUsedResourceMetrics
-func (m *QueueMetrics) IncQueueUsedResourceMetrics() {
-	m.queueUsedResourceMetrics.Inc()
-}
-
-func (m *QueueMetrics) AddQueueUsedResourceMetrics(value float64) {
-	m.queueUsedResourceMetrics.Add(float64(value))
-}
-
-func (m *QueueMetrics) DecQueueUsedResourceMetrics() {
-	m.queueUsedResourceMetrics.Dec()
-}
-
-func (m *QueueMetrics) SubQueueUsedResourceMetrics(value float64) {
-	m.queueUsedResourceMetrics.Sub(float64(value))
-}
-
-func (m *QueueMetrics) SetQueueUsedResourceMetrics(value float64) {
-	m.queueUsedResourceMetrics.Set(float64(value))
-}
-
-// Metrics Ops related to queueAvailableResourceMetrics
-func (m *QueueMetrics) IncQueueAvailableResourceMetrics() {
-	m.queueAvailableResourceMetrics.Inc()
-}
-
-func (m *QueueMetrics) AddQueueAvailableResourceMetrics(value float64) {
-	m.queueAvailableResourceMetrics.Add(float64(value))
-}
-
-func (m *QueueMetrics) DecQueueAvailableResourceMetrics() {
-	m.queueAvailableResourceMetrics.Dec()
-}
-
-func (m *QueueMetrics) SubQueueAvailableResourceMetrics(value float64) {
-	m.queueAvailableResourceMetrics.Sub(float64(value))
-}
-
-func (m *QueueMetrics) SetQueueAvailableResourceMetrics(value float64) {
-	m.queueAvailableResourceMetrics.Set(float64(value))
+func (m *QueueMetrics) SetQueueUsedResourceMetrics(resourceName string, value float64) {
+	m.usedResourceMetrics.With(prometheus.Labels{"resource": resourceName}).Set(value)
 }

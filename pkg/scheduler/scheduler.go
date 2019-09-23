@@ -25,7 +25,6 @@ import (
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
     "github.com/cloudera/yunikorn-core/pkg/handler"
     "github.com/cloudera/yunikorn-core/pkg/log"
-    "github.com/cloudera/yunikorn-core/pkg/metrics"
     "github.com/cloudera/yunikorn-core/pkg/plugins"
     "github.com/cloudera/yunikorn-core/pkg/rmproxy/rmevent"
     "github.com/cloudera/yunikorn-core/pkg/scheduler/schedulerevent"
@@ -49,8 +48,6 @@ type Scheduler struct {
     pendingSchedulerEvents   chan interface{}          // queue for scheduler events
     lock                     sync.RWMutex
 
-    metrics metrics.CoreSchedulerMetrics // Reference to scheduler metrics
-
     // Wait till next try
     // (It is designed to be accessed under a single goroutine, no lock needed).
     // This field has dual purposes:
@@ -62,14 +59,12 @@ type Scheduler struct {
     step uint64 // TODO document this, see ask_finder@findMayAllocationFromApplication
 }
 
-func NewScheduler(clusterInfo *cache.ClusterInfo, metrics metrics.CoreSchedulerMetrics) *Scheduler {
+func NewScheduler(clusterInfo *cache.ClusterInfo) *Scheduler {
     m := &Scheduler{}
     m.clusterInfo = clusterInfo
     m.waitTillNextTry = make(map[string]uint64)
     m.clusterSchedulingContext = NewClusterSchedulingContext()
     m.pendingSchedulerEvents = make(chan interface{}, 1024*1024)
-    m.metrics = metrics
-
     return m
 }
 

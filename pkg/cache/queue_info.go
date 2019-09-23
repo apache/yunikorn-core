@@ -46,9 +46,8 @@ type QueueInfo struct {
 
     Properties map[string]string     // this should be treated as immutable the value is a merge of parent(s)
                                      // properties with the config for this queue only manipulated during creation
-                                     // of the queue or via a queue configuration update
 
-    metrics metrics.CoreQueueMetrics
+                                     // of the queue or via a queue configuration update
 
     // Private fields need protection
     adminACL          security.ACL         // admin ACL
@@ -86,7 +85,6 @@ func NewManagedQueue(conf configs.QueueConfig, parent *QueueInfo) (*QueueInfo, e
         }
     }
 
-    qi.metrics = metrics.InitQueueMetrics(conf.Name)
     log.Logger().Debug("queue added",
         zap.String("queueName", qi.Name),
         zap.String("queuePath", qi.GetQueuePath()))
@@ -117,7 +115,6 @@ func NewUnmanagedQueue(name string, leaf bool, parent *QueueInfo) (*QueueInfo, e
         }
     }
 
-    qi.metrics = metrics.InitQueueMetrics(name)
     return qi, nil
 }
 
@@ -184,6 +181,15 @@ func (qi *QueueInfo) AddChildQueue(child *QueueInfo) error {
     return nil
 }
 
+func (qi *QueueInfo) updateUsedResourceMetrics() {
+    // update queue metrics when this is a leaf queue
+    if qi.isLeaf {
+        for k, v := range qi.allocatedResource.Resources {
+            metrics.GetQueueMetrics(qi.GetQueuePath()).SetQueueUsedResourceMetrics(k, float64(v))
+        }
+    }
+}
+
 // Increment the allocated resources for this queue (recursively)
 // Guard against going over max resources if the
 func (qi *QueueInfo) IncAllocatedResource(alloc *resources.Resource, nodeReported bool) error {
@@ -210,6 +216,7 @@ func (qi *QueueInfo) IncAllocatedResource(alloc *resources.Resource, nodeReporte
     }
     // all OK update this queue
     qi.allocatedResource = newAllocation
+    qi.updateUsedResourceMetrics()
     return nil
 }
 
@@ -236,6 +243,7 @@ func (qi *QueueInfo) DecAllocatedResource(alloc *resources.Resource) error {
     }
     // all OK update the queue
     qi.allocatedResource = resources.Sub(qi.allocatedResource, alloc)
+    qi.updateUsedResourceMetrics()
     return nil
 }
 

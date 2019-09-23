@@ -15,7 +15,10 @@ limitations under the License.
 */
 package webservice
 
-import "net/http"
+import (
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"net/http"
+)
 
 type Route struct {
 	Name        string
@@ -50,5 +53,11 @@ var routes = Routes{
 		"GET",
 		"/ws/v1/stack",
 		GetStackInfo,
+	},
+	Route {
+		"Scheduler",
+		"GET",
+		"/ws/v1/metrics",
+		promhttp.Handler().ServeHTTP,
 	},
 }

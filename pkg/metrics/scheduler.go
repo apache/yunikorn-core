@@ -17,83 +17,9 @@ limitations under the License.
 package metrics
 
 import (
-	"flag"
-	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.uber.org/zap"
-	"net/http"
-	"sync"
 	"time"
 )
-
-const (
-	// SchedulerSubsystem - subsystem name used by scheduler
-	SchedulerSubsystem = "yunikorn_scheduler_metrics"
-	// SchedulingLatencyName - scheduler latency metric name
-	SchedulingLatencyName = "scheduling_duration_seconds"
-)
-
-var addr = flag.String("0.0.0.0", ":8888", "The address to listen on for HTTP requests.")
-
-// singleton instance of SchedulerMetrics
-var instance *SchedulerMetrics
-var once sync.Once
-
-
-// Declare all core metrics ops in this interface
-type CoreSchedulerMetrics interface {
-	// Metrics Ops related to ScheduledAllocationSuccesses
-	IncScheduledAllocationSuccesses()
-	AddScheduledAllocationSuccesses(value int)
-
-	// Metrics Ops related to ScheduledAllocationFailures
-	IncScheduledAllocationFailures()
-	AddScheduledAllocationFailures(value int)
-
-	// Metrics Ops related to ScheduledAllocationErrors
-	IncScheduledAllocationErrors()
-	AddScheduledAllocationErrors(value int)
-
-	// Metrics Ops related to TotalApplicationsAdded
-	IncTotalApplicationsAdded()
-	AddTotalApplicationsAdded(value int)
-
-	// Metrics Ops related to TotalApplicationsRejected
-	IncTotalApplicationsRejected()
-	AddTotalApplicationsRejected(value int)
-
-	// Metrics Ops related to TotalApplicationsRunning
-	IncTotalApplicationsRunning()
-	AddTotalApplicationsRunning(value int)
-	DecTotalApplicationsRunning()
-	SubTotalApplicationsRunning(value int)
-	SetTotalApplicationsRunning(value int)
-
-	// Metrics Ops related to TotalApplicationsCompleted
-	IncTotalApplicationsCompleted()
-	AddTotalApplicationsCompleted(value int)
-	DecTotalApplicationsCompleted()
-	SubTotalApplicationsCompleted(value int)
-	SetTotalApplicationsCompleted(value int)
-
-	// Metrics Ops related to ActiveNodes
-	IncActiveNodes()
-	AddActiveNodes(value int)
-	DecActiveNodes()
-	SubActiveNodes(value int)
-	SetActiveNodes(value int)
-
-	// Metrics Ops related to failedNodes
-	IncFailedNodes()
-	AddFailedNodes(value int)
-	DecFailedNodes()
-	SubFailedNodes(value int)
-	SetFailedNodes(value int)
-
-	//latency change
-	ObserveSchedulingLatency(start time.Time)
-}
 
 // All core metrics variables to be declared in this struct
 type SchedulerMetrics struct  {
@@ -109,14 +35,7 @@ type SchedulerMetrics struct  {
 	activeNodes prometheus.Gauge
 	failedNodes prometheus.Gauge
 	schedulingLatency prometheus.Histogram
-}
-
-// Gets singleton instance of SchedulerMetrics
-func GetInstance() *SchedulerMetrics {
-	once.Do(func() {
-		instance = initSchedulerMetrics()
-	})
-	return instance
+	nodeSortingLatency prometheus.Histogram
 }
 
 // Initialize scheduler metrics
@@ -124,8 +43,9 @@ func initSchedulerMetrics() *SchedulerMetrics {
 	s := &SchedulerMetrics{}
 	s.scheduleAllocations = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
+			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
-			Name:      "schedule_attempts_total",
+			Name:      "allocation_attempts_total",
 			Help:      "Number of attempts to schedule pods, by the result. 'unschedulable' means a pod could not be scheduled, while 'error' means an internal scheduler problem.",
 		}, []string{"result"})
 	// AllocationScheduleSuccesses counts how many pods were scheduled.
@@ -136,6 +56,7 @@ func initSchedulerMetrics() *SchedulerMetrics {
 	s.allocationScheduleErrors = s.scheduleAllocations.With(prometheus.Labels{"result": "error"})
 	s.scheduleApplications = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
+			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "submitted_apps_total",
 			Help:      "Number of applications submitted, by the result.",
@@ -146,12 +67,14 @@ func initSchedulerMetrics() *SchedulerMetrics {
 	s.totalApplicationsRejected = s.scheduleApplications.With(prometheus.Labels{"result": "rejected"})
 	s.totalApplicationsRunning = prometheus.NewGauge(
 		prometheus.GaugeOpts{
+			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "running_apps",
 			Help:      "active apps",
 		})
 	s.totalApplicationsCompleted = prometheus.NewGauge(
 		prometheus.GaugeOpts{
+			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "completed_apps",
 			Help:      "completed apps",
@@ -160,12 +83,14 @@ func initSchedulerMetrics() *SchedulerMetrics {
 	// Nodes
 	s.activeNodes = prometheus.NewGauge(
 		prometheus.GaugeOpts{
+			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "active_nodes",
 			Help:      "active nodes",
 		})
 	s.failedNodes = prometheus.NewGauge(
 		prometheus.GaugeOpts{
+			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "failed_nodes",
 			Help:      "failed nodes",
@@ -173,16 +98,28 @@ func initSchedulerMetrics() *SchedulerMetrics {
 
 	s.schedulingLatency = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
+			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
-			Name:      "scheduling_latency_seconds",
-			Help:      "scheduling latency in seconds",
-			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 15),
+			Name:      "allocating_latency_seconds",
+			Help:      "container allocating latency in seconds",
+			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), //start from 0.1ms
+		},
+	)
+
+	s.nodeSortingLatency = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: Namespace,
+			Subsystem: SchedulerSubsystem,
+			Name:      "nodes_sorting_latency_seconds",
+			Help:      "nodes sorting latency in seconds",
+			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), //start from 0.1ms
 		},
 	)
 	var metricsList = []prometheus.Collector{
 		s.scheduleAllocations,
 		s.scheduleApplications,
 		s.schedulingLatency,
+		s.nodeSortingLatency,
 		s.totalApplicationsRunning,
 		s.totalApplicationsCompleted,
 		s.activeNodes,
@@ -193,15 +130,6 @@ func initSchedulerMetrics() *SchedulerMetrics {
 	for _, metric := range metricsList {
 		prometheus.MustRegister(metric)
 	}
-	// Expose the registered metrics via HTTP.
-	http.Handle("/metrics", promhttp.Handler())
-	log.Logger().Info("metrics started", zap.Int("servicePort", 9090))
-	go func() {
-		httpError := http.ListenAndServe(":9090", nil)
-		if httpError != nil {
-			log.Logger().Error("HTTP serving error", zap.Error(httpError))
-		}
-	}()
 
 	return s
 }
@@ -223,6 +151,10 @@ func SinceInSeconds(start time.Time) float64 {
 
 func (m *SchedulerMetrics) ObserveSchedulingLatency(start time.Time) {
 	m.schedulingLatency.Observe(SinceInSeconds(start))
+}
+
+func (m *SchedulerMetrics) ObserveNodeSortingLatency(start time.Time) {
+	m.nodeSortingLatency.Observe(SinceInSeconds(start))
 }
 
 // Define and implement all the metrics ops for Prometheus.

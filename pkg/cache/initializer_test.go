@@ -58,7 +58,7 @@ partitions:
            Properties:
              x: 345
 `
-    clusterInfo, _ := NewClusterInfo()
+    clusterInfo := NewClusterInfo()
     configs.MockSchedulerConfigByData([]byte(data))
     if _, err := SetClusterInfoFromConfigFile(clusterInfo, "rm-123", "default-policy-group"); err != nil {
         t.Errorf("Error when load clusterInfo from config %v", err)
@@ -96,7 +96,7 @@ partitions:
 func initializationAndCheck(t *testing.T, data string, expectFail bool) {
     configs.MockSchedulerConfigByData([]byte(data))
 
-    clusterInfo,_ := NewClusterInfo()
+    clusterInfo := NewClusterInfo()
     _, err := SetClusterInfoFromConfigFile(clusterInfo, "rm-123", "default-policy-group")
 
     if expectFail && err == nil {
@@ -265,7 +265,7 @@ partitions:
               application.default.priority: 3
               test.self: 999
 `
-    clusterInfo, _ := NewClusterInfo()
+    clusterInfo := NewClusterInfo()
     configs.MockSchedulerConfigByData([]byte(data))
     if _, err := SetClusterInfoFromConfigFile(clusterInfo, "rm-123", "default-policy-group"); err != nil {
         t.Errorf("Error when load clusterInfo from config %v", err)
@@ -330,7 +330,7 @@ partitions:
 
     rmId := "rm-123"
     policyGroup := "default-policy-group"
-    clusterInfo, _ := NewClusterInfo()
+    clusterInfo := NewClusterInfo()
     clusterInfo.policyGroup = policyGroup
     configs.MockSchedulerConfigByData([]byte(data))
     if _, err := SetClusterInfoFromConfigFile(clusterInfo, rmId, policyGroup); err != nil {

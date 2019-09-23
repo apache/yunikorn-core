@@ -48,8 +48,8 @@ func StartAllServicesWithManualScheduler() *ServiceContext {
 }
 
 func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
-    cache, metrics := cache.NewClusterInfo()
-    scheduler := scheduler.NewScheduler(cache, metrics)
+    cache := cache.NewClusterInfo()
+    scheduler := scheduler.NewScheduler(cache)
     proxy := rmproxy.NewRMProxy()
 
     eventHandler := handler.EventHandlers{

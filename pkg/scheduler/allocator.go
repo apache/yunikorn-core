@@ -20,6 +20,7 @@ import (
     "context"
     "github.com/cloudera/yunikorn-core/pkg/common"
     "github.com/cloudera/yunikorn-core/pkg/log"
+    "github.com/cloudera/yunikorn-core/pkg/metrics"
     "github.com/cloudera/yunikorn-core/pkg/plugins"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "go.uber.org/zap"
@@ -47,7 +48,6 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
             continue
         }
 
-        schedulingStart := time.Now()
         // Following steps:
         // - According to resource usage, find next N allocation Requests, N could be
         //   mini-batch because we don't want the process takes too long. And this
@@ -86,9 +86,6 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
 
         // Update missed opportunities
         m.handleFailedToAllocationAllocations(confirmedAllocations, candidates, preemptionParam)
-
-        // Update  metrics
-        m.metrics.ObserveSchedulingLatency(schedulingStart)
     }
 }
 
@@ -149,9 +146,6 @@ func (m *Scheduler) tryBatchAllocation(partition string, candidates []*Schedulin
     for idx, v := range nodeList {
         schedulingNodeList[idx] = NewSchedulingNode(v)
     }
-    // Sort by MAX_AVAILABLE resources.
-    // TODO, this should be configurable.
-    SortNodes(schedulingNodeList, MaxAvailableResources)
 
     ctx, cancel := context.WithCancel(context.Background())
 
@@ -162,6 +156,11 @@ func (m *Scheduler) tryBatchAllocation(partition string, candidates []*Schedulin
     var failedAskLength int32
 
     doAllocation := func(i int) {
+        allocatingStart := time.Now()
+        // Sort by MAX_AVAILABLE resources.
+        // TODO, this should be configurable.
+        SortNodes(schedulingNodeList, MaxAvailableResources)
+
         candidate := candidates[i]
         // Check if the same allocation key got rejected already.
         if preemptionParam.blacklistedRequest[candidate.AskProto.AllocationKey] {
@@ -176,6 +175,9 @@ func (m *Scheduler) tryBatchAllocation(partition string, candidates []*Schedulin
             preemptionParam.blacklistedRequest[candidate.AskProto.AllocationKey] = true
             failedAsks[length-1] = candidate
         }
+
+        // record the latency
+        metrics.GetSchedulerMetrics().ObserveSchedulingLatency(allocatingStart)
     }
 
     common.ParallelizeUntil(ctx, 1, len(candidates), doAllocation)

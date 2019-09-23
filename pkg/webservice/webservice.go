@@ -35,14 +35,14 @@ type WebService struct {
 	lock        sync.RWMutex
 }
 
-func NewRouter(info *cache.ClusterInfo) *mux.Router {
+func NewRouter() *mux.Router {
 
 	router := mux.NewRouter().StrictSlash(true)
 	for _, route := range routes {
 		var handler http.Handler
 
 		handler = route.HandlerFunc
-		handler = Logger(handler, route.Name, info)
+		handler = Logger(handler, route.Name)
 
 		router.
 			Methods(route.Method).
@@ -54,7 +54,7 @@ func NewRouter(info *cache.ClusterInfo) *mux.Router {
 	return router
 }
 
-func Logger(inner http.Handler, name string, info *cache.ClusterInfo) http.Handler {
+func Logger(inner http.Handler, name string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
@@ -66,7 +66,7 @@ func Logger(inner http.Handler, name string, info *cache.ClusterInfo) http.Handl
 }
 
 func (m *WebService) StartWebApp() {
-	router := NewRouter(m.clusterInfo)
+	router := NewRouter()
 	m.httpServer = &http.Server{Addr: ":9080", Handler: router}
 
 	log.Logger().Info("web-app started", zap.Int("port", 9080))

@@ -44,21 +44,15 @@ type ClusterInfo struct {
 
     // RM Event Handler
     EventHandlers handler.EventHandlers
-
-    // Reference to scheduler metrics
-    metrics metrics.CoreSchedulerMetrics
 }
 
-func NewClusterInfo() (*ClusterInfo, metrics.CoreSchedulerMetrics) {
+func NewClusterInfo() (info *ClusterInfo) {
     clusterInfo := &ClusterInfo{
         partitions:             make(map[string]*PartitionInfo),
         pendingRmEvents:        make(chan interface{}, 1024*1024),
         pendingSchedulerEvents: make(chan interface{}, 1024*1024),
     }
-
-    clusterInfo.metrics = metrics.GetInstance()
-
-    return clusterInfo, clusterInfo.metrics
+    return clusterInfo
 }
 
 // Start service
@@ -177,7 +171,6 @@ func (m *ClusterInfo) GetTotalPartitionResource(partitionName string) *resources
 func (m *ClusterInfo) addPartition(name string, info *PartitionInfo) {
     m.lock.Lock()
     defer m.lock.Unlock()
-    info.metrics = m.metrics
     m.partitions[name] = info
 }
 
@@ -212,7 +205,7 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
         // convert and resolve the user: cache can be set per partition
         ugi, err := partitionInfo.convertUGI(app.Ugi)
         if err != nil {
-            m.metrics.IncTotalApplicationsRejected()
+            metrics.GetSchedulerMetrics().IncTotalApplicationsRejected()
             rejectedApps = append(rejectedApps, &si.RejectedApplication{
                 ApplicationId: app.ApplicationId,
                 Reason:        err.Error(),
@@ -222,15 +215,13 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
         // create a new app object and add it to the partition (partition logs details)
         appInfo := NewApplicationInfo(app.ApplicationId, app.PartitionName, app.QueueName, ugi, app.Tags)
         if err := partitionInfo.addNewApplication(appInfo, true); err != nil {
-            m.metrics.IncTotalApplicationsRejected()
+            metrics.GetSchedulerMetrics().IncTotalApplicationsRejected()
             rejectedApps = append(rejectedApps, &si.RejectedApplication{
                 ApplicationId: app.ApplicationId,
                 Reason:        err.Error(),
             })
             continue
         }
-        // just add the apps: the scheduler might reject one later
-        m.metrics.IncTotalApplicationsAdded()
         addedAppInfosInterface = append(addedAppInfosInterface, appInfo)
     }
 
@@ -246,9 +237,9 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
 
     // Update metrics with removed applications
     if len(request.RemoveApplications) > 0 {
-        m.metrics.SubTotalApplicationsRunning(len(request.RemoveApplications))
+        metrics.GetSchedulerMetrics().SubTotalApplicationsRunning(len(request.RemoveApplications))
         // ToDO: need to improve this once we have state in YuniKorn for apps.
-        m.metrics.AddTotalApplicationsCompleted(len(request.RemoveApplications))
+        metrics.GetSchedulerMetrics().AddTotalApplicationsCompleted(len(request.RemoveApplications))
     }
     // Send message to Scheduler if we have anything to process (remove and or add)
     if len(request.RemoveApplications) > 0 || len(addedAppInfosInterface) > 0 {
@@ -337,7 +328,7 @@ func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
             msg := fmt.Sprintf("Failed to create node info from request, nodeId %s, error %s", node.NodeId, err.Error())
             log.Logger().Info(msg)
             // TODO assess impact of partition metrics (this never hit the partition)
-            m.metrics.IncFailedNodes()
+            metrics.GetSchedulerMetrics().IncFailedNodes()
             rejectedNodes = append(rejectedNodes,
                 &si.RejectedNode{
                     NodeId: node.NodeId,
@@ -350,7 +341,7 @@ func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
             msg := fmt.Sprintf("Failed to find partition %s for new node %s", nodeInfo.Partition, node.NodeId)
             log.Logger().Info(msg)
             // TODO assess impact of partition metrics (this never hit the partition)
-            m.metrics.IncFailedNodes()
+            metrics.GetSchedulerMetrics().IncFailedNodes()
             rejectedNodes = append(rejectedNodes,
                 &si.RejectedNode{
                     NodeId: node.NodeId,

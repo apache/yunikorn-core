@@ -157,7 +157,14 @@ func initSchedulerMetrics() *SchedulerMetrics {
 			Subsystem: SchedulerSubsystem,
 			Name:      "scheduling_latency_seconds",
 			Help:      "scheduling latency in seconds",
-			Buckets:   prometheus.ExponentialBuckets(2, 2, 15),
+			Buckets:   prometheus.ExponentialBuckets(10, 2, 7),
+			// 10        10micro
+			// 100       100micro
+			// 1000      1ms
+			// 10000     10ms
+			// 100000    100ms
+			// 1000000   1s
+			// 10000000  10s
 		},
 	)
 
@@ -166,7 +173,7 @@ func initSchedulerMetrics() *SchedulerMetrics {
 			Subsystem: SchedulerSubsystem,
 			Name:      "nodes_sorting_latency_ms",
 			Help:      "nodes sorting latency in microseconds",
-			Buckets:   prometheus.ExponentialBuckets(2, 2, 15),
+			Buckets:   prometheus.ExponentialBuckets(10, 2, 7),
 		},
 	)
 	var metricsList = []prometheus.Collector{
@@ -209,11 +216,11 @@ func SinceInSeconds(start time.Time) float64 {
 }
 
 func (m *SchedulerMetrics) ObserveSchedulingLatency(start time.Time) {
-	m.schedulingLatency.Observe(SinceInMilliseconds(start))
+	m.schedulingLatency.Observe(SinceInMicroseconds(start))
 }
 
 func (m *SchedulerMetrics) ObserveNodeSortingLatency(start time.Time) {
-	m.nodeSortingLatency.Observe(SinceInMilliseconds(start))
+	m.nodeSortingLatency.Observe(SinceInMicroseconds(start))
 }
 
 // Define and implement all the metrics ops for Prometheus.

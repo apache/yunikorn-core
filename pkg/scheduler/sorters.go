@@ -18,7 +18,9 @@ package scheduler
 
 import (
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-core/pkg/metrics"
     "sort"
+    "time"
 )
 
 // Sort queues, apps, etc.
@@ -63,6 +65,7 @@ func SortApplications(queues []*SchedulingApplication, sortType SortType, global
 
 func SortNodes(nodes []*SchedulingNode, sortType SortType) {
     if sortType == MaxAvailableResources {
+        sortingStart := time.Now()
         sort.SliceStable(nodes, func(i, j int) bool {
             l := nodes[i]
             r := nodes[j]
@@ -70,5 +73,6 @@ func SortNodes(nodes []*SchedulingNode, sortType SortType) {
             // Sort by available resource, descending order
             return resources.CompFairnessRatioAssumesUnitPartition(l.CachedAvailableResource, r.CachedAvailableResource) > 0
         })
+        metrics.GetSchedulerMetrics().ObserveSchedulingLatency(sortingStart)
     }
 }

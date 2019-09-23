@@ -80,6 +80,7 @@ type CoreSchedulerMetrics interface {
 
 	//latency change
 	ObserveSchedulingLatency(start time.Time)
+	ObserveNodeSortingLatency(start time.Time)
 }
 
 // All core metrics variables to be declared in this struct
@@ -96,6 +97,7 @@ type SchedulerMetrics struct  {
 	activeNodes prometheus.Gauge
 	failedNodes prometheus.Gauge
 	schedulingLatency prometheus.Histogram
+	nodeSortingLatency prometheus.Histogram
 }
 
 // Initialize scheduler metrics
@@ -158,6 +160,15 @@ func initSchedulerMetrics() *SchedulerMetrics {
 			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 15),
 		},
 	)
+
+	s.nodeSortingLatency = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Subsystem: SchedulerSubsystem,
+			Name:      "nodes_sorting_latency_ms",
+			Help:      "nodes sorting latency in microseconds",
+			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 15),
+		},
+	)
 	var metricsList = []prometheus.Collector{
 		s.scheduleAllocations,
 		s.scheduleApplications,
@@ -193,6 +204,10 @@ func SinceInSeconds(start time.Time) float64 {
 
 func (m *SchedulerMetrics) ObserveSchedulingLatency(start time.Time) {
 	m.schedulingLatency.Observe(SinceInSeconds(start))
+}
+
+func (m *SchedulerMetrics) ObserveNodeSortingLatency(start time.Time) {
+	m.nodeSortingLatency.Observe(SinceInMicroseconds(start))
 }
 
 // Define and implement all the metrics ops for Prometheus.

@@ -21,66 +21,6 @@ import (
 	"time"
 )
 
-const (
-	// SchedulerSubsystem - subsystem name used by scheduler
-	SchedulerSubsystem = "scheduler"
-)
-
-// Declare all core metrics ops in this interface
-type CoreSchedulerMetrics interface {
-	// Metrics Ops related to ScheduledAllocationSuccesses
-	IncScheduledAllocationSuccesses()
-	AddScheduledAllocationSuccesses(value int)
-
-	// Metrics Ops related to ScheduledAllocationFailures
-	IncScheduledAllocationFailures()
-	AddScheduledAllocationFailures(value int)
-
-	// Metrics Ops related to ScheduledAllocationErrors
-	IncScheduledAllocationErrors()
-	AddScheduledAllocationErrors(value int)
-
-	// Metrics Ops related to TotalApplicationsAdded
-	IncTotalApplicationsAdded()
-	AddTotalApplicationsAdded(value int)
-
-	// Metrics Ops related to TotalApplicationsRejected
-	IncTotalApplicationsRejected()
-	AddTotalApplicationsRejected(value int)
-
-	// Metrics Ops related to TotalApplicationsRunning
-	IncTotalApplicationsRunning()
-	AddTotalApplicationsRunning(value int)
-	DecTotalApplicationsRunning()
-	SubTotalApplicationsRunning(value int)
-	SetTotalApplicationsRunning(value int)
-
-	// Metrics Ops related to TotalApplicationsCompleted
-	IncTotalApplicationsCompleted()
-	AddTotalApplicationsCompleted(value int)
-	DecTotalApplicationsCompleted()
-	SubTotalApplicationsCompleted(value int)
-	SetTotalApplicationsCompleted(value int)
-
-	// Metrics Ops related to ActiveNodes
-	IncActiveNodes()
-	AddActiveNodes(value int)
-	DecActiveNodes()
-	SubActiveNodes(value int)
-	SetActiveNodes(value int)
-
-	// Metrics Ops related to failedNodes
-	IncFailedNodes()
-	AddFailedNodes(value int)
-	DecFailedNodes()
-	SubFailedNodes(value int)
-	SetFailedNodes(value int)
-
-	//latency change
-	ObserveSchedulingLatency(start time.Time)
-	ObserveNodeSortingLatency(start time.Time)
-}
-
 // All core metrics variables to be declared in this struct
 type SchedulerMetrics struct  {
 	scheduleAllocations  *prometheus.CounterVec
@@ -162,7 +102,7 @@ func initSchedulerMetrics() *SchedulerMetrics {
 			Subsystem: SchedulerSubsystem,
 			Name:      "scheduling_latency_seconds",
 			Help:      "scheduling latency in seconds",
-			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 5), //start from 0.1ms
+			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), //start from 0.1ms
 		},
 	)
 
@@ -172,7 +112,7 @@ func initSchedulerMetrics() *SchedulerMetrics {
 			Subsystem: SchedulerSubsystem,
 			Name:      "nodes_sorting_latency_seconds",
 			Help:      "nodes sorting latency in seconds",
-			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 5), //start from 0.1ms
+			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), //start from 0.1ms
 		},
 	)
 	var metricsList = []prometheus.Collector{

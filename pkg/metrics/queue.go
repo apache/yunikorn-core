@@ -21,18 +21,6 @@ import (
 	"sync"
 )
 
-const (
-	// 	QueuesSubsystem = "queues_metrics" - subsystem name used by queues
-	QueuesSubsystem = "queues"
-)
-
-type CoreQueueMetrics interface {
-	IncApplicationsAccepted()
-	IncApplicationsRejected()
-	IncApplicationsCompleted()
-	AddQueueUsedResourceMetrics(resourceName string, value float64)
-}
-
 type QueueMetrics struct  {
 	// metrics related to app
 	appMetrics *prometheus.CounterVec

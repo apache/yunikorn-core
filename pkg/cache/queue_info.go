@@ -207,6 +207,9 @@ func (qi *QueueInfo) IncAllocatedResource(alloc *resources.Resource, nodeReporte
     }
     // all OK update this queue
     qi.allocatedResource = newAllocation
+
+    // update queue metrics
+    log.Logger().Info("#####", zap.String("name", qi.GetQueuePath()))
     for k,v := range newAllocation.Resources {
         metrics.GetQueueMetrics(qi.GetQueuePath()).AddQueueUsedResourceMetrics(k, float64(v))
     }

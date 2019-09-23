@@ -16,11 +16,16 @@ limitations under the License.
 
 package metrics
 
-import "sync"
+import (
+	"sync"
+	"time"
+)
 
 const (
-	// SchedulerSubsystem - subsystem name used by scheduler
+	// all metrics should be declared under this namespace
 	Namespace = "yunikorn"
+	// SchedulerSubsystem - subsystem name used by scheduler
+	SchedulerSubsystem = "scheduler"
 )
 
 var once sync.Once
@@ -29,6 +34,69 @@ var m *Metrics
 type Metrics struct {
 	scheduler CoreSchedulerMetrics
 	queues map[string]CoreQueueMetrics
+	lock sync.RWMutex
+}
+
+type CoreQueueMetrics interface {
+	IncApplicationsAccepted()
+	IncApplicationsRejected()
+	IncApplicationsCompleted()
+	AddQueueUsedResourceMetrics(resourceName string, value float64)
+}
+
+// Declare all core metrics ops in this interface
+type CoreSchedulerMetrics interface {
+	// Metrics Ops related to ScheduledAllocationSuccesses
+	IncScheduledAllocationSuccesses()
+	AddScheduledAllocationSuccesses(value int)
+
+	// Metrics Ops related to ScheduledAllocationFailures
+	IncScheduledAllocationFailures()
+	AddScheduledAllocationFailures(value int)
+
+	// Metrics Ops related to ScheduledAllocationErrors
+	IncScheduledAllocationErrors()
+	AddScheduledAllocationErrors(value int)
+
+	// Metrics Ops related to TotalApplicationsAdded
+	IncTotalApplicationsAdded()
+	AddTotalApplicationsAdded(value int)
+
+	// Metrics Ops related to TotalApplicationsRejected
+	IncTotalApplicationsRejected()
+	AddTotalApplicationsRejected(value int)
+
+	// Metrics Ops related to TotalApplicationsRunning
+	IncTotalApplicationsRunning()
+	AddTotalApplicationsRunning(value int)
+	DecTotalApplicationsRunning()
+	SubTotalApplicationsRunning(value int)
+	SetTotalApplicationsRunning(value int)
+
+	// Metrics Ops related to TotalApplicationsCompleted
+	IncTotalApplicationsCompleted()
+	AddTotalApplicationsCompleted(value int)
+	DecTotalApplicationsCompleted()
+	SubTotalApplicationsCompleted(value int)
+	SetTotalApplicationsCompleted(value int)
+
+	// Metrics Ops related to ActiveNodes
+	IncActiveNodes()
+	AddActiveNodes(value int)
+	DecActiveNodes()
+	SubActiveNodes(value int)
+	SetActiveNodes(value int)
+
+	// Metrics Ops related to failedNodes
+	IncFailedNodes()
+	AddFailedNodes(value int)
+	DecFailedNodes()
+	SubFailedNodes(value int)
+	SetFailedNodes(value int)
+
+	//latency change
+	ObserveSchedulingLatency(start time.Time)
+	ObserveNodeSortingLatency(start time.Time)
 }
 
 func init() {
@@ -36,6 +104,7 @@ func init() {
 		m = &Metrics{
 			scheduler: initSchedulerMetrics(),
 			queues: make(map[string]CoreQueueMetrics),
+			lock: sync.RWMutex{},
 		}
 	})
 }
@@ -45,6 +114,8 @@ func GetSchedulerMetrics() CoreSchedulerMetrics {
 }
 
 func GetQueueMetrics(name string) CoreQueueMetrics {
+	m.lock.Lock()
+	defer m.lock.Unlock()
 	if qm, ok := m.queues[name]; ok {
 		return qm
 	} else {

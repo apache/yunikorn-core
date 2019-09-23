@@ -222,8 +222,6 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
             })
             continue
         }
-        // just add the apps: the scheduler might reject one later
-        metrics.GetSchedulerMetrics().IncTotalApplicationsAdded()
         addedAppInfosInterface = append(addedAppInfosInterface, appInfo)
     }
 

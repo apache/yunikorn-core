@@ -17,7 +17,11 @@ limitations under the License.
 package metrics
 
 import (
+	"fmt"
+	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
+	"strings"
 	"sync"
 )
 
@@ -34,13 +38,16 @@ type QueueMetrics struct  {
 var queueRegisterMetrics sync.Once
 
 func forQueue(name string) CoreQueueMetrics {
+
+	log.Logger().Info(">>>>>>", zap.String("name", name))
+
 	q := &QueueMetrics{}
 
 	// Queue Metrics
 	q.appMetrics = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: Namespace,
-			Subsystem: "queue_"+name,
+			Subsystem: substituteQueueName(name),
 			Name:      "app_metrics",
 			Help:      "Application Metrics",
 		}, []string{"state"})
@@ -48,7 +55,7 @@ func forQueue(name string) CoreQueueMetrics {
 	q.usedResourceMetrics = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: Namespace,
-			Subsystem: "queue_"+name,
+			Subsystem: substituteQueueName(name),
 			Name:      "used_resource",
 			Help:      "Queue used resource",
 		}, []string{"resource"})
@@ -56,7 +63,7 @@ func forQueue(name string) CoreQueueMetrics {
 	q.pendingResourceMetrics = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: Namespace,
-			Subsystem: "queue_"+name,
+			Subsystem: substituteQueueName(name),
 			Name:      "pending_resource",
 			Help:      "Queue pending resource",
 		}, []string{"resource"})
@@ -64,7 +71,7 @@ func forQueue(name string) CoreQueueMetrics {
 	q.availableResourceMetrics = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: Namespace,
-			Subsystem: "queue_"+name,
+			Subsystem: substituteQueueName(name),
 			Name:      "used_resource_metrics",
 			Help:      "used resource metrics related to queues etc.",
 		}, []string{"resource"})
@@ -84,6 +91,11 @@ func forQueue(name string) CoreQueueMetrics {
 	})
 
 	return q
+}
+
+func substituteQueueName(queueName string) string {
+	return fmt.Sprintf("queue_%s",
+		strings.Replace(queueName, ".", "_", -1))
 }
 
 func (m *QueueMetrics) IncApplicationsAccepted() {

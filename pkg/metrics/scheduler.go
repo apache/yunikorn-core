@@ -173,6 +173,7 @@ func initSchedulerMetrics() *SchedulerMetrics {
 		s.scheduleAllocations,
 		s.scheduleApplications,
 		s.schedulingLatency,
+		s.nodeSortingLatency,
 		s.totalApplicationsRunning,
 		s.totalApplicationsCompleted,
 		s.activeNodes,

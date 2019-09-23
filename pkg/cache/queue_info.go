@@ -208,9 +208,11 @@ func (qi *QueueInfo) IncAllocatedResource(alloc *resources.Resource, nodeReporte
     // all OK update this queue
     qi.allocatedResource = newAllocation
 
-    // update queue metrics
-    for k,v := range newAllocation.Resources {
-        metrics.GetQueueMetrics(qi.GetQueuePath()).AddQueueUsedResourceMetrics(k, float64(v))
+    // update queue metrics when this is a leaf queue
+    if qi.isLeaf {
+        for k, v := range newAllocation.Resources {
+            metrics.GetQueueMetrics(qi.GetQueuePath()).AddQueueUsedResourceMetrics(k, float64(v))
+        }
     }
     return nil
 }

@@ -184,7 +184,7 @@ func (qi *QueueInfo) AddChildQueue(child *QueueInfo) error {
 func (qi *QueueInfo) updateUsedResourceMetrics() {
     // update queue metrics when this is a leaf queue
     if qi.isLeaf {
-        for k, v := range qi.GetAllocatedResource().Resources {
+        for k, v := range qi.allocatedResource.Resources {
             metrics.GetQueueMetrics(qi.GetQueuePath()).SetQueueUsedResourceMetrics(k, float64(v))
         }
     }

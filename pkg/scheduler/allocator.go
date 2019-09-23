@@ -150,9 +150,6 @@ func (m *Scheduler) tryBatchAllocation(partition string, candidates []*Schedulin
     for idx, v := range nodeList {
         schedulingNodeList[idx] = NewSchedulingNode(v)
     }
-    // Sort by MAX_AVAILABLE resources.
-    // TODO, this should be configurable.
-    SortNodes(schedulingNodeList, MaxAvailableResources)
 
     ctx, cancel := context.WithCancel(context.Background())
 
@@ -163,6 +160,10 @@ func (m *Scheduler) tryBatchAllocation(partition string, candidates []*Schedulin
     var failedAskLength int32
 
     doAllocation := func(i int) {
+        // Sort by MAX_AVAILABLE resources.
+        // TODO, this should be configurable.
+        SortNodes(schedulingNodeList, MaxAvailableResources)
+
         candidate := candidates[i]
         // Check if the same allocation key got rejected already.
         if preemptionParam.blacklistedRequest[candidate.AskProto.AllocationKey] {

@@ -23,7 +23,7 @@ import (
 
 const (
 	// 	QueuesSubsystem = "queues_metrics" - subsystem name used by queues
-	QueuesSubsystem = "queues_metrics"
+	QueuesSubsystem = "queues"
 )
 
 type CoreQueueMetrics interface {
@@ -62,6 +62,7 @@ type CoreQueueMetrics interface {
 	DecQueueUsedResourceMetrics()
 	SubQueueUsedResourceMetrics(value float64)
 	SetQueueUsedResourceMetrics(value float64)
+	AddQueueUsedMemoryMetrics(value float64)
 
 	// Metrics Ops related to queueAvailableResourceMetrics
 	IncQueueAvailableResourceMetrics()
@@ -88,6 +89,7 @@ type QueueMetrics struct  {
 	queuePendingResourceMetrics prometheus.Gauge
 	queueUsedResourceMetrics prometheus.Gauge
 	queueAvailableResourceMetrics prometheus.Gauge
+	queueMemoryUsedMetrics prometheus.Gauge
 }
 
 var queueRegisterMetrics sync.Once
@@ -129,6 +131,7 @@ func initQueueMetrics(name string) *QueueMetrics {
 	// ApplicationsRunning counts how many apps are running active.
 	q.applicationsRunning = prometheus.NewGauge(
 		prometheus.GaugeOpts{
+			Namespace: Namespace,
 			Subsystem: QueuesSubsystem,
 			Name:      "queue_running_apps",
 			Help:      "active apps",
@@ -136,28 +139,38 @@ func initQueueMetrics(name string) *QueueMetrics {
 	// ApplicationsCompleted counts how many apps are completed.
 	q.applicationsCompleted = prometheus.NewGauge(
 		prometheus.GaugeOpts{
+			Namespace: Namespace,
 			Subsystem: QueuesSubsystem,
 			Name:      "queue_completed_apps",
 			Help:      "completed apps",
 		})
-
 	q.queuePendingResourceMetrics = prometheus.NewGauge(
 		prometheus.GaugeOpts{
+			Namespace: Namespace,
 			Subsystem: QueuesSubsystem,
 			Name:      "queue_pending_resource_metrics",
 			Help:      "pending resource metrics related to queues etc.",
 		})
 	q.queueUsedResourceMetrics = prometheus.NewGauge(
 		prometheus.GaugeOpts{
+			Namespace: Namespace,
 			Subsystem: QueuesSubsystem,
 			Name:      "queue_used_resource_metrics",
 			Help:      "used resource metrics related to queues etc.",
 		})
 	q.queueAvailableResourceMetrics = prometheus.NewGauge(
 		prometheus.GaugeOpts{
+			Namespace: Namespace,
 			Subsystem: QueuesSubsystem,
 			Name:      "queue_available_resource_metrics",
 			Help:      "available resource metrics related to queues etc.",
+		})
+	q.queueMemoryUsedMetrics = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: Namespace,
+			Subsystem: QueuesSubsystem,
+			Name:      "queue_memory_used",
+			Help:      "allocated memory in this queue",
 		})
 
 	var queueMetricsList = []prometheus.Collector{
@@ -165,6 +178,7 @@ func initQueueMetrics(name string) *QueueMetrics {
 		q.queuePendingResourceMetrics,
 		q.queueUsedResourceMetrics,
 		q.queueAvailableResourceMetrics,
+		q.queueMemoryUsedMetrics,
 	}
 
 	// Register the metrics.
@@ -267,6 +281,10 @@ func (m *QueueMetrics) IncQueueUsedResourceMetrics() {
 
 func (m *QueueMetrics) AddQueueUsedResourceMetrics(value float64) {
 	m.queueUsedResourceMetrics.Add(float64(value))
+}
+
+func (m *QueueMetrics) AddQueueUsedMemoryMetrics(value float64) {
+	m.queueMemoryUsedMetrics.Add(value)
 }
 
 func (m *QueueMetrics) DecQueueUsedResourceMetrics() {

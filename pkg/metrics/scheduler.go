@@ -23,9 +23,7 @@ import (
 
 const (
 	// SchedulerSubsystem - subsystem name used by scheduler
-	SchedulerSubsystem = "yunikorn_scheduler_metrics"
-	// SchedulingLatencyName - scheduler latency metric name
-	SchedulingLatencyName = "scheduling_duration_seconds"
+	SchedulerSubsystem = "scheduler"
 )
 
 // Declare all core metrics ops in this interface
@@ -105,6 +103,7 @@ func initSchedulerMetrics() *SchedulerMetrics {
 	s := &SchedulerMetrics{}
 	s.scheduleAllocations = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
+			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "schedule_attempts_total",
 			Help:      "Number of attempts to schedule pods, by the result. 'unschedulable' means a pod could not be scheduled, while 'error' means an internal scheduler problem.",
@@ -117,6 +116,7 @@ func initSchedulerMetrics() *SchedulerMetrics {
 	s.allocationScheduleErrors = s.scheduleAllocations.With(prometheus.Labels{"result": "error"})
 	s.scheduleApplications = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
+			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "submitted_apps_total",
 			Help:      "Number of applications submitted, by the result.",
@@ -127,12 +127,14 @@ func initSchedulerMetrics() *SchedulerMetrics {
 	s.totalApplicationsRejected = s.scheduleApplications.With(prometheus.Labels{"result": "rejected"})
 	s.totalApplicationsRunning = prometheus.NewGauge(
 		prometheus.GaugeOpts{
+			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "running_apps",
 			Help:      "active apps",
 		})
 	s.totalApplicationsCompleted = prometheus.NewGauge(
 		prometheus.GaugeOpts{
+			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "completed_apps",
 			Help:      "completed apps",
@@ -141,12 +143,14 @@ func initSchedulerMetrics() *SchedulerMetrics {
 	// Nodes
 	s.activeNodes = prometheus.NewGauge(
 		prometheus.GaugeOpts{
+			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "active_nodes",
 			Help:      "active nodes",
 		})
 	s.failedNodes = prometheus.NewGauge(
 		prometheus.GaugeOpts{
+			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "failed_nodes",
 			Help:      "failed nodes",
@@ -154,26 +158,21 @@ func initSchedulerMetrics() *SchedulerMetrics {
 
 	s.schedulingLatency = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
+			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "scheduling_latency_seconds",
 			Help:      "scheduling latency in seconds",
-			Buckets:   prometheus.ExponentialBuckets(10, 10, 7),
-			// 10        10micro
-			// 100       100micro
-			// 1000      1ms
-			// 10000     10ms
-			// 100000    100ms
-			// 1000000   1s
-			// 10000000  10s
+			Buckets:   prometheus.ExponentialBuckets(0.00001, 10, 6), //start from 0.01ms
 		},
 	)
 
 	s.nodeSortingLatency = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
+			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
-			Name:      "nodes_sorting_latency_ms",
-			Help:      "nodes sorting latency in microseconds",
-			Buckets:   prometheus.ExponentialBuckets(10, 10, 7),
+			Name:      "nodes_sorting_latency_seconds",
+			Help:      "nodes sorting latency in seconds",
+			Buckets:   prometheus.ExponentialBuckets(0.00001, 10, 6), //start from 0.01ms
 		},
 	)
 	var metricsList = []prometheus.Collector{
@@ -205,22 +204,17 @@ func SinceInMicroseconds(start time.Time) float64 {
 	return float64(time.Since(start).Nanoseconds() / time.Microsecond.Nanoseconds())
 }
 
-func SinceInMilliseconds(start time.Time) float64 {
-	return float64(time.Since(start).Nanoseconds() / time.Millisecond.Nanoseconds())
-}
-
-
 // SinceInSeconds gets the time since the specified start in seconds.
 func SinceInSeconds(start time.Time) float64 {
 	return time.Since(start).Seconds()
 }
 
 func (m *SchedulerMetrics) ObserveSchedulingLatency(start time.Time) {
-	m.schedulingLatency.Observe(SinceInMicroseconds(start))
+	m.schedulingLatency.Observe(SinceInSeconds(start))
 }
 
 func (m *SchedulerMetrics) ObserveNodeSortingLatency(start time.Time) {
-	m.nodeSortingLatency.Observe(SinceInMicroseconds(start))
+	m.nodeSortingLatency.Observe(SinceInSeconds(start))
 }
 
 // Define and implement all the metrics ops for Prometheus.

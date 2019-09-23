@@ -18,6 +18,11 @@ package metrics
 
 import "sync"
 
+const (
+	// SchedulerSubsystem - subsystem name used by scheduler
+	Namespace = "yunikorn"
+)
+
 var once sync.Once
 var m *Metrics
 

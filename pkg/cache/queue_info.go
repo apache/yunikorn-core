@@ -22,6 +22,7 @@ import (
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
     "github.com/cloudera/yunikorn-core/pkg/common/security"
     "github.com/cloudera/yunikorn-core/pkg/log"
+    "github.com/cloudera/yunikorn-core/pkg/metrics"
     "github.com/looplab/fsm"
     "go.uber.org/zap"
     "strings"
@@ -206,6 +207,7 @@ func (qi *QueueInfo) IncAllocatedResource(alloc *resources.Resource, nodeReporte
     }
     // all OK update this queue
     qi.allocatedResource = newAllocation
+    metrics.GetQueueMetrics(qi.GetQueuePath()).AddQueueUsedResourceMetrics()
     return nil
 }
 

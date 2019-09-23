@@ -162,7 +162,7 @@ func initSchedulerMetrics() *SchedulerMetrics {
 			Subsystem: SchedulerSubsystem,
 			Name:      "scheduling_latency_seconds",
 			Help:      "scheduling latency in seconds",
-			Buckets:   prometheus.ExponentialBuckets(0.00001, 10, 6), //start from 0.01ms
+			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 5), //start from 0.1ms
 		},
 	)
 
@@ -172,7 +172,7 @@ func initSchedulerMetrics() *SchedulerMetrics {
 			Subsystem: SchedulerSubsystem,
 			Name:      "nodes_sorting_latency_seconds",
 			Help:      "nodes sorting latency in seconds",
-			Buckets:   prometheus.ExponentialBuckets(0.00001, 10, 6), //start from 0.01ms
+			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 5), //start from 0.1ms
 		},
 	)
 	var metricsList = []prometheus.Collector{

@@ -28,14 +28,14 @@ var m *Metrics
 
 type Metrics struct {
 	scheduler CoreSchedulerMetrics
-	queues QueuesMetrics
+	queues map[string]CoreQueueMetrics
 }
 
 func init() {
 	once.Do(func() {
 		m = &Metrics{
 			scheduler: initSchedulerMetrics(),
-			queues: initQueuesMetrics(),
+			queues: make(map[string]CoreQueueMetrics),
 		}
 	})
 }
@@ -45,5 +45,11 @@ func GetSchedulerMetrics() CoreSchedulerMetrics {
 }
 
 func GetQueueMetrics(name string) CoreQueueMetrics {
-	return m.queues.forQueue(name)
+	if qm, ok := m.queues[name]; ok {
+		return qm
+	} else {
+		queueMetrics := forQueue(name)
+		m.queues[name] = queueMetrics
+		return queueMetrics
+	}
 }

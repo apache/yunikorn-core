@@ -58,11 +58,10 @@ type CoreQueueMetrics interface {
 
 	// Metrics Ops related to queueUsedResourceMetrics
 	IncQueueUsedResourceMetrics()
-	AddQueueUsedResourceMetrics(value float64)
+	AddQueueUsedResourceMetrics(resourceName string, value float64)
 	DecQueueUsedResourceMetrics()
 	SubQueueUsedResourceMetrics(value float64)
 	SetQueueUsedResourceMetrics(value float64)
-	AddQueueUsedMemoryMetrics(value float64)
 
 	// Metrics Ops related to queueAvailableResourceMetrics
 	IncQueueAvailableResourceMetrics()
@@ -279,8 +278,24 @@ func (m *QueueMetrics) IncQueueUsedResourceMetrics() {
 	m.queueUsedResourceMetrics.Inc()
 }
 
-func (m *QueueMetrics) AddQueueUsedResourceMetrics(value float64) {
-	m.queueUsedResourceMetrics.Add(float64(value))
+func (m *QueueMetrics) AddQueueUsedResourceMetrics(resourceName string, value float64) {
+	resourceMetrics := prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: Namespace,
+			Subsystem: QueuesSubsystem,
+			Name:      "queue_memory_used",
+			Help:      "allocated memory in this queue",
+			ConstLabels: prometheus.Labels{
+				"resourceName" : resourceName,
+			},
+		})
+	registerError := prometheus.Register(resourceMetrics)
+	if err, ok := registerError.(prometheus.AlreadyRegisteredError); ok {
+		if gauge, ok := err.ExistingCollector.(prometheus.Gauge); ok {
+			gauge.Add(float64(value))
+		}
+	}
+	resourceMetrics.Add(float64(value))
 }
 
 func (m *QueueMetrics) AddQueueUsedMemoryMetrics(value float64) {

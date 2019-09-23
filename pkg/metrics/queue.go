@@ -71,6 +71,10 @@ type CoreQueueMetrics interface {
 	SetQueueAvailableResourceMetrics(value float64)
 }
 
+type QueuesMetrics struct {
+	queuesMetrics map[string]*QueueMetrics
+	lock sync.RWMutex
+}
 
 type QueueMetrics struct  {
 	Name string
@@ -86,7 +90,26 @@ type QueueMetrics struct  {
 
 var queueRegisterMetrics sync.Once
 
-func InitQueueMetrics(name string) *QueueMetrics {
+func initQueuesMetrics() QueuesMetrics{
+	return QueuesMetrics{
+		queuesMetrics: make(map[string]*QueueMetrics),
+		lock: sync.RWMutex{},
+	}
+}
+
+func (qm *QueuesMetrics) forQueue(queueName string) *QueueMetrics {
+	qm.lock.Lock()
+	defer qm.lock.Unlock()
+	if metrics, ok := qm.queuesMetrics[queueName]; !ok {
+		queueMetrics := initQueueMetrics(queueName)
+		qm.queuesMetrics[queueName] = queueMetrics
+		return queueMetrics
+	} else {
+		return metrics
+	}
+}
+
+func initQueueMetrics(name string) *QueueMetrics {
 	q := &QueueMetrics{Name:name}
 
 	// Queue Metrics

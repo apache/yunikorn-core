@@ -22,7 +22,6 @@ import (
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
     "github.com/cloudera/yunikorn-core/pkg/common/security"
     "github.com/cloudera/yunikorn-core/pkg/log"
-    "github.com/cloudera/yunikorn-core/pkg/metrics"
     "github.com/looplab/fsm"
     "go.uber.org/zap"
     "strings"
@@ -46,9 +45,8 @@ type QueueInfo struct {
 
     Properties map[string]string     // this should be treated as immutable the value is a merge of parent(s)
                                      // properties with the config for this queue only manipulated during creation
-                                     // of the queue or via a queue configuration update
 
-    metrics metrics.CoreQueueMetrics
+                                     // of the queue or via a queue configuration update
 
     // Private fields need protection
     adminACL          security.ACL         // admin ACL
@@ -86,7 +84,6 @@ func NewManagedQueue(conf configs.QueueConfig, parent *QueueInfo) (*QueueInfo, e
         }
     }
 
-    qi.metrics = metrics.InitQueueMetrics(conf.Name)
     log.Logger().Debug("queue added",
         zap.String("queueName", qi.Name),
         zap.String("queuePath", qi.GetQueuePath()))
@@ -117,7 +114,6 @@ func NewUnmanagedQueue(name string, leaf bool, parent *QueueInfo) (*QueueInfo, e
         }
     }
 
-    qi.metrics = metrics.InitQueueMetrics(name)
     return qi, nil
 }
 

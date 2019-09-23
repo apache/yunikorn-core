@@ -52,7 +52,6 @@ type PartitionInfo struct {
     clusterInfo            *ClusterInfo                 // link back to the cluster info
     lock                   sync.RWMutex                 // lock for updating the partition
     totalPartitionResource *resources.Resource          // Total node resources
-    metrics                metrics.CoreSchedulerMetrics // Reference to scheduler metrics
 }
 
 // Create a new partition from scratch based on a validated configuration.
@@ -189,7 +188,7 @@ func (pi *PartitionInfo) addNewNode(node *NodeInfo, existingAllocations []*si.Al
                     zap.String("nodeId", node.NodeId),
                     zap.Int("existingAllocations", len(existingAllocations)))
                 pi.removeNodeInternal(node.NodeId)
-                pi.metrics.IncFailedNodes()
+                metrics.GetSchedulerMetrics().IncFailedNodes()
                 return err
             }
         }
@@ -216,7 +215,7 @@ func (pi *PartitionInfo) addNewNode(node *NodeInfo, existingAllocations []*si.Al
     }
 
     // Node is added update the metrics
-    pi.metrics.IncActiveNodes()
+    metrics.GetSchedulerMetrics().IncActiveNodes()
     log.Logger().Info("added node to partition",
         zap.String("nodeId", node.NodeId),
         zap.String("partition", pi.Name))
@@ -305,7 +304,7 @@ func (pi *PartitionInfo) removeNodeInternal(nodeId string) {
 
     // Remove node from list of tracked nodes
     delete(pi.nodes, nodeId)
-    pi.metrics.DecActiveNodes()
+    metrics.GetSchedulerMetrics().DecActiveNodes()
 
     log.Logger().Info("node removed",
         zap.String("partitionName", pi.Name),
@@ -343,7 +342,7 @@ func (pi *PartitionInfo) addNewApplication(info *ApplicationInfo, failIfExist bo
     info.leafQueue = pi.getQueue(info.QueueName)
     // Add app to the partition
     pi.applications[info.ApplicationId] = info
-    pi.metrics.IncTotalApplicationsAdded()
+    metrics.GetSchedulerMetrics().IncTotalApplicationsAdded()
 
     log.Logger().Info("app added to partition",
         zap.String("appId", info.ApplicationId),
@@ -473,24 +472,24 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
     var ok bool
 
     if node, ok = pi.nodes[alloc.NodeId]; !ok {
-        pi.metrics.IncScheduledAllocationErrors()
+        metrics.GetSchedulerMetrics().IncScheduledAllocationErrors()
         return nil, fmt.Errorf("failed to find node %s", alloc.NodeId)
     }
 
     if app, ok = pi.applications[alloc.ApplicationId]; !ok {
-        pi.metrics.IncScheduledAllocationErrors()
+        metrics.GetSchedulerMetrics().IncScheduledAllocationErrors()
         return nil, fmt.Errorf("failed to find application %s", alloc.ApplicationId)
     }
 
     if queue = pi.getQueue(alloc.QueueName); queue == nil || !queue.IsLeafQueue() {
-        pi.metrics.IncScheduledAllocationErrors()
+        metrics.GetSchedulerMetrics().IncScheduledAllocationErrors()
         return nil, fmt.Errorf("queue does not exist or is not a leaf queue %s", alloc.QueueName)
     }
 
     // Does the new allocation exceed the node's available resource?
     newNodeResource := resources.Add(node.GetAllocatedResource(), alloc.AllocatedResource)
     if !resources.FitIn(node.TotalResource, newNodeResource) {
-        pi.metrics.IncScheduledAllocationFailures()
+        metrics.GetSchedulerMetrics().IncScheduledAllocationFailures()
         return nil, fmt.Errorf("cannot allocate resource [%v] for application %s on "+
             "node %s because request exceeds available resources, used [%v] node limit [%v]",
             alloc.AllocatedResource, alloc.ApplicationId, node.NodeId, newNodeResource, node.TotalResource)
@@ -498,7 +497,7 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
 
     // If new allocation go beyond any of queue's max resource? Only check if when it is allocated instead of node reported.
     if err := queue.IncAllocatedResource(alloc.AllocatedResource, nodeReported); err != nil {
-        pi.metrics.IncScheduledAllocationFailures()
+        metrics.GetSchedulerMetrics().IncScheduledAllocationFailures()
         return nil, fmt.Errorf("cannot allocate resource from application %s: %v ",
             alloc.ApplicationId, err)
     }
@@ -513,7 +512,7 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
 
     pi.allocations[allocation.AllocationProto.Uuid] = allocation
 
-    pi.metrics.IncScheduledAllocationSuccesses()
+    metrics.GetSchedulerMetrics().IncScheduledAllocationSuccesses()
 
     log.Logger().Debug("added allocation",
         zap.String("allocationUid", allocationUuid),

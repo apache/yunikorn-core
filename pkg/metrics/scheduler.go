@@ -17,9 +17,7 @@ limitations under the License.
 package metrics
 
 import (
-	"flag"
 	"github.com/prometheus/client_golang/prometheus"
-	"sync"
 	"time"
 )
 
@@ -29,13 +27,6 @@ const (
 	// SchedulingLatencyName - scheduler latency metric name
 	SchedulingLatencyName = "scheduling_duration_seconds"
 )
-
-var addr = flag.String("0.0.0.0", ":8888", "The address to listen on for HTTP requests.")
-
-// singleton instance of SchedulerMetrics
-var instance *SchedulerMetrics
-var once sync.Once
-
 
 // Declare all core metrics ops in this interface
 type CoreSchedulerMetrics interface {
@@ -105,14 +96,6 @@ type SchedulerMetrics struct  {
 	activeNodes prometheus.Gauge
 	failedNodes prometheus.Gauge
 	schedulingLatency prometheus.Histogram
-}
-
-// Gets singleton instance of SchedulerMetrics
-func GetInstance() *SchedulerMetrics {
-	once.Do(func() {
-		instance = initSchedulerMetrics()
-	})
-	return instance
 }
 
 // Initialize scheduler metrics

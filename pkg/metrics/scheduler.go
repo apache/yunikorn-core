@@ -45,7 +45,7 @@ func initSchedulerMetrics() *SchedulerMetrics {
 		prometheus.CounterOpts{
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
-			Name:      "schedule_attempts_total",
+			Name:      "allocation_attempts_total",
 			Help:      "Number of attempts to schedule pods, by the result. 'unschedulable' means a pod could not be scheduled, while 'error' means an internal scheduler problem.",
 		}, []string{"result"})
 	// AllocationScheduleSuccesses counts how many pods were scheduled.
@@ -100,8 +100,8 @@ func initSchedulerMetrics() *SchedulerMetrics {
 		prometheus.HistogramOpts{
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
-			Name:      "scheduling_latency_seconds",
-			Help:      "scheduling latency in seconds",
+			Name:      "allocating_latency_seconds",
+			Help:      "container allocating latency in seconds",
 			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), //start from 0.1ms
 		},
 	)

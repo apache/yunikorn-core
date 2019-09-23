@@ -18,9 +18,7 @@ package metrics
 
 import (
 	"fmt"
-	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/prometheus/client_golang/prometheus"
-	"go.uber.org/zap"
 	"strings"
 	"sync"
 )
@@ -38,9 +36,6 @@ type QueueMetrics struct  {
 var queueRegisterMetrics sync.Once
 
 func forQueue(name string) CoreQueueMetrics {
-
-	log.Logger().Info(">>>>>>", zap.String("name", name))
-
 	q := &QueueMetrics{}
 
 	// Queue Metrics
@@ -112,4 +107,8 @@ func (m *QueueMetrics) IncApplicationsCompleted() {
 
 func (m *QueueMetrics) AddQueueUsedResourceMetrics(resourceName string, value float64) {
 	m.usedResourceMetrics.With(prometheus.Labels{"resource": resourceName}).Add(value)
+}
+
+func (m *QueueMetrics) SetQueueUsedResourceMetrics(resourceName string, value float64) {
+	m.usedResourceMetrics.With(prometheus.Labels{"resource": resourceName}).Set(value)
 }

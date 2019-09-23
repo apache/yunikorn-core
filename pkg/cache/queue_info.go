@@ -181,6 +181,15 @@ func (qi *QueueInfo) AddChildQueue(child *QueueInfo) error {
     return nil
 }
 
+func (qi *QueueInfo) updateUsedResourceMetrics() {
+    // update queue metrics when this is a leaf queue
+    if qi.isLeaf {
+        for k, v := range qi.GetAllocatedResource().Resources {
+            metrics.GetQueueMetrics(qi.GetQueuePath()).SetQueueUsedResourceMetrics(k, float64(v))
+        }
+    }
+}
+
 // Increment the allocated resources for this queue (recursively)
 // Guard against going over max resources if the
 func (qi *QueueInfo) IncAllocatedResource(alloc *resources.Resource, nodeReported bool) error {
@@ -207,13 +216,7 @@ func (qi *QueueInfo) IncAllocatedResource(alloc *resources.Resource, nodeReporte
     }
     // all OK update this queue
     qi.allocatedResource = newAllocation
-
-    // update queue metrics when this is a leaf queue
-    if qi.isLeaf {
-        for k, v := range newAllocation.Resources {
-            metrics.GetQueueMetrics(qi.GetQueuePath()).AddQueueUsedResourceMetrics(k, float64(v))
-        }
-    }
+    qi.updateUsedResourceMetrics()
     return nil
 }
 
@@ -240,6 +243,7 @@ func (qi *QueueInfo) DecAllocatedResource(alloc *resources.Resource) error {
     }
     // all OK update the queue
     qi.allocatedResource = resources.Sub(qi.allocatedResource, alloc)
+    qi.updateUsedResourceMetrics()
     return nil
 }
 

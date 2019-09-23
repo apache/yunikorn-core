@@ -42,6 +42,7 @@ type CoreQueueMetrics interface {
 	IncApplicationsRejected()
 	IncApplicationsCompleted()
 	AddQueueUsedResourceMetrics(resourceName string, value float64)
+	SetQueueUsedResourceMetrics(resourceName string, value float64)
 }
 
 // Declare all core metrics ops in this interface

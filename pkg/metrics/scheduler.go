@@ -198,6 +198,11 @@ func SinceInMicroseconds(start time.Time) float64 {
 	return float64(time.Since(start).Nanoseconds() / time.Microsecond.Nanoseconds())
 }
 
+func SinceInMilliseconds(start time.Time) float64 {
+	return float64(time.Since(start).Nanoseconds() / time.Millisecond.Nanoseconds())
+}
+
+
 // SinceInSeconds gets the time since the specified start in seconds.
 func SinceInSeconds(start time.Time) float64 {
 	return time.Since(start).Seconds()
@@ -208,7 +213,7 @@ func (m *SchedulerMetrics) ObserveSchedulingLatency(start time.Time) {
 }
 
 func (m *SchedulerMetrics) ObserveNodeSortingLatency(start time.Time) {
-	m.nodeSortingLatency.Observe(SinceInMicroseconds(start))
+	m.nodeSortingLatency.Observe(SinceInMilliseconds(start))
 }
 
 // Define and implement all the metrics ops for Prometheus.

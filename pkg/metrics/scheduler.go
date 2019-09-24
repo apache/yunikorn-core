@@ -50,7 +50,7 @@ func initSchedulerMetrics() *SchedulerMetrics {
 			Subsystem: SchedulerSubsystem,
 			Name:      "container_allocation",
 			Help:      "Number of attempts to schedule containers, by the result. error means attempt failed due to internal errors",
-		}, []string{"result"})
+		}, []string{"state"})
 	s.allocatedContainers = s.allocations.With(prometheus.Labels{"state": "allocated"})
 	s.rejectedContainers = s.allocations.With(prometheus.Labels{"state": "rejected"})
 	s.schedulingErrors = s.allocations.With(prometheus.Labels{"state": "error"})

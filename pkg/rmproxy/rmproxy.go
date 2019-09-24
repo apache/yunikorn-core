@@ -26,6 +26,7 @@ import (
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/handler"
     "github.com/cloudera/yunikorn-core/pkg/log"
+    "github.com/cloudera/yunikorn-core/pkg/metrics"
     "github.com/cloudera/yunikorn-core/pkg/plugins"
     "github.com/cloudera/yunikorn-core/pkg/rmproxy/rmevent"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
@@ -115,6 +116,7 @@ func (m *RMProxy) processAllocationUpdateEvent(event *rmevent.RMNewAllocationsEv
     }
 
     m.processUpdateResponse(event.RMId, response)
+    metrics.GetSchedulerMetrics().AddAllocatedContainers(len(event.Allocations))
 }
 
 func (m *RMProxy) processApplicationUpdateEvent(event *rmevent.RMApplicationUpdateEvent) {
@@ -127,6 +129,14 @@ func (m *RMProxy) processApplicationUpdateEvent(event *rmevent.RMApplicationUpda
     }
 
     m.processUpdateResponse(event.RMId, response)
+
+    // update app metrics
+    if len(event.RejectedApplications) > 0 {
+        metrics.GetSchedulerMetrics().AddTotalApplicationsRejected(len(event.RejectedApplications))
+    }
+    if len(event.AcceptedApplications) > 0 {
+        metrics.GetSchedulerMetrics().AddTotalApplicationsAdded(len(event.AcceptedApplications))
+    }
 }
 
 func (m *RMProxy) processRMReleaseAllocationEvent(event *rmevent.RMReleaseAllocationEvent) {
@@ -138,6 +148,7 @@ func (m *RMProxy) processRMReleaseAllocationEvent(event *rmevent.RMReleaseAlloca
     }
 
     m.processUpdateResponse(event.RMId, response)
+    metrics.GetSchedulerMetrics().AddReleasedContainers(len(event.ReleasedAllocations))
 }
 
 func (m *RMProxy) processUpdatePartitionConfigsEvent(event *rmevent.RMRejectedAllocationAskEvent) {
@@ -149,6 +160,7 @@ func (m *RMProxy) processUpdatePartitionConfigsEvent(event *rmevent.RMRejectedAl
     }
 
     m.processUpdateResponse(event.RMId, response)
+    metrics.GetSchedulerMetrics().AddRejectedContainers(len(event.RejectedAllocationAsks))
 }
 
 func (m *RMProxy) processRMNodeUpdateEvent(event *rmevent.RMNodeUpdateEvent) {

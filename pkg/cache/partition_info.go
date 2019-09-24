@@ -342,7 +342,6 @@ func (pi *PartitionInfo) addNewApplication(info *ApplicationInfo, failIfExist bo
     info.leafQueue = pi.getQueue(info.QueueName)
     // Add app to the partition
     pi.applications[info.ApplicationId] = info
-    metrics.GetSchedulerMetrics().IncTotalApplicationsAdded()
 
     log.Logger().Info("app added to partition",
         zap.String("appId", info.ApplicationId),
@@ -472,24 +471,24 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
     var ok bool
 
     if node, ok = pi.nodes[alloc.NodeId]; !ok {
-        metrics.GetSchedulerMetrics().IncScheduledAllocationErrors()
+        metrics.GetSchedulerMetrics().IncSchedulingError()
         return nil, fmt.Errorf("failed to find node %s", alloc.NodeId)
     }
 
     if app, ok = pi.applications[alloc.ApplicationId]; !ok {
-        metrics.GetSchedulerMetrics().IncScheduledAllocationErrors()
+        metrics.GetSchedulerMetrics().IncSchedulingError()
         return nil, fmt.Errorf("failed to find application %s", alloc.ApplicationId)
     }
 
     if queue = pi.getQueue(alloc.QueueName); queue == nil || !queue.IsLeafQueue() {
-        metrics.GetSchedulerMetrics().IncScheduledAllocationErrors()
+        metrics.GetSchedulerMetrics().IncSchedulingError()
         return nil, fmt.Errorf("queue does not exist or is not a leaf queue %s", alloc.QueueName)
     }
 
     // Does the new allocation exceed the node's available resource?
     newNodeResource := resources.Add(node.GetAllocatedResource(), alloc.AllocatedResource)
     if !resources.FitIn(node.TotalResource, newNodeResource) {
-        metrics.GetSchedulerMetrics().IncScheduledAllocationFailures()
+        metrics.GetSchedulerMetrics().IncSchedulingError()
         return nil, fmt.Errorf("cannot allocate resource [%v] for application %s on "+
             "node %s because request exceeds available resources, used [%v] node limit [%v]",
             alloc.AllocatedResource, alloc.ApplicationId, node.NodeId, newNodeResource, node.TotalResource)
@@ -497,7 +496,7 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
 
     // If new allocation go beyond any of queue's max resource? Only check if when it is allocated instead of node reported.
     if err := queue.IncAllocatedResource(alloc.AllocatedResource, nodeReported); err != nil {
-        metrics.GetSchedulerMetrics().IncScheduledAllocationFailures()
+        metrics.GetSchedulerMetrics().IncSchedulingError()
         return nil, fmt.Errorf("cannot allocate resource from application %s: %v ",
             alloc.ApplicationId, err)
     }
@@ -511,8 +510,6 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
     app.addAllocation(allocation)
 
     pi.allocations[allocation.AllocationProto.Uuid] = allocation
-
-    metrics.GetSchedulerMetrics().IncScheduledAllocationSuccesses()
 
     log.Logger().Debug("added allocation",
         zap.String("allocationUid", allocationUuid),

@@ -205,7 +205,6 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
         // convert and resolve the user: cache can be set per partition
         ugi, err := partitionInfo.convertUGI(app.Ugi)
         if err != nil {
-            metrics.GetSchedulerMetrics().IncTotalApplicationsRejected()
             rejectedApps = append(rejectedApps, &si.RejectedApplication{
                 ApplicationId: app.ApplicationId,
                 Reason:        err.Error(),
@@ -215,7 +214,6 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
         // create a new app object and add it to the partition (partition logs details)
         appInfo := NewApplicationInfo(app.ApplicationId, app.PartitionName, app.QueueName, ugi, app.Tags)
         if err := partitionInfo.addNewApplication(appInfo, true); err != nil {
-            metrics.GetSchedulerMetrics().IncTotalApplicationsRejected()
             rejectedApps = append(rejectedApps, &si.RejectedApplication{
                 ApplicationId: app.ApplicationId,
                 Reason:        err.Error(),

@@ -48,16 +48,20 @@ type CoreQueueMetrics interface {
 // Declare all core metrics ops in this interface
 type CoreSchedulerMetrics interface {
 	// Metrics Ops related to ScheduledAllocationSuccesses
-	IncScheduledAllocationSuccesses()
-	AddScheduledAllocationSuccesses(value int)
+	IncAllocatedContainer()
+	AddAllocatedContainers(value int)
 
 	// Metrics Ops related to ScheduledAllocationFailures
-	IncScheduledAllocationFailures()
-	AddScheduledAllocationFailures(value int)
+	IncRejectedContainer()
+	AddRejectedContainers(value int)
 
 	// Metrics Ops related to ScheduledAllocationErrors
-	IncScheduledAllocationErrors()
-	AddScheduledAllocationErrors(value int)
+	IncSchedulingError()
+	AddSchedulingErrors(value int)
+
+	// Metrics Ops related to released allocations
+	IncReleasedContainer()
+	AddReleasedContainers(value int)
 
 	// Metrics Ops related to TotalApplicationsAdded
 	IncTotalApplicationsAdded()

@@ -23,37 +23,40 @@ import (
 
 // All core metrics variables to be declared in this struct
 type SchedulerMetrics struct  {
-	scheduleAllocations  *prometheus.CounterVec
-	allocationScheduleSuccesses prometheus.Counter
-	allocationScheduleFailures prometheus.Counter
-	allocationScheduleErrors prometheus.Counter
-	scheduleApplications *prometheus.CounterVec
-	totalApplicationsAdded prometheus.Counter
-	totalApplicationsRejected prometheus.Counter
-	totalApplicationsRunning prometheus.Gauge
-	totalApplicationsCompleted prometheus.Gauge
-	activeNodes prometheus.Gauge
-	failedNodes prometheus.Gauge
-	schedulingLatency prometheus.Histogram
-	nodeSortingLatency prometheus.Histogram
+	allocations                 *prometheus.CounterVec
+	allocatedContainers prometheus.Counter
+	rejectedContainers  prometheus.Counter
+	schedulingErrors    prometheus.Counter
+	releasedContainers  prometheus.Counter
+	scheduleApplications        *prometheus.CounterVec
+	totalApplicationsAdded      prometheus.Counter
+	totalApplicationsRejected   prometheus.Counter
+	totalApplicationsRunning    prometheus.Gauge
+	totalApplicationsCompleted  prometheus.Gauge
+	activeNodes                 prometheus.Gauge
+	failedNodes                 prometheus.Gauge
+	schedulingLatency           prometheus.Histogram
+	nodeSortingLatency          prometheus.Histogram
 }
 
 // Initialize scheduler metrics
 func initSchedulerMetrics() *SchedulerMetrics {
 	s := &SchedulerMetrics{}
-	s.scheduleAllocations = prometheus.NewCounterVec(
+
+	// containers
+	s.allocations = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
-			Name:      "allocation_attempts_total",
-			Help:      "Number of attempts to schedule pods, by the result. 'unschedulable' means a pod could not be scheduled, while 'error' means an internal scheduler problem.",
+			Name:      "container_allocation",
+			Help:      "Number of attempts to schedule containers, by the result. error means attempt failed due to internal errors",
 		}, []string{"result"})
-	// AllocationScheduleSuccesses counts how many pods were scheduled.
-	s.allocationScheduleSuccesses = s.scheduleAllocations.With(prometheus.Labels{"result": "scheduled"})
-	// AllocationScheduleFailures counts how many pods could not be scheduled.
-	s.allocationScheduleFailures = s.scheduleAllocations.With(prometheus.Labels{"result": "unschedulable"})
-	// AllocationScheduleErrors counts how many pods could not be scheduled due to a scheduler error.
-	s.allocationScheduleErrors = s.scheduleAllocations.With(prometheus.Labels{"result": "error"})
+	s.allocatedContainers = s.allocations.With(prometheus.Labels{"state": "allocated"})
+	s.rejectedContainers = s.allocations.With(prometheus.Labels{"state": "rejected"})
+	s.schedulingErrors = s.allocations.With(prometheus.Labels{"state": "error"})
+	s.releasedContainers = s.allocations.With(prometheus.Labels{"state": "released"})
+
+	// apps
 	s.scheduleApplications = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: Namespace,
@@ -116,7 +119,7 @@ func initSchedulerMetrics() *SchedulerMetrics {
 		},
 	)
 	var metricsList = []prometheus.Collector{
-		s.scheduleAllocations,
+		s.allocations,
 		s.scheduleApplications,
 		s.schedulingLatency,
 		s.nodeSortingLatency,
@@ -159,30 +162,38 @@ func (m *SchedulerMetrics) ObserveNodeSortingLatency(start time.Time) {
 
 // Define and implement all the metrics ops for Prometheus.
 // Metrics Ops related to allocationScheduleSuccesses
-func (m *SchedulerMetrics) IncScheduledAllocationSuccesses() {
-	m.allocationScheduleSuccesses.Inc()
+func (m *SchedulerMetrics) IncAllocatedContainer() {
+	m.allocatedContainers.Inc()
 }
 
-func (m *SchedulerMetrics) AddScheduledAllocationSuccesses(value int) {
-	m.allocationScheduleSuccesses.Add(float64(value))
+func (m *SchedulerMetrics) AddAllocatedContainers(value int) {
+	m.allocatedContainers.Add(float64(value))
+}
+
+func (m *SchedulerMetrics) IncReleasedContainer() {
+	m.releasedContainers.Inc()
+}
+
+func (m *SchedulerMetrics) AddReleasedContainers(value int) {
+	m.releasedContainers.Add(float64(value))
 }
 
 // Metrics Ops related to allocationScheduleFailures
-func (m *SchedulerMetrics) IncScheduledAllocationFailures() {
-	m.allocationScheduleFailures.Inc()
+func (m *SchedulerMetrics) IncRejectedContainer() {
+	m.rejectedContainers.Inc()
 }
 
-func (m *SchedulerMetrics) AddScheduledAllocationFailures(value int) {
-	m.allocationScheduleFailures.Add(float64(value))
+func (m *SchedulerMetrics) AddRejectedContainers(value int) {
+	m.rejectedContainers.Add(float64(value))
 }
 
 // Metrics Ops related to allocationScheduleErrors
-func (m *SchedulerMetrics) IncScheduledAllocationErrors() {
-	m.allocationScheduleErrors.Inc()
+func (m *SchedulerMetrics) IncSchedulingError() {
+	m.schedulingErrors.Inc()
 }
 
-func (m *SchedulerMetrics) AddScheduledAllocationErrors(value int) {
-	m.allocationScheduleErrors.Add(float64(value))
+func (m *SchedulerMetrics) AddSchedulingErrors(value int) {
+	m.schedulingErrors.Add(float64(value))
 }
 
 // Metrics Ops related to totalApplicationsAdded

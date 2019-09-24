@@ -17,7 +17,9 @@ limitations under the License.
 package cache
 
 import (
+	"fmt"
 	"github.com/cloudera/yunikorn-core/pkg/log"
+	"github.com/cloudera/yunikorn-core/pkg/metrics"
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 )
@@ -89,6 +91,13 @@ func newAppState() *fsm.FSM {
 					zap.String("source", event.Src),
 					zap.String("destination", event.Dst),
 					zap.String("event", event.Event))
+			},
+			fmt.Sprintf("enter_%s", Running.String()): func(event *fsm.Event) {
+				metrics.GetSchedulerMetrics().IncTotalApplicationsRunning()
+			},
+			fmt.Sprintf("enter_%s", Completed.String()): func(event *fsm.Event) {
+				metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()
+				metrics.GetSchedulerMetrics().IncTotalApplicationsCompleted()
 			},
 		},
 	)

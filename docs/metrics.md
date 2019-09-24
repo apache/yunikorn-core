@@ -39,7 +39,7 @@ scrape_configs:
 
 ```shell script
 docker pull prom/prometheus:latest
-docker run -p 9090:9090 /path/to/prometheus.yml:/etc/prometheus/prometheus.yml prom/prometheus
+docker run -p 9090:9090 -v /path/to/prometheus.yml:/etc/prometheus/prometheus.yml prom/prometheus
 ```
 
 Use `docker.for.mac.host.internal` instead of `localhost` if you are running Prometheus in a local docker container

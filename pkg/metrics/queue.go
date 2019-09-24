@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"github.com/prometheus/client_golang/prometheus"
 	"strings"
-	"sync"
 )
 
 type QueueMetrics struct  {
@@ -32,8 +31,6 @@ type QueueMetrics struct  {
 	pendingResourceMetrics *prometheus.GaugeVec
 	availableResourceMetrics *prometheus.GaugeVec
 }
-
-var queueRegisterMetrics sync.Once
 
 func forQueue(name string) CoreQueueMetrics {
 	q := &QueueMetrics{}
@@ -79,11 +76,9 @@ func forQueue(name string) CoreQueueMetrics {
 	}
 
 	// Register the metrics.
-	queueRegisterMetrics.Do(func() {
-		for _, metric := range queueMetricsList {
-			prometheus.MustRegister(metric)
-		}
-	})
+	for _, metric := range queueMetricsList {
+		prometheus.MustRegister(metric)
+	}
 
 	return q
 }

@@ -75,6 +75,10 @@ func (m *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
     // Start event handlers
     go m.handleSchedulerEvent()
 
+    // Start resource monitor if necessary (majorly for testing)
+    monitor := newNodesResourceUsageMonitor(m)
+    monitor.start()
+
     if !manualSchedule {
         go m.internalSchedule()
         go m.internalPreemption()

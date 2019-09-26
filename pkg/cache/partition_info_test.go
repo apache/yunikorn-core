@@ -17,9 +17,12 @@ limitations under the License.
 package cache
 
 import (
+    "github.com/cloudera/yunikorn-core/pkg/api"
     "github.com/cloudera/yunikorn-core/pkg/common/commonevents"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+    "gotest.tools/assert"
+    "reflect"
     "testing"
     "time"
 )
@@ -710,4 +713,77 @@ partitions:
         t.Errorf("'root.parent.next.level.test.leaf' queue not created with correct settings: %v", queue)
     }
 
+}
+
+func TestCalculateNodesUsage(t *testing.T) {
+    data := `
+partitions:
+  - name: default
+    queues:
+      - name: production
+      - name: test
+        queues:
+          - name: admintest
+            resources:
+              guaranteed:
+                memory: 200
+                vcore: 200
+              max:
+                memory: 200
+                vcore: 200
+`
+
+    partition, err := CreatePartitionInfo([]byte(data))
+    if err != nil {
+        t.Error(err)
+        return
+    }
+
+    n1 := newNodeInfoForTest("host1", resources.NewResourceFromMap(
+        map[string]resources.Quantity{"memory": 100, "vcore": 100}),
+        map[string]string{api.HOSTNAME: "host1", api.RACKNAME: "rack1", api.NODE_PARTITION: "default"})
+    n2 := newNodeInfoForTest("host2", resources.NewResourceFromMap(
+        map[string]resources.Quantity{"memory": 100, "vcore": 100}),
+        map[string]string{api.HOSTNAME: "host2", api.RACKNAME: "rack1", api.NODE_PARTITION: "default"})
+
+    if err := partition.addNewNode(n1, nil); err != nil {
+        t.Error(err)
+    }
+
+    if err := partition.addNewNode(n2, nil); err != nil {
+        t.Error(err)
+    }
+
+    m := partition.CalculateNodesResourceUsage()
+    assert.Equal(t, len(m), 2)
+    assert.Assert(t, reflect.DeepEqual(m["memory"], []int{2, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
+
+    n1.allocatedResource = resources.NewResourceFromMap(
+        map[string]resources.Quantity{"memory": 100, "vcore": 100})
+    m = partition.CalculateNodesResourceUsage()
+    assert.Assert(t, reflect.DeepEqual(m["memory"], []int{1, 0, 0, 0, 0, 0, 0, 0, 0, 1}))
+
+    n1.allocatedResource = resources.NewResourceFromMap(
+        map[string]resources.Quantity{"memory": 50, "vcore": 50})
+    m = partition.CalculateNodesResourceUsage()
+    assert.Assert(t, reflect.DeepEqual(m["memory"], []int{1, 0, 0, 0, 1, 0, 0, 0, 0, 0}))
+
+
+    n1.allocatedResource = resources.NewResourceFromMap(
+        map[string]resources.Quantity{"memory": 12, "vcore": 12})
+    n2.allocatedResource = resources.NewResourceFromMap(
+        map[string]resources.Quantity{"memory": 88, "vcore": 88})
+    m = partition.CalculateNodesResourceUsage()
+    assert.Assert(t, reflect.DeepEqual(m["memory"], []int{0, 1, 0, 0, 0, 0, 0, 0, 1, 0}))
+
+    n3 := newNodeInfoForTest("host3", resources.NewResourceFromMap(
+        map[string]resources.Quantity{"memory": 100, "vcore": 100}),
+        map[string]string{api.HOSTNAME: "host3", api.RACKNAME: "rack1", api.NODE_PARTITION: "default"})
+    if err := partition.addNewNode(n3, nil); err != nil {
+        t.Error(err)
+    }
+
+    m = partition.CalculateNodesResourceUsage()
+    assert.Equal(t, len(m), 2)
+    assert.Assert(t, reflect.DeepEqual(m["memory"], []int{1, 1, 0, 0, 0, 0, 0, 0, 1, 0}))
 }

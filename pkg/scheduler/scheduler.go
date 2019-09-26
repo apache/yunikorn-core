@@ -84,8 +84,6 @@ func (m *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
         go m.internalSchedule()
         go m.internalPreemption()
     }
-
-    go m.internalNodeSorter()
 }
 
 // Create single allocation
@@ -126,18 +124,17 @@ func (m *Scheduler) internalPreemption() {
 }
 
 // Internal start node sorting service
-func (m *Scheduler) internalNodeSorter() {
-    for {
-        partitions := make([]*cache.PartitionInfo, 0)
-        for _, p := range partitions {
-            // If bin packing policy is enabled, do something
-            if p.NeedBinPackingSchedulingPolicy() {
-                m.SortAllNodes(p.Name)
-            }
-        }
-        time.Sleep(10 * time.Millisecond)
-    }
-}
+//func (m *Scheduler) internalNodeSorter() {
+//    for {
+//        for _, p := range m.clusterSchedulingContext.partitions {
+//            // If bin packing policy is enabled, do something
+//            if p.NeedBinPackingSchedulingPolicy() {
+//                m.SortAllNodes(p.Name)
+//            }
+//        }
+//        time.Sleep(10 * time.Millisecond)
+//    }
+//}
 
 func (m *Scheduler) updateSchedulingRequest(schedulingAsk *SchedulingAllocationAsk) error {
     m.lock.Lock()

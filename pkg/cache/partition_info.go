@@ -166,7 +166,12 @@ func (pi *PartitionInfo) GetRules() []configs.PlacementRule {
 // Is bin-packing scheduling enabled?
 // TODO: more finer enum based return model here is better instead of bool.
 func (pi *PartitionInfo) NeedBinPackingSchedulingPolicy() bool {
-    return pi.globalSchedulingPolicy.PolicyType == configs.SchedulingBinPackingPolicy
+    var ret bool
+    if pi.globalSchedulingPolicy != nil {
+      ret = pi.globalSchedulingPolicy.PolicyType == configs.SchedulingBinPackingPolicy
+    }
+
+    return ret
 }
 
 // Add a new node to the partition.

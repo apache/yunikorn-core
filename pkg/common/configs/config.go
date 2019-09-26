@@ -115,7 +115,6 @@ type User struct {
 type GlobalPolicy struct {
     Name   string
     Policy string
-    AutoRefresh bool      `yaml:",omitempty" json:",omitempty"`
 }
 
 type LoadSchedulerConfigFunc func(policyGroup string) (*SchedulerConfig, error)

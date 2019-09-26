@@ -60,7 +60,7 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
 
         // Try to allocate from candidates, returns allocation proposal as well as failed allocation
         // ask candidates. (For preemption).
-        allocations, _ := m.tryBatchAllocation(partition, candidates, preemptionParam /* it is allocation phase */)
+        allocations, _ := m.tryBatchAllocation(partition, partitionContext, candidates, preemptionParam /* it is allocation phase */)
 
         // Send allocations to cache, and pending ask.
         confirmedAllocations := make([]*SchedulingAllocation, 0)
@@ -133,11 +133,12 @@ func (m *Scheduler) allocate(nodes []*SchedulingNode, candidate *SchedulingAlloc
 }
 
 // Do mini batch allocation
-func (m *Scheduler) tryBatchAllocation(partition string, candidates []*SchedulingAllocationAsk,
+func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *PartitionSchedulingContext,
+    candidates []*SchedulingAllocationAsk,
     preemptionParam *preemptionParameters) ([]*SchedulingAllocation, []*SchedulingAllocationAsk) {
     // copy list of node since we going to go through node list a couple of times
-    schedulingNodeList := getNodeList(m, partition)
-    if schedulingNodeList == nil {
+    nodeList := getNodeList(m, partition)
+    if nodeList == nil {
         return make([]*SchedulingAllocation, 0), candidates
     }
 
@@ -158,7 +159,7 @@ func (m *Scheduler) tryBatchAllocation(partition string, candidates []*Schedulin
             return
         }
 
-        schedulingNodeList = evaluateForSchedulingPolicy(m, schedulingNodeList, partition, candidate)
+        schedulingNodeList := evaluateForSchedulingPolicy(m, nodeList, partition, candidate, partitionContext)
 
         if allocation := m.allocate(schedulingNodeList, candidate, preemptionParam); allocation != nil {
             length := atomic.AddInt32(&allocatedLength, 1)
@@ -207,22 +208,34 @@ func (m *Scheduler) tryBatchAllocation(partition string, candidates []*Schedulin
     return allocations, failedAsks
 }
 
-func evaluateForSchedulingPolicy(m *Scheduler, nodes []*SchedulingNode, partition string, candidate *SchedulingAllocationAsk) []*SchedulingNode {
-    // if already cached, send this nodes as candidate
-    if schedulingNodeList, ok := m.schedulingNodeList[partition]; ok {
-        //do something here
-        for i := 0; i < len(nodes); i++ {
-            node := schedulingNodeList[i]
-            if !node.CheckAllocateConditions(candidate.AskProto.AllocationKey) {
-                // skip the node if conditions can not be satisfied
-                continue
-            }
+// TODO: convert this as an interface.
+func evaluateForSchedulingPolicy(m *Scheduler, nodes []*SchedulingNode, partition string,
+    candidate *SchedulingAllocationAsk, partitionContext *PartitionSchedulingContext) []*SchedulingNode {
 
-            if node.CheckAndAllocateResource(candidate.AllocatedResource, false /* preemptionPhase */) {
-                return append(make([]*SchedulingNode, 1), node)
-            }
+    // If bin-packing is not enabled, simply return
+    if !partitionContext.partition.NeedBinPackingSchedulingPolicy() {
+        // Sort by MAX_AVAILABLE resources.
+        // TODO, this should be configurable.
+        SortNodes(nodes, MaxAvailableResources)
+        return nodes
+    }
+
+    // Do an in-place sorting
+    nodes = m.SortAllNodesWithAscendingResource(partition)
+
+    for i := 0; i < len(nodes); i++ {
+        node := nodes[i]
+        if !node.CheckAllocateConditions(candidate.AskProto.AllocationKey) {
+            // skip the node if conditions can not be satisfied
+            continue
+        }
+
+        // once we have a node which can fit the allocation ask, send back for scheduling
+        if node.CheckAndAllocateResource(candidate.AllocatedResource, false /* preemptionPhase */) {
+            return append(make([]*SchedulingNode, 1), node)
         }
     }
+
     return nodes
 }
 
@@ -238,9 +251,6 @@ func getNodeList(m *Scheduler, partition string) []*SchedulingNode {
         schedulingNodeList[idx] = NewSchedulingNode(v)
     }
 
-    // Sort by MAX_AVAILABLE resources.
-    // TODO, this should be configurable.
-    SortNodes(schedulingNodeList, MaxAvailableResources)
     return schedulingNodeList
 }
 

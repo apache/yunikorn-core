@@ -31,14 +31,11 @@ const (
 type SchedulingPolicy struct {
 	Name string
 	PolicyType string
-
-	AutoRefreshEnabled bool
 }
 
 func NewSchedulingPolicy(policy configs.GlobalPolicy) (*SchedulingPolicy) {
 	sp := &SchedulingPolicy{Name: strings.ToLower(policy.Name),
 		PolicyType: policy.Policy,
-		AutoRefreshEnabled: policy.AutoRefresh,
 	}
 
 	log.Logger().Debug("new scheduling policy added",

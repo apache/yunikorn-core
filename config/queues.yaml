@@ -3,7 +3,6 @@ partitions:
     globalpolicies:
       - name: myschedulingpolicy
         policy: binpacking
-        autorefresh: true
     placementrules:
       - name: User
         create: true

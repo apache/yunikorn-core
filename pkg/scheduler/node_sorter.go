@@ -24,11 +24,11 @@ import (
 )
 
 // Sort nodes here.
-func (m *Scheduler) SortAllNodes(name string) {
+func (m *Scheduler) SortAllNodesWithAscendingResource(name string) []*SchedulingNode {
 	nodeList := m.clusterInfo.GetPartition(name).CopyNodeInfos()
 	if len(nodeList) <= 0 {
 		// When we don't have node, do nothing
-		return
+		return nil
 	}
 
 	schedulingNodeList := make([]*SchedulingNode, len(nodeList))
@@ -45,9 +45,7 @@ func (m *Scheduler) SortAllNodes(name string) {
 		return resources.CompFairnessRatioAssumesUnitPartition(r.CachedAvailableResource, l.CachedAvailableResource) > 0
 	})
 
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	m.schedulingNodeList[name] = schedulingNodeList
-
 	metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
+
+	return schedulingNodeList
 }

@@ -40,6 +40,7 @@ type PartitionConfig struct {
     PlacementRules []PlacementRule           `yaml:",omitempty" json:",omitempty"`
     Users          []User                    `yaml:",omitempty" json:",omitempty"`
     Preemption     PartitionPreemptionConfig `yaml:",omitempty" json:",omitempty"`
+    GlobalPolicies []GlobalPolicy            `yaml:",omitempty" json:",omitempty"`
 }
 
 type PartitionPreemptionConfig struct {
@@ -106,6 +107,15 @@ type User struct {
     Name            string
     MaxResources    map[string]string `yaml:",omitempty" json:",omitempty"`
     MaxApplications uint64            `yaml:",omitempty" json:",omitempty"`
+}
+
+// Global Policy section
+// - the name of the policy (user defined)
+// - type: different type of policies supported (binpacking, fifo, random etc)
+type GlobalPolicy struct {
+    Name   string
+    Policy string
+    AutoRefresh bool      `yaml:",omitempty" json:",omitempty"`
 }
 
 type LoadSchedulerConfigFunc func(policyGroup string) (*SchedulerConfig, error)

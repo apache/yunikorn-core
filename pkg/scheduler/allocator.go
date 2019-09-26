@@ -136,15 +136,9 @@ func (m *Scheduler) allocate(nodes []*SchedulingNode, candidate *SchedulingAlloc
 func (m *Scheduler) tryBatchAllocation(partition string, candidates []*SchedulingAllocationAsk,
     preemptionParam *preemptionParameters) ([]*SchedulingAllocation, []*SchedulingAllocationAsk) {
     // copy list of node since we going to go through node list a couple of times
-    nodeList := m.clusterInfo.GetPartition(partition).CopyNodeInfos()
-    if len(nodeList) <= 0 {
-        // When we don't have node, do nothing
+    schedulingNodeList := getNodeList(m, partition)
+    if schedulingNodeList == nil {
         return make([]*SchedulingAllocation, 0), candidates
-    }
-
-    schedulingNodeList := make([]*SchedulingNode, len(nodeList))
-    for idx, v := range nodeList {
-        schedulingNodeList[idx] = NewSchedulingNode(v)
     }
 
     ctx, cancel := context.WithCancel(context.Background())
@@ -157,15 +151,14 @@ func (m *Scheduler) tryBatchAllocation(partition string, candidates []*Schedulin
 
     doAllocation := func(i int) {
         allocatingStart := time.Now()
-        // Sort by MAX_AVAILABLE resources.
-        // TODO, this should be configurable.
-        SortNodes(schedulingNodeList, MaxAvailableResources)
 
         candidate := candidates[i]
         // Check if the same allocation key got rejected already.
         if preemptionParam.blacklistedRequest[candidate.AskProto.AllocationKey] {
             return
         }
+
+        schedulingNodeList = evaluateForSchedulingPolicy(m, schedulingNodeList, partition, candidate)
 
         if allocation := m.allocate(schedulingNodeList, candidate, preemptionParam); allocation != nil {
             length := atomic.AddInt32(&allocatedLength, 1)
@@ -212,6 +205,43 @@ func (m *Scheduler) tryBatchAllocation(partition string, candidates []*Schedulin
     }
 
     return allocations, failedAsks
+}
+
+func evaluateForSchedulingPolicy(m *Scheduler, nodes []*SchedulingNode, partition string, candidate *SchedulingAllocationAsk) []*SchedulingNode {
+    // if already cached, send this nodes as candidate
+    if schedulingNodeList, ok := m.schedulingNodeList[partition]; ok {
+        //do something here
+        for i := 0; i < len(nodes); i++ {
+            node := schedulingNodeList[i]
+            if !node.CheckAllocateConditions(candidate.AskProto.AllocationKey) {
+                // skip the node if conditions can not be satisfied
+                continue
+            }
+
+            if node.CheckAndAllocateResource(candidate.AllocatedResource, false /* preemptionPhase */) {
+                return append(make([]*SchedulingNode, 1), node)
+            }
+        }
+    }
+    return nodes
+}
+
+func getNodeList(m *Scheduler, partition string) []*SchedulingNode {
+    nodeList := m.clusterInfo.GetPartition(partition).CopyNodeInfos()
+    if len(nodeList) <= 0 {
+        // When we don't have node, do nothing
+        return nil
+    }
+
+    schedulingNodeList := make([]*SchedulingNode, len(nodeList))
+    for idx, v := range nodeList {
+        schedulingNodeList[idx] = NewSchedulingNode(v)
+    }
+
+    // Sort by MAX_AVAILABLE resources.
+    // TODO, this should be configurable.
+    SortNodes(schedulingNodeList, MaxAvailableResources)
+    return schedulingNodeList
 }
 
 func (m* Scheduler) handleFailedToAllocationAllocations(allocations []*SchedulingAllocation, candidates []*SchedulingAllocationAsk, preemptionParam *preemptionParameters) {

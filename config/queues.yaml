@@ -1,5 +1,9 @@
 partitions:
   - name: default
+    globalpolicies:
+      - name: myschedulingpolicy
+        policy: binpacking
+        autorefresh: true
     placementrules:
       - name: User
         create: true

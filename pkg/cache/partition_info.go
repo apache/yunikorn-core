@@ -53,6 +53,7 @@ type PartitionInfo struct {
     clusterInfo            *ClusterInfo                 // link back to the cluster info
     lock                   sync.RWMutex                 // lock for updating the partition
     totalPartitionResource *resources.Resource          // Total node resources
+    globalSchedulingPolicy *SchedulingPolicy            // Global Scheduling Policies
 }
 
 // Create a new partition from scratch based on a validated configuration.
@@ -92,6 +93,18 @@ func NewPartitionInfo(partition configs.PartitionConfig, rmId string, info *Clus
     // get the user group cache for the partition
     // TODO get the resolver from the config
     p.userGroupCache = security.GetUserGroupCache("")
+
+    // TODO all policies are looped here, and considers
+    // only scheduler policy. Need some more cleaner interface here.
+    for _, policy := range partition.GlobalPolicies {
+        switch policy.Policy {
+        case configs.SchedulingBinPackingPolicy:
+            p.globalSchedulingPolicy = NewSchedulingPolicy(policy)
+            log.Logger().Info("SchedulingBinPackingPolicy policy is set.")
+        default:
+            log.Logger().Info("No default scheduling policy is set.")
+        }
+    }
 
     return p, nil
 }
@@ -148,6 +161,12 @@ func (pi *PartitionInfo) GetRules() []configs.PlacementRule {
         return []configs.PlacementRule{}
     }
     return *pi.rules
+}
+
+// Is bin-packing scheduling enabled?
+// TODO: more finer enum based return model here is better instead of bool.
+func (pi *PartitionInfo) NeedBinPackingSchedulingPolicy() bool {
+    return pi.globalSchedulingPolicy.PolicyType == configs.SchedulingBinPackingPolicy
 }
 
 // Add a new node to the partition.

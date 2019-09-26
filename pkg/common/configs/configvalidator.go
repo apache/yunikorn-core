@@ -31,6 +31,9 @@ const (
     DefaultPartition = "default"
 )
 
+const (
+    SchedulingBinPackingPolicy = "binpacking"
+)
 // A queue can be a username with the dot replaced. Most systems allow a 32 character user name.
 // The queue name must thus allow for at least that length with the replacement of dots.
 var QueueNameRegExp = regexp.MustCompile("^[a-zA-Z0-9_-]{1,64}$")
@@ -189,6 +192,42 @@ func checkUserDefinition(partition *PartitionConfig) error {
     return nil
 }
 
+// Check for global policies
+func checkGlobalPolicies(partition *PartitionConfig) error {
+    // return if nothing defined
+    if partition.GlobalPolicies == nil || len(partition.GlobalPolicies) == 0 {
+        return nil
+    }
+
+    log.Logger().Debug("checking partition global policy config",
+        zap.String("partitionName", partition.Name))
+
+    // top level policy check
+    for _, rule := range partition.GlobalPolicies {
+        if err := checkGlobalPolicy(rule); err != nil {
+            return err
+        }
+    }
+
+    return nil
+}
+
+// Check for global policy
+func checkGlobalPolicy(rule GlobalPolicy) error {
+
+    log.Logger().Debug("global policies:",
+        zap.String("policy name", rule.Name),
+        zap.String("policy type", rule.Policy))
+
+    // Defined polices.
+    // TODO: improvise for more policies here.
+    if SchedulingBinPackingPolicy != rule.Policy {
+        return fmt.Errorf("Global Policy parsing failed: %v")
+    }
+
+    return nil
+}
+
 // Check the queue names configured for compliance and uniqueness
 // - no duplicate names at each branched level in the tree
 // - queue name is alphanumeric (case ignore) with - and _
@@ -321,6 +360,10 @@ func Validate(newConfig *SchedulerConfig) error {
             return err
         }
         err = checkUserDefinition(&partition)
+        if err != nil {
+            return err
+        }
+        err = checkGlobalPolicies(&partition)
         if err != nil {
             return err
         }

@@ -222,7 +222,7 @@ func checkGlobalPolicy(rule GlobalPolicy) error {
     // Defined polices.
     // TODO: improvise for more policies here.
     if SchedulingBinPackingPolicy != rule.Policy {
-        return fmt.Errorf("Global Policy parsing failed: %v")
+        return fmt.Errorf("global policy parsing failed")
     }
 
     return nil

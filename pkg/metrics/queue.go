@@ -18,7 +18,9 @@ package metrics
 
 import (
 	"fmt"
+	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
 	"strings"
 )
 
@@ -77,15 +79,21 @@ func forQueue(name string) CoreQueueMetrics {
 
 	// Register the metrics.
 	for _, metric := range queueMetricsList {
-		prometheus.MustRegister(metric)
+		// registration might be failed if queue name is not valid
+		// metrics name must be complied with regex: [a-zA-Z_:][a-zA-Z0-9_:]*,
+		// queue name regex: ^[a-zA-Z0-9_-]{1,64}$
+		if err := prometheus.Register(metric); err != nil {
+			log.Logger().Warn("failed to register metrics collector", zap.Error(err))
+		}
 	}
 
 	return q
 }
 
 func substituteQueueName(queueName string) string {
-	return fmt.Sprintf("queue_%s",
+	str := fmt.Sprintf("queue_%s",
 		strings.Replace(queueName, ".", "_", -1))
+	return strings.Replace(str, "-", "_", -1)
 }
 
 func (m *QueueMetrics) IncApplicationsAccepted() {

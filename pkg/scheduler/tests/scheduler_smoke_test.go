@@ -1100,3 +1100,132 @@ partitions:
         })
     }
 }
+
+//func TestScheduleBestEffortRequests(t *testing.T) {
+//    // Start all tests
+//    serviceContext := entrypoint.StartAllServicesWithManualScheduler()
+//    defer serviceContext.StopAll()
+//    proxy := serviceContext.RMProxy
+//    cache := serviceContext.Cache
+//    scheduler := serviceContext.Scheduler
+//
+//    // Register RM
+//    configData := `
+//partitions:
+//  -
+//    name: default
+//    queues:
+//      - name: root
+//        submitacl: "*"
+//        queues:
+//          - name: a
+//            resources:
+//              guaranteed:
+//                memory: 100
+//                vcore: 10
+//              max:
+//                memory: 150
+//                vcore: 20
+//`
+//    configs.MockSchedulerConfigByData([]byte(configData))
+//    mockRM := NewMockRMCallbackHandler(t)
+//
+//    _, err := proxy.RegisterResourceManager(
+//        &si.RegisterResourceManagerRequest{
+//            RmId:        "rm:123",
+//            PolicyGroup: "policygroup",
+//            Version:     "0.0.2",
+//        }, mockRM)
+//
+//    if err != nil {
+//        t.Error(err.Error())
+//    }
+//
+//    // Check queues of cache and scheduler.
+//    partitionInfo := cache.GetPartition("[rm:123]default")
+//    assert.Assert(t, nil == partitionInfo.Root.MaxResource)
+//
+//    // Check scheduling queue root
+//    schedulerQueueRoot := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root", "[rm:123]default")
+//    assert.Assert(t, nil == schedulerQueueRoot.CachedQueueInfo.MaxResource)
+//
+//    // Check scheduling queue a
+//    schedulerQueueA := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.a", "[rm:123]default")
+//    assert.Assert(t, 150 == schedulerQueueA.CachedQueueInfo.MaxResource.Resources[resources.MEMORY])
+//
+//    // Register a node, and add apps
+//    err = proxy.Update(&si.UpdateRequest{
+//        NewSchedulableNodes: []*si.NewNodeInfo{
+//            {
+//                NodeId: "node-1:1234",
+//                Attributes: map[string]string{
+//                    "si.io/hostname": "node-1",
+//                    "si.io/rackname": "rack-1",
+//                },
+//                SchedulableResource: &si.Resource{
+//                    Resources: map[string]*si.Quantity{
+//                        "memory": {Value: 100},
+//                        "vcore":  {Value: 20},
+//                    },
+//                },
+//            },
+//            {
+//                NodeId: "node-2:1234",
+//                Attributes: map[string]string{
+//                    "si.io/hostname": "node-1",
+//                    "si.io/rackname": "rack-1",
+//                },
+//                SchedulableResource: &si.Resource{
+//                    Resources: map[string]*si.Quantity{
+//                        "memory": {Value: 100},
+//                        "vcore":  {Value: 20},
+//                    },
+//                },
+//            },
+//        },
+//        NewApplications: newAddAppRequest(map[string]string{"app-1":"root.a"}),
+//        RmId: "rm:123",
+//    })
+//
+//    if nil != err {
+//        t.Error(err.Error())
+//    }
+//
+//    waitForAcceptedApplications(mockRM, "app-1", 1000)
+//    waitForAcceptedNodes(mockRM, "node-1:1234", 1000)
+//    waitForAcceptedNodes(mockRM, "node-2:1234", 1000)
+//
+//    // Get scheduling app
+//    // schedulingApp := scheduler.GetClusterSchedulingContext().GetSchedulingApplication("app-1", "[rm:123]default")
+//
+//    // Verify app initial state
+//    app01, err := getApplicationInfoFromPartition(partitionInfo, "app-1")
+//    assert.Assert(t, err == nil)
+//    assert.Equal(t, app01.GetApplicationState(), cacheInfo.Accepted.String())
+//
+//    // submit best-effort requests, where resource ask is 0
+//    err = proxy.Update(&si.UpdateRequest{
+//        Asks: []*si.AllocationAsk{
+//            {
+//                AllocationKey: "alloc-1",
+//                ResourceAsk: &si.Resource{
+//                    Resources: map[string]*si.Quantity{
+//                        "memory": {Value: 0},
+//                        "vcore":  {Value: 0},
+//                    },
+//                },
+//                MaxAllocations: 2,
+//                ApplicationId:  "app-1",
+//            },
+//        },
+//        RmId: "rm:123",
+//    })
+//
+//    if nil != err {
+//        t.Error(err.Error())
+//    }
+//
+//    scheduler.SingleStepScheduleAllocTest(16)
+//
+//    waitForAllocations(mockRM, 2, 1000)
+//}

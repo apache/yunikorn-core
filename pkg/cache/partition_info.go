@@ -29,6 +29,7 @@ import (
     "github.com/looplab/fsm"
     "github.com/satori/go.uuid"
     "go.uber.org/zap"
+    "math"
     "strings"
     "sync"
     "time"
@@ -892,4 +893,41 @@ func (pi *PartitionInfo) convertUGI(ugi *si.UserGroupInformation) (security.User
     pi.lock.RLock()
     defer pi.lock.RUnlock()
     return pi.userGroupCache.ConvertUGI(ugi)
+}
+
+// calculate overall nodes resource usage and returns a map as the result,
+// where the key is the resource name, e.g memory, and the value is a []int,
+// which is a slice with 10 elements,
+// each element represents a range of resource usage,
+// such as
+//   0: 0%->10%
+//   1: 10% -> 20%
+//   ...
+//   9: 90% -> 100%
+// the element value represents number of nodes fall into this bucket.
+// if slice[9] = 3, this means there are 3 nodes resource usage is in the range 80% to 90%.
+func (pi *PartitionInfo) CalculateNodesResourceUsage() map[string][]int {
+    pi.lock.RLock()
+    defer pi.lock.RUnlock()
+    mapResult := make(map[string][]int)
+    for _, node := range pi.nodes {
+        for name, total := range node.TotalResource.Resources {
+            if float64(total) > 0 {
+                resourceAllocated := float64(node.allocatedResource.Resources[name])
+                v := resourceAllocated/float64(total)
+                idx := int(math.Dim(math.Ceil(v*10), 1))
+                if dist, ok := mapResult[name]; !ok {
+                    newDist := make([]int, 10)
+                    for i := range newDist {
+                        newDist[i] = 0
+                    }
+                    mapResult[name] = newDist
+                    mapResult[name][idx]++
+                } else {
+                    dist[idx]++
+                }
+            }
+        }
+    }
+    return mapResult
 }

@@ -92,12 +92,11 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
 func (m *Scheduler) regularAllocate(nodes []*SchedulingNode, candidate *SchedulingAllocationAsk) *SchedulingAllocation {
     nNodes := len(nodes)
     startIdx := rand.Intn(nNodes)
-    log.Logger().Debug("size of nodes in regularAllocate,",
-        zap.Int("size", nNodes))
+    if log.IsDebugEnabled() {
+        log.Logger().Debug("size of nodes in regularAllocate api call,", zap.Int("size", nNodes))
+    }
     for i := 0; i < len(nodes); i++ {
         idx := (i + startIdx) % nNodes
-        log.Logger().Debug("index in regularAllocate,",
-            zap.Int("index", idx))
         node := nodes[idx]
         if !node.CheckAllocateConditions(candidate.AskProto.AllocationKey) {
             // skip the node if conditions can not be satisfied
@@ -164,8 +163,6 @@ func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *Parti
         }
 
         schedulingNodeList := evaluateForSchedulingPolicy(m, nodeList, partition, candidate, partitionContext)
-        log.Logger().Debug("schedulingNodeList,",
-            zap.Int("size", len(schedulingNodeList)))
 
         if allocation := m.allocate(schedulingNodeList, candidate, preemptionParam); allocation != nil {
             length := atomic.AddInt32(&allocatedLength, 1)
@@ -238,8 +235,10 @@ func evaluateForSchedulingPolicy(m *Scheduler, nodes []*SchedulingNode, partitio
 
         // once we have a node which can fit the allocation ask, send back for scheduling
         if node.CheckAndAllocateResource(candidate.AllocatedResource, false /* preemptionPhase */) {
-            log.Logger().Debug("Selected node:",
-                zap.Any("id", node))
+            if log.IsDebugEnabled() {
+                log.Logger().Debug("Selected node:",
+                    zap.Any("id", node))
+            }
             return append(make([]*SchedulingNode, 0, 1), node)
         }
     }

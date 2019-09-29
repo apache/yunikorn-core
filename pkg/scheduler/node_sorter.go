@@ -28,7 +28,7 @@ func (m *Scheduler) SortAllNodesWithAscendingResource(name string) []*Scheduling
 	nodeList := m.clusterInfo.GetPartition(name).CopyNodeInfos()
 	if len(nodeList) <= 0 {
 		// When we don't have node, do nothing
-		return nil
+		return make([]*SchedulingNode, 0)
 	}
 
 	schedulingNodeList := make([]*SchedulingNode, len(nodeList))

@@ -240,7 +240,7 @@ func evaluateForSchedulingPolicy(m *Scheduler, nodes []*SchedulingNode, partitio
         if node.CheckAndAllocateResource(candidate.AllocatedResource, false /* preemptionPhase */) {
             log.Logger().Debug("Selected node:",
                 zap.Any("id", node))
-            return append(make([]*SchedulingNode, 1), node)
+            return append(make([]*SchedulingNode, 0, 1), node)
         }
     }
 

@@ -317,7 +317,6 @@ func (m *ClusterInfo) processNewSchedulableNodes(request *si.UpdateRequest) {
     existingAllocations := make([]*si.Allocation, 0)
     for _, node := range request.NewSchedulableNodes {
         nodeInfo, err := NewNodeInfo(node)
-        log.Logger().Info("########", zap.Any("", nodeInfo))
         if err != nil {
             msg := fmt.Sprintf("Failed to create node info from request, nodeId %s, error %s", node.NodeId, err.Error())
             log.Logger().Info(msg)

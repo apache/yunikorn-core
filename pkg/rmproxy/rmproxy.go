@@ -261,8 +261,6 @@ func (m *RMProxy) GetResourceManagerCallback(rmId string) api.ResourceManagerCal
 
 // Do normalize.
 func normalizeUpdateRequestByRMId(request *si.UpdateRequest) {
-    log.Logger().Info("######", zap.Any("", request))
-
     // Update asks
     if len(request.Asks) > 0 {
         for _, ask := range request.Asks {

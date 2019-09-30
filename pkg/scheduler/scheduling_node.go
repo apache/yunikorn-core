@@ -70,6 +70,12 @@ func (m *SchedulingNode) CheckAndAllocateResource(delta *resources.Resource, pre
 // will stop the checks.
 // The caller must not rely on all plugins being executed.
 func (m *SchedulingNode) CheckAllocateConditions(allocId string) bool {
+	if !m.NodeInfo.Schedulable {
+		log.Logger().Debug("node is unscheduable",
+			zap.String("nodeId", m.NodeId))
+		return false
+	}
+
 	// Check the predicates plugin (k8shim)
 	if plugin := plugins.GetPredicatesPlugin(); plugin != nil {
 		log.Logger().Debug("predicates",

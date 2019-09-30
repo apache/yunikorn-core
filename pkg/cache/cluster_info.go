@@ -18,6 +18,7 @@ package cache
 
 import (
     "fmt"
+    "github.com/cloudera/yunikorn-core/pkg/api"
     "github.com/cloudera/yunikorn-core/pkg/cache/cacheevent"
     "github.com/cloudera/yunikorn-core/pkg/common"
     "github.com/cloudera/yunikorn-core/pkg/common/commonevents"
@@ -310,13 +311,7 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
     })
 }
 
-// Process the node updates: add and remove nodes as needed.
-// Lock free call, all updates occur on the underlying application which is locked or via events.
-func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
-    // Process add node
-    if len(request.NewSchedulableNodes) == 0 {
-        return
-    }
+func (m *ClusterInfo) processNewSchedulableNodes(request *si.UpdateRequest) {
     acceptedNodes := make([]*si.AcceptedNode, 0)
     rejectedNodes := make([]*si.RejectedNode, 0)
     existingAllocations := make([]*si.Allocation, 0)
@@ -378,6 +373,48 @@ func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
     })
 }
 
+// RM may notify us to blacklist or whitelist a node,
+// this is to process such actions.
+func (m *ClusterInfo) processNodeActions(request *si.UpdateRequest) {
+    for _, update := range request.UpdatedNodes {
+        var partition *PartitionInfo
+        if p, ok := update.Attributes[api.NODE_PARTITION]; ok {
+            partition = m.GetPartition(p)
+        } else {
+            log.Logger().Debug("node partition not specified",
+                zap.String("nodeId", update.NodeId),
+                zap.String("nodeAction", update.Action.String()))
+            continue
+        }
+
+        if partition == nil {
+            continue
+        }
+
+        if node, ok := partition.nodes[update.NodeId]; ok {
+            switch update.Action {
+            case si.UpdateNodeInfo_DRAIN_NODE:
+                node.setSchedulable(false)
+            case si.UpdateNodeInfo_DRAIN_TO_SCHEDULABLE:
+                node.setSchedulable(true)
+            }
+        }
+    }
+}
+
+// Process the node updates: add and remove nodes as needed.
+// Lock free call, all updates occur on the underlying application which is locked or via events.
+func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
+    // Process add node
+    if len(request.NewSchedulableNodes) > 0 {
+        m.processNewSchedulableNodes(request)
+    }
+
+    if len(request.UpdatedNodes) > 0 {
+        m.processNodeActions(request)
+    }
+}
+
 // Process RM event internally. Split in steps that handle specific parts.
 // Lock free call, all updates occur in other methods.
 func (m *ClusterInfo) processRMUpdateEvent(event *cacheevent.RMUpdateRequestEvent) {
@@ -388,7 +425,7 @@ func (m *ClusterInfo) processRMUpdateEvent(event *cacheevent.RMUpdateRequestEven
     m.processApplicationUpdateFromRMUpdate(request)
     // 2) Add new request, release allocation, cancel request
     m.processNewAndReleaseAllocationRequests(request)
-    // 3) Add / remove Nodes
+    // 3) Add / remove / update Nodes
     m.processNodeUpdate(request)
 }
 

@@ -34,6 +34,7 @@ type NodeInfo struct {
     Hostname  string
     Rackname  string
     Partition string
+    Schedulable bool
 
     // Private fields need protection
     attributes  map[string]string
@@ -92,6 +93,7 @@ func NewNodeInfo(proto *si.NewNodeInfo) (*NodeInfo, error) {
         TotalResource:     resources.NewResourceFromProto(proto.SchedulableResource),
         allocatedResource: resources.NewResource(),
         allocations:       make(map[string]*AllocationInfo, 0),
+        Schedulable:       true,
     }
     m.availableResource = m.TotalResource
 
@@ -135,4 +137,16 @@ func (m *NodeInfo) GetAllAllocations() []*AllocationInfo {
     }
 
     return arr
+}
+
+func (m *NodeInfo) setSchedulable(schedulable bool) {
+    m.lock.Lock()
+    defer m.lock.Unlock()
+    m.Schedulable = schedulable
+}
+
+func (m *NodeInfo) IsSchedulable() bool {
+    m.lock.RLock()
+    defer m.lock.RUnlock()
+    return m.Schedulable
 }

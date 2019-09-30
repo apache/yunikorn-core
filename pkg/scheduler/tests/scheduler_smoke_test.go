@@ -1101,6 +1101,117 @@ partitions:
     }
 }
 
+// Test basic interactions from rm proxy to cache and to scheduler.
+func TestRMNodeActions(t *testing.T) {
+    // Start all tests
+    serviceContext := entrypoint.StartAllServicesWithManualScheduler()
+    defer serviceContext.StopAll()
+    proxy := serviceContext.RMProxy
+    cache := serviceContext.Cache
+
+    // Register RM
+    configData := `
+partitions:
+  -
+    name: default
+    queues:
+      - name: root
+        submitacl: "*"
+        queues:
+          - name: a
+            resources:
+              guaranteed:
+                memory: 100
+                vcore: 10
+              max:
+                memory: 150
+                vcore: 20
+`
+    configs.MockSchedulerConfigByData([]byte(configData))
+    mockRM := NewMockRMCallbackHandler(t)
+
+    _, err := proxy.RegisterResourceManager(
+        &si.RegisterResourceManagerRequest{
+            RmId:        "rm:123",
+            PolicyGroup: "policygroup",
+            Version:     "0.0.2",
+        }, mockRM)
+
+    if err != nil {
+        t.Error(err.Error())
+    }
+
+    err = proxy.Update(&si.UpdateRequest{
+        NewSchedulableNodes: []*si.NewNodeInfo{
+            {
+                NodeId: "node-1:1234",
+                Attributes: map[string]string{
+                    "si.io/hostname": "node-1",
+                    "si.io/rackname": "rack-1",
+                },
+                SchedulableResource: &si.Resource{
+                    Resources: map[string]*si.Quantity{
+                        "memory": {Value: 100},
+                        "vcore":  {Value: 20},
+                    },
+                },
+            },
+            {
+                NodeId: "node-2:1234",
+                Attributes: map[string]string{
+                    "si.io/hostname": "node-1",
+                    "si.io/rackname": "rack-1",
+                },
+                SchedulableResource: &si.Resource{
+                    Resources: map[string]*si.Quantity{
+                        "memory": {Value: 100},
+                        "vcore":  {Value: 20},
+                    },
+                },
+            },
+        },
+        NewApplications: newAddAppRequest(map[string]string{"app-1":"root.a"}),
+        RmId: "rm:123",
+    })
+
+    if nil != err {
+        t.Error(err.Error())
+    }
+
+    waitForAcceptedNodes(mockRM, "node-1:1234", 1000)
+    waitForAcceptedNodes(mockRM, "node-2:1234", 1000)
+
+    // verify all nodes are schedule-able
+    assert.Equal(t, cache.GetPartition("[rm:123]default").GetNode("node-1:1234").IsSchedulable(), true)
+    assert.Equal(t, cache.GetPartition("[rm:123]default").GetNode("node-2:1234").IsSchedulable(), true)
+
+    // send RM node actions
+    err = proxy.Update(&si.UpdateRequest{
+        UpdatedNodes: []*si.UpdateNodeInfo{
+            {
+                NodeId: "node-1:1234",
+                Action: si.UpdateNodeInfo_DRAIN_NODE,
+                Attributes: make(map[string]string),
+            },
+        },
+        RmId: "rm:123",
+    })
+
+    if nil != err {
+        t.Error(err.Error())
+    }
+
+    err = common.WaitFor(time.Second, 5*time.Second, func() bool {
+        return cache.GetPartition("[rm:123]default").GetNode("node-1:1234").IsSchedulable() == false &&
+            cache.GetPartition("[rm:123]default").GetNode("node-2:1234").IsSchedulable()
+    })
+
+    if nil != err {
+        t.Error(err.Error())
+    }
+}
+
+
 //func TestScheduleBestEffortRequests(t *testing.T) {
 //    // Start all tests
 //    serviceContext := entrypoint.StartAllServicesWithManualScheduler()

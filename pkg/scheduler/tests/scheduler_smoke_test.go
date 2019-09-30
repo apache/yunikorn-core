@@ -1182,8 +1182,8 @@ partitions:
     waitForAcceptedNodes(mockRM, "node-2:1234", 1000)
 
     // verify all nodes are schedule-able
-    assert.Equal(t, cache.GetPartition("[rm:123]default").GetNode("node-1:1234").Schedulable, true)
-    assert.Equal(t, cache.GetPartition("[rm:123]default").GetNode("node-2:1234").Schedulable, true)
+    assert.Equal(t, cache.GetPartition("[rm:123]default").GetNode("node-1:1234").IsSchedulable(), true)
+    assert.Equal(t, cache.GetPartition("[rm:123]default").GetNode("node-2:1234").IsSchedulable(), true)
 
     // send RM node actions
     err = proxy.Update(&si.UpdateRequest{
@@ -1202,8 +1202,8 @@ partitions:
     }
 
     err = common.WaitFor(time.Second, 5*time.Second, func() bool {
-        return cache.GetPartition("[rm:123]default").GetNode("node-1:1234").Schedulable == false &&
-            cache.GetPartition("[rm:123]default").GetNode("node-2:1234").Schedulable
+        return cache.GetPartition("[rm:123]default").GetNode("node-1:1234").IsSchedulable() == false &&
+            cache.GetPartition("[rm:123]default").GetNode("node-2:1234").IsSchedulable()
     })
 
     if nil != err {

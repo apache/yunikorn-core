@@ -144,3 +144,9 @@ func (m *NodeInfo) setSchedulable(schedulable bool) {
     defer m.lock.Unlock()
     m.Schedulable = schedulable
 }
+
+func (m *NodeInfo) IsSchedulable() bool {
+    m.lock.RLock()
+    defer m.lock.RUnlock()
+    return m.Schedulable
+}

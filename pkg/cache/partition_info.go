@@ -42,18 +42,18 @@ type PartitionInfo struct {
     RMId string
 
     // Private fields need protection
-    allocations            map[string]*AllocationInfo   // allocations
-    nodes                  map[string]*NodeInfo         // nodes registered
-    applications           map[string]*ApplicationInfo  // the application list
-    stateMachine           *fsm.FSM                     // the state of the queue for scheduling
-    stateTime              time.Time                    // last time the state was updated (needed for cleanup)
-    isPreemptable          bool                         // can allocations be preempted
-    rules                  *[]configs.PlacementRule     // placement rules to be loaded by the scheduler
-    userGroupCache         *security.UserGroupCache     // user cache per partition
-    clusterInfo            *ClusterInfo                 // link back to the cluster info
-    lock                   sync.RWMutex                 // lock for updating the partition
-    totalPartitionResource *resources.Resource          // Total node resources
-    globalSchedulingPolicy *SchedulingPolicy            // Global Scheduling Policies
+    allocations            map[string]*AllocationInfo  // allocations
+    nodes                  map[string]*NodeInfo        // nodes registered
+    applications           map[string]*ApplicationInfo // the application list
+    stateMachine           *fsm.FSM                    // the state of the queue for scheduling
+    stateTime              time.Time                   // last time the state was updated (needed for cleanup)
+    isPreemptable          bool                        // can allocations be preempted
+    rules                  *[]configs.PlacementRule    // placement rules to be loaded by the scheduler
+    userGroupCache         *security.UserGroupCache    // user cache per partition
+    clusterInfo            *ClusterInfo                // link back to the cluster info
+    lock                   sync.RWMutex                // lock for updating the partition
+    totalPartitionResource *resources.Resource         // Total node resources
+    nodeSortingPolicy      *NodeSortingPolicy          // Global Node Sorting Policies
 }
 
 // Create a new partition from scratch based on a validated configuration.
@@ -94,16 +94,14 @@ func NewPartitionInfo(partition configs.PartitionConfig, rmId string, info *Clus
     // TODO get the resolver from the config
     p.userGroupCache = security.GetUserGroupCache("")
 
-    // TODO all policies are looped here, and considers
-    // only scheduler policy. Need some more cleaner interface here.
-    for _, policy := range partition.GlobalPolicies {
-        switch policy.Policy {
-        case configs.SchedulingBinPackingPolicy:
-            p.globalSchedulingPolicy = NewSchedulingPolicy(policy)
-            log.Logger().Info("SchedulingBinPackingPolicy policy is set.")
-        default:
-            log.Logger().Info("No default scheduling policy is set.")
-        }
+    // TODO Need some more cleaner interface here.
+    switch partition.NodeSortPolicy.Type {
+    case configs.NodeSortingBinPackingPolicy:
+        p.nodeSortingPolicy = NewNodeSortingPolicy(partition.NodeSortPolicy)
+        log.Logger().Info("NodeSortingBinPackingPolicy policy is set.")
+    default:
+        p.nodeSortingPolicy = NewNodeDefaultSortingPolicy(configs.NodeSortingFairnessPolicy)
+        log.Logger().Info("No default scheduling policy is set.")
     }
 
     return p, nil
@@ -165,13 +163,12 @@ func (pi *PartitionInfo) GetRules() []configs.PlacementRule {
 
 // Is bin-packing scheduling enabled?
 // TODO: more finer enum based return model here is better instead of bool.
-func (pi *PartitionInfo) NeedBinPackingSchedulingPolicy() bool {
-    var ret bool
-    if pi.globalSchedulingPolicy != nil {
-      ret = pi.globalSchedulingPolicy.PolicyType == configs.SchedulingBinPackingPolicy
+func (pi *PartitionInfo) GetNodeSortingPolicy() string {
+    if pi.nodeSortingPolicy == nil {
+      return ""
     }
 
-    return ret
+    return pi.nodeSortingPolicy.PolicyType
 }
 
 // Add a new node to the partition.

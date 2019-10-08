@@ -24,17 +24,7 @@ import (
 )
 
 // Sort nodes here.
-func (m *Scheduler) SortAllNodesWithAscendingResource(name string) []*SchedulingNode {
-	nodeList := m.clusterInfo.GetPartition(name).CopyNodeInfos()
-	if len(nodeList) <= 0 {
-		// When we don't have node, do nothing
-		return make([]*SchedulingNode, 0)
-	}
-
-	schedulingNodeList := make([]*SchedulingNode, len(nodeList))
-	for idx, v := range nodeList {
-		schedulingNodeList[idx] = NewSchedulingNode(v)
-	}
+func (m *Scheduler) SortAllNodesWithAscendingResource(schedulingNodeList []*SchedulingNode) []*SchedulingNode {
 
 	sortingStart := time.Now()
 	sort.SliceStable(schedulingNodeList, func(i, j int) bool {

@@ -20,26 +20,29 @@ import (
 	"github.com/cloudera/yunikorn-core/pkg/common/configs"
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"go.uber.org/zap"
-	"strings"
 )
 
-const (
-	SCHEDULING_BINPACKING = 0
-	SCHEDULING_FAIRPOLICY = 1
-)
 
-type SchedulingPolicy struct {
-	Name string
+type NodeSortingPolicy struct {
 	PolicyType string
 }
 
-func NewSchedulingPolicy(policy configs.GlobalPolicy) (*SchedulingPolicy) {
-	sp := &SchedulingPolicy{Name: strings.ToLower(policy.Name),
-		PolicyType: policy.Policy,
+func NewNodeSortingPolicy(policy configs.NodeSortingPolicy) *NodeSortingPolicy {
+	sp := &NodeSortingPolicy{
+		PolicyType: policy.Type,
 	}
 
-	log.Logger().Debug("new scheduling policy added",
-		zap.String("policy name", sp.Name),
+	log.Logger().Debug("new node sorting policy added",
+		zap.String("type", sp.PolicyType))
+	return sp
+}
+
+func NewNodeDefaultSortingPolicy(policyType string) *NodeSortingPolicy {
+	sp := &NodeSortingPolicy{
+		PolicyType: policyType,
+	}
+
+	log.Logger().Debug("new node sorting policy added",
 		zap.String("type", sp.PolicyType))
 	return sp
 }

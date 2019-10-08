@@ -32,7 +32,9 @@ const (
 )
 
 const (
-    SchedulingBinPackingPolicy = "binpacking"
+    NodeSortingBinPackingPolicy = "binpacking"
+    NodeSortingFairnessPolicy   = "fair"
+    NodeSortingDefault = ""
 )
 // A queue can be a username with the dot replaced. Most systems allow a 32 character user name.
 // The queue name must thus allow for at least that length with the replacement of dots.
@@ -192,36 +194,23 @@ func checkUserDefinition(partition *PartitionConfig) error {
     return nil
 }
 
-// Check for global policies
-func checkGlobalPolicies(partition *PartitionConfig) error {
-    // return if nothing defined
-    if partition.GlobalPolicies == nil || len(partition.GlobalPolicies) == 0 {
-        return nil
-    }
-
-    log.Logger().Debug("checking partition global policy config",
-        zap.String("partitionName", partition.Name))
-
-    // top level policy check
-    for _, rule := range partition.GlobalPolicies {
-        if err := checkGlobalPolicy(rule); err != nil {
-            return err
-        }
-    }
-
-    return nil
-}
-
 // Check for global policy
-func checkGlobalPolicy(rule GlobalPolicy) error {
+func checkNodeSortingPolicy(partition *PartitionConfig) error {
 
-    log.Logger().Debug("global policies:",
-        zap.String("policy name", rule.Name),
-        zap.String("policy type", rule.Policy))
+    // get the policy
+    rule := partition.NodeSortPolicy
+
+    log.Logger().Debug("global node sorting policies:",
+        zap.String("policy type", rule.Type))
 
     // Defined polices.
     // TODO: improvise for more policies here.
-    if SchedulingBinPackingPolicy != rule.Policy {
+    switch rule.Type {
+    case NodeSortingBinPackingPolicy:
+    case NodeSortingFairnessPolicy:
+    case NodeSortingDefault:
+        break;
+    default:
         return fmt.Errorf("global policy parsing failed")
     }
 
@@ -363,7 +352,7 @@ func Validate(newConfig *SchedulerConfig) error {
         if err != nil {
             return err
         }
-        err = checkGlobalPolicies(&partition)
+        err = checkNodeSortingPolicy(&partition)
         if err != nil {
             return err
         }

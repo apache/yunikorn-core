@@ -19,12 +19,12 @@ package scheduler
 import (
     "context"
     "github.com/cloudera/yunikorn-core/pkg/common"
+    "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/metrics"
     "github.com/cloudera/yunikorn-core/pkg/plugins"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "go.uber.org/zap"
-    "math/rand"
     "sync/atomic"
     "time"
 )
@@ -91,13 +91,11 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
 
 func (m *Scheduler) regularAllocate(nodes []*SchedulingNode, candidate *SchedulingAllocationAsk) *SchedulingAllocation {
     nNodes := len(nodes)
-    startIdx := rand.Intn(nNodes)
     if log.IsDebugEnabled() {
         log.Logger().Debug("size of nodes in regularAllocate api call,", zap.Int("size", nNodes))
     }
     for i := 0; i < len(nodes); i++ {
-        idx := (i + startIdx) % nNodes
-        node := nodes[idx]
+        node := nodes[i]
         if !node.CheckAllocateConditions(candidate.AskProto.AllocationKey) {
             // skip the node if conditions can not be satisfied
             continue
@@ -215,34 +213,15 @@ func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *Parti
 func evaluateForSchedulingPolicy(m *Scheduler, nodes []*SchedulingNode, partition string,
     candidate *SchedulingAllocationAsk, partitionContext *PartitionSchedulingContext) []*SchedulingNode {
 
-    // If bin-packing is not enabled, simply return
-    if !partitionContext.partition.NeedBinPackingSchedulingPolicy() {
-        // Sort by MAX_AVAILABLE resources.
-        // TODO, this should be configurable.
+    // Sort Nodes based on the policy configured.
+    switch partitionContext.partition.GetNodeSortingPolicy() {
+    case configs.NodeSortingBinPackingPolicy:
+        nodes = m.SortAllNodesWithAscendingResource(nodes)
+        break
+    case configs.NodeSortingFairnessPolicy:
         SortNodes(nodes, MaxAvailableResources)
-        return nodes
+        break
     }
-
-    // Do an in-place sorting
-    nodes = m.SortAllNodesWithAscendingResource(partition)
-
-    for i := 0; i < len(nodes); i++ {
-        node := nodes[i]
-        if !node.CheckAllocateConditions(candidate.AskProto.AllocationKey) {
-            // skip the node if conditions can not be satisfied
-            continue
-        }
-
-        // once we have a node which can fit the allocation ask, send back for scheduling
-        if node.CheckAndAllocateResource(candidate.AllocatedResource, false /* preemptionPhase */) {
-            if log.IsDebugEnabled() {
-                log.Logger().Debug("Selected node:",
-                    zap.Any("id", node))
-            }
-            return append(make([]*SchedulingNode, 0, 1), node)
-        }
-    }
-
     return nodes
 }
 

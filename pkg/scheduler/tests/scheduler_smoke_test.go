@@ -1225,9 +1225,8 @@ func TestBinPackingAllocationForApplications(t *testing.T) {
 partitions:
   -
     name: default
-    globalpolicies:
-      - name: myschedulingpolicy
-        policy: binpacking
+    nodesortpolicy:
+        type: binpacking
     queues:
       - name: root
         submitacl: "*"

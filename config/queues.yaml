@@ -1,8 +1,7 @@
 partitions:
   - name: default
-    globalpolicies:
-      - name: myschedulingpolicy
-        policy: binpacking
+    nodesortpolicy:
+        type: binpacking
     placementrules:
       - name: User
         create: true

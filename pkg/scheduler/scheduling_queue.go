@@ -120,50 +120,46 @@ func (sq *SchedulingQueue) updateSchedulingQueueInfo(info map[string]*cache.Queu
 
 // Update pending resource of this queue
 func (sq *SchedulingQueue) IncPendingResource(delta *resources.Resource) {
-    sq.lock.Lock()
-    sq.pendingResource = resources.Add(sq.pendingResource, delta)
-    sq.lock.Unlock()
-
     // update the parent
     if sq.parent != nil {
         sq.parent.IncPendingResource(delta)
     }
+    // update this queue
+    sq.lock.Lock()
+    defer sq.lock.Unlock()
+    sq.pendingResource = resources.Add(sq.pendingResource, delta)
 }
 
 // Remove pending resource of this queue
 func (sq *SchedulingQueue) DecPendingResource(delta *resources.Resource) {
-    sq.lock.Lock()
-    // TODO we can go negative here, do we really want to do that?
-    sq.pendingResource = resources.Sub(sq.pendingResource, delta)
-    sq.lock.Unlock()
-
     // update the parent
     if sq.parent != nil {
         sq.parent.DecPendingResource(delta)
     }
+    // update this queue
+    sq.lock.Lock()
+    defer sq.lock.Unlock()
+    sq.pendingResource = resources.SubEliminateNegative(sq.pendingResource, delta)
 }
 
+// Add scheduling app to the queue
 func (sq *SchedulingQueue) AddSchedulingApplication(app *SchedulingApplication) {
     sq.lock.Lock()
     defer sq.lock.Unlock()
-
     sq.applications[app.ApplicationInfo.ApplicationId] = app
 }
 
+// Remove scheduling app and pending resource of this queue and update the parent queues
 func (sq *SchedulingQueue) RemoveSchedulingApplication(app *SchedulingApplication) {
-    sq.lock.Lock()
-    // Update pending resource of this queue
+    // Update pending resource of the parent queues
     totalPending := app.Requests.GetPendingResource()
-    if !resources.IsZero(totalPending) {
-        sq.pendingResource = resources.Sub(sq.pendingResource, totalPending)
-    }
-    delete(sq.applications, app.ApplicationInfo.ApplicationId)
-    sq.lock.Unlock()
-
-    // update the parent
     if !resources.IsZero(totalPending) {
         sq.parent.DecPendingResource(totalPending)
     }
+    sq.lock.Lock()
+    defer sq.lock.Unlock()
+    sq.pendingResource = resources.SubEliminateNegative(sq.pendingResource, totalPending)
+    delete(sq.applications, app.ApplicationInfo.ApplicationId)
 }
 
 // Get a copy of the child queues

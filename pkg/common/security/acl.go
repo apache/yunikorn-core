@@ -62,6 +62,11 @@ func (a *ACL) setUsers(userList []string) {
     }
     // add all users to the map
     for _, user := range userList {
+        // skip an empty user (happens if ACL is just groups)
+        if user == "" {
+            continue
+        }
+        // check the users validity
         if userNameRegExp.MatchString(user) {
             a.users[user] = true
         } else {
@@ -91,6 +96,11 @@ func (a *ACL) setGroups(groupList []string) {
     }
     // add all groups to the map
     for _, group := range groupList {
+        // skip an empty group (happens if ACL is just users and ends in space)
+        if group == "" {
+            continue
+        }
+        // check the group validity
         if groupRegExp.MatchString(group) {
             a.groups[group] = true
         } else {

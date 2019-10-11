@@ -12,11 +12,14 @@ partitions:
             - sandbox
       - name: Provided
         create: true
-    users:
-      - name: user1
+    limits:
+      - limit: "resource limit for user"
+        users:
+        - user1
         maxresources: {memory: 10000, vcore: 10}
-        maxapplications: 1
-      - name: user2
+      - limit: "application limit for group"
+        groups:
+          - sandbox
         maxapplications: 10
     queues:
       - name: root
@@ -51,5 +54,9 @@ partitions:
       maxapplications: 10
     - name: test
       properties:
-        acl: abc
         x: y
+      limits:
+      - limit: "resource limit for user"
+        users:
+        - gpuuser
+        maxresources: {memory: 10000, vcore: 10, gpu: 50}

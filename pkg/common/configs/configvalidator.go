@@ -178,43 +178,52 @@ func checkPlacementFilter(filter Filter) error {
     return nil
 }
 
-// Check a single user
-func checkUser(user User) error {
-    if user.Name == "" || !UserRegExp.MatchString(user.Name) {
-        return fmt.Errorf("invalid user name '%s' in user definition", user.Name)
+// Check a single limit entry
+func checkLimit(limit Limit) error {
+    if len(limit.Users) == 0 && len(limit.Groups) == 0 {
+        return fmt.Errorf("empty user and group lists defined in limit '%v'", limit)
+    }
+    for _, name := range limit.Users {
+        if name != "*" && !UserRegExp.MatchString(name) {
+            return fmt.Errorf("invalid limit user name '%s' in limit definition", name)
+        }
+    }
+    for _, name := range limit.Groups {
+        if name != "*" && !GroupRegExp.MatchString(name) {
+            return fmt.Errorf("invalid limit group name '%s' in limit definition", name)
+        }
     }
     total := int64(-1)
     var err error
     // check the resource (if defined)
-    if user.MaxResources != nil && len(user.MaxResources) != 0 {
-        total, err = checkResource(user.MaxResources)
+    if limit.MaxResources != nil && len(limit.MaxResources) != 0 {
+        total, err = checkResource(limit.MaxResources)
         if err != nil {
-            log.Logger().Debug("user resource parsing failed",
-                zap.String("user", user.Name),
-                zap.Int64("total", total),
+            log.Logger().Debug("resource parsing failed",
+                zap.Int64("resourceEntries", total),
                 zap.Error(err))
             return err
         }
     }
     // at least some resource should be not null
-    if user.MaxApplications == 0 && total <= 0 {
-        return fmt.Errorf("invalid resource combination for user name '%s' all resource limits are null", user.Name)
+    if limit.MaxApplications == 0 && total <= 0 {
+        return fmt.Errorf("invalid resource combination for limit names '%s' all resource limits are null", limit.Users)
     }
     return nil
 }
 
 // Check the defined users list
-func checkUsers(users []User, obj string) error {
+func checkLimits(limits []Limit, obj string) error {
     // return if nothing defined
-    if users == nil || len(users) == 0 {
+    if limits == nil || len(limits) == 0 {
         return nil
     }
 
-    log.Logger().Debug("checking user configs",
+    log.Logger().Debug("checking limits configs",
         zap.String("objName", obj),
-        zap.Int("userList", len(users)))
-    for _, queueUser := range users {
-        if err := checkUser(queueUser); err != nil {
+        zap.Int("limitsLength", len(limits)))
+    for _, limit := range limits {
+        if err := checkLimit(limit); err != nil {
             return err
         }
     }
@@ -243,7 +252,7 @@ func checkQueues(queue *QueueConfig, level int) error {
     }
 
     // check the users (if defined)
-    err = checkUsers(queue.Users, queue.Name)
+    err = checkLimits(queue.Limits, queue.Name)
     if err != nil {
         return err
     }
@@ -358,7 +367,7 @@ func Validate(newConfig *SchedulerConfig) error {
         if err != nil {
             return err
         }
-        err = checkUsers(partition.Users, partition.Name)
+        err = checkLimits(partition.Limits, partition.Name)
         if err != nil {
             return err
         }

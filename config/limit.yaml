@@ -1,0 +1,32 @@
+partitions:
+  - name: default
+    queues:
+      - name: root
+        limits:
+          - users: john,sue
+              maxapplications: 10
+              maxresources: {memory: 10000, vcore: 10}
+          - users: bob
+              maxapplications: 100
+        queues:
+          - name: level1
+            limits:
+              - limit:
+                users:
+                - user@domain
+                - testuser
+                maxapplications: 10
+              - limit:
+                groups: *
+                maxapplications: 10
+              - groups: appdev
+                maxapplications: 20
+            queues:
+              - name: level2-2
+                limits:
+                  - users: user@domain
+                    maxapplications: 1
+              - name: level2-2
+                limits:
+                  - users: user@domain
+                    maxapplications: 50

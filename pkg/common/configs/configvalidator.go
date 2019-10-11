@@ -212,13 +212,13 @@ func checkLimit(limit Limit) error {
     return nil
 }
 
-// Check the defined users list
+// Check the defined limits list
 func checkLimits(limits []Limit, obj string) error {
     // return if nothing defined
     if limits == nil || len(limits) == 0 {
         return nil
     }
-
+    // walk over the list of limits
     log.Logger().Debug("checking limits configs",
         zap.String("objName", obj),
         zap.Int("limitsLength", len(limits)))
@@ -251,7 +251,7 @@ func checkQueues(queue *QueueConfig, level int) error {
         return err
     }
 
-    // check the users (if defined)
+    // check the limits for this queue (if defined)
     err = checkLimits(queue.Limits, queue.Name)
     if err != nil {
         return err

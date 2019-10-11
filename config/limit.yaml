@@ -17,9 +17,12 @@ partitions:
                 - testuser
                 maxapplications: 10
               - limit:
-                groups: *
+                groups:
+                - "*"
                 maxapplications: 10
-              - groups: appdev
+              - limit:
+                groups:
+                - appdev
                 maxapplications: 20
             queues:
               - name: level2-2

@@ -103,7 +103,7 @@ The two command line tools are currently only provided as examples.
 
 Building the example command line tools:
 ```
-make example
+make commands
 ```  
 
 Run all unit tests for the core component: 

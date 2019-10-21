@@ -1096,6 +1096,23 @@ partitions:
 partitions:
   - name: default
     limits:
+      - limit:
+        users:
+        - user
+        maxresources: {memory: 0}
+    queues:
+      - name: root
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("queue user parsing should have failed: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    limits:
       - limit: illegal user
         users:
         - user space

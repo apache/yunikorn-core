@@ -18,8 +18,8 @@ package scheduler
 
 import (
     "context"
+    "github.com/cloudera/yunikorn-core/pkg/cache"
     "github.com/cloudera/yunikorn-core/pkg/common"
-    "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/metrics"
     "github.com/cloudera/yunikorn-core/pkg/plugins"
@@ -91,10 +91,7 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
 
 func (m *Scheduler) regularAllocate(nodes []*SchedulingNode, candidate *SchedulingAllocationAsk) *SchedulingAllocation {
     nNodes := len(nodes)
-    if log.IsDebugEnabled() {
-        log.Logger().Debug("size of nodes in regularAllocate api call,", zap.Int("size", nNodes))
-    }
-    for i := 0; i < len(nodes); i++ {
+    for i := 0; i < nNodes; i++ {
         node := nodes[i]
         if !node.CheckAllocateConditions(candidate.AskProto.AllocationKey) {
             // skip the node if conditions can not be satisfied
@@ -214,11 +211,13 @@ func evaluateForSchedulingPolicy(m *Scheduler, nodes []*SchedulingNode, partitio
     candidate *SchedulingAllocationAsk, partitionContext *PartitionSchedulingContext) []*SchedulingNode {
 
     // Sort Nodes based on the policy configured.
-    switch partitionContext.partition.GetNodeSortingPolicy() {
-    case configs.NodeSortingBinPackingPolicy:
+    configuredPolicy:= partitionContext.partition.GetNodeSortingPolicy()
+    switch configuredPolicy {
+    case cache.BinPackingPolicy:
         nodes = m.SortAllNodesWithAscendingResource(nodes)
         break
-    case configs.NodeSortingFairnessPolicy:
+    case cache.FairnessPolicy:
+    case cache.Default:
         SortNodes(nodes, MaxAvailableResources)
         break
     }

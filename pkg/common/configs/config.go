@@ -110,7 +110,7 @@ type User struct {
 }
 
 // Global Node Sorting Policy section
-// - type: different type of policies supported (binpacking, fifo, random etc)
+// - type: different type of policies supported (binpacking, fair etc)
 type NodeSortingPolicy struct {
     Type string
 }

@@ -72,17 +72,16 @@ func SortNodes(nodes []*SchedulingNode, sortType SortType) {
             r := nodes[j]
 
             // Sort by available resource, descending order
-            ret := resources.CompFairnessRatioAssumesUnitPartition(l.CachedAvailableResource, r.CachedAvailableResource) > 0
-            // Do an in-place shuffle with out creating a new-array
-            random := rand.New(rand.NewSource(time.Now().Unix()))
-            for len(nodes) > 0 {
-                n := len(nodes)
-                randIndex := random.Intn(n)
-                nodes[n-1], nodes[randIndex] = nodes[randIndex], nodes[n-1]
-                nodes = nodes[:n-1]
-            }
-            return ret
+            return resources.CompFairnessRatioAssumesUnitPartition(l.CachedAvailableResource, r.CachedAvailableResource) > 0
         })
+        // Do an in-place shuffle with out creating a new-array
+        random := rand.New(rand.NewSource(time.Now().Unix()))
+        for len(nodes) > 0 {
+            n := len(nodes)
+            randIndex := random.Intn(n)
+            nodes[n-1], nodes[randIndex] = nodes[randIndex], nodes[n-1]
+            nodes = nodes[:n-1]
+        }
         metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
     }
 }

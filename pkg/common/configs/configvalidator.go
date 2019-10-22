@@ -18,6 +18,7 @@ package configs
 
 import (
     "fmt"
+    "github.com/cloudera/yunikorn-core/pkg/cache"
     "github.com/cloudera/yunikorn-core/pkg/common/security"
     "github.com/cloudera/yunikorn-core/pkg/log"
     "go.uber.org/zap"
@@ -31,11 +32,6 @@ const (
     DefaultPartition = "default"
 )
 
-const (
-    NodeSortingBinPackingPolicy = "binpacking"
-    NodeSortingFairnessPolicy   = "fair"
-    NodeSortingDefault = ""
-)
 // A queue can be a username with the dot replaced. Most systems allow a 32 character user name.
 // The queue name must thus allow for at least that length with the replacement of dots.
 var QueueNameRegExp = regexp.MustCompile("^[a-zA-Z0-9_-]{1,64}$")
@@ -198,23 +194,16 @@ func checkUserDefinition(partition *PartitionConfig) error {
 func checkNodeSortingPolicy(partition *PartitionConfig) error {
 
     // get the policy
-    rule := partition.NodeSortPolicy
+    policy := partition.NodeSortPolicy
 
     log.Logger().Debug("global node sorting policies:",
-        zap.String("policy type", rule.Type))
+        zap.String("policy type", policy.Type))
 
     // Defined polices.
-    // TODO: improvise for more policies here.
-    switch rule.Type {
-    case NodeSortingBinPackingPolicy:
-    case NodeSortingFairnessPolicy:
-    case NodeSortingDefault:
-        break;
-    default:
-        return fmt.Errorf("global policy parsing failed")
-    }
+    configuredNodeSortingPolicy, error := cache.FromString(policy.Type)
 
-    return nil
+    log.Logger().Info("Node sorting policy:", zap.Any("policy name", policy.Type), zap.Any(", value", configuredNodeSortingPolicy))
+    return error
 }
 
 // Check the queue names configured for compliance and uniqueness

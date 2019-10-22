@@ -1253,7 +1253,7 @@ partitions:
         }, mockRM)
 
     if err != nil {
-        t.Error(err.Error())
+        t.Fatal(err.Error())
     }
 
     // Register a node, and add applications
@@ -1300,7 +1300,7 @@ partitions:
     schedulerQueueB := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.b", "[rm:123]default")
 
     if nil != err {
-        t.Error(err.Error())
+        t.Fatal(err.Error())
     }
 
     waitForAcceptedApplications(mockRM, "app-1", 1000)
@@ -1340,6 +1340,10 @@ partitions:
         RmId: "rm:123",
     })
 
+    if nil != err {
+        t.Fatal(err.Error())
+    }
+
     waitForPendingResource(t, schedulerQueueA, 400, 1000)
     waitForPendingResource(t, schedulerQueueB, 0, 1000)
     waitForPendingResource(t, schedulerQueueRoot, 400, 1000)
@@ -1348,7 +1352,7 @@ partitions:
 
     for i := 0; i < 9; i++ {
         scheduler.SingleStepScheduleAllocTest(1)
-        time.Sleep(time.Duration(100 * time.Millisecond))
+        time.Sleep(100 * time.Millisecond)
     }
 
     waitForAllocations(mockRM, 9, 1000)

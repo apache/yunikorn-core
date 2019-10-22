@@ -95,12 +95,13 @@ func NewPartitionInfo(partition configs.PartitionConfig, rmId string, info *Clus
     p.userGroupCache = security.GetUserGroupCache("")
 
     // TODO Need some more cleaner interface here.
-    switch partition.NodeSortPolicy.Type {
-    case configs.NodeSortingBinPackingPolicy:
+    configuredPolicy, _ := FromString(partition.NodeSortPolicy.Type)
+    switch configuredPolicy {
+    case BinPackingPolicy:
         p.nodeSortingPolicy = NewNodeSortingPolicy(partition.NodeSortPolicy)
         log.Logger().Info("NodeSortingBinPackingPolicy policy is set.")
     default:
-        p.nodeSortingPolicy = NewNodeDefaultSortingPolicy(configs.NodeSortingFairnessPolicy)
+        p.nodeSortingPolicy = NewNodeDefaultSortingPolicy("default")
         log.Logger().Info("No default scheduling policy is set.")
     }
 
@@ -163,9 +164,9 @@ func (pi *PartitionInfo) GetRules() []configs.PlacementRule {
 
 // Is bin-packing scheduling enabled?
 // TODO: more finer enum based return model here is better instead of bool.
-func (pi *PartitionInfo) GetNodeSortingPolicy() string {
+func (pi *PartitionInfo) GetNodeSortingPolicy() SortingPolicy {
     if pi.nodeSortingPolicy == nil {
-      return ""
+      return Default
     }
 
     return pi.nodeSortingPolicy.PolicyType

@@ -17,6 +17,7 @@ limitations under the License.
 package cache
 
 import (
+	"fmt"
 	"github.com/cloudera/yunikorn-core/pkg/common/configs"
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"go.uber.org/zap"
@@ -24,25 +25,52 @@ import (
 
 
 type NodeSortingPolicy struct {
-	PolicyType string
+	PolicyType SortingPolicy
+}
+
+type SortingPolicy int
+
+const (
+	BinPackingPolicy = iota
+	FairnessPolicy
+	Default
+	Undefined
+)
+
+func (nsp SortingPolicy) String() string {
+	return [...]string{"binpacking", "fair", "default"}[nsp]
+}
+func FromString(str string) (SortingPolicy, error) {
+	switch str {
+	case "binpacking":
+		return BinPackingPolicy, nil
+	case "fair":
+		return FairnessPolicy, nil
+	case "default":
+		return Default, nil
+	default:
+		return Undefined, fmt.Errorf("undefined policy %s", str)
+	}
 }
 
 func NewNodeSortingPolicy(policy configs.NodeSortingPolicy) *NodeSortingPolicy {
+	pType, _ := FromString(policy.Type)
 	sp := &NodeSortingPolicy{
-		PolicyType: policy.Type,
+		PolicyType : pType,
 	}
 
 	log.Logger().Debug("new node sorting policy added",
-		zap.String("type", sp.PolicyType))
+		zap.String("type", policy.Type))
 	return sp
 }
 
 func NewNodeDefaultSortingPolicy(policyType string) *NodeSortingPolicy {
+	pType, _ := FromString(policyType)
 	sp := &NodeSortingPolicy{
-		PolicyType: policyType,
+		PolicyType: pType,
 	}
 
 	log.Logger().Debug("new node sorting policy added",
-		zap.String("type", sp.PolicyType))
+		zap.String("type", policyType))
 	return sp
 }

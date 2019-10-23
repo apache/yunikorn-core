@@ -1,37 +1,36 @@
-package common
+package scheduler
 
 import (
-	"github.com/cloudera/yunikorn-core/pkg/scheduler"
 	"math/rand"
 )
 
 // SortingIterator generates a list of nodes sorted as per defined policy
 type SortingIterator interface {
 	HasNext() (ok bool)
-	Next() (node *scheduler.SchedulingNode)
+	Next() (node *SchedulingNode)
 }
 
 type BinPackingSortingIterator struct {
 	SortingIterator
 	countIdx int
-	nodes  []*scheduler.SchedulingNode
+	nodes  []*SchedulingNode
 }
 
 type FairSortingIterator struct {
 	SortingIterator
 	startIdx int
 	countIdx int
-	nodes  []*scheduler.SchedulingNode
+	nodes  []*SchedulingNode
 }
 
-func NewFairSortingIterator(schedulerNodes []*scheduler.SchedulingNode) *FairSortingIterator {
+func NewFairSortingIterator(schedulerNodes []*SchedulingNode) *FairSortingIterator {
 	return &FairSortingIterator{
 		nodes : schedulerNodes,
 		countIdx : 0,
 	}
 }
 
-func NewBinPackingSortingIterator(schedulerNodes []*scheduler.SchedulingNode) *BinPackingSortingIterator {
+func NewBinPackingSortingIterator(schedulerNodes []*SchedulingNode) *BinPackingSortingIterator {
 	return &BinPackingSortingIterator{
 		nodes : schedulerNodes,
 		countIdx : 0,
@@ -39,7 +38,7 @@ func NewBinPackingSortingIterator(schedulerNodes []*scheduler.SchedulingNode) *B
 }
 
 // Next advances to next element in array. Returns false on end of iteration.
-func (i *BinPackingSortingIterator) Next() *scheduler.SchedulingNode {
+func (i *BinPackingSortingIterator) Next() *SchedulingNode {
 	len := len(i.nodes)
 	if (i.countIdx + 1) > len {
 		return nil
@@ -60,7 +59,7 @@ func (i *BinPackingSortingIterator) HasNext() bool {
 }
 
 // Next advances to next element in array. Returns false on end of iteration.
-func (i *FairSortingIterator) Next() *scheduler.SchedulingNode {
+func (i *FairSortingIterator) Next() *SchedulingNode {
 	len := len(i.nodes)
 
 	// For the first time, initialize the rand seed based on number of nodes.

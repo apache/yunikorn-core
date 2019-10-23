@@ -88,7 +88,7 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
     }
 }
 
-func (m *Scheduler) regularAllocate(nodes common.SortingIterator, candidate *SchedulingAllocationAsk) *SchedulingAllocation {
+func (m *Scheduler) regularAllocate(nodes SortingIterator, candidate *SchedulingAllocationAsk) *SchedulingAllocation {
     for {
         if !nodes.HasNext() {
             break;
@@ -124,7 +124,7 @@ func (m *Scheduler) regularAllocate(nodes common.SortingIterator, candidate *Sch
     return nil
 }
 
-func (m *Scheduler) allocate(nodes common.SortingIterator, candidate *SchedulingAllocationAsk, preemptionParam *preemptionParameters) *SchedulingAllocation {
+func (m *Scheduler) allocate(nodes SortingIterator, candidate *SchedulingAllocationAsk, preemptionParam *preemptionParameters) *SchedulingAllocation {
     if preemptionParam.crossQueuePreemption {
         return crossQueuePreemptionAllocate(m.preemptionContext.partitions[candidate.PartitionName], nodes, candidate, preemptionParam)
     } else {
@@ -210,16 +210,16 @@ func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *Parti
 
 // TODO: convert this as an interface.
 func evaluateForSchedulingPolicy(m *Scheduler, nodes []*SchedulingNode, partition string,
-    candidate *SchedulingAllocationAsk, partitionContext *PartitionSchedulingContext) common.SortingIterator {
+    candidate *SchedulingAllocationAsk, partitionContext *PartitionSchedulingContext) SortingIterator {
     // Sort Nodes based on the policy configured.
     configuredPolicy:= partitionContext.partition.GetNodeSortingPolicy()
     switch configuredPolicy {
     case common.BinPackingPolicy:
         nodes = SortAllNodesWithAscendingResource(nodes)
-        return common.NewBinPackingSortingIterator(nodes)
+        return NewBinPackingSortingIterator(nodes)
     case common.FairnessPolicy:
         SortNodes(nodes, MaxAvailableResources)
-        return common.NewFairSortingIterator(nodes)
+        return NewFairSortingIterator(nodes)
     }
 
     return nil

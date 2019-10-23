@@ -44,6 +44,8 @@ func FromString(str string) (SortingPolicy, error) {
 		return BinPackingPolicy, nil
 	case "fair":
 		return FairnessPolicy, nil
+	case "":
+		return FairnessPolicy, nil
 	default:
 		return Undefined, fmt.Errorf("undefined policy %s", str)
 	}

@@ -167,7 +167,7 @@ func (pi *PartitionInfo) GetRules() []configs.PlacementRule {
 // TODO: more finer enum based return model here is better instead of bool.
 func (pi *PartitionInfo) GetNodeSortingPolicy() common.SortingPolicy {
     if pi.nodeSortingPolicy == nil {
-      return common.Default
+      return common.FairnessPolicy
     }
 
     return pi.nodeSortingPolicy.PolicyType

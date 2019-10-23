@@ -18,7 +18,6 @@ package scheduler
 
 import (
     "context"
-    "github.com/cloudera/yunikorn-core/pkg/cache"
     "github.com/cloudera/yunikorn-core/pkg/common"
     "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/metrics"
@@ -89,10 +88,13 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
     }
 }
 
-func (m *Scheduler) regularAllocate(nodes []*SchedulingNode, candidate *SchedulingAllocationAsk) *SchedulingAllocation {
-    nNodes := len(nodes)
-    for i := 0; i < nNodes; i++ {
-        node := nodes[i]
+func (m *Scheduler) regularAllocate(nodes common.SortingIterator, candidate *SchedulingAllocationAsk) *SchedulingAllocation {
+    for {
+        if !nodes.HasNext() {
+            break;
+        }
+
+        node := nodes.Next()
         if !node.CheckAllocateConditions(candidate.AskProto.AllocationKey) {
             // skip the node if conditions can not be satisfied
             continue
@@ -122,7 +124,7 @@ func (m *Scheduler) regularAllocate(nodes []*SchedulingNode, candidate *Scheduli
     return nil
 }
 
-func (m *Scheduler) allocate(nodes []*SchedulingNode, candidate *SchedulingAllocationAsk, preemptionParam *preemptionParameters) *SchedulingAllocation {
+func (m *Scheduler) allocate(nodes common.SortingIterator, candidate *SchedulingAllocationAsk, preemptionParam *preemptionParameters) *SchedulingAllocation {
     if preemptionParam.crossQueuePreemption {
         return crossQueuePreemptionAllocate(m.preemptionContext.partitions[candidate.PartitionName], nodes, candidate, preemptionParam)
     } else {
@@ -208,20 +210,19 @@ func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *Parti
 
 // TODO: convert this as an interface.
 func evaluateForSchedulingPolicy(m *Scheduler, nodes []*SchedulingNode, partition string,
-    candidate *SchedulingAllocationAsk, partitionContext *PartitionSchedulingContext) []*SchedulingNode {
-
+    candidate *SchedulingAllocationAsk, partitionContext *PartitionSchedulingContext) common.SortingIterator {
     // Sort Nodes based on the policy configured.
     configuredPolicy:= partitionContext.partition.GetNodeSortingPolicy()
     switch configuredPolicy {
-    case cache.BinPackingPolicy:
-        nodes = m.SortAllNodesWithAscendingResource(nodes)
-        break
-    case cache.FairnessPolicy:
-    case cache.Default:
+    case common.BinPackingPolicy:
+        nodes = SortAllNodesWithAscendingResource(nodes)
+        return common.NewBinPackingSortingIterator(nodes)
+    case common.FairnessPolicy:
         SortNodes(nodes, MaxAvailableResources)
-        break
+        return common.NewFairSortingIterator(nodes)
     }
-    return nodes
+
+    return nil
 }
 
 func getNodeList(m *Scheduler, partition string) []*SchedulingNode {

@@ -19,7 +19,6 @@ package scheduler
 import (
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
     "github.com/cloudera/yunikorn-core/pkg/metrics"
-    "math/rand"
     "sort"
     "time"
 )
@@ -74,14 +73,23 @@ func SortNodes(nodes []*SchedulingNode, sortType SortType) {
             // Sort by available resource, descending order
             return resources.CompFairnessRatioAssumesUnitPartition(l.CachedAvailableResource, r.CachedAvailableResource) > 0
         })
-        // Do an in-place shuffle with out creating a new-array
-        random := rand.New(rand.NewSource(time.Now().Unix()))
-        for len(nodes) > 0 {
-            n := len(nodes)
-            randIndex := random.Intn(n)
-            nodes[n-1], nodes[randIndex] = nodes[randIndex], nodes[n-1]
-            nodes = nodes[:n-1]
-        }
         metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
     }
+}
+
+// Sort nodes here.
+func SortAllNodesWithAscendingResource(schedulingNodeList []*SchedulingNode) []*SchedulingNode {
+
+    sortingStart := time.Now()
+    sort.SliceStable(schedulingNodeList, func(i, j int) bool {
+        l := schedulingNodeList[i]
+        r := schedulingNodeList[j]
+
+        // Sort by available resource, ascending order
+        return resources.CompFairnessRatioAssumesUnitPartition(r.CachedAvailableResource, l.CachedAvailableResource) > 0
+    })
+
+    metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
+
+    return schedulingNodeList
 }

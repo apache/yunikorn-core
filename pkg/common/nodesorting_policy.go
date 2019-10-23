@@ -14,11 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package cache
+package common
 
 import (
 	"fmt"
-	"github.com/cloudera/yunikorn-core/pkg/common/configs"
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"go.uber.org/zap"
 )
@@ -33,7 +32,6 @@ type SortingPolicy int
 const (
 	BinPackingPolicy = iota
 	FairnessPolicy
-	Default
 	Undefined
 )
 
@@ -46,25 +44,12 @@ func FromString(str string) (SortingPolicy, error) {
 		return BinPackingPolicy, nil
 	case "fair":
 		return FairnessPolicy, nil
-	case "default":
-		return Default, nil
 	default:
 		return Undefined, fmt.Errorf("undefined policy %s", str)
 	}
 }
 
-func NewNodeSortingPolicy(policy configs.NodeSortingPolicy) *NodeSortingPolicy {
-	pType, _ := FromString(policy.Type)
-	sp := &NodeSortingPolicy{
-		PolicyType : pType,
-	}
-
-	log.Logger().Debug("new node sorting policy added",
-		zap.String("type", policy.Type))
-	return sp
-}
-
-func NewNodeDefaultSortingPolicy(policyType string) *NodeSortingPolicy {
+func NewNodeSortingPolicy(policyType string) *NodeSortingPolicy {
 	pType, _ := FromString(policyType)
 	sp := &NodeSortingPolicy{
 		PolicyType: pType,

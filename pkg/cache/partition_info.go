@@ -18,6 +18,7 @@ package cache
 
 import (
     "fmt"
+    "github.com/cloudera/yunikorn-core/pkg/common"
     "github.com/cloudera/yunikorn-core/pkg/common/commonevents"
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
@@ -53,7 +54,7 @@ type PartitionInfo struct {
     clusterInfo            *ClusterInfo                // link back to the cluster info
     lock                   sync.RWMutex                // lock for updating the partition
     totalPartitionResource *resources.Resource         // Total node resources
-    nodeSortingPolicy      *NodeSortingPolicy          // Global Node Sorting Policies
+    nodeSortingPolicy      *common.NodeSortingPolicy   // Global Node Sorting Policies
 }
 
 // Create a new partition from scratch based on a validated configuration.
@@ -95,14 +96,14 @@ func NewPartitionInfo(partition configs.PartitionConfig, rmId string, info *Clus
     p.userGroupCache = security.GetUserGroupCache("")
 
     // TODO Need some more cleaner interface here.
-    configuredPolicy, _ := FromString(partition.NodeSortPolicy.Type)
+    configuredPolicy, _ := common.FromString(partition.NodeSortPolicy.Type)
     switch configuredPolicy {
-    case BinPackingPolicy:
-        p.nodeSortingPolicy = NewNodeSortingPolicy(partition.NodeSortPolicy)
+    case common.BinPackingPolicy:
+        p.nodeSortingPolicy = common.NewNodeSortingPolicy(partition.NodeSortPolicy.Type)
         log.Logger().Info("NodeSortingBinPackingPolicy policy is set.")
     default:
-        p.nodeSortingPolicy = NewNodeDefaultSortingPolicy("default")
-        log.Logger().Info("No default scheduling policy is set.")
+        p.nodeSortingPolicy = common.NewNodeSortingPolicy("fair")
+        log.Logger().Info("No default scheduling policy is set, hence setting to fair.")
     }
 
     return p, nil
@@ -164,9 +165,9 @@ func (pi *PartitionInfo) GetRules() []configs.PlacementRule {
 
 // Is bin-packing scheduling enabled?
 // TODO: more finer enum based return model here is better instead of bool.
-func (pi *PartitionInfo) GetNodeSortingPolicy() SortingPolicy {
+func (pi *PartitionInfo) GetNodeSortingPolicy() common.SortingPolicy {
     if pi.nodeSortingPolicy == nil {
-      return Default
+      return common.Default
     }
 
     return pi.nodeSortingPolicy.PolicyType

@@ -18,7 +18,7 @@ package configs
 
 import (
     "fmt"
-    "github.com/cloudera/yunikorn-core/pkg/cache"
+    "github.com/cloudera/yunikorn-core/pkg/common"
     "github.com/cloudera/yunikorn-core/pkg/common/security"
     "github.com/cloudera/yunikorn-core/pkg/log"
     "go.uber.org/zap"
@@ -196,11 +196,8 @@ func checkNodeSortingPolicy(partition *PartitionConfig) error {
     // get the policy
     policy := partition.NodeSortPolicy
 
-    log.Logger().Debug("global node sorting policies:",
-        zap.String("policy type", policy.Type))
-
     // Defined polices.
-    configuredNodeSortingPolicy, error := cache.FromString(policy.Type)
+    configuredNodeSortingPolicy, error := common.FromString(policy.Type)
 
     log.Logger().Info("Node sorting policy:", zap.Any("policy name", policy.Type), zap.Any(", value", configuredNodeSortingPolicy))
     return error

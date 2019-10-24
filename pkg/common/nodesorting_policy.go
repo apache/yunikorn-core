@@ -40,12 +40,11 @@ func (nsp SortingPolicy) String() string {
 }
 func FromString(str string) (SortingPolicy, error) {
 	switch str {
+	// fair is the default policy when not set
+	case "fair", "":
+		return FairnessPolicy, nil
 	case "binpacking":
 		return BinPackingPolicy, nil
-	case "fair":
-		return FairnessPolicy, nil
-	case "":
-		return FairnessPolicy, nil
 	default:
 		return Undefined, fmt.Errorf("undefined policy %s", str)
 	}

@@ -199,7 +199,7 @@ func checkNodeSortingPolicy(partition *PartitionConfig) error {
     // Defined polices.
     configuredNodeSortingPolicy, error := common.FromString(policy.Type)
 
-    log.Logger().Info("Node sorting policy:", zap.Any("policy name", policy.Type), zap.Any(", value", configuredNodeSortingPolicy))
+    log.Logger().Info("Node sorting policy:", zap.Any("policy name", policy.Type), zap.Any("value", configuredNodeSortingPolicy))
     return error
 }
 

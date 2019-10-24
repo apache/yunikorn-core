@@ -18,6 +18,7 @@ package configs
 
 import (
     "fmt"
+    "github.com/cloudera/yunikorn-core/pkg/common"
     "github.com/cloudera/yunikorn-core/pkg/common/security"
     "github.com/cloudera/yunikorn-core/pkg/log"
     "go.uber.org/zap"
@@ -189,6 +190,19 @@ func checkUserDefinition(partition *PartitionConfig) error {
     return nil
 }
 
+// Check for global policy
+func checkNodeSortingPolicy(partition *PartitionConfig) error {
+
+    // get the policy
+    policy := partition.NodeSortPolicy
+
+    // Defined polices.
+    configuredNodeSortingPolicy, error := common.FromString(policy.Type)
+
+    log.Logger().Info("Node sorting policy:", zap.Any("policy name", policy.Type), zap.Any("value", configuredNodeSortingPolicy))
+    return error
+}
+
 // Check the queue names configured for compliance and uniqueness
 // - no duplicate names at each branched level in the tree
 // - queue name is alphanumeric (case ignore) with - and _
@@ -321,6 +335,10 @@ func Validate(newConfig *SchedulerConfig) error {
             return err
         }
         err = checkUserDefinition(&partition)
+        if err != nil {
+            return err
+        }
+        err = checkNodeSortingPolicy(&partition)
         if err != nil {
             return err
         }

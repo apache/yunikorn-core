@@ -1212,6 +1212,158 @@ partitions:
 }
 
 
+func TestBinPackingAllocationForApplications(t *testing.T) {
+    // Start all tests
+    serviceContext := entrypoint.StartAllServicesWithManualScheduler()
+    defer serviceContext.StopAll()
+    proxy := serviceContext.RMProxy
+    cache := serviceContext.Cache
+    scheduler := serviceContext.Scheduler
+
+    // Register RM
+    configData := `
+partitions:
+  -
+    name: default
+    nodesortpolicy:
+        type: binpacking
+    queues:
+      - name: root
+        submitacl: "*"
+        queues:
+          - name: a
+            resources:
+              guaranteed:
+                memory: 100
+                vcore: 10
+          - name: b
+            resources:
+              guaranteed:
+                memory: 100
+                vcore: 10
+`
+    configs.MockSchedulerConfigByData([]byte(configData))
+    mockRM := NewMockRMCallbackHandler(t)
+
+    _, err := proxy.RegisterResourceManager(
+        &si.RegisterResourceManagerRequest{
+            RmId:        "rm:123",
+            PolicyGroup: "policygroup",
+            Version:     "0.0.2",
+        }, mockRM)
+
+    if err != nil {
+        t.Fatalf("Register RM failed with error: %v", err)
+    }
+
+    // Register a node, and add applications
+    err = proxy.Update(&si.UpdateRequest{
+        NewSchedulableNodes: []*si.NewNodeInfo{
+            {
+                NodeId: "node-1:1234",
+                Attributes: map[string]string{
+                    "si.io/hostname": "node-1",
+                    "si.io/rackname": "rack-1",
+                },
+                SchedulableResource: &si.Resource{
+                    Resources: map[string]*si.Quantity{
+                        "memory": {Value: 100},
+                        "vcore":  {Value: 20},
+                    },
+                },
+            },
+            {
+                NodeId: "node-2:1234",
+                Attributes: map[string]string{
+                    "si.io/hostname": "node-1",
+                    "si.io/rackname": "rack-1",
+                },
+                SchedulableResource: &si.Resource{
+                    Resources: map[string]*si.Quantity{
+                        "memory": {Value: 100},
+                        "vcore":  {Value: 20},
+                    },
+                },
+            },
+        },
+        NewApplications: newAddAppRequest(map[string]string{"app-1":"root.a","app-2":"root.a"}),
+        RmId: "rm:123",
+    })
+
+    if err != nil {
+        t.Fatalf("Proxy update failed with error: %v", err)
+    }
+
+    // Check scheduling queue root
+    schedulerQueueRoot := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root", "[rm:123]default")
+
+    // Check scheduling queue a
+    schedulerQueueA := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.a", "[rm:123]default")
+
+    // Check scheduling queue b
+    schedulerQueueB := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.b", "[rm:123]default")
+
+    waitForAcceptedApplications(mockRM, "app-1", 1000)
+    waitForAcceptedApplications(mockRM, "app-2", 1000)
+    waitForAcceptedNodes(mockRM, "node-1:1234", 1000)
+    waitForAcceptedNodes(mockRM, "node-2:1234", 1000)
+
+    // Get scheduling app
+    schedulingApp1 := scheduler.GetClusterSchedulingContext().GetSchedulingApplication("app-1", "[rm:123]default")
+    schedulingApp2 := scheduler.GetClusterSchedulingContext().GetSchedulingApplication("app-2", "[rm:123]default")
+
+    err = proxy.Update(&si.UpdateRequest{
+        Asks: []*si.AllocationAsk{
+            {
+                AllocationKey: "alloc-1",
+                ResourceAsk: &si.Resource{
+                    Resources: map[string]*si.Quantity{
+                        "memory": {Value: 10},
+                        "vcore":  {Value: 1},
+                    },
+                },
+                MaxAllocations: 20,
+                ApplicationId:  "app-1",
+            },
+            {
+                AllocationKey: "alloc-1",
+                ResourceAsk: &si.Resource{
+                    Resources: map[string]*si.Quantity{
+                        "memory": {Value: 10},
+                        "vcore":  {Value: 1},
+                    },
+                },
+                MaxAllocations: 20,
+                ApplicationId:  "app-2",
+            },
+        },
+        RmId: "rm:123",
+    })
+
+    if err != nil {
+        t.Fatalf("Proxy update failed with error: %v", err)
+    }
+
+    waitForPendingResource(t, schedulerQueueA, 400, 1000)
+    waitForPendingResource(t, schedulerQueueB, 0, 1000)
+    waitForPendingResource(t, schedulerQueueRoot, 400, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp1, 200, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp2, 200, 1000)
+
+    for i := 0; i < 9; i++ {
+        scheduler.SingleStepScheduleAllocTest(1)
+        time.Sleep(100 * time.Millisecond)
+    }
+
+    waitForAllocations(mockRM, 9, 1000)
+
+    totalNode1Resource := cache.GetPartition("[rm:123]default").GetNode("node-1:1234").GetAllocatedResource().Resources[resources.MEMORY]
+    assert.Equal(t, int(totalNode1Resource), 90)
+
+    totalNode2Resource := cache.GetPartition("[rm:123]default").GetNode("node-2:1234").GetAllocatedResource().Resources[resources.MEMORY]
+    assert.Equal(t, int(totalNode2Resource), 0)
+}
+
 //func TestScheduleBestEffortRequests(t *testing.T) {
 //    // Start all tests
 //    serviceContext := entrypoint.StartAllServicesWithManualScheduler()

@@ -177,7 +177,7 @@ func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionCont
     return nil
 }
 
-func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitionContext, nodes []*SchedulingNode, candidate *SchedulingAllocationAsk,
+func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitionContext, nodes SortingIterator, candidate *SchedulingAllocationAsk,
     preemptionParam *preemptionParameters) *SchedulingAllocation {
     if preemptionPartitionContext == nil {
         return nil
@@ -193,7 +193,13 @@ func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitio
     // TODO: do we want to make allocation-within-preemption sorted instead of randomly check nodes one-by-one?
     // First let's sort nodes by available resource
     var preemptResult *singleNodePreemptResult = nil
-    for _, node := range nodes {
+
+    for {
+        if !nodes.HasNext() {
+            break;
+        }
+
+        node := nodes.Next()
         if preemptResult = trySurgicalPreemptionOnNode(preemptionPartitionContext, preemptorQueue, node, candidate, headroomShortages); preemptResult != nil {
             break
         }

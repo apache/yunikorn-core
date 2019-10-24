@@ -76,3 +76,20 @@ func SortNodes(nodes []*SchedulingNode, sortType SortType) {
         metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
     }
 }
+
+// Sort nodes here.
+func SortAllNodesWithAscendingResource(schedulingNodeList []*SchedulingNode) []*SchedulingNode {
+
+    sortingStart := time.Now()
+    sort.SliceStable(schedulingNodeList, func(i, j int) bool {
+        l := schedulingNodeList[i]
+        r := schedulingNodeList[j]
+
+        // Sort by available resource, ascending order
+        return resources.CompFairnessRatioAssumesUnitPartition(r.CachedAvailableResource, l.CachedAvailableResource) > 0
+    })
+
+    metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
+
+    return schedulingNodeList
+}

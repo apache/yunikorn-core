@@ -24,7 +24,6 @@ import (
     "github.com/cloudera/yunikorn-core/pkg/plugins"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "go.uber.org/zap"
-    "math/rand"
     "sync/atomic"
     "time"
 )
@@ -60,7 +59,7 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
 
         // Try to allocate from candidates, returns allocation proposal as well as failed allocation
         // ask candidates. (For preemption).
-        allocations, _ := m.tryBatchAllocation(partition, candidates, preemptionParam /* it is allocation phase */)
+        allocations, _ := m.tryBatchAllocation(partition, partitionContext, candidates, preemptionParam /* it is allocation phase */)
 
         // Send allocations to cache, and pending ask.
         confirmedAllocations := make([]*SchedulingAllocation, 0)
@@ -89,12 +88,13 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
     }
 }
 
-func (m *Scheduler) regularAllocate(nodes []*SchedulingNode, candidate *SchedulingAllocationAsk) *SchedulingAllocation {
-    nNodes := len(nodes)
-    startIdx := rand.Intn(nNodes)
-    for i := 0; i < len(nodes); i++ {
-        idx := (i + startIdx) % nNodes
-        node := nodes[idx]
+func (m *Scheduler) regularAllocate(nodes SortingIterator, candidate *SchedulingAllocationAsk) *SchedulingAllocation {
+    for {
+        if !nodes.HasNext() {
+            break;
+        }
+
+        node := nodes.Next()
         if !node.CheckAllocateConditions(candidate.AskProto.AllocationKey) {
             // skip the node if conditions can not be satisfied
             continue
@@ -124,7 +124,7 @@ func (m *Scheduler) regularAllocate(nodes []*SchedulingNode, candidate *Scheduli
     return nil
 }
 
-func (m *Scheduler) allocate(nodes []*SchedulingNode, candidate *SchedulingAllocationAsk, preemptionParam *preemptionParameters) *SchedulingAllocation {
+func (m *Scheduler) allocate(nodes SortingIterator, candidate *SchedulingAllocationAsk, preemptionParam *preemptionParameters) *SchedulingAllocation {
     if preemptionParam.crossQueuePreemption {
         return crossQueuePreemptionAllocate(m.preemptionContext.partitions[candidate.PartitionName], nodes, candidate, preemptionParam)
     } else {
@@ -133,18 +133,13 @@ func (m *Scheduler) allocate(nodes []*SchedulingNode, candidate *SchedulingAlloc
 }
 
 // Do mini batch allocation
-func (m *Scheduler) tryBatchAllocation(partition string, candidates []*SchedulingAllocationAsk,
+func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *PartitionSchedulingContext,
+    candidates []*SchedulingAllocationAsk,
     preemptionParam *preemptionParameters) ([]*SchedulingAllocation, []*SchedulingAllocationAsk) {
     // copy list of node since we going to go through node list a couple of times
-    nodeList := m.clusterInfo.GetPartition(partition).CopyNodeInfos()
-    if len(nodeList) <= 0 {
-        // When we don't have node, do nothing
+    nodeList := getNodeList(m, partition)
+    if nodeList == nil {
         return make([]*SchedulingAllocation, 0), candidates
-    }
-
-    schedulingNodeList := make([]*SchedulingNode, len(nodeList))
-    for idx, v := range nodeList {
-        schedulingNodeList[idx] = NewSchedulingNode(v)
     }
 
     ctx, cancel := context.WithCancel(context.Background())
@@ -157,15 +152,14 @@ func (m *Scheduler) tryBatchAllocation(partition string, candidates []*Schedulin
 
     doAllocation := func(i int) {
         allocatingStart := time.Now()
-        // Sort by MAX_AVAILABLE resources.
-        // TODO, this should be configurable.
-        SortNodes(schedulingNodeList, MaxAvailableResources)
 
         candidate := candidates[i]
         // Check if the same allocation key got rejected already.
         if preemptionParam.blacklistedRequest[candidate.AskProto.AllocationKey] {
             return
         }
+
+        schedulingNodeList := evaluateForSchedulingPolicy(m, nodeList, partition, candidate, partitionContext)
 
         if allocation := m.allocate(schedulingNodeList, candidate, preemptionParam); allocation != nil {
             length := atomic.AddInt32(&allocatedLength, 1)
@@ -212,6 +206,38 @@ func (m *Scheduler) tryBatchAllocation(partition string, candidates []*Schedulin
     }
 
     return allocations, failedAsks
+}
+
+// TODO: convert this as an interface.
+func evaluateForSchedulingPolicy(m *Scheduler, nodes []*SchedulingNode, partition string,
+    candidate *SchedulingAllocationAsk, partitionContext *PartitionSchedulingContext) SortingIterator {
+    // Sort Nodes based on the policy configured.
+    configuredPolicy:= partitionContext.partition.GetNodeSortingPolicy()
+    switch configuredPolicy {
+    case common.BinPackingPolicy:
+        nodes = SortAllNodesWithAscendingResource(nodes)
+        return NewBinPackingSortingIterator(nodes)
+    case common.FairnessPolicy:
+        SortNodes(nodes, MaxAvailableResources)
+        return NewFairSortingIterator(nodes)
+    }
+
+    return nil
+}
+
+func getNodeList(m *Scheduler, partition string) []*SchedulingNode {
+    nodeList := m.clusterInfo.GetPartition(partition).CopyNodeInfos()
+    if len(nodeList) <= 0 {
+        // When we don't have node, do nothing
+        return nil
+    }
+
+    schedulingNodeList := make([]*SchedulingNode, len(nodeList))
+    for idx, v := range nodeList {
+        schedulingNodeList[idx] = NewSchedulingNode(v)
+    }
+
+    return schedulingNodeList
 }
 
 func (m* Scheduler) handleFailedToAllocationAllocations(allocations []*SchedulingAllocation, candidates []*SchedulingAllocationAsk, preemptionParam *preemptionParameters) {

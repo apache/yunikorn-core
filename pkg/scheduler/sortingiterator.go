@@ -37,7 +37,8 @@ func NewBinPackingSortingIterator(schedulerNodes []*SchedulingNode) *BinPackingS
 	}
 }
 
-// Next advances to next element in array. Returns false on end of iteration.
+// Next returns the next element and advances to next element in array.
+// Returns nil and reset the starting point at the end of iteration.
 func (i *BinPackingSortingIterator) Next() *SchedulingNode {
 	len := len(i.nodes)
 	if (i.countIdx + 1) > len {
@@ -49,7 +50,8 @@ func (i *BinPackingSortingIterator) Next() *SchedulingNode {
 	return value
 }
 
-// Next advances to next element in array. Returns false on end of iteration.
+// HasNext retrurns true if there is a next element in the array.
+// Returns false if there are no more elemeents.
 func (i *BinPackingSortingIterator) HasNext() bool {
 	len := len(i.nodes)
 	if (i.countIdx + 1) > len {
@@ -58,7 +60,8 @@ func (i *BinPackingSortingIterator) HasNext() bool {
 	return true
 }
 
-// Next advances to next element in array. Returns false on end of iteration.
+// Next returns the next element and advances to next element in array.
+// Returns nil and reset the starting point at the end of iteration.
 func (i *FairSortingIterator) Next() *SchedulingNode {
 	len := len(i.nodes)
 
@@ -79,7 +82,8 @@ func (i *FairSortingIterator) Next() *SchedulingNode {
 	return value
 }
 
-// Next advances to next element in array. Returns false on end of iteration.
+// HasNext retrurns true if there is a next element in the array.
+// Returns false if there are no more elemeents.
 func (i *FairSortingIterator) HasNext() bool {
 	len := len(i.nodes)
 	if (i.countIdx + 1) > len {

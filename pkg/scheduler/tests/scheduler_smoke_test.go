@@ -1253,7 +1253,7 @@ partitions:
         }, mockRM)
 
     if err != nil {
-        t.Fatal(err.Error())
+        t.Fatalf("Register RM failed with error: %v", err)
     }
 
     // Register a node, and add applications
@@ -1290,6 +1290,10 @@ partitions:
         RmId: "rm:123",
     })
 
+    if err != nil {
+        t.Fatalf("Proxy update failed with error: %v", err)
+    }
+
     // Check scheduling queue root
     schedulerQueueRoot := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root", "[rm:123]default")
 
@@ -1298,10 +1302,6 @@ partitions:
 
     // Check scheduling queue b
     schedulerQueueB := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.b", "[rm:123]default")
-
-    if nil != err {
-        t.Fatal(err.Error())
-    }
 
     waitForAcceptedApplications(mockRM, "app-1", 1000)
     waitForAcceptedApplications(mockRM, "app-2", 1000)
@@ -1340,8 +1340,8 @@ partitions:
         RmId: "rm:123",
     })
 
-    if nil != err {
-        t.Fatal(err.Error())
+    if err != nil {
+        t.Fatalf("Proxy update failed with error: %v", err)
     }
 
     waitForPendingResource(t, schedulerQueueA, 400, 1000)

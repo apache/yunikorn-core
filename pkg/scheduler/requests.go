@@ -61,9 +61,7 @@ func (m *SchedulingRequests) AddAllocationAsk(ask *SchedulingAllocationAsk) (*re
         oldAskResource = resources.MultiplyBy(oldAsk.AllocatedResource, float64(oldAsk.PendingRepeatAsk))
     }
 
-    if nil != oldAskResource {
-        resources.SubFrom(deltaPendingResource, oldAskResource)
-    }
+    deltaPendingResource.SubFrom(oldAskResource)
     m.requests[ask.AskProto.AllocationKey] = ask
 
     // Update total pending resource

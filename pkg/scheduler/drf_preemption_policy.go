@@ -93,7 +93,7 @@ func initHeadroomShortages(preemptorQueue *preemptionQueueContext, allocatedReso
     for cur != nil {
         // Headroom = max - may_allocated + preempting
         headroom := resources.Sub(cur.resources.max, cur.schedulingQueue.GetAllocatingResource())
-        resources.AddTo(headroom, cur.resources.markedPreemptedResource)
+        headroom.AddTo(cur.resources.markedPreemptedResource)
         headroomShortage := resources.SubEliminateNegative(allocatedResource, headroom)
         if resources.StrictlyGreaterThanZero(headroomShortage) {
             headroomShortages[cur.queuePath] = headroomShortage
@@ -116,8 +116,8 @@ func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionCont
     headroomShortages map[string]*resources.Resource) *singleNodePreemptResult {
     // To preempt resource = (allocating + candidate.asked) - (preempting + available)
     resourceToPreempt := resources.Add(node.AllocatingResource, candidate.AllocatedResource)
-    resources.SubFrom(resourceToPreempt, node.PreemptingResource)
-    resources.SubFrom(resourceToPreempt, node.CachedAvailableResource)
+    resourceToPreempt.SubFrom(node.PreemptingResource)
+    resourceToPreempt.SubFrom(node.CachedAvailableResource)
     resourceToPreempt = resources.ComponentWiseMax(resourceToPreempt, resources.Zero)
 
     // If allocated resource can fit in the node, and no headroom shortage of preemptor queue, we can directly get it allocated. (lucky!)
@@ -162,7 +162,7 @@ func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionCont
 
         // let's preempt the container.
         toReleaseAllocations[alloc.AllocationProto.Uuid] = alloc
-        resources.AddTo(totalReleasedResource, alloc.AllocatedResource)
+        totalReleasedResource.AddTo(alloc.AllocatedResource)
 
         // Check if we preempted enough resources.
         if resources.StrictlyGreaterThanOrEquals(totalReleasedResource, resourceToPreempt) {
@@ -242,15 +242,15 @@ func createPreemptionAndAllocationProposal(preemptionPartitionContext *preemptio
 
             // Update metrics of preempt queue
             preemptQueue := preemptionPartitionContext.leafQueues[alloc.AllocationProto.QueueName]
-            resources.AddTo(preemptQueue.resources.markedPreemptedResource, alloc.AllocatedResource)
+            preemptQueue.resources.markedPreemptedResource.AddTo(alloc.AllocatedResource)
             preemptQueue.resources.preemptable = resources.SubEliminateNegative(preemptQueue.resources.preemptable, alloc.AllocatedResource)
         }
-        resources.AddTo(pr.node.PreemptingResource, pr.totalReleasedResource)
+        pr.node.PreemptingResource.AddTo(pr.totalReleasedResource)
     }
 
     // Update metrics
     // For node, update allocating and preempting resources
-    resources.AddTo(nodeToAllocate.AllocatingResource, candidate.AllocatedResource)
+    nodeToAllocate.AllocatingResource.AddTo(candidate.AllocatedResource)
 
     return allocation
 }

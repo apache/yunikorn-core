@@ -74,7 +74,7 @@ func recursiveInitResources(ctx *preemptionQueueContext) {
 func recursiveUpdatePreemptableResources(partitionResource *resources.Resource, queue *preemptionQueueContext) {
     // There's a deadzone, when a queue used more than 10% of its guaranteed resource, preemption will started.
     // TODO: Make the ratio configurable
-    if resources.FairnessRatio(queue.resources.used, partitionResource, queue.resources.guaranteed, partitionResource) > 1.1 {
+    if resources.FairnessRatio(queue.resources.used, queue.resources.guaranteed, partitionResource) > 1.1 {
         // Preemptable resource = used - guarantee of each queue
         queue.resources.preemptable = resources.ComponentWiseMax(resources.Sub(queue.resources.used, queue.resources.guaranteed), resources.Zero)
     }

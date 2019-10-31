@@ -915,7 +915,7 @@ func TestComp(t *testing.T) {
 }
 
 func assertFairness(t *testing.T, cluster *Resource, left *Resource, right *Resource, expected float64) {
-    c := FairnessRatio(left, cluster, right, cluster)
+    c := FairnessRatio(left, right, cluster)
     if c != expected {
         t.Errorf("Fairness Ratio %s to %s, expected %f, got %f", left, right, expected, c)
     }
@@ -966,7 +966,7 @@ func TestFairnessRatio(t *testing.T) {
 
 // utility functions
 func assertComparison(t *testing.T, cluster *Resource, left *Resource, right *Resource, expected int) {
-    c := Comp(cluster, left, right)
+    c := CompFairnessRatio(left, right, cluster)
     if c != expected {
         t.Errorf("Compare %s to %s, expected %d, got %d", left, right, expected, c)
     }

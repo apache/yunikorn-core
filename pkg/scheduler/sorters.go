@@ -39,7 +39,7 @@ func SortQueue(queues []*SchedulingQueue, sortType SortType) {
             l := queues[i]
             r := queues[j]
 
-            comp := resources.CompFairnessRatio(l.ProposingResource, l.CachedQueueInfo.GuaranteedResource, r.ProposingResource, l.CachedQueueInfo.GuaranteedResource)
+            comp := resources.CompFairnessRatio(l.ProposingResource, r.ProposingResource, l.CachedQueueInfo.GuaranteedResource)
             return comp < 0
         })
     }
@@ -51,7 +51,7 @@ func SortApplications(queues []*SchedulingApplication, sortType SortType, global
             l := queues[i]
             r := queues[j]
 
-            comp := resources.CompFairnessRatio(l.MayAllocatedResource, globalResource, r.MayAllocatedResource, globalResource)
+            comp := resources.CompFairnessRatio(l.MayAllocatedResource, r.MayAllocatedResource, globalResource)
             return comp < 0
         })
     } else if sortType == FifoSortPolicy {

@@ -902,7 +902,7 @@ func TestGetShares(t *testing.T) {
         t.Errorf("incorrect shares with negative valued resource, expected %v got: %v", expected, shares)
     }
     total = NewResource()
-    expected = []float64{math.Inf(-1), 0, math.Inf(1)}
+    expected = []float64{-5, 0, 5}
     shares = getShares(res, total)
     if len(shares) != 3 || !reflect.DeepEqual(shares, expected) {
         t.Errorf("incorrect shares with zero valued resource, expected %v got: %v", expected, shares)
@@ -936,7 +936,7 @@ func TestGetShares(t *testing.T) {
     // resource quantity not in total
     res = &Resource{Resources: map[string]Quantity{"large": 5, "notintotal": 10}}
     total = &Resource{Resources: map[string]Quantity{"large": 15}}
-    expected = []float64{5.0 / 15.0, math.Inf(1)}
+    expected = []float64{5.0 / 15.0, 10}
     shares = getShares(res, total)
     if len(shares) != 2 || !reflect.DeepEqual(shares, expected) {
         t.Errorf("incorrect shares not in total, expected %v got: %v", expected, shares)

@@ -328,8 +328,11 @@ func getShares(res, total *Resource) []float64 {
         if v == 0 {
             continue
         }
-        // share is usage if total is nil
-        if total == nil {
+        // Share is usage if total is nil or zero for this resource
+        // Resources are integer so we could divide by 0. Handle it specifically here,
+        // similar to a nil total resource. The check is not to prevent the divide by 0 error.
+        // Compare against zero total resource fails without the check and some sorters use that.
+        if total == nil || total.Resources[k] == 0 {
             // negative share is logged
             if v < 0 {
                 log.Logger().Debug("usage is negative no total, share is also negative",
@@ -339,9 +342,6 @@ func getShares(res, total *Resource) []float64 {
             idx++
             continue
         }
-        // resources are integer so we could divide by 0, however the division is in floats
-        // this will thus give us +Inf or -Inf depending on the signs of the res and total
-        // usage nothing special to handle
         shares[idx] = float64(v) / float64(total.Resources[k])
         // negative share is logged
         if shares[idx] < 0 {

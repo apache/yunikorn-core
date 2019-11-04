@@ -1,8 +1,8 @@
 # YuniKorn Scheduler Placement Rules
 
-The basis for the placement rules is given in the [scheduler design document](https://github.com/cloudera/yunikorn-core/blob/master/docs/design/scheduler-configuration.md#placement-rules-definition).
+The basis for the placement rules is given in the [scheduler design document](./design/scheduler-configuration.md#placement-rules-definition).
 Multiple rules can be chained to form a placement policy.
-[Access control lists](https://github.com/cloudera/yunikorn-core/blob/master/docs/acls.md) and rule filters are defined per rule and enforced per rule.
+[Access control lists](./acls.md) and rule filters are defined per rule and enforced per rule.
 This document explains how to build a policy and the rules that are part of the scheduler with examples.
 
 ## Configuration
@@ -157,7 +157,7 @@ The administrative queue ACL also provides _submit_ access.
 If the queue does not exist or does not have an ACL set, the ACL of the parent queue is checked.
 This recursive check is repeated until an ACL provides access or after the ACL of the root queue is checked.
 
-For more detail on the ACL syntax check the [ACL documentation](https://github.com/cloudera/yunikorn-core/blob/master/docs/acls.md).
+For more detail on the ACL syntax check the [ACL documentation](./acls.md).
 
 ## Rules
 ### Provided Rule

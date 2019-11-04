@@ -85,15 +85,18 @@ func TestACLSpecialCase(t *testing.T) {
     if err == nil {
         t.Errorf("parsing passed for string: '  '")
     }
-    /**
+
     acl, err = NewACL("dotted.user")
-    if err != nil || len(acl.users) > 0 {
-        t.Errorf("parsing failed for string: 'dotted.user' acl has user list: %v", acl)
+    if err != nil || len(acl.users) != 1 {
+        t.Errorf("parsing failed for string: 'dotted.user' acl has incorrect user list: %v", acl)
     }
-    **/
     acl, err = NewACL("user,user")
     if err != nil || len(acl.users) != 1 {
         t.Errorf("parsing failed for string: 'user,user' acl has incorrect user list: %v", acl)
+    }
+    acl, err = NewACL(" dotted.group")
+    if err != nil || len(acl.groups) > 0 {
+        t.Errorf("parsing failed for string: ' dotted.group' acl has incorrect group list: %v", acl)
     }
     acl, err = NewACL(" group,group")
     if err != nil || len(acl.groups) != 1 {

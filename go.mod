@@ -6,15 +6,12 @@ require (
 	cloud.google.com/go v0.46.3 // indirect
 	github.com/cloudera/yunikorn-scheduler-interface v0.0.0-20190926162348-e1f0f8203763
 	github.com/creack/pty v1.1.9 // indirect
-	github.com/google/btree v1.0.0 // indirect
 	github.com/google/go-cmp v0.3.1 // indirect
 	github.com/google/pprof v0.0.0-20190908185732-236ed259b199 // indirect
 	github.com/gorilla/mux v1.7.3
 	github.com/hashicorp/golang-lru v0.5.3 // indirect
 	github.com/kr/pty v1.1.8 // indirect
 	github.com/looplab/fsm v0.1.0
-	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
-	github.com/modern-go/reflect2 v1.0.1 // indirect
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/prometheus/client_golang v1.1.0
 	github.com/rogpeppe/go-internal v1.4.0 // indirect
@@ -40,5 +37,4 @@ require (
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	gopkg.in/yaml.v2 v2.2.2
 	gotest.tools v0.0.0-20181223230014-1083505acf35
-	rsc.io/binaryregexp v0.2.0 // indirect
 )

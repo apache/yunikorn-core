@@ -160,7 +160,7 @@ func TestQueueGuaranteedResourceNotSet(t *testing.T) {
 		"vcore" : resources.Quantity(200)})
 	assert.Nil(t, q1.CachedQueueInfo.GuaranteedResource)
 
-	// q2 has no proposed resource
+	// q2 has no quaranteed resource (nil)
 	q2, err := createManagedQueue(root, "q2", false)
 	if err != nil {
 		t.Fatalf("failed to create leaf queue: %v", err)

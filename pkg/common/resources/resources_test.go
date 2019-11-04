@@ -872,102 +872,270 @@ func TestFitIn(t *testing.T) {
     }
 }
 
-func TestComp(t *testing.T) {
-    cluster := MockResource(4, 4, 4)
+func TestGetShares(t *testing.T) {
+    // simple cases nil or empty resources
+    shares := getShares(nil, nil)
+    if len(shares) > 0 {
+        t.Error("nil resources gave shares list longer than 0")
+    }
+    res := NewResource()
+    shares = getShares(res, nil)
+    if len(shares) > 0 {
+        t.Error("empty resource with total nil gave shares list longer than 0")
+    }
+    total := NewResource()
+    shares = getShares(res, total)
+    if len(shares) > 0 {
+        t.Error("empty resources gave shares list longer than 0")
+    }
 
-    // Easy cases
-    assertComparison(t, cluster, MockResource(1, 1, 1), MockResource(1, 1, 1), 0)
-    assertComparison(t, cluster, MockResource(0, 0, 0), MockResource(0, 0, 0), 0)
-    assertComparison(t, cluster, MockResource(2, 2, 2), MockResource(1, 1, 1), 1)
-    assertComparison(t, cluster, MockResource(2, 2, 2), MockResource(0, 0, 0), 1)
+    // simple case nil or empty total resource
+    res = &Resource{Resources: map[string]Quantity{"zero": 0}}
+    shares = getShares(res, nil)
+    if len(shares) != 1 && shares[0] != 0 {
+        t.Errorf("incorrect share with zero valued resource: %v", shares)
+    }
+    res = &Resource{Resources: map[string]Quantity{"large": 5, "zero": 0, "small": -5}}
+    expected := []float64{-5, 0, 5}
+    shares = getShares(res, nil)
+    if len(shares) != 3 || !reflect.DeepEqual(shares, expected) {
+        t.Errorf("incorrect shares with negative valued resource, expected %v got: %v", expected, shares)
+    }
+    total = NewResource()
+    expected = []float64{math.Inf(-1), 0, math.Inf(1)}
+    shares = getShares(res, total)
+    if len(shares) != 3 || !reflect.DeepEqual(shares, expected) {
+        t.Errorf("incorrect shares with zero valued resource, expected %v got: %v", expected, shares)
+    }
 
-    // Fair sharing cases
-    assertComparison(t, cluster, MockResource(2, 1, 1), MockResource(2, 1, 1), 0)
-    assertComparison(t, cluster, MockResource(2, 1, 1), MockResource(1, 2, 1), 0)
-    assertComparison(t, cluster, MockResource(2, 1, 1), MockResource(1, 1, 2), 0)
-    assertComparison(t, cluster, MockResource(2, 1, 0), MockResource(0, 1, 2), 0)
-    assertComparison(t, cluster, MockResource(2, 2, 1), MockResource(1, 2, 2), 0)
-    assertComparison(t, cluster, MockResource(2, 2, 1), MockResource(2, 1, 2), 0)
-    assertComparison(t, cluster, MockResource(2, 2, 1), MockResource(2, 2, 1), 0)
-    assertComparison(t, cluster, MockResource(2, 2, 0), MockResource(2, 0, 2), 0)
-    assertComparison(t, cluster, MockResource(3, 2, 1), MockResource(3, 2, 1), 0)
-    assertComparison(t, cluster, MockResource(3, 2, 1), MockResource(3, 1, 2), 0)
-    assertComparison(t, cluster, MockResource(3, 2, 1), MockResource(1, 2, 3), 0)
-    assertComparison(t, cluster, MockResource(3, 2, 1), MockResource(1, 3, 2), 0)
-    assertComparison(t, cluster, MockResource(3, 2, 1), MockResource(2, 1, 3), 0)
-    assertComparison(t, cluster, MockResource(3, 2, 1), MockResource(2, 3, 1), 0)
-    assertComparison(t, cluster, MockResource(2, 1, 1), MockResource(1, 1, 1), 1)
-    assertComparison(t, cluster, MockResource(2, 1, 1), MockResource(1, 1, 0), 1)
-    assertComparison(t, cluster, MockResource(2, 2, 1), MockResource(2, 1, 1), 1)
-    assertComparison(t, cluster, MockResource(2, 2, 1), MockResource(1, 2, 1), 1)
-    assertComparison(t, cluster, MockResource(2, 2, 1), MockResource(1, 1, 2), 1)
-    assertComparison(t, cluster, MockResource(2, 2, 1), MockResource(0, 2, 2), 1)
-    assertComparison(t, cluster, MockResource(2, 2, 2), MockResource(2, 1, 1), 1)
-    assertComparison(t, cluster, MockResource(2, 2, 2), MockResource(1, 2, 1), 1)
-    assertComparison(t, cluster, MockResource(2, 2, 2), MockResource(1, 1, 2), 1)
-    assertComparison(t, cluster, MockResource(2, 2, 2), MockResource(2, 2, 1), 1)
-    assertComparison(t, cluster, MockResource(2, 2, 2), MockResource(2, 1, 2), 1)
-    assertComparison(t, cluster, MockResource(2, 2, 2), MockResource(1, 2, 2), 1)
-    assertComparison(t, cluster, MockResource(3, 2, 1), MockResource(2, 2, 2), 1)
-    assertComparison(t, cluster, MockResource(3, 1, 1), MockResource(2, 2, 2), 1)
-    assertComparison(t, cluster, MockResource(3, 1, 1), MockResource(3, 1, 0), 1)
-    assertComparison(t, cluster, MockResource(3, 1, 1), MockResource(3, 0, 0), 1)
-}
+    // total resource set same as usage (including signs)
+    total = &Resource{Resources: map[string]Quantity{"large": 5, "zero": 0, "small": -5}}
+    expected = []float64{0, 1, 1}
+    shares = getShares(res, total)
+    if len(shares) != 3 || !reflect.DeepEqual(shares, expected) {
+        t.Errorf("incorrect shares with same resource, expected %v got: %v", expected, shares)
+    }
 
-func assertFairness(t *testing.T, cluster *Resource, left *Resource, right *Resource, expected float64) {
-    c := FairnessRatio(left, right, cluster)
-    if c != expected {
-        t.Errorf("Fairness Ratio %s to %s, expected %f, got %f", left, right, expected, c)
+    // negative share gets set to 0
+    res = &Resource{Resources: map[string]Quantity{"large": 5, "zero": 0, "small": -5}}
+    total = &Resource{Resources: map[string]Quantity{"large": 10, "zero": 10, "small": 10}}
+    expected = []float64{-0.5, 0, 0.5}
+    shares = getShares(res, total)
+    if len(shares) != 3 || !reflect.DeepEqual(shares, expected) {
+        t.Errorf("incorrect shares negative share not set to 0, expected %v got: %v", expected, shares)
+    }
+
+    // resource quantity larger than total
+    res = &Resource{Resources: map[string]Quantity{"large": 10, "small": 15}}
+    total = &Resource{Resources: map[string]Quantity{"large": 15, "small": 10}}
+    expected = []float64{10.0 / 15.0, 1.5}
+    shares = getShares(res, total)
+    if len(shares) != 2 || !reflect.DeepEqual(shares, expected) {
+        t.Errorf("incorrect shares larger than total, expected %v got: %v", expected, shares)
+    }
+    // resource quantity not in total
+    res = &Resource{Resources: map[string]Quantity{"large": 5, "notintotal": 10}}
+    total = &Resource{Resources: map[string]Quantity{"large": 15}}
+    expected = []float64{5.0 / 15.0, math.Inf(1)}
+    shares = getShares(res, total)
+    if len(shares) != 2 || !reflect.DeepEqual(shares, expected) {
+        t.Errorf("incorrect shares not in total, expected %v got: %v", expected, shares)
     }
 }
 
+func TestCompareShares(t *testing.T) {
+    // simple cases nil or empty shares
+    comp := compareShares(nil, nil)
+    if comp != 0 {
+        t.Error("nil shares not equal")
+    }
+    left := make([]float64, 0)
+    right := make([]float64, 0)
+    comp = compareShares(left, right)
+    if comp != 0 {
+        t.Error("empty shares not equal")
+    }
+    // simple case same shares
+    left = []float64{0, 5}
+    comp = compareShares(left, left)
+    if comp != 0 {
+        t.Error("same shares are not equal")
+    }
+    // highest same, less shares on one side, zero values
+    left = []float64{0, 10.0}
+    right = []float64{10.0}
+    comp = compareShares(left, right)
+    if comp != 0 {
+        t.Error("same shares are not equal")
+    }
+    left, right = right, left
+    comp = compareShares(left, right)
+    if comp != 0 {
+        t.Error("same shares are not equal")
+    }
 
-func TestFairnessRatio(t *testing.T) {
-    cluster := MockResource(4, 4, 4)
+    // highest is same, less shares on one side, positive values
+    left = []float64{1, 10}
+    right = []float64{10}
+    comp = compareShares(left, right)
+    if comp != 1 {
+        t.Errorf("left should have been larger: left %v, right %v", left, right)
+    }
+    left, right = right, left
+    comp = compareShares(left, right)
+    if comp != -1 {
+        t.Errorf("right should have been larger: left %v, right %v", left, right)
+    }
 
-    // Easy cases
-    assertFairness(t, cluster, MockResource(1, 1, 1), MockResource(1, 1, 1), 1)
-    assertFairness(t, cluster, MockResource(0, 0, 0), MockResource(0, 0, 0), 1)
-    assertFairness(t, cluster, MockResource(2, 2, 2), MockResource(1, 1, 1), 2)
-    assertFairness(t, cluster, MockResource(2, 2, 2), MockResource(0, 0, 0), math.Inf(1))
+    // highest is same, less shares on one side, negative values
+    left = []float64{-10, 10}
+    right = []float64{10}
+    comp = compareShares(left, right)
+    if comp != -1 {
+        t.Errorf("left should have been smaller: left %v, right %v", left, right)
+    }
+    left, right = right, left
+    comp = compareShares(left, right)
+    if comp != 1 {
+        t.Errorf("right should have been smaller: left %v, right %v", left, right)
+    }
 
-    // Fair sharing cases
-    assertFairness(t, cluster, MockResource(2, 1, 1), MockResource(2, 1, 1), 1)
-    assertFairness(t, cluster, MockResource(2, 1, 1), MockResource(1, 2, 1), 1)
-    assertFairness(t, cluster, MockResource(2, 1, 1), MockResource(1, 1, 2), 1)
-    assertFairness(t, cluster, MockResource(2, 1, 0), MockResource(0, 1, 2), 1)
-    assertFairness(t, cluster, MockResource(2, 2, 1), MockResource(1, 2, 2), 1)
-    assertFairness(t, cluster, MockResource(2, 2, 1), MockResource(2, 1, 2), 1)
-    assertFairness(t, cluster, MockResource(2, 2, 1), MockResource(2, 2, 1), 1)
-    assertFairness(t, cluster, MockResource(2, 2, 0), MockResource(2, 0, 2), 1)
-    assertFairness(t, cluster, MockResource(3, 2, 1), MockResource(3, 2, 1), 1)
-    assertFairness(t, cluster, MockResource(3, 2, 1), MockResource(3, 1, 2), 1)
-    assertFairness(t, cluster, MockResource(3, 2, 1), MockResource(1, 2, 3), 1)
-    assertFairness(t, cluster, MockResource(3, 2, 1), MockResource(1, 3, 2), 1)
-    assertFairness(t, cluster, MockResource(3, 2, 1), MockResource(2, 1, 3), 1)
-    assertFairness(t, cluster, MockResource(3, 2, 1), MockResource(2, 3, 1), 1)
-    assertFairness(t, cluster, MockResource(2, 1, 1), MockResource(1, 1, 1), 2)
-    assertFairness(t, cluster, MockResource(2, 1, 1), MockResource(1, 1, 0), 2)
-    assertFairness(t, cluster, MockResource(2, 2, 1), MockResource(2, 1, 1), 1)
-    assertFairness(t, cluster, MockResource(2, 2, 1), MockResource(1, 2, 1), 1)
-    assertFairness(t, cluster, MockResource(2, 2, 1), MockResource(1, 1, 2), 1)
-    assertFairness(t, cluster, MockResource(2, 2, 1), MockResource(0, 2, 2), 1)
-    assertFairness(t, cluster, MockResource(2, 2, 2), MockResource(2, 1, 1), 1)
-    assertFairness(t, cluster, MockResource(2, 2, 2), MockResource(1, 2, 1), 1)
-    assertFairness(t, cluster, MockResource(2, 2, 2), MockResource(1, 1, 2), 1)
-    assertFairness(t, cluster, MockResource(2, 2, 2), MockResource(2, 2, 1), 1)
-    assertFairness(t, cluster, MockResource(2, 2, 2), MockResource(2, 1, 2), 1)
-    assertFairness(t, cluster, MockResource(2, 2, 2), MockResource(1, 2, 2), 1)
-    assertFairness(t, cluster, MockResource(3, 2, 1), MockResource(2, 2, 2), 1.5)
-    assertFairness(t, cluster, MockResource(3, 1, 1), MockResource(2, 2, 2), 1.5)
-    assertFairness(t, cluster, MockResource(3, 1, 1), MockResource(3, 1, 0), 1)
-    assertFairness(t, cluster, MockResource(3, 1, 1), MockResource(3, 0, 0), 1)
+    // highest is smaller, less shares on one side, values are not important
+    left = []float64{0, 10}
+    right = []float64{5}
+    comp = compareShares(left, right)
+    if comp != 1 {
+        t.Errorf("left should have been larger: left %v, right %v", left, right)
+    }
+    left, right = right, left
+    comp = compareShares(left, right)
+    if comp != -1 {
+        t.Errorf("right should have been larger: left %v, right %v", left, right)
+    }
+
+    // highest is +Inf, less shares on one side, zeros before -Inf value
+    left = []float64{math.Inf(-1), 0, 0, math.Inf(1)}
+    right = []float64{math.Inf(1)}
+    comp = compareShares(left, right)
+    if comp != -1 {
+        t.Errorf("left should have been smaller: left %v, right %v", left, right)
+    }
+    left, right = right, left
+    comp = compareShares(left, right)
+    if comp != 1 {
+        t.Errorf("right should have been smaller: left %v, right %v", left, right)
+    }
+
+    // longer list of values (does not cover any new case)
+    left = []float64{-100, -10, 0, 1.1, 2.2, 3.3, 5, math.Inf(1)}
+    right = []float64{-99.99, -10, 0, 1.1, 2.2, 3.3, 5, math.Inf(1)}
+    comp = compareShares(left, right)
+    if comp != -1 {
+        t.Errorf("left should have been smaller: left %v, right %v", left, right)
+    }
+    left, right = right, left
+    comp = compareShares(left, right)
+    if comp != 1 {
+        t.Errorf("right should have been smaller: left %v, right %v", left, right)
+    }
 }
 
-// utility functions
-func assertComparison(t *testing.T, cluster *Resource, left *Resource, right *Resource, expected int) {
-    c := CompFairnessRatio(left, right, cluster)
-    if c != expected {
-        t.Errorf("Compare %s to %s, expected %d, got %d", left, right, expected, c)
+// This tests just the special code in the FairnessRatio.
+// This does not check the share calculation see TestGetShares for that.
+func TestFairnessRatio(t *testing.T) {
+    // simple case all empty or nil behaviour
+    left := NewResource()
+    right := NewResource()
+    total := NewResource()
+    fairRatio := FairnessRatio(left, right, total)
+    if fairRatio != 1 {
+        t.Errorf("zero resources should return 1, %f", fairRatio)
+    }
+    // right is zero should give +Inf or -Inf
+    total = &Resource{Resources: map[string]Quantity{"first": 10}}
+    left = &Resource{Resources: map[string]Quantity{"first": 1}}
+    fairRatio = FairnessRatio(left, right, total)
+    if !math.IsInf(fairRatio, 1) {
+        t.Errorf("positve left, zero right resources should return +Inf got: %f", fairRatio)
+    }
+    left = &Resource{Resources: map[string]Quantity{"first": -1}}
+    fairRatio = FairnessRatio(left, right, total)
+    if !math.IsInf(fairRatio, -1) {
+        t.Errorf("negative left, zero right resources should return -Inf got: %f", fairRatio)
+    }
+
+    // largest possible cluster: all resources used by left gives MaxInt or MinInt
+    total = &Resource{Resources: map[string]Quantity{"first": math.MaxInt64}}
+    left = &Resource{Resources: map[string]Quantity{"first": math.MaxInt64}}
+    right = &Resource{Resources: map[string]Quantity{"first": 1}}
+    fairRatio = FairnessRatio(left, right, total)
+    if fairRatio != math.MaxInt64 {
+        t.Errorf("maximum quantaties on left, 1 on right should get MaxInt got: %f", fairRatio)
+    }
+    right = &Resource{Resources: map[string]Quantity{"first": -1}}
+    fairRatio = FairnessRatio(left, right, total)
+    if fairRatio != math.MinInt64 {
+        t.Errorf("maximum quantaties on left, -1 on right should get MinInt got: %f", fairRatio)
+    }
+
+    // normal cluster size (left > right)
+    total = &Resource{Resources: map[string]Quantity{"first": 100}}
+    left = &Resource{Resources: map[string]Quantity{"first": 90}}
+    right = &Resource{Resources: map[string]Quantity{"first": 1}}
+    fairRatio = FairnessRatio(left, right, total)
+    if fairRatio != 90 {
+        t.Errorf("expected ratio 90 got: %f", fairRatio)
+    }
+    right = &Resource{Resources: map[string]Quantity{"first": -1}}
+    fairRatio = FairnessRatio(left, right, total)
+    if fairRatio != -90 {
+        t.Errorf("expected ratio -90 got: %f", fairRatio)
+    }
+    // normal cluster size (right > left)
+    total = &Resource{Resources: map[string]Quantity{"first": 100}}
+    left = &Resource{Resources: map[string]Quantity{"first": 1}}
+    right = &Resource{Resources: map[string]Quantity{"first": 90}}
+    expectedRatio := (1.0/100.0) / (90.0/100.0)
+    fairRatio = FairnessRatio(left, right, total)
+    if fairRatio != expectedRatio {
+        t.Errorf("expected ratio 90 got: %f", fairRatio)
+    }
+    left = &Resource{Resources: map[string]Quantity{"first": -1}}
+    fairRatio = FairnessRatio(left, right, total)
+    if fairRatio != -expectedRatio {
+        t.Errorf("expected ratio -90 got: %f", fairRatio)
+    }
+}
+
+// This tests just to cover code in the CompUsageRatio and CompUsageShare.
+// This does not check the share calculation and share comparison see TestGetShares and TestCompShares for that.
+func TestCompUsage(t *testing.T) {
+    // simple case all empty or nil behaviour
+    left := NewResource()
+    right := NewResource()
+    if CompUsageShares(left, right) != 0 {
+        t.Error("empty resources not equal usage")
+    }
+    total := NewResource()
+    if CompUsageRatio(left, right, total) != 0 {
+        t.Error("empty resources not equal share ratio")
+    }
+    // left larger than right
+    left = &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}}
+    right = &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}}
+    if CompUsageShares(left, right) != 1 {
+        t.Errorf("left resources should have been larger left %v, right %v", left, right)
+    }
+    total = &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}}
+    if CompUsageRatio(left, right, total) != 1 {
+        t.Errorf("left resources ratio should have been larger left %v, right %v", left, right)
+    }
+    // swap for a smaller than outcome
+    left, right = right, left
+    if CompUsageShares(left, right) != -1 {
+        t.Errorf("right resources should have been larger left %v, right %v", left, right)
+    }
+    if CompUsageRatio(left, right, total) != -1 {
+        t.Errorf("right resources ratio should have been larger left %v, right %v", left, right)
     }
 }

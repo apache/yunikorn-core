@@ -143,7 +143,7 @@ func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionCont
         }
 
         // Skip when the queue has <= 0 preempt-able resource
-        if resources.CompFairnessRatio(preemptQueue.resources.preemptable, resources.Zero, preemptionPartitionCtx.partitionTotalResource) <= 0 {
+        if resources.CompUsageRatio(preemptQueue.resources.preemptable, resources.Zero, preemptionPartitionCtx.partitionTotalResource) <= 0 {
             continue
         }
 
@@ -151,7 +151,7 @@ func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionCont
 
         // Make sure this preemption has positive impact of preemptable values. A corner case is:
         // A queue has preemptable resource = (memory=0, cpu=0, gpu=2), for this case, we should avoid preempt any allocation w/o gpu resource > 0
-        if resources.CompFairnessRatio(postPreemption, preemptQueue.resources.preemptable, preemptionPartitionCtx.partitionTotalResource) >= 0 {
+        if resources.CompUsageRatio(postPreemption, preemptQueue.resources.preemptable, preemptionPartitionCtx.partitionTotalResource) >= 0 {
             continue
         }
 

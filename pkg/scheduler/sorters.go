@@ -39,7 +39,7 @@ func SortQueue(queues []*SchedulingQueue, sortType SortType) {
             l := queues[i]
             r := queues[j]
 
-            comp := resources.CompFairnessRatio(l.ProposingResource, r.ProposingResource, l.CachedQueueInfo.GuaranteedResource)
+            comp := resources.CompUsageRatio(l.ProposingResource, r.ProposingResource, l.CachedQueueInfo.GuaranteedResource)
             return comp < 0
         })
     }
@@ -51,7 +51,7 @@ func SortApplications(queues []*SchedulingApplication, sortType SortType, global
             l := queues[i]
             r := queues[j]
 
-            comp := resources.CompFairnessRatio(l.MayAllocatedResource, r.MayAllocatedResource, globalResource)
+            comp := resources.CompUsageRatio(l.MayAllocatedResource, r.MayAllocatedResource, globalResource)
             return comp < 0
         })
     } else if sortType == FifoSortPolicy {
@@ -71,7 +71,7 @@ func SortNodes(nodes []*SchedulingNode, sortType SortType) {
             r := nodes[j]
 
             // Sort by available resource, descending order
-            return resources.CompFairnessRatioAssumesUnitPartition(l.CachedAvailableResource, r.CachedAvailableResource) > 0
+            return resources.CompUsageShares(l.CachedAvailableResource, r.CachedAvailableResource) > 0
         })
         metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
     }
@@ -86,7 +86,7 @@ func SortAllNodesWithAscendingResource(schedulingNodeList []*SchedulingNode) []*
         r := schedulingNodeList[j]
 
         // Sort by available resource, ascending order
-        return resources.CompFairnessRatioAssumesUnitPartition(r.CachedAvailableResource, l.CachedAvailableResource) > 0
+        return resources.CompUsageShares(r.CachedAvailableResource, l.CachedAvailableResource) > 0
     })
 
     metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)

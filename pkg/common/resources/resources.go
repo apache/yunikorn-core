@@ -314,57 +314,83 @@ func FitIn(larger, smaller *Resource) bool {
 
 // Get the share of each resource quantity when compared to the total
 // resources quantity
+// NOTE: shares can be negative and positive in the current assumptions
 func getShares(res, total *Resource) []float64 {
+    // shortcut if the passed in resource to get the share on is nil or empty (sparse)
+    if res == nil || len(res.Resources) == 0 {
+        return make([]float64, 0)
+    }
     shares := make([]float64, len(res.Resources))
     idx := 0
     for k, v := range res.Resources {
+        // no usage then there is no share (skip prevents NaN)
+        // floats init to 0 in the array anyway
         if v == 0 {
             continue
         }
-
-        // Get rid of 0 denominator (mostly)
-        pv := float64(1)
-        if total != nil {
-            pv = float64(total.Resources[k]) + 1e-4
-        }
-        if pv > 1e-8 {
-            shares[idx] = float64(v) / pv
+        // share is usage if total is nil
+        if total == nil {
+            // negative share is logged
+            if v < 0 {
+                log.Logger().Debug("usage is negative no total, share is also negative",
+                    zap.Int64("resource quantity", int64(v)))
+            }
+            shares[idx] = float64(v)
             idx++
-        } else {
-            shares[idx] = math.Inf(1)
-            idx++
+            continue
         }
+        // resources are integer so we could divide by 0, however the division is in floats
+        // this will thus give us +Inf or -Inf depending on the signs of the res and total
+        // usage nothing special to handle
+        shares[idx] = float64(v) / float64(total.Resources[k])
+        // negative share is logged
+        if shares[idx] < 0 {
+            log.Logger().Debug("share set is negative",
+                zap.Int64("resource quantity", int64(v)),
+                zap.Int64("total quantity", int64(total.Resources[k])))
+        }
+        idx++
     }
 
-    // sort in increasing order NaN is smaller than anything else
+    // sort in increasing order, NaN can not be part of the list
     sort.Float64s(shares)
-
     return shares
 }
 
 // Calculate share for left of total and right of total.
-// Compare the shares and return the result of compareShare
-func CompFairnessRatio(left, right, total *Resource) int {
+// This returns the same value as compareShares does:
+// 0 for equal shares
+// 1 if the left share is larger
+// -1 if the right share is larger
+func CompUsageRatio(left, right, total *Resource) int {
     lshares := getShares(left, total)
     rshares := getShares(right, total)
 
     return compareShares(lshares, rshares)
 }
 
-// Compare two resources and assumes partition resource == (1, 1 ...)
-func CompFairnessRatioAssumesUnitPartition(left, right *Resource) int {
+// Compare two resources usage shares and assumes a nil total resource.
+// The share is thus equivalent to the usage passed in.
+// This returns the same value as compareShares does:
+// 0 for equal shares
+// 1 if the left share is larger
+// -1 if the right share is larger
+func CompUsageShares(left, right *Resource) int {
     lshares := getShares(left,nil)
     rshares := getShares(right,nil)
 
     return compareShares(lshares, rshares)
 }
 
-// Get fairness ratio of a1/total / right/total
+// Get fairness ratio calculated by:
+// highest share for left resource from total divided by
+// highest share for right resource from total.
+// If highest share for the right resource is 0 fairness is 1
 func FairnessRatio(left, right, total *Resource) float64 {
     lshares := getShares(left, total)
     rshares := getShares(right, total)
 
-    // Get the largest value from the array
+    // Get the largest value from the shares
     lshare := float64(0)
     if shareLen := len(lshares); shareLen != 0 {
         lshare = lshares[shareLen - 1]
@@ -373,18 +399,13 @@ func FairnessRatio(left, right, total *Resource) float64 {
     if shareLen := len(rshares); shareLen != 0 {
         rshare = rshares[shareLen - 1]
     }
-
     // calculate the ratio
-    if math.Abs(rshare) < 1e-8 {
-        if math.Abs(lshare) < 1e-8 {
-            // 0 == 0
-            return 1
-        } else {
-            return math.Inf(1)
-        }
+    ratio := lshare / rshare
+    // divide by zero gives special NaN back change it to 1
+    if math.IsNaN(ratio) {
+        return 1
     }
-
-    return lshare / rshare
+    return ratio
 }
 
 // Compare the shares and return the compared value
@@ -392,49 +413,48 @@ func FairnessRatio(left, right, total *Resource) float64 {
 // 1 if the left share is larger
 // -1 if the right share is larger
 func compareShares(lshares, rshares []float64) int {
-
+    // get the length of the shares: a nil or empty share list gives -1
     lIdx := len(lshares) - 1
     rIdx := len(rshares) - 1
-
+    // if both lists have at least 1 share start comparing
     for rIdx >= 0 && lIdx >= 0 {
-        lValue := lshares[lIdx]
-        rValue := rshares[rIdx]
-        if lValue > rValue {
+        if lshares[lIdx] > rshares[rIdx] {
             return 1
-        } else if lValue < rValue {
-            return -1
-        } else {
-            lIdx --
-            rIdx --
         }
+        if lshares[lIdx] < rshares[rIdx] {
+            return -1
+        }
+        lIdx --
+        rIdx --
     }
-
-    // we got to the end
-    if lIdx == 0 && rIdx == 0 {
+    // we got to the end: one of the two indexes must be negative or both are
+    // case 1: nothing left on either side all shares are equal
+    if lIdx == -1 && rIdx == -1 {
         return 0
     }
+    // case 2: values left for the left shares
     if lIdx >= 0 {
         for lIdx >= 0 {
             if lshares[lIdx] > 0 {
                 return 1
-            } else if lshares[lIdx] < 0 {
-                return -1
-            } else {
-                lIdx --
             }
-        }
-    } else {
-        for rIdx >= 0 {
-            if rshares[rIdx] > 0 {
+            if lshares[lIdx] < 0 {
                 return -1
-            } else if rshares[rIdx] < 0 {
-                return 1
-            } else {
-                rIdx --
             }
+            lIdx --
         }
     }
-
+    // case 3: values left for the right shares
+    for rIdx >= 0 {
+        if rshares[rIdx] > 0 {
+            return -1
+        }
+        if rshares[rIdx] < 0 {
+            return 1
+        }
+        rIdx --
+    }
+    // all left over values were 0 still equal (sparse resources)
     return 0
 }
 

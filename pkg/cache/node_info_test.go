@@ -69,21 +69,25 @@ func TestNodeInfo(t *testing.T) {
         t.Errorf("Failed to update attributes")
     }
 
-    node.AddAllocation(CreateMockAllocationInfo("app1", resources.MockResource(100, 200), "1", "queue-1", "node-1"))
+    res1 := resources.NewResourceFromMap(map[string]resources.Quantity{"a": 100, "b": 200})
+    node.AddAllocation(CreateMockAllocationInfo("app1", res1, "1", "queue-1", "node-1"))
     if nil == node.GetAllocation("1") {
         t.Errorf("Failed to add allocations")
     }
 
-    if !resources.CompareMockResource(node.GetAllocatedResource(), 100, 200) {
-        t.Errorf("Failed to add allocations")
+    if !resources.Equals(node.GetAllocatedResource(), res1) {
+        t.Errorf("Failed to add allocations expected %v, got %v", res1, node.GetAllocatedResource())
     }
 
-    node.AddAllocation(CreateMockAllocationInfo("app1", resources.MockResource(20, 200), "2", "queue-1", "node-1"))
+    res2 := resources.NewResourceFromMap(map[string]resources.Quantity{"a": 20, "b": 200})
+    node.AddAllocation(CreateMockAllocationInfo("app1", res2, "2", "queue-1", "node-1"))
     if nil == node.GetAllocation("2") {
         t.Errorf("Failed to add allocations")
     }
 
-    if !resources.CompareMockResource(node.GetAllocatedResource(), 120, 400) {
-        t.Errorf("Failed to add allocations")
+    // calculate the total allocated
+    res2.AddTo(res1)
+    if !resources.Equals(node.GetAllocatedResource(), res2) {
+        t.Errorf("Failed to add allocations expected %v, got %v", res2, node.GetAllocatedResource())
     }
 }

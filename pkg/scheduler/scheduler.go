@@ -90,7 +90,7 @@ func newSingleAllocationProposal(alloc *SchedulingAllocation) *cacheevent.Alloca
     return &cacheevent.AllocationProposalBundleEvent{
         AllocationProposals: []*commonevents.AllocationProposal{
             {
-                NodeId:            alloc.NodeId,
+                NodeId:            alloc.Node.NodeId,
                 ApplicationId:     alloc.SchedulingAsk.ApplicationId,
                 QueueName:         alloc.SchedulingAsk.QueueName,
                 AllocatedResource: alloc.SchedulingAsk.AllocatedResource,
@@ -317,6 +317,18 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
 
     if len(ev.RejectedAllocations) > 0 {
         for _, alloc := range ev.RejectedAllocations {
+            // Remove unconfirmed resource for rejected allocations
+            if partition := m.clusterInfo.GetPartition(alloc.PartitionName); partition != nil {
+                if node := partition.GetNode(alloc.NodeId); node != nil {
+                    node.RemoveUnconfirmedResource(alloc.AllocatedResource)
+                } else {
+                    log.Logger().Error("failed to find node for rejected allocation",
+                        zap.String("nodeId", alloc.NodeId))
+                }
+            } else {
+                log.Logger().Error("failed to find partition for rejected allocation",
+                    zap.String("partition", alloc.PartitionName))
+            }
             // Update pending resource back
             if err := m.updateSchedulingRequestPendingAskByDelta(alloc, 1); err != nil {
                 log.Logger().Error("failed to increase pending ask",

@@ -44,7 +44,7 @@ func NewSchedulingNode(info *cache.NodeInfo) *SchedulingNode {
 		NodeId:                  info.NodeId,
 		AllocatingResource:      resources.NewResource(),
 		PreemptingResource:      resources.NewResource(),
-		CachedAvailableResource: info.GetAvailableResource(),
+		CachedAvailableResource: info.GetAvailableDeductUnconfirmedResource(),
 	}
 }
 

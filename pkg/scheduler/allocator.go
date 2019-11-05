@@ -72,7 +72,10 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
                 proposal := newSingleAllocationProposal(alloc)
                 err := m.updateSchedulingRequestPendingAskByDelta(proposal.AllocationProposals[0], -1)
                 if err == nil {
-                    m.eventHandlers.CacheEventHandler.HandleEvent(newSingleAllocationProposal(alloc))
+                    // update unconfirmed resource of related node for new allocation proposal
+                    alloc.Node.NodeInfo.AddUnconfirmedResource(alloc.SchedulingAsk.AllocatedResource)
+
+                    m.eventHandlers.CacheEventHandler.HandleEvent(proposal)
                     confirmedAllocations = append(confirmedAllocations, alloc)
                 } else {
                     log.Logger().Error("failed to send allocation proposal",
@@ -118,7 +121,7 @@ func (m *Scheduler) regularAllocate(nodes SortingIterator, candidate *Scheduling
             }
 
             // return allocation
-            return NewSchedulingAllocation(candidate, node.NodeId)
+            return NewSchedulingAllocation(candidate, node)
         }
     }
     return nil

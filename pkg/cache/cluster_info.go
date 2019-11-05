@@ -529,7 +529,7 @@ func (m *ClusterInfo) processAllocationProposalEvent(event *cacheevent.Allocatio
     if err != nil {
         // Send reject event back to scheduler
         m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
-            RejectedAllocations: event.AllocationProposals,
+            RejectedAllocations: []*commonevents.AllocationProposal{proposal},
         })
         return
     }

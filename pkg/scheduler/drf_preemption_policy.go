@@ -230,7 +230,7 @@ func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitio
 func createPreemptionAndAllocationProposal(preemptionPartitionContext *preemptionPartitionContext, nodeToAllocate *SchedulingNode, candidate *SchedulingAllocationAsk,
     preemptionResults []*singleNodePreemptResult) *SchedulingAllocation {
     // We will get this allocation by preempting resources.
-    allocation := NewSchedulingAllocation(candidate, nodeToAllocate.NodeId)
+    allocation := NewSchedulingAllocation(candidate, nodeToAllocate)
     allocation.Releases = make([]*commonevents.ReleaseAllocation, 0)
 
     // And add releases

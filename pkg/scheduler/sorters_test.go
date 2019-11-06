@@ -61,20 +61,32 @@ func TestSortQueues(t *testing.T) {
 		"memory": resources.Quantity(100),
 		"vcore" : resources.Quantity(100)})
 
+	// fairness ratios: q0:300/500=0.6, q1:200/300=0.67, q2:100/200=0.5
 	queues := []*SchedulingQueue{q0, q1, q2}
-	SortQueue(queues, FairSortPolicy)
-	assert.Equal(t, len(queues), 3)
-	assert.Equal(t, "root.q2", queues[0].Name)
-	assert.Equal(t, "root.q1", queues[1].Name)
-	assert.Equal(t, "root.q0", queues[2].Name)
-
-	q0.ProposingResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 200, "vcore": 200})
-	q1.ProposingResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300, "vcore": 300})
 	SortQueue(queues, FairSortPolicy)
 	assert.Equal(t, len(queues), 3)
 	assert.Equal(t, "root.q2", queues[0].Name)
 	assert.Equal(t, "root.q0", queues[1].Name)
 	assert.Equal(t, "root.q1", queues[2].Name)
+
+	// fairness ratios: q0:200/500=0.4, q1:300/300=1, q2:100/200=0.5
+	q0.ProposingResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 200, "vcore": 200})
+	q1.ProposingResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300, "vcore": 300})
+	SortQueue(queues, FairSortPolicy)
+	assert.Equal(t, len(queues), 3)
+	assert.Equal(t, "root.q0", queues[0].Name)
+	assert.Equal(t, "root.q2", queues[1].Name)
+	assert.Equal(t, "root.q1", queues[2].Name)
+
+	// fairness ratios: q0:150/500=0.3, q1:120/300=0.4, q2:100/200=0.5
+	q0.ProposingResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 150, "vcore": 150})
+	q1.ProposingResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 120, "vcore": 120})
+	q2.ProposingResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 100, "vcore": 100})
+	SortQueue(queues, FairSortPolicy)
+	assert.Equal(t, len(queues), 3)
+	assert.Equal(t, "root.q0", queues[0].Name)
+	assert.Equal(t, "root.q1", queues[1].Name)
+	assert.Equal(t, "root.q2", queues[2].Name)
 }
 
 // queue guaranteed resource is 0

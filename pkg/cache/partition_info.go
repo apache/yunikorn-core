@@ -450,7 +450,7 @@ func (pi *PartitionInfo) releaseAllocationsForApplication(toRelease *commonevent
             continue
         }
         node.RemoveAllocation(alloc.AllocationProto.Uuid)
-        resources.AddTo(totalReleasedResource, alloc.AllocatedResource)
+        totalReleasedResource.AddTo(alloc.AllocatedResource)
     }
 
     // this nil check is not really needed as we can only reach here with a queue set, IDE complains without this

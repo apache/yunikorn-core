@@ -18,7 +18,9 @@ package resources
 
 import (
     "fmt"
+    "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+    "go.uber.org/zap"
     "math"
     "sort"
     "strconv"
@@ -46,6 +48,9 @@ func NewResource() *Resource {
 
 func NewResourceFromProto(proto *si.Resource) *Resource {
     out := NewResource()
+    if proto == nil {
+        return out
+    }
     for k, v := range proto.Resources {
         out.Resources[k] = Quantity(v.Value)
     }
@@ -71,50 +76,170 @@ func NewResourceFromConf(configMap map[string]string) (*Resource, error) {
     return res, nil
 }
 
-func (m *Resource) String() string {
-    return fmt.Sprintf("%v", m.Resources)
+func (r *Resource) String() string {
+    return fmt.Sprintf("%v", r.Resources)
 }
 
 // Convert to a protobuf implementation
-func (m *Resource) ToProto() *si.Resource {
+func (r *Resource) ToProto() *si.Resource {
     proto := &si.Resource{}
     proto.Resources = make(map[string]*si.Quantity)
-    for k, v := range m.Resources {
+    for k, v := range r.Resources {
         proto.Resources[k] = &si.Quantity{Value: int64(v)}
     }
     return proto
 }
 
-// Return a clone (copy) of the resource
-func (m *Resource) Clone() *Resource {
+// Return a clone (copy) of the resource it is called on.
+// This provides a deep copy of the object with the exact same member set.
+// NOTE: this is a clone not a sparse copy of the original.
+func (r *Resource) Clone() *Resource {
     ret := NewResource()
-    for k, v := range m.Resources {
-        if v != 0 {
-            ret.Resources[k] = v
-        }
+    for k, v := range r.Resources {
+        ret.Resources[k] = v
     }
     return ret
 }
 
-// Operations
-// All operations must be nil safe
+// Add additional resource to the base updating the base resource
+// Should be used by temporary computation only
+// A nil base resource is considered an empty resource
+// A nil addition is treated as a zero valued resource and leaves base unchanged
+func (r *Resource) AddTo(add *Resource) {
+    if add == nil {
+        return
+    }
+    for k, v := range add.Resources {
+        r.Resources[k] = addVal(r.Resources[k], v)
+    }
+}
+
+// Subtract from the resource the passed in resource by updating the resource it is called on.
+// A nil passed in resource is treated as a zero valued resource and leaves the called on resource unchanged.
+// Should be used by temporary computation only
+func (r *Resource) SubFrom(sub *Resource) {
+    if sub == nil {
+        return
+    }
+    for k, v := range sub.Resources {
+        r.Resources[k] = subVal(r.Resources[k], v)
+    }
+}
+
+// Multiply the resource by the ratio updating the resource it is called on.
+// Should be used by temporary computation only.
+func (r *Resource) MultiplyTo(ratio float64) {
+    if r != nil {
+        for k, v := range r.Resources {
+            r.Resources[k] = mulValRatio(v, ratio)
+        }
+    }
+}
+
+// Wrapping safe calculators for the quantities of resources.
+// They will always return a valid int64. Logging if the calculator wrapped the value.
+// Returning the appropriate MaxInt64 or MinInt64 value.
+func addVal(valA, valB Quantity) Quantity {
+    result := valA + valB
+    // check if the sign wrapped
+    if (result < valA) != (valB < 0) {
+        if valA < 0 {
+            // return the minimum possible
+            log.Logger().Warn("Resource calculation wrapped: returned minimum value possible",
+                zap.Int64("valueA", int64(valA)),
+                zap.Int64("valueB", int64(valB)))
+            return math.MinInt64
+        } else {
+            // return the maximum possible
+            log.Logger().Warn("Resource calculation wrapped: returned maximum value possible",
+                zap.Int64("valueA", int64(valA)),
+                zap.Int64("valueB", int64(valB)))
+            return math.MaxInt64
+        }
+    }
+    // not wrapped normal case
+    return result
+}
+
+func subVal(valA, valB Quantity) Quantity {
+    return addVal(valA, -valB)
+}
+
+func mulVal(valA, valB Quantity) Quantity {
+    // optimise the zero cases (often hit with zero resource)
+    if valA == 0 || valB == 0 {
+        return 0
+    }
+    result := valA * valB
+    // check the wrapping
+    // MinInt64 * -1 is special: it returns MinInt64, it should return MaxInt64 but does not trigger
+    // wrapping if not specially checked
+    if (result/valB != valA) || (valA == math.MinInt64 && valB == -1) {
+        if (valA < 0) != (valB < 0) {
+            // return the minimum possible
+            log.Logger().Warn("Resource calculation wrapped: returned minimum value possible",
+                zap.Int64("valueA", int64(valA)),
+                zap.Int64("valueB", int64(valB)))
+            return math.MinInt64
+        } else {
+            // return the maximum possible
+            log.Logger().Warn("Resource calculation wrapped: returned maximum value possible",
+                zap.Int64("valueA", int64(valA)),
+                zap.Int64("valueB", int64(valB)))
+            return math.MaxInt64
+        }
+    }
+    // not wrapped normal case
+    return result
+}
+
+func mulValRatio(value Quantity, ratio float64) Quantity {
+    // optimise the zero cases (often hit with zero resource)
+    if value == 0 || ratio == 0 {
+        return 0
+    }
+    result := float64(value) * ratio
+    // protect against positive integer overflow
+    if result > math.MaxInt64 {
+        log.Logger().Warn("Multiplication result positive overflow",
+            zap.Float64("value", float64(value)),
+            zap.Float64("ratio", ratio))
+        return math.MaxInt64
+    }
+    // protect against negative integer overflow
+    if result < math.MinInt64 {
+        result = math.MinInt64
+        log.Logger().Warn("Multiplication result negative overflow",
+            zap.Float64("value", float64(value)),
+            zap.Float64("ratio", ratio))
+        return math.MinInt64
+    }
+    // not wrapped normal case
+    return Quantity(result)
+}
+
+// Operations on resources: the operations leave the passed in resources unchanged.
+// Resources are sparse objects in all cases an undefined quantity is assumed zero (0).
+// All operations must be nil safe.
+// All operations that take more than one resource return a union of resource entries
+// defined in both resources passed in. Operations must be able to handle the sparseness
+// of the resource objects
 
 // Add resources returning a new resource with the result
 // A nil resource is considered an empty resource
-func Add(left *Resource, right *Resource) *Resource {
+func Add(left, right *Resource) *Resource {
+    // check nil inputs and shortcut
     if left == nil {
         left = Zero
     }
     if right == nil {
-        right = Zero
+        return left.Clone()
     }
 
-    out := NewResource()
+    // neither are nil, clone one and add the other
+    out := left.Clone()
     for k, v := range right.Resources {
-        out.Resources[k] = v
-    }
-    for k, v := range left.Resources {
-        out.Resources[k] += v
+        out.Resources[k] = addVal(out.Resources[k], v)
     }
     return out
 }
@@ -122,20 +247,19 @@ func Add(left *Resource, right *Resource) *Resource {
 // Subtract resource returning a new resource with the result
 // A nil resource is considered an empty resource
 // This might return negative values for specific quantities
-func Sub(left *Resource, right *Resource) *Resource {
+func Sub(left, right *Resource) *Resource {
+    // check nil inputs and shortcut
     if left == nil {
         left = Zero
     }
     if right == nil {
-        right = Zero
+        return left.Clone()
     }
 
-    out := NewResource()
-    for k, v := range left.Resources {
-        out.Resources[k] = v
-    }
+    // neither are nil, clone one and sub the other
+    out := left.Clone()
     for k, v := range right.Resources {
-        out.Resources[k] -= v
+        out.Resources[k] = subVal(out.Resources[k], v)
     }
     return out
 }
@@ -143,23 +267,20 @@ func Sub(left *Resource, right *Resource) *Resource {
 // Subtract resource returning a new resource with the result
 // A nil resource is considered an empty resource
 // This will return 0 values for negative values
-func SubEliminateNegative(left *Resource, right *Resource) *Resource {
+func SubEliminateNegative(left, right *Resource) *Resource {
+    // check nil inputs and shortcut
     if left == nil {
         left = Zero
     }
     if right == nil {
-        right = Zero
+        return left.Clone()
     }
 
-    out := NewResource()
-    for k, v := range left.Resources {
-        out.Resources[k] = v
-    }
+    // neither are nil, clone one and sub the other
+    out := left.Clone()
     for k, v := range right.Resources {
-        out.Resources[k] -= v
-    }
-
-    for k := range out.Resources {
+        out.Resources[k] = subVal(out.Resources[k], v)
+        // make sure value is not negative
         if out.Resources[k] < 0 {
             out.Resources[k] = 0
         }
@@ -167,46 +288,16 @@ func SubEliminateNegative(left *Resource, right *Resource) *Resource {
     return out
 }
 
-// Add additional resource to the base updating the base resource
-// Should be used by temporary computation only
-// A nil base resource is considered an empty resource
-// A nil addition is treated as a zero valued resource and leaves base unchanged
-func AddTo(base *Resource, additional *Resource) {
-    if additional == nil {
-        return
-    }
-    if base == nil {
-        base = NewResource()
-    }
-    for k, v := range additional.Resources {
-        base.Resources[k] += v
-    }
-}
-
-// Subtract from the base resource the subtract resource by updating the base resource
-// Should be used by temporary computation only
-// A nil base resource is considered an empty resource
-// A nil subtract is treated as a zero valued resource and leaves base unchanged
-func SubFrom(base *Resource, subtract *Resource) {
-    if subtract == nil {
-        return
-    }
-    if base == nil {
-        base = Zero
-    }
-    for k, v := range subtract.Resources {
-        base.Resources[k] -= v
-    }
-}
-
 // Check if smaller fitin larger, negative values will be treated as 0
 // A nil resource is treated as an empty resource (zero)
-func FitIn(larger *Resource, smaller *Resource) bool {
+func FitIn(larger, smaller *Resource) bool {
     if larger == nil {
         larger = Zero
     }
+    // shortcut: a nil resource always fits because negative values are treated as 0
+    // this step explicitly does not check for zero values or an empty resource that is handled by the loop
     if smaller == nil {
-        smaller = Zero
+        return true
     }
 
     for k, v := range smaller.Resources {
@@ -221,55 +312,85 @@ func FitIn(larger *Resource, smaller *Resource) bool {
     return true
 }
 
-// Get the share of res when compared to partition
-func getShares(partition *Resource, res *Resource) []float64 {
+// Get the share of each resource quantity when compared to the total
+// resources quantity
+// NOTE: shares can be negative and positive in the current assumptions
+func getShares(res, total *Resource) []float64 {
+    // shortcut if the passed in resource to get the share on is nil or empty (sparse)
+    if res == nil || len(res.Resources) == 0 {
+        return make([]float64, 0)
+    }
     shares := make([]float64, len(res.Resources))
     idx := 0
     for k, v := range res.Resources {
+        // no usage then there is no share (skip prevents NaN)
+        // floats init to 0 in the array anyway
         if v == 0 {
             continue
         }
-
-        // Get rid of 0 denominator (mostly)
-        pv := float64(1)
-        if partition != nil {
-            pv = float64(partition.Resources[k]) + 1e-4
-        }
-        if pv > 1e-8 {
-            shares[idx] = float64(v) / pv
+        // Share is usage if total is nil or zero for this resource
+        // Resources are integer so we could divide by 0. Handle it specifically here,
+        // similar to a nil total resource. The check is not to prevent the divide by 0 error.
+        // Compare against zero total resource fails without the check and some sorters use that.
+        if total == nil || total.Resources[k] == 0 {
+            // negative share is logged
+            if v < 0 {
+                log.Logger().Debug("usage is negative no total, share is also negative",
+                    zap.Int64("resource quantity", int64(v)))
+            }
+            shares[idx] = float64(v)
             idx++
-        } else {
-            shares[idx] = math.Inf(1)
-            idx++
+            continue
         }
+        shares[idx] = float64(v) / float64(total.Resources[k])
+        // negative share is logged
+        if shares[idx] < 0 {
+            log.Logger().Debug("share set is negative",
+                zap.Int64("resource quantity", int64(v)),
+                zap.Int64("total quantity", int64(total.Resources[k])))
+        }
+        idx++
     }
 
+    // sort in increasing order, NaN can not be part of the list
     sort.Float64s(shares)
-
     return shares
 }
 
-// Compare a1 / b1 with a2 / b2
-func CompFairnessRatio(a1 *Resource, b1 *Resource, a2 *Resource, b2 *Resource) int {
-    lshares := getShares(b1, a1)
-    rshares := getShares(b2, a2)
+// Calculate share for left of total and right of total.
+// This returns the same value as compareShares does:
+// 0 for equal shares
+// 1 if the left share is larger
+// -1 if the right share is larger
+func CompUsageRatio(left, right, total *Resource) int {
+    lshares := getShares(left, total)
+    rshares := getShares(right, total)
 
     return compareShares(lshares, rshares)
 }
 
-// Compare two resources and assumes partition resource == (1, 1 ...)
-func CompFairnessRatioAssumesUnitPartition(a1 *Resource, a2 *Resource) int {
-    lshares := getShares(nil, a1)
-    rshares := getShares(nil, a2)
+// Compare two resources usage shares and assumes a nil total resource.
+// The share is thus equivalent to the usage passed in.
+// This returns the same value as compareShares does:
+// 0 for equal shares
+// 1 if the left share is larger
+// -1 if the right share is larger
+func CompUsageShares(left, right *Resource) int {
+    lshares := getShares(left,nil)
+    rshares := getShares(right,nil)
 
     return compareShares(lshares, rshares)
 }
 
-// Get fairness ratio of a1/b1 / a2/b2
-func FairnessRatio(a1 *Resource, b1 *Resource, a2 *Resource, b2 *Resource) float64 {
-    lshares := getShares(b1, a1)
-    rshares := getShares(b2, a2)
+// Get fairness ratio calculated by:
+// highest share for left resource from total divided by
+// highest share for right resource from total.
+// If highest share for the right resource is 0 fairness is 1
+func FairnessRatio(left, right, total *Resource) float64 {
+    lshares := getShares(left, total)
+    rshares := getShares(right, total)
 
+    // Get the largest value from the shares
     lshare := float64(0)
     if shareLen := len(lshares); shareLen != 0 {
         lshare = lshares[shareLen - 1]
@@ -278,68 +399,63 @@ func FairnessRatio(a1 *Resource, b1 *Resource, a2 *Resource, b2 *Resource) float
     if shareLen := len(rshares); shareLen != 0 {
         rshare = rshares[shareLen - 1]
     }
-
-    if math.Abs(rshare) < 1e-8 {
-        if math.Abs(lshare) < 1e-8 {
-            // 0 == 0
-            return 1
-        } else {
-            return math.Inf(1)
-        }
+    // calculate the ratio
+    ratio := lshare / rshare
+    // divide by zero gives special NaN back change it to 1
+    if math.IsNaN(ratio) {
+        return 1
     }
-
-    return lshare / rshare
+    return ratio
 }
 
+// Compare the shares and return the compared value
+// 0 for equal shares
+// 1 if the left share is larger
+// -1 if the right share is larger
 func compareShares(lshares, rshares []float64) int {
-
+    // get the length of the shares: a nil or empty share list gives -1
     lIdx := len(lshares) - 1
     rIdx := len(rshares) - 1
-
+    // if both lists have at least 1 share start comparing
     for rIdx >= 0 && lIdx >= 0 {
-        lValue := lshares[lIdx]
-        rValue := rshares[rIdx]
-        if lValue > rValue {
+        if lshares[lIdx] > rshares[rIdx] {
             return 1
-        } else if lValue < rValue {
-            return -1
-        } else {
-            lIdx --
-            rIdx --
         }
+        if lshares[lIdx] < rshares[rIdx] {
+            return -1
+        }
+        lIdx --
+        rIdx --
     }
-
-    if lIdx == 0 && rIdx == 0 {
+    // we got to the end: one of the two indexes must be negative or both are
+    // case 1: nothing left on either side all shares are equal
+    if lIdx == -1 && rIdx == -1 {
         return 0
-    } else if lIdx >= 0 {
+    }
+    // case 2: values left for the left shares
+    if lIdx >= 0 {
         for lIdx >= 0 {
             if lshares[lIdx] > 0 {
                 return 1
-            } else if lshares[lIdx] < 0 {
-                return -1
-            } else {
-                lIdx --
             }
-        }
-    } else {
-        for rIdx >= 0 {
-            if rshares[rIdx] > 0 {
+            if lshares[lIdx] < 0 {
                 return -1
-            } else if rshares[rIdx] < 0 {
-                return 1
-            } else {
-                rIdx --
             }
+            lIdx --
         }
     }
-
+    // case 3: values left for the right shares
+    for rIdx >= 0 {
+        if rshares[rIdx] > 0 {
+            return -1
+        }
+        if rshares[rIdx] < 0 {
+            return 1
+        }
+        rIdx --
+    }
+    // all left over values were 0 still equal (sparse resources)
     return 0
-}
-
-// Compare the share for the left and right resources to the partition
-// This compares left / partition with right / partition
-func Comp(partition *Resource, left *Resource, right *Resource) int {
-    return CompFairnessRatio(left, partition, right, partition)
 }
 
 // Compare the resources equal returns the specific values for following cases:
@@ -348,7 +464,7 @@ func Comp(partition *Resource, left *Resource, right *Resource) int {
 // nil   <set>  false
 // <set> nil    false
 // <set> <set>  true/false  *based on the individual Quantity values
-func Equals(left *Resource, right *Resource) bool {
+func Equals(left, right *Resource) bool {
     if left == right {
         return true
     }
@@ -372,31 +488,40 @@ func Equals(left *Resource, right *Resource) bool {
     return true
 }
 
-// Multiply the resource by the ratio updating the passed in resource
-// Should be used by temporary computation only
-// A nil resource is returned as is
-func MultiplyTo(left *Resource, ratio float64) {
-    if left != nil {
-        for k, v := range left.Resources {
-            left.Resources[k] = Quantity(float64(v) * ratio)
-        }
-    }
-}
-
-// Multiply the resource by the ratio returning a new resource
+// Multiply the resource by the integer ratio returning a new resource.
+// Result is protected from overflow (positive and negative).
 // A nil resource passed in returns a new empty resource (zero)
-func MultiplyBy(left *Resource, ratio float64) *Resource {
+func Multiply(base *Resource, ratio int64) *Resource {
     ret := NewResource()
-    if left != nil {
-        for k, v := range left.Resources {
-            ret.Resources[k] = Quantity(float64(v) * ratio)
-        }
+    // shortcut nil or zero input
+    if base == nil  || ratio == 0 {
+        return ret
+    }
+    qRatio := Quantity(ratio)
+    for k, v := range base.Resources {
+        ret.Resources[k] = mulVal(v, qRatio)
     }
     return ret
 }
 
-// Does any vector of larger > smaller and all vectors of larger >= smaller
-func StrictlyGreaterThan(larger *Resource, smaller *Resource) bool {
+// Multiply the resource by the floating point ratio returning a new resource.
+// The result is rounded down to the nearest integer value after the multiplication.
+// Result is protected from overflow (positive and negative).
+// A nil resource passed in returns a new empty resource (zero)
+func MultiplyBy(base *Resource, ratio float64) *Resource {
+    ret := NewResource()
+    if base == nil || ratio == 0 {
+        return ret
+    }
+    for k, v := range base.Resources {
+        ret.Resources[k] = mulValRatio(v, ratio)
+    }
+    return ret
+}
+
+// Return true if all quantities in larger > smaller
+// Two resources that are equal are not considered strictly larger than each other.
+func StrictlyGreaterThan(larger, smaller *Resource) bool {
     if larger == nil {
         larger = Zero
     }
@@ -404,27 +529,34 @@ func StrictlyGreaterThan(larger *Resource, smaller *Resource) bool {
         smaller = Zero
     }
 
-    delta := Quantity(0)
-
+    // keep track of the number of not equal values
+    notEqual := false
+    // check the larger side, track non equality
     for k, v := range larger.Resources {
         if smaller.Resources[k] > v {
             return false
         }
-        delta += v - smaller.Resources[k]
+        if smaller.Resources[k] != v {
+            notEqual = true
+        }
     }
 
+    // check the smaller side, track non equality
     for k, v := range smaller.Resources {
         if larger.Resources[k] < v {
             return false
         }
-        delta += larger.Resources[k] - v
+        if larger.Resources[k] != v {
+            notEqual = true
+        }
     }
-
-    return delta > 0
+    // at this point the resources are either equal or not
+    // if they are not equal larger is strictly larger than smaller
+    return notEqual
 }
 
-// Does all vector of larger >= smaller
-func StrictlyGreaterThanOrEquals(larger *Resource, smaller *Resource) bool {
+// Return true if all quantities in larger > smaller or if the two objects  are exactly the same.
+func StrictlyGreaterThanOrEquals(larger, smaller *Resource) bool {
     if larger == nil {
         larger = Zero
     }
@@ -447,31 +579,34 @@ func StrictlyGreaterThanOrEquals(larger *Resource, smaller *Resource) bool {
     return true
 }
 
-// Have at least one type > 0, and no type < 0
+// Have at least one quantity > 0, and no quantities < 0
 // A nil resource is not strictly greater than zero.
 func StrictlyGreaterThanZero(larger *Resource) bool {
-    var greater = false
-    if larger != nil {
-        for _, v := range larger.Resources {
-            if v < 0 {
-                greater = false
-                break
-            } else if v > 0 {
-                greater = true
-            }
+    if larger == nil {
+        return false
+    }
+    greater := false
+    for _, v := range larger.Resources {
+        if v < 0 {
+            return false
+        }
+        if v > 0 {
+            greater = true
         }
     }
     return greater
 }
 
-func minQuantity(x, y Quantity) Quantity {
+// Return the smallest quantity
+func MinQuantity(x, y Quantity) Quantity {
     if x < y {
         return x
     }
     return y
 }
 
-func maxQuantity(x, y Quantity) Quantity {
+// Return the largest quantity
+func MaxQuantity(x, y Quantity) Quantity {
     if x > y {
         return x
     }
@@ -479,31 +614,31 @@ func maxQuantity(x, y Quantity) Quantity {
 }
 
 
-// Returns a new resource with the smallest value for each entry in the resources
+// Returns a new resource with the smallest value for each quantity in the resources
 // If either resource passed in is nil a zero resource is returned
-func ComponentWiseMin(left *Resource, right *Resource) *Resource {
+func ComponentWiseMin(left, right *Resource) *Resource {
     out := NewResource()
     if left != nil && right != nil {
         for k, v := range left.Resources {
-            out.Resources[k] = minQuantity(v, right.Resources[k])
+            out.Resources[k] = MinQuantity(v, right.Resources[k])
         }
         for k, v := range right.Resources {
-            out.Resources[k] = minQuantity(v, left.Resources[k])
+            out.Resources[k] = MinQuantity(v, left.Resources[k])
         }
     }
     return out
 }
 
-// Returns a new resource with the smallest value for each entry in the resources
+// Returns a new resource with the largest value for each quantity in the resources
 // If either resource passed in is nil a zero resource is returned
-func ComponentWiseMax(left *Resource, right *Resource) *Resource {
+func ComponentWiseMax(left, right *Resource) *Resource {
     out := NewResource()
     if left != nil && right != nil {
         for k, v := range left.Resources {
-            out.Resources[k] = maxQuantity(v, right.Resources[k])
+            out.Resources[k] = MaxQuantity(v, right.Resources[k])
         }
         for k, v := range right.Resources {
-            out.Resources[k] = maxQuantity(v, left.Resources[k])
+            out.Resources[k] = MaxQuantity(v, left.Resources[k])
         }
     }
     return out
@@ -513,26 +648,13 @@ func ComponentWiseMax(left *Resource, right *Resource) *Resource {
 // Check that the whole resource is zero
 // A nil resource is zero (contrary to StrictlyGreaterThanZero)
 func IsZero(zero *Resource) bool {
-    if zero != nil {
-        for _, v := range zero.Resources {
-            if v != 0 {
-                return false
-            }
+    if zero == nil {
+        return true
+    }
+    for _, v := range zero.Resources {
+        if v != 0 {
+            return false
         }
     }
     return true
-}
-
-func MinQuantity(left Quantity, right Quantity) Quantity{
-    if left < right {
-        return left
-    }
-    return right
-}
-
-func MaxQuantity(left Quantity, right Quantity) Quantity{
-    if left < right {
-        return right
-    }
-    return left
 }

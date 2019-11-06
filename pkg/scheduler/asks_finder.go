@@ -206,7 +206,7 @@ func (m *Scheduler) findNextAllocationAskCandidate(
             // Handle for cross queue preemption
             if preemptionParameters.crossQueuePreemption {
                 // We won't allocate resources if the queue is above its guaranteed resource.
-                if comp := resources.Comp(queue.CachedQueueInfo.GuaranteedResource, queue.ProposingResource, queue.CachedQueueInfo.GuaranteedResource); comp >= 0 {
+                if comp := resources.CompUsageRatio(queue.ProposingResource, queue.CachedQueueInfo.GuaranteedResource, queue.CachedQueueInfo.GuaranteedResource); comp >= 0 {
                     log.Logger().Debug("skip queue because it is already beyond guaranteed",
                         zap.String("queueName", queue.Name))
                     continue

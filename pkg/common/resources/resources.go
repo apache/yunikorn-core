@@ -488,6 +488,9 @@ func Equals(left, right *Resource) bool {
     return true
 }
 
+// Multiply the resource by the integer ratio returning a new resource.
+// Result is protected from overflow (positive and negative).
+// A nil resource passed in returns a new empty resource (zero)
 func Multiply(base *Resource, ratio int64) *Resource {
     ret := NewResource()
     // shortcut nil or zero input
@@ -501,7 +504,7 @@ func Multiply(base *Resource, ratio int64) *Resource {
     return ret
 }
 
-// Multiply the resource by the ratio returning a new resource.
+// Multiply the resource by the floating point ratio returning a new resource.
 // The result is rounded down to the nearest integer value after the multiplication.
 // Result is protected from overflow (positive and negative).
 // A nil resource passed in returns a new empty resource (zero)

@@ -90,7 +90,7 @@ func newSingleAllocationProposal(alloc *SchedulingAllocation) *cacheevent.Alloca
     return &cacheevent.AllocationProposalBundleEvent{
         AllocationProposals: []*commonevents.AllocationProposal{
             {
-                NodeId:            alloc.Node.NodeId,
+                NodeId:            alloc.NodeId,
                 ApplicationId:     alloc.SchedulingAsk.ApplicationId,
                 QueueName:         alloc.SchedulingAsk.QueueName,
                 AllocatedResource: alloc.SchedulingAsk.AllocatedResource,
@@ -315,25 +315,22 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
         return
     }
 
+    if len(ev.AcceptedAllocations) > 0 {
+        for _, alloc := range ev.AcceptedAllocations {
+            // Decrease allocating resource of scheduling node
+            m.decAllocatingResourceForSchedulingNode(alloc)
+        }
+    }
+
     if len(ev.RejectedAllocations) > 0 {
         for _, alloc := range ev.RejectedAllocations {
-            // Remove unconfirmed resource for rejected allocations
-            if partition := m.clusterInfo.GetPartition(alloc.PartitionName); partition != nil {
-                if node := partition.GetNode(alloc.NodeId); node != nil {
-                    node.RemoveUnconfirmedResource(alloc.AllocatedResource)
-                } else {
-                    log.Logger().Error("failed to find node for rejected allocation",
-                        zap.String("nodeId", alloc.NodeId))
-                }
-            } else {
-                log.Logger().Error("failed to find partition for rejected allocation",
-                    zap.String("partition", alloc.PartitionName))
-            }
             // Update pending resource back
             if err := m.updateSchedulingRequestPendingAskByDelta(alloc, 1); err != nil {
                 log.Logger().Error("failed to increase pending ask",
                     zap.Error(err))
             }
+            // Decrease allocating resource of scheduling node
+            m.decAllocatingResourceForSchedulingNode(alloc)
         }
     }
 
@@ -368,6 +365,24 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
             })
         }
     }
+}
+
+func (m *Scheduler) decAllocatingResourceForSchedulingNode(alloc *commonevents.AllocationProposal) {
+    node, err := m.clusterSchedulingContext.GetSchedulingNode(alloc.NodeId, alloc.PartitionName)
+    if err != nil {
+        log.Logger().Error("failed to find scheduling node for rejected allocation",
+            zap.String("nodeId", alloc.NodeId),
+            zap.String("partitionName", alloc.PartitionName),
+            zap.String("allocationKey", alloc.AllocationKey),
+            zap.Error(err))
+    }
+    if node == nil {
+        log.Logger().Error("cannot find scheduling node for rejected allocation",
+            zap.String("nodeId", alloc.NodeId),
+            zap.String("partitionName", alloc.PartitionName),
+            zap.String("allocationKey", alloc.AllocationKey))
+    }
+    node.DecAllocatingResource(alloc.AllocatedResource)
 }
 
 // Process application adds and removes that have been processed by the cache.
@@ -474,6 +489,39 @@ func (m *Scheduler) processDeletePartitionConfigsEvent(event *schedulerevent.Sch
     }
 }
 
+func (m *Scheduler) processNodesUpdatesEvent(ev *schedulerevent.SchedulerNodesUpdatesEvent) {
+    if len(ev.AddedNodes) > 0 {
+        for _, n := range ev.AddedNodes {
+            node := n.(*cache.NodeInfo)
+            if err := m.clusterSchedulingContext.AddSchedulingNode(NewSchedulingNode(node)); err != nil {
+                log.Logger().Error("failed to add scheduling node to partition context",
+                    zap.String("nodeId", node.NodeId),
+                    zap.String("partitionName", node.Partition),
+                    zap.Error(err))
+            } else {
+                log.Logger().Info("added scheduling node to partition context",
+                    zap.String("nodeId", node.NodeId),
+                    zap.String("partitionName", node.Partition))
+            }
+        }
+    }
+    if len(ev.RemovedNodes) > 0 {
+        for _, n := range ev.RemovedNodes {
+            node := n.(*cache.NodeInfo)
+            if _, err := m.clusterSchedulingContext.RemoveSchedulingNode(node.NodeId, node.Partition); err != nil {
+                log.Logger().Error("failed to remove scheduling node from partition context",
+                    zap.String("nodeId", node.NodeId),
+                    zap.String("partitionName", node.Partition),
+                    zap.Error(err))
+            } else {
+                log.Logger().Info("removed scheduling node from partition context",
+                    zap.String("nodeId", node.NodeId),
+                    zap.String("partitionName", node.Partition))
+            }
+        }
+    }
+}
+
 func (m *Scheduler) handleSchedulerEvent() {
     for {
         ev := <-m.pendingSchedulerEvents
@@ -488,6 +536,8 @@ func (m *Scheduler) handleSchedulerEvent() {
             m.processUpdatePartitionConfigsEvent(v)
         case *schedulerevent.SchedulerDeletePartitionsConfigEvent:
             m.processDeletePartitionConfigsEvent(v)
+        case *schedulerevent.SchedulerNodesUpdatesEvent:
+            m.processNodesUpdatesEvent(v)
         default:
             panic(fmt.Sprintf("%s is not an acceptable type for Scheduler event.", reflect.TypeOf(v).String()))
         }

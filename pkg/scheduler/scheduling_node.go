@@ -31,9 +31,8 @@ type SchedulingNode struct {
 	NodeId   string
 
 	// Resource which is allocating (in addition to confirmed, allocated)
-	AllocatingResource      *resources.Resource
+	allocatingResource      *resources.Resource
 	PreemptingResource      *resources.Resource
-	CachedAvailableResource *resources.Resource
 
 	lock sync.RWMutex
 }
@@ -42,24 +41,23 @@ func NewSchedulingNode(info *cache.NodeInfo) *SchedulingNode {
 	return &SchedulingNode{
 		NodeInfo:                info,
 		NodeId:                  info.NodeId,
-		AllocatingResource:      resources.NewResource(),
+		allocatingResource:      resources.NewResource(),
 		PreemptingResource:      resources.NewResource(),
-		CachedAvailableResource: info.GetAvailableDeductUnconfirmedResource(),
 	}
 }
 
 func (m *SchedulingNode) CheckAndAllocateResource(delta *resources.Resource, preemptionPhase bool) bool {
 	m.lock.Lock()
 	m.lock.Unlock()
-	newAllocating := resources.Add(delta, m.AllocatingResource)
+	newAllocating := resources.Add(delta, m.allocatingResource)
 
-	avail := m.CachedAvailableResource
+	avail := m.GetAvailableResource()
 	if preemptionPhase {
 		avail = resources.Add(avail, m.PreemptingResource)
 	}
 
 	if resources.FitIn(avail, newAllocating) {
-		m.AllocatingResource = newAllocating
+		m.allocatingResource = newAllocating
 		return true
 	}
 	return false
@@ -94,4 +92,36 @@ func (m *SchedulingNode) CheckAllocateConditions(allocId string) bool {
 	}
 	// must be last return in the list
 	return true
+}
+
+func (m *SchedulingNode) GetCachedAvailableResource() *resources.Resource {
+	return m.NodeInfo.GetAvailableResource()
+}
+
+func (m *SchedulingNode) GetAvailableResource() *resources.Resource {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+
+	return resources.Sub(m.NodeInfo.GetAvailableResource(), m.allocatingResource)
+}
+
+func (m *SchedulingNode) GetAllocatingResource() *resources.Resource {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+
+	return m.allocatingResource
+}
+
+func (m *SchedulingNode) IncAllocatingResource(newAlloc *resources.Resource) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	m.allocatingResource = resources.Add(m.allocatingResource, newAlloc)
+}
+
+func (m *SchedulingNode) DecAllocatingResource(newAlloc *resources.Resource) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	m.allocatingResource = resources.Sub(m.allocatingResource, newAlloc)
 }

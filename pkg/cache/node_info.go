@@ -29,7 +29,6 @@ type NodeInfo struct {
     TotalResource     *resources.Resource
     allocatedResource *resources.Resource
     availableResource *resources.Resource
-    unconfirmedResource *resources.Resource
 
     // Fields for fast access
     Hostname  string
@@ -112,7 +111,6 @@ func (m *NodeInfo) AddAllocation(info *AllocationInfo) {
     m.allocations[info.AllocationProto.Uuid] = info
     m.allocatedResource = resources.Add(m.allocatedResource, info.AllocatedResource)
     m.availableResource = resources.Sub(m.TotalResource, m.allocatedResource)
-    m.unconfirmedResource = resources.Sub(m.unconfirmedResource, info.AllocatedResource)
 }
 
 func (m *NodeInfo) RemoveAllocation(uuid string) *AllocationInfo {
@@ -151,22 +149,4 @@ func (m *NodeInfo) IsSchedulable() bool {
     m.lock.RLock()
     defer m.lock.RUnlock()
     return m.Schedulable
-}
-
-func (m* NodeInfo) GetAvailableDeductUnconfirmedResource() *resources.Resource {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
-    return resources.SubEliminateNegative(m.availableResource, m.unconfirmedResource)
-}
-
-func (m *NodeInfo) AddUnconfirmedResource(unconfirmedResource *resources.Resource) {
-    m.lock.Lock()
-    defer m.lock.Unlock()
-    m.unconfirmedResource = resources.Add(m.unconfirmedResource, unconfirmedResource)
-}
-
-func (m *NodeInfo) RemoveUnconfirmedResource(unconfirmedResource *resources.Resource) {
-    m.lock.Lock()
-    defer m.lock.Unlock()
-    m.unconfirmedResource = resources.SubEliminateNegative(m.unconfirmedResource, unconfirmedResource)
 }

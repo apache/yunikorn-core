@@ -72,10 +72,7 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
                 proposal := newSingleAllocationProposal(alloc)
                 err := m.updateSchedulingRequestPendingAskByDelta(proposal.AllocationProposals[0], -1)
                 if err == nil {
-                    // update unconfirmed resource of related node for new allocation proposal
-                    alloc.Node.NodeInfo.AddUnconfirmedResource(alloc.SchedulingAsk.AllocatedResource)
-
-                    m.eventHandlers.CacheEventHandler.HandleEvent(proposal)
+                    m.eventHandlers.CacheEventHandler.HandleEvent(newSingleAllocationProposal(alloc))
                     confirmedAllocations = append(confirmedAllocations, alloc)
                 } else {
                     log.Logger().Error("failed to send allocation proposal",
@@ -121,7 +118,7 @@ func (m *Scheduler) regularAllocate(nodes SortingIterator, candidate *Scheduling
             }
 
             // return allocation
-            return NewSchedulingAllocation(candidate, node)
+            return NewSchedulingAllocation(candidate, node.NodeId)
         }
     }
     return nil
@@ -140,8 +137,8 @@ func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *Parti
     candidates []*SchedulingAllocationAsk,
     preemptionParam *preemptionParameters) ([]*SchedulingAllocation, []*SchedulingAllocationAsk) {
     // copy list of node since we going to go through node list a couple of times
-    nodeList := getNodeList(m, partition)
-    if nodeList == nil {
+    nodeList := partitionContext.GetSchedulingNodes()
+    if len(nodeList) <= 0 {
         return make([]*SchedulingAllocation, 0), candidates
     }
 
@@ -226,21 +223,6 @@ func evaluateForSchedulingPolicy(m *Scheduler, nodes []*SchedulingNode, partitio
     }
 
     return nil
-}
-
-func getNodeList(m *Scheduler, partition string) []*SchedulingNode {
-    nodeList := m.clusterInfo.GetPartition(partition).CopyNodeInfos()
-    if len(nodeList) <= 0 {
-        // When we don't have node, do nothing
-        return nil
-    }
-
-    schedulingNodeList := make([]*SchedulingNode, len(nodeList))
-    for idx, v := range nodeList {
-        schedulingNodeList[idx] = NewSchedulingNode(v)
-    }
-
-    return schedulingNodeList
 }
 
 func (m* Scheduler) handleFailedToAllocationAllocations(allocations []*SchedulingAllocation, candidates []*SchedulingAllocationAsk, preemptionParam *preemptionParameters) {

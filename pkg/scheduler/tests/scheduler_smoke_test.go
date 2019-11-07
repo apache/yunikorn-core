@@ -1108,6 +1108,7 @@ func TestRMNodeActions(t *testing.T) {
     defer serviceContext.StopAll()
     proxy := serviceContext.RMProxy
     cache := serviceContext.Cache
+    scheduler := serviceContext.Scheduler
 
     // Register RM
     configData := `
@@ -1181,11 +1182,15 @@ partitions:
     waitForAcceptedNodes(mockRM, "node-1:1234", 1000)
     waitForAcceptedNodes(mockRM, "node-2:1234", 1000)
 
+    // verify scheduling nodes
+    waitForSchedulingNode(t, scheduler, "node-1:1234", "[rm:123]default", 10000)
+    waitForSchedulingNode(t, scheduler, "node-2:1234", "[rm:123]default", 10000)
+
     // verify all nodes are schedule-able
     assert.Equal(t, cache.GetPartition("[rm:123]default").GetNode("node-1:1234").IsSchedulable(), true)
     assert.Equal(t, cache.GetPartition("[rm:123]default").GetNode("node-2:1234").IsSchedulable(), true)
 
-    // send RM node actions
+    // send RM node action: DRAIN_NODE
     err = proxy.Update(&si.UpdateRequest{
         UpdatedNodes: []*si.UpdateNodeInfo{
             {
@@ -1201,7 +1206,7 @@ partitions:
         t.Error(err.Error())
     }
 
-    err = common.WaitFor(time.Second, 5*time.Second, func() bool {
+    err = common.WaitFor(10*time.Millisecond, 5*time.Second, func() bool {
         return cache.GetPartition("[rm:123]default").GetNode("node-1:1234").IsSchedulable() == false &&
             cache.GetPartition("[rm:123]default").GetNode("node-2:1234").IsSchedulable()
     })
@@ -1209,6 +1214,35 @@ partitions:
     if nil != err {
         t.Error(err.Error())
     }
+    // verify that scheduling node (node-1) should be removed
+    waitForSchedulingNodeRemoved(t, scheduler, "node-1:1234", "[rm:123]default", 10000)
+
+    // send RM node action: DRAIN_TO_SCHEDULABLE
+    err = proxy.Update(&si.UpdateRequest{
+        UpdatedNodes: []*si.UpdateNodeInfo{
+            {
+                NodeId: "node-1:1234",
+                Action: si.UpdateNodeInfo_DRAIN_TO_SCHEDULABLE,
+                Attributes: make(map[string]string),
+            },
+        },
+        RmId: "rm:123",
+    })
+
+    if nil != err {
+        t.Error(err.Error())
+    }
+
+    err = common.WaitFor(10*time.Millisecond, 5*time.Second, func() bool {
+        return cache.GetPartition("[rm:123]default").GetNode("node-1:1234").IsSchedulable() &&
+            cache.GetPartition("[rm:123]default").GetNode("node-2:1234").IsSchedulable()
+    })
+
+    if nil != err {
+        t.Error(err.Error())
+    }
+    // verify that scheduling node (node-1) should be added
+    waitForSchedulingNode(t, scheduler, "node-1:1234", "[rm:123]default", 10000)
 }
 
 

@@ -369,6 +369,18 @@ func CompUsageRatio(left, right, total *Resource) int {
     return compareShares(lshares, rshares)
 }
 
+// Calculate share for left of total and right of total separately.
+// This returns the same value as compareShares does:
+// 0 for equal shares
+// 1 if the left share is larger
+// -1 if the right share is larger
+func CompUsageRatioSeparately(left, leftTotal, right, rightTotal *Resource) int {
+    lshares := getShares(left, leftTotal)
+    rshares := getShares(right, rightTotal)
+
+    return compareShares(lshares, rshares)
+}
+
 // Compare two resources usage shares and assumes a nil total resource.
 // The share is thus equivalent to the usage passed in.
 // This returns the same value as compareShares does:

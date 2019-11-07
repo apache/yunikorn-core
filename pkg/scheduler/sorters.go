@@ -39,7 +39,8 @@ func SortQueue(queues []*SchedulingQueue, sortType SortType) {
             l := queues[i]
             r := queues[j]
 
-            comp := resources.CompUsageRatio(l.ProposingResource, r.ProposingResource, l.CachedQueueInfo.GuaranteedResource)
+            comp := resources.CompUsageRatioSeparately(l.ProposingResource, l.CachedQueueInfo.GuaranteedResource,
+                r.ProposingResource, r.CachedQueueInfo.GuaranteedResource)
             return comp < 0
         })
     }

@@ -1107,7 +1107,7 @@ func TestFairnessRatio(t *testing.T) {
     }
 }
 
-// This tests just to cover code in the CompUsageRatio and CompUsageShare.
+// This tests just to cover code in the CompUsageRatio, CompUsageRatioSeparately and CompUsageShare.
 // This does not check the share calculation and share comparison see TestGetShares and TestCompShares for that.
 func TestCompUsage(t *testing.T) {
     // simple case all empty or nil behaviour
@@ -1137,5 +1137,20 @@ func TestCompUsage(t *testing.T) {
     }
     if CompUsageRatio(left, right, total) != -1 {
         t.Errorf("right resources ratio should have been larger left %v, right %v", left, right)
+    }
+
+    // test for CompUsageRatioSeparately
+    left = &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}}
+    right = &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}}
+    leftTotal := &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}}
+    rightTotal := leftTotal
+    if CompUsageRatioSeparately(left, leftTotal, right, rightTotal) != 1 {
+        t.Errorf("left resources ratio should have been larger left %v, left-total %v right %v right-total %v",
+            left, total, right, rightTotal)
+    }
+    rightTotal = &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}}
+    if CompUsageRatioSeparately(left, leftTotal, right, rightTotal) != -1 {
+        t.Errorf("right resources ratio should have been larger left %v, left-total %v right %v right-total %v",
+            left, rightTotal, right, total)
     }
 }

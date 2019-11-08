@@ -117,7 +117,7 @@ func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionCont
     // To preempt resource = (allocating + candidate.asked) - (preempting + available)
     resourceToPreempt := resources.Add(node.GetAllocatingResource(), candidate.AllocatedResource)
     resourceToPreempt.SubFrom(node.PreemptingResource)
-    resourceToPreempt.SubFrom(node.GetCachedAvailableResource())
+    resourceToPreempt.SubFrom(node.NodeInfo.GetAvailableResource())
     resourceToPreempt = resources.ComponentWiseMax(resourceToPreempt, resources.Zero)
 
     // If allocated resource can fit in the node, and no headroom shortage of preemptor queue, we can directly get it allocated. (lucky!)

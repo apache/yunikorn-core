@@ -32,6 +32,7 @@ type SchedulingNode struct {
 
 	// Resource which is allocating (in addition to confirmed, allocated)
 	allocatingResource      *resources.Resource
+	cachedAvailableResource *resources.Resource
 	PreemptingResource      *resources.Resource
 
 	lock sync.RWMutex
@@ -43,6 +44,7 @@ func NewSchedulingNode(info *cache.NodeInfo) *SchedulingNode {
 		NodeId:                  info.NodeId,
 		allocatingResource:      resources.NewResource(),
 		PreemptingResource:      resources.NewResource(),
+        cachedAvailableResource: info.GetAvailableResource(),
 	}
 }
 
@@ -51,13 +53,14 @@ func (m *SchedulingNode) CheckAndAllocateResource(delta *resources.Resource, pre
 	m.lock.Unlock()
 	newAllocating := resources.Add(delta, m.allocatingResource)
 
-	avail := m.GetCachedAvailableResource()
+	avail := m.NodeInfo.GetAvailableResource()
 	if preemptionPhase {
 		avail = resources.Add(avail, m.PreemptingResource)
 	}
 
 	if resources.FitIn(avail, newAllocating) {
 		m.allocatingResource = newAllocating
+        m.updateCachedAvailableResource()
 		return true
 	}
 	return false
@@ -95,14 +98,14 @@ func (m *SchedulingNode) CheckAllocateConditions(allocId string) bool {
 }
 
 func (m *SchedulingNode) GetCachedAvailableResource() *resources.Resource {
-	return m.NodeInfo.GetAvailableResource()
-}
-
-func (m *SchedulingNode) GetAvailableResource() *resources.Resource {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
-	return resources.Sub(m.NodeInfo.GetAvailableResource(), m.allocatingResource)
+	return m.cachedAvailableResource
+}
+
+func (m *SchedulingNode) updateCachedAvailableResource() {
+    m.cachedAvailableResource = resources.Sub(m.NodeInfo.GetAvailableResource(), m.allocatingResource)
 }
 
 func (m *SchedulingNode) GetAllocatingResource() *resources.Resource {
@@ -117,6 +120,7 @@ func (m *SchedulingNode) IncAllocatingResource(newAlloc *resources.Resource) {
 	defer m.lock.Unlock()
 
 	m.allocatingResource = resources.Add(m.allocatingResource, newAlloc)
+    m.updateCachedAvailableResource()
 }
 
 func (m *SchedulingNode) DecAllocatingResource(newAlloc *resources.Resource) {
@@ -124,4 +128,5 @@ func (m *SchedulingNode) DecAllocatingResource(newAlloc *resources.Resource) {
 	defer m.lock.Unlock()
 
 	m.allocatingResource = resources.Sub(m.allocatingResource, newAlloc)
+    m.updateCachedAvailableResource()
 }

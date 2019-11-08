@@ -51,7 +51,7 @@ func (m *SchedulingNode) CheckAndAllocateResource(delta *resources.Resource, pre
 	m.lock.Unlock()
 	newAllocating := resources.Add(delta, m.allocatingResource)
 
-	avail := m.GetAvailableResource()
+	avail := m.GetCachedAvailableResource()
 	if preemptionPhase {
 		avail = resources.Add(avail, m.PreemptingResource)
 	}

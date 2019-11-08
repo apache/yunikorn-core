@@ -25,6 +25,7 @@ import (
     "github.com/cloudera/yunikorn-core/pkg/entrypoint"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "gotest.tools/assert"
+    "strconv"
     "testing"
     "time"
 )
@@ -1396,6 +1397,119 @@ partitions:
 
     totalNode2Resource := cache.GetPartition("[rm:123]default").GetNode("node-2:1234").GetAllocatedResource().Resources[resources.MEMORY]
     assert.Equal(t, int(totalNode2Resource), 0)
+}
+
+func TestFairnessAllocationForNodes(t *testing.T) {
+    // Start all tests
+    serviceContext := entrypoint.StartAllServicesWithManualScheduler()
+    defer serviceContext.StopAll()
+    proxy := serviceContext.RMProxy
+    scheduler := serviceContext.Scheduler
+
+    // Register RM
+    configData := `
+partitions:
+  -
+    name: default
+    queues:
+      - name: root
+        submitacl: "*"
+        queues:
+          - name: a
+            resources:
+              guaranteed:
+                memory: 100
+                vcore: 10
+`
+    configs.MockSchedulerConfigByData([]byte(configData))
+    mockRM := NewMockRMCallbackHandler(t)
+
+    _, err := proxy.RegisterResourceManager(
+        &si.RegisterResourceManagerRequest{
+            RmId:        "rm:123",
+            PolicyGroup: "policygroup",
+            Version:     "0.0.2",
+        }, mockRM)
+
+    if err != nil {
+        t.Error(err.Error())
+    }
+
+    // Register 10 nodes, and add applications
+    nodes := make([]*si.NewNodeInfo, 0)
+    for i := 0; i < 10; i++ {
+        nodeId := "node-" + strconv.Itoa(i)
+        nodes = append(nodes, &si.NewNodeInfo{
+            NodeId: nodeId + ":1234",
+            Attributes: map[string]string{
+                "si.io/hostname": nodeId,
+                "si.io/rackname": "rack-1",
+            },
+            SchedulableResource: &si.Resource{
+                Resources: map[string]*si.Quantity{
+                    "memory": {Value: 100},
+                    "vcore":  {Value: 20},
+                },
+            },
+        })
+    }
+    err = proxy.Update(&si.UpdateRequest{
+        NewSchedulableNodes: nodes,
+        NewApplications:     newAddAppRequest(map[string]string{"app-1": "root.a"}),
+        RmId:                "rm:123",
+    })
+    if nil != err {
+        t.Error(err.Error())
+    }
+
+    // verify app and all nodes are accepted
+    waitForAcceptedApplications(mockRM, "app-1", 1000)
+    for _, node := range nodes {
+        waitForAcceptedNodes(mockRM, node.NodeId, 1000)
+    }
+
+    // Get scheduling app
+    schedulerQueueA := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.a", "[rm:123]default")
+    schedulingApp1 := scheduler.GetClusterSchedulingContext().GetSchedulingApplication("app-1", "[rm:123]default")
+
+    // Request ask with 20 allocations
+    err = proxy.Update(&si.UpdateRequest{
+        Asks: []*si.AllocationAsk{
+            {
+                AllocationKey: "alloc-1",
+                ResourceAsk: &si.Resource{
+                    Resources: map[string]*si.Quantity{
+                        "memory": {Value: 10},
+                        "vcore":  {Value: 1},
+                    },
+                },
+                MaxAllocations: 20,
+                ApplicationId:  "app-1",
+            },
+        },
+        RmId: "rm:123",
+    })
+
+    waitForPendingResource(t, schedulerQueueA, 200, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp1, 200, 1000)
+
+    for i := 0; i < 20; i++ {
+        scheduler.SingleStepScheduleAllocTest(1)
+    }
+
+    // Verify all requests are satisfied
+    waitForAllocations(mockRM, 20, 1000)
+    waitForPendingResource(t, schedulerQueueA, 0, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp1, 0, 1000)
+    assert.Assert(t, schedulingApp1.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY] == 200)
+
+    // Verify 2 allocations for every node
+    for _, node := range nodes {
+        schedulingNode, _ := scheduler.GetClusterSchedulingContext().GetSchedulingNode(node.NodeId, "[rm:123]default")
+        assert.Assert(t, schedulingNode.NodeInfo.GetAllocatedResource().Resources[resources.MEMORY] == 20)
+        assert.Assert(t, schedulingNode.GetAllocatingResource().Resources[resources.MEMORY] == 0)
+        assert.Assert(t, schedulingNode.GetAllocatingResource().Resources[resources.VCORE] == 0)
+    }
 }
 
 //func TestScheduleBestEffortRequests(t *testing.T) {

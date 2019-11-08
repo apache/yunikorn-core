@@ -544,15 +544,21 @@ func (m *ClusterInfo) processAllocationProposalEvent(event *cacheevent.Allocatio
     partitionInfo := m.GetPartition(proposal.PartitionName)
     allocInfo, err := partitionInfo.addNewAllocation(proposal)
     if err != nil {
+        log.Logger().Warn("failed to add new allocation to partition",
+            zap.String("allocationKey", proposal.AllocationKey),
+            zap.String("applicationId", proposal.ApplicationId),
+            zap.String("nodeId", proposal.NodeId),
+            zap.String("partitionName", proposal.PartitionName),
+            zap.Error(err))
         // Send reject event back to scheduler
         m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
-            RejectedAllocations: event.AllocationProposals,
+            RejectedAllocations: []*commonevents.AllocationProposal{proposal},
         })
         return
     } else {
         // Send accept event back to scheduler
         m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
-            AcceptedAllocations: event.AllocationProposals,
+            AcceptedAllocations: []*commonevents.AllocationProposal{proposal},
         })
     }
     rmId := common.GetRMIdFromPartitionName(proposal.PartitionName)

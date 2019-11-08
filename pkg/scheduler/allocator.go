@@ -80,7 +80,6 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
                 }
             }
         }
-
         nAlloc -= len(confirmedAllocations)
 
         // Update missed opportunities

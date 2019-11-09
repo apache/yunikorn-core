@@ -115,9 +115,9 @@ type singleNodePreemptResult struct {
 func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionContext, preemptorQueue *preemptionQueueContext, node *SchedulingNode, candidate *SchedulingAllocationAsk,
     headroomShortages map[string]*resources.Resource) *singleNodePreemptResult {
     // To preempt resource = (allocating + candidate.asked) - (preempting + available)
-    resourceToPreempt := resources.Add(node.GetAllocatingResource(), candidate.AllocatedResource)
+    //                     = candidate.asked - cachedAvailable - preempting
+    resourceToPreempt := resources.Sub(candidate.AllocatedResource, node.GetCachedAvailableResource())
     resourceToPreempt.SubFrom(node.PreemptingResource)
-    resourceToPreempt.SubFrom(node.NodeInfo.GetAvailableResource())
     resourceToPreempt = resources.ComponentWiseMax(resourceToPreempt, resources.Zero)
 
     // If allocated resource can fit in the node, and no headroom shortage of preemptor queue, we can directly get it allocated. (lucky!)

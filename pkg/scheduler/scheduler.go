@@ -317,8 +317,8 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
 
     if len(ev.AcceptedAllocations) > 0 {
         for _, alloc := range ev.AcceptedAllocations {
-            // Decrease allocating resource of scheduling node
-            m.decAllocatingResourceForSchedulingNode(alloc)
+            // notify accepted allocations to scheduling node
+            m.notifyAllocationToSchedulingNode(alloc, true)
         }
     }
 
@@ -329,8 +329,8 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
                 log.Logger().Error("failed to increase pending ask",
                     zap.Error(err))
             }
-            // Decrease allocating resource of scheduling node
-            m.decAllocatingResourceForSchedulingNode(alloc)
+            // notify rejected allocations to scheduling node
+            m.notifyAllocationToSchedulingNode(alloc, false)
         }
     }
 
@@ -367,7 +367,7 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
     }
 }
 
-func (m *Scheduler) decAllocatingResourceForSchedulingNode(alloc *commonevents.AllocationProposal) {
+func (m *Scheduler) notifyAllocationToSchedulingNode(alloc *commonevents.AllocationProposal, accepted bool) {
     node, err := m.clusterSchedulingContext.GetSchedulingNode(alloc.NodeId, alloc.PartitionName)
     if err != nil {
         log.Logger().Error("failed to find scheduling node for rejected allocation",
@@ -382,7 +382,11 @@ func (m *Scheduler) decAllocatingResourceForSchedulingNode(alloc *commonevents.A
             zap.String("partitionName", alloc.PartitionName),
             zap.String("allocationKey", alloc.AllocationKey))
     }
-    node.DecAllocatingResource(alloc.AllocatedResource)
+    if accepted {
+        node.handleAcceptedAllocation(alloc.AllocatedResource)
+    } else {
+        node.handleRejectedAllocation(alloc.AllocatedResource)
+    }
 }
 
 // Process application adds and removes that have been processed by the cache.

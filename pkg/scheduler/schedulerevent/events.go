@@ -24,6 +24,7 @@ import (
 // From Cache, update about allocations.
 type SchedulerAllocationUpdatesEvent struct {
     RejectedAllocations []*commonevents.AllocationProposal
+    AcceptedAllocations []*commonevents.AllocationProposal
     NewAsks             []*si.AllocationAsk
     ToReleases          *si.AllocationReleasesRequest
     ExistingAllocations []*si.Allocation // optional, only required during recovery
@@ -47,4 +48,10 @@ type SchedulerDeletePartitionsConfigEvent struct {
     // Type is *cache.PartitionInfo, avoid cycle imports
     DeletePartitions  []interface{}
     ResultChannel     chan *commonevents.Result
+}
+
+// From Cache, update about nodes.
+type SchedulerNodesUpdatesEvent struct {
+    AddedNodes   []interface{}
+    RemovedNodes []interface{}
 }

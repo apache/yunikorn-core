@@ -80,7 +80,6 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
                 }
             }
         }
-
         nAlloc -= len(confirmedAllocations)
 
         // Update missed opportunities
@@ -137,8 +136,8 @@ func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *Parti
     candidates []*SchedulingAllocationAsk,
     preemptionParam *preemptionParameters) ([]*SchedulingAllocation, []*SchedulingAllocationAsk) {
     // copy list of node since we going to go through node list a couple of times
-    nodeList := getNodeList(m, partition)
-    if nodeList == nil {
+    nodeList := partitionContext.GetSchedulingNodes()
+    if len(nodeList) <= 0 {
         return make([]*SchedulingAllocation, 0), candidates
     }
 
@@ -223,21 +222,6 @@ func evaluateForSchedulingPolicy(m *Scheduler, nodes []*SchedulingNode, partitio
     }
 
     return nil
-}
-
-func getNodeList(m *Scheduler, partition string) []*SchedulingNode {
-    nodeList := m.clusterInfo.GetPartition(partition).CopyNodeInfos()
-    if len(nodeList) <= 0 {
-        // When we don't have node, do nothing
-        return nil
-    }
-
-    schedulingNodeList := make([]*SchedulingNode, len(nodeList))
-    for idx, v := range nodeList {
-        schedulingNodeList[idx] = NewSchedulingNode(v)
-    }
-
-    return schedulingNodeList
 }
 
 func (m* Scheduler) handleFailedToAllocationAllocations(allocations []*SchedulingAllocation, candidates []*SchedulingAllocationAsk, preemptionParam *preemptionParameters) {

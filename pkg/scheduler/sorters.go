@@ -72,7 +72,7 @@ func SortNodes(nodes []*SchedulingNode, sortType SortType) {
             r := nodes[j]
 
             // Sort by available resource, descending order
-            return resources.CompUsageShares(l.CachedAvailableResource, r.CachedAvailableResource) > 0
+            return resources.CompUsageShares(l.GetCachedAvailableResource(), r.GetCachedAvailableResource()) > 0
         })
         metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
     }
@@ -87,7 +87,7 @@ func SortAllNodesWithAscendingResource(schedulingNodeList []*SchedulingNode) []*
         r := schedulingNodeList[j]
 
         // Sort by available resource, ascending order
-        return resources.CompUsageShares(r.CachedAvailableResource, l.CachedAvailableResource) > 0
+        return resources.CompUsageShares(r.GetCachedAvailableResource(), l.GetCachedAvailableResource()) > 0
     })
 
     metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)

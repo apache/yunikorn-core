@@ -315,6 +315,13 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
         return
     }
 
+    if len(ev.AcceptedAllocations) > 0 {
+        for _, alloc := range ev.AcceptedAllocations {
+            // notify accepted allocations to scheduling node
+            m.notifyAllocationToSchedulingNode(alloc, true)
+        }
+    }
+
     if len(ev.RejectedAllocations) > 0 {
         for _, alloc := range ev.RejectedAllocations {
             // Update pending resource back
@@ -322,6 +329,8 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
                 log.Logger().Error("failed to increase pending ask",
                     zap.Error(err))
             }
+            // notify rejected allocations to scheduling node
+            m.notifyAllocationToSchedulingNode(alloc, false)
         }
     }
 
@@ -355,6 +364,28 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
                 RMId:                   rmId,
             })
         }
+    }
+}
+
+func (m *Scheduler) notifyAllocationToSchedulingNode(alloc *commonevents.AllocationProposal, accepted bool) {
+    node, err := m.clusterSchedulingContext.GetSchedulingNode(alloc.NodeId, alloc.PartitionName)
+    if err != nil {
+        log.Logger().Error("failed to find scheduling node for rejected allocation",
+            zap.String("nodeId", alloc.NodeId),
+            zap.String("partitionName", alloc.PartitionName),
+            zap.String("allocationKey", alloc.AllocationKey),
+            zap.Error(err))
+    }
+    if node == nil {
+        log.Logger().Error("cannot find scheduling node for rejected allocation",
+            zap.String("nodeId", alloc.NodeId),
+            zap.String("partitionName", alloc.PartitionName),
+            zap.String("allocationKey", alloc.AllocationKey))
+    }
+    if accepted {
+        node.handleAcceptedAllocation(alloc.AllocatedResource)
+    } else {
+        node.handleRejectedAllocation(alloc.AllocatedResource)
     }
 }
 
@@ -462,6 +493,39 @@ func (m *Scheduler) processDeletePartitionConfigsEvent(event *schedulerevent.Sch
     }
 }
 
+func (m *Scheduler) processNodesUpdatesEvent(ev *schedulerevent.SchedulerNodesUpdatesEvent) {
+    if len(ev.AddedNodes) > 0 {
+        for _, n := range ev.AddedNodes {
+            node := n.(*cache.NodeInfo)
+            if err := m.clusterSchedulingContext.AddSchedulingNode(NewSchedulingNode(node)); err != nil {
+                log.Logger().Error("failed to add scheduling node to partition context",
+                    zap.String("nodeId", node.NodeId),
+                    zap.String("partitionName", node.Partition),
+                    zap.Error(err))
+            } else {
+                log.Logger().Info("added scheduling node to partition context",
+                    zap.String("nodeId", node.NodeId),
+                    zap.String("partitionName", node.Partition))
+            }
+        }
+    }
+    if len(ev.RemovedNodes) > 0 {
+        for _, n := range ev.RemovedNodes {
+            node := n.(*cache.NodeInfo)
+            if _, err := m.clusterSchedulingContext.RemoveSchedulingNode(node.NodeId, node.Partition); err != nil {
+                log.Logger().Error("failed to remove scheduling node from partition context",
+                    zap.String("nodeId", node.NodeId),
+                    zap.String("partitionName", node.Partition),
+                    zap.Error(err))
+            } else {
+                log.Logger().Info("removed scheduling node from partition context",
+                    zap.String("nodeId", node.NodeId),
+                    zap.String("partitionName", node.Partition))
+            }
+        }
+    }
+}
+
 func (m *Scheduler) handleSchedulerEvent() {
     for {
         ev := <-m.pendingSchedulerEvents
@@ -476,6 +540,8 @@ func (m *Scheduler) handleSchedulerEvent() {
             m.processUpdatePartitionConfigsEvent(v)
         case *schedulerevent.SchedulerDeletePartitionsConfigEvent:
             m.processDeletePartitionConfigsEvent(v)
+        case *schedulerevent.SchedulerNodesUpdatesEvent:
+            m.processNodesUpdatesEvent(v)
         default:
             panic(fmt.Sprintf("%s is not an acceptable type for Scheduler event.", reflect.TypeOf(v).String()))
         }

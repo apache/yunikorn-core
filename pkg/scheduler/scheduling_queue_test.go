@@ -207,7 +207,7 @@ func TestPendingCalc(t *testing.T) {
         t.Errorf("root queue pending allocation failed to decrement expected zero, got %v", root.pendingResource)
     }
     if !resources.IsZero(parent.pendingResource) {
-        t.Errorf("parent queue pending allocation should have failed to decrement expected zero, got %v", root.pendingResource)
+        t.Errorf("parent queue pending allocation should have failed to decrement expected zero, got %v", parent.pendingResource)
     }
 }
 

@@ -19,7 +19,6 @@ package tests
 import (
     "fmt"
     "github.com/cloudera/yunikorn-core/pkg/cache"
-    "github.com/cloudera/yunikorn-core/pkg/common"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
     "github.com/cloudera/yunikorn-core/pkg/scheduler"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
@@ -291,26 +290,4 @@ func newAddAppRequest(apps map[string]string) []*si.AddApplicationRequest {
         requests = append(requests, &request)
     }
     return requests
-}
-
-func waitForSchedulingNode(t *testing.T, scheduler *scheduler.Scheduler, nodeId string, partitionName string, timeoutMs int) {
-    err := common.WaitFor(10*time.Millisecond, 2*time.Second, func() bool {
-        node, _ := scheduler.GetClusterSchedulingContext().GetSchedulingNode(nodeId, partitionName)
-        return node != nil
-    })
-
-    if nil != err {
-        t.Error(err.Error())
-    }
-}
-
-func waitForSchedulingNodeRemoved(t *testing.T, scheduler *scheduler.Scheduler, nodeId string, partitionName string, timeoutMs int) {
-    err := common.WaitFor(10*time.Millisecond, 2*time.Second, func() bool {
-        node, _ := scheduler.GetClusterSchedulingContext().GetSchedulingNode(nodeId, partitionName)
-        return node == nil
-    })
-
-    if nil != err {
-        t.Error(err.Error())
-    }
 }

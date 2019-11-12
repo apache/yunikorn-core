@@ -314,7 +314,6 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
 func (m *ClusterInfo) processNewSchedulableNodes(request *si.UpdateRequest) {
     acceptedNodes := make([]*si.AcceptedNode, 0)
     rejectedNodes := make([]*si.RejectedNode, 0)
-    addedNodes := make([]interface{}, 0)
     existingAllocations := make([]*si.Allocation, 0)
     for _, node := range request.NewSchedulableNodes {
         nodeInfo, err := NewNodeInfo(node)
@@ -359,7 +358,6 @@ func (m *ClusterInfo) processNewSchedulableNodes(request *si.UpdateRequest) {
             zap.String("partition", nodeInfo.Partition))
         acceptedNodes = append(acceptedNodes, &si.AcceptedNode{NodeId: node.NodeId})
         existingAllocations = append(existingAllocations, node.ExistingAllocations...)
-        addedNodes = append(addedNodes, nodeInfo)
     }
 
     m.EventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMNodeUpdateEvent{
@@ -373,18 +371,11 @@ func (m *ClusterInfo) processNewSchedulableNodes(request *si.UpdateRequest) {
         ExistingAllocations: existingAllocations,
         RMId:                request.RmId,
     })
-
-    // send added nodes to scheduler
-    m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerNodesUpdatesEvent{
-        AddedNodes: addedNodes,
-    })
 }
 
 // RM may notify us to blacklist or whitelist a node,
 // this is to process such actions.
 func (m *ClusterInfo) processNodeActions(request *si.UpdateRequest) {
-    addedNodes := make([]interface{}, 0)
-    removedNodes := make([]interface{}, 0)
     for _, update := range request.UpdatedNodes {
         var partition *PartitionInfo
         if p, ok := update.Attributes[api.NODE_PARTITION]; ok {
@@ -404,19 +395,11 @@ func (m *ClusterInfo) processNodeActions(request *si.UpdateRequest) {
             switch update.Action {
             case si.UpdateNodeInfo_DRAIN_NODE:
                 node.setSchedulable(false)
-                removedNodes = append(removedNodes, node)
             case si.UpdateNodeInfo_DRAIN_TO_SCHEDULABLE:
                 node.setSchedulable(true)
-                addedNodes = append(addedNodes, node)
             }
         }
     }
-
-    // send removed nodes to scheduler
-    m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerNodesUpdatesEvent{
-        AddedNodes:   addedNodes,
-        RemovedNodes: removedNodes,
-    })
 }
 
 // Process the node updates: add and remove nodes as needed.
@@ -544,22 +527,11 @@ func (m *ClusterInfo) processAllocationProposalEvent(event *cacheevent.Allocatio
     partitionInfo := m.GetPartition(proposal.PartitionName)
     allocInfo, err := partitionInfo.addNewAllocation(proposal)
     if err != nil {
-        log.Logger().Warn("failed to add new allocation to partition",
-            zap.String("allocationKey", proposal.AllocationKey),
-            zap.String("applicationId", proposal.ApplicationId),
-            zap.String("nodeId", proposal.NodeId),
-            zap.String("partitionName", proposal.PartitionName),
-            zap.Error(err))
         // Send reject event back to scheduler
         m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
-            RejectedAllocations: []*commonevents.AllocationProposal{proposal},
+            RejectedAllocations: event.AllocationProposals,
         })
         return
-    } else {
-        // Send accept event back to scheduler
-        m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
-            AcceptedAllocations: []*commonevents.AllocationProposal{proposal},
-        })
     }
     rmId := common.GetRMIdFromPartitionName(proposal.PartitionName)
 

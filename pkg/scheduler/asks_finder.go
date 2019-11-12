@@ -64,15 +64,12 @@ func (m *Scheduler) findAllocationAsks(partitionTotalResource *resources.Resourc
 // sorting type for the parent queue.
 // Stopped queues will be filtered out at a later stage.
 func sortSubqueuesFromQueue(parentQueue *SchedulingQueue) []*SchedulingQueue {
-    parentQueue.lock.RLock()
-    defer parentQueue.lock.RUnlock()
-
-    // Create a copy of the queues with pending resources
+    // Create a list of the queues with pending resources
     sortedQueues := make([]*SchedulingQueue, 0)
-    for _, v := range parentQueue.childrenQueues {
+    for _, child := range parentQueue.GetCopyOfChildren() {
         // Only look at queue when pending-res > 0
-        if resources.StrictlyGreaterThanZero(v.GetPendingResource()) {
-            sortedQueues = append(sortedQueues, v)
+        if resources.StrictlyGreaterThanZero(child.GetPendingResource()) {
+            sortedQueues = append(sortedQueues, child)
         }
     }
 

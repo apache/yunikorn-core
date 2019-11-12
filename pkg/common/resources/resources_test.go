@@ -833,7 +833,41 @@ func TestSubEliminateNegative(t *testing.T) {
 
     expected := map[string]Quantity{"a": 0, "b": 1, "c": 0, "d": 1}
     if !reflect.DeepEqual(res3.Resources, expected) {
-        t.Errorf("Add failed expected %v, actual %v", expected, res3.Resources)
+        t.Errorf("sub failed expected %v, actual %v", expected, res3.Resources)
+    }
+}
+
+func TestSubErrorNegative(t *testing.T) {
+    // simple case (nil checks)
+    result, err := SubErrorNegative(nil, nil)
+    if err != nil || result == nil || len(result.Resources) != 0 {
+        t.Errorf("sub nil resources did not return zero resource: %v, %v", result, err)
+    }
+    // empty resources
+    left := NewResource()
+    result, err = SubErrorNegative(left, nil)
+    if err != nil || result == nil || len(result.Resources) != 0 || result == left {
+        t.Errorf("sub Zero resource (right) did not return cloned resource: %v, %v", result, err)
+    }
+
+    // simple empty resources
+    res1 := NewResourceFromMap(map[string]Quantity{"a": 5})
+    result, err = SubErrorNegative(left, res1)
+    if err == nil || result == nil || len(result.Resources) != 1 || result.Resources["a"] != 0 {
+        t.Errorf("sub simple resource did not return correct resource or no error: %v, %v", result, err)
+    }
+
+    // complex case: just checking the resource merge, values check is secondary
+    res1 = &Resource{Resources: map[string]Quantity{"a": 0, "b": 1}}
+    res2 := &Resource{Resources: map[string]Quantity{"a": 1, "c": 0, "d": -1}}
+    result, err = SubErrorNegative(res1, res2)
+    if err == nil {
+        t.Errorf("sub should have set error message and did not: %v", result)
+    }
+
+    expected := map[string]Quantity{"a": 0, "b": 1, "c": 0, "d": 1}
+    if !reflect.DeepEqual(result.Resources, expected) {
+        t.Errorf("sub failed expected %v, actual %v", expected, result.Resources)
     }
 }
 

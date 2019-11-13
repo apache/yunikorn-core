@@ -264,16 +264,37 @@ func Sub(left, right *Resource) *Resource {
     return out
 }
 
+// Subtract resource returning a new resource with the result. A nil resource is considered
+// an empty resource. This will return an error if any value in the result is negative.
+// The caller should at least log the error.
+// The returned resource is valid and has all negative values reset to 0
+func SubErrorNegative(left, right *Resource) (*Resource, error) {
+    res, message := subNonNegative(left, right)
+    var err error
+    if message != "" {
+        err = fmt.Errorf(message)
+    }
+    return res, err
+}
+
 // Subtract resource returning a new resource with the result
 // A nil resource is considered an empty resource
 // This will return 0 values for negative values
 func SubEliminateNegative(left, right *Resource) *Resource {
+    res, _ := subNonNegative(left, right)
+    return res
+}
+
+// Internal subtract resource returning a new resource with the result and an error message when a
+// quantity in the result was less than zero. All negative values are reset to 0.
+func subNonNegative(left, right *Resource) (*Resource, string) {
+    message := ""
     // check nil inputs and shortcut
     if left == nil {
         left = Zero
     }
     if right == nil {
-        return left.Clone()
+        return left.Clone(), message
     }
 
     // neither are nil, clone one and sub the other
@@ -282,10 +303,15 @@ func SubEliminateNegative(left, right *Resource) *Resource {
         out.Resources[k] = subVal(out.Resources[k], v)
         // make sure value is not negative
         if out.Resources[k] < 0 {
+            if message == "" {
+                message = "resource quantity less than zero for: " + k
+            } else {
+                message += ", " + k
+            }
             out.Resources[k] = 0
         }
     }
-    return out
+    return out, message
 }
 
 // Check if smaller fitin larger, negative values will be treated as 0

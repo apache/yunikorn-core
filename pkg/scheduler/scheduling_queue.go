@@ -31,7 +31,6 @@ type SchedulingQueue struct {
     Name                string              // Fully qualified path for the queue
     CachedQueueInfo     *cache.QueueInfo    // link back to the queue in the cache
     ProposingResource   *resources.Resource // How much resource added for proposing, this is used by queue sort when do candidate selection
-    PartitionResource   *resources.Resource // For fairness calculation
     ApplicationSortType SortType            // How applications are sorted (leaf queue only)
     QueueSortType       SortType            // How sub queues are sorted (parent queue only)
 
@@ -120,50 +119,65 @@ func (sq *SchedulingQueue) updateSchedulingQueueInfo(info map[string]*cache.Queu
 
 // Update pending resource of this queue
 func (sq *SchedulingQueue) IncPendingResource(delta *resources.Resource) {
-    sq.lock.Lock()
-    sq.pendingResource = resources.Add(sq.pendingResource, delta)
-    sq.lock.Unlock()
-
     // update the parent
     if sq.parent != nil {
         sq.parent.IncPendingResource(delta)
     }
+    // update this queue
+    sq.lock.Lock()
+    defer sq.lock.Unlock()
+    sq.pendingResource = resources.Add(sq.pendingResource, delta)
 }
 
 // Remove pending resource of this queue
 func (sq *SchedulingQueue) DecPendingResource(delta *resources.Resource) {
-    sq.lock.Lock()
-    // TODO we can go negative here, do we really want to do that?
-    sq.pendingResource = resources.Sub(sq.pendingResource, delta)
-    sq.lock.Unlock()
-
     // update the parent
     if sq.parent != nil {
         sq.parent.DecPendingResource(delta)
     }
+    // update this queue
+    sq.lock.Lock()
+    defer sq.lock.Unlock()
+    var err error
+    sq.pendingResource, err = resources.SubErrorNegative(sq.pendingResource, delta)
+    if err != nil {
+        log.Logger().Warn("Pending resources went negative",
+            zap.Error(err))
+    }
 }
 
+// Add scheduling app to the queue
 func (sq *SchedulingQueue) AddSchedulingApplication(app *SchedulingApplication) {
     sq.lock.Lock()
     defer sq.lock.Unlock()
-
     sq.applications[app.ApplicationInfo.ApplicationId] = app
 }
 
+// Remove scheduling app and pending resource of this queue and update the parent queues
 func (sq *SchedulingQueue) RemoveSchedulingApplication(app *SchedulingApplication) {
-    sq.lock.Lock()
-    // Update pending resource of this queue
-    totalPending := app.Requests.GetPendingResource()
-    if !resources.IsZero(totalPending) {
-        sq.pendingResource = resources.Sub(sq.pendingResource, totalPending)
+    // lock without using defer as we want to release the read lock before we start walking up
+    // the tree and make updates requiring a write lock.
+    sq.lock.RLock()
+    // make sure that the app is assigned to this queue and not removed yet, if not found return
+    if _, ok := sq.applications[app.ApplicationInfo.ApplicationId]; !ok {
+        sq.lock.RUnlock()
+        return
     }
-    delete(sq.applications, app.ApplicationInfo.ApplicationId)
-    sq.lock.Unlock()
-
-    // update the parent
+    sq.lock.RUnlock()
+    // Update pending resource of the parent queues
+    totalPending := app.Requests.GetPendingResource()
     if !resources.IsZero(totalPending) {
         sq.parent.DecPendingResource(totalPending)
     }
+    sq.lock.Lock()
+    defer sq.lock.Unlock()
+    var err error
+    sq.pendingResource, err = resources.SubErrorNegative(sq.pendingResource, totalPending)
+    if err != nil {
+        log.Logger().Warn("Removing application made pending resources negative",
+            zap.Error(err))
+    }
+    delete(sq.applications, app.ApplicationInfo.ApplicationId)
 }
 
 // Get a copy of the child queues
@@ -195,18 +209,15 @@ func (sq *SchedulingQueue) removeChildQueue(name string) {
 // The real removal is removing the queue from the parent's child list, use read lock on the queue
 func (sq *SchedulingQueue) RemoveQueue() bool {
     sq.lock.RLock()
+    defer sq.lock.RUnlock()
     // cannot remove a managed queue that is running
     if sq.isManaged() && sq.isRunning() {
-        sq.lock.RUnlock()
         return false
     }
     // cannot remove a queue that has children or applications assigned
     if len(sq.childrenQueues) > 0 || len(sq.applications) > 0 {
-        sq.lock.RUnlock()
         return false
     }
-    sq.lock.RUnlock()
-
     // root is always managed and is the only queue with a nil parent: no need to guard
     sq.parent.removeChildQueue(sq.Name)
     return true

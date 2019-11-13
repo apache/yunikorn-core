@@ -179,7 +179,6 @@ func TestUnManagedSubQueues(t *testing.T) {
     }
 }
 
-
 func TestPendingCalc(t *testing.T) {
     // create the root
     root, err := createRootQueue()
@@ -201,18 +200,14 @@ func TestPendingCalc(t *testing.T) {
     if !resources.IsZero(root.pendingResource) {
         t.Errorf("root queue pending allocation failed to decrement expected 0, got %v", root.pendingResource)
     }
-    root.DecPendingResource(allocation)
-    // Currently we allow negative
-    if !resources.Equals(root.pendingResource, resources.MultiplyBy(allocation, -1)) {
-        t.Errorf("root queue pending allocation failed to decrement expected negative, got %v", root.pendingResource)
-    }
-
-    // decrement parent root should go 2 * allocation negative
+    // Not allowed to go negative: both will be zero after this
+    root.IncPendingResource(allocation)
     parent.DecPendingResource(allocation)
-    if !resources.Equals(parent.pendingResource, resources.MultiplyBy(allocation, -1)) &&
-        !resources.Equals(root.pendingResource, resources.MultiplyBy(allocation, -2)) {
-        t.Errorf("pending allocation failed to decrement expected negative for parent and root, got parent %v, got root %v",
-            parent.pendingResource, root.pendingResource)
+    if !resources.IsZero(root.pendingResource) {
+        t.Errorf("root queue pending allocation failed to decrement expected zero, got %v", root.pendingResource)
+    }
+    if !resources.IsZero(parent.pendingResource) {
+        t.Errorf("parent queue pending allocation should have failed to decrement expected zero, got %v", parent.pendingResource)
     }
 }
 

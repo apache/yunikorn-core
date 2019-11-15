@@ -65,14 +65,14 @@ func NewDefaultNodeIterator(schedulerNodes []*SchedulingNode) *DefaultNodeIterat
 // Random iterator, wraps the base iterator
 // Iterates over the list from a random starting position in the list.
 // The iterator automatically wraps at the end of the list.
-type RandomNodeIterator struct {
+type RoundRobinNodeIterator struct {
 	baseIterator
 	startIdx int
 }
 
 // The starting point is randomised in the slice.
-func NewRandomNodeIterator(schedulerNodes []*SchedulingNode) *RandomNodeIterator {
-	it := &RandomNodeIterator{}
+func NewRoundRobinNodeIterator(schedulerNodes []*SchedulingNode) *RoundRobinNodeIterator {
+	it := &RoundRobinNodeIterator{}
 	it.nodes = schedulerNodes
 	it.size = len(schedulerNodes)
 	if it.size > 0 {
@@ -83,7 +83,7 @@ func NewRandomNodeIterator(schedulerNodes []*SchedulingNode) *RandomNodeIterator
 
 // Next returns the next element and advances to next element in array.
 // Returns nil at the end of iteration.
-func (ri *RandomNodeIterator) Next() *SchedulingNode {
+func (ri *RoundRobinNodeIterator) Next() *SchedulingNode {
 	// prevent panic on Next when slice is empty
 	if (ri.countIdx + 1) > ri.size {
 		return nil
@@ -100,7 +100,7 @@ func (ri *RandomNodeIterator) Next() *SchedulingNode {
 	return value
 }
 
-func (ri *RandomNodeIterator) Reset() {
+func (ri *RoundRobinNodeIterator) Reset() {
 	ri.countIdx = 0
 	ri.startIdx = -1
 }

@@ -1,3 +1,19 @@
+/*
+Copyright 2019 Cloudera, Inc.  All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package scheduler
 
 import (
@@ -7,9 +23,9 @@ import (
 )
 
 // empty test for random iterator
-func TestRandomIteratorEmpty(t *testing.T) {
+func TestRoundRobinIteratorEmpty(t *testing.T) {
     // nil list
-    rni := NewRandomNodeIterator(nil)
+    rni := NewRoundRobinNodeIterator(nil)
     if rni == nil {
         t.Fatal("failed to create basic iterator")
     }
@@ -21,7 +37,7 @@ func TestRandomIteratorEmpty(t *testing.T) {
     }
 
     // slice with a length of 0: first HasNext call
-    rni = NewRandomNodeIterator(make([]*SchedulingNode, 0))
+    rni = NewRoundRobinNodeIterator(make([]*SchedulingNode, 0))
     if rni == nil {
         t.Fatal("failed to create iterator with empty slice")
     }
@@ -32,7 +48,7 @@ func TestRandomIteratorEmpty(t *testing.T) {
         t.Errorf("empty node list does not have Next: %v", node)
     }
     // slice with a length of 0: direct Next call
-    rni = NewRandomNodeIterator(make([]*SchedulingNode, 0))
+    rni = NewRoundRobinNodeIterator(make([]*SchedulingNode, 0))
     if rni == nil {
         t.Fatal("failed to create iterator with empty slice")
     }
@@ -47,10 +63,10 @@ func TestRandomIteratorEmpty(t *testing.T) {
 }
 
 // test iterating over the slice: random start
-func TestRandomNodeIterating(t *testing.T) {
+func TestRoundRobinNodeIterating(t *testing.T) {
     // slice with a length of 5
     length := 5
-    rni := NewRandomNodeIterator(newSchedNodeList(length))
+    rni := NewRoundRobinNodeIterator(newSchedNodeList(length))
     if rni == nil {
         t.Fatal("failed to create iterator with set slice")
     }

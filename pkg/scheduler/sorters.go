@@ -23,22 +23,23 @@ import (
     "time"
 )
 
-// Sort queues, apps, etc.
-
+// Sort type for queues, apps, nodes etc.
 type SortType int32
 
 const (
     FairSortPolicy        = 0
     FifoSortPolicy        = 1
-    MaxAvailableResources = 2
+    MaxAvailableResources = 2 // node sorting, descending on available resources
+    MinAvailableResources = 3 // node sorting, ascending on available resources
 )
 
 func SortQueue(queues []*SchedulingQueue, sortType SortType) {
-    if sortType == FairSortPolicy {
+    // TODO add latency metric
+    switch sortType {
+    case FairSortPolicy:
         sort.SliceStable(queues, func(i, j int) bool {
             l := queues[i]
             r := queues[j]
-
             comp := resources.CompUsageRatioSeparately(l.ProposingResource, l.CachedQueueInfo.GuaranteedResource,
                 r.ProposingResource, r.CachedQueueInfo.GuaranteedResource)
             return comp < 0
@@ -46,51 +47,43 @@ func SortQueue(queues []*SchedulingQueue, sortType SortType) {
     }
 }
 
-func SortApplications(queues []*SchedulingApplication, sortType SortType, globalResource *resources.Resource) {
-    if sortType == FairSortPolicy {
-        sort.SliceStable(queues, func(i, j int) bool {
-            l := queues[i]
-            r := queues[j]
-
-            comp := resources.CompUsageRatio(l.MayAllocatedResource, r.MayAllocatedResource, globalResource)
-            return comp < 0
+func SortApplications(apps []*SchedulingApplication, sortType SortType, globalResource *resources.Resource) {
+    // TODO add latency metric
+    switch sortType {
+    case FairSortPolicy:
+        // Sort by usage
+        sort.SliceStable(apps, func(i, j int) bool {
+            l := apps[i]
+            r := apps[j]
+            return resources.CompUsageRatio(l.MayAllocatedResource, r.MayAllocatedResource, globalResource) < 0
         })
-    } else if sortType == FifoSortPolicy {
-        sort.SliceStable(queues, func(i, j int) bool {
-            l := queues[i]
-            r := queues[j]
+    case FifoSortPolicy:
+        // Sort by submission time oldest first
+        sort.SliceStable(apps, func(i, j int) bool {
+            l := apps[i]
+            r := apps[j]
             return l.ApplicationInfo.SubmissionTime < r.ApplicationInfo.SubmissionTime
         })
     }
 }
 
 func SortNodes(nodes []*SchedulingNode, sortType SortType) {
-    if sortType == MaxAvailableResources {
-        sortingStart := time.Now()
+    sortingStart := time.Now()
+    switch sortType {
+    case MaxAvailableResources:
+        // Sort by available resource, descending order
         sort.SliceStable(nodes, func(i, j int) bool {
             l := nodes[i]
             r := nodes[j]
-
-            // Sort by available resource, descending order
             return resources.CompUsageShares(l.CachedAvailableResource, r.CachedAvailableResource) > 0
         })
-        metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
-    }
-}
-
-// Sort nodes here.
-func SortAllNodesWithAscendingResource(schedulingNodeList []*SchedulingNode) []*SchedulingNode {
-
-    sortingStart := time.Now()
-    sort.SliceStable(schedulingNodeList, func(i, j int) bool {
-        l := schedulingNodeList[i]
-        r := schedulingNodeList[j]
-
+    case MinAvailableResources:
         // Sort by available resource, ascending order
-        return resources.CompUsageShares(r.CachedAvailableResource, l.CachedAvailableResource) > 0
-    })
-
+        sort.SliceStable(nodes, func(i, j int) bool {
+            l := nodes[i]
+            r := nodes[j]
+            return resources.CompUsageShares(r.CachedAvailableResource, l.CachedAvailableResource) > 0
+        })
+    }
     metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
-
-    return schedulingNodeList
 }

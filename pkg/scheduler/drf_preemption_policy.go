@@ -177,7 +177,7 @@ func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionCont
     return nil
 }
 
-func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitionContext, nodes SortingIterator, candidate *SchedulingAllocationAsk,
+func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitionContext, nodeIterator NodeIterator, candidate *SchedulingAllocationAsk,
     preemptionParam *preemptionParameters) *SchedulingAllocation {
     if preemptionPartitionContext == nil {
         return nil
@@ -194,12 +194,8 @@ func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitio
     // First let's sort nodes by available resource
     var preemptResult *singleNodePreemptResult = nil
 
-    for {
-        if !nodes.HasNext() {
-            break;
-        }
-
-        node := nodes.Next()
+    for nodeIterator.HasNext() {
+        node := nodeIterator.Next()
         if preemptResult = trySurgicalPreemptionOnNode(preemptionPartitionContext, preemptorQueue, node, candidate, headroomShortages); preemptResult != nil {
             break
         }

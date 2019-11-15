@@ -88,13 +88,9 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
     }
 }
 
-func (m *Scheduler) regularAllocate(nodes SortingIterator, candidate *SchedulingAllocationAsk) *SchedulingAllocation {
-    for {
-        if !nodes.HasNext() {
-            break;
-        }
-
-        node := nodes.Next()
+func (m *Scheduler) regularAllocate(nodeIterator NodeIterator, candidate *SchedulingAllocationAsk) *SchedulingAllocation {
+    for nodeIterator.HasNext() {
+        node := nodeIterator.Next()
         if !node.CheckAllocateConditions(candidate.AskProto.AllocationKey) {
             // skip the node if conditions can not be satisfied
             continue
@@ -124,7 +120,7 @@ func (m *Scheduler) regularAllocate(nodes SortingIterator, candidate *Scheduling
     return nil
 }
 
-func (m *Scheduler) allocate(nodes SortingIterator, candidate *SchedulingAllocationAsk, preemptionParam *preemptionParameters) *SchedulingAllocation {
+func (m *Scheduler) allocate(nodes NodeIterator, candidate *SchedulingAllocationAsk, preemptionParam *preemptionParameters) *SchedulingAllocation {
     if preemptionParam.crossQueuePreemption {
         return crossQueuePreemptionAllocate(m.preemptionContext.partitions[candidate.PartitionName], nodes, candidate, preemptionParam)
     } else {
@@ -137,7 +133,7 @@ func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *Parti
     candidates []*SchedulingAllocationAsk,
     preemptionParam *preemptionParameters) ([]*SchedulingAllocation, []*SchedulingAllocationAsk) {
     // copy list of node since we going to go through node list a couple of times
-    nodeList := getNodeList(m, partition)
+    nodeList := m.getNodeList(partition)
     if nodeList == nil {
         return make([]*SchedulingAllocation, 0), candidates
     }
@@ -159,9 +155,9 @@ func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *Parti
             return
         }
 
-        schedulingNodeList := evaluateForSchedulingPolicy(m, nodeList, partition, candidate, partitionContext)
+        nodeIterator := m.evaluateForSchedulingPolicy(nodeList, partitionContext)
 
-        if allocation := m.allocate(schedulingNodeList, candidate, preemptionParam); allocation != nil {
+        if allocation := m.allocate(nodeIterator, candidate, preemptionParam); allocation != nil {
             length := atomic.AddInt32(&allocatedLength, 1)
             allocations[length-1] = allocation
         } else {
@@ -209,23 +205,22 @@ func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *Parti
 }
 
 // TODO: convert this as an interface.
-func evaluateForSchedulingPolicy(m *Scheduler, nodes []*SchedulingNode, partition string,
-    candidate *SchedulingAllocationAsk, partitionContext *PartitionSchedulingContext) SortingIterator {
+func (m *Scheduler) evaluateForSchedulingPolicy(nodes []*SchedulingNode, partitionContext *PartitionSchedulingContext) NodeIterator {
     // Sort Nodes based on the policy configured.
     configuredPolicy:= partitionContext.partition.GetNodeSortingPolicy()
     switch configuredPolicy {
     case common.BinPackingPolicy:
-        nodes = SortAllNodesWithAscendingResource(nodes)
-        return NewBinPackingSortingIterator(nodes)
+        SortNodes(nodes, MinAvailableResources)
+        return NewDefaultNodeIterator(nodes)
     case common.FairnessPolicy:
         SortNodes(nodes, MaxAvailableResources)
-        return NewFairSortingIterator(nodes)
+        return NewDefaultNodeIterator(nodes)
     }
 
     return nil
 }
 
-func getNodeList(m *Scheduler, partition string) []*SchedulingNode {
+func (m *Scheduler) getNodeList(partition string) []*SchedulingNode {
     nodeList := m.clusterInfo.GetPartition(partition).CopyNodeInfos()
     if len(nodeList) <= 0 {
         // When we don't have node, do nothing

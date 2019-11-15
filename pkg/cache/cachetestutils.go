@@ -42,3 +42,14 @@ func CreatePartitionInfo(data []byte) (*PartitionInfo, error) {
     }
     return pi, nil
 }
+
+// Node to test with sorters
+func NewNodeForTest(nodeId string, availableResource *resources.Resource) *NodeInfo {
+    info := &NodeInfo{}
+
+    info.NodeId = nodeId
+    info.availableResource = availableResource
+    info.allocations = make(map[string]*AllocationInfo)
+
+    return info
+}

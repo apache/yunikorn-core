@@ -5,9 +5,8 @@
 **yunikorn-core**
 
 * Gang Scheduling.
-* Bin-packing.
-* Preemption based on fairness at the user/app level.
-* Application priority.
+* Priority based preemption.
+* Support application priority.
 * Rich scheduler metrics.
 * Workload simulator.
 * Prometheus integration (phase 2).
@@ -15,9 +14,9 @@
 
 **yunikorn-k8shim**
 
-* Placement rules.
 * Security support.
-* Helm chart support.
+* Performance improvement: merging, packing requests.
+* 3rd Operator/controller integration, pluggable app discovery.
 
 **yunikorn-web**
 
@@ -36,6 +35,8 @@
 * Hierarchy queues with min/max resource quotas.
 * Resource fairness between queues, users and apps.
 * Cross-queue preemption based on fairness.
+* Fair/Bin-packing scheduling policies.
+* Placement rules (auto queue creation/mapping).
 * Customized resource types (like GPU) scheduling support.
 * Rich placement constraints support.
 * Automatically map incoming container requests to queues by policies. 
@@ -49,6 +50,7 @@
 * Support K8s predicates. Such as pod affinity/anti-affinity, node selectors.
 * Support Persistent Volumes, Persistent Volume Claims, etc.
 * Load scheduler configuration from configmap dynamically (hot-refresh).
+* Helm chart support.
 
 **yunikorn-web**
 

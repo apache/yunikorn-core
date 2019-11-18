@@ -22,7 +22,7 @@
 
 * Implement cluster overview page, display overall info about cluster and applications
 
-## v0.0.1 (Done)
+## v0.1.0 (Done)
 
 **yunikorn-scheduler-interface**
 

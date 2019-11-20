@@ -23,7 +23,6 @@ import (
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 	"net/http"
-	_ "net/http/pprof"
 	"sync"
 	"time"
 )

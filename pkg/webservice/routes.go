@@ -18,6 +18,7 @@ package webservice
 import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"net/http"
+	"net/http/pprof"
 )
 
 type Route struct {
@@ -30,6 +31,7 @@ type Route struct {
 type Routes []Route
 
 var routes = Routes{
+	// endpoints to retrieve general scheduler info
 	Route{
 		"Scheduler",
 		"GET",
@@ -48,16 +50,53 @@ var routes = Routes{
 		"/ws/v1/apps",
 		GetApplicationsInfo,
 	},
+
+	// endpoint to retrieve goroutines info
 	Route{
 		"Scheduler",
 		"GET",
 		"/ws/v1/stack",
 		GetStackInfo,
 	},
+
+	// endpoint to retrieve server metrics
 	Route {
 		"Scheduler",
 		"GET",
 		"/ws/v1/metrics",
 		promhttp.Handler().ServeHTTP,
+	},
+
+	// endpoint to retrieve CPU, Memory profiling data,
+	// this works with pprof tool
+	Route{
+		Name:        "System",
+		Method:      "GET",
+		Pattern:     "/debug/pprof/",
+		HandlerFunc: pprof.Index,
+	},
+	Route{
+		Name:        "System",
+		Method:      "GET",
+		Pattern:     "/debug/pprof/cli",
+		HandlerFunc: pprof.Cmdline,
+	},
+	Route{
+		Name:        "System",
+		Method:      "GET",
+		Pattern:     "/debug/pprof/profile",
+		HandlerFunc: pprof.Profile,
+	},
+	Route{
+		Name:        "System",
+		Method:      "GET",
+		Pattern:     "/debug/pprof/symbol",
+		HandlerFunc: pprof.Symbol,
+	},
+	Route{
+		Name:        "System",
+		Method:      "GET",
+		Pattern:     "/debug/pprof/trace",
+		HandlerFunc: pprof.Trace,
 	},
 }

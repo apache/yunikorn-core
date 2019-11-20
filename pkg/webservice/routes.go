@@ -68,7 +68,9 @@ var routes = Routes{
 	},
 
 	// endpoint to retrieve CPU, Memory profiling data,
-	// this works with pprof tool
+	// this works with pprof tool. By default, pprof endpoints
+	// are only registered to http.DefaultServeMux. Here, we
+	// need to explicitly register all handlers.
 	Route{
 		Name:        "System",
 		Method:      "GET",
@@ -84,7 +86,37 @@ var routes = Routes{
 	Route{
 		Name:        "System",
 		Method:      "GET",
-		Pattern:     "/debug/pprof/cli",
+		Pattern:     "/debug/pprof/threadcreate",
+		HandlerFunc: pprof.Index,
+	},
+	Route{
+		Name:        "System",
+		Method:      "GET",
+		Pattern:     "/debug/pprof/goroutine",
+		HandlerFunc: pprof.Index,
+	},
+	Route{
+		Name:        "System",
+		Method:      "GET",
+		Pattern:     "/debug/pprof/allocs",
+		HandlerFunc: pprof.Index,
+	},
+	Route{
+		Name:        "System",
+		Method:      "GET",
+		Pattern:     "/debug/pprof/block",
+		HandlerFunc: pprof.Index,
+	},
+	Route{
+		Name:        "System",
+		Method:      "GET",
+		Pattern:     "/debug/pprof/mutex",
+		HandlerFunc: pprof.Index,
+	},
+	Route{
+		Name:        "System",
+		Method:      "GET",
+		Pattern:     "/debug/pprof/cmdline",
 		HandlerFunc: pprof.Cmdline,
 	},
 	Route{

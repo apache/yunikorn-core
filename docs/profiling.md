@@ -4,7 +4,7 @@ Use [pprof](https://github.com/google/pprof) to do CPU, Memory profiling can hel
 added to yunikorn rest service, we can easily retrieve and analyze them from HTTP
 endpoints.
 
-## Retrieve CPU (pprof) top
+## CPU profiling
 
 At this step, ensure you already have yunikorn running, it can be either running from
 local via a `make run` command, or deployed as a pod running inside of K8s. Then run
@@ -50,3 +50,29 @@ Similarly you can run
 ```
 go tool pprof http://localhost:9080/debug/pprof/profile/heap
 ```
+
+this will return a snapshot of current heap which allows us to check memory usage.
+Once it enters the interactive mode, you can run some useful commands. Such as
+top can list top memory consumption objects.
+```
+(pprof) top
+Showing nodes accounting for 83.58MB, 98.82% of 84.58MB total
+Showing top 10 nodes out of 86
+      flat  flat%   sum%        cum   cum%
+      32MB 37.84% 37.84%       32MB 37.84%  github.com/cloudera/yunikorn-core/pkg/cache.NewClusterInfo
+      16MB 18.92% 56.75%       16MB 18.92%  github.com/cloudera/yunikorn-core/pkg/rmproxy.NewRMProxy
+      16MB 18.92% 75.67%       16MB 18.92%  github.com/cloudera/yunikorn-core/pkg/scheduler.NewScheduler
+      16MB 18.92% 94.59%       16MB 18.92%  github.com/cloudera/yunikorn-k8shim/pkg/dispatcher.init.0.func1
+    1.04MB  1.23% 95.81%     1.04MB  1.23%  k8s.io/apimachinery/pkg/runtime.(*Scheme).AddKnownTypeWithName
+    0.52MB  0.61% 96.43%     0.52MB  0.61%  github.com/gogo/protobuf/proto.RegisterType
+    0.51MB  0.61% 97.04%     0.51MB  0.61%  sync.(*Map).Store
+    0.50MB   0.6% 97.63%     0.50MB   0.6%  regexp.onePassCopy
+    0.50MB  0.59% 98.23%     0.50MB  0.59%  github.com/json-iterator/go.(*Iterator).ReadString
+    0.50MB  0.59% 98.82%     0.50MB  0.59%  text/template/parse.(*Tree).newText
+```
+
+you can also run `web`, `pdf` or `gif` command to get the graph for heap.
+
+## Resources
+
+* pprof Document https://github.com/google/pprof/tree/master/doc.

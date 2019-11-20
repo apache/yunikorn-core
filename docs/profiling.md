@@ -73,6 +73,28 @@ Showing top 10 nodes out of 86
 
 you can also run `web`, `pdf` or `gif` command to get the graph for heap.
 
+## Download profiling file and analyze locally
+
+We have included essential go/go-tool binaries in scheduler docker image, you should be able to do some basic profiling
+analysis inside of the docker container. However, if you want to dig into some issues, it might be better to do the analysis
+locally. Then you need to copy the samples file to local environment first. The command to copy files is like following:
+
+```
+kubectl cp ${SCHEDULER_POD_NAME}:${SAMPLE_PATH_IN_DOCKER_CONTAINER} ${LOCAL_COPY_PATH}
+```
+
+for example
+
+```
+kubectl cp yunikorn-scheduler-cf8f8dd8-6szh5:/root/pprof/pprof.k8s_yunikorn_scheduler.samples.cpu.001.pb.gz /Users/wyang/Downloads/pprof.k8s_yunikorn_scheduler.samples.cpu.001.pb.gz
+```
+
+once you get the file in your local environment, then you can run the `pprof` command for analysis.
+
+```
+go tool pprof /Users/wyang/Downloads/pprof.k8s_yunikorn_scheduler.samples.cpu.001.pb.gz
+```
+
 ## Resources
 
 * pprof Document https://github.com/google/pprof/tree/master/doc.

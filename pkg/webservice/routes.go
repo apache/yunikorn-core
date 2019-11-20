@@ -69,34 +69,34 @@ var routes = Routes{
 
 	// endpoint to retrieve CPU, Memory profiling data,
 	// this works with pprof tool
-	Route{
-		Name:        "System",
-		Method:      "GET",
-		Pattern:     "/debug/pprof/",
-		HandlerFunc: pprof.Index,
-	},
-	Route{
-		Name:        "System",
-		Method:      "GET",
-		Pattern:     "/debug/pprof/cli",
-		HandlerFunc: pprof.Cmdline,
-	},
-	Route{
-		Name:        "System",
-		Method:      "GET",
-		Pattern:     "/debug/pprof/profile",
-		HandlerFunc: pprof.Profile,
-	},
-	Route{
-		Name:        "System",
-		Method:      "GET",
-		Pattern:     "/debug/pprof/symbol",
-		HandlerFunc: pprof.Symbol,
-	},
-	Route{
-		Name:        "System",
-		Method:      "GET",
-		Pattern:     "/debug/pprof/trace",
-		HandlerFunc: pprof.Trace,
-	},
+	//Route{
+	//	Name:        "System",
+	//	Method:      "GET",
+	//	Pattern:     "/debug/pprof/",
+	//	HandlerFunc: pprof.Index,
+	//},
+	//Route{
+	//	Name:        "System",
+	//	Method:      "GET",
+	//	Pattern:     "/debug/pprof/cli",
+	//	HandlerFunc: pprof.Cmdline,
+	//},
+	//Route{
+	//	Name:        "System",
+	//	Method:      "GET",
+	//	Pattern:     "/debug/pprof/profile",
+	//	HandlerFunc: pprof.Profile,
+	//},
+	//Route{
+	//	Name:        "System",
+	//	Method:      "GET",
+	//	Pattern:     "/debug/pprof/symbol",
+	//	HandlerFunc: pprof.Symbol,
+	//},
+	//Route{
+	//	Name:        "System",
+	//	Method:      "GET",
+	//	Pattern:     "/debug/pprof/trace",
+	//	HandlerFunc: pprof.Trace,
+	//},
 }

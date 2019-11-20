@@ -24,6 +24,7 @@ import (
 	"go.uber.org/zap"
 	"net/http"
 	_ "net/http/pprof"
+	"runtime/pprof"
 	"sync"
 	"time"
 )
@@ -70,6 +71,7 @@ func (m *WebService) StartWebApp() {
 	router := NewRouter()
 	m.httpServer = &http.Server{Addr: ":9080", Handler: router}
 
+	_ := pprof.Profiles()
 	log.Logger().Info("web-app started", zap.Int("port", 9080))
 	go func() {
 		httpError := m.httpServer.ListenAndServe()

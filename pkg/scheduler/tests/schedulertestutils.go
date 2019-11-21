@@ -275,7 +275,7 @@ func waitForMinAllocations(m *MockRMCallbackHandler, nAlloc int, timeoutMs int) 
         m.lock.RUnlock()
 
 
-        if allocLen != nAlloc {
+        if allocLen < nAlloc {
             time.Sleep(time.Millisecond)
         } else {
             return

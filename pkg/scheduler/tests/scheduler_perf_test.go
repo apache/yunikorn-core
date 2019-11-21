@@ -19,12 +19,19 @@ package tests
 import (
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/entrypoint"
+    "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+    "go.uber.org/zap"
+    "strconv"
     "testing"
     "time"
 )
 
 func TestSchedulerThroughput5KNodes(t *testing.T) {
+    if testing.Short() {
+        t.Skip("skipping performance testing in short mode")
+    }
+    log.InitAndSetLevel(zap.WarnLevel)
     // Start all tests
     serviceContext := entrypoint.StartAllServices()
     defer serviceContext.StopAll()
@@ -89,7 +96,7 @@ partitions:
     // register 5000 nodes
     totalNode := 5000
     for i:=0; i < totalNode; i++ {
-        nodeName := "node-" + string(i)
+        nodeName := "node-" + strconv.Itoa(i)
         node := &si.NewNodeInfo{
             NodeId:
             nodeName + ":1234",
@@ -156,13 +163,13 @@ partitions:
         RmId: "rm:123",
     })
 
-    // It is 200 * 5000 / 10
-    totalAllocation := 10000
+    // test number of allocations, should be less than or equal to 100000 (200 * 5000 / 10)
+    testNumAllocations := 10000
 
     // Wait for maximum 2 mins
     startTime = time.Now()
-    waitForMinAllocations(mockRM, totalAllocation, 120000)
+    waitForMinAllocations(mockRM, testNumAllocations, 120000)
     duration = time.Now().Sub(startTime)
 
-    t.Logf("Total time to allocate %d containers in %s, %f per second", totalAllocation, duration, float64(totalAllocation) / duration.Seconds())
+    t.Logf("Total time to allocate %d containers in %s, %f per second", testNumAllocations, duration, float64(testNumAllocations) / duration.Seconds())
 }

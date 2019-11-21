@@ -160,12 +160,33 @@ func waitForAcceptedNodes(m *MockRMCallbackHandler, nodeId string, timeoutMs int
         m.lock.RUnlock()
 
         if !accepted {
-            time.Sleep(time.Duration(100 * time.Millisecond))
+            time.Sleep(time.Duration(1 * time.Millisecond))
         } else {
             return
         }
-        if i*100 >= timeoutMs {
+        if i >= timeoutMs {
             m.t.Fatalf("Failed to wait AcceptedNode: %s", nodeId)
+            return
+        }
+    }
+}
+
+func waitForMinNumberOfAcceptedNodes(m *MockRMCallbackHandler, minNumNode int, timeoutMs int) {
+    var i = 0
+    for {
+        i++
+
+        m.lock.RLock()
+        accepted := len(m.acceptedNodes)
+        m.lock.RUnlock()
+
+        if accepted < minNumNode {
+            time.Sleep(time.Duration(1 * time.Millisecond))
+        } else {
+            return
+        }
+        if i >= timeoutMs {
+            m.t.Fatalf("Failed to wait #AcceptedNode=%d", minNumNode)
             return
         }
     }
@@ -239,6 +260,27 @@ func waitForAllocations(m *MockRMCallbackHandler, nAlloc int, timeoutMs int) {
             return
         }
         if i*100 >= timeoutMs {
+            m.t.Fatalf("Failed to wait Allocations expected %d, got %d", nAlloc, allocLen)
+            return
+        }
+    }
+}
+
+func waitForMinAllocations(m *MockRMCallbackHandler, nAlloc int, timeoutMs int) {
+    var i = 0
+    for {
+        i++
+        m.lock.RLock()
+        allocLen := len(m.Allocations)
+        m.lock.RUnlock()
+
+
+        if allocLen != nAlloc {
+            time.Sleep(time.Millisecond)
+        } else {
+            return
+        }
+        if i >= timeoutMs {
             m.t.Fatalf("Failed to wait Allocations expected %d, got %d", nAlloc, allocLen)
             return
         }

@@ -48,7 +48,7 @@ options, you need to install the virtualization tool `graphviz` first, if you ar
 Similarly you can run
 
 ```
-go tool pprof http://localhost:9080/debug/pprof/profile/heap
+go tool pprof http://localhost:9080/debug/pprof/heap
 ```
 
 this will return a snapshot of current heap which allows us to check memory usage.
@@ -73,7 +73,7 @@ Showing top 10 nodes out of 86
 
 you can also run `web`, `pdf` or `gif` command to get the graph for heap.
 
-## Download profiling file and analyze locally
+## Download profiling samples and analyze it locally
 
 We have included essential go/go-tool binaries in scheduler docker image, you should be able to do some basic profiling
 analysis inside of the docker container. However, if you want to dig into some issues, it might be better to do the analysis

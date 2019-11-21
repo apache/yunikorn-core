@@ -21,6 +21,7 @@ import (
     "github.com/cloudera/yunikorn-core/pkg/entrypoint"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "testing"
+    "time"
 )
 
 func TestSchedulerThroughput5KNodes(t *testing.T) {
@@ -112,7 +113,9 @@ partitions:
         NewSchedulableNodes: newNodes,
     })
 
-    duration := timeTillMinNumberOfAcceptedNodes(mockRM, totalNode)
+    startTime := time.Now()
+    waitForMinNumberOfAcceptedNodes(mockRM, totalNode, 5000)
+    duration := time.Now().Sub(startTime)
 
     t.Logf("Total time to add %d node %s, %f per second", totalNode, duration, float64(totalNode) / duration.Seconds())
 
@@ -155,7 +158,11 @@ partitions:
 
     // It is 200 * 5000 / 10
     totalAllocation := 10000
-    duration = timeTillMinAllocations(mockRM, totalAllocation)
+
+    // Wait for maximum 2 mins
+    startTime = time.Now()
+    waitForMinAllocations(mockRM, totalAllocation, 120000)
+    duration = time.Now().Sub(startTime)
 
     t.Logf("Total time to allocate %d containers in %s, %f per second", totalAllocation, duration, float64(totalAllocation) / duration.Seconds())
 }

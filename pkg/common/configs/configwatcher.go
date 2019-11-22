@@ -112,6 +112,14 @@ func (cw *ConfigWatcher) Run() {
 		go func() {
 			for {
 				select {
+				case <-quit:
+					<-cw.soloChan
+					ticker.Stop()
+					return
+				default:
+					break
+				}
+				select {
 				case <-ticker.C:
 					if !cw.runOnce() {
 						<-cw.soloChan

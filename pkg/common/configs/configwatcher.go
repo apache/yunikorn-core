@@ -117,6 +117,7 @@ func (cw *ConfigWatcher) Run() {
 					ticker.Stop()
 					return
 				default:
+					break
 				}
 				select {
 				case <-ticker.C:
@@ -124,6 +125,10 @@ func (cw *ConfigWatcher) Run() {
 						<-cw.soloChan
 						return
 					}
+				case <-quit:
+					<-cw.soloChan
+					ticker.Stop()
+					return
 				}
 			}
 		}()

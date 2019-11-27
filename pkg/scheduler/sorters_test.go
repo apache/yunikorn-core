@@ -184,7 +184,7 @@ func TestSortNodesMin(t *testing.T) {
 	SortNodes(nil, MinAvailableResources)
 	list := make([]*SchedulingNode, 0)
 	SortNodes(list, MinAvailableResources)
-	list = append(list, NewSchedulingNode(cache.NewNodeForTest("node-nil", nil)))
+	list = append(list, NewSchedulingNode(cache.NewNodeForSort("node-nil", nil)))
 	SortNodes(list, MinAvailableResources)
 
 	// stable sort is used so equal resources stay were they were
@@ -196,7 +196,7 @@ func TestSortNodesMin(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		num := strconv.Itoa(i)
 		node := NewSchedulingNode(
-			cache.NewNodeForTest("node-" + num, resources.Multiply(res, int64(3-i))),
+			cache.NewNodeForSort("node-" + num, resources.Multiply(res, int64(3-i))),
 			)
 		list[i] = node
 	}
@@ -206,7 +206,7 @@ func TestSortNodesMin(t *testing.T) {
 
 	// change node-1 on place 1 in the slice to have no res
 	list[1] = NewSchedulingNode(
-		cache.NewNodeForTest("node-1", resources.Multiply(res, 0)),
+		cache.NewNodeForSort("node-1", resources.Multiply(res, 0)),
 	)
 	// nodes should come back in order 1 (0), 2 (100), 0 (300)
 	SortNodes(list, MinAvailableResources)
@@ -214,7 +214,7 @@ func TestSortNodesMin(t *testing.T) {
 
 	// change node-1 on place 0 in the slice to have 300 res
 	list[0] = NewSchedulingNode(
-		cache.NewNodeForTest("node-1", resources.Multiply(res, 3)),
+		cache.NewNodeForSort("node-1", resources.Multiply(res, 3)),
 	)
 	// nodes should come back in order 2 (100), 1 (300), 0 (300)
 	SortNodes(list, MinAvailableResources)
@@ -222,7 +222,7 @@ func TestSortNodesMin(t *testing.T) {
 
 	// change node-0 on place 2 in the slice to have -300 res
 	list[2] = NewSchedulingNode(
-		cache.NewNodeForTest("node-0", resources.Multiply(res, -3)),
+		cache.NewNodeForSort("node-0", resources.Multiply(res, -3)),
 	)
 	// nodes should come back in order 0 (-300), 2 (100), 1 (300)
 	SortNodes(list, MinAvailableResources)
@@ -234,7 +234,7 @@ func TestSortNodesMax(t *testing.T) {
 	SortNodes(nil, MaxAvailableResources)
 	list := make([]*SchedulingNode, 0)
 	SortNodes(list, MaxAvailableResources)
-	list = append(list, NewSchedulingNode(cache.NewNodeForTest("node-nil", nil)))
+	list = append(list, NewSchedulingNode(cache.NewNodeForSort("node-nil", nil)))
 	SortNodes(list, MaxAvailableResources)
 
 	// stable sort is used so equal resources stay were they were
@@ -245,7 +245,7 @@ func TestSortNodesMax(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		num := strconv.Itoa(i)
 		node := NewSchedulingNode(
-			cache.NewNodeForTest("node-" + num, resources.Multiply(res, int64(1+i))),
+			cache.NewNodeForSort("node-" + num, resources.Multiply(res, int64(1+i))),
 		)
 		list[i] = node
 	}
@@ -255,7 +255,7 @@ func TestSortNodesMax(t *testing.T) {
 
 	// change node-1 on place 1 in the slice to have no res
 	list[1] = NewSchedulingNode(
-		cache.NewNodeForTest("node-1", resources.Multiply(res, 0)),
+		cache.NewNodeForSort("node-1", resources.Multiply(res, 0)),
 	)
 	// nodes should come back in order 2 (300), 0 (100), 1 (0)
 	SortNodes(list, MaxAvailableResources)
@@ -263,7 +263,7 @@ func TestSortNodesMax(t *testing.T) {
 
 	// change node-1 on place 2 in the slice to have 300 res
 	list[2] = NewSchedulingNode(
-		cache.NewNodeForTest("node-1", resources.Multiply(res, 3)),
+		cache.NewNodeForSort("node-1", resources.Multiply(res, 3)),
 	)
 	// nodes should come back in order 2 (300), 1 (300), 0 (100)
 	SortNodes(list, MaxAvailableResources)
@@ -271,7 +271,7 @@ func TestSortNodesMax(t *testing.T) {
 
 	// change node-2 on place 0 in the slice to have -300 res
 	list[0] = NewSchedulingNode(
-		cache.NewNodeForTest("node-2", resources.Multiply(res, -3)),
+		cache.NewNodeForSort("node-2", resources.Multiply(res, -3)),
 	)
 	// nodes should come back in order 1 (300), 0 (100), 2 (-300)
 	SortNodes(list, MaxAvailableResources)

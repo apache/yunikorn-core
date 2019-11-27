@@ -19,7 +19,9 @@ package scheduler
 import (
     "fmt"
     "github.com/cloudera/yunikorn-core/pkg/cache"
+    "github.com/cloudera/yunikorn-core/pkg/common/commonevents"
     "github.com/cloudera/yunikorn-core/pkg/log"
+    "github.com/cloudera/yunikorn-core/pkg/scheduler/schedulerevent"
     "go.uber.org/zap"
     "sync"
 )
@@ -200,4 +202,84 @@ func (csc *ClusterSchedulingContext) removeSchedulingPartition(partitionName str
     defer csc.lock.RUnlock()
 
     delete(csc.partitions, partitionName)
+}
+
+// Add a scheduling node based on the cache node that is already added.
+// This should not fail as the cache node exists and has been checked.
+func (csc *ClusterSchedulingContext) addSchedulingNode(info *cache.NodeInfo) {
+    csc.lock.Lock()
+    defer csc.lock.Unlock()
+
+    partition := csc.partitions[info.Partition]
+    if partition == nil {
+        log.Logger().Info("partition not found for new scheduling node",
+            zap.String("nodeId", info.NodeId),
+            zap.String("partitionName", info.Partition))
+        return
+    }
+    partition.addSchedulingNode(info)
+}
+
+// Add a scheduling node based on the cache node that is already added.
+// This should not fail as the cache node exists and has been checked.
+func (csc *ClusterSchedulingContext) removeSchedulingNode(info *cache.NodeInfo) {
+    csc.lock.Lock()
+    defer csc.lock.Unlock()
+
+    partition := csc.partitions[info.Partition]
+    if partition == nil {
+        log.Logger().Info("partition not found for removed scheduling node",
+            zap.String("nodeId", info.NodeId),
+            zap.String("partitionName", info.Partition))
+        return
+    }
+    partition.removeSchedulingNode(info.NodeId)
+}
+
+// Get a scheduling node based name and partition.
+// Returns nil if the partition or node cannot be found.
+func (csc *ClusterSchedulingContext) GetSchedulingNode(nodeId, partitionName string) *SchedulingNode {
+    csc.lock.Lock()
+    defer csc.lock.Unlock()
+
+    partition := csc.partitions[partitionName]
+    if partition == nil {
+        log.Logger().Info("partition not found for scheduling node",
+            zap.String("nodeId", nodeId),
+            zap.String("partitionName", partitionName))
+        return nil
+    }
+    return partition.getSchedulingNode(nodeId)
+}
+
+// Inform the scheduling node of the proposed allocation result.
+// This just reduces the allocating resource on the node.
+// This is a lock free call: locks are taken while retrieving the node and when updating the node
+func (csc *ClusterSchedulingContext) updateSchedulingNodeAlloc(alloc *commonevents.AllocationProposal) {
+    // get the partition and node (both have to exist to get here)
+    node := csc.GetSchedulingNode(alloc.NodeId, alloc.PartitionName)
+
+    node.handleAllocationUpdate(alloc.AllocatedResource)
+}
+
+
+// Release preempted resources after the cache has been updated.
+// This is a lock free call: locks are taken while retrieving the node and when updating the node
+func (csc *ClusterSchedulingContext) releasePreemptedResources(resources []schedulerevent.NodeResource) {
+    // no resources to release just return
+    if len(resources) == 0 {
+        return
+    }
+    // walk over the list of preempted resources
+    for _, nodeRes := range resources {
+        node := csc.GetSchedulingNode(nodeRes.NodeId, nodeRes.Partition)
+        if node == nil {
+            log.Logger().Info("scheduling node not found trying to release preempted resources",
+                zap.String("nodeId", nodeRes.NodeId),
+                zap.String("partitionName", nodeRes.Partition),
+                zap.Any("resource", nodeRes.PreemptedRes))
+            continue
+        }
+        node.handlePreemptionUpdate(nodeRes.PreemptedRes)
+    }
 }

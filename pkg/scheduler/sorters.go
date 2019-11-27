@@ -75,14 +75,14 @@ func SortNodes(nodes []*SchedulingNode, sortType SortType) {
         sort.SliceStable(nodes, func(i, j int) bool {
             l := nodes[i]
             r := nodes[j]
-            return resources.CompUsageShares(l.CachedAvailableResource, r.CachedAvailableResource) > 0
+            return resources.CompUsageShares(l.getAvailableResource(), r.getAvailableResource()) > 0
         })
     case MinAvailableResources:
         // Sort by available resource, ascending order
         sort.SliceStable(nodes, func(i, j int) bool {
             l := nodes[i]
             r := nodes[j]
-            return resources.CompUsageShares(r.CachedAvailableResource, l.CachedAvailableResource) > 0
+            return resources.CompUsageShares(r.getAvailableResource(), l.getAvailableResource()) > 0
         })
     }
     metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)

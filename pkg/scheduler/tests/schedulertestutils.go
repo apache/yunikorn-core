@@ -19,9 +19,12 @@ package tests
 import (
     "fmt"
     "github.com/cloudera/yunikorn-core/pkg/cache"
+    "github.com/cloudera/yunikorn-core/pkg/common"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/scheduler"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+    "go.uber.org/zap"
     "sync"
     "testing"
     "time"
@@ -223,6 +226,8 @@ func waitForPendingResource(t *testing.T, queue *scheduler.SchedulingQueue, memo
             return
         }
         if i*100 >= timeoutMs {
+            log.Logger().Info("queue detail",
+                zap.Any("queue", queue))
             t.Fatalf("Failed to wait pending resource on queue %s, actual = %v, expected = %v", queue.Name, queue.GetPendingResource().Resources[resources.MEMORY], memory)
             return
         }
@@ -255,7 +260,7 @@ func waitForAllocations(m *MockRMCallbackHandler, nAlloc int, timeoutMs int) {
 
 
         if allocLen != nAlloc {
-            time.Sleep(time.Duration(100 * time.Millisecond))
+            time.Sleep(100 * time.Millisecond)
         } else {
             return
         }
@@ -298,7 +303,7 @@ func waitForNodesAllocatedResource(t *testing.T, cache *cache.ClusterInfo, parti
         }
 
         if totalNodeResource != allocatdMemory {
-            time.Sleep(time.Duration(100 * time.Millisecond))
+            time.Sleep(100 * time.Millisecond)
         } else {
             return
         }
@@ -306,6 +311,27 @@ func waitForNodesAllocatedResource(t *testing.T, cache *cache.ClusterInfo, parti
             t.Fatalf("Failed to wait Allocations on partition %s and node %v", partitionName, nodeIds)
             return
         }
+    }
+}
+
+func waitForNewSchedulerNode(t *testing.T, context *scheduler.ClusterSchedulingContext, nodeId string, partitionName string, timeoutMs int) {
+    err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs) * time.Millisecond, func() bool {
+        node := context.GetSchedulingNode(nodeId, partitionName)
+        return node != nil
+
+    })
+    if err != nil {
+        t.Fatalf("Failed to wait for new scheduling node on partition %s, node %v", partitionName, nodeId)
+    }
+}
+
+func waitForRemovedSchedulerNode(t *testing.T, context *scheduler.ClusterSchedulingContext, nodeId string, partitionName string, timeoutMs int) {
+    err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs) * time.Millisecond, func() bool {
+        node := context.GetSchedulingNode(nodeId, partitionName)
+        return node == nil
+    })
+    if err != nil {
+        t.Fatalf("Failed to wait for removal of scheduling node on partition %s, node %v", partitionName, nodeId)
     }
 }
 

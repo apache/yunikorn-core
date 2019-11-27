@@ -316,19 +316,7 @@ func (m *ClusterInfo) processNewSchedulableNodes(request *si.UpdateRequest) {
     rejectedNodes := make([]*si.RejectedNode, 0)
     existingAllocations := make([]*si.Allocation, 0)
     for _, node := range request.NewSchedulableNodes {
-        nodeInfo, err := NewNodeInfo(node)
-        if err != nil {
-            msg := fmt.Sprintf("Failed to create node info from request, nodeId %s, error %s", node.NodeId, err.Error())
-            log.Logger().Info(msg)
-            // TODO assess impact of partition metrics (this never hit the partition)
-            metrics.GetSchedulerMetrics().IncFailedNodes()
-            rejectedNodes = append(rejectedNodes,
-                &si.RejectedNode{
-                    NodeId: node.NodeId,
-                    Reason: msg,
-                })
-            continue
-        }
+        nodeInfo := NewNodeInfo(node)
         partition := m.GetPartition(nodeInfo.Partition)
         if partition == nil {
             msg := fmt.Sprintf("Failed to find partition %s for new node %s", nodeInfo.Partition, node.NodeId)
@@ -342,9 +330,9 @@ func (m *ClusterInfo) processNewSchedulableNodes(request *si.UpdateRequest) {
                 })
             continue
         }
-        err = partition.addNewNode(nodeInfo, node.ExistingAllocations)
+        err := partition.addNewNode(nodeInfo, node.ExistingAllocations)
         if err != nil {
-            msg := fmt.Sprintf("Failure while adding new node, node rejectd with error %s", err.Error())
+            msg := fmt.Sprintf("Failure while adding new node, node rejected with error %s", err.Error())
             log.Logger().Warn(msg)
             rejectedNodes = append(rejectedNodes,
                 &si.RejectedNode{
@@ -356,24 +344,32 @@ func (m *ClusterInfo) processNewSchedulableNodes(request *si.UpdateRequest) {
         log.Logger().Info("successfully added node",
             zap.String("nodeId", node.NodeId),
             zap.String("partition", nodeInfo.Partition))
+        // create the equivalent scheduling node
+        m.EventHandlers.SchedulerEventHandler.HandleEvent(
+            &schedulerevent.SchedulerNodeEvent{
+                AddedNode: nodeInfo,
+            })
         acceptedNodes = append(acceptedNodes, &si.AcceptedNode{NodeId: node.NodeId})
         existingAllocations = append(existingAllocations, node.ExistingAllocations...)
     }
 
-    m.EventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMNodeUpdateEvent{
-        RMId:          request.RmId,
-        AcceptedNodes: acceptedNodes,
-        RejectedNodes: rejectedNodes,
-    })
+    // inform the RM which nodes have been accepted
+    m.EventHandlers.RMProxyEventHandler.HandleEvent(
+        &rmevent.RMNodeUpdateEvent{
+            RMId:          request.RmId,
+            AcceptedNodes: acceptedNodes,
+            RejectedNodes: rejectedNodes,
+        })
 
     // notify the scheduler to recover existing allocations
-    m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
-        ExistingAllocations: existingAllocations,
-        RMId:                request.RmId,
-    })
+    m.EventHandlers.SchedulerEventHandler.HandleEvent(
+        &schedulerevent.SchedulerAllocationUpdatesEvent{
+            ExistingAllocations: existingAllocations,
+            RMId:                request.RmId,
+        })
 }
 
-// RM may notify us to blacklist or whitelist a node,
+// RM may notify us to remove, blacklist or whitelist a node,
 // this is to process such actions.
 func (m *ClusterInfo) processNodeActions(request *si.UpdateRequest) {
     for _, update := range request.UpdatedNodes {
@@ -391,19 +387,30 @@ func (m *ClusterInfo) processNodeActions(request *si.UpdateRequest) {
             continue
         }
 
-        if node, ok := partition.nodes[update.NodeId]; ok {
+        if nodeInfo, ok := partition.nodes[update.NodeId]; ok {
             switch update.Action {
             case si.UpdateNodeInfo_DRAIN_NODE:
-                node.setSchedulable(false)
+                // set the state to not schedulable
+                nodeInfo.SetSchedulable(false)
             case si.UpdateNodeInfo_DRAIN_TO_SCHEDULABLE:
-                node.setSchedulable(true)
+                // set the state to schedulable
+                nodeInfo.SetSchedulable(true)
+            case si.UpdateNodeInfo_DECOMISSION:
+                // set the state to not schedulable then tell the partition to clean up
+                nodeInfo.SetSchedulable(false)
+                partition.RemoveNode(nodeInfo.NodeId)
+                // remove the equivalent scheduling node
+                m.EventHandlers.SchedulerEventHandler.HandleEvent(
+                    &schedulerevent.SchedulerNodeEvent{
+                        RemovedNode: nodeInfo,
+                    })
             }
         }
     }
 }
 
 // Process the node updates: add and remove nodes as needed.
-// Lock free call, all updates occur on the underlying application which is locked or via events.
+// Lock free call, all updates occur on the underlying node which is locked or via events.
 func (m *ClusterInfo) processNodeUpdate(request *si.UpdateRequest) {
     // Process add node
     if len(request.NewSchedulableNodes) > 0 {
@@ -514,7 +521,7 @@ func (m *ClusterInfo) processAllocationProposalEvent(event *cacheevent.Allocatio
         return
     }
 
-    // we currently only support 1 allocation in the list, fail if there are more
+    // we currently only support 1 allocation in the list, reject all but the first
     if len(event.AllocationProposals) != 1 {
         log.Logger().Info("More than 1 allocation proposal rejected all but first",
             zap.Int("allocPropLength", len(event.AllocationProposals)))
@@ -527,12 +534,18 @@ func (m *ClusterInfo) processAllocationProposalEvent(event *cacheevent.Allocatio
     partitionInfo := m.GetPartition(proposal.PartitionName)
     allocInfo, err := partitionInfo.addNewAllocation(proposal)
     if err != nil {
+        log.Logger().Error("failed to add new allocation to partition",
+            zap.String("allocationKey", proposal.AllocationKey),
+            zap.Error(err))
         // Send reject event back to scheduler
         m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
-            RejectedAllocations: event.AllocationProposals,
+            RejectedAllocations: event.AllocationProposals[:1],
         })
         return
     }
+    m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
+        AcceptedAllocations: event.AllocationProposals[:1],
+    })
     rmId := common.GetRMIdFromPartitionName(proposal.PartitionName)
 
     // Send allocation event to RM.
@@ -549,6 +562,24 @@ func (m *ClusterInfo) processRejectedApplicationEvent(event *cacheevent.Rejected
     if partition := m.GetPartition(event.PartitionName); partition != nil {
         partition.RemoveRejectedApp(event.ApplicationId)
     }
+}
+
+// Release the preempted resources we have released from the scheduling node
+func (m *ClusterInfo) notifySchedNodeAllocReleased(infos []*AllocationInfo, partitionName string) {
+    // we should only have 1 node but be safe and handle multiple independent nodes
+    nodeRes := make([]schedulerevent.NodeResource, len(infos))
+    for i, info := range infos {
+        nodeRes[i] = schedulerevent.NodeResource{
+            NodeId:       info.AllocationProto.NodeId,
+            Partition:    partitionName,
+            PreemptedRes: info.AllocatedResource,
+        }
+    }
+    // pass all releases to the scheduler
+    m.EventHandlers.SchedulerEventHandler.HandleEvent(
+        &schedulerevent.SchedulerNodeEvent{
+            PreemptedNodeResources: nodeRes,
+        })
 }
 
 // Create a RM update event to notify RM of released allocations
@@ -583,8 +614,12 @@ func (m *ClusterInfo) processAllocationReleases(toReleases []*commonevents.Relea
         rmID := common.GetRMIdFromPartitionName(toReleaseAllocation.PartitionName)
         // release the allocation from the partition
         releasedAllocations := partitionInfo.releaseAllocationsForApplication(toReleaseAllocation)
-        // whatever was released pass it back to the RM
         if len(releasedAllocations) != 0 {
+            // if the resources released were preempted update the scheduling node that it is done
+            if toReleaseAllocation.ReleaseType == si.AllocationReleaseResponse_PREEMPTED_BY_SCHEDULER {
+                m.notifySchedNodeAllocReleased(releasedAllocations, toReleaseAllocation.PartitionName)
+            }
+            // whatever was released pass it back to the RM
             m.notifyRMAllocationReleased(rmID, releasedAllocations, toReleaseAllocation.ReleaseType, toReleaseAllocation.Message)
         }
     }

@@ -21,7 +21,9 @@ import (
     "github.com/cloudera/yunikorn-core/pkg/cache"
     "github.com/cloudera/yunikorn-core/pkg/common/commonevents"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+    "go.uber.org/zap"
 )
 
 // Preemption policy based-on DRF
@@ -54,9 +56,9 @@ func (m *DRFPreemptionPolicy) DoPreemption(scheduler *Scheduler) {
  * So our algorithm should properly answer: if we preempt resources N from queue X (preemptee),
  * can we make sure demanding queue Y (preemptor) or its parent reduces their shortages
  * return true if positive contribution made to headroom shortage.
-
-TODO: An optimization is: calculate contributions first, and sort preemption victims by descend order of contribution to resource-to-preempt.
  */
+
+// TODO: An optimization is: calculate contributions first, and sort preemption victims by descend order of contribution to resource-to-preempt.
 func headroomShortageUpdate(preemptor *preemptionQueueContext, preemptee *preemptionQueueContext, allocationResource *resources.Resource,
     queueHeadroomShortages map[string]*resources.Resource) bool {
     // When we don't have any resource shortage issue, no positive contribution we can make.
@@ -114,14 +116,14 @@ type singleNodePreemptResult struct {
 // Do surgical preemption on node, if able to preempt, returns
 func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionContext, preemptorQueue *preemptionQueueContext, node *SchedulingNode, candidate *SchedulingAllocationAsk,
     headroomShortages map[string]*resources.Resource) *singleNodePreemptResult {
-    // To preempt resource = (allocating + candidate.asked) - (preempting + available)
-    resourceToPreempt := resources.Add(node.AllocatingResource, candidate.AllocatedResource)
-    resourceToPreempt.SubFrom(node.PreemptingResource)
-    resourceToPreempt.SubFrom(node.CachedAvailableResource)
-    resourceToPreempt = resources.ComponentWiseMax(resourceToPreempt, resources.Zero)
+    // the number of resources to preempt for this request is the available - requested
+    // ignoring anything below 0 as we have more available than requested
+    // don't count at what is already marked for preemption (that is still used)
+    // the scheduling node's available resource takes into account what is being allocated
+    resourceToPreempt := resources.SubEliminateNegative(node.getAvailableResource(), candidate.AllocatedResource)
 
     // If allocated resource can fit in the node, and no headroom shortage of preemptor queue, we can directly get it allocated. (lucky!)
-    if node.CheckAndAllocateResource(candidate.AllocatedResource, true /* preemptionPhase */) {
+    if node.CheckAndAllocateResource(candidate.AllocatedResource, true) {
         return &singleNodePreemptResult{
             node:                  node,
             toReleaseAllocations:  make(map[string]*cache.AllocationInfo),
@@ -134,7 +136,7 @@ func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionCont
 
     // Otherwise, try to do preemption, list all allocations on the node.
     // Fixme: this operation has too many copies, should avoid for better perf
-    for _, alloc := range node.NodeInfo.GetAllAllocations() {
+    for _, alloc := range node.nodeInfo.GetAllAllocations() {
         queueName := alloc.AllocationProto.QueueName
         // Try to do preemption.
         preemptQueue := preemptionPartitionCtx.leafQueues[queueName]
@@ -199,12 +201,20 @@ func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitio
         if preemptResult = trySurgicalPreemptionOnNode(preemptionPartitionContext, preemptorQueue, node, candidate, headroomShortages); preemptResult != nil {
             break
         }
+        log.Logger().Debug("preemption check on node",
+            zap.Any("node", node))
     }
 
     if preemptResult == nil {
+        log.Logger().Debug("preemption result nil",
+            zap.Any("candidate", candidate))
         return nil
     }
 
+    log.Logger().Debug("preemption result",
+        zap.Any("candidate", candidate),
+        zap.Any("node", preemptResult.node.NodeId),
+        zap.Any("preemptResult", preemptResult.toReleaseAllocations))
     preemptionResults := make([]*singleNodePreemptResult, 0)
     preemptionResults = append(preemptionResults, preemptResult)
     nodeToAllocate := preemptResult.node
@@ -233,7 +243,7 @@ func createPreemptionAndAllocationProposal(preemptionPartitionContext *preemptio
     for _, pr := range preemptionResults {
         for uuid, alloc := range pr.toReleaseAllocations {
 
-            allocation.Releases = append(allocation.Releases, commonevents.NewReleaseAllocation(uuid, alloc.ApplicationId, nodeToAllocate.NodeInfo.Partition,
+            allocation.Releases = append(allocation.Releases, commonevents.NewReleaseAllocation(uuid, alloc.ApplicationId, nodeToAllocate.nodeInfo.Partition,
                 fmt.Sprintf("Preempt allocation=%s for ask=%s", alloc, candidate.AskProto.AllocationKey), si.AllocationReleaseResponse_PREEMPTED_BY_SCHEDULER))
 
             // Update metrics of preempt queue
@@ -241,12 +251,12 @@ func createPreemptionAndAllocationProposal(preemptionPartitionContext *preemptio
             preemptQueue.resources.markedPreemptedResource.AddTo(alloc.AllocatedResource)
             preemptQueue.resources.preemptable = resources.SubEliminateNegative(preemptQueue.resources.preemptable, alloc.AllocatedResource)
         }
-        pr.node.PreemptingResource.AddTo(pr.totalReleasedResource)
+        pr.node.incPreemptingResource(pr.totalReleasedResource)
     }
 
     // Update metrics
     // For node, update allocating and preempting resources
-    nodeToAllocate.AllocatingResource.AddTo(candidate.AllocatedResource)
+    nodeToAllocate.incAllocatingResource(candidate.AllocatedResource)
 
     return allocation
 }

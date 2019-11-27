@@ -99,7 +99,7 @@ partitions:
 			{
 				NodeId: "node-2:1234",
 				Attributes: map[string]string{
-					"si.io/hostname": "node-1",
+					"si.io/hostname": "node-2",
 					"si.io/rackname": "rack-1",
 				},
 				SchedulableResource: &si.Resource{
@@ -281,7 +281,7 @@ partitions:
 			{
 				NodeId: "node-2:1234",
 				Attributes: map[string]string{
-					"si.io/hostname": "node-1",
+					"si.io/hostname": "node-2",
 					"si.io/rackname": "rack-1",
 				},
 				SchedulableResource: &si.Resource{
@@ -464,7 +464,7 @@ partitions:
 			{
 				NodeId: "node-2:1234",
 				Attributes: map[string]string{
-					"si.io/hostname": "node-1",
+					"si.io/hostname": "node-2",
 					"si.io/rackname": "rack-1",
 				},
 				SchedulableResource: &si.Resource{
@@ -617,7 +617,7 @@ partitions:
 			{
 				NodeId: "node-2:1234",
 				Attributes: map[string]string{
-					"si.io/hostname": "node-1",
+					"si.io/hostname": "node-2",
 					"si.io/rackname": "rack-1",
 				},
 				SchedulableResource: &si.Resource{

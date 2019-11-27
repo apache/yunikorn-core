@@ -281,7 +281,7 @@ func (pi *PartitionInfo) removeNodeInternal(nodeId string) {
 
     node := pi.nodes[nodeId]
     if node == nil {
-        log.Logger().Debug("not was not found",
+        log.Logger().Debug("node was not found",
             zap.String("nodeId", nodeId),
             zap.String("partitionName", pi.Name))
         return
@@ -510,15 +510,15 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
     }
 
     // Does the new allocation exceed the node's available resource?
-    newNodeResource := resources.Add(node.GetAllocatedResource(), alloc.AllocatedResource)
-    if !resources.FitIn(node.TotalResource, newNodeResource) {
+    if !node.CanAllocate(alloc.AllocatedResource) {
         metrics.GetSchedulerMetrics().IncSchedulingError()
         return nil, fmt.Errorf("cannot allocate resource [%v] for application %s on "+
             "node %s because request exceeds available resources, used [%v] node limit [%v]",
-            alloc.AllocatedResource, alloc.ApplicationId, node.NodeId, newNodeResource, node.TotalResource)
+            alloc.AllocatedResource, alloc.ApplicationId, node.NodeId, node.GetAllocatedResource(), node.TotalResource)
     }
 
-    // If new allocation go beyond any of queue's max resource? Only check if when it is allocated instead of node reported.
+    // If the new allocation goes beyond the queue's max resource (recursive)?
+    // Only check if it is allocated not when it is node reported.
     if err := queue.IncAllocatedResource(alloc.AllocatedResource, nodeReported); err != nil {
         metrics.GetSchedulerMetrics().IncSchedulingError()
         return nil, fmt.Errorf("cannot allocate resource from application %s: %v ",

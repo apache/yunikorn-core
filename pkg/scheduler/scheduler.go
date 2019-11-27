@@ -315,6 +315,17 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
         return
     }
 
+    // Allocations events cannot contain accepted and rejected allocations at the same time.
+    // There should never be more than one accepted allocation in the list
+    // See cluster_info.processAllocationProposalEvent()
+    if len(ev.AcceptedAllocations) > 0 {
+        alloc := ev.AcceptedAllocations[0]
+        // decrease the outstanding allocation resources
+        m.clusterSchedulingContext.updateSchedulingNodeAlloc(alloc)
+    }
+
+    // Rejects have not updated the node in the cache but have updated the scheduler node with
+    // outstanding allocations that need to be removed. Can be multiple in one event.
     if len(ev.RejectedAllocations) > 0 {
         for _, alloc := range ev.RejectedAllocations {
             // Update pending resource back
@@ -322,6 +333,8 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
                 log.Logger().Error("failed to increase pending ask",
                     zap.Error(err))
             }
+            // decrease the outstanding allocation resources
+            m.clusterSchedulingContext.updateSchedulingNodeAlloc(alloc)
         }
     }
 
@@ -462,10 +475,30 @@ func (m *Scheduler) processDeletePartitionConfigsEvent(event *schedulerevent.Sch
     }
 }
 
+// Add a scheduling node based on the node added to the cache.
+func (m *Scheduler) processNodeEvent(event *schedulerevent.SchedulerNodeEvent) {
+    // process the node addition (one per event)
+    if event.AddedNode != nil {
+        nodeInfo := event.AddedNode.(*cache.NodeInfo)
+        m.clusterSchedulingContext.addSchedulingNode(nodeInfo)
+    }
+    // process the node deletion (one per event)
+    if event.RemovedNode != nil {
+        nodeInfo := event.RemovedNode.(*cache.NodeInfo)
+        m.clusterSchedulingContext.removeSchedulingNode(nodeInfo)
+    }
+    // preempted resources have now been released update the node
+    if event.PreemptedNodeResources != nil {
+        m.clusterSchedulingContext.releasePreemptedResources(event.PreemptedNodeResources)
+    }
+}
+
 func (m *Scheduler) handleSchedulerEvent() {
     for {
         ev := <-m.pendingSchedulerEvents
         switch v := ev.(type) {
+        case *schedulerevent.SchedulerNodeEvent:
+            m.processNodeEvent(v)
         case *schedulerevent.SchedulerAllocationUpdatesEvent:
             m.processAllocationUpdateEvent(v)
         case *schedulerevent.SchedulerApplicationsUpdateEvent:

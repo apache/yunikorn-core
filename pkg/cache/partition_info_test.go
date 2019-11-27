@@ -17,7 +17,6 @@ limitations under the License.
 package cache
 
 import (
-    "github.com/cloudera/yunikorn-core/pkg/api"
     "github.com/cloudera/yunikorn-core/pkg/common/commonevents"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
@@ -144,8 +143,8 @@ partitions:
     }
     memVal := resources.Quantity(1000)
     nodeID := "node-1"
-    node1 := newNodeInfoForTest(nodeID, resources.NewResourceFromMap(
-        map[string]resources.Quantity{resources.MEMORY: memVal}), nil)
+    node1 := NewNodeForTest(nodeID, resources.NewResourceFromMap(
+        map[string]resources.Quantity{resources.MEMORY: memVal}))
     // add a node this must work
     err = partition.addNewNode(node1, nil)
     if err != nil || partition.GetNode(nodeID) == nil {
@@ -170,8 +169,8 @@ partitions:
     }
     waitForPartitionState(t, partition, Stopped.String(), 1000)
     nodeID = "node-2"
-    node2 := newNodeInfoForTest(nodeID, resources.NewResourceFromMap(
-        map[string]resources.Quantity{resources.MEMORY: memVal}), nil)
+    node2 := NewNodeForTest(nodeID, resources.NewResourceFromMap(
+        map[string]resources.Quantity{resources.MEMORY: memVal}))
 
     // add a second node to the test
     err = partition.addNewNode(node2, nil)
@@ -206,8 +205,8 @@ partitions:
     }
     waitForPartitionState(t, partition, Draining.String(), 1000)
     nodeID = "node-3"
-    node3 := newNodeInfoForTest(nodeID, resources.NewResourceFromMap(
-        map[string]resources.Quantity{resources.MEMORY: memVal}), nil)
+    node3 := NewNodeForTest(nodeID, resources.NewResourceFromMap(
+        map[string]resources.Quantity{resources.MEMORY: memVal}))
     // add a third node to the test
     err = partition.addNewNode(node3, nil)
     if err == nil || partition.GetNode(nodeID) != nil {
@@ -230,8 +229,8 @@ partitions:
         return
     }
     memVal := resources.Quantity(1000)
-    node1 := newNodeInfoForTest("node-1", resources.NewResourceFromMap(
-        map[string]resources.Quantity{resources.MEMORY: memVal}), nil)
+    node1 := NewNodeForTest("node-1", resources.NewResourceFromMap(
+        map[string]resources.Quantity{resources.MEMORY: memVal}))
     // add a node this must work
     err = partition.addNewNode(node1, nil)
     if err != nil {
@@ -349,13 +348,13 @@ partitions:
     // add a node with allocations: must have the correct app added already
     memVal := resources.Quantity(1000)
     nodeID := "node-1"
-    node1 := newNodeInfoForTest(nodeID, resources.NewResourceFromMap(
-        map[string]resources.Quantity{resources.MEMORY: memVal}), nil)
+    node1 := NewNodeForTest(nodeID, resources.NewResourceFromMap(
+        map[string]resources.Quantity{resources.MEMORY: memVal}))
     allocs := []*si.Allocation{createAllocation(queueName, nodeID, "alloc-1", appID)}
     // add a node this must work
     err = partition.addNewNode(node1, allocs)
     if err != nil || partition.GetNode(nodeID) == nil {
-        t.Errorf("add node to partition should not have failed: %v", err)
+        t.Fatalf("add node to partition should not have failed: %v", err)
     }
     // check partition resources
     memRes := partition.totalPartitionResource.Resources[resources.MEMORY]
@@ -381,8 +380,8 @@ partitions:
     }
 
     nodeID = "node-partial-fail"
-    node2 := newNodeInfoForTest(nodeID, resources.NewResourceFromMap(
-        map[string]resources.Quantity{resources.MEMORY: memVal}), nil)
+    node2 := NewNodeForTest(nodeID, resources.NewResourceFromMap(
+        map[string]resources.Quantity{resources.MEMORY: memVal}))
     allocs = []*si.Allocation{createAllocation(queueName, nodeID, "alloc-2", "app-2")}
     // add a node this partially fails: node is added, allocation is not added and thus we have an error
     err = partition.addNewNode(node2, allocs)
@@ -421,12 +420,12 @@ partitions:
 
     memVal := resources.Quantity(1000)
     nodeID := "node-1"
-    node1 := newNodeInfoForTest(nodeID, resources.NewResourceFromMap(
-        map[string]resources.Quantity{resources.MEMORY: memVal}), nil)
+    node1 := NewNodeForTest(nodeID, resources.NewResourceFromMap(
+        map[string]resources.Quantity{resources.MEMORY: memVal}))
     // add a node this must work
     err = partition.addNewNode(node1, nil)
     if err != nil || partition.GetNode(nodeID) == nil {
-        t.Errorf("add node to partition should not have failed: %v", err)
+        t.Fatalf("add node to partition should not have failed: %v", err)
     }
 
     alloc, err := partition.addNewAllocation(createAllocationProposal(queueName, nodeID, "alloc-1", appID))
@@ -509,8 +508,8 @@ partitions:
     // add a node to allow adding an allocation
     memVal := resources.Quantity(1000)
     nodeID := "node-1"
-    node1 := newNodeInfoForTest(nodeID, resources.NewResourceFromMap(
-        map[string]resources.Quantity{resources.MEMORY: memVal}), nil)
+    node1 := NewNodeForTest(nodeID, resources.NewResourceFromMap(
+        map[string]resources.Quantity{resources.MEMORY: memVal}))
     // add a node this must work
     err = partition.addNewNode(node1, nil)
     if err != nil || partition.GetNode(nodeID) == nil {
@@ -591,8 +590,8 @@ partitions:
     // add a node to allow adding an allocation
     memVal := resources.Quantity(1000)
     nodeID := "node-1"
-    node1 := newNodeInfoForTest(nodeID, resources.NewResourceFromMap(
-        map[string]resources.Quantity{resources.MEMORY: memVal}), nil)
+    node1 := NewNodeForTest(nodeID, resources.NewResourceFromMap(
+        map[string]resources.Quantity{resources.MEMORY: memVal}))
     // add a node this must work
     err = partition.addNewNode(node1, nil)
     if err != nil || partition.GetNode(nodeID) == nil {
@@ -739,13 +738,10 @@ partitions:
         return
     }
 
-    n1 := newNodeInfoForTest("host1", resources.NewResourceFromMap(
-        map[string]resources.Quantity{"memory": 100, "vcore": 100}),
-        map[string]string{api.HOSTNAME: "host1", api.RACKNAME: "rack1", api.NODE_PARTITION: "default"})
-    n2 := newNodeInfoForTest("host2", resources.NewResourceFromMap(
-        map[string]resources.Quantity{"memory": 100, "vcore": 100}),
-        map[string]string{api.HOSTNAME: "host2", api.RACKNAME: "rack1", api.NODE_PARTITION: "default"})
-
+    n1 := NewNodeForTest("host1", resources.NewResourceFromMap(
+        map[string]resources.Quantity{"memory": 100, "vcore": 100}))
+    n2 := NewNodeForTest("host2", resources.NewResourceFromMap(
+        map[string]resources.Quantity{"memory": 100, "vcore": 100}))
     if err := partition.addNewNode(n1, nil); err != nil {
         t.Error(err)
     }
@@ -776,9 +772,8 @@ partitions:
     m = partition.CalculateNodesResourceUsage()
     assert.Assert(t, reflect.DeepEqual(m["memory"], []int{0, 1, 0, 0, 0, 0, 0, 0, 1, 0}))
 
-    n3 := newNodeInfoForTest("host3", resources.NewResourceFromMap(
-        map[string]resources.Quantity{"memory": 100, "vcore": 100}),
-        map[string]string{api.HOSTNAME: "host3", api.RACKNAME: "rack1", api.NODE_PARTITION: "default"})
+    n3 := NewNodeForTest("host3", resources.NewResourceFromMap(
+        map[string]resources.Quantity{"memory": 100, "vcore": 100}))
     if err := partition.addNewNode(n3, nil); err != nil {
         t.Error(err)
     }

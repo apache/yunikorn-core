@@ -43,13 +43,28 @@ func CreatePartitionInfo(data []byte) (*PartitionInfo, error) {
     return pi, nil
 }
 
-// Node to test with sorters
-func NewNodeForTest(nodeId string, availableResource *resources.Resource) *NodeInfo {
-    info := &NodeInfo{}
+// Node to test with sorters (setting available resources)
+func NewNodeForSort(nodeId string, availResource *resources.Resource) *NodeInfo {
+    return newNodeForTest(nodeId, resources.NewResource(), availResource)
+}
 
-    info.NodeId = nodeId
-    info.availableResource = availableResource
-    info.allocations = make(map[string]*AllocationInfo)
+// Node to test with anything but the sorters (setting total resources)
+func NewNodeForTest(nodeId string, totalResource *resources.Resource) *NodeInfo {
+    return newNodeForTest(nodeId, totalResource, totalResource.Clone())
+}
 
-    return info
+// Internal function to create the nodeInfo
+func newNodeForTest(nodeId string, totalResource, availResource *resources.Resource) *NodeInfo {
+    node := &NodeInfo{}
+    // set the basics
+    node.NodeId = nodeId
+    node.allocations = make(map[string]*AllocationInfo)
+    node.schedulable = true
+    node.Partition = "default"
+    // make sure they are independent objects
+    node.TotalResource = totalResource
+    node.availableResource = availResource
+    node.allocatedResource = resources.NewResource()
+
+    return node
 }

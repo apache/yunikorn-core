@@ -23,130 +23,155 @@ import (
     "sync"
 )
 
-/* Related to nodes */
+// The node structure used throughout the system
 type NodeInfo struct {
-    NodeId            string
-    TotalResource     *resources.Resource
-    allocatedResource *resources.Resource
-    availableResource *resources.Resource
-
-    // Fields for fast access
-    Hostname  string
-    Rackname  string
-    Partition string
-    Schedulable bool
+    // Fields for fast access These fields are considered read only.
+    // Values should only be set when creating a new node and never changed.
+    NodeId        string
+    Hostname      string
+    Rackname      string
+    Partition     string
+    TotalResource *resources.Resource
 
     // Private fields need protection
-    attributes  map[string]string
-    allocations map[string]*AllocationInfo
+    attributes        map[string]string
+    allocatedResource *resources.Resource
+    availableResource *resources.Resource
+    allocations       map[string]*AllocationInfo
+    schedulable       bool
+
     lock        sync.RWMutex
 }
 
-func (m* NodeInfo) GetAllocatedResource() *resources.Resource {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
-
-    return m.allocatedResource
-}
-
-func (m* NodeInfo) GetAvailableResource() *resources.Resource {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
-
-    return m.availableResource
-}
-
-func (m *NodeInfo) GetAttribute(key string) string {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
-
-    return m.attributes[key]
-}
-
-func (m *NodeInfo) GetAllocation(uuid string) *AllocationInfo {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
-
-    return m.allocations[uuid]
-}
-
-func (m *NodeInfo) initializeAttribute(newAttributes map[string]string) error {
-    m.lock.Lock()
-    defer m.lock.Unlock()
-
-    m.attributes = newAttributes
-
-    m.refreshLocalVarsByAttributes()
-
-    return nil
-}
-
-func (m *NodeInfo) refreshLocalVarsByAttributes() {
-    m.Hostname = m.attributes[api.HOSTNAME]
-    m.Rackname = m.attributes[api.RACKNAME]
-    m.Partition = m.attributes[api.NODE_PARTITION]
-}
-
-func NewNodeInfo(proto *si.NewNodeInfo) (*NodeInfo, error) {
+// Create a new node from the protocol object.
+// The object can only be nil if the si.NewNodeInfo is nil, otherwise a valid object is returned.
+func NewNodeInfo(proto *si.NewNodeInfo) *NodeInfo {
+    if proto == nil {
+        return nil
+    }
     m := &NodeInfo{
         NodeId:            proto.NodeId,
         TotalResource:     resources.NewResourceFromProto(proto.SchedulableResource),
         allocatedResource: resources.NewResource(),
         allocations:       make(map[string]*AllocationInfo, 0),
-        Schedulable:       true,
+        schedulable:       true,
     }
-    m.availableResource = m.TotalResource
+    m.availableResource = m.TotalResource.Clone()
 
-    if err := m.initializeAttribute(proto.Attributes); err != nil {
-        return nil, err
-    }
+    m.initializeAttribute(proto.Attributes)
 
-    return m, nil
+    return m
 }
 
-func (m *NodeInfo) AddAllocation(info *AllocationInfo) {
-    m.lock.Lock()
-    defer m.lock.Unlock()
+// Set the attributes and fast access fields.
+// Unlocked call: should only be called on create or from test code
+func (ni *NodeInfo) initializeAttribute(newAttributes map[string]string) {
+    ni.attributes = newAttributes
 
-    m.allocations[info.AllocationProto.Uuid] = info
-    m.allocatedResource = resources.Add(m.allocatedResource, info.AllocatedResource)
-    m.availableResource = resources.Sub(m.TotalResource, m.allocatedResource)
+    ni.Hostname = ni.attributes[api.HOSTNAME]
+    ni.Rackname = ni.attributes[api.RACKNAME]
+    ni.Partition = ni.attributes[api.NODE_PARTITION]
 }
 
-func (m *NodeInfo) RemoveAllocation(uuid string) *AllocationInfo {
-    m.lock.Lock()
-    defer m.lock.Unlock()
+// Get an attribute by name. The most used attributes can be directly accessed via the
+// fields: Hostname, Rackname and Partition.
+// This is a lock free call. All attributes are considered read only
+func (ni *NodeInfo) GetAttribute(key string) string {
+    return ni.attributes[key]
+}
 
-    var info *AllocationInfo
-    if info = m.allocations[uuid]; info != nil {
-        delete(m.allocations, uuid)
-        m.allocatedResource = resources.Sub(m.allocatedResource, info.AllocatedResource)
-        m.availableResource = resources.Sub(m.TotalResource, m.allocatedResource)
+// Return the currently allocated resource for the node.
+func (ni *NodeInfo) GetAllocatedResource() *resources.Resource {
+    ni.lock.RLock()
+    defer ni.lock.RUnlock()
+
+    return ni.allocatedResource
+}
+
+// Return the currently available resource for the node.
+func (ni *NodeInfo) GetAvailableResource() *resources.Resource {
+    ni.lock.RLock()
+    defer ni.lock.RUnlock()
+
+    return ni.availableResource
+}
+
+// Return the allocation based on the uuid of the allocation.
+// returns nil if the allocation is not found
+func (ni *NodeInfo) GetAllocation(uuid string) *AllocationInfo {
+    ni.lock.RLock()
+    defer ni.lock.RUnlock()
+
+    return ni.allocations[uuid]
+}
+
+// Check if the allocation fits in the currently available resources.
+func (ni *NodeInfo) CanAllocate(resRequest *resources.Resource) bool {
+    ni.lock.RLock()
+    defer ni.lock.RUnlock()
+    if !resources.FitIn(ni.availableResource, resRequest) {
+        return false
+    }
+    return true
+}
+
+// Add the allocation to the node.Used resources will increase available will decrease.
+// This cannot fail. A nil AllocationInfo makes no changes.
+func (ni *NodeInfo) AddAllocation(alloc *AllocationInfo) {
+    if alloc == nil {
+        return
+    }
+    ni.lock.Lock()
+    defer ni.lock.Unlock()
+
+    ni.allocations[alloc.AllocationProto.Uuid] = alloc
+    ni.allocatedResource.AddTo(alloc.AllocatedResource)
+    ni.availableResource.SubFrom(alloc.AllocatedResource)
+}
+
+// Remove the allocation to the node.
+// Returns nil if the allocation was not found and no changes are made. If the allocation
+// is found the AllocationInfo removed is returned. Used resources will decrease available
+// will increase as per the allocation found.
+func (ni *NodeInfo) RemoveAllocation(uuid string) *AllocationInfo {
+    ni.lock.Lock()
+    defer ni.lock.Unlock()
+
+    info := ni.allocations[uuid]
+    if info != nil {
+        delete(ni.allocations, uuid)
+        ni.allocatedResource.SubFrom(info.AllocatedResource)
+        ni.availableResource.AddTo(info.AllocatedResource)
     }
 
     return info
 }
 
-func (m *NodeInfo) GetAllAllocations() []*AllocationInfo {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
+// Get a copy of the allocations on this node
+func (ni *NodeInfo) GetAllAllocations() []*AllocationInfo {
+    ni.lock.RLock()
+    defer ni.lock.RUnlock()
 
     arr := make([]*AllocationInfo, 0)
-    for _, v := range m.allocations {
+    for _, v := range ni.allocations {
         arr = append(arr, v)
     }
 
     return arr
 }
 
-func (m *NodeInfo) setSchedulable(schedulable bool) {
-    m.lock.Lock()
-    defer m.lock.Unlock()
-    m.Schedulable = schedulable
+// Set the node to unschedulable.
+// This will cause the node to be skipped during the scheduling cycle.
+// Visible for testing only
+func (ni *NodeInfo) SetSchedulable(schedulable bool) {
+    ni.lock.Lock()
+    defer ni.lock.Unlock()
+    ni.schedulable = schedulable
 }
 
-func (m *NodeInfo) IsSchedulable() bool {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
-    return m.Schedulable
+// Can this node be used in scheduling.
+func (ni *NodeInfo) IsSchedulable() bool {
+    ni.lock.RLock()
+    defer ni.lock.RUnlock()
+    return ni.schedulable
 }

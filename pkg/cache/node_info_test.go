@@ -19,75 +19,238 @@ package cache
 import (
     "github.com/cloudera/yunikorn-core/pkg/api"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+    "gotest.tools/assert"
     "testing"
 )
 
-func newNodeInfoForTest(nodeId string, totalResource *resources.Resource, attributes map[string]string) *NodeInfo {
-    m := &NodeInfo{}
+func newProto(nodeId string, totalResource *resources.Resource, attributes map[string]string) *si.NewNodeInfo {
+    proto := si.NewNodeInfo{
+        NodeId:               nodeId,
+        Attributes:           attributes,
+    }
 
-    m.NodeId = nodeId
-    m.TotalResource = totalResource
-    m.allocatedResource = resources.NewResource()
-    m.initializeAttribute(attributes)
-    m.allocations = make(map[string]*AllocationInfo)
-
-    return m
+    if totalResource != nil {
+        proto.SchedulableResource = &si.Resource{
+            Resources: map[string]*si.Quantity{},
+        }
+        for name, value := range totalResource.Resources {
+            quantity := si.Quantity{Value: int64(value)}
+            proto.SchedulableResource.Resources[name] = &quantity
+        }
+    }
+    return &proto
 }
 
-func TestNodeInfo(t *testing.T) {
-    node := newNodeInfoForTest("node-123", resources.NewResourceFromMap(
-        map[string]resources.Quantity{"a": 123, "b": 456}),
-        map[string]string{api.HOSTNAME: "host1", api.RACKNAME: "rack1", api.NODE_PARTITION: "partition1"})
-
-    if node.Hostname != "host1" {
-        t.Errorf("Failed to initialize hostname")
+func TestNewNodeInfo(t *testing.T) {
+    // simple nil check
+    node := NewNodeInfo(nil)
+    if node != nil {
+        t.Error("node not returned correctly: node is nul or incorrect name")
+    }
+    proto := newProto("testnode", nil, nil)
+    node = NewNodeInfo(proto)
+    if node == nil || node.NodeId != "testnode" {
+        t.Error("node not returned correctly: node is nul or incorrect name")
     }
 
-    if node.Rackname != "rack1" {
-        t.Errorf("Failed to initialize hostname")
+    totalRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100, "second": 100})
+    proto = newProto("testnode", totalRes, map[string]string{})
+    node = NewNodeInfo(proto)
+    if node == nil || node.NodeId != "testnode" {
+        t.Fatal("node not returned correctly: node is nul or incorrect name")
+    }
+    if !resources.Equals(node.TotalResource, totalRes) ||
+        !resources.Equals(node.availableResource, totalRes) {
+        t.Errorf("node resources not set correctly: %v expected got %v and %v",
+            totalRes, node.TotalResource, node.availableResource)
+    }
+    assert.Equal(t, node.Partition, "")
+
+    // set special attributes and get a new node
+    proto.Attributes = map[string]string{
+        api.HOSTNAME: "host1",
+        api.RACKNAME: "rack1",
+        api.NODE_PARTITION: "partition1",
+    }
+    node = NewNodeInfo(proto)
+    if node == nil || node.NodeId != "testnode" {
+        t.Fatal("node not returned correctly: node is nul or incorrect name")
+    }
+    assert.Equal(t, "host1", node.Hostname)
+    assert.Equal(t, "rack1", node.Rackname)
+    assert.Equal(t, "partition1", node.Partition)
+}
+
+func TestAttributes(t *testing.T) {
+    proto := newProto("testnode", nil, map[string]string{
+        api.NODE_PARTITION: "partition1",
+        "something": "just a text",
+    })
+
+    node := NewNodeInfo(proto)
+    if node == nil || node.NodeId != "testnode" {
+        t.Fatal("node not returned correctly: node is nul or incorrect name")
     }
 
-    if node.Partition != "partition1" {
-        t.Errorf("Failed to initialize hostname")
+    assert.Equal(t, "", node.Hostname)
+    assert.Equal(t, "", node.Rackname)
+    assert.Equal(t, "partition1", node.Partition)
+
+    value := node.GetAttribute(api.NODE_PARTITION)
+    assert.Equal(t, "partition1", value, "node attributes not set, expected 'partition1' got '%v'", value)
+    value = node.GetAttribute("something")
+    assert.Equal(t, "just a text", value, "node attributes not set, expected 'just a text' got '%v'", value)
+}
+
+func TestAddAllocation(t *testing.T) {
+    total := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100, "second": 200})
+    node := NewNodeForTest("node-123", total)
+    if !resources.IsZero(node.GetAllocatedResource()) {
+        t.Fatal("Failed to initialize resource")
     }
 
-    if node.TotalResource.Resources["a"] != 123 || node.TotalResource.Resources["b"] != 456 {
-        t.Errorf("Failed to initialize resource")
+    // check nil alloc
+    node.AddAllocation(nil)
+    if len(node.GetAllAllocations()) > 0 {
+        t.Fatalf("nil allocation should not have been added: %v", node)
+    }
+    // allocate half of the resources available and check the calculation
+    half := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50, "second": 100})
+    node.AddAllocation(CreateMockAllocationInfo("app1", half, "1", "queue-1", "node-1"))
+    if node.GetAllocation("1") == nil {
+        t.Fatal("failed to add allocations: allocation not returned")
+    }
+    if !resources.Equals(node.GetAllocatedResource(), half) {
+        t.Errorf("failed to add allocations expected %v, got %v", half, node.GetAllocatedResource())
+    }
+    if !resources.Equals(node.GetAvailableResource(), half) {
+        t.Errorf("failed to update available resources expected %v, got %v", half, node.GetAvailableResource())
     }
 
-    if node.GetAllocatedResource().Resources["a"] != 0 {
-        t.Errorf("Failed to initialize resource")
+    // second and check calculation
+    piece := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25, "second": 50})
+    node.AddAllocation(CreateMockAllocationInfo("app1", piece, "2", "queue-1", "node-1"))
+    if node.GetAllocation("2") == nil {
+        t.Fatal("failed to add allocations: allocation not returned")
+    }
+    piece.AddTo(half)
+    if !resources.Equals(node.GetAllocatedResource(), piece) {
+        t.Errorf("failed to add allocations expected %v, got %v", piece, node.GetAllocatedResource())
+    }
+    left := resources.Sub(total, piece)
+    if !resources.Equals(node.GetAvailableResource(), left) {
+        t.Errorf("failed to update available resources expected %v, got %v", left, node.GetAvailableResource())
+    }
+}
+
+func TestRemoveAllocation(t *testing.T) {
+    total := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100, "second": 200})
+    node := NewNodeForTest("node-123", total)
+    if !resources.IsZero(node.GetAllocatedResource()) {
+        t.Fatal("Failed to initialize resource")
     }
 
-    node.initializeAttribute(map[string]string{api.HOSTNAME: "host2", api.RACKNAME: "rack1", api.NODE_PARTITION: "partition1", "x": "y"})
-
-    if node.Hostname != "host2" {
-        t.Errorf("Failed to update hostname from attributes")
+    // allocate half of the resources available and check the calculation
+    half := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50, "second": 100})
+    node.AddAllocation(CreateMockAllocationInfo("app1", half, "1", "queue-1", "node-1"))
+    if node.GetAllocation("1") == nil {
+        t.Fatal("failed to add allocations: allocation not returned")
+    }
+    // check empty alloc
+    if node.RemoveAllocation("") != nil {
+        t.Errorf("empty allocation should not have been removed: %v", node)
+    }
+    if node.RemoveAllocation("not exist") != nil {
+        t.Errorf("'not exist' allocation should not have been removed: %v", node)
+    }
+    if !resources.Equals(node.GetAllocatedResource(), half) {
+        t.Errorf("allocated resource not set correctly %v got %v", half, node.GetAllocatedResource())
     }
 
-    if node.GetAttribute("x") != "y" {
-        t.Errorf("Failed to update attributes")
+    // add second alloc and remove first check calculation
+    piece := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25, "second": 50})
+    node.AddAllocation(CreateMockAllocationInfo("app1", piece, "2", "queue-1", "node-1"))
+    if node.GetAllocation("2") == nil {
+        t.Fatal("failed to add allocations: allocation not returned")
+    }
+    alloc := node.RemoveAllocation("1")
+    if  alloc == nil {
+        t.Error("allocation should have been removed but was not")
+    }
+    if !resources.Equals(node.GetAllocatedResource(), piece) {
+        t.Errorf("allocated resource not set correctly %v got %v", piece, node.GetAllocatedResource())
+    }
+    left := resources.Sub(total, piece)
+    if !resources.Equals(node.GetAvailableResource(), left) {
+        t.Errorf("allocated resource not set correctly %v got %v", left, node.GetAvailableResource())
+    }
+}
+
+func TestCanAllocate(t *testing.T) {
+    total := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 20})
+    node := NewNodeForTest("node-123", total)
+    if !resources.IsZero(node.GetAllocatedResource()) {
+        t.Fatal("Failed to initialize resource")
+    }
+    // ask for a resource not available and check the calculation
+    more := resources.NewResourceFromMap(map[string]resources.Quantity{"unknown": 10})
+    if node.CanAllocate(more) {
+        t.Errorf("can allocate should not have allowed %v to be allocated", more)
+    }
+    // ask for more than the resources available and check the calculation
+    more = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 25})
+    if node.CanAllocate(more) {
+        t.Errorf("can allocate should not have allowed %v to be allocated", more)
     }
 
-    res1 := resources.NewResourceFromMap(map[string]resources.Quantity{"a": 100, "b": 200})
-    node.AddAllocation(CreateMockAllocationInfo("app1", res1, "1", "queue-1", "node-1"))
-    if nil == node.GetAllocation("1") {
-        t.Errorf("Failed to add allocations")
+    // ask for less than the resources available and check the calculation
+    less := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 10})
+    if !node.CanAllocate(less) {
+        t.Errorf("can allocate should have allowed %v to be allocated", less)
+    }
+    node.AddAllocation(CreateMockAllocationInfo("app1", less, "1", "queue-1", "node-1"))
+    if !resources.Equals(node.GetAllocatedResource(), less) {
+        t.Errorf("allocated resource not set correctly %v got %v", less, node.GetAllocatedResource())
+    }
+    // ask for more than the total resources but more than available and check the calculation
+    less = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8, "second": 5})
+    if node.CanAllocate(less) {
+        t.Errorf("can allocate should not have allowed %v to be allocated", less)
     }
 
-    if !resources.Equals(node.GetAllocatedResource(), res1) {
-        t.Errorf("Failed to add allocations expected %v, got %v", res1, node.GetAllocatedResource())
+}
+
+func TestGetAllocations(t *testing.T) {
+    total := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100, "second": 200})
+    node := NewNodeForTest("node-123", total)
+    if !resources.IsZero(node.GetAllocatedResource()) {
+        t.Fatal("Failed to initialize resource")
     }
 
-    res2 := resources.NewResourceFromMap(map[string]resources.Quantity{"a": 20, "b": 200})
-    node.AddAllocation(CreateMockAllocationInfo("app1", res2, "2", "queue-1", "node-1"))
-    if nil == node.GetAllocation("2") {
-        t.Errorf("Failed to add allocations")
+    // nothing allocated get an empty list
+    allocs := node.GetAllAllocations()
+    if allocs == nil || len(allocs) != 0 {
+        t.Fatalf("allocation length should be 0 on new node")
     }
 
-    // calculate the total allocated
-    res2.AddTo(res1)
-    if !resources.Equals(node.GetAllocatedResource(), res2) {
-        t.Errorf("Failed to add allocations expected %v, got %v", res2, node.GetAllocatedResource())
+    // allocate
+    node.AddAllocation(CreateMockAllocationInfo("app1", nil, "1", "queue-1", "node-1"))
+    node.AddAllocation(CreateMockAllocationInfo("app1", nil, "2", "queue-1", "node-1"))
+    assert.Equal(t, 2, len(node.GetAllAllocations()), "allocation length mismatch")
+    // This should not happen in real code just making sure the code does do what is expected
+    node.AddAllocation(CreateMockAllocationInfo("app1", nil, "2", "queue-1", "node-1"))
+    assert.Equal(t, 2, len(node.GetAllAllocations()), "allocation length mismatch")
+}
+
+func TestSchedulingState(t *testing.T) {
+    node := NewNodeInfo(newProto("node-123", nil, nil))
+    if !node.IsSchedulable() {
+        t.Error("failed to initialize node: not schedulable")
+    }
+
+    node.SetSchedulable(false)
+    if node.IsSchedulable() {
+        t.Error("failed to modify node state: schedulable")
     }
 }

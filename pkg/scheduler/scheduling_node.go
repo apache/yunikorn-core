@@ -30,26 +30,26 @@ type SchedulingNode struct {
 	NodeId   string
 
 	// Private info
-	nodeInfo           *cache.NodeInfo
-	allocatingResource *resources.Resource // resources being allocated
-	preemptingResource *resources.Resource // resources considered for preemption
-	cachedAvailable    *resources.Resource // calculated available resources
-	availableDirty     bool                // is the calculated available resource up to date?
+	nodeInfo                *cache.NodeInfo
+	allocatingResource      *resources.Resource // resources being allocated
+	preemptingResource      *resources.Resource // resources considered for preemption
+	cachedAvailable         *resources.Resource // calculated available resources
+	cachedAvailableUpToDate bool                // is the calculated available resource up to date?
 
 	lock sync.RWMutex
 }
 
 func NewSchedulingNode(info *cache.NodeInfo) *SchedulingNode {
-	// save guard against panic
+	// safe guard against panic
 	if info == nil {
 		return nil
 	}
 	return &SchedulingNode{
-		nodeInfo:           info,
-		NodeId:             info.NodeId,
-		allocatingResource: resources.NewResource(),
-		preemptingResource: resources.NewResource(),
-		availableDirty:     true,
+		nodeInfo:                info,
+		NodeId:                  info.NodeId,
+		allocatingResource:      resources.NewResource(),
+		preemptingResource:      resources.NewResource(),
+		cachedAvailableUpToDate: true,
 	}
 }
 
@@ -67,9 +67,10 @@ func (sn *SchedulingNode) GetAllocatedResource() *resources.Resource {
 func (sn *SchedulingNode) getAvailableResource() *resources.Resource {
     sn.lock.Lock()
     defer sn.lock.Unlock()
-    if sn.availableDirty {
-		sn.cachedAvailable = resources.Sub(sn.nodeInfo.GetAvailableResource(), sn.allocatingResource)
-		sn.availableDirty = false
+    if sn.cachedAvailableUpToDate {
+		sn.cachedAvailable = sn.nodeInfo.GetAvailableResource()
+		sn.cachedAvailable.SubFrom(sn.allocatingResource)
+		sn.cachedAvailableUpToDate = false
 	}
 	return sn.cachedAvailable
 }
@@ -86,9 +87,9 @@ func (sn *SchedulingNode) getAllocatingResource() *resources.Resource {
 // Update the number of resource proposed for allocation on this node
 func (sn *SchedulingNode) incAllocatingResource(proposed *resources.Resource) {
 	sn.lock.Lock()
-    defer sn.lock.Unlock()
+	defer sn.lock.Unlock()
 
-    sn.availableDirty = true
+	sn.cachedAvailableUpToDate = true
 	sn.allocatingResource.AddTo(proposed)
 }
 
@@ -100,7 +101,7 @@ func (sn *SchedulingNode) handleAllocationUpdate(confirmed *resources.Resource) 
 		zap.String("nodeId", sn.NodeId),
 		zap.Any("confirmed", confirmed))
 
-	sn.availableDirty = true
+	sn.cachedAvailableUpToDate = true
 	sn.allocatingResource.SubFrom(confirmed)
 }
 
@@ -141,13 +142,13 @@ func (sn *SchedulingNode) CheckAndAllocateResource(delta *resources.Resource, pr
 	newAllocating := resources.Add(delta, sn.allocatingResource)
 
     if preemptionPhase {
-        available = resources.Add(available, sn.preemptingResource)
+        available.AddTo(sn.preemptingResource)
     }
     if resources.FitIn(available, newAllocating) {
         log.Logger().Debug("allocations in progress updated",
 			zap.String("nodeId", sn.NodeId),
 			zap.Any("total unconfirmed", newAllocating))
-		sn.availableDirty = true
+		sn.cachedAvailableUpToDate = true
 		sn.allocatingResource = newAllocating
 		return true
 	}

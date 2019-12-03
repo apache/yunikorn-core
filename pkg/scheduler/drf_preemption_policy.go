@@ -116,20 +116,22 @@ type singleNodePreemptResult struct {
 // Do surgical preemption on node, if able to preempt, returns
 func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionContext, preemptorQueue *preemptionQueueContext, node *SchedulingNode, candidate *SchedulingAllocationAsk,
     headroomShortages map[string]*resources.Resource) *singleNodePreemptResult {
-    // the number of resources to preempt for this request is the available - requested
-    // ignoring anything below 0 as we have more available than requested
-    // don't count at what is already marked for preemption (that is still used)
-    // the scheduling node's available resource takes into account what is being allocated
-    resourceToPreempt := resources.SubEliminateNegative(node.getAvailableResource(), candidate.AllocatedResource)
-
     // If allocated resource can fit in the node, and no headroom shortage of preemptor queue, we can directly get it allocated. (lucky!)
     if node.CheckAndAllocateResource(candidate.AllocatedResource, true) {
+        log.Logger().Debug("No preemption needed candidate fits on node",
+            zap.String("nodeId", node.NodeId))
         return &singleNodePreemptResult{
             node:                  node,
             toReleaseAllocations:  make(map[string]*cache.AllocationInfo),
             totalReleasedResource: resources.Zero,
         }
     }
+
+    // the number of resources to preempt for this request is the requested - available
+    // ignoring anything below 0 as we have more available than requested
+    // don't count at what is already marked for preemption (that is still used)
+    // the scheduling node's available resource takes into account what is being allocated
+    resourceToPreempt := resources.SubEliminateNegative(candidate.AllocatedResource, node.getAvailableResource())
 
     toReleaseAllocations := make(map[string]*cache.AllocationInfo)
     totalReleasedResource := resources.NewResource()
@@ -168,6 +170,9 @@ func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionCont
 
         // Check if we preempted enough resources.
         if resources.StrictlyGreaterThanOrEquals(totalReleasedResource, resourceToPreempt) {
+            log.Logger().Debug("Preemption requested on node",
+                zap.String("nodeId", node.NodeId),
+                zap.Any("resources released", totalReleasedResource))
             return &singleNodePreemptResult{
                 node:                  node,
                 toReleaseAllocations:  toReleaseAllocations,
@@ -201,8 +206,6 @@ func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitio
         if preemptResult = trySurgicalPreemptionOnNode(preemptionPartitionContext, preemptorQueue, node, candidate, headroomShortages); preemptResult != nil {
             break
         }
-        log.Logger().Debug("preemption check on node",
-            zap.Any("node", node))
     }
 
     if preemptResult == nil {

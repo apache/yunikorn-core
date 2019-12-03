@@ -81,19 +81,23 @@ func (ni *NodeInfo) GetAttribute(key string) string {
 }
 
 // Return the currently allocated resource for the node.
+// It returns a cloned object as we do not want to allow modifications to be made to the
+// value of the node.
 func (ni *NodeInfo) GetAllocatedResource() *resources.Resource {
     ni.lock.RLock()
     defer ni.lock.RUnlock()
 
-    return ni.allocatedResource
+    return ni.allocatedResource.Clone()
 }
 
 // Return the currently available resource for the node.
+// It returns a cloned object as we do not want to allow modifications to be made to the
+// value of the node.
 func (ni *NodeInfo) GetAvailableResource() *resources.Resource {
     ni.lock.RLock()
     defer ni.lock.RUnlock()
 
-    return ni.availableResource
+    return ni.availableResource.Clone()
 }
 
 // Return the allocation based on the uuid of the allocation.

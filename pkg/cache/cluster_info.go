@@ -526,29 +526,35 @@ func (m *ClusterInfo) processAllocationProposalEvent(event *cacheevent.Allocatio
         log.Logger().Info("More than 1 allocation proposal rejected all but first",
             zap.Int("allocPropLength", len(event.AllocationProposals)))
         // Send reject event back to scheduler for all but first
+        // this can be more than 1
         m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
             RejectedAllocations: event.AllocationProposals[1:],
         })
     }
+    // just process the first the rest is rejected already
     proposal := event.AllocationProposals[0]
     partitionInfo := m.GetPartition(proposal.PartitionName)
     allocInfo, err := partitionInfo.addNewAllocation(proposal)
     if err != nil {
         log.Logger().Error("failed to add new allocation to partition",
+            zap.String("partition", partitionInfo.Name),
             zap.String("allocationKey", proposal.AllocationKey),
             zap.Error(err))
         // Send reject event back to scheduler
+        // this could be more than 1 for the handler however here we can only have 1
         m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
             RejectedAllocations: event.AllocationProposals[:1],
         })
         return
     }
+    // Send accept event back to scheduler
+    // this must be only 1: the handler will ignore all others
     m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
         AcceptedAllocations: event.AllocationProposals[:1],
     })
     rmId := common.GetRMIdFromPartitionName(proposal.PartitionName)
 
-    // Send allocation event to RM.
+    // Send allocation event to RM: rejects are not passed back
     m.EventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMNewAllocationsEvent{
         Allocations: []*si.Allocation{allocInfo.AllocationProto},
         RMId:        rmId,
@@ -575,7 +581,7 @@ func (m *ClusterInfo) notifySchedNodeAllocReleased(infos []*AllocationInfo, part
             PreemptedRes: info.AllocatedResource,
         }
     }
-    // pass all releases to the scheduler
+    // pass all the preempted resources to the scheduler
     m.EventHandlers.SchedulerEventHandler.HandleEvent(
         &schedulerevent.SchedulerNodeEvent{
             PreemptedNodeResources: nodeRes,

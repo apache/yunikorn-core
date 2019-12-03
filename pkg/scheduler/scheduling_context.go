@@ -259,6 +259,14 @@ func (csc *ClusterSchedulingContext) updateSchedulingNodeAlloc(alloc *commoneven
     // get the partition and node (both have to exist to get here)
     node := csc.GetSchedulingNode(alloc.NodeId, alloc.PartitionName)
 
+    if node == nil {
+        log.Logger().Warn("node was removed while event was processed",
+            zap.String("partition", alloc.PartitionName),
+            zap.String("nodeId", alloc.NodeId),
+            zap.String("applicationId", alloc.ApplicationId),
+            zap.String("allocationKey", alloc.AllocationKey))
+        return
+    }
     node.handleAllocationUpdate(alloc.AllocatedResource)
 }
 

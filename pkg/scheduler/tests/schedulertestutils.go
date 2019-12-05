@@ -28,7 +28,7 @@ import (
 )
 
 type MockRMCallbackHandler struct {
-    t *testing.T
+    t testing.TB
 
     acceptedApplications map[string]bool
     rejectedApplications map[string]bool
@@ -40,7 +40,7 @@ type MockRMCallbackHandler struct {
     lock sync.RWMutex
 }
 
-func NewMockRMCallbackHandler(t *testing.T) *MockRMCallbackHandler {
+func NewMockRMCallbackHandler(t testing.TB) *MockRMCallbackHandler {
     return &MockRMCallbackHandler{
         t:                    t,
         acceptedApplications: make(map[string]bool),
@@ -275,7 +275,7 @@ func waitForMinAllocations(m *MockRMCallbackHandler, nAlloc int, timeoutMs int) 
         m.lock.RUnlock()
 
 
-        if allocLen != nAlloc {
+        if allocLen < nAlloc {
             time.Sleep(time.Millisecond)
         } else {
             return

@@ -17,19 +17,23 @@ limitations under the License.
 package tests
 
 import (
+    "fmt"
     "github.com/cloudera/yunikorn-core/pkg/common/configs"
     "github.com/cloudera/yunikorn-core/pkg/entrypoint"
+    "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+    "go.uber.org/zap"
+    "strconv"
     "testing"
     "time"
 )
 
-func TestSchedulerThroughput5KNodes(t *testing.T) {
+func benchmarkScheduling(b *testing.B, numNodes, numPods int) {
+    log.InitAndSetLevel(zap.InfoLevel)
     // Start all tests
     serviceContext := entrypoint.StartAllServices()
     defer serviceContext.StopAll()
     proxy := serviceContext.RMProxy
-    // scheduler := serviceContext.Scheduler
 
     // Register RM
     configData := `
@@ -52,7 +56,7 @@ partitions:
                 vcore: 10000
 `
     configs.MockSchedulerConfigByData([]byte(configData))
-    mockRM := NewMockRMCallbackHandler(t)
+    mockRM := NewMockRMCallbackHandler(b)
 
     _, err := proxy.RegisterResourceManager(
         &si.RegisterResourceManagerRequest{
@@ -62,34 +66,31 @@ partitions:
         }, mockRM)
 
     if err != nil {
-        t.Error(err.Error())
+        b.Error(err.Error())
     }
 
-    // Register a node, and add apps
+    // Add two apps and wait for them to be accepted
     err = proxy.Update(&si.UpdateRequest{
         NewApplications: newAddAppRequest(map[string]string{"app-1":"root.a", "app-2": "root.b"}),
         RmId: "rm:123",
     })
-
-    // Check scheduling queue root
-    // schedulerQueueRoot := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root", "[rm:123]default")
-
-    // Check scheduling queue a
-    // schedulerQueueA := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.a", "[rm:123]default")
-
     if nil != err {
-        t.Error(err.Error())
+        b.Error(err.Error())
     }
-
     waitForAcceptedApplications(mockRM, "app-1", 1000)
     waitForAcceptedApplications(mockRM, "app-2", 1000)
 
-    var newNodes []*si.NewNodeInfo
+    // Calculate node resources to make sure all required pods can be allocated
+    requestMem := 10
+    requestVcore := 1
+    numPodsPerNode := numPods / numNodes + 1
+    nodeMem := requestMem * numPodsPerNode
+    nodeVcore := requestVcore * numPodsPerNode
 
-    // register 5000 nodes
-    totalNode := 5000
-    for i:=0; i < totalNode; i++ {
-        nodeName := "node-" + string(i)
+    // Register nodes
+    var newNodes []*si.NewNodeInfo
+    for i:=0; i < numNodes; i++ {
+        nodeName := "node-" + strconv.Itoa(i)
         node := &si.NewNodeInfo{
             NodeId:
             nodeName + ":1234",
@@ -99,70 +100,85 @@ partitions:
             },
             SchedulableResource: &si.Resource{
                 Resources: map[string]*si.Quantity{
-                    "memory": {Value: 200},
-                    "vcore":  {Value: 20},
+                    "memory": {Value: int64(nodeMem)},
+                    "vcore":  {Value: int64(nodeVcore)},
                 },
             },
         }
-
         newNodes = append(newNodes, node)
     }
-
     err = proxy.Update(&si.UpdateRequest{
         RmId: "rm:123",
         NewSchedulableNodes: newNodes,
     })
 
+    // Wait for all nodes to be accepted
     startTime := time.Now()
-    waitForMinNumberOfAcceptedNodes(mockRM, totalNode, 5000)
+    waitForMinNumberOfAcceptedNodes(mockRM, numNodes, 5000)
     duration := time.Now().Sub(startTime)
+    b.Logf("Total time to add %d node in %s, %f per second", numNodes, duration, float64(numNodes) / duration.Seconds())
 
-    t.Logf("Total time to add %d node %s, %f per second", totalNode, duration, float64(totalNode) / duration.Seconds())
-
-    // Get scheduling app
-    // schedulingApp := scheduler.GetClusterSchedulingContext().GetSchedulingApplication("app-1", "[rm:123]default")
-
+    // Request pods
+    app1NumPods := numPods / 2
     err = proxy.Update(&si.UpdateRequest{
         Asks: []*si.AllocationAsk{
             {
                 AllocationKey: "alloc-1",
                 ResourceAsk: &si.Resource{
                     Resources: map[string]*si.Quantity{
-                        "memory": {Value: 10},
-                        "vcore":  {Value: 1},
+                        "memory": {Value: int64(requestMem)},
+                        "vcore":  {Value: int64(requestVcore)},
                     },
                 },
-                MaxAllocations: 200000,
+                MaxAllocations: int32(app1NumPods),
                 ApplicationId:  "app-1",
             },
         },
         RmId: "rm:123",
     })
-
     err = proxy.Update(&si.UpdateRequest{
         Asks: []*si.AllocationAsk{
             {
                 AllocationKey: "alloc-1",
                 ResourceAsk: &si.Resource{
                     Resources: map[string]*si.Quantity{
-                        "memory": {Value: 10},
-                        "vcore":  {Value: 1},
+                        "memory": {Value: int64(requestMem)},
+                        "vcore":  {Value: int64(requestVcore)},
                     },
                 },
-                MaxAllocations: 200000,
+                MaxAllocations: int32(numPods-app1NumPods),
                 ApplicationId:  "app-2",
             },
         },
         RmId: "rm:123",
     })
 
-    // It is 200 * 5000 / 10
-    totalAllocation := 10000
-
-    // Wait for maximum 2 mins
+    // Reset number of iterations and timer for this benchmark
+    b.N = numPods
     startTime = time.Now()
-    waitForMinAllocations(mockRM, totalAllocation, 120000)
+    b.ResetTimer()
+
+    // Wait for all pods to be allocated
+    waitForMinAllocations(mockRM, numPods, 120000)
+
+    // Stop timer and calculate duration
+    b.StopTimer()
     duration = time.Now().Sub(startTime)
 
-    t.Logf("Total time to allocate %d containers in %s, %f per second", totalAllocation, duration, float64(totalAllocation) / duration.Seconds())
+    b.Logf("Total time to allocate %d containers in %s, %f per second", numPods, duration, float64(numPods) / duration.Seconds())
+}
+
+func BenchmarkScheduling(b *testing.B) {
+    tests := []struct{ numNodes, numPods int }{
+        {numNodes: 500, numPods: 10000},
+        {numNodes: 1000, numPods: 10000},
+        {numNodes: 2000, numPods: 10000},
+        {numNodes: 5000, numPods: 10000},
+    }
+    for _, test := range tests {
+        name := fmt.Sprintf("%vNodes/%vPods", test.numNodes, test.numPods)
+        b.Run(name, func(b *testing.B) {
+            benchmarkScheduling(b, test.numNodes, test.numPods)
+        })
+    }
 }

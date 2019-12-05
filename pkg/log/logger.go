@@ -25,6 +25,7 @@ import (
 
 var once sync.Once
 var logger *zap.Logger
+var config *zap.Config
 
 func Logger() *zap.Logger {
 	once.Do(func() {
@@ -33,7 +34,9 @@ func Logger() *zap.Logger {
 			// is running as a deployment mode, or running with another non-go code
 			// shim. In this case, we need to create our own logger.
 			// TODO support log options when a global logger is not there
-			logger, _= zap.NewDevelopment()
+			c := zap.NewDevelopmentConfig()
+			config = &c
+			logger, _= config.Build()
 		}
 	})
 	return logger
@@ -54,4 +57,12 @@ func IsDebugEnabled() bool {
 // the context, yunikorn-core can simply reuse it.
 func isNopLogger(logger *zap.Logger) bool {
 	return reflect.DeepEqual(zap.NewNop(), logger)
+}
+
+// Visible by tests
+func InitAndSetLevel(level zapcore.Level) {
+	if config == nil {
+		Logger()
+	}
+	config.Level.SetLevel(level)
 }

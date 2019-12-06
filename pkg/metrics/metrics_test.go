@@ -1,0 +1,47 @@
+/*
+Copyright 2019 Cloudera, Inc.  All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package metrics
+
+import (
+    "github.com/prometheus/common/model"
+    "gotest.tools/assert"
+    "math/rand"
+    "testing"
+)
+
+func TestFormatMetricName(t *testing.T) {
+    testStrings := []string{"0", "ad_vs:ad", "~23", "test/a", "-dfs", "012~`s@dd#$b%23^&5^3*(45){78}|00[]\\1ssd"}
+    for _, testString := range testStrings {
+        replaceStr := FormatMetricName(testString)
+        assert.Equal(t, true, model.IsValidMetricName(model.LabelValue(replaceStr)))
+    }
+    numRandomTestStrings := 1000
+    randomTestStrings := make([]string, numRandomTestStrings)
+    for i := 0; i < numRandomTestStrings; i++ {
+        randomTestStrings[i] = generateRandomString(100)
+    }
+    for _, testString := range randomTestStrings {
+        replaceStr := FormatMetricName(testString)
+        assert.Equal(t, true, model.IsValidMetricName(model.LabelValue(replaceStr)))
+    }
+}
+
+func generateRandomString(len int) string {
+    randomBytes := make([]byte, len)
+    rand.Read(randomBytes)
+    return string(randomBytes)
+}

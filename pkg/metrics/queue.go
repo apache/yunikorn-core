@@ -91,8 +91,9 @@ func forQueue(name string) CoreQueueMetrics {
 }
 
 func substituteQueueName(queueName string) string {
-	return fmt.Sprintf("queue_%s",
+	str := fmt.Sprintf("queue_%s",
 		strings.Replace(queueName, ".", "_", -1))
+	return strings.Replace(str, "-", "_", -1)
 }
 
 func (m *QueueMetrics) IncApplicationsAccepted() {

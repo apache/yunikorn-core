@@ -133,7 +133,9 @@ func GetQueueMetrics(name string) CoreQueueMetrics {
 	}
 }
 
-func FormatMetricName(metricName string) string {
+// Format metric name based on the definition of metric name in prometheus, as per
+// https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels
+func formatMetricName(metricName string) string {
 	if len(metricName) == 0 {
 		return metricName
 	}

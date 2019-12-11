@@ -26,7 +26,7 @@ import (
 func TestFormatMetricName(t *testing.T) {
     testStrings := []string{"0", "ad_vs:ad", "~23", "test/a", "-dfs", "012~`s@dd#$b%23^&5^3*(45){78}|00[]\\1ssd"}
     for _, testString := range testStrings {
-        replaceStr := FormatMetricName(testString)
+        replaceStr := formatMetricName(testString)
         assert.Equal(t, true, model.IsValidMetricName(model.LabelValue(replaceStr)))
     }
     numRandomTestStrings := 1000
@@ -35,7 +35,7 @@ func TestFormatMetricName(t *testing.T) {
         randomTestStrings[i] = generateRandomString(100)
     }
     for _, testString := range randomTestStrings {
-        replaceStr := FormatMetricName(testString)
+        replaceStr := formatMetricName(testString)
         assert.Equal(t, true, model.IsValidMetricName(model.LabelValue(replaceStr)))
     }
 }

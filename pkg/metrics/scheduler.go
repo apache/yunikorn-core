@@ -330,7 +330,7 @@ func (m *SchedulerMetrics) SetNodeResourceUsage(resourceName string, rangeIdx in
 	var resourceMetrics *prometheus.GaugeVec
 	resourceMetrics, ok := m.nodesResourceUsages[resourceName]
 	if !ok {
-		metricsName := fmt.Sprintf("%s_nodes_usage", FormatMetricName(resourceName))
+		metricsName := fmt.Sprintf("%s_nodes_usage", formatMetricName(resourceName))
 		resourceMetrics = prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Namespace:   Namespace,

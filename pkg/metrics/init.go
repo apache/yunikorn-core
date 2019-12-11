@@ -26,6 +26,8 @@ const (
 	Namespace = "yunikorn"
 	// SchedulerSubsystem - subsystem name used by scheduler
 	SchedulerSubsystem = "scheduler"
+	// replacement of invalid byte for prometheus metric names
+	MetricNameInvalidByteReplacement = '_'
 )
 
 var once sync.Once
@@ -128,5 +130,27 @@ func GetQueueMetrics(name string) CoreQueueMetrics {
 		queueMetrics := forQueue(name)
 		m.queues[name] = queueMetrics
 		return queueMetrics
+	}
+}
+
+// Format metric name based on the definition of metric name in prometheus, as per
+// https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels
+func formatMetricName(metricName string) string {
+	if len(metricName) == 0 {
+		return metricName
+	}
+	newBytes := make([]byte, len(metricName))
+	for i := 0; i < len(metricName); i++ {
+		b := metricName[i]
+		if !((b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || b == '_' || b == ':' || (b >= '0' && b <= '9')) {
+			newBytes[i] = MetricNameInvalidByteReplacement
+		} else {
+			newBytes[i] = b
+		}
+	}
+	if '0' <= metricName[0] && metricName[0] <= '9' {
+		return string(MetricNameInvalidByteReplacement) + string(newBytes)
+	} else {
+		return string(newBytes)
 	}
 }

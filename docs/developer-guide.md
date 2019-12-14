@@ -38,6 +38,8 @@ For the deployment that uses a config map you need to set up the ConfigMap in ku
 How to deploy the scheduler with a ConfigMap is explained in the [scheduler configuration deployment](setup/configure-scheduler.md) document.
 
 The image build command will first build the integrated executable and then create the docker image.
+Currently, there are some published docker images under [this docker hub repo](https://hub.docker.com/u/yunikorn), you are free to fetch and use.
+But keep in mind, YuniKorn has no official release yet, the latest version image can only be used for testing or evaluating, do not use it in production.
 The default image tags are not be suitable for deployments to an accessible repository as it uses a hardcoded user and would push to Docker Hub with proper credentials.
 You *must* update the `TAG` variable in the `Makefile` to push to an accessible repository.
 When you update the image tag be aware that the deployment examples given will also need to be updated to reflect the same change.

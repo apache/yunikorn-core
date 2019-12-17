@@ -273,7 +273,7 @@ func (csc *ClusterSchedulingContext) updateSchedulingNodeAlloc(alloc *commoneven
 
 // Release preempted resources after the cache has been updated.
 // This is a lock free call: locks are taken while retrieving the node and when updating the node
-func (csc *ClusterSchedulingContext) releasePreemptedResources(resources []schedulerevent.NodeResource) {
+func (csc *ClusterSchedulingContext) releasePreemptedResources(resources []schedulerevent.PreemptedNodeResource) {
     // no resources to release just return
     if len(resources) == 0 {
         return

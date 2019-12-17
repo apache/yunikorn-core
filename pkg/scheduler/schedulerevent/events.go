@@ -39,9 +39,11 @@ type SchedulerNodeEvent struct {
     // Type is *cache.nodeInfo, avoid cyclic imports
     RemovedNode            interface{}
     // Resources that have been released via preemption
-    PreemptedNodeResources []NodeResource
+    PreemptedNodeResources []PreemptedNodeResource
 }
-type NodeResource struct {
+
+// From Cache to scheduler, change in resources under preemption for the node
+type PreemptedNodeResource struct {
         NodeId       string
         Partition    string
         PreemptedRes *resources.Resource

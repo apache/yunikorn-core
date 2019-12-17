@@ -573,9 +573,9 @@ func (m *ClusterInfo) processRejectedApplicationEvent(event *cacheevent.Rejected
 // Release the preempted resources we have released from the scheduling node
 func (m *ClusterInfo) notifySchedNodeAllocReleased(infos []*AllocationInfo, partitionName string) {
     // we should only have 1 node but be safe and handle multiple independent nodes
-    nodeRes := make([]schedulerevent.NodeResource, len(infos))
+    nodeRes := make([]schedulerevent.PreemptedNodeResource, len(infos))
     for i, info := range infos {
-        nodeRes[i] = schedulerevent.NodeResource{
+        nodeRes[i] = schedulerevent.PreemptedNodeResource{
             NodeId:       info.AllocationProto.NodeId,
             Partition:    partitionName,
             PreemptedRes: info.AllocatedResource,

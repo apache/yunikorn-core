@@ -209,7 +209,7 @@ func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitio
     }
 
     if preemptResult == nil {
-        log.Logger().Debug("preemption result nil",
+        log.Logger().Debug("preemption result nil, no preemption possible",
             zap.Any("candidate", candidate))
         return nil
     }

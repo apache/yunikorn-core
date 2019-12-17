@@ -139,6 +139,9 @@ func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *Parti
         return make([]*SchedulingAllocation, 0), candidates
     }
 
+    //init node sorter
+    nodeSorter := &BtreeBasedNodeSorter{}
+    nodeSorter.Init(nodeList, m.getNodeSortType(partitionContext.partition.GetNodeSortingPolicy()))
     ctx, cancel := context.WithCancel(context.Background())
 
     allocations := make([]*SchedulingAllocation, len(candidates))
@@ -156,11 +159,13 @@ func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *Parti
             return
         }
 
-        nodeIterator := m.evaluateForSchedulingPolicy(nodeList, partitionContext)
+        nodeIterator := NewDefaultNodeIterator(nodeSorter.GetSortedSchedulingNodes())
 
         if allocation := m.allocate(nodeIterator, candidate, preemptionParam); allocation != nil {
             length := atomic.AddInt32(&allocatedLength, 1)
             allocations[length-1] = allocation
+            // inform node sorter to update the node changed in this allocation
+            nodeSorter.UpdateNode(allocation.NodeId)
         } else {
             length := atomic.AddInt32(&failedAskLength, 1)
             preemptionParam.blacklistedRequest[candidate.AskProto.AllocationKey] = true
@@ -203,20 +208,14 @@ func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *Parti
     return allocations[:allocatedLength], failedAsks[:failedAskLength]
 }
 
-// TODO: convert this as an interface.
-func (m *Scheduler) evaluateForSchedulingPolicy(nodes []*SchedulingNode, partitionContext *PartitionSchedulingContext) NodeIterator {
-    // Sort Nodes based on the policy configured.
-    configuredPolicy:= partitionContext.partition.GetNodeSortingPolicy()
-    switch configuredPolicy {
-    case common.BinPackingPolicy:
-        SortNodes(nodes, MinAvailableResources)
-        return NewDefaultNodeIterator(nodes)
+func (m *Scheduler) getNodeSortType(partitionSortingPolicy common.SortingPolicy) SortType {
+    switch partitionSortingPolicy {
     case common.FairnessPolicy:
-        SortNodes(nodes, MaxAvailableResources)
-        return NewDefaultNodeIterator(nodes)
+        return MaxAvailableResources
+    case common.BinPackingPolicy:
+        return MinAvailableResources
     }
-
-    return nil
+    return MaxAvailableResources
 }
 
 func (m *Scheduler) handleFailedToAllocationAllocations(allocations []*SchedulingAllocation, candidates []*SchedulingAllocationAsk, preemptionParam *preemptionParameters) {

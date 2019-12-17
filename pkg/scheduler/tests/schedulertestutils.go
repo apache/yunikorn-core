@@ -25,6 +25,7 @@ import (
     "github.com/cloudera/yunikorn-core/pkg/scheduler"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "go.uber.org/zap"
+    "math"
     "sync"
     "testing"
     "time"
@@ -358,4 +359,30 @@ func newAddAppRequest(apps map[string]string) []*si.AddApplicationRequest {
         requests = append(requests, &request)
     }
     return requests
+}
+
+func Max(vars ...int) int {
+    if len(vars) == 0 {
+        return math.MinInt32
+    }
+    rst := vars[0]
+    for i := 1; i < len(vars); i++ {
+        if rst < vars[i] {
+            rst = vars[i]
+        }
+    }
+    return rst
+}
+
+func Min(vars ...int) int {
+    if len(vars) == 0 {
+        return math.MaxInt32
+    }
+    rst := vars[0]
+    for i := 1; i < len(vars); i++ {
+        if rst > vars[i] {
+            rst = vars[i]
+        }
+    }
+    return rst
 }

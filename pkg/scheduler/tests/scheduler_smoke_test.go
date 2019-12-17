@@ -1449,11 +1449,13 @@ partitions:
 
     waitForAllocations(mockRM, 9, 1000)
 
+    // node sequence may be different for different node sort policies
     totalNode1Resource := cache.GetPartition("[rm:123]default").GetNode("node-1:1234").GetAllocatedResource().Resources[resources.MEMORY]
-    assert.Equal(t, int(totalNode1Resource), 90)
-
     totalNode2Resource := cache.GetPartition("[rm:123]default").GetNode("node-2:1234").GetAllocatedResource().Resources[resources.MEMORY]
-    assert.Equal(t, int(totalNode2Resource), 0)
+    maxAllocatedMem := Max(int(totalNode1Resource), int(totalNode2Resource))
+    assert.Equal(t, maxAllocatedMem, 90)
+    minAllocatedMem := Min(int(totalNode1Resource), int(totalNode2Resource))
+    assert.Equal(t, minAllocatedMem, 0)
 }
 
 func TestFairnessAllocationForNodes(t *testing.T) {
@@ -1560,9 +1562,7 @@ partitions:
     waitForPendingResource(t, schedulerQueueA, 200, 1000)
     waitForPendingResourceForApplication(t, schedulingApp1, 200, 1000)
 
-    for i := 0; i < 20; i++ {
-        serviceContext.Scheduler.SingleStepScheduleAllocTest(1)
-    }
+    serviceContext.Scheduler.SingleStepScheduleAllocTest(20)
 
     // Verify all requests are satisfied
     waitForAllocations(mockRM, 20, 1000)

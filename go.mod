@@ -5,6 +5,7 @@ go 1.12
 require (
 	github.com/cloudera/yunikorn-scheduler-interface v0.0.0-20190926162348-e1f0f8203763
 	github.com/creack/pty v1.1.9 // indirect
+	github.com/google/btree v1.0.0
 	github.com/google/go-cmp v0.3.1 // indirect
 	github.com/gorilla/mux v1.7.3
 	github.com/kr/pretty v0.1.0 // indirect
@@ -13,6 +14,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.1 // indirect
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/prometheus/client_golang v1.1.0
+	github.com/prometheus/common v0.6.0
 	github.com/satori/go.uuid v1.2.0
 	github.com/stretchr/testify v1.3.0
 	go.uber.org/atomic v1.4.0 // indirect

@@ -18,8 +18,12 @@ package scheduler
 
 import (
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/metrics"
+    "github.com/google/btree"
+    "go.uber.org/zap"
     "sort"
+    "strings"
     "time"
 )
 
@@ -86,4 +90,120 @@ func SortNodes(nodes []*SchedulingNode, sortType SortType) {
         })
     }
     metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
+}
+
+// NodeSorter sorts a list of scheduling nodes based on the defined policy
+type NodeSorter interface {
+    // initialize node sorter with passing in specified sorting policy and a list of scheduling nodes
+    Init(schedulingNodes []*SchedulingNode, sortType SortType)
+    // returns sorted scheduling nodes based on specified sorting policy
+    GetSortedSchedulingNodes() []*SchedulingNode
+    // Update node snapshot and adjust its placement in tree
+    UpdateNode(nodeId string) bool
+}
+
+// Node sorter based on slice
+type SliceBasedNodeSorter struct {
+    NodeSorter
+    schedulingNodes []*SchedulingNode
+    sortType SortType
+}
+
+func (sbns *SliceBasedNodeSorter) Init(schedulingNodes []*SchedulingNode, sortType SortType) {
+    sbns.schedulingNodes = schedulingNodes
+    sbns.sortType = sortType
+}
+
+func (sbns *SliceBasedNodeSorter) GetSortedSchedulingNodes() []*SchedulingNode {
+    SortNodes(sbns.schedulingNodes, sbns.sortType)
+    return sbns.schedulingNodes
+}
+
+func (sbns *SliceBasedNodeSorter) UpdateNode(nodeId string) bool {
+    // do nothing for non-incremental sort policy
+    return true
+}
+
+// Node sorter based on btree
+type BtreeBasedNodeSorter struct {
+    NodeSorter
+    sortType SortType
+    nodeTree *btree.BTree
+    nodes    map[string]*SchedulingNodeSnapshot
+}
+
+// Snapshot of scheduling node used for sorting nodes based on btree,
+// cachedAvailableResource is involved in the comparison between btree items,
+// which should be unchangeable so that sorter can keep and manage a stable btree.
+type SchedulingNodeSnapshot struct {
+    schedulingNode          *SchedulingNode
+    cachedAvailableResource *resources.Resource
+}
+
+// Comparing cachedAvailableResource and nodeId (to make sure all nodes are independent items in btree)
+func (sns *SchedulingNodeSnapshot) Less(than btree.Item) bool {
+    availSharesComp := resources.CompUsageShares(sns.cachedAvailableResource, than.(*SchedulingNodeSnapshot).cachedAvailableResource)
+    if availSharesComp != 0 {
+        return availSharesComp < 0
+    }
+    return strings.Compare(sns.schedulingNode.NodeId, than.(*SchedulingNodeSnapshot).schedulingNode.NodeId) > 0
+}
+
+func (bbns *BtreeBasedNodeSorter) Init(schedulingNodes []*SchedulingNode, sortType SortType) {
+    bbns.sortType = sortType
+    bbns.nodeTree = btree.New(32)
+    bbns.nodes = make(map[string]*SchedulingNodeSnapshot)
+    // build btree and snapshots for input scheduling nodes
+    sortingStart := time.Now()
+    for _, schedulingNode := range schedulingNodes {
+        bbns.addSchedulingNode(schedulingNode)
+    }
+    metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
+}
+
+func (bbns *BtreeBasedNodeSorter) addSchedulingNode(schedulingNode *SchedulingNode) {
+    nodeSnapshot := &SchedulingNodeSnapshot{
+        schedulingNode:          schedulingNode,
+        cachedAvailableResource: schedulingNode.getAvailableResource().Clone(),
+    }
+    bbns.nodeTree.ReplaceOrInsert(nodeSnapshot)
+    bbns.nodes[schedulingNode.NodeId] = nodeSnapshot
+}
+
+func (bbns *BtreeBasedNodeSorter) UpdateNode(nodeId string) bool {
+    if nodeSnapshot, ok := bbns.nodes[nodeId]; ok {
+        deletedItem := bbns.nodeTree.Delete(nodeSnapshot)
+        if deletedItem == nil {
+            log.Logger().Warn("node not found in snapshot tree of node sorter",
+                zap.String("nodeId", nodeId))
+        } else {
+            schedulingNode := deletedItem.(*SchedulingNodeSnapshot).schedulingNode
+            bbns.addSchedulingNode(schedulingNode)
+            return true
+        }
+    } else {
+        log.Logger().Warn("node not found in snapshot cache of node sorter",
+            zap.String("nodeId", nodeId))
+    }
+    return false
+}
+
+func (bbns *BtreeBasedNodeSorter) GetSortedSchedulingNodes() []*SchedulingNode {
+    sortedSchedulingNodes := make([]*SchedulingNode, bbns.nodeTree.Len())
+    var i = 0
+    switch bbns.sortType {
+    case MinAvailableResources:
+        bbns.nodeTree.Ascend(func(item btree.Item) bool {
+            sortedSchedulingNodes[i] = item.(*SchedulingNodeSnapshot).schedulingNode
+            i++
+            return true
+        })
+    case MaxAvailableResources:
+        bbns.nodeTree.Descend(func(item btree.Item) bool {
+            sortedSchedulingNodes[i] = item.(*SchedulingNodeSnapshot).schedulingNode
+            i++
+            return true
+        })
+    }
+    return sortedSchedulingNodes
 }

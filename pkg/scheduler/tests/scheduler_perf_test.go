@@ -170,8 +170,8 @@ partitions:
 
 func BenchmarkScheduling(b *testing.B) {
     tests := []struct{ numNodes, numPods int }{
-        {numNodes: 500, numPods: 10000},
-        {numNodes: 1000, numPods: 10000},
+        {numNodes: 500, numPods: 100000},
+        {numNodes: 1000, numPods: 100000},
         {numNodes: 2000, numPods: 10000},
         {numNodes: 5000, numPods: 10000},
     }

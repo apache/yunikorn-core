@@ -55,11 +55,12 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
         //   can be done as multiple thread.
         // - For asks cannot be assigned, we will do preemption. Again it is done using
         //   single-thread.
-        candidates := m.findAllocationAsks(totalPartitionResource, partitionContext, nAlloc, m.step, preemptionParam /* it is allocation phase */)
+        candidates := m.findAllocationAsks(totalPartitionResource, partitionContext, nAlloc, m.step, preemptionParam)
 
         // Try to allocate from candidates, returns allocation proposal as well as failed allocation
         // ask candidates. (For preemption).
-        allocations, _ := m.tryBatchAllocation(partition, partitionContext, candidates, preemptionParam /* it is allocation phase */)
+        // TODO clean this up we ignore failures so why collect them?
+        allocations, _ := m.tryBatchAllocation(partition, partitionContext, candidates, preemptionParam)
 
         // Send allocations to cache, and pending ask.
         confirmedAllocations := make([]*SchedulingAllocation, 0)
@@ -95,7 +96,7 @@ func (m *Scheduler) regularAllocate(nodeIterator NodeIterator, candidate *Schedu
             // skip the node if conditions can not be satisfied
             continue
         }
-        if node.CheckAndAllocateResource(candidate.AllocatedResource, false /* preemptionPhase */) {
+        if node.CheckAndAllocateResource(candidate.AllocatedResource, false) {
             // before deciding on an allocation, call the reconcile plugin to sync scheduler cache
             // between core and shim if necessary. This is useful when running multiple allocations
             // in parallel and need to handle inter container affinity and anti-affinity.
@@ -133,8 +134,8 @@ func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *Parti
     candidates []*SchedulingAllocationAsk,
     preemptionParam *preemptionParameters) ([]*SchedulingAllocation, []*SchedulingAllocationAsk) {
     // copy list of node since we going to go through node list a couple of times
-    nodeList := m.getNodeList(partition)
-    if nodeList == nil {
+    nodeList := partitionContext.getSchedulingNodes()
+    if len(nodeList) == 0 {
         return make([]*SchedulingAllocation, 0), candidates
     }
 
@@ -174,34 +175,32 @@ func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *Parti
 
     cancel()
 
-    // Logging
-    if len(allocations) > 0 || len(failedAsks) > 0 {
-        log.Logger().Debug("allocations cannot satisfy asks",
-            zap.Int("numOfAllocations", len(allocations)),
-            zap.Int("numOfFailedAsks", len(failedAsks)))
-        if len(allocations) > 0 {
-            if log.IsDebugEnabled() {
-                for _, alloc := range allocations {
-                    if alloc != nil {
-                        log.Logger().Debug("allocation",
-                            zap.Any("allocation", alloc))
-                    }
+    // Logging only at debug level and just the parts needed
+    if log.IsDebugEnabled() {
+        if allocatedLength > 0 {
+            log.Logger().Debug("allocations added",
+                zap.Int32("numOfAllocations", allocatedLength))
+            for _, alloc := range allocations {
+                if alloc != nil {
+                    log.Logger().Debug("allocation",
+                        zap.Any("allocation", alloc))
                 }
             }
         }
-        if len(failedAsks) > 0 {
-            if log.IsDebugEnabled() {
-                for _, failedAsk := range failedAsks {
-                    if failedAsk != nil {
-                        log.Logger().Debug("failedAsks",
-                            zap.Any("ask", failedAsk))
-                    }
+        if failedAskLength > 0 {
+            log.Logger().Debug("asks failed",
+                zap.Int32("numOfFailedAsks", failedAskLength))
+            for _, failedAsk := range failedAsks {
+                if failedAsk != nil {
+                    log.Logger().Debug("failedAsks",
+                        zap.Any("ask", failedAsk))
                 }
             }
         }
     }
 
-    return allocations, failedAsks
+    // limit the slices based on what was found
+    return allocations[:allocatedLength], failedAsks[:failedAskLength]
 }
 
 // TODO: convert this as an interface.
@@ -220,22 +219,7 @@ func (m *Scheduler) evaluateForSchedulingPolicy(nodes []*SchedulingNode, partiti
     return nil
 }
 
-func (m *Scheduler) getNodeList(partition string) []*SchedulingNode {
-    nodeList := m.clusterInfo.GetPartition(partition).CopyNodeInfos()
-    if len(nodeList) <= 0 {
-        // When we don't have node, do nothing
-        return nil
-    }
-
-    schedulingNodeList := make([]*SchedulingNode, len(nodeList))
-    for idx, v := range nodeList {
-        schedulingNodeList[idx] = NewSchedulingNode(v)
-    }
-
-    return schedulingNodeList
-}
-
-func (m* Scheduler) handleFailedToAllocationAllocations(allocations []*SchedulingAllocation, candidates []*SchedulingAllocationAsk, preemptionParam *preemptionParameters) {
+func (m *Scheduler) handleFailedToAllocationAllocations(allocations []*SchedulingAllocation, candidates []*SchedulingAllocationAsk, preemptionParam *preemptionParameters) {
     // Failed allocated asks
     failedToAllocationKeys := make(map[string]bool, 0)
     allocatedKeys := make(map[string]bool, 0)

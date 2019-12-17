@@ -18,33 +18,53 @@ package schedulerevent
 
 import (
     "github.com/cloudera/yunikorn-core/pkg/common/commonevents"
+    "github.com/cloudera/yunikorn-core/pkg/common/resources"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 )
 
 // From Cache, update about allocations.
 type SchedulerAllocationUpdatesEvent struct {
     RejectedAllocations []*commonevents.AllocationProposal
+    AcceptedAllocations []*commonevents.AllocationProposal
     NewAsks             []*si.AllocationAsk
     ToReleases          *si.AllocationReleasesRequest
     ExistingAllocations []*si.Allocation // optional, only required during recovery
     RMId                string           // optional, only required during recovery
 }
 
+// From Cache, node updates.
+type SchedulerNodeEvent struct {
+    // Type is *cache.nodeInfo, avoid cyclic imports
+    AddedNode              interface{}
+    // Type is *cache.nodeInfo, avoid cyclic imports
+    RemovedNode            interface{}
+    // Resources that have been released via preemption
+    PreemptedNodeResources []PreemptedNodeResource
+}
+
+// From Cache to scheduler, change in resources under preemption for the node
+type PreemptedNodeResource struct {
+        NodeId       string
+        Partition    string
+        PreemptedRes *resources.Resource
+}
+
+
 // From Cache, update about apps.
 type SchedulerApplicationsUpdateEvent struct {
-    // Type is *cache.ApplicationInfo, avoid cycle imports
+    // Type is *cache.ApplicationInfo, avoid cyclic imports
     AddedApplications   []interface{}
     RemovedApplications []*si.RemoveApplicationRequest
 }
 
 type SchedulerUpdatePartitionsConfigEvent struct {
-    // Type is *cache.PartitionInfo, avoid cycle imports
+    // Type is *cache.PartitionInfo, avoid cyclic imports
     UpdatedPartitions []interface{}
     ResultChannel     chan *commonevents.Result
 }
 
 type SchedulerDeletePartitionsConfigEvent struct {
-    // Type is *cache.PartitionInfo, avoid cycle imports
+    // Type is *cache.PartitionInfo, avoid cyclic imports
     DeletePartitions  []interface{}
     ResultChannel     chan *commonevents.Result
 }

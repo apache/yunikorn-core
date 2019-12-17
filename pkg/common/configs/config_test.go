@@ -25,7 +25,7 @@ import (
     "testing"
 )
 
-func TestConfigSerde(t *testing.T) {
+func TestConfigSerdeQueues(t *testing.T) {
     conf := SchedulerConfig{
         Partitions: []PartitionConfig{
             {
@@ -119,10 +119,79 @@ func TestConfigSerde(t *testing.T) {
         Checksum: []byte(""),
     }
 
+    SerdeTest(t, conf, "QueueConfig")
+}
+
+func TestConfigSerdeLimits(t *testing.T) {
+    conf := SchedulerConfig{
+        Partitions: []PartitionConfig{
+            {
+                Name: "default",
+                Queues: []QueueConfig{
+                    {
+                        Name: "test",
+                        Limits: []Limit{
+                            {
+                                Limit: "queue limit",
+                                Users: []string{
+                                    "user1",
+                                },
+                                Groups: []string{
+                                    "group1",
+                                },
+                                MaxResources: map[string]string{
+                                    "memory": "10",
+                                    "vcores": "10",
+                                },
+                                MaxApplications: 1,
+                            },
+                        },
+                    },
+                },
+                Limits: []Limit{
+                    {
+                        Limit: "partition limit 1",
+                        Users: []string{
+                            "user1",
+                        },
+                        Groups: []string{
+                            "group1",
+                        },
+                        MaxResources: map[string]string{
+                            "memory": "10",
+                            "vcores": "10",
+                        },
+                        MaxApplications: 1,
+                    }, {
+                        Limit: "partition limit 2",
+                        Users: []string{
+                            "user2",
+                        },
+                        MaxResources: map[string]string{
+                            "memory": "10",
+                        },
+                    }, {
+                        Limit: "partition limit 3",
+                        Groups: []string{
+                            "group3",
+                        },
+                        MaxResources:    nil,
+                        MaxApplications: 1,
+                    },
+                },
+            },
+        },
+        Checksum: []byte(""),
+    }
+
+    SerdeTest(t, conf, "LimitConfig")
+}
+
+func SerdeTest(t *testing.T, conf SchedulerConfig, description string) {
     // convert the object to yaml
     yamlConf, err := yaml.Marshal(&conf)
     if err != nil {
-        t.Errorf("error marshalling yaml config: %v", err)
+        t.Fatalf("error marshalling yaml config '%s': %v", description, err)
     }
     t.Logf(string(yamlConf))
 
@@ -130,23 +199,23 @@ func TestConfigSerde(t *testing.T) {
     newConf := SchedulerConfig{}
     err = yaml.Unmarshal(yamlConf, &newConf)
     if err != nil {
-        t.Errorf("error unmarshalling serde yaml: %v", err)
+        t.Errorf("error unmarshalling serde yaml '%s': %v", description, err)
     }
 
     // marshal as json and we still should get the same objects
     jsonConf, err := json.Marshal(conf)
     t.Logf(string(jsonConf))
     if err != nil {
-        t.Errorf("error marshalling json from config: %v", err)
+        t.Fatalf("error marshalling json from config '%s': %v", description, err)
     }
 
     jsonConf2, err := json.Marshal(newConf)
     if err != nil {
-        t.Errorf("error marshalling json config from serde yaml config: %v", err)
+        t.Fatalf("error marshalling json config from serde yaml config '%s': %v", description, err)
     }
 
     if string(jsonConf) != string(jsonConf2) {
-        t.Error("json marshaled strings differ:")
+        t.Errorf("json marshaled strings differ for '%s':", description)
         t.Errorf("original=[%s]", jsonConf)
         t.Errorf("serde   =[%s]", jsonConf2)
     }
@@ -200,24 +269,6 @@ partitions:
               max:
                 memory: 5000
                 vcore: 50
-    placementrules:
-      - name: User
-        create: true
-        parent:
-          name: PrimaryGroupName
-          create: false
-        filter:
-          type: allow
-          groups:
-            - sandbox
-      - name: Provided
-        create: true
-    users:
-      - name: user1
-        maxresources: {memory: 10000, vcore: 10}
-        maxapplications: 7
-      - name: user2
-        maxapplications: 10
   - name: gpu
     queues:
       - name: production
@@ -232,7 +283,7 @@ partitions:
     // create the config and process it
     conf, err := CreateConfig(data)
     if err != nil {
-        t.Errorf("loading failed with error: %v", err)
+        t.Fatalf("loading failed with error: %v", err)
     }
 
     if conf.Partitions[0].Name != "default" {
@@ -434,6 +485,36 @@ partitions:
     if err == nil {
         t.Errorf("resource not a number queue parsing should have failed: %v", conf)
     }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: test
+        resources:
+          max: {memory: }
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("resource not a number queue parsing should have failed: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    queues:
+      - name: test
+        resources:
+          max:
+            memory:
+            vcore:
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("resource not a number queue parsing should have failed: %v", conf)
+    }
 }
 
 func TestParseACLFail(t *testing.T) {
@@ -492,7 +573,7 @@ partitions:
     // validate the config and check after the update
     conf, err := CreateConfig(data)
     if err != nil {
-        t.Errorf("should expect no error %v", err)
+        t.Fatalf("should expect no error %v", err)
     }
 
     if !conf.Partitions[0].Preemption.Enabled {
@@ -525,7 +606,7 @@ partitions:
     // validate the config and check after the update
     conf, err := CreateConfig(data)
     if err != nil {
-        t.Errorf("rule parsing should not have failed: %v", err)
+        t.Fatalf("rule parsing should not have failed: %v", err)
     }
     rule := conf.Partitions[0].PlacementRules[0]
     if !rule.Create {
@@ -560,7 +641,7 @@ partitions:
     // validate the config and check after the update
     conf, err = CreateConfig(data)
     if err != nil {
-        t.Errorf("rule parsing should not have failed: %v", err)
+        t.Fatalf("rule parsing should not have failed: %v", err)
     }
     rule = conf.Partitions[0].PlacementRules[0]
     if rule.Create {
@@ -598,7 +679,7 @@ partitions:
     // validate the config and check after the update
     conf, err = CreateConfig(data)
     if err != nil {
-        t.Errorf("rule parsing should not have failed: %v", err)
+        t.Fatalf("rule parsing should not have failed: %v", err)
     }
     if len(conf.Partitions[0].PlacementRules) != 3 {
         t.Errorf("incorrect number of rules returned expected 3 got: %d", len(conf.Partitions[0].PlacementRules))
@@ -618,7 +699,7 @@ partitions:
     // validate the config and check after the update
     conf, err = CreateConfig(data)
     if err != nil {
-        t.Errorf("rule parsing should not have failed: %v", err)
+        t.Fatalf("rule parsing should not have failed: %v", err)
     }
     if len(conf.Partitions[0].PlacementRules) != 2 {
         t.Errorf("incorrect number of rules returned expected 2 got: %d", len(conf.Partitions[0].PlacementRules))
@@ -730,5 +811,335 @@ partitions:
     conf, err := CreateConfig(data)
     if err != nil {
         t.Errorf("recursive parent rule parsing should not have failed: %v", conf)
+    }
+}
+
+func TestPartitionLimits(t *testing.T) {
+    data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+    limits:
+      - limit:
+        users:
+        - user1
+        maxresources: {memory: 10000, vcore: 10}
+        maxapplications: 5
+      - limit:
+        users:
+        - user2
+        groups:
+        - prod
+        maxapplications: 10
+      - limit:
+        groups:
+        - dev
+        - test
+        maxapplications: 20
+`
+    // validate the config and check after the update
+    conf, err := CreateConfig(data)
+    if err != nil {
+        t.Fatalf("partition user parsing should not have failed: %v", conf)
+    }
+    // gone through validation: 1 top level queues
+    if len(conf.Partitions[0].Queues) != 1 {
+        t.Errorf("failed to load queue %v", conf)
+    }
+    if len(conf.Partitions[0].Limits) != 3 {
+        t.Errorf("partition users linked not correctly loaded  %v", conf)
+    }
+
+    // limit 1 check
+    limit := conf.Partitions[0].Limits[0]
+    if len(limit.Users) != 1 && limit.Users[0] != "user1" && len(limit.Groups) != 0 {
+        t.Errorf("failed to load max apps %v", limit)
+    }
+    if len(limit.Groups) != 0 {
+        t.Errorf("group list should be empty and is not: %v", limit)
+    }
+    if limit.MaxApplications != 10 && (len(limit.MaxResources) != 2 && limit.MaxResources["memory"] != "10000") {
+        t.Errorf("failed to load max resources %v", limit)
+    }
+
+    // limit 2 check
+    limit = conf.Partitions[0].Limits[1]
+    if len(limit.Users) != 1 && limit.Users[0] != "user2" &&
+        len(limit.Groups) != 1 && limit.Groups[0] != "prod" {
+        t.Errorf("user and group list have incorrect entries (limit 2): %v", limit)
+    }
+    if limit.MaxApplications != 5 && (limit.MaxResources != nil || len(limit.MaxResources) != 0) {
+        t.Errorf("loaded resource limits incorrectly (limit 2): %v", limit)
+    }
+
+    // limit 3 check
+    limit = conf.Partitions[0].Limits[2]
+    if len(limit.Groups) != 2 && limit.Groups[0] != "dev" && limit.Groups[1] != "test" {
+        t.Errorf("failed to load groups from config (limit 3): %v", limit)
+    }
+    if len(limit.Users) != 0 {
+        t.Errorf("user list should be empty and is not (limit 3): %v", limit)
+    }
+    if limit.MaxApplications != 20 && (limit.MaxResources != nil || len(limit.MaxResources) != 0) {
+        t.Errorf("loaded resource limits incorrectly (limit 3): %v", limit)
+    }
+}
+
+func TestQueueLimits(t *testing.T) {
+    data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        limits:
+          - limit:
+            users: 
+            - user1
+            maxresources: {memory: 10000, vcore: 10}
+            maxapplications: 5
+          - limit:
+            users:
+            - user2
+            groups:
+            - prod
+            maxapplications: 10
+        queues:
+          - name: level1
+            limits:
+              - limit:
+                users: 
+                - subuser
+                maxapplications: 1
+`
+    // validate the config and check after the update
+    conf, err := CreateConfig(data)
+    if err != nil {
+        t.Fatalf("config parsing should not have failed: %v", conf)
+    }
+    // gone through validation: 1 top level queues
+    if len(conf.Partitions[0].Queues) != 1 {
+        t.Errorf("failed to load queue from config: %v", conf)
+    }
+    if len(conf.Partitions[0].Limits) != 0 {
+        t.Errorf("root queue limits linked to partition: %v", conf)
+    }
+
+    // limit number
+    if len(conf.Partitions[0].Queues[0].Limits) != 2 {
+        t.Errorf("failed to load queue limits from config: %v", conf)
+    }
+
+    // limit 1 check
+    limit := conf.Partitions[0].Queues[0].Limits[0]
+    if len(limit.Users) != 1 && limit.Users[0] != "user1" && len(limit.Groups) != 0 {
+        t.Errorf("user and group list have incorrect entries: %v", limit)
+    }
+    if limit.MaxApplications != 5 && (len(limit.MaxResources) != 2 && limit.MaxResources["memory"] != "10000") {
+        t.Errorf("loaded resource limits incorrectly: %v", limit)
+    }
+
+    // limit 2 check
+    limit = conf.Partitions[0].Queues[0].Limits[1]
+    if len(limit.Users) != 1 && limit.Users[0] != "user2" && limit.Groups[0] != "prod" {
+        t.Errorf("user and group list have incorrect entries (limit 2): %v", limit)
+    }
+    if limit.MaxApplications != 10 && (limit.MaxResources != nil || len(limit.MaxResources) != 0) {
+        t.Errorf("loaded resource limits incorrectly (limit 2): %v", limit)
+    }
+
+    // sub queue limit check
+    limit = conf.Partitions[0].Queues[0].Queues[0].Limits[0]
+    if len(limit.Users) != 1 && limit.Users[0] != "subuser" && len(limit.Groups) != 0 {
+        t.Errorf("user and group list have incorrect entries (sub queue): %v", limit)
+    }
+    if limit.MaxApplications != 1 && (limit.MaxResources != nil || len(limit.MaxResources) != 0) {
+        t.Errorf("loaded resource limits incorrectly (sub queue): %v", limit)
+    }
+}
+
+
+func TestComplexUsers(t *testing.T) {
+    data := `
+partitions:
+  - name: default
+    limits:
+      - limit: dot user
+        users:
+        - user.lastname
+        maxapplications: 1
+      - limit: "@ user"
+        users:
+        - user@domain
+        maxapplications: 1
+      - limit: wildcard user
+        users:
+        - "*"
+        maxapplications: 1
+      - limit: wildcard group
+        groups:
+        - "*"
+        maxapplications: 1
+    queues:
+      - name: root
+`
+    // validate the config and check after the update
+    conf, err := CreateConfig(data)
+    if err != nil {
+        t.Fatalf("config parsing should not have failed: %v", conf)
+    }
+    // gone through validation: 1 top level queues
+    if len(conf.Partitions[0].Queues) != 1 && len(conf.Partitions[0].Queues[0].Limits) != 0 {
+        t.Errorf("failed to load queues from config: %v", conf)
+    }
+    if len(conf.Partitions[0].Limits) != 4 {
+        t.Errorf("failed to load partition limits from config: %v", conf)
+    }
+
+    // user with dot check
+    limit := conf.Partitions[0].Limits[0]
+    if len(limit.Users) != 1 && limit.Users[0] != "user.lastname" {
+        t.Errorf("failed to load 'dot' user from config: %v", limit)
+    }
+
+    // user with @ check
+    limit = conf.Partitions[0].Limits[1]
+    if len(limit.Users) != 1 && limit.Users[0] != "user@domain" {
+        t.Errorf("failed to load '@' user from config: %v", limit)
+    }
+
+    // user wildcard
+    limit = conf.Partitions[0].Limits[2]
+    if len(limit.Users) != 0 && limit.Users[0] != "*" {
+        t.Errorf("failed to load wildcard user from config: %v", limit)
+    }
+
+    // group wildcard
+    limit = conf.Partitions[0].Limits[3]
+    if len(limit.Groups) != 1 && limit.Groups[0] != "*" {
+        t.Errorf("failed to load wildcard group from config: %v", limit)
+    }
+}
+
+func TestLimitsFail(t *testing.T) {
+    data := `
+partitions:
+  - name: default
+    limits:
+      - limit:
+        users:
+        - user1
+        maxresources: {}
+        maxapplications: 0
+    queues:
+      - name: root
+`
+    // validate the config and check after the update
+    conf, err := CreateConfig(data)
+    if err == nil {
+        t.Errorf("limit parsing should have failed resource nil: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    limits:
+      - limit:
+        users:
+        - user1
+        maxapplications: 0
+    queues:
+      - name: root
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("limit parsing should have failed max app zero: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    limits:
+      - limit:
+        users:
+        - user1
+        maxresources: {memory: 0}
+        maxapplications: 0
+    queues:
+      - name: root
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("limit parsing should have failed all limits zero: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    limits:
+      - limit:
+        users:
+        - user
+        maxresources: {memory: x}
+    queues:
+      - name: root
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("queue user parsing should have failed: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    limits:
+      - limit:
+        users:
+        - user
+        maxresources: {memory: 0}
+    queues:
+      - name: root
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("queue user parsing should have failed: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    limits:
+      - limit: illegal user
+        users:
+        - user space
+        maxapplications: 1
+    queues:
+      - name: root
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("limit parsing should have failed user space: %v", conf)
+    }
+
+    data = `
+partitions:
+  - name: default
+    limits:
+      - limit: illegal group
+        groups:
+        - group@domain
+        maxapplications: 1
+    queues:
+      - name: root
+`
+    // validate the config and check after the update
+    conf, err = CreateConfig(data)
+    if err == nil {
+        t.Errorf("limit parsing should have failed group @: %v", conf)
     }
 }

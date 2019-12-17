@@ -68,30 +68,32 @@ func checkACL(acl string) error {
 
 // Temporary convenience method: should use resource package to do this
 // currently no check for the type of resource as long as the value is OK all is OK
-func checkResource(res map[string]string) error {
+func checkResource(res map[string]string) (int64, error) {
+    var totalres int64
     for _, val := range res {
-        _, err := strconv.ParseInt(val, 10, 64)
+        rescount, err := strconv.ParseInt(val, 10, 64)
         if err != nil {
-            return fmt.Errorf("resource parsing failed: %v", err)
+            return 0, fmt.Errorf("resource parsing failed: %v", err)
         }
+        totalres += rescount
     }
-    return nil
+    return totalres, nil
 }
 
 // Check the resource configuration
 func checkResources(resource Resources) error {
     // check guaranteed resources
     if resource.Guaranteed != nil && len(resource.Guaranteed) != 0 {
-        err := checkResource(resource.Guaranteed)
+        _, err := checkResource(resource.Guaranteed)
         if err != nil {
             return err
         }
     }
     // check max resources
     if resource.Max != nil && len(resource.Max) != 0 {
-        err := checkResource(resource.Max)
-        if err != nil {
-            return err
+        total, err := checkResource(resource.Max)
+        if err != nil || total == 0{
+            return fmt.Errorf("max resource total is '%d', or parsing failed: %v", total, err)
         }
     }
     return nil
@@ -177,16 +179,55 @@ func checkPlacementFilter(filter Filter) error {
     return nil
 }
 
-// Check the defined users
-func checkUserDefinition(partition *PartitionConfig) error {
+// Check a single limit entry
+func checkLimit(limit Limit) error {
+    if len(limit.Users) == 0 && len(limit.Groups) == 0 {
+        return fmt.Errorf("empty user and group lists defined in limit '%v'", limit)
+    }
+    for _, name := range limit.Users {
+        if name != "*" && !UserRegExp.MatchString(name) {
+            return fmt.Errorf("invalid limit user name '%s' in limit definition", name)
+        }
+    }
+    for _, name := range limit.Groups {
+        if name != "*" && !GroupRegExp.MatchString(name) {
+            return fmt.Errorf("invalid limit group name '%s' in limit definition", name)
+        }
+    }
+    total := int64(-1)
+    var err error
+    // check the resource (if defined)
+    if limit.MaxResources != nil && len(limit.MaxResources) != 0 {
+        total, err = checkResource(limit.MaxResources)
+        if err != nil {
+            log.Logger().Debug("resource parsing failed",
+                zap.Int64("resourceEntries", total),
+                zap.Error(err))
+            return err
+        }
+    }
+    // at least some resource should be not null
+    if limit.MaxApplications == 0 && total <= 0 {
+        return fmt.Errorf("invalid resource combination for limit names '%s' all resource limits are null", limit.Users)
+    }
+    return nil
+}
+
+// Check the defined limits list
+func checkLimits(limits []Limit, obj string) error {
     // return if nothing defined
-    if partition.Users == nil || len(partition.Users) == 0 {
+    if limits == nil || len(limits) == 0 {
         return nil
     }
-
-    log.Logger().Debug("checking partition user config",
-        zap.String("partitionName", partition.Name))
-    // TODO check users
+    // walk over the list of limits
+    log.Logger().Debug("checking limits configs",
+        zap.String("objName", obj),
+        zap.Int("limitsLength", len(limits)))
+    for _, limit := range limits {
+        if err := checkLimit(limit); err != nil {
+            return err
+        }
+    }
     return nil
 }
 
@@ -220,6 +261,12 @@ func checkQueues(queue *QueueConfig, level int) error {
         return err
     }
     err = checkACL(queue.SubmitACL)
+    if err != nil {
+        return err
+    }
+
+    // check the limits for this queue (if defined)
+    err = checkLimits(queue.Limits, queue.Name)
     if err != nil {
         return err
     }
@@ -334,7 +381,7 @@ func Validate(newConfig *SchedulerConfig) error {
         if err != nil {
             return err
         }
-        err = checkUserDefinition(&partition)
+        err = checkLimits(partition.Limits, partition.Name)
         if err != nil {
             return err
         }

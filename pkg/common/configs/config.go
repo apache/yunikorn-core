@@ -34,11 +34,17 @@ type SchedulerConfig struct {
     Checksum   []byte
 }
 
+// The partition object for each partition:
+// - the name of the partition
+// - a list of sub or child queues
+// - a list of placement rule definition objects
+// - a list of users specifying limits on the partition
+// - the preemption configuration for the partition
 type PartitionConfig struct {
     Name           string
     Queues         []QueueConfig
     PlacementRules []PlacementRule           `yaml:",omitempty" json:",omitempty"`
-    Users          []User                    `yaml:",omitempty" json:",omitempty"`
+    Limits         []Limit                   `yaml:",omitempty" json:",omitempty"`
     Preemption     PartitionPreemptionConfig `yaml:",omitempty" json:",omitempty"`
     NodeSortPolicy NodeSortingPolicy         `yaml:",omitempty" json:",omitempty"`
 }
@@ -50,17 +56,21 @@ type PartitionPreemptionConfig struct {
 // The queue object for each queue:
 // - the name of the queue
 // - a resources object to specify resource limits on the queue
+// - the maximum number of applications that can run in the queue
 // - a set of properties, exact definition of what can be set is not part of the yaml
+// - ACL for submit and or admin access
 // - a list of sub or child queues
+// - a list of users specifying limits on a queue
 type QueueConfig struct {
     Name            string
     Parent          bool              `yaml:",omitempty" json:",omitempty"`
     Resources       Resources         `yaml:",omitempty" json:",omitempty"`
+    MaxApplications uint64            `yaml:",omitempty" json:",omitempty"`
     Properties      map[string]string `yaml:",omitempty" json:",omitempty"`
     AdminACL        string            `yaml:",omitempty" json:",omitempty"`
     SubmitACL       string            `yaml:",omitempty" json:",omitempty"`
-    MaxApplications uint64            `yaml:",omitempty" json:",omitempty"`
     Queues          []QueueConfig     `yaml:",omitempty" json:",omitempty"`
+    Limits          []Limit           `yaml:",omitempty" json:",omitempty"`
 }
 
 // The resource limits to set on the queue. The definition allows for an unlimited number of types to be used.
@@ -89,8 +99,8 @@ type PlacementRule struct {
 
 // The user and group filter for a rule.
 // - type of filter (allow or deny filter, empty means allow)
-// - comma separated list of users to filter
-// - comma separated list of groups to filter
+// - list of users to filter (maybe empty)
+// - list of groups to filter (maybe empty)
 // if the list of users or groups is exactly 1 long it is interpreted as a regular expression
 type Filter struct {
     Type   string
@@ -98,13 +108,22 @@ type Filter struct {
     Groups []string `yaml:",omitempty" json:",omitempty"`
 }
 
-// The user object to specify user limits at different levels in the partition or queues
-// Different limits for the same user may be defined at different levels in the hierarchy
-// - name of the user
-// - maximum resources as a resource object to allow for the user
-// - maximum number of applications the user can have running
-type User struct {
-    Name            string
+// A list of limit objects to define limits for a partition or queue
+type Limits struct {
+    Limit []Limit
+}
+
+// The limit object to specify user and or group limits at different levels in the partition or queues
+// Different limits for the same user or group may be defined at different levels in the hierarchy
+// - limit description (optional)
+// - list of users (maybe empty)
+// - list of groups (maybe empty)
+// - maximum resources as a resource object to allow for the user or group
+// - maximum number of applications the user or group can have running
+type Limit struct {
+    Limit           string
+    Users           []string          `yaml:",omitempty" json:",omitempty"`
+    Groups          []string          `yaml:",omitempty" json:",omitempty"`
     MaxResources    map[string]string `yaml:",omitempty" json:",omitempty"`
     MaxApplications uint64            `yaml:",omitempty" json:",omitempty"`
 }

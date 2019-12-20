@@ -17,6 +17,7 @@ limitations under the License.
 package scheduler
 
 import (
+    "github.com/cloudera/yunikorn-core/pkg/common"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
     "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/metrics"
@@ -33,8 +34,6 @@ type SortType int32
 const (
     FairSortPolicy        = 0
     FifoSortPolicy        = 1
-    MaxAvailableResources = 2 // node sorting, descending on available resources
-    MinAvailableResources = 3 // node sorting, ascending on available resources
 )
 
 func SortQueue(queues []*SchedulingQueue, sortType SortType) {
@@ -71,63 +70,58 @@ func SortApplications(apps []*SchedulingApplication, sortType SortType, globalRe
     }
 }
 
-func SortNodes(nodes []*SchedulingNode, sortType SortType) {
-    sortingStart := time.Now()
-    switch sortType {
-    case MaxAvailableResources:
-        // Sort by available resource, descending order
-        sort.SliceStable(nodes, func(i, j int) bool {
-            l := nodes[i]
-            r := nodes[j]
-            return resources.CompUsageShares(l.getAvailableResource(), r.getAvailableResource()) > 0
-        })
-    case MinAvailableResources:
-        // Sort by available resource, ascending order
-        sort.SliceStable(nodes, func(i, j int) bool {
-            l := nodes[i]
-            r := nodes[j]
-            return resources.CompUsageShares(r.getAvailableResource(), l.getAvailableResource()) > 0
-        })
-    }
-    metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
-}
-
 // NodeSorter sorts a list of scheduling nodes based on the defined policy
 type NodeSorter interface {
-    // initialize node sorter with passing in specified sorting policy and a list of scheduling nodes
-    Init(schedulingNodes []*SchedulingNode, sortType SortType)
-    // returns sorted scheduling nodes based on specified sorting policy
+    // initialize node sorter with passing in specified a list of scheduling nodes and sorting policy
+    Init(schedulingNodes []*SchedulingNode, sortingPolicy common.SortingPolicy)
+    // returns sorted scheduling nodes based on the specified sorting policy
     GetSortedSchedulingNodes() []*SchedulingNode
-    // Update node snapshot and adjust its placement in tree
-    UpdateNode(nodeId string) bool
+    // Update the order of a single node in sorted nodes
+    UpdateOrder(nodeId string)
 }
 
 // Node sorter based on slice
 type SliceBasedNodeSorter struct {
     NodeSorter
     schedulingNodes []*SchedulingNode
-    sortType SortType
+    sortingPolicy common.SortingPolicy
 }
 
-func (sbns *SliceBasedNodeSorter) Init(schedulingNodes []*SchedulingNode, sortType SortType) {
+func (sbns *SliceBasedNodeSorter) Init(schedulingNodes []*SchedulingNode, sortingPolicy common.SortingPolicy) {
     sbns.schedulingNodes = schedulingNodes
-    sbns.sortType = sortType
+    sbns.sortingPolicy = sortingPolicy
 }
 
 func (sbns *SliceBasedNodeSorter) GetSortedSchedulingNodes() []*SchedulingNode {
-    SortNodes(sbns.schedulingNodes, sbns.sortType)
+    sortingStart := time.Now()
+    switch sbns.sortingPolicy {
+    case common.FairnessPolicy:
+        // Sort by available resource, descending order
+        sort.SliceStable(sbns.schedulingNodes, func(i, j int) bool {
+            l := sbns.schedulingNodes[i]
+            r := sbns.schedulingNodes[j]
+            return resources.CompUsageShares(l.getAvailableResource(), r.getAvailableResource()) > 0
+        })
+    case common.BinPackingPolicy:
+        // Sort by available resource, ascending order
+        sort.SliceStable(sbns.schedulingNodes, func(i, j int) bool {
+            l := sbns.schedulingNodes[i]
+            r := sbns.schedulingNodes[j]
+            return resources.CompUsageShares(r.getAvailableResource(), l.getAvailableResource()) > 0
+        })
+    }
+    metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
     return sbns.schedulingNodes
 }
 
-func (sbns *SliceBasedNodeSorter) UpdateNode(nodeId string) bool {
+func (sbns *SliceBasedNodeSorter) UpdateOrder(nodeId string) {
     // do nothing for non-incremental sort policy
-    return true
 }
 
 // Node sorter based on btree
 type BtreeBasedNodeSorter struct {
     NodeSorter
-    sortType SortType
+    sortingPolicy common.SortingPolicy
     nodeTree *btree.BTree
     nodes    map[string]*SchedulingNodeSnapshot
 }
@@ -146,11 +140,11 @@ func (sns *SchedulingNodeSnapshot) Less(than btree.Item) bool {
     if availSharesComp != 0 {
         return availSharesComp < 0
     }
-    return strings.Compare(sns.schedulingNode.NodeId, than.(*SchedulingNodeSnapshot).schedulingNode.NodeId) > 0
+    return strings.Compare(sns.schedulingNode.NodeId, than.(*SchedulingNodeSnapshot).schedulingNode.NodeId) < 0
 }
 
-func (bbns *BtreeBasedNodeSorter) Init(schedulingNodes []*SchedulingNode, sortType SortType) {
-    bbns.sortType = sortType
+func (bbns *BtreeBasedNodeSorter) Init(schedulingNodes []*SchedulingNode, sortingPolicy common.SortingPolicy) {
+    bbns.sortingPolicy = sortingPolicy
     bbns.nodeTree = btree.New(32)
     bbns.nodes = make(map[string]*SchedulingNodeSnapshot)
     // build btree and snapshots for input scheduling nodes
@@ -170,7 +164,7 @@ func (bbns *BtreeBasedNodeSorter) addSchedulingNode(schedulingNode *SchedulingNo
     bbns.nodes[schedulingNode.NodeId] = nodeSnapshot
 }
 
-func (bbns *BtreeBasedNodeSorter) UpdateNode(nodeId string) bool {
+func (bbns *BtreeBasedNodeSorter) UpdateOrder(nodeId string) {
     if nodeSnapshot, ok := bbns.nodes[nodeId]; ok {
         deletedItem := bbns.nodeTree.Delete(nodeSnapshot)
         if deletedItem == nil {
@@ -179,27 +173,25 @@ func (bbns *BtreeBasedNodeSorter) UpdateNode(nodeId string) bool {
         } else {
             schedulingNode := deletedItem.(*SchedulingNodeSnapshot).schedulingNode
             bbns.addSchedulingNode(schedulingNode)
-            return true
         }
     } else {
         log.Logger().Warn("node not found in snapshot cache of node sorter",
             zap.String("nodeId", nodeId))
     }
-    return false
 }
 
 func (bbns *BtreeBasedNodeSorter) GetSortedSchedulingNodes() []*SchedulingNode {
     sortedSchedulingNodes := make([]*SchedulingNode, bbns.nodeTree.Len())
     var i = 0
-    switch bbns.sortType {
-    case MinAvailableResources:
-        bbns.nodeTree.Ascend(func(item btree.Item) bool {
+    switch bbns.sortingPolicy {
+    case common.FairnessPolicy:
+        bbns.nodeTree.Descend(func(item btree.Item) bool {
             sortedSchedulingNodes[i] = item.(*SchedulingNodeSnapshot).schedulingNode
             i++
             return true
         })
-    case MaxAvailableResources:
-        bbns.nodeTree.Descend(func(item btree.Item) bool {
+    case common.BinPackingPolicy:
+        bbns.nodeTree.Ascend(func(item btree.Item) bool {
             sortedSchedulingNodes[i] = item.(*SchedulingNodeSnapshot).schedulingNode
             i++
             return true

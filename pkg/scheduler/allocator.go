@@ -141,7 +141,7 @@ func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *Parti
 
     //init node sorter
     nodeSorter := &BtreeBasedNodeSorter{}
-    nodeSorter.Init(nodeList, m.getNodeSortType(partitionContext.partition.GetNodeSortingPolicy()))
+    nodeSorter.Init(nodeList, partitionContext.partition.GetNodeSortingPolicy())
     ctx, cancel := context.WithCancel(context.Background())
 
     allocations := make([]*SchedulingAllocation, len(candidates))
@@ -164,8 +164,8 @@ func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *Parti
         if allocation := m.allocate(nodeIterator, candidate, preemptionParam); allocation != nil {
             length := atomic.AddInt32(&allocatedLength, 1)
             allocations[length-1] = allocation
-            // inform node sorter to update the node changed in this allocation
-            nodeSorter.UpdateNode(allocation.NodeId)
+            // inform node sorter to update order of the node changed in this allocation
+            nodeSorter.UpdateOrder(allocation.NodeId)
         } else {
             length := atomic.AddInt32(&failedAskLength, 1)
             preemptionParam.blacklistedRequest[candidate.AskProto.AllocationKey] = true
@@ -206,16 +206,6 @@ func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *Parti
 
     // limit the slices based on what was found
     return allocations[:allocatedLength], failedAsks[:failedAskLength]
-}
-
-func (m *Scheduler) getNodeSortType(partitionSortingPolicy common.SortingPolicy) SortType {
-    switch partitionSortingPolicy {
-    case common.FairnessPolicy:
-        return MaxAvailableResources
-    case common.BinPackingPolicy:
-        return MinAvailableResources
-    }
-    return MaxAvailableResources
 }
 
 func (m *Scheduler) handleFailedToAllocationAllocations(allocations []*SchedulingAllocation, candidates []*SchedulingAllocationAsk, preemptionParam *preemptionParameters) {

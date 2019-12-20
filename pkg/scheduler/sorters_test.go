@@ -18,6 +18,7 @@ package scheduler
 
 import (
 	"github.com/cloudera/yunikorn-core/pkg/cache"
+	"github.com/cloudera/yunikorn-core/pkg/common"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"github.com/cloudera/yunikorn-core/pkg/common/security"
 	"github.com/cloudera/yunikorn-core/pkg/log"
@@ -179,20 +180,20 @@ func TestQueueGuaranteedResourceNotSet(t *testing.T) {
 	assertQueueList(t, queues, []int{2,1,0})
 }
 
-func TestSortNodesMin(t *testing.T) {
-	testSortNodesMin(t, &SliceBasedNodeSorter{})
-	testSortNodesMin(t, &BtreeBasedNodeSorter{})
+func TestSortNodesBinPacking(t *testing.T) {
+	testSortNodesBinPacking(t, &SliceBasedNodeSorter{})
+	testSortNodesBinPacking(t, &BtreeBasedNodeSorter{})
 }
 
-func testSortNodesMin(t *testing.T, nodeSorter NodeSorter) {
+func testSortNodesBinPacking(t *testing.T, nodeSorter NodeSorter) {
 	// nil or empty list cannot panic
-	nodeSorter.Init(nil, MinAvailableResources)
+	nodeSorter.Init(nil, common.BinPackingPolicy)
 	nodeSorter.GetSortedSchedulingNodes()
 	list := make([]*SchedulingNode, 0)
-	nodeSorter.Init(list, MinAvailableResources)
+	nodeSorter.Init(list, common.BinPackingPolicy)
 	nodeSorter.GetSortedSchedulingNodes()
 	list = append(list, NewSchedulingNode(cache.NewNodeForSort("node-nil", nil)))
-	nodeSorter.Init(list, MinAvailableResources)
+	nodeSorter.Init(list, common.BinPackingPolicy)
 	nodeSorter.GetSortedSchedulingNodes()
 
 	// stable sort is used so equal resources stay were they were
@@ -209,7 +210,7 @@ func testSortNodesMin(t *testing.T, nodeSorter NodeSorter) {
 		list[i] = node
 	}
 	// nodes should come back in order 2 (100), 1 (200), 0 (300)
-	nodeSorter.Init(list, MinAvailableResources)
+	nodeSorter.Init(list, common.BinPackingPolicy)
 	list = nodeSorter.GetSortedSchedulingNodes()
 	assertNodeList(t, list, []int{2,1,0})
 
@@ -218,7 +219,7 @@ func testSortNodesMin(t *testing.T, nodeSorter NodeSorter) {
 		cache.NewNodeForSort("node-1", resources.Multiply(res, 0)),
 	)
 	// nodes should come back in order 1 (0), 2 (100), 0 (300)
-	nodeSorter.Init(list, MinAvailableResources)
+	nodeSorter.Init(list, common.BinPackingPolicy)
 	list = nodeSorter.GetSortedSchedulingNodes()
 	assertNodeList(t, list, []int{2,0,1})
 
@@ -226,35 +227,46 @@ func testSortNodesMin(t *testing.T, nodeSorter NodeSorter) {
 	list[0] = NewSchedulingNode(
 		cache.NewNodeForSort("node-1", resources.Multiply(res, 3)),
 	)
-	// nodes should come back in order 2 (100), 1 (300), 0 (300)
-	nodeSorter.Init(list, MinAvailableResources)
-	list = nodeSorter.GetSortedSchedulingNodes()
-	assertNodeList(t, list, []int{2,1,0})
 
-	// change node-0 on place 2 in the slice to have -300 res
-	list[2] = NewSchedulingNode(
-		cache.NewNodeForSort("node-0", resources.Multiply(res, -3)),
-	)
+	nodeSorter.Init(list, common.BinPackingPolicy)
+	list = nodeSorter.GetSortedSchedulingNodes()
+	switch nodeSorter.(type) {
+	case *SliceBasedNodeSorter:
+		// nodes should come back in order 2 (100), 1 (300), 0 (300)
+		assertNodeList(t, list, []int{2,1,0})
+		// change node-0 on place 2 in the slice to have -300 res
+		list[2] = NewSchedulingNode(
+			cache.NewNodeForSort("node-0", resources.Multiply(res, -3)),
+		)
+	case *BtreeBasedNodeSorter:
+		// nodes should come back in order 2 (100), 0 (300), 1 (300)
+		assertNodeList(t, list, []int{1,2,0})
+		// change node-0 on place 1 in the slice to have -300 res
+		list[1] = NewSchedulingNode(
+			cache.NewNodeForSort("node-0", resources.Multiply(res, -3)),
+		)
+	}
+
 	// nodes should come back in order 0 (-300), 2 (100), 1 (300)
-	nodeSorter.Init(list, MinAvailableResources)
+	nodeSorter.Init(list, common.BinPackingPolicy)
 	list = nodeSorter.GetSortedSchedulingNodes()
 	assertNodeList(t, list, []int{0,2,1})
 }
 
-func TestSortNodesMax(t *testing.T) {
-	testSortNodesMax(t, &SliceBasedNodeSorter{})
-	testSortNodesMax(t, &BtreeBasedNodeSorter{})
+func TestSortNodesFairness(t *testing.T) {
+	testSortNodesFairness(t, &SliceBasedNodeSorter{})
+	testSortNodesFairness(t, &BtreeBasedNodeSorter{})
 }
 
-func testSortNodesMax(t *testing.T, nodeSorter NodeSorter) {
+func testSortNodesFairness(t *testing.T, nodeSorter NodeSorter) {
 	// nil or empty list cannot panic
-	nodeSorter.Init(nil, MaxAvailableResources)
+	nodeSorter.Init(nil, common.FairnessPolicy)
 	assert.Equal(t, 0, len(nodeSorter.GetSortedSchedulingNodes()))
 	list := make([]*SchedulingNode, 0)
-	nodeSorter.Init(list, MaxAvailableResources)
+	nodeSorter.Init(list, common.FairnessPolicy)
 	assert.Equal(t, 0, len(nodeSorter.GetSortedSchedulingNodes()))
 	list = append(list, NewSchedulingNode(cache.NewNodeForSort("node-nil", nil)))
-	nodeSorter.Init(list, MaxAvailableResources)
+	nodeSorter.Init(list, common.FairnessPolicy)
 	assert.Equal(t, 1, len(nodeSorter.GetSortedSchedulingNodes()))
 
 	// stable sort is used so equal resources stay were they were
@@ -270,7 +282,7 @@ func testSortNodesMax(t *testing.T, nodeSorter NodeSorter) {
 		list[i] = node
 	}
 	// nodes should come back in order 2 (300), 1 (200), 0 (100)
-	nodeSorter.Init(list, MaxAvailableResources)
+	nodeSorter.Init(list, common.FairnessPolicy)
 	list = nodeSorter.GetSortedSchedulingNodes()
 	assertNodeList(t, list, []int{2,1,0})
 
@@ -279,7 +291,7 @@ func testSortNodesMax(t *testing.T, nodeSorter NodeSorter) {
 		cache.NewNodeForSort("node-1", resources.Multiply(res, 0)),
 	)
 	// nodes should come back in order 2 (300), 0 (100), 1 (0)
-	nodeSorter.Init(list, MaxAvailableResources)
+	nodeSorter.Init(list, common.FairnessPolicy)
 	list = nodeSorter.GetSortedSchedulingNodes()
 	assertNodeList(t, list, []int{1,2,0})
 
@@ -288,27 +300,17 @@ func testSortNodesMax(t *testing.T, nodeSorter NodeSorter) {
 		cache.NewNodeForSort("node-1", resources.Multiply(res, 3)),
 	)
 
-	nodeSorter.Init(list, MaxAvailableResources)
+	nodeSorter.Init(list, common.FairnessPolicy)
 	list = nodeSorter.GetSortedSchedulingNodes()
-	switch nodeSorter.(type) {
-	case *SliceBasedNodeSorter:
-		// nodes should come back in order 2 (300), 1 (300), 0 (100)
-		assertNodeList(t, list, []int{2,1,0})
-		// change node-2 on place 0 in the slice to have -300 res
-		list[0] = NewSchedulingNode(
-			cache.NewNodeForSort("node-2", resources.Multiply(res, -3)),
-		)
-	case *BtreeBasedNodeSorter:
-		// nodes should come back in order 1 (300), 2 (300), 0 (100)
-		assertNodeList(t, list, []int{2,0,1})
-		// change node-2 on place 1 in the slice to have -300 res
-		list[1] = NewSchedulingNode(
-			cache.NewNodeForSort("node-2", resources.Multiply(res, -3)),
-		)
-	}
+	assertNodeList(t, list, []int{2,1,0})
+
+	// change node-2 on place 0 in the slice to have -300 res
+	list[0] = NewSchedulingNode(
+		cache.NewNodeForSort("node-2", resources.Multiply(res, -3)),
+	)
 
 	// nodes should come back in order 1 (300), 0 (100), 2 (-300)
-	nodeSorter.Init(list, MaxAvailableResources)
+	nodeSorter.Init(list, common.FairnessPolicy)
 	list = nodeSorter.GetSortedSchedulingNodes()
 	assertNodeList(t, list, []int{1,0,2})
 }
@@ -408,7 +410,7 @@ func assertQueueList(t *testing.T, list []*SchedulingQueue, place []int) {
 // list of nodes and the location of the named nodes inside that list
 // place[0] defines the location of the node-0 in the list of nodes
 func assertNodeList(t *testing.T, list []*SchedulingNode, place []int) {
-	assert.Equal(t, "node-0", list[place[0]].NodeId, )
+	assert.Equal(t, "node-0", list[place[0]].NodeId)
 	assert.Equal(t, "node-1", list[place[1]].NodeId)
 	assert.Equal(t, "node-2", list[place[2]].NodeId)
 }

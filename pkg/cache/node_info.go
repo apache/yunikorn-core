@@ -96,6 +96,7 @@ func (ni *NodeInfo) GetAllocatedResource() *resources.Resource {
 func (ni *NodeInfo) GetAvailableResource() *resources.Resource {
     ni.lock.RLock()
     defer ni.lock.RUnlock()
+
     if ni.availableResource == nil {
         ni.availableResource = resources.NewResource()
     }

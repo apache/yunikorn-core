@@ -87,6 +87,25 @@ Without setting the enviromnent minikube might not find the docker images when d
 1. run the image build from the yunikorn-k8shim repository root: `make image`
 1. deploy the scheduler as per the normal instructions.
 
+## Debug code locally
+
+Note, this instruction requires you have GoLand IDE for development.
+
+In GoLand, go to yunikorn-k8shim project. Then click "Run" -> "Debug..." -> "Edit Configuration..." to get the pop-up configuration window.
+Note, you need to click "+" to create a new profile if the `Go Build` option is not available at the first time.
+
+![Debug Configuration](../images/goland_debug.jpg)
+
+The highlighted fields are the configurations you need to add. These include:
+
+- Run Kind: package
+- Package path: point to the path of `pkg/shim` package
+- Working directory: point to the path of the `conf` directory, this is where the program loads configuration file from
+- Program arguments: specify the arguments to run the program, such as `-kubeConfig=/path/to/.kube/config -interval=1s -clusterId=mycluster -clusterVersion=0.1 -name=yunikorn -policyGroup=queues -logEncoding=console -logLevel=-1`.
+Note, you need to replace `/path/to/.kube/config` with the local path to the kubeconfig file. And if you want to change or add more options, you can run `_output/bin/k8s-yunikorn-scheduler -h` to find out.
+
+Once the changes are done, click "Apply", then "Debug". You will need to set proper breakpoints in order to debug the program.
+
 ## Access remote Kubernetes cluster
 
 This setup assumes you have already installed a remote Kubernetes cluster. 

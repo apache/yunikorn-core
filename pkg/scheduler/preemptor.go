@@ -33,12 +33,6 @@ type preemptionPartitionContext struct {
     leafQueues             map[string]*preemptionQueueContext
 }
 
-// Parameters used to do allocation within preemption loop.
-type preemptionParameters struct {
-    crossQueuePreemption bool
-    blacklistedRequest   map[string]bool
-}
-
 type preemptionQueueContext struct {
     queuePath       string
     schedulingQueue *SchedulingQueue

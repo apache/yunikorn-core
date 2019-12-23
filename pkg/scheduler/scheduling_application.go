@@ -18,21 +18,123 @@ package scheduler
 
 import (
     "github.com/cloudera/yunikorn-core/pkg/cache"
+    "github.com/cloudera/yunikorn-core/pkg/common"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-core/pkg/log"
+    "github.com/cloudera/yunikorn-core/pkg/plugins"
+    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+    "go.uber.org/zap"
+    "sync"
 )
 
 type SchedulingApplication struct {
     ApplicationInfo      *cache.ApplicationInfo
-    Requests             *SchedulingRequests
+    Requests             *AppSchedulingRequests
     MayAllocatedResource *resources.Resource // Maybe allocated, set by scheduler
 
     // Private fields need protection
     queue *SchedulingQueue // queue the application is running in
+
+    lock sync.RWMutex
 }
 
 func NewSchedulingApplication(appInfo *cache.ApplicationInfo) *SchedulingApplication {
-    return &SchedulingApplication{
+    app := &SchedulingApplication{
         ApplicationInfo: appInfo,
-        Requests:        NewSchedulingRequests(),
     }
+    app.Requests = NewSchedulingRequests(app)
+    return app
+}
+
+
+// sort scheduling Requests from a job
+func (app *SchedulingApplication) tryAllocate(partitionContext *PartitionSchedulingContext,
+    headroom *resources.Resource) *SchedulingAllocation {
+    app.lock.Lock()
+    defer app.lock.Unlock()
+
+    for _, request := range app.Requests.sortedRequestsByPriority {
+        if request.PendingRepeatAsk > 0 && resources.FitIn(headroom, request.AllocatedResource) {
+            if allocation := app.allocateForOneRequest(partitionContext, request); allocation != nil {
+                app.MayAllocatedResource = resources.Add(app.MayAllocatedResource, allocation.SchedulingAsk.AllocatedResource)
+                app.Requests.updateAllocationAskRepeat(request.AskProto.AllocationKey, -1)
+                return allocation
+            }
+        }
+    }
+
+    // Nothing allocated, skip this app
+    return nil
+}
+
+
+// This will be called when
+func (app *SchedulingApplication) AddBackAllocationAskRepeat(allocationKey string, nAlloc int32) (*resources.Resource, error) {
+    app.lock.Lock()
+    defer app.lock.Unlock()
+
+    return app.Requests.updateAllocationAskRepeat(allocationKey, nAlloc)
+}
+
+
+// This method will be called under application's allocation method.
+// Returns
+// - SchedulingAllocation (if allocated/reserved anything).
+// - Enum of why cannot allocate or reserve (if allocated/reserved nothing)
+func (m *SchedulingApplication) allocateForOneRequest(partitionContext* PartitionSchedulingContext, candidate *SchedulingAllocationAsk) *SchedulingAllocation {
+    nodeList := partitionContext.getSchedulingNodes()
+    if len(nodeList) == 0 {
+        return nil
+    }
+
+    nodeIterator := evaluateForSchedulingPolicy(nodeList, partitionContext)
+
+    for nodeIterator.HasNext() {
+        node := nodeIterator.Next()
+        if !node.CheckAllocateConditions(candidate.AskProto.AllocationKey) {
+            // skip the node if conditions can not be satisfied
+            continue
+        }
+        if node.CheckAndAllocateResource(candidate.AllocatedResource, false) {
+            // before deciding on an allocation, call the reconcile plugin to sync scheduler cache
+            // between core and shim if necessary. This is useful when running multiple allocations
+            // in parallel and need to handle inter container affinity and anti-affinity.
+            if rp := plugins.GetReconcilePlugin(); rp != nil {
+                if err := rp.ReSyncSchedulerCache(&si.ReSyncSchedulerCacheArgs{
+                    AssumedAllocations:    []*si.AssumedAllocation{
+                        {
+                            AllocationKey: candidate.AskProto.AllocationKey,
+                            NodeId:        node.NodeId,
+                        },
+                    },
+                }); err != nil {
+                    log.Logger().Error("failed to sync cache",
+                        zap.Error(err))
+                }
+            }
+
+            // return allocation (this is not a reservation)
+            return NewSchedulingAllocation(candidate, node.NodeId, false)
+        }
+    }
+
+    // TODO: Need to fix the reservation logic here.
+
+    return nil
+}
+
+
+// TODO: convert this as an interface.
+func evaluateForSchedulingPolicy(nodes []*SchedulingNode, partitionContext *PartitionSchedulingContext) NodeIterator {
+    // Sort Nodes based on the policy configured.
+    configuredPolicy:= partitionContext.partition.GetNodeSortingPolicy()
+    switch configuredPolicy {
+    case common.BinPackingPolicy:
+        SortNodes(nodes, MinAvailableResources)
+        return NewDefaultNodeIterator(nodes)
+    case common.FairnessPolicy:
+        SortNodes(nodes, MaxAvailableResources)
+        return NewDefaultNodeIterator(nodes)
+    }
+    return nil
 }

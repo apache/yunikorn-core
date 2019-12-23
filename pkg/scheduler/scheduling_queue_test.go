@@ -196,13 +196,13 @@ func TestPendingCalc(t *testing.T) {
     if !resources.Equals(root.pendingResource, allocation) {
         t.Errorf("root queue pending allocation failed to increment expected %v, got %v", allocation, root.pendingResource)
     }
-    parent.DecPendingResource(allocation)
+    parent.DecPendingResourceHierarchical(allocation)
     if !resources.IsZero(root.pendingResource) {
         t.Errorf("root queue pending allocation failed to decrement expected 0, got %v", root.pendingResource)
     }
     // Not allowed to go negative: both will be zero after this
     root.IncPendingResource(allocation)
-    parent.DecPendingResource(allocation)
+    parent.DecPendingResourceHierarchical(allocation)
     if !resources.IsZero(root.pendingResource) {
         t.Errorf("root queue pending allocation failed to decrement expected zero, got %v", root.pendingResource)
     }

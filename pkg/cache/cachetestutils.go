@@ -59,7 +59,7 @@ func newNodeForTest(nodeId string, totalResource, availResource *resources.Resou
     // set the basics
     node.NodeId = nodeId
     node.allocations = make(map[string]*AllocationInfo)
-    node.schedulable = true
+    node.schedulable.Store(true)
     node.Partition = "default"
     // make sure they are independent objects
     node.TotalResource = totalResource

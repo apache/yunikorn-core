@@ -27,10 +27,11 @@ type SchedulingAllocation struct {
     NodeId        string
     Releases      []*commonevents.ReleaseAllocation
     PartitionName string
+    Reservation   bool // Is it a reservation?
 }
 
-func NewSchedulingAllocation(ask *SchedulingAllocationAsk, nodeId string) *SchedulingAllocation {
-    return &SchedulingAllocation{SchedulingAsk: ask, NodeId: nodeId, NumAllocation: 1, PartitionName: ask.PartitionName}
+func NewSchedulingAllocation(ask *SchedulingAllocationAsk, nodeId string, reservation bool) *SchedulingAllocation {
+    return &SchedulingAllocation{SchedulingAsk: ask, NodeId: nodeId, NumAllocation: 1, PartitionName: ask.PartitionName, Reservation: reservation}
 }
 
 func (m *SchedulingAllocation) String() string {

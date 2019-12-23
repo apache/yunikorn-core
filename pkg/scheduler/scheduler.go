@@ -47,22 +47,11 @@ type Scheduler struct {
     eventHandlers            handler.EventHandlers     // list of event handlers
     pendingSchedulerEvents   chan interface{}          // queue for scheduler events
     lock                     sync.RWMutex
-
-    // Wait till next try
-    // (It is designed to be accessed under a single goroutine, no lock needed).
-    // This field has dual purposes:
-    // 1) When a request is picky, scheduler will increase this value for every failed retry. So we don't need to
-    //    look at picky-requests every time.
-    // 2) This also indicate starved requests so preemption can do surgical preemption based on this.
-    waitTillNextTry map[string]uint64
-
-    step uint64 // TODO document this, see ask_finder@findMayAllocationFromApplication
 }
 
 func NewScheduler(clusterInfo *cache.ClusterInfo) *Scheduler {
     m := &Scheduler{}
     m.clusterInfo = clusterInfo
-    m.waitTillNextTry = make(map[string]uint64)
     m.clusterSchedulingContext = NewClusterSchedulingContext()
     m.pendingSchedulerEvents = make(chan interface{}, 1024*1024)
     return m
@@ -107,10 +96,7 @@ func newSingleAllocationProposal(alloc *SchedulingAllocation) *cacheevent.Alloca
 // Internal start scheduling service
 func (m *Scheduler) internalSchedule() {
     for {
-        m.singleStepSchedule(16, &preemptionParameters{
-            crossQueuePreemption: false,
-            blacklistedRequest: make(map[string]bool),
-        })
+        m.singleStepSchedule()
     }
 }
 
@@ -152,8 +138,8 @@ func (m *Scheduler) updateSchedulingRequestPendingAskByDelta(allocProposal *comm
     }
 
     // found, now update the pending requests for the queues
-    pendingDelta, err := schedulingApp.Requests.UpdateAllocationAskRepeat(allocProposal.AllocationKey, deltaPendingAsk)
-    if err == nil && !resources.IsZero(pendingDelta) {
+    pendingDelta, err := schedulingApp.AddBackAllocationAskRepeat(allocProposal.AllocationKey, deltaPendingAsk)
+    if pendingDelta != nil && !resources.IsZero(pendingDelta) {
         schedulingApp.queue.IncPendingResource(pendingDelta)
     }
     return err

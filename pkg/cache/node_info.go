@@ -21,6 +21,7 @@ import (
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "sync"
+    "sync/atomic"
 )
 
 // The node structure used throughout the system
@@ -38,7 +39,7 @@ type NodeInfo struct {
     allocatedResource *resources.Resource
     availableResource *resources.Resource
     allocations       map[string]*AllocationInfo
-    schedulable       bool
+    schedulable       atomic.Value
 
     lock        sync.RWMutex
 }
@@ -54,8 +55,8 @@ func NewNodeInfo(proto *si.NewNodeInfo) *NodeInfo {
         TotalResource:     resources.NewResourceFromProto(proto.SchedulableResource),
         allocatedResource: resources.NewResource(),
         allocations:       make(map[string]*AllocationInfo, 0),
-        schedulable:       true,
     }
+    m.SetSchedulable(true)
     m.availableResource = m.TotalResource.Clone()
 
     m.initializeAttribute(proto.Attributes)
@@ -168,14 +169,10 @@ func (ni *NodeInfo) GetAllAllocations() []*AllocationInfo {
 // This will cause the node to be skipped during the scheduling cycle.
 // Visible for testing only
 func (ni *NodeInfo) SetSchedulable(schedulable bool) {
-    ni.lock.Lock()
-    defer ni.lock.Unlock()
-    ni.schedulable = schedulable
+    ni.schedulable.Store(schedulable)
 }
 
 // Can this node be used in scheduling.
 func (ni *NodeInfo) IsSchedulable() bool {
-    ni.lock.RLock()
-    defer ni.lock.RUnlock()
-    return ni.schedulable
+    return ni.schedulable.Load().(bool)
 }

@@ -71,6 +71,108 @@ func NewSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo, parent *SchedulingQ
     return sq
 }
 
+func (queue *SchedulingQueue) tryAllocate(
+    partitionTotalResource *resources.Resource,
+    partitionContext *PartitionSchedulingContext,
+    parentHeadroom *resources.Resource,
+    parentQueueMaxLimit *resources.Resource) *SchedulingAllocation {
+    queue.lock.Lock()
+    defer queue.lock.Unlock()
+
+    // skip stopped queues: running and draining queues are allowed
+    if queue.isStopped() {
+        log.Logger().Debug("skip non-running queue",
+            zap.String("queueName", queue.Name))
+        return nil
+    }
+    // Is it need any resource?
+    if !resources.StrictlyGreaterThanZero(queue.pendingResource) {
+        log.Logger().Debug("skip queue because it has no pending resource",
+            zap.String("queueName", queue.Name))
+        return nil
+    }
+
+    // Get queue max resource
+    queueMaxLimit := getQueueMaxLimit(partitionTotalResource, queue, parentQueueMaxLimit)
+
+    // Get headroom
+    newHeadroom := getHeadroomOfQueue(parentHeadroom, queueMaxLimit, queue)
+
+    var allocation *SchedulingAllocation = nil
+
+    if queue.isLeafQueue() {
+        sortedApps := queue.sortApplicationsFromLeafQueue()
+        for _, app := range sortedApps {
+            if allocation = app.tryAllocate(partitionContext, newHeadroom); allocation != nil {
+                break
+            }
+        }
+    } else {
+        sortedChildren := queue.sortSubqueuesFromQueue()
+        for _, queue := range sortedChildren {
+            if allocation = queue.tryAllocate(partitionTotalResource, partitionContext, newHeadroom, queueMaxLimit); allocation != nil {
+                break
+            }
+        }
+    }
+
+    if allocation != nil {
+        queue.ProposingResource = resources.Add(queue.ProposingResource, allocation.SchedulingAsk.AllocatedResource)
+
+        // Deduct pending resource of the queue
+        newPending, err := resources.SubErrorNegative(queue.pendingResource, allocation.SchedulingAsk.AllocatedResource)
+        if err != nil {
+            log.Logger().Warn("Pending resources went negative",
+                zap.Error(err))
+        }
+        queue.pendingResource = newPending
+        return allocation
+    }
+
+    return nil
+}
+
+
+// Return a sorted copy of the applications in the queue.
+// Only applications with a pending resource request are considered. The applications are sorted using the
+// sorting type for the leaf queue they are in.
+func (queue *SchedulingQueue) sortApplicationsFromLeafQueue() []*SchedulingApplication {
+    // Create a copy of the applications with pending resources
+    sortedApps := make([]*SchedulingApplication, 0)
+    for _, v := range queue.applications {
+        // Only look at app when pending-res > 0
+        if resources.StrictlyGreaterThanZero(v.Requests.GetPendingResource()) {
+            sortedApps = append(sortedApps, v)
+        }
+    }
+
+    // Sort the applications
+    SortApplications(sortedApps, queue.ApplicationSortType, queue.CachedQueueInfo.GuaranteedResource)
+
+    return sortedApps
+}
+
+
+// Return a sorted copy of the queues for this parent queue.
+// Only queues with a pending resource request are considered. The queues are sorted using the
+// sorting type for the parent queue.
+// Stopped queues will be filtered out at a later stage.
+func (queue *SchedulingQueue) sortSubqueuesFromQueue() []*SchedulingQueue {
+    // Create a list of the queues with pending resources
+    sortedQueues := make([]*SchedulingQueue, 0)
+    for _, child := range queue.childrenQueues {
+        // Only look at queue when pending-res > 0
+        if resources.StrictlyGreaterThanZero(child.GetPendingResource()) {
+            sortedQueues = append(sortedQueues, child)
+        }
+    }
+
+    // Sort the queues
+    SortQueue(sortedQueues, queue.QueueSortType)
+
+    return sortedQueues
+}
+
 func (sq * SchedulingQueue) GetPendingResource() *resources.Resource{
     sq.lock.RLock()
     defer sq.lock.RUnlock()
@@ -129,11 +231,11 @@ func (sq *SchedulingQueue) IncPendingResource(delta *resources.Resource) {
     sq.pendingResource = resources.Add(sq.pendingResource, delta)
 }
 
-// Remove pending resource of this queue
-func (sq *SchedulingQueue) DecPendingResource(delta *resources.Resource) {
+// Remove pending resource of this queue and its parents.
+func (sq *SchedulingQueue) DecPendingResourceHierarchical(delta *resources.Resource) {
     // update the parent
     if sq.parent != nil {
-        sq.parent.DecPendingResource(delta)
+        sq.parent.DecPendingResourceHierarchical(delta)
     }
     // update this queue
     sq.lock.Lock()
@@ -167,7 +269,7 @@ func (sq *SchedulingQueue) RemoveSchedulingApplication(app *SchedulingApplicatio
     // Update pending resource of the parent queues
     totalPending := app.Requests.GetPendingResource()
     if !resources.IsZero(totalPending) {
-        sq.parent.DecPendingResource(totalPending)
+        sq.parent.DecPendingResourceHierarchical(totalPending)
     }
     sq.lock.Lock()
     defer sq.lock.Unlock()

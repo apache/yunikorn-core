@@ -35,7 +35,8 @@ func (m *DRFPreemptionPolicy) DoPreemption(scheduler *Scheduler) {
     calculateIdealResources(scheduler)
 
     // Then go to under utilized queues and search for requests
-    scheduler.singleStepSchedule(16, &preemptionParameters{crossQueuePreemption: true, blacklistedRequest: make(map[string]bool)})
+    // FIXME, preemption need to be fixed.
+    // scheduler.singleStepSchedule(16, &preemptionParameters{crossQueuePreemption: true, blacklistedRequest: make(map[string]bool)})
 }
 
 /*
@@ -184,8 +185,7 @@ func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionCont
     return nil
 }
 
-func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitionContext, nodeIterator NodeIterator, candidate *SchedulingAllocationAsk,
-    preemptionParam *preemptionParameters) *SchedulingAllocation {
+func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitionContext, nodeIterator NodeIterator, candidate *SchedulingAllocationAsk) *SchedulingAllocation {
     if preemptionPartitionContext == nil {
         return nil
     }
@@ -239,7 +239,7 @@ func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitio
 func createPreemptionAndAllocationProposal(preemptionPartitionContext *preemptionPartitionContext, nodeToAllocate *SchedulingNode, candidate *SchedulingAllocationAsk,
     preemptionResults []*singleNodePreemptResult) *SchedulingAllocation {
     // We will get this allocation by preempting resources.
-    allocation := NewSchedulingAllocation(candidate, nodeToAllocate.NodeId)
+    allocation := NewSchedulingAllocation(candidate, nodeToAllocate.NodeId, false)
     allocation.Releases = make([]*commonevents.ReleaseAllocation, 0)
 
     // And add releases

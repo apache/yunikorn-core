@@ -17,242 +17,107 @@ limitations under the License.
 package scheduler
 
 import (
-    "context"
-    "github.com/cloudera/yunikorn-core/pkg/common"
-    "github.com/cloudera/yunikorn-core/pkg/log"
-    "github.com/cloudera/yunikorn-core/pkg/metrics"
-    "github.com/cloudera/yunikorn-core/pkg/plugins"
-    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
-    "go.uber.org/zap"
-    "sync/atomic"
-    "time"
+    "github.com/cloudera/yunikorn-core/pkg/common/resources"
 )
 
 // Visible by tests
 func (m *Scheduler) SingleStepScheduleAllocTest(nAlloc int) {
-    m.singleStepSchedule(nAlloc, &preemptionParameters{
-        crossQueuePreemption: false,
-        blacklistedRequest: make(map[string]bool),
-    })
+    for i := 0; i < nAlloc; i++ {
+        m.singleStepSchedule()
+    }
 }
 
-func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionParameters) {
-    if !preemptionParam.crossQueuePreemption {
-        m.step++
-    }
-
+func (m *Scheduler) singleStepSchedule() {
     for partition, partitionContext := range m.clusterSchedulingContext.getPartitionMapClone() {
         totalPartitionResource := m.clusterInfo.GetTotalPartitionResource(partition)
         if totalPartitionResource == nil {
             continue
         }
 
-        // Following steps:
-        // - According to resource usage, find next N allocation Requests, N could be
-        //   mini-batch because we don't want the process takes too long. And this
-        //   runs as single thread.
-        // - According to mini-batched allocation request. Try to allocate. This step
-        //   can be done as multiple thread.
-        // - For asks cannot be assigned, we will do preemption. Again it is done using
-        //   single-thread.
-        candidates := m.findAllocationAsks(totalPartitionResource, partitionContext, nAlloc, m.step, preemptionParam)
+        allocation := m.tryAllocationForPartition(totalPartitionResource, partitionContext)
 
-        // Try to allocate from candidates, returns allocation proposal as well as failed allocation
-        // ask candidates. (For preemption).
-        // TODO clean this up we ignore failures so why collect them?
-        allocations, _ := m.tryBatchAllocation(partition, partitionContext, candidates, preemptionParam)
-
-        // Send allocations to cache, and pending ask.
-        confirmedAllocations := make([]*SchedulingAllocation, 0)
-        if len(allocations) > 0 {
-            for _, alloc := range allocations {
-                if alloc == nil {
-                    continue
-                }
-
-                proposal := newSingleAllocationProposal(alloc)
-                err := m.updateSchedulingRequestPendingAskByDelta(proposal.AllocationProposals[0], -1)
-                if err == nil {
-                    m.eventHandlers.CacheEventHandler.HandleEvent(newSingleAllocationProposal(alloc))
-                    confirmedAllocations = append(confirmedAllocations, alloc)
-                } else {
-                    log.Logger().Error("failed to send allocation proposal",
-                        zap.Error(err))
-                }
-            }
-        }
-
-        nAlloc -= len(confirmedAllocations)
-
-        // Update missed opportunities
-        m.handleFailedToAllocationAllocations(confirmedAllocations, candidates, preemptionParam)
-    }
-}
-
-func (m *Scheduler) regularAllocate(nodeIterator NodeIterator, candidate *SchedulingAllocationAsk) *SchedulingAllocation {
-    for nodeIterator.HasNext() {
-        node := nodeIterator.Next()
-        if !node.CheckAllocateConditions(candidate.AskProto.AllocationKey) {
-            // skip the node if conditions can not be satisfied
+        // We don't hand over reserved container to cache.
+        if allocation == nil || allocation.Reservation {
             continue
         }
-        if node.CheckAndAllocateResource(candidate.AllocatedResource, false) {
-            // before deciding on an allocation, call the reconcile plugin to sync scheduler cache
-            // between core and shim if necessary. This is useful when running multiple allocations
-            // in parallel and need to handle inter container affinity and anti-affinity.
-            if rp := plugins.GetReconcilePlugin(); rp != nil {
-                if err := rp.ReSyncSchedulerCache(&si.ReSyncSchedulerCacheArgs{
-                    AssumedAllocations:    []*si.AssumedAllocation{
-                        {
-                            AllocationKey: candidate.AskProto.AllocationKey,
-                            NodeId:        node.NodeId,
-                        },
-                    },
-                }); err != nil {
-                    log.Logger().Error("failed to sync cache",
-                        zap.Error(err))
-                }
-            }
 
-            // return allocation
-            return NewSchedulingAllocation(candidate, node.NodeId)
+        m.eventHandlers.CacheEventHandler.HandleEvent(newSingleAllocationProposal(allocation))
+    }
+}
+
+// Try to allocate for a given partition
+func (m *Scheduler) tryAllocationForPartition(partitionTotalResource *resources.Resource, partitionContext *PartitionSchedulingContext) *SchedulingAllocation {
+
+    // Do we have any pending resource?
+    if !resources.StrictlyGreaterThanZero(partitionContext.Root.GetPendingResource()) {
+        // If no pending resource, return empty array
+        return nil
+    }
+
+    // Reset may allocations
+    m.resetMayAllocations(partitionContext)
+
+    return partitionContext.Root.tryAllocate(partitionTotalResource, partitionContext, nil, nil)
+}
+
+func getHeadroomOfQueue(parentHeadroom *resources.Resource, queueMaxLimit *resources.Resource, queue *SchedulingQueue) *resources.Resource {
+    // new headroom for this queue
+    if nil != parentHeadroom {
+        return resources.ComponentWiseMin(resources.Sub(queueMaxLimit, queue.ProposingResource), parentHeadroom)
+    }
+    return resources.Sub(queueMaxLimit, queue.ProposingResource)
+}
+
+func getQueueMaxLimit(partitionTotalResource *resources.Resource, queue *SchedulingQueue, parentMaxLimit *resources.Resource) *resources.Resource {
+    if queue.isRoot() {
+        return partitionTotalResource
+    }
+
+    // Get max resource of parent queue
+    maxResource := queue.CachedQueueInfo.MaxResource
+    if maxResource == nil {
+        maxResource = parentMaxLimit
+    }
+    maxResource = resources.ComponentWiseMin(maxResource, partitionTotalResource)
+    return maxResource
+}
+
+// do this from queue hierarchy, sortedQueueCandidates is temporary var
+// and won't be shared in other goroutines
+func (m *Scheduler) tryAllocateForQueuesRecursively(
+    partitionTotalResource *resources.Resource,
+    sortedQueueCandidates []*SchedulingQueue,
+    partitionContext *PartitionSchedulingContext,
+    parentHeadroom *resources.Resource,
+    parentQueueMaxLimit *resources.Resource) *SchedulingAllocation {
+    for _, queue := range sortedQueueCandidates {
+        if alloc := queue.tryAllocate(partitionTotalResource, partitionContext, parentHeadroom, parentQueueMaxLimit); alloc != nil {
+            return alloc
         }
     }
+
     return nil
 }
 
-func (m *Scheduler) allocate(nodes NodeIterator, candidate *SchedulingAllocationAsk, preemptionParam *preemptionParameters) *SchedulingAllocation {
-    if preemptionParam.crossQueuePreemption {
-        return crossQueuePreemptionAllocate(m.preemptionContext.partitions[candidate.PartitionName], nodes, candidate, preemptionParam)
+func (m *Scheduler) resetMayAllocations(partitionContext *PartitionSchedulingContext) {
+    // Recursively reset may-allocation
+    // lock the partition
+    partitionContext.lock.Lock()
+    defer partitionContext.lock.Unlock()
+
+    m.resetMayAllocationsForQueue(partitionContext.Root)
+}
+
+func (m *Scheduler) resetMayAllocationsForQueue(queue *SchedulingQueue) {
+    queue.ProposingResource = queue.CachedQueueInfo.GetAllocatedResource()
+    queue.SetAllocatingResource(queue.CachedQueueInfo.GetAllocatedResource())
+    if queue.isLeafQueue() {
+        for _, app := range queue.applications {
+            app.MayAllocatedResource = app.ApplicationInfo.GetAllocatedResource()
+        }
     } else {
-        return m.regularAllocate(nodes, candidate)
-    }
-}
-
-// Do mini batch allocation
-func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *PartitionSchedulingContext,
-    candidates []*SchedulingAllocationAsk,
-    preemptionParam *preemptionParameters) ([]*SchedulingAllocation, []*SchedulingAllocationAsk) {
-    // copy list of node since we going to go through node list a couple of times
-    nodeList := partitionContext.getSchedulingNodes()
-    if len(nodeList) == 0 {
-        return make([]*SchedulingAllocation, 0), candidates
-    }
-
-    ctx, cancel := context.WithCancel(context.Background())
-
-    allocations := make([]*SchedulingAllocation, len(candidates))
-    failedAsks := make([]*SchedulingAllocationAsk, len(candidates))
-
-    var allocatedLength int32
-    var failedAskLength int32
-
-    doAllocation := func(i int) {
-        allocatingStart := time.Now()
-
-        candidate := candidates[i]
-        // Check if the same allocation key got rejected already.
-        if preemptionParam.blacklistedRequest[candidate.AskProto.AllocationKey] {
-            return
-        }
-
-        nodeIterator := m.evaluateForSchedulingPolicy(nodeList, partitionContext)
-
-        if allocation := m.allocate(nodeIterator, candidate, preemptionParam); allocation != nil {
-            length := atomic.AddInt32(&allocatedLength, 1)
-            allocations[length-1] = allocation
-        } else {
-            length := atomic.AddInt32(&failedAskLength, 1)
-            preemptionParam.blacklistedRequest[candidate.AskProto.AllocationKey] = true
-            failedAsks[length-1] = candidate
-        }
-
-        // record the latency
-        metrics.GetSchedulerMetrics().ObserveSchedulingLatency(allocatingStart)
-    }
-
-    common.ParallelizeUntil(ctx, 1, len(candidates), doAllocation)
-
-    cancel()
-
-    // Logging only at debug level and just the parts needed
-    if log.IsDebugEnabled() {
-        if allocatedLength > 0 {
-            log.Logger().Debug("allocations added",
-                zap.Int32("numOfAllocations", allocatedLength))
-            for _, alloc := range allocations {
-                if alloc != nil {
-                    log.Logger().Debug("allocation",
-                        zap.Any("allocation", alloc))
-                }
-            }
-        }
-        if failedAskLength > 0 {
-            log.Logger().Debug("asks failed",
-                zap.Int32("numOfFailedAsks", failedAskLength))
-            for _, failedAsk := range failedAsks {
-                if failedAsk != nil {
-                    log.Logger().Debug("failedAsks",
-                        zap.Any("ask", failedAsk))
-                }
-            }
-        }
-    }
-
-    // limit the slices based on what was found
-    return allocations[:allocatedLength], failedAsks[:failedAskLength]
-}
-
-// TODO: convert this as an interface.
-func (m *Scheduler) evaluateForSchedulingPolicy(nodes []*SchedulingNode, partitionContext *PartitionSchedulingContext) NodeIterator {
-    // Sort Nodes based on the policy configured.
-    configuredPolicy:= partitionContext.partition.GetNodeSortingPolicy()
-    switch configuredPolicy {
-    case common.BinPackingPolicy:
-        SortNodes(nodes, MinAvailableResources)
-        return NewDefaultNodeIterator(nodes)
-    case common.FairnessPolicy:
-        SortNodes(nodes, MaxAvailableResources)
-        return NewDefaultNodeIterator(nodes)
-    }
-
-    return nil
-}
-
-func (m *Scheduler) handleFailedToAllocationAllocations(allocations []*SchedulingAllocation, candidates []*SchedulingAllocationAsk, preemptionParam *preemptionParameters) {
-    // Failed allocated asks
-    failedToAllocationKeys := make(map[string]bool, 0)
-    allocatedKeys := make(map[string]bool, 0)
-
-    for _, c := range candidates {
-        failedToAllocationKeys[c.AskProto.AllocationKey] = true
-    }
-
-    for _, alloc := range allocations {
-        delete(failedToAllocationKeys, alloc.SchedulingAsk.AskProto.AllocationKey)
-        allocatedKeys[alloc.SchedulingAsk.AskProto.AllocationKey] = true
-    }
-
-    for failedAllocationKey := range failedToAllocationKeys {
-        if preemptionParam.crossQueuePreemption {
-            preemptionParam.blacklistedRequest[failedAllocationKey] = true
-        } else {
-            curWaitValue := m.waitTillNextTry[failedAllocationKey]
-            if curWaitValue == 0 {
-                curWaitValue = 2
-            } else if curWaitValue < (1 << 20) {
-                // Increase missed value if it is less than 2^20 (TODO need do some experiments about this value)
-                curWaitValue <<= 1
-            }
-            m.waitTillNextTry[failedAllocationKey] = curWaitValue
-        }
-    }
-
-    for allocatedKey := range allocatedKeys {
-        if preemptionParam.crossQueuePreemption {
-            delete(preemptionParam.blacklistedRequest, allocatedKey)
-        } else {
-            delete(m.waitTillNextTry, allocatedKey)
+        for _, child := range queue.childrenQueues {
+            m.resetMayAllocationsForQueue(child)
         }
     }
 }

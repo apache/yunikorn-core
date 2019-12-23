@@ -17,42 +17,60 @@ limitations under the License.
 package scheduler
 
 import (
-    "errors"
     "fmt"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
-    "sync"
+    "sort"
 )
 
 // Responsibility of this class:
 // - Hold pending scheduling Requests.
 // - Pre-aggregate scheduling Requests by pre-defined keys, and calculate pending resources
-type SchedulingRequests struct {
+type AppSchedulingRequests struct {
     // AllocationKey -> allocationInfo
-    requests             map[string]*SchedulingAllocationAsk
-    totalPendingResource *resources.Resource
-
-    lock sync.RWMutex
+    requests                 map[string]*SchedulingAllocationAsk
+    sortedRequestsByPriority []*SchedulingAllocationAsk
+    totalPendingResource     *resources.Resource
+    app                      *SchedulingApplication
 }
 
-func NewSchedulingRequests() *SchedulingRequests {
-    return &SchedulingRequests{
-        requests:             make(map[string]*SchedulingAllocationAsk),
-        totalPendingResource: resources.NewResource(),
+func NewSchedulingRequests(app *SchedulingApplication) *AppSchedulingRequests {
+    return &AppSchedulingRequests{
+        requests:                 make(map[string]*SchedulingAllocationAsk),
+        sortedRequestsByPriority: make([]*SchedulingAllocationAsk, 0),
+        totalPendingResource:     resources.NewResource(),
+        app:                      app,
     }
 }
 
-func (m* SchedulingRequests) GetPendingResource() *resources.Resource {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
+func (m*AppSchedulingRequests) GetPendingResource() *resources.Resource {
+    m.app.lock.RLock()
+    defer m.app.lock.RUnlock()
 
     return m.totalPendingResource
 }
 
+// This will be always called under lock of other function, so no additional lock needed.
+func (m*AppSchedulingRequests) resortRequestByPriority() {
+    m.sortedRequestsByPriority = make([]*SchedulingAllocationAsk, len(m.requests))
+    idx := 0
+    for _, value := range m.requests {
+        m.sortedRequestsByPriority[idx] = value
+        idx++
+    }
+
+    sort.SliceStable(m.sortedRequestsByPriority, func(i, j int) bool {
+        l := m.sortedRequestsByPriority[i]
+        r := m.sortedRequestsByPriority[j]
+
+        return l.NormalizedPriority > r.NormalizedPriority
+    })
+}
+
 // Add new or replace
 // Return delta of pending resource and error if anything bad happens.
-func (m *SchedulingRequests) AddAllocationAsk(ask *SchedulingAllocationAsk) (*resources.Resource, error) {
-    m.lock.Lock()
-    defer m.lock.Unlock()
+func (m *AppSchedulingRequests) AddAllocationAsk(ask *SchedulingAllocationAsk) (*resources.Resource, error) {
+    m.app.lock.Lock()
+    defer m.app.lock.Unlock()
 
     deltaPendingResource := resources.MultiplyBy(ask.AllocatedResource, float64(ask.PendingRepeatAsk))
 
@@ -67,19 +85,18 @@ func (m *SchedulingRequests) AddAllocationAsk(ask *SchedulingAllocationAsk) (*re
     // Update total pending resource
     m.totalPendingResource = resources.Add(m.totalPendingResource, deltaPendingResource)
 
+    m.resortRequestByPriority()
+
     return deltaPendingResource, nil
 }
 
 // Update AllocationAsk #repeat, when delta > 0, increase repeat by delta, when delta < 0, decrease repeat by -delta
-// Returns error when allocationKey doesn't exist, or illegal delta specified.
-// Return change of pending resources, it will be used to update queues, applications, etc.
-func (m *SchedulingRequests) UpdateAllocationAskRepeat(allocationKey string, delta int32) (*resources.Resource, error) {
-    m.lock.Lock()
-    defer m.lock.Unlock()
-
+// This method should be called under app's lock, thus, no error check need to be done (external caller need to handle that)
+// Return delta of updated pending resource, nil if failed
+func (m *AppSchedulingRequests) updateAllocationAskRepeat(allocationKey string, delta int32) (*resources.Resource, error) {
     if ask := m.requests[allocationKey]; ask != nil {
-        if ask.PendingRepeatAsk+delta < 0 {
-            return nil, errors.New(fmt.Sprintf("Trying to decrease number of allocation for key=%s, under zero, please double check", allocationKey))
+        if ask.PendingRepeatAsk + delta < 0 {
+            return nil, fmt.Errorf("pending repeat ask for allocation_ID=%s will be negative after update, allocationKey=%s", ask.ApplicationId, allocationKey)
         }
 
         deltaPendingResource := resources.MultiplyBy(ask.AllocatedResource, float64(delta))
@@ -88,24 +105,28 @@ func (m *SchedulingRequests) UpdateAllocationAskRepeat(allocationKey string, del
 
         return deltaPendingResource, nil
     }
-    return nil, errors.New(fmt.Sprintf("Failed to locate request with key=%s", allocationKey))
+
+    return nil, fmt.Errorf("couldn't find pending request for allocation_ID=%s, allocationKey=%s", m.app.ApplicationInfo.ApplicationId, allocationKey)
 }
 
 // Remove allocation ask by key.
 // returns (change of pending resource, ask), return (nil, nil) if key cannot be found
-func (m *SchedulingRequests) RemoveAllocationAsk(allocationKey string) (*resources.Resource, *SchedulingAllocationAsk) {
+func (m *AppSchedulingRequests) RemoveAllocationAsk(allocationKey string) (*resources.Resource, *SchedulingAllocationAsk) {
     // when allocation key not specified, return cleanup all allocation ask
     if allocationKey == "" {
         return m.CleanupAllocationAsks(), nil
     }
 
-    m.lock.Lock()
-    defer m.lock.Unlock()
+    m.app.lock.Lock()
+    defer m.app.lock.Unlock()
 
     if ask := m.requests[allocationKey]; ask != nil {
         deltaPendingResource := resources.MultiplyBy(ask.AllocatedResource, -float64(ask.PendingRepeatAsk))
         m.totalPendingResource = resources.Add(m.totalPendingResource, deltaPendingResource)
         delete(m.requests, allocationKey)
+
+        m.resortRequestByPriority()
+
         return deltaPendingResource, ask
     }
 
@@ -114,9 +135,9 @@ func (m *SchedulingRequests) RemoveAllocationAsk(allocationKey string) (*resourc
 
 // Remove all allocation asks
 // returns (change of pending resource), when no asks, return nil
-func (m *SchedulingRequests) CleanupAllocationAsks() *resources.Resource {
-    m.lock.Lock()
-    defer m.lock.Unlock()
+func (m *AppSchedulingRequests) CleanupAllocationAsks() *resources.Resource {
+    m.app.lock.Lock()
+    defer m.app.lock.Unlock()
 
     var deltaPendingResource *resources.Resource = nil
     for _, ask := range m.requests {
@@ -133,9 +154,9 @@ func (m *SchedulingRequests) CleanupAllocationAsks() *resources.Resource {
     return deltaPendingResource
 }
 
-func (m *SchedulingRequests) GetSchedulingAllocationAsk(allocationKey string) *SchedulingAllocationAsk {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
+func (m *AppSchedulingRequests) GetSchedulingAllocationAsk(allocationKey string) *SchedulingAllocationAsk {
+    m.app.lock.RLock()
+    defer m.app.lock.RUnlock()
 
     return m.requests[allocationKey]
 }

@@ -94,7 +94,9 @@ func (sn *SchedulingNode) incAllocatingResource(proposed *resources.Resource) {
 }
 
 // Handle the allocation processing on the scheduler when the cache node is updated.
-func (sn *SchedulingNode) handleAllocationUpdate(confirmed *resources.Resource) {
+// This will be invoked when allocation is either rejected or accepted by cache. It
+// will decrease allocating resource, and make sure refresh cache at the next round.
+func (sn *SchedulingNode) decreaseAllocatingResource(confirmed *resources.Resource) {
 	sn.lock.Lock()
 	defer sn.lock.Unlock()
 	log.Logger().Debug("allocations in progress increased",

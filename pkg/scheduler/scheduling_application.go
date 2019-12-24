@@ -30,7 +30,13 @@ import (
 type SchedulingApplication struct {
     ApplicationInfo      *cache.ApplicationInfo
     Requests             *AppSchedulingRequests
-    MayAllocatedResource *resources.Resource // Maybe allocated, set by scheduler
+
+    // How much resource allocated for this queue, this includes:
+    // - Already allocated resources which is confirmed.
+    // - Allocating resources which are waiting to be confirmed.
+    // This will be used by sorting algorithm to sort queues while there're multiple thread
+    // allocate resources
+    mayAllocatedResource *resources.Resource
 
     // Private fields need protection
     queue *SchedulingQueue // queue the application is running in
@@ -56,7 +62,7 @@ func (app *SchedulingApplication) tryAllocate(partitionContext *PartitionSchedul
     for _, request := range app.Requests.sortedRequestsByPriority {
         if request.PendingRepeatAsk > 0 && resources.FitIn(headroom, request.AllocatedResource) {
             if allocation := app.allocateForOneRequest(partitionContext, request); allocation != nil {
-                app.MayAllocatedResource = resources.Add(app.MayAllocatedResource, allocation.SchedulingAsk.AllocatedResource)
+                app.mayAllocatedResource = resources.Add(app.mayAllocatedResource, allocation.SchedulingAsk.AllocatedResource)
                 app.Requests.updateAllocationAskRepeat(request.AskProto.AllocationKey, -1)
                 return allocation
             }
@@ -137,4 +143,18 @@ func evaluateForSchedulingPolicy(nodes []*SchedulingNode, partitionContext *Part
         return NewDefaultNodeIterator(nodes)
     }
     return nil
+}
+
+func (m *SchedulingApplication) GetMayAllocatedResource() *resources.Resource {
+    m.lock.RLock()
+    defer m.lock.RUnlock()
+
+    return m.mayAllocatedResource
+}
+
+func (m *SchedulingApplication) DecMayAllocatedResource(allocResource *resources.Resource) {
+    m.lock.RLock()
+    defer m.lock.RUnlock()
+
+    m.mayAllocatedResource = resources.Sub(m.mayAllocatedResource, allocResource)
 }

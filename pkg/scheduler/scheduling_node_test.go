@@ -126,13 +126,13 @@ func TestAllocatingResources(t *testing.T) {
         t.Errorf("allocating resources not set, expected %v got %v", expect, nodeAlloc)
     }
     // release one
-    node.handleAllocationUpdate(allocRes)
+    node.decreaseAllocatingResource(allocRes)
     nodeAlloc = node.getAllocatingResource()
     if !resources.Equals(nodeAlloc, allocRes) {
         t.Errorf("allocating resources not decremented, expected %v got %v", expect, nodeAlloc)
     }
     // release allocating: should be back to zero
-    node.handleAllocationUpdate(allocRes)
+    node.decreaseAllocatingResource(allocRes)
     nodeAlloc = node.getAllocatingResource()
     if !resources.IsZero(nodeAlloc) {
         t.Errorf("allocating resources not zero but %v", nodeAlloc)
@@ -184,8 +184,8 @@ func TestAvailableDirty(t *testing.T) {
     }
     node.getAvailableResource()
 
-    node.handleAllocationUpdate(res)
+    node.decreaseAllocatingResource(res)
     if !node.cachedAvailableUpToDate {
-        t.Error("node available resource dirty should be set after handleAllocationUpdate")
+        t.Error("node available resource dirty should be set after decreaseAllocatingResource")
     }
 }

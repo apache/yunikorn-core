@@ -28,19 +28,25 @@ import (
 
 // Represents Queue inside Scheduler
 type SchedulingQueue struct {
-    Name                string              // Fully qualified path for the queue
-    CachedQueueInfo     *cache.QueueInfo    // link back to the queue in the cache
-    ProposingResource   *resources.Resource // How much resource added for proposing, this is used by queue sort when do candidate selection
-    ApplicationSortType SortType            // How applications are sorted (leaf queue only)
-    QueueSortType       SortType            // How sub queues are sorted (parent queue only)
+    Name                string           // Fully qualified path for the queue
+    CachedQueueInfo     *cache.QueueInfo // link back to the queue in the cache
+    ApplicationSortType SortType         // How applications are sorted (leaf queue only)
+    QueueSortType       SortType         // How sub queues are sorted (parent queue only)
 
     // Private fields need protection
-    childrenQueues     map[string]*SchedulingQueue       // Only for direct children, parent queue only
-    applications       map[string]*SchedulingApplication // only for leaf queue
-    parent             *SchedulingQueue                  // link back to the parent in the scheduler
-    allocatingResource *resources.Resource               // Allocating resource
-    pendingResource    *resources.Resource               // Total pending resource
-    lock sync.RWMutex
+
+    // How much resource allocated for this queue, this includes:
+    // - Already allocated resources which is confirmed.
+    // - Allocating resources which are waiting to be confirmed.
+    // This will be used by sorting algorithm to sort queues while there're multiple thread
+    // allocate resources
+    mayAllocatedResource *resources.Resource
+    childrenQueues       map[string]*SchedulingQueue       // Only for direct children, parent queue only
+    applications         map[string]*SchedulingApplication // only for leaf queue
+    parent               *SchedulingQueue                  // link back to the parent in the scheduler
+    allocatingResource   *resources.Resource               // Allocating resource
+    pendingResource      *resources.Resource               // Total pending resource
+    lock                 sync.RWMutex
 }
 
 func NewSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo, parent *SchedulingQueue) *SchedulingQueue {
@@ -48,7 +54,7 @@ func NewSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo, parent *SchedulingQ
     sq.Name = cacheQueueInfo.GetQueuePath()
     sq.CachedQueueInfo = cacheQueueInfo
     sq.parent = parent
-    sq.ProposingResource = resources.NewResource()
+    sq.mayAllocatedResource = resources.NewResource()
     sq.childrenQueues = make(map[string]*SchedulingQueue)
     sq.applications = make(map[string]*SchedulingApplication)
     sq.pendingResource = resources.NewResource()
@@ -93,10 +99,10 @@ func (queue *SchedulingQueue) tryAllocate(
     }
 
     // Get queue max resource
-    queueMaxLimit := getQueueMaxLimit(partitionTotalResource, queue, parentQueueMaxLimit)
+    queueMaxLimit := queue.getMaxLimit(partitionTotalResource, parentQueueMaxLimit)
 
     // Get headroom
-    newHeadroom := getHeadroomOfQueue(parentHeadroom, queueMaxLimit, queue)
+    newHeadroom := queue.getHeadroom(parentHeadroom, queueMaxLimit)
 
     var allocation *SchedulingAllocation = nil
 
@@ -117,7 +123,7 @@ func (queue *SchedulingQueue) tryAllocate(
     }
 
     if allocation != nil {
-        queue.ProposingResource = resources.Add(queue.ProposingResource, allocation.SchedulingAsk.AllocatedResource)
+        queue.mayAllocatedResource = resources.Add(queue.mayAllocatedResource, allocation.SchedulingAsk.AllocatedResource)
 
         // Deduct pending resource of the queue
         newPending, err := resources.SubErrorNegative(queue.pendingResource, allocation.SchedulingAsk.AllocatedResource)
@@ -387,4 +393,45 @@ func (sq *SchedulingQueue) CheckSubmitAccess(user security.UserGroup) bool {
 // Calls the cache queue which is doing the real work.
 func (sq *SchedulingQueue) CheckAdminAccess(user security.UserGroup) bool {
     return sq.CachedQueueInfo.CheckAdminAccess(user)
+}
+
+func (sq* SchedulingQueue) getHeadroom(parentHeadroom *resources.Resource, queueMaxLimit *resources.Resource) *resources.Resource {
+    // new headroom for this queue
+    if nil != parentHeadroom {
+        return resources.ComponentWiseMin(resources.Sub(queueMaxLimit, sq.mayAllocatedResource), parentHeadroom)
+    }
+    return resources.Sub(queueMaxLimit, sq.mayAllocatedResource)
+}
+
+func (sq* SchedulingQueue) getMaxLimit(partitionTotalResource *resources.Resource, parentMaxLimit *resources.Resource) *resources.Resource {
+    if sq.isRoot() {
+        return partitionTotalResource
+    }
+
+    // Get max resource of parent queue
+    maxResource := sq.CachedQueueInfo.MaxResource
+    if maxResource == nil {
+        maxResource = parentMaxLimit
+    }
+    maxResource = resources.ComponentWiseMin(maxResource, partitionTotalResource)
+    return maxResource
+}
+
+func (sq* SchedulingQueue) GetMayAllocatedResource() *resources.Resource {
+    sq.lock.RLock()
+    defer sq.lock.RUnlock()
+
+    return sq.mayAllocatedResource
+}
+
+// Update may allocated resource from this queue
+func (sq *SchedulingQueue) DecMayAllocatedResource(alloc *resources.Resource) {
+    // update the parent
+    if sq.parent != nil {
+        sq.parent.DecMayAllocatedResource(alloc)
+    }
+    // update this queue
+    sq.lock.Lock()
+    defer sq.lock.Unlock()
+    sq.mayAllocatedResource = resources.Sub(sq.mayAllocatedResource, alloc)
 }

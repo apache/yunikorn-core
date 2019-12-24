@@ -127,7 +127,13 @@ func (m *Scheduler) updateSchedulingRequest(schedulingAsk *SchedulingAllocationA
     return err
 }
 
-func (m *Scheduler) updateSchedulingRequestPendingAskByDelta(allocProposal *commonevents.AllocationProposal, deltaPendingAsk int32) error {
+// Confirm or reject allocation proposal, when deltaPendingAsk > 0, it is confirm; otherwise it is reject.
+func (m *Scheduler) confirmOrRejectAllocationProposal(allocProposal *commonevents.AllocationProposal, deltaPendingAsk int32) error {
+    // This is no op.
+    if deltaPendingAsk == 0 {
+        return fmt.Errorf("confirmOrRejectAllocationProposal got input delta = 0, allocation id %s", allocProposal.AllocationKey)
+    }
+
     m.lock.Lock()
     defer m.lock.Unlock()
 
@@ -141,6 +147,13 @@ func (m *Scheduler) updateSchedulingRequestPendingAskByDelta(allocProposal *comm
     pendingDelta, err := schedulingApp.AddBackAllocationAskRepeat(allocProposal.AllocationKey, deltaPendingAsk)
     if pendingDelta != nil && !resources.IsZero(pendingDelta) {
         schedulingApp.queue.IncPendingResource(pendingDelta)
+    }
+
+    // If it is a reject proposal, update mayAllocatedResource of app and queue
+    if deltaPendingAsk < 0 {
+        resourceToDecrease := resources.Multiply(allocProposal.AllocatedResource, int64(deltaPendingAsk*-1))
+        schedulingApp.DecMayAllocatedResource(resourceToDecrease)
+        schedulingApp.queue.DecMayAllocatedResource(resourceToDecrease)
     }
     return err
 }
@@ -271,7 +284,7 @@ func (m *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocat
         }
 
         // handle allocation proposals
-        if err := m.updateSchedulingRequestPendingAskByDelta(&commonevents.AllocationProposal{
+        if err := m.confirmOrRejectAllocationProposal(&commonevents.AllocationProposal{
             NodeId:            alloc.NodeId,
             ApplicationId:     alloc.ApplicationId,
             QueueName:         alloc.QueueName,
@@ -315,7 +328,7 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
     if len(ev.RejectedAllocations) > 0 {
         for _, alloc := range ev.RejectedAllocations {
             // Update pending resource back
-            if err := m.updateSchedulingRequestPendingAskByDelta(alloc, 1); err != nil {
+            if err := m.confirmOrRejectAllocationProposal(alloc, 1); err != nil {
                 log.Logger().Error("failed to increase pending ask",
                     zap.Error(err))
             }

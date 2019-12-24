@@ -54,32 +54,7 @@ func (m *Scheduler) tryAllocationForPartition(partitionTotalResource *resources.
         return nil
     }
 
-    // Reset may allocations
-    m.resetMayAllocations(partitionContext)
-
     return partitionContext.Root.tryAllocate(partitionTotalResource, partitionContext, nil, nil)
-}
-
-func getHeadroomOfQueue(parentHeadroom *resources.Resource, queueMaxLimit *resources.Resource, queue *SchedulingQueue) *resources.Resource {
-    // new headroom for this queue
-    if nil != parentHeadroom {
-        return resources.ComponentWiseMin(resources.Sub(queueMaxLimit, queue.ProposingResource), parentHeadroom)
-    }
-    return resources.Sub(queueMaxLimit, queue.ProposingResource)
-}
-
-func getQueueMaxLimit(partitionTotalResource *resources.Resource, queue *SchedulingQueue, parentMaxLimit *resources.Resource) *resources.Resource {
-    if queue.isRoot() {
-        return partitionTotalResource
-    }
-
-    // Get max resource of parent queue
-    maxResource := queue.CachedQueueInfo.MaxResource
-    if maxResource == nil {
-        maxResource = parentMaxLimit
-    }
-    maxResource = resources.ComponentWiseMin(maxResource, partitionTotalResource)
-    return maxResource
 }
 
 // do this from queue hierarchy, sortedQueueCandidates is temporary var
@@ -97,27 +72,4 @@ func (m *Scheduler) tryAllocateForQueuesRecursively(
     }
 
     return nil
-}
-
-func (m *Scheduler) resetMayAllocations(partitionContext *PartitionSchedulingContext) {
-    // Recursively reset may-allocation
-    // lock the partition
-    partitionContext.lock.Lock()
-    defer partitionContext.lock.Unlock()
-
-    m.resetMayAllocationsForQueue(partitionContext.Root)
-}
-
-func (m *Scheduler) resetMayAllocationsForQueue(queue *SchedulingQueue) {
-    queue.ProposingResource = queue.CachedQueueInfo.GetAllocatedResource()
-    queue.SetAllocatingResource(queue.CachedQueueInfo.GetAllocatedResource())
-    if queue.isLeafQueue() {
-        for _, app := range queue.applications {
-            app.MayAllocatedResource = app.ApplicationInfo.GetAllocatedResource()
-        }
-    } else {
-        for _, child := range queue.childrenQueues {
-            m.resetMayAllocationsForQueue(child)
-        }
-    }
 }

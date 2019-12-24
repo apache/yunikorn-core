@@ -267,7 +267,7 @@ func (csc *ClusterSchedulingContext) updateSchedulingNodeAlloc(alloc *commoneven
             zap.String("allocationKey", alloc.AllocationKey))
         return
     }
-    node.handleAllocationUpdate(alloc.AllocatedResource)
+    node.decreaseAllocatingResource(alloc.AllocatedResource)
 }
 
 

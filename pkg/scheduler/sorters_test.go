@@ -43,7 +43,7 @@ func TestSortQueues(t *testing.T) {
 	}
 	q0.CachedQueueInfo.GuaranteedResource = resources.NewResourceFromMap(
 		map[string]resources.Quantity{"memory": 500, "vcore": 500})
-	q0.ProposingResource = resources.NewResourceFromMap(map[string]resources.Quantity{
+	q0.mayAllocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{
 		"memory": resources.Quantity(300),
 		"vcore" : resources.Quantity(300)})
 
@@ -53,7 +53,7 @@ func TestSortQueues(t *testing.T) {
 	}
 	q1.CachedQueueInfo.GuaranteedResource = resources.NewResourceFromMap(
 		map[string]resources.Quantity{"memory": 300, "vcore": 300})
-	q1.ProposingResource = resources.NewResourceFromMap(map[string]resources.Quantity{
+	q1.mayAllocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{
 		"memory": resources.Quantity(200),
 		"vcore" : resources.Quantity(200)})
 
@@ -63,7 +63,7 @@ func TestSortQueues(t *testing.T) {
 	}
 	q2.CachedQueueInfo.GuaranteedResource = resources.NewResourceFromMap(
 		map[string]resources.Quantity{"memory": 200, "vcore": 200})
-	q2.ProposingResource = resources.NewResourceFromMap(map[string]resources.Quantity{
+	q2.mayAllocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{
 		"memory": resources.Quantity(100),
 		"vcore" : resources.Quantity(100)})
 
@@ -74,16 +74,16 @@ func TestSortQueues(t *testing.T) {
 	assertQueueList(t, queues, []int{1,2,0})
 
 	// fairness ratios: q0:200/500=0.4, q1:300/300=1, q2:100/200=0.5
-	q0.ProposingResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 200, "vcore": 200})
-	q1.ProposingResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300, "vcore": 300})
+	q0.mayAllocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 200, "vcore": 200})
+	q1.mayAllocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300, "vcore": 300})
 	SortQueue(queues, FairSortPolicy)
 	assert.Equal(t, len(queues), 3)
 	assertQueueList(t, queues, []int{0,2,1})
 
 	// fairness ratios: q0:150/500=0.3, q1:120/300=0.4, q2:100/200=0.5
-	q0.ProposingResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 150, "vcore": 150})
-	q1.ProposingResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 120, "vcore": 120})
-	q2.ProposingResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 100, "vcore": 100})
+	q0.mayAllocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 150, "vcore": 150})
+	q1.mayAllocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 120, "vcore": 120})
+	q2.mayAllocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 100, "vcore": 100})
 	SortQueue(queues, FairSortPolicy)
 	assert.Equal(t, len(queues), 3)
 	assertQueueList(t, queues, []int{0,1,2})
@@ -104,7 +104,7 @@ func TestNoQueueLimits(t *testing.T) {
 	}
 	q0.CachedQueueInfo.GuaranteedResource = resources.NewResourceFromMap(
 		map[string]resources.Quantity{"memory": 0, "vcore": 0})
-	q0.ProposingResource = resources.NewResourceFromMap(map[string]resources.Quantity{
+	q0.mayAllocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{
 		"memory": resources.Quantity(300),
 		"vcore" : resources.Quantity(300)})
 
@@ -114,7 +114,7 @@ func TestNoQueueLimits(t *testing.T) {
 	}
 	q1.CachedQueueInfo.GuaranteedResource = resources.NewResourceFromMap(
 		map[string]resources.Quantity{"memory": 0, "vcore": 0})
-	q1.ProposingResource = resources.NewResourceFromMap(map[string]resources.Quantity{
+	q1.mayAllocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{
 		"memory": resources.Quantity(200),
 		"vcore" : resources.Quantity(200)})
 
@@ -124,7 +124,7 @@ func TestNoQueueLimits(t *testing.T) {
 	}
 	q2.CachedQueueInfo.GuaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{
 		"memory": 0, "vcore": 0})
-	q2.ProposingResource = resources.NewResourceFromMap(map[string]resources.Quantity{
+	q2.mayAllocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{
 		"memory": resources.Quantity(100),
 		"vcore" : resources.Quantity(100)})
 
@@ -133,8 +133,8 @@ func TestNoQueueLimits(t *testing.T) {
 	assert.Equal(t, len(queues), 3)
 	assertQueueList(t, queues, []int{2,1,0})
 
-	q0.ProposingResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 200, "vcore": 200})
-	q1.ProposingResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300, "vcore": 300})
+	q0.mayAllocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 200, "vcore": 200})
+	q1.mayAllocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300, "vcore": 300})
 	SortQueue(queues, FairSortPolicy)
 	assert.Equal(t, len(queues), 3)
 	assertQueueList(t, queues, []int{1,2,0})
@@ -153,7 +153,7 @@ func TestQueueGuaranteedResourceNotSet(t *testing.T) {
 		t.Fatalf("failed to create leaf queue: %v", err)
 	}
 	q0.CachedQueueInfo.GuaranteedResource = nil
-	q0.ProposingResource = resources.NewResourceFromMap(map[string]resources.Quantity{
+	q0.mayAllocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{
 		"memory": resources.Quantity(300),
 		"vcore" : resources.Quantity(300)})
 
@@ -162,7 +162,7 @@ func TestQueueGuaranteedResourceNotSet(t *testing.T) {
 		t.Fatalf("failed to create leaf queue: %v", err)
 	}
 	q1.CachedQueueInfo.GuaranteedResource = nil
-	q1.ProposingResource = resources.NewResourceFromMap(map[string]resources.Quantity{
+	q1.mayAllocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{
 		"memory": resources.Quantity(200),
 		"vcore" : resources.Quantity(200)})
 
@@ -289,7 +289,7 @@ func TestSortAppsFifo(t *testing.T) {
 		app := NewSchedulingApplication(
 			cache.NewApplicationInfo("app-" + num,"partition", "queue",
 				security.UserGroup{}, nil))
-		app.MayAllocatedResource = resources.Multiply(res, int64(i+1))
+		app.mayAllocatedResource = resources.Multiply(res, int64(i+1))
 		list[i] = app
 		// make sure the time stamps differ at least a bit (tracking in nano seconds)
 		time.Sleep(time.Nanosecond * 5)
@@ -315,7 +315,7 @@ func TestSortAppsFair(t *testing.T) {
 		app := NewSchedulingApplication(
 			cache.NewApplicationInfo("app-"+num, "partition", "queue",
 				security.UserGroup{}, nil))
-		app.MayAllocatedResource = resources.Multiply(res, int64(i+1))
+		app.mayAllocatedResource = resources.Multiply(res, int64(i+1))
 		list[i] = app
 	}
 	// nil resource: usage based sorting
@@ -344,20 +344,20 @@ func TestSortAppsFair(t *testing.T) {
 	assertAppList(t, list, []int{0,1,2,3})
 
 	// update allocated resource for app-1
-	list[1].MayAllocatedResource = resources.Multiply(res, 10)
+	list[1].mayAllocatedResource = resources.Multiply(res, 10)
 	// apps should come back in order: 0, 2, 3, 1
 	SortApplications(list, FairSortPolicy, resources.Multiply(res, 5))
 	assertAppList(t, list, []int{0,3,1,2})
 
 	// update allocated resource for app-3 to negative (move to head of the list)
-	list[2].MayAllocatedResource = resources.Multiply(res, -10)
+	list[2].mayAllocatedResource = resources.Multiply(res, -10)
 	// apps should come back in order: 3, 0, 2, 1
 	SortApplications(list, FairSortPolicy, resources.Multiply(res, 5))
 	for i := 0; i < 4; i++ {
 		log.Logger().Info("allocated res",
 			zap.Int("order", i),
 			zap.String("name", list[i].ApplicationInfo.ApplicationId),
-			zap.Any("res", list[i].MayAllocatedResource))
+			zap.Any("res", list[i].mayAllocatedResource))
 	}
 	assertAppList(t, list, []int{1,3,2,0})
 }

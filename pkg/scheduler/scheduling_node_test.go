@@ -46,13 +46,13 @@ func TestNewSchedulingNode(t *testing.T) {
     if !resources.IsZero(node.allocatingResource) && !resources.IsZero(node.preemptingResource) {
         t.Errorf("node resources should all be zero found: %v and %v", node.allocatingResource,  node.preemptingResource)
     }
-    if !node.cachedAvailableUpToDate {
+    if !node.needUpdateCachedAvailable {
         t.Error("node available resource dirty should be set for new node")
     }
     if !resources.Equals(node.getAvailableResource(), res) {
         t.Errorf("node available resource not set to cached value got: %v", node.getAvailableResource())
     }
-    if node.cachedAvailableUpToDate {
+    if node.needUpdateCachedAvailable {
         t.Error("node available resource dirty should be cleared after getAvailableResource call")
     }
 }
@@ -81,7 +81,7 @@ func TestCheckAllocate(t *testing.T) {
     if node == nil || node.NodeId != "node-1" {
         t.Fatalf("node create failed which should not have %v", node)
     }
-    if !node.cachedAvailableUpToDate {
+    if !node.needUpdateCachedAvailable {
         t.Error("node available resource dirty should be set for new node")
     }
     // normal alloc check dirty flag
@@ -90,7 +90,7 @@ func TestCheckAllocate(t *testing.T) {
     if !node.CheckAndAllocateResource(res, false) {
         t.Error("node should have accepted allocation")
     }
-    if !node.cachedAvailableUpToDate {
+    if !node.needUpdateCachedAvailable {
         t.Error("node available resource dirty should be set after CheckAndAllocateResource")
     }
     // add one that pushes node over its size
@@ -173,19 +173,19 @@ func TestAvailableDirty(t *testing.T) {
         t.Fatalf("node create failed which should not have %v", node)
     }
     node.getAvailableResource()
-    if node.cachedAvailableUpToDate {
+    if node.needUpdateCachedAvailable {
         t.Fatal("node available resource dirty should not be set after getAvailableResource")
     }
 
     res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
     node.incAllocatingResource(res)
-    if !node.cachedAvailableUpToDate {
+    if !node.needUpdateCachedAvailable {
         t.Error("node available resource dirty should be set after incAllocatingResource")
     }
     node.getAvailableResource()
 
     node.decreaseAllocatingResource(res)
-    if !node.cachedAvailableUpToDate {
+    if !node.needUpdateCachedAvailable {
         t.Error("node available resource dirty should be set after decreaseAllocatingResource")
     }
 }

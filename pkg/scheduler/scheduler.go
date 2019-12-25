@@ -127,15 +127,19 @@ func (m *Scheduler) updateSchedulingRequest(schedulingAsk *SchedulingAllocationA
     return err
 }
 
-// Confirm or reject allocation proposal, when deltaPendingAsk > 0, it is confirm; otherwise it is reject.
-func (m *Scheduler) confirmOrRejectAllocationProposal(allocProposal *commonevents.AllocationProposal, deltaPendingAsk int32) error {
+// Confirm or reject allocation proposal, when allocationAdded > 0, it is confirm; otherwise it is reject.
+// Accept value of allocationAdded is either +1 or -1
+// This will update node, app, and queues
+func (m *Scheduler) confirmOrRejectSingleAllocationProposal(allocProposal *commonevents.AllocationProposal, allocationAdded int32) error {
     // This is no op.
-    if deltaPendingAsk == 0 {
-        return fmt.Errorf("confirmOrRejectAllocationProposal got input delta = 0, allocation id %s", allocProposal.AllocationKey)
+    if allocationAdded != 1 && allocationAdded != -1 {
+        return fmt.Errorf("confirmOrRejectSingleAllocationProposal got allocationAdded not +1 or -1, allocation id %s", allocProposal.AllocationKey)
     }
 
     m.lock.Lock()
     defer m.lock.Unlock()
+
+    var err error = nil
 
     // Get SchedulingApplication
     schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(allocProposal.ApplicationId, allocProposal.PartitionName)
@@ -143,18 +147,21 @@ func (m *Scheduler) confirmOrRejectAllocationProposal(allocProposal *commonevent
         return fmt.Errorf("cannot find scheduling application %s, for allocation ID %s", allocProposal.ApplicationId, allocProposal.AllocationKey)
     }
 
-    // found, now update the pending requests for the queues
-    pendingDelta, err := schedulingApp.AddBackAllocationAskRepeat(allocProposal.AllocationKey, deltaPendingAsk)
-    if pendingDelta != nil && !resources.IsZero(pendingDelta) {
-        schedulingApp.queue.IncPendingResource(pendingDelta)
+    if allocationAdded < 0 {
+        // When it is a rejection
+        // Add back pending delta to application
+        var pendingDelta *resources.Resource
+        pendingDelta, err = schedulingApp.AddBackAllocationAskRepeat(allocProposal.AllocationKey, allocationAdded)
+        if pendingDelta != nil && !resources.IsZero(pendingDelta) {
+            schedulingApp.queue.IncPendingResource(pendingDelta)
+        }
     }
 
-    // If it is a reject proposal, update mayAllocatedResource of app and queue
-    if deltaPendingAsk < 0 {
-        resourceToDecrease := resources.Multiply(allocProposal.AllocatedResource, int64(deltaPendingAsk*-1))
-        schedulingApp.DecMayAllocatedResource(resourceToDecrease)
-        schedulingApp.queue.DecMayAllocatedResource(resourceToDecrease)
-    }
+    // For both confirmation and rejection, decrease allocating resource for node/app/queue
+    schedulingApp.DecAllocatingResource(allocProposal.AllocatedResource)
+    schedulingApp.queue.DecAllocatingResourceFromTheQueueAndParents(allocProposal.AllocatedResource)
+    m.clusterSchedulingContext.DecNodeAllocatingResource(allocProposal)
+
     return err
 }
 
@@ -284,7 +291,7 @@ func (m *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocat
         }
 
         // handle allocation proposals
-        if err := m.confirmOrRejectAllocationProposal(&commonevents.AllocationProposal{
+        if err := m.confirmOrRejectSingleAllocationProposal(&commonevents.AllocationProposal{
             NodeId:            alloc.NodeId,
             ApplicationId:     alloc.ApplicationId,
             QueueName:         alloc.QueueName,
@@ -314,26 +321,24 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
         return
     }
 
-    // Allocations events cannot contain accepted and rejected allocations at the same time.
-    // There should never be more than one accepted allocation in the list
-    // See cluster_info.processAllocationProposalEvent()
     if len(ev.AcceptedAllocations) > 0 {
-        alloc := ev.AcceptedAllocations[0]
-        // decrease the outstanding allocation resources
-        m.clusterSchedulingContext.updateSchedulingNodeAlloc(alloc)
+        for _, alloc := range ev.AcceptedAllocations {
+            // decrease the outstanding allocation resources
+            if err := m.confirmOrRejectSingleAllocationProposal(alloc, +1); err != nil {
+                log.Logger().Error("failed to increase pending ask",
+                    zap.Error(err))
+            }
+        }
     }
 
     // Rejects have not updated the node in the cache but have updated the scheduler node with
     // outstanding allocations that need to be removed. Can be multiple in one event.
     if len(ev.RejectedAllocations) > 0 {
         for _, alloc := range ev.RejectedAllocations {
-            // Update pending resource back
-            if err := m.confirmOrRejectAllocationProposal(alloc, 1); err != nil {
+            if err := m.confirmOrRejectSingleAllocationProposal(alloc, -1); err != nil {
                 log.Logger().Error("failed to increase pending ask",
                     zap.Error(err))
             }
-            // decrease the outstanding allocation resources
-            m.clusterSchedulingContext.updateSchedulingNodeAlloc(alloc)
         }
     }
 

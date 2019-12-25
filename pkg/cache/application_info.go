@@ -22,7 +22,9 @@ import (
     "github.com/looplab/fsm"
     "strings"
     "sync"
+    "sync/atomic"
     "time"
+    "unsafe"
 )
 
 /* Related to applications */
@@ -36,25 +38,38 @@ type ApplicationInfo struct {
     user              security.UserGroup         // owner of the application
     tags              map[string]string          // application tags used in scheduling
     leafQueue         *QueueInfo                 // link to the leaf queue
-    allocatedResource *resources.Resource        // total allocated resources
     allocations       map[string]*AllocationInfo // list of all allocations
     stateMachine      *fsm.FSM                   // application state machine
+
+    // This is intended to be accessed via sync package, never read the value directly from the pointer
+    allocatedResourcePointer unsafe.Pointer
+
     lock sync.RWMutex
 }
 
 // Create a new application
 func NewApplicationInfo(appId, partition, queueName string, ugi security.UserGroup, tags map[string]string) *ApplicationInfo {
-    return &ApplicationInfo{
+    info := &ApplicationInfo{
         ApplicationId: appId,
         Partition: partition,
         QueueName: queueName,
         SubmissionTime: time.Now().UnixNano(),
         tags: tags,
         user: ugi,
-        allocatedResource: resources.NewResource(),
         allocations: make(map[string]*AllocationInfo),
         stateMachine: newAppState(),
     }
+    info.setAllocatedResource(resources.NewResource())
+
+    return info
+}
+
+func (ai *ApplicationInfo) setAllocatedResource(res *resources.Resource) {
+    atomic.StorePointer(&ai.allocatedResourcePointer, unsafe.Pointer(res))
+}
+
+func (ai *ApplicationInfo) GetAllocatedResource() *resources.Resource {
+    return (*resources.Resource)(atomic.LoadPointer(&ai.allocatedResourcePointer))
 }
 
 // Return the current allocations for the application.
@@ -86,14 +101,6 @@ func (ai *ApplicationInfo) HandleApplicationEvent(event ApplicationEvent) error 
     return err
 }
 
-// Return the total allocated resources for the application.
-func (ai *ApplicationInfo) GetAllocatedResource() *resources.Resource {
-    ai.lock.RLock()
-    defer ai.lock.RUnlock()
-
-    return ai.allocatedResource
-}
-
 // Set the leaf queue the application runs in. Update the queue name also to match as this might be different from the
 // queue that was given when submitting the application.
 func (ai *ApplicationInfo) SetQueue(leaf *QueueInfo) {
@@ -110,7 +117,9 @@ func (ai *ApplicationInfo) addAllocation(info *AllocationInfo) {
     defer ai.lock.Unlock()
 
     ai.allocations[info.AllocationProto.Uuid] = info
-    ai.allocatedResource = resources.Add(ai.allocatedResource, info.AllocatedResource)
+    allocated := ai.GetAllocatedResource()
+    allocated = resources.Add(allocated, info.AllocatedResource)
+    ai.setAllocatedResource(allocated)
 }
 
 // Remove a specific allocation from the application.
@@ -123,7 +132,10 @@ func (ai *ApplicationInfo) removeAllocation(uuid string) *AllocationInfo {
 
     if alloc != nil {
         // When app has the allocation, update map, and update allocated resource of the app
-        ai.allocatedResource = resources.Sub(ai.allocatedResource, alloc.AllocatedResource)
+        allocated := ai.GetAllocatedResource()
+        allocated = resources.Sub(allocated, alloc.AllocatedResource)
+        ai.setAllocatedResource(allocated)
+
         delete(ai.allocations, uuid)
         return alloc
     }
@@ -143,7 +155,7 @@ func (ai *ApplicationInfo) removeAllAllocations() []*AllocationInfo {
         allocationsToRelease = append(allocationsToRelease, alloc)
     }
     // cleanup allocated resource for app
-    ai.allocatedResource = resources.NewResource()
+    ai.setAllocatedResource(resources.NewResource())
     ai.allocations = make(map[string]*AllocationInfo)
 
     return allocationsToRelease

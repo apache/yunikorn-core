@@ -28,15 +28,11 @@ import (
 )
 
 type SchedulingApplication struct {
-    ApplicationInfo      *cache.ApplicationInfo
-    Requests             *AppSchedulingRequests
+    ApplicationInfo *cache.ApplicationInfo
+    Requests        *AppSchedulingRequests
 
-    // How much resource allocated for this queue, this includes:
-    // - Already allocated resources which is confirmed.
-    // - Allocating resources which are waiting to be confirmed.
-    // This will be used by sorting algorithm to sort queues while there're multiple thread
-    // allocate resources
-    mayAllocatedResource *resources.Resource
+    // allocating resources, which is not confirmed yet from cache
+    allocating *resources.Resource
 
     // Private fields need protection
     queue *SchedulingQueue // queue the application is running in
@@ -47,6 +43,7 @@ type SchedulingApplication struct {
 func NewSchedulingApplication(appInfo *cache.ApplicationInfo) *SchedulingApplication {
     app := &SchedulingApplication{
         ApplicationInfo: appInfo,
+        allocating: resources.NewResource(),
     }
     app.Requests = NewSchedulingRequests(app)
     return app
@@ -62,7 +59,7 @@ func (app *SchedulingApplication) tryAllocate(partitionContext *PartitionSchedul
     for _, request := range app.Requests.sortedRequestsByPriority {
         if request.PendingRepeatAsk > 0 && resources.FitIn(headroom, request.AllocatedResource) {
             if allocation := app.allocateForOneRequest(partitionContext, request); allocation != nil {
-                app.mayAllocatedResource = resources.Add(app.mayAllocatedResource, allocation.SchedulingAsk.AllocatedResource)
+                app.allocating = resources.Add(app.allocating, allocation.SchedulingAsk.AllocatedResource)
                 app.Requests.updateAllocationAskRepeat(request.AskProto.AllocationKey, -1)
                 return allocation
             }
@@ -145,16 +142,17 @@ func evaluateForSchedulingPolicy(nodes []*SchedulingNode, partitionContext *Part
     return nil
 }
 
-func (m *SchedulingApplication) GetMayAllocatedResource() *resources.Resource {
+func (m *SchedulingApplication) DecAllocatingResource(allocResource *resources.Resource) {
     m.lock.RLock()
     defer m.lock.RUnlock()
 
-    return m.mayAllocatedResource
+    m.allocating = resources.Sub(m.allocating, allocResource)
 }
 
-func (m *SchedulingApplication) DecMayAllocatedResource(allocResource *resources.Resource) {
+// Returns allocated + allocating
+func (m* SchedulingApplication) GetTotalMayAllocated() *resources.Resource {
     m.lock.RLock()
     defer m.lock.RUnlock()
 
-    m.mayAllocatedResource = resources.Sub(m.mayAllocatedResource, allocResource)
+    return resources.Add(m.allocating, m.ApplicationInfo.GetAllocatedResource())
 }

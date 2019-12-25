@@ -30,11 +30,11 @@ type SchedulingNode struct {
 	NodeId   string
 
 	// Private info
-	nodeInfo                *cache.NodeInfo
-	allocatingResource      *resources.Resource // resources being allocated
-	preemptingResource      *resources.Resource // resources considered for preemption
-	cachedAvailable         *resources.Resource // calculated available resources
-	cachedAvailableUpToDate bool                // is the calculated available resource up to date?
+	nodeInfo                  *cache.NodeInfo
+	allocatingResource        *resources.Resource // resources being allocated
+	preemptingResource        *resources.Resource // resources considered for preemption
+	cachedAvailable           *resources.Resource // calculated available resources
+	needUpdateCachedAvailable bool                // is the calculated available resource up to date?
 
 	lock sync.RWMutex
 }
@@ -45,11 +45,11 @@ func NewSchedulingNode(info *cache.NodeInfo) *SchedulingNode {
 		return nil
 	}
 	return &SchedulingNode{
-		nodeInfo:                info,
-		NodeId:                  info.NodeId,
-		allocatingResource:      resources.NewResource(),
-		preemptingResource:      resources.NewResource(),
-		cachedAvailableUpToDate: true,
+		nodeInfo:                  info,
+		NodeId:                    info.NodeId,
+		allocatingResource:        resources.NewResource(),
+		preemptingResource:        resources.NewResource(),
+		needUpdateCachedAvailable: true,
 	}
 }
 
@@ -67,10 +67,10 @@ func (sn *SchedulingNode) GetAllocatedResource() *resources.Resource {
 func (sn *SchedulingNode) getAvailableResource() *resources.Resource {
     sn.lock.Lock()
     defer sn.lock.Unlock()
-    if sn.cachedAvailableUpToDate {
+    if sn.needUpdateCachedAvailable {
 		sn.cachedAvailable = sn.nodeInfo.GetAvailableResource()
 		sn.cachedAvailable.SubFrom(sn.allocatingResource)
-		sn.cachedAvailableUpToDate = false
+		sn.needUpdateCachedAvailable = false
 	}
 	return sn.cachedAvailable
 }
@@ -89,7 +89,7 @@ func (sn *SchedulingNode) incAllocatingResource(proposed *resources.Resource) {
 	sn.lock.Lock()
 	defer sn.lock.Unlock()
 
-	sn.cachedAvailableUpToDate = true
+	sn.needUpdateCachedAvailable = true
 	sn.allocatingResource.AddTo(proposed)
 }
 
@@ -103,7 +103,7 @@ func (sn *SchedulingNode) decreaseAllocatingResource(confirmed *resources.Resour
 		zap.String("nodeId", sn.NodeId),
 		zap.Any("confirmed", confirmed))
 
-	sn.cachedAvailableUpToDate = true
+	sn.needUpdateCachedAvailable = true
 	sn.allocatingResource.SubFrom(confirmed)
 }
 
@@ -150,7 +150,7 @@ func (sn *SchedulingNode) CheckAndAllocateResource(delta *resources.Resource, pr
         log.Logger().Debug("allocations in progress updated",
 			zap.String("nodeId", sn.NodeId),
 			zap.Any("total unconfirmed", newAllocating))
-		sn.cachedAvailableUpToDate = true
+		sn.needUpdateCachedAvailable = true
 		sn.allocatingResource = newAllocating
 		return true
 	}
@@ -188,4 +188,11 @@ func (sn *SchedulingNode) CheckAllocateConditions(allocId string) bool {
 	}
 	// must be last return in the list
 	return true
+}
+
+// Make sure update cached available at the next round
+func (sn *SchedulingNode) SetNeedUpdateCachedAvailable() {
+	sn.lock.Lock()
+	defer sn.lock.Unlock()
+	sn.needUpdateCachedAvailable = true
 }

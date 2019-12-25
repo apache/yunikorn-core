@@ -234,6 +234,25 @@ func waitForPendingResource(t *testing.T, queue *scheduler.SchedulingQueue, memo
     }
 }
 
+func waitForAllocatedResourceOfQueue(t *testing.T, queue *scheduler.SchedulingQueue, memory resources.Quantity, timeoutMs int) {
+    var i = 0
+    for {
+        i++
+        if queue.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY] != memory {
+            time.Sleep(time.Duration(100 * time.Millisecond))
+        } else {
+            return
+        }
+        if i*100 >= timeoutMs {
+            log.Logger().Info("queue detail",
+                zap.Any("queue", queue))
+            t.Fatalf("Failed to wait allocated resource on queue %s, actual = %v, expected = %v", queue.Name,
+                queue.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY], memory)
+            return
+        }
+    }
+}
+
 func waitForPendingResourceForApplication(t *testing.T, app *scheduler.SchedulingApplication, memory resources.Quantity, timeoutMs int) {
     var i = 0
     for {

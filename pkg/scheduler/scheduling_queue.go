@@ -35,12 +35,9 @@ type SchedulingQueue struct {
 
     // Private fields need protection
 
-    // How much resource allocated for this queue, this includes:
-    // - Already allocated resources which is confirmed.
-    // - Allocating resources which are waiting to be confirmed.
-    // This will be used by sorting algorithm to sort queues while there're multiple thread
-    // allocate resources
-    mayAllocatedResource *resources.Resource
+    // How many resources allocating but not confirmed yet from cache.
+    allocating *resources.Resource
+
     childrenQueues       map[string]*SchedulingQueue       // Only for direct children, parent queue only
     applications         map[string]*SchedulingApplication // only for leaf queue
     parent               *SchedulingQueue                  // link back to the parent in the scheduler
@@ -50,14 +47,15 @@ type SchedulingQueue struct {
 }
 
 func NewSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo, parent *SchedulingQueue) *SchedulingQueue {
-    sq := &SchedulingQueue{}
-    sq.Name = cacheQueueInfo.GetQueuePath()
-    sq.CachedQueueInfo = cacheQueueInfo
-    sq.parent = parent
-    sq.mayAllocatedResource = resources.NewResource()
-    sq.childrenQueues = make(map[string]*SchedulingQueue)
-    sq.applications = make(map[string]*SchedulingApplication)
-    sq.pendingResource = resources.NewResource()
+    sq := &SchedulingQueue{
+        Name: cacheQueueInfo.GetQueuePath(),
+        CachedQueueInfo: cacheQueueInfo,
+        parent: parent,
+        allocating: resources.NewResource(),
+        childrenQueues: make(map[string]*SchedulingQueue),
+        applications: make(map[string]*SchedulingApplication),
+        pendingResource: resources.NewResource(),
+    }
 
     // we can update the parent as we have a lock on the partition or the cluster when we get here
     if parent != nil {
@@ -123,7 +121,7 @@ func (queue *SchedulingQueue) tryAllocate(
     }
 
     if allocation != nil {
-        queue.mayAllocatedResource = resources.Add(queue.mayAllocatedResource, allocation.SchedulingAsk.AllocatedResource)
+        queue.allocating = resources.Add(queue.allocating, allocation.SchedulingAsk.AllocatedResource)
 
         // Deduct pending resource of the queue
         newPending, err := resources.SubErrorNegative(queue.pendingResource, allocation.SchedulingAsk.AllocatedResource)
@@ -395,12 +393,13 @@ func (sq *SchedulingQueue) CheckAdminAccess(user security.UserGroup) bool {
     return sq.CachedQueueInfo.CheckAdminAccess(user)
 }
 
+// Always called within sq's lock
 func (sq* SchedulingQueue) getHeadroom(parentHeadroom *resources.Resource, queueMaxLimit *resources.Resource) *resources.Resource {
     // new headroom for this queue
     if nil != parentHeadroom {
-        return resources.ComponentWiseMin(resources.Sub(queueMaxLimit, sq.mayAllocatedResource), parentHeadroom)
+        return resources.ComponentWiseMin(resources.Sub(queueMaxLimit, sq.getTotalMayAllocatedWithoutLock()), parentHeadroom)
     }
-    return resources.Sub(queueMaxLimit, sq.mayAllocatedResource)
+    return resources.Sub(queueMaxLimit, sq.getTotalMayAllocatedWithoutLock())
 }
 
 func (sq* SchedulingQueue) getMaxLimit(partitionTotalResource *resources.Resource, parentMaxLimit *resources.Resource) *resources.Resource {
@@ -417,21 +416,27 @@ func (sq* SchedulingQueue) getMaxLimit(partitionTotalResource *resources.Resourc
     return maxResource
 }
 
-func (sq* SchedulingQueue) GetMayAllocatedResource() *resources.Resource {
-    sq.lock.RLock()
-    defer sq.lock.RUnlock()
-
-    return sq.mayAllocatedResource
-}
-
 // Update may allocated resource from this queue
-func (sq *SchedulingQueue) DecMayAllocatedResource(alloc *resources.Resource) {
+func (sq *SchedulingQueue) DecAllocatingResourceFromTheQueueAndParents(alloc *resources.Resource) {
     // update the parent
     if sq.parent != nil {
-        sq.parent.DecMayAllocatedResource(alloc)
+        sq.parent.DecAllocatingResourceFromTheQueueAndParents(alloc)
     }
     // update this queue
     sq.lock.Lock()
     defer sq.lock.Unlock()
-    sq.mayAllocatedResource = resources.Sub(sq.mayAllocatedResource, alloc)
+    sq.allocating = resources.Sub(sq.allocating, alloc)
+}
+
+// allocating + allocated
+func (sq* SchedulingQueue) GetTotalMayAllocated() *resources.Resource {
+    sq.lock.RLock()
+    defer sq.lock.RUnlock()
+
+    return sq.getTotalMayAllocatedWithoutLock()
+}
+
+// allocating + allocated (lock free version)
+func (sq* SchedulingQueue) getTotalMayAllocatedWithoutLock() *resources.Resource {
+    return resources.Add(sq.allocating, sq.CachedQueueInfo.GetAllocatedResource())
 }

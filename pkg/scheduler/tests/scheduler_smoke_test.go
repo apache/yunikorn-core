@@ -1131,6 +1131,8 @@ partitions:
                 t.Fatalf("UpdateRequest 3 failed in run %s: %v", param.name, err)
             }
 
+            waitForAllocatedResourceOfQueue(t, schedulingQueue, 0, 1000)
+
             // schedule again, pending requests should be satisfied now
             for i := 0; i < 20; i++ {
                 serviceContext.Scheduler.SingleStepScheduleAllocTest(1)

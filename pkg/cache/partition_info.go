@@ -603,7 +603,7 @@ func (pi *PartitionInfo) RemoveApplication(appId string) (*ApplicationInfo, []*A
     if len(allocations) != 0 {
         for _, alloc := range allocations {
             uuid := alloc.AllocationProto.Uuid
-            log.Logger().Warn("removing allocations",
+            log.Logger().Info("removing allocations",
                 zap.String("appId", appId),
                 zap.String("allocationId", uuid))
             // Remove from partition cache

@@ -234,6 +234,26 @@ func waitForPendingResource(t *testing.T, queue *scheduler.SchedulingQueue, memo
     }
 }
 
+func waitForAllocatingResource(t *testing.T, queue *scheduler.SchedulingQueue, memory resources.Quantity, timeoutMs int) {
+    var i = 0
+    for {
+        i++
+        allocating := queue.GetAllocatingResource()
+        if allocating.Resources[resources.MEMORY] != memory {
+            time.Sleep(time.Duration(100 * time.Millisecond))
+        } else {
+            return
+        }
+        if i*100 >= timeoutMs {
+            log.Logger().Info("queue detail",
+                zap.Any("queue", queue))
+            t.Fatalf("Failed to wait allocating resource on queue %s, actual = %v, expected = %v", queue.Name, queue.GetAllocatingResource().Resources[resources.MEMORY], memory)
+            return
+        }
+    }
+}
+
+
 func waitForAllocatedResourceOfQueue(t *testing.T, queue *scheduler.SchedulingQueue, memory resources.Quantity, timeoutMs int) {
     var i = 0
     for {
@@ -264,6 +284,38 @@ func waitForPendingResourceForApplication(t *testing.T, app *scheduler.Schedulin
         }
         if i*100 >= timeoutMs {
             t.Fatalf("Failed to wait pending resource, expected=%v, actual=%v", memory, app.Requests.GetPendingResource().Resources[resources.MEMORY])
+            return
+        }
+    }
+}
+
+func waitForAllocatingResourceForApplication(t *testing.T, app *scheduler.SchedulingApplication, memory resources.Quantity, timeoutMs int) {
+    var i = 0
+    for {
+        i++
+        if app.GetAllocatingResourceTestOnly().Resources[resources.MEMORY] != memory {
+            time.Sleep(time.Duration(100 * time.Millisecond))
+        } else {
+            return
+        }
+        if i*100 >= timeoutMs {
+            t.Fatalf("Failed to wait allocating resource, expected=%v, actual=%v", memory, app.GetAllocatingResourceTestOnly().Resources[resources.MEMORY])
+            return
+        }
+    }
+}
+
+func waitForAllocatedResourceForApplication(t *testing.T, app *scheduler.SchedulingApplication, memory resources.Quantity, timeoutMs int) {
+    var i = 0
+    for {
+        i++
+        if app.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY] != memory {
+            time.Sleep(time.Duration(100 * time.Millisecond))
+        } else {
+            return
+        }
+        if i*100 >= timeoutMs {
+            t.Fatalf("Failed to wait allocated resource, expected=%v, actual=%v", memory, app.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY])
             return
         }
     }
@@ -373,6 +425,18 @@ func newAddAppRequest(apps map[string]string) []*si.AddApplicationRequest {
             Ugi: &si.UserGroupInformation{
                 User: "testuser",
             },
+        }
+        requests = append(requests, &request)
+    }
+    return requests
+}
+
+func newRemoveAppRequest(apps []string) []*si.RemoveApplicationRequest {
+    var requests []*si.RemoveApplicationRequest
+    for _, app := range apps {
+        request := si.RemoveApplicationRequest{
+            ApplicationId: app,
+            PartitionName: "",
         }
         requests = append(requests, &request)
     }

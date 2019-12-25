@@ -66,7 +66,7 @@ func TestQueueBasics(t *testing.T) {
         t.Errorf("root queue status is incorrect")
     }
     // allocations should be nil
-    if !resources.IsZero(root.allocatingResource) && !resources.IsZero(root.pendingResource) {
+    if !resources.IsZero(root.allocating) && !resources.IsZero(root.pendingResource) {
         t.Errorf("root queue must not have allocations set on create")
     }
 }
@@ -196,13 +196,13 @@ func TestPendingCalc(t *testing.T) {
     if !resources.Equals(root.pendingResource, allocation) {
         t.Errorf("root queue pending allocation failed to increment expected %v, got %v", allocation, root.pendingResource)
     }
-    parent.DecPendingResourceHierarchical(allocation)
+    parent.DecPendingResourceFromTheQueueAndParents(allocation)
     if !resources.IsZero(root.pendingResource) {
         t.Errorf("root queue pending allocation failed to decrement expected 0, got %v", root.pendingResource)
     }
     // Not allowed to go negative: both will be zero after this
     root.IncPendingResource(allocation)
-    parent.DecPendingResourceHierarchical(allocation)
+    parent.DecPendingResourceFromTheQueueAndParents(allocation)
     if !resources.IsZero(root.pendingResource) {
         t.Errorf("root queue pending allocation failed to decrement expected zero, got %v", root.pendingResource)
     }

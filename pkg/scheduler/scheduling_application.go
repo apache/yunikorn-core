@@ -156,3 +156,19 @@ func (m* SchedulingApplication) GetTotalMayAllocated() *resources.Resource {
 
     return resources.Add(m.allocating, m.ApplicationInfo.GetAllocatedResource())
 }
+
+// Increase allocating and its parent (ONLY USED BY TEST)
+func (m* SchedulingApplication) IncreaseAllocatingAndParentQueuesTestOnly(allocatingDelta *resources.Resource) {
+    m.queue.DecAllocatingResourceFromTheQueueAndParents(resources.Multiply(allocatingDelta, -1))
+
+    m.lock.Lock()
+    defer m.lock.Unlock()
+    m.allocating = resources.Add(m.allocating, allocatingDelta)
+}
+
+func (m* SchedulingApplication) GetAllocatingResourceTestOnly() *resources.Resource {
+    m.lock.RLock()
+    defer m.lock.RUnlock()
+
+    return m.allocating
+}

@@ -1579,3 +1579,175 @@ partitions:
     }
 }
 
+
+func TestRemoveAppAndResourceCleanup(t *testing.T) {
+    const partition = "[rm:123]default"
+    // Start all tests
+    serviceContext := entrypoint.StartAllServicesWithManualScheduler()
+    defer serviceContext.StopAll()
+    proxy := serviceContext.RMProxy
+    context := serviceContext.Scheduler.GetClusterSchedulingContext()
+
+    // Register RM
+    configData := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        submitacl: "*"
+        queues:
+          - name: a
+            resources:
+              guaranteed:
+                memory: 100
+                vcore: 10
+`
+    configs.MockSchedulerConfigByData([]byte(configData))
+    mockRM := NewMockRMCallbackHandler(t)
+
+    _, err := proxy.RegisterResourceManager(
+        &si.RegisterResourceManagerRequest{
+            RmId:        "rm:123",
+            PolicyGroup: "policygroup",
+            Version:     "0.0.2",
+        }, mockRM)
+
+    if err != nil {
+        t.Fatalf("RegisterResourceManager failed: %v", err)
+    }
+
+    // Register 10 nodes, and add applications
+    nodes := make([]*si.NewNodeInfo, 0)
+    for i := 0; i < 10; i++ {
+        nodeId := "node-" + strconv.Itoa(i)
+        nodes = append(nodes, &si.NewNodeInfo{
+            NodeId: nodeId + ":1234",
+            Attributes: map[string]string{
+                "si.io/hostname":  nodeId,
+                "si.io/rackname":  "rack-1",
+                "si.io/partition": "default",
+            },
+            SchedulableResource: &si.Resource{
+                Resources: map[string]*si.Quantity{
+                    "memory": {Value: 100},
+                    "vcore":  {Value: 20},
+                },
+            },
+        })
+    }
+
+    err = proxy.Update(&si.UpdateRequest{
+        NewSchedulableNodes: nodes,
+        NewApplications:     newAddAppRequest(map[string]string{"app-1": "root.a"}),
+        RmId:                "rm:123",
+    })
+
+    if err != nil {
+        t.Fatalf("UpdateRequest failed: %v", err)
+    }
+
+    // verify app and all nodes are accepted
+    waitForAcceptedApplications(mockRM, "app-1", 1000)
+    for _, node := range nodes {
+        waitForAcceptedNodes(mockRM, node.NodeId, 1000)
+    }
+
+    for _, node := range nodes {
+        waitForNewSchedulerNode(t, context, node.NodeId, partition, 1000)
+    }
+
+    // Request ask with 20 allocations
+    err = proxy.Update(&si.UpdateRequest{
+        Asks: []*si.AllocationAsk{
+            {
+                AllocationKey: "alloc-1",
+                ResourceAsk: &si.Resource{
+                    Resources: map[string]*si.Quantity{
+                        "memory": {Value: 10},
+                        "vcore":  {Value: 1},
+                    },
+                },
+                MaxAllocations: 20,
+                ApplicationId:  "app-1",
+            },
+        },
+        RmId: "rm:123",
+    })
+
+    if err != nil {
+        t.Fatalf("UpdateRequest failed: %v", err)
+    }
+
+    schedulerQueueA := context.GetSchedulingQueue("root.a", partition)
+    schedulerQueueRoot := context.GetSchedulingQueue("root", partition)
+    schedulingApp1 := context.GetSchedulingApplication("app-1", partition)
+
+    waitForPendingResource(t, schedulerQueueA, 200, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp1, 200, 1000)
+
+    for i := 0; i < 20; i++ {
+        serviceContext.Scheduler.SingleStepScheduleAllocTest(1)
+    }
+
+    // Verify all requests are satisfied
+    waitForAllocations(mockRM, 20, 1000)
+    waitForPendingResource(t, schedulerQueueA, 0, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp1, 0, 1000)
+    assert.Assert(t, schedulingApp1.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY] == 200)
+
+    // Verify 2 allocations for every node
+    for _, node := range nodes {
+        schedulingNode := context.GetSchedulingNode(node.NodeId, partition)
+        assert.Assert(t, schedulingNode.GetAllocatedResource().Resources[resources.MEMORY] == 20)
+    }
+
+    // Manually increase allocating resource of app and queue
+    schedulingApp1.IncreaseAllocatingAndParentQueuesTestOnly(resources.NewResourceFromMap(map[string]resources.Quantity{
+        "memory": 1000,
+        "vcore":  200,
+    }))
+
+    // Check allocating resource of app and queue
+    waitForAllocatingResource(t, schedulerQueueA, 1000, 1000)
+    waitForAllocatingResourceForApplication(t, schedulingApp1, 1000, 1000)
+    waitForAllocatingResource(t, schedulerQueueRoot, 1000, 1000)
+
+    // Remove app, make sure allocating and pending went to zero
+    // Register a node, and add apps
+    err = proxy.Update(&si.UpdateRequest{
+        RemoveApplications: newRemoveAppRequest([]string{"app-1"}),
+        RmId: "rm:123",
+    })
+
+    if err != nil {
+        t.Fatalf("UpdateRequest failed for remove app: %v", err)
+    }
+
+    // Check allocating resource of queue, should be 0 now
+    waitForAllocatingResource(t, schedulerQueueA, 0, 1000)
+    waitForAllocatingResource(t, schedulerQueueRoot, 0, 1000)
+
+    // Check allocated resource of queue, should be 0 now
+    waitForAllocatedResourceOfQueue(t, schedulerQueueA, 0, 1000)
+    waitForAllocatedResourceOfQueue(t, schedulerQueueRoot, 0, 1000)
+
+    // Check pending resource of queue, should be 0 now
+    waitForPendingResource(t, schedulerQueueA, 0, 1000)
+    waitForPendingResource(t, schedulerQueueRoot, 0, 1000)
+
+    // Check apps of queue, should be removed
+    if len(schedulerQueueA.GetApplicationsTestOnly()) != 0 {
+        t.Fatal("After remove app, queue should not include any app")
+    }
+
+    // Check apps of partition, should be removed
+    if context.GetSchedulingApplication("app-1", "[rm:123]default") != nil {
+        t.Fatal("After remove app, partition should not include any app")
+    }
+
+    // Verify 0 allocations for every node
+    for _, node := range nodes {
+        schedulingNode := context.GetSchedulingNode(node.NodeId, partition)
+        assert.Assert(t, schedulingNode.GetAllocatedResource().Resources[resources.MEMORY] == 0)
+    }
+}

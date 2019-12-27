@@ -19,8 +19,9 @@ package scheduler
 import (
 	"errors"
 	"fmt"
-	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"sync"
+
+	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 )
 
 // Responsibility of this class:

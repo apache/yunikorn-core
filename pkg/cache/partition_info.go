@@ -18,6 +18,11 @@ package cache
 
 import (
 	"fmt"
+	"math"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/cloudera/yunikorn-core/pkg/common"
 	"github.com/cloudera/yunikorn-core/pkg/common/commonevents"
 	"github.com/cloudera/yunikorn-core/pkg/common/configs"
@@ -28,12 +33,8 @@ import (
 	"github.com/cloudera/yunikorn-core/pkg/webservice/dao"
 	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 	"github.com/looplab/fsm"
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 	"go.uber.org/zap"
-	"math"
-	"strings"
-	"sync"
-	"time"
 )
 
 /* Related to partitions */

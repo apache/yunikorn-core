@@ -18,13 +18,14 @@ package configs
 
 import (
 	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
+
 	"github.com/cloudera/yunikorn-core/pkg/common"
 	"github.com/cloudera/yunikorn-core/pkg/common/security"
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"go.uber.org/zap"
-	"regexp"
-	"strconv"
-	"strings"
 )
 
 const (

@@ -18,11 +18,12 @@ package metrics
 
 import (
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
-	"sync"
-	"time"
 )
 
 var resourceUsageRangeBuckets = []string{

@@ -18,6 +18,10 @@ package cache
 
 import (
 	"fmt"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/cloudera/yunikorn-core/pkg/common/configs"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"github.com/cloudera/yunikorn-core/pkg/common/security"
@@ -25,9 +29,6 @@ import (
 	"github.com/cloudera/yunikorn-core/pkg/metrics"
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
-	"strings"
-	"sync"
-	"time"
 )
 
 const (

@@ -17,10 +17,11 @@ limitations under the License.
 package metrics
 
 import (
-	"github.com/prometheus/common/model"
-	"gotest.tools/assert"
 	"math/rand"
 	"testing"
+
+	"github.com/prometheus/common/model"
+	"gotest.tools/assert"
 )
 
 func TestFormatMetricName(t *testing.T) {

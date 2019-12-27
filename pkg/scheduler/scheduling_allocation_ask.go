@@ -17,10 +17,11 @@ limitations under the License.
 package scheduler
 
 import (
+	"sync"
+
 	"github.com/cloudera/yunikorn-core/pkg/common"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
-	"sync"
 )
 
 type SchedulingAllocationAsk struct {

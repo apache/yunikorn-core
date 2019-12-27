@@ -18,14 +18,15 @@ package scheduler
 
 import (
 	"context"
+	"sync/atomic"
+	"time"
+
 	"github.com/cloudera/yunikorn-core/pkg/common"
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/cloudera/yunikorn-core/pkg/metrics"
 	"github.com/cloudera/yunikorn-core/pkg/plugins"
 	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 	"go.uber.org/zap"
-	"sync/atomic"
-	"time"
 )
 
 // Visible by tests

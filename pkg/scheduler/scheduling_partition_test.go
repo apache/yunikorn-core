@@ -17,10 +17,11 @@ limitations under the License.
 package scheduler
 
 import (
+	"testing"
+
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"gotest.tools/assert"
-	"testing"
 )
 
 func newTestPartition() (*PartitionSchedulingContext, error) {

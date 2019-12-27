@@ -17,13 +17,14 @@ limitations under the License.
 package scheduler
 
 import (
+	"sync"
+
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/cloudera/yunikorn-core/pkg/plugins"
 	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 	"go.uber.org/zap"
-	"sync"
 )
 
 type SchedulingNode struct {

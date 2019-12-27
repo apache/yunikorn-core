@@ -18,12 +18,13 @@ package scheduler
 
 import (
 	"fmt"
+	"sync"
+
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/common/commonevents"
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/cloudera/yunikorn-core/pkg/scheduler/schedulerevent"
 	"go.uber.org/zap"
-	"sync"
 )
 
 type ClusterSchedulingContext struct {

@@ -17,10 +17,11 @@ limitations under the License.
 package cache
 
 import (
+	"testing"
+
 	"github.com/cloudera/yunikorn-core/pkg/common/configs"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"gotest.tools/assert"
-	"testing"
 )
 
 func createResource(memory, cpu int) *resources.Resource {

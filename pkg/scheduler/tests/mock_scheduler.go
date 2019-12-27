@@ -17,12 +17,13 @@ limitations under the License.
 package tests
 
 import (
+	"testing"
+
 	"github.com/cloudera/yunikorn-core/pkg/api"
 	"github.com/cloudera/yunikorn-core/pkg/common/configs"
 	"github.com/cloudera/yunikorn-core/pkg/entrypoint"
 	"github.com/cloudera/yunikorn-core/pkg/scheduler"
 	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
-	"testing"
 )
 
 var TwoEqualQueueConfigEnabledPreemption = `

@@ -17,8 +17,9 @@ limitations under the License.
 package security
 
 import (
-	"gotest.tools/assert"
 	"testing"
+
+	"gotest.tools/assert"
 )
 
 func TestACLCreate(t *testing.T) {

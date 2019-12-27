@@ -18,6 +18,7 @@ package common
 
 import (
 	"fmt"
+
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"go.uber.org/zap"
 )

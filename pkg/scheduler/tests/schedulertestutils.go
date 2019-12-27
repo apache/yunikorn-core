@@ -18,6 +18,10 @@ package tests
 
 import (
 	"fmt"
+	"sync"
+	"testing"
+	"time"
+
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/common"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
@@ -25,9 +29,6 @@ import (
 	"github.com/cloudera/yunikorn-core/pkg/scheduler"
 	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 	"go.uber.org/zap"
-	"sync"
-	"testing"
-	"time"
 )
 
 type MockRMCallbackHandler struct {

@@ -18,11 +18,12 @@ package placement
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/common/configs"
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"go.uber.org/zap"
-	"strings"
 )
 
 // A rule to place an application based on the queue provided by the user on submission.

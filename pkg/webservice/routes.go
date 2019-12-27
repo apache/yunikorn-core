@@ -16,9 +16,10 @@ limitations under the License.
 package webservice
 
 import (
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"net/http"
 	"net/http/pprof"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type Route struct {

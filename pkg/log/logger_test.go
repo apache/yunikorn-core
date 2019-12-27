@@ -17,10 +17,11 @@ limitations under the License.
 package log
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"testing"
 )
 
 func TestIsNopLogger(t *testing.T) {

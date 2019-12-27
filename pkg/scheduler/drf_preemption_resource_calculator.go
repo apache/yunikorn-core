@@ -17,8 +17,9 @@ limitations under the License.
 package scheduler
 
 import (
-	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"math"
+
+	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 )
 
 // Temp object for better readability.

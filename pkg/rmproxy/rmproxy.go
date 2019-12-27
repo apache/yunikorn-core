@@ -19,6 +19,10 @@ package rmproxy
 import (
 	"errors"
 	"fmt"
+	"reflect"
+	"sync"
+	"time"
+
 	"github.com/cloudera/yunikorn-core/pkg/api"
 	"github.com/cloudera/yunikorn-core/pkg/cache/cacheevent"
 	"github.com/cloudera/yunikorn-core/pkg/common"
@@ -31,9 +35,6 @@ import (
 	"github.com/cloudera/yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 	"go.uber.org/zap"
-	"reflect"
-	"sync"
-	"time"
 )
 
 // Gateway to talk to ResourceManager (behind grpc/API of scheduler-interface)

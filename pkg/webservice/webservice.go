@@ -18,13 +18,14 @@ package webservice
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"sync"
+	"time"
+
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
-	"net/http"
-	"sync"
-	"time"
 )
 
 var gClusterInfo *cache.ClusterInfo

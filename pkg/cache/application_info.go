@@ -17,12 +17,13 @@ limitations under the License.
 package cache
 
 import (
-	"github.com/cloudera/yunikorn-core/pkg/common/resources"
-	"github.com/cloudera/yunikorn-core/pkg/common/security"
-	"github.com/looplab/fsm"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/cloudera/yunikorn-core/pkg/common/resources"
+	"github.com/cloudera/yunikorn-core/pkg/common/security"
+	"github.com/looplab/fsm"
 )
 
 /* Related to applications */

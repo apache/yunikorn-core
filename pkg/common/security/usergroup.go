@@ -18,12 +18,13 @@ package security
 
 import (
 	"fmt"
-	"github.com/cloudera/yunikorn-core/pkg/log"
-	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
-	"go.uber.org/zap"
 	"os/user"
 	"sync"
 	"time"
+
+	"github.com/cloudera/yunikorn-core/pkg/log"
+	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+	"go.uber.org/zap"
 )
 
 const (

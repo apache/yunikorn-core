@@ -19,12 +19,13 @@ package configs
 import (
 	"crypto/sha256"
 	"fmt"
-	"github.com/cloudera/yunikorn-core/pkg/log"
-	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"os"
 	"path"
+
+	"github.com/cloudera/yunikorn-core/pkg/log"
+	"go.uber.org/zap"
+	"gopkg.in/yaml.v2"
 )
 
 // The configuration can contain multiple partitions. Each partition contains the queue definition for a logical

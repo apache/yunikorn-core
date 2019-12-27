@@ -17,8 +17,9 @@ limitations under the License.
 package cache
 
 import (
-	"gotest.tools/assert"
 	"testing"
+
+	"gotest.tools/assert"
 )
 
 func TestStateTransition(t *testing.T) {

@@ -17,9 +17,10 @@ limitations under the License.
 package scheduler
 
 import (
-	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"strconv"
 	"testing"
+
+	"github.com/cloudera/yunikorn-core/pkg/cache"
 )
 
 // empty test for random iterator

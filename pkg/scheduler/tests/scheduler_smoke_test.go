@@ -18,6 +18,10 @@ package tests
 
 import (
 	"bytes"
+	"strconv"
+	"testing"
+	"time"
+
 	cacheInfo "github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/common"
 	"github.com/cloudera/yunikorn-core/pkg/common/configs"
@@ -25,9 +29,6 @@ import (
 	"github.com/cloudera/yunikorn-core/pkg/entrypoint"
 	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 	"gotest.tools/assert"
-	"strconv"
-	"testing"
-	"time"
 )
 
 // Test scheduler reconfiguration

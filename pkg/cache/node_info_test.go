@@ -17,11 +17,12 @@ limitations under the License.
 package cache
 
 import (
+	"testing"
+
 	"github.com/cloudera/yunikorn-core/pkg/api"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 	"gotest.tools/assert"
-	"testing"
 )
 
 func newProto(nodeId string, totalResource *resources.Resource, attributes map[string]string) *si.NewNodeInfo {

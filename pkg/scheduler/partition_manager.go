@@ -17,10 +17,11 @@ limitations under the License.
 package scheduler
 
 import (
+	"time"
+
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"go.uber.org/zap"
-	"time"
 )
 
 const (

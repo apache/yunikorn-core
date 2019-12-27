@@ -18,10 +18,11 @@ package configs
 
 import (
 	"fmt"
-	"github.com/cloudera/yunikorn-core/pkg/common"
-	"gotest.tools/assert"
 	"testing"
 	"time"
+
+	"github.com/cloudera/yunikorn-core/pkg/common"
+	"gotest.tools/assert"
 )
 
 // test singleton

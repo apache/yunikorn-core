@@ -17,10 +17,11 @@ limitations under the License.
 package cache
 
 import (
+	"testing"
+
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"github.com/cloudera/yunikorn-core/pkg/common/security"
 	"gotest.tools/assert"
-	"testing"
 )
 
 func newApplicationInfo(appId, partition, queueName string) *ApplicationInfo {

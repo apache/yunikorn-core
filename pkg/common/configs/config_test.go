@@ -19,10 +19,11 @@ package configs
 import (
 	"encoding/json"
 	"fmt"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"path"
 	"testing"
+
+	"gopkg.in/yaml.v2"
 )
 
 func TestConfigSerdeQueues(t *testing.T) {

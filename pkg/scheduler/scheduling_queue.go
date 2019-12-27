@@ -17,13 +17,14 @@ limitations under the License.
 package scheduler
 
 import (
+	"strings"
+	"sync"
+
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"github.com/cloudera/yunikorn-core/pkg/common/security"
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"go.uber.org/zap"
-	"strings"
-	"sync"
 )
 
 // Represents Queue inside Scheduler

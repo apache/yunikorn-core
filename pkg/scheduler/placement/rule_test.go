@@ -17,9 +17,10 @@ limitations under the License.
 package placement
 
 import (
+	"testing"
+
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/common/configs"
-	"testing"
 )
 
 func TestNewRule(t *testing.T) {

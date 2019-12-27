@@ -17,15 +17,16 @@ limitations under the License.
 package scheduler
 
 import (
+	"strconv"
+	"testing"
+	"time"
+
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"github.com/cloudera/yunikorn-core/pkg/common/security"
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"go.uber.org/zap"
 	"gotest.tools/assert"
-	"strconv"
-	"testing"
-	"time"
 )
 
 // verify queue ordering is working

@@ -17,11 +17,12 @@ limitations under the License.
 package placement
 
 import (
+	"regexp"
+
 	"github.com/cloudera/yunikorn-core/pkg/common/configs"
 	"github.com/cloudera/yunikorn-core/pkg/common/security"
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"go.uber.org/zap"
-	"regexp"
 )
 
 type Filter struct {

@@ -18,10 +18,11 @@ package configs
 
 import (
 	"bytes"
-	"github.com/cloudera/yunikorn-core/pkg/log"
-	"go.uber.org/zap"
 	"sync"
 	"time"
+
+	"github.com/cloudera/yunikorn-core/pkg/log"
+	"go.uber.org/zap"
 )
 
 var configWatcher *ConfigWatcher

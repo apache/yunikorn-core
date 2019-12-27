@@ -18,11 +18,12 @@ package main
 
 import (
 	"context"
-	"github.com/cloudera/yunikorn-core/pkg/common"
-	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 	"io"
 	"log"
 	"time"
+
+	"github.com/cloudera/yunikorn-core/pkg/common"
+	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 )
 
 type SimpleScheduler struct {

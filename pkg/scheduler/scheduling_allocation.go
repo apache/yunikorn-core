@@ -18,6 +18,7 @@ package scheduler
 
 import (
 	"fmt"
+
 	"github.com/cloudera/yunikorn-core/pkg/common/commonevents"
 )
 

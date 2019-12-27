@@ -17,8 +17,9 @@ limitations under the License.
 package scheduler
 
 import (
-	"github.com/cloudera/yunikorn-core/pkg/metrics"
 	"time"
+
+	"github.com/cloudera/yunikorn-core/pkg/metrics"
 )
 
 type nodesResourceUsageMonitor struct {

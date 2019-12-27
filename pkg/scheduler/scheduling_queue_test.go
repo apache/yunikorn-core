@@ -17,11 +17,12 @@ limitations under the License.
 package scheduler
 
 import (
+	"strconv"
+	"testing"
+
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/common/configs"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
-	"strconv"
-	"testing"
 )
 
 // create the root queue, base for all testing

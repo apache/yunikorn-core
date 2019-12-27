@@ -18,12 +18,13 @@ package placement
 
 import (
 	"fmt"
+	"strings"
+	"sync"
+
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/common/configs"
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"go.uber.org/zap"
-	"strings"
-	"sync"
 )
 
 type AppPlacementManager struct {

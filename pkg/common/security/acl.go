@@ -18,10 +18,11 @@ package security
 
 import (
 	"fmt"
-	"github.com/cloudera/yunikorn-core/pkg/log"
-	"go.uber.org/zap"
 	"regexp"
 	"strings"
+
+	"github.com/cloudera/yunikorn-core/pkg/log"
+	"go.uber.org/zap"
 )
 
 const (

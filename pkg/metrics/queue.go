@@ -18,10 +18,11 @@ package metrics
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
-	"strings"
 )
 
 type QueueMetrics struct {

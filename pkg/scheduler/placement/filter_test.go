@@ -17,9 +17,10 @@ limitations under the License.
 package placement
 
 import (
+	"testing"
+
 	"github.com/cloudera/yunikorn-core/pkg/common/configs"
 	"github.com/cloudera/yunikorn-core/pkg/common/security"
-	"testing"
 )
 
 func TestNewFilterLists(t *testing.T) {

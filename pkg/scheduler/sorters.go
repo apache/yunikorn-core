@@ -17,10 +17,11 @@ limitations under the License.
 package scheduler
 
 import (
-	"github.com/cloudera/yunikorn-core/pkg/common/resources"
-	"github.com/cloudera/yunikorn-core/pkg/metrics"
 	"sort"
 	"time"
+
+	"github.com/cloudera/yunikorn-core/pkg/common/resources"
+	"github.com/cloudera/yunikorn-core/pkg/metrics"
 )
 
 // Sort type for queues, apps, nodes etc.

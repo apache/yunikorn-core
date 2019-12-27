@@ -17,14 +17,15 @@ package webservice
 
 import (
 	"encoding/json"
-	"github.com/cloudera/yunikorn-core/pkg/cache"
-	"github.com/cloudera/yunikorn-core/pkg/log"
-	"github.com/cloudera/yunikorn-core/pkg/webservice/dao"
-	"go.uber.org/zap"
 	"net/http"
 	"runtime"
 	"strconv"
 	"strings"
+
+	"github.com/cloudera/yunikorn-core/pkg/cache"
+	"github.com/cloudera/yunikorn-core/pkg/log"
+	"github.com/cloudera/yunikorn-core/pkg/webservice/dao"
+	"go.uber.org/zap"
 )
 
 func GetStackInfo(w http.ResponseWriter, r *http.Request) {

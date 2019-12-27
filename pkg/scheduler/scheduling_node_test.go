@@ -17,9 +17,10 @@ limitations under the License.
 package scheduler
 
 import (
+	"testing"
+
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
-	"testing"
 )
 
 func newNode(nodeId string, totalMap map[string]resources.Quantity) *SchedulingNode {

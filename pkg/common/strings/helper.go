@@ -19,6 +19,6 @@ package strings
 import "encoding/json"
 
 func PrettyPrintStruct(i interface{}) string {
-    s, _ := json.MarshalIndent(i, "", "\t")
-    return string(s)
+	s, _ := json.MarshalIndent(i, "", "\t")
+	return string(s)
 }

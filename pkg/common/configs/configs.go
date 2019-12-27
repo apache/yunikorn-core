@@ -19,35 +19,35 @@ package configs
 import "sync"
 
 const (
-    SchedulerConfigPath  = "scheduler-config-path"
-    DefaultSchedulerConfigPath = "/etc/yunikorn"
+	SchedulerConfigPath        = "scheduler-config-path"
+	DefaultSchedulerConfigPath = "/etc/yunikorn"
 )
 
 var ConfigMap map[string]string
 var ConfigContext *SchedulerConfigContext
 
 func init() {
-    ConfigMap = make(map[string]string)
-    ConfigContext = &SchedulerConfigContext{
-        configs: make(map[string]*SchedulerConfig),
-        lock: &sync.RWMutex{},
-    }
+	ConfigMap = make(map[string]string)
+	ConfigContext = &SchedulerConfigContext{
+		configs: make(map[string]*SchedulerConfig),
+		lock:    &sync.RWMutex{},
+	}
 }
 
 // scheduler config context provides thread-safe access for scheduler configurations
 type SchedulerConfigContext struct {
-    configs map[string]*SchedulerConfig
-    lock *sync.RWMutex
+	configs map[string]*SchedulerConfig
+	lock    *sync.RWMutex
 }
 
 func (ctx *SchedulerConfigContext) Set(policyGroup string, config *SchedulerConfig) {
-    ctx.lock.Lock()
-    defer ctx.lock.Unlock()
-    ctx.configs[policyGroup] = config
+	ctx.lock.Lock()
+	defer ctx.lock.Unlock()
+	ctx.configs[policyGroup] = config
 }
 
 func (ctx *SchedulerConfigContext) Get(policyGroup string) *SchedulerConfig {
-    ctx.lock.RLock()
-    defer ctx.lock.RUnlock()
-    return ctx.configs[policyGroup]
+	ctx.lock.RLock()
+	defer ctx.lock.RUnlock()
+	return ctx.configs[policyGroup]
 }

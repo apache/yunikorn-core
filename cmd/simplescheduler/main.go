@@ -17,20 +17,20 @@ limitations under the License.
 package main
 
 import (
-    "flag"
-    "os"
+	"flag"
+	"os"
 )
 
 var (
-    endpoint = flag.String("endpoint", "unix://tmp/yunikorn.sock", "YuniKorn endpoint")
+	endpoint = flag.String("endpoint", "unix://tmp/yunikorn.sock", "YuniKorn endpoint")
 )
 
 func main() {
-    handle()
-    os.Exit(0)
+	handle()
+	os.Exit(0)
 }
 
 func handle() {
-    scheduler := &SimpleScheduler{}
-    scheduler.Run("tcp://localhost:3333")
+	scheduler := &SimpleScheduler{}
+	scheduler.Run("tcp://localhost:3333")
 }

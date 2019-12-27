@@ -17,54 +17,54 @@ limitations under the License.
 package cache
 
 import (
-    "fmt"
-    "github.com/cloudera/yunikorn-core/pkg/common/configs"
-    "github.com/cloudera/yunikorn-core/pkg/common/resources"
-    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+	"fmt"
+	"github.com/cloudera/yunikorn-core/pkg/common/configs"
+	"github.com/cloudera/yunikorn-core/pkg/common/resources"
+	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 )
 
 func CreateMockAllocationInfo(appId string, res *resources.Resource, uuid string, queueName string, nodeId string) *AllocationInfo {
-    info := &AllocationInfo{ApplicationId: appId, AllocatedResource: res,
-        AllocationProto: &si.Allocation{Uuid: uuid, QueueName: queueName, NodeId: nodeId}}
-    return info
+	info := &AllocationInfo{ApplicationId: appId, AllocatedResource: res,
+		AllocationProto: &si.Allocation{Uuid: uuid, QueueName: queueName, NodeId: nodeId}}
+	return info
 }
 
 func CreatePartitionInfo(data []byte) (*PartitionInfo, error) {
-    // create config from string
-    configs.MockSchedulerConfigByData(data)
-    conf, err := configs.SchedulerConfigLoader("default-policy-group")
-    if err != nil {
-        return nil, fmt.Errorf("error when loading config %v", err)
-    }
-    pi, err := NewPartitionInfo(conf.Partitions[0], "rm1", nil)
-    if err != nil {
-        return nil, fmt.Errorf("error when loading ParttionInfo from config %v", err)
-    }
-    return pi, nil
+	// create config from string
+	configs.MockSchedulerConfigByData(data)
+	conf, err := configs.SchedulerConfigLoader("default-policy-group")
+	if err != nil {
+		return nil, fmt.Errorf("error when loading config %v", err)
+	}
+	pi, err := NewPartitionInfo(conf.Partitions[0], "rm1", nil)
+	if err != nil {
+		return nil, fmt.Errorf("error when loading ParttionInfo from config %v", err)
+	}
+	return pi, nil
 }
 
 // Node to test with sorters (setting available resources)
 func NewNodeForSort(nodeId string, availResource *resources.Resource) *NodeInfo {
-    return newNodeForTest(nodeId, resources.NewResource(), availResource)
+	return newNodeForTest(nodeId, resources.NewResource(), availResource)
 }
 
 // Node to test with anything but the sorters (setting total resources)
 func NewNodeForTest(nodeId string, totalResource *resources.Resource) *NodeInfo {
-    return newNodeForTest(nodeId, totalResource, totalResource.Clone())
+	return newNodeForTest(nodeId, totalResource, totalResource.Clone())
 }
 
 // Internal function to create the nodeInfo
 func newNodeForTest(nodeId string, totalResource, availResource *resources.Resource) *NodeInfo {
-    node := &NodeInfo{}
-    // set the basics
-    node.NodeId = nodeId
-    node.allocations = make(map[string]*AllocationInfo)
-    node.schedulable = true
-    node.Partition = "default"
-    // make sure they are independent objects
-    node.TotalResource = totalResource
-    node.availableResource = availResource
-    node.allocatedResource = resources.NewResource()
+	node := &NodeInfo{}
+	// set the basics
+	node.NodeId = nodeId
+	node.allocations = make(map[string]*AllocationInfo)
+	node.schedulable = true
+	node.Partition = "default"
+	// make sure they are independent objects
+	node.TotalResource = totalResource
+	node.availableResource = availResource
+	node.allocatedResource = resources.NewResource()
 
-    return node
+	return node
 }

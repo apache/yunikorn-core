@@ -17,84 +17,84 @@ limitations under the License.
 package main
 
 import (
-    "context"
-    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
-    "io"
-    "log"
-    "time"
+	"context"
+	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+	"io"
+	"log"
+	"time"
 
-    "google.golang.org/grpc"
+	"google.golang.org/grpc"
 )
 
 const (
-    address = "localhost:3333"
+	address = "localhost:3333"
 )
 
 func main() {
-    // Set up a connection to the server.
-    conn, err := grpc.Dial(address, grpc.WithInsecure())
-    if err != nil {
-        log.Fatalf("did not connect: %v", err)
-    }
-    defer conn.Close()
-    c := si.NewSchedulerClient(conn)
+	// Set up a connection to the server.
+	conn, err := grpc.Dial(address, grpc.WithInsecure())
+	if err != nil {
+		log.Fatalf("did not connect: %v", err)
+	}
+	defer conn.Close()
+	c := si.NewSchedulerClient(conn)
 
-    ctx, cancel := context.WithTimeout(context.Background(), time.Hour * 100000)
-    defer cancel()
-    _, err = c.RegisterResourceManager(ctx, &si.RegisterResourceManagerRequest{})
-    if err != nil {
-        log.Fatalf("could not greet: %v", err)
-    }
-    log.Printf("Responded")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Hour*100000)
+	defer cancel()
+	_, err = c.RegisterResourceManager(ctx, &si.RegisterResourceManagerRequest{})
+	if err != nil {
+		log.Fatalf("could not greet: %v", err)
+	}
+	log.Printf("Responded")
 
-    stream, err := c.Update(ctx)
-    done := make(chan bool)
+	stream, err := c.Update(ctx)
+	done := make(chan bool)
 
-    // Connect to server and send streaming
-    // first goroutine sends requests
-    go func() {
-        for i := 1; i <= 10; i++ {
-            req := si.UpdateRequest{}
-            if err := stream.Send(&req); err != nil {
-                log.Fatalf("can not send %v", err)
-            }
+	// Connect to server and send streaming
+	// first goroutine sends requests
+	go func() {
+		for i := 1; i <= 10; i++ {
+			req := si.UpdateRequest{}
+			if err := stream.Send(&req); err != nil {
+				log.Fatalf("can not send %v", err)
+			}
 
-            log.Print("Send request")
-            time.Sleep(time.Millisecond * 100)
-        }
-        //if err := stream.CloseSend(); err != nil {
-        //   log.Println(err)
-        //}
-    }()
+			log.Print("Send request")
+			time.Sleep(time.Millisecond * 100)
+		}
+		//if err := stream.CloseSend(); err != nil {
+		//   log.Println(err)
+		//}
+	}()
 
-    // second goroutine receives data from stream
-    // and saves result in max variable
-    //
-    // if stream is finished it closes done channel
-    go func() {
-        for {
-            _, err := stream.Recv()
-            if err == io.EOF {
-                close(done)
-                return
-            }
-            if err != nil {
-                log.Fatalf("can not receive %v", err)
-            }
-            log.Printf("Responded by server")
-        }
-    }()
+	// second goroutine receives data from stream
+	// and saves result in max variable
+	//
+	// if stream is finished it closes done channel
+	go func() {
+		for {
+			_, err := stream.Recv()
+			if err == io.EOF {
+				close(done)
+				return
+			}
+			if err != nil {
+				log.Fatalf("can not receive %v", err)
+			}
+			log.Printf("Responded by server")
+		}
+	}()
 
-    // third goroutine closes done channel
-    // if context is done
-    go func() {
-        <-ctx.Done()
-        if err := ctx.Err(); err != nil {
-            log.Println(err)
-        }
-        close(done)
-    }()
+	// third goroutine closes done channel
+	// if context is done
+	go func() {
+		<-ctx.Done()
+		if err := ctx.Err(); err != nil {
+			log.Println(err)
+		}
+		close(done)
+	}()
 
-    <-done
-    log.Printf("Finished")
+	<-done
+	log.Printf("Finished")
 }

@@ -35,8 +35,8 @@ var m *Metrics
 
 type Metrics struct {
 	scheduler CoreSchedulerMetrics
-	queues map[string]CoreQueueMetrics
-	lock sync.RWMutex
+	queues    map[string]CoreQueueMetrics
+	lock      sync.RWMutex
 }
 
 type CoreQueueMetrics interface {
@@ -111,8 +111,8 @@ func init() {
 	once.Do(func() {
 		m = &Metrics{
 			scheduler: initSchedulerMetrics(),
-			queues: make(map[string]CoreQueueMetrics),
-			lock: sync.RWMutex{},
+			queues:    make(map[string]CoreQueueMetrics),
+			lock:      sync.RWMutex{},
 		}
 	})
 }

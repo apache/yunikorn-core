@@ -24,13 +24,13 @@ import (
 	"strings"
 )
 
-type QueueMetrics struct  {
+type QueueMetrics struct {
 	// metrics related to app
 	appMetrics *prometheus.CounterVec
 
 	// metrics related to resource
-	usedResourceMetrics *prometheus.GaugeVec
-	pendingResourceMetrics *prometheus.GaugeVec
+	usedResourceMetrics      *prometheus.GaugeVec
+	pendingResourceMetrics   *prometheus.GaugeVec
 	availableResourceMetrics *prometheus.GaugeVec
 }
 
@@ -97,15 +97,15 @@ func substituteQueueName(queueName string) string {
 }
 
 func (m *QueueMetrics) IncApplicationsAccepted() {
-	m.appMetrics.With(prometheus.Labels{"state":"accepted"}).Inc()
+	m.appMetrics.With(prometheus.Labels{"state": "accepted"}).Inc()
 }
 
 func (m *QueueMetrics) IncApplicationsRejected() {
-	m.appMetrics.With(prometheus.Labels{"state":"rejected"}).Inc()
+	m.appMetrics.With(prometheus.Labels{"state": "rejected"}).Inc()
 }
 
 func (m *QueueMetrics) IncApplicationsCompleted() {
-	m.appMetrics.With(prometheus.Labels{"state":"completed"}).Inc()
+	m.appMetrics.With(prometheus.Labels{"state": "completed"}).Inc()
 }
 
 func (m *QueueMetrics) AddQueueUsedResourceMetrics(resourceName string, value float64) {

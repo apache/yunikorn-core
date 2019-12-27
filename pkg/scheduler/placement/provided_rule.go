@@ -17,12 +17,12 @@ limitations under the License.
 package placement
 
 import (
-    "fmt"
-    "github.com/cloudera/yunikorn-core/pkg/cache"
-    "github.com/cloudera/yunikorn-core/pkg/common/configs"
-    "github.com/cloudera/yunikorn-core/pkg/log"
-    "go.uber.org/zap"
-    "strings"
+	"fmt"
+	"github.com/cloudera/yunikorn-core/pkg/cache"
+	"github.com/cloudera/yunikorn-core/pkg/common/configs"
+	"github.com/cloudera/yunikorn-core/pkg/log"
+	"go.uber.org/zap"
+	"strings"
 )
 
 // A rule to place an application based on the queue provided by the user on submission.
@@ -30,77 +30,77 @@ import (
 // provided. If the queue is not qualified all "." characters will be replaced and the parent rule run before making the
 // queue name fully qualified.
 type providedRule struct {
-    basicRule
+	basicRule
 }
 
 func (pr *providedRule) getName() string {
-    return "provided"
+	return "provided"
 }
 
 func (pr *providedRule) initialise(conf configs.PlacementRule) error {
-    pr.create = conf.Create
-    pr.filter = newFilter(conf.Filter)
-    var err = error(nil)
-    if conf.Parent != nil {
-        pr.parent, err = newRule(*conf.Parent)
-    }
-    return err
+	pr.create = conf.Create
+	pr.filter = newFilter(conf.Filter)
+	var err = error(nil)
+	if conf.Parent != nil {
+		pr.parent, err = newRule(*conf.Parent)
+	}
+	return err
 }
 
 func (pr *providedRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
-    // since this is the provided rule we must have a queue in the info already
-    if app.QueueName == "" {
-        return "", nil
-    }
-    // before anything run the filter
-    if !pr.filter.allowUser(app.GetUser()) {
-        log.Logger().Debug("Provided rule filtered",
-            zap.String("application", app.ApplicationId),
-            zap.Any("user", app.GetUser()))
-        return "", nil
-    }
-    var parentName string
-    var err error
-    queueName := app.QueueName
-    // if we have a fully qualified queue passed in do not run the parent rule
-    if !strings.HasPrefix(queueName, configs.RootQueue + cache.DOT) {
-        // run the parent rule if set
-        if pr.parent != nil {
-            parentName, err = pr.parent.placeApplication(app, info)
-            // failed parent rule, fail this rule
-            if err != nil {
-                return "", err
-            }
-            // rule did not return a parent: this could be filter or create flag related
-            if parentName == "" {
-                return "", nil
-            }
-            // check if this is a parent queue and qualify it
-            if !strings.HasPrefix(parentName, configs.RootQueue + cache.DOT) {
-                parentName = configs.RootQueue + cache.DOT + parentName
-            }
-            if info.GetQueue(parentName).IsLeafQueue() {
-                return "", fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
-            }
-        }
-        // the parent is set from the rule otherwise set it to the root
-        if parentName == "" {
-            parentName = configs.RootQueue
-        }
-        // Make it a fully qualified queue
-        queueName = parentName + cache.DOT + replaceDot(queueName)
-    }
-    log.Logger().Debug("Provided rule intermediate result",
-        zap.String("application", app.ApplicationId),
-        zap.String("queue", queueName))
-    // get the queue object
-    queue := info.GetQueue(queueName)
-    // if we cannot create the queue must exist
-    if !pr.create && queue == nil {
-        return "", nil
-    }
-    log.Logger().Info("Provided rule application placed",
-        zap.String("application", app.ApplicationId),
-        zap.String("queue", queueName))
-    return queueName, nil
+	// since this is the provided rule we must have a queue in the info already
+	if app.QueueName == "" {
+		return "", nil
+	}
+	// before anything run the filter
+	if !pr.filter.allowUser(app.GetUser()) {
+		log.Logger().Debug("Provided rule filtered",
+			zap.String("application", app.ApplicationId),
+			zap.Any("user", app.GetUser()))
+		return "", nil
+	}
+	var parentName string
+	var err error
+	queueName := app.QueueName
+	// if we have a fully qualified queue passed in do not run the parent rule
+	if !strings.HasPrefix(queueName, configs.RootQueue+cache.DOT) {
+		// run the parent rule if set
+		if pr.parent != nil {
+			parentName, err = pr.parent.placeApplication(app, info)
+			// failed parent rule, fail this rule
+			if err != nil {
+				return "", err
+			}
+			// rule did not return a parent: this could be filter or create flag related
+			if parentName == "" {
+				return "", nil
+			}
+			// check if this is a parent queue and qualify it
+			if !strings.HasPrefix(parentName, configs.RootQueue+cache.DOT) {
+				parentName = configs.RootQueue + cache.DOT + parentName
+			}
+			if info.GetQueue(parentName).IsLeafQueue() {
+				return "", fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
+			}
+		}
+		// the parent is set from the rule otherwise set it to the root
+		if parentName == "" {
+			parentName = configs.RootQueue
+		}
+		// Make it a fully qualified queue
+		queueName = parentName + cache.DOT + replaceDot(queueName)
+	}
+	log.Logger().Debug("Provided rule intermediate result",
+		zap.String("application", app.ApplicationId),
+		zap.String("queue", queueName))
+	// get the queue object
+	queue := info.GetQueue(queueName)
+	// if we cannot create the queue must exist
+	if !pr.create && queue == nil {
+		return "", nil
+	}
+	log.Logger().Info("Provided rule application placed",
+		zap.String("application", app.ApplicationId),
+		zap.String("queue", queueName))
+	return queueName, nil
 }

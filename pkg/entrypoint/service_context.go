@@ -31,7 +31,6 @@ type ServiceContext struct {
 	WebApp    *webservice.WebService
 }
 
-
 func (s *ServiceContext) StopAll() {
 	// TODO implement stop for services
 	if s.WebApp != nil {

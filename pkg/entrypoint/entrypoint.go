@@ -17,63 +17,63 @@ limitations under the License.
 package entrypoint
 
 import (
-    "github.com/cloudera/yunikorn-core/pkg/cache"
-    "github.com/cloudera/yunikorn-core/pkg/handler"
-    "github.com/cloudera/yunikorn-core/pkg/rmproxy"
-    "github.com/cloudera/yunikorn-core/pkg/scheduler"
-    "github.com/cloudera/yunikorn-core/pkg/webservice"
+	"github.com/cloudera/yunikorn-core/pkg/cache"
+	"github.com/cloudera/yunikorn-core/pkg/handler"
+	"github.com/cloudera/yunikorn-core/pkg/rmproxy"
+	"github.com/cloudera/yunikorn-core/pkg/scheduler"
+	"github.com/cloudera/yunikorn-core/pkg/webservice"
 )
 
 // options used to control how services are started
 type StartupOptions struct {
-    manualScheduleFlag bool
-    startWebAppFlag bool
+	manualScheduleFlag bool
+	startWebAppFlag    bool
 }
 
 func StartAllServices() *ServiceContext {
-    return startAllServicesWithParameters(
-        StartupOptions{
-            manualScheduleFlag: false,
-            startWebAppFlag:    true,
-        })
+	return startAllServicesWithParameters(
+		StartupOptions{
+			manualScheduleFlag: false,
+			startWebAppFlag:    true,
+		})
 }
 
 // Visible by tests
 func StartAllServicesWithManualScheduler() *ServiceContext {
-    return startAllServicesWithParameters(
-        StartupOptions{
-            manualScheduleFlag: true,
-            startWebAppFlag:    false,
-        })
+	return startAllServicesWithParameters(
+		StartupOptions{
+			manualScheduleFlag: true,
+			startWebAppFlag:    false,
+		})
 }
 
 func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
-    cache := cache.NewClusterInfo()
-    scheduler := scheduler.NewScheduler(cache)
-    proxy := rmproxy.NewRMProxy()
+	cache := cache.NewClusterInfo()
+	scheduler := scheduler.NewScheduler(cache)
+	proxy := rmproxy.NewRMProxy()
 
-    eventHandler := handler.EventHandlers{
-        CacheEventHandler:     cache,
-        SchedulerEventHandler: scheduler,
-        RMProxyEventHandler:   proxy,
-    }
+	eventHandler := handler.EventHandlers{
+		CacheEventHandler:     cache,
+		SchedulerEventHandler: scheduler,
+		RMProxyEventHandler:   proxy,
+	}
 
-    // start services
-    cache.StartService(eventHandler)
-    scheduler.StartService(eventHandler, opts.manualScheduleFlag)
-    proxy.StartService(eventHandler)
+	// start services
+	cache.StartService(eventHandler)
+	scheduler.StartService(eventHandler, opts.manualScheduleFlag)
+	proxy.StartService(eventHandler)
 
-    context := &ServiceContext{
-        RMProxy:   proxy,
-        Cache:     cache,
-        Scheduler: scheduler,
-    }
+	context := &ServiceContext{
+		RMProxy:   proxy,
+		Cache:     cache,
+		Scheduler: scheduler,
+	}
 
-    if opts.startWebAppFlag {
-        webapp := webservice.NewWebApp(cache)
-        webapp.StartWebApp()
-        context.WebApp = webapp
-    }
+	if opts.startWebAppFlag {
+		webapp := webservice.NewWebApp(cache)
+		webapp.StartWebApp()
+		context.WebApp = webapp
+	}
 
-    return context
+	return context
 }

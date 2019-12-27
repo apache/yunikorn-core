@@ -17,48 +17,48 @@ limitations under the License.
 package common
 
 import (
-    "fmt"
-    "strings"
-    "time"
+	"fmt"
+	"strings"
+	"time"
 )
 
 func GetNormalizedPartitionName(partitionName string, rmId string) string {
-    if partitionName == "" {
-        partitionName = "default"
-    }
+	if partitionName == "" {
+		partitionName = "default"
+	}
 
-    return fmt.Sprintf("[%s]%s", rmId, partitionName)
+	return fmt.Sprintf("[%s]%s", rmId, partitionName)
 }
 
 func GetRMIdFromPartitionName(partitionName string) string {
-    idx := strings.Index(partitionName, "]")
-    if idx > 0 {
-        rmId := partitionName[1:idx]
-        return rmId
-    }
-    return ""
+	idx := strings.Index(partitionName, "]")
+	if idx > 0 {
+		rmId := partitionName[1:idx]
+		return rmId
+	}
+	return ""
 }
 
 func GetPartitionNameWithoutClusterId(partitionName string) string {
-    idx := strings.Index(partitionName, "]")
-    if idx > 0 {
-        return partitionName[idx+1:]
-    }
-    return partitionName
+	idx := strings.Index(partitionName, "]")
+	if idx > 0 {
+		return partitionName[idx+1:]
+	}
+	return partitionName
 }
 
 func WaitFor(interval time.Duration, timeout time.Duration, condition func() bool) error {
-    deadline := time.Now().Add(timeout)
-    for {
-        if time.Now().After(deadline) {
-            return fmt.Errorf("timeout waiting for condition")
-        }
-        if condition() {
-            return nil
-        } else {
-            time.Sleep(interval)
-            continue
-        }
+	deadline := time.Now().Add(timeout)
+	for {
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timeout waiting for condition")
+		}
+		if condition() {
+			return nil
+		} else {
+			time.Sleep(interval)
+			continue
+		}
 
-    }
+	}
 }

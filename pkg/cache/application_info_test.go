@@ -25,7 +25,7 @@ import (
 
 func newApplicationInfo(appId, partition, queueName string) *ApplicationInfo {
 	user := security.UserGroup{
-		User: "testuser",
+		User:   "testuser",
 		Groups: []string{},
 	}
 	tags := make(map[string]string, 0)
@@ -43,12 +43,12 @@ func TestNewApplicationInfo(t *testing.T) {
 func TestAllocations(t *testing.T) {
 	appInfo := newApplicationInfo("app-00001", "default", "root.a")
 
-    // nothing allocated
-    if !resources.IsZero(appInfo.GetAllocatedResource()) {
+	// nothing allocated
+	if !resources.IsZero(appInfo.GetAllocatedResource()) {
 		t.Error("new application has allocated resources")
 	}
 	// create an allocation and check the assignment
-	resMap := map[string]string{"memory":"100", "vcores":"10"}
+	resMap := map[string]string{"memory": "100", "vcores": "10"}
 	res, _ := resources.NewResourceFromConf(resMap)
 	alloc := CreateMockAllocationInfo("app-00001", res, "uuid-1", "root.a", "node-1")
 	appInfo.addAllocation(alloc)
@@ -84,9 +84,9 @@ func TestAllocations(t *testing.T) {
 func TestQueueUpdate(t *testing.T) {
 	appInfo := newApplicationInfo("app-00001", "default", "root.a")
 
-    queue, _ := NewUnmanagedQueue("test", true, nil)
-    appInfo.SetQueue(queue)
-    assert.Equal(t, appInfo.QueueName, "test")
+	queue, _ := NewUnmanagedQueue("test", true, nil)
+	appInfo.SetQueue(queue)
+	assert.Equal(t, appInfo.QueueName, "test")
 }
 
 func TestAcceptStateTransition(t *testing.T) {

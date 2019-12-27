@@ -64,24 +64,24 @@ func newAppState() *fsm.FSM {
 		New.String(), fsm.Events{
 			{
 				Name: AcceptApplication.String(),
-				Src: []string{New.String()},
-				Dst: Accepted.String(),
-			},{
+				Src:  []string{New.String()},
+				Dst:  Accepted.String(),
+			}, {
 				Name: RejectApplication.String(),
-				Src: []string{New.String()},
-				Dst: Rejected.String(),
-			},{
+				Src:  []string{New.String()},
+				Dst:  Rejected.String(),
+			}, {
 				Name: RunApplication.String(),
-				Src: []string{Accepted.String(), Running.String()},
-				Dst: Running.String(),
-			},{
+				Src:  []string{Accepted.String(), Running.String()},
+				Dst:  Running.String(),
+			}, {
 				Name: CompleteApplication.String(),
-				Src: []string{Running.String()},
-				Dst: Completed.String(),
-			},{
+				Src:  []string{Running.String()},
+				Dst:  Completed.String(),
+			}, {
 				Name: KillApplication.String(),
-				Src: []string{New.String(), Accepted.String(), Running.String(), Killed.String()},
-				Dst: Killed.String(),
+				Src:  []string{New.String(), Accepted.String(), Running.String(), Killed.String()},
+				Dst:  Killed.String(),
 			},
 		},
 		fsm.Callbacks{

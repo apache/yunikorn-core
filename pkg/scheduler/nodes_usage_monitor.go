@@ -22,15 +22,15 @@ import (
 )
 
 type nodesResourceUsageMonitor struct {
-	done chan bool
-	ticker *time.Ticker
+	done      chan bool
+	ticker    *time.Ticker
 	scheduler *Scheduler
 }
 
 func newNodesResourceUsageMonitor(scheduler *Scheduler) *nodesResourceUsageMonitor {
 	return &nodesResourceUsageMonitor{
-		done: make(chan bool),
-		ticker: time.NewTicker(1 * time.Second),
+		done:      make(chan bool),
+		ticker:    time.NewTicker(1 * time.Second),
 		scheduler: scheduler,
 	}
 }

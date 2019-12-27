@@ -27,7 +27,7 @@ import (
 )
 
 type SchedulingNode struct {
-	NodeId   string
+	NodeId string
 
 	// Private info
 	nodeInfo                *cache.NodeInfo
@@ -65,9 +65,9 @@ func (sn *SchedulingNode) GetAllocatedResource() *resources.Resource {
 // currently being allocated but not confirmed in the cache.
 // This does not lock the cache node as it will take its own lock.
 func (sn *SchedulingNode) getAvailableResource() *resources.Resource {
-    sn.lock.Lock()
-    defer sn.lock.Unlock()
-    if sn.cachedAvailableUpToDate {
+	sn.lock.Lock()
+	defer sn.lock.Unlock()
+	if sn.cachedAvailableUpToDate {
 		sn.cachedAvailable = sn.nodeInfo.GetAvailableResource()
 		sn.cachedAvailable.SubFrom(sn.allocatingResource)
 		sn.cachedAvailableUpToDate = false
@@ -118,7 +118,7 @@ func (sn *SchedulingNode) incPreemptingResource(preempting *resources.Resource) 
 	sn.lock.Lock()
 	defer sn.lock.Unlock()
 
-    sn.preemptingResource.AddTo(preempting)
+	sn.preemptingResource.AddTo(preempting)
 }
 
 func (sn *SchedulingNode) handlePreemptionUpdate(preempted *resources.Resource) {
@@ -141,11 +141,11 @@ func (sn *SchedulingNode) CheckAndAllocateResource(delta *resources.Resource, pr
 	available := sn.nodeInfo.GetAvailableResource()
 	newAllocating := resources.Add(delta, sn.allocatingResource)
 
-    if preemptionPhase {
-        available.AddTo(sn.preemptingResource)
-    }
-    if resources.FitIn(available, newAllocating) {
-        log.Logger().Debug("allocations in progress updated",
+	if preemptionPhase {
+		available.AddTo(sn.preemptingResource)
+	}
+	if resources.FitIn(available, newAllocating) {
+		log.Logger().Debug("allocations in progress updated",
 			zap.String("nodeId", sn.NodeId),
 			zap.Any("total unconfirmed", newAllocating))
 		sn.cachedAvailableUpToDate = true

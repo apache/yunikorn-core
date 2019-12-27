@@ -110,8 +110,8 @@ partitions:
 				},
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{"app-1":"root.a"}),
-		RmId: "rm:123",
+		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a"}),
+		RmId:            "rm:123",
 	})
 
 	if nil != err {
@@ -293,8 +293,8 @@ partitions:
 				ExistingAllocations: mockRM.nodeAllocations["node-2:1234"],
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{"app-1":"root.a"}),
-		RmId: "rm:123",
+		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a"}),
+		RmId:            "rm:123",
 	})
 
 	if nil != err {
@@ -442,11 +442,11 @@ partitions:
 				ExistingAllocations: []*si.Allocation{
 					{
 						AllocationKey: "allocation-key-01",
-						Uuid: "UUID01",
+						Uuid:          "UUID01",
 						ApplicationId: "app-01",
 						PartitionName: "default",
-						QueueName: "root.a",
-						NodeId: "node-1:1234",
+						QueueName:     "root.a",
+						NodeId:        "node-1:1234",
 						ResourcePerAlloc: &si.Resource{
 							Resources: map[string]*si.Quantity{
 								resources.MEMORY: {
@@ -457,7 +457,6 @@ partitions:
 								},
 							},
 						},
-
 					},
 				},
 			},
@@ -513,11 +512,11 @@ partitions:
 				ExistingAllocations: []*si.Allocation{
 					{
 						AllocationKey: "allocation-key-01",
-						Uuid: "UUID01",
+						Uuid:          "UUID01",
 						ApplicationId: "app-01",
 						PartitionName: "default",
-						QueueName: "root.a",
-						NodeId: "node-1:1234",
+						QueueName:     "root.a",
+						NodeId:        "node-1:1234",
 						ResourcePerAlloc: &si.Resource{
 							Resources: map[string]*si.Quantity{
 								resources.MEMORY: {
@@ -528,13 +527,12 @@ partitions:
 								},
 							},
 						},
-
 					},
 				},
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{"app-01":"root.a"}),
-		RmId: "rm:123",
+		NewApplications: newAddAppRequest(map[string]string{"app-01": "root.a"}),
+		RmId:            "rm:123",
 	})
 
 	if nil != err {
@@ -628,7 +626,7 @@ partitions:
 				},
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{"app-1":"root.a"}),
+		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a"}),
 		RmId:            "rm:123",
 	})
 
@@ -685,8 +683,8 @@ partitions:
 
 	// Register apps alone
 	err = proxy.Update(&si.UpdateRequest{
-		NewApplications: newAddAppRequest(map[string]string{"app-1":"root.a", "app-2":"root.a"}),
-		RmId: "rm:123",
+		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a", "app-2": "root.a"}),
+		RmId:            "rm:123",
 	})
 
 	if nil != err {

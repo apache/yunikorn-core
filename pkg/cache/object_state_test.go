@@ -17,73 +17,73 @@ limitations under the License.
 package cache
 
 import (
-    "gotest.tools/assert"
-    "testing"
+	"gotest.tools/assert"
+	"testing"
 )
 
 func TestStateTransition(t *testing.T) {
-    // base is active
-    stateMachine := newObjectState()
-    assert.Equal(t, stateMachine.Current(), Active.String())
+	// base is active
+	stateMachine := newObjectState()
+	assert.Equal(t, stateMachine.Current(), Active.String())
 
-    // active to stopped
-    err := stateMachine.Event(Stop.String(), "testobject")
-    assert.Assert(t, err == nil)
-    assert.Equal(t, stateMachine.Current(), Stopped.String())
+	// active to stopped
+	err := stateMachine.Event(Stop.String(), "testobject")
+	assert.Assert(t, err == nil)
+	assert.Equal(t, stateMachine.Current(), Stopped.String())
 
-    // remove on stopped not allowed
-    err = stateMachine.Event(Remove.String(), "testobject")
-    assert.Assert(t, err != nil)
-    assert.Equal(t, stateMachine.Current(), Stopped.String())
+	// remove on stopped not allowed
+	err = stateMachine.Event(Remove.String(), "testobject")
+	assert.Assert(t, err != nil)
+	assert.Equal(t, stateMachine.Current(), Stopped.String())
 
-    // stopped to active
-    err = stateMachine.Event(Start.String(), "testobject")
-    assert.Assert(t, err == nil)
-    assert.Equal(t, stateMachine.Current(), Active.String())
+	// stopped to active
+	err = stateMachine.Event(Start.String(), "testobject")
+	assert.Assert(t, err == nil)
+	assert.Equal(t, stateMachine.Current(), Active.String())
 
-    // active to draining
-    err = stateMachine.Event(Remove.String(), "testobject")
-    assert.Assert(t, err == nil)
-    assert.Equal(t, stateMachine.Current(), Draining.String())
+	// active to draining
+	err = stateMachine.Event(Remove.String(), "testobject")
+	assert.Assert(t, err == nil)
+	assert.Equal(t, stateMachine.Current(), Draining.String())
 
-    // start on draining not allowed
-    err = stateMachine.Event(Start.String(), "test_object")
-    assert.Assert(t, err != nil)
-    assert.Equal(t, stateMachine.Current(), Draining.String())
+	// start on draining not allowed
+	err = stateMachine.Event(Start.String(), "test_object")
+	assert.Assert(t, err != nil)
+	assert.Equal(t, stateMachine.Current(), Draining.String())
 
-    // stop on draining not allowed
-    err = stateMachine.Event(Stop.String(), "test_object")
-    assert.Assert(t, err != nil)
-    assert.Equal(t, stateMachine.Current(), Draining.String())
+	// stop on draining not allowed
+	err = stateMachine.Event(Stop.String(), "test_object")
+	assert.Assert(t, err != nil)
+	assert.Equal(t, stateMachine.Current(), Draining.String())
 }
 
 func TestTransitionToSelf(t *testing.T) {
-    // base is active
-    stateMachine := newObjectState()
+	// base is active
+	stateMachine := newObjectState()
 
-    // start on active
-    err := stateMachine.Event(Start.String(), "testobject")
-    assert.Assert(t, err != nil)
-    if err != nil && err.Error() != "no transition" {
-        t.Errorf("state change failed with error: %v", err)
-    }
-    assert.Equal(t, stateMachine.Current(), Active.String())
+	// start on active
+	err := stateMachine.Event(Start.String(), "testobject")
+	assert.Assert(t, err != nil)
+	if err != nil && err.Error() != "no transition" {
+		t.Errorf("state change failed with error: %v", err)
+	}
+	assert.Equal(t, stateMachine.Current(), Active.String())
 
-    // remove on draining
-    stateMachine.SetState(Draining.String())
-    err = stateMachine.Event(Remove.String(), "testobject")
-    assert.Assert(t, err != nil)
-    if err != nil && err.Error() != "no transition" {
-        t.Errorf("state change failed with error: %v", err)
-    }
-    assert.Equal(t, stateMachine.Current(), Draining.String())
+	// remove on draining
+	stateMachine.SetState(Draining.String())
+	err = stateMachine.Event(Remove.String(), "testobject")
+	assert.Assert(t, err != nil)
+	if err != nil && err.Error() != "no transition" {
+		t.Errorf("state change failed with error: %v", err)
+	}
+	assert.Equal(t, stateMachine.Current(), Draining.String())
 
-    // stop on stopped
-    stateMachine.SetState(Stopped.String())
-    err = stateMachine.Event(Stop.String(), "testobject")
-    assert.Assert(t, err != nil)
-    if err != nil && err.Error() != "no transition" {
-        t.Errorf("state change failed with error: %v", err)
-    }
-    assert.Equal(t, stateMachine.Current(), Stopped.String())
+	// stop on stopped
+	stateMachine.SetState(Stopped.String())
+	err = stateMachine.Event(Stop.String(), "testobject")
+	assert.Assert(t, err != nil)
+	if err != nil && err.Error() != "no transition" {
+		t.Errorf("state change failed with error: %v", err)
+	}
+	assert.Equal(t, stateMachine.Current(), Stopped.String())
 }

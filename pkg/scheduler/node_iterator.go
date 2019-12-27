@@ -24,7 +24,7 @@ type baseIterator struct {
 
 // Reset the iterator to start from the beginning
 func (bi *baseIterator) Reset() {
-    bi.countIdx = 0
+	bi.countIdx = 0
 }
 
 // HasNext returns true if there is a next element in the array.

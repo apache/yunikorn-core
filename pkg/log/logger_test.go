@@ -43,7 +43,7 @@ func TestIsNopLogger(t *testing.T) {
 
 func TestIsDebugEnabled(t *testing.T) {
 	zapConfigs := zap.Config{
-		Level: zap.NewAtomicLevelAt(zapcore.DebugLevel),
+		Level:    zap.NewAtomicLevelAt(zapcore.DebugLevel),
 		Encoding: "console",
 	}
 	if newLogger, err := zapConfigs.Build(); err != nil {
@@ -54,7 +54,7 @@ func TestIsDebugEnabled(t *testing.T) {
 	}
 
 	zapConfigs = zap.Config{
-		Level: zap.NewAtomicLevelAt(zapcore.InfoLevel),
+		Level:    zap.NewAtomicLevelAt(zapcore.InfoLevel),
 		Encoding: "console",
 	}
 	if newLogger, err := zapConfigs.Build(); err != nil {

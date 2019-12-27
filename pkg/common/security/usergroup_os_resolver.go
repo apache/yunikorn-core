@@ -17,23 +17,22 @@ limitations under the License.
 package security
 
 import (
-    "os/user"
-    "time"
+	"os/user"
+	"time"
 )
 
 // Get the cache and use that to resolve all user requests
 func GetUserGroupCacheOS() *UserGroupCache {
-    return &UserGroupCache{
-        ugs:           map[string]*UserGroup{},
-        interval:      cleanerInterval * time.Second,
-        lookup:        user.Lookup,
-        lookupGroupId: user.LookupGroupId,
-        groupIds:      wrappedGroupIds,
-    }
+	return &UserGroupCache{
+		ugs:           map[string]*UserGroup{},
+		interval:      cleanerInterval * time.Second,
+		lookup:        user.Lookup,
+		lookupGroupId: user.LookupGroupId,
+		groupIds:      wrappedGroupIds,
+	}
 }
 
 // wrapper function to allow easy testing of the cache
 func wrappedGroupIds(osUser *user.User) ([]string, error) {
-    return osUser.GroupIds()
+	return osUser.GroupIds()
 }
-

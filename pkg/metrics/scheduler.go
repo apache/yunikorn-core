@@ -39,7 +39,7 @@ var resourceUsageRangeBuckets = []string{
 }
 
 // All core metrics variables to be declared in this struct
-type SchedulerMetrics struct  {
+type SchedulerMetrics struct {
 	allocations                *prometheus.CounterVec
 	allocatedContainers        prometheus.Counter
 	rejectedContainers         prometheus.Counter
@@ -155,7 +155,7 @@ func initSchedulerMetrics() *SchedulerMetrics {
 
 	// Register the metrics.
 	for _, metric := range metricsList {
-		if err:= prometheus.Register(metric); err != nil {
+		if err := prometheus.Register(metric); err != nil {
 			log.Logger().Warn("failed to register metrics collector", zap.Error(err))
 		}
 	}
@@ -333,10 +333,10 @@ func (m *SchedulerMetrics) SetNodeResourceUsage(resourceName string, rangeIdx in
 		metricsName := fmt.Sprintf("%s_nodes_usage", formatMetricName(resourceName))
 		resourceMetrics = prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Namespace:   Namespace,
-				Subsystem:   SchedulerSubsystem,
-				Name:        metricsName,
-				Help:        "Nodes resource usage, by resource name.",
+				Namespace: Namespace,
+				Subsystem: SchedulerSubsystem,
+				Name:      metricsName,
+				Help:      "Nodes resource usage, by resource name.",
 			}, []string{"range"})
 		if err := prometheus.Register(resourceMetrics); err != nil {
 			log.Logger().Warn("failed to register metrics collector", zap.Error(err))

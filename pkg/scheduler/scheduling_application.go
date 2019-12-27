@@ -17,22 +17,22 @@ limitations under the License.
 package scheduler
 
 import (
-    "github.com/cloudera/yunikorn-core/pkg/cache"
-    "github.com/cloudera/yunikorn-core/pkg/common/resources"
+	"github.com/cloudera/yunikorn-core/pkg/cache"
+	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 )
 
 type SchedulingApplication struct {
-    ApplicationInfo      *cache.ApplicationInfo
-    Requests             *SchedulingRequests
-    MayAllocatedResource *resources.Resource // Maybe allocated, set by scheduler
+	ApplicationInfo      *cache.ApplicationInfo
+	Requests             *SchedulingRequests
+	MayAllocatedResource *resources.Resource // Maybe allocated, set by scheduler
 
-    // Private fields need protection
-    queue *SchedulingQueue // queue the application is running in
+	// Private fields need protection
+	queue *SchedulingQueue // queue the application is running in
 }
 
 func NewSchedulingApplication(appInfo *cache.ApplicationInfo) *SchedulingApplication {
-    return &SchedulingApplication{
-        ApplicationInfo: appInfo,
-        Requests:        NewSchedulingRequests(),
-    }
+	return &SchedulingApplication{
+		ApplicationInfo: appInfo,
+		Requests:        NewSchedulingRequests(),
+	}
 }

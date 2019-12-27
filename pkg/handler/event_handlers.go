@@ -17,11 +17,11 @@ limitations under the License.
 package handler
 
 import (
-    "github.com/cloudera/yunikorn-core/pkg/common/commonevents"
+	"github.com/cloudera/yunikorn-core/pkg/common/commonevents"
 )
 
 type EventHandlers struct {
-    RMProxyEventHandler   commonevents.EventHandler
-    CacheEventHandler     commonevents.EventHandler
-    SchedulerEventHandler commonevents.EventHandler
+	RMProxyEventHandler   commonevents.EventHandler
+	CacheEventHandler     commonevents.EventHandler
+	SchedulerEventHandler commonevents.EventHandler
 }

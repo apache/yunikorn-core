@@ -17,345 +17,343 @@ limitations under the License.
 package tests
 
 import (
-    "fmt"
-    "github.com/cloudera/yunikorn-core/pkg/cache"
-    "github.com/cloudera/yunikorn-core/pkg/common"
-    "github.com/cloudera/yunikorn-core/pkg/common/resources"
-    "github.com/cloudera/yunikorn-core/pkg/log"
-    "github.com/cloudera/yunikorn-core/pkg/scheduler"
-    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
-    "go.uber.org/zap"
-    "sync"
-    "testing"
-    "time"
+	"fmt"
+	"github.com/cloudera/yunikorn-core/pkg/cache"
+	"github.com/cloudera/yunikorn-core/pkg/common"
+	"github.com/cloudera/yunikorn-core/pkg/common/resources"
+	"github.com/cloudera/yunikorn-core/pkg/log"
+	"github.com/cloudera/yunikorn-core/pkg/scheduler"
+	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+	"go.uber.org/zap"
+	"sync"
+	"testing"
+	"time"
 )
 
 type MockRMCallbackHandler struct {
-    t testing.TB
+	t testing.TB
 
-    acceptedApplications map[string]bool
-    rejectedApplications map[string]bool
-    acceptedNodes        map[string]bool
-    rejectedNodes        map[string]bool
-    nodeAllocations      map[string][]*si.Allocation
-    Allocations          map[string]*si.Allocation
+	acceptedApplications map[string]bool
+	rejectedApplications map[string]bool
+	acceptedNodes        map[string]bool
+	rejectedNodes        map[string]bool
+	nodeAllocations      map[string][]*si.Allocation
+	Allocations          map[string]*si.Allocation
 
-    lock sync.RWMutex
+	lock sync.RWMutex
 }
 
 func NewMockRMCallbackHandler(t testing.TB) *MockRMCallbackHandler {
-    return &MockRMCallbackHandler{
-        t:                    t,
-        acceptedApplications: make(map[string]bool),
-        rejectedApplications: make(map[string]bool),
-        acceptedNodes:        make(map[string]bool),
-        rejectedNodes:        make(map[string]bool),
-        nodeAllocations:      make(map[string][]*si.Allocation),
-        Allocations:          make(map[string]*si.Allocation),
-    }
+	return &MockRMCallbackHandler{
+		t:                    t,
+		acceptedApplications: make(map[string]bool),
+		rejectedApplications: make(map[string]bool),
+		acceptedNodes:        make(map[string]bool),
+		rejectedNodes:        make(map[string]bool),
+		nodeAllocations:      make(map[string][]*si.Allocation),
+		Allocations:          make(map[string]*si.Allocation),
+	}
 }
 
 func (m *MockRMCallbackHandler) EvalPredicates(name string, node string) error {
-    return nil
+	return nil
 }
 
 func (m *MockRMCallbackHandler) RecvUpdateResponse(response *si.UpdateResponse) error {
-    m.lock.Lock()
-    defer m.lock.Unlock()
+	m.lock.Lock()
+	defer m.lock.Unlock()
 
-    // m.t.Logf("---- Received Update=%s", strings.PrettyPrintStruct(response))
+	// m.t.Logf("---- Received Update=%s", strings.PrettyPrintStruct(response))
 
-    for _, app := range response.AcceptedApplications {
-        m.acceptedApplications[app.ApplicationId] = true
-    }
+	for _, app := range response.AcceptedApplications {
+		m.acceptedApplications[app.ApplicationId] = true
+	}
 
-    for _, app := range response.RejectedApplications {
-        m.rejectedApplications[app.ApplicationId] = true
-    }
+	for _, app := range response.RejectedApplications {
+		m.rejectedApplications[app.ApplicationId] = true
+	}
 
-    for _, node := range response.AcceptedNodes {
-        m.acceptedNodes[node.NodeId] = true
-    }
+	for _, node := range response.AcceptedNodes {
+		m.acceptedNodes[node.NodeId] = true
+	}
 
-    for _, node := range response.RejectedNodes {
-        m.rejectedNodes[node.NodeId] = true
-    }
+	for _, node := range response.RejectedNodes {
+		m.rejectedNodes[node.NodeId] = true
+	}
 
-    for _, alloc := range response.NewAllocations {
-        m.Allocations[alloc.Uuid] = alloc
-        if val, ok := m.nodeAllocations[alloc.NodeId]; ok {
-            val = append(val, alloc)
-            m.nodeAllocations[alloc.NodeId] = val
-        } else {
-            nodeAllocations := make([]*si.Allocation, 0)
-            nodeAllocations = append(nodeAllocations, alloc)
-            m.nodeAllocations[alloc.NodeId] = nodeAllocations
-        }
-    }
+	for _, alloc := range response.NewAllocations {
+		m.Allocations[alloc.Uuid] = alloc
+		if val, ok := m.nodeAllocations[alloc.NodeId]; ok {
+			val = append(val, alloc)
+			m.nodeAllocations[alloc.NodeId] = val
+		} else {
+			nodeAllocations := make([]*si.Allocation, 0)
+			nodeAllocations = append(nodeAllocations, alloc)
+			m.nodeAllocations[alloc.NodeId] = nodeAllocations
+		}
+	}
 
-    for _, alloc := range response.ReleasedAllocations {
-        delete(m.Allocations, alloc.Uuid)
-    }
+	for _, alloc := range response.ReleasedAllocations {
+		delete(m.Allocations, alloc.Uuid)
+	}
 
-    return nil
+	return nil
 }
 
 func (m *MockRMCallbackHandler) getAllocations() map[string]*si.Allocation {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
+	m.lock.RLock()
+	defer m.lock.RUnlock()
 
-    allocations := make(map[string]*si.Allocation)
-    for key, value := range m.Allocations {
-        allocations[key] = value
-    }
-    return allocations
+	allocations := make(map[string]*si.Allocation)
+	for key, value := range m.Allocations {
+		allocations[key] = value
+	}
+	return allocations
 }
 
 func waitForAcceptedApplications(m *MockRMCallbackHandler, appId string, timeoutMs int) {
-    var i = 0
-    for {
-        i++
+	var i = 0
+	for {
+		i++
 
-        m.lock.RLock()
-        accepted := m.acceptedApplications[appId]
-        m.lock.RUnlock()
+		m.lock.RLock()
+		accepted := m.acceptedApplications[appId]
+		m.lock.RUnlock()
 
-        if !accepted {
-            time.Sleep(time.Duration(100 * time.Millisecond))
-        } else {
-            return
-        }
-        if i*100 >= timeoutMs {
-            m.t.Fatalf("Failed to wait AcceptedApplications: %s", appId)
-            return
-        }
-    }
+		if !accepted {
+			time.Sleep(time.Duration(100 * time.Millisecond))
+		} else {
+			return
+		}
+		if i*100 >= timeoutMs {
+			m.t.Fatalf("Failed to wait AcceptedApplications: %s", appId)
+			return
+		}
+	}
 }
 
 func waitForRejectedApplications(m *MockRMCallbackHandler, appId string, timeoutMs int) {
-    var i = 0
-    for {
-        i++
+	var i = 0
+	for {
+		i++
 
-        m.lock.RLock()
-        wait := !m.rejectedApplications[appId] || m.acceptedApplications[appId]
-        m.lock.RUnlock()
+		m.lock.RLock()
+		wait := !m.rejectedApplications[appId] || m.acceptedApplications[appId]
+		m.lock.RUnlock()
 
-        if wait {
-            time.Sleep(time.Duration(100 * time.Millisecond))
-        } else {
-            return
-        }
-        if i*100 >= timeoutMs {
-            m.t.Fatalf("Failed to wait RejectedApplications: %s", appId)
-            return
-        }
-    }
+		if wait {
+			time.Sleep(time.Duration(100 * time.Millisecond))
+		} else {
+			return
+		}
+		if i*100 >= timeoutMs {
+			m.t.Fatalf("Failed to wait RejectedApplications: %s", appId)
+			return
+		}
+	}
 }
 
 func waitForAcceptedNodes(m *MockRMCallbackHandler, nodeId string, timeoutMs int) {
-    var i = 0
-    for {
-        i++
+	var i = 0
+	for {
+		i++
 
-        m.lock.RLock()
-        accepted := m.acceptedNodes[nodeId]
-        m.lock.RUnlock()
+		m.lock.RLock()
+		accepted := m.acceptedNodes[nodeId]
+		m.lock.RUnlock()
 
-        if !accepted {
-            time.Sleep(time.Duration(1 * time.Millisecond))
-        } else {
-            return
-        }
-        if i >= timeoutMs {
-            m.t.Fatalf("Failed to wait AcceptedNode: %s", nodeId)
-            return
-        }
-    }
+		if !accepted {
+			time.Sleep(time.Duration(1 * time.Millisecond))
+		} else {
+			return
+		}
+		if i >= timeoutMs {
+			m.t.Fatalf("Failed to wait AcceptedNode: %s", nodeId)
+			return
+		}
+	}
 }
 
 func waitForMinNumberOfAcceptedNodes(m *MockRMCallbackHandler, minNumNode int, timeoutMs int) {
-    var i = 0
-    for {
-        i++
+	var i = 0
+	for {
+		i++
 
-        m.lock.RLock()
-        accepted := len(m.acceptedNodes)
-        m.lock.RUnlock()
+		m.lock.RLock()
+		accepted := len(m.acceptedNodes)
+		m.lock.RUnlock()
 
-        if accepted < minNumNode {
-            time.Sleep(time.Duration(1 * time.Millisecond))
-        } else {
-            return
-        }
-        if i >= timeoutMs {
-            m.t.Fatalf("Failed to wait #AcceptedNode=%d", minNumNode)
-            return
-        }
-    }
+		if accepted < minNumNode {
+			time.Sleep(time.Duration(1 * time.Millisecond))
+		} else {
+			return
+		}
+		if i >= timeoutMs {
+			m.t.Fatalf("Failed to wait #AcceptedNode=%d", minNumNode)
+			return
+		}
+	}
 }
 
 func waitForRejectedNodes(m *MockRMCallbackHandler, nodeId string, timeoutMs int) {
-    var i = 0
-    for {
-        i++
+	var i = 0
+	for {
+		i++
 
-        m.lock.RLock()
-        accepted := m.rejectedNodes[nodeId]
-        m.lock.RUnlock()
+		m.lock.RLock()
+		accepted := m.rejectedNodes[nodeId]
+		m.lock.RUnlock()
 
-        if !accepted {
-            time.Sleep(time.Duration(100 * time.Millisecond))
-        } else {
-            return
-        }
-        if i*100 >= timeoutMs {
-            m.t.Fatalf("Failed to wait AcceptedNode: %s", nodeId)
-            return
-        }
-    }
+		if !accepted {
+			time.Sleep(time.Duration(100 * time.Millisecond))
+		} else {
+			return
+		}
+		if i*100 >= timeoutMs {
+			m.t.Fatalf("Failed to wait AcceptedNode: %s", nodeId)
+			return
+		}
+	}
 }
 
 func waitForPendingResource(t *testing.T, queue *scheduler.SchedulingQueue, memory resources.Quantity, timeoutMs int) {
-    var i = 0
-    for {
-        i++
-        if queue.GetPendingResource().Resources[resources.MEMORY] != memory {
-            time.Sleep(time.Duration(100 * time.Millisecond))
-        } else {
-            return
-        }
-        if i*100 >= timeoutMs {
-            log.Logger().Info("queue detail",
-                zap.Any("queue", queue))
-            t.Fatalf("Failed to wait pending resource on queue %s, actual = %v, expected = %v", queue.Name, queue.GetPendingResource().Resources[resources.MEMORY], memory)
-            return
-        }
-    }
+	var i = 0
+	for {
+		i++
+		if queue.GetPendingResource().Resources[resources.MEMORY] != memory {
+			time.Sleep(time.Duration(100 * time.Millisecond))
+		} else {
+			return
+		}
+		if i*100 >= timeoutMs {
+			log.Logger().Info("queue detail",
+				zap.Any("queue", queue))
+			t.Fatalf("Failed to wait pending resource on queue %s, actual = %v, expected = %v", queue.Name, queue.GetPendingResource().Resources[resources.MEMORY], memory)
+			return
+		}
+	}
 }
 
 func waitForPendingResourceForApplication(t *testing.T, app *scheduler.SchedulingApplication, memory resources.Quantity, timeoutMs int) {
-    var i = 0
-    for {
-        i++
-        if app.Requests.GetPendingResource().Resources[resources.MEMORY] != memory {
-            time.Sleep(time.Duration(100 * time.Millisecond))
-        } else {
-            return
-        }
-        if i*100 >= timeoutMs {
-            t.Fatalf("Failed to wait pending resource, expected=%v, actual=%v", memory, app.Requests.GetPendingResource().Resources[resources.MEMORY])
-            return
-        }
-    }
+	var i = 0
+	for {
+		i++
+		if app.Requests.GetPendingResource().Resources[resources.MEMORY] != memory {
+			time.Sleep(time.Duration(100 * time.Millisecond))
+		} else {
+			return
+		}
+		if i*100 >= timeoutMs {
+			t.Fatalf("Failed to wait pending resource, expected=%v, actual=%v", memory, app.Requests.GetPendingResource().Resources[resources.MEMORY])
+			return
+		}
+	}
 }
 
 func waitForAllocations(m *MockRMCallbackHandler, nAlloc int, timeoutMs int) {
-    var i = 0
-    for {
-        i++
-        m.lock.RLock()
-        allocLen := len(m.Allocations)
-        m.lock.RUnlock()
+	var i = 0
+	for {
+		i++
+		m.lock.RLock()
+		allocLen := len(m.Allocations)
+		m.lock.RUnlock()
 
-
-        if allocLen != nAlloc {
-            time.Sleep(100 * time.Millisecond)
-        } else {
-            return
-        }
-        if i*100 >= timeoutMs {
-            m.t.Fatalf("Failed to wait Allocations expected %d, got %d", nAlloc, allocLen)
-            return
-        }
-    }
+		if allocLen != nAlloc {
+			time.Sleep(100 * time.Millisecond)
+		} else {
+			return
+		}
+		if i*100 >= timeoutMs {
+			m.t.Fatalf("Failed to wait Allocations expected %d, got %d", nAlloc, allocLen)
+			return
+		}
+	}
 }
 
 func waitForMinAllocations(m *MockRMCallbackHandler, nAlloc int, timeoutMs int) {
-    var i = 0
-    for {
-        i++
-        m.lock.RLock()
-        allocLen := len(m.Allocations)
-        m.lock.RUnlock()
+	var i = 0
+	for {
+		i++
+		m.lock.RLock()
+		allocLen := len(m.Allocations)
+		m.lock.RUnlock()
 
-
-        if allocLen < nAlloc {
-            time.Sleep(time.Millisecond)
-        } else {
-            return
-        }
-        if i >= timeoutMs {
-            m.t.Fatalf("Failed to wait Allocations expected %d, got %d", nAlloc, allocLen)
-            return
-        }
-    }
+		if allocLen < nAlloc {
+			time.Sleep(time.Millisecond)
+		} else {
+			return
+		}
+		if i >= timeoutMs {
+			m.t.Fatalf("Failed to wait Allocations expected %d, got %d", nAlloc, allocLen)
+			return
+		}
+	}
 }
 
 func waitForNodesAllocatedResource(t *testing.T, cache *cache.ClusterInfo, partitionName string, nodeIds []string, allocatdMemory resources.Quantity, timeoutMs int) {
-    var i = 0
-    for {
-        i++
+	var i = 0
+	for {
+		i++
 
-        var totalNodeResource resources.Quantity = 0
-        for _, nodeId := range nodeIds {
-            totalNodeResource += cache.GetPartition(partitionName).GetNode(nodeId).GetAllocatedResource().Resources[resources.MEMORY]
-        }
+		var totalNodeResource resources.Quantity = 0
+		for _, nodeId := range nodeIds {
+			totalNodeResource += cache.GetPartition(partitionName).GetNode(nodeId).GetAllocatedResource().Resources[resources.MEMORY]
+		}
 
-        if totalNodeResource != allocatdMemory {
-            time.Sleep(100 * time.Millisecond)
-        } else {
-            return
-        }
-        if i*100 >= timeoutMs {
-            t.Fatalf("Failed to wait Allocations on partition %s and node %v", partitionName, nodeIds)
-            return
-        }
-    }
+		if totalNodeResource != allocatdMemory {
+			time.Sleep(100 * time.Millisecond)
+		} else {
+			return
+		}
+		if i*100 >= timeoutMs {
+			t.Fatalf("Failed to wait Allocations on partition %s and node %v", partitionName, nodeIds)
+			return
+		}
+	}
 }
 
 func waitForNewSchedulerNode(t *testing.T, context *scheduler.ClusterSchedulingContext, nodeId string, partitionName string, timeoutMs int) {
-    err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs) * time.Millisecond, func() bool {
-        node := context.GetSchedulingNode(nodeId, partitionName)
-        return node != nil
+	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+		node := context.GetSchedulingNode(nodeId, partitionName)
+		return node != nil
 
-    })
-    if err != nil {
-        t.Fatalf("Failed to wait for new scheduling node on partition %s, node %v", partitionName, nodeId)
-    }
+	})
+	if err != nil {
+		t.Fatalf("Failed to wait for new scheduling node on partition %s, node %v", partitionName, nodeId)
+	}
 }
 
 func waitForRemovedSchedulerNode(t *testing.T, context *scheduler.ClusterSchedulingContext, nodeId string, partitionName string, timeoutMs int) {
-    err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs) * time.Millisecond, func() bool {
-        node := context.GetSchedulingNode(nodeId, partitionName)
-        return node == nil
-    })
-    if err != nil {
-        t.Fatalf("Failed to wait for removal of scheduling node on partition %s, node %v", partitionName, nodeId)
-    }
+	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+		node := context.GetSchedulingNode(nodeId, partitionName)
+		return node == nil
+	})
+	if err != nil {
+		t.Fatalf("Failed to wait for removal of scheduling node on partition %s, node %v", partitionName, nodeId)
+	}
 }
 
-func getApplicationInfoFromPartition(partitionInfo *cache.PartitionInfo, appId string) (*cache.ApplicationInfo, error){
-    for _, appInfo := range partitionInfo.GetApplications() {
-        if appInfo.ApplicationId == appId {
-            return appInfo, nil
-        }
-    }
-    return nil, fmt.Errorf("cannot find app %s from cache", appId)
+func getApplicationInfoFromPartition(partitionInfo *cache.PartitionInfo, appId string) (*cache.ApplicationInfo, error) {
+	for _, appInfo := range partitionInfo.GetApplications() {
+		if appInfo.ApplicationId == appId {
+			return appInfo, nil
+		}
+	}
+	return nil, fmt.Errorf("cannot find app %s from cache", appId)
 }
 
 func newAddAppRequest(apps map[string]string) []*si.AddApplicationRequest {
-    var requests []*si.AddApplicationRequest
-    for app, queue := range apps {
-        request := si.AddApplicationRequest{
-            ApplicationId: app,
-            QueueName:     queue,
-            PartitionName: "",
-            Ugi: &si.UserGroupInformation{
-                User: "testuser",
-            },
-        }
-        requests = append(requests, &request)
-    }
-    return requests
+	var requests []*si.AddApplicationRequest
+	for app, queue := range apps {
+		request := si.AddApplicationRequest{
+			ApplicationId: app,
+			QueueName:     queue,
+			PartitionName: "",
+			Ugi: &si.UserGroupInformation{
+				User: "testuser",
+			},
+		}
+		requests = append(requests, &request)
+	}
+	return requests
 }

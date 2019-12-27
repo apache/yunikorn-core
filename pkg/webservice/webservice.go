@@ -72,7 +72,7 @@ func (m *WebService) StartWebApp() {
 	log.Logger().Info("web-app started", zap.Int("port", 9080))
 	go func() {
 		httpError := m.httpServer.ListenAndServe()
-		if httpError != nil && httpError != http.ErrServerClosed{
+		if httpError != nil && httpError != http.ErrServerClosed {
 			log.Logger().Error("HTTP serving error",
 				zap.Error(httpError))
 		}

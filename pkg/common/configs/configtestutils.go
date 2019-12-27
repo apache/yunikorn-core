@@ -17,7 +17,7 @@ limitations under the License.
 package configs
 
 func MockSchedulerConfigByData(data []byte) {
-    SchedulerConfigLoader = func(policyGroup string) (config *SchedulerConfig, e error) {
-        return LoadSchedulerConfigFromByteArray(data)
-    }
+	SchedulerConfigLoader = func(policyGroup string) (config *SchedulerConfig, e error) {
+		return LoadSchedulerConfigFromByteArray(data)
+	}
 }

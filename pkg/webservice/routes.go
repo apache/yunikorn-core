@@ -60,7 +60,7 @@ var routes = Routes{
 	},
 
 	// endpoint to retrieve server metrics
-	Route {
+	Route{
 		"Scheduler",
 		"GET",
 		"/ws/v1/metrics",

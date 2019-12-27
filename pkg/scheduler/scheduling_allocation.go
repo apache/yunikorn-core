@@ -17,22 +17,22 @@ limitations under the License.
 package scheduler
 
 import (
-    "fmt"
-    "github.com/cloudera/yunikorn-core/pkg/common/commonevents"
+	"fmt"
+	"github.com/cloudera/yunikorn-core/pkg/common/commonevents"
 )
 
 type SchedulingAllocation struct {
-    SchedulingAsk *SchedulingAllocationAsk
-    NumAllocation int32
-    NodeId        string
-    Releases      []*commonevents.ReleaseAllocation
-    PartitionName string
+	SchedulingAsk *SchedulingAllocationAsk
+	NumAllocation int32
+	NodeId        string
+	Releases      []*commonevents.ReleaseAllocation
+	PartitionName string
 }
 
 func NewSchedulingAllocation(ask *SchedulingAllocationAsk, nodeId string) *SchedulingAllocation {
-    return &SchedulingAllocation{SchedulingAsk: ask, NodeId: nodeId, NumAllocation: 1, PartitionName: ask.PartitionName}
+	return &SchedulingAllocation{SchedulingAsk: ask, NodeId: nodeId, NumAllocation: 1, PartitionName: ask.PartitionName}
 }
 
 func (m *SchedulingAllocation) String() string {
-    return fmt.Sprintf("{AllocatioKey=%s,NumAllocation=%d,Node=%s", m.SchedulingAsk.AskProto.AllocationKey, m.NumAllocation, m.NodeId)
+	return fmt.Sprintf("{AllocatioKey=%s,NumAllocation=%d,Node=%s", m.SchedulingAsk.AskProto.AllocationKey, m.NumAllocation, m.NodeId)
 }

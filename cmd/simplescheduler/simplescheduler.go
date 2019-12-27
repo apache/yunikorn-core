@@ -88,4 +88,3 @@ func (scheduler *SimpleScheduler) Update(conn si.Scheduler_UpdateServer) error {
 		log.Printf("Responded")
 	}
 }
-

@@ -18,20 +18,20 @@ package api
 
 // Constants for node attribtues
 const (
-    ARCH                  = "si.io/arch"
-    HOSTNAME              = "si.io/hostname"
-    RACKNAME              = "si.io/rackname"
-    OS                    = "si.io/os"
-    INSTANCE_TYPE         = "si.io/instance-type"
-    FAILURE_DOMAIN_ZONE   = "si.io/zone"
-    FAILURE_DOMAIN_REGION = "si.io/region"
-    LOCAL_IMAGES          = "si.io/local-images"
-    NODE_PARTITION        = "si.io/node-partition"
+	ARCH                  = "si.io/arch"
+	HOSTNAME              = "si.io/hostname"
+	RACKNAME              = "si.io/rackname"
+	OS                    = "si.io/os"
+	INSTANCE_TYPE         = "si.io/instance-type"
+	FAILURE_DOMAIN_ZONE   = "si.io/zone"
+	FAILURE_DOMAIN_REGION = "si.io/region"
+	LOCAL_IMAGES          = "si.io/local-images"
+	NODE_PARTITION        = "si.io/node-partition"
 )
 
 // Constants for allocation attribtues
 const (
-    APPLICATION_ID  = "si.io/application-id"
-    CONTAINER_IMAGE = "si.io/container-image"
-    CONTAINER_PORTS = "si.io/container-ports"
+	APPLICATION_ID  = "si.io/application-id"
+	CONTAINER_IMAGE = "si.io/container-image"
+	CONTAINER_PORTS = "si.io/container-ports"
 )

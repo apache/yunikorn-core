@@ -36,7 +36,7 @@ func Logger() *zap.Logger {
 			// TODO support log options when a global logger is not there
 			c := zap.NewDevelopmentConfig()
 			config = &c
-			logger, _= config.Build()
+			logger, _ = config.Build()
 		}
 	})
 	return logger

@@ -33,9 +33,9 @@ var once sync.Once
 type ConfigWatcher struct {
 	rmId        string
 	policyGroup string
- 	reloader    ConfigReloader
+	reloader    ConfigReloader
 	expireTime  time.Duration
-	soloChan   chan interface{}
+	soloChan    chan interface{}
 	lock        *sync.Mutex
 }
 
@@ -58,8 +58,8 @@ func GetInstance() *ConfigWatcher {
 	// singleton
 	once.Do(func() {
 		configWatcher = &ConfigWatcher{
-			expireTime:      60 * time.Second,
-			lock:            &sync.Mutex{},
+			expireTime: 60 * time.Second,
+			lock:       &sync.Mutex{},
 		}
 	})
 
@@ -80,7 +80,7 @@ func (cw *ConfigWatcher) runOnce() bool {
 
 	newConfig, err := SchedulerConfigLoader(cw.policyGroup)
 	if err != nil {
-		log.Logger().Warn("failed to calculate the checksum of configuration file for policyGroup," +
+		log.Logger().Warn("failed to calculate the checksum of configuration file for policyGroup,"+
 			"ignore reloading configuration", zap.String("policyGroup", cw.policyGroup))
 		return false
 	}

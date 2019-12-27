@@ -17,15 +17,15 @@ limitations under the License.
 package placement
 
 import (
-    "github.com/cloudera/yunikorn-core/pkg/cache"
-    "github.com/cloudera/yunikorn-core/pkg/common/configs"
-    "github.com/cloudera/yunikorn-core/pkg/common/security"
-    "testing"
+	"github.com/cloudera/yunikorn-core/pkg/cache"
+	"github.com/cloudera/yunikorn-core/pkg/common/configs"
+	"github.com/cloudera/yunikorn-core/pkg/common/security"
+	"testing"
 )
 
 func TestUserRulePlace(t *testing.T) {
-    // Create the structure for the test
-    data := `
+	// Create the structure for the test
+	data := `
 partitions:
   - name: default
     queues:
@@ -35,86 +35,86 @@ partitions:
         queues:
           - name: testchild
 `
-    partInfo, err := CreatePartitionInfo([]byte(data))
-    tags := make(map[string]string, 0)
-    user := security.UserGroup{
-        User: "testchild",
-        Groups: []string{},
-    }
-    appInfo := cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
+	partInfo, err := CreatePartitionInfo([]byte(data))
+	tags := make(map[string]string, 0)
+	user := security.UserGroup{
+		User:   "testchild",
+		Groups: []string{},
+	}
+	appInfo := cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
 
-    // user queue that exists directly under the root
-    conf := configs.PlacementRule{
-        Name: "user",
-    }
-    rule, err := newRule(conf)
-    if err != nil || rule == nil {
-        t.Errorf("user rule create failed, err %v", err)
-    }
-    queue, err := rule.placeApplication(appInfo, partInfo)
-    if queue != "root.testchild" || err != nil {
-        t.Errorf("user rule failed to place queue in correct queue '%s', err %v", queue, err)
-    }
-    // trying to place in a parent queue should fail on queue create not in the rule
-    user = security.UserGroup{
-        User: "testparent",
-        Groups: []string{},
-    }
-    appInfo = cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
-    queue, err = rule.placeApplication(appInfo, partInfo)
-    if queue != "root.testparent" || err != nil {
-        t.Errorf("user rule failed with parent queue '%s', error %v", queue, err)
-    }
+	// user queue that exists directly under the root
+	conf := configs.PlacementRule{
+		Name: "user",
+	}
+	rule, err := newRule(conf)
+	if err != nil || rule == nil {
+		t.Errorf("user rule create failed, err %v", err)
+	}
+	queue, err := rule.placeApplication(appInfo, partInfo)
+	if queue != "root.testchild" || err != nil {
+		t.Errorf("user rule failed to place queue in correct queue '%s', err %v", queue, err)
+	}
+	// trying to place in a parent queue should fail on queue create not in the rule
+	user = security.UserGroup{
+		User:   "testparent",
+		Groups: []string{},
+	}
+	appInfo = cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
+	queue, err = rule.placeApplication(appInfo, partInfo)
+	if queue != "root.testparent" || err != nil {
+		t.Errorf("user rule failed with parent queue '%s', error %v", queue, err)
+	}
 
-    user = security.UserGroup{
-        User: "test.user",
-        Groups: []string{},
-    }
-    appInfo = cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
-    queue, err = rule.placeApplication(appInfo, partInfo)
-    if queue == "" || err != nil {
-        t.Errorf("user rule with dotted user should not have failed '%s', error %v", queue, err)
-    }
+	user = security.UserGroup{
+		User:   "test.user",
+		Groups: []string{},
+	}
+	appInfo = cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
+	queue, err = rule.placeApplication(appInfo, partInfo)
+	if queue == "" || err != nil {
+		t.Errorf("user rule with dotted user should not have failed '%s', error %v", queue, err)
+	}
 
-    // user queue that exists directly in hierarchy
-    conf = configs.PlacementRule{
-        Name: "user",
-        Parent: &configs.PlacementRule{
-            Name: "fixed",
-            Value: "testparent",
-        },
-    }
-    user = security.UserGroup{
-        User: "testchild",
-        Groups: []string{},
-    }
-    appInfo = cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
-    rule, err = newRule(conf)
-    if err != nil || rule == nil {
-        t.Errorf("user rule create failed with queue name, err %v", err)
-    }
-    queue, err = rule.placeApplication(appInfo, partInfo)
-    if queue != "root.testparent.testchild" || err != nil {
-        t.Errorf("user rule failed to place queue in correct queue '%s', err %v", queue, err)
-    }
+	// user queue that exists directly in hierarchy
+	conf = configs.PlacementRule{
+		Name: "user",
+		Parent: &configs.PlacementRule{
+			Name:  "fixed",
+			Value: "testparent",
+		},
+	}
+	user = security.UserGroup{
+		User:   "testchild",
+		Groups: []string{},
+	}
+	appInfo = cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
+	rule, err = newRule(conf)
+	if err != nil || rule == nil {
+		t.Errorf("user rule create failed with queue name, err %v", err)
+	}
+	queue, err = rule.placeApplication(appInfo, partInfo)
+	if queue != "root.testparent.testchild" || err != nil {
+		t.Errorf("user rule failed to place queue in correct queue '%s', err %v", queue, err)
+	}
 
-    // user queue that does not exists
-    user = security.UserGroup{
-        User: "unknown",
-        Groups: []string{},
-    }
-    appInfo = cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
+	// user queue that does not exists
+	user = security.UserGroup{
+		User:   "unknown",
+		Groups: []string{},
+	}
+	appInfo = cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
 
-    conf = configs.PlacementRule{
-        Name: "user",
-        Create: true,
-    }
-    rule, err = newRule(conf)
-    if err != nil || rule == nil {
-        t.Errorf("user rule create failed with queue name, err %v", err)
-    }
-    queue, err = rule.placeApplication(appInfo, partInfo)
-    if queue != "root.unknown" || err != nil {
-        t.Errorf("user rule placed in to be created queue with create false '%s', err %v", queue, err)
-    }
+	conf = configs.PlacementRule{
+		Name:   "user",
+		Create: true,
+	}
+	rule, err = newRule(conf)
+	if err != nil || rule == nil {
+		t.Errorf("user rule create failed with queue name, err %v", err)
+	}
+	queue, err = rule.placeApplication(appInfo, partInfo)
+	if queue != "root.unknown" || err != nil {
+		t.Errorf("user rule placed in to be created queue with create false '%s', err %v", queue, err)
+	}
 }

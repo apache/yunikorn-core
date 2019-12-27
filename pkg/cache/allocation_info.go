@@ -17,38 +17,38 @@ limitations under the License.
 package cache
 
 import (
-    "github.com/cloudera/yunikorn-core/pkg/common"
-    "github.com/cloudera/yunikorn-core/pkg/common/commonevents"
-    "github.com/cloudera/yunikorn-core/pkg/common/resources"
-    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+	"github.com/cloudera/yunikorn-core/pkg/common"
+	"github.com/cloudera/yunikorn-core/pkg/common/commonevents"
+	"github.com/cloudera/yunikorn-core/pkg/common/resources"
+	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 )
 
 /* Related to Allocation */
 type AllocationInfo struct {
-    // Original protocol
-    AllocationProto *si.Allocation
+	// Original protocol
+	AllocationProto *si.Allocation
 
-    // Other information
-    ApplicationId     string
-    AllocatedResource *resources.Resource
+	// Other information
+	ApplicationId     string
+	AllocatedResource *resources.Resource
 }
 
 func NewAllocationInfo(uuid string, alloc *commonevents.AllocationProposal) *AllocationInfo {
-    allocation := &AllocationInfo{
-        AllocationProto: &si.Allocation{
-            AllocationKey:    alloc.AllocationKey,
-            AllocationTags:   alloc.Tags,
-            Uuid:             uuid,
-            ResourcePerAlloc: alloc.AllocatedResource.ToProto(),
-            Priority:         alloc.Priority,
-            QueueName:        alloc.QueueName,
-            NodeId:           alloc.NodeId,
-            PartitionName:    common.GetPartitionNameWithoutClusterId(alloc.PartitionName),
-            ApplicationId:    alloc.ApplicationId,
-        },
-        ApplicationId:     alloc.ApplicationId,
-        AllocatedResource: alloc.AllocatedResource,
-    }
+	allocation := &AllocationInfo{
+		AllocationProto: &si.Allocation{
+			AllocationKey:    alloc.AllocationKey,
+			AllocationTags:   alloc.Tags,
+			Uuid:             uuid,
+			ResourcePerAlloc: alloc.AllocatedResource.ToProto(),
+			Priority:         alloc.Priority,
+			QueueName:        alloc.QueueName,
+			NodeId:           alloc.NodeId,
+			PartitionName:    common.GetPartitionNameWithoutClusterId(alloc.PartitionName),
+			ApplicationId:    alloc.ApplicationId,
+		},
+		ApplicationId:     alloc.ApplicationId,
+		AllocatedResource: alloc.AllocatedResource,
+	}
 
-    return allocation
+	return allocation
 }

@@ -22,7 +22,6 @@ import (
 	"go.uber.org/zap"
 )
 
-
 type NodeSortingPolicy struct {
 	PolicyType SortingPolicy
 }

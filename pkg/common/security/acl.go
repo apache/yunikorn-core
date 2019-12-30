@@ -21,8 +21,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cloudera/yunikorn-core/pkg/log"
 	"go.uber.org/zap"
+
+	"github.com/cloudera/yunikorn-core/pkg/log"
 )
 
 const (

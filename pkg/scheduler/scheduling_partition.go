@@ -21,11 +21,12 @@ import (
 	"strings"
 	"sync"
 
+	"go.uber.org/zap"
+
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/common/security"
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/cloudera/yunikorn-core/pkg/scheduler/placement"
-	"go.uber.org/zap"
 )
 
 type PartitionSchedulingContext struct {

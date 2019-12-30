@@ -21,10 +21,11 @@ import (
 	"testing"
 	"time"
 
+	"gotest.tools/assert"
+
 	"github.com/cloudera/yunikorn-core/pkg/common/commonevents"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
-	"gotest.tools/assert"
 )
 
 func createAllocation(queue, nodeID, allocID, appID string) *si.Allocation {
@@ -213,7 +214,6 @@ partitions:
 	if err == nil || partition.GetNode(nodeID) != nil {
 		t.Errorf("add new node to removed partition should have failed")
 	}
-
 }
 
 func TestRemoveNode(t *testing.T) {
@@ -712,7 +712,6 @@ partitions:
 	if queue != nil && !queue.isLeaf && !queue.isManaged {
 		t.Errorf("'root.parent.next.level.test.leaf' queue not created with correct settings: %v", queue)
 	}
-
 }
 
 func TestCalculateNodesUsage(t *testing.T) {

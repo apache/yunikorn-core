@@ -22,9 +22,10 @@ import (
 	"sort"
 	"strconv"
 
+	"go.uber.org/zap"
+
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
-	"go.uber.org/zap"
 )
 
 // const keys

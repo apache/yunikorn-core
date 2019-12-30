@@ -22,13 +22,14 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/common"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/cloudera/yunikorn-core/pkg/scheduler"
 	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
-	"go.uber.org/zap"
 )
 
 type MockRMCallbackHandler struct {
@@ -317,7 +318,6 @@ func waitForNewSchedulerNode(t *testing.T, context *scheduler.ClusterSchedulingC
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		node := context.GetSchedulingNode(nodeId, partitionName)
 		return node != nil
-
 	})
 	if err != nil {
 		t.Fatalf("Failed to wait for new scheduling node on partition %s, node %v", partitionName, nodeId)

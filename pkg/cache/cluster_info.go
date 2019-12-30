@@ -21,6 +21,8 @@ import (
 	"reflect"
 	"sync"
 
+	"go.uber.org/zap"
+
 	"github.com/cloudera/yunikorn-core/pkg/api"
 	"github.com/cloudera/yunikorn-core/pkg/cache/cacheevent"
 	"github.com/cloudera/yunikorn-core/pkg/common"
@@ -32,7 +34,6 @@ import (
 	"github.com/cloudera/yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/cloudera/yunikorn-core/pkg/scheduler/schedulerevent"
 	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
-	"go.uber.org/zap"
 )
 
 type ClusterInfo struct {

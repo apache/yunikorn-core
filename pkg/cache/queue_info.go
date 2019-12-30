@@ -22,13 +22,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/looplab/fsm"
+	"go.uber.org/zap"
+
 	"github.com/cloudera/yunikorn-core/pkg/common/configs"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"github.com/cloudera/yunikorn-core/pkg/common/security"
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/cloudera/yunikorn-core/pkg/metrics"
-	"github.com/looplab/fsm"
-	"go.uber.org/zap"
 )
 
 const (

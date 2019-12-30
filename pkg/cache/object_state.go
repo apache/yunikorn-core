@@ -17,9 +17,10 @@ limitations under the License.
 package cache
 
 import (
-	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
+
+	"github.com/cloudera/yunikorn-core/pkg/log"
 )
 
 // ----------------------------------

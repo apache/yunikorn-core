@@ -23,11 +23,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cloudera/yunikorn-core/pkg/log"
-	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+
+	"github.com/cloudera/yunikorn-core/pkg/log"
+	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 )
 
 // Defines Non blocking GRPC server interfaces
@@ -53,7 +54,6 @@ type nonBlockingGRPCServer struct {
 }
 
 func (s *nonBlockingGRPCServer) Start(endpoint string, ss si.SchedulerServer) {
-
 	s.wg.Add(1)
 
 	go s.serve(endpoint, ss)
@@ -105,7 +105,6 @@ func withServerUnaryInterceptor() grpc.ServerOption {
 }
 
 func (s *nonBlockingGRPCServer) serve(endpoint string, ss si.SchedulerServer) {
-
 	proto, addr, err := ParseEndpoint(endpoint)
 	if err != nil {
 		log.Logger().Fatal("fatal error", zap.Error(err))
@@ -139,5 +138,4 @@ func (s *nonBlockingGRPCServer) serve(endpoint string, ss si.SchedulerServer) {
 	if err := server.Serve(listener); err != nil {
 		log.Logger().Fatal("failed to serve", zap.Error(err))
 	}
-
 }

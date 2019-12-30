@@ -52,7 +52,6 @@ func (scheduler *SimpleScheduler) Update(conn si.Scheduler_UpdateServer) error {
 	ctx := conn.Context()
 
 	for {
-
 		// exit if context is done
 		// or continue
 		select {

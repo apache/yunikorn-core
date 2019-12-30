@@ -22,10 +22,11 @@ import (
 	"strconv"
 	"strings"
 
+	"go.uber.org/zap"
+
 	"github.com/cloudera/yunikorn-core/pkg/common"
 	"github.com/cloudera/yunikorn-core/pkg/common/security"
 	"github.com/cloudera/yunikorn-core/pkg/log"
-	"go.uber.org/zap"
 )
 
 const (
@@ -234,7 +235,6 @@ func checkLimits(limits []Limit, obj string) error {
 
 // Check for global policy
 func checkNodeSortingPolicy(partition *PartitionConfig) error {
-
 	// get the policy
 	policy := partition.NodeSortPolicy
 

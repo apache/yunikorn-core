@@ -22,10 +22,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudera/yunikorn-core/pkg/cache"
-	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
+
+	"github.com/cloudera/yunikorn-core/pkg/cache"
+	"github.com/cloudera/yunikorn-core/pkg/log"
 )
 
 var gClusterInfo *cache.ClusterInfo
@@ -37,7 +38,6 @@ type WebService struct {
 }
 
 func NewRouter() *mux.Router {
-
 	router := mux.NewRouter().StrictSlash(true)
 	for _, route := range routes {
 		var handler http.Handler
@@ -50,7 +50,6 @@ func NewRouter() *mux.Router {
 			Path(route.Pattern).
 			Name(route.Name).
 			Handler(handler)
-
 	}
 	return router
 }

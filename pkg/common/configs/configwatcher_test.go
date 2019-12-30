@@ -21,8 +21,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudera/yunikorn-core/pkg/common"
 	"gotest.tools/assert"
+
+	"github.com/cloudera/yunikorn-core/pkg/common"
 )
 
 // test singleton

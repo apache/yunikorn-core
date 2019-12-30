@@ -21,9 +21,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
+
+	"github.com/cloudera/yunikorn-core/pkg/log"
 )
 
 var resourceUsageRangeBuckets = []string{

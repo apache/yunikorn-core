@@ -19,9 +19,10 @@ package cache
 import (
 	"testing"
 
+	"gotest.tools/assert"
+
 	"github.com/cloudera/yunikorn-core/pkg/common/configs"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
-	"gotest.tools/assert"
 )
 
 func createResource(memory, cpu int) *resources.Resource {

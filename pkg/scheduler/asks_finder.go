@@ -17,9 +17,10 @@ limitations under the License.
 package scheduler
 
 import (
+	"go.uber.org/zap"
+
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"github.com/cloudera/yunikorn-core/pkg/log"
-	"go.uber.org/zap"
 )
 
 // Find next set of allocation asks for scheduler to place

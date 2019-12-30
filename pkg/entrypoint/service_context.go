@@ -16,12 +16,13 @@ limitations under the License.
 package entrypoint
 
 import (
+	"go.uber.org/zap"
+
 	"github.com/cloudera/yunikorn-core/pkg/api"
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/cloudera/yunikorn-core/pkg/scheduler"
 	"github.com/cloudera/yunikorn-core/pkg/webservice"
-	"go.uber.org/zap"
 )
 
 type ServiceContext struct {

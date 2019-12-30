@@ -59,6 +59,5 @@ func WaitFor(interval time.Duration, timeout time.Duration, condition func() boo
 			time.Sleep(interval)
 			continue
 		}
-
 	}
 }

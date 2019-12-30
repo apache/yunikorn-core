@@ -19,11 +19,12 @@ package cache
 import (
 	"fmt"
 
+	"go.uber.org/zap"
+
 	"github.com/cloudera/yunikorn-core/pkg/common"
 	"github.com/cloudera/yunikorn-core/pkg/common/configs"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"github.com/cloudera/yunikorn-core/pkg/log"
-	"go.uber.org/zap"
 )
 
 // Create partition info objects from the configuration to set in the cluster.
@@ -148,7 +149,6 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmId string) ([]*
 // Create a new checked PartitionInfo
 // convenience method that wraps creation and checking the settings.
 func newPartitionInfo(part configs.PartitionConfig, rmId string, info *ClusterInfo) (*PartitionInfo, error) {
-
 	partition, err := NewPartitionInfo(part, rmId, info)
 	if err != nil {
 		return nil, err

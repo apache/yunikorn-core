@@ -23,9 +23,10 @@ import (
 	"os"
 	"path"
 
-	"github.com/cloudera/yunikorn-core/pkg/log"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
+
+	"github.com/cloudera/yunikorn-core/pkg/log"
 )
 
 // The configuration can contain multiple partitions. Each partition contains the queue definition for a logical

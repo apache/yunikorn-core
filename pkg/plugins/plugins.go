@@ -17,8 +17,9 @@ limitations under the License.
 package plugins
 
 import (
-	"github.com/cloudera/yunikorn-core/pkg/log"
 	"go.uber.org/zap"
+
+	"github.com/cloudera/yunikorn-core/pkg/log"
 )
 
 var plugins SchedulerPlugins

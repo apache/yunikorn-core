@@ -19,12 +19,13 @@ package scheduler
 import (
 	"fmt"
 
+	"go.uber.org/zap"
+
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/common/commonevents"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
-	"go.uber.org/zap"
 )
 
 // Preemption policy based-on DRF
@@ -246,7 +247,6 @@ func createPreemptionAndAllocationProposal(preemptionPartitionContext *preemptio
 	// And add releases
 	for _, pr := range preemptionResults {
 		for uuid, alloc := range pr.toReleaseAllocations {
-
 			allocation.Releases = append(allocation.Releases, commonevents.NewReleaseAllocation(uuid, alloc.ApplicationId, nodeToAllocate.nodeInfo.Partition,
 				fmt.Sprintf("Preempt allocation=%s for ask=%s", alloc, candidate.AskProto.AllocationKey), si.AllocationReleaseResponse_PREEMPTED_BY_SCHEDULER))
 

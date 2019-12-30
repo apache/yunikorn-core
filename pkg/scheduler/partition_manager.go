@@ -19,9 +19,10 @@ package scheduler
 import (
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/log"
-	"go.uber.org/zap"
 )
 
 const (

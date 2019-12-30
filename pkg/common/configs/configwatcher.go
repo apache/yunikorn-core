@@ -21,8 +21,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudera/yunikorn-core/pkg/log"
 	"go.uber.org/zap"
+
+	"github.com/cloudera/yunikorn-core/pkg/log"
 )
 
 var configWatcher *ConfigWatcher

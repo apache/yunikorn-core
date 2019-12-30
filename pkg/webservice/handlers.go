@@ -22,10 +22,11 @@ import (
 	"strconv"
 	"strings"
 
+	"go.uber.org/zap"
+
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/cloudera/yunikorn-core/pkg/webservice/dao"
-	"go.uber.org/zap"
 )
 
 func GetStackInfo(w http.ResponseWriter, r *http.Request) {

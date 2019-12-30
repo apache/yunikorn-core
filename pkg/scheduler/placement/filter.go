@@ -19,10 +19,11 @@ package placement
 import (
 	"regexp"
 
+	"go.uber.org/zap"
+
 	"github.com/cloudera/yunikorn-core/pkg/common/configs"
 	"github.com/cloudera/yunikorn-core/pkg/common/security"
 	"github.com/cloudera/yunikorn-core/pkg/log"
-	"go.uber.org/zap"
 )
 
 type Filter struct {

@@ -19,9 +19,10 @@ package cache
 import (
 	"testing"
 
+	"gotest.tools/assert"
+
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"github.com/cloudera/yunikorn-core/pkg/common/security"
-	"gotest.tools/assert"
 )
 
 func newApplicationInfo(appId, partition, queueName string) *ApplicationInfo {
@@ -198,7 +199,6 @@ func TestCompletedTransition(t *testing.T) {
 	err = appInfo.HandleApplicationEvent(CompleteApplication)
 	assert.Assert(t, err != nil)
 	assert.Equal(t, appInfo2.GetApplicationState(), New.String())
-
 }
 
 func TestKilledTransition(t *testing.T) {

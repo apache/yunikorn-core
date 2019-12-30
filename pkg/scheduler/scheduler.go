@@ -22,6 +22,8 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/cache/cacheevent"
 	"github.com/cloudera/yunikorn-core/pkg/common"
@@ -33,7 +35,6 @@ import (
 	"github.com/cloudera/yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/cloudera/yunikorn-core/pkg/scheduler/schedulerevent"
 	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
-	"go.uber.org/zap"
 )
 
 // Responsibility of this class is, get status from SchedulerCache, and
@@ -260,7 +261,6 @@ func (m *Scheduler) processAllocationReleaseByAllocationKey(
 			}
 		}
 	}
-
 }
 
 func (m *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocation, rmId string) {

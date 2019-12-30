@@ -21,12 +21,13 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
+	"gotest.tools/assert"
+
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"github.com/cloudera/yunikorn-core/pkg/common/security"
 	"github.com/cloudera/yunikorn-core/pkg/log"
-	"go.uber.org/zap"
-	"gotest.tools/assert"
 )
 
 // verify queue ordering is working
@@ -302,7 +303,6 @@ func TestSortAppsFifo(t *testing.T) {
 	// apps should come back in order created 0, 1, 2, 3
 	SortApplications(list, FifoSortPolicy, nil)
 	assertAppList(t, list, []int{0, 1, 2, 3})
-
 }
 
 func TestSortAppsFair(t *testing.T) {

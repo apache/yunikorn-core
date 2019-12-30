@@ -19,10 +19,11 @@ package cache
 import (
 	"testing"
 
+	"gotest.tools/assert"
+
 	"github.com/cloudera/yunikorn-core/pkg/api"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
-	"gotest.tools/assert"
 )
 
 func newProto(nodeId string, totalResource *resources.Resource, attributes map[string]string) *si.NewNodeInfo {
@@ -219,7 +220,6 @@ func TestCanAllocate(t *testing.T) {
 	if node.CanAllocate(less) {
 		t.Errorf("can allocate should not have allowed %v to be allocated", less)
 	}
-
 }
 
 func TestGetAllocations(t *testing.T) {

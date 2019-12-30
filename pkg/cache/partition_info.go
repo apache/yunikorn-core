@@ -23,6 +23,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/looplab/fsm"
+	uuid "github.com/satori/go.uuid"
+	"go.uber.org/zap"
+
 	"github.com/cloudera/yunikorn-core/pkg/common"
 	"github.com/cloudera/yunikorn-core/pkg/common/commonevents"
 	"github.com/cloudera/yunikorn-core/pkg/common/configs"
@@ -32,9 +36,6 @@ import (
 	"github.com/cloudera/yunikorn-core/pkg/metrics"
 	"github.com/cloudera/yunikorn-core/pkg/webservice/dao"
 	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
-	"github.com/looplab/fsm"
-	uuid "github.com/satori/go.uuid"
-	"go.uber.org/zap"
 )
 
 /* Related to partitions */
@@ -540,7 +541,6 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
 		zap.String("allocationUid", allocationUuid),
 		zap.String("partitionName", pi.Name))
 	return allocation, nil
-
 }
 
 // Add a new allocation to the partition.

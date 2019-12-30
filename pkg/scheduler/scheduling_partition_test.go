@@ -19,9 +19,10 @@ package scheduler
 import (
 	"testing"
 
+	"gotest.tools/assert"
+
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
-	"gotest.tools/assert"
 )
 
 func newTestPartition() (*PartitionSchedulingContext, error) {

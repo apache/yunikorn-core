@@ -21,9 +21,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/looplab/fsm"
+
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"github.com/cloudera/yunikorn-core/pkg/common/security"
-	"github.com/looplab/fsm"
 )
 
 /* Related to applications */

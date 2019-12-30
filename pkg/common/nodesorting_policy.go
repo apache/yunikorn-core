@@ -19,8 +19,9 @@ package common
 import (
 	"fmt"
 
-	"github.com/cloudera/yunikorn-core/pkg/log"
 	"go.uber.org/zap"
+
+	"github.com/cloudera/yunikorn-core/pkg/log"
 )
 
 type NodeSortingPolicy struct {

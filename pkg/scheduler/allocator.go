@@ -223,8 +223,8 @@ func (m *Scheduler) evaluateForSchedulingPolicy(nodes []*SchedulingNode, partiti
 
 func (m *Scheduler) handleFailedToAllocationAllocations(allocations []*SchedulingAllocation, candidates []*SchedulingAllocationAsk, preemptionParam *preemptionParameters) {
 	// Failed allocated asks
-	failedToAllocationKeys := make(map[string]bool, 0)
-	allocatedKeys := make(map[string]bool, 0)
+	failedToAllocationKeys := make(map[string]bool)
+	allocatedKeys := make(map[string]bool)
 
 	for _, c := range candidates {
 		failedToAllocationKeys[c.AskProto.AllocationKey] = true

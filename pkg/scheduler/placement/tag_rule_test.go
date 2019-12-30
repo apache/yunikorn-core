@@ -81,7 +81,7 @@ partitions:
 	}
 
 	// tag does not have a value
-	tags := make(map[string]string, 0)
+	tags := make(map[string]string)
 	appInfo := cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
 	queue, err := rule.placeApplication(appInfo, partInfo)
 	if queue != "" || err != nil {

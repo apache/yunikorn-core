@@ -57,8 +57,6 @@ func (s *nonBlockingGRPCServer) Start(endpoint string, ss si.SchedulerServer) {
 	s.wg.Add(1)
 
 	go s.serve(endpoint, ss)
-
-	return
 }
 
 func (s *nonBlockingGRPCServer) Wait() {

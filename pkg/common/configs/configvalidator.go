@@ -36,20 +36,20 @@ const (
 
 // A queue can be a username with the dot replaced. Most systems allow a 32 character user name.
 // The queue name must thus allow for at least that length with the replacement of dots.
-var QueueNameRegExp = regexp.MustCompile("^[a-zA-Z0-9_-]{1,64}$")
+var QueueNameRegExp = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
 
 // User and group name check: systems allow different things POSIX is the base but we need to be lenient and allow more.
 // allow upper and lower case, add the @ and . (dot) and officially no length.
-var UserRegExp = regexp.MustCompile("^[_a-zA-Z][a-zA-Z0-9_.@-]*[$]?$")
+var UserRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9_.@-]*[$]?$`)
 
 // Groups should have a slightly more restrictive regexp (no @ . or $ at the end)
-var GroupRegExp = regexp.MustCompile("^[_a-zA-Z][a-zA-Z0-9_-]*$")
+var GroupRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9_-]*$`)
 
 // all characters that make a name different from a regexp
-var SpecialRegExp = regexp.MustCompile("[\\^\\$\\*\\+\\?\\(\\)\\[\\{\\}\\|]")
+var SpecialRegExp = regexp.MustCompile(`[\^$*+?()\[{}|]`)
 
 // The rule maps to a go identifier check that regexp only
-var RuleNameRegExp = regexp.MustCompile("^[_a-zA-Z][a-zA-Z0-9_]*$")
+var RuleNameRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9_]*$`)
 
 // Check the ACL
 func checkACL(acl string) error {
@@ -199,7 +199,7 @@ func checkLimit(limit Limit) error {
 	total := int64(-1)
 	var err error
 	// check the resource (if defined)
-	if limit.MaxResources != nil && len(limit.MaxResources) != 0 {
+	if len(limit.MaxResources) != 0 {
 		total, err = checkResource(limit.MaxResources)
 		if err != nil {
 			log.Logger().Debug("resource parsing failed",
@@ -218,7 +218,7 @@ func checkLimit(limit Limit) error {
 // Check the defined limits list
 func checkLimits(limits []Limit, obj string) error {
 	// return if nothing defined
-	if limits == nil || len(limits) == 0 {
+	if len(limits) == 0 {
 		return nil
 	}
 	// walk over the list of limits
@@ -239,10 +239,10 @@ func checkNodeSortingPolicy(partition *PartitionConfig) error {
 	policy := partition.NodeSortPolicy
 
 	// Defined polices.
-	configuredNodeSortingPolicy, error := common.FromString(policy.Type)
+	configuredNodeSortingPolicy, err := common.FromString(policy.Type)
 
 	log.Logger().Info("Node sorting policy:", zap.Any("policy name", policy.Type), zap.Any("value", configuredNodeSortingPolicy))
-	return error
+	return err
 }
 
 // Check the queue names configured for compliance and uniqueness

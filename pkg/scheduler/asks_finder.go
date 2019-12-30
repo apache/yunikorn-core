@@ -38,7 +38,7 @@ func (m *Scheduler) findAllocationAsks(partitionTotalResource *resources.Resourc
 	// Reset may allocations
 	m.resetMayAllocations(partitionContext)
 
-	selectedAsksByAllocationKey := make(map[string]int32, 0)
+	selectedAsksByAllocationKey := make(map[string]int32)
 
 	// Repeatedly go to queue hierarchy, find next allocation ask, until we find N allocations
 	found := true

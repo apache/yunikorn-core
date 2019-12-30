@@ -309,7 +309,7 @@ func (qi *QueueInfo) MarkQueueForRemoval() {
 				zap.String("queue", qi.GetQueuePath()),
 				zap.Error(err))
 		}
-		if qi.children != nil || len(qi.children) > 0 {
+		if len(qi.children) > 0 {
 			for _, child := range qi.children {
 				child.MarkQueueForRemoval()
 			}
@@ -379,12 +379,12 @@ func (qi *QueueInfo) updateQueueProps(conf configs.QueueConfig) error {
 // Merge the properties for the queue. This is only called when updating the queue from the configuration.
 func mergeProperties(parent map[string]string, child map[string]string) map[string]string {
 	merged := make(map[string]string)
-	if parent != nil && len(parent) > 0 {
+	if len(parent) > 0 {
 		for key, value := range parent {
 			merged[key] = value
 		}
 	}
-	if child != nil && len(child) > 0 {
+	if len(child) > 0 {
 		for key, value := range child {
 			merged[key] = value
 		}

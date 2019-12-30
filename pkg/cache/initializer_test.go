@@ -22,12 +22,7 @@ import (
 	"gotest.tools/assert"
 
 	"github.com/cloudera/yunikorn-core/pkg/common/configs"
-	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 )
-
-func createResource(memory, cpu int) *resources.Resource {
-	return resources.NewResourceFromMap(map[string]resources.Quantity{"memory": resources.Quantity(memory), "vcore": resources.Quantity(cpu)})
-}
 
 // Test most basic, normal case
 func TestBasicInitializer(t *testing.T) {

@@ -54,7 +54,7 @@ func NewNodeInfo(proto *si.NewNodeInfo) *NodeInfo {
 		NodeId:            proto.NodeId,
 		TotalResource:     resources.NewResourceFromProto(proto.SchedulableResource),
 		allocatedResource: resources.NewResource(),
-		allocations:       make(map[string]*AllocationInfo, 0),
+		allocations:       make(map[string]*AllocationInfo),
 		schedulable:       true,
 	}
 	m.availableResource = m.TotalResource.Clone()
@@ -114,10 +114,7 @@ func (ni *NodeInfo) GetAllocation(uuid string) *AllocationInfo {
 func (ni *NodeInfo) CanAllocate(resRequest *resources.Resource) bool {
 	ni.lock.RLock()
 	defer ni.lock.RUnlock()
-	if !resources.FitIn(ni.availableResource, resRequest) {
-		return false
-	}
-	return true
+	return resources.FitIn(ni.availableResource, resRequest)
 }
 
 // Add the allocation to the node.Used resources will increase available will decrease.

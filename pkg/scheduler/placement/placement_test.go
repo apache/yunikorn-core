@@ -210,7 +210,7 @@ partitions:
 	if err != nil || !man.initialised {
 		t.Errorf("failed to update existing manager, init state: %t, error: %v", man.initialised, err)
 	}
-	tags := make(map[string]string, 0)
+	tags := make(map[string]string)
 	user := security.UserGroup{
 		User:   "testchild",
 		Groups: []string{},

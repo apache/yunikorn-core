@@ -30,7 +30,7 @@ func createRootQueue() (*QueueInfo, error) {
 		Name:       "root",
 		Parent:     true,
 		Queues:     nil,
-		Properties: make(map[string]string, 0),
+		Properties: make(map[string]string),
 	}
 	return NewManagedQueue(rootConf, nil)
 }
@@ -41,7 +41,7 @@ func createManagedQueue(parentQI *QueueInfo, name string, parent bool) (*QueueIn
 		Name:       name,
 		Parent:     parent,
 		Queues:     nil,
-		Properties: make(map[string]string, 0),
+		Properties: make(map[string]string),
 	}
 	return NewManagedQueue(rootConf, parentQI)
 }

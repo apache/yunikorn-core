@@ -42,7 +42,7 @@ func NewPlacementManager(info *cache.PartitionInfo) *AppPlacementManager {
 		info: info,
 	}
 	rules := info.GetRules()
-	if rules != nil && len(rules) > 0 {
+	if len(rules) > 0 {
 		if err := m.initialise(rules); err != nil {
 			log.Logger().Info("Placement manager created without rules: not active",
 				zap.Error(err))
@@ -54,7 +54,7 @@ func NewPlacementManager(info *cache.PartitionInfo) *AppPlacementManager {
 // Update the rules for an active placement manager
 // Note that this will only be called when the manager is created earlier and the config is updated.
 func (m *AppPlacementManager) UpdateRules(rules []configs.PlacementRule) error {
-	if rules != nil && len(rules) > 0 {
+	if len(rules) > 0 {
 		log.Logger().Info("Building new rule list for placement manager")
 		if err := m.initialise(rules); err != nil {
 			log.Logger().Info("Placement manager rules not reloaded",
@@ -63,7 +63,7 @@ func (m *AppPlacementManager) UpdateRules(rules []configs.PlacementRule) error {
 		}
 	}
 	// if there are no rules in the config we should turn off the placement manager
-	if (rules == nil || len(rules) == 0) && m.initialised {
+	if len(rules) == 0 && m.initialised {
 		m.lock.Lock()
 		defer m.lock.Unlock()
 		log.Logger().Info("Placement manager rules removed on config reload")
@@ -108,17 +108,17 @@ func (m *AppPlacementManager) initialise(rules []configs.PlacementRule) error {
 // If any error is encountered a nil array is returned and the error set
 func (m *AppPlacementManager) buildRules(rules []configs.PlacementRule) ([]rule, error) {
 	// catch an empty list
-	if rules == nil || len(rules) == 0 {
+	if len(rules) == 0 {
 		return nil, fmt.Errorf("placement manager rule list request is empty")
 	}
 	// build temp list from new config
 	var newRules []rule
 	for _, conf := range rules {
-		rule, err := newRule(conf)
+		buildRule, err := newRule(conf)
 		if err != nil {
 			return nil, err
 		}
-		newRules = append(newRules, rule)
+		newRules = append(newRules, buildRule)
 	}
 	return newRules, nil
 }

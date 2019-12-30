@@ -49,19 +49,23 @@ type rule interface {
 
 // Basic structure that every placement rule uses.
 // The rules themselves should include the basicRule struct.
+// Linter does not pick up on the usage in the implementation(s).
+//nolint:structcheck
 type basicRule struct {
 	create bool
 	parent rule
 	filter Filter
 }
 
-// Get the parent rule used in testing only,
-// Should not be implemented in rules,
+// Get the parent rule used in testing only.
+// Should not be implemented in rules.
 func (r *basicRule) getParent() rule {
 	return r.parent
 }
 
-// Return the name if not overwritten by the rule,
+// Return the name if not overwritten by the rule.
+// Marked as nolint as rules should override this.
+//nolint:unused
 func (r *basicRule) getName() string {
 	return "unnamed rule"
 }

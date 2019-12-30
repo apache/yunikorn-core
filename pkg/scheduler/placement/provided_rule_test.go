@@ -35,7 +35,7 @@ partitions:
           - name: testchild
 `
 	partInfo, err := CreatePartitionInfo([]byte(data))
-	tags := make(map[string]string, 0)
+	tags := make(map[string]string)
 	user := security.UserGroup{
 		User:   "test",
 		Groups: []string{},

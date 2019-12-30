@@ -200,7 +200,7 @@ func (m *RMProxy) handleRMEvents() {
 func (m *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerRequest, callback api.ResourceManagerCallback) (*si.RegisterResourceManagerResponse, error) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	c := make(chan *commonevents.Result, 0)
+	c := make(chan *commonevents.Result)
 
 	if m.rmIdToCallback[request.RmId] != nil {
 		// Send to scheduler first, in case we need to remove any partitions.
@@ -219,7 +219,7 @@ func (m *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerReq
 		}
 	}
 
-	c = make(chan *commonevents.Result, 0)
+	c = make(chan *commonevents.Result)
 
 	// Add new RM.
 	go func() {
@@ -367,7 +367,7 @@ type ConfigurationReloader struct {
 }
 
 func (cr ConfigurationReloader) DoReloadConfiguration() error {
-	c := make(chan *commonevents.Result, 0)
+	c := make(chan *commonevents.Result)
 	cr.rmProxy.EventHandlers.CacheEventHandler.HandleEvent(
 		&commonevents.ConfigUpdateRMEvent{
 			RmId:    cr.rmId,

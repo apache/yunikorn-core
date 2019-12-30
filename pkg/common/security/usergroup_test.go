@@ -17,6 +17,7 @@ limitations under the License.
 package security
 
 import (
+	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 	"strings"
 	"testing"
 )
@@ -50,11 +51,11 @@ func TestGetUserGroup(t *testing.T) {
 	if len(testCache.ugs) != 1 {
 		t.Errorf("Cache not updated should have 1 entry %d", len(testCache.ugs))
 	}
-	// check returned info: 3 groups etc
+	// check returned info: primary and secondary groups etc
 	if ug.User != "testuser1" || len(ug.Groups) != 2 || ug.resolved == 0 || ug.failed {
 		t.Errorf("User 'testuser1' not resolved correctly: %v", ug)
 	}
-	cachedUG, _ := testCache.ugs["testuser1"]
+	cachedUG := testCache.ugs["testuser1"]
 	if ug.resolved != cachedUG.resolved {
 		t.Errorf("User 'testuser1' not cached correctly resolution time differs: %d got %d", ug.resolved, cachedUG.resolved)
 	}
@@ -76,7 +77,7 @@ func TestBrokenUserGroup(t *testing.T) {
 
 	ug, err := testCache.GetUserGroup("testuser2")
 	if err != nil {
-		t.Error("Lookup should not have failed: testuser1")
+		t.Error("Lookup should not have failed: testuser2")
 	}
 	if len(testCache.ugs) != 1 {
 		t.Errorf("Cache not updated should have 1 entry %d", len(testCache.ugs))
@@ -180,5 +181,51 @@ func TestCacheCleanUp(t *testing.T) {
 	testCache.cleanUpCache()
 	if len(testCache.ugs) != 1 {
 		t.Errorf("Cache not cleaned up : %v", testCache.ugs)
+	}
+}
+
+func TestConvertUGI(t *testing.T) {
+	testCache := GetUserGroupCache("test")
+	testCache.resetCache()
+	// test cache should be empty now
+	if len(testCache.ugs) != 0 {
+		t.Fatalf("Cache not empty: %v", testCache.ugs)
+	}
+	ugi := &si.UserGroupInformation{
+		User:                 "",
+		Groups:               nil,
+	}
+	ug, err := testCache.ConvertUGI(ugi)
+	if err == nil {
+		t.Errorf("empty user convert should have failed and did not: %v", ug)
+	}
+	// try known user without groups
+	ugi.User = "testuser1"
+	ug, err = testCache.ConvertUGI(ugi)
+	if err != nil {
+		t.Errorf("known user, no groups, convert should not have failed: %v", err)
+	}
+	if ug.User != "testuser1" || len(ug.Groups) != 2 || ug.resolved == 0 || ug.failed {
+		t.Errorf("User 'testuser1' not resolved correctly: %v", ug)
+	}
+	// try unknown user without groups
+	ugi.User = "unknown"
+	ug, err = testCache.ConvertUGI(ugi)
+	if err == nil {
+		t.Errorf("unknown user, no groups, convert should have failed: %v", ug)
+	}
+	// try unknown user with groups
+	ugi.User = "unknown2"
+	group := "passedin"
+	ugi.Groups = []string{group}
+	ug, err = testCache.ConvertUGI(ugi)
+	if err != nil {
+		t.Errorf("unknown user with groups, convert should not have failed: %v", err)
+	}
+	if ug.User != "unknown2" || len(ug.Groups) != 1 || ug.resolved == 0 || ug.failed {
+		t.Fatalf("User 'unknown2' not resolved correctly: %v", ug)
+	}
+	if ug.Groups[0] != group {
+		t.Errorf("groups not initialised correctly on convert: expected '%s' got '%s'", group, ug.Groups[0])
 	}
 }

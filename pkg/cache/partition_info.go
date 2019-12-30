@@ -418,9 +418,7 @@ func (pi *PartitionInfo) releaseAllocationsForApplication(toRelease *commonevent
 		if toRelease.Uuid == "" {
 			log.Logger().Debug("remove all allocations",
 				zap.String("appId", app.ApplicationId))
-			for _, alloc := range app.removeAllAllocations() {
-				allocationsToRelease = append(allocationsToRelease, alloc)
-			}
+			allocationsToRelease = append(allocationsToRelease, app.removeAllAllocations()...)
 		} else {
 			log.Logger().Debug("removing allocations",
 				zap.String("appId", app.ApplicationId),

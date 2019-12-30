@@ -86,16 +86,14 @@ func (sq *SchedulingQueue) updateSchedulingQueueProperties(prop map[string]strin
 	sq.ApplicationSortType = FifoSortPolicy
 	sq.QueueSortType = FairSortPolicy
 	// walk over all properties and process
-	if prop != nil {
-		for key, value := range prop {
-			if key == cache.ApplicationSortPolicy && value == "fair" {
-				sq.ApplicationSortType = FairSortPolicy
-			}
-			// for now skip the rest just log them
-			log.Logger().Debug("queue property skipped",
-				zap.String("key", key),
-				zap.String("value", value))
+	for key, value := range prop {
+		if key == cache.ApplicationSortPolicy && value == "fair" {
+			sq.ApplicationSortType = FairSortPolicy
 		}
+		// for now skip the rest just log them
+		log.Logger().Debug("queue property skipped",
+			zap.String("key", key),
+			zap.String("value", value))
 	}
 }
 

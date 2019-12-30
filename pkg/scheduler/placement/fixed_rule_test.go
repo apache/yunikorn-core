@@ -71,7 +71,7 @@ partitions:
 		User:   "testuser",
 		Groups: []string{},
 	}
-	tags := make(map[string]string, 0)
+	tags := make(map[string]string)
 	appInfo := cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
 
 	// fixed queue that exists directly under the root

@@ -30,7 +30,7 @@ func newApplicationInfo(appId, partition, queueName string) *ApplicationInfo {
 		User:   "testuser",
 		Groups: []string{},
 	}
-	tags := make(map[string]string, 0)
+	tags := make(map[string]string)
 	return NewApplicationInfo(appId, partition, queueName, user, tags)
 }
 

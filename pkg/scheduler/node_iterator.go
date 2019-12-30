@@ -30,14 +30,11 @@ func (bi *baseIterator) Reset() {
 // HasNext returns true if there is a next element in the array.
 // Returns false if there are no more elements or list is empty.
 func (bi *baseIterator) HasNext() bool {
-	if (bi.countIdx + 1) > bi.size {
-		return false
-	}
-	return true
+	return !(bi.countIdx + 1 > bi.size)
 }
 
 // Next returns the next element and advances to next element in array.
-// Returns nil and reset the starting point at the end of iteration.
+// Returns nil at the end of iteration.
 func (bi *baseIterator) Next() *SchedulingNode {
 	if (bi.countIdx + 1) > bi.size {
 		return nil

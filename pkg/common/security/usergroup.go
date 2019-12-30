@@ -126,22 +126,21 @@ func (c *UserGroupCache) ConvertUGI(ugi *si.UserGroupInformation) (UserGroup, er
 		return UserGroup{}, fmt.Errorf("empty user cannot resolve")
 	}
 	// try to resolve the user if group info is empty otherwise we just convert
-	if ugi.Groups == nil || len(ugi.Groups) == 0 {
+	if len(ugi.Groups) == 0 {
 		return c.GetUserGroup(ugi.User)
 	}
 	// If groups are already present we should just convert
 	newUG := UserGroup{User: ugi.User}
-	for _, group := range ugi.Groups {
-		newUG.Groups = append(newUG.Groups, group)
-	}
+	newUG.Groups = append(newUG.Groups, ugi.Groups...)
+	newUG.resolved = now.Unix()
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.ugs[ugi.User] = &newUG
 	return newUG, nil
 }
 
-// Get the user group information.
-// An error will still return a UserGroup. The Failed flag in the object will be set to true for any
+// Get the user group information. An error will still return a UserGroup.
+// The Failed flag in the object will be set to true for any failures.
 // The information is cached, negatively and positively.
 func (c *UserGroupCache) GetUserGroup(userName string) (UserGroup, error) {
 	// check if we have a user to resolve

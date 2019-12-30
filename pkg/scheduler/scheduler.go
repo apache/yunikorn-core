@@ -210,8 +210,7 @@ func (m *Scheduler) processAllocationReleaseByAllocationKey(
 	defer m.lock.Unlock()
 
 	// For all Requests
-
-	if allocationAsksToRelease != nil && len(allocationAsksToRelease) > 0 {
+	if len(allocationAsksToRelease) > 0 {
 		for _, toRelease := range allocationAsksToRelease {
 			schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(toRelease.ApplicationId, toRelease.PartitionName)
 			if schedulingApp != nil {
@@ -229,7 +228,7 @@ func (m *Scheduler) processAllocationReleaseByAllocationKey(
 		}
 	}
 
-	if allocationsToRelease != nil && len(allocationsToRelease) > 0 {
+	if len(allocationsToRelease) > 0 {
 		toReleaseAllocations := make([]*si.ForgotAllocation, len(allocationAsksToRelease))
 		for _, toRelease := range allocationsToRelease {
 			schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(toRelease.ApplicationId, toRelease.PartitionName)

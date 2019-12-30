@@ -31,7 +31,7 @@ func createRootQueue() (*SchedulingQueue, error) {
 		Name:       "root",
 		Parent:     true,
 		Queues:     nil,
-		Properties: make(map[string]string, 0),
+		Properties: make(map[string]string),
 	}
 	root, err := cache.NewManagedQueue(rootConf, nil)
 	return NewSchedulingQueueInfo(root, nil), err
@@ -43,7 +43,7 @@ func createManagedQueue(parentQI *SchedulingQueue, name string, parent bool) (*S
 		Name:       name,
 		Parent:     parent,
 		Queues:     nil,
-		Properties: make(map[string]string, 0),
+		Properties: make(map[string]string),
 	}
 	child, err := cache.NewManagedQueue(childConf, parentQI.CachedQueueInfo)
 	return NewSchedulingQueueInfo(child, parentQI), err

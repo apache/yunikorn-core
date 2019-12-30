@@ -116,7 +116,7 @@ partitions:
 	// Wait for all nodes to be accepted
 	startTime := time.Now()
 	waitForMinNumberOfAcceptedNodes(mockRM, numNodes, 5000)
-	duration := time.Now().Sub(startTime)
+	duration := time.Since(startTime)
 	b.Logf("Total time to add %d node in %s, %f per second", numNodes, duration, float64(numNodes)/duration.Seconds())
 
 	// Request pods
@@ -164,7 +164,7 @@ partitions:
 
 	// Stop timer and calculate duration
 	b.StopTimer()
-	duration = time.Now().Sub(startTime)
+	duration = time.Since(startTime)
 
 	b.Logf("Total time to allocate %d containers in %s, %f per second", numPods, duration, float64(numPods)/duration.Seconds())
 }

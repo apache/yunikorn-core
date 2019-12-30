@@ -17,6 +17,7 @@ limitations under the License.
 package scheduler
 
 import (
+	"fmt"
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"github.com/cloudera/yunikorn-core/pkg/log"
@@ -36,6 +37,15 @@ type SchedulingNode struct {
 	cachedAvailable           *resources.Resource // calculated available resources
 	needUpdateCachedAvailable bool                // is the calculated available resource up to date?
 
+	// Reservation requests
+	// Key is combination of applicationId and requestKey to make it unique
+	// Why multiple reservation supported? We can leverage this to do multi-preemption on one node.
+	// Or pre-ordering node for autoscaling nodes.
+	reservationRequests map[string]*ReservedSchedulingRequest
+
+	// Total reserved resource
+	totalReservedResource *resources.Resource
+
 	lock sync.RWMutex
 }
 
@@ -50,6 +60,8 @@ func NewSchedulingNode(info *cache.NodeInfo) *SchedulingNode {
 		allocatingResource:        resources.NewResource(),
 		preemptingResource:        resources.NewResource(),
 		needUpdateCachedAvailable: true,
+		reservationRequests: make(map[string]*ReservedSchedulingRequest, 0),
+		totalReservedResource:     resources.NewResource(),
 	}
 }
 
@@ -67,7 +79,13 @@ func (sn *SchedulingNode) GetAllocatedResource() *resources.Resource {
 func (sn *SchedulingNode) getAvailableResource() *resources.Resource {
     sn.lock.Lock()
     defer sn.lock.Unlock()
-    if sn.needUpdateCachedAvailable {
+
+    return sn.getAvailableResourceWithoutLock()
+}
+
+// Called under lock of scheduling node, will be used by internal methods
+func (sn *SchedulingNode) getAvailableResourceWithoutLock() *resources.Resource {
+	if sn.needUpdateCachedAvailable {
 		sn.cachedAvailable = sn.nodeInfo.GetAvailableResource()
 		sn.cachedAvailable.SubFrom(sn.allocatingResource)
 		sn.needUpdateCachedAvailable = false
@@ -140,10 +158,11 @@ func (sn *SchedulingNode) handlePreemptionUpdate(preempted *resources.Resource) 
 func (sn *SchedulingNode) CheckAndAllocateResource(delta *resources.Resource, preemptionPhase bool) bool {
 	sn.lock.Lock()
 	defer sn.lock.Unlock()
+
 	available := sn.nodeInfo.GetAvailableResource()
 	newAllocating := resources.Add(delta, sn.allocatingResource)
 
-    if preemptionPhase {
+	if preemptionPhase {
         available.AddTo(sn.preemptingResource)
     }
     if resources.FitIn(available, newAllocating) {
@@ -155,6 +174,34 @@ func (sn *SchedulingNode) CheckAndAllocateResource(delta *resources.Resource, pr
 		return true
 	}
 	return false
+}
+
+func (sn* SchedulingNode) ReserveOnNode(reservationRequest *ReservedSchedulingRequest) (bool, error) {
+	if reservationRequest.GetAmount() != 1 {
+		return false, fmt.Errorf("Only allow reserve one allocation at a time allocationKey=%s; node=%s", reservationRequest.SchedulingAsk.AskProto.AllocationKey,
+			reservationRequest.schedulingNode.NodeId)
+	}
+
+	sn.lock.Lock()
+	defer sn.lock.Unlock()
+
+	// Make sure node still has available resource before reserve resources
+	available := sn.getAvailableResourceWithoutLock()
+	allocatingAndReserved := resources.Add(sn.allocatingResource, sn.totalReservedResource)
+
+	if !resources.FitIn(available, allocatingAndReserved) {
+		// TODO
+	}
+
+	key := reservationRequest.GetReservationRequestKey()
+	val, exist := sn.reservationRequests[key]
+
+	if !exist {
+		reservationRequest := reservationRequest.Clone()
+		sn.reservationRequests[key] = reservationRequest
+	} else {
+		val.IncAmount()
+	}
 }
 
 // Checking pre allocation conditions. The pre-allocation conditions are implemented via plugins

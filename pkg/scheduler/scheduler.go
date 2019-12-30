@@ -79,7 +79,7 @@ func newSingleAllocationProposal(alloc *SchedulingAllocation) *cacheevent.Alloca
     return &cacheevent.AllocationProposalBundleEvent{
         AllocationProposals: []*commonevents.AllocationProposal{
             {
-                NodeId:            alloc.NodeId,
+                NodeId:            alloc.Node.NodeId,
                 ApplicationId:     alloc.SchedulingAsk.ApplicationId,
                 QueueName:         alloc.SchedulingAsk.QueueName,
                 AllocatedResource: alloc.SchedulingAsk.AllocatedResource,
@@ -89,7 +89,7 @@ func newSingleAllocationProposal(alloc *SchedulingAllocation) *cacheevent.Alloca
             },
         },
         ReleaseProposals: alloc.Releases,
-        PartitionName:    alloc.PartitionName,
+        PartitionName:    alloc.SchedulingAsk.PartitionName,
     }
 }
 

@@ -37,6 +37,9 @@ type SchedulingApplication struct {
     // Private fields need protection
     queue *SchedulingQueue // queue the application is running in
 
+    // Reserved request
+    reservedRequests map[string]*ReservedSchedulingRequest
+
     lock sync.RWMutex
 }
 
@@ -44,6 +47,7 @@ func NewSchedulingApplication(appInfo *cache.ApplicationInfo) *SchedulingApplica
     app := &SchedulingApplication{
         ApplicationInfo: appInfo,
         allocating: resources.NewResource(),
+        reservedRequests: make(map[string]*ReservedSchedulingRequest),
     }
     app.Requests = NewSchedulingRequests(app)
     return app
@@ -117,7 +121,7 @@ func (m *SchedulingApplication) allocateForOneRequest(partitionContext* Partitio
             }
 
             // return allocation (this is not a reservation)
-            return NewSchedulingAllocation(candidate, node.NodeId, false)
+            return NewSchedulingAllocation(candidate, node, m, false)
         }
     }
 
@@ -171,4 +175,15 @@ func (m* SchedulingApplication) GetAllocatingResourceTestOnly() *resources.Resou
     defer m.lock.RUnlock()
 
     return m.allocating
+}
+
+// Reserve scheduling request, this also reserve resources on
+func (m* SchedulingApplication) reserveSchedulingAllocation(allocation *SchedulingAllocation) (bool, error) {
+    reserveRequest := NewReservedSchedulingRequestFromSchedulingAllocation(allocation)
+
+    // handle reservation on node
+    m.lock.Lock()
+    defer m.lock.Unlock()
+
+    allocation.Node.ReserveOnNode(reserveRequest)
 }

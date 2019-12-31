@@ -33,7 +33,7 @@ var once sync.Once
 // it is initiated with a certain expiration time, it will stop running either
 // it detects configuration changes, or the expiration time reaches
 type ConfigWatcher struct {
-	rmId        string
+	rmID        string
 	policyGroup string
 	reloader    ConfigReloader
 	expireTime  time.Duration
@@ -46,9 +46,9 @@ type ConfigReloader interface {
 	DoReloadConfiguration() error
 }
 
-func CreateConfigWatcher(rmId string, policyGroup string, expiration time.Duration) *ConfigWatcher {
+func CreateConfigWatcher(rmID string, policyGroup string, expiration time.Duration) *ConfigWatcher {
 	return &ConfigWatcher{
-		rmId:        rmId,
+		rmID:        rmID,
 		policyGroup: policyGroup,
 		expireTime:  expiration,
 		soloChan:    make(chan interface{}, 1),

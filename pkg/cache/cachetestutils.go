@@ -24,9 +24,9 @@ import (
 	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 )
 
-func CreateMockAllocationInfo(appId string, res *resources.Resource, uuid string, queueName string, nodeId string) *AllocationInfo {
-	info := &AllocationInfo{ApplicationId: appId, AllocatedResource: res,
-		AllocationProto: &si.Allocation{Uuid: uuid, QueueName: queueName, NodeId: nodeId}}
+func CreateMockAllocationInfo(appID string, res *resources.Resource, uuid string, queueName string, nodeID string) *AllocationInfo {
+	info := &AllocationInfo{ApplicationID: appID, AllocatedResource: res,
+		AllocationProto: &si.Allocation{UUID: uuid, QueueName: queueName, NodeID: nodeID}}
 	return info
 }
 
@@ -45,20 +45,20 @@ func CreatePartitionInfo(data []byte) (*PartitionInfo, error) {
 }
 
 // Node to test with sorters (setting available resources)
-func NewNodeForSort(nodeId string, availResource *resources.Resource) *NodeInfo {
-	return newNodeForTest(nodeId, resources.NewResource(), availResource)
+func NewNodeForSort(nodeID string, availResource *resources.Resource) *NodeInfo {
+	return newNodeForTest(nodeID, resources.NewResource(), availResource)
 }
 
 // Node to test with anything but the sorters (setting total resources)
-func NewNodeForTest(nodeId string, totalResource *resources.Resource) *NodeInfo {
-	return newNodeForTest(nodeId, totalResource, totalResource.Clone())
+func NewNodeForTest(nodeID string, totalResource *resources.Resource) *NodeInfo {
+	return newNodeForTest(nodeID, totalResource, totalResource.Clone())
 }
 
 // Internal function to create the nodeInfo
-func newNodeForTest(nodeId string, totalResource, availResource *resources.Resource) *NodeInfo {
+func newNodeForTest(nodeID string, totalResource, availResource *resources.Resource) *NodeInfo {
 	node := &NodeInfo{}
 	// set the basics
-	node.NodeId = nodeId
+	node.NodeID = nodeID
 	node.allocations = make(map[string]*AllocationInfo)
 	node.schedulable = true
 	node.Partition = "default"

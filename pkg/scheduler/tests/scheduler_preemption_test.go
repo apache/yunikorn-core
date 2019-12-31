@@ -84,10 +84,10 @@ func TestBasicPreemption(t *testing.T) {
 					},
 				},
 				MaxAllocations: 20,
-				ApplicationId:  "app-1",
+				ApplicationID:  "app-1",
 			},
 		},
-		RmId: "rm:123",
+		RmID: "rm:123",
 	})
 
 	if nil != err {
@@ -123,10 +123,10 @@ func TestBasicPreemption(t *testing.T) {
 					},
 				},
 				MaxAllocations: 100,
-				ApplicationId:  "app-2",
+				ApplicationID:  "app-2",
 			},
 		},
-		RmId: "rm:123",
+		RmID: "rm:123",
 	})
 
 	if nil != err {

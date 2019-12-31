@@ -27,7 +27,7 @@ func GetUserGroupCacheOS() *UserGroupCache {
 		ugs:           map[string]*UserGroup{},
 		interval:      cleanerInterval * time.Second,
 		lookup:        user.Lookup,
-		lookupGroupId: user.LookupGroupId,
+		lookupGroupID: user.LookupGroupId,
 		groupIds:      wrappedGroupIds,
 	}
 }

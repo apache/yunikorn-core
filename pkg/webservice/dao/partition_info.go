@@ -16,7 +16,7 @@ limitations under the License.
 package dao
 
 type PartitionDAOInfo struct {
-	PartitionName string            `json:"partitionname"`
+	PartitionName string            `json:"partitionName"`
 	Capacity      PartitionCapacity `json:"capacity"`
 	Nodes         []NodeInfo        `json:"nodes"`
 	Queues        []QueueDAOInfo    `json:"queues"`
@@ -28,6 +28,6 @@ type PartitionCapacity struct {
 }
 
 type NodeInfo struct {
-	NodeId     string `json:"nodeId"`
+	NodeID     string `json:"nodeID"`
 	Capability string `json:"capability"`
 }

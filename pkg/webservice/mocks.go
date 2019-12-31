@@ -29,11 +29,11 @@ func getDummyPartitionJson() *dao.PartitionDAOInfo {
 	partitionInfo.Nodes = []dao.NodeInfo{
 		{
 			Capability: "3000mb, 200vcores",
-			NodeId:     "node1",
+			NodeID:     "node1",
 		},
 		{
 			Capability: "5000mb, 250vcores",
-			NodeId:     "node2",
+			NodeID:     "node2",
 		},
 	}
 	partitionInfo.Queues = []dao.QueueDAOInfo{

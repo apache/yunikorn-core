@@ -44,7 +44,7 @@ type SchedulerNodeEvent struct {
 
 // From Cache to scheduler, change in resources under preemption for the node
 type PreemptedNodeResource struct {
-	NodeId       string
+	NodeID       string
 	Partition    string
 	PreemptedRes *resources.Resource
 }

@@ -28,7 +28,7 @@ type SchedulerApi interface {
 	Update(request *si.UpdateRequest) error
 
 	// Notify scheduler to reload configuration and hot-refresh in-memory state based on configuration changes
-	ReloadConfiguration(clusterId string) error
+	ReloadConfiguration(clusterID string) error
 }
 
 // RM side needs to implement this API

@@ -29,7 +29,7 @@ import (
 )
 
 type SchedulingNode struct {
-	NodeId string
+	NodeID string
 
 	// Private info
 	nodeInfo                *cache.NodeInfo
@@ -48,7 +48,7 @@ func NewSchedulingNode(info *cache.NodeInfo) *SchedulingNode {
 	}
 	return &SchedulingNode{
 		nodeInfo:                info,
-		NodeId:                  info.NodeId,
+		NodeID:                  info.NodeID,
 		allocatingResource:      resources.NewResource(),
 		preemptingResource:      resources.NewResource(),
 		cachedAvailableUpToDate: true,
@@ -100,7 +100,7 @@ func (sn *SchedulingNode) handleAllocationUpdate(confirmed *resources.Resource) 
 	sn.lock.Lock()
 	defer sn.lock.Unlock()
 	log.Logger().Debug("allocations in progress increased",
-		zap.String("nodeId", sn.NodeId),
+		zap.String("nodeID", sn.NodeID),
 		zap.Any("confirmed", confirmed))
 
 	sn.cachedAvailableUpToDate = true
@@ -127,7 +127,7 @@ func (sn *SchedulingNode) handlePreemptionUpdate(preempted *resources.Resource) 
 	sn.lock.Lock()
 	defer sn.lock.Unlock()
 	log.Logger().Debug("preempted resources released",
-		zap.String("nodeId", sn.NodeId),
+		zap.String("nodeID", sn.NodeID),
 		zap.Any("preempted", preempted))
 
 	sn.preemptingResource.SubFrom(preempted)
@@ -148,7 +148,7 @@ func (sn *SchedulingNode) CheckAndAllocateResource(delta *resources.Resource, pr
 	}
 	if resources.FitIn(available, newAllocating) {
 		log.Logger().Debug("allocations in progress updated",
-			zap.String("nodeId", sn.NodeId),
+			zap.String("nodeID", sn.NodeID),
 			zap.Any("total unconfirmed", newAllocating))
 		sn.cachedAvailableUpToDate = true
 		sn.allocatingResource = newAllocating
@@ -163,25 +163,25 @@ func (sn *SchedulingNode) CheckAndAllocateResource(delta *resources.Resource, pr
 // The caller must thus not rely on all plugins being executed.
 // This is a lock free call as it does not change the node and multiple predicate checks could be
 // run at the same time.
-func (sn *SchedulingNode) CheckAllocateConditions(allocId string) bool {
+func (sn *SchedulingNode) CheckAllocateConditions(allocID string) bool {
 	if !sn.nodeInfo.IsSchedulable() {
 		log.Logger().Debug("node is unschedulable",
-			zap.String("nodeId", sn.NodeId))
+			zap.String("nodeID", sn.NodeID))
 		return false
 	}
 
 	// Check the predicates plugin (k8shim)
 	if plugin := plugins.GetPredicatesPlugin(); plugin != nil {
 		log.Logger().Debug("predicates",
-			zap.String("allocationId", allocId),
-			zap.String("nodeId", sn.NodeId))
+			zap.String("allocationId", allocID),
+			zap.String("nodeID", sn.NodeID))
 		if err := plugin.Predicates(&si.PredicatesArgs{
-			AllocationKey: allocId,
-			NodeId:        sn.NodeId,
+			AllocationKey: allocID,
+			NodeID:        sn.NodeID,
 		}); err != nil {
 			log.Logger().Debug("running predicates failed",
-				zap.String("allocationId", allocId),
-				zap.String("nodeId", sn.NodeId),
+				zap.String("allocationId", allocID),
+				zap.String("nodeID", sn.NodeID),
 				zap.Error(err))
 			return false
 		}

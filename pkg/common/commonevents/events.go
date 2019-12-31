@@ -22,7 +22,7 @@ import (
 )
 
 type RemoveRMPartitionsEvent struct {
-	RmId    string
+	RmID    string
 	Channel chan *Result
 }
 
@@ -32,7 +32,7 @@ type RegisterRMEvent struct {
 }
 
 type ConfigUpdateRMEvent struct {
-	RmId    string
+	RmID    string
 	Channel chan *Result
 }
 
@@ -46,8 +46,8 @@ type EventHandler interface {
 }
 
 type AllocationProposal struct {
-	NodeId            string
-	ApplicationId     string
+	NodeID            string
+	ApplicationID     string
 	QueueName         string
 	AllocatedResource *resources.Resource
 	AllocationKey     string
@@ -59,11 +59,11 @@ type AllocationProposal struct {
 // Message from scheduler about release allocation
 type ReleaseAllocation struct {
 	// optional, when this is set, only release allocation by given uuid.
-	Uuid string
+	UUID string
 	// when this is set, filter allocations by app id.
 	// empty value will filter allocations don't belong to app.
 	// when app id is set and uuid not set, release all allocations under the app id.
-	ApplicationId string
+	ApplicationID string
 	// Which partition to release, required.
 	PartitionName string
 	// For human-readable
@@ -72,10 +72,10 @@ type ReleaseAllocation struct {
 	ReleaseType si.AllocationReleaseResponse_TerminationType
 }
 
-func NewReleaseAllocation(uuid, appId, partitionName, message string, releaseType si.AllocationReleaseResponse_TerminationType) *ReleaseAllocation {
+func NewReleaseAllocation(uuid, appID, partitionName, message string, releaseType si.AllocationReleaseResponse_TerminationType) *ReleaseAllocation {
 	return &ReleaseAllocation{
-		Uuid:          uuid,
-		ApplicationId: appId,
+		UUID:          uuid,
+		ApplicationID: appID,
 		PartitionName: partitionName,
 		Message:       message,
 		ReleaseType:   releaseType,

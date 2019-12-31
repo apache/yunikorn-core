@@ -103,7 +103,7 @@ func TestManagedSubQueues(t *testing.T) {
 	}
 
 	// cannot remove child with app in it
-	app := NewSchedulingApplication(&cache.ApplicationInfo{ApplicationId: "test"})
+	app := NewSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "test"})
 	leaf.AddSchedulingApplication(app)
 
 	// both parent and leaf are marked for removal
@@ -157,7 +157,7 @@ func TestUnManagedSubQueues(t *testing.T) {
 	}
 
 	// cannot remove child with app in it
-	app := NewSchedulingApplication(&cache.ApplicationInfo{ApplicationId: "test"})
+	app := NewSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "test"})
 	leaf.AddSchedulingApplication(app)
 
 	// try to mark parent and leaf for removal

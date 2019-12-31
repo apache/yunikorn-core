@@ -28,7 +28,7 @@ import (
 type NodeInfo struct {
 	// Fields for fast access These fields are considered read only.
 	// Values should only be set when creating a new node and never changed.
-	NodeId        string
+	NodeID        string
 	Hostname      string
 	Rackname      string
 	Partition     string
@@ -51,7 +51,7 @@ func NewNodeInfo(proto *si.NewNodeInfo) *NodeInfo {
 		return nil
 	}
 	m := &NodeInfo{
-		NodeId:            proto.NodeId,
+		NodeID:            proto.NodeID,
 		TotalResource:     resources.NewResourceFromProto(proto.SchedulableResource),
 		allocatedResource: resources.NewResource(),
 		allocations:       make(map[string]*AllocationInfo),
@@ -126,7 +126,7 @@ func (ni *NodeInfo) AddAllocation(alloc *AllocationInfo) {
 	ni.lock.Lock()
 	defer ni.lock.Unlock()
 
-	ni.allocations[alloc.AllocationProto.Uuid] = alloc
+	ni.allocations[alloc.AllocationProto.UUID] = alloc
 	ni.allocatedResource.AddTo(alloc.AllocatedResource)
 	ni.availableResource.SubFrom(alloc.AllocatedResource)
 }

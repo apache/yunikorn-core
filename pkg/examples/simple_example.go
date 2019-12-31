@@ -64,7 +64,7 @@ partitions:
 
 	_, err := proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{
-			RmId:        "rm:123",
+			RmID:        "rm:123",
 			PolicyGroup: "policygroup",
 			Version:     "0.0.2",
 		}, mockRM)
@@ -77,7 +77,7 @@ partitions:
 	err = proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
-				NodeId: "node-1:1234",
+				NodeID: "node-1:1234",
 				Attributes: map[string]string{
 					"si.io/hostname": "node-1",
 					"si.io/rackname": "rack-1",
@@ -90,7 +90,7 @@ partitions:
 				},
 			},
 			{
-				NodeId: "node-2:1234",
+				NodeID: "node-2:1234",
 				Attributes: map[string]string{
 					"si.io/hostname": "node-2",
 					"si.io/rackname": "rack-1",
@@ -105,7 +105,7 @@ partitions:
 		},
 		// Please note that RM id is very important, should not be empty, and remember always set it
 		// for ALL update request
-		RmId: "rm:123",
+		RmID: "rm:123",
 	})
 
 	if err != nil {
@@ -118,7 +118,7 @@ partitions:
 	err = proxy.Update(&si.UpdateRequest{
 		NewApplications: []*si.AddApplicationRequest{
 			{
-				ApplicationId: "app-1",
+				ApplicationID: "app-1",
 				QueueName:     "a",
 				PartitionName: "",
 				Ugi: &si.UserGroupInformation{
@@ -126,7 +126,7 @@ partitions:
 				},
 			},
 		},
-		RmId: "rm:123",
+		RmID: "rm:123",
 	})
 
 	if err != nil {
@@ -148,9 +148,9 @@ partitions:
 					},
 				},
 				MaxAllocations: 20,
-				ApplicationId:  "app-1",
+				ApplicationID:  "app-1",
 			},
 		},
-		RmId: "rm:123",
+		RmID: "rm:123",
 	})
 }

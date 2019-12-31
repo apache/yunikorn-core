@@ -29,7 +29,7 @@ func GetUserGroupNoResolve() *UserGroupCache {
 		ugs:           map[string]*UserGroup{},
 		interval:      cleanerInterval * time.Second,
 		lookup:        noLookupUser,
-		lookupGroupId: noLookupGroupId,
+		lookupGroupID: noLookupGroupID,
 		groupIds:      noLookupGroupIds,
 	}
 }
@@ -44,7 +44,7 @@ func noLookupUser(userName string) (*user.User, error) {
 }
 
 // Echo the group as it comes in
-func noLookupGroupId(gid string) (*user.Group, error) {
+func noLookupGroupID(gid string) (*user.Group, error) {
 	group := user.Group{Gid: gid}
 	group.Name = gid
 	return &group, nil

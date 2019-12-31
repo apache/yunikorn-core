@@ -92,8 +92,8 @@ func newSingleAllocationProposal(alloc *SchedulingAllocation) *cacheevent.Alloca
 	return &cacheevent.AllocationProposalBundleEvent{
 		AllocationProposals: []*commonevents.AllocationProposal{
 			{
-				NodeId:            alloc.NodeId,
-				ApplicationId:     alloc.SchedulingAsk.ApplicationId,
+				NodeID:            alloc.NodeID,
+				ApplicationID:     alloc.SchedulingAsk.ApplicationID,
 				QueueName:         alloc.SchedulingAsk.QueueName,
 				AllocatedResource: alloc.SchedulingAsk.AllocatedResource,
 				AllocationKey:     alloc.SchedulingAsk.AskProto.AllocationKey,
@@ -129,9 +129,9 @@ func (m *Scheduler) updateSchedulingRequest(schedulingAsk *SchedulingAllocationA
 	defer m.lock.Unlock()
 
 	// Get SchedulingApplication
-	schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(schedulingAsk.ApplicationId, schedulingAsk.PartitionName)
+	schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(schedulingAsk.ApplicationID, schedulingAsk.PartitionName)
 	if schedulingApp == nil {
-		return fmt.Errorf("cannot find scheduling application %s, for allocation %s", schedulingAsk.ApplicationId, schedulingAsk.AskProto.AllocationKey)
+		return fmt.Errorf("cannot find scheduling application %s, for allocation %s", schedulingAsk.ApplicationID, schedulingAsk.AskProto.AllocationKey)
 	}
 
 	// found now update the pending requests for the queue that the app is running in
@@ -148,9 +148,9 @@ func (m *Scheduler) updateSchedulingRequestPendingAskByDelta(allocProposal *comm
 	defer m.lock.Unlock()
 
 	// Get SchedulingApplication
-	schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(allocProposal.ApplicationId, allocProposal.PartitionName)
+	schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(allocProposal.ApplicationID, allocProposal.PartitionName)
 	if schedulingApp == nil {
-		return fmt.Errorf("cannot find scheduling application %s, for allocation ID %s", allocProposal.ApplicationId, allocProposal.AllocationKey)
+		return fmt.Errorf("cannot find scheduling application %s, for allocation ID %s", allocProposal.ApplicationID, allocProposal.AllocationKey)
 	}
 
 	// found, now update the pending requests for the queues
@@ -172,16 +172,16 @@ func (m *Scheduler) removeApplication(request *si.RemoveApplicationRequest) erro
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	if _, err := m.clusterSchedulingContext.RemoveSchedulingApplication(request.ApplicationId, request.PartitionName); err != nil {
+	if _, err := m.clusterSchedulingContext.RemoveSchedulingApplication(request.ApplicationID, request.PartitionName); err != nil {
 		log.Logger().Error("failed to remove apps",
-			zap.String("appId", request.ApplicationId),
+			zap.String("appID", request.ApplicationID),
 			zap.String("partitionName", request.PartitionName),
 			zap.Error(err))
 		return err
 	}
 
 	log.Logger().Info("app removed",
-		zap.String("appId", request.ApplicationId),
+		zap.String("appID", request.ApplicationID),
 		zap.String("partitionName", request.PartitionName))
 	return nil
 }
@@ -212,7 +212,7 @@ func (m *Scheduler) processAllocationReleaseByAllocationKey(
 	// For all Requests
 	if len(allocationAsksToRelease) > 0 {
 		for _, toRelease := range allocationAsksToRelease {
-			schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(toRelease.ApplicationId, toRelease.PartitionName)
+			schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(toRelease.ApplicationID, toRelease.PartitionName)
 			if schedulingApp != nil {
 				delta, _ := schedulingApp.Requests.RemoveAllocationAsk(toRelease.Allocationkey)
 				if !resources.IsZero(delta) {
@@ -221,7 +221,7 @@ func (m *Scheduler) processAllocationReleaseByAllocationKey(
 
 				log.Logger().Info("release allocation",
 					zap.String("allocation", toRelease.Allocationkey),
-					zap.String("appId", toRelease.ApplicationId),
+					zap.String("appID", toRelease.ApplicationID),
 					zap.String("deductPendingResource", delta.String()),
 					zap.String("message", toRelease.Message))
 			}
@@ -231,10 +231,10 @@ func (m *Scheduler) processAllocationReleaseByAllocationKey(
 	if len(allocationsToRelease) > 0 {
 		toReleaseAllocations := make([]*si.ForgotAllocation, len(allocationAsksToRelease))
 		for _, toRelease := range allocationsToRelease {
-			schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(toRelease.ApplicationId, toRelease.PartitionName)
+			schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(toRelease.ApplicationID, toRelease.PartitionName)
 			if schedulingApp != nil {
 				for _, alloc := range schedulingApp.ApplicationInfo.GetAllAllocations() {
-					if alloc.AllocationProto.Uuid == toRelease.Uuid {
+					if alloc.AllocationProto.UUID == toRelease.UUID {
 						toReleaseAllocations = append(toReleaseAllocations, &si.ForgotAllocation{
 							AllocationKey: alloc.AllocationProto.AllocationKey,
 						})
@@ -262,7 +262,7 @@ func (m *Scheduler) processAllocationReleaseByAllocationKey(
 	}
 }
 
-func (m *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocation, rmId string) {
+func (m *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocation, rmID string) {
 	// the recovering of existing allocations looks like a replay of the scheduling process,
 	// in general, a scheduling process takes following steps
 	//  1) add scheduling info to schedulers cache, including app, pending requests etc
@@ -272,28 +272,28 @@ func (m *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocat
 	// the recovery is repeating all steps except step 2
 	for _, alloc := range existingAllocations {
 		log.Logger().Info("recovering allocations for app",
-			zap.String("applicationId", alloc.ApplicationId),
-			zap.String("nodeId", alloc.NodeId),
+			zap.String("applicationId", alloc.ApplicationID),
+			zap.String("nodeID", alloc.NodeID),
 			zap.String("queueName", alloc.QueueName),
 			zap.String("partition", alloc.PartitionName),
-			zap.String("allocationId", alloc.Uuid))
+			zap.String("allocationId", alloc.UUID))
 
 		// add scheduling asks
-		schedulingAsk := ConvertFromAllocation(alloc, rmId)
+		schedulingAsk := ConvertFromAllocation(alloc, rmID)
 		if err := m.updateSchedulingRequest(schedulingAsk); err != nil {
 			log.Logger().Warn("failed...", zap.Error(err))
 		}
 
 		// handle allocation proposals
 		if err := m.updateSchedulingRequestPendingAskByDelta(&commonevents.AllocationProposal{
-			NodeId:            alloc.NodeId,
-			ApplicationId:     alloc.ApplicationId,
+			NodeID:            alloc.NodeID,
+			ApplicationID:     alloc.ApplicationID,
 			QueueName:         alloc.QueueName,
 			AllocatedResource: resources.NewResourceFromProto(alloc.ResourcePerAlloc),
 			AllocationKey:     alloc.AllocationKey,
 			Tags:              alloc.AllocationTags,
 			Priority:          alloc.Priority,
-			PartitionName:     common.GetNormalizedPartitionName(alloc.PartitionName, rmId),
+			PartitionName:     common.GetNormalizedPartitionName(alloc.PartitionName, rmID),
 		}, -1); err != nil {
 			log.Logger().Error("failed to increase pending ask",
 				zap.Error(err))
@@ -349,14 +349,14 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
 	if len(ev.NewAsks) > 0 {
 		rejectedAsks := make([]*si.RejectedAllocationAsk, 0)
 
-		var rmId = ""
+		var rmID = ""
 		for _, ask := range ev.NewAsks {
-			rmId = common.GetRMIdFromPartitionName(ask.PartitionName)
+			rmID = common.GetRMIdFromPartitionName(ask.PartitionName)
 			schedulingAsk := NewSchedulingAllocationAsk(ask)
 			if err := m.updateSchedulingRequest(schedulingAsk); err != nil {
 				rejectedAsks = append(rejectedAsks, &si.RejectedAllocationAsk{
 					AllocationKey: schedulingAsk.AskProto.AllocationKey,
-					ApplicationId: schedulingAsk.ApplicationId,
+					ApplicationID: schedulingAsk.ApplicationID,
 					Reason:        err.Error()})
 			}
 		}
@@ -365,7 +365,7 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
 		if len(rejectedAsks) > 0 {
 			m.eventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMRejectedAllocationAskEvent{
 				RejectedAllocationAsks: rejectedAsks,
-				RMId:                   rmId,
+				RmID:                   rmID,
 			})
 		}
 	}
@@ -384,25 +384,25 @@ func (m *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerAp
 			rmID = common.GetRMIdFromPartitionName(app.Partition)
 			if err := m.addNewApplication(app); err != nil {
 				log.Logger().Debug("rejecting application in scheduler",
-					zap.String("appId", app.ApplicationId),
+					zap.String("appID", app.ApplicationID),
 					zap.String("partitionName", app.Partition),
 					zap.Error(err))
 				// update cache
 				m.eventHandlers.CacheEventHandler.HandleEvent(
 					&cacheevent.RejectedNewApplicationEvent{
-						ApplicationId: app.ApplicationId,
+						ApplicationID: app.ApplicationID,
 						PartitionName: app.Partition,
 						Reason:        err.Error(),
 					})
 				rejectedApps = append(rejectedApps, &si.RejectedApplication{
-					ApplicationId: app.ApplicationId,
+					ApplicationID: app.ApplicationID,
 					Reason:        err.Error(),
 				})
 				// app is rejected by the scheduler
 				_ = app.HandleApplicationEvent(cache.RejectApplication)
 			} else {
 				acceptedApps = append(acceptedApps, &si.AcceptedApplication{
-					ApplicationId: app.ApplicationId,
+					ApplicationID: app.ApplicationID,
 				})
 				// app is accepted by scheduler
 				_ = app.HandleApplicationEvent(cache.AcceptApplication)
@@ -410,7 +410,7 @@ func (m *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerAp
 		}
 		// notify RM proxy about apps added and rejected
 		m.eventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMApplicationUpdateEvent{
-			RMId:                 rmID,
+			RmID:                 rmID,
 			AcceptedApplications: acceptedApps,
 			RejectedApplications: rejectedApps,
 		})
@@ -422,18 +422,18 @@ func (m *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerAp
 
 			if err != nil {
 				log.Logger().Error("failed to remove app from partition",
-					zap.String("appId", app.ApplicationId),
+					zap.String("appID", app.ApplicationID),
 					zap.String("partitionName", app.PartitionName),
 					zap.Error(err))
 				continue
 			}
-			m.eventHandlers.CacheEventHandler.HandleEvent(&cacheevent.RemovedApplicationEvent{ApplicationId: app.ApplicationId, PartitionName: app.PartitionName})
+			m.eventHandlers.CacheEventHandler.HandleEvent(&cacheevent.RemovedApplicationEvent{ApplicationID: app.ApplicationID, PartitionName: app.PartitionName})
 		}
 	}
 }
 
 func (m *Scheduler) removePartitionsBelongToRM(event *commonevents.RemoveRMPartitionsEvent) {
-	m.clusterSchedulingContext.RemoveSchedulingPartitionsByRMId(event.RmId)
+	m.clusterSchedulingContext.RemoveSchedulingPartitionsByRMId(event.RmID)
 
 	// Send this event to cache
 	m.eventHandlers.CacheEventHandler.HandleEvent(event)

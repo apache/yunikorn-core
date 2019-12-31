@@ -25,15 +25,15 @@ import (
 type SchedulingAllocation struct {
 	SchedulingAsk *SchedulingAllocationAsk
 	NumAllocation int32
-	NodeId        string
+	NodeID        string
 	Releases      []*commonevents.ReleaseAllocation
 	PartitionName string
 }
 
-func NewSchedulingAllocation(ask *SchedulingAllocationAsk, nodeId string) *SchedulingAllocation {
-	return &SchedulingAllocation{SchedulingAsk: ask, NodeId: nodeId, NumAllocation: 1, PartitionName: ask.PartitionName}
+func NewSchedulingAllocation(ask *SchedulingAllocationAsk, nodeID string) *SchedulingAllocation {
+	return &SchedulingAllocation{SchedulingAsk: ask, NodeID: nodeID, NumAllocation: 1, PartitionName: ask.PartitionName}
 }
 
 func (m *SchedulingAllocation) String() string {
-	return fmt.Sprintf("{AllocatioKey=%s,NumAllocation=%d,Node=%s", m.SchedulingAsk.AskProto.AllocationKey, m.NumAllocation, m.NodeId)
+	return fmt.Sprintf("{AllocatioKey=%s,NumAllocation=%d,Node=%s", m.SchedulingAsk.AskProto.AllocationKey, m.NumAllocation, m.NodeID)
 }

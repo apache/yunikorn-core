@@ -78,7 +78,7 @@ func TestRoundRobinNodeIterating(t *testing.T) {
 	// walk over the whole list
 	for i := 0; i < length; i++ {
 		loc := (i + start) % length
-		if node := rni.Next(); node == nil || node.NodeId != "node-"+strconv.Itoa(loc) {
+		if node := rni.Next(); node == nil || node.NodeID != "node-"+strconv.Itoa(loc) {
 			t.Errorf("incorrect node returned: %v", node)
 		}
 	}
@@ -100,7 +100,7 @@ func TestRoundRobinNodeIterating(t *testing.T) {
 	if node == nil || rni.startIdx == -1 {
 		t.Fatalf("next should have set the start %d, and returned node: %v", rni.startIdx, node)
 	}
-	if node.NodeId != "node-"+strconv.Itoa(rni.startIdx) {
+	if node.NodeID != "node-"+strconv.Itoa(rni.startIdx) {
 		t.Errorf("incorrect node returned: %v", node)
 	}
 }
@@ -141,7 +141,7 @@ func TestDefaultNodeIterating(t *testing.T) {
 	}
 	// walk over the whole list
 	for i := 0; i < length; i++ {
-		if node := dni.Next(); node == nil || node.NodeId != "node-"+strconv.Itoa(i) {
+		if node := dni.Next(); node == nil || node.NodeID != "node-"+strconv.Itoa(i) {
 			t.Errorf("incorrect node returned: %v", node)
 		}
 	}
@@ -163,16 +163,16 @@ func TestDefaultNodeIterating(t *testing.T) {
 	if node == nil {
 		t.Fatal("next should have returned a node")
 	}
-	if node.NodeId != "node-0" {
+	if node.NodeID != "node-0" {
 		t.Errorf("incorrect node returned expected node-0 got: %v", node)
 	}
 }
 
 // Simple node with just an ID in the cache node.
 // That is all we need for iteration
-func newSchedNode(nodeId string) *SchedulingNode {
+func newSchedNode(nodeID string) *SchedulingNode {
 	nodeInfo := &cache.NodeInfo{
-		NodeId: nodeId,
+		NodeID: nodeID,
 	}
 	return NewSchedulingNode(nodeInfo)
 }

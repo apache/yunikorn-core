@@ -107,7 +107,7 @@ func (m *Scheduler) regularAllocate(nodeIterator NodeIterator, candidate *Schedu
 					AssumedAllocations: []*si.AssumedAllocation{
 						{
 							AllocationKey: candidate.AskProto.AllocationKey,
-							NodeId:        node.NodeId,
+							NodeID:        node.NodeID,
 						},
 					},
 				}); err != nil {
@@ -117,7 +117,7 @@ func (m *Scheduler) regularAllocate(nodeIterator NodeIterator, candidate *Schedu
 			}
 
 			// return allocation
-			return NewSchedulingAllocation(candidate, node.NodeId)
+			return NewSchedulingAllocation(candidate, node.NodeID)
 		}
 	}
 	return nil

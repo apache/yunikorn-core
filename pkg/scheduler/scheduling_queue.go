@@ -150,7 +150,7 @@ func (sq *SchedulingQueue) DecPendingResource(delta *resources.Resource) {
 func (sq *SchedulingQueue) AddSchedulingApplication(app *SchedulingApplication) {
 	sq.lock.Lock()
 	defer sq.lock.Unlock()
-	sq.applications[app.ApplicationInfo.ApplicationId] = app
+	sq.applications[app.ApplicationInfo.ApplicationID] = app
 }
 
 // Remove scheduling app and pending resource of this queue and update the parent queues
@@ -159,7 +159,7 @@ func (sq *SchedulingQueue) RemoveSchedulingApplication(app *SchedulingApplicatio
 	// the tree and make updates requiring a write lock.
 	sq.lock.RLock()
 	// make sure that the app is assigned to this queue and not removed yet, if not found return
-	if _, ok := sq.applications[app.ApplicationInfo.ApplicationId]; !ok {
+	if _, ok := sq.applications[app.ApplicationInfo.ApplicationID]; !ok {
 		sq.lock.RUnlock()
 		return
 	}
@@ -177,7 +177,7 @@ func (sq *SchedulingQueue) RemoveSchedulingApplication(app *SchedulingApplicatio
 		log.Logger().Warn("Removing application made pending resources negative",
 			zap.Error(err))
 	}
-	delete(sq.applications, app.ApplicationInfo.ApplicationId)
+	delete(sq.applications, app.ApplicationInfo.ApplicationID)
 }
 
 // Get a copy of the child queues

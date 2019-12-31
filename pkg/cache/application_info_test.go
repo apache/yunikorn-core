@@ -25,18 +25,18 @@ import (
 	"github.com/cloudera/yunikorn-core/pkg/common/security"
 )
 
-func newApplicationInfo(appId, partition, queueName string) *ApplicationInfo {
+func newApplicationInfo(appID, partition, queueName string) *ApplicationInfo {
 	user := security.UserGroup{
 		User:   "testuser",
 		Groups: []string{},
 	}
 	tags := make(map[string]string)
-	return NewApplicationInfo(appId, partition, queueName, user, tags)
+	return NewApplicationInfo(appID, partition, queueName, user, tags)
 }
 
 func TestNewApplicationInfo(t *testing.T) {
 	appInfo := newApplicationInfo("app-00001", "default", "root.a")
-	assert.Equal(t, appInfo.ApplicationId, "app-00001")
+	assert.Equal(t, appInfo.ApplicationID, "app-00001")
 	assert.Equal(t, appInfo.Partition, "default")
 	assert.Equal(t, appInfo.QueueName, "root.a")
 	assert.Equal(t, appInfo.GetApplicationState(), New.String())

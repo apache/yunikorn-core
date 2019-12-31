@@ -23,10 +23,10 @@ import (
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 )
 
-func newNode(nodeId string, totalMap map[string]resources.Quantity) *SchedulingNode {
+func newNode(nodeID string, totalMap map[string]resources.Quantity) *SchedulingNode {
 	// leverage the cache test code
 	totalRes := resources.NewResourceFromMap(totalMap)
-	nodeInfo := cache.NewNodeForTest(nodeId, totalRes)
+	nodeInfo := cache.NewNodeForTest(nodeID, totalRes)
 	return NewSchedulingNode(nodeInfo)
 }
 
@@ -40,7 +40,7 @@ func TestNewSchedulingNode(t *testing.T) {
 	// this is just a wrapper so we can use it to test the real new
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100, "second": 100})
 	node = newNode("node-1", res.Resources)
-	if node == nil || node.NodeId != "node-1" {
+	if node == nil || node.NodeID != "node-1" {
 		t.Fatalf("node create failed which should not have %v", node)
 	}
 	// check the resource info all zero
@@ -60,7 +60,7 @@ func TestNewSchedulingNode(t *testing.T) {
 
 func TestCheckConditions(t *testing.T) {
 	node := newNode("node-1", map[string]resources.Quantity{"first": 100, "second": 100})
-	if node == nil || node.NodeId != "node-1" {
+	if node == nil || node.NodeID != "node-1" {
 		t.Fatalf("node create failed which should not have %v", node)
 	}
 
@@ -79,7 +79,7 @@ func TestCheckConditions(t *testing.T) {
 
 func TestCheckAllocate(t *testing.T) {
 	node := newNode("node-1", map[string]resources.Quantity{"first": 10})
-	if node == nil || node.NodeId != "node-1" {
+	if node == nil || node.NodeID != "node-1" {
 		t.Fatalf("node create failed which should not have %v", node)
 	}
 	if !node.cachedAvailableUpToDate {
@@ -102,7 +102,7 @@ func TestCheckAllocate(t *testing.T) {
 
 	// check if preempting adds to available
 	node = newNode("node-1", map[string]resources.Quantity{"first": 5})
-	if node == nil || node.NodeId != "node-1" {
+	if node == nil || node.NodeID != "node-1" {
 		t.Fatalf("node create failed which should not have %v", node)
 	}
 	node.incPreemptingResource(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
@@ -114,7 +114,7 @@ func TestCheckAllocate(t *testing.T) {
 
 func TestAllocatingResources(t *testing.T) {
 	node := newNode("node-1", map[string]resources.Quantity{"first": 100})
-	if node == nil || node.NodeId != "node-1" {
+	if node == nil || node.NodeID != "node-1" {
 		t.Fatalf("node create failed which should not have %v", node)
 	}
 
@@ -142,7 +142,7 @@ func TestAllocatingResources(t *testing.T) {
 
 func TestPreemptingResources(t *testing.T) {
 	node := newNode("node-1", map[string]resources.Quantity{"first": 10})
-	if node == nil || node.NodeId != "node-1" {
+	if node == nil || node.NodeID != "node-1" {
 		t.Fatalf("node create failed which should not have %v", node)
 	}
 
@@ -170,7 +170,7 @@ func TestPreemptingResources(t *testing.T) {
 
 func TestAvailableDirty(t *testing.T) {
 	node := newNode("node-1", map[string]resources.Quantity{"first": 10})
-	if node == nil || node.NodeId != "node-1" {
+	if node == nil || node.NodeID != "node-1" {
 		t.Fatalf("node create failed which should not have %v", node)
 	}
 	node.getAvailableResource()

@@ -29,7 +29,7 @@ type AllocationInfo struct {
 	AllocationProto *si.Allocation
 
 	// Other information
-	ApplicationId     string
+	ApplicationID     string
 	AllocatedResource *resources.Resource
 }
 
@@ -38,15 +38,15 @@ func NewAllocationInfo(uuid string, alloc *commonevents.AllocationProposal) *All
 		AllocationProto: &si.Allocation{
 			AllocationKey:    alloc.AllocationKey,
 			AllocationTags:   alloc.Tags,
-			Uuid:             uuid,
+			UUID:             uuid,
 			ResourcePerAlloc: alloc.AllocatedResource.ToProto(),
 			Priority:         alloc.Priority,
 			QueueName:        alloc.QueueName,
-			NodeId:           alloc.NodeId,
-			PartitionName:    common.GetPartitionNameWithoutClusterId(alloc.PartitionName),
-			ApplicationId:    alloc.ApplicationId,
+			NodeID:           alloc.NodeID,
+			PartitionName:    common.GetPartitionNameWithoutClusterID(alloc.PartitionName),
+			ApplicationID:    alloc.ApplicationID,
 		},
-		ApplicationId:     alloc.ApplicationId,
+		ApplicationID:     alloc.ApplicationID,
 		AllocatedResource: alloc.AllocatedResource,
 	}
 

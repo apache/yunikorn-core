@@ -135,7 +135,7 @@ func (m *AppPlacementManager) PlaceApplication(app *cache.ApplicationInfo) error
 	for _, checkRule := range m.rules {
 		log.Logger().Debug("Executing rule for placing application",
 			zap.String("ruleName", checkRule.getName()),
-			zap.String("application", app.ApplicationId))
+			zap.String("application", app.ApplicationID))
 		queueName, err = checkRule.placeApplication(app, m.info)
 		if err != nil {
 			log.Logger().Error("rule execution failed",
@@ -161,7 +161,7 @@ func (m *AppPlacementManager) PlaceApplication(app *cache.ApplicationInfo) error
 					log.Logger().Debug("Submit access denied on queue",
 						zap.String("queueName", queue.GetQueuePath()),
 						zap.String("ruleName", checkRule.getName()),
-						zap.String("application", app.ApplicationId))
+						zap.String("application", app.ApplicationID))
 					// reset the queue name for the last rule in the chain
 					queueName = ""
 					continue
@@ -178,7 +178,7 @@ func (m *AppPlacementManager) PlaceApplication(app *cache.ApplicationInfo) error
 					log.Logger().Debug("Submit access denied on queue",
 						zap.String("queueName", queueName),
 						zap.String("ruleName", checkRule.getName()),
-						zap.String("application", app.ApplicationId))
+						zap.String("application", app.ApplicationID))
 					// reset the queue name for the last rule in the chain
 					queueName = ""
 					continue
@@ -189,7 +189,7 @@ func (m *AppPlacementManager) PlaceApplication(app *cache.ApplicationInfo) error
 		}
 	}
 	log.Logger().Debug("Rule result for placing application",
-		zap.String("application", app.ApplicationId),
+		zap.String("application", app.ApplicationID),
 		zap.String("queueName", queueName))
 	// no more rules to check no queueName found reject placement
 	if queueName == "" {

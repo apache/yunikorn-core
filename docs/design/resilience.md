@@ -103,7 +103,7 @@ The structure of the messages looks like,
 ```
 message NewNodeInfo {
   // nodeID
-  string nodeId = 1;
+  string nodeID = 1;
   // optional node attributes
   map<string, string> attributes = 2;
   // total node resource

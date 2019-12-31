@@ -19,17 +19,17 @@ package scheduler
 import "github.com/cloudera/yunikorn-core/pkg/api"
 
 const (
-	defaultApplicationId = "_default_application_"
+	defaultApplicationID = "_default_application_"
 	defaultPartitionName = "_default_partition_"
 )
 
-func GetApplicationIdFromTags(tags map[string]string) string {
-	appId := tags[api.APPLICATION_ID]
+func GetApplicationIDFromTags(tags map[string]string) string {
+	appID := tags[api.APPLICATION_ID]
 
-	if appId == "" {
-		return defaultApplicationId
+	if appID == "" {
+		return defaultApplicationID
 	}
-	return appId
+	return appID
 }
 
 func GetPartitionFromTags(tags map[string]string) string {

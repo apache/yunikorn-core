@@ -46,7 +46,7 @@ type UserGroupCache struct {
 	ugs      map[string]*UserGroup
 	// methods that allow mocking of the class or extending to use non OS solutions
 	lookup        func(userName string) (*user.User, error)
-	lookupGroupId func(gid string) (*user.Group, error)
+	lookupGroupID func(gid string) (*user.Group, error)
 	groupIds      func(osUser *user.User) ([]string, error)
 }
 
@@ -203,7 +203,7 @@ func (ug *UserGroup) resolveGroups(osUser *user.User, c *UserGroupCache) error {
 	var groupName *user.Group
 	var err = error(nil)
 	// resolve the primary group and add it first
-	groupName, err = c.lookupGroupId(osUser.Gid)
+	groupName, err = c.lookupGroupID(osUser.Gid)
 	if err != nil {
 		ug.Groups = append(ug.Groups, osUser.Gid)
 	} else {
@@ -221,7 +221,7 @@ func (ug *UserGroup) resolveGroups(osUser *user.User, c *UserGroupCache) error {
 		if gid == osUser.Gid {
 			continue
 		}
-		groupName, err = c.lookupGroupId(gid)
+		groupName, err = c.lookupGroupID(gid)
 		if err != nil {
 			ug.Groups = append(ug.Groups, gid)
 		} else {

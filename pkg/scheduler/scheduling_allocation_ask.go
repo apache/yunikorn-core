@@ -31,7 +31,7 @@ type SchedulingAllocationAsk struct {
 	// Extracted info
 	AllocatedResource  *resources.Resource
 	PendingRepeatAsk   int32
-	ApplicationId      string
+	ApplicationID      string
 	PartitionName      string
 	NormalizedPriority int32
 	QueueName          string
@@ -45,14 +45,14 @@ func NewSchedulingAllocationAsk(ask *si.AllocationAsk) *SchedulingAllocationAsk 
 		AskProto:          ask,
 		AllocatedResource: resources.NewResourceFromProto(ask.ResourceAsk),
 		PendingRepeatAsk:  ask.MaxAllocations,
-		ApplicationId:     ask.ApplicationId,
+		ApplicationID:     ask.ApplicationID,
 		PartitionName:     ask.PartitionName,
 		// TODO, normalize priority from ask
 	}
 }
 
-func ConvertFromAllocation(allocation *si.Allocation, rmId string) *SchedulingAllocationAsk {
-	partitionWithRMId := common.GetNormalizedPartitionName(allocation.PartitionName, rmId)
+func ConvertFromAllocation(allocation *si.Allocation, rmID string) *SchedulingAllocationAsk {
+	partitionWithRMId := common.GetNormalizedPartitionName(allocation.PartitionName, rmID)
 	return &SchedulingAllocationAsk{
 		AskProto: &si.AllocationAsk{
 			AllocationKey:  allocation.AllocationKey,
@@ -60,13 +60,13 @@ func ConvertFromAllocation(allocation *si.Allocation, rmId string) *SchedulingAl
 			Tags:           allocation.AllocationTags,
 			Priority:       allocation.Priority,
 			MaxAllocations: 1,
-			ApplicationId:  allocation.ApplicationId,
+			ApplicationID:  allocation.ApplicationID,
 			PartitionName:  partitionWithRMId,
 		},
 		QueueName:         allocation.QueueName,
 		AllocatedResource: resources.NewResourceFromProto(allocation.ResourcePerAlloc),
 		PendingRepeatAsk:  1,
-		ApplicationId:     allocation.ApplicationId,
+		ApplicationID:     allocation.ApplicationID,
 		PartitionName:     partitionWithRMId,
 	}
 }

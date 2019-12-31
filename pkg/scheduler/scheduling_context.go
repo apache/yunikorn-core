@@ -53,12 +53,12 @@ func (csc *ClusterSchedulingContext) getPartitionMapClone() map[string]*Partitio
 	return newMap
 }
 
-func (csc *ClusterSchedulingContext) GetSchedulingApplication(appId string, partitionName string) *SchedulingApplication {
+func (csc *ClusterSchedulingContext) GetSchedulingApplication(appID string, partitionName string) *SchedulingApplication {
 	csc.lock.RLock()
 	defer csc.lock.RUnlock()
 
 	if partition := csc.partitions[partitionName]; partition != nil {
-		return partition.getApplication(appId)
+		return partition.getApplication(appID)
 	}
 
 	return nil
@@ -78,7 +78,7 @@ func (csc *ClusterSchedulingContext) GetSchedulingQueue(queueName string, partit
 
 func (csc *ClusterSchedulingContext) AddSchedulingApplication(schedulingApp *SchedulingApplication) error {
 	partitionName := schedulingApp.ApplicationInfo.Partition
-	appId := schedulingApp.ApplicationInfo.ApplicationId
+	appID := schedulingApp.ApplicationInfo.ApplicationID
 
 	csc.lock.Lock()
 	defer csc.lock.Unlock()
@@ -88,24 +88,24 @@ func (csc *ClusterSchedulingContext) AddSchedulingApplication(schedulingApp *Sch
 			return err
 		}
 	} else {
-		return fmt.Errorf("failed to find partition=%s while adding app=%s", partitionName, appId)
+		return fmt.Errorf("failed to find partition=%s while adding app=%s", partitionName, appID)
 	}
 
 	return nil
 }
 
-func (csc *ClusterSchedulingContext) RemoveSchedulingApplication(appId string, partitionName string) (*SchedulingApplication, error) {
+func (csc *ClusterSchedulingContext) RemoveSchedulingApplication(appID string, partitionName string) (*SchedulingApplication, error) {
 	csc.lock.Lock()
 	defer csc.lock.Unlock()
 
 	if partition := csc.partitions[partitionName]; partition != nil {
-		schedulingApp, err := partition.RemoveSchedulingApplication(appId)
+		schedulingApp, err := partition.RemoveSchedulingApplication(appID)
 		if err != nil {
 			return nil, err
 		}
 		return schedulingApp, nil
 	} else {
-		return nil, fmt.Errorf("failed to find partition=%s while remove app=%s", partitionName, appId)
+		return nil, fmt.Errorf("failed to find partition=%s while remove app=%s", partitionName, appID)
 	}
 }
 
@@ -147,14 +147,14 @@ func (csc *ClusterSchedulingContext) updateSchedulingPartitions(partitions []*ca
 	return nil
 }
 
-func (csc *ClusterSchedulingContext) RemoveSchedulingPartitionsByRMId(rmId string) {
+func (csc *ClusterSchedulingContext) RemoveSchedulingPartitionsByRMId(rmID string) {
 	csc.lock.Lock()
 	defer csc.lock.Unlock()
 	partitionToRemove := make(map[string]bool)
 
 	// Just remove corresponding partitions
 	for k, partition := range csc.partitions {
-		if partition.RmId == rmId {
+		if partition.RmID == rmID {
 			partition.partitionManager.stop = true
 			partitionToRemove[k] = true
 		}
@@ -215,7 +215,7 @@ func (csc *ClusterSchedulingContext) addSchedulingNode(info *cache.NodeInfo) {
 	partition := csc.partitions[info.Partition]
 	if partition == nil {
 		log.Logger().Info("partition not found for new scheduling node",
-			zap.String("nodeId", info.NodeId),
+			zap.String("nodeID", info.NodeID),
 			zap.String("partitionName", info.Partition))
 		return
 	}
@@ -231,27 +231,27 @@ func (csc *ClusterSchedulingContext) removeSchedulingNode(info *cache.NodeInfo) 
 	partition := csc.partitions[info.Partition]
 	if partition == nil {
 		log.Logger().Info("partition not found for removed scheduling node",
-			zap.String("nodeId", info.NodeId),
+			zap.String("nodeID", info.NodeID),
 			zap.String("partitionName", info.Partition))
 		return
 	}
-	partition.removeSchedulingNode(info.NodeId)
+	partition.removeSchedulingNode(info.NodeID)
 }
 
 // Get a scheduling node based name and partition.
 // Returns nil if the partition or node cannot be found.
-func (csc *ClusterSchedulingContext) GetSchedulingNode(nodeId, partitionName string) *SchedulingNode {
+func (csc *ClusterSchedulingContext) GetSchedulingNode(nodeID, partitionName string) *SchedulingNode {
 	csc.lock.Lock()
 	defer csc.lock.Unlock()
 
 	partition := csc.partitions[partitionName]
 	if partition == nil {
 		log.Logger().Info("partition not found for scheduling node",
-			zap.String("nodeId", nodeId),
+			zap.String("nodeID", nodeID),
 			zap.String("partitionName", partitionName))
 		return nil
 	}
-	return partition.getSchedulingNode(nodeId)
+	return partition.getSchedulingNode(nodeID)
 }
 
 // Inform the scheduling node of the proposed allocation result.
@@ -259,13 +259,13 @@ func (csc *ClusterSchedulingContext) GetSchedulingNode(nodeId, partitionName str
 // This is a lock free call: locks are taken while retrieving the node and when updating the node
 func (csc *ClusterSchedulingContext) updateSchedulingNodeAlloc(alloc *commonevents.AllocationProposal) {
 	// get the partition and node (both have to exist to get here)
-	node := csc.GetSchedulingNode(alloc.NodeId, alloc.PartitionName)
+	node := csc.GetSchedulingNode(alloc.NodeID, alloc.PartitionName)
 
 	if node == nil {
 		log.Logger().Warn("node was removed while event was processed",
 			zap.String("partition", alloc.PartitionName),
-			zap.String("nodeId", alloc.NodeId),
-			zap.String("applicationId", alloc.ApplicationId),
+			zap.String("nodeID", alloc.NodeID),
+			zap.String("applicationId", alloc.ApplicationID),
 			zap.String("allocationKey", alloc.AllocationKey))
 		return
 	}
@@ -281,10 +281,10 @@ func (csc *ClusterSchedulingContext) releasePreemptedResources(resources []sched
 	}
 	// walk over the list of preempted resources
 	for _, nodeRes := range resources {
-		node := csc.GetSchedulingNode(nodeRes.NodeId, nodeRes.Partition)
+		node := csc.GetSchedulingNode(nodeRes.NodeID, nodeRes.Partition)
 		if node == nil {
 			log.Logger().Info("scheduling node not found trying to release preempted resources",
-				zap.String("nodeId", nodeRes.NodeId),
+				zap.String("nodeID", nodeRes.NodeID),
 				zap.String("partitionName", nodeRes.Partition),
 				zap.Any("resource", nodeRes.PreemptedRes))
 			continue

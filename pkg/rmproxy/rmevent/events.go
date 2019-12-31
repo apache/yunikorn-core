@@ -19,28 +19,28 @@ package rmevent
 import "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 
 type RMNewAllocationsEvent struct {
-	RMId        string
+	RmID        string
 	Allocations []*si.Allocation
 }
 
 type RMApplicationUpdateEvent struct {
-	RMId                 string
+	RmID                 string
 	AcceptedApplications []*si.AcceptedApplication
 	RejectedApplications []*si.RejectedApplication
 }
 
 type RMRejectedAllocationAskEvent struct {
-	RMId                   string
+	RmID                   string
 	RejectedAllocationAsks []*si.RejectedAllocationAsk
 }
 
 type RMReleaseAllocationEvent struct {
-	RMId                string
+	RmID                string
 	ReleasedAllocations []*si.AllocationReleaseResponse
 }
 
 type RMNodeUpdateEvent struct {
-	RMId          string
+	RmID          string
 	AcceptedNodes []*si.AcceptedNode
 	RejectedNodes []*si.RejectedNode
 }

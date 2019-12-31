@@ -64,7 +64,7 @@ func (fr *fixedRule) placeApplication(app *cache.ApplicationInfo, info *cache.Pa
 	// before anything run the filter
 	if !fr.filter.allowUser(app.GetUser()) {
 		log.Logger().Debug("Fixed rule filtered",
-			zap.String("application", app.ApplicationId),
+			zap.String("application", app.ApplicationID),
 			zap.Any("user", app.GetUser()),
 			zap.String("queueName", fr.queue))
 		return "", nil
@@ -101,7 +101,7 @@ func (fr *fixedRule) placeApplication(app *cache.ApplicationInfo, info *cache.Pa
 	}
 	// Log the result before we really create
 	log.Logger().Debug("Fixed rule intermediate result",
-		zap.String("application", app.ApplicationId),
+		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
 	// get the queue object
 	queue := info.GetQueue(queueName)
@@ -110,7 +110,7 @@ func (fr *fixedRule) placeApplication(app *cache.ApplicationInfo, info *cache.Pa
 		return "", nil
 	}
 	log.Logger().Info("Fixed rule application placed",
-		zap.String("application", app.ApplicationId),
+		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
 	return queueName, nil
 }

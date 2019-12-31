@@ -68,35 +68,35 @@ func (m *MockRMCallbackHandler) RecvUpdateResponse(response *si.UpdateResponse) 
 	// m.t.Logf("---- Received Update=%s", strings.PrettyPrintStruct(response))
 
 	for _, app := range response.AcceptedApplications {
-		m.acceptedApplications[app.ApplicationId] = true
+		m.acceptedApplications[app.ApplicationID] = true
 	}
 
 	for _, app := range response.RejectedApplications {
-		m.rejectedApplications[app.ApplicationId] = true
+		m.rejectedApplications[app.ApplicationID] = true
 	}
 
 	for _, node := range response.AcceptedNodes {
-		m.acceptedNodes[node.NodeId] = true
+		m.acceptedNodes[node.NodeID] = true
 	}
 
 	for _, node := range response.RejectedNodes {
-		m.rejectedNodes[node.NodeId] = true
+		m.rejectedNodes[node.NodeID] = true
 	}
 
 	for _, alloc := range response.NewAllocations {
-		m.Allocations[alloc.Uuid] = alloc
-		if val, ok := m.nodeAllocations[alloc.NodeId]; ok {
+		m.Allocations[alloc.UUID] = alloc
+		if val, ok := m.nodeAllocations[alloc.NodeID]; ok {
 			val = append(val, alloc)
-			m.nodeAllocations[alloc.NodeId] = val
+			m.nodeAllocations[alloc.NodeID] = val
 		} else {
 			nodeAllocations := make([]*si.Allocation, 0)
 			nodeAllocations = append(nodeAllocations, alloc)
-			m.nodeAllocations[alloc.NodeId] = nodeAllocations
+			m.nodeAllocations[alloc.NodeID] = nodeAllocations
 		}
 	}
 
 	for _, alloc := range response.ReleasedAllocations {
-		delete(m.Allocations, alloc.Uuid)
+		delete(m.Allocations, alloc.UUID)
 	}
 
 	return nil
@@ -113,13 +113,13 @@ func (m *MockRMCallbackHandler) getAllocations() map[string]*si.Allocation {
 	return allocations
 }
 
-func waitForAcceptedApplications(m *MockRMCallbackHandler, appId string, timeoutMs int) {
+func waitForAcceptedApplications(m *MockRMCallbackHandler, appID string, timeoutMs int) {
 	var i = 0
 	for {
 		i++
 
 		m.lock.RLock()
-		accepted := m.acceptedApplications[appId]
+		accepted := m.acceptedApplications[appID]
 		m.lock.RUnlock()
 
 		if !accepted {
@@ -128,19 +128,19 @@ func waitForAcceptedApplications(m *MockRMCallbackHandler, appId string, timeout
 			return
 		}
 		if i*100 >= timeoutMs {
-			m.t.Fatalf("Failed to wait AcceptedApplications: %s", appId)
+			m.t.Fatalf("Failed to wait AcceptedApplications: %s", appID)
 			return
 		}
 	}
 }
 
-func waitForRejectedApplications(m *MockRMCallbackHandler, appId string, timeoutMs int) {
+func waitForRejectedApplications(m *MockRMCallbackHandler, appID string, timeoutMs int) {
 	var i = 0
 	for {
 		i++
 
 		m.lock.RLock()
-		wait := !m.rejectedApplications[appId] || m.acceptedApplications[appId]
+		wait := !m.rejectedApplications[appID] || m.acceptedApplications[appID]
 		m.lock.RUnlock()
 
 		if wait {
@@ -149,19 +149,19 @@ func waitForRejectedApplications(m *MockRMCallbackHandler, appId string, timeout
 			return
 		}
 		if i*100 >= timeoutMs {
-			m.t.Fatalf("Failed to wait RejectedApplications: %s", appId)
+			m.t.Fatalf("Failed to wait RejectedApplications: %s", appID)
 			return
 		}
 	}
 }
 
-func waitForAcceptedNodes(m *MockRMCallbackHandler, nodeId string, timeoutMs int) {
+func waitForAcceptedNodes(m *MockRMCallbackHandler, nodeID string, timeoutMs int) {
 	var i = 0
 	for {
 		i++
 
 		m.lock.RLock()
-		accepted := m.acceptedNodes[nodeId]
+		accepted := m.acceptedNodes[nodeID]
 		m.lock.RUnlock()
 
 		if !accepted {
@@ -170,7 +170,7 @@ func waitForAcceptedNodes(m *MockRMCallbackHandler, nodeId string, timeoutMs int
 			return
 		}
 		if i >= timeoutMs {
-			m.t.Fatalf("Failed to wait AcceptedNode: %s", nodeId)
+			m.t.Fatalf("Failed to wait AcceptedNode: %s", nodeID)
 			return
 		}
 	}
@@ -197,13 +197,13 @@ func waitForMinNumberOfAcceptedNodes(m *MockRMCallbackHandler, minNumNode int, t
 	}
 }
 
-func waitForRejectedNodes(m *MockRMCallbackHandler, nodeId string, timeoutMs int) {
+func waitForRejectedNodes(m *MockRMCallbackHandler, nodeID string, timeoutMs int) {
 	var i = 0
 	for {
 		i++
 
 		m.lock.RLock()
-		accepted := m.rejectedNodes[nodeId]
+		accepted := m.rejectedNodes[nodeID]
 		m.lock.RUnlock()
 
 		if !accepted {
@@ -212,7 +212,7 @@ func waitForRejectedNodes(m *MockRMCallbackHandler, nodeId string, timeoutMs int
 			return
 		}
 		if i*100 >= timeoutMs {
-			m.t.Fatalf("Failed to wait AcceptedNode: %s", nodeId)
+			m.t.Fatalf("Failed to wait AcceptedNode: %s", nodeID)
 			return
 		}
 	}
@@ -292,14 +292,14 @@ func waitForMinAllocations(m *MockRMCallbackHandler, nAlloc int, timeoutMs int) 
 	}
 }
 
-func waitForNodesAllocatedResource(t *testing.T, cache *cache.ClusterInfo, partitionName string, nodeIds []string, allocatdMemory resources.Quantity, timeoutMs int) {
+func waitForNodesAllocatedResource(t *testing.T, cache *cache.ClusterInfo, partitionName string, nodeIDs []string, allocatdMemory resources.Quantity, timeoutMs int) {
 	var i = 0
 	for {
 		i++
 
 		var totalNodeResource resources.Quantity = 0
-		for _, nodeId := range nodeIds {
-			totalNodeResource += cache.GetPartition(partitionName).GetNode(nodeId).GetAllocatedResource().Resources[resources.MEMORY]
+		for _, nodeID := range nodeIDs {
+			totalNodeResource += cache.GetPartition(partitionName).GetNode(nodeID).GetAllocatedResource().Resources[resources.MEMORY]
 		}
 
 		if totalNodeResource != allocatdMemory {
@@ -308,46 +308,46 @@ func waitForNodesAllocatedResource(t *testing.T, cache *cache.ClusterInfo, parti
 			return
 		}
 		if i*100 >= timeoutMs {
-			t.Fatalf("Failed to wait Allocations on partition %s and node %v", partitionName, nodeIds)
+			t.Fatalf("Failed to wait Allocations on partition %s and node %v", partitionName, nodeIDs)
 			return
 		}
 	}
 }
 
-func waitForNewSchedulerNode(t *testing.T, context *scheduler.ClusterSchedulingContext, nodeId string, partitionName string, timeoutMs int) {
+func waitForNewSchedulerNode(t *testing.T, context *scheduler.ClusterSchedulingContext, nodeID string, partitionName string, timeoutMs int) {
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
-		node := context.GetSchedulingNode(nodeId, partitionName)
+		node := context.GetSchedulingNode(nodeID, partitionName)
 		return node != nil
 	})
 	if err != nil {
-		t.Fatalf("Failed to wait for new scheduling node on partition %s, node %v", partitionName, nodeId)
+		t.Fatalf("Failed to wait for new scheduling node on partition %s, node %v", partitionName, nodeID)
 	}
 }
 
-func waitForRemovedSchedulerNode(t *testing.T, context *scheduler.ClusterSchedulingContext, nodeId string, partitionName string, timeoutMs int) {
+func waitForRemovedSchedulerNode(t *testing.T, context *scheduler.ClusterSchedulingContext, nodeID string, partitionName string, timeoutMs int) {
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
-		node := context.GetSchedulingNode(nodeId, partitionName)
+		node := context.GetSchedulingNode(nodeID, partitionName)
 		return node == nil
 	})
 	if err != nil {
-		t.Fatalf("Failed to wait for removal of scheduling node on partition %s, node %v", partitionName, nodeId)
+		t.Fatalf("Failed to wait for removal of scheduling node on partition %s, node %v", partitionName, nodeID)
 	}
 }
 
-func getApplicationInfoFromPartition(partitionInfo *cache.PartitionInfo, appId string) (*cache.ApplicationInfo, error) {
+func getApplicationInfoFromPartition(partitionInfo *cache.PartitionInfo, appID string) (*cache.ApplicationInfo, error) {
 	for _, appInfo := range partitionInfo.GetApplications() {
-		if appInfo.ApplicationId == appId {
+		if appInfo.ApplicationID == appID {
 			return appInfo, nil
 		}
 	}
-	return nil, fmt.Errorf("cannot find app %s from cache", appId)
+	return nil, fmt.Errorf("cannot find app %s from cache", appID)
 }
 
 func newAddAppRequest(apps map[string]string) []*si.AddApplicationRequest {
 	var requests []*si.AddApplicationRequest
 	for app, queue := range apps {
 		request := si.AddApplicationRequest{
-			ApplicationId: app,
+			ApplicationID: app,
 			QueueName:     queue,
 			PartitionName: "",
 			Ugi: &si.UserGroupInformation{

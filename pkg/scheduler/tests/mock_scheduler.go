@@ -59,11 +59,11 @@ type MockScheduler struct {
 	mockRM         *MockRMCallbackHandler
 	serviceContext *entrypoint.ServiceContext
 	t              *testing.T
-	rmId           string
+	rmID           string
 }
 
 func (m *MockScheduler) Init(t *testing.T, config string) {
-	m.rmId = "rm:123"
+	m.rmID = "rm:123"
 	m.t = t
 
 	// Start all tests
@@ -77,7 +77,7 @@ func (m *MockScheduler) Init(t *testing.T, config string) {
 
 	_, err := m.proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{
-			RmId:        m.rmId,
+			RmID:        m.rmID,
 			PolicyGroup: "policygroup",
 			Version:     "0.0.2",
 		}, m.mockRM)
@@ -87,34 +87,34 @@ func (m *MockScheduler) Init(t *testing.T, config string) {
 	}
 }
 
-func (m *MockScheduler) AddNode(nodeId string, resource *si.Resource) {
+func (m *MockScheduler) AddNode(nodeID string, resource *si.Resource) {
 	err := m.proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
-				NodeId: nodeId,
+				NodeID: nodeID,
 				Attributes: map[string]string{
-					"si.io/hostname": nodeId,
+					"si.io/hostname": nodeID,
 					"si.io/rackname": "rack-1",
 				},
 				SchedulableResource: resource,
 			},
 		},
-		RmId: m.rmId,
+		RmID: m.rmID,
 	})
 
 	if err != nil {
 		m.t.Error(err.Error())
 	}
 
-	waitForAcceptedNodes(m.mockRM, nodeId, 1000)
+	waitForAcceptedNodes(m.mockRM, nodeID, 1000)
 }
 
-func (m *MockScheduler) AddApp(appId string, queue string, partition string) {
+func (m *MockScheduler) AddApp(appID string, queue string, partition string) {
 	// Register 2 node, and add apps
 	err := m.proxy.Update(&si.UpdateRequest{
 		NewApplications: []*si.AddApplicationRequest{
 			{
-				ApplicationId: appId,
+				ApplicationID: appID,
 				QueueName:     queue,
 				PartitionName: partition,
 				Ugi: &si.UserGroupInformation{
@@ -122,14 +122,14 @@ func (m *MockScheduler) AddApp(appId string, queue string, partition string) {
 				},
 			},
 		},
-		RmId: m.rmId,
+		RmID: m.rmID,
 	})
 
 	if nil != err {
 		m.t.Error(err.Error())
 	}
 
-	waitForAcceptedApplications(m.mockRM, appId, 1000)
+	waitForAcceptedApplications(m.mockRM, appID, 1000)
 }
 
 func (m *MockScheduler) GetSchedulingQueue(queue string) *scheduler.SchedulingQueue {

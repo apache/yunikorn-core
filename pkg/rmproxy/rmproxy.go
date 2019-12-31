@@ -45,11 +45,11 @@ type RMProxy struct {
 	// Internal fields
 	pendingRMEvents chan interface{}
 
-	rmIdToCallback map[string]api.ResourceManagerCallback
+	rmIDToCallback map[string]api.ResourceManagerCallback
 
 	// config version is tracked per RM,
 	// it is used to determine if configs need to be reloaded
-	rmIdToConfigWatcher map[string]*configs.ConfigWatcher
+	rmIDToConfigWatcher map[string]*configs.ConfigWatcher
 
 	lock sync.RWMutex
 }
@@ -76,8 +76,8 @@ func (m *RMProxy) HandleEvent(ev interface{}) {
 
 func NewRMProxy() *RMProxy {
 	rm := &RMProxy{
-		rmIdToCallback:      make(map[string]api.ResourceManagerCallback),
-		rmIdToConfigWatcher: make(map[string]*configs.ConfigWatcher),
+		rmIDToCallback:      make(map[string]api.ResourceManagerCallback),
+		rmIDToConfigWatcher: make(map[string]*configs.ConfigWatcher),
 		pendingRMEvents:     make(chan interface{}, 1024*1024),
 	}
 	return rm
@@ -89,23 +89,23 @@ func (m *RMProxy) StartService(handlers handler.EventHandlers) {
 	go m.handleRMEvents()
 }
 
-func (m *RMProxy) handleRMRecvUpdateResponseError(rmId string, err error) {
+func (m *RMProxy) handleRMRecvUpdateResponseError(rmID string, err error) {
 	log.Logger().Error("failed to handle response",
-		zap.String("rmId", rmId),
+		zap.String("rmID", rmID),
 		zap.Error(err))
 }
 
-func (m *RMProxy) processUpdateResponse(rmId string, response *si.UpdateResponse) {
+func (m *RMProxy) processUpdateResponse(rmID string, response *si.UpdateResponse) {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
-	if callback := m.rmIdToCallback[rmId]; callback != nil {
+	if callback := m.rmIDToCallback[rmID]; callback != nil {
 		if err := callback.RecvUpdateResponse(response); err != nil {
-			m.handleRMRecvUpdateResponseError(rmId, err)
+			m.handleRMRecvUpdateResponseError(rmID, err)
 		}
 	} else {
 		log.Logger().DPanic("RM is not registered",
-			zap.String("rmId", rmId))
+			zap.String("rmID", rmID))
 	}
 }
 
@@ -117,7 +117,7 @@ func (m *RMProxy) processAllocationUpdateEvent(event *rmevent.RMNewAllocationsEv
 		NewAllocations: event.Allocations,
 	}
 
-	m.processUpdateResponse(event.RMId, response)
+	m.processUpdateResponse(event.RmID, response)
 	metrics.GetSchedulerMetrics().AddAllocatedContainers(len(event.Allocations))
 }
 
@@ -130,7 +130,7 @@ func (m *RMProxy) processApplicationUpdateEvent(event *rmevent.RMApplicationUpda
 		AcceptedApplications: event.AcceptedApplications,
 	}
 
-	m.processUpdateResponse(event.RMId, response)
+	m.processUpdateResponse(event.RmID, response)
 
 	// update app metrics
 	if len(event.RejectedApplications) > 0 {
@@ -149,7 +149,7 @@ func (m *RMProxy) processRMReleaseAllocationEvent(event *rmevent.RMReleaseAlloca
 		ReleasedAllocations: event.ReleasedAllocations,
 	}
 
-	m.processUpdateResponse(event.RMId, response)
+	m.processUpdateResponse(event.RmID, response)
 	metrics.GetSchedulerMetrics().AddReleasedContainers(len(event.ReleasedAllocations))
 }
 
@@ -161,7 +161,7 @@ func (m *RMProxy) processUpdatePartitionConfigsEvent(event *rmevent.RMRejectedAl
 		RejectedAllocations: event.RejectedAllocationAsks,
 	}
 
-	m.processUpdateResponse(event.RMId, response)
+	m.processUpdateResponse(event.RmID, response)
 	metrics.GetSchedulerMetrics().AddRejectedContainers(len(event.RejectedAllocationAsks))
 }
 
@@ -174,7 +174,7 @@ func (m *RMProxy) processRMNodeUpdateEvent(event *rmevent.RMNodeUpdateEvent) {
 		AcceptedNodes: event.AcceptedNodes,
 	}
 
-	m.processUpdateResponse(event.RMId, response)
+	m.processUpdateResponse(event.RmID, response)
 }
 
 func (m *RMProxy) handleRMEvents() {
@@ -202,12 +202,12 @@ func (m *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerReq
 	defer m.lock.Unlock()
 	c := make(chan *commonevents.Result)
 
-	if m.rmIdToCallback[request.RmId] != nil {
+	if m.rmIDToCallback[request.RmID] != nil {
 		// Send to scheduler first, in case we need to remove any partitions.
 		go func() {
 			m.EventHandlers.SchedulerEventHandler.HandleEvent(
 				&commonevents.RemoveRMPartitionsEvent{
-					RmId:    request.RmId,
+					RmID:    request.RmID,
 					Channel: c,
 				})
 		}()
@@ -236,13 +236,13 @@ func (m *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerReq
 		// create a config watcher for this RM
 		// config watcher will only be started when a reload is triggered
 		// it is configured with a expiration time, and will be auto exit once that reaches
-		configWatcher := configs.CreateConfigWatcher(request.RmId, request.PolicyGroup, 60*time.Second)
+		configWatcher := configs.CreateConfigWatcher(request.RmID, request.PolicyGroup, 60*time.Second)
 		configWatcher.RegisterCallback(&ConfigurationReloader{
-			rmId:    request.RmId,
+			rmID:    request.RmID,
 			rmProxy: m,
 		})
-		m.rmIdToConfigWatcher[request.RmId] = configWatcher
-		m.rmIdToCallback[request.RmId] = callback
+		m.rmIDToConfigWatcher[request.RmID] = configWatcher
+		m.rmIDToCallback[request.RmID] = callback
 
 		// RM callback can optionally implement one or more scheduler plugin interfaces,
 		// register scheduler plugin if the callback implements any plugin interface
@@ -254,11 +254,11 @@ func (m *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerReq
 	}
 }
 
-func (m *RMProxy) GetResourceManagerCallback(rmId string) api.ResourceManagerCallback {
+func (m *RMProxy) GetResourceManagerCallback(rmID string) api.ResourceManagerCallback {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
-	return m.rmIdToCallback[rmId]
+	return m.rmIDToCallback[rmID]
 }
 
 // Do normalize.
@@ -266,7 +266,7 @@ func normalizeUpdateRequestByRMId(request *si.UpdateRequest) {
 	// Update asks
 	if len(request.Asks) > 0 {
 		for _, ask := range request.Asks {
-			ask.PartitionName = common.GetNormalizedPartitionName(ask.PartitionName, request.RmId)
+			ask.PartitionName = common.GetNormalizedPartitionName(ask.PartitionName, request.RmID)
 		}
 	}
 
@@ -274,14 +274,14 @@ func normalizeUpdateRequestByRMId(request *si.UpdateRequest) {
 	if len(request.NewSchedulableNodes) > 0 {
 		for _, node := range request.NewSchedulableNodes {
 			partition := node.Attributes[api.NODE_PARTITION]
-			node.Attributes[api.NODE_PARTITION] = common.GetNormalizedPartitionName(partition, request.RmId)
+			node.Attributes[api.NODE_PARTITION] = common.GetNormalizedPartitionName(partition, request.RmID)
 		}
 	}
 
 	// Update New apps
 	if len(request.NewApplications) > 0 {
 		for _, app := range request.NewApplications {
-			app.PartitionName = common.GetNormalizedPartitionName(app.PartitionName, request.RmId)
+			app.PartitionName = common.GetNormalizedPartitionName(app.PartitionName, request.RmID)
 		}
 	}
 
@@ -289,14 +289,14 @@ func normalizeUpdateRequestByRMId(request *si.UpdateRequest) {
 	if len(request.UpdatedNodes) > 0 {
 		for _, node := range request.UpdatedNodes {
 			partition := node.Attributes[api.NODE_PARTITION]
-			node.Attributes[api.NODE_PARTITION] = common.GetNormalizedPartitionName(partition, request.RmId)
+			node.Attributes[api.NODE_PARTITION] = common.GetNormalizedPartitionName(partition, request.RmID)
 		}
 	}
 
 	// Update Remove apps
 	if len(request.RemoveApplications) > 0 {
 		for _, app := range request.RemoveApplications {
-			app.PartitionName = common.GetNormalizedPartitionName(app.PartitionName, request.RmId)
+			app.PartitionName = common.GetNormalizedPartitionName(app.PartitionName, request.RmID)
 		}
 	}
 
@@ -304,13 +304,13 @@ func normalizeUpdateRequestByRMId(request *si.UpdateRequest) {
 	if request.Releases != nil {
 		if len(request.Releases.AllocationsToRelease) > 0 {
 			for _, rel := range request.Releases.AllocationsToRelease {
-				rel.PartitionName = common.GetNormalizedPartitionName(rel.PartitionName, request.RmId)
+				rel.PartitionName = common.GetNormalizedPartitionName(rel.PartitionName, request.RmID)
 			}
 		}
 
 		if len(request.Releases.AllocationAsksToRelease) > 0 {
 			for _, rel := range request.Releases.AllocationAsksToRelease {
-				rel.PartitionName = common.GetNormalizedPartitionName(rel.PartitionName, request.RmId)
+				rel.PartitionName = common.GetNormalizedPartitionName(rel.PartitionName, request.RmID)
 			}
 		}
 	}
@@ -321,8 +321,8 @@ func (m *RMProxy) checkUpdateRequest(request *si.UpdateRequest) error {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
-	if m.rmIdToCallback[request.RmId] == nil {
-		return errors.New(fmt.Sprintf("Received UpdateRequest, but RmId=\"%s\" not registered", request.RmId))
+	if m.rmIDToCallback[request.RmID] == nil {
+		return errors.New(fmt.Sprintf("Received UpdateRequest, but RmID=\"%s\" not registered", request.RmID))
 	}
 
 	return nil
@@ -342,13 +342,13 @@ func (m *RMProxy) Update(request *si.UpdateRequest) error {
 }
 
 // Triggers scheduler to reload configuration and apply the changes on-the-fly to the scheduler itself.
-func (m *RMProxy) ReloadConfiguration(rmId string) error {
+func (m *RMProxy) ReloadConfiguration(rmID string) error {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
-	if cw, ok := m.rmIdToConfigWatcher[rmId]; !ok {
+	if cw, ok := m.rmIDToConfigWatcher[rmID]; !ok {
 		// if configWatcher is not found for this RM
-		return fmt.Errorf("failed to reload configuration, because RM %s is unknown to the scheduler", rmId)
+		return fmt.Errorf("failed to reload configuration, because RM %s is unknown to the scheduler", rmID)
 	} else {
 		// ensure configWatcher is running
 		// configWatcher is only triggered to run when the reload is called,
@@ -362,7 +362,7 @@ func (m *RMProxy) ReloadConfiguration(rmId string) error {
 
 // actual configuration reloader
 type ConfigurationReloader struct {
-	rmId    string
+	rmID    string
 	rmProxy *RMProxy
 }
 
@@ -370,12 +370,12 @@ func (cr ConfigurationReloader) DoReloadConfiguration() error {
 	c := make(chan *commonevents.Result)
 	cr.rmProxy.EventHandlers.CacheEventHandler.HandleEvent(
 		&commonevents.ConfigUpdateRMEvent{
-			RmId:    cr.rmId,
+			RmID:    cr.rmID,
 			Channel: c,
 		})
 	result := <-c
 	if !result.Succeeded {
-		return fmt.Errorf("failed to update configuration for RM %s, result: %v", cr.rmId, result)
+		return fmt.Errorf("failed to update configuration for RM %s, result: %v", cr.rmID, result)
 	}
 	return nil
 }

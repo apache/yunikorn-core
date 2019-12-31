@@ -121,7 +121,7 @@ func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionCont
 	// If allocated resource can fit in the node, and no headroom shortage of preemptor queue, we can directly get it allocated. (lucky!)
 	if node.CheckAndAllocateResource(candidate.AllocatedResource, true) {
 		log.Logger().Debug("No preemption needed candidate fits on node",
-			zap.String("nodeId", node.NodeId))
+			zap.String("nodeID", node.NodeID))
 		return &singleNodePreemptResult{
 			node:                  node,
 			toReleaseAllocations:  make(map[string]*cache.AllocationInfo),
@@ -167,13 +167,13 @@ func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionCont
 		headroomShortageUpdate(preemptorQueue, preemptQueue, alloc.AllocatedResource, headroomShortages)
 
 		// let's preempt the container.
-		toReleaseAllocations[alloc.AllocationProto.Uuid] = alloc
+		toReleaseAllocations[alloc.AllocationProto.UUID] = alloc
 		totalReleasedResource.AddTo(alloc.AllocatedResource)
 
 		// Check if we preempted enough resources.
 		if resources.StrictlyGreaterThanOrEquals(totalReleasedResource, resourceToPreempt) {
 			log.Logger().Debug("Preemption requested on node",
-				zap.String("nodeId", node.NodeId),
+				zap.String("nodeID", node.NodeID),
 				zap.Any("resources released", totalReleasedResource))
 			return &singleNodePreemptResult{
 				node:                  node,
@@ -218,7 +218,7 @@ func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitio
 
 	log.Logger().Debug("preemption result",
 		zap.Any("candidate", candidate),
-		zap.Any("node", preemptResult.node.NodeId),
+		zap.Any("node", preemptResult.node.NodeID),
 		zap.Any("preemptResult", preemptResult.toReleaseAllocations))
 	preemptionResults := make([]*singleNodePreemptResult, 0)
 	preemptionResults = append(preemptionResults, preemptResult)
@@ -241,13 +241,13 @@ func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitio
 func createPreemptionAndAllocationProposal(preemptionPartitionContext *preemptionPartitionContext, nodeToAllocate *SchedulingNode, candidate *SchedulingAllocationAsk,
 	preemptionResults []*singleNodePreemptResult) *SchedulingAllocation {
 	// We will get this allocation by preempting resources.
-	allocation := NewSchedulingAllocation(candidate, nodeToAllocate.NodeId)
+	allocation := NewSchedulingAllocation(candidate, nodeToAllocate.NodeID)
 	allocation.Releases = make([]*commonevents.ReleaseAllocation, 0)
 
 	// And add releases
 	for _, pr := range preemptionResults {
 		for uuid, alloc := range pr.toReleaseAllocations {
-			allocation.Releases = append(allocation.Releases, commonevents.NewReleaseAllocation(uuid, alloc.ApplicationId, nodeToAllocate.nodeInfo.Partition,
+			allocation.Releases = append(allocation.Releases, commonevents.NewReleaseAllocation(uuid, alloc.ApplicationID, nodeToAllocate.nodeInfo.Partition,
 				fmt.Sprintf("Preempt allocation=%s for ask=%s", alloc, candidate.AskProto.AllocationKey), si.AllocationReleaseResponse_PREEMPTED_BY_SCHEDULER))
 
 			// Update metrics of preempt queue

@@ -140,19 +140,19 @@ func getApplicationJson(app *cache.ApplicationInfo) *dao.ApplicationDAOInfo {
 		allocInfo := dao.AllocationDAOInfo{
 			AllocationKey:    alloc.AllocationProto.AllocationKey,
 			AllocationTags:   alloc.AllocationProto.AllocationTags,
-			Uuid:             alloc.AllocationProto.Uuid,
+			UUID:             alloc.AllocationProto.UUID,
 			ResourcePerAlloc: strings.Trim(alloc.AllocatedResource.String(), "map"),
 			Priority:         alloc.AllocationProto.Priority.String(),
 			QueueName:        alloc.AllocationProto.QueueName,
-			NodeId:           alloc.AllocationProto.NodeId,
-			ApplicationId:    alloc.AllocationProto.ApplicationId,
+			NodeID:           alloc.AllocationProto.NodeID,
+			ApplicationID:    alloc.AllocationProto.ApplicationID,
 			Partition:        alloc.AllocationProto.PartitionName,
 		}
 		allocationInfos = append(allocationInfos, allocInfo)
 	}
 
 	return &dao.ApplicationDAOInfo{
-		ApplicationId:  app.ApplicationId,
+		ApplicationID:  app.ApplicationID,
 		UsedResource:   strings.Trim(app.GetAllocatedResource().String(), "map"),
 		Partition:      app.Partition,
 		QueueName:      app.QueueName,

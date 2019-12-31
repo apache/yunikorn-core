@@ -197,10 +197,10 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
 	for _, app := range request.NewApplications {
 		partitionInfo := m.GetPartition(app.PartitionName)
 		if partitionInfo == nil {
-			msg := fmt.Sprintf("Failed to add application %s to partition %s, partition doesn't exist", app.ApplicationId, app.PartitionName)
+			msg := fmt.Sprintf("Failed to add application %s to partition %s, partition doesn't exist", app.ApplicationID, app.PartitionName)
 			log.Logger().Info(msg)
 			rejectedApps = append(rejectedApps, &si.RejectedApplication{
-				ApplicationId: app.ApplicationId,
+				ApplicationID: app.ApplicationID,
 				Reason:        msg,
 			})
 			continue
@@ -209,16 +209,16 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
 		ugi, err := partitionInfo.convertUGI(app.Ugi)
 		if err != nil {
 			rejectedApps = append(rejectedApps, &si.RejectedApplication{
-				ApplicationId: app.ApplicationId,
+				ApplicationID: app.ApplicationID,
 				Reason:        err.Error(),
 			})
 			continue
 		}
 		// create a new app object and add it to the partition (partition logs details)
-		appInfo := NewApplicationInfo(app.ApplicationId, app.PartitionName, app.QueueName, ugi, app.Tags)
+		appInfo := NewApplicationInfo(app.ApplicationID, app.PartitionName, app.QueueName, ugi, app.Tags)
 		if err := partitionInfo.addNewApplication(appInfo, true); err != nil {
 			rejectedApps = append(rejectedApps, &si.RejectedApplication{
-				ApplicationId: app.ApplicationId,
+				ApplicationID: app.ApplicationID,
 				Reason:        err.Error(),
 			})
 			continue
@@ -230,7 +230,7 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
 	if len(rejectedApps) > 0 {
 		m.EventHandlers.RMProxyEventHandler.HandleEvent(
 			&rmevent.RMApplicationUpdateEvent{
-				RMId:                 request.RmId,
+				RmID:                 request.RmID,
 				AcceptedApplications: make([]*si.AcceptedApplication, 0),
 				RejectedApplications: rejectedApps,
 			})
@@ -266,25 +266,25 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
 		// try to get ApplicationInfo
 		partitionInfo := m.GetPartition(req.PartitionName)
 		if partitionInfo == nil {
-			msg := fmt.Sprintf("Failed to find partition %s, for application %s and allocation %s", req.PartitionName, req.ApplicationId, req.AllocationKey)
+			msg := fmt.Sprintf("Failed to find partition %s, for application %s and allocation %s", req.PartitionName, req.ApplicationID, req.AllocationKey)
 			log.Logger().Info(msg)
 			rejectedAsks = append(rejectedAsks, &si.RejectedAllocationAsk{
 				AllocationKey: req.AllocationKey,
-				ApplicationId: req.ApplicationId,
+				ApplicationID: req.ApplicationID,
 				Reason:        msg,
 			})
 			continue
 		}
 
 		// if app info doesn't exist, reject the request
-		appInfo := partitionInfo.getApplication(req.ApplicationId)
+		appInfo := partitionInfo.getApplication(req.ApplicationID)
 		if appInfo == nil {
-			msg := fmt.Sprintf("Failed to find applictaion %s, for allocation %s", req.ApplicationId, req.AllocationKey)
+			msg := fmt.Sprintf("Failed to find applictaion %s, for allocation %s", req.ApplicationID, req.AllocationKey)
 			log.Logger().Info(msg)
 			rejectedAsks = append(rejectedAsks,
 				&si.RejectedAllocationAsk{
 					AllocationKey: req.AllocationKey,
-					ApplicationId: req.ApplicationId,
+					ApplicationID: req.ApplicationID,
 					Reason:        msg,
 				})
 			continue
@@ -301,7 +301,7 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
 	// Reject asks returned to RM Proxy for the apps and partitions not found
 	if len(rejectedAsks) > 0 {
 		m.EventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMRejectedAllocationAskEvent{
-			RMId:                   request.RmId,
+			RmID:                   request.RmID,
 			RejectedAllocationAsks: rejectedAsks,
 		})
 	}
@@ -321,13 +321,13 @@ func (m *ClusterInfo) processNewSchedulableNodes(request *si.UpdateRequest) {
 		nodeInfo := NewNodeInfo(node)
 		partition := m.GetPartition(nodeInfo.Partition)
 		if partition == nil {
-			msg := fmt.Sprintf("Failed to find partition %s for new node %s", nodeInfo.Partition, node.NodeId)
+			msg := fmt.Sprintf("Failed to find partition %s for new node %s", nodeInfo.Partition, node.NodeID)
 			log.Logger().Info(msg)
 			// TODO assess impact of partition metrics (this never hit the partition)
 			metrics.GetSchedulerMetrics().IncFailedNodes()
 			rejectedNodes = append(rejectedNodes,
 				&si.RejectedNode{
-					NodeId: node.NodeId,
+					NodeID: node.NodeID,
 					Reason: msg,
 				})
 			continue
@@ -338,27 +338,27 @@ func (m *ClusterInfo) processNewSchedulableNodes(request *si.UpdateRequest) {
 			log.Logger().Warn(msg)
 			rejectedNodes = append(rejectedNodes,
 				&si.RejectedNode{
-					NodeId: node.NodeId,
+					NodeID: node.NodeID,
 					Reason: msg,
 				})
 			continue
 		}
 		log.Logger().Info("successfully added node",
-			zap.String("nodeId", node.NodeId),
+			zap.String("nodeID", node.NodeID),
 			zap.String("partition", nodeInfo.Partition))
 		// create the equivalent scheduling node
 		m.EventHandlers.SchedulerEventHandler.HandleEvent(
 			&schedulerevent.SchedulerNodeEvent{
 				AddedNode: nodeInfo,
 			})
-		acceptedNodes = append(acceptedNodes, &si.AcceptedNode{NodeId: node.NodeId})
+		acceptedNodes = append(acceptedNodes, &si.AcceptedNode{NodeID: node.NodeID})
 		existingAllocations = append(existingAllocations, node.ExistingAllocations...)
 	}
 
 	// inform the RM which nodes have been accepted
 	m.EventHandlers.RMProxyEventHandler.HandleEvent(
 		&rmevent.RMNodeUpdateEvent{
-			RMId:          request.RmId,
+			RmID:          request.RmID,
 			AcceptedNodes: acceptedNodes,
 			RejectedNodes: rejectedNodes,
 		})
@@ -367,7 +367,7 @@ func (m *ClusterInfo) processNewSchedulableNodes(request *si.UpdateRequest) {
 	m.EventHandlers.SchedulerEventHandler.HandleEvent(
 		&schedulerevent.SchedulerAllocationUpdatesEvent{
 			ExistingAllocations: existingAllocations,
-			RMId:                request.RmId,
+			RMId:                request.RmID,
 		})
 }
 
@@ -380,7 +380,7 @@ func (m *ClusterInfo) processNodeActions(request *si.UpdateRequest) {
 			partition = m.GetPartition(p)
 		} else {
 			log.Logger().Debug("node partition not specified",
-				zap.String("nodeId", update.NodeId),
+				zap.String("nodeID", update.NodeID),
 				zap.String("nodeAction", update.Action.String()))
 			continue
 		}
@@ -389,7 +389,7 @@ func (m *ClusterInfo) processNodeActions(request *si.UpdateRequest) {
 			continue
 		}
 
-		if nodeInfo, ok := partition.nodes[update.NodeId]; ok {
+		if nodeInfo, ok := partition.nodes[update.NodeID]; ok {
 			switch update.Action {
 			case si.UpdateNodeInfo_DRAIN_NODE:
 				// set the state to not schedulable
@@ -400,7 +400,7 @@ func (m *ClusterInfo) processNodeActions(request *si.UpdateRequest) {
 			case si.UpdateNodeInfo_DECOMISSION:
 				// set the state to not schedulable then tell the partition to clean up
 				nodeInfo.SetSchedulable(false)
-				partition.RemoveNode(nodeInfo.NodeId)
+				partition.RemoveNode(nodeInfo.NodeID)
 				// remove the equivalent scheduling node
 				m.EventHandlers.SchedulerEventHandler.HandleEvent(
 					&schedulerevent.SchedulerNodeEvent{
@@ -442,7 +442,7 @@ func (m *ClusterInfo) processRMUpdateEvent(event *cacheevent.RMUpdateRequestEven
 // Updated partitions can not fail on the scheduler side.
 // Locking occurs by the methods that are called, this must be lock free.
 func (m *ClusterInfo) processRMRegistrationEvent(event *commonevents.RegisterRMEvent) {
-	updatedPartitions, err := SetClusterInfoFromConfigFile(m, event.RMRegistrationRequest.RmId, event.RMRegistrationRequest.PolicyGroup)
+	updatedPartitions, err := SetClusterInfoFromConfigFile(m, event.RMRegistrationRequest.RmID, event.RMRegistrationRequest.PolicyGroup)
 	if err != nil {
 		event.Channel <- &commonevents.Result{Succeeded: false, Reason: err.Error()}
 	}
@@ -467,7 +467,7 @@ func (m *ClusterInfo) processRMRegistrationEvent(event *commonevents.RegisterRME
 // Updated and deleted partitions can not fail on the scheduler side.
 // Locking occurs by the methods that are called, this must be lock free.
 func (m *ClusterInfo) processRMConfigUpdateEvent(event *commonevents.ConfigUpdateRMEvent) {
-	updatedPartitions, deletedPartitions, err := UpdateClusterInfoFromConfigFile(m, event.RmId)
+	updatedPartitions, deletedPartitions, err := UpdateClusterInfoFromConfigFile(m, event.RmID)
 	if err != nil {
 		event.Channel <- &commonevents.Result{Succeeded: false, Reason: err.Error()}
 		return
@@ -554,12 +554,12 @@ func (m *ClusterInfo) processAllocationProposalEvent(event *cacheevent.Allocatio
 	m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
 		AcceptedAllocations: event.AllocationProposals[:1],
 	})
-	rmId := common.GetRMIdFromPartitionName(proposal.PartitionName)
+	rmID := common.GetRMIdFromPartitionName(proposal.PartitionName)
 
 	// Send allocation event to RM: rejects are not passed back
 	m.EventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMNewAllocationsEvent{
 		Allocations: []*si.Allocation{allocInfo.AllocationProto},
-		RMId:        rmId,
+		RmID:        rmID,
 	})
 }
 
@@ -568,7 +568,7 @@ func (m *ClusterInfo) processAllocationProposalEvent(event *cacheevent.Allocatio
 // Lock free call, all updates occur in the partition which is locked.
 func (m *ClusterInfo) processRejectedApplicationEvent(event *cacheevent.RejectedNewApplicationEvent) {
 	if partition := m.GetPartition(event.PartitionName); partition != nil {
-		partition.RemoveRejectedApp(event.ApplicationId)
+		partition.RemoveRejectedApp(event.ApplicationID)
 	}
 }
 
@@ -578,7 +578,7 @@ func (m *ClusterInfo) notifySchedNodeAllocReleased(infos []*AllocationInfo, part
 	nodeRes := make([]schedulerevent.PreemptedNodeResource, len(infos))
 	for i, info := range infos {
 		nodeRes[i] = schedulerevent.PreemptedNodeResource{
-			NodeId:       info.AllocationProto.NodeId,
+			NodeID:       info.AllocationProto.NodeID,
 			Partition:    partitionName,
 			PreemptedRes: info.AllocatedResource,
 		}
@@ -592,14 +592,14 @@ func (m *ClusterInfo) notifySchedNodeAllocReleased(infos []*AllocationInfo, part
 
 // Create a RM update event to notify RM of released allocations
 // Lock free call, all updates occur via events.
-func (m *ClusterInfo) notifyRMAllocationReleased(rmId string, released []*AllocationInfo, terminationType si.AllocationReleaseResponse_TerminationType, message string) {
+func (m *ClusterInfo) notifyRMAllocationReleased(rmID string, released []*AllocationInfo, terminationType si.AllocationReleaseResponse_TerminationType, message string) {
 	releaseEvent := &rmevent.RMReleaseAllocationEvent{
 		ReleasedAllocations: make([]*si.AllocationReleaseResponse, 0),
-		RMId:                rmId,
+		RmID:                rmID,
 	}
 	for _, alloc := range released {
 		releaseEvent.ReleasedAllocations = append(releaseEvent.ReleasedAllocations, &si.AllocationReleaseResponse{
-			Uuid:            alloc.AllocationProto.Uuid,
+			UUID:            alloc.AllocationProto.UUID,
 			TerminationType: terminationType,
 			Message:         message,
 		})
@@ -649,7 +649,7 @@ func (m *ClusterInfo) processRemoveRMPartitionsEvent(event *commonevents.RemoveR
 	toRemove := make(map[string]bool)
 
 	for partition, partitionContext := range m.partitions {
-		if partitionContext.RMId == event.RmId {
+		if partitionContext.RmID == event.RmID {
 			toRemove[partition] = true
 		}
 	}
@@ -673,15 +673,15 @@ func (m *ClusterInfo) processRemovedApplication(event *cacheevent.RemovedApplica
 			zap.String("partitionName", event.PartitionName))
 		return
 	}
-	_, allocations := partitionInfo.RemoveApplication(event.ApplicationId)
+	_, allocations := partitionInfo.RemoveApplication(event.ApplicationID)
 	log.Logger().Info("Removed application from partition",
-		zap.String("applicationId", event.ApplicationId),
+		zap.String("applicationId", event.ApplicationID),
 		zap.String("partitionName", event.PartitionName),
 		zap.Int("allocationsRemoved", len(allocations)))
 
 	if len(allocations) > 0 {
 		rmID := common.GetRMIdFromPartitionName(event.PartitionName)
 		m.notifyRMAllocationReleased(rmID, allocations, si.AllocationReleaseResponse_STOPPED_BY_RM,
-			fmt.Sprintf("Application %s Removed", event.ApplicationId))
+			fmt.Sprintf("Application %s Removed", event.ApplicationID))
 	}
 }

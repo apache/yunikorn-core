@@ -34,7 +34,7 @@ func newTestPartition() (*PartitionSchedulingContext, error) {
 	info := &cache.PartitionInfo{
 		Name: "default",
 		Root: rootInfo,
-		RMId: "test",
+		RmID: "test",
 	}
 
 	return newPartitionSchedulingContext(info, rootSched), nil
@@ -112,8 +112,8 @@ func TestGetNodes(t *testing.T) {
 	// returned list should be only two long
 	assert.Equal(t, 2, len(nodes), "node list not filtered")
 	// map iteration is random so don't know which we get first
-	if !(nodes[0].NodeId == "test1" && nodes[1].NodeId == "test2") &&
-		!(nodes[0].NodeId == "test2" && nodes[1].NodeId == "test1") {
+	if !(nodes[0].NodeID == "test1" && nodes[1].NodeID == "test2") &&
+		!(nodes[0].NodeID == "test2" && nodes[1].NodeID == "test1") {
 		t.Errorf("nodes not returend as expected %v", nodes)
 	}
 
@@ -127,7 +127,7 @@ func TestGetNodes(t *testing.T) {
 		t.Errorf("existing node returned for non existing name: %v", schedNode)
 	}
 	schedNode = partition.getSchedulingNode("test-filtered")
-	if schedNode == nil || schedNode.NodeId != "test-filtered" {
+	if schedNode == nil || schedNode.NodeID != "test-filtered" {
 		t.Error("failed to retrieve existing node")
 	}
 }

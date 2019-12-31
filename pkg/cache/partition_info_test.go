@@ -38,8 +38,8 @@ func createAllocation(queue, nodeID, allocID, appID string) *si.Allocation {
 		AllocationKey:    allocID,
 		ResourcePerAlloc: resAlloc,
 		QueueName:        queue,
-		NodeId:           nodeID,
-		ApplicationId:    appID,
+		NodeID:           nodeID,
+		ApplicationID:    appID,
 	}
 }
 
@@ -50,8 +50,8 @@ func createAllocationProposal(queue, nodeID, allocID, appID string) *commonevent
 		})
 
 	return &commonevents.AllocationProposal{
-		NodeId:            nodeID,
-		ApplicationId:     appID,
+		NodeID:            nodeID,
+		ApplicationID:     appID,
 		QueueName:         queue,
 		AllocatedResource: resAlloc,
 		AllocationKey:     allocID,
@@ -250,7 +250,7 @@ partitions:
 	}
 
 	// remove the node this cannot fail
-	partition.RemoveNode(node1.NodeId)
+	partition.RemoveNode(node1.NodeID)
 	if partition.GetTotalNodeCount() != 0 {
 		t.Errorf("node list was not updated, node was not removed expected 0 got %d", partition.GetTotalNodeCount())
 	}
@@ -433,7 +433,7 @@ partitions:
 	if err != nil {
 		t.Errorf("adding allocation failed and should not have failed: %v", err)
 	}
-	if partition.allocations[alloc.AllocationProto.Uuid] == nil {
+	if partition.allocations[alloc.AllocationProto.UUID] == nil {
 		t.Errorf("add allocation to partition not found in the allocation list")
 	}
 	// check the leaf queue usage
@@ -444,7 +444,7 @@ partitions:
 	}
 
 	alloc, err = partition.addNewAllocation(createAllocationProposal(queueName, nodeID, "alloc-2", appID))
-	if err != nil || partition.allocations[alloc.AllocationProto.Uuid] == nil {
+	if err != nil || partition.allocations[alloc.AllocationProto.UUID] == nil {
 		t.Errorf("adding allocation failed and should not have failed: %v", err)
 	}
 	// check the root queue usage
@@ -522,7 +522,7 @@ partitions:
 		t.Errorf("add allocation to partition should not have failed: %v", err)
 		return
 	}
-	uuid := alloc.AllocationProto.Uuid
+	uuid := alloc.AllocationProto.UUID
 
 	app, allocs := partition.RemoveApplication("does_not_exist")
 	if app != nil && len(allocs) != 0 {
@@ -605,7 +605,7 @@ partitions:
 		t.Errorf("add allocation to partition should not have failed: %v", err)
 		return
 	}
-	uuid := alloc.AllocationProto.Uuid
+	uuid := alloc.AllocationProto.UUID
 
 	allocs := partition.releaseAllocationsForApplication(nil)
 	if len(allocs) != 0 {

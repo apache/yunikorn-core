@@ -51,7 +51,7 @@ func (ur *userRule) placeApplication(app *cache.ApplicationInfo, info *cache.Par
 	userName := app.GetUser().User
 	if !ur.filter.allowUser(app.GetUser()) {
 		log.Logger().Debug("User rule filtered",
-			zap.String("application", app.ApplicationId),
+			zap.String("application", app.ApplicationID),
 			zap.Any("user", app.GetUser()))
 		return "", nil
 	}
@@ -82,7 +82,7 @@ func (ur *userRule) placeApplication(app *cache.ApplicationInfo, info *cache.Par
 	}
 	queueName := parentName + cache.DOT + replaceDot(userName)
 	log.Logger().Debug("User rule intermediate result",
-		zap.String("application", app.ApplicationId),
+		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
 	// get the queue object
 	queue := info.GetQueue(queueName)
@@ -91,7 +91,7 @@ func (ur *userRule) placeApplication(app *cache.ApplicationInfo, info *cache.Par
 		return "", nil
 	}
 	log.Logger().Info("User rule application placed",
-		zap.String("application", app.ApplicationId),
+		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
 	return queueName, nil
 }

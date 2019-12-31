@@ -52,14 +52,14 @@ type AllocationProposalBundleEvent struct {
 // the cache and must be removed from the cache.
 // These applications cannot have any allocations or other data linked to it.
 type RejectedNewApplicationEvent struct {
-	ApplicationId string
+	ApplicationID string
 	PartitionName string
 	Reason        string
 }
 
 // The application has finished or failed and is removed by the scheduler.
 type RemovedApplicationEvent struct {
-	ApplicationId string
+	ApplicationID string
 	PartitionName string
 }
 
@@ -68,8 +68,8 @@ func NewReleaseAllocationEventFromProto(proto []*si.AllocationReleaseRequest) *R
 
 	for _, req := range proto {
 		event.AllocationsToRelease = append(event.AllocationsToRelease, commonevents.NewReleaseAllocation(
-			req.Uuid,
-			req.ApplicationId,
+			req.UUID,
+			req.ApplicationID,
 			req.PartitionName,
 			req.Message,
 			si.AllocationReleaseResponse_STOPPED_BY_RM,

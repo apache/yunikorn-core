@@ -62,7 +62,7 @@ partitions:
 
 	_, err := proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{
-			RmId:        "rm:123",
+			RmID:        "rm:123",
 			PolicyGroup: "policygroup",
 			Version:     "0.0.2",
 		}, mockRM)
@@ -74,7 +74,7 @@ partitions:
 	// Add two apps and wait for them to be accepted
 	err = proxy.Update(&si.UpdateRequest{
 		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a", "app-2": "root.b"}),
-		RmId:            "rm:123",
+		RmID:            "rm:123",
 	})
 	if nil != err {
 		b.Error(err.Error())
@@ -94,7 +94,7 @@ partitions:
 	for i := 0; i < numNodes; i++ {
 		nodeName := "node-" + strconv.Itoa(i)
 		node := &si.NewNodeInfo{
-			NodeId: nodeName + ":1234",
+			NodeID: nodeName + ":1234",
 			Attributes: map[string]string{
 				"si.io/hostname": nodeName,
 				"si.io/rackname": "rack-1",
@@ -109,7 +109,7 @@ partitions:
 		newNodes = append(newNodes, node)
 	}
 	err = proxy.Update(&si.UpdateRequest{
-		RmId:                "rm:123",
+		RmID:                "rm:123",
 		NewSchedulableNodes: newNodes,
 	})
 
@@ -132,10 +132,10 @@ partitions:
 					},
 				},
 				MaxAllocations: int32(app1NumPods),
-				ApplicationId:  "app-1",
+				ApplicationID:  "app-1",
 			},
 		},
-		RmId: "rm:123",
+		RmID: "rm:123",
 	})
 	err = proxy.Update(&si.UpdateRequest{
 		Asks: []*si.AllocationAsk{
@@ -148,10 +148,10 @@ partitions:
 					},
 				},
 				MaxAllocations: int32(numPods - app1NumPods),
-				ApplicationId:  "app-2",
+				ApplicationID:  "app-2",
 			},
 		},
-		RmId: "rm:123",
+		RmID: "rm:123",
 	})
 
 	// Reset number of iterations and timer for this benchmark

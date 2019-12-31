@@ -128,9 +128,9 @@ func (manager PartitionManager) remove() {
 		zap.String("partitionName", manager.psc.Name))
 	for i := range apps {
 		_ = apps[i].HandleApplicationEvent(cache.KillApplication)
-		appId := apps[i].ApplicationId
-		_, _ = pi.RemoveApplication(appId)
-		_, _ = manager.psc.RemoveSchedulingApplication(appId)
+		appID := apps[i].ApplicationID
+		_, _ = pi.RemoveApplication(appID)
+		_, _ = manager.psc.RemoveSchedulingApplication(appID)
 	}
 	// remove the nodes
 	nodes := pi.CopyNodeInfos()
@@ -138,7 +138,7 @@ func (manager PartitionManager) remove() {
 		zap.Int("numOfNodes", len(nodes)),
 		zap.String("partitionName", manager.psc.Name))
 	for i := range nodes {
-		pi.RemoveNode(nodes[i].NodeId)
+		pi.RemoveNode(nodes[i].NodeID)
 	}
 	log.Logger().Info("removing partition",
 		zap.String("partitionName", manager.psc.Name))

@@ -29,7 +29,7 @@ func TestManagerNew(t *testing.T) {
 	pi := cache.PartitionInfo{
 		Name: "test",
 		Root: &cache.QueueInfo{Name: "Root"},
-		RMId: "test",
+		RmID: "test",
 	}
 	// basic info without rules, manager should not init
 	man := NewPlacementManager(&pi)
@@ -48,7 +48,7 @@ func TestManagerInit(t *testing.T) {
 	pi := cache.PartitionInfo{
 		Name: "test",
 		Root: &cache.QueueInfo{Name: "Root"},
-		RMId: "test",
+		RmID: "test",
 	}
 	// basic info without rules, manager should not init no error
 	man := NewPlacementManager(&pi)
@@ -94,7 +94,7 @@ func TestManagerUpdate(t *testing.T) {
 	pi := cache.PartitionInfo{
 		Name: "test",
 		Root: &cache.QueueInfo{Name: "Root"},
-		RMId: "test",
+		RmID: "test",
 	}
 	// basic info without rules, manager should not init
 	man := NewPlacementManager(&pi)
@@ -123,7 +123,7 @@ func TestManagerBuildRule(t *testing.T) {
 	pi := cache.PartitionInfo{
 		Name: "test",
 		Root: &cache.QueueInfo{Name: "Root"},
-		RMId: "test",
+		RmID: "test",
 	}
 	// basic with 1 rule
 	man := NewPlacementManager(&pi)

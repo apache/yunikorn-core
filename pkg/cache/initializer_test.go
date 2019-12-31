@@ -325,12 +325,12 @@ partitions:
              x: 345
 `
 
-	rmId := "rm-123"
+	rmID := "rm-123"
 	policyGroup := "default-policy-group"
 	clusterInfo := NewClusterInfo()
 	clusterInfo.policyGroup = policyGroup
 	configs.MockSchedulerConfigByData([]byte(data))
-	if _, err := SetClusterInfoFromConfigFile(clusterInfo, rmId, policyGroup); err != nil {
+	if _, err := SetClusterInfoFromConfigFile(clusterInfo, rmID, policyGroup); err != nil {
 		t.Errorf("Error when load clusterInfo from config %v", err)
 		return
 	}
@@ -338,7 +338,7 @@ partitions:
 	assert.Equal(t, 2, len(clusterInfo.partitions))
 
 	// Check default partition
-	defaultPartition := clusterInfo.partitions["["+rmId+"]default"]
+	defaultPartition := clusterInfo.partitions["["+rmID+"]default"]
 	rootQueue := defaultPartition.getQueue("root")
 	assert.Equal(t, 2, len(rootQueue.children))
 	assert.Equal(t, rootQueue.IsLeafQueue(), false)
@@ -357,7 +357,7 @@ partitions:
 	}
 
 	// Check gpu partition
-	gpuPartition := clusterInfo.partitions["["+rmId+"]gpu"]
+	gpuPartition := clusterInfo.partitions["["+rmID+"]gpu"]
 	testQueue = gpuPartition.getQueue("root.test")
 	if testQueue == nil {
 		t.Errorf("Failed parsing the test queue in gpu partition")
@@ -384,19 +384,19 @@ partitions:
           - name: new-queue
 `
 	configs.MockSchedulerConfigByData([]byte(data))
-	if _, _, err := UpdateClusterInfoFromConfigFile(clusterInfo, rmId); err != nil {
+	if _, _, err := UpdateClusterInfoFromConfigFile(clusterInfo, rmID); err != nil {
 		t.Errorf("Error when load clusterInfo from config %v", err)
 		return
 	}
 	// Check the partitions: config update just marks as deleted does not do full remove
 	assert.Equal(t, 2, len(clusterInfo.partitions))
-	gpuPartition = clusterInfo.partitions["["+rmId+"]gpu"]
+	gpuPartition = clusterInfo.partitions["["+rmID+"]gpu"]
 	if gpuPartition != nil && !gpuPartition.IsDraining() {
 		t.Errorf("Failed removing the gpu partition")
 		return
 	}
 	// Check default partition
-	defaultPartition = clusterInfo.partitions["["+rmId+"]default"]
+	defaultPartition = clusterInfo.partitions["["+rmID+"]default"]
 	rootQueue = defaultPartition.getQueue("root")
 	assert.Equal(t, 3, len(rootQueue.children))
 	assert.Equal(t, rootQueue.IsLeafQueue(), false)

@@ -26,9 +26,9 @@ import (
 	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 )
 
-func newProto(nodeId string, totalResource *resources.Resource, attributes map[string]string) *si.NewNodeInfo {
+func newProto(nodeID string, totalResource *resources.Resource, attributes map[string]string) *si.NewNodeInfo {
 	proto := si.NewNodeInfo{
-		NodeId:     nodeId,
+		NodeID:     nodeID,
 		Attributes: attributes,
 	}
 
@@ -52,14 +52,14 @@ func TestNewNodeInfo(t *testing.T) {
 	}
 	proto := newProto("testnode", nil, nil)
 	node = NewNodeInfo(proto)
-	if node == nil || node.NodeId != "testnode" {
+	if node == nil || node.NodeID != "testnode" {
 		t.Error("node not returned correctly: node is nul or incorrect name")
 	}
 
 	totalRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100, "second": 100})
 	proto = newProto("testnode", totalRes, map[string]string{})
 	node = NewNodeInfo(proto)
-	if node == nil || node.NodeId != "testnode" {
+	if node == nil || node.NodeID != "testnode" {
 		t.Fatal("node not returned correctly: node is nul or incorrect name")
 	}
 	if !resources.Equals(node.TotalResource, totalRes) ||
@@ -76,7 +76,7 @@ func TestNewNodeInfo(t *testing.T) {
 		api.NODE_PARTITION: "partition1",
 	}
 	node = NewNodeInfo(proto)
-	if node == nil || node.NodeId != "testnode" {
+	if node == nil || node.NodeID != "testnode" {
 		t.Fatal("node not returned correctly: node is nul or incorrect name")
 	}
 	assert.Equal(t, "host1", node.Hostname)
@@ -91,7 +91,7 @@ func TestAttributes(t *testing.T) {
 	})
 
 	node := NewNodeInfo(proto)
-	if node == nil || node.NodeId != "testnode" {
+	if node == nil || node.NodeID != "testnode" {
 		t.Fatal("node not returned correctly: node is nul or incorrect name")
 	}
 

@@ -31,7 +31,7 @@ import (
 
 type PartitionSchedulingContext struct {
 	Root *SchedulingQueue // start of the scheduling queue hierarchy
-	RmId string           // the RM the partition belongs to
+	RmID string           // the RM the partition belongs to
 	Name string           // name of the partition (logging mainly)
 
 	// Private fields need protection
@@ -54,7 +54,7 @@ func newPartitionSchedulingContext(info *cache.PartitionInfo, root *SchedulingQu
 		nodes:        make(map[string]*SchedulingNode),
 		Root:         root,
 		Name:         info.Name,
-		RmId:         info.RMId,
+		RmID:         info.RmID,
 		partition:    info,
 	}
 	psc.placementManager = placement.NewPlacementManager(info)
@@ -89,9 +89,9 @@ func (psc *PartitionSchedulingContext) AddSchedulingApplication(schedulingApp *S
 	defer psc.lock.Unlock()
 
 	// Add to applications
-	appId := schedulingApp.ApplicationInfo.ApplicationId
-	if psc.applications[appId] != nil {
-		return fmt.Errorf("adding application %s to partition %s, but application already existed", appId, psc.Name)
+	appID := schedulingApp.ApplicationInfo.ApplicationID
+	if psc.applications[appID] != nil {
+		return fmt.Errorf("adding application %s to partition %s, but application already existed", appID, psc.Name)
 	}
 
 	// Put app under the scheduling queue, the app has already been placed in the partition cache
@@ -99,7 +99,7 @@ func (psc *PartitionSchedulingContext) AddSchedulingApplication(schedulingApp *S
 	if psc.placementManager.IsInitialised() {
 		err := psc.placementManager.PlaceApplication(schedulingApp.ApplicationInfo)
 		if err != nil {
-			return fmt.Errorf("failed to place app in requested queue '%s' for application %s: %v", queueName, appId, err)
+			return fmt.Errorf("failed to place app in requested queue '%s' for application %s: %v", queueName, appID, err)
 		}
 		// pull out the queue name from the placement
 		queueName = schedulingApp.ApplicationInfo.QueueName
@@ -109,7 +109,7 @@ func (psc *PartitionSchedulingContext) AddSchedulingApplication(schedulingApp *S
 	// check if the queue already exist and what we have is a leaf queue with submit access
 	if schedulingQueue != nil &&
 		(!schedulingQueue.isLeafQueue() || !schedulingQueue.CheckSubmitAccess(schedulingApp.ApplicationInfo.GetUser())) {
-		return fmt.Errorf("failed to find queue %s for application %s", schedulingApp.ApplicationInfo.QueueName, appId)
+		return fmt.Errorf("failed to find queue %s for application %s", schedulingApp.ApplicationInfo.QueueName, appID)
 	}
 	// with placement rules the hierarchy might not exist so try and create it
 	if schedulingQueue == nil {
@@ -117,35 +117,35 @@ func (psc *PartitionSchedulingContext) AddSchedulingApplication(schedulingApp *S
 		// find the scheduling queue: if it still does not exist we fail the app
 		schedulingQueue = psc.getQueue(queueName)
 		if schedulingQueue == nil {
-			return fmt.Errorf("failed to find queue %s for application %s", schedulingApp.ApplicationInfo.QueueName, appId)
+			return fmt.Errorf("failed to find queue %s for application %s", schedulingApp.ApplicationInfo.QueueName, appID)
 		}
 	}
 
 	// all is OK update the app and partition
 	schedulingApp.queue = schedulingQueue
 	schedulingQueue.AddSchedulingApplication(schedulingApp)
-	psc.applications[appId] = schedulingApp
+	psc.applications[appID] = schedulingApp
 
 	return nil
 }
 
 // Remove the application from the scheduling partition.
-func (psc *PartitionSchedulingContext) RemoveSchedulingApplication(appId string) (*SchedulingApplication, error) {
+func (psc *PartitionSchedulingContext) RemoveSchedulingApplication(appID string) (*SchedulingApplication, error) {
 	psc.lock.Lock()
 	defer psc.lock.Unlock()
 
 	// Remove from applications map
-	if psc.applications[appId] == nil {
-		return nil, fmt.Errorf("removing application %s from partition %s, but application does not exist", appId, psc.Name)
+	if psc.applications[appID] == nil {
+		return nil, fmt.Errorf("removing application %s from partition %s, but application does not exist", appID, psc.Name)
 	}
-	schedulingApp := psc.applications[appId]
-	delete(psc.applications, appId)
+	schedulingApp := psc.applications[appID]
+	delete(psc.applications, appID)
 
 	// Remove app under queue
 	schedulingQueue := psc.getQueue(schedulingApp.ApplicationInfo.QueueName)
 	if schedulingQueue == nil {
 		// This is not normal
-		panic(fmt.Sprintf("Failed to find queue %s for app=%s while removing application", schedulingApp.ApplicationInfo.QueueName, appId))
+		panic(fmt.Sprintf("Failed to find queue %s for app=%s while removing application", schedulingApp.ApplicationInfo.QueueName, appID))
 	}
 	schedulingQueue.RemoveSchedulingApplication(schedulingApp)
 
@@ -184,11 +184,11 @@ func (psc *PartitionSchedulingContext) getQueue(name string) *SchedulingQueue {
 	return queue
 }
 
-func (psc *PartitionSchedulingContext) getApplication(appId string) *SchedulingApplication {
+func (psc *PartitionSchedulingContext) getApplication(appID string) *SchedulingApplication {
 	psc.lock.RLock()
 	defer psc.lock.RUnlock()
 
-	return psc.applications[appId]
+	return psc.applications[appID]
 }
 
 // Create a scheduling queue with full hierarchy. This is called when a new queue is created from a placement rule.
@@ -228,11 +228,11 @@ func (psc *PartitionSchedulingContext) createSchedulingQueue(name string, user s
 }
 
 // Get a scheduling node from the partition by nodeID.
-func (psc *PartitionSchedulingContext) getSchedulingNode(nodeId string) *SchedulingNode {
+func (psc *PartitionSchedulingContext) getSchedulingNode(nodeID string) *SchedulingNode {
 	psc.lock.RLock()
 	defer psc.lock.RUnlock()
 
-	return psc.nodes[nodeId]
+	return psc.nodes[nodeID]
 }
 
 // Get a copy of the scheduling nodes from the partition.
@@ -264,29 +264,29 @@ func (psc *PartitionSchedulingContext) addSchedulingNode(info *cache.NodeInfo) {
 	psc.lock.Lock()
 	defer psc.lock.Unlock()
 	// check consistency and reset to make sure it is consistent again
-	if _, ok := psc.nodes[info.NodeId]; ok {
+	if _, ok := psc.nodes[info.NodeID]; ok {
 		log.Logger().Debug("new node already existed: cache out of sync with scheduler",
-			zap.String("nodeID", info.NodeId))
+			zap.String("nodeID", info.NodeID))
 	}
 	// add the node, this will also get the sync back between the two lists
-	psc.nodes[info.NodeId] = NewSchedulingNode(info)
+	psc.nodes[info.NodeID] = NewSchedulingNode(info)
 }
 
 // Remove a scheduling node triggered by the removal of the cache node.
 // This will log if the scheduler is out of sync with the cache.
 // Should never be called directly as it will bring the scheduler out of sync with the cache.
-func (psc *PartitionSchedulingContext) removeSchedulingNode(nodeId string) {
-	if nodeId == "" {
+func (psc *PartitionSchedulingContext) removeSchedulingNode(nodeID string) {
+	if nodeID == "" {
 		return
 	}
 
 	psc.lock.Lock()
 	defer psc.lock.Unlock()
 	// check consistency just for debug
-	if _, ok := psc.nodes[nodeId]; !ok {
+	if _, ok := psc.nodes[nodeID]; !ok {
 		log.Logger().Debug("node to be removed does not exist: cache out of sync with scheduler",
-			zap.String("nodeID", nodeId))
+			zap.String("nodeID", nodeID))
 	}
 	// remove the node, this will also get the sync back between the two lists
-	delete(psc.nodes, nodeId)
+	delete(psc.nodes, nodeID)
 }

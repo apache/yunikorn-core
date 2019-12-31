@@ -30,7 +30,7 @@ func GetUserGroupCacheTest() *UserGroupCache {
 		ugs:           map[string]*UserGroup{},
 		interval:      time.Second,
 		lookup:        lookup,
-		lookupGroupId: lookupGroupId,
+		lookupGroupID: lookupGroupID,
 		groupIds:      groupIds,
 	}
 }
@@ -65,7 +65,7 @@ func lookup(userName string) (*user.User, error) {
 }
 
 // test function only
-func lookupGroupId(gid string) (*user.Group, error) {
+func lookupGroupID(gid string) (*user.Group, error) {
 	gID, _ := strconv.Atoi(gid)
 	// fail all groups under 1000
 	if gID < 1000 {

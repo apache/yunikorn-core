@@ -63,7 +63,7 @@ func (tr *tagRule) placeApplication(app *cache.ApplicationInfo, info *cache.Part
 	// before anything run the filter
 	if !tr.filter.allowUser(app.GetUser()) {
 		log.Logger().Debug("Tag rule filtered",
-			zap.String("application", app.ApplicationId),
+			zap.String("application", app.ApplicationID),
 			zap.Any("user", app.GetUser()),
 			zap.String("tagName", tr.tagName))
 		return "", nil
@@ -99,7 +99,7 @@ func (tr *tagRule) placeApplication(app *cache.ApplicationInfo, info *cache.Part
 		queueName = parentName + cache.DOT + replaceDot(tagVal)
 	}
 	log.Logger().Debug("Tag rule intermediate result",
-		zap.String("application", app.ApplicationId),
+		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
 	// get the queue object
 	queue := info.GetQueue(queueName)
@@ -108,7 +108,7 @@ func (tr *tagRule) placeApplication(app *cache.ApplicationInfo, info *cache.Part
 		return "", nil
 	}
 	log.Logger().Info("Tag rule application placed",
-		zap.String("application", app.ApplicationId),
+		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
 	return queueName, nil
 }

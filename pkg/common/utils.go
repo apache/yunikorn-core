@@ -22,24 +22,24 @@ import (
 	"time"
 )
 
-func GetNormalizedPartitionName(partitionName string, rmId string) string {
+func GetNormalizedPartitionName(partitionName string, rmID string) string {
 	if partitionName == "" {
 		partitionName = "default"
 	}
 
-	return fmt.Sprintf("[%s]%s", rmId, partitionName)
+	return fmt.Sprintf("[%s]%s", rmID, partitionName)
 }
 
 func GetRMIdFromPartitionName(partitionName string) string {
 	idx := strings.Index(partitionName, "]")
 	if idx > 0 {
-		rmId := partitionName[1:idx]
-		return rmId
+		rmID := partitionName[1:idx]
+		return rmID
 	}
 	return ""
 }
 
-func GetPartitionNameWithoutClusterId(partitionName string) string {
+func GetPartitionNameWithoutClusterID(partitionName string) string {
 	idx := strings.Index(partitionName, "]")
 	if idx > 0 {
 		return partitionName[idx+1:]

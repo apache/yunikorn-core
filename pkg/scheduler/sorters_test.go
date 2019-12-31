@@ -357,7 +357,7 @@ func TestSortAppsFair(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		log.Logger().Info("allocated res",
 			zap.Int("order", i),
-			zap.String("name", list[i].ApplicationInfo.ApplicationId),
+			zap.String("name", list[i].ApplicationInfo.ApplicationID),
 			zap.Any("res", list[i].MayAllocatedResource))
 	}
 	assertAppList(t, list, []int{1, 3, 2, 0})
@@ -374,16 +374,16 @@ func assertQueueList(t *testing.T, list []*SchedulingQueue, place []int) {
 // list of nodes and the location of the named nodes inside that list
 // place[0] defines the location of the node-0 in the list of nodes
 func assertNodeList(t *testing.T, list []*SchedulingNode, place []int) {
-	assert.Equal(t, "node-0", list[place[0]].NodeId)
-	assert.Equal(t, "node-1", list[place[1]].NodeId)
-	assert.Equal(t, "node-2", list[place[2]].NodeId)
+	assert.Equal(t, "node-0", list[place[0]].NodeID)
+	assert.Equal(t, "node-1", list[place[1]].NodeID)
+	assert.Equal(t, "node-2", list[place[2]].NodeID)
 }
 
 // list of application and the location of the named applications inside that list
 // place[0] defines the location of the app-0 in the list of applications
 func assertAppList(t *testing.T, list []*SchedulingApplication, place []int) {
-	assert.Equal(t, "app-0", list[place[0]].ApplicationInfo.ApplicationId)
-	assert.Equal(t, "app-1", list[place[1]].ApplicationInfo.ApplicationId)
-	assert.Equal(t, "app-2", list[place[2]].ApplicationInfo.ApplicationId)
-	assert.Equal(t, "app-3", list[place[3]].ApplicationInfo.ApplicationId)
+	assert.Equal(t, "app-0", list[place[0]].ApplicationInfo.ApplicationID)
+	assert.Equal(t, "app-1", list[place[1]].ApplicationInfo.ApplicationID)
+	assert.Equal(t, "app-2", list[place[2]].ApplicationInfo.ApplicationID)
+	assert.Equal(t, "app-3", list[place[3]].ApplicationInfo.ApplicationID)
 }

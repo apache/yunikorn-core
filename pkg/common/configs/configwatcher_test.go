@@ -60,7 +60,7 @@ func TestTriggerCallback(t *testing.T) {
 	cw.RegisterCallback(reloader)
 
 	// verify initial fields are correct
-	assert.Equal(t, cw.rmId, "rm-id")
+	assert.Equal(t, cw.rmID, "rm-id")
 	assert.Equal(t, cw.policyGroup, "p-group")
 	assert.Assert(t, cw.reloader != nil)
 
@@ -107,7 +107,7 @@ func TestChecksumFailure(t *testing.T) {
 	cw.RegisterCallback(reloader)
 
 	// verify initial fields are correct
-	assert.Equal(t, cw.rmId, "rm-id")
+	assert.Equal(t, cw.rmID, "rm-id")
 	assert.Equal(t, cw.policyGroup, "p-group")
 	assert.Assert(t, cw.reloader != nil)
 

@@ -29,7 +29,7 @@ import (
 
 /* Related to applications */
 type ApplicationInfo struct {
-	ApplicationId  string
+	ApplicationID  string
 	Partition      string
 	QueueName      string
 	SubmissionTime int64
@@ -45,9 +45,9 @@ type ApplicationInfo struct {
 }
 
 // Create a new application
-func NewApplicationInfo(appId, partition, queueName string, ugi security.UserGroup, tags map[string]string) *ApplicationInfo {
+func NewApplicationInfo(appID, partition, queueName string, ugi security.UserGroup, tags map[string]string) *ApplicationInfo {
 	return &ApplicationInfo{
-		ApplicationId:     appId,
+		ApplicationID:     appID,
 		Partition:         partition,
 		QueueName:         queueName,
 		SubmissionTime:    time.Now().UnixNano(),
@@ -80,7 +80,7 @@ func (ai *ApplicationInfo) GetApplicationState() string {
 // Handle the state event for the application.
 // The state machine handles the locking.
 func (ai *ApplicationInfo) HandleApplicationEvent(event ApplicationEvent) error {
-	err := ai.stateMachine.Event(event.String(), ai.ApplicationId)
+	err := ai.stateMachine.Event(event.String(), ai.ApplicationID)
 	// handle the same state transition not nil error (limit of fsm).
 	if err != nil && err.Error() == "no transition" {
 		return nil
@@ -111,7 +111,7 @@ func (ai *ApplicationInfo) addAllocation(info *AllocationInfo) {
 	ai.lock.Lock()
 	defer ai.lock.Unlock()
 
-	ai.allocations[info.AllocationProto.Uuid] = info
+	ai.allocations[info.AllocationProto.UUID] = info
 	ai.allocatedResource = resources.Add(ai.allocatedResource, info.AllocatedResource)
 }
 

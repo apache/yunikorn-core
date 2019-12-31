@@ -17,9 +17,10 @@ limitations under the License.
 package security
 
 import (
-	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 	"strings"
 	"testing"
+
+	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 )
 
 func TestGetUserGroupCache(t *testing.T) {

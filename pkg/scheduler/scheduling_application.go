@@ -37,8 +37,8 @@ type SchedulingApplication struct {
     // Private fields need protection
     queue *SchedulingQueue // queue the application is running in
 
-    // Reserved request
-    reservedRequests map[string]*ReservedSchedulingRequest
+    // Reserved request, allocKey -> nodeId-> reservation
+    reservedRequests map[string]map[string]*ReservedSchedulingRequest
 
     lock sync.RWMutex
 }
@@ -64,7 +64,11 @@ func (app *SchedulingApplication) tryAllocate(partitionContext *PartitionSchedul
         if request.PendingRepeatAsk > 0 && resources.FitIn(headroom, request.AllocatedResource) {
             if allocation := app.allocateForOneRequest(partitionContext, request); allocation != nil {
                 app.allocating = resources.Add(app.allocating, allocation.SchedulingAsk.AllocatedResource)
-                app.Requests.updateAllocationAskRepeat(request.AskProto.AllocationKey, -1)
+
+                // Decrease pending request by 1
+                if !allocation.Reservation {
+                    app.Requests.updateAllocationAskRepeat(request.AskProto.AllocationKey, -1)
+                }
                 return allocation
             }
         }
@@ -122,6 +126,16 @@ func (m *SchedulingApplication) allocateForOneRequest(partitionContext* Partitio
 
             // return allocation (this is not a reservation)
             return NewSchedulingAllocation(candidate, node, m, false)
+        } else {
+            // Try to reserve on the node
+            ok, err := m.reserveSchedulingAllocation(candidate, node)
+            if !ok {
+                log.Logger().Debug("failed to reserve allocation on node",
+                    zap.String("error", err.Error()))
+                return nil
+            }
+
+            return NewSchedulingAllocation(candidate, node, m, true)
         }
     }
 
@@ -178,12 +192,26 @@ func (m* SchedulingApplication) GetAllocatingResourceTestOnly() *resources.Resou
 }
 
 // Reserve scheduling request, this also reserve resources on
-func (m* SchedulingApplication) reserveSchedulingAllocation(allocation *SchedulingAllocation) (bool, error) {
-    reserveRequest := NewReservedSchedulingRequestFromSchedulingAllocation(allocation)
+func (m *SchedulingApplication) reserveSchedulingAllocation(ask *SchedulingAllocationAsk, node *SchedulingNode) (bool, error) {
+    allocKey := ask.AskProto.AllocationKey
+    reserveRequest := NewReservedSchedulingRequest(ask, m, node)
 
-    // handle reservation on node
     m.lock.Lock()
     defer m.lock.Unlock()
 
-    allocation.Node.ReserveOnNode(reserveRequest)
+    // Handle reservation on node
+    ok, err := node.ReserveOnNode(reserveRequest)
+    if !ok {
+        return false, err
+    }
+
+    // Reserve for the app
+    // No need to check if the reservation the key on the node existed or not if the ReserveOnNode succeeded
+    if _, ok := m.reservedRequests[allocKey]; !ok {
+        m.reservedRequests[allocKey] = make(map[string]*ReservedSchedulingRequest)
+    }
+
+    m.reservedRequests[allocKey][reserveRequest.SchedulingNode.NodeId] = reserveRequest
+
+    return true, nil
 }

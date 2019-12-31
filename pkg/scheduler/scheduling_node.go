@@ -80,11 +80,6 @@ func (sn *SchedulingNode) getAvailableResource() *resources.Resource {
     sn.lock.Lock()
     defer sn.lock.Unlock()
 
-    return sn.getAvailableResourceWithoutLock()
-}
-
-// Called under lock of scheduling node, will be used by internal methods
-func (sn *SchedulingNode) getAvailableResourceWithoutLock() *resources.Resource {
 	if sn.needUpdateCachedAvailable {
 		sn.cachedAvailable = sn.nodeInfo.GetAvailableResource()
 		sn.cachedAvailable.SubFrom(sn.allocatingResource)
@@ -177,20 +172,20 @@ func (sn *SchedulingNode) CheckAndAllocateResource(delta *resources.Resource, pr
 }
 
 func (sn* SchedulingNode) ReserveOnNode(reservationRequest *ReservedSchedulingRequest) (bool, error) {
+	requestAllocKey := reservationRequest.SchedulingAsk.AskProto.AllocationKey
+	nodeId := reservationRequest.SchedulingNode.NodeId
+
 	if reservationRequest.GetAmount() != 1 {
-		return false, fmt.Errorf("Only allow reserve one allocation at a time allocationKey=%s; node=%s", reservationRequest.SchedulingAsk.AskProto.AllocationKey,
-			reservationRequest.schedulingNode.NodeId)
+		return false, fmt.Errorf("Only allow reserve one allocation at a time allocationKey=%s; node=%s", requestAllocKey, nodeId)
 	}
 
 	sn.lock.Lock()
 	defer sn.lock.Unlock()
 
-	// Make sure node still has available resource before reserve resources
-	available := sn.getAvailableResourceWithoutLock()
-	allocatingAndReserved := resources.Add(sn.allocatingResource, sn.totalReservedResource)
-
-	if !resources.FitIn(available, allocatingAndReserved) {
-		// TODO
+	// TODO: For now, only allow one reservation at a time, however once we have preemption + reservation, or autoscaling inferno node,
+	// we can have this relaxed
+	if len(sn.reservationRequests) > 0 {
+		return false, fmt.Errorf("Failed to reserve request key=%s on node=%s since node is already reserved", requestAllocKey, nodeId)
 	}
 
 	key := reservationRequest.GetReservationRequestKey()
@@ -202,6 +197,10 @@ func (sn* SchedulingNode) ReserveOnNode(reservationRequest *ReservedSchedulingRe
 	} else {
 		val.IncAmount()
 	}
+
+	sn.totalReservedResource = resources.Add(sn.totalReservedResource, reservationRequest.SchedulingAsk.AllocatedResource)
+
+	return true, nil
 }
 
 // Checking pre allocation conditions. The pre-allocation conditions are implemented via plugins
@@ -213,6 +212,12 @@ func (sn* SchedulingNode) ReserveOnNode(reservationRequest *ReservedSchedulingRe
 func (sn *SchedulingNode) CheckAllocateConditions(allocId string) bool {
 	if !sn.nodeInfo.IsSchedulable() {
 		log.Logger().Debug("node is unschedulable",
+			zap.String("nodeId", sn.NodeId))
+		return false
+	}
+
+	if len(sn.reservationRequests) > 0 {
+		log.Logger().Debug("node is already reserved",
 			zap.String("nodeId", sn.NodeId))
 		return false
 	}

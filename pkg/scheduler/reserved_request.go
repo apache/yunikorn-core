@@ -21,46 +21,27 @@ import "sync"
 // Reserved *single* request
 type ReservedSchedulingRequest struct {
     // Public field, will not change overtime
-    SchedulingAsk *SchedulingAllocationAsk
-    App           *SchedulingApplication
+    SchedulingAsk         *SchedulingAllocationAsk
+    App                   *SchedulingApplication
+    SchedulingNode        *SchedulingNode
+    reservationRequestKey string
 
     // Following are private fields which subject to change
 
     // Where's the request reserved
-    schedulingNode *SchedulingNode
-    amount         int
+    amount int
 
     lock sync.RWMutex
 }
 
-func newReservedSchedulingRequest(ask *SchedulingAllocationAsk, app *SchedulingApplication, node *SchedulingNode) *ReservedSchedulingRequest {
+func NewReservedSchedulingRequest(ask *SchedulingAllocationAsk, app *SchedulingApplication, node *SchedulingNode) *ReservedSchedulingRequest {
     return &ReservedSchedulingRequest{
-        SchedulingAsk:  ask,
-        App:            app,
-        schedulingNode: node,
-        amount:         1,
+        SchedulingAsk:         ask,
+        App:                   app,
+        SchedulingNode:        node,
+        amount:                1,
+        reservationRequestKey: app.ApplicationInfo.ApplicationId + "|" + node.NodeId + "|" + ask.AskProto.AllocationKey,
     }
-}
-
-func NewReservedSchedulingRequestFromSchedulingAllocation(schedulingAllocation *SchedulingAllocation) *ReservedSchedulingRequest {
-    return newReservedSchedulingRequest(
-        schedulingAllocation.SchedulingAsk,
-        schedulingAllocation.Application,
-        schedulingAllocation.Node)
-}
-
-func (m *ReservedSchedulingRequest) SetSchedulingNode(node *SchedulingNode) {
-    m.lock.Lock()
-    defer m.lock.Unlock()
-
-    m.schedulingNode = node
-}
-
-func (m *ReservedSchedulingRequest) GetSchedulingNode() *SchedulingNode {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
-
-    return m.schedulingNode
 }
 
 // Increase amount of the reservation, return amount after increase
@@ -96,12 +77,11 @@ func (m *ReservedSchedulingRequest) GetAmount() int {
 // Get a unique key combined of application id and request key.
 func (m *ReservedSchedulingRequest) GetReservationRequestKey() string {
     // No lock needed when accessing two final fields
-    return m.App.ApplicationInfo.ApplicationId + "_" + m.SchedulingAsk.AskProto.AllocationKey
+    return m.reservationRequestKey
 }
 
 func (m *ReservedSchedulingRequest) Clone() *ReservedSchedulingRequest {
     m.lock.RLock()
     defer m.lock.RUnlock()
-
-    return newReservedSchedulingRequest(m.SchedulingAsk, m.App, m.schedulingNode)
+    return NewReservedSchedulingRequest(m.SchedulingAsk, m.App, m.SchedulingNode)
 }

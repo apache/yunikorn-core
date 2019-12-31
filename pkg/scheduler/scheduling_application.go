@@ -47,7 +47,7 @@ func NewSchedulingApplication(appInfo *cache.ApplicationInfo) *SchedulingApplica
     app := &SchedulingApplication{
         ApplicationInfo: appInfo,
         allocating: resources.NewResource(),
-        reservedRequests: make(map[string]*ReservedSchedulingRequest),
+        reservedRequests: make(map[string]map[string]*ReservedSchedulingRequest),
     }
     app.Requests = NewSchedulingRequests(app)
     return app

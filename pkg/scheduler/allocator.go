@@ -35,13 +35,19 @@ func (m *Scheduler) singleStepSchedule() {
         }
 
         allocation := m.tryAllocationForPartition(totalPartitionResource, partitionContext)
+        m.handleSchedulingAllocation(allocation, partitionContext)
+    }
+}
 
-        // We don't hand over reserved container to cache.
-        if allocation == nil || allocation.Reservation {
-            continue
-        }
-
-        m.eventHandlers.CacheEventHandler.HandleEvent(newSingleAllocationProposal(allocation))
+func (m *Scheduler) handleSchedulingAllocation(alloc *SchedulingAllocation, partitionCtx *PartitionSchedulingContext) {
+    if alloc == nil {
+        return
+    } else if alloc.Reservation {
+        // Reservation is kept inside scheduler, so update internal scheduler context
+        partitionCtx.AddNewReservation(alloc)
+    } else {
+        // Send allocation proposal to cache to commit
+        m.eventHandlers.CacheEventHandler.HandleEvent(newSingleAllocationProposal(alloc))
     }
 }
 

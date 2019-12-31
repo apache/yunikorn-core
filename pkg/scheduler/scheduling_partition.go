@@ -38,6 +38,7 @@ type PartitionSchedulingContext struct {
     nodes            map[string]*SchedulingNode        // nodes assigned to this partition
     placementManager *placement.AppPlacementManager    // placement manager for this partition
     partitionManager *PartitionManager                 // manager for this partition
+    reservedApps     map[string]*SchedulingApplication
     lock             sync.RWMutex
 }
 
@@ -54,6 +55,7 @@ func newPartitionSchedulingContext(info *cache.PartitionInfo, root *SchedulingQu
         Name:         info.Name,
         RmId:         info.RMId,
         partition:    info,
+        reservedApps: make(map[string]*SchedulingApplication),
     }
     psc.placementManager = placement.NewPlacementManager(info)
     return psc
@@ -287,4 +289,18 @@ func (psc *PartitionSchedulingContext) removeSchedulingNode(nodeId string) {
     }
     // remove the node, this will also get the sync back between the two lists
     delete(psc.nodes, nodeId)
+}
+
+// Add new reservation
+func (psc *PartitionSchedulingContext) AddNewReservation(reservation *SchedulingAllocation) {
+    psc.lock.Lock()
+    defer psc.lock.Unlock()
+
+    appId := reservation.Application.ApplicationInfo.ApplicationId
+
+    if _, ok := psc.reservedApps[appId]; ok {
+        return
+    }
+
+    psc.reservedApps[appId] = reservation.Application
 }

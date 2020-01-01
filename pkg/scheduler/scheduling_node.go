@@ -146,11 +146,38 @@ func (sn *SchedulingNode) handlePreemptionUpdate(preempted *resources.Resource) 
 	sn.preemptingResource.SubFrom(preempted)
 }
 
+// Calculate gap score of fit in, 0 means smaller can be fitin in the larger resource.
+// fit_in_gap_score = sigma((smaller_i- larger_i)/smaller_i) (i is index of resource type, and smaller_i > larger_i)
+func fitInGapScore(larger, smaller *resources.Resource) float64 {
+	score := resources.Quantity(0)
+	for k, v := range smaller.Resources {
+		if v <= 0 {
+			// 0 or negative v can fit at anywhere
+			continue
+		}
+
+		if larger == nil {
+			score += 1
+		}
+		largerV := larger.Resources[k]
+		if largerV < 0 {
+			largerV = 0
+		}
+
+		if v > largerV {
+			score += (v - largerV) / v
+		}
+	}
+	return float64(score)
+}
+
 // Check and update allocating resources of the scheduling node.
 // If the proposed allocation fits in the available resources, taking into account resources marked for
 // preemption if applicable, the allocating resources are updated and true is returned.
 // If the proposed allocation does not fit false is returned and no changes are made.
-func (sn *SchedulingNode) CheckAndAllocateResource(delta *resources.Resource, preemptionPhase bool) bool {
+// return true when resource can be allocated.
+// return false, and a score of how close it is
+func (sn *SchedulingNode) CheckAndAllocateResource(delta *resources.Resource, preemptionPhase bool) (bool, float64) {
 	sn.lock.Lock()
 	defer sn.lock.Unlock()
 
@@ -160,15 +187,17 @@ func (sn *SchedulingNode) CheckAndAllocateResource(delta *resources.Resource, pr
 	if preemptionPhase {
         available.AddTo(sn.preemptingResource)
     }
-    if resources.FitIn(available, newAllocating) {
+	score := fitInGapScore(available, newAllocating)
+    if score == 0 {
         log.Logger().Debug("allocations in progress updated",
 			zap.String("nodeId", sn.NodeId),
 			zap.Any("total unconfirmed", newAllocating))
 		sn.needUpdateCachedAvailable = true
 		sn.allocatingResource = newAllocating
-		return true
+		return true, 0
+	} else {
+		return false, score
 	}
-	return false
 }
 
 func (sn* SchedulingNode) ReserveOnNode(reservationRequest *ReservedSchedulingRequest) (bool, error) {

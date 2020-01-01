@@ -17,6 +17,7 @@ limitations under the License.
 package scheduler
 
 import (
+    "container/list"
     "fmt"
     "github.com/cloudera/yunikorn-core/pkg/cache"
     "github.com/cloudera/yunikorn-core/pkg/common/security"
@@ -303,4 +304,22 @@ func (psc *PartitionSchedulingContext) AddNewReservation(reservation *Scheduling
     }
 
     psc.reservedApps[appId] = reservation.Application
+}
+
+// Get an ordered reservation app list, it is a clone so change order of the list won't impact
+func (psc *PartitionSchedulingContext) GetReservationAppListClone() *list.List {
+    psc.lock.RLock()
+    defer psc.lock.RUnlock()
+
+    if len(psc.reservedApps) == 0 {
+        return nil
+    }
+
+    // queue for app allocation
+    appList := list.New()
+    for _, app := range psc.reservedApps {
+        appList.PushBack(app)
+    }
+
+    return appList
 }

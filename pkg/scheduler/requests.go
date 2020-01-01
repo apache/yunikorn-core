@@ -19,7 +19,6 @@ package scheduler
 import (
     "fmt"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
-    "sort"
 )
 
 // Responsibility of this class:
@@ -58,12 +57,7 @@ func (m*AppSchedulingRequests) resortRequestByPriority() {
         idx++
     }
 
-    sort.SliceStable(m.sortedRequestsByPriority, func(i, j int) bool {
-        l := m.sortedRequestsByPriority[i]
-        r := m.sortedRequestsByPriority[j]
-
-        return l.NormalizedPriority > r.NormalizedPriority
-    })
+    SortAskRequestsByPriority(m.sortedRequestsByPriority)
 }
 
 // Add new or replace

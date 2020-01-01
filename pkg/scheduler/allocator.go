@@ -28,15 +28,43 @@ func (m *Scheduler) SingleStepScheduleAllocTest(nAlloc int) {
 }
 
 func (m *Scheduler) singleStepSchedule() {
+    // Do regular allocation
     for partition, partitionContext := range m.clusterSchedulingContext.getPartitionMapClone() {
         totalPartitionResource := m.clusterInfo.GetTotalPartitionResource(partition)
         if totalPartitionResource == nil {
             continue
         }
 
+        // Do reservation allocation First
+        if m.reservationAllocation(partitionContext) {
+            // If allocated anything for reservation, skip regular allocation
+           continue
+        }
+
         allocation := m.tryAllocationForPartition(totalPartitionResource, partitionContext)
         m.handleSchedulingAllocation(allocation, partitionContext)
     }
+}
+
+// Do reservation allocation, returns if anything allocated
+func (m *Scheduler) reservationAllocation(partitionCtx *PartitionSchedulingContext) bool {
+    appList := partitionCtx.GetReservationAppListClone()
+
+    if appList == nil {
+        return false
+    }
+
+    // Have we allocated anything?
+    anythingAllocated := false
+
+    for appList.Len() > 0 {
+        // Get first app, but not remove it for now since the app could have multiple reservation requests
+        app := appList.Front()
+
+        app.
+    }
+
+    return anythingAllocated
 }
 
 func (m *Scheduler) handleSchedulingAllocation(alloc *SchedulingAllocation, partitionCtx *PartitionSchedulingContext) {

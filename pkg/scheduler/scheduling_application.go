@@ -24,6 +24,7 @@ import (
     "github.com/cloudera/yunikorn-core/pkg/plugins"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "go.uber.org/zap"
+    "math"
     "sync"
 )
 
@@ -52,7 +53,6 @@ func NewSchedulingApplication(appInfo *cache.ApplicationInfo) *SchedulingApplica
     app.Requests = NewSchedulingRequests(app)
     return app
 }
-
 
 // sort scheduling Requests from a job
 func (app *SchedulingApplication) tryAllocate(partitionContext *PartitionSchedulingContext,
@@ -100,13 +100,17 @@ func (m *SchedulingApplication) allocateForOneRequest(partitionContext* Partitio
 
     nodeIterator := evaluateForSchedulingPolicy(nodeList, partitionContext)
 
+    var bestNodeToReserve *SchedulingNode = nil
+    bestScore := math.Inf(+1)
+
     for nodeIterator.HasNext() {
         node := nodeIterator.Next()
         if !node.CheckAllocateConditions(candidate.AskProto.AllocationKey) {
             // skip the node if conditions can not be satisfied
             continue
         }
-        if node.CheckAndAllocateResource(candidate.AllocatedResource, false) {
+        ok, score := node.CheckAndAllocateResource(candidate.AllocatedResource, false)
+        if ok {
             // before deciding on an allocation, call the reconcile plugin to sync scheduler cache
             // between core and shim if necessary. This is useful when running multiple allocations
             // in parallel and need to handle inter container affinity and anti-affinity.
@@ -127,23 +131,92 @@ func (m *SchedulingApplication) allocateForOneRequest(partitionContext* Partitio
             // return allocation (this is not a reservation)
             return NewSchedulingAllocation(candidate, node, m, false)
         } else {
-            // Try to reserve on the node
-            ok, err := m.reserveSchedulingAllocation(candidate, node)
-            if !ok {
-                log.Logger().Debug("failed to reserve allocation on node",
-                    zap.String("error", err.Error()))
-                return nil
+            // Record the so-far best node to reserve
+            if score < bestScore {
+                bestNodeToReserve = node
             }
-
-            return NewSchedulingAllocation(candidate, node, m, true)
         }
     }
 
+    // Try to reserve on the node, if the best node to reserve is available.
+    if bestNodeToReserve != nil {
+        ok, err := m.reserveSchedulingAllocation(candidate, bestNodeToReserve)
+        if !ok {
+            log.Logger().Debug("failed to reserve allocation on node",
+                zap.String("error", err.Error()))
+            return nil
+        }
+        return NewSchedulingAllocation(candidate, bestNodeToReserve, m, true)
+    }
     // TODO: Need to fix the reservation logic here.
 
     return nil
 }
 
+// Try to allocate from reservation, return !nil if any request got successfully allocated.
+func (m *SchedulingApplication) TryAllocateFromReservation() *SchedulingAllocation {
+    sortedReservationRequest := m.getSortedReservationRequestCopy()
+
+    for _, request := range sortedReservationRequest {
+        alloc := m.tryAllocateFromReservationRequest(request)
+        if alloc != nil {
+            return alloc
+        }
+    }
+}
+
+func (m *SchedulingApplication) tryAllocateFromReservationRequest(request *SchedulingAllocationAsk) *SchedulingAllocation {
+    m.lock.Lock()
+    defer m.lock.Unlock()
+
+    allocKey := request.AskProto.AllocationKey
+
+    // Check if the reservation request is still valid
+    if req := m.Requests.requests[allocKey]; req == nil || req.PendingRepeatAsk <= 0 {
+        log.Logger().Debug("failed to allocate reservation request since we don't need it anymore",
+            zap.String("allocKey", allocKey))
+        return nil
+    }
+
+    // Loop nodes and allocate
+    reservationNodeMap := m.reservedRequests[allocKey]
+    if nil == reservationNodeMap || len(reservationNodeMap) == 0 {
+        delete(m.reservedRequests, allocKey)
+
+        log.Logger().Debug("failed to allocate reservation request since no more reservations",
+            zap.String("allocKey", allocKey))
+        return nil
+    }
+
+    for nodeId, reservationRequest := range reservationNodeMap {
+        log.Logger().Debug("trying to allocate reservation for node",
+            zap.String("allocKey", allocKey),
+            zap.String("nodeId", nodeId))
+
+        // TODO, add node reservation logic
+    }
+
+    // TODO, add re-reservation logic
+}
+
+// Get sorted alloc keys of reserved requests based on priority
+func (m *SchedulingApplication) getSortedReservationRequestCopy() []*SchedulingAllocationAsk {
+    pendingAsks := make([]*SchedulingAllocationAsk, 0)
+
+    m.lock.RLock()
+    defer m.lock.RUnlock()
+
+    for allocKey, valMap := range m.reservedRequests {
+        ask := m.Requests.requests[allocKey]
+        if ask != nil && len(valMap) > 0 {
+            pendingAsks = append(pendingAsks, ask)
+        }
+    }
+
+    SortAskRequestsByPriority(pendingAsks)
+
+    return pendingAsks
+}
 
 // TODO: convert this as an interface.
 func evaluateForSchedulingPolicy(nodes []*SchedulingNode, partitionContext *PartitionSchedulingContext) NodeIterator {

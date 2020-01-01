@@ -87,3 +87,12 @@ func SortNodes(nodes []*SchedulingNode, sortType SortType) {
     }
     metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
 }
+
+func SortAskRequestsByPriority(requests []*SchedulingAllocationAsk) {
+    sort.SliceStable(requests, func(i, j int) bool {
+        l := requests[i]
+        r := requests[j]
+
+        return l.NormalizedPriority > r.NormalizedPriority
+    })
+}

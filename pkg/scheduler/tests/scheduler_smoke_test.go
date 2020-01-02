@@ -423,11 +423,14 @@ partitions:
 		},
 		RmID: "rm:123",
 	})
+	if err != nil {
+		t.Fatalf("UpdateRequest 5 failed: %v", err)
+	}
 
 	// Release Allocations.
 	err = proxy.Update(updateRequest)
 	if err != nil {
-		t.Fatalf("UpdateRequest 5 failed: %v", err)
+		t.Fatalf("UpdateRequest 6 failed: %v", err)
 	}
 
 	// Check pending resource

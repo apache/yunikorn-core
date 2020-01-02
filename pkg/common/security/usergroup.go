@@ -167,9 +167,7 @@ func (c *UserGroupCache) GetUserGroup(userName string) (UserGroup, error) {
 	}
 	// resolve if we do not have it in the cache
 	// find the user first, then resolve the groups
-	var osUser *user.User
-	var err = error(nil)
-	osUser, err = c.lookup(userName)
+	osUser, err := c.lookup(userName)
 	if err != nil {
 		log.Logger().Error("Error resolving user: does not exist",
 			zap.String("userName", userName),
@@ -200,10 +198,8 @@ func (c *UserGroupCache) GetUserGroup(userName string) (UserGroup, error) {
 
 // Resolve the groups for the user if the user exists
 func (ug *UserGroup) resolveGroups(osUser *user.User, c *UserGroupCache) error {
-	var groupName *user.Group
-	var err = error(nil)
 	// resolve the primary group and add it first
-	groupName, err = c.lookupGroupID(osUser.Gid)
+	groupName, err := c.lookupGroupID(osUser.Gid)
 	if err != nil {
 		ug.Groups = append(ug.Groups, osUser.Gid)
 	} else {

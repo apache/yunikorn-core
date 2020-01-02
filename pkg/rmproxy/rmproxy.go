@@ -17,7 +17,6 @@ limitations under the License.
 package rmproxy
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"sync"
@@ -215,7 +214,7 @@ func (m *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerReq
 		result := <-c
 		close(c)
 		if !result.Succeeded {
-			return nil, errors.New(result.Reason)
+			return nil, fmt.Errorf("registration of RM failed: %v", result.Reason)
 		}
 	}
 
@@ -249,9 +248,8 @@ func (m *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerReq
 		plugins.RegisterSchedulerPlugin(callback)
 
 		return &si.RegisterResourceManagerResponse{}, nil
-	} else {
-		return nil, errors.New(result.Reason)
 	}
+	return nil, fmt.Errorf("registration of RM failed: %v", result.Reason)
 }
 
 func (m *RMProxy) GetResourceManagerCallback(rmID string) api.ResourceManagerCallback {
@@ -322,7 +320,7 @@ func (m *RMProxy) checkUpdateRequest(request *si.UpdateRequest) error {
 	defer m.lock.RUnlock()
 
 	if m.rmIDToCallback[request.RmID] == nil {
-		return errors.New(fmt.Sprintf("Received UpdateRequest, but RmID=\"%s\" not registered", request.RmID))
+		return fmt.Errorf("received UpdateRequest, but RmID=\"%s\" not registered", request.RmID)
 	}
 
 	return nil
@@ -346,17 +344,18 @@ func (m *RMProxy) ReloadConfiguration(rmID string) error {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
-	if cw, ok := m.rmIDToConfigWatcher[rmID]; !ok {
+	cw, ok := m.rmIDToConfigWatcher[rmID]
+	if !ok {
 		// if configWatcher is not found for this RM
 		return fmt.Errorf("failed to reload configuration, because RM %s is unknown to the scheduler", rmID)
-	} else {
-		// ensure configWatcher is running
-		// configWatcher is only triggered to run when the reload is called,
-		// it might be stopped when reload is done or expires, so it needs to
-		// be re-triggered when there is new reload call coming. This is a
-		// noop if the config watcher is already running.
-		cw.Run()
 	}
+	// ensure configWatcher is running
+	// configWatcher is only triggered to run when the reload is called,
+	// it might be stopped when reload is done or expires, so it needs to
+	// be re-triggered when there is new reload call coming. This is a
+	// noop if the config watcher is already running.
+	cw.Run()
+
 	return nil
 }
 

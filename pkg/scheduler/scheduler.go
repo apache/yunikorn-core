@@ -380,7 +380,11 @@ func (m *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerAp
 		acceptedApps := make([]*si.AcceptedApplication, 0)
 		var rmID string
 		for _, j := range ev.AddedApplications {
-			app := j.(*cache.ApplicationInfo)
+			app, ok := j.(*cache.ApplicationInfo)
+			if !ok {
+				log.Logger().Debug("cast failed unexpected object in event",
+					zap.Any("ApplicationInfo", j))
+			}
 			rmID = common.GetRMIdFromPartitionName(app.Partition)
 			if err := m.addNewApplication(app); err != nil {
 				log.Logger().Debug("rejecting application in scheduler",
@@ -399,13 +403,21 @@ func (m *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerAp
 					Reason:        err.Error(),
 				})
 				// app is rejected by the scheduler
-				_ = app.HandleApplicationEvent(cache.RejectApplication)
+				err = app.HandleApplicationEvent(cache.RejectApplication)
+				if err != nil {
+					log.Logger().Debug("cache event handling error returned",
+						zap.Error(err))
+				}
 			} else {
 				acceptedApps = append(acceptedApps, &si.AcceptedApplication{
 					ApplicationID: app.ApplicationID,
 				})
 				// app is accepted by scheduler
-				_ = app.HandleApplicationEvent(cache.AcceptApplication)
+				err = app.HandleApplicationEvent(cache.AcceptApplication)
+				if err != nil {
+					log.Logger().Debug("cache event handling error returned",
+						zap.Error(err))
+				}
 			}
 		}
 		// notify RM proxy about apps added and rejected
@@ -442,7 +454,12 @@ func (m *Scheduler) removePartitionsBelongToRM(event *commonevents.RemoveRMParti
 func (m *Scheduler) processUpdatePartitionConfigsEvent(event *schedulerevent.SchedulerUpdatePartitionsConfigEvent) {
 	partitions := make([]*cache.PartitionInfo, 0)
 	for _, p := range event.UpdatedPartitions {
-		partitions = append(partitions, p.(*cache.PartitionInfo))
+		partition, ok := p.(*cache.PartitionInfo)
+		if !ok {
+			log.Logger().Debug("cast failed unexpected object in event",
+				zap.Any("PartitionInfo", p))
+		}
+		partitions = append(partitions, partition)
 	}
 
 	if err := m.clusterSchedulingContext.updateSchedulingPartitions(partitions); err != nil {
@@ -460,7 +477,12 @@ func (m *Scheduler) processUpdatePartitionConfigsEvent(event *schedulerevent.Sch
 func (m *Scheduler) processDeletePartitionConfigsEvent(event *schedulerevent.SchedulerDeletePartitionsConfigEvent) {
 	partitions := make([]*cache.PartitionInfo, 0)
 	for _, p := range event.DeletePartitions {
-		partitions = append(partitions, p.(*cache.PartitionInfo))
+		partition, ok := p.(*cache.PartitionInfo)
+		if !ok {
+			log.Logger().Debug("cast failed unexpected object in event",
+				zap.Any("PartitionInfo", p))
+		}
+		partitions = append(partitions, partition)
 	}
 
 	if err := m.clusterSchedulingContext.deleteSchedulingPartitions(partitions); err != nil {
@@ -479,12 +501,20 @@ func (m *Scheduler) processDeletePartitionConfigsEvent(event *schedulerevent.Sch
 func (m *Scheduler) processNodeEvent(event *schedulerevent.SchedulerNodeEvent) {
 	// process the node addition (one per event)
 	if event.AddedNode != nil {
-		nodeInfo := event.AddedNode.(*cache.NodeInfo)
+		nodeInfo, ok := event.AddedNode.(*cache.NodeInfo)
+		if !ok {
+			log.Logger().Debug("cast failed unexpected object in event",
+				zap.Any("NodeInfo", event.AddedNode))
+		}
 		m.clusterSchedulingContext.addSchedulingNode(nodeInfo)
 	}
 	// process the node deletion (one per event)
 	if event.RemovedNode != nil {
-		nodeInfo := event.RemovedNode.(*cache.NodeInfo)
+		nodeInfo, ok := event.RemovedNode.(*cache.NodeInfo)
+		if !ok {
+			log.Logger().Debug("cast failed unexpected object in event",
+				zap.Any("NodeInfo", event.RemovedNode))
+		}
 		m.clusterSchedulingContext.removeSchedulingNode(nodeInfo)
 	}
 	// preempted resources have now been released update the node

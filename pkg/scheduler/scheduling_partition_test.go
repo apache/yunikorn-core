@@ -50,7 +50,7 @@ func TestNewPartition(t *testing.T) {
 		t.Fatal("nil root queue should not have returned partition")
 	}
 
-	partition, err := newTestPartition()
+	_, err := newTestPartition()
 	if err != nil {
 		t.Errorf("test partition create failed with error: %v ", err)
 	}

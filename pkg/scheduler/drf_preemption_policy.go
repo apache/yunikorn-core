@@ -226,9 +226,10 @@ func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitio
 
 	// Now let's see if we need to reclaim some headroom shortages
 
+	// TODO: Do this shotgun preemption in a separate patch, it should be very similar to CS's shotgun preemption. And we can prioritize to preempt from later launched
+	//nolint:staticcheck
 	if len(headroomShortages) != 0 {
 		// Yeah .. we have some shortages.
-		// TODO: Do this shotgun preemption in a separate patch, it should be very similar to CS's shotgun preemption. And we can prioritize to preempt from later launched
 		// allocations, allocation with lower priorities, etc.
 	}
 

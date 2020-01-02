@@ -115,6 +115,7 @@ func (manager PartitionManager) cleanQueues(schedulingQueue *SchedulingQueue) {
 // - applications
 // - nodes
 // last action is to remove the cluster links
+//nolint:errcheck
 func (manager PartitionManager) remove() {
 	log.Logger().Info("marking all queues for removal",
 		zap.String("partitionName", manager.psc.Name))

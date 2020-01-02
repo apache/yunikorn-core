@@ -66,7 +66,10 @@ func lookup(userName string) (*user.User, error) {
 
 // test function only
 func lookupGroupID(gid string) (*user.Group, error) {
-	gID, _ := strconv.Atoi(gid)
+	gID, err := strconv.Atoi(gid)
+	if err != nil {
+		return nil, err
+	}
 	// fail all groups under 1000
 	if gID < 1000 {
 		return nil, fmt.Errorf("lookup failed for group: %s", gid)

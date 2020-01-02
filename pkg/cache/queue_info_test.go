@@ -75,7 +75,11 @@ func TestAllocationCalcRoot(t *testing.T) {
 		t.Fatalf("failed to create basic root queue: %v", err)
 	}
 	res := map[string]string{"memory": "100", "vcores": "10"}
-	allocation, _ := resources.NewResourceFromConf(res)
+	var allocation *resources.Resource
+	allocation, err = resources.NewResourceFromConf(res)
+	if err != nil {
+		t.Fatalf("failed to create basic resource: %v", err)
+	}
 	err = root.IncAllocatedResource(allocation, false)
 	if err != nil {
 		t.Errorf("root queue allocation failed on increment %v", err)
@@ -99,13 +103,18 @@ func TestAllocationCalcSub(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create basic root queue: %v", err)
 	}
-	parent, err := createManagedQueue(root, "parent", true)
+	var parent *QueueInfo
+	parent, err = createManagedQueue(root, "parent", true)
 	if err != nil {
 		t.Fatalf("failed to create parent queue: %v", err)
 	}
 
 	res := map[string]string{"memory": "100", "vcores": "10"}
-	allocation, _ := resources.NewResourceFromConf(res)
+	var allocation *resources.Resource
+	allocation, err = resources.NewResourceFromConf(res)
+	if err != nil {
+		t.Fatalf("failed to create basic resource: %v", err)
+	}
 	err = parent.IncAllocatedResource(allocation, false)
 	if err != nil {
 		t.Errorf("parent queue allocation failed on increment %v", err)
@@ -143,7 +152,8 @@ func TestManagedSubQueues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create basic root queue: %v", err)
 	}
-	parent, err := createManagedQueue(root, "parent", true)
+	var parent *QueueInfo
+	parent, err = createManagedQueue(root, "parent", true)
 	if err != nil {
 		t.Fatalf("failed to create parent queue: %v", err)
 	}
@@ -153,7 +163,8 @@ func TestManagedSubQueues(t *testing.T) {
 	if len(root.children) == 0 {
 		t.Errorf("parent queue is not added to the root queue")
 	}
-	leaf, err := createManagedQueue(parent, "leaf", false)
+	var leaf *QueueInfo
+	leaf, err = createManagedQueue(parent, "leaf", false)
 	if err != nil {
 		t.Fatalf("failed to create leaf queue: %v", err)
 	}
@@ -179,7 +190,11 @@ func TestManagedSubQueues(t *testing.T) {
 	}
 	// now set some allocation in the parent and try removal again
 	res := map[string]string{"memory": "100", "vcores": "10"}
-	allocation, _ := resources.NewResourceFromConf(res)
+	var allocation *resources.Resource
+	allocation, err = resources.NewResourceFromConf(res)
+	if err != nil {
+		t.Fatalf("failed to create basic resource: %v", err)
+	}
 	err = parent.IncAllocatedResource(allocation, false)
 	if err != nil {
 		t.Errorf("allocation increase failed on parent: %v", err)
@@ -221,7 +236,8 @@ func TestUnManagedSubQueues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create basic root queue: %v", err)
 	}
-	parent, err := createUnManagedQueue(root, "parent", true)
+	var parent *QueueInfo
+	parent, err = createUnManagedQueue(root, "parent", true)
 	if err != nil {
 		t.Fatalf("failed to create parent queue: %v", err)
 	}
@@ -231,7 +247,8 @@ func TestUnManagedSubQueues(t *testing.T) {
 	if len(root.children) == 0 {
 		t.Errorf("parent queue is not added to the root queue")
 	}
-	leaf, err := createUnManagedQueue(parent, "leaf", false)
+	var leaf *QueueInfo
+	leaf, err = createUnManagedQueue(parent, "leaf", false)
 	if err != nil {
 		t.Fatalf("failed to create leaf queue: %v", err)
 	}
@@ -257,7 +274,11 @@ func TestUnManagedSubQueues(t *testing.T) {
 	}
 	// now set some allocation in the parent and try removal again
 	res := map[string]string{"memory": "100", "vcores": "10"}
-	allocation, _ := resources.NewResourceFromConf(res)
+	var allocation *resources.Resource
+	allocation, err = resources.NewResourceFromConf(res)
+	if err != nil {
+		t.Fatalf("failed to create basic resource: %v", err)
+	}
 	err = parent.IncAllocatedResource(allocation, false)
 	if err != nil {
 		t.Errorf("allocation increase failed on parent: %v", err)
@@ -280,13 +301,13 @@ func TestGetChildQueueInfos(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create basic root queue: %v", err)
 	}
-	//
-	parent, err := createManagedQueue(root, "parent-man", true)
+	var parent *QueueInfo
+	parent, err = createManagedQueue(root, "parent-man", true)
 	if err != nil {
 		t.Fatalf("failed to create basic managed parent queue: %v", err)
 	}
 	for i := 0; i < 10; i++ {
-		_, err := createManagedQueue(parent, "leaf-man"+strconv.Itoa(i), false)
+		_, err = createManagedQueue(parent, "leaf-man"+strconv.Itoa(i), false)
 		if err != nil {
 			t.Errorf("failed to create managed queue: %v", err)
 		}
@@ -300,7 +321,7 @@ func TestGetChildQueueInfos(t *testing.T) {
 		t.Fatalf("failed to create basic unmanaged parent queue: %v", err)
 	}
 	for i := 0; i < 10; i++ {
-		_, err := createUnManagedQueue(parent, "leaf-un-"+strconv.Itoa(i), false)
+		_, err = createUnManagedQueue(parent, "leaf-un-"+strconv.Itoa(i), false)
 		if err != nil {
 			t.Errorf("failed to create unmanaged queue: %v", err)
 		}

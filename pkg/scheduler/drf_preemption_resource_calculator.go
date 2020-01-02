@@ -189,7 +189,7 @@ func calculateIdealAllocation(resourceType string, totalAvailable resources.Quan
 			if satisfiedQueues[queue] {
 				continue
 			}
-			queueCalc.normalizedGuarantee = queueCalc.normalizedGuarantee / totalGuarantees
+			queueCalc.normalizedGuarantee /= totalGuarantees
 		}
 	}
 

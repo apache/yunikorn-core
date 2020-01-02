@@ -44,7 +44,7 @@ func TestGetUserGroup(t *testing.T) {
 
 	ug, err := testCache.GetUserGroup("testuser1")
 	if err != nil {
-		t.Error("Lookup should not have failed: testuser1")
+		t.Fatal("Lookup should not have failed: testuser1")
 	}
 	if ug.failed {
 		t.Errorf("lookup failed which should not have: %t", ug.failed)
@@ -62,9 +62,9 @@ func TestGetUserGroup(t *testing.T) {
 	}
 	// click over the clock: if we do not get the cached version the new time will differ from the cache update
 	cachedUG.resolved -= 5
-	ug, _ = testCache.GetUserGroup("testuser1")
-	if ug.resolved != cachedUG.resolved {
-		t.Errorf("User 'testuser1' not returned from Cache, resolution time differs: %d got %d", ug.resolved, cachedUG.resolved)
+	ug, err = testCache.GetUserGroup("testuser1")
+	if err != nil || ug.resolved != cachedUG.resolved {
+		t.Errorf("User 'testuser1' not returned from Cache, resolution time differs: %d got %d (err = %v)", ug.resolved, cachedUG.resolved, err)
 	}
 }
 

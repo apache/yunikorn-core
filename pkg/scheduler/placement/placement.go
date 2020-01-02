@@ -172,17 +172,15 @@ func (m *AppPlacementManager) PlaceApplication(app *cache.ApplicationInfo) error
 					app.QueueName = ""
 					return err
 				}
-			} else {
+			} else if !queue.CheckSubmitAccess(app.GetUser()) {
 				// Check if the user is allowed to submit to this queueName, if not next rule
-				if !queue.CheckSubmitAccess(app.GetUser()) {
-					log.Logger().Debug("Submit access denied on queue",
-						zap.String("queueName", queueName),
-						zap.String("ruleName", checkRule.getName()),
-						zap.String("application", app.ApplicationID))
-					// reset the queue name for the last rule in the chain
-					queueName = ""
-					continue
-				}
+				log.Logger().Debug("Submit access denied on queue",
+					zap.String("queueName", queueName),
+					zap.String("ruleName", checkRule.getName()),
+					zap.String("application", app.ApplicationID))
+				// reset the queue name for the last rule in the chain
+				queueName = ""
+				continue
 			}
 			// we have a queue that allows submitting and can be created: app placed
 			break

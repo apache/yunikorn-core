@@ -126,11 +126,10 @@ func GetQueueMetrics(name string) CoreQueueMetrics {
 	defer m.lock.Unlock()
 	if qm, ok := m.queues[name]; ok {
 		return qm
-	} else {
-		queueMetrics := forQueue(name)
-		m.queues[name] = queueMetrics
-		return queueMetrics
 	}
+	queueMetrics := forQueue(name)
+	m.queues[name] = queueMetrics
+	return queueMetrics
 }
 
 // Format metric name based on the definition of metric name in prometheus, as per
@@ -150,7 +149,6 @@ func formatMetricName(metricName string) string {
 	}
 	if '0' <= metricName[0] && metricName[0] <= '9' {
 		return string(MetricNameInvalidByteReplacement) + string(newBytes)
-	} else {
-		return string(newBytes)
 	}
+	return string(newBytes)
 }

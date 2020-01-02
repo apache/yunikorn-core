@@ -133,7 +133,7 @@ func (m *Scheduler) findMayAllocationFromApplication(schedulingRequests *Schedul
 	}
 
 	if bestAsk != nil {
-		selectedPendingAskByAllocationKey[bestAsk.AskProto.AllocationKey] += 1
+		selectedPendingAskByAllocationKey[bestAsk.AskProto.AllocationKey]++
 	}
 
 	return bestAsk

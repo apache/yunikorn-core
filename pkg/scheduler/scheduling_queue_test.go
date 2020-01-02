@@ -80,7 +80,8 @@ func TestManagedSubQueues(t *testing.T) {
 	}
 
 	// single parent under root
-	parent, err := createManagedQueue(root, "parent", true)
+	var parent *SchedulingQueue
+	parent, err = createManagedQueue(root, "parent", true)
 	if err != nil {
 		t.Fatalf("failed to create parent queue: %v", err)
 	}
@@ -91,7 +92,8 @@ func TestManagedSubQueues(t *testing.T) {
 		t.Errorf("parent queue is not added to the root queue")
 	}
 	// add a leaf under the parent
-	leaf, err := createManagedQueue(parent, "leaf", false)
+	var leaf *SchedulingQueue
+	leaf, err = createManagedQueue(parent, "leaf", false)
 	if err != nil {
 		t.Fatalf("failed to create leaf queue: %v", err)
 	}
@@ -134,7 +136,8 @@ func TestUnManagedSubQueues(t *testing.T) {
 	}
 
 	// single parent under root
-	parent, err := createUnManagedQueue(root, "parent", true)
+	var parent *SchedulingQueue
+	parent, err = createUnManagedQueue(root, "parent", true)
 	if err != nil {
 		t.Fatalf("failed to create parent queue: %v", err)
 	}
@@ -145,7 +148,8 @@ func TestUnManagedSubQueues(t *testing.T) {
 		t.Errorf("parent queue is not added to the root queue")
 	}
 	// add a leaf under the parent
-	leaf, err := createUnManagedQueue(parent, "leaf", false)
+	var leaf *SchedulingQueue
+	leaf, err = createUnManagedQueue(parent, "leaf", false)
 	if err != nil {
 		t.Fatalf("failed to create leaf queue: %v", err)
 	}
@@ -186,13 +190,18 @@ func TestPendingCalc(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create basic root queue: %v", err)
 	}
-	parent, err := createManagedQueue(root, "parent", true)
+	var parent *SchedulingQueue
+	parent, err = createManagedQueue(root, "parent", true)
 	if err != nil {
 		t.Fatalf("failed to create parent queue: %v", err)
 	}
 
 	res := map[string]string{"memory": "100", "vcores": "10"}
-	allocation, _ := resources.NewResourceFromConf(res)
+	var allocation *resources.Resource
+	allocation, err = resources.NewResourceFromConf(res)
+	if err != nil {
+		t.Fatalf("failed to create basic resource: %v", err)
+	}
 	parent.IncPendingResource(allocation)
 	if !resources.Equals(root.pendingResource, allocation) {
 		t.Errorf("root queue pending allocation failed to increment expected %v, got %v", allocation, root.pendingResource)
@@ -218,13 +227,13 @@ func TestGetChildQueueInfos(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create basic root queue: %v", err)
 	}
-	//
-	parent, err := createManagedQueue(root, "parent-man", true)
+	var parent *SchedulingQueue
+	parent, err = createManagedQueue(root, "parent-man", true)
 	if err != nil {
 		t.Fatalf("failed to create managed parent queue: %v", err)
 	}
 	for i := 0; i < 10; i++ {
-		_, err := createManagedQueue(parent, "leaf-man"+strconv.Itoa(i), false)
+		_, err = createManagedQueue(parent, "leaf-man"+strconv.Itoa(i), false)
 		if err != nil {
 			t.Errorf("failed to create managed queue: %v", err)
 		}
@@ -238,7 +247,7 @@ func TestGetChildQueueInfos(t *testing.T) {
 		t.Fatalf("failed to create unamanged parent queue: %v", err)
 	}
 	for i := 0; i < 10; i++ {
-		_, err := createUnManagedQueue(parent, "leaf-un-"+strconv.Itoa(i), false)
+		_, err = createUnManagedQueue(parent, "leaf-un-"+strconv.Itoa(i), false)
 		if err != nil {
 			t.Errorf("failed to create unmanaged queue: %v", err)
 		}

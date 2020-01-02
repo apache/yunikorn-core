@@ -35,6 +35,9 @@ partitions:
           - name: testchild
 `
 	partInfo, err := CreatePartitionInfo([]byte(data))
+	if err != nil {
+		t.Fatalf("Partition create failed with error: %v", err)
+	}
 	tags := make(map[string]string)
 	user := security.UserGroup{
 		User:   "test",
@@ -44,19 +47,21 @@ partitions:
 	conf := configs.PlacementRule{
 		Name: "provided",
 	}
-	rule, err := newRule(conf)
-	if err != nil || rule == nil {
+	var pr rule
+	pr, err = newRule(conf)
+	if err != nil || pr == nil {
 		t.Errorf("provided rule create failed, err %v", err)
 	}
 	// queue that does not exists directly under the root
-	appInfo := cache.NewApplicationInfo("app1", "default", "unkonwn", user, tags)
-	queue, err := rule.placeApplication(appInfo, partInfo)
+	appInfo := cache.NewApplicationInfo("app1", "default", "unknown", user, tags)
+	var queue string
+	queue, err = pr.placeApplication(appInfo, partInfo)
 	if queue != "" || err != nil {
 		t.Errorf("provided rule placed app in incorrect queue '%s', err %v", queue, err)
 	}
 	// trying to place in a qualified queue that does not exist
 	appInfo = cache.NewApplicationInfo("app1", "default", "root.unknown", user, tags)
-	queue, err = rule.placeApplication(appInfo, partInfo)
+	queue, err = pr.placeApplication(appInfo, partInfo)
 	if queue != "" || err != nil {
 		t.Errorf("provided rule placed app in incorrect queue '%s', error %v", queue, err)
 	}
@@ -65,11 +70,11 @@ partitions:
 		Name:   "provided",
 		Create: true,
 	}
-	rule, err = newRule(conf)
-	if err != nil || rule == nil {
+	pr, err = newRule(conf)
+	if err != nil || pr == nil {
 		t.Errorf("provided rule create failed, err %v", err)
 	}
-	queue, err = rule.placeApplication(appInfo, partInfo)
+	queue, err = pr.placeApplication(appInfo, partInfo)
 	if queue != "root.unknown" || err != nil {
 		t.Errorf("provided rule placed app in incorrect queue '%s', error %v", queue, err)
 	}
@@ -81,14 +86,14 @@ partitions:
 			Value: "testparent",
 		},
 	}
-	rule, err = newRule(conf)
-	if err != nil || rule == nil {
+	pr, err = newRule(conf)
+	if err != nil || pr == nil {
 		t.Errorf("provided rule create failed with parent name, err %v", err)
 	}
 
 	// unqualified queue with parent rule that exists directly in hierarchy
 	appInfo = cache.NewApplicationInfo("app1", "default", "testchild", user, tags)
-	queue, err = rule.placeApplication(appInfo, partInfo)
+	queue, err = pr.placeApplication(appInfo, partInfo)
 	if queue != "root.testparent.testchild" || err != nil {
 		t.Errorf("provided rule failed to place queue in correct queue '%s', err %v", queue, err)
 	}
@@ -96,7 +101,7 @@ partitions:
 	// qualified queue with parent rule (parent rule ignored)
 	appInfo = cache.NewApplicationInfo("app1", "default", "root.testparent", user, tags)
 
-	queue, err = rule.placeApplication(appInfo, partInfo)
+	queue, err = pr.placeApplication(appInfo, partInfo)
 	if queue != "root.testparent" || err != nil {
 		t.Errorf("provided rule placed in to be created queue with create false '%s', err %v", queue, err)
 	}

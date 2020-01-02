@@ -81,7 +81,6 @@ func (m *SchedulingAllocationAsk) AddPendingAskRepeat(delta int32) bool {
 	if m.PendingRepeatAsk+delta >= 0 {
 		m.PendingRepeatAsk += delta
 		return true
-	} else {
-		return false
 	}
+	return false
 }

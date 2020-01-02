@@ -17,7 +17,6 @@ limitations under the License.
 package scheduler
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 
@@ -80,7 +79,7 @@ func (m *SchedulingRequests) UpdateAllocationAskRepeat(allocationKey string, del
 
 	if ask := m.requests[allocationKey]; ask != nil {
 		if ask.PendingRepeatAsk+delta < 0 {
-			return nil, errors.New(fmt.Sprintf("Trying to decrease number of allocation for key=%s, under zero, please double check", allocationKey))
+			return nil, fmt.Errorf("trying to decrease number of allocation for key=%s, under zero, please double check", allocationKey)
 		}
 
 		deltaPendingResource := resources.MultiplyBy(ask.AllocatedResource, float64(delta))
@@ -89,7 +88,7 @@ func (m *SchedulingRequests) UpdateAllocationAskRepeat(allocationKey string, del
 
 		return deltaPendingResource, nil
 	}
-	return nil, errors.New(fmt.Sprintf("Failed to locate request with key=%s", allocationKey))
+	return nil, fmt.Errorf("failed to locate request with key=%s", allocationKey)
 }
 
 // Remove allocation ask by key.

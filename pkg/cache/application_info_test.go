@@ -51,7 +51,10 @@ func TestAllocations(t *testing.T) {
 	}
 	// create an allocation and check the assignment
 	resMap := map[string]string{"memory": "100", "vcores": "10"}
-	res, _ := resources.NewResourceFromConf(resMap)
+	res, err := resources.NewResourceFromConf(resMap)
+	if err != nil {
+		t.Fatalf("failed to create resource with error: %v", err)
+	}
 	alloc := CreateMockAllocationInfo("app-00001", res, "uuid-1", "root.a", "node-1")
 	appInfo.addAllocation(alloc)
 	if !resources.Equals(appInfo.allocatedResource, res) {
@@ -86,7 +89,10 @@ func TestAllocations(t *testing.T) {
 func TestQueueUpdate(t *testing.T) {
 	appInfo := newApplicationInfo("app-00001", "default", "root.a")
 
-	queue, _ := NewUnmanagedQueue("test", true, nil)
+	queue, err := NewUnmanagedQueue("test", true, nil)
+	if err != nil {
+		t.Fatalf("failed to create queue: %v", err)
+	}
 	appInfo.SetQueue(queue)
 	assert.Equal(t, appInfo.QueueName, "test")
 }

@@ -28,16 +28,16 @@ func TestFixedRule(t *testing.T) {
 	conf := configs.PlacementRule{
 		Name: "fixed",
 	}
-	rule, err := newRule(conf)
-	if err == nil || rule != nil {
-		t.Errorf("fixed rule create did not fail without queue name, err 'nil' , rule: %v", rule)
+	fr, err := newRule(conf)
+	if err == nil || fr != nil {
+		t.Errorf("fixed rule create did not fail without queue name, err 'nil', rule: %v", fr)
 	}
 	conf = configs.PlacementRule{
 		Name:  "fixed",
 		Value: "testqueue",
 	}
-	rule, err = newRule(conf)
-	if err != nil || rule == nil {
+	fr, err = newRule(conf)
+	if err != nil || fr == nil {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
 	// trying to create using a parent with a fully qualified child
@@ -49,9 +49,9 @@ func TestFixedRule(t *testing.T) {
 			Value: "testparent",
 		},
 	}
-	rule, err = newRule(conf)
-	if err == nil || rule != nil {
-		t.Errorf("fixed rule create did not fail with parent rule and qualified child queue name, err 'nil' , rule: %v", rule)
+	fr, err = newRule(conf)
+	if err == nil || fr != nil {
+		t.Errorf("fixed rule create did not fail with parent rule and qualified child queue name, err 'nil', rule: %v", fr)
 	}
 }
 
@@ -67,6 +67,9 @@ partitions:
           - name: testchild
 `
 	partInfo, err := CreatePartitionInfo([]byte(data))
+	if err != nil {
+		t.Fatalf("Partition create failed with error: %v", err)
+	}
 	user := security.UserGroup{
 		User:   "testuser",
 		Groups: []string{},
@@ -79,11 +82,13 @@ partitions:
 		Name:  "fixed",
 		Value: "testqueue",
 	}
-	rule, err := newRule(conf)
-	if err != nil || rule == nil {
+	var fr rule
+	fr, err = newRule(conf)
+	if err != nil || fr == nil {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
-	queue, err := rule.placeApplication(appInfo, partInfo)
+	var queue string
+	queue, err = fr.placeApplication(appInfo, partInfo)
 	if queue != "root.testqueue" || err != nil {
 		t.Errorf("fixed rule failed to place queue in correct queue '%s', err %v", queue, err)
 	}
@@ -93,11 +98,11 @@ partitions:
 		Name:  "fixed",
 		Value: "root.testparent.testchild",
 	}
-	rule, err = newRule(conf)
-	if err != nil || rule == nil {
+	fr, err = newRule(conf)
+	if err != nil || fr == nil {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
-	queue, err = rule.placeApplication(appInfo, partInfo)
+	queue, err = fr.placeApplication(appInfo, partInfo)
 	if queue != "root.testparent.testchild" || err != nil {
 		t.Errorf("fixed rule failed to place queue in correct queue '%s', err %v", queue, err)
 	}
@@ -108,11 +113,11 @@ partitions:
 		Value:  "newqueue",
 		Create: true,
 	}
-	rule, err = newRule(conf)
-	if err != nil || rule == nil {
+	fr, err = newRule(conf)
+	if err != nil || fr == nil {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
-	queue, err = rule.placeApplication(appInfo, partInfo)
+	queue, err = fr.placeApplication(appInfo, partInfo)
 	if queue != "root.newqueue" || err != nil {
 		t.Errorf("fixed rule failed to place queue in to be created queue '%s', err %v", queue, err)
 	}
@@ -122,11 +127,11 @@ partitions:
 		Name:  "fixed",
 		Value: "root.testparent",
 	}
-	rule, err = newRule(conf)
-	if err != nil || rule == nil {
+	fr, err = newRule(conf)
+	if err != nil || fr == nil {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
-	queue, err = rule.placeApplication(appInfo, partInfo)
+	queue, err = fr.placeApplication(appInfo, partInfo)
 	if queue != "root.testparent" || err != nil {
 		t.Errorf("fixed rule did fail with parent queue '%s', error %v", queue, err)
 	}
@@ -140,11 +145,11 @@ partitions:
 			Value: "testparent",
 		},
 	}
-	rule, err = newRule(conf)
-	if err != nil || rule == nil {
+	fr, err = newRule(conf)
+	if err != nil || fr == nil {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
-	queue, err = rule.placeApplication(appInfo, partInfo)
+	queue, err = fr.placeApplication(appInfo, partInfo)
 	if queue != "root.testparent.testchild" || err != nil {
 		t.Errorf("fixed rule with parent queue should not have failed '%s', error %v", queue, err)
 	}

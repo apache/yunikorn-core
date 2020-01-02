@@ -157,9 +157,8 @@ func (qi *QueueInfo) IsManaged() bool {
 func (qi *QueueInfo) GetQueuePath() string {
 	if qi.Parent == nil {
 		return qi.Name
-	} else {
-		return qi.Parent.GetQueuePath() + DOT + qi.Name
 	}
+	return qi.Parent.GetQueuePath() + DOT + qi.Name
 }
 
 // Add a new child queue to this queue

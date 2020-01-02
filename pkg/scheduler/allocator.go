@@ -126,9 +126,8 @@ func (m *Scheduler) regularAllocate(nodeIterator NodeIterator, candidate *Schedu
 func (m *Scheduler) allocate(nodes NodeIterator, candidate *SchedulingAllocationAsk, preemptionParam *preemptionParameters) *SchedulingAllocation {
 	if preemptionParam.crossQueuePreemption {
 		return crossQueuePreemptionAllocate(m.preemptionContext.partitions[candidate.PartitionName], nodes, candidate, preemptionParam)
-	} else {
-		return m.regularAllocate(nodes, candidate)
 	}
+	return m.regularAllocate(nodes, candidate)
 }
 
 // Do mini batch allocation

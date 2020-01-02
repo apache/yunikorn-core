@@ -36,8 +36,7 @@ const (
 
 func SortQueue(queues []*SchedulingQueue, sortType SortType) {
 	// TODO add latency metric
-	switch sortType {
-	case FairSortPolicy:
+	if sortType == FairSortPolicy {
 		sort.SliceStable(queues, func(i, j int) bool {
 			l := queues[i]
 			r := queues[j]

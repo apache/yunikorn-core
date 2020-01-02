@@ -103,12 +103,10 @@ func newFilter(conf configs.Filter) Filter {
 			if err != nil {
 				log.Logger().Debug("Filter user expression does not compile", zap.Any("userFilter", conf.Users))
 			}
-		} else {
+		} else if configs.UserRegExp.MatchString(conf.Users[0]) {
 			// regexp not found consider this a user, sanity check the entry
-			if configs.UserRegExp.MatchString(conf.Users[0]) {
-				// single entry just a user
-				filter.userList[conf.Users[0]] = true
-			}
+			// single entry just a user
+			filter.userList[conf.Users[0]] = true
 		}
 		filter.empty = false
 	}
@@ -139,12 +137,10 @@ func newFilter(conf configs.Filter) Filter {
 			if err != nil {
 				log.Logger().Debug("Filter group expression does not compile", zap.Any("groupFilter", conf.Groups))
 			}
-		} else {
+		} else if configs.GroupRegExp.MatchString(conf.Groups[0]) {
 			// regexp not found consider this a group, sanity check the entry
-			if configs.GroupRegExp.MatchString(conf.Groups[0]) {
-				// single entry just a group
-				filter.groupList[conf.Groups[0]] = true
-			}
+			// single entry just a group
+			filter.groupList[conf.Groups[0]] = true
 		}
 		filter.empty = false
 	}

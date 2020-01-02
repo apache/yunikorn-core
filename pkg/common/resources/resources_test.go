@@ -17,10 +17,7 @@ limitations under the License.
 package resources
 
 import (
-	"fmt"
 	"math"
-
-	//    "math"
 	"reflect"
 	"testing"
 )
@@ -46,7 +43,6 @@ func TestNewResourceFromConf(t *testing.T) {
 	if err == nil || original != nil {
 		t.Fatalf("new resource create should have returned error %v, res %v", err, original)
 	}
-	err = fmt.Errorf("")
 }
 
 func TestClone(t *testing.T) {

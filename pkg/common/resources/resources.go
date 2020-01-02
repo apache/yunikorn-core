@@ -151,13 +151,12 @@ func addVal(valA, valB Quantity) Quantity {
 				zap.Int64("valueA", int64(valA)),
 				zap.Int64("valueB", int64(valB)))
 			return math.MinInt64
-		} else {
-			// return the maximum possible
-			log.Logger().Warn("Resource calculation wrapped: returned maximum value possible",
-				zap.Int64("valueA", int64(valA)),
-				zap.Int64("valueB", int64(valB)))
-			return math.MaxInt64
 		}
+		// return the maximum possible
+		log.Logger().Warn("Resource calculation wrapped: returned maximum value possible",
+			zap.Int64("valueA", int64(valA)),
+			zap.Int64("valueB", int64(valB)))
+		return math.MaxInt64
 	}
 	// not wrapped normal case
 	return result
@@ -183,13 +182,12 @@ func mulVal(valA, valB Quantity) Quantity {
 				zap.Int64("valueA", int64(valA)),
 				zap.Int64("valueB", int64(valB)))
 			return math.MinInt64
-		} else {
-			// return the maximum possible
-			log.Logger().Warn("Resource calculation wrapped: returned maximum value possible",
-				zap.Int64("valueA", int64(valA)),
-				zap.Int64("valueB", int64(valB)))
-			return math.MaxInt64
 		}
+		// return the maximum possible
+		log.Logger().Warn("Resource calculation wrapped: returned maximum value possible",
+			zap.Int64("valueA", int64(valA)),
+			zap.Int64("valueB", int64(valB)))
+		return math.MaxInt64
 	}
 	// not wrapped normal case
 	return result
@@ -210,7 +208,6 @@ func mulValRatio(value Quantity, ratio float64) Quantity {
 	}
 	// protect against negative integer overflow
 	if result < math.MinInt64 {
-		result = math.MinInt64
 		log.Logger().Warn("Multiplication result negative overflow",
 			zap.Float64("value", float64(value)),
 			zap.Float64("ratio", ratio))

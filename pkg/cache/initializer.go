@@ -187,11 +187,9 @@ func checkResourceConfigurationsForQueue(cur *QueueInfo, parent *QueueInfo) erro
 		} else {
 			cur.GuaranteedResource = sum
 		}
-	} else {
+	} else if cur.GuaranteedResource == nil {
 		// When the queue doesn't have children, set guaranteed to zero if absent.
-		if cur.GuaranteedResource == nil {
-			cur.GuaranteedResource = resources.NewResource()
-		}
+		cur.GuaranteedResource = resources.NewResource()
 	}
 
 	// If Max resource not set, use parent's max resource

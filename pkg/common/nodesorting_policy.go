@@ -37,8 +37,9 @@ const (
 )
 
 func (nsp SortingPolicy) String() string {
-	return [...]string{"binpacking", "fair", "default"}[nsp]
+	return [...]string{"binpacking", "fair", "undefined"}[nsp]
 }
+
 func FromString(str string) (SortingPolicy, error) {
 	switch str {
 	// fair is the default policy when not set
@@ -47,17 +48,21 @@ func FromString(str string) (SortingPolicy, error) {
 	case "binpacking":
 		return BinPackingPolicy, nil
 	default:
-		return Undefined, fmt.Errorf("undefined policy %s", str)
+		return Undefined, fmt.Errorf("undefined policy: %s", str)
 	}
 }
 
 func NewNodeSortingPolicy(policyType string) *NodeSortingPolicy {
-	pType, _ := FromString(policyType)
+	pType, err := FromString(policyType)
+	if err != nil {
+		log.Logger().Debug("node sorting policy defaulted to 'undefined'",
+			zap.Error(err))
+	}
 	sp := &NodeSortingPolicy{
 		PolicyType: pType,
 	}
 
 	log.Logger().Debug("new node sorting policy added",
-		zap.String("type", policyType))
+		zap.String("type", pType.String()))
 	return sp
 }

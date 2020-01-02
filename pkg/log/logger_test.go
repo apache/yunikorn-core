@@ -25,20 +25,24 @@ import (
 )
 
 func TestIsNopLogger(t *testing.T) {
-	var logger *zap.Logger
+	testLogger, err := zap.NewDevelopment()
+	if err != nil {
+		t.Fatalf("Dev logger init failed with error: %v", err)
+	}
+	assert.Equal(t, false, isNopLogger(testLogger))
 
-	logger, _ = zap.NewDevelopment()
-	assert.Equal(t, false, isNopLogger(logger))
+	testLogger = zap.NewNop()
+	assert.Equal(t, true, isNopLogger(testLogger))
 
-	logger = zap.NewNop()
-	assert.Equal(t, true, isNopLogger(logger))
+	testLogger = zap.L()
+	assert.Equal(t, true, isNopLogger(testLogger))
 
-	logger = zap.L()
-	assert.Equal(t, true, isNopLogger(logger))
-
-	logger, _ = zap.NewProduction()
-	zap.ReplaceGlobals(logger)
-	assert.Equal(t, false, isNopLogger(logger))
+	testLogger, err = zap.NewProduction()
+	if err != nil {
+		t.Fatalf("Prod logger init failed with error: %v", err)
+	}
+	zap.ReplaceGlobals(testLogger)
+	assert.Equal(t, false, isNopLogger(testLogger))
 	assert.Equal(t, false, isNopLogger(zap.L()))
 }
 

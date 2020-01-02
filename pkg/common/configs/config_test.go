@@ -351,7 +351,7 @@ partitions:
 `
 	// create the config and process it
 	// validate the config and check after the update
-	conf, err := CreateConfig(data)
+	_, err := CreateConfig(data)
 	if err != nil {
 		t.Errorf("deep queue hierarchy test should not have failed: %v", err)
 	}
@@ -374,6 +374,7 @@ partitions:
 `
 	// create the config and process it
 	// validate the config and check after the update
+	var conf *SchedulerConfig
 	conf, err = CreateConfig(data)
 	if err == nil {
 		t.Errorf("deep queue hierarchy test should have failed: %v", conf)

@@ -76,7 +76,7 @@ partitions:
 		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a", "app-2": "root.b"}),
 		RmID:            "rm:123",
 	})
-	if nil != err {
+	if err != nil {
 		b.Error(err.Error())
 	}
 	waitForAcceptedApplications(mockRM, "app-1", 1000)
@@ -112,6 +112,9 @@ partitions:
 		RmID:                "rm:123",
 		NewSchedulableNodes: newNodes,
 	})
+	if err != nil {
+		b.Error(err.Error())
+	}
 
 	// Wait for all nodes to be accepted
 	startTime := time.Now()
@@ -137,6 +140,10 @@ partitions:
 		},
 		RmID: "rm:123",
 	})
+	if err != nil {
+		b.Error(err.Error())
+	}
+
 	err = proxy.Update(&si.UpdateRequest{
 		Asks: []*si.AllocationAsk{
 			{
@@ -153,9 +160,11 @@ partitions:
 		},
 		RmID: "rm:123",
 	})
+	if err != nil {
+		b.Error(err.Error())
+	}
 
-	// Reset number of iterations and timer for this benchmark
-	b.N = numPods
+	// Reset  timer for this benchmark
 	startTime = time.Now()
 	b.ResetTimer()
 

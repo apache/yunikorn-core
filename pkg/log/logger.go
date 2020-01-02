@@ -17,6 +17,7 @@ limitations under the License.
 package log
 
 import (
+	"fmt"
 	"reflect"
 	"sync"
 
@@ -37,7 +38,12 @@ func Logger() *zap.Logger {
 			// TODO support log options when a global logger is not there
 			c := zap.NewDevelopmentConfig()
 			config = &c
-			logger, _ = config.Build()
+			newLogger, err := config.Build()
+			// this should really not happen so just write to stdout
+			if err != nil {
+				fmt.Printf("Logger init error: %v", err)
+			}
+			logger = newLogger
 		}
 	})
 	return logger

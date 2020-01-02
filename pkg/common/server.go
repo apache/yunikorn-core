@@ -110,14 +110,15 @@ func (s *nonBlockingGRPCServer) serve(endpoint string, ss si.SchedulerServer) {
 
 	if proto == "unix" {
 		addr = "/" + addr
-		if err := os.Remove(addr); err != nil && !os.IsNotExist(err) {
+		if err = os.Remove(addr); err != nil && !os.IsNotExist(err) {
 			log.Logger().Fatal("failed to remove unix domain socket",
 				zap.String("uds", addr),
 				zap.Error(err))
 		}
 	}
 
-	listener, err := net.Listen(proto, addr)
+	var listener net.Listener
+	listener, err = net.Listen(proto, addr)
 	if err != nil {
 		log.Logger().Fatal("failed to listen to address",
 			zap.Error(err))
@@ -133,7 +134,7 @@ func (s *nonBlockingGRPCServer) serve(endpoint string, ss si.SchedulerServer) {
 	log.Logger().Info("listening for connections",
 		zap.String("address", listener.Addr().String()))
 
-	if err := server.Serve(listener); err != nil {
+	if err = server.Serve(listener); err != nil {
 		log.Logger().Fatal("failed to serve", zap.Error(err))
 	}
 }

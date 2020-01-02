@@ -37,6 +37,9 @@ partitions:
           - name: testchild
 `
 	partInfo, err := CreatePartitionInfo([]byte(data))
+	if err != nil {
+		t.Fatalf("Partition create failed with error: %v", err)
+	}
 	tags := make(map[string]string)
 	user := security.UserGroup{
 		User:   "testchild",
@@ -48,11 +51,13 @@ partitions:
 	conf := configs.PlacementRule{
 		Name: "user",
 	}
-	rule, err := newRule(conf)
-	if err != nil || rule == nil {
+	var ur rule
+	ur, err = newRule(conf)
+	if err != nil || ur == nil {
 		t.Errorf("user rule create failed, err %v", err)
 	}
-	queue, err := rule.placeApplication(appInfo, partInfo)
+	var queue string
+	queue, err = ur.placeApplication(appInfo, partInfo)
 	if queue != "root.testchild" || err != nil {
 		t.Errorf("user rule failed to place queue in correct queue '%s', err %v", queue, err)
 	}
@@ -62,7 +67,7 @@ partitions:
 		Groups: []string{},
 	}
 	appInfo = cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
-	queue, err = rule.placeApplication(appInfo, partInfo)
+	queue, err = ur.placeApplication(appInfo, partInfo)
 	if queue != "root.testparent" || err != nil {
 		t.Errorf("user rule failed with parent queue '%s', error %v", queue, err)
 	}
@@ -72,7 +77,7 @@ partitions:
 		Groups: []string{},
 	}
 	appInfo = cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
-	queue, err = rule.placeApplication(appInfo, partInfo)
+	queue, err = ur.placeApplication(appInfo, partInfo)
 	if queue == "" || err != nil {
 		t.Errorf("user rule with dotted user should not have failed '%s', error %v", queue, err)
 	}
@@ -90,11 +95,11 @@ partitions:
 		Groups: []string{},
 	}
 	appInfo = cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
-	rule, err = newRule(conf)
-	if err != nil || rule == nil {
+	ur, err = newRule(conf)
+	if err != nil || ur == nil {
 		t.Errorf("user rule create failed with queue name, err %v", err)
 	}
-	queue, err = rule.placeApplication(appInfo, partInfo)
+	queue, err = ur.placeApplication(appInfo, partInfo)
 	if queue != "root.testparent.testchild" || err != nil {
 		t.Errorf("user rule failed to place queue in correct queue '%s', err %v", queue, err)
 	}
@@ -110,11 +115,11 @@ partitions:
 		Name:   "user",
 		Create: true,
 	}
-	rule, err = newRule(conf)
-	if err != nil || rule == nil {
+	ur, err = newRule(conf)
+	if err != nil || ur == nil {
 		t.Errorf("user rule create failed with queue name, err %v", err)
 	}
-	queue, err = rule.placeApplication(appInfo, partInfo)
+	queue, err = ur.placeApplication(appInfo, partInfo)
 	if queue != "root.unknown" || err != nil {
 		t.Errorf("user rule placed in to be created queue with create false '%s', err %v", queue, err)
 	}

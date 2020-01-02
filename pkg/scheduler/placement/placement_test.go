@@ -164,10 +164,8 @@ func TestManagerBuildRule(t *testing.T) {
 	ruleObjs, err = man.buildRules(rules)
 	if err != nil || len(ruleObjs) != 2 {
 		t.Errorf("rule build should not have failed and created 2 rule, err: %v, rules: %v", err, ruleObjs)
-	} else {
-		if ruleObjs[0].getName() != "user" || ruleObjs[1].getName() != "test" {
-			t.Errorf("rule build order is not preserved: %v", ruleObjs)
-		}
+	} else if ruleObjs[0].getName() != "user" || ruleObjs[1].getName() != "test" {
+		t.Errorf("rule build order is not preserved: %v", ruleObjs)
 	}
 }
 
@@ -188,6 +186,9 @@ partitions:
             parent: true
 `
 	partInfo, err := CreatePartitionInfo([]byte(data))
+	if err != nil {
+		t.Fatalf("Partition create failed with error: %v", err)
+	}
 	// basic info without rules, manager should init
 	man := NewPlacementManager(partInfo)
 	if man == nil {

@@ -80,6 +80,9 @@ func NewPartitionInfo(partition configs.PartitionConfig, rmID string, info *Clus
 	// Add the rest of the queue structure recursively
 	queueConf := partition.Queues[0]
 	root, err := NewManagedQueue(queueConf, nil)
+	if err != nil {
+		return nil, err
+	}
 	err = addQueueInfo(queueConf.Queues, root)
 	if err != nil {
 		return nil, err
@@ -98,14 +101,20 @@ func NewPartitionInfo(partition configs.PartitionConfig, rmID string, info *Clus
 	p.userGroupCache = security.GetUserGroupCache("")
 
 	// TODO Need some more cleaner interface here.
-	configuredPolicy, _ := common.FromString(partition.NodeSortPolicy.Type)
+	var configuredPolicy common.SortingPolicy
+	configuredPolicy, err = common.FromString(partition.NodeSortPolicy.Type)
+	if err != nil {
+		log.Logger().Debug("NodeSorting policy incorrectly set or unknown",
+			zap.Error(err))
+	}
 	switch configuredPolicy {
-	case common.BinPackingPolicy:
+	case common.BinPackingPolicy, common.FairnessPolicy:
+		log.Logger().Info("NodeSorting policy set from config",
+			zap.String("policyName", configuredPolicy.String()))
 		p.nodeSortingPolicy = common.NewNodeSortingPolicy(partition.NodeSortPolicy.Type)
-		log.Logger().Info("NodeSortingBinPackingPolicy policy is set.")
-	default:
+	case common.Undefined:
+		log.Logger().Info("NodeSorting policy not set using 'fair' as default")
 		p.nodeSortingPolicy = common.NewNodeSortingPolicy("fair")
-		log.Logger().Info("No default scheduling policy is set, hence setting to fair.")
 	}
 
 	return p, nil
@@ -115,13 +124,13 @@ func NewPartitionInfo(partition configs.PartitionConfig, rmID string, info *Clus
 func addQueueInfo(conf []configs.QueueConfig, parent *QueueInfo) error {
 	// create the queue at this level
 	for _, queueConf := range conf {
-		parent, err := NewManagedQueue(queueConf, parent)
+		thisQueue, err := NewManagedQueue(queueConf, parent)
 		if err != nil {
 			return err
 		}
 		// recursive create the queues below
 		if len(queueConf.Queues) > 0 {
-			err := addQueueInfo(queueConf.Queues, parent)
+			err = addQueueInfo(queueConf.Queues, thisQueue)
 			if err != nil {
 				return err
 			}
@@ -192,7 +201,7 @@ func (pi *PartitionInfo) addNewNode(node *NodeInfo, existingAllocations []*si.Al
 		return fmt.Errorf("partition %s is stopped cannot add a new node %s", pi.Name, node.NodeID)
 	}
 
-	if node := pi.nodes[node.NodeID]; node != nil {
+	if pi.nodes[node.NodeID] != nil {
 		return fmt.Errorf("partition %s has an existing node %s, node name must be unique", pi.Name, node.NodeID)
 	}
 
@@ -296,7 +305,7 @@ func (pi *PartitionInfo) removeNodeInternal(nodeID string) {
 		// since we are not locking the node and or application we could have had an update while processing
 		if app := pi.applications[alloc.ApplicationID]; app != nil {
 			// check allocations on the node
-			if alloc := app.removeAllocation(allocID); alloc == nil {
+			if app.removeAllocation(allocID) == nil {
 				log.Logger().Info("allocation is not found, skipping removing the node",
 					zap.String("allocationId", allocID),
 					zap.String("appID", app.ApplicationID),
@@ -356,12 +365,11 @@ func (pi *PartitionInfo) addNewApplication(info *ApplicationInfo, failIfExist bo
 	if app := pi.applications[info.ApplicationID]; app != nil {
 		if failIfExist {
 			return fmt.Errorf("application %s already exists in partition %s", info.ApplicationID, pi.Name)
-		} else {
-			log.Logger().Info("app already exists in partition",
-				zap.String("appID", info.ApplicationID),
-				zap.String("partitionName", pi.Name))
-			return nil
 		}
+		log.Logger().Info("app already exists in partition",
+			zap.String("appID", info.ApplicationID),
+			zap.String("partitionName", pi.Name))
+		return nil
 	}
 
 	// queue is checked later and overwritten based on placement rules

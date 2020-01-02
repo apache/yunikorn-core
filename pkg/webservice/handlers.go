@@ -51,7 +51,7 @@ func GetQueueInfo(w http.ResponseWriter, r *http.Request) {
 
 	lists := gClusterInfo.ListPartitions()
 	for _, k := range lists {
-		partitionInfo := getPartitionJson(k)
+		partitionInfo := getPartitionJSON(k)
 
 		if err := json.NewEncoder(w).Encode(partitionInfo); err != nil {
 			panic(err)
@@ -64,7 +64,7 @@ func GetClusterInfo(w http.ResponseWriter, r *http.Request) {
 
 	lists := gClusterInfo.ListPartitions()
 	for _, k := range lists {
-		clusterInfo := getClusterJson(k)
+		clusterInfo := getClusterJSON(k)
 		var clustersInfo []dao.ClusterDAOInfo
 		clustersInfo = append(clustersInfo, *clusterInfo)
 
@@ -83,7 +83,7 @@ func GetApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 		partition := gClusterInfo.GetPartition(k)
 		appList := partition.GetApplications()
 		for _, app := range appList {
-			appDao := getApplicationJson(app)
+			appDao := getApplicationJSON(app)
 			appsDao = append(appsDao, appDao)
 		}
 	}
@@ -102,7 +102,7 @@ func writeHeaders(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func getClusterJson(name string) *dao.ClusterDAOInfo {
+func getClusterJSON(name string) *dao.ClusterDAOInfo {
 	clusterInfo := &dao.ClusterDAOInfo{}
 	partitionContext := gClusterInfo.GetPartition(name)
 	clusterInfo.TotalApplications = strconv.Itoa(partitionContext.GetTotalApplicationCount())
@@ -117,7 +117,7 @@ func getClusterJson(name string) *dao.ClusterDAOInfo {
 	return clusterInfo
 }
 
-func getPartitionJson(name string) *dao.PartitionDAOInfo {
+func getPartitionJSON(name string) *dao.PartitionDAOInfo {
 	partitionInfo := &dao.PartitionDAOInfo{}
 
 	partitionContext := gClusterInfo.GetPartition(name)
@@ -133,7 +133,7 @@ func getPartitionJson(name string) *dao.PartitionDAOInfo {
 	return partitionInfo
 }
 
-func getApplicationJson(app *cache.ApplicationInfo) *dao.ApplicationDAOInfo {
+func getApplicationJSON(app *cache.ApplicationInfo) *dao.ApplicationDAOInfo {
 	var allocationInfos []dao.AllocationDAOInfo
 	allocations := app.GetAllAllocations()
 	for _, alloc := range allocations {

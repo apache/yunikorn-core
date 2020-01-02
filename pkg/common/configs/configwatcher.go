@@ -94,14 +94,13 @@ func (cw *ConfigWatcher) runOnce() bool {
 		log.Logger().Debug("configuration file unchanged")
 		time.Sleep(1 * time.Second)
 		return true
-	} else {
-		// when detect state changes, trigger the reload function
-		log.Logger().Debug("configuration file changed")
-		if err := cw.reloader.DoReloadConfiguration(); err == nil {
-			log.Logger().Debug("configuration is successfully reloaded")
-		}
-		return false
 	}
+	// when detect state changes, trigger the reload function
+	log.Logger().Debug("configuration file changed")
+	if err = cw.reloader.DoReloadConfiguration(); err == nil {
+		log.Logger().Debug("configuration is successfully reloaded")
+	}
+	return false
 }
 
 // if configWatcher is not running, kick-off running it

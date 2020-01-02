@@ -27,26 +27,26 @@ func TestNewRule(t *testing.T) {
 	conf := configs.PlacementRule{
 		Name: "bogus",
 	}
-	rule, err := newRule(conf)
-	if err == nil || rule != nil {
-		t.Errorf("new rule create did not fail with bogus rule name, err 'nil' , rule: %v, ", rule)
+	nr, err := newRule(conf)
+	if err == nil || nr != nil {
+		t.Errorf("new newRule create did not fail with bogus newRule name, err 'nil' , newRule: %v, ", nr)
 	}
 
 	conf = configs.PlacementRule{
 		Name: "test",
 	}
-	rule, err = newRule(conf)
-	if err != nil || rule == nil {
-		t.Errorf("new rule build failed which should not, rule 'nil' , err: %v, ", err)
+	nr, err = newRule(conf)
+	if err != nil || nr == nil {
+		t.Errorf("new newRule build failed which should not, newRule 'nil' , err: %v, ", err)
 	}
 
-	// test normalise rule name
+	// test normalise newRule name
 	conf = configs.PlacementRule{
 		Name: "TeSt",
 	}
-	rule, err = newRule(conf)
-	if err != nil || rule == nil {
-		t.Errorf("new normalised rule build failed which should not, rule 'nil' , err: %v, ", err)
+	nr, err = newRule(conf)
+	if err != nil || nr == nil {
+		t.Errorf("new normalised newRule build failed which should not, newRule 'nil' , err: %v, ", err)
 	}
 }
 
@@ -55,28 +55,28 @@ func TestPlaceApp(t *testing.T) {
 	conf := configs.PlacementRule{
 		Name: "test",
 	}
-	rule, err := newRule(conf)
+	nr, err := newRule(conf)
 	if err != nil {
 		t.Fatal("unexpected rule initialisation error")
 	}
 	// place application that should fail
-	_, err = rule.placeApplication(nil, nil)
+	_, err = nr.placeApplication(nil, nil)
 	if err == nil {
 		t.Error("test rule place application did not fail as expected")
 	}
 	var queue string
 	// place application that should not fail and return "test"
-	queue, err = rule.placeApplication(&cache.ApplicationInfo{}, nil)
+	queue, err = nr.placeApplication(&cache.ApplicationInfo{}, nil)
 	if err != nil || queue != "test" {
 		t.Errorf("test rule place application did not fail, err: %v, ", err)
 	}
 	// place application that should not fail and return the queue in the object
-	queue, err = rule.placeApplication(&cache.ApplicationInfo{QueueName: "passedin"}, nil)
+	queue, err = nr.placeApplication(&cache.ApplicationInfo{QueueName: "passedin"}, nil)
 	if err != nil || queue != "passedin" {
 		t.Errorf("test rule place application did not fail, err: %v, ", err)
 	}
 	// place application that should not fail and return the queue in the object
-	queue, err = rule.placeApplication(&cache.ApplicationInfo{QueueName: "user.name"}, nil)
+	queue, err = nr.placeApplication(&cache.ApplicationInfo{QueueName: "user.name"}, nil)
 	if err != nil || queue != "user_dot_name" {
 		t.Errorf("test rule place application did not fail, err: %v, ", err)
 	}

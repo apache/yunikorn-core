@@ -266,7 +266,7 @@ func checkQueues(queue *QueueConfig, level int) error {
 		return err
 	}
 
-	// check the limits for this queue (if defined)
+	// check the limits for this child (if defined)
 	err = checkLimits(queue.Limits, queue.Name)
 	if err != nil {
 		return err
@@ -274,21 +274,20 @@ func checkQueues(queue *QueueConfig, level int) error {
 
 	// check this level for name compliance and uniqueness
 	queueMap := make(map[string]bool)
-	for _, queue := range queue.Queues {
-		if !QueueNameRegExp.MatchString(queue.Name) {
-			return fmt.Errorf("invalid queue name %s, a name must only have alphanumeric characters,"+
-				" - or _, and be no longer than 64 characters", queue.Name)
+	for _, child := range queue.Queues {
+		if !QueueNameRegExp.MatchString(child.Name) {
+			return fmt.Errorf("invalid child name %s, a name must only have alphanumeric characters,"+
+				" - or _, and be no longer than 64 characters", child.Name)
 		}
-		if queueMap[strings.ToLower(queue.Name)] {
-			return fmt.Errorf("duplicate queue name found with name %s, level %d", queue.Name, level)
-		} else {
-			queueMap[strings.ToLower(queue.Name)] = true
+		if queueMap[strings.ToLower(child.Name)] {
+			return fmt.Errorf("duplicate child name found with name %s, level %d", child.Name, level)
 		}
+		queueMap[strings.ToLower(child.Name)] = true
 	}
 
 	// recurse into the depth if this level passed
-	for _, queue := range queue.Queues {
-		err := checkQueues(&queue, level+1)
+	for _, child := range queue.Queues {
+		err = checkQueues(&child, level+1)
 		if err != nil {
 			return err
 		}

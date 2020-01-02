@@ -104,9 +104,8 @@ func (csc *ClusterSchedulingContext) RemoveSchedulingApplication(appID string, p
 			return nil, err
 		}
 		return schedulingApp, nil
-	} else {
-		return nil, fmt.Errorf("failed to find partition=%s while remove app=%s", partitionName, appID)
 	}
+	return nil, fmt.Errorf("failed to find partition=%s while remove app=%s", partitionName, appID)
 }
 
 // Update the scheduler's partition list based on the processed config

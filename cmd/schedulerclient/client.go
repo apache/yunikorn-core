@@ -49,6 +49,9 @@ func main() {
 	log.Printf("Responded")
 
 	stream, err := c.Update(ctx)
+	if err != nil {
+		log.Fatalf("error on update: %v", err)
+	}
 	done := make(chan bool)
 
 	// Connect to server and send streaming

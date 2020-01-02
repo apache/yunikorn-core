@@ -64,13 +64,13 @@ func TestCheckConditions(t *testing.T) {
     }
 
     // Check if we can allocate on scheduling node (no plugins)
-    if !node.CheckAllocateConditions("test") {
+    if !node.CheckAllocateConditions("test", false) {
         t.Error("node with scheduling set to true no plugins should allow allocation")
     }
 
     // Check if we can allocate on non scheduling node (no plugins)
     node.nodeInfo.SetSchedulable(false)
-    if node.CheckAllocateConditions("test") {
+    if node.CheckAllocateConditions("test", false) {
         t.Error("node with scheduling set to false should not allow allocation")
     }
     //TODO add mock for plugin to extend tests

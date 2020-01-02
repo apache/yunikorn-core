@@ -45,24 +45,24 @@ func NewReservedSchedulingRequest(ask *SchedulingAllocationAsk, app *SchedulingA
 }
 
 // Increase amount of the reservation, return amount after increase
-func (m *ReservedSchedulingRequest) IncAmount() int {
+func (m *ReservedSchedulingRequest) IncAmount(delta int) int {
     m.lock.Lock()
     defer m.lock.Unlock()
 
-    m.amount++
+    m.amount += delta
 
     return m.amount
 }
 
 // Decrease amount of the reservation, return amount after increase.
 // It is a no-op when amount is already <= 0 before decrease, and return false if such thing happens
-func (m *ReservedSchedulingRequest) DecAmount() (int, bool) {
+func (m *ReservedSchedulingRequest) DecAmount(delta int) (int, bool) {
     m.lock.Lock()
     defer m.lock.Unlock()
     if m.amount <= 0 {
         return m.amount, false
     }
-    m.amount--
+    m.amount -= delta
 
     return m.amount, true
 }

@@ -200,6 +200,28 @@ func (sn *SchedulingNode) CheckAndAllocateResource(delta *resources.Resource, pr
 	}
 }
 
+func (sn* SchedulingNode) UnreserveOnNode(reservationRequest *ReservedSchedulingRequest) bool {
+	sn.lock.Lock()
+	defer sn.lock.Unlock()
+
+	requestAllocKey := reservationRequest.SchedulingAsk.AskProto.AllocationKey
+
+	if val, ok := sn.reservationRequests[requestAllocKey]; ok {
+		_, decSucceeded := val.DecAmount()
+
+		if val.GetAmount() <= 0 {
+			delete(sn.reservationRequests, requestAllocKey)
+		}
+
+		if decSucceeded {
+			sn.totalReservedResource = resources.Sub(sn.totalReservedResource, reservationRequest.SchedulingAsk.AllocatedResource)
+			return true
+		}
+	}
+
+	return false
+}
+
 func (sn* SchedulingNode) ReserveOnNode(reservationRequest *ReservedSchedulingRequest) (bool, error) {
 	requestAllocKey := reservationRequest.SchedulingAsk.AskProto.AllocationKey
 	nodeId := reservationRequest.SchedulingNode.NodeId
@@ -224,7 +246,7 @@ func (sn* SchedulingNode) ReserveOnNode(reservationRequest *ReservedSchedulingRe
 		reservationRequest := reservationRequest.Clone()
 		sn.reservationRequests[key] = reservationRequest
 	} else {
-		val.IncAmount()
+		val.IncAmount(reservationRequest.GetAmount())
 	}
 
 	sn.totalReservedResource = resources.Add(sn.totalReservedResource, reservationRequest.SchedulingAsk.AllocatedResource)
@@ -238,14 +260,15 @@ func (sn* SchedulingNode) ReserveOnNode(reservationRequest *ReservedSchedulingRe
 // The caller must thus not rely on all plugins being executed.
 // This is a lock free call as it does not change the node and multiple predicate checks could be
 // run at the same time.
-func (sn *SchedulingNode) CheckAllocateConditions(allocId string) bool {
+func (sn *SchedulingNode) CheckAllocateConditions(allocId string, reservation bool) bool {
 	if !sn.nodeInfo.IsSchedulable() {
 		log.Logger().Debug("node is unschedulable",
 			zap.String("nodeId", sn.NodeId))
 		return false
 	}
 
-	if len(sn.reservationRequests) > 0 {
+	// Only check this for regular allocation (not reservation)
+	if reservation && len(sn.reservationRequests) > 0 {
 		log.Logger().Debug("node is already reserved",
 			zap.String("nodeId", sn.NodeId))
 		return false

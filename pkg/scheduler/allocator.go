@@ -70,7 +70,7 @@ func (m *Scheduler) reservationAllocation(partitionCtx *PartitionSchedulingConte
 func (m *Scheduler) handleSchedulingAllocation(alloc *SchedulingAllocation, partitionCtx *PartitionSchedulingContext) {
     if alloc == nil {
         return
-    } else if alloc.Reservation {
+    } else if alloc.AllocationResult == Reservation {
         // Reservation is kept inside scheduler, so update internal scheduler context
         partitionCtx.AddNewReservation(alloc)
     } else {

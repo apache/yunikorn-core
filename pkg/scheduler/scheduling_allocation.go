@@ -21,18 +21,33 @@ import (
     "github.com/cloudera/yunikorn-core/pkg/common/commonevents"
 )
 
-type SchedulingAllocation struct {
-    SchedulingAsk *SchedulingAllocationAsk
-    NumAllocation int32
-    Node          *SchedulingNode
-    Releases      []*commonevents.ReleaseAllocation
-    PartitionName string
-    Application   *SchedulingApplication
-    Reservation   bool // Is it a reservation?
+type AllocationResultType int
+
+const (
+    Allocation AllocationResultType = iota
+    Reservation
+    Unreserve
+)
+
+func (soe AllocationResultType) String() string {
+    return [...]string{"Allocation", "Reservation", "Unreserve"}[soe]
 }
 
-func NewSchedulingAllocation(ask *SchedulingAllocationAsk, node *SchedulingNode, app *SchedulingApplication, reservation bool) *SchedulingAllocation {
-    return &SchedulingAllocation{SchedulingAsk: ask, Node: node, NumAllocation: 1, Application: app, Reservation: reservation}
+type SchedulingAllocation struct {
+    SchedulingAsk    *SchedulingAllocationAsk
+    NumAllocation    int32
+    Node             *SchedulingNode
+    Releases         []*commonevents.ReleaseAllocation
+    Application      *SchedulingApplication
+    AllocationResult AllocationResultType // Is it a reservation?
+}
+
+func NewSchedulingAllocationFromReservationRequest(reservationRequest *ReservedSchedulingRequest) *SchedulingAllocation {
+    return NewSchedulingAllocation(reservationRequest.SchedulingAsk, reservationRequest.SchedulingNode, reservationRequest.App, Reservation)
+}
+
+func NewSchedulingAllocation(ask *SchedulingAllocationAsk, node *SchedulingNode, app *SchedulingApplication, allocationResult AllocationResultType) *SchedulingAllocation {
+    return &SchedulingAllocation{SchedulingAsk: ask, Node: node, NumAllocation: 1, Application: app, AllocationResult: allocationResult}
 }
 
 func (m *SchedulingAllocation) String() string {

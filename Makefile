@@ -1,5 +1,5 @@
 #
-# Copyright 2019 Cloudera, Inc.  All rights reserved.
+# Copyright 2020 Cloudera, Inc.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -41,7 +41,7 @@ all:
 .PHONY: common-check-license
 common-check-license:
 	@echo "checking license header"
-	@licRes=$$(grep -Lr --include="*.go" "Copyright 20[1-2][0-9] Cloudera" .) ; \
+	@licRes=$$(grep -Lr --include=*.{go,sh} "Copyright 20[1-2][0-9] Cloudera" .) ; \
 	if [ -n "$${licRes}" ]; then \
 		echo "following files have incorrect license header:\n$${licRes}" ; \
 		exit 1; \

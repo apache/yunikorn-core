@@ -160,8 +160,8 @@ func (m *SchedulingApplication) TryAllocateFromReservation() *SchedulingAllocati
         alloc := m.tryAllocateFromReservationRequest(request)
         if alloc != nil {
             // When alloc != nil, it means either allocation from reservation, or unreserve, for both case, unreserve the node
-            if alloc.AllocationResult == Allocation || alloc.AllocationResult == Unreserve {
-
+            if alloc.AllocationResult == AllocationFromReservation || alloc.AllocationResult == Unreserve {
+                m.unreserveSchedulingAllocation(alloc)
             }
 
             return alloc
@@ -208,7 +208,7 @@ func (m *SchedulingApplication) tryAllocateFromReservationRequest(request *Sched
 
         if ok, _ := node.CheckAndAllocateResource(reservationRequest.SchedulingAsk.AllocatedResource, false); ok {
             allocation := NewSchedulingAllocationFromReservationRequest(reservationRequest)
-            allocation.AllocationResult = Allocation
+            allocation.AllocationResult = AllocationFromReservation
         }
     }
 

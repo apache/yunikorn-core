@@ -25,6 +25,7 @@ type AllocationResultType int
 
 const (
     Allocation AllocationResultType = iota
+    AllocationFromReservation
     Reservation
     Unreserve
 )

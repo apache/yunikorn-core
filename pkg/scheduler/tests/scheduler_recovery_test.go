@@ -334,10 +334,10 @@ partitions:
 
 	node1AllocatedMemory := partition.GetNode("node-1:1234").GetAllocatedResource().Resources[resources.MEMORY]
 	node2AllocatedMemory := partition.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.MEMORY]
-	node1AllocatedCpu := partition.GetNode("node-1:1234").GetAllocatedResource().Resources[resources.VCORE]
-	node2AllocatedCpu := partition.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.VCORE]
+	node1AllocatedCPU := partition.GetNode("node-1:1234").GetAllocatedResource().Resources[resources.VCORE]
+	node2AllocatedCPU := partition.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.VCORE]
 	assert.Equal(t, node1AllocatedMemory+node2AllocatedMemory, resources.Quantity(120))
-	assert.Equal(t, node1AllocatedCpu+node2AllocatedCpu, resources.Quantity(12))
+	assert.Equal(t, node1AllocatedCPU+node2AllocatedCPU, resources.Quantity(12))
 
 	// verify queues
 	//  - verify root queue

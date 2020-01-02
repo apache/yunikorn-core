@@ -69,13 +69,13 @@ func NewNodeInfo(proto *si.NewNodeInfo) *NodeInfo {
 func (ni *NodeInfo) initializeAttribute(newAttributes map[string]string) {
 	ni.attributes = newAttributes
 
-	ni.Hostname = ni.attributes[api.HOSTNAME]
-	ni.Rackname = ni.attributes[api.RACKNAME]
-	ni.Partition = ni.attributes[api.NODE_PARTITION]
+	ni.Hostname = ni.attributes[api.HostName]
+	ni.Rackname = ni.attributes[api.RackName]
+	ni.Partition = ni.attributes[api.NodePartition]
 }
 
 // Get an attribute by name. The most used attributes can be directly accessed via the
-// fields: Hostname, Rackname and Partition.
+// fields: HostName, RackName and Partition.
 // This is a lock free call. All attributes are considered read only
 func (ni *NodeInfo) GetAttribute(key string) string {
 	return ni.attributes[key]

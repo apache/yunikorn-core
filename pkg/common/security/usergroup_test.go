@@ -193,8 +193,8 @@ func TestConvertUGI(t *testing.T) {
 		t.Fatalf("Cache not empty: %v", testCache.ugs)
 	}
 	ugi := &si.UserGroupInformation{
-		User:                 "",
-		Groups:               nil,
+		User:   "",
+		Groups: nil,
 	}
 	ug, err := testCache.ConvertUGI(ugi)
 	if err == nil {

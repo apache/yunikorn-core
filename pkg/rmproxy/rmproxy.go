@@ -273,8 +273,8 @@ func normalizeUpdateRequestByRMId(request *si.UpdateRequest) {
 	// Update Schedulable Nodes
 	if len(request.NewSchedulableNodes) > 0 {
 		for _, node := range request.NewSchedulableNodes {
-			partition := node.Attributes[api.NODE_PARTITION]
-			node.Attributes[api.NODE_PARTITION] = common.GetNormalizedPartitionName(partition, request.RmID)
+			partition := node.Attributes[api.NodePartition]
+			node.Attributes[api.NodePartition] = common.GetNormalizedPartitionName(partition, request.RmID)
 		}
 	}
 
@@ -288,8 +288,8 @@ func normalizeUpdateRequestByRMId(request *si.UpdateRequest) {
 	// Update Updated nodes
 	if len(request.UpdatedNodes) > 0 {
 		for _, node := range request.UpdatedNodes {
-			partition := node.Attributes[api.NODE_PARTITION]
-			node.Attributes[api.NODE_PARTITION] = common.GetNormalizedPartitionName(partition, request.RmID)
+			partition := node.Attributes[api.NodePartition]
+			node.Attributes[api.NodePartition] = common.GetNormalizedPartitionName(partition, request.RmID)
 		}
 	}
 

@@ -376,7 +376,7 @@ func (m *ClusterInfo) processNewSchedulableNodes(request *si.UpdateRequest) {
 func (m *ClusterInfo) processNodeActions(request *si.UpdateRequest) {
 	for _, update := range request.UpdatedNodes {
 		var partition *PartitionInfo
-		if p, ok := update.Attributes[api.NODE_PARTITION]; ok {
+		if p, ok := update.Attributes[api.NodePartition]; ok {
 			partition = m.GetPartition(p)
 		} else {
 			log.Logger().Debug("node partition not specified",
@@ -675,7 +675,7 @@ func (m *ClusterInfo) processRemovedApplication(event *cacheevent.RemovedApplica
 	}
 	_, allocations := partitionInfo.RemoveApplication(event.ApplicationID)
 	log.Logger().Info("Removed application from partition",
-		zap.String("applicationId", event.ApplicationID),
+		zap.String("applicationID", event.ApplicationID),
 		zap.String("partitionName", event.PartitionName),
 		zap.Int("allocationsRemoved", len(allocations)))
 

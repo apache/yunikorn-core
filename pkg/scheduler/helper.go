@@ -24,7 +24,7 @@ const (
 )
 
 func GetApplicationIDFromTags(tags map[string]string) string {
-	appID := tags[api.APPLICATION_ID]
+	appID := tags[api.ApplicationID]
 
 	if appID == "" {
 		return defaultApplicationID
@@ -33,7 +33,7 @@ func GetApplicationIDFromTags(tags map[string]string) string {
 }
 
 func GetPartitionFromTags(tags map[string]string) string {
-	partitionName := tags[api.NODE_PARTITION]
+	partitionName := tags[api.NodePartition]
 
 	if partitionName == "" {
 		return defaultPartitionName

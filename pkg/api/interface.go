@@ -18,7 +18,7 @@ package api
 
 import "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 
-type SchedulerApi interface {
+type SchedulerAPI interface {
 	// Register a new RM, if it is a reconnect from previous RM, cleanup
 	// all in-memory data and resync with RM.
 	RegisterResourceManager(request *si.RegisterResourceManagerRequest, callback ResourceManagerCallback) (*si.RegisterResourceManagerResponse, error)

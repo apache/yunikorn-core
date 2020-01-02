@@ -272,7 +272,7 @@ func (m *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocat
 	// the recovery is repeating all steps except step 2
 	for _, alloc := range existingAllocations {
 		log.Logger().Info("recovering allocations for app",
-			zap.String("applicationId", alloc.ApplicationID),
+			zap.String("applicationID", alloc.ApplicationID),
 			zap.String("nodeID", alloc.NodeID),
 			zap.String("queueName", alloc.QueueName),
 			zap.String("partition", alloc.PartitionName),

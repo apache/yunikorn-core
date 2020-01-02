@@ -88,7 +88,7 @@ as the fresh application submission.
 
 ```
 message AddApplicationRequest {
-  string applicationId = 1;
+  string applicationID = 1;
   string queueName = 2;
   string partitionName = 3;
 }

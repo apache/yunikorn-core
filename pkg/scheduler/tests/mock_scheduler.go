@@ -54,7 +54,7 @@ partitions:
 `
 
 type MockScheduler struct {
-	proxy          api.SchedulerApi
+	proxy          api.SchedulerAPI
 	scheduler      *scheduler.Scheduler
 	mockRM         *MockRMCallbackHandler
 	serviceContext *entrypoint.ServiceContext

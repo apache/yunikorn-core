@@ -265,7 +265,7 @@ func (csc *ClusterSchedulingContext) updateSchedulingNodeAlloc(alloc *commoneven
 		log.Logger().Warn("node was removed while event was processed",
 			zap.String("partition", alloc.PartitionName),
 			zap.String("nodeID", alloc.NodeID),
-			zap.String("applicationId", alloc.ApplicationID),
+			zap.String("applicationID", alloc.ApplicationID),
 			zap.String("allocationKey", alloc.AllocationKey))
 		return
 	}

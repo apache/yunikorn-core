@@ -26,7 +26,7 @@ import (
 )
 
 type ServiceContext struct {
-	RMProxy   api.SchedulerApi
+	RMProxy   api.SchedulerAPI
 	Cache     *cache.ClusterInfo
 	Scheduler *scheduler.Scheduler
 	WebApp    *webservice.WebService

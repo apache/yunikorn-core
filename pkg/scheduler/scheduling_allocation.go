@@ -39,16 +39,15 @@ type SchedulingAllocation struct {
     NumAllocation    int32
     Node             *SchedulingNode
     Releases         []*commonevents.ReleaseAllocation
-    Application      *SchedulingApplication
     AllocationResult AllocationResultType // Is it a reservation?
 }
 
 func NewSchedulingAllocationFromReservationRequest(reservationRequest *ReservedSchedulingRequest) *SchedulingAllocation {
-    return NewSchedulingAllocation(reservationRequest.SchedulingAsk, reservationRequest.SchedulingNode, reservationRequest.App, Reservation)
+    return NewSchedulingAllocation(reservationRequest.SchedulingAsk, reservationRequest.SchedulingNode, Reservation)
 }
 
-func NewSchedulingAllocation(ask *SchedulingAllocationAsk, node *SchedulingNode, app *SchedulingApplication, allocationResult AllocationResultType) *SchedulingAllocation {
-    return &SchedulingAllocation{SchedulingAsk: ask, Node: node, NumAllocation: 1, Application: app, AllocationResult: allocationResult}
+func NewSchedulingAllocation(ask *SchedulingAllocationAsk, node *SchedulingNode, allocationResult AllocationResultType) *SchedulingAllocation {
+    return &SchedulingAllocation{SchedulingAsk: ask, Node: node, NumAllocation: 1, AllocationResult: allocationResult}
 }
 
 func (m *SchedulingAllocation) String() string {

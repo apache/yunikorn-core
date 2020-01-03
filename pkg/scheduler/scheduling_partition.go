@@ -297,13 +297,15 @@ func (psc *PartitionSchedulingContext) AddNewReservation(reservation *Scheduling
     psc.lock.Lock()
     defer psc.lock.Unlock()
 
-    appId := reservation.Application.ApplicationInfo.ApplicationId
+    appId := reservation.SchedulingAsk.ApplicationId
 
     if _, ok := psc.reservedApps[appId]; ok {
         return
     }
 
-    psc.reservedApps[appId] = reservation.Application
+    if app := psc.applications[appId]; app != nil {
+        psc.reservedApps[appId] = app
+    }
 }
 
 // Get an ordered reservation app list, it is a clone so change order of the list won't impact

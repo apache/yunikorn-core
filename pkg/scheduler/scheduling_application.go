@@ -128,7 +128,7 @@ func (m *SchedulingApplication) allocateForOneRequest(partitionContext* Partitio
             }
 
             // return allocation (this is not a reservation)
-            return NewSchedulingAllocation(candidate, node, m, Allocation)
+            return NewSchedulingAllocation(candidate, node, Allocation)
         } else {
             // Record the so-far best node to reserve
             if score < bestScore {
@@ -145,7 +145,7 @@ func (m *SchedulingApplication) allocateForOneRequest(partitionContext* Partitio
                 zap.String("error", err.Error()))
             return nil
         }
-        return NewSchedulingAllocation(candidate, bestNodeToReserve, m, Reservation)
+        return NewSchedulingAllocation(candidate, bestNodeToReserve, Reservation)
     }
     // TODO: Need to fix the reservation logic here.
 
@@ -160,13 +160,13 @@ func (m *SchedulingApplication) TryAllocateFromReservation() *SchedulingAllocati
         alloc := m.tryAllocateFromReservationRequest(request)
         if alloc != nil {
             // When alloc != nil, it means either allocation from reservation, or unreserve, for both case, unreserve the node
-            if alloc.AllocationResult == AllocationFromReservation || alloc.AllocationResult == Unreserve {
-                m.unreserveSchedulingAllocation(alloc)
+            m.unreserveSchedulingAllocation(alloc)
+            if alloc.AllocationResult == AllocationFromReservation {
+                return alloc
             }
-
-            return alloc
         }
     }
+    return nil
 }
 
 func (m *SchedulingApplication) tryAllocateFromReservationRequest(request *SchedulingAllocationAsk) *SchedulingAllocation {
@@ -212,7 +212,8 @@ func (m *SchedulingApplication) tryAllocateFromReservationRequest(request *Sched
         }
     }
 
-    // TODO, add re-reservation logic
+    // TODO, add swap-reservation logic
+    return nil
 }
 
 // Get sorted alloc keys of reserved requests based on priority
@@ -342,9 +343,11 @@ func (m* SchedulingApplication) unreserveSchedulingAllocation(allocation *Schedu
     m.lock.Lock()
     defer m.lock.Unlock()
 
-    reservationRequest := NewReservedSchedulingRequest(allocation.SchedulingAsk, allocation.Application, allocation.Node)
+    reservationRequest := NewReservedSchedulingRequest(allocation.SchedulingAsk, m, allocation.Node)
 
     allocation.Node.UnreserveOnNode(reservationRequest)
 
     m.removeAppReservation(reservationRequest)
+
+    return true
 }

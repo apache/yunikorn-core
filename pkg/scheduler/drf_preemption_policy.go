@@ -118,7 +118,7 @@ type singleNodePreemptResult struct {
 func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionContext, preemptorQueue *preemptionQueueContext, node *SchedulingNode, candidate *SchedulingAllocationAsk,
     headroomShortages map[string]*resources.Resource) *singleNodePreemptResult {
     // If allocated resource can fit in the node, and no headroom shortage of preemptor queue, we can directly get it allocated. (lucky!)
-    if node.CheckAndAllocateResource(candidate.AllocatedResource, true) {
+    if ok, _ := node.CheckAndAllocateResource(candidate.AllocatedResource, true); ok {
         log.Logger().Debug("No preemption needed candidate fits on node",
             zap.String("nodeId", node.NodeId))
         return &singleNodePreemptResult{

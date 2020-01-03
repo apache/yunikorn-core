@@ -149,7 +149,7 @@ func (sn *SchedulingNode) handlePreemptionUpdate(preempted *resources.Resource) 
 // Calculate gap score of fit in, 0 means smaller can be fitin in the larger resource.
 // fit_in_gap_score = sigma((smaller_i- larger_i)/smaller_i) (i is index of resource type, and smaller_i > larger_i)
 func fitInGapScore(larger, smaller *resources.Resource) float64 {
-	score := resources.Quantity(0)
+	var score float64 = 0
 	for k, v := range smaller.Resources {
 		if v <= 0 {
 			// 0 or negative v can fit at anywhere
@@ -165,7 +165,7 @@ func fitInGapScore(larger, smaller *resources.Resource) float64 {
 		}
 
 		if v > largerV {
-			score += (v - largerV) / v
+			score += float64(v - largerV) / float64(v)
 		}
 	}
 	return float64(score)
@@ -207,7 +207,7 @@ func (sn* SchedulingNode) UnreserveOnNode(reservationRequest *ReservedScheduling
 	requestAllocKey := reservationRequest.SchedulingAsk.AskProto.AllocationKey
 
 	if val, ok := sn.reservationRequests[requestAllocKey]; ok {
-		_, decSucceeded := val.DecAmount()
+		_, decSucceeded := val.DecAmount(reservationRequest.GetAmount())
 
 		if val.GetAmount() <= 0 {
 			delete(sn.reservationRequests, requestAllocKey)

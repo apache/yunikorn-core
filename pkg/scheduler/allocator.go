@@ -59,9 +59,14 @@ func (m *Scheduler) reservationAllocation(partitionCtx *PartitionSchedulingConte
 
     for appList.Len() > 0 {
         // Get first app, but not remove it for now since the app could have multiple reservation requests
-        app := appList.Front()
+        app := appList.Front().Value.(*SchedulingApplication)
 
-        app.
+        allocation := app.TryAllocateFromReservation()
+
+        // Pop the front
+        if allocation == nil {
+            appList.Remove(appList.Front())
+        }
     }
 
     return anythingAllocated

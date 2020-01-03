@@ -19,6 +19,7 @@ package scheduler
 import (
     "github.com/cloudera/yunikorn-core/pkg/cache"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "github.com/stretchr/testify/assert"
     "testing"
 )
 
@@ -87,7 +88,7 @@ func TestCheckAllocate(t *testing.T) {
     // normal alloc check dirty flag
     node.getAvailableResource() // unset the dirty flag
     res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-    if !node.CheckAndAllocateResource(res, false) {
+    if ok, _ := node.CheckAndAllocateResource(res, false); !ok {
         t.Error("node should have accepted allocation")
     }
     if !node.needUpdateCachedAvailable {
@@ -95,7 +96,7 @@ func TestCheckAllocate(t *testing.T) {
     }
     // add one that pushes node over its size
     res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 6})
-    if node.CheckAndAllocateResource(res, false) {
+    if ok, _ := node.CheckAndAllocateResource(res, false); ok {
         t.Error("node should have rejected allocation (oversize)")
     }
 
@@ -106,7 +107,7 @@ func TestCheckAllocate(t *testing.T) {
     }
     node.incPreemptingResource(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
     // preemption alloc
-    if !node.CheckAndAllocateResource(res, true) {
+    if ok, _ := node.CheckAndAllocateResource(res, true); !ok {
         t.Error("node with scheduling set to false should not allow allocation")
     }
 }
@@ -188,4 +189,161 @@ func TestAvailableDirty(t *testing.T) {
     if !node.needUpdateCachedAvailable {
         t.Error("node available resource dirty should be set after decreaseAllocatingResource")
     }
+}
+
+func TestFitInGapScore(t *testing.T) {
+    // Fit
+    smaller := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+    larger := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11})
+    assert.True(t, fitInGapScore(larger, smaller) == 0)
+
+    // Fit
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+    larger = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+    assert.True(t, fitInGapScore(larger, smaller) == 0)
+
+    // Fit
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0})
+    larger = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+    assert.True(t, fitInGapScore(larger, smaller) == 0)
+
+    // Fit
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0})
+    larger = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0})
+    assert.True(t, fitInGapScore(larger, smaller) == 0)
+
+    // Fit (negative always fit)
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": -1})
+    larger = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0})
+    assert.True(t, fitInGapScore(larger, smaller) == 0)
+
+    // Fit (negative always fit)
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": -1})
+    larger = resources.NewResourceFromMap(map[string]resources.Quantity{"first": -2})
+    assert.True(t, fitInGapScore(larger, smaller) == 0)
+
+    // Fit
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{})
+    larger = resources.NewResourceFromMap(map[string]resources.Quantity{})
+    assert.True(t, fitInGapScore(larger, smaller) == 0)
+
+    // Fit
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0, "second": 0})
+    larger = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0, "second": 0})
+    assert.True(t, fitInGapScore(larger, smaller) == 0)
+
+    // Fit
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 0})
+    larger = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 0})
+    assert.True(t, fitInGapScore(larger, smaller) == 0)
+
+    // Fit
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 1})
+    larger = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 1})
+    assert.True(t, fitInGapScore(larger, smaller) == 0)
+
+    // Fit
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 1})
+    larger = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2, "second": 1})
+    assert.True(t, fitInGapScore(larger, smaller) == 0)
+
+    // Fit
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 1})
+    larger = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2, "second": 2})
+    assert.True(t, fitInGapScore(larger, smaller) == 0)
+
+    // Fit
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 1})
+    larger = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2, "second": 2})
+    assert.True(t, fitInGapScore(larger, smaller) == 0)
+
+    // Fit
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"second": 1})
+    larger = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2, "second": 2})
+    assert.True(t, fitInGapScore(larger, smaller) == 0)
+
+    // Cannot fit
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+    larger = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0})
+    assert.True(t, fitInGapScore(larger, smaller) > 0)
+
+    // Cannot fit
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2})
+    larger = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+    assert.True(t, fitInGapScore(larger, smaller) > 0)
+
+    // Cannot fit
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2})
+    larger = resources.NewResourceFromMap(map[string]resources.Quantity{})
+    assert.True(t, fitInGapScore(larger, smaller) > 0)
+
+    // Cannot fit
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 1})
+    larger = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0, "second": 2})
+    assert.True(t, fitInGapScore(larger, smaller) > 0)
+
+    // Cannot fit
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2, "second": 1})
+    larger = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 2})
+    assert.True(t, fitInGapScore(larger, smaller) > 0)
+
+    // Cannot fit
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2, "second": 1})
+    larger = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 1})
+    assert.True(t, fitInGapScore(larger, smaller) > 0)
+
+    // Cannot fit
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2, "second": 1})
+    larger = resources.NewResourceFromMap(map[string]resources.Quantity{"second": 1})
+    assert.True(t, fitInGapScore(larger, smaller) > 0)
+
+    // Following are relative score to see which one is more fit than the other
+
+    // All resource types are treated same
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 10})
+    largerA := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 10})
+    largerB := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 5})
+    assert.Equal(t, fitInGapScore(largerA, smaller), fitInGapScore(largerB, smaller))
+
+    // All resource types are treated same (proportional)
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 100})
+    largerA = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8, "second": 100})
+    largerB = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 80})
+    assert.Equal(t, fitInGapScore(largerA, smaller), fitInGapScore(largerB, smaller))
+
+    // missing types
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 10})
+    largerA = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8})
+    largerB = resources.NewResourceFromMap(map[string]resources.Quantity{"second": 8})
+    assert.Equal(t, fitInGapScore(largerA, smaller), fitInGapScore(largerB, smaller))
+
+    // missing types with proportional
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 100})
+    largerA = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8})
+    largerB = resources.NewResourceFromMap(map[string]resources.Quantity{"second": 80})
+    assert.Equal(t, fitInGapScore(largerA, smaller), fitInGapScore(largerB, smaller))
+
+    // A is more fit than B (smaller)
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 10})
+    largerA = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8, "second": 10})
+    largerB = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 9, "second": 10})
+    assert.True(t, fitInGapScore(largerA, smaller) > fitInGapScore(largerB, smaller))
+
+    // A is more fit than B (smaller)
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 10})
+    largerA = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8, "second": 9})
+    largerB = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 9, "second": 9})
+    assert.True(t, fitInGapScore(largerA, smaller) > fitInGapScore(largerB, smaller))
+
+    // A is more fit than B (smaller)
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 10})
+    largerA = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8, "second": 8})
+    largerB = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 9, "second": 9})
+    assert.True(t, fitInGapScore(largerA, smaller) > fitInGapScore(largerB, smaller))
+
+    // A is more fit than B (smaller)
+    smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 100})
+    largerA = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8, "second": 70})
+    largerB = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 7, "second": 90})
+    assert.True(t, fitInGapScore(largerA, smaller) > fitInGapScore(largerB, smaller))
 }

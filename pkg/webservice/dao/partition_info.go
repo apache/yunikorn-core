@@ -28,6 +28,6 @@ type PartitionCapacity struct {
 }
 
 type NodeInfo struct {
-	NodeID     string `json:"nodeID"`
+	NodeID     string `json:"nodeId"`
 	Capability string `json:"capability"`
 }

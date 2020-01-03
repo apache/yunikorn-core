@@ -104,7 +104,7 @@ func (m *SchedulingApplication) allocateForOneRequest(partitionContext* Partitio
 
     for nodeIterator.HasNext() {
         node := nodeIterator.Next()
-        if !node.CheckAllocateConditions(candidate.AskProto.AllocationKey, false) {
+        if !node.CheckAllocateConditions(candidate, false) {
             // skip the node if conditions can not be satisfied
             continue
         }
@@ -198,7 +198,7 @@ func (m *SchedulingApplication) tryAllocateFromReservationRequest(request *Sched
         // TODO, add node reservation logic
         node := reservationRequest.SchedulingNode
 
-        if !node.CheckAllocateConditions(allocKey, true) {
+        if !node.CheckAllocateConditions(reservationRequest.SchedulingAsk, true) {
             allocation := NewSchedulingAllocationFromReservationRequest(reservationRequest)
             allocation.AllocationResult = Unreserve
             return allocation
@@ -357,4 +357,18 @@ func (m* SchedulingApplication) unreserveSchedulingAllocation(allocation *Schedu
 // Only used by tests
 func (m* SchedulingApplication) GetReservations() map[string]map[string]*ReservedSchedulingRequest {
     return m.reservedRequests
+}
+
+func (m* SchedulingApplication) GetAllReservationRequests() []*ReservedSchedulingRequest {
+    m.lock.RLock()
+    defer m.lock.RUnlock()
+
+    requests := make([]*ReservedSchedulingRequest, 0)
+    for _, v := range m.reservedRequests {
+        for _, v := range v {
+            requests = append(requests, v)
+        }
+    }
+
+    return requests
 }

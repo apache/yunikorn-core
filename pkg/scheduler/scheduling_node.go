@@ -258,7 +258,7 @@ func (sn* SchedulingNode) ReserveOnNode(reservationRequest *ReservedSchedulingRe
 // The caller must thus not rely on all plugins being executed.
 // This is a lock free call as it does not change the node and multiple predicate checks could be
 // run at the same time.
-func (sn *SchedulingNode) CheckAllocateConditions(allocId string, reservation bool) bool {
+func (sn *SchedulingNode) CheckAllocateConditions(ask *SchedulingAllocationAsk, reservation bool) bool {
 	if !sn.nodeInfo.IsSchedulable() {
 		log.Logger().Debug("node is unschedulable",
 			zap.String("nodeId", sn.NodeId))
@@ -272,6 +272,18 @@ func (sn *SchedulingNode) CheckAllocateConditions(allocId string, reservation bo
 		return false
 	}
 
+	if !resources.FitIn(sn.nodeInfo.TotalResource, ask.AllocatedResource) {
+		log.Logger().Debug("node's total resource is smaller than ask's resource",
+			zap.String("nodeId", sn.NodeId),
+			zap.String("nodeTotalResource", sn.nodeInfo.TotalResource.String()),
+			zap.String("askedResource", ask.AllocatedResource.String()))
+		return false
+	}
+
+	return sn.checkPredicateForRequest(ask.AskProto.AllocationKey)
+}
+
+func (sn *SchedulingNode) checkPredicateForRequest(allocId string) bool {
 	// Check the predicates plugin (k8shim)
 	if plugin := plugins.GetPredicatesPlugin(); plugin != nil {
 		log.Logger().Debug("predicates",
@@ -288,7 +300,7 @@ func (sn *SchedulingNode) CheckAllocateConditions(allocId string, reservation bo
 			return false
 		}
 	}
-	// must be last return in the list
+
 	return true
 }
 

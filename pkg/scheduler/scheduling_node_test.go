@@ -19,6 +19,7 @@ package scheduler
 import (
     "github.com/cloudera/yunikorn-core/pkg/cache"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
+    "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "github.com/stretchr/testify/assert"
     "testing"
 )
@@ -59,20 +60,50 @@ func TestNewSchedulingNode(t *testing.T) {
 }
 
 func TestCheckConditions(t *testing.T) {
-    node := newNode("node-1", map[string]resources.Quantity{"first": 100, "second": 100})
+    ask := NewSchedulingAllocationAsk(&si.AllocationAsk{
+        AllocationKey: "test",
+        ResourceAsk: &si.Resource{
+            Resources: map[string]*si.Quantity{
+                "memory": {Value: 100},
+                "vcore":  {Value: 100},
+            },
+        },
+        MaxAllocations: 10,
+        ApplicationId:  "app-1",
+    })
+
+    node := newNode("node-1", map[string]resources.Quantity{"memory": 100, "vcore": 100})
     if node == nil || node.NodeId != "node-1" {
         t.Fatalf("node create failed which should not have %v", node)
     }
 
     // Check if we can allocate on scheduling node (no plugins)
-    if !node.CheckAllocateConditions("test", false) {
+    if !node.CheckAllocateConditions(ask, false) {
         t.Error("node with scheduling set to true no plugins should allow allocation")
     }
 
     // Check if we can allocate on non scheduling node (no plugins)
     node.nodeInfo.SetSchedulable(false)
-    if node.CheckAllocateConditions("test", false) {
+    if node.CheckAllocateConditions(ask, false) {
         t.Error("node with scheduling set to false should not allow allocation")
+    }
+
+    // Create another ask, which beyond node's resource, it should be rejected
+    ask = NewSchedulingAllocationAsk(&si.AllocationAsk{
+        AllocationKey: "test",
+        ResourceAsk: &si.Resource{
+            Resources: map[string]*si.Quantity{
+                "memory": {Value: 110},
+                "vcore":  {Value: 100},
+            },
+        },
+        MaxAllocations: 10,
+        ApplicationId:  "app-1",
+    })
+
+    node.nodeInfo.SetSchedulable(true)
+    if node.CheckAllocateConditions(ask, false) {
+        t.Error("node with smaller than request's resource should not allow allocation ever")
     }
     //TODO add mock for plugin to extend tests
 }

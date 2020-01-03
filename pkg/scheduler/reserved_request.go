@@ -23,8 +23,8 @@ type ReservedSchedulingRequest struct {
     // Public field, will not change overtime
     SchedulingAsk         *SchedulingAllocationAsk
     App                   *SchedulingApplication
-    SchedulingNode        *SchedulingNode
-    reservationRequestKey string
+    SchedulingNode              *SchedulingNode
+    reservationRequestKeyOnNode string
 
     // Following are private fields which subject to change
 
@@ -36,11 +36,11 @@ type ReservedSchedulingRequest struct {
 
 func NewReservedSchedulingRequest(ask *SchedulingAllocationAsk, app *SchedulingApplication, node *SchedulingNode) *ReservedSchedulingRequest {
     return &ReservedSchedulingRequest{
-        SchedulingAsk:         ask,
-        App:                   app,
-        SchedulingNode:        node,
-        amount:                1,
-        reservationRequestKey: app.ApplicationInfo.ApplicationId + "|" + node.NodeId + "|" + ask.AskProto.AllocationKey,
+        SchedulingAsk:               ask,
+        App:                         app,
+        SchedulingNode:              node,
+        amount:                      1,
+        reservationRequestKeyOnNode: app.ApplicationInfo.ApplicationId + "|" + node.NodeId + "|" + ask.AskProto.AllocationKey,
     }
 }
 
@@ -75,9 +75,9 @@ func (m *ReservedSchedulingRequest) GetAmount() int {
 }
 
 // Get a unique key combined of application id and request key.
-func (m *ReservedSchedulingRequest) GetReservationRequestKey() string {
+func (m *ReservedSchedulingRequest) GetReservationRequestKeyOnNode() string {
     // No lock needed when accessing two final fields
-    return m.reservationRequestKey
+    return m.reservationRequestKeyOnNode
 }
 
 func (m *ReservedSchedulingRequest) Clone() *ReservedSchedulingRequest {

@@ -31,7 +31,6 @@ import (
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "go.uber.org/zap"
     "reflect"
-    "sync"
     "time"
 )
 
@@ -46,7 +45,6 @@ type Scheduler struct {
     preemptionContext        *preemptionContext        // Preemption context
     eventHandlers            handler.EventHandlers     // list of event handlers
     pendingSchedulerEvents   chan interface{}          // queue for scheduler events
-    lock                     sync.RWMutex
 }
 
 func NewScheduler(clusterInfo *cache.ClusterInfo) *Scheduler {
@@ -109,9 +107,6 @@ func (m *Scheduler) internalPreemption() {
 }
 
 func (m *Scheduler) updateSchedulingRequest(schedulingAsk *SchedulingAllocationAsk) error {
-    m.lock.Lock()
-    defer m.lock.Unlock()
-
     // Get SchedulingApplication
     schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(schedulingAsk.ApplicationId, schedulingAsk.PartitionName)
     if schedulingApp == nil {
@@ -135,9 +130,6 @@ func (m *Scheduler) confirmOrRejectSingleAllocationProposal(allocProposal *commo
     if allocationAdded != 1 && allocationAdded != -1 {
         return fmt.Errorf("confirmOrRejectSingleAllocationProposal got allocationAdded not +1 or -1, allocation id %s", allocProposal.AllocationKey)
     }
-
-    m.lock.Lock()
-    defer m.lock.Unlock()
 
     var err error = nil
 
@@ -173,9 +165,6 @@ func (m *Scheduler) addNewApplication(info *cache.ApplicationInfo) error {
 }
 
 func (m *Scheduler) removeApplication(request *si.RemoveApplicationRequest) error {
-    m.lock.Lock()
-    defer m.lock.Unlock()
-
     if _, err := m.clusterSchedulingContext.RemoveSchedulingApplication(request.ApplicationId, request.PartitionName); err != nil {
         log.Logger().Error("failed to remove apps",
             zap.String("appId", request.ApplicationId),
@@ -210,8 +199,6 @@ func (m *Scheduler) HandleEvent(ev interface{}) {
 
 func (m *Scheduler) processAllocationReleaseByAllocationKey(
     allocationAsksToRelease []*si.AllocationAskReleaseRequest, allocationsToRelease []*si.AllocationReleaseRequest) {
-    m.lock.Lock()
-    defer m.lock.Unlock()
 
     // For all Requests
 

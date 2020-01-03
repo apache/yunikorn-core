@@ -204,13 +204,11 @@ func (sn* SchedulingNode) UnreserveOnNode(reservationRequest *ReservedScheduling
 	sn.lock.Lock()
 	defer sn.lock.Unlock()
 
-	requestAllocKey := reservationRequest.SchedulingAsk.AskProto.AllocationKey
-
-	if val, ok := sn.reservationRequests[requestAllocKey]; ok {
+	if val, ok := sn.reservationRequests[reservationRequest.GetReservationRequestKeyOnNode()]; ok {
 		_, decSucceeded := val.DecAmount(reservationRequest.GetAmount())
 
 		if val.GetAmount() <= 0 {
-			delete(sn.reservationRequests, requestAllocKey)
+			delete(sn.reservationRequests, reservationRequest.GetReservationRequestKeyOnNode())
 		}
 
 		if decSucceeded {
@@ -239,7 +237,7 @@ func (sn* SchedulingNode) ReserveOnNode(reservationRequest *ReservedSchedulingRe
 		return false, fmt.Errorf("Failed to reserve request key=%s on node=%s since node is already reserved", requestAllocKey, nodeId)
 	}
 
-	key := reservationRequest.GetReservationRequestKey()
+	key := reservationRequest.GetReservationRequestKeyOnNode()
 	val, exist := sn.reservationRequests[key]
 
 	if !exist {
@@ -268,7 +266,7 @@ func (sn *SchedulingNode) CheckAllocateConditions(allocId string, reservation bo
 	}
 
 	// Only check this for regular allocation (not reservation)
-	if reservation && len(sn.reservationRequests) > 0 {
+	if !reservation && len(sn.reservationRequests) > 0 {
 		log.Logger().Debug("node is already reserved",
 			zap.String("nodeId", sn.NodeId))
 		return false
@@ -299,4 +297,14 @@ func (sn *SchedulingNode) SetNeedUpdateCachedAvailable() {
 	sn.lock.Lock()
 	defer sn.lock.Unlock()
 	sn.needUpdateCachedAvailable = true
+}
+
+// Visible by tests
+func (sn *SchedulingNode) GetReservedRequests() map[string]*ReservedSchedulingRequest {
+	return sn.reservationRequests
+}
+
+// Visible by tests
+func (sn *SchedulingNode) GetTotalReservedResources() *resources.Resource {
+	return sn.totalReservedResource
 }

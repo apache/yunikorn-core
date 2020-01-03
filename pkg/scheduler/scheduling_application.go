@@ -153,7 +153,7 @@ func (m *SchedulingApplication) allocateForOneRequest(partitionContext* Partitio
 }
 
 // Try to allocate from reservation, return !nil if any request got successfully allocated.
-func (m *SchedulingApplication) TryAllocateFromReservation() *SchedulingAllocation {
+func (m *SchedulingApplication) TryAllocateFromReservationRequests() *SchedulingAllocation {
     sortedReservationRequest := m.getSortedReservationRequestCopy()
 
     for _, request := range sortedReservationRequest {
@@ -161,9 +161,7 @@ func (m *SchedulingApplication) TryAllocateFromReservation() *SchedulingAllocati
         if alloc != nil {
             // When alloc != nil, it means either allocation from reservation, or unreserve, for both case, unreserve the node
             m.unreserveSchedulingAllocation(alloc)
-            if alloc.AllocationResult == AllocationFromReservation {
-                return alloc
-            }
+            return alloc
         }
     }
     return nil
@@ -209,6 +207,7 @@ func (m *SchedulingApplication) tryAllocateFromReservationRequest(request *Sched
         if ok, _ := node.CheckAndAllocateResource(reservationRequest.SchedulingAsk.AllocatedResource, false); ok {
             allocation := NewSchedulingAllocationFromReservationRequest(reservationRequest)
             allocation.AllocationResult = AllocationFromReservation
+            return allocation
         }
     }
 
@@ -285,9 +284,6 @@ func (m* SchedulingApplication) GetAllocatingResourceTestOnly() *resources.Resou
 func (m *SchedulingApplication) reserveSchedulingAllocation(ask *SchedulingAllocationAsk, node *SchedulingNode) (bool, error) {
     reserveRequest := NewReservedSchedulingRequest(ask, m, node)
 
-    m.lock.Lock()
-    defer m.lock.Unlock()
-
     // Handle reservation on node
     ok, err := node.ReserveOnNode(reserveRequest)
     if !ok {
@@ -316,8 +312,9 @@ func (m* SchedulingApplication) addAppReservation(reservationRequest *ReservedSc
     if !exists {
         req = reservationRequest
         m.reservedRequests[allocKey][reservationRequest.SchedulingNode.NodeId] = reservationRequest
+    } else {
+        req.IncAmount(reservationRequest.GetAmount())
     }
-    req.IncAmount(reservationRequest.GetAmount())
 }
 
 func (m* SchedulingApplication) removeAppReservation(reservationRequest *ReservedSchedulingRequest) {
@@ -336,7 +333,12 @@ func (m* SchedulingApplication) removeAppReservation(reservationRequest *Reserve
     if !exists {
         return
     }
-    req.DecAmount(reservationRequest.GetAmount())
+    if amount, _ := req.DecAmount(reservationRequest.GetAmount()); amount <= 0 {
+        delete(reservationMap, reservationRequest.SchedulingNode.NodeId)
+        if len(m.reservedRequests[allocKey]) == 0 {
+            delete(m.reservedRequests, allocKey)
+        }
+    }
 }
 
 func (m* SchedulingApplication) unreserveSchedulingAllocation(allocation *SchedulingAllocation) bool {
@@ -350,4 +352,9 @@ func (m* SchedulingApplication) unreserveSchedulingAllocation(allocation *Schedu
     m.removeAppReservation(reservationRequest)
 
     return true
+}
+
+// Only used by tests
+func (m* SchedulingApplication) GetReservations() map[string]map[string]*ReservedSchedulingRequest {
+    return m.reservedRequests
 }

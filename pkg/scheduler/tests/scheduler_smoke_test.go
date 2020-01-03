@@ -1579,7 +1579,6 @@ partitions:
     }
 }
 
-
 func TestRemoveAppAndResourceCleanup(t *testing.T) {
     const partition = "[rm:123]default"
     // Start all tests

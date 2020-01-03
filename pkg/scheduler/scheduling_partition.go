@@ -20,6 +20,7 @@ import (
     "container/list"
     "fmt"
     "github.com/cloudera/yunikorn-core/pkg/cache"
+    "github.com/cloudera/yunikorn-core/pkg/common/resources"
     "github.com/cloudera/yunikorn-core/pkg/common/security"
     "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/scheduler/placement"
@@ -324,4 +325,18 @@ func (psc *PartitionSchedulingContext) GetReservationAppListClone() *list.List {
     }
 
     return appList
+}
+
+func (psc *PartitionSchedulingContext) HandleUnreservedRequest(appId string, requestResource *resources.Resource) {
+    psc.lock.Lock()
+    defer psc.lock.Unlock()
+
+    // Make sure app exist before decrease allocating resources
+    if app := psc.applications[appId]; app != nil {
+        app.DecAllocatingResource(requestResource)
+        app.queue.DecAllocatingResourceFromTheQueueAndParents(requestResource)
+        if len(app.reservedRequests) == 0 {
+            delete(psc.reservedApps, appId)
+        }
+    }
 }

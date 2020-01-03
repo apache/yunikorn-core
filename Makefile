@@ -38,6 +38,19 @@ RACE=-race
 all:
 	$(MAKE) -C $(dir $(BASE_DIR)) build
 
+.PHONY: lint
+lint:
+	@echo "running golangci-lint"
+	@lintBin=$$(go env GOPATH)/bin/golangci-lint ; \
+	if [ ! -f "$${lintBin}" ]; then \
+		lintBin=$$(echo ./bin/golangci-lint) ; \
+		if [ ! -f "$${lintBin}" ]; then \
+			echo "golangci-lint executable not found" ; \
+			exit 1; \
+		fi \
+	fi ; \
+	$${lintBin} run --new
+
 .PHONY: common-check-license
 common-check-license:
 	@echo "checking license header"

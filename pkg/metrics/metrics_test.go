@@ -17,11 +17,14 @@ limitations under the License.
 package metrics
 
 import (
-	"math/rand"
+	"crypto/rand"
 	"testing"
 
 	"github.com/prometheus/common/model"
+	"go.uber.org/zap"
 	"gotest.tools/assert"
+
+	"github.com/cloudera/yunikorn-core/pkg/log"
 )
 
 func TestFormatMetricName(t *testing.T) {
@@ -43,6 +46,11 @@ func TestFormatMetricName(t *testing.T) {
 
 func generateRandomString(len int) string {
 	randomBytes := make([]byte, len)
-	rand.Read(randomBytes)
+	n, err := rand.Read(randomBytes)
+	if err != nil {
+		log.Logger().Warn("Random running low on entropy",
+			zap.Int("bytesRequested", len),
+			zap.Int("bytesRead", n))
+	}
 	return string(randomBytes)
 }

@@ -211,6 +211,10 @@ func (m *MockScheduler) AddApp(appId string, queue string, partition string) {
 func (m* MockScheduler) AppRequestResource(appId string, allocId string, memPerRequest int64, vcorePerRequest int64, repeat int32) {
     app := m.scheduler.GetClusterSchedulingContext().GetSchedulingApplication(appId, m._partition("default"))
     pendingBefore := app.Requests.GetPendingResource().Resources["memory"]
+    repeatBefore := 0
+    if app.Requests.GetSchedulingAllocationAsk(allocId) != nil{
+        repeatBefore = int(app.Requests.GetSchedulingAllocationAsk(allocId).PendingRepeatAsk)
+    }
 
     m.proxy.Update(&si.UpdateRequest{
         Asks: []*si.AllocationAsk{
@@ -229,7 +233,7 @@ func (m* MockScheduler) AppRequestResource(appId string, allocId string, memPerR
         RmId: m.rmId,
     })
 
-    waitForPendingResourceForApplication(m.t, app, pendingBefore+resources.Quantity(memPerRequest)*resources.Quantity(repeat), 1000)
+    waitForPendingResourceForApplication(m.t, app, pendingBefore+resources.Quantity(memPerRequest)*resources.Quantity(repeat - int32(repeatBefore)), 1000)
 }
 
 func (m* MockScheduler) RemoveApp(appId string, partition string) {

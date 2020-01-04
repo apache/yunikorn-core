@@ -19,12 +19,13 @@ package scheduler
 import (
     "github.com/cloudera/yunikorn-core/pkg/cache"
     "github.com/cloudera/yunikorn-core/pkg/common"
+    "github.com/cloudera/yunikorn-core/pkg/common/math"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
     "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/plugins"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
     "go.uber.org/zap"
-    "math"
+    gomath "math"
     "sync"
 )
 
@@ -40,6 +41,7 @@ type SchedulingApplication struct {
 
     // Reserved request, allocKey -> nodeId-> reservation
     reservedRequests map[string]map[string]*ReservedSchedulingRequest
+    allocKeyToNumReservedRequests map[string]int
 
     lock sync.RWMutex
 }
@@ -49,6 +51,7 @@ func NewSchedulingApplication(appInfo *cache.ApplicationInfo) *SchedulingApplica
         ApplicationInfo: appInfo,
         allocating: resources.NewResource(),
         reservedRequests: make(map[string]map[string]*ReservedSchedulingRequest),
+        allocKeyToNumReservedRequests: make(map[string]int),
     }
     app.Requests = NewSchedulingRequests(app)
     return app
@@ -100,7 +103,7 @@ func (m *SchedulingApplication) allocateForOneRequest(partitionContext* Partitio
     nodeIterator := evaluateForSchedulingPolicy(nodeList, partitionContext)
 
     var bestNodeToReserve *SchedulingNode = nil
-    bestScore := math.Inf(+1)
+    bestScore := gomath.Inf(+1)
 
     for nodeIterator.HasNext() {
         node := nodeIterator.Next()
@@ -153,7 +156,15 @@ func (m *SchedulingApplication) allocateForOneRequest(partitionContext* Partitio
 }
 
 // Try to allocate from reservation, return !nil if any request got successfully allocated.
-func (m *SchedulingApplication) TryAllocateFromReservationRequests() *SchedulingAllocation {
+func (m *SchedulingApplication) TryAllocateFromReservationRequests() []*SchedulingAllocation {
+    excessiveReservationsToDrop := m.dropExcessiveReservationRequest()
+    if excessiveReservationsToDrop != nil {
+        for _, alloc := range excessiveReservationsToDrop {
+            m.unreserveSchedulingAllocation(alloc)
+        }
+        return excessiveReservationsToDrop
+    }
+
     sortedReservationRequest := m.getSortedReservationRequestCopy()
 
     for _, request := range sortedReservationRequest {
@@ -161,7 +172,7 @@ func (m *SchedulingApplication) TryAllocateFromReservationRequests() *Scheduling
         if alloc != nil {
             // When alloc != nil, it means either allocation from reservation, or unreserve, for both case, unreserve the node
             m.unreserveSchedulingAllocation(alloc)
-            return alloc
+            return []*SchedulingAllocation{alloc}
         }
     }
     return nil
@@ -213,6 +224,39 @@ func (m *SchedulingApplication) tryAllocateFromReservationRequest(request *Sched
 
     // TODO, add swap-reservation logic
     return nil
+}
+
+func (m* SchedulingApplication) dropExcessiveReservationRequest() []*SchedulingAllocation {
+    m.lock.Lock()
+    defer m.lock.Unlock()
+
+    var excessiveReservations []*SchedulingAllocation = nil
+
+    for allocKey, innerMap := range m.reservedRequests {
+        // if reserved more than ask
+        // No lock needed to access Requests.request, since it is already under lock.
+        numToDrop := m.allocKeyToNumReservedRequests[allocKey] - int(m.Requests.requests[allocKey].PendingRepeatAsk)
+        if numToDrop > 0 {
+            for _, reservationRequest := range innerMap {
+                nRequestToDrop := math.IntMin(numToDrop, reservationRequest.GetAmount())
+                for i := 0; i < nRequestToDrop; i++ {
+                    if nil == excessiveReservations {
+                        excessiveReservations = make([]*SchedulingAllocation, 0)
+                    }
+                    unreserveAllocation := NewSchedulingAllocationFromReservationRequest(reservationRequest)
+                    unreserveAllocation.NumAllocation = 1
+                    unreserveAllocation.AllocationResult = Unreserve
+                    excessiveReservations = append(excessiveReservations, unreserveAllocation)
+                }
+                numToDrop -= nRequestToDrop
+                if numToDrop == 0 {
+                    break
+                }
+            }
+        }
+    }
+
+    return excessiveReservations
 }
 
 // Get sorted alloc keys of reserved requests based on priority
@@ -315,6 +359,10 @@ func (m* SchedulingApplication) addAppReservation(reservationRequest *ReservedSc
     } else {
         req.IncAmount(reservationRequest.GetAmount())
     }
+
+    // updated allocKeyToNumReservationRequests
+    existingNum := m.allocKeyToNumReservedRequests[allocKey]
+    m.allocKeyToNumReservedRequests[allocKey] = existingNum + reservationRequest.GetAmount()
 }
 
 func (m* SchedulingApplication) removeAppReservation(reservationRequest *ReservedSchedulingRequest) {
@@ -339,6 +387,10 @@ func (m* SchedulingApplication) removeAppReservation(reservationRequest *Reserve
             delete(m.reservedRequests, allocKey)
         }
     }
+
+    // updated allocKeyToNumReservationRequests
+    existingNum := m.allocKeyToNumReservedRequests[allocKey]
+    m.allocKeyToNumReservedRequests[allocKey] = existingNum - reservationRequest.GetAmount()
 }
 
 func (m* SchedulingApplication) unreserveSchedulingAllocation(allocation *SchedulingAllocation) bool {

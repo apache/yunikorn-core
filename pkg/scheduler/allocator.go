@@ -36,16 +36,19 @@ func (m *Scheduler) singleStepSchedule() {
         }
 
         // Do reservation allocation First
-        alloc := m.reservationAllocation(partitionContext)
-        if nil == alloc {
-            alloc = m.tryAllocationForPartition(totalPartitionResource, partitionContext)
+        allocs := m.reservationAllocation(partitionContext)
+        if nil == allocs {
+            allocForRegularAllocation := m.tryAllocationForPartition(totalPartitionResource, partitionContext)
+            if allocForRegularAllocation != nil {
+                allocs = []*SchedulingAllocation{allocForRegularAllocation}
+            }
         }
-        m.handleSchedulingAllocation(alloc, partitionContext)
+        m.handleSchedulingAllocation(allocs, partitionContext)
     }
 }
 
 // Do reservation allocation, returns if anything allocated
-func (m *Scheduler) reservationAllocation(partitionCtx *PartitionSchedulingContext) *SchedulingAllocation {
+func (m *Scheduler) reservationAllocation(partitionCtx *PartitionSchedulingContext) []*SchedulingAllocation {
     appList := partitionCtx.GetReservationAppListClone()
 
     if appList == nil {
@@ -69,17 +72,19 @@ func (m *Scheduler) reservationAllocation(partitionCtx *PartitionSchedulingConte
     return nil
 }
 
-func (m *Scheduler) handleSchedulingAllocation(alloc *SchedulingAllocation, partitionCtx *PartitionSchedulingContext) {
-    if alloc == nil {
-        return
-    } else if alloc.AllocationResult == Reservation {
-        // Reservation is kept inside scheduler, so update internal scheduler context
-        partitionCtx.AddNewReservation(alloc)
-    } else if alloc.AllocationResult == Unreserve {
-        partitionCtx.HandleUnreservedRequest(alloc.SchedulingAsk.ApplicationId, alloc.SchedulingAsk.AllocatedResource)
-    } else if alloc.AllocationResult == Allocation || alloc.AllocationResult == AllocationFromReservation {
-        // Send allocation proposal to cache to commit
-        m.eventHandlers.CacheEventHandler.HandleEvent(newSingleAllocationProposal(alloc))
+func (m *Scheduler) handleSchedulingAllocation(allocations []*SchedulingAllocation, partitionCtx *PartitionSchedulingContext) {
+    for _, alloc := range allocations {
+        if alloc == nil {
+            return
+        } else if alloc.AllocationResult == Reservation {
+            // Reservation is kept inside scheduler, so update internal scheduler context
+            partitionCtx.AddNewReservation(alloc)
+        } else if alloc.AllocationResult == Unreserve {
+            partitionCtx.HandleUnreservedRequest(alloc.SchedulingAsk.ApplicationId, alloc.SchedulingAsk.AllocatedResource)
+        } else if alloc.AllocationResult == Allocation || alloc.AllocationResult == AllocationFromReservation {
+            // Send allocation proposal to cache to commit
+            m.eventHandlers.CacheEventHandler.HandleEvent(newSingleAllocationProposal(alloc))
+        }
     }
 }
 

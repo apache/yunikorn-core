@@ -82,6 +82,9 @@ func (m *Scheduler) handleSchedulingAllocation(allocations []*SchedulingAllocati
         } else if alloc.AllocationResult == Unreserve {
             partitionCtx.HandleUnreservedRequest(alloc.SchedulingAsk.ApplicationId, alloc.SchedulingAsk.AllocatedResource)
         } else if alloc.AllocationResult == Allocation || alloc.AllocationResult == AllocationFromReservation {
+            // Deduct queue's pending resources for allocation
+            partitionCtx.HandlePendingResourceDecreaseForQueues(alloc.SchedulingAsk.ApplicationId, alloc.SchedulingAsk.AllocatedResource)
+
             // Send allocation proposal to cache to commit
             m.eventHandlers.CacheEventHandler.HandleEvent(newSingleAllocationProposal(alloc))
         }

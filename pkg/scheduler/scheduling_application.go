@@ -216,6 +216,7 @@ func (m *SchedulingApplication) tryAllocateFromReservationRequest(request *Sched
         }
 
         if ok, _ := node.CheckAndAllocateResource(reservationRequest.SchedulingAsk.AllocatedResource, false); ok {
+            m.Requests.updateAllocationAskRepeat(request.AskProto.AllocationKey, -1)
             allocation := NewSchedulingAllocationFromReservationRequest(reservationRequest)
             allocation.AllocationResult = AllocationFromReservation
             return allocation

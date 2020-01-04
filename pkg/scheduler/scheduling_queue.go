@@ -121,14 +121,6 @@ func (queue *SchedulingQueue) tryAllocate(
 
     if allocation != nil {
         queue.allocating = resources.Add(queue.allocating, allocation.SchedulingAsk.AllocatedResource)
-
-        // Deduct pending resource of the queue
-        newPending, err := resources.SubErrorNegative(queue.pendingResource, allocation.SchedulingAsk.AllocatedResource)
-        if err != nil {
-            log.Logger().Warn("Pending resources went negative",
-                zap.Error(err))
-        }
-        queue.pendingResource = newPending
         return allocation
     }
 

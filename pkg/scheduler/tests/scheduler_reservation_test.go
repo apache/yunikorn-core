@@ -349,7 +349,6 @@ func TestReservationShouldNotGoBeyondNodeLimit(t *testing.T) {
     waitForAllocatedResourceOfQueue(t, schedulerQueueA, 200, 1000) // 180 + 20 allocated
 }
 
-
 // Test case:
 // - Register 10 nodes, 100 resource each.
 // - Submit app-1, ask for mem=60, repeat=10; (alloc-1)
@@ -443,4 +442,101 @@ func TestUnreserveWhenPendingIsLessThanReserved(t *testing.T) {
     waitForAllocatingResource(t, schedulerQueueA, 0, 1000)
     waitForAllocatingResourceForApplication(t, schedulingApp1, 0, 1000)
     assert.Equal(t, 0, len(schedulingApp1.GetAllReservationRequests()))
+}
+
+// Test case:
+// - Register 10 nodes, 100 resource each.
+// - Submit app-1, ask for mem=60, repeat=10; (alloc-1)
+// - For app-1, (alloc-2) ask for mem = 50, repeat = 8; there should have 8 reservation request (100 * 10 - 60 * 10) / 50 = 8;
+// - Add another two nodes to the cluster, we should get 4 more allocations and 4 unreserved requests
+func TestReservationCanLookUpDifferentNode(t *testing.T) {
+    ms := &MockScheduler{}
+    defer ms.Stop()
+
+    ms.Init(t, OneQueueConfig)
+
+    for i := 0; i < 10; i++ {
+        ms.AddNodeWithMemAndCpu("node-" + string(i), 100, 100)
+    }
+
+    ms.AddApp("app-1", "root.a", "default")
+
+    ms.AppRequestResource("app-1", "alloc-1", 60, 60, 10)
+
+    schedulerQueueA := ms.scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.a", ms._partition("default"))
+    schedulerQueueRoot := ms.scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root", ms._partition("default"))
+    schedulingApp1 := ms.scheduler.GetClusterSchedulingContext().GetSchedulingApplication("app-1", ms._partition("default"))
+
+    // Allocate for apps
+    for i := 0; i < 20; i++ {
+        ms.scheduler.SingleStepScheduleAllocTest(1)
+    }
+
+    // Verify all requests are satisfied
+    waitForAllocations(ms.mockRM, 10, 1000)
+    assert.True(t, schedulingApp1.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY] == 600)
+
+    // Verify 1 allocations for every node (mem=60)
+    for _, node := range ms.nodes {
+        assert.True(t, node.GetAllocatedResource().Resources[resources.MEMORY] == 60)
+    }
+
+    // Now, app-1 asks for a pod with mem=50, it should be reserved
+    ms.AppRequestResource("app-1", "alloc-2", 50, 50, 8)
+
+    // Allocate for apps
+    for i := 0; i < 20; i++ {
+        ms.scheduler.SingleStepScheduleAllocTest(1)
+    }
+
+    waitForAllocations(ms.mockRM, 10, 1000) // still the same
+    waitForAllocatingResource(t, schedulerQueueA, 400, 1000)
+    waitForAllocatingResourceForApplication(t, schedulingApp1, 400, 1000)
+    assert.Equal(t, 8, len(schedulingApp1.GetAllReservationRequests()))
+
+    // Check pending resource of queues and apps
+    waitForPendingResource(t, schedulerQueueA, 400, 1000)
+    waitForPendingResource(t, schedulerQueueRoot, 400, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp1, 400, 1000)
+
+    for i := 10; i < 12; i++ {
+        ms.AddNodeWithMemAndCpu("node-" + string(i), 100, 100)
+    }
+
+    // Allocate for apps
+    for i := 0; i < 20; i++ {
+        ms.scheduler.SingleStepScheduleAllocTest(1)
+    }
+
+    // 4 more allocations and 4 less reservations
+    waitForAllocations(ms.mockRM, 14, 1000) // still the same
+    waitForAllocatingResource(t, schedulerQueueA, 200, 1000)
+    waitForAllocatingResourceForApplication(t, schedulingApp1, 200, 1000)
+    assert.Equal(t, 4, len(schedulingApp1.GetAllReservationRequests()))
+
+    // Check pending resource of queues
+    waitForPendingResource(t, schedulerQueueA, 200, 1000)
+    waitForPendingResource(t, schedulerQueueRoot, 200, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp1, 200, 1000)
+
+    // Add 2 more nodes, we can find all requests allocated and no reservation
+    for i := 12; i < 14; i++ {
+        ms.AddNodeWithMemAndCpu("node-" + string(i), 100, 100)
+    }
+
+    // Allocate for apps
+    for i := 0; i < 20; i++ {
+        ms.scheduler.SingleStepScheduleAllocTest(1)
+    }
+
+    // 4 more allocations and 4 less reservations
+    waitForAllocations(ms.mockRM, 18, 1000) // still the same
+    waitForAllocatingResource(t, schedulerQueueA, 0, 1000)
+    waitForAllocatingResourceForApplication(t, schedulingApp1, 0, 1000)
+    assert.Equal(t, 0, len(schedulingApp1.GetAllReservationRequests()))
+
+    // Check pending resource of queues
+    waitForPendingResource(t, schedulerQueueA, 0, 1000)
+    waitForPendingResource(t, schedulerQueueRoot, 0, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp1, 0, 1000)
 }

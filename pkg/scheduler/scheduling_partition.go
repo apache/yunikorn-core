@@ -340,3 +340,13 @@ func (psc *PartitionSchedulingContext) HandleUnreservedRequest(appId string, req
         }
     }
 }
+
+func (psc *PartitionSchedulingContext) HandlePendingResourceDecreaseForQueues(appId string, amount *resources.Resource) {
+    psc.lock.Lock()
+    defer psc.lock.Unlock()
+
+    // Make sure app exist before decrease allocating resources
+    if app := psc.applications[appId]; app != nil {
+        app.queue.DecPendingResourceFromTheQueueAndParents(amount)
+    }
+}

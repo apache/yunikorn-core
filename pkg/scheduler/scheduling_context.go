@@ -233,6 +233,7 @@ func (csc *ClusterSchedulingContext) removeSchedulingNode(info *cache.NodeInfo) 
             zap.String("partitionName", info.Partition))
         return
     }
+
     partition.removeSchedulingNode(info.NodeId)
 }
 

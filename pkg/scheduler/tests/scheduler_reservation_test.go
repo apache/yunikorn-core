@@ -540,3 +540,170 @@ func TestReservationCanLookUpDifferentNode(t *testing.T) {
     waitForPendingResource(t, schedulerQueueRoot, 0, 1000)
     waitForPendingResourceForApplication(t, schedulingApp1, 0, 1000)
 }
+
+
+// Test case:
+// - Register 10 nodes, 100 resource each.
+// - Submit app-1, ask for mem=60, repeat=10; (alloc-1)
+// - For app-1, (alloc-2) ask for mem = 50, repeat = 8; there should have 8 reservation request (100 * 10 - 60 * 10) / 50 = 8;
+// - Remove all nodes from the cluster, should find reserved/allocating resources are gone, and pending resource keep unchanged
+func TestReservationRemoveNodeThenRemoveApp(t *testing.T) {
+    ms := &MockScheduler{}
+    defer ms.Stop()
+
+    ms.Init(t, OneQueueConfig)
+
+    for i := 0; i < 10; i++ {
+        ms.AddNodeWithMemAndCpu("node-" + string(i), 100, 100)
+    }
+
+    ms.AddApp("app-1", "root.a", "default")
+
+    ms.AppRequestResource("app-1", "alloc-1", 60, 60, 10)
+
+    schedulerQueueA := ms.scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.a", ms._partition("default"))
+    schedulerQueueRoot := ms.scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root", ms._partition("default"))
+    schedulingApp1 := ms.scheduler.GetClusterSchedulingContext().GetSchedulingApplication("app-1", ms._partition("default"))
+
+    // Allocate for apps
+    for i := 0; i < 20; i++ {
+        ms.scheduler.SingleStepScheduleAllocTest(1)
+    }
+
+    // Verify all requests are satisfied
+    waitForAllocations(ms.mockRM, 10, 1000)
+    assert.True(t, schedulingApp1.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY] == 600)
+
+    // Verify 1 allocations for every node (mem=60)
+    for _, node := range ms.nodes {
+        assert.True(t, node.GetAllocatedResource().Resources[resources.MEMORY] == 60)
+    }
+
+    // Now, app-1 asks for a pod with mem=50, it should be reserved
+    ms.AppRequestResource("app-1", "alloc-2", 50, 50, 8)
+
+    // Allocate for apps
+    for i := 0; i < 20; i++ {
+        ms.scheduler.SingleStepScheduleAllocTest(1)
+    }
+
+    waitForAllocations(ms.mockRM, 10, 1000) // still the same
+    waitForAllocatingResource(t, schedulerQueueA, 400, 1000)
+    waitForAllocatingResourceForApplication(t, schedulingApp1, 400, 1000)
+    assert.Equal(t, 8, len(schedulingApp1.GetAllReservationRequests()))
+
+    // Check pending resource of queues and apps
+    waitForPendingResource(t, schedulerQueueA, 400, 1000)
+    waitForPendingResource(t, schedulerQueueRoot, 400, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp1, 400, 1000)
+
+    // Now, remove all nodes from the cluster, and check allocating/reservation/pending resource
+    for i := 0; i < 10; i++ {
+        ms.RemoveNode("node-" + string(i), "default")
+    }
+
+    waitForAllocations(ms.mockRM, 0, 1000)
+
+    // Allocate for apps
+    for i := 0; i < 20; i++ {
+        ms.scheduler.SingleStepScheduleAllocTest(1)
+    }
+
+    waitForAllocatingResource(t, schedulerQueueA, 0, 1000)
+    waitForAllocatingResourceForApplication(t, schedulingApp1, 0, 1000)
+    assert.Equal(t, 0, len(schedulingApp1.GetAllReservationRequests()))
+
+    // Check pending resource of queues and apps
+    waitForPendingResource(t, schedulerQueueA, 400, 1000)
+    waitForPendingResource(t, schedulerQueueRoot, 400, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp1, 400, 1000)
+
+    // Remove app also, should fine everything is gone
+    ms.RemoveApp("app-1", "default")
+
+    waitForAllocations(ms.mockRM, 0, 1000)
+    waitForAllocatingResource(t, schedulerQueueA, 0, 1000)
+
+    // Check pending resource of queues
+    waitForPendingResource(t, schedulerQueueA, 0, 1000)
+    waitForPendingResource(t, schedulerQueueRoot, 0, 1000)
+}
+
+// Test case:
+// - Register 10 nodes, 100 resource each.
+// - Submit app-1, ask for mem=60, repeat=10; (alloc-1)
+// - For app-1, (alloc-2) ask for mem = 50, repeat = 8; there should have 8 reservation request (100 * 10 - 60 * 10) / 50 = 8;
+// - Remove app from the cluster and check resources
+func TestReservationRemoveAppThenRemoveNode(t *testing.T) {
+    ms := &MockScheduler{}
+    defer ms.Stop()
+
+    ms.Init(t, OneQueueConfig)
+
+    for i := 0; i < 10; i++ {
+        ms.AddNodeWithMemAndCpu("node-" + string(i), 100, 100)
+    }
+
+    ms.AddApp("app-1", "root.a", "default")
+
+    ms.AppRequestResource("app-1", "alloc-1", 60, 60, 10)
+
+    schedulerQueueA := ms.scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.a", ms._partition("default"))
+    schedulerQueueRoot := ms.scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root", ms._partition("default"))
+    schedulingApp1 := ms.scheduler.GetClusterSchedulingContext().GetSchedulingApplication("app-1", ms._partition("default"))
+
+    // Allocate for apps
+    for i := 0; i < 20; i++ {
+        ms.scheduler.SingleStepScheduleAllocTest(1)
+    }
+
+    // Verify all requests are satisfied
+    waitForAllocations(ms.mockRM, 10, 1000)
+    assert.True(t, schedulingApp1.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY] == 600)
+
+    // Verify 1 allocations for every node (mem=60)
+    for _, node := range ms.nodes {
+        assert.True(t, node.GetAllocatedResource().Resources[resources.MEMORY] == 60)
+    }
+
+    // Now, app-1 asks for a pod with mem=50, it should be reserved
+    ms.AppRequestResource("app-1", "alloc-2", 50, 50, 8)
+
+    // Allocate for apps
+    for i := 0; i < 20; i++ {
+        ms.scheduler.SingleStepScheduleAllocTest(1)
+    }
+
+    waitForAllocations(ms.mockRM, 10, 1000) // still the same
+    waitForAllocatingResource(t, schedulerQueueA, 400, 1000)
+    waitForAllocatingResourceForApplication(t, schedulingApp1, 400, 1000)
+    assert.Equal(t, 8, len(schedulingApp1.GetAllReservationRequests()))
+
+    // Verify reservation
+    for _, request := range schedulingApp1.GetAllReservationRequests() {
+        assert.True(t, len(request.SchedulingNode.GetReservedRequests()) > 0)
+        assert.True(t, request.SchedulingNode.GetTotalReservedResources().Resources[resources.MEMORY] > 0)
+    }
+
+    // Check pending resource of queues and apps
+    waitForPendingResource(t, schedulerQueueA, 400, 1000)
+    waitForPendingResource(t, schedulerQueueRoot, 400, 1000)
+    waitForPendingResourceForApplication(t, schedulingApp1, 400, 1000)
+
+    // Remove app also, should fine everything is gone
+    ms.RemoveApp("app-1", "default")
+
+    waitForAllocations(ms.mockRM, 0, 1000)
+    waitForAllocatingResource(t, schedulerQueueA, 0, 1000)
+
+    // Check pending resource of queues
+    waitForPendingResource(t, schedulerQueueA, 0, 1000)
+    waitForPendingResource(t, schedulerQueueRoot, 0, 1000)
+
+    // Verify no reservation for every node (mem=60)
+    for _, node := range ms.nodes {
+        assert.True(t, node.GetAllocatedResource().Resources[resources.MEMORY] == 0)
+        assert.True(t, len(node.GetReservedRequests()) == 0)
+        assert.True(t, node.GetTotalReservedResources().Resources[resources.MEMORY] == 0)
+    }
+}

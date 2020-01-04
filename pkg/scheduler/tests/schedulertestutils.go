@@ -24,6 +24,7 @@ import (
     "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/scheduler"
     "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+    "github.com/stretchr/testify/assert"
     "go.uber.org/zap"
     "sync"
     "testing"
@@ -126,7 +127,7 @@ func waitForAcceptedApplications(m *MockRMCallbackHandler, appId string, timeout
             return
         }
         if i*100 >= timeoutMs {
-            m.t.Fatalf("Failed to wait AcceptedApplications: %s", appId)
+            assert.Fail(m.t, fmt.Sprintf("Failed to wait AcceptedApplications: %s", appId))
             return
         }
     }
@@ -147,7 +148,7 @@ func waitForRejectedApplications(m *MockRMCallbackHandler, appId string, timeout
             return
         }
         if i*100 >= timeoutMs {
-            m.t.Fatalf("Failed to wait RejectedApplications: %s", appId)
+            assert.Fail(m.t, fmt.Sprintf("Failed to wait RejectedApplications: %s", appId))
             return
         }
     }
@@ -168,7 +169,7 @@ func waitForAcceptedNodes(m *MockRMCallbackHandler, nodeId string, timeoutMs int
             return
         }
         if i >= timeoutMs {
-            m.t.Fatalf("Failed to wait AcceptedNode: %s", nodeId)
+            assert.Fail(m.t, fmt.Sprintf("Failed to wait AcceptedNode: %s", nodeId))
             return
         }
     }
@@ -189,7 +190,7 @@ func waitForMinNumberOfAcceptedNodes(m *MockRMCallbackHandler, minNumNode int, t
             return
         }
         if i >= timeoutMs {
-            m.t.Fatalf("Failed to wait #AcceptedNode=%d", minNumNode)
+            assert.Fail(m.t, fmt.Sprintf("Failed to wait #AcceptedNode=%d", minNumNode))
             return
         }
     }
@@ -210,7 +211,7 @@ func waitForRejectedNodes(m *MockRMCallbackHandler, nodeId string, timeoutMs int
             return
         }
         if i*100 >= timeoutMs {
-            m.t.Fatalf("Failed to wait AcceptedNode: %s", nodeId)
+            assert.Fail(m.t, fmt.Sprintf("Failed to wait AcceptedNode: %s", nodeId))
             return
         }
     }
@@ -228,7 +229,8 @@ func waitForPendingResource(t *testing.T, queue *scheduler.SchedulingQueue, memo
         if i*100 >= timeoutMs {
             log.Logger().Info("queue detail",
                 zap.Any("queue", queue))
-            t.Fatalf("Failed to wait pending resource on queue %s, actual = %v, expected = %v", queue.Name, queue.GetPendingResource().Resources[resources.MEMORY], memory)
+            assert.Fail(t, fmt.Sprintf("Failed to wait pending resource on queue %s, actual = %v, expected = %v", queue.Name,
+                queue.GetPendingResource().Resources[resources.MEMORY], memory))
             return
         }
     }
@@ -278,12 +280,12 @@ func waitForPendingResourceForApplication(t *testing.T, app *scheduler.Schedulin
     for {
         i++
         if app.Requests.GetPendingResource().Resources[resources.MEMORY] != memory {
-            time.Sleep(time.Duration(100 * time.Millisecond))
+            time.Sleep(100 * time.Millisecond)
         } else {
             return
         }
         if i*100 >= timeoutMs {
-            t.Fatalf("Failed to wait pending resource, expected=%v, actual=%v", memory, app.Requests.GetPendingResource().Resources[resources.MEMORY])
+            assert.Fail(t, fmt.Sprintf("Failed to wait pending resource, expected=%v, actual=%v", memory, app.Requests.GetPendingResource().Resources[resources.MEMORY]))
             return
         }
     }
@@ -299,7 +301,7 @@ func waitForAllocatingResourceForApplication(t *testing.T, app *scheduler.Schedu
             return
         }
         if i*100 >= timeoutMs {
-            t.Fatalf("Failed to wait allocating resource, expected=%v, actual=%v", memory, app.GetAllocatingResourceTestOnly().Resources[resources.MEMORY])
+            assert.Fail(t, fmt.Sprintf("Failed to wait allocating resource, expected=%v, actual=%v", memory, app.GetAllocatingResourceTestOnly().Resources[resources.MEMORY]))
             return
         }
     }
@@ -315,7 +317,7 @@ func waitForAllocatedResourceForApplication(t *testing.T, app *scheduler.Schedul
             return
         }
         if i*100 >= timeoutMs {
-            t.Fatalf("Failed to wait allocated resource, expected=%v, actual=%v", memory, app.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY])
+            assert.Fail(t, fmt.Sprintf("Failed to wait allocated resource, expected=%v, actual=%v", memory, app.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY]))
             return
         }
     }
@@ -336,7 +338,7 @@ func waitForAllocations(m *MockRMCallbackHandler, nAlloc int, timeoutMs int) {
             return
         }
         if i*100 >= timeoutMs {
-            m.t.Fatalf("Failed to wait Allocations expected %d, got %d", nAlloc, allocLen)
+            assert.Fail(m.t, fmt.Sprintf("Failed to wait Allocations expected %d, got %d", nAlloc, allocLen))
             return
         }
     }
@@ -357,7 +359,7 @@ func waitForMinAllocations(m *MockRMCallbackHandler, nAlloc int, timeoutMs int) 
             return
         }
         if i >= timeoutMs {
-            m.t.Fatalf("Failed to wait Allocations expected %d, got %d", nAlloc, allocLen)
+            assert.Fail(m.t, fmt.Sprintf("Failed to wait Allocations expected %d, got %d", nAlloc, allocLen))
             return
         }
     }
@@ -379,7 +381,7 @@ func waitForNodesAllocatedResource(t *testing.T, cache *cache.ClusterInfo, parti
             return
         }
         if i*100 >= timeoutMs {
-            t.Fatalf("Failed to wait Allocations on partition %s and node %v", partitionName, nodeIds)
+            assert.Fail(t, fmt.Sprintf("Failed to wait Allocations on partition %s and node %v", partitionName, nodeIds))
             return
         }
     }
@@ -392,7 +394,7 @@ func waitForNewSchedulerNode(t *testing.T, context *scheduler.ClusterSchedulingC
 
     })
     if err != nil {
-        t.Fatalf("Failed to wait for new scheduling node on partition %s, node %v", partitionName, nodeId)
+        assert.Fail(t, fmt.Sprintf("Failed to wait for new scheduling node on partition %s, node %v", partitionName, nodeId))
     }
 }
 
@@ -402,7 +404,7 @@ func waitForRemovedSchedulerNode(t *testing.T, context *scheduler.ClusterSchedul
         return node == nil
     })
     if err != nil {
-        t.Fatalf("Failed to wait for removal of scheduling node on partition %s, node %v", partitionName, nodeId)
+        assert.Fail(t, fmt.Sprintf("Failed to wait for removal of scheduling node on partition %s, node %v", partitionName, nodeId))
     }
 }
 

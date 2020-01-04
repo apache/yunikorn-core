@@ -185,6 +185,28 @@ func (m *MockScheduler) AddNodeWithMemAndCpu(nodeId string, mem int64, vcore int
     waitForAcceptedNodes(m.mockRM, nodeId, 1000)
 }
 
+func (m *MockScheduler) RemoveNode(nodeId string, partition string) {
+    // send RM node action: DECOMMISSION (make it unschedulable and tell partition to delete)
+    err := m.proxy.Update(&si.UpdateRequest{
+        UpdatedNodes: []*si.UpdateNodeInfo{
+            {
+                NodeId: nodeId,
+                Action: si.UpdateNodeInfo_DECOMISSION,
+                Attributes: make(map[string]string),
+            },
+        },
+        RmId: m.rmId,
+    })
+
+    if err != nil {
+        m.t.Fatalf("RemoveNode failed: %v", err)
+    }
+
+    // node removal can be really quick: cannot test for unschedulable state (nil pointer)
+    // verify that scheduling node (node-2) was removed
+    waitForRemovedSchedulerNode(m.t, m.scheduler.GetClusterSchedulingContext(), nodeId, common.GetNormalizedPartitionName(partition, m.rmId), 10000)
+}
+
 func (m *MockScheduler) AddApp(appId string, queue string, partition string) {
     // Register 2 node, and add apps
     err := m.proxy.Update(&si.UpdateRequest{

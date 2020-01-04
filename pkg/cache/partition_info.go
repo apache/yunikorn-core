@@ -263,18 +263,19 @@ func (pi *PartitionInfo) addNodeReportedAllocations(allocation *si.Allocation) (
 
 // Remove a node from the partition.
 // This locks the partition and calls the internal unlocked version.
-func (pi *PartitionInfo) RemoveNode(nodeId string) {
+func (pi *PartitionInfo) RemoveNode(nodeId string) []*AllocationInfo {
     pi.lock.Lock()
     defer pi.lock.Unlock()
 
-    pi.removeNodeInternal(nodeId)
+    return pi.removeNodeInternal(nodeId)
 }
 
 // Remove a node from the partition.
 //
 // NOTE: this is a lock free call. It should only be called holding the PartitionInfo lock.
 // If access outside is needed a locked version must used, see removeNode
-func (pi *PartitionInfo) removeNodeInternal(nodeId string) {
+// Returns allocations on the node
+func (pi *PartitionInfo) removeNodeInternal(nodeId string) []*AllocationInfo {
     log.Logger().Info("remove node from partition",
         zap.String("nodeId", nodeId),
         zap.String("partition", pi.Name))
@@ -284,11 +285,13 @@ func (pi *PartitionInfo) removeNodeInternal(nodeId string) {
         log.Logger().Debug("node was not found",
             zap.String("nodeId", nodeId),
             zap.String("partitionName", pi.Name))
-        return
+        return nil
     }
 
+    allocations := node.GetAllAllocations()
+
     // walk over all allocations still registered for this node
-    for _, alloc := range node.GetAllAllocations() {
+    for _, alloc := range allocations {
         var queue *QueueInfo = nil
         allocID := alloc.AllocationProto.Uuid
         // since we are not locking the node and or application we could have had an update while processing
@@ -333,6 +336,8 @@ func (pi *PartitionInfo) removeNodeInternal(nodeId string) {
     log.Logger().Info("node removed",
         zap.String("partitionName", pi.Name),
         zap.String("nodeId", node.NodeId))
+
+    return allocations
 }
 
 // Add a new application to the partition.
@@ -507,6 +512,14 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
     if queue = pi.getQueue(alloc.QueueName); queue == nil || !queue.IsLeafQueue() {
         metrics.GetSchedulerMetrics().IncSchedulingError()
         return nil, fmt.Errorf("queue does not exist or is not a leaf queue %s", alloc.QueueName)
+    }
+
+    // Does the node schedulable?
+    if !node.IsSchedulable() {
+        metrics.GetSchedulerMetrics().IncSchedulingError()
+        return nil, fmt.Errorf("cannot allocate resource [%v] for application %s on "+
+            "node %s because node is not schedulable",
+            alloc.AllocatedResource, alloc.ApplicationId, node.NodeId)
     }
 
     // Does the new allocation exceed the node's available resource?

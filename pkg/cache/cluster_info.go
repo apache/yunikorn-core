@@ -398,12 +398,16 @@ func (m *ClusterInfo) processNodeActions(request *si.UpdateRequest) {
             case si.UpdateNodeInfo_DECOMISSION:
                 // set the state to not schedulable then tell the partition to clean up
                 nodeInfo.SetSchedulable(false)
-                partition.RemoveNode(nodeInfo.NodeId)
+                existingAllocations := partition.RemoveNode(nodeInfo.NodeId)
                 // remove the equivalent scheduling node
                 m.EventHandlers.SchedulerEventHandler.HandleEvent(
                     &schedulerevent.SchedulerNodeEvent{
                         RemovedNode: nodeInfo,
                     })
+                if existingAllocations != nil && len(existingAllocations) > 0 {
+                    m.notifyRMAllocationReleased(partition.RMId, existingAllocations, si.AllocationReleaseResponse_STOPPED_BY_RM,
+                        fmt.Sprintf("Node %s Removed", nodeInfo.NodeId))
+                }
             }
         }
     }

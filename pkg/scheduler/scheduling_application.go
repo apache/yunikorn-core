@@ -17,6 +17,7 @@ limitations under the License.
 package scheduler
 
 import (
+    "fmt"
     "github.com/cloudera/yunikorn-core/pkg/cache"
     "github.com/cloudera/yunikorn-core/pkg/common"
     "github.com/cloudera/yunikorn-core/pkg/common/math"
@@ -145,7 +146,10 @@ func (m *SchedulingApplication) allocateForOneRequest(partitionContext* Partitio
         ok, err := m.reserveSchedulingAllocation(candidate, bestNodeToReserve)
         if !ok {
             log.Logger().Debug("failed to reserve allocation on node",
-                zap.String("error", err.Error()))
+                zap.String("error", err.Error()),
+                zap.String("nodeId", bestNodeToReserve.NodeId),
+                zap.String("app", candidate.ApplicationId),
+                zap.String("allocKey", candidate.AskProto.AllocationKey))
             return nil
         }
         return NewSchedulingAllocation(candidate, bestNodeToReserve, Reservation)
@@ -327,6 +331,11 @@ func (m* SchedulingApplication) GetAllocatingResourceTestOnly() *resources.Resou
 
 // Reserve scheduling request, this also reserve resources on
 func (m *SchedulingApplication) reserveSchedulingAllocation(ask *SchedulingAllocationAsk, node *SchedulingNode) (bool, error) {
+    // Make sure we don't reserve more container than total repeat
+    if int32(m.allocKeyToNumReservedRequests[ask.AskProto.AllocationKey]) >= ask.PendingRepeatAsk {
+        return false, fmt.Errorf("Cannot reserve more since #reserved already >= #ask")
+    }
+
     reserveRequest := NewReservedSchedulingRequest(ask, m, node)
 
     // Handle reservation on node

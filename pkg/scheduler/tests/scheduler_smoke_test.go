@@ -331,15 +331,16 @@ partitions:
                 MaxAllocations: 2,
                 ApplicationId:  "app-1",
             },
+            // Asked a resource which has mem=200, it cannot fit in any node, so it will do nothing but keep 200 more pending resources
             {
                 AllocationKey: "alloc-3",
                 ResourceAsk: &si.Resource{
                     Resources: map[string]*si.Quantity{
-                        "memory": {Value: 100},
-                        "vcore":  {Value: 5},
+                        "memory": {Value: 200},
+                        "vcore":  {Value: 10},
                     },
                 },
-                MaxAllocations: 2,
+                MaxAllocations: 1,
                 ApplicationId:  "app-1",
             },
         },
@@ -351,7 +352,7 @@ partitions:
     }
 
     // Wait pending resource of queue a and scheduler queue
-    // Both pending memory = 50 * 2 + 100 * 2 = 300;
+    // Both pending memory = 50 * 2 + 200 = 300
     waitForPendingResource(t, schedulerQueueA, 300, 1000)
     waitForPendingResource(t, schedulerQueueRoot, 300, 1000)
     waitForPendingResourceForApplication(t, schedulingApp, 300, 1000)

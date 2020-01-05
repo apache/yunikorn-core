@@ -17,6 +17,7 @@ limitations under the License.
 package scheduler
 
 import (
+    "container/list"
     "github.com/cloudera/yunikorn-core/pkg/common/resources"
 )
 
@@ -47,12 +48,34 @@ func (m *Scheduler) singleStepSchedule() {
     }
 }
 
+// Apps could have excessive reservations, we need to clean them up first
+func dropExcessiveReservationRequests(reservedApps *list.List) []*SchedulingAllocation {
+    droppedExcessiveReservationRequest := make([]*SchedulingAllocation, 0)
+
+    for e := reservedApps.Front(); e != nil; e = e.Next() {
+        app := e.Value.(*SchedulingApplication)
+        appUnreserved := app.dropExcessiveReservationRequest()
+        if appUnreserved != nil && len(appUnreserved) > 0 {
+            for _, alloc := range appUnreserved {
+                droppedExcessiveReservationRequest = append(droppedExcessiveReservationRequest, alloc)
+            }
+        }
+    }
+
+    return droppedExcessiveReservationRequest
+}
+
 // Do reservation allocation, returns if anything allocated
 func (m *Scheduler) reservationAllocation(partitionCtx *PartitionSchedulingContext) []*SchedulingAllocation {
     appList := partitionCtx.GetReservationAppListClone()
 
     if appList == nil {
         return nil
+    }
+
+    droppedExcessiveReservationRequest := dropExcessiveReservationRequests(appList)
+    if droppedExcessiveReservationRequest != nil && len(droppedExcessiveReservationRequest) > 0 {
+        return droppedExcessiveReservationRequest
     }
 
     for appList.Len() > 0 {

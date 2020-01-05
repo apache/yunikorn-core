@@ -161,15 +161,10 @@ func (m *SchedulingApplication) allocateForOneRequest(partitionContext* Partitio
 
 // Try to allocate from reservation, return !nil if any request got successfully allocated.
 func (m *SchedulingApplication) TryAllocateFromReservationRequests() []*SchedulingAllocation {
-    excessiveReservationsToDrop := m.dropExcessiveReservationRequest()
-    if excessiveReservationsToDrop != nil {
-        for _, alloc := range excessiveReservationsToDrop {
-            m.unreserveSchedulingAllocation(alloc)
-        }
-        return excessiveReservationsToDrop
-    }
-
     sortedReservationRequest := m.getSortedReservationRequestCopy()
+
+    m.lock.Lock()
+    defer m.lock.Unlock()
 
     for _, request := range sortedReservationRequest {
         alloc := m.tryAllocateFromReservationRequest(request)
@@ -183,9 +178,6 @@ func (m *SchedulingApplication) TryAllocateFromReservationRequests() []*Scheduli
 }
 
 func (m *SchedulingApplication) tryAllocateFromReservationRequest(request *SchedulingAllocationAsk) *SchedulingAllocation {
-    m.lock.Lock()
-    defer m.lock.Unlock()
-
     allocKey := request.AskProto.AllocationKey
 
     // Check if the reservation request is still valid
@@ -258,6 +250,12 @@ func (m* SchedulingApplication) dropExcessiveReservationRequest() []*SchedulingA
                     break
                 }
             }
+        }
+    }
+
+    if excessiveReservations != nil {
+        for _, alloc := range excessiveReservations {
+            m.unreserveSchedulingAllocation(alloc)
         }
     }
 
@@ -404,9 +402,6 @@ func (m* SchedulingApplication) removeAppReservation(reservationRequest *Reserve
 }
 
 func (m* SchedulingApplication) unreserveSchedulingAllocation(allocation *SchedulingAllocation) bool {
-    m.lock.Lock()
-    defer m.lock.Unlock()
-
     reservationRequest := NewReservedSchedulingRequest(allocation.SchedulingAsk, m, allocation.Node)
 
     allocation.Node.UnreserveOnNode(reservationRequest)

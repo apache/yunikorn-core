@@ -238,21 +238,19 @@ func (psc *PartitionSchedulingContext) getSchedulingNode(nodeId string) *Schedul
 }
 
 // Get a copy of the scheduling nodes from the partition.
-func (psc *PartitionSchedulingContext) getSchedulingNodes() []*SchedulingNode {
+func (psc *PartitionSchedulingContext) getSchedulableNonReservedSchedulingNodes() []*SchedulingNode {
     psc.lock.RLock()
     defer psc.lock.RUnlock()
 
-    schedulingNodes := make([]*SchedulingNode, len(psc.nodes))
-    var i = 0
+    schedulingNodes := make([]*SchedulingNode, 0)
     for _, node := range psc.nodes {
         // filter out the nodes that are not scheduling
-        if node.nodeInfo.IsSchedulable() {
-            schedulingNodes[i] = node
-            i++
+        if node.nodeInfo.IsSchedulable() && !node.IsReserved() {
+            schedulingNodes = append(schedulingNodes, node)
         }
     }
     // only return the part that has really been written (no nil's)
-    return schedulingNodes[:i]
+    return schedulingNodes
 }
 
 // Add a new scheduling node triggered on the addition of the cache node.

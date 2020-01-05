@@ -96,7 +96,7 @@ func (app *SchedulingApplication) AddBackAllocationAskRepeat(allocationKey strin
 // - SchedulingAllocation (if allocated/reserved anything).
 // - Enum of why cannot allocate or reserve (if allocated/reserved nothing)
 func (m *SchedulingApplication) allocateForOneRequest(partitionContext* PartitionSchedulingContext, candidate *SchedulingAllocationAsk) *SchedulingAllocation {
-    nodeList := partitionContext.getSchedulingNodes()
+    nodeList := partitionContext.getSchedulableNonReservedSchedulingNodes()
     if len(nodeList) == 0 {
         return nil
     }

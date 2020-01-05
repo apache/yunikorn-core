@@ -25,6 +25,7 @@ import (
 	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 	"go.uber.org/zap"
 	"sync"
+	"sync/atomic"
 )
 
 type SchedulingNode struct {
@@ -43,6 +44,9 @@ type SchedulingNode struct {
 	// Or pre-ordering node for autoscaling nodes.
 	reservationRequests map[string]*ReservedSchedulingRequest
 
+	// node reserved or not, will be read by sorting algorithm, etc.
+	reserved atomic.Value
+
 	// Total reserved resource
 	totalReservedResource *resources.Resource
 
@@ -54,7 +58,7 @@ func NewSchedulingNode(info *cache.NodeInfo) *SchedulingNode {
 	if info == nil {
 		return nil
 	}
-	return &SchedulingNode{
+	node := &SchedulingNode{
 		nodeInfo:                  info,
 		NodeId:                    info.NodeId,
 		allocatingResource:        resources.NewResource(),
@@ -63,6 +67,8 @@ func NewSchedulingNode(info *cache.NodeInfo) *SchedulingNode {
 		reservationRequests: make(map[string]*ReservedSchedulingRequest, 0),
 		totalReservedResource:     resources.NewResource(),
 	}
+	node.SetReserved(false)
+	return node
 }
 
 // Get the allocated resource on this node.
@@ -209,6 +215,9 @@ func (sn* SchedulingNode) UnreserveOnNode(reservationRequest *ReservedScheduling
 
 		if val.GetAmount() <= 0 {
 			delete(sn.reservationRequests, reservationRequest.GetReservationRequestKeyOnNode())
+			if len(sn.reservationRequests) == 0 {
+				sn.SetReserved(false)
+			}
 		}
 
 		if decSucceeded {
@@ -248,6 +257,7 @@ func (sn* SchedulingNode) ReserveOnNode(reservationRequest *ReservedSchedulingRe
 	}
 
 	sn.totalReservedResource = resources.Add(sn.totalReservedResource, reservationRequest.SchedulingAsk.AllocatedResource)
+	sn.SetReserved(true)
 
 	return true, nil
 }
@@ -309,6 +319,18 @@ func (sn *SchedulingNode) SetNeedUpdateCachedAvailable() {
 	sn.lock.Lock()
 	defer sn.lock.Unlock()
 	sn.needUpdateCachedAvailable = true
+}
+
+// Set the node to unschedulable.
+// This will cause the node to be skipped during the scheduling cycle.
+// Visible for testing only
+func (ni *SchedulingNode) SetReserved(reserved bool) {
+	ni.reserved.Store(reserved)
+}
+
+// Can this node be used in scheduling.
+func (ni *SchedulingNode) IsReserved() bool {
+	return ni.reserved.Load().(bool)
 }
 
 // Visible by tests

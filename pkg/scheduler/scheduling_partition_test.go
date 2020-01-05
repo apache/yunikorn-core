@@ -96,7 +96,7 @@ func TestGetNodes(t *testing.T) {
         t.Fatalf("test partition create failed with error: %v ", err)
     }
 
-    nodes := partition.getSchedulingNodes()
+    nodes := partition.getSchedulableNonReservedSchedulingNodes()
     assert.Equal(t, 0, len(nodes), "list should have been empty")
 
     partition.addSchedulingNode(cache.NewNodeForTest("test1", resources.NewResource()))
@@ -106,7 +106,7 @@ func TestGetNodes(t *testing.T) {
     node.SetSchedulable(false)
     partition.addSchedulingNode(node)
     assert.Equal(t, 3, len(partition.nodes), "node list not correct")
-    nodes = partition.getSchedulingNodes()
+    nodes = partition.getSchedulableNonReservedSchedulingNodes()
     // returned list should be only two long
     assert.Equal(t, 2, len(nodes), "node list not filtered")
     // map iteration is random so don't know which we get first

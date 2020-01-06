@@ -20,7 +20,6 @@ import (
     "container/list"
     "fmt"
     "github.com/cloudera/yunikorn-core/pkg/cache"
-    "github.com/cloudera/yunikorn-core/pkg/common/resources"
     "github.com/cloudera/yunikorn-core/pkg/common/security"
     "github.com/cloudera/yunikorn-core/pkg/log"
     "github.com/cloudera/yunikorn-core/pkg/scheduler/placement"
@@ -238,14 +237,17 @@ func (psc *PartitionSchedulingContext) getSchedulingNode(nodeId string) *Schedul
 }
 
 // Get a copy of the scheduling nodes from the partition.
-func (psc *PartitionSchedulingContext) getSchedulableNonReservedSchedulingNodes() []*SchedulingNode {
+func (psc *PartitionSchedulingContext) getSchedulableNodes(excludeReservedNode bool) []*SchedulingNode {
     psc.lock.RLock()
     defer psc.lock.RUnlock()
 
     schedulingNodes := make([]*SchedulingNode, 0)
     for _, node := range psc.nodes {
+        if excludeReservedNode && node.IsReserved() {
+            continue
+        }
         // filter out the nodes that are not scheduling
-        if node.nodeInfo.IsSchedulable() && !node.IsReserved() {
+        if node.nodeInfo.IsSchedulable() {
             schedulingNodes = append(schedulingNodes, node)
         }
     }
@@ -292,19 +294,33 @@ func (psc *PartitionSchedulingContext) removeSchedulingNode(nodeId string) {
 }
 
 // Add new reservation
-func (psc *PartitionSchedulingContext) AddNewReservation(reservation *SchedulingAllocation) {
+func (psc *PartitionSchedulingContext) HandleReservationProposal(allocation *SchedulingAllocation) {
     psc.lock.Lock()
     defer psc.lock.Unlock()
 
-    appId := reservation.SchedulingAsk.ApplicationId
-
-    if _, ok := psc.reservedApps[appId]; ok {
+    app := psc.applications[allocation.SchedulingAsk.ApplicationId]
+    if app == nil {
+        log.Logger().Info("Failed to handle reservation, app is removed while allocating",
+            zap.String("app", allocation.SchedulingAsk.ApplicationId))
         return
     }
 
-    if app := psc.applications[appId]; app != nil {
-        psc.reservedApps[appId] = app
+    node := psc.nodes[allocation.Node.NodeId]
+    if node == nil {
+        log.Logger().Info("Failed to handle reservation, node is removed while allocating",
+            zap.String("node", allocation.Node.NodeId))
+        return
     }
+
+    if ok, err := app.UpdateForReservation(allocation); !ok {
+        log.Logger().Info("Failed to handle reservation, error during update of app",
+            zap.String("errMsg", err.Error()))
+        return
+    }
+
+    app.queue.IncAllocatingResourceFromTheQueueAndParents(allocation.SchedulingAsk.AllocatedResource)
+
+    psc.reservedApps[allocation.SchedulingAsk.ApplicationId] = app
 }
 
 // Get an ordered reservation app list, it is a clone so change order of the list won't impact
@@ -325,26 +341,54 @@ func (psc *PartitionSchedulingContext) GetReservationAppListClone() *list.List {
     return appList
 }
 
-func (psc *PartitionSchedulingContext) HandleUnreservedRequest(appId string, requestResource *resources.Resource) {
+func (psc *PartitionSchedulingContext) HandleUnreservedRequest(allocation *SchedulingAllocation) {
     psc.lock.Lock()
     defer psc.lock.Unlock()
 
     // Make sure app exist before decrease allocating resources
-    if app := psc.applications[appId]; app != nil {
-        app.DecAllocatingResource(requestResource)
-        app.queue.DecAllocatingResourceFromTheQueueAndParents(requestResource)
+    if app := psc.applications[allocation.SchedulingAsk.ApplicationId]; app != nil {
+        if ok, err := app.UpdateForReservationCancellation(allocation); !ok {
+            log.Logger().Info("Failed to handle reservation cancellation",
+                zap.String("errMsg", err.Error()))
+            return
+        }
+        app.queue.DecAllocatingResourceFromTheQueueAndParents(allocation.SchedulingAsk.AllocatedResource)
         if len(app.reservedRequests) == 0 {
-            delete(psc.reservedApps, appId)
+            delete(psc.reservedApps, app.ApplicationInfo.ApplicationId)
         }
     }
 }
 
-func (psc *PartitionSchedulingContext) HandlePendingResourceDecreaseForQueues(appId string, amount *resources.Resource) {
+// Handles new allocation and allocation-from-reservation
+func (psc *PartitionSchedulingContext) HandleAllocationProposal(allocation *SchedulingAllocation) {
     psc.lock.Lock()
     defer psc.lock.Unlock()
 
-    // Make sure app exist before decrease allocating resources
-    if app := psc.applications[appId]; app != nil {
-        app.queue.DecPendingResourceFromTheQueueAndParents(amount)
+    app := psc.applications[allocation.SchedulingAsk.ApplicationId]
+    if app == nil {
+        log.Logger().Info("Failed to handle new allocation, app is removed while allocating",
+            zap.String("app", allocation.SchedulingAsk.ApplicationId))
+        return
+    }
+
+    node := psc.nodes[allocation.Node.NodeId]
+    if node == nil {
+        log.Logger().Info("Failed to handle new allocation, node is removed while allocating",
+            zap.String("node", allocation.Node.NodeId))
+        return
+    }
+
+    if ok, err := app.UpdateForAllocation(allocation); !ok {
+        log.Logger().Info("Failed to handle new allocation, error happened while updating app and node",
+            zap.String("error", err.Error()))
+        return
+    }
+
+    // Deduct queue's pending resources for allocation.
+    app.queue.DecPendingResourceFromTheQueueAndParents(allocation.SchedulingAsk.AllocatedResource)
+
+    if allocation.AllocationResult == Allocation {
+        // Increase queue's allocating resource only for new allocation. (Reservation already increased allocating resource).
+        app.queue.IncAllocatingResourceFromTheQueueAndParents(allocation.SchedulingAsk.AllocatedResource)
     }
 }

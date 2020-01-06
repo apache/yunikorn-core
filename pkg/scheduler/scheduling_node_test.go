@@ -116,18 +116,33 @@ func TestCheckAllocate(t *testing.T) {
     if !node.needUpdateCachedAvailable {
         t.Error("node available resource dirty should be set for new node")
     }
+
     // normal alloc check dirty flag
     node.getAvailableResource() // unset the dirty flag
     res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-    if ok, _ := node.CheckAndAllocateResource(res, false); !ok {
+    ask := &SchedulingAllocationAsk {
+        AskProto: &si.AllocationAsk{
+            AllocationKey: "alloc-1",
+        },
+        AllocatedResource: res,
+    }
+
+    if ok := node.UpdateForAllocation(ask, false); !ok {
         t.Error("node should have accepted allocation")
     }
     if !node.needUpdateCachedAvailable {
-        t.Error("node available resource dirty should be set after CheckAndAllocateResource")
+        t.Error("node available resource dirty should be set after UpdateForAllocation")
     }
+
     // add one that pushes node over its size
     res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 6})
-    if ok, _ := node.CheckAndAllocateResource(res, false); ok {
+    ask = &SchedulingAllocationAsk {
+        AskProto: &si.AllocationAsk{
+            AllocationKey: "alloc-1",
+        },
+        AllocatedResource: res,
+    }
+    if ok := node.UpdateForAllocation(ask, false); ok {
         t.Error("node should have rejected allocation (oversize)")
     }
 
@@ -137,8 +152,15 @@ func TestCheckAllocate(t *testing.T) {
         t.Fatalf("node create failed which should not have %v", node)
     }
     node.incPreemptingResource(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
+
     // preemption alloc
-    if ok, _ := node.CheckAndAllocateResource(res, true); !ok {
+    ask = &SchedulingAllocationAsk {
+        AskProto: &si.AllocationAsk{
+            AllocationKey: "alloc-1",
+        },
+        AllocatedResource: res,
+    }
+    if ok := node.UpdateForAllocation(ask, false); ok {
         t.Error("node with scheduling set to false should not allow allocation")
     }
 }

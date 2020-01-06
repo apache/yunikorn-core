@@ -178,32 +178,48 @@ func fitInGapScore(larger, smaller *resources.Resource) float64 {
 }
 
 // Check and update allocating resources of the scheduling node.
-// If the proposed allocation fits in the available resources, taking into account resources marked for
-// preemption if applicable, the allocating resources are updated and true is returned.
+// If the proposed allocation fits in the available resources.
 // If the proposed allocation does not fit false is returned and no changes are made.
 // return true when resource can be allocated.
 // return false, and a score of how close it is
-func (sn *SchedulingNode) CheckAndAllocateResource(delta *resources.Resource, preemptionPhase bool) (bool, float64) {
+func (sn *SchedulingNode) UpdateForAllocation(ask *SchedulingAllocationAsk, reservation bool) bool {
+	if !sn.CheckAllocateConditions(ask, reservation) {
+		return false
+	}
+
 	sn.lock.Lock()
 	defer sn.lock.Unlock()
 
-	available := sn.nodeInfo.GetAvailableResource()
-	newAllocating := resources.Add(delta, sn.allocatingResource)
-
-	if preemptionPhase {
-        available.AddTo(sn.preemptingResource)
-    }
-	score := fitInGapScore(available, newAllocating)
-    if score == 0 {
-        log.Logger().Debug("allocations in progress updated",
-			zap.String("nodeId", sn.NodeId),
-			zap.Any("total unconfirmed", newAllocating))
+	ok, _ := sn.internalCheckResourceForAllocation(ask.AllocatedResource)
+	if ok {
+		newAllocating := resources.Add(ask.AllocatedResource, sn.allocatingResource)
 		sn.needUpdateCachedAvailable = true
 		sn.allocatingResource = newAllocating
+		return true
+	}
+	return false
+}
+
+func (sn* SchedulingNode) internalCheckResourceForAllocation(delta *resources.Resource) (bool, float64) {
+	available := sn.nodeInfo.GetAvailableResource()
+	newAllocating := resources.Add(delta, sn.allocatingResource)
+	score := fitInGapScore(available, newAllocating)
+	if score == 0 {
+		log.Logger().Debug("allocations in progress updated",
+			zap.String("nodeId", sn.NodeId),
+			zap.Any("total unconfirmed", newAllocating))
 		return true, 0
 	} else {
 		return false, score
 	}
+}
+
+// Check resource for allocation on this node, this is a read-only operation.
+func (sn *SchedulingNode) CheckResourceForAllocation(delta *resources.Resource) (bool, float64) {
+	sn.lock.RLock()
+	defer sn.lock.RUnlock()
+
+	return sn.internalCheckResourceForAllocation(delta)
 }
 
 func (sn* SchedulingNode) UnreserveOnNode(reservationRequest *ReservedSchedulingRequest) bool {
@@ -229,7 +245,12 @@ func (sn* SchedulingNode) UnreserveOnNode(reservationRequest *ReservedScheduling
 	return false
 }
 
-func (sn* SchedulingNode) ReserveOnNode(reservationRequest *ReservedSchedulingRequest) (bool, error) {
+// Check if we can make reservation on node or not, this is a read-only operation.
+func (sn* SchedulingNode) CanReserveOnNode(reservationRequest *ReservedSchedulingRequest) (bool, error) {
+	if !sn.CheckAllocateConditions(reservationRequest.SchedulingAsk, true) {
+		return false, fmt.Errorf("Failed to reserve on node since allocation condition cannot satisfied")
+	}
+
 	requestAllocKey := reservationRequest.SchedulingAsk.AskProto.AllocationKey
 	nodeId := reservationRequest.SchedulingNode.NodeId
 
@@ -237,14 +258,26 @@ func (sn* SchedulingNode) ReserveOnNode(reservationRequest *ReservedSchedulingRe
 		return false, fmt.Errorf("Only allow reserve one allocation at a time allocationKey=%s; node=%s", requestAllocKey, nodeId)
 	}
 
-	sn.lock.Lock()
-	defer sn.lock.Unlock()
+	sn.lock.RLock()
+	defer sn.lock.RUnlock()
 
 	// TODO: For now, only allow one reservation at a time, however once we have preemption + reservation, or autoscaling inferno node,
 	// we can have this relaxed
 	if len(sn.reservationRequests) > 0 {
 		return false, fmt.Errorf("Failed to reserve request key=%s on node=%s since node is already reserved", requestAllocKey, nodeId)
 	}
+
+	return true, nil
+}
+
+// Make reservation on node, this is a R+W operation.
+func (sn* SchedulingNode) UpdateForReservation(reservationRequest *ReservedSchedulingRequest) (bool, error) {
+	if ok, err := sn.CanReserveOnNode(reservationRequest); !ok {
+		return ok, err
+	}
+
+	sn.lock.Lock()
+	defer sn.lock.Unlock()
 
 	key := reservationRequest.GetReservationRequestKeyOnNode()
 	val, exist := sn.reservationRequests[key]

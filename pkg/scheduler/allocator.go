@@ -101,13 +101,11 @@ func (m *Scheduler) handleSchedulingAllocation(allocations []*SchedulingAllocati
             return
         } else if alloc.AllocationResult == Reservation {
             // Reservation is kept inside scheduler, so update internal scheduler context
-            partitionCtx.AddNewReservation(alloc)
+            partitionCtx.HandleReservationProposal(alloc)
         } else if alloc.AllocationResult == Unreserve {
-            partitionCtx.HandleUnreservedRequest(alloc.SchedulingAsk.ApplicationId, alloc.SchedulingAsk.AllocatedResource)
+            partitionCtx.HandleUnreservedRequest(alloc)
         } else if alloc.AllocationResult == Allocation || alloc.AllocationResult == AllocationFromReservation {
-            // Deduct queue's pending resources for allocation
-            partitionCtx.HandlePendingResourceDecreaseForQueues(alloc.SchedulingAsk.ApplicationId, alloc.SchedulingAsk.AllocatedResource)
-
+            partitionCtx.HandleAllocationProposal(alloc)
             // Send allocation proposal to cache to commit
             m.eventHandlers.CacheEventHandler.HandleEvent(newSingleAllocationProposal(alloc))
         }

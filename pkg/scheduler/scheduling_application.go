@@ -61,17 +61,12 @@ func NewSchedulingApplication(appInfo *cache.ApplicationInfo) *SchedulingApplica
 // sort scheduling Requests from a job
 func (app *SchedulingApplication) tryAllocate(partitionContext *PartitionSchedulingContext,
     headroom *resources.Resource) *SchedulingAllocation {
-    app.lock.Lock()
-    defer app.lock.Unlock()
+    app.lock.RLock()
+    defer app.lock.RUnlock()
 
     for _, request := range app.Requests.sortedRequestsByPriority {
         if request.PendingRepeatAsk > 0 && resources.FitIn(headroom, request.AllocatedResource) {
             if allocation := app.allocateForOneRequest(partitionContext, request); allocation != nil {
-                app.allocating = resources.Add(app.allocating, allocation.SchedulingAsk.AllocatedResource)
-
-                if allocation.AllocationResult == Allocation {
-                    app.Requests.updateAllocationAskRepeat(request.AskProto.AllocationKey, -1)
-                }
                 return allocation
             }
         }
@@ -96,7 +91,7 @@ func (app *SchedulingApplication) AddBackAllocationAskRepeat(allocationKey strin
 // - SchedulingAllocation (if allocated/reserved anything).
 // - Enum of why cannot allocate or reserve (if allocated/reserved nothing)
 func (m *SchedulingApplication) allocateForOneRequest(partitionContext* PartitionSchedulingContext, candidate *SchedulingAllocationAsk) *SchedulingAllocation {
-    nodeList := partitionContext.getSchedulableNonReservedSchedulingNodes()
+    nodeList := partitionContext.getSchedulableNodes(true)
     if len(nodeList) == 0 {
         return nil
     }
@@ -112,25 +107,8 @@ func (m *SchedulingApplication) allocateForOneRequest(partitionContext* Partitio
             // skip the node if conditions can not be satisfied
             continue
         }
-        ok, score := node.CheckAndAllocateResource(candidate.AllocatedResource, false)
+        ok, score := node.CheckResourceForAllocation(candidate.AllocatedResource)
         if ok {
-            // before deciding on an allocation, call the reconcile plugin to sync scheduler cache
-            // between core and shim if necessary. This is useful when running multiple allocations
-            // in parallel and need to handle inter container affinity and anti-affinity.
-            if rp := plugins.GetReconcilePlugin(); rp != nil {
-                if err := rp.ReSyncSchedulerCache(&si.ReSyncSchedulerCacheArgs{
-                    AssumedAllocations:    []*si.AssumedAllocation{
-                        {
-                            AllocationKey: candidate.AskProto.AllocationKey,
-                            NodeId:        node.NodeId,
-                        },
-                    },
-                }); err != nil {
-                    log.Logger().Error("failed to sync cache",
-                        zap.Error(err))
-                }
-            }
-
             // return allocation (this is not a reservation)
             return NewSchedulingAllocation(candidate, node, Allocation)
         } else {
@@ -143,7 +121,7 @@ func (m *SchedulingApplication) allocateForOneRequest(partitionContext* Partitio
 
     // Try to reserve on the node, if the best node to reserve is available.
     if bestNodeToReserve != nil {
-        ok, err := m.reserveSchedulingAllocation(candidate, bestNodeToReserve)
+        ok, err := m.precheckForReservation(candidate, bestNodeToReserve)
         if !ok {
             log.Logger().Debug("failed to reserve allocation on node",
                 zap.String("error", err.Error()),
@@ -159,18 +137,64 @@ func (m *SchedulingApplication) allocateForOneRequest(partitionContext* Partitio
     return nil
 }
 
+func (m* SchedulingApplication) UpdateForAllocation(allocation *SchedulingAllocation) (bool, error) {
+    m.lock.Lock()
+    defer m.lock.Unlock()
+
+    allocKey := allocation.SchedulingAsk.AskProto.AllocationKey
+
+    if allocation.SchedulingAsk.PendingRepeatAsk <= 0 {
+        return false, fmt.Errorf("trying to allocate for application, but the pending repeat ask is already <= 0, allocKey=%s", allocKey)
+    }
+
+    // When allocate from reservation, unreserve the request
+    if allocation.AllocationResult == AllocationFromReservation && !m.internalUnreserveAllocation(allocation) {
+        return false, fmt.Errorf("trying to allocate for application from reservation, but failed to unreserve request, allocKey=%s, " +
+            "node=%s. It is possible the reservation is changed before arrived here.",
+            allocKey, allocation.Node.NodeId)
+    }
+
+    if canAlloc := allocation.Node.UpdateForAllocation(allocation.SchedulingAsk, false); !canAlloc {
+        return false, fmt.Errorf("trying to allocate for application, but the resource on the node is not available, allocKey=%s, node=%s",
+            allocKey, allocation.Node.NodeId)
+    }
+
+    // before deciding on an allocation, call the reconcile plugin to sync scheduler cache
+    // between core and shim if necessary. This is useful when running multiple allocations
+    // in parallel and need to handle inter container affinity and anti-affinity.
+    if rp := plugins.GetReconcilePlugin(); rp != nil {
+        if err := rp.ReSyncSchedulerCache(&si.ReSyncSchedulerCacheArgs{
+            AssumedAllocations: []*si.AssumedAllocation{
+                {
+                    AllocationKey: allocKey,
+                    NodeId:        allocation.Node.NodeId,
+                },
+            },
+        }); err != nil {
+            log.Logger().Error("failed to sync cache",
+                zap.Error(err))
+        }
+    }
+
+    if allocation.AllocationResult == Allocation {
+        // Update allocating resource only for new allocation; allocation from reservation already has allocating updated.
+        m.allocating = resources.Add(m.allocating, allocation.SchedulingAsk.AllocatedResource)
+    }
+    m.Requests.updateAllocationAskRepeat(allocKey, -1)
+
+    return true, nil
+}
+
 // Try to allocate from reservation, return !nil if any request got successfully allocated.
 func (m *SchedulingApplication) TryAllocateFromReservationRequests() []*SchedulingAllocation {
     sortedReservationRequest := m.getSortedReservationRequestCopy()
 
-    m.lock.Lock()
-    defer m.lock.Unlock()
+    m.lock.RLock()
+    defer m.lock.RUnlock()
 
     for _, request := range sortedReservationRequest {
         alloc := m.tryAllocateFromReservationRequest(request)
         if alloc != nil {
-            // When alloc != nil, it means either allocation from reservation, or unreserve, for both case, unreserve the node
-            m.unreserveSchedulingAllocation(alloc)
             return []*SchedulingAllocation{alloc}
         }
     }
@@ -211,8 +235,7 @@ func (m *SchedulingApplication) tryAllocateFromReservationRequest(request *Sched
             return allocation
         }
 
-        if ok, _ := node.CheckAndAllocateResource(reservationRequest.SchedulingAsk.AllocatedResource, false); ok {
-            m.Requests.updateAllocationAskRepeat(request.AskProto.AllocationKey, -1)
+        if ok, _ := node.CheckResourceForAllocation(reservationRequest.SchedulingAsk.AllocatedResource); ok {
             allocation := NewSchedulingAllocationFromReservationRequest(reservationRequest)
             allocation.AllocationResult = AllocationFromReservation
             return allocation
@@ -224,8 +247,8 @@ func (m *SchedulingApplication) tryAllocateFromReservationRequest(request *Sched
 }
 
 func (m* SchedulingApplication) dropExcessiveReservationRequest() []*SchedulingAllocation {
-    m.lock.Lock()
-    defer m.lock.Unlock()
+    m.lock.RLock()
+    defer m.lock.RUnlock()
 
     var excessiveReservations []*SchedulingAllocation = nil
 
@@ -250,12 +273,6 @@ func (m* SchedulingApplication) dropExcessiveReservationRequest() []*SchedulingA
                     break
                 }
             }
-        }
-    }
-
-    if excessiveReservations != nil {
-        for _, alloc := range excessiveReservations {
-            m.unreserveSchedulingAllocation(alloc)
         }
     }
 
@@ -327,8 +344,7 @@ func (m* SchedulingApplication) GetAllocatingResourceTestOnly() *resources.Resou
     return m.allocating
 }
 
-// Reserve scheduling request, this also reserve resources on
-func (m *SchedulingApplication) reserveSchedulingAllocation(ask *SchedulingAllocationAsk, node *SchedulingNode) (bool, error) {
+func (m* SchedulingApplication) precheckForReservation(ask *SchedulingAllocationAsk, node *SchedulingNode) (bool, error) {
     // Make sure we don't reserve more container than total repeat
     if int32(m.allocKeyToNumReservedRequests[ask.AskProto.AllocationKey]) >= ask.PendingRepeatAsk {
         return false, fmt.Errorf("Cannot reserve more since #reserved already >= #ask")
@@ -337,12 +353,40 @@ func (m *SchedulingApplication) reserveSchedulingAllocation(ask *SchedulingAlloc
     reserveRequest := NewReservedSchedulingRequest(ask, m, node)
 
     // Handle reservation on node
-    ok, err := node.ReserveOnNode(reserveRequest)
+    ok, err := node.CanReserveOnNode(reserveRequest)
     if !ok {
         return false, err
     }
+    return true, nil
+}
+
+// Reserve scheduling request, this also reserve resources on
+func (m *SchedulingApplication) UpdateForReservation(allocation *SchedulingAllocation) (bool, error) {
+    m.lock.Lock()
+    defer m.lock.Unlock()
+
+    reserveRequest := NewReservedSchedulingRequest(allocation.SchedulingAsk, m, allocation.Node)
+    if ok, err := allocation.Node.UpdateForReservation(reserveRequest); !ok {
+        return ok, err
+    }
 
     m.addAppReservation(reserveRequest)
+
+    m.allocating = resources.Add(m.allocating, allocation.SchedulingAsk.AllocatedResource)
+
+    return true, nil
+}
+
+// Reserve scheduling request, this also reserve resources on
+func (m *SchedulingApplication) UpdateForReservationCancellation(allocation *SchedulingAllocation) (bool, error) {
+    m.lock.Lock()
+    defer m.lock.Unlock()
+
+    if !m.internalUnreserveAllocation(allocation) {
+        return false, fmt.Errorf("Failed to unreserve alloc=%s, node=%s from app=%s", allocation.SchedulingAsk.AskProto.AllocationKey, allocation.Node.NodeId, m.ApplicationInfo.ApplicationId)
+    }
+
+    m.allocating = resources.Sub(m.allocating, allocation.SchedulingAsk.AllocatedResource)
 
     return true, nil
 }
@@ -401,7 +445,7 @@ func (m* SchedulingApplication) removeAppReservation(reservationRequest *Reserve
     m.allocKeyToNumReservedRequests[allocKey] = existingNum - reservationRequest.GetAmount()
 }
 
-func (m* SchedulingApplication) unreserveSchedulingAllocation(allocation *SchedulingAllocation) bool {
+func (m* SchedulingApplication) internalUnreserveAllocation(allocation *SchedulingAllocation) bool {
     reservationRequest := NewReservedSchedulingRequest(allocation.SchedulingAsk, m, allocation.Node)
 
     allocation.Node.UnreserveOnNode(reservationRequest)

@@ -249,7 +249,9 @@ func waitForAllocatingResource(t *testing.T, queue *scheduler.SchedulingQueue, m
         if i*100 >= timeoutMs {
             log.Logger().Info("queue detail",
                 zap.Any("queue", queue))
-            t.Fatalf("Failed to wait allocating resource on queue %s, actual = %v, expected = %v", queue.Name, queue.GetAllocatingResource().Resources[resources.MEMORY], memory)
+            assert.Fail(t, fmt.Sprintf("Failed to wait allocating resource on queue %s, actual = %v, expected = %v", queue.Name,
+                queue.GetAllocatingResource().Resources[resources.MEMORY],
+                memory))
             return
         }
     }
@@ -268,8 +270,8 @@ func waitForAllocatedResourceOfQueue(t *testing.T, queue *scheduler.SchedulingQu
         if i*100 >= timeoutMs {
             log.Logger().Info("queue detail",
                 zap.Any("queue", queue))
-            t.Fatalf("Failed to wait allocated resource on queue %s, actual = %v, expected = %v", queue.Name,
-                queue.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY], memory)
+            assert.Fail(t, fmt.Sprintf("Failed to wait allocated resource on queue %s, actual = %v, expected = %v", queue.Name,
+                queue.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY], memory))
             return
         }
     }

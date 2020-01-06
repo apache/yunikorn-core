@@ -79,8 +79,8 @@ func (queue *SchedulingQueue) tryAllocate(
     partitionContext *PartitionSchedulingContext,
     parentHeadroom *resources.Resource,
     parentQueueMaxLimit *resources.Resource) *SchedulingAllocation {
-    queue.lock.Lock()
-    defer queue.lock.Unlock()
+    queue.lock.RLock()
+    defer queue.lock.RUnlock()
 
     // skip stopped queues: running and draining queues are allowed
     if queue.isStopped() {
@@ -119,12 +119,7 @@ func (queue *SchedulingQueue) tryAllocate(
         }
     }
 
-    if allocation != nil {
-        queue.allocating = resources.Add(queue.allocating, allocation.SchedulingAsk.AllocatedResource)
-        return allocation
-    }
-
-    return nil
+    return allocation
 }
 
 
@@ -404,6 +399,18 @@ func (sq* SchedulingQueue) getMaxLimit(partitionTotalResource *resources.Resourc
     }
     maxResource = resources.ComponentWiseMin(maxResource, partitionTotalResource)
     return maxResource
+}
+
+// Update may allocated resource from this queue
+func (sq *SchedulingQueue) IncAllocatingResourceFromTheQueueAndParents(alloc *resources.Resource) {
+    // update the parent
+    if sq.parent != nil {
+        sq.parent.IncAllocatingResourceFromTheQueueAndParents(alloc)
+    }
+    // update this queue
+    sq.lock.Lock()
+    defer sq.lock.Unlock()
+    sq.allocating = resources.Add(sq.allocating, alloc)
 }
 
 // Update may allocated resource from this queue

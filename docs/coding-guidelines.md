@@ -18,7 +18,7 @@ See [IDE setup](#goland-ide-setup) for a basic setup for the GoLand IDE.
 ## Automated checks
 Not all code will be written using an IDE.
 Even between contributors the settings might not be the same in all installs.
-To help keep code formatted consistently a [lint](https://en.wikipedia.org/wiki/Lint_(software) tool is part of the code approval.   
+To help keep code formatted consistently a [lint](https://en.wikipedia.org/wiki/Lint_(software\)) tool is part of the code approval.   
 
 There are a large number of lint tools are available for Go.
 Most of the lint tools only check one specific thing.
@@ -27,8 +27,8 @@ For the project we have chosen the [golangci-lint](https://github.com/golangci/g
 The tool can be run locally and will be integrated into the GitHub PR flow.
 
 ### Installing and running locally
-Depending on your development system the install might differ slightly.
-Follow the [install instructions](https://github.com/golangci/golangci-lint#install) provided by the project.
+Depending on your development system the instructions might differ slightly.
+Follow the [installation instructions](https://github.com/golangci/golangci-lint#install) provided by the project.
 
 After the tool is installed you can run it using the standard command line: 
 ```shell script
@@ -57,7 +57,7 @@ The make target is `lint`:
 make lint
 ```
 
-See the product documentation for more information.
+See the golangci-lint product documentation for more options and information on how to run the tool.
 
 ### Configuration
 A predefined configuration is provided for the two projects that use them:

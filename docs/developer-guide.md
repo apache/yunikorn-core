@@ -118,7 +118,7 @@ Running the lint tool over the current code:
 ```
 make lint
 ```  
-See the [codeing guidelines documentation](./coding-guidelines.md) for more details 
+See the [codeing guidelines documentation](./coding-guidelines.md) for more details. 
 
 As a utility target you can check that all files that must have a license have the correct license by running: 
 ```

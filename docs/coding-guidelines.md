@@ -12,7 +12,8 @@ The wiki provides a good collection of comments from code reviews.
 Most of the comments will be checked in the automated checks described below.
 
 When using an IDE, like GoLand or Visual Studio Code, use the builtin options.
-Most IDEs will provide an extensive list of checks or formatting options that help formatting and point out code issues. 
+Most IDEs will provide an extensive list of checks or formatting options that help formatting and point out code issues.
+See [IDE setup](#goland-ide-setup) for a basic setup for the GoLand IDE. 
 
 ## Automated checks
 Not all code will be written using an IDE.
@@ -83,3 +84,22 @@ If they are used they should be accompanied by a comment to explain why they are
 ``` 
 Using the `nolint` comment without a specific linter is discouraged.  
 
+## GoLand IDE setup
+GoLand has a number of checks turned on by default.
+These defaults already provide a good coverage and mark a lot of issues found by the linters as issues.
+To extend the coverage further and help mark issues proactively check the following settings and change them to the settings as per the screenshots.
+
+### Editor preferences
+Open the preferences pane and go to: Editor -> Code Style -> Go.
+There are three tabs to configure, the first two are crucial to comply with the basic rules from `gofmt` and `goimports`:
+
+| ||
+| -------- | ---------- |
+| Tabs |![tabs](images/goland_ide_pref_tabs.png)|
+| Imports |![imports](images/goland_ide_pref_imports.png)|
+| Other |![other](images/goland_ide_pref_other.png)|
+
+### Inspections
+The default inspections except for one that helps highlight shadowing variables. 
+
+![inspections](images/goland_ide_pref_inspections.png)

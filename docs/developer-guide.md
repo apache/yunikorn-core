@@ -114,6 +114,17 @@ make test
 ```
 Any changes made to the core code should not cause any existing tests to fail.
 
+Running the lint tool over the current code:
+```
+make lint
+```  
+See the [codeing guidelines documentation](./coding-guidelines.md) for more details 
+
+As a utility target you can check that all files that must have a license have the correct license by running: 
+```
+make common-check-license
+```
+
 ## Design documents
 
 All design documents are located in a central location per component. The core component design documents also contains the design documents for cross component designs.

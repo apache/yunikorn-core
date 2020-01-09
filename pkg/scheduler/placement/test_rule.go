@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,39 +17,40 @@ limitations under the License.
 package placement
 
 import (
-    "fmt"
-    "github.com/cloudera/yunikorn-core/pkg/cache"
-    "github.com/cloudera/yunikorn-core/pkg/common/configs"
+	"fmt"
+
+	"github.com/cloudera/yunikorn-core/pkg/cache"
+	"github.com/cloudera/yunikorn-core/pkg/common/configs"
 )
 
 // A simple test rule to place an application based on a nil application.
 // Testing only.
 type testRule struct {
-    basicRule
+	basicRule
 }
 
 func (tr *testRule) getName() string {
-    return "test"
+	return "test"
 }
 
 // Simple init for the test rule: allow everything as per a normal rule.
 func (tr *testRule) initialise(conf configs.PlacementRule) error {
-    tr.create = conf.Create
-    tr.filter = newFilter(conf.Filter)
-    var err = error(nil)
-    if conf.Parent != nil {
-        tr.parent, err = newRule(*conf.Parent)
-    }
-    return err
+	tr.create = conf.Create
+	tr.filter = newFilter(conf.Filter)
+	var err = error(nil)
+	if conf.Parent != nil {
+		tr.parent, err = newRule(*conf.Parent)
+	}
+	return err
 }
 
 // Simple test rule that just checks the app passed in and returns fixed queue names.
 func (tr *testRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
-    if app == nil {
-        return "", fmt.Errorf("nil app passed in")
-    }
-    if app.QueueName != "" {
-        return replaceDot(app.QueueName), nil
-    }
-    return "test", nil
+	if app == nil {
+		return "", fmt.Errorf("nil app passed in")
+	}
+	if app.QueueName != "" {
+		return replaceDot(app.QueueName), nil
+	}
+	return "test", nil
 }

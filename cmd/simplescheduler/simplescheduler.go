@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,11 +18,12 @@ package main
 
 import (
 	"context"
-	"github.com/cloudera/yunikorn-core/pkg/common"
-	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 	"io"
 	"log"
 	"time"
+
+	"github.com/cloudera/yunikorn-core/pkg/common"
+	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 )
 
 type SimpleScheduler struct {
@@ -51,7 +52,6 @@ func (scheduler *SimpleScheduler) Update(conn si.Scheduler_UpdateServer) error {
 	ctx := conn.Context()
 
 	for {
-
 		// exit if context is done
 		// or continue
 		select {
@@ -88,4 +88,3 @@ func (scheduler *SimpleScheduler) Update(conn si.Scheduler_UpdateServer) error {
 		log.Printf("Responded")
 	}
 }
-

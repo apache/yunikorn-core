@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,20 +18,20 @@ package api
 
 import "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 
-type SchedulerApi interface {
-    // Register a new RM, if it is a reconnect from previous RM, cleanup
-    // all in-memory data and resync with RM.
-    RegisterResourceManager(request *si.RegisterResourceManagerRequest, callback ResourceManagerCallback) (*si.RegisterResourceManagerResponse, error)
+type SchedulerAPI interface {
+	// Register a new RM, if it is a reconnect from previous RM, cleanup
+	// all in-memory data and resync with RM.
+	RegisterResourceManager(request *si.RegisterResourceManagerRequest, callback ResourceManagerCallback) (*si.RegisterResourceManagerResponse, error)
 
-    // Update Scheduler status (including node status update, allocation request
-    // updates, etc.
-    Update(request *si.UpdateRequest) error
+	// Update Scheduler status (including node status update, allocation request
+	// updates, etc.
+	Update(request *si.UpdateRequest) error
 
-    // Notify scheduler to reload configuration and hot-refresh in-memory state based on configuration changes
-    ReloadConfiguration(clusterId string) error
+	// Notify scheduler to reload configuration and hot-refresh in-memory state based on configuration changes
+	ReloadConfiguration(clusterID string) error
 }
 
 // RM side needs to implement this API
 type ResourceManagerCallback interface {
-    RecvUpdateResponse(response *si.UpdateResponse) error
+	RecvUpdateResponse(response *si.UpdateResponse) error
 }

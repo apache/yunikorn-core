@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,10 +18,12 @@ package configs
 
 import (
 	"bytes"
-	"github.com/cloudera/yunikorn-core/pkg/log"
-	"go.uber.org/zap"
 	"sync"
 	"time"
+
+	"go.uber.org/zap"
+
+	"github.com/cloudera/yunikorn-core/pkg/log"
 )
 
 var configWatcher *ConfigWatcher
@@ -31,11 +33,11 @@ var once sync.Once
 // it is initiated with a certain expiration time, it will stop running either
 // it detects configuration changes, or the expiration time reaches
 type ConfigWatcher struct {
-	rmId        string
+	rmID        string
 	policyGroup string
- 	reloader    ConfigReloader
+	reloader    ConfigReloader
 	expireTime  time.Duration
-	soloChan   chan interface{}
+	soloChan    chan interface{}
 	lock        *sync.Mutex
 }
 
@@ -44,9 +46,9 @@ type ConfigReloader interface {
 	DoReloadConfiguration() error
 }
 
-func CreateConfigWatcher(rmId string, policyGroup string, expiration time.Duration) *ConfigWatcher {
+func CreateConfigWatcher(rmID string, policyGroup string, expiration time.Duration) *ConfigWatcher {
 	return &ConfigWatcher{
-		rmId:        rmId,
+		rmID:        rmID,
 		policyGroup: policyGroup,
 		expireTime:  expiration,
 		soloChan:    make(chan interface{}, 1),
@@ -58,8 +60,8 @@ func GetInstance() *ConfigWatcher {
 	// singleton
 	once.Do(func() {
 		configWatcher = &ConfigWatcher{
-			expireTime:      60 * time.Second,
-			lock:            &sync.Mutex{},
+			expireTime: 60 * time.Second,
+			lock:       &sync.Mutex{},
 		}
 	})
 
@@ -80,7 +82,7 @@ func (cw *ConfigWatcher) runOnce() bool {
 
 	newConfig, err := SchedulerConfigLoader(cw.policyGroup)
 	if err != nil {
-		log.Logger().Warn("failed to calculate the checksum of configuration file for policyGroup," +
+		log.Logger().Warn("failed to calculate the checksum of configuration file for policyGroup,"+
 			"ignore reloading configuration", zap.String("policyGroup", cw.policyGroup))
 		return false
 	}
@@ -92,14 +94,13 @@ func (cw *ConfigWatcher) runOnce() bool {
 		log.Logger().Debug("configuration file unchanged")
 		time.Sleep(1 * time.Second)
 		return true
-	} else {
-		// when detect state changes, trigger the reload function
-		log.Logger().Debug("configuration file changed")
-		if err := cw.reloader.DoReloadConfiguration(); err == nil {
-			log.Logger().Debug("configuration is successfully reloaded")
-		}
-		return false
 	}
+	// when detect state changes, trigger the reload function
+	log.Logger().Debug("configuration file changed")
+	if err = cw.reloader.DoReloadConfiguration(); err == nil {
+		log.Logger().Debug("configuration is successfully reloaded")
+	}
+	return false
 }
 
 // if configWatcher is not running, kick-off running it

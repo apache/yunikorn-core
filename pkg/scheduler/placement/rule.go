@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,11 +18,13 @@ package placement
 
 import (
 	"fmt"
+	"strings"
+
+	"go.uber.org/zap"
+
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/common/configs"
 	"github.com/cloudera/yunikorn-core/pkg/log"
-	"go.uber.org/zap"
-	"strings"
 )
 
 // Interface that all placement rules need to implement.
@@ -47,19 +49,23 @@ type rule interface {
 
 // Basic structure that every placement rule uses.
 // The rules themselves should include the basicRule struct.
+// Linter does not pick up on the usage in the implementation(s).
+//nolint:structcheck
 type basicRule struct {
 	create bool
 	parent rule
 	filter Filter
 }
 
-// Get the parent rule used in testing only,
-// Should not be implemented in rules,
+// Get the parent rule used in testing only.
+// Should not be implemented in rules.
 func (r *basicRule) getParent() rule {
 	return r.parent
 }
 
-// Return the name if not overwritten by the rule,
+// Return the name if not overwritten by the rule.
+// Marked as nolint as rules should override this.
+//nolint:unused
 func (r *basicRule) getName() string {
 	return "unnamed rule"
 }

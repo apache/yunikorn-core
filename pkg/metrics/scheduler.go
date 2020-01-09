@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,11 +18,13 @@ package metrics
 
 import (
 	"fmt"
-	"github.com/cloudera/yunikorn-core/pkg/log"
-	"github.com/prometheus/client_golang/prometheus"
-	"go.uber.org/zap"
 	"sync"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
+
+	"github.com/cloudera/yunikorn-core/pkg/log"
 )
 
 var resourceUsageRangeBuckets = []string{
@@ -39,7 +41,7 @@ var resourceUsageRangeBuckets = []string{
 }
 
 // All core metrics variables to be declared in this struct
-type SchedulerMetrics struct  {
+type SchedulerMetrics struct {
 	allocations                *prometheus.CounterVec
 	allocatedContainers        prometheus.Counter
 	rejectedContainers         prometheus.Counter
@@ -155,7 +157,7 @@ func initSchedulerMetrics() *SchedulerMetrics {
 
 	// Register the metrics.
 	for _, metric := range metricsList {
-		if err:= prometheus.Register(metric); err != nil {
+		if err := prometheus.Register(metric); err != nil {
 			log.Logger().Warn("failed to register metrics collector", zap.Error(err))
 		}
 	}
@@ -333,10 +335,10 @@ func (m *SchedulerMetrics) SetNodeResourceUsage(resourceName string, rangeIdx in
 		metricsName := fmt.Sprintf("%s_nodes_usage", formatMetricName(resourceName))
 		resourceMetrics = prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Namespace:   Namespace,
-				Subsystem:   SchedulerSubsystem,
-				Name:        metricsName,
-				Help:        "Nodes resource usage, by resource name.",
+				Namespace: Namespace,
+				Subsystem: SchedulerSubsystem,
+				Name:      metricsName,
+				Help:      "Nodes resource usage, by resource name.",
 			}, []string{"range"})
 		if err := prometheus.Register(resourceMetrics); err != nil {
 			log.Logger().Warn("failed to register metrics collector", zap.Error(err))

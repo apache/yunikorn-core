@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,20 +17,21 @@ limitations under the License.
 package main
 
 import (
-    "flag"
-    "os"
+	"flag"
+	"os"
 )
 
 var (
-    endpoint = flag.String("endpoint", "unix://tmp/yunikorn.sock", "YuniKorn endpoint")
+	endpoint = flag.String("endpoint", "tcp://localhost:3333", "YuniKorn endpoint")
 )
 
 func main() {
-    handle()
-    os.Exit(0)
+	flag.Parse()
+	handle()
+	os.Exit(0)
 }
 
 func handle() {
-    scheduler := &SimpleScheduler{}
-    scheduler.Run("tcp://localhost:3333")
+	scheduler := &SimpleScheduler{}
+	scheduler.Run(*endpoint)
 }

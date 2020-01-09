@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,33 +17,38 @@ limitations under the License.
 package log
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"testing"
 )
 
 func TestIsNopLogger(t *testing.T) {
-	var logger *zap.Logger
+	testLogger, err := zap.NewDevelopment()
+	if err != nil {
+		t.Fatalf("Dev logger init failed with error: %v", err)
+	}
+	assert.Equal(t, false, isNopLogger(testLogger))
 
-	logger, _ = zap.NewDevelopment()
-	assert.Equal(t, false, isNopLogger(logger))
+	testLogger = zap.NewNop()
+	assert.Equal(t, true, isNopLogger(testLogger))
 
-	logger = zap.NewNop()
-	assert.Equal(t, true, isNopLogger(logger))
+	testLogger = zap.L()
+	assert.Equal(t, true, isNopLogger(testLogger))
 
-	logger = zap.L()
-	assert.Equal(t, true, isNopLogger(logger))
-
-	logger, _ = zap.NewProduction()
-	zap.ReplaceGlobals(logger)
-	assert.Equal(t, false, isNopLogger(logger))
+	testLogger, err = zap.NewProduction()
+	if err != nil {
+		t.Fatalf("Prod logger init failed with error: %v", err)
+	}
+	zap.ReplaceGlobals(testLogger)
+	assert.Equal(t, false, isNopLogger(testLogger))
 	assert.Equal(t, false, isNopLogger(zap.L()))
 }
 
 func TestIsDebugEnabled(t *testing.T) {
 	zapConfigs := zap.Config{
-		Level: zap.NewAtomicLevelAt(zapcore.DebugLevel),
+		Level:    zap.NewAtomicLevelAt(zapcore.DebugLevel),
 		Encoding: "console",
 	}
 	if newLogger, err := zapConfigs.Build(); err != nil {
@@ -54,7 +59,7 @@ func TestIsDebugEnabled(t *testing.T) {
 	}
 
 	zapConfigs = zap.Config{
-		Level: zap.NewAtomicLevelAt(zapcore.InfoLevel),
+		Level:    zap.NewAtomicLevelAt(zapcore.InfoLevel),
 		Encoding: "console",
 	}
 	if newLogger, err := zapConfigs.Build(); err != nil {

@@ -88,7 +88,7 @@ as the fresh application submission.
 
 ```
 message AddApplicationRequest {
-  string applicationId = 1;
+  string applicationID = 1;
   string queueName = 2;
   string partitionName = 3;
 }
@@ -103,7 +103,7 @@ The structure of the messages looks like,
 ```
 message NewNodeInfo {
   // nodeID
-  string nodeId = 1;
+  string nodeID = 1;
   // optional node attributes
   map<string, string> attributes = 2;
   // total node resource

@@ -48,6 +48,7 @@ See more instructions from the [User Guide](./docs/user-guide.md).
 
 We welcome any form of contributions, code, documentation or even discussions. To get involved, please read following resources.
 - Before you contributing code or documentation to YuniKorn, please read our [Developer Guide](docs/developer-guide.md).
+- When you are coding use the [Coding Guideines](docs/coding-guidelines.md).
 - Please read [How to Contribute](docs/how-to-contribute.md) to understand the procedure and guidelines of making contributions.
 
 ## Other Resources

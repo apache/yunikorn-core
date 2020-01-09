@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,48 +17,46 @@ limitations under the License.
 package common
 
 import (
-    "fmt"
-    "strings"
-    "time"
+	"fmt"
+	"strings"
+	"time"
 )
 
-func GetNormalizedPartitionName(partitionName string, rmId string) string {
-    if partitionName == "" {
-        partitionName = "default"
-    }
+func GetNormalizedPartitionName(partitionName string, rmID string) string {
+	if partitionName == "" {
+		partitionName = "default"
+	}
 
-    return fmt.Sprintf("[%s]%s", rmId, partitionName)
+	return fmt.Sprintf("[%s]%s", rmID, partitionName)
 }
 
 func GetRMIdFromPartitionName(partitionName string) string {
-    idx := strings.Index(partitionName, "]")
-    if idx > 0 {
-        rmId := partitionName[1:idx]
-        return rmId
-    }
-    return ""
+	idx := strings.Index(partitionName, "]")
+	if idx > 0 {
+		rmID := partitionName[1:idx]
+		return rmID
+	}
+	return ""
 }
 
-func GetPartitionNameWithoutClusterId(partitionName string) string {
-    idx := strings.Index(partitionName, "]")
-    if idx > 0 {
-        return partitionName[idx+1:]
-    }
-    return partitionName
+func GetPartitionNameWithoutClusterID(partitionName string) string {
+	idx := strings.Index(partitionName, "]")
+	if idx > 0 {
+		return partitionName[idx+1:]
+	}
+	return partitionName
 }
 
 func WaitFor(interval time.Duration, timeout time.Duration, condition func() bool) error {
-    deadline := time.Now().Add(timeout)
-    for {
-        if time.Now().After(deadline) {
-            return fmt.Errorf("timeout waiting for condition")
-        }
-        if condition() {
-            return nil
-        } else {
-            time.Sleep(interval)
-            continue
-        }
-
-    }
+	deadline := time.Now().Add(timeout)
+	for {
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timeout waiting for condition")
+		}
+		if condition() {
+			return nil
+		}
+		time.Sleep(interval)
+		continue
+	}
 }

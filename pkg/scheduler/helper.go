@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,24 +19,24 @@ package scheduler
 import "github.com/cloudera/yunikorn-core/pkg/api"
 
 const (
-    defaultApplicationId = "_default_application_"
-    defaultPartitionName = "_default_partition_"
+	defaultApplicationID = "_default_application_"
+	defaultPartitionName = "_default_partition_"
 )
 
-func GetApplicationIdFromTags(tags map[string]string) string {
-    appId := tags[api.APPLICATION_ID]
+func GetApplicationIDFromTags(tags map[string]string) string {
+	appID := tags[api.ApplicationID]
 
-    if appId == "" {
-        return defaultApplicationId
-    }
-    return appId
+	if appID == "" {
+		return defaultApplicationID
+	}
+	return appID
 }
 
 func GetPartitionFromTags(tags map[string]string) string {
-    partitionName := tags[api.NODE_PARTITION]
+	partitionName := tags[api.NodePartition]
 
-    if partitionName == "" {
-        return defaultPartitionName
-    }
-    return partitionName
+	if partitionName == "" {
+		return defaultPartitionName
+	}
+	return partitionName
 }

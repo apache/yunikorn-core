@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,10 +18,12 @@ package configs
 
 import (
 	"fmt"
-	"github.com/cloudera/yunikorn-core/pkg/common"
-	"gotest.tools/assert"
 	"testing"
 	"time"
+
+	"gotest.tools/assert"
+
+	"github.com/cloudera/yunikorn-core/pkg/common"
 )
 
 // test singleton
@@ -58,7 +60,7 @@ func TestTriggerCallback(t *testing.T) {
 	cw.RegisterCallback(reloader)
 
 	// verify initial fields are correct
-	assert.Equal(t, cw.rmId, "rm-id")
+	assert.Equal(t, cw.rmID, "rm-id")
 	assert.Equal(t, cw.policyGroup, "p-group")
 	assert.Assert(t, cw.reloader != nil)
 
@@ -105,7 +107,7 @@ func TestChecksumFailure(t *testing.T) {
 	cw.RegisterCallback(reloader)
 
 	// verify initial fields are correct
-	assert.Equal(t, cw.rmId, "rm-id")
+	assert.Equal(t, cw.rmID, "rm-id")
 	assert.Equal(t, cw.policyGroup, "p-group")
 	assert.Assert(t, cw.reloader != nil)
 

@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,10 +17,12 @@ limitations under the License.
 package log
 
 import (
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
+	"fmt"
 	"reflect"
 	"sync"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 var once sync.Once
@@ -36,7 +38,12 @@ func Logger() *zap.Logger {
 			// TODO support log options when a global logger is not there
 			c := zap.NewDevelopmentConfig()
 			config = &c
-			logger, _= config.Build()
+			newLogger, err := config.Build()
+			// this should really not happen so just write to stdout
+			if err != nil {
+				fmt.Printf("Logger init error: %v", err)
+			}
+			logger = newLogger
 		}
 	})
 	return logger

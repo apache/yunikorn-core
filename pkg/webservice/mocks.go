@@ -1,5 +1,5 @@
 /*/*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,17 +27,17 @@ func getDummyPartitionJson() *dao.PartitionDAOInfo {
 		UsedCapacity: "500mb, 50vcores",
 	}
 	partitionInfo.Nodes = []dao.NodeInfo{
-		dao.NodeInfo{
+		{
 			Capability: "3000mb, 200vcores",
-			NodeId:     "node1",
+			NodeID:     "node1",
 		},
-		dao.NodeInfo{
+		{
 			Capability: "5000mb, 250vcores",
-			NodeId:     "node2",
+			NodeID:     "node2",
 		},
 	}
 	partitionInfo.Queues = []dao.QueueDAOInfo{
-		dao.QueueDAOInfo{
+		{
 			Status:    "RUNNING",
 			QueueName: "queue1",
 			Capacities: dao.QueueCapacity{
@@ -47,7 +47,7 @@ func getDummyPartitionJson() *dao.PartitionDAOInfo {
 				AbsUsedCapacity: "50",
 			},
 			ChildQueues: []dao.QueueDAOInfo{
-				dao.QueueDAOInfo{
+				{
 					Status:    "RUNNING",
 					QueueName: "queue3",
 					Capacities: dao.QueueCapacity{
@@ -60,7 +60,7 @@ func getDummyPartitionJson() *dao.PartitionDAOInfo {
 				},
 			},
 		},
-		dao.QueueDAOInfo{
+		{
 			Status:    "RUNNING",
 			QueueName: "queue2",
 			Capacities: dao.QueueCapacity{

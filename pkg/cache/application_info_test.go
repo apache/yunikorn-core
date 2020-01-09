@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,24 +17,26 @@ limitations under the License.
 package cache
 
 import (
+	"testing"
+
+	"gotest.tools/assert"
+
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"github.com/cloudera/yunikorn-core/pkg/common/security"
-	"gotest.tools/assert"
-	"testing"
 )
 
-func newApplicationInfo(appId, partition, queueName string) *ApplicationInfo {
+func newApplicationInfo(appID, partition, queueName string) *ApplicationInfo {
 	user := security.UserGroup{
-		User: "testuser",
+		User:   "testuser",
 		Groups: []string{},
 	}
-	tags := make(map[string]string, 0)
-	return NewApplicationInfo(appId, partition, queueName, user, tags)
+	tags := make(map[string]string)
+	return NewApplicationInfo(appID, partition, queueName, user, tags)
 }
 
 func TestNewApplicationInfo(t *testing.T) {
 	appInfo := newApplicationInfo("app-00001", "default", "root.a")
-	assert.Equal(t, appInfo.ApplicationId, "app-00001")
+	assert.Equal(t, appInfo.ApplicationID, "app-00001")
 	assert.Equal(t, appInfo.Partition, "default")
 	assert.Equal(t, appInfo.QueueName, "root.a")
 	assert.Equal(t, appInfo.GetApplicationState(), New.String())
@@ -43,13 +45,16 @@ func TestNewApplicationInfo(t *testing.T) {
 func TestAllocations(t *testing.T) {
 	appInfo := newApplicationInfo("app-00001", "default", "root.a")
 
-    // nothing allocated
-    if !resources.IsZero(appInfo.GetAllocatedResource()) {
+	// nothing allocated
+	if !resources.IsZero(appInfo.GetAllocatedResource()) {
 		t.Error("new application has allocated resources")
 	}
 	// create an allocation and check the assignment
-	resMap := map[string]string{"memory":"100", "vcores":"10"}
-	res, _ := resources.NewResourceFromConf(resMap)
+	resMap := map[string]string{"memory": "100", "vcores": "10"}
+	res, err := resources.NewResourceFromConf(resMap)
+	if err != nil {
+		t.Fatalf("failed to create resource with error: %v", err)
+	}
 	alloc := CreateMockAllocationInfo("app-00001", res, "uuid-1", "root.a", "node-1")
 	appInfo.addAllocation(alloc)
 	if !resources.Equals(appInfo.allocatedResource, res) {
@@ -84,9 +89,12 @@ func TestAllocations(t *testing.T) {
 func TestQueueUpdate(t *testing.T) {
 	appInfo := newApplicationInfo("app-00001", "default", "root.a")
 
-    queue, _ := NewUnmanagedQueue("test", true, nil)
-    appInfo.SetQueue(queue)
-    assert.Equal(t, appInfo.QueueName, "test")
+	queue, err := NewUnmanagedQueue("test", true, nil)
+	if err != nil {
+		t.Fatalf("failed to create queue: %v", err)
+	}
+	appInfo.SetQueue(queue)
+	assert.Equal(t, appInfo.QueueName, "test")
 }
 
 func TestAcceptStateTransition(t *testing.T) {
@@ -197,7 +205,6 @@ func TestCompletedTransition(t *testing.T) {
 	err = appInfo.HandleApplicationEvent(CompleteApplication)
 	assert.Assert(t, err != nil)
 	assert.Equal(t, appInfo2.GetApplicationState(), New.String())
-
 }
 
 func TestKilledTransition(t *testing.T) {

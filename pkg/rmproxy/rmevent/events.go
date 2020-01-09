@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,28 +19,28 @@ package rmevent
 import "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 
 type RMNewAllocationsEvent struct {
-    RMId        string
-    Allocations []*si.Allocation
+	RmID        string
+	Allocations []*si.Allocation
 }
 
 type RMApplicationUpdateEvent struct {
-    RMId                 string
-    AcceptedApplications []*si.AcceptedApplication
-    RejectedApplications []*si.RejectedApplication
+	RmID                 string
+	AcceptedApplications []*si.AcceptedApplication
+	RejectedApplications []*si.RejectedApplication
 }
 
 type RMRejectedAllocationAskEvent struct {
-    RMId                   string
-    RejectedAllocationAsks []*si.RejectedAllocationAsk
+	RmID                   string
+	RejectedAllocationAsks []*si.RejectedAllocationAsk
 }
 
 type RMReleaseAllocationEvent struct {
-    RMId                string
-    ReleasedAllocations []*si.AllocationReleaseResponse
+	RmID                string
+	ReleasedAllocations []*si.AllocationReleaseResponse
 }
 
 type RMNodeUpdateEvent struct {
-    RMId          string
-    AcceptedNodes []*si.AcceptedNode
-    RejectedNodes []*si.RejectedNode
+	RmID          string
+	AcceptedNodes []*si.AcceptedNode
+	RejectedNodes []*si.RejectedNode
 }

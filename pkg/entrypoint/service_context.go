@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,21 +16,21 @@ limitations under the License.
 package entrypoint
 
 import (
+	"go.uber.org/zap"
+
 	"github.com/cloudera/yunikorn-core/pkg/api"
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/log"
 	"github.com/cloudera/yunikorn-core/pkg/scheduler"
 	"github.com/cloudera/yunikorn-core/pkg/webservice"
-	"go.uber.org/zap"
 )
 
 type ServiceContext struct {
-	RMProxy   api.SchedulerApi
+	RMProxy   api.SchedulerAPI
 	Cache     *cache.ClusterInfo
 	Scheduler *scheduler.Scheduler
 	WebApp    *webservice.WebService
 }
-
 
 func (s *ServiceContext) StopAll() {
 	// TODO implement stop for services

@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,13 +17,15 @@ limitations under the License.
 package tests
 
 import (
+	"testing"
+
+	"gotest.tools/assert"
+
 	cacheInfo "github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/common/configs"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"github.com/cloudera/yunikorn-core/pkg/entrypoint"
 	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
-	"gotest.tools/assert"
-	"testing"
 )
 
 func TestSchedulerRecovery(t *testing.T) {
@@ -57,7 +59,7 @@ partitions:
 
 	_, err := proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{
-			RmId:        "rm:123",
+			RmID:        "rm:123",
 			PolicyGroup: "policygroup",
 			Version:     "0.0.2",
 		}, mockRM)
@@ -84,7 +86,7 @@ partitions:
 	err = proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
-				NodeId: "node-1:1234",
+				NodeID: "node-1:1234",
 				Attributes: map[string]string{
 					"si.io/hostname": "node-1",
 					"si.io/rackname": "rack-1",
@@ -97,7 +99,7 @@ partitions:
 				},
 			},
 			{
-				NodeId: "node-2:1234",
+				NodeID: "node-2:1234",
 				Attributes: map[string]string{
 					"si.io/hostname": "node-2",
 					"si.io/rackname": "rack-1",
@@ -110,8 +112,8 @@ partitions:
 				},
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{"app-1":"root.a"}),
-		RmId: "rm:123",
+		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a"}),
+		RmID:            "rm:123",
 	})
 
 	if nil != err {
@@ -142,10 +144,10 @@ partitions:
 					},
 				},
 				MaxAllocations: 2,
-				ApplicationId:  "app-1",
+				ApplicationID:  "app-1",
 			},
 		},
-		RmId: "rm:123",
+		RmID: "rm:123",
 	})
 
 	if nil != err {
@@ -191,7 +193,7 @@ partitions:
 					},
 				},
 				MaxAllocations: 2,
-				ApplicationId:  "app-1",
+				ApplicationID:  "app-1",
 			},
 			{
 				AllocationKey: "alloc-3",
@@ -202,10 +204,10 @@ partitions:
 					},
 				},
 				MaxAllocations: 2,
-				ApplicationId:  "app-1",
+				ApplicationID:  "app-1",
 			},
 		},
-		RmId: "rm:123",
+		RmID: "rm:123",
 	})
 
 	if nil != err {
@@ -252,7 +254,7 @@ partitions:
 	newMockRM := NewMockRMCallbackHandler(t)
 	_, err = proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{
-			RmId:        "rm:123",
+			RmID:        "rm:123",
 			PolicyGroup: "policygroup",
 			Version:     "0.0.2",
 		}, newMockRM)
@@ -265,7 +267,7 @@ partitions:
 	err = proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
-				NodeId: "node-1:1234",
+				NodeID: "node-1:1234",
 				Attributes: map[string]string{
 					"si.io/hostname": "node-1",
 					"si.io/rackname": "rack-1",
@@ -279,7 +281,7 @@ partitions:
 				ExistingAllocations: mockRM.nodeAllocations["node-1:1234"],
 			},
 			{
-				NodeId: "node-2:1234",
+				NodeID: "node-2:1234",
 				Attributes: map[string]string{
 					"si.io/hostname": "node-2",
 					"si.io/rackname": "rack-1",
@@ -293,8 +295,8 @@ partitions:
 				ExistingAllocations: mockRM.nodeAllocations["node-2:1234"],
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{"app-1":"root.a"}),
-		RmId: "rm:123",
+		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a"}),
+		RmID:            "rm:123",
 	})
 
 	if nil != err {
@@ -311,7 +313,7 @@ partitions:
 	partition := cache.GetPartition("[rm:123]default")
 	// verify apps in this partition
 	assert.Equal(t, 1, len(partition.GetApplications()))
-	assert.Equal(t, "app-1", partition.GetApplications()[0].ApplicationId)
+	assert.Equal(t, "app-1", partition.GetApplications()[0].ApplicationID)
 	assert.Equal(t, len(partition.GetApplications()[0].GetAllAllocations()), 4)
 	assert.Equal(t, partition.GetApplications()[0].GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
 	assert.Equal(t, partition.GetApplications()[0].GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12))
@@ -332,10 +334,10 @@ partitions:
 
 	node1AllocatedMemory := partition.GetNode("node-1:1234").GetAllocatedResource().Resources[resources.MEMORY]
 	node2AllocatedMemory := partition.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.MEMORY]
-	node1AllocatedCpu := partition.GetNode("node-1:1234").GetAllocatedResource().Resources[resources.VCORE]
-	node2AllocatedCpu := partition.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.VCORE]
+	node1AllocatedCPU := partition.GetNode("node-1:1234").GetAllocatedResource().Resources[resources.VCORE]
+	node2AllocatedCPU := partition.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.VCORE]
 	assert.Equal(t, node1AllocatedMemory+node2AllocatedMemory, resources.Quantity(120))
-	assert.Equal(t, node1AllocatedCpu+node2AllocatedCpu, resources.Quantity(12))
+	assert.Equal(t, node1AllocatedCPU+node2AllocatedCPU, resources.Quantity(12))
 
 	// verify queues
 	//  - verify root queue
@@ -414,7 +416,7 @@ partitions:
 
 	_, err := proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{
-			RmId:        "rm:123",
+			RmID:        "rm:123",
 			PolicyGroup: "policygroup",
 			Version:     "0.0.2",
 		}, mockRM)
@@ -428,7 +430,7 @@ partitions:
 	err = proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
-				NodeId: "node-1:1234",
+				NodeID: "node-1:1234",
 				Attributes: map[string]string{
 					"si.io/hostname": "node-1",
 					"si.io/rackname": "rack-1",
@@ -442,11 +444,11 @@ partitions:
 				ExistingAllocations: []*si.Allocation{
 					{
 						AllocationKey: "allocation-key-01",
-						Uuid: "UUID01",
-						ApplicationId: "app-01",
+						UUID:          "UUID01",
+						ApplicationID: "app-01",
 						PartitionName: "default",
-						QueueName: "root.a",
-						NodeId: "node-1:1234",
+						QueueName:     "root.a",
+						NodeID:        "node-1:1234",
 						ResourcePerAlloc: &si.Resource{
 							Resources: map[string]*si.Quantity{
 								resources.MEMORY: {
@@ -457,12 +459,11 @@ partitions:
 								},
 							},
 						},
-
 					},
 				},
 			},
 			{
-				NodeId: "node-2:1234",
+				NodeID: "node-2:1234",
 				Attributes: map[string]string{
 					"si.io/hostname": "node-2",
 					"si.io/rackname": "rack-1",
@@ -475,7 +476,7 @@ partitions:
 				},
 			},
 		},
-		RmId: "rm:123",
+		RmID: "rm:123",
 	})
 
 	if nil != err {
@@ -499,7 +500,7 @@ partitions:
 	err = proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
-				NodeId: "node-1:1234",
+				NodeID: "node-1:1234",
 				Attributes: map[string]string{
 					"si.io/hostname": "node-1",
 					"si.io/rackname": "rack-1",
@@ -513,11 +514,11 @@ partitions:
 				ExistingAllocations: []*si.Allocation{
 					{
 						AllocationKey: "allocation-key-01",
-						Uuid: "UUID01",
-						ApplicationId: "app-01",
+						UUID:          "UUID01",
+						ApplicationID: "app-01",
 						PartitionName: "default",
-						QueueName: "root.a",
-						NodeId: "node-1:1234",
+						QueueName:     "root.a",
+						NodeID:        "node-1:1234",
 						ResourcePerAlloc: &si.Resource{
 							Resources: map[string]*si.Quantity{
 								resources.MEMORY: {
@@ -528,13 +529,12 @@ partitions:
 								},
 							},
 						},
-
 					},
 				},
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{"app-01":"root.a"}),
-		RmId: "rm:123",
+		NewApplications: newAddAppRequest(map[string]string{"app-01": "root.a"}),
+		RmID:            "rm:123",
 	})
 
 	if nil != err {
@@ -589,7 +589,7 @@ partitions:
 
 	_, err := proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{
-			RmId:        "rm:123",
+			RmID:        "rm:123",
 			PolicyGroup: "policygroup",
 			Version:     "0.0.2",
 		}, mockRM)
@@ -602,7 +602,7 @@ partitions:
 	err = proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
-				NodeId: "node-1:1234",
+				NodeID: "node-1:1234",
 				Attributes: map[string]string{
 					"si.io/hostname": "node-1",
 					"si.io/rackname": "rack-1",
@@ -615,7 +615,7 @@ partitions:
 				},
 			},
 			{
-				NodeId: "node-2:1234",
+				NodeID: "node-2:1234",
 				Attributes: map[string]string{
 					"si.io/hostname": "node-2",
 					"si.io/rackname": "rack-1",
@@ -628,8 +628,8 @@ partitions:
 				},
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{"app-1":"root.a"}),
-		RmId:            "rm:123",
+		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a"}),
+		RmID:            "rm:123",
 	})
 
 	if nil != err {
@@ -643,7 +643,7 @@ partitions:
 	app01 := serviceContext.Scheduler.GetClusterSchedulingContext().
 		GetSchedulingApplication("app-1", "[rm:123]default")
 	assert.Assert(t, app01 != nil)
-	assert.Equal(t, app01.ApplicationInfo.ApplicationId, "app-1")
+	assert.Equal(t, app01.ApplicationInfo.ApplicationID, "app-1")
 	assert.Equal(t, app01.ApplicationInfo.QueueName, "root.a")
 }
 
@@ -674,7 +674,7 @@ partitions:
 
 	_, err := proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{
-			RmId:        "rm:123",
+			RmID:        "rm:123",
 			PolicyGroup: "policygroup",
 			Version:     "0.0.2",
 		}, mockRM)
@@ -685,8 +685,8 @@ partitions:
 
 	// Register apps alone
 	err = proxy.Update(&si.UpdateRequest{
-		NewApplications: newAddAppRequest(map[string]string{"app-1":"root.a", "app-2":"root.a"}),
-		RmId: "rm:123",
+		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a", "app-2": "root.a"}),
+		RmID:            "rm:123",
 	})
 
 	if nil != err {
@@ -701,11 +701,11 @@ partitions:
 	var app1 *cacheInfo.ApplicationInfo
 	var app2 *cacheInfo.ApplicationInfo
 	for _, app := range apps {
-		if app.ApplicationId == "app-1" {
+		if app.ApplicationID == "app-1" {
 			app1 = app
 		}
 
-		if app.ApplicationId == "app-2" {
+		if app.ApplicationID == "app-2" {
 			app2 = app
 		}
 	}

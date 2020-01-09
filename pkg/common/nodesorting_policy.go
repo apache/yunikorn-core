@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,10 +18,11 @@ package common
 
 import (
 	"fmt"
-	"github.com/cloudera/yunikorn-core/pkg/log"
-	"go.uber.org/zap"
-)
 
+	"go.uber.org/zap"
+
+	"github.com/cloudera/yunikorn-core/pkg/log"
+)
 
 type NodeSortingPolicy struct {
 	PolicyType SortingPolicy
@@ -36,8 +37,9 @@ const (
 )
 
 func (nsp SortingPolicy) String() string {
-	return [...]string{"binpacking", "fair", "default"}[nsp]
+	return [...]string{"binpacking", "fair", "undefined"}[nsp]
 }
+
 func FromString(str string) (SortingPolicy, error) {
 	switch str {
 	// fair is the default policy when not set
@@ -46,17 +48,21 @@ func FromString(str string) (SortingPolicy, error) {
 	case "binpacking":
 		return BinPackingPolicy, nil
 	default:
-		return Undefined, fmt.Errorf("undefined policy %s", str)
+		return Undefined, fmt.Errorf("undefined policy: %s", str)
 	}
 }
 
 func NewNodeSortingPolicy(policyType string) *NodeSortingPolicy {
-	pType, _ := FromString(policyType)
+	pType, err := FromString(policyType)
+	if err != nil {
+		log.Logger().Debug("node sorting policy defaulted to 'undefined'",
+			zap.Error(err))
+	}
 	sp := &NodeSortingPolicy{
 		PolicyType: pType,
 	}
 
 	log.Logger().Debug("new node sorting policy added",
-		zap.String("type", policyType))
+		zap.String("type", pType.String()))
 	return sp
 }

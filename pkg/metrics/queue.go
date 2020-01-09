@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,19 +18,21 @@ package metrics
 
 import (
 	"fmt"
-	"github.com/cloudera/yunikorn-core/pkg/log"
+	"strings"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
-	"strings"
+
+	"github.com/cloudera/yunikorn-core/pkg/log"
 )
 
-type QueueMetrics struct  {
+type QueueMetrics struct {
 	// metrics related to app
 	appMetrics *prometheus.CounterVec
 
 	// metrics related to resource
-	usedResourceMetrics *prometheus.GaugeVec
-	pendingResourceMetrics *prometheus.GaugeVec
+	usedResourceMetrics      *prometheus.GaugeVec
+	pendingResourceMetrics   *prometheus.GaugeVec
 	availableResourceMetrics *prometheus.GaugeVec
 }
 
@@ -97,15 +99,15 @@ func substituteQueueName(queueName string) string {
 }
 
 func (m *QueueMetrics) IncApplicationsAccepted() {
-	m.appMetrics.With(prometheus.Labels{"state":"accepted"}).Inc()
+	m.appMetrics.With(prometheus.Labels{"state": "accepted"}).Inc()
 }
 
 func (m *QueueMetrics) IncApplicationsRejected() {
-	m.appMetrics.With(prometheus.Labels{"state":"rejected"}).Inc()
+	m.appMetrics.With(prometheus.Labels{"state": "rejected"}).Inc()
 }
 
 func (m *QueueMetrics) IncApplicationsCompleted() {
-	m.appMetrics.With(prometheus.Labels{"state":"completed"}).Inc()
+	m.appMetrics.With(prometheus.Labels{"state": "completed"}).Inc()
 }
 
 func (m *QueueMetrics) AddQueueUsedResourceMetrics(resourceName string, value float64) {

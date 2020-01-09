@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ limitations under the License.
 package configs
 
 func MockSchedulerConfigByData(data []byte) {
-    SchedulerConfigLoader = func(policyGroup string) (config *SchedulerConfig, e error) {
-        return LoadSchedulerConfigFromByteArray(data)
-    }
+	SchedulerConfigLoader = func(policyGroup string) (config *SchedulerConfig, e error) {
+		return LoadSchedulerConfigFromByteArray(data)
+	}
 }

@@ -1,3 +1,19 @@
+/*
+Copyright 2020 Cloudera, Inc.  All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package scheduler
 
 import (
@@ -24,20 +40,17 @@ type baseIterator struct {
 
 // Reset the iterator to start from the beginning
 func (bi *baseIterator) Reset() {
-    bi.countIdx = 0
+	bi.countIdx = 0
 }
 
 // HasNext returns true if there is a next element in the array.
 // Returns false if there are no more elements or list is empty.
 func (bi *baseIterator) HasNext() bool {
-	if (bi.countIdx + 1) > bi.size {
-		return false
-	}
-	return true
+	return !(bi.countIdx+1 > bi.size)
 }
 
 // Next returns the next element and advances to next element in array.
-// Returns nil and reset the starting point at the end of iteration.
+// Returns nil at the end of iteration.
 func (bi *baseIterator) Next() *SchedulingNode {
 	if (bi.countIdx + 1) > bi.size {
 		return nil

@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ type ApplicationsDAOInfo struct {
 }
 
 type ApplicationDAOInfo struct {
-	ApplicationId  string              `json:"applicationID"`
+	ApplicationID  string              `json:"applicationID"`
 	UsedResource   string              `json:"usedResource"`
 	Partition      string              `json:"partition"`
 	QueueName      string              `json:"queueName"`
@@ -33,11 +33,11 @@ type ApplicationDAOInfo struct {
 type AllocationDAOInfo struct {
 	AllocationKey    string            `json:"allocationKey"`
 	AllocationTags   map[string]string `json:"allocationTags"`
-	Uuid             string            `json:"uuid"`
+	UUID             string            `json:"uuid"`
 	ResourcePerAlloc string            `json:"resource"`
 	Priority         string            `json:"priority"`
 	QueueName        string            `json:"queueName"`
-	NodeId           string            `json:"nodeId"`
-	ApplicationId    string            `json:"applicationId"`
+	NodeID           string            `json:"nodeId"`
+	ApplicationID    string            `json:"applicationId"`
 	Partition        string            `json:"partition"`
 }

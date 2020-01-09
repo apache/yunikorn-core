@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -35,8 +35,8 @@ var m *Metrics
 
 type Metrics struct {
 	scheduler CoreSchedulerMetrics
-	queues map[string]CoreQueueMetrics
-	lock sync.RWMutex
+	queues    map[string]CoreQueueMetrics
+	lock      sync.RWMutex
 }
 
 type CoreQueueMetrics interface {
@@ -111,8 +111,8 @@ func init() {
 	once.Do(func() {
 		m = &Metrics{
 			scheduler: initSchedulerMetrics(),
-			queues: make(map[string]CoreQueueMetrics),
-			lock: sync.RWMutex{},
+			queues:    make(map[string]CoreQueueMetrics),
+			lock:      sync.RWMutex{},
 		}
 	})
 }
@@ -126,11 +126,10 @@ func GetQueueMetrics(name string) CoreQueueMetrics {
 	defer m.lock.Unlock()
 	if qm, ok := m.queues[name]; ok {
 		return qm
-	} else {
-		queueMetrics := forQueue(name)
-		m.queues[name] = queueMetrics
-		return queueMetrics
 	}
+	queueMetrics := forQueue(name)
+	m.queues[name] = queueMetrics
+	return queueMetrics
 }
 
 // Format metric name based on the definition of metric name in prometheus, as per
@@ -150,7 +149,6 @@ func formatMetricName(metricName string) string {
 	}
 	if '0' <= metricName[0] && metricName[0] <= '9' {
 		return string(MetricNameInvalidByteReplacement) + string(newBytes)
-	} else {
-		return string(newBytes)
 	}
+	return string(newBytes)
 }

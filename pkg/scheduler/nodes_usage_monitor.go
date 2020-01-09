@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,20 +17,21 @@ limitations under the License.
 package scheduler
 
 import (
-	"github.com/cloudera/yunikorn-core/pkg/metrics"
 	"time"
+
+	"github.com/cloudera/yunikorn-core/pkg/metrics"
 )
 
 type nodesResourceUsageMonitor struct {
-	done chan bool
-	ticker *time.Ticker
+	done      chan bool
+	ticker    *time.Ticker
 	scheduler *Scheduler
 }
 
 func newNodesResourceUsageMonitor(scheduler *Scheduler) *nodesResourceUsageMonitor {
 	return &nodesResourceUsageMonitor{
-		done: make(chan bool),
-		ticker: time.NewTicker(1 * time.Second),
+		done:      make(chan bool),
+		ticker:    time.NewTicker(1 * time.Second),
 		scheduler: scheduler,
 	}
 }
@@ -52,7 +53,7 @@ func (m *nodesResourceUsageMonitor) start() {
 func (m *nodesResourceUsageMonitor) runOnce() {
 	for _, p := range m.scheduler.GetClusterSchedulingContext().getPartitionMapClone() {
 		usageMap := p.partition.CalculateNodesResourceUsage()
-		if usageMap != nil && len(usageMap) > 0 {
+		if len(usageMap) > 0 {
 			for resourceName, usageBuckets := range usageMap {
 				for idx, bucketValue := range usageBuckets {
 					metrics.GetSchedulerMetrics().SetNodeResourceUsage(resourceName, idx, float64(bucketValue))
@@ -62,6 +63,8 @@ func (m *nodesResourceUsageMonitor) runOnce() {
 	}
 }
 
+// Stop the node usage monitor.
+//nolint:unused
 func (m *nodesResourceUsageMonitor) stop() {
 	m.done <- true
 }

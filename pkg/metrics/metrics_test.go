@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Cloudera, Inc.  All rights reserved.
+Copyright 2020 Cloudera, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,31 +17,40 @@ limitations under the License.
 package metrics
 
 import (
-    "github.com/prometheus/common/model"
-    "gotest.tools/assert"
-    "math/rand"
-    "testing"
+	"crypto/rand"
+	"testing"
+
+	"github.com/prometheus/common/model"
+	"go.uber.org/zap"
+	"gotest.tools/assert"
+
+	"github.com/cloudera/yunikorn-core/pkg/log"
 )
 
 func TestFormatMetricName(t *testing.T) {
-    testStrings := []string{"0", "ad_vs:ad", "~23", "test/a", "-dfs", "012~`s@dd#$b%23^&5^3*(45){78}|00[]\\1ssd"}
-    for _, testString := range testStrings {
-        replaceStr := formatMetricName(testString)
-        assert.Equal(t, true, model.IsValidMetricName(model.LabelValue(replaceStr)))
-    }
-    numRandomTestStrings := 1000
-    randomTestStrings := make([]string, numRandomTestStrings)
-    for i := 0; i < numRandomTestStrings; i++ {
-        randomTestStrings[i] = generateRandomString(100)
-    }
-    for _, testString := range randomTestStrings {
-        replaceStr := formatMetricName(testString)
-        assert.Equal(t, true, model.IsValidMetricName(model.LabelValue(replaceStr)))
-    }
+	testStrings := []string{"0", "ad_vs:ad", "~23", "test/a", "-dfs", "012~`s@dd#$b%23^&5^3*(45){78}|00[]\\1ssd"}
+	for _, testString := range testStrings {
+		replaceStr := formatMetricName(testString)
+		assert.Equal(t, true, model.IsValidMetricName(model.LabelValue(replaceStr)))
+	}
+	numRandomTestStrings := 1000
+	randomTestStrings := make([]string, numRandomTestStrings)
+	for i := 0; i < numRandomTestStrings; i++ {
+		randomTestStrings[i] = generateRandomString(100)
+	}
+	for _, testString := range randomTestStrings {
+		replaceStr := formatMetricName(testString)
+		assert.Equal(t, true, model.IsValidMetricName(model.LabelValue(replaceStr)))
+	}
 }
 
 func generateRandomString(len int) string {
-    randomBytes := make([]byte, len)
-    rand.Read(randomBytes)
-    return string(randomBytes)
+	randomBytes := make([]byte, len)
+	n, err := rand.Read(randomBytes)
+	if err != nil {
+		log.Logger().Warn("Random running low on entropy",
+			zap.Int("bytesRequested", len),
+			zap.Int("bytesRead", n))
+	}
+	return string(randomBytes)
 }

@@ -1,0 +1,80 @@
+# options for analysis running
+run:
+  issues-exit-code: 1
+  skip-dirs-use-default: true
+  modules-download-mode: readonly
+  deadline: 5m
+
+# settings of specific linters
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+  golint:
+    min-confidence: 0.8
+  gofmt:
+    simplify: true
+  goimports:
+    local-prefixes: github.com/cloudera/yunikorn
+  govet:
+    check-shadowing: true
+  depguard:
+    list-type: blacklist
+    include-go-root: false
+    packages:
+      - github.com/sirupsen/logrus
+      - github.com/stretchr/testify
+    packages-with-error-messages:
+      github.com/sirupsen/logrus: "logging is standardised via yunikorn logger and zap"
+      github.com/stretchr/testify: "test assertions must use gotest.tools/assert"
+
+# linters to use
+linters:
+  disable-all: true
+  fast: false
+  enable:
+    - errcheck
+    - unused
+    - staticcheck
+    - gosimple
+    - structcheck
+    - varcheck
+    - ineffassign
+    - deadcode
+    - funlen
+    - golint
+    - gofmt
+    - goimports
+    - govet
+    - goconst
+    - depguard
+    - nakedret
+    - gocritic
+    - godox
+    - gosec
+    - dogsled
+    - whitespace
+
+issues:
+  exclude-use-default: true
+
+  # Maximum issues count per one linter. Set to 0 to disable. Default is 50.
+  max-issues-per-linter: 0
+
+  # Maximum count of issues with the same text. Set to 0 to disable. Default is 3.
+  max-same-issues: 0
+
+  # Show only new issues: if there are unstaged changes or untracked files,
+  # only those changes are analyzed, else only changes in HEAD~ are analyzed.
+  # It's a super-useful option for integration of golangci-lint into existing
+  # large codebase. It's not practical to fix all existing issues at the moment
+  # of integration: much better don't allow issues in new code.
+  # Default is false.
+  new: false
+
+  # Show only new issues created after git revision `REV`
+  # new-from-rev: REV
+
+  # Show only new issues created in git patch with set file path.
+  # new-from-patch: path/to/patch/file
+

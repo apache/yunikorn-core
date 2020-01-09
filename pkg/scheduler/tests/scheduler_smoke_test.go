@@ -1701,11 +1701,14 @@ partitions:
         assert.Assert(t, schedulingNode.GetAllocatedResource().Resources[resources.MEMORY] == 20)
     }
 
-    // Manually increase allocating resource of app and queue
-    schedulingApp1.IncreaseAllocatingAndParentQueuesTestOnly(resources.NewResourceFromMap(map[string]resources.Quantity{
+    res := resources.NewResourceFromMap(map[string]resources.Quantity{
         "memory": 1000,
         "vcore":  200,
-    }))
+    })
+
+    // Manually increase allocating resource of app and queue
+    schedulingApp1.DecAllocatingResource(resources.Multiply(res, -1))
+    schedulerQueueA.IncAllocatingResourceFromTheQueueAndParents(res)
 
     // Check allocating resource of app and queue
     waitForAllocatingResource(t, schedulerQueueA, 1000, 1000)

@@ -117,8 +117,50 @@ func (m *Scheduler) updateSchedulingRequest(schedulingAsk *SchedulingAllocationA
     schedulingAsk.QueueName = schedulingApp.queue.Name
     pendingDelta, err := schedulingApp.Requests.AddAllocationAsk(schedulingAsk)
     if err == nil && !resources.IsZero(pendingDelta) {
-        schedulingApp.queue.IncPendingResource(pendingDelta)
+        schedulingApp.queue.incPendingResource(pendingDelta)
     }
+    return err
+}
+
+func (m *Scheduler) processAllocationProposal(allocProposal *commonevents.AllocationProposal) error {
+    var err error = nil
+
+    // Get SchedulingApplication
+    schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(allocProposal.ApplicationId, allocProposal.PartitionName)
+    if schedulingApp == nil {
+        return fmt.Errorf("cannot find scheduling application %s, for allocation ID %s", allocProposal.ApplicationId, allocProposal.AllocationKey)
+    }
+
+    // For both confirmation and rejection, decrease allocating resource for node/app/queue
+    schedulingApp.DecAllocatingResource(allocProposal.AllocatedResource)
+    schedulingApp.queue.decAllocatingResourceFromTheQueueAndParents(allocProposal.AllocatedResource)
+    m.clusterSchedulingContext.DecNodeAllocatingResource(allocProposal)
+
+    return err
+}
+
+func (m *Scheduler) rejectAllocationProposal(allocProposal *commonevents.AllocationProposal) error {
+    var err error = nil
+
+    // Get SchedulingApplication
+    schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(allocProposal.ApplicationId, allocProposal.PartitionName)
+    if schedulingApp == nil {
+        return fmt.Errorf("cannot find scheduling application %s, for allocation ID %s", allocProposal.ApplicationId, allocProposal.AllocationKey)
+    }
+
+    // When it is a rejection
+    // Add back pending delta to application
+    var pendingDelta *resources.Resource
+    pendingDelta, err = schedulingApp.addBackAllocationAskRepeat(allocProposal.AllocationKey, -1)
+    if pendingDelta != nil && !resources.IsZero(pendingDelta) {
+        schedulingApp.queue.incPendingResource(pendingDelta)
+    }
+
+    // decrease allocating resource for node/app/queue
+    schedulingApp.DecAllocatingResource(allocProposal.AllocatedResource)
+    schedulingApp.queue.decAllocatingResourceFromTheQueueAndParents(allocProposal.AllocatedResource)
+    m.clusterSchedulingContext.DecNodeAllocatingResource(allocProposal)
+
     return err
 }
 
@@ -143,15 +185,15 @@ func (m *Scheduler) confirmOrRejectSingleAllocationProposal(allocProposal *commo
         // When it is a rejection
         // Add back pending delta to application
         var pendingDelta *resources.Resource
-        pendingDelta, err = schedulingApp.AddBackAllocationAskRepeat(allocProposal.AllocationKey, allocationAdded)
+        pendingDelta, err = schedulingApp.addBackAllocationAskRepeat(allocProposal.AllocationKey, allocationAdded)
         if pendingDelta != nil && !resources.IsZero(pendingDelta) {
-            schedulingApp.queue.IncPendingResource(pendingDelta)
+            schedulingApp.queue.incPendingResource(pendingDelta)
         }
     }
 
     // For both confirmation and rejection, decrease allocating resource for node/app/queue
     schedulingApp.DecAllocatingResource(allocProposal.AllocatedResource)
-    schedulingApp.queue.DecAllocatingResourceFromTheQueueAndParents(allocProposal.AllocatedResource)
+    schedulingApp.queue.decAllocatingResourceFromTheQueueAndParents(allocProposal.AllocatedResource)
     m.clusterSchedulingContext.DecNodeAllocatingResource(allocProposal)
 
     return err
@@ -183,7 +225,7 @@ func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
     select {
     case queue <- ev:
         log.Logger().Debug("enqueued event",
-            zap.String("eventType",  reflect.TypeOf(ev).String()),
+            zap.String("eventType", reflect.TypeOf(ev).String()),
             zap.Any("event", ev),
             zap.Int("currentQueueSize", len(queue)))
     default:
@@ -208,7 +250,7 @@ func (m *Scheduler) processAllocationReleaseByAllocationKey(
             if schedulingApp != nil {
                 delta, _ := schedulingApp.Requests.RemoveAllocationAsk(toRelease.Allocationkey)
                 if !resources.IsZero(delta) {
-                    schedulingApp.queue.IncPendingResource(delta)
+                    schedulingApp.queue.incPendingResource(delta)
                 }
 
                 log.Logger().Info("release allocation",
@@ -221,7 +263,7 @@ func (m *Scheduler) processAllocationReleaseByAllocationKey(
     }
 
     if allocationsToRelease != nil && len(allocationsToRelease) > 0 {
-        toReleaseAllocations :=  make([]*si.ForgotAllocation, len(allocationAsksToRelease))
+        toReleaseAllocations := make([]*si.ForgotAllocation, len(allocationAsksToRelease))
         for _, toRelease := range allocationsToRelease {
             schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(toRelease.ApplicationId, toRelease.PartitionName)
             if schedulingApp != nil {
@@ -297,8 +339,8 @@ func (m *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocat
 func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAllocationUpdatesEvent) {
     if len(ev.ExistingAllocations) > 0 {
         // in recovery mode, we only expect existing allocations being reported
-        if len(ev.NewAsks) > 0 || len(ev.RejectedAllocations) > 0 || ev.ToReleases != nil{
-            log.Logger().Warn("illegal SchedulerAllocationUpdatesEvent," +
+        if len(ev.NewAsks) > 0 || len(ev.RejectedAllocations) > 0 || ev.ToReleases != nil {
+            log.Logger().Warn("illegal SchedulerAllocationUpdatesEvent,"+
                 " only existingAllocations can be set exclusively, other info will be skipped",
                 zap.Int("num of existingAllocations", len(ev.ExistingAllocations)),
                 zap.Int("num of rejectedAllocations", len(ev.RejectedAllocations)),
@@ -348,7 +390,7 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
                 rejectedAsks = append(rejectedAsks, &si.RejectedAllocationAsk{
                     AllocationKey: schedulingAsk.AskProto.AllocationKey,
                     ApplicationId: schedulingAsk.ApplicationId,
-                    Reason: err.Error()})
+                    Reason:        err.Error()})
             }
         }
 
@@ -383,7 +425,7 @@ func (m *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerAp
                     &cacheevent.RejectedNewApplicationEvent{
                         ApplicationId: app.ApplicationId,
                         PartitionName: app.Partition,
-                        Reason: err.Error(),
+                        Reason:        err.Error(),
                     })
                 rejectedApps = append(rejectedApps, &si.RejectedApplication{
                     ApplicationId: app.ApplicationId,

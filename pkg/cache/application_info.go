@@ -24,7 +24,6 @@ import (
     "sync"
     "sync/atomic"
     "time"
-    "unsafe"
 )
 
 /* Related to applications */
@@ -42,7 +41,7 @@ type ApplicationInfo struct {
     stateMachine      *fsm.FSM                   // application state machine
 
     // This is intended to be accessed via sync package, never read the value directly from the pointer
-    allocatedResourcePointer unsafe.Pointer
+    allocatedResourceRef atomic.Value
 
     lock sync.RWMutex
 }
@@ -65,11 +64,12 @@ func NewApplicationInfo(appId, partition, queueName string, ugi security.UserGro
 }
 
 func (ai *ApplicationInfo) setAllocatedResource(res *resources.Resource) {
-    atomic.StorePointer(&ai.allocatedResourcePointer, unsafe.Pointer(res))
+    ai.allocatedResourceRef.Store(*res)
 }
 
 func (ai *ApplicationInfo) GetAllocatedResource() *resources.Resource {
-    return (*resources.Resource)(atomic.LoadPointer(&ai.allocatedResourcePointer))
+    data := ai.allocatedResourceRef.Load().(resources.Resource)
+    return &data
 }
 
 // Return the current allocations for the application.

@@ -38,21 +38,21 @@ type SchedulingQueue struct {
     // How many resources allocating but not confirmed yet from cache.
     allocating *resources.Resource
 
-    childrenQueues       map[string]*SchedulingQueue       // Only for direct children, parent queue only
-    applications         map[string]*SchedulingApplication // only for leaf queue
-    parent               *SchedulingQueue                  // link back to the parent in the scheduler
-    pendingResource      *resources.Resource               // Total pending resource
-    lock                 sync.RWMutex
+    childrenQueues  map[string]*SchedulingQueue       // Only for direct children, parent queue only
+    applications    map[string]*SchedulingApplication // only for leaf queue
+    parent          *SchedulingQueue                  // link back to the parent in the scheduler
+    pendingResource *resources.Resource               // Total pending resource
+    lock            sync.RWMutex
 }
 
 func NewSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo, parent *SchedulingQueue) *SchedulingQueue {
     sq := &SchedulingQueue{
-        Name: cacheQueueInfo.GetQueuePath(),
+        Name:            cacheQueueInfo.GetQueuePath(),
         CachedQueueInfo: cacheQueueInfo,
-        parent: parent,
-        allocating: resources.NewResource(),
-        childrenQueues: make(map[string]*SchedulingQueue),
-        applications: make(map[string]*SchedulingApplication),
+        parent:          parent,
+        allocating:      resources.NewResource(),
+        childrenQueues:  make(map[string]*SchedulingQueue),
+        applications:    make(map[string]*SchedulingApplication),
         pendingResource: resources.NewResource(),
     }
 
@@ -74,44 +74,44 @@ func NewSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo, parent *SchedulingQ
     return sq
 }
 
-func (queue *SchedulingQueue) tryAllocate(
+func (sq *SchedulingQueue) tryAllocate(
     partitionTotalResource *resources.Resource,
     partitionContext *PartitionSchedulingContext,
     parentHeadroom *resources.Resource,
     parentQueueMaxLimit *resources.Resource) *SchedulingAllocation {
-    queue.lock.RLock()
-    defer queue.lock.RUnlock()
+    sq.lock.RLock()
+    defer sq.lock.RUnlock()
 
     // skip stopped queues: running and draining queues are allowed
-    if queue.isStopped() {
+    if sq.isStopped() {
         log.Logger().Debug("skip non-running queue",
-            zap.String("queueName", queue.Name))
+            zap.String("queueName", sq.Name))
         return nil
     }
     // Is it need any resource?
-    if !resources.StrictlyGreaterThanZero(queue.pendingResource) {
+    if !resources.StrictlyGreaterThanZero(sq.pendingResource) {
         log.Logger().Debug("skip queue because it has no pending resource",
-            zap.String("queueName", queue.Name))
+            zap.String("queueName", sq.Name))
         return nil
     }
 
     // Get queue max resource
-    queueMaxLimit := queue.getMaxLimit(partitionTotalResource, parentQueueMaxLimit)
+    queueMaxLimit := sq.getMaxLimit(partitionTotalResource, parentQueueMaxLimit)
 
     // Get headroom
-    newHeadroom := queue.getHeadroom(parentHeadroom, queueMaxLimit)
+    newHeadroom := sq.getHeadroom(parentHeadroom, queueMaxLimit)
 
     var allocation *SchedulingAllocation = nil
 
-    if queue.isLeafQueue() {
-        sortedApps := queue.sortApplicationsFromLeafQueue()
+    if sq.isLeafQueue() {
+        sortedApps := sq.sortApplicationsFromLeafQueue()
         for _, app := range sortedApps {
             if allocation = app.tryAllocate(partitionContext, newHeadroom); allocation != nil {
                 break
             }
         }
     } else {
-        sortedChildren := queue.sortSubqueuesFromQueue()
+        sortedChildren := sq.sortSubqueuesFromQueue()
         for _, queue := range sortedChildren {
             if allocation = queue.tryAllocate(partitionTotalResource, partitionContext, newHeadroom, queueMaxLimit); allocation != nil {
                 break
@@ -122,14 +122,13 @@ func (queue *SchedulingQueue) tryAllocate(
     return allocation
 }
 
-
 // Return a sorted copy of the applications in the queue.
 // Only applications with a pending resource request are considered. The applications are sorted using the
 // sorting type for the leaf queue they are in.
-func (queue *SchedulingQueue) sortApplicationsFromLeafQueue() []*SchedulingApplication {
+func (sq *SchedulingQueue) sortApplicationsFromLeafQueue() []*SchedulingApplication {
     // Create a copy of the applications with pending resources
     sortedApps := make([]*SchedulingApplication, 0)
-    for _, v := range queue.applications {
+    for _, v := range sq.applications {
         // Only look at app when pending-res > 0
         if resources.StrictlyGreaterThanZero(v.Requests.GetPendingResource()) {
             sortedApps = append(sortedApps, v)
@@ -137,20 +136,19 @@ func (queue *SchedulingQueue) sortApplicationsFromLeafQueue() []*SchedulingAppli
     }
 
     // Sort the applications
-    SortApplications(sortedApps, queue.ApplicationSortType, queue.CachedQueueInfo.GuaranteedResource)
+    SortApplications(sortedApps, sq.ApplicationSortType, sq.CachedQueueInfo.GuaranteedResource)
 
     return sortedApps
 }
-
 
 // Return a sorted copy of the queues for this parent queue.
 // Only queues with a pending resource request are considered. The queues are sorted using the
 // sorting type for the parent queue.
 // Stopped queues will be filtered out at a later stage.
-func (queue *SchedulingQueue) sortSubqueuesFromQueue() []*SchedulingQueue {
+func (sq *SchedulingQueue) sortSubqueuesFromQueue() []*SchedulingQueue {
     // Create a list of the queues with pending resources
     sortedQueues := make([]*SchedulingQueue, 0)
-    for _, child := range queue.childrenQueues {
+    for _, child := range sq.childrenQueues {
         // Only look at queue when pending-res > 0
         if resources.StrictlyGreaterThanZero(child.GetPendingResource()) {
             sortedQueues = append(sortedQueues, child)
@@ -158,12 +156,12 @@ func (queue *SchedulingQueue) sortSubqueuesFromQueue() []*SchedulingQueue {
     }
 
     // Sort the queues
-    SortQueue(sortedQueues, queue.QueueSortType)
+    SortQueue(sortedQueues, sq.QueueSortType)
 
     return sortedQueues
 }
 
-func (sq * SchedulingQueue) GetPendingResource() *resources.Resource{
+func (sq *SchedulingQueue) GetPendingResource() *resources.Resource {
     sq.lock.RLock()
     defer sq.lock.RUnlock()
 
@@ -178,7 +176,7 @@ func (sq *SchedulingQueue) updateSchedulingQueueProperties(prop map[string]strin
     // walk over all properties and process
     if prop != nil {
         for key, value := range prop {
-            if key == cache.ApplicationSortPolicy  && value == "fair" {
+            if key == cache.ApplicationSortPolicy && value == "fair" {
                 sq.ApplicationSortType = FairSortPolicy
             }
             // for now skip the rest just log them
@@ -210,10 +208,10 @@ func (sq *SchedulingQueue) updateSchedulingQueueInfo(info map[string]*cache.Queu
 }
 
 // Update pending resource of this queue
-func (sq *SchedulingQueue) IncPendingResource(delta *resources.Resource) {
+func (sq *SchedulingQueue) incPendingResource(delta *resources.Resource) {
     // update the parent
     if sq.parent != nil {
-        sq.parent.IncPendingResource(delta)
+        sq.parent.incPendingResource(delta)
     }
     // update this queue
     sq.lock.Lock()
@@ -274,7 +272,7 @@ func (sq *SchedulingQueue) RemoveSchedulingApplication(app *SchedulingApplicatio
 
     appAllocating := app.allocating
     if !resources.IsZero(appAllocating) {
-        sq.DecAllocatingResourceFromTheQueueAndParents(appAllocating)
+        sq.decAllocatingResourceFromTheQueueAndParents(appAllocating)
     }
 }
 
@@ -358,7 +356,7 @@ func (sq *SchedulingQueue) GetAllocatingResource() *resources.Resource {
     return sq.allocating
 }
 
-func (sq *SchedulingQueue) IncAllocatingResource(newAlloc *resources.Resource) {
+func (sq *SchedulingQueue) incAllocatingResource(newAlloc *resources.Resource) {
     sq.lock.Lock()
     defer sq.lock.Unlock()
 
@@ -379,7 +377,7 @@ func (sq *SchedulingQueue) CheckAdminAccess(user security.UserGroup) bool {
 }
 
 // Always called within sq's lock
-func (sq* SchedulingQueue) getHeadroom(parentHeadroom *resources.Resource, queueMaxLimit *resources.Resource) *resources.Resource {
+func (sq *SchedulingQueue) getHeadroom(parentHeadroom *resources.Resource, queueMaxLimit *resources.Resource) *resources.Resource {
     // new headroom for this queue
     if nil != parentHeadroom {
         return resources.ComponentWiseMin(resources.Sub(queueMaxLimit, sq.getTotalMayAllocatedWithoutLock()), parentHeadroom)
@@ -387,7 +385,7 @@ func (sq* SchedulingQueue) getHeadroom(parentHeadroom *resources.Resource, queue
     return resources.Sub(queueMaxLimit, sq.getTotalMayAllocatedWithoutLock())
 }
 
-func (sq* SchedulingQueue) getMaxLimit(partitionTotalResource *resources.Resource, parentMaxLimit *resources.Resource) *resources.Resource {
+func (sq *SchedulingQueue) getMaxLimit(partitionTotalResource *resources.Resource, parentMaxLimit *resources.Resource) *resources.Resource {
     if sq.isRoot() {
         return partitionTotalResource
     }
@@ -414,10 +412,10 @@ func (sq *SchedulingQueue) IncAllocatingResourceFromTheQueueAndParents(alloc *re
 }
 
 // Update may allocated resource from this queue
-func (sq *SchedulingQueue) DecAllocatingResourceFromTheQueueAndParents(alloc *resources.Resource) {
+func (sq *SchedulingQueue) decAllocatingResourceFromTheQueueAndParents(alloc *resources.Resource) {
     // update the parent
     if sq.parent != nil {
-        sq.parent.DecAllocatingResourceFromTheQueueAndParents(alloc)
+        sq.parent.decAllocatingResourceFromTheQueueAndParents(alloc)
     }
     // update this queue
     sq.lock.Lock()
@@ -432,7 +430,7 @@ func (sq *SchedulingQueue) DecAllocatingResourceFromTheQueueAndParents(alloc *re
 }
 
 // allocating + allocated
-func (sq* SchedulingQueue) GetTotalMayAllocated() *resources.Resource {
+func (sq *SchedulingQueue) getTotalMayAllocated() *resources.Resource {
     sq.lock.RLock()
     defer sq.lock.RUnlock()
 
@@ -440,7 +438,7 @@ func (sq* SchedulingQueue) GetTotalMayAllocated() *resources.Resource {
 }
 
 // allocating + allocated (lock free version)
-func (sq* SchedulingQueue) getTotalMayAllocatedWithoutLock() *resources.Resource {
+func (sq *SchedulingQueue) getTotalMayAllocatedWithoutLock() *resources.Resource {
     return resources.Add(sq.allocating, sq.CachedQueueInfo.GetAllocatedResource())
 }
 

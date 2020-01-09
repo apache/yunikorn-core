@@ -109,7 +109,7 @@ func (psc *PartitionSchedulingContext) AddSchedulingApplication(schedulingApp *S
     schedulingQueue := psc.getQueue(queueName)
     // check if the queue already exist and what we have is a leaf queue with submit access
     if schedulingQueue != nil &&
-        (!schedulingQueue.isLeafQueue() || !schedulingQueue.CheckSubmitAccess(schedulingApp.ApplicationInfo.GetUser())){
+        (!schedulingQueue.isLeafQueue() || !schedulingQueue.CheckSubmitAccess(schedulingApp.ApplicationInfo.GetUser())) {
         return fmt.Errorf("failed to find queue %s for application %s", schedulingApp.ApplicationInfo.QueueName, appId)
     }
     // with placement rules the hierarchy might not exist so try and create it
@@ -294,7 +294,7 @@ func (psc *PartitionSchedulingContext) removeSchedulingNode(nodeId string) {
 }
 
 // Add new reservation
-func (psc *PartitionSchedulingContext) HandleReservationProposal(allocation *SchedulingAllocation) {
+func (psc *PartitionSchedulingContext) handleReservedRequest(allocation *SchedulingAllocation) {
     psc.lock.Lock()
     defer psc.lock.Unlock()
 
@@ -312,9 +312,13 @@ func (psc *PartitionSchedulingContext) HandleReservationProposal(allocation *Sch
         return
     }
 
-    if ok, err := app.UpdateForReservation(allocation); !ok {
+    if ok, err := app.updateForReservation(allocation); !ok {
+        var msg string = ""
+        if err != nil {
+            msg = err.Error()
+        }
         log.Logger().Info("Failed to handle reservation, error during update of app",
-            zap.String("errMsg", err.Error()))
+            zap.String("errMsg", msg))
         return
     }
 
@@ -324,7 +328,7 @@ func (psc *PartitionSchedulingContext) HandleReservationProposal(allocation *Sch
 }
 
 // Get an ordered reservation app list, it is a clone so change order of the list won't impact
-func (psc *PartitionSchedulingContext) GetReservationAppListClone() *list.List {
+func (psc *PartitionSchedulingContext) getReservationAppListClone() *list.List {
     psc.lock.RLock()
     defer psc.lock.RUnlock()
 
@@ -341,18 +345,18 @@ func (psc *PartitionSchedulingContext) GetReservationAppListClone() *list.List {
     return appList
 }
 
-func (psc *PartitionSchedulingContext) HandleUnreservedRequest(allocation *SchedulingAllocation) {
+func (psc *PartitionSchedulingContext) handleUnreservedRequest(allocation *SchedulingAllocation) {
     psc.lock.Lock()
     defer psc.lock.Unlock()
 
     // Make sure app exist before decrease allocating resources
     if app := psc.applications[allocation.SchedulingAsk.ApplicationId]; app != nil {
-        if ok, err := app.UpdateForReservationCancellation(allocation); !ok {
+        if ok, err := app.updateForReservationCancellation(allocation); !ok {
             log.Logger().Info("Failed to handle reservation cancellation",
                 zap.String("errMsg", err.Error()))
             return
         }
-        app.queue.DecAllocatingResourceFromTheQueueAndParents(allocation.SchedulingAsk.AllocatedResource)
+        app.queue.decAllocatingResourceFromTheQueueAndParents(allocation.SchedulingAsk.AllocatedResource)
         if len(app.reservedRequests) == 0 {
             delete(psc.reservedApps, app.ApplicationInfo.ApplicationId)
         }
@@ -360,7 +364,7 @@ func (psc *PartitionSchedulingContext) HandleUnreservedRequest(allocation *Sched
 }
 
 // Handles new allocation and allocation-from-reservation
-func (psc *PartitionSchedulingContext) HandleAllocationProposal(allocation *SchedulingAllocation) {
+func (psc *PartitionSchedulingContext) handleAllocatedRequest(allocation *SchedulingAllocation) {
     psc.lock.Lock()
     defer psc.lock.Unlock()
 
@@ -378,7 +382,7 @@ func (psc *PartitionSchedulingContext) HandleAllocationProposal(allocation *Sche
         return
     }
 
-    if ok, err := app.UpdateForAllocation(allocation); !ok {
+    if ok, err := app.updateForAllocation(allocation); !ok {
         log.Logger().Info("Failed to handle new allocation, error happened while updating app and node",
             zap.String("error", err.Error()))
         return

@@ -67,7 +67,7 @@ func dropExcessiveReservationRequests(reservedApps *list.List) []*SchedulingAllo
 
 // Do reservation allocation, returns if anything allocated
 func (m *Scheduler) reservationAllocation(partitionCtx *PartitionSchedulingContext) []*SchedulingAllocation {
-    appList := partitionCtx.GetReservationAppListClone()
+    appList := partitionCtx.getReservationAppListClone()
 
     if appList == nil {
         return nil
@@ -82,7 +82,7 @@ func (m *Scheduler) reservationAllocation(partitionCtx *PartitionSchedulingConte
         // Get first app, but not remove it for now since the app could have multiple reservation requests
         app := appList.Front().Value.(*SchedulingApplication)
 
-        allocation := app.TryAllocateFromReservationRequests()
+        allocation := app.tryAllocateFromReservationRequests()
 
         if nil == allocation {
             appList.Remove(appList.Front())
@@ -101,11 +101,11 @@ func (m *Scheduler) handleSchedulingAllocation(allocations []*SchedulingAllocati
             return
         } else if alloc.AllocationResult == Reservation {
             // Reservation is kept inside scheduler, so update internal scheduler context
-            partitionCtx.HandleReservationProposal(alloc)
-        } else if alloc.AllocationResult == Unreserve {
-            partitionCtx.HandleUnreservedRequest(alloc)
+            partitionCtx.handleReservedRequest(alloc)
+        } else if alloc.AllocationResult == Unreservation {
+            partitionCtx.handleUnreservedRequest(alloc)
         } else if alloc.AllocationResult == Allocation || alloc.AllocationResult == AllocationFromReservation {
-            partitionCtx.HandleAllocationProposal(alloc)
+            partitionCtx.handleAllocatedRequest(alloc)
             // Send allocation proposal to cache to commit
             m.eventHandlers.CacheEventHandler.HandleEvent(newSingleAllocationProposal(alloc))
         }

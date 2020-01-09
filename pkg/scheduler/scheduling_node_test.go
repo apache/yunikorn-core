@@ -131,7 +131,7 @@ func TestCheckAllocate(t *testing.T) {
         t.Error("node should have accepted allocation")
     }
     if !node.needUpdateCachedAvailable {
-        t.Error("node available resource dirty should be set after UpdateForAllocation")
+        t.Error("node available resource dirty should be set after updateForAllocation")
     }
 
     // add one that pushes node over its size
@@ -376,25 +376,25 @@ func TestFitInGapScore(t *testing.T) {
     largerB = resources.NewResourceFromMap(map[string]resources.Quantity{"second": 80})
     assert.Equal(t, fitInGapScore(largerA, smaller), fitInGapScore(largerB, smaller))
 
-    // A is more fit than B (smaller)
+    // B is more fit than A
     smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 10})
     largerA = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8, "second": 10})
     largerB = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 9, "second": 10})
     assert.True(t, fitInGapScore(largerA, smaller) > fitInGapScore(largerB, smaller))
 
-    // A is more fit than B (smaller)
+    // B is more fit than A
     smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 10})
     largerA = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8, "second": 9})
     largerB = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 9, "second": 9})
     assert.True(t, fitInGapScore(largerA, smaller) > fitInGapScore(largerB, smaller))
 
-    // A is more fit than B (smaller)
+    // B is more fit than A
     smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 10})
     largerA = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8, "second": 8})
     largerB = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 9, "second": 9})
     assert.True(t, fitInGapScore(largerA, smaller) > fitInGapScore(largerB, smaller))
 
-    // A is more fit than B (smaller)
+    // B is more fit than A
     smaller = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 100})
     largerA = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8, "second": 70})
     largerB = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 7, "second": 90})

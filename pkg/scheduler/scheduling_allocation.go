@@ -27,11 +27,11 @@ const (
     Allocation AllocationResultType = iota
     AllocationFromReservation
     Reservation
-    Unreserve
+    Unreservation
 )
 
 func (soe AllocationResultType) String() string {
-    return [...]string{"Allocation", "Reservation", "Unreserve"}[soe]
+    return [...]string{"Allocation", "Reservation", "Unreservation"}[soe]
 }
 
 type SchedulingAllocation struct {

@@ -21,15 +21,16 @@ import "sync"
 // Reserved *single* request
 type ReservedSchedulingRequest struct {
     // Public field, will not change overtime
-    SchedulingAsk         *SchedulingAllocationAsk
-    App                   *SchedulingApplication
-    SchedulingNode              *SchedulingNode
-    reservationRequestKeyOnNode string
+    SchedulingAsk  *SchedulingAllocationAsk
+    App            *SchedulingApplication
+    SchedulingNode *SchedulingNode
 
     // Following are private fields which subject to change
 
-    // Where's the request reserved
+    // # of reserved scheduling ask on the node
     amount int
+
+    reservationRequestKeyOnNode string
 
     lock sync.RWMutex
 }
@@ -78,10 +79,4 @@ func (m *ReservedSchedulingRequest) GetAmount() int {
 func (m *ReservedSchedulingRequest) GetReservationRequestKeyOnNode() string {
     // No lock needed when accessing two final fields
     return m.reservationRequestKeyOnNode
-}
-
-func (m *ReservedSchedulingRequest) Clone() *ReservedSchedulingRequest {
-    m.lock.RLock()
-    defer m.lock.RUnlock()
-    return NewReservedSchedulingRequest(m.SchedulingAsk, m.App, m.SchedulingNode)
 }

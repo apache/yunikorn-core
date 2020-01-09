@@ -192,7 +192,7 @@ func TestPendingCalc(t *testing.T) {
 
     res := map[string]string{"memory":"100", "vcores":"10"}
     allocation, _ := resources.NewResourceFromConf(res)
-    parent.IncPendingResource(allocation)
+    parent.incPendingResource(allocation)
     if !resources.Equals(root.pendingResource, allocation) {
         t.Errorf("root queue pending allocation failed to increment expected %v, got %v", allocation, root.pendingResource)
     }
@@ -201,7 +201,7 @@ func TestPendingCalc(t *testing.T) {
         t.Errorf("root queue pending allocation failed to decrement expected 0, got %v", root.pendingResource)
     }
     // Not allowed to go negative: both will be zero after this
-    root.IncPendingResource(allocation)
+    root.incPendingResource(allocation)
     parent.DecPendingResourceFromTheQueueAndParents(allocation)
     if !resources.IsZero(root.pendingResource) {
         t.Errorf("root queue pending allocation failed to decrement expected zero, got %v", root.pendingResource)

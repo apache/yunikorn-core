@@ -230,7 +230,7 @@ func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitio
         // allocations, allocation with lower priorities, etc.
     }
 
-    preemptorQueue.schedulingQueue.IncAllocatingResource(candidate.AllocatedResource)
+    preemptorQueue.schedulingQueue.incAllocatingResource(candidate.AllocatedResource)
 
     // Finally, let's do preemption proposals
     return createPreemptionAndAllocationProposal(preemptionPartitionContext, nodeToAllocate, candidate, preemptionResults)

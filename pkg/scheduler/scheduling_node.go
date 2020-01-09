@@ -174,7 +174,7 @@ func fitInGapScore(larger, smaller *resources.Resource) float64 {
 			score += float64(v - largerV) / float64(v)
 		}
 	}
-	return float64(score)
+	return score
 }
 
 // Check and update allocating resources of the scheduling node.
@@ -248,7 +248,8 @@ func (sn* SchedulingNode) UnreserveOnNode(reservationRequest *ReservedScheduling
 // Check if we can make reservation on node or not, this is a read-only operation.
 func (sn* SchedulingNode) CanReserveOnNode(reservationRequest *ReservedSchedulingRequest) (bool, error) {
 	if !sn.CheckAllocateConditions(reservationRequest.SchedulingAsk, true) {
-		return false, fmt.Errorf("Failed to reserve on node since allocation condition cannot satisfied")
+		return false, fmt.Errorf("Failed to reserve on node since allocation condition cannot satisfied requestAllocKey=%s, nodeId=%s",
+			reservationRequest.SchedulingAsk.AskProto.AllocationKey, reservationRequest.SchedulingNode.NodeId)
 	}
 
 	requestAllocKey := reservationRequest.SchedulingAsk.AskProto.AllocationKey
@@ -283,7 +284,6 @@ func (sn* SchedulingNode) UpdateForReservation(reservationRequest *ReservedSched
 	val, exist := sn.reservationRequests[key]
 
 	if !exist {
-		reservationRequest := reservationRequest.Clone()
 		sn.reservationRequests[key] = reservationRequest
 	} else {
 		val.IncAmount(reservationRequest.GetAmount())

@@ -133,6 +133,15 @@ func (sn *SchedulingNode) handlePreemptionUpdate(preempted *resources.Resource) 
 	sn.preemptingResource.SubFrom(preempted)
 }
 
+// TODO how to handle preemption?
+func (sn *SchedulingNode) CheckBasicAllocateCondition(delta *resources.Resource) bool {
+	sn.lock.Lock()
+	defer sn.lock.Unlock()
+	available := sn.nodeInfo.GetAvailableResource()
+	newAllocating := resources.Add(delta, sn.allocatingResource)
+	return resources.FitIn(available, newAllocating)
+}
+
 // Check and update allocating resources of the scheduling node.
 // If the proposed allocation fits in the available resources, taking into account resources marked for
 // preemption if applicable, the allocating resources are updated and true is returned.

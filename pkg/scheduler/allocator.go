@@ -94,6 +94,14 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
 func (m *Scheduler) regularAllocate(nodeIterator NodeIterator, candidate *SchedulingAllocationAsk) *SchedulingAllocation {
 	for nodeIterator.HasNext() {
 		node := nodeIterator.Next()
+		if !node.CheckBasicAllocateCondition(candidate.AllocatedResource) {
+			// skip schedule onto node
+			log.Logger().Info("skipping node for allocation",
+				zap.String("reason", "basic condition not satisfied"),
+				zap.String("node", node.NodeID),
+				zap.Any("request", candidate.AskProto))
+			continue
+		}
 		if !node.CheckAllocateConditions(candidate.AskProto.AllocationKey) {
 			// skip the node if conditions can not be satisfied
 			continue

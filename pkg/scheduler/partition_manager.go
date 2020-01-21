@@ -31,7 +31,7 @@ const (
 	cleanerInterval = 10000 // sleep between queue removal checks
 )
 
-type PartitionManager struct {
+type partitionManager struct {
 	psc      *PartitionSchedulingContext
 	csc      *ClusterSchedulingContext
 	stop     bool
@@ -43,7 +43,7 @@ type PartitionManager struct {
 // - clean up the managed queues that are empty and removed from the configuration
 // - remove empty unmanaged queues
 // When the manager exits the partition is removed from the system and must be cleaned up
-func (manager PartitionManager) Run() {
+func (manager partitionManager) Run() {
 	if manager.interval == 0 {
 		manager.interval = cleanerInterval * time.Millisecond
 	}
@@ -67,14 +67,14 @@ func (manager PartitionManager) Run() {
 
 // Set the flag that the will allow the manager to exit.
 // No locking needed as there is just one place where this is called which is already locked.
-func (manager PartitionManager) Stop() {
+func (manager partitionManager) Stop() {
 	manager.stop = true
 }
 
 // Remove empty managed or unmanaged queue. The logic is mostly hidden in the cached object(s).
 // Perform the action recursively.
 // Only called internally and recursive, no locking
-func (manager PartitionManager) cleanQueues(schedulingQueue *SchedulingQueue) {
+func (manager partitionManager) cleanQueues(schedulingQueue *SchedulingQueue) {
 	if schedulingQueue == nil {
 		return
 	}
@@ -118,7 +118,7 @@ func (manager PartitionManager) cleanQueues(schedulingQueue *SchedulingQueue) {
 // - nodes
 // last action is to remove the cluster links
 //nolint:errcheck
-func (manager PartitionManager) remove() {
+func (manager partitionManager) remove() {
 	log.Logger().Info("marking all queues for removal",
 		zap.String("partitionName", manager.psc.Name))
 	pi := manager.psc.partition
@@ -141,7 +141,7 @@ func (manager PartitionManager) remove() {
 		zap.Int("numOfNodes", len(nodes)),
 		zap.String("partitionName", manager.psc.Name))
 	for i := range nodes {
-		pi.RemoveNode(nodes[i].NodeID)
+		_ = pi.RemoveNode(nodes[i].NodeID)
 	}
 	log.Logger().Info("removing partition",
 		zap.String("partitionName", manager.psc.Name))

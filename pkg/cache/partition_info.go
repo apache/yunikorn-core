@@ -219,22 +219,23 @@ func (pi *PartitionInfo) addNewNode(node *NodeInfo, existingAllocations []*si.Al
 		log.Logger().Info("add existing allocations",
 			zap.String("nodeID", node.NodeID),
 			zap.Int("existingAllocations", len(existingAllocations)))
-		for _, alloc := range existingAllocations {
+		for current, alloc := range existingAllocations {
 			if _, err := pi.addNodeReportedAllocations(alloc); err != nil {
+				released := pi.removeNodeInternal(node.NodeID)
 				log.Logger().Info("failed to add existing allocations",
 					zap.String("nodeID", node.NodeID),
-					zap.Int("existingAllocations", len(existingAllocations)))
-				pi.removeNodeInternal(node.NodeID)
+					zap.Int("existingAllocations", len(existingAllocations)),
+					zap.Int("releasedAllocations", len(released)),
+					zap.Int("processingAlloc", current))
 				metrics.GetSchedulerMetrics().IncFailedNodes()
 				return err
 			}
 		}
 	}
 
-	// Node is accepted, scan all recovered allocations again,
-	// handle state transition. We do this here because we want to
-	// node and its existing allocations might be removed if some allocation
-	// cannot be recovered.
+	// Node is accepted, scan all recovered allocations again, handle state transition.
+	// The node and its existing allocations might not be added (removed immediately after
+	// the add) if some allocation cannot be recovered.
 	if len(existingAllocations) > 0 {
 		// if an allocation of a app is accepted,
 		// transit app's state from Accepted to Running
@@ -276,18 +277,18 @@ func (pi *PartitionInfo) addNodeReportedAllocations(allocation *si.Allocation) (
 
 // Remove a node from the partition.
 // This locks the partition and calls the internal unlocked version.
-func (pi *PartitionInfo) RemoveNode(nodeID string) {
+func (pi *PartitionInfo) RemoveNode(nodeID string) []*AllocationInfo {
 	pi.lock.Lock()
 	defer pi.lock.Unlock()
 
-	pi.removeNodeInternal(nodeID)
+	return pi.removeNodeInternal(nodeID)
 }
 
-// Remove a node from the partition.
+// Remove a node from the partition. It returns all removed allocations.
 //
 // NOTE: this is a lock free call. It should only be called holding the PartitionInfo lock.
 // If access outside is needed a locked version must used, see removeNode
-func (pi *PartitionInfo) removeNodeInternal(nodeID string) {
+func (pi *PartitionInfo) removeNodeInternal(nodeID string) []*AllocationInfo {
 	log.Logger().Info("remove node from partition",
 		zap.String("nodeID", nodeID),
 		zap.String("partition", pi.Name))
@@ -297,18 +298,40 @@ func (pi *PartitionInfo) removeNodeInternal(nodeID string) {
 		log.Logger().Debug("node was not found",
 			zap.String("nodeID", nodeID),
 			zap.String("partitionName", pi.Name))
-		return
+		return nil
 	}
 
+	// found the node cleanup the node and all linked data
+	released := pi.removeNodeAllocations(node)
+	pi.totalPartitionResource = resources.Sub(pi.totalPartitionResource, node.TotalResource)
+	pi.Root.MaxResource = pi.totalPartitionResource
+
+	// Remove node from list of tracked nodes
+	delete(pi.nodes, nodeID)
+	metrics.GetSchedulerMetrics().DecActiveNodes()
+
+	log.Logger().Info("node removed",
+		zap.String("partitionName", pi.Name),
+		zap.String("nodeID", node.NodeID))
+	return released
+}
+
+// Remove all allocations that are assigned to a node as part of the node removal. This is not part of the node object
+// as updating the applications and queues is the only goal. Applications and queues are not accessible from the node.
+// The removed allocations are returned.
+func (pi *PartitionInfo) removeNodeAllocations(node *NodeInfo) []*AllocationInfo {
+	released := make([]*AllocationInfo, 0)
 	// walk over all allocations still registered for this node
 	for _, alloc := range node.GetAllAllocations() {
 		var queue *QueueInfo = nil
 		allocID := alloc.AllocationProto.UUID
 		// since we are not locking the node and or application we could have had an update while processing
+		// note that we do not return the allocation if the app or allocation is not found and assume that it
+		// was already removed
 		if app := pi.applications[alloc.ApplicationID]; app != nil {
 			// check allocations on the node
 			if app.removeAllocation(allocID) == nil {
-				log.Logger().Info("allocation is not found, skipping removing the node",
+				log.Logger().Info("allocation is not found, skipping while removing the node",
 					zap.String("allocationId", allocID),
 					zap.String("appID", app.ApplicationID),
 					zap.String("nodeID", node.NodeID))
@@ -316,7 +339,7 @@ func (pi *PartitionInfo) removeNodeInternal(nodeID string) {
 			}
 			queue = app.leafQueue
 		} else {
-			log.Logger().Info("app is not found, skipping removing the node",
+			log.Logger().Info("app is not found, skipping while removing the node",
 				zap.String("appID", alloc.ApplicationID),
 				zap.String("nodeID", node.NodeID))
 			continue
@@ -331,21 +354,13 @@ func (pi *PartitionInfo) removeNodeInternal(nodeID string) {
 			}
 		}
 
+		// the allocation is removed so add it to the list that we return
+		released = append(released, alloc)
 		log.Logger().Info("allocation removed",
 			zap.String("allocationId", allocID),
 			zap.String("nodeID", node.NodeID))
 	}
-
-	pi.totalPartitionResource = resources.Sub(pi.totalPartitionResource, node.TotalResource)
-	pi.Root.MaxResource = pi.totalPartitionResource
-
-	// Remove node from list of tracked nodes
-	delete(pi.nodes, nodeID)
-	metrics.GetSchedulerMetrics().DecActiveNodes()
-
-	log.Logger().Info("node removed",
-		zap.String("partitionName", pi.Name),
-		zap.String("nodeID", node.NodeID))
+	return released
 }
 
 // Add a new application to the partition.
@@ -520,8 +535,14 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
 		return nil, fmt.Errorf("queue does not exist or is not a leaf queue %s", alloc.QueueName)
 	}
 
+	// check the node status again
+	if !node.IsSchedulable() {
+		metrics.GetSchedulerMetrics().IncSchedulingError()
+		return nil, fmt.Errorf("node %s is not in schedulable state", node.NodeID)
+	}
+
 	// Does the new allocation exceed the node's available resource?
-	if !node.CanAllocate(alloc.AllocatedResource) {
+	if !node.canAllocate(alloc.AllocatedResource) {
 		metrics.GetSchedulerMetrics().IncSchedulingError()
 		return nil, fmt.Errorf("cannot allocate resource [%v] for application %s on "+
 			"node %s because request exceeds available resources, used [%v] node limit [%v]",
@@ -537,7 +558,7 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
 	}
 
 	// Start allocation
-	allocationUUID := pi.GetNewAllocationUUID()
+	allocationUUID := pi.getNewAllocationUUID()
 	allocation := NewAllocationInfo(allocationUUID, alloc)
 
 	node.AddAllocation(allocation)
@@ -562,7 +583,7 @@ func (pi *PartitionInfo) addNewAllocation(proposal *commonevents.AllocationPropo
 
 // Generate a new uuid for the allocation.
 // This is guaranteed to return a unique ID for this partition.
-func (pi *PartitionInfo) GetNewAllocationUUID() string {
+func (pi *PartitionInfo) getNewAllocationUUID() string {
 	// Retry to make sure uuid is correct
 	for {
 		allocationUUID := uuid.NewV4().String()
@@ -612,18 +633,18 @@ func (pi *PartitionInfo) RemoveApplication(appID string) (*ApplicationInfo, []*A
 	// Remove all allocations from nodes/queue
 	if len(allocations) != 0 {
 		for _, alloc := range allocations {
-			uuid := alloc.AllocationProto.UUID
+			currentUUID := alloc.AllocationProto.UUID
 			log.Logger().Warn("removing allocations",
 				zap.String("appID", appID),
-				zap.String("allocationId", uuid))
+				zap.String("allocationId", currentUUID))
 			// Remove from partition cache
-			if globalAlloc := pi.allocations[uuid]; globalAlloc == nil {
+			if globalAlloc := pi.allocations[currentUUID]; globalAlloc == nil {
 				log.Logger().Warn("unknown allocation: not found in global cache",
 					zap.String("appID", appID),
-					zap.String("allocationId", uuid))
+					zap.String("allocationId", currentUUID))
 				continue
 			} else {
-				delete(pi.allocations, uuid)
+				delete(pi.allocations, currentUUID)
 			}
 
 			// Remove from node
@@ -634,10 +655,10 @@ func (pi *PartitionInfo) RemoveApplication(appID string) (*ApplicationInfo, []*A
 					zap.String("nodeID", alloc.AllocationProto.NodeID))
 				continue
 			}
-			if nodeAlloc := node.RemoveAllocation(uuid); nodeAlloc == nil {
+			if nodeAlloc := node.RemoveAllocation(currentUUID); nodeAlloc == nil {
 				log.Logger().Warn("allocation not found on node",
 					zap.String("appID", appID),
-					zap.String("allocationId", uuid),
+					zap.String("allocationId", currentUUID),
 					zap.String("nodeID", alloc.AllocationProto.NodeID))
 				continue
 			}

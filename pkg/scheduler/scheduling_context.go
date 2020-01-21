@@ -136,7 +136,7 @@ func (csc *ClusterSchedulingContext) updateSchedulingPartitions(partitions []*ca
 			// create a new partition and add the queues
 			root := NewSchedulingQueueInfo(updatedPartition.Root, nil)
 			newPartition := newPartitionSchedulingContext(updatedPartition, root)
-			newPartition.partitionManager = &PartitionManager{
+			newPartition.partitionManager = &partitionManager{
 				psc: newPartition,
 				csc: csc,
 			}

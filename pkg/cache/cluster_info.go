@@ -402,7 +402,12 @@ func (m *ClusterInfo) processNodeActions(request *si.UpdateRequest) {
 			case si.UpdateNodeInfo_DECOMISSION:
 				// set the state to not schedulable then tell the partition to clean up
 				nodeInfo.SetSchedulable(false)
-				partition.RemoveNode(nodeInfo.NodeID)
+				released := partition.RemoveNode(nodeInfo.NodeID)
+				// notify the shim allocations have been released from node
+				if len(released) != 0 {
+					m.notifyRMAllocationReleased(partition.RmID, released, si.AllocationReleaseResponse_STOPPED_BY_RM,
+						fmt.Sprintf("Node %s Removed", nodeInfo.NodeID))
+				}
 				// remove the equivalent scheduling node
 				m.EventHandlers.SchedulerEventHandler.HandleEvent(
 					&schedulerevent.SchedulerNodeEvent{

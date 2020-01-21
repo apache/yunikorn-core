@@ -113,7 +113,7 @@ func (ni *NodeInfo) GetAllocation(uuid string) *AllocationInfo {
 }
 
 // Check if the allocation fits in the currently available resources.
-func (ni *NodeInfo) CanAllocate(resRequest *resources.Resource) bool {
+func (ni *NodeInfo) canAllocate(resRequest *resources.Resource) bool {
 	ni.lock.RLock()
 	defer ni.lock.RUnlock()
 	return resources.FitIn(ni.availableResource, resRequest)

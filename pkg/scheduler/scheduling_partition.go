@@ -41,7 +41,7 @@ type PartitionSchedulingContext struct {
 	applications     map[string]*SchedulingApplication // applications assigned to this partition
 	nodes            map[string]*SchedulingNode        // nodes assigned to this partition
 	placementManager *placement.AppPlacementManager    // placement manager for this partition
-	partitionManager *PartitionManager                 // manager for this partition
+	partitionManager *partitionManager                 // manager for this partition
 	lock             sync.RWMutex
 }
 

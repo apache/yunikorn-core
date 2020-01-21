@@ -121,7 +121,7 @@ func TestAddAllocation(t *testing.T) {
 	}
 	// allocate half of the resources available and check the calculation
 	half := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50, "second": 100})
-	node.AddAllocation(CreateMockAllocationInfo("app1", half, "1", "queue-1", "node-1"))
+	node.AddAllocation(createMockAllocationInfo("app1", half, "1", "queue-1", "node-1"))
 	if node.GetAllocation("1") == nil {
 		t.Fatal("failed to add allocations: allocation not returned")
 	}
@@ -134,7 +134,7 @@ func TestAddAllocation(t *testing.T) {
 
 	// second and check calculation
 	piece := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25, "second": 50})
-	node.AddAllocation(CreateMockAllocationInfo("app1", piece, "2", "queue-1", "node-1"))
+	node.AddAllocation(createMockAllocationInfo("app1", piece, "2", "queue-1", "node-1"))
 	if node.GetAllocation("2") == nil {
 		t.Fatal("failed to add allocations: allocation not returned")
 	}
@@ -157,7 +157,7 @@ func TestRemoveAllocation(t *testing.T) {
 
 	// allocate half of the resources available and check the calculation
 	half := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50, "second": 100})
-	node.AddAllocation(CreateMockAllocationInfo("app1", half, "1", "queue-1", "node-1"))
+	node.AddAllocation(createMockAllocationInfo("app1", half, "1", "queue-1", "node-1"))
 	if node.GetAllocation("1") == nil {
 		t.Fatal("failed to add allocations: allocation not returned")
 	}
@@ -174,7 +174,7 @@ func TestRemoveAllocation(t *testing.T) {
 
 	// add second alloc and remove first check calculation
 	piece := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25, "second": 50})
-	node.AddAllocation(CreateMockAllocationInfo("app1", piece, "2", "queue-1", "node-1"))
+	node.AddAllocation(createMockAllocationInfo("app1", piece, "2", "queue-1", "node-1"))
 	if node.GetAllocation("2") == nil {
 		t.Fatal("failed to add allocations: allocation not returned")
 	}
@@ -199,27 +199,27 @@ func TestCanAllocate(t *testing.T) {
 	}
 	// ask for a resource not available and check the calculation
 	more := resources.NewResourceFromMap(map[string]resources.Quantity{"unknown": 10})
-	if node.CanAllocate(more) {
+	if node.canAllocate(more) {
 		t.Errorf("can allocate should not have allowed %v to be allocated", more)
 	}
 	// ask for more than the resources available and check the calculation
 	more = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 25})
-	if node.CanAllocate(more) {
+	if node.canAllocate(more) {
 		t.Errorf("can allocate should not have allowed %v to be allocated", more)
 	}
 
 	// ask for less than the resources available and check the calculation
 	less := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 10})
-	if !node.CanAllocate(less) {
+	if !node.canAllocate(less) {
 		t.Errorf("can allocate should have allowed %v to be allocated", less)
 	}
-	node.AddAllocation(CreateMockAllocationInfo("app1", less, "1", "queue-1", "node-1"))
+	node.AddAllocation(createMockAllocationInfo("app1", less, "1", "queue-1", "node-1"))
 	if !resources.Equals(node.GetAllocatedResource(), less) {
 		t.Errorf("allocated resource not set correctly %v got %v", less, node.GetAllocatedResource())
 	}
 	// ask for more than the total resources but more than available and check the calculation
 	less = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8, "second": 5})
-	if node.CanAllocate(less) {
+	if node.canAllocate(less) {
 		t.Errorf("can allocate should not have allowed %v to be allocated", less)
 	}
 }
@@ -238,11 +238,11 @@ func TestGetAllocations(t *testing.T) {
 	}
 
 	// allocate
-	node.AddAllocation(CreateMockAllocationInfo("app1", nil, "1", "queue-1", "node-1"))
-	node.AddAllocation(CreateMockAllocationInfo("app1", nil, "2", "queue-1", "node-1"))
+	node.AddAllocation(createMockAllocationInfo("app1", nil, "1", "queue-1", "node-1"))
+	node.AddAllocation(createMockAllocationInfo("app1", nil, "2", "queue-1", "node-1"))
 	assert.Equal(t, 2, len(node.GetAllAllocations()), "allocation length mismatch")
 	// This should not happen in real code just making sure the code does do what is expected
-	node.AddAllocation(CreateMockAllocationInfo("app1", nil, "2", "queue-1", "node-1"))
+	node.AddAllocation(createMockAllocationInfo("app1", nil, "2", "queue-1", "node-1"))
 	assert.Equal(t, 2, len(node.GetAllAllocations()), "allocation length mismatch")
 }
 

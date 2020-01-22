@@ -22,6 +22,8 @@ import (
 	"strconv"
 	"testing"
 
+	"gotest.tools/assert"
+
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
@@ -66,11 +68,11 @@ func TestQueueBasics(t *testing.T) {
 	}
 	// check the state of the queue
 	if !root.isManaged() && !root.isLeafQueue() && !root.isRunning() {
-		t.Errorf("root queue status is incorrect")
+		t.Error("root queue status is incorrect")
 	}
 	// allocations should be nil
 	if !resources.IsZero(root.allocatingResource) && !resources.IsZero(root.pendingResource) {
-		t.Errorf("root queue must not have allocations set on create")
+		t.Error("root queue must not have allocations set on create")
 	}
 }
 
@@ -87,12 +89,19 @@ func TestManagedSubQueues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create parent queue: %v", err)
 	}
-	if parent.isLeafQueue() || !parent.isManaged() {
-		t.Errorf("parent queue is not marked as managed parent")
+	if parent.isLeafQueue() || !parent.isManaged() || !parent.isRunning() {
+		t.Error("parent queue is not marked as running managed parent")
 	}
 	if len(root.childrenQueues) == 0 {
-		t.Errorf("parent queue is not added to the root queue")
+		t.Error("parent queue is not added to the root queue")
 	}
+	if parent.isRoot() {
+		t.Error("parent queue says it is the root queue which is incorrect")
+	}
+	if parent.removeQueue() || len(root.childrenQueues) != 1 {
+		t.Error("parent queue should not have been removed as it is running")
+	}
+
 	// add a leaf under the parent
 	var leaf *SchedulingQueue
 	leaf, err = createManagedQueue(parent, "leaf", false)
@@ -100,33 +109,33 @@ func TestManagedSubQueues(t *testing.T) {
 		t.Fatalf("failed to create leaf queue: %v", err)
 	}
 	if len(parent.childrenQueues) == 0 {
-		t.Errorf("leaf queue is not added to the parent queue")
+		t.Error("leaf queue is not added to the parent queue")
 	}
 	if !leaf.isLeafQueue() || !leaf.isManaged() {
-		t.Errorf("leaf queue is not marked as managed leaf")
+		t.Error("leaf queue is not marked as managed leaf")
 	}
 
 	// cannot remove child with app in it
 	app := NewSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "test"})
-	leaf.AddSchedulingApplication(app)
+	leaf.addSchedulingApplication(app)
 
 	// both parent and leaf are marked for removal
 	parent.CachedQueueInfo.MarkQueueForRemoval()
 	if !leaf.isDraining() || !parent.isDraining() {
-		t.Errorf("queues are not marked for removal (not in draining state)")
+		t.Error("queues are not marked for removal (not in draining state)")
 	}
 	// try to remove the parent
-	if parent.RemoveQueue() {
-		t.Errorf("parent queue should not have been removed as it has a child")
+	if parent.removeQueue() {
+		t.Error("parent queue should not have been removed as it has a child")
 	}
 	// try to remove the child
-	if leaf.RemoveQueue() {
-		t.Errorf("leaf queue should not have been removed")
+	if leaf.removeQueue() {
+		t.Error("leaf queue should not have been removed")
 	}
 	// remove the app (dirty way)
 	delete(leaf.applications, "test")
-	if !leaf.RemoveQueue() && len(parent.childrenQueues) != 0 {
-		t.Errorf("leaf queue should have been removed and parent updated and was not")
+	if !leaf.removeQueue() && len(parent.childrenQueues) != 0 {
+		t.Error("leaf queue should have been removed and parent updated and was not")
 	}
 }
 
@@ -156,33 +165,33 @@ func TestUnManagedSubQueues(t *testing.T) {
 		t.Fatalf("failed to create leaf queue: %v", err)
 	}
 	if len(parent.childrenQueues) == 0 {
-		t.Errorf("leaf queue is not added to the parent queue")
+		t.Error("leaf queue is not added to the parent queue")
 	}
 	if !leaf.isLeafQueue() || leaf.isManaged() {
-		t.Errorf("leaf queue is not marked as managed leaf")
+		t.Error("leaf queue is not marked as managed leaf")
 	}
 
 	// cannot remove child with app in it
 	app := NewSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "test"})
-	leaf.AddSchedulingApplication(app)
+	leaf.addSchedulingApplication(app)
 
 	// try to mark parent and leaf for removal
 	parent.CachedQueueInfo.MarkQueueForRemoval()
 	if leaf.isDraining() || parent.isDraining() {
-		t.Errorf("queues are marked for removal (draining state not for unmanaged queues)")
+		t.Error("queues are marked for removal (draining state not for unmanaged queues)")
 	}
 	// try to remove the parent
-	if parent.RemoveQueue() {
-		t.Errorf("parent queue should not have been removed as it has a child")
+	if parent.removeQueue() {
+		t.Error("parent queue should not have been removed as it has a child")
 	}
 	// try to remove the child
-	if leaf.RemoveQueue() {
-		t.Errorf("leaf queue should not have been removed")
+	if leaf.removeQueue() {
+		t.Error("leaf queue should not have been removed")
 	}
 	// remove the app (dirty way)
 	delete(leaf.applications, "test")
-	if !leaf.RemoveQueue() && len(parent.childrenQueues) != 0 {
-		t.Errorf("leaf queue should have been removed and parent updated and was not")
+	if !leaf.removeQueue() && len(parent.childrenQueues) != 0 {
+		t.Error("leaf queue should have been removed and parent updated and was not")
 	}
 }
 
@@ -204,17 +213,17 @@ func TestPendingCalc(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create basic resource: %v", err)
 	}
-	parent.IncPendingResource(allocation)
+	parent.incPendingResource(allocation)
 	if !resources.Equals(root.pendingResource, allocation) {
 		t.Errorf("root queue pending allocation failed to increment expected %v, got %v", allocation, root.pendingResource)
 	}
-	parent.DecPendingResource(allocation)
+	parent.decPendingResource(allocation)
 	if !resources.IsZero(root.pendingResource) {
 		t.Errorf("root queue pending allocation failed to decrement expected 0, got %v", root.pendingResource)
 	}
 	// Not allowed to go negative: both will be zero after this
-	root.IncPendingResource(allocation)
-	parent.DecPendingResource(allocation)
+	root.incPendingResource(allocation)
+	parent.decPendingResource(allocation)
 	if !resources.IsZero(root.pendingResource) {
 		t.Errorf("root queue pending allocation failed to decrement expected zero, got %v", root.pendingResource)
 	}
@@ -261,5 +270,109 @@ func TestGetChildQueueInfos(t *testing.T) {
 	// check the root queue
 	if len(root.childrenQueues) != 2 {
 		t.Errorf("parent queues are not added to the root queue, expected 2 children got %d", len(root.childrenQueues))
+	}
+}
+
+func TestAddApplication(t *testing.T) {
+	// create the root
+	root, err := createRootQueue()
+	if err != nil {
+		t.Fatalf("failed to create basic root queue: %v", err)
+	}
+	var leaf *SchedulingQueue
+	leaf, err = createManagedQueue(root, "leaf-man", false)
+	if err != nil {
+		t.Fatalf("failed to create managed leaf queue: %v", err)
+	}
+	pending := resources.NewResourceFromMap(
+		map[string]resources.Quantity{
+			resources.MEMORY: 10,
+		})
+	app := NewSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "test"})
+	app.Requests.totalPendingResource = pending
+	// adding the app must not update pending resources
+	leaf.addSchedulingApplication(app)
+	assert.Equal(t, len(leaf.applications), 1, "Application was not added to the queue as expected")
+	assert.Assert(t, resources.IsZero(leaf.pendingResource), "leaf queue pending resource not zero")
+
+	// add the same app again should not increase the number of apps
+	leaf.addSchedulingApplication(app)
+	assert.Equal(t, len(leaf.applications), 1, "Application was not replaced in the queue as expected")
+}
+
+func TestRemoveApplication(t *testing.T) {
+	// create the root
+	root, err := createRootQueue()
+	if err != nil {
+		t.Fatalf("failed to create basic root queue: %v", err)
+	}
+	var leaf *SchedulingQueue
+	leaf, err = createManagedQueue(root, "leaf-man", false)
+	if err != nil {
+		t.Fatalf("failed to create managed leaf queue: %v", err)
+	}
+	// try removing a non existing app
+	nonExist := NewSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "test"})
+	if leaf.removeSchedulingAppInternal("test") {
+		t.Error("Removal of non existing app did not fail")
+	}
+	leaf.removeSchedulingApplication(nonExist)
+	assert.Equal(t, len(leaf.applications), 0, "Removal of non existing app updated unexpected")
+
+	// add an app and remove it
+	app := NewSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "exists"})
+	leaf.addSchedulingApplication(app)
+	assert.Equal(t, len(leaf.applications), 1, "Application was not added to the queue as expected")
+	assert.Assert(t, resources.IsZero(leaf.pendingResource), "leaf queue pending resource not zero")
+	leaf.removeSchedulingApplication(nonExist)
+	assert.Equal(t, len(leaf.applications), 1, "Non existing application was removed from the queue")
+	leaf.removeSchedulingApplication(app)
+	assert.Equal(t, len(leaf.applications), 0, "Application was not removed from the queue as expected")
+
+	// try the same again now with pending resources set
+	pending := resources.NewResourceFromMap(
+		map[string]resources.Quantity{
+			resources.MEMORY: 10,
+		})
+	app.Requests.totalPendingResource.AddTo(pending)
+	leaf.addSchedulingApplication(app)
+	assert.Equal(t, len(leaf.applications), 1, "Application was not added to the queue as expected")
+	assert.Assert(t, resources.IsZero(leaf.pendingResource), "leaf queue pending resource not zero")
+	// update pending resources for the hierarchy
+	leaf.incPendingResource(pending)
+	leaf.removeSchedulingApplication(app)
+	assert.Equal(t, len(leaf.applications), 0, "Application was not removed from the queue as expected")
+	assert.Assert(t, resources.IsZero(leaf.pendingResource), "leaf queue pending resource not updated correctly")
+	assert.Assert(t, resources.IsZero(root.pendingResource), "root queue pending resource not updated correctly")
+}
+
+func TestQueueStates(t *testing.T) {
+	// create the root
+	root, err := createRootQueue()
+	if err != nil {
+		t.Fatalf("failed to create basic root queue: %v", err)
+	}
+
+	// add a leaf under the root
+	var leaf *SchedulingQueue
+	leaf, err = createManagedQueue(root, "leaf", false)
+	if err != nil {
+		t.Fatalf("failed to create leaf queue: %v", err)
+	}
+	err = leaf.CachedQueueInfo.HandleQueueEvent(cache.Stop)
+	if err != nil || !leaf.isStopped() {
+		t.Errorf("leaf queue is not marked stopped: %v", err)
+	}
+	err = leaf.CachedQueueInfo.HandleQueueEvent(cache.Start)
+	if err != nil || !leaf.isRunning() {
+		t.Errorf("leaf queue is not marked running: %v", err)
+	}
+	err = leaf.CachedQueueInfo.HandleQueueEvent(cache.Remove)
+	if err != nil || !leaf.isDraining() {
+		t.Errorf("leaf queue is not marked draining: %v", err)
+	}
+	err = leaf.CachedQueueInfo.HandleQueueEvent(cache.Start)
+	if err == nil || !leaf.isDraining() {
+		t.Errorf("leaf queue changed state which should not happen: %v", err)
 	}
 }

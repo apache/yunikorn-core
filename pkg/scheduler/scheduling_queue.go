@@ -120,10 +120,10 @@ func (sq *SchedulingQueue) updateSchedulingQueueInfo(info map[string]*cache.Queu
 }
 
 // Update pending resource of this queue
-func (sq *SchedulingQueue) IncPendingResource(delta *resources.Resource) {
+func (sq *SchedulingQueue) incPendingResource(delta *resources.Resource) {
 	// update the parent
 	if sq.parent != nil {
-		sq.parent.IncPendingResource(delta)
+		sq.parent.incPendingResource(delta)
 	}
 	// update this queue
 	sq.lock.Lock()
@@ -132,10 +132,10 @@ func (sq *SchedulingQueue) IncPendingResource(delta *resources.Resource) {
 }
 
 // Remove pending resource of this queue
-func (sq *SchedulingQueue) DecPendingResource(delta *resources.Resource) {
+func (sq *SchedulingQueue) decPendingResource(delta *resources.Resource) {
 	// update the parent
 	if sq.parent != nil {
-		sq.parent.DecPendingResource(delta)
+		sq.parent.decPendingResource(delta)
 	}
 	// update this queue
 	sq.lock.Lock()
@@ -148,38 +148,40 @@ func (sq *SchedulingQueue) DecPendingResource(delta *resources.Resource) {
 	}
 }
 
-// Add scheduling app to the queue
-func (sq *SchedulingQueue) AddSchedulingApplication(app *SchedulingApplication) {
+// Add scheduling app to the queue. All checks are assumed to have passed before we get here.
+// No update of pending resource is needed as it should not have any requests yet.
+// Replaces the existing application without further checks or updates.
+func (sq *SchedulingQueue) addSchedulingApplication(app *SchedulingApplication) {
 	sq.lock.Lock()
 	defer sq.lock.Unlock()
 	sq.applications[app.ApplicationInfo.ApplicationID] = app
 }
 
-// Remove scheduling app and pending resource of this queue and update the parent queues
-func (sq *SchedulingQueue) RemoveSchedulingApplication(app *SchedulingApplication) {
-	// lock without using defer as we want to release the read lock before we start walking up
-	// the tree and make updates requiring a write lock.
-	sq.lock.RLock()
-	// make sure that the app is assigned to this queue and not removed yet, if not found return
-	if _, ok := sq.applications[app.ApplicationInfo.ApplicationID]; !ok {
-		sq.lock.RUnlock()
+// Remove scheduling app and pending resource of this queue and update the parent queues.
+// The cache application is already removed just update what is tracked on the scheduler side.
+// This is a lock free call all locks are taken when updating
+func (sq *SchedulingQueue) removeSchedulingApplication(app *SchedulingApplication) {
+	if !sq.removeSchedulingAppInternal(app.ApplicationInfo.ApplicationID) {
+		log.Logger().Debug("Application not found while removing from queue",
+			zap.String("queue", sq.CachedQueueInfo.Name),
+			zap.String("applicationID", app.ApplicationInfo.ApplicationID))
 		return
 	}
-	sq.lock.RUnlock()
-	// Update pending resource of the parent queues
-	totalPending := app.Requests.GetPendingResource()
-	if !resources.IsZero(totalPending) {
-		sq.parent.DecPendingResource(totalPending)
-	}
+	// Update pending resource of the queues
+	sq.decPendingResource(app.Requests.GetPendingResource())
+}
+
+// Remove the scheduling app from the list of tracked applications. Make sure that the app
+// is assigned to this queue and not removed yet.
+// If not found this call is a noop
+func (sq *SchedulingQueue) removeSchedulingAppInternal(appID string) bool {
 	sq.lock.Lock()
 	defer sq.lock.Unlock()
-	var err error
-	sq.pendingResource, err = resources.SubErrorNegative(sq.pendingResource, totalPending)
-	if err != nil {
-		log.Logger().Warn("Removing application made pending resources negative",
-			zap.Error(err))
+	_, ok := sq.applications[appID]
+	if ok {
+		delete(sq.applications, appID)
 	}
-	delete(sq.applications, app.ApplicationInfo.ApplicationID)
+	return ok
 }
 
 // Get a copy of the child queues
@@ -209,7 +211,7 @@ func (sq *SchedulingQueue) removeChildQueue(name string) {
 // Remove the queue from the structure.
 // Since nothing is allocated there shouldn't be anything referencing this queue any more.
 // The real removal is removing the queue from the parent's child list, use read lock on the queue
-func (sq *SchedulingQueue) RemoveQueue() bool {
+func (sq *SchedulingQueue) removeQueue() bool {
 	sq.lock.RLock()
 	defer sq.lock.RUnlock()
 	// cannot remove a managed queue that is running
@@ -255,21 +257,21 @@ func (sq *SchedulingQueue) isRoot() bool {
 	return sq.parent == nil
 }
 
-func (sq *SchedulingQueue) GetAllocatingResource() *resources.Resource {
+func (sq *SchedulingQueue) getAllocatingResource() *resources.Resource {
 	sq.lock.RLock()
 	defer sq.lock.RUnlock()
 
 	return sq.allocatingResource
 }
 
-func (sq *SchedulingQueue) IncAllocatingResource(newAlloc *resources.Resource) {
+func (sq *SchedulingQueue) incAllocatingResource(newAlloc *resources.Resource) {
 	sq.lock.Lock()
 	defer sq.lock.Unlock()
 
 	sq.allocatingResource = resources.Add(sq.allocatingResource, newAlloc)
 }
 
-func (sq *SchedulingQueue) SetAllocatingResource(newAlloc *resources.Resource) {
+func (sq *SchedulingQueue) setAllocatingResource(newAlloc *resources.Resource) {
 	sq.lock.Lock()
 	defer sq.lock.Unlock()
 

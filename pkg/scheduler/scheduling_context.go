@@ -31,7 +31,7 @@ import (
 )
 
 type ClusterSchedulingContext struct {
-	partitions map[string]*PartitionSchedulingContext
+	partitions map[string]*partitionSchedulingContext
 
 	needPreemption bool
 
@@ -40,15 +40,15 @@ type ClusterSchedulingContext struct {
 
 func NewClusterSchedulingContext() *ClusterSchedulingContext {
 	return &ClusterSchedulingContext{
-		partitions: make(map[string]*PartitionSchedulingContext),
+		partitions: make(map[string]*partitionSchedulingContext),
 	}
 }
 
-func (csc *ClusterSchedulingContext) getPartitionMapClone() map[string]*PartitionSchedulingContext {
+func (csc *ClusterSchedulingContext) getPartitionMapClone() map[string]*partitionSchedulingContext {
 	csc.lock.RLock()
 	defer csc.lock.RUnlock()
 
-	newMap := make(map[string]*PartitionSchedulingContext)
+	newMap := make(map[string]*partitionSchedulingContext)
 	for k, v := range csc.partitions {
 		newMap[k] = v
 	}
@@ -78,7 +78,7 @@ func (csc *ClusterSchedulingContext) GetSchedulingQueue(queueName string, partit
 	return nil
 }
 
-func (csc *ClusterSchedulingContext) AddSchedulingApplication(schedulingApp *SchedulingApplication) error {
+func (csc *ClusterSchedulingContext) addSchedulingApplication(schedulingApp *SchedulingApplication) error {
 	partitionName := schedulingApp.ApplicationInfo.Partition
 	appID := schedulingApp.ApplicationInfo.ApplicationID
 
@@ -86,7 +86,7 @@ func (csc *ClusterSchedulingContext) AddSchedulingApplication(schedulingApp *Sch
 	defer csc.lock.Unlock()
 
 	if partition := csc.partitions[partitionName]; partition != nil {
-		if err := partition.AddSchedulingApplication(schedulingApp); err != nil {
+		if err := partition.addSchedulingApplication(schedulingApp); err != nil {
 			return err
 		}
 	} else {
@@ -96,12 +96,12 @@ func (csc *ClusterSchedulingContext) AddSchedulingApplication(schedulingApp *Sch
 	return nil
 }
 
-func (csc *ClusterSchedulingContext) RemoveSchedulingApplication(appID string, partitionName string) (*SchedulingApplication, error) {
+func (csc *ClusterSchedulingContext) removeSchedulingApplication(appID string, partitionName string) (*SchedulingApplication, error) {
 	csc.lock.Lock()
 	defer csc.lock.Unlock()
 
 	if partition := csc.partitions[partitionName]; partition != nil {
-		schedulingApp, err := partition.RemoveSchedulingApplication(appID)
+		schedulingApp, err := partition.removeSchedulingApplication(appID)
 		if err != nil {
 			return nil, err
 		}

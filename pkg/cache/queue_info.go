@@ -47,11 +47,9 @@ type QueueInfo struct {
 	MaxResource        *resources.Resource // When not set, max = nil
 	GuaranteedResource *resources.Resource // When not set, Guaranteed == 0
 	Parent             *QueueInfo          // link to the parent queue
-
-	Properties map[string]string // this should be treated as immutable the value is a merge of parent(s)
-	// properties with the config for this queue only manipulated during creation
-
-	// of the queue or via a queue configuration update
+	Properties         map[string]string   // this should be treated as immutable the value is a merge of parent(s)
+										   // properties with the config for this queue only manipulated during creation
+										   // of the queue or via a queue configuration update
 
 	// Private fields need protection
 	adminACL          security.ACL          // admin ACL
@@ -83,7 +81,7 @@ func NewManagedQueue(conf configs.QueueConfig, parent *QueueInfo) (*QueueInfo, e
 
 	// add the queue in the structure
 	if parent != nil {
-		err := parent.AddChildQueue(qi)
+		err = parent.AddChildQueue(qi)
 		if err != nil {
 			return nil, fmt.Errorf("queue creation failed: %s", err)
 		}
@@ -407,6 +405,11 @@ func (qi *QueueInfo) IsRunning() bool {
 // Is the queue stopped, not active in scheduling at all.
 func (qi *QueueInfo) IsStopped() bool {
 	return qi.stateMachine.Current() == Stopped.String()
+}
+
+// Return the current state of the queue
+func (qi *QueueInfo) CurrentState() string {
+	return qi.stateMachine.Current()
 }
 
 // Check if the user has access to the queue to submit an application recursively.

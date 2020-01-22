@@ -27,7 +27,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 )
 
-func newTestPartition() (*PartitionSchedulingContext, error) {
+func newTestPartition() (*partitionSchedulingContext, error) {
 	rootSched, err := createRootQueue()
 	if err != nil {
 		return nil, err

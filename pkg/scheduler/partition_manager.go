@@ -32,7 +32,7 @@ const (
 )
 
 type partitionManager struct {
-	psc      *PartitionSchedulingContext
+	psc      *partitionSchedulingContext
 	csc      *ClusterSchedulingContext
 	stop     bool
 	interval time.Duration
@@ -71,7 +71,7 @@ func (manager partitionManager) Stop() {
 	manager.stop = true
 }
 
-// Remove empty managed or unmanaged queue. The logic is mostly hidden in the cached object(s).
+// Remove drained managed and empty unmanaged queues. The logic is mostly hidden in the cached object(s).
 // Perform the action recursively.
 // Only called internally and recursive, no locking
 func (manager partitionManager) cleanQueues(schedulingQueue *SchedulingQueue) {
@@ -94,12 +94,17 @@ func (manager partitionManager) cleanQueues(schedulingQueue *SchedulingQueue) {
 			// remove the cached queue, if not empty there is a problem since we have no applications left.
 			if schedulingQueue.CachedQueueInfo.RemoveQueue() {
 				// all OK update the queue hierarchy and partition
-				schedulingQueue.RemoveQueue()
+				if !schedulingQueue.removeQueue() {
+					log.Logger().Debug("unexpected failure removing the scheduling queue",
+						zap.String("partitionName", manager.psc.Name),
+						zap.String("schedulingQueue", schedulingQueue.Name))
+				}
 			} else {
-				log.Logger().Debug("failed to remove scheduling queue",
+				log.Logger().Debug("failed to remove scheduling queue (cache)",
+					zap.String("partitionName", manager.psc.Name),
 					zap.String("schedulingQueue", schedulingQueue.Name),
 					zap.String("queueAllocatedResource", schedulingQueue.CachedQueueInfo.GetAllocatedResource().String()),
-					zap.Int("numOfAssignedApps", 0),
+					zap.String("queueState", schedulingQueue.CachedQueueInfo.CurrentState()),
 					zap.String("partitionName", manager.psc.Name))
 			}
 		} else {
@@ -133,7 +138,7 @@ func (manager partitionManager) remove() {
 		_ = apps[i].HandleApplicationEvent(cache.KillApplication)
 		appID := apps[i].ApplicationID
 		_, _ = pi.RemoveApplication(appID)
-		_, _ = manager.psc.RemoveSchedulingApplication(appID)
+		_, _ = manager.psc.removeSchedulingApplication(appID)
 	}
 	// remove the nodes
 	nodes := pi.CopyNodeInfos()

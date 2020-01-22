@@ -98,7 +98,7 @@ func initHeadroomShortages(preemptorQueue *preemptionQueueContext, allocatedReso
 	cur := preemptorQueue
 	for cur != nil {
 		// Headroom = max - may_allocated + preempting
-		headroom := resources.Sub(cur.resources.max, cur.schedulingQueue.GetAllocatingResource())
+		headroom := resources.Sub(cur.resources.max, cur.schedulingQueue.getAllocatingResource())
 		headroom.AddTo(cur.resources.markedPreemptedResource)
 		headroomShortage := resources.SubEliminateNegative(allocatedResource, headroom)
 		if resources.StrictlyGreaterThanZero(headroomShortage) {
@@ -235,7 +235,7 @@ func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitio
 		// allocations, allocation with lower priorities, etc.
 	}
 
-	preemptorQueue.schedulingQueue.IncAllocatingResource(candidate.AllocatedResource)
+	preemptorQueue.schedulingQueue.incAllocatingResource(candidate.AllocatedResource)
 
 	// Finally, let's do preemption proposals
 	return createPreemptionAndAllocationProposal(preemptionPartitionContext, nodeToAllocate, candidate, preemptionResults)

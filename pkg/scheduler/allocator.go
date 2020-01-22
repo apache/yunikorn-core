@@ -141,7 +141,7 @@ func (m *Scheduler) allocate(nodes NodeIterator, candidate *SchedulingAllocation
 }
 
 // Do mini batch allocation
-func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *PartitionSchedulingContext,
+func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *partitionSchedulingContext,
 	candidates []*SchedulingAllocationAsk,
 	preemptionParam *preemptionParameters) ([]*SchedulingAllocation, []*SchedulingAllocationAsk) {
 	// copy list of node since we going to go through node list a couple of times
@@ -215,7 +215,7 @@ func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *Parti
 }
 
 // TODO: convert this as an interface.
-func (m *Scheduler) evaluateForSchedulingPolicy(nodes []*SchedulingNode, partitionContext *PartitionSchedulingContext) NodeIterator {
+func (m *Scheduler) evaluateForSchedulingPolicy(nodes []*SchedulingNode, partitionContext *partitionSchedulingContext) NodeIterator {
 	// Sort Nodes based on the policy configured.
 	configuredPolicy := partitionContext.partition.GetNodeSortingPolicy()
 	switch configuredPolicy {

@@ -140,7 +140,7 @@ func (m *Scheduler) updateSchedulingRequest(schedulingAsk *SchedulingAllocationA
 	schedulingAsk.QueueName = schedulingApp.queue.Name
 	pendingDelta, err := schedulingApp.Requests.AddAllocationAsk(schedulingAsk)
 	if err == nil && !resources.IsZero(pendingDelta) {
-		schedulingApp.queue.IncPendingResource(pendingDelta)
+		schedulingApp.queue.incPendingResource(pendingDelta)
 	}
 	return err
 }
@@ -158,7 +158,7 @@ func (m *Scheduler) updateSchedulingRequestPendingAskByDelta(allocProposal *comm
 	// found, now update the pending requests for the queues
 	pendingDelta, err := schedulingApp.Requests.UpdateAllocationAskRepeat(allocProposal.AllocationKey, deltaPendingAsk)
 	if err == nil && !resources.IsZero(pendingDelta) {
-		schedulingApp.queue.IncPendingResource(pendingDelta)
+		schedulingApp.queue.incPendingResource(pendingDelta)
 	}
 	return err
 }
@@ -167,14 +167,14 @@ func (m *Scheduler) updateSchedulingRequestPendingAskByDelta(allocProposal *comm
 func (m *Scheduler) addNewApplication(info *cache.ApplicationInfo) error {
 	schedulingApp := NewSchedulingApplication(info)
 
-	return m.clusterSchedulingContext.AddSchedulingApplication(schedulingApp)
+	return m.clusterSchedulingContext.addSchedulingApplication(schedulingApp)
 }
 
 func (m *Scheduler) removeApplication(request *si.RemoveApplicationRequest) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	if _, err := m.clusterSchedulingContext.RemoveSchedulingApplication(request.ApplicationID, request.PartitionName); err != nil {
+	if _, err := m.clusterSchedulingContext.removeSchedulingApplication(request.ApplicationID, request.PartitionName); err != nil {
 		log.Logger().Error("failed to remove apps",
 			zap.String("appID", request.ApplicationID),
 			zap.String("partitionName", request.PartitionName),
@@ -218,7 +218,7 @@ func (m *Scheduler) processAllocationReleaseByAllocationKey(
 			if schedulingApp != nil {
 				delta, _ := schedulingApp.Requests.RemoveAllocationAsk(toRelease.Allocationkey)
 				if !resources.IsZero(delta) {
-					schedulingApp.queue.IncPendingResource(delta)
+					schedulingApp.queue.incPendingResource(delta)
 				}
 
 				log.Logger().Info("release allocation",

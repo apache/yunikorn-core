@@ -27,7 +27,7 @@ import (
 
 // Find next set of allocation asks for scheduler to place
 // This could be "mini batch", no need to return too many candidates
-func (m *Scheduler) findAllocationAsks(partitionTotalResource *resources.Resource, partitionContext *PartitionSchedulingContext, n int,
+func (m *Scheduler) findAllocationAsks(partitionTotalResource *resources.Resource, partitionContext *partitionSchedulingContext, n int,
 	curStep uint64, preemptionParam *preemptionParameters) []*SchedulingAllocationAsk {
 	mayAllocateList := make([]*SchedulingAllocationAsk, 0)
 
@@ -176,7 +176,7 @@ func getQueueMaxLimit(partitionTotalResource *resources.Resource, queue *Schedul
 func (m *Scheduler) findNextAllocationAskCandidate(
 	partitionTotalResource *resources.Resource,
 	sortedQueueCandidates []*SchedulingQueue,
-	partitionContext *PartitionSchedulingContext,
+	partitionContext *partitionSchedulingContext,
 	parentHeadroom *resources.Resource,
 	parentQueueMaxLimit *resources.Resource,
 	curStep uint64,
@@ -235,7 +235,7 @@ func (m *Scheduler) findNextAllocationAskCandidate(
 	return nil
 }
 
-func (m *Scheduler) resetMayAllocations(partitionContext *PartitionSchedulingContext) {
+func (m *Scheduler) resetMayAllocations(partitionContext *partitionSchedulingContext) {
 	// Recursively reset may-allocation
 	// lock the partition
 	partitionContext.lock.Lock()
@@ -246,7 +246,7 @@ func (m *Scheduler) resetMayAllocations(partitionContext *PartitionSchedulingCon
 
 func (m *Scheduler) resetMayAllocationsForQueue(queue *SchedulingQueue) {
 	queue.ProposingResource = queue.CachedQueueInfo.GetAllocatedResource()
-	queue.SetAllocatingResource(queue.CachedQueueInfo.GetAllocatedResource())
+	queue.setAllocatingResource(queue.CachedQueueInfo.GetAllocatedResource())
 	if queue.isLeafQueue() {
 		for _, app := range queue.applications {
 			app.MayAllocatedResource = app.ApplicationInfo.GetAllocatedResource()

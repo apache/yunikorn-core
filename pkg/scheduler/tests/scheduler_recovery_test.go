@@ -913,7 +913,7 @@ partitions:
 	waitForAcceptedApplications(newMockRM, "app-1", 1000)
 
 	// mock existing allocations
-	recoveringAllocations :=  make(map[string][]*si.Allocation)
+	recoveringAllocations := make(map[string][]*si.Allocation)
 	for nodeID, allocations := range mockRM.nodeAllocations {
 		existingAllocations := make([]*si.Allocation, 0)
 		for _, previousAllocation := range allocations {
@@ -921,15 +921,15 @@ partitions:
 			// this is to simulate the case, when we have admission-controller auto-fill queue name to
 			// "root.default" when there is no queue name found in the pod
 			existingAllocations = append(existingAllocations, &si.Allocation{
-				AllocationKey:        previousAllocation.AllocationKey,
-				AllocationTags:       previousAllocation.AllocationTags,
-				UUID:                 previousAllocation.UUID,
-				ResourcePerAlloc:     previousAllocation.ResourcePerAlloc,
-				Priority:             previousAllocation.Priority,
-				QueueName:            "root.default",
-				NodeID:               previousAllocation.NodeID,
-				ApplicationID:        previousAllocation.ApplicationID,
-				PartitionName:        previousAllocation.PartitionName,
+				AllocationKey:    previousAllocation.AllocationKey,
+				AllocationTags:   previousAllocation.AllocationTags,
+				UUID:             previousAllocation.UUID,
+				ResourcePerAlloc: previousAllocation.ResourcePerAlloc,
+				Priority:         previousAllocation.Priority,
+				QueueName:        "root.default",
+				NodeID:           previousAllocation.NodeID,
+				ApplicationID:    previousAllocation.ApplicationID,
+				PartitionName:    previousAllocation.PartitionName,
 			})
 		}
 		recoveringAllocations[nodeID] = existingAllocations
@@ -967,7 +967,7 @@ partitions:
 				ExistingAllocations: recoveringAllocations["node-2:1234"],
 			},
 		},
-		RmID:            "rm:123",
+		RmID: "rm:123",
 	})
 
 	if err != nil {

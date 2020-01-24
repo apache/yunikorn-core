@@ -512,7 +512,8 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
 		return nil, fmt.Errorf("failed to find application %s", alloc.ApplicationID)
 	}
 
-	if queue = pi.getQueue(alloc.QueueName); queue == nil || !queue.IsLeafQueue() {
+	// allocation inherits the app queue as the source of truth
+	if queue = pi.getQueue(app.QueueName); queue == nil || !queue.IsLeafQueue() {
 		metrics.GetSchedulerMetrics().IncSchedulingError()
 		return nil, fmt.Errorf("queue does not exist or is not a leaf queue %s", alloc.QueueName)
 	}

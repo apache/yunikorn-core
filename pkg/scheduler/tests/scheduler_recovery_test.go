@@ -715,3 +715,266 @@ partitions:
 	assert.Equal(t, app1.GetApplicationState(), "Accepted")
 	assert.Equal(t, app2.GetApplicationState(), "Accepted")
 }
+
+// this case cover the scenario when we have placement rule enabled,
+// we do auto queue mapping for incoming applications.
+// here we enable auto queue mapping using tag-rule, which maps app to
+// a queue with name same as the namespace under root.
+// when new allocation requests are coming with queue name: "root.default",
+// the app will still be mapped to "root.pod-namespace". this is fine for
+// new allocations. But during the recovery, when we recover existing
+// allocations on node, we need to ensure the placement rule is still
+// enforced.
+func TestSchedulerRecoveryWhenPlacementRulesApplied(t *testing.T) {
+	// --------------------------------------------------
+	// Phase 1) Fresh start
+	// --------------------------------------------------
+	serviceContext := entrypoint.StartAllServicesWithManualScheduler()
+	proxy := serviceContext.RMProxy
+	scheduler := serviceContext.Scheduler
+
+	// Register RM
+	configData := `
+partitions:
+  - name: default
+    placementrules:
+      - name: tag
+        value: namespace
+        create: true
+    queues:
+      - name: root
+        submitacl: "*"
+`
+	configs.MockSchedulerConfigByData([]byte(configData))
+	mockRM := NewMockRMCallbackHandler(t)
+
+	_, err := proxy.RegisterResourceManager(
+		&si.RegisterResourceManagerRequest{
+			RmID:        "rm:123",
+			PolicyGroup: "policygroup",
+			Version:     "0.0.2",
+		}, mockRM)
+
+	if err != nil {
+		t.Fatalf("RM register failed: %v", err)
+	}
+
+	// initially there is only 1 root queue exist
+	schedulerQueueRoot := scheduler.GetClusterSchedulingContext().
+		GetSchedulingQueue("root", "[rm:123]default")
+	assert.Equal(t, len(schedulerQueueRoot.GetCopyOfChildren()), 0)
+
+	// Register nodes, and add apps
+	err = proxy.Update(&si.UpdateRequest{
+		NewSchedulableNodes: []*si.NewNodeInfo{
+			{
+				NodeID: "node-1:1234",
+				Attributes: map[string]string{
+					"si.io/hostname": "node-1",
+					"si.io/rackname": "rack-1",
+				},
+				SchedulableResource: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 100},
+						"vcore":  {Value: 20},
+					},
+				},
+			},
+			{
+				NodeID: "node-2:1234",
+				Attributes: map[string]string{
+					"si.io/hostname": "node-2",
+					"si.io/rackname": "rack-1",
+				},
+				SchedulableResource: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 100},
+						"vcore":  {Value: 20},
+					},
+				},
+			},
+		},
+		NewApplications: []*si.AddApplicationRequest{{
+			ApplicationID: "app-1",
+			QueueName:     "",
+			PartitionName: "",
+			Tags:          map[string]string{"namespace": "app-1-namespace"},
+			Ugi: &si.UserGroupInformation{
+				User: "test-user",
+			},
+		}},
+		RmID: "rm:123",
+	})
+
+	if err != nil {
+		t.Fatalf("Node and app update failed: %v", err)
+	}
+
+	waitForAcceptedApplications(mockRM, "app-1", 1000)
+	waitForAcceptedNodes(mockRM, "node-1:1234", 1000)
+	waitForAcceptedNodes(mockRM, "node-2:1234", 1000)
+
+	// now the queue should have been created under root.app-1-namespace
+	assert.Equal(t, len(schedulerQueueRoot.GetCopyOfChildren()), 1)
+	appQueue := scheduler.GetClusterSchedulingContext().
+		GetSchedulingQueue("root.app-1-namespace", "[rm:123]default")
+	assert.Assert(t, appQueue != nil)
+
+	err = proxy.Update(&si.UpdateRequest{
+		Asks: []*si.AllocationAsk{
+			{
+				AllocationKey: "alloc-1",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 10},
+						"vcore":  {Value: 1},
+					},
+				},
+				MaxAllocations: 2,
+				ApplicationID:  "app-1",
+			},
+		},
+		RmID: "rm:123",
+	})
+
+	if err != nil {
+		t.Fatalf("Allocation update failed: %v", err)
+	}
+
+	// Wait pending resource of queue a and scheduler queue
+	// Both pending memory = 10 * 2 = 20;
+	schedulingApp := scheduler.GetClusterSchedulingContext().
+		GetSchedulingApplication("app-1", "[rm:123]default")
+	waitForPendingResource(t, appQueue, 20, 1000)
+	waitForPendingResource(t, schedulerQueueRoot, 20, 1000)
+	waitForPendingResourceForApplication(t, schedulingApp, 20, 1000)
+
+	scheduler.SingleStepScheduleAllocTest(16)
+
+	waitForAllocations(mockRM, 2, 1000)
+
+	// Make sure pending resource updated to 0
+	waitForPendingResource(t, appQueue, 0, 1000)
+	waitForPendingResource(t, schedulerQueueRoot, 0, 1000)
+	waitForPendingResourceForApplication(t, schedulingApp, 0, 1000)
+
+	// Check allocated resources of queues, apps
+	assert.Equal(t, appQueue.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(20))
+	assert.Equal(t, schedulerQueueRoot.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(20))
+	assert.Equal(t, schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(20))
+
+	// once we start to process allocation asks from this app, verify the state again
+	assert.Equal(t, schedulingApp.ApplicationInfo.GetApplicationState(), cacheInfo.Running.String())
+
+	// --------------------------------------------------
+	// Phase 2) Restart the scheduler, test recovery
+	// --------------------------------------------------
+	serviceContext.StopAll()
+	// restart
+	serviceContext = entrypoint.StartAllServicesWithManualScheduler()
+	proxy = serviceContext.RMProxy
+	scheduler = serviceContext.Scheduler
+
+	// same RM gets register first
+	configs.MockSchedulerConfigByData([]byte(configData))
+	newMockRM := NewMockRMCallbackHandler(t)
+	_, err = proxy.RegisterResourceManager(
+		&si.RegisterResourceManagerRequest{
+			RmID:        "rm:123",
+			PolicyGroup: "policygroup",
+			Version:     "0.0.2",
+		}, newMockRM)
+
+	if err != nil {
+		t.Fatalf("RM re-register failed: %v", err)
+	}
+
+	// first recover apps
+	err = proxy.Update(&si.UpdateRequest{
+		NewApplications: []*si.AddApplicationRequest{
+			{
+				ApplicationID: "app-1",
+				QueueName:     "",
+				PartitionName: "",
+				Tags:          map[string]string{"namespace": "app-1-namespace"},
+				Ugi: &si.UserGroupInformation{
+					User: "test-user",
+				},
+			},
+		},
+		RmID: "rm:123",
+	})
+
+	if err != nil {
+		t.Fatalf("Application update failed: %v", err)
+	}
+
+	// waiting for recovery
+	waitForAcceptedApplications(newMockRM, "app-1", 1000)
+
+	// mock existing allocations
+	recoveringAllocations := make(map[string][]*si.Allocation)
+	for nodeID, allocations := range mockRM.nodeAllocations {
+		existingAllocations := make([]*si.Allocation, 0)
+		for _, previousAllocation := range allocations {
+			// except for queue name, copy from previous allocation
+			// this is to simulate the case, when we have admission-controller auto-fill queue name to
+			// "root.default" when there is no queue name found in the pod
+			existingAllocations = append(existingAllocations, &si.Allocation{
+				AllocationKey:    previousAllocation.AllocationKey,
+				AllocationTags:   previousAllocation.AllocationTags,
+				UUID:             previousAllocation.UUID,
+				ResourcePerAlloc: previousAllocation.ResourcePerAlloc,
+				Priority:         previousAllocation.Priority,
+				QueueName:        "root.default",
+				NodeID:           previousAllocation.NodeID,
+				ApplicationID:    previousAllocation.ApplicationID,
+				PartitionName:    previousAllocation.PartitionName,
+			})
+		}
+		recoveringAllocations[nodeID] = existingAllocations
+	}
+
+	// recover nodes
+	err = proxy.Update(&si.UpdateRequest{
+		NewSchedulableNodes: []*si.NewNodeInfo{
+			{
+				NodeID: "node-1:1234",
+				Attributes: map[string]string{
+					"si.io/hostname": "node-1",
+					"si.io/rackname": "rack-1",
+				},
+				SchedulableResource: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 100},
+						"vcore":  {Value: 20},
+					},
+				},
+				ExistingAllocations: recoveringAllocations["node-1:1234"],
+			},
+			{
+				NodeID: "node-2:1234",
+				Attributes: map[string]string{
+					"si.io/hostname": "node-2",
+					"si.io/rackname": "rack-1",
+				},
+				SchedulableResource: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 100},
+						"vcore":  {Value: 20},
+					},
+				},
+				ExistingAllocations: recoveringAllocations["node-2:1234"],
+			},
+		},
+		RmID: "rm:123",
+	})
+
+	if err != nil {
+		t.Fatalf("Node recovery failed: %v", err)
+	}
+
+	// waiting for recovery
+	waitForAcceptedNodes(newMockRM, "node-1:1234", 1000)
+	waitForAcceptedNodes(newMockRM, "node-2:1234", 1000)
+}

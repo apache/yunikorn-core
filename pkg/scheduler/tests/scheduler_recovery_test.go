@@ -756,7 +756,7 @@ partitions:
 		}, mockRM)
 
 	if err != nil {
-		t.Error(err.Error())
+		t.Fatalf("RM register failed: %v", err)
 	}
 
 	// initially there is only 1 root queue exist
@@ -806,8 +806,8 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	if nil != err {
-		t.Error(err.Error())
+	if err != nil {
+		t.Fatalf("Node and app update failed: %v", err)
 	}
 
 	waitForAcceptedApplications(mockRM, "app-1", 1000)
@@ -837,8 +837,8 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	if nil != err {
-		t.Error(err.Error())
+	if err != nil {
+		t.Fatalf("Allocation update failed: %v", err)
 	}
 
 	// Wait pending resource of queue a and scheduler queue
@@ -886,7 +886,7 @@ partitions:
 		}, newMockRM)
 
 	if err != nil {
-		t.Error(err.Error())
+		t.Fatalf("RM re-register failed: %v", err)
 	}
 
 	// first recover apps
@@ -905,8 +905,8 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	if nil != err {
-		t.Error(err.Error())
+	if err != nil {
+		t.Fatalf("Application update failed: %v", err)
 	}
 
 	// waiting for recovery
@@ -935,7 +935,7 @@ partitions:
 		recoveringAllocations[nodeID] = existingAllocations
 	}
 
-	// Register nodes, and add apps
+	// recover nodes
 	err = proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
@@ -970,8 +970,8 @@ partitions:
 		RmID:            "rm:123",
 	})
 
-	if nil != err {
-		t.Error(err.Error())
+	if err != nil {
+		t.Fatalf("Node recovery failed: %v", err)
 	}
 
 	// waiting for recovery

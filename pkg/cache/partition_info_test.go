@@ -291,8 +291,8 @@ func TestRemoveNodeWithAllocations(t *testing.T) {
 
 	// add broken allocations
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 1})
-	node1.allocations["notanapp"] = createMockAllocationInfo("notanapp", res, "noanapp", "root.default", nodeID)
-	node1.allocations["notanalloc"] = createMockAllocationInfo(appID, res, "notanalloc", "root.default", nodeID)
+	node1.allocations["notanapp"] = CreateMockAllocationInfo("notanapp", res, "noanapp", "root.default", nodeID)
+	node1.allocations["notanalloc"] = CreateMockAllocationInfo(appID, res, "notanalloc", "root.default", nodeID)
 
 	// remove the node this cannot fail
 	released := partition.RemoveNode(nodeID)

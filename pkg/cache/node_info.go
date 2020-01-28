@@ -34,10 +34,10 @@ type NodeInfo struct {
 	Hostname      string
 	Rackname      string
 	Partition     string
-	TotalResource *resources.Resource
 
 	// Private fields need protection
 	attributes        map[string]string
+	totalResource     *resources.Resource
 	allocatedResource *resources.Resource
 	availableResource *resources.Resource
 	allocations       map[string]*AllocationInfo
@@ -54,12 +54,12 @@ func NewNodeInfo(proto *si.NewNodeInfo) *NodeInfo {
 	}
 	m := &NodeInfo{
 		NodeID:            proto.NodeID,
-		TotalResource:     resources.NewResourceFromProto(proto.SchedulableResource),
+		totalResource:     resources.NewResourceFromProto(proto.SchedulableResource),
 		allocatedResource: resources.NewResource(),
 		allocations:       make(map[string]*AllocationInfo),
 		schedulable:       true,
 	}
-	m.availableResource = m.TotalResource.Clone()
+	m.availableResource = m.totalResource.Clone()
 
 	m.initializeAttribute(proto.Attributes)
 
@@ -110,6 +110,12 @@ func (ni *NodeInfo) GetAllocation(uuid string) *AllocationInfo {
 	defer ni.lock.RUnlock()
 
 	return ni.allocations[uuid]
+}
+
+// Check if the allocation fits int the nodes resources.
+// unlocked call as the totalResource can not be changed
+func (ni *NodeInfo) FitInNode(resRequest *resources.Resource) bool {
+	return resources.FitIn(ni.totalResource, resRequest)
 }
 
 // Check if the allocation fits in the currently available resources.
@@ -179,3 +185,4 @@ func (ni *NodeInfo) IsSchedulable() bool {
 	defer ni.lock.RUnlock()
 	return ni.schedulable
 }
+

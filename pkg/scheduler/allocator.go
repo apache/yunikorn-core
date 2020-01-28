@@ -96,7 +96,8 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
 func (m *Scheduler) regularAllocate(nodeIterator NodeIterator, candidate *SchedulingAllocationAsk) *SchedulingAllocation {
 	for nodeIterator.HasNext() {
 		node := nodeIterator.Next()
-		if !node.CheckBasicAllocateCondition(candidate.AllocatedResource) {
+		// skip the node if we cannot fit or are unschedulable
+		if !node.preAllocateCheck(candidate.AllocatedResource, false) {
 			// skip schedule onto node
 			log.Logger().Info("skipping node for allocation",
 				zap.String("reason", "basic condition not satisfied"),
@@ -104,11 +105,12 @@ func (m *Scheduler) regularAllocate(nodeIterator NodeIterator, candidate *Schedu
 				zap.Any("request", candidate.AskProto))
 			continue
 		}
-		if !node.CheckAllocateConditions(candidate.AskProto.AllocationKey) {
-			// skip the node if conditions can not be satisfied
+		// skip the node if conditions can not be satisfied
+		if !node.preAllocateConditions(candidate.AskProto.AllocationKey) {
 			continue
 		}
-		if node.CheckAndAllocateResource(candidate.AllocatedResource, false) {
+		// everything OK really allocate
+		if node.allocateResource(candidate.AllocatedResource, false) {
 			// before deciding on an allocation, call the reconcile plugin to sync scheduler cache
 			// between core and shim if necessary. This is useful when running multiple allocations
 			// in parallel and need to handle inter container affinity and anti-affinity.
@@ -215,7 +217,7 @@ func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *parti
 }
 
 // TODO: convert this as an interface.
-func (m *Scheduler) evaluateForSchedulingPolicy(nodes []*SchedulingNode, partitionContext *partitionSchedulingContext) NodeIterator {
+func (m *Scheduler) evaluateForSchedulingPolicy(nodes []*schedulingNode, partitionContext *partitionSchedulingContext) NodeIterator {
 	// Sort Nodes based on the policy configured.
 	configuredPolicy := partitionContext.partition.GetNodeSortingPolicy()
 	switch configuredPolicy {

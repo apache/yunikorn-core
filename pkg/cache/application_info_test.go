@@ -57,7 +57,7 @@ func TestAllocations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create resource with error: %v", err)
 	}
-	alloc := createMockAllocationInfo("app-00001", res, "uuid-1", "root.a", "node-1")
+	alloc := CreateMockAllocationInfo("app-00001", res, "uuid-1", "root.a", "node-1")
 	appInfo.addAllocation(alloc)
 	if !resources.Equals(appInfo.allocatedResource, res) {
 		t.Errorf("allocated resources is not updated correctly: %v", appInfo.allocatedResource)
@@ -66,9 +66,9 @@ func TestAllocations(t *testing.T) {
 	assert.Equal(t, len(allocs), 1)
 
 	// add more allocations to test the removals
-	alloc = createMockAllocationInfo("app-00001", res, "uuid-2", "root.a", "node-1")
+	alloc = CreateMockAllocationInfo("app-00001", res, "uuid-2", "root.a", "node-1")
 	appInfo.addAllocation(alloc)
-	alloc = createMockAllocationInfo("app-00001", res, "uuid-3", "root.a", "node-1")
+	alloc = CreateMockAllocationInfo("app-00001", res, "uuid-3", "root.a", "node-1")
 	appInfo.addAllocation(alloc)
 	allocs = appInfo.GetAllAllocations()
 	assert.Equal(t, len(allocs), 3)

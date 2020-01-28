@@ -112,16 +112,16 @@ func initHeadroomShortages(preemptorQueue *preemptionQueueContext, allocatedReso
 
 // Can we do surgical preemption on the node?
 type singleNodePreemptResult struct {
-	node                  *SchedulingNode
+	node                  *schedulingNode
 	toReleaseAllocations  map[string]*cache.AllocationInfo
 	totalReleasedResource *resources.Resource
 }
 
 // Do surgical preemption on node, if able to preempt, returns
-func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionContext, preemptorQueue *preemptionQueueContext, node *SchedulingNode, candidate *SchedulingAllocationAsk,
+func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionContext, preemptorQueue *preemptionQueueContext, node *schedulingNode, candidate *SchedulingAllocationAsk,
 	headroomShortages map[string]*resources.Resource) *singleNodePreemptResult {
 	// If allocated resource can fit in the node, and no headroom shortage of preemptor queue, we can directly get it allocated. (lucky!)
-	if node.CheckAndAllocateResource(candidate.AllocatedResource, true) {
+	if node.allocateResource(candidate.AllocatedResource, true) {
 		log.Logger().Debug("No preemption needed candidate fits on node",
 			zap.String("nodeID", node.NodeID))
 		return &singleNodePreemptResult{
@@ -241,7 +241,7 @@ func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitio
 	return createPreemptionAndAllocationProposal(preemptionPartitionContext, nodeToAllocate, candidate, preemptionResults)
 }
 
-func createPreemptionAndAllocationProposal(preemptionPartitionContext *preemptionPartitionContext, nodeToAllocate *SchedulingNode, candidate *SchedulingAllocationAsk,
+func createPreemptionAndAllocationProposal(preemptionPartitionContext *preemptionPartitionContext, nodeToAllocate *schedulingNode, candidate *SchedulingAllocationAsk,
 	preemptionResults []*singleNodePreemptResult) *SchedulingAllocation {
 	// We will get this allocation by preempting resources.
 	allocation := NewSchedulingAllocation(candidate, nodeToAllocate.NodeID)

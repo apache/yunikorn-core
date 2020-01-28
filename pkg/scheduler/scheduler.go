@@ -165,7 +165,7 @@ func (m *Scheduler) updateSchedulingRequestPendingAskByDelta(allocProposal *comm
 
 // When a new app added, invoked by external
 func (m *Scheduler) addNewApplication(info *cache.ApplicationInfo) error {
-	schedulingApp := NewSchedulingApplication(info)
+	schedulingApp := newSchedulingApplication(info)
 
 	return m.clusterSchedulingContext.addSchedulingApplication(schedulingApp)
 }

@@ -241,7 +241,7 @@ func (csc *ClusterSchedulingContext) removeSchedulingNode(info *cache.NodeInfo) 
 
 // Get a scheduling node based name and partition.
 // Returns nil if the partition or node cannot be found.
-func (csc *ClusterSchedulingContext) GetSchedulingNode(nodeID, partitionName string) *SchedulingNode {
+func (csc *ClusterSchedulingContext) GetSchedulingNode(nodeID, partitionName string) *schedulingNode {
 	csc.lock.Lock()
 	defer csc.lock.Unlock()
 

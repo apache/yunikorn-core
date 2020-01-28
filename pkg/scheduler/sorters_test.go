@@ -186,9 +186,9 @@ func TestQueueGuaranteedResourceNotSet(t *testing.T) {
 func TestSortNodesMin(t *testing.T) {
 	// nil or empty list cannot panic
 	SortNodes(nil, MinAvailableResources)
-	list := make([]*SchedulingNode, 0)
+	list := make([]*schedulingNode, 0)
 	SortNodes(list, MinAvailableResources)
-	list = append(list, NewSchedulingNode(cache.NewNodeForSort("node-nil", nil)))
+	list = append(list, newSchedulingNode(cache.NewNodeForSort("node-nil", nil)))
 	SortNodes(list, MinAvailableResources)
 
 	// stable sort is used so equal resources stay were they were
@@ -196,10 +196,10 @@ func TestSortNodesMin(t *testing.T) {
 		"first": resources.Quantity(100)})
 
 	// setup to sort ascending
-	list = make([]*SchedulingNode, 3)
+	list = make([]*schedulingNode, 3)
 	for i := 0; i < 3; i++ {
 		num := strconv.Itoa(i)
-		node := NewSchedulingNode(
+		node := newSchedulingNode(
 			cache.NewNodeForSort("node-"+num, resources.Multiply(res, int64(3-i))),
 		)
 		list[i] = node
@@ -209,7 +209,7 @@ func TestSortNodesMin(t *testing.T) {
 	assertNodeList(t, list, []int{2, 1, 0})
 
 	// change node-1 on place 1 in the slice to have no res
-	list[1] = NewSchedulingNode(
+	list[1] = newSchedulingNode(
 		cache.NewNodeForSort("node-1", resources.Multiply(res, 0)),
 	)
 	// nodes should come back in order 1 (0), 2 (100), 0 (300)
@@ -217,7 +217,7 @@ func TestSortNodesMin(t *testing.T) {
 	assertNodeList(t, list, []int{2, 0, 1})
 
 	// change node-1 on place 0 in the slice to have 300 res
-	list[0] = NewSchedulingNode(
+	list[0] = newSchedulingNode(
 		cache.NewNodeForSort("node-1", resources.Multiply(res, 3)),
 	)
 	// nodes should come back in order 2 (100), 1 (300), 0 (300)
@@ -225,7 +225,7 @@ func TestSortNodesMin(t *testing.T) {
 	assertNodeList(t, list, []int{2, 1, 0})
 
 	// change node-0 on place 2 in the slice to have -300 res
-	list[2] = NewSchedulingNode(
+	list[2] = newSchedulingNode(
 		cache.NewNodeForSort("node-0", resources.Multiply(res, -3)),
 	)
 	// nodes should come back in order 0 (-300), 2 (100), 1 (300)
@@ -236,19 +236,19 @@ func TestSortNodesMin(t *testing.T) {
 func TestSortNodesMax(t *testing.T) {
 	// nil or empty list cannot panic
 	SortNodes(nil, MaxAvailableResources)
-	list := make([]*SchedulingNode, 0)
+	list := make([]*schedulingNode, 0)
 	SortNodes(list, MaxAvailableResources)
-	list = append(list, NewSchedulingNode(cache.NewNodeForSort("node-nil", nil)))
+	list = append(list, newSchedulingNode(cache.NewNodeForSort("node-nil", nil)))
 	SortNodes(list, MaxAvailableResources)
 
 	// stable sort is used so equal resources stay were they were
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"first": resources.Quantity(100)})
 	// setup to sort descending
-	list = make([]*SchedulingNode, 3)
+	list = make([]*schedulingNode, 3)
 	for i := 0; i < 3; i++ {
 		num := strconv.Itoa(i)
-		node := NewSchedulingNode(
+		node := newSchedulingNode(
 			cache.NewNodeForSort("node-"+num, resources.Multiply(res, int64(1+i))),
 		)
 		list[i] = node
@@ -258,7 +258,7 @@ func TestSortNodesMax(t *testing.T) {
 	assertNodeList(t, list, []int{2, 1, 0})
 
 	// change node-1 on place 1 in the slice to have no res
-	list[1] = NewSchedulingNode(
+	list[1] = newSchedulingNode(
 		cache.NewNodeForSort("node-1", resources.Multiply(res, 0)),
 	)
 	// nodes should come back in order 2 (300), 0 (100), 1 (0)
@@ -266,7 +266,7 @@ func TestSortNodesMax(t *testing.T) {
 	assertNodeList(t, list, []int{1, 2, 0})
 
 	// change node-1 on place 2 in the slice to have 300 res
-	list[2] = NewSchedulingNode(
+	list[2] = newSchedulingNode(
 		cache.NewNodeForSort("node-1", resources.Multiply(res, 3)),
 	)
 	// nodes should come back in order 2 (300), 1 (300), 0 (100)
@@ -274,7 +274,7 @@ func TestSortNodesMax(t *testing.T) {
 	assertNodeList(t, list, []int{2, 1, 0})
 
 	// change node-2 on place 0 in the slice to have -300 res
-	list[0] = NewSchedulingNode(
+	list[0] = newSchedulingNode(
 		cache.NewNodeForSort("node-2", resources.Multiply(res, -3)),
 	)
 	// nodes should come back in order 1 (300), 0 (100), 2 (-300)
@@ -290,7 +290,7 @@ func TestSortAppsFifo(t *testing.T) {
 	list := make([]*SchedulingApplication, 4)
 	for i := 0; i < 4; i++ {
 		num := strconv.Itoa(i)
-		app := NewSchedulingApplication(
+		app := newSchedulingApplication(
 			cache.NewApplicationInfo("app-"+num, "partition", "queue",
 				security.UserGroup{}, nil))
 		app.MayAllocatedResource = resources.Multiply(res, int64(i+1))
@@ -315,7 +315,7 @@ func TestSortAppsFair(t *testing.T) {
 	list := make([]*SchedulingApplication, 4)
 	for i := 0; i < 4; i++ {
 		num := strconv.Itoa(i)
-		app := NewSchedulingApplication(
+		app := newSchedulingApplication(
 			cache.NewApplicationInfo("app-"+num, "partition", "queue",
 				security.UserGroup{}, nil))
 		app.MayAllocatedResource = resources.Multiply(res, int64(i+1))
@@ -375,7 +375,7 @@ func assertQueueList(t *testing.T, list []*SchedulingQueue, place []int) {
 
 // list of nodes and the location of the named nodes inside that list
 // place[0] defines the location of the node-0 in the list of nodes
-func assertNodeList(t *testing.T, list []*SchedulingNode, place []int) {
+func assertNodeList(t *testing.T, list []*schedulingNode, place []int) {
 	assert.Equal(t, "node-0", list[place[0]].NodeID)
 	assert.Equal(t, "node-1", list[place[1]].NodeID)
 	assert.Equal(t, "node-2", list[place[2]].NodeID)

@@ -27,7 +27,7 @@ import (
 )
 
 // AllocationInfo for tests inside the cache
-func createMockAllocationInfo(appID string, res *resources.Resource, uuid string, queueName string, nodeID string) *AllocationInfo {
+func CreateMockAllocationInfo(appID string, res *resources.Resource, uuid string, queueName string, nodeID string) *AllocationInfo {
 	info := &AllocationInfo{ApplicationID: appID, AllocatedResource: res,
 		AllocationProto: &si.Allocation{UUID: uuid, QueueName: queueName, NodeID: nodeID}}
 	return info
@@ -67,7 +67,7 @@ func newNodeForTest(nodeID string, totalResource, availResource *resources.Resou
 	node.schedulable = true
 	node.Partition = "default"
 	// make sure they are independent objects
-	node.TotalResource = totalResource
+	node.totalResource = totalResource
 	node.availableResource = availResource
 	node.allocatedResource = resources.NewResource()
 

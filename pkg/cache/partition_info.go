@@ -208,7 +208,7 @@ func (pi *PartitionInfo) addNewNode(node *NodeInfo, existingAllocations []*si.Al
 	}
 
 	// update the resources available in the cluster
-	pi.totalPartitionResource = resources.Add(pi.totalPartitionResource, node.TotalResource)
+	pi.totalPartitionResource = resources.Add(pi.totalPartitionResource, node.totalResource)
 	pi.Root.MaxResource = pi.totalPartitionResource
 
 	// Node is added to the system to allow processing of the allocations
@@ -303,7 +303,7 @@ func (pi *PartitionInfo) removeNodeInternal(nodeID string) []*AllocationInfo {
 
 	// found the node cleanup the node and all linked data
 	released := pi.removeNodeAllocations(node)
-	pi.totalPartitionResource = resources.Sub(pi.totalPartitionResource, node.TotalResource)
+	pi.totalPartitionResource = resources.Sub(pi.totalPartitionResource, node.totalResource)
 	pi.Root.MaxResource = pi.totalPartitionResource
 
 	// Remove node from list of tracked nodes
@@ -546,7 +546,7 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
 		metrics.GetSchedulerMetrics().IncSchedulingError()
 		return nil, fmt.Errorf("cannot allocate resource [%v] for application %s on "+
 			"node %s because request exceeds available resources, used [%v] node limit [%v]",
-			alloc.AllocatedResource, alloc.ApplicationID, node.NodeID, node.GetAllocatedResource(), node.TotalResource)
+			alloc.AllocatedResource, alloc.ApplicationID, node.NodeID, node.GetAllocatedResource(), node.totalResource)
 	}
 
 	// If the new allocation goes beyond the queue's max resource (recursive)?
@@ -965,7 +965,7 @@ func (pi *PartitionInfo) CalculateNodesResourceUsage() map[string][]int {
 	defer pi.lock.RUnlock()
 	mapResult := make(map[string][]int)
 	for _, node := range pi.nodes {
-		for name, total := range node.TotalResource.Resources {
+		for name, total := range node.totalResource.Resources {
 			if float64(total) > 0 {
 				resourceAllocated := float64(node.allocatedResource.Resources[name])
 				v := resourceAllocated / float64(total)

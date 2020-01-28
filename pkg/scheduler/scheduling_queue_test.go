@@ -116,7 +116,7 @@ func TestManagedSubQueues(t *testing.T) {
 	}
 
 	// cannot remove child with app in it
-	app := NewSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "test"})
+	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "test"})
 	leaf.addSchedulingApplication(app)
 
 	// both parent and leaf are marked for removal
@@ -172,7 +172,7 @@ func TestUnManagedSubQueues(t *testing.T) {
 	}
 
 	// cannot remove child with app in it
-	app := NewSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "test"})
+	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "test"})
 	leaf.addSchedulingApplication(app)
 
 	// try to mark parent and leaf for removal
@@ -288,7 +288,7 @@ func TestAddApplication(t *testing.T) {
 		map[string]resources.Quantity{
 			resources.MEMORY: 10,
 		})
-	app := NewSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "test"})
+	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "test"})
 	app.Requests.totalPendingResource = pending
 	// adding the app must not update pending resources
 	leaf.addSchedulingApplication(app)
@@ -312,7 +312,7 @@ func TestRemoveApplication(t *testing.T) {
 		t.Fatalf("failed to create managed leaf queue: %v", err)
 	}
 	// try removing a non existing app
-	nonExist := NewSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "test"})
+	nonExist := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "test"})
 	if leaf.removeSchedulingAppInternal("test") {
 		t.Error("Removal of non existing app did not fail")
 	}
@@ -320,7 +320,7 @@ func TestRemoveApplication(t *testing.T) {
 	assert.Equal(t, len(leaf.applications), 0, "Removal of non existing app updated unexpected")
 
 	// add an app and remove it
-	app := NewSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "exists"})
+	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "exists"})
 	leaf.addSchedulingApplication(app)
 	assert.Equal(t, len(leaf.applications), 1, "Application was not added to the queue as expected")
 	assert.Assert(t, resources.IsZero(leaf.pendingResource), "leaf queue pending resource not zero")

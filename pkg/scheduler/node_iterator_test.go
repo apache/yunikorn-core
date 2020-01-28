@@ -40,7 +40,7 @@ func TestRoundRobinIteratorEmpty(t *testing.T) {
 	}
 
 	// slice with a length of 0: first HasNext call
-	rni = NewRoundRobinNodeIterator(make([]*SchedulingNode, 0))
+	rni = NewRoundRobinNodeIterator(make([]*schedulingNode, 0))
 	if rni == nil {
 		t.Fatal("failed to create iterator with empty slice")
 	}
@@ -51,7 +51,7 @@ func TestRoundRobinIteratorEmpty(t *testing.T) {
 		t.Errorf("empty node list does not have Next: %v", node)
 	}
 	// slice with a length of 0: direct Next call
-	rni = NewRoundRobinNodeIterator(make([]*SchedulingNode, 0))
+	rni = NewRoundRobinNodeIterator(make([]*schedulingNode, 0))
 	if rni == nil {
 		t.Fatal("failed to create iterator with empty slice")
 	}
@@ -121,7 +121,7 @@ func TestDefaultNodeEmpty(t *testing.T) {
 		t.Errorf("nil node list does not have next node: %v", node)
 	}
 	// slice with a length of 0
-	dni = NewDefaultNodeIterator(make([]*SchedulingNode, 0))
+	dni = NewDefaultNodeIterator(make([]*schedulingNode, 0))
 	if dni == nil {
 		t.Fatal("failed to create iterator with empty slice")
 	}
@@ -172,16 +172,16 @@ func TestDefaultNodeIterating(t *testing.T) {
 
 // Simple node with just an ID in the cache node.
 // That is all we need for iteration
-func newSchedNode(nodeID string) *SchedulingNode {
+func newSchedNode(nodeID string) *schedulingNode {
 	nodeInfo := &cache.NodeInfo{
 		NodeID: nodeID,
 	}
-	return NewSchedulingNode(nodeInfo)
+	return newSchedulingNode(nodeInfo)
 }
 
 // A list of nodes that can be iterated over.
-func newSchedNodeList(number int) []*SchedulingNode {
-	list := make([]*SchedulingNode, number)
+func newSchedNodeList(number int) []*schedulingNode {
+	list := make([]*schedulingNode, number)
 	for i := 0; i < number; i++ {
 		num := strconv.Itoa(i)
 		node := newSchedNode("node-" + num)

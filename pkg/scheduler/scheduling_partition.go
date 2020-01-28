@@ -39,7 +39,7 @@ type partitionSchedulingContext struct {
 	// Private fields need protection
 	partition        *cache.PartitionInfo              // link back to the partition in the cache
 	applications     map[string]*SchedulingApplication // applications assigned to this partition
-	nodes            map[string]*SchedulingNode        // nodes assigned to this partition
+	nodes            map[string]*schedulingNode        // nodes assigned to this partition
 	placementManager *placement.AppPlacementManager    // placement manager for this partition
 	partitionManager *partitionManager                 // manager for this partition
 	lock             sync.RWMutex
@@ -53,7 +53,7 @@ func newPartitionSchedulingContext(info *cache.PartitionInfo, root *SchedulingQu
 	}
 	psc := &partitionSchedulingContext{
 		applications: make(map[string]*SchedulingApplication),
-		nodes:        make(map[string]*SchedulingNode),
+		nodes:        make(map[string]*schedulingNode),
 		Root:         root,
 		Name:         info.Name,
 		RmID:         info.RmID,
@@ -234,7 +234,7 @@ func (psc *partitionSchedulingContext) createSchedulingQueue(name string, user s
 }
 
 // Get a scheduling node from the partition by nodeID.
-func (psc *partitionSchedulingContext) getSchedulingNode(nodeID string) *SchedulingNode {
+func (psc *partitionSchedulingContext) getSchedulingNode(nodeID string) *schedulingNode {
 	psc.lock.RLock()
 	defer psc.lock.RUnlock()
 
@@ -242,11 +242,11 @@ func (psc *partitionSchedulingContext) getSchedulingNode(nodeID string) *Schedul
 }
 
 // Get a copy of the scheduling nodes from the partition.
-func (psc *partitionSchedulingContext) getSchedulingNodes() []*SchedulingNode {
+func (psc *partitionSchedulingContext) getSchedulingNodes() []*schedulingNode {
 	psc.lock.RLock()
 	defer psc.lock.RUnlock()
 
-	schedulingNodes := make([]*SchedulingNode, len(psc.nodes))
+	schedulingNodes := make([]*schedulingNode, len(psc.nodes))
 	var i = 0
 	for _, node := range psc.nodes {
 		// filter out the nodes that are not scheduling
@@ -275,7 +275,7 @@ func (psc *partitionSchedulingContext) addSchedulingNode(info *cache.NodeInfo) {
 			zap.String("nodeID", info.NodeID))
 	}
 	// add the node, this will also get the sync back between the two lists
-	psc.nodes[info.NodeID] = NewSchedulingNode(info)
+	psc.nodes[info.NodeID] = newSchedulingNode(info)
 }
 
 // Remove a scheduling node triggered by the removal of the cache node.

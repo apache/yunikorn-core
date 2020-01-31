@@ -181,13 +181,13 @@ func TestAllocatingResources(t *testing.T) {
 		t.Errorf("allocating resources not set, expected %v got %v", expect, nodeAlloc)
 	}
 	// release one
-	node.handleAllocationUpdate(allocRes)
+	node.decAllocatingResource(allocRes)
 	nodeAlloc = node.getAllocatingResource()
 	if !resources.Equals(nodeAlloc, allocRes) {
 		t.Errorf("allocating resources not decremented, expected %v got %v", expect, nodeAlloc)
 	}
 	// release allocating: should be back to zero
-	node.handleAllocationUpdate(allocRes)
+	node.decAllocatingResource(allocRes)
 	nodeAlloc = node.getAllocatingResource()
 	if !resources.IsZero(nodeAlloc) {
 		t.Errorf("allocating resources not zero but %v", nodeAlloc)
@@ -209,13 +209,13 @@ func TestPreemptingResources(t *testing.T) {
 		t.Errorf("preempting resources not set, expected %v got %v", expect, nodePreempt)
 	}
 	// release one preemption
-	node.handlePreemptionUpdate(preemptRes)
+	node.decPreemptingResource(preemptRes)
 	nodePreempt = node.getPreemptingResource()
 	if !resources.Equals(nodePreempt, preemptRes) {
 		t.Errorf("preempting resources not decremented, expected %v got %v", preemptRes, nodePreempt)
 	}
 	// release preemption: should be back to zero
-	node.handlePreemptionUpdate(preemptRes)
+	node.decPreemptingResource(preemptRes)
 	nodePreempt = node.getPreemptingResource()
 	if !resources.IsZero(nodePreempt) {
 		t.Errorf("preempting resources not zero but %v", nodePreempt)
@@ -239,9 +239,9 @@ func TestAvailableDirty(t *testing.T) {
 	}
 	node.getAvailableResource()
 
-	node.handleAllocationUpdate(res)
+	node.decAllocatingResource(res)
 	if !node.cachedAvailableUpdateNeeded {
-		t.Error("node available resource dirty should be set after handleAllocationUpdate")
+		t.Error("node available resource dirty should be set after decAllocatingResource")
 	}
 }
 
@@ -253,8 +253,11 @@ func TestNodeReservation(t *testing.T) {
 	if node.isReserved() {
 		t.Fatal("new node should not have reservations")
 	}
+	if node.isReservedForApp("") {
+		t.Error("new node should not have reservations for empty appID")
+	}
 	if node.isReservedForApp("unknown") {
-		t.Error("new node should not have reservations for unknown app")
+		t.Error("new node should not have reservations for unknown appID")
 	}
 
 	// reserve illegal request
@@ -281,8 +284,11 @@ func TestNodeReservation(t *testing.T) {
 	if !ok || err != nil {
 		t.Errorf("reservation should not have failed: status %t, error %v", ok, err)
 	}
+	if node.isReservedForApp("") {
+		t.Error("node should not have reservations for empty appID")
+	}
 	if node.isReservedForApp("unknown") {
-		t.Errorf("node should not have reservations for unknown app")
+		t.Errorf("node should not have reservations for unknown appID")
 	}
 	if node.isReserved() && !node.isReservedForApp("app-1") {
 		t.Errorf("node should have reservations for app-1")

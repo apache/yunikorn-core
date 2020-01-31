@@ -258,7 +258,7 @@ func (csc *ClusterSchedulingContext) GetSchedulingNode(nodeID, partitionName str
 // Inform the scheduling node of the proposed allocation result.
 // This just reduces the allocating resource on the node.
 // This is a lock free call: locks are taken while retrieving the node and when updating the node
-func (csc *ClusterSchedulingContext) updateSchedulingNodeAlloc(alloc *commonevents.AllocationProposal) {
+func (csc *ClusterSchedulingContext) releaseAllocatingResources(alloc *commonevents.AllocationProposal) {
 	// get the partition and node (both have to exist to get here)
 	node := csc.GetSchedulingNode(alloc.NodeID, alloc.PartitionName)
 
@@ -270,7 +270,7 @@ func (csc *ClusterSchedulingContext) updateSchedulingNodeAlloc(alloc *commoneven
 			zap.String("allocationKey", alloc.AllocationKey))
 		return
 	}
-	node.handleAllocationUpdate(alloc.AllocatedResource)
+	node.decAllocatingResource(alloc.AllocatedResource)
 }
 
 // Release preempted resources after the cache has been updated.
@@ -290,6 +290,6 @@ func (csc *ClusterSchedulingContext) releasePreemptedResources(resources []sched
 				zap.Any("resource", nodeRes.PreemptedRes))
 			continue
 		}
-		node.handlePreemptionUpdate(nodeRes.PreemptedRes)
+		node.decPreemptingResource(nodeRes.PreemptedRes)
 	}
 }

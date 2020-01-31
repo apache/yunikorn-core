@@ -26,36 +26,37 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
-type SchedulingAllocationAsk struct {
+type schedulingAllocationAsk struct {
 	// Original ask
 	AskProto *si.AllocationAsk
 
 	// Extracted info
 	AllocatedResource  *resources.Resource
-	PendingRepeatAsk   int32
 	ApplicationID      string
 	PartitionName      string
 	NormalizedPriority int32
 	QueueName          string
 
-	// Lock
-	lock sync.RWMutex
+	// Private fields need protection
+	pendingRepeatAsk int32
+
+	sync.RWMutex
 }
 
-func NewSchedulingAllocationAsk(ask *si.AllocationAsk) *SchedulingAllocationAsk {
-	return &SchedulingAllocationAsk{
+func newSchedulingAllocationAsk(ask *si.AllocationAsk) *schedulingAllocationAsk {
+	return &schedulingAllocationAsk{
 		AskProto:          ask,
 		AllocatedResource: resources.NewResourceFromProto(ask.ResourceAsk),
-		PendingRepeatAsk:  ask.MaxAllocations,
+		pendingRepeatAsk:  ask.MaxAllocations,
 		ApplicationID:     ask.ApplicationID,
 		PartitionName:     ask.PartitionName,
 		// TODO, normalize priority from ask
 	}
 }
 
-func ConvertFromAllocation(allocation *si.Allocation, rmID string) *SchedulingAllocationAsk {
+func convertFromAllocation(allocation *si.Allocation, rmID string) *schedulingAllocationAsk {
 	partitionWithRMId := common.GetNormalizedPartitionName(allocation.PartitionName, rmID)
-	return &SchedulingAllocationAsk{
+	return &schedulingAllocationAsk{
 		AskProto: &si.AllocationAsk{
 			AllocationKey:  allocation.AllocationKey,
 			ResourceAsk:    allocation.ResourcePerAlloc,
@@ -67,7 +68,7 @@ func ConvertFromAllocation(allocation *si.Allocation, rmID string) *SchedulingAl
 		},
 		QueueName:         allocation.QueueName,
 		AllocatedResource: resources.NewResourceFromProto(allocation.ResourcePerAlloc),
-		PendingRepeatAsk:  1,
+		pendingRepeatAsk:  1,
 		ApplicationID:     allocation.ApplicationID,
 		PartitionName:     partitionWithRMId,
 	}
@@ -76,13 +77,23 @@ func ConvertFromAllocation(allocation *si.Allocation, rmID string) *SchedulingAl
 // Add delta to pending ask,
 //    if original_pending + delta >= 0, return true. And update internal pending ask.
 //    If original_pending + delta < 0, return false and keep original_pending unchanged.
-func (m *SchedulingAllocationAsk) AddPendingAskRepeat(delta int32) bool {
-	m.lock.Lock()
-	defer m.lock.Unlock()
+func (saa *schedulingAllocationAsk) addPendingAskRepeat(delta int32) bool {
+	saa.Lock()
+	defer saa.Unlock()
 
-	if m.PendingRepeatAsk+delta >= 0 {
-		m.PendingRepeatAsk += delta
+	if saa.pendingRepeatAsk+delta >= 0 {
+		saa.pendingRepeatAsk += delta
 		return true
 	}
 	return false
+}
+
+// Get the pending ask repeat
+//    if original_pending + delta >= 0, return true. And update internal pending ask.
+//    If original_pending + delta < 0, return false and keep original_pending unchanged.
+func (saa *schedulingAllocationAsk) getPendingAskRepeat() int32 {
+	saa.RLock()
+	defer saa.RUnlock()
+
+	return saa.pendingRepeatAsk
 }

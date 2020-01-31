@@ -289,7 +289,7 @@ func TestAddApplication(t *testing.T) {
 			resources.MEMORY: 10,
 		})
 	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "test"})
-	app.Requests.totalPendingResource = pending
+	app.pending = pending
 	// adding the app must not update pending resources
 	leaf.addSchedulingApplication(app)
 	assert.Equal(t, len(leaf.applications), 1, "Application was not added to the queue as expected")
@@ -334,7 +334,7 @@ func TestRemoveApplication(t *testing.T) {
 		map[string]resources.Quantity{
 			resources.MEMORY: 10,
 		})
-	app.Requests.totalPendingResource.AddTo(pending)
+	app.pending.AddTo(pending)
 	leaf.addSchedulingApplication(app)
 	assert.Equal(t, len(leaf.applications), 1, "Application was not added to the queue as expected")
 	assert.Assert(t, resources.IsZero(leaf.pendingResource), "leaf queue pending resource not zero")

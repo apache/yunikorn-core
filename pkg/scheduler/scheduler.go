@@ -90,21 +90,21 @@ func (m *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 }
 
 // Create single allocation
-func newSingleAllocationProposal(alloc *SchedulingAllocation) *cacheevent.AllocationProposalBundleEvent {
+func newSingleAllocationProposal(alloc *schedulingAllocation) *cacheevent.AllocationProposalBundleEvent {
 	return &cacheevent.AllocationProposalBundleEvent{
 		AllocationProposals: []*commonevents.AllocationProposal{
 			{
-				NodeID:            alloc.NodeID,
-				ApplicationID:     alloc.SchedulingAsk.ApplicationID,
-				QueueName:         alloc.SchedulingAsk.QueueName,
-				AllocatedResource: alloc.SchedulingAsk.AllocatedResource,
-				AllocationKey:     alloc.SchedulingAsk.AskProto.AllocationKey,
-				Priority:          alloc.SchedulingAsk.AskProto.Priority,
-				PartitionName:     alloc.SchedulingAsk.PartitionName,
+				NodeID:            alloc.nodeID,
+				ApplicationID:     alloc.schedulingAsk.ApplicationID,
+				QueueName:         alloc.schedulingAsk.QueueName,
+				AllocatedResource: alloc.schedulingAsk.AllocatedResource,
+				AllocationKey:     alloc.schedulingAsk.AskProto.AllocationKey,
+				Priority:          alloc.schedulingAsk.AskProto.Priority,
+				PartitionName:     alloc.schedulingAsk.PartitionName,
 			},
 		},
-		ReleaseProposals: alloc.Releases,
-		PartitionName:    alloc.PartitionName,
+		ReleaseProposals: alloc.releases,
+		PartitionName:    alloc.schedulingAsk.PartitionName,
 	}
 }
 
@@ -126,7 +126,7 @@ func (m *Scheduler) internalPreemption() {
 	}
 }
 
-func (m *Scheduler) updateSchedulingRequest(schedulingAsk *SchedulingAllocationAsk) error {
+func (m *Scheduler) updateSchedulingRequest(schedulingAsk *schedulingAllocationAsk) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -138,7 +138,7 @@ func (m *Scheduler) updateSchedulingRequest(schedulingAsk *SchedulingAllocationA
 
 	// found now update the pending requests for the queue that the app is running in
 	schedulingAsk.QueueName = schedulingApp.queue.Name
-	pendingDelta, err := schedulingApp.Requests.AddAllocationAsk(schedulingAsk)
+	pendingDelta, err := schedulingApp.addAllocationAsk(schedulingAsk)
 	if err == nil && !resources.IsZero(pendingDelta) {
 		schedulingApp.queue.incPendingResource(pendingDelta)
 	}
@@ -156,7 +156,7 @@ func (m *Scheduler) updateSchedulingRequestPendingAskByDelta(allocProposal *comm
 	}
 
 	// found, now update the pending requests for the queues
-	pendingDelta, err := schedulingApp.Requests.UpdateAllocationAskRepeat(allocProposal.AllocationKey, deltaPendingAsk)
+	pendingDelta, err := schedulingApp.updateAllocationAskRepeat(allocProposal.AllocationKey, deltaPendingAsk)
 	if err == nil && !resources.IsZero(pendingDelta) {
 		schedulingApp.queue.incPendingResource(pendingDelta)
 	}
@@ -216,7 +216,7 @@ func (m *Scheduler) processAllocationReleaseByAllocationKey(
 		for _, toRelease := range allocationAsksToRelease {
 			schedulingApp := m.clusterSchedulingContext.GetSchedulingApplication(toRelease.ApplicationID, toRelease.PartitionName)
 			if schedulingApp != nil {
-				delta, _ := schedulingApp.Requests.RemoveAllocationAsk(toRelease.Allocationkey)
+				delta := schedulingApp.removeAllocationAsk(toRelease.Allocationkey)
 				if !resources.IsZero(delta) {
 					schedulingApp.queue.incPendingResource(delta)
 				}
@@ -281,7 +281,7 @@ func (m *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocat
 			zap.String("allocationId", alloc.UUID))
 
 		// add scheduling asks
-		schedulingAsk := ConvertFromAllocation(alloc, rmID)
+		schedulingAsk := convertFromAllocation(alloc, rmID)
 		if err := m.updateSchedulingRequest(schedulingAsk); err != nil {
 			log.Logger().Warn("failed...", zap.Error(err))
 		}
@@ -323,7 +323,7 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
 	if len(ev.AcceptedAllocations) > 0 {
 		alloc := ev.AcceptedAllocations[0]
 		// decrease the outstanding allocation resources
-		m.clusterSchedulingContext.updateSchedulingNodeAlloc(alloc)
+		m.clusterSchedulingContext.releaseAllocatingResources(alloc)
 	}
 
 	// Rejects have not updated the node in the cache but have updated the scheduler node with
@@ -336,7 +336,7 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
 					zap.Error(err))
 			}
 			// decrease the outstanding allocation resources
-			m.clusterSchedulingContext.updateSchedulingNodeAlloc(alloc)
+			m.clusterSchedulingContext.releaseAllocatingResources(alloc)
 		}
 	}
 
@@ -354,7 +354,7 @@ func (m *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
 		var rmID = ""
 		for _, ask := range ev.NewAsks {
 			rmID = common.GetRMIdFromPartitionName(ask.PartitionName)
-			schedulingAsk := NewSchedulingAllocationAsk(ask)
+			schedulingAsk := newSchedulingAllocationAsk(ask)
 			if err := m.updateSchedulingRequest(schedulingAsk); err != nil {
 				rejectedAsks = append(rejectedAsks, &si.RejectedAllocationAsk{
 					AllocationKey: schedulingAsk.AskProto.AllocationKey,

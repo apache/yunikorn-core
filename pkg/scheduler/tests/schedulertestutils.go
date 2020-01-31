@@ -242,13 +242,13 @@ func waitForPendingResourceForApplication(t *testing.T, app *scheduler.Schedulin
 	var i = 0
 	for {
 		i++
-		if app.Requests.GetPendingResource().Resources[resources.MEMORY] != memory {
+		if app.GetPendingResource().Resources[resources.MEMORY] != memory {
 			time.Sleep(time.Duration(100 * time.Millisecond))
 		} else {
 			return
 		}
 		if i*100 >= timeoutMs {
-			t.Fatalf("Failed to wait pending resource, expected=%v, actual=%v", memory, app.Requests.GetPendingResource().Resources[resources.MEMORY])
+			t.Fatalf("Failed to wait pending resource, expected=%v, actual=%v", memory, app.GetPendingResource().Resources[resources.MEMORY])
 			return
 		}
 	}

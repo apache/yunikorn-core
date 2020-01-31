@@ -17,17 +17,43 @@ limitations under the License.
 package scheduler
 
 import (
+	"testing"
+
+	"gotest.tools/assert"
+
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
 	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
 )
 
-func newAllocationAsk(allocKey, appID string, res *resources.Resource) *SchedulingAllocationAsk {
+func newAllocationAsk(allocKey, appID string, res *resources.Resource) *schedulingAllocationAsk {
+	return newAllocationAskRepeat(allocKey, appID, res, 1)
+}
+
+func newAllocationAskRepeat(allocKey, appID string, res *resources.Resource, repeat int) *schedulingAllocationAsk {
 	ask := &si.AllocationAsk{
 		AllocationKey:  allocKey,
 		ApplicationID:  appID,
 		PartitionName:  "default",
 		ResourceAsk:    res.ToProto(),
-		MaxAllocations: 1,
+		MaxAllocations: int32(repeat),
 	}
-	return NewSchedulingAllocationAsk(ask)
+	return newSchedulingAllocationAsk(ask)
+}
+
+func TestPendingAskRepeat(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	ask := newAllocationAsk("alloc-1", "app-1", res)
+	assert.Equal(t, ask.getPendingAskRepeat(), int32(1), "pending ask repeat should be 1")
+	if !ask.addPendingAskRepeat(1) {
+		t.Errorf("increase of pending ask with 1 failed, expected repeat 2, current repeat: %d", ask.getPendingAskRepeat())
+	}
+	if !ask.addPendingAskRepeat(-1) {
+		t.Errorf("decrease of pending ask with 1 failed, expected repeat 1, current repeat: %d", ask.getPendingAskRepeat())
+	}
+	if ask.addPendingAskRepeat(-2) {
+		t.Errorf("decrease of pending ask with 2 did not fail, expected repeat 1, current repeat: %d", ask.getPendingAskRepeat())
+	}
+	if !ask.addPendingAskRepeat(-1) {
+		t.Errorf("decrease of pending ask with 1 failed, expected repeat 0, current repeat: %d", ask.getPendingAskRepeat())
+	}
 }

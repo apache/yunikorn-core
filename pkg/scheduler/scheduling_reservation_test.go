@@ -34,31 +34,31 @@ func TestNewReservation(t *testing.T) {
 	node := newNode("node-1", q)
 
 	// check the basics
-	reserved := newReservation(nil, nil, nil)
-	if reserved != nil {
-		t.Errorf("reservation with nil objects should have returned nil: %v", reserved)
+	reserve := newReservation(nil, nil, nil)
+	if reserve != nil {
+		t.Errorf("reservation with nil objects should have returned nil: %v", reserve)
 	}
-	reserved = newReservation(node, app, nil)
-	if reserved != nil {
-		t.Errorf("reservation with nil ask set should have returned nil: '%v'", reserved)
+	reserve = newReservation(node, app, nil)
+	if reserve != nil {
+		t.Errorf("reservation with nil ask set should have returned nil: '%v'", reserve)
 	}
-	reserved = newReservation(node, app, ask)
-	if reserved != nil {
-		t.Errorf("reservation with all objects set should have returned nil: '%v'", reserved)
+	reserve = newReservation(node, app, ask)
+	if reserve != nil {
+		t.Errorf("reservation with all objects set should have returned nil: '%v'", reserve)
 	}
 
 	// other cases
-	reserved = newReservation(node, nil, ask)
-	if reserved == nil {
+	reserve = newReservation(node, nil, ask)
+	if reserve == nil {
 		t.Fatal("node reservation was unexpectedly nil")
 	}
-	assert.Equal(t, reserved.getKey(), "node-1|alloc-1", "incorrect node reservation key")
+	assert.Equal(t, reserve.getKey(), "node-1|alloc-1", "incorrect node reservation key")
 
-	reserved = newReservation(nil, app, ask)
-	if reserved == nil {
+	reserve = newReservation(nil, app, ask)
+	if reserve == nil {
 		t.Fatal("app reservation was unexpectedly nil")
 	}
-	assert.Equal(t, reserved.getKey(), "app-1|alloc-1", "incorrect app reservation key")
+	assert.Equal(t, reserve.getKey(), "app-1|alloc-1", "incorrect app reservation key")
 }
 
 func TestReservationKey(t *testing.T) {
@@ -70,16 +70,16 @@ func TestReservationKey(t *testing.T) {
 	node := newNode("node-1", q)
 
 	// check the basics
-	reserved := reservationKey(nil, nil, nil)
-	assert.Equal(t, reserved, "", "reservation with nil objects should have  empty key")
-	reserved = reservationKey(node, app, nil)
-	assert.Equal(t, reserved, "", "reservation with nil ask set should have empty key")
-	reserved = reservationKey(node, app, ask)
-	assert.Equal(t, reserved, "", "reservation with all objects set should have empty key")
+	reserve := reservationKey(nil, nil, nil)
+	assert.Equal(t, reserve, "", "reservation with nil objects should have  empty key")
+	reserve = reservationKey(node, app, nil)
+	assert.Equal(t, reserve, "", "reservation with nil ask set should have empty key")
+	reserve = reservationKey(node, app, ask)
+	assert.Equal(t, reserve, "", "reservation with all objects set should have empty key")
 
 	// other cases
-	reserved = reservationKey(node, nil, ask)
-	assert.Equal(t, reserved, "node-1|alloc-1", "incorrect node reservation key")
-	reserved = reservationKey(nil, app, ask)
-	assert.Equal(t, reserved, "app-1|alloc-1", "incorrect app reservation key")
+	reserve = reservationKey(node, nil, ask)
+	assert.Equal(t, reserve, "node-1|alloc-1", "incorrect node reservation key")
+	reserve = reservationKey(nil, app, ask)
+	assert.Equal(t, reserve, "app-1|alloc-1", "incorrect app reservation key")
 }

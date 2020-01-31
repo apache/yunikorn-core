@@ -24,18 +24,37 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
 )
 
-type SchedulingAllocation struct {
-	SchedulingAsk *SchedulingAllocationAsk
-	NumAllocation int32
-	NodeID        string
-	Releases      []*commonevents.ReleaseAllocation
-	PartitionName string
+type allocationResult int
+
+const (
+	none allocationResult = iota
+	allocated
+	allocatedReserved
+	reserved
+	unreserved
+)
+
+func (ar allocationResult) String() string {
+	return [...]string{"none", "allocated", "allocatedReserved", "reserved", "unreserved"}[ar]
 }
 
-func NewSchedulingAllocation(ask *SchedulingAllocationAsk, nodeID string) *SchedulingAllocation {
-	return &SchedulingAllocation{SchedulingAsk: ask, NodeID: nodeID, NumAllocation: 1, PartitionName: ask.PartitionName}
+type schedulingAllocation struct {
+	schedulingAsk *schedulingAllocationAsk
+	repeats       int32
+	nodeID        string
+	releases      []*commonevents.ReleaseAllocation
+	result        allocationResult
 }
 
-func (m *SchedulingAllocation) String() string {
-	return fmt.Sprintf("{AllocatioKey=%s,NumAllocation=%d,Node=%s", m.SchedulingAsk.AskProto.AllocationKey, m.NumAllocation, m.NodeID)
+func newSchedulingAllocation(ask *schedulingAllocationAsk, nodeID string) *schedulingAllocation {
+	return &schedulingAllocation{
+		schedulingAsk: ask,
+		nodeID:        nodeID,
+		repeats:       1,
+		result:        none,
+	}
+}
+
+func (sa *schedulingAllocation) String() string {
+	return fmt.Sprintf("AllocatioKey=%s, repeats=%d, node=%s, result=%s", sa.schedulingAsk.AskProto.AllocationKey, sa.repeats, sa.nodeID, sa.result.String())
 }

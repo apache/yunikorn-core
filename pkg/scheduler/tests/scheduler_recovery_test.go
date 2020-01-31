@@ -367,10 +367,10 @@ partitions:
 	assert.Equal(t, recoveredApp.ApplicationInfo.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12))
 
 	// there should be no pending resources
-	assert.Equal(t, recoveredApp.Requests.GetPendingResource().Resources[resources.MEMORY], resources.Quantity(0))
-	assert.Equal(t, recoveredApp.Requests.GetPendingResource().Resources[resources.VCORE], resources.Quantity(0))
+	assert.Equal(t, recoveredApp.GetPendingResource().Resources[resources.MEMORY], resources.Quantity(0))
+	assert.Equal(t, recoveredApp.GetPendingResource().Resources[resources.VCORE], resources.Quantity(0))
 	for _, existingAllocation := range mockRM.Allocations {
-		schedulingAllocation := recoveredApp.Requests.GetSchedulingAllocationAsk(existingAllocation.AllocationKey)
+		schedulingAllocation := recoveredApp.GetSchedulingAllocationAsk(existingAllocation.AllocationKey)
 		assert.Assert(t, schedulingAllocation != nil)
 	}
 

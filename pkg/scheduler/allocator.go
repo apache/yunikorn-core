@@ -52,7 +52,7 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
 		}
 
 		// Following steps:
-		// - According to resource usage, find next N allocation Requests, N could be
+		// - According to resource usage, find next N allocation requests, N could be
 		//   mini-batch because we don't want the process takes too long. And this
 		//   runs as single thread.
 		// - According to mini-batched allocation request. Try to allocate. This step
@@ -67,7 +67,7 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
 		allocations, _ := m.tryBatchAllocation(partition, partitionContext, candidates, preemptionParam)
 
 		// Send allocations to cache, and pending ask.
-		confirmedAllocations := make([]*SchedulingAllocation, 0)
+		confirmedAllocations := make([]*schedulingAllocation, 0)
 		if len(allocations) > 0 {
 			for _, alloc := range allocations {
 				if alloc == nil {
@@ -93,7 +93,7 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
 	}
 }
 
-func (m *Scheduler) regularAllocate(nodeIterator NodeIterator, candidate *SchedulingAllocationAsk) *SchedulingAllocation {
+func (m *Scheduler) regularAllocate(nodeIterator NodeIterator, candidate *schedulingAllocationAsk) *schedulingAllocation {
 	for nodeIterator.HasNext() {
 		node := nodeIterator.Next()
 		// skip the node if we cannot fit or are unschedulable
@@ -129,13 +129,13 @@ func (m *Scheduler) regularAllocate(nodeIterator NodeIterator, candidate *Schedu
 			}
 
 			// return allocation
-			return NewSchedulingAllocation(candidate, node.NodeID)
+			return newSchedulingAllocation(candidate, node.NodeID)
 		}
 	}
 	return nil
 }
 
-func (m *Scheduler) allocate(nodes NodeIterator, candidate *SchedulingAllocationAsk, preemptionParam *preemptionParameters) *SchedulingAllocation {
+func (m *Scheduler) allocate(nodes NodeIterator, candidate *schedulingAllocationAsk, preemptionParam *preemptionParameters) *schedulingAllocation {
 	if preemptionParam.crossQueuePreemption {
 		return crossQueuePreemptionAllocate(m.preemptionContext.partitions[candidate.PartitionName], nodes, candidate, preemptionParam)
 	}
@@ -144,18 +144,18 @@ func (m *Scheduler) allocate(nodes NodeIterator, candidate *SchedulingAllocation
 
 // Do mini batch allocation
 func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *partitionSchedulingContext,
-	candidates []*SchedulingAllocationAsk,
-	preemptionParam *preemptionParameters) ([]*SchedulingAllocation, []*SchedulingAllocationAsk) {
+	candidates []*schedulingAllocationAsk,
+	preemptionParam *preemptionParameters) ([]*schedulingAllocation, []*schedulingAllocationAsk) {
 	// copy list of node since we going to go through node list a couple of times
 	nodeList := partitionContext.getSchedulingNodes()
 	if len(nodeList) == 0 {
-		return make([]*SchedulingAllocation, 0), candidates
+		return make([]*schedulingAllocation, 0), candidates
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	allocations := make([]*SchedulingAllocation, len(candidates))
-	failedAsks := make([]*SchedulingAllocationAsk, len(candidates))
+	allocations := make([]*schedulingAllocation, len(candidates))
+	failedAsks := make([]*schedulingAllocationAsk, len(candidates))
 
 	var allocatedLength int32
 	var failedAskLength int32
@@ -232,7 +232,7 @@ func (m *Scheduler) evaluateForSchedulingPolicy(nodes []*schedulingNode, partiti
 	return nil
 }
 
-func (m *Scheduler) handleFailedToAllocationAllocations(allocations []*SchedulingAllocation, candidates []*SchedulingAllocationAsk, preemptionParam *preemptionParameters) {
+func (m *Scheduler) handleFailedToAllocationAllocations(allocations []*schedulingAllocation, candidates []*schedulingAllocationAsk, preemptionParam *preemptionParameters) {
 	// Failed allocated asks
 	failedToAllocationKeys := make(map[string]bool)
 	allocatedKeys := make(map[string]bool)
@@ -242,8 +242,8 @@ func (m *Scheduler) handleFailedToAllocationAllocations(allocations []*Schedulin
 	}
 
 	for _, alloc := range allocations {
-		delete(failedToAllocationKeys, alloc.SchedulingAsk.AskProto.AllocationKey)
-		allocatedKeys[alloc.SchedulingAsk.AskProto.AllocationKey] = true
+		delete(failedToAllocationKeys, alloc.schedulingAsk.AskProto.AllocationKey)
+		allocatedKeys[alloc.schedulingAsk.AskProto.AllocationKey] = true
 	}
 
 	for failedAllocationKey := range failedToAllocationKeys {

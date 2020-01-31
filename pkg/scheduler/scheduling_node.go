@@ -102,7 +102,7 @@ func (sn *schedulingNode) incAllocatingResource(proposed *resources.Resource) {
 }
 
 // Handle the allocation processing on the scheduler when the cache node is updated.
-func (sn *schedulingNode) handleAllocationUpdate(confirmed *resources.Resource) {
+func (sn *schedulingNode) decAllocatingResource(confirmed *resources.Resource) {
 	sn.Lock()
 	defer sn.Unlock()
 	log.Logger().Debug("allocations in progress increased",
@@ -129,7 +129,7 @@ func (sn *schedulingNode) incPreemptingResource(preempting *resources.Resource) 
 	sn.preemptingResource.AddTo(preempting)
 }
 
-func (sn *schedulingNode) handlePreemptionUpdate(preempted *resources.Resource) {
+func (sn *schedulingNode) decPreemptingResource(preempted *resources.Resource) {
 	sn.Lock()
 	defer sn.Unlock()
 	log.Logger().Debug("preempted resources released",
@@ -152,6 +152,7 @@ func (sn *schedulingNode) allocateResource(res *resources.Resource, preemptionPh
 	if preemptionPhase {
 		available.AddTo(sn.preemptingResource)
 	}
+	// check if this still fits: it might have changed since pre check
 	if resources.FitIn(available, newAllocating) {
 		log.Logger().Debug("allocations in progress updated",
 			zap.String("nodeID", sn.NodeID),
@@ -160,6 +161,7 @@ func (sn *schedulingNode) allocateResource(res *resources.Resource, preemptionPh
 		sn.allocatingResource = newAllocating
 		return true
 	}
+	// allocation failed resource did not fit
 	return false
 }
 
@@ -173,7 +175,7 @@ func (sn *schedulingNode) allocateResource(res *resources.Resource, preemptionPh
 func (sn *schedulingNode) preAllocateConditions(allocID string) bool {
 	// Check the predicates plugin (k8shim)
 	if plugin := plugins.GetPredicatesPlugin(); plugin != nil {
-		log.Logger().Debug("predicates",
+		log.Logger().Debug("checking predicates",
 			zap.String("allocationId", allocID),
 			zap.String("nodeID", sn.NodeID))
 		if err := plugin.Predicates(&si.PredicatesArgs{
@@ -187,7 +189,7 @@ func (sn *schedulingNode) preAllocateConditions(allocID string) bool {
 			return false
 		}
 	}
-	// must be last return in the list
+	// all predicate plugins passed
 	return true
 }
 
@@ -212,7 +214,7 @@ func (sn *schedulingNode) preAllocateCheck(res *resources.Resource, preemptionPh
 	if preemptionPhase {
 		available.AddTo(sn.preemptingResource)
 	}
-	newAllocating := resources.Add(res, sn.allocatingResource)
+	newAllocating := resources.Add(res, sn.getAllocatingResource())
 	if !resources.FitIn(available, newAllocating) {
 		log.Logger().Debug("requested resource is larger than available node resources",
 			zap.String("nodeID", sn.NodeID),
@@ -220,6 +222,7 @@ func (sn *schedulingNode) preAllocateCheck(res *resources.Resource, preemptionPh
 			zap.Any("allocating", newAllocating))
 		return false
 	}
+	// can allocate, based on resource size
 	return true
 }
 
@@ -230,8 +233,12 @@ func (sn *schedulingNode) isReserved() bool {
 	return len(sn.reservations) > 0
 }
 
-// Return if the node has been reserved by any application
+// Return true if and only if the node has been reserved by the application
+// NOTE: a return value of false does not mean the node is not reserved by a different app
 func (sn *schedulingNode) isReservedForApp(appID string) bool {
+	if appID == "" {
+		return false
+	}
 	sn.RLock()
 	defer sn.RUnlock()
 	for key := range sn.reservations {
@@ -245,16 +252,16 @@ func (sn *schedulingNode) isReservedForApp(appID string) bool {
 // Reserve the node for this application and ask combination, if not reserved yet.
 // The reservation is checked against the node resources.
 // If the reservation fails the function returns false, if the reservation is made it returns true.
-func (sn *schedulingNode) reserve(app *SchedulingApplication, ask *SchedulingAllocationAsk) (bool, error) {
+func (sn *schedulingNode) reserve(app *SchedulingApplication, ask *schedulingAllocationAsk) (bool, error) {
 	sn.Lock()
 	defer sn.Unlock()
 	if len(sn.reservations) > 0 {
 		return false, fmt.Errorf("node is already reserved, nodeID %s", sn.NodeID)
 	}
-	reserved := newReservation(nil, app, ask)
+	appReservation := newReservation(nil, app, ask)
 	// this should really not happen just guard against panic
 	// either app or ask are nil
-	if reserved == nil {
+	if appReservation == nil {
 		log.Logger().Debug("reservation creation failed unexpectedly",
 			zap.String("nodeID", sn.NodeID),
 			zap.Any("app", app),
@@ -270,7 +277,7 @@ func (sn *schedulingNode) reserve(app *SchedulingApplication, ask *SchedulingAll
 			zap.String("allocationAsk", ask.AllocatedResource.String()))
 		return false, fmt.Errorf("reservation does not fit on node %s, appID %s, ask %s", sn.NodeID, app.ApplicationInfo.ApplicationID, ask.AllocatedResource.String())
 	}
-	sn.reservations[reserved.getKey()] = reserved
+	sn.reservations[appReservation.getKey()] = appReservation
 	// reservation added successfully
 	return true, nil
 }
@@ -278,7 +285,7 @@ func (sn *schedulingNode) reserve(app *SchedulingApplication, ask *SchedulingAll
 // unReserve the node for this application and ask combination
 // If the reservation does not exist it returns false, if the reservation is removed it returns true.
 // The error is set if the reservation key cannot be generated.
-func (sn *schedulingNode) unReserve(app *SchedulingApplication, ask *SchedulingAllocationAsk) (bool, error) {
+func (sn *schedulingNode) unReserve(app *SchedulingApplication, ask *schedulingAllocationAsk) (bool, error) {
 	sn.Lock()
 	defer sn.Unlock()
 	resKey := reservationKey(nil, app, ask)

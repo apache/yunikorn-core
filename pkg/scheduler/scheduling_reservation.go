@@ -25,14 +25,14 @@ import (
 type reservation struct {
 	nodeID string
 	appID  string
-	ask    *SchedulingAllocationAsk
+	askKey string
 }
 
 // The reservation inside the scheduler. A reservation object is never mutated and does not use locking.
 // One of the node and app must be nil, not both or neither. The ask must always be set.
 // The key depends on where the reservation was made (node or app).
-func newReservation(node *schedulingNode, app *SchedulingApplication, ask *SchedulingAllocationAsk) *reservation {
-	if ask == nil || (app == nil && node == nil) || (app != nil && node != nil){
+func newReservation(node *schedulingNode, app *SchedulingApplication, ask *schedulingAllocationAsk) *reservation {
+	if ask == nil || (app == nil && node == nil) || (app != nil && node != nil) {
 		log.Logger().Warn("Illegal reservation requested",
 			zap.Any("node", node),
 			zap.Any("app", app),
@@ -40,7 +40,7 @@ func newReservation(node *schedulingNode, app *SchedulingApplication, ask *Sched
 		return nil
 	}
 	res := &reservation{
-		ask: ask,
+		askKey: ask.AskProto.AllocationKey,
 	}
 	// since one is nil this is needed to prevent panic
 	if node == nil {
@@ -51,7 +51,7 @@ func newReservation(node *schedulingNode, app *SchedulingApplication, ask *Sched
 	return res
 }
 
-func reservationKey(node *schedulingNode, app *SchedulingApplication, ask *SchedulingAllocationAsk) string {
+func reservationKey(node *schedulingNode, app *SchedulingApplication, ask *schedulingAllocationAsk) string {
 	if ask == nil || (app == nil && node == nil) || (app != nil && node != nil) {
 		log.Logger().Warn("Illegal reservation key requested",
 			zap.Any("node", node),
@@ -60,16 +60,15 @@ func reservationKey(node *schedulingNode, app *SchedulingApplication, ask *Sched
 		return ""
 	}
 	if node == nil {
-		return app.ApplicationInfo.ApplicationID+"|"+ask.AskProto.AllocationKey
+		return app.ApplicationInfo.ApplicationID + "|" + ask.AskProto.AllocationKey
 	}
-	return node.NodeID+"|"+ask.AskProto.AllocationKey
+	return node.NodeID + "|" + ask.AskProto.AllocationKey
 }
 
 // Return the reservation key
 func (r *reservation) getKey() string {
 	if r.nodeID == "" {
-		return r.appID+"|"+r.ask.AskProto.AllocationKey
+		return r.appID + "|" + r.askKey
 	}
-	return r.nodeID+"|"+r.ask.AskProto.AllocationKey
+	return r.nodeID + "|" + r.askKey
 }
-

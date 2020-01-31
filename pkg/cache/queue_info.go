@@ -318,6 +318,8 @@ func (qi *QueueInfo) MarkQueueForRemoval() {
 
 // Update an existing managed queue based on the updated configuration
 func (qi *QueueInfo) updateQueueProps(conf configs.QueueConfig) error {
+	qi.lock.Lock()
+	defer qi.lock.Unlock()
 	// Set the ACLs
 	var err error
 	qi.submitACL, err = security.NewACL(conf.SubmitACL)

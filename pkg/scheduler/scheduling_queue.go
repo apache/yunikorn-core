@@ -168,7 +168,7 @@ func (sq *SchedulingQueue) removeSchedulingApplication(app *SchedulingApplicatio
 		return
 	}
 	// Update pending resource of the queues
-	sq.decPendingResource(app.Requests.GetPendingResource())
+	sq.decPendingResource(app.GetPendingResource())
 }
 
 // Remove the scheduling app from the list of tracked applications. Make sure that the app

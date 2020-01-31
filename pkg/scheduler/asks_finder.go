@@ -28,8 +28,8 @@ import (
 // Find next set of allocation asks for scheduler to place
 // This could be "mini batch", no need to return too many candidates
 func (m *Scheduler) findAllocationAsks(partitionTotalResource *resources.Resource, partitionContext *partitionSchedulingContext, n int,
-	curStep uint64, preemptionParam *preemptionParameters) []*SchedulingAllocationAsk {
-	mayAllocateList := make([]*SchedulingAllocationAsk, 0)
+	curStep uint64, preemptionParam *preemptionParameters) []*schedulingAllocationAsk {
+	mayAllocateList := make([]*schedulingAllocationAsk, 0)
 
 	// Do we have any pending resource?
 	if !resources.StrictlyGreaterThanZero(partitionContext.Root.GetPendingResource()) {
@@ -93,7 +93,7 @@ func sortApplicationsFromQueue(leafQueue *SchedulingQueue) []*SchedulingApplicat
 	sortedApps := make([]*SchedulingApplication, 0)
 	for _, v := range leafQueue.applications {
 		// Only look at app when pending-res > 0
-		if resources.StrictlyGreaterThanZero(v.Requests.GetPendingResource()) {
+		if resources.StrictlyGreaterThanZero(v.GetPendingResource()) {
 			sortedApps = append(sortedApps, v)
 		}
 	}
@@ -104,15 +104,12 @@ func sortApplicationsFromQueue(leafQueue *SchedulingQueue) []*SchedulingApplicat
 	return sortedApps
 }
 
-// sort scheduling Requests from a job
-func (m *Scheduler) findMayAllocationFromApplication(schedulingRequests *SchedulingRequests,
-	headroom *resources.Resource, curStep uint64, selectedPendingAskByAllocationKey map[string]int32, preemptionParameters *preemptionParameters) *SchedulingAllocationAsk {
-	schedulingRequests.lock.RLock()
-	defer schedulingRequests.lock.RUnlock()
+// sort scheduling requests from a job
+func (m *Scheduler) findMayAllocationFromApplication(requests map[string]*schedulingAllocationAsk,
+	headroom *resources.Resource, curStep uint64, selectedPendingAskByAllocationKey map[string]int32, preemptionParameters *preemptionParameters) *schedulingAllocationAsk {
+	var bestAsk *schedulingAllocationAsk = nil
 
-	var bestAsk *SchedulingAllocationAsk = nil
-
-	for _, v := range schedulingRequests.requests {
+	for _, v := range requests {
 		if preemptionParameters.crossQueuePreemption {
 			// Skip black listed requests for this preemption cycle.
 			if preemptionParameters.blacklistedRequest[v.AskProto.AllocationKey] {
@@ -127,7 +124,7 @@ func (m *Scheduler) findMayAllocationFromApplication(schedulingRequests *Schedul
 		}
 
 		// Only sort request if its resource fits headroom
-		if v.PendingRepeatAsk-selectedPendingAskByAllocationKey[v.AskProto.AllocationKey] > 0 && resources.FitIn(headroom, v.AllocatedResource) {
+		if v.getPendingAskRepeat()-selectedPendingAskByAllocationKey[v.AskProto.AllocationKey] > 0 && resources.FitIn(headroom, v.AllocatedResource) {
 			if bestAsk == nil || v.NormalizedPriority > bestAsk.NormalizedPriority {
 				bestAsk = v
 			}
@@ -181,7 +178,7 @@ func (m *Scheduler) findNextAllocationAskCandidate(
 	parentQueueMaxLimit *resources.Resource,
 	curStep uint64,
 	selectedPendingAskByAllocationKey map[string]int32,
-	preemptionParameters *preemptionParameters) *SchedulingAllocationAsk {
+	preemptionParameters *preemptionParameters) *schedulingAllocationAsk {
 	for _, queue := range sortedQueueCandidates {
 		// skip stopped queues: running and draining queues are allowed
 		if queue.isStopped() {
@@ -215,7 +212,7 @@ func (m *Scheduler) findNextAllocationAskCandidate(
 
 			sortedApps := sortApplicationsFromQueue(queue)
 			for _, app := range sortedApps {
-				if ask := m.findMayAllocationFromApplication(app.Requests, newHeadroom, curStep,
+				if ask := m.findMayAllocationFromApplication(app.requests, newHeadroom, curStep,
 					selectedPendingAskByAllocationKey, preemptionParameters); ask != nil {
 					app.MayAllocatedResource = resources.Add(app.MayAllocatedResource, ask.AllocatedResource)
 					queue.ProposingResource = resources.Add(queue.ProposingResource, ask.AllocatedResource)

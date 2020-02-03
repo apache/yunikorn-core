@@ -4,12 +4,12 @@ Before reading this guide, we assume you either have a Kubernetes cluster, or a 
 It is also assumed that `kubectl` is on your path and properly configured.
 Follow this [guide](setup/env-setup.md) on how to setup a local Kubernetes cluster using docker-desktop.
 
-All files mentioned in this user guide are part of the [yunikorn-k8shim](https://github.com/cloudera/yunikorn-k8shim) repository.
-They are located in the [deployments](https://github.com/cloudera/yunikorn-k8shim/tree/master/deployments/scheduler) sub directory. The command given assume that you are located in that directory.
+All files mentioned in this user guide are part of the [yunikorn-k8shim](https://github.com/apache/incubator-yunikorn-k8shim) repository.
+They are located in the [deployments](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/deployments/scheduler) sub directory. The command given assume that you are located in that directory.
 
 ## Quick Start
 
-The easiest way to get started is to our [helm charts](https://github.com/cloudera/yunikorn-k8shim/tree/master/helm-charts) to deploy YuniKorn on an existing Kubernetes cluster.
+The easiest way to get started is to our [helm charts](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/helm-charts) to deploy YuniKorn on an existing Kubernetes cluster.
 
 ```shell script
 helm install ./yunikorn
@@ -46,7 +46,7 @@ Unknown queue names will cause the pod to be rejected by the YuniKorn scheduler.
 ### Running simple sample applications
 
 All sample deployments can be found under `examples` directory.
-The list of all examples is in the [README](https://github.com/cloudera/yunikorn-k8shim/blob/master/deployments/examples).
+The list of all examples is in the [README](https://github.com/apache/incubator-yunikorn-k8shim/blob/master/deployments/examples).
 Not all examples are given here. Further details can be found in that README.
 
 A single pod based on a standard nignx image: 
@@ -57,7 +57,7 @@ A simple sleep job example:
 ```
 kubectl create -f examples/sleep/sleeppods.xml
 ```
-The files for these examples can be found in the [README nignx](https://github.com/cloudera/yunikorn-k8shim/tree/master/deployments/examples#nignx) and the [README sleep](https://github.com/cloudera/yunikorn-k8shim/tree/master/deployments/examples#sleep) sections.
+The files for these examples can be found in the [README nignx](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/deployments/examples#nignx) and the [README sleep](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/deployments/examples#sleep) sections.
 
 ### Running a spark application
 Kubernetes support for Apache Spark is not part of all releases. You must have a current release of Apache Spark with Kubernetes support built in. 
@@ -84,7 +84,7 @@ Spark uses its own version of the application ID tag called *spark-app-id*. This
 * examples/spark/driver.yaml
 * examples/spark/executor.yaml
 When you run Spark on Kubernetes with pod templates, *spark-app-id* is considered the applicationId.
-A script to run the spark application and the yaml files are in the [README spark](https://github.com/cloudera/yunikorn-k8shim/tree/master/deployments/examples#spark) section.
+A script to run the spark application and the yaml files are in the [README spark](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/deployments/examples#spark) section.
 
 ### Affinity scheduling
 The scheduler supports affinity and ati affinity scheduling on kubernetes using predicates:
@@ -93,12 +93,12 @@ kubectl create -f examples/predicates/pod-anti-affinity-example.yaml
 ```
 This deployment ensures 2 pods cannot be co-located together on same node.
 If this yaml is deployed on 1 node cluster, expect 1 pod to be started and the other pod should stay in a pending state.
-More examples on affinity and anti affinity scheduling in the predicates section of the [README predicates](https://github.com/cloudera/yunikorn-k8shim/tree/master/deployments/examples#predicates)
+More examples on affinity and anti affinity scheduling in the predicates section of the [README predicates](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/deployments/examples#predicates)
 
 ### Volume examples
 There are three examples with volumes available. The NFS example does not work on docker desktop and requires [minikube](https://kubernetes.io/docs/tasks/tools/install-minikube/). 
 The EBS volume requires a kubernetes cluster running on AWS (EKS).
-Further instructions for the volume examples in the section of the [README Volumes](https://github.com/cloudera/yunikorn-k8shim/tree/master/deployments/examples#volumes).
+Further instructions for the volume examples in the section of the [README Volumes](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/deployments/examples#volumes).
 
 CAUTION: All examples will generate an unending stream of data in a file called `dates.txt` on the mounted volume. This could cause a disk to fill up and execution time should be limited. 
 

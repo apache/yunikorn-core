@@ -136,11 +136,14 @@ func (qi *QueueInfo) HandleQueueEvent(event SchedulingObjectEvent) error {
 	return err
 }
 
+// Return the currently allocated resource for the queue.
+// It returns a cloned object as we do not want to allow modifications to be made to the
+// value of the queue.
 func (qi *QueueInfo) GetAllocatedResource() *resources.Resource {
 	qi.lock.RLock()
 	defer qi.lock.RUnlock()
 
-	return qi.allocatedResource
+	return qi.allocatedResource.Clone()
 }
 
 // Return if this is a leaf queue or not
@@ -192,7 +195,7 @@ func (qi *QueueInfo) updateUsedResourceMetrics() {
 }
 
 // Increment the allocated resources for this queue (recursively)
-// Guard against going over max resources if the
+// Guard against going over max resources if set
 func (qi *QueueInfo) IncAllocatedResource(alloc *resources.Resource, nodeReported bool) error {
 	qi.lock.Lock()
 	defer qi.lock.Unlock()

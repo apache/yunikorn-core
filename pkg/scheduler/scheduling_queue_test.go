@@ -38,7 +38,11 @@ func createRootQueue() (*SchedulingQueue, error) {
 		Properties: make(map[string]string),
 	}
 	root, err := cache.NewManagedQueue(rootConf, nil)
-	return NewSchedulingQueueInfo(root, nil), err
+	// something failed in the cache return early
+	if err != nil {
+		return nil, err
+	}
+	return newSchedulingQueueInfo(root, nil), err
 }
 
 // wrapper around the create calls using the same syntax as an unmanaged queue
@@ -50,13 +54,21 @@ func createManagedQueue(parentQI *SchedulingQueue, name string, parent bool) (*S
 		Properties: make(map[string]string),
 	}
 	child, err := cache.NewManagedQueue(childConf, parentQI.CachedQueueInfo)
-	return NewSchedulingQueueInfo(child, parentQI), err
+	// something failed in the cache return early
+	if err != nil {
+		return nil, err
+	}
+	return newSchedulingQueueInfo(child, parentQI), err
 }
 
 // wrapper around the create calls using the same syntax as a managed queue
 func createUnManagedQueue(parentQI *SchedulingQueue, name string, parent bool) (*SchedulingQueue, error) {
 	child, err := cache.NewUnmanagedQueue(name, !parent, parentQI.CachedQueueInfo)
-	return NewSchedulingQueueInfo(child, parentQI), err
+	// something failed in the cache return early
+	if err != nil {
+		return nil, err
+	}
+	return newSchedulingQueueInfo(child, parentQI), err
 }
 
 // base test for creating a managed queue
@@ -71,7 +83,7 @@ func TestQueueBasics(t *testing.T) {
 		t.Error("root queue status is incorrect")
 	}
 	// allocations should be nil
-	if !resources.IsZero(root.allocatingResource) && !resources.IsZero(root.pendingResource) {
+	if !resources.IsZero(root.preempting) && !resources.IsZero(root.pending) {
 		t.Error("root queue must not have allocations set on create")
 	}
 }
@@ -201,10 +213,10 @@ func TestPendingCalc(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create basic root queue: %v", err)
 	}
-	var parent *SchedulingQueue
-	parent, err = createManagedQueue(root, "parent", true)
+	var leaf *SchedulingQueue
+	leaf, err = createManagedQueue(root, "leaf", false)
 	if err != nil {
-		t.Fatalf("failed to create parent queue: %v", err)
+		t.Fatalf("failed to create leaf queue: %v", err)
 	}
 
 	res := map[string]string{"memory": "100", "vcores": "10"}
@@ -213,22 +225,30 @@ func TestPendingCalc(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create basic resource: %v", err)
 	}
-	parent.incPendingResource(allocation)
-	if !resources.Equals(root.pendingResource, allocation) {
-		t.Errorf("root queue pending allocation failed to increment expected %v, got %v", allocation, root.pendingResource)
+	leaf.incPendingResource(allocation)
+	if !resources.Equals(root.pending, allocation) {
+		t.Errorf("root queue pending allocation failed to increment expected %v, got %v", allocation, root.pending)
 	}
-	parent.decPendingResource(allocation)
-	if !resources.IsZero(root.pendingResource) {
-		t.Errorf("root queue pending allocation failed to decrement expected 0, got %v", root.pendingResource)
+	if !resources.Equals(leaf.pending, allocation) {
+		t.Errorf("leaf queue pending allocation failed to increment expected %v, got %v", allocation, leaf.pending)
+	}
+	leaf.decPendingResource(allocation)
+	if !resources.IsZero(root.pending) {
+		t.Errorf("root queue pending allocation failed to decrement expected 0, got %v", root.pending)
+	}
+	if !resources.IsZero(leaf.pending) {
+		t.Errorf("leaf queue pending allocation failed to decrement expected 0, got %v", leaf.pending)
 	}
 	// Not allowed to go negative: both will be zero after this
-	root.incPendingResource(allocation)
-	parent.decPendingResource(allocation)
-	if !resources.IsZero(root.pendingResource) {
-		t.Errorf("root queue pending allocation failed to decrement expected zero, got %v", root.pendingResource)
+	newRes := resources.Multiply(allocation, 2)
+	root.pending = newRes
+	leaf.decPendingResource(newRes)
+	// using the get function to access the value
+	if !resources.IsZero(root.GetPendingResource()) {
+		t.Errorf("root queue pending allocation failed to decrement expected zero, got %v", root.pending)
 	}
-	if !resources.IsZero(parent.pendingResource) {
-		t.Errorf("parent queue pending allocation should have failed to decrement expected zero, got %v", parent.pendingResource)
+	if !resources.IsZero(leaf.GetPendingResource()) {
+		t.Errorf("leaf queue pending allocation should have failed to decrement expected zero, got %v", leaf.pending)
 	}
 }
 
@@ -293,7 +313,7 @@ func TestAddApplication(t *testing.T) {
 	// adding the app must not update pending resources
 	leaf.addSchedulingApplication(app)
 	assert.Equal(t, len(leaf.applications), 1, "Application was not added to the queue as expected")
-	assert.Assert(t, resources.IsZero(leaf.pendingResource), "leaf queue pending resource not zero")
+	assert.Assert(t, resources.IsZero(leaf.pending), "leaf queue pending resource not zero")
 
 	// add the same app again should not increase the number of apps
 	leaf.addSchedulingApplication(app)
@@ -323,7 +343,7 @@ func TestRemoveApplication(t *testing.T) {
 	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "exists"})
 	leaf.addSchedulingApplication(app)
 	assert.Equal(t, len(leaf.applications), 1, "Application was not added to the queue as expected")
-	assert.Assert(t, resources.IsZero(leaf.pendingResource), "leaf queue pending resource not zero")
+	assert.Assert(t, resources.IsZero(leaf.pending), "leaf queue pending resource not zero")
 	leaf.removeSchedulingApplication(nonExist)
 	assert.Equal(t, len(leaf.applications), 1, "Non existing application was removed from the queue")
 	leaf.removeSchedulingApplication(app)
@@ -337,13 +357,13 @@ func TestRemoveApplication(t *testing.T) {
 	app.pending.AddTo(pending)
 	leaf.addSchedulingApplication(app)
 	assert.Equal(t, len(leaf.applications), 1, "Application was not added to the queue as expected")
-	assert.Assert(t, resources.IsZero(leaf.pendingResource), "leaf queue pending resource not zero")
+	assert.Assert(t, resources.IsZero(leaf.pending), "leaf queue pending resource not zero")
 	// update pending resources for the hierarchy
 	leaf.incPendingResource(pending)
 	leaf.removeSchedulingApplication(app)
 	assert.Equal(t, len(leaf.applications), 0, "Application was not removed from the queue as expected")
-	assert.Assert(t, resources.IsZero(leaf.pendingResource), "leaf queue pending resource not updated correctly")
-	assert.Assert(t, resources.IsZero(root.pendingResource), "root queue pending resource not updated correctly")
+	assert.Assert(t, resources.IsZero(leaf.pending), "leaf queue pending resource not updated correctly")
+	assert.Assert(t, resources.IsZero(root.pending), "root queue pending resource not updated correctly")
 }
 
 func TestQueueStates(t *testing.T) {
@@ -374,5 +394,222 @@ func TestQueueStates(t *testing.T) {
 	err = leaf.CachedQueueInfo.HandleQueueEvent(cache.Start)
 	if err == nil || !leaf.isDraining() {
 		t.Errorf("leaf queue changed state which should not happen: %v", err)
+	}
+}
+
+func TestAllocatingCalc(t *testing.T) {
+	// create the root
+	root, err := createRootQueue()
+	if err != nil {
+		t.Fatalf("failed to create basic root queue: %v", err)
+	}
+	var leaf *SchedulingQueue
+	leaf, err = createManagedQueue(root, "leaf", false)
+	if err != nil {
+		t.Fatalf("failed to create leaf queue: %v", err)
+	}
+
+	res := map[string]string{"first": "1"}
+	var allocation *resources.Resource
+	allocation, err = resources.NewResourceFromConf(res)
+	if err != nil {
+		t.Fatalf("failed to create basic resource: %v", err)
+	}
+	leaf.incAllocatingResource(allocation)
+	if !resources.Equals(root.allocating, allocation) {
+		t.Errorf("root queue allocating failed to increment expected %v, got %v", allocation, root.allocating)
+	}
+	if !resources.Equals(leaf.allocating, allocation) {
+		t.Errorf("leaf queue allocating failed to increment expected %v, got %v", allocation, leaf.allocating)
+	}
+	leaf.decAllocatingResource(allocation)
+	if !resources.IsZero(root.allocating) {
+		t.Errorf("root queue allocating failed to decrement expected 0, got %v", root.allocating)
+	}
+	// Not allowed to go negative: both will be zero after this
+	root.incAllocatingResource(allocation)
+	leaf.decAllocatingResource(allocation)
+	// using the get function to access the value
+	if !resources.IsZero(root.getAllocatingResource()) {
+		t.Errorf("root queue allocating failed to decrement expected zero, got %v", root.allocating)
+	}
+	if !resources.IsZero(leaf.getAllocatingResource()) {
+		t.Errorf("leaf queue allocating should have failed to decrement expected zero, got %v", leaf.allocating)
+	}
+}
+
+func TestPreemptingCalc(t *testing.T) {
+	// create the root
+	root, err := createRootQueue()
+	if err != nil {
+		t.Fatalf("failed to create basic root queue: %v", err)
+	}
+	var leaf *SchedulingQueue
+	leaf, err = createManagedQueue(root, "leaf", false)
+	if err != nil {
+		t.Fatalf("failed to create leaf queue: %v", err)
+	}
+
+	res := map[string]string{"first": "1"}
+	var allocation *resources.Resource
+	allocation, err = resources.NewResourceFromConf(res)
+	if err != nil {
+		t.Fatalf("failed to create basic resource: %v", err)
+	}
+	if !resources.IsZero(leaf.preempting) {
+		t.Errorf("leaf queue preempting resources not set as expected 0, got %v", leaf.preempting)
+	}
+	if !resources.IsZero(root.preempting) {
+		t.Errorf("root queue preempting resources not set as expected 0, got %v", root.preempting)
+	}
+	// preempting does not filter up the hierarchy, check that
+	leaf.incPreemptingResource(allocation)
+	// using the get function to access the value
+	if !resources.Equals(allocation, leaf.getPreemptingResource()) {
+		t.Errorf("queue preempting resources not set as expected %v, got %v", allocation, leaf.preempting)
+	}
+	if !resources.IsZero(root.getPreemptingResource()) {
+		t.Errorf("root queue preempting resources not set as expected 0, got %v", root.preempting)
+	}
+	newRes := resources.Multiply(allocation, 2)
+	leaf.decPreemptingResource(newRes)
+	if !resources.IsZero(leaf.getPreemptingResource()) {
+		t.Errorf("queue preempting resources not set as expected 0, got %v", leaf.preempting)
+	}
+	leaf.setPreemptingResource(newRes)
+	if !resources.Equals(leaf.getPreemptingResource(), resources.Multiply(allocation, 2)) {
+		t.Errorf("queue preempting resources not set as expected %v, got %v", newRes, leaf.preempting)
+	}
+}
+
+func TestUnconfirmedCalc(t *testing.T) {
+	// create the root
+	root, err := createRootQueue()
+	if err != nil {
+		t.Fatalf("failed to create basic root queue: %v", err)
+	}
+	var leaf *SchedulingQueue
+	leaf, err = createManagedQueue(root, "leaf", false)
+	if err != nil {
+		t.Fatalf("failed to create leaf queue: %v", err)
+	}
+	unconfirmed := leaf.getUnconfirmedAllocated()
+	if !resources.IsZero(unconfirmed) {
+		t.Errorf("queue unconfirmed and allocated resources not set as expected 0, got %v", unconfirmed)
+	}
+	res := map[string]string{"first": "1"}
+	var allocation *resources.Resource
+	allocation, err = resources.NewResourceFromConf(res)
+	if err != nil {
+		t.Fatalf("failed to create basic resource: %v", err)
+	}
+	leaf.incAllocatingResource(allocation)
+	unconfirmed = leaf.getUnconfirmedAllocated()
+	if !resources.Equals(unconfirmed, allocation) {
+		t.Errorf("root queue allocating failed to increment expected %v, got %v", allocation, unconfirmed)
+	}
+	// increase the allocated queue resource, use nodeReported true to bypass checks
+	err = leaf.CachedQueueInfo.IncAllocatedResource(allocation, true)
+	if err != nil {
+		t.Fatalf("failed to increase cache queue allocated resource: %v", err)
+	}
+	unconfirmed = leaf.getUnconfirmedAllocated()
+	allocation = resources.Multiply(allocation, 2)
+	if !resources.Equals(unconfirmed, allocation) {
+		t.Errorf("root queue allocating failed to increment expected %v, got %v", allocation, unconfirmed)
+	}
+}
+
+// This test must not test the sorter that is underlying.
+// It tests the queue specific parts of the code only.
+func TestSortApplications(t *testing.T) {
+	// create the root
+	root, err := createRootQueue()
+	if err != nil {
+		t.Fatalf("failed to create basic root queue: %v", err)
+	}
+	var leaf, parent *SchedulingQueue
+	// empty parent queue
+	parent, err = createManagedQueue(root, "parent", true)
+	if err != nil {
+		t.Fatalf("failed to create parent queue: %v", err)
+	}
+	if apps := parent.sortApplications(); apps != nil {
+		t.Errorf("parent queue should not return sorted apps: %v", apps)
+	}
+
+	// empty leaf queue
+	leaf, err = createManagedQueue(parent, "leaf", false)
+	if err != nil {
+		t.Fatalf("failed to create leaf queue: %v", err)
+	}
+	if len(leaf.sortApplications()) != 0 {
+		t.Errorf("empty queue should return no app from sort: %v", leaf)
+	}
+	// new app does not have pending res, does not get returned
+	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "app-1"})
+	leaf.addSchedulingApplication(app)
+	if len(leaf.sortApplications()) != 0 {
+		t.Errorf("app without ask should not be in sorted apps: %v", app)
+	}
+	var res, delta *resources.Resource
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "1"})
+	if err != nil {
+		t.Fatalf("failed to create basic resource: %v", err)
+	}
+	// add an ask app must be returned
+	delta, err = app.addAllocationAsk(newAllocationAsk("alloc-1", "app-1", res))
+	if err != nil || !resources.Equals(res, delta) {
+		t.Errorf("allocation ask delta expected %v, got %v (err = %v)", res, delta, err)
+	}
+	sortedApp := leaf.sortApplications()
+	if len(sortedApp) != 1 || sortedApp[0].ApplicationInfo.ApplicationID != "app-1" {
+		t.Errorf("sorted application is missing expected app: %v", sortedApp)
+	}
+	// set 0 repeat
+	_, err = app.updateAllocationAskRepeat("alloc-1", -1)
+	if err != nil || len(leaf.sortApplications()) != 0 {
+		t.Errorf("app with ask but 0 pending resources should not be in sorted apps: %v (err = %v)", app, err)
+	}
+}
+
+// This test must not test the sorter that is underlying.
+// It tests the queue specific parts of the code only.
+func TestSortQueue(t *testing.T) {
+	// create the root
+	root, err := createRootQueue()
+	if err != nil {
+		t.Fatalf("failed to create basic root queue: %v", err)
+	}
+
+	var leaf, parent *SchedulingQueue
+	// empty parent queue
+	parent, err = createManagedQueue(root, "parent", true)
+	if err != nil {
+		t.Fatalf("failed to create parent queue: %v", err)
+	}
+	if len(parent.sortQueues()) != 0 {
+		t.Errorf("parent queue should return sorted queues: %v", parent)
+	}
+
+	// leaf queue must be nil
+	leaf, err = createManagedQueue(parent, "leaf", false)
+	if err != nil {
+		t.Fatalf("failed to create leaf queue: %v", err)
+	}
+	if queues := leaf.sortQueues(); queues != nil {
+		t.Errorf("leaf queue should return sorted queues: %v", queues)
+	}
+	if queues := parent.sortQueues(); len(queues) != 0 {
+		t.Errorf("parent queue with leaf returned unexpectd queues: %v", queues)
+	}
+	var res *resources.Resource
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "1"})
+	if err != nil {
+		t.Fatalf("failed to create basic resource: %v", err)
+	}
+	leaf.incPendingResource(res)
+	if queues := parent.sortQueues(); len(queues) != 1 {
+		t.Errorf("parent queue did not return expected queues: %v", queues)
 	}
 }

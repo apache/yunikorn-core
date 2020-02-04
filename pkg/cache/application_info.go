@@ -95,7 +95,7 @@ func (ai *ApplicationInfo) GetAllocatedResource() *resources.Resource {
 	ai.lock.RLock()
 	defer ai.lock.RUnlock()
 
-	return ai.allocatedResource
+	return ai.allocatedResource.Clone()
 }
 
 // Set the leaf queue the application runs in. Update the queue name also to match as this might be different from the

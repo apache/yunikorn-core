@@ -39,7 +39,7 @@ func (m *DRFPreemptionPolicy) DoPreemption(scheduler *Scheduler) {
 	calculateIdealResources(scheduler)
 
 	// Then go to under utilized queues and search for requests
-	scheduler.singleStepSchedule(16, &preemptionParameters{crossQueuePreemption: true, blacklistedRequest: make(map[string]bool)})
+	scheduler.singleStepSchedule(16)
 }
 
 /*
@@ -98,7 +98,7 @@ func initHeadroomShortages(preemptorQueue *preemptionQueueContext, allocatedReso
 	cur := preemptorQueue
 	for cur != nil {
 		// Headroom = max - may_allocated + preempting
-		headroom := resources.Sub(cur.resources.max, cur.schedulingQueue.getAllocatingResource())
+		headroom := resources.Sub(cur.resources.max, cur.schedulingQueue.getPreemptingResource())
 		headroom.AddTo(cur.resources.markedPreemptedResource)
 		headroomShortage := resources.SubEliminateNegative(allocatedResource, headroom)
 		if resources.StrictlyGreaterThanZero(headroomShortage) {
@@ -188,8 +188,7 @@ func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionCont
 	return nil
 }
 
-func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitionContext, nodeIterator NodeIterator, candidate *schedulingAllocationAsk,
-	preemptionParam *preemptionParameters) *schedulingAllocation {
+func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitionContext, nodeIterator NodeIterator, candidate *schedulingAllocationAsk) *schedulingAllocation {
 	if preemptionPartitionContext == nil {
 		return nil
 	}
@@ -235,7 +234,7 @@ func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitio
 		// allocations, allocation with lower priorities, etc.
 	}
 
-	preemptorQueue.schedulingQueue.incAllocatingResource(candidate.AllocatedResource)
+	preemptorQueue.schedulingQueue.incPreemptingResource(candidate.AllocatedResource)
 
 	// Finally, let's do preemption proposals
 	return createPreemptionAndAllocationProposal(preemptionPartitionContext, nodeToAllocate, candidate, preemptionResults)

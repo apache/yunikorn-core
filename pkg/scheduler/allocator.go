@@ -34,17 +34,10 @@ import (
 
 // Visible by tests
 func (m *Scheduler) SingleStepScheduleAllocTest(nAlloc int) {
-	m.singleStepSchedule(nAlloc, &preemptionParameters{
-		crossQueuePreemption: false,
-		blacklistedRequest:   make(map[string]bool),
-	})
+	m.singleStepSchedule(nAlloc)
 }
 
-func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionParameters) {
-	if !preemptionParam.crossQueuePreemption {
-		m.step++
-	}
-
+func (m *Scheduler) singleStepSchedule(nAlloc int) {
 	for partition, partitionContext := range m.clusterSchedulingContext.getPartitionMapClone() {
 		totalPartitionResource := m.clusterInfo.GetTotalPartitionResource(partition)
 		if totalPartitionResource == nil {
@@ -59,12 +52,12 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
 		//   can be done as multiple thread.
 		// - For asks cannot be assigned, we will do preemption. Again it is done using
 		//   single-thread.
-		candidates := m.findAllocationAsks(totalPartitionResource, partitionContext, nAlloc, m.step, preemptionParam)
+		candidates := m.findAllocationAsks(totalPartitionResource, partitionContext, nAlloc, m.step)
 
 		// Try to allocate from candidates, returns allocation proposal as well as failed allocation
 		// ask candidates. (For preemption).
 		// TODO clean this up we ignore failures so why collect them?
-		allocations, _ := m.tryBatchAllocation(partition, partitionContext, candidates, preemptionParam)
+		allocations, _ := m.tryBatchAllocation(partition, partitionContext, candidates)
 
 		// Send allocations to cache, and pending ask.
 		confirmedAllocations := make([]*schedulingAllocation, 0)
@@ -89,7 +82,7 @@ func (m *Scheduler) singleStepSchedule(nAlloc int, preemptionParam *preemptionPa
 		nAlloc -= len(confirmedAllocations)
 
 		// Update missed opportunities
-		m.handleFailedToAllocationAllocations(confirmedAllocations, candidates, preemptionParam)
+		m.handleFailedToAllocationAllocations(confirmedAllocations, candidates)
 	}
 }
 
@@ -135,19 +128,15 @@ func (m *Scheduler) regularAllocate(nodeIterator NodeIterator, candidate *schedu
 	return nil
 }
 
-func (m *Scheduler) allocate(nodes NodeIterator, candidate *schedulingAllocationAsk, preemptionParam *preemptionParameters) *schedulingAllocation {
-	if preemptionParam.crossQueuePreemption {
-		return crossQueuePreemptionAllocate(m.preemptionContext.partitions[candidate.PartitionName], nodes, candidate, preemptionParam)
-	}
+func (m *Scheduler) allocate(nodes NodeIterator, candidate *schedulingAllocationAsk) *schedulingAllocation {
 	return m.regularAllocate(nodes, candidate)
 }
 
 // Do mini batch allocation
 func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *partitionSchedulingContext,
-	candidates []*schedulingAllocationAsk,
-	preemptionParam *preemptionParameters) ([]*schedulingAllocation, []*schedulingAllocationAsk) {
+	candidates []*schedulingAllocationAsk) ([]*schedulingAllocation, []*schedulingAllocationAsk) {
 	// copy list of node since we going to go through node list a couple of times
-	nodeList := partitionContext.getSchedulingNodes()
+	nodeList := partitionContext.getSchedulableNodes()
 	if len(nodeList) == 0 {
 		return make([]*schedulingAllocation, 0), candidates
 	}
@@ -165,19 +154,11 @@ func (m *Scheduler) tryBatchAllocation(partition string, partitionContext *parti
 
 		candidate := candidates[i]
 		// Check if the same allocation key got rejected already.
-		if preemptionParam.blacklistedRequest[candidate.AskProto.AllocationKey] {
-			return
-		}
-
 		nodeIterator := m.evaluateForSchedulingPolicy(nodeList, partitionContext)
 
-		if allocation := m.allocate(nodeIterator, candidate, preemptionParam); allocation != nil {
+		if allocation := m.allocate(nodeIterator, candidate); allocation != nil {
 			length := atomic.AddInt32(&allocatedLength, 1)
 			allocations[length-1] = allocation
-		} else {
-			length := atomic.AddInt32(&failedAskLength, 1)
-			preemptionParam.blacklistedRequest[candidate.AskProto.AllocationKey] = true
-			failedAsks[length-1] = candidate
 		}
 
 		// record the latency
@@ -222,17 +203,17 @@ func (m *Scheduler) evaluateForSchedulingPolicy(nodes []*schedulingNode, partiti
 	configuredPolicy := partitionContext.partition.GetNodeSortingPolicy()
 	switch configuredPolicy {
 	case common.BinPackingPolicy:
-		SortNodes(nodes, MinAvailableResources)
+		sortNodes(nodes, MinAvailableResources)
 		return NewDefaultNodeIterator(nodes)
 	case common.FairnessPolicy:
-		SortNodes(nodes, MaxAvailableResources)
+		sortNodes(nodes, MaxAvailableResources)
 		return NewDefaultNodeIterator(nodes)
 	}
 
 	return nil
 }
 
-func (m *Scheduler) handleFailedToAllocationAllocations(allocations []*schedulingAllocation, candidates []*schedulingAllocationAsk, preemptionParam *preemptionParameters) {
+func (m *Scheduler) handleFailedToAllocationAllocations(allocations []*schedulingAllocation, candidates []*schedulingAllocationAsk) {
 	// Failed allocated asks
 	failedToAllocationKeys := make(map[string]bool)
 	allocatedKeys := make(map[string]bool)
@@ -247,25 +228,17 @@ func (m *Scheduler) handleFailedToAllocationAllocations(allocations []*schedulin
 	}
 
 	for failedAllocationKey := range failedToAllocationKeys {
-		if preemptionParam.crossQueuePreemption {
-			preemptionParam.blacklistedRequest[failedAllocationKey] = true
-		} else {
-			curWaitValue := m.waitTillNextTry[failedAllocationKey]
-			if curWaitValue == 0 {
-				curWaitValue = 2
-			} else if curWaitValue < (1 << 20) {
-				// Increase missed value if it is less than 2^20 (TODO need do some experiments about this value)
-				curWaitValue <<= 1
-			}
-			m.waitTillNextTry[failedAllocationKey] = curWaitValue
+		curWaitValue := m.waitTillNextTry[failedAllocationKey]
+		if curWaitValue == 0 {
+			curWaitValue = 2
+		} else if curWaitValue < (1 << 20) {
+			// Increase missed value if it is less than 2^20 (TODO need do some experiments about this value)
+			curWaitValue <<= 1
 		}
+		m.waitTillNextTry[failedAllocationKey] = curWaitValue
 	}
 
 	for allocatedKey := range allocatedKeys {
-		if preemptionParam.crossQueuePreemption {
-			delete(preemptionParam.blacklistedRequest, allocatedKey)
-		} else {
-			delete(m.waitTillNextTry, allocatedKey)
-		}
+		delete(m.waitTillNextTry, allocatedKey)
 	}
 }

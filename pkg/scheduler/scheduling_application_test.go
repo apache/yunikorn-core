@@ -23,11 +23,13 @@ import (
 
 	"github.com/cloudera/yunikorn-core/pkg/cache"
 	"github.com/cloudera/yunikorn-core/pkg/common/resources"
+	"github.com/cloudera/yunikorn-core/pkg/common/security"
 )
 
 func TestAppAllocating(t *testing.T) {
 	appID := "app-1"
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: appID})
+	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	app := newSchedulingApplication(appInfo)
 	if app == nil || app.ApplicationInfo.ApplicationID != appID {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
@@ -67,7 +69,8 @@ func TestAppAllocating(t *testing.T) {
 
 func TestAppReservation(t *testing.T) {
 	appID := "app-1"
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: appID})
+	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	app := newSchedulingApplication(appInfo)
 	if app == nil || app.ApplicationInfo.ApplicationID != appID {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
@@ -101,7 +104,7 @@ func TestAppReservation(t *testing.T) {
 
 	res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	ask = newAllocationAsk(askKey, appID, res)
-	app = newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: appID})
+	app = newSchedulingApplication(appInfo)
 	// reserve that works
 	ok, err = app.reserve(node, ask)
 	if !ok || err != nil {
@@ -159,7 +162,8 @@ func TestAppReservation(t *testing.T) {
 
 func TestAppAllocReservation(t *testing.T) {
 	appID := "app-1"
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: appID})
+	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	app := newSchedulingApplication(appInfo)
 	if app == nil || app.ApplicationInfo.ApplicationID != appID {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
@@ -217,7 +221,8 @@ func TestAppAllocReservation(t *testing.T) {
 
 func TestUpdateRepeat(t *testing.T) {
 	appID := "app-1"
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: appID})
+	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	app := newSchedulingApplication(appInfo)
 	if app == nil || app.ApplicationInfo.ApplicationID != appID {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
@@ -263,7 +268,8 @@ func TestUpdateRepeat(t *testing.T) {
 
 func TestAddAllocAsk(t *testing.T) {
 	appID := "app-1"
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: appID})
+	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	app := newSchedulingApplication(appInfo)
 	if app == nil || app.ApplicationInfo.ApplicationID != appID {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
@@ -329,7 +335,8 @@ func TestAddAllocAsk(t *testing.T) {
 
 func TestRemoveAllocAsk(t *testing.T) {
 	appID := "app-1"
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: appID})
+	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	app := newSchedulingApplication(appInfo)
 	if app == nil || app.ApplicationInfo.ApplicationID != appID {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
@@ -375,5 +382,35 @@ func TestRemoveAllocAsk(t *testing.T) {
 	}
 	if len(app.requests) != 0 {
 		t.Fatalf("asks not removed from as expected got %d", len(app.requests))
+	}
+}
+
+func TestUnconfirmedAppCalc(t *testing.T) {
+	appID := "app-1"
+	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	app := newSchedulingApplication(appInfo)
+	if app == nil || app.ApplicationInfo.ApplicationID != appID {
+		t.Fatalf("app create failed which should not have %v", app)
+	}
+	unconfirmed := app.getUnconfirmedAllocated()
+	if !resources.IsZero(unconfirmed) {
+		t.Errorf("app unconfirmed and allocated resources not set as expected 0, got %v", unconfirmed)
+	}
+	res := map[string]string{"first": "1"}
+	allocation, err := resources.NewResourceFromConf(res)
+	if err != nil {
+		t.Fatalf("failed to create basic resource: %v", err)
+	}
+	app.incAllocating(allocation)
+	unconfirmed = app.getUnconfirmedAllocated()
+	if !resources.Equals(allocation, unconfirmed) {
+		t.Errorf("app unconfirmed and allocated resources not set as expected %v, got %v", allocation, unconfirmed)
+	}
+	allocInfo := cache.CreateMockAllocationInfo("app-1", allocation, "uuid", "root.leaf", "node-1")
+	cache.AddAllocationToApp(app.ApplicationInfo, allocInfo)
+	unconfirmed = app.getUnconfirmedAllocated()
+	allocation = resources.Multiply(allocation, 2)
+	if !resources.Equals(allocation, unconfirmed) {
+		t.Errorf("app unconfirmed and allocated resources not set as expected %v, got %v", allocation, unconfirmed)
 	}
 }

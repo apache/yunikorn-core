@@ -47,8 +47,8 @@ func TestNewSchedulingNode(t *testing.T) {
 		t.Fatalf("node create failed which should not have %v", node)
 	}
 	// check the resource info all zero
-	if !resources.IsZero(node.allocatingResource) && !resources.IsZero(node.preemptingResource) {
-		t.Errorf("node resources should all be zero found: %v and %v", node.allocatingResource, node.preemptingResource)
+	if !resources.IsZero(node.allocating) && !resources.IsZero(node.preempting) {
+		t.Errorf("node resources should all be zero found: %v and %v", node.allocating, node.preempting)
 	}
 	if !node.cachedAvailableUpdateNeeded {
 		t.Error("node available resource dirty should be set for new node")
@@ -113,7 +113,7 @@ func TestPreAllocateCheck(t *testing.T) {
 	}
 
 	// set preempting resources
-	node.preemptingResource = resSmall
+	node.preempting = resSmall
 	if !node.preAllocateCheck(resSmall, true) {
 		t.Error("small resource should have fitted in available allocation (preemption)")
 	}
@@ -235,7 +235,7 @@ func TestAvailableDirty(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
 	node.incAllocatingResource(res)
 	if !node.cachedAvailableUpdateNeeded {
-		t.Error("node available resource dirty should be set after incAllocatingResource")
+		t.Error("node available resource dirty should be set after incPreemptingResource")
 	}
 	node.getAvailableResource()
 

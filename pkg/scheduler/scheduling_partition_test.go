@@ -100,25 +100,21 @@ func TestGetNodes(t *testing.T) {
 		t.Fatalf("test partition create failed with error: %v ", err)
 	}
 
-	nodes := partition.getSchedulingNodes()
+	nodes := partition.getSchedulableNodes()
 	assert.Equal(t, 0, len(nodes), "list should have been empty")
 
-	partition.addSchedulingNode(cache.NewNodeForTest("test1", resources.NewResource()))
-	partition.addSchedulingNode(cache.NewNodeForTest("test2", resources.NewResource()))
+	node1 := "node-1"
+	partition.addSchedulingNode(cache.NewNodeForTest(node1, resources.NewResource()))
+	node2 := "node-2"
+	partition.addSchedulingNode(cache.NewNodeForTest(node2, resources.NewResource()))
 	// add one node that will not be returned in the node list
-	node := cache.NewNodeForTest("test-filtered", resources.NewResource())
+	node3 := "notScheduling"
+	node := cache.NewNodeForTest(node3, resources.NewResource())
 	node.SetSchedulable(false)
 	partition.addSchedulingNode(node)
-	assert.Equal(t, 3, len(partition.nodes), "node list not correct")
-	nodes = partition.getSchedulingNodes()
-	// returned list should be only two long
-	assert.Equal(t, 2, len(nodes), "node list not filtered")
-	// map iteration is random so don't know which we get first
-	if !(nodes[0].NodeID == "test1" && nodes[1].NodeID == "test2") &&
-		!(nodes[0].NodeID == "test2" && nodes[1].NodeID == "test1") {
-		t.Errorf("nodes not returend as expected %v", nodes)
-	}
-
+	node4 := "reserved"
+	node = cache.NewNodeForTest(node4, resources.NewResource())
+	partition.addSchedulingNode(node)
 	// get individual nodes
 	schedNode := partition.getSchedulingNode("")
 	if schedNode != nil {
@@ -128,8 +124,33 @@ func TestGetNodes(t *testing.T) {
 	if schedNode != nil {
 		t.Errorf("existing node returned for non existing name: %v", schedNode)
 	}
-	schedNode = partition.getSchedulingNode("test-filtered")
-	if schedNode == nil || schedNode.NodeID != "test-filtered" {
-		t.Error("failed to retrieve existing node")
+	schedNode = partition.getSchedulingNode(node3)
+	if schedNode == nil || schedNode.NodeID != node3 {
+		t.Error("failed to retrieve existing non scheduling node")
+	}
+	schedNode = partition.getSchedulingNode(node4)
+	schedNode.reservations["app-1|alloc-1"] = &reservation{"", "app-1", "alloc-1"}
+	if schedNode == nil || schedNode.NodeID != node4 {
+		t.Error("failed to retrieve existing reserved node")
+	}
+
+	assert.Equal(t, 4, len(partition.nodes), "node list not correct")
+	nodes = partition.getSchedulableNodes()
+	// returned list should be only two long
+	assert.Equal(t, 2, len(nodes), "node list not filtered")
+	// map iteration is random so don't know which we get first
+	for _, schedNode = range nodes {
+		if schedNode.NodeID != node1 && schedNode.NodeID != node2 {
+			t.Fatalf("unexpected node returned in list: %s", node.NodeID)
+		}
+	}
+	nodes = partition.getSchedulingNodes(false)
+	// returned list should be 3 long: no reserved filter
+	assert.Equal(t, 3, len(nodes), "node list was incorrectly filtered")
+	// check if we have all nodes: since there is a backing map we cannot have duplicates
+	for _, schedNode = range nodes {
+		if schedNode.NodeID == node3 {
+			t.Fatalf("unexpected node returned in list: %s", node.NodeID)
+		}
 	}
 }

@@ -26,11 +26,16 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
-// AllocationInfo for tests inside the cache
+// AllocationInfo for tests inside and outside the cache
 func CreateMockAllocationInfo(appID string, res *resources.Resource, uuid string, queueName string, nodeID string) *AllocationInfo {
 	info := &AllocationInfo{ApplicationID: appID, AllocatedResource: res,
 		AllocationProto: &si.Allocation{UUID: uuid, QueueName: queueName, NodeID: nodeID}}
 	return info
+}
+
+// Add allocation to cache app for tests
+func AddAllocationToApp(app *ApplicationInfo, alloc *AllocationInfo) {
+	app.addAllocation(alloc)
 }
 
 // Create a partition for testing from a yaml configuration

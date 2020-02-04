@@ -31,15 +31,15 @@ import (
 )
 
 type SchedulingApplication struct {
-	ApplicationInfo      *cache.ApplicationInfo
-	MayAllocatedResource *resources.Resource // Maybe allocated, set by scheduler
+	ApplicationInfo *cache.ApplicationInfo
 
 	// Private fields need protection
-	queue        *SchedulingQueue // queue the application is running in
-	allocating   *resources.Resource
-	pending      *resources.Resource
-	reservations map[string]*reservation             // a map of reservations
-	requests     map[string]*schedulingAllocationAsk // a map of asks
+	queue          *SchedulingQueue                    // queue the application is running in
+	allocating     *resources.Resource                 // allocating resource set by the scheduler
+	pending        *resources.Resource                 // pending resources from asks for the app
+	reservations   map[string]*reservation             // a map of reservations
+	requests       map[string]*schedulingAllocationAsk // a map of asks
+	sortedRequests []*schedulingAllocationAsk
 
 	sync.RWMutex
 }
@@ -65,6 +65,19 @@ func (sa *SchedulingApplication) GetPendingResource() *resources.Resource {
 	sa.RLock()
 	defer sa.RUnlock()
 	return sa.pending
+}
+
+// Return the allocating and allocated resources for this application
+func (sa *SchedulingApplication) getUnconfirmedAllocated() *resources.Resource {
+	sa.RLock()
+	defer sa.RUnlock()
+	return resources.Add(sa.allocating, sa.ApplicationInfo.GetAllocatedResource())
+}
+
+func (sa *SchedulingApplication) getAllocatingResource() *resources.Resource {
+	sa.RLock()
+	defer sa.RUnlock()
+	return sa.allocating
 }
 
 // Increment allocating resource for the app
@@ -265,4 +278,15 @@ func (sa *SchedulingApplication) canAskReserve(ask *schedulingAllocationAsk) boo
 			zap.Int("askReserved", len(resNumber)))
 	}
 	return pending > len(resNumber)
+}
+
+// Locking occurs by the methods that are calling the sort, this must be lock free.
+func (sa *SchedulingApplication) sortRequests(ascending bool) {
+	sa.sortedRequests = make([]*schedulingAllocationAsk, len(sa.requests))
+	idx := 0
+	for _, value := range sa.requests {
+		sa.sortedRequests[idx] = value
+		idx++
+	}
+	sortAskByPriority(sa.sortedRequests, ascending)
 }

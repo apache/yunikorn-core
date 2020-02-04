@@ -34,24 +34,25 @@ type schedulingAllocationAsk struct {
 	AllocatedResource  *resources.Resource
 	ApplicationID      string
 	PartitionName      string
-	NormalizedPriority int32
 	QueueName          string
 
 	// Private fields need protection
+	priority         int32
 	pendingRepeatAsk int32
 
 	sync.RWMutex
 }
 
 func newSchedulingAllocationAsk(ask *si.AllocationAsk) *schedulingAllocationAsk {
-	return &schedulingAllocationAsk{
+	saa := &schedulingAllocationAsk{
 		AskProto:          ask,
 		AllocatedResource: resources.NewResourceFromProto(ask.ResourceAsk),
 		pendingRepeatAsk:  ask.MaxAllocations,
 		ApplicationID:     ask.ApplicationID,
 		PartitionName:     ask.PartitionName,
-		// TODO, normalize priority from ask
 	}
+	saa.priority = saa.normalizePriority(ask.Priority)
+	return saa
 }
 
 func convertFromAllocation(allocation *si.Allocation, rmID string) *schedulingAllocationAsk {
@@ -96,4 +97,11 @@ func (saa *schedulingAllocationAsk) getPendingAskRepeat() int32 {
 	defer saa.RUnlock()
 
 	return saa.pendingRepeatAsk
+}
+
+// Normalised priority
+// Currently a direct conversion.
+func (saa *schedulingAllocationAsk) normalizePriority(priority *si.Priority) int32 {
+	// TODO, really normalize priority from ask
+	return priority.GetPriorityValue()
 }

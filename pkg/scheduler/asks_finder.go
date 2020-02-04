@@ -28,7 +28,7 @@ import (
 // Find next set of allocation asks for scheduler to place
 // This could be "mini batch", no need to return too many candidates
 func (m *Scheduler) findAllocationAsks(partitionTotalResource *resources.Resource, partitionContext *partitionSchedulingContext, n int,
-	curStep uint64, preemptionParam *preemptionParameters) []*schedulingAllocationAsk {
+	curStep uint64) []*schedulingAllocationAsk {
 	mayAllocateList := make([]*schedulingAllocationAsk, 0)
 
 	// Do we have any pending resource?
@@ -48,7 +48,7 @@ func (m *Scheduler) findAllocationAsks(partitionTotalResource *resources.Resourc
 		// Find next allocation ask, see if it can be allocated, if yes, add to
 		// may allocate list.
 		next := m.findNextAllocationAskCandidate(partitionTotalResource, []*SchedulingQueue{partitionContext.Root}, partitionContext,
-			nil, nil, curStep, selectedAsksByAllocationKey, preemptionParam)
+			nil, nil, curStep, selectedAsksByAllocationKey)
 		found = next != nil
 
 		if found {
@@ -77,55 +77,26 @@ func sortSubqueuesFromQueue(parentQueue *SchedulingQueue) []*SchedulingQueue {
 	}
 
 	// Sort the queues
-	SortQueue(sortedQueues, parentQueue.QueueSortType)
+	sortQueue(sortedQueues, parentQueue.QueueSortType)
 
 	return sortedQueues
 }
 
-// Return a sorted copy of the applications in the queue.
-// Only applications with a pending resource request are considered. The applications are sorted using the
-// sorting type for the leaf queue they are in.
-func sortApplicationsFromQueue(leafQueue *SchedulingQueue) []*SchedulingApplication {
-	leafQueue.lock.RLock()
-	defer leafQueue.lock.RUnlock()
-
-	// Create a copy of the applications with pending resources
-	sortedApps := make([]*SchedulingApplication, 0)
-	for _, v := range leafQueue.applications {
-		// Only look at app when pending-res > 0
-		if resources.StrictlyGreaterThanZero(v.GetPendingResource()) {
-			sortedApps = append(sortedApps, v)
-		}
-	}
-
-	// Sort the applications
-	SortApplications(sortedApps, leafQueue.ApplicationSortType, leafQueue.CachedQueueInfo.GuaranteedResource)
-
-	return sortedApps
-}
-
 // sort scheduling requests from a job
 func (m *Scheduler) findMayAllocationFromApplication(requests map[string]*schedulingAllocationAsk,
-	headroom *resources.Resource, curStep uint64, selectedPendingAskByAllocationKey map[string]int32, preemptionParameters *preemptionParameters) *schedulingAllocationAsk {
+	headroom *resources.Resource, curStep uint64, selectedPendingAskByAllocationKey map[string]int32) *schedulingAllocationAsk {
 	var bestAsk *schedulingAllocationAsk = nil
 
 	for _, v := range requests {
-		if preemptionParameters.crossQueuePreemption {
-			// Skip black listed requests for this preemption cycle.
-			if preemptionParameters.blacklistedRequest[v.AskProto.AllocationKey] {
-				continue
-			}
-		} else {
-			// For normal allocation.
-			if m.waitTillNextTry[v.AskProto.AllocationKey]&curStep != 0 {
-				// this request is "blacklisted"
-				continue
-			}
+		// For normal allocation.
+		if m.waitTillNextTry[v.AskProto.AllocationKey]&curStep != 0 {
+			// this request is "blacklisted"
+			continue
 		}
 
 		// Only sort request if its resource fits headroom
 		if v.getPendingAskRepeat()-selectedPendingAskByAllocationKey[v.AskProto.AllocationKey] > 0 && resources.FitIn(headroom, v.AllocatedResource) {
-			if bestAsk == nil || v.NormalizedPriority > bestAsk.NormalizedPriority {
+			if bestAsk == nil || v.priority > bestAsk.priority {
 				bestAsk = v
 			}
 		}
@@ -138,20 +109,12 @@ func (m *Scheduler) findMayAllocationFromApplication(requests map[string]*schedu
 	return bestAsk
 }
 
-func getHeadroomOfQueue(parentHeadroom *resources.Resource, queueMaxLimit *resources.Resource, queue *SchedulingQueue,
-	preemptionParameters *preemptionParameters) *resources.Resource {
-	// When cross-queue preemption is enabled, don't calculate headroom of non-leaf queues.
-	if preemptionParameters.crossQueuePreemption {
-		if !queue.isLeafQueue() {
-			return nil
-		}
-	}
-
+func getHeadroomOfQueue(parentHeadroom *resources.Resource, queueMaxLimit *resources.Resource, queue *SchedulingQueue) *resources.Resource {
 	// new headroom for this queue
 	if nil != parentHeadroom {
-		return resources.ComponentWiseMin(resources.Sub(queueMaxLimit, queue.ProposingResource), parentHeadroom)
+		return resources.ComponentWiseMin(resources.Sub(queueMaxLimit, queue.getAllocatingResource()), parentHeadroom)
 	}
-	return resources.Sub(queueMaxLimit, queue.ProposingResource)
+	return resources.Sub(queueMaxLimit, queue.getAllocatingResource())
 }
 
 func getQueueMaxLimit(partitionTotalResource *resources.Resource, queue *SchedulingQueue, parentMaxLimit *resources.Resource) *resources.Resource {
@@ -177,8 +140,7 @@ func (m *Scheduler) findNextAllocationAskCandidate(
 	parentHeadroom *resources.Resource,
 	parentQueueMaxLimit *resources.Resource,
 	curStep uint64,
-	selectedPendingAskByAllocationKey map[string]int32,
-	preemptionParameters *preemptionParameters) *schedulingAllocationAsk {
+	selectedPendingAskByAllocationKey map[string]int32) *schedulingAllocationAsk {
 	for _, queue := range sortedQueueCandidates {
 		// skip stopped queues: running and draining queues are allowed
 		if queue.isStopped() {
@@ -197,33 +159,23 @@ func (m *Scheduler) findNextAllocationAskCandidate(
 		queueMaxLimit := getQueueMaxLimit(partitionTotalResource, queue, parentQueueMaxLimit)
 
 		// Get headroom
-		newHeadroom := getHeadroomOfQueue(parentHeadroom, queueMaxLimit, queue, preemptionParameters)
+		newHeadroom := getHeadroomOfQueue(parentHeadroom, queueMaxLimit, queue)
 
 		if queue.isLeafQueue() {
-			// Handle for cross queue preemption
-			if preemptionParameters.crossQueuePreemption {
-				// We won't allocate resources if the queue is above its guaranteed resource.
-				if comp := resources.CompUsageRatio(queue.ProposingResource, queue.CachedQueueInfo.GuaranteedResource, queue.CachedQueueInfo.GuaranteedResource); comp >= 0 {
-					log.Logger().Debug("skip queue because it is already beyond guaranteed",
-						zap.String("queueName", queue.Name))
-					continue
-				}
-			}
-
-			sortedApps := sortApplicationsFromQueue(queue)
+			sortedApps := queue.sortApplications()
 			for _, app := range sortedApps {
 				if ask := m.findMayAllocationFromApplication(app.requests, newHeadroom, curStep,
-					selectedPendingAskByAllocationKey, preemptionParameters); ask != nil {
-					app.MayAllocatedResource = resources.Add(app.MayAllocatedResource, ask.AllocatedResource)
-					queue.ProposingResource = resources.Add(queue.ProposingResource, ask.AllocatedResource)
+					selectedPendingAskByAllocationKey); ask != nil {
+					app.incAllocating(ask.AllocatedResource)
+					queue.incAllocatingResource(ask.AllocatedResource)
 					return ask
 				}
 			}
 		} else {
-			sortedChildren := sortSubqueuesFromQueue(queue)
+			sortedChildren := queue.sortQueues()
 			if ask := m.findNextAllocationAskCandidate(partitionTotalResource, sortedChildren, partitionContext, newHeadroom, queueMaxLimit,
-				curStep, selectedPendingAskByAllocationKey, preemptionParameters); ask != nil {
-				queue.ProposingResource = resources.Add(queue.ProposingResource, ask.AllocatedResource)
+				curStep, selectedPendingAskByAllocationKey); ask != nil {
+				queue.incAllocatingResource(ask.AllocatedResource)
 				return ask
 			}
 		}
@@ -235,18 +187,18 @@ func (m *Scheduler) findNextAllocationAskCandidate(
 func (m *Scheduler) resetMayAllocations(partitionContext *partitionSchedulingContext) {
 	// Recursively reset may-allocation
 	// lock the partition
-	partitionContext.lock.Lock()
-	defer partitionContext.lock.Unlock()
+	partitionContext.Lock()
+	defer partitionContext.Unlock()
 
 	m.resetMayAllocationsForQueue(partitionContext.Root)
 }
 
 func (m *Scheduler) resetMayAllocationsForQueue(queue *SchedulingQueue) {
-	queue.ProposingResource = queue.CachedQueueInfo.GetAllocatedResource()
-	queue.setAllocatingResource(queue.CachedQueueInfo.GetAllocatedResource())
+	queue.allocating = queue.CachedQueueInfo.GetAllocatedResource()
+	queue.setPreemptingResource(queue.CachedQueueInfo.GetAllocatedResource())
 	if queue.isLeafQueue() {
 		for _, app := range queue.applications {
-			app.MayAllocatedResource = app.ApplicationInfo.GetAllocatedResource()
+			app.allocating = app.ApplicationInfo.GetAllocatedResource()
 		}
 	} else {
 		for _, child := range queue.childrenQueues {

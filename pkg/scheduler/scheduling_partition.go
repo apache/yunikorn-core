@@ -39,10 +39,12 @@ type partitionSchedulingContext struct {
 	// Private fields need protection
 	partition        *cache.PartitionInfo              // link back to the partition in the cache
 	applications     map[string]*SchedulingApplication // applications assigned to this partition
+	reservedApps     map[string]*SchedulingApplication // applications reserved within this partition
 	nodes            map[string]*schedulingNode        // nodes assigned to this partition
 	placementManager *placement.AppPlacementManager    // placement manager for this partition
 	partitionManager *partitionManager                 // manager for this partition
-	lock             sync.RWMutex
+
+	sync.RWMutex
 }
 
 // Create a new partitioning scheduling context.
@@ -53,6 +55,7 @@ func newPartitionSchedulingContext(info *cache.PartitionInfo, root *SchedulingQu
 	}
 	psc := &partitionSchedulingContext{
 		applications: make(map[string]*SchedulingApplication),
+		reservedApps: make(map[string]*SchedulingApplication),
 		nodes:        make(map[string]*schedulingNode),
 		Root:         root,
 		Name:         info.Name,
@@ -65,8 +68,8 @@ func newPartitionSchedulingContext(info *cache.PartitionInfo, root *SchedulingQu
 
 // Update the scheduling partition based on the reloaded config.
 func (psc *partitionSchedulingContext) updatePartitionSchedulingContext(info *cache.PartitionInfo) {
-	psc.lock.Lock()
-	defer psc.lock.Unlock()
+	psc.Lock()
+	defer psc.Unlock()
 
 	if psc.placementManager.IsInitialised() {
 		log.Logger().Info("Updating placement manager rules on config reload")
@@ -87,8 +90,8 @@ func (psc *partitionSchedulingContext) updatePartitionSchedulingContext(info *ca
 
 // Add a new application to the scheduling partition.
 func (psc *partitionSchedulingContext) addSchedulingApplication(schedulingApp *SchedulingApplication) error {
-	psc.lock.Lock()
-	defer psc.lock.Unlock()
+	psc.Lock()
+	defer psc.Unlock()
 
 	// Add to applications
 	appID := schedulingApp.ApplicationInfo.ApplicationID
@@ -110,7 +113,7 @@ func (psc *partitionSchedulingContext) addSchedulingApplication(schedulingApp *S
 	schedulingQueue := psc.getQueue(queueName)
 	// check if the queue already exist and what we have is a leaf queue with submit access
 	if schedulingQueue != nil &&
-		(!schedulingQueue.isLeafQueue() || !schedulingQueue.CheckSubmitAccess(schedulingApp.ApplicationInfo.GetUser())) {
+		(!schedulingQueue.isLeafQueue() || !schedulingQueue.checkSubmitAccess(schedulingApp.ApplicationInfo.GetUser())) {
 		return fmt.Errorf("failed to find queue %s for application %s", schedulingApp.ApplicationInfo.QueueName, appID)
 	}
 	// with placement rules the hierarchy might not exist so try and create it
@@ -133,8 +136,8 @@ func (psc *partitionSchedulingContext) addSchedulingApplication(schedulingApp *S
 
 // Remove the application from the scheduling partition.
 func (psc *partitionSchedulingContext) removeSchedulingApplication(appID string) (*SchedulingApplication, error) {
-	psc.lock.Lock()
-	defer psc.lock.Unlock()
+	psc.Lock()
+	defer psc.Unlock()
 
 	// Remove from applications map
 	if psc.applications[appID] == nil {
@@ -162,8 +165,8 @@ func (psc *partitionSchedulingContext) removeSchedulingApplication(appID string)
 // Wrapper around the unlocked version getQueue()
 // Visible by tests
 func (psc *partitionSchedulingContext) GetQueue(name string) *SchedulingQueue {
-	psc.lock.RLock()
-	defer psc.lock.RUnlock()
+	psc.RLock()
+	defer psc.RUnlock()
 	return psc.getQueue(name)
 }
 
@@ -191,8 +194,8 @@ func (psc *partitionSchedulingContext) getQueue(name string) *SchedulingQueue {
 }
 
 func (psc *partitionSchedulingContext) getApplication(appID string) *SchedulingApplication {
-	psc.lock.RLock()
-	defer psc.lock.RUnlock()
+	psc.RLock()
+	defer psc.RUnlock()
 
 	return psc.applications[appID]
 }
@@ -220,7 +223,7 @@ func (psc *partitionSchedulingContext) createSchedulingQueue(name string, user s
 	}
 	// Check the ACL before we really create
 	// The existing parent scheduling queue is the lowest we need to look at
-	if !parent.CheckSubmitAccess(user) {
+	if !parent.checkSubmitAccess(user) {
 		log.Logger().Debug("Submit access denied by scheduler on queue",
 			zap.String("deniedQueueName", schedQueue),
 			zap.String("requestedQueue", name))
@@ -230,33 +233,38 @@ func (psc *partitionSchedulingContext) createSchedulingQueue(name string, user s
 		zap.String("parent", schedQueue),
 		zap.String("child", cacheQueue),
 		zap.String("fullPath", name))
-	NewSchedulingQueueInfo(queue, parent)
+	newSchedulingQueueInfo(queue, parent)
 }
 
 // Get a scheduling node from the partition by nodeID.
 func (psc *partitionSchedulingContext) getSchedulingNode(nodeID string) *schedulingNode {
-	psc.lock.RLock()
-	defer psc.lock.RUnlock()
+	psc.RLock()
+	defer psc.RUnlock()
 
 	return psc.nodes[nodeID]
 }
 
 // Get a copy of the scheduling nodes from the partition.
-func (psc *partitionSchedulingContext) getSchedulingNodes() []*schedulingNode {
-	psc.lock.RLock()
-	defer psc.lock.RUnlock()
+// This list does not include reserved nodes or nodes marked unschedulable
+func (psc *partitionSchedulingContext) getSchedulableNodes() []*schedulingNode {
+	return psc.getSchedulingNodes(true)
+}
 
-	schedulingNodes := make([]*schedulingNode, len(psc.nodes))
-	var i = 0
+// Get a copy of the scheduling nodes from the partition.
+// Excludes unschedulable nodes only, reserved node inclusion depends on the parameter passed in.
+func (psc *partitionSchedulingContext) getSchedulingNodes(excludeReserved bool) []*schedulingNode {
+	psc.RLock()
+	defer psc.RUnlock()
+
+	schedulingNodes := make([]*schedulingNode, 0)
 	for _, node := range psc.nodes {
 		// filter out the nodes that are not scheduling
-		if node.nodeInfo.IsSchedulable() {
-			schedulingNodes[i] = node
-			i++
+		if !node.nodeInfo.IsSchedulable() || (excludeReserved && node.isReserved()) {
+			continue
 		}
+		schedulingNodes = append(schedulingNodes, node)
 	}
-	// only return the part that has really been written (no nil's)
-	return schedulingNodes[:i]
+	return schedulingNodes
 }
 
 // Add a new scheduling node triggered on the addition of the cache node.
@@ -267,8 +275,8 @@ func (psc *partitionSchedulingContext) addSchedulingNode(info *cache.NodeInfo) {
 		return
 	}
 
-	psc.lock.Lock()
-	defer psc.lock.Unlock()
+	psc.Lock()
+	defer psc.Unlock()
 	// check consistency and reset to make sure it is consistent again
 	if _, ok := psc.nodes[info.NodeID]; ok {
 		log.Logger().Debug("new node already existed: cache out of sync with scheduler",
@@ -286,8 +294,8 @@ func (psc *partitionSchedulingContext) removeSchedulingNode(nodeID string) {
 		return
 	}
 
-	psc.lock.Lock()
-	defer psc.lock.Unlock()
+	psc.Lock()
+	defer psc.Unlock()
 	// check consistency just for debug
 	if _, ok := psc.nodes[nodeID]; !ok {
 		log.Logger().Debug("node to be removed does not exist: cache out of sync with scheduler",

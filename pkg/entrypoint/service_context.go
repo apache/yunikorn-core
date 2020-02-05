@@ -18,11 +18,11 @@ package entrypoint
 import (
 	"go.uber.org/zap"
 
-	"github.com/cloudera/yunikorn-core/pkg/api"
-	"github.com/cloudera/yunikorn-core/pkg/cache"
-	"github.com/cloudera/yunikorn-core/pkg/log"
-	"github.com/cloudera/yunikorn-core/pkg/scheduler"
-	"github.com/cloudera/yunikorn-core/pkg/webservice"
+	"github.com/apache/incubator-yunikorn-core/pkg/api"
+	"github.com/apache/incubator-yunikorn-core/pkg/cache"
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
+	"github.com/apache/incubator-yunikorn-core/pkg/webservice"
 )
 
 type ServiceContext struct {

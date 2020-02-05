@@ -1,6 +1,6 @@
 # Developer Guide
 
-YuniKorn always works with a container orchestrator system. Currently, a Kubernetes shim [yunikorn-k8shim](https://github.com/cloudera/yunikorn-k8shim)
+YuniKorn always works with a container orchestrator system. Currently, a Kubernetes shim [yunikorn-k8shim](https://github.com/apache/incubator-yunikorn-k8shim)
 is provided in our repositories, you can leverage it to develop YuniKorn scheduling features and integrate with Kubernetes.
 This document describes resources how to setup dev environment and how to do the development.
 
@@ -13,14 +13,14 @@ Read the [environment setup guide](setup/env-setup.md) first to setup Docker and
 Prerequisite:
 - Go 1.11+
 
-You can build the scheduler for Kubernetes from [yunikorn-k8shim](https://github.com/cloudera/yunikorn-k8shim) project.
+You can build the scheduler for Kubernetes from [yunikorn-k8shim](https://github.com/apache/incubator-yunikorn-k8shim) project.
 The build procedure will built all components into a single executable that can be deployed and running on Kubernetes.
 
 Start the integrated build process by pulling the `yunikorn-k8shim` repository:
 ```bash
 mkdir $HOME/yunikorn/
 cd $HOME/yunikorn/
-git clone https://github.com/cloudera/yunikorn-k8shim.git
+git clone https://github.com/apache/incubator-yunikorn-k8shim.git
 ```
 At this point you have an environment that will allow you to build an integrated image for the YuniKorn scheduler.
 
@@ -33,7 +33,7 @@ make image
 ```
 
 The image with the build in configuration can be deployed directly on kubernetes.
-Some sample deployments that can be used are found under [deployments](https://github.com/cloudera/yunikorn-k8shim/tree/master/deployments/scheduler) directory.
+Some sample deployments that can be used are found under [deployments](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/deployments/scheduler) directory.
 For the deployment that uses a config map you need to set up the ConfigMap in kubernetes.
 How to deploy the scheduler with a ConfigMap is explained in the [scheduler configuration deployment](setup/configure-scheduler.md) document.
 
@@ -76,7 +76,7 @@ Changing dependencies uses mod `replace` directives as explained in the [local b
 
 ## Build the web UI
 
-Example deployments reference the [YuniKorn web UI](https://github.com/cloudera/yunikorn-web). 
+Example deployments reference the [YuniKorn web UI](https://github.com/apache/incubator-yunikorn-web). 
 The YuniKorn web UI has its own specific requirements for the build. The project has specific requirements for the build follow the steps in the README to prepare a development environment and build how to build the projects.
 The scheduler is fully functional without the web UI. 
 

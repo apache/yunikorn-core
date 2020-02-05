@@ -24,10 +24,10 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/cloudera/yunikorn-core/pkg/common/configs"
-	"github.com/cloudera/yunikorn-core/pkg/entrypoint"
-	"github.com/cloudera/yunikorn-core/pkg/log"
-	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
+	"github.com/apache/incubator-yunikorn-core/pkg/entrypoint"
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 func benchmarkScheduling(b *testing.B, numNodes, numPods int) {

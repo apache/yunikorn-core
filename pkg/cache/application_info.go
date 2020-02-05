@@ -23,8 +23,8 @@ import (
 
 	"github.com/looplab/fsm"
 
-	"github.com/cloudera/yunikorn-core/pkg/common/resources"
-	"github.com/cloudera/yunikorn-core/pkg/common/security"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 )
 
 /* Related to applications */

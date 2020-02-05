@@ -19,8 +19,8 @@ package scheduler
 import (
 	"testing"
 
-	"github.com/cloudera/yunikorn-core/pkg/cache"
-	"github.com/cloudera/yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/cache"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 )
 
 func newNode(nodeID string, totalMap map[string]resources.Quantity) *SchedulingNode {

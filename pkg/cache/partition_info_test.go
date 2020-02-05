@@ -23,9 +23,9 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/cloudera/yunikorn-core/pkg/common/commonevents"
-	"github.com/cloudera/yunikorn-core/pkg/common/resources"
-	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 func createAllocation(queue, nodeID, allocID, appID string) *si.Allocation {

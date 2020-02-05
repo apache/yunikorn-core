@@ -19,7 +19,7 @@ package scheduler
 import (
 	"fmt"
 
-	"github.com/cloudera/yunikorn-core/pkg/common/commonevents"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
 )
 
 type SchedulingAllocation struct {

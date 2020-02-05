@@ -22,9 +22,9 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/cloudera/yunikorn-core/pkg/cache"
-	"github.com/cloudera/yunikorn-core/pkg/common/configs"
-	"github.com/cloudera/yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/cache"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
 
 // Interface that all placement rules need to implement.

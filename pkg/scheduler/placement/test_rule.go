@@ -19,8 +19,8 @@ package placement
 import (
 	"fmt"
 
-	"github.com/cloudera/yunikorn-core/pkg/cache"
-	"github.com/cloudera/yunikorn-core/pkg/common/configs"
+	"github.com/apache/incubator-yunikorn-core/pkg/cache"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 )
 
 // A simple test rule to place an application based on a nil application.

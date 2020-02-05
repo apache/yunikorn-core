@@ -21,7 +21,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/cloudera/yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
 
 type NodeSortingPolicy struct {

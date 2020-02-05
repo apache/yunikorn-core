@@ -17,10 +17,10 @@ limitations under the License.
 package cache
 
 import (
-	"github.com/cloudera/yunikorn-core/pkg/common"
-	"github.com/cloudera/yunikorn-core/pkg/common/commonevents"
-	"github.com/cloudera/yunikorn-core/pkg/common/resources"
-	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 /* Related to Allocation */

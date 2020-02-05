@@ -18,7 +18,7 @@ This kubernetes environment can be either local or remote.
 
 - download configuration file if not available on the node to add to kubernetes:
 ```
-curl -o queues.yaml https://raw.githubusercontent.com/cloudera/yunikorn-k8shim/master/conf/queues.yaml
+curl -o queues.yaml https://raw.githubusercontent.com/apache/incubator-yunikorn-k8shim/master/conf/queues.yaml
 ```
 - create ConfigMap in kubernetes:
 ```
@@ -47,7 +47,7 @@ Second step is t link the mount point back to the configuration map created in k
         name: yunikorn-configs
 ``` 
 
-Both steps are part of the scheduler yaml file, an example can be seen at [scheduler.yaml](https://github.com/cloudera/yunikorn-k8shim/blob/master/deployments/scheduler/scheduler.yaml)
+Both steps are part of the scheduler yaml file, an example can be seen at [scheduler.yaml](https://github.com/apache/incubator-yunikorn-k8shim/blob/master/deployments/scheduler/scheduler.yaml)
 for reference.
 
 

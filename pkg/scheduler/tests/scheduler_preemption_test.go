@@ -21,8 +21,8 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/cloudera/yunikorn-core/pkg/common/resources"
-	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 // Test basic interactions from rm proxy to cache and to scheduler.

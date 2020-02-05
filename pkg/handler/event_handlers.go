@@ -17,7 +17,7 @@ limitations under the License.
 package handler
 
 import (
-	"github.com/cloudera/yunikorn-core/pkg/common/commonevents"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
 )
 
 type EventHandlers struct {

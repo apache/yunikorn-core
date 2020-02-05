@@ -61,8 +61,8 @@ See the golangci-lint product documentation for more options and information on 
 
 ### Configuration
 A predefined configuration is provided for the two projects that use them:
-* [YuniKorn k8shim](https://github.com/cloudera/yunikorn-k8shim)
-* [YuniKorn core](https://github.com/cloudera/yunikorn-core).  
+* [YuniKorn k8shim](https://github.com/apache/incubator-yunikorn-k8shim)
+* [YuniKorn core](https://github.com/apache/incubator-yunikorn-core).  
 
 The configuration is provided in the yaml file: [golangci.yml](../.golangci.yml).
 

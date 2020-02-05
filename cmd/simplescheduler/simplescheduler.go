@@ -22,8 +22,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/cloudera/yunikorn-core/pkg/common"
-	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 type SimpleScheduler struct {

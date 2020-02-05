@@ -23,10 +23,10 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/cloudera/yunikorn-core/pkg/cache"
-	"github.com/cloudera/yunikorn-core/pkg/common/security"
-	"github.com/cloudera/yunikorn-core/pkg/log"
-	"github.com/cloudera/yunikorn-core/pkg/scheduler/placement"
+	"github.com/apache/incubator-yunikorn-core/pkg/cache"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/placement"
 )
 
 type PartitionSchedulingContext struct {

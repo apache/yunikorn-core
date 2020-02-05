@@ -19,7 +19,7 @@ package scheduler
 import (
 	"math"
 
-	"github.com/cloudera/yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 )
 
 // Temp object for better readability.

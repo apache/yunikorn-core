@@ -97,7 +97,7 @@ message AddApplicationRequest {
 #### Nodes and allocations
 
 Once a shim is registered to the scheduler-core, subsequent requests are sent via `UpdateRequest#NewNodeInfo`
-(see more from [si.proto](https://github.com/cloudera/yunikorn-scheduler-interface/blob/master/si.proto)).
+(see more from [si.proto](https://github.com/apache/incubator-yunikorn-scheduler-interface/blob/master/si.proto)).
 The structure of the messages looks like,
 
 ```

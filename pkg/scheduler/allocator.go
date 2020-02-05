@@ -23,11 +23,11 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/cloudera/yunikorn-core/pkg/common"
-	"github.com/cloudera/yunikorn-core/pkg/log"
-	"github.com/cloudera/yunikorn-core/pkg/metrics"
-	"github.com/cloudera/yunikorn-core/pkg/plugins"
-	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
+	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 // Visible by tests

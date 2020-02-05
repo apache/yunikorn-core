@@ -19,8 +19,8 @@ package placement
 import (
 	"testing"
 
-	"github.com/cloudera/yunikorn-core/pkg/cache"
-	"github.com/cloudera/yunikorn-core/pkg/common/configs"
+	"github.com/apache/incubator-yunikorn-core/pkg/cache"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 )
 
 func TestNewRule(t *testing.T) {

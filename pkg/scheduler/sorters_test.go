@@ -24,10 +24,10 @@ import (
 	"go.uber.org/zap"
 	"gotest.tools/assert"
 
-	"github.com/cloudera/yunikorn-core/pkg/cache"
-	"github.com/cloudera/yunikorn-core/pkg/common/resources"
-	"github.com/cloudera/yunikorn-core/pkg/common/security"
-	"github.com/cloudera/yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/cache"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
 
 // verify queue ordering is working

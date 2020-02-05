@@ -20,7 +20,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/cloudera/yunikorn-core/pkg/cache"
+	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 )
 
 // empty test for random iterator

@@ -19,11 +19,11 @@ package tests
 import (
 	"testing"
 
-	"github.com/cloudera/yunikorn-core/pkg/api"
-	"github.com/cloudera/yunikorn-core/pkg/common/configs"
-	"github.com/cloudera/yunikorn-core/pkg/entrypoint"
-	"github.com/cloudera/yunikorn-core/pkg/scheduler"
-	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/incubator-yunikorn-core/pkg/api"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
+	"github.com/apache/incubator-yunikorn-core/pkg/entrypoint"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 var TwoEqualQueueConfigEnabledPreemption = `

@@ -21,8 +21,8 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/cloudera/yunikorn-core/pkg/common/resources"
-	"github.com/cloudera/yunikorn-core/pkg/common/security"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 )
 
 func newApplicationInfo(appID, partition, queueName string) *ApplicationInfo {

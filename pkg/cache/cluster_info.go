@@ -23,17 +23,17 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/cloudera/yunikorn-core/pkg/api"
-	"github.com/cloudera/yunikorn-core/pkg/cache/cacheevent"
-	"github.com/cloudera/yunikorn-core/pkg/common"
-	"github.com/cloudera/yunikorn-core/pkg/common/commonevents"
-	"github.com/cloudera/yunikorn-core/pkg/common/resources"
-	"github.com/cloudera/yunikorn-core/pkg/handler"
-	"github.com/cloudera/yunikorn-core/pkg/log"
-	"github.com/cloudera/yunikorn-core/pkg/metrics"
-	"github.com/cloudera/yunikorn-core/pkg/rmproxy/rmevent"
-	"github.com/cloudera/yunikorn-core/pkg/scheduler/schedulerevent"
-	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/incubator-yunikorn-core/pkg/api"
+	"github.com/apache/incubator-yunikorn-core/pkg/cache/cacheevent"
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/handler"
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
+	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/schedulerevent"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 type ClusterInfo struct {

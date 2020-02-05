@@ -59,10 +59,10 @@ top can list top memory consumption objects.
 Showing nodes accounting for 83.58MB, 98.82% of 84.58MB total
 Showing top 10 nodes out of 86
       flat  flat%   sum%        cum   cum%
-      32MB 37.84% 37.84%       32MB 37.84%  github.com/cloudera/yunikorn-core/pkg/cache.NewClusterInfo
-      16MB 18.92% 56.75%       16MB 18.92%  github.com/cloudera/yunikorn-core/pkg/rmproxy.NewRMProxy
-      16MB 18.92% 75.67%       16MB 18.92%  github.com/cloudera/yunikorn-core/pkg/scheduler.NewScheduler
-      16MB 18.92% 94.59%       16MB 18.92%  github.com/cloudera/yunikorn-k8shim/pkg/dispatcher.init.0.func1
+      32MB 37.84% 37.84%       32MB 37.84%  github.com/apache/incubator-yunikorn-core/pkg/cache.NewClusterInfo
+      16MB 18.92% 56.75%       16MB 18.92%  github.com/apache/incubator-yunikorn-core/pkg/rmproxy.NewRMProxy
+      16MB 18.92% 75.67%       16MB 18.92%  github.com/apache/incubator-yunikorn-core/pkg/scheduler.NewScheduler
+      16MB 18.92% 94.59%       16MB 18.92%  github.com/apache/incubator-yunikorn-k8shim/pkg/dispatcher.init.0.func1
     1.04MB  1.23% 95.81%     1.04MB  1.23%  k8s.io/apimachinery/pkg/runtime.(*Scheme).AddKnownTypeWithName
     0.52MB  0.61% 96.43%     0.52MB  0.61%  github.com/gogo/protobuf/proto.RegisterType
     0.51MB  0.61% 97.04%     0.51MB  0.61%  sync.(*Map).Store

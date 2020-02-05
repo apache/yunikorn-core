@@ -22,7 +22,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 
 	"google.golang.org/grpc"
 )

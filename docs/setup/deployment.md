@@ -1,12 +1,12 @@
 # Deployment Guide
 
-The easiest way to deploy YuniKorn is to leverage our [helm charts](https://github.com/cloudera/yunikorn-k8shim/tree/master/helm-charts),
+The easiest way to deploy YuniKorn is to leverage our [helm charts](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/helm-charts),
 you can find the guide [here](../user-guide.md). However, if you want to explore the deployment procedure
 step by step, here are the instructions.
 
 ## Setup RBAC
 
-The first step is to create the RBAC role for the scheduler, see [yunikorn-rbac.yaml](https://github.com/cloudera/yunikorn-k8shim/blob/master/deployments/scheduler/yunikorn-rbac.yaml)
+The first step is to create the RBAC role for the scheduler, see [yunikorn-rbac.yaml](https://github.com/apache/incubator-yunikorn-k8shim/blob/master/deployments/scheduler/yunikorn-rbac.yaml)
 ```
 kubectl create -f scheduler/yunikorn-rbac.yaml
 ```
@@ -18,7 +18,7 @@ YuniKorn loads its configuration from a K8s configmap, so it is required to crea
 
 - download a sample configuration file:
 ```
-curl -o queues.yaml https://raw.githubusercontent.com/cloudera/yunikorn-k8shim/master/conf/queues.yaml
+curl -o queues.yaml https://raw.githubusercontent.com/apache/incubator-yunikorn-k8shim/master/conf/queues.yaml
 ```
 - create ConfigMap in kubernetes:
 ```
@@ -34,7 +34,7 @@ For more information about how to manage scheduler's configuration via configmap
 ## Deploy the scheduler on k8s
 
 Before you can deploy the scheduler the image for the scheduler and the web interface must be build with the appropriate tags.
-The procedure on how to build the images is explained in the [build document](./developer-guide.md). See [scheduler.yaml](https://github.com/cloudera/yunikorn-k8shim/blob/master/deployments/scheduler/scheduler.yaml)
+The procedure on how to build the images is explained in the [build document](./developer-guide.md). See [scheduler.yaml](https://github.com/apache/incubator-yunikorn-k8shim/blob/master/deployments/scheduler/scheduler.yaml)
 ```
 kubectl create -f scheduler/scheduler.yaml
 ```

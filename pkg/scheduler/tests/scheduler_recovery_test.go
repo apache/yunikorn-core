@@ -21,11 +21,11 @@ import (
 
 	"gotest.tools/assert"
 
-	cacheInfo "github.com/cloudera/yunikorn-core/pkg/cache"
-	"github.com/cloudera/yunikorn-core/pkg/common/configs"
-	"github.com/cloudera/yunikorn-core/pkg/common/resources"
-	"github.com/cloudera/yunikorn-core/pkg/entrypoint"
-	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+	cacheInfo "github.com/apache/incubator-yunikorn-core/pkg/cache"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/entrypoint"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 func TestSchedulerRecovery(t *testing.T) {

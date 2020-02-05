@@ -32,17 +32,17 @@ There is no need to change any of the imports in the source code. The change mus
 
 Using `replace` to use of a forked dependency, such as:
 ```
-replace github.com/cloudera/yunikorn-core => example.com/some/forked-yunikorn
+replace github.com/apache/incubator-yunikorn-core => example.com/some/forked-yunikorn
 ```
 
 There is no requirement to fork and create a new repository. If you do not have a repository you can use a local checked out copy too. 
 Using `replace` to use of a local directory as a dependency:
 ```
-replace github.com/cloudera/yunikorn-core => /User/example/local/checked-out-yunikorn
+replace github.com/apache/incubator-yunikorn-core => /User/example/local/checked-out-yunikorn
 ```
 and for the same dependency using a relative path:
 ```
-replace github.com/cloudera/yunikorn-core => ../checked-out-yunikorn
+replace github.com/apache/incubator-yunikorn-core => ../checked-out-yunikorn
 ```
 Note: if the `replace` directive is using a local filesystem path, then the target must have the `go.mod` file at that location.
 

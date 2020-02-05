@@ -20,8 +20,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cloudera/yunikorn-core/pkg/common/resources"
-	"github.com/cloudera/yunikorn-core/pkg/metrics"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 )
 
 // Sort type for queues, apps, nodes etc.

@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/cloudera/yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 )
 
 // Responsibility of this class:

@@ -22,8 +22,8 @@ import (
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
-	"github.com/cloudera/yunikorn-core/pkg/log"
-	"github.com/cloudera/yunikorn-core/pkg/metrics"
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 )
 
 // ----------------------------------

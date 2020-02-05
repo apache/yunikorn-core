@@ -17,11 +17,11 @@ limitations under the License.
 package entrypoint
 
 import (
-	"github.com/cloudera/yunikorn-core/pkg/cache"
-	"github.com/cloudera/yunikorn-core/pkg/handler"
-	"github.com/cloudera/yunikorn-core/pkg/rmproxy"
-	"github.com/cloudera/yunikorn-core/pkg/scheduler"
-	"github.com/cloudera/yunikorn-core/pkg/webservice"
+	"github.com/apache/incubator-yunikorn-core/pkg/cache"
+	"github.com/apache/incubator-yunikorn-core/pkg/handler"
+	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
+	"github.com/apache/incubator-yunikorn-core/pkg/webservice"
 )
 
 // options used to control how services are started

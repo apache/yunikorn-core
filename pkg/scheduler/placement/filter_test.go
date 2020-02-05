@@ -19,8 +19,8 @@ package placement
 import (
 	"testing"
 
-	"github.com/cloudera/yunikorn-core/pkg/common/configs"
-	"github.com/cloudera/yunikorn-core/pkg/common/security"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 )
 
 func TestNewFilterLists(t *testing.T) {

@@ -21,9 +21,9 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/cloudera/yunikorn-core/pkg/api"
-	"github.com/cloudera/yunikorn-core/pkg/common/resources"
-	"github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/incubator-yunikorn-core/pkg/api"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 func newProto(nodeID string, totalResource *resources.Resource, attributes map[string]string) *si.NewNodeInfo {

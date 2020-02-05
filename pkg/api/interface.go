@@ -16,7 +16,7 @@ limitations under the License.
 
 package api
 
-import "github.com/cloudera/yunikorn-scheduler-interface/lib/go/si"
+import "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 
 type SchedulerAPI interface {
 	// Register a new RM, if it is a reconnect from previous RM, cleanup

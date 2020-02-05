@@ -1,10 +1,9 @@
-module github.com/cloudera/yunikorn-core
+module github.com/apache/incubator-yunikorn-core
 
 go 1.12
 
 require (
-	github.com/cloudera/yunikorn-scheduler-interface v0.0.0-20200109232514-da93802b2137
-	github.com/creack/pty v1.1.9 // indirect
+	github.com/apache/incubator-yunikorn-scheduler-interface v0.0.0-20200205180409-ebed5aec1d1f
 	github.com/google/go-cmp v0.3.1 // indirect
 	github.com/gorilla/mux v1.7.3
 	github.com/kr/pretty v0.1.0 // indirect

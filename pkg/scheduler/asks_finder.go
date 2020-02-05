@@ -19,8 +19,8 @@ package scheduler
 import (
 	"go.uber.org/zap"
 
-	"github.com/cloudera/yunikorn-core/pkg/common/resources"
-	"github.com/cloudera/yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
 
 // Find next set of allocation asks for scheduler to place

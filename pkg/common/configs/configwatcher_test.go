@@ -23,7 +23,7 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/cloudera/yunikorn-core/pkg/common"
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
 )
 
 // test singleton

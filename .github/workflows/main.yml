@@ -28,7 +28,7 @@ jobs:
         run: |
           export PATH=$PATH:$(go env GOPATH)/bin
           go get -u golang.org/x/lint/golint
-          echo ${GOPATH}
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.22.2
           ls -al ${GOPATH}/bin
           make lint
 

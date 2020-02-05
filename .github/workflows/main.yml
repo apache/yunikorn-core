@@ -23,6 +23,8 @@ jobs:
         run: make common-check-license
 
       - name: Go lint
+        env:
+          GOPATH: /tmp/go
         run: |
           export PATH=$PATH:$(go env GOPATH)/bin
           go get -u golang.org/x/lint/golint

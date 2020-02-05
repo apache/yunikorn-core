@@ -26,6 +26,8 @@ jobs:
         run: |
           export PATH=$PATH:$(go env GOPATH)/bin
           go get -u golang.org/x/lint/golint
+          echo ${GOPATH}
+          ls -al ${GOPATH}/bin
           make lint
 
       - name: unit test

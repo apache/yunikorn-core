@@ -1,5 +1,10 @@
 # YuniKorn - A Universal Scheduler
 
+
+![GreenBuild](https://github.com/apache/incubator-yunikorn-core/workflows/Precommit%20check/badge.svg)
+
+![Architecture](docs/images/yunikorn-logo.png)
+
 YuniKorn is a light-weighted, universal resource scheduler for container orchestrator systems.
 It was created to achieve fine-grained resource sharing for various workloads efficiently on a large scale, multi-tenant,
 and cloud-native environment. YuniKorn brings a unified, cross-platform scheduling experience for mixed workloads consists

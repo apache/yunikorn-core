@@ -1,7 +1,7 @@
 # YuniKorn - A Universal Scheduler
 
 
-![GreenBuild](https://github.com/apache/incubator-yunikorn-core/workflows/Precommit%20check/badge.svg)
+![Green Build](https://github.com/apache/incubator-yunikorn-core/workflows/Green%20Build/badge.svg)
 
 ![Architecture](docs/images/yunikorn-logo.png)
 

@@ -56,7 +56,7 @@ lint:
 .PHONY: common-check-license
 common-check-license:
 	@echo "checking license header"
-	@licRes=$$(grep -Lr --include=*.{go,sh} "Copyright 20[1-2][0-9] Cloudera" .) ; \
+	@licRes=$$(grep -Lr --include=*.{go,sh} "Licensed to the Apache Software Foundation" .) ; \
 	if [ -n "$${licRes}" ]; then \
 		echo "following files have incorrect license header:\n$${licRes}" ; \
 		exit 1; \

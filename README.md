@@ -2,7 +2,7 @@
 
 ![Green Build](https://github.com/apache/incubator-yunikorn-core/workflows/Green%20Build/badge.svg)
 
-<img src="https://raw.githubusercontent.com/apache/incubator-yunikorn-core/master/docs/images/logo/yunikorn-logo-light.png" width="100">
+<img src="https://raw.githubusercontent.com/apache/incubator-yunikorn-core/master/docs/images/logo/yunikorn-logo-main.png" width="100">
 
 ----
 

@@ -21,6 +21,7 @@ package entrypoint
 import (
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/handler"
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice"
@@ -33,6 +34,7 @@ type StartupOptions struct {
 }
 
 func StartAllServices() *ServiceContext {
+	log.Logger().Info("ServiceContext start all services")
 	return startAllServicesWithParameters(
 		StartupOptions{
 			manualScheduleFlag: false,
@@ -42,6 +44,7 @@ func StartAllServices() *ServiceContext {
 
 // Visible by tests
 func StartAllServicesWithManualScheduler() *ServiceContext {
+	log.Logger().Info("ServiceContext start all services (manual scheduler)")
 	return startAllServicesWithParameters(
 		StartupOptions{
 			manualScheduleFlag: true,
@@ -61,6 +64,7 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 	}
 
 	// start services
+	log.Logger().Info("ServiceContext start scheduling services")
 	cache.StartService(eventHandler)
 	scheduler.StartService(eventHandler, opts.manualScheduleFlag)
 	proxy.StartService(eventHandler)
@@ -72,6 +76,7 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 	}
 
 	if opts.startWebAppFlag {
+		log.Logger().Info("ServiceContext start web application service")
 		webapp := webservice.NewWebApp(cache)
 		webapp.StartWebApp()
 		context.WebApp = webapp

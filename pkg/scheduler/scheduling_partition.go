@@ -26,20 +26,22 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/placement"
 )
 
 type partitionSchedulingContext struct {
-	Root *SchedulingQueue // start of the scheduling queue hierarchy
-	RmID string           // the RM the partition belongs to
-	Name string           // name of the partition (logging mainly)
+	RmID string // the RM the partition belongs to
+	Name string // name of the partition (logging mainly)
 
 	// Private fields need protection
 	partition        *cache.PartitionInfo              // link back to the partition in the cache
+	root             *SchedulingQueue                  // start of the scheduling queue hierarchy
 	applications     map[string]*SchedulingApplication // applications assigned to this partition
-	reservedApps     map[string]*SchedulingApplication // applications reserved within this partition
+	reservedApps     map[string]int                    // applications reserved within this partition, with reservation count
 	nodes            map[string]*schedulingNode        // nodes assigned to this partition
 	placementManager *placement.AppPlacementManager    // placement manager for this partition
 	partitionManager *partitionManager                 // manager for this partition
@@ -55,9 +57,9 @@ func newPartitionSchedulingContext(info *cache.PartitionInfo, root *SchedulingQu
 	}
 	psc := &partitionSchedulingContext{
 		applications: make(map[string]*SchedulingApplication),
-		reservedApps: make(map[string]*SchedulingApplication),
+		reservedApps: make(map[string]int),
 		nodes:        make(map[string]*schedulingNode),
-		Root:         root,
+		root:         root,
 		Name:         info.Name,
 		RmID:         info.RmID,
 		partition:    info,
@@ -81,7 +83,7 @@ func (psc *partitionSchedulingContext) updatePartitionSchedulingContext(info *ca
 		log.Logger().Info("Creating new placement manager on config reload")
 		psc.placementManager = placement.NewPlacementManager(info)
 	}
-	root := psc.Root
+	root := psc.root
 	// update the root queue properties
 	root.updateSchedulingQueueProperties(info.Root.Properties)
 	// update the rest of the queues recursively
@@ -145,9 +147,16 @@ func (psc *partitionSchedulingContext) removeSchedulingApplication(appID string)
 	}
 	schedulingApp := psc.applications[appID]
 	delete(psc.applications, appID)
+	delete(psc.reservedApps, appID)
 
-	// Remove app under queue
+	// Remove all asks and thus all reservations and pending resources (queue included)
 	queueName := schedulingApp.ApplicationInfo.QueueName
+	schedulingApp.removeAllocationAsk("")
+	log.Logger().Debug("application removed from the scheduler",
+		zap.String("queue", queueName),
+		zap.String("applicationID", appID))
+
+	// Remove app from queue
 	schedulingQueue := psc.getQueue(queueName)
 	if schedulingQueue == nil {
 		// This is not normal return an error and log
@@ -177,11 +186,11 @@ func (psc *partitionSchedulingContext) GetQueue(name string) *SchedulingQueue {
 // NOTE: this is a lock free call. It should only be called holding the PartitionSchedulingContext lock.
 func (psc *partitionSchedulingContext) getQueue(name string) *SchedulingQueue {
 	// start at the root
-	queue := psc.Root
+	queue := psc.root
 	part := strings.Split(strings.ToLower(name), cache.DOT)
-	// short circuit the root queue
-	if len(part) == 1 {
-		return queue
+	// no input
+	if len(part) == 0 || part[0] != "root" {
+		return nil
 	}
 	// walk over the parts going down towards the requested queue
 	for i := 1; i < len(part); i++ {
@@ -297,10 +306,203 @@ func (psc *partitionSchedulingContext) removeSchedulingNode(nodeID string) {
 	psc.Lock()
 	defer psc.Unlock()
 	// check consistency just for debug
-	if _, ok := psc.nodes[nodeID]; !ok {
+	node, ok := psc.nodes[nodeID]
+	if !ok {
 		log.Logger().Debug("node to be removed does not exist: cache out of sync with scheduler",
 			zap.String("nodeID", nodeID))
+		return
 	}
 	// remove the node, this will also get the sync back between the two lists
 	delete(psc.nodes, nodeID)
+	if !node.unReserveApps() {
+		log.Logger().Warn("Node removal did not remove all application reservations this can affect scheduling",
+			zap.String("nodeID", nodeID))
+	}
+}
+
+// Try regular allocation for the partition
+// Lock free call this all locks are taken when needed in called functions
+func (psc *partitionSchedulingContext) tryAllocate() *schedulingAllocation {
+	if !resources.StrictlyGreaterThanZero(psc.root.GetPendingResource()) {
+		// nothing to do just return
+		return nil
+	}
+	// try allocating from the root down
+	return psc.root.tryAllocate(psc)
+}
+
+// Try process reservations for the partition
+// Lock free call this all locks are taken when needed in called functions
+func (psc *partitionSchedulingContext) tryReservedAllocate() *schedulingAllocation {
+	if len(psc.reservedApps) == 0 {
+		return nil
+	}
+	// try allocating from the root down
+	return psc.root.tryReservedAllocate()
+}
+
+// Process the allocation and make the changes in the partition.
+// If the allocation needs to be passed on to the cache true will be returned if not false is returned
+func (psc *partitionSchedulingContext) allocate(alloc *schedulingAllocation) bool {
+	psc.Lock()
+	defer psc.Unlock()
+	// partition is locked nothing can change from now on
+	// find the app make sure it still exists
+	appID := alloc.schedulingAsk.ApplicationID
+	app := psc.applications[appID]
+	if app == nil {
+		log.Logger().Info("Application was removed while allocating",
+			zap.String("appID", appID))
+		return false
+	}
+	// find the node make sure it still exists
+	nodeID := alloc.nodeID
+	node := psc.nodes[nodeID]
+	if node == nil {
+		log.Logger().Info("Node was removed while allocating",
+			zap.String("nodeID", nodeID),
+			zap.String("appID", appID))
+		return false
+	}
+	// reservation does not leave the scheduler
+	if alloc.result == reserved {
+		psc.reserve(app, node, alloc.schedulingAsk)
+		return false
+	}
+	// unreserve does not leave the scheduler
+	if alloc.result == unreserved || alloc.result == allocatedReserved {
+		// unreserve only in the scheduler
+		psc.unReserve(app, node, alloc.schedulingAsk)
+		// real allocation after reservation does get passed on to the cache
+		if alloc.result == unreserved {
+			return false
+		}
+	}
+	return true
+}
+
+// Confirm the allocation. This is called as the result of the scheduler passing the proposal to the cache.
+// This updates the allocating resources for app, queue and node in the scheduler
+// Called for both allocations from reserved as well as for direct allocations.
+// The unreserve is already handled before we get here so there is no difference in handling.
+// Lock free call this must be called holding the context lock
+func (psc *partitionSchedulingContext) confirmAllocation(appID, nodeID, allocKey string, confirm bool) error {
+	psc.RLock()
+	defer psc.RUnlock()
+	// partition is locked nothing can change from now on
+	// find the app make sure it still exists
+	app := psc.applications[appID]
+	if app == nil {
+		return fmt.Errorf("application was removed while allocating: %s", appID)
+	}
+	// find the node make sure it still exists
+	node := psc.nodes[nodeID]
+	if node == nil {
+		return fmt.Errorf("node was removed while allocating app %s: %s", appID, nodeID)
+	}
+	log.Logger().Debug("allocation confirmation on partition",
+		zap.String("partition", psc.Name),
+		zap.String("appID", appID),
+		zap.String("nodeID", nodeID),
+		zap.String("allocKey", allocKey),
+		zap.Bool("confirmation", confirm))
+	// The repeat gets "added back" when rejected, it was removed during the try
+	var delta *resources.Resource
+	if !confirm {
+		var err error
+		delta, err = app.updateAskRepeat(allocKey, 1)
+		if err != nil {
+			return err
+		}
+	} else {
+		delta = app.GetSchedulingAllocationAsk(allocKey).AllocatedResource
+	}
+
+	// this is a confirmation or rejection update all objects of inflight allocating resources
+	if !resources.IsZero(delta) {
+		log.Logger().Debug("confirm allocation updating allocating",
+			zap.String("delta", delta.String()))
+		// update the allocating values with the delta
+		app.decAllocatingResource(delta)
+		app.queue.decAllocatingResource(delta)
+		node.decAllocatingResource(delta)
+	}
+	// all is ok when we are here
+	return nil
+}
+
+// Process the reservation in the scheduler
+// Lock free call this must be called holding the context lock
+func (psc *partitionSchedulingContext) reserve(app *SchedulingApplication, node *schedulingNode, ask *schedulingAllocationAsk) {
+	appID := app.ApplicationInfo.ApplicationID
+	// app has node already reserved cannot reserve again
+	if app.isReservedOnNode(node.NodeID) {
+		log.Logger().Info("Application is already reserved on node",
+			zap.String("appID", appID),
+			zap.String("nodeID", node.NodeID))
+		return
+	}
+	// all ok, add the reservation to the app, this will also reserve the node
+	if ok, err := app.reserve(node, ask); !ok {
+		log.Logger().Info("Failed to handle reservation, error during update of app",
+			zap.Error(err))
+		return
+	}
+
+	// add the reservation to the queue list
+	app.queue.reserve(appID)
+	// increase the number of reservations for this app
+	psc.reservedApps[appID]++
+}
+
+// Process the reservation in the scheduler
+// Lock free call this must be called holding the context lock
+func (psc *partitionSchedulingContext) unReserve(app *SchedulingApplication, node *schedulingNode, ask *schedulingAllocationAsk) {
+	appID := app.ApplicationInfo.ApplicationID
+	if psc.reservedApps[appID] == 0 {
+		log.Logger().Info("Application is not reserved in partition",
+			zap.String("appID", appID))
+		return
+	}
+	// all ok, remove the reservation of the app, this will also unReserve the node
+	if ok, err := app.unReserve(node, ask); !ok {
+		log.Logger().Info("Failed to unreserve, error during allocate on the app",
+			zap.Error(err))
+		return
+	}
+	// remove the reservation of the queue
+	app.queue.unReserve(appID)
+	// make sure we cannot go below 0
+	if num, ok := psc.reservedApps[appID]; ok {
+		// decrease the number of reservations for this app and cleanup
+		if num == 1 {
+			delete(psc.reservedApps, appID)
+		} else {
+			psc.reservedApps[appID]--
+		}
+	}
+}
+
+// Get the iterator for the sorted nodes list from the partition.
+func (psc *partitionSchedulingContext) getNodeIteratorForPolicy(nodes []*schedulingNode) NodeIterator {
+	// Sort Nodes based on the policy configured.
+	configuredPolicy := psc.partition.GetNodeSortingPolicy()
+	switch configuredPolicy {
+	case common.BinPackingPolicy:
+		sortNodes(nodes, MinAvailableResources)
+		return NewDefaultNodeIterator(nodes)
+	case common.FairnessPolicy:
+		sortNodes(nodes, MaxAvailableResources)
+		return NewDefaultNodeIterator(nodes)
+	}
+	return nil
+}
+
+// Create a node iterator for the schedulable nodes based on the policy set for this partition.
+// The iterator is nil if there are no schedulable nodes available.
+func (psc *partitionSchedulingContext) getNodeIterator() NodeIterator {
+	if nodeList := psc.getSchedulableNodes(); len(nodeList) != 0 {
+		return psc.getNodeIteratorForPolicy(nodeList)
+	}
+	return nil
 }

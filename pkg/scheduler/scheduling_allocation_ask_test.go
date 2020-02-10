@@ -18,6 +18,7 @@ package scheduler
 
 import (
 	"testing"
+	"time"
 
 	"gotest.tools/assert"
 
@@ -44,16 +45,29 @@ func TestPendingAskRepeat(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
 	ask := newAllocationAsk("alloc-1", "app-1", res)
 	assert.Equal(t, ask.getPendingAskRepeat(), int32(1), "pending ask repeat should be 1")
-	if !ask.addPendingAskRepeat(1) {
+	if !ask.updatePendingAskRepeat(1) {
 		t.Errorf("increase of pending ask with 1 failed, expected repeat 2, current repeat: %d", ask.getPendingAskRepeat())
 	}
-	if !ask.addPendingAskRepeat(-1) {
+	if !ask.updatePendingAskRepeat(-1) {
 		t.Errorf("decrease of pending ask with 1 failed, expected repeat 1, current repeat: %d", ask.getPendingAskRepeat())
 	}
-	if ask.addPendingAskRepeat(-2) {
+	if ask.updatePendingAskRepeat(-2) {
 		t.Errorf("decrease of pending ask with 2 did not fail, expected repeat 1, current repeat: %d", ask.getPendingAskRepeat())
 	}
-	if !ask.addPendingAskRepeat(-1) {
+	if !ask.updatePendingAskRepeat(-1) {
 		t.Errorf("decrease of pending ask with 1 failed, expected repeat 0, current repeat: %d", ask.getPendingAskRepeat())
+	}
+}
+
+// the create time should not be manipulated but we need it for reservation testing
+func TestGetCreateTime(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	ask := newAllocationAskRepeat("alloc-1", "app-1", res, 2)
+	created := ask.getCreateTime()
+	// move time 10 seconds back
+	ask.createTime = created.Add(time.Second * -10)
+	createdNow := ask.getCreateTime()
+	if createdNow.Equal(created) {
+		t.Fatal("create time stamp should have been modified")
 	}
 }

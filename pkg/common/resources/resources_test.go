@@ -22,6 +22,8 @@ import (
 	"math"
 	"reflect"
 	"testing"
+
+	"gotest.tools/assert"
 )
 
 func TestNewResourceFromConf(t *testing.T) {
@@ -1185,4 +1187,61 @@ func TestCompUsage(t *testing.T) {
 		t.Errorf("right resources ratio should have been larger left %v, left-total %v right %v right-total %v",
 			left, rightTotal, right, total)
 	}
+}
+
+func TestFitInScore(t *testing.T) {
+	// simple case (nil checks)
+	var empty *Resource
+	// nil dereference
+	if empty.FitInScore(nil) != 0 {
+		t.Error("FitInScore on nil receiver failed")
+	}
+	fit := NewResourceFromMap(map[string]Quantity{"first": 0})
+	if empty.FitInScore(fit) != 1 {
+		t.Error("FitInScore on nil receiver failed")
+	}
+	empty = NewResource()
+	assert.Equal(t, empty.FitInScore(nil), 0.0, "FitInScore with nil input failed")
+	// zero checks
+	assert.Equal(t, empty.FitInScore(Zero), 0.0, "FitInScore on zero resource failed")
+	assert.Equal(t, empty.FitInScore(fit), 0.0, "FitInScore on resource with zero quantities failed")
+	// simple score checks
+	fit = NewResourceFromMap(map[string]Quantity{"first": 10})
+	assert.Equal(t, empty.FitInScore(fit), 1.0, "FitInScore on resource with one quantity failed")
+	fit = NewResourceFromMap(map[string]Quantity{"first": 10, "second": 10})
+	assert.Equal(t, empty.FitInScore(fit), 2.0, "FitInScore on resource with two quantities failed")
+	fit = NewResourceFromMap(map[string]Quantity{"first": -10})
+	assert.Equal(t, empty.FitInScore(fit), 0.0, "FitInScore on resource with negative quantity failed")
+	// fit checks, non empty receiver with one quantity
+	res := NewResourceFromMap(map[string]Quantity{"first": 10})
+	fit = NewResourceFromMap(map[string]Quantity{"first": 10})
+	assert.Equal(t, res.FitInScore(fit), 0.0, "FitInScore on exact resource failed")
+	fit = NewResourceFromMap(map[string]Quantity{"first": -10})
+	assert.Equal(t, res.FitInScore(fit), 0.0, "FitInScore on negative quantity resource failed")
+	fit = NewResourceFromMap(map[string]Quantity{"first": 5})
+	assert.Equal(t, res.FitInScore(fit), 0.0, "FitInScore on smaller resource failed")
+	fit = NewResourceFromMap(map[string]Quantity{"first": 5, "second": 10})
+	assert.Equal(t, res.FitInScore(fit), 1.0, "FitInScore on resource with undefined fit quantity failed")
+	fit = NewResourceFromMap(map[string]Quantity{"first": 100})
+	assert.Equal(t, res.FitInScore(fit), 0.9, "FitInScore on one larger value failed")
+	fit = NewResourceFromMap(map[string]Quantity{"first": 20, "second": 100})
+	assert.Equal(t, res.FitInScore(fit), 1.5, "FitInScore on resource with defined and undefined quantity failed")
+	// fit checks, non empty receiver with multiple quantities
+	res = NewResourceFromMap(map[string]Quantity{"first": 10, "second": 10})
+	fit = NewResourceFromMap(map[string]Quantity{"first": 100})
+	assert.Equal(t, res.FitInScore(fit), 0.9, "FitInScore on larger resource missing quantity failed")
+	fit = NewResourceFromMap(map[string]Quantity{"first": 1, "second": 1})
+	assert.Equal(t, res.FitInScore(fit), 0.0, "FitInScore on smaller resource multiple quantities failed")
+	fit = NewResourceFromMap(map[string]Quantity{"first": 10, "second": 10})
+	assert.Equal(t, res.FitInScore(fit), 0.0, "FitInScore on exact resource multiple quantities failed")
+	fit = NewResourceFromMap(map[string]Quantity{"first": 100, "second": 100})
+	assert.Equal(t, res.FitInScore(fit), 1.8, "FitInScore on larger resource with defined quantities failed")
+	// fit checks, non empty receiver with one negative quantity
+	res = NewResourceFromMap(map[string]Quantity{"first": -1})
+	fit = NewResourceFromMap(map[string]Quantity{"first": 1})
+	assert.Equal(t, res.FitInScore(fit), 1.0, "FitInScore on negative receiver quantity failed")
+	// fit checks, non empty receiver with negative quantities
+	res = NewResourceFromMap(map[string]Quantity{"first": -10, "second": -10})
+	fit = NewResourceFromMap(map[string]Quantity{"first": 1, "second": 1})
+	assert.Equal(t, res.FitInScore(fit), 2.0, "FitInScore on resource with multiple negative quantities failed")
 }

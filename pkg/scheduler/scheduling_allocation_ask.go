@@ -20,6 +20,7 @@ package scheduler
 
 import (
 	"sync"
+	"time"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
@@ -31,12 +32,13 @@ type schedulingAllocationAsk struct {
 	AskProto *si.AllocationAsk
 
 	// Extracted info
-	AllocatedResource  *resources.Resource
-	ApplicationID      string
-	PartitionName      string
-	QueueName          string
+	AllocatedResource *resources.Resource
+	ApplicationID     string
+	PartitionName     string
+	QueueName         string
 
 	// Private fields need protection
+	createTime       time.Time // the time this ask was created (used in reservations)
 	priority         int32
 	pendingRepeatAsk int32
 
@@ -50,6 +52,7 @@ func newSchedulingAllocationAsk(ask *si.AllocationAsk) *schedulingAllocationAsk 
 		pendingRepeatAsk:  ask.MaxAllocations,
 		ApplicationID:     ask.ApplicationID,
 		PartitionName:     ask.PartitionName,
+		createTime:        time.Now(),
 	}
 	saa.priority = saa.normalizePriority(ask.Priority)
 	return saa
@@ -69,16 +72,18 @@ func convertFromAllocation(allocation *si.Allocation, rmID string) *schedulingAl
 		},
 		QueueName:         allocation.QueueName,
 		AllocatedResource: resources.NewResourceFromProto(allocation.ResourcePerAlloc),
-		pendingRepeatAsk:  1,
 		ApplicationID:     allocation.ApplicationID,
 		PartitionName:     partitionWithRMId,
+		pendingRepeatAsk:  1,
+		createTime:        time.Now(),
 	}
 }
 
-// Add delta to pending ask,
-//    if original_pending + delta >= 0, return true. And update internal pending ask.
-//    If original_pending + delta < 0, return false and keep original_pending unchanged.
-func (saa *schedulingAllocationAsk) addPendingAskRepeat(delta int32) bool {
+// Update pending ask repeat with the delta given.
+// Update the pending ask repeat counter with the delta (pos or neg). The pending repeat is always 0 or higher.
+// If the update would cause the repeat to go negative the update is discarded and false is returned.
+// In all other cases the repeat is updated and true is returned.
+func (saa *schedulingAllocationAsk) updatePendingAskRepeat(delta int32) bool {
 	saa.Lock()
 	defer saa.Unlock()
 
@@ -90,13 +95,17 @@ func (saa *schedulingAllocationAsk) addPendingAskRepeat(delta int32) bool {
 }
 
 // Get the pending ask repeat
-//    if original_pending + delta >= 0, return true. And update internal pending ask.
-//    If original_pending + delta < 0, return false and keep original_pending unchanged.
 func (saa *schedulingAllocationAsk) getPendingAskRepeat() int32 {
 	saa.RLock()
 	defer saa.RUnlock()
 
 	return saa.pendingRepeatAsk
+}
+
+// Return the time this ask was created
+// Should be treated as read only not te be modified
+func (saa *schedulingAllocationAsk) getCreateTime() time.Time {
+	return saa.createTime
 }
 
 // Normalised priority

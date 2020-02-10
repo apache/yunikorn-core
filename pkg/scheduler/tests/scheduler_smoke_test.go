@@ -76,19 +76,19 @@ partitions:
 
 	// Check queues of cache and scheduler.
 	partitionInfo := cache.GetPartition("[rm:123]default")
-	assert.Assert(t, nil == partitionInfo.Root.MaxResource, "partition info max resource nil, first load")
+	assert.Assert(t, nil == partitionInfo.Root.GetMaxResource(), "partition info max resource nil, first load")
 
 	// Check scheduling queue root
 	schedulerQueueRoot := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root", "[rm:123]default")
-	assert.Assert(t, nil == schedulerQueueRoot.CachedQueueInfo.MaxResource, "root scheduling queue max resource nil, first load")
+	assert.Assert(t, nil == schedulerQueueRoot.QueueInfo.GetMaxResource(), "root scheduling queue max resource nil, first load")
 
 	// Check scheduling queue root.base
 	schedulerQueue := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.base", "[rm:123]default")
-	assert.Assert(t, 150 == schedulerQueue.CachedQueueInfo.MaxResource.Resources[resources.MEMORY])
+	assert.Assert(t, 150 == schedulerQueue.QueueInfo.GetMaxResource().Resources[resources.MEMORY])
 
 	// Check the queue which will be removed
 	schedulerQueue = scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.tobedeleted", "[rm:123]default")
-	if !schedulerQueue.CachedQueueInfo.IsRunning() {
+	if !schedulerQueue.QueueInfo.IsRunning() {
 		t.Errorf("child queue root.tobedeleted is not in running state")
 	}
 
@@ -129,20 +129,20 @@ partitions:
 
 	// Check queues of cache and scheduler.
 	partitionInfo = cache.GetPartition("[rm:123]default")
-	assert.Assert(t, nil == partitionInfo.Root.MaxResource, "partition info max resource nil, reload")
+	assert.Assert(t, nil == partitionInfo.Root.GetMaxResource(), "partition info max resource nil, reload")
 
 	// Check scheduling queue root
 	schedulerQueueRoot = scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root", "[rm:123]default")
-	assert.Assert(t, nil == schedulerQueueRoot.CachedQueueInfo.MaxResource, "root scheduling queue max resource nil, reload")
+	assert.Assert(t, nil == schedulerQueueRoot.QueueInfo.GetMaxResource(), "root scheduling queue max resource nil, reload")
 
 	// Check scheduling queue root.base
 	schedulerQueue = scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.base", "[rm:123]default")
-	assert.Assert(t, 1000 == schedulerQueue.CachedQueueInfo.MaxResource.Resources[resources.MEMORY])
-	assert.Assert(t, 250 == schedulerQueue.CachedQueueInfo.GuaranteedResource.Resources[resources.VCORE])
+	assert.Assert(t, 1000 == schedulerQueue.QueueInfo.GetMaxResource().Resources[resources.MEMORY])
+	assert.Assert(t, 250 == schedulerQueue.QueueInfo.GuaranteedResource.Resources[resources.VCORE])
 
 	// check the removed queue state
 	schedulerQueue = scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.tobedeleted", "[rm:123]default")
-	if !schedulerQueue.CachedQueueInfo.IsDraining() {
+	if !schedulerQueue.QueueInfo.IsDraining() {
 		t.Errorf("child queue root.tobedeleted is not in draining state")
 	}
 	// check the newly added queue
@@ -156,11 +156,11 @@ partitions:
 	if partitionInfo == nil {
 		t.Fatal("gpu partition not found")
 	}
-	assert.Assert(t, nil == partitionInfo.Root.MaxResource, "GPU partition info max resource nil")
+	assert.Assert(t, nil == partitionInfo.Root.GetMaxResource(), "GPU partition info max resource nil")
 
 	// Check scheduling queue root
 	schedulerQueueRoot = scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root", "[rm:123]gpu")
-	assert.Assert(t, nil == schedulerQueueRoot.CachedQueueInfo.MaxResource)
+	assert.Assert(t, nil == schedulerQueueRoot.QueueInfo.GetMaxResource())
 
 	// Check scheduling queue root.production
 	schedulerQueue = scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.production", "[rm:123]gpu")
@@ -212,15 +212,15 @@ partitions:
 
 	// Check queues of cache and scheduler.
 	partitionInfo := cache.GetPartition("[rm:123]default")
-	assert.Assert(t, nil == partitionInfo.Root.MaxResource, "partition info max resource nil")
+	assert.Assert(t, nil == partitionInfo.Root.GetMaxResource(), "partition info max resource nil")
 
 	// Check scheduling queue root
 	schedulerQueueRoot := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root", "[rm:123]default")
-	assert.Assert(t, nil == schedulerQueueRoot.CachedQueueInfo.MaxResource)
+	assert.Assert(t, nil == schedulerQueueRoot.QueueInfo.GetMaxResource())
 
 	// Check scheduling queue a
 	schedulerQueueA := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.a", "[rm:123]default")
-	assert.Assert(t, 150 == schedulerQueueA.CachedQueueInfo.MaxResource.Resources[resources.MEMORY])
+	assert.Assert(t, 150 == schedulerQueueA.QueueInfo.GetMaxResource().Resources[resources.MEMORY])
 
 	// Register a node, and add apps
 	err = proxy.Update(&si.UpdateRequest{
@@ -301,7 +301,7 @@ partitions:
 	waitForPendingResource(t, schedulerQueueRoot, 20, 1000)
 	waitForPendingResourceForApplication(t, schedulingApp, 20, 1000)
 
-	scheduler.SingleStepScheduleAllocTest(16)
+	scheduler.MultiStepSchedule(16)
 
 	waitForAllocations(mockRM, 2, 1000)
 
@@ -311,8 +311,8 @@ partitions:
 	waitForPendingResourceForApplication(t, schedulingApp, 0, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Assert(t, schedulerQueueA.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 20)
-	assert.Assert(t, schedulerQueueRoot.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 20)
+	assert.Assert(t, schedulerQueueA.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 20)
+	assert.Assert(t, schedulerQueueRoot.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 20)
 	assert.Assert(t, schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY] == 20)
 
 	// once we start to process allocation asks from this app, verify the state again
@@ -361,7 +361,7 @@ partitions:
 	waitForPendingResourceForApplication(t, schedulingApp, 300, 1000)
 
 	// Now app-1 uses 20 resource, and queue-a's max = 150, so it can get two 50 container allocated.
-	scheduler.SingleStepScheduleAllocTest(16)
+	scheduler.MultiStepSchedule(16)
 
 	waitForAllocations(mockRM, 4, 1000)
 
@@ -371,8 +371,8 @@ partitions:
 	waitForPendingResourceForApplication(t, schedulingApp, 200, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Assert(t, schedulerQueueA.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 120)
-	assert.Assert(t, schedulerQueueRoot.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 120)
+	assert.Assert(t, schedulerQueueA.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 120)
+	assert.Assert(t, schedulerQueueRoot.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 120)
 	assert.Assert(t, schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY] == 120)
 
 	// Check allocated resources of nodes
@@ -409,8 +409,8 @@ partitions:
 	waitForPendingResourceForApplication(t, schedulingApp, 200, 1000)
 
 	// Check allocated resources of queues, apps should be 0 now
-	assert.Assert(t, schedulerQueueA.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 0)
-	assert.Assert(t, schedulerQueueRoot.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 0)
+	assert.Assert(t, schedulerQueueA.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 0)
+	assert.Assert(t, schedulerQueueRoot.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 0)
 	assert.Assert(t, schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY] == 0)
 
 	// Release asks
@@ -561,8 +561,8 @@ partitions:
 	waitForPendingResourceForApplication(t, schedulingApp, 50, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Assert(t, schedulerQueueA.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 150)
-	assert.Assert(t, schedulerQueueRoot.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 150)
+	assert.Assert(t, schedulerQueueA.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 150)
+	assert.Assert(t, schedulerQueueRoot.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 150)
 	assert.Assert(t, schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY] == 150)
 
 	// Check allocated resources of nodes
@@ -700,7 +700,7 @@ partitions:
 	waitForPendingResource(t, schedulerQueueRoot, 400, 1000)
 
 	for i := 0; i < 20; i++ {
-		scheduler.SingleStepScheduleAllocTest(1)
+		scheduler.MultiStepSchedule(1)
 		time.Sleep(100 * time.Millisecond)
 	}
 
@@ -850,7 +850,7 @@ partitions:
 	waitForPendingResourceForApplication(t, schedulingApp2, 200, 1000)
 
 	for i := 0; i < 20; i++ {
-		scheduler.SingleStepScheduleAllocTest(1)
+		scheduler.MultiStepSchedule(1)
 		time.Sleep(100 * time.Millisecond)
 	}
 
@@ -1095,7 +1095,7 @@ partitions:
 			waitForPendingResource(t, schedulingQueue, 120, 1000)
 
 			for i := 0; i < 20; i++ {
-				serviceContext.Scheduler.SingleStepScheduleAllocTest(1)
+				serviceContext.Scheduler.MultiStepSchedule(1)
 				time.Sleep(100 * time.Millisecond)
 			}
 
@@ -1140,7 +1140,7 @@ partitions:
 
 			// schedule again, pending requests should be satisfied now
 			for i := 0; i < 20; i++ {
-				serviceContext.Scheduler.SingleStepScheduleAllocTest(1)
+				serviceContext.Scheduler.MultiStepSchedule(1)
 				time.Sleep(100 * time.Millisecond)
 			}
 
@@ -1449,7 +1449,7 @@ partitions:
 	waitForPendingResourceForApplication(t, schedulingApp2, 200, 1000)
 
 	for i := 0; i < 9; i++ {
-		scheduler.SingleStepScheduleAllocTest(1)
+		scheduler.MultiStepSchedule(1)
 		time.Sleep(100 * time.Millisecond)
 	}
 
@@ -1567,7 +1567,7 @@ partitions:
 	waitForPendingResourceForApplication(t, schedulingApp1, 200, 1000)
 
 	for i := 0; i < 20; i++ {
-		serviceContext.Scheduler.SingleStepScheduleAllocTest(1)
+		serviceContext.Scheduler.MultiStepSchedule(1)
 	}
 
 	// Verify all requests are satisfied

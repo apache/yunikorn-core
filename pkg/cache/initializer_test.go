@@ -393,7 +393,7 @@ partitions:
 	// Check the partitions: config update just marks as deleted does not do full remove
 	assert.Equal(t, 2, len(clusterInfo.partitions))
 	gpuPartition = clusterInfo.partitions["["+rmID+"]gpu"]
-	if gpuPartition != nil && !gpuPartition.IsDraining() {
+	if gpuPartition != nil && !gpuPartition.isDraining() {
 		t.Errorf("Failed removing the gpu partition")
 		return
 	}
@@ -423,7 +423,7 @@ partitions:
 	if testQueue.GuaranteedResource.Resources["memory"] != 100 {
 		t.Errorf("Failed parsing GuaranteedResource settings on test queue in default partition")
 	}
-	if testQueue.MaxResource.Resources["vcore"] != 20 {
-		t.Errorf("Failed parsing MaxResource settings on test queue in default partition")
+	if testQueue.maxResource.Resources["vcore"] != 20 {
+		t.Errorf("Failed parsing maxResource settings on test queue in default partition")
 	}
 }

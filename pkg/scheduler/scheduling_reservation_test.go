@@ -33,32 +33,38 @@ func TestNewReservation(t *testing.T) {
 	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "app-1"})
 	node := newNode("node-1", q)
 
-	// check the basics
-	reserve := newReservation(nil, nil, nil)
+	// check the basics (failures)
+	reserve := newReservation(nil, nil, nil, true)
 	if reserve != nil {
 		t.Errorf("reservation with nil objects should have returned nil: %v", reserve)
 	}
-	reserve = newReservation(node, app, nil)
+	reserve = newReservation(node, app, nil, true)
 	if reserve != nil {
 		t.Errorf("reservation with nil ask set should have returned nil: '%v'", reserve)
 	}
-	reserve = newReservation(node, app, ask)
+	reserve = newReservation(node, nil, ask, true)
 	if reserve != nil {
-		t.Errorf("reservation with all objects set should have returned nil: '%v'", reserve)
+		t.Errorf("reservation with nil app set should have returned nil: '%v'", reserve)
+	}
+	reserve = newReservation(nil, app, ask, true)
+	if reserve != nil {
+		t.Errorf("reservation with nil node set should have returned nil: '%v'", reserve)
 	}
 
-	// other cases
-	reserve = newReservation(node, nil, ask)
+	// working cases
+	reserve = newReservation(node, app, ask, true)
 	if reserve == nil {
-		t.Fatal("node reservation was unexpectedly nil")
+		t.Fatalf("reservation with all objects set should have returned nil: %v", reserve)
 	}
 	assert.Equal(t, reserve.getKey(), "node-1|alloc-1", "incorrect node reservation key")
+	assert.Equal(t, reserve.String(), "app-1 -> node-1|alloc-1", "incorrect string form")
 
-	reserve = newReservation(nil, app, ask)
+	reserve = newReservation(node, app, ask, false)
 	if reserve == nil {
-		t.Fatal("app reservation was unexpectedly nil")
+		t.Fatalf("reservation with all objects set should have returned nil: %v", reserve)
 	}
 	assert.Equal(t, reserve.getKey(), "app-1|alloc-1", "incorrect app reservation key")
+	assert.Equal(t, reserve.String(), "node-1 -> app-1|alloc-1", "incorrect string form")
 }
 
 func TestReservationKey(t *testing.T) {
@@ -82,4 +88,38 @@ func TestReservationKey(t *testing.T) {
 	assert.Equal(t, reserve, "node-1|alloc-1", "incorrect node reservation key")
 	reserve = reservationKey(nil, app, ask)
 	assert.Equal(t, reserve, "app-1|alloc-1", "incorrect app reservation key")
+}
+
+func TestUnReserve(t *testing.T) {
+	// create the input objects
+	q := map[string]resources.Quantity{"first": 0}
+	res := resources.NewResourceFromMap(q)
+	ask := newAllocationAsk("alloc-1", "app-1", res)
+	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "app-1"})
+	node := newNode("node-1", q)
+
+	// standalone reservation unreserve returns false as app is not reserved
+	reserve := newReservation(node, app, ask, true)
+	assert.Equal(t, reserve.getKey(), "node-1|alloc-1", "incorrect node reservation key")
+	ok, err := reserve.unReserve()
+	if ok || err != nil {
+		t.Fatalf("unreserve should have returned false and no error: %v", err)
+	}
+	reserve = newReservation(node, app, ask, false)
+	assert.Equal(t, reserve.getKey(), "app-1|alloc-1", "incorrect app reservation key")
+	ok, err = reserve.unReserve()
+	if ok || err != nil {
+		t.Fatalf("unreserve should have returned false and no error: %v", err)
+	}
+
+	// do a bogus reserve and unreserve: no errors and should be really removed
+	app.requests[ask.AskProto.AllocationKey] = ask
+	ok, err = app.reserve(node, ask)
+	if !ok || err != nil || len(app.reservations) != 1 || len(node.reservations) != 1 {
+		t.Fatalf("reserve should not have failed: %v", err)
+	}
+	ok, err = reserve.unReserve()
+	if !ok || err != nil || len(app.reservations) != 0 || len(node.reservations) != 0 {
+		t.Fatalf("unreserve should have returned true and no error: %v", err)
+	}
 }

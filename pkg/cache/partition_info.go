@@ -56,14 +56,15 @@ type PartitionInfo struct {
 	rules                  *[]configs.PlacementRule    // placement rules to be loaded by the scheduler
 	userGroupCache         *security.UserGroupCache    // user cache per partition
 	clusterInfo            *ClusterInfo                // link back to the cluster info
-	lock                   sync.RWMutex                // lock for updating the partition
 	totalPartitionResource *resources.Resource         // Total node resources
 	nodeSortingPolicy      *common.NodeSortingPolicy   // Global Node Sorting Policies
+
+	sync.RWMutex
 }
 
 // Create a new partition from scratch based on a validated configuration.
 // If the configuration did not pass validation and is processed weird errors could occur.
-func NewPartitionInfo(partition configs.PartitionConfig, rmID string, info *ClusterInfo) (*PartitionInfo, error) {
+func newPartitionInfo(partition configs.PartitionConfig, rmID string, info *ClusterInfo) (*PartitionInfo, error) {
 	p := &PartitionInfo{
 		Name:         partition.Name,
 		RmID:         rmID,
@@ -143,7 +144,7 @@ func addQueueInfo(conf []configs.QueueConfig, parent *QueueInfo) error {
 
 // Handle the state event for the application.
 // The state machine handles the locking.
-func (pi *PartitionInfo) HandlePartitionEvent(event SchedulingObjectEvent) error {
+func (pi *PartitionInfo) handlePartitionEvent(event SchedulingObjectEvent) error {
 	err := pi.stateMachine.Event(event.String(), pi.Name)
 	if err == nil {
 		pi.stateTime = time.Now()
@@ -157,8 +158,8 @@ func (pi *PartitionInfo) HandlePartitionEvent(event SchedulingObjectEvent) error
 }
 
 func (pi *PartitionInfo) GetTotalPartitionResource() *resources.Resource {
-	pi.lock.RLock()
-	defer pi.lock.RUnlock()
+	pi.RLock()
+	defer pi.RUnlock()
 
 	return pi.totalPartitionResource
 }
@@ -192,14 +193,14 @@ func (pi *PartitionInfo) GetNodeSortingPolicy() common.SortingPolicy {
 // means that the partition is updated before the allocations. Failure to add all reported allocations will
 // cause the node to be rejected
 func (pi *PartitionInfo) addNewNode(node *NodeInfo, existingAllocations []*si.Allocation) error {
-	pi.lock.Lock()
-	defer pi.lock.Unlock()
+	pi.Lock()
+	defer pi.Unlock()
 
 	log.Logger().Info("add node to partition",
 		zap.String("nodeID", node.NodeID),
 		zap.String("partition", pi.Name))
 
-	if pi.IsDraining() || pi.IsStopped() {
+	if pi.isDraining() || pi.isStopped() {
 		return fmt.Errorf("partition %s is stopped cannot add a new node %s", pi.Name, node.NodeID)
 	}
 
@@ -208,8 +209,8 @@ func (pi *PartitionInfo) addNewNode(node *NodeInfo, existingAllocations []*si.Al
 	}
 
 	// update the resources available in the cluster
-	pi.totalPartitionResource = resources.Add(pi.totalPartitionResource, node.totalResource)
-	pi.Root.MaxResource = pi.totalPartitionResource
+	pi.totalPartitionResource.AddTo(node.totalResource)
+	pi.Root.setMaxResource(pi.totalPartitionResource)
 
 	// Node is added to the system to allow processing of the allocations
 	pi.nodes[node.NodeID] = node
@@ -241,13 +242,20 @@ func (pi *PartitionInfo) addNewNode(node *NodeInfo, existingAllocations []*si.Al
 		// transit app's state from Accepted to Running
 		for _, alloc := range existingAllocations {
 			if app, ok := pi.applications[alloc.ApplicationID]; ok {
-				log.Logger().Info("", zap.String("state", app.GetApplicationState()))
 				if app.GetApplicationState() == Accepted.String() {
+					log.Logger().Info("moving application with existing allocations to running state",
+						zap.String("appID", app.ApplicationID),
+						zap.String(" current state", app.GetApplicationState()))
 					if err := app.HandleApplicationEvent(RunApplication); err != nil {
 						log.Logger().Warn("unable to handle app event - RunApplication",
 							zap.Error(err))
 					}
 				}
+			} else {
+				log.Logger().Info("existing allocations in recovery reference unknown application",
+					zap.String("allocationKey", alloc.AllocationKey),
+					zap.String("appID", alloc.ApplicationID),
+					zap.String("nodeID", alloc.NodeID))
 			}
 		}
 	}
@@ -278,8 +286,8 @@ func (pi *PartitionInfo) addNodeReportedAllocations(allocation *si.Allocation) (
 // Remove a node from the partition.
 // This locks the partition and calls the internal unlocked version.
 func (pi *PartitionInfo) RemoveNode(nodeID string) []*AllocationInfo {
-	pi.lock.Lock()
-	defer pi.lock.Unlock()
+	pi.Lock()
+	defer pi.Unlock()
 
 	return pi.removeNodeInternal(nodeID)
 }
@@ -303,8 +311,8 @@ func (pi *PartitionInfo) removeNodeInternal(nodeID string) []*AllocationInfo {
 
 	// found the node cleanup the node and all linked data
 	released := pi.removeNodeAllocations(node)
-	pi.totalPartitionResource = resources.Sub(pi.totalPartitionResource, node.totalResource)
-	pi.Root.MaxResource = pi.totalPartitionResource
+	pi.totalPartitionResource.SubFrom(node.totalResource)
+	pi.Root.setMaxResource(pi.totalPartitionResource)
 
 	// Remove node from list of tracked nodes
 	delete(pi.nodes, nodeID)
@@ -347,7 +355,7 @@ func (pi *PartitionInfo) removeNodeAllocations(node *NodeInfo) []*AllocationInfo
 
 		// we should never have an error, cache is in an inconsistent state if this happens
 		if queue != nil {
-			if err := queue.DecAllocatedResource(alloc.AllocatedResource); err != nil {
+			if err := queue.decAllocatedResource(alloc.AllocatedResource); err != nil {
 				log.Logger().Warn("failed to release resources from queue",
 					zap.String("appID", alloc.ApplicationID),
 					zap.Error(err))
@@ -368,14 +376,14 @@ func (pi *PartitionInfo) removeNodeAllocations(node *NodeInfo) []*AllocationInfo
 // If the flag is true the add will fail returning an error. If the flag is false the add will not fail if the application
 // exists but no change is made.
 func (pi *PartitionInfo) addNewApplication(info *ApplicationInfo, failIfExist bool) error {
-	pi.lock.Lock()
-	defer pi.lock.Unlock()
+	pi.Lock()
+	defer pi.Unlock()
 
 	log.Logger().Info("adding app to partition",
 		zap.String("appID", info.ApplicationID),
 		zap.String("queue", info.QueueName),
 		zap.String("partitionName", pi.Name))
-	if pi.IsDraining() || pi.IsStopped() {
+	if pi.isDraining() || pi.isStopped() {
 		return fmt.Errorf("partition %s is stopped cannot add a new application %s", pi.Name, info.ApplicationID)
 	}
 
@@ -403,8 +411,8 @@ func (pi *PartitionInfo) addNewApplication(info *ApplicationInfo, failIfExist bo
 // Get the application object for the application ID as tracked by the partition.
 // This will return nil if the application is not part of this partition.
 func (pi *PartitionInfo) getApplication(appID string) *ApplicationInfo {
-	pi.lock.RLock()
-	defer pi.lock.RUnlock()
+	pi.RLock()
+	defer pi.RUnlock()
 
 	return pi.applications[appID]
 }
@@ -413,8 +421,8 @@ func (pi *PartitionInfo) getApplication(appID string) *ApplicationInfo {
 // This will return nil if the node is not part of this partition.
 // Visible by tests
 func (pi *PartitionInfo) GetNode(nodeID string) *NodeInfo {
-	pi.lock.RLock()
-	defer pi.lock.RUnlock()
+	pi.RLock()
+	defer pi.RUnlock()
 
 	return pi.nodes[nodeID]
 }
@@ -423,8 +431,8 @@ func (pi *PartitionInfo) GetNode(nodeID string) *NodeInfo {
 // Returns all removed allocations.
 // If no specific allocation is specified via a uuid all allocations are removed.
 func (pi *PartitionInfo) releaseAllocationsForApplication(toRelease *commonevents.ReleaseAllocation) []*AllocationInfo {
-	pi.lock.Lock()
-	defer pi.lock.Unlock()
+	pi.Lock()
+	defer pi.Unlock()
 
 	allocationsToRelease := make([]*AllocationInfo, 0)
 
@@ -481,7 +489,7 @@ func (pi *PartitionInfo) releaseAllocationsForApplication(toRelease *commonevent
 	// this nil check is not really needed as we can only reach here with a queue set, IDE complains without this
 	if queue != nil {
 		// we should never have an error, cache is in an inconsistent state if this happens
-		if err := queue.DecAllocatedResource(totalReleasedResource); err != nil {
+		if err := queue.decAllocatedResource(totalReleasedResource); err != nil {
 			log.Logger().Warn("failed to release resources",
 				zap.Any("appID", toRelease.ApplicationID),
 				zap.Error(err))
@@ -508,7 +516,7 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
 	log.Logger().Debug("adding allocation",
 		zap.String("partitionName", pi.Name))
 
-	if pi.IsStopped() {
+	if pi.isStopped() {
 		return nil, fmt.Errorf("partition %s is stopped cannot add new allocation %s", pi.Name, alloc.AllocationKey)
 	}
 
@@ -532,7 +540,7 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
 	// allocation inherits the app queue as the source of truth
 	if queue = pi.getQueue(app.QueueName); queue == nil || !queue.IsLeafQueue() {
 		metrics.GetSchedulerMetrics().IncSchedulingError()
-		return nil, fmt.Errorf("queue does not exist or is not a leaf queue %s", alloc.QueueName)
+		return nil, fmt.Errorf("queue does not exist or is not a leaf queue %s", app.QueueName)
 	}
 
 	// check the node status again
@@ -576,8 +584,8 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
 // Add a new allocation to the partition.
 // This is the locked version which calls addNewAllocationInternal() inside a partition lock.
 func (pi *PartitionInfo) addNewAllocation(proposal *commonevents.AllocationProposal) (*AllocationInfo, error) {
-	pi.lock.Lock()
-	defer pi.lock.Unlock()
+	pi.Lock()
+	defer pi.Unlock()
 	return pi.addNewAllocationInternal(proposal, false)
 }
 
@@ -595,9 +603,9 @@ func (pi *PartitionInfo) getNewAllocationUUID() string {
 
 // Remove a rejected application from the partition.
 // This is just a cleanup, the app has not been scheduled yet.
-func (pi *PartitionInfo) RemoveRejectedApp(appID string) {
-	pi.lock.Lock()
-	defer pi.lock.Unlock()
+func (pi *PartitionInfo) removeRejectedApp(appID string) {
+	pi.Lock()
+	defer pi.Unlock()
 
 	log.Logger().Debug("removing rejected app from partition",
 		zap.String("appID", appID),
@@ -609,8 +617,8 @@ func (pi *PartitionInfo) RemoveRejectedApp(appID string) {
 // Remove the application from the partition.
 // This will also release all the allocations for application from the queue and nodes.
 func (pi *PartitionInfo) RemoveApplication(appID string) (*ApplicationInfo, []*AllocationInfo) {
-	pi.lock.Lock()
-	defer pi.lock.Unlock()
+	pi.Lock()
+	defer pi.Unlock()
 
 	log.Logger().Debug("removing app from partition",
 		zap.String("appID", appID),
@@ -667,7 +675,7 @@ func (pi *PartitionInfo) RemoveApplication(appID string) (*ApplicationInfo, []*A
 		// we should never have an error, cache is in an inconsistent state if this happens
 		queue := app.leafQueue
 		if queue != nil {
-			if err := queue.DecAllocatedResource(totalAppAllocated); err != nil {
+			if err := queue.decAllocatedResource(totalAppAllocated); err != nil {
 				log.Logger().Error("failed to release resources for app",
 					zap.String("appID", app.ApplicationID),
 					zap.Error(err))
@@ -687,8 +695,8 @@ func (pi *PartitionInfo) RemoveApplication(appID string) (*ApplicationInfo, []*A
 
 // Return a copy of all the nodes registers to this partition
 func (pi *PartitionInfo) CopyNodeInfos() []*NodeInfo {
-	pi.lock.RLock()
-	defer pi.lock.RUnlock()
+	pi.RLock()
+	defer pi.RUnlock()
 
 	out := make([]*NodeInfo, len(pi.nodes))
 
@@ -713,8 +721,8 @@ func checkAndSetResource(resource *resources.Resource) string {
 // remove hard coded values and unknown AbsUsedCapacity
 // map status to the draining flag
 func (pi *PartitionInfo) GetQueueInfos() []dao.QueueDAOInfo {
-	pi.lock.RLock()
-	defer pi.lock.RUnlock()
+	pi.RLock()
+	defer pi.RUnlock()
 
 	var queueInfos []dao.QueueDAOInfo
 
@@ -723,7 +731,7 @@ func (pi *PartitionInfo) GetQueueInfos() []dao.QueueDAOInfo {
 	info.Status = "RUNNING"
 	info.Capacities = dao.QueueCapacity{
 		Capacity:        checkAndSetResource(pi.Root.GuaranteedResource),
-		MaxCapacity:     checkAndSetResource(pi.Root.MaxResource),
+		MaxCapacity:     checkAndSetResource(pi.Root.maxResource),
 		UsedCapacity:    checkAndSetResource(pi.Root.GetAllocatedResource()),
 		AbsUsedCapacity: "20",
 	}
@@ -745,7 +753,7 @@ func GetChildQueueInfos(info *QueueInfo) []dao.QueueDAOInfo {
 		queue.Status = "RUNNING"
 		queue.Capacities = dao.QueueCapacity{
 			Capacity:        checkAndSetResource(v.GuaranteedResource),
-			MaxCapacity:     checkAndSetResource(v.MaxResource),
+			MaxCapacity:     checkAndSetResource(v.maxResource),
 			UsedCapacity:    checkAndSetResource(v.GetAllocatedResource()),
 			AbsUsedCapacity: "20",
 		}
@@ -757,26 +765,26 @@ func GetChildQueueInfos(info *QueueInfo) []dao.QueueDAOInfo {
 }
 
 func (pi *PartitionInfo) GetTotalApplicationCount() int {
-	pi.lock.RLock()
-	defer pi.lock.RUnlock()
+	pi.RLock()
+	defer pi.RUnlock()
 	return len(pi.applications)
 }
 
 func (pi *PartitionInfo) GetTotalAllocationCount() int {
-	pi.lock.RLock()
-	defer pi.lock.RUnlock()
+	pi.RLock()
+	defer pi.RUnlock()
 	return len(pi.allocations)
 }
 
 func (pi *PartitionInfo) GetTotalNodeCount() int {
-	pi.lock.RLock()
-	defer pi.lock.RUnlock()
+	pi.RLock()
+	defer pi.RUnlock()
 	return len(pi.nodes)
 }
 
 func (pi *PartitionInfo) GetApplications() []*ApplicationInfo {
-	pi.lock.RLock()
-	defer pi.lock.RUnlock()
+	pi.RLock()
+	defer pi.RUnlock()
 	var appList []*ApplicationInfo
 	for _, app := range pi.applications {
 		appList = append(appList, app)
@@ -787,8 +795,8 @@ func (pi *PartitionInfo) GetApplications() []*ApplicationInfo {
 // Get the queue from the structure based on the fully qualified name.
 // Wrapper around the unlocked version getQueue()
 func (pi *PartitionInfo) GetQueue(name string) *QueueInfo {
-	pi.lock.RLock()
-	defer pi.lock.RUnlock()
+	pi.RLock()
+	defer pi.RUnlock()
 	return pi.getQueue(name)
 }
 
@@ -817,8 +825,8 @@ func (pi *PartitionInfo) getQueue(name string) *QueueInfo {
 
 // Update the queues in the partition based on the reloaded and checked config
 func (pi *PartitionInfo) updatePartitionDetails(partition configs.PartitionConfig) error {
-	pi.lock.RLock()
-	defer pi.lock.RUnlock()
+	pi.RLock()
+	defer pi.RUnlock()
 	// update preemption needed flag
 	pi.isPreemptable = partition.Preemption.Enabled
 	// start at the root: there is only one queue
@@ -867,10 +875,10 @@ func (pi *PartitionInfo) updateQueues(config []configs.QueueConfig, parent *Queu
 
 // Mark the partition  for removal from the system.
 // This can be executed multiple times and is only effective the first time.
-func (pi *PartitionInfo) MarkPartitionForRemoval() {
-	pi.lock.RLock()
-	defer pi.lock.RUnlock()
-	if err := pi.HandlePartitionEvent(Remove); err != nil {
+func (pi *PartitionInfo) markPartitionForRemoval() {
+	pi.RLock()
+	defer pi.RUnlock()
+	if err := pi.handlePartitionEvent(Remove); err != nil {
 		log.Logger().Error("failed to mark partition for deletion",
 			zap.String("partitionName", pi.Name),
 			zap.Error(err))
@@ -881,25 +889,25 @@ func (pi *PartitionInfo) MarkPartitionForRemoval() {
 // This is the cleanup triggered by the exiting scheduler partition. Just unlinking from the cluster should be enough.
 // All other clean up is triggered from the scheduler
 func (pi *PartitionInfo) Remove() {
-	pi.lock.RLock()
-	defer pi.lock.RUnlock()
+	pi.RLock()
+	defer pi.RUnlock()
 	// safeguard
-	if pi.IsDraining() || pi.IsStopped() {
+	if pi.isDraining() || pi.isStopped() {
 		pi.clusterInfo.removePartition(pi.Name)
 	}
 }
 
 // Is the partition marked for deletion and can only handle existing application requests.
 // No new applications will be accepted.
-func (pi *PartitionInfo) IsDraining() bool {
+func (pi *PartitionInfo) isDraining() bool {
 	return pi.stateMachine.Current() == Draining.String()
 }
 
-func (pi *PartitionInfo) IsRunning() bool {
+func (pi *PartitionInfo) isRunning() bool {
 	return pi.stateMachine.Current() == Active.String()
 }
 
-func (pi *PartitionInfo) IsStopped() bool {
+func (pi *PartitionInfo) isStopped() bool {
 	return pi.stateMachine.Current() == Stopped.String()
 }
 
@@ -944,8 +952,8 @@ func (pi *PartitionInfo) CreateQueues(queueName string) error {
 }
 
 func (pi *PartitionInfo) convertUGI(ugi *si.UserGroupInformation) (security.UserGroup, error) {
-	pi.lock.RLock()
-	defer pi.lock.RUnlock()
+	pi.RLock()
+	defer pi.RUnlock()
 	return pi.userGroupCache.ConvertUGI(ugi)
 }
 
@@ -961,8 +969,8 @@ func (pi *PartitionInfo) convertUGI(ugi *si.UserGroupInformation) (security.User
 // the element value represents number of nodes fall into this bucket.
 // if slice[9] = 3, this means there are 3 nodes resource usage is in the range 80% to 90%.
 func (pi *PartitionInfo) CalculateNodesResourceUsage() map[string][]int {
-	pi.lock.RLock()
-	defer pi.lock.RUnlock()
+	pi.RLock()
+	defer pi.RUnlock()
 	mapResult := make(map[string][]int)
 	for _, node := range pi.nodes {
 		for name, total := range node.totalResource.Resources {

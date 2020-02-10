@@ -102,7 +102,7 @@ func TestBasicPreemption(t *testing.T) {
 	waitForPendingResourceForApplication(t, schedulingApp1, 200, 1000)
 
 	// Try to schedule 40 allocations
-	scheduler.SingleStepScheduleAllocTest(20)
+	scheduler.MultiStepSchedule(20)
 
 	// We should be able to get 20 allocations.
 	waitForAllocations(ms.mockRM, 20, 1000)
@@ -111,7 +111,7 @@ func TestBasicPreemption(t *testing.T) {
 	waitForPendingResource(t, schedulerQueueA, 0, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Assert(t, schedulerQueueA.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 200)
+	assert.Assert(t, schedulerQueueA.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 200)
 
 	// Application-2 Ask for 20 resources
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -138,13 +138,13 @@ func TestBasicPreemption(t *testing.T) {
 	waitForPendingResource(t, schedulerQueueB, 1000, 1000)
 
 	// Now app-1 uses 20 resource, and queue-a's max = 150, so it can get two 50 container allocated.
-	scheduler.SingleStepScheduleAllocTest(16)
+	scheduler.MultiStepSchedule(16)
 
 	// Check pending resource, should be still 1000, nothing will be allocated because cluster is full
 	waitForPendingResource(t, schedulerQueueB, 1000, 1000)
 
 	// Check allocated resources of queue, should be 0
-	assert.Assert(t, schedulerQueueB.CachedQueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 0)
+	assert.Assert(t, schedulerQueueB.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 0)
 
 	// Now we do a preemption.
 	scheduler.SingleStepPreemption()

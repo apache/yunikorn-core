@@ -198,20 +198,30 @@ func (sn *schedulingNode) preAllocateConditions(allocID string) bool {
 	return true
 }
 
-// Check if the node should be considered as a possible node to allocate on
+// Check if the node should be considered as a possible node to allocate on.
+//
 // This is a lock free call. No updates are made this only performs a pre allocate checks
-func (sn *schedulingNode) preAllocateCheck(res *resources.Resource, preemptionPhase bool) bool {
+func (sn *schedulingNode) preAllocateCheck(res *resources.Resource, resKey string, preemptionPhase bool) error {
 	// shortcut if a node is not schedulable
 	if !sn.nodeInfo.IsSchedulable() {
 		log.Logger().Debug("node is unschedulable",
 			zap.String("nodeID", sn.NodeID))
-		return false
+		return fmt.Errorf("pre alloc check, node is unschedulable: %s", sn.NodeID)
 	}
 	// cannot allocate zero or negative resource
 	if !resources.StrictlyGreaterThanZero(res) {
 		log.Logger().Debug("pre alloc check: requested resource is zero",
 			zap.String("nodeID", sn.NodeID))
-		return false
+		return fmt.Errorf("pre alloc check: requested resource is zero: %s", sn.NodeID)
+	}
+	// check if the node is reserved for this app/alloc
+	if sn.isReserved() {
+		if !sn.isReservedForApp(resKey) {
+			log.Logger().Debug("pre alloc check: node reserved for different app or ask",
+				zap.String("nodeID", sn.NodeID),
+				zap.String("resKey", resKey))
+			return fmt.Errorf("pre alloc check: node %s reserved for different app or ask: %s", sn.NodeID, resKey)
+		}
 	}
 
 	// check if resources are available
@@ -225,10 +235,10 @@ func (sn *schedulingNode) preAllocateCheck(res *resources.Resource, preemptionPh
 			zap.String("nodeID", sn.NodeID),
 			zap.Any("available", available),
 			zap.Any("allocating", newAllocating))
-		return false
+		return fmt.Errorf("pre alloc check: requested resource %s is larger than resource available on %s, %s", newAllocating.String(), sn.NodeID, available.String())
 	}
 	// can allocate, based on resource size
-	return true
+	return nil
 }
 
 // Return if the node has been reserved by any application
@@ -240,14 +250,17 @@ func (sn *schedulingNode) isReserved() bool {
 
 // Return true if and only if the node has been reserved by the application
 // NOTE: a return value of false does not mean the node is not reserved by a different app
-func (sn *schedulingNode) isReservedForApp(appID string) bool {
-	if appID == "" {
+func (sn *schedulingNode) isReservedForApp(key string) bool {
+	if key == "" {
 		return false
 	}
 	sn.RLock()
 	defer sn.RUnlock()
-	for key := range sn.reservations {
-		if strings.HasPrefix(key, appID) {
+	if strings.Contains(key, "|") {
+		return sn.reservations[key] != nil
+	}
+	for resKey := range sn.reservations {
+		if strings.HasPrefix(resKey, key) {
 			return true
 		}
 	}
@@ -263,7 +276,7 @@ func (sn *schedulingNode) reserve(app *SchedulingApplication, ask *schedulingAll
 	if len(sn.reservations) > 0 {
 		return false, fmt.Errorf("node is already reserved, nodeID %s", sn.NodeID)
 	}
-	appReservation := newReservation(nil, app, ask)
+	appReservation := newReservation(sn, app, ask, false)
 	// this should really not happen just guard against panic
 	// either app or ask are nil
 	if appReservation == nil {
@@ -311,4 +324,23 @@ func (sn *schedulingNode) unReserve(app *SchedulingApplication, ask *schedulingA
 		zap.String("appID", app.ApplicationInfo.ApplicationID),
 		zap.String("ask", ask.AskProto.AllocationKey))
 	return false, nil
+}
+
+// Remove all reservation made on this node from the app.
+// This is an unlocked function, it does not use a copy of the map when calling unReserve. That call will via the app call
+// unReserve on the node which is locked and modifies the original map. However deleting an entry from a map while iterating
+// over the map is perfectly safe based on the Go Specs.
+// It must only be called when removing the node under a partition lock.
+func (sn *schedulingNode) unReserveApps() bool {
+	var allOK = true
+	for key, res := range sn.reservations {
+		if ok, err := res.unReserve(); !ok {
+			log.Logger().Warn("Removal of reservation failed while removing node",
+				zap.String("nodeID", sn.NodeID),
+				zap.String("reservationKey", key),
+				zap.Error(err))
+			allOK = ok
+		}
+	}
+	return allOK
 }

@@ -25,7 +25,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/schedulerevent"
 )
@@ -53,6 +52,13 @@ func (csc *ClusterSchedulingContext) getPartitionMapClone() map[string]*partitio
 		newMap[k] = v
 	}
 	return newMap
+}
+
+func (csc *ClusterSchedulingContext) getPartition(partitionName string) *partitionSchedulingContext {
+	csc.lock.RLock()
+	defer csc.lock.RUnlock()
+
+	return csc.partitions[partitionName]
 }
 
 func (csc *ClusterSchedulingContext) GetSchedulingApplication(appID string, partitionName string) *SchedulingApplication {
@@ -253,24 +259,6 @@ func (csc *ClusterSchedulingContext) GetSchedulingNode(nodeID, partitionName str
 		return nil
 	}
 	return partition.getSchedulingNode(nodeID)
-}
-
-// Inform the scheduling node of the proposed allocation result.
-// This just reduces the allocating resource on the node.
-// This is a lock free call: locks are taken while retrieving the node and when updating the node
-func (csc *ClusterSchedulingContext) releaseAllocatingResources(alloc *commonevents.AllocationProposal) {
-	// get the partition and node (both have to exist to get here)
-	node := csc.GetSchedulingNode(alloc.NodeID, alloc.PartitionName)
-
-	if node == nil {
-		log.Logger().Warn("node was removed while event was processed",
-			zap.String("partition", alloc.PartitionName),
-			zap.String("nodeID", alloc.NodeID),
-			zap.String("applicationID", alloc.ApplicationID),
-			zap.String("allocationKey", alloc.AllocationKey))
-		return
-	}
-	node.decAllocatingResource(alloc.AllocatedResource)
 }
 
 // Release preempted resources after the cache has been updated.

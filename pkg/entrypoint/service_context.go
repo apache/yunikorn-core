@@ -35,6 +35,7 @@ type ServiceContext struct {
 }
 
 func (s *ServiceContext) StopAll() {
+	log.Logger().Info("ServiceContext stop all services")
 	// TODO implement stop for services
 	if s.WebApp != nil {
 		if err := s.WebApp.StopWebApp(); err != nil {

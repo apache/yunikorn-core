@@ -39,7 +39,7 @@ func createPartitionInfos(clusterInfo *ClusterInfo, conf *configs.SchedulerConfi
 	for _, p := range conf.Partitions {
 		partitionName := common.GetNormalizedPartitionName(p.Name, rmID)
 		p.Name = partitionName
-		partition, err := newPartitionInfo(p, rmID, clusterInfo)
+		partition, err := newPartitionInfoInternal(p, rmID, clusterInfo)
 		if err != nil {
 			return []*PartitionInfo{}, err
 		}
@@ -109,7 +109,7 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmID string) ([]*
 		part, ok := clusterInfo.partitions[p.Name]
 		if ok {
 			// make sure the new info passes all checks
-			_, err = newPartitionInfo(p, rmID, nil)
+			_, err = newPartitionInfoInternal(p, rmID, nil)
 			if err != nil {
 				return []*PartitionInfo{}, []*PartitionInfo{}, err
 			}
@@ -123,7 +123,7 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmID string) ([]*
 			// not found: new partition, no checks needed
 			log.Logger().Info("added partitions", zap.String("partitionName", partitionName))
 
-			part, err = newPartitionInfo(p, rmID, clusterInfo)
+			part, err = newPartitionInfoInternal(p, rmID, clusterInfo)
 			clusterInfo.addPartition(partitionName, part)
 			if err != nil {
 				return []*PartitionInfo{}, []*PartitionInfo{}, err
@@ -138,7 +138,7 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmID string) ([]*
 	deletedPartitions := make([]*PartitionInfo, 0)
 	for _, part := range clusterInfo.partitions {
 		if !visited[part.Name] {
-			part.MarkPartitionForRemoval()
+			part.markPartitionForRemoval()
 			deletedPartitions = append(deletedPartitions, part)
 			log.Logger().Info("marked partition for removal",
 				zap.String("partitionName", part.Name))
@@ -150,8 +150,8 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmID string) ([]*
 
 // Create a new checked PartitionInfo
 // convenience method that wraps creation and checking the settings.
-func newPartitionInfo(part configs.PartitionConfig, rmID string, info *ClusterInfo) (*PartitionInfo, error) {
-	partition, err := NewPartitionInfo(part, rmID, info)
+func newPartitionInfoInternal(part configs.PartitionConfig, rmID string, info *ClusterInfo) (*PartitionInfo, error) {
+	partition, err := newPartitionInfo(part, rmID, info)
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +179,7 @@ func checkResourceConfigurationsForQueue(cur *QueueInfo, parent *QueueInfo) erro
 
 		sum := resources.NewResource()
 		for _, child := range cur.children {
-			sum = resources.Add(sum, child.GuaranteedResource)
+			sum.AddTo(child.GuaranteedResource)
 		}
 
 		if cur.GuaranteedResource != nil {
@@ -194,21 +194,16 @@ func checkResourceConfigurationsForQueue(cur *QueueInfo, parent *QueueInfo) erro
 		cur.GuaranteedResource = resources.NewResource()
 	}
 
-	// If Max resource not set, use parent's max resource
-	if cur.MaxResource == nil && parent != nil && parent.MaxResource != nil {
-		cur.MaxResource = parent.MaxResource
-	}
-
 	// If max resource exist, check guaranteed fits in max, cur.max fit in parent.max
-	if cur.MaxResource != nil {
-		if parent != nil && parent.MaxResource != nil {
-			if !resources.FitIn(parent.MaxResource, cur.MaxResource) {
-				return fmt.Errorf("queue %s has max resources (%v) set larger than parent's max resources (%v)", cur.Name, cur.MaxResource, parent.MaxResource)
+	if cur.maxResource != nil {
+		if parent != nil && parent.maxResource != nil {
+			if !resources.FitIn(parent.maxResource, cur.maxResource) {
+				return fmt.Errorf("queue %s has max resources (%v) set larger than parent's max resources (%v)", cur.Name, cur.maxResource, parent.maxResource)
 			}
 		}
 
-		if !resources.FitIn(cur.MaxResource, cur.GuaranteedResource) {
-			return fmt.Errorf("queue %s has max resources (%v) set smaller than guaranteed resources (%v)", cur.Name, cur.MaxResource, cur.GuaranteedResource)
+		if !resources.FitIn(cur.maxResource, cur.GuaranteedResource) {
+			return fmt.Errorf("queue %s has max resources (%v) set smaller than guaranteed resources (%v)", cur.Name, cur.maxResource, cur.GuaranteedResource)
 		}
 	}
 

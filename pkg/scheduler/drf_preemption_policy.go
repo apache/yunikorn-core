@@ -39,7 +39,10 @@ func (m *DRFPreemptionPolicy) DoPreemption(scheduler *Scheduler) {
 	calculateIdealResources(scheduler)
 
 	// Then go to under utilized queues and search for requests
-	scheduler.singleStepSchedule(16)
+	// removed pre-emption as its need a refactor
+	// scheduler.schedule()
+	// original call
+	// scheduler.singleStepSchedule(16, &preemptionParameters{crossQueuePreemption: true, blacklistedRequest: make(map[string]bool)})
 }
 
 /*

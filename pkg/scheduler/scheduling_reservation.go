@@ -26,14 +26,19 @@ type reservation struct {
 	nodeID string
 	appID  string
 	askKey string
+	// these references must ONLY be used for ask, node and application removal otherwise
+	// the reservations cannot be removed and scheduling might be impacted.
+	app  *SchedulingApplication
+	node *schedulingNode
+	ask  *schedulingAllocationAsk
 }
 
 // The reservation inside the scheduler. A reservation object is never mutated and does not use locking.
-// One of the node and app must be nil, not both or neither. The ask must always be set.
 // The key depends on where the reservation was made (node or app).
-func newReservation(node *schedulingNode, app *SchedulingApplication, ask *schedulingAllocationAsk) *reservation {
-	if ask == nil || (app == nil && node == nil) || (app != nil && node != nil) {
-		log.Logger().Warn("Illegal reservation requested",
+// appBased must be true for a reservation for an app and false for a reservation on a node
+func newReservation(node *schedulingNode, app *SchedulingApplication, ask *schedulingAllocationAsk, appBased bool) *reservation {
+	if ask == nil || app == nil || node == nil {
+		log.Logger().Warn("Illegal reservation requested: one input is nil",
 			zap.Any("node", node),
 			zap.Any("app", app),
 			zap.Any("ask", ask))
@@ -41,12 +46,14 @@ func newReservation(node *schedulingNode, app *SchedulingApplication, ask *sched
 	}
 	res := &reservation{
 		askKey: ask.AskProto.AllocationKey,
+		ask:    ask,
+		app:    app,
+		node:   node,
 	}
-	// since one is nil this is needed to prevent panic
-	if node == nil {
-		res.appID = app.ApplicationInfo.ApplicationID
-	} else {
+	if appBased {
 		res.nodeID = node.NodeID
+	} else {
+		res.appID = app.ApplicationInfo.ApplicationID
 	}
 	return res
 }
@@ -71,4 +78,19 @@ func (r *reservation) getKey() string {
 		return r.appID + "|" + r.askKey
 	}
 	return r.nodeID + "|" + r.askKey
+}
+
+// Remove the reservation from the app and node that created the reservation.
+// This is used while removing an app, ask or node from the scheduler.
+// It calls the UNLOCKED version of the unReserve on the app always.
+// The app is responsible for calling unReserve on the node.
+func (r *reservation) unReserve() (bool, error) {
+	return r.app.unReserveInternal(r.node, r.ask)
+}
+
+func (r *reservation) String() string {
+	if r.nodeID == "" {
+		return r.node.NodeID + " -> " + r.appID + "|" + r.askKey
+	}
+	return r.app.ApplicationInfo.ApplicationID + " -> " + r.nodeID + "|" + r.askKey
 }

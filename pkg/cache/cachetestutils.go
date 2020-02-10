@@ -46,7 +46,7 @@ func CreatePartitionInfo(data []byte) (*PartitionInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error when loading config %v", err)
 	}
-	pi, err := NewPartitionInfo(conf.Partitions[0], "rm1", nil)
+	pi, err := newPartitionInfo(conf.Partitions[0], "rm1", nil)
 	if err != nil {
 		return nil, fmt.Errorf("error when loading ParttionInfo from config %v", err)
 	}

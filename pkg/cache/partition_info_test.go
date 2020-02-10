@@ -166,7 +166,7 @@ func TestAddNewNode(t *testing.T) {
 	}
 
 	// mark partition stopped, no new node can be added
-	if err = partition.HandlePartitionEvent(Stop); err != nil {
+	if err = partition.handlePartitionEvent(Stop); err != nil {
 		t.Fatalf("partition state change failed: %v", err)
 	}
 	waitForPartitionState(t, partition, Stopped.String(), 1000)
@@ -181,7 +181,7 @@ func TestAddNewNode(t *testing.T) {
 	}
 
 	// mark partition active again, the new node can be added
-	if err = partition.HandlePartitionEvent(Start); err != nil {
+	if err = partition.handlePartitionEvent(Start); err != nil {
 		t.Fatalf("partition state change failed: %v", err)
 	}
 	waitForPartitionState(t, partition, Active.String(), 1000)
@@ -200,7 +200,7 @@ func TestAddNewNode(t *testing.T) {
 	}
 
 	// mark partition stopped, no new node can be added
-	if err = partition.HandlePartitionEvent(Remove); err != nil {
+	if err = partition.handlePartitionEvent(Remove); err != nil {
 		t.Fatalf("partition state change failed: %v", err)
 	}
 	waitForPartitionState(t, partition, Draining.String(), 1000)
@@ -329,7 +329,7 @@ func TestAddNewApplication(t *testing.T) {
 	}
 
 	// mark partition stopped, no new application can be added
-	if err = partition.HandlePartitionEvent(Stop); err != nil {
+	if err = partition.handlePartitionEvent(Stop); err != nil {
 		t.Fatalf("partition state change failed: %v", err)
 	}
 	waitForPartitionState(t, partition, Stopped.String(), 1000)
@@ -342,7 +342,7 @@ func TestAddNewApplication(t *testing.T) {
 
 	// mark partition for deletion, no new application can be added
 	partition.stateMachine.SetState(Active.String())
-	if err = partition.HandlePartitionEvent(Remove); err != nil {
+	if err = partition.handlePartitionEvent(Remove); err != nil {
 		t.Fatalf("partition state change failed: %v", err)
 	}
 	waitForPartitionState(t, partition, Draining.String(), 1000)
@@ -481,7 +481,7 @@ func TestAddNewAllocation(t *testing.T) {
 	node1.SetSchedulable(true)
 
 	// mark partition stopped, no new application can be added
-	if err = partition.HandlePartitionEvent(Stop); err != nil {
+	if err = partition.handlePartitionEvent(Stop); err != nil {
 		t.Fatalf("partition state change failed: %v", err)
 	}
 	waitForPartitionState(t, partition, Stopped.String(), 1000)
@@ -491,7 +491,7 @@ func TestAddNewAllocation(t *testing.T) {
 	}
 	// mark partition for removal, no new application can be added
 	partition.stateMachine.SetState(Active.String())
-	if err = partition.HandlePartitionEvent(Remove); err != nil {
+	if err = partition.handlePartitionEvent(Remove); err != nil {
 		t.Fatalf("partition state change failed: %v", err)
 	}
 	waitForPartitionState(t, partition, Draining.String(), 1000)

@@ -32,32 +32,33 @@ import (
 
 // Represents Queue inside Scheduler
 type SchedulingQueue struct {
-	Name                string              // Fully qualified path for the queue
-	CachedQueueInfo     *cache.QueueInfo    // link back to the queue in the cache
-	QueueSortType       SortType            // How sub queues are sorted (parent queue only)
+	Name      string           // Fully qualified path for the queue
+	QueueInfo *cache.QueueInfo // link back to the queue in the cache
 
 	// Private fields need protection
-	applicationSortType SortType                          // How applications are sorted (leaf queue only)
-	childrenQueues      map[string]*SchedulingQueue       // Only for direct children, parent queue only
-	applications        map[string]*SchedulingApplication // only for leaf queue
-	parent              *SchedulingQueue                  // link back to the parent in the scheduler
-	allocating          *resources.Resource               // resource being allocated in the queue but not confirmed
-	preempting          *resources.Resource               // resource considered for preemption in the queue
-	pending             *resources.Resource               // pending resource for the apps in the queue
+	sortType       SortType                          // How applications (leaf) or queues (parents) are sorted
+	childrenQueues map[string]*SchedulingQueue       // Only for direct children, parent queue only
+	applications   map[string]*SchedulingApplication // only for leaf queue
+	reservedApps   map[string]int                    // applications reserved within this queue, with reservation count
+	parent         *SchedulingQueue                  // link back to the parent in the scheduler
+	allocating     *resources.Resource               // resource being allocated in the queue but not confirmed
+	preempting     *resources.Resource               // resource considered for preemption in the queue
+	pending        *resources.Resource               // pending resource for the apps in the queue
 
 	sync.RWMutex
 }
 
 func newSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo, parent *SchedulingQueue) *SchedulingQueue {
 	sq := &SchedulingQueue{
-		Name:            cacheQueueInfo.GetQueuePath(),
-		CachedQueueInfo: cacheQueueInfo,
-		parent:          parent,
-		childrenQueues:  make(map[string]*SchedulingQueue),
-		applications:    make(map[string]*SchedulingApplication),
-		allocating:      resources.NewResource(),
-		preempting:      resources.NewResource(),
-		pending:         resources.NewResource(),
+		Name:           cacheQueueInfo.GetQueuePath(),
+		QueueInfo:      cacheQueueInfo,
+		parent:         parent,
+		childrenQueues: make(map[string]*SchedulingQueue),
+		applications:   make(map[string]*SchedulingApplication),
+		reservedApps:   make(map[string]int),
+		allocating:     resources.NewResource(),
+		preempting:     resources.NewResource(),
+		pending:        resources.NewResource(),
 	}
 
 	// we can update the parent as we have a lock on the partition or the cluster when we get here
@@ -81,18 +82,22 @@ func newSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo, parent *SchedulingQ
 // Update the properties for the scheduling queue based on the current cached configuration
 func (sq *SchedulingQueue) updateSchedulingQueueProperties(prop map[string]string) {
 	// set the defaults, override with what is in the configured properties
-	sq.applicationSortType = FifoSortPolicy
-	sq.QueueSortType = FairSortPolicy
-	// walk over all properties and process
-	for key, value := range prop {
-		if key == cache.ApplicationSortPolicy && value == "fair" {
-			sq.applicationSortType = FairSortPolicy
+	if sq.isLeafQueue() {
+		sq.sortType = FifoSortPolicy
+		// walk over all properties and process
+		for key, value := range prop {
+			if key == cache.ApplicationSortPolicy && value == "fair" {
+				sq.sortType = FairSortPolicy
+			}
+			// for now skip the rest just log them
+			log.Logger().Debug("queue property skipped",
+				zap.String("key", key),
+				zap.String("value", value))
 		}
-		// for now skip the rest just log them
-		log.Logger().Debug("queue property skipped",
-			zap.String("key", key),
-			zap.String("value", value))
+		return
 	}
+	// set the sorting type for parent queues
+	sq.sortType = FairSortPolicy
 }
 
 // Update the queue properties and the child queues for the queue after a configuration update.
@@ -115,6 +120,12 @@ func (sq *SchedulingQueue) updateSchedulingQueueInfo(info map[string]*cache.Queu
 	}
 }
 
+// Return the allocated resources for this queue
+func (sq *SchedulingQueue) GetAllocatedResource() *resources.Resource {
+	return sq.QueueInfo.GetAllocatedResource()
+}
+
+// Return the pending resources for this queue
 func (sq *SchedulingQueue) GetPendingResource() *resources.Resource {
 	sq.RLock()
 	defer sq.RUnlock()
@@ -146,7 +157,7 @@ func (sq *SchedulingQueue) decPendingResource(delta *resources.Resource) {
 	sq.pending, err = resources.SubErrorNegative(sq.pending, delta)
 	if err != nil {
 		log.Logger().Warn("Pending resources went negative",
-			zap.String("queueName", sq.CachedQueueInfo.Name),
+			zap.String("queueName", sq.QueueInfo.Name),
 			zap.Error(err))
 	}
 }
@@ -160,31 +171,25 @@ func (sq *SchedulingQueue) addSchedulingApplication(app *SchedulingApplication) 
 	sq.applications[app.ApplicationInfo.ApplicationID] = app
 }
 
-// Remove scheduling app and pending resource of this queue and update the parent queues.
-// The cache application is already removed just update what is tracked on the scheduler side.
-// This is a lock free call all locks are taken when updating
-func (sq *SchedulingQueue) removeSchedulingApplication(app *SchedulingApplication) {
-	if !sq.removeSchedulingAppInternal(app.ApplicationInfo.ApplicationID) {
-		log.Logger().Debug("Application not found while removing from queue",
-			zap.String("queueName", sq.CachedQueueInfo.Name),
-			zap.String("applicationID", app.ApplicationInfo.ApplicationID))
-		return
-	}
-	// Update pending resource of the queues
-	sq.decPendingResource(app.GetPendingResource())
-}
-
 // Remove the scheduling app from the list of tracked applications. Make sure that the app
 // is assigned to this queue and not removed yet.
 // If not found this call is a noop
-func (sq *SchedulingQueue) removeSchedulingAppInternal(appID string) bool {
+func (sq *SchedulingQueue) removeSchedulingApplication(app *SchedulingApplication) {
+	// clean up any outstanding pending resources
+	appID := app.ApplicationInfo.ApplicationID
+	if _, ok := sq.applications[appID]; !ok {
+		log.Logger().Debug("Application not found while removing from queue",
+			zap.String("queueName", sq.QueueInfo.Name),
+			zap.String("applicationID", appID))
+		return
+	}
+	if appPending := app.GetPendingResource(); !resources.IsZero(appPending) {
+		sq.decPendingResource(appPending)
+	}
 	sq.Lock()
 	defer sq.Unlock()
-	_, ok := sq.applications[appID]
-	if ok {
-		delete(sq.applications, appID)
-	}
-	return ok
+
+	delete(sq.applications, appID)
 }
 
 // Get a copy of the child queues
@@ -232,27 +237,27 @@ func (sq *SchedulingQueue) removeQueue() bool {
 // Is this queue a leaf or not (i.e parent)
 // link back to the underlying queue object to prevent out of sync types
 func (sq *SchedulingQueue) isLeafQueue() bool {
-	return sq.CachedQueueInfo.IsLeafQueue()
+	return sq.QueueInfo.IsLeafQueue()
 }
 
 // Queue status methods reflecting the underlying queue object state
 // link back to the underlying queue object to prevent out of sync states
 func (sq *SchedulingQueue) isRunning() bool {
-	return sq.CachedQueueInfo.IsRunning()
+	return sq.QueueInfo.IsRunning()
 }
 
 func (sq *SchedulingQueue) isDraining() bool {
-	return sq.CachedQueueInfo.IsDraining()
+	return sq.QueueInfo.IsDraining()
 }
 
 func (sq *SchedulingQueue) isStopped() bool {
-	return sq.CachedQueueInfo.IsStopped()
+	return sq.QueueInfo.IsStopped()
 }
 
 // Is this queue managed or not.
 // link back to the underlying queue object to prevent out of sync types
 func (sq *SchedulingQueue) isManaged() bool {
-	return sq.CachedQueueInfo.IsManaged()
+	return sq.QueueInfo.IsManaged()
 }
 
 func (sq *SchedulingQueue) isRoot() bool {
@@ -281,7 +286,7 @@ func (sq *SchedulingQueue) decPreemptingResource(newAlloc *resources.Resource) {
 	sq.preempting, err = resources.SubErrorNegative(sq.preempting, newAlloc)
 	if err != nil {
 		log.Logger().Warn("Preempting resources went negative",
-			zap.String("queueName", sq.CachedQueueInfo.Name),
+			zap.String("queueName", sq.QueueInfo.Name),
 			zap.Error(err))
 	}
 }
@@ -298,20 +303,20 @@ func (sq *SchedulingQueue) setPreemptingResource(newAlloc *resources.Resource) {
 // This will check the submit ACL and the admin ACL.
 // Calls the cache queue which is doing the real work.
 func (sq *SchedulingQueue) checkSubmitAccess(user security.UserGroup) bool {
-	return sq.CachedQueueInfo.CheckSubmitAccess(user)
+	return sq.QueueInfo.CheckSubmitAccess(user)
 }
 
 // Check if the user has access to the queue for admin actions.
 // Calls the cache queue which is doing the real work.
 func (sq *SchedulingQueue) checkAdminAccess(user security.UserGroup) bool {
-	return sq.CachedQueueInfo.CheckAdminAccess(user)
+	return sq.QueueInfo.CheckAdminAccess(user)
 }
 
 // Return the allocated and allocating resources for this queue
 func (sq *SchedulingQueue) getUnconfirmedAllocated() *resources.Resource {
 	sq.RLock()
 	defer sq.RUnlock()
-	return resources.Add(sq.allocating, sq.CachedQueueInfo.GetAllocatedResource())
+	return resources.Add(sq.allocating, sq.QueueInfo.GetAllocatedResource())
 }
 
 // Return the allocating resources for this queue
@@ -347,7 +352,7 @@ func (sq *SchedulingQueue) decAllocatingResource(delta *resources.Resource) {
 	sq.allocating, err = resources.SubErrorNegative(sq.allocating, delta)
 	if err != nil {
 		log.Logger().Warn("Allocating resources went negative on queue",
-			zap.String("queueName", sq.CachedQueueInfo.Name),
+			zap.String("queueName", sq.QueueInfo.Name),
 			zap.Error(err))
 	}
 }
@@ -371,7 +376,7 @@ func (sq *SchedulingQueue) sortApplications() []*SchedulingApplication {
 		}
 	}
 	// Sort the applications
-	sortApplications(sortedApps, sq.applicationSortType, sq.CachedQueueInfo.GuaranteedResource)
+	sortApplications(sortedApps, sq.sortType, sq.QueueInfo.GuaranteedResource)
 
 	return sortedApps
 }
@@ -388,15 +393,177 @@ func (sq *SchedulingQueue) sortQueues() []*SchedulingQueue {
 	}
 	// Create a list of the queues with pending resources
 	sortedQueues := make([]*SchedulingQueue, 0)
-	// TODO Stopped queues are filtered out at a later stage should be here
 	for _, child := range sq.childrenQueues {
-		// Only look at queue when pending-res > 0
+		// a stopped queue cannot be scheduled
+		if child.isStopped() {
+			continue
+		}
+		// queue must have pending resources to be considered for scheduling
 		if resources.StrictlyGreaterThanZero(child.GetPendingResource()) {
 			sortedQueues = append(sortedQueues, child)
 		}
 	}
 	// Sort the queues
-	sortQueue(sortedQueues, sq.QueueSortType)
+	sortQueue(sortedQueues, sq.sortType)
 
 	return sortedQueues
+}
+
+// Get the headroom for the queue this should never be more than the headroom for the parent.
+// In case there are no nodes in a newly started cluster and no queues have a limit configured this call
+// will return nil.
+// NOTE: if a resource quantity is missing and a limit is defined the missing quantity will be seen as a limit of 0.
+// When defining a limit you therefore should define all resource quantities.
+func (sq *SchedulingQueue) getHeadRoom() *resources.Resource {
+	var parentHeadRoom *resources.Resource
+	if sq.parent != nil {
+		parentHeadRoom = sq.parent.getHeadRoom()
+	}
+	sq.RLock()
+	defer sq.RUnlock()
+	headRoom := sq.QueueInfo.GetMaxResource()
+	// if we have no max set headroom is always the same as the parent
+	if headRoom == nil {
+		return parentHeadRoom
+	}
+	// calculate unused
+	headRoom.SubFrom(sq.allocating)
+	headRoom.SubFrom(sq.QueueInfo.GetAllocatedResource())
+	// check the minimum of the two: parentHeadRoom is nil for root
+	if parentHeadRoom == nil {
+		return headRoom
+	}
+	return resources.ComponentWiseMin(headRoom, parentHeadRoom)
+}
+
+// Get the max resource for the queue this should never be more than the max for the parent.
+// The root queue always has its limit set to the total cluster size (dynamic based on node registration)
+// In case there are no nodes in a newly started cluster and no queues have a limit configured this call
+// will return nil.
+// NOTE: if a resource quantity is missing and a limit is defined the missing quantity will be seen as a limit of 0.
+// When defining a limit you therefore should define all resource quantities.
+func (sq *SchedulingQueue) getMaxResource() *resources.Resource {
+	// get the limit for the parent first and check against the queues own
+	var limit *resources.Resource
+	if sq.parent != nil {
+		limit = sq.parent.getMaxResource()
+	}
+	sq.RLock()
+	defer sq.RUnlock()
+	max := sq.QueueInfo.GetMaxResource()
+	// no queue limit set, not even for root
+	if limit == nil {
+		return max
+	}
+	// parent limit set no queue limit return parent
+	if max == nil {
+		return limit
+	}
+	// calculate the smallest value for each type
+	return resources.ComponentWiseMin(limit, max)
+}
+
+// Try allocate pending requests. This only gets called if there is a pending request on this queue or its children.
+// This is a depth first algorithm: descend into the depth of the queue tree first. Child queues are sorted based on
+// the configured queue sortType. Queues without pending resources are skipped.
+// Applications are sorted based on the application sortType. Applications without pending resources are skipped.
+// Lock free call this all locks are taken when needed in called functions
+func (sq *SchedulingQueue) tryAllocate(ctx *partitionSchedulingContext) *schedulingAllocation {
+	if sq.isLeafQueue() {
+		// get the headroom
+		headRoom := sq.getHeadRoom()
+		// process the apps (filters out app without pending requests)
+		for _, app := range sq.sortApplications() {
+			alloc := app.tryAllocate(headRoom, ctx)
+			if alloc != nil {
+				log.Logger().Debug("allocation found on queue",
+					zap.String("queueName", sq.Name),
+					zap.String("appID", app.ApplicationInfo.ApplicationID),
+					zap.String("allocation", alloc.String()))
+				return alloc
+			}
+		}
+	} else {
+		// process the child queues (filters out queues without pending requests)
+		for _, child := range sq.sortQueues() {
+			alloc := child.tryAllocate(ctx)
+			if alloc != nil {
+				return alloc
+			}
+		}
+	}
+	return nil
+}
+
+// Try allocate reserved requests. This only gets called if there is a pending request on this queue or its children.
+// This is a depth first algorithm: descend into the depth of the queue tree first. Child queues are sorted based on
+// the configured queue sortType. Queues without pending resources are skipped.
+// Applications are currently NOT sorted and are iterated over in a random order.
+// Lock free call this all locks are taken when needed in called functions
+func (sq *SchedulingQueue) tryReservedAllocate() *schedulingAllocation {
+	if sq.isLeafQueue() {
+		// skip if it has no reservations
+		if len(sq.reservedApps) != 0 {
+			// get the headroom
+			headRoom := sq.getHeadRoom()
+			// process the apps
+			for appID, numRes := range sq.reservedApps {
+				if numRes > 1 {
+					log.Logger().Debug("multiple reservations found for application trying to allocate one",
+						zap.String("appID", appID),
+						zap.Int("reservations", numRes))
+				}
+				app := sq.getApplication(appID)
+				alloc := app.tryReservedAllocate(headRoom)
+				if alloc != nil {
+					log.Logger().Debug("reservation found for allocation found on queue",
+						zap.String("queueName", sq.Name),
+						zap.String("appID", appID),
+						zap.String("allocation", alloc.String()))
+					return alloc
+				}
+			}
+		}
+	} else {
+		// process the child queues (filters out queues that have no pending requests)
+		for _, child := range sq.sortQueues() {
+			alloc := child.tryReservedAllocate()
+			if alloc != nil {
+				return alloc
+			}
+		}
+	}
+	return nil
+}
+
+// Add an reserved app to the list.
+// No checks this is only called when a reservation is processed using the app stored in the queue.
+func (sq *SchedulingQueue) reserve(appID string) {
+	sq.Lock()
+	defer sq.Unlock()
+	// increase the number of reservations for this app
+	sq.reservedApps[appID]++
+}
+
+// Add an reserved app to the list.
+// No checks this is only called when a reservation is processed using the app stored in the queue.
+func (sq *SchedulingQueue) unReserve(appID string) {
+	sq.Lock()
+	defer sq.Unlock()
+	// make sure we cannot go below 0
+	if num, ok := sq.reservedApps[appID]; ok {
+		// decrease the number of reservations for this app and cleanup
+		if num == 1 {
+			delete(sq.reservedApps, appID)
+		} else {
+			sq.reservedApps[appID]--
+		}
+	}
+}
+
+// Get the app based on the ID.
+func (sq *SchedulingQueue) getApplication(appID string) *SchedulingApplication {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.applications[appID]
 }

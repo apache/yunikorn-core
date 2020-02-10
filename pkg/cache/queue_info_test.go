@@ -39,13 +39,13 @@ func createRootQueue() (*QueueInfo, error) {
 
 // wrapper around the create call using the same syntax as an unmanaged queue
 func createManagedQueue(parentQI *QueueInfo, name string, parent bool) (*QueueInfo, error) {
-	rootConf := configs.QueueConfig{
+	childConf := configs.QueueConfig{
 		Name:       name,
 		Parent:     parent,
 		Queues:     nil,
 		Properties: make(map[string]string),
 	}
-	return NewManagedQueue(rootConf, parentQI)
+	return NewManagedQueue(childConf, parentQI)
 }
 
 // wrapper around the create call using the same syntax as a managed queue
@@ -86,14 +86,14 @@ func TestAllocationCalcRoot(t *testing.T) {
 	if err != nil {
 		t.Errorf("root queue allocation failed on increment %v", err)
 	}
-	err = root.DecAllocatedResource(allocation)
+	err = root.decAllocatedResource(allocation)
 	if err != nil {
 		t.Errorf("root queue allocation failed on decrement %v", err)
 	}
 	if !resources.IsZero(root.allocatedResource) {
 		t.Errorf("root queue allocations are not zero: %v", root.allocatedResource)
 	}
-	err = root.DecAllocatedResource(allocation)
+	err = root.decAllocatedResource(allocation)
 	if err == nil {
 		t.Errorf("root queue allocation should have failed to decrement %v", err)
 	}
@@ -121,14 +121,14 @@ func TestAllocationCalcSub(t *testing.T) {
 	if err != nil {
 		t.Errorf("parent queue allocation failed on increment %v", err)
 	}
-	err = parent.DecAllocatedResource(allocation)
+	err = parent.decAllocatedResource(allocation)
 	if err != nil {
 		t.Errorf("parent queue allocation failed on decrement %v", err)
 	}
 	if !resources.IsZero(root.allocatedResource) {
 		t.Errorf("root queue allocations are not zero: %v", root.allocatedResource)
 	}
-	err = root.DecAllocatedResource(allocation)
+	err = root.decAllocatedResource(allocation)
 	if err == nil {
 		t.Errorf("root queue allocation should have failed to decrement %v", root.allocatedResource)
 	}
@@ -138,11 +138,11 @@ func TestAllocationCalcSub(t *testing.T) {
 	if err != nil {
 		t.Errorf("parent queue allocation failed on increment %v", err)
 	}
-	err = root.DecAllocatedResource(allocation)
+	err = root.decAllocatedResource(allocation)
 	if err != nil {
 		t.Errorf("root queue allocation failed on decrement %v", err)
 	}
-	err = parent.DecAllocatedResource(allocation)
+	err = parent.decAllocatedResource(allocation)
 	if err == nil {
 		t.Errorf("parent queue allocation should have failed on decrement %v, %v", root.allocatedResource, parent.allocatedResource)
 	}
@@ -204,7 +204,7 @@ func TestManagedSubQueues(t *testing.T) {
 	if parent.RemoveQueue() {
 		t.Errorf("parent queue should not have been removed as it has an allocation")
 	}
-	err = parent.DecAllocatedResource(allocation)
+	err = parent.decAllocatedResource(allocation)
 	if err != nil {
 		t.Errorf("parent queue allocation failed on decrement %v", err)
 	}
@@ -288,7 +288,7 @@ func TestUnManagedSubQueues(t *testing.T) {
 	if parent.RemoveQueue() {
 		t.Errorf("parent queue should not have been removed as it has an allocation")
 	}
-	err = parent.DecAllocatedResource(allocation)
+	err = parent.decAllocatedResource(allocation)
 	if err != nil {
 		t.Errorf("parent queue allocation failed on decrement %v", err)
 	}
@@ -335,5 +335,37 @@ func TestGetChildQueueInfos(t *testing.T) {
 	// check the root queue
 	if len(root.children) != 2 {
 		t.Errorf("parent queues are not added to the root queue, expected 2 children got %d", len(root.children))
+	}
+}
+
+func TestMaxResource(t *testing.T) {
+	resMap := map[string]string{"first": "10"}
+	res, err := resources.NewResourceFromConf(resMap)
+	if err != nil {
+		t.Fatalf("failed to create basic resource: %v", err)
+	}
+	// create the root
+	var root, parent *QueueInfo
+	root, err = createRootQueue()
+	if err != nil {
+		t.Fatalf("failed to create basic root queue: %v", err)
+	}
+	parent, err = createManagedQueue(root, "parent", true)
+	if err != nil {
+		t.Fatalf("failed to create basic managed parent queue: %v", err)
+	}
+	// Nothing set max should be nil
+	if root.GetMaxResource() != nil || parent.GetMaxResource() != nil {
+		t.Errorf("empty cluster should not have max set on root queue")
+	}
+	// try setting on the parent (nothing should change)
+	parent.setMaxResource(res)
+	if parent.GetMaxResource() != nil {
+		t.Errorf("parent queue change should have been rejected parent: %v", parent.GetMaxResource())
+	}
+	// Set on the root should change
+	root.setMaxResource(res)
+	if !resources.Equals(res, root.GetMaxResource()) {
+		t.Errorf("root max setting not picked up by parent queue expected %v, got %v", res, parent.GetMaxResource())
 	}
 }

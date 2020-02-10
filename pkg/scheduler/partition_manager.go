@@ -55,7 +55,7 @@ func (manager partitionManager) Run() {
 	for {
 		time.Sleep(manager.interval)
 		runStart := time.Now()
-		manager.cleanQueues(manager.psc.Root)
+		manager.cleanQueues(manager.psc.root)
 		if manager.stop {
 			break
 		}
@@ -92,7 +92,7 @@ func (manager partitionManager) cleanQueues(schedulingQueue *SchedulingQueue) {
 		// make sure the queue is empty
 		if len(schedulingQueue.applications) == 0 {
 			// remove the cached queue, if not empty there is a problem since we have no applications left.
-			if schedulingQueue.CachedQueueInfo.RemoveQueue() {
+			if schedulingQueue.QueueInfo.RemoveQueue() {
 				// all OK update the queue hierarchy and partition
 				if !schedulingQueue.removeQueue() {
 					log.Logger().Debug("unexpected failure removing the scheduling queue",
@@ -103,8 +103,8 @@ func (manager partitionManager) cleanQueues(schedulingQueue *SchedulingQueue) {
 				log.Logger().Debug("failed to remove scheduling queue (cache)",
 					zap.String("partitionName", manager.psc.Name),
 					zap.String("schedulingQueue", schedulingQueue.Name),
-					zap.String("queueAllocatedResource", schedulingQueue.CachedQueueInfo.GetAllocatedResource().String()),
-					zap.String("queueState", schedulingQueue.CachedQueueInfo.CurrentState()),
+					zap.String("queueAllocatedResource", schedulingQueue.QueueInfo.GetAllocatedResource().String()),
+					zap.String("queueState", schedulingQueue.QueueInfo.CurrentState()),
 					zap.String("partitionName", manager.psc.Name))
 			}
 		} else {

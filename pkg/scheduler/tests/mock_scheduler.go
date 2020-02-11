@@ -19,8 +19,6 @@
 package tests
 
 import (
-	"testing"
-
 	"github.com/apache/incubator-yunikorn-core/pkg/api"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/entrypoint"
@@ -28,45 +26,16 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
-var TwoEqualQueueConfigEnabledPreemption = `
-partitions:
-  - name: default
-    queues:
-      - name: root
-        submitacl: "*"
-        queues:
-          - name: a
-            resources:
-              guaranteed:
-                memory: 100
-                vcore: 100
-              max:
-                memory: 200
-                vcore: 200
-          - name: b
-            resources:
-              guaranteed:
-                memory: 100
-                vcore: 100
-              max:
-                memory: 200
-                vcore: 200
-    preemption:
-      enabled: true
-`
-
-type MockScheduler struct {
+type mockScheduler struct {
 	proxy          api.SchedulerAPI
 	scheduler      *scheduler.Scheduler
-	mockRM         *MockRMCallbackHandler
+	mockRM         *mockRMCallback
 	serviceContext *entrypoint.ServiceContext
-	t              *testing.T
 	rmID           string
 }
 
-func (m *MockScheduler) Init(t *testing.T, config string) {
+func (m *mockScheduler) Init(config string) error {
 	m.rmID = "rm:123"
-	m.t = t
 
 	// Start all tests
 	serviceContext := entrypoint.StartAllServicesWithManualScheduler()
@@ -75,7 +44,7 @@ func (m *MockScheduler) Init(t *testing.T, config string) {
 	m.scheduler = serviceContext.Scheduler
 
 	configs.MockSchedulerConfigByData([]byte(config))
-	m.mockRM = NewMockRMCallbackHandler(t)
+	m.mockRM = NewMockRMCallbackHandler()
 
 	_, err := m.proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{
@@ -83,14 +52,11 @@ func (m *MockScheduler) Init(t *testing.T, config string) {
 			PolicyGroup: "policygroup",
 			Version:     "0.0.2",
 		}, m.mockRM)
-
-	if err != nil {
-		t.Error(err.Error())
-	}
+	return err
 }
 
-func (m *MockScheduler) AddNode(nodeID string, resource *si.Resource) {
-	err := m.proxy.Update(&si.UpdateRequest{
+func (m *mockScheduler) addNode(nodeID string, resource *si.Resource) error {
+	return m.proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
 				NodeID: nodeID,
@@ -103,17 +69,10 @@ func (m *MockScheduler) AddNode(nodeID string, resource *si.Resource) {
 		},
 		RmID: m.rmID,
 	})
-
-	if err != nil {
-		m.t.Error(err.Error())
-	}
-
-	waitForAcceptedNodes(m.mockRM, nodeID, 1000)
 }
 
-func (m *MockScheduler) AddApp(appID string, queue string, partition string) {
-	// Register 2 node, and add apps
-	err := m.proxy.Update(&si.UpdateRequest{
+func (m *mockScheduler) addApp(appID string, queue string, partition string) error {
+	return m.proxy.Update(&si.UpdateRequest{
 		NewApplications: []*si.AddApplicationRequest{
 			{
 				ApplicationID: appID,
@@ -126,19 +85,9 @@ func (m *MockScheduler) AddApp(appID string, queue string, partition string) {
 		},
 		RmID: m.rmID,
 	})
-
-	if nil != err {
-		m.t.Error(err.Error())
-	}
-
-	waitForAcceptedApplications(m.mockRM, appID, 1000)
 }
 
-func (m *MockScheduler) GetSchedulingQueue(queue string) *scheduler.SchedulingQueue {
-	return m.scheduler.GetClusterSchedulingContext().GetSchedulingQueue(queue, "[rm:123]default")
-}
-
-func (m *MockScheduler) Stop() {
+func (m *mockScheduler) Stop() {
 	if m.serviceContext != nil {
 		m.serviceContext.StopAll()
 	}

@@ -60,7 +60,7 @@ partitions:
                 vcore: 10000
 `
 	configs.MockSchedulerConfigByData([]byte(configData))
-	mockRM := NewMockRMCallbackHandler(b)
+	mockRM := NewMockRMCallbackHandler()
 
 	_, err := proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{
@@ -70,7 +70,7 @@ partitions:
 		}, mockRM)
 
 	if err != nil {
-		b.Error(err.Error())
+		b.Fatalf("RegisterResourceManager failed: %v", err)
 	}
 
 	// Add two apps and wait for them to be accepted
@@ -79,10 +79,10 @@ partitions:
 		RmID:            "rm:123",
 	})
 	if err != nil {
-		b.Error(err.Error())
+		b.Fatalf("UpdateRequest application failed: %v", err)
 	}
-	waitForAcceptedApplications(mockRM, "app-1", 1000)
-	waitForAcceptedApplications(mockRM, "app-2", 1000)
+	mockRM.waitForAcceptedApplication(b, "app-1", 1000)
+	mockRM.waitForAcceptedApplication(b, "app-2", 1000)
 
 	// Calculate node resources to make sure all required pods can be allocated
 	requestMem := 10
@@ -115,12 +115,12 @@ partitions:
 		NewSchedulableNodes: newNodes,
 	})
 	if err != nil {
-		b.Error(err.Error())
+		b.Fatalf("UpdateRequest nodes failed: %v", err)
 	}
 
 	// Wait for all nodes to be accepted
 	startTime := time.Now()
-	waitForMinNumberOfAcceptedNodes(mockRM, numNodes, 5000)
+	mockRM.waitForMinAcceptedNodes(b, numNodes, 5000)
 	duration := time.Since(startTime)
 	b.Logf("Total time to add %d node in %s, %f per second", numNodes, duration, float64(numNodes)/duration.Seconds())
 
@@ -171,7 +171,7 @@ partitions:
 	b.ResetTimer()
 
 	// Wait for all pods to be allocated
-	waitForMinAllocations(mockRM, numPods, 120000)
+	mockRM.waitForMinAllocations(b, numPods, 300000)
 
 	// Stop timer and calculate duration
 	b.StopTimer()

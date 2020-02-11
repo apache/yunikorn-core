@@ -62,7 +62,7 @@ partitions:
 	configs.MockSchedulerConfigByData([]byte(configData))
 
 	// Register RM
-	mockRM := tests.NewMockRMCallbackHandler(nil) // [CHANGE THIS], should use your own implementation of api.ResourceManagerCallback
+	mockRM := tests.NewMockRMCallbackHandler() // [CHANGE THIS], should use your own implementation of api.ResourceManagerCallback
 
 	_, err := proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{
@@ -135,7 +135,7 @@ partitions:
 		panic(err)
 	}
 
-	// Refer to schedulertestutils.go:30
+	// Refer to mock_rm_callback.go:109
 	// You need to check app accepted by scheduler before proceed.
 
 	// Send request

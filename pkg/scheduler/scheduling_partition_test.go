@@ -232,7 +232,7 @@ func TestTryAllocate(t *testing.T) {
 	if partition == nil {
 		t.Fatal("partition create failed")
 	}
-	if alloc := partition.tryAllocate(); alloc != nil {
+	if alloc, _ := partition.tryAllocate(); alloc != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %v", alloc.String())
 	}
 
@@ -293,7 +293,7 @@ func TestTryAllocate(t *testing.T) {
 	}
 
 	// first allocation should be app-1 and alloc-2
-	alloc := partition.tryAllocate()
+	alloc, _ := partition.tryAllocate()
 	if alloc == nil {
 		t.Fatal("allocation did not return any allocation")
 	}
@@ -309,7 +309,7 @@ func TestTryAllocate(t *testing.T) {
 	}
 
 	// second allocation should be app-2 and alloc-1: higher up in the queue hierarchy
-	alloc = partition.tryAllocate()
+	alloc, _ = partition.tryAllocate()
 	if alloc == nil {
 		t.Fatal("allocation did not return any allocation")
 	}
@@ -325,7 +325,7 @@ func TestTryAllocate(t *testing.T) {
 	}
 
 	// third allocation should be app-1 and alloc-1
-	alloc = partition.tryAllocate()
+	alloc, _ = partition.tryAllocate()
 	if alloc == nil {
 		t.Fatal("allocation did not return any allocation")
 	}
@@ -349,7 +349,7 @@ func TestTryAllocateLarge(t *testing.T) {
 	if partition == nil {
 		t.Fatal("partition create failed")
 	}
-	if alloc := partition.tryAllocate(); alloc != nil {
+	if alloc, _ := partition.tryAllocate(); alloc != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %v", alloc.String())
 	}
 
@@ -375,7 +375,7 @@ func TestTryAllocateLarge(t *testing.T) {
 	if err != nil || !resources.Equals(res, delta) {
 		t.Errorf("failed to add ask to app resource added: %v expected %v (err = %v)", delta, res, err)
 	}
-	alloc := partition.tryAllocate()
+	alloc, _ := partition.tryAllocate()
 	if alloc != nil {
 		t.Fatalf("allocation did return allocation which does not fit: %s", alloc.String())
 	}
@@ -387,7 +387,7 @@ func TestAllocReserveNewNode(t *testing.T) {
 	if partition == nil {
 		t.Fatal("partition create failed")
 	}
-	if alloc := partition.tryAllocate(); alloc != nil {
+	if alloc, _ := partition.tryAllocate(); alloc != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %v", alloc.String())
 	}
 
@@ -419,7 +419,7 @@ func TestAllocReserveNewNode(t *testing.T) {
 		t.Errorf("failed to add ask to app resource added: %v expected %v (err = %v)", delta, res, err)
 	}
 	// the first one should be allocated
-	alloc := partition.tryAllocate()
+	alloc, _ := partition.tryAllocate()
 	if alloc == nil {
 		t.Fatalf("1st allocation did not return the correct allocation")
 	}
@@ -429,7 +429,7 @@ func TestAllocReserveNewNode(t *testing.T) {
 		t.Fatalf("1st normal allocation should be passed back to cache")
 	}
 	// the second one should be reserved as the 2nd node is not scheduling
-	alloc = partition.tryAllocate()
+	alloc, _ = partition.tryAllocate()
 	if alloc == nil {
 		t.Fatalf("2nd allocation did not return the correct allocation")
 	}
@@ -530,7 +530,7 @@ func TestTryAllocateReserve(t *testing.T) {
 		t.Fatalf("reserved allocation should not return any allocation: %v, '%s'", alloc, nodeID)
 	}
 	// try non reserved this should allocate
-	alloc = partition.tryAllocate()
+	alloc, _ = partition.tryAllocate()
 	if alloc == nil {
 		t.Fatal("allocation did not return any allocation")
 	}
@@ -541,4 +541,65 @@ func TestTryAllocateReserve(t *testing.T) {
 	if !resources.IsZero(partition.root.GetPendingResource()) {
 		t.Fatalf("pending allocations should be set to zero")
 	}
+}
+
+func TestTryAllocateWithReserved(t *testing.T) {
+	partition := createQueuesNodes(t)
+	if partition == nil {
+		t.Fatal("partition create failed")
+	}
+	if alloc, _ := partition.tryReservedAllocate(); alloc != nil {
+		t.Fatalf("empty cluster reserved allocate returned allocation: %v", alloc.String())
+	}
+
+	leaf := partition.getQueue("root.parent.leaf1")
+	if leaf == nil {
+		t.Fatal("leaf queue create failed")
+	}
+	appID := "app-1"
+	res, err := resources.NewResourceFromConf(map[string]string{"first": "5"})
+	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: appID})
+	if app == nil || err != nil {
+		t.Fatalf("failed to create app (%v) and or resource: %v (err = %v)", app, res, err)
+	}
+	app.queue = leaf
+
+	// fake adding to the partition
+	leaf.addSchedulingApplication(app)
+	partition.applications[appID] = app
+	var delta *resources.Resource
+	ask := newAllocationAskRepeat("alloc-1", appID, res, 2)
+	delta, err = app.addAllocationAsk(ask)
+	if err != nil || !resources.Equals(resources.Multiply(res, 2), delta) {
+		t.Errorf("failed to add ask to app resource added: %v expected %v (err = %v)", delta, resources.Multiply(res, 4), err)
+	}
+	// reserve one node: scheduling should happen on the other
+	node2 := partition.getSchedulingNode("node-2")
+	if node2 == nil {
+		t.Fatal("expected node-2 to be returned got nil")
+	}
+	partition.reserve(app, node2, ask)
+	if !app.isReservedOnNode(node2.NodeID) || len(app.isAskReserved("alloc-1")) == 0 {
+		t.Fatalf("reservation failure for ask and node2")
+	}
+	assert.Equal(t, 1, len(partition.reservedApps), "partition should have reserved app")
+	alloc, nodeID := partition.tryAllocate()
+	if alloc == nil || nodeID == "" {
+		t.Fatalf("allocation did not return correct allocation %v, %s", alloc, nodeID)
+	}
+	assert.Equal(t, allocatedReserved, alloc.result, "expected reserved allocation to be returned")
+	assert.Equal(t, node2.NodeID, nodeID, "expected nodeID to be set on tryAllocate")
+
+	// confirm the outcome
+	partition.allocate(alloc, nodeID)
+	assert.Equal(t, 0, len(node2.reservations), "reservation should have been removed from node")
+	assert.Equal(t, false, app.isReservedOnNode(node2.NodeID), "reservation cleanup for ask on app failed")
+
+	// node2 is unreserved now so the next one should allocate on the 2nd node (fair sharing)
+	alloc, nodeID = partition.tryAllocate()
+	if alloc == nil || nodeID != "" {
+		t.Fatalf("allocation did not return correct allocation %v, %s", alloc, nodeID)
+	}
+	assert.Equal(t, allocated, alloc.result, "expected allocated allocation to be returned")
+	assert.Equal(t, node2.NodeID, alloc.nodeID, "expected allocation on node2 to be returned")
 }

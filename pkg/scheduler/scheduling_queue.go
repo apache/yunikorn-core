@@ -468,31 +468,31 @@ func (sq *SchedulingQueue) getMaxResource() *resources.Resource {
 // the configured queue sortType. Queues without pending resources are skipped.
 // Applications are sorted based on the application sortType. Applications without pending resources are skipped.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *SchedulingQueue) tryAllocate(ctx *partitionSchedulingContext) *schedulingAllocation {
+func (sq *SchedulingQueue) tryAllocate(ctx *partitionSchedulingContext) (*schedulingAllocation, string) {
 	if sq.isLeafQueue() {
 		// get the headroom
 		headRoom := sq.getHeadRoom()
 		// process the apps (filters out app without pending requests)
 		for _, app := range sq.sortApplications() {
-			alloc := app.tryAllocate(headRoom, ctx)
+			alloc, nodeID := app.tryAllocate(headRoom, ctx)
 			if alloc != nil {
 				log.Logger().Debug("allocation found on queue",
 					zap.String("queueName", sq.Name),
 					zap.String("appID", app.ApplicationInfo.ApplicationID),
 					zap.String("allocation", alloc.String()))
-				return alloc
+				return alloc, nodeID
 			}
 		}
 	} else {
 		// process the child queues (filters out queues without pending requests)
 		for _, child := range sq.sortQueues() {
-			alloc := child.tryAllocate(ctx)
+			alloc, nodeID := child.tryAllocate(ctx)
 			if alloc != nil {
-				return alloc
+				return alloc, nodeID
 			}
 		}
 	}
-	return nil
+	return nil, ""
 }
 
 // Try allocate reserved requests. This only gets called if there is a pending request on this queue or its children.

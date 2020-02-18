@@ -566,14 +566,14 @@ func (s *Scheduler) schedule() {
 		alloc, nodeID := psc.tryReservedAllocate()
 		// nothing reserved that can be allocated try normal allocate
 		if alloc == nil {
-			alloc = psc.tryAllocate()
+			alloc, nodeID = psc.tryAllocate()
 		}
 		// there is an allocation that can be made do the real work in the partition
 		if alloc != nil {
 			// only pass back a real allocation, reservations are just scheduler side
 			// proposal this will return to the scheduler an SchedulerApplicationsUpdateEvent when the
 			// is processed by the cache (this can be a reject or accept)
-			// nodeID is an empty string in all but one reserved alloc case
+			// nodeID is an empty string in all but reserved alloc cases
 			if psc.allocate(alloc, nodeID) {
 				s.eventHandlers.CacheEventHandler.HandleEvent(newSingleAllocationProposal(alloc))
 			}

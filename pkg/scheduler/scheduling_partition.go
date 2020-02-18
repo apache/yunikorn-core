@@ -342,10 +342,10 @@ func (psc *partitionSchedulingContext) removeSchedulingNode(nodeID string) {
 
 // Try regular allocation for the partition
 // Lock free call this all locks are taken when needed in called functions
-func (psc *partitionSchedulingContext) tryAllocate() *schedulingAllocation {
+func (psc *partitionSchedulingContext) tryAllocate() (*schedulingAllocation, string) {
 	if !resources.StrictlyGreaterThanZero(psc.root.GetPendingResource()) {
 		// nothing to do just return
-		return nil
+		return nil, ""
 	}
 	// try allocating from the root down
 	return psc.root.tryAllocate(psc)

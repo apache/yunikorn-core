@@ -384,7 +384,7 @@ func (sa *SchedulingApplication) sortRequests(ascending bool) {
 }
 
 // Try a regular allocation of the pending requests
-func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *partitionSchedulingContext) *schedulingAllocation {
+func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *partitionSchedulingContext) (*schedulingAllocation, string) {
 	sa.Lock()
 	defer sa.Unlock()
 	// make sure the request are sorted
@@ -396,15 +396,15 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 			continue
 		}
 		if nodeIterator := ctx.getNodeIterator(); nodeIterator != nil {
-			alloc := sa.tryNodes(request, nodeIterator)
+			alloc, nodeID := sa.tryNodes(request, nodeIterator)
 			// have a candidate return it
 			if alloc != nil {
-				return alloc
+				return alloc, nodeID
 			}
 		}
 	}
 	// no requests fit, skip to next app
-	return nil
+	return nil, ""
 }
 
 // Try a reserved allocation of an outstanding reservation
@@ -458,7 +458,7 @@ func (sa *SchedulingApplication) tryReservedAllocate(headRoom *resources.Resourc
 }
 
 // Try all the nodes for a reserved request that have not been tried yet.
-// This cannot result in a reservation as the ask is already reserved
+// This should never result in a reservation as the ask is already reserved
 func (sa *SchedulingApplication) tryNodesNoReserve(ask *schedulingAllocationAsk, nodeIterator NodeIterator, reservedNode string) *schedulingAllocation {
 	for nodeIterator.HasNext() {
 		node := nodeIterator.Next()
@@ -479,9 +479,12 @@ func (sa *SchedulingApplication) tryNodesNoReserve(ask *schedulingAllocationAsk,
 
 // Try all the nodes for a request. The result is an allocation or reservation of a node.
 // New allocations can only be reserved after a delay.
-func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIterator NodeIterator) *schedulingAllocation {
+func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIterator NodeIterator) (*schedulingAllocation, string) {
 	var nodeToReserve *SchedulingNode
 	scoreReserved := math.Inf(1)
+	// check if the ask is reserved or not
+	allocKey := ask.AskProto.AllocationKey
+	reservedAsks := sa.isAskReserved(allocKey)
 	for nodeIterator.HasNext() {
 		node := nodeIterator.Next()
 		// skip over the node if the resource does not fit the node at all.
@@ -491,8 +494,31 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 		alloc := sa.tryNode(node, ask)
 		// allocation worked so return
 		if alloc != nil {
+			// check if the node was reserved for this ask: if it is set the result and return
+			// NOTE: this is a safeguard as reserved nodes should never be part of the iterator
+			// but we have no locking
+			if _, ok := sa.reservations[reservationKey(node, nil, ask)]; ok {
+				log.Logger().Debug("allocate found reserved ask during non reserved allocate",
+					zap.String("appID", sa.ApplicationInfo.ApplicationID),
+					zap.String("nodeID", node.NodeID),
+					zap.String("allocationKey", allocKey))
+				alloc.result = allocatedReserved
+				return alloc, ""
+			}
+			// we could also have a different node reserved for this ask if it has pick one of
+			// the reserved nodes to unreserve (first one in the list)
+			if len(reservedAsks) > 0 {
+				nodeID := strings.TrimSuffix(reservedAsks[0], "|"+allocKey)
+				log.Logger().Debug("allocate picking reserved ask during non reserved allocate",
+					zap.String("appID", sa.ApplicationInfo.ApplicationID),
+					zap.String("nodeID", nodeID),
+					zap.String("allocationKey", allocKey))
+				alloc.result = allocatedReserved
+				return alloc, nodeID
+			}
+			// nothing reserved just return this as a normal alloc
 			alloc.result = allocated
-			return alloc
+			return alloc, ""
 		}
 		// nothing allocated should we look at a reservation?
 		// TODO make this smarter a hardcoded delay is not the right thing
@@ -511,14 +537,14 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 		log.Logger().Debug("found candidate node for app reservation",
 			zap.String("appID", sa.ApplicationInfo.ApplicationID),
 			zap.String("nodeID", nodeToReserve.NodeID),
-			zap.String("allocationKey", ask.AskProto.AllocationKey))
+			zap.String("allocationKey", allocKey))
 		// return allocation proposal and mark it as a reservation
 		alloc := newSchedulingAllocation(ask, nodeToReserve.NodeID)
 		alloc.result = reserved
-		return alloc
+		return alloc, ""
 	}
 	// ask does not fit, skip to next ask
-	return nil
+	return nil, ""
 }
 
 // Try allocating on one specific node

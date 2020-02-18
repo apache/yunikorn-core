@@ -30,10 +30,10 @@ import (
 type NodeInfo struct {
 	// Fields for fast access These fields are considered read only.
 	// Values should only be set when creating a new node and never changed.
-	NodeID        string
-	Hostname      string
-	Rackname      string
-	Partition     string
+	NodeID    string
+	Hostname  string
+	Rackname  string
+	Partition string
 
 	// Private fields need protection
 	attributes        map[string]string
@@ -185,4 +185,3 @@ func (ni *NodeInfo) IsSchedulable() bool {
 	defer ni.lock.RUnlock()
 	return ni.schedulable
 }
-

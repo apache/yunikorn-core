@@ -69,7 +69,7 @@ func sortApplications(apps []*SchedulingApplication, sortType SortType, globalRe
 	}
 }
 
-func sortNodes(nodes []*schedulingNode, sortType SortType) {
+func sortNodes(nodes []*SchedulingNode, sortType SortType) {
 	sortingStart := time.Now()
 	switch sortType {
 	case MaxAvailableResources:

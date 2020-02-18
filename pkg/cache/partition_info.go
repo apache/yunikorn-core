@@ -513,12 +513,15 @@ func (pi *PartitionInfo) releaseAllocationsForApplication(toRelease *commonevent
 // NOTE: this is a lock free call. It should only be called holding the PartitionInfo lock.
 // If access outside is needed a locked version must used, see addNewAllocation
 func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.AllocationProposal, nodeReported bool) (*AllocationInfo, error) {
-	log.Logger().Debug("adding allocation",
-		zap.String("partitionName", pi.Name))
-
 	if pi.isStopped() {
 		return nil, fmt.Errorf("partition %s is stopped cannot add new allocation %s", pi.Name, alloc.AllocationKey)
 	}
+
+	log.Logger().Debug("adding allocation",
+		zap.String("partitionName", pi.Name),
+		zap.Bool("restoredAlloc", nodeReported),
+		zap.String("appID", alloc.ApplicationID),
+		zap.String("allocKey", alloc.AllocationKey))
 
 	// Check if allocation violates any resource restriction, or allocate on a
 	// non-existent applications or nodes.
@@ -576,8 +579,10 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
 	pi.allocations[allocation.AllocationProto.UUID] = allocation
 
 	log.Logger().Debug("added allocation",
+		zap.String("partitionName", pi.Name),
+		zap.String("appID", app.ApplicationID),
 		zap.String("allocationUid", allocationUUID),
-		zap.String("partitionName", pi.Name))
+		zap.String("allocKey", alloc.AllocationKey))
 	return allocation, nil
 }
 
@@ -642,9 +647,6 @@ func (pi *PartitionInfo) RemoveApplication(appID string) (*ApplicationInfo, []*A
 	if len(allocations) != 0 {
 		for _, alloc := range allocations {
 			currentUUID := alloc.AllocationProto.UUID
-			log.Logger().Warn("removing allocations",
-				zap.String("appID", appID),
-				zap.String("allocationId", currentUUID))
 			// Remove from partition cache
 			if globalAlloc := pi.allocations[currentUUID]; globalAlloc == nil {
 				log.Logger().Warn("unknown allocation: not found in global cache",

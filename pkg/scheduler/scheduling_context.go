@@ -61,7 +61,10 @@ func (csc *ClusterSchedulingContext) getPartition(partitionName string) *partiti
 	return csc.partitions[partitionName]
 }
 
-func (csc *ClusterSchedulingContext) GetSchedulingApplication(appID string, partitionName string) *SchedulingApplication {
+// Get the scheduling application based on the ID from the partition.
+// Returns nil if the partition or app cannot be found.
+// Visible for tests
+func (csc *ClusterSchedulingContext) GetSchedulingApplication(appID, partitionName string) *SchedulingApplication {
 	csc.lock.RLock()
 	defer csc.lock.RUnlock()
 
@@ -72,13 +75,29 @@ func (csc *ClusterSchedulingContext) GetSchedulingApplication(appID string, part
 	return nil
 }
 
-// Visible by tests
+// Get the scheduling queue based on the queue path name from the partition.
+// Returns nil if the partition or queue cannot be found.
+// Visible for tests
 func (csc *ClusterSchedulingContext) GetSchedulingQueue(queueName string, partitionName string) *SchedulingQueue {
 	csc.lock.RLock()
 	defer csc.lock.RUnlock()
 
 	if partition := csc.partitions[partitionName]; partition != nil {
 		return partition.GetQueue(queueName)
+	}
+
+	return nil
+}
+
+// Return the list of reservations for the partition.
+// Returns nil if the partition cannot be found or an empty map if there are no reservations
+// Visible for tests
+func (csc *ClusterSchedulingContext) GetPartitionReservations(partitionName string) map[string]int {
+	csc.lock.RLock()
+	defer csc.lock.RUnlock()
+
+	if partition := csc.partitions[partitionName]; partition != nil {
+		return partition.getReservations()
 	}
 
 	return nil
@@ -245,9 +264,10 @@ func (csc *ClusterSchedulingContext) removeSchedulingNode(info *cache.NodeInfo) 
 	partition.removeSchedulingNode(info.NodeID)
 }
 
-// Get a scheduling node based name and partition.
+// Get a scheduling node based on its name from the partition.
 // Returns nil if the partition or node cannot be found.
-func (csc *ClusterSchedulingContext) GetSchedulingNode(nodeID, partitionName string) *schedulingNode {
+// Visible for tests
+func (csc *ClusterSchedulingContext) GetSchedulingNode(nodeID, partitionName string) *SchedulingNode {
 	csc.lock.Lock()
 	defer csc.lock.Unlock()
 

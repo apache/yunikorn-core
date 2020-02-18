@@ -20,13 +20,14 @@ package scheduler
 
 import (
 	"testing"
+
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 )
 
-func newNode(nodeID string, totalMap map[string]resources.Quantity) *schedulingNode {
+func newNode(nodeID string, totalMap map[string]resources.Quantity) *SchedulingNode {
 	// leverage the cache test code
 	totalRes := resources.NewResourceFromMap(totalMap)
 	nodeInfo := cache.NewNodeForTest(nodeID, totalRes)
@@ -360,7 +361,8 @@ func TestUnReserveApps(t *testing.T) {
 	if node.isReserved() {
 		t.Fatal("new node should not have reservations")
 	}
-	if !node.unReserveApps() {
+	reservedKeys, ok := node.unReserveApps()
+	if !ok || len(reservedKeys) != 0 {
 		t.Fatal("new node should not fail remove all reservations")
 	}
 
@@ -378,13 +380,13 @@ func TestUnReserveApps(t *testing.T) {
 	if err != nil || !resources.Equals(res, delta) {
 		t.Fatalf("ask should have been added to the app expected resource delta  %v got %v (err = %v)", res, delta, err)
 	}
-	var ok bool
 	ok, err = app.reserve(node, ask)
 	if !ok || err != nil {
 		t.Errorf("reservation should not have failed: status %t, error %v", ok, err)
 	}
 	assert.Equal(t, 1, len(node.reservations), "node should have reservation")
-	if !node.unReserveApps() {
+	reservedKeys, ok = node.unReserveApps()
+	if !ok || len(reservedKeys) != 1 {
 		t.Fatal("node should have removed reservation")
 	}
 
@@ -394,7 +396,8 @@ func TestUnReserveApps(t *testing.T) {
 		t.Errorf("reservation should not have failed: status %t, error %v", ok, err)
 	}
 	assert.Equal(t, 1, len(node.reservations), "node should have reservation")
-	if node.unReserveApps() {
+	reservedKeys, ok = node.unReserveApps()
+	if ok || len(reservedKeys) != 1 {
 		t.Fatal("node should have removed reservation")
 	}
 }
@@ -407,7 +410,8 @@ func TestIsReservedForApp(t *testing.T) {
 	if node.isReserved() {
 		t.Fatal("new node should not have reservations")
 	}
-	if !node.unReserveApps() {
+	reservedKeys, ok := node.unReserveApps()
+	if !ok || len(reservedKeys) != 0 {
 		t.Fatal("new node should not fail remove all reservations")
 	}
 

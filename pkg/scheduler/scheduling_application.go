@@ -20,6 +20,7 @@ package scheduler
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -33,9 +34,7 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
-const (
-	reservationDelay = 2 * time.Second
-)
+var reservationDelay = 2 * time.Second
 
 type SchedulingApplication struct {
 	ApplicationInfo *cache.ApplicationInfo
@@ -61,6 +60,27 @@ func newSchedulingApplication(appInfo *cache.ApplicationInfo) *SchedulingApplica
 	}
 }
 
+// override reservation delay for tests
+func OverrideReservationDelay(delay time.Duration) {
+	log.Logger().Debug("Test override reservation delay",
+		zap.Duration("delay", delay))
+	reservationDelay = delay
+}
+
+// Return an array of all reservation keys for the app.
+// This will return an empty array if there are no reservations.
+// Visible for tests
+func (sa *SchedulingApplication) GetReservations() []string {
+	sa.RLock()
+	defer sa.RUnlock()
+	keys := make([]string, 0)
+	for key := range sa.reservations {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+// Return the allocation ask for the key, nil if not found
 func (sa *SchedulingApplication) GetSchedulingAllocationAsk(allocationKey string) *schedulingAllocationAsk {
 	sa.RLock()
 	defer sa.RUnlock()
@@ -114,19 +134,22 @@ func (sa *SchedulingApplication) decAllocatingResource(delta *resources.Resource
 
 // Remove one or more allocation asks from this application.
 // This also removes any reservations that are linked to the ask.
-func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) {
+// The return value is the number of reservations released
+func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) int {
 	sa.Lock()
 	defer sa.Unlock()
 	// shortcut no need to do anything
 	if len(sa.requests) == 0 {
-		return
+		return 0
 	}
 	var deltaPendingResource *resources.Resource = nil
 	// when allocation key not specified, cleanup all allocation ask
+	var toRelease int
 	if allocKey == "" {
 		// cleanup all reservations
 		for key, reserve := range sa.reservations {
-			if ok, err := reserve.unReserve(); !ok {
+			_, ok, err := reserve.unReserve()
+			if !ok {
 				log.Logger().Warn("Removal of reservation failed while removing all allocations",
 					zap.String("appID", sa.ApplicationInfo.ApplicationID),
 					zap.String("reservationKey", key),
@@ -134,6 +157,7 @@ func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) {
 			}
 			// clean up the queue reservation (one at a time)
 			sa.queue.unReserve(sa.ApplicationInfo.ApplicationID)
+			toRelease++
 		}
 		// Cleanup total pending resource
 		deltaPendingResource = sa.pending
@@ -142,7 +166,8 @@ func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) {
 	} else {
 		// cleanup the reservation for this allocation
 		for _, key := range sa.isAskReserved(allocKey) {
-			if ok, err := sa.reservations[key].unReserve(); !ok {
+			_, ok, err := sa.reservations[key].unReserve()
+			if !ok {
 				log.Logger().Warn("Removal of reservation failed while removing allocation",
 					zap.String("appID", sa.ApplicationInfo.ApplicationID),
 					zap.String("reservationKey", key),
@@ -150,6 +175,7 @@ func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) {
 			}
 			// clean up the queue reservation
 			sa.queue.unReserve(sa.ApplicationInfo.ApplicationID)
+			toRelease++
 		}
 		if ask := sa.requests[allocKey]; ask != nil {
 			deltaPendingResource = resources.MultiplyBy(ask.AllocatedResource, float64(ask.getPendingAskRepeat()))
@@ -159,6 +185,7 @@ func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) {
 	}
 	// clean up the queue pending resources
 	sa.queue.decPendingResource(deltaPendingResource)
+	return toRelease
 }
 
 // Add an allocation ask to this application
@@ -239,7 +266,7 @@ func (sa *SchedulingApplication) isReservedOnNode(nodeID string) bool {
 // Reserve the application for this node and ask combination.
 // If the reservation fails the function returns false, if the reservation is made it returns true.
 // If the node and ask combination was already reserved for the application this is a noop and returns true.
-func (sa *SchedulingApplication) reserve(node *schedulingNode, ask *schedulingAllocationAsk) (bool, error) {
+func (sa *SchedulingApplication) reserve(node *SchedulingNode, ask *schedulingAllocationAsk) (bool, error) {
 	sa.Lock()
 	defer sa.Unlock()
 	// create the reservation (includes nil checks)
@@ -274,7 +301,7 @@ func (sa *SchedulingApplication) reserve(node *schedulingNode, ask *schedulingAl
 // This first removes the reservation from the node.
 // The error is set if the reservation key cannot be generated on the app or node.
 // If the reservation does not exist it returns false, if the reservation is removed it returns true.
-func (sa *SchedulingApplication) unReserve(node *schedulingNode, ask *schedulingAllocationAsk) (bool, error) {
+func (sa *SchedulingApplication) unReserve(node *SchedulingNode, ask *schedulingAllocationAsk) (bool, error) {
 	sa.Lock()
 	defer sa.Unlock()
 	return sa.unReserveInternal(node, ask)
@@ -282,7 +309,7 @@ func (sa *SchedulingApplication) unReserve(node *schedulingNode, ask *scheduling
 
 // Unlocked version for unReserve that really does the work.
 // Must only be called while holding the application lock.
-func (sa *SchedulingApplication) unReserveInternal(node *schedulingNode, ask *schedulingAllocationAsk) (bool, error) {
+func (sa *SchedulingApplication) unReserveInternal(node *SchedulingNode, ask *schedulingAllocationAsk) (bool, error) {
 	resKey := reservationKey(node, nil, ask)
 	if resKey == "" {
 		log.Logger().Debug("unreserve reservation key create failed unexpectedly",
@@ -381,7 +408,7 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 }
 
 // Try a reserved allocation of an outstanding reservation
-func (sa *SchedulingApplication) tryReservedAllocate(headRoom *resources.Resource) *schedulingAllocation {
+func (sa *SchedulingApplication) tryReservedAllocate(headRoom *resources.Resource, ctx *partitionSchedulingContext) (*schedulingAllocation, string) {
 	sa.Lock()
 	defer sa.Unlock()
 	// process all outstanding reservations and pick the first one that fits
@@ -389,13 +416,21 @@ func (sa *SchedulingApplication) tryReservedAllocate(headRoom *resources.Resourc
 		ask := sa.requests[reserve.askKey]
 		// sanity check and cleanup if needed
 		if ask == nil || ask.pendingRepeatAsk == 0 {
-			// remove the reservation but use the internal values
-			_, err := sa.unReserveInternal(reserve.node, reserve.ask)
-			if err != nil {
-				log.Logger().Warn("Failed to unreserve empty ask",
-					zap.Error(err))
+			var unreserveAsk *schedulingAllocationAsk
+			// if the ask was not found we need to construct one to unreserve
+			if ask == nil {
+				unreserveAsk = &schedulingAllocationAsk{
+					AskProto:      &si.AllocationAsk{AllocationKey: reserve.askKey},
+					ApplicationID: sa.ApplicationInfo.ApplicationID,
+					QueueName:     sa.queue.Name,
+				}
+			} else {
+				unreserveAsk = ask
 			}
-			continue
+			// remove the reservation as this should not be reserved
+			alloc := newSchedulingAllocation(unreserveAsk, reserve.nodeID)
+			alloc.result = unreserved
+			return alloc, ""
 		}
 		// check if this fits in the queue's head room
 		if !resources.FitIn(headRoom, ask.AllocatedResource) {
@@ -406,17 +441,53 @@ func (sa *SchedulingApplication) tryReservedAllocate(headRoom *resources.Resourc
 		// allocation worked set the result and return
 		if alloc != nil {
 			alloc.result = allocatedReserved
+			return alloc, ""
+		}
+	}
+	// lets try this on all other nodes
+	for _, reserve := range sa.reservations {
+		if nodeIterator := ctx.getNodeIterator(); nodeIterator != nil {
+			alloc := sa.tryNodesNoReserve(reserve.ask, nodeIterator, reserve.nodeID)
+			// have a candidate return it, including the node that was reserved
+			if alloc != nil {
+				return alloc, reserve.nodeID
+			}
+		}
+	}
+	return nil, ""
+}
+
+// Try all the nodes for a reserved request that have not been tried yet.
+// This cannot result in a reservation as the ask is already reserved
+func (sa *SchedulingApplication) tryNodesNoReserve(ask *schedulingAllocationAsk, nodeIterator NodeIterator, reservedNode string) *schedulingAllocation {
+	for nodeIterator.HasNext() {
+		node := nodeIterator.Next()
+		// skip over the node if the resource does not fit the node or this is the reserved node.
+		if !node.nodeInfo.FitInNode(ask.AllocatedResource) || node.NodeID == reservedNode {
+			continue
+		}
+		alloc := sa.tryNode(node, ask)
+		// allocation worked so return
+		if alloc != nil {
+			alloc.result = allocatedReserved
 			return alloc
 		}
 	}
+	// ask does not fit, skip to next ask
 	return nil
 }
 
+// Try all the nodes for a request. The result is an allocation or reservation of a node.
+// New allocations can only be reserved after a delay.
 func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIterator NodeIterator) *schedulingAllocation {
-	var nodeToReserve *schedulingNode
-	var scoreReserved float64
+	var nodeToReserve *SchedulingNode
+	scoreReserved := math.Inf(1)
 	for nodeIterator.HasNext() {
 		node := nodeIterator.Next()
+		// skip over the node if the resource does not fit the node at all.
+		if !node.nodeInfo.FitInNode(ask.AllocatedResource) {
+			continue
+		}
 		alloc := sa.tryNode(node, ask)
 		// allocation worked so return
 		if alloc != nil {
@@ -450,8 +521,8 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 	return nil
 }
 
-// Tr
-func (sa *SchedulingApplication) tryNode(node *schedulingNode, ask *schedulingAllocationAsk) *schedulingAllocation {
+// Try allocating on one specific node
+func (sa *SchedulingApplication) tryNode(node *SchedulingNode, ask *schedulingAllocationAsk) *schedulingAllocation {
 	allocKey := ask.AskProto.AllocationKey
 	toAllocate := ask.AllocatedResource
 	// create the key for the reservation
@@ -505,7 +576,7 @@ func (sa *SchedulingApplication) tryNode(node *schedulingNode, ask *schedulingAl
 // This is only called for recovering existing allocations on a node. We can not use the normal scheduling for this as
 // the cache has already been updated and the allocation is confirmed. Checks for resource limits would fail. However
 // the scheduler fakes a confirmation from the cache later and we thus need this to track correctly.
-func (sa *SchedulingApplication) recoverOnNode(node *schedulingNode, ask *schedulingAllocationAsk) {
+func (sa *SchedulingApplication) recoverOnNode(node *SchedulingNode, ask *schedulingAllocationAsk) {
 	sa.Lock()
 	defer sa.Unlock()
 	toAllocate := ask.AllocatedResource

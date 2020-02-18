@@ -113,7 +113,7 @@ func (m *mockRMCallback) waitForAcceptedApplication(tb testing.TB, appID string,
 		return m.acceptedApplications[appID]
 	})
 	if err != nil {
-		tb.Fatalf("Failed to wait for accepted application: %s", appID)
+		tb.Fatalf("Failed to wait for accepted application: %s, called from: %s", appID, caller())
 	}
 }
 
@@ -124,7 +124,7 @@ func (m *mockRMCallback) waitForRejectedApplication(t *testing.T, appID string, 
 		return m.rejectedApplications[appID]
 	})
 	if err != nil {
-		t.Fatalf("Failed to wait for rejected application: %s", appID)
+		t.Fatalf("Failed to wait for rejected application: %s, called from: %s", appID, caller())
 	}
 }
 
@@ -135,7 +135,7 @@ func (m *mockRMCallback) waitForAcceptedNode(t *testing.T, nodeID string, timeou
 		return m.acceptedNodes[nodeID]
 	})
 	if err != nil {
-		t.Fatalf("Failed to wait for node state to become accepted: %s", nodeID)
+		t.Fatalf("Failed to wait for node state to become accepted: %s, called from: %s", nodeID, caller())
 	}
 }
 
@@ -148,7 +148,7 @@ func (m *mockRMCallback) waitForMinAcceptedNodes(tb testing.TB, minNumNode int, 
 		return numNodes >= minNumNode
 	})
 	if err != nil {
-		tb.Fatalf("Failed to wait for min accepted nodes, expected %d, actual %d", minNumNode, numNodes)
+		tb.Fatalf("Failed to wait for min accepted nodes, expected %d, actual %d, called from: %s", minNumNode, numNodes, caller())
 	}
 }
 
@@ -159,7 +159,7 @@ func (m *mockRMCallback) waitForRejectedNode(t *testing.T, nodeID string, timeou
 		return m.rejectedNodes[nodeID]
 	})
 	if err != nil {
-		t.Fatalf("Failed to wait for node state to become rejected: %s", nodeID)
+		t.Fatalf("Failed to wait for node state to become rejected: %s, called from: %s", nodeID, caller())
 	}
 }
 
@@ -172,7 +172,7 @@ func (m *mockRMCallback) waitForAllocations(t *testing.T, nAlloc int, timeoutMs 
 		return allocLen == nAlloc
 	})
 	if err != nil {
-		t.Fatalf("Failed to wait for allocations, expected %d, actual %d", nAlloc, allocLen)
+		t.Fatalf("Failed to wait for allocations, expected %d, actual %d, called from: %s", nAlloc, allocLen, caller())
 	}
 }
 
@@ -185,6 +185,6 @@ func (m *mockRMCallback) waitForMinAllocations(tb testing.TB, nAlloc int, timeou
 		return allocLen >= nAlloc
 	})
 	if err != nil {
-		tb.Fatalf("Failed to wait for min allocations expected %d, actual %d", nAlloc, allocLen)
+		tb.Fatalf("Failed to wait for min allocations expected %d, actual %d, called from: %s", nAlloc, allocLen, caller())
 	}
 }

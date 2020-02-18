@@ -194,11 +194,16 @@ func (s *Scheduler) processAllocationReleaseByAllocationKey(allocationAsksToRele
 		for _, toRelease := range allocationAsksToRelease {
 			schedulingApp := s.clusterSchedulingContext.GetSchedulingApplication(toRelease.ApplicationID, toRelease.PartitionName)
 			if schedulingApp != nil {
-				schedulingApp.removeAllocationAsk(toRelease.Allocationkey)
+				// remove the allocation asks from the app
+				reservedAsks := schedulingApp.removeAllocationAsk(toRelease.Allocationkey)
 				log.Logger().Info("release allocation",
 					zap.String("allocation", toRelease.Allocationkey),
 					zap.String("appID", toRelease.ApplicationID),
 					zap.String("message", toRelease.Message))
+				// update the partition if the asks were reserved (clean up)
+				if reservedAsks != 0 {
+					s.clusterSchedulingContext.getPartition(toRelease.PartitionName).unReserveUpdate(toRelease.ApplicationID, reservedAsks)
+				}
 			}
 		}
 	}
@@ -556,8 +561,9 @@ func (s *Scheduler) schedule() {
 		if psc.root.getMaxResource() == nil {
 			continue
 		}
-		// try reservations first
-		alloc := psc.tryReservedAllocate()
+		// try reservations first: gets back a node ID if the allocation occurs on a node
+		// that was not reserved by the app/ask
+		alloc, nodeID := psc.tryReservedAllocate()
 		// nothing reserved that can be allocated try normal allocate
 		if alloc == nil {
 			alloc = psc.tryAllocate()
@@ -565,9 +571,10 @@ func (s *Scheduler) schedule() {
 		// there is an allocation that can be made do the real work in the partition
 		if alloc != nil {
 			// only pass back a real allocation, reservations are just scheduler side
-			// this will return to the scheduler an SchedulerApplicationsUpdateEvent when the proposal
+			// proposal this will return to the scheduler an SchedulerApplicationsUpdateEvent when the
 			// is processed by the cache (this can be a reject or accept)
-			if psc.allocate(alloc) {
+			// nodeID is an empty string in all but one reserved alloc case
+			if psc.allocate(alloc, nodeID) {
 				s.eventHandlers.CacheEventHandler.HandleEvent(newSingleAllocationProposal(alloc))
 			}
 		}

@@ -31,14 +31,14 @@ type reservation struct {
 	// these references must ONLY be used for ask, node and application removal otherwise
 	// the reservations cannot be removed and scheduling might be impacted.
 	app  *SchedulingApplication
-	node *schedulingNode
+	node *SchedulingNode
 	ask  *schedulingAllocationAsk
 }
 
 // The reservation inside the scheduler. A reservation object is never mutated and does not use locking.
 // The key depends on where the reservation was made (node or app).
 // appBased must be true for a reservation for an app and false for a reservation on a node
-func newReservation(node *schedulingNode, app *SchedulingApplication, ask *schedulingAllocationAsk, appBased bool) *reservation {
+func newReservation(node *SchedulingNode, app *SchedulingApplication, ask *schedulingAllocationAsk, appBased bool) *reservation {
 	if ask == nil || app == nil || node == nil {
 		log.Logger().Warn("Illegal reservation requested: one input is nil",
 			zap.Any("node", node),
@@ -60,7 +60,7 @@ func newReservation(node *schedulingNode, app *SchedulingApplication, ask *sched
 	return res
 }
 
-func reservationKey(node *schedulingNode, app *SchedulingApplication, ask *schedulingAllocationAsk) string {
+func reservationKey(node *SchedulingNode, app *SchedulingApplication, ask *schedulingAllocationAsk) string {
 	if ask == nil || (app == nil && node == nil) || (app != nil && node != nil) {
 		log.Logger().Warn("Illegal reservation key requested",
 			zap.Any("node", node),
@@ -86,8 +86,9 @@ func (r *reservation) getKey() string {
 // This is used while removing an app, ask or node from the scheduler.
 // It calls the UNLOCKED version of the unReserve on the app always.
 // The app is responsible for calling unReserve on the node.
-func (r *reservation) unReserve() (bool, error) {
-	return r.app.unReserveInternal(r.node, r.ask)
+func (r *reservation) unReserve() (string, bool, error) {
+	ok, err := r.app.unReserveInternal(r.node, r.ask)
+	return r.appID, ok, err
 }
 
 func (r *reservation) String() string {

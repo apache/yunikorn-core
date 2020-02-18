@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	TwoEqualQueueConfigEnabledPreemption = `
+	DualQueuePreemptionConfig = `
 partitions:
   - name: default
     queues:
@@ -69,7 +69,7 @@ func TestBasicPreemption(t *testing.T) {
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(TwoEqualQueueConfigEnabledPreemption)
+	err := ms.Init(DualQueuePreemptionConfig, false)
 	if err != nil {
 		t.Errorf("mock scheduler creation failed for preemption test: %v", err)
 	}
@@ -111,13 +111,13 @@ func TestBasicPreemption(t *testing.T) {
 	ms.mockRM.waitForAcceptedApplication(t, "app-2", 1000)
 
 	// Check scheduling queue root
-	schedulerQueueRoot := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root", "[rm:123]default")
-	schedulerQueueA := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.a", "[rm:123]default")
-	schedulerQueueB := scheduler.GetClusterSchedulingContext().GetSchedulingQueue("root.b", "[rm:123]default")
+	schedulerQueueRoot := ms.getSchedulingQueue("root")
+	schedulerQueueA := ms.getSchedulingQueue("root.a")
+	schedulerQueueB := ms.getSchedulingQueue("root.b")
 
 	// Get scheduling app
-	schedulingApp1 := scheduler.GetClusterSchedulingContext().GetSchedulingApplication("app-1", "[rm:123]default")
-	schedulingApp2 := scheduler.GetClusterSchedulingContext().GetSchedulingApplication("app-2", "[rm:123]default")
+	schedulingApp1 := ms.getSchedulingApplication("app-1")
+	schedulingApp2 := ms.getSchedulingApplication("app-2")
 
 	// Ask (10, 10) resources * 20, which will fulfill the cluster.
 	err = ms.proxy.Update(&si.UpdateRequest{

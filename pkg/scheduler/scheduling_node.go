@@ -32,7 +32,7 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
-type schedulingNode struct {
+type SchedulingNode struct {
 	NodeID string
 
 	// Private info
@@ -46,12 +46,12 @@ type schedulingNode struct {
 	sync.RWMutex
 }
 
-func newSchedulingNode(info *cache.NodeInfo) *schedulingNode {
+func newSchedulingNode(info *cache.NodeInfo) *SchedulingNode {
 	// safe guard against panic
 	if info == nil {
 		return nil
 	}
-	return &schedulingNode{
+	return &SchedulingNode{
 		nodeInfo:                    info,
 		NodeID:                      info.NodeID,
 		allocating:                  resources.NewResource(),
@@ -61,10 +61,23 @@ func newSchedulingNode(info *cache.NodeInfo) *schedulingNode {
 	}
 }
 
+// Return an array of all reservation keys for the node.
+// This will return an empty array if there are no reservations.
+// Visible for tests
+func (sn *SchedulingNode) GetReservations() []string {
+	sn.RLock()
+	defer sn.RUnlock()
+	keys := make([]string, 0)
+	for key := range sn.reservations {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
 // Get the allocated resource on this node.
 // These resources are just the confirmed allocations (tracked in the cache node).
 // This does not lock the cache node as it will take its own lock.
-func (sn *schedulingNode) GetAllocatedResource() *resources.Resource {
+func (sn *SchedulingNode) GetAllocatedResource() *resources.Resource {
 	return sn.nodeInfo.GetAllocatedResource()
 }
 
@@ -72,7 +85,7 @@ func (sn *schedulingNode) GetAllocatedResource() *resources.Resource {
 // These resources are confirmed allocations (tracked in the cache node) minus the resources
 // currently being allocated but not confirmed in the cache.
 // This does not lock the cache node as it will take its own lock.
-func (sn *schedulingNode) getAvailableResource() *resources.Resource {
+func (sn *SchedulingNode) getAvailableResource() *resources.Resource {
 	sn.Lock()
 	defer sn.Unlock()
 	if sn.cachedAvailableUpdateNeeded {
@@ -85,7 +98,7 @@ func (sn *schedulingNode) getAvailableResource() *resources.Resource {
 
 // Get the resource tagged for allocation on this node.
 // These resources are part of unconfirmed allocations.
-func (sn *schedulingNode) getAllocatingResource() *resources.Resource {
+func (sn *SchedulingNode) getAllocatingResource() *resources.Resource {
 	sn.RLock()
 	defer sn.RUnlock()
 
@@ -93,7 +106,7 @@ func (sn *schedulingNode) getAllocatingResource() *resources.Resource {
 }
 
 // Update the number of resource proposed for allocation on this node
-func (sn *schedulingNode) incAllocatingResource(delta *resources.Resource) {
+func (sn *SchedulingNode) incAllocatingResource(delta *resources.Resource) {
 	sn.Lock()
 	defer sn.Unlock()
 
@@ -102,7 +115,7 @@ func (sn *schedulingNode) incAllocatingResource(delta *resources.Resource) {
 }
 
 // Handle the allocation processing on the scheduler when the cache node is updated.
-func (sn *schedulingNode) decAllocatingResource(delta *resources.Resource) {
+func (sn *SchedulingNode) decAllocatingResource(delta *resources.Resource) {
 	sn.Lock()
 	defer sn.Unlock()
 
@@ -117,7 +130,7 @@ func (sn *schedulingNode) decAllocatingResource(delta *resources.Resource) {
 }
 
 // Get the number of resource tagged for preemption on this node
-func (sn *schedulingNode) getPreemptingResource() *resources.Resource {
+func (sn *SchedulingNode) getPreemptingResource() *resources.Resource {
 	sn.RLock()
 	defer sn.RUnlock()
 
@@ -125,14 +138,14 @@ func (sn *schedulingNode) getPreemptingResource() *resources.Resource {
 }
 
 // Update the number of resource tagged for preemption on this node
-func (sn *schedulingNode) incPreemptingResource(preempting *resources.Resource) {
+func (sn *SchedulingNode) incPreemptingResource(preempting *resources.Resource) {
 	sn.Lock()
 	defer sn.Unlock()
 
 	sn.preempting.AddTo(preempting)
 }
 
-func (sn *schedulingNode) decPreemptingResource(delta *resources.Resource) {
+func (sn *SchedulingNode) decPreemptingResource(delta *resources.Resource) {
 	sn.Lock()
 	defer sn.Unlock()
 	var err error
@@ -148,7 +161,7 @@ func (sn *schedulingNode) decPreemptingResource(delta *resources.Resource) {
 // If the proposed allocation fits in the available resources, taking into account resources marked for
 // preemption if applicable, the allocating resources are updated and true is returned.
 // If the proposed allocation does not fit false is returned and no changes are made.
-func (sn *schedulingNode) allocateResource(res *resources.Resource, preemptionPhase bool) bool {
+func (sn *SchedulingNode) allocateResource(res *resources.Resource, preemptionPhase bool) bool {
 	sn.Lock()
 	defer sn.Unlock()
 	available := sn.nodeInfo.GetAvailableResource()
@@ -177,7 +190,7 @@ func (sn *schedulingNode) allocateResource(res *resources.Resource, preemptionPh
 // The caller must thus not rely on all plugins being executed.
 // This is a lock free call as it does not change the node and multiple predicate checks could be
 // run at the same time.
-func (sn *schedulingNode) preAllocateConditions(allocID string) bool {
+func (sn *SchedulingNode) preAllocateConditions(allocID string) bool {
 	// Check the predicates plugin (k8shim)
 	if plugin := plugins.GetPredicatesPlugin(); plugin != nil {
 		log.Logger().Debug("checking predicates",
@@ -201,7 +214,7 @@ func (sn *schedulingNode) preAllocateConditions(allocID string) bool {
 // Check if the node should be considered as a possible node to allocate on.
 //
 // This is a lock free call. No updates are made this only performs a pre allocate checks
-func (sn *schedulingNode) preAllocateCheck(res *resources.Resource, resKey string, preemptionPhase bool) error {
+func (sn *SchedulingNode) preAllocateCheck(res *resources.Resource, resKey string, preemptionPhase bool) error {
 	// shortcut if a node is not schedulable
 	if !sn.nodeInfo.IsSchedulable() {
 		log.Logger().Debug("node is unschedulable",
@@ -242,7 +255,7 @@ func (sn *schedulingNode) preAllocateCheck(res *resources.Resource, resKey strin
 }
 
 // Return if the node has been reserved by any application
-func (sn *schedulingNode) isReserved() bool {
+func (sn *SchedulingNode) isReserved() bool {
 	sn.RLock()
 	defer sn.RUnlock()
 	return len(sn.reservations) > 0
@@ -250,7 +263,7 @@ func (sn *schedulingNode) isReserved() bool {
 
 // Return true if and only if the node has been reserved by the application
 // NOTE: a return value of false does not mean the node is not reserved by a different app
-func (sn *schedulingNode) isReservedForApp(key string) bool {
+func (sn *SchedulingNode) isReservedForApp(key string) bool {
 	if key == "" {
 		return false
 	}
@@ -270,7 +283,7 @@ func (sn *schedulingNode) isReservedForApp(key string) bool {
 // Reserve the node for this application and ask combination, if not reserved yet.
 // The reservation is checked against the node resources.
 // If the reservation fails the function returns false, if the reservation is made it returns true.
-func (sn *schedulingNode) reserve(app *SchedulingApplication, ask *schedulingAllocationAsk) (bool, error) {
+func (sn *SchedulingNode) reserve(app *SchedulingApplication, ask *schedulingAllocationAsk) (bool, error) {
 	sn.Lock()
 	defer sn.Unlock()
 	if len(sn.reservations) > 0 {
@@ -303,7 +316,7 @@ func (sn *schedulingNode) reserve(app *SchedulingApplication, ask *schedulingAll
 // unReserve the node for this application and ask combination
 // If the reservation does not exist it returns false, if the reservation is removed it returns true.
 // The error is set if the reservation key cannot be generated.
-func (sn *schedulingNode) unReserve(app *SchedulingApplication, ask *schedulingAllocationAsk) (bool, error) {
+func (sn *SchedulingNode) unReserve(app *SchedulingApplication, ask *schedulingAllocationAsk) (bool, error) {
 	sn.Lock()
 	defer sn.Unlock()
 	resKey := reservationKey(nil, app, ask)
@@ -331,16 +344,21 @@ func (sn *schedulingNode) unReserve(app *SchedulingApplication, ask *schedulingA
 // unReserve on the node which is locked and modifies the original map. However deleting an entry from a map while iterating
 // over the map is perfectly safe based on the Go Specs.
 // It must only be called when removing the node under a partition lock.
-func (sn *schedulingNode) unReserveApps() bool {
+// It returns a list of all apps that have been unreserved on the node regardless of the result of the app unReserve call.
+// If all unReserve calls work true will be returned, false in all other cases.
+func (sn *SchedulingNode) unReserveApps() ([]string, bool) {
 	var allOK = true
+	var appReserve []string
 	for key, res := range sn.reservations {
-		if ok, err := res.unReserve(); !ok {
+		appID, ok, err := res.unReserve()
+		if !ok {
 			log.Logger().Warn("Removal of reservation failed while removing node",
 				zap.String("nodeID", sn.NodeID),
 				zap.String("reservationKey", key),
 				zap.Error(err))
 			allOK = ok
 		}
+		appReserve = append(appReserve, appID)
 	}
-	return allOK
+	return appReserve, allOK
 }

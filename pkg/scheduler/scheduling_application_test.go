@@ -258,9 +258,9 @@ func TestAppAllocReservation(t *testing.T) {
 		t.Errorf("app should have reservations for node %s and %s and has not: %v", nodeID1, nodeID2, askReserved)
 	}
 	// clean up all asks and reservations
-	app.removeAllocationAsk("")
-	if app.hasReserved() || node1.isReserved() || node2.isReserved() {
-		t.Error("ask removal did not clean up all reservations")
+	reservedAsks := app.removeAllocationAsk("")
+	if app.hasReserved() || node1.isReserved() || node2.isReserved() || reservedAsks != 2 {
+		t.Errorf("ask removal did not clean up all reservations, reserved released = %d", reservedAsks)
 	}
 }
 
@@ -430,10 +430,10 @@ func TestRemoveReservedAllocAsk(t *testing.T) {
 		t.Fatalf("app should have reservation for %v on node", allocKey)
 	}
 	before := app.GetPendingResource().Clone()
-	app.removeAllocationAsk(allocKey)
+	reservedAsks := app.removeAllocationAsk(allocKey)
 	delta = resources.Sub(before, app.GetPendingResource())
-	if !resources.Equals(res, delta) {
-		t.Errorf("resource ask2 should have been removed from app: %v", delta)
+	if !resources.Equals(res, delta) || reservedAsks != 1 {
+		t.Errorf("resource ask2 should have been removed from app: %v, (reserved released = %d)", delta, reservedAsks)
 	}
 	if app.hasReserved() || node.isReserved() {
 		t.Fatal("app and node should not have reservations")
@@ -456,19 +456,19 @@ func TestRemoveReservedAllocAsk(t *testing.T) {
 		t.Errorf("unreserve on node should not have failed: status %t, error %v", ok, err)
 	}
 	before = app.GetPendingResource().Clone()
-	app.removeAllocationAsk(allocKey)
+	reservedAsks = app.removeAllocationAsk(allocKey)
 	delta = resources.Sub(before, app.GetPendingResource())
-	if !resources.Equals(res, delta) {
-		t.Errorf("resource ask2 should have been removed from app: %v", delta)
+	if !resources.Equals(res, delta) || reservedAsks != 1 {
+		t.Errorf("resource ask2 should have been removed from app: %v, (reserved released = %d)", delta, reservedAsks)
 	}
 	// app reservation is not removed due to the node removal failure
 	if !app.hasReserved() || node.isReserved() {
 		t.Fatal("app should and node should not have reservations")
 	}
 	// clean up
-	app.removeAllocationAsk("")
-	if !resources.IsZero(app.GetPendingResource()) {
-		t.Errorf("all resource asks should have been removed from app: %v", app.GetPendingResource())
+	reservedAsks = app.removeAllocationAsk("")
+	if !resources.IsZero(app.GetPendingResource()) || reservedAsks != 1 {
+		t.Errorf("all resource asks should have been removed from app: %v, (reserved released = %d)", app.GetPendingResource(), reservedAsks)
 	}
 	// app reservation is still not removed due to the node removal failure
 	if !app.hasReserved() || node.isReserved() {
@@ -491,12 +491,12 @@ func TestRemoveAllocAsk(t *testing.T) {
 	app.queue = queue
 
 	// failures cases: things should not crash (nothing happens)
-	app.removeAllocationAsk("")
-	if !resources.IsZero(app.GetPendingResource()) {
+	reservedAsks := app.removeAllocationAsk("")
+	if !resources.IsZero(app.GetPendingResource()) || reservedAsks != 0 {
 		t.Errorf("pending resource not updated correctly removing all, expected zero but was: %v", app.GetPendingResource())
 	}
-	app.removeAllocationAsk("unknown")
-	if !resources.IsZero(app.GetPendingResource()) {
+	reservedAsks = app.removeAllocationAsk("unknown")
+	if !resources.IsZero(app.GetPendingResource()) || reservedAsks != 0 {
 		t.Errorf("pending resource not updated correctly removing unknown, expected zero but was: %v", app.GetPendingResource())
 	}
 
@@ -522,16 +522,19 @@ func TestRemoveAllocAsk(t *testing.T) {
 	}
 
 	// test removes unknown (nothing happens)
-	app.removeAllocationAsk("unknown")
-	before := app.GetPendingResource().Clone()
-	app.removeAllocationAsk("alloc-1")
-	delta := resources.Sub(before, app.GetPendingResource())
-	if !resources.Equals(delta, delta1) {
-		t.Errorf("ask should have been removed from app, err %v, expected delta %v but was: %v", err, delta1, delta)
+	reservedAsks = app.removeAllocationAsk("unknown")
+	if reservedAsks != 0 {
+		t.Errorf("asks released which did not exist: %d", reservedAsks)
 	}
-	app.removeAllocationAsk("")
-	if len(app.requests) != 0 {
-		t.Fatalf("asks not removed from as expected got %d", len(app.requests))
+	before := app.GetPendingResource().Clone()
+	reservedAsks = app.removeAllocationAsk("alloc-1")
+	delta := resources.Sub(before, app.GetPendingResource())
+	if !resources.Equals(delta, delta1) || reservedAsks != 0 {
+		t.Errorf("ask should have been removed from app, err %v, expected delta %v but was: %v, (reserved released = %d)", err, delta1, delta, reservedAsks)
+	}
+	reservedAsks = app.removeAllocationAsk("")
+	if len(app.requests) != 0 || reservedAsks != 0 {
+		t.Fatalf("asks not removed as expected 0 got %d, (reserved released = %d)", len(app.requests), reservedAsks)
 	}
 	if !resources.IsZero(app.GetPendingResource()) {
 		t.Errorf("pending resource not updated correctly, expected zero but was: %v", app.GetPendingResource())

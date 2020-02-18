@@ -404,6 +404,7 @@ func getShares(res, total *Resource) []float64 {
 			// negative share is logged
 			if v < 0 {
 				log.Logger().Debug("usage is negative no total, share is also negative",
+					zap.String("resource key", k),
 					zap.Int64("resource quantity", int64(v)))
 			}
 			shares[idx] = float64(v)
@@ -414,6 +415,7 @@ func getShares(res, total *Resource) []float64 {
 		// negative share is logged
 		if shares[idx] < 0 {
 			log.Logger().Debug("share set is negative",
+				zap.String("resource key", k),
 				zap.Int64("resource quantity", int64(v)),
 				zap.Int64("total quantity", int64(total.Resources[k])))
 		}

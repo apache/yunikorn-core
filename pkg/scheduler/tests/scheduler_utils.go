@@ -20,6 +20,9 @@ package tests
 
 import (
 	"fmt"
+	"os"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,6 +36,21 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
+// Returns the calling function name, file name and line.
+// Used in waitFor.. functions to show where the call was made from.
+// The 2 caller skip steps over the waitFor.. caller back into the real test call
+func caller() string {
+	pc, file, line, ok := runtime.Caller(2)
+	funcName := "unknown"
+	if ok {
+		name := runtime.FuncForPC(pc).Name()
+		name = name[strings.LastIndex(name, ".")+1:]
+		file = file[strings.LastIndex(file, string(os.PathSeparator))+1:]
+		funcName = fmt.Sprintf("%s in %s:%d", name, file, line)
+	}
+	return funcName
+}
+
 func waitForPendingQueueResource(t *testing.T, queue *scheduler.SchedulingQueue, memory resources.Quantity, timeoutMs int) {
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		return queue.GetPendingResource().Resources[resources.MEMORY] == memory
@@ -40,7 +58,7 @@ func waitForPendingQueueResource(t *testing.T, queue *scheduler.SchedulingQueue,
 	if err != nil {
 		log.Logger().Info("queue detail",
 			zap.Any("queue", queue))
-		t.Fatalf("Failed to wait pending resource on queue %s, expected %v, actual %v", queue.Name, memory, queue.GetPendingResource().Resources[resources.MEMORY])
+		t.Fatalf("Failed to wait pending resource on queue %s, expected %v, actual %v, called from: %s", queue.Name, memory, queue.GetPendingResource().Resources[resources.MEMORY], caller())
 	}
 }
 
@@ -49,7 +67,25 @@ func waitForPendingAppResource(t *testing.T, app *scheduler.SchedulingApplicatio
 		return app.GetPendingResource().Resources[resources.MEMORY] == memory
 	})
 	if err != nil {
-		t.Fatalf("Failed to wait for pending resource, expected %v, actual %v", memory, app.GetPendingResource().Resources[resources.MEMORY])
+		t.Fatalf("Failed to wait for pending resource, expected %v, actual %v, called from: %s", memory, app.GetPendingResource().Resources[resources.MEMORY], caller())
+	}
+}
+
+func waitForAllocatedAppResource(t *testing.T, app *scheduler.SchedulingApplication, memory resources.Quantity, timeoutMs int) {
+	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+		return app.GetAllocatedResource().Resources[resources.MEMORY] == memory
+	})
+	if err != nil {
+		t.Fatalf("Failed to wait for pending resource, expected %v, actual %v, called from: %s", memory, app.GetPendingResource().Resources[resources.MEMORY], caller())
+	}
+}
+
+func waitForAllocatedQueueResource(t *testing.T, queue *scheduler.SchedulingQueue, memory resources.Quantity, timeoutMs int) {
+	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+		return queue.GetAllocatedResource().Resources[resources.MEMORY] == memory
+	})
+	if err != nil {
+		t.Fatalf("Failed to wait for allocations on queue %s, called from: %s", queue.Name, caller())
 	}
 }
 
@@ -63,7 +99,7 @@ func waitForNodesAllocatedResource(t *testing.T, cache *cache.ClusterInfo, parti
 		return totalNodeResource == allocatedMemory
 	})
 	if err != nil {
-		t.Fatalf("Failed to wait for allocations on partition %s and node %v", partitionName, nodeIDs)
+		t.Fatalf("Failed to wait for allocations on partition %s and node %v, called from: %s", partitionName, nodeIDs, caller())
 	}
 }
 
@@ -73,7 +109,7 @@ func waitForNewSchedulerNode(t *testing.T, context *scheduler.ClusterSchedulingC
 		return node != nil
 	})
 	if err != nil {
-		t.Fatalf("Failed to wait for new scheduling node on partition %s, node %v", partitionName, nodeID)
+		t.Fatalf("Failed to wait for new scheduling node on partition %s, node %v, called from: %s", partitionName, nodeID, caller())
 	}
 }
 
@@ -83,7 +119,7 @@ func waitForRemovedSchedulerNode(t *testing.T, context *scheduler.ClusterSchedul
 		return node == nil
 	})
 	if err != nil {
-		t.Fatalf("Failed to wait for removal of scheduling node on partition %s, node %v", partitionName, nodeID)
+		t.Fatalf("Failed to wait for removal of scheduling node on partition %s, node %v, called from: %s", partitionName, nodeID, caller())
 	}
 }
 

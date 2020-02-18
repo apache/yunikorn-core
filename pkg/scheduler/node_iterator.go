@@ -27,7 +27,7 @@ type NodeIterator interface {
 	// returns true if there are more values to iterate over
 	HasNext() (ok bool)
 	// returns the next node from the iterator
-	Next() (node *schedulingNode)
+	Next() (node *SchedulingNode)
 	// reset the iterator to a clean state
 	Reset()
 }
@@ -37,7 +37,7 @@ type baseIterator struct {
 	NodeIterator
 	countIdx int
 	size     int
-	nodes    []*schedulingNode
+	nodes    []*SchedulingNode
 }
 
 // Reset the iterator to start from the beginning
@@ -53,7 +53,7 @@ func (bi *baseIterator) HasNext() bool {
 
 // Next returns the next element and advances to next element in array.
 // Returns nil at the end of iteration.
-func (bi *baseIterator) Next() *schedulingNode {
+func (bi *baseIterator) Next() *SchedulingNode {
 	if (bi.countIdx + 1) > bi.size {
 		return nil
 	}
@@ -70,7 +70,7 @@ type DefaultNodeIterator struct {
 }
 
 // Create a new default iterator
-func NewDefaultNodeIterator(schedulerNodes []*schedulingNode) *DefaultNodeIterator {
+func NewDefaultNodeIterator(schedulerNodes []*SchedulingNode) *DefaultNodeIterator {
 	it := &DefaultNodeIterator{}
 	it.nodes = schedulerNodes
 	it.size = len(schedulerNodes)
@@ -86,7 +86,7 @@ type RoundRobinNodeIterator struct {
 }
 
 // The starting point is randomised in the slice.
-func NewRoundRobinNodeIterator(schedulerNodes []*schedulingNode) *RoundRobinNodeIterator {
+func NewRoundRobinNodeIterator(schedulerNodes []*SchedulingNode) *RoundRobinNodeIterator {
 	it := &RoundRobinNodeIterator{}
 	it.nodes = schedulerNodes
 	it.size = len(schedulerNodes)
@@ -98,7 +98,7 @@ func NewRoundRobinNodeIterator(schedulerNodes []*schedulingNode) *RoundRobinNode
 
 // Next returns the next element and advances to next element in array.
 // Returns nil at the end of iteration.
-func (ri *RoundRobinNodeIterator) Next() *schedulingNode {
+func (ri *RoundRobinNodeIterator) Next() *SchedulingNode {
 	// prevent panic on Next when slice is empty
 	if (ri.countIdx + 1) > ri.size {
 		return nil

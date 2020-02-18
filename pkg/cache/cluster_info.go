@@ -272,7 +272,7 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
 		// if app info doesn't exist, reject the request
 		appInfo := partitionInfo.getApplication(req.ApplicationID)
 		if appInfo == nil {
-			msg := fmt.Sprintf("Failed to find applictaion %s, for allocation %s", req.ApplicationID, req.AllocationKey)
+			msg := fmt.Sprintf("Failed to find application %s, for allocation %s", req.ApplicationID, req.AllocationKey)
 			log.Logger().Info(msg)
 			rejectedAsks = append(rejectedAsks,
 				&si.RejectedAllocationAsk{
@@ -356,12 +356,14 @@ func (m *ClusterInfo) processNewSchedulableNodes(request *si.UpdateRequest) {
 			RejectedNodes: rejectedNodes,
 		})
 
-	// notify the scheduler to recover existing allocations
-	m.EventHandlers.SchedulerEventHandler.HandleEvent(
-		&schedulerevent.SchedulerAllocationUpdatesEvent{
-			ExistingAllocations: existingAllocations,
-			RMId:                request.RmID,
-		})
+	// notify the scheduler to recover existing allocations (only when provided)
+	if len(existingAllocations) > 0 {
+		m.EventHandlers.SchedulerEventHandler.HandleEvent(
+			&schedulerevent.SchedulerAllocationUpdatesEvent{
+				ExistingAllocations: existingAllocations,
+				RMId:                request.RmID,
+			})
+	}
 }
 
 // RM may notify us to remove, blacklist or whitelist a node,

@@ -16,7 +16,6 @@
  limitations under the License.
 */
 
-
 package scheduler
 
 import (
@@ -102,17 +101,18 @@ func TestUnReserve(t *testing.T) {
 	node := newNode("node-1", q)
 
 	// standalone reservation unreserve returns false as app is not reserved
+	// appIDs list should be empty
 	reserve := newReservation(node, app, ask, true)
 	assert.Equal(t, reserve.getKey(), "node-1|alloc-1", "incorrect node reservation key")
-	ok, err := reserve.unReserve()
-	if ok || err != nil {
-		t.Fatalf("unreserve should have returned false and no error: %v", err)
+	appID, ok, err := reserve.unReserve()
+	if ok || err != nil || appID != "" {
+		t.Fatalf("unreserve should have returned false and no error: %v, app %v", err, appID)
 	}
 	reserve = newReservation(node, app, ask, false)
 	assert.Equal(t, reserve.getKey(), "app-1|alloc-1", "incorrect app reservation key")
-	ok, err = reserve.unReserve()
-	if ok || err != nil {
-		t.Fatalf("unreserve should have returned false and no error: %v", err)
+	appID, ok, err = reserve.unReserve()
+	if ok || err != nil || appID != "app-1" {
+		t.Fatalf("unreserve should have returned false and no error: %v, app %v", err, appID)
 	}
 
 	// do a bogus reserve and unreserve: no errors and should be really removed
@@ -121,8 +121,8 @@ func TestUnReserve(t *testing.T) {
 	if !ok || err != nil || len(app.reservations) != 1 || len(node.reservations) != 1 {
 		t.Fatalf("reserve should not have failed: %v", err)
 	}
-	ok, err = reserve.unReserve()
-	if !ok || err != nil || len(app.reservations) != 0 || len(node.reservations) != 0 {
-		t.Fatalf("unreserve should have returned true and no error: %v", err)
+	appID, ok, err = reserve.unReserve()
+	if !ok || err != nil || appID != "app-1" || len(app.reservations) != 0 || len(node.reservations) != 0 {
+		t.Fatalf("unreserve should have returned true and no error: %v, app %v", err, appID)
 	}
 }

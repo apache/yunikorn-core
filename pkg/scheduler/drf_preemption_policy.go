@@ -115,13 +115,13 @@ func initHeadroomShortages(preemptorQueue *preemptionQueueContext, allocatedReso
 
 // Can we do surgical preemption on the node?
 type singleNodePreemptResult struct {
-	node                  *schedulingNode
+	node                  *SchedulingNode
 	toReleaseAllocations  map[string]*cache.AllocationInfo
 	totalReleasedResource *resources.Resource
 }
 
 // Do surgical preemption on node, if able to preempt, returns
-func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionContext, preemptorQueue *preemptionQueueContext, node *schedulingNode, candidate *schedulingAllocationAsk,
+func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionContext, preemptorQueue *preemptionQueueContext, node *SchedulingNode, candidate *schedulingAllocationAsk,
 	headroomShortages map[string]*resources.Resource) *singleNodePreemptResult {
 	// If allocated resource can fit in the node, and no headroom shortage of preemptor queue, we can directly get it allocated. (lucky!)
 	if node.allocateResource(candidate.AllocatedResource, true) {
@@ -243,7 +243,7 @@ func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitio
 	return createPreemptionAndAllocationProposal(preemptionPartitionContext, nodeToAllocate, candidate, preemptionResults)
 }
 
-func createPreemptionAndAllocationProposal(preemptionPartitionContext *preemptionPartitionContext, nodeToAllocate *schedulingNode, candidate *schedulingAllocationAsk,
+func createPreemptionAndAllocationProposal(preemptionPartitionContext *preemptionPartitionContext, nodeToAllocate *SchedulingNode, candidate *schedulingAllocationAsk,
 	preemptionResults []*singleNodePreemptResult) *schedulingAllocation {
 	// We will get this allocation by preempting resources.
 	allocation := newSchedulingAllocation(candidate, nodeToAllocate.NodeID)

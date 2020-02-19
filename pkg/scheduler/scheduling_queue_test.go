@@ -489,7 +489,7 @@ func TestPreemptingCalc(t *testing.T) {
 	}
 }
 
-func TestUnconfirmedCalc(t *testing.T) {
+func TestAssumedQueueCalc(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)
 	if err != nil {
@@ -500,9 +500,9 @@ func TestUnconfirmedCalc(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create leaf queue: %v", err)
 	}
-	unconfirmed := leaf.getUnconfirmedAllocated()
-	if !resources.IsZero(unconfirmed) {
-		t.Errorf("queue unconfirmed and allocated resources not set as expected 0, got %v", unconfirmed)
+	assumed := leaf.getAssumeAllocated()
+	if !resources.IsZero(assumed) {
+		t.Errorf("queue unconfirmed and allocated resources not set as expected 0, got %v", assumed)
 	}
 	res := map[string]string{"first": "1"}
 	var allocation *resources.Resource
@@ -511,19 +511,19 @@ func TestUnconfirmedCalc(t *testing.T) {
 		t.Fatalf("failed to create basic resource: %v", err)
 	}
 	leaf.incAllocatingResource(allocation)
-	unconfirmed = leaf.getUnconfirmedAllocated()
-	if !resources.Equals(unconfirmed, allocation) {
-		t.Errorf("root queue allocating failed to increment expected %v, got %v", allocation, unconfirmed)
+	assumed = leaf.getAssumeAllocated()
+	if !resources.Equals(assumed, allocation) {
+		t.Errorf("root queue allocating failed to increment expected %v, got %v", allocation, assumed)
 	}
 	// increase the allocated queue resource, use nodeReported true to bypass checks
 	err = leaf.QueueInfo.IncAllocatedResource(allocation, true)
 	if err != nil {
 		t.Fatalf("failed to increase cache queue allocated resource: %v", err)
 	}
-	unconfirmed = leaf.getUnconfirmedAllocated()
+	assumed = leaf.getAssumeAllocated()
 	allocation = resources.Multiply(allocation, 2)
-	if !resources.Equals(unconfirmed, allocation) {
-		t.Errorf("root queue allocating failed to increment expected %v, got %v", allocation, unconfirmed)
+	if !resources.Equals(assumed, allocation) {
+		t.Errorf("root queue allocating failed to increment expected %v, got %v", allocation, assumed)
 	}
 }
 

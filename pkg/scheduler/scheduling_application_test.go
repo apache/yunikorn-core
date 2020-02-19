@@ -545,16 +545,16 @@ func TestRemoveAllocAsk(t *testing.T) {
 }
 
 // test allocating and allocated calculation
-func TestUnconfirmedAppCalc(t *testing.T) {
+func TestAssumedAppCalc(t *testing.T) {
 	appID := "app-1"
 	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
 	app := newSchedulingApplication(appInfo)
 	if app == nil || app.ApplicationInfo.ApplicationID != appID {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
-	unconfirmed := app.getUnconfirmedAllocated()
-	if !resources.IsZero(unconfirmed) {
-		t.Errorf("app unconfirmed and allocated resources not set as expected 0, got %v", unconfirmed)
+	assumed := app.getAssumeAllocated()
+	if !resources.IsZero(assumed) {
+		t.Errorf("app unconfirmed and allocated resources not set as expected 0, got %v", assumed)
 	}
 	res := map[string]string{"first": "1"}
 	allocation, err := resources.NewResourceFromConf(res)
@@ -562,16 +562,16 @@ func TestUnconfirmedAppCalc(t *testing.T) {
 		t.Fatalf("failed to create basic resource: %v", err)
 	}
 	app.incAllocatingResource(allocation)
-	unconfirmed = app.getUnconfirmedAllocated()
-	if !resources.Equals(allocation, unconfirmed) {
-		t.Errorf("app unconfirmed and allocated resources not set as expected %v, got %v", allocation, unconfirmed)
+	assumed = app.getAssumeAllocated()
+	if !resources.Equals(allocation, assumed) {
+		t.Errorf("app unconfirmed and allocated resources not set as expected %v, got %v", allocation, assumed)
 	}
 	allocInfo := cache.CreateMockAllocationInfo("app-1", allocation, "uuid", "root.leaf", "node-1")
 	cache.AddAllocationToApp(app.ApplicationInfo, allocInfo)
-	unconfirmed = app.getUnconfirmedAllocated()
+	assumed = app.getAssumeAllocated()
 	allocation = resources.Multiply(allocation, 2)
-	if !resources.Equals(allocation, unconfirmed) {
-		t.Errorf("app unconfirmed and allocated resources not set as expected %v, got %v", allocation, unconfirmed)
+	if !resources.Equals(allocation, assumed) {
+		t.Errorf("app unconfirmed and allocated resources not set as expected %v, got %v", allocation, assumed)
 	}
 }
 

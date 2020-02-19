@@ -100,7 +100,7 @@ func (sa *SchedulingApplication) GetPendingResource() *resources.Resource {
 }
 
 // Return the allocating and allocated resources for this application
-func (sa *SchedulingApplication) getUnconfirmedAllocated() *resources.Resource {
+func (sa *SchedulingApplication) getAssumeAllocated() *resources.Resource {
 	sa.RLock()
 	defer sa.RUnlock()
 	return resources.Add(sa.allocating, sa.ApplicationInfo.GetAllocatedResource())

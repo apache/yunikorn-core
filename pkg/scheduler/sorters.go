@@ -42,8 +42,8 @@ func sortQueue(queues []*SchedulingQueue, sortType SortType) {
 		sort.SliceStable(queues, func(i, j int) bool {
 			l := queues[i]
 			r := queues[j]
-			comp := resources.CompUsageRatioSeparately(l.getUnconfirmedAllocated(), l.QueueInfo.GuaranteedResource,
-				r.getUnconfirmedAllocated(), r.QueueInfo.GuaranteedResource)
+			comp := resources.CompUsageRatioSeparately(l.getAssumeAllocated(), l.QueueInfo.GuaranteedResource,
+				r.getAssumeAllocated(), r.QueueInfo.GuaranteedResource)
 			return comp < 0
 		})
 	}
@@ -57,7 +57,7 @@ func sortApplications(apps []*SchedulingApplication, sortType SortType, globalRe
 		sort.SliceStable(apps, func(i, j int) bool {
 			l := apps[i]
 			r := apps[j]
-			return resources.CompUsageRatio(l.getUnconfirmedAllocated(), r.getUnconfirmedAllocated(), globalResource) < 0
+			return resources.CompUsageRatio(l.getAssumeAllocated(), r.getAssumeAllocated(), globalResource) < 0
 		})
 	case FifoSortPolicy:
 		// Sort by submission time oldest first

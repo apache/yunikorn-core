@@ -313,7 +313,7 @@ func (sq *SchedulingQueue) checkAdminAccess(user security.UserGroup) bool {
 }
 
 // Return the allocated and allocating resources for this queue
-func (sq *SchedulingQueue) getUnconfirmedAllocated() *resources.Resource {
+func (sq *SchedulingQueue) getAssumeAllocated() *resources.Resource {
 	sq.RLock()
 	defer sq.RUnlock()
 	return resources.Add(sq.allocating, sq.QueueInfo.GetAllocatedResource())

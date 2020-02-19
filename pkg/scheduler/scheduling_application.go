@@ -148,8 +148,8 @@ func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) int {
 	if allocKey == "" {
 		// cleanup all reservations
 		for key, reserve := range sa.reservations {
-			_, ok, err := reserve.unReserve()
-			if !ok {
+			_, err := reserve.unReserve()
+			if err != nil {
 				log.Logger().Warn("Removal of reservation failed while removing all allocations",
 					zap.String("appID", sa.ApplicationInfo.ApplicationID),
 					zap.String("reservationKey", key),
@@ -166,8 +166,8 @@ func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) int {
 	} else {
 		// cleanup the reservation for this allocation
 		for _, key := range sa.isAskReserved(allocKey) {
-			_, ok, err := sa.reservations[key].unReserve()
-			if !ok {
+			_, err := sa.reservations[key].unReserve()
+			if err != nil {
 				log.Logger().Warn("Removal of reservation failed while removing allocation",
 					zap.String("appID", sa.ApplicationInfo.ApplicationID),
 					zap.String("reservationKey", key),
@@ -301,7 +301,7 @@ func (sa *SchedulingApplication) reserve(node *SchedulingNode, ask *schedulingAl
 // This first removes the reservation from the node.
 // The error is set if the reservation key cannot be generated on the app or node.
 // If the reservation does not exist it returns false, if the reservation is removed it returns true.
-func (sa *SchedulingApplication) unReserve(node *SchedulingNode, ask *schedulingAllocationAsk) (bool, error) {
+func (sa *SchedulingApplication) unReserve(node *SchedulingNode, ask *schedulingAllocationAsk) error {
 	sa.Lock()
 	defer sa.Unlock()
 	return sa.unReserveInternal(node, ask)
@@ -309,29 +309,29 @@ func (sa *SchedulingApplication) unReserve(node *SchedulingNode, ask *scheduling
 
 // Unlocked version for unReserve that really does the work.
 // Must only be called while holding the application lock.
-func (sa *SchedulingApplication) unReserveInternal(node *SchedulingNode, ask *schedulingAllocationAsk) (bool, error) {
+func (sa *SchedulingApplication) unReserveInternal(node *SchedulingNode, ask *schedulingAllocationAsk) error {
 	resKey := reservationKey(node, nil, ask)
 	if resKey == "" {
 		log.Logger().Debug("unreserve reservation key create failed unexpectedly",
 			zap.String("appID", sa.ApplicationInfo.ApplicationID),
 			zap.Any("node", node),
 			zap.Any("ask", ask))
-		return false, fmt.Errorf("reservation key failed node or ask are nil for appID %s", sa.ApplicationInfo.ApplicationID)
+		return fmt.Errorf("reservation key failed node or ask are nil for appID %s", sa.ApplicationInfo.ApplicationID)
 	}
 	// find the reservation and then unReserve the node before removing from the app
 	if _, found := sa.reservations[resKey]; found {
-		if ok, err := node.unReserve(sa, ask); !ok {
-			return false, err
+		if err := node.unReserve(sa, ask); err != nil {
+			return err
 		}
 		delete(sa.reservations, resKey)
-		return true, nil
+		return nil
 	}
 	// reservation was not found
 	log.Logger().Debug("reservation not found while removing from app",
 		zap.String("appID", sa.ApplicationInfo.ApplicationID),
 		zap.String("nodeID", node.NodeID),
 		zap.String("ask", ask.AskProto.AllocationKey))
-	return false, nil
+	return nil
 }
 
 // Return the allocation reservations on any node.

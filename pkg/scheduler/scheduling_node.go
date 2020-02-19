@@ -283,11 +283,11 @@ func (sn *SchedulingNode) isReservedForApp(key string) bool {
 // Reserve the node for this application and ask combination, if not reserved yet.
 // The reservation is checked against the node resources.
 // If the reservation fails the function returns false, if the reservation is made it returns true.
-func (sn *SchedulingNode) reserve(app *SchedulingApplication, ask *schedulingAllocationAsk) (bool, error) {
+func (sn *SchedulingNode) reserve(app *SchedulingApplication, ask *schedulingAllocationAsk) error {
 	sn.Lock()
 	defer sn.Unlock()
 	if len(sn.reservations) > 0 {
-		return false, fmt.Errorf("node is already reserved, nodeID %s", sn.NodeID)
+		return fmt.Errorf("node is already reserved, nodeID %s", sn.NodeID)
 	}
 	appReservation := newReservation(sn, app, ask, false)
 	// this should really not happen just guard against panic
@@ -297,7 +297,7 @@ func (sn *SchedulingNode) reserve(app *SchedulingApplication, ask *schedulingAll
 			zap.String("nodeID", sn.NodeID),
 			zap.Any("app", app),
 			zap.Any("ask", ask))
-		return false, fmt.Errorf("reservation creation failed app or ask are nil on nodeID %s", sn.NodeID)
+		return fmt.Errorf("reservation creation failed app or ask are nil on nodeID %s", sn.NodeID)
 	}
 	// reservation must fit on the empty node
 	if !sn.nodeInfo.FitInNode(ask.AllocatedResource) {
@@ -306,11 +306,11 @@ func (sn *SchedulingNode) reserve(app *SchedulingApplication, ask *schedulingAll
 			zap.String("appID", app.ApplicationInfo.ApplicationID),
 			zap.String("ask", ask.AskProto.AllocationKey),
 			zap.String("allocationAsk", ask.AllocatedResource.String()))
-		return false, fmt.Errorf("reservation does not fit on node %s, appID %s, ask %s", sn.NodeID, app.ApplicationInfo.ApplicationID, ask.AllocatedResource.String())
+		return fmt.Errorf("reservation does not fit on node %s, appID %s, ask %s", sn.NodeID, app.ApplicationInfo.ApplicationID, ask.AllocatedResource.String())
 	}
 	sn.reservations[appReservation.getKey()] = appReservation
 	// reservation added successfully
-	return true, nil
+	return nil
 }
 
 // unReserve the node for this application and ask combination

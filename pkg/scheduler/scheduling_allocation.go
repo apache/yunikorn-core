@@ -39,11 +39,12 @@ func (ar allocationResult) String() string {
 }
 
 type schedulingAllocation struct {
-	schedulingAsk *schedulingAllocationAsk
-	repeats       int32
-	nodeID        string
-	releases      []*commonevents.ReleaseAllocation
-	result        allocationResult
+	schedulingAsk  *schedulingAllocationAsk
+	repeats        int32
+	nodeID         string
+	reservedNodeID string
+	releases       []*commonevents.ReleaseAllocation
+	result         allocationResult
 }
 
 func newSchedulingAllocation(ask *schedulingAllocationAsk, nodeID string) *schedulingAllocation {

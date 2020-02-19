@@ -96,9 +96,9 @@ func TestAppReservation(t *testing.T) {
 	app.queue = queue
 
 	// reserve illegal request
-	ok, err := app.reserve(nil, nil)
-	if ok || err == nil {
-		t.Errorf("illegal reservation requested but did not fail: status %t, error %v", ok, err)
+	err = app.reserve(nil, nil)
+	if err == nil {
+		t.Errorf("illegal reservation requested but did not fail: error %v", err)
 	}
 
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 15})
@@ -108,9 +108,9 @@ func TestAppReservation(t *testing.T) {
 	node := newNode(nodeID, map[string]resources.Quantity{"first": 10})
 
 	// too large for node
-	ok, err = app.reserve(node, ask)
-	if ok || err == nil {
-		t.Errorf("requested reservation does not fit in node resource but did not fail: status %t, error %v", ok, err)
+	err = app.reserve(node, ask)
+	if err == nil {
+		t.Errorf("requested reservation does not fit in node resource but did not fail: error %v", err)
 	}
 
 	res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
@@ -123,9 +123,9 @@ func TestAppReservation(t *testing.T) {
 		t.Errorf("ask should have been added to app, err %v, expected delta %v but was: %v", err, res, delta)
 	}
 	// reserve that works
-	ok, err = app.reserve(node, ask)
-	if !ok || err != nil {
-		t.Errorf("reservation should not have failed: status %t, error %v", ok, err)
+	err = app.reserve(node, ask)
+	if err != nil {
+		t.Errorf("reservation should not have failed: error %v", err)
 	}
 	if app.isReservedOnNode("") {
 		t.Errorf("app should not have reservations for empty node ID")
@@ -138,12 +138,13 @@ func TestAppReservation(t *testing.T) {
 	}
 
 	// reserve the same reservation
-	ok, err = app.reserve(node, ask)
-	if ok || err == nil {
-		t.Errorf("reservation should have failed: status %t, error %v", ok, err)
+	err = app.reserve(node, ask)
+	if err == nil {
+		t.Errorf("reservation should have failed: error %v", err)
 	}
 
 	// unreserve unknown node/ask
+	var ok bool
 	ok, err = app.unReserve(nil, nil)
 	if ok || err == nil {
 		t.Errorf("illegal reservation release but did not fail: status %t, error %v", ok, err)
@@ -156,13 +157,13 @@ func TestAppReservation(t *testing.T) {
 	if err != nil || !resources.Equals(res, delta) {
 		t.Errorf("ask2 should have been added to app, err %v, expected delta %v but was: %v", err, res, delta)
 	}
-	ok, err = app.reserve(node, ask2)
-	if ok || err == nil {
-		t.Errorf("reservation of node by second ask should have failed: status %t, error %v", ok, err)
+	err = app.reserve(node, ask2)
+	if err == nil {
+		t.Errorf("reservation of node by second ask should have failed: error %v", err)
 	}
-	ok, err = app.reserve(node2, ask2)
-	if !ok || err != nil {
-		t.Errorf("reservation of 2nd node should not have failed: status %t, error %v", ok, err)
+	err = app.reserve(node2, ask2)
+	if err != nil {
+		t.Errorf("reservation of 2nd node should not have failed: error %v", err)
 	}
 	ok, err = app.unReserve(node2, ask2)
 	if !ok || err != nil {
@@ -217,10 +218,9 @@ func TestAppAllocReservation(t *testing.T) {
 	if err != nil || !resources.Equals(resources.Multiply(res, 2), delta) {
 		t.Errorf("ask should have been added to app, err %v, expected delta %v but was: %v", err, resources.Multiply(res, 2), delta)
 	}
-	var ok bool
-	ok, err = app.reserve(node1, ask)
-	if !ok || err != nil {
-		t.Errorf("reservation should not have failed: status %t, error %v", ok, err)
+	err = app.reserve(node1, ask)
+	if err != nil {
+		t.Errorf("reservation should not have failed: error %v", err)
 	}
 	if len(app.isAskReserved("")) != 0 {
 		t.Fatal("app should not have reservation for empty allocKey")
@@ -233,9 +233,9 @@ func TestAppAllocReservation(t *testing.T) {
 
 	nodeID2 := "node-2"
 	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 10})
-	ok, err = app.reserve(node2, ask)
-	if !ok || err != nil {
-		t.Errorf("reservation should not have failed: status %t, error %v", ok, err)
+	err = app.reserve(node2, ask)
+	if err != nil {
+		t.Errorf("reservation should not have failed: error %v", err)
 	}
 	nodeKey2 := nodeID2 + "|" + allocKey
 	askReserved = app.isAskReserved(allocKey)
@@ -248,9 +248,9 @@ func TestAppAllocReservation(t *testing.T) {
 		t.Error("ask has maximum repeats reserved, reserve check should have failed")
 	}
 	node3 := newNode("node-3", map[string]resources.Quantity{"first": 10})
-	ok, err = app.reserve(node3, ask)
-	if ok || err == nil {
-		t.Errorf("reservation should have failed: status %t, error %v", ok, err)
+	err = app.reserve(node3, ask)
+	if err == nil {
+		t.Errorf("reservation should have failed: error %v", err)
 	}
 	askReserved = app.isAskReserved(allocKey)
 	if len(askReserved) != 2 && (askReserved[0] != nodeKey1 || askReserved[1] != nodeKey1) &&
@@ -421,10 +421,9 @@ func TestRemoveReservedAllocAsk(t *testing.T) {
 	// reserve one alloc and remove
 	nodeID := "node-1"
 	node := newNode(nodeID, map[string]resources.Quantity{"first": 10})
-	var ok bool
-	ok, err = app.reserve(node, ask)
-	if !ok || err != nil {
-		t.Errorf("reservation should not have failed: status %t, error %v", ok, err)
+	err = app.reserve(node, ask)
+	if err != nil {
+		t.Errorf("reservation should not have failed: error %v", err)
 	}
 	if len(app.isAskReserved(allocKey)) != 1 || !node.isReserved() {
 		t.Fatalf("app should have reservation for %v on node", allocKey)
@@ -444,13 +443,14 @@ func TestRemoveReservedAllocAsk(t *testing.T) {
 	if err != nil || !resources.Equals(res, delta) {
 		t.Fatalf("resource ask2 should have been added to app: %v (err = %v)", delta, err)
 	}
-	ok, err = app.reserve(node, ask)
-	if !ok || err != nil {
-		t.Errorf("reservation should not have failed: status %t, error %v", ok, err)
+	err = app.reserve(node, ask)
+	if err != nil {
+		t.Errorf("reservation should not have failed: error %v", err)
 	}
 	if len(app.isAskReserved(allocKey)) != 1 || !node.isReserved() {
 		t.Fatalf("app should have reservation for %v on node", allocKey)
 	}
+	var ok bool
 	ok, err = node.unReserve(app, ask)
 	if !ok || err != nil {
 		t.Errorf("unreserve on node should not have failed: status %t, error %v", ok, err)

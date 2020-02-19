@@ -342,10 +342,10 @@ func (psc *partitionSchedulingContext) removeSchedulingNode(nodeID string) {
 
 // Try regular allocation for the partition
 // Lock free call this all locks are taken when needed in called functions
-func (psc *partitionSchedulingContext) tryAllocate() (*schedulingAllocation, string) {
+func (psc *partitionSchedulingContext) tryAllocate() *schedulingAllocation {
 	if !resources.StrictlyGreaterThanZero(psc.root.GetPendingResource()) {
 		// nothing to do just return
-		return nil, ""
+		return nil
 	}
 	// try allocating from the root down
 	return psc.root.tryAllocate(psc)
@@ -353,9 +353,9 @@ func (psc *partitionSchedulingContext) tryAllocate() (*schedulingAllocation, str
 
 // Try process reservations for the partition
 // Lock free call this all locks are taken when needed in called functions
-func (psc *partitionSchedulingContext) tryReservedAllocate() (*schedulingAllocation, string) {
+func (psc *partitionSchedulingContext) tryReservedAllocate() *schedulingAllocation {
 	if len(psc.reservedApps) == 0 {
-		return nil, ""
+		return nil
 	}
 	// try allocating from the root down
 	return psc.root.tryReservedAllocate(psc)
@@ -363,7 +363,7 @@ func (psc *partitionSchedulingContext) tryReservedAllocate() (*schedulingAllocat
 
 // Process the allocation and make the changes in the partition.
 // If the allocation needs to be passed on to the cache true will be returned if not false is returned
-func (psc *partitionSchedulingContext) allocate(alloc *schedulingAllocation, nodeID string) bool {
+func (psc *partitionSchedulingContext) allocate(alloc *schedulingAllocation) bool {
 	psc.Lock()
 	defer psc.Unlock()
 	// partition is locked nothing can change from now on
@@ -378,13 +378,15 @@ func (psc *partitionSchedulingContext) allocate(alloc *schedulingAllocation, nod
 	// find the node make sure it still exists
 	// if the node was passed in use that ID instead of the one from the allocation
 	// the node ID is set when a reservation is allocated on a non-reserved node
-	if nodeID == "" {
+	var nodeID string
+	if alloc.reservedNodeID == "" {
 		nodeID = alloc.nodeID
 	} else {
 		log.Logger().Debug("Reservation allocated on different node",
 			zap.String("current node", alloc.nodeID),
 			zap.String("reserved node", nodeID),
 			zap.String("appID", appID))
+		nodeID = alloc.reservedNodeID
 	}
 	node := psc.nodes[nodeID]
 	if node == nil {
@@ -476,7 +478,7 @@ func (psc *partitionSchedulingContext) reserve(app *SchedulingApplication, node 
 		return
 	}
 	// all ok, add the reservation to the app, this will also reserve the node
-	if ok, err := app.reserve(node, ask); !ok {
+	if err := app.reserve(node, ask); err != nil {
 		log.Logger().Info("Failed to handle reservation, error during update of app",
 			zap.Error(err))
 		return

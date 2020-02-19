@@ -266,7 +266,7 @@ func (sa *SchedulingApplication) isReservedOnNode(nodeID string) bool {
 // Reserve the application for this node and ask combination.
 // If the reservation fails the function returns false, if the reservation is made it returns true.
 // If the node and ask combination was already reserved for the application this is a noop and returns true.
-func (sa *SchedulingApplication) reserve(node *SchedulingNode, ask *schedulingAllocationAsk) (bool, error) {
+func (sa *SchedulingApplication) reserve(node *SchedulingNode, ask *schedulingAllocationAsk) error {
 	sa.Lock()
 	defer sa.Unlock()
 	// create the reservation (includes nil checks)
@@ -276,25 +276,25 @@ func (sa *SchedulingApplication) reserve(node *SchedulingNode, ask *schedulingAl
 			zap.String("app", sa.ApplicationInfo.ApplicationID),
 			zap.Any("node", node),
 			zap.Any("ask", ask))
-		return false, fmt.Errorf("reservation creation failed node or ask are nil on appID %s", sa.ApplicationInfo.ApplicationID)
+		return fmt.Errorf("reservation creation failed node or ask are nil on appID %s", sa.ApplicationInfo.ApplicationID)
 	}
 	allocKey := ask.AskProto.AllocationKey
 	if sa.requests[allocKey] == nil {
 		log.Logger().Debug("ask is not registered to this app",
 			zap.String("app", sa.ApplicationInfo.ApplicationID),
 			zap.String("allocKey", allocKey))
-		return false, fmt.Errorf("reservation creation failed ask %s not found on appID %s", allocKey, sa.ApplicationInfo.ApplicationID)
+		return fmt.Errorf("reservation creation failed ask %s not found on appID %s", allocKey, sa.ApplicationInfo.ApplicationID)
 	}
 	if !sa.canAskReserve(ask) {
-		return false, fmt.Errorf("reservation of ask exceeds pending repeat, pending ask repeat %d", ask.pendingRepeatAsk)
+		return fmt.Errorf("reservation of ask exceeds pending repeat, pending ask repeat %d", ask.pendingRepeatAsk)
 	}
 	// check if we can reserve the node before reserving on the app
-	if ok, err := node.reserve(sa, ask); !ok {
-		return ok, err
+	if err := node.reserve(sa, ask); err != nil {
+		return err
 	}
 	sa.reservations[nodeReservation.getKey()] = nodeReservation
 	// reservation added successfully
-	return true, nil
+	return nil
 }
 
 // unReserve the application for this node and ask combination.
@@ -384,7 +384,7 @@ func (sa *SchedulingApplication) sortRequests(ascending bool) {
 }
 
 // Try a regular allocation of the pending requests
-func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *partitionSchedulingContext) (*schedulingAllocation, string) {
+func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *partitionSchedulingContext) *schedulingAllocation {
 	sa.Lock()
 	defer sa.Unlock()
 	// make sure the request are sorted
@@ -396,19 +396,19 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 			continue
 		}
 		if nodeIterator := ctx.getNodeIterator(); nodeIterator != nil {
-			alloc, nodeID := sa.tryNodes(request, nodeIterator)
+			alloc := sa.tryNodes(request, nodeIterator)
 			// have a candidate return it
 			if alloc != nil {
-				return alloc, nodeID
+				return alloc
 			}
 		}
 	}
 	// no requests fit, skip to next app
-	return nil, ""
+	return nil
 }
 
 // Try a reserved allocation of an outstanding reservation
-func (sa *SchedulingApplication) tryReservedAllocate(headRoom *resources.Resource, ctx *partitionSchedulingContext) (*schedulingAllocation, string) {
+func (sa *SchedulingApplication) tryReservedAllocate(headRoom *resources.Resource, ctx *partitionSchedulingContext) *schedulingAllocation {
 	sa.Lock()
 	defer sa.Unlock()
 	// process all outstanding reservations and pick the first one that fits
@@ -430,7 +430,7 @@ func (sa *SchedulingApplication) tryReservedAllocate(headRoom *resources.Resourc
 			// remove the reservation as this should not be reserved
 			alloc := newSchedulingAllocation(unreserveAsk, reserve.nodeID)
 			alloc.result = unreserved
-			return alloc, ""
+			return alloc
 		}
 		// check if this fits in the queue's head room
 		if !resources.FitIn(headRoom, ask.AllocatedResource) {
@@ -441,7 +441,7 @@ func (sa *SchedulingApplication) tryReservedAllocate(headRoom *resources.Resourc
 		// allocation worked set the result and return
 		if alloc != nil {
 			alloc.result = allocatedReserved
-			return alloc, ""
+			return alloc
 		}
 	}
 	// lets try this on all other nodes
@@ -450,11 +450,11 @@ func (sa *SchedulingApplication) tryReservedAllocate(headRoom *resources.Resourc
 			alloc := sa.tryNodesNoReserve(reserve.ask, nodeIterator, reserve.nodeID)
 			// have a candidate return it, including the node that was reserved
 			if alloc != nil {
-				return alloc, reserve.nodeID
+				return alloc
 			}
 		}
 	}
-	return nil, ""
+	return nil
 }
 
 // Try all the nodes for a reserved request that have not been tried yet.
@@ -469,6 +469,7 @@ func (sa *SchedulingApplication) tryNodesNoReserve(ask *schedulingAllocationAsk,
 		alloc := sa.tryNode(node, ask)
 		// allocation worked so return
 		if alloc != nil {
+			alloc.reservedNodeID = reservedNode
 			alloc.result = allocatedReserved
 			return alloc
 		}
@@ -479,7 +480,7 @@ func (sa *SchedulingApplication) tryNodesNoReserve(ask *schedulingAllocationAsk,
 
 // Try all the nodes for a request. The result is an allocation or reservation of a node.
 // New allocations can only be reserved after a delay.
-func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIterator NodeIterator) (*schedulingAllocation, string) {
+func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIterator NodeIterator) *schedulingAllocation {
 	var nodeToReserve *SchedulingNode
 	scoreReserved := math.Inf(1)
 	// check if the ask is reserved or not
@@ -503,7 +504,7 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 					zap.String("nodeID", node.NodeID),
 					zap.String("allocationKey", allocKey))
 				alloc.result = allocatedReserved
-				return alloc, ""
+				return alloc
 			}
 			// we could also have a different node reserved for this ask if it has pick one of
 			// the reserved nodes to unreserve (first one in the list)
@@ -514,11 +515,12 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 					zap.String("nodeID", nodeID),
 					zap.String("allocationKey", allocKey))
 				alloc.result = allocatedReserved
-				return alloc, nodeID
+				alloc.reservedNodeID = nodeID
+				return alloc
 			}
 			// nothing reserved just return this as a normal alloc
 			alloc.result = allocated
-			return alloc, ""
+			return alloc
 		}
 		// nothing allocated should we look at a reservation?
 		// TODO make this smarter a hardcoded delay is not the right thing
@@ -541,10 +543,10 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 		// return allocation proposal and mark it as a reservation
 		alloc := newSchedulingAllocation(ask, nodeToReserve.NodeID)
 		alloc.result = reserved
-		return alloc, ""
+		return alloc
 	}
 	// ask does not fit, skip to next ask
-	return nil, ""
+	return nil
 }
 
 // Try allocating on one specific node

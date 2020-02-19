@@ -468,31 +468,31 @@ func (sq *SchedulingQueue) getMaxResource() *resources.Resource {
 // the configured queue sortType. Queues without pending resources are skipped.
 // Applications are sorted based on the application sortType. Applications without pending resources are skipped.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *SchedulingQueue) tryAllocate(ctx *partitionSchedulingContext) (*schedulingAllocation, string) {
+func (sq *SchedulingQueue) tryAllocate(ctx *partitionSchedulingContext) *schedulingAllocation {
 	if sq.isLeafQueue() {
 		// get the headroom
 		headRoom := sq.getHeadRoom()
 		// process the apps (filters out app without pending requests)
 		for _, app := range sq.sortApplications() {
-			alloc, nodeID := app.tryAllocate(headRoom, ctx)
+			alloc := app.tryAllocate(headRoom, ctx)
 			if alloc != nil {
 				log.Logger().Debug("allocation found on queue",
 					zap.String("queueName", sq.Name),
 					zap.String("appID", app.ApplicationInfo.ApplicationID),
 					zap.String("allocation", alloc.String()))
-				return alloc, nodeID
+				return alloc
 			}
 		}
 	} else {
 		// process the child queues (filters out queues without pending requests)
 		for _, child := range sq.sortQueues() {
-			alloc, nodeID := child.tryAllocate(ctx)
+			alloc := child.tryAllocate(ctx)
 			if alloc != nil {
-				return alloc, nodeID
+				return alloc
 			}
 		}
 	}
-	return nil, ""
+	return nil
 }
 
 // Try allocate reserved requests. This only gets called if there is a pending request on this queue or its children.
@@ -500,7 +500,7 @@ func (sq *SchedulingQueue) tryAllocate(ctx *partitionSchedulingContext) (*schedu
 // the configured queue sortType. Queues without pending resources are skipped.
 // Applications are currently NOT sorted and are iterated over in a random order.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *SchedulingQueue) tryReservedAllocate(ctx *partitionSchedulingContext) (*schedulingAllocation, string) {
+func (sq *SchedulingQueue) tryReservedAllocate(ctx *partitionSchedulingContext) *schedulingAllocation {
 	if sq.isLeafQueue() {
 		// skip if it has no reservations
 		if len(sq.reservedApps) != 0 {
@@ -514,26 +514,26 @@ func (sq *SchedulingQueue) tryReservedAllocate(ctx *partitionSchedulingContext) 
 						zap.Int("reservations", numRes))
 				}
 				app := sq.getApplication(appID)
-				alloc, nodeID := app.tryReservedAllocate(headRoom, ctx)
+				alloc := app.tryReservedAllocate(headRoom, ctx)
 				if alloc != nil {
 					log.Logger().Debug("reservation found for allocation found on queue",
 						zap.String("queueName", sq.Name),
 						zap.String("appID", appID),
 						zap.String("allocation", alloc.String()))
-					return alloc, nodeID
+					return alloc
 				}
 			}
 		}
 	} else {
 		// process the child queues (filters out queues that have no pending requests)
 		for _, child := range sq.sortQueues() {
-			alloc, nodeID := child.tryReservedAllocate(ctx)
+			alloc := child.tryReservedAllocate(ctx)
 			if alloc != nil {
-				return alloc, nodeID
+				return alloc
 			}
 		}
 	}
-	return nil, ""
+	return nil
 }
 
 // Add an reserved app to the list.

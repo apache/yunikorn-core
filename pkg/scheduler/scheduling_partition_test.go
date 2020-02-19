@@ -232,7 +232,7 @@ func TestTryAllocate(t *testing.T) {
 	if partition == nil {
 		t.Fatal("partition create failed")
 	}
-	if alloc, _ := partition.tryAllocate(); alloc != nil {
+	if alloc := partition.tryAllocate(); alloc != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %v", alloc.String())
 	}
 
@@ -293,7 +293,7 @@ func TestTryAllocate(t *testing.T) {
 	}
 
 	// first allocation should be app-1 and alloc-2
-	alloc, _ := partition.tryAllocate()
+	alloc := partition.tryAllocate()
 	if alloc == nil {
 		t.Fatal("allocation did not return any allocation")
 	}
@@ -303,13 +303,13 @@ func TestTryAllocate(t *testing.T) {
 	assert.Equal(t, alloc.schedulingAsk.AskProto.AllocationKey, "alloc-2", "expected ask alloc-2 to be allocated")
 
 	// process the allocation like the scheduler does after a try
-	toCache := partition.allocate(alloc, "")
+	toCache := partition.allocate(alloc)
 	if !toCache {
 		t.Fatalf("normal allocation should be passed back to cache")
 	}
 
 	// second allocation should be app-2 and alloc-1: higher up in the queue hierarchy
-	alloc, _ = partition.tryAllocate()
+	alloc = partition.tryAllocate()
 	if alloc == nil {
 		t.Fatal("allocation did not return any allocation")
 	}
@@ -319,13 +319,13 @@ func TestTryAllocate(t *testing.T) {
 	assert.Equal(t, alloc.schedulingAsk.AskProto.AllocationKey, "alloc-1", "expected ask alloc-1 to be allocated")
 
 	// process the allocation like the scheduler does after a try
-	toCache = partition.allocate(alloc, "")
+	toCache = partition.allocate(alloc)
 	if !toCache {
 		t.Fatalf("second normal allocation should be passed back to cache")
 	}
 
 	// third allocation should be app-1 and alloc-1
-	alloc, _ = partition.tryAllocate()
+	alloc = partition.tryAllocate()
 	if alloc == nil {
 		t.Fatal("allocation did not return any allocation")
 	}
@@ -335,7 +335,7 @@ func TestTryAllocate(t *testing.T) {
 	assert.Equal(t, alloc.schedulingAsk.AskProto.AllocationKey, "alloc-1", "expected ask alloc-1 to be allocated")
 
 	// process the allocation like the scheduler does after a try
-	toCache = partition.allocate(alloc, "")
+	toCache = partition.allocate(alloc)
 	if !toCache {
 		t.Fatalf("third normal allocation should be passed back to cache")
 	}
@@ -349,7 +349,7 @@ func TestTryAllocateLarge(t *testing.T) {
 	if partition == nil {
 		t.Fatal("partition create failed")
 	}
-	if alloc, _ := partition.tryAllocate(); alloc != nil {
+	if alloc := partition.tryAllocate(); alloc != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %v", alloc.String())
 	}
 
@@ -375,7 +375,7 @@ func TestTryAllocateLarge(t *testing.T) {
 	if err != nil || !resources.Equals(res, delta) {
 		t.Errorf("failed to add ask to app resource added: %v expected %v (err = %v)", delta, res, err)
 	}
-	alloc, _ := partition.tryAllocate()
+	alloc := partition.tryAllocate()
 	if alloc != nil {
 		t.Fatalf("allocation did return allocation which does not fit: %s", alloc.String())
 	}
@@ -387,7 +387,7 @@ func TestAllocReserveNewNode(t *testing.T) {
 	if partition == nil {
 		t.Fatal("partition create failed")
 	}
-	if alloc, _ := partition.tryAllocate(); alloc != nil {
+	if alloc := partition.tryAllocate(); alloc != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %v", alloc.String())
 	}
 
@@ -419,23 +419,23 @@ func TestAllocReserveNewNode(t *testing.T) {
 		t.Errorf("failed to add ask to app resource added: %v expected %v (err = %v)", delta, res, err)
 	}
 	// the first one should be allocated
-	alloc, _ := partition.tryAllocate()
+	alloc := partition.tryAllocate()
 	if alloc == nil {
 		t.Fatalf("1st allocation did not return the correct allocation")
 	}
 	assert.Equal(t, allocated, alloc.result, "allocation result should have been allocated")
-	toCache := partition.allocate(alloc, "")
+	toCache := partition.allocate(alloc)
 	if !toCache {
 		t.Fatalf("1st normal allocation should be passed back to cache")
 	}
 	// the second one should be reserved as the 2nd node is not scheduling
-	alloc, _ = partition.tryAllocate()
+	alloc = partition.tryAllocate()
 	if alloc == nil {
 		t.Fatalf("2nd allocation did not return the correct allocation")
 	}
 	assert.Equal(t, reserved, alloc.result, "allocation result should have been reserved")
 	nodeReserved := alloc.nodeID
-	toCache = partition.allocate(alloc, "")
+	toCache = partition.allocate(alloc)
 	if toCache {
 		t.Fatalf("2nd allocation reservation should not be passed back to cache")
 	}
@@ -444,11 +444,10 @@ func TestAllocReserveNewNode(t *testing.T) {
 
 	// turn on 2nd node
 	node2.nodeInfo.SetSchedulable(true)
-	var nodeID string
-	alloc, nodeID = partition.tryReservedAllocate()
+	alloc = partition.tryReservedAllocate()
 	assert.Equal(t, allocatedReserved, alloc.result, "allocation result should have been allocatedReserved")
-	assert.Equal(t, nodeID, nodeReserved, "node should be set from reserved with new node")
-	toCache = partition.allocate(alloc, nodeID)
+	assert.Equal(t, alloc.reservedNodeID, nodeReserved, "node should be set from reserved with new node")
+	toCache = partition.allocate(alloc)
 	if !toCache {
 		t.Fatalf("allocation from reservation should be passed back to cache")
 	}
@@ -461,7 +460,7 @@ func TestTryAllocateReserve(t *testing.T) {
 	if partition == nil {
 		t.Fatal("partition create failed")
 	}
-	if alloc, _ := partition.tryReservedAllocate(); alloc != nil {
+	if alloc := partition.tryReservedAllocate(); alloc != nil {
 		t.Fatalf("empty cluster reserved allocate returned allocation: %v", alloc.String())
 	}
 
@@ -504,18 +503,18 @@ func TestTryAllocateReserve(t *testing.T) {
 	}
 
 	// first allocation should be app-1 and alloc-2
-	alloc, nodeID := partition.tryReservedAllocate()
+	alloc := partition.tryReservedAllocate()
 	if alloc == nil {
 		t.Fatal("allocation did not return any allocation")
 	}
 	assert.Equal(t, alloc.result, allocatedReserved, "result is not the expected allocated from reserved")
-	assert.Equal(t, nodeID, "", "node should not be set for allocated from reserved")
+	assert.Equal(t, alloc.reservedNodeID, "", "node should not be set for allocated from reserved")
 	assert.Equal(t, len(alloc.releases), 0, "released allocations should have been 0")
 	assert.Equal(t, alloc.schedulingAsk.ApplicationID, appID, "expected application app-1 to be allocated")
 	assert.Equal(t, alloc.schedulingAsk.AskProto.AllocationKey, "alloc-2", "expected ask alloc-2 to be allocated")
 
 	// process the allocation like the scheduler does after a try
-	toCache := partition.allocate(alloc, nodeID)
+	toCache := partition.allocate(alloc)
 	if !toCache {
 		t.Fatalf("allocation from reserved should be passed back to cache")
 	}
@@ -525,12 +524,12 @@ func TestTryAllocateReserve(t *testing.T) {
 	}
 
 	// no reservations left this should return nil
-	alloc, nodeID = partition.tryReservedAllocate()
-	if alloc != nil || nodeID != "" {
-		t.Fatalf("reserved allocation should not return any allocation: %v, '%s'", alloc, nodeID)
+	alloc = partition.tryReservedAllocate()
+	if alloc != nil {
+		t.Fatalf("reserved allocation should not return any allocation: %v, '%s'", alloc, alloc.reservedNodeID)
 	}
 	// try non reserved this should allocate
-	alloc, _ = partition.tryAllocate()
+	alloc = partition.tryAllocate()
 	if alloc == nil {
 		t.Fatal("allocation did not return any allocation")
 	}
@@ -548,7 +547,7 @@ func TestTryAllocateWithReserved(t *testing.T) {
 	if partition == nil {
 		t.Fatal("partition create failed")
 	}
-	if alloc, _ := partition.tryReservedAllocate(); alloc != nil {
+	if alloc := partition.tryReservedAllocate(); alloc != nil {
 		t.Fatalf("empty cluster reserved allocate returned allocation: %v", alloc.String())
 	}
 
@@ -583,22 +582,22 @@ func TestTryAllocateWithReserved(t *testing.T) {
 		t.Fatalf("reservation failure for ask and node2")
 	}
 	assert.Equal(t, 1, len(partition.reservedApps), "partition should have reserved app")
-	alloc, nodeID := partition.tryAllocate()
-	if alloc == nil || nodeID == "" {
-		t.Fatalf("allocation did not return correct allocation %v, %s", alloc, nodeID)
+	alloc := partition.tryAllocate()
+	if alloc == nil || alloc.reservedNodeID == "" {
+		t.Fatalf("allocation did not return correct allocation %v, %s", alloc, alloc.reservedNodeID)
 	}
 	assert.Equal(t, allocatedReserved, alloc.result, "expected reserved allocation to be returned")
-	assert.Equal(t, node2.NodeID, nodeID, "expected nodeID to be set on tryAllocate")
+	assert.Equal(t, node2.NodeID, alloc.reservedNodeID, "expected nodeID to be set on tryAllocate")
 
 	// confirm the outcome
-	partition.allocate(alloc, nodeID)
+	partition.allocate(alloc)
 	assert.Equal(t, 0, len(node2.reservations), "reservation should have been removed from node")
 	assert.Equal(t, false, app.isReservedOnNode(node2.NodeID), "reservation cleanup for ask on app failed")
 
 	// node2 is unreserved now so the next one should allocate on the 2nd node (fair sharing)
-	alloc, nodeID = partition.tryAllocate()
-	if alloc == nil || nodeID != "" {
-		t.Fatalf("allocation did not return correct allocation %v, %s", alloc, nodeID)
+	alloc = partition.tryAllocate()
+	if alloc == nil || alloc.reservedNodeID != "" {
+		t.Fatalf("allocation did not return correct allocation %v, %s", alloc, alloc.reservedNodeID)
 	}
 	assert.Equal(t, allocated, alloc.result, "expected allocated allocation to be returned")
 	assert.Equal(t, node2.NodeID, alloc.nodeID, "expected allocation on node2 to be returned")

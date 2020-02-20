@@ -35,12 +35,6 @@ type preemptionPartitionContext struct {
 	leafQueues             map[string]*preemptionQueueContext
 }
 
-// Parameters used to do allocation within preemption loop.
-type preemptionParameters struct {
-	crossQueuePreemption bool
-	blacklistedRequest   map[string]bool
-}
-
 type preemptionQueueContext struct {
 	queuePath       string
 	schedulingQueue *SchedulingQueue
@@ -65,10 +59,10 @@ type queuePreemptCalcResource struct {
 }
 
 func (m *queuePreemptCalcResource) initFromSchedulingQueue(queue *SchedulingQueue) {
-	m.guaranteed = queue.CachedQueueInfo.GuaranteedResource
-	m.used = queue.CachedQueueInfo.GetAllocatedResource()
+	m.guaranteed = queue.QueueInfo.GuaranteedResource
+	m.used = queue.QueueInfo.GetAllocatedResource()
 	m.pending = queue.GetPendingResource()
-	m.max = queue.CachedQueueInfo.MaxResource
+	m.max = queue.QueueInfo.GetMaxResource()
 }
 
 func newQueuePreemptCalcResource() *queuePreemptCalcResource {
@@ -90,38 +84,38 @@ func getPreemptionPolicies() []PreemptionPolicy {
 }
 
 // Visible by tests
-func (m *Scheduler) SingleStepPreemption() {
+func (s *Scheduler) SingleStepPreemption() {
 	// Skip if no preemption needed.
-	if !m.clusterSchedulingContext.NeedPreemption() {
+	if !s.clusterSchedulingContext.NeedPreemption() {
 		return
 	}
 
-	m.resetPreemptionContext()
+	s.resetPreemptionContext()
 
 	// Do preemption for each policies
 	for _, policy := range getPreemptionPolicies() {
-		policy.DoPreemption(m)
+		policy.DoPreemption(s)
 	}
 }
 
 // Copy & Reset PreemptionContext
-func (m *Scheduler) resetPreemptionContext() {
+func (s *Scheduler) resetPreemptionContext() {
 	// Create a new preemption context
-	m.preemptionContext = &preemptionContext{
+	s.preemptionContext = &preemptionContext{
 		partitions: make(map[string]*preemptionPartitionContext),
 	}
 
 	// Copy from scheduler
-	for partition, partitionContext := range m.clusterSchedulingContext.getPartitionMapClone() {
+	for partition, partitionContext := range s.clusterSchedulingContext.getPartitionMapClone() {
 		preemptionPartitionCtx := &preemptionPartitionContext{
 			leafQueues: make(map[string]*preemptionQueueContext),
 		}
-		m.preemptionContext.partitions[partition] = preemptionPartitionCtx
-		preemptionPartitionCtx.root = m.recursiveInitPreemptionQueueContext(preemptionPartitionCtx, nil, partitionContext.Root)
+		s.preemptionContext.partitions[partition] = preemptionPartitionCtx
+		preemptionPartitionCtx.root = s.recursiveInitPreemptionQueueContext(preemptionPartitionCtx, nil, partitionContext.root)
 	}
 }
 
-func (m *Scheduler) recursiveInitPreemptionQueueContext(preemptionPartitionCtx *preemptionPartitionContext, parent *preemptionQueueContext,
+func (s *Scheduler) recursiveInitPreemptionQueueContext(preemptionPartitionCtx *preemptionPartitionContext, parent *preemptionQueueContext,
 	queue *SchedulingQueue) *preemptionQueueContext {
 	preemptionQueue := &preemptionQueueContext{
 		queuePath:       queue.Name,
@@ -136,7 +130,7 @@ func (m *Scheduler) recursiveInitPreemptionQueueContext(preemptionPartitionCtx *
 	}
 
 	for childName, child := range queue.childrenQueues {
-		preemptionQueue.children[childName] = m.recursiveInitPreemptionQueueContext(preemptionPartitionCtx, preemptionQueue, child)
+		preemptionQueue.children[childName] = s.recursiveInitPreemptionQueueContext(preemptionPartitionCtx, preemptionQueue, child)
 	}
 
 	return preemptionQueue

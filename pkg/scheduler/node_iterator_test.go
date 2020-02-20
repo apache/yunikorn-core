@@ -176,7 +176,7 @@ func newSchedNode(nodeID string) *SchedulingNode {
 	nodeInfo := &cache.NodeInfo{
 		NodeID: nodeID,
 	}
-	return NewSchedulingNode(nodeInfo)
+	return newSchedulingNode(nodeInfo)
 }
 
 // A list of nodes that can be iterated over.

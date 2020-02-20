@@ -36,20 +36,20 @@ const (
 	MinAvailableResources = 3 // node sorting, ascending on available resources
 )
 
-func SortQueue(queues []*SchedulingQueue, sortType SortType) {
+func sortQueue(queues []*SchedulingQueue, sortType SortType) {
 	// TODO add latency metric
 	if sortType == FairSortPolicy {
 		sort.SliceStable(queues, func(i, j int) bool {
 			l := queues[i]
 			r := queues[j]
-			comp := resources.CompUsageRatioSeparately(l.ProposingResource, l.CachedQueueInfo.GuaranteedResource,
-				r.ProposingResource, r.CachedQueueInfo.GuaranteedResource)
+			comp := resources.CompUsageRatioSeparately(l.getAssumeAllocated(), l.QueueInfo.GuaranteedResource,
+				r.getAssumeAllocated(), r.QueueInfo.GuaranteedResource)
 			return comp < 0
 		})
 	}
 }
 
-func SortApplications(apps []*SchedulingApplication, sortType SortType, globalResource *resources.Resource) {
+func sortApplications(apps []*SchedulingApplication, sortType SortType, globalResource *resources.Resource) {
 	// TODO add latency metric
 	switch sortType {
 	case FairSortPolicy:
@@ -57,7 +57,7 @@ func SortApplications(apps []*SchedulingApplication, sortType SortType, globalRe
 		sort.SliceStable(apps, func(i, j int) bool {
 			l := apps[i]
 			r := apps[j]
-			return resources.CompUsageRatio(l.MayAllocatedResource, r.MayAllocatedResource, globalResource) < 0
+			return resources.CompUsageRatio(l.getAssumeAllocated(), r.getAssumeAllocated(), globalResource) < 0
 		})
 	case FifoSortPolicy:
 		// Sort by submission time oldest first
@@ -69,7 +69,7 @@ func SortApplications(apps []*SchedulingApplication, sortType SortType, globalRe
 	}
 }
 
-func SortNodes(nodes []*SchedulingNode, sortType SortType) {
+func sortNodes(nodes []*SchedulingNode, sortType SortType) {
 	sortingStart := time.Now()
 	switch sortType {
 	case MaxAvailableResources:
@@ -88,4 +88,16 @@ func SortNodes(nodes []*SchedulingNode, sortType SortType) {
 		})
 	}
 	metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
+}
+
+func sortAskByPriority(requests []*schedulingAllocationAsk, ascending bool) {
+	sort.SliceStable(requests, func(i, j int) bool {
+		l := requests[i]
+		r := requests[j]
+
+		if ascending {
+			return l.priority < r.priority
+		}
+		return l.priority > r.priority
+	})
 }

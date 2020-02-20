@@ -30,6 +30,15 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
+const configDefault = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        queues:
+        - name: default
+`
+
 func createAllocation(queue, nodeID, allocID, appID string) *si.Allocation {
 	resAlloc := &si.Resource{
 		Resources: map[string]*si.Quantity{
@@ -131,14 +140,7 @@ partitions:
 }
 
 func TestAddNewNode(t *testing.T) {
-	data := `
-partitions:
-  - name: default
-    queues:
-      - name: root
-`
-
-	partition, err := CreatePartitionInfo([]byte(data))
+	partition, err := CreatePartitionInfo([]byte(configDefault))
 	if err != nil {
 		t.Fatalf("partition create failed: %v", err)
 	}
@@ -164,7 +166,7 @@ partitions:
 	}
 
 	// mark partition stopped, no new node can be added
-	if err = partition.HandlePartitionEvent(Stop); err != nil {
+	if err = partition.handlePartitionEvent(Stop); err != nil {
 		t.Fatalf("partition state change failed: %v", err)
 	}
 	waitForPartitionState(t, partition, Stopped.String(), 1000)
@@ -179,7 +181,7 @@ partitions:
 	}
 
 	// mark partition active again, the new node can be added
-	if err = partition.HandlePartitionEvent(Start); err != nil {
+	if err = partition.handlePartitionEvent(Start); err != nil {
 		t.Fatalf("partition state change failed: %v", err)
 	}
 	waitForPartitionState(t, partition, Active.String(), 1000)
@@ -191,14 +193,14 @@ partitions:
 	// check partition resources
 	memRes = partition.totalPartitionResource.Resources[resources.MEMORY]
 	if memRes != 2*memVal {
-		t.Errorf("add node to partition did not update total resources expected %d got %d", memVal, memRes)
+		t.Errorf("add node to partition did not update total resources expected %d got %d", 2*memVal, memRes)
 	}
 	if partition.GetTotalNodeCount() != 2 {
 		t.Errorf("node list was not updated, incorrect number of nodes registered expected 2 got %d", partition.GetTotalNodeCount())
 	}
 
 	// mark partition stopped, no new node can be added
-	if err = partition.HandlePartitionEvent(Remove); err != nil {
+	if err = partition.handlePartitionEvent(Remove); err != nil {
 		t.Fatalf("partition state change failed: %v", err)
 	}
 	waitForPartitionState(t, partition, Draining.String(), 1000)
@@ -213,23 +215,17 @@ partitions:
 }
 
 func TestRemoveNode(t *testing.T) {
-	data := `
-partitions:
-  - name: default
-    queues:
-      - name: root
-`
-
-	partition, err := CreatePartitionInfo([]byte(data))
+	partition, err := CreatePartitionInfo([]byte(configDefault))
 	if err != nil {
 		t.Fatalf("partition create failed: %v", err)
 	}
 	memVal := resources.Quantity(1000)
-	node1 := NewNodeForTest("node-1", resources.NewResourceFromMap(
+	nodeID := "node-1"
+	node1 := NewNodeForTest(nodeID, resources.NewResourceFromMap(
 		map[string]resources.Quantity{resources.MEMORY: memVal}))
 	// add a node this must work
 	err = partition.addNewNode(node1, nil)
-	if err != nil {
+	if err != nil || partition.GetNode(nodeID) == nil {
 		t.Errorf("add node to partition should not have failed: %v", err)
 	}
 	// check partition resources
@@ -238,14 +234,18 @@ partitions:
 		t.Errorf("add node to partition did not update total resources expected %d got %d", memVal, memRes)
 	}
 
-	// remove a bogus node should not do anything
-	partition.RemoveNode("does-not-exist")
-	if partition.GetTotalNodeCount() != 1 {
-		t.Errorf("node list was updated, node was removed expected 1 nodes got %d", partition.GetTotalNodeCount())
+	// remove a bogus node should not do anything: returns nil for allocations
+	released := partition.RemoveNode("does-not-exist")
+	if partition.GetTotalNodeCount() != 1 && released != nil {
+		t.Errorf("node list was updated, node was removed expected 1 nodes got %d, released allocations: %v",
+			partition.GetTotalNodeCount(), released)
 	}
 
-	// remove the node this cannot fail
-	partition.RemoveNode(node1.NodeID)
+	// remove the node this cannot fail: must return an empty array, not nil
+	released = partition.RemoveNode(nodeID)
+	if released == nil || len(released) != 0 {
+		t.Errorf("node released wrong allocation info, expected nothing got %v", released)
+	}
 	if partition.GetTotalNodeCount() != 0 {
 		t.Errorf("node list was not updated, node was not removed expected 0 got %d", partition.GetTotalNodeCount())
 	}
@@ -256,17 +256,57 @@ partitions:
 	}
 }
 
-func TestAddNewApplication(t *testing.T) {
-	data := `
-partitions:
-  - name: default
-    queues:
-      - name: root
-        queues:
-        - name: default
-`
+func TestRemoveNodeWithAllocations(t *testing.T) {
+	partition, err := CreatePartitionInfo([]byte(configDefault))
+	if err != nil {
+		t.Fatalf("partition create failed: %v", err)
+	}
 
-	partition, err := CreatePartitionInfo([]byte(data))
+	// add a new app
+	appID := "app-1"
+	queueName := "root.default"
+	appInfo := newApplicationInfo(appID, "default", queueName)
+	err = partition.addNewApplication(appInfo, true)
+	if err != nil {
+		t.Errorf("add application to partition should not have failed: %v", err)
+	}
+
+	// add a node with allocations: must have the correct app added already
+	memVal := resources.Quantity(1000)
+	nodeID := "node-1"
+	node1 := NewNodeForTest(nodeID, resources.NewResourceFromMap(
+		map[string]resources.Quantity{resources.MEMORY: memVal}))
+	allocs := []*si.Allocation{createAllocation(queueName, nodeID, "alloc-1", appID)}
+	// add a node this must work
+	err = partition.addNewNode(node1, allocs)
+	if err != nil || partition.GetNode(nodeID) == nil {
+		t.Fatalf("add node to partition should not have failed: %v", err)
+	}
+	// get what was allocated
+	allocated := node1.GetAllAllocations()
+	if len(allocated) != 1 {
+		t.Fatalf("allocation not added correctly expected 1 got: %v", allocated)
+	}
+	allocUUID := allocated[0].AllocationProto.UUID
+
+	// add broken allocations
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 1})
+	node1.allocations["notanapp"] = CreateMockAllocationInfo("notanapp", res, "noanapp", "root.default", nodeID)
+	node1.allocations["notanalloc"] = CreateMockAllocationInfo(appID, res, "notanalloc", "root.default", nodeID)
+
+	// remove the node this cannot fail
+	released := partition.RemoveNode(nodeID)
+	if partition.GetTotalNodeCount() != 0 {
+		t.Errorf("node list was not updated, node was not removed expected 0 got %d", partition.GetTotalNodeCount())
+	}
+	if len(released) != 1 {
+		t.Errorf("node did not release correct allocation expected 1 got %d", len(released))
+	}
+	assert.Equal(t, released[0].AllocationProto.UUID, allocUUID, "UUID returned by release not the same as on allocation")
+}
+
+func TestAddNewApplication(t *testing.T) {
+	partition, err := CreatePartitionInfo([]byte(configDefault))
 	if err != nil {
 		t.Fatalf("partition create failed: %v", err)
 	}
@@ -289,7 +329,7 @@ partitions:
 	}
 
 	// mark partition stopped, no new application can be added
-	if err = partition.HandlePartitionEvent(Stop); err != nil {
+	if err = partition.handlePartitionEvent(Stop); err != nil {
 		t.Fatalf("partition state change failed: %v", err)
 	}
 	waitForPartitionState(t, partition, Stopped.String(), 1000)
@@ -302,7 +342,7 @@ partitions:
 
 	// mark partition for deletion, no new application can be added
 	partition.stateMachine.SetState(Active.String())
-	if err = partition.HandlePartitionEvent(Remove); err != nil {
+	if err = partition.handlePartitionEvent(Remove); err != nil {
 		t.Fatalf("partition state change failed: %v", err)
 	}
 	waitForPartitionState(t, partition, Draining.String(), 1000)
@@ -314,16 +354,7 @@ partitions:
 }
 
 func TestAddNodeWithAllocations(t *testing.T) {
-	data := `
-partitions:
-  - name: default
-    queues:
-      - name: root
-        queues:
-        - name: default
-`
-
-	partition, err := CreatePartitionInfo([]byte(data))
+	partition, err := CreatePartitionInfo([]byte(configDefault))
 	if err != nil {
 		t.Fatalf("partition create failed: %v", err)
 	}
@@ -386,16 +417,7 @@ partitions:
 }
 
 func TestAddNewAllocation(t *testing.T) {
-	data := `
-partitions:
-  - name: default
-    queues:
-      - name: root
-        queues:
-        - name: default
-`
-
-	partition, err := CreatePartitionInfo([]byte(data))
+	partition, err := CreatePartitionInfo([]byte(configDefault))
 	if err != nil {
 		t.Fatalf("partition create failed: %v", err)
 	}
@@ -449,8 +471,17 @@ partitions:
 		t.Errorf("adding allocation worked and should have failed: %v", alloc)
 	}
 
+	// mark the node as not schedulable: allocation must fail
+	node1.SetSchedulable(false)
+	alloc, err = partition.addNewAllocation(createAllocationProposal(queueName, nodeID, "alloc-4", appID))
+	if err == nil || alloc != nil {
+		t.Errorf("adding allocation worked and should have failed: %v", alloc)
+	}
+	// reset the state so it cannot affect further tests
+	node1.SetSchedulable(true)
+
 	// mark partition stopped, no new application can be added
-	if err = partition.HandlePartitionEvent(Stop); err != nil {
+	if err = partition.handlePartitionEvent(Stop); err != nil {
 		t.Fatalf("partition state change failed: %v", err)
 	}
 	waitForPartitionState(t, partition, Stopped.String(), 1000)
@@ -460,7 +491,7 @@ partitions:
 	}
 	// mark partition for removal, no new application can be added
 	partition.stateMachine.SetState(Active.String())
-	if err = partition.HandlePartitionEvent(Remove); err != nil {
+	if err = partition.handlePartitionEvent(Remove); err != nil {
 		t.Fatalf("partition state change failed: %v", err)
 	}
 	waitForPartitionState(t, partition, Draining.String(), 1000)
@@ -471,16 +502,7 @@ partitions:
 }
 
 func TestRemoveApp(t *testing.T) {
-	data := `
-partitions:
-  - name: default
-    queues:
-      - name: root
-        queues:
-        - name: default
-`
-
-	partition, err := CreatePartitionInfo([]byte(data))
+	partition, err := CreatePartitionInfo([]byte(configDefault))
 	if err != nil {
 		t.Fatalf("partition create failed: %v", err)
 	}
@@ -554,16 +576,7 @@ partitions:
 }
 
 func TestRemoveAppAllocs(t *testing.T) {
-	data := `
-partitions:
-  - name: default
-    queues:
-      - name: root
-        queues:
-        - name: default
-`
-
-	partition, err := CreatePartitionInfo([]byte(data))
+	partition, err := CreatePartitionInfo([]byte(configDefault))
 	if err != nil {
 		t.Fatalf("partition create failed: %v", err)
 	}
@@ -630,16 +643,7 @@ partitions:
 }
 
 func TestCreateQueues(t *testing.T) {
-	data := `
-partitions:
-  - name: default
-    queues:
-      - name: root
-        queues:
-        - name: default
-`
-
-	partition, err := CreatePartitionInfo([]byte(data))
+	partition, err := CreatePartitionInfo([]byte(configDefault))
 	if err != nil {
 		t.Fatalf("partition create failed: %v", err)
 	}

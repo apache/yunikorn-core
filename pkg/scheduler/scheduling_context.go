@@ -25,13 +25,12 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/schedulerevent"
 )
 
 type ClusterSchedulingContext struct {
-	partitions map[string]*PartitionSchedulingContext
+	partitions map[string]*partitionSchedulingContext
 
 	needPreemption bool
 
@@ -40,22 +39,32 @@ type ClusterSchedulingContext struct {
 
 func NewClusterSchedulingContext() *ClusterSchedulingContext {
 	return &ClusterSchedulingContext{
-		partitions: make(map[string]*PartitionSchedulingContext),
+		partitions: make(map[string]*partitionSchedulingContext),
 	}
 }
 
-func (csc *ClusterSchedulingContext) getPartitionMapClone() map[string]*PartitionSchedulingContext {
+func (csc *ClusterSchedulingContext) getPartitionMapClone() map[string]*partitionSchedulingContext {
 	csc.lock.RLock()
 	defer csc.lock.RUnlock()
 
-	newMap := make(map[string]*PartitionSchedulingContext)
+	newMap := make(map[string]*partitionSchedulingContext)
 	for k, v := range csc.partitions {
 		newMap[k] = v
 	}
 	return newMap
 }
 
-func (csc *ClusterSchedulingContext) GetSchedulingApplication(appID string, partitionName string) *SchedulingApplication {
+func (csc *ClusterSchedulingContext) getPartition(partitionName string) *partitionSchedulingContext {
+	csc.lock.RLock()
+	defer csc.lock.RUnlock()
+
+	return csc.partitions[partitionName]
+}
+
+// Get the scheduling application based on the ID from the partition.
+// Returns nil if the partition or app cannot be found.
+// Visible for tests
+func (csc *ClusterSchedulingContext) GetSchedulingApplication(appID, partitionName string) *SchedulingApplication {
 	csc.lock.RLock()
 	defer csc.lock.RUnlock()
 
@@ -66,7 +75,9 @@ func (csc *ClusterSchedulingContext) GetSchedulingApplication(appID string, part
 	return nil
 }
 
-// Visible by tests
+// Get the scheduling queue based on the queue path name from the partition.
+// Returns nil if the partition or queue cannot be found.
+// Visible for tests
 func (csc *ClusterSchedulingContext) GetSchedulingQueue(queueName string, partitionName string) *SchedulingQueue {
 	csc.lock.RLock()
 	defer csc.lock.RUnlock()
@@ -78,7 +89,21 @@ func (csc *ClusterSchedulingContext) GetSchedulingQueue(queueName string, partit
 	return nil
 }
 
-func (csc *ClusterSchedulingContext) AddSchedulingApplication(schedulingApp *SchedulingApplication) error {
+// Return the list of reservations for the partition.
+// Returns nil if the partition cannot be found or an empty map if there are no reservations
+// Visible for tests
+func (csc *ClusterSchedulingContext) GetPartitionReservations(partitionName string) map[string]int {
+	csc.lock.RLock()
+	defer csc.lock.RUnlock()
+
+	if partition := csc.partitions[partitionName]; partition != nil {
+		return partition.getReservations()
+	}
+
+	return nil
+}
+
+func (csc *ClusterSchedulingContext) addSchedulingApplication(schedulingApp *SchedulingApplication) error {
 	partitionName := schedulingApp.ApplicationInfo.Partition
 	appID := schedulingApp.ApplicationInfo.ApplicationID
 
@@ -86,7 +111,7 @@ func (csc *ClusterSchedulingContext) AddSchedulingApplication(schedulingApp *Sch
 	defer csc.lock.Unlock()
 
 	if partition := csc.partitions[partitionName]; partition != nil {
-		if err := partition.AddSchedulingApplication(schedulingApp); err != nil {
+		if err := partition.addSchedulingApplication(schedulingApp); err != nil {
 			return err
 		}
 	} else {
@@ -96,12 +121,12 @@ func (csc *ClusterSchedulingContext) AddSchedulingApplication(schedulingApp *Sch
 	return nil
 }
 
-func (csc *ClusterSchedulingContext) RemoveSchedulingApplication(appID string, partitionName string) (*SchedulingApplication, error) {
+func (csc *ClusterSchedulingContext) removeSchedulingApplication(appID string, partitionName string) (*SchedulingApplication, error) {
 	csc.lock.Lock()
 	defer csc.lock.Unlock()
 
 	if partition := csc.partitions[partitionName]; partition != nil {
-		schedulingApp, err := partition.RemoveSchedulingApplication(appID)
+		schedulingApp, err := partition.removeSchedulingApplication(appID)
 		if err != nil {
 			return nil, err
 		}
@@ -134,9 +159,9 @@ func (csc *ClusterSchedulingContext) updateSchedulingPartitions(partitions []*ca
 			log.Logger().Info("creating scheduling partition",
 				zap.String("partitionName", updatedPartition.Name))
 			// create a new partition and add the queues
-			root := NewSchedulingQueueInfo(updatedPartition.Root, nil)
+			root := newSchedulingQueueInfo(updatedPartition.Root, nil)
 			newPartition := newPartitionSchedulingContext(updatedPartition, root)
-			newPartition.partitionManager = &PartitionManager{
+			newPartition.partitionManager = &partitionManager{
 				psc: newPartition,
 				csc: csc,
 			}
@@ -239,8 +264,9 @@ func (csc *ClusterSchedulingContext) removeSchedulingNode(info *cache.NodeInfo) 
 	partition.removeSchedulingNode(info.NodeID)
 }
 
-// Get a scheduling node based name and partition.
+// Get a scheduling node based on its name from the partition.
 // Returns nil if the partition or node cannot be found.
+// Visible for tests
 func (csc *ClusterSchedulingContext) GetSchedulingNode(nodeID, partitionName string) *SchedulingNode {
 	csc.lock.Lock()
 	defer csc.lock.Unlock()
@@ -253,24 +279,6 @@ func (csc *ClusterSchedulingContext) GetSchedulingNode(nodeID, partitionName str
 		return nil
 	}
 	return partition.getSchedulingNode(nodeID)
-}
-
-// Inform the scheduling node of the proposed allocation result.
-// This just reduces the allocating resource on the node.
-// This is a lock free call: locks are taken while retrieving the node and when updating the node
-func (csc *ClusterSchedulingContext) updateSchedulingNodeAlloc(alloc *commonevents.AllocationProposal) {
-	// get the partition and node (both have to exist to get here)
-	node := csc.GetSchedulingNode(alloc.NodeID, alloc.PartitionName)
-
-	if node == nil {
-		log.Logger().Warn("node was removed while event was processed",
-			zap.String("partition", alloc.PartitionName),
-			zap.String("nodeID", alloc.NodeID),
-			zap.String("applicationID", alloc.ApplicationID),
-			zap.String("allocationKey", alloc.AllocationKey))
-		return
-	}
-	node.handleAllocationUpdate(alloc.AllocatedResource)
 }
 
 // Release preempted resources after the cache has been updated.
@@ -290,6 +298,6 @@ func (csc *ClusterSchedulingContext) releasePreemptedResources(resources []sched
 				zap.Any("resource", nodeRes.PreemptedRes))
 			continue
 		}
-		node.handlePreemptionUpdate(nodeRes.PreemptedRes)
+		node.decPreemptingResource(nodeRes.PreemptedRes)
 	}
 }

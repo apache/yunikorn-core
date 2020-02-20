@@ -44,25 +44,24 @@ const (
 // The queue structure as used throughout the scheduler
 type QueueInfo struct {
 	Name               string
-	MaxResource        *resources.Resource // When not set, max = nil
 	GuaranteedResource *resources.Resource // When not set, Guaranteed == 0
 	Parent             *QueueInfo          // link to the parent queue
-
-	Properties map[string]string // this should be treated as immutable the value is a merge of parent(s)
+	Properties         map[string]string   // this should be treated as immutable the value is a merge of parent(s)
 	// properties with the config for this queue only manipulated during creation
-
 	// of the queue or via a queue configuration update
 
 	// Private fields need protection
 	adminACL          security.ACL          // admin ACL
 	submitACL         security.ACL          // submit ACL
+	maxResource       *resources.Resource   // When not set, max = nil
 	allocatedResource *resources.Resource   // set based on allocation
 	isLeaf            bool                  // this is a leaf queue or not (i.e. parent)
 	isManaged         bool                  // queue is part of the config, not auto created
 	stateMachine      *fsm.FSM              // the state of the queue for scheduling
 	stateTime         time.Time             // last time the state was updated (needed for cleanup)
 	children          map[string]*QueueInfo // list of direct children
-	lock              sync.RWMutex          // lock for updating the queue
+
+	sync.RWMutex // lock for updating the queue
 }
 
 // Create a new queue from the configuration object.
@@ -83,7 +82,7 @@ func NewManagedQueue(conf configs.QueueConfig, parent *QueueInfo) (*QueueInfo, e
 
 	// add the queue in the structure
 	if parent != nil {
-		err := parent.AddChildQueue(qi)
+		err = parent.addChildQueue(qi)
 		if err != nil {
 			return nil, fmt.Errorf("queue creation failed: %s", err)
 		}
@@ -113,7 +112,7 @@ func NewUnmanagedQueue(name string, leaf bool, parent *QueueInfo) (*QueueInfo, e
 	// TODO set resources and properties on unmanaged queues
 	// add the queue in the structure
 	if parent != nil {
-		err := parent.AddChildQueue(qi)
+		err := parent.addChildQueue(qi)
 		if err != nil {
 			return nil, fmt.Errorf("queue creation failed: %s", err)
 		}
@@ -138,11 +137,38 @@ func (qi *QueueInfo) HandleQueueEvent(event SchedulingObjectEvent) error {
 	return err
 }
 
+// Return the currently allocated resource for the queue.
+// It returns a cloned object as we do not want to allow modifications to be made to the
+// value of the queue.
 func (qi *QueueInfo) GetAllocatedResource() *resources.Resource {
-	qi.lock.RLock()
-	defer qi.lock.RUnlock()
+	qi.RLock()
+	defer qi.RUnlock()
+	return qi.allocatedResource.Clone()
+}
 
-	return qi.allocatedResource
+// Return the max resource for the queue.
+// If not set the returned resource will be nil.
+func (qi *QueueInfo) GetMaxResource() *resources.Resource {
+	qi.RLock()
+	defer qi.RUnlock()
+	if qi.maxResource == nil {
+		return nil
+	}
+	return qi.maxResource.Clone()
+}
+
+// Set the max resource for root the queue.
+// Should only happen on the root, all other queues get it from the config via properties.
+func (qi *QueueInfo) setMaxResource(max *resources.Resource) {
+	qi.Lock()
+	defer qi.Unlock()
+
+	if qi.Parent != nil {
+		log.Logger().Warn("Max resources set on a queue that is not the root",
+			zap.String("queueName", qi.Name))
+		return
+	}
+	qi.maxResource = max.Clone()
 }
 
 // Return if this is a leaf queue or not
@@ -167,9 +193,9 @@ func (qi *QueueInfo) GetQueuePath() string {
 // - can only add to a non leaf queue
 // - cannot add when the queue is marked for deletion
 // - if this is the first child initialise
-func (qi *QueueInfo) AddChildQueue(child *QueueInfo) error {
-	qi.lock.Lock()
-	defer qi.lock.Unlock()
+func (qi *QueueInfo) addChildQueue(child *QueueInfo) error {
+	qi.Lock()
+	defer qi.Unlock()
 	if qi.isLeaf {
 		return fmt.Errorf("cannot add a child queue to a leaf queue: %s", qi.Name)
 	}
@@ -194,17 +220,17 @@ func (qi *QueueInfo) updateUsedResourceMetrics() {
 }
 
 // Increment the allocated resources for this queue (recursively)
-// Guard against going over max resources if the
+// Guard against going over max resources if set
 func (qi *QueueInfo) IncAllocatedResource(alloc *resources.Resource, nodeReported bool) error {
-	qi.lock.Lock()
-	defer qi.lock.Unlock()
+	qi.Lock()
+	defer qi.Unlock()
 
 	// check this queue: failure stops checks if the allocation is not part of a node addition
 	newAllocation := resources.Add(qi.allocatedResource, alloc)
 	if !nodeReported {
-		if qi.MaxResource != nil && !resources.FitIn(qi.MaxResource, newAllocation) {
+		if qi.maxResource != nil && !resources.FitIn(qi.maxResource, newAllocation) {
 			return fmt.Errorf("allocation (%v) puts queue %s over maximum allocation (%v)",
-				alloc, qi.GetQueuePath(), qi.MaxResource)
+				alloc, qi.GetQueuePath(), qi.maxResource)
 		}
 	}
 	// check the parent: need to pass before updating
@@ -212,7 +238,7 @@ func (qi *QueueInfo) IncAllocatedResource(alloc *resources.Resource, nodeReporte
 		if err := qi.Parent.IncAllocatedResource(alloc, nodeReported); err != nil {
 			log.Logger().Error("parent queue exceeds maximum resource",
 				zap.Any("allocationId", alloc),
-				zap.Any("maxResource", qi.MaxResource),
+				zap.Any("maxResource", qi.maxResource),
 				zap.Error(err))
 			return err
 		}
@@ -225,9 +251,9 @@ func (qi *QueueInfo) IncAllocatedResource(alloc *resources.Resource, nodeReporte
 
 // Decrement the allocated resources for this queue (recursively)
 // Guard against going below zero resources.
-func (qi *QueueInfo) DecAllocatedResource(alloc *resources.Resource) error {
-	qi.lock.Lock()
-	defer qi.lock.Unlock()
+func (qi *QueueInfo) decAllocatedResource(alloc *resources.Resource) error {
+	qi.Lock()
+	defer qi.Unlock()
 
 	// check this queue: failure stops checks
 	if alloc != nil && !resources.FitIn(qi.allocatedResource, alloc) {
@@ -236,10 +262,10 @@ func (qi *QueueInfo) DecAllocatedResource(alloc *resources.Resource) error {
 	}
 	// check the parent: need to pass before updating
 	if qi.Parent != nil {
-		if err := qi.Parent.DecAllocatedResource(alloc); err != nil {
+		if err := qi.Parent.decAllocatedResource(alloc); err != nil {
 			log.Logger().Error("released allocation is larger than parent queue max resource",
 				zap.Any("allocationId", alloc),
-				zap.Any("maxResource", qi.MaxResource),
+				zap.Any("maxResource", qi.maxResource),
 				zap.Error(err))
 			return err
 		}
@@ -251,8 +277,8 @@ func (qi *QueueInfo) DecAllocatedResource(alloc *resources.Resource) error {
 }
 
 func (qi *QueueInfo) GetCopyOfChildren() map[string]*QueueInfo {
-	qi.lock.RLock()
-	defer qi.lock.RUnlock()
+	qi.RLock()
+	defer qi.RUnlock()
 
 	children := make(map[string]*QueueInfo)
 	for k, v := range qi.children {
@@ -267,8 +293,8 @@ func (qi *QueueInfo) GetCopyOfChildren() map[string]*QueueInfo {
 // This may only be called by the queue removal itself on the registered parent.
 // Queue removal is always a bottom up action: leafs first then the parent.
 func (qi *QueueInfo) removeChildQueue(name string) {
-	qi.lock.Lock()
-	defer qi.lock.Unlock()
+	qi.Lock()
+	defer qi.Unlock()
 	delete(qi.children, strings.ToLower(name))
 }
 
@@ -276,8 +302,8 @@ func (qi *QueueInfo) removeChildQueue(name string) {
 // Since nothing is allocated there shouldn't be anything referencing this queue any more.
 // The real removal is removing the queue from the parent's child list
 func (qi *QueueInfo) RemoveQueue() bool {
-	qi.lock.Lock()
-	defer qi.lock.Unlock()
+	qi.Lock()
+	defer qi.Unlock()
 	// cannot remove a managed queue that is running
 	if qi.isManaged && qi.IsRunning() {
 		return false
@@ -298,8 +324,8 @@ func (qi *QueueInfo) RemoveQueue() bool {
 // This is a noop on an unmanaged queue
 func (qi *QueueInfo) MarkQueueForRemoval() {
 	// need to lock for write as we don't want to add a queue while marking for removal
-	qi.lock.Lock()
-	defer qi.lock.Unlock()
+	qi.Lock()
+	defer qi.Unlock()
 	// Mark the managed queue for deletion: it is removed from the config let it drain.
 	// Also mark all the managed children for deletion.
 	if qi.isManaged {
@@ -320,6 +346,8 @@ func (qi *QueueInfo) MarkQueueForRemoval() {
 
 // Update an existing managed queue based on the updated configuration
 func (qi *QueueInfo) updateQueueProps(conf configs.QueueConfig) error {
+	qi.Lock()
+	defer qi.Unlock()
 	// Set the ACLs
 	var err error
 	qi.submitACL, err = security.NewACL(conf.SubmitACL)
@@ -354,7 +382,7 @@ func (qi *QueueInfo) updateQueueProps(conf configs.QueueConfig) error {
 		return err
 	}
 	if len(maxResource.Resources) != 0 {
-		qi.MaxResource = maxResource
+		qi.maxResource = maxResource
 	}
 
 	// Load the guaranteed resources
@@ -409,12 +437,17 @@ func (qi *QueueInfo) IsStopped() bool {
 	return qi.stateMachine.Current() == Stopped.String()
 }
 
+// Return the current state of the queue
+func (qi *QueueInfo) CurrentState() string {
+	return qi.stateMachine.Current()
+}
+
 // Check if the user has access to the queue to submit an application recursively.
 // This will check the submit ACL and the admin ACL.
 func (qi *QueueInfo) CheckSubmitAccess(user security.UserGroup) bool {
-	qi.lock.RLock()
+	qi.RLock()
 	allow := qi.submitACL.CheckAccess(user) || qi.adminACL.CheckAccess(user)
-	qi.lock.RUnlock()
+	qi.RUnlock()
 	if !allow && qi.Parent != nil {
 		allow = qi.Parent.CheckSubmitAccess(user)
 	}
@@ -423,9 +456,9 @@ func (qi *QueueInfo) CheckSubmitAccess(user security.UserGroup) bool {
 
 // Check if the user has access to the queue for admin actions recursively.
 func (qi *QueueInfo) CheckAdminAccess(user security.UserGroup) bool {
-	qi.lock.RLock()
+	qi.RLock()
 	allow := qi.adminACL.CheckAccess(user)
-	qi.lock.RUnlock()
+	qi.RUnlock()
 	if !allow && qi.Parent != nil {
 		allow = qi.Parent.CheckAdminAccess(user)
 	}

@@ -19,63 +19,46 @@
 package tests
 
 import (
-	"testing"
-
 	"github.com/apache/incubator-yunikorn-core/pkg/api"
+	"github.com/apache/incubator-yunikorn-core/pkg/cache"
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/entrypoint"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
-var TwoEqualQueueConfigEnabledPreemption = `
-partitions:
-  - name: default
-    queues:
-      - name: root
-        submitacl: "*"
-        queues:
-          - name: a
-            resources:
-              guaranteed:
-                memory: 100
-                vcore: 100
-              max:
-                memory: 200
-                vcore: 200
-          - name: b
-            resources:
-              guaranteed:
-                memory: 100
-                vcore: 100
-              max:
-                memory: 200
-                vcore: 200
-    preemption:
-      enabled: true
-`
-
-type MockScheduler struct {
+type mockScheduler struct {
 	proxy          api.SchedulerAPI
 	scheduler      *scheduler.Scheduler
-	mockRM         *MockRMCallbackHandler
+	mockRM         *mockRMCallback
 	serviceContext *entrypoint.ServiceContext
-	t              *testing.T
+	clusterInfo    *cache.ClusterInfo
 	rmID           string
+	partitionName  string
 }
 
-func (m *MockScheduler) Init(t *testing.T, config string) {
+// Create the mock sceduler with the config provided.
+// The scheduler in the tests is normally the manual scheduler: the code must call
+// MultiStepSchedule(int) to allocate.
+// Auto scheduling does not give control over the scheduling steps and should only
+// be used in specific use case testing.
+func (m *mockScheduler) Init(config string, autoSchedule bool) error {
 	m.rmID = "rm:123"
-	m.t = t
+	m.partitionName = common.GetNormalizedPartitionName("default", m.rmID)
 
 	// Start all tests
-	serviceContext := entrypoint.StartAllServicesWithManualScheduler()
-	m.serviceContext = serviceContext
-	m.proxy = serviceContext.RMProxy
-	m.scheduler = serviceContext.Scheduler
+	if autoSchedule {
+		m.serviceContext = entrypoint.StartAllServices()
+	} else {
+		m.serviceContext = entrypoint.StartAllServicesWithManualScheduler()
+	}
+	m.proxy = m.serviceContext.RMProxy
+	m.clusterInfo = m.serviceContext.Cache
+	m.scheduler = m.serviceContext.Scheduler
 
 	configs.MockSchedulerConfigByData([]byte(config))
-	m.mockRM = NewMockRMCallbackHandler(t)
+	m.mockRM = NewMockRMCallbackHandler()
 
 	_, err := m.proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{
@@ -83,14 +66,17 @@ func (m *MockScheduler) Init(t *testing.T, config string) {
 			PolicyGroup: "policygroup",
 			Version:     "0.0.2",
 		}, m.mockRM)
+	return err
+}
 
-	if err != nil {
-		t.Error(err.Error())
+func (m *mockScheduler) Stop() {
+	if m.serviceContext != nil {
+		m.serviceContext.StopAll()
 	}
 }
 
-func (m *MockScheduler) AddNode(nodeID string, resource *si.Resource) {
-	err := m.proxy.Update(&si.UpdateRequest{
+func (m *mockScheduler) addNode(nodeID string, resource *si.Resource) error {
+	return m.proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
 				NodeID: nodeID,
@@ -103,17 +89,23 @@ func (m *MockScheduler) AddNode(nodeID string, resource *si.Resource) {
 		},
 		RmID: m.rmID,
 	})
-
-	if err != nil {
-		m.t.Error(err.Error())
-	}
-
-	waitForAcceptedNodes(m.mockRM, nodeID, 1000)
 }
 
-func (m *MockScheduler) AddApp(appID string, queue string, partition string) {
-	// Register 2 node, and add apps
-	err := m.proxy.Update(&si.UpdateRequest{
+func (m *mockScheduler) removeNode(nodeID string) error {
+	return m.proxy.Update(&si.UpdateRequest{
+		UpdatedNodes: []*si.UpdateNodeInfo{
+			{
+				NodeID:     nodeID,
+				Action:     si.UpdateNodeInfo_DECOMISSION,
+				Attributes: map[string]string{},
+			},
+		},
+		RmID: m.rmID,
+	})
+}
+
+func (m *mockScheduler) addApp(appID string, queue string, partition string) error {
+	return m.proxy.Update(&si.UpdateRequest{
 		NewApplications: []*si.AddApplicationRequest{
 			{
 				ApplicationID: appID,
@@ -126,20 +118,55 @@ func (m *MockScheduler) AddApp(appID string, queue string, partition string) {
 		},
 		RmID: m.rmID,
 	})
-
-	if nil != err {
-		m.t.Error(err.Error())
-	}
-
-	waitForAcceptedApplications(m.mockRM, appID, 1000)
 }
 
-func (m *MockScheduler) GetSchedulingQueue(queue string) *scheduler.SchedulingQueue {
-	return m.scheduler.GetClusterSchedulingContext().GetSchedulingQueue(queue, "[rm:123]default")
+func (m *mockScheduler) removeApp(appID, partition string) error {
+	return m.proxy.Update(&si.UpdateRequest{
+		RemoveApplications: []*si.RemoveApplicationRequest{
+			{
+				ApplicationID: appID,
+				PartitionName: partition,
+			},
+		},
+		RmID: m.rmID,
+	})
 }
 
-func (m *MockScheduler) Stop() {
-	if m.serviceContext != nil {
-		m.serviceContext.StopAll()
-	}
+func (m *mockScheduler) addAppRequest(appID, allocID string, resource *si.Resource, repeat int32) error {
+	return m.proxy.Update(&si.UpdateRequest{
+		Asks: []*si.AllocationAsk{
+			{
+				AllocationKey:  allocID,
+				ApplicationID:  appID,
+				ResourceAsk:    resource,
+				MaxAllocations: repeat,
+			},
+		},
+		RmID: m.rmID,
+	})
+}
+
+// simple wrapper to limit the repeating code getting the queue
+func (m *mockScheduler) getSchedulingNode(nodeName string) *scheduler.SchedulingNode {
+	return m.scheduler.GetClusterSchedulingContext().GetSchedulingNode(nodeName, m.partitionName)
+}
+
+// simple wrapper to limit the repeating code getting the queue
+func (m *mockScheduler) getSchedulingQueue(queueName string) *scheduler.SchedulingQueue {
+	return m.scheduler.GetClusterSchedulingContext().GetSchedulingQueue(queueName, m.partitionName)
+}
+
+// simple wrapper to limit the repeating code getting the queue with non default partition
+func (m *mockScheduler) getSchedulingQueuePartition(queueName, partitionName string) *scheduler.SchedulingQueue {
+	return m.scheduler.GetClusterSchedulingContext().GetSchedulingQueue(queueName, partitionName)
+}
+
+// simple wrapper to limit the repeating code getting the app
+func (m *mockScheduler) getSchedulingApplication(appID string) *scheduler.SchedulingApplication {
+	return m.scheduler.GetClusterSchedulingContext().GetSchedulingApplication(appID, m.partitionName)
+}
+
+// simple wrapper to limit the repeating code getting the app
+func (m *mockScheduler) getPartitionReservations() map[string]int {
+	return m.scheduler.GetClusterSchedulingContext().GetPartitionReservations(m.partitionName)
 }

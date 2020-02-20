@@ -31,8 +31,8 @@ const (
 	cleanerInterval = 10000 // sleep between queue removal checks
 )
 
-type PartitionManager struct {
-	psc      *PartitionSchedulingContext
+type partitionManager struct {
+	psc      *partitionSchedulingContext
 	csc      *ClusterSchedulingContext
 	stop     bool
 	interval time.Duration
@@ -43,7 +43,7 @@ type PartitionManager struct {
 // - clean up the managed queues that are empty and removed from the configuration
 // - remove empty unmanaged queues
 // When the manager exits the partition is removed from the system and must be cleaned up
-func (manager PartitionManager) Run() {
+func (manager partitionManager) Run() {
 	if manager.interval == 0 {
 		manager.interval = cleanerInterval * time.Millisecond
 	}
@@ -55,7 +55,7 @@ func (manager PartitionManager) Run() {
 	for {
 		time.Sleep(manager.interval)
 		runStart := time.Now()
-		manager.cleanQueues(manager.psc.Root)
+		manager.cleanQueues(manager.psc.root)
 		if manager.stop {
 			break
 		}
@@ -67,14 +67,14 @@ func (manager PartitionManager) Run() {
 
 // Set the flag that the will allow the manager to exit.
 // No locking needed as there is just one place where this is called which is already locked.
-func (manager PartitionManager) Stop() {
+func (manager partitionManager) Stop() {
 	manager.stop = true
 }
 
-// Remove empty managed or unmanaged queue. The logic is mostly hidden in the cached object(s).
+// Remove drained managed and empty unmanaged queues. The logic is mostly hidden in the cached object(s).
 // Perform the action recursively.
 // Only called internally and recursive, no locking
-func (manager PartitionManager) cleanQueues(schedulingQueue *SchedulingQueue) {
+func (manager partitionManager) cleanQueues(schedulingQueue *SchedulingQueue) {
 	if schedulingQueue == nil {
 		return
 	}
@@ -92,14 +92,19 @@ func (manager PartitionManager) cleanQueues(schedulingQueue *SchedulingQueue) {
 		// make sure the queue is empty
 		if len(schedulingQueue.applications) == 0 {
 			// remove the cached queue, if not empty there is a problem since we have no applications left.
-			if schedulingQueue.CachedQueueInfo.RemoveQueue() {
+			if schedulingQueue.QueueInfo.RemoveQueue() {
 				// all OK update the queue hierarchy and partition
-				schedulingQueue.RemoveQueue()
+				if !schedulingQueue.removeQueue() {
+					log.Logger().Debug("unexpected failure removing the scheduling queue",
+						zap.String("partitionName", manager.psc.Name),
+						zap.String("schedulingQueue", schedulingQueue.Name))
+				}
 			} else {
-				log.Logger().Debug("failed to remove scheduling queue",
+				log.Logger().Debug("failed to remove scheduling queue (cache)",
+					zap.String("partitionName", manager.psc.Name),
 					zap.String("schedulingQueue", schedulingQueue.Name),
-					zap.String("queueAllocatedResource", schedulingQueue.CachedQueueInfo.GetAllocatedResource().String()),
-					zap.Int("numOfAssignedApps", 0),
+					zap.String("queueAllocatedResource", schedulingQueue.QueueInfo.GetAllocatedResource().String()),
+					zap.String("queueState", schedulingQueue.QueueInfo.CurrentState()),
 					zap.String("partitionName", manager.psc.Name))
 			}
 		} else {
@@ -118,7 +123,7 @@ func (manager PartitionManager) cleanQueues(schedulingQueue *SchedulingQueue) {
 // - nodes
 // last action is to remove the cluster links
 //nolint:errcheck
-func (manager PartitionManager) remove() {
+func (manager partitionManager) remove() {
 	log.Logger().Info("marking all queues for removal",
 		zap.String("partitionName", manager.psc.Name))
 	pi := manager.psc.partition
@@ -133,7 +138,7 @@ func (manager PartitionManager) remove() {
 		_ = apps[i].HandleApplicationEvent(cache.KillApplication)
 		appID := apps[i].ApplicationID
 		_, _ = pi.RemoveApplication(appID)
-		_, _ = manager.psc.RemoveSchedulingApplication(appID)
+		_, _ = manager.psc.removeSchedulingApplication(appID)
 	}
 	// remove the nodes
 	nodes := pi.CopyNodeInfos()
@@ -141,7 +146,7 @@ func (manager PartitionManager) remove() {
 		zap.Int("numOfNodes", len(nodes)),
 		zap.String("partitionName", manager.psc.Name))
 	for i := range nodes {
-		pi.RemoveNode(nodes[i].NodeID)
+		_ = pi.RemoveNode(nodes[i].NodeID)
 	}
 	log.Logger().Info("removing partition",
 		zap.String("partitionName", manager.psc.Name))

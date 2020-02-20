@@ -64,10 +64,10 @@ func TestNewNodeInfo(t *testing.T) {
 	if node == nil || node.NodeID != "testnode" {
 		t.Fatal("node not returned correctly: node is nul or incorrect name")
 	}
-	if !resources.Equals(node.TotalResource, totalRes) ||
+	if !resources.Equals(node.totalResource, totalRes) ||
 		!resources.Equals(node.availableResource, totalRes) {
 		t.Errorf("node resources not set correctly: %v expected got %v and %v",
-			totalRes, node.TotalResource, node.availableResource)
+			totalRes, node.totalResource, node.availableResource)
 	}
 	assert.Equal(t, node.Partition, "")
 
@@ -199,18 +199,18 @@ func TestCanAllocate(t *testing.T) {
 	}
 	// ask for a resource not available and check the calculation
 	more := resources.NewResourceFromMap(map[string]resources.Quantity{"unknown": 10})
-	if node.CanAllocate(more) {
+	if node.canAllocate(more) {
 		t.Errorf("can allocate should not have allowed %v to be allocated", more)
 	}
 	// ask for more than the resources available and check the calculation
 	more = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 25})
-	if node.CanAllocate(more) {
+	if node.canAllocate(more) {
 		t.Errorf("can allocate should not have allowed %v to be allocated", more)
 	}
 
 	// ask for less than the resources available and check the calculation
 	less := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 10})
-	if !node.CanAllocate(less) {
+	if !node.canAllocate(less) {
 		t.Errorf("can allocate should have allowed %v to be allocated", less)
 	}
 	node.AddAllocation(CreateMockAllocationInfo("app1", less, "1", "queue-1", "node-1"))
@@ -219,7 +219,7 @@ func TestCanAllocate(t *testing.T) {
 	}
 	// ask for more than the total resources but more than available and check the calculation
 	less = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8, "second": 5})
-	if node.CanAllocate(less) {
+	if node.canAllocate(less) {
 		t.Errorf("can allocate should not have allowed %v to be allocated", less)
 	}
 }

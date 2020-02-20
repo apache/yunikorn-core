@@ -20,42 +20,47 @@ package scheduler
 
 import (
 	"sync"
+	"time"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
-type SchedulingAllocationAsk struct {
+type schedulingAllocationAsk struct {
 	// Original ask
 	AskProto *si.AllocationAsk
 
 	// Extracted info
-	AllocatedResource  *resources.Resource
-	PendingRepeatAsk   int32
-	ApplicationID      string
-	PartitionName      string
-	NormalizedPriority int32
-	QueueName          string
+	AllocatedResource *resources.Resource
+	ApplicationID     string
+	PartitionName     string
+	QueueName         string
 
-	// Lock
-	lock sync.RWMutex
+	// Private fields need protection
+	createTime       time.Time // the time this ask was created (used in reservations)
+	priority         int32
+	pendingRepeatAsk int32
+
+	sync.RWMutex
 }
 
-func NewSchedulingAllocationAsk(ask *si.AllocationAsk) *SchedulingAllocationAsk {
-	return &SchedulingAllocationAsk{
+func newSchedulingAllocationAsk(ask *si.AllocationAsk) *schedulingAllocationAsk {
+	saa := &schedulingAllocationAsk{
 		AskProto:          ask,
 		AllocatedResource: resources.NewResourceFromProto(ask.ResourceAsk),
-		PendingRepeatAsk:  ask.MaxAllocations,
+		pendingRepeatAsk:  ask.MaxAllocations,
 		ApplicationID:     ask.ApplicationID,
 		PartitionName:     ask.PartitionName,
-		// TODO, normalize priority from ask
+		createTime:        time.Now(),
 	}
+	saa.priority = saa.normalizePriority(ask.Priority)
+	return saa
 }
 
-func ConvertFromAllocation(allocation *si.Allocation, rmID string) *SchedulingAllocationAsk {
+func convertFromAllocation(allocation *si.Allocation, rmID string) *schedulingAllocationAsk {
 	partitionWithRMId := common.GetNormalizedPartitionName(allocation.PartitionName, rmID)
-	return &SchedulingAllocationAsk{
+	return &schedulingAllocationAsk{
 		AskProto: &si.AllocationAsk{
 			AllocationKey:  allocation.AllocationKey,
 			ResourceAsk:    allocation.ResourcePerAlloc,
@@ -67,22 +72,45 @@ func ConvertFromAllocation(allocation *si.Allocation, rmID string) *SchedulingAl
 		},
 		QueueName:         allocation.QueueName,
 		AllocatedResource: resources.NewResourceFromProto(allocation.ResourcePerAlloc),
-		PendingRepeatAsk:  1,
 		ApplicationID:     allocation.ApplicationID,
 		PartitionName:     partitionWithRMId,
+		pendingRepeatAsk:  1,
+		createTime:        time.Now(),
 	}
 }
 
-// Add delta to pending ask,
-//    if original_pending + delta >= 0, return true. And update internal pending ask.
-//    If original_pending + delta < 0, return false and keep original_pending unchanged.
-func (m *SchedulingAllocationAsk) AddPendingAskRepeat(delta int32) bool {
-	m.lock.Lock()
-	defer m.lock.Unlock()
+// Update pending ask repeat with the delta given.
+// Update the pending ask repeat counter with the delta (pos or neg). The pending repeat is always 0 or higher.
+// If the update would cause the repeat to go negative the update is discarded and false is returned.
+// In all other cases the repeat is updated and true is returned.
+func (saa *schedulingAllocationAsk) updatePendingAskRepeat(delta int32) bool {
+	saa.Lock()
+	defer saa.Unlock()
 
-	if m.PendingRepeatAsk+delta >= 0 {
-		m.PendingRepeatAsk += delta
+	if saa.pendingRepeatAsk+delta >= 0 {
+		saa.pendingRepeatAsk += delta
 		return true
 	}
 	return false
+}
+
+// Get the pending ask repeat
+func (saa *schedulingAllocationAsk) getPendingAskRepeat() int32 {
+	saa.RLock()
+	defer saa.RUnlock()
+
+	return saa.pendingRepeatAsk
+}
+
+// Return the time this ask was created
+// Should be treated as read only not te be modified
+func (saa *schedulingAllocationAsk) getCreateTime() time.Time {
+	return saa.createTime
+}
+
+// Normalised priority
+// Currently a direct conversion.
+func (saa *schedulingAllocationAsk) normalizePriority(priority *si.Priority) int32 {
+	// TODO, really normalize priority from ask
+	return priority.GetPriorityValue()
 }

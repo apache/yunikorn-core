@@ -26,12 +26,19 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
+// AllocationInfo for tests inside and outside the cache
 func CreateMockAllocationInfo(appID string, res *resources.Resource, uuid string, queueName string, nodeID string) *AllocationInfo {
 	info := &AllocationInfo{ApplicationID: appID, AllocatedResource: res,
 		AllocationProto: &si.Allocation{UUID: uuid, QueueName: queueName, NodeID: nodeID}}
 	return info
 }
 
+// Add allocation to cache app for tests
+func AddAllocationToApp(app *ApplicationInfo, alloc *AllocationInfo) {
+	app.addAllocation(alloc)
+}
+
+// Create a partition for testing from a yaml configuration
 func CreatePartitionInfo(data []byte) (*PartitionInfo, error) {
 	// create config from string
 	configs.MockSchedulerConfigByData(data)
@@ -39,7 +46,7 @@ func CreatePartitionInfo(data []byte) (*PartitionInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error when loading config %v", err)
 	}
-	pi, err := NewPartitionInfo(conf.Partitions[0], "rm1", nil)
+	pi, err := newPartitionInfo(conf.Partitions[0], "rm1", nil)
 	if err != nil {
 		return nil, fmt.Errorf("error when loading ParttionInfo from config %v", err)
 	}
@@ -65,7 +72,7 @@ func newNodeForTest(nodeID string, totalResource, availResource *resources.Resou
 	node.schedulable = true
 	node.Partition = "default"
 	// make sure they are independent objects
-	node.TotalResource = totalResource
+	node.totalResource = totalResource
 	node.availableResource = availResource
 	node.allocatedResource = resources.NewResource()
 

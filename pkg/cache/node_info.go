@@ -30,14 +30,14 @@ import (
 type NodeInfo struct {
 	// Fields for fast access These fields are considered read only.
 	// Values should only be set when creating a new node and never changed.
-	NodeID        string
-	Hostname      string
-	Rackname      string
-	Partition     string
-	TotalResource *resources.Resource
+	NodeID    string
+	Hostname  string
+	Rackname  string
+	Partition string
 
 	// Private fields need protection
 	attributes        map[string]string
+	totalResource     *resources.Resource
 	allocatedResource *resources.Resource
 	availableResource *resources.Resource
 	allocations       map[string]*AllocationInfo
@@ -54,12 +54,12 @@ func NewNodeInfo(proto *si.NewNodeInfo) *NodeInfo {
 	}
 	m := &NodeInfo{
 		NodeID:            proto.NodeID,
-		TotalResource:     resources.NewResourceFromProto(proto.SchedulableResource),
+		totalResource:     resources.NewResourceFromProto(proto.SchedulableResource),
 		allocatedResource: resources.NewResource(),
 		allocations:       make(map[string]*AllocationInfo),
 		schedulable:       true,
 	}
-	m.availableResource = m.TotalResource.Clone()
+	m.availableResource = m.totalResource.Clone()
 
 	m.initializeAttribute(proto.Attributes)
 
@@ -112,8 +112,14 @@ func (ni *NodeInfo) GetAllocation(uuid string) *AllocationInfo {
 	return ni.allocations[uuid]
 }
 
+// Check if the allocation fits int the nodes resources.
+// unlocked call as the totalResource can not be changed
+func (ni *NodeInfo) FitInNode(resRequest *resources.Resource) bool {
+	return resources.FitIn(ni.totalResource, resRequest)
+}
+
 // Check if the allocation fits in the currently available resources.
-func (ni *NodeInfo) CanAllocate(resRequest *resources.Resource) bool {
+func (ni *NodeInfo) canAllocate(resRequest *resources.Resource) bool {
 	ni.lock.RLock()
 	defer ni.lock.RUnlock()
 	return resources.FitIn(ni.availableResource, resRequest)

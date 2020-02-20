@@ -29,7 +29,6 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/cache/cacheevent"
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
@@ -40,7 +39,6 @@ import (
 
 type ClusterInfo struct {
 	partitions  map[string]*PartitionInfo
-	lock        sync.RWMutex
 	policyGroup string
 
 	// Event queues
@@ -49,6 +47,8 @@ type ClusterInfo struct {
 
 	// RM Event Handler
 	EventHandlers handler.EventHandlers
+
+	sync.RWMutex
 }
 
 func NewClusterInfo() (info *ClusterInfo) {
@@ -145,8 +145,8 @@ func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
 // Get the list of partitions.
 // Locked call, used outside of the cache.
 func (m *ClusterInfo) ListPartitions() []string {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
+	m.RLock()
+	defer m.RUnlock()
 	var partitions []string
 	for k := range m.partitions {
 		partitions = append(partitions, k)
@@ -157,33 +157,24 @@ func (m *ClusterInfo) ListPartitions() []string {
 // Get the partition by name.
 // Locked call, used outside of the cache.
 func (m *ClusterInfo) GetPartition(name string) *PartitionInfo {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
+	m.RLock()
+	defer m.RUnlock()
 	return m.partitions[name]
-}
-
-// Get the total resources for the partition by name.
-// Locked call, used outside of the cache.
-func (m *ClusterInfo) GetTotalPartitionResource(partitionName string) *resources.Resource {
-	if p := m.GetPartition(partitionName); p != nil {
-		return p.GetTotalPartitionResource()
-	}
-	return nil
 }
 
 // Add a new partition to the cluster, locked.
 // Called by the configuration update.
 func (m *ClusterInfo) addPartition(name string, info *PartitionInfo) {
-	m.lock.Lock()
-	defer m.lock.Unlock()
+	m.Lock()
+	defer m.Unlock()
 	m.partitions[name] = info
 }
 
 // Remove a partition from the cluster, locked.
 // Called by the partition itself when the partition is removed by the partition manager.
 func (m *ClusterInfo) removePartition(name string) {
-	m.lock.Lock()
-	defer m.lock.Unlock()
+	m.Lock()
+	defer m.Unlock()
 	delete(m.partitions, name)
 }
 
@@ -281,7 +272,7 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
 		// if app info doesn't exist, reject the request
 		appInfo := partitionInfo.getApplication(req.ApplicationID)
 		if appInfo == nil {
-			msg := fmt.Sprintf("Failed to find applictaion %s, for allocation %s", req.ApplicationID, req.AllocationKey)
+			msg := fmt.Sprintf("Failed to find application %s, for allocation %s", req.ApplicationID, req.AllocationKey)
 			log.Logger().Info(msg)
 			rejectedAsks = append(rejectedAsks,
 				&si.RejectedAllocationAsk{
@@ -365,12 +356,14 @@ func (m *ClusterInfo) processNewSchedulableNodes(request *si.UpdateRequest) {
 			RejectedNodes: rejectedNodes,
 		})
 
-	// notify the scheduler to recover existing allocations
-	m.EventHandlers.SchedulerEventHandler.HandleEvent(
-		&schedulerevent.SchedulerAllocationUpdatesEvent{
-			ExistingAllocations: existingAllocations,
-			RMId:                request.RmID,
-		})
+	// notify the scheduler to recover existing allocations (only when provided)
+	if len(existingAllocations) > 0 {
+		m.EventHandlers.SchedulerEventHandler.HandleEvent(
+			&schedulerevent.SchedulerAllocationUpdatesEvent{
+				ExistingAllocations: existingAllocations,
+				RMId:                request.RmID,
+			})
+	}
 }
 
 // RM may notify us to remove, blacklist or whitelist a node,
@@ -402,7 +395,12 @@ func (m *ClusterInfo) processNodeActions(request *si.UpdateRequest) {
 			case si.UpdateNodeInfo_DECOMISSION:
 				// set the state to not schedulable then tell the partition to clean up
 				nodeInfo.SetSchedulable(false)
-				partition.RemoveNode(nodeInfo.NodeID)
+				released := partition.RemoveNode(nodeInfo.NodeID)
+				// notify the shim allocations have been released from node
+				if len(released) != 0 {
+					m.notifyRMAllocationReleased(partition.RmID, released, si.AllocationReleaseResponse_STOPPED_BY_RM,
+						fmt.Sprintf("Node %s Removed", nodeInfo.NodeID))
+				}
 				// remove the equivalent scheduling node
 				m.EventHandlers.SchedulerEventHandler.HandleEvent(
 					&schedulerevent.SchedulerNodeEvent{
@@ -570,7 +568,7 @@ func (m *ClusterInfo) processAllocationProposalEvent(event *cacheevent.Allocatio
 // Lock free call, all updates occur in the partition which is locked.
 func (m *ClusterInfo) processRejectedApplicationEvent(event *cacheevent.RejectedNewApplicationEvent) {
 	if partition := m.GetPartition(event.PartitionName); partition != nil {
-		partition.RemoveRejectedApp(event.ApplicationID)
+		partition.removeRejectedApp(event.ApplicationID)
 	}
 }
 
@@ -645,8 +643,8 @@ func (m *ClusterInfo) handleAllocationReleasesRequestEvent(event *cacheevent.Rel
 
 func (m *ClusterInfo) processRemoveRMPartitionsEvent(event *commonevents.RemoveRMPartitionsEvent) {
 	// Hold write lock of cache
-	m.lock.Lock()
-	defer m.lock.Unlock()
+	m.Lock()
+	defer m.Unlock()
 
 	toRemove := make(map[string]bool)
 

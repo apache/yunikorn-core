@@ -140,6 +140,47 @@ func (r *Resource) MultiplyTo(ratio float64) {
 	}
 }
 
+// Calculate how well the receiver fits in "fit"
+// - A score of 0 is a fit (similar to FitIn)
+// - The score is calculated only using resource type defined in the fit resource.
+// - The score has a range between 0..#fit-res (the number of resource types in fit)
+// - Same score means same fit
+// - The lower the score the better the fit (0 is a fit)
+// - Each individual score is calculated as follows: score = (fitVal - resVal) / fitVal
+//   That calculation per type is summed up for all resource types in fit.
+//   example 1: fit memory 1000; resource 100; score = 0.9
+//   example 2: fit memory 150; resource 15; score = 0.9
+//   example 3: fit memory 100, cpu 1; resource memory 10; score = 1.9
+// - A nil receiver gives back the maximum score (number of resources types in fit)
+func (r *Resource) FitInScore(fit *Resource) float64 {
+	var score float64
+	// short cut for a nil receiver and fit
+	if r == nil || fit == nil {
+		if fit != nil {
+			return float64(len(fit.Resources))
+		}
+		return score
+	}
+	// walk over the defined values
+	for key, fitVal := range fit.Resources {
+		// negative is treated as 0 and fits always
+		if fitVal <= 0 {
+			continue
+		}
+		// negative is treated as 0 and gives max score of 1
+		resVal := r.Resources[key]
+		if resVal <= 0 {
+			score++
+			continue
+		}
+		// smaller values fit: score = 0 for those
+		if fitVal > resVal {
+			score += float64(fitVal-resVal) / float64(fitVal)
+		}
+	}
+	return score
+}
+
 // Wrapping safe calculators for the quantities of resources.
 // They will always return a valid int64. Logging if the calculator wrapped the value.
 // Returning the appropriate MaxInt64 or MinInt64 value.
@@ -363,6 +404,7 @@ func getShares(res, total *Resource) []float64 {
 			// negative share is logged
 			if v < 0 {
 				log.Logger().Debug("usage is negative no total, share is also negative",
+					zap.String("resource key", k),
 					zap.Int64("resource quantity", int64(v)))
 			}
 			shares[idx] = float64(v)
@@ -373,6 +415,7 @@ func getShares(res, total *Resource) []float64 {
 		// negative share is logged
 		if shares[idx] < 0 {
 			log.Logger().Debug("share set is negative",
+				zap.String("resource key", k),
 				zap.Int64("resource quantity", int64(v)),
 				zap.Int64("total quantity", int64(total.Resources[k])))
 		}

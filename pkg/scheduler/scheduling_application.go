@@ -606,14 +606,14 @@ func (sa *SchedulingApplication) tryNode(node *SchedulingNode, ask *schedulingAl
 // the scheduler fakes a confirmation from the cache later and we thus need this to track correctly.
 func (sa *SchedulingApplication) recoverOnNode(node *SchedulingNode, ask *schedulingAllocationAsk) {
 	log.Logger().Info("#### recoverOnNode is start", zap.String("node", node.NodeID))
-	sa.Lock()
-	defer sa.Unlock()
 	toAllocate := ask.AllocatedResource
 	// update the scheduling objects with the in progress resource
 	node.incAllocatingResource(toAllocate)
 	sa.queue.incAllocatingResource(toAllocate)
 	sa.allocating.AddTo(toAllocate)
 	// mark this ask as allocating by lowering the repeat
+	sa.Lock()
+	defer sa.Unlock()
 	if _, err := sa.updateAskRepeatInternal(ask, -1); err != nil {
 		log.Logger().Error("application recovery update of existing allocation failed",
 			zap.String("appID", sa.ApplicationInfo.ApplicationID),

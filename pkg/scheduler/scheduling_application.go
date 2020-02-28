@@ -233,9 +233,14 @@ func (sa *SchedulingApplication) updateAskRepeatInternal(ask *schedulingAllocati
 	}
 
 	deltaPendingResource := resources.Multiply(ask.AllocatedResource, int64(delta))
-	sa.pending.AddTo(deltaPendingResource)
 	// update the pending of the queue with the same delta
 	sa.queue.incPendingResource(deltaPendingResource)
+
+	// update app pending resource
+	// always lock app after queue, avoid deadlock
+	sa.Lock()
+	defer sa.Unlock()
+	sa.pending.AddTo(deltaPendingResource)
 
 	return deltaPendingResource, nil
 }
@@ -605,8 +610,6 @@ func (sa *SchedulingApplication) tryNode(node *SchedulingNode, ask *schedulingAl
 // the cache has already been updated and the allocation is confirmed. Checks for resource limits would fail. However
 // the scheduler fakes a confirmation from the cache later and we thus need this to track correctly.
 func (sa *SchedulingApplication) recoverOnNode(node *SchedulingNode, ask *schedulingAllocationAsk) {
-	sa.Lock()
-	defer sa.Unlock()
 	toAllocate := ask.AllocatedResource
 	// update the scheduling objects with the in progress resource
 	node.incAllocatingResource(toAllocate)

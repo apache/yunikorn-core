@@ -302,10 +302,10 @@ func (s *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocat
 					AllocatedResource: resources.NewResourceFromProto(alloc.ResourcePerAlloc),
 					AllocationKey:     alloc.AllocationKey,
 					Priority:          alloc.Priority,
-					PartitionName:     alloc.PartitionName,
+					PartitionName:     common.GetNormalizedPartitionName(alloc.PartitionName, rmID),
 				},
 			},
-			PartitionName: alloc.PartitionName,
+			PartitionName: common.GetNormalizedPartitionName(alloc.PartitionName, rmID),
 		})
 	}
 }

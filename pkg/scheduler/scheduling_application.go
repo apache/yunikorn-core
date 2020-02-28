@@ -605,6 +605,7 @@ func (sa *SchedulingApplication) tryNode(node *SchedulingNode, ask *schedulingAl
 // the cache has already been updated and the allocation is confirmed. Checks for resource limits would fail. However
 // the scheduler fakes a confirmation from the cache later and we thus need this to track correctly.
 func (sa *SchedulingApplication) recoverOnNode(node *SchedulingNode, ask *schedulingAllocationAsk) {
+	log.Logger().Info("#### recoverOnNode is start", zap.String("node", node.NodeID))
 	sa.Lock()
 	defer sa.Unlock()
 	toAllocate := ask.AllocatedResource
@@ -619,4 +620,5 @@ func (sa *SchedulingApplication) recoverOnNode(node *SchedulingNode, ask *schedu
 			zap.String("allocKey", ask.AskProto.AllocationKey),
 			zap.Error(err))
 	}
+	log.Logger().Info("#### recoverOnNode is done", zap.String("node", node.NodeID))
 }

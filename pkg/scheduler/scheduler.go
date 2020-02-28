@@ -618,6 +618,7 @@ func (s *Scheduler) schedule() {
 
 // Retrieve the app and node to set the allocating resources on when recovering allocations
 func (s *Scheduler) updateAppAllocating(ask *schedulingAllocationAsk, nodeID string) error {
+	log.Logger().Info("#### updateAppAllocating is start", zap.String("node", nodeID))
 	app := s.clusterSchedulingContext.GetSchedulingApplication(ask.ApplicationID, ask.PartitionName)
 	if app == nil {
 		return fmt.Errorf("cannot find scheduling application on allocation recovery %s", ask.ApplicationID)
@@ -632,5 +633,7 @@ func (s *Scheduler) updateAppAllocating(ask *schedulingAllocationAsk, nodeID str
 		zap.String("appID", ask.ApplicationID),
 		zap.String("queueName", ask.QueueName))
 	app.recoverOnNode(node, ask)
+	log.Logger().Info("#### updateAppAllocating is done", zap.String("node", nodeID))
+
 	return nil
 }

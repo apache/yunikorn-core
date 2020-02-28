@@ -271,11 +271,16 @@ func (s *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocat
 				zap.Error(err))
 		}
 
+		log.Logger().Info("#### convertFromAllocation is done")
+
 		// set the scheduler allocation in progress info (step 3)
 		if err := s.updateAppAllocating(ask, alloc.NodeID); err != nil {
 			log.Logger().Warn("app recovery failed to update allocating information",
 				zap.Error(err))
 		}
+
+		log.Logger().Info("#### updateAppAllocating is done")
+
 
 		// handle allocation proposals (step 5)
 		if err := s.confirmAllocationProposal(&commonevents.AllocationProposal{
@@ -295,6 +300,9 @@ func (s *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocat
 }
 
 func (s *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAllocationUpdatesEvent) {
+
+	log.Logger().Info("##### processAllocationUpdateEvent start")
+
 	if len(ev.ExistingAllocations) > 0 {
 		// in recovery mode, we only expect existing allocations being reported
 		if len(ev.NewAsks) > 0 || len(ev.RejectedAllocations) > 0 || ev.ToReleases != nil {
@@ -363,12 +371,18 @@ func (s *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
 			})
 		}
 	}
+
+	log.Logger().Info("##### processAllocationUpdateEvent done")
+
 }
 
 // Process application adds and removes that have been processed by the cache.
 // The cache processes the applications and has already filtered out some apps.
 // All apps come from one si.UpdateRequest and thus from one RM.
 func (s *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerApplicationsUpdateEvent) {
+	log.Logger().Info("##### processApplicationUpdateEvent start")
+
+
 	if len(ev.AddedApplications) > 0 {
 		rejectedApps := make([]*si.RejectedApplication, 0)
 		acceptedApps := make([]*si.AcceptedApplication, 0)
@@ -436,16 +450,28 @@ func (s *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerAp
 			s.eventHandlers.CacheEventHandler.HandleEvent(&cacheevent.RemovedApplicationEvent{ApplicationID: app.ApplicationID, PartitionName: app.PartitionName})
 		}
 	}
+
+	log.Logger().Info("##### processApplicationUpdateEvent done")
+
 }
 
 func (s *Scheduler) removePartitionsBelongToRM(event *commonevents.RemoveRMPartitionsEvent) {
+	log.Logger().Info("##### removePartitionsBelongToRM start")
+
 	s.clusterSchedulingContext.RemoveSchedulingPartitionsByRMId(event.RmID)
 
 	// Send this event to cache
 	s.eventHandlers.CacheEventHandler.HandleEvent(event)
+
+	log.Logger().Info("##### removePartitionsBelongToRM done")
+
 }
 
 func (s *Scheduler) processUpdatePartitionConfigsEvent(event *schedulerevent.SchedulerUpdatePartitionsConfigEvent) {
+
+	log.Logger().Info("##### processUpdatePartitionConfigsEvent start")
+
+
 	partitions := make([]*cache.PartitionInfo, 0)
 	for _, p := range event.UpdatedPartitions {
 		partition, ok := p.(*cache.PartitionInfo)
@@ -466,9 +492,15 @@ func (s *Scheduler) processUpdatePartitionConfigsEvent(event *schedulerevent.Sch
 			Succeeded: true,
 		}
 	}
+
+	log.Logger().Info("##### processUpdatePartitionConfigsEvent done")
+
 }
 
 func (s *Scheduler) processDeletePartitionConfigsEvent(event *schedulerevent.SchedulerDeletePartitionsConfigEvent) {
+
+	log.Logger().Info("##### processDeletePartitionConfigsEvent start")
+
 	partitions := make([]*cache.PartitionInfo, 0)
 	for _, p := range event.DeletePartitions {
 		partition, ok := p.(*cache.PartitionInfo)
@@ -489,6 +521,9 @@ func (s *Scheduler) processDeletePartitionConfigsEvent(event *schedulerevent.Sch
 			Succeeded: true,
 		}
 	}
+
+	log.Logger().Info("##### processDeletePartitionConfigsEvent done")
+
 }
 
 // Add a scheduling node based on the node added to the cache.

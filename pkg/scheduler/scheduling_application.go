@@ -229,17 +229,13 @@ func (sa *SchedulingApplication) updateAskRepeat(allocKey string, delta int32) (
 func (sa *SchedulingApplication) updateAskRepeatInternal(ask *schedulingAllocationAsk, delta int32) (*resources.Resource, error) {
 	// updating with delta does error checking internally
 	if !ask.updatePendingAskRepeat(delta) {
-		return nil, fmt.Errorf("ask repaeat not updated resulting repeat less than zero for ask %s on app %s", ask.AskProto.AllocationKey, sa.ApplicationInfo.ApplicationID)
+		return nil, fmt.Errorf("ask repaeat not updated resulting repeat less than zero for ask %s on app %s",
+			ask.AskProto.AllocationKey, sa.ApplicationInfo.ApplicationID)
 	}
 
 	deltaPendingResource := resources.Multiply(ask.AllocatedResource, int64(delta))
 	// update the pending of the queue with the same delta
 	sa.queue.incPendingResource(deltaPendingResource)
-
-	// update app pending resource
-	// always lock app after queue, avoid deadlock
-	sa.Lock()
-	defer sa.Unlock()
 	sa.pending.AddTo(deltaPendingResource)
 
 	return deltaPendingResource, nil
@@ -610,16 +606,26 @@ func (sa *SchedulingApplication) tryNode(node *SchedulingNode, ask *schedulingAl
 // the cache has already been updated and the allocation is confirmed. Checks for resource limits would fail. However
 // the scheduler fakes a confirmation from the cache later and we thus need this to track correctly.
 func (sa *SchedulingApplication) recoverOnNode(node *SchedulingNode, ask *schedulingAllocationAsk) {
+	// updating with delta does error checking internally
+	if !ask.updatePendingAskRepeat(-1) {
+		log.Logger().Error("application recovery update of existing allocation failed",
+			zap.String("reason", "ask repeat not updated resulting repeat less than zero"),
+			zap.String("allocationKey", ask.AskProto.AllocationKey),
+			zap.String("applicationID", sa.ApplicationInfo.ApplicationID))
+		return
+	}
+
 	toAllocate := ask.AllocatedResource
+	deltaPendingResource := resources.Multiply(ask.AllocatedResource, int64(-1))
 	// update the scheduling objects with the in progress resource
 	node.incAllocatingResource(toAllocate)
 	sa.queue.incAllocatingResource(toAllocate)
+	// update the pending of the queue with the same delta
+	sa.queue.incPendingResource(deltaPendingResource)
+
+	// update app
+	sa.Lock()
+	defer sa.Unlock()
 	sa.allocating.AddTo(toAllocate)
-	// mark this ask as allocating by lowering the repeat
-	if _, err := sa.updateAskRepeatInternal(ask, -1); err != nil {
-		log.Logger().Error("application recovery update of existing allocation failed",
-			zap.String("appID", sa.ApplicationInfo.ApplicationID),
-			zap.String("allocKey", ask.AskProto.AllocationKey),
-			zap.Error(err))
-	}
+	sa.pending.AddTo(deltaPendingResource)
 }

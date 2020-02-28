@@ -191,8 +191,6 @@ func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) int {
 // Add an allocation ask to this application
 // If the ask already exist update the existing info
 func (sa *SchedulingApplication) addAllocationAsk(ask *schedulingAllocationAsk) (*resources.Resource, error) {
-	sa.Lock()
-	defer sa.Unlock()
 	if ask == nil {
 		return nil, fmt.Errorf("ask cannot be nil when added to app %s", sa.ApplicationInfo.ApplicationID)
 	}
@@ -202,6 +200,12 @@ func (sa *SchedulingApplication) addAllocationAsk(ask *schedulingAllocationAsk) 
 	ask.QueueName = sa.queue.Name
 	delta := resources.Multiply(ask.AllocatedResource, int64(ask.getPendingAskRepeat()))
 
+	// update pending resources in the queue
+	sa.queue.incPendingResource(delta)
+
+	// update resources in the app
+	sa.Lock()
+	defer sa.Unlock()
 	var oldAskResource *resources.Resource = nil
 	if oldAsk := sa.requests[ask.AskProto.AllocationKey]; oldAsk != nil {
 		oldAskResource = resources.Multiply(oldAsk.AllocatedResource, int64(oldAsk.getPendingAskRepeat()))
@@ -209,10 +213,7 @@ func (sa *SchedulingApplication) addAllocationAsk(ask *schedulingAllocationAsk) 
 
 	delta.SubFrom(oldAskResource)
 	sa.requests[ask.AskProto.AllocationKey] = ask
-
-	// Update total pending resource
 	sa.pending.AddTo(delta)
-	sa.queue.incPendingResource(delta)
 
 	return delta, nil
 }

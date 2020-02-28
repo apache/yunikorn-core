@@ -374,7 +374,7 @@ func (sa *SchedulingApplication) canAskReserve(ask *schedulingAllocationAsk) boo
 func (sa *SchedulingApplication) sortRequests(ascending bool) {
 	sa.sortedRequests = nil
 	for _, request := range sa.requests {
-		if request.pendingRepeatAsk == 0 {
+		if request.getPendingAskRepeat() == 0 {
 			continue
 		}
 		sa.sortedRequests = append(sa.sortedRequests, request)

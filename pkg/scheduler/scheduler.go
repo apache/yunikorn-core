@@ -292,8 +292,21 @@ func (s *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocat
 				zap.Error(err))
 		}
 
-		// recover allocation in cache
-		s.eventHandlers.CacheEventHandler.HandleEvent(alloc)
+		// ask cache to sync up
+		s.eventHandlers.CacheEventHandler.HandleEvent(&cacheevent.AllocationProposalBundleEvent{
+			AllocationProposals: []*commonevents.AllocationProposal{
+				{
+					NodeID:            alloc.NodeID,
+					ApplicationID:     alloc.ApplicationID,
+					QueueName:         alloc.QueueName,
+					AllocatedResource: resources.NewResourceFromProto(alloc.ResourcePerAlloc),
+					AllocationKey:     alloc.AllocationKey,
+					Priority:          alloc.Priority,
+					PartitionName:     alloc.PartitionName,
+				},
+			},
+			PartitionName: alloc.PartitionName,
+		})
 	}
 }
 

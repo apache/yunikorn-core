@@ -291,6 +291,9 @@ func (s *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocat
 			log.Logger().Error("app recovery failed to confirm allocation proposal",
 				zap.Error(err))
 		}
+
+		// recover allocation in cache
+		s.eventHandlers.CacheEventHandler.HandleEvent(alloc)
 	}
 }
 

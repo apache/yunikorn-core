@@ -291,22 +291,6 @@ func (s *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocat
 			log.Logger().Error("app recovery failed to confirm allocation proposal",
 				zap.Error(err))
 		}
-
-		// // ask cache to sync up
-		// s.eventHandlers.CacheEventHandler.HandleEvent(&cacheevent.AllocationProposalBundleEvent{
-		// 	AllocationProposals: []*commonevents.AllocationProposal{
-		// 		{
-		// 			NodeID:            alloc.NodeID,
-		// 			ApplicationID:     alloc.ApplicationID,
-		// 			QueueName:         alloc.QueueName,
-		// 			AllocatedResource: resources.NewResourceFromProto(alloc.ResourcePerAlloc),
-		// 			AllocationKey:     alloc.AllocationKey,
-		// 			Priority:          alloc.Priority,
-		// 			PartitionName:     common.GetNormalizedPartitionName(alloc.PartitionName, rmID),
-		// 		},
-		// 	},
-		// 	PartitionName: common.GetNormalizedPartitionName(alloc.PartitionName, rmID),
-		// })
 	}
 }
 

@@ -103,6 +103,12 @@ func (ni *NodeInfo) GetAvailableResource() *resources.Resource {
 	return ni.availableResource.Clone()
 }
 
+func (ni *NodeInfo) GetCapacity() *resources.Resource {
+	ni.lock.RLock()
+	defer ni.lock.RUnlock()
+	return ni.totalResource.Clone()
+}
+
 // Return the allocation based on the uuid of the allocation.
 // returns nil if the allocation is not found
 func (ni *NodeInfo) GetAllocation(uuid string) *AllocationInfo {

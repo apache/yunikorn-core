@@ -95,6 +95,29 @@ func GetApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func GetNodesInfo(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+
+	var result []*dao.NodesDAOInfo
+	lists := gClusterInfo.ListPartitions()
+	for _, k := range lists {
+		var nodesDao []*dao.NodeDAOInfo
+		partition := gClusterInfo.GetPartition(k)
+		for _, node := range partition.GetNodes() {
+			nodeDao := getNodeJSON(node)
+			nodesDao = append(nodesDao, nodeDao)
+		}
+		result = append(result, &dao.NodesDAOInfo{
+			PartitionName: partition.Name,
+			Nodes:         nodesDao,
+		})
+	}
+
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		panic(err)
+	}
+}
+
 func writeHeaders(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -161,5 +184,34 @@ func getApplicationJSON(app *cache.ApplicationInfo) *dao.ApplicationDAOInfo {
 		SubmissionTime: app.SubmissionTime,
 		Allocations:    allocationInfos,
 		State:          app.GetApplicationState(),
+	}
+}
+
+func getNodeJSON(nodeInfo *cache.NodeInfo) *dao.NodeDAOInfo {
+	var allocations []*dao.AllocationDAOInfo
+	for _, alloc := range nodeInfo.GetAllAllocations() {
+		allocInfo := &dao.AllocationDAOInfo{
+			AllocationKey:    alloc.AllocationProto.AllocationKey,
+			AllocationTags:   alloc.AllocationProto.AllocationTags,
+			UUID:             alloc.AllocationProto.UUID,
+			ResourcePerAlloc: strings.Trim(alloc.AllocatedResource.String(), "map"),
+			Priority:         alloc.AllocationProto.Priority.String(),
+			QueueName:        alloc.AllocationProto.QueueName,
+			NodeID:           alloc.AllocationProto.NodeID,
+			ApplicationID:    alloc.AllocationProto.ApplicationID,
+			Partition:        alloc.AllocationProto.PartitionName,
+		}
+		allocations = append(allocations, allocInfo)
+	}
+
+	return &dao.NodeDAOInfo{
+		NodeID:      nodeInfo.NodeID,
+		HostName:    nodeInfo.Hostname,
+		RackName:    nodeInfo.Rackname,
+		Capacity:    strings.Trim(nodeInfo.GetCapacity().String(), "map"),
+		Allocated:   strings.Trim(nodeInfo.GetAllocatedResource().String(), "map"),
+		Available:   strings.Trim(nodeInfo.GetAvailableResource().String(), "map"),
+		Allocations: allocations,
+		Schedulable: nodeInfo.IsSchedulable(),
 	}
 }

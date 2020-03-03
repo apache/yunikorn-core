@@ -192,6 +192,17 @@ func (sq *SchedulingQueue) removeSchedulingApplication(app *SchedulingApplicatio
 	delete(sq.applications, appID)
 }
 
+// Get a copy of all apps holding the lock
+func (sq *SchedulingQueue) getCopyOfApps() map[string]*SchedulingApplication {
+	sq.RLock()
+	defer sq.RUnlock()
+	appsCopy := make(map[string]*SchedulingApplication, 0)
+	for appID, app := range sq.applications {
+		appsCopy[appID] = app
+	}
+	return appsCopy
+}
+
 // Get a copy of the child queues
 // This is used by the partition manager to find all queues to clean however we can not
 // guarantee that there is no new child added while we clean up since there is no overall
@@ -381,15 +392,14 @@ func (sq *SchedulingQueue) sortApplications() []*SchedulingApplication {
 	}
 	// Create a copy of the applications with pending resources
 	sortedApps := make([]*SchedulingApplication, 0)
-	for _, app := range sq.applications {
+	for _, app := range sq.getCopyOfApps() {
 		// Only look at app when pending-res > 0
 		if resources.StrictlyGreaterThanZero(app.GetPendingResource()) {
 			sortedApps = append(sortedApps, app)
 		}
 	}
 	// Sort the applications
-	sorter := sq.getSortType()
-	sortApplications(sortedApps, sorter, sq.QueueInfo.GetGuaranteedResource())
+	sortApplications(sortedApps, sq.getSortType(), sq.QueueInfo.GetGuaranteedResource())
 
 	return sortedApps
 }
@@ -404,7 +414,7 @@ func (sq *SchedulingQueue) sortQueues() []*SchedulingQueue {
 	}
 	// Create a list of the queues with pending resources
 	sortedQueues := make([]*SchedulingQueue, 0)
-	for _, child := range sq.childrenQueues {
+	for _, child := range sq.GetCopyOfChildren() {
 		// a stopped queue cannot be scheduled
 		if child.isStopped() {
 			continue

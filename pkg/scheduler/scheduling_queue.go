@@ -193,15 +193,28 @@ func (sq *SchedulingQueue) removeSchedulingApplication(app *SchedulingApplicatio
 }
 
 // Get a copy of the child queues
+// Lock free call: this is used by the partition manager to find all queues to clean
+// however we can not guarantee that there is no new child added while we clean up since
+// there is no overall lock on the scheduler. We'll need to test just before to make sure
+// the parent is empty
 func (sq *SchedulingQueue) GetCopyOfChildren() map[string]*SchedulingQueue {
-	sq.RLock()
-	defer sq.RUnlock()
-
 	children := make(map[string]*SchedulingQueue)
 	for k, v := range sq.childrenQueues {
 		children[k] = v
 	}
 	return children
+}
+
+// Check if the queue is empty
+// A parent queue is empty when it has no children left
+// A leaf queue is empty when there are no applications left
+func (sq *SchedulingQueue) isEmpty() bool {
+	sq.RLock()
+	defer sq.RUnlock()
+	if sq.isLeafQueue() {
+		return len(sq.applications) == 0
+	}
+	return len(sq.childrenQueues) == 0
 }
 
 // Remove a child queue from this queue.
@@ -360,23 +373,22 @@ func (sq *SchedulingQueue) decAllocatingResource(delta *resources.Resource) {
 // Return a sorted copy of the applications in the queue. Applications are sorted using the
 // sorting type of the queue.
 // Only applications with a pending resource request are considered.
+// Lock free call all locks are taken when needed in called functions
 func (sq *SchedulingQueue) sortApplications() []*SchedulingApplication {
-	sq.RLock()
-	defer sq.RUnlock()
-
 	if !sq.isLeafQueue() {
 		return nil
 	}
 	// Create a copy of the applications with pending resources
 	sortedApps := make([]*SchedulingApplication, 0)
-	for _, v := range sq.applications {
+	for _, app := range sq.applications {
 		// Only look at app when pending-res > 0
-		if resources.StrictlyGreaterThanZero(v.GetPendingResource()) {
-			sortedApps = append(sortedApps, v)
+		if resources.StrictlyGreaterThanZero(app.GetPendingResource()) {
+			sortedApps = append(sortedApps, app)
 		}
 	}
 	// Sort the applications
-	sortApplications(sortedApps, sq.sortType, sq.QueueInfo.GuaranteedResource)
+	sorter := sq.getSortType()
+	sortApplications(sortedApps, sorter, sq.QueueInfo.GetGuaranteedResource())
 
 	return sortedApps
 }
@@ -384,10 +396,8 @@ func (sq *SchedulingQueue) sortApplications() []*SchedulingApplication {
 // Return a sorted copy of the queues for this parent queue.
 // Only queues with a pending resource request are considered. The queues are sorted using the
 // sorting type for the parent queue.
+// Lock free call all locks are taken when needed in called functions
 func (sq *SchedulingQueue) sortQueues() []*SchedulingQueue {
-	sq.RLock()
-	defer sq.RUnlock()
-
 	if sq.isLeafQueue() {
 		return nil
 	}
@@ -404,7 +414,8 @@ func (sq *SchedulingQueue) sortQueues() []*SchedulingQueue {
 		}
 	}
 	// Sort the queues
-	sortQueue(sortedQueues, sq.sortType)
+	sorter := sq.getSortType()
+	sortQueue(sortedQueues, sorter)
 
 	return sortedQueues
 }
@@ -566,4 +577,11 @@ func (sq *SchedulingQueue) getApplication(appID string) *SchedulingApplication {
 	sq.RLock()
 	defer sq.RUnlock()
 	return sq.applications[appID]
+}
+
+// get the queue sort type holding a lock
+func (sq *SchedulingQueue) getSortType() SortType {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.sortType
 }

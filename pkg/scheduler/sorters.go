@@ -42,8 +42,8 @@ func sortQueue(queues []*SchedulingQueue, sortType SortType) {
 		sort.SliceStable(queues, func(i, j int) bool {
 			l := queues[i]
 			r := queues[j]
-			comp := resources.CompUsageRatioSeparately(l.getAssumeAllocated(), l.QueueInfo.GuaranteedResource,
-				r.getAssumeAllocated(), r.QueueInfo.GuaranteedResource)
+			comp := resources.CompUsageRatioSeparately(l.getAssumeAllocated(), l.QueueInfo.GetGuaranteedResource(),
+				r.getAssumeAllocated(), r.QueueInfo.GetGuaranteedResource())
 			return comp < 0
 		})
 	}

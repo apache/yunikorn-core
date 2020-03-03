@@ -317,8 +317,8 @@ partitions:
 	// verify queues
 	//  - verify root queue
 	t.Log("verifying root queue")
-	assert.Equal(t, partition.Root.GuaranteedResource.Resources[resources.MEMORY], resources.Quantity(100))
-	assert.Equal(t, partition.Root.GuaranteedResource.Resources[resources.VCORE], resources.Quantity(10))
+	assert.Equal(t, partition.Root.GetGuaranteedResource().Resources[resources.MEMORY], resources.Quantity(100))
+	assert.Equal(t, partition.Root.GetGuaranteedResource().Resources[resources.VCORE], resources.Quantity(10))
 	assert.Equal(t, partition.Root.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
 	assert.Equal(t, partition.Root.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12))
 	//  - verify root.a queue

@@ -164,6 +164,7 @@ func newPartitionInfoInternal(part configs.PartitionConfig, rmID string, info *C
 }
 
 // Check the queue resource configuration settings.
+// This is lock free and not protected against race conditions as it operates on a private new structure.
 // - child or children cannot have higher maximum or guaranteed limits than parents
 // - children (added together) cannot have a higher guaranteed setting than a parent
 // TODO add maximum number of running applications
@@ -179,19 +180,19 @@ func checkResourceConfigurationsForQueue(cur *QueueInfo, parent *QueueInfo) erro
 
 		sum := resources.NewResource()
 		for _, child := range cur.children {
-			sum.AddTo(child.GuaranteedResource)
+			sum.AddTo(child.guaranteedResource)
 		}
 
-		if cur.GuaranteedResource != nil {
-			if !resources.FitIn(cur.GuaranteedResource, sum) {
-				return fmt.Errorf("queue %s has guaranteed-resources (%v) smaller than sum of children guaranteed resources (%v)", cur.Name, cur.GuaranteedResource, sum)
+		if cur.guaranteedResource != nil {
+			if !resources.FitIn(cur.guaranteedResource, sum) {
+				return fmt.Errorf("queue %s has guaranteed-resources (%v) smaller than sum of children guaranteed resources (%v)", cur.Name, cur.guaranteedResource, sum)
 			}
 		} else {
-			cur.GuaranteedResource = sum
+			cur.guaranteedResource = sum
 		}
-	} else if cur.GuaranteedResource == nil {
+	} else if cur.guaranteedResource == nil {
 		// When the queue doesn't have children, set guaranteed to zero if absent.
-		cur.GuaranteedResource = resources.NewResource()
+		cur.guaranteedResource = resources.NewResource()
 	}
 
 	// If max resource exist, check guaranteed fits in max, cur.max fit in parent.max
@@ -202,8 +203,8 @@ func checkResourceConfigurationsForQueue(cur *QueueInfo, parent *QueueInfo) erro
 			}
 		}
 
-		if !resources.FitIn(cur.maxResource, cur.GuaranteedResource) {
-			return fmt.Errorf("queue %s has max resources (%v) set smaller than guaranteed resources (%v)", cur.Name, cur.maxResource, cur.GuaranteedResource)
+		if !resources.FitIn(cur.maxResource, cur.guaranteedResource) {
+			return fmt.Errorf("queue %s has max resources (%v) set smaller than guaranteed resources (%v)", cur.Name, cur.maxResource, cur.guaranteedResource)
 		}
 	}
 

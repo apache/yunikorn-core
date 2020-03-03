@@ -38,16 +38,16 @@ func TestSortQueues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create basic root queue: %v", err)
 	}
-	root.QueueInfo.GuaranteedResource = resources.NewResourceFromMap(
-		map[string]resources.Quantity{"memory": 1000, "vcore": 1000})
+	cache.SetGuaranteedResource(root.QueueInfo,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000, "vcore": 1000}))
 
 	var q0, q1, q2 *SchedulingQueue
 	q0, err = createManagedQueue(root, "q0", false, nil)
 	if err != nil {
 		t.Fatalf("failed to create leaf queue: %v", err)
 	}
-	q0.QueueInfo.GuaranteedResource = resources.NewResourceFromMap(
-		map[string]resources.Quantity{"memory": 500, "vcore": 500})
+	cache.SetGuaranteedResource(q0.QueueInfo,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500, "vcore": 500}))
 	q0.allocating = resources.NewResourceFromMap(map[string]resources.Quantity{
 		"memory": resources.Quantity(300),
 		"vcore":  resources.Quantity(300)})
@@ -56,8 +56,8 @@ func TestSortQueues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create leaf queue: %v", err)
 	}
-	q1.QueueInfo.GuaranteedResource = resources.NewResourceFromMap(
-		map[string]resources.Quantity{"memory": 300, "vcore": 300})
+	cache.SetGuaranteedResource(q1.QueueInfo,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300, "vcore": 300}))
 	q1.allocating = resources.NewResourceFromMap(map[string]resources.Quantity{
 		"memory": resources.Quantity(200),
 		"vcore":  resources.Quantity(200)})
@@ -66,8 +66,8 @@ func TestSortQueues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create leaf queue: %v", err)
 	}
-	q2.QueueInfo.GuaranteedResource = resources.NewResourceFromMap(
-		map[string]resources.Quantity{"memory": 200, "vcore": 200})
+	cache.SetGuaranteedResource(q2.QueueInfo,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 200, "vcore": 200}))
 	q2.allocating = resources.NewResourceFromMap(map[string]resources.Quantity{
 		"memory": resources.Quantity(100),
 		"vcore":  resources.Quantity(100)})
@@ -100,16 +100,16 @@ func TestNoQueueLimits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create basic root queue: %v", err)
 	}
-	root.QueueInfo.GuaranteedResource = resources.NewResourceFromMap(
-		map[string]resources.Quantity{"memory": 0, "vcore": 0})
+	cache.SetGuaranteedResource(root.QueueInfo,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 0, "vcore": 0}))
 
 	var q0, q1, q2 *SchedulingQueue
 	q0, err = createManagedQueue(root, "q0", false, nil)
 	if err != nil {
 		t.Fatalf("failed to create leaf queue: %v", err)
 	}
-	q0.QueueInfo.GuaranteedResource = resources.NewResourceFromMap(
-		map[string]resources.Quantity{"memory": 0, "vcore": 0})
+	cache.SetGuaranteedResource(q0.QueueInfo,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 0, "vcore": 0}))
 	q0.allocating = resources.NewResourceFromMap(map[string]resources.Quantity{
 		"memory": resources.Quantity(300),
 		"vcore":  resources.Quantity(300)})
@@ -118,8 +118,8 @@ func TestNoQueueLimits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create leaf queue: %v", err)
 	}
-	q1.QueueInfo.GuaranteedResource = resources.NewResourceFromMap(
-		map[string]resources.Quantity{"memory": 0, "vcore": 0})
+	cache.SetGuaranteedResource(q1.QueueInfo,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 0, "vcore": 0}))
 	q1.allocating = resources.NewResourceFromMap(map[string]resources.Quantity{
 		"memory": resources.Quantity(200),
 		"vcore":  resources.Quantity(200)})
@@ -128,8 +128,8 @@ func TestNoQueueLimits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create leaf queue: %v", err)
 	}
-	q2.QueueInfo.GuaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{
-		"memory": 0, "vcore": 0})
+	cache.SetGuaranteedResource(q2.QueueInfo,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 0, "vcore": 0}))
 	q2.allocating = resources.NewResourceFromMap(map[string]resources.Quantity{
 		"memory": resources.Quantity(100),
 		"vcore":  resources.Quantity(100)})
@@ -152,14 +152,14 @@ func TestQueueGuaranteedResourceNotSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create basic root queue: %v", err)
 	}
-	root.QueueInfo.GuaranteedResource = nil
+	cache.SetGuaranteedResource(root.QueueInfo, nil)
 
 	var q0, q1, q2 *SchedulingQueue
 	q0, err = createManagedQueue(root, "q0", false, nil)
 	if err != nil {
 		t.Fatalf("failed to create leaf queue: %v", err)
 	}
-	q0.QueueInfo.GuaranteedResource = nil
+	cache.SetGuaranteedResource(q0.QueueInfo, nil)
 	q0.allocating = resources.NewResourceFromMap(map[string]resources.Quantity{
 		"memory": resources.Quantity(300),
 		"vcore":  resources.Quantity(300)})
@@ -168,7 +168,7 @@ func TestQueueGuaranteedResourceNotSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create leaf queue: %v", err)
 	}
-	q1.QueueInfo.GuaranteedResource = nil
+	cache.SetGuaranteedResource(q1.QueueInfo, nil)
 	q1.allocating = resources.NewResourceFromMap(map[string]resources.Quantity{
 		"memory": resources.Quantity(200),
 		"vcore":  resources.Quantity(200)})
@@ -178,7 +178,7 @@ func TestQueueGuaranteedResourceNotSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create leaf queue: %v", err)
 	}
-	q2.QueueInfo.GuaranteedResource = nil
+	cache.SetGuaranteedResource(q2.QueueInfo, nil)
 
 	queues := []*SchedulingQueue{q0, q1, q2}
 	sortQueue(queues, FairSortPolicy)

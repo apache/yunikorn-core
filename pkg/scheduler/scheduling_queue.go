@@ -193,11 +193,12 @@ func (sq *SchedulingQueue) removeSchedulingApplication(app *SchedulingApplicatio
 }
 
 // Get a copy of the child queues
-// Lock free call: this is used by the partition manager to find all queues to clean
-// however we can not guarantee that there is no new child added while we clean up since
-// there is no overall lock on the scheduler. We'll need to test just before to make sure
-// the parent is empty
+// This is used by the partition manager to find all queues to clean however we can not
+// guarantee that there is no new child added while we clean up since there is no overall
+// lock on the scheduler. We'll need to test just before to make sure the parent is empty
 func (sq *SchedulingQueue) GetCopyOfChildren() map[string]*SchedulingQueue {
+	sq.RLock()
+	defer sq.RUnlock()
 	children := make(map[string]*SchedulingQueue)
 	for k, v := range sq.childrenQueues {
 		children[k] = v

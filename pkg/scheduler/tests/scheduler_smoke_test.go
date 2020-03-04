@@ -124,7 +124,7 @@ partitions:
 	// Check scheduling queue root.base
 	schedulerQueue = ms.getSchedulingQueue("root.base")
 	assert.Assert(t, 1000 == schedulerQueue.QueueInfo.GetMaxResource().Resources[resources.MEMORY])
-	assert.Assert(t, 250 == schedulerQueue.QueueInfo.GuaranteedResource.Resources[resources.VCORE])
+	assert.Assert(t, 250 == schedulerQueue.QueueInfo.GetGuaranteedResource().Resources[resources.VCORE])
 
 	// check the removed queue state
 	schedulerQueue = ms.getSchedulingQueue("root.tobedeleted")

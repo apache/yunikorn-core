@@ -420,10 +420,10 @@ partitions:
 	if len(testQueue.Properties) != 1 {
 		t.Errorf("Failed parsing the properties on test queue in default partition")
 	}
-	if testQueue.GuaranteedResource.Resources["memory"] != 100 {
+	if testQueue.GetGuaranteedResource().Resources["memory"] != 100 {
 		t.Errorf("Failed parsing GuaranteedResource settings on test queue in default partition")
 	}
-	if testQueue.maxResource.Resources["vcore"] != 20 {
+	if testQueue.GetMaxResource().Resources["vcore"] != 20 {
 		t.Errorf("Failed parsing maxResource settings on test queue in default partition")
 	}
 }

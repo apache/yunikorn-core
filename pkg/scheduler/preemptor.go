@@ -59,7 +59,7 @@ type queuePreemptCalcResource struct {
 }
 
 func (m *queuePreemptCalcResource) initFromSchedulingQueue(queue *SchedulingQueue) {
-	m.guaranteed = queue.QueueInfo.GuaranteedResource
+	m.guaranteed = queue.QueueInfo.GetGuaranteedResource()
 	m.used = queue.QueueInfo.GetAllocatedResource()
 	m.pending = queue.GetPendingResource()
 	m.max = queue.QueueInfo.GetMaxResource()

@@ -872,3 +872,24 @@ func TestGetApp(t *testing.T) {
 		t.Errorf("un registered app found using appID which should not happen: %v", unknown)
 	}
 }
+
+func TestIsEmpty(t *testing.T) {
+	// create the root
+	root, err := createRootQueue(nil)
+	if err != nil {
+		t.Fatalf("failed to create basic root queue: %v", err)
+	}
+	assert.Equal(t, root.isEmpty(), true, "new root queue should have been empty")
+	var leaf *SchedulingQueue
+	leaf, err = createManagedQueue(root, "leaf", false, nil)
+	if err != nil {
+		t.Fatalf("failed to create leaf queue: %v", err)
+	}
+	assert.Equal(t, root.isEmpty(), false, "root queue with child leaf should not have been empty")
+	assert.Equal(t, leaf.isEmpty(), true, "new leaf should have been empty")
+
+	// add app and check proper returns
+	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "app-1"})
+	leaf.addSchedulingApplication(app)
+	assert.Equal(t, leaf.isEmpty(), false, "queue with registered app should not be empty")
+}

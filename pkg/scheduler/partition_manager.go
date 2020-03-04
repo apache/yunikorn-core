@@ -90,7 +90,7 @@ func (manager partitionManager) cleanQueues(schedulingQueue *SchedulingQueue) {
 			zap.String("queueName", schedulingQueue.Name),
 			zap.String("partitionName", manager.psc.Name))
 		// make sure the queue is empty
-		if len(schedulingQueue.applications) == 0 {
+		if schedulingQueue.isEmpty() {
 			// remove the cached queue, if not empty there is a problem since we have no applications left.
 			if schedulingQueue.QueueInfo.RemoveQueue() {
 				// all OK update the queue hierarchy and partition
@@ -109,7 +109,7 @@ func (manager partitionManager) cleanQueues(schedulingQueue *SchedulingQueue) {
 			}
 		} else {
 			// TODO time out waiting for draining and removal
-			log.Logger().Debug("failed to remove scheduling queue due to existing assigned apps",
+			log.Logger().Debug("failed to remove scheduling queue due to existing assigned apps or leaf queues",
 				zap.String("schedulingQueue", schedulingQueue.Name),
 				zap.String("partitionName", manager.psc.Name))
 		}

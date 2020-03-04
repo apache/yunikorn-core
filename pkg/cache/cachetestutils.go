@@ -78,3 +78,10 @@ func newNodeForTest(nodeID string, totalResource, availResource *resources.Resou
 
 	return node
 }
+
+// Utility function to allow tests to set the guaranteed resource that is not exported
+func SetGuaranteedResource(info *QueueInfo, res *resources.Resource) {
+	if info != nil {
+		info.guaranteedResource = res
+	}
+}

@@ -730,10 +730,10 @@ func (pi *PartitionInfo) GetQueueInfos() []dao.QueueDAOInfo {
 
 	info := dao.QueueDAOInfo{}
 	info.QueueName = pi.Root.Name
-	info.Status = "RUNNING"
+	info.Status = pi.Root.stateMachine.Current()
 	info.Capacities = dao.QueueCapacity{
-		Capacity:        checkAndSetResource(pi.Root.GuaranteedResource),
-		MaxCapacity:     checkAndSetResource(pi.Root.maxResource),
+		Capacity:        checkAndSetResource(pi.Root.GetGuaranteedResource()),
+		MaxCapacity:     checkAndSetResource(pi.Root.GetMaxResource()),
 		UsedCapacity:    checkAndSetResource(pi.Root.GetAllocatedResource()),
 		AbsUsedCapacity: "20",
 	}
@@ -749,17 +749,17 @@ func (pi *PartitionInfo) GetQueueInfos() []dao.QueueDAOInfo {
 // map status to the draining flag
 func GetChildQueueInfos(info *QueueInfo) []dao.QueueDAOInfo {
 	var infos []dao.QueueDAOInfo
-	for _, v := range info.children {
+	for _, child := range info.children {
 		queue := dao.QueueDAOInfo{}
-		queue.QueueName = v.Name
-		queue.Status = "RUNNING"
+		queue.QueueName = child.Name
+		queue.Status = child.stateMachine.Current()
 		queue.Capacities = dao.QueueCapacity{
-			Capacity:        checkAndSetResource(v.GuaranteedResource),
-			MaxCapacity:     checkAndSetResource(v.maxResource),
-			UsedCapacity:    checkAndSetResource(v.GetAllocatedResource()),
+			Capacity:        checkAndSetResource(child.GetGuaranteedResource()),
+			MaxCapacity:     checkAndSetResource(child.GetMaxResource()),
+			UsedCapacity:    checkAndSetResource(child.GetAllocatedResource()),
 			AbsUsedCapacity: "20",
 		}
-		queue.ChildQueues = GetChildQueueInfos(v)
+		queue.ChildQueues = GetChildQueueInfos(child)
 		infos = append(infos, queue)
 	}
 

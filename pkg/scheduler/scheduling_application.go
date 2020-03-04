@@ -286,7 +286,7 @@ func (sa *SchedulingApplication) reserve(node *SchedulingNode, ask *schedulingAl
 		return fmt.Errorf("reservation creation failed ask %s not found on appID %s", allocKey, sa.ApplicationInfo.ApplicationID)
 	}
 	if !sa.canAskReserve(ask) {
-		return fmt.Errorf("reservation of ask exceeds pending repeat, pending ask repeat %d", ask.pendingRepeatAsk)
+		return fmt.Errorf("reservation of ask exceeds pending repeat, pending ask repeat %d", ask.getPendingAskRepeat())
 	}
 	// check if we can reserve the node before reserving on the app
 	if err := node.reserve(sa, ask); err != nil {
@@ -372,7 +372,7 @@ func (sa *SchedulingApplication) canAskReserve(ask *schedulingAllocationAsk) boo
 func (sa *SchedulingApplication) sortRequests(ascending bool) {
 	sa.sortedRequests = nil
 	for _, request := range sa.requests {
-		if request.pendingRepeatAsk == 0 {
+		if request.getPendingAskRepeat() == 0 {
 			continue
 		}
 		sa.sortedRequests = append(sa.sortedRequests, request)
@@ -415,7 +415,7 @@ func (sa *SchedulingApplication) tryReservedAllocate(headRoom *resources.Resourc
 	for _, reserve := range sa.reservations {
 		ask := sa.requests[reserve.askKey]
 		// sanity check and cleanup if needed
-		if ask == nil || ask.pendingRepeatAsk == 0 {
+		if ask == nil || ask.getPendingAskRepeat() == 0 {
 			var unreserveAsk *schedulingAllocationAsk
 			// if the ask was not found we need to construct one to unreserve
 			if ask == nil {

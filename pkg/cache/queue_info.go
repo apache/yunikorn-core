@@ -51,15 +51,16 @@ type QueueInfo struct {
 	// of the queue or via a queue configuration update
 
 	// Private fields need protection
-	adminACL          security.ACL          // admin ACL
-	submitACL         security.ACL          // submit ACL
-	maxResource       *resources.Resource   // When not set, max = nil
-	allocatedResource *resources.Resource   // set based on allocation
-	isLeaf            bool                  // this is a leaf queue or not (i.e. parent)
-	isManaged         bool                  // queue is part of the config, not auto created
-	stateMachine      *fsm.FSM              // the state of the queue for scheduling
-	stateTime         time.Time             // last time the state was updated (needed for cleanup)
-	children          map[string]*QueueInfo // list of direct children
+	adminACL           security.ACL          // admin ACL
+	submitACL          security.ACL          // submit ACL
+	maxResource        *resources.Resource   // When not set, max = nil
+	guaranteedResource *resources.Resource   // When not set, Guaranteed == 0
+	allocatedResource  *resources.Resource   // set based on allocation
+	isLeaf             bool                  // this is a leaf queue or not (i.e. parent)
+	isManaged          bool                  // queue is part of the config, not auto created
+	stateMachine       *fsm.FSM              // the state of the queue for scheduling
+	stateTime          time.Time             // last time the state was updated (needed for cleanup)
+	children           map[string]*QueueInfo // list of direct children
 
 	sync.RWMutex // lock for updating the queue
 }
@@ -144,6 +145,13 @@ func (qi *QueueInfo) GetAllocatedResource() *resources.Resource {
 	qi.RLock()
 	defer qi.RUnlock()
 	return qi.allocatedResource.Clone()
+}
+
+// Return the guaranteed resource for the queue.
+func (qi *QueueInfo) GetGuaranteedResource() *resources.Resource {
+	qi.RLock()
+	defer qi.RUnlock()
+	return qi.guaranteedResource
 }
 
 // Return the max resource for the queue.
@@ -263,9 +271,9 @@ func (qi *QueueInfo) decAllocatedResource(alloc *resources.Resource) error {
 	// check the parent: need to pass before updating
 	if qi.Parent != nil {
 		if err := qi.Parent.decAllocatedResource(alloc); err != nil {
-			log.Logger().Error("released allocation is larger than parent queue max resource",
+			log.Logger().Error("released allocation is larger than parent queue allocated resource",
 				zap.Any("allocationId", alloc),
-				zap.Any("maxResource", qi.maxResource),
+				zap.Any("parent allocatedResource", qi.Parent.GetAllocatedResource()),
 				zap.Error(err))
 			return err
 		}
@@ -393,7 +401,7 @@ func (qi *QueueInfo) updateQueueProps(conf configs.QueueConfig) error {
 		return err
 	}
 	if len(guaranteedResource.Resources) != 0 {
-		qi.GuaranteedResource = guaranteedResource
+		qi.guaranteedResource = guaranteedResource
 	}
 
 	// Update Properties

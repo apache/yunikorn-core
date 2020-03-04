@@ -499,8 +499,8 @@ func TestRemoveAllocAsk(t *testing.T) {
 	var delta2 *resources.Resource
 	delta2, err = app.addAllocationAsk(ask)
 	assert.NilError(t, err, "ask 2 should have been added to app, returned delta")
-	if len(app.requests) != 2 {
-		t.Fatalf("missing asks from app expected 2 got %d", len(app.requests))
+	if app.requests.Size() != 2 {
+		t.Fatalf("missing asks from app expected 2 got %d", app.requests.Size())
 	}
 	if !resources.Equals(resources.Add(delta1, delta2), app.GetPendingResource()) {
 		t.Errorf("pending resource not updated correctly, expected %v but was: %v", resources.Add(delta1, delta2), app.GetPendingResource())
@@ -518,8 +518,8 @@ func TestRemoveAllocAsk(t *testing.T) {
 		t.Errorf("ask should have been removed from app, err %v, expected delta %v but was: %v, (reserved released = %d)", err, delta1, delta, reservedAsks)
 	}
 	reservedAsks = app.removeAllocationAsk("")
-	if len(app.requests) != 0 || reservedAsks != 0 {
-		t.Fatalf("asks not removed as expected 0 got %d, (reserved released = %d)", len(app.requests), reservedAsks)
+	if app.requests.Size() != 0 || reservedAsks != 0 {
+		t.Fatalf("asks not removed as expected 0 got %d, (reserved released = %d)", app.requests.Size(), reservedAsks)
 	}
 	if !resources.IsZero(app.GetPendingResource()) {
 		t.Errorf("pending resource not updated correctly, expected zero but was: %v", app.GetPendingResource())
@@ -564,31 +564,24 @@ func TestSortRequests(t *testing.T) {
 	if app == nil || app.ApplicationInfo.ApplicationID != appID {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
-	if app.sortedRequests != nil {
+	queue, err := createRootQueue(nil)
+	if err != nil {
+		t.Fatalf("queue create failed: %v", err)
+	}
+	app.queue = queue
+	if app.requests.GetPendingRequestIterator().HasNext() {
 		t.Fatalf("new app create should not have sorted requests: %v", app)
 	}
-	app.sortRequests(true)
-	if app.sortedRequests != nil {
-		t.Fatalf("after sort call (no pending resources) list must be nil: %v", app.sortedRequests)
-	}
-
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	for i := 1; i < 4; i++ {
 		num := strconv.Itoa(i)
 		ask := newAllocationAsk("ask-"+num, appID, res)
 		ask.priority = int32(i)
-		app.requests[ask.AskProto.AllocationKey] = ask
+		app.addAllocationAsk(ask)
 	}
-	app.sortRequests(true)
-	if len(app.sortedRequests) != 3 {
-		t.Fatalf("app sorted requests not correct: %v", app.sortedRequests)
-	}
-	allocKey := app.sortedRequests[0].AskProto.AllocationKey
-	delete(app.requests, allocKey)
-	app.sortRequests(true)
-	if len(app.sortedRequests) != 2 {
-		t.Fatalf("app sorted requests not correct after removal: %v", app.sortedRequests)
-	}
+	assertAskPriorities(t, app.requests.GetPendingRequestIterator(), []int32{3, 2, 1})
+	app.removeAllocationAsk("ask-3")
+	assertAskPriorities(t, app.requests.GetPendingRequestIterator(), []int32{2, 1})
 }
 
 func TestStateChangeOnAskUpdate(t *testing.T) {

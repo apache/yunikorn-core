@@ -121,7 +121,7 @@ func TestUnReserve(t *testing.T) {
 	}
 
 	// do a bogus reserve and unreserve: no errors and should be really removed
-	app.requests[ask.AskProto.AllocationKey] = ask
+	app.requests.AddRequest(ask)
 	err = app.reserve(node, ask)
 	if err != nil || len(app.reservations) != 1 || len(node.reservations) != 1 {
 		t.Fatalf("reserve should not have failed: %v", err)

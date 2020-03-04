@@ -19,9 +19,11 @@
 package scheduler
 
 import (
+	"fmt"
 	"sort"
 	"time"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
@@ -157,4 +159,96 @@ func sortAskByPriority(requests []*schedulingAllocationAsk, ascending bool) {
 		}
 		return l.priority > r.priority
 	})
+}
+
+// This interface is used by scheduling queue to sort applications and
+// get sorted pending requests from a specific application.
+type AppSortPolicy interface {
+	// sort applications
+	sortApplications(apps []*SchedulingApplication, queueInfo *cache.QueueInfo)
+	// get pending requests iterator,
+	// there may be different orders or compositions of requests for different implementations.
+	getPendingRequestIterator(app *SchedulingApplication) RequestIterator
+}
+
+type FifoAppSortPolicy struct {
+	AppSortPolicy
+}
+
+func (as *FifoAppSortPolicy) sortApplications(apps []*SchedulingApplication, queueInfo *cache.QueueInfo) {
+	// Sort by submission time oldest first
+	sort.SliceStable(apps, func(i, j int) bool {
+		l := apps[i]
+		r := apps[j]
+		return l.ApplicationInfo.SubmissionTime < r.ApplicationInfo.SubmissionTime
+	})
+}
+
+func (as *FifoAppSortPolicy) getPendingRequestIterator(app *SchedulingApplication) RequestIterator {
+	return app.requests.GetPendingRequestIterator()
+}
+
+type FairAppSortPolicy struct {
+	AppSortPolicy
+}
+
+func (as *FairAppSortPolicy) sortApplications(apps []*SchedulingApplication, queueInfo *cache.QueueInfo) {
+	// Sort by usage
+	sort.SliceStable(apps, func(i, j int) bool {
+		l := apps[i]
+		r := apps[j]
+		return resources.CompUsageRatio(l.getAssumeAllocated(), r.getAssumeAllocated(),
+			queueInfo.GetGuaranteedResource()) < 0
+	})
+}
+
+func (as *FairAppSortPolicy) getPendingRequestIterator(app *SchedulingApplication) RequestIterator {
+	return app.requests.GetPendingRequestIterator()
+}
+
+type PriorityFifoAppSortPolicy struct {
+	AppSortPolicy
+}
+
+func (as *PriorityFifoAppSortPolicy) sortApplications(apps []*SchedulingApplication, queueInfo *cache.QueueInfo) {
+	// Sort first by priority, then by create time
+	sort.SliceStable(apps, func(i, j int) bool {
+		r := apps[j].requests.GetTopPendingPriorityGroup()
+		if r == nil {
+			return true
+		}
+		l := apps[i].requests.GetTopPendingPriorityGroup()
+		if l == nil {
+			return false
+		}
+		if l.GetPriority() == r.GetPriority() {
+			return l.GetCreateTime().Before(r.GetCreateTime())
+		} else {
+			return l.GetPriority() > r.GetPriority()
+		}
+	})
+}
+
+func (as *PriorityFifoAppSortPolicy) getPendingRequestIterator(app *SchedulingApplication) RequestIterator {
+	topPendingPriorityGroup := app.requests.GetTopPendingPriorityGroup()
+	if topPendingPriorityGroup != nil {
+		return topPendingPriorityGroup.GetPendingRequestIterator()
+	} else {
+		return NewSortedRequestIterator([]common.MapIterator{})
+	}
+}
+
+func newAppSortPolicy(sortPolicy policies.SortPolicy) (AppSortPolicy, error) {
+	switch sortPolicy {
+	case policies.FairSortPolicy:
+		return &FairAppSortPolicy{}, nil
+	case policies.FifoSortPolicy:
+		return &FifoAppSortPolicy{}, nil
+	default:
+		return nil, fmt.Errorf("undefined app sort policy: %s", sortPolicy.String())
+	}
+}
+
+func newDefaultAppSortPolicy() AppSortPolicy {
+	return &FairAppSortPolicy{}
 }

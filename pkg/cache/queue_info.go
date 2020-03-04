@@ -542,3 +542,12 @@ func (qi *QueueInfo) GetQueueInfos() dao.QueueDAOInfo {
 	}
 	return queueInfo
 }
+
+// Set the queue to unschedulable.
+// This will cause the node to be skipped during the scheduling cycle.
+// Visible for testing only
+func (qi *QueueInfo) SetGuaranteedResource(guaranteedRes *resources.Resource) {
+	qi.Lock()
+	defer qi.Unlock()
+	qi.guaranteedResource = guaranteedRes
+}

@@ -41,6 +41,7 @@ type SchedulingQueue struct {
 
 	// Private fields need protection
 	sortType       policies.SortPolicy               // How applications (leaf) or queues (parents) are sorted
+	appSortPolicy  AppSortPolicy                     // Sort policy defines how applications are sorted and how pending requests are organized
 	childrenQueues map[string]*SchedulingQueue       // Only for direct children, parent queue only
 	applications   map[string]*SchedulingApplication // only for leaf queue
 	reservedApps   map[string]int                    // applications reserved within this queue, with reservation count
@@ -109,10 +110,23 @@ func (sq *SchedulingQueue) updateSchedulingQueueProperties(prop map[string]strin
 		if sq.sortType == policies.Undefined {
 			sq.sortType = policies.FifoSortPolicy
 		}
+		sq.updateAppSortPolicy()
 		return
 	}
 	// set the sorting type for parent queues
 	sq.sortType = policies.FairSortPolicy
+	sq.updateAppSortPolicy()
+}
+
+// Update app sort policy
+// NOTE: this is a lock free call. It should only be called holding the SchedulingQueue lock.
+func (sq *SchedulingQueue) updateAppSortPolicy() {
+	if appSortPolicy, err := newAppSortPolicy(sq.sortType); err == nil {
+		sq.appSortPolicy = appSortPolicy
+	} else {
+		log.Logger().Error("Can't get app sort policy by name",
+			zap.String("queueName", sq.Name), zap.Error(err))
+	}
 }
 
 // Update the queue properties and the child queues for the queue after a configuration update.
@@ -443,7 +457,9 @@ func (sq *SchedulingQueue) sortApplications() []*SchedulingApplication {
 		return nil
 	}
 	// Sort the applications
-	return sortApplications(sq.getCopyOfApps(), sq.getSortType(), sq.QueueInfo.GetGuaranteedResource())
+	sortedApps := filterOnPendingResources(sq.getCopyOfApps())
+	sq.appSortPolicy.sortApplications(sortedApps, sq.QueueInfo)
+	return sortedApps
 }
 
 // Return a sorted copy of the queues for this parent queue.

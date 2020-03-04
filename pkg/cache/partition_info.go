@@ -794,6 +794,12 @@ func (pi *PartitionInfo) GetApplications() []*ApplicationInfo {
 	return appList
 }
 
+func (pi *PartitionInfo) GetNodes() map[string]*NodeInfo {
+	pi.RLock()
+	defer pi.RUnlock()
+	return pi.nodes
+}
+
 // Get the queue from the structure based on the fully qualified name.
 // Wrapper around the unlocked version getQueue()
 func (pi *PartitionInfo) GetQueue(name string) *QueueInfo {

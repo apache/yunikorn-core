@@ -61,12 +61,6 @@ func newSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo, parent *SchedulingQ
 		pending:        resources.NewResource(),
 	}
 
-	// we can update the parent as we have a lock on the partition or the cluster when we get here
-	if parent != nil {
-		name := sq.Name[strings.LastIndex(sq.Name, cache.DOT)+1:]
-		parent.childrenQueues[name] = sq
-	}
-
 	// update the properties
 	sq.updateSchedulingQueueProperties(cacheQueueInfo.Properties)
 
@@ -76,11 +70,19 @@ func newSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo, parent *SchedulingQ
 		sq.childrenQueues[childName] = newChildQueue
 	}
 
+	// add to the parent, we might have a partition lock already
+	// still need to make sure we lock the parent so we do not interfere with scheduling
+	if parent != nil {
+		parent.addChildQueue(sq)
+	}
+
 	return sq
 }
 
 // Update the properties for the scheduling queue based on the current cached configuration
 func (sq *SchedulingQueue) updateSchedulingQueueProperties(prop map[string]string) {
+	sq.Lock()
+	defer sq.Unlock()
 	// set the defaults, override with what is in the configured properties
 	if sq.isLeafQueue() {
 		sq.sortType = FifoSortPolicy
@@ -105,11 +107,9 @@ func (sq *SchedulingQueue) updateSchedulingQueueProperties(prop map[string]strin
 // Child queues that are removed from the configuration have been changed to a draining state and will not be scheduled.
 // They are not removed until the queue is really empty, no action must be taken here.
 func (sq *SchedulingQueue) updateSchedulingQueueInfo(info map[string]*cache.QueueInfo, parent *SchedulingQueue) {
-	sq.Lock()
-	defer sq.Unlock()
 	// initialise the child queues based on what is in the cached copy
 	for childName, childQueue := range info {
-		child := sq.childrenQueues[childName]
+		child := sq.getChildQueue(childName)
 		// create a new queue if it does not exist
 		if child == nil {
 			child = newSchedulingQueueInfo(childQueue, parent)
@@ -238,6 +238,24 @@ func (sq *SchedulingQueue) removeChildQueue(name string) {
 	defer sq.Unlock()
 
 	delete(sq.childrenQueues, name)
+}
+
+// Add a child queue to this queue.
+func (sq *SchedulingQueue) addChildQueue(child *SchedulingQueue) {
+	sq.Lock()
+	defer sq.Unlock()
+
+	// no need to lock child as it is a new queue which cannot be accessed yet
+	name := child.Name[strings.LastIndex(child.Name, cache.DOT)+1:]
+	sq.childrenQueues[name] = child
+}
+
+// Get a child queue based on the name of the child.
+func (sq *SchedulingQueue) getChildQueue(name string) *SchedulingQueue {
+	sq.RLock()
+	defer sq.RUnlock()
+
+	return sq.childrenQueues[name]
 }
 
 // Remove the queue from the structure.

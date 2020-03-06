@@ -19,6 +19,8 @@
 package tests
 
 import (
+	"os"
+	"runtime/pprof"
 	"sync"
 	"testing"
 	"time"
@@ -172,6 +174,7 @@ func (m *mockRMCallback) waitForAllocations(t *testing.T, nAlloc int, timeoutMs 
 		return allocLen == nAlloc
 	})
 	if err != nil {
+		pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
 		t.Fatalf("Failed to wait for allocations, expected %d, actual %d, called from: %s", nAlloc, allocLen, caller())
 	}
 }

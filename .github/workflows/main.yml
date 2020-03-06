@@ -33,4 +33,9 @@ jobs:
           make lint
 
       - name: unit test
-        run: make test
+        run: |
+          cd pkg/scheduler/tests
+          go test -run TestBasicScheduler -v
+          echo ""
+          echo ""
+          go test -run TestReservationForTwoQueues -v

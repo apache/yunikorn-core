@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
@@ -243,7 +244,7 @@ func TestReservationForTwoQueues(t *testing.T) {
 
 	// Allocate for app 1
 	ms.scheduler.MultiStepSchedule(8)
-	ms.mockRM.waitForAllocations(t, 4, 1000)
+	ms.mockRM.waitForAllocations(t, 4, 3000)
 	mem := int(app1.GetAllocatedResource().Resources[resources.MEMORY])
 	assert.Equal(t, 80, mem, "allocated resource after alloc not correct")
 	waitForNodesAllocatedResource(t, ms.clusterInfo, ms.partitionName, nodes, 80, 1000)
@@ -268,10 +269,14 @@ func TestReservationForTwoQueues(t *testing.T) {
 	// Allocation should not change
 	ms.mockRM.waitForAllocations(t, 4, 1000)
 
+	err = common.WaitFor(100 * time.Millisecond, 3000 * time.Millisecond, func() bool {
+		return len(ms.getPartitionReservations()) == 1
+	})
+	if err != nil {
+		t.Fatal("partition reservations are missing")
+	}
 	// both reservations should be for the same app
-	appResCounter := ms.getPartitionReservations()
-	assert.Equal(t, 1, len(appResCounter), "partition reservations are missing")
-	assert.Equal(t, 2, appResCounter[app2ID], "partition reservations counter should have been 2")
+	assert.Equal(t, 2, ms.getPartitionReservations()[app2ID], "partition reservations counter should have been 2")
 	assert.Equal(t, 2, len(app2.GetReservations()), "app-2 should have 2 reservations")
 	assert.Equal(t, 0, len(app3.GetReservations()), "app-3 should have no reservations")
 

@@ -19,6 +19,8 @@
 package tests
 
 import (
+	"os"
+	"runtime/pprof"
 	"strconv"
 	"testing"
 	"time"
@@ -270,6 +272,7 @@ func TestReservationForTwoQueues(t *testing.T) {
 
 	// both reservations should be for the same app
 	appResCounter := ms.getPartitionReservations()
+	pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
 	assert.Equal(t, 1, len(appResCounter), "partition reservations are missing")
 	assert.Equal(t, 2, appResCounter[app2ID], "partition reservations counter should have been 2")
 	assert.Equal(t, 2, len(app2.GetReservations()), "app-2 should have 2 reservations")

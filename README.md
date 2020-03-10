@@ -52,7 +52,9 @@ See more instructions from the [User Guide](./docs/user-guide.md).
 
 ## How can I get involved?
 
-We welcome any form of contributions, code, documentation or even discussions. To get involved, please read following resources.
+We welcome any form of contributions, code, documentation or even discussions. 
+To get involved, please read following resources.
+- Logging an issue or improvement use the [Reporting an issue Guide](docs/reporting-issues.md).
 - Before you contributing code or documentation to YuniKorn, please read our [Developer Guide](docs/developer-guide.md).
 - When you are coding use the [Coding Guidelines](docs/coding-guidelines.md).
 - Please read [How to Contribute](docs/how-to-contribute.md) to understand the procedure and guidelines of making contributions.
@@ -69,13 +71,13 @@ We welcome any form of contributions, code, documentation or even discussions. T
 
 **Communication channels**
 
-- We use [Slack](https://slack.com/) as our primary collaboration system, you can join us by accessing [this link](https://join.slack.com/t/yunikornworkspace/shared_invite/enQtNzAzMjY0OTI4MjYzLTBmMDdkYTAwNDMwNTE3NWVjZWE1OTczMWE4NDI2Yzg3MmEyZjUyYTZlMDE5M2U4ZjZhNmYyNGFmYjY4ZGYyMGE).
+- Mailing lists are:
+  - user@ user questions list
+  - dev@ development discussions
+  - issues@ JIRA issue feed
+- We use [Slack](https://slack.com/) as our collaboration system, you can join us by accessing [this link](https://join.slack.com/t/yunikornworkspace/shared_invite/enQtNzAzMjY0OTI4MjYzLTBmMDdkYTAwNDMwNTE3NWVjZWE1OTczMWE4NDI2Yzg3MmEyZjUyYTZlMDE5M2U4ZjZhNmYyNGFmYjY4ZGYyMGE).
 Currently, we have following channels in the workspace: `#yunikorn-dev` and `#yunikorn-user`.
-- Google Group: https://groups.google.com/d/forum/yunikorn
-- Mailing list: yunikorn@googlegroups.com  
 
 **Blog posts**
 
 - [YuniKorn: a universal resource scheduler](https://blog.cloudera.com/blog/2019/07/yunikorn-a-universal-resource-scheduler/)
-
-

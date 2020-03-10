@@ -63,7 +63,7 @@ partitions:
 ```
 NOTE:
 Currently the Kubernetes unique shim does not support any other partition than the `default` partition..
-This has been logged as an [issue](https://github.com/cloudera/yunikorn-k8shim/issues/49) for the shim.
+This has been logged as an [jira](https://issues.apache.org/jira/browse/YUNIKORN-22) for the shim.
 
 ### Queues
 The _queues_ entry is the main configuration element. 

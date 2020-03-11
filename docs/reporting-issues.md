@@ -53,7 +53,7 @@ If you are not sure then just leave it empty.
 
 If you are a developer intending to fix the bug, put your JIRA ID in the Assignee field.
 Note that you need to be in the contributors list of Apache YuniKorn in order to be able to be assign a JIRA ticket.
-If you have not been added to the list, send an email to the dev@yunikorn mailing list or ask in a comment of the jira to request for it.
+If you have not been added to the list, send an email to the [dev@yunikorn.apache.org](mailto:dev@yunikorn.apache.org) mailing list or ask in a comment of the jira to request for it.
 
 Please put as much detail as possible in the Description field.
 Include your configuration changes, cluster size, and YuniKorn version.

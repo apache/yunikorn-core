@@ -75,5 +75,5 @@ The JIRA will not be closed automatically.
 ## Still got questions?
 If you’re not sure about something, try to follow the style of the existing codebase.
 Look at whether there are other examples in the code that do a similar thing.
-Feel free to ask on the dev@yunikorn.apache.org list as well.
+Feel free to ask on the [dev@yunikorn.apache.org](mailto:dev@yunikorn.apache.org) list as well.
 

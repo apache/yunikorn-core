@@ -72,9 +72,9 @@ To get involved, please read following resources.
 **Communication channels**
 
 - Mailing lists are:
-  - user@ user questions list
-  - dev@ development discussions
-  - issues@ JIRA issue feed
+  - [user@yunikorn.apache.org](mailto:user@yunikorn.apache.org) user questions list
+  - [dev@yunikorn.apache.org](mailto:dev@yunikorn.apache.org) development discussions
+  - [issues@yunikorn.apache.org](mailto:issues@yunikorn.apache.org) JIRA issue feed
 - We use [Slack](https://slack.com/) as our collaboration system, you can join us by accessing [this link](https://join.slack.com/t/yunikornworkspace/shared_invite/enQtNzAzMjY0OTI4MjYzLTBmMDdkYTAwNDMwNTE3NWVjZWE1OTczMWE4NDI2Yzg3MmEyZjUyYTZlMDE5M2U4ZjZhNmYyNGFmYjY4ZGYyMGE).
 Currently, we have following channels in the workspace: `#yunikorn-dev` and `#yunikorn-user`.
 

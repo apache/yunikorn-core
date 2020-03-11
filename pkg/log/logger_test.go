@@ -21,9 +21,9 @@ package log
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gotest.tools/assert"
 )
 
 func TestIsNopLogger(t *testing.T) {
@@ -53,21 +53,16 @@ func TestIsDebugEnabled(t *testing.T) {
 		Level:    zap.NewAtomicLevelAt(zapcore.DebugLevel),
 		Encoding: "console",
 	}
-	if newLogger, err := zapConfigs.Build(); err != nil {
-		assert.Fail(t, err.Error())
-	} else {
-		logger = newLogger
-		assert.Equal(t, true, IsDebugEnabled())
-	}
+	var err error
+	logger, err = zapConfigs.Build()
+	assert.NilError(t, err, "debug level logger create failed")
+	assert.Equal(t, true, IsDebugEnabled())
 
 	zapConfigs = zap.Config{
 		Level:    zap.NewAtomicLevelAt(zapcore.InfoLevel),
 		Encoding: "console",
 	}
-	if newLogger, err := zapConfigs.Build(); err != nil {
-		assert.Fail(t, err.Error())
-	} else {
-		logger = newLogger
-		assert.Equal(t, false, IsDebugEnabled())
-	}
+	logger, err = zapConfigs.Build()
+	assert.NilError(t, err, "info level logger create failed")
+	assert.Equal(t, false, IsDebugEnabled())
 }

@@ -24,6 +24,7 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/maps"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
@@ -217,7 +218,7 @@ func (as *FifoAppSortPolicy) getPendingRequestIterator(app *SchedulingApplicatio
 	if topPendingPriorityGroup != nil {
 		return topPendingPriorityGroup.GetPendingRequestIterator()
 	} else {
-		return NewSortedRequestIterator([]common.MapIterator{})
+		return NewSortedRequestIterator([]maps.MapIterator{})
 	}
 }
 

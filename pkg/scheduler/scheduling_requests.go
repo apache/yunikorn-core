@@ -19,7 +19,7 @@
 package scheduler
 
 import (
-    "github.com/apache/incubator-yunikorn-core/pkg/common"
+    "github.com/apache/incubator-yunikorn-core/pkg/common/maps"
     "time"
 )
 
@@ -79,13 +79,13 @@ type SortedRequests struct {
     // a map of all requests
     requests map[string]*schedulingAllocationAsk
     // sorted priority groups in the descending order by priority
-    sortedPriorityGroups *common.SortableLinkedMap
+    sortedPriorityGroups *maps.SortableLinkedMap
 }
 
 func NewSortedRequests() *SortedRequests {
     return &SortedRequests{
         requests:             make(map[string]*schedulingAllocationAsk),
-        sortedPriorityGroups: common.NewSortableLinkedMap(func(i, j interface{}) bool {
+        sortedPriorityGroups: maps.NewSortableLinkedMap(func(i, j interface{}) bool {
             return i.(PriorityGroup).GetPriority() > j.(PriorityGroup).GetPriority()
         }, func(value interface{}) bool {
             return value.(PriorityGroup).IsPending()
@@ -155,7 +155,7 @@ func (sr *SortedRequests) GetTopPendingPriorityGroup() PriorityGroup {
 
 func (sr *SortedRequests) GetPendingRequestIterator() RequestIterator {
     pgIt := sr.sortedPriorityGroups.GetMatchedIterator()
-    iterators := make([]common.MapIterator, 0)
+    iterators := make([]maps.MapIterator, 0)
     for pgIt.HasNext() {
         _, pg := pgIt.Next()
         pendingReqIt := pg.(*SortedPriorityGroup).sortedRequests.GetMatchedIterator()
@@ -171,14 +171,14 @@ type SortedPriorityGroup struct {
     // create time of the group
     createTime time.Time
     // sorted requests in ascending order by the creation time of request
-    sortedRequests *common.SortableLinkedMap
+    sortedRequests *maps.SortableLinkedMap
 }
 
 func NewSortedPriorityGroup(priority int32) *SortedPriorityGroup {
     return &SortedPriorityGroup{
         priority:   priority,
         createTime: time.Now(),
-        sortedRequests: common.NewSortableLinkedMap(func(i, j interface{}) bool {
+        sortedRequests: maps.NewSortableLinkedMap(func(i, j interface{}) bool {
             return i.(*schedulingAllocationAsk).getCreateTime().Before(j.(*schedulingAllocationAsk).getCreateTime())
         }, func(value interface{}) bool {
             return value.(*schedulingAllocationAsk).getPendingAskRepeat() > 0
@@ -211,19 +211,19 @@ func (spg *SortedPriorityGroup) IsPending() bool {
 }
 
 func (spg *SortedPriorityGroup) GetPendingRequestIterator() RequestIterator {
-    return NewSortedRequestIterator([]common.MapIterator{spg.sortedRequests.GetMatchedIterator()})
+    return NewSortedRequestIterator([]maps.MapIterator{spg.sortedRequests.GetMatchedIterator()})
 }
 
 func (spg *SortedPriorityGroup) GetRequestIterator() RequestIterator {
-    return NewSortedRequestIterator([]common.MapIterator{spg.sortedRequests.GetIterator()})
+    return NewSortedRequestIterator([]maps.MapIterator{spg.sortedRequests.GetIterator()})
 }
 
 type SortedRequestIterator struct {
-    iterators []common.MapIterator
+    iterators []maps.MapIterator
     index int
 }
 
-func NewSortedRequestIterator(iterators []common.MapIterator) *SortedRequestIterator {
+func NewSortedRequestIterator(iterators []maps.MapIterator) *SortedRequestIterator {
     return &SortedRequestIterator{
         iterators: iterators,
         index:     0,

@@ -16,7 +16,7 @@
  limitations under the License.
 */
 
-package common
+package maps
 
 // This interface defines how to storing and managing data in forms of mapping.
 type Map interface {

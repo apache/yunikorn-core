@@ -87,7 +87,7 @@ func NewSortedRequests() *SortedRequests {
         requests:             make(map[string]*schedulingAllocationAsk),
         sortedPriorityGroups: common.NewSortableLinkedMap(func(i, j interface{}) bool {
             return i.(PriorityGroup).GetPriority() > j.(PriorityGroup).GetPriority()
-        }, true, func(value interface{}) bool {
+        }, func(value interface{}) bool {
             return value.(PriorityGroup).IsPending()
         }),
     }
@@ -180,7 +180,7 @@ func NewSortedPriorityGroup(priority int32) *SortedPriorityGroup {
         createTime: time.Now(),
         sortedRequests: common.NewSortableLinkedMap(func(i, j interface{}) bool {
             return i.(*schedulingAllocationAsk).getCreateTime().Before(j.(*schedulingAllocationAsk).getCreateTime())
-        }, true, func(value interface{}) bool {
+        }, func(value interface{}) bool {
             return value.(*schedulingAllocationAsk).getPendingAskRepeat() > 0
         }),
     }

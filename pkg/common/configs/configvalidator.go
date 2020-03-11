@@ -240,6 +240,16 @@ func checkLimits(limits []Limit, obj string) error {
 	return nil
 }
 
+// Check the defined limits list
+func checkProperties(properties map [string]string) error {
+	if appSortPolicy, ok := properties[common.ApplicationSortPolicy]; ok {
+		if _, err := common.ParseAppSortPolicyType(appSortPolicy); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Check for global policy
 func checkNodeSortingPolicy(partition *PartitionConfig) error {
 	// get the policy
@@ -274,6 +284,12 @@ func checkQueues(queue *QueueConfig, level int) error {
 
 	// check the limits for this child (if defined)
 	err = checkLimits(queue.Limits, queue.Name)
+	if err != nil {
+		return err
+	}
+
+	// check the properties for this child (if defined)
+	err = checkProperties(queue.Properties)
 	if err != nil {
 		return err
 	}

@@ -118,8 +118,8 @@ func (sq *SchedulingQueue) updateSchedulingQueueProperties(prop map[string]strin
 	sq.updateAppSortPolicy()
 }
 
-// Update app sort policy
-// NOTE: this is a lock free call. It should only be called holding the SchedulingQueue lock.
+// Update the app sort policy
+// NOTE: this is a lock free call. It should only be called while holding the SchedulingQueue lock.
 func (sq *SchedulingQueue) updateAppSortPolicy() {
 	if appSortPolicy, err := newAppSortPolicy(sq.sortType); err == nil {
 		sq.appSortPolicy = appSortPolicy

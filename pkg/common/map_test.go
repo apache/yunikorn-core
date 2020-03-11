@@ -21,6 +21,8 @@ package common
 import (
     "fmt"
     "gotest.tools/assert"
+    "math/rand"
+    "sort"
     "testing"
 )
 
@@ -55,7 +57,11 @@ func checkEmptyMap(t *testing.T, testMap *SortableLinkedMap) {
 }
 
 func checkMap(t *testing.T, testMap *SortableLinkedMap, expectedKeys []interface{}, expectedValues []interface{},
-    expectedFirstMatchValue interface{}) {
+    expectedFirstMatchedValue interface{}) {
+    if len(expectedKeys) == 0 {
+        checkEmptyMap(t, testMap)
+        return
+    }
     // check head & tail
     t.Logf("Check SortableLinkedMap: expectedKeys=%v, expectedValues=%v",
         expectedKeys, expectedValues)
@@ -81,10 +87,10 @@ func checkMap(t *testing.T, testMap *SortableLinkedMap, expectedKeys []interface
         assert.Equal(t, value, values[index])
     }
     // check first matched entry
-    if expectedFirstMatchValue == nil {
+    if expectedFirstMatchedValue == nil {
         assert.Assert(t, testMap.firstMatchedEntry == nil)
     } else {
-        assert.Equal(t, testMap.firstMatchedEntry.value, expectedFirstMatchValue)
+        assert.Equal(t, testMap.firstMatchedEntry.value, expectedFirstMatchedValue)
     }
     // check iterator
     checkIterator(t, testMap.GetIterator(), expectedKeys, expectedValues)
@@ -92,29 +98,29 @@ func checkMap(t *testing.T, testMap *SortableLinkedMap, expectedKeys []interface
 
 // Test simple linked map without sorting
 func TestSimpleLinkedMap(t *testing.T) {
-    testMap := NewSortableLinkedMap(nil, false, nil)
+    testMap := NewSortableLinkedMap(nil, nil)
     // empty map
     checkEmptyMap(t, testMap)
 
     // put
     result := testMap.Put(1, 1)
-    assert.Equal(t, result, 1)
+    assert.Equal(t, result, nil)
     checkMap(t, testMap, []interface{}{1}, []interface{}{1}, nil)
 
     result = testMap.Put("2", "2")
-    assert.Equal(t, result, "2")
+    assert.Equal(t, result, nil)
     checkMap(t, testMap, []interface{}{1, "2"}, []interface{}{1, "2"}, nil)
 
     result = testMap.Put("3", 3)
-    assert.Equal(t, result, 3)
+    assert.Equal(t, result, nil)
     checkMap(t, testMap, []interface{}{1, "2", "3"}, []interface{}{1, "2", 3}, nil)
 
     result = testMap.Put(4, "4")
-    assert.Equal(t, result, "4")
+    assert.Equal(t, result, nil)
     checkMap(t, testMap, []interface{}{1, "2", "3", 4}, []interface{}{1, "2", 3, "4"}, nil)
 
     result = testMap.Put(5, 5)
-    assert.Equal(t, result, 5)
+    assert.Equal(t, result, nil)
     checkMap(t, testMap, []interface{}{1, "2", "3", 4, 5}, []interface{}{1, "2", 3, "4", 5}, nil)
 
     result = testMap.Put(6, nil)
@@ -122,7 +128,7 @@ func TestSimpleLinkedMap(t *testing.T) {
     checkMap(t, testMap, []interface{}{1, "2", "3", 4, 5, 6}, []interface{}{1, "2", 3, "4", 5, nil}, nil)
 
     result = testMap.Put(nil, 7)
-    assert.Equal(t, result, 7)
+    assert.Equal(t, result, nil)
     checkMap(t, testMap, []interface{}{1, "2", "3", 4, 5, 6, nil}, []interface{}{1, "2", 3, "4", 5, nil, 7}, nil)
 
     // replace
@@ -195,114 +201,7 @@ func TestSimpleLinkedMap(t *testing.T) {
 func TestSortableLinkedMap(t *testing.T) {
     testMap := NewSortableLinkedMap(func(i, j interface{}) bool {
         return i.(int) > j.(int)
-    }, false, func(value interface{}) bool {
-        return value.(int) % 2 == 0
-    })
-    // empty map
-    checkEmptyMap(t, testMap)
-
-    // put cases
-    testMap.Put(1, 1)
-    checkMap(t, testMap, []interface{}{1}, []interface{}{1}, nil)
-
-    testMap.Put(2, 2)
-    checkMap(t, testMap, []interface{}{2, 1}, []interface{}{2, 1}, 2)
-
-    testMap.Put(3, 3)
-    checkMap(t, testMap, []interface{}{3, 2, 1}, []interface{}{3, 2, 1}, 2)
-
-    testMap.Put(4, 4)
-    checkMap(t, testMap, []interface{}{4, 3, 2, 1}, []interface{}{4, 3, 2, 1}, 4)
-
-    testMap.Put(5, 5)
-    checkMap(t, testMap, []interface{}{5, 4, 3, 2, 1}, []interface{}{5, 4, 3, 2, 1}, 4)
-
-    testMap.Put(6, 6)
-    checkMap(t, testMap, []interface{}{6, 5, 4, 3, 2, 1}, []interface{}{6, 5, 4, 3, 2, 1}, 6)
-    checkIterator(t, testMap.GetMatchedIterator(), []interface{}{6, 4, 2}, []interface{}{6, 4, 2})
-
-    // replace cases
-    testMap.Put(1, 11)
-    checkMap(t, testMap, []interface{}{1, 6, 5, 4, 3, 2}, []interface{}{11, 6, 5, 4, 3, 2}, 6)
-
-    testMap.Put(2, 12)
-    checkMap(t, testMap, []interface{}{2, 1, 6, 5, 4, 3}, []interface{}{12, 11, 6, 5, 4, 3}, 12)
-    checkIterator(t, testMap.GetMatchedIterator(), []interface{}{2, 6, 4}, []interface{}{12, 6, 4})
-
-    testMap.Put(2, 0)
-    checkMap(t, testMap, []interface{}{1, 6, 5, 4, 3, 2}, []interface{}{11, 6, 5, 4, 3, 0}, 6)
-    checkIterator(t, testMap.GetMatchedIterator(), []interface{}{6, 4, 2}, []interface{}{6, 4, 0})
-
-    testMap.Put(1, 1)
-    checkMap(t, testMap, []interface{}{6, 5, 4, 3, 1, 2}, []interface{}{6, 5, 4, 3, 1, 0}, 6)
-
-    // first matched cases
-    // update first matched entry
-    testMap.Put(6, 2)
-    checkMap(t, testMap, []interface{}{5, 4, 3, 6, 1, 2}, []interface{}{5, 4, 3, 2, 1, 0}, 4)
-    checkIterator(t, testMap.GetMatchedIterator(), []interface{}{4, 6, 2}, []interface{}{4, 2, 0})
-
-    testMap.Put(6, 6)
-    checkMap(t, testMap, []interface{}{6, 5, 4, 3, 1, 2}, []interface{}{6, 5, 4, 3, 1, 0}, 6)
-    checkIterator(t, testMap.GetMatchedIterator(), []interface{}{6, 4, 2}, []interface{}{6, 4, 0})
-
-    testMap.Put(2, 2)
-    checkMap(t, testMap, []interface{}{6, 5, 4, 3, 2, 1}, []interface{}{6, 5, 4, 3, 2, 1}, 6)
-    checkIterator(t, testMap.GetMatchedIterator(), []interface{}{6, 4, 2}, []interface{}{6, 4, 2})
-
-    testMap.Put(6, 12)
-    checkMap(t, testMap, []interface{}{6, 5, 4, 3, 2, 1}, []interface{}{12, 5, 4, 3, 2, 1}, 12)
-    checkIterator(t, testMap.GetMatchedIterator(), []interface{}{6, 4, 2}, []interface{}{12, 4, 2})
-
-    testMap.Put(6, 0)
-    checkMap(t, testMap, []interface{}{5, 4, 3, 2, 1, 6}, []interface{}{5, 4, 3, 2, 1, 0}, 4)
-    checkIterator(t, testMap.GetMatchedIterator(), []interface{}{4, 2, 6}, []interface{}{4, 2, 0})
-
-    testMap.Put(6, 12)
-    checkMap(t, testMap, []interface{}{6, 5, 4, 3, 2, 1}, []interface{}{12, 5, 4, 3, 2, 1}, 12)
-    checkIterator(t, testMap.GetMatchedIterator(), []interface{}{6, 4, 2}, []interface{}{12, 4, 2})
-
-    testMap.Put(6, 6)
-    checkMap(t, testMap, []interface{}{6, 5, 4, 3, 2, 1}, []interface{}{6, 5, 4, 3, 2, 1}, 6)
-    checkIterator(t, testMap.GetMatchedIterator(), []interface{}{6, 4, 2}, []interface{}{6, 4, 2})
-
-    testMap.Put(6, 1)
-    checkMap(t, testMap, []interface{}{5, 4, 3, 2, 6, 1}, []interface{}{5, 4, 3, 2, 1, 1}, 4)
-    checkIterator(t, testMap.GetMatchedIterator(), []interface{}{4, 2}, []interface{}{4, 2})
-
-    testMap.Put(6, 6)
-    checkMap(t, testMap, []interface{}{6, 5, 4, 3, 2, 1}, []interface{}{6, 5, 4, 3, 2, 1}, 6)
-    checkIterator(t, testMap.GetMatchedIterator(), []interface{}{6, 4, 2}, []interface{}{6, 4, 2})
-
-    // remove cases
-    testMap.Remove(6)
-    checkMap(t, testMap, []interface{}{5, 4, 3, 2, 1}, []interface{}{5, 4, 3, 2, 1}, 4)
-    checkIterator(t, testMap.GetMatchedIterator(), []interface{}{4, 2}, []interface{}{4, 2})
-
-    testMap.Remove(1)
-    checkMap(t, testMap, []interface{}{5, 4, 3, 2}, []interface{}{5, 4, 3, 2}, 4)
-
-    testMap.Remove(3)
-    checkMap(t, testMap, []interface{}{5, 4, 2}, []interface{}{5, 4, 2}, 4)
-
-    testMap.Remove(4)
-    checkMap(t, testMap, []interface{}{5, 2}, []interface{}{5, 2}, 2)
-    checkIterator(t, testMap.GetMatchedIterator(), []interface{}{2}, []interface{}{2})
-
-    testMap.Remove(2)
-    checkMap(t, testMap, []interface{}{5}, []interface{}{5}, nil)
-    checkIterator(t, testMap.GetMatchedIterator(), []interface{}{}, []interface{}{})
-
-    // reset case
-    testMap.Reset()
-    checkEmptyMap(t, testMap)
-}
-
-// Test sortable linked map with fixed order
-func TestSortableLinkedMapWithFixedOrder(t *testing.T) {
-    testMap := NewSortableLinkedMap(func(i, j interface{}) bool {
-        return i.(int) > j.(int)
-    }, true, func(value interface{}) bool {
+    }, func(value interface{}) bool {
         return value.(int) % 2 == 0
     })
     // empty map
@@ -331,14 +230,6 @@ func TestSortableLinkedMapWithFixedOrder(t *testing.T) {
     // replace
     testMap.Put(1, 11)
     checkMap(t, testMap, []interface{}{6, 5, 4, 3, 2, 1}, []interface{}{6, 5, 4, 3, 2, 11}, 6)
-
-    //testMap.Put(2, 12)
-    //checkMap(t, testMap, []interface{}{6, 5, 4, 3, 2, 1}, []interface{}{6, 5, 4, 3, 12, 11}, 12)
-    //checkIterator(t, testMap.GetMatchedIterator(), []interface{}{6, 4, 2}, []interface{}{6, 4, 12})
-    //
-    //testMap.Put(2, 2)
-    //checkMap(t, testMap, []interface{}{6, 5, 4, 3, 2, 1}, []interface{}{6, 5, 4, 3, 2, 11}, 6)
-    //checkIterator(t, testMap.GetMatchedIterator(), []interface{}{6, 4, 2}, []interface{}{6, 4, 2})
 
     testMap.Put(3, 0)
     checkMap(t, testMap, []interface{}{6, 5, 4, 3, 2, 1}, []interface{}{6, 5, 4, 0, 2, 11}, 6)
@@ -375,4 +266,105 @@ func TestSortableLinkedMapWithFixedOrder(t *testing.T) {
 
     testMap.Remove(5)
     checkEmptyMap(t, testMap)
+}
+
+// Test updating sortable linked map randomly
+func TestUpdatingSortableLinkedMapRandomly(t *testing.T) {
+    testMap := NewSortableLinkedMap(func(i, j interface{}) bool {
+        return i.(int) > j.(int)
+    }, func(value interface{}) bool {
+        return value.(int) % 2 == 0
+    })
+    // empty map
+    checkEmptyMap(t, testMap)
+
+    // add random value in the interval [0, 1000)
+    randomInts := rand.Perm(1000)
+    expectedKVs := make(map[int]int, 1000)
+    for i, randomInt := range randomInts {
+        testMap.Put(randomInt, randomInt)
+        expectedKVs[i] = i
+    }
+    sortedKeyValues, expectedFirstMatchedValue := getExpectedResults(expectedKVs)
+    checkMap(t, testMap, sortedKeyValues, sortedKeyValues, expectedFirstMatchedValue)
+
+    // remove random value in the interval [0, 1000)
+    randomInts = rand.Perm(1000)
+    for i, randomInt := range randomInts {
+        testMap.Remove(randomInt)
+        delete(expectedKVs, randomInt)
+        if i % 10 == 0 {
+            sortedKeyValues, expectedFirstMatchedValue := getExpectedResults(expectedKVs)
+            checkMap(t, testMap, sortedKeyValues, sortedKeyValues, expectedFirstMatchedValue)
+        }
+    }
+    checkEmptyMap(t, testMap)
+
+    // random add or remove value
+    maxRandNum := 100
+    for i := 0; i < 1000; i++ {
+        randomOpt := rand.Intn(2)
+        if randomOpt == 0 {
+            // remove random value
+            if len(expectedKVs) > 0 {
+                randomKV := getExistingRandomKey(expectedKVs)
+                delete(expectedKVs, randomKV)
+                removedValue := testMap.Remove(randomKV)
+                assert.Equal(t, removedValue, randomKV)
+                sortedKeyValues, expectedFirstMatchedValue := getExpectedResults(expectedKVs)
+                checkMap(t, testMap, sortedKeyValues, sortedKeyValues, expectedFirstMatchedValue)
+            }
+        } else {
+            // add or update random value
+            randomKV := getNonExistingRandomKey(expectedKVs, maxRandNum)
+            expectedKVs[randomKV] = randomKV
+            oldValue := testMap.Put(randomKV, randomKV)
+            assert.Assert(t, oldValue == nil)
+            // check
+            sortedKeyValues, expectedFirstMatchedValue := getExpectedResults(expectedKVs)
+            checkMap(t, testMap, sortedKeyValues, sortedKeyValues, expectedFirstMatchedValue)
+        }
+    }
+}
+
+func getExistingRandomKey(kvMap map[int]int) int {
+    keys := make([]int, len(kvMap))
+    i := 0
+    for k := range kvMap {
+        keys[i] = k
+        i++
+    }
+    return keys[rand.Intn(len(keys))]
+}
+
+func getNonExistingRandomKey(kvMap map[int]int, maxRandNum int) int {
+    if len(kvMap) == maxRandNum {
+        return -1
+    }
+    randInts := rand.Perm(maxRandNum)
+    for _, randKV := range randInts {
+        if _, ok := kvMap[randKV]; !ok {
+            return randKV
+        }
+    }
+    return -1
+}
+
+func getExpectedResults(kvMap map[int]int) ([]interface{}, interface{}) {
+    keyValues := make([]int, len(kvMap))
+    i := 0
+    for k := range kvMap {
+        keyValues[i] = k
+        i++
+    }
+    sort.Sort(sort.Reverse(sort.IntSlice(keyValues)))
+    expectedKeyValues := make([]interface{}, len(keyValues))
+    var expectedFirstMatchedValue interface{}
+    for i, v := range keyValues {
+        expectedKeyValues[i] = v
+        if expectedFirstMatchedValue == nil && v % 2 == 0 {
+            expectedFirstMatchedValue = v
+        }
+    }
+    return expectedKeyValues, expectedFirstMatchedValue
 }

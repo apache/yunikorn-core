@@ -19,7 +19,6 @@
 package scheduler
 
 import (
-	"fmt"
 	"sort"
 	"time"
 
@@ -171,23 +170,6 @@ type AppSortPolicy interface {
 	getPendingRequestIterator(app *SchedulingApplication) RequestIterator
 }
 
-type FifoAppSortPolicy struct {
-	AppSortPolicy
-}
-
-func (as *FifoAppSortPolicy) sortApplications(apps []*SchedulingApplication, queueInfo *cache.QueueInfo) {
-	// Sort by submission time oldest first
-	sort.SliceStable(apps, func(i, j int) bool {
-		l := apps[i]
-		r := apps[j]
-		return l.ApplicationInfo.SubmissionTime < r.ApplicationInfo.SubmissionTime
-	})
-}
-
-func (as *FifoAppSortPolicy) getPendingRequestIterator(app *SchedulingApplication) RequestIterator {
-	return app.requests.GetPendingRequestIterator()
-}
-
 type FairAppSortPolicy struct {
 	AppSortPolicy
 }
@@ -206,19 +188,20 @@ func (as *FairAppSortPolicy) getPendingRequestIterator(app *SchedulingApplicatio
 	return app.requests.GetPendingRequestIterator()
 }
 
-type PriorityFifoAppSortPolicy struct {
+type FifoAppSortPolicy struct {
 	AppSortPolicy
 }
 
-func (as *PriorityFifoAppSortPolicy) sortApplications(apps []*SchedulingApplication, queueInfo *cache.QueueInfo) {
+func (as *FifoAppSortPolicy) sortApplications(apps []*SchedulingApplication, queueInfo *cache.QueueInfo) {
 	// Sort first by priority, then by create time
 	sort.SliceStable(apps, func(i, j int) bool {
 		r := apps[j].requests.GetTopPendingPriorityGroup()
-		if r == nil {
-			return true
-		}
 		l := apps[i].requests.GetTopPendingPriorityGroup()
-		if l == nil {
+		if r == nil && l == nil {
+			return apps[i].ApplicationInfo.SubmissionTime < apps[j].ApplicationInfo.SubmissionTime
+		} else if r == nil {
+			return true
+		} else if l == nil {
 			return false
 		}
 		if l.GetPriority() == r.GetPriority() {
@@ -229,7 +212,7 @@ func (as *PriorityFifoAppSortPolicy) sortApplications(apps []*SchedulingApplicat
 	})
 }
 
-func (as *PriorityFifoAppSortPolicy) getPendingRequestIterator(app *SchedulingApplication) RequestIterator {
+func (as *FifoAppSortPolicy) getPendingRequestIterator(app *SchedulingApplication) RequestIterator {
 	topPendingPriorityGroup := app.requests.GetTopPendingPriorityGroup()
 	if topPendingPriorityGroup != nil {
 		return topPendingPriorityGroup.GetPendingRequestIterator()
@@ -245,10 +228,6 @@ func newAppSortPolicy(sortPolicy policies.SortPolicy) (AppSortPolicy, error) {
 	case policies.FifoSortPolicy:
 		return &FifoAppSortPolicy{}, nil
 	default:
-		return nil, fmt.Errorf("undefined app sort policy: %s", sortPolicy.String())
+		return &FairAppSortPolicy{}, nil
 	}
-}
-
-func newDefaultAppSortPolicy() AppSortPolicy {
-	return &FairAppSortPolicy{}
 }

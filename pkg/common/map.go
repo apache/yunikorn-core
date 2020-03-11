@@ -47,6 +47,7 @@ type MapIterator interface {
 
 // This is an implementation of Map interface which leverages the hash and linked list algorithms
 // to make data sorted by specified comparison and efficient to be found and updated.
+// Note that the order of linked list won't change when updating an existing entry for now.
 // It's not thread-safe, must be called while holding the lock.
 type SortableLinkedMap struct {
     // a map of entries
@@ -58,15 +59,10 @@ type SortableLinkedMap struct {
     // keep the first entry in linked entries that matches the specific
     // findFirstMatchFunc function.
     firstMatchedEntry *SortableLinkedMapEntry
-    // keep linked entries sorted by the provided isPreFuc function,
+    // keep linked entries sorted by the provided compareFunc function,
     // if not provided, always put the new entry into the tail.
-    isPreFunc func(i, j interface{}) bool
-    // whether the order of linked entries is fixed for updating,
-    // won't change the order when updating the value if set to true,
-    // otherwise will try to reorder the updated entry.
-    // If set to true, make sure that the update won't affect the sort policy
-    // defined by isPreFunc function, otherwise it will break the correctness of first matched entry.
-    isFixedOrder bool
+    // return true if i should be placed before j, otherwise return false.
+    compareFunc func(i, j interface{}) bool
     // function helps to locate the entry in specified condition.
     matchFunc func(value interface{}) bool
 }
@@ -85,12 +81,11 @@ type SortableLinkedMapEntry struct {
     isMatched bool
 }
 
-func NewSortableLinkedMap(isPreFunc func(i, j interface{}) bool, isFixedOrder bool,
+func NewSortableLinkedMap(compareFunc func(i, j interface{}) bool,
     matchFunc func(value interface{}) bool) *SortableLinkedMap {
     return &SortableLinkedMap{
         entries:      make(map[interface{}]*SortableLinkedMapEntry),
-        isPreFunc:    isPreFunc,
-        isFixedOrder: isFixedOrder,
+        compareFunc:  compareFunc,
         matchFunc:    matchFunc,
     }
 }
@@ -131,8 +126,8 @@ func (slm *SortableLinkedMap) HasMatched() bool {
 
 func (slm *SortableLinkedMap) findPreEntry(fromEntry, newEntry *SortableLinkedMapEntry,
     isForward bool) *SortableLinkedMapEntry {
-    // always put the new entry into the tail if isPreFunc isn't defined
-    if slm.isPreFunc == nil {
+    // always put the new entry into the tail if compareFunc isn't defined
+    if slm.compareFunc == nil {
         return slm.tail
     }
     // find the entry
@@ -142,7 +137,7 @@ func (slm *SortableLinkedMap) findPreEntry(fromEntry, newEntry *SortableLinkedMa
             break
         } else {
             if isForward {
-                if slm.isPreFunc(newEntry.value, lookupEntry.value) {
+                if slm.compareFunc(newEntry.value, lookupEntry.value) {
                     // move forward if newEntry is pre
                     lookupEntry = lookupEntry.pre
                 } else {
@@ -150,7 +145,7 @@ func (slm *SortableLinkedMap) findPreEntry(fromEntry, newEntry *SortableLinkedMa
                     return lookupEntry
                 }
             } else {
-                if slm.isPreFunc(lookupEntry.value, newEntry.value) {
+                if slm.compareFunc(lookupEntry.value, newEntry.value) {
                     // move backward if lookupEntry is pre
                     lookupEntry = lookupEntry.next
                 }  else {
@@ -215,26 +210,6 @@ func (slm *SortableLinkedMap) removeFromLinkedList(entry *SortableLinkedMapEntry
     }
 }
 
-// Reorder the specified entry: remove then add the entry if need to move forward/backward
-func (slm *SortableLinkedMap) reorderEntry(entry *SortableLinkedMapEntry) {
-    // need to move forward
-    if entry.pre != nil {
-        if !slm.isPreFunc(entry.pre.value, entry.value) {
-            preEntry := slm.findPreEntry(entry.pre, entry, true)
-            slm.removeFromLinkedList(entry)
-            slm.putIntoLinkedList(preEntry, entry)
-        }
-    }
-    // need to move backward
-    if entry.next != nil {
-        if !slm.isPreFunc(entry.value, entry.next.value) {
-            preEntry := slm.findPreEntry(entry.next, entry, false)
-            slm.removeFromLinkedList(entry)
-            slm.putIntoLinkedList(preEntry, entry)
-        }
-    }
-}
-
 // Find next match entry after the first match entry
 func (slm *SortableLinkedMap) findNextMatchedEntry() *SortableLinkedMapEntry {
     if slm.firstMatchedEntry == nil {
@@ -269,7 +244,7 @@ func (slm *SortableLinkedMap) updateMatchedState(updatedEntry * SortableLinkedMa
         if slm.firstMatchedEntry == nil {
             // set first matched entry if not present
             slm.firstMatchedEntry = updatedEntry
-        } else if slm.isPreFunc != nil && slm.isPreFunc(updatedEntry.value, slm.firstMatchedEntry.value) {
+        } else if slm.compareFunc != nil && slm.compareFunc(updatedEntry.value, slm.firstMatchedEntry.value) {
             // if map is sortable and updated entry should be placed before first matched entry
             slm.firstMatchedEntry = updatedEntry
         }
@@ -285,18 +260,13 @@ func (slm *SortableLinkedMap) updateMatchedState(updatedEntry * SortableLinkedMa
 func (slm *SortableLinkedMap) Put(key interface{}, value interface{}) interface{} {
     // update the value if entry exists
     if entry, ok := slm.entries[key]; ok {
-        updatedValue := entry.value
+        oldValue := entry.value
         entry.value = value
-        // reorder this entry if isPreFunc is present and not fixed order
-        if slm.isPreFunc != nil && !slm.isFixedOrder {
-            // reorder entry
-            slm.reorderEntry(entry)
-        }
         // update matched state
         if slm.matchFunc != nil {
             slm.updateMatchedState(entry)
         }
-        return updatedValue
+        return oldValue
     }
     // create a new entry
     newEntry := &SortableLinkedMapEntry{
@@ -313,7 +283,7 @@ func (slm *SortableLinkedMap) Put(key interface{}, value interface{}) interface{
     }
     // update entry map
     slm.entries[key] = newEntry
-    return newEntry.value
+    return nil
 }
 
 func (slm *SortableLinkedMap) Remove(key interface{}) interface{} {

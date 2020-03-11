@@ -15,7 +15,7 @@ linters-settings:
   gofmt:
     simplify: true
   goimports:
-    local-prefixes: github.com/cloudera/yunikorn
+    local-prefixes: github.com/apache/incubator-yunikorn
   govet:
     check-shadowing: true
   depguard:

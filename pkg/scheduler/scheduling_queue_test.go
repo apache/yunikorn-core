@@ -19,12 +19,15 @@
 package scheduler
 
 import (
+	"fmt"
 	"strconv"
 	"testing"
+	"time"
 
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
@@ -826,4 +829,78 @@ func TestIsEmpty(t *testing.T) {
 	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "app-1"})
 	leaf.addSchedulingApplication(app)
 	assert.Equal(t, leaf.isEmpty(), false, "queue with registered app should not be empty")
+}
+
+func BenchmarkSortApplications(b *testing.B) {
+	tests := []struct {
+		numApplications int
+		policyType      common.AppSortPolicyType
+	}{
+		{numApplications: 10, policyType: common.FairAppSortPolicyType},
+		{numApplications: 10, policyType: common.FifoAppSortPolicyType},
+		{numApplications: 100, policyType: common.FairAppSortPolicyType},
+		{numApplications: 100, policyType: common.FifoAppSortPolicyType},
+		{numApplications: 1000, policyType: common.FairAppSortPolicyType},
+		{numApplications: 1000, policyType: common.FifoAppSortPolicyType},
+	}
+	for _, test := range tests {
+		name := fmt.Sprintf("%vApps/%s", test.numApplications, test.policyType)
+		b.Run(name, func(b *testing.B) {
+			benchmarkSortApplications(b, test.numApplications, test.policyType)
+		})
+	}
+}
+
+func benchmarkSortApplications(b *testing.B, numApplications int, policyType common.AppSortPolicyType) {
+	// create the root
+	root, err := createRootQueue(nil)
+	if err != nil {
+		b.Fatalf("failed to create basic root queue: %v", err)
+	}
+	var leaf, parent *SchedulingQueue
+	// empty parent queue
+	parent, err = createManagedQueue(root, "parent", true, nil)
+	if err != nil {
+		b.Fatalf("failed to create parent queue: %v", err)
+	}
+	// empty leaf queue
+	leaf, err = createManagedQueue(parent, "leaf", false, nil)
+	leaf.appSortPolicy = newAppSortPolicy(policyType)
+	if err != nil {
+		b.Fatalf("failed to create leaf queue: %v", err)
+	}
+	// add apps with a pending ask
+	for i := 0; i < numApplications; i++ {
+		appID := fmt.Sprintf("app-%d", i)
+		appInfo := cache.NewApplicationInfo(appID, "default", leaf.Name, security.UserGroup{}, nil)
+		app := newSchedulingApplication(appInfo)
+		app.queue = leaf
+		leaf.addSchedulingApplication(app)
+		var res, delta *resources.Resource
+		res, err = resources.NewResourceFromConf(map[string]string{"first": "1"})
+		if err != nil {
+			b.Fatalf("failed to create basic resource: %v", err)
+		}
+		// add an ask app must be returned
+		delta, err = app.addAllocationAsk(newAllocationAsk("alloc-1", appID, res))
+		if err != nil || !resources.Equals(res, delta) {
+			b.Errorf("allocation ask delta expected %v, got %v (err = %v)", res, delta, err)
+		}
+	}
+
+	// Reset  timer for this benchmark
+	startTime := time.Now()
+	b.ResetTimer()
+
+	// execute sorting for 1000 times
+	testTimes := 100
+	for i := 0; i < testTimes; i++ {
+		leaf.sortApplications()
+	}
+
+	// Stop timer and calculate duration
+	b.StopTimer()
+	duration := time.Since(startTime)
+	b.Logf("Total time to sort %d apps for %d times in %s, avg time: %s",
+		numApplications, testTimes, duration, duration/100)
 }

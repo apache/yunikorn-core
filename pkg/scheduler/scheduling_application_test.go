@@ -19,8 +19,11 @@
 package scheduler
 
 import (
+	"fmt"
+	"math/rand"
 	"strconv"
 	"testing"
+	"time"
 
 	"gotest.tools/assert"
 
@@ -644,10 +647,102 @@ func TestStateChangeOnAskUpdate(t *testing.T) {
 	app.allocating = res
 	// add an ask with the repeat set to 0 (cannot use the proper way)
 	ask = newAllocationAskRepeat(askID, appID, res, 0)
-	app.requests[askID] = ask
+	app.requests.AddRequest(ask)
 
 	// with allocations in flight we should not change state
 	released = app.removeAllocationAsk(askID)
 	assert.Equal(t, released, 0, "allocation ask should not have been reserved")
 	assert.Assert(t, app.isStarting(), "application changed state unexpectedly: %s", app.ApplicationInfo.GetApplicationState())
+}
+
+func BenchmarkIteratePendingRequests(b *testing.B) {
+	tests := []struct {
+		numPriorities          int
+		numRequestsPerPriority int
+		pendingPercentage      float32
+	}{
+		// expect the performance is only related to the number of pending requests,
+		// won't be affected by other factors such as the number of priorities and pending percentage.
+
+		// cases: 10,000 pending requests in total with different number of priorities
+		{numPriorities: 1, numRequestsPerPriority: 10000, pendingPercentage: 1.0},
+		{numPriorities: 2, numRequestsPerPriority: 5000, pendingPercentage: 1.0},
+		{numPriorities: 5, numRequestsPerPriority: 2000, pendingPercentage: 1.0},
+		{numPriorities: 10, numRequestsPerPriority: 1000, pendingPercentage: 1.0},
+
+		// cases: 10,000 pending requests in total with only 1 priority and different pending percentage
+		{numPriorities: 1, numRequestsPerPriority: 10000, pendingPercentage: 1.0},
+		{numPriorities: 1, numRequestsPerPriority: 10000, pendingPercentage: 0.5},
+		{numPriorities: 1, numRequestsPerPriority: 10000, pendingPercentage: 0.2},
+		{numPriorities: 1, numRequestsPerPriority: 10000, pendingPercentage: 0.1},
+	}
+	for _, test := range tests {
+		name := fmt.Sprintf("%dPriorities/%dRequests/%fPendingPercentage",
+			test.numPriorities, test.numRequestsPerPriority, test.pendingPercentage)
+		b.Run(name, func(b *testing.B) {
+			benchmarkIteratePendingRequests(b, test.numPriorities, test.numRequestsPerPriority,
+				test.pendingPercentage)
+		})
+	}
+}
+
+func benchmarkIteratePendingRequests(b *testing.B, numPriorities, numRequestsPerPriority int, pendingPercentage float32) {
+	appID := "app-1"
+	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	app := newSchedulingApplication(appInfo)
+	if app == nil || app.ApplicationInfo.ApplicationID != appID {
+		b.Fatalf("app create failed which should not have %v", app)
+	}
+	queue, err := createRootQueue(nil)
+	if err != nil {
+		b.Fatalf("queue create failed: %v", err)
+	}
+	app.queue = queue
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	pendingFlag := int(pendingPercentage * 100)
+	expectedPendingCount := 0
+	askIndex := 0
+	for i := 0; i < numPriorities; i++ {
+		for j := 0; j < numRequestsPerPriority; j++ {
+			repeat := 0
+			if rand.Intn(100) < pendingFlag {
+				repeat = 1
+				expectedPendingCount++
+			}
+			ask := newAllocationAskRepeat("ask-"+strconv.Itoa(askIndex), appID, res, repeat)
+			ask.priority = int32(i)
+			app.addAllocationAsk(ask)
+			askIndex++
+		}
+	}
+
+	// check pending count
+	pendingCount := 0
+	reqIt := app.requests.GetPendingRequestIterator()
+	for reqIt.HasNext() {
+		reqIt.Next()
+		pendingCount++
+	}
+	if pendingCount != expectedPendingCount {
+		b.Fatalf("expected pending count: %v, but actually got: %v", expectedPendingCount, pendingCount)
+	}
+
+	// Reset timer for this benchmark
+	startTime := time.Now()
+	b.ResetTimer()
+
+	// execute get all pending for 1000 times
+	testTimes := 100
+	for i := 0; i < testTimes; i++ {
+		reqIt := app.requests.GetPendingRequestIterator()
+		for reqIt.HasNext() {
+			reqIt.Next()
+		}
+	}
+
+	// Stop timer and calculate duration
+	b.StopTimer()
+	duration := time.Since(startTime)
+	b.Logf("Total time to iterate %d pending requests from %d request for %d times in %s, avg time: %s",
+		expectedPendingCount, numPriorities*numRequestsPerPriority, testTimes, duration, duration/100)
 }

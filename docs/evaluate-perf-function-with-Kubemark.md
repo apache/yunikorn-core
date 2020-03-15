@@ -11,7 +11,7 @@ In YuniKorn, we have done lots of optimizations to improve the performance, such
 and low-latency sorting policies. The following chart reveals the scheduler throughput (by using Kubemark simulated
 environment, and launching 50,000 pods with heterogeneous resource requests ), comparing to the K8s default scheduler.
 
-<img src="images/throughput.png" width=500>
+![Scheduler Throughput](images/throughput.png)
 
 The charts record the time spent until all pods are running on the cluster
 
@@ -27,7 +27,7 @@ Each of YuniKorn queues has its guaranteed and maximum capacity. When we have lo
 YuniKorn ensures each of them gets its fair share. When we monitor the resource usage of these queues, we can clearly
 see how fairness was enforced:
 
-<img src="images/queue-fairness.png" width=500>
+![Scheduler Throughput](images/queue-fairness.png)
 
 We set up 4 heterogeneous queues on this cluster, and submit different workloads against these queues.
 From the chart, we can see the queue resources are increasing nearly in the same trend, which means the resource

@@ -11,7 +11,7 @@ In YuniKorn, we have done lots of optimizations to improve the performance, such
 and low-latency sorting policies. The following chart reveals the scheduler throughput (by using Kubemark simulated
 environment, and launching 50,000 pods with heterogeneous resource requests ), comparing to the K8s default scheduler.
 
-![Scheduler Throughput](images/throughput.png)
+![Scheduler Throughput](images/throughput.png) <!-- .element height="50%" width="50%" -->
 
 The charts record the time spent until all pods are running on the cluster
 
@@ -27,7 +27,7 @@ Each of YuniKorn queues has its guaranteed and maximum capacity. When we have lo
 YuniKorn ensures each of them gets its fair share. When we monitor the resource usage of these queues, we can clearly
 see how fairness was enforced:
 
-![Cross Queue Fairness](images/queue-fairness.png)
+![Cross Queue Fairness](images/queue-fairness.png) <!-- .element height="50%" width="50%" -->
 
 We set up 4 heterogeneous queues on this cluster, and submit different workloads against these queues.
 From the chart, we can see the queue resources are increasing nearly in the same trend, which means the resource
@@ -58,7 +58,7 @@ This means at the given time, this cluster has 100 nodes whose utilization is in
 it has 300 nodes whose utilization is in the range 10% - 20%, and so on… Now, we run lots of workloads and
 collect metrics, see the below chart:
 
-![Node Fairness](images/node-fair.png)
+![Node Fairness](images/node-fair.png) <!-- .element height="50%" width="50%" -->
 
 We can see all nodes have 0% utilization, and then all of them move to bucket-1, then bucket-2 … and eventually
 all nodes moved to bucket-9, which means all capacity is used. In another word, nodes’ resource has been used in
@@ -68,7 +68,7 @@ a fairness manner.
 
 This is When the bin-packing policy is enabled, we can see the following pattern:
 
-![Node Bin-Packing](images/node-bin-packing.png)
+![Node Bin-Packing](images/node-bin-packing.png) <!-- .element height="50%" width="50%" -->
 
 On the contrary, all nodes are moving between 2 buckets, bucket-0 and bucket-9. Nodes in bucket-0 (0% - 10%)
 are decreasing in a linear manner, and nodes in bucket-9 (90% - 100%) are increasing with the same curve.

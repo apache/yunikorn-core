@@ -9,7 +9,7 @@ There were 18 bare-metal servers being used to simulate 2000/4000 nodes for thes
 When running Big Data batch workloads, e.g Spark, on K8s, scheduler throughput becomes to be one of the main concerns.
 In YuniKorn, we have done lots of optimizations to improve the performance, such as a fully async event-driven system
 and low-latency sorting policies. The following chart reveals the scheduler throughput (by using Kubemark simulated
-environment, and launching 50,000 pods with heterogeneous resource requests ), comparing to the K8s default scheduler.
+environment, and submitting 50,000 pods), comparing to the K8s default scheduler.
 
 ![Scheduler Throughput](images/throughput.png)
 

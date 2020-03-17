@@ -43,7 +43,7 @@ partitions:
 `,
             expectedResponse: dao.ValidateConfResponse{
                 Allowed: true,
-                Error:   "",
+                Reason:   "",
             },
         },
         {
@@ -57,7 +57,7 @@ partitions:
 `,
             expectedResponse: dao.ValidateConfResponse{
                 Allowed: false,
-                Error:   "undefined policy: invalid",
+                Reason:   "undefined policy: invalid",
             },
         },
     }
@@ -71,7 +71,7 @@ partitions:
             t.Errorf("failed to unmarshal ValidateConfResponse from response body: %s", string(resp.outputBytes))
         } else {
             assert.Equal(t, vcr.Allowed, test.expectedResponse.Allowed)
-            assert.Equal(t, vcr.Error, test.expectedResponse.Error)
+            assert.Equal(t, vcr.Reason, test.expectedResponse.Reason)
         }
     }
 }

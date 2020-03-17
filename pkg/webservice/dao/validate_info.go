@@ -20,5 +20,5 @@ package dao
 
 type ValidateConfResponse struct {
     Allowed bool
-    Error   string
+    Reason  string
 }

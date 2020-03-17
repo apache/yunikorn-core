@@ -19,6 +19,8 @@ package webservice
 
 import (
 	"encoding/json"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
+	"io/ioutil"
 	"net/http"
 	"runtime"
 	"strconv"
@@ -113,6 +115,24 @@ func GetNodesInfo(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		panic(err)
+	}
+}
+
+func ValidateConf(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	requestBytes, err := ioutil.ReadAll(r.Body)
+	if err == nil {
+		_, err = configs.LoadSchedulerConfigFromByteArray(requestBytes)
+	}
+	var result dao.ValidateConfResponse
+	if err != nil {
+		result.Allowed = false
+		result.Error = err.Error()
+	} else {
+		result.Allowed = true
+	}
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		panic(err)
 	}

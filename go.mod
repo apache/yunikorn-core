@@ -9,6 +9,8 @@ require (
 	github.com/gorilla/mux v1.7.3
 	github.com/kr/text v0.2.0 // indirect
 	github.com/looplab/fsm v0.1.0
+	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
+	github.com/modern-go/reflect2 v1.0.1 // indirect
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/prometheus/client_golang v1.1.0

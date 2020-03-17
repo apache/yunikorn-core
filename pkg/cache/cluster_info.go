@@ -23,6 +23,7 @@ import (
 	"reflect"
 	"sync"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/api"
@@ -386,6 +387,15 @@ func (m *ClusterInfo) processNodeActions(request *si.UpdateRequest) {
 
 		if nodeInfo, ok := partition.nodes[update.NodeID]; ok {
 			switch update.Action {
+			case si.UpdateNodeInfo_UPDATE_NODE_CAPACITY:
+				newCapacity := resources.NewResourceFromProto(update.SchedulableResource)
+				nodeInfo.SetCapacity(newCapacity)
+
+				m.EventHandlers.SchedulerEventHandler.HandleEvent(
+					&schedulerevent.SchedulerNodeEvent{
+						UpdateNode: nodeInfo,
+					})
+
 			case si.UpdateNodeInfo_DRAIN_NODE:
 				// set the state to not schedulable
 				nodeInfo.SetSchedulable(false)

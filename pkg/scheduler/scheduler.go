@@ -515,6 +515,15 @@ func (s *Scheduler) processNodeEvent(event *schedulerevent.SchedulerNodeEvent) {
 	if event.PreemptedNodeResources != nil {
 		s.clusterSchedulingContext.releasePreemptedResources(event.PreemptedNodeResources)
 	}
+	// update node resources
+	if event.UpdateNode != nil {
+		nodeInfo, ok := event.UpdateNode.(*cache.NodeInfo)
+		if !ok {
+			log.Logger().Debug("cast failed unexpected object in event",
+				zap.Any("NodeInfo", event.UpdateNode))
+		}
+		s.clusterSchedulingContext.updateSchedulingNode(nodeInfo)
+	}
 }
 
 func (s *Scheduler) handleSchedulerEvent() {

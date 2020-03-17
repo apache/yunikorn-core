@@ -308,6 +308,19 @@ func (psc *partitionSchedulingContext) addSchedulingNode(info *cache.NodeInfo) {
 	psc.nodes[info.NodeID] = newSchedulingNode(info)
 }
 
+func (psc *partitionSchedulingContext) updateSchedulingNode(info *cache.NodeInfo) {
+	if info == nil {
+		return
+	}
+
+	psc.Lock()
+	defer psc.Unlock()
+	// check consistency and reset to make sure it is consistent again
+	if schedulingNode, ok := psc.nodes[info.NodeID]; ok {
+		schedulingNode.updateNodeInfo(info)
+	}
+}
+
 // Remove a scheduling node triggered by the removal of the cache node.
 // This will log if the scheduler is out of sync with the cache.
 // Should never be called directly as it will bring the scheduler out of sync with the cache.

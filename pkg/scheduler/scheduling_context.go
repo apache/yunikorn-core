@@ -264,6 +264,20 @@ func (csc *ClusterSchedulingContext) removeSchedulingNode(info *cache.NodeInfo) 
 	partition.removeSchedulingNode(info.NodeID)
 }
 
+func (csc *ClusterSchedulingContext) updateSchedulingNode(newInfo *cache.NodeInfo) {
+	csc.lock.Lock()
+	defer csc.lock.Unlock()
+
+	partition := csc.partitions[newInfo.Partition]
+	if partition == nil {
+		log.Logger().Info("partition not found for updated scheduling node",
+			zap.String("nodeID", newInfo.NodeID),
+			zap.String("partitionName", newInfo.Partition))
+		return
+	}
+	partition.updateSchedulingNode(newInfo)
+}
+
 // Get a scheduling node based on its name from the partition.
 // Returns nil if the partition or node cannot be found.
 // Visible for tests

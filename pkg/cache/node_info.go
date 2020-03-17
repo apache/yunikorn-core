@@ -23,6 +23,7 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/api"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -107,6 +108,19 @@ func (ni *NodeInfo) GetCapacity() *resources.Resource {
 	ni.lock.RLock()
 	defer ni.lock.RUnlock()
 	return ni.totalResource.Clone()
+}
+
+func (ni *NodeInfo) SetCapacity(newCapacity *resources.Resource) {
+	ni.lock.Lock()
+	defer ni.lock.Unlock()
+	if resources.Equals(ni.totalResource, newCapacity) {
+		log.Logger().Info("skip updating capacity, not changed")
+		return
+	}
+
+	ni.totalResource = newCapacity
+	ni.availableResource = ni.totalResource.Clone()
+	ni.availableResource.SubFrom(ni.allocatedResource)
 }
 
 // Return the allocation based on the uuid of the allocation.

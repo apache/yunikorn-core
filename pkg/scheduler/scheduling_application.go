@@ -20,7 +20,6 @@ package scheduler
 
 import (
 	"fmt"
-	"math"
 	"strings"
 	"sync"
 	"time"
@@ -482,7 +481,7 @@ func (sa *SchedulingApplication) tryNodesNoReserve(ask *schedulingAllocationAsk,
 // New allocations can only be reserved after a delay.
 func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIterator NodeIterator) *schedulingAllocation {
 	var nodeToReserve *SchedulingNode
-	scoreReserved := math.Inf(1)
+	//scoreReserved := math.Inf(1)
 	// check if the ask is reserved or not
 	allocKey := ask.AskProto.AllocationKey
 	reservedAsks := sa.isAskReserved(allocKey)
@@ -524,6 +523,7 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 		}
 		// nothing allocated should we look at a reservation?
 		// TODO make this smarter a hardcoded delay is not the right thing
+		/**
 		if time.Since(ask.getCreateTime()) > reservationDelay {
 			score := ask.AllocatedResource.FitInScore(node.getAvailableResource())
 			// Record the so-far best node to reserve
@@ -532,6 +532,7 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 				nodeToReserve = node
 			}
 		}
+		 */
 	}
 	// we have not allocated yet, check if we should reserve
 	// NOTE: the node should not be reserved as the iterator filters them but we do not lock the nodes

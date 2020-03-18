@@ -19,6 +19,8 @@ package webservice
 
 import (
 	"encoding/json"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
+	"io/ioutil"
 	"net/http"
 	"runtime"
 	"strconv"
@@ -45,6 +47,7 @@ func GetStackInfo(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := w.Write(stack()); err != nil {
 		log.Logger().Error("GetStackInfo error", zap.Error(err))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -56,7 +59,7 @@ func GetQueueInfo(w http.ResponseWriter, r *http.Request) {
 		partitionInfo := getPartitionJSON(k)
 
 		if err := json.NewEncoder(w).Encode(partitionInfo); err != nil {
-			panic(err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}
 }
@@ -71,7 +74,7 @@ func GetClusterInfo(w http.ResponseWriter, r *http.Request) {
 		clustersInfo = append(clustersInfo, *clusterInfo)
 
 		if err := json.NewEncoder(w).Encode(clustersInfo); err != nil {
-			panic(err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}
 }
@@ -91,7 +94,7 @@ func GetApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
-		panic(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -114,7 +117,25 @@ func GetNodesInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewEncoder(w).Encode(result); err != nil {
-		panic(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func ValidateConf(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	requestBytes, err := ioutil.ReadAll(r.Body)
+	if err == nil {
+		_, err = configs.LoadSchedulerConfigFromByteArray(requestBytes)
+	}
+	var result dao.ValidateConfResponse
+	if err != nil {
+		result.Allowed = false
+		result.Reason = err.Error()
+	} else {
+		result.Allowed = true
+	}
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -124,7 +145,6 @@ func writeHeaders(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Credentials", "true")
 	w.Header().Set("Access-Control-Allow-Methods", "GET,POST,HEAD,OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "X-Requested-With,Content-Type,Accept,Origin")
-	w.WriteHeader(http.StatusOK)
 }
 
 func getClusterJSON(name string) *dao.ClusterDAOInfo {

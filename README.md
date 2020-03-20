@@ -20,11 +20,11 @@ Following chart illustrates the high-level architecture of YuniKorn.
 
 ![Architecture](docs/images/architecture.png)
 
-YuniKorn consists of the following components spread over multiple code repositories.
+YuniKorn consists of the following components spread over multiple code repositories, most of the following projects written in GoLang.
 
 - _Scheduler core_: the brain of the scheduler, which makes placement decisions (Allocate container X on node Y)
   according to pre configured policies. See more in current repo [yunikorn-core](https://github.com/apache/incubator-yunikorn-core).
-  _Scheduler core_ is written in GoLang and implemented in a way to be agnostic to scheduler implementation.
+  _Scheduler core_ is implemented in a way to be agnostic to scheduler implementation.
 - _Scheduler interface_: the common scheduler interface used by shims and the core scheduler.
   Contains the API layer (with GRPC/programming language bindings) which is agnostic to container orchestrator systems like YARN/K8s.
   See more in [yunikorn-scheduler-interface](https://github.com/apache/incubator-yunikorn-scheduler-interface).
@@ -51,13 +51,12 @@ YuniKorn consists of the following components spread over multiple code reposito
 
 ### Integration with K8s:
 
-`yunikorn-k8shim` nicely integrated with K8s, supported features like: 
+The `k8shim` provides the integration for K8s scheduling and supported features include: 
 
 - _Predicates:_ All kinds of predicates such as node-selector, pod affinity/anti-affinity, taint/tolerant, etc.
 - _Persistent volumes:_ We have verified hostpath, EBS, NFS, etc. 
-- _K8s namespace awareness:_ YuniKorn support hierarchical of queues, does it mean you need to give up K8s namespace? Answer is no, by default YuniKorn fully support automatically
- map K8s
- namespaces to YuniKorn queues. All Namespace related ResourceQuota, permissions will be still valid.
+- _K8s namespace awareness:_ YuniKorn support hierarchical of queues, does it mean you need to give up K8s namespace? Answer is no, with simple config, YuniKorn is able to 
+ support automatically map K8s namespaces to YuniKorn queues. All K8s-namespace-related ResourceQuota, permissions will be still valid.
 - _Metrics:_ Prometheus, Grafana integration.
 - _Cluster AutoScaler_: YuniKorn can nicely work with Cluster AutoScaler (https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler) to drive cluster scales up and down.
 - _K8s Events_: YuniKorn also integrated with K8s events, so lots of information can be retrieved by using `kubectl describe pod`.
@@ -67,8 +66,8 @@ We love high-performance software, and we made tremendous efforts to make it to 
 Here's [Performance Test Result](docs/evaluate-perf-function-with-Kubemark.md) 
 
 #### Deployment model
-Yunikorn can be deployed as a K8s custom scheduler, and take over all POD scheduling. Or, YuniKorn can be deploy together with K8s default scheduler and take over
- subset of nodes.
+Yunikorn can be deployed as a K8s custom scheduler, and take over all POD scheduling. Community is actively working on 
+[Co-existing with other K8s schedulers](https://issues.apache.org/jira/browse/YUNIKORN-16) to allow YuniKorn take over subset of the cluster nodes. 
  
 #### Verified K8s versions 
 

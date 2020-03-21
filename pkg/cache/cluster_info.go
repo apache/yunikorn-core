@@ -249,6 +249,9 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
 // Process the allocation updates. Add and remove allocations for the applications.
 // Lock free call, all updates occur on the underlying application which is locked or via events.
 func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateRequest) {
+
+	log.Logger().Info("*** processNewAndReleaseAllocationRequests")
+
 	if len(request.Asks) == 0 && request.Releases == nil {
 		return
 	}
@@ -301,6 +304,8 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
 	}
 
 	// Send all asks and release allocation requests to scheduler
+	log.Logger().Info("*** sending release request to scheduler",
+		zap.Any("-->", request.Releases))
 	m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
 		NewAsks:    request.Asks,
 		ToReleases: request.Releases,

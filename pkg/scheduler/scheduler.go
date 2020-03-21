@@ -189,9 +189,13 @@ func (s *Scheduler) HandleEvent(ev interface{}) {
 }
 
 func (s *Scheduler) processAllocationReleaseByAllocationKey(allocationAsksToRelease []*si.AllocationAskReleaseRequest, allocationsToRelease []*si.AllocationReleaseRequest) {
+	log.Logger().Info("**** processAllocationReleaseByAllocationKey",
+		zap.Int("", len(allocationAsksToRelease)))
 	// For all Requests
 	if len(allocationAsksToRelease) > 0 {
 		for _, toRelease := range allocationAsksToRelease {
+			log.Logger().Info("**** scheduler release",
+				zap.String("key", toRelease.Allocationkey))
 			schedulingApp := s.clusterSchedulingContext.GetSchedulingApplication(toRelease.ApplicationID, toRelease.PartitionName)
 			if schedulingApp != nil {
 				// remove the allocation asks from the app
@@ -199,10 +203,12 @@ func (s *Scheduler) processAllocationReleaseByAllocationKey(allocationAsksToRele
 				log.Logger().Info("release allocation",
 					zap.String("allocation", toRelease.Allocationkey),
 					zap.String("appID", toRelease.ApplicationID),
-					zap.String("message", toRelease.Message))
+					zap.String("message", toRelease.Message),
+					zap.Int("ReservedToRelease", reservedAsks))
 				// update the partition if the asks were reserved (clean up)
 				if reservedAsks != 0 {
-					s.clusterSchedulingContext.getPartition(toRelease.PartitionName).unReserveUpdate(toRelease.ApplicationID, reservedAsks)
+					s.clusterSchedulingContext.getPartition(toRelease.PartitionName).
+						unReserveUpdate(toRelease.ApplicationID, reservedAsks)
 				}
 			}
 		}

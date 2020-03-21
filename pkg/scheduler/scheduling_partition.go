@@ -492,7 +492,7 @@ func (psc *partitionSchedulingContext) reserve(app *SchedulingApplication, node 
 	}
 	// all ok, add the reservation to the app, this will also reserve the node
 	if err := app.reserve(node, ask); err != nil {
-		log.Logger().Info("Failed to handle reservation, error during update of app",
+		log.Logger().Debug("Failed to handle reservation, error during update of app",
 			zap.Error(err))
 		return
 	}
@@ -553,6 +553,7 @@ func (psc *partitionSchedulingContext) getNodeIterator() NodeIterator {
 func (psc *partitionSchedulingContext) unReserveUpdate(appID string, asks int) {
 	psc.Lock()
 	defer psc.Unlock()
+	log.Logger().Info("**** unReserveUpdate")
 	psc.unReserveCount(appID, asks)
 }
 

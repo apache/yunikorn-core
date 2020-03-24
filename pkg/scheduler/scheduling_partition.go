@@ -382,11 +382,11 @@ func (psc *partitionSchedulingContext) allocate(alloc *schedulingAllocation) boo
 	if alloc.reservedNodeID == "" {
 		nodeID = alloc.nodeID
 	} else {
+		nodeID = alloc.reservedNodeID
 		log.Logger().Debug("Reservation allocated on different node",
 			zap.String("current node", alloc.nodeID),
 			zap.String("reserved node", nodeID),
 			zap.String("appID", appID))
-		nodeID = alloc.reservedNodeID
 	}
 	node := psc.nodes[nodeID]
 	if node == nil {

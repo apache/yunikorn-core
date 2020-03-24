@@ -436,7 +436,7 @@ func (pi *PartitionInfo) releaseAllocationsForApplication(toRelease *commonevent
 
 	allocationsToRelease := make([]*AllocationInfo, 0)
 
-	log.Logger().Info("removing allocation from partition",
+	log.Logger().Debug("removing allocation from partition",
 		zap.String("partitionName", pi.Name))
 	if toRelease == nil {
 		log.Logger().Debug("no allocations removed from partition",

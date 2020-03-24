@@ -165,11 +165,7 @@ func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) int {
 		sa.requests = make(map[string]*schedulingAllocationAsk)
 	} else {
 		// cleanup the reservation for this allocation
-		log.Logger().Info("*** check if ask is reserved",
-			zap.String("key", allocKey))
 		for _, key := range sa.isAskReserved(allocKey) {
-			log.Logger().Info("*** cleanup reservation",
-				zap.String("key", allocKey))
 			_, err := sa.reservations[key].unReserve()
 			if err != nil {
 				log.Logger().Warn("Removal of reservation failed while removing allocation",

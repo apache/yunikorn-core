@@ -23,13 +23,13 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/api"
 	"github.com/apache/incubator-yunikorn-core/pkg/cache/cacheevent"
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
@@ -249,9 +249,6 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
 // Process the allocation updates. Add and remove allocations for the applications.
 // Lock free call, all updates occur on the underlying application which is locked or via events.
 func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateRequest) {
-
-	log.Logger().Info("*** processNewAndReleaseAllocationRequests")
-
 	if len(request.Asks) == 0 && request.Releases == nil {
 		return
 	}
@@ -304,8 +301,6 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
 	}
 
 	// Send all asks and release allocation requests to scheduler
-	log.Logger().Info("*** sending release request to scheduler",
-		zap.Any("-->", request.Releases))
 	m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
 		NewAsks:    request.Asks,
 		ToReleases: request.Releases,
@@ -400,7 +395,6 @@ func (m *ClusterInfo) processNodeActions(request *si.UpdateRequest) {
 					&schedulerevent.SchedulerNodeEvent{
 						UpdateNode: nodeInfo,
 					})
-
 			case si.UpdateNodeInfo_DRAIN_NODE:
 				// set the state to not schedulable
 				nodeInfo.SetSchedulable(false)

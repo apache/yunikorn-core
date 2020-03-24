@@ -553,7 +553,6 @@ func (psc *partitionSchedulingContext) getNodeIterator() NodeIterator {
 func (psc *partitionSchedulingContext) unReserveUpdate(appID string, asks int) {
 	psc.Lock()
 	defer psc.Unlock()
-	log.Logger().Info("**** unReserveUpdate")
 	psc.unReserveCount(appID, asks)
 }
 

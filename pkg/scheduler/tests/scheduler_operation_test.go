@@ -26,6 +26,9 @@ import (
 	"gotest.tools/assert"
 )
 
+// this test simulates the scenario the cluster starts up with 0 nodes
+// then we submit an app, the app tasks will be pending; then we add a
+// node to the cluster, then we see the app gets the allocation it needed.
 func TestSchedulerWithoutNodes(t *testing.T) {
 	// Register RM
 	configData := `
@@ -277,7 +280,133 @@ partitions:
 	waitForPendingQueueResource(t, schedulerQueueA, 0, 1000)
 	waitForPendingQueueResource(t, schedulerQueueRoot, 0, 1000)
 	waitForPendingAppResource(t, schedulingApp, 0, 1000)
+	waitForAllocatedQueueResource(t, schedulerQueueA, 20, 1000)
+	waitForAllocatedAppResource(t, schedulingApp, 20, 1000)
+	waitForNodesAllocatedResource(t, ms.clusterInfo, "[rm:123]default",
+		[]string{"node-1:1234"}, 20, 1000)
 
 	// Make sure we get correct allocations
 	ms.mockRM.waitForAllocations(t, 2, 1000)
+
+	// now remove the node
+	err = ms.proxy.Update(&si.UpdateRequest{
+		UpdatedNodes: []*si.UpdateNodeInfo{
+			{
+				NodeID:     "node-1:1234",
+				Action:     si.UpdateNodeInfo_DECOMISSION,
+				Attributes: map[string]string{},
+			},
+		},
+		RmID: "rm:123",
+	})
+
+	if err != nil {
+		t.Fatalf("UpdateRequest failed: %v", err)
+	}
+
+	// make sure the resources are released from queue/app
+	waitForAllocatedQueueResource(t, schedulerQueueA, 0, 1000)
+	waitForAllocatedAppResource(t, schedulingApp, 0, 1000)
+	// make sure the node is removed from partition
+	assert.Equal(t, len(partitionInfo.GetNodes()), 0)
+}
+
+func TestUpdateNodeCapacity(t *testing.T) {
+	// Register RM
+	configData := `
+partitions:
+  -
+    name: default
+    queues:
+      - name: root
+        submitacl: "*"
+        queues:
+          - name: a
+            resources:
+              max:
+                memory: 150
+                vcore: 20
+`
+	// Start all tests
+	ms := &mockScheduler{}
+	defer ms.Stop()
+
+	err := ms.Init(configData, false)
+	if err != nil {
+		t.Fatalf("RegisterResourceManager failed: %v", err)
+	}
+
+	// Check queues of cache and scheduler.
+	partitionInfo := ms.clusterInfo.GetPartition("[rm:123]default")
+	assert.Assert(t, nil == partitionInfo.Root.GetMaxResource(), "partition info max resource nil")
+
+	// Register a node
+	err = ms.proxy.Update(&si.UpdateRequest{
+		NewSchedulableNodes: []*si.NewNodeInfo{
+			{
+				NodeID: "node-1:1234",
+				Attributes: map[string]string{
+					"si.io/hostname": "node-1",
+					"si.io/rackname": "rack-1",
+				},
+				SchedulableResource: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 100},
+						"vcore":  {Value: 20},
+					},
+				},
+			},
+		},
+		RmID:            "rm:123",
+	})
+
+	if err != nil {
+		t.Fatalf("UpdateRequest failed: %v", err)
+	}
+
+	// Wait until node is registered
+	context := ms.scheduler.GetClusterSchedulingContext()
+	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
+	waitForNewSchedulerNode(t, context, "node-1:1234", "[rm:123]default", 1000)
+
+	// verify node capacity
+	assert.Equal(t, len(partitionInfo.GetNodes()), 1)
+	node1 := partitionInfo.GetNode("node-1:1234")
+	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.MEMORY]), int64(100))
+	schedulingNode1 := ms.scheduler.GetClusterSchedulingContext().
+		GetSchedulingNode("node-1:1234", "[rm:123]default")
+	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[resources.MEMORY]), int64(0))
+	assert.Equal(t, int64(schedulingNode1.GetAvailableResourceForTest().Resources[resources.MEMORY]), int64(100))
+
+	// update node capacity
+	err = ms.proxy.Update(&si.UpdateRequest{
+		UpdatedNodes: []*si.UpdateNodeInfo{
+			{
+				NodeID: "node-1:1234",
+				Attributes: map[string]string{
+					"si.io/hostname": "node-1",
+					"si.io/rackname": "rack-1",
+				},
+				SchedulableResource: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 300},
+						"vcore":  {Value: 10},
+					},
+				},
+				Action: si.UpdateNodeInfo_UPDATE_NODE_CAPACITY,
+			},
+		},
+		RmID: "rm:123",
+	})
+
+	if err != nil {
+		t.Fatalf("UpdateRequest failed: %v", err)
+	}
+
+	waitForNodesAvailableResource(t, ms.clusterInfo, "[rm:123]default",
+		[]string{"node-1:1234"}, 300, 1000)
+	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.MEMORY]), int64(300))
+	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.VCORE]), int64(10))
+	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[resources.MEMORY]), int64(0))
+	assert.Equal(t, int64(schedulingNode1.GetAvailableResourceForTest().Resources[resources.MEMORY]), int64(300))
 }

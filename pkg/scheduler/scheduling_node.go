@@ -86,6 +86,8 @@ func (sn *SchedulingNode) updateNodeInfo(newNodeInfo *cache.NodeInfo) {
 // These resources are just the confirmed allocations (tracked in the cache node).
 // This does not lock the cache node as it will take its own lock.
 func (sn *SchedulingNode) GetAllocatedResource() *resources.Resource {
+	sn.RLock()
+	defer sn.RUnlock()
 	return sn.nodeInfo.GetAllocatedResource()
 }
 

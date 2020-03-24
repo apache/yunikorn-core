@@ -294,18 +294,12 @@ partitions:
 	assert.Equal(t, partition.GetApplications()[0].GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12))
 
 	// verify nodes
-	t.Logf("verifying recovered nodes, counts %d", partition.GetTotalNodeCount())
-	assert.Equal(t, 2, partition.GetTotalNodeCount())
+	assert.Equal(t, 2, partition.GetTotalNodeCount(), "incorrect recovered node count")
 	node1Allocations := mockRM.nodeAllocations["node-1:1234"]
 	node2Allocations := mockRM.nodeAllocations["node-2:1234"]
 
-	t.Logf("verifying allocations on node-1, expected %d, actual %d",
-		len(node1Allocations), len(partition.GetNode("node-1:1234").GetAllAllocations()))
-	t.Logf("verifying allocations on node-1, expected %d, actual %d",
-		len(node2Allocations), len(partition.GetNode("node-2:1234").GetAllAllocations()))
-
-	assert.Equal(t, len(node1Allocations), len(partition.GetNode("node-1:1234").GetAllAllocations()))
-	assert.Equal(t, len(node2Allocations), len(partition.GetNode("node-2:1234").GetAllAllocations()))
+	assert.Equal(t, len(node1Allocations), len(partition.GetNode("node-1:1234").GetAllAllocations()), "allocations on node-1 not as expected")
+	assert.Equal(t, len(node2Allocations), len(partition.GetNode("node-2:1234").GetAllAllocations()), "allocations on node-1 not as expected")
 
 	node1AllocatedMemory := partition.GetNode("node-1:1234").GetAllocatedResource().Resources[resources.MEMORY]
 	node2AllocatedMemory := partition.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.MEMORY]
@@ -316,44 +310,31 @@ partitions:
 
 	// verify queues
 	//  - verify root queue
-	t.Log("verifying root queue")
-	assert.Equal(t, partition.Root.GetGuaranteedResource().Resources[resources.MEMORY], resources.Quantity(100))
-	assert.Equal(t, partition.Root.GetGuaranteedResource().Resources[resources.VCORE], resources.Quantity(10))
-	assert.Equal(t, partition.Root.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
-	assert.Equal(t, partition.Root.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12))
+	assert.Equal(t, partition.Root.GetGuaranteedResource().Resources[resources.MEMORY], resources.Quantity(100), "guaranteed memory on root queue not as expected")
+	assert.Equal(t, partition.Root.GetGuaranteedResource().Resources[resources.VCORE], resources.Quantity(10), "guaranteed vcore on root queue not as expected")
+	assert.Equal(t, partition.Root.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120), "allocated memory on root queue not as expected")
+	assert.Equal(t, partition.Root.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12), "allocated vcore on root queue not as expected")
 	//  - verify root.a queue
-	t.Log("verifying root.a queue")
 	childQueues := partition.Root.GetCopyOfChildren()
-	if queueA, ok := childQueues["a"]; !ok {
-		t.Fatal("root.a doesn't exist in partition")
-	} else {
-		assert.Equal(t, queueA.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
-		assert.Equal(t, partition.Root.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12))
-	}
+	queueA := childQueues["a"]
+	assert.Assert(t, queueA != nil, "root.a doesn't exist in partition")
+	assert.Equal(t, queueA.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120), "allocated memory on root.a queue not as expected")
+	assert.Equal(t, queueA.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12), "allocated vcore on root.a queue not as expected")
 
 	// verify scheduler clusterInfo
-	t.Log("verifying scheduling app")
 	ms.mockRM.waitForAcceptedApplication(t, "app-1", 1000)
 	recoveredApp := ms.getSchedulingApplication("app-1")
 	assert.Assert(t, recoveredApp != nil)
-	assert.Equal(t, recoveredApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
-	assert.Equal(t, recoveredApp.ApplicationInfo.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12))
+	assert.Equal(t, recoveredApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120), "allocated memory on app not as expected")
+	assert.Equal(t, recoveredApp.ApplicationInfo.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12), "allocated vcore on app not as expected")
 
 	// there should be no pending resources
-	assert.Equal(t, recoveredApp.GetPendingResource().Resources[resources.MEMORY], resources.Quantity(0))
-	assert.Equal(t, recoveredApp.GetPendingResource().Resources[resources.VCORE], resources.Quantity(0))
+	assert.Equal(t, recoveredApp.GetPendingResource().Resources[resources.MEMORY], resources.Quantity(0), "pending memory on app not as expected")
+	assert.Equal(t, recoveredApp.GetPendingResource().Resources[resources.VCORE], resources.Quantity(0), "pending vcore on app not as expected")
 	for _, existingAllocation := range mockRM.Allocations {
 		schedulingAllocation := recoveredApp.GetSchedulingAllocationAsk(existingAllocation.AllocationKey)
-		assert.Assert(t, schedulingAllocation != nil)
+		assert.Assert(t, schedulingAllocation != nil, "recovered scheduling allocation %s not found on app", existingAllocation.AllocationKey)
 	}
-
-	t.Log("verifying scheduling queues")
-	recoveredQueueRoot := ms.getSchedulingQueue("root")
-	recoveredQueue := ms.getSchedulingQueue("root.a")
-	assert.Equal(t, recoveredQueue.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
-	assert.Equal(t, recoveredQueue.QueueInfo.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12))
-	assert.Equal(t, recoveredQueueRoot.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
-	assert.Equal(t, recoveredQueueRoot.QueueInfo.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12))
 
 	// verify app state
 	assert.Equal(t, recoveredApp.ApplicationInfo.GetApplicationState(), "Running")

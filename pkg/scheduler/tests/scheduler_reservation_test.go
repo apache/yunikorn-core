@@ -84,41 +84,28 @@ func TestBasicReservation(t *testing.T) {
 	defer ms.Stop()
 
 	err := ms.Init(SingleQueueConfig, false)
-	if err != nil {
-		t.Fatalf("RegisterResourceManager failed: %v", err)
-	}
+	assert.NilError(t, err, "RegisterResourceManager failed")
+
+	// override the reservation delay, and cleanup when done
 	scheduler.OverrideReservationDelay(10 * time.Millisecond)
-	nodes := make([]string, 0)
-	for i := 1; i < 3; i++ {
-		node := "node-" + strconv.Itoa(i)
-		err = ms.addNode(node, &si.Resource{
-			Resources: map[string]*si.Quantity{
-				"memory": {Value: 50},
-				"vcore":  {Value: 50},
-			},
-		})
-		if err != nil {
-			t.Fatalf("node creation failed: %v", err)
-		}
-		nodes = append(nodes, node)
-	}
+	defer scheduler.OverrideReservationDelay(2 * time.Second)
+
+	nodes := createNodes(t, ms, 2, 50)
 	ms.mockRM.waitForMinAcceptedNodes(t, 2, 1000)
 
 	appID := "app-1"
 	queueName := "root.leaf-1"
 	err = ms.addApp(appID, queueName, "default")
-	if err != nil {
-		t.Fatalf("adding app to scheduler failed: %v", err)
-	}
+	assert.NilError(t, err, "adding app to scheduler failed")
+
 	ms.mockRM.waitForAcceptedApplication(t, appID, 1000)
 	// Get scheduling app
 	app := ms.getSchedulingApplication(appID)
 
 	res := &si.Resource{Resources: map[string]*si.Quantity{"memory": {Value: 20}, "vcore": {Value: 20}}}
 	err = ms.addAppRequest(appID, "alloc-1", res, 6)
-	if err != nil {
-		t.Fatalf("adding requests to app failed: %v", err)
-	}
+	assert.NilError(t, err, "adding requests to app failed")
+
 	leafQueue := ms.getSchedulingQueue(queueName)
 	waitForPendingQueueResource(t, leafQueue, 120, 1000)
 	waitForPendingAppResource(t, app, 120, 1000)
@@ -142,29 +129,27 @@ func TestBasicReservation(t *testing.T) {
 
 	// check objects have reservations assigned,
 	assert.Equal(t, 2, len(app.GetReservations()), "reservations missing from app")
-	assert.Equal(t, 1, len(ms.getSchedulingNode("node-1").GetReservations()), "reservation missing on node-1")
-	assert.Equal(t, 1, len(ms.getSchedulingNode("node-2").GetReservations()), "reservation missing on node-2")
+	assert.Equal(t, 1, len(ms.getSchedulingNode(nodes[0]).GetReservations()), "reservation missing on %s", nodes[0])
+	assert.Equal(t, 1, len(ms.getSchedulingNode(nodes[1]).GetReservations()), "reservation missing on %s", nodes[1])
 	assert.Equal(t, 2, ms.getPartitionReservations()[appID], "reservations missing from partition")
 
 	// Remove app-1
 	err = ms.removeApp(appID, "default")
-	if err != nil {
-		t.Fatalf("application removal failed: %v", err)
-	}
+	assert.NilError(t, err, "application removal failed")
 
 	// Check allocated resource of queue, should be 0 now
 	waitForAllocatedQueueResource(t, leafQueue, 0, 1000)
 	mem = int(app.GetAllocatedResource().Resources[resources.MEMORY])
 	assert.Equal(t, 0, mem, "allocated app resource not correct after app removal")
-	mem = int(ms.getSchedulingNode("node-1").GetAllocatedResource().Resources[resources.MEMORY])
+	mem = int(ms.getSchedulingNode(nodes[0]).GetAllocatedResource().Resources[resources.MEMORY])
 	assert.Equal(t, 0, mem, "allocated node-1 resource not correct after app removal")
-	mem = int(ms.getSchedulingNode("node-2").GetAllocatedResource().Resources[resources.MEMORY])
+	mem = int(ms.getSchedulingNode(nodes[1]).GetAllocatedResource().Resources[resources.MEMORY])
 	assert.Equal(t, 0, mem, "allocated node-2 resource not correct after app removal")
 
 	// App/node should not have reservation now
 	assert.Equal(t, 0, len(app.GetReservations()), "reservations missing from app")
-	assert.Equal(t, 0, len(ms.getSchedulingNode("node-1").GetReservations()), "reservation missing on node-1")
-	assert.Equal(t, 0, len(ms.getSchedulingNode("node-2").GetReservations()), "reservation missing on node-2")
+	assert.Equal(t, 0, len(ms.getSchedulingNode(nodes[0]).GetReservations()), "reservation missing on %s", nodes[0])
+	assert.Equal(t, 0, len(ms.getSchedulingNode(nodes[1]).GetReservations()), "reservation missing on %s", nodes[1])
 	assert.Equal(t, 0, ms.getPartitionReservations()[appID], "reservations missing from partition")
 }
 
@@ -178,52 +163,36 @@ func TestReservationForTwoQueues(t *testing.T) {
 	defer ms.Stop()
 
 	err := ms.Init(DualQueueConfig, false)
-	if err != nil {
-		t.Fatalf("RegisterResourceManager failed: %v", err)
-	}
-
+	assert.NilError(t, err, "RegisterResourceManager failed")
+	// override the reservation delay, and cleanup when done
 	scheduler.OverrideReservationDelay(10 * time.Millisecond)
-	nodes := make([]string, 0)
-	for i := 1; i < 3; i++ {
-		node := "node-" + strconv.Itoa(i)
-		err = ms.addNode(node, &si.Resource{
-			Resources: map[string]*si.Quantity{
-				"memory": {Value: 50},
-				"vcore":  {Value: 50},
-			},
-		})
-		if err != nil {
-			t.Fatalf("node creation failed: %v", err)
-		}
-		nodes = append(nodes, node)
-	}
+	defer scheduler.OverrideReservationDelay(2 * time.Second)
+
+	nodes := createNodes(t, ms, 2, 50)
 	ms.mockRM.waitForMinAcceptedNodes(t, 2, 1000)
 
 	// add the first scheduling app
 	app1ID := "app-1"
 	leaf1Name := "root.leaf-1"
 	err = ms.addApp(app1ID, leaf1Name, "default")
-	if err != nil {
-		t.Fatalf("adding app 1 to scheduler failed: %v", err)
-	}
+	assert.NilError(t, err, "adding app 1 to scheduler failed")
+
 	ms.mockRM.waitForAcceptedApplication(t, app1ID, 1000)
 	app1 := ms.getSchedulingApplication(app1ID)
 	// add the second scheduling app
 	app2ID := "app-2"
 	leaf2name := "root.leaf-2"
 	err = ms.addApp(app2ID, leaf2name, "default")
-	if err != nil {
-		t.Fatalf("adding app 2 to scheduler failed: %v", err)
-	}
+	assert.NilError(t, err, "adding app 2 to scheduler failed")
+
 	ms.mockRM.waitForAcceptedApplication(t, app2ID, 1000)
 	app2 := ms.getSchedulingApplication(app2ID)
 
-	// add the second scheduling app
+	// add the third scheduling app
 	app3ID := "app-3"
 	err = ms.addApp(app3ID, leaf2name, "default")
-	if err != nil {
-		t.Fatalf("adding app 3 to scheduler failed: %v", err)
-	}
+	assert.NilError(t, err, "adding app 3 to scheduler failed")
+
 	ms.mockRM.waitForAcceptedApplication(t, app3ID, 1000)
 	app3 := ms.getSchedulingApplication(app3ID)
 
@@ -235,9 +204,8 @@ func TestReservationForTwoQueues(t *testing.T) {
 
 	// allocate bulk of the node
 	err = ms.addAppRequest(app1ID, "alloc-1", resLarge, 4)
-	if err != nil {
-		t.Fatalf("adding request to app-1 failed: %v", err)
-	}
+	assert.NilError(t, err, "adding request to app-1 failed")
+
 	waitForPendingQueueResource(t, leaf1, 80, 1000)
 	waitForPendingAppResource(t, app1, 80, 1000)
 
@@ -250,14 +218,12 @@ func TestReservationForTwoQueues(t *testing.T) {
 
 	// these will be reserved (one on each node)
 	err = ms.addAppRequest(app2ID, "alloc-2", resLarge, 2)
-	if err != nil {
-		t.Fatalf("adding request to app-2 failed: %v", err)
-	}
+	assert.NilError(t, err, "adding request to app-2 failed")
+
 	// nothing will happen with these
 	err = ms.addAppRequest(app3ID, "alloc-3", resSmall, 2)
-	if err != nil {
-		t.Fatalf("adding request to app-3 failed: %v", err)
-	}
+	assert.NilError(t, err, "adding request to app-3 failed")
+
 	waitForPendingQueueResource(t, leaf2, 50, 1000)
 	waitForPendingAppResource(t, app2, 40, 1000)
 	waitForPendingAppResource(t, app3, 10, 1000)
@@ -277,9 +243,7 @@ func TestReservationForTwoQueues(t *testing.T) {
 
 	// Now remove app-1, and do allocation
 	err = ms.removeApp(app1ID, "default")
-	if err != nil {
-		t.Fatalf("application removal from partition failed: %v", err)
-	}
+	assert.NilError(t, err, "application removal from partition failed")
 
 	// Check allocated resource of queue, should be 0 now
 	ms.mockRM.waitForAllocations(t, 0, 1000)
@@ -309,41 +273,27 @@ func TestRemoveReservedNode(t *testing.T) {
 	defer ms.Stop()
 
 	err := ms.Init(SingleQueueConfig, false)
-	if err != nil {
-		t.Fatalf("RegisterResourceManager failed: %v", err)
-	}
+	assert.NilError(t, err, "RegisterResourceManager failed")
+	// override the reservation delay, and cleanup when done
 	scheduler.OverrideReservationDelay(10 * time.Millisecond)
-	nodes := make([]string, 0)
-	for i := 1; i < 3; i++ {
-		node := "node-" + strconv.Itoa(i)
-		err = ms.addNode(node, &si.Resource{
-			Resources: map[string]*si.Quantity{
-				"memory": {Value: 50},
-				"vcore":  {Value: 50},
-			},
-		})
-		if err != nil {
-			t.Fatalf("node creation failed: %v", err)
-		}
-		nodes = append(nodes, node)
-	}
+	defer scheduler.OverrideReservationDelay(2 * time.Second)
+
+	nodes := createNodes(t, ms, 2, 50)
 	ms.mockRM.waitForMinAcceptedNodes(t, 2, 1000)
 
 	appID := "app-1"
 	queueName := "root.leaf-1"
 	err = ms.addApp(appID, queueName, "default")
-	if err != nil {
-		t.Fatalf("adding app to scheduler failed: %v", err)
-	}
+	assert.NilError(t, err, "adding app to scheduler failed")
+
 	ms.mockRM.waitForAcceptedApplication(t, appID, 1000)
 	// Get scheduling app
 	app := ms.getSchedulingApplication(appID)
 
 	res := &si.Resource{Resources: map[string]*si.Quantity{"memory": {Value: 20}, "vcore": {Value: 20}}}
 	err = ms.addAppRequest(appID, "alloc-1", res, 6)
-	if err != nil {
-		t.Fatalf("adding requests to app failed: %v", err)
-	}
+	assert.NilError(t, err, "adding requests to app failed")
+
 	leafQueue := ms.getSchedulingQueue(queueName)
 	waitForPendingQueueResource(t, leafQueue, 120, 1000)
 	waitForPendingAppResource(t, app, 120, 1000)
@@ -355,20 +305,19 @@ func TestRemoveReservedNode(t *testing.T) {
 	waitForPendingAppResource(t, app, 40, 1000)
 	// check objects have reservations assigned,
 	assert.Equal(t, 2, len(app.GetReservations()), "reservations missing from app")
-	assert.Equal(t, 1, len(ms.getSchedulingNode("node-1").GetReservations()), "reservation missing on node-1")
-	assert.Equal(t, 1, len(ms.getSchedulingNode("node-2").GetReservations()), "reservation missing on node-2")
+	assert.Equal(t, 1, len(ms.getSchedulingNode(nodes[0]).GetReservations()), "reservation missing on %s", nodes[0])
+	assert.Equal(t, 1, len(ms.getSchedulingNode(nodes[1]).GetReservations()), "reservation missing on %s", nodes[1])
 	assert.Equal(t, 2, ms.getPartitionReservations()[appID], "reservations missing from partition")
 
 	// remove the 2nd node
 	err = ms.removeNode(nodes[1])
-	if err != nil {
-		t.Fatalf("node removal failed: %v", err)
-	}
+	assert.NilError(t, err, "node removal failed")
+
 	waitForRemovedSchedulerNode(t, ms.serviceContext.Scheduler.GetClusterSchedulingContext(), nodes[1], ms.partitionName, 1000)
 	waitForAllocatedAppResource(t, app, 40, 1000)
 	ms.mockRM.waitForAllocations(t, 2, 1000)
 	assert.Equal(t, 1, len(app.GetReservations()), "reservations missing from app")
-	assert.Equal(t, 1, len(ms.getSchedulingNode("node-1").GetReservations()), "reservation missing on node-1")
+	assert.Equal(t, 1, len(ms.getSchedulingNode(nodes[0]).GetReservations()), "reservation missing on %s", nodes[0])
 	assert.Equal(t, 1, ms.getPartitionReservations()[appID], "reservations not removed from partition")
 }
 
@@ -378,40 +327,29 @@ func TestAddNewNode(t *testing.T) {
 	defer ms.Stop()
 
 	err := ms.Init(SingleQueueConfig, false)
-	if err != nil {
-		t.Fatalf("RegisterResourceManager failed: %v", err)
-	}
+	assert.NilError(t, err, "RegisterResourceManager failed")
+
+	// override the reservation delay, and cleanup when done
 	scheduler.OverrideReservationDelay(10 * time.Millisecond)
-	nodes := make([]string, 0)
-	nodeRes := map[string]*si.Quantity{"memory": {Value: 50}, "vcore": {Value: 50}}
-	for i := 1; i < 4; i++ {
-		node := "node-" + strconv.Itoa(i)
-		err = ms.addNode(node, &si.Resource{
-			Resources: nodeRes,
-		})
-		if err != nil {
-			t.Fatalf("node creation failed: %v", err)
-		}
-		nodes = append(nodes, node)
-	}
+	defer scheduler.OverrideReservationDelay(2 * time.Second)
+
+	nodes := createNodes(t, ms, 3, 50)
 	ms.mockRM.waitForMinAcceptedNodes(t, 3, 1000)
-	ms.clusterInfo.GetPartition(ms.partitionName).GetNode("node-3").SetSchedulable(false)
+	ms.clusterInfo.GetPartition(ms.partitionName).GetNode(nodes[2]).SetSchedulable(false)
 
 	appID := "app-1"
 	queueName := "root.leaf-1"
 	err = ms.addApp(appID, queueName, "default")
-	if err != nil {
-		t.Fatalf("adding app to scheduler failed: %v", err)
-	}
+	assert.NilError(t, err, "adding app to scheduler failed")
+
 	ms.mockRM.waitForAcceptedApplication(t, appID, 1000)
 	// Get scheduling app
 	app := ms.getSchedulingApplication(appID)
 
 	res := &si.Resource{Resources: map[string]*si.Quantity{"memory": {Value: 20}, "vcore": {Value: 20}}}
 	err = ms.addAppRequest(appID, "alloc-1", res, 6)
-	if err != nil {
-		t.Fatalf("adding requests to app failed: %v", err)
-	}
+	assert.NilError(t, err, "adding requests to app failed")
+
 	leafQueue := ms.getSchedulingQueue(queueName)
 	waitForPendingQueueResource(t, leafQueue, 120, 1000)
 	waitForPendingAppResource(t, app, 120, 1000)
@@ -421,12 +359,12 @@ func TestAddNewNode(t *testing.T) {
 	ms.mockRM.waitForAllocations(t, 4, 1000)
 	// check objects have reservations assigned,
 	assert.Equal(t, 2, len(app.GetReservations()), "reservations missing from app")
-	assert.Equal(t, 1, len(ms.getSchedulingNode(nodes[0]).GetReservations()), "reservation missing on node-1")
-	assert.Equal(t, 1, len(ms.getSchedulingNode(nodes[1]).GetReservations()), "reservation missing on node-2")
+	assert.Equal(t, 1, len(ms.getSchedulingNode(nodes[0]).GetReservations()), "reservation missing on %s", nodes[0])
+	assert.Equal(t, 1, len(ms.getSchedulingNode(nodes[1]).GetReservations()), "reservation missing on %s", nodes[1])
 	assert.Equal(t, 2, ms.getPartitionReservations()[appID], "reservations missing from partition")
 
 	// change the third node to scheduling (simulates new node)
-	ms.clusterInfo.GetPartition(ms.partitionName).GetNode("node-3").SetSchedulable(true)
+	ms.clusterInfo.GetPartition(ms.partitionName).GetNode(nodes[2]).SetSchedulable(true)
 
 	// start allocating: both reservations should be moved to the 3rd node
 	ms.scheduler.MultiStepSchedule(10)
@@ -439,7 +377,22 @@ func TestAddNewNode(t *testing.T) {
 
 	// check the cleanup of the reservation
 	assert.Equal(t, 0, len(app.GetReservations()), "reservations found on app")
-	assert.Equal(t, 0, len(ms.getSchedulingNode(nodes[0]).GetReservations()), "reservation found on node-1")
-	assert.Equal(t, 0, len(ms.getSchedulingNode(nodes[1]).GetReservations()), "reservation found on node-2")
+	assert.Equal(t, 0, len(ms.getSchedulingNode(nodes[0]).GetReservations()), "reservation found on %s", nodes[0])
+	assert.Equal(t, 0, len(ms.getSchedulingNode(nodes[1]).GetReservations()), "reservation found on %s", nodes[1])
 	assert.Equal(t, 0, ms.getPartitionReservations()[appID], "reservations not removed from partition")
+}
+
+func createNodes(t *testing.T, ms *mockScheduler, count int, res int64) []string {
+	nodes := make([]string, 0)
+	nodeRes := map[string]*si.Quantity{"memory": {Value: res}, "vcore": {Value: res}}
+	for i := 1; i < count+1; i++ {
+		node := "node-" + strconv.Itoa(i)
+		err := ms.addNode(node, &si.Resource{
+			Resources: nodeRes,
+		})
+		assert.NilError(t, err, "node creation failed")
+
+		nodes = append(nodes, node)
+	}
+	return nodes
 }

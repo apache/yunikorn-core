@@ -39,6 +39,7 @@ type NodeInfo struct {
 	// Private fields need protection
 	attributes        map[string]string
 	totalResource     *resources.Resource
+	occupiedResource  *resources.Resource
 	allocatedResource *resources.Resource
 	availableResource *resources.Resource
 	allocations       map[string]*AllocationInfo
@@ -57,6 +58,7 @@ func NewNodeInfo(proto *si.NewNodeInfo) *NodeInfo {
 		NodeID:            proto.NodeID,
 		totalResource:     resources.NewResourceFromProto(proto.SchedulableResource),
 		allocatedResource: resources.NewResource(),
+		occupiedResource:  resources.NewResource(),
 		allocations:       make(map[string]*AllocationInfo),
 		schedulable:       true,
 	}
@@ -121,6 +123,27 @@ func (ni *NodeInfo) SetCapacity(newCapacity *resources.Resource) {
 	ni.totalResource = newCapacity
 	ni.availableResource = ni.totalResource.Clone()
 	ni.availableResource.SubFrom(ni.allocatedResource)
+	ni.availableResource.SubFrom(ni.occupiedResource)
+}
+
+func (ni *NodeInfo) GetOccupiedResource() *resources.Resource {
+	ni.lock.RLock()
+	defer ni.lock.RUnlock()
+	return ni.occupiedResource.Clone()
+}
+
+func (ni *NodeInfo) SetOccupiedResource(occupiedResource *resources.Resource) {
+	ni.lock.Lock()
+	defer ni.lock.Unlock()
+	if resources.Equals(ni.occupiedResource, occupiedResource) {
+		log.Logger().Info("skip updating occupiedResource, not changed")
+		return
+	}
+
+	ni.occupiedResource = occupiedResource
+	ni.availableResource = ni.totalResource.Clone()
+	ni.availableResource.SubFrom(ni.allocatedResource)
+	ni.availableResource.SubFrom(ni.occupiedResource)
 }
 
 // Return the allocation based on the uuid of the allocation.

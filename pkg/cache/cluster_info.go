@@ -387,10 +387,15 @@ func (m *ClusterInfo) processNodeActions(request *si.UpdateRequest) {
 
 		if nodeInfo, ok := partition.nodes[update.NodeID]; ok {
 			switch update.Action {
-			case si.UpdateNodeInfo_UPDATE_NODE_CAPACITY:
-				newCapacity := resources.NewResourceFromProto(update.SchedulableResource)
-				nodeInfo.SetCapacity(newCapacity)
-
+			case si.UpdateNodeInfo_UPDATE:
+				if sr := update.SchedulableResource; sr != nil {
+					newCapacity := resources.NewResourceFromProto(sr)
+					nodeInfo.SetCapacity(newCapacity)
+				}
+				if or := update.OccupiedResource; or != nil {
+					newOccupied := resources.NewResourceFromProto(or)
+					nodeInfo.SetOccupiedResource(newOccupied)
+				}
 				m.EventHandlers.SchedulerEventHandler.HandleEvent(
 					&schedulerevent.SchedulerNodeEvent{
 						UpdateNode: nodeInfo,

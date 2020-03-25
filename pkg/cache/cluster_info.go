@@ -390,11 +390,11 @@ func (m *ClusterInfo) processNodeActions(request *si.UpdateRequest) {
 			case si.UpdateNodeInfo_UPDATE:
 				if sr := update.SchedulableResource; sr != nil {
 					newCapacity := resources.NewResourceFromProto(sr)
-					nodeInfo.SetCapacity(newCapacity)
+					nodeInfo.setCapacity(newCapacity)
 				}
 				if or := update.OccupiedResource; or != nil {
 					newOccupied := resources.NewResourceFromProto(or)
-					nodeInfo.SetOccupiedResource(newOccupied)
+					nodeInfo.setOccupiedResource(newOccupied)
 				}
 				m.EventHandlers.SchedulerEventHandler.HandleEvent(
 					&schedulerevent.SchedulerNodeEvent{

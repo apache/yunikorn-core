@@ -315,9 +315,11 @@ func (psc *partitionSchedulingContext) updateSchedulingNode(info *cache.NodeInfo
 
 	psc.Lock()
 	defer psc.Unlock()
-	// check consistency and reset to make sure it is consistent again
 	if schedulingNode, ok := psc.nodes[info.NodeID]; ok {
 		schedulingNode.updateNodeInfo(info)
+	} else {
+		log.Logger().Warn("node is not found in partitionSchedulingContext while attempting to update it",
+			zap.String("nodeID", info.NodeID))
 	}
 }
 

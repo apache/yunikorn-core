@@ -531,7 +531,7 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 				zap.Time("createTime", ask.getCreateTime()),
 				zap.Duration("askAge", askAge),
 				zap.Duration("reservationDelay", reservationDelay))
-			score := ask.AllocatedResource.FitInScore(node.getAvailableResource())
+			score := ask.AllocatedResource.FitInScore(node.GetAvailableResource())
 			// Record the so-far best node to reserve
 			if score < scoreReserved {
 				scoreReserved = score

@@ -200,11 +200,10 @@ func (s *Scheduler) processAllocationReleaseByAllocationKey(allocationAsksToRele
 					zap.String("allocation", toRelease.Allocationkey),
 					zap.String("appID", toRelease.ApplicationID),
 					zap.String("message", toRelease.Message),
-					zap.Int("ReservedToRelease", reservedAsks))
+					zap.Int("reservedAskReleased", reservedAsks))
 				// update the partition if the asks were reserved (clean up)
 				if reservedAsks != 0 {
-					s.clusterSchedulingContext.getPartition(toRelease.PartitionName).
-						unReserveUpdate(toRelease.ApplicationID, reservedAsks)
+					s.clusterSchedulingContext.getPartition(toRelease.PartitionName).unReserveUpdate(toRelease.ApplicationID, reservedAsks)
 				}
 			}
 		}

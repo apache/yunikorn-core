@@ -91,16 +91,11 @@ func (sn *SchedulingNode) GetAllocatedResource() *resources.Resource {
 	return sn.nodeInfo.GetAllocatedResource()
 }
 
-// expose this for tests
-func (sn *SchedulingNode) GetAvailableResourceForTest() *resources.Resource {
-	return sn.getAvailableResource()
-}
-
 // Get the available resource on this node.
 // These resources are confirmed allocations (tracked in the cache node) minus the resources
 // currently being allocated but not confirmed in the cache.
 // This does not lock the cache node as it will take its own lock.
-func (sn *SchedulingNode) getAvailableResource() *resources.Resource {
+func (sn *SchedulingNode) GetAvailableResource() *resources.Resource {
 	sn.Lock()
 	defer sn.Unlock()
 	if sn.cachedAvailableUpdateNeeded {

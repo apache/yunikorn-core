@@ -63,6 +63,7 @@ func NewNodeInfo(proto *si.NewNodeInfo) *NodeInfo {
 		schedulable:       true,
 	}
 	m.availableResource = m.totalResource.Clone()
+	m.refreshAvailableResource()
 
 	m.initializeAttribute(proto.Attributes)
 
@@ -112,18 +113,15 @@ func (ni *NodeInfo) GetCapacity() *resources.Resource {
 	return ni.totalResource.Clone()
 }
 
-func (ni *NodeInfo) SetCapacity(newCapacity *resources.Resource) {
+func (ni *NodeInfo) setCapacity(newCapacity *resources.Resource) {
 	ni.lock.Lock()
 	defer ni.lock.Unlock()
 	if resources.Equals(ni.totalResource, newCapacity) {
-		log.Logger().Info("skip updating capacity, not changed")
+		log.Logger().Debug("skip updating capacity, not changed")
 		return
 	}
-
 	ni.totalResource = newCapacity
-	ni.availableResource = ni.totalResource.Clone()
-	ni.availableResource.SubFrom(ni.allocatedResource)
-	ni.availableResource.SubFrom(ni.occupiedResource)
+	ni.refreshAvailableResource()
 }
 
 func (ni *NodeInfo) GetOccupiedResource() *resources.Resource {
@@ -132,18 +130,15 @@ func (ni *NodeInfo) GetOccupiedResource() *resources.Resource {
 	return ni.occupiedResource.Clone()
 }
 
-func (ni *NodeInfo) SetOccupiedResource(occupiedResource *resources.Resource) {
+func (ni *NodeInfo) setOccupiedResource(occupiedResource *resources.Resource) {
 	ni.lock.Lock()
 	defer ni.lock.Unlock()
 	if resources.Equals(ni.occupiedResource, occupiedResource) {
-		log.Logger().Info("skip updating occupiedResource, not changed")
+		log.Logger().Debug("skip updating occupiedResource, not changed")
 		return
 	}
-
 	ni.occupiedResource = occupiedResource
-	ni.availableResource = ni.totalResource.Clone()
-	ni.availableResource.SubFrom(ni.allocatedResource)
-	ni.availableResource.SubFrom(ni.occupiedResource)
+	ni.refreshAvailableResource()
 }
 
 // Return the allocation based on the uuid of the allocation.
@@ -227,4 +222,12 @@ func (ni *NodeInfo) IsSchedulable() bool {
 	ni.lock.RLock()
 	defer ni.lock.RUnlock()
 	return ni.schedulable
+}
+
+// refresh node available resource based on the latest allocated and occupied resources.
+// this call assumes the caller already acquires the lock.
+func (ni *NodeInfo) refreshAvailableResource() {
+	ni.availableResource = ni.totalResource.Clone()
+	ni.availableResource.SubFrom(ni.allocatedResource)
+	ni.availableResource.SubFrom(ni.occupiedResource)
 }

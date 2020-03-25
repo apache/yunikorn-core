@@ -53,17 +53,15 @@ partitions:
 	defer ms.Stop()
 
 	err := ms.Init(configData, false)
-	if err != nil {
-		t.Fatalf("RegisterResourceManager failed: %v", err)
-	}
+	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Check queues of cache and scheduler.
 	partitionInfo := ms.clusterInfo.GetPartition("[rm:123]default")
-	assert.Assert(t, nil == partitionInfo.Root.GetMaxResource(), "partition info max resource nil")
+	assert.Assert(t, partitionInfo.Root.GetMaxResource() == nil, "partition info max resource nil")
 
 	// Check scheduling queue root
 	schedulerQueueRoot := ms.getSchedulingQueue("root")
-	assert.Assert(t, nil == schedulerQueueRoot.QueueInfo.GetMaxResource())
+	assert.Assert(t, schedulerQueueRoot.QueueInfo.GetMaxResource() == nil)
 
 	// Check scheduling queue a
 	schedulerQueueA := ms.getSchedulingQueue("root.a")
@@ -101,9 +99,7 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	if err != nil {
-		t.Fatalf("UpdateRequest 2 failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest failed")
 
 	waitForPendingQueueResource(t, schedulerQueueA, 20, 1000)
 	waitForPendingQueueResource(t, schedulerQueueRoot, 20, 1000)
@@ -138,9 +134,7 @@ partitions:
 		RmID:            "rm:123",
 	})
 
-	if err != nil {
-		t.Fatalf("UpdateRequest failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest failed")
 
 	// Wait until node is registered
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
@@ -181,17 +175,15 @@ partitions:
 	defer ms.Stop()
 
 	err := ms.Init(configData, false)
-	if err != nil {
-		t.Fatalf("RegisterResourceManager failed: %v", err)
-	}
+	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Check queues of cache and scheduler.
 	partitionInfo := ms.clusterInfo.GetPartition("[rm:123]default")
-	assert.Assert(t, nil == partitionInfo.Root.GetMaxResource(), "partition info max resource nil")
+	assert.Assert(t, partitionInfo.Root.GetMaxResource() == nil, "partition info max resource nil")
 
 	// Check scheduling queue root
 	schedulerQueueRoot := ms.getSchedulingQueue("root")
-	assert.Assert(t, nil == schedulerQueueRoot.QueueInfo.GetMaxResource())
+	assert.Assert(t, schedulerQueueRoot.QueueInfo.GetMaxResource() == nil)
 
 	// Check scheduling queue a
 	schedulerQueueA := ms.getSchedulingQueue("root.a")
@@ -229,9 +221,7 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	if err != nil {
-		t.Fatalf("UpdateRequest 2 failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest failed")
 
 	waitForPendingQueueResource(t, schedulerQueueA, 20, 1000)
 	waitForPendingQueueResource(t, schedulerQueueRoot, 20, 1000)
@@ -250,10 +240,7 @@ partitions:
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
 				NodeID: "node-1:1234",
-				Attributes: map[string]string{
-					"si.io/hostname": "node-1",
-					"si.io/rackname": "rack-1",
-				},
+				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 100},
@@ -266,9 +253,7 @@ partitions:
 		RmID:            "rm:123",
 	})
 
-	if err != nil {
-		t.Fatalf("UpdateRequest failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest failed")
 
 	// Wait until node is registered
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
@@ -300,9 +285,7 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	if err != nil {
-		t.Fatalf("UpdateRequest failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest failed")
 
 	// make sure the resources are released from queue/app
 	waitForAllocatedQueueResource(t, schedulerQueueA, 0, 1000)
@@ -332,13 +315,11 @@ partitions:
 	defer ms.Stop()
 
 	err := ms.Init(configData, false)
-	if err != nil {
-		t.Fatalf("RegisterResourceManager failed: %v", err)
-	}
+	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Check queues of cache and scheduler.
 	partitionInfo := ms.clusterInfo.GetPartition("[rm:123]default")
-	assert.Assert(t, nil == partitionInfo.Root.GetMaxResource(), "partition info max resource nil")
+	assert.Assert(t, partitionInfo.Root.GetMaxResource() == nil, "partition info max resource nil")
 
 	// Register a node
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -360,9 +341,7 @@ partitions:
 		RmID:            "rm:123",
 	})
 
-	if err != nil {
-		t.Fatalf("UpdateRequest failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest failed")
 
 	// Wait until node is registered
 	context := ms.scheduler.GetClusterSchedulingContext()
@@ -376,7 +355,7 @@ partitions:
 	schedulingNode1 := ms.scheduler.GetClusterSchedulingContext().
 		GetSchedulingNode("node-1:1234", "[rm:123]default")
 	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[resources.MEMORY]), int64(0))
-	assert.Equal(t, int64(schedulingNode1.GetAvailableResourceForTest().Resources[resources.MEMORY]), int64(100))
+	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[resources.MEMORY]), int64(100))
 
 	// update node capacity
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -399,16 +378,14 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	if err != nil {
-		t.Fatalf("UpdateRequest failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest failed")
 
 	waitForNodesAvailableResource(t, ms.clusterInfo, "[rm:123]default",
 		[]string{"node-1:1234"}, 300, 1000)
 	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.MEMORY]), int64(300))
 	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.VCORE]), int64(10))
 	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[resources.MEMORY]), int64(0))
-	assert.Equal(t, int64(schedulingNode1.GetAvailableResourceForTest().Resources[resources.MEMORY]), int64(300))
+	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[resources.MEMORY]), int64(300))
 }
 
 func TestUpdateNodeOccupiedResources(t *testing.T) {
@@ -432,13 +409,11 @@ partitions:
 	defer ms.Stop()
 
 	err := ms.Init(configData, false)
-	if err != nil {
-		t.Fatalf("RegisterResourceManager failed: %v", err)
-	}
+	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Check queues of cache and scheduler.
 	partitionInfo := ms.clusterInfo.GetPartition("[rm:123]default")
-	assert.Assert(t, nil == partitionInfo.Root.GetMaxResource(), "partition info max resource nil")
+	assert.Assert(t, partitionInfo.Root.GetMaxResource() == nil, "partition info max resource nil")
 
 	// Register a node
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -460,9 +435,7 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	if err != nil {
-		t.Fatalf("UpdateRequest failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest failed")
 
 	// Wait until node is registered
 	context := ms.scheduler.GetClusterSchedulingContext()
@@ -476,7 +449,7 @@ partitions:
 	schedulingNode1 := ms.scheduler.GetClusterSchedulingContext().
 		GetSchedulingNode("node-1:1234", "[rm:123]default")
 	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[resources.MEMORY]), int64(0))
-	assert.Equal(t, int64(schedulingNode1.GetAvailableResourceForTest().Resources[resources.MEMORY]), int64(100))
+	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[resources.MEMORY]), int64(100))
 
 	// update node capacity
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -499,9 +472,7 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	if err != nil {
-		t.Fatalf("UpdateRequest failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest failed")
 
 	waitForNodesAvailableResource(t, ms.clusterInfo, "[rm:123]default",
 		[]string{"node-1:1234"}, 20, 1000)
@@ -510,5 +481,5 @@ partitions:
 	assert.Equal(t, int64(node1.GetOccupiedResource().Resources[resources.MEMORY]), int64(80))
 	assert.Equal(t, int64(node1.GetOccupiedResource().Resources[resources.VCORE]), int64(5))
 	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[resources.MEMORY]), int64(0))
-	assert.Equal(t, int64(schedulingNode1.GetAvailableResourceForTest().Resources[resources.MEMORY]), int64(20))
+	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[resources.MEMORY]), int64(20))
 }

@@ -559,6 +559,8 @@ func (s *Scheduler) GetClusterSchedulingContext() *ClusterSchedulingContext {
 // Visible by tests
 func (s *Scheduler) MultiStepSchedule(nAlloc int) {
 	for i := 0; i < nAlloc; i++ {
+		log.Logger().Debug("Scheduler manual stepping",
+			zap.Int("count", i))
 		s.schedule()
 	}
 }

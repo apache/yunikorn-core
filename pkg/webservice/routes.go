@@ -76,6 +76,14 @@ var routes = Routes{
 		promhttp.Handler().ServeHTTP,
 	},
 
+	// endpoint to validate conf
+	Route{
+		"Scheduler",
+		"POST",
+		"/ws/v1/validate-conf",
+		ValidateConf,
+	},
+
 	// endpoint to retrieve CPU, Memory profiling data,
 	// this works with pprof tool. By default, pprof endpoints
 	// are only registered to http.DefaultServeMux. Here, we

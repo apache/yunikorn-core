@@ -353,8 +353,10 @@ func TestTryAllocateLarge(t *testing.T) {
 		t.Fatalf("empty cluster allocate returned allocation: %v", alloc.String())
 	}
 
-	// override the reservation delay
+	// override the reservation delay, and cleanup when done
 	OverrideReservationDelay(time.Nanosecond)
+	defer OverrideReservationDelay(2 * time.Second)
+
 	leaf := partition.getQueue("root.parent.leaf1")
 	if leaf == nil {
 		t.Fatal("leaf queue create failed")
@@ -391,8 +393,10 @@ func TestAllocReserveNewNode(t *testing.T) {
 		t.Fatalf("empty cluster allocate returned allocation: %v", alloc.String())
 	}
 
-	// override the reservation delay
+	// override the reservation delay, and cleanup when done
 	OverrideReservationDelay(time.Nanosecond)
+	defer OverrideReservationDelay(2 * time.Second)
+
 	// turn off the second node
 	node2 := partition.getSchedulingNode("node-2")
 	node2.nodeInfo.SetSchedulable(false)

@@ -29,7 +29,7 @@ kubectl create configmap yunikorn-configs --from-file=queues.yaml
 kubectl describe configmaps yunikorn-configs
 ```
 
-For more information about how to manage scheduler's configuration via configmap, see more from [here](./setup/configure-scheduler.md).
+For more information about how to manage scheduler's configuration via configmap, see more from [here](./configure-scheduler.md).
 
 ## Deploy the scheduler on k8s
 

@@ -477,17 +477,12 @@ func (pi *PartitionInfo) releaseAllocationsForApplication(toRelease *commonevent
 	for _, alloc := range allocationsToRelease {
 		// remove allocation from node
 		node := pi.nodes[alloc.AllocationProto.NodeID]
-		// node could be nil if when release happens, the node is already
-		// removed from the cluster. in this case, we need to make sure
-		// resources are released correctly. otherwise these resources will
-		// be leaked.
 		if node == nil || node.GetAllocation(alloc.AllocationProto.UUID) == nil {
-			log.Logger().Info("node is not found or the allocation is not found",
-				zap.String("node", alloc.AllocationProto.NodeID),
-				zap.String("allocationID", alloc.AllocationProto.UUID))
-		} else {
-			node.RemoveAllocation(alloc.AllocationProto.UUID)
+			log.Logger().Info("node is not found for allocation",
+				zap.Any("allocation", alloc))
+			continue
 		}
+		node.RemoveAllocation(alloc.AllocationProto.UUID)
 		totalReleasedResource.AddTo(alloc.AllocatedResource)
 	}
 

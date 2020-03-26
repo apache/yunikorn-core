@@ -453,7 +453,7 @@ func (pi *PartitionInfo) releaseAllocationsForApplication(toRelease *commonevent
 				zap.String("appID", app.ApplicationID))
 			allocationsToRelease = append(allocationsToRelease, app.removeAllAllocations()...)
 		} else {
-			log.Logger().Debug("removing allocations",
+			log.Logger().Info("removing allocations",
 				zap.String("appID", app.ApplicationID),
 				zap.String("allocationId", toRelease.UUID))
 			if alloc := app.removeAllocation(toRelease.UUID); alloc != nil {
@@ -981,9 +981,9 @@ func (pi *PartitionInfo) CalculateNodesResourceUsage() map[string][]int {
 	defer pi.RUnlock()
 	mapResult := make(map[string][]int)
 	for _, node := range pi.nodes {
-		for name, total := range node.totalResource.Resources {
+		for name, total := range node.GetCapacity().Resources {
 			if float64(total) > 0 {
-				resourceAllocated := float64(node.allocatedResource.Resources[name])
+				resourceAllocated := float64(node.GetAllocatedResource().Resources[name])
 				v := resourceAllocated / float64(total)
 				idx := int(math.Dim(math.Ceil(v*10), 1))
 				if dist, ok := mapResult[name]; !ok {

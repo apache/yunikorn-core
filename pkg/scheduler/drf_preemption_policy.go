@@ -138,7 +138,7 @@ func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionCont
 	// ignoring anything below 0 as we have more available than requested
 	// don't count at what is already marked for preemption (that is still used)
 	// the scheduling node's available resource takes into account what is being allocated
-	resourceToPreempt := resources.SubEliminateNegative(candidate.AllocatedResource, node.getAvailableResource())
+	resourceToPreempt := resources.SubEliminateNegative(candidate.AllocatedResource, node.GetAvailableResource())
 
 	toReleaseAllocations := make(map[string]*cache.AllocationInfo)
 	totalReleasedResource := resources.NewResource()

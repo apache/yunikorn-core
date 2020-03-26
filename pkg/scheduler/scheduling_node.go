@@ -74,10 +74,20 @@ func (sn *SchedulingNode) GetReservations() []string {
 	return keys
 }
 
+func (sn *SchedulingNode) updateNodeInfo(newNodeInfo *cache.NodeInfo) {
+	sn.Lock()
+	defer sn.Unlock()
+
+	sn.nodeInfo = newNodeInfo
+	sn.cachedAvailableUpdateNeeded = true
+}
+
 // Get the allocated resource on this node.
 // These resources are just the confirmed allocations (tracked in the cache node).
 // This does not lock the cache node as it will take its own lock.
 func (sn *SchedulingNode) GetAllocatedResource() *resources.Resource {
+	sn.RLock()
+	defer sn.RUnlock()
 	return sn.nodeInfo.GetAllocatedResource()
 }
 
@@ -85,7 +95,7 @@ func (sn *SchedulingNode) GetAllocatedResource() *resources.Resource {
 // These resources are confirmed allocations (tracked in the cache node) minus the resources
 // currently being allocated but not confirmed in the cache.
 // This does not lock the cache node as it will take its own lock.
-func (sn *SchedulingNode) getAvailableResource() *resources.Resource {
+func (sn *SchedulingNode) GetAvailableResource() *resources.Resource {
 	sn.Lock()
 	defer sn.Unlock()
 	if sn.cachedAvailableUpdateNeeded {

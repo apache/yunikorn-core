@@ -229,6 +229,7 @@ func getNodeJSON(nodeInfo *cache.NodeInfo) *dao.NodeDAOInfo {
 		HostName:    nodeInfo.Hostname,
 		RackName:    nodeInfo.Rackname,
 		Capacity:    strings.Trim(nodeInfo.GetCapacity().String(), "map"),
+		Occupied:    strings.Trim(nodeInfo.GetOccupiedResource().String(), "map"),
 		Allocated:   strings.Trim(nodeInfo.GetAllocatedResource().String(), "map"),
 		Available:   strings.Trim(nodeInfo.GetAvailableResource().String(), "map"),
 		Allocations: allocations,

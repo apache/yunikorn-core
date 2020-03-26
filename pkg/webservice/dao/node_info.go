@@ -29,6 +29,7 @@ type NodeDAOInfo struct {
 	RackName    string               `json:"RackName"`
 	Capacity    string               `json:"capacity"`
 	Allocated   string               `json:"allocated"`
+	Occupied    string               `json:"occupied"`
 	Available   string               `json:"available"`
 	Allocations []*AllocationDAOInfo `json:"allocations"`
 	Schedulable bool                 `json:"schedulable"`

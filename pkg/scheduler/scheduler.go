@@ -199,7 +199,8 @@ func (s *Scheduler) processAllocationReleaseByAllocationKey(allocationAsksToRele
 				log.Logger().Info("release allocation",
 					zap.String("allocation", toRelease.Allocationkey),
 					zap.String("appID", toRelease.ApplicationID),
-					zap.String("message", toRelease.Message))
+					zap.String("message", toRelease.Message),
+					zap.Int("reservedAskReleased", reservedAsks))
 				// update the partition if the asks were reserved (clean up)
 				if reservedAsks != 0 {
 					s.clusterSchedulingContext.getPartition(toRelease.PartitionName).unReserveUpdate(toRelease.ApplicationID, reservedAsks)
@@ -514,6 +515,15 @@ func (s *Scheduler) processNodeEvent(event *schedulerevent.SchedulerNodeEvent) {
 	// preempted resources have now been released update the node
 	if event.PreemptedNodeResources != nil {
 		s.clusterSchedulingContext.releasePreemptedResources(event.PreemptedNodeResources)
+	}
+	// update node resources
+	if event.UpdateNode != nil {
+		nodeInfo, ok := event.UpdateNode.(*cache.NodeInfo)
+		if !ok {
+			log.Logger().Debug("cast failed unexpected object in event",
+				zap.Any("NodeInfo", event.UpdateNode))
+		}
+		s.clusterSchedulingContext.updateSchedulingNode(nodeInfo)
 	}
 }
 

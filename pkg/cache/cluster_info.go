@@ -29,6 +29,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/cache/cacheevent"
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
@@ -386,6 +387,19 @@ func (m *ClusterInfo) processNodeActions(request *si.UpdateRequest) {
 
 		if nodeInfo, ok := partition.nodes[update.NodeID]; ok {
 			switch update.Action {
+			case si.UpdateNodeInfo_UPDATE:
+				if sr := update.SchedulableResource; sr != nil {
+					newCapacity := resources.NewResourceFromProto(sr)
+					nodeInfo.setCapacity(newCapacity)
+				}
+				if or := update.OccupiedResource; or != nil {
+					newOccupied := resources.NewResourceFromProto(or)
+					nodeInfo.setOccupiedResource(newOccupied)
+				}
+				m.EventHandlers.SchedulerEventHandler.HandleEvent(
+					&schedulerevent.SchedulerNodeEvent{
+						UpdateNode: nodeInfo,
+					})
 			case si.UpdateNodeInfo_DRAIN_NODE:
 				// set the state to not schedulable
 				nodeInfo.SetSchedulable(false)

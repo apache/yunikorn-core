@@ -103,6 +103,20 @@ func waitForNodesAllocatedResource(t *testing.T, cache *cache.ClusterInfo, parti
 	}
 }
 
+func waitForNodesAvailableResource(t *testing.T, cache *cache.ClusterInfo, partitionName string, nodeIDs []string, availableMemory resources.Quantity, timeoutMs int) {
+	var totalNodeResource resources.Quantity
+	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+		totalNodeResource = 0
+		for _, nodeID := range nodeIDs {
+			totalNodeResource += cache.GetPartition(partitionName).GetNode(nodeID).GetAvailableResource().Resources[resources.MEMORY]
+		}
+		return totalNodeResource == availableMemory
+	})
+	if err != nil {
+		t.Fatalf("Failed to wait for available resource %v and node %v, called from: %s", availableMemory, nodeIDs, caller())
+	}
+}
+
 func waitForNewSchedulerNode(t *testing.T, context *scheduler.ClusterSchedulingContext, nodeID string, partitionName string, timeoutMs int) {
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		node := context.GetSchedulingNode(nodeID, partitionName)

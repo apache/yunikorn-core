@@ -54,8 +54,8 @@ func TestNewSchedulingNode(t *testing.T) {
 	if !node.cachedAvailableUpdateNeeded {
 		t.Error("node available resource dirty should be set for new node")
 	}
-	if !resources.Equals(node.getAvailableResource(), res) {
-		t.Errorf("node available resource not set to cached value got: %v", node.getAvailableResource())
+	if !resources.Equals(node.GetAvailableResource(), res) {
+		t.Errorf("node available resource not set to cached value got: %v", node.GetAvailableResource())
 	}
 	if node.cachedAvailableUpdateNeeded {
 		t.Error("node available resource dirty should be cleared after getAvailableResource call")
@@ -157,7 +157,7 @@ func TestCheckAllocate(t *testing.T) {
 		t.Error("node available resource dirty should be set for new node")
 	}
 	// normal alloc check dirty flag
-	node.getAvailableResource() // unset the dirty flag
+	node.GetAvailableResource() // unset the dirty flag
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	if !node.allocateResource(res, false) {
 		t.Error("node should have accepted allocation")
@@ -256,7 +256,7 @@ func TestAvailableDirty(t *testing.T) {
 	if node == nil || node.NodeID != "node-1" {
 		t.Fatalf("node create failed which should not have %v", node)
 	}
-	node.getAvailableResource()
+	node.GetAvailableResource()
 	if node.cachedAvailableUpdateNeeded {
 		t.Fatal("node available resource dirty should not be set after getAvailableResource")
 	}
@@ -266,7 +266,7 @@ func TestAvailableDirty(t *testing.T) {
 	if !node.cachedAvailableUpdateNeeded {
 		t.Error("node available resource dirty should be set after incPreemptingResource")
 	}
-	node.getAvailableResource()
+	node.GetAvailableResource()
 
 	node.decAllocatingResource(res)
 	if !node.cachedAvailableUpdateNeeded {

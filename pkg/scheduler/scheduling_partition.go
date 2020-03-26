@@ -308,6 +308,21 @@ func (psc *partitionSchedulingContext) addSchedulingNode(info *cache.NodeInfo) {
 	psc.nodes[info.NodeID] = newSchedulingNode(info)
 }
 
+func (psc *partitionSchedulingContext) updateSchedulingNode(info *cache.NodeInfo) {
+	if info == nil {
+		return
+	}
+
+	psc.Lock()
+	defer psc.Unlock()
+	if schedulingNode, ok := psc.nodes[info.NodeID]; ok {
+		schedulingNode.updateNodeInfo(info)
+	} else {
+		log.Logger().Warn("node is not found in partitionSchedulingContext while attempting to update it",
+			zap.String("nodeID", info.NodeID))
+	}
+}
+
 // Remove a scheduling node triggered by the removal of the cache node.
 // This will log if the scheduler is out of sync with the cache.
 // Should never be called directly as it will bring the scheduler out of sync with the cache.
@@ -479,7 +494,7 @@ func (psc *partitionSchedulingContext) reserve(app *SchedulingApplication, node 
 	}
 	// all ok, add the reservation to the app, this will also reserve the node
 	if err := app.reserve(node, ask); err != nil {
-		log.Logger().Info("Failed to handle reservation, error during update of app",
+		log.Logger().Debug("Failed to handle reservation, error during update of app",
 			zap.Error(err))
 		return
 	}

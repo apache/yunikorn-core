@@ -40,6 +40,8 @@ type SchedulerNodeEvent struct {
 	AddedNode interface{}
 	// Type is *cache.nodeInfo, avoid cyclic imports
 	RemovedNode interface{}
+	// Type is *cache.nodeInfo, avoid cyclic imports
+	UpdateNode interface{}
 	// Resources that have been released via preemption
 	PreemptedNodeResources []PreemptedNodeResource
 }

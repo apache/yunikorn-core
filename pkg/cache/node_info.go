@@ -23,6 +23,7 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/api"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -38,6 +39,7 @@ type NodeInfo struct {
 	// Private fields need protection
 	attributes        map[string]string
 	totalResource     *resources.Resource
+	occupiedResource  *resources.Resource
 	allocatedResource *resources.Resource
 	availableResource *resources.Resource
 	allocations       map[string]*AllocationInfo
@@ -56,10 +58,12 @@ func NewNodeInfo(proto *si.NewNodeInfo) *NodeInfo {
 		NodeID:            proto.NodeID,
 		totalResource:     resources.NewResourceFromProto(proto.SchedulableResource),
 		allocatedResource: resources.NewResource(),
+		occupiedResource:  resources.NewResource(),
 		allocations:       make(map[string]*AllocationInfo),
 		schedulable:       true,
 	}
 	m.availableResource = m.totalResource.Clone()
+	m.refreshAvailableResource()
 
 	m.initializeAttribute(proto.Attributes)
 
@@ -107,6 +111,34 @@ func (ni *NodeInfo) GetCapacity() *resources.Resource {
 	ni.lock.RLock()
 	defer ni.lock.RUnlock()
 	return ni.totalResource.Clone()
+}
+
+func (ni *NodeInfo) setCapacity(newCapacity *resources.Resource) {
+	ni.lock.Lock()
+	defer ni.lock.Unlock()
+	if resources.Equals(ni.totalResource, newCapacity) {
+		log.Logger().Debug("skip updating capacity, not changed")
+		return
+	}
+	ni.totalResource = newCapacity
+	ni.refreshAvailableResource()
+}
+
+func (ni *NodeInfo) GetOccupiedResource() *resources.Resource {
+	ni.lock.RLock()
+	defer ni.lock.RUnlock()
+	return ni.occupiedResource.Clone()
+}
+
+func (ni *NodeInfo) setOccupiedResource(occupiedResource *resources.Resource) {
+	ni.lock.Lock()
+	defer ni.lock.Unlock()
+	if resources.Equals(ni.occupiedResource, occupiedResource) {
+		log.Logger().Debug("skip updating occupiedResource, not changed")
+		return
+	}
+	ni.occupiedResource = occupiedResource
+	ni.refreshAvailableResource()
 }
 
 // Return the allocation based on the uuid of the allocation.
@@ -190,4 +222,12 @@ func (ni *NodeInfo) IsSchedulable() bool {
 	ni.lock.RLock()
 	defer ni.lock.RUnlock()
 	return ni.schedulable
+}
+
+// refresh node available resource based on the latest allocated and occupied resources.
+// this call assumes the caller already acquires the lock.
+func (ni *NodeInfo) refreshAvailableResource() {
+	ni.availableResource = ni.totalResource.Clone()
+	ni.availableResource.SubFrom(ni.allocatedResource)
+	ni.availableResource.SubFrom(ni.occupiedResource)
 }

@@ -63,7 +63,7 @@ func newSchedulingApplication(appInfo *cache.ApplicationInfo) *SchedulingApplica
 // override reservation delay for tests
 func OverrideReservationDelay(delay time.Duration) {
 	log.Logger().Debug("Test override reservation delay",
-		zap.Duration("delay", delay))
+		zap.String("delay", delay.String()))
 	reservationDelay = delay
 }
 

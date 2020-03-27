@@ -55,7 +55,7 @@ kubectl create -f examples/nginx/nginx.yaml
 ```
 A simple sleep job example:
 ```
-kubectl create -f examples/sleep/sleeppods.xml
+kubectl create -f examples/sleep/sleeppods.yaml
 ```
 The files for these examples can be found in the [README nginx](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/deployments/examples#nginx) and the [README sleep](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/deployments/examples#sleep) sections.
 

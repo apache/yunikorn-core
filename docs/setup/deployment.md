@@ -34,7 +34,7 @@ For more information about how to manage scheduler's configuration via configmap
 ## Deploy the scheduler on k8s
 
 Before you can deploy the scheduler the image for the scheduler and the web interface must be build with the appropriate tags.
-The procedure on how to build the images is explained in the [build document](./developer-guide.md). See [scheduler.yaml](https://github.com/apache/incubator-yunikorn-k8shim/blob/master/deployments/scheduler/scheduler.yaml)
+The procedure on how to build the images is explained in the [build document](../developer-guide.md). See [scheduler.yaml](https://github.com/apache/incubator-yunikorn-k8shim/blob/master/deployments/scheduler/scheduler.yaml)
 ```
 kubectl create -f scheduler/scheduler.yaml
 ```

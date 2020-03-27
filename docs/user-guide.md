@@ -49,7 +49,7 @@ All sample deployments can be found under `examples` directory.
 The list of all examples is in the [README](https://github.com/apache/incubator-yunikorn-k8shim/blob/master/deployments/examples).
 Not all examples are given here. Further details can be found in that README.
 
-A single pod based on a standard nignx image: 
+A single pod based on a standard nginx image: 
 ```
 kubectl create -f examples/nginx/nginx.yaml
 ```
@@ -57,7 +57,7 @@ A simple sleep job example:
 ```
 kubectl create -f examples/sleep/sleeppods.xml
 ```
-The files for these examples can be found in the [README nignx](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/deployments/examples#nignx) and the [README sleep](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/deployments/examples#sleep) sections.
+The files for these examples can be found in the [README nginx](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/deployments/examples#nginx) and the [README sleep](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/deployments/examples#sleep) sections.
 
 ### Running a spark application
 Kubernetes support for Apache Spark is not part of all releases. You must have a current release of Apache Spark with Kubernetes support built in. 

@@ -58,7 +58,7 @@ func NewNodeInfo(proto *si.NewNodeInfo) *NodeInfo {
 		NodeID:            proto.NodeID,
 		totalResource:     resources.NewResourceFromProto(proto.SchedulableResource),
 		allocatedResource: resources.NewResource(),
-		occupiedResource:  resources.NewResource(),
+		occupiedResource:  resources.NewResourceFromProto(proto.OccupiedResource),
 		allocations:       make(map[string]*AllocationInfo),
 		schedulable:       true,
 	}

@@ -20,6 +20,7 @@ package rmproxy
 
 import (
 	"fmt"
+	"github.com/apache/incubator-yunikorn-core/pkg/diagnostic"
 	"reflect"
 	"sync"
 	"time"
@@ -379,4 +380,8 @@ func (cr ConfigurationReloader) DoReloadConfiguration() error {
 		return fmt.Errorf("failed to update configuration for RM %s, result: %v", cr.rmID, result)
 	}
 	return nil
+}
+
+func (m* RMProxy) GetSchedulerEventUpdate() []*api.DiagnosticEvent {
+	return diagnostic.GetEventsRecorder().FlushEvents()
 }

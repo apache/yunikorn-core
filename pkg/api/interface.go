@@ -31,6 +31,9 @@ type SchedulerAPI interface {
 
 	// Notify scheduler to reload configuration and hot-refresh in-memory state based on configuration changes
 	ReloadConfiguration(clusterID string) error
+
+	// Get Update of Scheduler Events
+	GetSchedulerEventUpdate() []*DiagnosticEvent
 }
 
 // RM side needs to implement this API

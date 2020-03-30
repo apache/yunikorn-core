@@ -29,9 +29,11 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
 )
 
 var gClusterInfo *cache.ClusterInfo
+var imHistory *history.InternalMetricsHistory
 
 type WebService struct {
 	httpServer  *http.Server
@@ -82,9 +84,10 @@ func (m *WebService) StartWebApp() {
 	}()
 }
 
-func NewWebApp(clusterInfo *cache.ClusterInfo) *WebService {
+func NewWebApp(clusterInfo *cache.ClusterInfo, internalMetrics *history.InternalMetricsHistory) *WebService {
 	m := &WebService{}
 	gClusterInfo = clusterInfo
+	imHistory = internalMetrics
 	return m
 }
 

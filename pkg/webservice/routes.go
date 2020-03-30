@@ -84,6 +84,20 @@ var routes = Routes{
 		ValidateConf,
 	},
 
+	// endpoint to retrieve historical data
+	Route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/history/apps",
+		GetApplicationHistory,
+	},
+	Route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/history/containers",
+		GetContainerHistory,
+	},
+
 	// endpoint to retrieve CPU, Memory profiling data,
 	// this works with pprof tool. By default, pprof endpoints
 	// are only registered to http.DefaultServeMux. Here, we

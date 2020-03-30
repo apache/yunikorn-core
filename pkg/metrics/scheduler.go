@@ -200,6 +200,10 @@ func (m *SchedulerMetrics) AddAllocatedContainers(value int) {
 	m.allocatedContainers.Add(float64(value))
 }
 
+func (m *SchedulerMetrics) getAllocatedContainers() *prometheus.Counter {
+	return &m.allocatedContainers
+}
+
 func (m *SchedulerMetrics) IncReleasedContainer() {
 	m.releasedContainers.Inc()
 }
@@ -263,6 +267,10 @@ func (m *SchedulerMetrics) SubTotalApplicationsRunning(value int) {
 
 func (m *SchedulerMetrics) SetTotalApplicationsRunning(value int) {
 	m.totalApplicationsRunning.Set(float64(value))
+}
+
+func (m *SchedulerMetrics) getTotalApplicationsRunning() *prometheus.Gauge {
+	return &m.totalApplicationsRunning
 }
 
 // Metrics Ops related to totalApplicationsCompleted

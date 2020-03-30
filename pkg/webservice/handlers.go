@@ -19,7 +19,6 @@ package webservice
 
 import (
 	"encoding/json"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"io/ioutil"
 	"net/http"
 	"runtime"
@@ -29,6 +28,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 )
@@ -234,5 +234,41 @@ func getNodeJSON(nodeInfo *cache.NodeInfo) *dao.NodeDAOInfo {
 		Available:   strings.Trim(nodeInfo.GetAvailableResource().String(), "map"),
 		Allocations: allocations,
 		Schedulable: nodeInfo.IsSchedulable(),
+	}
+}
+
+func GetApplicationHistory(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+
+	var result []*dao.ApplicationHistoryDAOInfo
+	records := imHistory.GetRecords()
+	for _, record := range records {
+		element := &dao.ApplicationHistoryDAOInfo{
+			Timestamp:         record.Timestamp.UnixNano(),
+			TotalApplications: strconv.Itoa(record.TotalApplications),
+		}
+		result = append(result, element)
+	}
+
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func GetContainerHistory(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+
+	var result []*dao.ContainerHistoryDAOInfo
+	records := imHistory.GetRecords()
+	for _, record := range records {
+		element := &dao.ContainerHistoryDAOInfo{
+			Timestamp:       record.Timestamp.UnixNano(),
+			TotalContainers: strconv.Itoa(record.TotalContainers),
+		}
+		result = append(result, element)
+	}
+
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

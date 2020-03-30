@@ -22,6 +22,8 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
+	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
 	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice"
@@ -57,6 +59,9 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 	scheduler := scheduler.NewScheduler(cache)
 	proxy := rmproxy.NewRMProxy()
 
+	imHistory := history.NewInternalMetricsHistory(1440)
+	metricsCollector := metrics.NewInternalMetricsCollector(imHistory)
+
 	eventHandler := handler.EventHandlers{
 		CacheEventHandler:     cache,
 		SchedulerEventHandler: scheduler,
@@ -68,6 +73,7 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 	cache.StartService(eventHandler)
 	scheduler.StartService(eventHandler, opts.manualScheduleFlag)
 	proxy.StartService(eventHandler)
+	metricsCollector.StartService()
 
 	context := &ServiceContext{
 		RMProxy:   proxy,
@@ -77,7 +83,7 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 
 	if opts.startWebAppFlag {
 		log.Logger().Info("ServiceContext start web application service")
-		webapp := webservice.NewWebApp(cache)
+		webapp := webservice.NewWebApp(cache, imHistory)
 		webapp.StartWebApp()
 		context.WebApp = webapp
 	}

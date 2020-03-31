@@ -28,7 +28,7 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
-func newProto(nodeID string, totalResource *resources.Resource, attributes map[string]string) *si.NewNodeInfo {
+func newProto(nodeID string, totalResource, occupiedResource *resources.Resource, attributes map[string]string) *si.NewNodeInfo {
 	proto := si.NewNodeInfo{
 		NodeID:     nodeID,
 		Attributes: attributes,
@@ -43,6 +43,16 @@ func newProto(nodeID string, totalResource *resources.Resource, attributes map[s
 			proto.SchedulableResource.Resources[name] = &quantity
 		}
 	}
+
+	if occupiedResource != nil {
+		proto.OccupiedResource = &si.Resource{
+			Resources: map[string]*si.Quantity{},
+		}
+		for name, value := range occupiedResource.Resources {
+			quantity := si.Quantity{Value: int64(value)}
+			proto.OccupiedResource.Resources[name] = &quantity
+		}
+	}
 	return &proto
 }
 
@@ -52,14 +62,14 @@ func TestNewNodeInfo(t *testing.T) {
 	if node != nil {
 		t.Error("node not returned correctly: node is nul or incorrect name")
 	}
-	proto := newProto("testnode", nil, nil)
+	proto := newProto("testnode", nil, nil, nil)
 	node = NewNodeInfo(proto)
 	if node == nil || node.NodeID != "testnode" {
 		t.Error("node not returned correctly: node is nul or incorrect name")
 	}
 
 	totalRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100, "second": 100})
-	proto = newProto("testnode", totalRes, map[string]string{})
+	proto = newProto("testnode", totalRes, nil, map[string]string{})
 	node = NewNodeInfo(proto)
 	if node == nil || node.NodeID != "testnode" {
 		t.Fatal("node not returned correctly: node is nul or incorrect name")
@@ -84,10 +94,30 @@ func TestNewNodeInfo(t *testing.T) {
 	assert.Equal(t, "host1", node.Hostname)
 	assert.Equal(t, "rack1", node.Rackname)
 	assert.Equal(t, "partition1", node.Partition)
+
+	// test capacity/available/occupied resources
+	totalResources := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100, "second": 100})
+	occupiedResources := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 30, "second": 20})
+	availableResources := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 70, "second": 80})
+	proto = newProto("testnode", totalResources, occupiedResources, map[string]string{})
+	node = NewNodeInfo(proto)
+	assert.Equal(t, node.NodeID, "testnode", "node not returned correctly: node is nul or incorrect name")
+	if !resources.Equals(node.GetCapacity(), totalResources) {
+		t.Errorf("node total resources not set correctly: %v expected got %v",
+			totalResources, node.GetCapacity())
+	}
+	if !resources.Equals(node.GetAvailableResource(), availableResources) {
+		t.Errorf("node available resources not set correctly: %v expected got %v",
+			availableResources, node.GetAvailableResource())
+	}
+	if !resources.Equals(node.GetOccupiedResource(), occupiedResources) {
+		t.Errorf("node occupied resources not set correctly: %v expected got %v",
+			occupiedResources, node.GetOccupiedResource())
+	}
 }
 
 func TestAttributes(t *testing.T) {
-	proto := newProto("testnode", nil, map[string]string{
+	proto := newProto("testnode", nil, nil, map[string]string{
 		api.NodePartition: "partition1",
 		"something":       "just a text",
 	})
@@ -247,7 +277,7 @@ func TestGetAllocations(t *testing.T) {
 }
 
 func TestSchedulingState(t *testing.T) {
-	node := NewNodeInfo(newProto("node-123", nil, nil))
+	node := NewNodeInfo(newProto("node-123", nil, nil, nil))
 	if !node.IsSchedulable() {
 		t.Error("failed to initialize node: not schedulable")
 	}

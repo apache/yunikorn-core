@@ -29,7 +29,12 @@ import (
 type InternalMetricsHistory struct {
 	records []*MetricsRecord
 	limit   int
-	mutex   sync.Mutex
+
+	// internal implementation of limited array
+	pointer int
+	full    bool
+
+	sync.RWMutex
 }
 
 type MetricsRecord struct {
@@ -40,35 +45,55 @@ type MetricsRecord struct {
 
 func NewInternalMetricsHistory(limit int) *InternalMetricsHistory {
 	return &InternalMetricsHistory{
-		records: make([]*MetricsRecord, 0),
+		records: make([]*MetricsRecord, limit),
 		limit:   limit,
 	}
 }
 
 func (h *InternalMetricsHistory) Store(totalApplications, totalContainers int) {
-	h.mutex.Lock()
-	defer h.mutex.Unlock()
+	h.Lock()
+	defer h.Unlock()
 
-	h.records = append(h.records,
-		&MetricsRecord{
-			time.Now(),
-			totalApplications,
-			totalContainers,
-		})
-	if len(h.records) > h.limit {
-		// remove oldest entry
-		h.records = h.records[1:]
+	h.records[h.pointer] = &MetricsRecord{
+		time.Now(),
+		totalApplications,
+		totalContainers,
+	}
+
+	h.pointer++
+	if h.pointer == h.limit {
+		h.pointer = 0
+		h.full = true
 	}
 }
 
+// the return of this function is ordered by the time of addition
 func (h *InternalMetricsHistory) GetRecords() []*MetricsRecord {
-	h.mutex.Lock()
-	defer h.mutex.Unlock()
-	return h.records
+	h.RLock()
+	defer h.RUnlock()
+
+	returnRecords := make([]*MetricsRecord, 0)
+	if h.full {
+		pointer := h.pointer
+		for i := 0; i < h.limit; i++ {
+			returnRecords = append(returnRecords, h.records[pointer])
+			pointer++
+			if pointer == h.limit {
+				pointer = 0
+			}
+		}
+	} else {
+		for _, record := range h.records {
+			if record != nil {
+				returnRecords = append(returnRecords, record)
+			}
+		}
+	}
+	return returnRecords
 }
 
 func (h *InternalMetricsHistory) GetLimit() int {
-	h.mutex.Lock()
-	defer h.mutex.Unlock()
+	h.RLock()
+	defer h.RUnlock()
 	return h.limit
 }

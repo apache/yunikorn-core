@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
@@ -200,8 +201,10 @@ func (m *SchedulerMetrics) AddAllocatedContainers(value int) {
 	m.allocatedContainers.Add(float64(value))
 }
 
-func (m *SchedulerMetrics) getAllocatedContainers() *prometheus.Counter {
-	return &m.allocatedContainers
+func (m *SchedulerMetrics) getAllocatedContainers() (int, error) {
+	metric := &dto.Metric{}
+	err := m.allocatedContainers.Write(metric)
+	return int(*metric.Counter.Value), err
 }
 
 func (m *SchedulerMetrics) IncReleasedContainer() {
@@ -269,8 +272,10 @@ func (m *SchedulerMetrics) SetTotalApplicationsRunning(value int) {
 	m.totalApplicationsRunning.Set(float64(value))
 }
 
-func (m *SchedulerMetrics) getTotalApplicationsRunning() *prometheus.Gauge {
-	return &m.totalApplicationsRunning
+func (m *SchedulerMetrics) getTotalApplicationsRunning() (int, error) {
+	metric := &dto.Metric{}
+	err := m.totalApplicationsRunning.Write(metric)
+	return int(*metric.Gauge.Value), err
 }
 
 // Metrics Ops related to totalApplicationsCompleted

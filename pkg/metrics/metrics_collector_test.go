@@ -29,7 +29,7 @@ import (
 
 func TestHistoricalPartitionInfoUpdater(t *testing.T) {
 	metricsHistory := history.NewInternalMetricsHistory(3)
-	setInternalMetricsCollectorTickerForTest(500 * time.Millisecond)
+	setInternalMetricsCollectorTicker(5 * time.Millisecond)
 	metricsCollector := NewInternalMetricsCollector(metricsHistory)
 	metricsCollector.StartService()
 
@@ -40,26 +40,22 @@ func TestHistoricalPartitionInfoUpdater(t *testing.T) {
 			metrics.IncTotalApplicationsRunning()
 			metrics.AddAllocatedContainers(2)
 			i += 1
-			time.Sleep(400 * time.Millisecond)
+			time.Sleep(4 * time.Millisecond)
 		}
 	}()
 
-	time.Sleep(1100 * time.Millisecond)
+	time.Sleep(11 * time.Millisecond)
 	metricsCollector.Stop()
 
 	records := metricsHistory.GetRecords()
 	assert.Equal(t, 2, len(records), "Expected exactly 2 history records")
 	for i, record := range records {
 		if i == 0 {
-			assert.Equal(t, 2, record.TotalApplications,
-				"Expected exactly 2 applications at 0.5 sec")
-			assert.Equal(t, 4, record.TotalContainers,
-				"Expected exactly 4 allocations at 0.5 sec")
+			assert.Equal(t, 2, record.TotalApplications, "Expected exactly 2 applications at 10 msec")
+			assert.Equal(t, 4, record.TotalContainers, "Expected exactly 4 allocations at 10 msec")
 		} else if i == 1 {
-			assert.Equal(t, 3, record.TotalApplications,
-				"Expected exactly 3 applications at 1 sec")
-			assert.Equal(t, 6, record.TotalContainers,
-				"Expected exactly 4 allocations at 1 sec")
+			assert.Equal(t, 3, record.TotalApplications, "Expected exactly 3 applications at 20 msec")
+			assert.Equal(t, 6, record.TotalContainers, "Expected exactly 4 allocations at 20 msec")
 		}
 	}
 }

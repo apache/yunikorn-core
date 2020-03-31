@@ -33,6 +33,7 @@ import (
 type StartupOptions struct {
 	manualScheduleFlag bool
 	startWebAppFlag    bool
+	metricsHistorySize int
 }
 
 func StartAllServices() *ServiceContext {
@@ -41,6 +42,7 @@ func StartAllServices() *ServiceContext {
 		StartupOptions{
 			manualScheduleFlag: false,
 			startWebAppFlag:    true,
+			metricsHistorySize: 1440,
 		})
 }
 
@@ -51,6 +53,7 @@ func StartAllServicesWithManualScheduler() *ServiceContext {
 		StartupOptions{
 			manualScheduleFlag: true,
 			startWebAppFlag:    false,
+			metricsHistorySize: 0,
 		})
 }
 
@@ -58,9 +61,6 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 	cache := cache.NewClusterInfo()
 	scheduler := scheduler.NewScheduler(cache)
 	proxy := rmproxy.NewRMProxy()
-
-	imHistory := history.NewInternalMetricsHistory(1440)
-	metricsCollector := metrics.NewInternalMetricsCollector(imHistory)
 
 	eventHandler := handler.EventHandlers{
 		CacheEventHandler:     cache,
@@ -73,12 +73,17 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 	cache.StartService(eventHandler)
 	scheduler.StartService(eventHandler, opts.manualScheduleFlag)
 	proxy.StartService(eventHandler)
-	metricsCollector.StartService()
 
 	context := &ServiceContext{
 		RMProxy:   proxy,
 		Cache:     cache,
 		Scheduler: scheduler,
+	}
+
+	imHistory := history.NewInternalMetricsHistory(opts.metricsHistorySize)
+	if opts.metricsHistorySize != 0 {
+		metricsCollector := metrics.NewInternalMetricsCollector(imHistory)
+		metricsCollector.StartService()
 	}
 
 	if opts.startWebAppFlag {

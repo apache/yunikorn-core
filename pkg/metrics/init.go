@@ -21,8 +21,6 @@ package metrics
 import (
 	"sync"
 	"time"
-
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 const (
@@ -56,7 +54,7 @@ type CoreSchedulerMetrics interface {
 	// Metrics Ops related to ScheduledAllocationSuccesses
 	IncAllocatedContainer()
 	AddAllocatedContainers(value int)
-	getAllocatedContainers() *prometheus.Counter
+	getAllocatedContainers() (int, error)
 
 	// Metrics Ops related to ScheduledAllocationFailures
 	IncRejectedContainer()
@@ -84,7 +82,7 @@ type CoreSchedulerMetrics interface {
 	DecTotalApplicationsRunning()
 	SubTotalApplicationsRunning(value int)
 	SetTotalApplicationsRunning(value int)
-	getTotalApplicationsRunning() *prometheus.Gauge
+	getTotalApplicationsRunning() (int, error)
 
 	// Metrics Ops related to TotalApplicationsCompleted
 	IncTotalApplicationsCompleted()

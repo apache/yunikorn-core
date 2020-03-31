@@ -21,7 +21,6 @@ package metrics
 import (
 	"time"
 
-	dto "github.com/prometheus/client_model/go"
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
@@ -56,25 +55,17 @@ func (u *InternalMetricsCollector) StartService() {
 			case <-u.ticker.C:
 				log.Logger().Debug("Adding current status to historical partition data")
 
-				totalAppsRunningMetric := &dto.Metric{}
-				totalAppsRunningMetricGauge := m.scheduler.getTotalApplicationsRunning()
-				err := (*totalAppsRunningMetricGauge).Write(totalAppsRunningMetric)
+				totalAppsRunning, err := m.scheduler.getTotalApplicationsRunning()
 				if err != nil {
 					log.Logger().Warn("Could not encode metric.", zap.Error(err))
 					continue
 				}
-
-				totalContainersRunningMetric := &dto.Metric{}
-				totalContainersRunningMetricCounter := m.scheduler.getAllocatedContainers()
-				err = (*totalContainersRunningMetricCounter).Write(totalContainersRunningMetric)
+				totalContainersRunning, err := m.scheduler.getAllocatedContainers()
 				if err != nil {
 					log.Logger().Warn("Could not encode metric.", zap.Error(err))
 					continue
 				}
-
-				u.metricsHistory.Store(
-					int(*totalAppsRunningMetric.Gauge.Value),
-					int(*totalContainersRunningMetric.Counter.Value))
+				u.metricsHistory.Store(totalAppsRunning, totalContainersRunning)
 			}
 		}
 	}()
@@ -84,6 +75,7 @@ func (u *InternalMetricsCollector) Stop() {
 	u.stopped <- true
 }
 
-func setInternalMetricsCollectorTickerForTest(newDefault time.Duration) {
+// visible only for test
+func setInternalMetricsCollectorTicker(newDefault time.Duration) {
 	tickerDefault = newDefault
 }

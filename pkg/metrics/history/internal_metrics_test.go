@@ -31,16 +31,13 @@ func TestHistoricalClusterInfo(t *testing.T) {
 	assert.Equal(t, limit, hpInfo.GetLimit(), "Limit should have been set to 2!")
 
 	hpInfo.Store(2, 3)
-	assert.Equal(t, 1, len(hpInfo.GetRecords()),
-		"Expected to have 1 record")
+	assert.Equal(t, 1, len(hpInfo.GetRecords()), "Expected to have 1 record")
 
 	hpInfo.Store(3, 4)
-	assert.Equal(t, 2, len(hpInfo.GetRecords()),
-		"Expected to have 2 records")
+	assert.Equal(t, 2, len(hpInfo.GetRecords()), "Expected to have 2 records")
 
 	hpInfo.Store(5, 6)
-	assert.Equal(t, 2, len(hpInfo.GetRecords()),
-		"Expected to have 2 records")
+	assert.Equal(t, 2, len(hpInfo.GetRecords()), "Expected to have 2 records")
 
 	for i, record := range hpInfo.GetRecords() {
 		switch i {

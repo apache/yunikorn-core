@@ -38,14 +38,14 @@ func Logger() *zap.Logger {
 			// is running as a deployment mode, or running with another non-go code
 			// shim. In this case, we need to create our own logger.
 			// TODO support log options when a global logger is not there
-			c := zap.NewDevelopmentConfig()
-			config = &c
-			newLogger, err := config.Build()
-			// this should really not happen so just write to stdout
+			config = createConfig()
+			var err error
+			logger, err = config.Build()
+			// this should really not happen so just write to stdout and set a Nop logger
 			if err != nil {
-				fmt.Printf("Logger init error: %v", err)
+				fmt.Printf("Logging disabled, logger init failed with error: %v", err)
+				logger = zap.NewNop()
 			}
-			logger = newLogger
 		}
 	})
 	return logger
@@ -74,4 +74,33 @@ func InitAndSetLevel(level zapcore.Level) {
 		Logger()
 	}
 	config.Level.SetLevel(level)
+}
+
+// Create a log config to keep full control over
+// LogLevel set to DEBUG, Encodes for console, Writes to stderr,
+// Enables development mode (DPanicLevel),
+// Print stack traces for messages at WarnLevel and above
+func createConfig() *zap.Config {
+	return &zap.Config{
+		Level:       zap.NewAtomicLevelAt(zap.DebugLevel),
+		Development: true,
+		Encoding:    "console",
+		EncoderConfig: zapcore.EncoderConfig{
+			MessageKey:    "message",
+			LevelKey:      "level",
+			TimeKey:       "time",
+			NameKey:       "name",
+			CallerKey:     "caller",
+			StacktraceKey: "stacktrace",
+			LineEnding:    zapcore.DefaultLineEnding,
+			// note: https://godoc.org/go.uber.org/zap/zapcore#EncoderConfig
+			// only EncodeName is optional all others must be set
+			EncodeLevel:    zapcore.CapitalLevelEncoder,
+			EncodeTime:     zapcore.ISO8601TimeEncoder,
+			EncodeDuration: zapcore.StringDurationEncoder,
+			EncodeCaller:   zapcore.ShortCallerEncoder,
+		},
+		OutputPaths:      []string{"stderr"},
+		ErrorOutputPaths: []string{"stderr"},
+	}
 }

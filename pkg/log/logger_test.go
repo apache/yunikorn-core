@@ -66,3 +66,20 @@ func TestIsDebugEnabled(t *testing.T) {
 	assert.NilError(t, err, "info level logger create failed")
 	assert.Equal(t, false, IsDebugEnabled())
 }
+
+func TestCreateConfig(t *testing.T) {
+	// direct call
+	zapConfig := createConfig()
+	localLogger, err := zapConfig.Build()
+	assert.NilError(t, err, "default config logger create failed")
+	assert.Equal(t, true, localLogger.Core().Enabled(zap.DebugLevel))
+
+	// indirect call to init logger
+	assert.Assert(t, logger != nil, "standard logger should not have been created")
+	_ = Logger()
+	assert.Assert(t, logger == nil, "standard logger should have been created")
+	assert.Equal(t, true, IsDebugEnabled())
+	// change log level: check config stored and logger create
+	InitAndSetLevel(zap.InfoLevel)
+	assert.Equal(t, false, IsDebugEnabled())
+}

@@ -29,24 +29,24 @@ import (
 
 var tickerDefault = 1 * time.Minute
 
-type InternalMetricsCollector struct {
+type internalMetricsCollector struct {
 	ticker         *time.Ticker
 	stopped        chan bool
 	metricsHistory *history.InternalMetricsHistory
 }
 
-func NewInternalMetricsCollector(hcInfo *history.InternalMetricsHistory) *InternalMetricsCollector {
+func NewInternalMetricsCollector(hcInfo *history.InternalMetricsHistory) *internalMetricsCollector {
 	finished := make(chan bool)
 	ticker := time.NewTicker(tickerDefault)
 
-	return &InternalMetricsCollector{
+	return &internalMetricsCollector{
 		ticker,
 		finished,
 		hcInfo,
 	}
 }
 
-func (u *InternalMetricsCollector) StartService() {
+func (u *internalMetricsCollector) StartService() {
 	go func() {
 		for {
 			select {
@@ -57,12 +57,12 @@ func (u *InternalMetricsCollector) StartService() {
 
 				totalAppsRunning, err := m.scheduler.getTotalApplicationsRunning()
 				if err != nil {
-					log.Logger().Warn("Could not encode metric.", zap.Error(err))
+					log.Logger().Warn("Could not encode totalApplications metric.", zap.Error(err))
 					continue
 				}
 				totalContainersRunning, err := m.scheduler.getAllocatedContainers()
 				if err != nil {
-					log.Logger().Warn("Could not encode metric.", zap.Error(err))
+					log.Logger().Warn("Could not encode totalContainers metric.", zap.Error(err))
 					continue
 				}
 				u.metricsHistory.Store(totalAppsRunning, totalContainersRunning)
@@ -71,7 +71,7 @@ func (u *InternalMetricsCollector) StartService() {
 	}()
 }
 
-func (u *InternalMetricsCollector) Stop() {
+func (u *internalMetricsCollector) Stop() {
 	u.stopped <- true
 }
 

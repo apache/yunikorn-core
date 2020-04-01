@@ -80,8 +80,9 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 		Scheduler: scheduler,
 	}
 
-	imHistory := history.NewInternalMetricsHistory(opts.metricsHistorySize)
+	var imHistory *history.InternalMetricsHistory
 	if opts.metricsHistorySize != 0 {
+		imHistory = history.NewInternalMetricsHistory(opts.metricsHistorySize)
 		metricsCollector := metrics.NewInternalMetricsCollector(imHistory)
 		metricsCollector.StartService()
 	}

@@ -201,10 +201,12 @@ func (m *SchedulerMetrics) AddAllocatedContainers(value int) {
 	m.allocatedContainers.Add(float64(value))
 }
 
-func (m *SchedulerMetrics) getAllocatedContainers() (int, error) {
-	metric := &dto.Metric{}
-	err := m.allocatedContainers.Write(metric)
-	return int(*metric.Counter.Value), err
+func (m *SchedulerMetrics) getAllocatedContainers() (value int, err error) {
+	metricDto := &dto.Metric{}
+	if err = m.allocatedContainers.Write(metricDto); err == nil {
+		value = int(*metricDto.Counter.Value)
+	}
+	return
 }
 
 func (m *SchedulerMetrics) IncReleasedContainer() {

@@ -27,17 +27,16 @@ import (
 // for the web UI's front page.
 // For more detailed metrics collection use Prometheus.
 type InternalMetricsHistory struct {
-	records []*MetricsRecord
+	records []*metricsRecord
 	limit   int
 
 	// internal implementation of limited array
 	pointer int
-	full    bool
 
 	sync.RWMutex
 }
 
-type MetricsRecord struct {
+type metricsRecord struct {
 	Timestamp         time.Time
 	TotalApplications int
 	TotalContainers   int
@@ -45,7 +44,7 @@ type MetricsRecord struct {
 
 func NewInternalMetricsHistory(limit int) *InternalMetricsHistory {
 	return &InternalMetricsHistory{
-		records: make([]*MetricsRecord, limit),
+		records: make([]*metricsRecord, limit),
 		limit:   limit,
 	}
 }
@@ -54,7 +53,7 @@ func (h *InternalMetricsHistory) Store(totalApplications, totalContainers int) {
 	h.Lock()
 	defer h.Unlock()
 
-	h.records[h.pointer] = &MetricsRecord{
+	h.records[h.pointer] = &metricsRecord{
 		time.Now(),
 		totalApplications,
 		totalContainers,
@@ -63,32 +62,19 @@ func (h *InternalMetricsHistory) Store(totalApplications, totalContainers int) {
 	h.pointer++
 	if h.pointer == h.limit {
 		h.pointer = 0
-		h.full = true
 	}
 }
 
-// the return of this function is ordered by the time of addition
-func (h *InternalMetricsHistory) GetRecords() []*MetricsRecord {
+// contract: the non-nil values are ordered by the time of addition
+// may contains nil values, those should be handled (filtered) on the caller's side
+func (h *InternalMetricsHistory) GetRecords() []*metricsRecord {
 	h.RLock()
 	defer h.RUnlock()
 
-	returnRecords := make([]*MetricsRecord, 0)
-	if h.full {
-		pointer := h.pointer
-		for i := 0; i < h.limit; i++ {
-			returnRecords = append(returnRecords, h.records[pointer])
-			pointer++
-			if pointer == h.limit {
-				pointer = 0
-			}
-		}
-	} else {
-		for _, record := range h.records {
-			if record != nil {
-				returnRecords = append(returnRecords, record)
-			}
-		}
-	}
+	returnRecords := make([]*metricsRecord, h.limit-h.pointer)
+	copy(returnRecords, h.records[h.pointer:])
+	returnRecords = append(returnRecords, h.records[:h.pointer]...)
+
 	return returnRecords
 }
 

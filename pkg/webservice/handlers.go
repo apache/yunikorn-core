@@ -240,35 +240,45 @@ func getNodeJSON(nodeInfo *cache.NodeInfo) *dao.NodeDAOInfo {
 func GetApplicationHistory(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
-	var result []*dao.ApplicationHistoryDAOInfo
-	records := imHistory.GetRecords()
-	for _, record := range records {
-		element := &dao.ApplicationHistoryDAOInfo{
-			Timestamp:         record.Timestamp.UnixNano(),
-			TotalApplications: strconv.Itoa(record.TotalApplications),
+	if imHistory != nil {
+		var result []*dao.ApplicationHistoryDAOInfo
+		records := imHistory.GetRecords()
+		for _, record := range records {
+			if record != nil {
+				element := &dao.ApplicationHistoryDAOInfo{
+					Timestamp:         record.Timestamp.UnixNano(),
+					TotalApplications: strconv.Itoa(record.TotalApplications),
+				}
+				result = append(result, element)
+			}
 		}
-		result = append(result, element)
-	}
-
-	if err := json.NewEncoder(w).Encode(result); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		if err := json.NewEncoder(w).Encode(result); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	} else {
+		http.Error(w, "Internal metrics collection is not enabled.", http.StatusInternalServerError)
 	}
 }
 
 func GetContainerHistory(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
-	var result []*dao.ContainerHistoryDAOInfo
-	records := imHistory.GetRecords()
-	for _, record := range records {
-		element := &dao.ContainerHistoryDAOInfo{
-			Timestamp:       record.Timestamp.UnixNano(),
-			TotalContainers: strconv.Itoa(record.TotalContainers),
+	if imHistory != nil {
+		var result []*dao.ContainerHistoryDAOInfo
+		records := imHistory.GetRecords()
+		for _, record := range records {
+			if record != nil {
+				element := &dao.ContainerHistoryDAOInfo{
+					Timestamp:       record.Timestamp.UnixNano(),
+					TotalContainers: strconv.Itoa(record.TotalContainers),
+				}
+				result = append(result, element)
+			}
 		}
-		result = append(result, element)
-	}
-
-	if err := json.NewEncoder(w).Encode(result); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		if err := json.NewEncoder(w).Encode(result); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	} else {
+		http.Error(w, "Internal metrics collection is not enabled.", http.StatusInternalServerError)
 	}
 }

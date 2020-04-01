@@ -58,7 +58,6 @@ func (h *InternalMetricsHistory) Store(totalApplications, totalContainers int) {
 		totalApplications,
 		totalContainers,
 	}
-
 	h.pointer++
 	if h.pointer == h.limit {
 		h.pointer = 0
@@ -74,7 +73,6 @@ func (h *InternalMetricsHistory) GetRecords() []*metricsRecord {
 	returnRecords := make([]*metricsRecord, h.limit-h.pointer)
 	copy(returnRecords, h.records[h.pointer:])
 	returnRecords = append(returnRecords, h.records[:h.pointer]...)
-
 	return returnRecords
 }
 

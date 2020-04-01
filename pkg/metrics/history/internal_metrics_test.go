@@ -24,6 +24,16 @@ import (
 	"gotest.tools/assert"
 )
 
+func countNils(records []*metricsRecord) int {
+	count := 0
+	for _, record := range records {
+		if record == nil {
+			count++
+		}
+	}
+	return count
+}
+
 func TestHistoricalClusterInfo(t *testing.T) {
 	limit := 2
 	hpInfo := NewInternalMetricsHistory(limit)
@@ -31,13 +41,19 @@ func TestHistoricalClusterInfo(t *testing.T) {
 	assert.Equal(t, limit, hpInfo.GetLimit(), "Limit should have been set to 2!")
 
 	hpInfo.Store(2, 3)
-	assert.Equal(t, 1, len(hpInfo.GetRecords()), "Expected to have 1 record")
+	records := hpInfo.GetRecords()
+	assert.Equal(t, 2, len(records), "Expected to have 1 non nil record.")
+	assert.Equal(t, 1, countNils(records), "Expected to have 1 non nil record.")
 
 	hpInfo.Store(3, 4)
-	assert.Equal(t, 2, len(hpInfo.GetRecords()), "Expected to have 2 records")
+	records = hpInfo.GetRecords()
+	assert.Equal(t, 2, len(records), "Expected to have 2 records")
+	assert.Equal(t, 0, countNils(records), "Expected to have 0 non nil record.")
 
 	hpInfo.Store(5, 6)
-	assert.Equal(t, 2, len(hpInfo.GetRecords()), "Expected to have 2 records")
+	records = hpInfo.GetRecords()
+	assert.Equal(t, 2, len(records), "Expected to have 2 records")
+	assert.Equal(t, 0, countNils(records), "Expected to have 0 non nil record.")
 
 	for i, record := range hpInfo.GetRecords() {
 		switch i {

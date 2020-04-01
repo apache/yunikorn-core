@@ -22,9 +22,8 @@ import (
 	"testing"
 	"time"
 
-	"gotest.tools/assert"
-
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestHistoricalPartitionInfoUpdater(t *testing.T) {
@@ -48,12 +47,14 @@ func TestHistoricalPartitionInfoUpdater(t *testing.T) {
 	metricsCollector.Stop()
 
 	records := metricsHistory.GetRecords()
-	assert.Equal(t, 2, len(records), "Expected exactly 2 history records")
+	assert.Equal(t, 3, len(records), "Expected exactly 2 history records")
 	for i, record := range records {
 		if i == 0 {
+			assert.Nil(t, nil, "The 1st item should be nil!")
+		} else if i == 1 {
 			assert.Equal(t, 2, record.TotalApplications, "Expected exactly 2 applications at 10 msec")
 			assert.Equal(t, 4, record.TotalContainers, "Expected exactly 4 allocations at 10 msec")
-		} else if i == 1 {
+		} else if i == 2 {
 			assert.Equal(t, 3, record.TotalApplications, "Expected exactly 3 applications at 20 msec")
 			assert.Equal(t, 6, record.TotalContainers, "Expected exactly 4 allocations at 20 msec")
 		}

@@ -323,9 +323,15 @@ func NewSortableLinkedMapIterator(linkedMap *SortableLinkedMap, findMatched bool
     if linkedMap == nil {
         return &SortableLinkedMapIterator{}
     }
+    var indexEntry *SortableLinkedMapEntry
+    if findMatched {
+        indexEntry = linkedMap.firstMatchedEntry
+    } else {
+        indexEntry = linkedMap.head
+    }
     return &SortableLinkedMapIterator{
         findMatched: findMatched,
-        indexEntry:  linkedMap.head,
+        indexEntry:  indexEntry,
     }
 }
 

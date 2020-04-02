@@ -63,7 +63,7 @@ func newSchedulingApplication(appInfo *cache.ApplicationInfo) *SchedulingApplica
 // override reservation delay for tests
 func OverrideReservationDelay(delay time.Duration) {
 	log.Logger().Debug("Test override reservation delay",
-		zap.String("delay", delay.String()))
+		zap.Duration("delay", delay))
 	reservationDelay = delay
 }
 
@@ -528,9 +528,9 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 		if askAge > reservationDelay {
 			log.Logger().Debug("app reservation check",
 				zap.String("allocationKey", allocKey),
-				zap.String("createTime", ask.getCreateTime().String()),
-				zap.Float64("askAge", askAge.Seconds()),
-				zap.String("reservationDelay", reservationDelay.String()))
+				zap.Time("createTime", ask.getCreateTime()),
+				zap.Duration("askAge", askAge),
+				zap.Duration("reservationDelay", reservationDelay))
 			score := ask.AllocatedResource.FitInScore(node.GetAvailableResource())
 			// Record the so-far best node to reserve
 			if score < scoreReserved {

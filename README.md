@@ -1,7 +1,5 @@
 # Apache YuniKorn (incubating) - A Universal Scheduler
 
-![Green Build](https://github.com/apache/incubator-yunikorn-core/workflows/Green%20Build/badge.svg)
-
 <img src="https://raw.githubusercontent.com/apache/incubator-yunikorn-core/master/docs/images/logo/yunikorn-logo-blue.png" width="200">
 
 ----

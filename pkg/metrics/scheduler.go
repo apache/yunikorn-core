@@ -201,12 +201,13 @@ func (m *SchedulerMetrics) AddAllocatedContainers(value int) {
 	m.allocatedContainers.Add(float64(value))
 }
 
-func (m *SchedulerMetrics) getAllocatedContainers() (value int, err error) {
+func (m *SchedulerMetrics) getAllocatedContainers() (int, error) {
 	metricDto := &dto.Metric{}
-	if err = m.allocatedContainers.Write(metricDto); err == nil {
-		value = int(*metricDto.Counter.Value)
+	if err := m.allocatedContainers.Write(metricDto); err == nil {
+		return int(*metricDto.Counter.Value), nil
+	} else {
+		return -1, err
 	}
-	return
 }
 
 func (m *SchedulerMetrics) IncReleasedContainer() {
@@ -275,9 +276,12 @@ func (m *SchedulerMetrics) SetTotalApplicationsRunning(value int) {
 }
 
 func (m *SchedulerMetrics) getTotalApplicationsRunning() (int, error) {
-	metric := &dto.Metric{}
-	err := m.totalApplicationsRunning.Write(metric)
-	return int(*metric.Gauge.Value), err
+	metricDto := &dto.Metric{}
+	if err := m.totalApplicationsRunning.Write(metricDto); err == nil {
+		return int(*metricDto.Gauge.Value), nil
+	} else {
+		return -1, err
+	}
 }
 
 // Metrics Ops related to totalApplicationsCompleted

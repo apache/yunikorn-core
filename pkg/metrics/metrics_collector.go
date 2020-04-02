@@ -29,6 +29,8 @@ import (
 
 var tickerDefault = 1 * time.Minute
 
+// collecting metrics for YuniKorn-internal usage
+// will fill missing values with -1, in case of failures
 type internalMetricsCollector struct {
 	ticker         *time.Ticker
 	stopped        chan bool
@@ -58,12 +60,12 @@ func (u *internalMetricsCollector) StartService() {
 				totalAppsRunning, err := m.scheduler.getTotalApplicationsRunning()
 				if err != nil {
 					log.Logger().Warn("Could not encode totalApplications metric.", zap.Error(err))
-					continue
+					totalAppsRunning = -1
 				}
 				totalContainersRunning, err := m.scheduler.getAllocatedContainers()
 				if err != nil {
 					log.Logger().Warn("Could not encode totalContainers metric.", zap.Error(err))
-					continue
+					totalContainersRunning = -1
 				}
 				u.metricsHistory.Store(totalAppsRunning, totalContainersRunning)
 			}

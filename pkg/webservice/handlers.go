@@ -244,20 +244,20 @@ func GetApplicationHistory(w http.ResponseWriter, r *http.Request) {
 		var result []*dao.ApplicationHistoryDAOInfo
 		records := imHistory.GetRecords()
 		for _, record := range records {
-			if record != nil {
-				element := &dao.ApplicationHistoryDAOInfo{
-					Timestamp:         record.Timestamp.UnixNano(),
-					TotalApplications: strconv.Itoa(record.TotalApplications),
-				}
-				result = append(result, element)
+			if record == nil {
+				break
 			}
+			element := &dao.ApplicationHistoryDAOInfo{
+				Timestamp:         record.Timestamp.UnixNano(),
+				TotalApplications: strconv.Itoa(record.TotalApplications),
+			}
+			result = append(result, element)
 		}
 		if err := json.NewEncoder(w).Encode(result); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-	} else {
-		http.Error(w, "Internal metrics collection is not enabled.", http.StatusInternalServerError)
 	}
+	http.Error(w, "Internal metrics collection is not enabled.", http.StatusInternalServerError)
 }
 
 func GetContainerHistory(w http.ResponseWriter, r *http.Request) {
@@ -267,18 +267,18 @@ func GetContainerHistory(w http.ResponseWriter, r *http.Request) {
 		var result []*dao.ContainerHistoryDAOInfo
 		records := imHistory.GetRecords()
 		for _, record := range records {
-			if record != nil {
-				element := &dao.ContainerHistoryDAOInfo{
-					Timestamp:       record.Timestamp.UnixNano(),
-					TotalContainers: strconv.Itoa(record.TotalContainers),
-				}
-				result = append(result, element)
+			if record == nil {
+				break
 			}
+			element := &dao.ContainerHistoryDAOInfo{
+				Timestamp:       record.Timestamp.UnixNano(),
+				TotalContainers: strconv.Itoa(record.TotalContainers),
+			}
+			result = append(result, element)
 		}
 		if err := json.NewEncoder(w).Encode(result); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-	} else {
-		http.Error(w, "Internal metrics collection is not enabled.", http.StatusInternalServerError)
 	}
+	http.Error(w, "Internal metrics collection is not enabled.", http.StatusInternalServerError)
 }

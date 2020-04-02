@@ -43,7 +43,7 @@ func Logger() *zap.Logger {
 			logger, err = config.Build()
 			// this should really not happen so just write to stdout and set a Nop logger
 			if err != nil {
-				fmt.Printf("Logging disabled, logger init failed with error: %v", err)
+				fmt.Printf("Logging disabled, logger init failed with error: %v\n", err)
 				logger = zap.NewNop()
 			}
 		}

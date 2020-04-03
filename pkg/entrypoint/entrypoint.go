@@ -22,6 +22,8 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
+	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
 	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice"
@@ -31,6 +33,7 @@ import (
 type StartupOptions struct {
 	manualScheduleFlag bool
 	startWebAppFlag    bool
+	metricsHistorySize int
 }
 
 func StartAllServices() *ServiceContext {
@@ -39,6 +42,7 @@ func StartAllServices() *ServiceContext {
 		StartupOptions{
 			manualScheduleFlag: false,
 			startWebAppFlag:    true,
+			metricsHistorySize: 1440,
 		})
 }
 
@@ -49,6 +53,7 @@ func StartAllServicesWithManualScheduler() *ServiceContext {
 		StartupOptions{
 			manualScheduleFlag: true,
 			startWebAppFlag:    false,
+			metricsHistorySize: 0,
 		})
 }
 
@@ -75,9 +80,16 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 		Scheduler: scheduler,
 	}
 
+	var imHistory *history.InternalMetricsHistory
+	if opts.metricsHistorySize != 0 {
+		imHistory = history.NewInternalMetricsHistory(opts.metricsHistorySize)
+		metricsCollector := metrics.NewInternalMetricsCollector(imHistory)
+		metricsCollector.StartService()
+	}
+
 	if opts.startWebAppFlag {
 		log.Logger().Info("ServiceContext start web application service")
-		webapp := webservice.NewWebApp(cache)
+		webapp := webservice.NewWebApp(cache, imHistory)
 		webapp.StartWebApp()
 		context.WebApp = webapp
 	}

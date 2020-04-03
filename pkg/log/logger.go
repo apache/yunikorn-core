@@ -30,6 +30,7 @@ import (
 var once sync.Once
 var logger *zap.Logger
 var config *zap.Config
+var aLevel *zap.AtomicLevel
 
 func Logger() *zap.Logger {
 	once.Do(func() {
@@ -76,13 +77,20 @@ func InitAndSetLevel(level zapcore.Level) {
 	config.Level.SetLevel(level)
 }
 
+func GetAtomicLevel() *zap.AtomicLevel {
+	return aLevel
+}
+
 // Create a log config to keep full control over
 // LogLevel set to DEBUG, Encodes for console, Writes to stderr,
 // Enables development mode (DPanicLevel),
 // Print stack traces for messages at WarnLevel and above
 func createConfig() *zap.Config {
+	atomicLevel := zap.NewAtomicLevelAt(zap.DebugLevel)
+	aLevel = &atomicLevel
+
 	return &zap.Config{
-		Level:       zap.NewAtomicLevelAt(zap.DebugLevel),
+		Level:       atomicLevel,
 		Development: true,
 		Encoding:    "console",
 		EncoderConfig: zapcore.EncoderConfig{

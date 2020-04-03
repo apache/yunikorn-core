@@ -282,3 +282,41 @@ func GetContainerHistory(w http.ResponseWriter, r *http.Request) {
 	}
 	http.Error(w, "Internal metrics collection is not enabled.", http.StatusInternalServerError)
 }
+
+func ConfigureLogger(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+
+	// decode the request
+	requestBytes, err := ioutil.ReadAll(r.Body)
+	var options map[string]string
+	if err != nil {
+		errMsg := "Could not read request body."
+		log.Logger().Warn(errMsg, zap.Error(err))
+		http.Error(w, errMsg, http.StatusInternalServerError)
+		return
+	}
+	if err = json.Unmarshal(requestBytes, &options); err != nil {
+		errMsg := "Unsupported request body."
+		log.Logger().Warn(errMsg, zap.Error(err))
+		http.Error(w, errMsg, http.StatusBadRequest)
+		return
+	}
+
+	// setting the log level
+	if level, ok := options["level"]; ok {
+		aLevel := log.GetAtomicLevel()
+		if aLevel == nil {
+			errMsg := "Could not set log level dynamically."
+			log.Logger().Error(errMsg, zap.Error(err))
+			http.Error(w, errMsg, http.StatusInternalServerError)
+			return
+		}
+		err = aLevel.UnmarshalText([]byte(strings.ToLower(level)))
+		if err != nil {
+			errMsg := "Could not parse the new log level."
+			log.Logger().Error(errMsg, zap.Error(err))
+			http.Error(w, errMsg, http.StatusInternalServerError)
+			return
+		}
+	}
+}

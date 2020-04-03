@@ -20,7 +20,9 @@ package webservice
 
 import (
     "encoding/json"
+    "github.com/apache/incubator-yunikorn-core/pkg/log"
     "github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
+    "go.uber.org/zap/zapcore"
     "gotest.tools/assert"
     "net/http"
     "strings"
@@ -74,6 +76,35 @@ partitions:
             assert.Equal(t, vcr.Reason, test.expectedResponse.Reason)
         }
     }
+}
+
+func TestConfigureLogger(t *testing.T) {
+    // initialize
+    log.Logger().Info("Started TestConfigureLogger, and the Logger initialized.")
+    aLevel := log.GetAtomicLevel()
+    if aLevel == nil {
+        log.Logger().Error("Could not initialize AtomicLevel of Logger.")
+        t.FailNow()
+    }
+    assert.Equal(t, zapcore.DebugLevel, aLevel.Level(), "AtomicLevel should be on debug level.")
+
+    // set log level to warn
+    toWarn := "{\"level\":\"Warn\"}"
+    reqWarn, _ := http.NewRequest("POST", "", strings.NewReader(toWarn))
+    respWarn := &TestResponseWriter{}
+    ConfigureLogger(respWarn, reqWarn)
+    assert.Equal(t, zapcore.WarnLevel, aLevel.Level(), "AtomicLevel should be on warn level.")
+
+    // for debug purposes we print out texts
+    log.Logger().Info("This text should not be displayed.")
+    log.Logger().Warn("This text should be displayed.")
+
+    // set log level back to debug
+    toDebug := "{\"level\":\"DEBUG\"}"
+    reqDebug, _ := http.NewRequest("POST", "", strings.NewReader(toDebug))
+    respDebug := &TestResponseWriter{}
+    ConfigureLogger(respDebug, reqDebug)
+    assert.Equal(t, zapcore.DebugLevel, aLevel.Level(), "AtomicLevel should be on debug level.")
 }
 
 type TestResponseWriter struct {

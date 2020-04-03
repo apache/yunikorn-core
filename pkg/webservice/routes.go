@@ -98,6 +98,14 @@ var routes = Routes{
 		GetContainerHistory,
 	},
 
+	// endpoint to set log level
+	Route{
+		"Log",
+		"POST",
+		"/ws/v1/log",
+		ConfigureLogger,
+	},
+
 	// endpoint to retrieve CPU, Memory profiling data,
 	// this works with pprof tool. By default, pprof endpoints
 	// are only registered to http.DefaultServeMux. Here, we

@@ -59,7 +59,7 @@ func (manager partitionManager) Run() {
 		if manager.stop {
 			break
 		}
-		log.Logger().Info("time consumed for queue cleaner",
+		log.Logger().Debug("time consumed for queue cleaner",
 			zap.String("duration", time.Since(runStart).String()))
 	}
 	manager.remove()
@@ -86,9 +86,6 @@ func (manager partitionManager) cleanQueues(schedulingQueue *SchedulingQueue) {
 	}
 	// when we have done the children (or have none) this schedulingQueue might be removable
 	if schedulingQueue.isDraining() || !schedulingQueue.isManaged() {
-		log.Logger().Debug("removing scheduling queue",
-			zap.String("queueName", schedulingQueue.Name),
-			zap.String("partitionName", manager.psc.Name))
 		// make sure the queue is empty
 		if schedulingQueue.isEmpty() {
 			// remove the cached queue, if not empty there is a problem since we have no applications left.
@@ -100,7 +97,7 @@ func (manager partitionManager) cleanQueues(schedulingQueue *SchedulingQueue) {
 						zap.String("schedulingQueue", schedulingQueue.Name))
 				}
 			} else {
-				log.Logger().Debug("failed to remove scheduling queue (cache)",
+				log.Logger().Debug("skip removing the scheduling queue",
 					zap.String("partitionName", manager.psc.Name),
 					zap.String("schedulingQueue", schedulingQueue.Name),
 					zap.String("queueAllocatedResource", schedulingQueue.QueueInfo.GetAllocatedResource().String()),
@@ -109,7 +106,8 @@ func (manager partitionManager) cleanQueues(schedulingQueue *SchedulingQueue) {
 			}
 		} else {
 			// TODO time out waiting for draining and removal
-			log.Logger().Debug("failed to remove scheduling queue due to existing assigned apps or leaf queues",
+			log.Logger().Debug("skip removing the scheduling queue",
+				zap.String("reason", "there are existing assigned apps or leaf queues"),
 				zap.String("schedulingQueue", schedulingQueue.Name),
 				zap.String("partitionName", manager.psc.Name))
 		}

@@ -196,7 +196,7 @@ func (pi *PartitionInfo) addNewNode(node *NodeInfo, existingAllocations []*si.Al
 	pi.Lock()
 	defer pi.Unlock()
 
-	log.Logger().Info("add node to partition",
+	log.Logger().Debug("add node to partition",
 		zap.String("nodeID", node.NodeID),
 		zap.String("partition", pi.Name))
 
@@ -379,7 +379,7 @@ func (pi *PartitionInfo) addNewApplication(info *ApplicationInfo, failIfExist bo
 	pi.Lock()
 	defer pi.Unlock()
 
-	log.Logger().Info("adding app to partition",
+	log.Logger().Debug("adding app to partition",
 		zap.String("appID", info.ApplicationID),
 		zap.String("queue", info.QueueName),
 		zap.String("partitionName", pi.Name))
@@ -453,7 +453,7 @@ func (pi *PartitionInfo) releaseAllocationsForApplication(toRelease *commonevent
 				zap.String("appID", app.ApplicationID))
 			allocationsToRelease = append(allocationsToRelease, app.removeAllAllocations()...)
 		} else {
-			log.Logger().Info("removing allocations",
+			log.Logger().Debug("removing allocations",
 				zap.String("appID", app.ApplicationID),
 				zap.String("allocationId", toRelease.UUID))
 			if alloc := app.removeAllocation(toRelease.UUID); alloc != nil {

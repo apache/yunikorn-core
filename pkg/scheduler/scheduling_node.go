@@ -203,17 +203,10 @@ func (sn *SchedulingNode) allocateResource(res *resources.Resource, preemptionPh
 func (sn *SchedulingNode) preAllocateConditions(allocID string) bool {
 	// Check the predicates plugin (k8shim)
 	if plugin := plugins.GetPredicatesPlugin(); plugin != nil {
-		log.Logger().Debug("checking predicates",
-			zap.String("allocationId", allocID),
-			zap.String("nodeID", sn.NodeID))
 		if err := plugin.Predicates(&si.PredicatesArgs{
 			AllocationKey: allocID,
 			NodeID:        sn.NodeID,
 		}); err != nil {
-			log.Logger().Debug("running predicates failed",
-				zap.String("allocationId", allocID),
-				zap.String("nodeID", sn.NodeID),
-				zap.Error(err))
 			return false
 		}
 	}

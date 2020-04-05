@@ -44,7 +44,7 @@ type RMProxy struct {
 	EventHandlers handler.EventHandlers
 
 	// Internal fields
-	pendingRMEvents chan interface{}
+	pendingRMEvents *common.EventQueue
 
 	rmIDToCallback map[string]api.ResourceManagerCallback
 
@@ -59,27 +59,15 @@ func (m *RMProxy) GetRMEventHandler() commonevents.EventHandler {
 	return m
 }
 
-func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
-	select {
-	case queue <- ev:
-		log.Logger().Debug("enqueue event",
-			zap.Any("event", ev),
-			zap.Int("currentQueueSize", len(queue)))
-	default:
-		log.Logger().Panic("failed to enqueue event",
-			zap.String("event", reflect.TypeOf(ev).String()))
-	}
-}
-
 func (m *RMProxy) HandleEvent(ev interface{}) {
-	enqueueAndCheckFull(m.pendingRMEvents, ev)
+	m.pendingRMEvents.EnqueueAndCheckFull(ev)
 }
 
 func NewRMProxy() *RMProxy {
 	rm := &RMProxy{
 		rmIDToCallback:      make(map[string]api.ResourceManagerCallback),
 		rmIDToConfigWatcher: make(map[string]*configs.ConfigWatcher),
-		pendingRMEvents:     make(chan interface{}, 1024*1024),
+		pendingRMEvents:     common.NewEventQueue("rmproxy.RMProxyQueue", 1024*1024),
 	}
 	return rm
 }
@@ -180,7 +168,7 @@ func (m *RMProxy) processRMNodeUpdateEvent(event *rmevent.RMNodeUpdateEvent) {
 
 func (m *RMProxy) handleRMEvents() {
 	for {
-		ev := <-m.pendingRMEvents
+		ev := m.pendingRMEvents.Pop()
 		switch v := ev.(type) {
 		case *rmevent.RMNewAllocationsEvent:
 			m.processAllocationUpdateEvent(v)

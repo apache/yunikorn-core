@@ -43,8 +43,8 @@ type ClusterInfo struct {
 	policyGroup string
 
 	// Event queues
-	pendingRmEvents        chan interface{}
-	pendingSchedulerEvents chan interface{}
+	pendingRmEvents        *common.EventQueue
+	pendingSchedulerEvents *common.EventQueue
 
 	// RM Event Handler
 	EventHandlers handler.EventHandlers
@@ -55,8 +55,8 @@ type ClusterInfo struct {
 func NewClusterInfo() (info *ClusterInfo) {
 	clusterInfo := &ClusterInfo{
 		partitions:             make(map[string]*PartitionInfo),
-		pendingRmEvents:        make(chan interface{}, 1024*1024),
-		pendingSchedulerEvents: make(chan interface{}, 1024*1024),
+		pendingRmEvents:        common.NewEventQueue("cache.RMEventQueue", 1024*1024),
+		pendingSchedulerEvents: common.NewEventQueue("cache.SchedulerEventQueue", 1024*1024),
 	}
 	return clusterInfo
 }
@@ -72,7 +72,7 @@ func (m *ClusterInfo) StartService(handlers handler.EventHandlers) {
 
 func (m *ClusterInfo) handleSchedulerEvents() {
 	for {
-		ev := <-m.pendingSchedulerEvents
+		ev := m.pendingSchedulerEvents.Pop()
 		switch v := ev.(type) {
 		case *cacheevent.AllocationProposalBundleEvent:
 			m.processAllocationProposalEvent(v)
@@ -92,7 +92,7 @@ func (m *ClusterInfo) handleSchedulerEvents() {
 
 func (m *ClusterInfo) handleRMEvents() {
 	for {
-		ev := <-m.pendingRmEvents
+		ev := m.pendingRmEvents.Pop()
 		switch v := ev.(type) {
 		case *cacheevent.RMUpdateRequestEvent:
 			m.processRMUpdateEvent(v)
@@ -110,36 +110,23 @@ func (m *ClusterInfo) handleRMEvents() {
 func (m *ClusterInfo) HandleEvent(ev interface{}) {
 	switch v := ev.(type) {
 	case *cacheevent.AllocationProposalBundleEvent:
-		enqueueAndCheckFull(m.pendingSchedulerEvents, v)
+		m.pendingSchedulerEvents.EnqueueAndCheckFull(v)
 	case *cacheevent.RejectedNewApplicationEvent:
-		enqueueAndCheckFull(m.pendingSchedulerEvents, v)
+		m.pendingSchedulerEvents.EnqueueAndCheckFull(v)
 	case *cacheevent.ReleaseAllocationsEvent:
-		enqueueAndCheckFull(m.pendingSchedulerEvents, v)
+		m.pendingSchedulerEvents.EnqueueAndCheckFull(v)
 	case *commonevents.RemoveRMPartitionsEvent:
-		enqueueAndCheckFull(m.pendingSchedulerEvents, v)
+		m.pendingSchedulerEvents.EnqueueAndCheckFull(v)
 	case *cacheevent.RemovedApplicationEvent:
-		enqueueAndCheckFull(m.pendingSchedulerEvents, v)
+		m.pendingSchedulerEvents.EnqueueAndCheckFull(v)
 	case *cacheevent.RMUpdateRequestEvent:
-		enqueueAndCheckFull(m.pendingRmEvents, v)
+		m.pendingRmEvents.EnqueueAndCheckFull(v)
 	case *commonevents.RegisterRMEvent:
-		enqueueAndCheckFull(m.pendingRmEvents, v)
+		m.pendingRmEvents.EnqueueAndCheckFull(v)
 	case *commonevents.ConfigUpdateRMEvent:
-		enqueueAndCheckFull(m.pendingRmEvents, v)
+		m.pendingRmEvents.EnqueueAndCheckFull(v)
 	default:
 		panic(fmt.Sprintf("Received unexpected event type = %s", reflect.TypeOf(v).String()))
-	}
-}
-
-func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
-	select {
-	case queue <- ev:
-		log.Logger().Debug("enqueued event",
-			zap.String("eventType", reflect.TypeOf(ev).String()),
-			zap.Any("event", ev),
-			zap.Int("currentQueueSize", len(queue)))
-	default:
-		log.Logger().DPanic("failed to enqueue event",
-			zap.String("event", reflect.TypeOf(ev).String()))
 	}
 }
 

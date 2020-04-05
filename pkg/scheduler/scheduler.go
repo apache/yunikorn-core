@@ -48,14 +48,14 @@ type Scheduler struct {
 	clusterSchedulingContext *ClusterSchedulingContext // main context
 	preemptionContext        *preemptionContext        // Preemption context
 	eventHandlers            handler.EventHandlers     // list of event handlers
-	pendingSchedulerEvents   chan interface{}          // queue for scheduler events
+	pendingSchedulerEvents   *common.EventQueue        // queue for scheduler events
 }
 
 func NewScheduler(clusterInfo *cache.ClusterInfo) *Scheduler {
 	m := &Scheduler{}
 	m.clusterInfo = clusterInfo
 	m.clusterSchedulingContext = NewClusterSchedulingContext()
-	m.pendingSchedulerEvents = make(chan interface{}, 1024*1024)
+	m.pendingSchedulerEvents = common.NewEventQueue("scheduler.SchedulerEventQueue", 1024*1024)
 	return m
 }
 
@@ -170,22 +170,9 @@ func (s *Scheduler) removeApplication(request *si.RemoveApplicationRequest) erro
 	return nil
 }
 
-func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
-	select {
-	case queue <- ev:
-		log.Logger().Debug("enqueued event",
-			zap.String("eventType", reflect.TypeOf(ev).String()),
-			zap.Any("event", ev),
-			zap.Int("currentQueueSize", len(queue)))
-	default:
-		log.Logger().DPanic("failed to enqueue event",
-			zap.String("event", reflect.TypeOf(ev).String()))
-	}
-}
-
 // Implement methods for Scheduler events
 func (s *Scheduler) HandleEvent(ev interface{}) {
-	enqueueAndCheckFull(s.pendingSchedulerEvents, ev)
+	s.pendingSchedulerEvents.EnqueueAndCheckFull(ev)
 }
 
 func (s *Scheduler) processAllocationReleaseByAllocationKey(allocationAsksToRelease []*si.AllocationAskReleaseRequest, allocationsToRelease []*si.AllocationReleaseRequest) {
@@ -529,7 +516,7 @@ func (s *Scheduler) processNodeEvent(event *schedulerevent.SchedulerNodeEvent) {
 
 func (s *Scheduler) handleSchedulerEvent() {
 	for {
-		ev := <-s.pendingSchedulerEvents
+		ev := s.pendingSchedulerEvents.Pop()
 		switch v := ev.(type) {
 		case *schedulerevent.SchedulerNodeEvent:
 			s.processNodeEvent(v)

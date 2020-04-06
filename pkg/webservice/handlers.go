@@ -245,7 +245,7 @@ func GetApplicationHistory(w http.ResponseWriter, r *http.Request) {
 		records := imHistory.GetRecords()
 		for _, record := range records {
 			if record == nil {
-				break
+				continue
 			}
 			element := &dao.ApplicationHistoryDAOInfo{
 				Timestamp:         record.Timestamp.UnixNano(),
@@ -256,6 +256,7 @@ func GetApplicationHistory(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewEncoder(w).Encode(result); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
+		return
 	}
 	http.Error(w, "Internal metrics collection is not enabled.", http.StatusInternalServerError)
 }
@@ -268,7 +269,7 @@ func GetContainerHistory(w http.ResponseWriter, r *http.Request) {
 		records := imHistory.GetRecords()
 		for _, record := range records {
 			if record == nil {
-				break
+				continue
 			}
 			element := &dao.ContainerHistoryDAOInfo{
 				Timestamp:       record.Timestamp.UnixNano(),
@@ -279,6 +280,7 @@ func GetContainerHistory(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewEncoder(w).Encode(result); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
+		return
 	}
 	http.Error(w, "Internal metrics collection is not enabled.", http.StatusInternalServerError)
 }

@@ -269,7 +269,7 @@ func (psc *partitionSchedulingContext) getSchedulingNode(nodeID string) *Schedul
 // Get a copy of the scheduling nodes from the partition.
 // This list does not include reserved nodes or nodes marked unschedulable
 func (psc *partitionSchedulingContext) getSchedulableNodes() []*SchedulingNode {
-	return psc.getSchedulingNodes(true)
+	return psc.getSchedulingNodes(false)
 }
 
 // Get a copy of the scheduling nodes from the partition.

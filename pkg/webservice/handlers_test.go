@@ -20,13 +20,16 @@ package webservice
 
 import (
     "encoding/json"
-    "github.com/apache/incubator-yunikorn-core/pkg/log"
-    "github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
-    "go.uber.org/zap/zapcore"
-    "gotest.tools/assert"
     "net/http"
     "strings"
     "testing"
+
+    "gotest.tools/assert"
+
+    "go.uber.org/zap/zapcore"
+
+    "github.com/apache/incubator-yunikorn-core/pkg/log"
+    "github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 )
 
 func TestValidateConf(t *testing.T) {

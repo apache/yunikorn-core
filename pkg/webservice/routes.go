@@ -98,7 +98,7 @@ var routes = Routes{
 		GetContainerHistory,
 	},
 
-	// endpoint to set log level
+	// endpoint to set attributes of the logger
 	Route{
 		"Log",
 		"POST",

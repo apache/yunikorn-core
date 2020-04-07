@@ -32,6 +32,44 @@ var logger *zap.Logger
 var config *zap.Config
 var aLevel *zap.AtomicLevel
 
+type overriddenCore struct {
+	aLevel *zap.AtomicLevel
+	zapcore.Core
+}
+
+func (oc overriddenCore) Enabled(level zapcore.Level) bool {
+	return oc.aLevel.Enabled(level)
+}
+
+func (oc overriddenCore) Check(ent zapcore.Entry, ce *zapcore.CheckedEntry) *zapcore.CheckedEntry {
+	if oc.aLevel.Enabled(ent.Level) {
+		return ce.AddCore(ent, oc)
+	}
+	return ce
+}
+
+// workaround since no clean way to obtain a Level from a zap.Logger
+func obtainLevel(core zapcore.Core) zapcore.Level {
+	if core.Enabled(zapcore.DebugLevel) {
+		return zapcore.DebugLevel
+	} else if core.Enabled(zapcore.InfoLevel) {
+		return zapcore.InfoLevel
+	} else if core.Enabled(zapcore.WarnLevel) {
+		return zapcore.WarnLevel
+	} else if core.Enabled(zapcore.ErrorLevel) {
+		return zapcore.ErrorLevel
+	} else if core.Enabled(zapcore.DPanicLevel) {
+		return zapcore.DPanicLevel
+	} else if core.Enabled(zapcore.PanicLevel) {
+		return zapcore.PanicLevel
+	} else if core.Enabled(zapcore.FatalLevel) {
+		return zapcore.FatalLevel
+	} else {
+		// TODO maybe panic here?
+		return zapcore.InfoLevel
+	}
+}
+
 func Logger() *zap.Logger {
 	once.Do(func() {
 		if logger = zap.L(); isNopLogger(logger) {
@@ -48,6 +86,18 @@ func Logger() *zap.Logger {
 				logger = zap.NewNop()
 			}
 		}
+
+		// wrapping the logger core to have control over log level
+		aLevelInstance := zap.NewAtomicLevelAt(obtainLevel(logger.Core()))
+		aLevel = &aLevelInstance
+		logger = logger.WithOptions(zap.WrapCore(
+			func(core zapcore.Core) zapcore.Core {
+				return overriddenCore{
+					aLevel,
+					core,
+				}
+			}))
+
 	})
 	return logger
 }
@@ -86,11 +136,8 @@ func GetAtomicLevel() *zap.AtomicLevel {
 // Enables development mode (DPanicLevel),
 // Print stack traces for messages at WarnLevel and above
 func createConfig() *zap.Config {
-	atomicLevel := zap.NewAtomicLevelAt(zap.DebugLevel)
-	aLevel = &atomicLevel
-
 	return &zap.Config{
-		Level:       atomicLevel,
+		Level:       zap.NewAtomicLevelAt(zap.DebugLevel),
 		Development: true,
 		Encoding:    "console",
 		EncoderConfig: zapcore.EncoderConfig{

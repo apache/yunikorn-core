@@ -492,6 +492,9 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 	reservedAsks := sa.isAskReserved(allocKey)
 	for nodeIterator.HasNext() {
 		node := nodeIterator.Next()
+		log.Logger().Debug("*** tryAllocateOnNode",
+			zap.String("node", node.NodeID),
+			zap.String("req", ask.AskProto.String()))
 		// skip over the node if the resource does not fit the node at all.
 		if !node.nodeInfo.FitInNode(ask.AllocatedResource) {
 			continue

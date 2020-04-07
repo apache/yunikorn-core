@@ -281,7 +281,7 @@ func (psc *partitionSchedulingContext) getSchedulingNodes(excludeReserved bool) 
 	schedulingNodes := make([]*SchedulingNode, 0)
 	for _, node := range psc.nodes {
 		// filter out the nodes that are not scheduling
-		if !node.nodeInfo.IsSchedulable() || (excludeReserved && node.isReserved()) {
+		if !node.nodeInfo.IsSchedulable() {
 			continue
 		}
 		schedulingNodes = append(schedulingNodes, node)

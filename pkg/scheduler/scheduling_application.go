@@ -390,8 +390,6 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 	// make sure the request are sorted
 	sa.sortRequests(false)
 	// get all the requests from the app sorted in order
-	log.Logger().Debug("total pending requests",
-		zap.Int("length", len(sa.sortedRequests)))
 	for _, request := range sa.sortedRequests {
 		// resource must fit in headroom otherwise skip the request
 		if !resources.FitIn(headRoom, request.AllocatedResource) {

@@ -241,24 +241,24 @@ func GetApplicationHistory(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	if imHistory != nil {
-		var result []*dao.ApplicationHistoryDAOInfo
-		records := imHistory.GetRecords()
-		for _, record := range records {
-			if record == nil {
-				continue
-			}
-			element := &dao.ApplicationHistoryDAOInfo{
-				Timestamp:         record.Timestamp.UnixNano(),
-				TotalApplications: strconv.Itoa(record.TotalApplications),
-			}
-			result = append(result, element)
-		}
-		if err := json.NewEncoder(w).Encode(result); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
+		http.Error(w, "Internal metrics collection is not enabled.", http.StatusInternalServerError)
 		return
 	}
-	http.Error(w, "Internal metrics collection is not enabled.", http.StatusInternalServerError)
+	var result []*dao.ApplicationHistoryDAOInfo
+	records := imHistory.GetRecords()
+	for _, record := range records {
+		if record == nil {
+			continue
+		}
+		element := &dao.ApplicationHistoryDAOInfo{
+			Timestamp:         record.Timestamp.UnixNano(),
+			TotalApplications: strconv.Itoa(record.TotalApplications),
+		}
+		result = append(result, element)
+	}
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func GetContainerHistory(w http.ResponseWriter, r *http.Request) {

@@ -207,6 +207,7 @@ func (sn *SchedulingNode) preAllocateConditions(allocID string) bool {
 			AllocationKey: allocID,
 			NodeID:        sn.NodeID,
 		}); err != nil {
+			log.Logger().Debug("***", zap.Error(err))
 			return false
 		}
 	}

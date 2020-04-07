@@ -581,7 +581,6 @@ func (s *Scheduler) schedule() {
 		}
 		// nothing reserved that can be allocated try normal allocate
 		if alloc == nil {
-			log.Logger().Debug("*** node allocation from reserved spots")
 			alloc = psc.tryAllocate()
 		}
 		// there is an allocation that can be made do the real work in the partition

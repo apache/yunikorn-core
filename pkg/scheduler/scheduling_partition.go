@@ -362,6 +362,7 @@ func (psc *partitionSchedulingContext) tryAllocate() *schedulingAllocation {
 		// nothing to do just return
 		return nil
 	}
+
 	// try allocating from the root down
 	return psc.root.tryAllocate(psc)
 }

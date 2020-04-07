@@ -232,14 +232,14 @@ func (sn *SchedulingNode) preAllocateCheck(res *resources.Resource, resKey strin
 		return fmt.Errorf("pre alloc check: requested resource is zero: %s", sn.NodeID)
 	}
 	// check if the node is reserved for this app/alloc
-	if sn.isReserved() {
-		if !sn.isReservedForApp(resKey) {
-			log.Logger().Debug("pre alloc check: node reserved for different app or ask",
-				zap.String("nodeID", sn.NodeID),
-				zap.String("resKey", resKey))
-			return fmt.Errorf("pre alloc check: node %s reserved for different app or ask: %s", sn.NodeID, resKey)
-		}
-	}
+	// if sn.isReserved() {
+	// 	if !sn.isReservedForApp(resKey) {
+	// 		log.Logger().Debug("pre alloc check: node reserved for different app or ask",
+	// 			zap.String("nodeID", sn.NodeID),
+	// 			zap.String("resKey", resKey))
+	// 		return fmt.Errorf("pre alloc check: node %s reserved for different app or ask: %s", sn.NodeID, resKey)
+	// 	}
+	// }
 
 	// check if resources are available
 	available := sn.nodeInfo.GetAvailableResource()

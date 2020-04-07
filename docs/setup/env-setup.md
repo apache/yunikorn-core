@@ -30,7 +30,7 @@ After setting up the local Kubernetes you need to deploy the dashboard using the
     ```shell script
     kubectl proxy &
     ```
-1. access the dashboard at the following URL: [clickable link](http://localhost:8001/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard:/proxy/#!/login)
+1. access the dashboard at the following URL: [kubernetes dashboard](http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/#/login)
 
 ### Access local Kubernetes cluster
 

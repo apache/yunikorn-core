@@ -541,11 +541,13 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 	}
 	// we have not allocated yet, check if we should reserve
 	// NOTE: the node should not be reserved as the iterator filters them but we do not lock the nodes
-	if nodeToReserve != nil && !nodeToReserve.isReserved() {
+	if nodeToReserve != nil && !nodeToReserve.isReserved() && len(reservedAsks) < int(ask.pendingRepeatAsk) {
 		log.Logger().Debug("found candidate node for app reservation",
 			zap.String("appID", sa.ApplicationInfo.ApplicationID),
 			zap.String("nodeID", nodeToReserve.NodeID),
-			zap.String("allocationKey", allocKey))
+			zap.String("allocationKey", allocKey),
+			zap.Int("reservedAsksNum", len(reservedAsks)),
+			zap.Int32("pendingRepeatAskNum", ask.pendingRepeatAsk))
 		// return allocation proposal and mark it as a reservation
 		alloc := newSchedulingAllocation(ask, nodeToReserve.NodeID)
 		alloc.result = reserved

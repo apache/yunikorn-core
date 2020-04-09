@@ -391,10 +391,9 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 	sa.sortRequests(false)
 	// get all the requests from the app sorted in order
 	for _, request := range sa.sortedRequests {
-		log.Logger().Debug("*** tryAllocateRequest", zap.String("req", request.AskProto.String()))
 		// resource must fit in headroom otherwise skip the request
 		if !resources.FitIn(headRoom, request.AllocatedResource) {
-			log.Logger().Debug("*** skip allocation because headroom not enough",
+			log.Logger().Debug("skipping allocation because headroom not enough",
 				zap.String("headRoom", headRoom.String()),
 				zap.String("request", request.AllocatedResource.String()))
 			continue
@@ -492,9 +491,6 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 	reservedAsks := sa.isAskReserved(allocKey)
 	for nodeIterator.HasNext() {
 		node := nodeIterator.Next()
-		log.Logger().Debug("*** tryAllocateOnNode",
-			zap.String("node", node.NodeID),
-			zap.String("req", ask.AskProto.String()))
 		// skip over the node if the resource does not fit the node at all.
 		if !node.nodeInfo.FitInNode(ask.AllocatedResource) {
 			continue

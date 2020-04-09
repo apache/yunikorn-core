@@ -269,7 +269,7 @@ func (psc *partitionSchedulingContext) getSchedulingNode(nodeID string) *Schedul
 // Get a copy of the scheduling nodes from the partition.
 // This list does not include reserved nodes or nodes marked unschedulable
 func (psc *partitionSchedulingContext) getSchedulableNodes() []*SchedulingNode {
-	return psc.getSchedulingNodes(false)
+	return psc.getSchedulingNodes(true)
 }
 
 // Get a copy of the scheduling nodes from the partition.
@@ -281,7 +281,7 @@ func (psc *partitionSchedulingContext) getSchedulingNodes(excludeReserved bool) 
 	schedulingNodes := make([]*SchedulingNode, 0)
 	for _, node := range psc.nodes {
 		// filter out the nodes that are not scheduling
-		if !node.nodeInfo.IsSchedulable() {
+		if !node.nodeInfo.IsSchedulable() || (excludeReserved && node.isReserved()) {
 			continue
 		}
 		schedulingNodes = append(schedulingNodes, node)
@@ -362,7 +362,6 @@ func (psc *partitionSchedulingContext) tryAllocate() *schedulingAllocation {
 		// nothing to do just return
 		return nil
 	}
-
 	// try allocating from the root down
 	return psc.root.tryAllocate(psc)
 }

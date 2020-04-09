@@ -193,22 +193,33 @@ func (sn *SchedulingNode) allocateResource(res *resources.Resource, preemptionPh
 	return false
 }
 
-// Checking allocation conditions in the shim.
-// The allocation conditions are implemented via plugins in the shim. If no plugins are
-// implemented then the check will return true. If multiple plugins are implemented the first
-// failure will stop the checks.
+// Checking pre-conditions in the shim for an allocation.
+func (sn *SchedulingNode) preAllocateConditions(allocID string) bool {
+	return sn.preConditions(allocID, true)
+}
+
+// Checking pre-conditions in the shim for a reservation.
+func (sn *SchedulingNode) preReserveConditions(allocID string) bool {
+	return sn.preConditions(allocID, false)
+}
+
+// The pre conditions are implemented via plugins in the shim. If no plugins are implemented then
+// the check will return true. If multiple plugins are implemented the first failure will stop the
+// checks.
 // The caller must thus not rely on all plugins being executed.
 // This is a lock free call as it does not change the node and multiple predicate checks could be
 // run at the same time.
-func (sn *SchedulingNode) preAllocateConditions(allocID string) bool {
+func (sn *SchedulingNode) preConditions(allocID string, allocate bool) bool {
 	// Check the predicates plugin (k8shim)
 	if plugin := plugins.GetPredicatesPlugin(); plugin != nil {
 		log.Logger().Debug("checking predicates",
 			zap.String("allocationId", allocID),
-			zap.String("nodeID", sn.NodeID))
+			zap.String("nodeID", sn.NodeID),
+			zap.Bool("allocation", allocate))
 		if err := plugin.Predicates(&si.PredicatesArgs{
 			AllocationKey: allocID,
 			NodeID:        sn.NodeID,
+			Allocate:      allocate,
 		}); err != nil {
 			log.Logger().Debug("running predicates failed",
 				zap.String("allocationId", allocID),

@@ -30,7 +30,7 @@ func GetNormalizedPartitionName(partitionName string, rmID string) string {
 	}
 
 	// handle already normalized partition name
-	if strings.HasPrefix("[", partitionName) {
+	if strings.HasPrefix(partitionName, "[") {
 		return partitionName
 	}
 	return fmt.Sprintf("[%s]%s", rmID, partitionName)

@@ -562,13 +562,13 @@ func (m *ClusterInfo) processAllocationProposalEvent(event *cacheevent.Allocatio
 			RejectedAllocations: event.AllocationProposals[:1],
 		})
 		return
-	} else {
-		log.Logger().Info("allocation accepted",
-			zap.String("appID", proposal.ApplicationID),
-			zap.String("queue", proposal.QueueName),
-			zap.String("partition", proposal.PartitionName),
-			zap.String("allocationKey", proposal.AllocationKey))
 	}
+
+	log.Logger().Info("allocation accepted",
+		zap.String("appID", proposal.ApplicationID),
+		zap.String("queue", proposal.QueueName),
+		zap.String("partition", proposal.PartitionName),
+		zap.String("allocationKey", proposal.AllocationKey))
 
 	// Send accept event back to scheduler
 	// this must be only 1: the handler will ignore all others

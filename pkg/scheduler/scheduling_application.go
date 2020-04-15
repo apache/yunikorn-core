@@ -393,9 +393,6 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 	for _, request := range sa.sortedRequests {
 		// resource must fit in headroom otherwise skip the request
 		if !resources.FitIn(headRoom, request.AllocatedResource) {
-			log.Logger().Debug("skipping allocation because headroom not enough",
-				zap.String("headRoom", headRoom.String()),
-				zap.String("request", request.AllocatedResource.String()))
 			continue
 		}
 		if nodeIterator := ctx.getNodeIterator(); nodeIterator != nil {

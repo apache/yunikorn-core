@@ -86,6 +86,9 @@ func (manager partitionManager) cleanQueues(schedulingQueue *SchedulingQueue) {
 	}
 	// when we have done the children (or have none) this schedulingQueue might be removable
 	if schedulingQueue.isDraining() || !schedulingQueue.isManaged() {
+		log.Logger().Debug("removing scheduling queue",
+			zap.String("queueName", schedulingQueue.Name),
+			zap.String("partitionName", manager.psc.Name))
 		// make sure the queue is empty
 		if schedulingQueue.isEmpty() {
 			// remove the cached queue, if not empty there is a problem since we have no applications left.

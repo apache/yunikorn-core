@@ -576,11 +576,6 @@ func (s *Scheduler) schedule() {
 		// try reservations first: gets back a node ID if the allocation occurs on a node
 		// that was not reserved by the app/ask
 		alloc := psc.tryReservedAllocate()
-		if alloc != nil {
-			log.Logger().Debug("try to allocate resources for a request from a reservation",
-				zap.String("allocation", alloc.String()))
-		}
-
 		// nothing reserved that can be allocated try normal allocate
 		if alloc == nil {
 			alloc = psc.tryAllocate()

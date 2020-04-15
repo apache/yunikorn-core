@@ -486,6 +486,7 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 	// check if the ask is reserved or not
 	allocKey := ask.AskProto.AllocationKey
 	reservedAsks := sa.isAskReserved(allocKey)
+	allowReserve := len(reservedAsks) < int(ask.pendingRepeatAsk)
 	for nodeIterator.HasNext() {
 		node := nodeIterator.Next()
 		// skip over the node if the resource does not fit the node at all.
@@ -525,7 +526,7 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 		// nothing allocated should we look at a reservation?
 		// TODO make this smarter a hardcoded delay is not the right thing
 		askAge := time.Since(ask.getCreateTime())
-		if askAge > reservationDelay {
+		if allowReserve && askAge > reservationDelay {
 			log.Logger().Debug("app reservation check",
 				zap.String("allocationKey", allocKey),
 				zap.Time("createTime", ask.getCreateTime()),
@@ -545,7 +546,13 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 		log.Logger().Debug("found candidate node for app reservation",
 			zap.String("appID", sa.ApplicationInfo.ApplicationID),
 			zap.String("nodeID", nodeToReserve.NodeID),
-			zap.String("allocationKey", allocKey))
+			zap.String("allocationKey", allocKey),
+			zap.Int("reservations", len(reservedAsks)),
+			zap.Int32("pendingRepeats", ask.pendingRepeatAsk))
+		// skip the node if conditions can not be satisfied
+		if !nodeToReserve.preReserveConditions(allocKey) {
+			return nil
+		}
 		// return allocation proposal and mark it as a reservation
 		alloc := newSchedulingAllocation(ask, nodeToReserve.NodeID)
 		alloc.result = reserved

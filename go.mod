@@ -3,8 +3,8 @@ module github.com/apache/incubator-yunikorn-core
 go 1.12
 
 require (
-	github.com/apache/incubator-yunikorn-scheduler-interface v0.0.0-20200327234544-149aaa3d8e48
-	github.com/golang/protobuf v1.3.5 // indirect
+	github.com/apache/incubator-yunikorn-scheduler-interface v0.0.0-20200414171840-a773cd557b1f
+	github.com/golang/protobuf v1.4.0 // indirect
 	github.com/gorilla/mux v1.7.3
 	github.com/kr/text v0.2.0 // indirect
 	github.com/looplab/fsm v0.1.0
@@ -22,10 +22,11 @@ require (
 	go.uber.org/zap v1.13.0
 	golang.org/x/lint v0.0.0-20200302205851-738671d3881b // indirect
 	golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e
+	golang.org/x/sys v0.0.0-20200413165638-669c56c373c4 // indirect
 	golang.org/x/text v0.3.2 // indirect
-	golang.org/x/tools v0.0.0-20200324201824-1fc30e1f4ccc // indirect
-	google.golang.org/genproto v0.0.0-20200324203455-a04cca1dde73 // indirect
-	google.golang.org/grpc v1.28.0
+	golang.org/x/tools v0.0.0-20200415000939-92398ad77b89 // indirect
+	google.golang.org/genproto v0.0.0-20200413115906-b5235f65be36 // indirect
+	google.golang.org/grpc v1.28.1
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/yaml.v2 v2.2.8
 	gotest.tools v2.2.0+incompatible

@@ -424,6 +424,13 @@ func (psc *partitionSchedulingContext) allocate(alloc *schedulingAllocation) boo
 			return false
 		}
 	}
+
+	log.Logger().Info("scheduler allocation proposal",
+		zap.String("appID", alloc.schedulingAsk.ApplicationID),
+		zap.String("queue", alloc.schedulingAsk.QueueName),
+		zap.String("allocationKey", alloc.schedulingAsk.AskProto.AllocationKey),
+		zap.String("allocatedResource", alloc.schedulingAsk.AllocatedResource.String()),
+		zap.String("targetNode", alloc.nodeID))
 	return true
 }
 
@@ -478,6 +485,10 @@ func (psc *partitionSchedulingContext) confirmAllocation(appID, nodeID, allocKey
 			zap.String("delta", delta.String()))
 	}
 	// all is ok when we are here
+	log.Logger().Info("allocation proposal confirmed",
+		zap.String("appID", appID),
+		zap.String("allocationKey", allocKey),
+		zap.String("nodeID", nodeID))
 	return nil
 }
 
@@ -503,6 +514,12 @@ func (psc *partitionSchedulingContext) reserve(app *SchedulingApplication, node 
 	app.queue.reserve(appID)
 	// increase the number of reservations for this app
 	psc.reservedApps[appID]++
+
+	log.Logger().Info("allocation ask is reserved",
+		zap.String("appID", ask.ApplicationID),
+		zap.String("queue", ask.QueueName),
+		zap.String("allocationKey", ask.AskProto.AllocationKey),
+		zap.String("node", node.NodeID))
 }
 
 // Process the unreservation in the scheduler
@@ -524,6 +541,12 @@ func (psc *partitionSchedulingContext) unReserve(app *SchedulingApplication, nod
 	app.queue.unReserve(appID)
 	// make sure we cannot go below 0
 	psc.unReserveCount(appID, 1)
+
+	log.Logger().Info("allocation ask is unreserved",
+		zap.String("appID", ask.ApplicationID),
+		zap.String("queue", ask.QueueName),
+		zap.String("allocationKey", ask.AskProto.AllocationKey),
+		zap.String("node", node.NodeID))
 }
 
 // Get the iterator for the sorted nodes list from the partition.

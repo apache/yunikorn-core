@@ -164,11 +164,10 @@ func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) 
 
 func loadSchedulerConfigFromFile(policyGroup string) (*SchedulerConfig, error) {
 	filePath := resolveConfigurationFileFunc(policyGroup)
-	log.Logger().Debug("loading configuration",
-		zap.String("configurationPath", filePath))
 	buf, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		log.Logger().Error("failed to load configuration",
+			zap.String("configFilePath", filePath),
 			zap.Error(err))
 		return nil, err
 	}

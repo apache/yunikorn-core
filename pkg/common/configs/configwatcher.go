@@ -93,7 +93,6 @@ func (cw *ConfigWatcher) runOnce() bool {
 	same := bytes.Equal(newConfig.Checksum, ConfigContext.Get(cw.policyGroup).Checksum)
 	if same {
 		// check sum equals, file not changed
-		log.Logger().Debug("configuration file unchanged")
 		time.Sleep(1 * time.Second)
 		return true
 	}

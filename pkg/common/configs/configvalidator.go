@@ -241,9 +241,8 @@ func checkNodeSortingPolicy(partition *PartitionConfig) error {
 	policy := partition.NodeSortPolicy
 
 	// Defined polices.
-	configuredNodeSortingPolicy, err := common.FromString(policy.Type)
+	_, err := common.FromString(policy.Type)
 
-	log.Logger().Info("Node sorting policy:", zap.Any("policy name", policy.Type), zap.Any("value", configuredNodeSortingPolicy))
 	return err
 }
 

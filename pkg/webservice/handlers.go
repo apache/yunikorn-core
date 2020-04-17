@@ -33,7 +33,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 )
 
-func GetStackInfo(w http.ResponseWriter, r *http.Request) {
+func getStackInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	var stack = func() []byte {
 		buf := make([]byte, 1024)
@@ -51,7 +51,7 @@ func GetStackInfo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func GetQueueInfo(w http.ResponseWriter, r *http.Request) {
+func getQueueInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	lists := gClusterInfo.ListPartitions()
@@ -64,7 +64,7 @@ func GetQueueInfo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func GetClusterInfo(w http.ResponseWriter, r *http.Request) {
+func getClusterInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	lists := gClusterInfo.ListPartitions()
@@ -79,7 +79,7 @@ func GetClusterInfo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func GetApplicationsInfo(w http.ResponseWriter, r *http.Request) {
+func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	var appsDao []*dao.ApplicationDAOInfo
@@ -98,7 +98,7 @@ func GetApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func GetNodesInfo(w http.ResponseWriter, r *http.Request) {
+func getNodesInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	var result []*dao.NodesDAOInfo
@@ -121,7 +121,7 @@ func GetNodesInfo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func ValidateConf(w http.ResponseWriter, r *http.Request) {
+func validateConf(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	requestBytes, err := ioutil.ReadAll(r.Body)
 	if err == nil {
@@ -134,7 +134,7 @@ func ValidateConf(w http.ResponseWriter, r *http.Request) {
 	} else {
 		result.Allowed = true
 	}
-	if err := json.NewEncoder(w).Encode(result); err != nil {
+	if err = json.NewEncoder(w).Encode(result); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -237,18 +237,21 @@ func getNodeJSON(nodeInfo *cache.NodeInfo) *dao.NodeDAOInfo {
 	}
 }
 
-func GetApplicationHistory(w http.ResponseWriter, r *http.Request) {
+func getApplicationHistory(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
-	if imHistory != nil {
-		http.Error(w, "Internal metrics collection is not enabled.", http.StatusInternalServerError)
+	// There is nothing to return but we did not really encounter a problem
+	if imHistory == nil {
+		http.Error(w, "Internal metrics collection is not enabled.", http.StatusNotImplemented)
 		return
 	}
 	var result []*dao.ApplicationHistoryDAOInfo
+	// get a copy of the records: if the array contains nil values they will always be at the
+	// start and we cannot shortcut the loop using a break, we must finish iterating
 	records := imHistory.GetRecords()
 	for _, record := range records {
 		if record == nil {
-			break
+			continue
 		}
 		element := &dao.ApplicationHistoryDAOInfo{
 			Timestamp:         record.Timestamp.UnixNano(),
@@ -261,18 +264,21 @@ func GetApplicationHistory(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func GetContainerHistory(w http.ResponseWriter, r *http.Request) {
+func getContainerHistory(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
-	if imHistory != nil {
-		http.Error(w, "Internal metrics collection is not enabled.", http.StatusInternalServerError)
+	// There is nothing to return but we did not really encounter a problem
+	if imHistory == nil {
+		http.Error(w, "Internal metrics collection is not enabled.", http.StatusNotImplemented)
 		return
 	}
 	var result []*dao.ContainerHistoryDAOInfo
+	// get a copy of the records: if the array contains nil values they will always be at the
+	// start and we cannot shortcut the loop using a break, we must finish iterating
 	records := imHistory.GetRecords()
 	for _, record := range records {
 		if record == nil {
-			break
+			continue
 		}
 		element := &dao.ContainerHistoryDAOInfo{
 			Timestamp:       record.Timestamp.UnixNano(),

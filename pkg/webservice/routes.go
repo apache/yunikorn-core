@@ -39,25 +39,25 @@ var routes = Routes{
 		"Scheduler",
 		"GET",
 		"/ws/v1/queues",
-		GetQueueInfo,
+		getQueueInfo,
 	},
 	Route{
 		"Cluster",
 		"GET",
 		"/ws/v1/clusters",
-		GetClusterInfo,
+		getClusterInfo,
 	},
 	Route{
 		"Scheduler",
 		"GET",
 		"/ws/v1/apps",
-		GetApplicationsInfo,
+		getApplicationsInfo,
 	},
 	Route{
 		"Scheduler",
 		"GET",
 		"/ws/v1/nodes",
-		GetNodesInfo,
+		getNodesInfo,
 	},
 
 	// endpoint to retrieve goroutines info
@@ -65,7 +65,7 @@ var routes = Routes{
 		"Scheduler",
 		"GET",
 		"/ws/v1/stack",
-		GetStackInfo,
+		getStackInfo,
 	},
 
 	// endpoint to retrieve server metrics
@@ -81,7 +81,7 @@ var routes = Routes{
 		"Scheduler",
 		"POST",
 		"/ws/v1/validate-conf",
-		ValidateConf,
+		validateConf,
 	},
 
 	// endpoint to retrieve historical data
@@ -89,13 +89,13 @@ var routes = Routes{
 		"Scheduler",
 		"GET",
 		"/ws/v1/history/apps",
-		GetApplicationHistory,
+		getApplicationHistory,
 	},
 	Route{
 		"Scheduler",
 		"GET",
 		"/ws/v1/history/containers",
-		GetContainerHistory,
+		getContainerHistory,
 	},
 
 	// endpoint to retrieve CPU, Memory profiling data,

@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
@@ -245,12 +246,15 @@ func TestTryAllocate(t *testing.T) {
 		t.Fatal("leaf queue create failed")
 	}
 	appID1 := "app-1"
+	app1Info := cache.NewApplicationInfo(appID1, "default", "root.parent.leaf1", security.UserGroup{}, nil)
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: appID1})
+	app := newSchedulingApplication(app1Info)
 	if app == nil || err != nil {
 		t.Fatalf("failed to create app (%v) and or resource: %v (err = %v)", app, res, err)
 	}
 	app.queue = leaf
+
+	app1Info.SetApplicationState(cache.Running.String())
 
 	// fake adding to the partition
 	leaf.addSchedulingApplication(app)
@@ -271,7 +275,8 @@ func TestTryAllocate(t *testing.T) {
 	}
 
 	appID2 := "app-2"
-	app2 := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: appID2})
+	app2Info := cache.NewApplicationInfo(appID2, "default", "root.leaf2", security.UserGroup{}, nil)
+	app2 := newSchedulingApplication(app2Info)
 	ask2 := newAllocationAsk("alloc-1", appID2, res)
 	if app2 == nil || ask2 == nil {
 		t.Fatal("failed to create app2 and ask2")
@@ -281,6 +286,8 @@ func TestTryAllocate(t *testing.T) {
 		t.Fatal("leaf2 queue create failed")
 	}
 	app2.queue = leaf2
+
+	app2Info.SetApplicationState(cache.Running.String())
 
 	// fake adding to the partition
 	leaf2.addSchedulingApplication(app2)
@@ -362,8 +369,9 @@ func TestTryAllocateLarge(t *testing.T) {
 		t.Fatal("leaf queue create failed")
 	}
 	appID := "app-1"
+	app1Info := cache.NewApplicationInfo(appID, "default", "root.parent.leaf1", security.UserGroup{}, nil)
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "100"})
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: appID})
+	app := newSchedulingApplication(app1Info)
 	if app == nil || err != nil {
 		t.Fatalf("failed to create app (%v) and or resource: %v (err = %v)", app, res, err)
 	}
@@ -405,13 +413,16 @@ func TestAllocReserveNewNode(t *testing.T) {
 		t.Fatal("leaf queue create failed")
 	}
 	appID := "app-1"
+	app1Info := cache.NewApplicationInfo(appID, "default", "root.parent.leaf1", security.UserGroup{}, nil)
 	// only one resource for alloc fits on a node
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "8"})
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: appID})
+	app := newSchedulingApplication(app1Info)
 	if app == nil || err != nil {
 		t.Fatalf("failed to create app (%v) and or resource: %v (err = %v)", app, res, err)
 	}
 	app.queue = leaf
+
+	app1Info.SetApplicationState(cache.Running.String())
 
 	// fake adding to the partition
 	leaf.addSchedulingApplication(app)
@@ -477,12 +488,15 @@ func TestTryAllocateReserve(t *testing.T) {
 		t.Fatal("leaf queue create failed")
 	}
 	appID := "app-1"
+	app1Info := cache.NewApplicationInfo(appID, "default", "root.parent.leaf1", security.UserGroup{}, nil)
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: appID})
+	app := newSchedulingApplication(app1Info)
 	if app == nil || err != nil {
 		t.Fatalf("failed to create app (%v) and or resource: %v (err = %v)", app, res, err)
 	}
 	app.queue = leaf
+
+	app1Info.SetApplicationState(cache.Running.String())
 
 	// fake adding to the partition
 	leaf.addSchedulingApplication(app)
@@ -560,12 +574,16 @@ func TestTryAllocateWithReserved(t *testing.T) {
 		t.Fatal("leaf queue create failed")
 	}
 	appID := "app-1"
+	app1Info := cache.NewApplicationInfo(appID, "default", "root.parent.leaf1", security.UserGroup{}, nil)
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "5"})
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: appID})
+	app := newSchedulingApplication(app1Info)
 	if app == nil || err != nil {
 		t.Fatalf("failed to create app (%v) and or resource: %v (err = %v)", app, res, err)
 	}
 	app.queue = leaf
+
+	// set app to running state, in order to enable scheduling
+	app1Info.SetApplicationState(cache.Running.String())
 
 	// fake adding to the partition
 	leaf.addSchedulingApplication(app)

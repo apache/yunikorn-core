@@ -66,6 +66,12 @@ func sortApplications(apps []*SchedulingApplication, sortType SortType, globalRe
 			r := apps[j]
 			return l.ApplicationInfo.SubmissionTime < r.ApplicationInfo.SubmissionTime
 		})
+
+		// fifo := &AppStateAwareFifoPolicy{}
+		// fifo.Apply(apps)
+
+		fifo := &BasicFifoPolicy{}
+		fifo.Apply(apps)
 	}
 }
 

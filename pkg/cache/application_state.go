@@ -35,6 +35,7 @@ type ApplicationEvent int
 
 const (
 	AcceptApplication ApplicationEvent = iota
+	ScheduleApplication
 	RejectApplication
 	RunApplication
 	CompleteApplication
@@ -42,7 +43,7 @@ const (
 )
 
 func (ae ApplicationEvent) String() string {
-	return [...]string{"AcceptApplication", "RejectApplication", "RunApplication", "CompleteApplication", "KillApplication"}[ae]
+	return [...]string{"AcceptApplication", "ScheduleApplication", "RejectApplication", "RunApplication", "CompleteApplication", "KillApplication"}[ae]
 }
 
 // ----------------------------------
@@ -53,14 +54,38 @@ type ApplicationState int
 const (
 	New ApplicationState = iota
 	Accepted
-	Rejected
+	Scheduable
 	Running
+	Rejected
 	Completed
 	Killed
 )
 
+var appStatesMap = map[string]ApplicationState{
+	"New":        New,
+	"Accepted":   Accepted,
+	"Scheduable": Scheduable,
+	"Running":    Running,
+	"Rejected":   Rejected,
+	"Completed":  Completed,
+	"Killed":     Killed,
+}
+
+func LoadAppStateFrom(str string) ApplicationState {
+	return appStatesMap[str]
+}
+
+func (as ApplicationState) IsSchedulable() bool {
+	return as == Scheduable || as == Running
+}
+
 func (as ApplicationState) String() string {
-	return [...]string{"New", "Accepted", "Rejected", "Running", "Completed", "Killed"}[as]
+	for k, v := range appStatesMap {
+		if v == as {
+			return k
+		}
+	}
+	return ""
 }
 
 func newAppState() *fsm.FSM {
@@ -70,6 +95,14 @@ func newAppState() *fsm.FSM {
 				Name: AcceptApplication.String(),
 				Src:  []string{New.String()},
 				Dst:  Accepted.String(),
+			}, {
+				Name: ScheduleApplication.String(),
+				Src:  []string{Accepted.String()},
+				Dst:  Scheduable.String(),
+			},{
+				Name: RunApplication.String(),
+				Src:  []string{Scheduable.String()},
+				Dst:  Running.String(),
 			}, {
 				Name: RejectApplication.String(),
 				Src:  []string{New.String()},

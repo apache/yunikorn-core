@@ -387,6 +387,13 @@ func (sa *SchedulingApplication) sortRequests(ascending bool) {
 func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *partitionSchedulingContext) *schedulingAllocation {
 	sa.Lock()
 	defer sa.Unlock()
+
+	// if app is not scheduable, skip it
+	appState := cache.LoadAppStateFrom(sa.ApplicationInfo.GetApplicationState())
+	if !appState.IsSchedulable() {
+		return nil
+	}
+
 	// make sure the request are sorted
 	sa.sortRequests(false)
 	// get all the requests from the app sorted in order

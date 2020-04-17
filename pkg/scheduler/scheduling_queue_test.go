@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
@@ -554,7 +555,8 @@ func TestSortApplications(t *testing.T) {
 		t.Errorf("empty queue should return no app from sort: %v", leaf)
 	}
 	// new app does not have pending res, does not get returned
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "app-1"})
+	appInfo := cache.NewApplicationInfo("app-1", "default", "root.parent.leaf", security.UserGroup{}, nil)
+	app := newSchedulingApplication(appInfo)
 	app.queue = leaf
 	leaf.addSchedulingApplication(app)
 	if len(leaf.sortApplications()) != 0 {

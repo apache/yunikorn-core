@@ -79,6 +79,11 @@ func (ai *ApplicationInfo) GetApplicationState() string {
 	return ai.stateMachine.Current()
 }
 
+// Only used in test
+func (ai *ApplicationInfo) SetApplicationState(state string) {
+	ai.stateMachine.SetState(state)
+}
+
 // Handle the state event for the application.
 // The state machine handles the locking.
 func (ai *ApplicationInfo) HandleApplicationEvent(event ApplicationEvent) error {

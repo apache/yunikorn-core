@@ -12,7 +12,7 @@ They are located in the [deployments](https://github.com/apache/incubator-yuniko
 The easiest way to get started is to our [helm charts](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/helm-charts) to deploy YuniKorn on an existing Kubernetes cluster.
 
 ```shell script
-helm install ./yunikorn
+helm install yunikorn ./yunikorn
 ```
 
 it will firstly create a `configmap` where stores YuniKorn configuration, and then deploy YuniKorn scheduler
@@ -20,7 +20,12 @@ and web UI containers in a pod as a `deployment` in the `default` namespace. If 
 
 ```shell script
 kubectl create namespace yunikorn-ns
-helm install ./yunikorn --namespace yunikorn-ns
+helm install yunikorn ./yunikorn --namespace yunikorn-ns
+```
+
+Likewise, it's easy to uninstall as following:
+```shell script
+helm uninstall yunikorn --namespace yunikorn-ns
 ```
 
 If you don't want to use helm charts, you can find our step-by-step

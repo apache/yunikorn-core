@@ -9,6 +9,11 @@ github.com/alecthomas/units v0.0.0-20190717042225-c3de453c63f4 h1:Hs82Z41s6SdL1C
 github.com/alecthomas/units v0.0.0-20190717042225-c3de453c63f4/go.mod h1:ybxpYRFXyAe+OPACYpWeL0wqObRcbAqCMya13uyzqw0=
 github.com/apache/incubator-yunikorn-scheduler-interface v0.0.0-20200414171840-a773cd557b1f h1:MO1PV62hmeaahOItQq848+aSbypnjdtXj4k0v+O4+nI=
 github.com/apache/incubator-yunikorn-scheduler-interface v0.0.0-20200414171840-a773cd557b1f/go.mod h1:De+73NNH4KaRL9MGGnCyHJOtx2oQGVYOaespfoRNGSo=
+github.com/apache/incubator-yunikorn-scheduler-interface v0.8.0-incubating-rc1 h1:YAGs5q+oxM4lWb0UXshUFEoUGwORFTPsKaTQeVAFW20=
+github.com/apache/incubator-yunikorn-scheduler-interface v0.8.0-incubating-rc1.0.20200417223236-c171c7c7214a h1:XiJcI6zHy1A3dp8hjgkMvQ07SSUPfyUSFMB3/f+Y7fI=
+github.com/apache/incubator-yunikorn-scheduler-interface v0.8.0-incubating-rc1.0.20200417223236-c171c7c7214a/go.mod h1:De+73NNH4KaRL9MGGnCyHJOtx2oQGVYOaespfoRNGSo=
+github.com/apache/incubator-yunikorn-scheduler-interface v0.8.0-incubating-rc1.0.20200417223559-b7002c5925df h1:HWBCDEv2EB8ubgZndPcnSTRn5QNZSq6qm6TdzuB3Gmo=
+github.com/apache/incubator-yunikorn-scheduler-interface v0.8.0-incubating-rc1.0.20200417223559-b7002c5925df/go.mod h1:De+73NNH4KaRL9MGGnCyHJOtx2oQGVYOaespfoRNGSo=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
 github.com/beorn7/perks v1.0.0 h1:HWo1m869IqiPhD389kmkxeTalrjNbbJTC8LXupb+sl0=
 github.com/beorn7/perks v1.0.0/go.mod h1:KWe93zE9D1o94FZ5RNwFwVgaQK1VOXiVxmqh+CedLV8=

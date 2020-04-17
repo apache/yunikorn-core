@@ -236,6 +236,27 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
 		// ToDO: need to improve this once we have state in YuniKorn for apps.
 		metrics.GetSchedulerMetrics().AddTotalApplicationsCompleted(len(request.RemoveApplications))
 	}
+
+	if len(request.UpdateApplications) > 0 {
+		for _, updateAppRequest := range request.UpdateApplications {
+			partitionInfo := m.GetPartition(updateAppRequest.PartitionName)
+			if partitionInfo == nil {
+				log.Logger().Warn("Update application failed",
+					zap.String("reason", fmt.Sprintf("partition %s not found", updateAppRequest.PartitionName)))
+				continue
+			}
+
+			if appInfo := partitionInfo.getApplication(updateAppRequest.ApplicationID); appInfo != nil {
+				if updateAppRequest.State.ApplicationState == si.ApplicationStates_RUNNING {
+					if err := appInfo.HandleApplicationEvent(RunApplication); err != nil {
+						log.Logger().Warn("failed to handle app event: RunApplication",
+							zap.Error(err))
+					}
+				}
+			}
+		}
+	}
+
 	// Send message to Scheduler if we have anything to process (remove and or add)
 	if len(request.RemoveApplications) > 0 || len(addedAppInfosInterface) > 0 {
 		m.EventHandlers.SchedulerEventHandler.HandleEvent(

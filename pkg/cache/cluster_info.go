@@ -304,13 +304,13 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
 				})
 			continue
 		}
-		// start to process allocation asks from this app
-		// transit app's state to running
-		err := appInfo.HandleApplicationEvent(RunApplication)
-		if err != nil {
-			log.Logger().Debug("Application state change failed",
-				zap.Error(err))
-		}
+		// // start to process allocation asks from this app
+		// // transit app's state to running
+		// err := appInfo.HandleApplicationEvent(RunApplication)
+		// if err != nil {
+		// 	log.Logger().Debug("Application state change failed",
+		// 		zap.Error(err))
+		// }
 	}
 
 	// Reject asks returned to RM Proxy for the apps and partitions not found

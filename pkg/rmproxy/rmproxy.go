@@ -285,6 +285,13 @@ func normalizeUpdateRequestByRMId(request *si.UpdateRequest) {
 		}
 	}
 
+	// Update apps
+	if len(request.UpdateApplications) > 0 {
+		for _, app := range request.UpdateApplications {
+			app.PartitionName = common.GetNormalizedPartitionName(app.PartitionName, request.RmID)
+		}
+	}
+
 	// Update Updated nodes
 	if len(request.UpdatedNodes) > 0 {
 		for _, node := range request.UpdatedNodes {

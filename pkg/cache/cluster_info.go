@@ -182,7 +182,8 @@ func (m *ClusterInfo) removePartition(name string) {
 // Process the application update. Add and remove applications from the partitions.
 // Lock free call, all updates occur on the underlying partition which is locked, or via events.
 func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateRequest) {
-	if len(request.NewApplications) == 0 && len(request.RemoveApplications) == 0 {
+	if len(request.NewApplications) == 0 && len(request.RemoveApplications) == 0 &&
+		len(request.UpdateApplications) == 0 {
 		return
 	}
 	addedAppInfosInterface := make([]interface{}, 0)
@@ -239,6 +240,7 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
 
 	if len(request.UpdateApplications) > 0 {
 		for _, updateAppRequest := range request.UpdateApplications {
+			log.Logger().Info("handling updateAppRequest", zap.String("req", request.String()))
 			partitionInfo := m.GetPartition(updateAppRequest.PartitionName)
 			if partitionInfo == nil {
 				log.Logger().Warn("Update application failed",

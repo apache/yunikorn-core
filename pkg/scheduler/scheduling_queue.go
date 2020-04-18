@@ -514,6 +514,14 @@ func (sq *SchedulingQueue) tryAllocate(ctx *partitionSchedulingContext) *schedul
 		headRoom := sq.getHeadRoom()
 		// process the apps (filters out app without pending requests)
 		sortedApps := sq.sortApplications()
+		log.Logger().Info("##################")
+		for idx, app := range sortedApps {
+			log.Logger().Info(" - ",
+				zap.Int("ID", idx),
+				zap.String("app", app.ApplicationInfo.ApplicationID),
+				zap.String("state", app.ApplicationInfo.GetApplicationState()))
+		}
+
 		for _, app := range sortedApps {
 			alloc := app.tryAllocate(headRoom, ctx)
 			if alloc != nil {

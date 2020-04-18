@@ -18,7 +18,7 @@ See [IDE setup](#goland-ide-setup) for a basic setup for the GoLand IDE.
 ## Automated checks
 Not all code will be written using an IDE.
 Even between contributors the settings might not be the same in all installs.
-To help keep code formatted consistently a [lint](https://en.wikipedia.org/wiki/Lint_(software\)) tool is part of the code approval.   
+To help keep code formatted consistently a [lint](https://en.wikipedia.org/wiki/Lint_(software)) tool is part of the code approval.   
 
 There are a large number of lint tools are available for Go.
 Most of the lint tools only check one specific thing.

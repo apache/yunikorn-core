@@ -412,9 +412,9 @@ func (sq *SchedulingQueue) sortApplications() []*SchedulingApplication {
 	sortedApps := make([]*SchedulingApplication, 0)
 	for _, app := range sq.getCopyOfApps() {
 		// Only look at app when pending-res > 0
-		if resources.StrictlyGreaterThanZero(app.GetPendingResource()) {
+		//if resources.StrictlyGreaterThanZero(app.GetPendingResource()) {
 			sortedApps = append(sortedApps, app)
-		}
+		//}
 	}
 	// Sort the applications
 	sortApplications(sortedApps, sq.getSortType(), sq.QueueInfo.GetGuaranteedResource())

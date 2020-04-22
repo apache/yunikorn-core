@@ -44,7 +44,6 @@ const (
 // The queue structure as used throughout the scheduler
 type QueueInfo struct {
 	Name               string
-	GuaranteedResource *resources.Resource // When not set, Guaranteed == 0
 	Parent             *QueueInfo          // link to the parent queue
 	Properties         map[string]string   // this should be treated as immutable the value is a merge of parent(s)
 	// properties with the config for this queue only manipulated during creation

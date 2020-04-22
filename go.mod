@@ -3,7 +3,7 @@ module github.com/apache/incubator-yunikorn-core
 go 1.12
 
 require (
-	github.com/apache/incubator-yunikorn-scheduler-interface v0.8.0-incubating-rc1
+	github.com/apache/incubator-yunikorn-scheduler-interface v0.8.0
 	github.com/golang/protobuf v1.4.0 // indirect
 	github.com/gorilla/mux v1.7.3
 	github.com/kr/text v0.2.0 // indirect

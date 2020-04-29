@@ -24,6 +24,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
+	"gotest.tools/assert"
 )
 
 // basic test to check if no rules leave the manager unusable
@@ -188,9 +189,7 @@ partitions:
             parent: true
 `
 	partInfo, err := CreatePartitionInfo([]byte(data))
-	if err != nil {
-		t.Fatalf("Partition create failed with error: %v", err)
-	}
+	assert.NilError(t, err, "Partition create failed with error")
 	// basic info without rules, manager should init
 	man := NewPlacementManager(partInfo)
 	if man == nil {

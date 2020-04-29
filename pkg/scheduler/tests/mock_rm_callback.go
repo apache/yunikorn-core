@@ -25,6 +25,7 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+	"gotest.tools/assert"
 )
 
 type mockRMCallback struct {
@@ -123,9 +124,7 @@ func (m *mockRMCallback) waitForRejectedApplication(t *testing.T, appID string, 
 		defer m.RUnlock()
 		return m.rejectedApplications[appID]
 	})
-	if err != nil {
-		t.Fatalf("Failed to wait for rejected application: %s, called from: %s", appID, caller())
-	}
+	assert.NilError(t, err, "Failed to wait for rejected application: %s, called from: %s", appID, caller())
 }
 
 func (m *mockRMCallback) waitForAcceptedNode(t *testing.T, nodeID string, timeoutMs int) {
@@ -134,9 +133,7 @@ func (m *mockRMCallback) waitForAcceptedNode(t *testing.T, nodeID string, timeou
 		defer m.RUnlock()
 		return m.acceptedNodes[nodeID]
 	})
-	if err != nil {
-		t.Fatalf("Failed to wait for node state to become accepted: %s, called from: %s", nodeID, caller())
-	}
+	assert.NilError(t, err, "Failed to wait for node state to become accepted: %s, called from: %s", nodeID, caller())
 }
 
 func (m *mockRMCallback) waitForMinAcceptedNodes(tb testing.TB, minNumNode int, timeoutMs int) {
@@ -158,9 +155,7 @@ func (m *mockRMCallback) waitForRejectedNode(t *testing.T, nodeID string, timeou
 		defer m.RUnlock()
 		return m.rejectedNodes[nodeID]
 	})
-	if err != nil {
-		t.Fatalf("Failed to wait for node state to become rejected: %s, called from: %s", nodeID, caller())
-	}
+	assert.NilError(t, err, "Failed to wait for node state to become rejected: %s, called from: %s", nodeID, caller())
 }
 
 func (m *mockRMCallback) waitForAllocations(t *testing.T, nAlloc int, timeoutMs int) {
@@ -171,9 +166,7 @@ func (m *mockRMCallback) waitForAllocations(t *testing.T, nAlloc int, timeoutMs 
 		allocLen = len(m.Allocations)
 		return allocLen == nAlloc
 	})
-	if err != nil {
-		t.Fatalf("Failed to wait for allocations, expected %d, actual %d, called from: %s", nAlloc, allocLen, caller())
-	}
+	assert.NilError(t, err, "Failed to wait for allocations, expected %d, actual %d, called from: %s", nAlloc, allocLen, caller())
 }
 
 func (m *mockRMCallback) waitForMinAllocations(tb testing.TB, nAlloc int, timeoutMs int) {

@@ -772,3 +772,46 @@ partitions:
 	assert.Equal(t, len(m), 2)
 	assert.Assert(t, reflect.DeepEqual(m["memory"], []int{1, 1, 0, 0, 0, 0, 0, 0, 1, 0}))
 }
+
+func TestCalculateAbsUsedCapacity(t *testing.T) {
+	capacitySet := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1024, "vcores": 1})
+	usedCapacitySet := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 512, "vcores": 1})
+	capacityWithMemoryOnly := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1024})
+	emptyCapacity := resources.NewResource()
+	var nilCapacity *resources.Resource = nil
+
+	t.Log("Testing the case when we have resource set and also resource usage")
+	absUsedCapacity := calculateAbsUsedCapacity(capacitySet, usedCapacitySet)
+	expectedAbsUsedCapacity := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 50, "vcores": 100})
+	assert.Assert(t, reflect.DeepEqual(expectedAbsUsedCapacity, absUsedCapacity))
+
+	t.Log("Testing the case when there is resource set but there is no resource usage")
+	absUsedCapacity2 := calculateAbsUsedCapacity(capacitySet, emptyCapacity)
+	expectedAbsUsedCapacity2 := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 0, "vcores": 0})
+	assert.Assert(t, reflect.DeepEqual(expectedAbsUsedCapacity2, absUsedCapacity2))
+
+	t.Log("Testing the case when there is no resource set but there is resource usage")
+	absUsedCapacity3 := calculateAbsUsedCapacity(emptyCapacity, usedCapacitySet)
+	expectedAbsUsedCapacity3 := resources.NewResource()
+	assert.Assert(t, reflect.DeepEqual(expectedAbsUsedCapacity3, absUsedCapacity3))
+
+	t.Log("Testing the case when the resource is nil but there is resource usage")
+	absUsedCapacity4 := calculateAbsUsedCapacity(nilCapacity, usedCapacitySet)
+	var expectedAbsUsedCapacity4 *resources.Resource = nil
+	assert.Assert(t, reflect.DeepEqual(expectedAbsUsedCapacity4, absUsedCapacity4))
+
+	t.Log("Testing the case when there is resource set but the resource usage is nil")
+	absUsedCapacity5 := calculateAbsUsedCapacity(capacitySet, nilCapacity)
+	expectedAbsUsedCapacity5 := resources.NewResource()
+	assert.Assert(t, reflect.DeepEqual(expectedAbsUsedCapacity5, absUsedCapacity5))
+
+	t.Log("Testing the case when only the memory resource is set, but there is both memory and vcore usage")
+	absUsedCapacity6 := calculateAbsUsedCapacity(capacityWithMemoryOnly, usedCapacitySet)
+	expectedAbsUsedCapacity6 := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 50})
+	assert.Assert(t, reflect.DeepEqual(expectedAbsUsedCapacity6, absUsedCapacity6))
+
+	t.Log("Testing the case when resource is set, but there is only memory usage")
+	absUsedCapacity7 := calculateAbsUsedCapacity(capacitySet, capacityWithMemoryOnly)
+	expectedAbsUsedCapacity7 := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 100, "vcores": 0})
+	assert.Assert(t, reflect.DeepEqual(expectedAbsUsedCapacity7, absUsedCapacity7))
+}

@@ -715,55 +715,46 @@ func checkAndSetResource(resource *resources.Resource) string {
 	if resource != nil {
 		return strings.Trim(resource.String(), "map")
 	}
-	return ""
+	return "[]"
 }
 
-// TODO fix this:
-// should only return one element, only a root queue
-// remove hard coded values and unknown AbsUsedCapacity
-// map status to the draining flag
-func (pi *PartitionInfo) GetQueueInfos() []dao.QueueDAOInfo {
-	pi.RLock()
-	defer pi.RUnlock()
-
-	var queueInfos []dao.QueueDAOInfo
-
-	info := dao.QueueDAOInfo{}
-	info.QueueName = pi.Root.Name
-	info.Status = pi.Root.stateMachine.Current()
-	info.Capacities = dao.QueueCapacity{
-		Capacity:        checkAndSetResource(pi.Root.GetGuaranteedResource()),
-		MaxCapacity:     checkAndSetResource(pi.Root.GetMaxResource()),
-		UsedCapacity:    checkAndSetResource(pi.Root.GetAllocatedResource()),
-		AbsUsedCapacity: "20",
+func calculateAbsUsedCapacity(capacity *resources.Resource, usedCapacity *resources.Resource) *resources.Resource {
+	if capacity == nil {
+		return nil
 	}
-	info.ChildQueues = GetChildQueueInfos(pi.Root)
-	queueInfos = append(queueInfos, info)
-
-	return queueInfos
-}
-
-// TODO fix this:
-// should only return one element, only a root queue
-// remove hard coded values and unknown AbsUsedCapacity
-// map status to the draining flag
-func GetChildQueueInfos(info *QueueInfo) []dao.QueueDAOInfo {
-	var infos []dao.QueueDAOInfo
-	for _, child := range info.children {
-		queue := dao.QueueDAOInfo{}
-		queue.QueueName = child.Name
-		queue.Status = child.stateMachine.Current()
-		queue.Capacities = dao.QueueCapacity{
-			Capacity:        checkAndSetResource(child.GetGuaranteedResource()),
-			MaxCapacity:     checkAndSetResource(child.GetMaxResource()),
-			UsedCapacity:    checkAndSetResource(child.GetAllocatedResource()),
-			AbsUsedCapacity: "20",
+	if usedCapacity == nil {
+		return resources.NewResource()
+	}
+	absResource := make(map[string]resources.Quantity)
+	for resourceName, availableResource := range capacity.Resources {
+		var absResValue float32
+		if availableResource != 0 {
+			if usedResource, ok := usedCapacity.Resources[resourceName]; ok {
+				absResValue = float32(usedResource) / float32(availableResource) * 100
+			}
 		}
-		queue.ChildQueues = GetChildQueueInfos(child)
-		infos = append(infos, queue)
+		absResource[resourceName] = resources.Quantity(absResValue)
 	}
+	return resources.NewResourceFromMap(absResource)
+}
 
-	return infos
+func (qi *QueueInfo) GetQueueInfos() dao.QueueDAOInfo {
+	qi.RLock()
+	defer qi.RUnlock()
+	queueInfo := dao.QueueDAOInfo{}
+	queueInfo.QueueName = qi.Name
+	queueInfo.Status = qi.stateMachine.Current()
+	queueInfo.Capacities = dao.QueueCapacity{
+		Capacity:        checkAndSetResource(qi.GetGuaranteedResource()),
+		MaxCapacity:     checkAndSetResource(qi.GetMaxResource()),
+		UsedCapacity:    checkAndSetResource(qi.GetAllocatedResource()),
+		AbsUsedCapacity: checkAndSetResource(calculateAbsUsedCapacity(
+			qi.GetMaxResource(), qi.GetAllocatedResource())),
+	}
+	for _, child := range qi.children {
+		queueInfo.ChildQueues = append(queueInfo.ChildQueues, child.GetQueueInfos())
+	}
+	return queueInfo
 }
 
 func (pi *PartitionInfo) GetTotalApplicationCount() int {

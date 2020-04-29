@@ -174,8 +174,8 @@ limits:
     - <group name>
     maxapplications: <1..maxint>
     maxresources:
-      <resourcen name 1>: <0..maxint>
-      <resourcen name 2>: <0..maxint>
+      <resource name 1>: <0..maxint>
+      <resource name 2>: <0..maxint>
 ```
 
 Limits are applied recursively in the case of a queue limit.
@@ -250,10 +250,10 @@ Basic `resources` yaml entry:
 ```yaml
 resources:
   guaranteed:
-    <resourcen name 1>: <0..maxint>
-    <resourcen name 2>: <0..maxint>
+    <resource name 1>: <0..maxint>
+    <resource name 2>: <0..maxint>
   max:
-    <resourcen name 1>: <0..maxint>
-    <resourcen name 2>: <0..maxint>
+    <resource name 1>: <0..maxint>
+    <resource name 2>: <0..maxint>
 ```
 Resources that are not specified in the list are not limited, for max resources, or guaranteed in the case of guaranteed resources. 

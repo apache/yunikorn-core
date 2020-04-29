@@ -21,7 +21,7 @@ type PartitionDAOInfo struct {
 	PartitionName string            `json:"partitionName"`
 	Capacity      PartitionCapacity `json:"capacity"`
 	Nodes         []NodeInfo        `json:"nodes"`
-	Queues        []QueueDAOInfo    `json:"queues"`
+	Queues        QueueDAOInfo    `json:"queues"`
 }
 
 type PartitionCapacity struct {

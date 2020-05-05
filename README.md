@@ -1,12 +1,29 @@
-# Apache YuniKorn (incubating) - A Universal Scheduler
+<!--
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ -->
+# Apache YuniKorn (Incubating) - A Universal Scheduler
 
 <img src="https://raw.githubusercontent.com/apache/incubator-yunikorn-core/master/docs/images/logo/yunikorn-logo-blue.png" width="200">
 
 ----
 
-Apache YuniKorn (incubating) is a light-weighted, universal resource scheduler for container orchestrator systems.
+Apache YuniKorn (Incubating) is a light-weight, universal resource scheduler for container orchestrator systems.
 It was created to achieve fine-grained resource sharing for various workloads efficiently on a large scale, multi-tenant,
-and cloud-native environment. YuniKorn brings a unified, cross-platform scheduling experience for mixed workloads consists
+and cloud-native environment. YuniKorn brings a unified, cross-platform, scheduling experience for mixed workloads that consist
 of stateless batch workloads and stateful services. 
 
 YuniKorn now supports K8s and can be deployed as a custom K8s scheduler. YuniKorn's architecture design also allows adding different
@@ -100,7 +117,7 @@ See more instructions from the [User Guide](./docs/user-guide.md).
 
 ## How can I get involved?
 
-Apache YuniKorn (incubating) community includes engineers from Alibaba, Apple, 
+Apache YuniKorn (Incubating) community includes engineers from Alibaba, Apple, 
 Cloudera, Linkedin, Microsoft, Nvidia, Tencent, Uber, etc. (sorted by alphabet). Want to join the community? 
 We welcome any form of contributions, code, documentation or suggestions! 
 
@@ -124,12 +141,17 @@ To get involved, please read following resources.
 **Communication channels**
 
 - Mailing lists are:
-  - [user@yunikorn.apache.org](mailto:user@yunikorn.apache.org) user questions list
-  - [dev@yunikorn.apache.org](mailto:dev@yunikorn.apache.org) development discussions
-  - [issues@yunikorn.apache.org](mailto:issues@yunikorn.apache.org) JIRA issue feed
+  - for people wanting to contribute to the project: [dev@yunikorn.apache.org](mailto:dev@yunikorn.apache.org) [subscribe](mailto:dev-subscribe@yunikorn.apache.org?subject="send this email to subscribe") [unsubscribe](mailto:dev-unsubscribe@yunikorn.apache.org?subject="send this email to unsubscribe") [archives](https://lists.apache.org/list.html?dev@yunikorn.apache.org)
+  - JIRA issue updates: issues@yunikorn.apache.org [subscribe](mailto:issues-subscribe@yunikorn.apache.org?subject="send this email to subscribe") [unsubscribe](mailto:issues-unsubscribe@yunikorn.apache.org?subject="send this email to unsubscribe") [archives](https://lists.apache.org/list.html?issues@yunikorn.apache.org)
+  - for review messages and patches in GitHub pull requests reviews@yunikorn.apache.org [subscribe](mailto:reviews-subscribe@yunikorn.apache.org?subject="send this email to subscribe") [unsubscribe](mailto:reviews-unsubscribe@yunikorn.apache.org?subject="send this email to unsubscribe") [archives](https://lists.apache.org/list.html?reviews@yunikorn.apache.org)
+
 - We use [Slack](https://slack.com/) as our collaboration system, you can join us by accessing [this link](https://join.slack.com/t/yunikornworkspace/shared_invite/enQtNzAzMjY0OTI4MjYzLTBmMDdkYTAwNDMwNTE3NWVjZWE1OTczMWE4NDI2Yzg3MmEyZjUyYTZlMDE5M2U4ZjZhNmYyNGFmYjY4ZGYyMGE).
 Currently, we have following channels in the workspace: `#yunikorn-dev` and `#yunikorn-user`.
 
 **Blog posts**
 
+Apache based blogs:
+- [Apache YuniKorn (Incubating) release announcements](https://blogs.apache.org/yunikorn/)
+
+3rd party blog posts:
 - [YuniKorn: a universal resource scheduler](https://blog.cloudera.com/blog/2019/07/yunikorn-a-universal-resource-scheduler/)

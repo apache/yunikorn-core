@@ -38,10 +38,10 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v2
 
-      - name: Check license
-        run: make check-license
+      - name: Checking license headers
+        run: make license-check
 
-      - name: Go lint
+      - name: Run lint checks
         env:
           GOPATH: /tmp/go
         run: |
@@ -50,5 +50,5 @@ jobs:
           ls -al ${GOPATH}/bin
           make lint
 
-      - name: unit test
+      - name: Run unit tests
         run: make test

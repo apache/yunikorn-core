@@ -57,7 +57,7 @@ lint:
 .PHONY: license-check
 license-check:
 	@echo "checking license header"
-	@licRes=$$(grep -Lr --include=*.{go,sh,md,yaml,mod} "Licensed to the Apache Software Foundation" .) ; \
+	@licRes=$$(grep -Lr --include=*.{go,sh,md,yaml,yml,mod} "Licensed to the Apache Software Foundation" .) ; \
 	if [ -n "$${licRes}" ]; then \
 		echo "following files have incorrect license header:\n$${licRes}" ; \
 		exit 1; \

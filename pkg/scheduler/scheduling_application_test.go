@@ -89,11 +89,12 @@ func TestAppReservation(t *testing.T) {
 		t.Error("new app should not have reservations for unknown node")
 	}
 
-	queue := createDefaultRootQueueProtected(t)
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
 
 	// reserve illegal request
-	err := app.reserve(nil, nil)
+	err = app.reserve(nil, nil)
 	if err == nil {
 		t.Errorf("illegal reservation requested but did not fail: error %v", err)
 	}
@@ -194,7 +195,8 @@ func TestAppAllocReservation(t *testing.T) {
 	if len(app.isAskReserved("")) != 0 {
 		t.Fatal("new app should not have reservation for empty allocKey")
 	}
-	queue := createDefaultRootQueueProtected(t)
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
 
 	// reserve 1 allocate ask
@@ -262,7 +264,8 @@ func TestUpdateRepeat(t *testing.T) {
 	if app == nil || app.ApplicationInfo.ApplicationID != appID {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
-	queue := createDefaultRootQueueProtected(t)
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
 
 	// failure cases
@@ -313,7 +316,8 @@ func TestAddAllocAsk(t *testing.T) {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
 
-	queue := createDefaultRootQueueProtected(t)
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
 
 	// failure cases
@@ -383,7 +387,8 @@ func TestRemoveReservedAllocAsk(t *testing.T) {
 	if app == nil || app.ApplicationInfo.ApplicationID != appID {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
-	queue := createDefaultRootQueueProtected(t)
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
 
 	// create app and allocs
@@ -469,7 +474,8 @@ func TestRemoveAllocAsk(t *testing.T) {
 	if app == nil || app.ApplicationInfo.ApplicationID != appID {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
-	queue := createDefaultRootQueueProtected(t)
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
 
 	// failures cases: things should not crash (nothing happens)

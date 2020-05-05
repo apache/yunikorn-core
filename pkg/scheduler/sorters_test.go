@@ -34,12 +34,13 @@ import (
 
 // verify queue ordering is working
 func TestSortQueues(t *testing.T) {
-	root := createDefaultRootQueueProtected(t)
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
 	cache.SetGuaranteedResource(root.QueueInfo,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000, "vcore": 1000}))
 
 	var q0, q1, q2 *SchedulingQueue
-	q0, err := createManagedQueue(root, "q0", false, nil)
+	q0, err = createManagedQueue(root, "q0", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	cache.SetGuaranteedResource(q0.QueueInfo,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500, "vcore": 500}))
@@ -87,12 +88,13 @@ func TestSortQueues(t *testing.T) {
 
 // queue guaranteed resource is 0
 func TestNoQueueLimits(t *testing.T) {
-	root := createDefaultRootQueueProtected(t)
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
 	cache.SetGuaranteedResource(root.QueueInfo,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 0, "vcore": 0}))
 
 	var q0, q1, q2 *SchedulingQueue
-	q0, err := createManagedQueue(root, "q0", false, nil)
+	q0, err = createManagedQueue(root, "q0", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	cache.SetGuaranteedResource(q0.QueueInfo,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 0, "vcore": 0}))
@@ -130,11 +132,12 @@ func TestNoQueueLimits(t *testing.T) {
 
 // queue guaranteed resource is not set
 func TestQueueGuaranteedResourceNotSet(t *testing.T) {
-	root := createDefaultRootQueueProtected(t)
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
 	cache.SetGuaranteedResource(root.QueueInfo, nil)
 
 	var q0, q1, q2 *SchedulingQueue
-	q0, err := createManagedQueue(root, "q0", false, nil)
+	q0, err = createManagedQueue(root, "q0", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	cache.SetGuaranteedResource(q0.QueueInfo, nil)
 	q0.allocating = resources.NewResourceFromMap(map[string]resources.Quantity{

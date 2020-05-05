@@ -22,8 +22,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 	"gotest.tools/assert"
+
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 func TestGetUserGroupCache(t *testing.T) {

@@ -21,10 +21,11 @@ package placement
 import (
 	"testing"
 
+	"gotest.tools/assert"
+
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
-	"gotest.tools/assert"
 )
 
 // basic test to check if no rules leave the manager unusable

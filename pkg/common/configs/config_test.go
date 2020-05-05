@@ -25,8 +25,9 @@ import (
 	"path"
 	"testing"
 
-	"gopkg.in/yaml.v2"
 	"gotest.tools/assert"
+
+	"gopkg.in/yaml.v2"
 )
 
 func TestConfigSerdeQueues(t *testing.T) {

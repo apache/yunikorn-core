@@ -22,9 +22,10 @@ import (
 	"strconv"
 	"testing"
 
+	"gotest.tools/assert"
+
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-	"gotest.tools/assert"
 )
 
 // create the root queue, base for all testing

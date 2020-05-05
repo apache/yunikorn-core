@@ -39,14 +39,13 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Check license
-        run: make common-check-license
+        run: make check-license
 
       - name: Go lint
         env:
           GOPATH: /tmp/go
         run: |
           export PATH=$PATH:$(go env GOPATH)/bin
-          go get -u golang.org/x/lint/golint
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.22.2
           ls -al ${GOPATH}/bin
           make lint

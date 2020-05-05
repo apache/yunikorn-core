@@ -4,25 +4,27 @@
 
 **yunikorn-core**
 
-* Gang Scheduling.
-* Priority based preemption.
-* Support application priority.
-* Rich scheduler metrics.
-* Workload simulator.
-* Prometheus integration (phase 2).
-* Grafana integration.
+* [YUNIKORN-1](https://issues.apache.org/jira/browse/YUNIKORN-1): Support app/task priority aware scheduling.
+* [YUNIKORN-2](https://issues.apache.org/jira/browse/YUNIKORN-2): Gang Scheduling.
+* [YUNIKORN-21](https://issues.apache.org/jira/browse/YUNIKORN-21): Optimize node sorting algorithms.
+* [YUNIKORN-42](https://issues.apache.org/jira/browse/YUNIKORN-42): High efficient scheduling events framework phase 1.
+* [YUNIKORN-33](https://issues.apache.org/jira/browse/YUNIKORN-33): Performance benchmark with Kubemark.
+* [YUNIKORN-131](https://issues.apache.org/jira/browse/YUNIKORN-131): Prometheus integration - phase 2.
+* [YUNIKORN-132](https://issues.apache.org/jira/browse/YUNIKORN-132): Publish helm charts for convenient access.
 
 **yunikorn-k8shim**
 
-* Security support.
-* Performance improvement: merging, packing requests.
-* 3rd Operator/controller integration, pluggable app discovery.
+* [YUNIKORN-133](https://issues.apache.org/jira/browse/YUNIKORN-133): Performance improvement: optimize predicate function performance.
+* [YUNIKORN-42](https://issues.apache.org/jira/browse/YUNIKORN-42): Publish comprehensive scheduler events to K8s event system. 
 
 **yunikorn-web**
 
-* Implement cluster overview page, display overall info about cluster and applications
+* [YUNIKORN-83](https://issues.apache.org/jira/browse/YUNIKORN-83): Implements the nodes info page.
 
-## v0.1.0 (Done)
+## v0.8.0 (May 4, 2020)
+
+This release ships a fully functional resource scheduler for Kubernetes with a number of useful features that empower
+to run Big Data workloads on K8s. See more at [Release Notes](http://yunikorn.apache.org/release/v0.8.0.html).
 
 **yunikorn-scheduler-interface**
 
@@ -50,6 +52,7 @@
 * Support K8s predicates. Such as pod affinity/anti-affinity, node selectors.
 * Support Persistent Volumes, Persistent Volume Claims, etc.
 * Load scheduler configuration from configmap dynamically (hot-refresh).
+* 3rd Operator/controller integration, pluggable app discovery.
 * Helm chart support.
 
 **yunikorn-web**

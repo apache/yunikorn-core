@@ -102,7 +102,8 @@ func TestManagedSubQueues(t *testing.T) {
 	assert.NilError(t, err, "queue create failed")
 
 	// single parent under root
-	parent, err := createManagedQueue(root, "parent", true, nil)
+	var parent *SchedulingQueue
+	parent, err = createManagedQueue(root, "parent", true, nil)
 	assert.NilError(t, err, "failed to create parent queue")
 	if parent.isLeafQueue() || !parent.isManaged() || !parent.isRunning() {
 		t.Error("parent queue is not marked as running managed parent")
@@ -158,7 +159,8 @@ func TestUnManagedSubQueues(t *testing.T) {
 	assert.NilError(t, err, "queue create failed")
 
 	// single parent under root
-	parent, err := createUnManagedQueue(root, "parent", true)
+	var parent *SchedulingQueue
+	parent, err = createUnManagedQueue(root, "parent", true)
 	assert.NilError(t, err, "failed to create parent queue")
 	if parent.isLeafQueue() || parent.isManaged() {
 		t.Errorf("parent queue is not marked as parent")
@@ -205,7 +207,8 @@ func TestPendingCalc(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
-	leaf, err := createManagedQueue(root, "leaf", false, nil)
+	var leaf *SchedulingQueue
+	leaf, err = createManagedQueue(root, "leaf", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 
 	res := map[string]string{"memory": "100", "vcores": "10"}
@@ -243,7 +246,8 @@ func TestGetChildQueueInfos(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
-	parent, err := createManagedQueue(root, "parent-man", true, nil)
+	var parent *SchedulingQueue
+	parent, err = createManagedQueue(root, "parent-man", true, nil)
 	assert.NilError(t, err, "failed to create managed parent queue")
 	for i := 0; i < 10; i++ {
 		_, err = createManagedQueue(parent, "leaf-man"+strconv.Itoa(i), false, nil)
@@ -277,7 +281,8 @@ func TestAddApplication(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
-	leaf, err := createManagedQueue(root, "leaf-man", false, nil)
+	var leaf *SchedulingQueue
+	leaf, err = createManagedQueue(root, "leaf-man", false, nil)
 	assert.NilError(t, err, "failed to create managed leaf queue")
 	pending := resources.NewResourceFromMap(
 		map[string]resources.Quantity{
@@ -299,7 +304,8 @@ func TestRemoveApplication(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
-	leaf, err := createManagedQueue(root, "leaf-man", false, nil)
+	var leaf *SchedulingQueue
+	leaf, err = createManagedQueue(root, "leaf-man", false, nil)
 	assert.NilError(t, err, "failed to create managed leaf queue")
 	// try removing a non existing app
 	nonExist := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "test"})
@@ -339,7 +345,8 @@ func TestQueueStates(t *testing.T) {
 	assert.NilError(t, err, "queue create failed")
 
 	// add a leaf under the root
-	leaf, err := createManagedQueue(root, "leaf", false, nil)
+	var leaf *SchedulingQueue
+	leaf, err = createManagedQueue(root, "leaf", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	err = leaf.QueueInfo.HandleQueueEvent(cache.Stop)
 	if err != nil || !leaf.isStopped() {
@@ -363,7 +370,8 @@ func TestAllocatingCalc(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
-	leaf, err := createManagedQueue(root, "leaf", false, nil)
+	var leaf *SchedulingQueue
+	leaf, err = createManagedQueue(root, "leaf", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 
 	res := map[string]string{"first": "1"}
@@ -397,7 +405,8 @@ func TestPreemptingCalc(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
-	leaf, err := createManagedQueue(root, "leaf", false, nil)
+	var leaf *SchedulingQueue
+	leaf, err = createManagedQueue(root, "leaf", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 
 	res := map[string]string{"first": "1"}
@@ -434,7 +443,8 @@ func TestAssumedQueueCalc(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
-	leaf, err := createManagedQueue(root, "leaf", false, nil)
+	var leaf *SchedulingQueue
+	leaf, err = createManagedQueue(root, "leaf", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	assumed := leaf.getAssumeAllocated()
 	if !resources.IsZero(assumed) {
@@ -465,15 +475,15 @@ func TestSortApplications(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
+	var leaf, parent *SchedulingQueue
 	// empty parent queue
-	parent, err := createManagedQueue(root, "parent", true, nil)
+	parent, err = createManagedQueue(root, "parent", true, nil)
 	assert.NilError(t, err, "failed to create parent queue: %v")
 	if apps := parent.sortApplications(); apps != nil {
 		t.Errorf("parent queue should not return sorted apps: %v", apps)
 	}
 
 	// empty leaf queue
-	var leaf *SchedulingQueue
 	leaf, err = createManagedQueue(parent, "leaf", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	if len(leaf.sortApplications()) != 0 {
@@ -512,9 +522,9 @@ func TestSortQueue(t *testing.T) {
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 
-	var leaf *SchedulingQueue
+	var leaf, parent *SchedulingQueue
 	// empty parent queue
-	parent, err := createManagedQueue(root, "parent", true, nil)
+	parent, err = createManagedQueue(root, "parent", true, nil)
 	assert.NilError(t, err, "failed to create parent queue")
 	if len(parent.sortQueues()) != 0 {
 		t.Errorf("parent queue should return sorted queues: %v", parent)
@@ -552,8 +562,9 @@ func TestHeadroom(t *testing.T) {
 		t.Errorf("empty cluster with root queue should not have headroom: %v", headRoom)
 	}
 
+	var parent *SchedulingQueue
 	// empty parent queue: nil test
-	parent, err := createManagedQueue(root, "parent", true, nil)
+	parent, err = createManagedQueue(root, "parent", true, nil)
 	assert.NilError(t, err, "failed to create parent queue")
 	headRoom = parent.getHeadRoom()
 	if headRoom != nil {
@@ -633,8 +644,9 @@ func TestGetMaxUsage(t *testing.T) {
 		t.Errorf("empty cluster with root queue should not have max set: %v", maxUsage)
 	}
 
+	var parent *SchedulingQueue
 	// empty parent queue
-	parent, err := createManagedQueue(root, "parent", true, nil)
+	parent, err = createManagedQueue(root, "parent", true, nil)
 	assert.NilError(t, err, "failed to create parent queue")
 	maxUsage = parent.getMaxResource()
 	if maxUsage != nil {
@@ -694,7 +706,8 @@ func TestReserveApp(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
-	leaf, err := createManagedQueue(root, "leaf", false, nil)
+	var leaf *SchedulingQueue
+	leaf, err = createManagedQueue(root, "leaf", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	assert.Equal(t, len(leaf.reservedApps), 0, "new queue should not have reserved apps")
 	// no checks this works for everything
@@ -716,7 +729,8 @@ func TestGetApp(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
-	leaf, err := createManagedQueue(root, "leaf", false, nil)
+	var leaf *SchedulingQueue
+	leaf, err = createManagedQueue(root, "leaf", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	// check for init of the map
 	if unknown := leaf.getApplication("unknown"); unknown != nil {

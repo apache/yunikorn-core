@@ -206,7 +206,8 @@ func TestAppAllocReservation(t *testing.T) {
 	ask := newAllocationAskRepeat(allocKey, appID, res, 2)
 	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
 	// reserve that works
-	delta, err := app.addAllocationAsk(ask)
+	var delta *resources.Resource
+	delta, err = app.addAllocationAsk(ask)
 	if err != nil || !resources.Equals(resources.Multiply(res, 2), delta) {
 		t.Errorf("ask should have been added to app, err %v, expected delta %v but was: %v", err, resources.Multiply(res, 2), delta)
 	}
@@ -491,7 +492,8 @@ func TestRemoveAllocAsk(t *testing.T) {
 	// setup the allocs
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	ask := newAllocationAskRepeat("alloc-1", appID, res, 2)
-	delta1, err := app.addAllocationAsk(ask)
+	var delta1 *resources.Resource
+	delta1, err = app.addAllocationAsk(ask)
 	assert.NilError(t, err, "ask 1 should have been added to app, returned delta")
 	ask = newAllocationAskRepeat("alloc-2", appID, res, 2)
 	var delta2 *resources.Resource

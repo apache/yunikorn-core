@@ -298,7 +298,8 @@ func TestNodeReservation(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 15})
 	ask := newAllocationAsk("alloc-1", "app-1", res)
 	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "app-1"})
-	queue, err := createRootQueue(nil)
+	var queue *SchedulingQueue
+	queue, err = createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
 
@@ -370,7 +371,8 @@ func TestUnReserveApps(t *testing.T) {
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
-	delta, err := app.addAllocationAsk(ask)
+	var delta *resources.Resource
+	delta, err = app.addAllocationAsk(ask)
 	if err != nil || !resources.Equals(res, delta) {
 		t.Fatalf("ask should have been added to the app expected resource delta  %v got %v (err = %v)", res, delta, err)
 	}

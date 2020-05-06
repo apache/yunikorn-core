@@ -75,7 +75,8 @@ func TestAllocationCalcRoot(t *testing.T) {
 	root, err := createRootQueue()
 	assert.NilError(t, err, "failed to create basic root queue")
 	res := map[string]string{"memory": "100", "vcores": "10"}
-	allocation, err := resources.NewResourceFromConf(res)
+	var allocation *resources.Resource
+	allocation, err = resources.NewResourceFromConf(res)
 	assert.NilError(t, err, "failed to create basic resource")
 	err = root.IncAllocatedResource(allocation, false)
 	if err != nil {
@@ -98,7 +99,8 @@ func TestAllocationCalcSub(t *testing.T) {
 	// create the root
 	root, err := createRootQueue()
 	assert.NilError(t, err, "failed to create basic root queue")
-	parent, err := createManagedQueue(root, "parent", true)
+	var parent *QueueInfo
+	parent, err = createManagedQueue(root, "parent", true)
 	assert.NilError(t, err, "failed to create parent queue")
 
 	res := map[string]string{"memory": "100", "vcores": "10"}
@@ -140,7 +142,8 @@ func TestManagedSubQueues(t *testing.T) {
 	// create the root
 	root, err := createRootQueue()
 	assert.NilError(t, err, "failed to create basic root queue")
-	parent, err := createManagedQueue(root, "parent", true)
+	var parent *QueueInfo
+	parent, err = createManagedQueue(root, "parent", true)
 	assert.NilError(t, err, "failed to create parent queue")
 	if parent.isLeaf {
 		t.Errorf("parent queue is not marked as a parent")
@@ -215,7 +218,8 @@ func TestUnManagedSubQueues(t *testing.T) {
 	// create the root
 	root, err := createRootQueue()
 	assert.NilError(t, err, "failed to create basic root queue")
-	parent, err := createUnManagedQueue(root, "parent", true)
+	var parent *QueueInfo
+	parent, err = createManagedQueue(root, "parent-man", true)
 	assert.NilError(t, err, "failed to create parent queue")
 	if parent.isLeaf {
 		t.Errorf("parent queue is not marked as a parent")
@@ -271,7 +275,8 @@ func TestGetChildQueueInfos(t *testing.T) {
 	// create the root
 	root, err := createRootQueue()
 	assert.NilError(t, err, "failed to create basic root queue")
-	parent, err := createManagedQueue(root, "parent-man", true)
+	var parent *QueueInfo
+	parent, err = createManagedQueue(root, "parent-man", true)
 	assert.NilError(t, err, "failed to create basic managed parent queue")
 	for i := 0; i < 10; i++ {
 		_, err = createManagedQueue(parent, "leaf-man"+strconv.Itoa(i), false)
@@ -302,9 +307,10 @@ func TestMaxResource(t *testing.T) {
 	res, err := resources.NewResourceFromConf(resMap)
 	assert.NilError(t, err, "failed to create basic resource")
 	// create the root
-	root, err := createRootQueue()
+	var root, parent *QueueInfo
+	root, err = createRootQueue()
 	assert.NilError(t, err, "failed to create basic root queue")
-	parent, err := createManagedQueue(root, "parent", true)
+	parent, err = createManagedQueue(root, "parent", true)
 	assert.NilError(t, err, "failed to create basic managed parent queue")
 	// Nothing set max should be nil
 	if root.GetMaxResource() != nil || parent.GetMaxResource() != nil {

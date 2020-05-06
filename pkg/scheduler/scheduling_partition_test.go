@@ -182,7 +182,8 @@ func TestGetQueue(t *testing.T) {
 func createQueuesNodes(t *testing.T) *partitionSchedulingContext {
 	partition, err := newTestPartition()
 	assert.NilError(t, err, "test partition create failed with error")
-	res, err := resources.NewResourceFromConf(map[string]string{"first": "10"})
+	var res *resources.Resource
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "10"})
 	assert.NilError(t, err, "failed to create basic resource")
 	node1 := "node-1"
 	partition.addSchedulingNode(cache.NewNodeForTest(node1, res))

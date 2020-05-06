@@ -1,15 +1,33 @@
+<!--
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ -->
+
 # Resilience Design
 
 This is not a HA (High-availability) design, HA implies that a service can
 survive from a fatal software/hardware failure. That requires one or more
 standby instances providing same services to take over active instance on failures.
-Resilience here means for yunikorn, we can restart it without losing its state.
+Resilience here means for YuniKorn, we can restart it without losing its state.
 
 ## The problem
 
 YuniKorn is designed as a stateless service, it doesn't persist its state, e.g
 applications/queues/allocations etc, to any persistent storage. All states are
-in memory only. This design ensures yunikorn to be able to response requests with
+in memory only. This design ensures YuniKorn to be able to response requests with
 low latency, and deployment mode is simple. However, a restart (or recovery) will
 have the problem to lose state data. We need a decent way to reconstruct all
 previous states on a restart.
@@ -38,7 +56,7 @@ New -----------> Registered -----------> Recovering ----------> Running
 
 Following chart illustrate how yunikorn-core and shim works together on recovery.
 
-![Workflow](./resilience-workflow.jpg)
+![Workflow](../images/resilience-workflow.jpg)
 
 Restart (with recovery) process
 - yunikorn-shim registers itself with yunikorn-core
@@ -67,7 +85,7 @@ In the shim layer, it maintains states for each node and pods running on this no
 all nodes initially are considered as under `recovering`. Only when all pods running on this node are fully recovered,
 the node can be considered as `recovered`.
 
-![node-recovery](./resilience-node-recovery.jpg)
+![node-recovery](../images/resilience-node-recovery.jpg)
 
 Like demonstrated on upon diagram,
 

@@ -1,3 +1,21 @@
+<!--
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ -->
+
 # Developer Guide
 
 YuniKorn always works with a container orchestrator system. Currently, a Kubernetes shim [yunikorn-k8shim](https://github.com/apache/incubator-yunikorn-k8shim)
@@ -101,7 +119,7 @@ A functional scheduler must have at least one resource manager that registers.
 
 ### Build steps
 The core component contains two command line tools: the `simplescheduler` and the `schedulerclient`.
-The two command line tools are currently only provided as examples.
+The two command line tools have been provided as examples only and are not supposed to implement all functionality.
 
 Building the example command line tools:
 ```
@@ -118,7 +136,7 @@ Running the lint tool over the current code:
 ```
 make lint
 ```  
-See the [codeing guidelines documentation](./coding-guidelines.md) for more details. 
+See the [coding guidelines documentation](./coding-guidelines.md) for more details. 
 
 As a utility target you can check that all files that must have a license have the correct license by running: 
 ```
@@ -128,4 +146,4 @@ make common-check-license
 ## Design documents
 
 All design documents are located in a central location per component. The core component design documents also contains the design documents for cross component designs.
-[List of design documents](design/design-index.md)
+[List of design documents](design/README.md)

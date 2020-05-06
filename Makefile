@@ -51,13 +51,13 @@ lint:
 			exit 1; \
 		fi \
 	fi ; \
-	headSHA=$$(git rev-parse --short=12 HEAD) ; \
+	headSHA=$$(git rev-parse --short=12 origin/HEAD) ; \
 	$${lintBin} run --new-from-rev=$${headSHA}
 
-.PHONY: common-check-license
-common-check-license:
+.PHONY: license-check
+license-check:
 	@echo "checking license header"
-	@licRes=$$(grep -Lr --include=*.{go,sh} "Licensed to the Apache Software Foundation" .) ; \
+	@licRes=$$(grep -Lr --include=*.{go,sh,md,yaml,yml,mod} "Licensed to the Apache Software Foundation" .) ; \
 	if [ -n "$${licRes}" ]; then \
 		echo "following files have incorrect license header:\n$${licRes}" ; \
 		exit 1; \

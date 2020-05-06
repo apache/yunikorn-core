@@ -1,12 +1,30 @@
+<!--
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ -->
+
 # Profiling Scheduler
 
-Use [pprof](https://github.com/google/pprof) to do CPU, Memory profiling can help you understand the runtime status of yunikorn scheduler. Profiling instruments have been
-added to yunikorn rest service, we can easily retrieve and analyze them from HTTP
+Use [pprof](https://github.com/google/pprof) to do CPU, Memory profiling can help you understand the runtime status of YuniKorn scheduler. Profiling instruments have been
+added to YuniKorn rest service, we can easily retrieve and analyze them from HTTP
 endpoints.
 
 ## CPU profiling
 
-At this step, ensure you already have yunikorn running, it can be either running from
+At this step, ensure you already have YuniKorn running, it can be either running from
 local via a `make run` command, or deployed as a pod running inside of K8s. Then run
 
 ```
@@ -45,7 +63,7 @@ options, you need to install the virtualization tool `graphviz` first, if you ar
 
 ## Memory Profiling
 
-Similarly you can run
+Similarly, you can run
 
 ```
 go tool pprof http://localhost:9080/debug/pprof/heap

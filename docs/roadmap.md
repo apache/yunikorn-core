@@ -10,7 +10,6 @@
 * [YUNIKORN-42](https://issues.apache.org/jira/browse/YUNIKORN-42): High efficient scheduling events framework phase 1.
 * [YUNIKORN-33](https://issues.apache.org/jira/browse/YUNIKORN-33): Performance benchmark with Kubemark.
 * [YUNIKORN-131](https://issues.apache.org/jira/browse/YUNIKORN-131): Prometheus integration - phase 2.
-* [YUNIKORN-132](https://issues.apache.org/jira/browse/YUNIKORN-132): Publish helm charts for convenient access.
 
 **yunikorn-k8shim**
 

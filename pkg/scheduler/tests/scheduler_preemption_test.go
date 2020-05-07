@@ -201,4 +201,5 @@ func TestBasicPreemption(t *testing.T) {
 
 func TestFun(t *testing.T) {
 	assert.Equal(t, "a", "a")
+	assert.Equal(t, "b", "b")
 }

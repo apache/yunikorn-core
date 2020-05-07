@@ -738,3 +738,46 @@ func IsZero(zero *Resource) bool {
 	}
 	return true
 }
+
+func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {
+	if capacity == nil || used == nil {
+		log.Logger().Warn("Cannot calculate absolute capacity because of missing capacity or usage")
+		return NewResource()
+	}
+	absResource := make(map[string]Quantity)
+	for resourceName, availableResource := range capacity.Resources {
+		var absResValue int64
+		if usedResource, ok := used.Resources[resourceName]; ok {
+			if availableResource < usedResource {
+				log.Logger().Warn("Higher usage than max capacity",
+					zap.String("resource", resourceName),
+					zap.Int64("capacity", int64(availableResource)),
+					zap.Int64("usage", int64(usedResource)))
+			}
+			div := float64(usedResource) / float64(availableResource)
+			absResValue = int64(div * 100)
+			// protect against positive integer overflow
+			if absResValue < 0 && div > 0{
+				log.Logger().Warn("Absolute resource value result positive overflow",
+					zap.String("resource", resourceName),
+					zap.Int64("capacity", int64(availableResource)),
+					zap.Int64("usage", int64(usedResource)))
+				absResValue = math.MaxInt64
+			}
+			// protect against negative integer overflow
+			if absResValue > 0 && div < 0 {
+				log.Logger().Warn("Absolute resource value result negative overflow",
+					zap.String("resource", resourceName),
+					zap.Int64("capacity", int64(availableResource)),
+					zap.Int64("usage", int64(usedResource)))
+				absResValue = math.MinInt64
+			}
+		} else {
+			log.Logger().Warn("Cannot calculate absolute usage for resource because of missing usage information",
+				zap.String("resource name", resourceName))
+			continue
+		}
+		absResource[resourceName] = Quantity(absResValue)
+	}
+	return NewResourceFromMap(absResource)
+}

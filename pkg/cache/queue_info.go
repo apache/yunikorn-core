@@ -20,6 +20,7 @@ package cache
 
 import (
 	"fmt"
+	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 	"strings"
 	"sync"
 	"time"
@@ -470,4 +471,23 @@ func (qi *QueueInfo) CheckAdminAccess(user security.UserGroup) bool {
 		allow = qi.Parent.CheckAdminAccess(user)
 	}
 	return allow
+}
+
+func (qi *QueueInfo) GetQueueInfos() dao.QueueDAOInfo {
+	qi.RLock()
+	defer qi.RUnlock()
+	queueInfo := dao.QueueDAOInfo{}
+	queueInfo.QueueName = qi.Name
+	queueInfo.Status = qi.stateMachine.Current()
+	queueInfo.Capacities = dao.QueueCapacity{
+		Capacity:        checkAndSetResource(qi.GetGuaranteedResource()),
+		MaxCapacity:     checkAndSetResource(qi.GetMaxResource()),
+		UsedCapacity:    checkAndSetResource(qi.GetAllocatedResource()),
+		AbsUsedCapacity: checkAndSetResource(resources.CalculateAbsUsedCapacity(
+			qi.GetMaxResource(), qi.GetAllocatedResource())),
+	}
+	for _, child := range qi.children {
+		queueInfo.ChildQueues = append(queueInfo.ChildQueues, child.GetQueueInfos())
+	}
+	return queueInfo
 }

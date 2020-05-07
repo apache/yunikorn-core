@@ -36,7 +36,6 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
-	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -716,45 +715,6 @@ func checkAndSetResource(resource *resources.Resource) string {
 		return strings.Trim(resource.String(), "map")
 	}
 	return "[]"
-}
-
-func calculateAbsUsedCapacity(capacity *resources.Resource, usedCapacity *resources.Resource) *resources.Resource {
-	if capacity == nil {
-		return nil
-	}
-	if usedCapacity == nil {
-		return resources.NewResource()
-	}
-	absResource := make(map[string]resources.Quantity)
-	for resourceName, availableResource := range capacity.Resources {
-		var absResValue float32
-		if availableResource != 0 {
-			if usedResource, ok := usedCapacity.Resources[resourceName]; ok {
-				absResValue = float32(usedResource) / float32(availableResource) * 100
-			}
-		}
-		absResource[resourceName] = resources.Quantity(absResValue)
-	}
-	return resources.NewResourceFromMap(absResource)
-}
-
-func (qi *QueueInfo) GetQueueInfos() dao.QueueDAOInfo {
-	qi.RLock()
-	defer qi.RUnlock()
-	queueInfo := dao.QueueDAOInfo{}
-	queueInfo.QueueName = qi.Name
-	queueInfo.Status = qi.stateMachine.Current()
-	queueInfo.Capacities = dao.QueueCapacity{
-		Capacity:        checkAndSetResource(qi.GetGuaranteedResource()),
-		MaxCapacity:     checkAndSetResource(qi.GetMaxResource()),
-		UsedCapacity:    checkAndSetResource(qi.GetAllocatedResource()),
-		AbsUsedCapacity: checkAndSetResource(calculateAbsUsedCapacity(
-			qi.GetMaxResource(), qi.GetAllocatedResource())),
-	}
-	for _, child := range qi.children {
-		queueInfo.ChildQueues = append(queueInfo.ChildQueues, child.GetQueueInfos())
-	}
-	return queueInfo
 }
 
 func (pi *PartitionInfo) GetTotalApplicationCount() int {

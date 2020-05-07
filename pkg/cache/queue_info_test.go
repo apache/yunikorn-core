@@ -19,7 +19,11 @@
 package cache
 
 import (
+	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
+	assert2 "github.com/stretchr/testify/assert"
+	"gotest.tools/assert"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
@@ -367,5 +371,70 @@ func TestMaxResource(t *testing.T) {
 	root.setMaxResource(res)
 	if !resources.Equals(res, root.GetMaxResource()) {
 		t.Errorf("root max setting not picked up by parent queue expected %v, got %v", res, parent.GetMaxResource())
+	}
+}
+
+func TestGetQueueInfos(t *testing.T) {
+	root, err := createRootQueue()
+	if err != nil {
+		t.Fatalf("failed to create basic root queue: %v", err)
+	}
+	rootMax, err := resources.NewResourceFromConf(map[string]string{"memory": "2048", "vcores": "10"})
+	root.setMaxResource(rootMax)
+
+	var parent *QueueInfo
+	parentUsed, err := resources.NewResourceFromConf(map[string]string{"memory": "1012", "vcores": "2"})
+	parent, err = createManagedQueue(root, "parent", true)
+	if err != nil {
+		t.Fatalf("failed to create parent queue: %v", err)
+	}
+	parent.IncAllocatedResource(parentUsed, false)
+
+	var child1 *QueueInfo
+	child1used, err := resources.NewResourceFromConf(map[string]string{"memory": "1012", "vcores": "2"})
+	child1, err = createManagedQueue(parent, "child1", true)
+	if err != nil {
+		t.Fatalf("failed to create child queue: %v", err)
+	}
+	child1.IncAllocatedResource(child1used, false)
+	var child2 *QueueInfo
+	child2, err = createManagedQueue(parent, "child2", true)
+	if err != nil {
+		t.Fatalf("failed to create child queue: %v", err)
+	}
+	child2.setMaxResource(resources.NewResource())
+
+	rootDaoInfo := root.GetQueueInfos()
+
+	compareQueueInfoWithDAO(t, root, rootDaoInfo)
+	parentDaoInfo := rootDaoInfo.ChildQueues[0]
+	compareQueueInfoWithDAO(t, parent, parentDaoInfo)
+	for _, childDao := range parentDaoInfo.ChildQueues {
+		name := childDao.QueueName
+		child := parent.children[name]
+		assert2.NotNil(t, child)
+		compareQueueInfoWithDAO(t, child, childDao)
+	}
+}
+
+func compareQueueInfoWithDAO(t *testing.T, queueInfo *QueueInfo, dao dao.QueueDAOInfo) {
+	assert.Equal(t, queueInfo.Name, dao.QueueName)
+	assert.Equal(t, len(queueInfo.children), len(dao.ChildQueues))
+	assert.Equal(t, queueInfo.stateMachine.Current(), dao.Status)
+	emptyRes := "[]"
+	if queueInfo.allocatedResource == nil {
+		assert.Equal(t, emptyRes, dao.Capacities.UsedCapacity)
+	} else {
+		assert.Equal(t, strings.Trim(queueInfo.allocatedResource.String(), "map"), dao.Capacities.UsedCapacity)
+	}
+	if queueInfo.maxResource == nil {
+		assert.Equal(t, emptyRes, dao.Capacities.MaxCapacity)
+	} else {
+		assert.Equal(t, strings.Trim(queueInfo.maxResource.String(), "map"), dao.Capacities.MaxCapacity)
+	}
+	if queueInfo.guaranteedResource == nil {
+		assert.Equal(t, emptyRes, dao.Capacities.Capacity)
+	} else {
+		assert.Equal(t, strings.Trim(queueInfo.guaranteedResource.String(), "map"), dao.Capacities.Capacity)
 	}
 }

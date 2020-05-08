@@ -68,3 +68,44 @@ func NewNodeSortingPolicy(policyType string) *NodeSortingPolicy {
 		zap.String("type", pType.String()))
 	return sp
 }
+
+type NewNodeScorerFunc func(conf map[string]interface{}) (interface{}, error)
+type NewNodeSortingAlgorithmFunc func(conf map[string]interface{}) (interface{}, error)
+
+var (
+	NodeScorerMakers           = make(map[string]NewNodeScorerFunc)
+	NodeSortingAlgorithmMakers = make(map[string]NewNodeSortingAlgorithmFunc)
+)
+
+func RegisterNodeScorerMaker(name string, newNodeScorerFunc NewNodeScorerFunc) {
+	NodeScorerMakers[name] = newNodeScorerFunc
+}
+
+func RegisterNodeSortingAlgorithmMaker(name string, newNodeSortingAlgorithmFunc NewNodeSortingAlgorithmFunc) {
+	NodeSortingAlgorithmMakers[name] = newNodeSortingAlgorithmFunc
+}
+
+func GetNodeScorerOrFactory(name string, conf map[string]interface{}) (interface{}, error) {
+	scorerMaker := NodeScorerMakers[name]
+	if scorerMaker == nil {
+		return nil, fmt.Errorf("node scorer '%s' not found", name)
+	}
+	scorer, err := scorerMaker(conf)
+	if err != nil {
+		return nil, err
+	}
+	return scorer, nil
+}
+
+func GetNodeSortingAlgorithm(name string, conf map[string]interface{}) (interface{}, error) {
+	nodeSortingAlgoMaker := NodeSortingAlgorithmMakers[name]
+	if nodeSortingAlgoMaker == nil {
+		return nil, fmt.Errorf("node sorting algorithm '%s' not found", name)
+	}
+	algorithm, err := nodeSortingAlgoMaker(conf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize node sorting algorithm %s: %s",
+			name, err.Error())
+	}
+	return algorithm, nil
+}

@@ -45,12 +45,14 @@ type SchedulerConfig struct {
 // - a list of users specifying limits on the partition
 // - the preemption configuration for the partition
 type PartitionConfig struct {
-	Name           string
-	Queues         []QueueConfig
-	PlacementRules []PlacementRule           `yaml:",omitempty" json:",omitempty"`
-	Limits         []Limit                   `yaml:",omitempty" json:",omitempty"`
-	Preemption     PartitionPreemptionConfig `yaml:",omitempty" json:",omitempty"`
-	NodeSortPolicy NodeSortingPolicy         `yaml:",omitempty" json:",omitempty"`
+	Name              string
+	Queues            []QueueConfig
+	PlacementRules    []PlacementRule            `yaml:",omitempty" json:",omitempty"`
+	Limits            []Limit                    `yaml:",omitempty" json:",omitempty"`
+	Preemption        PartitionPreemptionConfig  `yaml:",omitempty" json:",omitempty"`
+	NodeSortPolicy    NodeSortingPolicy          `yaml:",omitempty" json:",omitempty"`
+	NodeEvaluator     NodeEvaluatorConfig        `yaml:",omitempty" json:",omitempty"`
+	NodeSortAlgorithm NodeSortingAlgorithmConfig `yaml:",omitempty" json:",omitempty"`
 }
 
 type PartitionPreemptionConfig struct {
@@ -136,6 +138,25 @@ type Limit struct {
 // - type: different type of policies supported (binpacking, fair etc)
 type NodeSortingPolicy struct {
 	Type string
+}
+
+// The node evaluator config
+type NodeEvaluatorConfig struct {
+	ScorerConfigs []*NodeScorerConfig
+}
+
+// The scorer config
+type NodeScorerConfig struct {
+	ScorerName string
+	Weight     int64
+	Conf       map[string]interface{} `yaml:",omitempty" json:",omitempty"`
+	Scorer     interface{}            `yaml:",omitempty" json:",omitempty"`
+}
+
+type NodeSortingAlgorithmConfig struct {
+	Name      string
+	Conf      map[string]interface{} `yaml:",omitempty" json:",omitempty"`
+	Algorithm interface{}            `yaml:",omitempty" json:",omitempty"`
 }
 
 type LoadSchedulerConfigFunc func(policyGroup string) (*SchedulerConfig, error)

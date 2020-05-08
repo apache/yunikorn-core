@@ -21,8 +21,11 @@ package tests
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 
 	"go.uber.org/zap"
 	"gotest.tools/assert"
@@ -33,7 +36,7 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
-func benchmarkScheduling(b *testing.B, numNodes, numPods int) {
+func benchmarkScheduling(b *testing.B, numNodes, numPods int, nodeSortingAlgorithmName string) {
 	log.InitAndSetLevel(zap.InfoLevel)
 	// Start all tests
 	serviceContext := entrypoint.StartAllServices()
@@ -45,6 +48,8 @@ func benchmarkScheduling(b *testing.B, numNodes, numPods int) {
 partitions:
   -
     name: default
+    nodesortalgorithm:
+      name: $ALGORITHM_NAME
     queues:
       - name: root
         submitacl: "*"
@@ -60,6 +65,7 @@ partitions:
                 memory: 1000000
                 vcore: 10000
 `
+	configData = strings.Replace(configData, "$ALGORITHM_NAME", nodeSortingAlgorithmName, 1)
 	configs.MockSchedulerConfigByData([]byte(configData))
 	mockRM := NewMockRMCallbackHandler()
 
@@ -182,10 +188,16 @@ func BenchmarkScheduling(b *testing.B) {
 		{numNodes: 2000, numPods: 10000},
 		{numNodes: 5000, numPods: 10000},
 	}
-	for _, test := range tests {
-		name := fmt.Sprintf("%vNodes/%vPods", test.numNodes, test.numPods)
-		b.Run(name, func(b *testing.B) {
-			benchmarkScheduling(b, test.numNodes, test.numPods)
-		})
+	nodeSortingAlgorithmNames := []string{
+		scheduler.DefaultNodeSortingAlgorithmName,
+		scheduler.IncrementalNodeSortingAlgorithmName,
+	}
+	for _, nodeSortingAlgorithmName := range nodeSortingAlgorithmNames {
+		for _, test := range tests {
+			name := fmt.Sprintf("Algorithm:%s/%vNodes/%vPods", nodeSortingAlgorithmName, test.numNodes, test.numPods)
+			b.Run(name, func(b *testing.B) {
+				benchmarkScheduling(b, test.numNodes, test.numPods, nodeSortingAlgorithmName)
+			})
+		}
 	}
 }

@@ -23,11 +23,13 @@ import (
 	"fmt"
 	"io/ioutil"
 	"path"
+	"strings"
 	"testing"
 
+	"gopkg.in/yaml.v2"
 	"gotest.tools/assert"
 
-	"gopkg.in/yaml.v2"
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
 )
 
 func TestConfigSerdeQueues(t *testing.T) {
@@ -1123,4 +1125,237 @@ partitions:
 	if err == nil {
 		t.Errorf("limit parsing should have failed group @: %v", conf)
 	}
+}
+
+func TestNodeSortingAlgorithm(t *testing.T) {
+	// node sorting algorithm is not configured
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+`
+	// validate the config and check after the update
+	conf, err := CreateConfig(data)
+	assert.NilError(t, err, "node sorting algorithm parsing should not have failed")
+	nodeSortAlgorithm := conf.Partitions[0].NodeSortAlgorithm
+	assert.Equal(t, nodeSortAlgorithm.Name, "",
+		"incorrect name, expected '' got '%v'", nodeSortAlgorithm.Name)
+
+	// node sorting algorithm is configured with name
+	common.RegisterNodeSortingAlgorithmMaker("test", func(conf map[string]interface{}) (interface{}, error) {
+		return "test-algo", nil
+	})
+	data = `
+partitions:
+  - name: default
+    nodesortalgorithm:
+      name: test
+    queues:
+      - name: root
+`
+	// validate the config and check after the update
+	conf, err = CreateConfig(data)
+	assert.NilError(t, err, "node sorting algorithm parsing should not have failed")
+	nodeSortAlgorithm = conf.Partitions[0].NodeSortAlgorithm
+	assert.Equal(t, nodeSortAlgorithm.Name, "test",
+		"incorrect name, expected 'test' got '%v'", nodeSortAlgorithm.Name)
+	assert.Equal(t, nodeSortAlgorithm.Algorithm, "test-algo",
+		"incorrect algorithm, expected 'test' got '%v'", nodeSortAlgorithm.Name)
+	assert.Assert(t, nodeSortAlgorithm.Conf == nil,
+		"incorrect conf, expected nil got '%v'", nodeSortAlgorithm.Conf)
+
+	// node sorting algorithm is configured with name and conf
+	data = `
+partitions:
+  - name: default
+    nodesortalgorithm:
+      name: test
+      conf:
+        k1: v1
+        k2: 2
+    queues:
+      - name: root
+`
+	// validate the config and check after the update
+	conf, err = CreateConfig(data)
+	assert.NilError(t, err, "node sorting algorithm parsing should not have failed")
+	nodeSortAlgorithm = conf.Partitions[0].NodeSortAlgorithm
+	assert.Equal(t, nodeSortAlgorithm.Name, "test",
+		"incorrect name, expected 'test' got '%v'", nodeSortAlgorithm.Name)
+	assert.Equal(t, nodeSortAlgorithm.Algorithm, "test-algo",
+		"incorrect algorithm, expected 'test' got '%v'", nodeSortAlgorithm.Name)
+	assert.DeepEqual(t, nodeSortAlgorithm.Conf, map[string]interface{}{"k1": "v1", "k2": 2})
+}
+
+func TestNodeSortingAlgorithmFail(t *testing.T) {
+	// node sorting algorithm is configured with invalid name
+	data := `
+partitions:
+  - name: default
+    nodesortalgorithm:
+      name: invalid
+    queues:
+      - name: root
+`
+	// validate the config and check after the update
+	_, err := CreateConfig(data)
+	assert.Error(t, err, "node sorting algorithm 'invalid' not found")
+
+	// node sorting algorithm is configured with wrong format
+	data = `
+partitions:
+  - name: default
+    nodesortalgorithm:
+      name: test
+      conf: incorrect
+    queues:
+      - name: root
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.Assert(t, err != nil)
+	assert.Assert(t, strings.HasSuffix(err.Error(), "cannot unmarshal !!str `incorrect` into map[string]interface {}"))
+}
+
+func TestNodeEvaluator(t *testing.T) {
+	// node evaluator is not configured
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+`
+	// validate the config and check after the update
+	conf, err := CreateConfig(data)
+	assert.NilError(t, err, "node evaluator parsing should not have failed")
+	nodeEvaluator := conf.Partitions[0].NodeEvaluator
+	assert.Assert(t, nodeEvaluator.ScorerConfigs == nil,
+		"expected nil scorer configs but got '%+v'", nodeEvaluator.ScorerConfigs)
+
+	// node sorting algorithm is configured with 1 scorer config including scorer name
+	common.RegisterNodeScorerMaker("TestScorer1", func(conf map[string]interface{}) (interface{}, error) {
+		return "test-scorer-1", nil
+	})
+	data = `
+partitions:
+  - name: default
+    nodeevaluator:
+      scorerconfigs:
+        - scorername: TestScorer1
+    queues:
+      - name: root
+`
+	// validate the config and check after the update
+	conf, err = CreateConfig(data)
+	assert.NilError(t, err, "node evaluator parsing should not have failed")
+	nodeScorerConfig := conf.Partitions[0].NodeEvaluator.ScorerConfigs[0]
+	assert.Equal(t, nodeScorerConfig.ScorerName, "TestScorer1",
+		"incorrect name, expected 'TestScorer1' got '%v'", nodeScorerConfig.ScorerName)
+	assert.Equal(t, nodeScorerConfig.Scorer, "test-scorer-1",
+		"incorrect scorer, expected 'test-scorer-1' got '%v'", nodeScorerConfig.Scorer)
+	assert.Assert(t, nodeScorerConfig.Conf == nil,
+		"incorrect conf, expected nil got '%v'", nodeScorerConfig.Conf)
+	// weight should be updated from 0 to 1 by default
+	assert.Equal(t, nodeScorerConfig.Weight, int64(1),
+		"incorrect weight, expected 1 got %v", nodeScorerConfig.Weight)
+
+	// node evaluator is configured with 1 scorer config including scorer name, conf and weight
+	common.RegisterNodeScorerMaker("TestScorer2", func(conf map[string]interface{}) (interface{}, error) {
+		return "test-scorer-2", nil
+	})
+	data = `
+partitions:
+  - name: default
+    nodeevaluator:
+      scorerconfigs:
+        - scorername: TestScorer2
+          conf: {"k1":"v1", "k2":2}
+          weight: 3
+    queues:
+      - name: root
+`
+	// validate the config and check after the update
+	conf, err = CreateConfig(data)
+	assert.NilError(t, err, "node evaluator parsing should not have failed")
+	nodeScorerConfig = conf.Partitions[0].NodeEvaluator.ScorerConfigs[0]
+	assert.Equal(t, nodeScorerConfig.ScorerName, "TestScorer2",
+		"incorrect name, expected 'TestScorer2' got '%v'", nodeScorerConfig.ScorerName)
+	assert.Equal(t, nodeScorerConfig.Scorer, "test-scorer-2",
+		"incorrect scorer, expected 'test-scorer-2' got '%v'", nodeScorerConfig.Scorer)
+	assert.DeepEqual(t, nodeScorerConfig.Conf, map[string]interface{}{"k1": "v1", "k2": 2})
+	assert.Equal(t, nodeScorerConfig.Weight, int64(3),
+		"incorrect weight, expected 3 got %v", nodeScorerConfig.Weight)
+
+	// node evaluator is configured with 2 scorer configs
+	data = `
+partitions:
+  - name: default
+    nodeevaluator:
+      scorerconfigs:
+        - scorername: TestScorer1
+          conf: {"k1":"v1", "k2":2}
+          weight: 1
+        - scorername: TestScorer2
+          weight: 2
+    queues:
+      - name: root
+`
+	// validate the configs and check after the update
+	conf, err = CreateConfig(data)
+	assert.NilError(t, err, "node evaluator parsing should not have failed")
+	// validate the first scorer config
+	nodeScorerConfig = conf.Partitions[0].NodeEvaluator.ScorerConfigs[0]
+	assert.Equal(t, nodeScorerConfig.ScorerName, "TestScorer1",
+		"incorrect name, expected 'TestScorer1' got '%v'", nodeScorerConfig.ScorerName)
+	assert.Equal(t, nodeScorerConfig.Scorer, "test-scorer-1",
+		"incorrect scorer, expected 'test-scorer-1' got '%v'", nodeScorerConfig.Scorer)
+	assert.DeepEqual(t, nodeScorerConfig.Conf, map[string]interface{}{"k1": "v1", "k2": 2})
+	assert.Equal(t, nodeScorerConfig.Weight, int64(1),
+		"incorrect weight, expected 1 got %v", nodeScorerConfig.Weight)
+	// validate the second scorer config
+	nodeScorerConfig = conf.Partitions[0].NodeEvaluator.ScorerConfigs[1]
+	assert.Equal(t, nodeScorerConfig.ScorerName, "TestScorer2",
+		"incorrect name, expected 'TestScorer2' got '%v'", nodeScorerConfig.ScorerName)
+	assert.Equal(t, nodeScorerConfig.Scorer, "test-scorer-2",
+		"incorrect scorer, expected 'test-scorer-2' got '%v'", nodeScorerConfig.Scorer)
+	assert.Assert(t, nodeScorerConfig.Conf == nil,
+		"incorrect conf, expected nil got '%+v'", nodeScorerConfig.Conf)
+	assert.Equal(t, nodeScorerConfig.Weight, int64(2),
+		"incorrect weight, expected 2 got %v", nodeScorerConfig.Weight)
+}
+
+func TestNodeEvaluatorFail(t *testing.T) {
+	// node evaluator is configured with invalid scorer name
+	data := `
+partitions:
+  - name: default
+    nodeevaluator:
+      scorerconfigs:
+        - scorername: invalid
+    queues:
+      - name: root
+`
+	// validate the config and check after the update
+	_, err := CreateConfig(data)
+	assert.Error(t, err, "node scorer 'invalid' not found")
+
+	// node sorting algorithm is configured with 1 scorer config including incorrect conf
+	common.RegisterNodeScorerMaker("TestScorer1", func(conf map[string]interface{}) (interface{}, error) {
+		return "test-scorer-1", nil
+	})
+	data = `
+partitions:
+  - name: default
+    nodeevaluator:
+      scorerconfigs:
+        - scorername: TestScorer1
+          conf: 'invalid'
+    queues:
+      - name: root
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.Assert(t, err != nil)
+	assert.Assert(t, strings.HasSuffix(err.Error(), "cannot unmarshal !!str `invalid` into map[string]interface {}"))
 }

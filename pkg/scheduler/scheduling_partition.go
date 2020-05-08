@@ -20,8 +20,11 @@ package scheduler
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
+
+	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 
 	"go.uber.org/zap"
 
@@ -38,13 +41,16 @@ type partitionSchedulingContext struct {
 	Name string // name of the partition (logging mainly)
 
 	// Private fields need protection
-	partition        *cache.PartitionInfo              // link back to the partition in the cache
-	root             *SchedulingQueue                  // start of the scheduling queue hierarchy
-	applications     map[string]*SchedulingApplication // applications assigned to this partition
-	reservedApps     map[string]int                    // applications reserved within this partition, with reservation count
-	nodes            map[string]*SchedulingNode        // nodes assigned to this partition
-	placementManager *placement.AppPlacementManager    // placement manager for this partition
-	partitionManager *partitionManager                 // manager for this partition
+	partition            *cache.PartitionInfo              // link back to the partition in the cache
+	root                 *SchedulingQueue                  // start of the scheduling queue hierarchy
+	applications         map[string]*SchedulingApplication // applications assigned to this partition
+	reservedApps         map[string]int                    // applications reserved within this partition, with reservation count
+	nodes                map[string]*SchedulingNode        // nodes assigned to this partition
+	placementManager     *placement.AppPlacementManager    // placement manager for this partition
+	partitionManager     *partitionManager                 // manager for this partition
+	nodeSortingAlgorithm NodeSortingAlgorithm              // node sorting algorithm for this partition
+	nodeEvaluator        NodeEvaluator                     // node evaluator for this partition
+	subjectManager       *SubjectManager                   // subject manager for this partition
 
 	sync.RWMutex
 }
@@ -65,7 +71,40 @@ func newPartitionSchedulingContext(info *cache.PartitionInfo, root *SchedulingQu
 		partition:    info,
 	}
 	psc.placementManager = placement.NewPlacementManager(info)
+	// init subject manager
+	psc.subjectManager = NewSubjectManager()
+	// init node evaluator
+	nodeEvaluatorConfig := info.GetNodeEvaluator()
+	psc.nodeEvaluator = NewDefaultNodeEvaluator(nodeEvaluatorConfig)
+	// init node sorting algorithm
+	nodeSortingAlgoConfig := psc.partition.GetNodeSortingAlgorithm()
+	psc.nodeSortingAlgorithm = getNodeSortingAlgorithm(nodeSortingAlgoConfig)
+	psc.nodeSortingAlgorithm.init(psc)
+	log.Logger().Info("node sorting algorithm initialized",
+		zap.Any("type", reflect.TypeOf(psc.nodeSortingAlgorithm)))
 	return psc
+}
+
+func getNodeSortingAlgorithm(config *configs.NodeSortingAlgorithmConfig) NodeSortingAlgorithm {
+	if config != nil && config.Algorithm != nil {
+		if algorithm, ok := config.Algorithm.(NodeSortingAlgorithm); ok {
+			return algorithm
+		}
+	}
+	// return default algorithm by default
+	return &DefaultNodeSortingAlgorithm{}
+}
+
+func getDefaultNodeScorerConfigs() []*configs.NodeScorerConfig {
+	scorer, _ := common.GetNodeScorerOrFactory(DominantResourceUsageScorerName, nil)
+	scorerConfigs := []*configs.NodeScorerConfig{
+		{
+			ScorerName: DominantResourceUsageScorerName,
+			Weight:     1,
+			Scorer:     scorer,
+		},
+	}
+	return scorerConfigs
 }
 
 // Update the scheduling partition based on the reloaded config.
@@ -305,7 +344,11 @@ func (psc *partitionSchedulingContext) addSchedulingNode(info *cache.NodeInfo) {
 			zap.String("nodeID", info.NodeID))
 	}
 	// add the node, this will also get the sync back between the two lists
-	psc.nodes[info.NodeID] = newSchedulingNode(info)
+	schedulingNode := newSchedulingNode(info)
+	schedulingNode.setSubjectManager(psc.subjectManager)
+	psc.nodes[info.NodeID] = schedulingNode
+	// notify ADD event for node subject
+	psc.subjectManager.NotifyEvent(NodeSubject, &NodeSubjectAddEvent{node: schedulingNode})
 }
 
 func (psc *partitionSchedulingContext) updateSchedulingNode(info *cache.NodeInfo) {
@@ -353,6 +396,8 @@ func (psc *partitionSchedulingContext) removeSchedulingNode(nodeID string) {
 	for _, appID := range reservedKeys {
 		psc.unReserveCount(appID, 1)
 	}
+	// notify ADD event for node subject
+	psc.subjectManager.NotifyEvent(NodeSubject, &NodeSubjectRemoveEvent{nodeID: nodeID})
 }
 
 // Try regular allocation for the partition
@@ -363,7 +408,8 @@ func (psc *partitionSchedulingContext) tryAllocate() *schedulingAllocation {
 		return nil
 	}
 	// try allocating from the root down
-	return psc.root.tryAllocate(psc)
+	alloc := psc.root.tryAllocate(psc)
+	return alloc
 }
 
 // Try process reservations for the partition
@@ -373,7 +419,8 @@ func (psc *partitionSchedulingContext) tryReservedAllocate() *schedulingAllocati
 		return nil
 	}
 	// try allocating from the root down
-	return psc.root.tryReservedAllocate(psc)
+	alloc := psc.root.tryReservedAllocate(psc)
+	return alloc
 }
 
 // Process the allocation and make the changes in the partition.
@@ -566,11 +613,9 @@ func (psc *partitionSchedulingContext) getNodeIteratorForPolicy(nodes []*Schedul
 
 // Create a node iterator for the schedulable nodes based on the policy set for this partition.
 // The iterator is nil if there are no schedulable nodes available.
-func (psc *partitionSchedulingContext) getNodeIterator() NodeIterator {
-	if nodeList := psc.getSchedulableNodes(); len(nodeList) != 0 {
-		return psc.getNodeIteratorForPolicy(nodeList)
-	}
-	return nil
+func (psc *partitionSchedulingContext) getNodeIterator(request *schedulingAllocationAsk) NodeIterator {
+	nodeIt := psc.nodeSortingAlgorithm.getNodeIterator(request)
+	return nodeIt
 }
 
 // Locked version of the reservation counter update

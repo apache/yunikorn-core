@@ -246,6 +246,44 @@ func checkNodeSortingPolicy(partition *PartitionConfig) error {
 	return err
 }
 
+// Check for node sorting algorithm
+func checkAndInitNodeSortingAlgorithm(partition *PartitionConfig) error {
+	if partition.NodeSortAlgorithm.Name == "" {
+		log.Logger().Info("skip initializing node sorting algorithm without specified name")
+		return nil
+	}
+	algorithm, err := common.GetNodeSortingAlgorithm(partition.NodeSortAlgorithm.Name, partition.NodeSortAlgorithm.Conf)
+	if err != nil {
+		return err
+	}
+	partition.NodeSortAlgorithm.Algorithm = algorithm
+	log.Logger().Info("node sorting algorithm created",
+		zap.Any("name", partition.NodeSortAlgorithm.Name))
+	return nil
+}
+
+// Check for node evaluator
+func checkAndInitNodeEvaluator(partition *PartitionConfig) error {
+	if len(partition.NodeEvaluator.ScorerConfigs) == 0 {
+		log.Logger().Info("skip initializing node evaluator without specified configs")
+		return nil
+	}
+	for _, sc := range partition.NodeEvaluator.ScorerConfigs {
+		if sc.Weight == 0 {
+			sc.Weight = 1
+			log.Logger().Info("weight in scorer config has been updated from 0 to 1 by default",
+				zap.Any("config", sc))
+		}
+		nodeScorer, err := common.GetNodeScorerOrFactory(sc.ScorerName, sc.Conf)
+		if err != nil {
+			return err
+		}
+		sc.Scorer = nodeScorer
+	}
+	log.Logger().Info("node evaluator initialized", zap.Any("config", partition.NodeEvaluator))
+	return nil
+}
+
 // Check the queue names configured for compliance and uniqueness
 // - no duplicate names at each branched level in the tree
 // - queue name is alphanumeric (case ignore) with - and _
@@ -387,6 +425,14 @@ func Validate(newConfig *SchedulerConfig) error {
 			return err
 		}
 		err = checkNodeSortingPolicy(&partition)
+		if err != nil {
+			return err
+		}
+		err = checkAndInitNodeSortingAlgorithm(&partition)
+		if err != nil {
+			return err
+		}
+		err = checkAndInitNodeEvaluator(&partition)
 		if err != nil {
 			return err
 		}

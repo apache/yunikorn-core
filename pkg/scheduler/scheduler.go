@@ -219,6 +219,14 @@ func (s *Scheduler) processAllocationReleaseByAllocationKey(allocationAsksToRele
 						toReleaseAllocations = append(toReleaseAllocations, &si.ForgotAllocation{
 							AllocationKey: alloc.AllocationProto.AllocationKey,
 						})
+						// notify scheduling node resource of this node has been updated
+						partitionContext := s.clusterSchedulingContext.getPartition(toRelease.PartitionName)
+						if partitionContext != nil && partitionContext.subjectManager != nil {
+							schedulingNode := partitionContext.getSchedulingNode(alloc.AllocationProto.NodeID)
+							if schedulingNode != nil {
+								schedulingNode.nodeResourceUpdated()
+							}
+						}
 					}
 				}
 			}

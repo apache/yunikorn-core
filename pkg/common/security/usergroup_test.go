@@ -22,6 +22,8 @@ import (
 	"strings"
 	"testing"
 
+	"gotest.tools/assert"
+
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -45,9 +47,7 @@ func TestGetUserGroup(t *testing.T) {
 	}
 
 	ug, err := testCache.GetUserGroup("testuser1")
-	if err != nil {
-		t.Fatal("Lookup should not have failed: testuser1")
-	}
+	assert.NilError(t, err, "Lookup should not have failed: testuser1")
 	if ug.failed {
 		t.Errorf("lookup failed which should not have: %t", ug.failed)
 	}

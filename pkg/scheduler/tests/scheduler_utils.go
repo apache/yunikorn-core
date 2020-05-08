@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
@@ -66,27 +67,21 @@ func waitForPendingAppResource(t *testing.T, app *scheduler.SchedulingApplicatio
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		return app.GetPendingResource().Resources[resources.MEMORY] == memory
 	})
-	if err != nil {
-		t.Fatalf("Failed to wait for pending resource, expected %v, actual %v, called from: %s", memory, app.GetPendingResource().Resources[resources.MEMORY], caller())
-	}
+	assert.NilError(t, err, "Failed to wait for pending resource, expected %v, actual %v, called from: %s", memory, app.GetPendingResource().Resources[resources.MEMORY], caller())
 }
 
 func waitForAllocatedAppResource(t *testing.T, app *scheduler.SchedulingApplication, memory resources.Quantity, timeoutMs int) {
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		return app.GetAllocatedResource().Resources[resources.MEMORY] == memory
 	})
-	if err != nil {
-		t.Fatalf("Failed to wait for pending resource, expected %v, actual %v, called from: %s", memory, app.GetPendingResource().Resources[resources.MEMORY], caller())
-	}
+	assert.NilError(t, err, "Failed to wait for pending resource, expected %v, actual %v, called from: %s", memory, app.GetPendingResource().Resources[resources.MEMORY], caller())
 }
 
 func waitForAllocatedQueueResource(t *testing.T, queue *scheduler.SchedulingQueue, memory resources.Quantity, timeoutMs int) {
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		return queue.GetAllocatedResource().Resources[resources.MEMORY] == memory
 	})
-	if err != nil {
-		t.Fatalf("Failed to wait for allocations on queue %s, called from: %s", queue.Name, caller())
-	}
+	assert.NilError(t, err, "Failed to wait for allocations on queue %s, called from: %s", queue.Name, caller())
 }
 
 func waitForNodesAllocatedResource(t *testing.T, cache *cache.ClusterInfo, partitionName string, nodeIDs []string, allocatedMemory resources.Quantity, timeoutMs int) {
@@ -98,9 +93,7 @@ func waitForNodesAllocatedResource(t *testing.T, cache *cache.ClusterInfo, parti
 		}
 		return totalNodeResource == allocatedMemory
 	})
-	if err != nil {
-		t.Fatalf("Failed to wait for allocations on partition %s and node %v, called from: %s", partitionName, nodeIDs, caller())
-	}
+	assert.NilError(t, err, "Failed to wait for allocations on partition %s and node %v, called from: %s", partitionName, nodeIDs, caller())
 }
 
 func waitForNodesAvailableResource(t *testing.T, cache *cache.ClusterInfo, partitionName string, nodeIDs []string, availableMemory resources.Quantity, timeoutMs int) {
@@ -112,9 +105,7 @@ func waitForNodesAvailableResource(t *testing.T, cache *cache.ClusterInfo, parti
 		}
 		return totalNodeResource == availableMemory
 	})
-	if err != nil {
-		t.Fatalf("Failed to wait for available resource %v and node %v, called from: %s", availableMemory, nodeIDs, caller())
-	}
+	assert.NilError(t, err, "Failed to wait for available resource %v and node %v, called from: %s", availableMemory, nodeIDs, caller())
 }
 
 func waitForNewSchedulerNode(t *testing.T, context *scheduler.ClusterSchedulingContext, nodeID string, partitionName string, timeoutMs int) {
@@ -122,9 +113,7 @@ func waitForNewSchedulerNode(t *testing.T, context *scheduler.ClusterSchedulingC
 		node := context.GetSchedulingNode(nodeID, partitionName)
 		return node != nil
 	})
-	if err != nil {
-		t.Fatalf("Failed to wait for new scheduling node on partition %s, node %v, called from: %s", partitionName, nodeID, caller())
-	}
+	assert.NilError(t, err, "Failed to wait for new scheduling node on partition %s, node %v, called from: %s", partitionName, nodeID, caller())
 }
 
 func waitForRemovedSchedulerNode(t *testing.T, context *scheduler.ClusterSchedulingContext, nodeID string, partitionName string, timeoutMs int) {
@@ -132,9 +121,7 @@ func waitForRemovedSchedulerNode(t *testing.T, context *scheduler.ClusterSchedul
 		node := context.GetSchedulingNode(nodeID, partitionName)
 		return node == nil
 	})
-	if err != nil {
-		t.Fatalf("Failed to wait for removal of scheduling node on partition %s, node %v, called from: %s", partitionName, nodeID, caller())
-	}
+	assert.NilError(t, err, "Failed to wait for removal of scheduling node on partition %s, node %v, called from: %s", partitionName, nodeID, caller())
 }
 
 func getApplicationInfoFromPartition(partitionInfo *cache.PartitionInfo, appID string) (*cache.ApplicationInfo, error) {

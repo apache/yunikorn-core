@@ -300,9 +300,7 @@ func TestNodeReservation(t *testing.T) {
 	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "app-1"})
 	var queue *SchedulingQueue
 	queue, err = createRootQueue(nil)
-	if err != nil {
-		t.Fatalf("queue create failed: %v", err)
-	}
+	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
 
 	// too large for node
@@ -371,9 +369,7 @@ func TestUnReserveApps(t *testing.T) {
 	ask := newAllocationAsk("alloc-1", "app-1", res)
 	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "app-1"})
 	queue, err := createRootQueue(nil)
-	if err != nil {
-		t.Fatalf("queue create failed: %v", err)
-	}
+	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
 	var delta *resources.Resource
 	delta, err = app.addAllocationAsk(ask)
@@ -421,9 +417,7 @@ func TestIsReservedForApp(t *testing.T) {
 	ask := newAllocationAsk("alloc-1", "app-1", res)
 	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "app-1"})
 	queue, err := createRootQueue(nil)
-	if err != nil {
-		t.Fatalf("queue create failed: %v", err)
-	}
+	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
 
 	// standalone reservation unreserve returns false as app is not reserved

@@ -109,9 +109,7 @@ func TestACLSpecialCase(t *testing.T) {
 
 func TestACLAccess(t *testing.T) {
 	acl, err := NewACL("user1,user2 group1,group2")
-	if err != nil {
-		t.Fatalf("parsing failed for string: 'user1,user2 group1,group2'")
-	}
+	assert.NilError(t, err, "parsing failed for string: 'user1,user2 group1,group2'")
 	user := UserGroup{User: "", Groups: nil}
 	assert.Assert(t, !acl.CheckAccess(user), "no user, should have been denied")
 	user = UserGroup{User: "user1", Groups: nil}
@@ -124,18 +122,14 @@ func TestACLAccess(t *testing.T) {
 	assert.Assert(t, !acl.CheckAccess(user), "user3/group3 should have been denied")
 
 	acl, err = NewACL("*")
-	if err != nil {
-		t.Fatalf("parsing failed for string: '*'")
-	}
+	assert.NilError(t, err, "parsing failed for string: '*'")
 	user = UserGroup{User: "", Groups: nil}
 	assert.Assert(t, acl.CheckAccess(user), "no user, wildcard should have been allowed")
 	user = UserGroup{User: "user1", Groups: []string{"group1"}}
 	assert.Assert(t, acl.CheckAccess(user), "user1/group1, wildcard should have been allowed")
 
 	acl, err = NewACL("")
-	if err != nil {
-		t.Fatalf("parsing failed for string: ''")
-	}
+	assert.NilError(t, err, "parsing failed for string: ''")
 	user = UserGroup{User: "", Groups: nil}
 	assert.Assert(t, !acl.CheckAccess(user), "no user, empty ACL always deny")
 	user = UserGroup{User: "user1", Groups: []string{"group1"}}

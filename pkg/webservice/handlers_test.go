@@ -71,9 +71,8 @@ partitions:
 		resp := &MockResponseWriter{}
 		validateConf(resp, req)
 		var vcr dao.ValidateConfResponse
-		if err := json.Unmarshal(resp.outputBytes, &vcr); err != nil {
-			t.Fatalf("failed to unmarshal ValidateConfResponse from response body: %s", string(resp.outputBytes))
-		}
+		err := json.Unmarshal(resp.outputBytes, &vcr)
+		assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
 		assert.Equal(t, vcr.Allowed, test.expectedResponse.Allowed)
 		assert.Equal(t, vcr.Reason, test.expectedResponse.Reason)
 	}
@@ -95,9 +94,8 @@ func TestApplicationHistory(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getApplicationHistory(resp, req)
 	var appHist []dao.ApplicationHistoryDAOInfo
-	if err := json.Unmarshal(resp.outputBytes, &appHist); err != nil {
-		t.Fatalf("failed to unmarshal app history response from response body: %s", string(resp.outputBytes))
-	}
+	err := json.Unmarshal(resp.outputBytes, &appHist)
+	assert.NilError(t, err, "failed to unmarshal app history response from response body: %s", string(resp.outputBytes))
 	assert.Equal(t, resp.statusCode, 0, "app response should have no status")
 	assert.Equal(t, len(appHist), 0, "empty response must have no records")
 
@@ -107,9 +105,8 @@ func TestApplicationHistory(t *testing.T) {
 	imHistory.Store(30, 0)
 	resp = &MockResponseWriter{}
 	getApplicationHistory(resp, req)
-	if err := json.Unmarshal(resp.outputBytes, &appHist); err != nil {
-		t.Fatalf("failed to unmarshal app history response from response body: %s", string(resp.outputBytes))
-	}
+	err = json.Unmarshal(resp.outputBytes, &appHist)
+	assert.NilError(t, err, "failed to unmarshal app history response from response body: %s", string(resp.outputBytes))
 	assert.Equal(t, resp.statusCode, 0, "app response should have no status")
 	assert.Equal(t, len(appHist), 3, "incorrect number of records returned")
 	assert.Equal(t, appHist[0].TotalApplications, "1", "metric 1 should be 1 apps and was not")
@@ -122,9 +119,8 @@ func TestApplicationHistory(t *testing.T) {
 	imHistory.Store(300, 0)
 	resp = &MockResponseWriter{}
 	getApplicationHistory(resp, req)
-	if err := json.Unmarshal(resp.outputBytes, &appHist); err != nil {
-		t.Fatalf("failed to unmarshal app history response from response body: %s", string(resp.outputBytes))
-	}
+	err = json.Unmarshal(resp.outputBytes, &appHist)
+	assert.NilError(t, err, "failed to unmarshal app history response from response body: %s", string(resp.outputBytes))
 	assert.Equal(t, resp.statusCode, 0, "app response should have no status")
 	assert.Equal(t, len(appHist), 5, "incorrect number of records returned")
 	assert.Equal(t, appHist[0].TotalApplications, "2", "metric 1 should be 1 apps and was not")
@@ -147,9 +143,8 @@ func TestContainerHistory(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getContainerHistory(resp, req)
 	var contHist []dao.ContainerHistoryDAOInfo
-	if err := json.Unmarshal(resp.outputBytes, &contHist); err != nil {
-		t.Fatalf("failed to unmarshal container history response from response body: %s", string(resp.outputBytes))
-	}
+	err := json.Unmarshal(resp.outputBytes, &contHist)
+	assert.NilError(t, err, "failed to unmarshal container history response from response body: %s", string(resp.outputBytes))
 	assert.Equal(t, resp.statusCode, 0, "container response should have no status")
 	assert.Equal(t, len(contHist), 0, "empty response must have no records")
 
@@ -159,9 +154,8 @@ func TestContainerHistory(t *testing.T) {
 	imHistory.Store(0, 30)
 	resp = &MockResponseWriter{}
 	getContainerHistory(resp, req)
-	if err := json.Unmarshal(resp.outputBytes, &contHist); err != nil {
-		t.Fatalf("failed to unmarshal container history response from response body: %s", string(resp.outputBytes))
-	}
+	err = json.Unmarshal(resp.outputBytes, &contHist)
+	assert.NilError(t, err, "failed to unmarshal container history response from response body: %s", string(resp.outputBytes))
 	assert.Equal(t, resp.statusCode, 0, "container response should have no status")
 	assert.Equal(t, len(contHist), 3, "incorrect number of records returned")
 	assert.Equal(t, contHist[0].TotalContainers, "1", "metric 1 should be 1 apps and was not")
@@ -174,9 +168,8 @@ func TestContainerHistory(t *testing.T) {
 	imHistory.Store(0, 300)
 	resp = &MockResponseWriter{}
 	getContainerHistory(resp, req)
-	if err := json.Unmarshal(resp.outputBytes, &contHist); err != nil {
-		t.Fatalf("failed to unmarshal container history response from response body: %s", string(resp.outputBytes))
-	}
+	err = json.Unmarshal(resp.outputBytes, &contHist)
+	assert.NilError(t, err, "failed to unmarshal container history response from response body: %s", string(resp.outputBytes))
 	assert.Equal(t, resp.statusCode, 0, "container response should have no status")
 	assert.Equal(t, len(contHist), 5, "incorrect number of records returned")
 	assert.Equal(t, contHist[0].TotalContainers, "2", "metric 1 should be 1 apps and was not")

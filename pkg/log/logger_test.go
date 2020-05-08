@@ -33,9 +33,7 @@ func TestIsNopLogger(t *testing.T) {
 	defer resetGlobals()
 
 	testLogger, err := zap.NewDevelopment()
-	if err != nil {
-		t.Fatalf("Dev logger init failed with error: %v", err)
-	}
+	assert.NilError(t, err, "Dev logger init failed with error")
 	assert.Equal(t, false, isNopLogger(testLogger))
 
 	testLogger = zap.NewNop()
@@ -45,9 +43,7 @@ func TestIsNopLogger(t *testing.T) {
 	assert.Equal(t, true, isNopLogger(testLogger))
 
 	testLogger, err = zap.NewProduction()
-	if err != nil {
-		t.Fatalf("Prod logger init failed with error: %v", err)
-	}
+	assert.NilError(t, err, "Prod logger init failed with error")
 	zap.ReplaceGlobals(testLogger)
 	assert.Equal(t, false, isNopLogger(testLogger))
 	assert.Equal(t, false, isNopLogger(zap.L()))

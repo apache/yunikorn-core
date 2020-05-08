@@ -61,9 +61,7 @@ func TestNewPartition(t *testing.T) {
 
 func TestAddNode(t *testing.T) {
 	partition, err := newTestPartition()
-	if err != nil {
-		t.Fatalf("test partition create failed with error: %v ", err)
-	}
+	assert.NilError(t, err, "test partition create failed with error")
 	partition.addSchedulingNode(nil)
 	assert.Equal(t, 0, len(partition.nodes), "nil node should not be added")
 	node := cache.NewNodeForTest("test1", resources.NewResource())
@@ -79,9 +77,7 @@ func TestAddNode(t *testing.T) {
 
 func TestRemoveNode(t *testing.T) {
 	partition, err := newTestPartition()
-	if err != nil {
-		t.Fatalf("test partition create failed with error: %v ", err)
-	}
+	assert.NilError(t, err, "test partition create failed with error")
 	partition.addSchedulingNode(cache.NewNodeForTest("test", resources.NewResource()))
 	assert.Equal(t, 1, len(partition.nodes), "node list not correct")
 
@@ -97,9 +93,7 @@ func TestRemoveNode(t *testing.T) {
 
 func TestGetNodes(t *testing.T) {
 	partition, err := newTestPartition()
-	if err != nil {
-		t.Fatalf("test partition create failed with error: %v ", err)
-	}
+	assert.NilError(t, err, "test partition create failed with error")
 
 	nodes := partition.getSchedulableNodes()
 	assert.Equal(t, 0, len(nodes), "list should have been empty")
@@ -159,11 +153,9 @@ func TestGetNodes(t *testing.T) {
 }
 
 func TestGetQueue(t *testing.T) {
-	// get the
+	// get the partition
 	partition, err := newTestPartition()
-	if err != nil {
-		t.Fatalf("test partition create failed with error: %v ", err)
-	}
+	assert.NilError(t, err, "test partition create failed with error")
 	var nilQueue *SchedulingQueue
 	// test partition has a root queue
 	queue := partition.GetQueue("")
@@ -176,9 +168,7 @@ func TestGetQueue(t *testing.T) {
 	}
 	resMap := map[string]string{"first": "100"}
 	_, err = createManagedQueue(queue, "parent", true, resMap)
-	if err != nil {
-		t.Fatalf("failed to create parent queue: %v", err)
-	}
+	assert.NilError(t, err, "failed to create parent queue")
 	queue = partition.GetQueue("root.unknown")
 	assert.Equal(t, queue, nilQueue, "partition returned not nil for non existing queue name request: %v", queue)
 	queue = partition.GetQueue("root.parent")
@@ -191,14 +181,10 @@ func TestGetQueue(t *testing.T) {
 // and 2 nodes: node-1 & node-2
 func createQueuesNodes(t *testing.T) *partitionSchedulingContext {
 	partition, err := newTestPartition()
-	if err != nil {
-		t.Fatalf("test partition create failed with error: %v ", err)
-	}
+	assert.NilError(t, err, "test partition create failed with error")
 	var res *resources.Resource
 	res, err = resources.NewResourceFromConf(map[string]string{"first": "10"})
-	if err != nil {
-		t.Fatalf("failed to create basic resource: %v", err)
-	}
+	assert.NilError(t, err, "failed to create basic resource")
 	node1 := "node-1"
 	partition.addSchedulingNode(cache.NewNodeForTest(node1, res))
 	node2 := "node-2"
@@ -207,23 +193,15 @@ func createQueuesNodes(t *testing.T) *partitionSchedulingContext {
 	var root, parent *SchedulingQueue
 	resMap := map[string]string{"first": "100"}
 	root, err = createRootQueue(resMap)
-	if err != nil {
-		t.Fatalf("failed to create basic root queue: %v", err)
-	}
+	assert.NilError(t, err, "failed to create basic root queue")
 	// fake adding the queue structure, just add the root
 	partition.root = root
 	parent, err = createManagedQueue(root, "parent", true, nil)
-	if err != nil {
-		t.Fatalf("failed to create parent queue: %v", err)
-	}
+	assert.NilError(t, err, "failed to create parent queue")
 	_, err = createManagedQueue(parent, "leaf1", false, nil)
-	if err != nil {
-		t.Fatalf("failed to create leaf queue: %v", err)
-	}
+	assert.NilError(t, err, "failed to create leaf queue")
 	_, err = createManagedQueue(root, "leaf2", false, nil)
-	if err != nil {
-		t.Fatalf("failed to create parent queue: %v", err)
-	}
+	assert.NilError(t, err, "failed to create parent queue")
 	return partition
 }
 

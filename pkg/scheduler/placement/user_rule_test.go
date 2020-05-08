@@ -21,6 +21,8 @@ package placement
 import (
 	"testing"
 
+	"gotest.tools/assert"
+
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
@@ -39,9 +41,7 @@ partitions:
           - name: testchild
 `
 	partInfo, err := CreatePartitionInfo([]byte(data))
-	if err != nil {
-		t.Fatalf("Partition create failed with error: %v", err)
-	}
+	assert.NilError(t, err, "Partition create failed with error")
 	tags := make(map[string]string)
 	user := security.UserGroup{
 		User:   "testchild",

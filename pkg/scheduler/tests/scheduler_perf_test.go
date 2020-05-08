@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/entrypoint"
@@ -69,18 +70,14 @@ partitions:
 			Version:     "0.0.2",
 		}, mockRM)
 
-	if err != nil {
-		b.Fatalf("RegisterResourceManager failed: %v", err)
-	}
+	assert.NilError(b, err, "RegisterResourceManager failed")
 
 	// Add two apps and wait for them to be accepted
 	err = proxy.Update(&si.UpdateRequest{
 		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a", "app-2": "root.b"}),
 		RmID:            "rm:123",
 	})
-	if err != nil {
-		b.Fatalf("UpdateRequest application failed: %v", err)
-	}
+	assert.NilError(b, err, "UpdateRequest application failed")
 	mockRM.waitForAcceptedApplication(b, "app-1", 1000)
 	mockRM.waitForAcceptedApplication(b, "app-2", 1000)
 
@@ -114,9 +111,7 @@ partitions:
 		RmID:                "rm:123",
 		NewSchedulableNodes: newNodes,
 	})
-	if err != nil {
-		b.Fatalf("UpdateRequest nodes failed: %v", err)
-	}
+	assert.NilError(b, err, "UpdateRequest nodes failed")
 
 	// Wait for all nodes to be accepted
 	startTime := time.Now()

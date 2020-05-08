@@ -54,9 +54,7 @@ partitions:
 	defer ms.Stop()
 
 	err := ms.Init(configData, false)
-	if err != nil {
-		t.Fatalf("RegisterResourceManager failed: %v", err)
-	}
+	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Check queues of clusterInfo and scheduler.
 	partitionInfo := ms.clusterInfo.GetPartition("[rm:123]default")
@@ -234,9 +232,7 @@ partitions:
 	ms.serviceContext.StopAll()
 	// restart
 	err = ms.Init(configData, false)
-	if err != nil {
-		t.Fatalf("2nd RegisterResourceManager failed: %v", err)
-	}
+	assert.NilError(t, err, "2nd RegisterResourceManager failed")
 
 	// Register nodes, and add apps
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -365,9 +361,7 @@ partitions:
 	defer ms.Stop()
 
 	err := ms.Init(configData, false)
-	if err != nil {
-		t.Fatalf("RegisterResourceManager failed: %v", err)
-	}
+	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Register nodes, and add apps
 	// here we only report back existing allocations, without registering applications
@@ -536,9 +530,7 @@ partitions:
 			Version:     "0.0.2",
 		}, mockRM)
 
-	if err != nil {
-		t.Fatalf("RegisterResourceManager failed: %v", err)
-	}
+	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Register nodes, and add apps
 	err = proxy.Update(&si.UpdateRequest{
@@ -621,9 +613,7 @@ partitions:
 			Version:     "0.0.2",
 		}, mockRM)
 
-	if err != nil {
-		t.Fatalf("RegisterResourceManager failed: %v", err)
-	}
+	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Register apps alone
 	err = proxy.Update(&si.UpdateRequest{
@@ -687,10 +677,7 @@ partitions:
 	defer ms.Stop()
 
 	err := ms.Init(configData, false)
-
-	if err != nil {
-		t.Fatalf("RegisterResourceManager failed: %v", err)
-	}
+	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// initially there is only 1 root queue exist
 	schedulerQueueRoot := ms.getSchedulingQueue("root")
@@ -738,9 +725,7 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	if err != nil {
-		t.Fatalf("UpdateRequest nodes and apps failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest nodes and apps failed")
 
 	ms.mockRM.waitForAcceptedApplication(t, "app-1", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
@@ -768,9 +753,7 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	if err != nil {
-		t.Fatalf("UpdateRequest add allocations failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest add allocations failed")
 
 	// Wait pending resource of queue a and scheduler queue
 	// Both pending memory = 10 * 2 = 20;
@@ -804,9 +787,7 @@ partitions:
 	mockRM := ms.mockRM
 	// restart
 	err = ms.Init(configData, false)
-	if err != nil {
-		t.Fatalf("2nd RegisterResourceManager failed: %v", err)
-	}
+	assert.NilError(t, err, "2nd RegisterResourceManager failed")
 
 	// first recover apps
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -824,9 +805,7 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	if err != nil {
-		t.Fatalf("UpdateRequest add app failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest add app failed")
 
 	// waiting for recovery
 	ms.mockRM.waitForAcceptedApplication(t, "app-1", 1000)
@@ -889,9 +868,7 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	if err != nil {
-		t.Fatalf("UpdateRequest nodes failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest nodes failed")
 
 	// waiting for recovery
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)

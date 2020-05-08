@@ -82,30 +82,22 @@ func TestBasicPreemption(t *testing.T) {
 			"vcore":  {Value: 100},
 		},
 	})
-	if err != nil {
-		t.Fatalf("Adding node 1 to scheduler failed: %v", err)
-	}
+	assert.NilError(t, err, "Adding node 1 to scheduler failed")
 	err = ms.addNode("node-2:1234", &si.Resource{
 		Resources: map[string]*si.Quantity{
 			"memory": {Value: 100},
 			"vcore":  {Value: 100},
 		},
 	})
-	if err != nil {
-		t.Fatalf("Adding node 2 to scheduler failed: %v", err)
-	}
+	assert.NilError(t, err, "Adding node 2 to scheduler failed")
 
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
 	err = ms.addApp("app-1", "root.a", "")
-	if err != nil {
-		t.Fatalf("Adding application 1 to scheduler failed: %v", err)
-	}
+	assert.NilError(t, err, "Adding application 1 to scheduler failed")
 	err = ms.addApp("app-2", "root.b", "")
-	if err != nil {
-		t.Fatalf("Adding application 2 to scheduler failed: %v", err)
-	}
+	assert.NilError(t, err, "Adding application 2 to scheduler failed")
 
 	ms.mockRM.waitForAcceptedApplication(t, "app-1", 1000)
 	ms.mockRM.waitForAcceptedApplication(t, "app-2", 1000)

@@ -40,3 +40,5 @@ jobs:
 
       - name: Run unit tests
         run: make test
+        env:
+          GOMAXPROCS: 1

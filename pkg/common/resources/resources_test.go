@@ -1302,8 +1302,7 @@ func TestCalculateAbsUsedCapacity(t *testing.T) {
 			expected: NewResourceFromMap(map[string]Quantity{"memory": math.MaxInt64, "vcores": math.MaxInt64}),
 		},
 	}
-	for testName, test := range tests {
-		t.Logf("Running test case %s", testName)
+	for _, test := range tests {
 		absCapacity := CalculateAbsUsedCapacity(test.capacity, test.used)
 		assert.DeepEqual(t, test.expected, absCapacity)
 	}

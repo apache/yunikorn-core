@@ -757,7 +757,7 @@ func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {
 			div := float64(usedResource) / float64(availableResource)
 			absResValue = int64(div * 100)
 			// protect against positive integer overflow
-			if absResValue < 0 && div > 0{
+			if absResValue < 0 && div > 0 {
 				log.Logger().Warn("Absolute resource value result positive overflow",
 					zap.String("resource", resourceName),
 					zap.Int64("capacity", int64(availableResource)),

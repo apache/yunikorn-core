@@ -1256,7 +1256,7 @@ func TestCalculateAbsUsedCapacity(t *testing.T) {
 		capacity, used, expected *Resource
 	}{
 		"nil resource, nil usage": {
-			expected :emptyResource,
+			expected: emptyResource,
 		},
 		"zero resource, nil usage": {
 			capacity: zeroResource,
@@ -1268,37 +1268,37 @@ func TestCalculateAbsUsedCapacity(t *testing.T) {
 		},
 		"resource set, zero usage": {
 			capacity: resourceSet,
-			used: zeroResource,
+			used:     zeroResource,
 			expected: zeroResource,
 		},
 		"resource set, usage set": {
 			capacity: resourceSet,
-			used: usageSet,
+			used:     usageSet,
 			expected: NewResourceFromMap(map[string]Quantity{"memory": 50, "vcores": 33}),
 		},
 		"partial resource set, usage set": {
 			capacity: partialResource,
-			used: usageSet,
+			used:     usageSet,
 			expected: NewResourceFromMap(map[string]Quantity{"memory": 100}),
 		},
 		"resource set, partial usage set": {
 			capacity: resourceSet,
-			used: partialResource,
+			used:     partialResource,
 			expected: NewResourceFromMap(map[string]Quantity{"memory": 50}),
 		},
 		"positive overflow": {
 			capacity: NewResourceFromMap(map[string]Quantity{"memory": 10}),
-			used: NewResourceFromMap(map[string]Quantity{"memory": math.MaxInt64}),
+			used:     NewResourceFromMap(map[string]Quantity{"memory": math.MaxInt64}),
 			expected: NewResourceFromMap(map[string]Quantity{"memory": math.MaxInt64}),
 		},
 		"negative overflow": {
 			capacity: NewResourceFromMap(map[string]Quantity{"memory": 10}),
-			used: NewResourceFromMap(map[string]Quantity{"memory": math.MinInt64}),
+			used:     NewResourceFromMap(map[string]Quantity{"memory": math.MinInt64}),
 			expected: NewResourceFromMap(map[string]Quantity{"memory": math.MinInt64}),
 		},
 		"zero resource, non zero used": {
 			capacity: zeroResource,
-			used: usageSet,
+			used:     usageSet,
 			expected: NewResourceFromMap(map[string]Quantity{"memory": math.MaxInt64, "vcores": math.MaxInt64}),
 		},
 	}

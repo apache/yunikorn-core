@@ -19,9 +19,6 @@
 package cache
 
 import (
-	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
-	assert2 "github.com/stretchr/testify/assert"
-	"gotest.tools/assert"
 	"strconv"
 	"strings"
 	"testing"
@@ -30,6 +27,7 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 )
 
 // create the root queue, base for all testing
@@ -338,23 +336,35 @@ func TestGetQueueInfos(t *testing.T) {
 		t.Fatalf("failed to create basic root queue: %v", err)
 	}
 	rootMax, err := resources.NewResourceFromConf(map[string]string{"memory": "2048", "vcores": "10"})
+	if err != nil {
+		t.Fatalf("failed to create configuration: %v", err)
+	}
 	root.setMaxResource(rootMax)
 
 	var parent *QueueInfo
 	parentUsed, err := resources.NewResourceFromConf(map[string]string{"memory": "1012", "vcores": "2"})
+	if err != nil {
+		t.Fatalf("failed to create resource: %v", err)
+	}
 	parent, err = createManagedQueue(root, "parent", true)
 	if err != nil {
-		t.Fatalf("failed to create parent queue: %v", err)
+		t.Fatalf("failed to create queue: %v", err)
 	}
-	parent.IncAllocatedResource(parentUsed, false)
+	err = parent.IncAllocatedResource(parentUsed, false)
+	if err != nil {
+		t.Fatalf("failed to increment allocated resource: %v", err)
+	}
 
 	var child1 *QueueInfo
-	child1used, err := resources.NewResourceFromConf(map[string]string{"memory": "1012", "vcores": "2"})
+	var child1used, _ = resources.NewResourceFromConf(map[string]string{"memory": "1012", "vcores": "2"})
 	child1, err = createManagedQueue(parent, "child1", true)
 	if err != nil {
-		t.Fatalf("failed to create child queue: %v", err)
+		t.Fatalf("failed to create queue: %v", err)
 	}
-	child1.IncAllocatedResource(child1used, false)
+	err = child1.IncAllocatedResource(child1used, false)
+	if err != nil {
+		t.Fatalf("failed to increment allocated resource: %v", err)
+	}
 	var child2 *QueueInfo
 	child2, err = createManagedQueue(parent, "child2", true)
 	if err != nil {
@@ -370,7 +380,9 @@ func TestGetQueueInfos(t *testing.T) {
 	for _, childDao := range parentDaoInfo.ChildQueues {
 		name := childDao.QueueName
 		child := parent.children[name]
-		assert2.NotNil(t, child)
+		if child == nil {
+			t.Fail()
+		}
 		compareQueueInfoWithDAO(t, child, childDao)
 	}
 }

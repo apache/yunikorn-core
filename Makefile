@@ -76,7 +76,7 @@ build: commands
 
 # Run the tests after building
 .PHONY: test
-test:
+test: clean
 	@echo "running unit tests"
 	go test -parallel 1 ./... -cover $(RACE) -tags deadlock
 	go vet $(REPO)...

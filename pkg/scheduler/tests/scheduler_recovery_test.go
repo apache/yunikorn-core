@@ -149,7 +149,7 @@ partitions:
 
 	ms.scheduler.MultiStepSchedule(16)
 
-	ms.mockRM.waitForAllocations(t, 2, 1000)
+	ms.mockRM.waitForAllocations(t, 2, 3000)
 
 	// Make sure pending resource updated to 0
 	waitForPendingQueueResource(t, schedulerQueueA, 0, 1000)
@@ -783,7 +783,7 @@ partitions:
 
 	ms.scheduler.MultiStepSchedule(16)
 
-	ms.mockRM.waitForAllocations(t, 2, 1000)
+	ms.mockRM.waitForAllocations(t, 2, 3000)
 
 	// Make sure pending resource updated to 0
 	waitForPendingQueueResource(t, appQueue, 0, 1000)

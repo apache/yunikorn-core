@@ -112,7 +112,7 @@ func TestBasicReservation(t *testing.T) {
 
 	// Allocate for app
 	ms.scheduler.MultiStepSchedule(20)
-	ms.mockRM.waitForAllocations(t, 4, 1000)
+	ms.mockRM.waitForAllocations(t, 4, 3000)
 
 	// Verify that all 4 requests are satisfied
 	mem := int(app.GetAllocatedResource().Resources[resources.MEMORY])
@@ -125,7 +125,7 @@ func TestBasicReservation(t *testing.T) {
 	ms.scheduler.MultiStepSchedule(10)
 
 	// Allocation should not change (still 4)
-	ms.mockRM.waitForAllocations(t, 4, 1000)
+	ms.mockRM.waitForAllocations(t, 4, 3000)
 
 	// check objects have reservations assigned,
 	assert.Equal(t, 2, len(app.GetReservations()), "reservations missing from app")
@@ -211,7 +211,7 @@ func TestReservationForTwoQueues(t *testing.T) {
 
 	// Allocate for app 1
 	ms.scheduler.MultiStepSchedule(8)
-	ms.mockRM.waitForAllocations(t, 4, 1000)
+	ms.mockRM.waitForAllocations(t, 4, 3000)
 	mem := int(app1.GetAllocatedResource().Resources[resources.MEMORY])
 	assert.Equal(t, 80, mem, "allocated resource after alloc not correct")
 	waitForNodesAllocatedResource(t, ms.clusterInfo, ms.partitionName, nodes, 80, 1000)
@@ -232,7 +232,7 @@ func TestReservationForTwoQueues(t *testing.T) {
 	ms.scheduler.MultiStepSchedule(6)
 
 	// Allocation should not change
-	ms.mockRM.waitForAllocations(t, 4, 1000)
+	ms.mockRM.waitForAllocations(t, 4, 3000)
 
 	// both reservations should be for the same app
 	appResCounter := ms.getPartitionReservations()
@@ -246,12 +246,12 @@ func TestReservationForTwoQueues(t *testing.T) {
 	assert.NilError(t, err, "application removal from partition failed")
 
 	// Check allocated resource of queue, should be 0 now
-	ms.mockRM.waitForAllocations(t, 0, 1000)
+	ms.mockRM.waitForAllocations(t, 0, 3000)
 	waitForAllocatedQueueResource(t, leaf1, 0, 1000)
 
 	// Allocate twice, which we should see two reservations filled
 	ms.scheduler.MultiStepSchedule(2)
-	ms.mockRM.waitForAllocations(t, 2, 1000)
+	ms.mockRM.waitForAllocations(t, 2, 3000)
 
 	// Check allocated resource of queue, should be 50 now
 	waitForAllocatedQueueResource(t, leaf2, 40, 1000)
@@ -301,7 +301,7 @@ func TestRemoveReservedNode(t *testing.T) {
 	// Allocate for app
 	ms.scheduler.MultiStepSchedule(20)
 	waitForAllocatedAppResource(t, app, 80, 1000)
-	ms.mockRM.waitForAllocations(t, 4, 1000)
+	ms.mockRM.waitForAllocations(t, 4, 3000)
 	waitForPendingAppResource(t, app, 40, 1000)
 	// check objects have reservations assigned,
 	assert.Equal(t, 2, len(app.GetReservations()), "reservations missing from app")
@@ -315,7 +315,7 @@ func TestRemoveReservedNode(t *testing.T) {
 
 	waitForRemovedSchedulerNode(t, ms.serviceContext.Scheduler.GetClusterSchedulingContext(), nodes[1], ms.partitionName, 1000)
 	waitForAllocatedAppResource(t, app, 40, 1000)
-	ms.mockRM.waitForAllocations(t, 2, 1000)
+	ms.mockRM.waitForAllocations(t, 2, 3000)
 	assert.Equal(t, 1, len(app.GetReservations()), "reservations missing from app")
 	assert.Equal(t, 1, len(ms.getSchedulingNode(nodes[0]).GetReservations()), "reservation missing on %s", nodes[0])
 	assert.Equal(t, 1, ms.getPartitionReservations()[appID], "reservations not removed from partition")
@@ -356,7 +356,7 @@ func TestAddNewNode(t *testing.T) {
 
 	// Allocate for app
 	ms.scheduler.MultiStepSchedule(20)
-	ms.mockRM.waitForAllocations(t, 4, 1000)
+	ms.mockRM.waitForAllocations(t, 4, 3000)
 	// check objects have reservations assigned,
 	assert.Equal(t, 2, len(app.GetReservations()), "reservations missing from app")
 	assert.Equal(t, 1, len(ms.getSchedulingNode(nodes[0]).GetReservations()), "reservation missing on %s", nodes[0])
@@ -368,7 +368,7 @@ func TestAddNewNode(t *testing.T) {
 
 	// start allocating: both reservations should be moved to the 3rd node
 	ms.scheduler.MultiStepSchedule(10)
-	ms.mockRM.waitForAllocations(t, 6, 1000)
+	ms.mockRM.waitForAllocations(t, 6, 3000)
 	waitForAllocatedAppResource(t, app, 120, 1000)
 	waitForPendingQueueResource(t, leafQueue, 0, 1000)
 	waitForPendingAppResource(t, app, 0, 1000)

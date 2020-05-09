@@ -219,7 +219,7 @@ func TestUnManagedSubQueues(t *testing.T) {
 	root, err := createRootQueue()
 	assert.NilError(t, err, "failed to create basic root queue")
 	var parent *QueueInfo
-	parent, err = createManagedQueue(root, "parent-man", true)
+	parent, err = createUnManagedQueue(root, "parent-man", true)
 	assert.NilError(t, err, "failed to create parent queue")
 	if parent.isLeaf {
 		t.Errorf("parent queue is not marked as a parent")

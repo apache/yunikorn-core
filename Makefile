@@ -52,6 +52,7 @@ lint:
 		fi \
 	fi ; \
 	headSHA=$$(git rev-parse --short=12 origin/HEAD) ; \
+	@echo "${headSHA}" ; \
 	$${lintBin} run --new-from-rev=$${headSHA}
 
 .PHONY: license-check

@@ -50,6 +50,7 @@ jobs:
           ls -al ${GOPATH}/bin
           pwd
           ls -al
+          golangci-lint --version
           make lint
 
       - name: Run unit tests

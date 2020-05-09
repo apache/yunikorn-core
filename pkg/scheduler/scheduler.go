@@ -569,7 +569,6 @@ func (s *Scheduler) handleSchedulerEvent() {
 				panic(fmt.Sprintf("%s is not an acceptable type for Scheduler event.", reflect.TypeOf(v).String()))
 			}
 		case <-s.stopChan:
-			log.Logger().Info("#### stop scheduler event handler")
 			return
 		}
 	}

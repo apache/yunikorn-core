@@ -199,7 +199,3 @@ func TestBasicPreemption(t *testing.T) {
 	waitForPendingAppResource(t, schedulingApp2, 900, 1000)
 }
 
-func TestFun(t *testing.T) {
-	assert.Equal(t, "a", "a")
-	assert.Equal(t, "b", "b")
-}

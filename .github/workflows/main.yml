@@ -42,8 +42,11 @@ jobs:
         run: make license-check
 
       - uses: actions/checkout@v2
-      - name: Run golangci-lint
-        uses: actions-contrib/golangci-lint@v1
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v0.1.7
+        with:
+          version: v1.26
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run unit tests
         run: make test

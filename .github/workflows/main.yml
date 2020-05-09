@@ -46,6 +46,7 @@ jobs:
           GOPATH: /tmp/go
         run: |
           export PATH=$PATH:$(go env GOPATH)/bin
+          go get -u golang.org/x/lint/golint
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.22.2
           ls -al ${GOPATH}/bin
           pwd

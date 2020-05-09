@@ -588,13 +588,17 @@ func (s *Scheduler) MultiStepSchedule(nAlloc int) {
 		log.Logger().Debug("Scheduler manual stepping",
 			zap.Int("count", i))
 		s.schedule()
+
+		// for single step scheduling, wait for events to drain before entering next step
+		// this will give us a more stable processing of scheduling events
+		// note, this is only used in tests
 		s.drain()
 		s.clusterInfo.Drain()
 	}
 }
 
 func (s *Scheduler) drain() {
-	if err := common.WaitFor(10*time.Millisecond, 1000*time.Millisecond, func() bool {
+	if err := common.WaitFor(10*time.Millisecond, 3000*time.Millisecond, func() bool {
 		return len(s.pendingSchedulerEvents) == 0
 	}); err != nil {
 		log.Logger().Warn("timeout waiting for the scheduling events to drain")

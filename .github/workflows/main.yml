@@ -41,18 +41,5 @@ jobs:
       - name: Checking license headers
         run: make license-check
 
-      - name: Run lint checks
-        env:
-          GOPATH: /tmp/go
-        run: |
-          export PATH=$PATH:$(go env GOPATH)/bin
-          go get -u golang.org/x/lint/golint
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.22.2
-          ls -al ${GOPATH}/bin
-          pwd
-          ls -al
-          golangci-lint --version
-          make lint
-
       - name: Run unit tests
         run: make test

@@ -140,22 +140,6 @@ func (m *ClusterInfo) handleRMEvents() {
 	}
 }
 
-// func (m *ClusterInfo) handleRMEvents() {
-// 	for {
-// 		ev := <-m.pendingRmEvents
-// 		switch v := ev.(type) {
-// 		case *cacheevent.RMUpdateRequestEvent:
-// 			m.processRMUpdateEvent(v)
-// 		case *commonevents.RegisterRMEvent:
-// 			m.processRMRegistrationEvent(v)
-// 		case *commonevents.ConfigUpdateRMEvent:
-// 			m.processRMConfigUpdateEvent(v)
-// 		default:
-// 			panic(fmt.Sprintf("%s is not an acceptable type for RM event.", reflect.TypeOf(v).String()))
-// 		}
-// 	}
-// }
-
 // Implement methods for Cache events
 func (m *ClusterInfo) HandleEvent(ev interface{}) {
 	switch v := ev.(type) {

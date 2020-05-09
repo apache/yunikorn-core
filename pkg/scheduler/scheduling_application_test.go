@@ -90,9 +90,7 @@ func TestAppReservation(t *testing.T) {
 	}
 
 	queue, err := createRootQueue(nil)
-	if err != nil {
-		t.Fatalf("queue create failed: %v", err)
-	}
+	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
 
 	// reserve illegal request
@@ -176,9 +174,7 @@ func TestAppReservation(t *testing.T) {
 
 	// failure case: remove reservation from node
 	err = node.unReserve(app, ask)
-	if err != nil {
-		t.Fatalf("un-reserve on node should not have failed: error %v", err)
-	}
+	assert.NilError(t, err, "un-reserve on node should not have failed: error")
 	err = app.unReserve(node, ask)
 	if err != nil {
 		t.Errorf("node does not have reservation removal of app reservation should have failed: error %v", err)
@@ -200,9 +196,7 @@ func TestAppAllocReservation(t *testing.T) {
 		t.Fatal("new app should not have reservation for empty allocKey")
 	}
 	queue, err := createRootQueue(nil)
-	if err != nil {
-		t.Fatalf("queue create failed: %v", err)
-	}
+	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
 
 	// reserve 1 allocate ask
@@ -272,9 +266,7 @@ func TestUpdateRepeat(t *testing.T) {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
 	queue, err := createRootQueue(nil)
-	if err != nil {
-		t.Fatalf("queue create failed: %v", err)
-	}
+	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
 
 	// failure cases
@@ -326,9 +318,7 @@ func TestAddAllocAsk(t *testing.T) {
 	}
 
 	queue, err := createRootQueue(nil)
-	if err != nil {
-		t.Fatalf("queue create failed: %v", err)
-	}
+	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
 
 	// failure cases
@@ -399,9 +389,7 @@ func TestRemoveReservedAllocAsk(t *testing.T) {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
 	queue, err := createRootQueue(nil)
-	if err != nil {
-		t.Fatalf("queue create failed: %v", err)
-	}
+	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
 
 	// create app and allocs
@@ -488,9 +476,7 @@ func TestRemoveAllocAsk(t *testing.T) {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
 	queue, err := createRootQueue(nil)
-	if err != nil {
-		t.Fatalf("queue create failed: %v", err)
-	}
+	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
 
 	// failures cases: things should not crash (nothing happens)
@@ -508,15 +494,11 @@ func TestRemoveAllocAsk(t *testing.T) {
 	ask := newAllocationAskRepeat("alloc-1", appID, res, 2)
 	var delta1 *resources.Resource
 	delta1, err = app.addAllocationAsk(ask)
-	if err != nil {
-		t.Fatalf("ask 1 should have been added to app, returned delta: %v", delta1)
-	}
+	assert.NilError(t, err, "ask 1 should have been added to app, returned delta")
 	ask = newAllocationAskRepeat("alloc-2", appID, res, 2)
 	var delta2 *resources.Resource
 	delta2, err = app.addAllocationAsk(ask)
-	if err != nil {
-		t.Fatalf("ask 2 should have been added to app, returned delta: %v", delta2)
-	}
+	assert.NilError(t, err, "ask 2 should have been added to app, returned delta")
 	if len(app.requests) != 2 {
 		t.Fatalf("missing asks from app expected 2 got %d", len(app.requests))
 	}
@@ -558,9 +540,7 @@ func TestAssumedAppCalc(t *testing.T) {
 	}
 	res := map[string]string{"first": "1"}
 	allocation, err := resources.NewResourceFromConf(res)
-	if err != nil {
-		t.Fatalf("failed to create basic resource: %v", err)
-	}
+	assert.NilError(t, err, "failed to create basic resource")
 	app.incAllocatingResource(allocation)
 	assumed = app.getAssumeAllocated()
 	if !resources.Equals(allocation, assumed) {

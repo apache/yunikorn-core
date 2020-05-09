@@ -238,14 +238,11 @@ func TestUnManagedSubQueues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create basic root queue: %v", err)
 	}
-	t.Log("### root queue created")
 	var parent *QueueInfo
 	parent, err = createUnManagedQueue(root, "parent", true)
 	if err != nil {
 		t.Fatalf("failed to create parent queue: %v", err)
 	}
-	t.Log("### root.parent queue created")
-
 	if parent.isLeaf {
 		t.Errorf("parent queue is not marked as a parent")
 	}
@@ -257,8 +254,6 @@ func TestUnManagedSubQueues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create leaf queue: %v", err)
 	}
-	t.Log("### root.parent.leaf queue created")
-
 	if len(parent.children) == 0 {
 		t.Errorf("leaf queue is not added to the parent queue")
 	}
@@ -268,7 +263,6 @@ func TestUnManagedSubQueues(t *testing.T) {
 
 	// try to mark parent and leaf for removal
 	parent.MarkQueueForRemoval()
-	t.Logf("### leaf: %s, parent: %s", leaf.stateMachine.Current(), parent.stateMachine.Current())
 	if leaf.IsDraining() || parent.IsDraining() {
 		t.Errorf("queues are marked for removal (draining state not for unmanaged queues)")
 	}

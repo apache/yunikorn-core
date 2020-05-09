@@ -52,6 +52,9 @@ type RMProxy struct {
 	// it is used to determine if configs need to be reloaded
 	rmIDToConfigWatcher map[string]*configs.ConfigWatcher
 
+	stopChan chan struct{}
+	waitGroup *sync.WaitGroup
+
 	lock sync.RWMutex
 }
 
@@ -80,6 +83,8 @@ func NewRMProxy() *RMProxy {
 		rmIDToCallback:      make(map[string]api.ResourceManagerCallback),
 		rmIDToConfigWatcher: make(map[string]*configs.ConfigWatcher),
 		pendingRMEvents:     make(chan interface{}, 1024*1024),
+		waitGroup:           &sync.WaitGroup{},
+		stopChan:            make(chan struct{}),
 	}
 	return rm
 }
@@ -87,7 +92,13 @@ func NewRMProxy() *RMProxy {
 func (m *RMProxy) StartService(handlers handler.EventHandlers) {
 	m.EventHandlers = handlers
 
+	m.waitGroup.Add(1)
 	go m.handleRMEvents()
+}
+
+func (m *RMProxy) StopService()  {
+	close(m.stopChan)
+	m.waitGroup.Wait()
 }
 
 func (m *RMProxy) handleRMRecvUpdateResponseError(rmID string, err error) {
@@ -179,21 +190,26 @@ func (m *RMProxy) processRMNodeUpdateEvent(event *rmevent.RMNodeUpdateEvent) {
 }
 
 func (m *RMProxy) handleRMEvents() {
+	defer m.waitGroup.Done()
 	for {
-		ev := <-m.pendingRMEvents
-		switch v := ev.(type) {
-		case *rmevent.RMNewAllocationsEvent:
-			m.processAllocationUpdateEvent(v)
-		case *rmevent.RMApplicationUpdateEvent:
-			m.processApplicationUpdateEvent(v)
-		case *rmevent.RMReleaseAllocationEvent:
-			m.processRMReleaseAllocationEvent(v)
-		case *rmevent.RMRejectedAllocationAskEvent:
-			m.processUpdatePartitionConfigsEvent(v)
-		case *rmevent.RMNodeUpdateEvent:
-			m.processRMNodeUpdateEvent(v)
-		default:
-			panic(fmt.Sprintf("%s is not an acceptable type for RM event.", reflect.TypeOf(v).String()))
+		select {
+		case ev := <-m.pendingRMEvents:
+			switch v := ev.(type) {
+			case *rmevent.RMNewAllocationsEvent:
+				m.processAllocationUpdateEvent(v)
+			case *rmevent.RMApplicationUpdateEvent:
+				m.processApplicationUpdateEvent(v)
+			case *rmevent.RMReleaseAllocationEvent:
+				m.processRMReleaseAllocationEvent(v)
+			case *rmevent.RMRejectedAllocationAskEvent:
+				m.processUpdatePartitionConfigsEvent(v)
+			case *rmevent.RMNodeUpdateEvent:
+				m.processRMNodeUpdateEvent(v)
+			default:
+				panic(fmt.Sprintf("%s is not an acceptable type for RM event.", reflect.TypeOf(v).String()))
+			}
+		case <-m.stopChan:
+			return
 		}
 	}
 }

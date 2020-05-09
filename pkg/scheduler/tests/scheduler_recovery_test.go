@@ -507,6 +507,7 @@ partitions:
 // test scheduler recovery that only registers nodes and apps
 func TestAppRecovery(t *testing.T) {
 	serviceContext := entrypoint.StartAllServicesWithManualScheduler()
+	defer serviceContext.StopAll()
 	proxy := serviceContext.RMProxy
 
 	// Register RM
@@ -592,6 +593,7 @@ partitions:
 // test scheduler recovery that only registers apps
 func TestAppRecoveryAlone(t *testing.T) {
 	serviceContext := entrypoint.StartAllServicesWithManualScheduler()
+	defer serviceContext.StopAll()
 	proxy := serviceContext.RMProxy
 
 	// Register RM

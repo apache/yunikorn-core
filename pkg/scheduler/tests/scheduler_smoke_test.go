@@ -449,7 +449,7 @@ partitions:
 	assert.NilError(t, err, "UpdateRequest 2 failed")
 
 	// wait until we have maxed out the leaf queue
-	ms.mockRM.waitForAllocations(t, 15, 1000)
+	ms.mockRM.waitForAllocations(t, 15, 3000)
 
 	// Check scheduling queue root
 	schedulerQueueRoot := ms.getSchedulingQueue("root")
@@ -867,10 +867,10 @@ partitions:
 				t.Fatal("application 'app-1' not found in cache")
 			}
 			waitForAllocatedAppResource(t, app1, 100, 1000)
+			ms.mockRM.waitForAllocations(t, 10, 1000)
 
 			assert.Equal(t, len(app1.ApplicationInfo.GetAllAllocations()), 10, "number of app allocations incorrect")
 			assert.Equal(t, int(app1.GetAllocatedResource().Resources[resources.MEMORY]), 100, "app allocated resource incorrect")
-			assert.Equal(t, len(ms.mockRM.getAllocations()), 10, "number of RM allocations incorrect")
 
 			// release all allocated allocations
 			allocReleases := make([]*si.AllocationReleaseRequest, 0)

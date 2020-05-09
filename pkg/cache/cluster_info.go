@@ -51,7 +51,7 @@ type ClusterInfo struct {
 	EventHandlers handler.EventHandlers
 
 	waitGroup *sync.WaitGroup
-	stopChan chan struct{}
+	stopChan  chan struct{}
 
 	sync.RWMutex
 }
@@ -81,13 +81,13 @@ func (m *ClusterInfo) StartService(handlers handler.EventHandlers) {
 
 func (m *ClusterInfo) StopService() {
 	close(m.stopChan)
-	if err := common.WaitWithTimeout(m.waitGroup, 3 * time.Second); err != nil {
+	if err := common.WaitWithTimeout(m.waitGroup, 3*time.Second); err != nil {
 		log.Logger().Warn("stop cache completed with error", zap.Error(err))
 	}
 }
 
 func (m *ClusterInfo) Drain() {
-	if err := common.WaitFor(10 * time.Millisecond, 1000 * time.Millisecond, func() bool {
+	if err := common.WaitFor(10*time.Millisecond, 1000*time.Millisecond, func() bool {
 		return len(m.pendingSchedulerEvents) == 0 && len(m.pendingRmEvents) == 0
 	}); err != nil {
 		log.Logger().Warn("timeout waiting for events to drain in cache")
@@ -154,8 +154,8 @@ func (m *ClusterInfo) handleRMEvents() {
 			default:
 				panic(fmt.Sprintf("%s is not an acceptable type for RM event.", reflect.TypeOf(v).String()))
 			}
-			case <-m.stopChan:
-				return
+		case <-m.stopChan:
+			return
 		}
 	}
 }

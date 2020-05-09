@@ -198,4 +198,3 @@ func TestBasicPreemption(t *testing.T) {
 	waitForPendingQueueResource(t, schedulerQueueB, 900, 1000)
 	waitForPendingAppResource(t, schedulingApp2, 900, 1000)
 }
-

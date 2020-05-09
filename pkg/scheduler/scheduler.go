@@ -57,7 +57,7 @@ type Scheduler struct {
 func NewScheduler(clusterInfo *cache.ClusterInfo) *Scheduler {
 	m := &Scheduler{
 		waitGroup: &sync.WaitGroup{},
-		stopChan: make(chan struct{}),
+		stopChan:  make(chan struct{}),
 	}
 
 	m.clusterInfo = clusterInfo
@@ -87,7 +87,7 @@ func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 
 func (s *Scheduler) StopService() {
 	close(s.stopChan)
-	if err := common.WaitWithTimeout(s.waitGroup, 3 * time.Second); err != nil {
+	if err := common.WaitWithTimeout(s.waitGroup, 3*time.Second); err != nil {
 		log.Logger().Warn("stop scheduler completed with error", zap.Error(err))
 	}
 }
@@ -594,7 +594,7 @@ func (s *Scheduler) MultiStepSchedule(nAlloc int) {
 }
 
 func (s *Scheduler) drain() {
-	if err := common.WaitFor(10 * time.Millisecond, 1000 * time.Millisecond, func() bool {
+	if err := common.WaitFor(10*time.Millisecond, 1000*time.Millisecond, func() bool {
 		return len(s.pendingSchedulerEvents) == 0
 	}); err != nil {
 		log.Logger().Warn("timeout waiting for the scheduling events to drain")

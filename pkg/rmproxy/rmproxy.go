@@ -52,7 +52,7 @@ type RMProxy struct {
 	// it is used to determine if configs need to be reloaded
 	rmIDToConfigWatcher map[string]*configs.ConfigWatcher
 
-	stopChan chan struct{}
+	stopChan  chan struct{}
 	waitGroup *sync.WaitGroup
 
 	lock sync.RWMutex
@@ -96,9 +96,9 @@ func (m *RMProxy) StartService(handlers handler.EventHandlers) {
 	go m.handleRMEvents()
 }
 
-func (m *RMProxy) StopService()  {
+func (m *RMProxy) StopService() {
 	close(m.stopChan)
-	if err := common.WaitWithTimeout(m.waitGroup, 3 * time.Second); err != nil {
+	if err := common.WaitWithTimeout(m.waitGroup, 3*time.Second); err != nil {
 		log.Logger().Warn("stop rmProxy completed with error", zap.Error(err))
 	}
 }

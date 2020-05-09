@@ -94,26 +94,6 @@ func (m *ClusterInfo) Drain() {
 	}
 }
 
-// func (m *ClusterInfo) handleSchedulerEvents() {
-// 	for {
-// 		ev := <-m.pendingSchedulerEvents
-// 		switch v := ev.(type) {
-// 		case *cacheevent.AllocationProposalBundleEvent:
-// 			m.processAllocationProposalEvent(v)
-// 		case *cacheevent.RejectedNewApplicationEvent:
-// 			m.processRejectedApplicationEvent(v)
-// 		case *cacheevent.ReleaseAllocationsEvent:
-// 			m.handleAllocationReleasesRequestEvent(v)
-// 		case *cacheevent.RemovedApplicationEvent:
-// 			m.processRemovedApplication(v)
-// 		case *commonevents.RemoveRMPartitionsEvent:
-// 			m.processRemoveRMPartitionsEvent(v)
-// 		default:
-// 			panic(fmt.Sprintf("%s is not an acceptable type for scheduler event.", reflect.TypeOf(v).String()))
-// 		}
-// 	}
-// }
-
 func (m *ClusterInfo) handleSchedulerEvents() {
 	defer m.waitGroup.Done()
 	for {

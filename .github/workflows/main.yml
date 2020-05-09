@@ -41,12 +41,16 @@ jobs:
       - name: Checking license headers
         run: make license-check
 
-      - uses: actions/checkout@v2
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v0.1.7
-        with:
-          version: v1.26
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run lint checks
+        env:
+          GOPATH: /tmp/go
+        run: |
+          export PATH=$PATH:$(go env GOPATH)/bin
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.22.2
+          ls -al ${GOPATH}/bin
+          pwd
+          ls -al
+          make lint
 
       - name: Run unit tests
         run: make test

@@ -41,11 +41,8 @@ jobs:
       - name: Checking license headers
         run: make license-check
 
-      - name: golangci-lint
-        uses: reviewdog/action-golangci-lint@v1
-        with:
-          github_token: ${{ secrets.github_token }}
-          golangci_lint_flags: "--enable-all --exclude-use-default=false"
+      - name: Run golangci-lint
+        uses: actions-contrib/golangci-lint@v1
 
       - name: Run unit tests
         run: make test

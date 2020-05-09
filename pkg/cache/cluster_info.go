@@ -81,7 +81,9 @@ func (m *ClusterInfo) StartService(handlers handler.EventHandlers) {
 
 func (m *ClusterInfo) StopService() {
 	close(m.stopChan)
-	m.waitGroup.Wait()
+	if err := common.WaitWithTimeout(m.waitGroup, 3 * time.Second); err != nil {
+		log.Logger().Warn("stop cache completed with error", zap.Error(err))
+	}
 }
 
 func (m *ClusterInfo) Drain() {

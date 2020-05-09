@@ -87,7 +87,9 @@ func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 
 func (s *Scheduler) StopService() {
 	close(s.stopChan)
-	s.waitGroup.Wait()
+	if err := common.WaitWithTimeout(s.waitGroup, 3 * time.Second); err != nil {
+		log.Logger().Warn("stop scheduler completed with error", zap.Error(err))
+	}
 }
 
 // Create single allocation

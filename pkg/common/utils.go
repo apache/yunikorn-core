@@ -21,6 +21,7 @@ package common
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -64,5 +65,19 @@ func WaitFor(interval time.Duration, timeout time.Duration, condition func() boo
 		}
 		time.Sleep(interval)
 		continue
+	}
+}
+
+func WaitWithTimeout(wg *sync.WaitGroup, timeout time.Duration) error {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		wg.Wait()
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-time.After(timeout):
+		return fmt.Errorf(fmt.Sprintf("goroutine stop times out after %s", timeout.String()))
 	}
 }

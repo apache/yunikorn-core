@@ -98,7 +98,9 @@ func (m *RMProxy) StartService(handlers handler.EventHandlers) {
 
 func (m *RMProxy) StopService()  {
 	close(m.stopChan)
-	m.waitGroup.Wait()
+	if err := common.WaitWithTimeout(m.waitGroup, 3 * time.Second); err != nil {
+		log.Logger().Warn("stop rmProxy completed with error", zap.Error(err))
+	}
 }
 
 func (m *RMProxy) handleRMRecvUpdateResponseError(rmID string, err error) {

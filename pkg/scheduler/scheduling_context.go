@@ -150,6 +150,8 @@ func (csc *ClusterSchedulingContext) updateSchedulingPartitions(partitions []*ca
 		csc.needPreemption = csc.needPreemption || updatedPartition.NeedPreemption()
 
 		partition := csc.partitions[updatedPartition.Name]
+		// here we update the queues
+		// TODO update the event cache
 		if partition != nil {
 			log.Logger().Info("updating scheduling partition",
 				zap.String("partitionName", updatedPartition.Name))

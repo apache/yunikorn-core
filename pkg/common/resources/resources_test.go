@@ -1245,6 +1245,7 @@ func TestFitInScore(t *testing.T) {
 	fit = NewResourceFromMap(map[string]Quantity{"first": 1, "second": 1})
 	assert.Equal(t, res.FitInScore(fit), 2.0, "FitInScore on resource with multiple negative quantities failed")
 }
+
 func TestCalculateAbsUsedCapacity(t *testing.T) {
 	zeroResource := NewResourceFromMap(map[string]Quantity{"memory": 0, "vcores": 0})
 	resourceSet := NewResourceFromMap(map[string]Quantity{"memory": 2048, "vcores": 3})

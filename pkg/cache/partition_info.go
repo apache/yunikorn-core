@@ -710,13 +710,6 @@ func (pi *PartitionInfo) CopyNodeInfos() []*NodeInfo {
 	return out
 }
 
-func checkAndSetResource(resource *resources.Resource) string {
-	if resource != nil {
-		return strings.Trim(resource.String(), "map")
-	}
-	return "[]"
-}
-
 func (pi *PartitionInfo) GetTotalApplicationCount() int {
 	pi.RLock()
 	defer pi.RUnlock()

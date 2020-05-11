@@ -23,6 +23,7 @@ import (
 	"math"
 	"sort"
 	"strconv"
+	"strings"
 
 	"go.uber.org/zap"
 
@@ -82,6 +83,13 @@ func NewResourceFromConf(configMap map[string]string) (*Resource, error) {
 
 func (r *Resource) String() string {
 	return fmt.Sprintf("%v", r.Resources)
+}
+
+func (r *Resource) DAOString() string {
+	if r != nil {
+		return strings.Trim(r.String(), "map")
+	}
+	return "[]"
 }
 
 // Convert to a protobuf implementation

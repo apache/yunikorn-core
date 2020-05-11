@@ -332,44 +332,33 @@ func TestMaxResource(t *testing.T) {
 
 func TestGetQueueInfos(t *testing.T) {
 	root, err := createRootQueue()
-	if err != nil {
-		t.Fatalf("failed to create basic root queue: %v", err)
-	}
-	rootMax, err := resources.NewResourceFromConf(map[string]string{"memory": "2048", "vcores": "10"})
-	if err != nil {
-		t.Fatalf("failed to create configuration: %v", err)
-	}
+	assert.NilError(t, err, "failed to create basic root queue: %v", err)
+	var rootMax *resources.Resource
+	rootMax, err = resources.NewResourceFromConf(map[string]string{"memory": "2048", "vcores": "10"})
+	assert.NilError(t, err, "failed to create configuration: %v", err)
 	root.setMaxResource(rootMax)
 
+	var parentUsed *resources.Resource
+	parentUsed, err = resources.NewResourceFromConf(map[string]string{"memory": "1012", "vcores": "2"})
+	assert.NilError(t, err, "failed to create resource: %v", err)
 	var parent *QueueInfo
-	parentUsed, err := resources.NewResourceFromConf(map[string]string{"memory": "1012", "vcores": "2"})
-	if err != nil {
-		t.Fatalf("failed to create resource: %v", err)
-	}
 	parent, err = createManagedQueue(root, "parent", true)
-	if err != nil {
-		t.Fatalf("failed to create queue: %v", err)
-	}
+	assert.NilError(t, err, "failed to create queue: %v", err)
 	err = parent.IncAllocatedResource(parentUsed, false)
-	if err != nil {
-		t.Fatalf("failed to increment allocated resource: %v", err)
-	}
+	assert.NilError(t, err, "failed to increment allocated resource: %v", err)
 
+	var child1used *resources.Resource
+	child1used, err = resources.NewResourceFromConf(map[string]string{"memory": "1012", "vcores": "2"})
+	assert.NilError(t, err, "failed to create resource: %v", err)
 	var child1 *QueueInfo
-	var child1used, _ = resources.NewResourceFromConf(map[string]string{"memory": "1012", "vcores": "2"})
 	child1, err = createManagedQueue(parent, "child1", true)
-	if err != nil {
-		t.Fatalf("failed to create queue: %v", err)
-	}
+	assert.NilError(t, err, "failed to create queue: %v", err)
 	err = child1.IncAllocatedResource(child1used, false)
-	if err != nil {
-		t.Fatalf("failed to increment allocated resource: %v", err)
-	}
+	assert.NilError(t, err, "failed to increment allocated resource: %v", err, err)
+
 	var child2 *QueueInfo
 	child2, err = createManagedQueue(parent, "child2", true)
-	if err != nil {
-		t.Fatalf("failed to create child queue: %v", err)
-	}
+	assert.NilError(t, err, "failed to create child queue: %v", err)
 	child2.setMaxResource(resources.NewResource())
 
 	rootDaoInfo := root.GetQueueInfos()

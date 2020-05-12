@@ -20,9 +20,7 @@ package tests
 
 import (
 	"testing"
-	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
@@ -147,9 +145,9 @@ partitions:
 	waitForPendingQueueResource(t, schedulerQueueRoot, 20, 1000)
 	waitForPendingAppResource(t, schedulingApp, 20, 1000)
 
-	cancel := ms.scheduler.ScheduleMomentarily(3*time.Second)
+	ms.scheduler.MultiStepSchedule(16)
 
-	ms.mockRM.waitForAllocations(t, 2, 3000)
+	ms.mockRM.waitForAllocations(t, 2, 1000)
 
 	// Make sure pending resource updated to 0
 	waitForPendingQueueResource(t, schedulerQueueA, 0, 1000)
@@ -167,8 +165,6 @@ partitions:
 	// Check allocated resources of nodes
 	waitForNodesAllocatedResource(t, ms.clusterInfo, "[rm:123]default",
 		[]string{"node-1:1234", "node-2:1234"}, 20, 1000)
-
-	cancel()
 
 	// Ask for two more resources
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -210,7 +206,7 @@ partitions:
 	waitForPendingAppResource(t, schedulingApp, 300, 1000)
 
 	// Now app-1 uses 20 resource, and queue-a's max = 150, so it can get two 50 container allocated.
-	cancel = ms.scheduler.ScheduleMomentarily(3*time.Second)
+	ms.scheduler.MultiStepSchedule(16)
 
 	ms.mockRM.waitForAllocations(t, 4, 3000)
 
@@ -227,8 +223,6 @@ partitions:
 	// Check allocated resources of nodes
 	waitForNodesAllocatedResource(t, ms.clusterInfo, "[rm:123]default",
 		[]string{"node-1:1234", "node-2:1234"}, 120, 1000)
-
-	cancel()
 
 	// --------------------------------------------------
 	// Phase 2) Restart the scheduler, test recovery
@@ -339,10 +333,7 @@ partitions:
 	}
 
 	// verify app state
-	err = common.WaitFor(100 * time.Millisecond, 3000 * time.Millisecond, func() bool {
-		return recoveredApp.ApplicationInfo.GetApplicationState() == "Running"
-	})
-	assert.NilError(t, err, "application should be in Running state")
+	assert.Equal(t, recoveredApp.ApplicationInfo.GetApplicationState(), "Running")
 }
 
 // test scheduler recovery when shim doesn't report existing application

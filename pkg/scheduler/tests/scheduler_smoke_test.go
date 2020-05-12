@@ -581,15 +581,15 @@ partitions:
 	waitForPendingQueueResource(t, schedulerQueue2, 200, 3000)
 	waitForPendingQueueResource(t, schedulerQueueRoot, 400, 3000)
 
-	cancel := ms.scheduler.ScheduleMomentarily(3 * time.Second)
-	ms.mockRM.waitForAllocations(t, 20, 30000)
+	ms.scheduler.MultiStepSchedule(25)
+	ms.mockRM.waitForAllocations(t, 20, 1500)
+
 	waitForAllocatedAppResource(t, app1, 100, 3000)
 	waitForAllocatedAppResource(t, app2, 100, 3000)
 	// Make sure pending resource updated to 0
 	waitForPendingQueueResource(t, schedulerQueue1, 100, 3000)
 	waitForPendingQueueResource(t, schedulerQueue2, 100, 3000)
 	waitForPendingQueueResource(t, schedulerQueueRoot, 200, 3000)
-	cancel()
 }
 
 func TestFairnessAllocationForApplications(t *testing.T) {

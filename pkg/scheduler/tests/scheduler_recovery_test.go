@@ -237,6 +237,9 @@ partitions:
 	assert.NilError(t, err, "2nd RegisterResourceManager failed")
 
 	// Register apps first
+	// app must be recovered first in prior of allocations
+	// this is because each allocation will need to have the
+	// app it belongs to registered in the scheduler before the recovery
 	err = ms.proxy.Update(&si.UpdateRequest{
 		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a"}),
 		RmID:            "rm:123",

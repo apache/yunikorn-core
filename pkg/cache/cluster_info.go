@@ -86,14 +86,6 @@ func (m *ClusterInfo) StopService() {
 	}
 }
 
-func (m *ClusterInfo) Drain() {
-	if err := common.WaitFor(10*time.Millisecond, 1000*time.Millisecond, func() bool {
-		return len(m.pendingSchedulerEvents) == 0 && len(m.pendingRmEvents) == 0
-	}); err != nil {
-		log.Logger().Warn("timeout waiting for events to drain in cache")
-	}
-}
-
 func (m *ClusterInfo) handleSchedulerEvents() {
 	defer m.waitGroup.Done()
 	for {

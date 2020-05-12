@@ -588,21 +588,13 @@ func (s *Scheduler) MultiStepSchedule(nAlloc int) {
 		log.Logger().Debug("Scheduler manual stepping",
 			zap.Int("count", i))
 		s.schedule()
-		//
-		// // for single step scheduling, wait for events to drain before entering next step
-		// // this will give us a more stable processing of scheduling events
-		// // note, this is only used in tests
-		// s.drain()
-		// s.clusterInfo.Drain()
-		time.Sleep(100 * time.Millisecond)
-	}
-}
 
-func (s *Scheduler) drain() {
-	if err := common.WaitFor(10*time.Millisecond, 3000*time.Millisecond, func() bool {
-		return len(s.pendingSchedulerEvents) == 0
-	}); err != nil {
-		log.Logger().Warn("timeout waiting for the scheduling events to drain")
+		// sometimes the smoke tests are failing because they are competing CPU resources.
+		// each scheduling cycle, let's sleep for a small amount of time (100ms),
+		// this can ensure even CPU is intensive, the main thread can give up some CPU time
+		// for other go routines to process, such as event handling routines.
+		// Note, this sleep only works in tests.
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 

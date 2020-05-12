@@ -24,7 +24,7 @@ go:
   - "1.12"
 
 git:
-  depth: 50
+  depth: 1
 
 env:
   - GO111MODULE=on
@@ -35,7 +35,6 @@ jobs:
   include:
     - stage: unit test
       script:
-        - git log
         - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.22.2
         - make license-check
         - make test

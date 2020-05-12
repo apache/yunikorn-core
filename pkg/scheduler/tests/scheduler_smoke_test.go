@@ -579,7 +579,7 @@ partitions:
 	waitForPendingQueueResource(t, schedulerQueueRoot, 400, 3000)
 
 	ms.scheduler.MultiStepSchedule(25)
-	ms.mockRM.waitForAllocations(t, 20, 3000)
+	ms.mockRM.waitForAllocations(t, 20, 30000)
 
 	waitForAllocatedAppResource(t, app1, 100, 3000)
 	waitForAllocatedAppResource(t, app2, 100, 3000)

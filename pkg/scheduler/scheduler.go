@@ -595,6 +595,7 @@ func (s *Scheduler) MultiStepSchedule(nAlloc int) {
 		// note, this is only used in tests
 		s.drain()
 		s.clusterInfo.Drain()
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 

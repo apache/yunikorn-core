@@ -588,12 +588,12 @@ func (s *Scheduler) MultiStepSchedule(nAlloc int) {
 		log.Logger().Debug("Scheduler manual stepping",
 			zap.Int("count", i))
 		s.schedule()
-
-		// for single step scheduling, wait for events to drain before entering next step
-		// this will give us a more stable processing of scheduling events
-		// note, this is only used in tests
-		s.drain()
-		s.clusterInfo.Drain()
+		//
+		// // for single step scheduling, wait for events to drain before entering next step
+		// // this will give us a more stable processing of scheduling events
+		// // note, this is only used in tests
+		// s.drain()
+		// s.clusterInfo.Drain()
 		time.Sleep(100 * time.Millisecond)
 	}
 }

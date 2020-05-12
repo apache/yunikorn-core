@@ -23,6 +23,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/api"
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice"
 )
@@ -41,6 +42,20 @@ func (s *ServiceContext) StopAll() {
 		if err := s.WebApp.StopWebApp(); err != nil {
 			log.Logger().Error("failed to stop web-app",
 				zap.Error(err))
+		}
+	}
+
+	if s.Cache != nil {
+		s.Cache.StopService()
+	}
+
+	if s.Scheduler != nil {
+		s.Scheduler.StopService()
+	}
+
+	if s.RMProxy != nil {
+		if proxy, ok := s.RMProxy.(*rmproxy.RMProxy); ok {
+			proxy.StopService()
 		}
 	}
 }

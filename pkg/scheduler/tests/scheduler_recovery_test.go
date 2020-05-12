@@ -147,7 +147,7 @@ partitions:
 
 	ms.scheduler.MultiStepSchedule(16)
 
-	ms.mockRM.waitForAllocations(t, 2, 1000)
+	ms.mockRM.waitForAllocations(t, 2, 3000)
 
 	// Make sure pending resource updated to 0
 	waitForPendingQueueResource(t, schedulerQueueA, 0, 1000)
@@ -501,6 +501,7 @@ partitions:
 // test scheduler recovery that only registers nodes and apps
 func TestAppRecovery(t *testing.T) {
 	serviceContext := entrypoint.StartAllServicesWithManualScheduler()
+	defer serviceContext.StopAll()
 	proxy := serviceContext.RMProxy
 
 	// Register RM
@@ -584,6 +585,7 @@ partitions:
 // test scheduler recovery that only registers apps
 func TestAppRecoveryAlone(t *testing.T) {
 	serviceContext := entrypoint.StartAllServicesWithManualScheduler()
+	defer serviceContext.StopAll()
 	proxy := serviceContext.RMProxy
 
 	// Register RM
@@ -764,7 +766,7 @@ partitions:
 
 	ms.scheduler.MultiStepSchedule(16)
 
-	ms.mockRM.waitForAllocations(t, 2, 1000)
+	ms.mockRM.waitForAllocations(t, 2, 3000)
 
 	// Make sure pending resource updated to 0
 	waitForPendingQueueResource(t, appQueue, 0, 1000)

@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -49,6 +50,9 @@ type ClusterInfo struct {
 	// RM Event Handler
 	EventHandlers handler.EventHandlers
 
+	waitGroup *sync.WaitGroup
+	stopChan  chan struct{}
+
 	sync.RWMutex
 }
 
@@ -57,6 +61,8 @@ func NewClusterInfo() (info *ClusterInfo) {
 		partitions:             make(map[string]*PartitionInfo),
 		pendingRmEvents:        make(chan interface{}, 1024*1024),
 		pendingSchedulerEvents: make(chan interface{}, 1024*1024),
+		waitGroup:              &sync.WaitGroup{},
+		stopChan:               make(chan struct{}),
 	}
 	return clusterInfo
 }
@@ -66,42 +72,70 @@ func (m *ClusterInfo) StartService(handlers handler.EventHandlers) {
 	m.EventHandlers = handlers
 
 	// Start event handlers
+	m.waitGroup.Add(1)
 	go m.handleRMEvents()
+
+	m.waitGroup.Add(1)
 	go m.handleSchedulerEvents()
 }
 
+func (m *ClusterInfo) StopService() {
+	close(m.stopChan)
+	if err := common.WaitWithTimeout(m.waitGroup, 3*time.Second); err != nil {
+		log.Logger().Warn("stop cache completed with error", zap.Error(err))
+	}
+}
+
+func (m *ClusterInfo) Drain() {
+	if err := common.WaitFor(10*time.Millisecond, 1000*time.Millisecond, func() bool {
+		return len(m.pendingSchedulerEvents) == 0 && len(m.pendingRmEvents) == 0
+	}); err != nil {
+		log.Logger().Warn("timeout waiting for events to drain in cache")
+	}
+}
+
 func (m *ClusterInfo) handleSchedulerEvents() {
+	defer m.waitGroup.Done()
 	for {
-		ev := <-m.pendingSchedulerEvents
-		switch v := ev.(type) {
-		case *cacheevent.AllocationProposalBundleEvent:
-			m.processAllocationProposalEvent(v)
-		case *cacheevent.RejectedNewApplicationEvent:
-			m.processRejectedApplicationEvent(v)
-		case *cacheevent.ReleaseAllocationsEvent:
-			m.handleAllocationReleasesRequestEvent(v)
-		case *cacheevent.RemovedApplicationEvent:
-			m.processRemovedApplication(v)
-		case *commonevents.RemoveRMPartitionsEvent:
-			m.processRemoveRMPartitionsEvent(v)
-		default:
-			panic(fmt.Sprintf("%s is not an acceptable type for scheduler event.", reflect.TypeOf(v).String()))
+		select {
+		case ev := <-m.pendingSchedulerEvents:
+			switch v := ev.(type) {
+			case *cacheevent.AllocationProposalBundleEvent:
+				m.processAllocationProposalEvent(v)
+			case *cacheevent.RejectedNewApplicationEvent:
+				m.processRejectedApplicationEvent(v)
+			case *cacheevent.ReleaseAllocationsEvent:
+				m.handleAllocationReleasesRequestEvent(v)
+			case *cacheevent.RemovedApplicationEvent:
+				m.processRemovedApplication(v)
+			case *commonevents.RemoveRMPartitionsEvent:
+				m.processRemoveRMPartitionsEvent(v)
+			default:
+				log.Logger().Warn("Invalid RM event type", zap.String("eventType", reflect.TypeOf(v).String()))
+			}
+		case <-m.stopChan:
+			return
 		}
 	}
 }
 
 func (m *ClusterInfo) handleRMEvents() {
+	defer m.waitGroup.Done()
 	for {
-		ev := <-m.pendingRmEvents
-		switch v := ev.(type) {
-		case *cacheevent.RMUpdateRequestEvent:
-			m.processRMUpdateEvent(v)
-		case *commonevents.RegisterRMEvent:
-			m.processRMRegistrationEvent(v)
-		case *commonevents.ConfigUpdateRMEvent:
-			m.processRMConfigUpdateEvent(v)
-		default:
-			panic(fmt.Sprintf("%s is not an acceptable type for RM event.", reflect.TypeOf(v).String()))
+		select {
+		case ev := <-m.pendingRmEvents:
+			switch v := ev.(type) {
+			case *cacheevent.RMUpdateRequestEvent:
+				m.processRMUpdateEvent(v)
+			case *commonevents.RegisterRMEvent:
+				m.processRMRegistrationEvent(v)
+			case *commonevents.ConfigUpdateRMEvent:
+				m.processRMConfigUpdateEvent(v)
+			default:
+				panic(fmt.Sprintf("%s is not an acceptable type for RM event.", reflect.TypeOf(v).String()))
+			}
+		case <-m.stopChan:
+			return
 		}
 	}
 }

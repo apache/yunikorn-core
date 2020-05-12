@@ -142,7 +142,7 @@ func TestBasicPreemption(t *testing.T) {
 	scheduler.MultiStepSchedule(20)
 
 	// We should be able to get 20 allocations.
-	ms.mockRM.waitForAllocations(t, 20, 1000)
+	ms.mockRM.waitForAllocations(t, 20, 3000)
 
 	// Make sure pending resource updated to 0
 	waitForPendingQueueResource(t, schedulerQueueA, 0, 1000)

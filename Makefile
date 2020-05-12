@@ -76,7 +76,7 @@ build: commands
 
 # Run the tests after building
 .PHONY: test
-test:
+test: clean
 	@echo "running unit tests"
 	go test ./... -cover $(RACE) -tags deadlock
 	go vet $(REPO)...
@@ -84,5 +84,5 @@ test:
 # Simple clean of generated files only (no local cleanup).
 .PHONY: clean
 clean:
-	go clean -r -x ./...
+	go clean -cache -testcache -r -x ./...
 	-rm -rf _output

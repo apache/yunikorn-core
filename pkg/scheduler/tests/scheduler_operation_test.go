@@ -148,7 +148,7 @@ partitions:
 	waitForPendingAppResource(t, schedulingApp, 0, 1000)
 
 	// Make sure we get correct allocations
-	ms.mockRM.waitForAllocations(t, 2, 3000)
+	ms.mockRM.waitForAllocations(t, 2, 1000)
 }
 
 func TestAddRemoveNodes(t *testing.T) {
@@ -271,7 +271,7 @@ partitions:
 		[]string{"node-1:1234"}, 20, 1000)
 
 	// Make sure we get correct allocations
-	ms.mockRM.waitForAllocations(t, 2, 3000)
+	ms.mockRM.waitForAllocations(t, 2, 1000)
 
 	// now remove the node
 	err = ms.proxy.Update(&si.UpdateRequest{

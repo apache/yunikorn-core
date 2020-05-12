@@ -210,7 +210,7 @@ partitions:
 	// Now app-1 uses 20 resource, and queue-a's max = 150, so it can get two 50 container allocated.
 	ms.scheduler.MultiStepSchedule(16)
 
-	ms.mockRM.waitForAllocations(t, 4, 3000)
+	ms.mockRM.waitForAllocations(t, 4, 1000)
 
 	// Check pending resource, should be 200 now.
 	waitForPendingQueueResource(t, schedulerQueueA, 200, 1000)
@@ -782,7 +782,7 @@ partitions:
 
 	ms.scheduler.MultiStepSchedule(16)
 
-	ms.mockRM.waitForAllocations(t, 2, 3000)
+	ms.mockRM.waitForAllocations(t, 2, 1000)
 
 	// Make sure pending resource updated to 0
 	waitForPendingQueueResource(t, appQueue, 0, 1000)

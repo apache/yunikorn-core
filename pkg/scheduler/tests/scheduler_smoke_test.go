@@ -248,7 +248,7 @@ partitions:
 
 	ms.scheduler.MultiStepSchedule(16)
 
-	ms.mockRM.waitForAllocations(t, 2, 3000)
+	ms.mockRM.waitForAllocations(t, 2, 1000)
 
 	// Make sure pending resource updated to 0
 	waitForPendingQueueResource(t, leaf, 0, 1000)
@@ -305,7 +305,7 @@ partitions:
 	// Now app-1 uses 20 resource, and queue-a's max = 150, so it can get two 50 container allocated.
 	ms.scheduler.MultiStepSchedule(16)
 
-	ms.mockRM.waitForAllocations(t, 4, 3000)
+	ms.mockRM.waitForAllocations(t, 4, 1000)
 
 	// Check pending resource, should be 200 now.
 	waitForPendingQueueResource(t, leaf, 200, 1000)
@@ -340,7 +340,7 @@ partitions:
 	err = ms.proxy.Update(updateRequest)
 	assert.NilError(t, err, "UpdateRequest 4 failed")
 
-	ms.mockRM.waitForAllocations(t, 0, 3000)
+	ms.mockRM.waitForAllocations(t, 0, 1000)
 
 	// Check pending resource, should be 200 (same)
 	waitForPendingQueueResource(t, leaf, 200, 1000)
@@ -449,7 +449,7 @@ partitions:
 	assert.NilError(t, err, "UpdateRequest 2 failed")
 
 	// wait until we have maxed out the leaf queue
-	ms.mockRM.waitForAllocations(t, 15, 3000)
+	ms.mockRM.waitForAllocations(t, 15, 1000)
 
 	// Check scheduling queue root
 	schedulerQueueRoot := ms.getSchedulingQueue("root")
@@ -692,7 +692,7 @@ partitions:
 
 	ms.scheduler.MultiStepSchedule(25)
 
-	ms.mockRM.waitForAllocations(t, 20, 3000)
+	ms.mockRM.waitForAllocations(t, 20, 1000)
 
 	// Make sure pending resource updated to 100, which means
 	waitForPendingQueueResource(t, schedulerQueue, 200, 1000)
@@ -868,7 +868,7 @@ partitions:
 				t.Fatal("application 'app-1' not found in cache")
 			}
 			waitForAllocatedAppResource(t, app1, 100, 1000)
-			ms.mockRM.waitForAllocations(t, 10, 3000)
+			ms.mockRM.waitForAllocations(t, 10, 1000)
 			assert.Equal(t, len(app1.ApplicationInfo.GetAllAllocations()), 10, "number of app allocations incorrect")
 			assert.Equal(t, int(app1.GetAllocatedResource().Resources[resources.MEMORY]), 100, "app allocated resource incorrect")
 
@@ -897,7 +897,7 @@ partitions:
 			ms.scheduler.MultiStepSchedule(10)
 
 			waitForPendingQueueResource(t, schedulingQueue, 0, 1000)
-			ms.mockRM.waitForAllocations(t, 2, 3000)
+			ms.mockRM.waitForAllocations(t, 2, 1000)
 			assert.Equal(t, len(ms.mockRM.getAllocations()), 2)
 		})
 	}
@@ -1126,7 +1126,7 @@ partitions:
 	waitForPendingAppResource(t, schedulingApp2, 200, 1000)
 
 	ms.scheduler.MultiStepSchedule(9)
-	ms.mockRM.waitForAllocations(t, 9, 3000)
+	ms.mockRM.waitForAllocations(t, 9, 1000)
 
 	node1Alloc := ms.clusterInfo.GetPartition(partition).GetNode("node-1:1234").GetAllocatedResource().Resources[resources.MEMORY]
 	node2Alloc := ms.clusterInfo.GetPartition(partition).GetNode("node-2:1234").GetAllocatedResource().Resources[resources.MEMORY]
@@ -1220,7 +1220,7 @@ partitions:
 	ms.scheduler.MultiStepSchedule(20)
 
 	// Verify all requests are satisfied
-	ms.mockRM.waitForAllocations(t, 20, 3000)
+	ms.mockRM.waitForAllocations(t, 20, 1000)
 	waitForPendingQueueResource(t, schedulerQueue, 0, 1000)
 	waitForPendingAppResource(t, schedulingApp, 0, 1000)
 	assert.Equal(t, int(schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY]), 200)

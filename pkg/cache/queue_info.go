@@ -24,6 +24,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
+
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
@@ -43,9 +45,9 @@ const (
 
 // The queue structure as used throughout the scheduler
 type QueueInfo struct {
-	Name               string
-	Parent             *QueueInfo          // link to the parent queue
-	Properties         map[string]string   // this should be treated as immutable the value is a merge of parent(s)
+	Name       string
+	Parent     *QueueInfo        // link to the parent queue
+	Properties map[string]string // this should be treated as immutable the value is a merge of parent(s)
 	// properties with the config for this queue only manipulated during creation
 	// of the queue or via a queue configuration update
 
@@ -470,4 +472,23 @@ func (qi *QueueInfo) CheckAdminAccess(user security.UserGroup) bool {
 		allow = qi.Parent.CheckAdminAccess(user)
 	}
 	return allow
+}
+
+func (qi *QueueInfo) GetQueueInfos() dao.QueueDAOInfo {
+	qi.RLock()
+	defer qi.RUnlock()
+	queueInfo := dao.QueueDAOInfo{}
+	queueInfo.QueueName = qi.Name
+	queueInfo.Status = qi.stateMachine.Current()
+	queueInfo.Capacities = dao.QueueCapacity{
+		Capacity:     qi.GetGuaranteedResource().DAOString(),
+		MaxCapacity:  qi.GetMaxResource().DAOString(),
+		UsedCapacity: qi.GetAllocatedResource().DAOString(),
+		AbsUsedCapacity: resources.CalculateAbsUsedCapacity(
+			qi.GetMaxResource(), qi.GetAllocatedResource()).DAOString(),
+	}
+	for _, child := range qi.children {
+		queueInfo.ChildQueues = append(queueInfo.ChildQueues, child.GetQueueInfos())
+	}
+	return queueInfo
 }

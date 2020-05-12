@@ -36,7 +36,6 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
-	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -709,61 +708,6 @@ func (pi *PartitionInfo) CopyNodeInfos() []*NodeInfo {
 	}
 
 	return out
-}
-
-func checkAndSetResource(resource *resources.Resource) string {
-	if resource != nil {
-		return strings.Trim(resource.String(), "map")
-	}
-	return ""
-}
-
-// TODO fix this:
-// should only return one element, only a root queue
-// remove hard coded values and unknown AbsUsedCapacity
-// map status to the draining flag
-func (pi *PartitionInfo) GetQueueInfos() []dao.QueueDAOInfo {
-	pi.RLock()
-	defer pi.RUnlock()
-
-	var queueInfos []dao.QueueDAOInfo
-
-	info := dao.QueueDAOInfo{}
-	info.QueueName = pi.Root.Name
-	info.Status = pi.Root.stateMachine.Current()
-	info.Capacities = dao.QueueCapacity{
-		Capacity:        checkAndSetResource(pi.Root.GetGuaranteedResource()),
-		MaxCapacity:     checkAndSetResource(pi.Root.GetMaxResource()),
-		UsedCapacity:    checkAndSetResource(pi.Root.GetAllocatedResource()),
-		AbsUsedCapacity: "20",
-	}
-	info.ChildQueues = GetChildQueueInfos(pi.Root)
-	queueInfos = append(queueInfos, info)
-
-	return queueInfos
-}
-
-// TODO fix this:
-// should only return one element, only a root queue
-// remove hard coded values and unknown AbsUsedCapacity
-// map status to the draining flag
-func GetChildQueueInfos(info *QueueInfo) []dao.QueueDAOInfo {
-	var infos []dao.QueueDAOInfo
-	for _, child := range info.children {
-		queue := dao.QueueDAOInfo{}
-		queue.QueueName = child.Name
-		queue.Status = child.stateMachine.Current()
-		queue.Capacities = dao.QueueCapacity{
-			Capacity:        checkAndSetResource(child.GetGuaranteedResource()),
-			MaxCapacity:     checkAndSetResource(child.GetMaxResource()),
-			UsedCapacity:    checkAndSetResource(child.GetAllocatedResource()),
-			AbsUsedCapacity: "20",
-		}
-		queue.ChildQueues = GetChildQueueInfos(child)
-		infos = append(infos, queue)
-	}
-
-	return infos
 }
 
 func (pi *PartitionInfo) GetTotalApplicationCount() int {

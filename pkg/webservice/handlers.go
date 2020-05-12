@@ -166,7 +166,7 @@ func getPartitionJSON(name string) *dao.PartitionDAOInfo {
 	partitionInfo := &dao.PartitionDAOInfo{}
 
 	partitionContext := gClusterInfo.GetPartition(name)
-	queueDAOInfo := partitionContext.GetQueueInfos()
+	queueDAOInfo := partitionContext.Root.GetQueueInfos()
 
 	partitionInfo.PartitionName = partitionContext.Name
 	partitionInfo.Capacity = dao.PartitionCapacity{

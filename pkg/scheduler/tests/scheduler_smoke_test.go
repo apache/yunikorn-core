@@ -37,7 +37,6 @@ const partition = "[rm:123]default"
 
 // Test scheduler reconfiguration
 func TestConfigScheduler(t *testing.T) {
-	t.Skip()
 	configData := `
 partitions:
   - name: default
@@ -247,7 +246,7 @@ partitions:
 	waitForPendingQueueResource(t, root, 20, 1000)
 	waitForPendingAppResource(t, schedulingApp, 20, 1000)
 
-	ms.scheduler.MultiStepSchedule(16)
+	cancel := ms.scheduler.ScheduleMomentarily(3 * time.Second)
 
 	ms.mockRM.waitForAllocations(t, 2, 3000)
 
@@ -266,6 +265,8 @@ partitions:
 
 	// Check allocated resources of nodes
 	waitForNodesAllocatedResource(t, ms.clusterInfo, ms.partitionName, []string{"node-1:1234", "node-2:1234"}, 20, 1000)
+
+	cancel()
 
 	// Ask for two more resources
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -304,7 +305,7 @@ partitions:
 	waitForPendingAppResource(t, schedulingApp, 300, 1000)
 
 	// Now app-1 uses 20 resource, and queue-a's max = 150, so it can get two 50 container allocated.
-	ms.scheduler.MultiStepSchedule(16)
+	cancel = ms.scheduler.ScheduleMomentarily(3 * time.Second)
 
 	ms.mockRM.waitForAllocations(t, 4, 3000)
 
@@ -320,6 +321,8 @@ partitions:
 
 	// Check allocated resources of nodes
 	waitForNodesAllocatedResource(t, ms.clusterInfo, partition, []string{"node-1:1234", "node-2:1234"}, 120, 1000)
+
+	cancel()
 
 	updateRequest := &si.UpdateRequest{
 		Releases: &si.AllocationReleasesRequest{
@@ -578,15 +581,15 @@ partitions:
 	waitForPendingQueueResource(t, schedulerQueue2, 200, 3000)
 	waitForPendingQueueResource(t, schedulerQueueRoot, 400, 3000)
 
-	ms.scheduler.MultiStepSchedule(25)
+	cancel := ms.scheduler.ScheduleMomentarily(3 * time.Second)
 	ms.mockRM.waitForAllocations(t, 20, 30000)
-
 	waitForAllocatedAppResource(t, app1, 100, 3000)
 	waitForAllocatedAppResource(t, app2, 100, 3000)
 	// Make sure pending resource updated to 0
 	waitForPendingQueueResource(t, schedulerQueue1, 100, 3000)
 	waitForPendingQueueResource(t, schedulerQueue2, 100, 3000)
 	waitForPendingQueueResource(t, schedulerQueueRoot, 200, 3000)
+	cancel()
 }
 
 func TestFairnessAllocationForApplications(t *testing.T) {
@@ -691,7 +694,7 @@ partitions:
 	waitForPendingAppResource(t, schedulingApp1, 200, 1000)
 	waitForPendingAppResource(t, schedulingApp2, 200, 1000)
 
-	ms.scheduler.MultiStepSchedule(25)
+	cancel := ms.scheduler.ScheduleMomentarily(3 * time.Second)
 
 	ms.mockRM.waitForAllocations(t, 20, 3000)
 
@@ -700,6 +703,8 @@ partitions:
 	waitForPendingQueueResource(t, schedulerQueueRoot, 200, 1000)
 	waitForPendingAppResource(t, schedulingApp1, 100, 1000)
 	waitForPendingAppResource(t, schedulingApp2, 100, 1000)
+	cancel()
+
 
 	// Both apps got 100 resources,
 	assert.Equal(t, int(schedulingApp1.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY]), 100, "app1 allocated resource incorrect")
@@ -859,16 +864,19 @@ partitions:
 
 			waitForPendingQueueResource(t, schedulingQueue, 120, 1000)
 
-			ms.scheduler.MultiStepSchedule(20)
+			cancel := ms.scheduler.ScheduleMomentarily(3 * time.Second)
 
 			// 100 memory gets allocated, 20 pending because the capacity is 100
 			waitForPendingQueueResource(t, schedulingQueue, 20, 1000)
+
 			app1 := ms.getSchedulingApplication("app-1")
 			if app1 == nil {
 				t.Fatal("application 'app-1' not found in cache")
 			}
 			waitForAllocatedAppResource(t, app1, 100, 1000)
 			ms.mockRM.waitForAllocations(t, 10, 3000)
+
+			cancel()
 
 			assert.Equal(t, len(app1.ApplicationInfo.GetAllAllocations()), 10, "number of app allocations incorrect")
 			assert.Equal(t, int(app1.GetAllocatedResource().Resources[resources.MEMORY]), 100, "app allocated resource incorrect")
@@ -895,10 +903,12 @@ partitions:
 			waitForAllocatedQueueResource(t, schedulingQueue, 0, 1000)
 
 			// schedule again, pending requests should be satisfied now
-			ms.scheduler.MultiStepSchedule(10)
+			cancel = ms.scheduler.ScheduleMomentarily(3 * time.Second)
 
 			waitForPendingQueueResource(t, schedulingQueue, 0, 1000)
 			ms.mockRM.waitForAllocations(t, 2, 3000)
+
+			cancel()
 			assert.Equal(t, len(ms.mockRM.getAllocations()), 2)
 		})
 	}
@@ -1218,13 +1228,14 @@ partitions:
 	waitForPendingQueueResource(t, schedulerQueue, 200, 1000)
 	waitForPendingAppResource(t, schedulingApp, 200, 1000)
 
-	ms.scheduler.MultiStepSchedule(20)
+	cancel := ms.scheduler.ScheduleMomentarily(3 * time.Second)
 
 	// Verify all requests are satisfied
 	ms.mockRM.waitForAllocations(t, 20, 3000)
 	waitForPendingQueueResource(t, schedulerQueue, 0, 1000)
 	waitForPendingAppResource(t, schedulingApp, 0, 1000)
 	assert.Equal(t, int(schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY]), 200)
+	cancel()
 
 	// Verify 2 allocations for every node
 	for _, node := range nodes {

@@ -20,6 +20,7 @@ package tests
 
 import (
 	"testing"
+	"time"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
@@ -106,12 +107,15 @@ partitions:
 	waitForPendingAppResource(t, schedulingApp, 20, 1000)
 
 	// no nodes available, no allocation can be made
-	ms.scheduler.MultiStepSchedule(16)
+	cancel := ms.scheduler.ScheduleMomentarily(3 * time.Second)
 
 	// pending resources should not change
 	waitForPendingQueueResource(t, schedulerQueueA, 20, 1000)
 	waitForPendingQueueResource(t, schedulerQueueRoot, 20, 1000)
 	waitForPendingAppResource(t, schedulingApp, 20, 1000)
+
+	// cancel scheduling before next step
+	cancel()
 
 	// Register a node
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -140,7 +144,8 @@ partitions:
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 
 	// Run scheduling
-	ms.scheduler.MultiStepSchedule(16)
+    cancel = ms.scheduler.ScheduleMomentarily(3 * time.Second)
+    defer cancel()
 
 	// Wait for allocating resources
 	waitForPendingQueueResource(t, schedulerQueueA, 0, 1000)

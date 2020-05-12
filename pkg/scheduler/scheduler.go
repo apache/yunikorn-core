@@ -599,18 +599,23 @@ func (s *Scheduler) MultiStepSchedule(nAlloc int) {
 }
 
 // run schedule for sometime until cancel function is called
-func (s *Scheduler) ScheduleWithCancel(timeout time.Duration) context.CancelFunc {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
+func (s *Scheduler) ScheduleMomentarily(duration time.Duration) context.CancelFunc {
+	ctx, cancel := context.WithTimeout(context.Background(), duration)
 
 	go func() {
-		select {
-		default:
-			s.schedule()
-		case <-ctx.Done():
-			break
+		for {
+			select {
+			default:
+				s.schedule()
+			case <-ctx.Done():
+				break
+			}
 		}
 	}()
+
+	time.AfterFunc(duration, func() {
+		cancel()
+	})
 
 	return cancel
 }

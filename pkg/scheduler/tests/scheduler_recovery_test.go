@@ -20,7 +20,9 @@ package tests
 
 import (
 	"testing"
+	"time"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
@@ -234,7 +236,24 @@ partitions:
 	err = ms.Init(configData, false)
 	assert.NilError(t, err, "2nd RegisterResourceManager failed")
 
-	// Register nodes, and add apps
+	// Register apps first
+	err = ms.proxy.Update(&si.UpdateRequest{
+		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a"}),
+		RmID:            "rm:123",
+	})
+
+	if nil != err {
+		t.Fatalf("UpdateRequest nodes and app for recovery failed: %v", err)
+	}
+
+	ms.mockRM.waitForAcceptedApplication(t, "app-1", 1000)
+	partition := ms.clusterInfo.GetPartition("[rm:123]default")
+	err = common.WaitFor(100 * time.Millisecond, 1000 * time.Millisecond, func() bool {
+		return partition.GetApplications()[0].GetApplicationState() == "Accepted"
+	})
+	assert.NilError(t, err)
+
+	// Register nodes, and app allocations
 	err = ms.proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
@@ -266,7 +285,6 @@ partitions:
 				ExistingAllocations: mockRM.nodeAllocations["node-2:1234"],
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a"}),
 		RmID:            "rm:123",
 	})
 
@@ -275,13 +293,11 @@ partitions:
 	}
 
 	// waiting for recovery
-	ms.mockRM.waitForAcceptedApplication(t, "app-1", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
 	// verify partition info
 	t.Log("verifying partition info")
-	partition := ms.clusterInfo.GetPartition("[rm:123]default")
 	// verify apps in this partition
 	assert.Equal(t, 1, len(partition.GetApplications()))
 	assert.Equal(t, "app-1", partition.GetApplications()[0].ApplicationID)

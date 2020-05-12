@@ -18,7 +18,7 @@
 
 package scheduler
 
-import "github.com/apache/incubator-yunikorn-core/pkg/api"
+import "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 
 const (
 	defaultApplicationID = "_default_application_"
@@ -26,7 +26,7 @@ const (
 )
 
 func GetApplicationIDFromTags(tags map[string]string) string {
-	appID := tags[api.ApplicationID]
+	appID := tags[common.ApplicationID]
 
 	if appID == "" {
 		return defaultApplicationID
@@ -35,7 +35,7 @@ func GetApplicationIDFromTags(tags map[string]string) string {
 }
 
 func GetPartitionFromTags(tags map[string]string) string {
-	partitionName := tags[api.NodePartition]
+	partitionName := tags[common.NodePartition]
 
 	if partitionName == "" {
 		return defaultPartitionName

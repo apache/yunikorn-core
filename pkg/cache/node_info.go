@@ -21,9 +21,9 @@ package cache
 import (
 	"sync"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/api"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -75,9 +75,9 @@ func NewNodeInfo(proto *si.NewNodeInfo) *NodeInfo {
 func (ni *NodeInfo) initializeAttribute(newAttributes map[string]string) {
 	ni.attributes = newAttributes
 
-	ni.Hostname = ni.attributes[api.HostName]
-	ni.Rackname = ni.attributes[api.RackName]
-	ni.Partition = ni.attributes[api.NodePartition]
+	ni.Hostname = ni.attributes[common.HostName]
+	ni.Rackname = ni.attributes[common.RackName]
+	ni.Partition = ni.attributes[common.NodePartition]
 }
 
 // Get an attribute by name. The most used attributes can be directly accessed via the

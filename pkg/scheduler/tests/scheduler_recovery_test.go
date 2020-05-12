@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
@@ -338,7 +339,10 @@ partitions:
 	}
 
 	// verify app state
-	assert.Equal(t, recoveredApp.ApplicationInfo.GetApplicationState(), "Running")
+	err = common.WaitFor(100 * time.Millisecond, 3000 * time.Millisecond, func() bool {
+		return recoveredApp.ApplicationInfo.GetApplicationState() == "Running"
+	})
+	assert.NilError(t, err, "application should be in Running state")
 }
 
 // test scheduler recovery when shim doesn't report existing application

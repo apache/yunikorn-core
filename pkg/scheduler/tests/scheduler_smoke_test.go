@@ -862,7 +862,6 @@ partitions:
 
 			// 100 memory gets allocated, 20 pending because the capacity is 100
 			waitForPendingQueueResource(t, schedulingQueue, 20, 1000)
-
 			app1 := ms.getSchedulingApplication("app-1")
 			if app1 == nil {
 				t.Fatal("application 'app-1' not found in cache")

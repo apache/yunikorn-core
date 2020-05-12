@@ -19,7 +19,6 @@
 package scheduler
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 	"sync"
@@ -597,28 +596,6 @@ func (s *Scheduler) MultiStepSchedule(nAlloc int) {
 		s.clusterInfo.Drain()
 		time.Sleep(100 * time.Millisecond)
 	}
-}
-
-// run schedule for sometime until cancel function is called
-func (s *Scheduler) ScheduleMomentarily(duration time.Duration) context.CancelFunc {
-	ctx, cancel := context.WithTimeout(context.Background(), duration)
-
-	go func() {
-		for {
-			select {
-			default:
-				s.schedule()
-			case <-ctx.Done():
-				break
-			}
-		}
-	}()
-
-	time.AfterFunc(duration, func() {
-		cancel()
-	})
-
-	return cancel
 }
 
 func (s *Scheduler) drain() {

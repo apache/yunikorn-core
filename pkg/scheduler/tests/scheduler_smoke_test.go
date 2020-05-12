@@ -690,7 +690,7 @@ partitions:
 	waitForPendingAppResource(t, schedulingApp1, 200, 1000)
 	waitForPendingAppResource(t, schedulingApp2, 200, 1000)
 
-	cancel := ms.scheduler.ScheduleMomentarily(3 * time.Second)
+	ms.scheduler.MultiStepSchedule(25)
 
 	ms.mockRM.waitForAllocations(t, 20, 3000)
 
@@ -699,8 +699,6 @@ partitions:
 	waitForPendingQueueResource(t, schedulerQueueRoot, 200, 1000)
 	waitForPendingAppResource(t, schedulingApp1, 100, 1000)
 	waitForPendingAppResource(t, schedulingApp2, 100, 1000)
-	cancel()
-
 
 	// Both apps got 100 resources,
 	assert.Equal(t, int(schedulingApp1.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY]), 100, "app1 allocated resource incorrect")
@@ -1219,14 +1217,13 @@ partitions:
 	waitForPendingQueueResource(t, schedulerQueue, 200, 1000)
 	waitForPendingAppResource(t, schedulingApp, 200, 1000)
 
-	cancel := ms.scheduler.ScheduleMomentarily(3 * time.Second)
+	ms.scheduler.MultiStepSchedule(20)
 
 	// Verify all requests are satisfied
 	ms.mockRM.waitForAllocations(t, 20, 3000)
 	waitForPendingQueueResource(t, schedulerQueue, 0, 1000)
 	waitForPendingAppResource(t, schedulingApp, 0, 1000)
 	assert.Equal(t, int(schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY]), 200)
-	cancel()
 
 	// Verify 2 allocations for every node
 	for _, node := range nodes {

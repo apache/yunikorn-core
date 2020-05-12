@@ -33,10 +33,16 @@ install: true
 
 jobs:
   include:
+    - stage: check license
+      script:
+        - make license-check
     - stage: unit test
       script:
-        - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.22.2
-        - make license-check
         - make test
+        # - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.22.2
         # - make lint
       after_success: bash <(curl -s https://codecov.io/bash)
+
+
+notifications:
+  webhooks: https://www.travisbuddy.com/

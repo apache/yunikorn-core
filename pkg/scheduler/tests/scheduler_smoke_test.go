@@ -573,19 +573,19 @@ partitions:
 	app2 := ms.getSchedulingApplication(app2ID)
 
 	// Check pending resource, should be 100 (same)
-	waitForPendingQueueResource(t, schedulerQueue1, 200, 3000)
-	waitForPendingQueueResource(t, schedulerQueue2, 200, 3000)
-	waitForPendingQueueResource(t, schedulerQueueRoot, 400, 3000)
+	waitForPendingQueueResource(t, schedulerQueue1, 200, 1000)
+	waitForPendingQueueResource(t, schedulerQueue2, 200, 1000)
+	waitForPendingQueueResource(t, schedulerQueueRoot, 400, 1000)
 
 	ms.scheduler.MultiStepSchedule(25)
 	ms.mockRM.waitForAllocations(t, 20, 1500)
 
-	waitForAllocatedAppResource(t, app1, 100, 3000)
-	waitForAllocatedAppResource(t, app2, 100, 3000)
+	waitForAllocatedAppResource(t, app1, 100, 1000)
+	waitForAllocatedAppResource(t, app2, 100, 1000)
 	// Make sure pending resource updated to 0
-	waitForPendingQueueResource(t, schedulerQueue1, 100, 3000)
-	waitForPendingQueueResource(t, schedulerQueue2, 100, 3000)
-	waitForPendingQueueResource(t, schedulerQueueRoot, 200, 3000)
+	waitForPendingQueueResource(t, schedulerQueue1, 100, 1000)
+	waitForPendingQueueResource(t, schedulerQueue2, 100, 1000)
+	waitForPendingQueueResource(t, schedulerQueueRoot, 200, 1000)
 }
 
 func TestFairnessAllocationForApplications(t *testing.T) {
@@ -868,9 +868,10 @@ partitions:
 				t.Fatal("application 'app-1' not found in cache")
 			}
 			waitForAllocatedAppResource(t, app1, 100, 1000)
-			ms.mockRM.waitForAllocations(t, 10, 1000)
+
 			assert.Equal(t, len(app1.ApplicationInfo.GetAllAllocations()), 10, "number of app allocations incorrect")
 			assert.Equal(t, int(app1.GetAllocatedResource().Resources[resources.MEMORY]), 100, "app allocated resource incorrect")
+			assert.Equal(t, len(ms.mockRM.getAllocations()), 10, "number of RM allocations incorrect")
 
 			// release all allocated allocations
 			allocReleases := make([]*si.AllocationReleaseRequest, 0)

@@ -38,5 +38,5 @@ jobs:
         - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.22.2
         - make license-check
         - make test
-        - make lint
+        # - make lint
       after_success: bash <(curl -s https://codecov.io/bash)

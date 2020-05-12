@@ -244,10 +244,7 @@ partitions:
 		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a"}),
 		RmID:            "rm:123",
 	})
-
-	if nil != err {
-		t.Fatalf("UpdateRequest nodes and app for recovery failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest that reports existing apps is failed")
 
 	ms.mockRM.waitForAcceptedApplication(t, "app-1", 1000)
 	partition := ms.clusterInfo.GetPartition("[rm:123]default")

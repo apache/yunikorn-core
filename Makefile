@@ -78,7 +78,7 @@ build: commands
 .PHONY: test
 test: clean
 	@echo "running unit tests"
-	go test ./... -cover $(RACE) -tags deadlock
+	go test ./... $(RACE) -tags deadlock -coverprofile=coverage.txt -covermode=atomic
 	go vet $(REPO)...
 
 # Simple clean of generated files only (no local cleanup).

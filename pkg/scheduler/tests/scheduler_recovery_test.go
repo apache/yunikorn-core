@@ -248,7 +248,7 @@ partitions:
 
 	ms.mockRM.waitForAcceptedApplication(t, "app-1", 1000)
 	partition := ms.clusterInfo.GetPartition("[rm:123]default")
-	err = common.WaitFor(100 * time.Millisecond, 1000 * time.Millisecond, func() bool {
+	err = common.WaitFor(100*time.Millisecond, 1000*time.Millisecond, func() bool {
 		return partition.GetApplications()[0].GetApplicationState() == "Accepted"
 	})
 	assert.NilError(t, err)
@@ -285,7 +285,7 @@ partitions:
 				ExistingAllocations: mockRM.nodeAllocations["node-2:1234"],
 			},
 		},
-		RmID:            "rm:123",
+		RmID: "rm:123",
 	})
 
 	if nil != err {

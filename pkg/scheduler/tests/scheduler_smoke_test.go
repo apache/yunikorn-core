@@ -246,7 +246,7 @@ partitions:
 	waitForPendingQueueResource(t, root, 20, 1000)
 	waitForPendingAppResource(t, schedulingApp, 20, 1000)
 
-	cancel := ms.scheduler.ScheduleMomentarily(3 * time.Second)
+	ms.scheduler.MultiStepSchedule(16)
 
 	ms.mockRM.waitForAllocations(t, 2, 3000)
 
@@ -265,8 +265,6 @@ partitions:
 
 	// Check allocated resources of nodes
 	waitForNodesAllocatedResource(t, ms.clusterInfo, ms.partitionName, []string{"node-1:1234", "node-2:1234"}, 20, 1000)
-
-	cancel()
 
 	// Ask for two more resources
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -305,7 +303,7 @@ partitions:
 	waitForPendingAppResource(t, schedulingApp, 300, 1000)
 
 	// Now app-1 uses 20 resource, and queue-a's max = 150, so it can get two 50 container allocated.
-	cancel = ms.scheduler.ScheduleMomentarily(3 * time.Second)
+	ms.scheduler.MultiStepSchedule(16)
 
 	ms.mockRM.waitForAllocations(t, 4, 3000)
 
@@ -321,8 +319,6 @@ partitions:
 
 	// Check allocated resources of nodes
 	waitForNodesAllocatedResource(t, ms.clusterInfo, partition, []string{"node-1:1234", "node-2:1234"}, 120, 1000)
-
-	cancel()
 
 	updateRequest := &si.UpdateRequest{
 		Releases: &si.AllocationReleasesRequest{
@@ -864,7 +860,7 @@ partitions:
 
 			waitForPendingQueueResource(t, schedulingQueue, 120, 1000)
 
-			cancel := ms.scheduler.ScheduleMomentarily(3 * time.Second)
+			ms.scheduler.MultiStepSchedule(20)
 
 			// 100 memory gets allocated, 20 pending because the capacity is 100
 			waitForPendingQueueResource(t, schedulingQueue, 20, 1000)
@@ -875,9 +871,6 @@ partitions:
 			}
 			waitForAllocatedAppResource(t, app1, 100, 1000)
 			ms.mockRM.waitForAllocations(t, 10, 3000)
-
-			cancel()
-
 			assert.Equal(t, len(app1.ApplicationInfo.GetAllAllocations()), 10, "number of app allocations incorrect")
 			assert.Equal(t, int(app1.GetAllocatedResource().Resources[resources.MEMORY]), 100, "app allocated resource incorrect")
 
@@ -903,12 +896,10 @@ partitions:
 			waitForAllocatedQueueResource(t, schedulingQueue, 0, 1000)
 
 			// schedule again, pending requests should be satisfied now
-			cancel = ms.scheduler.ScheduleMomentarily(3 * time.Second)
+			ms.scheduler.MultiStepSchedule(10)
 
 			waitForPendingQueueResource(t, schedulingQueue, 0, 1000)
 			ms.mockRM.waitForAllocations(t, 2, 3000)
-
-			cancel()
 			assert.Equal(t, len(ms.mockRM.getAllocations()), 2)
 		})
 	}

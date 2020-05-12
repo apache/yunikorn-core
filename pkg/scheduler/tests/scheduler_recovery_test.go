@@ -20,6 +20,7 @@ package tests
 
 import (
 	"testing"
+	"time"
 
 	"gotest.tools/assert"
 
@@ -145,7 +146,7 @@ partitions:
 	waitForPendingQueueResource(t, schedulerQueueRoot, 20, 1000)
 	waitForPendingAppResource(t, schedulingApp, 20, 1000)
 
-	ms.scheduler.MultiStepSchedule(16)
+	cancel := ms.scheduler.ScheduleMomentarily(3*time.Second)
 
 	ms.mockRM.waitForAllocations(t, 2, 3000)
 
@@ -165,6 +166,8 @@ partitions:
 	// Check allocated resources of nodes
 	waitForNodesAllocatedResource(t, ms.clusterInfo, "[rm:123]default",
 		[]string{"node-1:1234", "node-2:1234"}, 20, 1000)
+
+	cancel()
 
 	// Ask for two more resources
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -206,7 +209,7 @@ partitions:
 	waitForPendingAppResource(t, schedulingApp, 300, 1000)
 
 	// Now app-1 uses 20 resource, and queue-a's max = 150, so it can get two 50 container allocated.
-	ms.scheduler.MultiStepSchedule(16)
+	cancel = ms.scheduler.ScheduleMomentarily(3*time.Second)
 
 	ms.mockRM.waitForAllocations(t, 4, 3000)
 
@@ -223,6 +226,8 @@ partitions:
 	// Check allocated resources of nodes
 	waitForNodesAllocatedResource(t, ms.clusterInfo, "[rm:123]default",
 		[]string{"node-1:1234", "node-2:1234"}, 120, 1000)
+
+	cancel()
 
 	// --------------------------------------------------
 	// Phase 2) Restart the scheduler, test recovery

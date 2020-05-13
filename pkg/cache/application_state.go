@@ -31,76 +31,102 @@ import (
 // ----------------------------------
 // application events
 // ----------------------------------
-type ApplicationEvent int
+type applicationEvent int
 
 const (
-	AcceptApplication ApplicationEvent = iota
-	RejectApplication
+	AcceptApplication applicationEvent = iota
+	StartApplication
 	RunApplication
+	WaitApplication
+	RejectApplication
 	CompleteApplication
 	KillApplication
 )
 
-func (ae ApplicationEvent) String() string {
-	return [...]string{"AcceptApplication", "RejectApplication", "RunApplication", "CompleteApplication", "KillApplication"}[ae]
+func (ae applicationEvent) String() string {
+	return [...]string{"AcceptApplication", "StartApplication", "RunApplication", "WaitApplication", "RejectApplication", "CompleteApplication", "KillApplication"}[ae]
 }
 
 // ----------------------------------
 // application states
 // ----------------------------------
-type ApplicationState int
+type applicationState int
 
 const (
-	New ApplicationState = iota
+	New applicationState = iota
 	Accepted
-	Rejected
+	Starting
 	Running
+	Waiting
+	Rejected
 	Completed
 	Killed
 )
 
-func (as ApplicationState) String() string {
-	return [...]string{"New", "Accepted", "Rejected", "Running", "Completed", "Killed"}[as]
+func (as applicationState) String() string {
+	return [...]string{"New", "Accepted", "Starting", "Running", "Waiting", "Rejected", "Completed", "Killed"}[as]
 }
 
 func newAppState() *fsm.FSM {
 	return fsm.NewFSM(
 		New.String(), fsm.Events{
 			{
-				Name: AcceptApplication.String(),
-				Src:  []string{New.String()},
-				Dst:  Accepted.String(),
-			}, {
 				Name: RejectApplication.String(),
 				Src:  []string{New.String()},
 				Dst:  Rejected.String(),
 			}, {
+				Name: AcceptApplication.String(),
+				Src:  []string{New.String()},
+				Dst:  Accepted.String(),
+			}, {
+				Name: StartApplication.String(),
+				Src:  []string{Accepted.String()},
+				Dst:  Starting.String(),
+			}, {
 				Name: RunApplication.String(),
-				Src:  []string{Accepted.String(), Running.String()},
+				Src:  []string{Running.String(), Starting.String(), Waiting.String()},
 				Dst:  Running.String(),
 			}, {
 				Name: CompleteApplication.String(),
-				Src:  []string{Running.String()},
+				Src:  []string{Running.String(), Starting.String(), Waiting.String()},
 				Dst:  Completed.String(),
 			}, {
+				Name: WaitApplication.String(),
+				Src:  []string{Accepted.String(), Running.String(), Starting.String()},
+				Dst:  Waiting.String(),
+			}, {
 				Name: KillApplication.String(),
-				Src:  []string{New.String(), Accepted.String(), Running.String(), Killed.String()},
+				Src:  []string{Accepted.String(), Killed.String(), New.String(), Running.String(), Starting.String(), Waiting.String()},
 				Dst:  Killed.String(),
 			},
 		},
 		fsm.Callbacks{
 			"enter_state": func(event *fsm.Event) {
-				log.Logger().Debug("app state transition",
-					zap.Any("app", event.Args[0]),
+				log.Logger().Debug("Application state transition",
+					zap.String("appID", event.Args[0].(*ApplicationInfo).ApplicationID),
 					zap.String("source", event.Src),
 					zap.String("destination", event.Dst),
 					zap.String("event", event.Event))
 			},
+			fmt.Sprintf("enter_%s", Starting.String()): func(event *fsm.Event) {
+				event.Args[0].(*ApplicationInfo).setStartingTimer()
+			},
+			fmt.Sprintf("leave_%s", Starting.String()): func(event *fsm.Event) {
+				event.Args[0].(*ApplicationInfo).clearStartingTimer()
+			},
+			fmt.Sprintf("leave_%s", New.String()): func(event *fsm.Event) {
+				metrics.GetSchedulerMetrics().IncTotalApplicationsAdded()
+			},
+			fmt.Sprintf("enter_%s", Rejected.String()): func(event *fsm.Event) {
+				metrics.GetSchedulerMetrics().IncTotalApplicationsRejected()
+			},
 			fmt.Sprintf("enter_%s", Running.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsRunning()
 			},
-			fmt.Sprintf("enter_%s", Completed.String()): func(event *fsm.Event) {
+			fmt.Sprintf("leave_%s", Running.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()
+			},
+			fmt.Sprintf("enter_%s", Completed.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsCompleted()
 			},
 		},

@@ -20,6 +20,7 @@ package cache
 
 import (
 	"testing"
+	"time"
 
 	"gotest.tools/assert"
 
@@ -95,128 +96,39 @@ func TestQueueUpdate(t *testing.T) {
 	assert.Equal(t, appInfo.QueueName, "test")
 }
 
-func TestAcceptStateTransition(t *testing.T) {
-	// Accept only from new
+func TestStateTimeOut(t *testing.T) {
+	startingTimeout = time.Microsecond * 100
+	defer func() { startingTimeout = time.Minute * 5 }()
 	appInfo := newApplicationInfo("app-00001", "default", "root.a")
-	assert.Equal(t, appInfo.GetApplicationState(), New.String())
-
-	// new to accepted
 	err := appInfo.HandleApplicationEvent(AcceptApplication)
-	assert.Assert(t, err == nil)
-	assert.Equal(t, appInfo.GetApplicationState(), Accepted.String())
+	assert.NilError(t, err, "no error expected new to accepted (timeout test)")
+	err = appInfo.HandleApplicationEvent(StartApplication)
+	assert.NilError(t, err, "no error expected accepted to starting (timeout test)")
+	// give it some time to run and progress
+	time.Sleep(time.Millisecond * 5)
+	if appInfo.IsStarting() {
+		t.Fatal("Starting state should have timed out")
+	}
+	if appInfo.stateTimer != nil {
+		t.Fatalf("Startup timer has not be cleared on time out as expected, %v", appInfo.stateTimer)
+	}
 
-	// app already accepted: error expected
+	startingTimeout = time.Millisecond * 10
+	appInfo = newApplicationInfo("app-00001", "default", "root.a")
 	err = appInfo.HandleApplicationEvent(AcceptApplication)
-	assert.Assert(t, err != nil)
-	assert.Equal(t, appInfo.GetApplicationState(), Accepted.String())
-
-	// accepted to killed
-	err = appInfo.HandleApplicationEvent(KillApplication)
-	assert.Assert(t, err == nil)
-	assert.Equal(t, appInfo.GetApplicationState(), Killed.String())
-}
-
-func TestRejectTransition(t *testing.T) {
-	// Reject only from new
-	appInfo := newApplicationInfo("app-00001", "default", "root.a")
-	assert.Equal(t, appInfo.GetApplicationState(), New.String())
-
-	// new to rejected
-	err := appInfo.HandleApplicationEvent(RejectApplication)
-	assert.Assert(t, err == nil)
-	assert.Equal(t, appInfo.GetApplicationState(), Rejected.String())
-
-	// app already rejected: error expected
-	err = appInfo.HandleApplicationEvent(RejectApplication)
-	assert.Assert(t, err != nil)
-	assert.Equal(t, appInfo.GetApplicationState(), Rejected.String())
-
-	// rejected to killed: error expected
-	err = appInfo.HandleApplicationEvent(KillApplication)
-	assert.Assert(t, err != nil)
-	assert.Equal(t, appInfo.GetApplicationState(), Rejected.String())
-
-	// Reject fails from all but new
-	appInfo = newApplicationInfo("app-00002", "default", "root.a")
-	assert.Equal(t, appInfo.GetApplicationState(), New.String())
-	err = appInfo.HandleApplicationEvent(AcceptApplication)
-	assert.Assert(t, err == nil)
-	assert.Equal(t, appInfo.GetApplicationState(), Accepted.String())
-	err = appInfo.HandleApplicationEvent(RejectApplication)
-	assert.Assert(t, err != nil)
-	assert.Equal(t, appInfo.GetApplicationState(), Accepted.String())
-}
-
-func TestRunTransition(t *testing.T) {
-	// run from accepted
-	appInfo := newApplicationInfo("app-00001", "default", "root.a")
-	assert.Equal(t, appInfo.GetApplicationState(), New.String())
-	err := appInfo.HandleApplicationEvent(AcceptApplication)
-	assert.Assert(t, err == nil)
-	assert.Equal(t, appInfo.GetApplicationState(), Accepted.String())
-
-	// run app
+	assert.NilError(t, err, "no error expected new to accepted (timeout test2)")
+	err = appInfo.HandleApplicationEvent(StartApplication)
+	assert.NilError(t, err, "no error expected accepted to starting (timeout test2)")
+	// give it some time to run and progress
+	time.Sleep(time.Microsecond * 100)
+	if !appInfo.IsStarting() || appInfo.stateTimer == nil {
+		t.Fatalf("Starting state and timer should not have timed out yet, state: %s", appInfo.stateMachine.Current())
+	}
 	err = appInfo.HandleApplicationEvent(RunApplication)
-	assert.Assert(t, err == nil)
-	assert.Equal(t, appInfo.GetApplicationState(), Running.String())
-
-	// run app: same state is allowed for running
-	err = appInfo.HandleApplicationEvent(RunApplication)
-	assert.Assert(t, err == nil)
-	assert.Equal(t, appInfo.GetApplicationState(), Running.String())
-
-	// run to killed
-	err = appInfo.HandleApplicationEvent(KillApplication)
-	assert.Assert(t, err == nil)
-	assert.Equal(t, appInfo.GetApplicationState(), Killed.String())
-
-	// run fails from all but running or accepted
-	err = appInfo.HandleApplicationEvent(RunApplication)
-	assert.Assert(t, err != nil)
-	assert.Equal(t, appInfo.GetApplicationState(), Killed.String())
-}
-
-func TestCompletedTransition(t *testing.T) {
-	// complete only from run
-	appInfo := newApplicationInfo("app-00001", "default", "root.a")
-	assert.Equal(t, appInfo.GetApplicationState(), New.String())
-	err := appInfo.HandleApplicationEvent(AcceptApplication)
-	assert.Assert(t, err == nil)
-	assert.Equal(t, appInfo.GetApplicationState(), Accepted.String())
-	err = appInfo.HandleApplicationEvent(RunApplication)
-	assert.Assert(t, err == nil)
-	assert.Equal(t, appInfo.GetApplicationState(), Running.String())
-
-	// completed only from run
-	err = appInfo.HandleApplicationEvent(CompleteApplication)
-	assert.Assert(t, err == nil)
-	assert.Equal(t, appInfo.GetApplicationState(), Completed.String())
-
-	// completed to killed: error expected
-	err = appInfo.HandleApplicationEvent(KillApplication)
-	assert.Assert(t, err != nil)
-	assert.Equal(t, appInfo.GetApplicationState(), Completed.String())
-
-	// completed fails from all but running
-	appInfo2 := newApplicationInfo("app-00002", "default", "root.a")
-	assert.Equal(t, appInfo2.GetApplicationState(), New.String())
-	err = appInfo.HandleApplicationEvent(CompleteApplication)
-	assert.Assert(t, err != nil)
-	assert.Equal(t, appInfo2.GetApplicationState(), New.String())
-}
-
-func TestKilledTransition(t *testing.T) {
-	// complete only from run
-	appInfo := newApplicationInfo("app-00001", "default", "root.a")
-	assert.Equal(t, appInfo.GetApplicationState(), New.String())
-
-	// new to killed
-	err := appInfo.HandleApplicationEvent(KillApplication)
-	assert.Assert(t, err == nil)
-	assert.Equal(t, appInfo.GetApplicationState(), Killed.String())
-
-	// killed to killed
-	err = appInfo.HandleApplicationEvent(KillApplication)
-	assert.Assert(t, err == nil)
-	assert.Equal(t, appInfo.GetApplicationState(), Killed.String())
+	assert.NilError(t, err, "no error expected starting to run (timeout test2)")
+	// give it some time to run and progress
+	time.Sleep(time.Microsecond * 100)
+	if !appInfo.stateMachine.Is(Running.String()) || appInfo.stateTimer != nil {
+		t.Fatalf("State is not running or timer was not cleared, state: %s, timer %v", appInfo.stateMachine.Current(), appInfo.stateTimer)
+	}
 }

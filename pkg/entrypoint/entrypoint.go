@@ -64,9 +64,11 @@ func StartAllServicesWithManualScheduler() *ServiceContext {
 func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 	var eventCache *events.EventCache
 	var eventChannel *events.EventChannel
+	var eventStore *events.EventStore
 	if opts.eventCacheEnabled {
 		eventCache = events.NewEventCache()
 		eventChannel = eventCache.GetEventChannel()
+		eventStore = eventCache.GetEventStore()
 	}
 	cache := cache.NewClusterInfo()
 	scheduler := scheduler.NewScheduler(cache, eventChannel)
@@ -88,9 +90,10 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 	}
 
 	context := &ServiceContext{
-		RMProxy:   proxy,
-		Cache:     cache,
-		Scheduler: scheduler,
+		RMProxy:    proxy,
+		Cache:      cache,
+		Scheduler:  scheduler,
+		EventStore: eventStore,
 	}
 
 	var imHistory *history.InternalMetricsHistory

@@ -18,6 +18,7 @@
 package entrypoint
 
 import (
+	"github.com/apache/incubator-yunikorn-core/pkg/events"
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/api"
@@ -28,10 +29,11 @@ import (
 )
 
 type ServiceContext struct {
-	RMProxy   api.SchedulerAPI
-	Cache     *cache.ClusterInfo
-	Scheduler *scheduler.Scheduler
-	WebApp    *webservice.WebService
+	RMProxy    api.SchedulerAPI
+	Cache      *cache.ClusterInfo
+	Scheduler  *scheduler.Scheduler
+	WebApp     *webservice.WebService
+	EventStore *events.EventStore
 }
 
 func (s *ServiceContext) StopAll() {

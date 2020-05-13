@@ -21,6 +21,8 @@ package placement
 import (
 	"testing"
 
+	"gotest.tools/assert"
+
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 )
@@ -58,9 +60,7 @@ func TestPlaceApp(t *testing.T) {
 		Name: "test",
 	}
 	nr, err := newRule(conf)
-	if err != nil {
-		t.Fatal("unexpected rule initialisation error")
-	}
+	assert.NilError(t, err, "unexpected rule initialisation error")
 	// place application that should fail
 	_, err = nr.placeApplication(nil, nil)
 	if err == nil {

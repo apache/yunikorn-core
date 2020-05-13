@@ -20,10 +20,14 @@ package cache
 
 import (
 	"strconv"
+	"strings"
 	"testing"
+
+	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 )
 
 // create the root queue, base for all testing
@@ -57,9 +61,7 @@ func createUnManagedQueue(parentQI *QueueInfo, name string, parent bool) (*Queue
 func TestQueueInfo(t *testing.T) {
 	// create the root
 	root, err := createRootQueue()
-	if err != nil {
-		t.Fatalf("failed to create basic root queue: %v", err)
-	}
+	assert.NilError(t, err, "failed to create basic root queue")
 	// check the state of the queue
 	if !root.isManaged && !root.isLeaf && !root.IsRunning() {
 		t.Errorf("root queue status is incorrect")
@@ -73,15 +75,11 @@ func TestQueueInfo(t *testing.T) {
 func TestAllocationCalcRoot(t *testing.T) {
 	// create the root
 	root, err := createRootQueue()
-	if err != nil {
-		t.Fatalf("failed to create basic root queue: %v", err)
-	}
+	assert.NilError(t, err, "failed to create basic root queue")
 	res := map[string]string{"memory": "100", "vcores": "10"}
 	var allocation *resources.Resource
 	allocation, err = resources.NewResourceFromConf(res)
-	if err != nil {
-		t.Fatalf("failed to create basic resource: %v", err)
-	}
+	assert.NilError(t, err, "failed to create basic resource")
 	err = root.IncAllocatedResource(allocation, false)
 	if err != nil {
 		t.Errorf("root queue allocation failed on increment %v", err)
@@ -102,21 +100,15 @@ func TestAllocationCalcRoot(t *testing.T) {
 func TestAllocationCalcSub(t *testing.T) {
 	// create the root
 	root, err := createRootQueue()
-	if err != nil {
-		t.Fatalf("failed to create basic root queue: %v", err)
-	}
+	assert.NilError(t, err, "failed to create basic root queue")
 	var parent *QueueInfo
 	parent, err = createManagedQueue(root, "parent", true)
-	if err != nil {
-		t.Fatalf("failed to create parent queue: %v", err)
-	}
+	assert.NilError(t, err, "failed to create parent queue")
 
 	res := map[string]string{"memory": "100", "vcores": "10"}
 	var allocation *resources.Resource
 	allocation, err = resources.NewResourceFromConf(res)
-	if err != nil {
-		t.Fatalf("failed to create basic resource: %v", err)
-	}
+	assert.NilError(t, err, "failed to create basic resource")
 	err = parent.IncAllocatedResource(allocation, false)
 	if err != nil {
 		t.Errorf("parent queue allocation failed on increment %v", err)
@@ -151,14 +143,10 @@ func TestAllocationCalcSub(t *testing.T) {
 func TestManagedSubQueues(t *testing.T) {
 	// create the root
 	root, err := createRootQueue()
-	if err != nil {
-		t.Fatalf("failed to create basic root queue: %v", err)
-	}
+	assert.NilError(t, err, "failed to create basic root queue")
 	var parent *QueueInfo
 	parent, err = createManagedQueue(root, "parent", true)
-	if err != nil {
-		t.Fatalf("failed to create parent queue: %v", err)
-	}
+	assert.NilError(t, err, "failed to create parent queue")
 	if parent.isLeaf {
 		t.Errorf("parent queue is not marked as a parent")
 	}
@@ -167,9 +155,7 @@ func TestManagedSubQueues(t *testing.T) {
 	}
 	var leaf *QueueInfo
 	leaf, err = createManagedQueue(parent, "leaf", false)
-	if err != nil {
-		t.Fatalf("failed to create leaf queue: %v", err)
-	}
+	assert.NilError(t, err, "failed to create leaf queue")
 	if len(parent.children) == 0 {
 		t.Errorf("leaf queue is not added to the parent queue")
 	}
@@ -194,9 +180,7 @@ func TestManagedSubQueues(t *testing.T) {
 	res := map[string]string{"memory": "100", "vcores": "10"}
 	var allocation *resources.Resource
 	allocation, err = resources.NewResourceFromConf(res)
-	if err != nil {
-		t.Fatalf("failed to create basic resource: %v", err)
-	}
+	assert.NilError(t, err, "failed to create basic resource")
 	err = parent.IncAllocatedResource(allocation, false)
 	if err != nil {
 		t.Errorf("allocation increase failed on parent: %v", err)
@@ -235,14 +219,10 @@ func TestMergeProperties(t *testing.T) {
 func TestUnManagedSubQueues(t *testing.T) {
 	// create the root
 	root, err := createRootQueue()
-	if err != nil {
-		t.Fatalf("failed to create basic root queue: %v", err)
-	}
+	assert.NilError(t, err, "failed to create basic root queue")
 	var parent *QueueInfo
-	parent, err = createUnManagedQueue(root, "parent", true)
-	if err != nil {
-		t.Fatalf("failed to create parent queue: %v", err)
-	}
+	parent, err = createManagedQueue(root, "parent-man", true)
+	assert.NilError(t, err, "failed to create parent queue")
 	if parent.isLeaf {
 		t.Errorf("parent queue is not marked as a parent")
 	}
@@ -251,9 +231,7 @@ func TestUnManagedSubQueues(t *testing.T) {
 	}
 	var leaf *QueueInfo
 	leaf, err = createUnManagedQueue(parent, "leaf", false)
-	if err != nil {
-		t.Fatalf("failed to create leaf queue: %v", err)
-	}
+	assert.NilError(t, err, "failed to create leaf queue")
 	if len(parent.children) == 0 {
 		t.Errorf("leaf queue is not added to the parent queue")
 	}
@@ -278,9 +256,7 @@ func TestUnManagedSubQueues(t *testing.T) {
 	res := map[string]string{"memory": "100", "vcores": "10"}
 	var allocation *resources.Resource
 	allocation, err = resources.NewResourceFromConf(res)
-	if err != nil {
-		t.Fatalf("failed to create basic resource: %v", err)
-	}
+	assert.NilError(t, err, "failed to create basic resource")
 	err = parent.IncAllocatedResource(allocation, false)
 	if err != nil {
 		t.Errorf("allocation increase failed on parent: %v", err)
@@ -300,33 +276,23 @@ func TestUnManagedSubQueues(t *testing.T) {
 func TestGetChildQueueInfos(t *testing.T) {
 	// create the root
 	root, err := createRootQueue()
-	if err != nil {
-		t.Fatalf("failed to create basic root queue: %v", err)
-	}
+	assert.NilError(t, err, "failed to create basic root queue")
 	var parent *QueueInfo
 	parent, err = createManagedQueue(root, "parent-man", true)
-	if err != nil {
-		t.Fatalf("failed to create basic managed parent queue: %v", err)
-	}
+	assert.NilError(t, err, "failed to create basic managed parent queue")
 	for i := 0; i < 10; i++ {
 		_, err = createManagedQueue(parent, "leaf-man"+strconv.Itoa(i), false)
-		if err != nil {
-			t.Errorf("failed to create managed queue: %v", err)
-		}
+		assert.NilError(t, err, "failed to create managed queue")
 	}
 	if len(parent.children) != 10 {
 		t.Errorf("managed leaf queues are not added to the parent queue, expected 10 children got %d", len(parent.children))
 	}
 
 	parent, err = createUnManagedQueue(root, "parent-un", true)
-	if err != nil {
-		t.Fatalf("failed to create basic unmanaged parent queue: %v", err)
-	}
+	assert.NilError(t, err, "failed to create basic unmanaged parent queue")
 	for i := 0; i < 10; i++ {
 		_, err = createUnManagedQueue(parent, "leaf-un-"+strconv.Itoa(i), false)
-		if err != nil {
-			t.Errorf("failed to create unmanaged queue: %v", err)
-		}
+		assert.NilError(t, err, "failed to create basic unmanaged queue")
 	}
 	if len(parent.children) != 10 {
 		t.Errorf("unmanaged leaf queues are not added to the parent queue, expected 10 children got %d", len(parent.children))
@@ -341,19 +307,13 @@ func TestGetChildQueueInfos(t *testing.T) {
 func TestMaxResource(t *testing.T) {
 	resMap := map[string]string{"first": "10"}
 	res, err := resources.NewResourceFromConf(resMap)
-	if err != nil {
-		t.Fatalf("failed to create basic resource: %v", err)
-	}
+	assert.NilError(t, err, "failed to create basic resource")
 	// create the root
 	var root, parent *QueueInfo
 	root, err = createRootQueue()
-	if err != nil {
-		t.Fatalf("failed to create basic root queue: %v", err)
-	}
+	assert.NilError(t, err, "failed to create basic root queue")
 	parent, err = createManagedQueue(root, "parent", true)
-	if err != nil {
-		t.Fatalf("failed to create basic managed parent queue: %v", err)
-	}
+	assert.NilError(t, err, "failed to create basic managed parent queue")
 	// Nothing set max should be nil
 	if root.GetMaxResource() != nil || parent.GetMaxResource() != nil {
 		t.Errorf("empty cluster should not have max set on root queue")
@@ -367,5 +327,73 @@ func TestMaxResource(t *testing.T) {
 	root.setMaxResource(res)
 	if !resources.Equals(res, root.GetMaxResource()) {
 		t.Errorf("root max setting not picked up by parent queue expected %v, got %v", res, parent.GetMaxResource())
+	}
+}
+
+func TestGetQueueInfos(t *testing.T) {
+	root, err := createRootQueue()
+	assert.NilError(t, err, "failed to create basic root queue: %v", err)
+	var rootMax *resources.Resource
+	rootMax, err = resources.NewResourceFromConf(map[string]string{"memory": "2048", "vcores": "10"})
+	assert.NilError(t, err, "failed to create configuration: %v", err)
+	root.setMaxResource(rootMax)
+
+	var parentUsed *resources.Resource
+	parentUsed, err = resources.NewResourceFromConf(map[string]string{"memory": "1012", "vcores": "2"})
+	assert.NilError(t, err, "failed to create resource: %v", err)
+	var parent *QueueInfo
+	parent, err = createManagedQueue(root, "parent", true)
+	assert.NilError(t, err, "failed to create queue: %v", err)
+	err = parent.IncAllocatedResource(parentUsed, false)
+	assert.NilError(t, err, "failed to increment allocated resource: %v", err)
+
+	var child1used *resources.Resource
+	child1used, err = resources.NewResourceFromConf(map[string]string{"memory": "1012", "vcores": "2"})
+	assert.NilError(t, err, "failed to create resource: %v", err)
+	var child1 *QueueInfo
+	child1, err = createManagedQueue(parent, "child1", true)
+	assert.NilError(t, err, "failed to create queue: %v", err)
+	err = child1.IncAllocatedResource(child1used, false)
+	assert.NilError(t, err, "failed to increment allocated resource: %v", err, err)
+
+	var child2 *QueueInfo
+	child2, err = createManagedQueue(parent, "child2", true)
+	assert.NilError(t, err, "failed to create child queue: %v", err)
+	child2.setMaxResource(resources.NewResource())
+
+	rootDaoInfo := root.GetQueueInfos()
+
+	compareQueueInfoWithDAO(t, root, rootDaoInfo)
+	parentDaoInfo := rootDaoInfo.ChildQueues[0]
+	compareQueueInfoWithDAO(t, parent, parentDaoInfo)
+	for _, childDao := range parentDaoInfo.ChildQueues {
+		name := childDao.QueueName
+		child := parent.children[name]
+		if child == nil {
+			t.Fail()
+		}
+		compareQueueInfoWithDAO(t, child, childDao)
+	}
+}
+
+func compareQueueInfoWithDAO(t *testing.T, queueInfo *QueueInfo, dao dao.QueueDAOInfo) {
+	assert.Equal(t, queueInfo.Name, dao.QueueName)
+	assert.Equal(t, len(queueInfo.children), len(dao.ChildQueues))
+	assert.Equal(t, queueInfo.stateMachine.Current(), dao.Status)
+	emptyRes := "[]"
+	if queueInfo.allocatedResource == nil {
+		assert.Equal(t, emptyRes, dao.Capacities.UsedCapacity)
+	} else {
+		assert.Equal(t, strings.Trim(queueInfo.allocatedResource.String(), "map"), dao.Capacities.UsedCapacity)
+	}
+	if queueInfo.maxResource == nil {
+		assert.Equal(t, emptyRes, dao.Capacities.MaxCapacity)
+	} else {
+		assert.Equal(t, strings.Trim(queueInfo.maxResource.String(), "map"), dao.Capacities.MaxCapacity)
+	}
+	if queueInfo.guaranteedResource == nil {
+		assert.Equal(t, emptyRes, dao.Capacities.Capacity)
+	} else {
+		assert.Equal(t, strings.Trim(queueInfo.guaranteedResource.String(), "map"), dao.Capacities.Capacity)
 	}
 }

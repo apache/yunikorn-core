@@ -241,8 +241,8 @@ func TestUnManagedSubQueues(t *testing.T) {
 
 	// try to mark parent and leaf for removal
 	parent.MarkQueueForRemoval()
-	if leaf.IsDraining() || parent.IsDraining() {
-		t.Errorf("queues are marked for removal (draining state not for unmanaged queues)")
+	if leaf.IsDraining() || !parent.IsDraining() {
+		t.Errorf("queues are incorrectly marked for removal: leaf (expected false): %t; parent (expected true) %t", leaf.IsDraining(), parent.IsDraining())
 	}
 	// try to remove the parent
 	if parent.RemoveQueue() {
@@ -258,16 +258,12 @@ func TestUnManagedSubQueues(t *testing.T) {
 	allocation, err = resources.NewResourceFromConf(res)
 	assert.NilError(t, err, "failed to create basic resource")
 	err = parent.IncAllocatedResource(allocation, false)
-	if err != nil {
-		t.Errorf("allocation increase failed on parent: %v", err)
-	}
+	assert.NilError(t, err, "allocation increase failed on parent")
 	if parent.RemoveQueue() {
 		t.Errorf("parent queue should not have been removed as it has an allocation")
 	}
 	err = parent.decAllocatedResource(allocation)
-	if err != nil {
-		t.Errorf("parent queue allocation failed on decrement %v", err)
-	}
+	assert.NilError(t, err, "parent queue allocation failed on decrement")
 	if !parent.RemoveQueue() {
 		t.Errorf("parent queue should have been removed and was not")
 	}

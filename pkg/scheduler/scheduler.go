@@ -21,6 +21,7 @@ package scheduler
 import (
 	"fmt"
 	"reflect"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -49,10 +50,16 @@ type Scheduler struct {
 	preemptionContext        *preemptionContext        // Preemption context
 	eventHandlers            handler.EventHandlers     // list of event handlers
 	pendingSchedulerEvents   chan interface{}          // queue for scheduler events
+	waitGroup                *sync.WaitGroup
+	stopChan                 chan struct{}
 }
 
 func NewScheduler(clusterInfo *cache.ClusterInfo) *Scheduler {
-	m := &Scheduler{}
+	m := &Scheduler{
+		waitGroup: &sync.WaitGroup{},
+		stopChan:  make(chan struct{}),
+	}
+
 	m.clusterInfo = clusterInfo
 	m.clusterSchedulingContext = NewClusterSchedulingContext()
 	m.pendingSchedulerEvents = make(chan interface{}, 1024*1024)
@@ -64,6 +71,7 @@ func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 	s.eventHandlers = handlers
 
 	// Start event handlers
+	s.waitGroup.Add(1)
 	go s.handleSchedulerEvent()
 
 	// Start resource monitor if necessary (majorly for testing)
@@ -71,8 +79,16 @@ func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 	monitor.start()
 
 	if !manualSchedule {
+		s.waitGroup.Add(1)
 		go s.internalSchedule()
 		go s.internalPreemption()
+	}
+}
+
+func (s *Scheduler) StopService() {
+	close(s.stopChan)
+	if err := common.WaitWithTimeout(s.waitGroup, 3*time.Second); err != nil {
+		log.Logger().Warn("stop scheduler completed with error", zap.Error(err))
 	}
 }
 
@@ -97,8 +113,14 @@ func newSingleAllocationProposal(alloc *schedulingAllocation) *cacheevent.Alloca
 
 // Internal start scheduling service
 func (s *Scheduler) internalSchedule() {
+	defer s.waitGroup.Done()
 	for {
-		s.schedule()
+		select {
+		default:
+			s.schedule()
+		case <-s.stopChan:
+			return
+		}
 	}
 }
 
@@ -528,23 +550,28 @@ func (s *Scheduler) processNodeEvent(event *schedulerevent.SchedulerNodeEvent) {
 }
 
 func (s *Scheduler) handleSchedulerEvent() {
+	defer s.waitGroup.Done()
 	for {
-		ev := <-s.pendingSchedulerEvents
-		switch v := ev.(type) {
-		case *schedulerevent.SchedulerNodeEvent:
-			s.processNodeEvent(v)
-		case *schedulerevent.SchedulerAllocationUpdatesEvent:
-			s.processAllocationUpdateEvent(v)
-		case *schedulerevent.SchedulerApplicationsUpdateEvent:
-			s.processApplicationUpdateEvent(v)
-		case *commonevents.RemoveRMPartitionsEvent:
-			s.removePartitionsBelongToRM(v)
-		case *schedulerevent.SchedulerUpdatePartitionsConfigEvent:
-			s.processUpdatePartitionConfigsEvent(v)
-		case *schedulerevent.SchedulerDeletePartitionsConfigEvent:
-			s.processDeletePartitionConfigsEvent(v)
-		default:
-			panic(fmt.Sprintf("%s is not an acceptable type for Scheduler event.", reflect.TypeOf(v).String()))
+		select {
+		case ev := <-s.pendingSchedulerEvents:
+			switch v := ev.(type) {
+			case *schedulerevent.SchedulerNodeEvent:
+				s.processNodeEvent(v)
+			case *schedulerevent.SchedulerAllocationUpdatesEvent:
+				s.processAllocationUpdateEvent(v)
+			case *schedulerevent.SchedulerApplicationsUpdateEvent:
+				s.processApplicationUpdateEvent(v)
+			case *commonevents.RemoveRMPartitionsEvent:
+				s.removePartitionsBelongToRM(v)
+			case *schedulerevent.SchedulerUpdatePartitionsConfigEvent:
+				s.processUpdatePartitionConfigsEvent(v)
+			case *schedulerevent.SchedulerDeletePartitionsConfigEvent:
+				s.processDeletePartitionConfigsEvent(v)
+			default:
+				panic(fmt.Sprintf("%s is not an acceptable type for Scheduler event.", reflect.TypeOf(v).String()))
+			}
+		case <-s.stopChan:
+			return
 		}
 	}
 }
@@ -561,6 +588,13 @@ func (s *Scheduler) MultiStepSchedule(nAlloc int) {
 		log.Logger().Debug("Scheduler manual stepping",
 			zap.Int("count", i))
 		s.schedule()
+
+		// sometimes the smoke tests are failing because they are competing CPU resources.
+		// each scheduling cycle, let's sleep for a small amount of time (100ms),
+		// this can ensure even CPU is intensive, the main thread can give up some CPU time
+		// for other go routines to process, such as event handling routines.
+		// Note, this sleep only works in tests.
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 

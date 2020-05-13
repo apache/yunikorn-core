@@ -153,7 +153,7 @@ func TestManagedSubQueues(t *testing.T) {
 	}
 }
 
-func TestUnManagedSubSchedulingQueues(t *testing.T) {
+func TestUnManagedSubQueues(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")

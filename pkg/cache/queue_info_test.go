@@ -20,12 +20,14 @@ package cache
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 )
 
 // create the root queue, base for all testing
@@ -325,5 +327,73 @@ func TestMaxResource(t *testing.T) {
 	root.setMaxResource(res)
 	if !resources.Equals(res, root.GetMaxResource()) {
 		t.Errorf("root max setting not picked up by parent queue expected %v, got %v", res, parent.GetMaxResource())
+	}
+}
+
+func TestGetQueueInfos(t *testing.T) {
+	root, err := createRootQueue()
+	assert.NilError(t, err, "failed to create basic root queue: %v", err)
+	var rootMax *resources.Resource
+	rootMax, err = resources.NewResourceFromConf(map[string]string{"memory": "2048", "vcores": "10"})
+	assert.NilError(t, err, "failed to create configuration: %v", err)
+	root.setMaxResource(rootMax)
+
+	var parentUsed *resources.Resource
+	parentUsed, err = resources.NewResourceFromConf(map[string]string{"memory": "1012", "vcores": "2"})
+	assert.NilError(t, err, "failed to create resource: %v", err)
+	var parent *QueueInfo
+	parent, err = createManagedQueue(root, "parent", true)
+	assert.NilError(t, err, "failed to create queue: %v", err)
+	err = parent.IncAllocatedResource(parentUsed, false)
+	assert.NilError(t, err, "failed to increment allocated resource: %v", err)
+
+	var child1used *resources.Resource
+	child1used, err = resources.NewResourceFromConf(map[string]string{"memory": "1012", "vcores": "2"})
+	assert.NilError(t, err, "failed to create resource: %v", err)
+	var child1 *QueueInfo
+	child1, err = createManagedQueue(parent, "child1", true)
+	assert.NilError(t, err, "failed to create queue: %v", err)
+	err = child1.IncAllocatedResource(child1used, false)
+	assert.NilError(t, err, "failed to increment allocated resource: %v", err, err)
+
+	var child2 *QueueInfo
+	child2, err = createManagedQueue(parent, "child2", true)
+	assert.NilError(t, err, "failed to create child queue: %v", err)
+	child2.setMaxResource(resources.NewResource())
+
+	rootDaoInfo := root.GetQueueInfos()
+
+	compareQueueInfoWithDAO(t, root, rootDaoInfo)
+	parentDaoInfo := rootDaoInfo.ChildQueues[0]
+	compareQueueInfoWithDAO(t, parent, parentDaoInfo)
+	for _, childDao := range parentDaoInfo.ChildQueues {
+		name := childDao.QueueName
+		child := parent.children[name]
+		if child == nil {
+			t.Fail()
+		}
+		compareQueueInfoWithDAO(t, child, childDao)
+	}
+}
+
+func compareQueueInfoWithDAO(t *testing.T, queueInfo *QueueInfo, dao dao.QueueDAOInfo) {
+	assert.Equal(t, queueInfo.Name, dao.QueueName)
+	assert.Equal(t, len(queueInfo.children), len(dao.ChildQueues))
+	assert.Equal(t, queueInfo.stateMachine.Current(), dao.Status)
+	emptyRes := "[]"
+	if queueInfo.allocatedResource == nil {
+		assert.Equal(t, emptyRes, dao.Capacities.UsedCapacity)
+	} else {
+		assert.Equal(t, strings.Trim(queueInfo.allocatedResource.String(), "map"), dao.Capacities.UsedCapacity)
+	}
+	if queueInfo.maxResource == nil {
+		assert.Equal(t, emptyRes, dao.Capacities.MaxCapacity)
+	} else {
+		assert.Equal(t, strings.Trim(queueInfo.maxResource.String(), "map"), dao.Capacities.MaxCapacity)
+	}
+	if queueInfo.guaranteedResource == nil {
+		assert.Equal(t, emptyRes, dao.Capacities.Capacity)
+	} else {
+		assert.Equal(t, strings.Trim(queueInfo.guaranteedResource.String(), "map"), dao.Capacities.Capacity)
 	}
 }

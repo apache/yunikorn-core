@@ -19,6 +19,6 @@
 package dao
 
 type ValidateConfResponse struct {
-    Allowed bool    `json:"allowed"`
-    Reason  string  `json:"reason"`
+	Allowed bool   `json:"allowed"`
+	Reason  string `json:"reason"`
 }

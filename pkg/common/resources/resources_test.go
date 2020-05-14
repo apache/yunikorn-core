@@ -1245,3 +1245,66 @@ func TestFitInScore(t *testing.T) {
 	fit = NewResourceFromMap(map[string]Quantity{"first": 1, "second": 1})
 	assert.Equal(t, res.FitInScore(fit), 2.0, "FitInScore on resource with multiple negative quantities failed")
 }
+
+func TestCalculateAbsUsedCapacity(t *testing.T) {
+	zeroResource := NewResourceFromMap(map[string]Quantity{"memory": 0, "vcores": 0})
+	resourceSet := NewResourceFromMap(map[string]Quantity{"memory": 2048, "vcores": 3})
+	usageSet := NewResourceFromMap(map[string]Quantity{"memory": 1024, "vcores": 1})
+	partialResource := NewResourceFromMap(map[string]Quantity{"memory": 1024})
+	emptyResource := NewResource()
+
+	tests := map[string]struct {
+		capacity, used, expected *Resource
+	}{
+		"nil resource, nil usage": {
+			expected: emptyResource,
+		},
+		"zero resource, nil usage": {
+			capacity: zeroResource,
+			expected: emptyResource,
+		},
+		"resource set, nil usage": {
+			capacity: resourceSet,
+			expected: emptyResource,
+		},
+		"resource set, zero usage": {
+			capacity: resourceSet,
+			used:     zeroResource,
+			expected: zeroResource,
+		},
+		"resource set, usage set": {
+			capacity: resourceSet,
+			used:     usageSet,
+			expected: NewResourceFromMap(map[string]Quantity{"memory": 50, "vcores": 33}),
+		},
+		"partial resource set, usage set": {
+			capacity: partialResource,
+			used:     usageSet,
+			expected: NewResourceFromMap(map[string]Quantity{"memory": 100}),
+		},
+		"resource set, partial usage set": {
+			capacity: resourceSet,
+			used:     partialResource,
+			expected: NewResourceFromMap(map[string]Quantity{"memory": 50}),
+		},
+		"positive overflow": {
+			capacity: NewResourceFromMap(map[string]Quantity{"memory": 10}),
+			used:     NewResourceFromMap(map[string]Quantity{"memory": math.MaxInt64}),
+			expected: NewResourceFromMap(map[string]Quantity{"memory": math.MaxInt64}),
+		},
+		"negative overflow": {
+			capacity: NewResourceFromMap(map[string]Quantity{"memory": 10}),
+			used:     NewResourceFromMap(map[string]Quantity{"memory": math.MinInt64}),
+			expected: NewResourceFromMap(map[string]Quantity{"memory": math.MinInt64}),
+		},
+		"zero resource, non zero used": {
+			capacity: zeroResource,
+			used:     usageSet,
+			expected: NewResourceFromMap(map[string]Quantity{"memory": math.MaxInt64, "vcores": math.MaxInt64}),
+		},
+	}
+	for _, test := range tests {
+		absCapacity := CalculateAbsUsedCapacity(test.capacity, test.used)
+		assert.DeepEqual(t, test.expected, absCapacity)
+	}
+}

@@ -79,6 +79,9 @@ func checkResource(res map[string]string) (int64, error) {
 		if err != nil {
 			return 0, fmt.Errorf("resource parsing failed: %v", err)
 		}
+		if rescount < 0 {
+			return 0, fmt.Errorf("resource value invalid, cannot be negative: %d", rescount)
+		}
 		totalres += rescount
 	}
 	return totalres, nil

@@ -17,6 +17,12 @@
  -->
 # Apache YuniKorn (Incubating) - A Universal Scheduler
 
+[![Build Status](https://travis-ci.org/apache/incubator-yunikorn-core.svg?branch=master)](https://travis-ci.org/apache/incubator-yunikorn-core)
+[![codecov](https://codecov.io/gh/apache/incubator-yunikorn-core/branch/master/graph/badge.svg)](https://codecov.io/gh/apache/incubator-yunikorn-core)
+[![Go Report Card](https://goreportcard.com/badge/github.com/apache/incubator-yunikorn-core)](https://goreportcard.com/report/github.com/apache/incubator-yunikorn-core)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Repo Size](https://img.shields.io/github/repo-size/apache/incubator-yunikorn-core)](https://img.shields.io/github/repo-size/apache/incubator-yunikorn-core)
+
 <img src="https://raw.githubusercontent.com/apache/incubator-yunikorn-core/master/docs/images/logo/yunikorn-logo-blue.png" width="200">
 
 ----

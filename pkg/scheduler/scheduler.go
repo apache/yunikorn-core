@@ -561,6 +561,13 @@ func (s *Scheduler) MultiStepSchedule(nAlloc int) {
 		log.Logger().Debug("Scheduler manual stepping",
 			zap.Int("count", i))
 		s.schedule()
+
+		// sometimes the smoke tests are failing because they are competing CPU resources.
+		// each scheduling cycle, let's sleep for a small amount of time (100ms),
+		// this can ensure even CPU is intensive, the main thread can give up some CPU time
+		// for other go routines to process, such as event handling routines.
+		// Note, this sleep only works in tests.
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 

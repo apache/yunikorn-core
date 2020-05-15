@@ -68,7 +68,7 @@ The docker image built from previous step has embedded some important build info
 these info with docker `inspect` command.
 
 ```
-docker inspect yunikorn/yunikorn:scheduler-latest
+docker inspect apache/yunikorn:admission-latest
 ```
 
 these info includes git revisions (last commit SHA) for each component, to help you understand which version of the source code

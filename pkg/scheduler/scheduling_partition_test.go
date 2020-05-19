@@ -25,7 +25,9 @@ import (
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 func newTestPartition() (*partitionSchedulingContext, error) {
@@ -583,4 +585,106 @@ func TestTryAllocateWithReserved(t *testing.T) {
 	}
 	assert.Equal(t, allocated, alloc.result, "expected allocated allocation to be returned")
 	assert.Equal(t, node2.NodeID, alloc.nodeID, "expected allocation on node2 to be returned")
+}
+
+//nolint: funlen
+func TestConfirmProposalErrors(t *testing.T) {
+	var tests = []struct {
+		name     string
+		proposal *commonevents.AllocationProposal
+		validFn  func(t *testing.T, err error)
+	}{
+		{"proposal involves non-exist node",
+			&commonevents.AllocationProposal{
+				NodeID:        "non-exist-node",
+				ApplicationID: "app-1",
+				QueueName:     "root.parent.leaf1",
+				AllocationKey: "app-1-alloc-1",
+				PartitionName: "default",
+			},
+			func(t *testing.T, err error) {
+				assert.ErrorContains(t, err, "node was removed while allocating app")
+			}},
+		{"proposal involves non-exist job",
+			&commonevents.AllocationProposal{
+				NodeID:        "node-1",
+				ApplicationID: "app-unknown",
+				QueueName:     "root.parent.leaf1",
+				AllocationKey: "app-1-alloc-1",
+				PartitionName: "default",
+			},
+			func(t *testing.T, err error) {
+				assert.ErrorContains(t, err, "application was removed while allocating")
+			}},
+		{"proposal involves non-exist ask",
+			&commonevents.AllocationProposal{
+				NodeID:        "node-1",
+				ApplicationID: "app-1",
+				QueueName:     "root.parent.leaf1",
+				AllocationKey: "non-exist-key",
+				PartitionName: "default",
+			},
+			func(t *testing.T, err error) {
+				assert.ErrorContains(t, err, "has been removed while attempting to allocate resources for it")
+			}},
+		{"good proposal",
+			&commonevents.AllocationProposal{
+				NodeID:        "node-1",
+				ApplicationID: "app-1",
+				QueueName:     "root.parent.leaf1",
+				AllocationKey: "app-1-alloc-1",
+				PartitionName: "default",
+			},
+			func(t *testing.T, err error) {
+				assert.NilError(t, err, "confirmation should success")
+			}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			partition := createQueuesNodes(t)
+			if partition == nil {
+				t.Fatal("partition create failed")
+			}
+
+			leaf := partition.getQueue("root.parent.leaf1")
+			if leaf == nil {
+				t.Fatal("leaf queue create failed")
+			}
+			appID1 := "app-1"
+			res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
+			app := newSchedulingApplication(&cache.ApplicationInfo{
+				ApplicationID:  appID1,
+				Partition:      "default",
+				QueueName:      "root.parent.leaf1",
+				SubmissionTime: time.Now().Unix(),
+			})
+			if app == nil || err != nil {
+				t.Fatalf("failed to create app (%v) and or resource: %v (err = %v)", app, res, err)
+			}
+			app.queue = leaf
+
+			// add ask
+			askProto := &si.AllocationAsk{
+				AllocationKey: "app-1-alloc-1",
+				ApplicationID: "app-1",
+				PartitionName: "default",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"first": {Value: 10},
+					},
+				},
+				MaxAllocations: 1,
+			}
+			schedulingAsk := newSchedulingAllocationAsk(askProto)
+			_, err = app.addAllocationAsk(schedulingAsk)
+			assert.NilError(t, err, "add allocation ask failed")
+			err = partition.addSchedulingApplication(app)
+			assert.NilError(t, err, "add scheduling application failed")
+
+			// try to confirm a proposal where it tries to allocate to a non-exist node
+			err = partition.confirmAllocation(tt.proposal, true)
+			tt.validFn(t, err)
+		})
+	}
 }

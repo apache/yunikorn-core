@@ -55,6 +55,7 @@ func createManagedQueue(parentQI *SchedulingQueue, name string, parent bool, max
 	childConf := configs.QueueConfig{
 		Name:       name,
 		Parent:     parent,
+		AdminACL:   "*",
 		Queues:     nil,
 		Properties: make(map[string]string),
 	}

@@ -81,8 +81,8 @@ func (m *mockScheduler) addNode(nodeID string, resource *si.Resource) error {
 			{
 				NodeID: nodeID,
 				Attributes: map[string]string{
-					"si.io/hostname": nodeID,
-					"si.io/rackname": "rack-1",
+					"si/hostname": nodeID,
+					"si/rackname": "rack-1",
 				},
 				SchedulableResource: resource,
 			},

@@ -119,8 +119,8 @@ partitions:
 			{
 				NodeID: "node-1:1234",
 				Attributes: map[string]string{
-					"si.io/hostname": "node-1",
-					"si.io/rackname": "rack-1",
+					"si/hostname": "node-1",
+					"si/rackname": "rack-1",
 				},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -327,8 +327,8 @@ partitions:
 			{
 				NodeID: "node-1:1234",
 				Attributes: map[string]string{
-					"si.io/hostname": "node-1",
-					"si.io/rackname": "rack-1",
+					"si/hostname": "node-1",
+					"si/rackname": "rack-1",
 				},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -363,8 +363,8 @@ partitions:
 			{
 				NodeID: "node-1:1234",
 				Attributes: map[string]string{
-					"si.io/hostname": "node-1",
-					"si.io/rackname": "rack-1",
+					"si/hostname": "node-1",
+					"si/rackname": "rack-1",
 				},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -421,8 +421,8 @@ partitions:
 			{
 				NodeID: "node-1:1234",
 				Attributes: map[string]string{
-					"si.io/hostname": "node-1",
-					"si.io/rackname": "rack-1",
+					"si/hostname": "node-1",
+					"si/rackname": "rack-1",
 				},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -457,8 +457,8 @@ partitions:
 			{
 				NodeID: "node-1:1234",
 				Attributes: map[string]string{
-					"si.io/hostname": "node-1",
-					"si.io/rackname": "rack-1",
+					"si/hostname": "node-1",
+					"si/rackname": "rack-1",
 				},
 				OccupiedResource: &si.Resource{
 					Resources: map[string]*si.Quantity{

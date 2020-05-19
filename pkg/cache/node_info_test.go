@@ -21,9 +21,9 @@ package cache
 import (
 	"testing"
 
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/api"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
@@ -83,9 +83,9 @@ func TestNewNodeInfo(t *testing.T) {
 
 	// set special attributes and get a new node
 	proto.Attributes = map[string]string{
-		api.HostName:      "host1",
-		api.RackName:      "rack1",
-		api.NodePartition: "partition1",
+		common.HostName:      "host1",
+		common.RackName:      "rack1",
+		common.NodePartition: "partition1",
 	}
 	node = NewNodeInfo(proto)
 	if node == nil || node.NodeID != "testnode" {
@@ -118,7 +118,7 @@ func TestNewNodeInfo(t *testing.T) {
 
 func TestAttributes(t *testing.T) {
 	proto := newProto("testnode", nil, nil, map[string]string{
-		api.NodePartition: "partition1",
+		common.NodePartition: "partition1",
 		"something":       "just a text",
 	})
 
@@ -131,7 +131,7 @@ func TestAttributes(t *testing.T) {
 	assert.Equal(t, "", node.Rackname)
 	assert.Equal(t, "partition1", node.Partition)
 
-	value := node.GetAttribute(api.NodePartition)
+	value := node.GetAttribute(common.NodePartition)
 	assert.Equal(t, "partition1", value, "node attributes not set, expected 'partition1' got '%v'", value)
 	value = node.GetAttribute("something")
 	assert.Equal(t, "just a text", value, "node attributes not set, expected 'just a text' got '%v'", value)

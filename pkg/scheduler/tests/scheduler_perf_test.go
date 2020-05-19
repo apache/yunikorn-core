@@ -95,8 +95,8 @@ partitions:
 		node := &si.NewNodeInfo{
 			NodeID: nodeName + ":1234",
 			Attributes: map[string]string{
-				"si.io/hostname": nodeName,
-				"si.io/rackname": "rack-1",
+				"si/hostname": nodeName,
+				"si/rackname": "rack-1",
 			},
 			SchedulableResource: &si.Resource{
 				Resources: map[string]*si.Quantity{

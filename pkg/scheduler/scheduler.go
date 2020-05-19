@@ -336,6 +336,13 @@ func (s *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
 					},
 				})
 			}
+		} else {
+			// scheduler has confirmed the allocation, notify the RM about these allocations
+			rmID := common.GetRMIdFromPartitionName(alloc.AllocationProposal.PartitionName)
+			s.eventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMNewAllocationsEvent{
+				Allocations: alloc.Allocations,
+				RmID:        rmID,
+			})
 		}
 	}
 

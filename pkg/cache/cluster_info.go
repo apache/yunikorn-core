@@ -580,13 +580,6 @@ func (m *ClusterInfo) processAllocationProposalEvent(event *cacheevent.Allocatio
 			},
 		},
 	})
-	rmID := common.GetRMIdFromPartitionName(proposal.PartitionName)
-
-	// Send allocation event to RM: rejects are not passed back
-	m.EventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMNewAllocationsEvent{
-		Allocations: []*si.Allocation{allocInfo.AllocationProto},
-		RmID:        rmID,
-	})
 }
 
 // Rejected application from the scheduler.

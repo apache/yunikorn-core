@@ -576,7 +576,7 @@ func (m *ClusterInfo) processAllocationProposalEvent(event *cacheevent.Allocatio
 		AcceptedAllocations: []*schedulerevent.AcceptedAllocationProposal{
 			{
 				AllocationProposal: proposal,
-				Allocations: []*si.Allocation{allocInfo.AllocationProto},
+				Allocations:        []*si.Allocation{allocInfo.AllocationProto},
 			},
 		},
 	})

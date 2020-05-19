@@ -388,6 +388,7 @@ func TestAddNewNode(t *testing.T) {
 // then simulate that user cancel all asks, the shim will send the release request
 // for both 3 requests. we are expecting to see after this, all existing asks and
 // allocations are all removed. Before the fix, sometimes it may run into NPE error.
+//nolint: funlen
 func TestUnReservationAndDeletion(t *testing.T) {
 	var tests = []struct {
 		repeat int
@@ -455,7 +456,7 @@ func TestUnReservationAndDeletion(t *testing.T) {
 			numOfReservation1 := len(ms.getSchedulingNode(nodes[0]).GetReservations())
 			numOfReservation2 := len(ms.getSchedulingNode(nodes[1]).GetReservations())
 			assert.Equal(t, 1, len(app.GetReservations()), "reservations missing from app")
-			assert.Equal(t, 1, numOfReservation1 + numOfReservation2, "reservation missing on %s", nodes[0])
+			assert.Equal(t, 1, numOfReservation1+numOfReservation2, "reservation missing on %s", nodes[0])
 			assert.Equal(t, 1, ms.getPartitionReservations()[appID], "reservations missing from partition")
 
 			// delete existing allocations

@@ -153,17 +153,17 @@ func (m *mockScheduler) removeAppRequest(app, allocID string, isAsk bool) error 
 	if isAsk {
 		ask := &si.AllocationAskReleaseRequest{
 			PartitionName: m.partitionName,
-			ApplicationID:        app,
-			Allocationkey:        allocID,
-			Message:              "ask is released",
+			ApplicationID: app,
+			Allocationkey: allocID,
+			Message:       "ask is released",
 		}
 		ask2Release = append(ask2Release, ask)
 	} else {
-		alloc := &si.AllocationReleaseRequest {
+		alloc := &si.AllocationReleaseRequest{
 			PartitionName: m.partitionName,
 			ApplicationID: app,
-			UUID: allocID,
-			Message: "alloc is released",
+			UUID:          allocID,
+			Message:       "alloc is released",
 		}
 		alloc2Release = append(alloc2Release, alloc)
 	}

@@ -145,7 +145,7 @@ func (s *Scheduler) processAllocationProposal(allocProposal *commonevents.Alloca
 		return fmt.Errorf("cannot find scheduling partition %s, for allocation ID %s", allocProposal.PartitionName, allocProposal.AllocationKey)
 	}
 
-	return partition.confirmAllocation(allocProposal.ApplicationID, allocProposal.NodeID, allocProposal.AllocationKey, confirm)
+	return partition.confirmAllocation(allocProposal, confirm)
 }
 
 // When a new app added, invoked by external
@@ -295,6 +295,9 @@ func (s *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocat
 	}
 }
 
+// cache sends the SchedulerAllocationUpdatesEvent to the scheduler, this is to notify the scheduler
+// to update its internal states and keep in sync with the cache. at this point, allocations are either
+// already allocated or released in the cache.
 func (s *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAllocationUpdatesEvent) {
 	if len(ev.ExistingAllocations) > 0 {
 		// in recovery mode, we only expect existing allocations being reported
@@ -315,9 +318,24 @@ func (s *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
 	if len(ev.AcceptedAllocations) > 0 {
 		alloc := ev.AcceptedAllocations[0]
 		// Update pending resource
-		if err := s.confirmAllocationProposal(alloc); err != nil {
+		if err := s.confirmAllocationProposal(alloc.AllocationProposal); err != nil {
 			log.Logger().Error("failed to confirm allocation proposal",
 				zap.Error(err))
+			// if the scheduler could not confirm the proposal,
+			// we need to notify the cache to revert the allocations
+			for _, allocInfo := range alloc.Allocations {
+				s.eventHandlers.CacheEventHandler.HandleEvent(&cacheevent.ReleaseAllocationsEvent{
+					AllocationsToRelease: []*commonevents.ReleaseAllocation{
+						{
+							UUID:          allocInfo.UUID,
+							ApplicationID: alloc.AllocationProposal.ApplicationID,
+							PartitionName: alloc.AllocationProposal.PartitionName,
+							Message:       "scheduler is unable to confirm the allocation",
+							ReleaseType:   si.AllocationReleaseResponse_STOPPED_BY_RM,
+						},
+					},
+				})
+			}
 		}
 	}
 

@@ -146,6 +146,37 @@ func (m *mockScheduler) addAppRequest(appID, allocID string, resource *si.Resour
 	})
 }
 
+func (m *mockScheduler) removeAppRequest(app, allocID string, isAsk bool) error {
+	alloc2Release := make([]*si.AllocationReleaseRequest, 0)
+	ask2Release := make([]*si.AllocationAskReleaseRequest, 0)
+
+	if isAsk {
+		ask := &si.AllocationAskReleaseRequest{
+			PartitionName: m.partitionName,
+			ApplicationID:        app,
+			Allocationkey:        allocID,
+			Message:              "ask is released",
+		}
+		ask2Release = append(ask2Release, ask)
+	} else {
+		alloc := &si.AllocationReleaseRequest {
+			PartitionName: m.partitionName,
+			ApplicationID: app,
+			UUID: allocID,
+			Message: "alloc is released",
+		}
+		alloc2Release = append(alloc2Release, alloc)
+	}
+
+	return m.proxy.Update(&si.UpdateRequest{
+		Releases: &si.AllocationReleasesRequest{
+			AllocationsToRelease:    alloc2Release,
+			AllocationAsksToRelease: ask2Release,
+		},
+		RmID: m.rmID,
+	})
+}
+
 // simple wrapper to limit the repeating code getting the queue
 func (m *mockScheduler) getSchedulingNode(nodeName string) *scheduler.SchedulingNode {
 	return m.scheduler.GetClusterSchedulingContext().GetSchedulingNode(nodeName, m.partitionName)

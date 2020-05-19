@@ -27,11 +27,23 @@ import (
 // From Cache, update about allocations.
 type SchedulerAllocationUpdatesEvent struct {
 	RejectedAllocations []*commonevents.AllocationProposal
-	AcceptedAllocations []*commonevents.AllocationProposal
+	AcceptedAllocations []*AcceptedAllocationProposal
 	NewAsks             []*si.AllocationAsk
 	ToReleases          *si.AllocationReleasesRequest
 	ExistingAllocations []*si.Allocation // optional, only required during recovery
 	RMId                string           // optional, only required during recovery
+}
+
+// each accepted allocation proposal is bound to one or more allocations
+// at present, we assume there is always 1 allocation per proposal
+type AcceptedAllocationProposal struct {
+	AllocationProposal *commonevents.AllocationProposal
+	Allocations        []*si.Allocation
+}
+
+type AllocationProposal struct {
+	AllocationProposal *commonevents.AllocationProposal
+	Allocations        []*si.Allocation
 }
 
 // From Cache, node updates.

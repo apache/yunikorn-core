@@ -573,7 +573,12 @@ func (m *ClusterInfo) processAllocationProposalEvent(event *cacheevent.Allocatio
 	// Send accept event back to scheduler
 	// this must be only 1: the handler will ignore all others
 	m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
-		AcceptedAllocations: event.AllocationProposals[:1],
+		AcceptedAllocations: []*schedulerevent.AcceptedAllocationProposal{
+			{
+				AllocationProposal: proposal,
+				Allocations: []*si.Allocation{allocInfo.AllocationProto},
+			},
+		},
 	})
 	rmID := common.GetRMIdFromPartitionName(proposal.PartitionName)
 

@@ -172,7 +172,7 @@ func TestSortNodesBin(t *testing.T) {
 	list = append(list, newSchedulingNode(cache.NewNodeForSort("node-nil", nil)))
 	sortNodes(list, common.BinPackingPolicy)
 
-	// stable sort is used so equal resources stay were they were
+	// stable sort is used so equal resources stay where they were
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"first": resources.Quantity(100)})
 
@@ -222,7 +222,7 @@ func TestSortNodesFair(t *testing.T) {
 	list = append(list, newSchedulingNode(cache.NewNodeForSort("node-nil", nil)))
 	sortNodes(list, common.FairnessPolicy)
 
-	// stable sort is used so equal resources stay were they were
+	// stable sort is used so equal resources stay where they were
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"first": resources.Quantity(100)})
 	// setup to sort descending
@@ -264,7 +264,7 @@ func TestSortNodesFair(t *testing.T) {
 }
 
 func TestSortAppsNoPending(t *testing.T) {
-	// stable sort is used so equal values stay were they were
+	// stable sort is used so equal values stay where they were
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"first": resources.Quantity(100)})
 	input := make(map[string]*SchedulingApplication, 4)
@@ -298,7 +298,7 @@ func TestSortAppsNoPending(t *testing.T) {
 }
 
 func TestSortAppsFifo(t *testing.T) {
-	// stable sort is used so equal values stay were they were
+	// stable sort is used so equal values stay where they were
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"first": resources.Quantity(100)})
 	// setup to sort descending: all apps have pending resources
@@ -322,7 +322,7 @@ func TestSortAppsFifo(t *testing.T) {
 }
 
 func TestSortAppsFair(t *testing.T) {
-	// stable sort is used so equal values stay were they were
+	// stable sort is used so equal values stay where they were
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"first": resources.Quantity(100)})
 	// setup to sort descending: all apps have pending resources
@@ -370,7 +370,7 @@ func TestSortAppsFair(t *testing.T) {
 }
 
 func TestSortAppsStateAware(t *testing.T) {
-	// stable sort is used so equal values stay were they were
+	// stable sort is used so equal values stay where they were
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"first": resources.Quantity(100)})
 	// setup all apps with pending resources, all accepted state
@@ -384,7 +384,7 @@ func TestSortAppsStateAware(t *testing.T) {
 		app.allocating = resources.Multiply(res, int64(i+1))
 		app.pending = res
 		input[appID] = app
-		err := app.ApplicationInfo.HandleApplicationEvent(cache.AcceptApplication)
+		err := app.ApplicationInfo.HandleApplicationEvent(cache.RunApplication)
 		assert.NilError(t, err, "state change failed for app %v", appID)
 		// make sure the time stamps differ at least a bit (tracking in nano seconds)
 		time.Sleep(time.Nanosecond * 5)
@@ -401,7 +401,7 @@ func TestSortAppsStateAware(t *testing.T) {
 	assertAppListLength(t, list, []string{appID1})
 
 	// move the first app to starting no pending resource should get nothing
-	err := input[appID0].ApplicationInfo.HandleApplicationEvent(cache.StartApplication)
+	err := input[appID0].ApplicationInfo.HandleApplicationEvent(cache.RunApplication)
 	assert.NilError(t, err, "state change failed for app-0")
 	list = sortApplications(input, policies.StateAwarePolicy, nil)
 	assertAppListLength(t, list, []string{})
@@ -410,7 +410,7 @@ func TestSortAppsStateAware(t *testing.T) {
 	err = input[appID0].ApplicationInfo.HandleApplicationEvent(cache.RunApplication)
 	assert.NilError(t, err, "state change failed for app-0")
 	appID3 := "app-3"
-	err = input[appID3].ApplicationInfo.HandleApplicationEvent(cache.StartApplication)
+	err = input[appID3].ApplicationInfo.HandleApplicationEvent(cache.RunApplication)
 	assert.NilError(t, err, "state change failed for app-3")
 	list = sortApplications(input, policies.StateAwarePolicy, nil)
 	assertAppListLength(t, list, []string{appID3})
@@ -428,7 +428,7 @@ func TestSortAppsStateAware(t *testing.T) {
 }
 
 func TestSortAsks(t *testing.T) {
-	// stable sort is used so equal values stay were they were
+	// stable sort is used so equal values stay where they were
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"first": resources.Quantity(1)})
 	list := make([]*schedulingAllocationAsk, 4)

@@ -100,9 +100,9 @@ func TestStateTimeOut(t *testing.T) {
 	startingTimeout = time.Microsecond * 100
 	defer func() { startingTimeout = time.Minute * 5 }()
 	appInfo := newApplicationInfo("app-00001", "default", "root.a")
-	err := appInfo.HandleApplicationEvent(AcceptApplication)
+	err := appInfo.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (timeout test)")
-	err = appInfo.HandleApplicationEvent(StartApplication)
+	err = appInfo.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected accepted to starting (timeout test)")
 	// give it some time to run and progress
 	time.Sleep(time.Millisecond * 5)
@@ -115,9 +115,9 @@ func TestStateTimeOut(t *testing.T) {
 
 	startingTimeout = time.Millisecond * 10
 	appInfo = newApplicationInfo("app-00001", "default", "root.a")
-	err = appInfo.HandleApplicationEvent(AcceptApplication)
+	err = appInfo.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (timeout test2)")
-	err = appInfo.HandleApplicationEvent(StartApplication)
+	err = appInfo.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected accepted to starting (timeout test2)")
 	// give it some time to run and progress
 	time.Sleep(time.Microsecond * 100)

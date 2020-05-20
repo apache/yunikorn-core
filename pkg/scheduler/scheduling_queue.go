@@ -89,7 +89,7 @@ func (sq *SchedulingQueue) updateSchedulingQueueProperties(prop map[string]strin
 	if sq.isLeafQueue() {
 		// walk over all properties and process
 		var err error
-		sq.sortType = policies.UndefinedApp
+		sq.sortType = policies.Undefined
 		for key, value := range prop {
 			if key == configs.ApplicationSortPolicy {
 				sq.sortType, err = policies.SortPolicyFromString(value)
@@ -104,7 +104,7 @@ func (sq *SchedulingQueue) updateSchedulingQueueProperties(prop map[string]strin
 				zap.String("value", value))
 		}
 		// if it is not defined default to fifo
-		if sq.sortType == policies.UndefinedApp {
+		if sq.sortType == policies.Undefined {
 			sq.sortType = policies.FifoSortPolicy
 		}
 		return

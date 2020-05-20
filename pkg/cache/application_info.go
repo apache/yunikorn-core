@@ -178,16 +178,12 @@ func (ai *ApplicationInfo) SetQueue(leaf *QueueInfo) {
 
 // Add a new allocation to the application
 func (ai *ApplicationInfo) addAllocation(info *AllocationInfo) {
-	// progress the state based on where we are, we cannot fail in this case
-	// do NOT change the order as that will break the state
-	// ignore the errors explicitly and marked as nolint
-	if ai.IsStarting() {
-		//nolint: errcheck
-		_ = ai.HandleApplicationEvent(RunApplication)
-	}
-	if ai.IsAccepted() {
-		//nolint: errcheck
-		_ = ai.HandleApplicationEvent(StartApplication)
+	// progress the state based on where we are, we should never fail in this case
+	// keep track of a failure
+	if err := ai.HandleApplicationEvent(RunApplication); err != nil {
+		log.Logger().Error("Unexpected app state change failure while adding allocation",
+			zap.String("currentState", ai.stateMachine.Current()),
+			zap.Error(err))
 	}
 	// add the allocation
 	ai.Lock()

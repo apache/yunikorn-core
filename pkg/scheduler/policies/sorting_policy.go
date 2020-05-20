@@ -26,14 +26,14 @@ import (
 type SortPolicy int
 
 const (
-	FifoSortPolicy   SortPolicy = iota // fair based on usage
-	FairSortPolicy                     // first in first out, submit time
+	FifoSortPolicy   SortPolicy = iota // first in first out, submit time
+	FairSortPolicy                     // fair based on usage
 	StateAwarePolicy                   // only 1 app in starting state
-	UndefinedApp                       // not initialised or parsing failed
+	Undefined                          // not initialised or parsing failed
 )
 
 func (s SortPolicy) String() string {
-	return [...]string{"fifo", "fair", "status", "undefined"}[s]
+	return [...]string{"fifo", "fair", "stateaware", "undefined"}[s]
 }
 
 func SortPolicyFromString(str string) (SortPolicy, error) {
@@ -46,6 +46,6 @@ func SortPolicyFromString(str string) (SortPolicy, error) {
 	case StateAwarePolicy.String():
 		return StateAwarePolicy, nil
 	default:
-		return UndefinedApp, fmt.Errorf("undefined policy: %s", str)
+		return Undefined, fmt.Errorf("undefined policy: %s", str)
 	}
 }

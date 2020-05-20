@@ -30,13 +30,8 @@ func TestAcceptStateTransition(t *testing.T) {
 	assert.Equal(t, appInfo.GetApplicationState(), New.String())
 
 	// new to accepted
-	err := appInfo.HandleApplicationEvent(AcceptApplication)
+	err := appInfo.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted")
-	assert.Equal(t, appInfo.GetApplicationState(), Accepted.String())
-
-	// app already accepted: error expected
-	err = appInfo.HandleApplicationEvent(AcceptApplication)
-	assert.Assert(t, err != nil, "error expected accepted to accepted")
 	assert.Equal(t, appInfo.GetApplicationState(), Accepted.String())
 
 	// accepted to rejected: error expected
@@ -75,18 +70,13 @@ func TestStartStateTransition(t *testing.T) {
 	// starting only from accepted
 	appInfo := newApplicationInfo("app-00001", "default", "root.a")
 	assert.Equal(t, appInfo.GetApplicationState(), New.String())
-	err := appInfo.HandleApplicationEvent(AcceptApplication)
+	err := appInfo.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (start test)")
 	assert.Equal(t, appInfo.GetApplicationState(), Accepted.String())
 
 	// start app
-	err = appInfo.HandleApplicationEvent(StartApplication)
+	err = appInfo.HandleApplicationEvent(RunApplication)
 	assert.Assert(t, err, "no error expected new to starting")
-	assert.Equal(t, appInfo.GetApplicationState(), Starting.String())
-
-	// start app: same state is not allowed for starting
-	err = appInfo.HandleApplicationEvent(StartApplication)
-	assert.Assert(t, err != nil, "error expected starting to starting")
 	assert.Equal(t, appInfo.GetApplicationState(), Starting.String())
 
 	// starting to rejected: error expected
@@ -98,20 +88,15 @@ func TestStartStateTransition(t *testing.T) {
 	err = appInfo.HandleApplicationEvent(KillApplication)
 	assert.NilError(t, err, "no error expected starting to killed")
 	assert.Equal(t, appInfo.GetApplicationState(), Killed.String())
-
-	// starting fails from all but accepted
-	err = appInfo.HandleApplicationEvent(StartApplication)
-	assert.Assert(t, err != nil, "error expected killed to starting")
-	assert.Equal(t, appInfo.GetApplicationState(), Killed.String())
 }
 
 func TestRunStateTransition(t *testing.T) {
 	// run only from starting
 	appInfo := newApplicationInfo("app-00001", "default", "root.a")
 	assert.Equal(t, appInfo.GetApplicationState(), New.String())
-	err := appInfo.HandleApplicationEvent(AcceptApplication)
+	err := appInfo.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (run test)")
-	err = appInfo.HandleApplicationEvent(StartApplication)
+	err = appInfo.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected accepted to starting (run test)")
 	assert.Equal(t, appInfo.GetApplicationState(), Starting.String())
 
@@ -135,7 +120,7 @@ func TestRunStateTransition(t *testing.T) {
 	assert.NilError(t, err, "no error expected running to killed")
 	assert.Equal(t, appInfo.GetApplicationState(), Killed.String())
 
-	// run fails from all but running or starting
+	// run fails from killing
 	err = appInfo.HandleApplicationEvent(RunApplication)
 	assert.Assert(t, err != nil, "error expected killed to running")
 	assert.Equal(t, appInfo.GetApplicationState(), Killed.String())
@@ -145,9 +130,9 @@ func TestCompletedStateTransition(t *testing.T) {
 	// complete only from run or waiting
 	appInfo := newApplicationInfo("app-00001", "default", "root.a")
 	assert.Equal(t, appInfo.GetApplicationState(), New.String())
-	err := appInfo.HandleApplicationEvent(AcceptApplication)
+	err := appInfo.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (completed test)")
-	err = appInfo.HandleApplicationEvent(StartApplication)
+	err = appInfo.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected accepted to starting (completed test)")
 	err = appInfo.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected starting to running (completed test)")
@@ -160,7 +145,7 @@ func TestCompletedStateTransition(t *testing.T) {
 	// complete only from run or waiting
 	appInfo = newApplicationInfo("app-00002", "default", "root.a")
 	assert.Equal(t, appInfo.GetApplicationState(), New.String())
-	err = appInfo.HandleApplicationEvent(AcceptApplication)
+	err = appInfo.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (completed test)")
 	err = appInfo.HandleApplicationEvent(WaitApplication)
 	assert.NilError(t, err, "no error expected accepted to waiting (completed test)")
@@ -191,7 +176,7 @@ func TestCompletedStateTransition(t *testing.T) {
 func TestWaitStateTransition(t *testing.T) {
 	appInfo := newApplicationInfo("app-00001", "default", "root.a")
 	assert.Equal(t, appInfo.GetApplicationState(), New.String())
-	err := appInfo.HandleApplicationEvent(AcceptApplication)
+	err := appInfo.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (wait test)")
 
 	// accepted to wait and back again
@@ -202,9 +187,9 @@ func TestWaitStateTransition(t *testing.T) {
 	// starting to wait
 	appInfo = newApplicationInfo("app-00002", "default", "root.a")
 	assert.Equal(t, appInfo.GetApplicationState(), New.String())
-	err = appInfo.HandleApplicationEvent(AcceptApplication)
+	err = appInfo.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (wait test)")
-	err = appInfo.HandleApplicationEvent(StartApplication)
+	err = appInfo.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected accepted to starting")
 	assert.Equal(t, appInfo.GetApplicationState(), Starting.String())
 	err = appInfo.HandleApplicationEvent(WaitApplication)

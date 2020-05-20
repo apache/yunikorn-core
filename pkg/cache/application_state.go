@@ -34,9 +34,7 @@ import (
 type applicationEvent int
 
 const (
-	AcceptApplication applicationEvent = iota
-	StartApplication
-	RunApplication
+	RunApplication applicationEvent = iota
 	WaitApplication
 	RejectApplication
 	CompleteApplication
@@ -44,7 +42,7 @@ const (
 )
 
 func (ae applicationEvent) String() string {
-	return [...]string{"AcceptApplication", "StartApplication", "RunApplication", "WaitApplication", "RejectApplication", "CompleteApplication", "KillApplication"}[ae]
+	return [...]string{"RunApplication", "WaitApplication", "RejectApplication", "CompleteApplication", "KillApplication"}[ae]
 }
 
 // ----------------------------------
@@ -75,11 +73,11 @@ func newAppState() *fsm.FSM {
 				Src:  []string{New.String()},
 				Dst:  Rejected.String(),
 			}, {
-				Name: AcceptApplication.String(),
+				Name: RunApplication.String(),
 				Src:  []string{New.String()},
 				Dst:  Accepted.String(),
 			}, {
-				Name: StartApplication.String(),
+				Name: RunApplication.String(),
 				Src:  []string{Accepted.String()},
 				Dst:  Starting.String(),
 			}, {

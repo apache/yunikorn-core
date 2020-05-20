@@ -183,26 +183,28 @@ func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) int {
 			delete(sa.requests, allocKey)
 		}
 	}
-	// Check if we need to change state based on the ask removal:
-	// 1) if pending is zero (no more asks left)
-	// 2) if allocation is zero (nothing is running)
-	// Change the state to waiting
-	if resources.IsZero(sa.pending) && resources.IsZero(sa.GetAllocatedResource()) {
-		oldState := sa.ApplicationInfo.GetApplicationState()
-		if err := sa.ApplicationInfo.HandleApplicationEvent(cache.WaitApplication); err != nil {
-			log.Logger().Warn("Application state not changed to Waiting while removing ask(s)",
-				zap.String("oldState", oldState),
-				zap.Int("releaseAllocs", toRelease),
-				zap.Error(err))
-		} else {
-			log.Logger().Debug("Application state change to Waiting while removing ask(s)",
-				zap.String("oldState", oldState),
-				zap.Int("releaseAllocs", toRelease))
-		}
-	}
 	// clean up the queue pending resources
 	sa.queue.decPendingResource(deltaPendingResource)
+
+	if resources.IsZero(sa.pending) {
+		sa.askUpdateStateChange()
+	}
+
 	return toRelease
+}
+
+// Check if we need to change state based on the ask update:
+// 1) if pending is zero (no more asks left, checked in the caller)
+// 2) if allocation is zero (nothing is running)
+// Change the state to waiting
+func (sa *SchedulingApplication) askUpdateStateChange() {
+	if resources.IsZero(sa.GetAllocatedResource()) {
+		if err := sa.ApplicationInfo.HandleApplicationEvent(cache.WaitApplication); err != nil {
+			log.Logger().Warn("Application state not changed to Waiting while removing ask(s)",
+				zap.String("currentState", sa.ApplicationInfo.GetApplicationState()),
+				zap.Error(err))
+		}
+	}
 }
 
 // Add an allocation ask to this application
@@ -229,7 +231,7 @@ func (sa *SchedulingApplication) addAllocationAsk(ask *schedulingAllocationAsk) 
 	// 2) all asks and allocation have been removed: state is Waiting
 	// Accept the app and get it scheduling (again)
 	if sa.isNew() {
-		if err := sa.ApplicationInfo.HandleApplicationEvent(cache.AcceptApplication); err != nil {
+		if err := sa.ApplicationInfo.HandleApplicationEvent(cache.RunApplication); err != nil {
 			log.Logger().Debug("Application state change failed while adding first ask",
 				zap.String("currentState", sa.ApplicationInfo.GetApplicationState()),
 				zap.Error(err))
@@ -271,6 +273,10 @@ func (sa *SchedulingApplication) updateAskRepeatInternal(ask *schedulingAllocati
 	sa.pending.AddTo(deltaPendingResource)
 	// update the pending of the queue with the same delta
 	sa.queue.incPendingResource(deltaPendingResource)
+
+	if resources.IsZero(sa.pending) {
+		sa.askUpdateStateChange()
+	}
 
 	return deltaPendingResource, nil
 }
@@ -690,22 +696,21 @@ func (sa *SchedulingApplication) isWaiting() bool {
 // Move the app state to running after allocation has been recovered.
 // Since we do not add allocations in the normal way states will not change during recovery.
 // There could also be multiple nodes that recover the app and
-// This moves via starting directly to running.
+// This should move via starting directly to running.
 func (sa *SchedulingApplication) finishRecovery() {
 	// no need to do anything if we are already running
 	if sa.ApplicationInfo.IsRunning() {
 		return
 	}
-	// this is the first recovered allocation: move to starting this cannot fail
-	if sa.ApplicationInfo.IsAccepted() {
-		// ignore the errors explicitly and marked as nolint
-		//nolint: errcheck
-		_ = sa.ApplicationInfo.HandleApplicationEvent(cache.StartApplication)
-		_ = sa.ApplicationInfo.HandleApplicationEvent(cache.RunApplication)
+	// If we're not running we need to cover two cases in one: move from accepted, via starting to running
+	err := sa.ApplicationInfo.HandleApplicationEvent(cache.RunApplication)
+	if err == nil {
+		err = sa.ApplicationInfo.HandleApplicationEvent(cache.RunApplication)
 	}
-	// log unexpected state
-	if !sa.ApplicationInfo.IsRunning() {
-		log.Logger().Warn("State of recovered app is not the expected RUNNING state",
-			zap.String("state", sa.ApplicationInfo.GetApplicationState()))
+	// log the unexpected failure
+	if err != nil {
+		log.Logger().Error("Unexpected app state change failure while recovering allocation",
+			zap.String("currentState", sa.ApplicationInfo.GetApplicationState()),
+			zap.Error(err))
 	}
 }

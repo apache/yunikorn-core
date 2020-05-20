@@ -32,8 +32,8 @@ func TestAppFromString(t *testing.T) {
 		{"EmptyString", "", FifoSortPolicy, false},
 		{"FifoString", "fifo", FifoSortPolicy, false},
 		{"FairString", "fair", FairSortPolicy, false},
-		{"StatusString", "status", StateAwarePolicy, false},
-		{"UnknownString", "unknown", UndefinedApp, true},
+		{"StatusString", "stateaware", StateAwarePolicy, false},
+		{"UnknownString", "unknown", Undefined, true},
 	}
 	for _, tt := range tests {
 		got, err := SortPolicyFromString(tt.arg)
@@ -56,8 +56,8 @@ func TestAppToString(t *testing.T) {
 	}{
 		{"FifoString", FifoSortPolicy, "fifo"},
 		{"FairString", FairSortPolicy, "fair"},
-		{"StatusString", StateAwarePolicy, "status"},
-		{"DefaultString", UndefinedApp, "undefined"},
+		{"StatusString", StateAwarePolicy, "stateaware"},
+		{"DefaultString", Undefined, "undefined"},
 		{"NoneString", someSP, "fifo"},
 	}
 	for _, tt := range tests {

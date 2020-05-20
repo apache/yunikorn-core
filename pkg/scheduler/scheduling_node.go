@@ -56,7 +56,7 @@ func newSchedulingNode(info *cache.NodeInfo) *SchedulingNode {
 		NodeID:                      info.NodeID,
 		allocating:                  resources.NewResource(),
 		preempting:                  resources.NewResource(),
-		cachedAvailable:			 resources.NewResource(),
+		cachedAvailable:             resources.NewResource(),
 		cachedAvailableUpdateNeeded: true,
 		reservations:                make(map[string]*reservation),
 	}

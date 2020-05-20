@@ -145,6 +145,7 @@ func (m *mockScheduler) addAppRequest(appID, allocID string, resource *si.Resour
 		RmID: m.rmID,
 	})
 }
+
 func (m *mockScheduler) releaseAllocRequest(appID, uuid string) error {
 	return m.proxy.Update(&si.UpdateRequest{
 		Releases: &si.AllocationReleasesRequest{

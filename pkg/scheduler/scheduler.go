@@ -144,8 +144,23 @@ func (s *Scheduler) processAllocationProposal(allocProposal *commonevents.Alloca
 	if partition == nil {
 		return fmt.Errorf("cannot find scheduling partition %s, for allocation ID %s", allocProposal.PartitionName, allocProposal.AllocationKey)
 	}
+	uuid, err := partition.confirmAllocation(allocProposal, confirm)
+	if uuid != "" {
+		log.Logger().Debug("failed to confirm proposal, removing allocation from cache",
+			zap.String("appID", allocProposal.ApplicationID),
+			zap.String("partitionName", allocProposal.PartitionName),
+			zap.String("allocationKey", allocProposal.AllocationKey),
+			zap.String("UUID", uuid))
+		// Pass in a releaseType of preemption we need to communicate the release back to the RM. The alloc was
+		// communicated to the RM from the cache but immediately removed again
+		// This is an internal removal which we do not have a code for, however it is triggered by the ask removal
+		// from the RM. Stopped by RM fits best.
+		event := &cacheevent.ReleaseAllocationsEvent{AllocationsToRelease: make([]*commonevents.ReleaseAllocation, 0)}
+		event.AllocationsToRelease = append(event.AllocationsToRelease, commonevents.NewReleaseAllocation(uuid, allocProposal.ApplicationID, allocProposal.PartitionName, "allocation confirmation failure (ask removal)", si.AllocationReleaseResponse_STOPPED_BY_RM))
 
-	return partition.confirmAllocation(allocProposal.ApplicationID, allocProposal.NodeID, allocProposal.AllocationKey, confirm)
+		s.eventHandlers.CacheEventHandler.HandleEvent(event)
+	}
+	return err
 }
 
 // When a new app added, invoked by external
@@ -196,7 +211,7 @@ func (s *Scheduler) processAllocationReleaseByAllocationKey(allocationAsksToRele
 			if schedulingApp != nil {
 				// remove the allocation asks from the app
 				reservedAsks := schedulingApp.removeAllocationAsk(toRelease.Allocationkey)
-				log.Logger().Info("release allocation",
+				log.Logger().Info("release allocation ask",
 					zap.String("allocation", toRelease.Allocationkey),
 					zap.String("appID", toRelease.ApplicationID),
 					zap.String("message", toRelease.Message),

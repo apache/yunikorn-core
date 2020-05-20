@@ -73,6 +73,23 @@ func (ai *ApplicationInfo) GetAllAllocations() []*AllocationInfo {
 	return allocations
 }
 
+// Return the allocation for the allocation key. This will return the first allocation for the
+// allocation key. It will only work for the case that the repeat is 1.
+func (ai *ApplicationInfo) GetAllocationUUID(allocKey string) string {
+	ai.lock.RLock()
+	defer ai.lock.RUnlock()
+
+	// just get the first one, ignore multiple repeats for now.
+	// we cannot detect multiple repeats easily here.
+	for uuid, alloc := range ai.allocations {
+		if alloc.AllocationProto.AllocationKey == allocKey {
+			return uuid
+		}
+	}
+	// not found return an empty string
+	return ""
+}
+
 // Return the current state for the application.
 // The state machine handles the locking.
 func (ai *ApplicationInfo) GetApplicationState() string {

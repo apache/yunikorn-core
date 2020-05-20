@@ -37,15 +37,16 @@ type NodeInfo struct {
 	Partition string
 
 	// Private fields need protection
-	attributes        map[string]string
-	totalResource     *resources.Resource
-	occupiedResource  *resources.Resource
-	allocatedResource *resources.Resource
-	availableResource *resources.Resource
-	allocations       map[string]*AllocationInfo
-	schedulable       bool
+	attributes            map[string]string
+	totalResource         *resources.Resource
+	occupiedResource      *resources.Resource
+	allocatedResource     *resources.Resource
+	availableResource     *resources.Resource
+	availableUpdateNeeded bool
+	allocations           map[string]*AllocationInfo
+	schedulable           bool
 
-	lock sync.RWMutex
+	sync.RWMutex
 }
 
 // Create a new node from the protocol object.
@@ -55,15 +56,16 @@ func NewNodeInfo(proto *si.NewNodeInfo) *NodeInfo {
 		return nil
 	}
 	m := &NodeInfo{
-		NodeID:            proto.NodeID,
-		totalResource:     resources.NewResourceFromProto(proto.SchedulableResource),
-		allocatedResource: resources.NewResource(),
-		occupiedResource:  resources.NewResourceFromProto(proto.OccupiedResource),
-		allocations:       make(map[string]*AllocationInfo),
-		schedulable:       true,
+		NodeID:                proto.NodeID,
+		availableUpdateNeeded: true,
+		totalResource:         resources.NewResourceFromProto(proto.SchedulableResource),
+		allocatedResource:     resources.NewResource(),
+		occupiedResource:      resources.NewResourceFromProto(proto.OccupiedResource),
+		allocations:           make(map[string]*AllocationInfo),
+		schedulable:           true,
 	}
-	m.availableResource = m.totalResource.Clone()
-	m.refreshAvailableResource()
+	// initialise available resources
+	m.availableResource = resources.Sub(m.totalResource, m.occupiedResource)
 
 	m.initializeAttribute(proto.Attributes)
 
@@ -91,8 +93,8 @@ func (ni *NodeInfo) GetAttribute(key string) string {
 // It returns a cloned object as we do not want to allow modifications to be made to the
 // value of the node.
 func (ni *NodeInfo) GetAllocatedResource() *resources.Resource {
-	ni.lock.RLock()
-	defer ni.lock.RUnlock()
+	ni.RLock()
+	defer ni.RUnlock()
 
 	return ni.allocatedResource.Clone()
 }
@@ -101,21 +103,36 @@ func (ni *NodeInfo) GetAllocatedResource() *resources.Resource {
 // It returns a cloned object as we do not want to allow modifications to be made to the
 // value of the node.
 func (ni *NodeInfo) GetAvailableResource() *resources.Resource {
-	ni.lock.RLock()
-	defer ni.lock.RUnlock()
+	ni.RLock()
+	defer ni.RUnlock()
 
 	return ni.availableResource.Clone()
 }
 
+// Return the fact that the available resource has changed for the node.
+// This should only be called by the SchedulingNode when it checks to update its cached value.
+// This handles two cases:
+// - removal of allocations via events
+// - update of the node capacity via events
+func (ni *NodeInfo) SyncAvailableResource() bool {
+	ni.RLock()
+	defer ni.RUnlock()
+	if ni.availableUpdateNeeded {
+		ni.availableUpdateNeeded = false
+		return true
+	}
+	return false
+}
+
 func (ni *NodeInfo) GetCapacity() *resources.Resource {
-	ni.lock.RLock()
-	defer ni.lock.RUnlock()
+	ni.RLock()
+	defer ni.RUnlock()
 	return ni.totalResource.Clone()
 }
 
 func (ni *NodeInfo) setCapacity(newCapacity *resources.Resource) {
-	ni.lock.Lock()
-	defer ni.lock.Unlock()
+	ni.Lock()
+	defer ni.Unlock()
 	if resources.Equals(ni.totalResource, newCapacity) {
 		log.Logger().Debug("skip updating capacity, not changed")
 		return
@@ -125,14 +142,14 @@ func (ni *NodeInfo) setCapacity(newCapacity *resources.Resource) {
 }
 
 func (ni *NodeInfo) GetOccupiedResource() *resources.Resource {
-	ni.lock.RLock()
-	defer ni.lock.RUnlock()
+	ni.RLock()
+	defer ni.RUnlock()
 	return ni.occupiedResource.Clone()
 }
 
 func (ni *NodeInfo) setOccupiedResource(occupiedResource *resources.Resource) {
-	ni.lock.Lock()
-	defer ni.lock.Unlock()
+	ni.Lock()
+	defer ni.Unlock()
 	if resources.Equals(ni.occupiedResource, occupiedResource) {
 		log.Logger().Debug("skip updating occupiedResource, not changed")
 		return
@@ -144,8 +161,8 @@ func (ni *NodeInfo) setOccupiedResource(occupiedResource *resources.Resource) {
 // Return the allocation based on the uuid of the allocation.
 // returns nil if the allocation is not found
 func (ni *NodeInfo) GetAllocation(uuid string) *AllocationInfo {
-	ni.lock.RLock()
-	defer ni.lock.RUnlock()
+	ni.RLock()
+	defer ni.RUnlock()
 
 	return ni.allocations[uuid]
 }
@@ -158,8 +175,8 @@ func (ni *NodeInfo) FitInNode(resRequest *resources.Resource) bool {
 
 // Check if the allocation fits in the currently available resources.
 func (ni *NodeInfo) canAllocate(resRequest *resources.Resource) bool {
-	ni.lock.RLock()
-	defer ni.lock.RUnlock()
+	ni.RLock()
+	defer ni.RUnlock()
 	return resources.FitIn(ni.availableResource, resRequest)
 }
 
@@ -169,27 +186,29 @@ func (ni *NodeInfo) AddAllocation(alloc *AllocationInfo) {
 	if alloc == nil {
 		return
 	}
-	ni.lock.Lock()
-	defer ni.lock.Unlock()
+	ni.Lock()
+	defer ni.Unlock()
 
 	ni.allocations[alloc.AllocationProto.UUID] = alloc
 	ni.allocatedResource.AddTo(alloc.AllocatedResource)
 	ni.availableResource.SubFrom(alloc.AllocatedResource)
+	ni.availableUpdateNeeded = true
 }
 
 // Remove the allocation to the node.
 // Returns nil if the allocation was not found and no changes are made. If the allocation
 // is found the AllocationInfo removed is returned. Used resources will decrease available
-// will increase as per the allocation found.
+// will increase as per the allocation removed.
 func (ni *NodeInfo) RemoveAllocation(uuid string) *AllocationInfo {
-	ni.lock.Lock()
-	defer ni.lock.Unlock()
+	ni.Lock()
+	defer ni.Unlock()
 
 	info := ni.allocations[uuid]
 	if info != nil {
 		delete(ni.allocations, uuid)
 		ni.allocatedResource.SubFrom(info.AllocatedResource)
 		ni.availableResource.AddTo(info.AllocatedResource)
+		ni.availableUpdateNeeded = true
 	}
 
 	return info
@@ -197,8 +216,8 @@ func (ni *NodeInfo) RemoveAllocation(uuid string) *AllocationInfo {
 
 // Get a copy of the allocations on this node
 func (ni *NodeInfo) GetAllAllocations() []*AllocationInfo {
-	ni.lock.RLock()
-	defer ni.lock.RUnlock()
+	ni.RLock()
+	defer ni.RUnlock()
 
 	arr := make([]*AllocationInfo, 0)
 	for _, v := range ni.allocations {
@@ -212,15 +231,15 @@ func (ni *NodeInfo) GetAllAllocations() []*AllocationInfo {
 // This will cause the node to be skipped during the scheduling cycle.
 // Visible for testing only
 func (ni *NodeInfo) SetSchedulable(schedulable bool) {
-	ni.lock.Lock()
-	defer ni.lock.Unlock()
+	ni.Lock()
+	defer ni.Unlock()
 	ni.schedulable = schedulable
 }
 
 // Can this node be used in scheduling.
 func (ni *NodeInfo) IsSchedulable() bool {
-	ni.lock.RLock()
-	defer ni.lock.RUnlock()
+	ni.RLock()
+	defer ni.RUnlock()
 	return ni.schedulable
 }
 
@@ -230,4 +249,5 @@ func (ni *NodeInfo) refreshAvailableResource() {
 	ni.availableResource = ni.totalResource.Clone()
 	ni.availableResource.SubFrom(ni.allocatedResource)
 	ni.availableResource.SubFrom(ni.occupiedResource)
+	ni.availableUpdateNeeded = true
 }

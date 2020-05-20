@@ -543,11 +543,12 @@ func (sq *SchedulingQueue) tryAllocate(ctx *partitionSchedulingContext) *schedul
 func (sq *SchedulingQueue) tryReservedAllocate(ctx *partitionSchedulingContext) *schedulingAllocation {
 	if sq.isLeafQueue() {
 		// skip if it has no reservations
-		if len(sq.reservedApps) != 0 {
+		reservedCopy := sq.getReservedApps()
+		if len(reservedCopy) != 0 {
 			// get the headroom
 			headRoom := sq.getHeadRoom()
 			// process the apps
-			for appID, numRes := range sq.reservedApps {
+			for appID, numRes := range reservedCopy {
 				if numRes > 1 {
 					log.Logger().Debug("multiple reservations found for application trying to allocate one",
 						zap.String("appID", appID),
@@ -574,6 +575,20 @@ func (sq *SchedulingQueue) tryReservedAllocate(ctx *partitionSchedulingContext) 
 		}
 	}
 	return nil
+}
+
+// Get a copy of the reserved app list
+// locked to prevent race conditions from event updates
+func (sq *SchedulingQueue) getReservedApps() map[string]int {
+	sq.Lock()
+	defer sq.Unlock()
+
+	copied := make(map[string]int)
+	for appID, numRes := range sq.reservedApps {
+		copied[appID] = numRes
+	}
+	// increase the number of reservations for this app
+	return copied
 }
 
 // Add an reserved app to the list.

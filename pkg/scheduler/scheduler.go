@@ -299,7 +299,6 @@ func (s *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocat
 		// this means that the app must exist (cannot be nil)
 		app := s.clusterSchedulingContext.GetSchedulingApplication(ask.ApplicationID, ask.PartitionName)
 		app.finishRecovery()
-
 	}
 }
 

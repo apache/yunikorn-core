@@ -110,15 +110,20 @@ When you run Spark on Kubernetes with pod templates, *spark-app-id* is considere
 A script to run the spark application and the yaml files are in the [README spark](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/deployments/examples#spark) section.
 
 ### Running a simple Tensorflow job 
-There is a example for Tensorflow job. You must install tf-operator first. You can install kubeflow which can auto install tf-operator for you, URL: https://www.kubeflow.org/docs/started/getting-started/
+There is an example for Tensorflow job. You must install tf-operator first. 
+You can install tf-operator by applying all yaml from two website down below:
+* CRD: https://github.com/kubeflow/manifests/tree/master/tf-training/tf-job-crds/base
+* Deployment: https://github.com/kubeflow/manifests/tree/master/tf-training/tf-job-operator/base
+Also you can install kubeflow which can auto install tf-operator for you, URL: https://www.kubeflow.org/docs/started/getting-started/
 
-A simple tfjob example:
+A simple Tensorflow job example:
 
+You need to [build the image](https://github.com/kubeflow/tf-operator/tree/master/examples/v1/dist-mnist) which used in example yaml.
 ```
 kubectl create -f examples/tfjob/tf-job-mnist.yaml
 ```
 
-The file for this example can be found in the [README tfjob](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/deployments/examples#tfjob) section.
+The file for this example can be found in the [README Tensorflow job](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/deployments/examples#tfjob) section.
 
 ### Affinity scheduling
 The scheduler supports affinity and ati affinity scheduling on kubernetes using predicates:

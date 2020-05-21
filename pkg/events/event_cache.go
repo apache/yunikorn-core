@@ -62,10 +62,6 @@ func (ec EventCache) GetEventChannel() *EventChannel {
 	return ec.channel
 }
 
-func (ec EventCache) GetEventStore() *EventStore {
-	return ec.store
-}
-
 func (ec EventCache) processEvent() {
 	for {
 		for {

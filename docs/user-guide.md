@@ -109,6 +109,17 @@ Spark uses its own version of the application ID tag called *spark-app-id*. This
 When you run Spark on Kubernetes with pod templates, *spark-app-id* is considered the applicationId.
 A script to run the spark application and the yaml files are in the [README spark](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/deployments/examples#spark) section.
 
+### Running a simple Tensorflow job 
+There is a example for Tensorflow job. You must install tf-operator first. You can install kubeflow which can auto install tf-operator for you, URL: https://www.kubeflow.org/docs/started/getting-started/
+
+A simple tfjob example:
+
+```
+kubectl create -f examples/tfjob/tf-job-mnist.yaml
+```
+
+The file for this example can be found in the [README tfjob](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/deployments/examples#tfjob) section.
+
 ### Affinity scheduling
 The scheduler supports affinity and ati affinity scheduling on kubernetes using predicates:
 ```

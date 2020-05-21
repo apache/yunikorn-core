@@ -50,6 +50,12 @@ func RegisterSchedulerPlugin(plugin interface{}) {
 		plugins.reconcilePlugin = t
 		registered = true
 	}
+	if t, ok := plugin.(ReconcilePlugin); ok {
+		log.Logger().Debug("register event plugin",
+			zap.String("type", "EventPlugin"))
+		plugins.eventPlugin = t
+		registered = true
+	}
 	if !registered {
 		log.Logger().Debug("no scheduler plugin implemented, none registered")
 	}
@@ -65,4 +71,8 @@ func GetVolumesPlugin() VolumesPlugin {
 
 func GetReconcilePlugin() ReconcilePlugin {
 	return plugins.reconcilePlugin
+}
+
+func GetEventPlugin() EventPlugin {
+	return plugins.eventPlugin
 }

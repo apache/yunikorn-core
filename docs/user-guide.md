@@ -123,7 +123,7 @@ You need to [build the image](https://github.com/kubeflow/tf-operator/tree/maste
 kubectl create -f examples/tfjob/tf-job-mnist.yaml
 ```
 
-The file for this example can be found in the [README Tensorflow job](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/deployments/examples#tfjob) section.
+The file for this example can be found in the [README Tensorflow job](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/deployments/examples#Tensorflow-job) section.
 
 ### Affinity scheduling
 The scheduler supports affinity and ati affinity scheduling on kubernetes using predicates:

@@ -20,7 +20,7 @@
 
 The documents describing the design for yunikorn-core specific implementations.
 
-- [Design of YuniKorn scheduler](design.md)
+- [Design of YuniKorn scheduler](./scheduler-core-design.md)
 - [Scheduler configuration](scheduler-configuration.md)
 - [Cross queue pre-emption design](cross-queue-preemption.md)
 - [Resillience and recovery](resilience.md)

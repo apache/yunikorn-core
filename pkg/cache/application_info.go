@@ -143,7 +143,7 @@ func (ai *ApplicationInfo) clearStartingTimer() {
 }
 
 // In case of state aware scheduling we do not want to get stuck in starting as we might have an application that only
-// requires one allocation.
+// requires one allocation or is really slow asking for more than the first one.
 // This will progress the state of the application from Starting to Running
 func (ai *ApplicationInfo) timeOutStarting() {
 	// make sure we are still in the right state
@@ -230,12 +230,18 @@ func (ai *ApplicationInfo) removeAllAllocations() []*AllocationInfo {
 
 // get a copy of the user details for the application
 func (ai *ApplicationInfo) GetUser() security.UserGroup {
+	ai.Lock()
+	defer ai.Unlock()
+
 	return ai.user
 }
 
 // Get a tag from the application
 // Note: Tags are not case sensitive
 func (ai *ApplicationInfo) GetTag(tag string) string {
+	ai.Lock()
+	defer ai.Unlock()
+
 	tagVal := ""
 	for key, val := range ai.tags {
 		if strings.EqualFold(key, tag) {

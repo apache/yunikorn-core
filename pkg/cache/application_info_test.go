@@ -105,7 +105,7 @@ func TestStateTimeOut(t *testing.T) {
 	err = appInfo.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected accepted to starting (timeout test)")
 	// give it some time to run and progress
-	time.Sleep(time.Millisecond * 5)
+	time.Sleep(time.Millisecond * 100)
 	if appInfo.IsStarting() {
 		t.Fatal("Starting state should have timed out")
 	}
@@ -113,7 +113,7 @@ func TestStateTimeOut(t *testing.T) {
 		t.Fatalf("Startup timer has not be cleared on time out as expected, %v", appInfo.stateTimer)
 	}
 
-	startingTimeout = time.Millisecond * 10
+	startingTimeout = time.Millisecond * 100
 	appInfo = newApplicationInfo("app-00001", "default", "root.a")
 	err = appInfo.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (timeout test2)")

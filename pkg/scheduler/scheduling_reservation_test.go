@@ -25,6 +25,7 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 )
 
 func TestNewReservation(t *testing.T) {
@@ -73,8 +74,10 @@ func TestReservationKey(t *testing.T) {
 	// create the input objects
 	q := map[string]resources.Quantity{"first": 1}
 	res := resources.NewResourceFromMap(q)
-	ask := newAllocationAsk("alloc-1", "app-1", res)
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "app-1"})
+	appID := "app-1"
+	ask := newAllocationAsk("alloc-1", appID, res)
+	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	app := newSchedulingApplication(appInfo)
 	node := newNode("node-1", q)
 
 	// check the basics
@@ -96,8 +99,10 @@ func TestUnReserve(t *testing.T) {
 	// create the input objects
 	q := map[string]resources.Quantity{"first": 0}
 	res := resources.NewResourceFromMap(q)
-	ask := newAllocationAsk("alloc-1", "app-1", res)
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "app-1"})
+	app1 := "app-1"
+	ask := newAllocationAsk("alloc-1", app1, res)
+	appInfo := cache.NewApplicationInfo(app1, "default", "root.unknown", security.UserGroup{}, nil)
+	app := newSchedulingApplication(appInfo)
 	node := newNode("node-1", q)
 
 	// standalone reservation unreserve returns false as app is not reserved
@@ -111,7 +116,7 @@ func TestUnReserve(t *testing.T) {
 	reserve = newReservation(node, app, ask, false)
 	assert.Equal(t, reserve.getKey(), "app-1|alloc-1", "incorrect app reservation key")
 	appID, err = reserve.unReserve()
-	if err != nil || appID != "app-1" {
+	if err != nil || appID != app1 {
 		t.Fatalf("unreserve should have returned no error: %v, app %v", err, appID)
 	}
 
@@ -122,7 +127,7 @@ func TestUnReserve(t *testing.T) {
 		t.Fatalf("reserve should not have failed: %v", err)
 	}
 	appID, err = reserve.unReserve()
-	if err != nil || appID != "app-1" || len(app.reservations) != 0 || len(node.reservations) != 0 {
+	if err != nil || appID != app1 || len(app.reservations) != 0 || len(node.reservations) != 0 {
 		t.Fatalf("unreserve should have returned no error: %v, app %v", err, appID)
 	}
 }

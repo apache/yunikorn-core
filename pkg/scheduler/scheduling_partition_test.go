@@ -26,6 +26,7 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 )
 
 func newTestPartition() (*partitionSchedulingContext, error) {
@@ -224,7 +225,8 @@ func TestTryAllocate(t *testing.T) {
 	}
 	appID1 := "app-1"
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: appID1})
+	appInfo := cache.NewApplicationInfo(appID1, "default", "root.unknown", security.UserGroup{}, nil)
+	app := newSchedulingApplication(appInfo)
 	if app == nil || err != nil {
 		t.Fatalf("failed to create app (%v) and or resource: %v (err = %v)", app, res, err)
 	}
@@ -249,7 +251,8 @@ func TestTryAllocate(t *testing.T) {
 	}
 
 	appID2 := "app-2"
-	app2 := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: appID2})
+	appInfo = cache.NewApplicationInfo(appID2, "default", "root.unknown", security.UserGroup{}, nil)
+	app2 := newSchedulingApplication(appInfo)
 	ask2 := newAllocationAsk("alloc-1", appID2, res)
 	if app2 == nil || ask2 == nil {
 		t.Fatal("failed to create app2 and ask2")
@@ -341,7 +344,8 @@ func TestTryAllocateLarge(t *testing.T) {
 	}
 	appID := "app-1"
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "100"})
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: appID})
+	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	app := newSchedulingApplication(appInfo)
 	if app == nil || err != nil {
 		t.Fatalf("failed to create app (%v) and or resource: %v (err = %v)", app, res, err)
 	}
@@ -385,7 +389,8 @@ func TestAllocReserveNewNode(t *testing.T) {
 	appID := "app-1"
 	// only one resource for alloc fits on a node
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "8"})
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: appID})
+	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	app := newSchedulingApplication(appInfo)
 	if app == nil || err != nil {
 		t.Fatalf("failed to create app (%v) and or resource: %v (err = %v)", app, res, err)
 	}
@@ -456,7 +461,8 @@ func TestTryAllocateReserve(t *testing.T) {
 	}
 	appID := "app-1"
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: appID})
+	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	app := newSchedulingApplication(appInfo)
 	if app == nil || err != nil {
 		t.Fatalf("failed to create app (%v) and or resource: %v (err = %v)", app, res, err)
 	}
@@ -539,7 +545,8 @@ func TestTryAllocateWithReserved(t *testing.T) {
 	}
 	appID := "app-1"
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "5"})
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: appID})
+	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	app := newSchedulingApplication(appInfo)
 	if app == nil || err != nil {
 		t.Fatalf("failed to create app (%v) and or resource: %v (err = %v)", app, res, err)
 	}

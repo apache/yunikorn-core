@@ -220,7 +220,7 @@ partitions:
 	app01, err = getApplicationInfoFromPartition(partitionInfo, appID)
 	assert.NilError(t, err, "application not found")
 
-	assert.Equal(t, app01.GetApplicationState(), cache.Accepted.String())
+	assert.Equal(t, app01.GetApplicationState(), cache.New.String())
 
 	err = ms.proxy.Update(&si.UpdateRequest{
 		Asks: []*si.AllocationAsk{
@@ -245,6 +245,7 @@ partitions:
 	waitForPendingQueueResource(t, leaf, 20, 1000)
 	waitForPendingQueueResource(t, root, 20, 1000)
 	waitForPendingAppResource(t, schedulingApp, 20, 1000)
+	assert.Equal(t, app01.GetApplicationState(), cache.Accepted.String())
 
 	ms.scheduler.MultiStepSchedule(16)
 

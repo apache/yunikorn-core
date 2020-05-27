@@ -565,15 +565,11 @@ func (psc *partitionSchedulingContext) unReserve(app *SchedulingApplication, nod
 func (psc *partitionSchedulingContext) getNodeIteratorForPolicy(nodes []*SchedulingNode) NodeIterator {
 	// Sort Nodes based on the policy configured.
 	configuredPolicy := psc.partition.GetNodeSortingPolicy()
-	switch configuredPolicy {
-	case common.BinPackingPolicy:
-		sortNodes(nodes, MinAvailableResources)
-		return NewDefaultNodeIterator(nodes)
-	case common.FairnessPolicy:
-		sortNodes(nodes, MaxAvailableResources)
-		return NewDefaultNodeIterator(nodes)
+	if configuredPolicy == common.Undefined {
+		return nil
 	}
-	return nil
+	sortNodes(nodes, configuredPolicy)
+	return NewDefaultNodeIterator(nodes)
 }
 
 // Create a node iterator for the schedulable nodes based on the policy set for this partition.

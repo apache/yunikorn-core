@@ -5,3 +5,5 @@
 *.a
 _output
 .idea
+coverage.txt
+

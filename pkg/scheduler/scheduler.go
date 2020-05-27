@@ -285,12 +285,14 @@ func (s *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocat
 		if err := s.updateSchedulingRequest(ask); err != nil {
 			log.Logger().Warn("app recovery failed to update scheduling request",
 				zap.Error(err))
+			continue
 		}
 
 		// set the scheduler allocation in progress info (step 3)
 		if err := s.updateAppAllocating(ask, alloc.NodeID); err != nil {
 			log.Logger().Warn("app recovery failed to update allocating information",
 				zap.Error(err))
+			continue
 		}
 
 		// handle allocation proposals (step 5)
@@ -306,7 +308,12 @@ func (s *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocat
 		}); err != nil {
 			log.Logger().Error("app recovery failed to confirm allocation proposal",
 				zap.Error(err))
+			continue
 		}
+		// all done move the app to running, this can only happen if all updates worked
+		// this means that the app must exist (cannot be nil)
+		app := s.clusterSchedulingContext.GetSchedulingApplication(ask.ApplicationID, ask.PartitionName)
+		app.finishRecovery()
 	}
 }
 
@@ -391,9 +398,11 @@ func (s *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerAp
 		var rmID string
 		for _, j := range ev.AddedApplications {
 			app, ok := j.(*cache.ApplicationInfo)
+			// if the cast failed we do not have the correct object, skip it
 			if !ok {
 				log.Logger().Debug("cast failed unexpected object in event",
 					zap.Any("ApplicationInfo", j))
+				continue
 			}
 			rmID = common.GetRMIdFromPartitionName(app.Partition)
 			if err := s.addNewApplication(app); err != nil {
@@ -422,12 +431,6 @@ func (s *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerAp
 				acceptedApps = append(acceptedApps, &si.AcceptedApplication{
 					ApplicationID: app.ApplicationID,
 				})
-				// app is accepted by scheduler
-				err = app.HandleApplicationEvent(cache.AcceptApplication)
-				if err != nil {
-					log.Logger().Debug("cache event handling error returned",
-						zap.Error(err))
-				}
 			}
 		}
 		// notify RM proxy about apps added and rejected

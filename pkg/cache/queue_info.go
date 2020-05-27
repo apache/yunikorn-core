@@ -24,8 +24,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
-
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
@@ -34,13 +32,12 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
+	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 )
 
 const (
 	DOT        = "."
 	DotReplace = "_dot_"
-	// How to sort applications, valid options are fair / fifo
-	ApplicationSortPolicy = "application.sort.policy"
 )
 
 // The queue structure as used throughout the scheduler

@@ -109,6 +109,8 @@ type CoreSchedulerMetrics interface {
 	//latency change
 	ObserveSchedulingLatency(start time.Time)
 	ObserveNodeSortingLatency(start time.Time)
+	ObserveAppSortingLatency(start time.Time)
+	ObserveQueueSortingLatency(start time.Time)
 }
 
 func init() {

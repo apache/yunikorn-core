@@ -25,6 +25,7 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 )
 
 func newNode(nodeID string, totalMap map[string]resources.Quantity) *SchedulingNode {
@@ -124,8 +125,10 @@ func TestPreAllocateCheck(t *testing.T) {
 	// check if we can allocate on a reserved node
 	q := map[string]resources.Quantity{"first": 0}
 	res := resources.NewResourceFromMap(q)
-	ask := newAllocationAsk("alloc-1", "app-1", res)
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "app-1"})
+	appID := "app-1"
+	ask := newAllocationAsk("alloc-1", appID, res)
+	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	app := newSchedulingApplication(appInfo)
 
 	// standalone reservation unreserve returns false as app is not reserved
 	reserve := newReservation(node, app, ask, false)
@@ -136,7 +139,7 @@ func TestPreAllocateCheck(t *testing.T) {
 	if err = node.preAllocateCheck(resSmall, "app-1|alloc-2", true); err == nil {
 		t.Errorf("node was reserved for this app but not the alloc and check passed: %v", err)
 	}
-	err = node.preAllocateCheck(resSmall, "app-1", true)
+	err = node.preAllocateCheck(resSmall, appID, true)
 	assert.NilError(t, err, "node was reserved for this app but check did not pass check")
 	err = node.preAllocateCheck(resSmall, "app-1|alloc-1", true)
 	assert.NilError(t, err, "node was reserved for this app/alloc but check did not pass check")
@@ -297,11 +300,9 @@ func TestNodeReservation(t *testing.T) {
 
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 15})
 	ask := newAllocationAsk("alloc-1", "app-1", res)
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "app-1"})
-	var queue *SchedulingQueue
-	queue, err = createRootQueue(nil)
-	assert.NilError(t, err, "queue create failed")
-	app.queue = queue
+	appID := "app-1"
+	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	app := newSchedulingApplication(appInfo)
 
 	// too large for node
 	err = node.reserve(app, ask)
@@ -310,13 +311,12 @@ func TestNodeReservation(t *testing.T) {
 	}
 
 	res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-	ask = newAllocationAsk("alloc-1", "app-1", res)
-	app = newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "app-1"})
+	ask = newAllocationAsk("alloc-1", appID, res)
+	appInfo = cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	app = newSchedulingApplication(appInfo)
 	// reserve that works
 	err = node.reserve(app, ask)
-	if err != nil {
-		t.Errorf("reservation should not have failed: error %v", err)
-	}
+	assert.NilError(t, err, "reservation should not have failed")
 	if node.isReservedForApp("") {
 		t.Error("node should not have reservations for empty key")
 	}
@@ -338,17 +338,14 @@ func TestNodeReservation(t *testing.T) {
 	if err == nil {
 		t.Errorf("illegal reservation release but did not fail: error %v", err)
 	}
-	ask2 := newAllocationAsk("alloc-2", "app-2", res)
-	app2 := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "app-2"})
-	app2.queue = queue
+	appID = "app-2"
+	ask2 := newAllocationAsk("alloc-2", appID, res)
+	appInfo = cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	app2 := newSchedulingApplication(appInfo)
 	err = node.unReserve(app2, ask2)
-	if err != nil {
-		t.Errorf("un-reserve different app should have failed without error: error %v", err)
-	}
+	assert.NilError(t, err, "un-reserve different app should have failed without error")
 	err = node.unReserve(app, ask)
-	if err != nil {
-		t.Errorf("un-reserve should not have failed: error %v", err)
-	}
+	assert.NilError(t, err, "un-reserve should not have failed")
 }
 
 func TestUnReserveApps(t *testing.T) {
@@ -366,20 +363,21 @@ func TestUnReserveApps(t *testing.T) {
 
 	// create some reservations and see it clean up via the app
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
-	ask := newAllocationAsk("alloc-1", "app-1", res)
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "app-1"})
+	appID := "app-1"
+	ask := newAllocationAsk("alloc-1", appID, res)
+	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	app := newSchedulingApplication(appInfo)
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
 	var delta *resources.Resource
 	delta, err = app.addAllocationAsk(ask)
-	if err != nil || !resources.Equals(res, delta) {
-		t.Fatalf("ask should have been added to the app expected resource delta  %v got %v (err = %v)", res, delta, err)
+	assert.NilError(t, err, "ask should have been added to the app")
+	if !resources.Equals(res, delta) {
+		t.Fatalf("expected resource delta  %v got %v", res, delta)
 	}
 	err = app.reserve(node, ask)
-	if err != nil {
-		t.Errorf("reservation should not have failed: error %v", err)
-	}
+	assert.NilError(t, err, "reservation should not have failed")
 	assert.Equal(t, 1, len(node.reservations), "node should have reservation")
 	reservedKeys, ok = node.unReserveApps()
 	if !ok || len(reservedKeys) != 1 {
@@ -388,9 +386,7 @@ func TestUnReserveApps(t *testing.T) {
 
 	// reserve just the node
 	err = node.reserve(app, ask)
-	if err != nil {
-		t.Errorf("reservation should not have failed: error %v", err)
-	}
+	assert.NilError(t, err, "reservation should not have failed")
 	assert.Equal(t, 1, len(node.reservations), "node should have reservation")
 	reservedKeys, ok = node.unReserveApps()
 	if !ok || len(reservedKeys) != 1 {
@@ -416,9 +412,6 @@ func TestIsReservedForApp(t *testing.T) {
 	res := resources.NewResourceFromMap(q)
 	ask := newAllocationAsk("alloc-1", "app-1", res)
 	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "app-1"})
-	queue, err := createRootQueue(nil)
-	assert.NilError(t, err, "queue create failed")
-	app.queue = queue
 
 	// standalone reservation unreserve returns false as app is not reserved
 	reserve := newReservation(node, app, ask, false)

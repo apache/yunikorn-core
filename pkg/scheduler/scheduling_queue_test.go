@@ -27,6 +27,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 )
 
 // create the root queue, base for all testing
@@ -490,7 +491,8 @@ func TestSortApplications(t *testing.T) {
 		t.Errorf("empty queue should return no app from sort: %v", leaf)
 	}
 	// new app does not have pending res, does not get returned
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "app-1"})
+	appInfo := cache.NewApplicationInfo("app-1", "default", leaf.QueueInfo.GetQueuePath(), security.UserGroup{}, nil)
+	app := newSchedulingApplication(appInfo)
 	app.queue = leaf
 	leaf.addSchedulingApplication(app)
 	if len(leaf.sortApplications()) != 0 {

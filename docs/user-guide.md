@@ -27,7 +27,7 @@ They are located in the [deployments](https://github.com/apache/incubator-yuniko
 
 ## Quick Start
 
-The easiest way to get started is to our [helm charts](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/helm-charts) to deploy YuniKorn on an existing Kubernetes cluster. Recommand to use Helm 3 or later versions.
+The easiest way to get started is to our [helm charts](https://github.com/apache/incubator-yunikorn-release/tree/master/helm-charts) to deploy YuniKorn on an existing Kubernetes cluster. Recommand to use Helm 3 or later versions.
 
 ```shell script
 helm install yunikorn ./yunikorn
@@ -108,6 +108,22 @@ Spark uses its own version of the application ID tag called *spark-app-id*. This
 * examples/spark/executor.yaml
 When you run Spark on Kubernetes with pod templates, *spark-app-id* is considered the applicationId.
 A script to run the spark application and the yaml files are in the [README spark](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/deployments/examples#spark) section.
+
+### Running a simple Tensorflow job 
+There is an example for Tensorflow job. You must install tf-operator first. 
+You can install tf-operator by applying all yaml from two website down below:
+* CRD: https://github.com/kubeflow/manifests/tree/master/tf-training/tf-job-crds/base
+* Deployment: https://github.com/kubeflow/manifests/tree/master/tf-training/tf-job-operator/base
+Also you can install kubeflow which can auto install tf-operator for you, URL: https://www.kubeflow.org/docs/started/getting-started/
+
+A simple Tensorflow job example:
+
+You need to [build the image](https://github.com/kubeflow/tf-operator/tree/master/examples/v1/dist-mnist) which used in example yaml.
+```
+kubectl create -f examples/tfjob/tf-job-mnist.yaml
+```
+
+The file for this example can be found in the [README Tensorflow job](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/deployments/examples#Tensorflow-job) section.
 
 ### Affinity scheduling
 The scheduler supports affinity and ati affinity scheduling on kubernetes using predicates:

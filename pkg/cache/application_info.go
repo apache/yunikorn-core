@@ -254,8 +254,8 @@ func (ai *ApplicationInfo) GetTag(tag string) string {
 }
 
 func (ai *ApplicationInfo) String() string {
-	ai.lock.Lock()
-	defer ai.lock.Unlock()
+	ai.RLock()
+	defer ai.RUnlock()
 	return fmt.Sprintf("{ApplicationID: %s, Partition: %s, QueueName: %s, SubmissionTime: %x}",
 		ai.ApplicationID, ai.Partition, ai.QueueName, ai.SubmissionTime)
 }

@@ -25,9 +25,15 @@ import (
 	"time"
 
 	"github.com/looplab/fsm"
+	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
+)
+
+var (
+	startingTimeout = time.Minute * 5
 )
 
 /* Related to applications */
@@ -44,7 +50,9 @@ type ApplicationInfo struct {
 	allocatedResource *resources.Resource        // total allocated resources
 	allocations       map[string]*AllocationInfo // list of all allocations
 	stateMachine      *fsm.FSM                   // application state machine
-	lock              sync.RWMutex
+	stateTimer        *time.Timer                // timer for state time
+
+	sync.RWMutex
 }
 
 // Create a new application
@@ -64,8 +72,8 @@ func NewApplicationInfo(appID, partition, queueName string, ugi security.UserGro
 
 // Return the current allocations for the application.
 func (ai *ApplicationInfo) GetAllAllocations() []*AllocationInfo {
-	ai.lock.RLock()
-	defer ai.lock.RUnlock()
+	ai.RLock()
+	defer ai.RUnlock()
 
 	var allocations []*AllocationInfo
 	for _, alloc := range ai.allocations {
@@ -74,16 +82,36 @@ func (ai *ApplicationInfo) GetAllAllocations() []*AllocationInfo {
 	return allocations
 }
 
-// Return the current state for the application.
+// Return the current state or a checked specific state for the application.
 // The state machine handles the locking.
 func (ai *ApplicationInfo) GetApplicationState() string {
 	return ai.stateMachine.Current()
 }
 
+func (ai *ApplicationInfo) IsStarting() bool {
+	return ai.stateMachine.Is(Starting.String())
+}
+
+func (ai *ApplicationInfo) IsAccepted() bool {
+	return ai.stateMachine.Is(Accepted.String())
+}
+
+func (ai *ApplicationInfo) IsNew() bool {
+	return ai.stateMachine.Is(New.String())
+}
+
+func (ai *ApplicationInfo) IsRunning() bool {
+	return ai.stateMachine.Is(Running.String())
+}
+
+func (ai *ApplicationInfo) IsWaiting() bool {
+	return ai.stateMachine.Is(Waiting.String())
+}
+
 // Handle the state event for the application.
 // The state machine handles the locking.
-func (ai *ApplicationInfo) HandleApplicationEvent(event ApplicationEvent) error {
-	err := ai.stateMachine.Event(event.String(), ai.ApplicationID)
+func (ai *ApplicationInfo) HandleApplicationEvent(event applicationEvent) error {
+	err := ai.stateMachine.Event(event.String(), ai)
 	// handle the same state transition not nil error (limit of fsm).
 	if err != nil && err.Error() == "no transition" {
 		return nil
@@ -91,10 +119,50 @@ func (ai *ApplicationInfo) HandleApplicationEvent(event ApplicationEvent) error 
 	return err
 }
 
+// Set the starting timer to make sure the application will not get stuck in a starting state too long.
+// This prevents an app from not progressing to Running when it only has 1 allocation.
+// Called when entering the Starting state by the state machine.
+func (ai *ApplicationInfo) setStartingTimer() {
+	ai.Lock()
+	defer ai.Unlock()
+
+	log.Logger().Debug("Application Starting state timer initiated",
+		zap.String("appID", ai.ApplicationID),
+		zap.Duration("timeout", startingTimeout))
+	ai.stateTimer = time.AfterFunc(startingTimeout, ai.timeOutStarting)
+}
+
+// Clear the starting timer. If the application has progressed out of the starting state we need to stop the
+// timer and clean up.
+// Called when leaving the Starting state by the state machine.
+func (ai *ApplicationInfo) clearStartingTimer() {
+	ai.Lock()
+	defer ai.Unlock()
+
+	ai.stateTimer.Stop()
+	ai.stateTimer = nil
+}
+
+// In case of state aware scheduling we do not want to get stuck in starting as we might have an application that only
+// requires one allocation or is really slow asking for more than the first one.
+// This will progress the state of the application from Starting to Running
+func (ai *ApplicationInfo) timeOutStarting() {
+	// make sure we are still in the right state
+	// we could have been killed or something might have happened while waiting for a lock
+	if ai.IsStarting() {
+		log.Logger().Warn("Application in starting state timed out: auto progress",
+			zap.String("applicationID", ai.ApplicationID),
+			zap.String("state", ai.stateMachine.Current()))
+
+		//nolint: errcheck
+		_ = ai.HandleApplicationEvent(RunApplication)
+	}
+}
+
 // Return the total allocated resources for the application.
 func (ai *ApplicationInfo) GetAllocatedResource() *resources.Resource {
-	ai.lock.RLock()
-	defer ai.lock.RUnlock()
+	ai.RLock()
+	defer ai.RUnlock()
 
 	return ai.allocatedResource.Clone()
 }
@@ -102,8 +170,8 @@ func (ai *ApplicationInfo) GetAllocatedResource() *resources.Resource {
 // Set the leaf queue the application runs in. Update the queue name also to match as this might be different from the
 // queue that was given when submitting the application.
 func (ai *ApplicationInfo) SetQueue(leaf *QueueInfo) {
-	ai.lock.Lock()
-	defer ai.lock.Unlock()
+	ai.Lock()
+	defer ai.Unlock()
 
 	ai.leafQueue = leaf
 	ai.QueueName = leaf.GetQueuePath()
@@ -111,8 +179,16 @@ func (ai *ApplicationInfo) SetQueue(leaf *QueueInfo) {
 
 // Add a new allocation to the application
 func (ai *ApplicationInfo) addAllocation(info *AllocationInfo) {
-	ai.lock.Lock()
-	defer ai.lock.Unlock()
+	// progress the state based on where we are, we should never fail in this case
+	// keep track of a failure
+	if err := ai.HandleApplicationEvent(RunApplication); err != nil {
+		log.Logger().Error("Unexpected app state change failure while adding allocation",
+			zap.String("currentState", ai.stateMachine.Current()),
+			zap.Error(err))
+	}
+	// add the allocation
+	ai.Lock()
+	defer ai.Unlock()
 
 	ai.allocations[info.AllocationProto.UUID] = info
 	ai.allocatedResource = resources.Add(ai.allocatedResource, info.AllocatedResource)
@@ -121,8 +197,8 @@ func (ai *ApplicationInfo) addAllocation(info *AllocationInfo) {
 // Remove a specific allocation from the application.
 // Return the allocation that was removed.
 func (ai *ApplicationInfo) removeAllocation(uuid string) *AllocationInfo {
-	ai.lock.Lock()
-	defer ai.lock.Unlock()
+	ai.Lock()
+	defer ai.Unlock()
 
 	alloc := ai.allocations[uuid]
 
@@ -139,11 +215,10 @@ func (ai *ApplicationInfo) removeAllocation(uuid string) *AllocationInfo {
 // Remove all allocations from the application.
 // All allocations that have been removed are returned.
 func (ai *ApplicationInfo) removeAllAllocations() []*AllocationInfo {
+	ai.Lock()
+	defer ai.Unlock()
+
 	allocationsToRelease := make([]*AllocationInfo, 0)
-
-	ai.lock.Lock()
-	defer ai.lock.Unlock()
-
 	for _, alloc := range ai.allocations {
 		allocationsToRelease = append(allocationsToRelease, alloc)
 	}
@@ -156,12 +231,18 @@ func (ai *ApplicationInfo) removeAllAllocations() []*AllocationInfo {
 
 // get a copy of the user details for the application
 func (ai *ApplicationInfo) GetUser() security.UserGroup {
+	ai.Lock()
+	defer ai.Unlock()
+
 	return ai.user
 }
 
 // Get a tag from the application
 // Note: Tags are not case sensitive
 func (ai *ApplicationInfo) GetTag(tag string) string {
+	ai.Lock()
+	defer ai.Unlock()
+
 	tagVal := ""
 	for key, val := range ai.tags {
 		if strings.EqualFold(key, tag) {

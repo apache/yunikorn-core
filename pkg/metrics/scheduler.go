@@ -60,6 +60,8 @@ type SchedulerMetrics struct {
 	nodesResourceUsages        map[string]*prometheus.GaugeVec
 	schedulingLatency          prometheus.Histogram
 	nodeSortingLatency         prometheus.Histogram
+	appSortingLatency          prometheus.Histogram
+	queueSortingLatency        prometheus.Histogram
 	lock                       sync.RWMutex
 }
 
@@ -147,11 +149,36 @@ func initSchedulerMetrics() *SchedulerMetrics {
 			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), //start from 0.1ms
 		},
 	)
+
+	// latency for all queues together
+	s.queueSortingLatency = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: Namespace,
+			Subsystem: SchedulerSubsystem,
+			Name:      "queues_sorting_latency_seconds",
+			Help:      "queues sorting latency in seconds",
+			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), //start from 0.1ms
+		},
+	)
+
+	// latency for all apps together
+	s.appSortingLatency = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: Namespace,
+			Subsystem: SchedulerSubsystem,
+			Name:      "app_sorting_latency_seconds",
+			Help:      "app sorting latency in seconds",
+			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), //start from 0.1ms
+		},
+	)
+
 	var metricsList = []prometheus.Collector{
 		s.allocations,
 		s.scheduleApplications,
 		s.schedulingLatency,
 		s.nodeSortingLatency,
+		s.queueSortingLatency,
+		s.appSortingLatency,
 		s.totalApplicationsRunning,
 		s.totalApplicationsCompleted,
 		s.activeNodes,
@@ -189,6 +216,14 @@ func (m *SchedulerMetrics) ObserveSchedulingLatency(start time.Time) {
 
 func (m *SchedulerMetrics) ObserveNodeSortingLatency(start time.Time) {
 	m.nodeSortingLatency.Observe(SinceInSeconds(start))
+}
+
+func (m *SchedulerMetrics) ObserveAppSortingLatency(start time.Time) {
+	m.appSortingLatency.Observe(SinceInSeconds(start))
+}
+
+func (m *SchedulerMetrics) ObserveQueueSortingLatency(start time.Time) {
+	m.queueSortingLatency.Observe(SinceInSeconds(start))
 }
 
 // Define and implement all the metrics ops for Prometheus.

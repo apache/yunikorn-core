@@ -27,7 +27,7 @@ They are located in the [deployments](https://github.com/apache/incubator-yuniko
 
 ## Quick Start
 
-The easiest way to get started is to our [helm charts](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/helm-charts) to deploy YuniKorn on an existing Kubernetes cluster. Recommand to use Helm 3 or later versions.
+The easiest way to get started is to our [helm charts](https://github.com/apache/incubator-yunikorn-release/tree/master/helm-charts) to deploy YuniKorn on an existing Kubernetes cluster. Recommand to use Helm 3 or later versions.
 
 ```shell script
 helm install yunikorn ./yunikorn

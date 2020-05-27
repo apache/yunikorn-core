@@ -210,7 +210,7 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
 		}
 		// create a new app object and add it to the partition (partition logs details)
 		appInfo := NewApplicationInfo(app.ApplicationID, app.PartitionName, app.QueueName, ugi, app.Tags)
-		if err := partitionInfo.addNewApplication(appInfo, true); err != nil {
+		if err = partitionInfo.addNewApplication(appInfo, true); err != nil {
 			rejectedApps = append(rejectedApps, &si.RejectedApplication{
 				ApplicationID: app.ApplicationID,
 				Reason:        err.Error(),
@@ -282,13 +282,6 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
 					Reason:        msg,
 				})
 			continue
-		}
-		// start to process allocation asks from this app
-		// transit app's state to running
-		err := appInfo.HandleApplicationEvent(RunApplication)
-		if err != nil {
-			log.Logger().Debug("Application state change failed",
-				zap.Error(err))
 		}
 	}
 

@@ -22,57 +22,68 @@ import (
 	"time"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
+	"go.uber.org/zap"
 )
 
 // TODO this should be configurable?
-const sleepTime = 1 * time.Second
+const sleepTimeInterval = 10 * time.Millisecond
+const pushEventInterval = 500 * time.Millisecond
+
+var Cache *EventCache
 
 type EventCache struct {
 	// input
-	channel *EventChannel
+	channel *eventChannel
 
 	// output
-	store *EventStore
+	store *eventStore
 }
 
 func NewEventCache() *EventCache {
-	return &EventCache{
-		NewEventChannel(),
-		NewEventStore(),
+	Cache = &EventCache{
+		newEventChannel(),
+		newEventStore(),
 	}
+	return Cache
 }
 
 func (ec EventCache) StartService() {
-	// event processing thread
 	// TODO consider thread pool
+
+	// event processing thread
 	go ec.processEvent()
 
-	// old event clearing thread
+	// event pushing thread to shim
 	go func() {
 		for {
-			// TODO add time info: how long did this step take?
-			log.Logger().Info("Started clearing out old event objects")
-			time.Sleep(1 * time.Hour)
-			ec.store.ClearOldObjects()
+			if eventPlugin := plugins.GetEventPlugin(); eventPlugin != nil {
+				messages := ec.store.collectEvents()
+				if err := eventPlugin.SendEvent(messages); err != nil && err.Error() != "" {
+					log.Logger().Warn("Callback failed - could not sent EventMessage to shim",
+						zap.Error(err), zap.Int("number of messages", len(messages)))
+				}
+			}
+			time.Sleep(pushEventInterval)
 		}
 	}()
 }
 
-func (ec EventCache) GetEventChannel() *EventChannel {
-	return ec.channel
+func (ec EventCache) AddEvent(event Event) {
+	ec.channel.addEvent(event)
 }
 
 func (ec EventCache) processEvent() {
 	for {
 		for {
-			// TODO add time info: how long did this step take?
-			event, ok := ec.channel.GetNextEvent()
+			// TODO for debugging: add time info about how long did this step take
+			event, ok := ec.channel.getNextEvent()
 			if ok {
-				ec.store.Visit(event)
+				ec.store.store(event)
 			} else {
 				break
 			}
 		}
-		time.Sleep(sleepTime)
+		time.Sleep(sleepTimeInterval)
 	}
 }

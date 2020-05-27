@@ -21,30 +21,36 @@ package events
 import (
 	"fmt"
 	"strconv"
+	"sync"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
 
 // TODO should configure the size of the channel
-const eventChannelSize = 10000
+const eventChannelSize = 100000
 
 // wrapping the channel into a struct - so that the underlying implementation can be changed
-type EventChannel struct {
-	events       chan interface{}
+type eventChannel struct {
+	events       chan Event
 	diagCounter  int
 	diagInterval int
+
+	sync.RWMutex
 }
 
-func NewEventChannel() *EventChannel {
-	return &EventChannel{
-		make(chan interface{}, eventChannelSize),
-		0,
-		1000,
+func newEventChannel() *eventChannel {
+	return &eventChannel{
+		events:       make(chan Event, eventChannelSize),
+		diagCounter:  0,
+		diagInterval: 1000,
 	}
 
 }
 
-func (ec *EventChannel) GetNextEvent() (interface{}, bool) {
+func (ec *eventChannel) getNextEvent() (Event, bool) {
+	ec.Lock()
+	defer ec.Unlock()
+
 	select {
 	case msg, ok := <-ec.events:
 		return msg, ok
@@ -54,7 +60,11 @@ func (ec *EventChannel) GetNextEvent() (interface{}, bool) {
 }
 
 
-func (ec *EventChannel) AddEvent(event interface{}) {
+func (ec *eventChannel) addEvent(event Event) {
+	ec.Lock()
+	defer ec.Unlock()
+
+	ec.diagCounter += 1
 	if ec.diagCounter >= ec.diagInterval {
 		msg := fmt.Sprintf("Event cache channel has %s size and %s capacity.", strconv.Itoa(len(ec.events)), strconv.Itoa(cap(ec.events)))
 		log.Logger().Info(msg)

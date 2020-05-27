@@ -30,7 +30,6 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-	"github.com/apache/incubator-yunikorn-core/pkg/events"
 	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
@@ -50,15 +49,13 @@ type Scheduler struct {
 	preemptionContext        *preemptionContext        // Preemption context
 	eventHandlers            handler.EventHandlers     // list of event handlers
 	pendingSchedulerEvents   chan interface{}          // queue for scheduler events
-	eventChannel             *events.EventChannel      // send events to event cache
 }
 
-func NewScheduler(clusterInfo *cache.ClusterInfo, eventChannel *events.EventChannel) *Scheduler {
+func NewScheduler(clusterInfo *cache.ClusterInfo) *Scheduler {
 	m := &Scheduler{}
 	m.clusterInfo = clusterInfo
 	m.clusterSchedulingContext = NewClusterSchedulingContext()
 	m.pendingSchedulerEvents = make(chan interface{}, 1024*1024)
-	m.eventChannel = eventChannel
 	return m
 }
 
@@ -412,11 +409,6 @@ func (s *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerAp
 				})
 				// app is accepted by scheduler
 				err = app.HandleApplicationEvent(cache.AcceptApplication)
-				if s.eventChannel != nil {
-					// send application accepted event
-					event := events.CreateAppEvent(app.ApplicationID)
-					s.eventChannel.AddEvent(event)
-				}
 				if err != nil {
 					log.Logger().Debug("cache event handling error returned",
 						zap.Error(err))

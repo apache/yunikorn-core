@@ -367,13 +367,19 @@ func subNonNegative(left, right *Resource) (*Resource, string) {
 // Check if smaller fitin larger, negative values will be treated as 0
 // A nil resource is treated as an empty resource (zero)
 func FitIn(larger, smaller *Resource) bool {
+	fitIn, _ := FitInWithExplanation(larger, smaller)
+	return fitIn
+}
+
+// TODO test this
+func FitInWithExplanation(larger, smaller *Resource) (bool, string)  {
 	if larger == nil {
 		larger = Zero
 	}
 	// shortcut: a nil resource always fits because negative values are treated as 0
 	// this step explicitly does not check for zero values or an empty resource that is handled by the loop
 	if smaller == nil {
-		return true
+		return true, ""
 	}
 
 	for k, v := range smaller.Resources {
@@ -382,10 +388,10 @@ func FitIn(larger, smaller *Resource) bool {
 			largerValue = 0
 		}
 		if v > largerValue {
-			return false
+			return false, fmt.Sprintf("Resource %d %s is lower than %d", largerValue, k, v)
 		}
 	}
-	return true
+	return true, ""
 }
 
 // Get the share of each resource quantity when compared to the total

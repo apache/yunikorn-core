@@ -19,49 +19,56 @@
 package events
 
 import (
-	"time"
+	"sync"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 	"go.uber.org/zap"
 )
 
-const keepTime = 24 * time.Hour // 1 day
+type eventStore struct {
+	eventMap map[interface{}]Event
 
-type EventStore struct {
-	apps   *AppEventStore
-	queues *QueueEventStore
+	sync.RWMutex
 }
 
-func NewEventStore() *EventStore {
-	return &EventStore{
-		NewAppEventStore(),
-		NewQueueEventStore(),
+func newEventStore() *eventStore {
+	return &eventStore{
+		eventMap: make(map[interface{}]Event),
 	}
 }
 
-func (es EventStore) Visit(event interface{}) {
-	// TODO process event
-	switch v := event.(type) {
-	case *AppEvent:
-		es.apps.VisitApp(v.app)
-	case *QueueEvent:
-		es.queues.VisitQueue(v.queue)
-	default:
-		log.Logger().Error("event could not be processed in the event cache.", zap.Any("event", v))
+func (es *eventStore) store(event Event) {
+	es.Lock()
+	defer es.Unlock()
+
+	es.eventMap[event.GetSource()] = event
+}
+
+
+
+func (es *eventStore) collectEvents() []*si.EventMessage {
+	if eventPlugin := plugins.GetEventPlugin(); eventPlugin != nil {
+		es.Lock()
+		defer es.Unlock()
+
+		messages := make([]*si.EventMessage, 0)
+
+		// collect events
+		for _, v := range es.eventMap {
+			message, err := ToEventMessage(v)
+			if err != nil {
+				log.Logger().Warn("Could not translate object to EventMessage", zap.Any("object", v))
+				continue
+			}
+			messages = append(messages, message)
+		}
+
+		// clear map
+		es.eventMap = make(map[interface{}]Event)
+
+		return messages
 	}
-}
-
-
-func (es EventStore) GetAppLastVisitTime(app string) time.Time {
-	return es.apps.GetAppLastVisitTime(app)
-}
-
-func (es EventStore) GetQueueLastVisitTime(queue string) time.Time {
-	return es.queues.GetQueueLastVisitTime(queue)
-}
-
-
-func (es EventStore) ClearOldObjects() {
-	es.apps.clearOldApps()
-	es.queues.clearOldQueues()
+	return nil
 }

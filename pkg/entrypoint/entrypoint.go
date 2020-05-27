@@ -63,13 +63,12 @@ func StartAllServicesWithManualScheduler() *ServiceContext {
 
 func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 	var eventCache *events.EventCache
-	var eventChannel *events.EventChannel
 	if opts.eventCacheEnabled {
 		eventCache = events.NewEventCache()
-		eventChannel = eventCache.GetEventChannel()
 	}
+
 	cache := cache.NewClusterInfo()
-	scheduler := scheduler.NewScheduler(cache, eventChannel)
+	scheduler := scheduler.NewScheduler(cache)
 	proxy := rmproxy.NewRMProxy()
 
 	eventHandler := handler.EventHandlers{

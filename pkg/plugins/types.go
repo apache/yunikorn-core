@@ -18,13 +18,19 @@
 
 package plugins
 
-import "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+import (
+	"sync"
+
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+)
 
 type SchedulerPlugins struct {
 	predicatesPlugin PredicatesPlugin
 	volumesPlugin    VolumesPlugin
 	reconcilePlugin  ReconcilePlugin
 	eventPlugin      EventPlugin
+
+	sync.Mutex
 }
 
 // RM side implements this API when it can provide plugin for predicates.
@@ -50,5 +56,5 @@ type ReconcilePlugin interface {
 type EventPlugin interface {
 	// This plugin is responsible for transmitting events to the shim side.
 	// Events can be further exposed from the shim.
-	SendEvent(event *si.EventMessage) error
+	SendEvent(event []*si.EventMessage) error
 }

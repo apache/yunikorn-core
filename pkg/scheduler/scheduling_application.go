@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/events"
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
@@ -393,19 +394,11 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 	for _, request := range sa.sortedRequests {
 		// resource must fit in headroom otherwise skip the request
 		if !resources.FitIn(headRoom, request.AllocatedResource) {
-			log.Logger().Debug("app does not fit into headroom", zap.String("app", sa.ApplicationInfo.ApplicationID), zap.Any("headroom", headRoom))
 			if ep := plugins.GetEventPlugin(); ep != nil {
-				log.Logger().Debug("sending event to shim")
-				event := si.EventMessage{
-					Type:    si.EventMessage_APP,
-					ID:      request.ApplicationID,
-					Reason:  "Pending resources would not fit in",
-					Message: "",
-				}
-				if err := ep.SendEvent(&event); err != nil {
-					log.Logger().Warn("Error handling event in the shim",
-						zap.Error(err), zap.Any("event", event))
-				}
+				_, msg := resources.FitInWithExplanation(headRoom, request.AllocatedResource)
+				message := fmt.Sprintf("Application %s does not fit in %s queue: %s", request.ApplicationID, request.QueueName, msg)
+				event := events.CreateInsufficientQueueResourcesEvent(request.AskProto, message)
+				events.Cache.AddEvent(event)
 			}
 			continue
 		} else {

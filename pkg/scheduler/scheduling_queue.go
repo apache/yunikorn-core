@@ -514,7 +514,6 @@ func (sq *SchedulingQueue) tryAllocate(ctx *partitionSchedulingContext) *schedul
 		headRoom := sq.getHeadRoom()
 		// process the apps (filters out app without pending requests)
 		for _, app := range sq.sortApplications() {
-			log.Logger().Debug("debug log #58")
 			alloc := app.tryAllocate(headRoom, ctx)
 			if alloc != nil {
 				log.Logger().Debug("allocation found on queue",

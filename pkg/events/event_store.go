@@ -19,9 +19,10 @@
 package events
 
 import (
-	"fmt"
-	"reflect"
 	"time"
+
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"go.uber.org/zap"
 )
 
 const keepTime = 24 * time.Hour // 1 day
@@ -46,7 +47,7 @@ func (es EventStore) Visit(event interface{}) {
 	case *QueueEvent:
 		es.queues.VisitQueue(v.queue)
 	default:
-		panic(fmt.Sprintf("%s could not be processed in the event cache.", reflect.TypeOf(v).String()))
+		log.Logger().Error("event could not be processed in the event cache.", zap.Any("event", v))
 	}
 }
 

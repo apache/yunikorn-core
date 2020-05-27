@@ -50,7 +50,7 @@ func RegisterSchedulerPlugin(plugin interface{}) {
 		plugins.reconcilePlugin = t
 		registered = true
 	}
-	if t, ok := plugin.(ReconcilePlugin); ok {
+	if t, ok := plugin.(EventPlugin); ok {
 		log.Logger().Debug("register event plugin",
 			zap.String("type", "EventPlugin"))
 		plugins.eventPlugin = t

@@ -57,7 +57,7 @@ func (es *eventStore) collectEvents() []*si.EventMessage {
 
 		// collect events
 		for _, v := range es.eventMap {
-			message, err := ToEventMessage(v)
+			message, err := toEventMessage(v)
 			if err != nil {
 				log.Logger().Warn("Could not translate object to EventMessage", zap.Any("object", v))
 				continue

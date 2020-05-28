@@ -398,6 +398,7 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 				_, msg := resources.FitInWithExplanation(headRoom, request.AllocatedResource)
 				message := fmt.Sprintf("Application %s does not fit in %s queue: %s", request.ApplicationID, request.QueueName, msg)
 				event := events.CreateInsufficientQueueResourcesEvent(request.AskProto, message)
+				// taskID
 				events.Cache.AddEvent(event)
 			}
 			continue

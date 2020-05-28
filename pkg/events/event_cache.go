@@ -28,7 +28,7 @@ import (
 
 // TODO this should be configurable?
 const sleepTimeInterval = 10 * time.Millisecond
-const pushEventInterval = 500 * time.Millisecond
+const pushEventInterval = 2 * time.Second
 
 var Cache *EventCache
 

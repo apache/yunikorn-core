@@ -42,7 +42,7 @@ func newEventChannel() *eventChannel {
 	return &eventChannel{
 		events:       make(chan Event, eventChannelSize),
 		diagCounter:  0,
-		diagInterval: 1000,
+		diagInterval: eventChannelSize,
 	}
 
 }
@@ -67,7 +67,7 @@ func (ec *eventChannel) addEvent(event Event) {
 	ec.diagCounter += 1
 	if ec.diagCounter >= ec.diagInterval {
 		msg := fmt.Sprintf("Event cache channel has %s size and %s capacity.", strconv.Itoa(len(ec.events)), strconv.Itoa(cap(ec.events)))
-		log.Logger().Info(msg)
+		log.Logger().Debug(msg)
 		ec.diagCounter = 0
 	}
 	ec.events <- event

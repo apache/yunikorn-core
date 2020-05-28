@@ -20,6 +20,7 @@ package events
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
@@ -32,7 +33,7 @@ type Event interface {
 	GetMessage() string
 }
 
-func ToEventMessage(e Event) (*si.EventMessage, error) {
+func toEventMessage(e Event) (*si.EventMessage, error) {
 	eventType, id, err := convertSourceToTypeAndID(e.GetSource())
 	if err != nil {
 		return nil, err
@@ -48,12 +49,12 @@ func ToEventMessage(e Event) (*si.EventMessage, error) {
 func convertSourceToTypeAndID(obj interface{}) (si.EventMessage_Type, string, error) {
 	// TODO other type checks
 	if ask, ok := obj.(*si.AllocationAsk); ok {
-		return si.EventMessage_APP, ask.ApplicationID, nil
+		return si.EventMessage_REQUEST, strings.Join([]string{ask.AllocationKey, ask.ApplicationID}, ","), nil
 	}
 	log.Logger().Warn("Could not convert source object to EventMessageType", zap.Any("object", obj))
 
 	// TODO should add UNKNOWN request?
-	return si.EventMessage_REQUEST, "", fmt.Errorf("Could not ")
+	return si.EventMessage_REQUEST, "", fmt.Errorf("could not convert source object to EventMessageType")
 }
 
 type baseEvent struct {

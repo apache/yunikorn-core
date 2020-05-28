@@ -84,5 +84,6 @@ test: clean
 # Simple clean of generated files only (no local cleanup).
 .PHONY: clean
 clean:
-	go clean -cache -testcache -r -x ./...
+	@echo "cleaning up caches and output"
+	go clean -cache -testcache -r -x ./... 2>&1 >/dev/null
 	-rm -rf _output

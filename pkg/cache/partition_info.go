@@ -233,32 +233,6 @@ func (pi *PartitionInfo) addNewNode(node *NodeInfo, existingAllocations []*si.Al
 		}
 	}
 
-	// Node is accepted, scan all recovered allocations again, handle state transition.
-	// The node and its existing allocations might not be added (removed immediately after
-	// the add) if some allocation cannot be recovered.
-	if len(existingAllocations) > 0 {
-		// if an allocation of a app is accepted,
-		// transit app's state from Accepted to Running
-		for _, alloc := range existingAllocations {
-			if app, ok := pi.applications[alloc.ApplicationID]; ok {
-				if app.GetApplicationState() == Accepted.String() {
-					log.Logger().Info("moving application with existing allocations to running state",
-						zap.String("appID", app.ApplicationID),
-						zap.String(" current state", app.GetApplicationState()))
-					if err := app.HandleApplicationEvent(RunApplication); err != nil {
-						log.Logger().Warn("unable to handle app event - RunApplication",
-							zap.Error(err))
-					}
-				}
-			} else {
-				log.Logger().Info("existing allocations in recovery reference unknown application",
-					zap.String("allocationKey", alloc.AllocationKey),
-					zap.String("appID", alloc.ApplicationID),
-					zap.String("nodeID", alloc.NodeID))
-			}
-		}
-	}
-
 	// Node is added update the metrics
 	metrics.GetSchedulerMetrics().IncActiveNodes()
 	log.Logger().Info("added node to partition",

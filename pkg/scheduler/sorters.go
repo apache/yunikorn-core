@@ -22,23 +22,15 @@ import (
 	"sort"
 	"time"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 )
 
-// Sort type for queues, apps, nodes etc.
-type SortType int32
-
-const (
-	FairSortPolicy        = 0
-	FifoSortPolicy        = 1
-	MaxAvailableResources = 2 // node sorting, descending on available resources
-	MinAvailableResources = 3 // node sorting, ascending on available resources
-)
-
-func sortQueue(queues []*SchedulingQueue, sortType SortType) {
-	// TODO add latency metric
-	if sortType == FairSortPolicy {
+func sortQueue(queues []*SchedulingQueue, sortType policies.SortPolicy) {
+	sortingStart := time.Now()
+	if sortType == policies.FairSortPolicy {
 		sort.SliceStable(queues, func(i, j int) bool {
 			l := queues[i]
 			r := queues[j]
@@ -50,39 +42,101 @@ func sortQueue(queues []*SchedulingQueue, sortType SortType) {
 			return comp < 0
 		})
 	}
+	metrics.GetSchedulerMetrics().ObserveQueueSortingLatency(sortingStart)
 }
 
-func sortApplications(apps []*SchedulingApplication, sortType SortType, globalResource *resources.Resource) {
-	// TODO add latency metric
+func sortApplications(apps map[string]*SchedulingApplication, sortType policies.SortPolicy, globalResource *resources.Resource) []*SchedulingApplication {
+	sortingStart := time.Now()
+	var sortedApps []*SchedulingApplication
 	switch sortType {
-	case FairSortPolicy:
+	case policies.FairSortPolicy:
+		sortedApps = filterOnPendingResources(apps)
 		// Sort by usage
-		sort.SliceStable(apps, func(i, j int) bool {
-			l := apps[i]
-			r := apps[j]
+		sort.SliceStable(sortedApps, func(i, j int) bool {
+			l := sortedApps[i]
+			r := sortedApps[j]
 			return resources.CompUsageRatio(l.getAssumeAllocated(), r.getAssumeAllocated(), globalResource) < 0
 		})
-	case FifoSortPolicy:
+	case policies.FifoSortPolicy:
+		sortedApps = filterOnPendingResources(apps)
 		// Sort by submission time oldest first
-		sort.SliceStable(apps, func(i, j int) bool {
-			l := apps[i]
-			r := apps[j]
+		sort.SliceStable(sortedApps, func(i, j int) bool {
+			l := sortedApps[i]
+			r := sortedApps[j]
+			return l.ApplicationInfo.SubmissionTime < r.ApplicationInfo.SubmissionTime
+		})
+	case policies.StateAwarePolicy:
+		sortedApps = stateAwareFilter(apps)
+		// Sort by submission time oldest first
+		sort.SliceStable(sortedApps, func(i, j int) bool {
+			l := sortedApps[i]
+			r := sortedApps[j]
 			return l.ApplicationInfo.SubmissionTime < r.ApplicationInfo.SubmissionTime
 		})
 	}
+	metrics.GetSchedulerMetrics().ObserveAppSortingLatency(sortingStart)
+	return sortedApps
 }
 
-func sortNodes(nodes []*SchedulingNode, sortType SortType) {
+func filterOnPendingResources(apps map[string]*SchedulingApplication) []*SchedulingApplication {
+	filteredApps := make([]*SchedulingApplication, 0)
+	for _, app := range apps {
+		// Only look at app when pending-res > 0
+		if resources.StrictlyGreaterThanZero(app.GetPendingResource()) {
+			filteredApps = append(filteredApps, app)
+		}
+	}
+	return filteredApps
+}
+
+// This filter only allows one (1) application with a state that is not running in the list of candidates.
+// The preference is a state of Starting. If we can not find an app with a starting state we will use an app
+// with an Accepted state. However if there is an app with a Starting state even with no pending resource
+// requests, no Accepted apps can be scheduled. An app in New state does not have any asks and can never be
+// scheduled.
+func stateAwareFilter(apps map[string]*SchedulingApplication) []*SchedulingApplication {
+	filteredApps := make([]*SchedulingApplication, 0)
+	var acceptedApp *SchedulingApplication
+	var foundStarting bool
+	for _, app := range apps {
+		// found a starting app clear out the accepted app (independent of pending resources)
+		if app.isStarting() {
+			foundStarting = true
+			acceptedApp = nil
+		}
+		// Now just look at app when pending-res > 0
+		if resources.StrictlyGreaterThanZero(app.GetPendingResource()) {
+			// filter accepted apps
+			if app.isAccepted() {
+				// check if we have not seen a starting app
+				// replace the currently tracked accepted app if this is an older one
+				if !foundStarting && (acceptedApp == nil || acceptedApp.ApplicationInfo.SubmissionTime > app.ApplicationInfo.SubmissionTime) {
+					acceptedApp = app
+				}
+				continue
+			}
+			// this is a running or starting app add it to the list
+			filteredApps = append(filteredApps, app)
+		}
+	}
+	// just add the accepted app if we need to: apps are not sorted yet
+	if acceptedApp != nil {
+		filteredApps = append(filteredApps, acceptedApp)
+	}
+	return filteredApps
+}
+
+func sortNodes(nodes []*SchedulingNode, sortType common.SortingPolicy) {
 	sortingStart := time.Now()
 	switch sortType {
-	case MaxAvailableResources:
+	case common.FairnessPolicy:
 		// Sort by available resource, descending order
 		sort.SliceStable(nodes, func(i, j int) bool {
 			l := nodes[i]
 			r := nodes[j]
 			return resources.CompUsageShares(l.GetAvailableResource(), r.GetAvailableResource()) > 0
 		})
-	case MinAvailableResources:
+	case common.BinPackingPolicy:
 		// Sort by available resource, ascending order
 		sort.SliceStable(nodes, func(i, j int) bool {
 			l := nodes[i]

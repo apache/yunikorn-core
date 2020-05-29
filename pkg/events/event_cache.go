@@ -21,6 +21,8 @@ package events
 import (
 	"sync"
 	"time"
+
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
 
 // TODO this should be configurable?
@@ -57,7 +59,7 @@ func GetEventCache() *EventCache {
 }
 
 // TODO consider thread pool
-func (ec EventCache) StartService() {
+func (ec *EventCache) StartService() {
 	ec.Lock()
 	defer ec.Unlock()
 
@@ -72,7 +74,7 @@ func (ec EventCache) StartService() {
 	}
 }
 
-func (ec EventCache) Stop() {
+func (ec *EventCache) Stop() {
 	ec.Lock()
 	defer ec.Unlock()
 
@@ -89,29 +91,36 @@ func (ec EventCache) Stop() {
 	}
 }
 
-func (ec EventCache) AddPublisher(pub EventPublisher) {
-	ec.publishers = append(ec.publishers, pub)
+func (ec *EventCache) AddPublisher(pub EventPublisher) {
+	ec.Lock()
+	defer ec.Unlock()
+
+	if ec.started  {
+		log.Logger().Error("Added Publisher to a running EventCache!")
+	} else {
+		ec.publishers = append(ec.publishers, pub)
+	}
 }
 
-func (ec EventCache) AddEvent(event Event) {
+func (ec *EventCache) AddEvent(event Event) {
 	ec.channel.AddEvent(event)
 }
 
-func (ec EventCache) IsStarted() bool {
+func (ec *EventCache) IsStarted() bool {
 	ec.Lock()
 	defer ec.Unlock()
 
 	return ec.started
 }
 
-func (ec EventCache) isStopped() bool {
+func (ec *EventCache) isStopped() bool {
 	ec.Lock()
 	defer ec.Unlock()
 
 	return ec.stopped
 }
 
-func (ec EventCache) processEvent() {
+func (ec *EventCache) processEvent() {
 	for {
 		// break the main loop if stopped
 		if ec.isStopped() {

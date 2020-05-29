@@ -41,20 +41,20 @@ type shimPublisher struct {
 }
 
 func newShimPublisher(event EventStore) EventPublisher {
-	return shimPublisher{
+	return &shimPublisher{
 		store:   event,
 		stopped: false,
 	}
 }
 
-func (sp shimPublisher) isStopped() bool {
+func (sp *shimPublisher) isStopped() bool {
 	sp.Lock()
 	defer sp.Unlock()
 
 	return sp.stopped
 }
 
-func (sp shimPublisher) StartService() {
+func (sp *shimPublisher) StartService() {
 	go func () {
 		for {
 			if sp.isStopped() {
@@ -62,6 +62,7 @@ func (sp shimPublisher) StartService() {
 			}
 			if eventPlugin := plugins.GetEventPlugin(); eventPlugin != nil {
 				messages := sp.store.CollectEvents()
+				log.Logger().Debug("Sending events", zap.Int("number of messages", len(messages)))
 				if err := eventPlugin.SendEvent(messages); err != nil && err.Error() != "" {
 					log.Logger().Warn("Callback failed - could not sent EventMessage to shim",
 						zap.Error(err), zap.Int("number of messages", len(messages)))
@@ -72,7 +73,7 @@ func (sp shimPublisher) StartService() {
 	}()
 }
 
-func (sp shimPublisher) Stop() {
+func (sp *shimPublisher) Stop() {
 	sp.Lock()
 	defer sp.Unlock()
 
@@ -82,7 +83,7 @@ func (sp shimPublisher) Stop() {
 	sp.stopped = true
 }
 
-func (sp shimPublisher) GetEventStore() EventStore {
+func (sp *shimPublisher) GetEventStore() EventStore {
 	// only set in the constructor, no need to lock
 	return sp.store
 }

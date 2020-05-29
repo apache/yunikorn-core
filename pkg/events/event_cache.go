@@ -21,10 +21,6 @@ package events
 import (
 	"sync"
 	"time"
-
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
-	"go.uber.org/zap"
 )
 
 // TODO this should be configurable?
@@ -35,16 +31,21 @@ var once sync.Once
 var cache *EventCache
 
 type EventCache struct {
-	channel EventChannel // input
-	store   EventStore   // output
-	stopped bool
+	channel    EventChannel     // channelling input events
+	store      EventStore       // storing events
+	publishers []EventPublisher // publishing events to sinks
+	stopped    bool             // whether the service is stopped
 }
 
 func GetEventCache() *EventCache {
 	once.Do(func(){
+		store := newEventStoreImpl()
+		pub := newShimPublisher(store)
+
 		cache = &EventCache{
 			newEventChannelImpl(),
-			newEventStoreImpl(),
+			store,
+			[]EventPublisher{pub},
 			false,
 		}
 	})
@@ -57,22 +58,10 @@ func (ec EventCache) StartService() {
 	// event processing thread
 	go ec.processEvent()
 
-	// event pushing thread to shim
-	go func() {
-		for {
-			if ec.stopped {
-				break
-			}
-			if eventPlugin := plugins.GetEventPlugin(); eventPlugin != nil {
-				messages := ec.store.CollectEvents()
-				if err := eventPlugin.SendEvent(messages); err != nil && err.Error() != "" {
-					log.Logger().Warn("Callback failed - could not sent EventMessage to shim",
-						zap.Error(err), zap.Int("number of messages", len(messages)))
-				}
-			}
-			time.Sleep(pushEventInterval)
-		}
-	}()
+	// start event publishers
+	for _, publisher := range ec.publishers {
+		publisher.StartService()
+	}
 }
 
 func (ec EventCache) Stop() {
@@ -80,6 +69,15 @@ func (ec EventCache) Stop() {
 		panic("could not stop EventCache service")
 	}
 	ec.stopped = true
+
+	// stop event publishers
+	for _, publisher := range ec.publishers {
+		publisher.Stop()
+	}
+}
+
+func (ec EventCache) AddPublisher(pub EventPublisher) {
+	ec.publishers = append(ec.publishers, pub)
 }
 
 func (ec EventCache) AddEvent(event Event) {

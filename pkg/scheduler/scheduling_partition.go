@@ -442,7 +442,7 @@ func (psc *partitionSchedulingContext) allocate(alloc *schedulingAllocation) boo
 // This updates the allocating resources for app, queue and node in the scheduler
 // Called for both allocations from reserved as well as for direct allocations.
 // The unreserve is already handled before we get here so there is no difference in handling.
-func (psc *partitionSchedulingContext) confirmAllocation(allocProposal *commonevents.AllocationProposal, confirm bool) (string, error) {
+func (psc *partitionSchedulingContext) confirmAllocation(allocProposal *commonevents.AllocationProposal, confirm bool) error {
 	psc.RLock()
 	defer psc.RUnlock()
 	// partition is locked nothing can change from now on
@@ -450,13 +450,13 @@ func (psc *partitionSchedulingContext) confirmAllocation(allocProposal *commonev
 	appID := allocProposal.ApplicationID
 	app := psc.applications[appID]
 	if app == nil {
-		return "", fmt.Errorf("application was removed while allocating: %s", appID)
+		return fmt.Errorf("application was removed while allocating: %s", appID)
 	}
 	// find the node make sure it still exists
 	nodeID := allocProposal.NodeID
 	node := psc.nodes[nodeID]
 	if node == nil {
-		return "", fmt.Errorf("node was removed while allocating app %s: %s", appID, nodeID)
+		return fmt.Errorf("node was removed while allocating app %s: %s", appID, nodeID)
 	}
 
 	// Node and app exist we now can confirm the allocation
@@ -488,12 +488,12 @@ func (psc *partitionSchedulingContext) confirmAllocation(allocProposal *commonev
 		// This is a noop when the ask was removed in the mean time: no follow up needed
 		_, err := app.updateAskRepeat(allocKey, 1)
 		if err != nil {
-			return "", err
+			return err
 		}
 	} else if app.GetSchedulingAllocationAsk(allocKey) == nil {
 		// The ask was removed while we processed the proposal. The scheduler is updated but we need
 		// to make sure the cache removes the allocation that we cannot confirm
-		return app.ApplicationInfo.GetAllocationUUID(allocKey), fmt.Errorf("ask was removed while allocating for app %s: %s", appID, allocKey)
+		return fmt.Errorf("ask was removed while allocating for app %s: %s", appID, allocKey)
 	}
 
 	// all is ok when we are here
@@ -501,7 +501,7 @@ func (psc *partitionSchedulingContext) confirmAllocation(allocProposal *commonev
 		zap.String("appID", appID),
 		zap.String("allocationKey", allocKey),
 		zap.String("nodeID", nodeID))
-	return "", nil
+	return nil
 }
 
 // Process the reservation in the scheduler

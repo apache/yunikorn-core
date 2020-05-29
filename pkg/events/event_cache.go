@@ -34,7 +34,10 @@ type EventCache struct {
 	channel    EventChannel     // channelling input events
 	store      EventStore       // storing events
 	publishers []EventPublisher // publishing events to sinks
+	started    bool             // whether the service is started
 	stopped    bool             // whether the service is stopped
+
+	sync.Mutex
 }
 
 func GetEventCache() *EventCache {
@@ -43,19 +46,24 @@ func GetEventCache() *EventCache {
 		pub := newShimPublisher(store)
 
 		cache = &EventCache{
-			newEventChannelImpl(),
-			store,
-			[]EventPublisher{pub},
-			false,
+			channel:    newEventChannelImpl(),
+			store:      store,
+			publishers: []EventPublisher{pub},
+			started:    false,
+			stopped:    false,
 		}
 	})
 	return cache
 }
 
+// TODO consider thread pool
 func (ec EventCache) StartService() {
-	// TODO consider thread pool
+	ec.Lock()
+	defer ec.Unlock()
 
-	// event processing thread
+	ec.started = true
+
+	// start main event processing thread
 	go ec.processEvent()
 
 	// start event publishers
@@ -65,14 +73,19 @@ func (ec EventCache) StartService() {
 }
 
 func (ec EventCache) Stop() {
-	if ec.stopped {
-		panic("could not stop EventCache service")
-	}
-	ec.stopped = true
+	ec.Lock()
+	defer ec.Unlock()
 
-	// stop event publishers
-	for _, publisher := range ec.publishers {
-		publisher.Stop()
+	if ec.started {
+		if ec.stopped {
+			panic("could not stop EventCache service")
+		}
+		ec.stopped = true
+
+		// stop event publishers
+		for _, publisher := range ec.publishers {
+			publisher.Stop()
+		}
 	}
 }
 
@@ -84,15 +97,29 @@ func (ec EventCache) AddEvent(event Event) {
 	ec.channel.AddEvent(event)
 }
 
+func (ec EventCache) IsStarted() bool {
+	ec.Lock()
+	defer ec.Unlock()
+
+	return ec.started
+}
+
+func (ec EventCache) isStopped() bool {
+	ec.Lock()
+	defer ec.Unlock()
+
+	return ec.stopped
+}
+
 func (ec EventCache) processEvent() {
 	for {
 		// break the main loop if stopped
-		if ec.stopped {
+		if ec.isStopped() {
 			break
 		}
 		for {
 			// do not process any new event if the process has been stopped
-			if ec.stopped {
+			if ec.isStopped() {
 				break
 			}
 			// TODO for debugging: add time info about how long did this step take

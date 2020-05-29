@@ -19,6 +19,7 @@
 package events
 
 import (
+	"sync"
 	"time"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
@@ -35,19 +36,28 @@ type EventPublisher interface {
 type shimPublisher struct {
 	store EventStore
 	stopped bool
+
+	sync.Mutex
 }
 
 func newShimPublisher(event EventStore) EventPublisher {
 	return shimPublisher{
-		event,
-		false,
+		store:   event,
+		stopped: false,
 	}
+}
+
+func (sp shimPublisher) isStopped() bool {
+	sp.Lock()
+	defer sp.Unlock()
+
+	return sp.stopped
 }
 
 func (sp shimPublisher) StartService() {
 	go func () {
 		for {
-			if sp.stopped {
+			if sp.isStopped() {
 				break
 			}
 			if eventPlugin := plugins.GetEventPlugin(); eventPlugin != nil {
@@ -63,6 +73,9 @@ func (sp shimPublisher) StartService() {
 }
 
 func (sp shimPublisher) Stop() {
+	sp.Lock()
+	defer sp.Unlock()
+
 	if sp.stopped {
 		panic("could not stop shimPublisher service: already stopped")
 	}
@@ -70,5 +83,6 @@ func (sp shimPublisher) Stop() {
 }
 
 func (sp shimPublisher) GetEventStore() EventStore {
+	// only set in the constructor, no need to lock
 	return sp.store
 }

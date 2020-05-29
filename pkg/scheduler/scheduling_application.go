@@ -435,12 +435,12 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 	for _, request := range sa.sortedRequests {
 		// resource must fit in headroom otherwise skip the request
 		if !resources.FitIn(headRoom, request.AllocatedResource) {
-			if ep := plugins.GetEventPlugin(); ep != nil {
+			eventCache := events.GetEventCache()
+			if eventCache.IsStarted() {
 				_, msg := resources.FitInWithExplanation(headRoom, request.AllocatedResource)
 				message := fmt.Sprintf("Application %s does not fit in %s queue: %s", request.ApplicationID, request.QueueName, msg)
 				event := events.CreateInsufficientQueueResourcesEvent(request.AskProto, message)
-				// taskID
-				events.GetEventCache().AddEvent(event)
+				eventCache.AddEvent(event)
 			}
 			continue
 		} else {

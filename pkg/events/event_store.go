@@ -22,7 +22,6 @@ import (
 	"sync"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 	"go.uber.org/zap"
 )
@@ -52,26 +51,23 @@ func (es *defaultEventStore) Store(event Event) {
 }
 
 func (es *defaultEventStore) CollectEvents() []*si.EventMessage {
-	if eventPlugin := plugins.GetEventPlugin(); eventPlugin != nil {
-		es.Lock()
-		defer es.Unlock()
+	es.Lock()
+	defer es.Unlock()
 
-		messages := make([]*si.EventMessage, 0)
+	messages := make([]*si.EventMessage, 0)
 
-		// collect events
-		for _, v := range es.eventMap {
-			message, err := toEventMessage(v)
-			if err != nil {
-				log.Logger().Warn("Could not translate object to EventMessage", zap.Any("object", v))
-				continue
-			}
-			messages = append(messages, message)
+	// collect events
+	for _, v := range es.eventMap {
+		message, err := toEventMessage(v)
+		if err != nil {
+			log.Logger().Warn("Could not translate object to EventMessage", zap.Any("object", v))
+			continue
 		}
-
-		// clear map
-		es.eventMap = make(map[interface{}]Event)
-
-		return messages
+		messages = append(messages, message)
 	}
-	return nil
+
+	// clear map
+	es.eventMap = make(map[interface{}]Event)
+
+	return messages
 }

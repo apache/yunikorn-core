@@ -64,7 +64,7 @@ func StartAllServicesWithManualScheduler() *ServiceContext {
 func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 	var eventCache *events.EventCache
 	if opts.eventCacheEnabled {
-		eventCache = events.NewEventCache()
+		eventCache = events.GetEventCache()
 	}
 
 	cache := cache.NewClusterInfo()

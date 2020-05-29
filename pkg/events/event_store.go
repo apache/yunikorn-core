@@ -27,28 +27,31 @@ import (
 	"go.uber.org/zap"
 )
 
-type eventStore struct {
+type EventStore interface {
+	Store(Event)
+	CollectEvents() []*si.EventMessage
+}
+
+type defaultEventStore struct {
 	eventMap map[interface{}]Event
 
 	sync.RWMutex
 }
 
-func newEventStore() *eventStore {
-	return &eventStore{
+func newEventStoreImpl() EventStore {
+	return &defaultEventStore{
 		eventMap: make(map[interface{}]Event),
 	}
 }
 
-func (es *eventStore) store(event Event) {
+func (es *defaultEventStore) Store(event Event) {
 	es.Lock()
 	defer es.Unlock()
 
 	es.eventMap[event.GetSource()] = event
 }
 
-
-
-func (es *eventStore) collectEvents() []*si.EventMessage {
+func (es *defaultEventStore) CollectEvents() []*si.EventMessage {
 	if eventPlugin := plugins.GetEventPlugin(); eventPlugin != nil {
 		es.Lock()
 		defer es.Unlock()

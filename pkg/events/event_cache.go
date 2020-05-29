@@ -19,6 +19,7 @@
 package events
 
 import (
+	"sync"
 	"time"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
@@ -30,22 +31,25 @@ import (
 const sleepTimeInterval = 10 * time.Millisecond
 const pushEventInterval = 2 * time.Second
 
-var Cache *EventCache
+var once sync.Once
+var cache *EventCache
 
 type EventCache struct {
 	// input
 	channel *eventChannel
 
 	// output
-	store *eventStore
+	store EventStore
 }
 
-func NewEventCache() *EventCache {
-	Cache = &EventCache{
-		newEventChannel(),
-		newEventStore(),
-	}
-	return Cache
+func GetEventCache() *EventCache {
+	once.Do(func(){
+		cache = &EventCache{
+			newEventChannel(),
+			newEventStoreImpl(),
+		}
+	})
+	return cache
 }
 
 func (ec EventCache) StartService() {
@@ -58,7 +62,7 @@ func (ec EventCache) StartService() {
 	go func() {
 		for {
 			if eventPlugin := plugins.GetEventPlugin(); eventPlugin != nil {
-				messages := ec.store.collectEvents()
+				messages := ec.store.CollectEvents()
 				if err := eventPlugin.SendEvent(messages); err != nil && err.Error() != "" {
 					log.Logger().Warn("Callback failed - could not sent EventMessage to shim",
 						zap.Error(err), zap.Int("number of messages", len(messages)))
@@ -79,7 +83,7 @@ func (ec EventCache) processEvent() {
 			// TODO for debugging: add time info about how long did this step take
 			event, ok := ec.channel.getNextEvent()
 			if ok {
-				ec.store.store(event)
+				ec.store.Store(event)
 			} else {
 				break
 			}

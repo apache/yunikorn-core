@@ -35,11 +35,9 @@ var once sync.Once
 var cache *EventCache
 
 type EventCache struct {
-	// input
-	channel *eventChannel
-
-	// output
-	store EventStore
+	channel *eventChannel // input
+	store   EventStore    // output
+	stopped bool
 }
 
 func GetEventCache() *EventCache {
@@ -47,6 +45,7 @@ func GetEventCache() *EventCache {
 		cache = &EventCache{
 			newEventChannel(),
 			newEventStoreImpl(),
+			false,
 		}
 	})
 	return cache
@@ -61,6 +60,9 @@ func (ec EventCache) StartService() {
 	// event pushing thread to shim
 	go func() {
 		for {
+			if ec.stopped {
+				break
+			}
 			if eventPlugin := plugins.GetEventPlugin(); eventPlugin != nil {
 				messages := ec.store.CollectEvents()
 				if err := eventPlugin.SendEvent(messages); err != nil && err.Error() != "" {
@@ -73,13 +75,28 @@ func (ec EventCache) StartService() {
 	}()
 }
 
+func (ec EventCache) Stop() {
+	if ec.stopped {
+		panic("could not stop EventCache service")
+	}
+	ec.stopped = true
+}
+
 func (ec EventCache) AddEvent(event Event) {
 	ec.channel.addEvent(event)
 }
 
 func (ec EventCache) processEvent() {
 	for {
+		// break the main loop if stopped
+		if ec.stopped {
+			break
+		}
 		for {
+			// do not process any new event if the process has been stopped
+			if ec.stopped {
+				break
+			}
 			// TODO for debugging: add time info about how long did this step take
 			event, ok := ec.channel.getNextEvent()
 			if ok {

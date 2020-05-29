@@ -56,6 +56,7 @@ func newSchedulingNode(info *cache.NodeInfo) *SchedulingNode {
 		NodeID:                      info.NodeID,
 		allocating:                  resources.NewResource(),
 		preempting:                  resources.NewResource(),
+		cachedAvailable:             resources.NewResource(),
 		cachedAvailableUpdateNeeded: true,
 		reservations:                make(map[string]*reservation),
 	}
@@ -98,7 +99,7 @@ func (sn *SchedulingNode) GetAllocatedResource() *resources.Resource {
 func (sn *SchedulingNode) GetAvailableResource() *resources.Resource {
 	sn.Lock()
 	defer sn.Unlock()
-	if sn.cachedAvailableUpdateNeeded {
+	if sn.cachedAvailableUpdateNeeded || sn.nodeInfo.SyncAvailableResource() {
 		sn.cachedAvailable = sn.nodeInfo.GetAvailableResource()
 		sn.cachedAvailable.SubFrom(sn.allocating)
 		sn.cachedAvailableUpdateNeeded = false

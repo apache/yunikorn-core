@@ -20,6 +20,7 @@ package tests
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -380,6 +381,86 @@ func TestAddNewNode(t *testing.T) {
 	assert.Equal(t, 0, len(ms.getSchedulingNode(nodes[0]).GetReservations()), "reservation found on %s", nodes[0])
 	assert.Equal(t, 0, len(ms.getSchedulingNode(nodes[1]).GetReservations()), "reservation found on %s", nodes[1])
 	assert.Equal(t, 0, ms.getPartitionReservations()[appID], "reservations not removed from partition")
+}
+
+// simple reservation one app one queue
+func TestUnReservationAndDeletion(t *testing.T) {
+	ms := &mockScheduler{}
+	defer ms.Stop()
+
+	err := ms.Init(SingleQueueConfig, false)
+	assert.NilError(t, err, "RegisterResourceManager failed")
+
+	// override the reservation delay, and cleanup when done
+	scheduler.OverrideReservationDelay(10 * time.Millisecond)
+	defer scheduler.OverrideReservationDelay(2 * time.Second)
+
+	nodes := createNodes(t, ms, 2, 30)
+	ms.mockRM.waitForMinAcceptedNodes(t, 2, 1000)
+
+	appID := "app-1"
+	queueName := "root.leaf-1"
+	err = ms.addApp(appID, queueName, "default")
+	assert.NilError(t, err, "adding app to scheduler failed")
+	ms.mockRM.waitForAcceptedApplication(t, appID, 1000)
+	// Get scheduling app
+	app := ms.getSchedulingApplication(appID)
+
+	// 3 asks, each one asks for 20 cpu/memory
+	// we only have 2 nodes, 30 * 2
+	// 2 asks can be allocated, the other one will be reserved
+	res := &si.Resource{Resources: map[string]*si.Quantity{"memory": {Value: 20}, "vcore": {Value: 20}}}
+	err = ms.addAppRequest(appID, "alloc-1", res, 1)
+	assert.NilError(t, err, "adding requests to app failed")
+	err = ms.addAppRequest(appID, "alloc-2", res, 1)
+	assert.NilError(t, err, "adding requests to app failed")
+	err = ms.addAppRequest(appID, "alloc-3", res, 1)
+	assert.NilError(t, err, "adding requests to app failed")
+	leafQueue := ms.getSchedulingQueue(queueName)
+	waitForPendingQueueResource(t, leafQueue, 60, 1000)
+	waitForPendingAppResource(t, app, 60, 1000)
+	// Allocate for app
+	ms.scheduler.MultiStepSchedule(5)
+	ms.mockRM.waitForAllocations(t, 2, 1000)
+	// 40 allocated, 20 pending
+	waitForPendingQueueResource(t, leafQueue, 20, 1000)
+	waitForPendingAppResource(t, app, 20, 1000)
+	// check objects have reservations assigned,
+	assert.Equal(t, 1, len(app.GetReservations()), "reservations missing from app")
+	assert.Equal(t, 1, ms.getPartitionReservations()[appID], "reservations missing from partition")
+	numOfReservation := len(ms.getSchedulingNode(nodes[0]).GetReservations()) + len(ms.getSchedulingNode(nodes[1]).GetReservations())
+	assert.Equal(t, 1, numOfReservation, "reservation missing on nodes")
+	// delete existing allocations
+	for _, alloc := range ms.mockRM.getAllocations() {
+		err = ms.releaseAllocRequest(appID, alloc.UUID)
+		assert.NilError(t, err, "allocation release update failed")
+	}
+	// delete pending asks
+	for _, ask := range app.GetReservations() {
+		askID := ask[strings.Index(ask, "|")+1:]
+		err = ms.releaseAskRequest(appID, askID)
+		assert.NilError(t, err, "ask release update failed")
+	}
+	ms.scheduler.MultiStepSchedule(5)
+	// since all requests are removed, there should be no more pending resources
+	waitForPendingQueueResource(t, leafQueue, 0, 1000)
+	waitForPendingAppResource(t, app, 0, 1000)
+	// there is no reservations anymore
+	assert.Equal(t, len(ms.getSchedulingNode(nodes[0]).GetReservations()), 0)
+	assert.Equal(t, len(ms.getSchedulingNode(nodes[1]).GetReservations()), 0)
+	assert.Equal(t, len(app.GetReservations()), 0)
+	waitForNodesAllocatedResource(t, ms.clusterInfo, ms.partitionName, []string{nodes[0]}, 0, 1000)
+	waitForNodesAllocatedResource(t, ms.clusterInfo, ms.partitionName, []string{nodes[1]}, 0, 1000)
+	//nolint: errcheck
+	nodeRes, _ := resources.NewResourceFromConf(map[string]string{"memory": "30", "vcore": "30"})
+	waitForNodesAvailableResource(t, ms.clusterInfo, ms.partitionName, []string{"node-1", "node-2"}, 60, 1000)
+	waitForNodesAllocatedResource(t, ms.clusterInfo, ms.partitionName, []string{"node-1", "node-2"}, 0, 1000)
+	if !resources.Equals(nodeRes, ms.getSchedulingNode(nodes[0]).GetAvailableResource()) {
+		t.Fatalf("available resources not alll resources: expected %s, got %s", nodeRes, ms.getSchedulingNode(nodes[0]).GetAvailableResource())
+	}
+	if !resources.Equals(nodeRes, ms.getSchedulingNode(nodes[1]).GetAvailableResource()) {
+		t.Fatalf("available resources not alll resources: expected %s, got %s", nodeRes, ms.getSchedulingNode(nodes[1]).GetAvailableResource())
+	}
 }
 
 func createNodes(t *testing.T, ms *mockScheduler, count int, res int64) []string {

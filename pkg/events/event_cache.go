@@ -35,15 +35,15 @@ var once sync.Once
 var cache *EventCache
 
 type EventCache struct {
-	channel *eventChannel // input
-	store   EventStore    // output
+	channel EventChannel // input
+	store   EventStore   // output
 	stopped bool
 }
 
 func GetEventCache() *EventCache {
 	once.Do(func(){
 		cache = &EventCache{
-			newEventChannel(),
+			newEventChannelImpl(),
 			newEventStoreImpl(),
 			false,
 		}
@@ -83,7 +83,7 @@ func (ec EventCache) Stop() {
 }
 
 func (ec EventCache) AddEvent(event Event) {
-	ec.channel.addEvent(event)
+	ec.channel.AddEvent(event)
 }
 
 func (ec EventCache) processEvent() {
@@ -98,7 +98,7 @@ func (ec EventCache) processEvent() {
 				break
 			}
 			// TODO for debugging: add time info about how long did this step take
-			event, ok := ec.channel.getNextEvent()
+			event, ok := ec.channel.GetNextEvent()
 			if ok {
 				ec.store.Store(event)
 			} else {

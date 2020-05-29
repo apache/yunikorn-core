@@ -29,8 +29,13 @@ import (
 // TODO should configure the size of the channel
 const eventChannelSize = 100000
 
-// wrapping the channel into a struct - so that the underlying implementation can be changed
-type eventChannel struct {
+
+type EventChannel interface {
+	GetNextEvent() (Event, bool)
+	AddEvent(event Event)
+}
+
+type defaultEventChannel struct {
 	events       chan Event
 	diagCounter  int
 	diagInterval int
@@ -38,8 +43,8 @@ type eventChannel struct {
 	sync.RWMutex
 }
 
-func newEventChannel() *eventChannel {
-	return &eventChannel{
+func newEventChannelImpl() EventChannel {
+	return &defaultEventChannel{
 		events:       make(chan Event, eventChannelSize),
 		diagCounter:  0,
 		diagInterval: eventChannelSize,
@@ -47,7 +52,7 @@ func newEventChannel() *eventChannel {
 
 }
 
-func (ec *eventChannel) getNextEvent() (Event, bool) {
+func (ec *defaultEventChannel) GetNextEvent() (Event, bool) {
 	ec.Lock()
 	defer ec.Unlock()
 
@@ -60,7 +65,7 @@ func (ec *eventChannel) getNextEvent() (Event, bool) {
 }
 
 
-func (ec *eventChannel) addEvent(event Event) {
+func (ec *defaultEventChannel) AddEvent(event Event) {
 	ec.Lock()
 	defer ec.Unlock()
 

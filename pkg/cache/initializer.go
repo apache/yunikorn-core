@@ -58,7 +58,7 @@ func createPartitionInfos(clusterInfo *ClusterInfo, conf *configs.SchedulerConfi
 func SetClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmID string, policyGroup string) ([]*PartitionInfo, error) {
 	// we should not have any partitions set at this point
 	if len(clusterInfo.partitions) > 0 {
-		return []*PartitionInfo{}, fmt.Errorf("RM %s has been registerd before, active partitions %d", rmID, len(clusterInfo.partitions))
+		return []*PartitionInfo{}, fmt.Errorf("RM %s has been registered before, active partitions %d", rmID, len(clusterInfo.partitions))
 	}
 	// load the config this returns a validated configuration
 	conf, err := configs.SchedulerConfigLoader(policyGroup)

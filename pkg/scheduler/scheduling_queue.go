@@ -346,7 +346,7 @@ func (sq *SchedulingQueue) decPreemptingResource(newAlloc *resources.Resource) {
 }
 
 // (Re)Set the preempting resources for the queue.
-// This could be because they are pre-empted or the preemption was cancelled.
+// This could be because they are preempted, or the preemption was cancelled.
 func (sq *SchedulingQueue) setPreemptingResource(newAlloc *resources.Resource) {
 	sq.Lock()
 	defer sq.Unlock()

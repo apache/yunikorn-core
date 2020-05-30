@@ -91,7 +91,7 @@ func TestReplaceDot(t *testing.T) {
 	}
 	name = replaceDot("name...name")
 	if name != "name_dot__dot__dot_name" {
-		t.Errorf("replace consequtive dots failed, name: %s, ", name)
+		t.Errorf("replace consecutive dots failed, name: %s, ", name)
 	}
 	name = replaceDot("name.name.name")
 	if name != "name_dot_name_dot_name" {

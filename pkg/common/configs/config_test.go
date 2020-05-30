@@ -299,7 +299,7 @@ partitions:
 
 	// root.production queue
 	if conf.Partitions[0].Queues[0].Queues[0].Resources.Guaranteed["memory"] != "1000" {
-		t.Errorf("failed to load guranteed resource from file %v", conf)
+		t.Errorf("failed to load guaranteed resource from file %v", conf)
 	}
 
 	// root.test queue

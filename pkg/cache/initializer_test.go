@@ -99,7 +99,7 @@ func initializationAndCheck(t *testing.T, data string, expectFail bool) {
 	_, err := SetClusterInfoFromConfigFile(clusterInfo, "rm-123", "default-policy-group")
 
 	if expectFail && err == nil {
-		t.Errorf("Expect fail, but suceeded")
+		t.Errorf("Expect fail, but succeeded")
 	} else if !expectFail && err != nil {
 		t.Errorf("Expect success, but failed, error = %s", err.Error())
 	}

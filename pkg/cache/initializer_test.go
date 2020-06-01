@@ -455,7 +455,7 @@ partitions:
 	queue := defaultPartition.getQueue("root")
 	assert.Equal(t, 2, len(queue.children))
 
-	assert.Assert(t, queue.properties != nil, "Expected nil properties on root queue")
+	assert.Assert(t, queue.properties == nil, "Expected nil properties on root queue")
 	queue = defaultPartition.getQueue("root.production")
 	assert.Equal(t, len(queue.properties), 0, "Expected no properties on root.production queue")
 	queue = defaultPartition.getQueue("root.test")

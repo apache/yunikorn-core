@@ -86,7 +86,7 @@ func (psc *partitionSchedulingContext) updatePartitionSchedulingContext(info *ca
 	}
 	root := psc.root
 	// update the root queue properties
-	root.updateSchedulingQueueProperties(info.Root.Properties)
+	root.updateSchedulingQueueProperties(info.Root.GetProperties())
 	// update the rest of the queues recursively
 	root.updateSchedulingQueueInfo(info.Root.GetCopyOfChildren(), root)
 }

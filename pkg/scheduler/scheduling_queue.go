@@ -64,7 +64,7 @@ func newSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo, parent *SchedulingQ
 	}
 
 	// update the properties
-	sq.updateSchedulingQueueProperties(cacheQueueInfo.Properties)
+	sq.updateSchedulingQueueProperties(cacheQueueInfo.GetProperties())
 
 	// initialise the child queues based what is in the cached copy
 	for childName, childQueue := range cacheQueueInfo.GetCopyOfChildren() {
@@ -125,7 +125,7 @@ func (sq *SchedulingQueue) updateSchedulingQueueInfo(info map[string]*cache.Queu
 		if child == nil {
 			child = newSchedulingQueueInfo(childQueue, parent)
 		} else {
-			child.updateSchedulingQueueProperties(childQueue.Properties)
+			child.updateSchedulingQueueProperties(childQueue.GetProperties())
 		}
 		child.updateSchedulingQueueInfo(childQueue.GetCopyOfChildren(), child)
 	}

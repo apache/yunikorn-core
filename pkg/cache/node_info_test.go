@@ -21,10 +21,10 @@ package cache
 import (
 	"testing"
 
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 

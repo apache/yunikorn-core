@@ -37,6 +37,9 @@ linters-settings:
     local-prefixes: github.com/apache/incubator-yunikorn
   govet:
     check-shadowing: true
+  funlen:
+    lines: 120
+    statements: 80
   depguard:
     list-type: blacklist
     include-go-root: false

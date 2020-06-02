@@ -1090,7 +1090,7 @@ func TestFairnessRatio(t *testing.T) {
 	left = &Resource{Resources: map[string]Quantity{"first": 1}}
 	fairRatio = FairnessRatio(left, right, total)
 	if !math.IsInf(fairRatio, 1) {
-		t.Errorf("positve left, zero right resources should return +Inf got: %f", fairRatio)
+		t.Errorf("positive left, zero right resources should return +Inf got: %f", fairRatio)
 	}
 	left = &Resource{Resources: map[string]Quantity{"first": -1}}
 	fairRatio = FairnessRatio(left, right, total)

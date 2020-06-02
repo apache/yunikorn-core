@@ -69,10 +69,11 @@ partitions:
 	assert.Assert(t, 150 == schedulerQueueA.QueueInfo.GetMaxResource().Resources[resources.MEMORY])
 
 	// Register nodes, and add apps
+	appID := "app-1"
 	err = ms.proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
-				NodeID: "node-1:1234",
+				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -82,7 +83,7 @@ partitions:
 				},
 			},
 			{
-				NodeID: "node-2:1234",
+				NodeID:     "node-2:1234",
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -92,25 +93,23 @@ partitions:
 				},
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a"}),
+		NewApplications: newAddAppRequest(map[string]string{appID: "root.a"}),
 		RmID:            "rm:123",
 	})
 
-	if nil != err {
-		t.Fatalf("UpdateRequest nodes and app failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest nodes and app failed")
 
-	ms.mockRM.waitForAcceptedApplication(t, "app-1", 1000)
+	ms.mockRM.waitForAcceptedApplication(t, appID, 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
 	// Get scheduling app
-	schedulingApp := ms.getSchedulingApplication("app-1")
+	schedulingApp := ms.getSchedulingApplication(appID)
 
 	// Verify app initial state
-	app01, err := getApplicationInfoFromPartition(partitionInfo, "app-1")
-	assert.Assert(t, err == nil)
-	assert.Equal(t, app01.GetApplicationState(), cache.Accepted.String())
+	app01, err := getApplicationInfoFromPartition(partitionInfo, appID)
+	assert.NilError(t, err, "app not found on partitionInfo")
+	assert.Equal(t, app01.GetApplicationState(), cache.New.String())
 
 	err = ms.proxy.Update(&si.UpdateRequest{
 		Asks: []*si.AllocationAsk{
@@ -123,21 +122,20 @@ partitions:
 					},
 				},
 				MaxAllocations: 2,
-				ApplicationID:  "app-1",
+				ApplicationID:  appID,
 			},
 		},
 		RmID: "rm:123",
 	})
 
-	if nil != err {
-		t.Fatalf("UpdateRequest add resuorces failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest add resources failed")
 
 	// Wait pending resource of queue a and scheduler queue
 	// Both pending memory = 10 * 2 = 20;
 	waitForPendingQueueResource(t, schedulerQueueA, 20, 1000)
 	waitForPendingQueueResource(t, schedulerQueueRoot, 20, 1000)
 	waitForPendingAppResource(t, schedulingApp, 20, 1000)
+	assert.Equal(t, app01.GetApplicationState(), cache.Accepted.String())
 
 	ms.scheduler.MultiStepSchedule(16)
 
@@ -172,7 +170,7 @@ partitions:
 					},
 				},
 				MaxAllocations: 2,
-				ApplicationID:  "app-1",
+				ApplicationID:  appID,
 			},
 			{
 				AllocationKey: "alloc-3",
@@ -183,15 +181,13 @@ partitions:
 					},
 				},
 				MaxAllocations: 2,
-				ApplicationID:  "app-1",
+				ApplicationID:  appID,
 			},
 		},
 		RmID: "rm:123",
 	})
 
-	if nil != err {
-		t.Fatalf("UpdateRequest further alloc on existing app failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest further alloc on existing app failed")
 
 	// Wait pending resource of queue a and scheduler queue
 	// Both pending memory = 50 * 2 + 100 * 2 = 300;
@@ -232,7 +228,7 @@ partitions:
 	err = ms.proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
-				NodeID: "node-1:1234",
+				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -243,7 +239,7 @@ partitions:
 				ExistingAllocations: mockRM.nodeAllocations["node-1:1234"],
 			},
 			{
-				NodeID: "node-2:1234",
+				NodeID:     "node-2:1234",
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -254,60 +250,57 @@ partitions:
 				ExistingAllocations: mockRM.nodeAllocations["node-2:1234"],
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a"}),
+		NewApplications: newAddAppRequest(map[string]string{appID: "root.a"}),
 		RmID:            "rm:123",
 	})
 
-	if nil != err {
-		t.Fatalf("UpdateRequest nodes and app for recovery failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest nodes and app for recovery failed")
 
 	// waiting for recovery
-	ms.mockRM.waitForAcceptedApplication(t, "app-1", 1000)
+	ms.mockRM.waitForAcceptedApplication(t, appID, 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
-	// verify partition info
-	t.Log("verifying partition info")
-	partition := ms.clusterInfo.GetPartition("[rm:123]default")
-	// verify apps in this partition
-	assert.Equal(t, 1, len(partition.GetApplications()))
-	assert.Equal(t, "app-1", partition.GetApplications()[0].ApplicationID)
-	assert.Equal(t, len(partition.GetApplications()[0].GetAllAllocations()), 4)
-	assert.Equal(t, partition.GetApplications()[0].GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
-	assert.Equal(t, partition.GetApplications()[0].GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12))
+	// verify partitionInfo info
+	partitionInfo = ms.clusterInfo.GetPartition("[rm:123]default")
+	// verify apps in this partitionInfo
+	assert.Equal(t, 1, len(partitionInfo.GetApplications()))
+	assert.Equal(t, appID, partitionInfo.GetApplications()[0].ApplicationID)
+	assert.Equal(t, len(partitionInfo.GetApplications()[0].GetAllAllocations()), 4)
+	assert.Equal(t, partitionInfo.GetApplications()[0].GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
+	assert.Equal(t, partitionInfo.GetApplications()[0].GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12))
 
 	// verify nodes
-	assert.Equal(t, 2, partition.GetTotalNodeCount(), "incorrect recovered node count")
+	assert.Equal(t, 2, partitionInfo.GetTotalNodeCount(), "incorrect recovered node count")
 	node1Allocations := mockRM.nodeAllocations["node-1:1234"]
 	node2Allocations := mockRM.nodeAllocations["node-2:1234"]
 
-	assert.Equal(t, len(node1Allocations), len(partition.GetNode("node-1:1234").GetAllAllocations()), "allocations on node-1 not as expected")
-	assert.Equal(t, len(node2Allocations), len(partition.GetNode("node-2:1234").GetAllAllocations()), "allocations on node-1 not as expected")
+	assert.Equal(t, len(node1Allocations), len(partitionInfo.GetNode("node-1:1234").GetAllAllocations()), "allocations on node-1 not as expected")
+	assert.Equal(t, len(node2Allocations), len(partitionInfo.GetNode("node-2:1234").GetAllAllocations()), "allocations on node-1 not as expected")
 
-	node1AllocatedMemory := partition.GetNode("node-1:1234").GetAllocatedResource().Resources[resources.MEMORY]
-	node2AllocatedMemory := partition.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.MEMORY]
-	node1AllocatedCPU := partition.GetNode("node-1:1234").GetAllocatedResource().Resources[resources.VCORE]
-	node2AllocatedCPU := partition.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.VCORE]
+	node1AllocatedMemory := partitionInfo.GetNode("node-1:1234").GetAllocatedResource().Resources[resources.MEMORY]
+	node2AllocatedMemory := partitionInfo.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.MEMORY]
+	node1AllocatedCPU := partitionInfo.GetNode("node-1:1234").GetAllocatedResource().Resources[resources.VCORE]
+	node2AllocatedCPU := partitionInfo.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.VCORE]
 	assert.Equal(t, node1AllocatedMemory+node2AllocatedMemory, resources.Quantity(120))
 	assert.Equal(t, node1AllocatedCPU+node2AllocatedCPU, resources.Quantity(12))
 
 	// verify queues
 	//  - verify root queue
-	assert.Equal(t, partition.Root.GetGuaranteedResource().Resources[resources.MEMORY], resources.Quantity(100), "guaranteed memory on root queue not as expected")
-	assert.Equal(t, partition.Root.GetGuaranteedResource().Resources[resources.VCORE], resources.Quantity(10), "guaranteed vcore on root queue not as expected")
-	assert.Equal(t, partition.Root.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120), "allocated memory on root queue not as expected")
-	assert.Equal(t, partition.Root.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12), "allocated vcore on root queue not as expected")
+	assert.Equal(t, partitionInfo.Root.GetGuaranteedResource().Resources[resources.MEMORY], resources.Quantity(100), "guaranteed memory on root queue not as expected")
+	assert.Equal(t, partitionInfo.Root.GetGuaranteedResource().Resources[resources.VCORE], resources.Quantity(10), "guaranteed vcore on root queue not as expected")
+	assert.Equal(t, partitionInfo.Root.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120), "allocated memory on root queue not as expected")
+	assert.Equal(t, partitionInfo.Root.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12), "allocated vcore on root queue not as expected")
 	//  - verify root.a queue
-	childQueues := partition.Root.GetCopyOfChildren()
+	childQueues := partitionInfo.Root.GetCopyOfChildren()
 	queueA := childQueues["a"]
-	assert.Assert(t, queueA != nil, "root.a doesn't exist in partition")
+	assert.Assert(t, queueA != nil, "root.a doesn't exist in partitionInfo")
 	assert.Equal(t, queueA.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120), "allocated memory on root.a queue not as expected")
 	assert.Equal(t, queueA.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12), "allocated vcore on root.a queue not as expected")
 
 	// verify scheduler clusterInfo
-	ms.mockRM.waitForAcceptedApplication(t, "app-1", 1000)
-	recoveredApp := ms.getSchedulingApplication("app-1")
+	ms.mockRM.waitForAcceptedApplication(t, appID, 1000)
+	recoveredApp := ms.getSchedulingApplication(appID)
 	assert.Assert(t, recoveredApp != nil)
 	assert.Equal(t, recoveredApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120), "allocated memory on app not as expected")
 	assert.Equal(t, recoveredApp.ApplicationInfo.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12), "allocated vcore on app not as expected")
@@ -321,7 +314,7 @@ partitions:
 	}
 
 	// verify app state
-	assert.Equal(t, recoveredApp.ApplicationInfo.GetApplicationState(), "Running")
+	assert.Equal(t, recoveredApp.ApplicationInfo.GetApplicationState(), cache.Running.String())
 }
 
 // test scheduler recovery when shim doesn't report existing application
@@ -356,7 +349,7 @@ partitions:
 	err = ms.proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
-				NodeID: "node-1:1234",
+				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -386,7 +379,7 @@ partitions:
 				},
 			},
 			{
-				NodeID: "node-2:1234",
+				NodeID:     "node-2:1234",
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -399,28 +392,26 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	if nil != err {
-		t.Fatalf("UpdateRequest nodes and apps failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest nodes and apps failed")
 
 	// waiting for recovery
 	// node-1 should be rejected as some of allocations cannot be recovered
 	ms.mockRM.waitForRejectedNode(t, "node-1:1234", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
-	// verify partition resources
-	partition := ms.clusterInfo.GetPartition("[rm:123]default")
-	assert.Equal(t, partition.GetTotalNodeCount(), 1)
-	assert.Equal(t, partition.GetTotalApplicationCount(), 0)
-	assert.Equal(t, partition.GetTotalAllocationCount(), 0)
-	assert.Equal(t, partition.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.MEMORY],
+	// verify partitionInfo resources
+	partitionInfo := ms.clusterInfo.GetPartition("[rm:123]default")
+	assert.Equal(t, partitionInfo.GetTotalNodeCount(), 1)
+	assert.Equal(t, partitionInfo.GetTotalApplicationCount(), 0)
+	assert.Equal(t, partitionInfo.GetTotalAllocationCount(), 0)
+	assert.Equal(t, partitionInfo.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.MEMORY],
 		resources.Quantity(0))
 
 	// register the node again, with application info attached
 	err = ms.proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
-				NodeID: "node-1:1234",
+				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -454,19 +445,17 @@ partitions:
 		RmID:            "rm:123",
 	})
 
-	if nil != err {
-		t.Fatalf("UpdateRequest re-register nodes and app failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest re-register nodes and app failed")
 
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 
-	assert.Equal(t, partition.GetTotalNodeCount(), 2)
-	assert.Equal(t, partition.GetTotalApplicationCount(), 1)
-	assert.Equal(t, partition.GetTotalAllocationCount(), 1)
-	assert.Equal(t, partition.GetNode("node-1:1234").GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(100))
-	assert.Equal(t, partition.GetNode("node-1:1234").GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(1))
-	assert.Equal(t, partition.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(0))
-	assert.Equal(t, partition.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(0))
+	assert.Equal(t, partitionInfo.GetTotalNodeCount(), 2)
+	assert.Equal(t, partitionInfo.GetTotalApplicationCount(), 1)
+	assert.Equal(t, partitionInfo.GetTotalAllocationCount(), 1)
+	assert.Equal(t, partitionInfo.GetNode("node-1:1234").GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(100))
+	assert.Equal(t, partitionInfo.GetNode("node-1:1234").GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(1))
+	assert.Equal(t, partitionInfo.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(0))
+	assert.Equal(t, partitionInfo.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(0))
 
 	t.Log("verifying scheduling queues")
 	recoveredQueueRoot := ms.getSchedulingQueue("root")
@@ -511,11 +500,12 @@ partitions:
 
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
+	appID := "app-1"
 	// Register nodes, and add apps
 	err = proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
-				NodeID: "node-1:1234",
+				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -525,7 +515,7 @@ partitions:
 				},
 			},
 			{
-				NodeID: "node-2:1234",
+				NodeID:     "node-2:1234",
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -535,22 +525,20 @@ partitions:
 				},
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a"}),
+		NewApplications: newAddAppRequest(map[string]string{appID: "root.a"}),
 		RmID:            "rm:123",
 	})
 
-	if nil != err {
-		t.Fatalf("UpdateRequest nodes and apps failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest nodes and apps failed")
 
 	// waiting for recovery
 	mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
 	app01 := serviceContext.Scheduler.GetClusterSchedulingContext().
-		GetSchedulingApplication("app-1", "[rm:123]default")
+		GetSchedulingApplication(appID, "[rm:123]default")
 	assert.Assert(t, app01 != nil)
-	assert.Equal(t, app01.ApplicationInfo.ApplicationID, "app-1")
+	assert.Equal(t, app01.ApplicationInfo.ApplicationID, appID)
 	assert.Equal(t, app01.ApplicationInfo.QueueName, "root.a")
 }
 
@@ -589,36 +577,28 @@ partitions:
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Register apps alone
+	appID := "app-1"
 	err = proxy.Update(&si.UpdateRequest{
-		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a", "app-2": "root.a"}),
+		NewApplications: newAddAppRequest(map[string]string{appID: "root.a", "app-2": "root.a"}),
 		RmID:            "rm:123",
 	})
 
-	if nil != err {
-		t.Fatalf("UpdateRequest app failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest app failed")
 
-	mockRM.waitForAcceptedApplication(t, "app-1", 1000)
+	mockRM.waitForAcceptedApplication(t, appID, 1000)
 	mockRM.waitForAcceptedApplication(t, "app-2", 1000)
 
 	// verify app state
 	apps := serviceContext.Cache.GetPartition("[rm:123]default").GetApplications()
-	var app1 *cache.ApplicationInfo
-	var app2 *cache.ApplicationInfo
+	found := 0
 	for _, app := range apps {
-		if app.ApplicationID == "app-1" {
-			app1 = app
-		}
-
-		if app.ApplicationID == "app-2" {
-			app2 = app
+		if app.ApplicationID == appID || app.ApplicationID == "app-2" {
+			assert.Equal(t, app.GetApplicationState(), cache.New.String())
+			found++
 		}
 	}
 
-	assert.Assert(t, app1 != nil)
-	assert.Assert(t, app2 != nil)
-	assert.Equal(t, app1.GetApplicationState(), "Accepted")
-	assert.Equal(t, app2.GetApplicationState(), "Accepted")
+	assert.Equal(t, found, 2, "did not find expected number of apps after recovery")
 }
 
 // this case cover the scenario when we have placement rule enabled,
@@ -656,11 +636,12 @@ partitions:
 	schedulerQueueRoot := ms.getSchedulingQueue("root")
 	assert.Equal(t, len(schedulerQueueRoot.GetCopyOfChildren()), 0)
 
+	appID := "app-1"
 	// Register nodes, and add apps
 	err = ms.proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
-				NodeID: "node-1:1234",
+				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -670,7 +651,7 @@ partitions:
 				},
 			},
 			{
-				NodeID: "node-2:1234",
+				NodeID:     "node-2:1234",
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -681,7 +662,7 @@ partitions:
 			},
 		},
 		NewApplications: []*si.AddApplicationRequest{{
-			ApplicationID: "app-1",
+			ApplicationID: appID,
 			QueueName:     "",
 			PartitionName: "",
 			Tags:          map[string]string{"namespace": "app-1-namespace"},
@@ -694,7 +675,7 @@ partitions:
 
 	assert.NilError(t, err, "UpdateRequest nodes and apps failed")
 
-	ms.mockRM.waitForAcceptedApplication(t, "app-1", 1000)
+	ms.mockRM.waitForAcceptedApplication(t, appID, 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
@@ -714,7 +695,7 @@ partitions:
 					},
 				},
 				MaxAllocations: 2,
-				ApplicationID:  "app-1",
+				ApplicationID:  appID,
 			},
 		},
 		RmID: "rm:123",
@@ -724,7 +705,7 @@ partitions:
 
 	// Wait pending resource of queue a and scheduler queue
 	// Both pending memory = 10 * 2 = 20;
-	schedulingApp := ms.getSchedulingApplication("app-1")
+	schedulingApp := ms.getSchedulingApplication(appID)
 	waitForPendingQueueResource(t, appQueue, 20, 1000)
 	waitForPendingQueueResource(t, schedulerQueueRoot, 20, 1000)
 	waitForPendingAppResource(t, schedulingApp, 20, 1000)
@@ -760,7 +741,7 @@ partitions:
 	err = ms.proxy.Update(&si.UpdateRequest{
 		NewApplications: []*si.AddApplicationRequest{
 			{
-				ApplicationID: "app-1",
+				ApplicationID: appID,
 				QueueName:     "",
 				PartitionName: "",
 				Tags:          map[string]string{"namespace": "app-1-namespace"},
@@ -775,7 +756,7 @@ partitions:
 	assert.NilError(t, err, "UpdateRequest add app failed")
 
 	// waiting for recovery
-	ms.mockRM.waitForAcceptedApplication(t, "app-1", 1000)
+	ms.mockRM.waitForAcceptedApplication(t, appID, 1000)
 
 	// mock existing allocations
 	recoveringAllocations := make(map[string][]*si.Allocation)
@@ -804,7 +785,7 @@ partitions:
 	err = ms.proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
-				NodeID: "node-1:1234",
+				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -815,7 +796,7 @@ partitions:
 				ExistingAllocations: recoveringAllocations["node-1:1234"],
 			},
 			{
-				NodeID: "node-2:1234",
+				NodeID:     "node-2:1234",
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{

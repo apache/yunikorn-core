@@ -76,7 +76,7 @@ partitions:
 		t.Errorf("Failed parsing the test queue in default partition")
 		return
 	}
-	if len(testQueue.Properties) != 2 {
+	if len(testQueue.properties) != 2 {
 		t.Errorf("Failed parsing the properties on test queue in default partition")
 	}
 
@@ -87,7 +87,7 @@ partitions:
 		t.Errorf("Failed parsing the test queue in gpu partition")
 		return
 	}
-	if len(testQueue.Properties) != 1 {
+	if len(testQueue.properties) != 1 {
 		t.Errorf("Failed parsing the properties on test queue in gpu partition")
 	}
 }
@@ -99,7 +99,7 @@ func initializationAndCheck(t *testing.T, data string, expectFail bool) {
 	_, err := SetClusterInfoFromConfigFile(clusterInfo, "rm-123", "default-policy-group")
 
 	if expectFail && err == nil {
-		t.Errorf("Expect fail, but suceeded")
+		t.Errorf("Expect fail, but succeeded")
 	} else if !expectFail && err != nil {
 		t.Errorf("Expect success, but failed, error = %s", err.Error())
 	}
@@ -277,22 +277,22 @@ partitions:
 	production := root.children["production"]
 	test := root.children["test"]
 
-	assert.Equal(t, len(root.Properties), 2)
-	assert.Equal(t, len(production.Properties), 3)
-	assert.Equal(t, len(test.Properties), 3)
+	assert.Equal(t, len(root.properties), 2)
+	assert.Equal(t, len(production.properties), 3)
+	assert.Equal(t, len(test.properties), 3)
 
 	// property not defined at child queue, overwrite the parent value
-	assert.Equal(t, root.Properties["application.default.priority"], "1")
-	assert.Equal(t, production.Properties["application.default.priority"], "2")
-	assert.Equal(t, test.Properties["application.default.priority"], "3")
+	assert.Equal(t, root.properties["application.default.priority"], "1")
+	assert.Equal(t, production.properties["application.default.priority"], "2")
+	assert.Equal(t, test.properties["application.default.priority"], "3")
 
 	// properties only defined in child queue
-	assert.Equal(t, production.Properties["production.self"], "000")
-	assert.Equal(t, test.Properties["test.self"], "999")
+	assert.Equal(t, production.properties["production.self"], "000")
+	assert.Equal(t, test.properties["test.self"], "999")
 
 	// property not defined at child queue, directly inherited from parent
-	assert.Equal(t, production.Properties["application.default.type"], "batch")
-	assert.Equal(t, test.Properties["application.default.type"], "batch")
+	assert.Equal(t, production.properties["application.default.type"], "batch")
+	assert.Equal(t, test.properties["application.default.type"], "batch")
 }
 
 // Test most basic, normal case
@@ -354,7 +354,7 @@ partitions:
 		t.Errorf("Failed parsing the test queue in default partition")
 		return
 	}
-	if len(testQueue.Properties) != 2 {
+	if len(testQueue.properties) != 2 {
 		t.Errorf("Failed parsing the properties on test queue in default partition")
 	}
 
@@ -365,7 +365,7 @@ partitions:
 		t.Errorf("Failed parsing the test queue in gpu partition")
 		return
 	}
-	if len(testQueue.Properties) != 1 {
+	if len(testQueue.properties) != 1 {
 		t.Errorf("Failed parsing the properties on test queue in gpu partition")
 	}
 
@@ -417,7 +417,7 @@ partitions:
 		t.Errorf("Failed parsing the test queue in default partition")
 		return
 	}
-	if len(testQueue.Properties) != 1 {
+	if len(testQueue.properties) != 1 {
 		t.Errorf("Failed parsing the properties on test queue in default partition")
 	}
 	if testQueue.GetGuaranteedResource().Resources["memory"] != 100 {
@@ -426,4 +426,38 @@ partitions:
 	if testQueue.GetMaxResource().Resources["vcore"] != 20 {
 		t.Errorf("Failed parsing maxResource settings on test queue in default partition")
 	}
+}
+
+// Test no props set on different levels
+func TestNoProps(t *testing.T) {
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        queues:
+          - name: production
+          - name: test
+            properties:
+              x: 345
+`
+
+	rmID := "rm-123"
+	policyGroup := "default-policy-group"
+	clusterInfo := NewClusterInfo()
+	clusterInfo.policyGroup = policyGroup
+	configs.MockSchedulerConfigByData([]byte(data))
+	_, err := SetClusterInfoFromConfigFile(clusterInfo, rmID, policyGroup)
+	assert.NilError(t, err, "Error when load clusterInfo from config")
+
+	// Check default partition
+	defaultPartition := clusterInfo.partitions["["+rmID+"]default"]
+	queue := defaultPartition.getQueue("root")
+	assert.Equal(t, 2, len(queue.children))
+
+	assert.Assert(t, queue.properties == nil, "Expected nil properties on root queue")
+	queue = defaultPartition.getQueue("root.production")
+	assert.Equal(t, len(queue.properties), 0, "Expected no properties on root.production queue")
+	queue = defaultPartition.getQueue("root.test")
+	assert.Equal(t, len(queue.properties), 1, "Expected one property on root.test queue")
 }

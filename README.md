@@ -147,9 +147,10 @@ To get involved, please read following resources.
 **Communication channels**
 
 - Mailing lists are:
-  - for people wanting to contribute to the project: [dev@yunikorn.apache.org](mailto:dev@yunikorn.apache.org) [subscribe](mailto:dev-subscribe@yunikorn.apache.org?subject="send this email to subscribe") [unsubscribe](mailto:dev-unsubscribe@yunikorn.apache.org?subject="send this email to unsubscribe") [archives](https://lists.apache.org/list.html?dev@yunikorn.apache.org)
-  - JIRA issue updates: issues@yunikorn.apache.org [subscribe](mailto:issues-subscribe@yunikorn.apache.org?subject="send this email to subscribe") [unsubscribe](mailto:issues-unsubscribe@yunikorn.apache.org?subject="send this email to unsubscribe") [archives](https://lists.apache.org/list.html?issues@yunikorn.apache.org)
-  - for review messages and patches in GitHub pull requests reviews@yunikorn.apache.org [subscribe](mailto:reviews-subscribe@yunikorn.apache.org?subject="send this email to subscribe") [unsubscribe](mailto:reviews-unsubscribe@yunikorn.apache.org?subject="send this email to unsubscribe") [archives](https://lists.apache.org/list.html?reviews@yunikorn.apache.org)
+  - for people wanting to contribute to or discuss the project development: [dev@yunikorn.apache.org](mailto:dev@yunikorn.apache.org)   
+    subscribe to: dev@ [subscribe](mailto:dev-subscribe@yunikorn.apache.org?subject="subscribe%20to%20YuniKorn%20dev%20list") ([unsubscribe](mailto:dev-unsubscribe@yunikorn.apache.org?subject="unsubscribe%20from%20YuniKorn%20dev%20list") [archives](https://lists.apache.org/list.html?dev@yunikorn.apache.org))
+  - for JIRA issue updates subscribe to: issues@ [subscribe](mailto:issues-subscribe@yunikorn.apache.org?subject="subscribe%20to%20YuniKorn%20issues%20list") ([unsubscribe](mailto:issues-unsubscribe@yunikorn.apache.org?subject="unsubscribe%20from%20YuniKorn%20issues%20list") [archives](https://lists.apache.org/list.html?issues@yunikorn.apache.org))
+  - for GitHub pull requests messages subscribe to: reviews@ [subscribe](mailto:reviews-subscribe@yunikorn.apache.org?subject="subscribe%20to%20YuniKorn%20reviews%20list") ([unsubscribe](mailto:reviews-unsubscribe@yunikorn.apache.org?subject="unsubscribe%20from%20YuniKorn%20reviews%20list") [archives](https://lists.apache.org/list.html?reviews@yunikorn.apache.org))
 
 - We use [Slack](https://slack.com/) as our collaboration system, you can join us by accessing [this link](https://join.slack.com/t/yunikornworkspace/shared_invite/enQtNzAzMjY0OTI4MjYzLTBmMDdkYTAwNDMwNTE3NWVjZWE1OTczMWE4NDI2Yzg3MmEyZjUyYTZlMDE5M2U4ZjZhNmYyNGFmYjY4ZGYyMGE).
 Currently, we have following channels in the workspace: `#yunikorn-dev` and `#yunikorn-user`.

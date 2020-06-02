@@ -143,6 +143,36 @@ func (m *mockScheduler) addAppRequest(appID, allocID string, resource *si.Resour
 	})
 }
 
+func (m *mockScheduler) releaseAllocRequest(appID, uuid string) error {
+	return m.proxy.Update(&si.UpdateRequest{
+		Releases: &si.AllocationReleasesRequest{
+			AllocationsToRelease: []*si.AllocationReleaseRequest{
+				{
+					ApplicationID: appID,
+					UUID:          uuid,
+					PartitionName: m.partitionName,
+				},
+			},
+		},
+		RmID: m.rmID,
+	})
+}
+
+func (m *mockScheduler) releaseAskRequest(appID, allocKey string) error {
+	return m.proxy.Update(&si.UpdateRequest{
+		Releases: &si.AllocationReleasesRequest{
+			AllocationAsksToRelease: []*si.AllocationAskReleaseRequest{
+				{
+					ApplicationID: appID,
+					Allocationkey: allocKey,
+					PartitionName: m.partitionName,
+				},
+			},
+		},
+		RmID: m.rmID,
+	})
+}
+
 // simple wrapper to limit the repeating code getting the queue
 func (m *mockScheduler) getSchedulingNode(nodeName string) *scheduler.SchedulingNode {
 	return m.scheduler.GetClusterSchedulingContext().GetSchedulingNode(nodeName, m.partitionName)

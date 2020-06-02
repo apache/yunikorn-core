@@ -210,7 +210,7 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
 		}
 		// create a new app object and add it to the partition (partition logs details)
 		appInfo := NewApplicationInfo(app.ApplicationID, app.PartitionName, app.QueueName, ugi, app.Tags)
-		if err := partitionInfo.addNewApplication(appInfo, true); err != nil {
+		if err = partitionInfo.addNewApplication(appInfo, true); err != nil {
 			rejectedApps = append(rejectedApps, &si.RejectedApplication{
 				ApplicationID: app.ApplicationID,
 				Reason:        err.Error(),
@@ -282,13 +282,6 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
 					Reason:        msg,
 				})
 			continue
-		}
-		// start to process allocation asks from this app
-		// transit app's state to running
-		err := appInfo.HandleApplicationEvent(RunApplication)
-		if err != nil {
-			log.Logger().Debug("Application state change failed",
-				zap.Error(err))
 		}
 	}
 
@@ -570,6 +563,9 @@ func (m *ClusterInfo) processAllocationProposalEvent(event *cacheevent.Allocatio
 		zap.String("partition", proposal.PartitionName),
 		zap.String("allocationKey", proposal.AllocationKey))
 
+	// all is confirmed set the UUID in the proposal to pass it back to the scheduler
+	// currently used when an ask is removed while allocation is in flight
+	proposal.UUID = allocInfo.AllocationProto.UUID
 	// Send accept event back to scheduler
 	// this must be only 1: the handler will ignore all others
 	m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{

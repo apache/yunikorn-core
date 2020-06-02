@@ -27,6 +27,7 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
@@ -85,7 +86,7 @@ func (psc *partitionSchedulingContext) updatePartitionSchedulingContext(info *ca
 	}
 	root := psc.root
 	// update the root queue properties
-	root.updateSchedulingQueueProperties(info.Root.Properties)
+	root.updateSchedulingQueueProperties(info.Root.GetProperties())
 	// update the rest of the queues recursively
 	root.updateSchedulingQueueInfo(info.Root.GetCopyOfChildren(), root)
 }
@@ -369,9 +370,12 @@ func (psc *partitionSchedulingContext) tryAllocate() *schedulingAllocation {
 // Try process reservations for the partition
 // Lock free call this all locks are taken when needed in called functions
 func (psc *partitionSchedulingContext) tryReservedAllocate() *schedulingAllocation {
+	psc.Lock()
 	if len(psc.reservedApps) == 0 {
+		psc.Unlock()
 		return nil
 	}
+	psc.Unlock()
 	// try allocating from the root down
 	return psc.root.tryReservedAllocate(psc)
 }
@@ -438,52 +442,60 @@ func (psc *partitionSchedulingContext) allocate(alloc *schedulingAllocation) boo
 // This updates the allocating resources for app, queue and node in the scheduler
 // Called for both allocations from reserved as well as for direct allocations.
 // The unreserve is already handled before we get here so there is no difference in handling.
-// Lock free call this must be called holding the context lock
-func (psc *partitionSchedulingContext) confirmAllocation(appID, nodeID, allocKey string, confirm bool) error {
+func (psc *partitionSchedulingContext) confirmAllocation(allocProposal *commonevents.AllocationProposal, confirm bool) error {
 	psc.RLock()
 	defer psc.RUnlock()
 	// partition is locked nothing can change from now on
 	// find the app make sure it still exists
+	appID := allocProposal.ApplicationID
 	app := psc.applications[appID]
 	if app == nil {
 		return fmt.Errorf("application was removed while allocating: %s", appID)
 	}
 	// find the node make sure it still exists
+	nodeID := allocProposal.NodeID
 	node := psc.nodes[nodeID]
 	if node == nil {
 		return fmt.Errorf("node was removed while allocating app %s: %s", appID, nodeID)
 	}
-	log.Logger().Debug("allocation confirmation on partition",
+
+	// Node and app exist we now can confirm the allocation
+	allocKey := allocProposal.AllocationKey
+	log.Logger().Debug("processing allocation proposal",
 		zap.String("partition", psc.Name),
 		zap.String("appID", appID),
 		zap.String("nodeID", nodeID),
 		zap.String("allocKey", allocKey),
 		zap.Bool("confirmation", confirm))
-	// The repeat gets "added back" when rejected, it was removed during the try
-	var delta *resources.Resource
-	if !confirm {
-		var err error
-		delta, err = app.updateAskRepeat(allocKey, 1)
-		if err != nil {
-			return err
-		}
-	} else {
-		delta = app.GetSchedulingAllocationAsk(allocKey).AllocatedResource
-	}
 
-	// this is a confirmation or rejection update all objects of inflight allocating resources
+	// this is a confirmation or rejection update inflight allocating resources of all objects
+	delta := allocProposal.AllocatedResource
 	if !resources.IsZero(delta) {
-		// update the allocating values with the delta
-		app.decAllocatingResource(delta)
-		app.queue.decAllocatingResource(delta)
-		node.decAllocatingResource(delta)
-		log.Logger().Debug("confirm allocation updating allocating",
+		log.Logger().Debug("confirm allocation: update allocating resources",
 			zap.String("partition", psc.Name),
 			zap.String("appID", appID),
 			zap.String("nodeID", nodeID),
 			zap.String("allocKey", allocKey),
 			zap.String("delta", delta.String()))
+		// update the allocating values with the delta
+		app.decAllocatingResource(delta)
+		app.queue.decAllocatingResource(delta)
+		node.decAllocatingResource(delta)
 	}
+
+	if !confirm {
+		// The repeat gets "added back" when rejected
+		// This is a noop when the ask was removed in the mean time: no follow up needed
+		_, err := app.updateAskRepeat(allocKey, 1)
+		if err != nil {
+			return err
+		}
+	} else if app.GetSchedulingAllocationAsk(allocKey) == nil {
+		// The ask was removed while we processed the proposal. The scheduler is updated but we need
+		// to make sure the cache removes the allocation that we cannot confirm
+		return fmt.Errorf("ask was removed while allocating for app %s: %s", appID, allocKey)
+	}
+
 	// all is ok when we are here
 	log.Logger().Info("allocation proposal confirmed",
 		zap.String("appID", appID),
@@ -553,15 +565,11 @@ func (psc *partitionSchedulingContext) unReserve(app *SchedulingApplication, nod
 func (psc *partitionSchedulingContext) getNodeIteratorForPolicy(nodes []*SchedulingNode) NodeIterator {
 	// Sort Nodes based on the policy configured.
 	configuredPolicy := psc.partition.GetNodeSortingPolicy()
-	switch configuredPolicy {
-	case common.BinPackingPolicy:
-		sortNodes(nodes, MinAvailableResources)
-		return NewDefaultNodeIterator(nodes)
-	case common.FairnessPolicy:
-		sortNodes(nodes, MaxAvailableResources)
-		return NewDefaultNodeIterator(nodes)
+	if configuredPolicy == common.Undefined {
+		return nil
 	}
-	return nil
+	sortNodes(nodes, configuredPolicy)
+	return NewDefaultNodeIterator(nodes)
 }
 
 // Create a node iterator for the schedulable nodes based on the policy set for this partition.

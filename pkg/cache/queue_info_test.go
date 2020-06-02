@@ -43,11 +43,16 @@ func createRootQueue() (*QueueInfo, error) {
 
 // wrapper around the create call using the same syntax as an unmanaged queue
 func createManagedQueue(parentQI *QueueInfo, name string, parent bool) (*QueueInfo, error) {
+	return createManagedQueueProps(parentQI, name, parent, make(map[string]string))
+}
+
+// create managed queue with props set
+func createManagedQueueProps(parentQI *QueueInfo, name string, parent bool, props map[string]string) (*QueueInfo, error) {
 	childConf := configs.QueueConfig{
 		Name:       name,
 		Parent:     parent,
 		Queues:     nil,
-		Properties: make(map[string]string),
+		Properties: props,
 	}
 	return NewManagedQueue(childConf, parentQI)
 }
@@ -214,6 +219,36 @@ func TestMergeProperties(t *testing.T) {
 	if len(merged) != 3 {
 		t.Errorf("merge failed not exactly 3 keys: %v", merged)
 	}
+}
+
+func TestQueueProps(t *testing.T) {
+	// create the root
+	root, err := createRootQueue()
+	assert.NilError(t, err, "failed to create basic root queue")
+	var parent *QueueInfo
+	props := map[string]string{"first": "value", "second": "other value"}
+	parent, err = createManagedQueueProps(root, "parent", true, props)
+	assert.NilError(t, err, "failed to create parent queue")
+	assert.Assert(t, !parent.isLeaf, "parent queue is not marked as a parent")
+	assert.Equal(t, len(root.children), 1, "parent queue is not added to the root queue")
+	assert.Equal(t, len(parent.properties), 2, "parent queue properties expected 2, got %v", parent.properties)
+
+	var leaf *QueueInfo
+	leaf, err = createManagedQueue(parent, "leaf", false)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, len(parent.children), 1, "leaf queue is not added to the parent queue")
+	assert.Assert(t, leaf.isLeaf && leaf.isManaged, "leaf queue is not marked as managed leaf")
+	assert.Equal(t, len(leaf.properties), 2, "leaf queue properties size incorrect")
+
+	props = map[string]string{"first": "not inherited", configs.ApplicationSortPolicy: "stateaware"}
+	parent, err = createManagedQueueProps(root, "parent2", true, props)
+	assert.NilError(t, err, "failed to create parent queue")
+	assert.Equal(t, len(parent.properties), 2, "parent queue properties size incorrect")
+	leaf, err = createUnManagedQueue(parent, "leaf", false)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Assert(t, leaf.isLeaf && !leaf.isManaged, "leaf queue is not marked as unmanaged leaf")
+	assert.Equal(t, len(leaf.properties), 1, "leaf queue properties size incorrect")
+	assert.Equal(t, leaf.properties[configs.ApplicationSortPolicy], "stateaware", "leaf queue property value not as expected")
 }
 
 func TestUnManagedSubQueues(t *testing.T) {

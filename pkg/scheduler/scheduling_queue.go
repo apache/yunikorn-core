@@ -25,9 +25,11 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 )
 
 // Represents Queue inside Scheduler
@@ -36,7 +38,7 @@ type SchedulingQueue struct {
 	QueueInfo *cache.QueueInfo // link back to the queue in the cache
 
 	// Private fields need protection
-	sortType       SortType                          // How applications (leaf) or queues (parents) are sorted
+	sortType       policies.SortPolicy               // How applications (leaf) or queues (parents) are sorted
 	childrenQueues map[string]*SchedulingQueue       // Only for direct children, parent queue only
 	applications   map[string]*SchedulingApplication // only for leaf queue
 	reservedApps   map[string]int                    // applications reserved within this queue, with reservation count
@@ -62,7 +64,7 @@ func newSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo, parent *SchedulingQ
 	}
 
 	// update the properties
-	sq.updateSchedulingQueueProperties(cacheQueueInfo.Properties)
+	sq.updateSchedulingQueueProperties(cacheQueueInfo.GetProperties())
 
 	// initialise the child queues based what is in the cached copy
 	for childName, childQueue := range cacheQueueInfo.GetCopyOfChildren() {
@@ -85,21 +87,30 @@ func (sq *SchedulingQueue) updateSchedulingQueueProperties(prop map[string]strin
 	defer sq.Unlock()
 	// set the defaults, override with what is in the configured properties
 	if sq.isLeafQueue() {
-		sq.sortType = FifoSortPolicy
 		// walk over all properties and process
+		var err error
+		sq.sortType = policies.Undefined
 		for key, value := range prop {
-			if key == cache.ApplicationSortPolicy && value == "fair" {
-				sq.sortType = FairSortPolicy
+			if key == configs.ApplicationSortPolicy {
+				sq.sortType, err = policies.SortPolicyFromString(value)
+				if err != nil {
+					log.Logger().Debug("application sort property configuration error",
+						zap.Error(err))
+				}
 			}
 			// for now skip the rest just log them
 			log.Logger().Debug("queue property skipped",
 				zap.String("key", key),
 				zap.String("value", value))
 		}
+		// if it is not defined default to fifo
+		if sq.sortType == policies.Undefined {
+			sq.sortType = policies.FifoSortPolicy
+		}
 		return
 	}
 	// set the sorting type for parent queues
-	sq.sortType = FairSortPolicy
+	sq.sortType = policies.FairSortPolicy
 }
 
 // Update the queue properties and the child queues for the queue after a configuration update.
@@ -114,7 +125,7 @@ func (sq *SchedulingQueue) updateSchedulingQueueInfo(info map[string]*cache.Queu
 		if child == nil {
 			child = newSchedulingQueueInfo(childQueue, parent)
 		} else {
-			child.updateSchedulingQueueProperties(childQueue.Properties)
+			child.updateSchedulingQueueProperties(childQueue.GetProperties())
 		}
 		child.updateSchedulingQueueInfo(childQueue.GetCopyOfChildren(), child)
 	}
@@ -335,7 +346,7 @@ func (sq *SchedulingQueue) decPreemptingResource(newAlloc *resources.Resource) {
 }
 
 // (Re)Set the preempting resources for the queue.
-// This could be because they are pre-empted or the preemption was cancelled.
+// This could be because they are preempted, or the preemption was cancelled.
 func (sq *SchedulingQueue) setPreemptingResource(newAlloc *resources.Resource) {
 	sq.Lock()
 	defer sq.Unlock()
@@ -408,18 +419,8 @@ func (sq *SchedulingQueue) sortApplications() []*SchedulingApplication {
 	if !sq.isLeafQueue() {
 		return nil
 	}
-	// Create a copy of the applications with pending resources
-	sortedApps := make([]*SchedulingApplication, 0)
-	for _, app := range sq.getCopyOfApps() {
-		// Only look at app when pending-res > 0
-		if resources.StrictlyGreaterThanZero(app.GetPendingResource()) {
-			sortedApps = append(sortedApps, app)
-		}
-	}
 	// Sort the applications
-	sortApplications(sortedApps, sq.getSortType(), sq.QueueInfo.GetGuaranteedResource())
-
-	return sortedApps
+	return sortApplications(sq.getCopyOfApps(), sq.getSortType(), sq.QueueInfo.GetGuaranteedResource())
 }
 
 // Return a sorted copy of the queues for this parent queue.
@@ -443,8 +444,7 @@ func (sq *SchedulingQueue) sortQueues() []*SchedulingQueue {
 		}
 	}
 	// Sort the queues
-	sorter := sq.getSortType()
-	sortQueue(sortedQueues, sorter)
+	sortQueue(sortedQueues, sq.getSortType())
 
 	return sortedQueues
 }
@@ -505,8 +505,8 @@ func (sq *SchedulingQueue) getMaxResource() *resources.Resource {
 
 // Try allocate pending requests. This only gets called if there is a pending request on this queue or its children.
 // This is a depth first algorithm: descend into the depth of the queue tree first. Child queues are sorted based on
-// the configured queue sortType. Queues without pending resources are skipped.
-// Applications are sorted based on the application sortType. Applications without pending resources are skipped.
+// the configured queue sortPolicy. Queues without pending resources are skipped.
+// Applications are sorted based on the application sortPolicy. Applications without pending resources are skipped.
 // Lock free call this all locks are taken when needed in called functions
 func (sq *SchedulingQueue) tryAllocate(ctx *partitionSchedulingContext) *schedulingAllocation {
 	if sq.isLeafQueue() {
@@ -537,17 +537,18 @@ func (sq *SchedulingQueue) tryAllocate(ctx *partitionSchedulingContext) *schedul
 
 // Try allocate reserved requests. This only gets called if there is a pending request on this queue or its children.
 // This is a depth first algorithm: descend into the depth of the queue tree first. Child queues are sorted based on
-// the configured queue sortType. Queues without pending resources are skipped.
+// the configured queue sortPolicy. Queues without pending resources are skipped.
 // Applications are currently NOT sorted and are iterated over in a random order.
 // Lock free call this all locks are taken when needed in called functions
 func (sq *SchedulingQueue) tryReservedAllocate(ctx *partitionSchedulingContext) *schedulingAllocation {
 	if sq.isLeafQueue() {
 		// skip if it has no reservations
-		if len(sq.reservedApps) != 0 {
+		reservedCopy := sq.getReservedApps()
+		if len(reservedCopy) != 0 {
 			// get the headroom
 			headRoom := sq.getHeadRoom()
 			// process the apps
-			for appID, numRes := range sq.reservedApps {
+			for appID, numRes := range reservedCopy {
 				if numRes > 1 {
 					log.Logger().Debug("multiple reservations found for application trying to allocate one",
 						zap.String("appID", appID),
@@ -574,6 +575,20 @@ func (sq *SchedulingQueue) tryReservedAllocate(ctx *partitionSchedulingContext) 
 		}
 	}
 	return nil
+}
+
+// Get a copy of the reserved app list
+// locked to prevent race conditions from event updates
+func (sq *SchedulingQueue) getReservedApps() map[string]int {
+	sq.Lock()
+	defer sq.Unlock()
+
+	copied := make(map[string]int)
+	for appID, numRes := range sq.reservedApps {
+		copied[appID] = numRes
+	}
+	// increase the number of reservations for this app
+	return copied
 }
 
 // Add an reserved app to the list.
@@ -609,7 +624,7 @@ func (sq *SchedulingQueue) getApplication(appID string) *SchedulingApplication {
 }
 
 // get the queue sort type holding a lock
-func (sq *SchedulingQueue) getSortType() SortType {
+func (sq *SchedulingQueue) getSortType() policies.SortPolicy {
 	sq.RLock()
 	defer sq.RUnlock()
 	return sq.sortType

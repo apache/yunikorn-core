@@ -92,7 +92,7 @@ The `examples/spark` directory contains pod template files for the Apache Spark 
 * Get latest spark from github (only latest code supports to specify pod template), URL: https://github.com/apache/spark
 * Build spark with Kubernetes support:
 ```
-mvn -Pyarn -Phadoop-2.7 -Dhadoop.version=2.7.0 -Phive -Pkubernetes -Phive-thriftserver -DskipTests package
+mvn -Pyarn -Phadoop-2.7 -Dhadoop.version=2.7.4 -Phive -Pkubernetes -Phive-thriftserver -DskipTests package
 ```
 * Run spark submit
 ```

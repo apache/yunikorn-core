@@ -94,10 +94,7 @@ partitions:
 		nodeName := "node-" + strconv.Itoa(i)
 		node := &si.NewNodeInfo{
 			NodeID: nodeName + ":1234",
-			Attributes: map[string]string{
-				"si/hostname": nodeName,
-				"si/rackname": "rack-1",
-			},
+			Attributes: map[string]string{},
 			SchedulableResource: &si.Resource{
 				Resources: map[string]*si.Quantity{
 					"memory": {Value: int64(nodeMem)},

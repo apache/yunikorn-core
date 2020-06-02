@@ -73,10 +73,7 @@ partitions:
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
 				NodeID: "node-1:1234",
-				Attributes: map[string]string{
-					"si/hostname": "node-1",
-					"si/rackname": "rack-1",
-				},
+				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 100},
@@ -86,10 +83,7 @@ partitions:
 			},
 			{
 				NodeID: "node-2:1234",
-				Attributes: map[string]string{
-					"si/hostname": "node-2",
-					"si/rackname": "rack-1",
-				},
+				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 100},
@@ -239,10 +233,7 @@ partitions:
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
 				NodeID: "node-1:1234",
-				Attributes: map[string]string{
-					"si/hostname": "node-1",
-					"si/rackname": "rack-1",
-				},
+				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 100},
@@ -253,10 +244,7 @@ partitions:
 			},
 			{
 				NodeID: "node-2:1234",
-				Attributes: map[string]string{
-					"si/hostname": "node-2",
-					"si/rackname": "rack-1",
-				},
+				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 100},
@@ -369,10 +357,7 @@ partitions:
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
 				NodeID: "node-1:1234",
-				Attributes: map[string]string{
-					"si/hostname": "node-1",
-					"si/rackname": "rack-1",
-				},
+				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 100},
@@ -402,10 +387,7 @@ partitions:
 			},
 			{
 				NodeID: "node-2:1234",
-				Attributes: map[string]string{
-					"si/hostname": "node-2",
-					"si/rackname": "rack-1",
-				},
+				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 100},
@@ -439,10 +421,7 @@ partitions:
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
 				NodeID: "node-1:1234",
-				Attributes: map[string]string{
-					"si/hostname": "node-1",
-					"si/rackname": "rack-1",
-				},
+				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 100},
@@ -537,10 +516,7 @@ partitions:
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
 				NodeID: "node-1:1234",
-				Attributes: map[string]string{
-					"si/hostname": "node-1",
-					"si/rackname": "rack-1",
-				},
+				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 100},
@@ -550,10 +526,7 @@ partitions:
 			},
 			{
 				NodeID: "node-2:1234",
-				Attributes: map[string]string{
-					"si/hostname": "node-2",
-					"si/rackname": "rack-1",
-				},
+				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 100},
@@ -688,10 +661,7 @@ partitions:
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
 				NodeID: "node-1:1234",
-				Attributes: map[string]string{
-					"si/hostname": "node-1",
-					"si/rackname": "rack-1",
-				},
+				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 100},
@@ -701,10 +671,7 @@ partitions:
 			},
 			{
 				NodeID: "node-2:1234",
-				Attributes: map[string]string{
-					"si/hostname": "node-2",
-					"si/rackname": "rack-1",
-				},
+				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 100},
@@ -838,10 +805,7 @@ partitions:
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
 				NodeID: "node-1:1234",
-				Attributes: map[string]string{
-					"si/hostname": "node-1",
-					"si/rackname": "rack-1",
-				},
+				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 100},
@@ -852,10 +816,7 @@ partitions:
 			},
 			{
 				NodeID: "node-2:1234",
-				Attributes: map[string]string{
-					"si/hostname": "node-2",
-					"si/rackname": "rack-1",
-				},
+				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 100},

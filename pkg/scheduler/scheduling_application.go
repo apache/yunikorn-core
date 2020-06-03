@@ -693,6 +693,11 @@ func (sa *SchedulingApplication) isWaiting() bool {
 	return sa.ApplicationInfo.IsWaiting()
 }
 
+// Get a tag from the cache object
+func (sa *SchedulingApplication) getTag(tag string) string {
+	return sa.ApplicationInfo.GetTag(tag)
+}
+
 // Move the app state to running after allocation has been recovered.
 // Since we do not add allocations in the normal way states will not change during recovery.
 // There could also be multiple nodes that recover the app and

@@ -1308,3 +1308,68 @@ func TestCalculateAbsUsedCapacity(t *testing.T) {
 		assert.DeepEqual(t, test.expected, absCapacity)
 	}
 }
+
+func TestNewResourceFromString(t *testing.T) {
+	// emptyResource := NewResource()
+
+	tests := map[string]struct {
+		jsonRes string
+		fail bool
+		expected *Resource
+	}{
+		"empty string": {
+			jsonRes: "",
+			fail: false,
+			expected: nil,
+		},
+		"empty json": {
+			jsonRes: "{}",
+			fail: false,
+			expected: NewResource(),
+		},
+		"not a map": {
+			jsonRes: "error",
+			fail: true,
+			expected: nil,
+		},
+		"illegal json": {
+			jsonRes: "{\"json invalid\":\"missing curly bracket\"",
+			fail: true,
+			expected: nil,
+		},
+		"illegal value": {
+			jsonRes: "{\"invalid\":\"value error\"}",
+			fail: true,
+			expected: nil,
+		},
+		"simple": {
+			jsonRes: "{\"valid\":\"10\"}",
+			fail: false,
+			expected: NewResourceFromMap(map[string]Quantity{"valid": 10}),
+		},
+		"double": {
+			jsonRes: "{\"valid\":\"10\", \"other\":\"5\"}",
+			fail: false,
+			expected: NewResourceFromMap(map[string]Quantity{"valid": 10, "other": 5}),
+		},
+		"same twice": {
+			jsonRes: "{\"negative\":\"10\", \"negative\":\"-10\"}",
+			fail: false,
+			expected: NewResourceFromMap(map[string]Quantity{"negative": -10}),
+		},
+	}
+	for name, test := range tests {
+		fromJson, err := NewResourceFromString(test.jsonRes)
+		if test.fail {
+			if err == nil || fromJson != nil {
+				t.Errorf("expected error and nil resource for test: %s got results", name)
+			}
+		} else {
+			if test.expected == nil && fromJson != nil {
+				t.Errorf("expected nil resource for test: %s, got: %s", name, fromJson.String())
+			} else if !Equals(fromJson, test.expected) {
+				t.Errorf("returned resource did not match expected resource for test: %s, expected %s, got: %v", name, test.expected, fromJson)
+			}
+		}
+	}
+}

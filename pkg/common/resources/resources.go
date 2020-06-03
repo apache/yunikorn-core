@@ -19,6 +19,7 @@
 package resources
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"sort"
@@ -64,6 +65,16 @@ func NewResourceFromProto(proto *si.Resource) *Resource {
 
 func NewResourceFromMap(m map[string]Quantity) *Resource {
 	return &Resource{Resources: m}
+}
+
+// Create a new resource from a string.
+// The string must be a json marshalled list of map[string]string.
+func NewResourceFromString(str string) (*Resource, error) {
+	var resMap map[string]string
+	if err := json.Unmarshal([]byte(str), &resMap); err != nil {
+		return nil, err
+	}
+	return NewResourceFromConf(resMap)
 }
 
 // Create a new resource from the config map.

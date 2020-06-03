@@ -301,6 +301,66 @@ func TestAddApplication(t *testing.T) {
 	assert.Equal(t, len(leaf.applications), 1, "Application was not replaced in the queue as expected")
 }
 
+func TestAddApplicationWithTag(t *testing.T) {
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	// only need to test leaf queues as we will never add an app to a parent
+	var leaf, leafUn *SchedulingQueue
+	leaf, err = createManagedQueue(root, "leaf-man", false, nil)
+	assert.NilError(t, err, "failed to create managed leaf queue")
+	leafUn, err = createUnManagedQueue(root, "leaf-unman", false)
+	assert.NilError(t, err, "failed to create unmanaged leaf queue")
+	appInfo := cache.NewApplicationInfo("app-1", "default", "root.leaf-man", security.UserGroup{}, nil)
+	app1 := newSchedulingApplication(appInfo)
+
+	// adding the app to managed/unmanaged queue must not update queue settings, works
+	leaf.addSchedulingApplication(app1)
+	assert.Equal(t, len(leaf.applications), 1, "Application was not added to the managed queue as expected")
+	if leaf.getMaxResource() != nil {
+		t.Errorf("Max resources should not be set on managed queue got: %s", leaf.getMaxResource().String())
+	}
+	appInfo = cache.NewApplicationInfo("app-2", "default", "root.leaf-un", security.UserGroup{}, nil)
+	app2 := newSchedulingApplication(appInfo)
+	leafUn.addSchedulingApplication(app2)
+	assert.Equal(t, len(leaf.applications), 1, "Application was not added to the unmanaged queue as expected")
+	if leafUn.getMaxResource() != nil {
+		t.Errorf("Max resources should not be set on unmanaged queue got: %s", leafUn.getMaxResource().String())
+	}
+
+	maxRes := resources.NewResourceFromMap(
+		map[string]resources.Quantity{
+			"first": 10,
+		})
+	tags := make(map[string]string)
+	tags[appTagNamespaceResourceQuota] = "{\"first\":\"10\"}"
+	// add apps again now with the tag set
+	appInfo = cache.NewApplicationInfo("app-3", "default", "root.leaf-man", security.UserGroup{}, tags)
+	app3 := newSchedulingApplication(appInfo)
+	leaf.addSchedulingApplication(app3)
+	assert.Equal(t, len(leaf.applications), 2, "Application was not added to the managed queue as expected")
+	if leaf.getMaxResource() != nil {
+		t.Errorf("Max resources should not be set on managed queue got: %s", leaf.getMaxResource().String())
+	}
+	appInfo = cache.NewApplicationInfo("app-4", "default", "root.leaf-un", security.UserGroup{}, tags)
+	app4 := newSchedulingApplication(appInfo)
+	leafUn.addSchedulingApplication(app4)
+	assert.Equal(t, len(leaf.applications), 2, "Application was not added to the unmanaged queue as expected")
+	if !resources.Equals(leafUn.getMaxResource(), maxRes) {
+		t.Errorf("Max resources not set as expected: %s got: %v", maxRes.String(), leafUn.getMaxResource())
+	}
+
+	// set to illegal limit (0 value)
+	tags[appTagNamespaceResourceQuota] = "{\"first\":\"0\"}"
+	appInfo = cache.NewApplicationInfo("app-4", "default", "root.leaf-un", security.UserGroup{}, tags)
+	app4 = newSchedulingApplication(appInfo)
+	leafUn.addSchedulingApplication(app4)
+	assert.Equal(t, len(leaf.applications), 2, "Application was not added to the unmanaged queue as expected")
+	if !resources.Equals(leafUn.getMaxResource(), maxRes) {
+		t.Errorf("Max resources not set as expected: %s got: %v", maxRes.String(), leafUn.getMaxResource())
+	}
+}
+
 func TestRemoveApplication(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)

@@ -516,7 +516,7 @@ func (s *Scheduler) processNodeEvent(event *schedulerevent.SchedulerNodeEvent) {
 	if event.AddedNode != nil {
 		nodeInfo, ok := event.AddedNode.(*cache.NodeInfo)
 		if !ok {
-			log.Logger().Debug("cast failed unexpected object in node delete event",
+			log.Logger().Debug("cast failed unexpected object in node add event",
 				zap.Any("NodeInfo", event.AddedNode))
 		}
 		s.clusterSchedulingContext.addSchedulingNode(nodeInfo)
@@ -525,7 +525,7 @@ func (s *Scheduler) processNodeEvent(event *schedulerevent.SchedulerNodeEvent) {
 	if event.RemovedNode != nil {
 		nodeInfo, ok := event.RemovedNode.(*cache.NodeInfo)
 		if !ok {
-			log.Logger().Debug("cast failed unexpected object in event",
+			log.Logger().Debug("cast failed unexpected object in node remove event",
 				zap.Any("NodeInfo", event.RemovedNode))
 		}
 		s.clusterSchedulingContext.removeSchedulingNode(nodeInfo)
@@ -538,7 +538,7 @@ func (s *Scheduler) processNodeEvent(event *schedulerevent.SchedulerNodeEvent) {
 	if event.UpdateNode != nil {
 		nodeInfo, ok := event.UpdateNode.(*cache.NodeInfo)
 		if !ok {
-			log.Logger().Debug("cast failed unexpected object in event",
+			log.Logger().Debug("cast failed unexpected object in node update event",
 				zap.Any("NodeInfo", event.UpdateNode))
 		}
 		s.clusterSchedulingContext.updateSchedulingNode(nodeInfo)

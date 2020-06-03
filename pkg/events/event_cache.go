@@ -45,12 +45,11 @@ type EventCache struct {
 func GetEventCache() *EventCache {
 	once.Do(func(){
 		store := newEventStoreImpl()
-		pub := newShimPublisher(store)
 
 		cache = &EventCache{
 			channel:    newEventChannelImpl(),
 			store:      store,
-			publishers: []EventPublisher{pub},
+			publishers: make([]EventPublisher, 0),
 			started:    false,
 			stopped:    false,
 		}
@@ -67,11 +66,6 @@ func (ec *EventCache) StartService() {
 
 	// start main event processing thread
 	go ec.processEvent()
-
-	// start event publishers
-	for _, publisher := range ec.publishers {
-		publisher.StartService()
-	}
 }
 
 func (ec *EventCache) Stop() {
@@ -118,6 +112,10 @@ func (ec *EventCache) isStopped() bool {
 	defer ec.Unlock()
 
 	return ec.stopped
+}
+
+func (ec *EventCache) GetEventStore() EventStore {
+	return ec.store
 }
 
 func (ec *EventCache) processEvent() {

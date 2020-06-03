@@ -28,7 +28,7 @@ import (
 
 type EventStore interface {
 	Store(Event)
-	CollectEvents() []*si.EventMessage
+	CollectEvents() []*si.EventRecord
 }
 
 type defaultEventStore struct {
@@ -50,11 +50,11 @@ func (es *defaultEventStore) Store(event Event) {
 	es.eventMap[event.GetSource()] = event
 }
 
-func (es *defaultEventStore) CollectEvents() []*si.EventMessage {
+func (es *defaultEventStore) CollectEvents() []*si.EventRecord {
 	es.Lock()
 	defer es.Unlock()
 
-	messages := make([]*si.EventMessage, 0)
+	messages := make([]*si.EventRecord, 0)
 
 	// collect events
 	for _, v := range es.eventMap {

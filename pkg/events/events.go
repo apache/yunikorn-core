@@ -20,7 +20,6 @@ package events
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
@@ -29,42 +28,49 @@ import (
 
 type Event interface {
 	GetSource() interface{}
+	GetGroup() string
 	GetReason() string
 	GetMessage() string
 }
 
-func toEventMessage(e Event) (*si.EventMessage, error) {
+func toEventMessage(e Event) (*si.EventRecord, error) {
 	eventType, id, err := convertSourceToTypeAndID(e.GetSource())
 	if err != nil {
 		return nil, err
 	}
-	return &si.EventMessage{
-		Type:    eventType,
-		ID:      id,
-		Reason:  e.GetReason(),
-		Message: e.GetMessage(),
+	return &si.EventRecord{
+		Type:     eventType,
+		ObjectID: id,
+		GroupID:  e.GetGroup(),
+		Reason:   e.GetReason(),
+		Message:  e.GetMessage(),
 	}, nil
 }
 
-func convertSourceToTypeAndID(obj interface{}) (si.EventMessage_Type, string, error) {
+func convertSourceToTypeAndID(obj interface{}) (si.EventRecord_Type, string, error) {
 	// TODO other type checks
 	if ask, ok := obj.(*si.AllocationAsk); ok {
-		return si.EventMessage_REQUEST, strings.Join([]string{ask.AllocationKey, ask.ApplicationID}, ","), nil
+		return si.EventRecord_REQUEST, ask.AllocationKey, nil
 	}
 	log.Logger().Warn("Could not convert source object to EventMessageType", zap.Any("object", obj))
 
 	// TODO should add UNKNOWN request?
-	return si.EventMessage_REQUEST, "", fmt.Errorf("could not convert source object to EventMessageType")
+	return si.EventRecord_REQUEST, "", fmt.Errorf("could not convert source object to EventMessageType")
 }
 
 type baseEvent struct {
 	source  interface{}
+	group   string
 	reason  string
 	message string
 }
 
 func (be *baseEvent) GetSource() interface{} {
 	return be.source
+}
+
+func (be *baseEvent) GetGroup() string {
+	return be.group
 }
 
 func (be *baseEvent) GetReason() string {
@@ -79,6 +85,7 @@ func (be *baseEvent) GetMessage() string {
 func CreateInsufficientQueueResourcesEvent(ask *si.AllocationAsk, message string) Event {
 	return &baseEvent{
 		source:  ask,
+		group:	 ask.ApplicationID,
 		reason:  "InsufficientQueueResources",
 		message: message,
 	}

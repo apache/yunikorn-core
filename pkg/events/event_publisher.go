@@ -40,7 +40,7 @@ type shimPublisher struct {
 	sync.Mutex
 }
 
-func newShimPublisher(event EventStore) EventPublisher {
+func NewShimPublisher(event EventStore) EventPublisher {
 	return &shimPublisher{
 		store:   event,
 		stopped: false,

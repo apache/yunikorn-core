@@ -27,10 +27,12 @@ They are located in the [deployments](https://github.com/apache/incubator-yuniko
 
 ## Quick Start
 
-The easiest way to get started is to our [helm charts](https://github.com/apache/incubator-yunikorn-release/tree/master/helm-charts) to deploy YuniKorn on an existing Kubernetes cluster. Recommand to use Helm 3 or later versions.
+The easiest way to get started is to use our Helm Charts to deploy YuniKorn on an existing Kubernetes cluster. Recommand to use Helm 3 or later versions.
 
 ```shell script
-helm install yunikorn ./yunikorn
+helm repo add yunikorn  https://apache.github.io/incubator-yunikorn-release
+helm repo update
+helm install yunikorn/yunikorn
 ```
 
 it will firstly create a `configmap` where stores YuniKorn configuration, and then deploy YuniKorn scheduler
@@ -38,7 +40,7 @@ and web UI containers in a pod as a `deployment` in the `default` namespace. If 
 
 ```shell script
 kubectl create namespace yunikorn-ns
-helm install yunikorn ./yunikorn --namespace yunikorn-ns
+helm install yunikorn yunikorn/yunikorn --namespace yunikorn-ns
 ```
 
 Uninstall yunikorn:
@@ -90,7 +92,7 @@ The `examples/spark` directory contains pod template files for the Apache Spark 
 * Get latest spark from github (only latest code supports to specify pod template), URL: https://github.com/apache/spark
 * Build spark with Kubernetes support:
 ```
-mvn -Pyarn -Phadoop-2.7 -Dhadoop.version=2.7.0 -Phive -Pkubernetes -Phive-thriftserver -DskipTests package
+mvn -Pyarn -Phadoop-2.7 -Dhadoop.version=2.7.4 -Phive -Pkubernetes -Phive-thriftserver -DskipTests package
 ```
 * Run spark submit
 ```

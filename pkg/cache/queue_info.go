@@ -42,13 +42,14 @@ const (
 
 // The queue structure as used throughout the scheduler
 type QueueInfo struct {
-	Name       string
-	Parent     *QueueInfo        // link to the parent queue
-	Properties map[string]string // this should be treated as immutable the value is a merge of parent(s)
-	// properties with the config for this queue only manipulated during creation
-	// of the queue or via a queue configuration update
+	Name   string
+	Parent *QueueInfo // link to the parent queue
 
 	// Private fields need protection
+	// The queue properties should be treated as immutable the value is a merge of the
+	// parent properties with the config for this queue only manipulated during creation
+	// of the queue or via a queue configuration update.
+	properties         map[string]string
 	adminACL           security.ACL          // admin ACL
 	submitACL          security.ACL          // submit ACL
 	maxResource        *resources.Resource   // When not set, max = nil
@@ -93,8 +94,8 @@ func NewManagedQueue(conf configs.QueueConfig, parent *QueueInfo) (*QueueInfo, e
 	return qi, nil
 }
 
-// Create a new queue unmanaged queue
-// Rule base queue which might not fit in the structure or fail parsing
+// Create a new unmanaged queue. An unmanaged queue is created as result of a rule.
+// Rule based queues which might not fit in the structure or fail parsing.
 func NewUnmanagedQueue(name string, leaf bool, parent *QueueInfo) (*QueueInfo, error) {
 	// name might not be checked do it here
 	if !configs.QueueNameRegExp.MatchString(name) {
@@ -115,12 +116,14 @@ func NewUnmanagedQueue(name string, leaf bool, parent *QueueInfo) (*QueueInfo, e
 		if err != nil {
 			return nil, fmt.Errorf("queue creation failed: %s", err)
 		}
+		// pull the properties from the parent that should be set on the child
+		qi.setTemplateProperties()
 	}
 
 	return qi, nil
 }
 
-// Handle the state event for the application.
+// Handle the state event for the queue.
 // The state machine handles the locking.
 func (qi *QueueInfo) HandleQueueEvent(event SchedulingObjectEvent) error {
 	err := qi.stateMachine.Event(event.String(), qi.Name)
@@ -350,6 +353,40 @@ func (qi *QueueInfo) MarkQueueForRemoval() {
 	}
 }
 
+// Return a copy of the properties for this queue
+func (qi *QueueInfo) GetProperties() map[string]string {
+	qi.Lock()
+	defer qi.Unlock()
+	props := make(map[string]string)
+	for key, value := range qi.properties {
+		props[key] = value
+	}
+	return props
+}
+
+// Set the properties that the unmanaged child queue inherits from the parent
+// only called on create of a new unmanaged queue
+// This currently only sets the sort policy as it is set on the parent
+// Further implementation is part of YUNIKORN-193
+func (qi *QueueInfo) setTemplateProperties() {
+	qi.Lock()
+	defer qi.Unlock()
+	// for a leaf queue pull out all values from the template and set each of them
+	// See YUNIKORN-193: for now just copy one attr from parent
+	if qi.isLeaf {
+		qi.properties = make(map[string]string)
+		parentProp := qi.Parent.GetProperties()
+		if len(parentProp) != 0 {
+			if parentProp[configs.ApplicationSortPolicy] != "" {
+				qi.properties[configs.ApplicationSortPolicy] = parentProp[configs.ApplicationSortPolicy]
+			}
+		}
+	}
+	// for a parent queue we just copy the template from its parent (no need to be recursive)
+	// this stops at the first managed queue
+	// See YUNIKORN-193
+}
+
 // Update an existing managed queue based on the updated configuration
 func (qi *QueueInfo) updateQueueProps(conf configs.QueueConfig) error {
 	qi.Lock()
@@ -402,17 +439,20 @@ func (qi *QueueInfo) updateQueueProps(conf configs.QueueConfig) error {
 		qi.guaranteedResource = guaranteedResource
 	}
 
-	// Update Properties
-	qi.Properties = conf.Properties
-	if qi.Parent != nil && qi.Parent.Properties != nil {
-		qi.Properties = mergeProperties(qi.Parent.Properties, conf.Properties)
+	// Update properties
+	qi.properties = conf.Properties
+	if qi.Parent != nil {
+		parentProps := qi.Parent.GetProperties()
+		if len(parentProps) != 0 {
+			qi.properties = mergeProperties(parentProps, conf.Properties)
+		}
 	}
 
 	return nil
 }
 
 // Merge the properties for the queue. This is only called when updating the queue from the configuration.
-func mergeProperties(parent map[string]string, child map[string]string) map[string]string {
+func mergeProperties(parent, child map[string]string) map[string]string {
 	merged := make(map[string]string)
 	if len(parent) > 0 {
 		for key, value := range parent {

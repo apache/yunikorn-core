@@ -19,6 +19,7 @@
 package cache
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -250,4 +251,11 @@ func (ai *ApplicationInfo) GetTag(tag string) string {
 		}
 	}
 	return tagVal
+}
+
+func (ai *ApplicationInfo) String() string {
+	ai.RLock()
+	defer ai.RUnlock()
+	return fmt.Sprintf("{ApplicationID: %s, Partition: %s, QueueName: %s, SubmissionTime: %x}",
+		ai.ApplicationID, ai.Partition, ai.QueueName, ai.SubmissionTime)
 }

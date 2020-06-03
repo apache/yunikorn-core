@@ -144,8 +144,23 @@ func (s *Scheduler) processAllocationProposal(allocProposal *commonevents.Alloca
 	if partition == nil {
 		return fmt.Errorf("cannot find scheduling partition %s, for allocation ID %s", allocProposal.PartitionName, allocProposal.AllocationKey)
 	}
+	err := partition.confirmAllocation(allocProposal, confirm)
+	if err != nil && allocProposal.UUID != "" {
+		log.Logger().Debug("failed to confirm proposal, removing allocation from cache",
+			zap.String("appID", allocProposal.ApplicationID),
+			zap.String("partitionName", allocProposal.PartitionName),
+			zap.String("allocationKey", allocProposal.AllocationKey),
+			zap.String("allocation UUID", allocProposal.UUID))
+		// Pass in a releaseType of preemption we need to communicate the release back to the RM. The alloc was
+		// communicated to the RM from the cache but immediately removed again
+		// This is an internal removal which we do not have a code for, however it is triggered by the ask removal
+		// from the RM. Stopped by RM fits best.
+		event := &cacheevent.ReleaseAllocationsEvent{AllocationsToRelease: make([]*commonevents.ReleaseAllocation, 0)}
+		event.AllocationsToRelease = append(event.AllocationsToRelease, commonevents.NewReleaseAllocation(allocProposal.UUID, allocProposal.ApplicationID, allocProposal.PartitionName, "allocation confirmation failure (ask removal)", si.AllocationReleaseResponse_STOPPED_BY_RM))
 
-	return partition.confirmAllocation(allocProposal.ApplicationID, allocProposal.NodeID, allocProposal.AllocationKey, confirm)
+		s.eventHandlers.CacheEventHandler.HandleEvent(event)
+	}
+	return err
 }
 
 // When a new app added, invoked by external
@@ -196,7 +211,7 @@ func (s *Scheduler) processAllocationReleaseByAllocationKey(allocationAsksToRele
 			if schedulingApp != nil {
 				// remove the allocation asks from the app
 				reservedAsks := schedulingApp.removeAllocationAsk(toRelease.Allocationkey)
-				log.Logger().Info("release allocation",
+				log.Logger().Info("release allocation ask",
 					zap.String("allocation", toRelease.Allocationkey),
 					zap.String("appID", toRelease.ApplicationID),
 					zap.String("message", toRelease.Message),
@@ -501,7 +516,7 @@ func (s *Scheduler) processNodeEvent(event *schedulerevent.SchedulerNodeEvent) {
 	if event.AddedNode != nil {
 		nodeInfo, ok := event.AddedNode.(*cache.NodeInfo)
 		if !ok {
-			log.Logger().Debug("cast failed unexpected object in node delete event",
+			log.Logger().Debug("cast failed unexpected object in node add event",
 				zap.Any("NodeInfo", event.AddedNode))
 		}
 		s.clusterSchedulingContext.addSchedulingNode(nodeInfo)
@@ -510,7 +525,7 @@ func (s *Scheduler) processNodeEvent(event *schedulerevent.SchedulerNodeEvent) {
 	if event.RemovedNode != nil {
 		nodeInfo, ok := event.RemovedNode.(*cache.NodeInfo)
 		if !ok {
-			log.Logger().Debug("cast failed unexpected object in event",
+			log.Logger().Debug("cast failed unexpected object in node remove event",
 				zap.Any("NodeInfo", event.RemovedNode))
 		}
 		s.clusterSchedulingContext.removeSchedulingNode(nodeInfo)
@@ -523,7 +538,7 @@ func (s *Scheduler) processNodeEvent(event *schedulerevent.SchedulerNodeEvent) {
 	if event.UpdateNode != nil {
 		nodeInfo, ok := event.UpdateNode.(*cache.NodeInfo)
 		if !ok {
-			log.Logger().Debug("cast failed unexpected object in event",
+			log.Logger().Debug("cast failed unexpected object in node update event",
 				zap.Any("NodeInfo", event.UpdateNode))
 		}
 		s.clusterSchedulingContext.updateSchedulingNode(nodeInfo)

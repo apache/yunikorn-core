@@ -56,6 +56,7 @@ type AllocationProposal struct {
 	Tags              map[string]string
 	Priority          *si.Priority
 	PartitionName     string
+	UUID              string // Set when the proposal is added in the cache
 }
 
 // Message from scheduler about release allocation

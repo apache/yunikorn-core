@@ -25,7 +25,8 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
 
-// TODO this should be configurable?
+const defaultEventChannelSize = 100000
+
 const sleepTimeInterval = 10 * time.Millisecond
 const pushEventInterval = 2 * time.Second
 
@@ -47,7 +48,7 @@ func GetEventCache() *EventCache {
 		store := newEventStoreImpl()
 
 		cache = &EventCache{
-			channel:    newEventChannelImpl(),
+			channel:    newEventChannelImpl(defaultEventChannelSize),
 			store:      store,
 			publishers: make([]EventPublisher, 0),
 			started:    false,

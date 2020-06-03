@@ -17,3 +17,54 @@
 */
 
 package events
+
+import (
+	"testing"
+
+	"gotest.tools/assert"
+)
+
+func TestEmptyChannel(t *testing.T) {
+	channel := newEventChannelImpl(1)
+	event, success := channel.GetNextEvent()
+	assert.Equal(t, success, false)
+	assert.Equal(t, event, nil)
+}
+
+func TestPushAndRetrieve(t *testing.T) {
+	channel := newEventChannelImpl(1)
+	event, success := channel.GetNextEvent()
+	assert.Equal(t, success, false)
+	assert.Equal(t, event, nil)
+
+	newEvent := &baseEvent{}
+	channel.AddEvent(newEvent)
+	event, success = channel.GetNextEvent()
+	assert.Equal(t, success, true)
+	assert.Equal(t, event, newEvent)
+
+	event, success = channel.GetNextEvent()
+	assert.Equal(t, success, false)
+	assert.Equal(t, event, nil)
+}
+
+func TestLimit(t *testing.T) {
+	channel := newEventChannelImpl(1)
+	event1 := &baseEvent{
+		reason: "reason1",
+	}
+	event2 := &baseEvent{
+		reason: "reason2",
+	}
+
+	channel.AddEvent(event1)
+	channel.AddEvent(event2)
+
+	event, success := channel.GetNextEvent()
+	assert.Equal(t, success, true)
+	assert.Equal(t, event, event1)
+
+	event, success = channel.GetNextEvent()
+	assert.Equal(t, success, false)
+	assert.Equal(t, event, nil)
+}

@@ -26,9 +26,6 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
 
-// TODO should configure the size of the channel
-const eventChannelSize = 100000
-
 
 type EventChannel interface {
 	GetNextEvent() (Event, bool)
@@ -43,7 +40,7 @@ type defaultEventChannel struct {
 	sync.RWMutex
 }
 
-func newEventChannelImpl() EventChannel {
+func newEventChannelImpl(eventChannelSize int) EventChannel {
 	return &defaultEventChannel{
 		events:       make(chan Event, eventChannelSize),
 		diagCounter:  0,
@@ -75,5 +72,11 @@ func (ec *defaultEventChannel) AddEvent(event Event) {
 		log.Logger().Debug(msg)
 		ec.diagCounter = 0
 	}
-	ec.events <- event
+	select {
+		case ec.events <- event:
+			// event is successfully pushed to channel
+		default:
+			// if the channel is full, emitting log entries on DEBUG=< level is going to have serious performance impact
+			log.Logger().Debug("Channel is full - discarding event.")
+	}
 }

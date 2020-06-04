@@ -333,7 +333,7 @@ func TestAddApplicationWithTag(t *testing.T) {
 			"first": 10,
 		})
 	tags := make(map[string]string)
-	tags[appTagNamespaceResourceQuota] = "{\"first\":\"10\"}"
+	tags[appTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":10}}}"
 	// add apps again now with the tag set
 	appInfo = cache.NewApplicationInfo("app-3", "default", "root.leaf-man", security.UserGroup{}, tags)
 	app3 := newSchedulingApplication(appInfo)
@@ -351,7 +351,7 @@ func TestAddApplicationWithTag(t *testing.T) {
 	}
 
 	// set to illegal limit (0 value)
-	tags[appTagNamespaceResourceQuota] = "{\"first\":\"0\"}"
+	tags[appTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":0}}}"
 	appInfo = cache.NewApplicationInfo("app-4", "default", "root.leaf-un", security.UserGroup{}, tags)
 	app4 = newSchedulingApplication(appInfo)
 	leafUn.addSchedulingApplication(app4)

@@ -68,13 +68,13 @@ func NewResourceFromMap(m map[string]Quantity) *Resource {
 }
 
 // Create a new resource from a string.
-// The string must be a json marshalled list of map[string]string.
+// The string must be a json marshalled si.Resource.
 func NewResourceFromString(str string) (*Resource, error) {
-	var resMap map[string]string
-	if err := json.Unmarshal([]byte(str), &resMap); err != nil {
+	var siRes *si.Resource
+	if err := json.Unmarshal([]byte(str), &siRes); err != nil {
 		return nil, err
 	}
-	return NewResourceFromConf(resMap)
+	return NewResourceFromProto(siRes), nil
 }
 
 // Create a new resource from the config map.

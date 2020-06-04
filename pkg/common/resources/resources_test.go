@@ -1310,8 +1310,6 @@ func TestCalculateAbsUsedCapacity(t *testing.T) {
 }
 
 func TestNewResourceFromString(t *testing.T) {
-	// emptyResource := NewResource()
-
 	tests := map[string]struct {
 		jsonRes  string
 		fail     bool
@@ -1323,37 +1321,37 @@ func TestNewResourceFromString(t *testing.T) {
 			expected: nil,
 		},
 		"empty json": {
-			jsonRes:  "{}",
+			jsonRes:  "{\"resources\":{}}",
 			fail:     false,
 			expected: NewResource(),
 		},
 		"not a map": {
-			jsonRes:  "error",
+			jsonRes:  "{\"resources\":{error}}",
 			fail:     true,
 			expected: nil,
 		},
 		"illegal json": {
-			jsonRes:  "{\"json invalid\":\"missing curly bracket\"",
+			jsonRes:  "{\"resources\":{\"missing curly bracket\":{\"value\":5}}",
 			fail:     true,
 			expected: nil,
 		},
 		"illegal value": {
-			jsonRes:  "{\"invalid\":\"value error\"}",
+			jsonRes:  "{\"resources\":{\"invalid\":{\"value\":\"error\"}}}",
 			fail:     true,
 			expected: nil,
 		},
 		"simple": {
-			jsonRes:  "{\"valid\":\"10\"}",
+			jsonRes:  "{\"resources\":{\"valid\":{\"value\":10}}}",
 			fail:     false,
 			expected: NewResourceFromMap(map[string]Quantity{"valid": 10}),
 		},
 		"double": {
-			jsonRes:  "{\"valid\":\"10\", \"other\":\"5\"}",
+			jsonRes:  "{\"resources\":{\"valid\":{\"value\":10}, \"other\":{\"value\":5}}}",
 			fail:     false,
 			expected: NewResourceFromMap(map[string]Quantity{"valid": 10, "other": 5}),
 		},
 		"same twice": {
-			jsonRes:  "{\"negative\":\"10\", \"negative\":\"-10\"}",
+			jsonRes:  "{\"resources\":{\"negative\":{\"value\":10}, \"negative\":{\"value\":-10}}}",
 			fail:     false,
 			expected: NewResourceFromMap(map[string]Quantity{"negative": -10}),
 		},

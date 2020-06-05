@@ -365,6 +365,50 @@ func TestMaxResource(t *testing.T) {
 	}
 }
 
+func TestUpdateUnManagedMaxResource(t *testing.T) {
+	resMap := map[string]string{"first": "10"}
+	res, err := resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err, "failed to create basic resource")
+	// create the root
+	var root, parent, leaf *QueueInfo
+	root, err = createRootQueue()
+	assert.NilError(t, err, "failed to create basic root queue")
+	// Nothing set max should be nil
+	if root.GetMaxResource() != nil {
+		t.Errorf("empty cluster should not have max set on root queue")
+	}
+
+	// try setting on the parent or managed leaf (nothing should change)
+	parent, err = createUnManagedQueue(root, "parent-un", true)
+	assert.NilError(t, err, "failed to create basic unmanaged parent queue")
+	parent.UpdateUnManagedMaxResource(res)
+	if parent.GetMaxResource() != nil {
+		t.Errorf("unmanaged parent queue change should have been rejected expected nil got: %v", parent.GetMaxResource())
+	}
+	parent, err = createManagedQueue(root, "parent-man", true)
+	assert.NilError(t, err, "failed to create basic unmanaged parent queue")
+	parent.UpdateUnManagedMaxResource(res)
+	if parent.GetMaxResource() != nil {
+		t.Errorf("managed parent queue change should have been rejected expected nil got: %v", parent.GetMaxResource())
+	}
+
+	leaf, err = createManagedQueue(root, "leaf-man", false)
+	assert.NilError(t, err, "failed to create basic managed leaf queue")
+	// Set on the root should change
+	leaf.UpdateUnManagedMaxResource(res)
+	if leaf.GetMaxResource() != nil {
+		t.Errorf("managed leaf queue change should have been rejected expected nil got: %v", parent.GetMaxResource())
+	}
+
+	// try setting on the unmanaged leaf (should change)
+	leaf, err = createUnManagedQueue(root, "leaf-un", false)
+	assert.NilError(t, err, "failed to create basic unmanaged leaf queue")
+	leaf.UpdateUnManagedMaxResource(res)
+	if !resources.Equals(res, leaf.GetMaxResource()) {
+		t.Errorf("leaf max setting not set as expected %v, got %v", res, leaf.GetMaxResource())
+	}
+}
+
 func TestGetQueueInfos(t *testing.T) {
 	root, err := createRootQueue()
 	assert.NilError(t, err, "failed to create basic root queue: %v", err)

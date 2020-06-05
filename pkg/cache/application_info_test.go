@@ -37,6 +37,14 @@ func newApplicationInfo(appID, partition, queueName string) *ApplicationInfo {
 	return NewApplicationInfo(appID, partition, queueName, user, tags)
 }
 
+func newApplicationInfoWithTags(appID, partition, queueName string, tags map[string]string) *ApplicationInfo {
+	user := security.UserGroup{
+		User:   "testuser",
+		Groups: []string{},
+	}
+	return NewApplicationInfo(appID, partition, queueName, user, tags)
+}
+
 func TestNewApplicationInfo(t *testing.T) {
 	appInfo := newApplicationInfo("app-00001", "default", "root.a")
 	assert.Equal(t, appInfo.ApplicationID, "app-00001")
@@ -131,4 +139,20 @@ func TestStateTimeOut(t *testing.T) {
 	if !appInfo.stateMachine.Is(Running.String()) || appInfo.stateTimer != nil {
 		t.Fatalf("State is not running or timer was not cleared, state: %s, timer %v", appInfo.stateMachine.Current(), appInfo.stateTimer)
 	}
+}
+
+func TestGetTag(t *testing.T) {
+	appInfo := newApplicationInfoWithTags("app-1", "default", "root.a", nil)
+	tag := appInfo.GetTag("")
+	assert.Equal(t, tag, "", "expected empty tag value if tags nil")
+	tags := make(map[string]string)
+	appInfo = newApplicationInfoWithTags("app-1", "default", "root.a", tags)
+	tag = appInfo.GetTag("")
+	assert.Equal(t, tag, "", "expected empty tag value if no tags defined")
+	tags["test"] = "test value"
+	appInfo = newApplicationInfoWithTags("app-1", "default", "root.a", tags)
+	tag = appInfo.GetTag("notfound")
+	assert.Equal(t, tag, "", "expected empty tag value if tag not found")
+	tag = appInfo.GetTag("test")
+	assert.Equal(t, tag, "test value", "expected tag value")
 }

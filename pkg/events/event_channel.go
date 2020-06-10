@@ -21,26 +21,24 @@ package events
 import (
 	"fmt"
 	"strconv"
-	"sync"
+	"sync/atomic"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
 
 
 type EventChannel interface {
-	GetNextEvent() (Event, bool)
+	GetNextEvent() Event
 	AddEvent(event Event)
 }
 
 type defaultEventChannel struct {
 	events       chan Event
-	diagCounter  int
-	diagInterval int
-
-	sync.RWMutex
+	diagCounter  uint32
+	diagInterval uint32
 }
 
-func newEventChannelImpl(eventChannelSize int) EventChannel {
+func newEventChannelImpl(eventChannelSize uint32) EventChannel {
 	return &defaultEventChannel{
 		events:       make(chan Event, eventChannelSize),
 		diagCounter:  0,
@@ -49,29 +47,26 @@ func newEventChannelImpl(eventChannelSize int) EventChannel {
 
 }
 
-func (ec *defaultEventChannel) GetNextEvent() (Event, bool) {
-	ec.Lock()
-	defer ec.Unlock()
-
+func (ec *defaultEventChannel) GetNextEvent() Event {
 	select {
-	case msg, ok := <-ec.events:
-		return msg, ok
+	case msg := <-ec.events:
+		return msg
 	default:
-		return nil, false
+		return nil
 	}
 }
 
 
 func (ec *defaultEventChannel) AddEvent(event Event) {
-	ec.Lock()
-	defer ec.Unlock()
-
-	ec.diagCounter += 1
-	if ec.diagCounter >= ec.diagInterval {
+	atomic.AddUint32(&ec.diagCounter, 1)
+	diagCounter := atomic.LoadUint32(&ec.diagCounter)
+	diagInterval := atomic.LoadUint32(&ec.diagInterval)
+	if diagCounter >= diagInterval {
 		msg := fmt.Sprintf("Event cache channel has %s size and %s capacity.", strconv.Itoa(len(ec.events)), strconv.Itoa(cap(ec.events)))
 		log.Logger().Debug(msg)
-		ec.diagCounter = 0
+		atomic.StoreUint32(&ec.diagCounter, 0)
 	}
+
 	select {
 		case ec.events <- event:
 			// event is successfully pushed to channel

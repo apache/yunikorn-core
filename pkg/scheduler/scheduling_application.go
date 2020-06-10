@@ -437,14 +437,11 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 		if !resources.FitIn(headRoom, request.AllocatedResource) {
 			eventCache := events.GetEventCache()
 			if eventCache.IsStarted() {
-				_, msg := resources.FitInWithExplanation(headRoom, request.AllocatedResource)
-				message := fmt.Sprintf("Application %s does not fit in %s queue: %s", request.ApplicationID, request.QueueName, msg)
+				message := fmt.Sprintf("Application %s does not fit into %s queue", request.ApplicationID, request.QueueName)
 				event := events.CreateInsufficientQueueResourcesEvent(request.AskProto, message)
 				eventCache.AddEvent(event)
 			}
 			continue
-		} else {
-			log.Logger().Debug("app fits into headroom", zap.String("app", sa.ApplicationInfo.ApplicationID), zap.Any("headroom", headRoom))
 		}
 		if nodeIterator := ctx.getNodeIterator(); nodeIterator != nil {
 			alloc := sa.tryNodes(request, nodeIterator)

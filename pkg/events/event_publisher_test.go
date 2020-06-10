@@ -19,43 +19,60 @@
 package events
 
 import (
+	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
+	"gotest.tools/assert"
+
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
-	"gotest.tools/assert"
 )
 
 type eventStoreForTest struct {
 	events chan Event
 }
 
-func eventToRecord(event Event) *si.EventRecord {
+func eventToRecord(event Event) (*si.EventRecord, error) {
 	source, ok := event.GetSource().(string)
 	if !ok {
-		panic("Expected string in tests")
+		return nil, fmt.Errorf("expected string in tests")
 	}
 	return &si.EventRecord{
 		ObjectID: source,
 		GroupID: event.GetGroup(),
 		Reason: event.GetReason(),
 		Message: event.GetMessage(),
-	}
+	}, nil
 }
 
 func (es *eventStoreForTest) Store(e Event) {
 	es.events <- e
 }
 
-func (es *eventStoreForTest) CollectEvents() []*si.EventRecord {
+func (es *eventStoreForTest) CollectEvents() ([]*si.EventRecord, error) {
 	records := make([]*si.EventRecord, 0)
+	errorList := make([]string, 0)
 	for {
 		select {
 			case event := <-es.events:
-				records = append(records, eventToRecord(event))
+				record, err := eventToRecord(event)
+				if err != nil {
+					log.Logger().Warn("error during converting events to records", zap.Error(err))
+					errorList = append(errorList, err.Error())
+					continue
+				}
+				records = append(records, record)
 			default:
-				return records
+				var errorsToReturn error
+				if len(errorList) > 0 {
+					errorsToReturn = errors.New(strings.Join(errorList, ","))
+				}
+				return records, errorsToReturn
 		}
 	}
 }
@@ -65,15 +82,15 @@ type eventPluginForTest struct {
 }
 
 // create and register mocked event plugin
-func createEventPluginForTest(t *testing.T) eventPluginForTest {
+func createEventPluginForTest() (*eventPluginForTest, error) {
 	eventPlugin := eventPluginForTest{
 		records: make(chan *si.EventRecord, 3),
 	}
 	plugins.RegisterSchedulerPlugin(&eventPlugin)
 	if plugins.GetEventPlugin() == nil {
-		t.Fatalf("Event plugin should have been registered!")
+		return nil, fmt.Errorf("event plugin is not registered")
 	}
-	return eventPlugin
+	return &eventPlugin, nil
 }
 
 func (ep *eventPluginForTest) SendEvent(events []*si.EventRecord) error {
@@ -104,8 +121,6 @@ func TestServiceStartStopWithoutEventPlugin(t *testing.T) {
 }
 
 func TestServiceStartStopWithEventPlugin(t *testing.T) {
-	createEventPluginForTest(t)
-
 	store := &eventStoreForTest{
 		events: make(chan Event, 2),
 	}
@@ -117,7 +132,8 @@ func TestServiceStartStopWithEventPlugin(t *testing.T) {
 }
 
 func TestPublisher(t *testing.T) {
-	eventPlugin := createEventPluginForTest(t)
+	eventPlugin, err := createEventPluginForTest()
+	assert.NilError(t, err, "unable to create event plugin for test")
 	store := &eventStoreForTest{
 		events: make(chan Event, 2),
 	}

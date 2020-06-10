@@ -22,10 +22,13 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
-	"go.uber.org/zap"
 )
+
+const pushEventInterval = 2 * time.Second
 
 type EventPublisher interface {
 	StartService()
@@ -35,15 +38,15 @@ type EventPublisher interface {
 
 type shimPublisher struct {
 	store EventStore
-	stopped bool
+	stop  bool
 
 	sync.Mutex
 }
 
 func NewShimPublisher(event EventStore) EventPublisher {
 	return &shimPublisher{
-		store:   event,
-		stopped: false,
+		store: event,
+		stop:  false,
 	}
 }
 
@@ -51,7 +54,7 @@ func (sp *shimPublisher) isStopped() bool {
 	sp.Lock()
 	defer sp.Unlock()
 
-	return sp.stopped
+	return sp.stop
 }
 
 func (sp *shimPublisher) StartService() {
@@ -61,11 +64,15 @@ func (sp *shimPublisher) StartService() {
 				break
 			}
 			if eventPlugin := plugins.GetEventPlugin(); eventPlugin != nil {
-				messages := sp.store.CollectEvents()
-				log.Logger().Debug("Sending events", zap.Int("number of messages", len(messages)))
-				if err := eventPlugin.SendEvent(messages); err != nil && err.Error() != "" {
-					log.Logger().Warn("Callback failed - could not sent EventMessage to shim",
-						zap.Error(err), zap.Int("number of messages", len(messages)))
+				messages, err := sp.store.CollectEvents()
+				if err != nil {
+					log.Logger().Warn("collecting events failed", zap.Error(err))
+				} else {
+					log.Logger().Debug("Sending events", zap.Int("number of messages", len(messages)))
+					if err := eventPlugin.SendEvent(messages); err != nil && err.Error() != "" {
+						log.Logger().Warn("Callback failed - could not sent EventMessage to shim",
+							zap.Error(err), zap.Int("number of messages", len(messages)))
+					}
 				}
 			}
 			time.Sleep(pushEventInterval)
@@ -77,10 +84,10 @@ func (sp *shimPublisher) Stop() {
 	sp.Lock()
 	defer sp.Unlock()
 
-	if sp.stopped {
-		panic("could not stop shimPublisher service: already stopped")
+	if sp.stop {
+		panic("could not stop shimPublisher service: already stop")
 	}
-	sp.stopped = true
+	sp.stop = true
 }
 
 func (sp *shimPublisher) GetEventStore() EventStore {

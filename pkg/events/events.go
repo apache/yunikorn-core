@@ -21,9 +21,10 @@ package events
 import (
 	"fmt"
 
+	"go.uber.org/zap"
+
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
-	"go.uber.org/zap"
 )
 
 type Event interface {

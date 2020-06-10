@@ -28,7 +28,6 @@ import (
 const defaultEventChannelSize = 100000
 
 const sleepTimeInterval = 10 * time.Millisecond
-const pushEventInterval = 2 * time.Second
 
 var once sync.Once
 var cache *EventCache
@@ -38,7 +37,7 @@ type EventCache struct {
 	store      EventStore       // storing events
 	publishers []EventPublisher // publishing events to sinks
 	started    bool             // whether the service is started
-	stopped    bool             // whether the service is stopped
+	stopped    bool             // whether the service is stop
 
 	sync.Mutex
 }
@@ -63,10 +62,10 @@ func (ec *EventCache) StartService() {
 	ec.Lock()
 	defer ec.Unlock()
 
-	ec.started = true
-
 	// start main event processing thread
 	go ec.processEvent()
+
+	ec.started = true
 }
 
 func (ec *EventCache) Stop() {
@@ -121,18 +120,18 @@ func (ec *EventCache) GetEventStore() EventStore {
 
 func (ec *EventCache) processEvent() {
 	for {
-		// break the main loop if stopped
+		// break the main loop if stop
 		if ec.isStopped() {
 			break
 		}
 		for {
-			// do not process any new event if the process has been stopped
+			// do not process any new event if the process has been stop
 			if ec.isStopped() {
 				break
 			}
 			// TODO for debugging: add time info about how long did this step take
-			event, ok := ec.channel.GetNextEvent()
-			if ok {
+			event := ec.channel.GetNextEvent()
+			if event != nil {
 				ec.store.Store(event)
 			} else {
 				break

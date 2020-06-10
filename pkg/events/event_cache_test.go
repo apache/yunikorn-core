@@ -22,8 +22,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 	"gotest.tools/assert"
+
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 func TestSingleEvent(t *testing.T) {
@@ -46,7 +47,11 @@ func TestSingleEvent(t *testing.T) {
 	// wait for cache to process the event
 	time.Sleep(2 * sleepTimeInterval)
 
-	records := store.CollectEvents()
+	records, err := store.CollectEvents()
+	if records == nil {
+		t.Fatal("collecting events should return something")
+	}
+	assert.NilError(t, err, "collecting events failed")
 	assert.Equal(t, len(records), 1)
 	record := records[0]
 	assert.Equal(t, record.Type, si.EventRecord_REQUEST)
@@ -93,7 +98,11 @@ func TestMultipleEvents(t *testing.T) {
 	// wait for cache to process the event
 	time.Sleep(2 * sleepTimeInterval)
 
-	records := store.CollectEvents()
+	records, err := store.CollectEvents()
+	assert.NilError(t, err, "collecting events failed")
+	if records == nil {
+		t.Fatal("collecting events should return something")
+	}
 	assert.Equal(t, len(records), 2)
 	for _, record := range records {
 		assert.Equal(t, record.Type, si.EventRecord_REQUEST)

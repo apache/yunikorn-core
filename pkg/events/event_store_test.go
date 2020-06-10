@@ -39,7 +39,8 @@ func TestStoreAndRetrieveAllocationAsk(t *testing.T) {
 	}
 	store.Store(&event)
 
-	records := store.CollectEvents()
+	records, err := store.CollectEvents()
+	assert.NilError(t, err, "collecting events failed")
 	assert.Equal(t, len(records), 1)
 	record := records[0]
 	assert.Equal(t, record.Type, si.EventRecord_REQUEST)
@@ -49,7 +50,8 @@ func TestStoreAndRetrieveAllocationAsk(t *testing.T) {
 	assert.Equal(t, record.Reason, "reason")
 
 	// calling CollectEvents erases the events map
-	records = store.CollectEvents()
+	records, err = store.CollectEvents()
+	assert.NilError(t, err, "collecting events failed")
 	assert.Equal(t, len(records), 0)
 }
 
@@ -82,7 +84,8 @@ func TestStoreAndRetrieveMultipleAllocationAsks(t *testing.T) {
 	store.Store(&event1)
 	store.Store(&event2)
 	store.Store(&event3)
-	records := store.CollectEvents()
+	records, err := store.CollectEvents()
+	assert.NilError(t, err, "collecting events failed")
 	assert.Equal(t, len(records), 2)
 	for _, record := range records {
 		assert.Equal(t, record.Type, si.EventRecord_REQUEST)

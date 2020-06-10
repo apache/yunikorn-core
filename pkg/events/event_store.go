@@ -19,16 +19,19 @@
 package events
 
 import (
+	"errors"
+	"strings"
 	"sync"
+
+	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
-	"go.uber.org/zap"
 )
 
 type EventStore interface {
 	Store(Event)
-	CollectEvents() []*si.EventRecord
+	CollectEvents() ([]*si.EventRecord, error)
 }
 
 type defaultEventStore struct {
@@ -50,17 +53,19 @@ func (es *defaultEventStore) Store(event Event) {
 	es.eventMap[event.GetSource()] = event
 }
 
-func (es *defaultEventStore) CollectEvents() []*si.EventRecord {
+func (es *defaultEventStore) CollectEvents() ([]*si.EventRecord, error) {
 	es.Lock()
 	defer es.Unlock()
 
 	messages := make([]*si.EventRecord, 0)
+	errorList := make([]string, 0)
 
 	// collect events
 	for _, v := range es.eventMap {
 		message, err := toEventMessage(v)
 		if err != nil {
-			log.Logger().Warn("Could not translate object to EventMessage", zap.Any("object", v))
+			log.Logger().Debug("could not translate object to EventMessage", zap.Any("object", v))
+			errorList = append(errorList, err.Error())
 			continue
 		}
 		messages = append(messages, message)
@@ -69,5 +74,9 @@ func (es *defaultEventStore) CollectEvents() []*si.EventRecord {
 	// clear map
 	es.eventMap = make(map[interface{}]Event)
 
-	return messages
+	var errorsToReturn error
+	if len(errorList) > 0 {
+		errorsToReturn = errors.New(strings.Join(errorList, ","))
+	}
+	return messages, errorsToReturn
 }

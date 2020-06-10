@@ -26,25 +26,21 @@ import (
 
 func TestEmptyChannel(t *testing.T) {
 	channel := newEventChannelImpl(1)
-	event, success := channel.GetNextEvent()
-	assert.Equal(t, success, false)
+	event := channel.GetNextEvent()
 	assert.Equal(t, event, nil)
 }
 
 func TestPushAndRetrieve(t *testing.T) {
 	channel := newEventChannelImpl(1)
-	event, success := channel.GetNextEvent()
-	assert.Equal(t, success, false)
+	event := channel.GetNextEvent()
 	assert.Equal(t, event, nil)
 
 	newEvent := &baseEvent{}
 	channel.AddEvent(newEvent)
-	event, success = channel.GetNextEvent()
-	assert.Equal(t, success, true)
+	event = channel.GetNextEvent()
 	assert.Equal(t, event, newEvent)
 
-	event, success = channel.GetNextEvent()
-	assert.Equal(t, success, false)
+	event = channel.GetNextEvent()
 	assert.Equal(t, event, nil)
 }
 
@@ -60,11 +56,9 @@ func TestLimit(t *testing.T) {
 	channel.AddEvent(event1)
 	channel.AddEvent(event2)
 
-	event, success := channel.GetNextEvent()
-	assert.Equal(t, success, true)
+	event := channel.GetNextEvent()
 	assert.Equal(t, event, event1)
 
-	event, success = channel.GetNextEvent()
-	assert.Equal(t, success, false)
+	event = channel.GetNextEvent()
 	assert.Equal(t, event, nil)
 }

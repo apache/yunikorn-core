@@ -32,6 +32,8 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 )
 
+const appTagNamespaceResourceQuota = "namespace.resourcequota"
+
 // Represents Queue inside Scheduler
 type SchedulingQueue struct {
 	Name      string           // Fully qualified path for the queue
@@ -175,11 +177,32 @@ func (sq *SchedulingQueue) decPendingResource(delta *resources.Resource) {
 
 // Add scheduling app to the queue. All checks are assumed to have passed before we get here.
 // No update of pending resource is needed as it should not have any requests yet.
-// Replaces the existing application without further checks or updates.
+// Replaces the existing application without further checks.
 func (sq *SchedulingQueue) addSchedulingApplication(app *SchedulingApplication) {
 	sq.Lock()
 	defer sq.Unlock()
 	sq.applications[app.ApplicationInfo.ApplicationID] = app
+	// YUNIKORN-199: update the quota from the namespace
+	// get the tag with the quota
+	quota := app.getTag(appTagNamespaceResourceQuota)
+	if quota == "" {
+		return
+	}
+	// need to set a quota: convert json string to resource
+	res, err := resources.NewResourceFromString(quota)
+	if err != nil {
+		log.Logger().Error("application resource quota conversion failure",
+			zap.String("json quota string", quota),
+			zap.Error(err))
+		return
+	}
+	if !resources.StrictlyGreaterThanZero(res) {
+		log.Logger().Error("application resource quota has at least one 0 value: cannot set queue limit",
+			zap.String("maxResource", res.String()))
+		return
+	}
+	// set the quota
+	sq.QueueInfo.UpdateUnManagedMaxResource(res)
 }
 
 // Remove the scheduling app from the list of tracked applications. Make sure that the app

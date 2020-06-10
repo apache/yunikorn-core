@@ -180,6 +180,19 @@ func (qi *QueueInfo) setMaxResource(max *resources.Resource) {
 	qi.maxResource = max.Clone()
 }
 
+// Update the max resource for an unmanaged leaf queue.
+func (qi *QueueInfo) UpdateUnManagedMaxResource(max *resources.Resource) {
+	qi.Lock()
+	defer qi.Unlock()
+
+	if qi.isManaged || !qi.isLeaf {
+		log.Logger().Warn("Trying to set max resources set on a queue that is not an unmanaged leaf",
+			zap.String("queueName", qi.Name))
+		return
+	}
+	qi.maxResource = max
+}
+
 // Return if this is a leaf queue or not
 func (qi *QueueInfo) IsLeafQueue() bool {
 	return qi.isLeaf

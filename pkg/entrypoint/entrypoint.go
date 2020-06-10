@@ -67,7 +67,6 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 	if opts.eventCacheEnabled {
 		eventCache = events.GetEventCache()
 		eventPublisher = events.NewShimPublisher(eventCache.GetEventStore())
-		eventCache.AddPublisher(eventPublisher)
 	}
 
 	cache := cache.NewClusterInfo()

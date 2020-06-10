@@ -109,13 +109,20 @@ func (ep *eventPluginForTest) getNextEventRecord() *si.EventRecord {
 	}
 }
 
+func createPublisherForTest(store EventStore) *shimPublisher {
+	return &shimPublisher{
+		store: store,
+		stop:  false,
+	}
+}
+
 func TestServiceStartStopWithoutEventPlugin(t *testing.T) {
 	store := &eventStoreForTest{
 		events: make(chan Event, 2),
 	}
-	publisher := NewShimPublisher(store)
+	publisher := createPublisherForTest(store)
 	publisher.StartService()
-	assert.Equal(t, publisher.GetEventStore(), store)
+	assert.Equal(t, publisher.getEventStore(), store)
 	time.Sleep(100 * time.Millisecond)
 	publisher.Stop()
 }
@@ -124,9 +131,9 @@ func TestServiceStartStopWithEventPlugin(t *testing.T) {
 	store := &eventStoreForTest{
 		events: make(chan Event, 2),
 	}
-	publisher := NewShimPublisher(store)
+	publisher := createPublisherForTest(store)
 	publisher.StartService()
-	assert.Equal(t, publisher.GetEventStore(), store)
+	assert.Equal(t, publisher.getEventStore(), store)
 	time.Sleep(100 * time.Millisecond)
 	publisher.Stop()
 }

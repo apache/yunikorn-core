@@ -21,8 +21,6 @@ package events
 import (
 	"sync"
 	"time"
-
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
 
 const defaultEventChannelSize = 100000
@@ -33,11 +31,10 @@ var once sync.Once
 var cache *EventCache
 
 type EventCache struct {
-	channel    EventChannel     // channelling input events
-	store      EventStore       // storing events
-	publishers []EventPublisher // publishing events to sinks
-	started    bool             // whether the service is started
-	stopped    bool             // whether the service is stop
+	channel EventChannel // channelling input events
+	store   EventStore   // storing events
+	started bool         // whether the service is started
+	stopped bool         // whether the service is stop
 
 	sync.Mutex
 }
@@ -47,11 +44,10 @@ func GetEventCache() *EventCache {
 		store := newEventStoreImpl()
 
 		cache = &EventCache{
-			channel:    newEventChannelImpl(defaultEventChannelSize),
-			store:      store,
-			publishers: make([]EventPublisher, 0),
-			started:    false,
-			stopped:    false,
+			channel: newEventChannelImpl(defaultEventChannelSize),
+			store:   store,
+			started: false,
+			stopped: false,
 		}
 	})
 	return cache
@@ -73,26 +69,8 @@ func (ec *EventCache) Stop() {
 	defer ec.Unlock()
 
 	if ec.started {
-		if ec.stopped {
-			panic("could not stop EventCache service")
-		}
 		ec.stopped = true
-
-		// stop event publishers
-		for _, publisher := range ec.publishers {
-			publisher.Stop()
-		}
-	}
-}
-
-func (ec *EventCache) AddPublisher(pub EventPublisher) {
-	ec.Lock()
-	defer ec.Unlock()
-
-	if ec.started  {
-		log.Logger().Error("Added Publisher to a running EventCache!")
-	} else {
-		ec.publishers = append(ec.publishers, pub)
+		ec.started = false
 	}
 }
 

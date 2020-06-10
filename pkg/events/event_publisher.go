@@ -33,7 +33,6 @@ const pushEventInterval = 2 * time.Second
 type EventPublisher interface {
 	StartService()
 	Stop()
-	GetEventStore() EventStore
 }
 
 type shimPublisher struct {
@@ -43,9 +42,9 @@ type shimPublisher struct {
 	sync.Mutex
 }
 
-func NewShimPublisher(event EventStore) EventPublisher {
+func NewShimPublisher(store EventStore) EventPublisher {
 	return &shimPublisher{
-		store: event,
+		store: store,
 		stop:  false,
 	}
 }
@@ -67,7 +66,7 @@ func (sp *shimPublisher) StartService() {
 				messages, err := sp.store.CollectEvents()
 				if err != nil {
 					log.Logger().Warn("collecting events failed", zap.Error(err))
-				} else {
+				} else if len(messages) > 0 {
 					log.Logger().Debug("Sending events", zap.Int("number of messages", len(messages)))
 					if err := eventPlugin.SendEvent(messages); err != nil && err.Error() != "" {
 						log.Logger().Warn("Callback failed - could not sent EventMessage to shim",
@@ -84,13 +83,10 @@ func (sp *shimPublisher) Stop() {
 	sp.Lock()
 	defer sp.Unlock()
 
-	if sp.stop {
-		panic("could not stop shimPublisher service: already stop")
-	}
 	sp.stop = true
 }
 
-func (sp *shimPublisher) GetEventStore() EventStore {
+func (sp *shimPublisher) getEventStore() EventStore {
 	// only set in the constructor, no need to lock
 	return sp.store
 }

@@ -44,14 +44,14 @@ func TestSingleEvent(t *testing.T) {
 	}
 	cache.AddEvent(&event)
 
-	// wait for cache to process the event
-	time.Sleep(2 * sleepTimeInterval)
+	// wait for events to be processed
+	time.Sleep(1 * time.Millisecond)
 
 	records, err := store.CollectEvents()
 	if records == nil {
-		t.Fatal("collecting events should return something")
+		t.Fatal("collecting eventChannel should return something")
 	}
-	assert.NilError(t, err, "collecting events failed")
+	assert.NilError(t, err, "collecting eventChannel failed")
 	assert.Equal(t, len(records), 1)
 	record := records[0]
 	assert.Equal(t, record.Type, si.EventRecord_REQUEST)
@@ -96,12 +96,12 @@ func TestMultipleEvents(t *testing.T) {
 	cache.AddEvent(&event3)
 
 	// wait for cache to process the event
-	time.Sleep(2 * sleepTimeInterval)
+	time.Sleep(1 * time.Millisecond)
 
 	records, err := store.CollectEvents()
-	assert.NilError(t, err, "collecting events failed")
+	assert.NilError(t, err, "collecting eventChannel failed")
 	if records == nil {
-		t.Fatal("collecting events should return something")
+		t.Fatal("collecting eventChannel should return something")
 	}
 	assert.Equal(t, len(records), 2)
 	for _, record := range records {

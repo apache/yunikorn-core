@@ -60,7 +60,7 @@ func (es *defaultEventStore) CollectEvents() ([]*si.EventRecord, error) {
 	messages := make([]*si.EventRecord, 0)
 	errorList := make([]string, 0)
 
-	// collect events
+	// collect eventChannel
 	for _, v := range es.eventMap {
 		message, err := toEventMessage(v)
 		if err != nil {

@@ -28,50 +28,49 @@ import (
 
 
 type EventChannel interface {
-	GetNextEvent() Event
 	AddEvent(event Event)
+	GetChannel() chan Event
+	Stop()
 }
 
 type defaultEventChannel struct {
-	events       chan Event
+	eventChannel chan Event
 	diagCounter  uint32
 	diagInterval uint32
 }
 
 func newEventChannelImpl(eventChannelSize uint32) EventChannel {
 	return &defaultEventChannel{
-		events:       make(chan Event, eventChannelSize),
+		eventChannel: make(chan Event, eventChannelSize),
 		diagCounter:  0,
 		diagInterval: eventChannelSize,
 	}
 
 }
 
-func (ec *defaultEventChannel) GetNextEvent() Event {
-	select {
-	case msg := <-ec.events:
-		return msg
-	default:
-		return nil
-	}
-}
-
-
 func (ec *defaultEventChannel) AddEvent(event Event) {
 	atomic.AddUint32(&ec.diagCounter, 1)
 	diagCounter := atomic.LoadUint32(&ec.diagCounter)
 	diagInterval := atomic.LoadUint32(&ec.diagInterval)
 	if diagCounter >= diagInterval {
-		msg := fmt.Sprintf("Event cache channel has %s size and %s capacity.", strconv.Itoa(len(ec.events)), strconv.Itoa(cap(ec.events)))
+		msg := fmt.Sprintf("Event cache channel has %s size and %s capacity.", strconv.Itoa(len(ec.eventChannel)), strconv.Itoa(cap(ec.eventChannel)))
 		log.Logger().Debug(msg)
 		atomic.StoreUint32(&ec.diagCounter, 0)
 	}
 
 	select {
-		case ec.events <- event:
+		case ec.eventChannel <- event:
 			// event is successfully pushed to channel
 		default:
 			// if the channel is full, emitting log entries on DEBUG=< level is going to have serious performance impact
 			log.Logger().Debug("Channel is full - discarding event.")
 	}
+}
+
+func (ec *defaultEventChannel) GetChannel() chan Event {
+	return ec.eventChannel
+}
+
+func (ec *defaultEventChannel) Stop() {
+	close(ec.eventChannel)
 }

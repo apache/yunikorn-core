@@ -24,28 +24,38 @@ import (
 	"gotest.tools/assert"
 )
 
+func isChannelEmpty(channel chan Event) bool {
+	select {
+	case <- channel:
+		return false
+	default:
+		return true
+	}
+}
+
 func TestEmptyChannel(t *testing.T) {
-	channel := newEventChannelImpl(1)
-	event := channel.GetNextEvent()
-	assert.Equal(t, event, nil)
+	eventChannel := newEventChannelImpl(1)
+	assert.Equal(t, isChannelEmpty(eventChannel.GetChannel()), true)
 }
 
 func TestPushAndRetrieve(t *testing.T) {
-	channel := newEventChannelImpl(1)
-	event := channel.GetNextEvent()
-	assert.Equal(t, event, nil)
+	eventChannel := newEventChannelImpl(1)
+	assert.Equal(t, isChannelEmpty(eventChannel.GetChannel()), true)
 
 	newEvent := &baseEvent{}
-	channel.AddEvent(newEvent)
-	event = channel.GetNextEvent()
-	assert.Equal(t, event, newEvent)
+	eventChannel.AddEvent(newEvent)
+	select {
+	case event := <- eventChannel.GetChannel():
+		assert.Equal(t, event, newEvent)
+	default:
+		t.Fatal("expected event object in EventChannel")
+	}
 
-	event = channel.GetNextEvent()
-	assert.Equal(t, event, nil)
+	assert.Equal(t, isChannelEmpty(eventChannel.GetChannel()), true)
 }
 
 func TestLimit(t *testing.T) {
-	channel := newEventChannelImpl(1)
+	eventChannel := newEventChannelImpl(1)
 	event1 := &baseEvent{
 		reason: "reason1",
 	}
@@ -53,12 +63,15 @@ func TestLimit(t *testing.T) {
 		reason: "reason2",
 	}
 
-	channel.AddEvent(event1)
-	channel.AddEvent(event2)
+	eventChannel.AddEvent(event1)
+	eventChannel.AddEvent(event2)
 
-	event := channel.GetNextEvent()
-	assert.Equal(t, event, event1)
+	select {
+	case event := <- eventChannel.GetChannel():
+		assert.Equal(t, event, event1)
+	default:
+		t.Fatal("expected event object in EventChannel")
+	}
 
-	event = channel.GetNextEvent()
-	assert.Equal(t, event, nil)
+	assert.Equal(t, isChannelEmpty(eventChannel.GetChannel()), true)
 }

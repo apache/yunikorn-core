@@ -62,7 +62,7 @@ func (es *eventStoreForTest) CollectEvents() ([]*si.EventRecord, error) {
 			case event := <-es.events:
 				record, err := eventToRecord(event)
 				if err != nil {
-					log.Logger().Warn("error during converting events to records", zap.Error(err))
+					log.Logger().Warn("error during converting eventChannel to records", zap.Error(err))
 					errorList = append(errorList, err.Error())
 					continue
 				}

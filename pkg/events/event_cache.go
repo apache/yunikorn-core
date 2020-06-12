@@ -39,7 +39,7 @@ type EventCache struct {
 }
 
 func GetEventCache() *EventCache {
-	once.Do(func(){
+	once.Do(func() {
 		store := newEventStoreImpl()
 
 		cache = &EventCache{
@@ -52,7 +52,6 @@ func GetEventCache() *EventCache {
 	return cache
 }
 
-// TODO consider thread pool
 func (ec *EventCache) StartService() {
 	ec.Lock()
 	defer ec.Unlock()
@@ -94,19 +93,19 @@ func (ec *EventCache) GetEventStore() EventStore {
 func (ec *EventCache) processEvent() {
 	for {
 		select {
-			case <- ec.stop:
-				return
-			case event, ok := <- ec.channel.GetChannel():
-				if event != nil {
-					ec.store.Store(event)
-				} else {
-					log.Logger().Debug("nil object in EventChannel")
-					if !ok {
-						log.Logger().Info("the EventChannel is closed - closing the EventCache")
-						ec.Stop()
-						return
-					}
+		case <-ec.stop:
+			return
+		case event, ok := <-ec.channel.GetChannel():
+			if event != nil {
+				ec.store.Store(event)
+			} else {
+				log.Logger().Debug("nil object in EventChannel")
+				if !ok {
+					log.Logger().Info("the EventChannel is closed - closing the EventCache")
+					ec.Stop()
+					return
 				}
+			}
 		}
 	}
 }

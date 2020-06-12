@@ -49,13 +49,11 @@ func toEventMessage(e Event) (*si.EventRecord, error) {
 }
 
 func convertSourceToTypeAndID(obj interface{}) (si.EventRecord_Type, string, error) {
-	// TODO other type checks
 	if ask, ok := obj.(*si.AllocationAsk); ok {
 		return si.EventRecord_REQUEST, ask.AllocationKey, nil
 	}
 	log.Logger().Warn("Could not convert source object to EventMessageType", zap.Any("object", obj))
 
-	// TODO should add UNKNOWN request?
 	return si.EventRecord_REQUEST, "", fmt.Errorf("could not convert source object to EventMessageType")
 }
 
@@ -82,11 +80,10 @@ func (be *baseEvent) GetMessage() string {
 	return be.message
 }
 
-
 func CreateInsufficientQueueResourcesEvent(ask *si.AllocationAsk, message string) Event {
 	return &baseEvent{
 		source:  ask,
-		group:	 ask.ApplicationID,
+		group:   ask.ApplicationID,
 		reason:  "InsufficientQueueResources",
 		message: message,
 	}

@@ -106,15 +106,16 @@ func TestMultipleEvents(t *testing.T) {
 	assert.Equal(t, len(records), 2)
 	for _, record := range records {
 		assert.Equal(t, record.Type, si.EventRecord_REQUEST)
-		if record.ObjectID == "alloc1" {
+		switch {
+		case record.ObjectID == "alloc1":
 			assert.Equal(t, record.GroupID, "app1")
 			assert.Equal(t, record.Message, "message2")
 			assert.Equal(t, record.Reason, "reason2")
-		} else if record.ObjectID == "alloc2" {
+		case record.ObjectID == "alloc2":
 			assert.Equal(t, record.GroupID, "app2")
 			assert.Equal(t, record.Message, "message3")
 			assert.Equal(t, record.Reason, "reason3")
-		} else {
+		default:
 			t.Fatalf("Unexpected allocation found")
 		}
 	}

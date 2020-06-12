@@ -26,7 +26,6 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
 
-
 type EventChannel interface {
 	AddEvent(event Event)
 	GetChannel() chan Event
@@ -45,7 +44,6 @@ func newEventChannelImpl(eventChannelSize uint32) EventChannel {
 		diagCounter:  0,
 		diagInterval: eventChannelSize,
 	}
-
 }
 
 func (ec *defaultEventChannel) AddEvent(event Event) {
@@ -59,11 +57,11 @@ func (ec *defaultEventChannel) AddEvent(event Event) {
 	}
 
 	select {
-		case ec.eventChannel <- event:
-			// event is successfully pushed to channel
-		default:
-			// if the channel is full, emitting log entries on DEBUG=< level is going to have serious performance impact
-			log.Logger().Debug("Channel is full - discarding event.")
+	case ec.eventChannel <- event:
+		// event is successfully pushed to channel
+	default:
+		// if the channel is full, emitting log entries on DEBUG=< level is going to have serious performance impact
+		log.Logger().Debug("Channel is full - discarding event.")
 	}
 }
 

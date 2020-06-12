@@ -44,9 +44,9 @@ func eventToRecord(event Event) (*si.EventRecord, error) {
 	}
 	return &si.EventRecord{
 		ObjectID: source,
-		GroupID: event.GetGroup(),
-		Reason: event.GetReason(),
-		Message: event.GetMessage(),
+		GroupID:  event.GetGroup(),
+		Reason:   event.GetReason(),
+		Message:  event.GetMessage(),
 	}, nil
 }
 
@@ -59,20 +59,20 @@ func (es *eventStoreForTest) CollectEvents() ([]*si.EventRecord, error) {
 	errorList := make([]string, 0)
 	for {
 		select {
-			case event := <-es.events:
-				record, err := eventToRecord(event)
-				if err != nil {
-					log.Logger().Warn("error during converting eventChannel to records", zap.Error(err))
-					errorList = append(errorList, err.Error())
-					continue
-				}
-				records = append(records, record)
-			default:
-				var errorsToReturn error
-				if len(errorList) > 0 {
-					errorsToReturn = errors.New(strings.Join(errorList, ","))
-				}
-				return records, errorsToReturn
+		case event := <-es.events:
+			record, err := eventToRecord(event)
+			if err != nil {
+				log.Logger().Warn("error during converting eventChannel to records", zap.Error(err))
+				errorList = append(errorList, err.Error())
+				continue
+			}
+			records = append(records, record)
+		default:
+			var errorsToReturn error
+			if len(errorList) > 0 {
+				errorsToReturn = errors.New(strings.Join(errorList, ","))
+			}
+			return records, errorsToReturn
 		}
 	}
 }
@@ -102,10 +102,10 @@ func (ep *eventPluginForTest) SendEvent(events []*si.EventRecord) error {
 
 func (ep *eventPluginForTest) getNextEventRecord() *si.EventRecord {
 	select {
-		case record := <- ep.records:
-			return record
-		default:
-			return nil
+	case record := <-ep.records:
+		return record
+	default:
+		return nil
 	}
 }
 

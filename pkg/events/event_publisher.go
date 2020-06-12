@@ -57,7 +57,7 @@ func (sp *shimPublisher) isStopped() bool {
 }
 
 func (sp *shimPublisher) StartService() {
-	go func () {
+	go func() {
 		for {
 			if sp.isStopped() {
 				break

@@ -26,7 +26,7 @@ import (
 
 func isChannelEmpty(channel chan Event) bool {
 	select {
-	case <- channel:
+	case <-channel:
 		return false
 	default:
 		return true
@@ -45,7 +45,7 @@ func TestPushAndRetrieve(t *testing.T) {
 	newEvent := &baseEvent{}
 	eventChannel.AddEvent(newEvent)
 	select {
-	case event := <- eventChannel.GetChannel():
+	case event := <-eventChannel.GetChannel():
 		assert.Equal(t, event, newEvent)
 	default:
 		t.Fatal("expected event object in EventChannel")
@@ -67,7 +67,7 @@ func TestLimit(t *testing.T) {
 	eventChannel.AddEvent(event2)
 
 	select {
-	case event := <- eventChannel.GetChannel():
+	case event := <-eventChannel.GetChannel():
 		assert.Equal(t, event, event1)
 	default:
 		t.Fatal("expected event object in EventChannel")

@@ -25,8 +25,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/events"
 	"go.uber.org/zap"
+
+	"github.com/apache/incubator-yunikorn-core/pkg/events"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"

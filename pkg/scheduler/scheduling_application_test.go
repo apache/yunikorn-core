@@ -575,7 +575,7 @@ func TestSortRequests(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	for i := 1; i < 4; i++ {
 		num := strconv.Itoa(i)
-		ask := newAllocationAsk("ask-"+num, "app-1", res)
+		ask := newAllocationAsk("ask-"+num, appID, res)
 		ask.priority = int32(i)
 		app.requests[ask.AskProto.AllocationKey] = ask
 	}
@@ -589,4 +589,72 @@ func TestSortRequests(t *testing.T) {
 	if len(app.sortedRequests) != 2 {
 		t.Fatalf("app sorted requests not correct after removal: %v", app.sortedRequests)
 	}
+}
+
+func TestStateChangeOnAskUpdate(t *testing.T) {
+	// create a fake queue
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+
+	appID := "app-1"
+	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	app := newSchedulingApplication(appInfo)
+	if app == nil || app.ApplicationInfo.ApplicationID != appID {
+		t.Fatalf("app create failed which should not have %v", app)
+	}
+	// fake the queue assignment
+	app.queue = queue
+	// app should be new
+	assert.Assert(t, app.isNew(), "New application did not return new state: %s", app.ApplicationInfo.GetApplicationState())
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	askID := "ask-1"
+	ask := newAllocationAsk(askID, appID, res)
+	_, err = app.addAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app, returned delta")
+	// app with ask should be accepted
+	assert.Assert(t, app.isAccepted(), "application did not change to accepted state: %s", app.ApplicationInfo.GetApplicationState())
+
+	// removing the ask should move it to waiting
+	released := app.removeAllocationAsk(askID)
+	assert.Equal(t, released, 0, "allocation ask should not have been reserved")
+	assert.Assert(t, app.isWaiting(), "application did not change to waiting state: %s", app.ApplicationInfo.GetApplicationState())
+
+	// start with a fresh state machine
+	appInfo = cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	app = newSchedulingApplication(appInfo)
+	if app == nil || app.ApplicationInfo.ApplicationID != appID {
+		t.Fatalf("app create failed which should not have %v", app)
+	}
+	// fake the queue assignment
+	app.queue = queue
+	// app should be new
+	assert.Assert(t, app.isNew(), "New application did not return new state: %s", app.ApplicationInfo.GetApplicationState())
+	_, err = app.addAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app, returned delta")
+	// app with ask should be accepted
+	assert.Assert(t, app.isAccepted(), "application did not change to accepted state: %s", app.ApplicationInfo.GetApplicationState())
+	// add an alloc
+	uuid := "uuid-1"
+	allocInfo := cache.CreateMockAllocationInfo(appID, res, uuid, "root.unknown", "node-1")
+	cache.AddAllocationToApp(appInfo, allocInfo)
+	// app should be starting
+	assert.Assert(t, app.isStarting(), "application did not return starting state after alloc: %s", app.ApplicationInfo.GetApplicationState())
+
+	// removing the ask should not move anywhere as there is an allocation
+	released = app.removeAllocationAsk(askID)
+	assert.Equal(t, released, 0, "allocation ask should not have been reserved")
+	assert.Assert(t, app.isStarting(), "application changed state unexpectedly: %s", app.ApplicationInfo.GetApplicationState())
+
+	// remove the allocation
+	cache.RemoveAllocationFromApp(appInfo, uuid)
+	// set in flight allocation
+	app.allocating = res
+	// add an ask with the repeat set to 0 (cannot use the proper way)
+	ask = newAllocationAskRepeat(askID, appID, res, 0)
+	app.requests[askID] = ask
+
+	// with allocations in flight we should not change state
+	released = app.removeAllocationAsk(askID)
+	assert.Equal(t, released, 0, "allocation ask should not have been reserved")
+	assert.Assert(t, app.isStarting(), "application changed state unexpectedly: %s", app.ApplicationInfo.GetApplicationState())
 }

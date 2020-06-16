@@ -38,6 +38,11 @@ func AddAllocationToApp(app *ApplicationInfo, alloc *AllocationInfo) {
 	app.addAllocation(alloc)
 }
 
+// Remove allocation to cache app for tests
+func RemoveAllocationFromApp(app *ApplicationInfo, uuid string) {
+	app.removeAllocation(uuid)
+}
+
 // Create a partition for testing from a yaml configuration
 func CreatePartitionInfo(data []byte) (*PartitionInfo, error) {
 	// create config from string

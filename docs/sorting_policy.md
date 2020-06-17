@@ -28,6 +28,12 @@ The application sorting policy is set for each queue via the config.
 A sorting policy setting is only effective on a `leaf` queue.
 Each `leaf` queue can use a different policy.
 
+A sorting policy only specifies the order in which the applications are sorted within a queue.
+That order is crucial in specifying which application is considered first when assigning resources.
+Sorting policies do _not_ affect the number of applications that are scheduled or active in the queue at the same time.
+All applications that have pending resource requests can and will be scheduled in a queue unless specifically filtered out.
+Even when applications are sorted using a first in first out policy multiple applications will run in a queue in parallel. 
+
 A `parent` queue will always use the fair policy to sort the child queues.
 
 The following configuration entry sets the application sorting policy to `fifo` for the queue `root.sandbox`: 
@@ -49,40 +55,55 @@ A filter is applied _while_ sorting the applications to remove all that do not h
 Short description: first in first out, based on application create time  
 Config value: fifo (default)  
 Behaviour:  
-The applications are sorted based on the application create time stamp.
+Before sorting the applications are filtered and must have pending resource requests.
+
+After filtering the applications left are sorted based on the application create time stamp only, no other filtering is applied. 
 Since applications can only be added while the system is locked there can never be two applications with the exact same time stamp. 
 
-Before sorting the applications are filtered and must have outstanding requests.
+The result is that the oldest application that requests resources gets resources.
+Younger applications will be given resources when all the current requests of older applications have been fulfilled. 
 
 ### FairSortPolicy
 Short description: fair based on usage  
 Config value: fair  
 Behaviour:  
-The applications are sorted based on the application usage.
+Before sorting the applications are filtered and must have pending resource requests.
+
+After filtering the applications left are sorted based on the application usage.
 The usage of the application is defined as all confirmed and unconfirmed allocations for the applications. 
 All resources defined on the application will be taken into account when calculating the usage.
 
-Before sorting the applications are filtered and must have outstanding requests.
+The result is that the resources available are spread equally over all applications that request resources.
 
 ### StateAwarePolicy
 Short description: limit of one (1) application in Starting or Accepted state  
 Config value: stateaware  
 Behaviour:  
-The applications are sorted based on the application create time stamp, after filtering based on status.
+This sorting policy requires an understanding of the application states.
 Applications states are described in the [application states](object_states.md#application-state) documentation.
 
-Before sorting applications the following filter is applied to the applications:
+Before sorting applications the following filters are applied to all applications in the queue:
+The first filter is based on the application state.
+The following applications pass through the filter and generate the first intermediate list:
 * all applications in the state _running_
-* only one of the following two:  
-    * one application in the _starting_ state
-    * one application in the _accepted_ state
-* applications must have outstanding requests
+* _one_ (1) application in the _starting_ state
+* if there are _no_ applications in the _starting_ state _one_ (1) application in the _accepted_ state is added
 
+The second filter takes the result of the first filter as an input.
+The preliminary list is filtered again: all applications _without_ a pending request are removed.
+
+After filtering based on status and pending requests the applications that remain are sorted.
+The final list is thus filtered twice with the remaining applications sorted on create time.
+
+To recap the _staring_ and _accepted_ state interactions: 
 The application in the _accepted_ state is only added if there is no application in the _starting_ state.
-The application in the _starting_ state does not have to have outstanding requests.
+The application in the _starting_ state does not have to have pending requests.
 Any application in the _starting_ state will prevent _accepted_ applications from being added to the filtered list.
 
-After the list is filtered all applications are sorted on create time.
+For further details see the [Example run](design/state-aware-scheduling.md#example-run) in the design document.
+
+The result is that already running applications that request resources will get resources first.
+A drip feed of one new applications is added to the list of running applications to be allocated after all running applications.  
 
 ## Node sorting
 The node sorting policy is set for a partition via the config.

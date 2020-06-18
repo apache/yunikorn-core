@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 )
 
 const defaultEventChannelSize = 100000
@@ -30,10 +31,9 @@ var once sync.Once
 var cache *EventCache
 
 type EventCache struct {
-	channel EventChannel // channelling input eventChannel
-	store   EventStore   // storing eventChannel
-	started bool         // whether the service is started
-	stop    chan bool    // whether the service is stop
+	channel chan Event // channelling input eventChannel
+	store   EventStore // storing eventChannel
+	stop    chan bool  // whether the service is stop
 
 	sync.Mutex
 }
@@ -43,9 +43,8 @@ func GetEventCache() *EventCache {
 		store := newEventStoreImpl()
 
 		cache = &EventCache{
-			channel: newEventChannelImpl(defaultEventChannelSize),
+			channel: nil,
 			store:   store,
-			started: false,
 			stop:    make(chan bool),
 		}
 	})
@@ -56,34 +55,38 @@ func (ec *EventCache) StartService() {
 	ec.Lock()
 	defer ec.Unlock()
 
-	if !ec.started {
-		// start main event processing thread
-		go ec.processEvent()
-
-		ec.started = true
-	}
+	ec.channel = make(chan Event, defaultEventChannelSize)
+	go ec.processEvent()
 }
 
 func (ec *EventCache) IsStarted() bool {
 	ec.Lock()
 	defer ec.Unlock()
 
-	return ec.started
+	return ec.channel == nil
 }
 
 func (ec *EventCache) Stop() {
 	ec.Lock()
 	defer ec.Unlock()
 
-	if ec.started {
-		ec.stop <- true
-		ec.channel.Stop()
-		ec.started = false
+	ec.stop <- true
+	if ec.channel != nil {
+		close(ec.channel)
+		ec.channel = nil
 	}
 }
 
 func (ec *EventCache) AddEvent(event Event) {
-	ec.channel.AddEvent(event)
+	metrics.GetEventMetrics().IncEventsCreated()
+	select {
+	case ec.channel <- event:
+		metrics.GetEventMetrics().IncEventsChanneled()
+	default:
+		// if the channel is full, emitting log entries on DEBUG=< level is going to have serious performance impact
+		log.Logger().Debug("Channel is full - discarding event.")
+		metrics.GetEventMetrics().IncEventsNotChanneled()
+	}
 }
 
 func (ec *EventCache) GetEventStore() EventStore {
@@ -95,9 +98,10 @@ func (ec *EventCache) processEvent() {
 		select {
 		case <-ec.stop:
 			return
-		case event, ok := <-ec.channel.GetChannel():
+		case event, ok := <-ec.channel:
 			if event != nil {
 				ec.store.Store(event)
+				metrics.GetEventMetrics().IncEventsProcessed()
 			} else {
 				log.Logger().Debug("nil object in EventChannel")
 				if !ok {

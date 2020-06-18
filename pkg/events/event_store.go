@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
@@ -73,6 +74,9 @@ func (es *defaultEventStore) CollectEvents() ([]*si.EventRecord, error) {
 
 	// clear map
 	es.eventMap = make(map[interface{}]Event)
+
+	metrics.GetEventMetrics().AddEventsCollected(len(messages))
+	metrics.GetEventMetrics().AddEventsNotCollected(len(errorList))
 
 	var errorsToReturn error
 	if len(errorList) > 0 {

@@ -123,7 +123,6 @@ func TestServiceStartStopWithoutEventPlugin(t *testing.T) {
 	publisher := createPublisherForTest(store)
 	publisher.StartService()
 	assert.Equal(t, publisher.getEventStore(), store)
-	time.Sleep(100 * time.Millisecond)
 	publisher.Stop()
 }
 
@@ -134,7 +133,6 @@ func TestServiceStartStopWithEventPlugin(t *testing.T) {
 	publisher := createPublisherForTest(store)
 	publisher.StartService()
 	assert.Equal(t, publisher.getEventStore(), store)
-	time.Sleep(100 * time.Millisecond)
 	publisher.Stop()
 }
 

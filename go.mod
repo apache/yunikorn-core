@@ -22,7 +22,7 @@ module github.com/apache/incubator-yunikorn-core
 go 1.12
 
 require (
-	github.com/apache/incubator-yunikorn-scheduler-interface v0.8.1-0.20200611153658-aa3d0d66d3a3
+	github.com/apache/incubator-yunikorn-scheduler-interface v0.8.1-0.20200613000533-a889c9d6bafc
 	github.com/golang/protobuf v1.4.0 // indirect
 	github.com/gorilla/mux v1.7.3
 	github.com/kr/text v0.2.0 // indirect

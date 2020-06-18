@@ -34,6 +34,8 @@ The documents describing the configuration:
 - [Queue Configuration](queue_config.md)
 - [Dynamic Queues and Placement Rules](placement_rules.md)
 - [Queue Access Control Lists](acls.md)
+- [Sorting Policies](sorting_policy.md)
+- [State Machines and Events](object_states.md)
 
 Metrics and performance documentation:
 - [Kubemark Performance](evaluate-perf-function-with-Kubemark.md)

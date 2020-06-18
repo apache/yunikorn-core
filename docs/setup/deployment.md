@@ -18,7 +18,7 @@
 
 # Deployment Guide
 
-The easiest way to deploy YuniKorn is to leverage our [helm charts](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/helm-charts),
+The easiest way to deploy YuniKorn is to leverage our [helm charts](https://github.com/apache/incubator-yunikorn-release/tree/master/helm-charts),
 you can find the guide [here](../user-guide.md). However, if you want to explore the deployment procedure
 step by step, here are the instructions.
 

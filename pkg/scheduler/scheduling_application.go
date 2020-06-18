@@ -187,26 +187,21 @@ func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) int {
 	}
 	// clean up the queue pending resources
 	sa.queue.decPendingResource(deltaPendingResource)
-
-	if resources.IsZero(sa.pending) {
-		sa.askUpdateStateChange()
-	}
-
-	return toRelease
-}
-
-// Check if we need to change state based on the ask update:
-// 1) if pending is zero (no more asks left, checked in the caller)
-// 2) if allocation is zero (nothing is running)
-// Change the state to waiting
-func (sa *SchedulingApplication) askUpdateStateChange() {
-	if resources.IsZero(sa.GetAllocatedResource()) {
+	// Check if we need to change state based on the ask removal:
+	// 1) if pending is zero (no more asks left)
+	// 2) if confirmed allocations is zero (nothing is running)
+	// 3) if there are no allocations in flight
+	// Change the state to waiting.
+	// When all 3 resources trackers are zero we should not expect anything to come in later.
+	if resources.IsZero(sa.pending) && resources.IsZero(sa.GetAllocatedResource()) && resources.IsZero(sa.allocating) {
 		if err := sa.ApplicationInfo.HandleApplicationEvent(cache.WaitApplication); err != nil {
-			log.Logger().Warn("Application state not changed to Waiting while removing ask(s)",
+			log.Logger().Warn("Application state not changed to Waiting while updating ask(s)",
 				zap.String("currentState", sa.ApplicationInfo.GetApplicationState()),
 				zap.Error(err))
 		}
 	}
+
+	return toRelease
 }
 
 // Add an allocation ask to this application
@@ -231,15 +226,8 @@ func (sa *SchedulingApplication) addAllocationAsk(ask *schedulingAllocationAsk) 
 	// Check if we need to change state based on the ask added, there are two cases:
 	// 1) first ask added on a new app: state is New
 	// 2) all asks and allocation have been removed: state is Waiting
-	// Accept the app and get it scheduling (again)
-	if sa.isNew() {
-		if err := sa.ApplicationInfo.HandleApplicationEvent(cache.RunApplication); err != nil {
-			log.Logger().Debug("Application state change failed while adding first ask",
-				zap.String("currentState", sa.ApplicationInfo.GetApplicationState()),
-				zap.Error(err))
-		}
-	}
-	if sa.isWaiting() {
+	// Move the state and get it scheduling (again)
+	if sa.isNew() || sa.isWaiting() {
 		if err := sa.ApplicationInfo.HandleApplicationEvent(cache.RunApplication); err != nil {
 			log.Logger().Debug("Application state change failed while adding new ask",
 				zap.String("currentState", sa.ApplicationInfo.GetApplicationState()),
@@ -275,10 +263,6 @@ func (sa *SchedulingApplication) updateAskRepeatInternal(ask *schedulingAllocati
 	sa.pending.AddTo(deltaPendingResource)
 	// update the pending of the queue with the same delta
 	sa.queue.incPendingResource(deltaPendingResource)
-
-	if resources.IsZero(sa.pending) {
-		sa.askUpdateStateChange()
-	}
 
 	return deltaPendingResource, nil
 }

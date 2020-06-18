@@ -63,19 +63,25 @@ The queues configuration is explained below.
 Optionally the following keys can be defined for a partition:
 * [placementrules](#placement-rules)
 * [limits](#limits)
+* nodesortpolicy
 * preemption
 
 Placement rules and limits are explained in their own chapters
+
+The `nodesortpolicy` defines the way the nodes are sorted for the partition.
+Details on the values that can be used are in the [sorting policy](sorting_policy.md#node-sorting) documentation.
+
 The preemption key can currently have only one sub key: _enabled_.
 This boolean value defines the preemption behaviour for the whole partition.
 
 The default value for _enabled_ is _false_.
 Allowed values: _true_ or _false_, any other value will cause a parse error.
 
-Example `partition` yaml entry with _preemption_ flag:
+Example `partition` yaml entry with _preemption_ flag set and a `nodesortpolicy` of _fair_:
 ```yaml
 partitions:
   - name: <name of the partition>
+    nodesortpolicy: fair
     preemption:
       enabled: true
 ```
@@ -137,7 +143,8 @@ The `queues` entry is a recursive entry for a queue level and uses the exact sam
 The `properties` parameter is a simple key value pair list. 
 The list provides a simple set of properties for the queue.
 There are no limitations on the key or value values, anything is allowed.
-Currently the property list is not used in the scheduler and is only provided for future expansion like the option to turn on or off preemption on a queue or define a sorting order specific for a queue.  
+Currently, the property list is only used in the scheduler to define a [sorting order](sorting_policy.md#application-sorting) for a leaf queue.
+Future expansions, like the option to turn on or off preemption on a queue or other sorting policies, would use this same property construct without the need to change the configuration.
 
 Access to a queue is set via the `adminacl` for administrative actions and for submitting an application via the `submitacl` entry.
 ACLs are documented in the [Access control lists](./acls.md) document.

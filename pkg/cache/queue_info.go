@@ -537,6 +537,10 @@ func (qi *QueueInfo) GetQueueInfos() dao.QueueDAOInfo {
 		AbsUsedCapacity: resources.CalculateAbsUsedCapacity(
 			qi.GetMaxResource(), qi.GetAllocatedResource()).DAOString(),
 	}
+	queueInfo.Properties = make(map[string]string)
+	for k, v := range qi.properties {
+		queueInfo.Properties[k] = v
+	}
 	for _, child := range qi.children {
 		queueInfo.ChildQueues = append(queueInfo.ChildQueues, child.GetQueueInfos())
 	}

@@ -425,6 +425,8 @@ func TestGetQueueInfos(t *testing.T) {
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	err = parent.IncAllocatedResource(parentUsed, false)
 	assert.NilError(t, err, "failed to increment allocated resource: %v", err)
+	parent.properties = make(map[string]string)
+	parent.properties[configs.ApplicationSortPolicy] = "fifo"
 
 	var child1used *resources.Resource
 	child1used, err = resources.NewResourceFromConf(map[string]string{"memory": "1012", "vcores": "2"})
@@ -474,5 +476,11 @@ func compareQueueInfoWithDAO(t *testing.T, queueInfo *QueueInfo, dao dao.QueueDA
 		assert.Equal(t, emptyRes, dao.Capacities.Capacity)
 	} else {
 		assert.Equal(t, strings.Trim(queueInfo.guaranteedResource.String(), "map"), dao.Capacities.Capacity)
+	}
+	assert.Equal(t, len(queueInfo.properties), len(dao.Properties))
+	if len(queueInfo.properties) > 0 {
+		for k, v := range queueInfo.properties {
+			assert.Equal(t, v, dao.Properties[k])
+		}
 	}
 }

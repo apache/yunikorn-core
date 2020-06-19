@@ -69,6 +69,16 @@ func newPartitionSchedulingContext(info *cache.PartitionInfo, root *SchedulingQu
 	return psc
 }
 
+func (psc *partitionSchedulingContext) getPartitionAvailable() *resources.Resource {
+	psc.RLock()
+	defer psc.RUnlock()
+
+	available := psc.partition.GetTotalPartitionResource()
+	available.SubFrom(psc.root.GetAllocatedResource())
+	available.SubFrom(psc.root.getAllocatingResource())
+	return available
+}
+
 // Update the scheduling partition based on the reloaded config.
 func (psc *partitionSchedulingContext) updatePartitionSchedulingContext(info *cache.PartitionInfo) {
 	psc.Lock()

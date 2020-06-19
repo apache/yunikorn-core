@@ -499,6 +499,37 @@ func (sq *SchedulingQueue) getHeadRoom() *resources.Resource {
 	return resources.ComponentWiseMin(headRoom, parentHeadRoom)
 }
 
+// this function returns the max headRoom of a queue
+// this doesn't get the partition resources into the consideration
+func (sq *SchedulingQueue) getMaxHeadRoom() *resources.Resource {
+	var parentHeadRoom *resources.Resource
+	if sq.parent != nil {
+		parentHeadRoom = sq.parent.getMaxHeadRoom()
+	}
+	sq.RLock()
+	defer sq.RUnlock()
+
+	var headRoom *resources.Resource
+	if sq.parent != nil {
+		// for non-root queue, get headRoom from queue max resource
+		// for root queue, remain to nil (=unlimited)
+		headRoom = sq.QueueInfo.GetMaxResource()
+	}
+
+	// if we have no max set headroom is always the same as the parent
+	if headRoom == nil {
+		return parentHeadRoom
+	}
+	// calculate unused
+	headRoom.SubFrom(sq.allocating)
+	headRoom.SubFrom(sq.QueueInfo.GetAllocatedResource())
+	// check the minimum of the two: parentHeadRoom is nil for root
+	if parentHeadRoom == nil {
+		return headRoom
+	}
+	return resources.ComponentWiseMin(headRoom, parentHeadRoom)
+}
+
 // Get the max resource for the queue this should never be more than the max for the parent.
 // The root queue always has its limit set to the total cluster size (dynamic based on node registration)
 // In case there are no nodes in a newly started cluster and no queues have a limit configured this call

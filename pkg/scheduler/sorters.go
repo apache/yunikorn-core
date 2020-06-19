@@ -163,7 +163,7 @@ func sortAskByPriority(requests []*schedulingAllocationAsk, ascending bool) {
 
 // This interface is used by scheduling queue to sort applications and
 // get sorted pending requests from a specific application.
-type AppSortPolicy interface {
+type AppRequestSorter interface {
 	// sort applications
 	sortApplications(apps []*SchedulingApplication, queueInfo *cache.QueueInfo)
 	// get pending requests iterator,
@@ -171,11 +171,11 @@ type AppSortPolicy interface {
 	getPendingRequestIterator(app *SchedulingApplication) RequestIterator
 }
 
-type FairAppSortPolicy struct {
-	AppSortPolicy
+type FairAppRequestSorter struct {
+	AppRequestSorter
 }
 
-func (as *FairAppSortPolicy) sortApplications(apps []*SchedulingApplication, queueInfo *cache.QueueInfo) {
+func (as *FairAppRequestSorter) sortApplications(apps []*SchedulingApplication, queueInfo *cache.QueueInfo) {
 	// Sort by usage
 	sort.SliceStable(apps, func(i, j int) bool {
 		l := apps[i]
@@ -185,50 +185,50 @@ func (as *FairAppSortPolicy) sortApplications(apps []*SchedulingApplication, que
 	})
 }
 
-func (as *FairAppSortPolicy) getPendingRequestIterator(app *SchedulingApplication) RequestIterator {
+func (as *FairAppRequestSorter) getPendingRequestIterator(app *SchedulingApplication) RequestIterator {
 	return app.requests.GetPendingRequestIterator()
 }
 
-type FifoAppSortPolicy struct {
-	AppSortPolicy
+type FifoAppRequestSorter struct {
+	AppRequestSorter
 }
 
-func (as *FifoAppSortPolicy) sortApplications(apps []*SchedulingApplication, queueInfo *cache.QueueInfo) {
+func (as *FifoAppRequestSorter) sortApplications(apps []*SchedulingApplication, queueInfo *cache.QueueInfo) {
 	// Sort first by priority, then by create time
 	sort.SliceStable(apps, func(i, j int) bool {
 		r := apps[j].requests.GetTopPendingPriorityGroup()
 		l := apps[i].requests.GetTopPendingPriorityGroup()
-		if r == nil && l == nil {
+		switch {
+		case r == nil && l == nil:
 			return apps[i].ApplicationInfo.SubmissionTime < apps[j].ApplicationInfo.SubmissionTime
-		} else if r == nil {
+		case r == nil:
 			return true
-		} else if l == nil {
+		case l == nil:
 			return false
 		}
+
 		if l.GetPriority() == r.GetPriority() {
 			return l.GetCreateTime().Before(r.GetCreateTime())
-		} else {
-			return l.GetPriority() > r.GetPriority()
 		}
+		return l.GetPriority() > r.GetPriority()
 	})
 }
 
-func (as *FifoAppSortPolicy) getPendingRequestIterator(app *SchedulingApplication) RequestIterator {
+func (as *FifoAppRequestSorter) getPendingRequestIterator(app *SchedulingApplication) RequestIterator {
 	topPendingPriorityGroup := app.requests.GetTopPendingPriorityGroup()
 	if topPendingPriorityGroup != nil {
 		return topPendingPriorityGroup.GetPendingRequestIterator()
-	} else {
-		return NewSortedRequestIterator([]maps.MapIterator{})
 	}
+	return NewSortedRequestIterator([]maps.MapIterator{})
 }
 
-func newAppSortPolicy(sortPolicy policies.SortPolicy) (AppSortPolicy, error) {
+func newAppRequestSorter(sortPolicy policies.SortPolicy) AppRequestSorter {
 	switch sortPolicy {
 	case policies.FairSortPolicy:
-		return &FairAppSortPolicy{}, nil
+		return &FairAppRequestSorter{}
 	case policies.FifoSortPolicy:
-		return &FifoAppSortPolicy{}, nil
+		return &FifoAppRequestSorter{}
 	default:
-		return &FairAppSortPolicy{}, nil
+		return &FairAppRequestSorter{}
 	}
 }

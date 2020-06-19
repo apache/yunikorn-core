@@ -27,10 +27,10 @@ import (
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
-	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 )
 
 // create the root queue, base for all testing
@@ -834,14 +834,14 @@ func TestIsEmpty(t *testing.T) {
 func BenchmarkSortApplications(b *testing.B) {
 	tests := []struct {
 		numApplications int
-		policyType      common.AppSortPolicyType
+		policyType      policies.SortPolicy
 	}{
-		{numApplications: 10, policyType: common.FairAppSortPolicyType},
-		{numApplications: 10, policyType: common.FifoAppSortPolicyType},
-		{numApplications: 100, policyType: common.FairAppSortPolicyType},
-		{numApplications: 100, policyType: common.FifoAppSortPolicyType},
-		{numApplications: 1000, policyType: common.FairAppSortPolicyType},
-		{numApplications: 1000, policyType: common.FifoAppSortPolicyType},
+		{numApplications: 10, policyType: policies.FairSortPolicy},
+		{numApplications: 10, policyType: policies.FifoSortPolicy},
+		{numApplications: 100, policyType: policies.FairSortPolicy},
+		{numApplications: 100, policyType: policies.FifoSortPolicy},
+		{numApplications: 1000, policyType: policies.FairSortPolicy},
+		{numApplications: 1000, policyType: policies.FifoSortPolicy},
 	}
 	for _, test := range tests {
 		name := fmt.Sprintf("%vApps/%s", test.numApplications, test.policyType)
@@ -851,7 +851,7 @@ func BenchmarkSortApplications(b *testing.B) {
 	}
 }
 
-func benchmarkSortApplications(b *testing.B, numApplications int, policyType common.AppSortPolicyType) {
+func benchmarkSortApplications(b *testing.B, numApplications int, sortPolicy policies.SortPolicy) {
 	// create the root
 	root, err := createRootQueue(nil)
 	if err != nil {
@@ -865,7 +865,7 @@ func benchmarkSortApplications(b *testing.B, numApplications int, policyType com
 	}
 	// empty leaf queue
 	leaf, err = createManagedQueue(parent, "leaf", false, nil)
-	leaf.appSortPolicy = newAppSortPolicy(policyType)
+	leaf.appRequestSorter = newAppRequestSorter(sortPolicy)
 	if err != nil {
 		b.Fatalf("failed to create leaf queue: %v", err)
 	}

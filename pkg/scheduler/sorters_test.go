@@ -298,7 +298,7 @@ func TestSortAppsNoPending(t *testing.T) {
 }
 
 func TestSortAppsFifo(t *testing.T) {
-	fifoAppSortPolicy, _ := newAppSortPolicy(policies.FifoSortPolicy)
+	fifoAppRequestSorter := newAppRequestSorter(policies.FifoSortPolicy)
 	// stable sort is used so equal values stay where they were
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"first": resources.Quantity(100)})
@@ -319,12 +319,12 @@ func TestSortAppsFifo(t *testing.T) {
 	// map iteration is random so we do not need to check input
 	// apps should come back in order created 0, 1, 2, 3
 	list := filterOnPendingResources(input)
-	fifoAppSortPolicy.sortApplications(list, &cache.QueueInfo{})
+	fifoAppRequestSorter.sortApplications(list, &cache.QueueInfo{})
 	assertAppList(t, list, []int{0, 1, 2, 3})
 }
 
 func TestSortAppsFair(t *testing.T) {
-	fairAppSortPolicy, _ := newAppSortPolicy(policies.FairSortPolicy)
+	fairAppRequestSorter := newAppRequestSorter(policies.FairSortPolicy)
 	// stable sort is used so equal values stay where they were
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"first": resources.Quantity(100)})
@@ -344,29 +344,29 @@ func TestSortAppsFair(t *testing.T) {
 	// apps should come back in order: 0, 1, 2, 3
 	list := filterOnPendingResources(input)
 	queueInfo := &cache.QueueInfo{}
-	fairAppSortPolicy.sortApplications(list, queueInfo)
+	fairAppRequestSorter.sortApplications(list, queueInfo)
 	assertAppList(t, list, []int{0, 1, 2, 3})
 
 	// apps should come back in order: 0, 1, 2, 3
 	queueInfo.SetGuaranteedResource(resources.Multiply(res, 0))
-	fairAppSortPolicy.sortApplications(list, queueInfo)
+	fairAppRequestSorter.sortApplications(list, queueInfo)
 	assertAppList(t, list, []int{0, 1, 2, 3})
 
 	// apps should come back in order: 0, 1, 2, 3
 	queueInfo.SetGuaranteedResource(resources.Multiply(res, 5))
-	fairAppSortPolicy.sortApplications(list, queueInfo)
+	fairAppRequestSorter.sortApplications(list, queueInfo)
 	assertAppList(t, list, []int{0, 1, 2, 3})
 
 	// update allocated resource for app-1
 	input["app-1"].allocating = resources.Multiply(res, 10)
 	// apps should come back in order: 0, 2, 3, 1
-	fairAppSortPolicy.sortApplications(list, queueInfo)
+	fairAppRequestSorter.sortApplications(list, queueInfo)
 	assertAppList(t, list, []int{0, 3, 1, 2})
 
 	// update allocated resource for app-3 to negative (move to head of the list)
 	input["app-3"].allocating = resources.Multiply(res, -10)
 	// apps should come back in order: 3, 0, 2, 1
-	fairAppSortPolicy.sortApplications(list, queueInfo)
+	fairAppRequestSorter.sortApplications(list, queueInfo)
 	for i := 0; i < 4; i++ {
 		log.Logger().Info("allocated res",
 			zap.Int("order", i),
@@ -435,7 +435,7 @@ func TestSortAppsStateAware(t *testing.T) {
 }
 
 func TestSortAppsFifoWithoutPriority(t *testing.T) {
-	fifoAppSortPolicy, _ := newAppSortPolicy(common.FifoAppSortPolicyType)
+	fifoAppRequestSorter := newAppRequestSorter(policies.FifoSortPolicy)
 	// stable sort is used so equal values stay were they were
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"first": resources.Quantity(100)})
@@ -458,12 +458,12 @@ func TestSortAppsFifoWithoutPriority(t *testing.T) {
 	list[1], list[3] = list[3], list[1]
 	assertAppList(t, list, []int{2, 3, 0, 1})
 	// apps should come back in order created 0, 1, 2, 3
-	fifoAppSortPolicy.sortApplications(list, queueInfo)
+	fifoAppRequestSorter.sortApplications(list, queueInfo)
 	assertAppList(t, list, []int{0, 1, 2, 3})
 }
 
 func TestSortAppsFifoWithPriority(t *testing.T) {
-	fifoAppSortPolicy, _ := newAppSortPolicy(policies.FifoSortPolicy)
+	fifoAppRequestSorter := newAppRequestSorter(policies.FifoSortPolicy)
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"first": resources.Quantity(100)})
 	queue, err := createRootQueue(nil)
@@ -484,8 +484,10 @@ func TestSortAppsFifoWithPriority(t *testing.T) {
 		// app-2 has P2 and P3 asks, app-3 has P3 and P4 asks.
 		ask1 := newAllocationAskWithPriority("ask-P"+strconv.Itoa(i), app.ApplicationInfo.ApplicationID, res, int32(i))
 		ask2 := newAllocationAskWithPriority("ask-P"+strconv.Itoa(i+1), app.ApplicationInfo.ApplicationID, res, int32(i+1))
-		app.addAllocationAsk(ask1)
-		app.addAllocationAsk(ask2)
+		_, err = app.addAllocationAsk(ask1)
+		assert.NilError(t, err, "failed to add allocation ask")
+		_, err = app.addAllocationAsk(ask2)
+		assert.NilError(t, err, "failed to add allocation ask")
 		list[i] = app
 		apps[i] = app
 	}
@@ -494,39 +496,40 @@ func TestSortAppsFifoWithPriority(t *testing.T) {
 	list[1], list[3] = list[3], list[1]
 	assertAppList(t, list, []int{2, 3, 0, 1})
 	// expected sort result: app-3(P3 P4) app-2(P2 P3) app-1(P1 P2) app-0(P0 P1)
-	fifoAppSortPolicy.sortApplications(list, nil)
+	fifoAppRequestSorter.sortApplications(list, nil)
 	assertAppList(t, list, []int{3, 2, 1, 0})
 	// assert priorities of pending asks for scheduling,
 	// only asks with top priority should be chosen for scheduling.
-	reqIt := fifoAppSortPolicy.getPendingRequestIterator(apps[0])
+	reqIt := fifoAppRequestSorter.getPendingRequestIterator(apps[0])
 	assertAskPriorities(t, reqIt, []int32{1})
-	reqIt = fifoAppSortPolicy.getPendingRequestIterator(apps[1])
+	reqIt = fifoAppRequestSorter.getPendingRequestIterator(apps[1])
 	assertAskPriorities(t, reqIt, []int32{2})
-	reqIt = fifoAppSortPolicy.getPendingRequestIterator(apps[2])
+	reqIt = fifoAppRequestSorter.getPendingRequestIterator(apps[2])
 	assertAskPriorities(t, reqIt, []int32{3})
-	reqIt = fifoAppSortPolicy.getPendingRequestIterator(apps[3])
+	reqIt = fifoAppRequestSorter.getPendingRequestIterator(apps[3])
 	assertAskPriorities(t, reqIt, []int32{4})
 
 	// add P5 ask for app-0
 	// expected sort result: app-0(P0 P1 P5) app-3(P3 P4) app-2(P2 P3) app-1(P1 P2)
 	newAsk := newAllocationAskWithPriority("ask-P5", apps[0].ApplicationInfo.ApplicationID, res, int32(5))
-	apps[0].addAllocationAsk(newAsk)
+	_, err = apps[0].addAllocationAsk(newAsk)
+	assert.NilError(t, err, "failed to add allocation ask")
 	// apps should come back in order: 0, 3, 2, 1
-	fifoAppSortPolicy.sortApplications(list, nil)
+	fifoAppRequestSorter.sortApplications(list, nil)
 	assertAppList(t, list, []int{0, 3, 2, 1})
 	// now only P5 ask can be scheduled for app-0
-	reqIt = fifoAppSortPolicy.getPendingRequestIterator(apps[0])
+	reqIt = fifoAppRequestSorter.getPendingRequestIterator(apps[0])
 	assertAskPriorities(t, reqIt, []int32{5})
 
 	// remove P4 ask of app-0
 	// expected sort result: app-0(P0 P1 P5) app-2(P2 P3) app-3(P3) app-1(P1 P2)
 	// app-2 is located before app-3 since its P3 ask is older than that of app-3.
 	apps[3].removeAllocationAsk("ask-P4")
-	fifoAppSortPolicy.sortApplications(list, nil)
+	fifoAppRequestSorter.sortApplications(list, nil)
 	// apps should come back in order: 0, 3, 1, 2
 	assertAppList(t, list, []int{0, 3, 1, 2})
 	// now only P3 ask can be scheduled for app-0
-	reqIt = fifoAppSortPolicy.getPendingRequestIterator(apps[3])
+	reqIt = fifoAppRequestSorter.getPendingRequestIterator(apps[3])
 	assertAskPriorities(t, reqIt, []int32{3})
 
 	// move things around to see sorting
@@ -536,25 +539,25 @@ func TestSortAppsFifoWithPriority(t *testing.T) {
 	// remove P1 ask of app-0
 	// expected sort result: app-0(P0 P5) app-2(P2 P3) app-3(P3) app-1(P1 P2)
 	apps[0].removeAllocationAsk("ask-P1")
-	fifoAppSortPolicy.sortApplications(list, nil)
+	fifoAppRequestSorter.sortApplications(list, nil)
 	// apps should come back in order: 0, 3, 1, 2
 	assertAppList(t, list, []int{0, 3, 1, 2})
 
 	// remove P5 ask of app-0
 	// expected sort result: app-2(P2 P3) app-3(P3) app-1(P1 P2) app-0(P0)
 	apps[0].removeAllocationAsk("ask-P5")
-	fifoAppSortPolicy.sortApplications(list, nil)
+	fifoAppRequestSorter.sortApplications(list, nil)
 	// apps should come back in order: 3, 2, 0, 1
 	assertAppList(t, list, []int{3, 2, 0, 1})
 
 	// remove P3 ask of app-3
 	// expected sort result: app-2(P2 P3) app-1(P1 P2) app-0(P0) app-3()
 	apps[3].removeAllocationAsk("ask-P3")
-	fifoAppSortPolicy.sortApplications(list, nil)
+	fifoAppRequestSorter.sortApplications(list, nil)
 	// apps should come back in order: 2, 1, 0, 3
 	assertAppList(t, list, []int{2, 1, 0, 3})
 	// now on ask can be scheduled for app-3
-	reqIt = fifoAppSortPolicy.getPendingRequestIterator(apps[3])
+	reqIt = fifoAppRequestSorter.getPendingRequestIterator(apps[3])
 	assert.Equal(t, reqIt.HasNext(), false)
 }
 

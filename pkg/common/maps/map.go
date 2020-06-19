@@ -20,27 +20,27 @@ package maps
 
 // This interface defines how to storing and managing data in forms of mapping.
 type Map interface {
-    // add or update a mapping,
-    // return the previous value if present, otherwise return nil.
-    Put(key interface{}, value interface{}) interface{}
-    // remove the mapping with the specified key,
-    // return the removed mapping if present, otherwise return nil.
-    Remove(key interface{}) interface{}
-    // get the value that matches the specified allocation key,
-    // return the matched value if present, otherwise return nil.
-    Get(key interface{}) interface{}
-    // return iterator for all entries
-    GetIterator() MapIterator
-    // return the size of all entries
-    Size() int
-    // reset to a clean state
-    Reset()
+	// add or update a mapping,
+	// return the previous value if present, otherwise return nil.
+	Put(key interface{}, value interface{}) interface{}
+	// remove the mapping with the specified key,
+	// return the removed mapping if present, otherwise return nil.
+	Remove(key interface{}) interface{}
+	// get the value that matches the specified allocation key,
+	// return the matched value if present, otherwise return nil.
+	Get(key interface{}) interface{}
+	// return iterator for all entries
+	GetIterator() MapIterator
+	// return the size of all entries
+	Size() int
+	// reset to a clean state
+	Reset()
 }
 
 // This interface helps to iterate over all entries in mapping
 type MapIterator interface {
-    // return true if there are more entries to iterate over
-    HasNext() (ok bool)
-    // return the key and value from the iterator
-    Next() (key interface{}, value interface{})
+	// return true if there are more entries to iterate over
+	HasNext() (ok bool)
+	// return the key and value from the iterator
+	Next() (key interface{}, value interface{})
 }

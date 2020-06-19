@@ -397,7 +397,7 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 	sa.Lock()
 	defer sa.Unlock()
 	// make sure the request are sorted
-	requestIt := sa.queue.appSortPolicy.getPendingRequestIterator(sa)
+	requestIt := sa.queue.appRequestSorter.getPendingRequestIterator(sa)
 	// get all the requests from the app sorted in order
 	for requestIt.HasNext() {
 		request := requestIt.Next()

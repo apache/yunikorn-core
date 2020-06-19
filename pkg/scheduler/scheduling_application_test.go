@@ -580,7 +580,8 @@ func TestSortRequests(t *testing.T) {
 		num := strconv.Itoa(i)
 		ask := newAllocationAsk("ask-"+num, appID, res)
 		ask.priority = int32(i)
-		app.addAllocationAsk(ask)
+		_, err := app.addAllocationAsk(ask)
+		assert.NilError(t, err, "failed to add allocation ask")
 	}
 	assertAskPriorities(t, app.requests.GetPendingRequestIterator(), []int32{3, 2, 1})
 	app.removeAllocationAsk("ask-3")
@@ -711,7 +712,8 @@ func benchmarkIteratePendingRequests(b *testing.B, numPriorities, numRequestsPer
 			}
 			ask := newAllocationAskRepeat("ask-"+strconv.Itoa(askIndex), appID, res, repeat)
 			ask.priority = int32(i)
-			app.addAllocationAsk(ask)
+			_, err := app.addAllocationAsk(ask)
+			assert.NilError(b, err, "failed to add allocation ask")
 			askIndex++
 		}
 	}

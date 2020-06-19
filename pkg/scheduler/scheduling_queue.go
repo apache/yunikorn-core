@@ -40,15 +40,15 @@ type SchedulingQueue struct {
 	QueueInfo *cache.QueueInfo // link back to the queue in the cache
 
 	// Private fields need protection
-	sortType       policies.SortPolicy               // How applications (leaf) or queues (parents) are sorted
-	appSortPolicy  AppSortPolicy                     // Sort policy defines how applications are sorted and how pending requests are organized
-	childrenQueues map[string]*SchedulingQueue       // Only for direct children, parent queue only
-	applications   map[string]*SchedulingApplication // only for leaf queue
-	reservedApps   map[string]int                    // applications reserved within this queue, with reservation count
-	parent         *SchedulingQueue                  // link back to the parent in the scheduler
-	allocating     *resources.Resource               // resource being allocated in the queue but not confirmed
-	preempting     *resources.Resource               // resource considered for preemption in the queue
-	pending        *resources.Resource               // pending resource for the apps in the queue
+	sortType         policies.SortPolicy               // How applications (leaf) or queues (parents) are sorted
+	appRequestSorter AppRequestSorter                  // Sort policy defines how applications are sorted and how pending requests are organized
+	childrenQueues   map[string]*SchedulingQueue       // Only for direct children, parent queue only
+	applications     map[string]*SchedulingApplication // only for leaf queue
+	reservedApps     map[string]int                    // applications reserved within this queue, with reservation count
+	parent           *SchedulingQueue                  // link back to the parent in the scheduler
+	allocating       *resources.Resource               // resource being allocated in the queue but not confirmed
+	preempting       *resources.Resource               // resource considered for preemption in the queue
+	pending          *resources.Resource               // pending resource for the apps in the queue
 
 	sync.RWMutex
 }
@@ -110,23 +110,12 @@ func (sq *SchedulingQueue) updateSchedulingQueueProperties(prop map[string]strin
 		if sq.sortType == policies.Undefined {
 			sq.sortType = policies.FifoSortPolicy
 		}
-		sq.updateAppSortPolicy()
+		sq.appRequestSorter = newAppRequestSorter(sq.sortType)
 		return
 	}
 	// set the sorting type for parent queues
 	sq.sortType = policies.FairSortPolicy
-	sq.updateAppSortPolicy()
-}
-
-// Update the app sort policy
-// NOTE: this is a lock free call. It should only be called while holding the SchedulingQueue lock.
-func (sq *SchedulingQueue) updateAppSortPolicy() {
-	if appSortPolicy, err := newAppSortPolicy(sq.sortType); err == nil {
-		sq.appSortPolicy = appSortPolicy
-	} else {
-		log.Logger().Error("Can't get app sort policy by name",
-			zap.String("queueName", sq.Name), zap.Error(err))
-	}
+	sq.appRequestSorter = newAppRequestSorter(sq.sortType)
 }
 
 // Update the queue properties and the child queues for the queue after a configuration update.
@@ -458,7 +447,7 @@ func (sq *SchedulingQueue) sortApplications() []*SchedulingApplication {
 	}
 	// Sort the applications
 	sortedApps := filterOnPendingResources(sq.getCopyOfApps())
-	sq.appSortPolicy.sortApplications(sortedApps, sq.QueueInfo)
+	sq.appRequestSorter.sortApplications(sortedApps, sq.QueueInfo)
 	return sortedApps
 }
 

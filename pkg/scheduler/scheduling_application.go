@@ -423,7 +423,10 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 			eventCache := events.GetEventCache()
 			if eventCache.IsStarted() {
 				message := fmt.Sprintf("Application %s does not fit into %s queue", request.ApplicationID, request.QueueName)
-				event := events.CreateInsufficientQueueResourcesEvent(request.AskProto, message)
+				event, err := createInsufficientQueueResourcesEvent(request.AskProto, message)
+				if err != nil {
+					log.Logger().Warn("Could not emit event")
+				}
 				eventCache.AddEvent(event)
 			}
 			continue
@@ -710,4 +713,11 @@ func (sa *SchedulingApplication) finishRecovery() {
 			zap.String("currentState", sa.ApplicationInfo.GetApplicationState()),
 			zap.Error(err))
 	}
+}
+
+func createInsufficientQueueResourcesEvent(ask *si.AllocationAsk, message string) (*si.EventRecord, error) {
+	if ask == nil {
+		return nil, fmt.Errorf("could not create Event object from nil AllocationAsk")
+	}
+	return events.CreateRequestEventRecord(ask.AllocationKey, ask.ApplicationID, "InsufficientQueueResources", message)
 }

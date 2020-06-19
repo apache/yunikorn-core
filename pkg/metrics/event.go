@@ -26,7 +26,6 @@ type eventMetrics struct {
 	totalEventsNotChanneled prometheus.Gauge
 	totalEventsProcessed    prometheus.Gauge
 	totalEventsCollected    prometheus.Gauge
-	totalEventsNotCollected prometheus.Gauge
 }
 
 func initEventMetrics() CoreEventMetrics {
@@ -67,13 +66,6 @@ func initEventMetrics() CoreEventMetrics {
 			Name:      "total_collected",
 			Help:      "total events collected",
 		})
-	metrics.totalEventsNotCollected = prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Namespace: Namespace,
-			Subsystem: EventSubsystem,
-			Name:      "total_not_collected",
-			Help:      "total events not collected",
-		})
 
 	return metrics
 }
@@ -97,8 +89,4 @@ func (em *eventMetrics) IncEventsProcessed() {
 // TODO consider GaugeVec where label=EventType
 func (em *eventMetrics) AddEventsCollected(collectedEvents int) {
 	em.totalEventsCollected.Add(float64(collectedEvents))
-}
-
-func (em *eventMetrics) AddEventsNotCollected(notCollectedEvents int) {
-	em.totalEventsNotCollected.Add(float64(notCollectedEvents))
 }

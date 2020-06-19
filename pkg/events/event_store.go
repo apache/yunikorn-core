@@ -19,68 +19,48 @@
 package events
 
 import (
-	"errors"
-	"strings"
 	"sync"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
-	"go.uber.org/zap"
-
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 type EventStore interface {
-	Store(Event)
-	CollectEvents() ([]*si.EventRecord, error)
+	Store(event *si.EventRecord)
+	CollectEvents() []*si.EventRecord
 }
 
 type defaultEventStore struct {
-	eventMap map[interface{}]Event
+	eventMap map[string]*si.EventRecord
 
 	sync.RWMutex
 }
 
 func newEventStoreImpl() EventStore {
 	return &defaultEventStore{
-		eventMap: make(map[interface{}]Event),
+		eventMap: make(map[string]*si.EventRecord),
 	}
 }
 
-func (es *defaultEventStore) Store(event Event) {
+func (es *defaultEventStore) Store(event *si.EventRecord) {
 	es.Lock()
 	defer es.Unlock()
 
-	es.eventMap[event.GetSource()] = event
+	es.eventMap[event.ObjectID] = event
 }
 
-func (es *defaultEventStore) CollectEvents() ([]*si.EventRecord, error) {
+func (es *defaultEventStore) CollectEvents() []*si.EventRecord {
 	es.Lock()
 	defer es.Unlock()
 
 	messages := make([]*si.EventRecord, 0)
-	errorList := make([]string, 0)
-
-	// collect eventChannel
 	for _, v := range es.eventMap {
-		message, err := toEventMessage(v)
-		if err != nil {
-			log.Logger().Debug("could not translate object to EventMessage", zap.Any("object", v))
-			errorList = append(errorList, err.Error())
-			continue
-		}
-		messages = append(messages, message)
+		messages = append(messages, v)
 	}
 
-	// clear map
-	es.eventMap = make(map[interface{}]Event)
+	// TODO how not to clear map
+	es.eventMap = make(map[string]*si.EventRecord)
 
 	metrics.GetEventMetrics().AddEventsCollected(len(messages))
-	metrics.GetEventMetrics().AddEventsNotCollected(len(errorList))
-
-	var errorsToReturn error
-	if len(errorList) > 0 {
-		errorsToReturn = errors.New(strings.Join(errorList, ","))
-	}
-	return messages, errorsToReturn
+	return messages
 }

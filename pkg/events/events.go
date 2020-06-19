@@ -19,72 +19,19 @@
 package events
 
 import (
-	"fmt"
-
-	"go.uber.org/zap"
-
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
-type Event interface {
-	GetSource() interface{}
-	GetGroup() string
-	GetReason() string
-	GetMessage() string
-}
-
-func toEventMessage(e Event) (*si.EventRecord, error) {
-	eventType, id, err := convertSourceToTypeAndID(e.GetSource())
-	if err != nil {
-		return nil, err
-	}
+func createEventRecord(recordType si.EventRecord_Type, objectID, groupID, reason, message string) (*si.EventRecord, error) {
 	return &si.EventRecord{
-		Type:     eventType,
-		ObjectID: id,
-		GroupID:  e.GetGroup(),
-		Reason:   e.GetReason(),
-		Message:  e.GetMessage(),
+		Type:     recordType,
+		ObjectID: objectID,
+		GroupID:  groupID,
+		Reason:   reason,
+		Message:  message,
 	}, nil
 }
 
-func convertSourceToTypeAndID(obj interface{}) (si.EventRecord_Type, string, error) {
-	if ask, ok := obj.(*si.AllocationAsk); ok {
-		return si.EventRecord_REQUEST, ask.AllocationKey, nil
-	}
-	log.Logger().Warn("Could not convert source object to EventMessageType", zap.Any("object", obj))
-
-	return si.EventRecord_REQUEST, "", fmt.Errorf("could not convert source object to EventMessageType")
-}
-
-type baseEvent struct {
-	source  interface{}
-	group   string
-	reason  string
-	message string
-}
-
-func (be *baseEvent) GetSource() interface{} {
-	return be.source
-}
-
-func (be *baseEvent) GetGroup() string {
-	return be.group
-}
-
-func (be *baseEvent) GetReason() string {
-	return be.reason
-}
-
-func (be *baseEvent) GetMessage() string {
-	return be.message
-}
-
-func CreateInsufficientQueueResourcesEvent(ask *si.AllocationAsk, message string) Event {
-	return &baseEvent{
-		source:  ask,
-		group:   ask.ApplicationID,
-		reason:  "InsufficientQueueResources",
-		message: message,
-	}
+func CreateRequestEventRecord(objectID, groupID, reason, message string) (*si.EventRecord, error) {
+	return createEventRecord(si.EventRecord_REQUEST, objectID, groupID, reason, message)
 }

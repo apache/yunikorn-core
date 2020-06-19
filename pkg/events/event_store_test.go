@@ -28,19 +28,16 @@ import (
 
 func TestStoreAndRetrieveAllocationAsk(t *testing.T) {
 	store := newEventStoreImpl()
-	ask := si.AllocationAsk{
-		AllocationKey: "alloc1",
-	}
-	event := baseEvent{
-		source:  &ask,
-		group:   "app1",
-		reason:  "reason",
-		message: "message",
+	event := si.EventRecord{
+		Type:     si.EventRecord_REQUEST,
+		ObjectID: "alloc1",
+		GroupID:  "app1",
+		Reason:   "reason",
+		Message:  "message",
 	}
 	store.Store(&event)
 
-	records, err := store.CollectEvents()
-	assert.NilError(t, err, "collecting eventChannel failed")
+	records := store.CollectEvents()
 	assert.Equal(t, len(records), 1)
 	record := records[0]
 	assert.Equal(t, record.Type, si.EventRecord_REQUEST)
@@ -50,42 +47,38 @@ func TestStoreAndRetrieveAllocationAsk(t *testing.T) {
 	assert.Equal(t, record.Reason, "reason")
 
 	// calling CollectEvents erases the eventChannel map
-	records, err = store.CollectEvents()
-	assert.NilError(t, err, "collecting eventChannel failed")
+	records = store.CollectEvents()
 	assert.Equal(t, len(records), 0)
 }
 
 func TestStoreAndRetrieveMultipleAllocationAsks(t *testing.T) {
 	store := newEventStoreImpl()
-	ask1 := si.AllocationAsk{
-		AllocationKey: "alloc1",
+
+	event1 := si.EventRecord{
+		Type:     si.EventRecord_REQUEST,
+		ObjectID: "alloc1",
+		GroupID:  "app1",
+		Reason:   "reason1",
+		Message:  "message1",
 	}
-	ask2 := si.AllocationAsk{
-		AllocationKey: "alloc2",
+	event2 := si.EventRecord{
+		Type:     si.EventRecord_REQUEST,
+		ObjectID: "alloc1",
+		GroupID:  "app1",
+		Reason:   "reason2",
+		Message:  "message2",
 	}
-	event1 := baseEvent{
-		source:  &ask1,
-		group:   "app1",
-		reason:  "reason1",
-		message: "message1",
-	}
-	event2 := baseEvent{
-		source:  &ask1,
-		group:   "app1",
-		reason:  "reason2",
-		message: "message2",
-	}
-	event3 := baseEvent{
-		source:  &ask2,
-		group:   "app2",
-		reason:  "reason3",
-		message: "message3",
+	event3 := si.EventRecord{
+		Type:     si.EventRecord_REQUEST,
+		ObjectID: "alloc2",
+		GroupID:  "app2",
+		Reason:   "reason3",
+		Message:  "message3",
 	}
 	store.Store(&event1)
 	store.Store(&event2)
 	store.Store(&event3)
-	records, err := store.CollectEvents()
-	assert.NilError(t, err, "collecting eventChannel failed")
+	records := store.CollectEvents()
 	assert.Equal(t, len(records), 2)
 	for _, record := range records {
 		assert.Equal(t, record.Type, si.EventRecord_REQUEST)

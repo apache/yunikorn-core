@@ -23,17 +23,19 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
-const defaultEventChannelSize = 100000
+// need to change for testing
+var defaultEventChannelSize = 100000
 
 var once sync.Once
 var cache *EventCache
 
 type EventCache struct {
-	channel chan Event // channelling input eventChannel
-	store   EventStore // storing eventChannel
-	stop    chan bool  // whether the service is stop
+	channel chan *si.EventRecord // channelling input eventChannel
+	store   EventStore           // storing eventChannel
+	stop    chan bool            // whether the service is stop
 
 	sync.Mutex
 }
@@ -42,20 +44,25 @@ func GetEventCache() *EventCache {
 	once.Do(func() {
 		store := newEventStoreImpl()
 
-		cache = &EventCache{
-			channel: nil,
-			store:   store,
-			stop:    make(chan bool),
-		}
+		cache = createEventCacheInternal(store)
 	})
 	return cache
+}
+
+func createEventCacheInternal(store EventStore) *EventCache {
+	return &EventCache{
+		channel: nil,
+		store:   store,
+		stop:    make(chan bool),
+	}
 }
 
 func (ec *EventCache) StartService() {
 	ec.Lock()
 	defer ec.Unlock()
 
-	ec.channel = make(chan Event, defaultEventChannelSize)
+	ec.channel = make(chan *si.EventRecord, defaultEventChannelSize)
+
 	go ec.processEvent()
 }
 
@@ -63,7 +70,7 @@ func (ec *EventCache) IsStarted() bool {
 	ec.Lock()
 	defer ec.Unlock()
 
-	return ec.channel == nil
+	return ec.channel != nil
 }
 
 func (ec *EventCache) Stop() {
@@ -77,14 +84,13 @@ func (ec *EventCache) Stop() {
 	}
 }
 
-func (ec *EventCache) AddEvent(event Event) {
+func (ec *EventCache) AddEvent(event *si.EventRecord) {
 	metrics.GetEventMetrics().IncEventsCreated()
 	select {
 	case ec.channel <- event:
 		metrics.GetEventMetrics().IncEventsChanneled()
 	default:
-		// if the channel is full, emitting log entries on DEBUG=< level is going to have serious performance impact
-		log.Logger().Debug("Channel is full - discarding event.")
+		log.Logger().Debug("could not add Event to channel")
 		metrics.GetEventMetrics().IncEventsNotChanneled()
 	}
 }
@@ -99,16 +105,12 @@ func (ec *EventCache) processEvent() {
 		case <-ec.stop:
 			return
 		case event, ok := <-ec.channel:
+			if !ok {
+				return
+			}
 			if event != nil {
 				ec.store.Store(event)
 				metrics.GetEventMetrics().IncEventsProcessed()
-			} else {
-				log.Logger().Debug("nil object in EventChannel")
-				if !ok {
-					log.Logger().Info("the EventChannel is closed - closing the EventCache")
-					ec.Stop()
-					return
-				}
 			}
 		}
 	}

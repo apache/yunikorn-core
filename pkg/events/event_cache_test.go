@@ -27,31 +27,43 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
+func TestStartStop(t *testing.T) {
+	cache := GetEventCache()
+	assert.Equal(t, cache.IsStarted(), false, "EventCache should not be started when constructed")
+	// adding event to stopped cache does not cause panic
+	cache.AddEvent(nil)
+	cache.StartService()
+	// add an event
+	cache.AddEvent(nil)
+	assert.Equal(t, cache.IsStarted(), true, "EventCache should have been started")
+	cache.Stop()
+	// adding event to stopped cache does not cause panic
+	cache.AddEvent(nil)
+	assert.Equal(t, cache.IsStarted(), false, "EventCache should have been stopped")
+}
+
 func TestSingleEvent(t *testing.T) {
 	cache := GetEventCache()
 	store := cache.GetEventStore()
 
 	cache.StartService()
 
-	ask := si.AllocationAsk{
-		AllocationKey: "alloc1",
-	}
-	event := baseEvent{
-		source:  &ask,
-		group:   "app1",
-		reason:  "reason",
-		message: "message",
+	event := si.EventRecord{
+		Type:     si.EventRecord_REQUEST,
+		ObjectID: "alloc1",
+		GroupID:  "app1",
+		Reason:   "reason",
+		Message:  "message",
 	}
 	cache.AddEvent(&event)
 
 	// wait for events to be processed
 	time.Sleep(1 * time.Millisecond)
 
-	records, err := store.CollectEvents()
+	records := store.CollectEvents()
 	if records == nil {
 		t.Fatal("collecting eventChannel should return something")
 	}
-	assert.NilError(t, err, "collecting eventChannel failed")
 	assert.Equal(t, len(records), 1)
 	record := records[0]
 	assert.Equal(t, record.Type, si.EventRecord_REQUEST)
@@ -67,29 +79,26 @@ func TestMultipleEvents(t *testing.T) {
 
 	cache.StartService()
 
-	ask1 := si.AllocationAsk{
-		AllocationKey: "alloc1",
+	event1 := si.EventRecord{
+		Type:     si.EventRecord_REQUEST,
+		ObjectID: "alloc1",
+		GroupID:  "app1",
+		Reason:   "reason1",
+		Message:  "message1",
 	}
-	ask2 := si.AllocationAsk{
-		AllocationKey: "alloc2",
+	event2 := si.EventRecord{
+		Type:     si.EventRecord_REQUEST,
+		ObjectID: "alloc1",
+		GroupID:  "app1",
+		Reason:   "reason2",
+		Message:  "message2",
 	}
-	event1 := baseEvent{
-		source:  &ask1,
-		group:   "app1",
-		reason:  "reason1",
-		message: "message1",
-	}
-	event2 := baseEvent{
-		source:  &ask1,
-		group:   "app1",
-		reason:  "reason2",
-		message: "message2",
-	}
-	event3 := baseEvent{
-		source:  &ask2,
-		group:   "app2",
-		reason:  "reason3",
-		message: "message3",
+	event3 := si.EventRecord{
+		Type:     si.EventRecord_REQUEST,
+		ObjectID: "alloc2",
+		GroupID:  "app2",
+		Reason:   "reason3",
+		Message:  "message3",
 	}
 	cache.AddEvent(&event1)
 	cache.AddEvent(&event2)
@@ -98,8 +107,7 @@ func TestMultipleEvents(t *testing.T) {
 	// wait for cache to process the event
 	time.Sleep(1 * time.Millisecond)
 
-	records, err := store.CollectEvents()
-	assert.NilError(t, err, "collecting eventChannel failed")
+	records := store.CollectEvents()
 	if records == nil {
 		t.Fatal("collecting eventChannel should return something")
 	}
@@ -120,3 +128,44 @@ func TestMultipleEvents(t *testing.T) {
 		}
 	}
 }
+
+type slowEventStore struct {
+}
+
+func (ses slowEventStore) Store(*si.EventRecord) {
+	time.Sleep(20 * time.Millisecond)
+}
+
+func (ses slowEventStore) CollectEvents() []*si.EventRecord {
+	return nil
+}
+
+func TestLimitedChannel(t *testing.T) {
+	defaultEventChannelSize = 2
+
+	store := slowEventStore{}
+	cache := createEventCacheInternal(store)
+	assert.Equal(t, cache.IsStarted(), false, "EventCache should not be started when constructed")
+	cache.StartService()
+	assert.Equal(t, cache.IsStarted(), true, "EventCache should have been started")
+
+	event := si.EventRecord{
+		Type:     si.EventRecord_REQUEST,
+		ObjectID: "alloc1",
+		GroupID:  "app1",
+		Reason:   "reason",
+		Message:  "message",
+	}
+
+	cache.AddEvent(&event)
+	assert.Equal(t, len(cache.channel), 1, "the number of queued elements should be one")
+	// wait until event processing is blocked due to slow store
+	time.Sleep(1 * time.Millisecond)
+	cache.AddEvent(&event)
+	assert.Equal(t, len(cache.channel), 1, "the number of queued elements should be two")
+	cache.AddEvent(&event)
+	assert.Equal(t, len(cache.channel), 2, "the number of queued elements should be two")
+	cache.AddEvent(&event)
+	assert.Equal(t, len(cache.channel), 2, "the number of queued elements should be two")
+}
+

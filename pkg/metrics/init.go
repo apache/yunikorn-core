@@ -122,7 +122,6 @@ type CoreEventMetrics interface {
 	IncEventsNotChanneled()
 	IncEventsProcessed()
 	AddEventsCollected(collectedEvents int)
-	AddEventsNotCollected(notCollectedEvents int)
 }
 
 func init() {

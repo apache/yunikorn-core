@@ -42,7 +42,11 @@ type shimPublisher struct {
 	sync.Mutex
 }
 
-func NewShimPublisher(store EventStore) EventPublisher {
+func CreateShimPublisher(store EventStore) EventPublisher {
+	return createShimPublisherInternal(store)
+}
+
+func createShimPublisherInternal(store EventStore) *shimPublisher {
 	return &shimPublisher{
 		store: store,
 		stop:  false,
@@ -63,10 +67,8 @@ func (sp *shimPublisher) StartService() {
 				break
 			}
 			if eventPlugin := plugins.GetEventPlugin(); eventPlugin != nil {
-				messages, err := sp.store.CollectEvents()
-				if err != nil {
-					log.Logger().Warn("collecting eventChannel failed", zap.Error(err))
-				} else if len(messages) > 0 {
+				messages := sp.store.CollectEvents()
+				if len(messages) > 0 {
 					log.Logger().Debug("Sending eventChannel", zap.Int("number of messages", len(messages)))
 					if err := eventPlugin.SendEvent(messages); err != nil && err.Error() != "" {
 						log.Logger().Warn("Callback failed - could not sent EventMessage to shim",

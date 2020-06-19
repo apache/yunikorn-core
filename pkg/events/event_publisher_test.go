@@ -19,21 +19,12 @@
 package events
 
 import (
-	"errors"
-	"fmt"
-	"strings"
 	"testing"
-	"time"
 
-	"go.uber.org/zap"
 	"gotest.tools/assert"
-
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
-type eventStoreForTest struct {
+/*type eventStoreForTest struct {
 	events chan Event
 }
 
@@ -75,9 +66,9 @@ func (es *eventStoreForTest) CollectEvents() ([]*si.EventRecord, error) {
 			return records, errorsToReturn
 		}
 	}
-}
+}*/
 
-type eventPluginForTest struct {
+/*type eventPluginForTest struct {
 	records chan *si.EventRecord
 }
 
@@ -107,42 +98,23 @@ func (ep *eventPluginForTest) getNextEventRecord() *si.EventRecord {
 	default:
 		return nil
 	}
-}
-
-func createPublisherForTest(store EventStore) *shimPublisher {
-	return &shimPublisher{
-		store: store,
-		stop:  false,
-	}
-}
+}*/
 
 func TestServiceStartStopWithoutEventPlugin(t *testing.T) {
-	store := &eventStoreForTest{
-		events: make(chan Event, 2),
-	}
-	publisher := createPublisherForTest(store)
+	store := newEventStoreImpl()
+	publisher := createShimPublisherInternal(store)
 	publisher.StartService()
 	assert.Equal(t, publisher.getEventStore(), store)
 	publisher.Stop()
 }
 
-func TestServiceStartStopWithEventPlugin(t *testing.T) {
-	store := &eventStoreForTest{
-		events: make(chan Event, 2),
-	}
-	publisher := createPublisherForTest(store)
-	publisher.StartService()
-	assert.Equal(t, publisher.getEventStore(), store)
-	publisher.Stop()
-}
-
-func TestPublisher(t *testing.T) {
+/*func TestPublisher(t *testing.T) {
 	eventPlugin, err := createEventPluginForTest()
 	assert.NilError(t, err, "unable to create event plugin for test")
 	store := &eventStoreForTest{
 		events: make(chan Event, 2),
 	}
-	publisher := NewShimPublisher(store)
+	publisher := CreateShimPublisher(store)
 	publisher.StartService()
 
 	event := baseEvent{
@@ -162,4 +134,4 @@ func TestPublisher(t *testing.T) {
 	assert.Equal(t, eventFromPlugin.GroupID, "group")
 	assert.Equal(t, eventFromPlugin.Reason, "reason")
 	assert.Equal(t, eventFromPlugin.Message, "message")
-}
+}*/

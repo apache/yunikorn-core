@@ -562,7 +562,7 @@ func (s *Scheduler) handleSchedulerEvent() {
 		case *schedulerevent.SchedulerDeletePartitionsConfigEvent:
 			s.processDeletePartitionConfigsEvent(v)
 		default:
-			panic(fmt.Sprintf("%s is not an acceptable type for Scheduler event.", reflect.TypeOf(v).String()))
+			log.Logger().Warn(fmt.Sprintf("%s is not an acceptable type for Scheduler event.", reflect.TypeOf(v).String()))
 		}
 	}
 }

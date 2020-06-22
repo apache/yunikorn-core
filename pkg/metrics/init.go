@@ -121,6 +121,8 @@ type CoreEventMetrics interface {
 	IncEventsChanneled()
 	IncEventsNotChanneled()
 	IncEventsProcessed()
+	IncEventsStored()
+	IncEventsNotStored()
 	AddEventsCollected(collectedEvents int)
 }
 

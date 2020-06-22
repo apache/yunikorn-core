@@ -96,3 +96,35 @@ func TestStoreAndRetrieveMultipleAllocationAsks(t *testing.T) {
 		}
 	}
 }
+
+func TestStoreWithLimitedSize(t *testing.T) {
+	maxEventStoreSize = 2
+
+	store := newEventStoreImpl()
+	event1 := si.EventRecord{
+		Type:     si.EventRecord_REQUEST,
+		ObjectID: "alloc1",
+		GroupID:  "app1",
+		Reason:   "reason1",
+		Message:  "message1",
+	}
+	event2 := si.EventRecord{
+		Type:     si.EventRecord_REQUEST,
+		ObjectID: "alloc2",
+		GroupID:  "app2",
+		Reason:   "reason2",
+		Message:  "message2",
+	}
+	event3 := si.EventRecord{
+		Type:     si.EventRecord_REQUEST,
+		ObjectID: "alloc3",
+		GroupID:  "app3",
+		Reason:   "reason3",
+		Message:  "message3",
+	}
+	store.Store(&event1)
+	store.Store(&event2)
+	store.Store(&event3)
+	records := store.CollectEvents()
+	assert.Equal(t, len(records), 2)
+}

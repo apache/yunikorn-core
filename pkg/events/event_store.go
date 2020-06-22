@@ -25,13 +25,16 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
+var maxEventStoreSize = 1000
+
 type EventStore interface {
 	Store(event *si.EventRecord)
 	CollectEvents() []*si.EventRecord
 }
 
 type defaultEventStore struct {
-	eventMap map[string]*si.EventRecord
+	eventMap     map[string]*si.EventRecord
+	storedEvents int
 
 	sync.RWMutex
 }
@@ -46,7 +49,18 @@ func (es *defaultEventStore) Store(event *si.EventRecord) {
 	es.Lock()
 	defer es.Unlock()
 
+	// limiting the size of the store
+	if es.storedEvents >= maxEventStoreSize {
+		metrics.GetEventMetrics().IncEventsNotStored()
+		return
+	}
+
+	if _, ok := es.eventMap[event.ObjectID]; !ok {
+		es.storedEvents += 1
+	}
+
 	es.eventMap[event.ObjectID] = event
+	metrics.GetEventMetrics().IncEventsStored()
 }
 
 func (es *defaultEventStore) CollectEvents() []*si.EventRecord {
@@ -60,6 +74,7 @@ func (es *defaultEventStore) CollectEvents() []*si.EventRecord {
 
 	// TODO how not to clear map
 	es.eventMap = make(map[string]*si.EventRecord)
+	es.storedEvents = 0
 
 	metrics.GetEventMetrics().AddEventsCollected(len(messages))
 	return messages

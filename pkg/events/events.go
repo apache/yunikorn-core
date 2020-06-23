@@ -19,16 +19,19 @@
 package events
 
 import (
+	"time"
+
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 func createEventRecord(recordType si.EventRecord_Type, objectID, groupID, reason, message string) (*si.EventRecord, error) {
 	return &si.EventRecord{
-		Type:     recordType,
-		ObjectID: objectID,
-		GroupID:  groupID,
-		Reason:   reason,
-		Message:  message,
+		Type:          recordType,
+		ObjectID:      objectID,
+		GroupID:       groupID,
+		Reason:        reason,
+		Message:       message,
+		TimestampNano: time.Now().UnixNano(),
 	}, nil
 }
 

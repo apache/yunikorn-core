@@ -28,7 +28,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 )
 
-const pushEventInterval = 2 * time.Second
+var pushEventInterval = 2 * time.Second
 
 type EventPublisher interface {
 	StartService()

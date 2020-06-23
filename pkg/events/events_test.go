@@ -30,4 +30,11 @@ func TestCreateEventRecord(t *testing.T) {
 	record, err := CreateRequestEventRecord("ask", "app", "reason", "message")
 	assert.NilError(t, err, "the error should be nil")
 	assert.Equal(t, record.Type, si.EventRecord_REQUEST)
+	assert.Equal(t, record.ObjectID, "ask")
+	assert.Equal(t, record.GroupID, "app")
+	assert.Equal(t, record.Reason, "reason")
+	assert.Equal(t, record.Message, "message")
+	if record.TimestampNano == 0 {
+		t.Fatal("the timestamp should have been created")
+	}
 }

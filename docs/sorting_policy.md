@@ -175,7 +175,7 @@ Requests are sorted based on the time the request was created only.
 The oldest request will be considered first.
 
 ### PrioritySortPolicy
-Short description: sort requests from highest to the lowest   
+Short description: sorts requests from highest to the lowest priority   
 Config value: priority  
 Behaviour:  
 Before sorting the requests are filtered and must have pending asks.

@@ -143,15 +143,19 @@ This results in a node with the highest utilisation to be considered first for a
 Resulting in a high(er) utilisation of a small(er) number of nodes, better suited for cloud deployments.   
 
 ## Request sorting
-There are currently two policies for sorting requests within an application.
 A request is an ask from an application which maps to one or more pods or containers.
+The number of pods or containers is specified by the repeat specified in the request.
+Pending repeats on a request are pending resources for an application.
+A sorting policy only specifies the order in which the requests are sorted within an application.
+
+There are currently two policies for sorting requests within an application.
 The policy is not set directly on the application but inherited from the queue. 
 A sorting policy setting is only effective on a `leaf` queue.
 Each `leaf` queue can use a different policy.
 
 Requests are sorted but this is not a guarantee that a newer request will not be allocated before an older request.
-There might be cases that a request cannot be allocated immediately.
-In that case is a newer request might be allocated before an older request (i.e. a reservation for an old request).  
+There might be a case that a request cannot be allocated immediately.
+In that case a newer request might be allocated before an older request (i.e. a reservation for an old request).  
 
 The following configuration entry sets the request sorting policy to `priority` for the queue `root.sandbox`: 
 ```yaml
@@ -169,19 +173,19 @@ partitions:
 Short description: first in first out, based on application create time  
 Config value: fifo (default)  
 Behaviour:  
-Before sorting the requests are filtered and must have pending asks.
+Before sorting the requests are filtered and must have pending repeats.
 
-Requests are sorted based on the time the request was created only.
-The oldest request will be considered first.
+Requests are sorted based on the time the request was created.
+The oldest request will be considered first by the scheduler.
 
 ### PrioritySortPolicy
 Short description: sorts requests from highest to the lowest priority   
 Config value: priority  
 Behaviour:  
-Before sorting the requests are filtered and must have pending asks.
+Before sorting the requests are filtered and must have pending repeats.
 
 Priority is a non-negative integer number.
 Zero (0) is considered the lowest priority in the range. 
 
-Requests with the same priority for one application are sorted based on the time the request was created.
+Requests with the same priority are sorted based on the time the request was created.
 Within a priority requests are thus always considered in a first in first out order.

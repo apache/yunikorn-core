@@ -85,7 +85,8 @@ func (m *ClusterInfo) handleSchedulerEvents() {
 		case *commonevents.RemoveRMPartitionsEvent:
 			m.processRemoveRMPartitionsEvent(v)
 		default:
-			panic(fmt.Sprintf("%s is not an acceptable type for scheduler event.", reflect.TypeOf(v).String()))
+			log.Logger().Error("Received type is not an acceptable type for scheduler event.",
+				zap.String("received type", reflect.TypeOf(v).String()))
 		}
 	}
 }
@@ -101,7 +102,8 @@ func (m *ClusterInfo) handleRMEvents() {
 		case *commonevents.ConfigUpdateRMEvent:
 			m.processRMConfigUpdateEvent(v)
 		default:
-			panic(fmt.Sprintf("%s is not an acceptable type for RM event.", reflect.TypeOf(v).String()))
+			log.Logger().Error("Received type is not an acceptable type for RM event.",
+				zap.String("received type", reflect.TypeOf(v).String()))
 		}
 	}
 }
@@ -126,7 +128,8 @@ func (m *ClusterInfo) HandleEvent(ev interface{}) {
 	case *commonevents.ConfigUpdateRMEvent:
 		enqueueAndCheckFull(m.pendingRmEvents, v)
 	default:
-		panic(fmt.Sprintf("Received unexpected event type = %s", reflect.TypeOf(v).String()))
+		log.Logger().Error("Received unexpected event type.",
+			zap.String("Received event type", reflect.TypeOf(v).String()))
 	}
 }
 

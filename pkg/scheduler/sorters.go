@@ -28,6 +28,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 )
 
+// Queues can only be sorted on usage.
 func sortQueue(queues []*SchedulingQueue, sortType policies.SortPolicy) {
 	sortingStart := time.Now()
 	if sortType == policies.FairSortPolicy {
@@ -45,6 +46,8 @@ func sortQueue(queues []*SchedulingQueue, sortType policies.SortPolicy) {
 	metrics.GetSchedulerMetrics().ObserveQueueSortingLatency(sortingStart)
 }
 
+// Sort applications: each sort type can filter the applications before sorting.
+// The filtering is dependent on the sorting policy used.
 func sortApplications(apps map[string]*SchedulingApplication, sortType policies.SortPolicy, globalResource *resources.Resource) []*SchedulingApplication {
 	sortingStart := time.Now()
 	var sortedApps []*SchedulingApplication
@@ -63,7 +66,7 @@ func sortApplications(apps map[string]*SchedulingApplication, sortType policies.
 		sort.SliceStable(sortedApps, func(i, j int) bool {
 			l := sortedApps[i]
 			r := sortedApps[j]
-			return l.ApplicationInfo.SubmissionTime < r.ApplicationInfo.SubmissionTime
+			return l.ApplicationInfo.SubmissionTime.Before(r.ApplicationInfo.SubmissionTime)
 		})
 	case policies.StateAwarePolicy:
 		sortedApps = stateAwareFilter(apps)
@@ -71,13 +74,14 @@ func sortApplications(apps map[string]*SchedulingApplication, sortType policies.
 		sort.SliceStable(sortedApps, func(i, j int) bool {
 			l := sortedApps[i]
 			r := sortedApps[j]
-			return l.ApplicationInfo.SubmissionTime < r.ApplicationInfo.SubmissionTime
+			return l.ApplicationInfo.SubmissionTime.Before(r.ApplicationInfo.SubmissionTime)
 		})
 	}
 	metrics.GetSchedulerMetrics().ObserveAppSortingLatency(sortingStart)
 	return sortedApps
 }
 
+// Filter applications and only return applications with pending resources
 func filterOnPendingResources(apps map[string]*SchedulingApplication) []*SchedulingApplication {
 	filteredApps := make([]*SchedulingApplication, 0)
 	for _, app := range apps {
@@ -110,7 +114,7 @@ func stateAwareFilter(apps map[string]*SchedulingApplication) []*SchedulingAppli
 			if app.isAccepted() {
 				// check if we have not seen a starting app
 				// replace the currently tracked accepted app if this is an older one
-				if !foundStarting && (acceptedApp == nil || acceptedApp.ApplicationInfo.SubmissionTime > app.ApplicationInfo.SubmissionTime) {
+				if !foundStarting && (acceptedApp == nil || acceptedApp.ApplicationInfo.SubmissionTime.After(app.ApplicationInfo.SubmissionTime)) {
 					acceptedApp = app
 				}
 				continue
@@ -147,14 +151,42 @@ func sortNodes(nodes []*SchedulingNode, sortType common.SortingPolicy) {
 	metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
 }
 
-func sortAskByPriority(requests []*schedulingAllocationAsk, ascending bool) {
-	sort.SliceStable(requests, func(i, j int) bool {
-		l := requests[i]
-		r := requests[j]
-
-		if ascending {
-			return l.priority < r.priority
+// Sort requests inside an application.
+// Requests are filtered and only requests with a pending repeats are returned
+func sortRequests(requests map[string]*schedulingAllocationAsk, sortType policies.SortPolicy) []*schedulingAllocationAsk {
+	var sortedRequests []*schedulingAllocationAsk
+	for _, request := range requests {
+		if request.getPendingAskRepeat() == 0 {
+			continue
 		}
-		return l.priority > r.priority
-	})
+		sortedRequests = append(sortedRequests, request)
+	}
+	switch sortType {
+	case policies.FifoSortPolicy:
+		// Sort by create time
+		sort.SliceStable(sortedRequests, func(i, j int) bool {
+			l := sortedRequests[i]
+			r := sortedRequests[j]
+			return l.createTime.Before(r.createTime)
+		})
+	case policies.PriorityPolicy:
+		// Sort by priority, then by create time stamp
+		sort.SliceStable(sortedRequests, func(i, j int) bool {
+			l := sortedRequests[i]
+			r := sortedRequests[j]
+			return sortRequestsByPriority(l, r)
+		})
+	}
+	return sortedRequests
+}
+
+// Sort the requests based on the priority of the request.
+// The higher the number the higher the priority.
+// Sorting happens in an descending order.
+// If the request priority is the same the oldest one is considered to have the higher priority.
+func sortRequestsByPriority(l, r *schedulingAllocationAsk) bool {
+	if l.priority == r.priority {
+		return l.createTime.Before(r.createTime)
+	}
+	return l.priority > r.priority
 }

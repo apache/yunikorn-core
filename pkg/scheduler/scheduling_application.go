@@ -31,6 +31,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -40,23 +41,26 @@ type SchedulingApplication struct {
 	ApplicationInfo *cache.ApplicationInfo
 
 	// Private fields need protection
-	queue          *SchedulingQueue                    // queue the application is running in
-	allocating     *resources.Resource                 // allocating resource set by the scheduler
-	pending        *resources.Resource                 // pending resources from asks for the app
-	reservations   map[string]*reservation             // a map of reservations
-	requests       map[string]*schedulingAllocationAsk // a map of asks
-	sortedRequests []*schedulingAllocationAsk
+	queue               *SchedulingQueue                    // queue the application is running in
+	allocating          *resources.Resource                 // allocating resource set by the scheduler
+	pending             *resources.Resource                 // pending resources from asks for the app
+	reservations        map[string]*reservation             // a map of reservations
+	requests            map[string]*schedulingAllocationAsk // a map of asks
+	sortedRequests      []*schedulingAllocationAsk          // sorted ask list
+	sortedRequestsDirty bool                                // is the map of asks out of sync with the sorted list
+	requestSortPolicy   policies.SortPolicy                 // policy to sort asks on
 
 	sync.RWMutex
 }
 
 func newSchedulingApplication(appInfo *cache.ApplicationInfo) *SchedulingApplication {
 	return &SchedulingApplication{
-		ApplicationInfo: appInfo,
-		allocating:      resources.NewResource(),
-		pending:         resources.NewResource(),
-		requests:        make(map[string]*schedulingAllocationAsk),
-		reservations:    make(map[string]*reservation),
+		ApplicationInfo:     appInfo,
+		allocating:          resources.NewResource(),
+		pending:             resources.NewResource(),
+		requests:            make(map[string]*schedulingAllocationAsk),
+		reservations:        make(map[string]*reservation),
+		sortedRequestsDirty: true,
 	}
 }
 
@@ -163,6 +167,7 @@ func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) int {
 		deltaPendingResource = sa.pending
 		sa.pending = resources.NewResource()
 		sa.requests = make(map[string]*schedulingAllocationAsk)
+		sa.sortedRequestsDirty = true
 	} else {
 		// cleanup the reservation for this allocation
 		for _, key := range sa.isAskReserved(allocKey) {
@@ -180,6 +185,7 @@ func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) int {
 		if ask := sa.requests[allocKey]; ask != nil {
 			deltaPendingResource = resources.MultiplyBy(ask.AllocatedResource, float64(ask.getPendingAskRepeat()))
 			sa.pending.SubFrom(deltaPendingResource)
+			sa.sortedRequestsDirty = true
 			delete(sa.requests, allocKey)
 		}
 	}
@@ -238,6 +244,7 @@ func (sa *SchedulingApplication) addAllocationAsk(ask *schedulingAllocationAsk) 
 	delta.SubFrom(oldAskResource)
 	sa.pending.AddTo(delta)
 	sa.queue.incPendingResource(delta)
+	sa.sortedRequestsDirty = true
 
 	return delta, nil
 }
@@ -261,6 +268,8 @@ func (sa *SchedulingApplication) updateAskRepeatInternal(ask *schedulingAllocati
 	sa.pending.AddTo(deltaPendingResource)
 	// update the pending of the queue with the same delta
 	sa.queue.incPendingResource(deltaPendingResource)
+	// mark sorted as dirty
+	sa.sortedRequestsDirty = true
 
 	return deltaPendingResource, nil
 }
@@ -391,20 +400,13 @@ func (sa *SchedulingApplication) canAskReserve(ask *schedulingAllocationAsk) boo
 	return pending > len(resNumber)
 }
 
-// Sort the request for the app in order based on the priority of the request.
+// Sort the request for the app in order based on the requestSortPolicy.
 // The sorted list only contains candidates that have an outstanding repeat.
 // No locking must be called while holding the lock
-func (sa *SchedulingApplication) sortRequests(ascending bool) {
-	sa.sortedRequests = nil
-	for _, request := range sa.requests {
-		if request.getPendingAskRepeat() == 0 {
-			continue
-		}
-		sa.sortedRequests = append(sa.sortedRequests, request)
-	}
-	// we might not have any requests
-	if len(sa.sortedRequests) > 0 {
-		sortAskByPriority(sa.sortedRequests, ascending)
+func (sa *SchedulingApplication) sortRequests() {
+	if sa.sortedRequestsDirty {
+		sa.sortedRequests = sortRequests(sa.requests, sa.requestSortPolicy)
+		sa.sortedRequestsDirty = false
 	}
 }
 
@@ -413,7 +415,7 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 	sa.Lock()
 	defer sa.Unlock()
 	// make sure the request are sorted
-	sa.sortRequests(false)
+	sa.sortRequests()
 	// get all the requests from the app sorted in order
 	for _, request := range sa.sortedRequests {
 		// resource must fit in headroom otherwise skip the request

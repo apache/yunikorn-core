@@ -201,7 +201,7 @@ func getApplicationJSON(app *cache.ApplicationInfo) *dao.ApplicationDAOInfo {
 		UsedResource:   strings.Trim(app.GetAllocatedResource().String(), "map"),
 		Partition:      app.Partition,
 		QueueName:      app.QueueName,
-		SubmissionTime: app.SubmissionTime,
+		SubmissionTime: app.SubmissionTime.UnixNano(),
 		Allocations:    allocationInfos,
 		State:          app.GetApplicationState(),
 	}

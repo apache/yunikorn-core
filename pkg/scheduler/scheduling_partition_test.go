@@ -218,7 +218,7 @@ func TestTryAllocate(t *testing.T) {
 	// create a set of queues and apps: app-1 2 asks; app-2 1 ask (same size)
 	// leaf1 will have an app with 2 requests and thus more unconfirmed resources compared to leaf2
 	// this should filter up in the parent and the 1st allocate should show an app-1 allocation
-	// the ask with the higher priority is the second one added alloc-2 for app-1
+	// the oldest ask should be allocated first this is alloc-1 for app-1
 	leaf := partition.getQueue("root.parent.leaf1")
 	if leaf == nil {
 		t.Fatal("leaf queue create failed")
@@ -244,7 +244,6 @@ func TestTryAllocate(t *testing.T) {
 	if ask1 == nil {
 		t.Fatal("ask creation failed for ask1")
 	}
-	ask1.priority = 2
 	delta, err = app.addAllocationAsk(ask1)
 	if err != nil || !resources.Equals(res, delta) {
 		t.Errorf("failed to add ask 2 to app 1 resource added: %v expected %v (err = %v)", delta, res, err)
@@ -267,7 +266,6 @@ func TestTryAllocate(t *testing.T) {
 	leaf2.addSchedulingApplication(app2)
 	partition.applications[appID2] = app2
 
-	ask2.priority = 2
 	delta, err = app2.addAllocationAsk(ask2)
 	if err != nil || !resources.Equals(res, delta) {
 		t.Errorf("failed to add ask to app resource added: %v expected %v (err = %v)", delta, res, err)
@@ -281,13 +279,10 @@ func TestTryAllocate(t *testing.T) {
 	assert.Equal(t, alloc.result, allocated, "result is not the expected allocated")
 	assert.Equal(t, len(alloc.releases), 0, "released allocations should have been 0")
 	assert.Equal(t, alloc.schedulingAsk.ApplicationID, appID1, "expected application app-1 to be allocated")
-	assert.Equal(t, alloc.schedulingAsk.AskProto.AllocationKey, "alloc-2", "expected ask alloc-2 to be allocated")
+	assert.Equal(t, alloc.schedulingAsk.AskProto.AllocationKey, "alloc-1", "expected ask alloc-1 to be allocated")
 
 	// process the allocation like the scheduler does after a try
-	toCache := partition.allocate(alloc)
-	if !toCache {
-		t.Fatalf("normal allocation should be passed back to cache")
-	}
+	assert.Assert(t, partition.allocate(alloc), "normal allocation should be passed back to cache")
 
 	// second allocation should be app-2 and alloc-1: higher up in the queue hierarchy
 	alloc = partition.tryAllocate()
@@ -300,10 +295,7 @@ func TestTryAllocate(t *testing.T) {
 	assert.Equal(t, alloc.schedulingAsk.AskProto.AllocationKey, "alloc-1", "expected ask alloc-1 to be allocated")
 
 	// process the allocation like the scheduler does after a try
-	toCache = partition.allocate(alloc)
-	if !toCache {
-		t.Fatalf("second normal allocation should be passed back to cache")
-	}
+	assert.Assert(t, partition.allocate(alloc), "second normal allocation should be passed back to cache")
 
 	// third allocation should be app-1 and alloc-1
 	alloc = partition.tryAllocate()
@@ -313,13 +305,11 @@ func TestTryAllocate(t *testing.T) {
 	assert.Equal(t, alloc.result, allocated, "result is not the expected allocated")
 	assert.Equal(t, len(alloc.releases), 0, "released allocations should have been 0")
 	assert.Equal(t, alloc.schedulingAsk.ApplicationID, appID1, "expected application app-1 to be allocated")
-	assert.Equal(t, alloc.schedulingAsk.AskProto.AllocationKey, "alloc-1", "expected ask alloc-1 to be allocated")
+	assert.Equal(t, alloc.schedulingAsk.AskProto.AllocationKey, "alloc-2", "expected ask alloc-2 to be allocated")
 
 	// process the allocation like the scheduler does after a try
-	toCache = partition.allocate(alloc)
-	if !toCache {
-		t.Fatalf("third normal allocation should be passed back to cache")
-	}
+	assert.Assert(t, partition.allocate(alloc), "third normal allocation should be passed back to cache")
+
 	if !resources.IsZero(partition.root.GetPendingResource()) {
 		t.Fatalf("pending allocations should be set to zero")
 	}

@@ -108,9 +108,15 @@ func (saa *schedulingAllocationAsk) getCreateTime() time.Time {
 	return saa.createTime
 }
 
-// Normalised priority
-// Currently a direct conversion.
+// Normalised priority, a direct conversion with a minimal value of 0.
+// 0 is the lowest priority
+// MaxInt the highest.
+// No support for named priorities
 func (saa *schedulingAllocationAsk) normalizePriority(priority *si.Priority) int32 {
 	// TODO, really normalize priority from ask
-	return priority.GetPriorityValue()
+	prioVal := priority.GetPriorityValue()
+	if prioVal < 0 {
+		return 0
+	}
+	return prioVal
 }

@@ -564,31 +564,50 @@ func TestSortRequests(t *testing.T) {
 	if app == nil || app.ApplicationInfo.ApplicationID != appID {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
-	if app.sortedRequests != nil {
-		t.Fatalf("new app create should not have sorted requests: %v", app)
-	}
-	app.sortRequests(true)
-	if app.sortedRequests != nil {
-		t.Fatalf("after sort call (no pending resources) list must be nil: %v", app.sortedRequests)
-	}
+	assert.Assert(t, app.sortedRequestsDirty, "sorted requests should have been dirty for new app")
+	assert.Equal(t, len(app.sortedRequests), 0, "app sorted requests should be empty for new app: %v", app.sortedRequests)
+
+	app.sortRequests()
+	assert.Assert(t, !app.sortedRequestsDirty, "sorted requests should not have been dirty after sort call")
+	assert.Equal(t, len(app.sortedRequests), 0, "after sort call (no pending resources) list must be empty: %v", app.sortedRequests)
+
+	// fake the queue for the ask repeat changes
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
 
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
-	for i := 1; i < 4; i++ {
+	for i := 1; i < 6; i++ {
 		num := strconv.Itoa(i)
 		ask := newAllocationAsk("ask-"+num, appID, res)
 		ask.priority = int32(i)
-		app.requests[ask.AskProto.AllocationKey] = ask
+		_, err = app.addAllocationAsk(ask)
+		assert.NilError(t, err, "adding ask failed")
 	}
-	app.sortRequests(true)
-	if len(app.sortedRequests) != 3 {
-		t.Fatalf("app sorted requests not correct: %v", app.sortedRequests)
-	}
+	assert.Assert(t, app.sortedRequestsDirty, "sorted requests should have been dirty after add ask")
+	app.sortRequests()
+	assert.Assert(t, !app.sortedRequestsDirty, "sorted requests should not have been dirty after sort call")
+	assert.Equal(t, len(app.sortedRequests), 5, "app sorted requests not correct add: %v", app.sortedRequests)
+
 	allocKey := app.sortedRequests[0].AskProto.AllocationKey
-	delete(app.requests, allocKey)
-	app.sortRequests(true)
-	if len(app.sortedRequests) != 2 {
-		t.Fatalf("app sorted requests not correct after removal: %v", app.sortedRequests)
-	}
+	app.removeAllocationAsk(allocKey)
+	assert.Assert(t, app.sortedRequestsDirty, "sorted requests should have been dirty after remove ask")
+	app.sortRequests()
+	assert.Assert(t, !app.sortedRequestsDirty, "sorted requests should not have been dirty after sort call")
+	assert.Equal(t, len(app.sortedRequests), 4, "app sorted requests not correct after removal: %v", app.sortedRequests)
+
+	_, err = app.updateAskRepeatInternal(app.sortedRequests[1], -1)
+	assert.NilError(t, err, "updating ask repeat failed")
+	assert.Assert(t, app.sortedRequestsDirty, "sorted requests should have been dirty after updating ask repeat")
+	app.sortRequests()
+	assert.Assert(t, !app.sortedRequestsDirty, "sorted requests should not have been dirty after sort call")
+	assert.Equal(t, len(app.sortedRequests), 3, "app sorted requests not correct after repeat update: %v", app.sortedRequests)
+
+	app.removeAllocationAsk("")
+	assert.Assert(t, app.sortedRequestsDirty, "sorted requests should have been dirty after remove ask")
+	app.sortRequests()
+	assert.Assert(t, !app.sortedRequestsDirty, "sorted requests should not have been dirty after sort call")
+	assert.Equal(t, len(app.sortedRequests), 0, "app sorted requests not correct after removal: %v", app.sortedRequests)
 }
 
 func TestStateChangeOnAskUpdate(t *testing.T) {

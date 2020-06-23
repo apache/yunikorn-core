@@ -73,3 +73,26 @@ func TestGetCreateTime(t *testing.T) {
 		t.Fatal("create time stamp should have been modified")
 	}
 }
+
+// Check priority defaults and normalisation
+func TestPriority(t *testing.T) {
+	ask := &si.AllocationAsk{}
+	allocAsk := newSchedulingAllocationAsk(ask)
+	if allocAsk == nil {
+		t.Fatalf("empty ask proto should not fail creation")
+	}
+	priority := int32(0)
+	assert.Equal(t, allocAsk.priority, priority, "priority should default to 0 value")
+
+	ask = &si.AllocationAsk{
+		Priority: &si.Priority{Priority: &si.Priority_PriorityValue{PriorityValue: int32(-1)}},
+	}
+	allocAsk = newSchedulingAllocationAsk(ask)
+	assert.Equal(t, allocAsk.priority, priority, "priority should have been normalised (min value 0)")
+	priority = int32(100)
+	ask = &si.AllocationAsk{
+		Priority: &si.Priority{Priority: &si.Priority_PriorityValue{PriorityValue: priority}},
+	}
+	allocAsk = newSchedulingAllocationAsk(ask)
+	assert.Equal(t, allocAsk.priority, priority, "priority should have been set to 100")
+}

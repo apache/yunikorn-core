@@ -164,6 +164,48 @@ func TestQueueGuaranteedResourceNotSet(t *testing.T) {
 	assertQueueList(t, queues, []int{2, 1, 0})
 }
 
+// queue guaranteed resource is not set
+func TestQueueSameUsage(t *testing.T) {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	cache.SetGuaranteedResource(root.QueueInfo, nil)
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{
+		"first":  resources.Quantity(200),
+		"second": resources.Quantity(200)})
+
+	var q0, q1, q2 *SchedulingQueue
+	q0, err = createManagedQueue(root, "q0", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	cache.SetGuaranteedResource(q0.QueueInfo, nil)
+	q0.allocating = res
+
+	q1, err = createManagedQueue(root, "q1", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	cache.SetGuaranteedResource(q1.QueueInfo, nil)
+	q1.allocating = res
+
+	// q2 has no guaranteed resource (nil)
+	q2, err = createManagedQueue(root, "q2", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	cache.SetGuaranteedResource(q2.QueueInfo, nil)
+	q2.allocating = res
+
+	queues := []*SchedulingQueue{q0, q1, q2}
+	// queues are exactly the same stable sort should return them in the same order
+	sortQueue(queues, policies.FairSortPolicy)
+	assert.Equal(t, len(queues), 3)
+	assertQueueList(t, queues, []int{0, 1, 2})
+	//
+	q1.pending = resources.NewResourceFromMap(map[string]resources.Quantity{
+		"first":  resources.Quantity(100),
+		"second": resources.Quantity(100)})
+	q2.pending = res
+	sortQueue(queues, policies.FairSortPolicy)
+	assert.Equal(t, len(queues), 3)
+	assertQueueList(t, queues, []int{2, 1, 0})
+}
+
 func TestSortNodesBin(t *testing.T) {
 	// nil or empty list cannot panic
 	sortNodes(nil, common.BinPackingPolicy)
@@ -318,7 +360,7 @@ func TestSortAppsFifo(t *testing.T) {
 	// map iteration is random so we do not need to check input
 	// apps should come back in order created 0, 1, 2, 3
 	list := sortApplications(input, policies.FifoSortPolicy, nil)
-	assertAppList(t, list, []int{0, 1, 2, 3})
+	assertAppList(t, list, []int{0, 1, 2, 3}, "baseline")
 }
 
 func TestSortAppsFair(t *testing.T) {
@@ -340,21 +382,21 @@ func TestSortAppsFair(t *testing.T) {
 	// nil resource: usage based sorting
 	// apps should come back in order: 0, 1, 2, 3
 	list := sortApplications(input, policies.FairSortPolicy, nil)
-	assertAppList(t, list, []int{0, 1, 2, 3})
+	assertAppList(t, list, []int{0, 1, 2, 3}, "nil usage")
 
 	// apps should come back in order: 0, 1, 2, 3
 	list = sortApplications(input, policies.FairSortPolicy, resources.Multiply(res, 0))
-	assertAppList(t, list, []int{0, 1, 2, 3})
+	assertAppList(t, list, []int{0, 1, 2, 3}, "zero usage")
 
 	// apps should come back in order: 0, 1, 2, 3
 	list = sortApplications(input, policies.FairSortPolicy, resources.Multiply(res, 5))
-	assertAppList(t, list, []int{0, 1, 2, 3})
+	assertAppList(t, list, []int{0, 1, 2, 3}, "same usage")
 
 	// update allocated resource for app-1
 	input["app-1"].allocating = resources.Multiply(res, 10)
 	// apps should come back in order: 0, 2, 3, 1
 	list = sortApplications(input, policies.FairSortPolicy, resources.Multiply(res, 5))
-	assertAppList(t, list, []int{0, 3, 1, 2})
+	assertAppList(t, list, []int{0, 3, 1, 2}, "app-1 high usage")
 
 	// update allocated resource for app-3 to negative (move to head of the list)
 	input["app-3"].allocating = resources.Multiply(res, -10)
@@ -366,7 +408,7 @@ func TestSortAppsFair(t *testing.T) {
 			zap.String("name", list[i].ApplicationInfo.ApplicationID),
 			zap.Any("res", list[i].allocating))
 	}
-	assertAppList(t, list, []int{1, 3, 2, 0})
+	assertAppList(t, list, []int{1, 3, 2, 0}, "app-3 negative usage")
 }
 
 func TestSortAppsStateAware(t *testing.T) {
@@ -427,41 +469,50 @@ func TestSortAppsStateAware(t *testing.T) {
 	assertAppListLength(t, list, []string{appID0, appID1, appID3})
 }
 
-func TestSortAsks(t *testing.T) {
-	// stable sort is used so equal values stay where they were
+func TestSortAsksFifo(t *testing.T) {
+	// values are sorted on create time
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"first": resources.Quantity(1)})
-	list := make([]*schedulingAllocationAsk, 4)
-	for i := 0; i < 4; i++ {
-		num := strconv.Itoa(i)
-		ask := newAllocationAsk("ask-"+num, "app-1", res)
+	asks := make(map[string]*schedulingAllocationAsk, 4)
+	for i := 0; i < 5; i++ {
+		askID := "ask-" + strconv.Itoa(i)
+		ask := newAllocationAskRepeat(askID, "app-1", res, i)
 		ask.priority = int32(i)
-		list[i] = ask
+		asks[askID] = ask
+		time.Sleep(5 * time.Nanosecond)
 	}
-	// move things around
-	list[0], list[2] = list[2], list[0]
-	list[1], list[3] = list[3], list[1]
-	assertAskList(t, list, []int{2, 3, 0, 1})
-	sortAskByPriority(list, true)
-	// asks should come back in order: 0, 1, 2, 3
-	assertAskList(t, list, []int{0, 1, 2, 3})
-	// move things around
-	list[0], list[2] = list[2], list[0]
-	list[1], list[3] = list[3], list[1]
-	assertAskList(t, list, []int{2, 3, 0, 1})
-	sortAskByPriority(list, false)
-	// asks should come back in order: 3, 2, 1, 0
-	assertAskList(t, list, []int{3, 2, 1, 0})
-	// make asks with same priority
-	// ask-3 and ask-1 both with prio 1 do not change order
-	// ask-3 must always be earlier in the list
-	list[0].priority = 1
-	sortAskByPriority(list, true)
-	// asks should come back in order: 0, 2, 3, 1
-	assertAskList(t, list, []int{0, 2, 3, 1})
-	sortAskByPriority(list, false)
-	// asks should come back in order: 3, 2, 0, 1
-	assertAskList(t, list, []int{3, 2, 0, 1})
+	list := sortRequests(asks, policies.FifoSortPolicy)
+	// asks should come back in order: 1, 2, 3, 4
+	// 0 is removed as it has no pending asks
+	assertAskList(t, list, []int{0, 1, 2, 3}, "baseline")
+}
+
+func TestSortAsksPriority(t *testing.T) {
+	// stable sort is used but equal values are sorted on create time
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{
+		"first": resources.Quantity(1)})
+	asks := make(map[string]*schedulingAllocationAsk, 5)
+	for i := 0; i < 5; i++ {
+		askID := "ask-" + strconv.Itoa(i)
+		ask := newAllocationAskRepeat(askID, "app-1", res, i)
+		ask.priority = int32(i)
+		asks[askID] = ask
+	}
+	// asks should come back in order: 4, 3, 2, 1
+	// 0 is removed as it has no pending asks
+	list := sortRequests(asks, policies.PriorityPolicy)
+	assertAskList(t, list, []int{3, 2, 1, 0}, "baseline")
+
+	// change the priority for third ask to 1 it should move to back in the list
+	// must stay behind to first ask as it is older
+	asks["ask-3"].priority = 1
+	list = sortRequests(asks, policies.PriorityPolicy)
+	assertAskList(t, list, []int{2, 1, 3, 0}, "ask-3 change")
+
+	// change the priority for first ask it should move almost to the front of the list
+	asks["ask-1"].priority = 3
+	list = sortRequests(asks, policies.PriorityPolicy)
+	assertAskList(t, list, []int{1, 2, 3, 0}, "ask-1 changed")
 }
 
 // list of queues and the location of the named queue inside that list
@@ -482,20 +533,21 @@ func assertNodeList(t *testing.T, list []*SchedulingNode, place []int) {
 
 // list of application and the location of the named applications inside that list
 // place[0] defines the location of the app-0 in the list of applications
-func assertAppList(t *testing.T, list []*SchedulingApplication, place []int) {
-	assert.Equal(t, "app-0", list[place[0]].ApplicationInfo.ApplicationID)
-	assert.Equal(t, "app-1", list[place[1]].ApplicationInfo.ApplicationID)
-	assert.Equal(t, "app-2", list[place[2]].ApplicationInfo.ApplicationID)
-	assert.Equal(t, "app-3", list[place[3]].ApplicationInfo.ApplicationID)
+func assertAppList(t *testing.T, list []*SchedulingApplication, place []int, test string) {
+	assert.Equal(t, "app-0", list[place[0]].ApplicationInfo.ApplicationID, test)
+	assert.Equal(t, "app-1", list[place[1]].ApplicationInfo.ApplicationID, test)
+	assert.Equal(t, "app-2", list[place[2]].ApplicationInfo.ApplicationID, test)
+	assert.Equal(t, "app-3", list[place[3]].ApplicationInfo.ApplicationID, test)
 }
 
-// list of application and the location of the named applications inside that list
-// place[0] defines the location of the app-0 in the list of applications
-func assertAskList(t *testing.T, list []*schedulingAllocationAsk, place []int) {
-	assert.Equal(t, "ask-0", list[place[0]].AskProto.AllocationKey)
-	assert.Equal(t, "ask-1", list[place[1]].AskProto.AllocationKey)
-	assert.Equal(t, "ask-2", list[place[2]].AskProto.AllocationKey)
-	assert.Equal(t, "ask-3", list[place[3]].AskProto.AllocationKey)
+// list of asks and the location of the named ask inside that list
+// place[0] defines the location of the ask-1 in the list of asks
+// ask-0 is currently always filtered in the tests as it has a 0 repeat
+func assertAskList(t *testing.T, list []*schedulingAllocationAsk, place []int, test string) {
+	assert.Equal(t, "ask-1", list[place[0]].AskProto.AllocationKey, test)
+	assert.Equal(t, "ask-2", list[place[1]].AskProto.AllocationKey, test)
+	assert.Equal(t, "ask-3", list[place[2]].AskProto.AllocationKey, test)
+	assert.Equal(t, "ask-4", list[place[3]].AskProto.AllocationKey, test)
 }
 
 func assertAppListLength(t *testing.T, list []*SchedulingApplication, apps []string) {

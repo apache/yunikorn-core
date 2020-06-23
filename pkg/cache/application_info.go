@@ -41,7 +41,7 @@ type ApplicationInfo struct {
 	ApplicationID  string
 	Partition      string
 	QueueName      string
-	SubmissionTime int64
+	SubmissionTime time.Time
 
 	// Private fields need protection
 	user              security.UserGroup         // owner of the application
@@ -61,7 +61,7 @@ func NewApplicationInfo(appID, partition, queueName string, ugi security.UserGro
 		ApplicationID:     appID,
 		Partition:         partition,
 		QueueName:         queueName,
-		SubmissionTime:    time.Now().UnixNano(),
+		SubmissionTime:    time.Now(),
 		tags:              tags,
 		user:              ugi,
 		allocatedResource: resources.NewResource(),
@@ -256,6 +256,6 @@ func (ai *ApplicationInfo) GetTag(tag string) string {
 func (ai *ApplicationInfo) String() string {
 	ai.RLock()
 	defer ai.RUnlock()
-	return fmt.Sprintf("{ApplicationID: %s, Partition: %s, QueueName: %s, SubmissionTime: %x}",
-		ai.ApplicationID, ai.Partition, ai.QueueName, ai.SubmissionTime)
+	return fmt.Sprintf("{ApplicationID: %s, Partition: %s, QueueName: %s, SubmissionTime: %s}",
+		ai.ApplicationID, ai.Partition, ai.QueueName, ai.SubmissionTime.String())
 }

@@ -28,6 +28,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 )
 
 // create the root queue, base for all testing
@@ -826,4 +827,41 @@ func TestIsEmpty(t *testing.T) {
 	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "app-1"})
 	leaf.addSchedulingApplication(app)
 	assert.Equal(t, leaf.isEmpty(), false, "queue with registered app should not be empty")
+}
+
+func TestUpdatePolicyProperties(t *testing.T) {
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	var leaf, parent *SchedulingQueue
+	leaf, err = createManagedQueue(root, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	parent, err = createManagedQueue(root, "parent", true, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	// check the defaults
+	props := map[string]string{configs.ApplicationSortPolicy: "", configs.RequestSortPolicy: ""}
+	leaf.updateSchedulingQueueProperties(props)
+	assert.Equal(t, leaf.sortPolicy, policies.FifoSortPolicy, "default not set to FIFO for leaf application sort policy")
+	assert.Equal(t, leaf.requestSortPolicy, policies.FifoSortPolicy, "default not set to FIFO for leaf request sort policy")
+	parent.updateSchedulingQueueProperties(props)
+	assert.Equal(t, parent.sortPolicy, policies.FairSortPolicy, "default not set to FAIR for parent queue sort policy")
+
+	// check an unknown value should still be defaults
+	props = map[string]string{configs.ApplicationSortPolicy: "bogus", configs.RequestSortPolicy: "bogus"}
+	leaf.updateSchedulingQueueProperties(props)
+	assert.Equal(t, leaf.sortPolicy, policies.FifoSortPolicy, "default not set to FIFO for leaf application sort policy")
+	assert.Equal(t, leaf.requestSortPolicy, policies.FifoSortPolicy, "default not set to FIFO for leaf request sort policy")
+	parent.updateSchedulingQueueProperties(props)
+	assert.Equal(t, parent.sortPolicy, policies.FairSortPolicy, "default not set to FAIR for parent queue sort policy")
+
+	// check a known value should change
+	props = map[string]string{configs.ApplicationSortPolicy: "stateaware", configs.RequestSortPolicy: "priority"}
+	leaf.updateSchedulingQueueProperties(props)
+	assert.Equal(t, leaf.sortPolicy, policies.StateAwarePolicy, "stateware for leaf application sort policy not set correctly")
+	assert.Equal(t, leaf.requestSortPolicy, policies.PriorityPolicy, "fifo for leaf request sort policy not set correctly")
+
+	// parent only supports fair at the moment: check if it changes fo any known value
+	props = map[string]string{configs.ApplicationSortPolicy: "fifo"}
+	parent.updateSchedulingQueueProperties(props)
+	assert.Equal(t, parent.sortPolicy, policies.FairSortPolicy, "default not set to FAIR for parent queue sort policy")
 }

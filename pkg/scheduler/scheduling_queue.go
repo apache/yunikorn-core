@@ -40,14 +40,15 @@ type SchedulingQueue struct {
 	QueueInfo *cache.QueueInfo // link back to the queue in the cache
 
 	// Private fields need protection
-	sortType       policies.SortPolicy               // How applications (leaf) or queues (parents) are sorted
-	childrenQueues map[string]*SchedulingQueue       // Only for direct children, parent queue only
-	applications   map[string]*SchedulingApplication // only for leaf queue
-	reservedApps   map[string]int                    // applications reserved within this queue, with reservation count
-	parent         *SchedulingQueue                  // link back to the parent in the scheduler
-	allocating     *resources.Resource               // resource being allocated in the queue but not confirmed
-	preempting     *resources.Resource               // resource considered for preemption in the queue
-	pending        *resources.Resource               // pending resource for the apps in the queue
+	sortPolicy        policies.SortPolicy               // How applications (leaf) or queues (parents) are sorted
+	requestSortPolicy policies.SortPolicy               // How request within applications are sorted
+	childrenQueues    map[string]*SchedulingQueue       // Only for direct children, parent queue only
+	applications      map[string]*SchedulingApplication // only for leaf queue
+	reservedApps      map[string]int                    // applications reserved within this queue, with reservation count
+	parent            *SchedulingQueue                  // link back to the parent in the scheduler
+	allocating        *resources.Resource               // resource being allocated in the queue but not confirmed
+	preempting        *resources.Resource               // resource considered for preemption in the queue
+	pending           *resources.Resource               // pending resource for the apps in the queue
 
 	sync.RWMutex
 }
@@ -91,12 +92,20 @@ func (sq *SchedulingQueue) updateSchedulingQueueProperties(prop map[string]strin
 	if sq.isLeafQueue() {
 		// walk over all properties and process
 		var err error
-		sq.sortType = policies.Undefined
+		sq.sortPolicy = policies.Undefined
+		sq.requestSortPolicy = policies.Undefined
 		for key, value := range prop {
 			if key == configs.ApplicationSortPolicy {
-				sq.sortType, err = policies.SortPolicyFromString(value)
+				sq.sortPolicy, err = policies.SortPolicyFromString(value)
 				if err != nil {
 					log.Logger().Debug("application sort property configuration error",
+						zap.Error(err))
+				}
+			}
+			if key == configs.RequestSortPolicy {
+				sq.requestSortPolicy, err = policies.SortPolicyFromString(value)
+				if err != nil {
+					log.Logger().Debug("task sort property configuration error",
 						zap.Error(err))
 				}
 			}
@@ -105,14 +114,18 @@ func (sq *SchedulingQueue) updateSchedulingQueueProperties(prop map[string]strin
 				zap.String("key", key),
 				zap.String("value", value))
 		}
-		// if it is not defined default to fifo
-		if sq.sortType == policies.Undefined {
-			sq.sortType = policies.FifoSortPolicy
+		// if sortPolicy is not defined default to fifo
+		if sq.sortPolicy == policies.Undefined {
+			sq.sortPolicy = policies.FifoSortPolicy
+		}
+		// if requestSortPolicy is not defined default to priority
+		if sq.requestSortPolicy == policies.Undefined {
+			sq.requestSortPolicy = policies.FifoSortPolicy
 		}
 		return
 	}
 	// set the sorting type for parent queues
-	sq.sortType = policies.FairSortPolicy
+	sq.sortPolicy = policies.FairSortPolicy
 }
 
 // Update the queue properties and the child queues for the queue after a configuration update.
@@ -182,6 +195,7 @@ func (sq *SchedulingQueue) addSchedulingApplication(app *SchedulingApplication) 
 	sq.Lock()
 	defer sq.Unlock()
 	sq.applications[app.ApplicationInfo.ApplicationID] = app
+	app.requestSortPolicy = sq.requestSortPolicy
 	// YUNIKORN-199: update the quota from the namespace
 	// get the tag with the quota
 	quota := app.getTag(appTagNamespaceResourceQuota)
@@ -650,5 +664,5 @@ func (sq *SchedulingQueue) getApplication(appID string) *SchedulingApplication {
 func (sq *SchedulingQueue) getSortType() policies.SortPolicy {
 	sq.RLock()
 	defer sq.RUnlock()
-	return sq.sortType
+	return sq.sortPolicy
 }

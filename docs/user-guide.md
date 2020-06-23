@@ -64,6 +64,7 @@ The following table lists the configurable parameters of the YuniKorn chart and 
 | `resources.limits.cpu`            | CPU resource limit                                             | `4`  
 | `resources.limits.memory`         | Memory resource limit                                          | `2Gi` 
 | `embedAdmissionController`        | Flag for enabling/disabling admission controller               | `true` 
+
 Uninstall yunikorn:
 ```shell script
 helm uninstall yunikorn --namespace yunikorn-ns

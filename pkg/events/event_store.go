@@ -56,7 +56,7 @@ func (es *defaultEventStore) Store(event *si.EventRecord) {
 	}
 
 	if _, ok := es.eventMap[event.ObjectID]; !ok {
-		es.storedEvents += 1
+		es.storedEvents++
 	}
 
 	es.eventMap[event.ObjectID] = event
@@ -72,7 +72,6 @@ func (es *defaultEventStore) CollectEvents() []*si.EventRecord {
 		messages = append(messages, v)
 	}
 
-	// TODO how not to clear map
 	es.eventMap = make(map[string]*si.EventRecord)
 	es.storedEvents = 0
 

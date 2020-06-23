@@ -168,4 +168,3 @@ func TestLimitedChannel(t *testing.T) {
 	cache.AddEvent(&event)
 	assert.Equal(t, len(cache.channel), 2, "the number of queued elements should be two")
 }
-

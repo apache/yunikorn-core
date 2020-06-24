@@ -19,14 +19,33 @@
 package tests
 
 import (
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
+	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
+
+type fakeContainerStateUpdater struct {
+	sentUpdate *si.UpdateContainerSchedulingStateRequest
+	sync.RWMutex
+}
+
+func (f *fakeContainerStateUpdater) Update(request *si.UpdateContainerSchedulingStateRequest) {
+	f.Lock()
+	defer f.Unlock()
+	f.sentUpdate = request
+}
+
+func (f *fakeContainerStateUpdater) getContainerUpdateRequest() *si.UpdateContainerSchedulingStateRequest {
+	f.RLock()
+	defer f.RUnlock()
+	return f.sentUpdate
+}
 
 func TestContainerStateUpdater(t *testing.T) {
 	configData := `
@@ -47,12 +66,9 @@ partitions:
 	err := ms.Init(configData, true)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
-	// inject a updater handler for testing
-	// this is a simple handler, it only verifies the number of
-	var sentUpdate *si.UpdateContainerSchedulingStateRequest
-	ms.mockRM.injectContainerStateUpdaterHandler(func(request *si.UpdateContainerSchedulingStateRequest) {
-		sentUpdate = request
-	})
+	// register a fake container state updater for testing
+	fk := &fakeContainerStateUpdater{}
+	plugins.RegisterSchedulerPlugin(fk)
 
 	leafName := "root.singleleaf"
 	appID := "app-1"
@@ -124,8 +140,9 @@ partitions:
 	})
 
 	err = common.WaitFor(100 * time.Millisecond, 3000 * time.Millisecond, func() bool {
-		return sentUpdate != nil && sentUpdate.ApplicartionID == appID &&
-			sentUpdate.GetState() == si.UpdateContainerSchedulingStateRequest_FAILED
+		reqSent := fk.getContainerUpdateRequest()
+		return reqSent != nil && reqSent.ApplicartionID == appID &&
+			reqSent.GetState() == si.UpdateContainerSchedulingStateRequest_FAILED
 	})
 	assert.NilError(t, err)
 }

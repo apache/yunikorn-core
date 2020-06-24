@@ -431,7 +431,7 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 	for _, request := range sa.sortedRequests {
 		// resource must fit in headroom otherwise skip the request
 		if !resources.FitIn(headRoom, request.AllocatedResource) {
-			// if the queue (or any of its parent) has max capacity is defined,
+			// if the queue (or any of its parent) has max capacity defined,
 			// get the max headroom, this represents the configured queue quota.
 			// if queue quota is enough, but headroom is not, usually this means
 			// the cluster needs to scale up to meet the its capacity.

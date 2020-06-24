@@ -37,9 +37,6 @@ type mockRMCallback struct {
 	nodeAllocations      map[string][]*si.Allocation
 	Allocations          map[string]*si.Allocation
 
-	// scheduler plugin handler
-	containerStateUpdaterHandler func(request *si.UpdateContainerSchedulingStateRequest)
-
 	sync.RWMutex
 }
 
@@ -54,17 +51,6 @@ func NewMockRMCallbackHandler() *mockRMCallback {
 		rejectedNodes:        make(map[string]bool),
 		nodeAllocations:      make(map[string][]*si.Allocation),
 		Allocations:          make(map[string]*si.Allocation),
-		containerStateUpdaterHandler: nil,
-	}
-}
-
-func (m *mockRMCallback) injectContainerStateUpdaterHandler(handler func(request *si.UpdateContainerSchedulingStateRequest)) {
-	m.containerStateUpdaterHandler = handler
-}
-
-func (m *mockRMCallback) Update(request *si.UpdateContainerSchedulingStateRequest) {
-	if m.containerStateUpdaterHandler != nil {
-		m.containerStateUpdaterHandler(request)
 	}
 }
 

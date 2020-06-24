@@ -19,8 +19,6 @@
 package plugins
 
 import (
-	"go.uber.org/zap"
-
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
 
@@ -31,42 +29,22 @@ func init() {
 }
 
 func RegisterSchedulerPlugin(plugin interface{}) {
-	registered := false
 	if t, ok := plugin.(PredicatesPlugin); ok {
-		log.Logger().Debug("register scheduler plugin",
-			zap.String("type", "PredicatesPlugin"))
+		log.Logger().Debug("register scheduler plugin: PredicatesPlugin")
 		plugins.predicatesPlugin = t
-		registered = true
-	}
-	if t, ok := plugin.(VolumesPlugin); ok {
-		log.Logger().Debug("register scheduler plugin",
-			zap.String("type", "VolumesPlugin"))
-		plugins.volumesPlugin = t
-		registered = true
 	}
 	if t, ok := plugin.(ReconcilePlugin); ok {
-		log.Logger().Debug("register scheduler plugin",
-			zap.String("type", "ReconcilePlugin"))
+		log.Logger().Debug("register scheduler plugin: ReconcilePlugin")
 		plugins.reconcilePlugin = t
-		registered = true
 	}
 	if t, ok := plugin.(ContainerSchedulingStateUpdater); ok {
-		log.Logger().Debug("register scheduler plugin",
-			zap.String("type", "ContainerSchedulingStateUpdater"))
+		log.Logger().Debug("register scheduler plugin: ContainerSchedulingStateUpdater")
 		plugins.schedulingStateUpdater = t
-		registered = true
-	}
-	if !registered {
-		log.Logger().Debug("no scheduler plugin implemented, none registered")
 	}
 }
 
 func GetPredicatesPlugin() PredicatesPlugin {
 	return plugins.predicatesPlugin
-}
-
-func GetVolumesPlugin() VolumesPlugin {
-	return plugins.volumesPlugin
 }
 
 func GetReconcilePlugin() ReconcilePlugin {

@@ -24,9 +24,10 @@ import (
 	"testing"
 	"time"
 
+	"gotest.tools/assert"
+
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
-	"gotest.tools/assert"
 )
 
 type mockEventPlugin struct {

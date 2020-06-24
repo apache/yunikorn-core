@@ -59,6 +59,7 @@ func TestCreateEventRecordTypes(t *testing.T) {
 
 func TestEmptyFields(t *testing.T) {
 	record, err := createEventRecord(si.EventRecord_QUEUE, "obj", "group", "reason", "message")
+	assert.NilError(t, err)
 	assert.Assert(t, record != nil, "the EventRecord should be created with a non-empty objectID")
 
 	_, err = createEventRecord(si.EventRecord_QUEUE, "", "group", "reason", "message")

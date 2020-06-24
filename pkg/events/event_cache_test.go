@@ -23,11 +23,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common"
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"go.uber.org/zap"
+
 	"gotest.tools/assert"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -67,7 +68,7 @@ func TestSingleEvent(t *testing.T) {
 	cache.AddEvent(&event)
 
 	// wait for events to be processed
-	err := common.WaitFor(1 * time.Millisecond, 10 * time.Millisecond, func() bool {
+	err := common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
 		return store.CountStoredEvents() == 1
 	})
 	assert.NilError(t, err, "the event should have been processed")
@@ -117,7 +118,7 @@ func TestMultipleEvents(t *testing.T) {
 	cache.AddEvent(&event3)
 
 	// wait for events to be processed
-	err := common.WaitFor(1 * time.Millisecond, 100 * time.Millisecond, func() bool {
+	err := common.WaitFor(1*time.Millisecond, 100*time.Millisecond, func() bool {
 		return store.CountStoredEvents() >= 2
 	})
 	assert.NilError(t, err, "the event should have been processed")
@@ -203,9 +204,7 @@ func TestLimitedChannel(t *testing.T) {
 	cache.AddEvent(&event)
 
 	// wait for events to be occupy the slow store
-	err := common.WaitFor(1 * time.Millisecond, 100 * time.Millisecond, func() bool {
-		return store.getBusy()
-	})
+	err := common.WaitFor(1*time.Millisecond, 100*time.Millisecond, store.getBusy)
 	assert.NilError(t, err, "the event should have been processed")
 	assert.Equal(t, len(cache.channel), 0, "the number of queued elements should be zero")
 

@@ -52,7 +52,7 @@ func createShimPublisherInternal(store EventStore) *shimPublisher {
 
 func createShimPublisherWithParameters(store EventStore, pushEventInterval time.Duration) *shimPublisher {
 	publisher := &shimPublisher{
-		store: store,
+		store:             store,
 		pushEventInterval: pushEventInterval,
 	}
 	publisher.stop.Store(false)

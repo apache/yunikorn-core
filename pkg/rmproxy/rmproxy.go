@@ -36,6 +36,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
+	siCommon "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -273,8 +274,8 @@ func normalizeUpdateRequestByRMId(request *si.UpdateRequest) {
 	// Update Schedulable Nodes
 	if len(request.NewSchedulableNodes) > 0 {
 		for _, node := range request.NewSchedulableNodes {
-			partition := node.Attributes[api.NodePartition]
-			node.Attributes[api.NodePartition] = common.GetNormalizedPartitionName(partition, request.RmID)
+			partition := node.Attributes[siCommon.NodePartition]
+			node.Attributes[siCommon.NodePartition] = common.GetNormalizedPartitionName(partition, request.RmID)
 		}
 	}
 
@@ -288,8 +289,8 @@ func normalizeUpdateRequestByRMId(request *si.UpdateRequest) {
 	// Update Updated nodes
 	if len(request.UpdatedNodes) > 0 {
 		for _, node := range request.UpdatedNodes {
-			partition := node.Attributes[api.NodePartition]
-			node.Attributes[api.NodePartition] = common.GetNormalizedPartitionName(partition, request.RmID)
+			partition := node.Attributes[siCommon.NodePartition]
+			node.Attributes[siCommon.NodePartition] = common.GetNormalizedPartitionName(partition, request.RmID)
 		}
 	}
 

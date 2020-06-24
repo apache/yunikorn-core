@@ -80,10 +80,7 @@ func (m *mockScheduler) addNode(nodeID string, resource *si.Resource) error {
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
 				NodeID: nodeID,
-				Attributes: map[string]string{
-					"si.io/hostname": nodeID,
-					"si.io/rackname": "rack-1",
-				},
+				Attributes: map[string]string{},
 				SchedulableResource: resource,
 			},
 		},

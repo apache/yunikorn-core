@@ -425,8 +425,6 @@ func TestGetQueueInfos(t *testing.T) {
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	err = parent.IncAllocatedResource(parentUsed, false)
 	assert.NilError(t, err, "failed to increment allocated resource: %v", err)
-	parent.properties = make(map[string]string)
-	parent.properties[configs.ApplicationSortPolicy] = "fifo"
 
 	var child1used *resources.Resource
 	child1used, err = resources.NewResourceFromConf(map[string]string{"memory": "1012", "vcores": "2"})
@@ -441,6 +439,59 @@ func TestGetQueueInfos(t *testing.T) {
 	child2, err = createManagedQueue(parent, "child2", true)
 	assert.NilError(t, err, "failed to create child queue: %v", err)
 	child2.setMaxResource(resources.NewResource())
+	rootDaoInfo := root.GetQueueInfos()
+
+	compareQueueInfoWithDAO(t, root, rootDaoInfo)
+	parentDaoInfo := rootDaoInfo.ChildQueues[0]
+	compareQueueInfoWithDAO(t, parent, parentDaoInfo)
+	for _, childDao := range parentDaoInfo.ChildQueues {
+		name := childDao.QueueName
+		child := parent.children[name]
+		if child == nil {
+			t.Fail()
+		}
+		compareQueueInfoWithDAO(t, child, childDao)
+	}
+}
+
+func TestGetQueueInfoPropertiesSet(t *testing.T) {
+	root, err := createRootQueue()
+	assert.NilError(t, err, "failed to create basic root queue: %v", err)
+
+	// managed parent queue with property set
+	var parent *QueueInfo
+	parent, err = createManagedQueue(root, "parent", true)
+	assert.NilError(t, err, "failed to create queue: %v", err)
+	parent.properties = make(map[string]string)
+	parent.properties[configs.ApplicationSortPolicy] = "fifo"
+
+	// managed leaf queue with some properties set
+	var child1 *QueueInfo
+	child1, err = createManagedQueue(parent, "child1", true)
+	assert.NilError(t, err, "failed to create queue: %v", err)
+	child1.properties = make(map[string]string)
+	child1.properties["some_property"] = "some_value"
+	child1.properties[configs.ApplicationSortPolicy] = "fair"
+
+	// maanaged leaf queue with some properties set
+	var child2 *QueueInfo
+	child2, err = createManagedQueue(parent, "child2", true)
+	assert.NilError(t, err, "failed to create child queue: %v", err)
+	child2.properties = make(map[string]string)
+	child2.properties[configs.ApplicationSortPolicy] = "state_aware"
+
+	// un managed leaf queue with some properties set
+	var unmanaged *QueueInfo
+	unmanaged, err = createUnManagedQueue(parent, "child3", true)
+	assert.NilError(t, err, "failed to create child queue: %v", err)
+	unmanaged.properties = make(map[string]string)
+	unmanaged.properties[configs.ApplicationSortPolicy] = "fifo"
+
+	// un managed leaf queue with no properties set (empty property set)
+	var unmanaged2 *QueueInfo
+	unmanaged2, err = createUnManagedQueue(parent, "child4", true)
+	assert.NilError(t, err, "failed to create child queue: %v", err)
+	unmanaged2.properties = make(map[string]string)
 
 	rootDaoInfo := root.GetQueueInfos()
 

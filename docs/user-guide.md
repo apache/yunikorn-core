@@ -43,6 +43,28 @@ kubectl create namespace yunikorn-ns
 helm install yunikorn yunikorn/yunikorn --namespace yunikorn-ns
 ```
 
+Configuration
+## Configuration
+The following table lists the configurable parameters of the YuniKorn chart and their default values.
+
+| Parameter                         | Description                                                    | Default                                     |
+| ---                               | ---                                                            | ---                                         |
+| `imagePullSecrets`                | Docker repository secrets                                      | ` `  
+| `serviceAccount`                  | Service account name                                           | `yunikorn-admin`  
+| `image.repository`                | Scheduler image repository                                     | `apache/yunikorn` 
+| `image.tag`                       | Scheduler image tag                                            | `scheduler-latest` 
+| `image.pullPolicy`                | Scheduler image pull policy                                    | `Always`  
+| `web_image.repository`            | web app image repository                                       | `apache/yunikorn` 
+| `web_image.tag`                   | web app image tag                                              | `web-latest` 
+| `web_image.pullPolicy`            | web app image pull policy                                      | `Always`  
+| `service.port`                    | Port of the scheduler service                                  | `9080` 
+| `service.port_web`                | Port of the web application service                            | `9889`  
+| `resources.requests.cpu`          | CPU resource requests                                          | `200m`  
+| `resources.requests.memory`       | Memory resource requests                                       | `1Gi`  
+| `resources.limits.cpu`            | CPU resource limit                                             | `4`  
+| `resources.limits.memory`         | Memory resource limit                                          | `2Gi` 
+| `embedAdmissionController`        | Flag for enabling/disabling admission controller               | `true` 
+
 Uninstall yunikorn:
 ```shell script
 helm uninstall yunikorn --namespace yunikorn-ns

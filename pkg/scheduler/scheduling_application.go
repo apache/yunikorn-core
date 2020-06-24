@@ -455,8 +455,8 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 				// if an updater plugin is registered, update the state to the shim
 				sa.updateContainerSchedulingStateIfNeeded(request,
 					si.UpdateContainerSchedulingStateRequest_FAILED,
-					"non of the nodes can satisfy both conditions: " +
-					"1) node has enough resources; 2) node satisfies all placement constraints")
+					"non of the nodes can satisfy both conditions: "+
+						"1) node has enough resources; 2) node satisfies all placement constraints")
 			} else {
 				// have a candidate return it
 				return alloc

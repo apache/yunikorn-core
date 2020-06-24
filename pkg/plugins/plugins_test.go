@@ -26,7 +26,7 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
-type fakePredicatePluginImpl struct {}
+type fakePredicatePluginImpl struct{}
 
 func (f *fakePredicatePluginImpl) Predicates(args *si.PredicatesArgs) error {
 	// do nothing

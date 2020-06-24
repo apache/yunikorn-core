@@ -23,10 +23,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common"
-	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"gotest.tools/assert"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
+	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -70,9 +70,9 @@ partitions:
 	fk := &fakeContainerStateUpdater{}
 	plugins.RegisterSchedulerPlugin(fk)
 
-	leafName := "root.singleleaf"
-	appID := "app-1"
-	node1 := "node-1"
+	const leafName = "root.singleleaf"
+	const appID = "app-1"
+	const node1 = "node-1"
 
 	// Register a node, and add apps
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -138,8 +138,9 @@ partitions:
 		},
 		RmID: "rm:123",
 	})
+	assert.NilError(t, err)
 
-	err = common.WaitFor(100 * time.Millisecond, 3000 * time.Millisecond, func() bool {
+	err = common.WaitFor(100*time.Millisecond, 3000*time.Millisecond, func() bool {
 		reqSent := fk.getContainerUpdateRequest()
 		return reqSent != nil && reqSent.ApplicartionID == appID &&
 			reqSent.GetState() == si.UpdateContainerSchedulingStateRequest_FAILED

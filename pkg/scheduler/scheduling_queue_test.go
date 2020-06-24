@@ -698,11 +698,12 @@ func TestHeadroom(t *testing.T) {
 	}
 	headRoom = leaf2.getHeadRoom()
 	maxHeadRoom = leaf2.getMaxHeadRoom()
-	if !resources.Equals(res, headRoom) || !resources.Equals(res, maxHeadRoom)  {
+	if !resources.Equals(res, headRoom) || !resources.Equals(res, maxHeadRoom) {
 		t.Errorf("leaf1 queue head room not as expected %v, got: %v (err %v)", res, headRoom, err)
 	}
 }
 
+//nolint: funlen
 func TestMaxHeadroom(t *testing.T) {
 	// create the root: nil test
 	root, err := createRootQueue(nil)

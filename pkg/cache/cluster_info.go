@@ -25,7 +25,6 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/api"
 	"github.com/apache/incubator-yunikorn-core/pkg/cache/cacheevent"
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
@@ -35,6 +34,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/schedulerevent"
+	siCommon "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -368,7 +368,7 @@ func (m *ClusterInfo) processNewSchedulableNodes(request *si.UpdateRequest) {
 func (m *ClusterInfo) processNodeActions(request *si.UpdateRequest) {
 	for _, update := range request.UpdatedNodes {
 		var partition *PartitionInfo
-		if p, ok := update.Attributes[api.NodePartition]; ok {
+		if p, ok := update.Attributes[siCommon.NodePartition]; ok {
 			partition = m.GetPartition(p)
 		} else {
 			log.Logger().Debug("node partition not specified",

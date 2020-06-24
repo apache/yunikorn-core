@@ -19,7 +19,7 @@
 package events
 
 import (
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -28,7 +28,8 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 )
 
-var pushEventInterval = 2 * time.Second
+// stores the push event internal
+var defaultPushEventInterval = 2 * time.Second
 
 type EventPublisher interface {
 	StartService()
@@ -36,10 +37,9 @@ type EventPublisher interface {
 }
 
 type shimPublisher struct {
-	store EventStore
-	stop  bool
-
-	sync.Mutex
+	store             EventStore
+	pushEventInterval time.Duration
+	stop              atomic.Value
 }
 
 func CreateShimPublisher(store EventStore) EventPublisher {
@@ -47,17 +47,20 @@ func CreateShimPublisher(store EventStore) EventPublisher {
 }
 
 func createShimPublisherInternal(store EventStore) *shimPublisher {
-	return &shimPublisher{
+	return createShimPublisherWithParameters(store, defaultPushEventInterval)
+}
+
+func createShimPublisherWithParameters(store EventStore, pushEventInterval time.Duration) *shimPublisher {
+	publisher := &shimPublisher{
 		store: store,
-		stop:  false,
+		pushEventInterval: pushEventInterval,
 	}
+	publisher.stop.Store(false)
+	return publisher
 }
 
 func (sp *shimPublisher) isStopped() bool {
-	sp.Lock()
-	defer sp.Unlock()
-
-	return sp.stop
+	return sp.stop.Load().(bool)
 }
 
 func (sp *shimPublisher) StartService() {
@@ -76,19 +79,15 @@ func (sp *shimPublisher) StartService() {
 					}
 				}
 			}
-			time.Sleep(pushEventInterval)
+			time.Sleep(sp.pushEventInterval)
 		}
 	}()
 }
 
 func (sp *shimPublisher) Stop() {
-	sp.Lock()
-	defer sp.Unlock()
-
-	sp.stop = true
+	sp.stop.Store(true)
 }
 
 func (sp *shimPublisher) getEventStore() EventStore {
-	// only set in the constructor, no need to lock
 	return sp.store
 }

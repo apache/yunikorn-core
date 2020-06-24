@@ -27,10 +27,9 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/events"
-
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/events"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
@@ -423,11 +422,14 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 			eventCache := events.GetEventCache()
 			if eventCache.IsStarted() {
 				message := fmt.Sprintf("Application %s does not fit into %s queue", request.ApplicationID, request.QueueName)
-				event, err := createInsufficientQueueResourcesEvent(request.AskProto, message)
-				if err != nil {
-					log.Logger().Warn("Could not emit event")
+				askProto := request.AskProto
+				if event, err := events.CreateRequestEventRecord(askProto.AllocationKey, askProto.ApplicationID, "InsufficientQueueResources", message); err != nil {
+					log.Logger().Warn("Event creation failed",
+						zap.String("event message", message),
+						zap.Error(err))
+				} else {
+					eventCache.AddEvent(event)
 				}
-				eventCache.AddEvent(event)
 			}
 			continue
 		}
@@ -713,11 +715,4 @@ func (sa *SchedulingApplication) finishRecovery() {
 			zap.String("currentState", sa.ApplicationInfo.GetApplicationState()),
 			zap.Error(err))
 	}
-}
-
-func createInsufficientQueueResourcesEvent(ask *si.AllocationAsk, message string) (*si.EventRecord, error) {
-	if ask == nil {
-		return nil, fmt.Errorf("could not create Event object from nil AllocationAsk")
-	}
-	return events.CreateRequestEventRecord(ask.AllocationKey, ask.ApplicationID, "InsufficientQueueResources", message)
 }

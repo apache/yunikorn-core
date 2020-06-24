@@ -65,29 +65,29 @@ func RegisterSchedulerPlugin(plugin interface{}) {
 }
 
 func GetPredicatesPlugin() PredicatesPlugin {
-	plugins.Lock()
-	defer plugins.Unlock()
+	plugins.RLock()
+	defer plugins.RUnlock()
 
 	return plugins.predicatesPlugin
 }
 
 func GetVolumesPlugin() VolumesPlugin {
-	plugins.Lock()
-	defer plugins.Unlock()
+	plugins.RLock()
+	defer plugins.RUnlock()
 
 	return plugins.volumesPlugin
 }
 
 func GetReconcilePlugin() ReconcilePlugin {
-	plugins.Lock()
-	defer plugins.Unlock()
+	plugins.RLock()
+	defer plugins.RUnlock()
 
 	return plugins.reconcilePlugin
 }
 
 func GetEventPlugin() EventPlugin {
-	plugins.Lock()
-	defer plugins.Unlock()
+	plugins.RLock()
+	defer plugins.RUnlock()
 
 	return plugins.eventPlugin
 }

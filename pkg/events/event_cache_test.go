@@ -19,16 +19,25 @@
 package events
 
 import (
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"go.uber.org/zap"
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
-func TestStartStop(t *testing.T) {
+func TestGetEventCache(t *testing.T) {
 	cache := GetEventCache()
+	assert.Assert(t, cache != nil, "the cache should not be nil")
+}
+
+func TestStartStop(t *testing.T) {
+	cache := createEventStoreAndCache()
 	assert.Equal(t, cache.IsStarted(), false, "EventCache should not be started when constructed")
 	// adding event to stopped cache does not cause panic
 	cache.AddEvent(nil)
@@ -43,7 +52,7 @@ func TestStartStop(t *testing.T) {
 }
 
 func TestSingleEvent(t *testing.T) {
-	cache := GetEventCache()
+	cache := createEventStoreAndCache()
 	store := cache.GetEventStore()
 
 	cache.StartService()
@@ -58,7 +67,10 @@ func TestSingleEvent(t *testing.T) {
 	cache.AddEvent(&event)
 
 	// wait for events to be processed
-	time.Sleep(1 * time.Millisecond)
+	err := common.WaitFor(1 * time.Millisecond, 10 * time.Millisecond, func() bool {
+		return store.CountStoredEvents() == 1
+	})
+	assert.NilError(t, err, "the event should have been processed")
 
 	records := store.CollectEvents()
 	if records == nil {
@@ -74,7 +86,7 @@ func TestSingleEvent(t *testing.T) {
 }
 
 func TestMultipleEvents(t *testing.T) {
-	cache := GetEventCache()
+	cache := createEventStoreAndCache()
 	store := cache.GetEventStore()
 
 	cache.StartService()
@@ -104,8 +116,11 @@ func TestMultipleEvents(t *testing.T) {
 	cache.AddEvent(&event2)
 	cache.AddEvent(&event3)
 
-	// wait for cache to process the event
-	time.Sleep(1 * time.Millisecond)
+	// wait for events to be processed
+	err := common.WaitFor(1 * time.Millisecond, 100 * time.Millisecond, func() bool {
+		return store.CountStoredEvents() >= 2
+	})
+	assert.NilError(t, err, "the event should have been processed")
 
 	records := store.CollectEvents()
 	if records == nil {
@@ -130,21 +145,49 @@ func TestMultipleEvents(t *testing.T) {
 }
 
 type slowEventStore struct {
+	busy bool
+
+	sync.Mutex
 }
 
-func (ses slowEventStore) Store(*si.EventRecord) {
-	time.Sleep(20 * time.Millisecond)
+func (ses *slowEventStore) setBusy(b bool) {
+	ses.Lock()
+	defer ses.Unlock()
+
+	log.Logger().Info("setting busy to ", zap.Bool("bool", b))
+
+	ses.busy = b
 }
 
-func (ses slowEventStore) CollectEvents() []*si.EventRecord {
+func (ses *slowEventStore) getBusy() bool {
+	ses.Lock()
+	defer ses.Unlock()
+
+	log.Logger().Info("getting busy ", zap.Bool("bool", ses.busy))
+
+	return ses.busy
+}
+
+func (ses *slowEventStore) Store(*si.EventRecord) {
+	ses.setBusy(true)
+	defer ses.setBusy(false)
+
+	time.Sleep(50 * time.Millisecond)
+}
+
+func (ses *slowEventStore) CollectEvents() []*si.EventRecord {
 	return nil
+}
+
+func (ses *slowEventStore) CountStoredEvents() int {
+	return 0
 }
 
 func TestLimitedChannel(t *testing.T) {
 	defaultEventChannelSize = 2
 
 	store := slowEventStore{}
-	cache := createEventCacheInternal(store)
+	cache := createEventCacheInternal(&store)
 	assert.Equal(t, cache.IsStarted(), false, "EventCache should not be started when constructed")
 	cache.StartService()
 	assert.Equal(t, cache.IsStarted(), true, "EventCache should have been started")
@@ -158,9 +201,14 @@ func TestLimitedChannel(t *testing.T) {
 	}
 
 	cache.AddEvent(&event)
-	assert.Equal(t, len(cache.channel), 1, "the number of queued elements should be one")
-	// wait until event processing is blocked due to slow store
-	time.Sleep(1 * time.Millisecond)
+
+	// wait for events to be occupy the slow store
+	err := common.WaitFor(1 * time.Millisecond, 100 * time.Millisecond, func() bool {
+		return store.getBusy()
+	})
+	assert.NilError(t, err, "the event should have been processed")
+	assert.Equal(t, len(cache.channel), 0, "the number of queued elements should be zero")
+
 	cache.AddEvent(&event)
 	assert.Equal(t, len(cache.channel), 1, "the number of queued elements should be two")
 	cache.AddEvent(&event)

@@ -30,7 +30,7 @@ type SchedulerPlugins struct {
 	reconcilePlugin  ReconcilePlugin
 	eventPlugin      EventPlugin
 
-	sync.Mutex
+	sync.RWMutex
 }
 
 // RM side implements this API when it can provide plugin for predicates.

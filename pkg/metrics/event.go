@@ -110,7 +110,6 @@ func (em *eventMetrics) IncEventsNotStored() {
 	em.totalEventsNotStored.Inc()
 }
 
-// TODO consider GaugeVec where label=EventType
 func (em *eventMetrics) AddEventsCollected(collectedEvents int) {
 	em.totalEventsCollected.Add(float64(collectedEvents))
 }

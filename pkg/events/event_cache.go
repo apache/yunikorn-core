@@ -42,11 +42,14 @@ type EventCache struct {
 
 func GetEventCache() *EventCache {
 	once.Do(func() {
-		store := newEventStoreImpl()
-
-		cache = createEventCacheInternal(store)
+		cache = createEventStoreAndCache()
 	})
 	return cache
+}
+
+func createEventStoreAndCache() *EventCache {
+	store := newEventStoreImpl()
+	return createEventCacheInternal(store)
 }
 
 func createEventCacheInternal(store EventStore) *EventCache {
@@ -57,13 +60,16 @@ func createEventCacheInternal(store EventStore) *EventCache {
 	}
 }
 
-func (ec *EventCache) StartService() {
+func (ec *EventCache) createChannel() {
 	ec.Lock()
 	defer ec.Unlock()
 
 	ec.channel = make(chan *si.EventRecord, defaultEventChannelSize)
+}
 
-	go ec.processEvent()
+func (ec *EventCache) StartService() {
+	ec.createChannel()
+	go ec.processEvents()
 }
 
 func (ec *EventCache) IsStarted() bool {
@@ -99,7 +105,7 @@ func (ec *EventCache) GetEventStore() EventStore {
 	return ec.store
 }
 
-func (ec *EventCache) processEvent() {
+func (ec *EventCache) processEvents() {
 	for {
 		select {
 		case <-ec.stop:

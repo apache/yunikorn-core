@@ -76,6 +76,11 @@ func (ep *mockEventPlugin) getNextEventRecord() *si.EventRecord {
 	}
 }
 
+func TestCreateShimPublisher(t *testing.T) {
+	publisher := CreateShimPublisher(nil)
+	assert.Assert(t, publisher != nil, "publisher should not be nil")
+}
+
 func TestServiceStartStopInternal(t *testing.T) {
 	store := newEventStoreImpl()
 	publisher := createShimPublisherInternal(store)
@@ -85,13 +90,13 @@ func TestServiceStartStopInternal(t *testing.T) {
 }
 
 func TestPublisher(t *testing.T) {
-	pushEventInterval = 2 * time.Millisecond
+	pushEventInterval := 2 * time.Millisecond
 
 	eventPlugin, err := createEventPluginForTest(false)
 	assert.NilError(t, err, "could not create event plugin for test")
 
 	store := newEventStoreImpl()
-	publisher := CreateShimPublisher(store)
+	publisher := createShimPublisherWithParameters(store, pushEventInterval)
 	publisher.StartService()
 
 	event := &si.EventRecord{
@@ -119,13 +124,13 @@ func TestPublisher(t *testing.T) {
 }
 
 func TestPublisherHandleError(t *testing.T) {
-	pushEventInterval = 2 * time.Millisecond
+	pushEventInterval := 2 * time.Millisecond
 
 	eventPlugin, err := createEventPluginForTest(true)
 	assert.NilError(t, err, "could not create event plugin for test")
 
 	store := newEventStoreImpl()
-	publisher := CreateShimPublisher(store)
+	publisher := createShimPublisherWithParameters(store, pushEventInterval)
 	publisher.StartService()
 
 	event1 := &si.EventRecord{

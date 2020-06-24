@@ -19,6 +19,7 @@
 package events
 
 import (
+	"strconv"
 	"testing"
 
 	"gotest.tools/assert"
@@ -26,7 +27,7 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
-func TestStoreAndRetrieveAllocationAsk(t *testing.T) {
+func TestStoreAndRetrieve(t *testing.T) {
 	store := newEventStoreImpl()
 	event := si.EventRecord{
 		Type:     si.EventRecord_REQUEST,
@@ -51,7 +52,7 @@ func TestStoreAndRetrieveAllocationAsk(t *testing.T) {
 	assert.Equal(t, len(records), 0)
 }
 
-func TestStoreAndRetrieveMultipleAllocationAsks(t *testing.T) {
+func TestMultiEventsSameObjectID(t *testing.T) {
 	store := newEventStoreImpl()
 
 	event1 := si.EventRecord{
@@ -98,33 +99,19 @@ func TestStoreAndRetrieveMultipleAllocationAsks(t *testing.T) {
 }
 
 func TestStoreWithLimitedSize(t *testing.T) {
-	maxEventStoreSize = 2
+	maxEventStoreSize = 3
 
 	store := newEventStoreImpl()
-	event1 := si.EventRecord{
-		Type:     si.EventRecord_REQUEST,
-		ObjectID: "alloc1",
-		GroupID:  "app1",
-		Reason:   "reason1",
-		Message:  "message1",
+	for i := 0; i < 5; i++ {
+		event := &si.EventRecord{
+			Type:     si.EventRecord_REQUEST,
+			ObjectID: "alloc-" + strconv.Itoa(i),
+			GroupID:  "app",
+			Reason:   "reason",
+			Message:  "message",
+		}
+		store.Store(event)
 	}
-	event2 := si.EventRecord{
-		Type:     si.EventRecord_REQUEST,
-		ObjectID: "alloc2",
-		GroupID:  "app2",
-		Reason:   "reason2",
-		Message:  "message2",
-	}
-	event3 := si.EventRecord{
-		Type:     si.EventRecord_REQUEST,
-		ObjectID: "alloc3",
-		GroupID:  "app3",
-		Reason:   "reason3",
-		Message:  "message3",
-	}
-	store.Store(&event1)
-	store.Store(&event2)
-	store.Store(&event3)
 	records := store.CollectEvents()
-	assert.Equal(t, len(records), 2)
+	assert.Equal(t, len(records), 3)
 }

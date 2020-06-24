@@ -27,9 +27,9 @@ import (
 )
 
 func TestCreateEventRecord(t *testing.T) {
-	record, err := CreateRequestEventRecord("ask", "app", "reason", "message")
+	record, err := createEventRecord(si.EventRecord_NODE, "ask", "app", "reason", "message")
 	assert.NilError(t, err, "the error should be nil")
-	assert.Equal(t, record.Type, si.EventRecord_REQUEST)
+	assert.Equal(t, record.Type, si.EventRecord_NODE)
 	assert.Equal(t, record.ObjectID, "ask")
 	assert.Equal(t, record.GroupID, "app")
 	assert.Equal(t, record.Reason, "reason")
@@ -37,4 +37,33 @@ func TestCreateEventRecord(t *testing.T) {
 	if record.TimestampNano == 0 {
 		t.Fatal("the timestamp should have been created")
 	}
+}
+
+func TestCreateEventRecordTypes(t *testing.T) {
+	record, err := CreateRequestEventRecord("ask", "app", "reason", "message")
+	assert.NilError(t, err, "the error should be nil")
+	assert.Equal(t, record.Type, si.EventRecord_REQUEST)
+
+	record, err = CreateAppEventRecord("ask", "app", "message")
+	assert.NilError(t, err, "the error should be nil")
+	assert.Equal(t, record.Type, si.EventRecord_APP)
+
+	record, err = CreateNodeEventRecord("ask", "app", "message")
+	assert.NilError(t, err, "the error should be nil")
+	assert.Equal(t, record.Type, si.EventRecord_NODE)
+
+	record, err = CreateQueueEventRecord("ask", "app", "reason", "message")
+	assert.NilError(t, err, "the error should be nil")
+	assert.Equal(t, record.Type, si.EventRecord_QUEUE)
+}
+
+func TestEmptyFields(t *testing.T) {
+	record, err := createEventRecord(si.EventRecord_QUEUE, "obj", "group", "reason", "message")
+	assert.Assert(t, record != nil, "the EventRecord should be created with a non-empty objectID")
+
+	_, err = createEventRecord(si.EventRecord_QUEUE, "", "group", "reason", "message")
+	assert.Assert(t, err != nil, "the EventRecord should not be created with empty objectID")
+
+	_, err = createEventRecord(si.EventRecord_QUEUE, "obj", "group", "", "message")
+	assert.Assert(t, err != nil, "the EventRecord should not be created with empty reason")
 }

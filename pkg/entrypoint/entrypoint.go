@@ -45,7 +45,7 @@ func StartAllServices() *ServiceContext {
 			manualScheduleFlag: false,
 			startWebAppFlag:    true,
 			metricsHistorySize: 1440,
-			eventCacheEnabled:  true,
+			eventCacheEnabled:  false,
 		})
 }
 
@@ -84,11 +84,13 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 	cache.StartService(eventHandler)
 	scheduler.StartService(eventHandler, opts.manualScheduleFlag)
 	proxy.StartService(eventHandler)
-	if eventCache != nil {
-		eventCache.StartService()
-	}
-	if eventPublisher != nil {
-		eventPublisher.StartService()
+	if opts.eventCacheEnabled {
+		if eventCache != nil {
+			eventCache.StartService()
+			if eventPublisher != nil {
+				eventPublisher.StartService()
+			}
+		}
 	}
 
 	context := &ServiceContext{

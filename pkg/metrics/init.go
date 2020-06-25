@@ -28,6 +28,8 @@ const (
 	Namespace = "yunikorn"
 	// SchedulerSubsystem - subsystem name used by scheduler
 	SchedulerSubsystem = "scheduler"
+	// EventSubsystem - subsystem name used by event cache
+	EventSubsystem = "event"
 	// replacement of invalid byte for prometheus metric names
 	MetricNameInvalidByteReplacement = '_'
 )
@@ -38,6 +40,7 @@ var m *Metrics
 type Metrics struct {
 	scheduler CoreSchedulerMetrics
 	queues    map[string]CoreQueueMetrics
+	event     CoreEventMetrics
 	lock      sync.RWMutex
 }
 
@@ -113,11 +116,22 @@ type CoreSchedulerMetrics interface {
 	ObserveQueueSortingLatency(start time.Time)
 }
 
+type CoreEventMetrics interface {
+	IncEventsCreated()
+	IncEventsChanneled()
+	IncEventsNotChanneled()
+	IncEventsProcessed()
+	IncEventsStored()
+	IncEventsNotStored()
+	AddEventsCollected(collectedEvents int)
+}
+
 func init() {
 	once.Do(func() {
 		m = &Metrics{
 			scheduler: initSchedulerMetrics(),
 			queues:    make(map[string]CoreQueueMetrics),
+			event:     initEventMetrics(),
 			lock:      sync.RWMutex{},
 		}
 	})
@@ -136,6 +150,10 @@ func GetQueueMetrics(name string) CoreQueueMetrics {
 	queueMetrics := forQueue(name)
 	m.queues[name] = queueMetrics
 	return queueMetrics
+}
+
+func GetEventMetrics() CoreEventMetrics {
+	return m.event
 }
 
 // Format metric name based on the definition of metric name in prometheus, as per

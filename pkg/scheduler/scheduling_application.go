@@ -29,6 +29,7 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/events"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
@@ -418,6 +419,18 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 	for _, request := range sa.sortedRequests {
 		// resource must fit in headroom otherwise skip the request
 		if !resources.FitIn(headRoom, request.AllocatedResource) {
+			eventCache := events.GetEventCache()
+			if eventCache.IsStarted() {
+				message := fmt.Sprintf("Application %s does not fit into %s queue", request.ApplicationID, request.QueueName)
+				askProto := request.AskProto
+				if event, err := events.CreateRequestEventRecord(askProto.AllocationKey, askProto.ApplicationID, "InsufficientQueueResources", message); err != nil {
+					log.Logger().Warn("Event creation failed",
+						zap.String("event message", message),
+						zap.Error(err))
+				} else {
+					eventCache.AddEvent(event)
+				}
+			}
 			continue
 		}
 		if nodeIterator := ctx.getNodeIterator(); nodeIterator != nil {

@@ -31,6 +31,9 @@ func init() {
 }
 
 func RegisterSchedulerPlugin(plugin interface{}) {
+	plugins.Lock()
+	defer plugins.Unlock()
+
 	registered := false
 	if t, ok := plugin.(PredicatesPlugin); ok {
 		log.Logger().Debug("register scheduler plugin",
@@ -50,19 +53,41 @@ func RegisterSchedulerPlugin(plugin interface{}) {
 		plugins.reconcilePlugin = t
 		registered = true
 	}
+	if t, ok := plugin.(EventPlugin); ok {
+		log.Logger().Debug("register event plugin",
+			zap.String("type", "EventPlugin"))
+		plugins.eventPlugin = t
+		registered = true
+	}
 	if !registered {
 		log.Logger().Debug("no scheduler plugin implemented, none registered")
 	}
 }
 
 func GetPredicatesPlugin() PredicatesPlugin {
+	plugins.RLock()
+	defer plugins.RUnlock()
+
 	return plugins.predicatesPlugin
 }
 
 func GetVolumesPlugin() VolumesPlugin {
+	plugins.RLock()
+	defer plugins.RUnlock()
+
 	return plugins.volumesPlugin
 }
 
 func GetReconcilePlugin() ReconcilePlugin {
+	plugins.RLock()
+	defer plugins.RUnlock()
+
 	return plugins.reconcilePlugin
+}
+
+func GetEventPlugin() EventPlugin {
+	plugins.RLock()
+	defer plugins.RUnlock()
+
+	return plugins.eventPlugin
 }

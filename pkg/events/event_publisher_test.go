@@ -50,19 +50,18 @@ func createEventPluginForTest(fail bool) (*mockEventPlugin, error) {
 	return &eventPlugin, nil
 }
 
-func (ep *mockEventPlugin) SendEvent(events []*si.EventRecord) error {
+func (ep *mockEventPlugin) SendEvent(events []*si.EventRecord) {
 	ep.Lock()
 	defer ep.Unlock()
 
 	if ep.fail {
 		// we only fail once, next time we succeed
 		ep.fail = false
-		return fmt.Errorf("could not send event")
+		return
 	}
 	for _, event := range events {
 		ep.records <- event
 	}
-	return nil
 }
 
 func (ep *mockEventPlugin) getNextEventRecord() *si.EventRecord {

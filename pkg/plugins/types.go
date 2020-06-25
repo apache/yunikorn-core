@@ -56,5 +56,5 @@ type ReconcilePlugin interface {
 type EventPlugin interface {
 	// This plugin is responsible for transmitting events to the shim side.
 	// Events can be further exposed from the shim.
-	SendEvent(events []*si.EventRecord) error
+	SendEvent(events []*si.EventRecord)
 }

@@ -458,10 +458,10 @@ func TestSortAsks(t *testing.T) {
 	list[0].priority = 1
 	sortAskByPriority(list, true)
 	// asks should come back in order: 0, 2, 3, 1
-	assertAskList(t, list, []int{0, 2, 3, 1})
+	assertAskList(t, list, []int{0, 1, 3, 2})
 	sortAskByPriority(list, false)
 	// asks should come back in order: 3, 2, 0, 1
-	assertAskList(t, list, []int{3, 2, 0, 1})
+	assertAskList(t, list, []int{3, 1, 0, 2})
 }
 
 // list of queues and the location of the named queue inside that list

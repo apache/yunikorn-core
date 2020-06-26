@@ -545,8 +545,10 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
 	// Start allocation
 	allocationUUID := alloc.UUID
 	if !nodeReported {
-		// if not node reported (aka recovery an existing allocation)
-		// we do not need to generate an UUID in this case
+		// if the allocation is node reported (aka recovery an existing allocation),
+		// we do not need to generate an UUID for it, we directly use the UUID reported by shim
+		// to track this allocation; otherwise this is a new allocation, then we generate an UUID
+		// and this UUID will be sent to shim to keep consistent.
 		allocationUUID = pi.getNewAllocationUUID()
 	}
 	allocation := NewAllocationInfo(allocationUUID, alloc)

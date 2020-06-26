@@ -265,7 +265,9 @@ func TestRemoveNodeWithAllocations(t *testing.T) {
 	nodeID := "node-1"
 	node1 := NewNodeForTest(nodeID, resources.NewResourceFromMap(
 		map[string]resources.Quantity{resources.MEMORY: memVal}))
-	allocs := []*si.Allocation{createAllocation(queueName, nodeID, "alloc-1", appID)}
+	alloc := createAllocation(queueName, nodeID, "alloc-1", appID)
+	alloc.UUID = "alloc-1-uuid"
+	allocs := []*si.Allocation{alloc}
 	// add a node this must work
 	err = partition.addNewNode(node1, allocs)
 	if err != nil || partition.GetNode(nodeID) == nil {
@@ -358,7 +360,9 @@ func TestAddNodeWithAllocations(t *testing.T) {
 	nodeID := "node-1"
 	node1 := NewNodeForTest(nodeID, resources.NewResourceFromMap(
 		map[string]resources.Quantity{resources.MEMORY: memVal}))
-	allocs := []*si.Allocation{createAllocation(queueName, nodeID, "alloc-1", appID)}
+	alloc := createAllocation(queueName, nodeID, "alloc-1", appID)
+	alloc.UUID = "alloc-1-uuid"
+	allocs := []*si.Allocation{alloc}
 	// add a node this must work
 	err = partition.addNewNode(node1, allocs)
 	if err != nil || partition.GetNode(nodeID) == nil {

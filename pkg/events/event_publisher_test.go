@@ -32,16 +32,14 @@ import (
 
 type mockEventPlugin struct {
 	records chan *si.EventRecord
-	fail    bool
 
 	sync.Mutex
 }
 
 // create and register mocked event plugin
-func createEventPluginForTest(fail bool) (*mockEventPlugin, error) {
+func createEventPluginForTest() (*mockEventPlugin, error) {
 	eventPlugin := mockEventPlugin{
 		records: make(chan *si.EventRecord, 3),
-		fail:    fail,
 	}
 	plugins.RegisterSchedulerPlugin(&eventPlugin)
 	if plugins.GetEventPlugin() == nil {
@@ -54,11 +52,6 @@ func (ep *mockEventPlugin) SendEvent(events []*si.EventRecord) {
 	ep.Lock()
 	defer ep.Unlock()
 
-	if ep.fail {
-		// we only fail once, next time we succeed
-		ep.fail = false
-		return
-	}
 	for _, event := range events {
 		ep.records <- event
 	}
@@ -92,7 +85,7 @@ func TestServiceStartStopInternal(t *testing.T) {
 func TestPublisher(t *testing.T) {
 	pushEventInterval := 2 * time.Millisecond
 
-	eventPlugin, err := createEventPluginForTest(false)
+	eventPlugin, err := createEventPluginForTest()
 	assert.NilError(t, err, "could not create event plugin for test")
 
 	store := newEventStoreImpl()
@@ -123,52 +116,3 @@ func TestPublisher(t *testing.T) {
 	publisher.Stop()
 }
 
-func TestPublisherHandleError(t *testing.T) {
-	pushEventInterval := 2 * time.Millisecond
-
-	eventPlugin, err := createEventPluginForTest(true)
-	assert.NilError(t, err, "could not create event plugin for test")
-
-	store := newEventStoreImpl()
-	publisher := createShimPublisherWithParameters(store, pushEventInterval)
-	publisher.StartService()
-
-	event1 := &si.EventRecord{
-		Type:          si.EventRecord_REQUEST,
-		ObjectID:      "ask1",
-		GroupID:       "app1",
-		Reason:        "reason1",
-		Message:       "message1",
-		TimestampNano: 123456,
-	}
-	store.Store(event1)
-	time.Sleep(2 * pushEventInterval)
-
-	// was not able to send event, plugin should be empty
-	eventFromPlugin1 := eventPlugin.getNextEventRecord()
-	if eventFromPlugin1 != nil {
-		t.Fatal("event should be nil due to failure")
-	}
-
-	event2 := &si.EventRecord{
-		Type:          si.EventRecord_REQUEST,
-		ObjectID:      "ask2",
-		GroupID:       "app2",
-		Reason:        "reason2",
-		Message:       "message2",
-		TimestampNano: 123457,
-	}
-	store.Store(event2)
-	time.Sleep(2 * pushEventInterval)
-	eventFromPlugin2 := eventPlugin.getNextEventRecord()
-	if eventFromPlugin2 == nil {
-		t.Fatal("EventRecord should not be nil!")
-	}
-	assert.Equal(t, eventFromPlugin2.ObjectID, "ask2")
-	assert.Equal(t, eventFromPlugin2.GroupID, "app2")
-	assert.Equal(t, eventFromPlugin2.Reason, "reason2")
-	assert.Equal(t, eventFromPlugin2.Message, "message2")
-	assert.Equal(t, eventFromPlugin2.TimestampNano, int64(123457))
-
-	publisher.Stop()
-}

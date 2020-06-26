@@ -484,6 +484,77 @@ func TestAddNewAllocation(t *testing.T) {
 	}
 }
 
+// this test is to verify the node recovery of the existing allocations
+// after it adds a node to partition with existing allocations,
+// it verifies the allocations are added to the node, resources are counted correct
+func TestAddNodeWithExistingAllocations(t *testing.T) {
+	const appID = "app-1"
+	const queueName = "root.default"
+	const nodeID = "node-1"
+	const allocationUUID1 = "alloc-UUID-1"
+	const allocationUUID2 = "alloc-UUID-2"
+
+	partition, err := CreatePartitionInfo([]byte(configDefault))
+	assert.NilError(t, err, "partition create failed")
+
+	// add a new app
+	appInfo := newApplicationInfo(appID, "default", queueName)
+	err = partition.addNewApplication(appInfo, true)
+	if err != nil {
+		t.Errorf("add application to partition should not have failed: %v", err)
+	}
+
+	// add a node with 2 existing allocations
+	alloc1Res := &si.Resource{Resources: map[string]*si.Quantity{resources.MEMORY: {Value: 200}}}
+	alloc2Res := &si.Resource{Resources: map[string]*si.Quantity{resources.MEMORY: {Value: 300}}}
+	nodeTotal := &si.Resource{Resources: map[string]*si.Quantity{resources.MEMORY: {Value: 1000}}}
+	node1 := NewNodeForTest(nodeID, resources.NewResourceFromProto(nodeTotal))
+	err = partition.addNewNode(node1, []*si.Allocation{
+		{
+			AllocationKey:        allocationUUID1,
+			AllocationTags:       map[string]string{"a": "b"},
+			UUID:                 allocationUUID1,
+			ResourcePerAlloc:     alloc1Res,
+			Priority:             nil,
+			QueueName:            queueName,
+			NodeID:               nodeID,
+			ApplicationID:        appID,
+			PartitionName:        "default",
+		},
+		{
+			AllocationKey:        allocationUUID2,
+			AllocationTags:       map[string]string{"a": "b"},
+			UUID:                 allocationUUID2,
+			ResourcePerAlloc:     alloc2Res,
+			Priority:             nil,
+			QueueName:            queueName,
+			NodeID:               nodeID,
+			ApplicationID:        appID,
+			PartitionName:        "default",
+		},
+	})
+	assert.NilError(t, err, "add node failed")
+
+	// verify existing allocations are added to the node
+	assert.Equal(t, len(node1.GetAllAllocations()), 2)
+
+	alloc1 := node1.GetAllocation(allocationUUID1)
+	alloc2 := node1.GetAllocation(allocationUUID2)
+	assert.Assert(t, alloc1 != nil)
+	assert.Assert(t, alloc2 != nil)
+	assert.Equal(t, alloc1.AllocationProto.UUID, "alloc-UUID-1")
+	assert.Equal(t, alloc2.AllocationProto.UUID, "alloc-UUID-2")
+	assert.Assert(t, resources.Equals(alloc1.AllocatedResource, resources.NewResourceFromProto(alloc1Res)))
+	assert.Assert(t, resources.Equals(alloc2.AllocatedResource, resources.NewResourceFromProto(alloc2Res)))
+	assert.Equal(t, alloc1.ApplicationID, "app-1")
+	assert.Equal(t, alloc2.ApplicationID, "app-1")
+
+	// verify node resource
+	assert.Assert(t, resources.Equals(node1.GetCapacity(), resources.NewResourceFromProto(nodeTotal)))
+	assert.Assert(t, resources.Equals(node1.GetAllocatedResource(),
+		resources.Add(resources.NewResourceFromProto(alloc1Res), resources.NewResourceFromProto(alloc2Res))))
+}
+
 func TestRemoveApp(t *testing.T) {
 	partition, err := CreatePartitionInfo([]byte(configDefault))
 	assert.NilError(t, err, "partition create failed")

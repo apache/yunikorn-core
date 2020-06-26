@@ -253,6 +253,7 @@ func (pi *PartitionInfo) addNodeReportedAllocations(allocation *si.Allocation) (
 		AllocationKey:     allocation.AllocationKey,
 		Tags:              allocation.AllocationTags,
 		Priority:          allocation.Priority,
+		UUID:              allocation.UUID,
 	}, true)
 }
 
@@ -542,7 +543,12 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
 	}
 
 	// Start allocation
-	allocationUUID := pi.getNewAllocationUUID()
+	allocationUUID := alloc.UUID
+	if !nodeReported {
+		// if not node reported (aka recovery an existing allocation)
+		// we do not need to generate an UUID in this case
+		allocationUUID = pi.getNewAllocationUUID()
+	}
 	allocation := NewAllocationInfo(allocationUUID, alloc)
 
 	node.AddAllocation(allocation)

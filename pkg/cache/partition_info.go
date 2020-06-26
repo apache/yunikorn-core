@@ -552,7 +552,6 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
 			metrics.GetSchedulerMetrics().IncSchedulingError()
 			return nil, fmt.Errorf("failing to restore allocation %s for application %s: missing UUID",
 				alloc.AllocationKey, alloc.ApplicationID)
-
 		}
 		allocationUUID = alloc.UUID
 	} else {

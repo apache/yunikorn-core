@@ -491,6 +491,7 @@ func TestAddNodeWithExistingAllocations(t *testing.T) {
 	const appID = "app-1"
 	const queueName = "root.default"
 	const nodeID = "node-1"
+	const nodeID2 = "node-2"
 	const allocationUUID1 = "alloc-UUID-1"
 	const allocationUUID2 = "alloc-UUID-2"
 
@@ -553,6 +554,25 @@ func TestAddNodeWithExistingAllocations(t *testing.T) {
 	assert.Assert(t, resources.Equals(node1.GetCapacity(), resources.NewResourceFromProto(nodeTotal)))
 	assert.Assert(t, resources.Equals(node1.GetAllocatedResource(),
 		resources.Add(resources.NewResourceFromProto(alloc1Res), resources.NewResourceFromProto(alloc2Res))))
+
+	// add a node with 1 existing allocation that does not have a UUID, must fail
+	node2 := NewNodeForTest(nodeID2, resources.NewResourceFromProto(nodeTotal))
+	err = partition.addNewNode(node2, []*si.Allocation{
+		{
+			AllocationKey:    "fails-to-restore",
+			AllocationTags:   map[string]string{"a": "b"},
+			UUID:             "",
+			ResourcePerAlloc: alloc1Res,
+			Priority:         nil,
+			QueueName:        queueName,
+			NodeID:           nodeID2,
+			ApplicationID:    appID,
+			PartitionName:    "default",
+		},
+	})
+	if err == nil {
+		t.Fatal("Adding a node with existing allocation without UUID should have failed")
+	}
 }
 
 func TestRemoveApp(t *testing.T) {

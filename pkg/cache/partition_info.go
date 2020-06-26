@@ -253,6 +253,7 @@ func (pi *PartitionInfo) addNodeReportedAllocations(allocation *si.Allocation) (
 		AllocationKey:     allocation.AllocationKey,
 		Tags:              allocation.AllocationTags,
 		Priority:          allocation.Priority,
+		UUID:              allocation.UUID,
 	}, true)
 }
 
@@ -541,8 +542,22 @@ func (pi *PartitionInfo) addNewAllocationInternal(alloc *commonevents.Allocation
 			alloc.ApplicationID, err)
 	}
 
+	allocationUUID := ""
+	// if the allocation is node reported (aka recovery an existing allocation),
+	// we do not need to generate an UUID for it, we directly use the UUID reported by shim
+	// to track this allocation; otherwise this is a new allocation, then we generate an UUID
+	// and this UUID will be sent to shim to keep consistent.
+	if nodeReported {
+		if alloc.UUID == "" {
+			metrics.GetSchedulerMetrics().IncSchedulingError()
+			return nil, fmt.Errorf("failing to restore allocation %s for application %s: missing UUID",
+				alloc.AllocationKey, alloc.ApplicationID)
+		}
+		allocationUUID = alloc.UUID
+	} else {
+		allocationUUID = pi.getNewAllocationUUID()
+	}
 	// Start allocation
-	allocationUUID := pi.getNewAllocationUUID()
 	allocation := NewAllocationInfo(allocationUUID, alloc)
 
 	node.AddAllocation(allocation)

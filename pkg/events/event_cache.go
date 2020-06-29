@@ -29,22 +29,23 @@ import (
 // need to change for testing
 var defaultEventChannelSize = 100000
 
-var once sync.Once
 var cache *EventCache
 
 type EventCache struct {
+	Store EventStore // storing eventChannel
+
 	channel chan *si.EventRecord // channelling input eventChannel
-	store   EventStore           // storing eventChannel
 	stop    chan bool            // whether the service is stop
 
 	sync.Mutex
 }
 
 func GetEventCache() *EventCache {
-	once.Do(func() {
-		cache = createEventStoreAndCache()
-	})
 	return cache
+}
+
+func CreateAndSetEventCache() {
+	cache = createEventStoreAndCache()
 }
 
 func createEventStoreAndCache() *EventCache {
@@ -54,29 +55,14 @@ func createEventStoreAndCache() *EventCache {
 
 func createEventCacheInternal(store EventStore) *EventCache {
 	return &EventCache{
-		channel: nil,
-		store:   store,
+		Store:   store,
+		channel: make(chan *si.EventRecord, defaultEventChannelSize),
 		stop:    make(chan bool),
 	}
 }
 
-func (ec *EventCache) createChannel() {
-	ec.Lock()
-	defer ec.Unlock()
-
-	ec.channel = make(chan *si.EventRecord, defaultEventChannelSize)
-}
-
 func (ec *EventCache) StartService() {
-	ec.createChannel()
 	go ec.processEvents()
-}
-
-func (ec *EventCache) IsStarted() bool {
-	ec.Lock()
-	defer ec.Unlock()
-
-	return ec.channel != nil
 }
 
 func (ec *EventCache) Stop() {
@@ -101,10 +87,6 @@ func (ec *EventCache) AddEvent(event *si.EventRecord) {
 	}
 }
 
-func (ec *EventCache) GetEventStore() EventStore {
-	return ec.store
-}
-
 func (ec *EventCache) processEvents() {
 	for {
 		select {
@@ -115,7 +97,7 @@ func (ec *EventCache) processEvents() {
 				return
 			}
 			if event != nil {
-				ec.store.Store(event)
+				ec.Store.Store(event)
 				metrics.GetEventMetrics().IncEventsProcessed()
 			}
 		}

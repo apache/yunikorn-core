@@ -27,6 +27,7 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
+// the fields of an event should match after stored and retrieved
 func TestStoreAndRetrieve(t *testing.T) {
 	store := newEventStoreImpl()
 	event := si.EventRecord{
@@ -52,52 +53,41 @@ func TestStoreAndRetrieve(t *testing.T) {
 	assert.Equal(t, len(records), 0)
 }
 
+// the store should store only one event per ObjectID and
+// that should be the least recently added
 func TestMultiEventsSameObjectID(t *testing.T) {
 	store := newEventStoreImpl()
-
-	event1 := si.EventRecord{
-		Type:     si.EventRecord_REQUEST,
-		ObjectID: "alloc1",
-		GroupID:  "app1",
-		Reason:   "reason1",
-		Message:  "message1",
+	for i := 0; i < 3; i++ {
+		event := &si.EventRecord{
+			Type:     si.EventRecord_REQUEST,
+			ObjectID: "alloc" + strconv.Itoa(i / 2),
+			GroupID:  "app" + strconv.Itoa(i / 2),
+			Reason:   "reason" + strconv.Itoa(i),
+			Message:  "message" + strconv.Itoa(i),
+		}
+		store.Store(event)
 	}
-	event2 := si.EventRecord{
-		Type:     si.EventRecord_REQUEST,
-		ObjectID: "alloc1",
-		GroupID:  "app1",
-		Reason:   "reason2",
-		Message:  "message2",
-	}
-	event3 := si.EventRecord{
-		Type:     si.EventRecord_REQUEST,
-		ObjectID: "alloc2",
-		GroupID:  "app2",
-		Reason:   "reason3",
-		Message:  "message3",
-	}
-	store.Store(&event1)
-	store.Store(&event2)
-	store.Store(&event3)
 	records := store.CollectEvents()
 	assert.Equal(t, len(records), 2)
 	for _, record := range records {
 		assert.Equal(t, record.Type, si.EventRecord_REQUEST)
 		switch {
+		case record.ObjectID == "alloc0":
+			assert.Equal(t, record.GroupID, "app0")
+			assert.Equal(t, record.Reason, "reason1")
+			assert.Equal(t, record.Message, "message1")
 		case record.ObjectID == "alloc1":
 			assert.Equal(t, record.GroupID, "app1")
-			assert.Equal(t, record.Message, "message2")
 			assert.Equal(t, record.Reason, "reason2")
-		case record.ObjectID == "alloc2":
-			assert.Equal(t, record.GroupID, "app2")
-			assert.Equal(t, record.Message, "message3")
-			assert.Equal(t, record.Reason, "reason3")
+			assert.Equal(t, record.Message, "message2")
 		default:
 			t.Fatalf("Unexpected allocation found")
 		}
 	}
 }
 
+// if we push more events to the EventStore than its
+// allowed maximum, those that couldn't fit will be omitted
 func TestStoreWithLimitedSize(t *testing.T) {
 	maxEventStoreSize = 3
 

@@ -64,24 +64,26 @@ func (sp *shimPublisher) isStopped() bool {
 }
 
 func (sp *shimPublisher) StartService() {
-	go func() {
-		for {
-			if sp.isStopped() {
-				break
-			}
+	go sp.publish()
+}
+
+func (sp *shimPublisher) publish() {
+	for {
+		if sp.isStopped() {
+			break
+		}
+		messages := sp.store.CollectEvents()
+		if len(messages) > 0 {
 			if eventPlugin := plugins.GetEventPlugin(); eventPlugin != nil {
-				messages := sp.store.CollectEvents()
-				if len(messages) > 0 {
-					log.Logger().Debug("Sending eventChannel", zap.Int("number of messages", len(messages)))
-					if err := eventPlugin.SendEvent(messages); err != nil && err.Error() != "" {
-						log.Logger().Warn("Callback failed - could not sent EventMessage to shim",
-							zap.Error(err), zap.Int("number of messages", len(messages)))
-					}
+				log.Logger().Debug("Sending eventChannel", zap.Int("number of messages", len(messages)))
+				if err := eventPlugin.SendEvent(messages); err != nil {
+					log.Logger().Warn("Callback failed - could not sent EventMessage to shim",
+						zap.Error(err), zap.Int("number of messages", len(messages)))
 				}
 			}
-			time.Sleep(sp.pushEventInterval)
 		}
-	}()
+		time.Sleep(sp.pushEventInterval)
+	}
 }
 
 func (sp *shimPublisher) Stop() {

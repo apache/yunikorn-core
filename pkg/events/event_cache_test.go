@@ -103,8 +103,8 @@ func TestEventWithMatchingObjectID(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		event := &si.EventRecord{
 			Type:     si.EventRecord_REQUEST,
-			ObjectID: "alloc" + strconv.Itoa(i / 2),
-			GroupID:  "app" + strconv.Itoa(i / 2),
+			ObjectID: "alloc" + strconv.Itoa(i/2),
+			GroupID:  "app" + strconv.Itoa(i/2),
 			Reason:   "reason" + strconv.Itoa(i),
 			Message:  "message" + strconv.Itoa(i),
 		}

@@ -76,7 +76,7 @@ func (es *defaultEventStore) CollectEvents() []*si.EventRecord {
 	es.Lock()
 	defer es.Unlock()
 
-	messages := make([]*si.EventRecord, 0)
+	messages := make([]*si.EventRecord, 0, len(es.eventMap))
 	for _, v := range es.eventMap {
 		messages = append(messages, v)
 	}
@@ -89,8 +89,8 @@ func (es *defaultEventStore) CollectEvents() []*si.EventRecord {
 }
 
 func (es *defaultEventStore) CountStoredEvents() int {
-	es.Lock()
-	defer es.Unlock()
+	es.RLock()
+	defer es.RUnlock()
 
 	return len(es.eventMap)
 }

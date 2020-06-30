@@ -432,24 +432,23 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 	for _, request := range sa.sortedRequests {
 		// resource must fit in headroom otherwise skip the request
 		if !resources.FitIn(headRoom, request.AllocatedResource) {
-			// if the queue (or any of its parent) has max capacity defined,
-			// get the max headroom, this represents the configured queue quota.
-			// if queue quota is enough, but headroom is not, usually this means
-			// the cluster needs to scale up to meet the its capacity.
-			maxHeadRoom := sa.queue.getMaxHeadRoom()
-			if resources.FitIn(maxHeadRoom, request.AllocatedResource) {
-				sa.updateContainerSchedulingState(request,
-					si.UpdateContainerSchedulingStateRequest_FAILED,
-					"failed to schedule the request because partition resource is not enough")
-			} else {
-				sa.updateContainerSchedulingState(request,
-					si.UpdateContainerSchedulingStateRequest_SKIPPED,
-					"skip the request because the queue quota has been exceed")
-			}
+			if eventCache := events.GetEventCache(); eventCache != nil {
+				// if the queue (or any of its parent) has max capacity defined,
+				// get the max headroom, this represents the configured queue quota.
+				// if queue quota is enough, but headroom is not, usually this means
+				// the cluster needs to scale up to meet the its capacity.
+				maxHeadRoom := sa.queue.getMaxHeadRoom()
+				if resources.FitIn(maxHeadRoom, request.AllocatedResource) {
+					sa.updateContainerSchedulingState(request,
+						si.UpdateContainerSchedulingStateRequest_FAILED,
+						"failed to schedule the request because partition resource is not enough")
+				} else {
+					sa.updateContainerSchedulingState(request,
+						si.UpdateContainerSchedulingStateRequest_SKIPPED,
+						"skip the request because the queue quota has been exceed")
+				}
 
-			// post scheduling events via the scheduler plugin
-			eventCache := events.GetEventCache()
-			if eventCache.IsStarted() {
+				// post scheduling events via the scheduler plugin
 				message := fmt.Sprintf("Application %s does not fit into %s queue", request.ApplicationID, request.QueueName)
 				askProto := request.AskProto
 				if event, err := events.CreateRequestEventRecord(askProto.AllocationKey, askProto.ApplicationID, "InsufficientQueueResources", message); err != nil {
@@ -460,12 +459,11 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 					eventCache.AddEvent(event)
 				}
 			}
-
-			// skip the request
 			continue
 		}
 		if nodeIterator := ctx.getNodeIterator(); nodeIterator != nil {
 			alloc := sa.tryNodes(request, nodeIterator)
+			// have a candidate return it
 			if alloc == nil {
 				// we have enough headroom, but we could not find a node for this request,
 				// this can happen when non of the nodes is qualified for this request,

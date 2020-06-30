@@ -432,23 +432,23 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 	for _, request := range sa.sortedRequests {
 		// resource must fit in headroom otherwise skip the request
 		if !resources.FitIn(headRoom, request.AllocatedResource) {
-			if eventCache := events.GetEventCache(); eventCache != nil {
-				// if the queue (or any of its parent) has max capacity defined,
-				// get the max headroom, this represents the configured queue quota.
-				// if queue quota is enough, but headroom is not, usually this means
-				// the cluster needs to scale up to meet the its capacity.
-				maxHeadRoom := sa.queue.getMaxHeadRoom()
-				if resources.FitIn(maxHeadRoom, request.AllocatedResource) {
-					sa.updateContainerSchedulingState(request,
-						si.UpdateContainerSchedulingStateRequest_FAILED,
-						"failed to schedule the request because partition resource is not enough")
-				} else {
-					sa.updateContainerSchedulingState(request,
-						si.UpdateContainerSchedulingStateRequest_SKIPPED,
-						"skip the request because the queue quota has been exceed")
-				}
+			// if the queue (or any of its parent) has max capacity defined,
+			// get the max headroom, this represents the configured queue quota.
+			// if queue quota is enough, but headroom is not, usually this means
+			// the cluster needs to scale up to meet the its capacity.
+			maxHeadRoom := sa.queue.getMaxHeadRoom()
+			if resources.FitIn(maxHeadRoom, request.AllocatedResource) {
+				sa.updateContainerSchedulingState(request,
+					si.UpdateContainerSchedulingStateRequest_FAILED,
+					"failed to schedule the request because partition resource is not enough")
+			} else {
+				sa.updateContainerSchedulingState(request,
+					si.UpdateContainerSchedulingStateRequest_SKIPPED,
+					"skip the request because the queue quota has been exceed")
+			}
 
-				// post scheduling events via the scheduler plugin
+			// post scheduling events via the scheduler plugin
+			if eventCache := events.GetEventCache(); eventCache != nil {
 				message := fmt.Sprintf("Application %s does not fit into %s queue", request.ApplicationID, request.QueueName)
 				askProto := request.AskProto
 				if event, err := events.CreateRequestEventRecord(askProto.AllocationKey, askProto.ApplicationID, "InsufficientQueueResources", message); err != nil {

@@ -73,10 +73,7 @@ func (sp *shimPublisher) StartService() {
 				messages := sp.store.CollectEvents()
 				if len(messages) > 0 {
 					log.Logger().Debug("Sending eventChannel", zap.Int("number of messages", len(messages)))
-					if err := eventPlugin.SendEvent(messages); err != nil && err.Error() != "" {
-						log.Logger().Warn("Callback failed - could not sent EventMessage to shim",
-							zap.Error(err), zap.Int("number of messages", len(messages)))
-					}
+					eventPlugin.SendEvent(messages)
 				}
 			}
 			time.Sleep(sp.pushEventInterval)

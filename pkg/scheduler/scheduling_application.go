@@ -29,6 +29,7 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/events"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
@@ -408,19 +409,6 @@ func (sa *SchedulingApplication) sortRequests(ascending bool) {
 	}
 }
 
-// update container scheduling state to shim if the plugin is registered
-func (sa *SchedulingApplication) updateContainerSchedulingStateIfNeeded(ask *schedulingAllocationAsk,
-	state si.UpdateContainerSchedulingStateRequest_SchedulingState, reason string) {
-	if updater := plugins.GetContainerSchedulingStateUpdaterPlugin(); updater != nil {
-		updater.Update(&si.UpdateContainerSchedulingStateRequest{
-			ApplicartionID: ask.AskProto.ApplicationID,
-			AllocationKey:  ask.AskProto.AllocationKey,
-			State:          state,
-			Reason:         reason,
-		})
-	}
-}
-
 // Try a regular allocation of the pending requests
 func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *partitionSchedulingContext) *schedulingAllocation {
 	sa.Lock()
@@ -431,34 +419,24 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 	for _, request := range sa.sortedRequests {
 		// resource must fit in headroom otherwise skip the request
 		if !resources.FitIn(headRoom, request.AllocatedResource) {
-			// if the queue (or any of its parent) has max capacity defined,
-			// get the max headroom, this represents the configured queue quota.
-			// if queue quota is enough, but headroom is not, usually this means
-			// the cluster needs to scale up to meet the its capacity.
-			maxHeadRoom := sa.queue.getMaxHeadRoom()
-			if resources.FitIn(maxHeadRoom, request.AllocatedResource) {
-				sa.updateContainerSchedulingStateIfNeeded(request,
-					si.UpdateContainerSchedulingStateRequest_FAILED,
-					"failed to schedule the request because partition resource is not enough")
+			eventCache := events.GetEventCache()
+			if eventCache.IsStarted() {
+				message := fmt.Sprintf("Application %s does not fit into %s queue", request.ApplicationID, request.QueueName)
+				askProto := request.AskProto
+				if event, err := events.CreateRequestEventRecord(askProto.AllocationKey, askProto.ApplicationID, "InsufficientQueueResources", message); err != nil {
+					log.Logger().Warn("Event creation failed",
+						zap.String("event message", message),
+						zap.Error(err))
+				} else {
+					eventCache.AddEvent(event)
+				}
 			}
-			// skip the request
 			continue
 		}
 		if nodeIterator := ctx.getNodeIterator(); nodeIterator != nil {
 			alloc := sa.tryNodes(request, nodeIterator)
-			if alloc == nil {
-				// we have enough headroom, but we could not find a node for this request,
-				// this can happen when non of the nodes is qualified for this request,
-				// by satisfying both conditions:
-				//   1) node has enough resources;
-				//   2) node satisfies all placement constraints of the request (e.g predicates)
-				// if an updater plugin is registered, update the state to the shim
-				sa.updateContainerSchedulingStateIfNeeded(request,
-					si.UpdateContainerSchedulingStateRequest_FAILED,
-					"non of the nodes can satisfy both conditions: "+
-						"1) node has enough resources; 2) node satisfies all placement constraints")
-			} else {
-				// have a candidate return it
+			// have a candidate return it
+			if alloc != nil {
 				return alloc
 			}
 		}

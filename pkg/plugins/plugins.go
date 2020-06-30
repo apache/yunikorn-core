@@ -29,6 +29,9 @@ func init() {
 }
 
 func RegisterSchedulerPlugin(plugin interface{}) {
+	plugins.Lock()
+	defer plugins.Unlock()
+
 	if t, ok := plugin.(PredicatesPlugin); ok {
 		log.Logger().Debug("register scheduler plugin: PredicatesPlugin")
 		plugins.predicatesPlugin = t
@@ -37,6 +40,10 @@ func RegisterSchedulerPlugin(plugin interface{}) {
 		log.Logger().Debug("register scheduler plugin: ReconcilePlugin")
 		plugins.reconcilePlugin = t
 	}
+	if t, ok := plugin.(EventPlugin); ok {
+		log.Logger().Debug("register scheduler plugin: EventPlugin")
+		plugins.eventPlugin = t
+	}
 	if t, ok := plugin.(ContainerSchedulingStateUpdater); ok {
 		log.Logger().Debug("register scheduler plugin: ContainerSchedulingStateUpdater")
 		plugins.schedulingStateUpdater = t
@@ -44,13 +51,29 @@ func RegisterSchedulerPlugin(plugin interface{}) {
 }
 
 func GetPredicatesPlugin() PredicatesPlugin {
+	plugins.RLock()
+	defer plugins.RUnlock()
+
 	return plugins.predicatesPlugin
 }
 
+func GetVolumesPlugin() VolumesPlugin {
+	plugins.RLock()
+	defer plugins.RUnlock()
+
+	return plugins.volumesPlugin
+}
+
 func GetReconcilePlugin() ReconcilePlugin {
+	plugins.RLock()
+	defer plugins.RUnlock()
+
 	return plugins.reconcilePlugin
 }
 
-func GetContainerSchedulingStateUpdaterPlugin() ContainerSchedulingStateUpdater {
-	return plugins.schedulingStateUpdater
+func GetEventPlugin() EventPlugin {
+	plugins.RLock()
+	defer plugins.RUnlock()
+
+	return plugins.eventPlugin
 }

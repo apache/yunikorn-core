@@ -265,7 +265,9 @@ func TestRemoveNodeWithAllocations(t *testing.T) {
 	nodeID := "node-1"
 	node1 := NewNodeForTest(nodeID, resources.NewResourceFromMap(
 		map[string]resources.Quantity{resources.MEMORY: memVal}))
-	allocs := []*si.Allocation{createAllocation(queueName, nodeID, "alloc-1", appID)}
+	alloc := createAllocation(queueName, nodeID, "alloc-1", appID)
+	alloc.UUID = "alloc-1-uuid"
+	allocs := []*si.Allocation{alloc}
 	// add a node this must work
 	err = partition.addNewNode(node1, allocs)
 	if err != nil || partition.GetNode(nodeID) == nil {
@@ -358,7 +360,9 @@ func TestAddNodeWithAllocations(t *testing.T) {
 	nodeID := "node-1"
 	node1 := NewNodeForTest(nodeID, resources.NewResourceFromMap(
 		map[string]resources.Quantity{resources.MEMORY: memVal}))
-	allocs := []*si.Allocation{createAllocation(queueName, nodeID, "alloc-1", appID)}
+	alloc := createAllocation(queueName, nodeID, "alloc-1", appID)
+	alloc.UUID = "alloc-1-uuid"
+	allocs := []*si.Allocation{alloc}
 	// add a node this must work
 	err = partition.addNewNode(node1, allocs)
 	if err != nil || partition.GetNode(nodeID) == nil {
@@ -481,6 +485,97 @@ func TestAddNewAllocation(t *testing.T) {
 	alloc, err = partition.addNewAllocation(createAllocationProposal(queueName, nodeID, "alloc-4", appID))
 	if err != nil || alloc == nil || len(partition.allocations) != 3 {
 		t.Errorf("adding allocation did not work and should have (allocation length %d: %v", len(partition.allocations), err)
+	}
+}
+
+// this test is to verify the node recovery of the existing allocations
+// after it adds a node to partition with existing allocations,
+// it verifies the allocations are added to the node, resources are counted correct
+func TestAddNodeWithExistingAllocations(t *testing.T) {
+	const appID = "app-1"
+	const queueName = "root.default"
+	const nodeID = "node-1"
+	const nodeID2 = "node-2"
+	const allocationUUID1 = "alloc-UUID-1"
+	const allocationUUID2 = "alloc-UUID-2"
+
+	partition, err := CreatePartitionInfo([]byte(configDefault))
+	assert.NilError(t, err, "partition create failed")
+
+	// add a new app
+	appInfo := newApplicationInfo(appID, "default", queueName)
+	err = partition.addNewApplication(appInfo, true)
+	if err != nil {
+		t.Errorf("add application to partition should not have failed: %v", err)
+	}
+
+	// add a node with 2 existing allocations
+	alloc1Res := &si.Resource{Resources: map[string]*si.Quantity{resources.MEMORY: {Value: 200}}}
+	alloc2Res := &si.Resource{Resources: map[string]*si.Quantity{resources.MEMORY: {Value: 300}}}
+	nodeTotal := &si.Resource{Resources: map[string]*si.Quantity{resources.MEMORY: {Value: 1000}}}
+	node1 := NewNodeForTest(nodeID, resources.NewResourceFromProto(nodeTotal))
+	err = partition.addNewNode(node1, []*si.Allocation{
+		{
+			AllocationKey:    allocationUUID1,
+			AllocationTags:   map[string]string{"a": "b"},
+			UUID:             allocationUUID1,
+			ResourcePerAlloc: alloc1Res,
+			Priority:         nil,
+			QueueName:        queueName,
+			NodeID:           nodeID,
+			ApplicationID:    appID,
+			PartitionName:    "default",
+		},
+		{
+			AllocationKey:    allocationUUID2,
+			AllocationTags:   map[string]string{"a": "b"},
+			UUID:             allocationUUID2,
+			ResourcePerAlloc: alloc2Res,
+			Priority:         nil,
+			QueueName:        queueName,
+			NodeID:           nodeID,
+			ApplicationID:    appID,
+			PartitionName:    "default",
+		},
+	})
+	assert.NilError(t, err, "add node failed")
+
+	// verify existing allocations are added to the node
+	assert.Equal(t, len(node1.GetAllAllocations()), 2)
+
+	alloc1 := node1.GetAllocation(allocationUUID1)
+	alloc2 := node1.GetAllocation(allocationUUID2)
+	assert.Assert(t, alloc1 != nil)
+	assert.Assert(t, alloc2 != nil)
+	assert.Equal(t, alloc1.AllocationProto.UUID, "alloc-UUID-1")
+	assert.Equal(t, alloc2.AllocationProto.UUID, "alloc-UUID-2")
+	assert.Assert(t, resources.Equals(alloc1.AllocatedResource, resources.NewResourceFromProto(alloc1Res)))
+	assert.Assert(t, resources.Equals(alloc2.AllocatedResource, resources.NewResourceFromProto(alloc2Res)))
+	assert.Equal(t, alloc1.ApplicationID, "app-1")
+	assert.Equal(t, alloc2.ApplicationID, "app-1")
+
+	// verify node resource
+	assert.Assert(t, resources.Equals(node1.GetCapacity(), resources.NewResourceFromProto(nodeTotal)))
+	assert.Assert(t, resources.Equals(node1.GetAllocatedResource(),
+		resources.Add(resources.NewResourceFromProto(alloc1Res), resources.NewResourceFromProto(alloc2Res))))
+
+	// add a node with 1 existing allocation that does not have a UUID, must fail
+	node2 := NewNodeForTest(nodeID2, resources.NewResourceFromProto(nodeTotal))
+	err = partition.addNewNode(node2, []*si.Allocation{
+		{
+			AllocationKey:    "fails-to-restore",
+			AllocationTags:   map[string]string{"a": "b"},
+			UUID:             "",
+			ResourcePerAlloc: alloc1Res,
+			Priority:         nil,
+			QueueName:        queueName,
+			NodeID:           nodeID2,
+			ApplicationID:    appID,
+			PartitionName:    "default",
+		},
+	})
+	if err == nil {
+		t.Fatal("Adding a node with existing allocation without UUID should have failed")
 	}
 }
 

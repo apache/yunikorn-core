@@ -152,6 +152,10 @@ func sortAskByPriority(requests []*schedulingAllocationAsk, ascending bool) {
 		l := requests[i]
 		r := requests[j]
 
+		if l.priority == r.priority {
+			return l.createTime.Before(r.createTime)
+		}
+
 		if ascending {
 			return l.priority < r.priority
 		}

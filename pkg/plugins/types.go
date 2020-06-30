@@ -19,13 +19,19 @@
 package plugins
 
 import (
+	"sync"
+
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 type SchedulerPlugins struct {
 	predicatesPlugin       PredicatesPlugin
+	volumesPlugin          VolumesPlugin
 	reconcilePlugin        ReconcilePlugin
+	eventPlugin            EventPlugin
 	schedulingStateUpdater ContainerSchedulingStateUpdater
+
+	sync.RWMutex
 }
 
 // RM side implements this API when it can provide plugin for predicates.
@@ -35,11 +41,23 @@ type PredicatesPlugin interface {
 	Predicates(args *si.PredicatesArgs) error
 }
 
+// RM side implements this API when it can provide plugin for volumes.
+type VolumesPlugin interface {
+	// Bind the volumes after allocation has been confirmed
+	//VolumesBind(allocationId string, node string) error
+}
+
 type ReconcilePlugin interface {
 	// RM side implements this API when it can provide plugin for reconciling
 	// Re-sync scheduler cache can sync some in-cache (yunikorn-core side) state changes
 	// to scheduler cache (shim-side), such as assumed allocations.
 	ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error
+}
+
+type EventPlugin interface {
+	// This plugin is responsible for transmitting events to the shim side.
+	// Events can be further exposed from the shim.
+	SendEvent(events []*si.EventRecord) error
 }
 
 // Scheduler core can update container scheduling state to the RM,

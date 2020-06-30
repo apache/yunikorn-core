@@ -18,10 +18,11 @@
 package dao
 
 type QueueDAOInfo struct {
-	QueueName   string         `json:"queuename"`
-	Status      string         `json:"status"`
-	Capacities  QueueCapacity  `json:"capacities"`
-	ChildQueues []QueueDAOInfo `json:"queues"`
+	QueueName   string            `json:"queuename"`
+	Status      string            `json:"status"`
+	Capacities  QueueCapacity     `json:"capacities"`
+	ChildQueues []QueueDAOInfo    `json:"queues"`
+	Properties  map[string]string `json:"properties"`
 }
 
 type QueueCapacity struct {

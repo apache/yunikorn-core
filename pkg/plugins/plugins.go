@@ -77,3 +77,10 @@ func GetEventPlugin() EventPlugin {
 
 	return plugins.eventPlugin
 }
+
+func GetContainerSchedulingStateUpdaterPlugin() ContainerSchedulingStateUpdater {
+	plugins.RLock()
+	defer plugins.RUnlock()
+
+	return plugins.schedulingStateUpdater
+}

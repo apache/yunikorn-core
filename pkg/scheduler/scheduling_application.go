@@ -422,7 +422,6 @@ func (sa *SchedulingApplication) updateContainerSchedulingState(ask *schedulingA
 	}
 }
 
-
 // Try a regular allocation of the pending requests
 func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *partitionSchedulingContext) *schedulingAllocation {
 	sa.Lock()
@@ -442,6 +441,10 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 				sa.updateContainerSchedulingState(request,
 					si.UpdateContainerSchedulingStateRequest_FAILED,
 					"failed to schedule the request because partition resource is not enough")
+			} else {
+				sa.updateContainerSchedulingState(request,
+					si.UpdateContainerSchedulingStateRequest_SKIPPED,
+					"skip the request because the queue quota has been exceed")
 			}
 
 			// post scheduling events via the scheduler plugin

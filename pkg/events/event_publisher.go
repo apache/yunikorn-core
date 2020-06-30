@@ -59,19 +59,15 @@ func createShimPublisherWithParameters(store EventStore, pushEventInterval time.
 	return publisher
 }
 
-func (sp *shimPublisher) isStopped() bool {
-	return sp.stop.Load().(bool)
-}
-
 func (sp *shimPublisher) StartService() {
 	go func() {
 		for {
-			if sp.isStopped() {
+			if sp.stop.Load().(bool) {
 				break
 			}
-			if eventPlugin := plugins.GetEventPlugin(); eventPlugin != nil {
-				messages := sp.store.CollectEvents()
-				if len(messages) > 0 {
+			messages := sp.store.CollectEvents()
+			if len(messages) > 0 {
+				if eventPlugin := plugins.GetEventPlugin(); eventPlugin != nil {
 					log.Logger().Debug("Sending eventChannel", zap.Int("number of messages", len(messages)))
 					eventPlugin.SendEvent(messages)
 				}

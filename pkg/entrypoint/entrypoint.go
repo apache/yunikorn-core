@@ -65,8 +65,9 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 	var eventCache *events.EventCache
 	var eventPublisher events.EventPublisher
 	if opts.eventCacheEnabled {
+		events.CreateAndSetEventCache()
 		eventCache = events.GetEventCache()
-		eventPublisher = events.CreateShimPublisher(eventCache.GetEventStore())
+		eventPublisher = events.CreateShimPublisher(eventCache.Store)
 	}
 
 	cache := cache.NewClusterInfo()
@@ -84,12 +85,10 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 	cache.StartService(eventHandler)
 	scheduler.StartService(eventHandler, opts.manualScheduleFlag)
 	proxy.StartService(eventHandler)
-	if opts.eventCacheEnabled {
-		if eventCache != nil {
-			eventCache.StartService()
-			if eventPublisher != nil {
-				eventPublisher.StartService()
-			}
+	if opts.eventCacheEnabled && eventCache != nil {
+		eventCache.StartService()
+		if eventPublisher != nil {
+			eventPublisher.StartService()
 		}
 	}
 

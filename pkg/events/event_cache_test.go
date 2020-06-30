@@ -19,6 +19,7 @@
 package events
 
 import (
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -32,30 +33,34 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
+// the EventCache should be nil by default, until not set by CreateAndSetEventCache()
 func TestGetEventCache(t *testing.T) {
 	cache := GetEventCache()
+	assert.Assert(t, cache == nil, "the cache should be nil by default")
+	CreateAndSetEventCache()
+	cache = GetEventCache()
 	assert.Assert(t, cache != nil, "the cache should not be nil")
 }
 
-func TestStartStop(t *testing.T) {
-	cache := createEventStoreAndCache()
-	assert.Equal(t, cache.IsStarted(), false, "EventCache should not be started when constructed")
+// StartService() and Stop() must not cause panic
+func TestSimpleStartAndStop(t *testing.T) {
+	CreateAndSetEventCache()
+	cache := GetEventCache()
 	// adding event to stopped cache does not cause panic
 	cache.AddEvent(nil)
 	cache.StartService()
 	// add an event
 	cache.AddEvent(nil)
-	assert.Equal(t, cache.IsStarted(), true, "EventCache should have been started")
 	cache.Stop()
 	// adding event to stopped cache does not cause panic
 	cache.AddEvent(nil)
-	assert.Equal(t, cache.IsStarted(), false, "EventCache should have been stopped")
 }
 
-func TestSingleEvent(t *testing.T) {
-	cache := createEventStoreAndCache()
-	store := cache.GetEventStore()
-
+// if an EventRecord is added to the EventCache, the same record
+// should be retrieved from the EventStore
+func TestSingleEventStoredCorrectly(t *testing.T) {
+	CreateAndSetEventCache()
+	cache := GetEventCache()
 	cache.StartService()
 
 	event := si.EventRecord{
@@ -69,11 +74,11 @@ func TestSingleEvent(t *testing.T) {
 
 	// wait for events to be processed
 	err := common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
-		return store.CountStoredEvents() == 1
+		return cache.Store.CountStoredEvents() == 1
 	})
 	assert.NilError(t, err, "the event should have been processed")
 
-	records := store.CollectEvents()
+	records := cache.Store.CollectEvents()
 	if records == nil {
 		t.Fatal("collecting eventChannel should return something")
 	}
@@ -86,44 +91,33 @@ func TestSingleEvent(t *testing.T) {
 	assert.Equal(t, record.Reason, "reason")
 }
 
-func TestMultipleEvents(t *testing.T) {
-	cache := createEventStoreAndCache()
-	store := cache.GetEventStore()
-
+// this test checks that if we have multiple events
+// stored in the EventStore, for a given ObjectID we
+// only store one event, and it is always the
+// least recently added one
+func TestEventWithMatchingObjectID(t *testing.T) {
+	CreateAndSetEventCache()
+	cache := GetEventCache()
 	cache.StartService()
 
-	event1 := si.EventRecord{
-		Type:     si.EventRecord_REQUEST,
-		ObjectID: "alloc1",
-		GroupID:  "app1",
-		Reason:   "reason1",
-		Message:  "message1",
+	for i := 0; i < 3; i++ {
+		event := &si.EventRecord{
+			Type:     si.EventRecord_REQUEST,
+			ObjectID: "alloc" + strconv.Itoa(i/2),
+			GroupID:  "app" + strconv.Itoa(i/2),
+			Reason:   "reason" + strconv.Itoa(i),
+			Message:  "message" + strconv.Itoa(i),
+		}
+		cache.AddEvent(event)
 	}
-	event2 := si.EventRecord{
-		Type:     si.EventRecord_REQUEST,
-		ObjectID: "alloc1",
-		GroupID:  "app1",
-		Reason:   "reason2",
-		Message:  "message2",
-	}
-	event3 := si.EventRecord{
-		Type:     si.EventRecord_REQUEST,
-		ObjectID: "alloc2",
-		GroupID:  "app2",
-		Reason:   "reason3",
-		Message:  "message3",
-	}
-	cache.AddEvent(&event1)
-	cache.AddEvent(&event2)
-	cache.AddEvent(&event3)
 
 	// wait for events to be processed
 	err := common.WaitFor(1*time.Millisecond, 100*time.Millisecond, func() bool {
-		return store.CountStoredEvents() >= 2
+		return cache.Store.CountStoredEvents() >= 2
 	})
 	assert.NilError(t, err, "the event should have been processed")
 
-	records := store.CollectEvents()
+	records := cache.Store.CollectEvents()
 	if records == nil {
 		t.Fatal("collecting eventChannel should return something")
 	}
@@ -131,14 +125,14 @@ func TestMultipleEvents(t *testing.T) {
 	for _, record := range records {
 		assert.Equal(t, record.Type, si.EventRecord_REQUEST)
 		switch {
+		case record.ObjectID == "alloc0":
+			assert.Equal(t, record.GroupID, "app0")
+			assert.Equal(t, record.Message, "message1")
+			assert.Equal(t, record.Reason, "reason1")
 		case record.ObjectID == "alloc1":
 			assert.Equal(t, record.GroupID, "app1")
 			assert.Equal(t, record.Message, "message2")
 			assert.Equal(t, record.Reason, "reason2")
-		case record.ObjectID == "alloc2":
-			assert.Equal(t, record.GroupID, "app2")
-			assert.Equal(t, record.Message, "message3")
-			assert.Equal(t, record.Reason, "reason3")
 		default:
 			t.Fatalf("Unexpected allocation found")
 		}
@@ -184,14 +178,16 @@ func (ses *slowEventStore) CountStoredEvents() int {
 	return 0
 }
 
-func TestLimitedChannel(t *testing.T) {
+// this test checks that if storing events is much slower
+// than the rate the events are generated, it doesn't cause
+// panic by filling up the EventChannel
+func TestSlowChannelFillingUpEventChannel(t *testing.T) {
 	defaultEventChannelSize = 2
 
 	store := slowEventStore{}
 	cache := createEventCacheInternal(&store)
-	assert.Equal(t, cache.IsStarted(), false, "EventCache should not be started when constructed")
+
 	cache.StartService()
-	assert.Equal(t, cache.IsStarted(), true, "EventCache should have been started")
 
 	event := si.EventRecord{
 		Type:     si.EventRecord_REQUEST,

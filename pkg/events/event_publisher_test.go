@@ -69,11 +69,13 @@ func (ep *mockEventPlugin) getNextEventRecord() *si.EventRecord {
 	}
 }
 
+// creating a Publisher with nil store should still provide a non-nil object
 func TestCreateShimPublisher(t *testing.T) {
 	publisher := CreateShimPublisher(nil)
 	assert.Assert(t, publisher != nil, "publisher should not be nil")
 }
 
+// StartService() and Stop() functions should not cause panic
 func TestServiceStartStopInternal(t *testing.T) {
 	store := newEventStoreImpl()
 	publisher := createShimPublisherInternal(store)
@@ -82,7 +84,30 @@ func TestServiceStartStopInternal(t *testing.T) {
 	publisher.Stop()
 }
 
-func TestPublisher(t *testing.T) {
+func TestNoFillWithoutEventPluginRegistered(t *testing.T) {
+	pushEventInterval := 2 * time.Millisecond
+
+	store := newEventStoreImpl()
+	publisher := createShimPublisherWithParameters(store, pushEventInterval)
+	publisher.StartService()
+
+	event := &si.EventRecord{
+		Type:          si.EventRecord_REQUEST,
+		ObjectID:      "ask",
+		GroupID:       "app",
+		Reason:        "reason",
+		Message:       "message",
+		TimestampNano: 123456,
+	}
+	store.Store(event)
+	time.Sleep(2 * pushEventInterval)
+	assert.Equal(t, store.CountStoredEvents(), 0,
+		"the Publisher should erase the store even if no EventPlugin registered")
+}
+
+// we push an event to the publisher, and check that the same event
+// is published by observing the mocked EventPlugin
+func TestPublisherSendsEvent(t *testing.T) {
 	pushEventInterval := 2 * time.Millisecond
 
 	eventPlugin, err := createEventPluginForTest()

@@ -409,7 +409,7 @@ func (sa *SchedulingApplication) sortRequests(ascending bool) {
 	}
 }
 
-func (sa *SchedulingApplication) getOutstandingRequests(headRoom *resources.Resource, ctx *partitionSchedulingContext, total *outstandingRequests) {
+func (sa *SchedulingApplication) getOutstandingRequests(headRoom *resources.Resource, total *outstandingRequests) {
 	sa.RLock()
 	defer sa.RUnlock()
 

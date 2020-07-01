@@ -19,6 +19,7 @@
 package scheduler
 
 import (
+	"fmt"
 	"strconv"
 	"testing"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 )
 
 // create the root queue, base for all testing
@@ -1115,4 +1117,158 @@ func TestIsEmpty(t *testing.T) {
 	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "app-1"})
 	leaf.addSchedulingApplication(app)
 	assert.Equal(t, leaf.isEmpty(), false, "queue with registered app should not be empty")
+}
+
+func TestGetOutstandingRequest(t *testing.T) {
+	const app1ID = "app1"
+	const app2ID = "app1"
+
+	// queue structure:
+	// root
+	//   - queue1 (max.cpu = 10)
+	//   - queue2 (max.cpu = 5)
+	//
+	// submit app1 to root.queue1, app2 to root.queue2
+	// app1 asks for 20 1x1CPU requests, app2 asks for 20 1x1CPU requests
+	// verify the outstanding requests for each of the queue is up to its max capacity, 10/5 respectively
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "failed to create root queue with limit")
+	var queue1, queue2 *SchedulingQueue
+	queue1, err = createManagedQueue(root, "queue1", false, map[string]string{"cpu": "10"})
+	assert.NilError(t, err, "failed to create queue1 queue")
+	queue2, err = createManagedQueue(root, "queue2", false, map[string]string{"cpu": "5"})
+	assert.NilError(t, err, "failed to create queue2 queue")
+
+	app1Info := cache.NewApplicationInfo(app1ID, "default", "root.queue1", security.UserGroup{}, nil)
+	app1 := newSchedulingApplication(app1Info)
+	app1.queue = queue1
+	queue1.addSchedulingApplication(app1)
+	res, err := resources.NewResourceFromConf(map[string]string{"cpu": "1"})
+	assert.NilError(t, err, "failed to create basic resource")
+	for i := 0; i < 20; i++ {
+		_, err = app1.addAllocationAsk(
+			newAllocationAsk(fmt.Sprintf("alloc-%d", i), app1ID, res))
+		assert.NilError(t, err, "failed to add allocation ask")
+	}
+
+	app2Info := cache.NewApplicationInfo(app2ID, "default", "root.queue2", security.UserGroup{}, nil)
+	app2 := newSchedulingApplication(app2Info)
+	app2.queue = queue2
+	queue2.addSchedulingApplication(app2)
+	for i := 0; i < 20; i++ {
+		_, err = app2.addAllocationAsk(
+			newAllocationAsk(fmt.Sprintf("alloc-%d", i), app2ID, res))
+		assert.NilError(t, err, "failed to add allocation ask")
+	}
+
+	// verify get outstanding requests for root, and child queues
+	rootTotal := newOutstandingRequests()
+	root.getQueueOutstandingRequests(rootTotal)
+	assert.Equal(t, len(rootTotal.getRequests()), 15)
+
+	queue1Total := newOutstandingRequests()
+	queue1.getQueueOutstandingRequests(queue1Total)
+	assert.Equal(t, len(queue1Total.getRequests()), 10)
+
+	queue2Total := newOutstandingRequests()
+	queue2.getQueueOutstandingRequests(queue2Total)
+	assert.Equal(t, len(queue2Total.getRequests()), 5)
+
+	// simulate queue1 has some allocating resources
+	// after allocation, the max available becomes to be 5
+	allocatingRest := map[string]string{"cpu": "5"}
+	allocation, err := resources.NewResourceFromConf(allocatingRest)
+	assert.NilError(t, err, "failed to create basic resource")
+	queue1.incAllocatingResource(allocation)
+
+	queue1Total = newOutstandingRequests()
+	queue1.getQueueOutstandingRequests(queue1Total)
+	assert.Equal(t, len(queue1Total.getRequests()), 5)
+
+	queue2Total = newOutstandingRequests()
+	queue2.getQueueOutstandingRequests(queue2Total)
+	assert.Equal(t, len(queue2Total.getRequests()), 5)
+
+	rootTotal = newOutstandingRequests()
+	root.getQueueOutstandingRequests(rootTotal)
+	assert.Equal(t, len(rootTotal.getRequests()), 10)
+
+	// remove app2 from queue2
+	queue2.removeSchedulingApplication(app2)
+	queue2Total = newOutstandingRequests()
+	queue2.getQueueOutstandingRequests(queue2Total)
+	assert.Equal(t, len(queue2Total.getRequests()), 0)
+
+	rootTotal = newOutstandingRequests()
+	root.getQueueOutstandingRequests(rootTotal)
+	assert.Equal(t, len(rootTotal.getRequests()), 5)
+}
+
+func TestGetOutstandingRequestWithStateAwareSortingPolicy(t *testing.T) {
+	const app1ID = "app1"
+	const app2ID = "app2"
+
+	// queue structure:
+	// root
+	//   - queue1 (max.cpu = 10)
+	//
+	// submit app1 and app2 to root.queue1
+	// app1 asks for 5 1x1CPU requests, app2 asks for 20 1x1CPU requests
+	// verify the outstanding requests calculation is correct when the sorting policy is StateAware
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "failed to create root queue with limit")
+	var queue1 *SchedulingQueue
+	queue1, err = createManagedQueue(root, "queue1", false, map[string]string{"cpu": "10"})
+	assert.NilError(t, err, "failed to create queue1 queue")
+	queue1.sortType = policies.StateAwarePolicy
+
+	app1Info := cache.NewApplicationInfo(app1ID, "default", "root.queue1", security.UserGroup{}, nil)
+	app1 := newSchedulingApplication(app1Info)
+	app1.queue = queue1
+	queue1.addSchedulingApplication(app1)
+	res, err := resources.NewResourceFromConf(map[string]string{"cpu": "1"})
+	assert.NilError(t, err, "failed to create basic resource")
+	for i := 0; i < 5; i++ {
+		_, err = app1.addAllocationAsk(
+			newAllocationAsk(fmt.Sprintf("alloc-%d", i), app1ID, res))
+		assert.NilError(t, err, "failed to add allocation ask")
+	}
+
+	app2Info := cache.NewApplicationInfo(app2ID, "default", "root.queue1", security.UserGroup{}, nil)
+	app2 := newSchedulingApplication(app2Info)
+	app2.queue = queue1
+	queue1.addSchedulingApplication(app2)
+	for i := 0; i < 20; i++ {
+		_, err = app2.addAllocationAsk(
+			newAllocationAsk(fmt.Sprintf("alloc-%d", i), app2ID, res))
+		assert.NilError(t, err, "failed to add allocation ask")
+	}
+
+	// verify get outstanding requests for root, and child queues
+	// when the sorting policy is StateAware, at this point, both apps are in NEW state,
+	// that means only the 1st app will be visited
+	rootTotal := newOutstandingRequests()
+	root.getQueueOutstandingRequests(rootTotal)
+	assert.Equal(t, len(rootTotal.getRequests()), 5)
+
+	queue1Total := newOutstandingRequests()
+	queue1.getQueueOutstandingRequests(queue1Total)
+	assert.Equal(t, len(queue1Total.getRequests()), 5)
+
+	// transit app1 to run
+	// then both apps can be scheduled
+	err = app1Info.HandleApplicationEvent(cache.RunApplication)
+	assert.NilError(t, err, "run app failed")
+	assert.Equal(t, app1Info.GetApplicationState(), cache.Starting.String())
+	err = app1Info.HandleApplicationEvent(cache.RunApplication)
+	assert.NilError(t, err, "run app failed")
+	assert.Equal(t, app1Info.GetApplicationState(), cache.Running.String())
+
+	rootTotal = newOutstandingRequests()
+	root.getQueueOutstandingRequests(rootTotal)
+	assert.Equal(t, len(rootTotal.getRequests()), 10)
+
+	queue1Total = newOutstandingRequests()
+	queue1.getQueueOutstandingRequests(queue1Total)
+	assert.Equal(t, len(queue1Total.getRequests()), 10)
 }

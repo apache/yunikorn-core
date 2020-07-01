@@ -363,7 +363,7 @@ func (psc *partitionSchedulingContext) calculateOutstandingRequests() *outstandi
 	}
 	// try allocating from the root down
 	outstanding := newOutstandingRequests()
-	psc.root.getQueueOutstandingRequests(psc, outstanding)
+	psc.root.getQueueOutstandingRequests(outstanding)
 	return outstanding
 }
 

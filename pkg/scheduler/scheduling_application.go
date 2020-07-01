@@ -409,16 +409,18 @@ func (sa *SchedulingApplication) sortRequests(ascending bool) {
 	}
 }
 
-// update container scheduling state to shim if the plugin is registered
-func (sa *SchedulingApplication) updateContainerSchedulingState(ask *schedulingAllocationAsk,
-	state si.UpdateContainerSchedulingStateRequest_SchedulingState, reason string) {
-	if updater := plugins.GetContainerSchedulingStateUpdaterPlugin(); updater != nil {
-		updater.Update(&si.UpdateContainerSchedulingStateRequest{
-			ApplicartionID: ask.AskProto.ApplicationID,
-			AllocationKey:  ask.AskProto.AllocationKey,
-			State:          state,
-			Reason:         reason,
-		})
+func (sa *SchedulingApplication) getOutstandingRequests(headRoom *resources.Resource, ctx *partitionSchedulingContext, total *outstandingRequests) {
+	sa.RLock()
+	defer sa.RUnlock()
+
+	// make sure the request are sorted
+	sa.sortRequests(false)
+	for _, request := range sa.sortedRequests {
+		if resources.FitIn(headRoom, request.AllocatedResource) {
+			// if headroom is still enough for the resources
+			total.add(request)
+			headRoom.SubFrom(request.AllocatedResource)
+		}
 	}
 }
 
@@ -432,21 +434,6 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 	for _, request := range sa.sortedRequests {
 		// resource must fit in headroom otherwise skip the request
 		if !resources.FitIn(headRoom, request.AllocatedResource) {
-			// if the queue (or any of its parent) has max capacity defined,
-			// get the max headroom, this represents the configured queue quota.
-			// if queue quota is enough, but headroom is not, usually this means
-			// the cluster needs to scale up to meet the its capacity.
-			maxHeadRoom := sa.queue.getMaxHeadRoom()
-			if resources.FitIn(maxHeadRoom, request.AllocatedResource) {
-				sa.updateContainerSchedulingState(request,
-					si.UpdateContainerSchedulingStateRequest_FAILED,
-					"failed to schedule the request because partition resource is not enough")
-			} else {
-				sa.updateContainerSchedulingState(request,
-					si.UpdateContainerSchedulingStateRequest_SKIPPED,
-					"skip the request because the queue quota has been exceed")
-			}
-
 			// post scheduling events via the scheduler plugin
 			if eventCache := events.GetEventCache(); eventCache != nil {
 				message := fmt.Sprintf("Application %s does not fit into %s queue", request.ApplicationID, request.QueueName)
@@ -464,18 +451,7 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 		if nodeIterator := ctx.getNodeIterator(); nodeIterator != nil {
 			alloc := sa.tryNodes(request, nodeIterator)
 			// have a candidate return it
-			if alloc == nil {
-				// we have enough headroom, but we could not find a node for this request,
-				// this can happen when non of the nodes is qualified for this request,
-				// by satisfying both conditions:
-				//   1) node has enough resources;
-				//   2) node satisfies all placement constraints of the request (e.g predicates)
-				// if an updater plugin is registered, update the state to the shim
-				sa.updateContainerSchedulingState(request,
-					si.UpdateContainerSchedulingStateRequest_FAILED,
-					"non of the nodes can satisfy both conditions: "+
-						"1) node has enough resources; 2) node satisfies all placement constraints")
-			} else {
+			if alloc != nil {
 				return alloc
 			}
 		}

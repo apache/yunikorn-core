@@ -72,6 +72,7 @@ func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 
 	if !manualSchedule {
 		go s.internalSchedule()
+		go s.internalInspectOutstandingRequests()
 		go s.internalPreemption()
 	}
 }
@@ -107,6 +108,39 @@ func (s *Scheduler) internalPreemption() {
 	for {
 		s.SingleStepPreemption()
 		time.Sleep(1000 * time.Millisecond)
+	}
+}
+
+func (s *Scheduler) internalInspectOutstandingRequests() {
+	for {
+		time.Sleep(1000 * time.Millisecond)
+		s.inspectOutstandingRequests()
+	}
+}
+
+func (s *Scheduler) inspectOutstandingRequests() {
+	log.Logger().Debug("inspect outstanding requests")
+	// schedule each partition defined in the cluster
+	for _, psc := range s.clusterSchedulingContext.getPartitionMapClone() {
+		requests := psc.calculateOutstandingRequests()
+		if requests != nil && !requests.isEmpty() {
+			totalOutstanding := requests.getRequests()
+			for _, ask := range totalOutstanding {
+				log.Logger().Debug("outstanding request",
+					zap.String("appID", ask.AskProto.ApplicationID),
+					zap.String("allocationKey", ask.AskProto.AllocationKey))
+				// these asks are queue outstanding requests,
+				// they can fit into the max head room, but they are pending because lack of partition resources
+				if updater := plugins.GetContainerSchedulingStateUpdaterPlugin(); updater != nil {
+					updater.Update(&si.UpdateContainerSchedulingStateRequest{
+						ApplicartionID: ask.AskProto.ApplicationID,
+						AllocationKey:  ask.AskProto.AllocationKey,
+						State:          si.UpdateContainerSchedulingStateRequest_FAILED,
+						Reason:         "request is waiting for cluster resources become available",
+					})
+				}
+			}
+		}
 	}
 }
 

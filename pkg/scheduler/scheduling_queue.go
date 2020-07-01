@@ -575,6 +575,19 @@ func (sq *SchedulingQueue) tryAllocate(ctx *partitionSchedulingContext) *schedul
 	return nil
 }
 
+func (sq *SchedulingQueue) getQueueOutstandingRequests(ctx *partitionSchedulingContext, total *outstandingRequests) {
+	if sq.isLeafQueue() {
+		headRoom := sq.getMaxHeadRoom()
+		for _, app := range sq.sortApplications() {
+			app.getOutstandingRequests(headRoom, ctx, total)
+		}
+	} else {
+		for _, child := range sq.sortQueues() {
+			child.getQueueOutstandingRequests(ctx, total)
+		}
+	}
+}
+
 // Try allocate reserved requests. This only gets called if there is a pending request on this queue or its children.
 // This is a depth first algorithm: descend into the depth of the queue tree first. Child queues are sorted based on
 // the configured queue sortPolicy. Queues without pending resources are skipped.

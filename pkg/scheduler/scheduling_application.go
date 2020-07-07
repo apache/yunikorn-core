@@ -441,6 +441,11 @@ func (sa *SchedulingApplication) tryAllocate(headRoom, maxHeadRoom *resources.Re
 				// update the message
 				key = "InsufficientClusterResources"
 				message += " (scale up triggered)"
+				log.Logger().Debug("Scale up triggered",
+					zap.String("queueName", request.QueueName),
+					zap.String("applicationID", request.AskProto.ApplicationID),
+					zap.String("allocationKey", request.AskProto.AllocationKey),
+					zap.String("resourceRequest", request.AllocatedResource.String()))
 			}
 			// post scheduling events via the scheduler plugin
 			if eventCache := events.GetEventCache(); eventCache != nil {

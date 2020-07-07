@@ -88,7 +88,7 @@ func TestBasicReservation(t *testing.T) {
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// override the reservation delay, and cleanup when done
-	scheduler.OverrideReservationDelay(10 * time.Millisecond)
+	scheduler.OverrideReservationDelay(5 * time.Millisecond)
 	defer scheduler.OverrideReservationDelay(2 * time.Second)
 
 	nodes := createNodes(t, ms, 2, 50)
@@ -166,7 +166,7 @@ func TestReservationForTwoQueues(t *testing.T) {
 	err := ms.Init(DualQueueConfig, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 	// override the reservation delay, and cleanup when done
-	scheduler.OverrideReservationDelay(10 * time.Millisecond)
+	scheduler.OverrideReservationDelay(5 * time.Millisecond)
 	defer scheduler.OverrideReservationDelay(2 * time.Second)
 
 	nodes := createNodes(t, ms, 2, 50)
@@ -276,7 +276,7 @@ func TestRemoveReservedNode(t *testing.T) {
 	err := ms.Init(SingleQueueConfig, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 	// override the reservation delay, and cleanup when done
-	scheduler.OverrideReservationDelay(10 * time.Millisecond)
+	scheduler.OverrideReservationDelay(5 * time.Millisecond)
 	defer scheduler.OverrideReservationDelay(2 * time.Second)
 
 	nodes := createNodes(t, ms, 2, 50)
@@ -331,7 +331,7 @@ func TestAddNewNode(t *testing.T) {
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// override the reservation delay, and cleanup when done
-	scheduler.OverrideReservationDelay(10 * time.Millisecond)
+	scheduler.OverrideReservationDelay(5 * time.Millisecond)
 	defer scheduler.OverrideReservationDelay(2 * time.Second)
 
 	nodes := createNodes(t, ms, 3, 50)

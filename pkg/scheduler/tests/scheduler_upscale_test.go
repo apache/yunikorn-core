@@ -160,14 +160,13 @@ func TestUpScaleWithoutNodesMultiQueue(t *testing.T) {
 		RmID:            "rm:123",
 	})
 	assert.NilError(t, err, "UpdateRequest failed for app-1")
+	ms.mockRM.waitForAcceptedApplication(t, "app-1", 1000)
+
 	err = ms.proxy.Update(&si.UpdateRequest{
 		NewApplications: newAddAppRequest(map[string]string{"app-2": "root.parent.leaf2"}),
 		RmID:            "rm:123",
 	})
 	assert.NilError(t, err, "UpdateRequest failed for app-2")
-
-	// Applications should be accepted
-	ms.mockRM.waitForAcceptedApplication(t, "app-1", 1000)
 	ms.mockRM.waitForAcceptedApplication(t, "app-2", 1000)
 
 	// App asks for allocations
@@ -299,14 +298,13 @@ func TestUpScaleWithoutNodesMultiApp(t *testing.T) {
 		RmID:            "rm:123",
 	})
 	assert.NilError(t, err, "UpdateRequest failed for app-1")
+	ms.mockRM.waitForAcceptedApplication(t, "app-1", 1000)
+
 	err = ms.proxy.Update(&si.UpdateRequest{
 		NewApplications: newAddAppRequest(map[string]string{"app-2": "root.parent.leaf1"}),
 		RmID:            "rm:123",
 	})
 	assert.NilError(t, err, "UpdateRequest failed for app-2")
-
-	// Applications should be accepted
-	ms.mockRM.waitForAcceptedApplication(t, "app-1", 1000)
 	ms.mockRM.waitForAcceptedApplication(t, "app-2", 1000)
 
 	// App asks for 2 allocations per app

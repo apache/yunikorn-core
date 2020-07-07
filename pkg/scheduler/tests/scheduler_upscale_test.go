@@ -173,34 +173,26 @@ func TestUpScaleWithoutNodesMultiQueue(t *testing.T) {
 	err = ms.proxy.Update(&si.UpdateRequest{
 		Asks: []*si.AllocationAsk{
 			{
-				AllocationKey: "alloc-1",
-				ResourceAsk: &si.Resource{
-					Resources: map[string]*si.Quantity{"memory": {Value: 10}, "vcore": {Value: 4}},
-				},
+				AllocationKey:  "alloc-1",
+				ResourceAsk:    &si.Resource{Resources: map[string]*si.Quantity{"memory": {Value: 10}, "vcore": {Value: 4}}},
 				MaxAllocations: 1,
 				ApplicationID:  "app-1",
 			},
 			{
-				AllocationKey: "alloc-2",
-				ResourceAsk: &si.Resource{
-					Resources: map[string]*si.Quantity{"memory": {Value: 2}, "vcore": {Value: 2}},
-				},
+				AllocationKey:  "alloc-2",
+				ResourceAsk:    &si.Resource{Resources: map[string]*si.Quantity{"memory": {Value: 2}, "vcore": {Value: 2}}},
 				MaxAllocations: 1,
 				ApplicationID:  "app-1",
 			},
 			{
-				AllocationKey: "alloc-3",
-				ResourceAsk: &si.Resource{
-					Resources: map[string]*si.Quantity{"memory": {Value: 5}, "vcore": {Value: 3}},
-				},
+				AllocationKey:  "alloc-3",
+				ResourceAsk:    &si.Resource{Resources: map[string]*si.Quantity{"memory": {Value: 5}, "vcore": {Value: 3}}},
 				MaxAllocations: 1,
 				ApplicationID:  "app-2",
 			},
 			{
-				AllocationKey: "alloc-4",
-				ResourceAsk: &si.Resource{
-					Resources: map[string]*si.Quantity{"memory": {Value: 5}, "vcore": {Value: 3}},
-				},
+				AllocationKey:  "alloc-4",
+				ResourceAsk:    &si.Resource{Resources: map[string]*si.Quantity{"memory": {Value: 5}, "vcore": {Value: 3}}},
 				MaxAllocations: 1,
 				ApplicationID:  "app-2",
 			},
@@ -214,21 +206,18 @@ func TestUpScaleWithoutNodesMultiQueue(t *testing.T) {
 	leaf1 := ms.getSchedulingQueue("root.parent.leaf1")
 	leaf2 := ms.getSchedulingQueue("root.parent.leaf2")
 	parent := ms.getSchedulingQueue("root.parent")
-	root := ms.getSchedulingQueue("root")
 
 	// no nodes available, no allocation can be made
 	// pending resources should not change
 	waitForPendingQueueResource(t, leaf1, 12, 1000)
 	waitForPendingQueueResource(t, leaf2, 10, 1000)
 	waitForPendingQueueResource(t, parent, 22, 1000)
-	waitForPendingQueueResource(t, root, 22, 1000)
 	waitForPendingAppResource(t, app1, 12, 1000)
 	waitForPendingAppResource(t, app2, 10, 1000)
 	ms.scheduler.MultiStepSchedule(10)
 	waitForPendingQueueResource(t, leaf1, 12, 1000)
 	waitForPendingQueueResource(t, leaf2, 10, 1000)
 	waitForPendingQueueResource(t, parent, 22, 1000)
-	waitForPendingQueueResource(t, root, 22, 1000)
 
 	var res *resources.Resource
 	res, err = resources.NewResourceFromConf(map[string]string{"memory": "20", "vcore": "10"})
@@ -257,10 +246,8 @@ func TestUpScaleWithoutNodesMultiQueue(t *testing.T) {
 	err = ms.proxy.Update(&si.UpdateRequest{
 		Asks: []*si.AllocationAsk{
 			{
-				AllocationKey: "alloc-5",
-				ResourceAsk: &si.Resource{
-					Resources: map[string]*si.Quantity{"memory": {Value: 5}, "vcore": {Value: 3}},
-				},
+				AllocationKey:  "alloc-5",
+				ResourceAsk:    &si.Resource{Resources: map[string]*si.Quantity{"memory": {Value: 5}, "vcore": {Value: 3}}},
 				MaxAllocations: 1,
 				ApplicationID:  "app-2",
 			},
@@ -272,12 +259,10 @@ func TestUpScaleWithoutNodesMultiQueue(t *testing.T) {
 	// no nodes available, no allocation can be made
 	waitForPendingQueueResource(t, leaf2, 15, 1000)
 	waitForPendingQueueResource(t, parent, 27, 1000)
-	waitForPendingQueueResource(t, root, 27, 1000)
 	waitForPendingAppResource(t, app2, 15, 1000)
 	ms.scheduler.MultiStepSchedule(10)
 	waitForPendingQueueResource(t, leaf2, 15, 1000)
 	waitForPendingQueueResource(t, parent, 27, 1000)
-	waitForPendingQueueResource(t, root, 27, 1000)
 	waitForPendingAppResource(t, app2, 15, 1000)
 
 	// add more to app-2 and see if we can get above the parent queue limit

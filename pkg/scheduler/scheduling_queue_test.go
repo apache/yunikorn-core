@@ -1038,8 +1038,6 @@ func TestMaxHeadroomUpscaleWithMax(t *testing.T) {
 	headRoom = parent.getMaxHeadRoom()
 	assert.Assert(t, resources.Equals(res, headRoom), "upscale test: allocated parent queue maxHeadRoom expected: %s, got: %s", res, headRoom)
 	// parent should now have a zero headRoom, root max is exactly same as allocated
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "0", "second": "0"})
-	assert.NilError(t, err, "failed to create resource")
 	headRoom = parent.getHeadRoom()
 	assert.Assert(t, resources.IsZero(headRoom), "upscale test: parent queue headRoom expected zero resource got: %s", headRoom)
 }
@@ -1194,6 +1192,7 @@ func TestUpScalingCalc(t *testing.T) {
 	assert.Assert(t, resources.Equals(res, leaf.upScaling), "leaf queue upscaling increment expected: %s, got: %s", res, leaf.upScaling)
 
 	res, err = resources.NewResourceFromConf(map[string]string{"first": "3", "second": "4"})
+	assert.NilError(t, err, "failed to create basic resource")
 	leaf.decUpScalingResource(res)
 
 	var left *resources.Resource

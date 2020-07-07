@@ -356,14 +356,12 @@ func (psc *partitionSchedulingContext) removeSchedulingNode(nodeID string) {
 	}
 }
 
-func (psc *partitionSchedulingContext) calculateOutstandingRequests() *outstandingRequests {
+func (psc *partitionSchedulingContext) calculateOutstandingRequests() []*schedulingAllocationAsk {
 	if !resources.StrictlyGreaterThanZero(psc.root.GetPendingResource()) {
-		// nothing to do just return
 		return nil
 	}
-	// try allocating from the root down
-	outstanding := newOutstandingRequests()
-	psc.root.getQueueOutstandingRequests(outstanding)
+	outstanding := make([]*schedulingAllocationAsk, 0)
+	psc.root.getQueueOutstandingRequests(&outstanding)
 	return outstanding
 }
 

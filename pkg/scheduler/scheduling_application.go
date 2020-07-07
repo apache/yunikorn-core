@@ -409,7 +409,7 @@ func (sa *SchedulingApplication) sortRequests(ascending bool) {
 	}
 }
 
-func (sa *SchedulingApplication) getOutstandingRequests(headRoom *resources.Resource, total *outstandingRequests) {
+func (sa *SchedulingApplication) getOutstandingRequests(headRoom *resources.Resource, total *[]*schedulingAllocationAsk) {
 	sa.RLock()
 	defer sa.RUnlock()
 
@@ -418,7 +418,7 @@ func (sa *SchedulingApplication) getOutstandingRequests(headRoom *resources.Reso
 	for _, request := range sa.sortedRequests {
 		if resources.FitIn(headRoom, request.AllocatedResource) {
 			// if headroom is still enough for the resources
-			total.add(request)
+			*total = append(*total, request)
 			headRoom.SubFrom(request.AllocatedResource)
 		}
 	}

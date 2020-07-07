@@ -118,14 +118,19 @@ func (s *Scheduler) internalInspectOutstandingRequests() {
 	}
 }
 
+// inspect on the outstanding requests for each of the queues,
+// update request state accordingly to shim if needed.
+// this function filters out all outstanding requests that being
+// skipped due to insufficient cluster resources and update the
+// state through the ContainerSchedulingStateUpdaterPlugin in order
+// to trigger the auto-scaling.
 func (s *Scheduler) inspectOutstandingRequests() {
 	log.Logger().Debug("inspect outstanding requests")
 	// schedule each partition defined in the cluster
 	for _, psc := range s.clusterSchedulingContext.getPartitionMapClone() {
 		requests := psc.calculateOutstandingRequests()
-		if requests != nil && !requests.isEmpty() {
-			totalOutstanding := requests.getRequests()
-			for _, ask := range totalOutstanding {
+		if requests != nil && len(requests) > 0 {
+			for _, ask := range requests {
 				log.Logger().Debug("outstanding request",
 					zap.String("appID", ask.AskProto.ApplicationID),
 					zap.String("allocationKey", ask.AskProto.AllocationKey))

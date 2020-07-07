@@ -575,7 +575,7 @@ func (sq *SchedulingQueue) tryAllocate(ctx *partitionSchedulingContext) *schedul
 	return nil
 }
 
-func (sq *SchedulingQueue) getQueueOutstandingRequests(total *outstandingRequests) {
+func (sq *SchedulingQueue) getQueueOutstandingRequests(total *[]*schedulingAllocationAsk) {
 	if sq.isLeafQueue() {
 		headRoom := sq.getMaxHeadRoom()
 		for _, app := range sq.sortApplications() {

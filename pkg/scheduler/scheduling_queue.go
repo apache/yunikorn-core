@@ -48,6 +48,7 @@ type SchedulingQueue struct {
 	allocating     *resources.Resource               // resource being allocated in the queue but not confirmed
 	preempting     *resources.Resource               // resource considered for preemption in the queue
 	pending        *resources.Resource               // pending resource for the apps in the queue
+	upScaling      *resources.Resource               // resource marked for upscaling in the queue
 
 	sync.RWMutex
 }
@@ -63,6 +64,7 @@ func newSchedulingQueueInfo(cacheQueueInfo *cache.QueueInfo, parent *SchedulingQ
 		allocating:     resources.NewResource(),
 		preempting:     resources.NewResource(),
 		pending:        resources.NewResource(),
+		upScaling:      resources.NewResource(),
 	}
 
 	// update the properties
@@ -143,6 +145,49 @@ func (sq *SchedulingQueue) GetPendingResource() *resources.Resource {
 	sq.RLock()
 	defer sq.RUnlock()
 	return sq.pending
+}
+
+// Return the upscaling resources for this queue (needed by tests)
+func (sq *SchedulingQueue) GetUpScalingResource() *resources.Resource {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.upScaling
+}
+
+// Increment upScaling resource of this queue
+func (sq *SchedulingQueue) incUpScalingResource(delta *resources.Resource) {
+	// update the parent
+	if sq.parent != nil {
+		sq.parent.incUpScalingResource(delta)
+	} else {
+		// no update on upscaling for the root
+		return
+	}
+	// update this queue
+	sq.Lock()
+	defer sq.Unlock()
+	sq.upScaling.AddTo(delta)
+}
+
+// Remove upScaling resource of this queue
+func (sq *SchedulingQueue) decUpScalingResource(delta *resources.Resource) {
+	// update the parent
+	if sq.parent != nil {
+		sq.parent.decUpScalingResource(delta)
+	} else {
+		// no update for upscaling on the root
+		return
+	}
+	// update this queue
+	sq.Lock()
+	defer sq.Unlock()
+	var err error
+	sq.upScaling, err = resources.SubErrorNegative(sq.upScaling, delta)
+	if err != nil {
+		log.Logger().Warn("Resources marked for scale up went negative",
+			zap.String("queueName", sq.QueueInfo.Name),
+			zap.Error(err))
+	}
 }
 
 // Update pending resource of this queue
@@ -482,11 +527,11 @@ func (sq *SchedulingQueue) getHeadRoom() *resources.Resource {
 	if sq.parent != nil {
 		parentHeadRoom = sq.parent.getHeadRoom()
 	}
-	return sq.internalHeadRoom(parentHeadRoom)
+	return sq.internalHeadRoom(parentHeadRoom, false)
 }
 
 // this function returns the max headRoom of a queue
-// this doesn't get the partition resources into the consideration
+// this doesn't take the partition resources into the consideration
 func (sq *SchedulingQueue) getMaxHeadRoom() *resources.Resource {
 	var parentHeadRoom *resources.Resource
 	if sq.parent != nil {
@@ -494,14 +539,18 @@ func (sq *SchedulingQueue) getMaxHeadRoom() *resources.Resource {
 	} else {
 		return nil
 	}
-	return sq.internalHeadRoom(parentHeadRoom)
+	return sq.internalHeadRoom(parentHeadRoom, true)
 }
 
-func (sq *SchedulingQueue) internalHeadRoom(parentHeadRoom *resources.Resource) *resources.Resource {
+func (sq *SchedulingQueue) internalHeadRoom(parentHeadRoom *resources.Resource, max bool) *resources.Resource {
 	sq.RLock()
 	defer sq.RUnlock()
 	headRoom := sq.QueueInfo.GetMaxResource()
 
+	// handle an empty cluster on startup: allowing upscale
+	if sq.parent == nil && headRoom == nil {
+		headRoom = resources.NewResource()
+	}
 	// if we have no max set headroom is always the same as the parent
 	if headRoom == nil {
 		return parentHeadRoom
@@ -509,6 +558,10 @@ func (sq *SchedulingQueue) internalHeadRoom(parentHeadRoom *resources.Resource) 
 	// calculate unused
 	headRoom.SubFrom(sq.allocating)
 	headRoom.SubFrom(sq.QueueInfo.GetAllocatedResource())
+	// if we're calculating max we need to adjust for already up scaled
+	if max {
+		headRoom.SubFrom(sq.upScaling)
+	}
 	// check the minimum of the two: parentHeadRoom is nil for root
 	if parentHeadRoom == nil {
 		return headRoom
@@ -554,7 +607,8 @@ func (sq *SchedulingQueue) tryAllocate(ctx *partitionSchedulingContext) *schedul
 		headRoom := sq.getHeadRoom()
 		// process the apps (filters out app without pending requests)
 		for _, app := range sq.sortApplications() {
-			alloc := app.tryAllocate(headRoom, ctx)
+			maxHeadRoom := sq.getMaxHeadRoom()
+			alloc := app.tryAllocate(headRoom, maxHeadRoom, ctx)
 			if alloc != nil {
 				log.Logger().Debug("allocation found on queue",
 					zap.String("queueName", sq.Name),
@@ -573,19 +627,6 @@ func (sq *SchedulingQueue) tryAllocate(ctx *partitionSchedulingContext) *schedul
 		}
 	}
 	return nil
-}
-
-func (sq *SchedulingQueue) getQueueOutstandingRequests(total *outstandingRequests) {
-	if sq.isLeafQueue() {
-		headRoom := sq.getMaxHeadRoom()
-		for _, app := range sq.sortApplications() {
-			app.getOutstandingRequests(headRoom, total)
-		}
-	} else {
-		for _, child := range sq.sortQueues() {
-			child.getQueueOutstandingRequests(total)
-		}
-	}
 }
 
 // Try allocate reserved requests. This only gets called if there is a pending request on this queue or its children.

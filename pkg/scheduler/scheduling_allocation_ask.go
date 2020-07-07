@@ -41,6 +41,7 @@ type schedulingAllocationAsk struct {
 	createTime       time.Time // the time this ask was created (used in reservations)
 	priority         int32
 	pendingRepeatAsk int32
+	upscaleRequested bool
 
 	sync.RWMutex
 }
@@ -100,6 +101,22 @@ func (saa *schedulingAllocationAsk) getPendingAskRepeat() int32 {
 	defer saa.RUnlock()
 
 	return saa.pendingRepeatAsk
+}
+
+// Set the fact that the upscale was requested
+func (saa *schedulingAllocationAsk) setUpscaleRequested(val bool) {
+	saa.Lock()
+	defer saa.Unlock()
+	saa.upscaleRequested = val
+}
+
+// Get the fact that the upscale was requested
+// visible for testing
+func (saa *schedulingAllocationAsk) GetUpscaleRequested() bool {
+	saa.RLock()
+	defer saa.RUnlock()
+
+	return saa.upscaleRequested
 }
 
 // Return the time this ask was created

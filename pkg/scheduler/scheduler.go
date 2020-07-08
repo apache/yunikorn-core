@@ -129,7 +129,7 @@ func (s *Scheduler) inspectOutstandingRequests() {
 	// schedule each partition defined in the cluster
 	for _, psc := range s.clusterSchedulingContext.getPartitionMapClone() {
 		requests := psc.calculateOutstandingRequests()
-		if requests != nil && len(requests) > 0 {
+		if len(requests) > 0 {
 			for _, ask := range requests {
 				log.Logger().Debug("outstanding request",
 					zap.String("appID", ask.AskProto.ApplicationID),

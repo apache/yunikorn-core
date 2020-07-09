@@ -45,7 +45,7 @@ func StartAllServices() *ServiceContext {
 			manualScheduleFlag: false,
 			startWebAppFlag:    true,
 			metricsHistorySize: 1440,
-			eventCacheEnabled:  false,
+			eventCacheEnabled:  true,
 		})
 }
 

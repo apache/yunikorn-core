@@ -25,10 +25,11 @@ import (
 )
 
 type SchedulerPlugins struct {
-	predicatesPlugin PredicatesPlugin
-	volumesPlugin    VolumesPlugin
-	reconcilePlugin  ReconcilePlugin
-	eventPlugin      EventPlugin
+	predicatesPlugin       PredicatesPlugin
+	volumesPlugin          VolumesPlugin
+	reconcilePlugin        ReconcilePlugin
+	eventPlugin            EventPlugin
+	schedulingStateUpdater ContainerSchedulingStateUpdater
 
 	sync.RWMutex
 }
@@ -57,4 +58,14 @@ type EventPlugin interface {
 	// This plugin is responsible for transmitting events to the shim side.
 	// Events can be further exposed from the shim.
 	SendEvent(events []*si.EventRecord)
+}
+
+// Scheduler core can update container scheduling state to the RM,
+// the shim side can determine what to do incorporate with the scheduling state
+type ContainerSchedulingStateUpdater interface {
+	// update container scheduling state to the shim side
+	// this might be called even the container scheduling state is unchanged
+	// the shim side cannot assume to only receive updates on state changes
+	// the shim side implementation must be thread safe
+	Update(request *si.UpdateContainerSchedulingStateRequest)
 }

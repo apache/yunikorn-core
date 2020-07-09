@@ -482,9 +482,26 @@ func (sq *SchedulingQueue) getHeadRoom() *resources.Resource {
 	if sq.parent != nil {
 		parentHeadRoom = sq.parent.getHeadRoom()
 	}
+	return sq.internalHeadRoom(parentHeadRoom)
+}
+
+// this function returns the max headRoom of a queue
+// this doesn't get the partition resources into the consideration
+func (sq *SchedulingQueue) getMaxHeadRoom() *resources.Resource {
+	var parentHeadRoom *resources.Resource
+	if sq.parent != nil {
+		parentHeadRoom = sq.parent.getMaxHeadRoom()
+	} else {
+		return nil
+	}
+	return sq.internalHeadRoom(parentHeadRoom)
+}
+
+func (sq *SchedulingQueue) internalHeadRoom(parentHeadRoom *resources.Resource) *resources.Resource {
 	sq.RLock()
 	defer sq.RUnlock()
 	headRoom := sq.QueueInfo.GetMaxResource()
+
 	// if we have no max set headroom is always the same as the parent
 	if headRoom == nil {
 		return parentHeadRoom
@@ -556,6 +573,19 @@ func (sq *SchedulingQueue) tryAllocate(ctx *partitionSchedulingContext) *schedul
 		}
 	}
 	return nil
+}
+
+func (sq *SchedulingQueue) getQueueOutstandingRequests(total *[]*schedulingAllocationAsk) {
+	if sq.isLeafQueue() {
+		headRoom := sq.getMaxHeadRoom()
+		for _, app := range sq.sortApplications() {
+			app.getOutstandingRequests(headRoom, total)
+		}
+	} else {
+		for _, child := range sq.sortQueues() {
+			child.getQueueOutstandingRequests(total)
+		}
+	}
 }
 
 // Try allocate reserved requests. This only gets called if there is a pending request on this queue or its children.

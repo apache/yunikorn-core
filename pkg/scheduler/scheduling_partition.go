@@ -356,6 +356,15 @@ func (psc *partitionSchedulingContext) removeSchedulingNode(nodeID string) {
 	}
 }
 
+func (psc *partitionSchedulingContext) calculateOutstandingRequests() []*schedulingAllocationAsk {
+	if !resources.StrictlyGreaterThanZero(psc.root.GetPendingResource()) {
+		return nil
+	}
+	outstanding := make([]*schedulingAllocationAsk, 0)
+	psc.root.getQueueOutstandingRequests(&outstanding)
+	return outstanding
+}
+
 // Try regular allocation for the partition
 // Lock free call this all locks are taken when needed in called functions
 func (psc *partitionSchedulingContext) tryAllocate() *schedulingAllocation {

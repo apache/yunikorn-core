@@ -409,6 +409,21 @@ func (sa *SchedulingApplication) sortRequests(ascending bool) {
 	}
 }
 
+func (sa *SchedulingApplication) getOutstandingRequests(headRoom *resources.Resource, total *[]*schedulingAllocationAsk) {
+	sa.RLock()
+	defer sa.RUnlock()
+
+	// make sure the request are sorted
+	sa.sortRequests(false)
+	for _, request := range sa.sortedRequests {
+		if resources.FitIn(headRoom, request.AllocatedResource) {
+			// if headroom is still enough for the resources
+			*total = append(*total, request)
+			headRoom.SubFrom(request.AllocatedResource)
+		}
+	}
+}
+
 // Try a regular allocation of the pending requests
 func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *partitionSchedulingContext) *schedulingAllocation {
 	sa.Lock()
@@ -419,6 +434,7 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 	for _, request := range sa.sortedRequests {
 		// resource must fit in headroom otherwise skip the request
 		if !resources.FitIn(headRoom, request.AllocatedResource) {
+			// post scheduling events via the scheduler plugin
 			if eventCache := events.GetEventCache(); eventCache != nil {
 				message := fmt.Sprintf("Application %s does not fit into %s queue", request.ApplicationID, request.QueueName)
 				askProto := request.AskProto

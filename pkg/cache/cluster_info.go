@@ -212,7 +212,8 @@ func (m *ClusterInfo) processApplicationUpdateFromRMUpdate(request *si.UpdateReq
 			continue
 		}
 		// create a new app object and add it to the partition (partition logs details)
-		appInfo := NewApplicationInfo(app.ApplicationID, app.PartitionName, app.QueueName, ugi, app.Tags)
+		appInfo := NewApplicationInfoWithEventHandler(app.ApplicationID, app.PartitionName, app.QueueName, ugi, app.Tags,
+			m.EventHandlers.RMProxyEventHandler, request.RmID)
 		if err = partitionInfo.addNewApplication(appInfo, true); err != nil {
 			rejectedApps = append(rejectedApps, &si.RejectedApplication{
 				ApplicationID: app.ApplicationID,

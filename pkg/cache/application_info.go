@@ -20,6 +20,9 @@ package cache
 
 import (
 	"fmt"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
+	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 	"strings"
 	"sync"
 	"time"
@@ -52,7 +55,19 @@ type ApplicationInfo struct {
 	stateMachine      *fsm.FSM                   // application state machine
 	stateTimer        *time.Timer                // timer for state time
 
+	//TODO create a struct for it
+	stateStateEventHandler commonevents.EventHandler
+	rmId              string
+
 	sync.RWMutex
+}
+
+func NewApplicationInfoWithEventHandler(appID, partition, queueName string, ugi security.UserGroup, tags map[string]string,
+	eventHandler commonevents.EventHandler, rmId string) *ApplicationInfo {
+	app := NewApplicationInfo(appID, partition, queueName, ugi, tags)
+	app.stateStateEventHandler = eventHandler
+	app.rmId = rmId
+	return app
 }
 
 // Create a new application
@@ -112,6 +127,21 @@ func (ai *ApplicationInfo) IsWaiting() bool {
 // The state machine handles the locking.
 func (ai *ApplicationInfo) HandleApplicationEvent(event applicationEvent) error {
 	err := ai.stateMachine.Event(event.String(), ai)
+	//TODO: register somewhere the application state
+	updatedApps := make([]*si.UpdatedApplication, 0)
+	updatedApps = append(updatedApps, &si.UpdatedApplication{
+		ApplicationID: ai.ApplicationID,
+		State:         ai.stateMachine.Current(),
+	})
+	if err ==nil && ai.stateStateEventHandler != nil {
+	ai.stateStateEventHandler.HandleEvent(
+		&rmevent.RMApplicationUpdateEvent{
+			RmID:                 ai.rmId,
+			AcceptedApplications: make([]*si.AcceptedApplication, 0),
+			RejectedApplications: make([]*si.RejectedApplication, 0),
+			UpdatedApplications: updatedApps,
+		})
+	}
 	// handle the same state transition not nil error (limit of fsm).
 	if err != nil && err.Error() == "no transition" {
 		return nil

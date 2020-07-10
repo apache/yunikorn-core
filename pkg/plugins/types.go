@@ -26,7 +26,6 @@ import (
 
 type SchedulerPlugins struct {
 	predicatesPlugin       PredicatesPlugin
-	volumesPlugin          VolumesPlugin
 	reconcilePlugin        ReconcilePlugin
 	eventPlugin            EventPlugin
 	schedulingStateUpdater ContainerSchedulingStateUpdater
@@ -39,12 +38,6 @@ type PredicatesPlugin interface {
 	// Run a certain set of predicate functions to determine if a proposed allocation
 	// can be allocated onto a node.
 	Predicates(args *si.PredicatesArgs) error
-}
-
-// RM side implements this API when it can provide plugin for volumes.
-type VolumesPlugin interface {
-	// Bind the volumes after allocation has been confirmed
-	//VolumesBind(allocationId string, node string) error
 }
 
 type ReconcilePlugin interface {

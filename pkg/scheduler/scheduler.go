@@ -612,6 +612,17 @@ func (s *Scheduler) GetClusterSchedulingContext() *ClusterSchedulingContext {
 	return s.clusterSchedulingContext
 }
 
+// The inspector for testing which runs nInspect times the normal inspection routine.
+// Visible by tests
+func (s *Scheduler) ManualInspectOutstandingRequests(nInspect int) {
+	for i := 0; i < nInspect; i++ {
+		log.Logger().Debug("Scheduler manual inspection",
+			zap.Int("count", i))
+		time.Sleep(10 * time.Millisecond)
+		s.inspectOutstandingRequests()
+	}
+}
+
 // The scheduler for testing which runs nAlloc times the normal schedule routine.
 // Visible by tests
 func (s *Scheduler) MultiStepSchedule(nAlloc int) {

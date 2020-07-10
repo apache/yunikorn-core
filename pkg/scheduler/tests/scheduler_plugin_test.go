@@ -63,7 +63,8 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, true)
+	// manual scheduling: updater should do its work independent of scheduler
+	err := ms.Init(configData, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// register a fake container state updater for testing
@@ -116,7 +117,8 @@ partitions:
 
 	assert.NilError(t, err, "UpdateRequest 2 failed")
 
-	// the request should be able to get 1 allocation
+	// schedule for the first allocation
+	ms.scheduler.MultiStepSchedule(3)
 	ms.mockRM.waitForAllocations(t, 1, 1000)
 
 	// now submit another request, ask for 5 memory
@@ -139,6 +141,12 @@ partitions:
 		RmID: "rm:123",
 	})
 	assert.NilError(t, err)
+
+	queue := ms.getSchedulingQueue(leafName)
+	app := ms.getSchedulingApplication(appID)
+	waitForPendingQueueResource(t, queue, 5, 1000)
+	waitForPendingAppResource(t, app, 5, 1000)
+	ms.scheduler.ManualInspectOutstandingRequests(2)
 
 	err = common.WaitFor(100*time.Millisecond, 3000*time.Millisecond, func() bool {
 		reqSent := fk.getContainerUpdateRequest()

@@ -416,10 +416,12 @@ func (sa *SchedulingApplication) getOutstandingRequests(headRoom *resources.Reso
 	// make sure the request are sorted
 	sa.sortRequests(false)
 	for _, request := range sa.sortedRequests {
-		if resources.FitIn(headRoom, request.AllocatedResource) {
+		if headRoom == nil || resources.FitIn(headRoom, request.AllocatedResource) {
 			// if headroom is still enough for the resources
 			*total = append(*total, request)
-			headRoom.SubFrom(request.AllocatedResource)
+			if headRoom != nil {
+				headRoom.SubFrom(request.AllocatedResource)
+			}
 		}
 	}
 }

@@ -334,7 +334,7 @@ func TestNodeReservation(t *testing.T) {
 	}
 
 	// unreserve different app
-	err, _ = node.unReserve(nil, nil)
+	_, err = node.unReserve(nil, nil)
 	if err == nil {
 		t.Errorf("illegal reservation release but did not fail: error %v", err)
 	}
@@ -343,10 +343,10 @@ func TestNodeReservation(t *testing.T) {
 	appInfo = cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
 	app2 := newSchedulingApplication(appInfo)
 	var num int
-	err, num = node.unReserve(app2, ask2)
+	num, err = node.unReserve(app2, ask2)
 	assert.NilError(t, err, "un-reserve different app should have failed without error")
 	assert.Equal(t, num, 0, "un-reserve different app should have failed without releases")
-	err, num = node.unReserve(app, ask)
+	num, err = node.unReserve(app, ask)
 	assert.NilError(t, err, "un-reserve should not have failed")
 	assert.Equal(t, num, 1, "un-reserve app should have released ")
 }

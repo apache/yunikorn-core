@@ -143,7 +143,7 @@ func TestAppReservation(t *testing.T) {
 
 	// unreserve unknown node/ask
 	var num int
-	err, _ = app.unReserve(nil, nil)
+	_, err = app.unReserve(nil, nil)
 	if err == nil {
 		t.Errorf("illegal reservation release but did not fail: error %v", err)
 	}
@@ -163,21 +163,21 @@ func TestAppReservation(t *testing.T) {
 	if err != nil {
 		t.Errorf("reservation of 2nd node should not have failed: error %v", err)
 	}
-	err, _ = app.unReserve(node2, ask2)
+	_, err = app.unReserve(node2, ask2)
 	if err != nil {
 		t.Errorf("remove of reservation of 2nd node should not have failed: error %v", err)
 	}
 	// unreserve the same should fail
-	err, _ = app.unReserve(node2, ask2)
+	_, err = app.unReserve(node2, ask2)
 	if err != nil {
 		t.Errorf("remove twice of reservation of 2nd node should have failed: error %v", err)
 	}
 
 	// failure case: remove reservation from node, app still needs cleanup
-	err, num = node.unReserve(app, ask)
+	num, err = node.unReserve(app, ask)
 	assert.NilError(t, err, "un-reserve on node should not have failed with error")
 	assert.Equal(t, num, 1, "un-reserve on node should have removed reservation")
-	err, num = app.unReserve(node, ask)
+	num, err = app.unReserve(node, ask)
 	assert.NilError(t, err, "app has reservation should not have failed")
 	assert.Equal(t, num, 1, "un-reserve on app should have removed reservation from app")
 }
@@ -439,7 +439,7 @@ func TestRemoveReservedAllocAsk(t *testing.T) {
 		t.Fatalf("app should have reservation for %v on node", allocKey)
 	}
 	var num int
-	err, num = node.unReserve(app, ask2)
+	num, err = node.unReserve(app, ask2)
 	assert.NilError(t, err, "un-reserve on node should not have failed")
 	assert.Equal(t, num, 1, "un-reserve on node should have removed reservation")
 

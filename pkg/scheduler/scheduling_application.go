@@ -149,7 +149,7 @@ func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) int {
 	if allocKey == "" {
 		// cleanup all reservations
 		for key, reserve := range sa.reservations {
-			err, releases := sa.unReserveInternal(reserve.node, reserve.ask)
+			releases, err := sa.unReserveInternal(reserve.node, reserve.ask)
 			if err != nil {
 				log.Logger().Warn("Removal of reservation failed while removing all allocation asks",
 					zap.String("appID", sa.ApplicationInfo.ApplicationID),
@@ -169,7 +169,7 @@ func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) int {
 		// cleanup the reservation for this allocation
 		for _, key := range sa.isAskReserved(allocKey) {
 			reserve := sa.reservations[key]
-			err, releases := sa.unReserveInternal(reserve.node, reserve.ask)
+			releases, err := sa.unReserveInternal(reserve.node, reserve.ask)
 			if err != nil {
 				log.Logger().Warn("Removal of reservation failed while removing allocation ask",
 					zap.String("appID", sa.ApplicationInfo.ApplicationID),
@@ -330,7 +330,7 @@ func (sa *SchedulingApplication) reserve(node *SchedulingNode, ask *schedulingAl
 // This first removes the reservation from the node.
 // If the reservation does not exist it returns 0 for reservations removed, if the reservation is removed it returns 1.
 // The error is set if the reservation key cannot be removed from the app or node.
-func (sa *SchedulingApplication) unReserve(node *SchedulingNode, ask *schedulingAllocationAsk) (error, int) {
+func (sa *SchedulingApplication) unReserve(node *SchedulingNode, ask *schedulingAllocationAsk) (int, error) {
 	sa.Lock()
 	defer sa.Unlock()
 	return sa.unReserveInternal(node, ask)
@@ -338,20 +338,20 @@ func (sa *SchedulingApplication) unReserve(node *SchedulingNode, ask *scheduling
 
 // Unlocked version for unReserve that really does the work.
 // Must only be called while holding the application lock.
-func (sa *SchedulingApplication) unReserveInternal(node *SchedulingNode, ask *schedulingAllocationAsk) (error, int) {
+func (sa *SchedulingApplication) unReserveInternal(node *SchedulingNode, ask *schedulingAllocationAsk) (int, error) {
 	resKey := reservationKey(node, nil, ask)
 	if resKey == "" {
 		log.Logger().Debug("unreserve reservation key create failed unexpectedly",
 			zap.String("appID", sa.ApplicationInfo.ApplicationID),
 			zap.Any("node", node),
 			zap.Any("ask", ask))
-		return fmt.Errorf("reservation key failed node or ask are nil for appID %s", sa.ApplicationInfo.ApplicationID), 0
+		return 0, fmt.Errorf("reservation key failed node or ask are nil for appID %s", sa.ApplicationInfo.ApplicationID)
 	}
 	// unReserve the node before removing from the app
 	var num int
 	var err error
-	if err, num = node.unReserve(sa, ask); err != nil {
-		return err, 0
+	if num, err = node.unReserve(sa, ask); err != nil {
+		return 0, err
 	}
 	// if the unreserve worked on the node check the app
 	if _, found := sa.reservations[resKey]; found {
@@ -363,7 +363,7 @@ func (sa *SchedulingApplication) unReserveInternal(node *SchedulingNode, ask *sc
 				zap.String("ask", ask.AskProto.AllocationKey))
 		}
 		delete(sa.reservations, resKey)
-		return nil, 1
+		return 1, nil
 	}
 	// reservation was not found
 	log.Logger().Debug("reservation not found while removing from app",
@@ -371,7 +371,7 @@ func (sa *SchedulingApplication) unReserveInternal(node *SchedulingNode, ask *sc
 		zap.String("nodeID", node.NodeID),
 		zap.String("ask", ask.AskProto.AllocationKey),
 		zap.Int("nodeReservationsRemoved", num))
-	return nil, 0
+	return 0, nil
 }
 
 // Return the allocation reservations on any node.

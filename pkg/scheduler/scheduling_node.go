@@ -340,7 +340,7 @@ func (sn *SchedulingNode) reserve(app *SchedulingApplication, ask *schedulingAll
 // unReserve the node for this application and ask combination
 // If the reservation does not exist it returns 0 for reservations removed, if the reservation is removed it returns 1.
 // The error is set if the reservation key cannot be generated.
-func (sn *SchedulingNode) unReserve(app *SchedulingApplication, ask *schedulingAllocationAsk) (error, int) {
+func (sn *SchedulingNode) unReserve(app *SchedulingApplication, ask *schedulingAllocationAsk) (int, error) {
 	sn.Lock()
 	defer sn.Unlock()
 	resKey := reservationKey(nil, app, ask)
@@ -349,18 +349,18 @@ func (sn *SchedulingNode) unReserve(app *SchedulingApplication, ask *schedulingA
 			zap.String("nodeID", sn.NodeID),
 			zap.Any("app", app),
 			zap.Any("ask", ask))
-		return fmt.Errorf("reservation key failed app or ask are nil on nodeID %s", sn.NodeID), 0
+		return 0, fmt.Errorf("reservation key failed app or ask are nil on nodeID %s", sn.NodeID)
 	}
 	if _, ok := sn.reservations[resKey]; ok {
 		delete(sn.reservations, resKey)
-		return nil, 1
+		return 1, nil
 	}
 	// reservation was not found
 	log.Logger().Debug("reservation not found while removing from node",
 		zap.String("nodeID", sn.NodeID),
 		zap.String("appID", app.ApplicationInfo.ApplicationID),
 		zap.String("ask", ask.AskProto.AllocationKey))
-	return nil, 0
+	return 0, nil
 }
 
 // Remove all reservation made on this node from the app.
@@ -375,7 +375,7 @@ func (sn *SchedulingNode) unReserveApps() ([]string, []int) {
 	var askRelease []int
 	for key, res := range sn.reservations {
 		appID := res.appID
-		err, num := res.app.unReserveInternal(res.node, res.ask)
+		num, err := res.app.unReserveInternal(res.node, res.ask)
 		if err != nil {
 			log.Logger().Warn("Removal of reservation failed while removing node",
 				zap.String("nodeID", sn.NodeID),

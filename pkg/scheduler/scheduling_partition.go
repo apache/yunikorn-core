@@ -544,7 +544,7 @@ func (psc *partitionSchedulingContext) unReserve(app *SchedulingApplication, nod
 	// all ok, remove the reservation of the app, this will also unReserve the node
 	var err error
 	var num int
-	if err, num = app.unReserve(node, ask); err != nil {
+	if num, err = app.unReserve(node, ask); err != nil {
 		log.Logger().Info("Failed to unreserve, error during allocate on the app",
 			zap.Error(err))
 		return

@@ -344,15 +344,10 @@ func (psc *partitionSchedulingContext) removeSchedulingNode(nodeID string) {
 	// remove the node, this will also get the sync back between the two lists
 	delete(psc.nodes, nodeID)
 	// unreserve all the apps that were reserved on the node
-	var reservedKeys []string
-	reservedKeys, ok = node.unReserveApps()
-	if !ok {
-		log.Logger().Warn("Node removal did not remove all application reservations this can affect scheduling",
-			zap.String("nodeID", nodeID))
-	}
+	reservedKeys, releasedAsks := node.unReserveApps()
 	// update the partition reservations based on the node clean up
-	for _, appID := range reservedKeys {
-		psc.unReserveCount(appID, 1)
+	for i, appID := range reservedKeys {
+		psc.unReserveCount(appID, releasedAsks[i])
 	}
 }
 
@@ -379,12 +374,6 @@ func (psc *partitionSchedulingContext) tryAllocate() *schedulingAllocation {
 // Try process reservations for the partition
 // Lock free call this all locks are taken when needed in called functions
 func (psc *partitionSchedulingContext) tryReservedAllocate() *schedulingAllocation {
-	psc.Lock()
-	if len(psc.reservedApps) == 0 {
-		psc.Unlock()
-		return nil
-	}
-	psc.Unlock()
 	// try allocating from the root down
 	return psc.root.tryReservedAllocate(psc)
 }
@@ -553,21 +542,24 @@ func (psc *partitionSchedulingContext) unReserve(app *SchedulingApplication, nod
 		return
 	}
 	// all ok, remove the reservation of the app, this will also unReserve the node
-	if err := app.unReserve(node, ask); err != nil {
+	var err error
+	var num int
+	if err, num = app.unReserve(node, ask); err != nil {
 		log.Logger().Info("Failed to unreserve, error during allocate on the app",
 			zap.Error(err))
 		return
 	}
 	// remove the reservation of the queue
-	app.queue.unReserve(appID)
+	app.queue.unReserve(appID, num)
 	// make sure we cannot go below 0
-	psc.unReserveCount(appID, 1)
+	psc.unReserveCount(appID, num)
 
 	log.Logger().Info("allocation ask is unreserved",
 		zap.String("appID", ask.ApplicationID),
 		zap.String("queue", ask.QueueName),
 		zap.String("allocationKey", ask.AskProto.AllocationKey),
-		zap.String("node", node.NodeID))
+		zap.String("node", node.NodeID),
+		zap.Int("reservationsRemoved", num))
 }
 
 // Get the iterator for the sorted nodes list from the partition.

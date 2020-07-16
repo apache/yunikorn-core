@@ -334,7 +334,7 @@ func TestNodeReservation(t *testing.T) {
 	}
 
 	// unreserve different app
-	err = node.unReserve(nil, nil)
+	err, _ = node.unReserve(nil, nil)
 	if err == nil {
 		t.Errorf("illegal reservation release but did not fail: error %v", err)
 	}
@@ -342,10 +342,13 @@ func TestNodeReservation(t *testing.T) {
 	ask2 := newAllocationAsk("alloc-2", appID, res)
 	appInfo = cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
 	app2 := newSchedulingApplication(appInfo)
-	err = node.unReserve(app2, ask2)
+	var num int
+	err, num = node.unReserve(app2, ask2)
 	assert.NilError(t, err, "un-reserve different app should have failed without error")
-	err = node.unReserve(app, ask)
+	assert.Equal(t, num, 0, "un-reserve different app should have failed without releases")
+	err, num = node.unReserve(app, ask)
 	assert.NilError(t, err, "un-reserve should not have failed")
+	assert.Equal(t, num, 1, "un-reserve app should have released ")
 }
 
 func TestUnReserveApps(t *testing.T) {
@@ -356,9 +359,9 @@ func TestUnReserveApps(t *testing.T) {
 	if node.isReserved() {
 		t.Fatal("new node should not have reservations")
 	}
-	reservedKeys, ok := node.unReserveApps()
-	if !ok || len(reservedKeys) != 0 {
-		t.Fatal("new node should not fail remove all reservations")
+	reservedKeys, releasedAsks := node.unReserveApps()
+	if len(reservedKeys) != 0 || len(releasedAsks) != 0 {
+		t.Fatalf("new node should not fail remove all reservations: asks released = %v, reservation keys = %v", releasedAsks, reservedKeys)
 	}
 
 	// create some reservations and see it clean up via the app
@@ -379,8 +382,8 @@ func TestUnReserveApps(t *testing.T) {
 	err = app.reserve(node, ask)
 	assert.NilError(t, err, "reservation should not have failed")
 	assert.Equal(t, 1, len(node.reservations), "node should have reservation")
-	reservedKeys, ok = node.unReserveApps()
-	if !ok || len(reservedKeys) != 1 {
+	reservedKeys, releasedAsks = node.unReserveApps()
+	if len(reservedKeys) != 1 || len(releasedAsks) != 1 {
 		t.Fatal("node should have removed reservation")
 	}
 
@@ -388,9 +391,9 @@ func TestUnReserveApps(t *testing.T) {
 	err = node.reserve(app, ask)
 	assert.NilError(t, err, "reservation should not have failed")
 	assert.Equal(t, 1, len(node.reservations), "node should have reservation")
-	reservedKeys, ok = node.unReserveApps()
-	if !ok || len(reservedKeys) != 1 {
-		t.Errorf("node should have removed reservation: status = %t, reservation keys = %v", ok, reservedKeys)
+	reservedKeys, releasedAsks = node.unReserveApps()
+	if len(reservedKeys) != 1 || len(releasedAsks) != 1 {
+		t.Fatalf("node should have removed reservation: asks released = %v, reservation keys = %v", releasedAsks, reservedKeys)
 	}
 }
 
@@ -402,9 +405,9 @@ func TestIsReservedForApp(t *testing.T) {
 	if node.isReserved() {
 		t.Fatal("new node should not have reservations")
 	}
-	reservedKeys, ok := node.unReserveApps()
-	if !ok || len(reservedKeys) != 0 {
-		t.Fatalf("new node should not fail remove all reservations: status = %t, reservation keys = %v", ok, reservedKeys)
+	reservedKeys, releasedAsks := node.unReserveApps()
+	if len(reservedKeys) != 0 || len(releasedAsks) != 0 {
+		t.Fatalf("new node should not fail remove all reservations: asks released = %v, reservation keys = %v", releasedAsks, reservedKeys)
 	}
 
 	// check if we can allocate on a reserved node

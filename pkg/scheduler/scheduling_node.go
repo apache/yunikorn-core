@@ -338,9 +338,9 @@ func (sn *SchedulingNode) reserve(app *SchedulingApplication, ask *schedulingAll
 }
 
 // unReserve the node for this application and ask combination
-// If the reservation does not exist it returns false, if the reservation is removed it returns true.
+// If the reservation does not exist it returns 0 for reservations removed, if the reservation is removed it returns 1.
 // The error is set if the reservation key cannot be generated.
-func (sn *SchedulingNode) unReserve(app *SchedulingApplication, ask *schedulingAllocationAsk) error {
+func (sn *SchedulingNode) unReserve(app *SchedulingApplication, ask *schedulingAllocationAsk) (int, error) {
 	sn.Lock()
 	defer sn.Unlock()
 	resKey := reservationKey(nil, app, ask)
@@ -349,18 +349,18 @@ func (sn *SchedulingNode) unReserve(app *SchedulingApplication, ask *schedulingA
 			zap.String("nodeID", sn.NodeID),
 			zap.Any("app", app),
 			zap.Any("ask", ask))
-		return fmt.Errorf("reservation key failed app or ask are nil on nodeID %s", sn.NodeID)
+		return 0, fmt.Errorf("reservation key failed app or ask are nil on nodeID %s", sn.NodeID)
 	}
 	if _, ok := sn.reservations[resKey]; ok {
 		delete(sn.reservations, resKey)
-		return nil
+		return 1, nil
 	}
 	// reservation was not found
 	log.Logger().Debug("reservation not found while removing from node",
 		zap.String("nodeID", sn.NodeID),
 		zap.String("appID", app.ApplicationInfo.ApplicationID),
 		zap.String("ask", ask.AskProto.AllocationKey))
-	return nil
+	return 0, nil
 }
 
 // Remove all reservation made on this node from the app.
@@ -368,21 +368,23 @@ func (sn *SchedulingNode) unReserve(app *SchedulingApplication, ask *schedulingA
 // unReserve on the node which is locked and modifies the original map. However deleting an entry from a map while iterating
 // over the map is perfectly safe based on the Go Specs.
 // It must only be called when removing the node under a partition lock.
-// It returns a list of all apps that have been unreserved on the node regardless of the result of the app unReserve call.
-// If all unReserve calls work true will be returned, false in all other cases.
-func (sn *SchedulingNode) unReserveApps() ([]string, bool) {
-	var allOK = true
+// It returns a list of all apps that have been checked on the node regardless of the result of the app unReserve call.
+// The corresponding integers show the number of reservations removed for each app entry
+func (sn *SchedulingNode) unReserveApps() ([]string, []int) {
 	var appReserve []string
+	var askRelease []int
 	for key, res := range sn.reservations {
-		appID, err := res.unReserve()
+		appID := res.appID
+		num, err := res.app.unReserveInternal(res.node, res.ask)
 		if err != nil {
 			log.Logger().Warn("Removal of reservation failed while removing node",
 				zap.String("nodeID", sn.NodeID),
 				zap.String("reservationKey", key),
 				zap.Error(err))
-			allOK = false
 		}
+		// pass back the removed asks for each app
 		appReserve = append(appReserve, appID)
+		askRelease = append(askRelease, num)
 	}
-	return appReserve, allOK
+	return appReserve, askRelease
 }

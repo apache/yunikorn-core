@@ -149,16 +149,17 @@ func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) int {
 	if allocKey == "" {
 		// cleanup all reservations
 		for key, reserve := range sa.reservations {
-			_, err := reserve.unReserve()
+			releases, err := sa.unReserveInternal(reserve.node, reserve.ask)
 			if err != nil {
 				log.Logger().Warn("Removal of reservation failed while removing all allocation asks",
 					zap.String("appID", sa.ApplicationInfo.ApplicationID),
 					zap.String("reservationKey", key),
 					zap.Error(err))
+				continue
 			}
 			// clean up the queue reservation (one at a time)
-			sa.queue.unReserve(sa.ApplicationInfo.ApplicationID)
-			toRelease++
+			sa.queue.unReserve(sa.ApplicationInfo.ApplicationID, releases)
+			toRelease += releases
 		}
 		// Cleanup total pending resource
 		deltaPendingResource = sa.pending
@@ -167,16 +168,18 @@ func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) int {
 	} else {
 		// cleanup the reservation for this allocation
 		for _, key := range sa.isAskReserved(allocKey) {
-			_, err := sa.reservations[key].unReserve()
+			reserve := sa.reservations[key]
+			releases, err := sa.unReserveInternal(reserve.node, reserve.ask)
 			if err != nil {
 				log.Logger().Warn("Removal of reservation failed while removing allocation ask",
 					zap.String("appID", sa.ApplicationInfo.ApplicationID),
 					zap.String("reservationKey", key),
 					zap.Error(err))
+				continue
 			}
 			// clean up the queue reservation
-			sa.queue.unReserve(sa.ApplicationInfo.ApplicationID)
-			toRelease++
+			sa.queue.unReserve(sa.ApplicationInfo.ApplicationID, releases)
+			toRelease += releases
 		}
 		if ask := sa.requests[allocKey]; ask != nil {
 			deltaPendingResource = resources.MultiplyBy(ask.AllocatedResource, float64(ask.getPendingAskRepeat()))
@@ -325,9 +328,9 @@ func (sa *SchedulingApplication) reserve(node *SchedulingNode, ask *schedulingAl
 
 // unReserve the application for this node and ask combination.
 // This first removes the reservation from the node.
-// The error is set if the reservation key cannot be generated on the app or node.
-// If the reservation does not exist it returns false, if the reservation is removed it returns true.
-func (sa *SchedulingApplication) unReserve(node *SchedulingNode, ask *schedulingAllocationAsk) error {
+// If the reservation does not exist it returns 0 for reservations removed, if the reservation is removed it returns 1.
+// The error is set if the reservation key cannot be removed from the app or node.
+func (sa *SchedulingApplication) unReserve(node *SchedulingNode, ask *schedulingAllocationAsk) (int, error) {
 	sa.Lock()
 	defer sa.Unlock()
 	return sa.unReserveInternal(node, ask)
@@ -335,29 +338,40 @@ func (sa *SchedulingApplication) unReserve(node *SchedulingNode, ask *scheduling
 
 // Unlocked version for unReserve that really does the work.
 // Must only be called while holding the application lock.
-func (sa *SchedulingApplication) unReserveInternal(node *SchedulingNode, ask *schedulingAllocationAsk) error {
+func (sa *SchedulingApplication) unReserveInternal(node *SchedulingNode, ask *schedulingAllocationAsk) (int, error) {
 	resKey := reservationKey(node, nil, ask)
 	if resKey == "" {
 		log.Logger().Debug("unreserve reservation key create failed unexpectedly",
 			zap.String("appID", sa.ApplicationInfo.ApplicationID),
 			zap.Any("node", node),
 			zap.Any("ask", ask))
-		return fmt.Errorf("reservation key failed node or ask are nil for appID %s", sa.ApplicationInfo.ApplicationID)
+		return 0, fmt.Errorf("reservation key failed node or ask are nil for appID %s", sa.ApplicationInfo.ApplicationID)
 	}
-	// find the reservation and then unReserve the node before removing from the app
+	// unReserve the node before removing from the app
+	var num int
+	var err error
+	if num, err = node.unReserve(sa, ask); err != nil {
+		return 0, err
+	}
+	// if the unreserve worked on the node check the app
 	if _, found := sa.reservations[resKey]; found {
-		if err := node.unReserve(sa, ask); err != nil {
-			return err
+		// worked on the node means either found or not but no error, log difference here
+		if num == 0 {
+			log.Logger().Info("reservation not found while removing from node, app has reservation",
+				zap.String("appID", sa.ApplicationInfo.ApplicationID),
+				zap.String("nodeID", node.NodeID),
+				zap.String("ask", ask.AskProto.AllocationKey))
 		}
 		delete(sa.reservations, resKey)
-		return nil
+		return 1, nil
 	}
 	// reservation was not found
-	log.Logger().Debug("reservation not found while removing from app",
+	log.Logger().Info("reservation not found while removing from app",
 		zap.String("appID", sa.ApplicationInfo.ApplicationID),
 		zap.String("nodeID", node.NodeID),
-		zap.String("ask", ask.AskProto.AllocationKey))
-	return nil
+		zap.String("ask", ask.AskProto.AllocationKey),
+		zap.Int("nodeReservationsRemoved", num))
+	return 0, nil
 }
 
 // Return the allocation reservations on any node.

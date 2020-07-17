@@ -904,11 +904,10 @@ func TestReserveApp(t *testing.T) {
 	assert.Equal(t, leaf.reservedApps[appName], 1, "app should have one reservation")
 	leaf.reserve(appName)
 	assert.Equal(t, leaf.reservedApps[appName], 2, "app should have two reservations")
-	leaf.unReserve(appName)
-	leaf.unReserve(appName)
+	leaf.unReserve(appName, 2)
 	assert.Equal(t, len(leaf.reservedApps), 0, "queue should not have any reserved apps, all reservations were removed")
 
-	leaf.unReserve("unknown")
+	leaf.unReserve("unknown", 1)
 	assert.Equal(t, len(leaf.reservedApps), 0, "unreserve of unknown app should not have changed count or added app")
 }
 

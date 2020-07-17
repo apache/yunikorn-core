@@ -82,15 +82,6 @@ func (r *reservation) getKey() string {
 	return r.nodeID + "|" + r.askKey
 }
 
-// Remove the reservation from the app and node that created the reservation.
-// This is used while removing an app, ask or node from the scheduler.
-// It calls the UNLOCKED version of the unReserve on the app always.
-// The app is responsible for calling unReserve on the node.
-func (r *reservation) unReserve() (string, error) {
-	err := r.app.unReserveInternal(r.node, r.ask)
-	return r.appID, err
-}
-
 func (r *reservation) String() string {
 	if r.nodeID == "" {
 		return r.node.NodeID + " -> " + r.appID + "|" + r.askKey

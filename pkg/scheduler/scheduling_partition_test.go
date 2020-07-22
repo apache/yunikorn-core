@@ -335,7 +335,7 @@ func TestTryAllocateLarge(t *testing.T) {
 	}
 
 	// override the reservation delay, and cleanup when done
-	OverrideReservationDelay(time.Nanosecond)
+	OverrideReservationDelay(10 * time.Nanosecond)
 	defer OverrideReservationDelay(2 * time.Second)
 
 	leaf := partition.getQueue("root.parent.leaf1")
@@ -376,7 +376,7 @@ func TestAllocReserveNewNode(t *testing.T) {
 	}
 
 	// override the reservation delay, and cleanup when done
-	OverrideReservationDelay(time.Nanosecond)
+	OverrideReservationDelay(10 * time.Nanosecond)
 	defer OverrideReservationDelay(2 * time.Second)
 
 	// turn off the second node
@@ -603,7 +603,7 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 	}
 
 	// override the reservation delay, and cleanup when done
-	OverrideReservationDelay(time.Nanosecond)
+	OverrideReservationDelay(10 * time.Nanosecond)
 	defer OverrideReservationDelay(2 * time.Second)
 
 	leaf := partition.getQueue("root.parent.leaf1")

@@ -655,16 +655,16 @@ func (sq *SchedulingQueue) reserve(appID string) {
 
 // Add an reserved app to the list.
 // No checks this is only called when a reservation is processed using the app stored in the queue.
-func (sq *SchedulingQueue) unReserve(appID string) {
+func (sq *SchedulingQueue) unReserve(appID string, releases int) {
 	sq.Lock()
 	defer sq.Unlock()
 	// make sure we cannot go below 0
 	if num, ok := sq.reservedApps[appID]; ok {
 		// decrease the number of reservations for this app and cleanup
-		if num == 1 {
+		if num <= releases {
 			delete(sq.reservedApps, appID)
 		} else {
-			sq.reservedApps[appID]--
+			sq.reservedApps[appID] -= releases
 		}
 	}
 }

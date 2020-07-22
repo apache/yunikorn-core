@@ -142,7 +142,8 @@ func TestAppReservation(t *testing.T) {
 	}
 
 	// unreserve unknown node/ask
-	err = app.unReserve(nil, nil)
+	var num int
+	_, err = app.unReserve(nil, nil)
 	if err == nil {
 		t.Errorf("illegal reservation release but did not fail: error %v", err)
 	}
@@ -162,23 +163,23 @@ func TestAppReservation(t *testing.T) {
 	if err != nil {
 		t.Errorf("reservation of 2nd node should not have failed: error %v", err)
 	}
-	err = app.unReserve(node2, ask2)
+	_, err = app.unReserve(node2, ask2)
 	if err != nil {
 		t.Errorf("remove of reservation of 2nd node should not have failed: error %v", err)
 	}
 	// unreserve the same should fail
-	err = app.unReserve(node2, ask2)
+	_, err = app.unReserve(node2, ask2)
 	if err != nil {
 		t.Errorf("remove twice of reservation of 2nd node should have failed: error %v", err)
 	}
 
-	// failure case: remove reservation from node
-	err = node.unReserve(app, ask)
-	assert.NilError(t, err, "un-reserve on node should not have failed: error")
-	err = app.unReserve(node, ask)
-	if err != nil {
-		t.Errorf("node does not have reservation removal of app reservation should have failed: error %v", err)
-	}
+	// failure case: remove reservation from node, app still needs cleanup
+	num, err = node.unReserve(app, ask)
+	assert.NilError(t, err, "un-reserve on node should not have failed with error")
+	assert.Equal(t, num, 1, "un-reserve on node should have removed reservation")
+	num, err = app.unReserve(node, ask)
+	assert.NilError(t, err, "app has reservation should not have failed")
+	assert.Equal(t, num, 1, "un-reserve on app should have removed reservation from app")
 }
 
 // test multiple reservations from one allocation
@@ -437,10 +438,11 @@ func TestRemoveReservedAllocAsk(t *testing.T) {
 	if len(app.isAskReserved(allocKey)) != 1 || !node.isReserved() {
 		t.Fatalf("app should have reservation for %v on node", allocKey)
 	}
-	err = node.unReserve(app, ask2)
-	if err != nil {
-		t.Errorf("unreserve on node should not have failed: error %v", err)
-	}
+	var num int
+	num, err = node.unReserve(app, ask2)
+	assert.NilError(t, err, "un-reserve on node should not have failed")
+	assert.Equal(t, num, 1, "un-reserve on node should have removed reservation")
+
 	before = app.GetPendingResource().Clone()
 	reservedAsks = app.removeAllocationAsk(allocKey)
 	delta = resources.Sub(before, app.GetPendingResource())

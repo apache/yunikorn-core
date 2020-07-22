@@ -559,7 +559,7 @@ func TestTryAllocateWithReserved(t *testing.T) {
 	ask := newAllocationAskRepeat("alloc-1", appID, res, 2)
 	delta, err = app.addAllocationAsk(ask)
 	if err != nil || !resources.Equals(resources.Multiply(res, 2), delta) {
-		t.Errorf("failed to add ask to app resource added: %v expected %v (err = %v)", delta, resources.Multiply(res, 4), err)
+		t.Errorf("failed to add ask to app resource added: %v expected %v (err = %v)", delta, resources.Multiply(res, 2), err)
 	}
 	// reserve one node: scheduling should happen on the other
 	node2 := partition.getSchedulingNode("node-2")
@@ -590,4 +590,98 @@ func TestTryAllocateWithReserved(t *testing.T) {
 	}
 	assert.Equal(t, allocated, alloc.result, "expected allocated allocation to be returned")
 	assert.Equal(t, node2.NodeID, alloc.nodeID, "expected allocation on node2 to be returned")
+}
+
+// remove the reserved ask while allocating in flight for the ask
+func TestScheduleRemoveReservedAsk(t *testing.T) {
+	partition := createQueuesNodes(t)
+	if partition == nil {
+		t.Fatal("partition create failed")
+	}
+	if alloc := partition.tryAllocate(); alloc != nil {
+		t.Fatalf("empty cluster allocate returned allocation: %v", alloc.String())
+	}
+
+	// override the reservation delay, and cleanup when done
+	OverrideReservationDelay(time.Nanosecond)
+	defer OverrideReservationDelay(2 * time.Second)
+
+	leaf := partition.getQueue("root.parent.leaf1")
+	if leaf == nil {
+		t.Fatal("leaf queue create failed")
+	}
+	appID := "app-1"
+	res, err := resources.NewResourceFromConf(map[string]string{"first": "4"})
+	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	app := newSchedulingApplication(appInfo)
+	if app == nil || err != nil {
+		t.Fatalf("failed to create app (%v) and or resource: %v (err = %v)", app, res, err)
+	}
+	app.queue = leaf
+
+	// fake adding to the partition
+	leaf.addSchedulingApplication(app)
+	partition.applications[appID] = app
+	var delta *resources.Resource
+	ask := newAllocationAskRepeat("alloc-1", appID, res, 4)
+	delta, err = app.addAllocationAsk(ask)
+	if err != nil || !resources.Equals(resources.Multiply(res, 4), delta) {
+		t.Errorf("failed to add ask to app resource added: %v expected %v (err = %v)", delta, resources.Multiply(res, 4), err)
+	}
+	// allocate the ask
+	for i := 1; i <= 4; i++ {
+		alloc := partition.tryAllocate()
+		if alloc == nil || alloc.result != allocated {
+			t.Fatalf("expected allocated allocation to be returned (step %d) %v", i, alloc)
+		}
+		partition.allocate(alloc)
+	}
+
+	// add a asks which should reserve
+	ask = newAllocationAskRepeat("alloc-2", appID, res, 1)
+	delta, err = app.addAllocationAsk(ask)
+	if err != nil || !resources.Equals(res, delta) {
+		t.Errorf("failed to add ask 2 to app resource added: %v expected %v (err = %v)", delta, resources.Multiply(res, 2), err)
+	}
+	ask = newAllocationAskRepeat("alloc-3", appID, res, 1)
+	delta, err = app.addAllocationAsk(ask)
+	if err != nil || !resources.Equals(res, delta) {
+		t.Errorf("failed to add ask 3 to app resource added: %v expected %v (err = %v)", delta, resources.Multiply(res, 2), err)
+	}
+	// allocate so we get reservations
+	for i := 1; i <= 2; i++ {
+		alloc := partition.tryAllocate()
+		if alloc == nil || alloc.result != reserved {
+			t.Fatalf("expected reserved allocation to be returned (step %d) %v", i, alloc)
+		}
+		partition.allocate(alloc)
+	}
+	assert.Equal(t, len(partition.reservedApps), 1, "partition should have reserved app")
+	assert.Equal(t, len(app.reservations), 2, "application reservations should be 2")
+
+	// add a node
+	node3 := "node-3"
+	partition.addSchedulingNode(cache.NewNodeForTest(node3, res))
+	// try to allocate one of the reservation
+	alloc := partition.tryReservedAllocate()
+	if alloc == nil || alloc.result != allocatedReserved {
+		t.Fatalf("expected allocatedReserved allocation to be returned %v", alloc)
+	}
+	// before confirming remove the ask: do what the scheduler does when it gets a request from a
+	// shim in processAllocationReleaseByAllocationKey()
+	// make sure we are counting correctly and leave the other reservation intact
+	removeAskID := "alloc-2"
+	if alloc.schedulingAsk.AskProto.AllocationKey == "alloc-3" {
+		removeAskID = "alloc-3"
+	}
+	released := app.removeAllocationAsk(removeAskID)
+	assert.Equal(t, released, 1, "expected one reservations to be released")
+	partition.unReserveUpdate(appID, released)
+	assert.Equal(t, len(partition.reservedApps), 1, "partition should still have reserved app")
+	assert.Equal(t, len(app.reservations), 1, "application reservations should be 1")
+
+	// now confirm the allocation: this should not remove the reservation
+	partition.allocate(alloc)
+	assert.Equal(t, len(partition.reservedApps), 1, "partition should still have reserved app")
+	assert.Equal(t, len(app.reservations), 1, "application reservations should be kept at 1")
 }

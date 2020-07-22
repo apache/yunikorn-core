@@ -57,13 +57,6 @@ func GetPredicatesPlugin() PredicatesPlugin {
 	return plugins.predicatesPlugin
 }
 
-func GetVolumesPlugin() VolumesPlugin {
-	plugins.RLock()
-	defer plugins.RUnlock()
-
-	return plugins.volumesPlugin
-}
-
 func GetReconcilePlugin() ReconcilePlugin {
 	plugins.RLock()
 	defer plugins.RUnlock()

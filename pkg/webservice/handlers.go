@@ -82,14 +82,31 @@ func getClusterInfo(w http.ResponseWriter, r *http.Request) {
 func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
+	queueName := r.URL.Query().Get("queue")
+	if queueName != "" {
+		queueNameArr := strings.Split(queueName, ".")
+		for _, name := range queueNameArr {
+			if !configs.QueueNameRegExp.MatchString(name) {
+				http.Error(w, "Invalid queue name "+name+", a name must only have alphanumeric characters,"+
+					" - or _, and be no longer than 64 characters", http.StatusBadRequest)
+			}
+		}
+	}
 	var appsDao []*dao.ApplicationDAOInfo
 	lists := gClusterInfo.ListPartitions()
 	for _, k := range lists {
 		partition := gClusterInfo.GetPartition(k)
 		appList := partition.GetApplications()
 		for _, app := range appList {
-			appDao := getApplicationJSON(app)
-			appsDao = append(appsDao, appDao)
+			if len(queueName) > 0 {
+				if strings.EqualFold(queueName, app.QueueName) {
+					appDao := getApplicationJSON(app)
+					appsDao = append(appsDao, appDao)
+				}
+			} else {
+				appDao := getApplicationJSON(app)
+				appsDao = append(appsDao, appDao)
+			}
 		}
 	}
 

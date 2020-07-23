@@ -26,6 +26,8 @@ import (
 
 	"gotest.tools/assert"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/cache"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 )
@@ -174,4 +176,88 @@ func TestContainerHistory(t *testing.T) {
 	assert.Equal(t, len(contHist), 5, "incorrect number of records returned")
 	assert.Equal(t, contHist[0].TotalContainers, "2", "metric 1 should be 1 apps and was not")
 	assert.Equal(t, contHist[4].TotalContainers, "300", "metric 5 should be 300 apps and was not")
+}
+
+func TestQueryParamInAppsHandler(t *testing.T) {
+	const configDefault = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        queues:
+        - name: default
+`
+	rmID := "rm-123"
+	policyGroup := "default-policy-group"
+	clusterInfo := cache.NewClusterInfo()
+
+	configs.MockSchedulerConfigByData([]byte(configDefault))
+	if _, err := cache.SetClusterInfoFromConfigFile(clusterInfo, rmID, policyGroup); err != nil {
+		t.Errorf("Error when load clusterInfo from config %v", err)
+		return
+	}
+	assert.Equal(t, 1, len(clusterInfo.ListPartitions()))
+
+	// Check default partition
+	partitionName := "[" + rmID + "]default"
+	defaultPartition := clusterInfo.GetPartition(partitionName)
+	assert.Equal(t, 0, len(defaultPartition.GetApplications()))
+
+	// add a new app
+	appInfo := cache.CreateNewApplicationInfo("app-1", partitionName, "root.default")
+	err := cache.AddAppToPartition(appInfo, defaultPartition)
+	if err != nil {
+		t.Errorf("add application to partition should not have failed: %v", err)
+	}
+	assert.Equal(t, appInfo.GetApplicationState(), "New")
+	assert.Equal(t, 1, len(defaultPartition.GetApplications()))
+
+	NewWebApp(clusterInfo, nil)
+
+	// Passing "root.default" as filter return 1 application
+	req, errReq := http.NewRequest("GET", "/ws/v1/apps?queue=root.default", strings.NewReader(""))
+	assert.NilError(t, errReq, "App Handler request failed")
+	resp := &MockResponseWriter{}
+	var appsDao []*dao.ApplicationDAOInfo
+	getApplicationsInfo(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &appsDao)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, len(appsDao), 1)
+
+	// Passing "root.q1" as filter return 0 application as there is no app running in "root.q1" queue
+	req1, err1 := http.NewRequest("GET", "/ws/v1/apps?queue=root.q1", strings.NewReader(""))
+	assert.NilError(t, err1, "App Handler request failed")
+	resp1 := &MockResponseWriter{}
+	var appsDao1 []*dao.ApplicationDAOInfo
+	getApplicationsInfo(resp1, req1)
+	err = json.Unmarshal(resp1.outputBytes, &appsDao1)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, len(appsDao1), 0)
+
+	// Not passing any queue filter (only handler endpoint) return all applications
+	req2, err2 := http.NewRequest("GET", "/ws/v1/apps", strings.NewReader(""))
+	assert.NilError(t, err2, "App Handler request failed")
+	resp2 := &MockResponseWriter{}
+	var appsDao2 []*dao.ApplicationDAOInfo
+	getApplicationsInfo(resp2, req2)
+	err = json.Unmarshal(resp2.outputBytes, &appsDao2)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, len(appsDao2), 1)
+
+	// Passing "root.q1.default" as filter return 0 application though child queue name is same but different queue path
+	req3, err3 := http.NewRequest("GET", "/ws/v1/apps?queue=root.q1.default", strings.NewReader(""))
+	assert.NilError(t, err3, "App Handler request failed")
+	resp3 := &MockResponseWriter{}
+	var appsDao3 []*dao.ApplicationDAOInfo
+	getApplicationsInfo(resp3, req3)
+	err = json.Unmarshal(resp3.outputBytes, &appsDao3)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, len(appsDao3), 0)
+
+	// Passing "root.default(spe" as filter throws bad request error as queue name doesn't comply with expected characters
+	req4, err4 := http.NewRequest("GET", "/ws/v1/apps?queue=root.default(spe", strings.NewReader(""))
+	assert.NilError(t, err4, "App Handler request failed")
+	resp4 := &MockResponseWriter{}
+	getApplicationsInfo(resp4, req4)
+	assert.Equal(t, 400, resp4.statusCode)
 }

@@ -133,6 +133,43 @@ Spark uses its own version of the application ID tag called *spark-app-id*. This
 When you run Spark on Kubernetes with pod templates, *spark-app-id* is considered the applicationId.
 A script to run the spark application and the yaml files are in the [README spark](https://github.com/apache/incubator-yunikorn-k8shim/tree/master/deployments/examples#spark) section.
 
+### Running a flink application
+There are two deploy modes to run flink on Kubernetes.
+* standalone mode: uses common resource definitions in Kubernetes (such as Configmap, Deployment, Job, Service, etc.) and launches the components with the kubectl commands.
+* native mode: uses client scripts to launch flink JobManager of type Deployment which will connect to Kubernetes ApiServer to request resources on demand.
+
+#### Standalone mode
+Please follow [Kubernetes Setup](https://ci.apache.org/projects/flink/flink-docs-stable/ops/deployment/kubernetes.html) to get details and examples of standalone deploy mode.
+In this mode, we can directly add required labels (applicationId and queue) in Deployment/Job spec to run flink application with YuniKorn scheduler, as well as [Run workloads with YuniKorn Scheduler](#run-workloads-with-yunikorn-scheduler).
+
+#### Native mode
+Please follow [Native Kubernetes Setup](https://ci.apache.org/projects/flink/flink-docs-stable/ops/deployment/native_kubernetes.html) to get details and examples of native deploy mode.
+Running flink application with YuniKorn scheduler in native mode is only supported for flink 1.11 or above, we can leverage two flink configurations `kubernetes.jobmanager.labels` and `kubernetes.taskmanager.labels` to set the required labels.
+Examples:
+* Start flink session
+```
+./bin/kubernetes-session.sh \
+  -Dkubernetes.cluster-id=<ClusterId> \
+  -Dtaskmanager.memory.process.size=4096m \
+  -Dkubernetes.taskmanager.cpu=2 \
+  -Dtaskmanager.numberOfTaskSlots=4 \
+  -Dresourcemanager.taskmanager-timeout=3600000 \
+  -Dkubernetes.jobmanager.labels=applicationId:MyOwnApplicationId,queue:root.sandbox \
+  -Dkubernetes.taskmanager.labels=applicationId:MyOwnApplicationId,queue:root.sandbox
+```
+* Start flink application
+```
+./bin/flink run-application -p 8 -t kubernetes-application \
+  -Dkubernetes.cluster-id=<ClusterId> \
+  -Dtaskmanager.memory.process.size=4096m \
+  -Dkubernetes.taskmanager.cpu=2 \
+  -Dtaskmanager.numberOfTaskSlots=4 \
+  -Dkubernetes.container.image=<CustomImageName> \
+  -Dkubernetes.jobmanager.labels=applicationId:MyOwnApplicationId,queue:root.sandbox \
+  -Dkubernetes.taskmanager.labels=applicationId:MyOwnApplicationId,queue:root.sandbox \
+  local:///opt/flink/usrlib/my-flink-job.jar
+```
+
 ### Running a simple Tensorflow job 
 There is an example for Tensorflow job. You must install tf-operator first. 
 You can install tf-operator by applying all yaml from two website down below:

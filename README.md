@@ -51,7 +51,7 @@ contribute your ideas, explore use cases, or participate the development.
 
 Apache YuniKorn (Incubating) project is consisted by 4 git repositories:
 
-- [yunikorn-core](https://github.com/apache/incubator-yunikorn-core/) :round_pushpin: : the scheduler brain
+- [yunikorn-core](https://github.com/apache/incubator-yunikorn-core/) : the scheduler brain :round_pushpin: 
 - [yunikorn-k8shim](https://github.com/apache/incubator-yunikorn-k8shim) : the adaptor to Kubernetes
 - [yunikorn-scheduler-interface](https://github.com/apache/incubator-yunikorn-scheduler-interface) : the common scheduling interface
 - [yunikorn-web](https://github.com/apache/incubator-yunikorn-web) : the web UI

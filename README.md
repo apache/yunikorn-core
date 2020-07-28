@@ -37,10 +37,10 @@ shim layer and adopt to different ResourceManager implementation including Apach
 
 ## Get Started
 
-See get started with running YuniKorn on Kubernetes, please read the documentation on [yunikorn.apache.org](http://yunikorn.apache.org/docs/).
+See how to get started with running YuniKorn on Kubernetes, please read the documentation on [yunikorn.apache.org](http://yunikorn.apache.org/docs/).
 
-If you want to know more about the value of the YuniKorn project, and what YuniKorn can do. Here is some
-[session recordings and demos](http://yunikorn.apache.org/community/sessions) for you to look at.
+Want to know more about the value of the YuniKorn project, and what YuniKorn can do? Here is some
+[session recordings and demos](http://yunikorn.apache.org/community/sessions).
 
 ## Get Involved
 
@@ -51,10 +51,10 @@ contribute your ideas, explore use cases, or participate the development.
 
 Apache YuniKorn (Incubating) project is consisted by 4 git repositories:
 
-- [yunikorn-core](https://github.com/apache/incubator-yunikorn-core/) (you are here :round_pushpin:)
-- [yunikorn-k8shim](https://github.com/apache/incubator-yunikorn-k8shim)
-- [yunikorn-scheduler-interface](https://github.com/apache/incubator-yunikorn-scheduler-interface)
-- [yunikorn-web](https://github.com/apache/incubator-yunikorn-web)
+- [yunikorn-core](https://github.com/apache/incubator-yunikorn-core/) :round_pushpin: : the scheduler brain
+- [yunikorn-k8shim](https://github.com/apache/incubator-yunikorn-k8shim) : the adaptor to Kubernetes
+- [yunikorn-scheduler-interface](https://github.com/apache/incubator-yunikorn-scheduler-interface) : the common scheduling interface
+- [yunikorn-web](https://github.com/apache/incubator-yunikorn-web) : the web UI
 
 The `yunikorn-core` is the brain of the scheduler, which makes placement decisions (Allocate container X on node Y) according
 to pre configured policies. Scheduler core is implemented in a way to be agnostic to scheduler implementation.

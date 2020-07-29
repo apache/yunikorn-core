@@ -268,10 +268,7 @@ func (sn *SchedulingNode) preAllocateCheck(res *resources.Resource, resKey strin
 	available.SubFrom(sn.getAllocatingResource())
 	// check the request fits in what we have calculated
 	if !resources.FitIn(available, res) {
-		log.Logger().Debug("requested resource is larger than currently available node resources",
-			zap.String("nodeID", sn.NodeID),
-			zap.Any("requested", res),
-			zap.Any("available", available))
+		// requested resource is larger than currently available node resources
 		return fmt.Errorf("pre alloc check: requested resource %s is larger than currently available %s resource on %s", res.String(), available.String(), sn.NodeID)
 	}
 	// can allocate, based on resource size

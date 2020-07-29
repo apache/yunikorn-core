@@ -56,8 +56,8 @@ type ApplicationInfo struct {
 	stateTimer        *time.Timer                // timer for state time
 
 	//TODO create a struct for it
-	stateStateEventHandler commonevents.EventHandler
-	rmId              string
+	statusChangeEventHandler commonevents.EventHandler
+	rmId                     string
 
 	sync.RWMutex
 }
@@ -65,7 +65,7 @@ type ApplicationInfo struct {
 func NewApplicationInfoWithEventHandler(appID, partition, queueName string, ugi security.UserGroup, tags map[string]string,
 	eventHandler commonevents.EventHandler, rmId string) *ApplicationInfo {
 	app := NewApplicationInfo(appID, partition, queueName, ugi, tags)
-	app.stateStateEventHandler = eventHandler
+	app.statusChangeEventHandler = eventHandler
 	app.rmId = rmId
 	return app
 }
@@ -127,14 +127,16 @@ func (ai *ApplicationInfo) IsWaiting() bool {
 // The state machine handles the locking.
 func (ai *ApplicationInfo) HandleApplicationEvent(event applicationEvent) error {
 	err := ai.stateMachine.Event(event.String(), ai)
-	//TODO: register somewhere the application state
 	updatedApps := make([]*si.UpdatedApplication, 0)
 	updatedApps = append(updatedApps, &si.UpdatedApplication{
 		ApplicationID: ai.ApplicationID,
 		State:         ai.stateMachine.Current(),
+		StateTransitionTimestamp: time.Now().UnixNano(),
+		Message: fmt.Sprintf("{Status change triggered by the event : %s}",event.String()),
 	})
-	if err ==nil && ai.stateStateEventHandler != nil {
-	ai.stateStateEventHandler.HandleEvent(
+
+	if err ==nil && ai.statusChangeEventHandler != nil {
+	ai.statusChangeEventHandler.HandleEvent(
 		&rmevent.RMApplicationUpdateEvent{
 			RmID:                 ai.rmId,
 			AcceptedApplications: make([]*si.AcceptedApplication, 0),

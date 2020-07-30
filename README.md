@@ -49,12 +49,14 @@ contribute your ideas, explore use cases, or participate the development.
 
 ## Code Structure
 
-Apache YuniKorn (Incubating) project is consisted by 4 git repositories:
+Apache YuniKorn (Incubating) project has the following git repositories:
 
 - [yunikorn-core](https://github.com/apache/incubator-yunikorn-core/) : the scheduler brain :round_pushpin: 
 - [yunikorn-k8shim](https://github.com/apache/incubator-yunikorn-k8shim) : the adaptor to Kubernetes
 - [yunikorn-scheduler-interface](https://github.com/apache/incubator-yunikorn-scheduler-interface) : the common scheduling interface
 - [yunikorn-web](https://github.com/apache/incubator-yunikorn-web) : the web UI
+- [yunikorn-release](https://github.com/apache/incubator-yunikorn-release/): the repo manages yunikorn releases, including the helm charts
+- [yunikorn-site](https://github.com/apache/incubator-yunikorn-site/): the source code for [yunikorn website](http://yunikorn.apache.org/)
 
-The `yunikorn-core` is the brain of the scheduler, which makes placement decisions (Allocate container X on node Y) according
-to pre configured policies. Scheduler core is implemented in a way to be agnostic to scheduler implementation.
+The `yunikorn-core` is the brain of the scheduler, which makes placement decisions (allocate container X on node Y) according
+to the builtin rich scheduling policies. Scheduler core implementation is agnostic to the underneath resource manager system.

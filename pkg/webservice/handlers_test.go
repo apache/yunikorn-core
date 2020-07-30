@@ -206,17 +206,16 @@ partitions:
 	// add a new app
 	appInfo := cache.CreateNewApplicationInfo("app-1", partitionName, "root.default")
 	err := cache.AddAppToPartition(appInfo, defaultPartition)
-	if err != nil {
-		t.Errorf("add application to partition should not have failed: %v", err)
-	}
+	assert.NilError(t, err, "Failed to add Application to Partition.")
 	assert.Equal(t, appInfo.GetApplicationState(), "New")
 	assert.Equal(t, 1, len(defaultPartition.GetApplications()))
 
 	NewWebApp(clusterInfo, nil)
 
 	// Passing "root.default" as filter return 1 application
-	req, errReq := http.NewRequest("GET", "/ws/v1/apps?queue=root.default", strings.NewReader(""))
-	assert.NilError(t, errReq, "App Handler request failed")
+	var req *http.Request
+	req, err = http.NewRequest("GET", "/ws/v1/apps?queue=root.default", strings.NewReader(""))
+	assert.NilError(t, err, "App Handler request failed")
 	resp := &MockResponseWriter{}
 	var appsDao []*dao.ApplicationDAOInfo
 	getApplicationsInfo(resp, req)
@@ -225,39 +224,36 @@ partitions:
 	assert.Equal(t, len(appsDao), 1)
 
 	// Passing "root.q1" as filter return 0 application as there is no app running in "root.q1" queue
-	req1, err1 := http.NewRequest("GET", "/ws/v1/apps?queue=root.q1", strings.NewReader(""))
-	assert.NilError(t, err1, "App Handler request failed")
-	resp1 := &MockResponseWriter{}
-	var appsDao1 []*dao.ApplicationDAOInfo
-	getApplicationsInfo(resp1, req1)
-	err = json.Unmarshal(resp1.outputBytes, &appsDao1)
+	req, err = http.NewRequest("GET", "/ws/v1/apps?queue=root.q1", strings.NewReader(""))
+	assert.NilError(t, err, "App Handler request failed")
+	resp = &MockResponseWriter{}
+	getApplicationsInfo(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &appsDao)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, len(appsDao1), 0)
+	assert.Equal(t, len(appsDao), 0)
 
 	// Not passing any queue filter (only handler endpoint) return all applications
-	req2, err2 := http.NewRequest("GET", "/ws/v1/apps", strings.NewReader(""))
-	assert.NilError(t, err2, "App Handler request failed")
-	resp2 := &MockResponseWriter{}
-	var appsDao2 []*dao.ApplicationDAOInfo
-	getApplicationsInfo(resp2, req2)
-	err = json.Unmarshal(resp2.outputBytes, &appsDao2)
+	req, err = http.NewRequest("GET", "/ws/v1/apps", strings.NewReader(""))
+	assert.NilError(t, err, "App Handler request failed")
+	resp = &MockResponseWriter{}
+	getApplicationsInfo(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &appsDao)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, len(appsDao2), 1)
+	assert.Equal(t, len(appsDao), 1)
 
 	// Passing "root.q1.default" as filter return 0 application though child queue name is same but different queue path
-	req3, err3 := http.NewRequest("GET", "/ws/v1/apps?queue=root.q1.default", strings.NewReader(""))
-	assert.NilError(t, err3, "App Handler request failed")
-	resp3 := &MockResponseWriter{}
-	var appsDao3 []*dao.ApplicationDAOInfo
-	getApplicationsInfo(resp3, req3)
-	err = json.Unmarshal(resp3.outputBytes, &appsDao3)
+	req, err = http.NewRequest("GET", "/ws/v1/apps?queue=root.q1.default", strings.NewReader(""))
+	assert.NilError(t, err, "App Handler request failed")
+	resp = &MockResponseWriter{}
+	getApplicationsInfo(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &appsDao)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, len(appsDao3), 0)
+	assert.Equal(t, len(appsDao), 0)
 
 	// Passing "root.default(spe" as filter throws bad request error as queue name doesn't comply with expected characters
-	req4, err4 := http.NewRequest("GET", "/ws/v1/apps?queue=root.default(spe", strings.NewReader(""))
-	assert.NilError(t, err4, "App Handler request failed")
-	resp4 := &MockResponseWriter{}
-	getApplicationsInfo(resp4, req4)
-	assert.Equal(t, 400, resp4.statusCode)
+	req, err = http.NewRequest("GET", "/ws/v1/apps?queue=root.default(spe", strings.NewReader(""))
+	assert.NilError(t, err, "App Handler request failed")
+	resp = &MockResponseWriter{}
+	getApplicationsInfo(resp, req)
+	assert.Equal(t, 400, resp.statusCode)
 }

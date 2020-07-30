@@ -19,6 +19,7 @@ package webservice
 
 import (
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"net/http"
 	"runtime"
@@ -83,29 +84,20 @@ func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	queueName := r.URL.Query().Get("queue")
-	if queueName != "" {
-		queueNameArr := strings.Split(queueName, ".")
-		for _, name := range queueNameArr {
-			if !configs.QueueNameRegExp.MatchString(name) {
-				http.Error(w, "Invalid queue name "+name+", a name must only have alphanumeric characters,"+
-					" - or _, and be no longer than 64 characters", http.StatusBadRequest)
-			}
-		}
+	queueErr := validateQueue(queueName)
+	if queueErr != nil {
+		http.Error(w, queueErr.Error(), http.StatusBadRequest)
+		return
 	}
+
 	var appsDao []*dao.ApplicationDAOInfo
 	lists := gClusterInfo.ListPartitions()
 	for _, k := range lists {
 		partition := gClusterInfo.GetPartition(k)
 		appList := partition.GetApplications()
 		for _, app := range appList {
-			if len(queueName) > 0 {
-				if strings.EqualFold(queueName, app.QueueName) {
-					appDao := getApplicationJSON(app)
-					appsDao = append(appsDao, appDao)
-				}
-			} else {
-				appDao := getApplicationJSON(app)
-				appsDao = append(appsDao, appDao)
+			if len(queueName) == 0 || strings.EqualFold(queueName, app.QueueName) {
+				appsDao = append(appsDao, getApplicationJSON(app))
 			}
 		}
 	}
@@ -113,6 +105,20 @@ func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func validateQueue(queueName string) error {
+	if queueName != "" {
+		queueNameArr := strings.Split(queueName, ".")
+		for _, name := range queueNameArr {
+			if !configs.QueueNameRegExp.MatchString(name) {
+				return errors.New("Problem in Queue query parameter parsing as queue param '" + queueName + "' " +
+					"contains invalid queue name '" + name + "'. Queue name must only have alphanumeric characters," +
+					" - or _, and be no longer than 64 characters.")
+			}
+		}
+	}
+	return nil
 }
 
 func getNodesInfo(w http.ResponseWriter, r *http.Request) {

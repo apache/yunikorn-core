@@ -213,19 +213,13 @@ func (sn *SchedulingNode) preReserveConditions(allocID string) bool {
 func (sn *SchedulingNode) preConditions(allocID string, allocate bool) bool {
 	// Check the predicates plugin (k8shim)
 	if plugin := plugins.GetPredicatesPlugin(); plugin != nil {
-		log.Logger().Debug("checking predicates",
-			zap.String("allocationId", allocID),
-			zap.String("nodeID", sn.NodeID),
-			zap.Bool("allocation", allocate))
+		// checking predicates
 		if err := plugin.Predicates(&si.PredicatesArgs{
 			AllocationKey: allocID,
 			NodeID:        sn.NodeID,
 			Allocate:      allocate,
 		}); err != nil {
-			log.Logger().Debug("running predicates failed",
-				zap.String("allocationId", allocID),
-				zap.String("nodeID", sn.NodeID),
-				zap.Error(err))
+			// running predicates failed
 			return false
 		}
 	}

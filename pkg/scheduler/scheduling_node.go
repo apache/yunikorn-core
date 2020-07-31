@@ -213,19 +213,13 @@ func (sn *SchedulingNode) preReserveConditions(allocID string) bool {
 func (sn *SchedulingNode) preConditions(allocID string, allocate bool) bool {
 	// Check the predicates plugin (k8shim)
 	if plugin := plugins.GetPredicatesPlugin(); plugin != nil {
-		log.Logger().Debug("checking predicates",
-			zap.String("allocationId", allocID),
-			zap.String("nodeID", sn.NodeID),
-			zap.Bool("allocation", allocate))
+		// checking predicates
 		if err := plugin.Predicates(&si.PredicatesArgs{
 			AllocationKey: allocID,
 			NodeID:        sn.NodeID,
 			Allocate:      allocate,
 		}); err != nil {
-			log.Logger().Debug("running predicates failed",
-				zap.String("allocationId", allocID),
-				zap.String("nodeID", sn.NodeID),
-				zap.Error(err))
+			// running predicates failed
 			return false
 		}
 	}
@@ -268,10 +262,7 @@ func (sn *SchedulingNode) preAllocateCheck(res *resources.Resource, resKey strin
 	available.SubFrom(sn.getAllocatingResource())
 	// check the request fits in what we have calculated
 	if !resources.FitIn(available, res) {
-		log.Logger().Debug("requested resource is larger than currently available node resources",
-			zap.String("nodeID", sn.NodeID),
-			zap.Any("requested", res),
-			zap.Any("available", available))
+		// requested resource is larger than currently available node resources
 		return fmt.Errorf("pre alloc check: requested resource %s is larger than currently available %s resource on %s", res.String(), available.String(), sn.NodeID)
 	}
 	// can allocate, based on resource size

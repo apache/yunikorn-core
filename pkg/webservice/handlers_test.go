@@ -193,8 +193,7 @@ partitions:
 
 	configs.MockSchedulerConfigByData([]byte(configDefault))
 	if _, err := cache.SetClusterInfoFromConfigFile(clusterInfo, rmID, policyGroup); err != nil {
-		t.Errorf("Error when load clusterInfo from config %v", err)
-		return
+		t.Fatalf("Error when load clusterInfo from config %v", err)
 	}
 	assert.Equal(t, 1, len(clusterInfo.ListPartitions()))
 

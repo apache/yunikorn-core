@@ -39,7 +39,7 @@ jobs:
         - make test
         - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.22.2
         - make lint
-      after_success: bash <(curl -s https://codecov.io/bash) -v 
+      after_success: bash <(curl -s https://codecov.io/bash) -v
 
 notifications:
   webhooks: https://www.travisbuddy.com/

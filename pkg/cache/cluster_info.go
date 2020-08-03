@@ -146,6 +146,14 @@ func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
 	}
 }
 
+// Get the config name.
+// Locked call, used outside of the cache.
+func (m *ClusterInfo) GetPolicyGroup() string {
+	m.RLock()
+	defer m.RUnlock()
+	return m.policyGroup
+}
+
 // Get the list of partitions.
 // Locked call, used outside of the cache.
 func (m *ClusterInfo) ListPartitions() []string {
@@ -461,9 +469,6 @@ func (m *ClusterInfo) processRMRegistrationEvent(event *commonevents.RegisterRME
 	for _, u := range updatedPartitions {
 		updatedPartitionsInterfaces = append(updatedPartitionsInterfaces, u)
 	}
-
-	// Keep track of the config, cannot be changed for this RM
-	m.policyGroup = event.RMRegistrationRequest.PolicyGroup
 
 	// Send updated partitions to scheduler
 	m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerUpdatePartitionsConfigEvent{

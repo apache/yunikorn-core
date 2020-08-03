@@ -35,7 +35,7 @@ import (
 // set of scheduler resources.
 type SchedulerConfig struct {
 	Partitions []PartitionConfig
-	Checksum   []byte
+	Checksum   [32]byte `yaml:"-" json:"-"`
 }
 
 // The partition object for each partition:
@@ -157,8 +157,8 @@ func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) 
 		return nil, err
 	}
 
-	h := sha256.New()
-	conf.Checksum = h.Sum(content)
+	// h := sha256.New()
+	conf.Checksum = sha256.Sum256(content)
 	return conf, err
 }
 

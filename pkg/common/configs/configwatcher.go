@@ -79,6 +79,7 @@ func (cw *ConfigWatcher) RegisterCallback(reloader ConfigReloader) {
 // returns true if config file state remains same,
 // returns false if config file state changes
 func (cw *ConfigWatcher) runOnce() bool {
+	// acquire the lock to avoid Checksum changed externally
 	cw.lock.Lock()
 	defer cw.lock.Unlock()
 
@@ -89,9 +90,7 @@ func (cw *ConfigWatcher) runOnce() bool {
 		return false
 	}
 
-	// acquire the lock to avoid Checksum changed externally
-	same := bytes.Equal(newConfig.Checksum, ConfigContext.Get(cw.policyGroup).Checksum)
-	if same {
+	if bytes.Equal(newConfig.Checksum[:], ConfigContext.Get(cw.policyGroup).Checksum[:]) {
 		// check sum equals, file not changed
 		time.Sleep(1 * time.Second)
 		return true

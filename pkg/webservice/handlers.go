@@ -19,6 +19,7 @@ package webservice
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"runtime"
@@ -26,6 +27,7 @@ import (
 	"strings"
 
 	"go.uber.org/zap"
+	"gopkg.in/yaml.v2"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
@@ -290,4 +292,34 @@ func getContainerHistory(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
+}
+
+func getClusterConfig(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	jsonOutput := false
+	query := r.URL.Query()
+	// check if we have a request for json output
+	if len(query) != 0 {
+		if _, ok := query["json"]; ok {
+			jsonOutput = true
+		}
+	}
+
+	var marshalledConf []byte
+	var err error
+	conf := configs.ConfigContext.Get(gClusterInfo.GetPolicyGroup())
+	if jsonOutput {
+		marshalledConf, err = json.Marshal(&conf)
+	} else {
+		marshalledConf, err = yaml.Marshal(&conf)
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	// add readable form of checksum
+	sha256 := fmt.Sprintf("\nsha256 checksum: %X", conf.Checksum)
+	marshalledConf = append(marshalledConf, sha256...)
+	if _, err = w.Write(marshalledConf); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }

@@ -24,11 +24,36 @@ import (
 	"strings"
 	"testing"
 
+	"gopkg.in/yaml.v2"
 	"gotest.tools/assert"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/cache"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 )
+
+const startConf = `
+partitions:
+  - name: default
+    nodesortpolicy:
+        type: fair
+    queues:
+      - name: root
+        properties:
+          first: "some value with spaces"
+          second: somethingElse
+`
+const updatedConf = `
+partitions:
+  - name: default
+    nodesortpolicy:
+        type: binpacking
+    queues:
+      - name: root
+        properties:
+          first: "changedValue"
+`
 
 func TestValidateConf(t *testing.T) {
 	tests := []struct {
@@ -174,4 +199,85 @@ func TestContainerHistory(t *testing.T) {
 	assert.Equal(t, len(contHist), 5, "incorrect number of records returned")
 	assert.Equal(t, contHist[0].TotalContainers, "2", "metric 1 should be 1 apps and was not")
 	assert.Equal(t, contHist[4].TotalContainers, "300", "metric 5 should be 300 apps and was not")
+}
+
+func TestGetConfigYAML(t *testing.T) {
+	rmID := "rm-123"
+	policyGroup := "default-policy-group"
+	gClusterInfo = cache.NewClusterInfo()
+
+	configs.MockSchedulerConfigByData([]byte(startConf))
+	if _, err := cache.SetClusterInfoFromConfigFile(gClusterInfo, rmID, policyGroup); err != nil {
+		t.Fatalf("Error when load clusterInfo from config %v", err)
+	}
+	// No err check: new request always returns correctly
+	//nolint: errcheck
+	req, _ := http.NewRequest("GET", "", nil)
+	resp := &MockResponseWriter{}
+	getClusterConfig(resp, req)
+	// yaml unmarshal handles the checksum add the end automatically in this implementation
+	conf := &configs.SchedulerConfig{}
+	err := yaml.Unmarshal(resp.outputBytes, conf)
+	assert.NilError(t, err, "failed to unmarshal config from response body")
+	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "fair", "node sort policy set incorrectly, not fair")
+
+	// pull the checksum out of the response
+	parts := strings.SplitAfter(string(resp.outputBytes), "sha256 checksum: ")
+	assert.Equal(t, len(parts), 2, "checksum boundary not found")
+	startConfSum := parts[1]
+
+	// change the config
+	configs.MockSchedulerConfigByData([]byte(updatedConf))
+	if _, _, err = cache.UpdateClusterInfoFromConfigFile(gClusterInfo, rmID); err != nil {
+		t.Fatalf("Error when updating clusterInfo from config %v", err)
+	}
+	getClusterConfig(resp, req)
+	t.Log(string(resp.outputBytes))
+	err = yaml.Unmarshal(resp.outputBytes, conf)
+	assert.NilError(t, err, "failed to unmarshal config from response body (updated config)")
+	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "binpacking", "node sort policy not updated")
+
+	parts = strings.SplitAfter(string(resp.outputBytes), "sha256 checksum: ")
+	assert.Equal(t, len(parts), 2, "checksum boundary not found")
+	updatedConfSum := parts[1]
+	assert.Assert(t, startConfSum != updatedConfSum, "checksums did not change in output")
+}
+
+func TestGetConfigJSON(t *testing.T) {
+	rmID := "rm-123"
+	policyGroup := "default-policy-group"
+	gClusterInfo = cache.NewClusterInfo()
+
+	configs.MockSchedulerConfigByData([]byte(startConf))
+	if _, err := cache.SetClusterInfoFromConfigFile(gClusterInfo, rmID, policyGroup); err != nil {
+		t.Fatalf("Error when load clusterInfo from config %v", err)
+	}
+	// No err check: new request always returns correctly
+	//nolint: errcheck
+	req, _ := http.NewRequest("GET", "?json", nil)
+	resp := &MockResponseWriter{}
+	getClusterConfig(resp, req)
+
+	// json unmarshal does not handle the checksum add the end automatically
+	// need to remove it before unmarshalling
+	parts := strings.SplitAfter(string(resp.outputBytes), "\n")
+	assert.Equal(t, len(parts), 2, "checksum boundary not found (json)")
+	startConfSum := parts[1]
+	conf := &configs.SchedulerConfig{}
+	err := json.Unmarshal([]byte(parts[0]), conf)
+	assert.NilError(t, err, "failed to unmarshal config from response body")
+	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "fair", "node sort policy set incorrectly, not fair")
+
+	// change the config
+	configs.MockSchedulerConfigByData([]byte(updatedConf))
+	if _, _, err = cache.UpdateClusterInfoFromConfigFile(gClusterInfo, rmID); err != nil {
+		t.Fatalf("Error when updating clusterInfo from config %v", err)
+	}
+	getClusterConfig(resp, req)
+	parts = strings.SplitAfter(string(resp.outputBytes), "\n")
+	assert.Equal(t, len(parts), 2, "checksum boundary not found (json changed)")
+	assert.Assert(t, startConfSum != parts[1], "checksums did not change in output: %s, %s", startConfSum, parts[1])
+	err = json.Unmarshal([]byte(parts[0]), conf)
+	assert.NilError(t, err, "failed to unmarshal config from response body (updated config)")
+	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "binpacking", "node sort policy not updated")
 }

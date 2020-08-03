@@ -30,6 +30,8 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+var emptySum = [32]byte{}
+
 func TestConfigSerdeQueues(t *testing.T) {
 	conf := SchedulerConfig{
 		Partitions: []PartitionConfig{
@@ -121,7 +123,7 @@ func TestConfigSerdeQueues(t *testing.T) {
 				},
 			},
 		},
-		Checksum: []byte(""),
+		Checksum: emptySum,
 	}
 
 	SerdeTest(t, conf, "QueueConfig")
@@ -186,7 +188,7 @@ func TestConfigSerdeLimits(t *testing.T) {
 				},
 			},
 		},
-		Checksum: []byte(""),
+		Checksum: emptySum,
 	}
 
 	SerdeTest(t, conf, "LimitConfig")

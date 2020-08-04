@@ -57,7 +57,7 @@ func (tr *tagRule) initialise(conf configs.PlacementRule) error {
 }
 
 func (tr *tagRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
-	// if the tag is not present we can skipp all other processing
+	// if the tag is not present we can skip all other processing
 	tagVal := app.GetTag(tr.tagName)
 	if tagVal == "" {
 		return "", nil
@@ -70,33 +70,12 @@ func (tr *tagRule) placeApplication(app *cache.ApplicationInfo, info *cache.Part
 			zap.String("tagName", tr.tagName))
 		return "", nil
 	}
-	var parentName string
-	var err error
 	queueName := tagVal
 	// if we have a fully qualified queue in the value do not run the parent rule
 	if !strings.HasPrefix(queueName, configs.RootQueue+cache.DOT) {
-		// run the parent rule if set
-		if tr.parent != nil {
-			parentName, err = tr.parent.placeApplication(app, info)
-			// failed parent rule, fail this rule
-			if err != nil {
-				return "", err
-			}
-			// rule did not match: this could be filter or create flag related
-			if parentName == "" {
-				return "", nil
-			}
-			// check if this is a parent queue and qualify it
-			if !strings.HasPrefix(parentName, configs.RootQueue+cache.DOT) {
-				parentName = configs.RootQueue + cache.DOT + parentName
-			}
-			if info.GetQueue(parentName).IsLeafQueue() {
-				return "", fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
-			}
-		}
-		// the parent is set from the rule otherwise set it to the root
+		parentName, err := tr.executeParentPlacement(app, info)
 		if parentName == "" {
-			parentName = configs.RootQueue
+			return parentName, err
 		}
 		queueName = parentName + cache.DOT + replaceDot(tagVal)
 	}

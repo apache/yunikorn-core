@@ -19,9 +19,6 @@
 package placement
 
 import (
-	"fmt"
-	"strings"
-
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
@@ -57,30 +54,9 @@ func (ur *userRule) placeApplication(app *cache.ApplicationInfo, info *cache.Par
 			zap.Any("user", app.GetUser()))
 		return "", nil
 	}
-	var parentName string
-	var err error
-	// run the parent rule if set
-	if ur.parent != nil {
-		parentName, err = ur.parent.placeApplication(app, info)
-		// failed parent rule, fail this rule
-		if err != nil {
-			return "", err
-		}
-		// rule did not match: this could be filter or create flag related
-		if parentName == "" {
-			return "", nil
-		}
-		// check if this is a parent queue and qualify it
-		if !strings.HasPrefix(parentName, configs.RootQueue+cache.DOT) {
-			parentName = configs.RootQueue + cache.DOT + parentName
-		}
-		if info.GetQueue(parentName).IsLeafQueue() {
-			return "", fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
-		}
-	}
-	// the parent is set from the rule otherwise set it to the root
+	parentName, err := ur.executeParentPlacement(app, info)
 	if parentName == "" {
-		parentName = configs.RootQueue
+		return parentName, err
 	}
 	queueName := parentName + cache.DOT + replaceDot(userName)
 	log.Logger().Debug("User rule intermediate result",

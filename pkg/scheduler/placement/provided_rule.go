@@ -19,7 +19,6 @@
 package placement
 
 import (
-	"fmt"
 	"strings"
 
 	"go.uber.org/zap"
@@ -63,33 +62,12 @@ func (pr *providedRule) placeApplication(app *cache.ApplicationInfo, info *cache
 			zap.Any("user", app.GetUser()))
 		return "", nil
 	}
-	var parentName string
-	var err error
 	queueName := app.QueueName
 	// if we have a fully qualified queue passed in do not run the parent rule
 	if !strings.HasPrefix(queueName, configs.RootQueue+cache.DOT) {
-		// run the parent rule if set
-		if pr.parent != nil {
-			parentName, err = pr.parent.placeApplication(app, info)
-			// failed parent rule, fail this rule
-			if err != nil {
-				return "", err
-			}
-			// rule did not return a parent: this could be filter or create flag related
-			if parentName == "" {
-				return "", nil
-			}
-			// check if this is a parent queue and qualify it
-			if !strings.HasPrefix(parentName, configs.RootQueue+cache.DOT) {
-				parentName = configs.RootQueue + cache.DOT + parentName
-			}
-			if info.GetQueue(parentName).IsLeafQueue() {
-				return "", fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
-			}
-		}
-		// the parent is set from the rule otherwise set it to the root
+		parentName, err := pr.executeParentPlacement(app, info)
 		if parentName == "" {
-			parentName = configs.RootQueue
+			return parentName, err
 		}
 		// Make it a fully qualified queue
 		queueName = parentName + cache.DOT + replaceDot(queueName)

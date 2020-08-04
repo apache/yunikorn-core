@@ -71,33 +71,12 @@ func (fr *fixedRule) placeApplication(app *cache.ApplicationInfo, info *cache.Pa
 			zap.String("queueName", fr.queue))
 		return "", nil
 	}
-	var parentName string
-	var err error
 	queueName := fr.queue
 	// if the fixed queue is already fully qualified skip the parent check
 	if !fr.qualified {
-		// run the parent rule if set
-		if fr.parent != nil {
-			parentName, err = fr.parent.placeApplication(app, info)
-			// failed parent rule, fail this rule
-			if err != nil {
-				return "", err
-			}
-			// rule did not return a parent: this could be filter or create flag related
-			if parentName == "" {
-				return "", nil
-			}
-			// check if this is a parent queue and qualify it
-			if !strings.HasPrefix(parentName, configs.RootQueue+cache.DOT) {
-				parentName = configs.RootQueue + cache.DOT + parentName
-			}
-			if info.GetQueue(parentName).IsLeafQueue() {
-				return "", fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
-			}
-		}
-		// the parent is set from the rule otherwise set it to the root
+		parentName, err := fr.executeParentPlacement(app, info)
 		if parentName == "" {
-			parentName = configs.RootQueue
+			return parentName, err
 		}
 		queueName = parentName + cache.DOT + fr.queue
 	}

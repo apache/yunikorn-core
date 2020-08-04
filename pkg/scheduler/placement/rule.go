@@ -72,6 +72,37 @@ func (r *basicRule) getName() string {
 	return "unnamed rule"
 }
 
+func (r *basicRule) executeParentPlacement(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
+	var parentName string
+	var err error
+
+	// run the parent rule if set
+	parent := r.getParent()
+	if parent != nil {
+		parentName, err = parent.placeApplication(app, info)
+		// failed parent rule, fail this rule
+		if err != nil {
+			return "", err
+		}
+		// rule did not return a parent: this could be filter or create flag related
+		if parentName == "" {
+			return "", nil
+		}
+		// check if this is a parent queue and qualify it
+		if !strings.HasPrefix(parentName, configs.RootQueue+cache.DOT) {
+			parentName = configs.RootQueue + cache.DOT + parentName
+		}
+		if info.GetQueue(parentName).IsLeafQueue() {
+			return "", fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
+		}
+	}
+	// the parent is set from the rule otherwise set it to the root
+	if parentName == "" {
+		parentName = configs.RootQueue
+	}
+	return parentName, nil
+}
+
 // Create a new rule based on the getName of the rule requested. The rule is initialised with the configuration and can
 // be used directly.
 func newRule(conf configs.PlacementRule) (rule, error) {
@@ -92,6 +123,9 @@ func newRule(conf configs.PlacementRule) (rule, error) {
 	// rule that uses a tag from the application (like namespace)
 	case "tag":
 		newRule = &tagRule{}
+	// rule that uses a mapping of a tag from the application
+	case "mapping":
+		newRule = &mappingRule{}
 	// test rule not to be used outside of testing code
 	case "test":
 		newRule = &testRule{}

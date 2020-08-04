@@ -296,21 +296,15 @@ func getContainerHistory(w http.ResponseWriter, r *http.Request) {
 
 func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
-	jsonOutput := false
-	query := r.URL.Query()
-	// check if we have a request for json output
-	if len(query) != 0 {
-		if _, ok := query["json"]; ok {
-			jsonOutput = true
-		}
-	}
 
+	conf := configs.ConfigContext.Get(gClusterInfo.GetPolicyGroup())
 	var marshalledConf []byte
 	var err error
-	conf := configs.ConfigContext.Get(gClusterInfo.GetPolicyGroup())
-	if jsonOutput {
+	// check if we have a request for json output
+	if r.Header.Get("Accept") == "application/json" {
 		marshalledConf, err = json.Marshal(&conf)
 	} else {
+		w.Header().Set("Content-Type", "application/x-yaml; charset=UTF-8")
 		marshalledConf, err = yaml.Marshal(&conf)
 	}
 	if err != nil {

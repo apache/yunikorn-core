@@ -231,8 +231,9 @@ func TestGetConfigYAML(t *testing.T) {
 	if _, _, err = cache.UpdateClusterInfoFromConfigFile(gClusterInfo, rmID); err != nil {
 		t.Fatalf("Error when updating clusterInfo from config %v", err)
 	}
+	// check that we return yaml by default, unmarshal will error when we don't
+	req.Header.Set("Accept", "unknown")
 	getClusterConfig(resp, req)
-	t.Log(string(resp.outputBytes))
 	err = yaml.Unmarshal(resp.outputBytes, conf)
 	assert.NilError(t, err, "failed to unmarshal config from response body (updated config)")
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "binpacking", "node sort policy not updated")
@@ -254,7 +255,8 @@ func TestGetConfigJSON(t *testing.T) {
 	}
 	// No err check: new request always returns correctly
 	//nolint: errcheck
-	req, _ := http.NewRequest("GET", "?json", nil)
+	req, _ := http.NewRequest("GET", "", nil)
+	req.Header.Set("Accept", "application/json")
 	resp := &MockResponseWriter{}
 	getClusterConfig(resp, req)
 
@@ -265,8 +267,8 @@ func TestGetConfigJSON(t *testing.T) {
 	startConfSum := parts[1]
 	conf := &configs.SchedulerConfig{}
 	err := json.Unmarshal([]byte(parts[0]), conf)
-	assert.NilError(t, err, "failed to unmarshal config from response body")
-	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "fair", "node sort policy set incorrectly, not fair")
+	assert.NilError(t, err, "failed to unmarshal config from response body (json)")
+	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "fair", "node sort policy set incorrectly, not fair (json)")
 
 	// change the config
 	configs.MockSchedulerConfigByData([]byte(updatedConf))
@@ -276,8 +278,8 @@ func TestGetConfigJSON(t *testing.T) {
 	getClusterConfig(resp, req)
 	parts = strings.SplitAfter(string(resp.outputBytes), "\n")
 	assert.Equal(t, len(parts), 2, "checksum boundary not found (json changed)")
-	assert.Assert(t, startConfSum != parts[1], "checksums did not change in output: %s, %s", startConfSum, parts[1])
+	assert.Assert(t, startConfSum != parts[1], "checksums did not change in json output: %s, %s", startConfSum, parts[1])
 	err = json.Unmarshal([]byte(parts[0]), conf)
-	assert.NilError(t, err, "failed to unmarshal config from response body (updated config)")
-	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "binpacking", "node sort policy not updated")
+	assert.NilError(t, err, "failed to unmarshal config from response body (json, updated config)")
+	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "binpacking", "node sort policy not updated (json)")
 }

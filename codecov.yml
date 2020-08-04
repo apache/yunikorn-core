@@ -20,3 +20,7 @@ codecov:
   notify:
     wait_for_ci: no
 
+comment:
+  layout: "reach,diff,flags,tree"
+  behavior: default
+  require_changes: no

@@ -112,8 +112,8 @@ func validateQueue(queueName string) error {
 		queueNameArr := strings.Split(queueName, ".")
 		for _, name := range queueNameArr {
 			if !configs.QueueNameRegExp.MatchString(name) {
-				return fmt.Errorf("problem in queue query parameter parsing as queue param " +
-					"%s contains invalid queue name %s. Queue name must only have " +
+				return fmt.Errorf("problem in queue query parameter parsing as queue param "+
+					"%s contains invalid queue name %s. Queue name must only have "+
 					"alphanumeric characters, - or _, and be no longer than 64 characters", queueName, name)
 			}
 		}

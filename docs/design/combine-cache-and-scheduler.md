@@ -266,16 +266,141 @@ These operations shares a lot of common properties:
 - RM send RegisterRMEvent/ConfigUpdateRMEvent to scheduler
 - Scheduler load config file:
 - Scheduler wlock(cluster): 
-  - For new partitions: scheduler add new partition #with queues
-  - For updated partitions: 
+  - (1) For create new partitions: scheduler add new partition #with queues
+  - (2) For updated partitions: 
     - scheduler wlock(partition)
       - scheduler wlock(queue) #along the hierarchy
         - update queue configs. 
-  - For delete partitions: 
+  - (3) For delete partitions: 
     - scheduler wlock(partition)
       - scheduler.delete_all_apps(partition) # See common method below
       - scheduler.delete_queue(root) # See common method below
       - scheduler.delete_nodes(partition) # See common method below
+```
+
+**Add Application**
+
+```
+- RM send RMUpdateRequestEvent, includes NewApplication 
+- Scheduler getPartition
+  - wlock(Partition)
+    - queue = getQueue(app) 
+    - wlock(queue) 
+      - add-app-to-queue
+```
+
+**Remove Application**
+
+```
+- RM send RMUpdateRequestEvent, includes NewApplication 
+- Scheduler getPartition
+  - wlock(Partition)
+    - app = getApp(app) 
+    - wlock(app):
+      - save allocating/allocated/pending resources
+	    - for alloc := app.alloc:
+	      app.remove_allocation(alloc)
+	    - cleanup all pending requests
+	  - Deduct allocating/allocated/pending resources along the queue hierarchies. (wlock of queues)
+```
+
+**Update pending ask of application**
+
+```
+- RM send RMUpdateRequestEvent, includes Asks, or AllocationAsksToRelease
+- Scheduler getPartition
+  - rlock(Partition) # NOTE: this is rlock 
+  - app = getApp(app)
+  - wlock(app)
+    - Update pending ask.
+  - Deduct pending resources along the queue hierarchies. (wlock of queues)
+```
+
+**Release Allocation** (Initiated by RM)
+
+```
+- RM send RMUpdateRequestEvent, includes AllocationsToRelease
+- Scheduler getPartition
+  - wlock(Partition) # this is not a typo, we need wlock since allocation is more serious than pending ask. 
+    - app = getApp(app)
+  - wlock(app)
+    - app.remove_allocation(alloc)
+  - Deduct allocated resources along the queue hierarchies. (wlock of queues)
+```
+
+**Release Allocation** (Initiated by Scheduler)
+
+```
+- Preemption logic get victim (AllocationProposalBundleEvent), and send to scheduler to commit the proposal.
+  - Preemption logic doesn't have to hold wlock for anything.
+- (Details see Function: scheduler.commit below)
+```
+
+**Add new node** 
+
+```
+- RM send RMUpdateRequestEvent, includes NewSchedulableNodes
+- Scheduler getPartition 
+  - wlock(partition)
+    - addNode
+    - update other fields like total partition resource.
+```
+
+**Remove node** 
+
+```
+- RM send RMUpdateRequestEvent, includes update node (UpdateNodeInfo_DECOMISSION) 
+- Scheduler getPartition 
+  - wlock(partition)
+    - rlock(node)
+      - getCopyOfAllocations,Reservations
+    - for alloc : allocations/reservations 
+      - app.remove_allocation(alloc)
+      - update queue allocated resources (along the hierarchy) (wlock(queues))
+    - remove node from map.
+```
+
+**Scheduler main allocation logic.** 
+
+```
+- go scheduler.allocate() (can multi-thread)
+- scheduler.allocate 
+  - for partition : cluster.getPartitionsClone(): 
+    - rlock(partition) 
+      - rlock(queue-hierarchy) 
+        - for app: queue
+          - rlock(app)
+            - for request : app.getRequests 
+              - for node : sorted-node-based-on-request(request) 
+                - rlock(node)
+                  - try-allocate-or-reserve, if succeded, return proposal.
+  - If get an proposal: 
+    # We need to update allocating resource of multiple objects, so we need to lock the partition
+    - wlock(partition) 
+      - wlock(app)
+        - updateAllocating  
+      - wlock(node)
+        - updateAllocating 
+      - wlock(queue-hierarchy) 
+        - updateAllocating.
+    - send proposal to commit event queue.
+```
+
+**Function: scheduler.commit**
+
+```
+go scheduler.commitProposal()
+- scheduler.commitProposal: 
+  proposal := <- scheduler.pendingProposal # get next proposal. 
+  partition := proposal.partition
+  wlock(partition): 
+     - if not precheck(proposal) # precheck all conditions for the proposals. 
+       - reject proposal. (see below handle rejected proposals)
+     - update-scheduler-internal-fields (queues, node, app):
+       - notify RM about new alloc/release.
+       
+go scheduler.handleRejectedProposals() 
+- # clean up properties like allocating resources. 
 ```
 
 **Function: scheduler.delete_queue(queue)**
@@ -320,10 +445,3 @@ app.remove_alloc(alloc)
      >> Emit alloc_completed_event to RMProxy 
      
 ```
-
-
-
-## Next Steps 
-
-1. Get rid of Cache object (there should have one object for one purpose)
-2. Write locking design.

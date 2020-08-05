@@ -157,7 +157,7 @@ func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) 
 		return nil, err
 	}
 
-	// h := sha256.New()
+	// Create a sha256 checksum for this validated config
 	conf.Checksum = sha256.Sum256(content)
 	return conf, err
 }

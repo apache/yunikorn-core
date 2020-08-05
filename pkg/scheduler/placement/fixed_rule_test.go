@@ -92,7 +92,7 @@ partitions:
 	var queue string
 	queue, err = fr.placeApplication(appInfo, partInfo)
 	if queue != "root.testqueue" || err != nil {
-		t.Errorf("fixed rule failed to place queue in correct queue '%s', err %v", queue, err)
+		t.Errorf("fixed rule failed to place app to correct queue '%s', err %v", queue, err)
 	}
 
 	// fixed queue that exists directly in hierarchy

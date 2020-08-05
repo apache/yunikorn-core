@@ -55,10 +55,10 @@ func (mr *mappingRule) initialise(conf configs.PlacementRule) error {
 	if mr.tagName == "" {
 		return fmt.Errorf("the mapping queue rules's tag part should be nonempty")
 	}
-	mr.values = strings.Split(parts[1], ",")
-	if len(mr.values) == 0 {
-		return fmt.Errorf("the mapping queue rules's from part should be nonempty")
+	if parts[1] == "" {
+		return fmt.Errorf("the mapping queue rules's values part should be nonempty")
 	}
+	mr.values = strings.Split(parts[1], ",")
 	mr.queueName = parts[2]
 	if mr.queueName == "" {
 		return fmt.Errorf("the mapping queue rules's queue part should be nonempty")
@@ -92,6 +92,7 @@ func (mr *mappingRule) placeApplication(app *cache.ApplicationInfo, info *cache.
 	for _, value := range mr.values {
 		if tagValue == value {
 			match = true
+			break
 		}
 	}
 	if !match {

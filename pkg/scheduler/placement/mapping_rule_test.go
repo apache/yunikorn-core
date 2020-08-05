@@ -40,7 +40,7 @@ func TestMappingRuleCreation(t *testing.T) {
 
 	// not 2 separators
 	conf = configs.PlacementRule{
-		Name: "mapping",
+		Name:  "mapping",
 		Value: "a:b",
 	}
 	mr, err = newRule(conf)
@@ -48,7 +48,7 @@ func TestMappingRuleCreation(t *testing.T) {
 		t.Errorf("mapping rule create did not fail with 1 separator")
 	}
 	conf = configs.PlacementRule{
-		Name: "mapping",
+		Name:  "mapping",
 		Value: "a:b:c:d",
 	}
 	mr, err = newRule(conf)
@@ -58,7 +58,7 @@ func TestMappingRuleCreation(t *testing.T) {
 
 	// empty tag value
 	conf = configs.PlacementRule{
-		Name: "mapping",
+		Name:  "mapping",
 		Value: ":b:c",
 	}
 	mr, err = newRule(conf)
@@ -68,7 +68,7 @@ func TestMappingRuleCreation(t *testing.T) {
 
 	// empty values part
 	conf = configs.PlacementRule{
-		Name: "mapping",
+		Name:  "mapping",
 		Value: "a::c",
 	}
 	mr, err = newRule(conf)
@@ -78,7 +78,7 @@ func TestMappingRuleCreation(t *testing.T) {
 
 	// empty queue name
 	conf = configs.PlacementRule{
-		Name: "mapping",
+		Name:  "mapping",
 		Value: "a:b:",
 	}
 	mr, err = newRule(conf)
@@ -88,7 +88,7 @@ func TestMappingRuleCreation(t *testing.T) {
 
 	// non-existing parent
 	conf = configs.PlacementRule{
-		Name: "mapping",
+		Name:  "mapping",
 		Value: "a:b:c",
 		Parent: &configs.PlacementRule{
 			Name: "nonexisting",
@@ -102,10 +102,10 @@ func TestMappingRuleCreation(t *testing.T) {
 
 func TestMappingRuleName(t *testing.T) {
 	conf := configs.PlacementRule{
-		Name: "mapping",
+		Name:  "mapping",
 		Value: "a:b,c:d",
 		Parent: &configs.PlacementRule{
-			Name: "mapping",
+			Name:  "mapping",
 			Value: "e:f:g",
 		},
 	}
@@ -140,10 +140,10 @@ partitions:
 		Groups: []string{},
 	}
 	conf := configs.PlacementRule{
-		Name: "mapping",
+		Name:  "mapping",
 		Value: "tag:value1,value2:root.testqueue",
 		Filter: configs.Filter{
-			Type: "deny",
+			Type:  "deny",
 			Users: []string{"testuser2"},
 		},
 	}
@@ -196,8 +196,8 @@ partitions:
 		Value:  "tag3:value4:testqueue2",
 		Create: true,
 		Parent: &configs.PlacementRule{
-			Name:   "fixed",
-			Value:  "root.testparent2",
+			Name:  "fixed",
+			Value: "root.testparent2",
 		},
 	}
 	mr, err = newRule(conf)

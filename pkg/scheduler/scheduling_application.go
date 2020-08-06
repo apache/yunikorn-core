@@ -638,10 +638,6 @@ func (sa *SchedulingApplication) tryNode(node *SchedulingNode, ask *schedulingAl
 	// create the key for the reservation
 	if err := node.preAllocateCheck(toAllocate, reservationKey(nil, sa, ask), false); err != nil {
 		// skip schedule onto node
-		log.Logger().Debug("skipping node for allocation: basic condition not satisfied",
-			zap.String("node", node.NodeID),
-			zap.Any("allocationKey", allocKey),
-			zap.Error(err))
 		return nil
 	}
 	// skip the node if conditions can not be satisfied

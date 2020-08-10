@@ -20,7 +20,7 @@ package cache
 
 import (
 	"fmt"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
+	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 	"strings"
@@ -55,17 +55,16 @@ type ApplicationInfo struct {
 	stateMachine      *fsm.FSM                   // application state machine
 	stateTimer        *time.Timer                // timer for state time
 
-	//TODO create a struct for it
-	statusChangeEventHandler commonevents.EventHandler
+	eventHandlers handler.EventHandlers
 	rmId                     string
 
 	sync.RWMutex
 }
 
 func NewApplicationInfoWithEventHandler(appID, partition, queueName string, ugi security.UserGroup, tags map[string]string,
-	eventHandler commonevents.EventHandler, rmId string) *ApplicationInfo {
+	eventHandler handler.EventHandlers, rmId string) *ApplicationInfo {
 	app := NewApplicationInfo(appID, partition, queueName, ugi, tags)
-	app.statusChangeEventHandler = eventHandler
+	app.eventHandlers = eventHandler
 	app.rmId = rmId
 	return app
 }
@@ -127,28 +126,31 @@ func (ai *ApplicationInfo) IsWaiting() bool {
 // The state machine handles the locking.
 func (ai *ApplicationInfo) HandleApplicationEvent(event applicationEvent) error {
 	err := ai.stateMachine.Event(event.String(), ai)
-	updatedApps := make([]*si.UpdatedApplication, 0)
-	updatedApps = append(updatedApps, &si.UpdatedApplication{
-		ApplicationID: ai.ApplicationID,
-		State:         ai.stateMachine.Current(),
-		StateTransitionTimestamp: time.Now().UnixNano(),
-		Message: fmt.Sprintf("{Status change triggered by the event : %s}",event.String()),
-	})
-
-	if err ==nil && ai.statusChangeEventHandler != nil {
-	ai.statusChangeEventHandler.HandleEvent(
-		&rmevent.RMApplicationUpdateEvent{
-			RmID:                 ai.rmId,
-			AcceptedApplications: make([]*si.AcceptedApplication, 0),
-			RejectedApplications: make([]*si.RejectedApplication, 0),
-			UpdatedApplications: updatedApps,
-		})
-	}
 	// handle the same state transition not nil error (limit of fsm).
 	if err != nil && err.Error() == "no transition" {
 		return nil
 	}
 	return err
+}
+
+func (ai *ApplicationInfo) onStateChange(event *fsm.Event) {
+	updatedApps := make([]*si.UpdatedApplication, 0)
+	updatedApps = append(updatedApps, &si.UpdatedApplication{
+		ApplicationID: ai.ApplicationID,
+		State:         ai.stateMachine.Current(),
+		StateTransitionTimestamp: time.Now().UnixNano(),
+		Message: fmt.Sprintf("{Status change triggered by the event : %v}", event),
+	})
+
+	if ai.eventHandlers.RMProxyEventHandler != nil {
+		ai.eventHandlers.RMProxyEventHandler.HandleEvent(
+			&rmevent.RMApplicationUpdateEvent{
+				RmID:                 ai.rmId,
+				AcceptedApplications: make([]*si.AcceptedApplication, 0),
+				RejectedApplications: make([]*si.RejectedApplication, 0),
+				UpdatedApplications: updatedApps,
+			})
+	}
 }
 
 // Set the starting timer to make sure the application will not get stuck in a starting state too long.

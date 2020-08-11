@@ -104,7 +104,7 @@ partitions:
 
 	// wait until configuration is reloaded
 	if err = common.WaitFor(time.Second, 5*time.Second, func() bool {
-		return !bytes.Equal(configs.ConfigContext.Get("policygroup").Checksum, configChecksum)
+		return !bytes.Equal(configs.ConfigContext.Get("policygroup").Checksum[:], configChecksum[:])
 	}); err != nil {
 		t.Errorf("timeout waiting for configuration to be reloaded: %v", err)
 	}

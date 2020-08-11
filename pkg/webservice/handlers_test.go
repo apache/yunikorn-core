@@ -283,3 +283,82 @@ func TestGetConfigJSON(t *testing.T) {
 	assert.NilError(t, err, "failed to unmarshal config from response body (json, updated config)")
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "binpacking", "node sort policy not updated (json)")
 }
+
+func TestQueryParamInAppsHandler(t *testing.T) {
+	const configDefault = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        queues:
+        - name: default
+`
+	rmID := "rm-123"
+	policyGroup := "default-policy-group"
+	clusterInfo := cache.NewClusterInfo()
+
+	configs.MockSchedulerConfigByData([]byte(configDefault))
+	if _, err := cache.SetClusterInfoFromConfigFile(clusterInfo, rmID, policyGroup); err != nil {
+		t.Fatalf("Error when load clusterInfo from config %v", err)
+	}
+	assert.Equal(t, 1, len(clusterInfo.ListPartitions()))
+
+	// Check default partition
+	partitionName := "[" + rmID + "]default"
+	defaultPartition := clusterInfo.GetPartition(partitionName)
+	assert.Equal(t, 0, len(defaultPartition.GetApplications()))
+
+	// add a new app
+	appInfo := cache.CreateNewApplicationInfo("app-1", partitionName, "root.default")
+	err := cache.AddAppToPartition(appInfo, defaultPartition)
+	assert.NilError(t, err, "Failed to add Application to Partition.")
+	assert.Equal(t, appInfo.GetApplicationState(), "New")
+	assert.Equal(t, 1, len(defaultPartition.GetApplications()))
+
+	NewWebApp(clusterInfo, nil)
+
+	// Passing "root.default" as filter return 1 application
+	var req *http.Request
+	req, err = http.NewRequest("GET", "/ws/v1/apps?queue=root.default", strings.NewReader(""))
+	assert.NilError(t, err, "App Handler request failed")
+	resp := &MockResponseWriter{}
+	var appsDao []*dao.ApplicationDAOInfo
+	getApplicationsInfo(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &appsDao)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, len(appsDao), 1)
+
+	// Passing "root.q1" as filter return 0 application as there is no app running in "root.q1" queue
+	req, err = http.NewRequest("GET", "/ws/v1/apps?queue=root.q1", strings.NewReader(""))
+	assert.NilError(t, err, "App Handler request failed")
+	resp = &MockResponseWriter{}
+	getApplicationsInfo(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &appsDao)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, len(appsDao), 0)
+
+	// Not passing any queue filter (only handler endpoint) return all applications
+	req, err = http.NewRequest("GET", "/ws/v1/apps", strings.NewReader(""))
+	assert.NilError(t, err, "App Handler request failed")
+	resp = &MockResponseWriter{}
+	getApplicationsInfo(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &appsDao)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, len(appsDao), 1)
+
+	// Passing "root.q1.default" as filter return 0 application though child queue name is same but different queue path
+	req, err = http.NewRequest("GET", "/ws/v1/apps?queue=root.q1.default", strings.NewReader(""))
+	assert.NilError(t, err, "App Handler request failed")
+	resp = &MockResponseWriter{}
+	getApplicationsInfo(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &appsDao)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, len(appsDao), 0)
+
+	// Passing "root.default(spe" as filter throws bad request error as queue name doesn't comply with expected characters
+	req, err = http.NewRequest("GET", "/ws/v1/apps?queue=root.default(spe", strings.NewReader(""))
+	assert.NilError(t, err, "App Handler request failed")
+	resp = &MockResponseWriter{}
+	getApplicationsInfo(resp, req)
+	assert.Equal(t, 400, resp.statusCode)
+}

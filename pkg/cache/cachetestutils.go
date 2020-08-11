@@ -23,6 +23,7 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -89,4 +90,17 @@ func SetGuaranteedResource(info *QueueInfo, res *resources.Resource) {
 	if info != nil {
 		info.guaranteedResource = res
 	}
+}
+
+func CreateNewApplicationInfo(appID, partition, queueName string) *ApplicationInfo {
+	user := security.UserGroup{
+		User:   "testuser",
+		Groups: []string{},
+	}
+	tags := make(map[string]string)
+	return NewApplicationInfo(appID, partition, queueName, user, tags)
+}
+
+func AddAppToPartition(app *ApplicationInfo, partition *PartitionInfo) error {
+	return partition.addNewApplication(app, true)
 }

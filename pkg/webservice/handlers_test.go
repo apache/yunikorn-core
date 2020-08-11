@@ -202,8 +202,8 @@ func TestContainerHistory(t *testing.T) {
 }
 
 func TestGetConfigYAML(t *testing.T) {
-	rmID := "rm-123"
-	policyGroup := "default-policy-group"
+	const rmID = "rm-123"
+	const policyGroup = "default-policy-group"
 	gClusterInfo = cache.NewClusterInfo()
 
 	configs.MockSchedulerConfigByData([]byte(startConf))
@@ -245,8 +245,8 @@ func TestGetConfigYAML(t *testing.T) {
 }
 
 func TestGetConfigJSON(t *testing.T) {
-	rmID := "rm-123"
-	policyGroup := "default-policy-group"
+	const rmID = "rm-123"
+	const policyGroup = "default-policy-group"
 	gClusterInfo = cache.NewClusterInfo()
 
 	configs.MockSchedulerConfigByData([]byte(startConf))

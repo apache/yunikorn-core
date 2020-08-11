@@ -20,9 +20,6 @@ package cache
 
 import (
 	"fmt"
-	"github.com/apache/incubator-yunikorn-core/pkg/handler"
-	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 	"strings"
 	"sync"
 	"time"
@@ -32,7 +29,10 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
+	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 var (
@@ -56,16 +56,16 @@ type ApplicationInfo struct {
 	stateTimer        *time.Timer                // timer for state time
 
 	eventHandlers handler.EventHandlers
-	rmId                     string
+	rmID          string
 
 	sync.RWMutex
 }
 
 func NewApplicationInfoWithEventHandler(appID, partition, queueName string, ugi security.UserGroup, tags map[string]string,
-	eventHandler handler.EventHandlers, rmId string) *ApplicationInfo {
+	eventHandler handler.EventHandlers, rmID string) *ApplicationInfo {
 	app := NewApplicationInfo(appID, partition, queueName, ugi, tags)
 	app.eventHandlers = eventHandler
-	app.rmId = rmId
+	app.rmID = rmID
 	return app
 }
 
@@ -145,7 +145,7 @@ func (ai *ApplicationInfo) onStateChange(event *fsm.Event) {
 	if ai.eventHandlers.RMProxyEventHandler != nil {
 		ai.eventHandlers.RMProxyEventHandler.HandleEvent(
 			&rmevent.RMApplicationUpdateEvent{
-				RmID:                 ai.rmId,
+				RmID:                 ai.rmID,
 				AcceptedApplications: make([]*si.AcceptedApplication, 0),
 				RejectedApplications: make([]*si.RejectedApplication, 0),
 				UpdatedApplications: updatedApps,

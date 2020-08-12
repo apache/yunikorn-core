@@ -24,36 +24,36 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-type Route struct {
+type route struct {
 	Name        string
 	Method      string
 	Pattern     string
 	HandlerFunc http.HandlerFunc
 }
 
-type Routes []Route
+type routes []route
 
-var routes = Routes{
+var webRoutes = routes{
 	// endpoints to retrieve general scheduler info
-	Route{
+	route{
 		"Scheduler",
 		"GET",
 		"/ws/v1/queues",
 		getQueueInfo,
 	},
-	Route{
+	route{
 		"Cluster",
 		"GET",
 		"/ws/v1/clusters",
 		getClusterInfo,
 	},
-	Route{
+	route{
 		"Scheduler",
 		"GET",
 		"/ws/v1/apps",
 		getApplicationsInfo,
 	},
-	Route{
+	route{
 		"Scheduler",
 		"GET",
 		"/ws/v1/nodes",
@@ -61,7 +61,7 @@ var routes = Routes{
 	},
 
 	// endpoint to retrieve goroutines info
-	Route{
+	route{
 		"Scheduler",
 		"GET",
 		"/ws/v1/stack",
@@ -69,15 +69,23 @@ var routes = Routes{
 	},
 
 	// endpoint to retrieve server metrics
-	Route{
+	route{
 		"Scheduler",
 		"GET",
 		"/ws/v1/metrics",
 		promhttp.Handler().ServeHTTP,
 	},
 
+	// endpoint to retrieve the current conf
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/config",
+		getClusterConfig,
+	},
+
 	// endpoint to validate conf
-	Route{
+	route{
 		"Scheduler",
 		"POST",
 		"/ws/v1/validate-conf",
@@ -85,13 +93,13 @@ var routes = Routes{
 	},
 
 	// endpoint to retrieve historical data
-	Route{
+	route{
 		"Scheduler",
 		"GET",
 		"/ws/v1/history/apps",
 		getApplicationHistory,
 	},
-	Route{
+	route{
 		"Scheduler",
 		"GET",
 		"/ws/v1/history/containers",
@@ -102,67 +110,67 @@ var routes = Routes{
 	// this works with pprof tool. By default, pprof endpoints
 	// are only registered to http.DefaultServeMux. Here, we
 	// need to explicitly register all handlers.
-	Route{
+	route{
 		Name:        "System",
 		Method:      "GET",
 		Pattern:     "/debug/pprof/",
 		HandlerFunc: pprof.Index,
 	},
-	Route{
+	route{
 		Name:        "System",
 		Method:      "GET",
 		Pattern:     "/debug/pprof/heap",
 		HandlerFunc: pprof.Index,
 	},
-	Route{
+	route{
 		Name:        "System",
 		Method:      "GET",
 		Pattern:     "/debug/pprof/threadcreate",
 		HandlerFunc: pprof.Index,
 	},
-	Route{
+	route{
 		Name:        "System",
 		Method:      "GET",
 		Pattern:     "/debug/pprof/goroutine",
 		HandlerFunc: pprof.Index,
 	},
-	Route{
+	route{
 		Name:        "System",
 		Method:      "GET",
 		Pattern:     "/debug/pprof/allocs",
 		HandlerFunc: pprof.Index,
 	},
-	Route{
+	route{
 		Name:        "System",
 		Method:      "GET",
 		Pattern:     "/debug/pprof/block",
 		HandlerFunc: pprof.Index,
 	},
-	Route{
+	route{
 		Name:        "System",
 		Method:      "GET",
 		Pattern:     "/debug/pprof/mutex",
 		HandlerFunc: pprof.Index,
 	},
-	Route{
+	route{
 		Name:        "System",
 		Method:      "GET",
 		Pattern:     "/debug/pprof/cmdline",
 		HandlerFunc: pprof.Cmdline,
 	},
-	Route{
+	route{
 		Name:        "System",
 		Method:      "GET",
 		Pattern:     "/debug/pprof/profile",
 		HandlerFunc: pprof.Profile,
 	},
-	Route{
+	route{
 		Name:        "System",
 		Method:      "GET",
 		Pattern:     "/debug/pprof/symbol",
 		HandlerFunc: pprof.Symbol,
 	},
-	Route{
+	route{
 		Name:        "System",
 		Method:      "GET",
 		Pattern:     "/debug/pprof/trace",

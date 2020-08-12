@@ -66,14 +66,15 @@ func SetClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmID string, policyG
 		return []*PartitionInfo{}, err
 	}
 
-	// update global scheduler configs
-	configs.ConfigContext.Set(policyGroup, conf)
-
-	updatedPartitions, err := createPartitionInfos(clusterInfo, conf, rmID)
-
+	var updatedPartitions []*PartitionInfo
+	updatedPartitions, err = createPartitionInfos(clusterInfo, conf, rmID)
 	if err != nil {
 		return []*PartitionInfo{}, err
 	}
+
+	// update global scheduler configs, set the policyGroup for this cluster
+	clusterInfo.policyGroup = policyGroup
+	configs.ConfigContext.Set(policyGroup, conf)
 
 	return updatedPartitions, nil
 }

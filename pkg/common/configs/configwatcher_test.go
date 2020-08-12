@@ -49,11 +49,12 @@ func (r *FakeConfigReloader) DoReloadConfiguration() error {
 // it verifies the callback is not triggered until file state changes.
 func TestTriggerCallback(t *testing.T) {
 	var timesOfChecksum int
+	var modifiedSum = [32]byte{65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 48, 49, 50, 51, 52, 53}
 	// init context
-	ConfigContext.Set("p-group", &SchedulerConfig{Checksum: []byte("abc")})
+	ConfigContext.Set("p-group", &SchedulerConfig{Checksum: emptySum})
 	SchedulerConfigLoader = func(policyGroup string) (config *SchedulerConfig, e error) {
 		timesOfChecksum++
-		return &SchedulerConfig{Checksum: []byte("abc")}, nil
+		return &SchedulerConfig{Checksum: emptySum}, nil
 	}
 
 	// the original Checksum
@@ -76,7 +77,7 @@ func TestTriggerCallback(t *testing.T) {
 	// simulate file state changes
 	SchedulerConfigLoader = func(policyGroup string) (config *SchedulerConfig, e error) {
 		timesOfChecksum++
-		return &SchedulerConfig{Checksum: []byte("bcd")}, nil
+		return &SchedulerConfig{Checksum: modifiedSum}, nil
 	}
 
 	cw.runOnce()
@@ -125,10 +126,10 @@ func TestChecksumFailure(t *testing.T) {
 
 func TestConfigWatcherExpiration(t *testing.T) {
 	// init conf
-	ConfigContext.Set("p-group", &SchedulerConfig{Checksum: []byte("abc")})
+	ConfigContext.Set("p-group", &SchedulerConfig{Checksum: emptySum})
 	// simulate configuration never changes
 	SchedulerConfigLoader = func(policyGroup string) (config *SchedulerConfig, e error) {
-		return &SchedulerConfig{Checksum: []byte("abc")}, nil
+		return &SchedulerConfig{Checksum: emptySum}, nil
 	}
 	cw := CreateConfigWatcher("rm-id", "p-group", 2*time.Second)
 	cw.Run()

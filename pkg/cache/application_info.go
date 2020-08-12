@@ -136,10 +136,10 @@ func (ai *ApplicationInfo) HandleApplicationEvent(event applicationEvent) error 
 func (ai *ApplicationInfo) onStateChange(event *fsm.Event) {
 	updatedApps := make([]*si.UpdatedApplication, 0)
 	updatedApps = append(updatedApps, &si.UpdatedApplication{
-		ApplicationID: ai.ApplicationID,
-		State:         ai.stateMachine.Current(),
+		ApplicationID:            ai.ApplicationID,
+		State:                    ai.stateMachine.Current(),
 		StateTransitionTimestamp: time.Now().UnixNano(),
-		Message: fmt.Sprintf("{Status change triggered by the event : %v}", event),
+		Message:                  fmt.Sprintf("{Status change triggered by the event : %v}", event),
 	})
 
 	if ai.eventHandlers.RMProxyEventHandler != nil {
@@ -148,7 +148,7 @@ func (ai *ApplicationInfo) onStateChange(event *fsm.Event) {
 				RmID:                 ai.rmID,
 				AcceptedApplications: make([]*si.AcceptedApplication, 0),
 				RejectedApplications: make([]*si.RejectedApplication, 0),
-				UpdatedApplications: updatedApps,
+				UpdatedApplications:  updatedApps,
 			})
 	}
 }

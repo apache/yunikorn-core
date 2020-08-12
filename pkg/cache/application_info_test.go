@@ -182,4 +182,3 @@ type MockEventHandler struct {
 func (m *MockEventHandler) HandleEvent(ev interface{}) {
 	m.eventHandled = true
 }
-

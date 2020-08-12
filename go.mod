@@ -19,7 +19,7 @@
 
 module github.com/apache/incubator-yunikorn-core
 
-go 1.12
+go 1.15
 
 require (
 	github.com/apache/incubator-yunikorn-scheduler-interface v0.8.1-0.20200623235757-ceaac44952b8

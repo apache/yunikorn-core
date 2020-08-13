@@ -100,11 +100,17 @@ func newAppState() *fsm.FSM {
 		},
 		fsm.Callbacks{
 			"enter_state": func(event *fsm.Event) {
+				appInfo, ok := event.Args[0].(*ApplicationInfo)
+				if !ok {
+					log.Logger().Warn("The first argument is not an ApplicationInfo")
+					return
+				}
 				log.Logger().Debug("Application state transition",
-					zap.String("appID", event.Args[0].(*ApplicationInfo).ApplicationID),
+					zap.String("appID", appInfo.ApplicationID),
 					zap.String("source", event.Src),
 					zap.String("destination", event.Dst),
 					zap.String("event", event.Event))
+				appInfo.onStateChange(event)
 			},
 			fmt.Sprintf("enter_%s", Starting.String()): func(event *fsm.Event) {
 				event.Args[0].(*ApplicationInfo).setStartingTimer()

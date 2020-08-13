@@ -29,7 +29,10 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
+	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 var (
@@ -52,7 +55,18 @@ type ApplicationInfo struct {
 	stateMachine      *fsm.FSM                   // application state machine
 	stateTimer        *time.Timer                // timer for state time
 
+	eventHandlers handler.EventHandlers
+	rmID          string
+
 	sync.RWMutex
+}
+
+func NewApplicationInfoWithEventHandler(appID, partition, queueName string, ugi security.UserGroup, tags map[string]string,
+	eventHandler handler.EventHandlers, rmID string) *ApplicationInfo {
+	app := NewApplicationInfo(appID, partition, queueName, ugi, tags)
+	app.eventHandlers = eventHandler
+	app.rmID = rmID
+	return app
 }
 
 // Create a new application
@@ -117,6 +131,26 @@ func (ai *ApplicationInfo) HandleApplicationEvent(event applicationEvent) error 
 		return nil
 	}
 	return err
+}
+
+func (ai *ApplicationInfo) onStateChange(event *fsm.Event) {
+	updatedApps := make([]*si.UpdatedApplication, 0)
+	updatedApps = append(updatedApps, &si.UpdatedApplication{
+		ApplicationID:            ai.ApplicationID,
+		State:                    ai.stateMachine.Current(),
+		StateTransitionTimestamp: time.Now().UnixNano(),
+		Message:                  fmt.Sprintf("{Status change triggered by the event : %v}", event),
+	})
+
+	if ai.eventHandlers.RMProxyEventHandler != nil {
+		ai.eventHandlers.RMProxyEventHandler.HandleEvent(
+			&rmevent.RMApplicationUpdateEvent{
+				RmID:                 ai.rmID,
+				AcceptedApplications: make([]*si.AcceptedApplication, 0),
+				RejectedApplications: make([]*si.RejectedApplication, 0),
+				UpdatedApplications:  updatedApps,
+			})
+	}
 }
 
 // Set the starting timer to make sure the application will not get stuck in a starting state too long.

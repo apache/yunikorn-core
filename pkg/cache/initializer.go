@@ -94,20 +94,24 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmID string) ([]*
 	if err != nil {
 		return []*PartitionInfo{}, []*PartitionInfo{}, err
 	}
+	return clusterInfo.applyConfigChanges(conf, rmID)
+}
 
+func (m *ClusterInfo) applyConfigChanges(conf *configs.SchedulerConfig, rmID string) ([]*PartitionInfo, []*PartitionInfo, error) {
 	// update global scheduler configs
-	configs.ConfigContext.Set(clusterInfo.policyGroup, conf)
+	configs.ConfigContext.Set(m.policyGroup, conf)
 
 	// Start updating the config is OK and should pass setting on the cluster
 	log.Logger().Info("updating partitions", zap.String("rmID", rmID))
 	// keep track of the deleted and updated partitions
 	updatedPartitions := make([]*PartitionInfo, 0)
 	visited := map[string]bool{}
+	var err error
 	// walk over the partitions in the config: update existing ones
 	for _, p := range conf.Partitions {
 		partitionName := common.GetNormalizedPartitionName(p.Name, rmID)
 		p.Name = partitionName
-		part, ok := clusterInfo.partitions[p.Name]
+		part, ok := m.partitions[p.Name]
 		if ok {
 			// make sure the new info passes all checks
 			_, err = newPartitionInfoInternal(p, rmID, nil)
@@ -124,8 +128,8 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmID string) ([]*
 			// not found: new partition, no checks needed
 			log.Logger().Info("added partitions", zap.String("partitionName", partitionName))
 
-			part, err = newPartitionInfoInternal(p, rmID, clusterInfo)
-			clusterInfo.addPartition(partitionName, part)
+			part, err = newPartitionInfoInternal(p, rmID, m)
+			m.addPartition(partitionName, part)
 			if err != nil {
 				return []*PartitionInfo{}, []*PartitionInfo{}, err
 			}
@@ -137,7 +141,7 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmID string) ([]*
 
 	// get the removed partitions, mark them as deleted
 	deletedPartitions := make([]*PartitionInfo, 0)
-	for _, part := range clusterInfo.partitions {
+	for _, part := range m.partitions {
 		if !visited[part.Name] {
 			part.markPartitionForRemoval()
 			deletedPartitions = append(deletedPartitions, part)

@@ -48,6 +48,10 @@ func RegisterSchedulerPlugin(plugin interface{}) {
 		log.Logger().Debug("register scheduler plugin: ContainerSchedulingStateUpdater")
 		plugins.schedulingStateUpdater = t
 	}
+	if t, ok := plugin.(ConfigMapPlugin); ok {
+		log.Logger().Debug("register scheduler plugin: ConfigMapPlugin")
+		plugins.configPlugin = t
+	}
 }
 
 func GetPredicatesPlugin() PredicatesPlugin {
@@ -76,4 +80,11 @@ func GetContainerSchedulingStateUpdaterPlugin() ContainerSchedulingStateUpdater 
 	defer plugins.RUnlock()
 
 	return plugins.schedulingStateUpdater
+}
+
+func GetConfigPlugin() ConfigMapPlugin {
+	plugins.RLock()
+	defer plugins.RUnlock()
+
+	return plugins.configPlugin
 }

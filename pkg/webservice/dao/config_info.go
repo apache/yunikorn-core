@@ -22,3 +22,8 @@ type ValidateConfResponse struct {
 	Allowed bool   `json:"allowed"`
 	Reason  string `json:"reason"`
 }
+
+type UpdateConfResponse struct {
+	Success bool `json:"success"`
+	Reason string `json:"reason"`
+}

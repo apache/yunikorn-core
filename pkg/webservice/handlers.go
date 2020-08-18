@@ -32,7 +32,9 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
@@ -339,3 +341,51 @@ func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
+
+func updateConfig(w http.ResponseWriter, r *http.Request) {
+	//TODO: return if there is already one call in process
+	writeHeaders(w)
+	requestBytes, err := ioutil.ReadAll(r.Body)
+
+	if err == nil {
+		// validation is already called when loading the config
+		schedulerConf, err2 := configs.LoadSchedulerConfigFromByteArray(requestBytes)
+		if err2 != nil {
+			buildUpdateResponse(false, err2.Error(), w)
+			return
+		}
+		err3 := saveConfigmap(string(requestBytes))
+		if err3 != nil {
+			buildUpdateResponse(false, err3.Error(), w)
+			return
+		}
+		err4 := gClusterInfo.UpdateSchedulerConfig(schedulerConf)
+		if err4 != nil {
+			buildUpdateResponse(false, err4.Error(), w)
+			//TODO: revert configmap changes
+			return
+		}
+		buildUpdateResponse(true, "", w)
+	}
+}
+
+func buildUpdateResponse(success bool, reason string, w http.ResponseWriter) {
+	var result dao.UpdateConfResponse
+	result.Success = success
+	result.Reason = reason
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+func saveConfigmap(conf string) error {
+	if plugin := plugins.GetConfigPlugin(); plugin != nil {
+		// checking predicates
+		if err := plugin.UpdateConfigMap(&si.ConfigMapArgs{
+			Configs:            conf,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+

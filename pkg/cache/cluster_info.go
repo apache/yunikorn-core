@@ -28,6 +28,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/cache/cacheevent"
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
@@ -487,7 +488,22 @@ func (m *ClusterInfo) processRMConfigUpdateEvent(event *commonevents.ConfigUpdat
 		event.Channel <- &commonevents.Result{Succeeded: false, Reason: err.Error()}
 		return
 	}
+	result := m.sendUpdatedPartitionsToScheduler(updatedPartitions)
+	if !result.Succeeded {
+		event.Channel <- &commonevents.Result{Succeeded: false, Reason: result.Reason}
+		return
+	}
+	result = m.sendDeletedPartitionsToScheduler(deletedPartitions)
+	if !result.Succeeded {
+		event.Channel <- &commonevents.Result{Succeeded: false, Reason: result.Reason}
+		return
+	}
 
+	// all succeed
+	event.Channel <- &commonevents.Result{Succeeded: true}
+}
+
+func(m *ClusterInfo) sendUpdatedPartitionsToScheduler(updatedPartitions []*PartitionInfo) *commonevents.Result {
 	updatedPartitionsInterfaces := make([]interface{}, 0)
 	for _, u := range updatedPartitions {
 		updatedPartitionsInterfaces = append(updatedPartitionsInterfaces, u)
@@ -500,11 +516,10 @@ func (m *ClusterInfo) processRMConfigUpdateEvent(event *commonevents.ConfigUpdat
 		ResultChannel:     updatePartitionResult,
 	})
 	result := <-updatePartitionResult
-	if !result.Succeeded {
-		event.Channel <- &commonevents.Result{Succeeded: false, Reason: result.Reason}
-		return
-	}
+	return result
+}
 
+func(m *ClusterInfo) sendDeletedPartitionsToScheduler(deletedPartitions []*PartitionInfo) *commonevents.Result {
 	deletedPartitionsInterfaces := make([]interface{}, 0)
 	for _, u := range deletedPartitions {
 		deletedPartitionsInterfaces = append(deletedPartitionsInterfaces, u)
@@ -516,14 +531,8 @@ func (m *ClusterInfo) processRMConfigUpdateEvent(event *commonevents.ConfigUpdat
 		DeletePartitions: deletedPartitionsInterfaces,
 		ResultChannel:    deletePartitionResult,
 	})
-	result = <-deletePartitionResult
-	if !result.Succeeded {
-		event.Channel <- &commonevents.Result{Succeeded: false, Reason: result.Reason}
-		return
-	}
-
-	// all succeed
-	event.Channel <- &commonevents.Result{Succeeded: true}
+	result := <-deletePartitionResult
+	return result
 }
 
 // Process an allocation bundle which could contain release and allocation proposals.
@@ -710,3 +719,29 @@ func (m *ClusterInfo) processRemovedApplication(event *cacheevent.RemovedApplica
 			fmt.Sprintf("Application %s Removed", event.ApplicationID))
 	}
 }
+
+func (m *ClusterInfo) UpdateSchedulerConfig(conf *configs.SchedulerConfig) error {
+	rmID := ""
+	for _, pi := range m.partitions {
+		rmID = pi.RmID
+		break
+	}
+	updatedPartitions, deletedPartitions, err := m.applyConfigChanges(conf, rmID)
+	if err != nil {
+		return err
+	}
+	if len(updatedPartitions) > 0 {
+		result := m.sendUpdatedPartitionsToScheduler(updatedPartitions)
+		if !result.Succeeded {
+			return fmt.Errorf(result.Reason)
+		}
+	}
+	if len(deletedPartitions) > 0 {
+		result2 := m.sendDeletedPartitionsToScheduler(deletedPartitions)
+		if !result2.Succeeded {
+			return fmt.Errorf(result2.Reason)
+		}
+	}
+	return nil
+}
+

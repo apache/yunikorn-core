@@ -65,5 +65,5 @@ type ContainerSchedulingStateUpdater interface {
 }
 
 type ConfigMapPlugin interface {
-	UpdateConfigMap(args *si.ConfigMapArgs) error
+	UpdateConfigMap(args *si.ConfigMapArgs) (string, error)
 }

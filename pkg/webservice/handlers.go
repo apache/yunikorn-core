@@ -25,6 +25,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
@@ -342,8 +343,10 @@ func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+var mutex sync.Mutex
 func updateConfig(w http.ResponseWriter, r *http.Request) {
-	//TODO: return if there is already one call in process
+	mutex.Lock()
+	defer mutex.Unlock()
 	writeHeaders(w)
 	requestBytes, err := ioutil.ReadAll(r.Body)
 
@@ -354,15 +357,16 @@ func updateConfig(w http.ResponseWriter, r *http.Request) {
 			buildUpdateResponse(false, err2.Error(), w)
 			return
 		}
-		err3 := saveConfigmap(string(requestBytes))
+		oldConf, err3 := saveConfigmap(string(requestBytes))
 		if err3 != nil {
 			buildUpdateResponse(false, err3.Error(), w)
 			return
 		}
 		err4 := gClusterInfo.UpdateSchedulerConfig(schedulerConf)
 		if err4 != nil {
+			// revert configmap changes
+			saveConfigmap(oldConf)
 			buildUpdateResponse(false, err4.Error(), w)
-			//TODO: revert configmap changes
 			return
 		}
 		buildUpdateResponse(true, "", w)
@@ -377,15 +381,16 @@ func buildUpdateResponse(success bool, reason string, w http.ResponseWriter) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
-func saveConfigmap(conf string) error {
+func saveConfigmap(conf string) (string, error) {
 	if plugin := plugins.GetConfigPlugin(); plugin != nil {
 		// checking predicates
-		if err := plugin.UpdateConfigMap(&si.ConfigMapArgs{
+		oldConf, err := plugin.UpdateConfigMap(&si.ConfigMapArgs{
 			Configs:            conf,
-		}); err != nil {
-			return err
+		}); if err != nil {
+			return "", err
 		}
+		return oldConf, nil
 	}
-	return nil
+	return "", fmt.Errorf("config plugn not found")
 }
 

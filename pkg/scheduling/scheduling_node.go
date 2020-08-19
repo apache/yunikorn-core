@@ -476,9 +476,9 @@ func (sn *SchedulingNode) AddAllocation(alloc *schedulingAllocation) {
 	sn.Lock()
 	defer sn.Unlock()
 
-	sn.allocations[alloc.uuid] = alloc
-	sn.allocatedResource = resources.Add(sn.allocatedResource, alloc.schedulingAsk.AllocatedResource)
-	sn.availableResource = resources.Sub(sn.availableResource, alloc.schedulingAsk.AllocatedResource)
+	sn.allocations[alloc.GetUUID()] = alloc
+	sn.allocatedResource = resources.Add(sn.allocatedResource, alloc.SchedulingAsk.AllocatedResource)
+	sn.availableResource = resources.Sub(sn.availableResource, alloc.SchedulingAsk.AllocatedResource)
 	sn.availableUpdateNeeded = true
 }
 
@@ -493,8 +493,8 @@ func (sn *SchedulingNode) RemoveAllocation(uuid string) *schedulingAllocation {
 	info := sn.allocations[uuid]
 	if info != nil {
 		delete(sn.allocations, uuid)
-		sn.allocatedResource = resources.Sub(sn.allocatedResource, info.schedulingAsk.AllocatedResource)
-		sn.availableResource = resources.Add(sn.availableResource, info.schedulingAsk.AllocatedResource)
+		sn.allocatedResource = resources.Sub(sn.allocatedResource, info.SchedulingAsk.AllocatedResource)
+		sn.availableResource = resources.Add(sn.availableResource, info.SchedulingAsk.AllocatedResource)
 		sn.availableUpdateNeeded = true
 	}
 

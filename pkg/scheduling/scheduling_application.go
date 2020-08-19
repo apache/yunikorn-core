@@ -48,10 +48,10 @@ type SchedulingApplication struct {
 	ApplicationID  string
 	Partition      string
 	SubmissionTime int64
+	QueueName      string
 
 	// Private fields need protection
-	queue          *SchedulingQueue // queue the application is running in
-	queueName      string
+	queue          *SchedulingQueue                    // queue the application is running in
 	user           security.UserGroup                  // owner of the application
 	tags           map[string]string                   // application tags used in scheduling
 	allocated      *resources.Resource                 // total allocated resources
@@ -81,19 +81,19 @@ func NewSchedulingApp(appID, partition, queueName string, ugi security.UserGroup
 // Create a new application
 func newSchedulingAppInternal(appID, partition, queueName string, ugi security.UserGroup, tags map[string]string) *SchedulingApplication {
 	return &SchedulingApplication{
-		ApplicationID:     appID,
-		Partition:         partition,
-		queueName:         queueName,
-		SubmissionTime:    time.Now().UnixNano(),
-		tags:              tags,
-		user:              ugi,
-		allocated: resources.NewResource(),
-		allocations:       make(map[string]*schedulingAllocation),
-		stateMachine:      newAppState(),
-		allocating:      resources.NewResource(),
-		pending:         resources.NewResource(),
-		requests:        make(map[string]*schedulingAllocationAsk),
-		reservations:    make(map[string]*reservation),
+		ApplicationID:  appID,
+		Partition:      partition,
+		QueueName:      queueName,
+		SubmissionTime: time.Now().UnixNano(),
+		tags:           tags,
+		user:           ugi,
+		allocated:      resources.NewResource(),
+		allocations:    make(map[string]*schedulingAllocation),
+		stateMachine:   newAppState(),
+		allocating:     resources.NewResource(),
+		pending:        resources.NewResource(),
+		requests:       make(map[string]*schedulingAllocationAsk),
+		reservations:   make(map[string]*reservation),
 	}
 }
 
@@ -472,7 +472,7 @@ func (sa *SchedulingApplication) getOutstandingRequests(headRoom *resources.Reso
 }
 
 // Try a regular allocation of the pending requests
-func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *partitionSchedulingContext) *schedulingAllocation {
+func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *PartitionSchedulingContext) *schedulingAllocation {
 	sa.Lock()
 	defer sa.Unlock()
 	// make sure the request are sorted
@@ -508,7 +508,7 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 }
 
 // Try a reserved allocation of an outstanding reservation
-func (sa *SchedulingApplication) tryReservedAllocate(headRoom *resources.Resource, ctx *partitionSchedulingContext) *schedulingAllocation {
+func (sa *SchedulingApplication) tryReservedAllocate(headRoom *resources.Resource, ctx *PartitionSchedulingContext) *schedulingAllocation {
 	sa.Lock()
 	defer sa.Unlock()
 	// process all outstanding reservations and pick the first one that fits
@@ -899,7 +899,7 @@ func (sa *SchedulingApplication) SetQueue(leaf *SchedulingQueue) {
 	defer sa.Unlock()
 
 	sa.queue = leaf
-	sa.queueName = leaf.QueuePath
+	sa.QueueName = leaf.QueuePath
 }
 
 // Add a new allocation to the application
@@ -915,8 +915,8 @@ func (sa *SchedulingApplication) addAllocation(alloc *schedulingAllocation) {
 	sa.Lock()
 	defer sa.Unlock()
 
-	sa.allocations[alloc.uuid] = alloc
-	sa.allocated = resources.Add(sa.allocated, alloc.schedulingAsk.AllocatedResource)
+	sa.allocations[alloc.GetUUID()] = alloc
+	sa.allocated = resources.Add(sa.allocated, alloc.SchedulingAsk.AllocatedResource)
 }
 
 // Remove a specific allocation from the application.
@@ -929,7 +929,7 @@ func (sa *SchedulingApplication) removeAllocation(uuid string) *schedulingAlloca
 
 	if alloc != nil {
 		// When app has the allocation, update map, and update allocated resource of the app
-		sa.allocated = resources.Sub(sa.allocated, alloc.schedulingAsk.AllocatedResource)
+		sa.allocated = resources.Sub(sa.allocated, alloc.SchedulingAsk.AllocatedResource)
 		delete(sa.allocations, uuid)
 		return alloc
 	}
@@ -976,4 +976,18 @@ func (sa *SchedulingApplication) GetTag(tag string) string {
 		}
 	}
 	return tagVal
+}
+
+func (sa *SchedulingApplication) GetQueue() *SchedulingQueue {
+	sa.RLock()
+	defer sa.RUnlock()
+
+	return sa.queue
+}
+
+func (sa *SchedulingApplication) SetQueue(queue *SchedulingQueue) {
+	sa.Lock()
+	defer sa.Unlock()
+
+	sa.queue = queue
 }

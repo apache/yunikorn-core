@@ -32,7 +32,7 @@ const (
 )
 
 type partitionManager struct {
-	psc      *partitionSchedulingContext
+	psc      *PartitionSchedulingContext
 	csc      *ClusterSchedulingContext
 	stop     bool
 	interval time.Duration

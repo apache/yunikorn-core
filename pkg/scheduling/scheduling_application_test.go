@@ -650,16 +650,6 @@ func TestStateChangeOnAskUpdate(t *testing.T) {
 	assert.Assert(t, app.isStarting(), "application changed state unexpectedly: %s", app.GetApplicationState())
 }
 
-
-func newSchedulingAppTestOnly(appID, partition, queueName string) *SchedulingApplication {
-	user := security.UserGroup{
-		User:   "testuser",
-		Groups: []string{},
-	}
-	tags := make(map[string]string)
-	return newSchedulingAppInternal(appID, partition, queueName, user, tags)
-}
-
 func newSchedulingAppTestOnlyWithTags(appID, partition, queueName string, tags map[string]string) *SchedulingApplication {
 	user := security.UserGroup{
 		User:   "testuser",
@@ -672,7 +662,7 @@ func TestNewApplicationInfo(t *testing.T) {
 	appInfo := newSchedulingAppTestOnly("app-00001", "default", "root.a")
 	assert.Equal(t, appInfo.ApplicationID, "app-00001")
 	assert.Equal(t, appInfo.Partition, "default")
-	assert.Equal(t, appInfo.queueName, "root.a")
+	assert.Equal(t, appInfo.QueueName, "root.a")
 	assert.Equal(t, appInfo.GetApplicationState(), New.String())
 }
 
@@ -725,7 +715,7 @@ func TestQueueUpdate(t *testing.T) {
 	queue, err := NewDynamicQueue("test", true, nil)
 	assert.NilError(t, err, "failed to create queue")
 	appInfo.SetQueue(queue)
-	assert.Equal(t, appInfo.queueName, "test")
+	assert.Equal(t, appInfo.QueueName, "test")
 }
 
 func TestStateTimeOut(t *testing.T) {

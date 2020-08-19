@@ -20,6 +20,7 @@ package scheduler
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
 )
@@ -39,25 +40,43 @@ func (ar allocationResult) String() string {
 }
 
 type schedulingAllocation struct {
-	schedulingAsk  *schedulingAllocationAsk
+	SchedulingAsk  *schedulingAllocationAsk
 	repeats        int32
 	nodeID         string
-	uuid           string
 	reservedNodeID string
 	releases       []*commonevents.ReleaseAllocation
 	result         allocationResult
+
+	// Mutable part, need protection
+	uuid           string
+
+	sync.RWMutex
 }
 
 func newSchedulingAllocation(ask *schedulingAllocationAsk, nodeID string) *schedulingAllocation {
 	return &schedulingAllocation{
-		schedulingAsk: ask,
+		SchedulingAsk: ask,
 		nodeID:        nodeID,
 		repeats:       1,
 		result:        none,
-		uuid:          // FIX ME
+		uuid:          "", // UUID will be set later
 	}
 }
 
 func (sa *schedulingAllocation) String() string {
-	return fmt.Sprintf("AllocatioKey=%s, repeats=%d, node=%s, result=%s", sa.schedulingAsk.AskProto.AllocationKey, sa.repeats, sa.nodeID, sa.result.String())
+	return fmt.Sprintf("AllocatioKey=%s, repeats=%d, node=%s, result=%s", sa.SchedulingAsk.AskProto.AllocationKey, sa.repeats, sa.nodeID, sa.result.String())
+}
+
+func (sa* schedulingAllocation) GetUUID() string {
+	sa.RLock()
+	defer sa.RUnlock()
+
+	return sa.uuid
+}
+
+func (sa* schedulingAllocation) SetUUID(uuid string) {
+	sa.Lock()
+	defer sa.Unlock()
+
+	sa.uuid = uuid
 }

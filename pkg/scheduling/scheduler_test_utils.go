@@ -19,9 +19,11 @@
 package scheduler
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
@@ -72,4 +74,33 @@ func newNodeForTestInternal(nodeID string, totalResource, availResource *resourc
 	node := newSchedulingNode(&proto)
 	node.availableResource = availResource
 	return node
+}
+
+// Create a partition for testing from a yaml configuration
+func createSchedulerConfig(configBytes []byte) (*configs.SchedulerConfig, error) {
+	// create config from string
+	configs.MockSchedulerConfigByData(configBytes)
+	conf, err := configs.SchedulerConfigLoader("default-policy-group")
+	if err != nil {
+		return nil, fmt.Errorf("error when loading config %v", err)
+	}
+	return conf, nil
+}
+
+// Create a partition for testing from a yaml configuration
+func createMockPartitionSchedulingContextFromConfig(configBytes []byte) (*PartitionSchedulingContext, error) {
+	config, err:= createSchedulerConfig(configBytes)
+	if err != nil {
+		return nil, err
+	}
+	return newPartitionInfo(config.Partitions[0], "test")
+}
+
+func newSchedulingAppTestOnly(appID, partition, queueName string) *SchedulingApplication {
+	user := security.UserGroup{
+		User:   "testuser",
+		Groups: []string{},
+	}
+	tags := make(map[string]string)
+	return newSchedulingAppInternal(appID, partition, queueName, user, tags)
 }

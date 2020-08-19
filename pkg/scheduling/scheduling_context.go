@@ -30,7 +30,7 @@ import (
 )
 
 type ClusterSchedulingContext struct {
-	partitions map[string]*partitionSchedulingContext
+	partitions map[string]*PartitionSchedulingContext
 
 	needPreemption bool
 
@@ -39,22 +39,22 @@ type ClusterSchedulingContext struct {
 
 func NewClusterSchedulingContext() *ClusterSchedulingContext {
 	return &ClusterSchedulingContext{
-		partitions: make(map[string]*partitionSchedulingContext),
+		partitions: make(map[string]*PartitionSchedulingContext),
 	}
 }
 
-func (csc *ClusterSchedulingContext) getPartitionMapClone() map[string]*partitionSchedulingContext {
+func (csc *ClusterSchedulingContext) getPartitionMapClone() map[string]*PartitionSchedulingContext {
 	csc.lock.RLock()
 	defer csc.lock.RUnlock()
 
-	newMap := make(map[string]*partitionSchedulingContext)
+	newMap := make(map[string]*PartitionSchedulingContext)
 	for k, v := range csc.partitions {
 		newMap[k] = v
 	}
 	return newMap
 }
 
-func (csc *ClusterSchedulingContext) getPartition(partitionName string) *partitionSchedulingContext {
+func (csc *ClusterSchedulingContext) getPartition(partitionName string) *PartitionSchedulingContext {
 	csc.lock.RLock()
 	defer csc.lock.RUnlock()
 

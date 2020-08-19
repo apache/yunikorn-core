@@ -601,7 +601,7 @@ func (sq *SchedulingQueue) getMaxResource() *resources.Resource {
 // the configured queue sortPolicy. Queues without pending resources are skipped.
 // Applications are sorted based on the application sortPolicy. Applications without pending resources are skipped.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *SchedulingQueue) tryAllocate(ctx *partitionSchedulingContext) *schedulingAllocation {
+func (sq *SchedulingQueue) tryAllocate(ctx *PartitionSchedulingContext) *schedulingAllocation {
 	if sq.isLeafQueue() {
 		// get the headroom
 		headRoom := sq.getHeadRoom()
@@ -646,7 +646,7 @@ func (sq *SchedulingQueue) getQueueOutstandingRequests(total *[]*schedulingAlloc
 // the configured queue sortPolicy. Queues without pending resources are skipped.
 // Applications are currently NOT sorted and are iterated over in a random order.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *SchedulingQueue) tryReservedAllocate(ctx *partitionSchedulingContext) *schedulingAllocation {
+func (sq *SchedulingQueue) tryReservedAllocate(ctx *PartitionSchedulingContext) *schedulingAllocation {
 	if sq.isLeafQueue() {
 		// skip if it has no reservations
 		reservedCopy := sq.getReservedApps()

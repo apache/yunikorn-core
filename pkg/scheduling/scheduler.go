@@ -83,16 +83,16 @@ func newSingleAllocationProposal(alloc *schedulingAllocation) *cacheevent.Alloca
 		AllocationProposals: []*commonevents.AllocationProposal{
 			{
 				NodeID:            alloc.nodeID,
-				ApplicationID:     alloc.schedulingAsk.ApplicationID,
-				QueueName:         alloc.schedulingAsk.QueueName,
-				AllocatedResource: alloc.schedulingAsk.AllocatedResource,
-				AllocationKey:     alloc.schedulingAsk.AskProto.AllocationKey,
-				Priority:          alloc.schedulingAsk.AskProto.Priority,
-				PartitionName:     alloc.schedulingAsk.PartitionName,
+				ApplicationID:     alloc.SchedulingAsk.ApplicationID,
+				QueueName:         alloc.SchedulingAsk.QueueName,
+				AllocatedResource: alloc.SchedulingAsk.AllocatedResource,
+				AllocationKey:     alloc.SchedulingAsk.AskProto.AllocationKey,
+				Priority:          alloc.SchedulingAsk.AskProto.Priority,
+				PartitionName:     alloc.SchedulingAsk.PartitionName,
 			},
 		},
 		ReleaseProposals: alloc.releases,
-		PartitionName:    alloc.schedulingAsk.PartitionName,
+		PartitionName:    alloc.SchedulingAsk.PartitionName,
 	}
 }
 

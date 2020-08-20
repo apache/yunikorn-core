@@ -209,40 +209,6 @@ func (psc *PartitionSchedulingContext) addSchedulingApplication(schedulingApp *S
 	return nil
 }
 
-// Remove the application from the scheduling partition.
-func (psc *PartitionSchedulingContext) removeSchedulingApplication(appID string) (*SchedulingApplication, error) {
-	psc.Lock()
-	defer psc.Unlock()
-
-	// Remove from applications map
-	if psc.applications[appID] == nil {
-		return nil, fmt.Errorf("removing application %s from partition %s, but application does not exist", appID, psc.Name)
-	}
-	schedulingApp := psc.applications[appID]
-	delete(psc.applications, appID)
-	delete(psc.reservedApps, appID)
-
-	// Remove all asks and thus all reservations and pending resources (queue included)
-	queueName := schedulingApp.QueueName
-	_ = schedulingApp.removeAllocationAsk("")
-	log.Logger().Debug("application removed from the scheduler",
-		zap.String("queue", queueName),
-		zap.String("applicationID", appID))
-
-	// Remove app from queue
-	schedulingQueue := psc.getQueue(queueName)
-	if schedulingQueue == nil {
-		// This is not normal return an error and log
-		log.Logger().Warn("failed to find assigned queue while removing application",
-			zap.String("queue", queueName),
-			zap.String("applicationID", appID))
-		return nil, fmt.Errorf("failed to find queue %s while removing application %s", queueName, appID)
-	}
-	schedulingQueue.removeSchedulingApplication(schedulingApp)
-
-	return schedulingApp, nil
-}
-
 // Return a copy of the map of all reservations for the partition.
 // This will return an empty map if there are no reservations.
 // Visible for tests
@@ -891,43 +857,6 @@ func (psc *PartitionSchedulingContext) removeNodeAllocations(node *SchedulingNod
 	return released
 }
 
-// Add a new application to the partition.
-// A new application should not be part of the partition yet. The failure behaviour is managed by the failIfExist flag.
-// If the flag is true the add will fail returning an error. If the flag is false the add will not fail if the application
-// exists but no change is made.
-func (psc *PartitionSchedulingContext) addNewApplication(app *SchedulingApplication, failIfExist bool) error {
-	psc.Lock()
-	defer psc.Unlock()
-
-	log.Logger().Debug("adding app to partition",
-		zap.String("appID", app.ApplicationID),
-		zap.String("queue", app.QueueName),
-		zap.String("partitionName", psc.Name))
-	if psc.isDraining() || psc.isStopped() {
-		return fmt.Errorf("partition %s is stopped cannot add a new application %s", psc.Name, app.ApplicationID)
-	}
-
-	if app := psc.applications[app.ApplicationID]; app != nil {
-		if failIfExist {
-			return fmt.Errorf("application %s already exists in partition %s", app.ApplicationID, psc.Name)
-		}
-		log.Logger().Info("app already exists in partition",
-			zap.String("appID", app.ApplicationID),
-			zap.String("partitionName", psc.Name))
-		return nil
-	}
-
-	// queue is checked later and overwritten based on placement rules
-	app.SetQueue(psc.getQueue(app.QueueName))
-	// Add app to the partition
-	psc.applications[app.ApplicationID] = app
-
-	log.Logger().Info("app added to partition",
-		zap.String("appID", app.ApplicationID),
-		zap.String("partitionName", psc.Name))
-	return nil
-}
-
 // Get the node object for the node ID as tracked by the partition.
 // This will return nil if the node is not part of this partition.
 // Visible by tests
@@ -1149,7 +1078,7 @@ func (psc *PartitionSchedulingContext) removeRejectedApp(appID string) {
 
 // Remove the application from the partition.
 // This will also release all the allocations for application from the queue and nodes.
-func (psc *PartitionSchedulingContext) RemoveApplication(appID string) (*SchedulingApplication, []*schedulingAllocation) {
+func (psc *PartitionSchedulingContext) removeApplication(appID string) []*schedulingAllocation {
 	psc.Lock()
 	defer psc.Unlock()
 
@@ -1158,12 +1087,19 @@ func (psc *PartitionSchedulingContext) RemoveApplication(appID string) (*Schedul
 		zap.String("partitionName", psc.Name))
 
 	app := psc.applications[appID]
+
+	delete(psc.applications, appID)
+	delete(psc.reservedApps, appID)
+
 	if app == nil {
 		log.Logger().Warn("app not found partition",
 			zap.String("appID", appID),
 			zap.String("partitionName", psc.Name))
-		return nil, make([]*schedulingAllocation, 0)
+		return nil
 	}
+
+	_ = app.removeAllocationAskInternal("")
+
 	// Save the total allocated resources of the application.
 	// Might need to base this on calculation of the real removed resources.
 	totalAppAllocated := app.GetAllocatedResource()
@@ -1201,26 +1137,20 @@ func (psc *PartitionSchedulingContext) RemoveApplication(appID string) (*Schedul
 				continue
 			}
 		}
-
-		// we should never have an error, cache is in an inconsistent state if this happens
-		queue := app.GetQueue()
-		if queue != nil {
-			if err := queue.decAllocatedResource(totalAppAllocated); err != nil {
-				log.Logger().Error("failed to release resources for app",
-					zap.String("appID", app.ApplicationID),
-					zap.Error(err))
-			}
-		}
 	}
-	// Remove app from cache now that everything is cleaned up
-	delete(psc.applications, appID)
+
+	// we should never have an error, cache is in an inconsistent state if this happens
+	queue := app.GetQueue()
+	if queue != nil {
+		queue.removeSchedulingApplication(app)
+	}
 
 	log.Logger().Info("app removed from partition",
 		zap.String("appID", app.ApplicationID),
 		zap.String("partitionName", app.Partition),
 		zap.Any("resourceReleased", totalAppAllocated))
 
-	return app, allocations
+	return allocations
 }
 
 // Return a copy of all the nodes registers to this partition

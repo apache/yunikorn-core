@@ -164,10 +164,20 @@ func (sa *SchedulingApplication) decAllocatingResource(delta *resources.Resource
 	}
 }
 
+func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) {
+	pending :=sa.removeAllocationAskInternal(allocKey)
+
+	// Avoid taking queue's lock while holding app's lock.
+	if nil != pending {
+		// clean up the queue pending resources
+		sa.queue.decPendingResource(pending)
+	}
+}
+
 // Remove one or more allocation asks from this application.
 // This also removes any reservations that are linked to the ask.
-// The return value is the number of reservations released
-func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) int {
+// The return value is pending resource released
+func (sa *SchedulingApplication) removeAllocationAskInternal(allocKey string) *resources.Resource {
 	sa.Lock()
 	defer sa.Unlock()
 	// shortcut no need to do anything
@@ -218,8 +228,7 @@ func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) int {
 			delete(sa.requests, allocKey)
 		}
 	}
-	// clean up the queue pending resources
-	sa.queue.decPendingResource(deltaPendingResource)
+
 	// Check if we need to change state based on the ask removal:
 	// 1) if pending is zero (no more asks left)
 	// 2) if confirmed allocations is zero (nothing is running)
@@ -234,7 +243,7 @@ func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) int {
 		}
 	}
 
-	return toRelease
+	return deltaPendingResource
 }
 
 // Add an allocation ask to this application

@@ -21,8 +21,11 @@ package scheduler
 import (
 	"fmt"
 	"reflect"
+	"sync"
 	"time"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
+	siCommon "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
@@ -49,14 +52,21 @@ type Scheduler struct {
 	preemptionContext        *preemptionContext        // Preemption context
 	eventHandlers            handler.EventHandlers     // list of event handlers
 	pendingSchedulerEvents   chan interface{}          // queue for scheduler events
+	partitions               map[string]*PartitionSchedulingContext
+	policyGroup              string
+
+	// Event queues
+	pendingRmEvents chan interface{}
+
+	sync.RWMutex
 }
 
 func NewScheduler(clusterInfo *cache.ClusterInfo) *Scheduler {
-	m := &Scheduler{}
-	m.clusterInfo = clusterInfo
-	m.clusterSchedulingContext = NewClusterSchedulingContext()
-	m.pendingSchedulerEvents = make(chan interface{}, 1024*1024)
-	return m
+	s := &Scheduler{}
+	s.clusterInfo = clusterInfo
+	s.clusterSchedulingContext = NewClusterSchedulingContext()
+	s.pendingSchedulerEvents = make(chan interface{}, 1024*1024)
+	return s
 }
 
 // Start service
@@ -209,19 +219,13 @@ func (s *Scheduler) addNewApplication(info *cache.ApplicationInfo) error {
 	return s.clusterSchedulingContext.addSchedulingApplication(schedulingApp)
 }
 
-func (s *Scheduler) removeApplication(request *si.RemoveApplicationRequest) error {
-	if _, err := s.clusterSchedulingContext.removeSchedulingApplication(request.ApplicationID, request.PartitionName); err != nil {
-		log.Logger().Error("failed to remove apps",
-			zap.String("appID", request.ApplicationID),
-			zap.String("partitionName", request.PartitionName),
-			zap.Error(err))
-		return err
-	}
+func (s *Scheduler) removeApplication(request *si.RemoveApplicationRequest) []*schedulingAllocation {
+	allocations := s.clusterSchedulingContext.removeSchedulingApplication(request.ApplicationID, request.PartitionName)
 
 	log.Logger().Info("app removed",
 		zap.String("appID", request.ApplicationID),
 		zap.String("partitionName", request.PartitionName))
-	return nil
+	return allocations
 }
 
 func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
@@ -249,7 +253,7 @@ func (s *Scheduler) processAllocationReleaseByAllocationKey(allocationAsksToRele
 			schedulingApp := s.clusterSchedulingContext.GetSchedulingApplication(toRelease.ApplicationID, toRelease.PartitionName)
 			if schedulingApp != nil {
 				// remove the allocation asks from the app
-				reservedAsks := schedulingApp.removeAllocationAsk(toRelease.Allocationkey)
+				reservedAsks := schedulingApp.removeAllocationAskInternal(toRelease.Allocationkey)
 				log.Logger().Info("release allocation ask",
 					zap.String("allocation", toRelease.Allocationkey),
 					zap.String("appID", toRelease.ApplicationID),
@@ -427,75 +431,6 @@ func (s *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAll
 	}
 }
 
-// Process application adds and removes that have been processed by the cache.
-// The cache processes the applications and has already filtered out some apps.
-// All apps come from one si.UpdateRequest and thus from one RM.
-func (s *Scheduler) processApplicationUpdateEvent(ev *schedulerevent.SchedulerApplicationsUpdateEvent) {
-	if len(ev.AddedApplications) > 0 {
-		rejectedApps := make([]*si.RejectedApplication, 0)
-		acceptedApps := make([]*si.AcceptedApplication, 0)
-		var rmID string
-		for _, j := range ev.AddedApplications {
-			app, ok := j.(*cache.ApplicationInfo)
-			// if the cast failed we do not have the correct object, skip it
-			if !ok {
-				log.Logger().Debug("cast failed unexpected object in event",
-					zap.Any("ApplicationInfo", j))
-				continue
-			}
-			rmID = common.GetRMIdFromPartitionName(app.Partition)
-			if err := s.addNewApplication(app); err != nil {
-				log.Logger().Debug("rejecting application in scheduler",
-					zap.String("appID", app.ApplicationID),
-					zap.String("partitionName", app.Partition),
-					zap.Error(err))
-				// update cache
-				s.eventHandlers.CacheEventHandler.HandleEvent(
-					&cacheevent.RejectedNewApplicationEvent{
-						ApplicationID: app.ApplicationID,
-						PartitionName: app.Partition,
-						Reason:        err.Error(),
-					})
-				rejectedApps = append(rejectedApps, &si.RejectedApplication{
-					ApplicationID: app.ApplicationID,
-					Reason:        err.Error(),
-				})
-				// app is rejected by the scheduler
-				err = app.HandleApplicationEvent(cache.RejectApplication)
-				if err != nil {
-					log.Logger().Debug("cache event handling error returned",
-						zap.Error(err))
-				}
-			} else {
-				acceptedApps = append(acceptedApps, &si.AcceptedApplication{
-					ApplicationID: app.ApplicationID,
-				})
-			}
-		}
-		// notify RM proxy about apps added and rejected
-		s.eventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMApplicationUpdateEvent{
-			RmID:                 rmID,
-			AcceptedApplications: acceptedApps,
-			RejectedApplications: rejectedApps,
-		})
-	}
-
-	if len(ev.RemovedApplications) > 0 {
-		for _, app := range ev.RemovedApplications {
-			err := s.removeApplication(app)
-
-			if err != nil {
-				log.Logger().Error("failed to remove app from partition",
-					zap.String("appID", app.ApplicationID),
-					zap.String("partitionName", app.PartitionName),
-					zap.Error(err))
-				continue
-			}
-			s.eventHandlers.CacheEventHandler.HandleEvent(&cacheevent.RemovedApplicationEvent{ApplicationID: app.ApplicationID, PartitionName: app.PartitionName})
-		}
-	}
-}
-
 func (s *Scheduler) removePartitionsBelongToRM(event *commonevents.RemoveRMPartitionsEvent) {
 	s.clusterSchedulingContext.RemoveSchedulingPartitionsByRMId(event.RmID)
 
@@ -592,8 +527,6 @@ func (s *Scheduler) handleSchedulerEvent() {
 			s.processNodeEvent(v)
 		case *schedulerevent.SchedulerAllocationUpdatesEvent:
 			s.processAllocationUpdateEvent(v)
-		case *schedulerevent.SchedulerApplicationsUpdateEvent:
-			s.processApplicationUpdateEvent(v)
 		case *commonevents.RemoveRMPartitionsEvent:
 			s.removePartitionsBelongToRM(v)
 		case *schedulerevent.SchedulerUpdatePartitionsConfigEvent:
@@ -675,4 +608,621 @@ func (s *Scheduler) updateAppAllocating(ask *schedulingAllocationAsk, nodeID str
 		zap.String("queueName", ask.QueueName))
 	app.recoverOnNode(node, ask)
 	return nil
+}
+
+func (s *Scheduler) handleSchedulerEvents() {
+	for {
+		ev := <-s.pendingSchedulerEvents
+		switch v := ev.(type) {
+		case *cacheevent.AllocationProposalBundleEvent:
+			s.processAllocationProposalEvent(v)
+		case *cacheevent.RejectedNewApplicationEvent:
+			s.processRejectedApplicationEvent(v)
+		case *cacheevent.ReleaseAllocationsEvent:
+			s.handleAllocationReleasesRequestEvent(v)
+		case *commonevents.RemoveRMPartitionsEvent:
+			s.processRemoveRMPartitionsEvent(v)
+		default:
+			log.Logger().Error("Received type is not an acceptable type for scheduler event.",
+				zap.String("received type", reflect.TypeOf(v).String()))
+		}
+	}
+}
+
+func (s *Scheduler) handleRMEvents() {
+	for {
+		ev := <-s.pendingRmEvents
+		switch v := ev.(type) {
+		case *cacheevent.RMUpdateRequestEvent:
+			s.processRMUpdateEvent(v)
+		case *commonevents.RegisterRMEvent:
+			s.processRMRegistrationEvent(v)
+		case *commonevents.ConfigUpdateRMEvent:
+			s.processRMConfigUpdateEvent(v)
+		default:
+			log.Logger().Error("Received type is not an acceptable type for RM event.",
+				zap.String("received type", reflect.TypeOf(v).String()))
+		}
+	}
+}
+
+// Implement methods for Cache events
+func (s *Scheduler) HandleEvent(ev interface{}) {
+	switch v := ev.(type) {
+	case *cacheevent.AllocationProposalBundleEvent:
+		enqueueAndCheckFull(s.pendingSchedulerEvents, v)
+	case *cacheevent.RejectedNewApplicationEvent:
+		enqueueAndCheckFull(s.pendingSchedulerEvents, v)
+	case *cacheevent.ReleaseAllocationsEvent:
+		enqueueAndCheckFull(s.pendingSchedulerEvents, v)
+	case *commonevents.RemoveRMPartitionsEvent:
+		enqueueAndCheckFull(s.pendingSchedulerEvents, v)
+	case *cacheevent.RMUpdateRequestEvent:
+		enqueueAndCheckFull(s.pendingRmEvents, v)
+	case *commonevents.RegisterRMEvent:
+		enqueueAndCheckFull(s.pendingRmEvents, v)
+	case *commonevents.ConfigUpdateRMEvent:
+		enqueueAndCheckFull(s.pendingRmEvents, v)
+	default:
+		log.Logger().Error("Received unexpected event type.",
+			zap.String("Received event type", reflect.TypeOf(v).String()))
+	}
+}
+
+func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
+	select {
+	case queue <- ev:
+		log.Logger().Debug("enqueued event",
+			zap.String("eventType", reflect.TypeOf(ev).String()),
+			zap.Any("event", ev),
+			zap.Int("currentQueueSize", len(queue)))
+	default:
+		log.Logger().DPanic("failed to enqueue event",
+			zap.String("event", reflect.TypeOf(ev).String()))
+	}
+}
+
+// Get the config name.
+// Locked call, used outside of the cache.
+func (s *Scheduler) GetPolicyGroup() string {
+	s.RLock()
+	defer s.RUnlock()
+	return s.policyGroup
+}
+
+// Get the list of partitions.
+// Locked call, used outside of the cache.
+func (s *Scheduler) ListPartitions() []string {
+	s.RLock()
+	defer s.RUnlock()
+	var partitions []string
+	for k := range s.partitions {
+		partitions = append(partitions, k)
+	}
+	return partitions
+}
+
+// Get the partition by name.
+// Locked call, used outside of the cache.
+func (s *Scheduler) GetPartition(name string) *PartitionSchedulingContext {
+	s.RLock()
+	defer s.RUnlock()
+	return s.partitions[name]
+}
+
+// Add a new partition to the cluster, locked.
+// Called by the configuration update.
+func (s *Scheduler) addPartition(name string, partition *PartitionSchedulingContext) {
+	s.Lock()
+	defer s.Unlock()
+	s.partitions[name] = partition
+}
+
+// Remove a partition from the cluster, locked.
+// Called by the partition itself when the partition is removed by the partition manager.
+func (s *Scheduler) removePartition(name string) {
+	s.Lock()
+	defer s.Unlock()
+	delete(s.partitions, name)
+}
+
+// Process the application update. Add and remove applications from the partitions.
+// Lock free call, all updates occur on the underlying partition which is locked, or via events.
+func (s *Scheduler) processApplicationUpdateFromRMUpdate(request *si.UpdateRequest) {
+	if len(request.NewApplications) == 0 && len(request.RemoveApplications) == 0 {
+		return
+	}
+	addedAppInfosInterface := make([]interface{}, 0)
+	rejectedApps := make([]*si.RejectedApplication, 0)
+
+	for _, app := range request.NewApplications {
+		partitionInfo := s.GetPartition(app.PartitionName)
+		if partitionInfo == nil {
+			msg := fmt.Sprintf("Failed to add application %s to partition %s, partition doesn't exist", app.ApplicationID, app.PartitionName)
+			log.Logger().Info(msg)
+			rejectedApps = append(rejectedApps, &si.RejectedApplication{
+				ApplicationID: app.ApplicationID,
+				Reason:        msg,
+			})
+			continue
+		}
+		// convert and resolve the user: cache can be set per partition
+		ugi, err := partitionInfo.convertUGI(app.Ugi)
+		if err != nil {
+			rejectedApps = append(rejectedApps, &si.RejectedApplication{
+				ApplicationID: app.ApplicationID,
+				Reason:        err.Error(),
+			})
+			continue
+		}
+		// create a new app object and add it to the partition (partition logs details)
+		appInfo := NewSchedulingApp(app.ApplicationID, app.PartitionName, app.QueueName, ugi, app.Tags,
+			s.eventHandlers, request.RmID)
+		if err = partitionInfo.addSchedulingApplication(appInfo); err != nil {
+			rejectedApps = append(rejectedApps, &si.RejectedApplication{
+				ApplicationID: app.ApplicationID,
+				Reason:        err.Error(),
+			})
+			continue
+		}
+		addedAppInfosInterface = append(addedAppInfosInterface, appInfo)
+	}
+
+	// Respond to RMProxy with already rejected apps if needed
+	if len(rejectedApps) > 0 {
+		s.eventHandlers.RMProxyEventHandler.HandleEvent(
+			&rmevent.RMApplicationUpdateEvent{
+				RmID:                 request.RmID,
+				AcceptedApplications: make([]*si.AcceptedApplication, 0),
+				RejectedApplications: rejectedApps,
+			})
+	}
+
+	if len(request.RemoveApplications) > 0 {
+		metrics.GetSchedulerMetrics().SubTotalApplicationsRunning(len(request.RemoveApplications))
+		// ToDO: need to improve this once we have state in YuniKorn for apps.
+		metrics.GetSchedulerMetrics().AddTotalApplicationsCompleted(len(request.RemoveApplications))
+
+		for _, app := range request.RemoveApplications {
+			allocations := s.removeApplication(app)
+
+			if len(allocations) > 0 {
+				rmID := common.GetRMIdFromPartitionName(app.PartitionName)
+				s.notifyRMAllocationReleased(rmID, allocations, si.AllocationReleaseResponse_STOPPED_BY_RM,
+					fmt.Sprintf("Application %s Removed", app.ApplicationID))
+			}
+		}
+	}
+}
+
+// Process the allocation updates. Add and remove allocations for the applications.
+// Lock free call, all updates occur on the underlying application which is locked or via events.
+func (s *Scheduler) processNewAndReleaseAllocationRequests(request *si.UpdateRequest) {
+	if len(request.Asks) == 0 && request.Releases == nil {
+		return
+	}
+	// Send rejects back to RM
+	rejectedAsks := make([]*si.RejectedAllocationAsk, 0)
+
+	// Send to scheduler
+	for _, req := range request.Asks {
+		// try to get ApplicationInfo
+		partitionInfo := s.GetPartition(req.PartitionName)
+		if partitionInfo == nil {
+			msg := fmt.Sprintf("Failed to find partition %s, for application %s and allocation %s", req.PartitionName, req.ApplicationID, req.AllocationKey)
+			log.Logger().Info(msg)
+			rejectedAsks = append(rejectedAsks, &si.RejectedAllocationAsk{
+				AllocationKey: req.AllocationKey,
+				ApplicationID: req.ApplicationID,
+				Reason:        msg,
+			})
+			continue
+		}
+
+		// if app info doesn't exist, reject the request
+		appInfo := partitionInfo.getApplication(req.ApplicationID)
+		if appInfo == nil {
+			msg := fmt.Sprintf("Failed to find application %s, for allocation %s", req.ApplicationID, req.AllocationKey)
+			log.Logger().Info(msg)
+			rejectedAsks = append(rejectedAsks,
+				&si.RejectedAllocationAsk{
+					AllocationKey: req.AllocationKey,
+					ApplicationID: req.ApplicationID,
+					Reason:        msg,
+				})
+			continue
+		}
+	}
+
+	// Reject asks returned to RM Proxy for the apps and partitions not found
+	if len(rejectedAsks) > 0 {
+		s.EventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMRejectedAllocationAskEvent{
+			RmID:                   request.RmID,
+			RejectedAllocationAsks: rejectedAsks,
+		})
+	}
+
+	// Send all asks and release allocation requests to scheduler
+	s.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
+		NewAsks:    request.Asks,
+		ToReleases: request.Releases,
+	})
+}
+
+func (s *Scheduler) processNewSchedulableNodes(request *si.UpdateRequest) {
+	acceptedNodes := make([]*si.AcceptedNode, 0)
+	rejectedNodes := make([]*si.RejectedNode, 0)
+	existingAllocations := make([]*si.Allocation, 0)
+	for _, node := range request.NewSchedulableNodes {
+		nodeInfo := NewNodeInfo(node)
+		partition := s.GetPartition(nodeInfo.Partition)
+		if partition == nil {
+			msg := fmt.Sprintf("Failed to find partition %s for new node %s", nodeInfo.Partition, node.NodeID)
+			log.Logger().Info(msg)
+			// TODO assess impact of partition metrics (this never hit the partition)
+			metrics.GetSchedulerMetrics().IncFailedNodes()
+			rejectedNodes = append(rejectedNodes,
+				&si.RejectedNode{
+					NodeID: node.NodeID,
+					Reason: msg,
+				})
+			continue
+		}
+		err := partition.addNewNode(nodeInfo, node.ExistingAllocations)
+		if err != nil {
+			msg := fmt.Sprintf("Failure while adding new node, node rejected with error %s", err.Error())
+			log.Logger().Warn(msg)
+			rejectedNodes = append(rejectedNodes,
+				&si.RejectedNode{
+					NodeID: node.NodeID,
+					Reason: msg,
+				})
+			continue
+		}
+		log.Logger().Info("successfully added node",
+			zap.String("nodeID", node.NodeID),
+			zap.String("partition", nodeInfo.Partition))
+		// create the equivalent scheduling node
+		s.EventHandlers.SchedulerEventHandler.HandleEvent(
+			&schedulerevent.SchedulerNodeEvent{
+				AddedNode: nodeInfo,
+			})
+		acceptedNodes = append(acceptedNodes, &si.AcceptedNode{NodeID: node.NodeID})
+		existingAllocations = append(existingAllocations, node.ExistingAllocations...)
+	}
+
+	// inform the RM which nodes have been accepted
+	s.EventHandlers.RMProxyEventHandler.HandleEvent(
+		&rmevent.RMNodeUpdateEvent{
+			RmID:          request.RmID,
+			AcceptedNodes: acceptedNodes,
+			RejectedNodes: rejectedNodes,
+		})
+
+	// notify the scheduler to recover existing allocations (only when provided)
+	if len(existingAllocations) > 0 {
+		s.EventHandlers.SchedulerEventHandler.HandleEvent(
+			&schedulerevent.SchedulerAllocationUpdatesEvent{
+				ExistingAllocations: existingAllocations,
+				RMId:                request.RmID,
+			})
+	}
+}
+
+// RM may notify us to remove, blacklist or whitelist a node,
+// this is to process such actions.
+func (s *Scheduler) processNodeActions(request *si.UpdateRequest) {
+	for _, update := range request.UpdatedNodes {
+		var partition *PartitionInfo
+		if p, ok := update.Attributes[siCommon.NodePartition]; ok {
+			partition = s.GetPartition(p)
+		} else {
+			log.Logger().Debug("node partition not specified",
+				zap.String("nodeID", update.NodeID),
+				zap.String("nodeAction", update.Action.String()))
+			continue
+		}
+
+		if partition == nil {
+			continue
+		}
+
+		if nodeInfo, ok := partition.nodes[update.NodeID]; ok {
+			switch update.Action {
+			case si.UpdateNodeInfo_UPDATE:
+				if sr := update.SchedulableResource; sr != nil {
+					newCapacity := resources.NewResourceFromProto(sr)
+					nodeInfo.setCapacity(newCapacity)
+				}
+				if or := update.OccupiedResource; or != nil {
+					newOccupied := resources.NewResourceFromProto(or)
+					nodeInfo.setOccupiedResource(newOccupied)
+				}
+				s.EventHandlers.SchedulerEventHandler.HandleEvent(
+					&schedulerevent.SchedulerNodeEvent{
+						UpdateNode: nodeInfo,
+					})
+			case si.UpdateNodeInfo_DRAIN_NODE:
+				// set the state to not schedulable
+				nodeInfo.SetSchedulable(false)
+			case si.UpdateNodeInfo_DRAIN_TO_SCHEDULABLE:
+				// set the state to schedulable
+				nodeInfo.SetSchedulable(true)
+			case si.UpdateNodeInfo_DECOMISSION:
+				// set the state to not schedulable then tell the partition to clean up
+				nodeInfo.SetSchedulable(false)
+				released := partition.RemoveNode(nodeInfo.NodeID)
+				// notify the shim allocations have been released from node
+				if len(released) != 0 {
+					s.notifyRMAllocationReleased(partition.RmID, released, si.AllocationReleaseResponse_STOPPED_BY_RM,
+						fmt.Sprintf("Node %s Removed", nodeInfo.NodeID))
+				}
+				// remove the equivalent scheduling node
+				s.EventHandlers.SchedulerEventHandler.HandleEvent(
+					&schedulerevent.SchedulerNodeEvent{
+						RemovedNode: nodeInfo,
+					})
+			}
+		}
+	}
+}
+
+// Process the node updates: add and remove nodes as needed.
+// Lock free call, all updates occur on the underlying node which is locked or via events.
+func (s *Scheduler) processNodeUpdate(request *si.UpdateRequest) {
+	// Process add node
+	if len(request.NewSchedulableNodes) > 0 {
+		s.processNewSchedulableNodes(request)
+	}
+
+	if len(request.UpdatedNodes) > 0 {
+		s.processNodeActions(request)
+	}
+}
+
+// Process RM event internally. Split in steps that handle specific parts.
+// Lock free call, all updates occur in other methods.
+func (s *Scheduler) processRMUpdateEvent(event *cacheevent.RMUpdateRequestEvent) {
+	// Order of following operations are important,
+	// don't change unless carefully thought
+	request := event.Request
+	// 1) Add / remove app requested by RM.
+	s.processApplicationUpdateFromRMUpdate(request)
+	// 2) Add new request, release allocation, cancel request
+	s.processNewAndReleaseAllocationRequests(request)
+	// 3) Add / remove / update Nodes
+	s.processNodeUpdate(request)
+}
+
+// Process the RM registration
+// Updated partitions can not fail on the scheduler side.
+// Locking occurs by the methods that are called, this must be lock free.
+func (s *Scheduler) processRMRegistrationEvent(event *commonevents.RegisterRMEvent) {
+	updatedPartitions, err := SetClusterInfoFromConfigFile(m, event.RMRegistrationRequest.RmID, event.RMRegistrationRequest.PolicyGroup)
+	if err != nil {
+		event.Channel <- &commonevents.Result{Succeeded: false, Reason: err.Error()}
+	}
+
+	updatedPartitionsInterfaces := make([]interface{}, 0)
+	for _, u := range updatedPartitions {
+		updatedPartitionsInterfaces = append(updatedPartitionsInterfaces, u)
+	}
+
+	// Send updated partitions to scheduler
+	s.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerUpdatePartitionsConfigEvent{
+		UpdatedPartitions: updatedPartitionsInterfaces,
+		ResultChannel:     event.Channel,
+	})
+}
+
+// Process a configuration update.
+// The configuration is syntax checked as part of the update of the cluster from the file.
+// Updated and deleted partitions can not fail on the scheduler side.
+// Locking occurs by the methods that are called, this must be lock free.
+func (s *Scheduler) processRMConfigUpdateEvent(event *commonevents.ConfigUpdateRMEvent) {
+	updatedPartitions, deletedPartitions, err := UpdateClusterInfoFromConfigFile(m, event.RmID)
+	if err != nil {
+		event.Channel <- &commonevents.Result{Succeeded: false, Reason: err.Error()}
+		return
+	}
+
+	updatedPartitionsInterfaces := make([]interface{}, 0)
+	for _, u := range updatedPartitions {
+		updatedPartitionsInterfaces = append(updatedPartitionsInterfaces, u)
+	}
+
+	// Send updated partitions to scheduler
+	updatePartitionResult := make(chan *commonevents.Result)
+	s.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerUpdatePartitionsConfigEvent{
+		UpdatedPartitions: updatedPartitionsInterfaces,
+		ResultChannel:     updatePartitionResult,
+	})
+	result := <-updatePartitionResult
+	if !result.Succeeded {
+		event.Channel <- &commonevents.Result{Succeeded: false, Reason: result.Reason}
+		return
+	}
+
+	deletedPartitionsInterfaces := make([]interface{}, 0)
+	for _, u := range deletedPartitions {
+		deletedPartitionsInterfaces = append(deletedPartitionsInterfaces, u)
+	}
+
+	// Send deleted partitions to the scheduler
+	deletePartitionResult := make(chan *commonevents.Result)
+	s.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerDeletePartitionsConfigEvent{
+		DeletePartitions: deletedPartitionsInterfaces,
+		ResultChannel:    deletePartitionResult,
+	})
+	result = <-deletePartitionResult
+	if !result.Succeeded {
+		event.Channel <- &commonevents.Result{Succeeded: false, Reason: result.Reason}
+		return
+	}
+
+	// all succeed
+	event.Channel <- &commonevents.Result{Succeeded: true}
+}
+
+// Process an allocation bundle which could contain release and allocation proposals.
+// Lock free call, all updates occur on the underlying partition which is locked or via events.
+func (s *Scheduler) processAllocationProposalEvent(event *cacheevent.AllocationProposalBundleEvent) {
+	// Release if there is anything to release
+	if len(event.ReleaseProposals) > 0 {
+		s.processAllocationReleases(event.ReleaseProposals)
+	}
+	// Skip allocation if nothing here.
+	if len(event.AllocationProposals) == 0 {
+		return
+	}
+
+	// we currently only support 1 allocation in the list, reject all but the first
+	if len(event.AllocationProposals) != 1 {
+		log.Logger().Info("More than 1 allocation proposal rejected all but first",
+			zap.Int("allocPropLength", len(event.AllocationProposals)))
+		// Send reject event back to scheduler for all but first
+		// this can be more than 1
+		s.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
+			RejectedAllocations: event.AllocationProposals[1:],
+		})
+	}
+	// just process the first the rest is rejected already
+	proposal := event.AllocationProposals[0]
+	partitionInfo := s.GetPartition(proposal.PartitionName)
+	allocInfo, err := partitionInfo.addNewAllocation(proposal)
+	if err != nil {
+		log.Logger().Error("failed to add new allocation to partition",
+			zap.String("partition", partitionInfo.Name),
+			zap.String("allocationKey", proposal.AllocationKey),
+			zap.Error(err))
+		// Send reject event back to scheduler
+		// this could be more than 1 for the handler however here we can only have 1
+		s.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
+			RejectedAllocations: event.AllocationProposals[:1],
+		})
+		return
+	}
+
+	log.Logger().Info("allocation accepted",
+		zap.String("appID", proposal.ApplicationID),
+		zap.String("queue", proposal.QueueName),
+		zap.String("partition", proposal.PartitionName),
+		zap.String("allocationKey", proposal.AllocationKey))
+
+	// all is confirmed set the UUID in the proposal to pass it back to the scheduler
+	// currently used when an ask is removed while allocation is in flight
+	proposal.UUID = allocInfo.AllocationProto.UUID
+	// Send accept event back to scheduler
+	// this must be only 1: the handler will ignore all others
+	s.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
+		AcceptedAllocations: event.AllocationProposals[:1],
+	})
+	rmID := common.GetRMIdFromPartitionName(proposal.PartitionName)
+
+	// Send allocation event to RM: rejects are not passed back
+	s.EventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMNewAllocationsEvent{
+		Allocations: []*si.Allocation{allocInfo.AllocationProto},
+		RmID:        rmID,
+	})
+}
+
+// Rejected application from the scheduler.
+// Cleanup the app from the partition.
+// Lock free call, all updates occur in the partition which is locked.
+func (s *Scheduler) processRejectedApplicationEvent(event *cacheevent.RejectedNewApplicationEvent) {
+	if partition := s.GetPartition(event.PartitionName); partition != nil {
+		partition.removeRejectedApp(event.ApplicationID)
+	}
+}
+
+// Release the preempted resources we have released from the scheduling node
+func (s *Scheduler) notifySchedNodeAllocReleased(infos []*AllocationInfo, partitionName string) {
+	// we should only have 1 node but be safe and handle multiple independent nodes
+	nodeRes := make([]schedulerevent.PreemptedNodeResource, len(infos))
+	for i, info := range infos {
+		nodeRes[i] = schedulerevent.PreemptedNodeResource{
+			NodeID:       info.AllocationProto.NodeID,
+			Partition:    partitionName,
+			PreemptedRes: info.AllocatedResource,
+		}
+	}
+	// pass all the preempted resources to the scheduler
+	s.EventHandlers.SchedulerEventHandler.HandleEvent(
+		&schedulerevent.SchedulerNodeEvent{
+			PreemptedNodeResources: nodeRes,
+		})
+}
+
+// Create a RM update event to notify RM of released allocations
+// Lock free call, all updates occur via events.
+func (s *Scheduler) notifyRMAllocationReleased(rmID string, released []*AllocationInfo, terminationType si.AllocationReleaseResponse_TerminationType, message string) {
+	releaseEvent := &rmevent.RMReleaseAllocationEvent{
+		ReleasedAllocations: make([]*si.AllocationReleaseResponse, 0),
+		RmID:                rmID,
+	}
+	for _, alloc := range released {
+		releaseEvent.ReleasedAllocations = append(releaseEvent.ReleasedAllocations, &si.AllocationReleaseResponse{
+			UUID:            alloc.AllocationProto.UUID,
+			TerminationType: terminationType,
+			Message:         message,
+		})
+	}
+
+	s.EventHandlers.RMProxyEventHandler.HandleEvent(releaseEvent)
+}
+
+// Process the allocations to release.
+// Lock free call, all updates occur via events.
+func (s *Scheduler) processAllocationReleases(toReleases []*commonevents.ReleaseAllocation) {
+	// Try to release allocations specified in the events
+	for _, toReleaseAllocation := range toReleases {
+		partitionInfo := s.GetPartition(toReleaseAllocation.PartitionName)
+		if partitionInfo == nil {
+			log.Logger().Info("Failed to find partition for allocation proposal",
+				zap.String("partitionName", toReleaseAllocation.PartitionName))
+			continue
+		}
+		rmID := common.GetRMIdFromPartitionName(toReleaseAllocation.PartitionName)
+		// release the allocation from the partition
+		releasedAllocations := partitionInfo.releaseAllocationsForApplication(toReleaseAllocation)
+		if len(releasedAllocations) != 0 {
+			// if the resources released were preempted update the scheduling node that it is done
+			if toReleaseAllocation.ReleaseType == si.AllocationReleaseResponse_PREEMPTED_BY_SCHEDULER {
+				s.notifySchedNodeAllocReleased(releasedAllocations, toReleaseAllocation.PartitionName)
+			}
+			// whatever was released pass it back to the RM
+			s.notifyRMAllocationReleased(rmID, releasedAllocations, toReleaseAllocation.ReleaseType, toReleaseAllocation.Message)
+		}
+	}
+}
+
+// Process the allocation release event.
+func (s *Scheduler) handleAllocationReleasesRequestEvent(event *cacheevent.ReleaseAllocationsEvent) {
+	// Release if there is anything to release.
+	if len(event.AllocationsToRelease) > 0 {
+		s.processAllocationReleases(event.AllocationsToRelease)
+	}
+}
+
+func (s *Scheduler) processRemoveRMPartitionsEvent(event *commonevents.RemoveRMPartitionsEvent) {
+	// Hold write lock of cache
+	s.Lock()
+	defer s.Unlock()
+
+	toRemove := make(map[string]bool)
+
+	for partition, partitionContext := range s.partitions {
+		if partitionContext.RmID == event.RmID {
+			toRemove[partition] = true
+		}
+	}
+
+	for partition := range toRemove {
+		delete(s.partitions, partition)
+	}
+
+	// Done, notify channel
+	event.Channel <- &commonevents.Result{
+		Succeeded: true,
+	}
 }

@@ -652,7 +652,7 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 	if alloc.SchedulingAsk.AskProto.AllocationKey == "alloc-3" {
 		removeAskID = "alloc-3"
 	}
-	released := app.removeAllocationAsk(removeAskID)
+	released := app.removeAllocationAskInternal(removeAskID)
 	assert.Equal(t, released, 1, "expected one reservations to be released")
 	partition.unReserveUpdate(appID, released)
 	assert.Equal(t, len(partition.reservedApps), 1, "partition should still have reserved app")
@@ -1249,7 +1249,7 @@ func TestRemoveApp(t *testing.T) {
 	assert.NilError(t, err, "add allocation to partition should not have failed")
 	uuid := alloc.GetUUID()
 
-	app, allocs := partition.RemoveApplication("does_not_exist")
+	app, allocs := partition.removeApplication("does_not_exist")
 	if app != nil && len(allocs) != 0 {
 		t.Errorf("non existing application returned unexpected values: application info %v (allocs = %v)", app, allocs)
 	}
@@ -1263,7 +1263,7 @@ func TestRemoveApp(t *testing.T) {
 	}
 
 	// remove the newly added app (no allocations)
-	app, allocs = partition.RemoveApplication(appID)
+	app, allocs = partition.removeApplication(appID)
 	if app == nil && len(allocs) != 0 {
 		t.Errorf("existing application without allocations returned allocations %v", allocs)
 	}
@@ -1282,7 +1282,7 @@ func TestRemoveApp(t *testing.T) {
 	}
 
 	// remove the newly added app
-	app, allocs = partition.RemoveApplication(appID)
+	app, allocs = partition.removeApplication(appID)
 	if app == nil && len(allocs) != 1 {
 		t.Errorf("existing application with allocations returned unexpected allocations %v", allocs)
 	}

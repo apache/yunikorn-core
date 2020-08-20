@@ -121,18 +121,19 @@ func (csc *ClusterSchedulingContext) addSchedulingApplication(schedulingApp *Sch
 	return nil
 }
 
-func (csc *ClusterSchedulingContext) removeSchedulingApplication(appID string, partitionName string) (*SchedulingApplication, error) {
+func (csc *ClusterSchedulingContext) removeSchedulingApplication(appID string, partitionName string) []*schedulingAllocation {
 	csc.lock.Lock()
 	defer csc.lock.Unlock()
 
 	if partition := csc.partitions[partitionName]; partition != nil {
-		schedulingApp, err := partition.removeSchedulingApplication(appID)
-		if err != nil {
-			return nil, err
-		}
-		return schedulingApp, nil
+		allocations := partition.removeApplication(appID)
+		return allocations
 	}
-	return nil, fmt.Errorf("failed to find partition=%s while remove app=%s", partitionName, appID)
+
+	log.Logger().Warn("failed to find partition while remove app",
+		zap.String("partition", partitionName),
+		zap.String("app", appID))
+	return nil
 }
 
 // Update the scheduler's partition list based on the processed config

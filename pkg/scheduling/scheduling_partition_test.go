@@ -33,7 +33,7 @@ import (
 
 func newTestPartition() (*PartitionSchedulingContext, error) {
 	config, _ := createSchedulerConfig([]byte(configDefault))
-	return newPartitionInfo(config.Partitions[0], "test")
+	return newSchedulingPartitionFromConfig(config.Partitions[0], "test")
 }
 
 func TestNewPartition(t *testing.T) {

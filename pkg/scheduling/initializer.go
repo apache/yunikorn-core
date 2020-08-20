@@ -152,7 +152,7 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmID string) ([]*
 // Create a new checked PartitionInfo
 // convenience method that wraps creation and checking the settings.
 func newPartitionInfoInternal(part configs.PartitionConfig, rmID string, info *ClusterInfo) (*PartitionInfo, error) {
-	partition, err := newPartitionInfo(part, rmID, info)
+	partition, err := newSchedulingPartitionFromConfig(part, rmID, info)
 	if err != nil {
 		return nil, err
 	}

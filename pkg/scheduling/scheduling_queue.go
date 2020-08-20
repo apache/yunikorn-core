@@ -29,7 +29,6 @@ import (
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
@@ -182,13 +181,13 @@ func (sq *SchedulingQueue) updateSchedulingQueueProperties(prop map[string]strin
 // Child queues that are removed from the configuration have been changed to a draining state and will not be scheduled.
 // They are not removed until the queue is really empty, no action must be taken here.
 // FIXME: Properly handle update scheduler config, error during initialization, etc.
-func (sq *SchedulingQueue) updateSchedulingQueueInfo(info map[string]*cache.QueueInfo, parent *SchedulingQueue) {
+func (sq *SchedulingQueue) updateSchedulingQueueInfo(updatedQueues map[string]*SchedulingQueue, parent *SchedulingQueue) {
 	// initialise the child queues based on what is in the cached copy
-	for childName, childQueue := range info {
+	for childName, childQueue := range updatedQueues {
 		child := sq.getChildQueue(childName)
 		// create a new queue if it does not exist
 		if child == nil {
-			child = NewPreConfiguredQueue(childQueue, parent)
+			parent.addChildQueue(child)
 		} else {
 			child.updateSchedulingQueueProperties(childQueue.GetProperties())
 		}

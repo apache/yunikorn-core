@@ -67,7 +67,7 @@ type PartitionSchedulingContext struct {
 
 // Create a new partition from scratch based on a validated configuration.
 // If the configuration did not pass validation and is processed weird errors could occur.
-func newPartitionInfo(conf configs.PartitionConfig, rmID string) (*PartitionSchedulingContext, error) {
+func newSchedulingPartitionFromConfig(conf configs.PartitionConfig, rmID string) (*PartitionSchedulingContext, error) {
 	p := &PartitionSchedulingContext{
 		Name:                   conf.Name,
 		RmID:                   rmID,
@@ -138,13 +138,13 @@ func initialPartitionFromConfig(p *PartitionSchedulingContext, conf configs.Part
 }
 
 // Update the scheduling partition based on the reloaded config.
-func (psc *PartitionSchedulingContext) updatePartitionSchedulingContext(info *cache.PartitionInfo) {
+func (psc *PartitionSchedulingContext) updatePartitionSchedulingContext(updatePartition *PartitionSchedulingContext) {
 	psc.Lock()
 	defer psc.Unlock()
 
 	if psc.placementManager.IsInitialised() {
 		log.Logger().Info("Updating placement manager rules on config reload")
-		err := psc.placementManager.UpdateRules(info.GetRules())
+		err := psc.placementManager.UpdateRules(updatePartition.GetRules())
 		if err != nil {
 			log.Logger().Info("New placement rules not activated, config reload failed", zap.Error(err))
 		}
@@ -154,9 +154,9 @@ func (psc *PartitionSchedulingContext) updatePartitionSchedulingContext(info *ca
 	}
 	root := psc.root
 	// update the root queue properties
-	root.updateSchedulingQueueProperties(info.Root.GetProperties())
+	root.updateSchedulingQueueProperties(updatePartition.root.GetProperties())
 	// update the rest of the queues recursively
-	root.updateSchedulingQueueInfo(info.Root.GetCopyOfChildren(), root)
+	root.updateSchedulingQueueInfo(updatePartition.root.GetCopyOfChildren(), root)
 }
 
 // Add a new application to the scheduling partition.

@@ -93,7 +93,7 @@ func createMockPartitionSchedulingContextFromConfig(configBytes []byte) (*Partit
 	if err != nil {
 		return nil, err
 	}
-	return newPartitionInfo(config.Partitions[0], "test")
+	return newSchedulingPartitionFromConfig(config.Partitions[0], "test")
 }
 
 func newSchedulingAppTestOnly(appID, partition, queueName string) *SchedulingApplication {

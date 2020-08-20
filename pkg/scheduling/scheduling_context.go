@@ -29,6 +29,8 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/schedulerevent"
 )
 
+
+// FIXME: remove this class
 type ClusterSchedulingContext struct {
 	partitions map[string]*PartitionSchedulingContext
 
@@ -104,8 +106,8 @@ func (csc *ClusterSchedulingContext) GetPartitionReservations(partitionName stri
 }
 
 func (csc *ClusterSchedulingContext) addSchedulingApplication(schedulingApp *SchedulingApplication) error {
-	partitionName := schedulingApp.ApplicationInfo.Partition
-	appID := schedulingApp.ApplicationInfo.ApplicationID
+	partitionName := schedulingApp.Partition
+	appID := schedulingApp.ApplicationID
 
 	csc.lock.Lock()
 	defer csc.lock.Unlock()
@@ -140,7 +142,7 @@ func (csc *ClusterSchedulingContext) removeSchedulingApplication(appID string, p
 // - updates existing partitions and the queues linked
 // - add new partitions including queues
 // updates and add internally are processed differently outside of this method they are the same.
-func (csc *ClusterSchedulingContext) updateSchedulingPartitions(partitions []*cache.PartitionInfo) error {
+func (csc *ClusterSchedulingContext) updateSchedulingPartitions(partitions []*PartitionSchedulingContext) error {
 	csc.lock.Lock()
 	defer csc.lock.Unlock()
 	log.Logger().Info("updating scheduler context",
@@ -157,18 +159,11 @@ func (csc *ClusterSchedulingContext) updateSchedulingPartitions(partitions []*ca
 			// the partition details don't need updating just the queues
 			partition.updatePartitionSchedulingContext(updatedPartition)
 		} else {
-			log.Logger().Info("creating scheduling partition",
+			log.Logger().Info("Adding new scheduling partition",
 				zap.String("partitionName", updatedPartition.Name))
-			// create a new partition and add the queues
-			root := newSchedulingQueueInfo(updatedPartition.Root, nil)
-			newPartition := newPartitionSchedulingContext(updatedPartition, root)
-			newPartition.partitionManager = &partitionManager{
-				psc: newPartition,
-				csc: csc,
-			}
-			go newPartition.partitionManager.Run()
 
-			csc.partitions[updatedPartition.Name] = newPartition
+			csc.partitions[updatedPartition.Name] = updatedPartition
+			go updatedPartition.partitionManager.Run()
 		}
 	}
 	return nil
@@ -194,24 +189,24 @@ func (csc *ClusterSchedulingContext) RemoveSchedulingPartitionsByRMId(rmID strin
 
 // Remove the partition from the scheduler based on a configuration change
 // No resources can be used and the underlying partition should not be running
-func (csc *ClusterSchedulingContext) deleteSchedulingPartitions(partitions []*cache.PartitionInfo) error {
+func (csc *ClusterSchedulingContext) deleteSchedulingPartitions(toDeletePartitions []string) error {
 	csc.lock.Lock()
 	defer csc.lock.Unlock()
 
 	var err error
 	// Walk over the deleted partitions
-	for _, deletedPartition := range partitions {
-		partition := csc.partitions[deletedPartition.Name]
+	for _, deletedPartition := range toDeletePartitions {
+		partition := csc.partitions[deletedPartition]
 		if partition != nil {
 			log.Logger().Info("marking scheduling partition for deletion",
-				zap.String("partitionName", deletedPartition.Name))
+				zap.String("partitionName", deletedPartition))
 			partition.partitionManager.Stop()
 		} else {
 			// collect all errors and keep processing
 			if err == nil {
-				err = fmt.Errorf("failed to find partition that should have been deleted: %s", deletedPartition.Name)
+				err = fmt.Errorf("failed to find partition that should have been deleted: %s", deletedPartition)
 			} else {
-				err = fmt.Errorf("%v, %s", err, deletedPartition.Name)
+				err = fmt.Errorf("%v, %s", err, deletedPartition)
 			}
 		}
 	}

@@ -159,7 +159,7 @@ func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) 
 
 	// Create a sha256 checksum for this validated config
 	conf.Checksum = sha256.Sum256(content)
-	return conf, err
+	return conf, nil
 }
 
 func loadSchedulerConfigFromFile(policyGroup string) (*SchedulerConfig, error) {

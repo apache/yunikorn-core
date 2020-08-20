@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 	siCommon "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"go.uber.org/zap"
@@ -994,74 +995,110 @@ func (s *Scheduler) processRMUpdateEvent(event *cacheevent.RMUpdateRequestEvent)
 	s.processNodeUpdate(request)
 }
 
-// Process the RM registration
-// Updated partitions can not fail on the scheduler side.
-// Locking occurs by the methods that are called, this must be lock free.
-func (s *Scheduler) processRMRegistrationEvent(event *commonevents.RegisterRMEvent) {
-	updatedPartitions, err := SetClusterInfoFromConfigFile(m, event.RMRegistrationRequest.RmID, event.RMRegistrationRequest.PolicyGroup)
-	if err != nil {
-		event.Channel <- &commonevents.Result{Succeeded: false, Reason: err.Error()}
+func (s* Scheduler) updateSchedulerConfig(newConfig *configs.SchedulerConfig, rmId string) error {
+	updatedPartitions := make([]*PartitionSchedulingContext, 0)
+	for _, partitionConf := range newConfig.Partitions {
+		updatedPartition, err := newSchedulingPartitionFromConfig(partitionConf, rmId)
+		if err != nil {
+			log.Logger().Error("failed to initialize partition during config update",
+				zap.String("partition", partitionConf.Name),
+				zap.Error(err))
+			return err
+		}
+		updatedPartitions = append(updatedPartitions, updatedPartition)
 	}
 
-	updatedPartitionsInterfaces := make([]interface{}, 0)
-	for _, u := range updatedPartitions {
-		updatedPartitionsInterfaces = append(updatedPartitionsInterfaces, u)
+	// Get deleted partitions
+	deletedPartitions := make([]string, 0)
+	for _, p := range updatedPartitions {
+		if _, ok := s.partitions[p.Name]; !ok {
+			deletedPartitions = append(deletedPartitions, p.Name)
+		}
 	}
 
-	// Send updated partitions to scheduler
-	s.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerUpdatePartitionsConfigEvent{
-		UpdatedPartitions: updatedPartitionsInterfaces,
-		ResultChannel:     event.Channel,
-	})
+	// Update partitions first
+	if err := s.clusterSchedulingContext.updateSchedulingPartitions(updatedPartitions); err != nil {
+		return err
+	}
+
+	// Handle deleted partitions
+	if err := s.clusterSchedulingContext.deleteSchedulingPartitions(deletedPartitions); err != nil {
+		return err
+	}
+
+	return nil
 }
 
-// Process a configuration update.
-// The configuration is syntax checked as part of the update of the cluster from the file.
-// Updated and deleted partitions can not fail on the scheduler side.
-// Locking occurs by the methods that are called, this must be lock free.
-func (s *Scheduler) processRMConfigUpdateEvent(event *commonevents.ConfigUpdateRMEvent) {
-	updatedPartitions, deletedPartitions, err := UpdateClusterInfoFromConfigFile(m, event.RmID)
+func (s* Scheduler) processRMRegistrationEvent(event *commonevents.RegisterRMEvent) {
+	rmId := event.RMRegistrationRequest.RmID
+	policyGroup := event.RMRegistrationRequest.PolicyGroup
+
+	s.Lock()
+	defer s.Unlock()
+
+	// we should not have any partitions set at this point
+	if len(s.partitions) > 0 {
+		event.Channel <- &commonevents.Result{
+			Succeeded: false,
+			Reason: fmt.Errorf("RM %s has been registered before, active partitions %d", rmId, len(s.partitions)).Error()}
+	}
+
+	// load the config this returns a validated configuration
+	conf, err := s.loadSchedulerConfigAndNotifyError(rmId, policyGroup, event.Channel)
+
 	if err != nil {
-		event.Channel <- &commonevents.Result{Succeeded: false, Reason: err.Error()}
 		return
 	}
 
-	updatedPartitionsInterfaces := make([]interface{}, 0)
-	for _, u := range updatedPartitions {
-		updatedPartitionsInterfaces = append(updatedPartitionsInterfaces, u)
+	if err = s.updateSchedulerConfig(conf, rmId); err != nil {
+		event.Channel <- &commonevents.Result{
+			Succeeded: false,
+			Reason:    fmt.Errorf("failed to update scheduler config, err=%s", err.Error()).Error()}
 	}
 
-	// Send updated partitions to scheduler
-	updatePartitionResult := make(chan *commonevents.Result)
-	s.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerUpdatePartitionsConfigEvent{
-		UpdatedPartitions: updatedPartitionsInterfaces,
-		ResultChannel:     updatePartitionResult,
-	})
-	result := <-updatePartitionResult
-	if !result.Succeeded {
-		event.Channel <- &commonevents.Result{Succeeded: false, Reason: result.Reason}
+	s.policyGroup = policyGroup
+	configs.ConfigContext.Set(policyGroup, conf)
+
+	event.Channel <- &commonevents.Result{Succeeded: true, Reason: ""}
+}
+
+func (s *Scheduler) loadSchedulerConfigAndNotifyError(rmId, policyGroup string, resultChannel chan *commonevents.Result) (*configs.SchedulerConfig, error) {
+	// load the config this returns a validated configuration
+	conf, err := configs.SchedulerConfigLoader(policyGroup)
+
+	if err != nil {
+		resultChannel <- &commonevents.Result{
+			Succeeded: false,
+			Reason:    fmt.Errorf("failed to load scheduler config, err=%s", err.Error()).Error()}
+		return nil, err
+	}
+
+	// Normalize partition name before return
+	for _, p := range conf.Partitions {
+		partitionName := common.GetNormalizedPartitionName(p.Name, rmId)
+		p.Name = partitionName
+	}
+
+	return conf, nil
+}
+
+func (s* Scheduler) processRMConfigUpdateEvent(event *commonevents.ConfigUpdateRMEvent) {
+	s.Lock()
+	defer s.Unlock()
+
+	conf, err := s.loadSchedulerConfigAndNotifyError(event.RmID, s.policyGroup, event.Channel)
+
+	if err != nil {
 		return
 	}
 
-	deletedPartitionsInterfaces := make([]interface{}, 0)
-	for _, u := range deletedPartitions {
-		deletedPartitionsInterfaces = append(deletedPartitionsInterfaces, u)
+	if err = s.updateSchedulerConfig(conf, event.RmID); err != nil {
+		event.Channel <- &commonevents.Result{
+			Succeeded: false,
+			Reason:    fmt.Errorf("failed to update scheduler config, err=%s", err.Error()).Error()}
 	}
 
-	// Send deleted partitions to the scheduler
-	deletePartitionResult := make(chan *commonevents.Result)
-	s.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerDeletePartitionsConfigEvent{
-		DeletePartitions: deletedPartitionsInterfaces,
-		ResultChannel:    deletePartitionResult,
-	})
-	result = <-deletePartitionResult
-	if !result.Succeeded {
-		event.Channel <- &commonevents.Result{Succeeded: false, Reason: result.Reason}
-		return
-	}
-
-	// all succeed
-	event.Channel <- &commonevents.Result{Succeeded: true}
+	event.Channel <- &commonevents.Result{Succeeded: true, Reason: ""}
 }
 
 // Process an allocation bundle which could contain release and allocation proposals.
@@ -1205,20 +1242,23 @@ func (s *Scheduler) handleAllocationReleasesRequestEvent(event *cacheevent.Relea
 }
 
 func (s *Scheduler) processRemoveRMPartitionsEvent(event *commonevents.RemoveRMPartitionsEvent) {
-	// Hold write lock of cache
 	s.Lock()
 	defer s.Unlock()
 
-	toRemove := make(map[string]bool)
-
+	deletedPartitions := make([]string, 0)
 	for partition, partitionContext := range s.partitions {
 		if partitionContext.RmID == event.RmID {
-			toRemove[partition] = true
+			deletedPartitions = append(deletedPartitions, partition)
 		}
 	}
 
-	for partition := range toRemove {
-		delete(s.partitions, partition)
+	// Handle deleted partitions
+	if err := s.clusterSchedulingContext.deleteSchedulingPartitions(deletedPartitions); err != nil {
+		// Done, notify channel
+		event.Channel <- &commonevents.Result{
+			Succeeded: false,
+			Reason:    err.Error(),
+		}
 	}
 
 	// Done, notify channel

@@ -35,7 +35,6 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
@@ -49,7 +48,6 @@ type PartitionSchedulingContext struct {
 	Name string // name of the partition (logging mainly)
 
 	// Private fields need protection
-	partition              *cache.PartitionInfo              // link back to the partition in the cache
 	root                   *SchedulingQueue                  // start of the scheduling queue hierarchy
 	applications           map[string]*SchedulingApplication // applications assigned to this partition
 	reservedApps           map[string]int                    // applications reserved within this partition, with reservation count
@@ -201,13 +199,13 @@ func (psc *PartitionSchedulingContext) addSchedulingApplication(schedulingApp *S
 	// check if the queue already exist and what we have is a leaf queue with submit access
 	if schedulingQueue != nil &&
 		(!schedulingQueue.isLeafQueue() || !schedulingQueue.checkSubmitAccess(schedulingApp.GetUser())) {
-		return fmt.Errorf("failed to find queue %s for application %s", schedulingApp.QueueName, appID)
+		return fmt.Errorf("failed to submit to queue %s for application %s. " +
+			"It is either caused by wrong ACL permission or trying to submit to a parent queue",
+			schedulingApp.QueueName, appID)
 	}
+
 	// with placement rules the hierarchy might not exist so try and create it
 	if schedulingQueue == nil {
-		psc.createSchedulingQueue(queueName, schedulingApp.GetUser())
-		// find the scheduling queue: if it still does not exist we fail the app
-		schedulingQueue = psc.getQueue(queueName)
 		if schedulingQueue == nil {
 			return fmt.Errorf("failed to find queue %s for application %s", schedulingApp.QueueName, appID)
 		}
@@ -242,7 +240,7 @@ func (psc *PartitionSchedulingContext) getReservations() map[string]int {
 func (psc *PartitionSchedulingContext) getQueue(name string) *SchedulingQueue {
 	// start at the root
 	queue := psc.root
-	part := strings.Split(strings.ToLower(name), cache.DOT)
+	part := strings.Split(strings.ToLower(name), DOT)
 	// no input
 	if len(part) == 0 || part[0] != "root" {
 		return nil
@@ -262,43 +260,6 @@ func (psc *PartitionSchedulingContext) getApplication(appID string) *SchedulingA
 	defer psc.RUnlock()
 
 	return psc.applications[appID]
-}
-
-// Create a scheduling queue with full hierarchy. This is called when a new queue is created from a placement rule.
-// It will not return anything and cannot "fail". A failure is picked up by the queue not existing after this call.
-//
-// NOTE: this is a lock free call. It should only be called holding the PartitionSchedulingContext lock.
-func (psc *PartitionSchedulingContext) createSchedulingQueue(name string, user security.UserGroup) {
-	// find the scheduling furthest down the hierarchy that exists
-	schedQueue := name // the scheduling queue that exists
-	cacheQueue := ""   // the cache queue that needs to be created (with children)
-	parent := psc.getQueue(schedQueue)
-	for parent == nil {
-		cacheQueue = schedQueue
-		schedQueue = name[0:strings.LastIndex(name, cache.DOT)]
-		parent = psc.getQueue(schedQueue)
-	}
-	// found the last known scheduling queue,
-	// create the corresponding scheduler queue based on the already created cache queue
-	queue := psc.partition.GetQueue(cacheQueue)
-	// if the cache queue does not exist we should fail this create
-	if queue == nil {
-		return
-	}
-	// Check the ACL before we really create
-	// The existing parent scheduling queue is the lowest we need to look at
-	if !parent.checkSubmitAccess(user) {
-		log.Logger().Debug("Submit access denied by scheduler on queue",
-			zap.String("deniedQueueName", schedQueue),
-			zap.String("requestedQueue", name))
-		return
-	}
-	log.Logger().Debug("Creating scheduling queue(s)",
-		zap.String("parent", schedQueue),
-		zap.String("child", cacheQueue),
-		zap.String("fullPath", name))
-	// FIXME: need revisit how placement rule works in the new code structure
-	newSchedulingQueueInfo(queue, parent)
 }
 
 // Get a scheduling node from the partition by nodeID.
@@ -475,7 +436,7 @@ func (psc *PartitionSchedulingContext) allocate(alloc *schedulingAllocation) boo
 		zap.String("targetNode", alloc.nodeID))
 
 	if commitProposal {
-		psc.scheduler.processAllocationProposalEvent(newSingleAllocationProposal(alloc)))
+		psc.scheduler.addNewSchedulingAllocationToCommit(alloc)
 	}
 	return true
 }
@@ -609,7 +570,7 @@ func (psc *PartitionSchedulingContext) unReserve(app *SchedulingApplication, nod
 // Get the iterator for the sorted nodes list from the partition.
 func (psc *PartitionSchedulingContext) getNodeIteratorForPolicy(nodes []*SchedulingNode) NodeIterator {
 	// Sort Nodes based on the policy configured.
-	configuredPolicy := psc.partition.GetNodeSortingPolicy()
+	configuredPolicy := psc.GetNodeSortingPolicy()
 	if configuredPolicy == common.Undefined {
 		return nil
 	}
@@ -773,6 +734,7 @@ func (psc *PartitionSchedulingContext) addNewNode(node *SchedulingNode, existing
 // Used when a new node is added to the partition which already reports existing allocations.
 // FIXME: overhaul of Allocation from schedulingAllocation needed.
 func (psc *PartitionSchedulingContext) addNodeReportedAllocations(allocation *si.Allocation) (*schedulingAllocation, error) {
+	// FIXME: wangda: we need to create schedulingAllocation based on si.Allocation
 	return psc.addNewAllocationInternal(&commonevents.AllocationProposal{
 		NodeID:            allocation.NodeID,
 		ApplicationID:     allocation.ApplicationID,

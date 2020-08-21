@@ -23,27 +23,26 @@ import (
 	"strings"
 	"sync"
 
-	"go.uber.org/zap"
-
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
+	"go.uber.org/zap"
 )
 
 type AppPlacementManager struct {
 	name        string
-	info        *cache.PartitionInfo
+	psc         *scheduler.PartitionSchedulingContext
 	rules       []rule
 	initialised bool
 	lock        sync.RWMutex
 }
 
-func NewPlacementManager(info *cache.PartitionInfo) *AppPlacementManager {
+func NewPlacementManager(psc *scheduler.PartitionSchedulingContext) *AppPlacementManager {
 	m := &AppPlacementManager{
-		name: info.Name,
-		info: info,
+		name: psc.Name,
+		psc:  psc,
 	}
-	rules := info.GetRules()
+	rules := psc.GetRules()
 	if len(rules) > 0 {
 		if err := m.initialise(rules); err != nil {
 			log.Logger().Info("Placement manager created without rules: not active",
@@ -125,7 +124,7 @@ func (m *AppPlacementManager) buildRules(rules []configs.PlacementRule) ([]rule,
 	return newRules, nil
 }
 
-func (m *AppPlacementManager) PlaceApplication(app *cache.ApplicationInfo) error {
+func (m *AppPlacementManager) PlaceApplication(app *scheduler.SchedulingApplication) error {
 	// Placement manager not initialised cannot place application, just return
 	m.lock.RLock()
 	defer m.lock.RUnlock()
@@ -149,26 +148,26 @@ func (m *AppPlacementManager) PlaceApplication(app *cache.ApplicationInfo) error
 		// queueName returned make sure ACL allows access and create the queueName if not exist
 		if queueName != "" {
 			// get the queue object
-			queue := m.info.GetQueue(queueName)
+			queue := m.psc.GetQueue(queueName)
 			// we create the queueName if it does not exists
 			if queue == nil {
 				current := queueName
 				for queue == nil {
-					current = current[0:strings.LastIndex(current, cache.DOT)]
+					current = current[0:strings.LastIndex(current, scheduler.DOT)]
 					// check if the queue exist
-					queue = m.info.GetQueue(current)
+					queue = m.psc.GetQueue(current)
 				}
 				// Check if the user is allowed to submit to this queueName, if not next rule
 				if !queue.CheckSubmitAccess(app.GetUser()) {
 					log.Logger().Debug("Submit access denied on queue",
-						zap.String("queueName", queue.GetQueuePath()),
+						zap.String("queueName", queue.QueuePath),
 						zap.String("ruleName", checkRule.getName()),
 						zap.String("application", app.ApplicationID))
 					// reset the queue name for the last rule in the chain
 					queueName = ""
 					continue
 				}
-				err = m.info.CreateQueues(queueName)
+				err = m.psc.CreateQueues(queueName)
 				// errors can occur when the parent queueName is already a leaf queueName
 				if err != nil {
 					app.QueueName = ""
@@ -197,6 +196,6 @@ func (m *AppPlacementManager) PlaceApplication(app *cache.ApplicationInfo) error
 		return fmt.Errorf("application rejected: no placment rule matched")
 	}
 	// Add the queue into the application, overriding what was submitted
-	app.SetQueue(m.info.GetQueue(queueName))
+	app.SetQueue(m.psc.GetQueue(queueName))
 	return nil
 }

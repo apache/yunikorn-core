@@ -118,7 +118,7 @@ func (s *Scheduler) resetPreemptionContext() {
 func (s *Scheduler) recursiveInitPreemptionQueueContext(preemptionPartitionCtx *preemptionPartitionContext, parent *preemptionQueueContext,
 	queue *SchedulingQueue) *preemptionQueueContext {
 	preemptionQueue := &preemptionQueueContext{
-		queuePath:       queue.Name,
+		queuePath:       queue.QueuePath,
 		parent:          parent,
 		schedulingQueue: queue,
 		resources:       newQueuePreemptCalcResource(),
@@ -126,7 +126,7 @@ func (s *Scheduler) recursiveInitPreemptionQueueContext(preemptionPartitionCtx *
 	}
 
 	if queue.isLeafQueue() {
-		preemptionPartitionCtx.leafQueues[queue.Name] = preemptionQueue
+		preemptionPartitionCtx.leafQueues[queue.QueuePath] = preemptionQueue
 	}
 
 	for childName, child := range queue.childrenQueues {

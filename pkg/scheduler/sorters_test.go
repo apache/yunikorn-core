@@ -467,9 +467,9 @@ func TestSortAsks(t *testing.T) {
 // list of queues and the location of the named queue inside that list
 // place[0] defines the location of the root.q0 in the list of queues
 func assertQueueList(t *testing.T, list []*SchedulingQueue, place []int) {
-	assert.Equal(t, "root.q0", list[place[0]].Name)
-	assert.Equal(t, "root.q1", list[place[1]].Name)
-	assert.Equal(t, "root.q2", list[place[2]].Name)
+	assert.Equal(t, "root.q0", list[place[0]].QueuePath)
+	assert.Equal(t, "root.q1", list[place[1]].QueuePath)
+	assert.Equal(t, "root.q2", list[place[2]].QueuePath)
 }
 
 // list of nodes and the location of the named nodes inside that list

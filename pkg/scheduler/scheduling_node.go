@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
@@ -36,30 +37,50 @@ type SchedulingNode struct {
 	NodeID string
 
 	// Private info
-	nodeInfo                    *cache.NodeInfo
 	allocating                  *resources.Resource     // resources being allocated
 	preempting                  *resources.Resource     // resources considered for preemption
-	cachedAvailable             *resources.Resource     // calculated available resources
-	cachedAvailableUpdateNeeded bool                    // is the calculated available resource up to date?
 	reservations                map[string]*reservation // a map of reservations
+
+	Hostname  string
+	Rackname  string
+	Partition string
+
+	attributes            map[string]string
+	totalResource         *resources.Resource
+	occupiedResource      *resources.Resource
+	allocatedResource     *resources.Resource
+	availableResource     *resources.Resource
+	availableUpdateNeeded bool
+	allocations           map[string]*schedulingAllocation
+	schedulable           bool
+
 
 	sync.RWMutex
 }
 
-func newSchedulingNode(info *cache.NodeInfo) *SchedulingNode {
-	// safe guard against panic
-	if info == nil {
+func newSchedulingNode(proto *si.NewNodeInfo) *SchedulingNode {
+	if proto == nil {
 		return nil
 	}
-	return &SchedulingNode{
-		nodeInfo:                    info,
-		NodeID:                      info.NodeID,
-		allocating:                  resources.NewResource(),
-		preempting:                  resources.NewResource(),
-		cachedAvailable:             resources.NewResource(),
-		cachedAvailableUpdateNeeded: true,
-		reservations:                make(map[string]*reservation),
+	m := &SchedulingNode{
+		NodeID:                proto.NodeID,
+		availableUpdateNeeded: true,
+		totalResource:         resources.NewResourceFromProto(proto.SchedulableResource),
+		allocatedResource:     resources.NewResource(),
+		occupiedResource:      resources.NewResourceFromProto(proto.OccupiedResource),
+		allocations:           make(map[string]*schedulingAllocation),
+		schedulable:           true,
+		allocating:            resources.NewResource(),
+		preempting:            resources.NewResource(),
+		reservations:          make(map[string]*reservation),
 	}
+
+	// initialise available resources
+	m.availableResource = resources.Sub(m.totalResource, m.occupiedResource)
+
+	m.initializeAttribute(proto.Attributes)
+
+	return m
 }
 
 // Return an array of all reservation keys for the node.
@@ -75,21 +96,12 @@ func (sn *SchedulingNode) GetReservations() []string {
 	return keys
 }
 
+// FIXME, update this for node update calls.
 func (sn *SchedulingNode) updateNodeInfo(newNodeInfo *cache.NodeInfo) {
 	sn.Lock()
 	defer sn.Unlock()
 
 	sn.nodeInfo = newNodeInfo
-	sn.cachedAvailableUpdateNeeded = true
-}
-
-// Get the allocated resource on this node.
-// These resources are just the confirmed allocations (tracked in the cache node).
-// This does not lock the cache node as it will take its own lock.
-func (sn *SchedulingNode) GetAllocatedResource() *resources.Resource {
-	sn.RLock()
-	defer sn.RUnlock()
-	return sn.nodeInfo.GetAllocatedResource()
 }
 
 // Get the available resource on this node.
@@ -99,12 +111,7 @@ func (sn *SchedulingNode) GetAllocatedResource() *resources.Resource {
 func (sn *SchedulingNode) GetAvailableResource() *resources.Resource {
 	sn.Lock()
 	defer sn.Unlock()
-	if sn.cachedAvailableUpdateNeeded || sn.nodeInfo.SyncAvailableResource() {
-		sn.cachedAvailable = sn.nodeInfo.GetAvailableResource()
-		sn.cachedAvailable.SubFrom(sn.allocating)
-		sn.cachedAvailableUpdateNeeded = false
-	}
-	return sn.cachedAvailable
+	return sn.availableResource
 }
 
 // Get the resource tagged for allocation on this node.
@@ -121,7 +128,6 @@ func (sn *SchedulingNode) incAllocatingResource(delta *resources.Resource) {
 	sn.Lock()
 	defer sn.Unlock()
 
-	sn.cachedAvailableUpdateNeeded = true
 	sn.allocating.AddTo(delta)
 }
 
@@ -130,7 +136,6 @@ func (sn *SchedulingNode) decAllocatingResource(delta *resources.Resource) {
 	sn.Lock()
 	defer sn.Unlock()
 
-	sn.cachedAvailableUpdateNeeded = true
 	var err error
 	sn.allocating, err = resources.SubErrorNegative(sn.allocating, delta)
 	if err != nil {
@@ -175,18 +180,17 @@ func (sn *SchedulingNode) decPreemptingResource(delta *resources.Resource) {
 func (sn *SchedulingNode) allocateResource(res *resources.Resource, preemptionPhase bool) bool {
 	sn.Lock()
 	defer sn.Unlock()
-	available := sn.nodeInfo.GetAvailableResource()
 	newAllocating := resources.Add(res, sn.allocating)
 
+	availableResource := sn.availableResource.Clone()
 	if preemptionPhase {
-		available.AddTo(sn.preempting)
+		availableResource.AddTo(sn.preempting)
 	}
 	// check if this still fits: it might have changed since pre check
-	if resources.FitIn(available, newAllocating) {
+	if resources.FitIn(availableResource, newAllocating) {
 		log.Logger().Debug("allocations in progress updated",
 			zap.String("nodeID", sn.NodeID),
 			zap.Any("total unconfirmed", newAllocating))
-		sn.cachedAvailableUpdateNeeded = true
 		sn.allocating = newAllocating
 		return true
 	}
@@ -195,12 +199,12 @@ func (sn *SchedulingNode) allocateResource(res *resources.Resource, preemptionPh
 }
 
 // Checking pre-conditions in the shim for an allocation.
-func (sn *SchedulingNode) preAllocateConditions(allocID string) bool {
+func (sn *SchedulingNode) preAllocateConditions(allocID string) error {
 	return sn.preConditions(allocID, true)
 }
 
 // Checking pre-conditions in the shim for a reservation.
-func (sn *SchedulingNode) preReserveConditions(allocID string) bool {
+func (sn *SchedulingNode) preReserveConditions(allocID string) error {
 	return sn.preConditions(allocID, false)
 }
 
@@ -210,21 +214,18 @@ func (sn *SchedulingNode) preReserveConditions(allocID string) bool {
 // The caller must thus not rely on all plugins being executed.
 // This is a lock free call as it does not change the node and multiple predicate checks could be
 // run at the same time.
-func (sn *SchedulingNode) preConditions(allocID string, allocate bool) bool {
+func (sn *SchedulingNode) preConditions(allocID string, allocate bool) error {
 	// Check the predicates plugin (k8shim)
 	if plugin := plugins.GetPredicatesPlugin(); plugin != nil {
 		// checking predicates
-		if err := plugin.Predicates(&si.PredicatesArgs{
+		return plugin.Predicates(&si.PredicatesArgs{
 			AllocationKey: allocID,
 			NodeID:        sn.NodeID,
 			Allocate:      allocate,
-		}); err != nil {
-			// running predicates failed
-			return false
-		}
+		})
 	}
 	// all predicate plugins passed
-	return true
+	return nil
 }
 
 // Check if the node should be considered as a possible node to allocate on.
@@ -232,7 +233,7 @@ func (sn *SchedulingNode) preConditions(allocID string, allocate bool) bool {
 // This is a lock free call. No updates are made this only performs a pre allocate checks
 func (sn *SchedulingNode) preAllocateCheck(res *resources.Resource, resKey string, preemptionPhase bool) error {
 	// shortcut if a node is not schedulable
-	if !sn.nodeInfo.IsSchedulable() {
+	if !sn.IsSchedulable() {
 		log.Logger().Debug("node is unschedulable",
 			zap.String("nodeID", sn.NodeID))
 		return fmt.Errorf("pre alloc check, node is unschedulable: %s", sn.NodeID)
@@ -254,7 +255,7 @@ func (sn *SchedulingNode) preAllocateCheck(res *resources.Resource, resKey strin
 	}
 
 	// check if resources are available
-	available := sn.nodeInfo.GetAvailableResource()
+	available := sn.availableResource.Clone()
 	if preemptionPhase {
 		available.AddTo(sn.getPreemptingResource())
 	}
@@ -315,13 +316,13 @@ func (sn *SchedulingNode) reserve(app *SchedulingApplication, ask *schedulingAll
 		return fmt.Errorf("reservation creation failed app or ask are nil on nodeID %s", sn.NodeID)
 	}
 	// reservation must fit on the empty node
-	if !sn.nodeInfo.FitInNode(ask.AllocatedResource) {
+	if !sn.FitInNode(ask.AllocatedResource) {
 		log.Logger().Debug("reservation does not fit on the node",
 			zap.String("nodeID", sn.NodeID),
-			zap.String("appID", app.ApplicationInfo.ApplicationID),
+			zap.String("appID", app.ApplicationID),
 			zap.String("ask", ask.AskProto.AllocationKey),
 			zap.String("allocationAsk", ask.AllocatedResource.String()))
-		return fmt.Errorf("reservation does not fit on node %s, appID %s, ask %s", sn.NodeID, app.ApplicationInfo.ApplicationID, ask.AllocatedResource.String())
+		return fmt.Errorf("reservation does not fit on node %s, appID %s, ask %s", sn.NodeID, app.ApplicationID, ask.AllocatedResource.String())
 	}
 	sn.reservations[appReservation.getKey()] = appReservation
 	// reservation added successfully
@@ -349,7 +350,7 @@ func (sn *SchedulingNode) unReserve(app *SchedulingApplication, ask *schedulingA
 	// reservation was not found
 	log.Logger().Debug("reservation not found while removing from node",
 		zap.String("nodeID", sn.NodeID),
-		zap.String("appID", app.ApplicationInfo.ApplicationID),
+		zap.String("appID", app.ApplicationID),
 		zap.String("ask", ask.AskProto.AllocationKey))
 	return 0, nil
 }
@@ -378,4 +379,159 @@ func (sn *SchedulingNode) unReserveApps() ([]string, []int) {
 		askRelease = append(askRelease, num)
 	}
 	return appReserve, askRelease
+}
+
+// Set the attributes and fast access fields.
+// Unlocked call: should only be called on create or from test code
+func (sn *SchedulingNode) initializeAttribute(newAttributes map[string]string) {
+	sn.attributes = newAttributes
+
+	sn.Hostname = sn.attributes[common.HostName]
+	sn.Rackname = sn.attributes[common.RackName]
+	sn.Partition = sn.attributes[common.NodePartition]
+}
+
+// Get an attribute by name. The most used attributes can be directly accessed via the
+// fields: HostName, RackName and Partition.
+// This is a lock free call. All attributes are considered read only
+func (sn *SchedulingNode) GetAttribute(key string) string {
+	return sn.attributes[key]
+}
+
+// Return the currently allocated resource for the node.
+// It returns a cloned object as we do not want to allow modifications to be made to the
+// value of the node.
+func (sn *SchedulingNode) GetAllocatedResource() *resources.Resource {
+	sn.RLock()
+	defer sn.RUnlock()
+
+	return sn.allocatedResource
+}
+
+func (sn *SchedulingNode) GetCapacity() *resources.Resource {
+	sn.RLock()
+	defer sn.RUnlock()
+	return sn.totalResource.Clone()
+}
+
+func (sn *SchedulingNode) setCapacity(newCapacity *resources.Resource) {
+	sn.Lock()
+	defer sn.Unlock()
+	if resources.Equals(sn.totalResource, newCapacity) {
+		log.Logger().Debug("skip updating capacity, not changed")
+		return
+	}
+	sn.totalResource = newCapacity
+	sn.refreshAvailableResource()
+}
+
+func (sn *SchedulingNode) GetOccupiedResource() *resources.Resource {
+	sn.RLock()
+	defer sn.RUnlock()
+	return sn.occupiedResource.Clone()
+}
+
+func (sn *SchedulingNode) setOccupiedResource(occupiedResource *resources.Resource) {
+	sn.Lock()
+	defer sn.Unlock()
+	if resources.Equals(sn.occupiedResource, occupiedResource) {
+		log.Logger().Debug("skip updating occupiedResource, not changed")
+		return
+	}
+	sn.occupiedResource = occupiedResource
+	sn.refreshAvailableResource()
+}
+
+// Return the allocation based on the uuid of the allocation.
+// returns nil if the allocation is not found
+func (sn *SchedulingNode) GetAllocation(uuid string) *schedulingAllocation {
+	sn.RLock()
+	defer sn.RUnlock()
+
+	return sn.allocations[uuid]
+}
+
+// Check if the allocation fits int the nodes resources.
+// unlocked call as the totalResource can not be changed
+func (sn *SchedulingNode) FitInNode(resRequest *resources.Resource) bool {
+	return resources.FitIn(sn.totalResource, resRequest)
+}
+
+// Check if the allocation fits in the currently available resources.
+func (sn *SchedulingNode) canAllocate(resRequest *resources.Resource) bool {
+	sn.RLock()
+	defer sn.RUnlock()
+	return resources.FitIn(sn.availableResource, resRequest)
+}
+
+// Add the allocation to the node.Used resources will increase available will decrease.
+// This cannot fail. A nil AllocationInfo makes no changes.
+func (sn *SchedulingNode) AddAllocation(alloc *schedulingAllocation) {
+	if alloc == nil {
+		return
+	}
+	sn.Lock()
+	defer sn.Unlock()
+
+	sn.allocations[alloc.GetUUID()] = alloc
+	sn.allocatedResource = resources.Add(sn.allocatedResource, alloc.SchedulingAsk.AllocatedResource)
+	sn.availableResource = resources.Sub(sn.availableResource, alloc.SchedulingAsk.AllocatedResource)
+	sn.availableUpdateNeeded = true
+}
+
+// Remove the allocation to the node.
+// Returns nil if the allocation was not found and no changes are made. If the allocation
+// is found the AllocationInfo removed is returned. Used resources will decrease available
+// will increase as per the allocation removed.
+func (sn *SchedulingNode) RemoveAllocation(uuid string) *schedulingAllocation {
+	sn.Lock()
+	defer sn.Unlock()
+
+	info := sn.allocations[uuid]
+	if info != nil {
+		delete(sn.allocations, uuid)
+		sn.allocatedResource = resources.Sub(sn.allocatedResource, info.SchedulingAsk.AllocatedResource)
+		sn.availableResource = resources.Add(sn.availableResource, info.SchedulingAsk.AllocatedResource)
+		sn.availableUpdateNeeded = true
+	}
+
+	return info
+}
+
+// Get a copy of the allocations on this node
+func (sn *SchedulingNode) GetAllAllocations() []*schedulingAllocation {
+	sn.RLock()
+	defer sn.RUnlock()
+
+	arr := make([]*schedulingAllocation, 0)
+	for _, v := range sn.allocations {
+		arr = append(arr, v)
+	}
+
+	return arr
+}
+
+// Set the node to unschedulable.
+// This will cause the node to be skipped during the scheduling cycle.
+// Visible for testing only
+func (sn *SchedulingNode) SetSchedulable(schedulable bool) {
+	sn.Lock()
+	defer sn.Unlock()
+	sn.schedulable = schedulable
+}
+
+// Can this node be used in scheduling.
+func (sn *SchedulingNode) IsSchedulable() bool {
+	sn.RLock()
+	defer sn.RUnlock()
+	return sn.schedulable
+}
+
+// refresh node available resource based on the latest allocated and occupied resources.
+// this call assumes the caller already acquires the lock.
+func (sn *SchedulingNode) refreshAvailableResource() {
+	sn.availableResource = sn.totalResource.Clone()
+	sn.availableResource = resources.Sub(sn.availableResource, sn.allocatedResource)
+	sn.availableResource = resources.Sub(sn.availableResource, sn.occupiedResource)
+	sn.availableUpdateNeeded = true
 }

@@ -25,9 +25,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
+	"github.com/apache/incubator-yunikorn-core/pkg/handler"
+	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
+	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/events"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
@@ -35,29 +38,62 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
+var (
+	startingTimeout = time.Minute * 5
+)
+
 var reservationDelay = 2 * time.Second
 
 type SchedulingApplication struct {
-	ApplicationInfo *cache.ApplicationInfo
+	ApplicationID  string
+	Partition      string
+	SubmissionTime int64
+	QueueName      string
 
 	// Private fields need protection
 	queue          *SchedulingQueue                    // queue the application is running in
+	user           security.UserGroup                  // owner of the application
+	tags           map[string]string                   // application tags used in scheduling
+	allocated      *resources.Resource                 // total allocated resources
 	allocating     *resources.Resource                 // allocating resource set by the scheduler
+	allocations    map[string]*schedulingAllocation    // list of all allocations
 	pending        *resources.Resource                 // pending resources from asks for the app
 	reservations   map[string]*reservation             // a map of reservations
 	requests       map[string]*schedulingAllocationAsk // a map of asks
 	sortedRequests []*schedulingAllocationAsk
+	stateMachine   *fsm.FSM    // application state machine
+	stateTimer     *time.Timer // timer for state time
+
+	eventHandlers handler.EventHandlers
+	rmID          string
 
 	sync.RWMutex
 }
 
-func newSchedulingApplication(appInfo *cache.ApplicationInfo) *SchedulingApplication {
+func NewSchedulingApp(appID, partition, queueName string, ugi security.UserGroup, tags map[string]string,
+	eventHandler handler.EventHandlers, rmID string) *SchedulingApplication {
+	app := newSchedulingAppInternal(appID, partition, queueName, ugi, tags)
+	app.eventHandlers = eventHandler
+	app.rmID = rmID
+	return app
+}
+
+// Create a new application
+func newSchedulingAppInternal(appID, partition, queueName string, ugi security.UserGroup, tags map[string]string) *SchedulingApplication {
 	return &SchedulingApplication{
-		ApplicationInfo: appInfo,
-		allocating:      resources.NewResource(),
-		pending:         resources.NewResource(),
-		requests:        make(map[string]*schedulingAllocationAsk),
-		reservations:    make(map[string]*reservation),
+		ApplicationID:  appID,
+		Partition:      partition,
+		QueueName:      queueName,
+		SubmissionTime: time.Now().UnixNano(),
+		tags:           tags,
+		user:           ugi,
+		allocated:      resources.NewResource(),
+		allocations:    make(map[string]*schedulingAllocation),
+		stateMachine:   newAppState(),
+		allocating:     resources.NewResource(),
+		pending:        resources.NewResource(),
+		requests:       make(map[string]*schedulingAllocationAsk),
+		reservations:   make(map[string]*reservation),
 	}
 }
 
@@ -88,11 +124,6 @@ func (sa *SchedulingApplication) GetSchedulingAllocationAsk(allocationKey string
 	return sa.requests[allocationKey]
 }
 
-// Return the allocated resources for this application
-func (sa *SchedulingApplication) GetAllocatedResource() *resources.Resource {
-	return sa.ApplicationInfo.GetAllocatedResource()
-}
-
 // Return the pending resources for this application
 func (sa *SchedulingApplication) GetPendingResource() *resources.Resource {
 	sa.RLock()
@@ -104,7 +135,7 @@ func (sa *SchedulingApplication) GetPendingResource() *resources.Resource {
 func (sa *SchedulingApplication) getAssumeAllocated() *resources.Resource {
 	sa.RLock()
 	defer sa.RUnlock()
-	return resources.Add(sa.allocating, sa.ApplicationInfo.GetAllocatedResource())
+	return resources.Add(sa.allocating, sa.GetAllocatedResource())
 }
 
 // Return the allocating resources for this application
@@ -133,17 +164,29 @@ func (sa *SchedulingApplication) decAllocatingResource(delta *resources.Resource
 	}
 }
 
+func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) {
+	pending, unreserved := sa.removeAllocationAskInternal(allocKey)
+
+	// Avoid taking queue's lock while holding app's lock.
+	if nil != pending {
+		// clean up the queue pending resources
+		sa.queue.decPendingResource(pending)
+		sa.queue.unReserve(sa.ApplicationID, unreserved)
+	}
+}
+
 // Remove one or more allocation asks from this application.
 // This also removes any reservations that are linked to the ask.
-// The return value is the number of reservations released
-func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) int {
+// The return value is pending resource released
+func (sa *SchedulingApplication) removeAllocationAskInternal(allocKey string) (*resources.Resource, int) {
 	sa.Lock()
 	defer sa.Unlock()
 	// shortcut no need to do anything
 	if len(sa.requests) == 0 {
-		return 0
+		return resources.NewResource(), 0
 	}
 	var deltaPendingResource *resources.Resource = nil
+	var unreserved = 0
 	// when allocation key not specified, cleanup all allocation ask
 	var toRelease int
 	if allocKey == "" {
@@ -152,14 +195,13 @@ func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) int {
 			releases, err := sa.unReserveInternal(reserve.node, reserve.ask)
 			if err != nil {
 				log.Logger().Warn("Removal of reservation failed while removing all allocation asks",
-					zap.String("appID", sa.ApplicationInfo.ApplicationID),
+					zap.String("appID", sa.ApplicationID),
 					zap.String("reservationKey", key),
 					zap.Error(err))
 				continue
 			}
 			// clean up the queue reservation (one at a time)
-			sa.queue.unReserve(sa.ApplicationInfo.ApplicationID, releases)
-			toRelease += releases
+			unreserved += releases
 		}
 		// Cleanup total pending resource
 		deltaPendingResource = sa.pending
@@ -172,14 +214,12 @@ func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) int {
 			releases, err := sa.unReserveInternal(reserve.node, reserve.ask)
 			if err != nil {
 				log.Logger().Warn("Removal of reservation failed while removing allocation ask",
-					zap.String("appID", sa.ApplicationInfo.ApplicationID),
+					zap.String("appID", sa.ApplicationID),
 					zap.String("reservationKey", key),
 					zap.Error(err))
 				continue
 			}
-			// clean up the queue reservation
-			sa.queue.unReserve(sa.ApplicationInfo.ApplicationID, releases)
-			toRelease += releases
+			unreserved += releases
 		}
 		if ask := sa.requests[allocKey]; ask != nil {
 			deltaPendingResource = resources.MultiplyBy(ask.AllocatedResource, float64(ask.getPendingAskRepeat()))
@@ -187,8 +227,7 @@ func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) int {
 			delete(sa.requests, allocKey)
 		}
 	}
-	// clean up the queue pending resources
-	sa.queue.decPendingResource(deltaPendingResource)
+
 	// Check if we need to change state based on the ask removal:
 	// 1) if pending is zero (no more asks left)
 	// 2) if confirmed allocations is zero (nothing is running)
@@ -196,14 +235,14 @@ func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) int {
 	// Change the state to waiting.
 	// When all 3 resources trackers are zero we should not expect anything to come in later.
 	if resources.IsZero(sa.pending) && resources.IsZero(sa.GetAllocatedResource()) && resources.IsZero(sa.allocating) {
-		if err := sa.ApplicationInfo.HandleApplicationEvent(cache.WaitApplication); err != nil {
+		if err := sa.HandleApplicationEvent(WaitApplication); err != nil {
 			log.Logger().Warn("Application state not changed to Waiting while updating ask(s)",
-				zap.String("currentState", sa.ApplicationInfo.GetApplicationState()),
+				zap.String("currentState", sa.GetApplicationState()),
 				zap.Error(err))
 		}
 	}
 
-	return toRelease
+	return deltaPendingResource, unreserved
 }
 
 // Add an allocation ask to this application
@@ -212,12 +251,12 @@ func (sa *SchedulingApplication) addAllocationAsk(ask *schedulingAllocationAsk) 
 	sa.Lock()
 	defer sa.Unlock()
 	if ask == nil {
-		return nil, fmt.Errorf("ask cannot be nil when added to app %s", sa.ApplicationInfo.ApplicationID)
+		return nil, fmt.Errorf("ask cannot be nil when added to app %s", sa.ApplicationID)
 	}
 	if ask.getPendingAskRepeat() == 0 || resources.IsZero(ask.AllocatedResource) {
-		return nil, fmt.Errorf("invalid ask added to app %s: %v", sa.ApplicationInfo.ApplicationID, ask)
+		return nil, fmt.Errorf("invalid ask added to app %s: %v", sa.ApplicationID, ask)
 	}
-	ask.QueueName = sa.queue.Name
+	ask.QueueName = sa.queue.QueuePath
 	delta := resources.Multiply(ask.AllocatedResource, int64(ask.getPendingAskRepeat()))
 
 	var oldAskResource *resources.Resource = nil
@@ -230,9 +269,9 @@ func (sa *SchedulingApplication) addAllocationAsk(ask *schedulingAllocationAsk) 
 	// 2) all asks and allocation have been removed: state is Waiting
 	// Move the state and get it scheduling (again)
 	if sa.isNew() || sa.isWaiting() {
-		if err := sa.ApplicationInfo.HandleApplicationEvent(cache.RunApplication); err != nil {
+		if err := sa.HandleApplicationEvent(RunApplication); err != nil {
 			log.Logger().Debug("Application state change failed while adding new ask",
-				zap.String("currentState", sa.ApplicationInfo.GetApplicationState()),
+				zap.String("currentState", sa.GetApplicationState()),
 				zap.Error(err))
 		}
 	}
@@ -258,7 +297,7 @@ func (sa *SchedulingApplication) updateAskRepeat(allocKey string, delta int32) (
 func (sa *SchedulingApplication) updateAskRepeatInternal(ask *schedulingAllocationAsk, delta int32) (*resources.Resource, error) {
 	// updating with delta does error checking internally
 	if !ask.updatePendingAskRepeat(delta) {
-		return nil, fmt.Errorf("ask repaeat not updated resulting repeat less than zero for ask %s on app %s", ask.AskProto.AllocationKey, sa.ApplicationInfo.ApplicationID)
+		return nil, fmt.Errorf("ask repaeat not updated resulting repeat less than zero for ask %s on app %s", ask.AskProto.AllocationKey, sa.ApplicationID)
 	}
 
 	deltaPendingResource := resources.Multiply(ask.AllocatedResource, int64(delta))
@@ -302,17 +341,17 @@ func (sa *SchedulingApplication) reserve(node *SchedulingNode, ask *schedulingAl
 	nodeReservation := newReservation(node, sa, ask, true)
 	if nodeReservation == nil {
 		log.Logger().Debug("reservation creation failed unexpectedly",
-			zap.String("app", sa.ApplicationInfo.ApplicationID),
+			zap.String("app", sa.ApplicationID),
 			zap.Any("node", node),
 			zap.Any("ask", ask))
-		return fmt.Errorf("reservation creation failed node or ask are nil on appID %s", sa.ApplicationInfo.ApplicationID)
+		return fmt.Errorf("reservation creation failed node or ask are nil on appID %s", sa.ApplicationID)
 	}
 	allocKey := ask.AskProto.AllocationKey
 	if sa.requests[allocKey] == nil {
 		log.Logger().Debug("ask is not registered to this app",
-			zap.String("app", sa.ApplicationInfo.ApplicationID),
+			zap.String("app", sa.ApplicationID),
 			zap.String("allocKey", allocKey))
-		return fmt.Errorf("reservation creation failed ask %s not found on appID %s", allocKey, sa.ApplicationInfo.ApplicationID)
+		return fmt.Errorf("reservation creation failed ask %s not found on appID %s", allocKey, sa.ApplicationID)
 	}
 	if !sa.canAskReserve(ask) {
 		return fmt.Errorf("reservation of ask exceeds pending repeat, pending ask repeat %d", ask.getPendingAskRepeat())
@@ -342,10 +381,10 @@ func (sa *SchedulingApplication) unReserveInternal(node *SchedulingNode, ask *sc
 	resKey := reservationKey(node, nil, ask)
 	if resKey == "" {
 		log.Logger().Debug("unreserve reservation key create failed unexpectedly",
-			zap.String("appID", sa.ApplicationInfo.ApplicationID),
+			zap.String("appID", sa.ApplicationID),
 			zap.Any("node", node),
 			zap.Any("ask", ask))
-		return 0, fmt.Errorf("reservation key failed node or ask are nil for appID %s", sa.ApplicationInfo.ApplicationID)
+		return 0, fmt.Errorf("reservation key failed node or ask are nil for appID %s", sa.ApplicationID)
 	}
 	// unReserve the node before removing from the app
 	var num int
@@ -358,7 +397,7 @@ func (sa *SchedulingApplication) unReserveInternal(node *SchedulingNode, ask *sc
 		// worked on the node means either found or not but no error, log difference here
 		if num == 0 {
 			log.Logger().Info("reservation not found while removing from node, app has reservation",
-				zap.String("appID", sa.ApplicationInfo.ApplicationID),
+				zap.String("appID", sa.ApplicationID),
 				zap.String("nodeID", node.NodeID),
 				zap.String("ask", ask.AskProto.AllocationKey))
 		}
@@ -367,7 +406,7 @@ func (sa *SchedulingApplication) unReserveInternal(node *SchedulingNode, ask *sc
 	}
 	// reservation was not found
 	log.Logger().Info("reservation not found while removing from app",
-		zap.String("appID", sa.ApplicationInfo.ApplicationID),
+		zap.String("appID", sa.ApplicationID),
 		zap.String("nodeID", node.NodeID),
 		zap.String("ask", ask.AskProto.AllocationKey),
 		zap.Int("nodeReservationsRemoved", num))
@@ -441,7 +480,7 @@ func (sa *SchedulingApplication) getOutstandingRequests(headRoom *resources.Reso
 }
 
 // Try a regular allocation of the pending requests
-func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *partitionSchedulingContext) *schedulingAllocation {
+func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *PartitionSchedulingContext) *schedulingAllocation {
 	sa.Lock()
 	defer sa.Unlock()
 	// make sure the request are sorted
@@ -477,7 +516,7 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 }
 
 // Try a reserved allocation of an outstanding reservation
-func (sa *SchedulingApplication) tryReservedAllocate(headRoom *resources.Resource, ctx *partitionSchedulingContext) *schedulingAllocation {
+func (sa *SchedulingApplication) tryReservedAllocate(headRoom *resources.Resource, ctx *PartitionSchedulingContext) *schedulingAllocation {
 	sa.Lock()
 	defer sa.Unlock()
 	// process all outstanding reservations and pick the first one that fits
@@ -490,8 +529,8 @@ func (sa *SchedulingApplication) tryReservedAllocate(headRoom *resources.Resourc
 			if ask == nil {
 				unreserveAsk = &schedulingAllocationAsk{
 					AskProto:      &si.AllocationAsk{AllocationKey: reserve.askKey},
-					ApplicationID: sa.ApplicationInfo.ApplicationID,
-					QueueName:     sa.queue.Name,
+					ApplicationID: sa.ApplicationID,
+					QueueName:     sa.queue.QueuePath,
 				}
 			} else {
 				unreserveAsk = ask
@@ -532,7 +571,7 @@ func (sa *SchedulingApplication) tryNodesNoReserve(ask *schedulingAllocationAsk,
 	for nodeIterator.HasNext() {
 		node := nodeIterator.Next()
 		// skip over the node if the resource does not fit the node or this is the reserved node.
-		if !node.nodeInfo.FitInNode(ask.AllocatedResource) || node.NodeID == reservedNode {
+		if !node.FitInNode(ask.AllocatedResource) || node.NodeID == reservedNode {
 			continue
 		}
 		alloc := sa.tryNode(node, ask)
@@ -559,7 +598,7 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 	for nodeIterator.HasNext() {
 		node := nodeIterator.Next()
 		// skip over the node if the resource does not fit the node at all.
-		if !node.nodeInfo.FitInNode(ask.AllocatedResource) {
+		if !node.FitInNode(ask.AllocatedResource) {
 			continue
 		}
 		alloc := sa.tryNode(node, ask)
@@ -570,7 +609,7 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 			// but we have no locking
 			if _, ok := sa.reservations[reservationKey(node, nil, ask)]; ok {
 				log.Logger().Debug("allocate found reserved ask during non reserved allocate",
-					zap.String("appID", sa.ApplicationInfo.ApplicationID),
+					zap.String("appID", sa.ApplicationID),
 					zap.String("nodeID", node.NodeID),
 					zap.String("allocationKey", allocKey))
 				alloc.result = allocatedReserved
@@ -581,7 +620,7 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 			if len(reservedAsks) > 0 {
 				nodeID := strings.TrimSuffix(reservedAsks[0], "|"+allocKey)
 				log.Logger().Debug("allocate picking reserved ask during non reserved allocate",
-					zap.String("appID", sa.ApplicationInfo.ApplicationID),
+					zap.String("appID", sa.ApplicationID),
 					zap.String("nodeID", nodeID),
 					zap.String("allocationKey", allocKey))
 				alloc.result = allocatedReserved
@@ -613,7 +652,7 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 	// NOTE: the node should not be reserved as the iterator filters them but we do not lock the nodes
 	if nodeToReserve != nil && !nodeToReserve.isReserved() {
 		log.Logger().Debug("found candidate node for app reservation",
-			zap.String("appID", sa.ApplicationInfo.ApplicationID),
+			zap.String("appID", sa.ApplicationID),
 			zap.String("nodeID", nodeToReserve.NodeID),
 			zap.String("allocationKey", allocKey),
 			zap.Int("reservations", len(reservedAsks)),
@@ -693,7 +732,7 @@ func (sa *SchedulingApplication) recoverOnNode(node *SchedulingNode, ask *schedu
 	// mark this ask as allocating by lowering the repeat
 	if _, err := sa.updateAskRepeatInternal(ask, -1); err != nil {
 		log.Logger().Error("application recovery update of existing allocation failed",
-			zap.String("appID", sa.ApplicationInfo.ApplicationID),
+			zap.String("appID", sa.ApplicationID),
 			zap.String("allocKey", ask.AskProto.AllocationKey),
 			zap.Error(err))
 	}
@@ -702,24 +741,24 @@ func (sa *SchedulingApplication) recoverOnNode(node *SchedulingNode, ask *schedu
 // Application status methods reflecting the underlying app object state
 // link back to the underlying app object to prevent out of sync states
 func (sa *SchedulingApplication) isAccepted() bool {
-	return sa.ApplicationInfo.IsAccepted()
+	return sa.IsAccepted()
 }
 
 func (sa *SchedulingApplication) isStarting() bool {
-	return sa.ApplicationInfo.IsStarting()
+	return sa.IsStarting()
 }
 
 func (sa *SchedulingApplication) isNew() bool {
-	return sa.ApplicationInfo.IsNew()
+	return sa.IsNew()
 }
 
 func (sa *SchedulingApplication) isWaiting() bool {
-	return sa.ApplicationInfo.IsWaiting()
+	return sa.IsWaiting()
 }
 
 // Get a tag from the cache object
 func (sa *SchedulingApplication) getTag(tag string) string {
-	return sa.ApplicationInfo.GetTag(tag)
+	return sa.GetTag(tag)
 }
 
 // Move the app state to running after allocation has been recovered.
@@ -728,18 +767,239 @@ func (sa *SchedulingApplication) getTag(tag string) string {
 // This should move via starting directly to running.
 func (sa *SchedulingApplication) finishRecovery() {
 	// no need to do anything if we are already running
-	if sa.ApplicationInfo.IsRunning() {
+	if sa.IsRunning() {
 		return
 	}
 	// If we're not running we need to cover two cases in one: move from accepted, via starting to running
-	err := sa.ApplicationInfo.HandleApplicationEvent(cache.RunApplication)
+	err := sa.HandleApplicationEvent(RunApplication)
 	if err == nil {
-		err = sa.ApplicationInfo.HandleApplicationEvent(cache.RunApplication)
+		err = sa.HandleApplicationEvent(RunApplication)
 	}
 	// log the unexpected failure
 	if err != nil {
 		log.Logger().Error("Unexpected app state change failure while recovering allocation",
-			zap.String("currentState", sa.ApplicationInfo.GetApplicationState()),
+			zap.String("currentState", sa.GetApplicationState()),
 			zap.Error(err))
 	}
+}
+
+// Return the current allocations for the application.
+func (sa *SchedulingApplication) GetAllAllocations() []*schedulingAllocation {
+	sa.RLock()
+	defer sa.RUnlock()
+
+	var allocations []*schedulingAllocation
+	for _, alloc := range sa.allocations {
+		allocations = append(allocations, alloc)
+	}
+	return allocations
+}
+
+// Return the current state or a checked specific state for the application.
+// The state machine handles the locking.
+func (sa *SchedulingApplication) GetApplicationState() string {
+	return sa.stateMachine.Current()
+}
+
+func (sa *SchedulingApplication) IsStarting() bool {
+	return sa.stateMachine.Is(Starting.String())
+}
+
+func (sa *SchedulingApplication) IsAccepted() bool {
+	return sa.stateMachine.Is(Accepted.String())
+}
+
+func (sa *SchedulingApplication) IsNew() bool {
+	return sa.stateMachine.Is(New.String())
+}
+
+func (sa *SchedulingApplication) IsRunning() bool {
+	return sa.stateMachine.Is(Running.String())
+}
+
+func (sa *SchedulingApplication) IsWaiting() bool {
+	return sa.stateMachine.Is(Waiting.String())
+}
+
+// Handle the state event for the application.
+// The state machine handles the locking.
+func (sa *SchedulingApplication) HandleApplicationEvent(event applicationEvent) error {
+	err := sa.stateMachine.Event(event.String(), sa)
+	// handle the same state transition not nil error (limit of fsm).
+	if err != nil && err.Error() == "no transition" {
+		return nil
+	}
+	return err
+}
+
+func (sa *SchedulingApplication) onStateChange(event *fsm.Event) {
+	updatedApps := make([]*si.UpdatedApplication, 0)
+	updatedApps = append(updatedApps, &si.UpdatedApplication{
+		ApplicationID:            sa.ApplicationID,
+		State:                    sa.stateMachine.Current(),
+		StateTransitionTimestamp: time.Now().UnixNano(),
+		Message:                  fmt.Sprintf("{Status change triggered by the event : %v}", event),
+	})
+
+	if sa.eventHandlers.RMProxyEventHandler != nil {
+		sa.eventHandlers.RMProxyEventHandler.HandleEvent(
+			&rmevent.RMApplicationUpdateEvent{
+				RmID:                 sa.rmID,
+				AcceptedApplications: make([]*si.AcceptedApplication, 0),
+				RejectedApplications: make([]*si.RejectedApplication, 0),
+				UpdatedApplications:  updatedApps,
+			})
+	}
+}
+
+// Set the starting timer to make sure the application will not get stuck in a starting state too long.
+// This prevents an app from not progressing to Running when it only has 1 allocation.
+// Called when entering the Starting state by the state machine.
+func (sa *SchedulingApplication) setStartingTimer() {
+	sa.Lock()
+	defer sa.Unlock()
+
+	log.Logger().Debug("Application Starting state timer initiated",
+		zap.String("appID", sa.ApplicationID),
+		zap.Duration("timeout", startingTimeout))
+	sa.stateTimer = time.AfterFunc(startingTimeout, sa.timeOutStarting)
+}
+
+// Clear the starting timer. If the application has progressed out of the starting state we need to stop the
+// timer and clean up.
+// Called when leaving the Starting state by the state machine.
+func (sa *SchedulingApplication) clearStartingTimer() {
+	sa.Lock()
+	defer sa.Unlock()
+
+	sa.stateTimer.Stop()
+	sa.stateTimer = nil
+}
+
+// In case of state aware scheduling we do not want to get stuck in starting as we might have an application that only
+// requires one allocation or is really slow asking for more than the first one.
+// This will progress the state of the application from Starting to Running
+func (sa *SchedulingApplication) timeOutStarting() {
+	// make sure we are still in the right state
+	// we could have been killed or something might have happened while waiting for a lock
+	if sa.IsStarting() {
+		log.Logger().Warn("Application in starting state timed out: auto progress",
+			zap.String("applicationID", sa.ApplicationID),
+			zap.String("state", sa.stateMachine.Current()))
+
+		//nolint: errcheck
+		_ = sa.HandleApplicationEvent(RunApplication)
+	}
+}
+
+// Return the total allocated resources for the application.
+func (sa *SchedulingApplication) GetAllocatedResource() *resources.Resource {
+	sa.RLock()
+	defer sa.RUnlock()
+
+	return sa.allocated.Clone()
+}
+
+// Set the leaf queue the application runs in. Update the queue name also to match as this might be different from the
+// queue that was given when submitting the application.
+func (sa *SchedulingApplication) SetQueue(leaf *SchedulingQueue) {
+	sa.Lock()
+	defer sa.Unlock()
+
+	sa.queue = leaf
+	sa.QueueName = leaf.QueuePath
+}
+
+// Add a new allocation to the application
+func (sa *SchedulingApplication) addAllocation(alloc *schedulingAllocation) {
+	// progress the state based on where we are, we should never fail in this case
+	// keep track of a failure
+	if err := sa.HandleApplicationEvent(RunApplication); err != nil {
+		log.Logger().Error("Unexpected app state change failure while adding allocation",
+			zap.String("currentState", sa.stateMachine.Current()),
+			zap.Error(err))
+	}
+	// add the allocation
+	sa.Lock()
+	defer sa.Unlock()
+
+	sa.allocations[alloc.GetUUID()] = alloc
+	sa.allocated = resources.Add(sa.allocated, alloc.SchedulingAsk.AllocatedResource)
+	sa.updateAskRepeatInternal(alloc.SchedulingAsk, -1)
+}
+
+// Remove a specific allocation from the application.
+// Return the allocation that was removed.
+func (sa *SchedulingApplication) removeAllocation(uuid string) *schedulingAllocation {
+	sa.Lock()
+	defer sa.Unlock()
+
+	return sa.removeAllocationInternal(uuid)
+}
+
+func (sa *SchedulingApplication) removeAllocationInternal(uuid string) *schedulingAllocation {
+	alloc := sa.allocations[uuid]
+
+	if alloc != nil {
+		// When app has the allocation, update map, and update allocated resource of the app
+		sa.allocated = resources.Sub(sa.allocated, alloc.SchedulingAsk.AllocatedResource)
+		delete(sa.allocations, uuid)
+		return alloc
+	}
+
+	return nil
+}
+
+// Remove all allocations from the application.
+// All allocations that have been removed are returned.
+func (sa *SchedulingApplication) removeAllAllocations() []*schedulingAllocation {
+	sa.Lock()
+	defer sa.Unlock()
+
+	releasedAllocations := make([]*schedulingAllocation, 0)
+	for _, alloc := range sa.allocations {
+		if released := sa.removeAllocationInternal(alloc.uuid); released != nil {
+			releasedAllocations = append(releasedAllocations, released)
+		}
+	}
+
+	return releasedAllocations
+}
+
+// get a copy of the user details for the application
+func (sa *SchedulingApplication) GetUser() security.UserGroup {
+	sa.Lock()
+	defer sa.Unlock()
+
+	return sa.user
+}
+
+// Get a tag from the application
+// Note: Tags are not case sensitive
+func (sa *SchedulingApplication) GetTag(tag string) string {
+	sa.Lock()
+	defer sa.Unlock()
+
+	tagVal := ""
+	for key, val := range sa.tags {
+		if strings.EqualFold(key, tag) {
+			tagVal = val
+			break
+		}
+	}
+	return tagVal
+}
+
+func (sa *SchedulingApplication) GetQueue() *SchedulingQueue {
+	sa.RLock()
+	defer sa.RUnlock()
+
+	return sa.queue
+}
+
+func (sa *SchedulingApplication) SetQueue(queue *SchedulingQueue) {
+	sa.Lock()
+	defer sa.Unlock()
+
+	sa.queue = queue
 }

@@ -21,10 +21,10 @@ package scheduler
 import (
 	"strconv"
 	"testing"
+	"time"
 
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 )
@@ -32,9 +32,8 @@ import (
 // test allocating calculation
 func TestAppAllocating(t *testing.T) {
 	appID := "app-1"
-	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
-	app := newSchedulingApplication(appInfo)
-	if app == nil || app.ApplicationInfo.ApplicationID != appID {
+	app := newSchedulingAppInternal(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	if app == nil || app.ApplicationID != appID {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
 	if !resources.IsZero(app.allocating) {
@@ -74,9 +73,8 @@ func TestAppAllocating(t *testing.T) {
 // test basic reservations
 func TestAppReservation(t *testing.T) {
 	appID := "app-1"
-	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
-	app := newSchedulingApplication(appInfo)
-	if app == nil || app.ApplicationInfo.ApplicationID != appID {
+	app := newSchedulingAppInternal(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	if app == nil || app.ApplicationID != appID {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
 	if app.hasReserved() {
@@ -113,7 +111,7 @@ func TestAppReservation(t *testing.T) {
 
 	res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	ask = newAllocationAsk(askKey, appID, res)
-	app = newSchedulingApplication(appInfo)
+	app = newSchedulingAppInternal(appID, "default", "root.unknown", security.UserGroup{}, nil)
 	app.queue = queue
 	var delta *resources.Resource
 	delta, err = app.addAllocationAsk(ask)
@@ -185,9 +183,8 @@ func TestAppReservation(t *testing.T) {
 // test multiple reservations from one allocation
 func TestAppAllocReservation(t *testing.T) {
 	appID := "app-1"
-	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
-	app := newSchedulingApplication(appInfo)
-	if app == nil || app.ApplicationInfo.ApplicationID != appID {
+	app := newSchedulingAppInternal(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	if app == nil || app.ApplicationID != appID {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
 	if app.hasReserved() {
@@ -252,7 +249,7 @@ func TestAppAllocReservation(t *testing.T) {
 		t.Errorf("app should have reservations for node %s and %s and has not: %v", nodeID1, nodeID2, askReserved)
 	}
 	// clean up all asks and reservations
-	reservedAsks := app.removeAllocationAsk("")
+	reservedAsks := app.removeAllocationAskInternal("")
 	if app.hasReserved() || node1.isReserved() || node2.isReserved() || reservedAsks != 2 {
 		t.Errorf("ask removal did not clean up all reservations, reserved released = %d", reservedAsks)
 	}
@@ -261,9 +258,8 @@ func TestAppAllocReservation(t *testing.T) {
 // test update allocation repeat
 func TestUpdateRepeat(t *testing.T) {
 	appID := "app-1"
-	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
-	app := newSchedulingApplication(appInfo)
-	if app == nil || app.ApplicationInfo.ApplicationID != appID {
+	app := newSchedulingAppInternal(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	if app == nil || app.ApplicationID != appID {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
 	queue, err := createRootQueue(nil)
@@ -312,9 +308,8 @@ func TestUpdateRepeat(t *testing.T) {
 // test pending calculation and ask addition
 func TestAddAllocAsk(t *testing.T) {
 	appID := "app-1"
-	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
-	app := newSchedulingApplication(appInfo)
-	if app == nil || app.ApplicationInfo.ApplicationID != appID {
+	app := newSchedulingAppInternal(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	if app == nil || app.ApplicationID != appID {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
 
@@ -384,9 +379,8 @@ func TestAddAllocAsk(t *testing.T) {
 // test reservations removal by allocation
 func TestRemoveReservedAllocAsk(t *testing.T) {
 	appID := "app-1"
-	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
-	app := newSchedulingApplication(appInfo)
-	if app == nil || app.ApplicationInfo.ApplicationID != appID {
+	app := newSchedulingAppInternal(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	if app == nil || app.ApplicationID != appID {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
 	queue, err := createRootQueue(nil)
@@ -417,7 +411,7 @@ func TestRemoveReservedAllocAsk(t *testing.T) {
 		t.Fatalf("app should have reservation for %v on node", allocKey)
 	}
 	before := app.GetPendingResource().Clone()
-	reservedAsks := app.removeAllocationAsk(allocKey)
+	reservedAsks := app.removeAllocationAskInternal(allocKey)
 	delta = resources.Sub(before, app.GetPendingResource())
 	if !resources.Equals(res, delta) || reservedAsks != 1 {
 		t.Errorf("resource ask2 should have been removed from app: %v, (reserved released = %d)", delta, reservedAsks)
@@ -444,7 +438,7 @@ func TestRemoveReservedAllocAsk(t *testing.T) {
 	assert.Equal(t, num, 1, "un-reserve on node should have removed reservation")
 
 	before = app.GetPendingResource().Clone()
-	reservedAsks = app.removeAllocationAsk(allocKey)
+	reservedAsks = app.removeAllocationAskInternal(allocKey)
 	delta = resources.Sub(before, app.GetPendingResource())
 	if !resources.Equals(res, delta) || reservedAsks != 1 {
 		t.Errorf("resource ask2 should have been removed from app: %v, (reserved released = %d)", delta, reservedAsks)
@@ -459,7 +453,7 @@ func TestRemoveReservedAllocAsk(t *testing.T) {
 		t.Errorf("reservation should not have failed: error %v", err)
 	}
 	// clean up
-	reservedAsks = app.removeAllocationAsk("")
+	reservedAsks = app.removeAllocationAskInternal("")
 	if !resources.IsZero(app.GetPendingResource()) || reservedAsks != 1 {
 		t.Errorf("all resource asks should have been removed from app: %v, (reserved released = %d)", app.GetPendingResource(), reservedAsks)
 	}
@@ -472,9 +466,8 @@ func TestRemoveReservedAllocAsk(t *testing.T) {
 // test pending calculation and ask removal
 func TestRemoveAllocAsk(t *testing.T) {
 	appID := "app-1"
-	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
-	app := newSchedulingApplication(appInfo)
-	if app == nil || app.ApplicationInfo.ApplicationID != appID {
+	app := newSchedulingAppInternal(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	if app == nil || app.ApplicationID != appID {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
 	queue, err := createRootQueue(nil)
@@ -482,11 +475,11 @@ func TestRemoveAllocAsk(t *testing.T) {
 	app.queue = queue
 
 	// failures cases: things should not crash (nothing happens)
-	reservedAsks := app.removeAllocationAsk("")
+	reservedAsks := app.removeAllocationAskInternal("")
 	if !resources.IsZero(app.GetPendingResource()) || reservedAsks != 0 {
 		t.Errorf("pending resource not updated correctly removing all, expected zero but was: %v", app.GetPendingResource())
 	}
-	reservedAsks = app.removeAllocationAsk("unknown")
+	reservedAsks = app.removeAllocationAskInternal("unknown")
 	if !resources.IsZero(app.GetPendingResource()) || reservedAsks != 0 {
 		t.Errorf("pending resource not updated correctly removing unknown, expected zero but was: %v", app.GetPendingResource())
 	}
@@ -509,17 +502,17 @@ func TestRemoveAllocAsk(t *testing.T) {
 	}
 
 	// test removes unknown (nothing happens)
-	reservedAsks = app.removeAllocationAsk("unknown")
+	reservedAsks = app.removeAllocationAskInternal("unknown")
 	if reservedAsks != 0 {
 		t.Errorf("asks released which did not exist: %d", reservedAsks)
 	}
 	before := app.GetPendingResource().Clone()
-	reservedAsks = app.removeAllocationAsk("alloc-1")
+	reservedAsks = app.removeAllocationAskInternal("alloc-1")
 	delta := resources.Sub(before, app.GetPendingResource())
 	if !resources.Equals(delta, delta1) || reservedAsks != 0 {
 		t.Errorf("ask should have been removed from app, err %v, expected delta %v but was: %v, (reserved released = %d)", err, delta1, delta, reservedAsks)
 	}
-	reservedAsks = app.removeAllocationAsk("")
+	reservedAsks = app.removeAllocationAskInternal("")
 	if len(app.requests) != 0 || reservedAsks != 0 {
 		t.Fatalf("asks not removed as expected 0 got %d, (reserved released = %d)", len(app.requests), reservedAsks)
 	}
@@ -531,9 +524,8 @@ func TestRemoveAllocAsk(t *testing.T) {
 // test allocating and allocated calculation
 func TestAssumedAppCalc(t *testing.T) {
 	appID := "app-1"
-	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
-	app := newSchedulingApplication(appInfo)
-	if app == nil || app.ApplicationInfo.ApplicationID != appID {
+	app := newSchedulingAppInternal(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	if app == nil || app.ApplicationID != appID {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
 	assumed := app.getAssumeAllocated()
@@ -548,8 +540,8 @@ func TestAssumedAppCalc(t *testing.T) {
 	if !resources.Equals(allocation, assumed) {
 		t.Errorf("app unconfirmed and allocated resources not set as expected %v, got %v", allocation, assumed)
 	}
-	allocInfo := cache.CreateMockAllocationInfo("app-1", allocation, "uuid", "root.leaf", "node-1")
-	cache.AddAllocationToApp(app.ApplicationInfo, allocInfo)
+	alloc := createMockAllocationInfo("app-1", allocation, "uuid", "root.leaf", "node-1")
+	app.addAllocation(alloc)
 	assumed = app.getAssumeAllocated()
 	allocation = resources.Multiply(allocation, 2)
 	if !resources.Equals(allocation, assumed) {
@@ -561,9 +553,8 @@ func TestAssumedAppCalc(t *testing.T) {
 // It tests the queue specific parts of the code only.
 func TestSortRequests(t *testing.T) {
 	appID := "app-1"
-	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
-	app := newSchedulingApplication(appInfo)
-	if app == nil || app.ApplicationInfo.ApplicationID != appID {
+	app := newSchedulingAppInternal(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	if app == nil || app.ApplicationID != appID {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
 	if app.sortedRequests != nil {
@@ -599,56 +590,54 @@ func TestStateChangeOnAskUpdate(t *testing.T) {
 	assert.NilError(t, err, "queue create failed")
 
 	appID := "app-1"
-	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
-	app := newSchedulingApplication(appInfo)
-	if app == nil || app.ApplicationInfo.ApplicationID != appID {
+	app := newSchedulingAppInternal(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	if app == nil || app.ApplicationID != appID {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
 	// fake the queue assignment
 	app.queue = queue
 	// app should be new
-	assert.Assert(t, app.isNew(), "New application did not return new state: %s", app.ApplicationInfo.GetApplicationState())
+	assert.Assert(t, app.isNew(), "New application did not return new state: %s", app.GetApplicationState())
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	askID := "ask-1"
 	ask := newAllocationAsk(askID, appID, res)
 	_, err = app.addAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been added to app, returned delta")
 	// app with ask should be accepted
-	assert.Assert(t, app.isAccepted(), "application did not change to accepted state: %s", app.ApplicationInfo.GetApplicationState())
+	assert.Assert(t, app.isAccepted(), "application did not change to accepted state: %s", app.GetApplicationState())
 
 	// removing the ask should move it to waiting
-	released := app.removeAllocationAsk(askID)
+	released := app.removeAllocationAskInternal(askID)
 	assert.Equal(t, released, 0, "allocation ask should not have been reserved")
-	assert.Assert(t, app.isWaiting(), "application did not change to waiting state: %s", app.ApplicationInfo.GetApplicationState())
+	assert.Assert(t, app.isWaiting(), "application did not change to waiting state: %s", app.GetApplicationState())
 
 	// start with a fresh state machine
-	appInfo = cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
-	app = newSchedulingApplication(appInfo)
-	if app == nil || app.ApplicationInfo.ApplicationID != appID {
+	app = newSchedulingAppInternal(appID, "default", "root.unknown", security.UserGroup{}, nil)
+	if app == nil || app.ApplicationID != appID {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
 	// fake the queue assignment
 	app.queue = queue
 	// app should be new
-	assert.Assert(t, app.isNew(), "New application did not return new state: %s", app.ApplicationInfo.GetApplicationState())
+	assert.Assert(t, app.isNew(), "New application did not return new state: %s", app.GetApplicationState())
 	_, err = app.addAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been added to app, returned delta")
 	// app with ask should be accepted
-	assert.Assert(t, app.isAccepted(), "application did not change to accepted state: %s", app.ApplicationInfo.GetApplicationState())
+	assert.Assert(t, app.isAccepted(), "application did not change to accepted state: %s", app.GetApplicationState())
 	// add an alloc
 	uuid := "uuid-1"
-	allocInfo := cache.CreateMockAllocationInfo(appID, res, uuid, "root.unknown", "node-1")
-	cache.AddAllocationToApp(appInfo, allocInfo)
+	alloc := createMockAllocationInfo(appID, res, uuid, "root.unknown", "node-1")
+	app.addAllocation(alloc)
 	// app should be starting
-	assert.Assert(t, app.isStarting(), "application did not return starting state after alloc: %s", app.ApplicationInfo.GetApplicationState())
+	assert.Assert(t, app.isStarting(), "application did not return starting state after alloc: %s", app.GetApplicationState())
 
 	// removing the ask should not move anywhere as there is an allocation
-	released = app.removeAllocationAsk(askID)
+	released = app.removeAllocationAskInternal(askID)
 	assert.Equal(t, released, 0, "allocation ask should not have been reserved")
-	assert.Assert(t, app.isStarting(), "application changed state unexpectedly: %s", app.ApplicationInfo.GetApplicationState())
+	assert.Assert(t, app.isStarting(), "application changed state unexpectedly: %s", app.GetApplicationState())
 
 	// remove the allocation
-	cache.RemoveAllocationFromApp(appInfo, uuid)
+	app.removeAllocation(uuid)
 	// set in flight allocation
 	app.allocating = res
 	// add an ask with the repeat set to 0 (cannot use the proper way)
@@ -656,7 +645,155 @@ func TestStateChangeOnAskUpdate(t *testing.T) {
 	app.requests[askID] = ask
 
 	// with allocations in flight we should not change state
-	released = app.removeAllocationAsk(askID)
+	released = app.removeAllocationAskInternal(askID)
 	assert.Equal(t, released, 0, "allocation ask should not have been reserved")
-	assert.Assert(t, app.isStarting(), "application changed state unexpectedly: %s", app.ApplicationInfo.GetApplicationState())
+	assert.Assert(t, app.isStarting(), "application changed state unexpectedly: %s", app.GetApplicationState())
 }
+
+func newSchedulingAppTestOnlyWithTags(appID, partition, queueName string, tags map[string]string) *SchedulingApplication {
+	user := security.UserGroup{
+		User:   "testuser",
+		Groups: []string{},
+	}
+	return newSchedulingAppInternal(appID, partition, queueName, user, tags)
+}
+
+func TestNewApplicationInfo(t *testing.T) {
+	appInfo := newSchedulingAppTestOnly("app-00001", "default", "root.a")
+	assert.Equal(t, appInfo.ApplicationID, "app-00001")
+	assert.Equal(t, appInfo.Partition, "default")
+	assert.Equal(t, appInfo.QueueName, "root.a")
+	assert.Equal(t, appInfo.GetApplicationState(), New.String())
+}
+
+func TestAllocations(t *testing.T) {
+	appInfo := newSchedulingAppTestOnly("app-00001", "default", "root.a")
+
+	// nothing allocated
+	if !resources.IsZero(appInfo.GetAllocatedResource()) {
+		t.Error("new application has allocated resources")
+	}
+	// create an allocation and check the assignment
+	resMap := map[string]string{"memory": "100", "vcores": "10"}
+	res, err := resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err, "failed to create resource with error")
+	alloc := createMockAllocationInfo("app-00001", res, "uuid-1", "root.a", "node-1")
+	appInfo.addAllocation(alloc)
+	if !resources.Equals(appInfo.allocated, res) {
+		t.Errorf("allocated resources is not updated correctly: %v", appInfo.allocated)
+	}
+	allocs := appInfo.GetAllAllocations()
+	assert.Equal(t, len(allocs), 1)
+
+	// add more allocations to test the removals
+	alloc = createMockAllocationInfo("app-00001", res, "uuid-2", "root.a", "node-1")
+	appInfo.addAllocation(alloc)
+	alloc = createMockAllocationInfo("app-00001", res, "uuid-3", "root.a", "node-1")
+	appInfo.addAllocation(alloc)
+	allocs = appInfo.GetAllAllocations()
+	assert.Equal(t, len(allocs), 3)
+	// remove one of the 3
+	if alloc = appInfo.removeAllocation("uuid-2"); alloc == nil {
+		t.Error("returned allocations was nil allocation was not removed")
+	}
+	// try to remove a non existing alloc
+	if alloc = appInfo.removeAllocation("does-not-exist"); alloc != nil {
+		t.Errorf("returned allocations was not allocation was incorrectly removed: %v", alloc)
+	}
+	// remove all left over allocations
+	if allocs = appInfo.removeAllAllocations(); allocs == nil || len(allocs) != 2 {
+		t.Errorf("returned number of allocations was incorrect: %v", allocs)
+	}
+	allocs = appInfo.GetAllAllocations()
+	assert.Equal(t, len(allocs), 0)
+}
+
+func TestQueueUpdate(t *testing.T) {
+	appInfo := newSchedulingAppTestOnly("app-00001", "default", "root.a")
+
+	// FIXME: do this after queue handled
+	queue, err := NewDynamicQueue("test", true, nil)
+	assert.NilError(t, err, "failed to create queue")
+	appInfo.SetQueue(queue)
+	assert.Equal(t, appInfo.QueueName, "test")
+}
+
+func TestStateTimeOut(t *testing.T) {
+	startingTimeout = time.Microsecond * 100
+	defer func() { startingTimeout = time.Minute * 5 }()
+	appInfo := newSchedulingAppTestOnly("app-00001", "default", "root.a")
+	err := appInfo.HandleApplicationEvent(RunApplication)
+	assert.NilError(t, err, "no error expected new to accepted (timeout test)")
+	err = appInfo.HandleApplicationEvent(RunApplication)
+	assert.NilError(t, err, "no error expected accepted to starting (timeout test)")
+	// give it some time to run and progress
+	time.Sleep(time.Millisecond * 100)
+	if appInfo.IsStarting() {
+		t.Fatal("Starting state should have timed out")
+	}
+	if appInfo.stateTimer != nil {
+		t.Fatalf("Startup timer has not be cleared on time out as expected, %v", appInfo.stateTimer)
+	}
+
+	startingTimeout = time.Millisecond * 100
+	appInfo = newSchedulingAppTestOnly("app-00001", "default", "root.a")
+	err = appInfo.HandleApplicationEvent(RunApplication)
+	assert.NilError(t, err, "no error expected new to accepted (timeout test2)")
+	err = appInfo.HandleApplicationEvent(RunApplication)
+	assert.NilError(t, err, "no error expected accepted to starting (timeout test2)")
+	// give it some time to run and progress
+	time.Sleep(time.Microsecond * 100)
+	if !appInfo.IsStarting() || appInfo.stateTimer == nil {
+		t.Fatalf("Starting state and timer should not have timed out yet, state: %s", appInfo.stateMachine.Current())
+	}
+	err = appInfo.HandleApplicationEvent(RunApplication)
+	assert.NilError(t, err, "no error expected starting to run (timeout test2)")
+	// give it some time to run and progress
+	time.Sleep(time.Microsecond * 100)
+	if !appInfo.stateMachine.Is(Running.String()) || appInfo.stateTimer != nil {
+		t.Fatalf("State is not running or timer was not cleared, state: %s, timer %v", appInfo.stateMachine.Current(), appInfo.stateTimer)
+	}
+}
+
+func TestGetTag(t *testing.T) {
+	appInfo := newSchedulingAppTestOnlyWithTags("app-1", "default", "root.a", nil)
+	tag := appInfo.GetTag("")
+	assert.Equal(t, tag, "", "expected empty tag value if tags nil")
+	tags := make(map[string]string)
+	appInfo = newSchedulingAppTestOnlyWithTags("app-1", "default", "root.a", tags)
+	tag = appInfo.GetTag("")
+	assert.Equal(t, tag, "", "expected empty tag value if no tags defined")
+	tags["test"] = "test value"
+	appInfo = newSchedulingAppTestOnlyWithTags("app-1", "default", "root.a", tags)
+	tag = appInfo.GetTag("notfound")
+	assert.Equal(t, tag, "", "expected empty tag value if tag not found")
+	tag = appInfo.GetTag("test")
+	assert.Equal(t, tag, "test value", "expected tag value")
+}
+
+func TestOnStatusChangeCalled(t *testing.T) {
+	appInfo := newSchedulingAppTestOnly("app-00001", "default", "root.a")
+	assert.Equal(t, appInfo.GetApplicationState(), New.String())
+	mockHandler := &MockEventHandler{eventHandled: false}
+	appInfo.eventHandlers.RMProxyEventHandler = mockHandler
+
+	err := appInfo.HandleApplicationEvent(RunApplication)
+	assert.NilError(t, err, "no error expected")
+	assert.Assert(t, mockHandler.eventHandled)
+
+	mockHandler.eventHandled = false
+	// accepted to rejected: error expected
+	err = appInfo.HandleApplicationEvent(RejectApplication)
+	assert.Assert(t, err != nil, "error expected ")
+	assert.Equal(t, appInfo.GetApplicationState(), Accepted.String())
+	assert.Assert(t, !mockHandler.eventHandled)
+}
+
+type MockEventHandler struct {
+	eventHandled bool
+}
+
+func (m *MockEventHandler) HandleEvent(ev interface{}) {
+	m.eventHandled = true
+}
+

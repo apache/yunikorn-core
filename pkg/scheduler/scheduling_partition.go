@@ -19,7 +19,6 @@
 package scheduler
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -57,7 +56,7 @@ type PartitionSchedulingContext struct {
 	nodes                  map[string]*SchedulingNode        // nodes assigned to this partition
 	placementManager       *placement.AppPlacementManager    // placement manager for this partition
 	partitionManager       *partitionManager                 // manager for this partition
-	allocations            map[string]*schedulingAllocation        // allocations
+	allocations            map[string]*schedulingAllocation  // allocations
 	stateMachine           *fsm.FSM                          // the state of the queue for scheduling
 	stateTime              time.Time                         // last time the state was updated (needed for cleanup)
 	isPreemptable          bool                              // can allocations be preempted
@@ -66,6 +65,7 @@ type PartitionSchedulingContext struct {
 	totalPartitionResource *resources.Resource               // Total node resources
 	nodeSortingPolicy      *common.NodeSortingPolicy         // Global Node Sorting Policies
 	eventHandler           handler.EventHandlers
+	scheduler              *Scheduler
 
 	sync.RWMutex
 }
@@ -83,6 +83,7 @@ func newSchedulingPartitionFromConfig(conf configs.PartitionConfig, rmID string,
 		totalPartitionResource: resources.NewResource(),
 		reservedApps:           make(map[string]int),
 		eventHandler:           scheduler.eventHandlers,
+		scheduler:              scheduler,
 	}
 
 	log.Logger().Info("creating partition",
@@ -432,15 +433,11 @@ func (psc *PartitionSchedulingContext) allocateSanityCheck(alloc* schedulingAllo
 	return app, node, nil
 }
 
-// Process the allocation and make the changes in the partition.
-// If the allocation needs to be passed on to the cache true will be returned if not false is returned
-func (psc *PartitionSchedulingContext) allocate(alloc *schedulingAllocation) bool {
-	psc.Lock()
-	defer psc.Unlock()
-
+// FIXME, reservation should be handled by the same async proposal handler.
+func (psc *PartitionSchedulingContext) handleReservations(alloc* schedulingAllocation) bool {
 	app, node, err := psc.allocateSanityCheck(alloc)
 	if err != nil {
-
+		return false
 	}
 
 	// reservation does not leave the scheduler
@@ -459,14 +456,27 @@ func (psc *PartitionSchedulingContext) allocate(alloc *schedulingAllocation) boo
 		}
 	}
 
+	return true
+}
+
+// Process the allocation and make the changes in the partition.
+// If the allocation needs to be passed on to the cache true will be returned if not false is returned
+func (psc *PartitionSchedulingContext) allocate(alloc *schedulingAllocation) bool {
+	psc.Lock()
+	defer psc.Unlock()
+
+	commitProposal := psc.handleReservations(alloc)
+
 	log.Logger().Info("scheduler allocation proposal",
 		zap.String("appID", alloc.SchedulingAsk.ApplicationID),
 		zap.String("queue", alloc.SchedulingAsk.QueueName),
 		zap.String("allocationKey", alloc.SchedulingAsk.AskProto.AllocationKey),
 		zap.String("allocatedResource", alloc.SchedulingAsk.AllocatedResource.String()),
 		zap.String("targetNode", alloc.nodeID))
-// FIXME : this should be a event handled by scheduler
-	s.processAllocationProposalEvent(newSingleAllocationProposal(alloc)))
+
+	if commitProposal {
+		psc.scheduler.processAllocationProposalEvent(newSingleAllocationProposal(alloc)))
+	}
 	return true
 }
 
@@ -730,6 +740,9 @@ func (psc *PartitionSchedulingContext) addNewNode(node *SchedulingNode, existing
 	psc.nodes[node.NodeID] = node
 
 	// Add allocations that exist on the node when added
+	// FIXME:
+	//    note from wangda: the behavior of recovery need to be double checked:
+	//    - How assume cache should work. (Do we want to check predict / assume cache?)
 	if len(existingAllocations) > 0 {
 		log.Logger().Info("add existing allocations",
 			zap.String("nodeID", node.NodeID),
@@ -991,7 +1004,7 @@ func (psc *PartitionSchedulingContext) addNewAllocationSanityCheck(alloc *schedu
 	}
 
 	// App should have enough asks
-	if app.GetSchedulingAllocationAsk(allocKey).getPendingAskRepeat() < 0 {
+	if (!nodeReported) && app.GetSchedulingAllocationAsk(allocKey).getPendingAskRepeat() < 0 {
 		return nil, nil, nil, fmt.Errorf("cannot allocate resource [%v] for application %s on "+
 			"node %s because app doesn't have more ask, allocateKey=%s",
 			allocatedResource, appId, node.NodeID, allocKey)
@@ -1022,12 +1035,12 @@ func (psc *PartitionSchedulingContext) addNewAllocationSanityCheck(alloc *schedu
 //
 // NOTE: It should only be called holding the PartitionInfo lock.
 // If access outside is needed a locked version must used, see addNewAllocation
-func (psc *PartitionSchedulingContext) addNewAllocationInternal(alloc *schedulingAllocation, nodeReported bool) (*schedulingAllocation, error) {
+func (psc *PartitionSchedulingContext) addNewAllocationInternal(alloc *schedulingAllocation, nodeReported bool) error {
 
 	app, node, queue, err := psc.addNewAllocationSanityCheck(alloc, nodeReported)
 
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Make changes to scheduler
@@ -1049,12 +1062,9 @@ func (psc *PartitionSchedulingContext) addNewAllocationInternal(alloc *schedulin
 		}
 	}
 
-	// FIXME: Make reservation logic can be done here.
-	xxx
-
 	node.AddAllocation(alloc)
 
-	app.addAllocation(alloc)
+	app.addAllocation(alloc, nodeReported)
 
 	queue.IncAllocatedResource(alloc.SchedulingAsk.AllocatedResource, nodeReported)
 
@@ -1066,12 +1076,12 @@ func (psc *PartitionSchedulingContext) addNewAllocationInternal(alloc *schedulin
 		zap.String("allocationUid", alloc.GetUUID()),
 		zap.String("allocKey", alloc.SchedulingAsk.AskProto.AllocationKey))
 
-	return alloc, nil
+	return nil
 }
 
 // Add a new allocation to the partition.
 // This is the locked version which calls addNewAllocationInternal() inside a partition lock.
-func (psc *PartitionSchedulingContext) addNewAllocation(alloc *schedulingAllocation) (*schedulingAllocation, error) {
+func (psc *PartitionSchedulingContext) addNewAllocation(alloc *schedulingAllocation) error {
 	psc.Lock()
 	defer psc.Unlock()
 	return psc.addNewAllocationInternal(alloc, false)
@@ -1249,19 +1259,6 @@ func (psc *PartitionSchedulingContext) markPartitionForRemoval() {
 		log.Logger().Error("failed to mark partition for deletion",
 			zap.String("partitionName", psc.Name),
 			zap.Error(err))
-	}
-}
-
-// The partition has been removed from the configuration and must be removed.
-// This is the cleanup triggered by the exiting scheduler partition. Just unlinking from the cluster should be enough.
-// All other clean up is triggered from the scheduler
-func (psc *PartitionSchedulingContext) Remove() {
-	psc.RLock()
-	defer psc.RUnlock()
-	// safeguard
-	if psc.isDraining() || psc.isStopped() {
-		// FIXME: overhaul of clusterInfo, remove partition needed.
-		psc.clusterInfo.removePartition(psc.Name)
 	}
 }
 

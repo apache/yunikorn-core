@@ -24,20 +24,19 @@ import (
 	"sync"
 	"time"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
 )
 
-var gClusterInfo *cache.ClusterInfo
+var gscheduler *scheduler.Scheduler
 var imHistory *history.InternalMetricsHistory
 
 type WebService struct {
 	httpServer  *http.Server
-	clusterInfo *cache.ClusterInfo
 	lock        sync.RWMutex
 }
 
@@ -81,9 +80,9 @@ func (m *WebService) StartWebApp() {
 	}()
 }
 
-func NewWebApp(clusterInfo *cache.ClusterInfo, internalMetrics *history.InternalMetricsHistory) *WebService {
+func NewWebApp(s *scheduler.Scheduler, internalMetrics *history.InternalMetricsHistory) *WebService {
 	m := &WebService{}
-	gClusterInfo = clusterInfo
+	gscheduler = s
 	imHistory = internalMetrics
 	return m
 }

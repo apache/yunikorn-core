@@ -18,7 +18,10 @@
 
 package rmevent
 
-import "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+import (
+	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+)
 
 type RMNewAllocationsEvent struct {
 	RmID        string
@@ -46,4 +49,13 @@ type RMNodeUpdateEvent struct {
 	RmID          string
 	AcceptedNodes []*si.AcceptedNode
 	RejectedNodes []*si.RejectedNode
+}
+
+type RMUpdateRequestEvent struct {
+	Request *si.UpdateRequest
+}
+
+type RMRegistrationEvent struct {
+	Registration  *si.RegisterResourceManagerRequest
+	ResultChannel chan *commonevents.Result
 }

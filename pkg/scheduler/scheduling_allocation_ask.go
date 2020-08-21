@@ -22,7 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
@@ -56,27 +55,6 @@ func newSchedulingAllocationAsk(ask *si.AllocationAsk) *schedulingAllocationAsk 
 	}
 	saa.priority = saa.normalizePriority(ask.Priority)
 	return saa
-}
-
-func convertFromAllocation(allocation *si.Allocation, rmID string) *schedulingAllocationAsk {
-	partitionWithRMId := common.GetNormalizedPartitionName(allocation.PartitionName, rmID)
-	return &schedulingAllocationAsk{
-		AskProto: &si.AllocationAsk{
-			AllocationKey:  allocation.AllocationKey,
-			ResourceAsk:    allocation.ResourcePerAlloc,
-			Tags:           allocation.AllocationTags,
-			Priority:       allocation.Priority,
-			MaxAllocations: 1,
-			ApplicationID:  allocation.ApplicationID,
-			PartitionName:  partitionWithRMId,
-		},
-		QueueName:         allocation.QueueName,
-		AllocatedResource: resources.NewResourceFromProto(allocation.ResourcePerAlloc),
-		ApplicationID:     allocation.ApplicationID,
-		PartitionName:     partitionWithRMId,
-		pendingRepeatAsk:  1,
-		createTime:        time.Now(),
-	}
 }
 
 // Update pending ask repeat with the delta given.

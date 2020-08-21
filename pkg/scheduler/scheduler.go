@@ -48,26 +48,27 @@ import (
 // Scheduler may maintain its local status which is different from SchedulerCache
 type Scheduler struct {
 	// Private fields need protection
-	clusterInfo            *cache.ClusterInfo    // link to the cache object
+	// clusterInfo            *cache.ClusterInfo    // link to the cache object
 	preemptionContext      *preemptionContext    // Preemption context
 	eventHandlers          handler.EventHandlers // list of event handlers
-	pendingSchedulerEvents chan interface{}      // queue for scheduler events
-	partitions             map[string]*PartitionSchedulingContext
-	needPreemption         bool
-	policyGroup            string
+
+	partitions         map[string]*PartitionSchedulingContext
+	needPreemption     bool
+	policyGroup        string
 
 	// Event queues
 	pendingRmEvents chan interface{}
+	pendingCommitQueue chan *schedulingAllocation // queue for scheduler events
 
 	sync.RWMutex
 }
 
-// FIXME: need better create the constructor
-func NewScheduler(clusterInfo *cache.ClusterInfo) *Scheduler {
+func NewScheduler() *Scheduler {
 	s := &Scheduler{}
-	s.clusterInfo = clusterInfo
-	s.clusterSchedulingContext = NewClusterSchedulingContext()
-	s.pendingSchedulerEvents = make(chan interface{}, 1024*1024)
+	s.pendingRmEvents = make(chan interface{}, 1024*1024)
+	s.pendingCommitQueue = make(chan *schedulingAllocation, 1024*1024)
+	s.partitions = make(map[string]*PartitionSchedulingContext)
+
 	return s
 }
 
@@ -76,7 +77,9 @@ func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 	s.eventHandlers = handlers
 
 	// Start event handlers
-	go s.handleSchedulerEvent()
+	// go s.handleSchedulerEvent()
+
+	go s.handleSchedulingAllocationCommit()
 
 	// Start resource monitor if necessary (majorly for testing)
 	monitor := newNodesResourceUsageMonitor(s)
@@ -86,25 +89,6 @@ func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 		go s.internalSchedule()
 		go s.internalInspectOutstandingRequests()
 		go s.internalPreemption()
-	}
-}
-
-// Create single allocation
-func newSingleAllocationProposal(alloc *schedulingAllocation) *cacheevent.AllocationProposalBundleEvent {
-	return &cacheevent.AllocationProposalBundleEvent{
-		AllocationProposals: []*commonevents.AllocationProposal{
-			{
-				NodeID:            alloc.nodeID,
-				ApplicationID:     alloc.SchedulingAsk.ApplicationID,
-				QueueName:         alloc.SchedulingAsk.QueueName,
-				AllocatedResource: alloc.SchedulingAsk.AllocatedResource,
-				AllocationKey:     alloc.SchedulingAsk.AskProto.AllocationKey,
-				Priority:          alloc.SchedulingAsk.AskProto.Priority,
-				PartitionName:     alloc.SchedulingAsk.PartitionName,
-			},
-		},
-		ReleaseProposals: alloc.releases,
-		PartitionName:    alloc.SchedulingAsk.PartitionName,
 	}
 }
 
@@ -173,47 +157,6 @@ func (s *Scheduler) updateSchedulingRequest(schedulingAsk *schedulingAllocationA
 	return err
 }
 
-// Recovery of allocations do not go through the normal cycle and never have an "allocating" state.
-// When a node registers with existing allocations this would cause issues as we cannot confirm the resources.
-// Set the allocating
-// Confirm an allocation proposal.
-// Convenience function around updating the proposal with a change of +1.
-func (s *Scheduler) confirmAllocationProposal(allocProposal *commonevents.AllocationProposal) error {
-	return s.processAllocationProposal(allocProposal, true)
-}
-
-// Reject an allocation proposal.
-// Convenience function for updating the proposal with a change of -1.
-func (s *Scheduler) rejectAllocationProposal(allocProposal *commonevents.AllocationProposal) error {
-	return s.processAllocationProposal(allocProposal, false)
-}
-
-// Process the allocation proposal by updating the app and queue.
-func (s *Scheduler) processAllocationProposal(allocProposal *commonevents.AllocationProposal, confirm bool) error {
-	// get the partition
-	partition := s.getPartition(allocProposal.PartitionName)
-	if partition == nil {
-		return fmt.Errorf("cannot find scheduling partition %s, for allocation ID %s", allocProposal.PartitionName, allocProposal.AllocationKey)
-	}
-	err := partition.confirmAllocation(allocProposal, confirm)
-	if err != nil && allocProposal.UUID != "" {
-		log.Logger().Debug("failed to confirm proposal, removing allocation from cache",
-			zap.String("appID", allocProposal.ApplicationID),
-			zap.String("partitionName", allocProposal.PartitionName),
-			zap.String("allocationKey", allocProposal.AllocationKey),
-			zap.String("allocation UUID", allocProposal.UUID))
-		// Pass in a releaseType of preemption we need to communicate the release back to the RM. The alloc was
-		// communicated to the RM from the cache but immediately removed again
-		// This is an internal removal which we do not have a code for, however it is triggered by the ask removal
-		// from the RM. Stopped by RM fits best.
-		event := &cacheevent.ReleaseAllocationsEvent{AllocationsToRelease: make([]*ReleaseAllocation, 0)}
-		event.AllocationsToRelease = append(event.AllocationsToRelease, commonevents.NewReleaseAllocation(allocProposal.UUID, allocProposal.ApplicationID, allocProposal.PartitionName, "allocation confirmation failure (ask removal)", si.AllocationReleaseResponse_STOPPED_BY_RM))
-
-		s.eventHandlers.CacheEventHandler.HandleEvent(event)
-	}
-	return err
-}
-
 func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
 	select {
 	case queue <- ev:
@@ -227,9 +170,21 @@ func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
 	}
 }
 
-// Implement methods for Scheduler events
-func (s *Scheduler) HandleEvent(ev interface{}) {
-	enqueueAndCheckFull(s.pendingSchedulerEvents, ev)
+func enqueueAllocAndCheckFull(queue chan *schedulingAllocation, alloc *schedulingAllocation) {
+	select {
+	case queue <- alloc:
+		log.Logger().Debug("enqueued new allocation proposal",
+			zap.String("eventType", reflect.TypeOf(alloc).String()),
+			zap.Any("event", alloc),
+			zap.Int("currentQueueSize", len(queue)))
+	default:
+		log.Logger().DPanic("failed to enqueue event",
+			zap.String("event", reflect.TypeOf(alloc).String()))
+	}
+}
+
+func (s *Scheduler) addNewSchedulingAllocationToCommit(alloc *schedulingAllocation) {
+	enqueueAllocAndCheckFull(s.pendingCommitQueue, alloc)
 }
 
 func (s *Scheduler) processAllocationAsksToRelease(allocationAsksToRelease []*si.AllocationAskReleaseRequest) {
@@ -254,181 +209,11 @@ func (s *Scheduler) processAllocationAsksToRelease(allocationAsksToRelease []*si
 	}
 }
 
-func (s *Scheduler) recoverExistingAllocations(existingAllocations []*si.Allocation, rmID string) {
-	// A scheduling cycle for an application takes following steps:
-	//  1) Add an application into schedulers and the cache, includes the partition and queue update
-	//  2) Add requests to the app (can be included in the same update) updating queues and app itself
-	//  3) For pending asks run the scheduling logic to propose an allocation on a node:
-	//     Updating the node, queue and app with the proposal
-	//     Order for processing: partition -> queue -> app
-	//  4) Update data in cache using the proposal (node, queue and app) return a confirmation/reject
-	//     This can still cause a reject of the proposal for certain cases
-	//  5) Confirm/reject the allocation in the scheduler updating node, queue and app
-	// Recovering of existing allocations looks like a replay of the scheduling process. However step 3
-	// an 4 are handled directly not via the normal scheduling logic as the node, queue and app are all
-	// known. The existing allocations are directly added to the cache.
-	for _, alloc := range existingAllocations {
-		log.Logger().Info("recovering allocations for app",
-			zap.String("applicationID", alloc.ApplicationID),
-			zap.String("nodeID", alloc.NodeID),
-			zap.String("queueName", alloc.QueueName),
-			zap.String("partition", alloc.PartitionName),
-			zap.String("allocationKey", alloc.AllocationKey),
-			zap.String("allocationId", alloc.UUID))
-
-		// add scheduling asks (step 2 above)
-		ask := convertFromAllocation(alloc, rmID)
-		if err := s.updateSchedulingRequest(ask); err != nil {
-			log.Logger().Warn("app recovery failed to update scheduling request",
-				zap.Error(err))
-			continue
-		}
-
-		// set the scheduler allocation in progress info (step 3)
-		if err := s.updateAppAllocating(ask, alloc.NodeID); err != nil {
-			log.Logger().Warn("app recovery failed to update allocating information",
-				zap.Error(err))
-			continue
-		}
-
-		// handle allocation proposals (step 5)
-		if err := s.confirmAllocationProposal(&commonevents.AllocationProposal{
-			NodeID:            alloc.NodeID,
-			ApplicationID:     alloc.ApplicationID,
-			QueueName:         alloc.QueueName,
-			AllocatedResource: resources.NewResourceFromProto(alloc.ResourcePerAlloc),
-			AllocationKey:     alloc.AllocationKey,
-			Tags:              alloc.AllocationTags,
-			Priority:          alloc.Priority,
-			PartitionName:     common.GetNormalizedPartitionName(alloc.PartitionName, rmID),
-		}); err != nil {
-			log.Logger().Error("app recovery failed to confirm allocation proposal",
-				zap.Error(err))
-			continue
-		}
-		// all done move the app to running, this can only happen if all updates worked
-		// this means that the app must exist (cannot be nil)
-		app := s.GetSchedulingApplication(ask.ApplicationID, ask.PartitionName)
-		app.finishRecovery()
-	}
-}
-
-func (s *Scheduler) processAllocationUpdateEvent(ev *schedulerevent.SchedulerAllocationUpdatesEvent) {
-	if len(ev.ExistingAllocations) > 0 {
-		// in recovery mode, we only expect existing allocations being reported
-		if len(ev.NewAsks) > 0 || len(ev.RejectedAllocations) > 0 || ev.ToReleases != nil {
-			log.Logger().Warn("illegal SchedulerAllocationUpdatesEvent,"+
-				" only existingAllocations can be set exclusively, other info will be skipped",
-				zap.Int("num of existingAllocations", len(ev.ExistingAllocations)),
-				zap.Int("num of rejectedAllocations", len(ev.RejectedAllocations)),
-				zap.Int("num of newAsk", len(ev.NewAsks)))
-		}
-		s.recoverExistingAllocations(ev.ExistingAllocations, ev.RMId)
-		return
-	}
-
-	// Allocations events cannot contain accepted and rejected allocations at the same time.
-	// There should never be more than one accepted allocation in the list
-	// See cluster_info.processAllocationProposalEvent()
-	if len(ev.AcceptedAllocations) > 0 {
-		alloc := ev.AcceptedAllocations[0]
-		// Update pending resource
-		if err := s.confirmAllocationProposal(alloc); err != nil {
-			log.Logger().Error("failed to confirm allocation proposal",
-				zap.Error(err))
-		}
-	}
-
-	// Rejects have not updated the node in the cache but have updated the scheduler with
-	// outstanding allocations that need to be removed. Can be multiple in one event.
-	if len(ev.RejectedAllocations) > 0 {
-		for _, alloc := range ev.RejectedAllocations {
-			// Update pending resource back
-			if err := s.rejectAllocationProposal(alloc); err != nil {
-				log.Logger().Error("failed to reject allocation proposal",
-					zap.Error(err))
-			}
-		}
-	}
-}
-
-func (s *Scheduler) removePartitionsBelongToRM(event *commonevents.RemoveRMPartitionsEvent) {
-	s.RemoveSchedulingPartitionsByRMId(event.RmID)
-
-	// Send this event to cache
-	s.eventHandlers.CacheEventHandler.HandleEvent(event)
-}
-
-func (s *Scheduler) processUpdatePartitionConfigsEvent(event *schedulerevent.SchedulerUpdatePartitionsConfigEvent) {
-	partitions := make([]*cache.PartitionInfo, 0)
-	for _, p := range event.UpdatedPartitions {
-		partition, ok := p.(*cache.PartitionInfo)
-		if !ok {
-			log.Logger().Debug("cast failed unexpected object in partition update event",
-				zap.Any("PartitionInfo", p))
-		}
-		partitions = append(partitions, partition)
-	}
-
-	if err := s.updateSchedulingPartitions(partitions); err != nil {
-		event.ResultChannel <- &commonevents.Result{
-			Succeeded: false,
-			Reason:    err.Error(),
-		}
-	} else {
-		event.ResultChannel <- &commonevents.Result{
-			Succeeded: true,
-		}
-	}
-}
-
-func (s *Scheduler) processDeletePartitionConfigsEvent(event *schedulerevent.SchedulerDeletePartitionsConfigEvent) {
-	partitions := make([]*cache.PartitionInfo, 0)
-	for _, p := range event.DeletePartitions {
-		partition, ok := p.(*cache.PartitionInfo)
-		if !ok {
-			log.Logger().Debug("cast failed unexpected object in partition delete event",
-				zap.Any("PartitionInfo", p))
-		}
-		partitions = append(partitions, partition)
-	}
-
-	if err := s.deleteSchedulingPartitions(partitions); err != nil {
-		event.ResultChannel <- &commonevents.Result{
-			Succeeded: false,
-			Reason:    err.Error(),
-		}
-	} else {
-		event.ResultChannel <- &commonevents.Result{
-			Succeeded: true,
-		}
-	}
-}
-
-func (s *Scheduler) handleSchedulerEvent() {
+func (s *Scheduler) handleSchedulingAllocationCommit() {
 	for {
-		ev := <-s.pendingSchedulerEvents
-		switch v := ev.(type) {
-		case *schedulerevent.SchedulerNodeEvent:
-			s.processNodeEvent(v)
-		case *schedulerevent.SchedulerAllocationUpdatesEvent:
-			s.processAllocationUpdateEvent(v)
-		case *commonevents.RemoveRMPartitionsEvent:
-			s.removePartitionsBelongToRM(v)
-		case *schedulerevent.SchedulerUpdatePartitionsConfigEvent:
-			s.processUpdatePartitionConfigsEvent(v)
-		case *schedulerevent.SchedulerDeletePartitionsConfigEvent:
-			s.processDeletePartitionConfigsEvent(v)
-		default:
-			log.Logger().Error("Received type is not an acceptable type for Scheduler event.",
-				zap.String("Received type", reflect.TypeOf(v).String()))
-		}
+		ev := <-s.pendingCommitQueue
+		s.commitSchedulingAllocation(ev)
 	}
-}
-
-// Visible by tests
-func (s *Scheduler) GetClusterSchedulingContext() *ClusterSchedulingContext {
-	return s.clusterSchedulingContext
 }
 
 // The scheduler for testing which runs nAlloc times the normal schedule routine.
@@ -472,43 +257,11 @@ func (s *Scheduler) schedule() {
 	}
 }
 
-// Retrieve the app and node to set the allocating resources on when recovering allocations
-func (s *Scheduler) updateAppAllocating(ask *schedulingAllocationAsk, nodeID string) error {
-	app := s.GetSchedulingApplication(ask.ApplicationID, ask.PartitionName)
-	if app == nil {
-		return fmt.Errorf("cannot find scheduling application on allocation recovery %s", ask.ApplicationID)
-	}
-	node := s.GetSchedulingNode(nodeID, ask.PartitionName)
-	if node == nil {
-		return fmt.Errorf("cannot find scheduling node on allocation recovery %s", nodeID)
-	}
-	log.Logger().Debug("updating allocating for application, queue and node",
-		zap.String("allocKey", ask.AskProto.AllocationKey),
-		zap.String("nodeID", node.NodeID),
-		zap.String("appID", ask.ApplicationID),
-		zap.String("queueName", ask.QueueName))
-	app.recoverOnNode(node, ask)
-	return nil
-}
-
-func (s *Scheduler) handleSchedulerEvents_OriginalCache() {
-	for {
-		ev := <-s.pendingSchedulerEvents
-		switch v := ev.(type) {
-		case *cacheevent.AllocationProposalBundleEvent:
-			s.processAllocationProposalEvent(v)
-		default:
-			log.Logger().Error("Received type is not an acceptable type for scheduler event.",
-				zap.String("received type", reflect.TypeOf(v).String()))
-		}
-	}
-}
-
 func (s *Scheduler) handleRMEvents() {
 	for {
 		ev := <-s.pendingRmEvents
 		switch v := ev.(type) {
-		case *cacheevent.RMUpdateRequestEvent:
+		case *rmevent.RMUpdateRequestEvent:
 			s.processRMUpdateEvent(v)
 		case *commonevents.RegisterRMEvent:
 			s.processRMRegistrationEvent(v)
@@ -526,13 +279,9 @@ func (s *Scheduler) handleRMEvents() {
 // Implement methods for Cache events
 func (s *Scheduler) HandleEvent(ev interface{}) {
 	switch v := ev.(type) {
-	case *cacheevent.AllocationProposalBundleEvent:
-		enqueueAndCheckFull(s.pendingSchedulerEvents, v)
-	case *cacheevent.ReleaseAllocationsEvent:
-		enqueueAndCheckFull(s.pendingSchedulerEvents, v)
 	case *commonevents.RemoveRMPartitionsEvent:
-		enqueueAndCheckFull(s.pendingSchedulerEvents, v)
-	case *cacheevent.RMUpdateRequestEvent:
+		enqueueAndCheckFull(s.pendingRmEvents, v)
+	case *rmevent.RMUpdateRequestEvent:
 		enqueueAndCheckFull(s.pendingRmEvents, v)
 	case *commonevents.RegisterRMEvent:
 		enqueueAndCheckFull(s.pendingRmEvents, v)
@@ -541,19 +290,6 @@ func (s *Scheduler) HandleEvent(ev interface{}) {
 	default:
 		log.Logger().Error("Received unexpected event type.",
 			zap.String("Received event type", reflect.TypeOf(v).String()))
-	}
-}
-
-func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
-	select {
-	case queue <- ev:
-		log.Logger().Debug("enqueued event",
-			zap.String("eventType", reflect.TypeOf(ev).String()),
-			zap.Any("event", ev),
-			zap.Int("currentQueueSize", len(queue)))
-	default:
-		log.Logger().DPanic("failed to enqueue event",
-			zap.String("event", reflect.TypeOf(ev).String()))
 	}
 }
 
@@ -671,10 +407,9 @@ func (s *Scheduler) processNewAndReleaseAllocationRequests(request *si.UpdateReq
 	toReleases := request.Releases
 	newAsks := request.Asks
 
-	if toReleases!= nil {
+	if toReleases != nil {
 		s.processAllocationAsksToRelease(toReleases.AllocationAsksToRelease)
-		// FIXME: move the event NewReleaseAllocationEventFromProto to a normal structure to scheduler
-		s.processAllocationReleases(cacheevent.NewReleaseAllocationEventFromProto(toReleases.AllocationsToRelease).AllocationsToRelease)
+		s.processAllocationReleases(AllocationReleaseRequestToReleaseAllocation(toReleases.AllocationsToRelease, "", si.AllocationReleaseResponse_STOPPED_BY_RM))
 	}
 
 	if len(newAsks) > 0 {
@@ -774,10 +509,6 @@ func (s *Scheduler) processNodeActions(request *si.UpdateRequest) {
 					newOccupied := resources.NewResourceFromProto(or)
 					nodeInfo.setOccupiedResource(newOccupied)
 				}
-				s.eventHandlers.SchedulerEventHandler.HandleEvent(
-					&schedulerevent.SchedulerNodeEvent{
-						UpdateNode: nodeInfo,
-					})
 			case si.UpdateNodeInfo_DRAIN_NODE:
 				// set the state to not schedulable
 				nodeInfo.SetSchedulable(false)
@@ -788,11 +519,6 @@ func (s *Scheduler) processNodeActions(request *si.UpdateRequest) {
 				// set the state to not schedulable then tell the partition to clean up
 				nodeInfo.SetSchedulable(false)
 				partition.removeSchedulingNode(nodeInfo.NodeID)
-				// remove the equivalent scheduling node
-				s.eventHandlers.SchedulerEventHandler.HandleEvent(
-					&schedulerevent.SchedulerNodeEvent{
-						RemovedNode: nodeInfo,
-					})
 			}
 		}
 	}
@@ -813,7 +539,7 @@ func (s *Scheduler) processNodeUpdate(request *si.UpdateRequest) {
 
 // Process RM event internally. Split in steps that handle specific parts.
 // Lock free call, all updates occur in other methods.
-func (s *Scheduler) processRMUpdateEvent(event *cacheevent.RMUpdateRequestEvent) {
+func (s *Scheduler) processRMUpdateEvent(event *rmevent.RMUpdateRequestEvent) {
 	// Order of following operations are important,
 	// don't change unless carefully thought
 	request := event.Request
@@ -828,7 +554,7 @@ func (s *Scheduler) processRMUpdateEvent(event *cacheevent.RMUpdateRequestEvent)
 func (s *Scheduler) updateSchedulerConfig(newConfig *configs.SchedulerConfig, rmId string) error {
 	updatedPartitions := make([]*PartitionSchedulingContext, 0)
 	for _, partitionConf := range newConfig.Partitions {
-		updatedPartition, err := newSchedulingPartitionFromConfig(partitionConf, rmId, s.eventHandlers)
+		updatedPartition, err := newSchedulingPartitionFromConfig(partitionConf, rmId, s)
 		if err != nil {
 			log.Logger().Error("failed to initialize partition during config update",
 				zap.String("partition", partitionConf.Name),
@@ -933,45 +659,60 @@ func (s *Scheduler) processRMConfigUpdateEvent(event *commonevents.ConfigUpdateR
 
 // Process an allocation bundle which could contain release and allocation proposals.
 // Lock free call, all updates occur on the underlying partition which is locked or via events.
-func (s *Scheduler) processAllocationProposalEvent(event *cacheevent.AllocationProposalBundleEvent) {
+func (s *Scheduler) commitSchedulingAllocation(alloc *schedulingAllocation) {
 	// Release if there is anything to release
-	if len(event.ReleaseProposals) > 0 {
-		s.processAllocationReleases(event.ReleaseProposals)
+	if len(alloc.releases) > 0 {
+		s.processAllocationReleases(alloc.releases)
 	}
 	// Skip allocation if nothing here.
-	if len(event.AllocationProposals) == 0 {
+	if alloc.repeats == 0 {
 		return
 	}
 
 	// we currently only support 1 allocation in the list, reject all but the first
-	if len(event.AllocationProposals) != 1 {
+	if alloc.repeats != 1 {
 		log.Logger().Info("More than 1 allocation proposal rejected all but first",
-			zap.Int("allocPropLength", len(event.AllocationProposals)))
+			zap.Int32("allocPropLength", alloc.repeats))
 	}
 
+	partitionName := alloc.SchedulingAsk.PartitionName
+	queueName := alloc.SchedulingAsk.QueueName
+	allocationKey := alloc.SchedulingAsk.AskProto.AllocationKey
+
 	// just process the first the rest is rejected already
-	proposal := event.AllocationProposals[0]
-	partitionInfo := s.GetPartition(proposal.PartitionName)
-	allocInfo, err := partitionInfo.addNewAllocation(proposal)
+	partitionInfo := s.GetPartition(partitionName)
+	err := partitionInfo.addNewAllocation(alloc)
 	if err != nil {
 		log.Logger().Error("failed to add new allocation to partition",
 			zap.String("partition", partitionInfo.Name),
-			zap.String("allocationKey", proposal.AllocationKey),
+			zap.String("allocationKey", alloc.SchedulingAsk.AskProto.AllocationKey),
 			zap.Error(err))
 		return
 	}
 
 	log.Logger().Info("allocation accepted",
-		zap.String("appID", proposal.ApplicationID),
-		zap.String("queue", proposal.QueueName),
-		zap.String("partition", proposal.PartitionName),
-		zap.String("allocationKey", proposal.AllocationKey))
+		zap.String("appID", alloc.SchedulingAsk.ApplicationID),
+		zap.String("queue", queueName),
+		zap.String("partition", partitionName),
+		zap.String("allocationKey", allocationKey))
 
 	// Send allocation event to RM: rejects are not passed back
-	rmID := common.GetRMIdFromPartitionName(proposal.PartitionName)
+	rmID := common.GetRMIdFromPartitionName(partitionName)
 	s.eventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMNewAllocationsEvent{
-		Allocations: []*si.Allocation{allocInfo.AllocationProto},
-		RmID:        rmID,
+		Allocations: []*si.Allocation{
+			{
+				AllocationKey:    allocationKey,
+				AllocationTags:   alloc.SchedulingAsk.AskProto.Tags,
+				UUID:             alloc.GetUUID(),
+				ResourcePerAlloc: alloc.SchedulingAsk.AllocatedResource.ToProto(),
+				Priority:         alloc.SchedulingAsk.AskProto.Priority,
+				QueueName:        queueName,
+				NodeID:           alloc.nodeID,
+				PartitionName:    common.GetPartitionNameWithoutClusterID(partitionName),
+				ApplicationID:    alloc.SchedulingAsk.ApplicationID,
+			},
+		},
+		RmID: rmID,
 	})
 }
 
@@ -1095,15 +836,13 @@ func (s *Scheduler) addSchedulingApplication(schedulingApp *SchedulingApplicatio
 	return nil
 }
 
-func (s *Scheduler) removeSchedulingApplication(appID string, partitionName string) []*schedulingAllocation {
+func (s *Scheduler) removeSchedulingApplication(appID string, partitionName string) {
 	s.Lock()
 	defer s.Unlock()
 
 	if partition := s.partitions[partitionName]; partition != nil {
-		return partition.removeApplication(appID)
+		partition.removeApplication(appID)
 	}
-
-	return nil
 }
 
 // Update the scheduler's partition list based on the processed config
@@ -1136,24 +875,6 @@ func (s *Scheduler) updateSchedulingPartitions(partitions []*PartitionScheduling
 		}
 	}
 	return nil
-}
-
-func (s *Scheduler) RemoveSchedulingPartitionsByRMId(rmID string) {
-	s.Lock()
-	defer s.Unlock()
-	partitionToRemove := make(map[string]bool)
-
-	// Just remove corresponding partitions
-	for k, partition := range s.partitions {
-		if partition.RmID == rmID {
-			partition.partitionManager.stop = true
-			partitionToRemove[k] = true
-		}
-	}
-
-	for partitionName := range partitionToRemove {
-		delete(s.partitions, partitionName)
-	}
 }
 
 // Remove the partition from the scheduler based on a configuration change
@@ -1216,6 +937,7 @@ func (s *Scheduler) GetSchedulingNode(nodeID, partitionName string) *SchedulingN
 
 // Release preempted resources after the cache has been updated.
 // This is a lock free call: locks are taken while retrieving the node and when updating the node
+// FIXME: preemption logic isn't correct anyway ..
 func (s *Scheduler) releasePreemptedResources(resources []schedulerevent.PreemptedNodeResource) {
 	// no resources to release just return
 	if len(resources) == 0 {

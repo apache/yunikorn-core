@@ -226,7 +226,7 @@ func (m *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerReq
 
 	// Add new RM.
 	go func() {
-		m.EventHandlers.CacheEventHandler.HandleEvent(
+		m.EventHandlers.SchedulerEventHandler.HandleEvent(
 			&commonevents.RegisterRMEvent{
 				RMRegistrationRequest: request,
 				Channel:               c,
@@ -337,7 +337,7 @@ func (m *RMProxy) Update(request *si.UpdateRequest) error {
 
 	go func() {
 		normalizeUpdateRequestByRMId(request)
-		m.EventHandlers.CacheEventHandler.HandleEvent(&cacheevent.RMUpdateRequestEvent{Request: request})
+		m.EventHandlers.SchedulerEventHandler.HandleEvent(&cacheevent.RMUpdateRequestEvent{Request: request})
 	}()
 
 	return nil
@@ -371,7 +371,7 @@ type ConfigurationReloader struct {
 
 func (cr ConfigurationReloader) DoReloadConfiguration() error {
 	c := make(chan *commonevents.Result)
-	cr.rmProxy.EventHandlers.CacheEventHandler.HandleEvent(
+	cr.rmProxy.EventHandlers.SchedulerEventHandler.HandleEvent(
 		&commonevents.ConfigUpdateRMEvent{
 			RmID:    cr.rmID,
 			Channel: c,

@@ -35,3 +35,17 @@ type ReleaseAllocation struct {
 	// Release type
 	ReleaseType si.AllocationReleaseResponse_TerminationType
 }
+
+func AllocationReleaseRequestToReleaseAllocation(request []*si.AllocationReleaseRequest, msg string, releaseType si.AllocationReleaseResponse_TerminationType) []*ReleaseAllocation {
+	ret := make([]*ReleaseAllocation, 0)
+	for _, r := range request {
+		ret = append(ret, &ReleaseAllocation{
+			UUID:          r.UUID,
+			ApplicationID: r.ApplicationID,
+			PartitionName: r.PartitionName,
+			Message:       msg,
+			ReleaseType:   releaseType,
+		})
+	}
+	return ret
+}

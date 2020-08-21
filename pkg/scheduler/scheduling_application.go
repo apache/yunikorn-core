@@ -717,27 +717,6 @@ func (sa *SchedulingApplication) tryNode(node *SchedulingNode, ask *schedulingAl
 	return nil
 }
 
-// Recover the allocation for this app on the node provided.
-// This is only called for recovering existing allocations on a node. We can not use the normal scheduling for this as
-// the cache has already been updated and the allocation is confirmed. Checks for resource limits would fail. However
-// the scheduler fakes a confirmation from the cache later and we thus need this to track correctly.
-func (sa *SchedulingApplication) recoverOnNode(node *SchedulingNode, ask *schedulingAllocationAsk) {
-	sa.Lock()
-	defer sa.Unlock()
-	toAllocate := ask.AllocatedResource
-	// update the scheduling objects with the in progress resource
-	node.incAllocatingResource(toAllocate)
-	sa.queue.incAllocatingResource(toAllocate)
-	sa.allocating.AddTo(toAllocate)
-	// mark this ask as allocating by lowering the repeat
-	if _, err := sa.updateAskRepeatInternal(ask, -1); err != nil {
-		log.Logger().Error("application recovery update of existing allocation failed",
-			zap.String("appID", sa.ApplicationID),
-			zap.String("allocKey", ask.AskProto.AllocationKey),
-			zap.Error(err))
-	}
-}
-
 // Application status methods reflecting the underlying app object state
 // link back to the underlying app object to prevent out of sync states
 func (sa *SchedulingApplication) isAccepted() bool {
@@ -911,7 +890,7 @@ func (sa *SchedulingApplication) SetQueue(leaf *SchedulingQueue) {
 }
 
 // Add a new allocation to the application
-func (sa *SchedulingApplication) addAllocation(alloc *schedulingAllocation) {
+func (sa *SchedulingApplication) addAllocation(alloc *schedulingAllocation, nodeReported bool) {
 	// progress the state based on where we are, we should never fail in this case
 	// keep track of a failure
 	if err := sa.HandleApplicationEvent(RunApplication); err != nil {
@@ -925,7 +904,16 @@ func (sa *SchedulingApplication) addAllocation(alloc *schedulingAllocation) {
 
 	sa.allocations[alloc.GetUUID()] = alloc
 	sa.allocated = resources.Add(sa.allocated, alloc.SchedulingAsk.AllocatedResource)
-	sa.updateAskRepeatInternal(alloc.SchedulingAsk, -1)
+	
+	// When it is node reported, there's no pending ask will be generated, thus we will not deduct ask when do the allocation (recovery).
+	if !nodeReported {
+		sa.updateAskRepeatInternal(alloc.SchedulingAsk, -1)
+	}
+
+	if nodeReported {
+		// FIXME, wangda: is it correct???
+		sa.finishRecovery()
+	}
 }
 
 // Remove a specific allocation from the application.

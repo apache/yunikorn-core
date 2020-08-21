@@ -19,7 +19,6 @@
 package entrypoint
 
 import (
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/events"
 	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
@@ -70,19 +69,16 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 		eventPublisher = events.CreateShimPublisher(eventCache.Store)
 	}
 
-	cache := cache.NewClusterInfo()
-	scheduler := scheduler.NewScheduler(cache)
+	scheduler := scheduler.NewScheduler()
 	proxy := rmproxy.NewRMProxy()
 
 	eventHandler := handler.EventHandlers{
-		CacheEventHandler:     cache,
 		SchedulerEventHandler: scheduler,
 		RMProxyEventHandler:   proxy,
 	}
 
 	// start services
 	log.Logger().Info("ServiceContext start scheduling services")
-	cache.StartService(eventHandler)
 	scheduler.StartService(eventHandler, opts.manualScheduleFlag)
 	proxy.StartService(eventHandler)
 	if opts.eventCacheEnabled && eventCache != nil {
@@ -94,7 +90,6 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 
 	context := &ServiceContext{
 		RMProxy:   proxy,
-		Cache:     cache,
 		Scheduler: scheduler,
 	}
 
@@ -107,7 +102,7 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 
 	if opts.startWebAppFlag {
 		log.Logger().Info("ServiceContext start web application service")
-		webapp := webservice.NewWebApp(cache, imHistory)
+		webapp := webservice.NewWebApp(scheduler, imHistory)
 		webapp.StartWebApp()
 		context.WebApp = webapp
 	}

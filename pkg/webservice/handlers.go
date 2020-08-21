@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
@@ -56,7 +57,7 @@ func getStackInfo(w http.ResponseWriter, r *http.Request) {
 func getQueueInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
-	lists := gClusterInfo.ListPartitions()
+	lists := gscheduler.ListPartitions()
 	for _, k := range lists {
 		partitionInfo := getPartitionJSON(k)
 
@@ -69,7 +70,7 @@ func getQueueInfo(w http.ResponseWriter, r *http.Request) {
 func getClusterInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
-	lists := gClusterInfo.ListPartitions()
+	lists := gscheduler.ListPartitions()
 	for _, k := range lists {
 		clusterInfo := getClusterJSON(k)
 		var clustersInfo []dao.ClusterDAOInfo
@@ -92,9 +93,9 @@ func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var appsDao []*dao.ApplicationDAOInfo
-	lists := gClusterInfo.ListPartitions()
+	lists := gscheduler.ListPartitions()
 	for _, k := range lists {
-		partition := gClusterInfo.GetPartition(k)
+		partition := gscheduler.GetPartition(k)
 		appList := partition.GetApplications()
 		for _, app := range appList {
 			if len(queueName) == 0 || strings.EqualFold(queueName, app.QueueName) {
@@ -126,10 +127,10 @@ func getNodesInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	var result []*dao.NodesDAOInfo
-	lists := gClusterInfo.ListPartitions()
+	lists := gscheduler.ListPartitions()
 	for _, k := range lists {
 		var nodesDao []*dao.NodeDAOInfo
-		partition := gClusterInfo.GetPartition(k)
+		partition := gscheduler.GetPartition(k)
 		for _, node := range partition.GetNodes() {
 			nodeDao := getNodeJSON(node)
 			nodesDao = append(nodesDao, nodeDao)
@@ -173,7 +174,7 @@ func writeHeaders(w http.ResponseWriter) {
 
 func getClusterJSON(name string) *dao.ClusterDAOInfo {
 	clusterInfo := &dao.ClusterDAOInfo{}
-	partitionContext := gClusterInfo.GetPartition(name)
+	partitionContext := gscheduler.GetPartition(name)
 	clusterInfo.TotalApplications = strconv.Itoa(partitionContext.GetTotalApplicationCount())
 	clusterInfo.TotalContainers = strconv.Itoa(partitionContext.GetTotalAllocationCount())
 	clusterInfo.TotalNodes = strconv.Itoa(partitionContext.GetTotalNodeCount())
@@ -189,7 +190,7 @@ func getClusterJSON(name string) *dao.ClusterDAOInfo {
 func getPartitionJSON(name string) *dao.PartitionDAOInfo {
 	partitionInfo := &dao.PartitionDAOInfo{}
 
-	partitionContext := gClusterInfo.GetPartition(name)
+	partitionContext := gscheduler.GetPartition(name)
 	queueDAOInfo := partitionContext.Root.GetQueueInfos()
 
 	partitionInfo.PartitionName = partitionContext.Name
@@ -202,7 +203,7 @@ func getPartitionJSON(name string) *dao.PartitionDAOInfo {
 	return partitionInfo
 }
 
-func getApplicationJSON(app *cache.ApplicationInfo) *dao.ApplicationDAOInfo {
+func getApplicationJSON(app *scheduler.SchedulingApplication) *dao.ApplicationDAOInfo {
 	var allocationInfos []dao.AllocationDAOInfo
 	allocations := app.GetAllAllocations()
 	for _, alloc := range allocations {
@@ -319,7 +320,7 @@ func getContainerHistory(w http.ResponseWriter, r *http.Request) {
 func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
-	conf := configs.ConfigContext.Get(gClusterInfo.GetPolicyGroup())
+	conf := configs.ConfigContext.Get(gscheduler.GetPolicyGroup())
 	var marshalledConf []byte
 	var err error
 	// check if we have a request for json output

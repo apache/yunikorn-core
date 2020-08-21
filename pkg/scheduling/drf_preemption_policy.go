@@ -247,7 +247,7 @@ func createPreemptionAndAllocationProposal(preemptionPartitionContext *preemptio
 	preemptionResults []*singleNodePreemptResult) *schedulingAllocation {
 	// We will get this allocation by preempting resources.
 	allocation := newSchedulingAllocation(candidate, nodeToAllocate.NodeID)
-	allocation.releases = make([]*commonevents.ReleaseAllocation, 0)
+	allocation.releases = make([]*ReleaseAllocation, 0)
 
 	// And add releases
 	for _, pr := range preemptionResults {

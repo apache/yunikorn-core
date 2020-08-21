@@ -35,7 +35,7 @@ type SchedulerAllocationUpdatesEvent struct {
 }
 
 // From Cache, node updates.
-type SchedulerNodeEvent struct {
+type _SchedulerNodeEvent struct {
 	// Type is *cache.nodeInfo, avoid cyclic imports
 	AddedNode interface{}
 	// Type is *cache.nodeInfo, avoid cyclic imports

@@ -26,7 +26,9 @@ import (
 	"time"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
+	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
+	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 	"github.com/looplab/fsm"
 	uuid "github.com/satori/go.uuid"
@@ -61,13 +63,14 @@ type PartitionSchedulingContext struct {
 	userGroupCache         *security.UserGroupCache          // user cache per partition
 	totalPartitionResource *resources.Resource               // Total node resources
 	nodeSortingPolicy      *common.NodeSortingPolicy         // Global Node Sorting Policies
+	eventHandler           handler.EventHandlers
 
 	sync.RWMutex
 }
 
 // Create a new partition from scratch based on a validated configuration.
 // If the configuration did not pass validation and is processed weird errors could occur.
-func newSchedulingPartitionFromConfig(conf configs.PartitionConfig, rmID string) (*PartitionSchedulingContext, error) {
+func newSchedulingPartitionFromConfig(conf configs.PartitionConfig, rmID string, scheduler *Scheduler) (*PartitionSchedulingContext, error) {
 	p := &PartitionSchedulingContext{
 		Name:                   conf.Name,
 		RmID:                   rmID,
@@ -77,6 +80,7 @@ func newSchedulingPartitionFromConfig(conf configs.PartitionConfig, rmID string)
 		applications:           make(map[string]*SchedulingApplication),
 		totalPartitionResource: resources.NewResource(),
 		reservedApps:           make(map[string]int),
+		eventHandler:           scheduler.eventHandlers,
 	}
 
 	log.Logger().Info("creating partition",
@@ -88,6 +92,11 @@ func newSchedulingPartitionFromConfig(conf configs.PartitionConfig, rmID string)
 	}
 
 	p.placementManager = placement.NewPlacementManager(p)
+	p.partitionManager = &partitionManager{
+		psc: p,
+		stop: false,
+		scheduler: scheduler,
+	}
 
 	return p, nil
 }
@@ -320,50 +329,11 @@ func (psc *PartitionSchedulingContext) getSchedulingNodes(excludeReserved bool) 
 	return schedulingNodes
 }
 
-// Add a new scheduling node triggered on the addition of the cache node.
-// This will log if the scheduler is out of sync with the cache.
-// As a side effect it will bring the cache and scheduler back into sync.
-func (psc *PartitionSchedulingContext) addSchedulingNode(node *SchedulingNode) {
-	if node == nil {
-		return
-	}
-
-	psc.Lock()
-	defer psc.Unlock()
-	// check consistency and reset to make sure it is consistent again
-	if _, ok := psc.nodes[node.NodeID]; ok {
-		log.Logger().Debug("new node already existed: cache out of sync with scheduler",
-			zap.String("nodeID", node.NodeID))
-	}
-	// add the node, this will also get the sync back between the two lists
-	psc.nodes[node.NodeID] = node
-}
-
-func (psc *PartitionSchedulingContext) updateSchedulingNode(info *cache.NodeInfo) {
-	if info == nil {
-		return
-	}
-
-	psc.Lock()
-	defer psc.Unlock()
-	if schedulingNode, ok := psc.nodes[info.NodeID]; ok {
-		schedulingNode.updateNodeInfo(info)
-	} else {
-		log.Logger().Warn("node is not found in PartitionSchedulingContext while attempting to update it",
-			zap.String("nodeID", info.NodeID))
-	}
-}
-
-// Remove a scheduling node triggered by the removal of the cache node.
-// This will log if the scheduler is out of sync with the cache.
-// Should never be called directly as it will bring the scheduler out of sync with the cache.
-func (psc *PartitionSchedulingContext) removeSchedulingNode(nodeID string) {
+func (psc *PartitionSchedulingContext) removeSchedulingNodeInternal(nodeID string) {
 	if nodeID == "" {
 		return
 	}
 
-	psc.Lock()
-	defer psc.Unlock()
 	// check consistency just for debug
 	node, ok := psc.nodes[nodeID]
 	if !ok {
@@ -371,6 +341,15 @@ func (psc *PartitionSchedulingContext) removeSchedulingNode(nodeID string) {
 			zap.String("nodeID", nodeID))
 		return
 	}
+
+	node.SetSchedulable(false)
+
+	psc.removeNodeAllocations(node)
+	psc.totalPartitionResource.SubFrom(node.totalResource)
+	psc.root.setMaxResource(psc.totalPartitionResource)
+
+	// Remove node from list of tracked nodes
+	metrics.GetSchedulerMetrics().DecActiveNodes()
 	// remove the node, this will also get the sync back between the two lists
 	delete(psc.nodes, nodeID)
 	// unreserve all the apps that were reserved on the node
@@ -379,6 +358,16 @@ func (psc *PartitionSchedulingContext) removeSchedulingNode(nodeID string) {
 	for i, appID := range reservedKeys {
 		psc.unReserveCount(appID, releasedAsks[i])
 	}
+}
+
+// Remove a scheduling node triggered by the removal of the cache node.
+// This will log if the scheduler is out of sync with the cache.
+// Should never be called directly as it will bring the scheduler out of sync with the cache.
+func (psc *PartitionSchedulingContext) removeSchedulingNode(nodeID string) {
+	psc.Lock()
+	defer psc.Unlock()
+
+	psc.removeSchedulingNodeInternal(nodeID)
 }
 
 func (psc *PartitionSchedulingContext) calculateOutstandingRequests() []*schedulingAllocationAsk {
@@ -732,11 +721,10 @@ func (psc *PartitionSchedulingContext) addNewNode(node *SchedulingNode, existing
 			zap.Int("existingAllocations", len(existingAllocations)))
 		for current, alloc := range existingAllocations {
 			if _, err := psc.addNodeReportedAllocations(alloc); err != nil {
-				released := psc.removeNodeInternal(node.NodeID)
+				psc.removeSchedulingNodeInternal(node.NodeID)
 				log.Logger().Info("failed to add existing allocations",
 					zap.String("nodeID", node.NodeID),
 					zap.Int("existingAllocations", len(existingAllocations)),
-					zap.Int("releasedAllocations", len(released)),
 					zap.Int("processingAlloc", current))
 				metrics.GetSchedulerMetrics().IncFailedNodes()
 				return err
@@ -769,92 +757,20 @@ func (psc *PartitionSchedulingContext) addNodeReportedAllocations(allocation *si
 	}, true)
 }
 
-// Remove a node from the partition.
-// This locks the partition and calls the internal unlocked version.
-func (psc *PartitionSchedulingContext) RemoveNode(nodeID string) []*schedulingAllocation {
-	psc.Lock()
-	defer psc.Unlock()
-
-	return psc.removeNodeInternal(nodeID)
-}
-
-// Remove a node from the partition. It returns all removed allocations.
-//
-// NOTE: this is a lock free call. It should only be called holding the PartitionInfo lock.
-// If access outside is needed a locked version must used, see removeNode
-func (psc *PartitionSchedulingContext) removeNodeInternal(nodeID string) []*schedulingAllocation {
-	log.Logger().Info("remove node from partition",
-		zap.String("nodeID", nodeID),
-		zap.String("partition", psc.Name))
-
-	node := psc.nodes[nodeID]
-	if node == nil {
-		log.Logger().Debug("node was not found",
-			zap.String("nodeID", nodeID),
-			zap.String("partitionName", psc.Name))
-		return nil
-	}
-
-	// found the node cleanup the node and all linked data
-	released := psc.removeNodeAllocations(node)
-	psc.totalPartitionResource.SubFrom(node.totalResource)
-	psc.root.setMaxResource(psc.totalPartitionResource)
-
-	// Remove node from list of tracked nodes
-	delete(psc.nodes, nodeID)
-	metrics.GetSchedulerMetrics().DecActiveNodes()
-
-	log.Logger().Info("node removed",
-		zap.String("partitionName", psc.Name),
-		zap.String("nodeID", node.NodeID))
-	return released
-}
-
 // Remove all allocations that are assigned to a node as part of the node removal. This is not part of the node object
 // as updating the applications and queues is the only goal. Applications and queues are not accessible from the node.
 // The removed allocations are returned.
-func (psc *PartitionSchedulingContext) removeNodeAllocations(node *SchedulingNode) []*schedulingAllocation {
-	released := make([]*schedulingAllocation, 0)
+func (psc *PartitionSchedulingContext) removeNodeAllocations(node *SchedulingNode) {
 	// walk over all allocations still registered for this node
 	for _, alloc := range node.GetAllAllocations() {
-		var queue *SchedulingQueue = nil
-		allocID := alloc.GetUUID()
-		// since we are not locking the node and or application we could have had an update while processing
-		// note that we do not return the allocation if the app or allocation is not found and assume that it
-		// was already removed
-		if app := psc.applications[alloc.SchedulingAsk.ApplicationID]; app != nil {
-			// check allocations on the node
-			if app.removeAllocation(allocID) == nil {
-				log.Logger().Info("allocation is not found, skipping while removing the node",
-					zap.String("allocationId", allocID),
-					zap.String("appID", app.ApplicationID),
-					zap.String("nodeID", node.NodeID))
-				continue
-			}
-			queue = app.GetQueue()
-		} else {
-			log.Logger().Info("app is not found, skipping while removing the node",
-				zap.String("appID", alloc.SchedulingAsk.ApplicationID),
-				zap.String("nodeID", node.NodeID))
-			continue
-		}
-
-		// we should never have an error, cache is in an inconsistent state if this happens
-		if queue != nil {
-			if err := queue.decAllocatedResource(alloc.SchedulingAsk.AllocatedResource); err != nil {
-				log.Logger().Warn("failed to release resources from queue",
-					zap.String("appID", alloc.SchedulingAsk.ApplicationID),
-					zap.Error(err))
-			}
-		}
-
-		// the allocation is removed so add it to the list that we return
-		released = append(released, alloc)
-		log.Logger().Info("allocation removed",
-			zap.String("allocationId", allocID),
-			zap.String("nodeID", node.NodeID))
+		psc.releaseAllocationsForApplicationInternal(&ReleaseAllocation{
+			UUID:          alloc.GetUUID(),
+			ApplicationID: alloc.SchedulingAsk.ApplicationID,
+			PartitionName: psc.Name,
+			Message:       "Released after node removed",
+			ReleaseType:   si.AllocationReleaseResponse_STOPPED_BY_RM,
+		})
 	}
-	return released
 }
 
 // Get the node object for the node ID as tracked by the partition.
@@ -867,13 +783,7 @@ func (psc *PartitionSchedulingContext) GetNode(nodeID string) *SchedulingNode {
 	return psc.nodes[nodeID]
 }
 
-// Remove one or more allocations for an application.
-// Returns all removed allocations.
-// If no specific allocation is specified via a uuid all allocations are removed.
-func (psc *PartitionSchedulingContext) releaseAllocationsForApplication(toRelease *commonevents.ReleaseAllocation) []*schedulingAllocation {
-	psc.Lock()
-	defer psc.Unlock()
-
+func (psc *PartitionSchedulingContext) releaseAllocationsForApplicationInternal(toRelease *ReleaseAllocation) []*schedulingAllocation {
 	allocationsToRelease := make([]*schedulingAllocation, 0)
 
 	log.Logger().Debug("removing allocation from partition",
@@ -944,7 +854,51 @@ func (psc *PartitionSchedulingContext) releaseAllocationsForApplication(toReleas
 	log.Logger().Info("allocation removed",
 		zap.Int("numOfAllocationReleased", len(allocationsToRelease)),
 		zap.String("partitionName", psc.Name))
+
+	if len(allocationsToRelease) != 0 {
+		// whatever was released pass it back to the RM
+		psc.notifyRMAllocationReleased(psc.RmID, allocationsToRelease, toRelease.ReleaseType, toRelease.Message)
+
+		// Forgot allocations is to notify shim to remove from Cache (for predicates).
+		forgotAllocations := make([]*si.ForgotAllocation, 0)
+
+		for _, alloc := range allocationsToRelease {
+			forgotAllocations = append(forgotAllocations, &si.ForgotAllocation{
+				AllocationKey: alloc.SchedulingAsk.AskProto.AllocationKey,
+			})
+		}
+	}
+
 	return allocationsToRelease
+}
+
+// Create a RM update event to notify RM of released allocations
+// Lock free call, all updates occur via events.
+func (psc *PartitionSchedulingContext) notifyRMAllocationReleased(rmID string, released []*schedulingAllocation, terminationType si.AllocationReleaseResponse_TerminationType,
+	message string) {
+	releaseEvent := &rmevent.RMReleaseAllocationEvent{
+		ReleasedAllocations: make([]*si.AllocationReleaseResponse, 0),
+		RmID:                rmID,
+	}
+	for _, alloc := range released {
+		releaseEvent.ReleasedAllocations = append(releaseEvent.ReleasedAllocations, &si.AllocationReleaseResponse{
+			UUID:            alloc.GetUUID(),
+			TerminationType: terminationType,
+			Message:         message,
+		})
+	}
+
+	psc.eventHandler.RMProxyEventHandler.HandleEvent(releaseEvent)
+}
+
+// Remove one or more allocations for an application.
+// Returns all removed allocations.
+// If no specific allocation is specified via a uuid all allocations are removed.
+func (psc *PartitionSchedulingContext) releaseAllocationsForApplication(toRelease *ReleaseAllocation) []*schedulingAllocation {
+	psc.Lock()
+	defer psc.Unlock()
+
+	return psc.releaseAllocationsForApplicationInternal(toRelease)
 }
 
 // Add an allocation to the partition/node/application/queue.
@@ -1076,15 +1030,26 @@ func (psc *PartitionSchedulingContext) removeRejectedApp(appID string) {
 	delete(psc.applications, appID)
 }
 
+
+
 // Remove the application from the partition.
 // This will also release all the allocations for application from the queue and nodes.
-func (psc *PartitionSchedulingContext) removeApplication(appID string) []*schedulingAllocation {
+func (psc *PartitionSchedulingContext) removeApplication(appID string) {
 	psc.Lock()
 	defer psc.Unlock()
 
 	log.Logger().Debug("removing app from partition",
 		zap.String("appID", appID),
 		zap.String("partitionName", psc.Name))
+
+	// First release all allocations of the app.
+	psc.releaseAllocationsForApplicationInternal(&ReleaseAllocation{
+		UUID: "",
+		ApplicationID: appID,
+		PartitionName: psc.Name,
+		Message: "",
+		ReleaseType: si.AllocationReleaseResponse_STOPPED_BY_RM,
+	})
 
 	app := psc.applications[appID]
 
@@ -1095,49 +1060,10 @@ func (psc *PartitionSchedulingContext) removeApplication(appID string) []*schedu
 		log.Logger().Warn("app not found partition",
 			zap.String("appID", appID),
 			zap.String("partitionName", psc.Name))
-		return nil
+		return
 	}
 
-	_ = app.removeAllocationAskInternal("")
-
-	// Save the total allocated resources of the application.
-	// Might need to base this on calculation of the real removed resources.
-	totalAppAllocated := app.GetAllocatedResource()
-
-	// Remove all allocations from the application
-	allocations := app.removeAllAllocations()
-
-	// Remove all allocations from nodes/queue
-	if len(allocations) != 0 {
-		for _, alloc := range allocations {
-			currentUUID := alloc.GetUUID()
-			// Remove from partition cache
-			if globalAlloc := psc.allocations[currentUUID]; globalAlloc == nil {
-				log.Logger().Warn("unknown allocation: not found in global cache",
-					zap.String("appID", appID),
-					zap.String("allocationId", currentUUID))
-				continue
-			} else {
-				delete(psc.allocations, currentUUID)
-			}
-
-			// Remove from node
-			node := psc.nodes[alloc.nodeID]
-			if node == nil {
-				log.Logger().Warn("unknown node: not found in active node list",
-					zap.String("appID", appID),
-					zap.String("nodeID", alloc.nodeID))
-				continue
-			}
-			if nodeAlloc := node.RemoveAllocation(currentUUID); nodeAlloc == nil {
-				log.Logger().Warn("allocation not found on node",
-					zap.String("appID", appID),
-					zap.String("allocationId", currentUUID),
-					zap.String("nodeID", alloc.nodeID))
-				continue
-			}
-		}
-	}
+	app.removeAllocationAsk("")
 
 	// we should never have an error, cache is in an inconsistent state if this happens
 	queue := app.GetQueue()
@@ -1147,10 +1073,7 @@ func (psc *PartitionSchedulingContext) removeApplication(appID string) []*schedu
 
 	log.Logger().Info("app removed from partition",
 		zap.String("appID", app.ApplicationID),
-		zap.String("partitionName", app.Partition),
-		zap.Any("resourceReleased", totalAppAllocated))
-
-	return allocations
+		zap.String("partitionName", app.Partition))
 }
 
 // Return a copy of all the nodes registers to this partition
@@ -1365,4 +1288,13 @@ func (psc *PartitionSchedulingContext) CalculateNodesResourceUsage() map[string]
 		}
 	}
 	return mapResult
+}
+
+func (psc *PartitionSchedulingContext) getAllocation(uuid string) *schedulingAllocation {
+	psc.RLock()
+	defer psc.RUnlock()
+
+	alloc := psc.allocations[uuid]
+
+	return alloc
 }

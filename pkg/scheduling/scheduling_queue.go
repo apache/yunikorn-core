@@ -270,7 +270,7 @@ func (sq *SchedulingQueue) addSchedulingApplication(app *SchedulingApplication) 
 // Remove the scheduling app from the list of tracked applications. Make sure that the app
 // is assigned to this queue and not removed yet.
 // If not found this call is a noop
-func (sq *SchedulingQueue) removeSchedulingApplication(app *SchedulingApplication, totalAllocated *resources.Resource) {
+func (sq *SchedulingQueue) removeSchedulingApplication(app *SchedulingApplication) {
 	// clean up any outstanding pending resources
 	appID := app.ApplicationID
 	if _, ok := sq.applications[appID]; !ok {
@@ -278,11 +278,6 @@ func (sq *SchedulingQueue) removeSchedulingApplication(app *SchedulingApplicatio
 			zap.String("queueName", sq.QueuePath),
 			zap.String("applicationID", appID))
 		return
-	}
-	if err := sq.decAllocatedResource(totalAllocated); err != nil {
-		log.Logger().Error("failed to release resources for app",
-			zap.String("appID", app.ApplicationID),
-			zap.Error(err))
 	}
 	sq.Lock()
 	defer sq.Unlock()

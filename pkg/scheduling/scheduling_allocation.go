@@ -21,8 +21,6 @@ package scheduler
 import (
 	"fmt"
 	"sync"
-
-	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
 )
 
 type allocationResult int
@@ -44,7 +42,7 @@ type schedulingAllocation struct {
 	repeats        int32
 	nodeID         string
 	reservedNodeID string
-	releases       []*commonevents.ReleaseAllocation
+	releases       []*ReleaseAllocation
 	result         allocationResult
 
 	// Mutable part, need protection

@@ -646,7 +646,7 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 		t.Fatalf("expected allocatedReserved allocation to be returned %v", alloc)
 	}
 	// before confirming remove the ask: do what the scheduler does when it gets a request from a
-	// shim in processAllocationReleaseByAllocationKey()
+	// shim in processAllocationAsksToRelease()
 	// make sure we are counting correctly and leave the other reservation intact
 	removeAskID := "alloc-2"
 	if alloc.SchedulingAsk.AskProto.AllocationKey == "alloc-3" {

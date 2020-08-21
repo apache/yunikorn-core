@@ -53,7 +53,7 @@ type AllocationProposalBundleEvent struct {
 // Applications can be rejected by the scheduler. At that point the application has already been added to
 // the cache and must be removed from the cache.
 // These applications cannot have any allocations or other data linked to it.
-type RejectedNewApplicationEvent struct {
+type _RejectedNewApplicationEvent struct {
 	ApplicationID string
 	PartitionName string
 	Reason        string

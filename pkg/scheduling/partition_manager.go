@@ -32,10 +32,10 @@ const (
 )
 
 type partitionManager struct {
-	psc      *PartitionSchedulingContext
-	csc      *ClusterSchedulingContext
-	stop     bool
-	interval time.Duration
+	psc       *PartitionSchedulingContext
+	scheduler *Scheduler
+	stop      bool
+	interval  time.Duration
 }
 
 // Run the manager for the partition.
@@ -139,7 +139,7 @@ func (manager partitionManager) remove() {
 		_ = apps[i].HandleApplicationEvent(cache.KillApplication)
 		appID := apps[i].ApplicationID
 		_, _ = pi.RemoveApplication(appID)
-		_, _ = manager.psc.removeSchedulingApplication(appID)
+		manager.psc.removeApplication(appID)
 	}
 	// remove the nodes
 	nodes := pi.CopyNodeInfos()
@@ -154,5 +154,5 @@ func (manager partitionManager) remove() {
 	// remove the cache object
 	pi.Remove()
 	// remove the scheduler object
-	manager.csc.removeSchedulingPartition(manager.psc.Name)
+	manager.scheduler.removeSchedulingPartition(manager.psc.Name)
 }

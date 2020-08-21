@@ -165,26 +165,28 @@ func (sa *SchedulingApplication) decAllocatingResource(delta *resources.Resource
 }
 
 func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) {
-	pending :=sa.removeAllocationAskInternal(allocKey)
+	pending, unreserved := sa.removeAllocationAskInternal(allocKey)
 
 	// Avoid taking queue's lock while holding app's lock.
 	if nil != pending {
 		// clean up the queue pending resources
 		sa.queue.decPendingResource(pending)
+		sa.queue.unReserve(sa.ApplicationID, unreserved)
 	}
 }
 
 // Remove one or more allocation asks from this application.
 // This also removes any reservations that are linked to the ask.
 // The return value is pending resource released
-func (sa *SchedulingApplication) removeAllocationAskInternal(allocKey string) *resources.Resource {
+func (sa *SchedulingApplication) removeAllocationAskInternal(allocKey string) (*resources.Resource, int) {
 	sa.Lock()
 	defer sa.Unlock()
 	// shortcut no need to do anything
 	if len(sa.requests) == 0 {
-		return 0
+		return resources.NewResource(), 0
 	}
 	var deltaPendingResource *resources.Resource = nil
+	var unreserved = 0
 	// when allocation key not specified, cleanup all allocation ask
 	var toRelease int
 	if allocKey == "" {
@@ -199,8 +201,7 @@ func (sa *SchedulingApplication) removeAllocationAskInternal(allocKey string) *r
 				continue
 			}
 			// clean up the queue reservation (one at a time)
-			sa.queue.unReserve(sa.ApplicationID, releases)
-			toRelease += releases
+			unreserved += releases
 		}
 		// Cleanup total pending resource
 		deltaPendingResource = sa.pending
@@ -218,9 +219,7 @@ func (sa *SchedulingApplication) removeAllocationAskInternal(allocKey string) *r
 					zap.Error(err))
 				continue
 			}
-			// clean up the queue reservation
-			sa.queue.unReserve(sa.ApplicationID, releases)
-			toRelease += releases
+			unreserved += releases
 		}
 		if ask := sa.requests[allocKey]; ask != nil {
 			deltaPendingResource = resources.MultiplyBy(ask.AllocatedResource, float64(ask.getPendingAskRepeat()))
@@ -243,7 +242,7 @@ func (sa *SchedulingApplication) removeAllocationAskInternal(allocKey string) *r
 		}
 	}
 
-	return deltaPendingResource
+	return deltaPendingResource, unreserved
 }
 
 // Add an allocation ask to this application
@@ -934,6 +933,10 @@ func (sa *SchedulingApplication) removeAllocation(uuid string) *schedulingAlloca
 	sa.Lock()
 	defer sa.Unlock()
 
+	return sa.removeAllocationInternal(uuid)
+}
+
+func (sa *SchedulingApplication) removeAllocationInternal(uuid string) *schedulingAllocation {
 	alloc := sa.allocations[uuid]
 
 	if alloc != nil {
@@ -952,15 +955,14 @@ func (sa *SchedulingApplication) removeAllAllocations() []*schedulingAllocation 
 	sa.Lock()
 	defer sa.Unlock()
 
-	allocationsToRelease := make([]*schedulingAllocation, 0)
+	releasedAllocations := make([]*schedulingAllocation, 0)
 	for _, alloc := range sa.allocations {
-		allocationsToRelease = append(allocationsToRelease, alloc)
+		if released := sa.removeAllocationInternal(alloc.uuid); released != nil {
+			releasedAllocations = append(releasedAllocations, released)
+		}
 	}
-	// cleanup allocated resource for app
-	sa.allocated = resources.NewResource()
-	sa.allocations = make(map[string]*schedulingAllocation)
 
-	return allocationsToRelease
+	return releasedAllocations
 }
 
 // get a copy of the user details for the application

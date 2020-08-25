@@ -124,12 +124,13 @@ func (m *RMProxy) processAllocationUpdateEvent(event *rmevent.RMNewAllocationsEv
 }
 
 func (m *RMProxy) processApplicationUpdateEvent(event *rmevent.RMApplicationUpdateEvent) {
-	if len(event.RejectedApplications) == 0 && len(event.AcceptedApplications) == 0 {
+	if len(event.RejectedApplications) == 0 && len(event.AcceptedApplications) == 0 && len(event.UpdatedApplications) == 0 {
 		return
 	}
 	response := &si.UpdateResponse{
 		RejectedApplications: event.RejectedApplications,
 		AcceptedApplications: event.AcceptedApplications,
+		UpdatedApplications:  event.UpdatedApplications,
 	}
 
 	m.processUpdateResponse(event.RmID, response)

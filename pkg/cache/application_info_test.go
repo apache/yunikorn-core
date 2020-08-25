@@ -156,3 +156,29 @@ func TestGetTag(t *testing.T) {
 	tag = appInfo.GetTag("test")
 	assert.Equal(t, tag, "test value", "expected tag value")
 }
+
+func TestOnStatusChangeCalled(t *testing.T) {
+	appInfo := newApplicationInfo("app-00001", "default", "root.a")
+	assert.Equal(t, appInfo.GetApplicationState(), New.String())
+	mockHandler := &MockEventHandler{eventHandled: false}
+	appInfo.eventHandlers.RMProxyEventHandler = mockHandler
+
+	err := appInfo.HandleApplicationEvent(RunApplication)
+	assert.NilError(t, err, "no error expected")
+	assert.Assert(t, mockHandler.eventHandled)
+
+	mockHandler.eventHandled = false
+	// accepted to rejected: error expected
+	err = appInfo.HandleApplicationEvent(RejectApplication)
+	assert.Assert(t, err != nil, "error expected ")
+	assert.Equal(t, appInfo.GetApplicationState(), Accepted.String())
+	assert.Assert(t, !mockHandler.eventHandled)
+}
+
+type MockEventHandler struct {
+	eventHandled bool
+}
+
+func (m *MockEventHandler) HandleEvent(ev interface{}) {
+	m.eventHandled = true
+}

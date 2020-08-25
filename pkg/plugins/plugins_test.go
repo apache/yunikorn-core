@@ -43,4 +43,5 @@ func TestRegisterPlugins(t *testing.T) {
 	assert.Assert(t, GetPredicatesPlugin() != nil, "predicates plugin should have been registered")
 	assert.Assert(t, GetReconcilePlugin() != nil, "reconcile plugin should have been registered")
 	assert.Assert(t, GetContainerSchedulingStateUpdaterPlugin() == nil, "volume plugin should not have been registered")
+	assert.Assert(t, GetConfigPlugin() == nil, "config plugin should not have been registered")
 }

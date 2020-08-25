@@ -20,6 +20,11 @@ package webservice
 
 import (
 	"encoding/json"
+	"fmt"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
+	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/schedulerevent"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 	"net/http"
 	"strings"
 	"testing"
@@ -55,6 +60,15 @@ partitions:
           first: "changedValue"
 `
 
+const invalidConf = `
+partitions:
+  - name: default
+    nodesortpolicy:
+        type: invalid
+    queues:
+      - name: root
+`
+
 func TestValidateConf(t *testing.T) {
 	tests := []struct {
 		content          string
@@ -75,14 +89,7 @@ partitions:
 			},
 		},
 		{
-			content: `
-partitions:
-  - name: default
-    nodesortpolicy:
-        type: invalid
-    queues:
-      - name: root
-`,
+			content: invalidConf,
 			expectedResponse: dao.ValidateConfResponse{
 				Allowed: false,
 				Reason:  "undefined policy: invalid",
@@ -361,4 +368,110 @@ partitions:
 	resp = &MockResponseWriter{}
 	getApplicationsInfo(resp, req)
 	assert.Equal(t, 400, resp.statusCode)
+}
+
+type fakeConfigPlugin struct {
+	generateError bool
+}
+
+func (f fakeConfigPlugin) UpdateConfigMap(args *si.ConfigMapArgs) (string, error) {
+	if f.generateError {
+		return "", fmt.Errorf("configMapError")
+	}
+	return startConf, nil
+}
+
+func TestSaveConfigMapNoError(t *testing.T) {
+	plugins.RegisterSchedulerPlugin(&fakeConfigPlugin{generateError: false})
+	oldConf, err := saveConfigmap(updatedConf)
+	assert.NilError(t, err, "No error expected")
+	assert.Equal(t, oldConf, startConf, " Wrong returned configuration")
+}
+
+func TestSaveConfigMapErrorExpected(t *testing.T) {
+	plugins.RegisterSchedulerPlugin(&fakeConfigPlugin{generateError: true})
+	oldConf, err := saveConfigmap(updatedConf)
+	assert.Assert(t, err != nil, "Missing expected error")
+	assert.Equal(t, oldConf, "", " Wrong returned configuration")
+}
+
+func TestBuildUpdateResponse(t *testing.T) {
+	testCases := []struct {
+		name    string
+		success bool
+		reason  string
+	}{
+		{"Success", true, ""},
+		{"Failed", false, "CofigMap update Failed"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := &MockResponseWriter{}
+			buildUpdateResponse(tc.success, tc.reason, resp)
+			var ucr dao.UpdateConfResponse
+			err := json.Unmarshal(resp.outputBytes, &ucr)
+			assert.NilError(t, err, "No error expected")
+			assert.Equal(t, tc.reason, ucr.Reason, "Response reason should match")
+			assert.Equal(t, tc.success, ucr.Success, "Response success flag should match")
+		})
+	}
+}
+
+type mockScheduler struct {
+	clusterInfo *cache.ClusterInfo
+}
+
+func (m mockScheduler) HandleEvent(ev interface{}) {
+	go handlePartitionUpdates(ev)
+}
+
+func handlePartitionUpdates(ev interface{}) {
+	switch v := ev.(type) {
+	case *schedulerevent.SchedulerUpdatePartitionsConfigEvent:
+		v.ResultChannel <- &commonevents.Result{
+			Succeeded: true,
+		}
+	case *schedulerevent.SchedulerDeletePartitionsConfigEvent:
+		v.ResultChannel <- &commonevents.Result{
+			Succeeded: true,
+		}
+	}
+}
+
+func TestUpdateConfig(t *testing.T) {
+	plugins.RegisterSchedulerPlugin(&fakeConfigPlugin{generateError: false})
+	gClusterInfo = cache.NewClusterInfo()
+	scheduler := mockScheduler{gClusterInfo}
+	gClusterInfo.EventHandlers.SchedulerEventHandler = scheduler
+	configs.MockSchedulerConfigByData([]byte(startConf))
+	if _, err := cache.SetClusterInfoFromConfigFile(gClusterInfo, "rmID", "default-policy-group"); err != nil {
+		t.Fatalf("Error when load clusterInfo from config %v", err)
+	}
+
+	testCases := []struct {
+		name             string
+		newConf          string
+		expectedResponse dao.UpdateConfResponse
+	}{
+		{"Valid conf", updatedConf, dao.UpdateConfResponse{
+			Success: true,
+			Reason:  "",
+		}},
+		{"Invalid conf", invalidConf, dao.UpdateConfResponse{
+			Success: false,
+			Reason:  "undefined policy: invalid",
+		}},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := &MockResponseWriter{}
+			req, _ := http.NewRequest("PUT", "", strings.NewReader(tc.newConf))
+			updateConfig(resp, req)
+			var ucr dao.UpdateConfResponse
+			err := json.Unmarshal(resp.outputBytes, &ucr)
+			assert.NilError(t, err, "No error expected")
+			assert.DeepEqual(t, ucr, tc.expectedResponse)
+		})
+	}
 }

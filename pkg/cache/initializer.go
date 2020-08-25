@@ -97,9 +97,9 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmID string) ([]*
 	return clusterInfo.applyConfigChanges(conf, rmID)
 }
 
-func (m *ClusterInfo) applyConfigChanges(conf *configs.SchedulerConfig, rmID string) ([]*PartitionInfo, []*PartitionInfo, error) {
+func (clusterInfo *ClusterInfo) applyConfigChanges(conf *configs.SchedulerConfig, rmID string) ([]*PartitionInfo, []*PartitionInfo, error) {
 	// update global scheduler configs
-	configs.ConfigContext.Set(m.policyGroup, conf)
+	configs.ConfigContext.Set(clusterInfo.policyGroup, conf)
 
 	// Start updating the config is OK and should pass setting on the cluster
 	log.Logger().Info("updating partitions", zap.String("rmID", rmID))
@@ -111,7 +111,7 @@ func (m *ClusterInfo) applyConfigChanges(conf *configs.SchedulerConfig, rmID str
 	for _, p := range conf.Partitions {
 		partitionName := common.GetNormalizedPartitionName(p.Name, rmID)
 		p.Name = partitionName
-		part, ok := m.partitions[p.Name]
+		part, ok := clusterInfo.partitions[p.Name]
 		if ok {
 			// make sure the new info passes all checks
 			_, err = newPartitionInfoInternal(p, rmID, nil)
@@ -128,8 +128,8 @@ func (m *ClusterInfo) applyConfigChanges(conf *configs.SchedulerConfig, rmID str
 			// not found: new partition, no checks needed
 			log.Logger().Info("added partitions", zap.String("partitionName", partitionName))
 
-			part, err = newPartitionInfoInternal(p, rmID, m)
-			m.addPartition(partitionName, part)
+			part, err = newPartitionInfoInternal(p, rmID, clusterInfo)
+			clusterInfo.addPartition(partitionName, part)
 			if err != nil {
 				return []*PartitionInfo{}, []*PartitionInfo{}, err
 			}
@@ -141,7 +141,7 @@ func (m *ClusterInfo) applyConfigChanges(conf *configs.SchedulerConfig, rmID str
 
 	// get the removed partitions, mark them as deleted
 	deletedPartitions := make([]*PartitionInfo, 0)
-	for _, part := range m.partitions {
+	for _, part := range clusterInfo.partitions {
 		if !visited[part.Name] {
 			part.markPartitionForRemoval()
 			deletedPartitions = append(deletedPartitions, part)

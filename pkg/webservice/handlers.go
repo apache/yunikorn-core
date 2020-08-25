@@ -391,6 +391,6 @@ func saveConfigmap(conf string) (string, error) {
 		}
 		return oldConf, nil
 	}
-	return "", fmt.Errorf("config plugn not found")
+	return "", fmt.Errorf("config plugin not found")
 }
 

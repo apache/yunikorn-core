@@ -20,7 +20,6 @@ package webservice
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/schedulerevent"
@@ -374,23 +373,29 @@ type fakeConfigPlugin struct {
 	generateError bool
 }
 
-func (f fakeConfigPlugin) UpdateConfigMap(args *si.ConfigMapArgs) (string, error) {
+func (f fakeConfigPlugin) UpdateConfiguration (args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
 	if f.generateError {
-		return "", fmt.Errorf("configMapError")
+		return &si.UpdateConfigurationResponse{
+			Success: false,
+			Reason: "configuration update error",
+		}
 	}
-	return startConf, nil
+	return &si.UpdateConfigurationResponse{
+		Success: true,
+		OldConfig: startConf,
+	}
 }
 
 func TestSaveConfigMapNoError(t *testing.T) {
 	plugins.RegisterSchedulerPlugin(&fakeConfigPlugin{generateError: false})
-	oldConf, err := saveConfigmap(updatedConf)
+	oldConf, err := updateConfiguration(updatedConf)
 	assert.NilError(t, err, "No error expected")
 	assert.Equal(t, oldConf, startConf, " Wrong returned configuration")
 }
 
 func TestSaveConfigMapErrorExpected(t *testing.T) {
 	plugins.RegisterSchedulerPlugin(&fakeConfigPlugin{generateError: true})
-	oldConf, err := saveConfigmap(updatedConf)
+	oldConf, err := updateConfiguration(updatedConf)
 	assert.Assert(t, err != nil, "Missing expected error")
 	assert.Equal(t, oldConf, "", " Wrong returned configuration")
 }

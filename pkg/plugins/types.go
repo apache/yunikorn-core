@@ -29,7 +29,7 @@ type SchedulerPlugins struct {
 	reconcilePlugin        ReconcilePlugin
 	eventPlugin            EventPlugin
 	schedulingStateUpdater ContainerSchedulingStateUpdater
-	configPlugin		   ConfigMapPlugin
+	configPlugin		   ConfigurationPlugin
 
 	sync.RWMutex
 }
@@ -64,6 +64,6 @@ type ContainerSchedulingStateUpdater interface {
 	Update(request *si.UpdateContainerSchedulingStateRequest)
 }
 
-type ConfigMapPlugin interface {
-	UpdateConfigMap(args *si.ConfigMapArgs) (string, error)
+type ConfigurationPlugin interface {
+	UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse
 }

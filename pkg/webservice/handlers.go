@@ -20,15 +20,13 @@ package webservice
 import (
 	"encoding/json"
 	"fmt"
+	"go.uber.org/zap"
+	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"net/http"
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
-
-	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
@@ -343,54 +341,61 @@ func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-var mutex sync.Mutex
 func updateConfig(w http.ResponseWriter, r *http.Request) {
-	mutex.Lock()
-	defer mutex.Unlock()
+	lock.Lock()
+	defer lock.Unlock()
 	writeHeaders(w)
 	requestBytes, err := ioutil.ReadAll(r.Body)
-
-	if err == nil {
-		// validation is already called when loading the config
-		schedulerConf, err2 := configs.LoadSchedulerConfigFromByteArray(requestBytes)
-		if err2 != nil {
-			buildUpdateResponse(false, err2.Error(), w)
-			return
-		}
-		oldConf, err3 := saveConfigmap(string(requestBytes))
-		if err3 != nil {
-			buildUpdateResponse(false, err3.Error(), w)
-			return
-		}
-		err4 := gClusterInfo.UpdateSchedulerConfig(schedulerConf)
-		if err4 != nil {
-			// revert configmap changes
-			saveConfigmap(oldConf)
-			buildUpdateResponse(false, err4.Error(), w)
-			return
-		}
-		buildUpdateResponse(true, "", w)
+	if err != nil {
+		buildUpdateResponse(false, err.Error(), w)
+		return
 	}
+	// validation is already called when loading the config
+	schedulerConf, err := configs.LoadSchedulerConfigFromByteArray(requestBytes)
+	if err != nil {
+		buildUpdateResponse(false, err.Error(), w)
+		return
+	}
+	oldConf, err := updateConfiguration(string(requestBytes))
+	if err != nil {
+		buildUpdateResponse(false, err.Error(), w)
+		return
+	}
+	err = gClusterInfo.UpdateSchedulerConfig(schedulerConf)
+	if err != nil {
+		// revert configmap changes
+		updateConfiguration(oldConf)
+		buildUpdateResponse(false, err.Error(), w)
+		return
+	}
+	buildUpdateResponse(true, "", w)
 }
 
 func buildUpdateResponse(success bool, reason string, w http.ResponseWriter) {
 	var result dao.UpdateConfResponse
+	if len(reason) > 0 {
+		log.Logger().Info("Result of configuration update: ",
+			zap.Bool("Result", success),
+			zap.String("Reason in case of failure", reason))
+	}
 	result.Success = success
 	result.Reason = reason
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
-func saveConfigmap(conf string) (string, error) {
+func updateConfiguration(conf string) (string, error) {
 	if plugin := plugins.GetConfigPlugin(); plugin != nil {
 		// checking predicates
-		oldConf, err := plugin.UpdateConfigMap(&si.ConfigMapArgs{
-			Configs:            conf,
-		}); if err != nil {
-			return "", err
+		resp := plugin.UpdateConfiguration(&si.UpdateConfigurationRequest{
+			Configs: conf,
+		})
+		if resp.Success {
+			return resp.OldConfig, nil
+		} else {
+			return resp.OldConfig, fmt.Errorf(resp.Reason)
 		}
-		return oldConf, nil
+
 	}
 	return "", fmt.Errorf("config plugin not found")
 }
-

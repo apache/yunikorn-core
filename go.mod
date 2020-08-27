@@ -22,7 +22,7 @@ module github.com/apache/incubator-yunikorn-core
 go 1.12
 
 require (
-	github.com/apache/incubator-yunikorn-scheduler-interface v0.9.1-0.20200731171855-a731b08643db
+	github.com/apache/incubator-yunikorn-scheduler-interface v0.9.1-0.20200827013520-ec2f681ecb5b
 	github.com/golang/protobuf v1.4.0 // indirect
 	github.com/gorilla/mux v1.7.3
 	github.com/kr/text v0.2.0 // indirect
@@ -42,8 +42,7 @@ require (
 	golang.org/x/sys v0.0.0-20200413165638-669c56c373c4 // indirect
 	golang.org/x/text v0.3.2 // indirect
 	golang.org/x/tools v0.0.0-20200415000939-92398ad77b89 // indirect
-	google.golang.org/genproto v0.0.0-20200413115906-b5235f65be36 // indirect
-	google.golang.org/grpc v1.28.1
+	google.golang.org/grpc v1.26.0
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/yaml.v2 v2.2.8
 	gotest.tools v2.2.0+incompatible

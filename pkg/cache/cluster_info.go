@@ -49,7 +49,7 @@ type ClusterInfo struct {
 
 	// RM Event Handler
 	EventHandlers handler.EventHandlers
-
+	skipConfigUpdate bool
 	sync.RWMutex
 }
 
@@ -484,6 +484,12 @@ func (m *ClusterInfo) processRMRegistrationEvent(event *commonevents.RegisterRME
 // Updated and deleted partitions can not fail on the scheduler side.
 // Locking occurs by the methods that are called, this must be lock free.
 func (m *ClusterInfo) processRMConfigUpdateEvent(event *commonevents.ConfigUpdateRMEvent) {
+	if m.skipConfigUpdate {
+		m.skipConfigUpdate = false
+		log.Logger().Info("Skip reloading configuration")
+		event.Channel <- &commonevents.Result{Succeeded: true, Reason: "Skip reloading configuration"}
+		return
+	}
 	updatedPartitions, deletedPartitions, err := UpdateClusterInfoFromConfigFile(m, event.RmID)
 	if err != nil {
 		event.Channel <- &commonevents.Result{Succeeded: false, Reason: err.Error()}
@@ -743,6 +749,7 @@ func (m *ClusterInfo) UpdateSchedulerConfig(conf *configs.SchedulerConfig) error
 			return fmt.Errorf(result2.Reason)
 		}
 	}
+	m.skipConfigUpdate = true
 	return nil
 }
 

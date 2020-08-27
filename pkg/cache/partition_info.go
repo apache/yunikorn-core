@@ -141,7 +141,7 @@ func addQueueInfo(conf []configs.QueueConfig, parent *QueueInfo) error {
 	return nil
 }
 
-// Handle the state event for the application.
+// Handle the state event for the partition.
 // The state machine handles the locking.
 func (pi *PartitionInfo) handlePartitionEvent(event SchedulingObjectEvent) error {
 	err := pi.stateMachine.Event(event.String(), pi.Name)

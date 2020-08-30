@@ -1152,6 +1152,14 @@ func (psc *PartitionSchedulingContext) GetQueue(name string) *SchedulingQueue {
 	return psc.getQueue(name)
 }
 
+// Get the queue from the structure based on the fully qualified name.
+// Wrapper around the unlocked version getQueue()
+func (psc *PartitionSchedulingContext) Root() *SchedulingQueue {
+	psc.RLock()
+	defer psc.RUnlock()
+	return psc.root
+}
+
 // Update the passed in queues and then do this recursively for the children
 func (psc *PartitionSchedulingContext) updateQueues(config []configs.QueueConfig, parent *SchedulingQueue) error {
 	// get the name of the passed in queue

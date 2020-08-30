@@ -27,7 +27,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/api"
-	"github.com/apache/incubator-yunikorn-core/pkg/cache/cacheevent"
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"

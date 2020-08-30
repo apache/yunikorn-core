@@ -21,7 +21,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/api"
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice"
@@ -29,7 +28,6 @@ import (
 
 type ServiceContext struct {
 	RMProxy   api.SchedulerAPI
-	Cache     *cache.ClusterInfo
 	Scheduler *scheduler.Scheduler
 	WebApp    *webservice.WebService
 }

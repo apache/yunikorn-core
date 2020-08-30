@@ -21,6 +21,10 @@ package scheduler
 import (
 	"fmt"
 	"sync"
+	"time"
+
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 type allocationResult int
@@ -58,6 +62,35 @@ func newSchedulingAllocation(ask *schedulingAllocationAsk, nodeID string) *sched
 		repeats:       1,
 		result:        none,
 		uuid:          "", // UUID will be set later
+	}
+}
+
+func newSchedulingAllocationFromProto(allocation *si.Allocation) *schedulingAllocation {
+	return &schedulingAllocation{
+		SchedulingAsk: &schedulingAllocationAsk{
+			AskProto: &si.AllocationAsk{
+				AllocationKey:  allocation.AllocationKey,
+				ApplicationID:  allocation.ApplicationID,
+				PartitionName:  allocation.PartitionName,
+				ResourceAsk:    allocation.ResourcePerAlloc,
+				MaxAllocations: 1,
+				Priority:       allocation.Priority,
+				Tags:           allocation.AllocationTags,
+			},
+			AllocatedResource: resources.NewResourceFromProto(allocation.ResourcePerAlloc),
+			ApplicationID:     allocation.ApplicationID,
+			PartitionName:     allocation.GetPartitionName(),
+			QueueName:         allocation.GetQueueName(),
+			createTime:        time.Time{},
+			priority:          allocation.Priority.GetPriorityValue(),
+			pendingRepeatAsk:  0,
+			RWMutex:           sync.RWMutex{},
+		},
+		repeats:  0,
+		nodeID:   allocation.NodeID,
+		releases: nil,
+		result:   allocated,
+		uuid:     allocation.UUID,
 	}
 }
 

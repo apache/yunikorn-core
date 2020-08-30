@@ -34,8 +34,8 @@ func sortQueue(queues []*SchedulingQueue, sortType policies.SortPolicy) {
 		sort.SliceStable(queues, func(i, j int) bool {
 			l := queues[i]
 			r := queues[j]
-			comp := resources.CompUsageRatioSeparately(l.getAssumeAllocated(), l.QueueInfo.GetGuaranteedResource(),
-				r.getAssumeAllocated(), r.QueueInfo.GetGuaranteedResource())
+			comp := resources.CompUsageRatioSeparately(l.getAssumeAllocated(), l.GetGuaranteedResource(),
+				r.getAssumeAllocated(), r.GetGuaranteedResource())
 			if comp == 0 {
 				return resources.StrictlyGreaterThan(resources.Sub(l.pending, r.pending), resources.Zero)
 			}
@@ -55,7 +55,7 @@ func sortApplications(apps map[string]*SchedulingApplication, sortType policies.
 		sort.SliceStable(sortedApps, func(i, j int) bool {
 			l := sortedApps[i]
 			r := sortedApps[j]
-			return resources.CompUsageRatio(l.getAssumeAllocated(), r.getAssumeAllocated(), globalResource) < 0
+			return resources.CompUsageRatio(l.GetAllocatedResource(), r.GetAllocatedResource(), globalResource) < 0
 		})
 	case policies.FifoSortPolicy:
 		sortedApps = filterOnPendingResources(apps)
@@ -63,7 +63,7 @@ func sortApplications(apps map[string]*SchedulingApplication, sortType policies.
 		sort.SliceStable(sortedApps, func(i, j int) bool {
 			l := sortedApps[i]
 			r := sortedApps[j]
-			return l.ApplicationInfo.SubmissionTime < r.ApplicationInfo.SubmissionTime
+			return l.SubmissionTime < r.SubmissionTime
 		})
 	case policies.StateAwarePolicy:
 		sortedApps = stateAwareFilter(apps)
@@ -71,7 +71,7 @@ func sortApplications(apps map[string]*SchedulingApplication, sortType policies.
 		sort.SliceStable(sortedApps, func(i, j int) bool {
 			l := sortedApps[i]
 			r := sortedApps[j]
-			return l.ApplicationInfo.SubmissionTime < r.ApplicationInfo.SubmissionTime
+			return l.SubmissionTime < r.SubmissionTime
 		})
 	}
 	metrics.GetSchedulerMetrics().ObserveAppSortingLatency(sortingStart)
@@ -110,7 +110,7 @@ func stateAwareFilter(apps map[string]*SchedulingApplication) []*SchedulingAppli
 			if app.isAccepted() {
 				// check if we have not seen a starting app
 				// replace the currently tracked accepted app if this is an older one
-				if !foundStarting && (acceptedApp == nil || acceptedApp.ApplicationInfo.SubmissionTime > app.ApplicationInfo.SubmissionTime) {
+				if !foundStarting && (acceptedApp == nil || acceptedApp.SubmissionTime > app.SubmissionTime) {
 					acceptedApp = app
 				}
 				continue

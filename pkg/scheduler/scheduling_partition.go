@@ -36,7 +36,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
@@ -362,7 +361,7 @@ func (psc *PartitionSchedulingContext) tryReservedAllocate() *schedulingAllocati
 }
 
 // Sanity check of allocation, and get app and node reference
-func (psc *PartitionSchedulingContext) allocateSanityCheck(alloc* schedulingAllocation) (*SchedulingApplication, *SchedulingNode, error) {
+func (psc *PartitionSchedulingContext) reserveUnreserveSanityCheck(alloc* schedulingAllocation) (*SchedulingApplication, *SchedulingNode, error) {
 	// partition is locked nothing can change from now on
 	// find the app make sure it still exists
 	appID := alloc.SchedulingAsk.ApplicationID
@@ -394,39 +393,32 @@ func (psc *PartitionSchedulingContext) allocateSanityCheck(alloc* schedulingAllo
 	return app, node, nil
 }
 
-// FIXME, reservation should be handled by the same async proposal handler.
-func (psc *PartitionSchedulingContext) handleReservations(alloc* schedulingAllocation) bool {
-	app, node, err := psc.allocateSanityCheck(alloc)
+func (psc *PartitionSchedulingContext) handleReserveAndUnreserve(alloc* schedulingAllocation) {
+	psc.Lock()
+	defer psc.Unlock()
+
+	app, node, err := psc.reserveUnreserveSanityCheck(alloc)
 	if err != nil {
-		return false
+		log.Logger().Debug("Reservation Sanity Check failed",
+			zap.Error(err))
+		return
 	}
 
 	// reservation does not leave the scheduler
 	if alloc.result == reserved {
 		psc.reserve(app, node, alloc.SchedulingAsk)
-		return false
-	}
-
-	// unreserve does not leave the scheduler
-	if alloc.result == unreserved || alloc.result == allocatedReserved {
-		// unreserve only in the scheduler
+	} else if alloc.result == unreserved || alloc.result == allocatedReserved {
 		psc.unReserve(app, node, alloc.SchedulingAsk)
-		// real allocation after reservation does get passed on to the cache
-		if alloc.result == unreserved {
-			return false
-		}
 	}
-
-	return true
 }
 
 // Process the allocation and make the changes in the partition.
 // If the allocation needs to be passed on to the cache true will be returned if not false is returned
 func (psc *PartitionSchedulingContext) allocate(alloc *schedulingAllocation) bool {
-	psc.Lock()
-	defer psc.Unlock()
-
-	commitProposal := psc.handleReservations(alloc)
+	// If there's reservation or unreserve, handle it
+	if alloc.result == allocatedReserved || alloc.result == unreserved || alloc.result == reserved {
+		psc.handleReserveAndUnreserve(alloc)
+	}
 
 	log.Logger().Info("scheduler allocation proposal",
 		zap.String("appID", alloc.SchedulingAsk.ApplicationID),
@@ -435,76 +427,69 @@ func (psc *PartitionSchedulingContext) allocate(alloc *schedulingAllocation) boo
 		zap.String("allocatedResource", alloc.SchedulingAsk.AllocatedResource.String()),
 		zap.String("targetNode", alloc.nodeID))
 
-	if commitProposal {
-		psc.scheduler.addNewSchedulingAllocationToCommit(alloc)
+	// If there's allocation, no matter if it is new allocation or allocate from reserve, commit it here.
+	if alloc.result == allocated || alloc.result == allocatedReserved {
+		psc.commitSchedulingAllocation(alloc)
 	}
 	return true
 }
 
-// Confirm the allocation. This is called as the result of the scheduler passing the proposal to the cache.
-// This updates the allocating resources for app, queue and node in the scheduler
-// Called for both allocations from reserved as well as for direct allocations.
-// The unreserve is already handled before we get here so there is no difference in handling.
-func (psc *PartitionSchedulingContext) confirmAllocation(allocProposal *commonevents.AllocationProposal, confirm bool) error {
-	psc.RLock()
-	defer psc.RUnlock()
-	// partition is locked nothing can change from now on
-	// find the app make sure it still exists
-	appID := allocProposal.ApplicationID
-	app := psc.applications[appID]
-	if app == nil {
-		return fmt.Errorf("application was removed while allocating: %s", appID)
+// Process an allocation bundle which could contain release and allocation proposals.
+// Lock free call, all updates occur on the underlying partition which is locked or via events.
+func (psc *PartitionSchedulingContext) commitSchedulingAllocation(alloc *schedulingAllocation) {
+	// Release if there is anything to release
+	if len(alloc.releases) > 0 {
+		psc.scheduler.processAllocationReleases(alloc.releases)
 	}
-	// find the node make sure it still exists
-	nodeID := allocProposal.NodeID
-	node := psc.nodes[nodeID]
-	if node == nil {
-		return fmt.Errorf("node was removed while allocating app %s: %s", appID, nodeID)
+	// Skip allocation if nothing here.
+	if alloc.repeats == 0 {
+		return
 	}
 
-	// Node and app exist we now can confirm the allocation
-	allocKey := allocProposal.AllocationKey
-	log.Logger().Debug("processing allocation proposal",
-		zap.String("partition", psc.Name),
-		zap.String("appID", appID),
-		zap.String("nodeID", nodeID),
-		zap.String("allocKey", allocKey),
-		zap.Bool("confirmation", confirm))
+	// we currently only support 1 allocation in the list, reject all but the first
+	if alloc.repeats != 1 {
+		log.Logger().Info("More than 1 allocation proposal rejected all but first",
+			zap.Int32("allocPropLength", alloc.repeats))
+	}
 
-	// this is a confirmation or rejection update inflight allocating resources of all objects
-	delta := allocProposal.AllocatedResource
-	if !resources.IsZero(delta) {
-		log.Logger().Debug("confirm allocation: update allocating resources",
+	partitionName := alloc.SchedulingAsk.PartitionName
+	queueName := alloc.SchedulingAsk.QueueName
+	allocationKey := alloc.SchedulingAsk.AskProto.AllocationKey
+
+	// just process the first the rest is rejected already
+	err := psc.addNewAllocation(alloc)
+	if err != nil {
+		log.Logger().Error("failed to add new allocation to partition",
 			zap.String("partition", psc.Name),
-			zap.String("appID", appID),
-			zap.String("nodeID", nodeID),
-			zap.String("allocKey", allocKey),
-			zap.String("delta", delta.String()))
-		// update the allocating values with the delta
-		app.decAllocatingResource(delta)
-		app.GetQueue().decAllocatingResource(delta)
-		node.decAllocatingResource(delta)
+			zap.String("allocationKey", alloc.SchedulingAsk.AskProto.AllocationKey),
+			zap.Error(err))
+		return
 	}
 
-	if !confirm {
-		// The repeat gets "added back" when rejected
-		// This is a noop when the ask was removed in the mean time: no follow up needed
-		_, err := app.updateAskRepeat(allocKey, 1)
-		if err != nil {
-			return err
-		}
-	} else if app.GetSchedulingAllocationAsk(allocKey) == nil {
-		// The ask was removed while we processed the proposal. The scheduler is updated but we need
-		// to make sure the cache removes the allocation that we cannot confirm
-		return fmt.Errorf("ask was removed while allocating for app %s: %s", appID, allocKey)
-	}
+	log.Logger().Info("allocation accepted",
+		zap.String("appID", alloc.SchedulingAsk.ApplicationID),
+		zap.String("queue", queueName),
+		zap.String("partition", partitionName),
+		zap.String("allocationKey", allocationKey))
 
-	// all is ok when we are here
-	log.Logger().Info("allocation proposal confirmed",
-		zap.String("appID", appID),
-		zap.String("allocationKey", allocKey),
-		zap.String("nodeID", nodeID))
-	return nil
+	// Send allocation event to RM: rejects are not passed back
+	rmID := common.GetRMIdFromPartitionName(partitionName)
+	psc.eventHandler.RMProxyEventHandler.HandleEvent(&rmevent.RMNewAllocationsEvent{
+		Allocations: []*si.Allocation{
+			{
+				AllocationKey:    allocationKey,
+				AllocationTags:   alloc.SchedulingAsk.AskProto.Tags,
+				UUID:             alloc.GetUUID(),
+				ResourcePerAlloc: alloc.SchedulingAsk.AllocatedResource.ToProto(),
+				Priority:         alloc.SchedulingAsk.AskProto.Priority,
+				QueueName:        queueName,
+				NodeID:           alloc.nodeID,
+				PartitionName:    common.GetPartitionNameWithoutClusterID(partitionName),
+				ApplicationID:    alloc.SchedulingAsk.ApplicationID,
+			},
+		},
+		RmID: rmID,
+	})
 }
 
 // Process the reservation in the scheduler
@@ -709,7 +694,7 @@ func (psc *PartitionSchedulingContext) addNewNode(node *SchedulingNode, existing
 			zap.String("nodeID", node.NodeID),
 			zap.Int("existingAllocations", len(existingAllocations)))
 		for current, alloc := range existingAllocations {
-			if _, err := psc.addNodeReportedAllocations(alloc); err != nil {
+			if err := psc.addNodeReportedAllocations(alloc); err != nil {
 				psc.removeSchedulingNodeInternal(node.NodeID)
 				log.Logger().Info("failed to add existing allocations",
 					zap.String("nodeID", node.NodeID),
@@ -732,19 +717,8 @@ func (psc *PartitionSchedulingContext) addNewNode(node *SchedulingNode, existing
 
 // Wrapper function to convert the reported allocation into an AllocationProposal.
 // Used when a new node is added to the partition which already reports existing allocations.
-// FIXME: overhaul of Allocation from schedulingAllocation needed.
-func (psc *PartitionSchedulingContext) addNodeReportedAllocations(allocation *si.Allocation) (*schedulingAllocation, error) {
-	// FIXME: wangda: we need to create schedulingAllocation based on si.Allocation
-	return psc.addNewAllocationInternal(&commonevents.AllocationProposal{
-		NodeID:            allocation.NodeID,
-		ApplicationID:     allocation.ApplicationID,
-		QueueName:         allocation.QueueName,
-		AllocatedResource: resources.NewResourceFromProto(allocation.ResourcePerAlloc),
-		AllocationKey:     allocation.AllocationKey,
-		Tags:              allocation.AllocationTags,
-		Priority:          allocation.Priority,
-		UUID:              allocation.UUID,
-	}, true)
+func (psc *PartitionSchedulingContext) addNodeReportedAllocations(allocation *si.Allocation) error {
+	return psc.addNewAllocationInternal(newSchedulingAllocationFromProto(allocation), true)
 }
 
 // Remove all allocations that are assigned to a node as part of the node removal. This is not part of the node object

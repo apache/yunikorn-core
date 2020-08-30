@@ -29,8 +29,6 @@ import (
 	siCommon "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
-	"github.com/apache/incubator-yunikorn-core/pkg/cache/cacheevent"
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
@@ -58,7 +56,6 @@ type Scheduler struct {
 
 	// Event queues
 	pendingRmEvents chan interface{}
-	pendingCommitQueue chan *schedulingAllocation // queue for scheduler events
 
 	sync.RWMutex
 }
@@ -66,7 +63,6 @@ type Scheduler struct {
 func NewScheduler() *Scheduler {
 	s := &Scheduler{}
 	s.pendingRmEvents = make(chan interface{}, 1024*1024)
-	s.pendingCommitQueue = make(chan *schedulingAllocation, 1024*1024)
 	s.partitions = make(map[string]*PartitionSchedulingContext)
 
 	return s
@@ -75,11 +71,6 @@ func NewScheduler() *Scheduler {
 // Start service
 func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule bool) {
 	s.eventHandlers = handlers
-
-	// Start event handlers
-	// go s.handleSchedulerEvent()
-
-	go s.handleSchedulingAllocationCommit()
 
 	// Start resource monitor if necessary (majorly for testing)
 	monitor := newNodesResourceUsageMonitor(s)
@@ -183,10 +174,6 @@ func enqueueAllocAndCheckFull(queue chan *schedulingAllocation, alloc *schedulin
 	}
 }
 
-func (s *Scheduler) addNewSchedulingAllocationToCommit(alloc *schedulingAllocation) {
-	enqueueAllocAndCheckFull(s.pendingCommitQueue, alloc)
-}
-
 func (s *Scheduler) processAllocationAsksToRelease(allocationAsksToRelease []*si.AllocationAskReleaseRequest) {
 	// For all Requests
 	if len(allocationAsksToRelease) > 0 {
@@ -206,13 +193,6 @@ func (s *Scheduler) processAllocationAsksToRelease(allocationAsksToRelease []*si
 				}
 			}
 		}
-	}
-}
-
-func (s *Scheduler) handleSchedulingAllocationCommit() {
-	for {
-		ev := <-s.pendingCommitQueue
-		s.commitSchedulingAllocation(ev)
 	}
 }
 
@@ -395,6 +375,22 @@ func (s *Scheduler) processApplicationUpdateFromRMUpdate(request *si.UpdateReque
 		for _, app := range request.RemoveApplications {
 			s.removeSchedulingApplication(app.ApplicationID, app.PartitionName)
 		}
+	}
+}
+
+
+// Process the allocations to release.
+// Lock free call, all updates occur via events.
+func (s *Scheduler) processAllocationReleases(toReleases []*ReleaseAllocation) {
+	// Try to release allocations specified in the events
+	for _, toReleaseAllocation := range toReleases {
+		psc := s.getPartition(toReleaseAllocation.PartitionName)
+		if nil == psc {
+			return
+		}
+
+		// release the allocation from the partition
+		psc.releaseAllocationsForApplication(toReleaseAllocation)
 	}
 }
 
@@ -655,81 +651,6 @@ func (s *Scheduler) processRMConfigUpdateEvent(event *commonevents.ConfigUpdateR
 	}
 
 	event.Channel <- &commonevents.Result{Succeeded: true, Reason: ""}
-}
-
-// Process an allocation bundle which could contain release and allocation proposals.
-// Lock free call, all updates occur on the underlying partition which is locked or via events.
-func (s *Scheduler) commitSchedulingAllocation(alloc *schedulingAllocation) {
-	// Release if there is anything to release
-	if len(alloc.releases) > 0 {
-		s.processAllocationReleases(alloc.releases)
-	}
-	// Skip allocation if nothing here.
-	if alloc.repeats == 0 {
-		return
-	}
-
-	// we currently only support 1 allocation in the list, reject all but the first
-	if alloc.repeats != 1 {
-		log.Logger().Info("More than 1 allocation proposal rejected all but first",
-			zap.Int32("allocPropLength", alloc.repeats))
-	}
-
-	partitionName := alloc.SchedulingAsk.PartitionName
-	queueName := alloc.SchedulingAsk.QueueName
-	allocationKey := alloc.SchedulingAsk.AskProto.AllocationKey
-
-	// just process the first the rest is rejected already
-	partitionInfo := s.GetPartition(partitionName)
-	err := partitionInfo.addNewAllocation(alloc)
-	if err != nil {
-		log.Logger().Error("failed to add new allocation to partition",
-			zap.String("partition", partitionInfo.Name),
-			zap.String("allocationKey", alloc.SchedulingAsk.AskProto.AllocationKey),
-			zap.Error(err))
-		return
-	}
-
-	log.Logger().Info("allocation accepted",
-		zap.String("appID", alloc.SchedulingAsk.ApplicationID),
-		zap.String("queue", queueName),
-		zap.String("partition", partitionName),
-		zap.String("allocationKey", allocationKey))
-
-	// Send allocation event to RM: rejects are not passed back
-	rmID := common.GetRMIdFromPartitionName(partitionName)
-	s.eventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMNewAllocationsEvent{
-		Allocations: []*si.Allocation{
-			{
-				AllocationKey:    allocationKey,
-				AllocationTags:   alloc.SchedulingAsk.AskProto.Tags,
-				UUID:             alloc.GetUUID(),
-				ResourcePerAlloc: alloc.SchedulingAsk.AllocatedResource.ToProto(),
-				Priority:         alloc.SchedulingAsk.AskProto.Priority,
-				QueueName:        queueName,
-				NodeID:           alloc.nodeID,
-				PartitionName:    common.GetPartitionNameWithoutClusterID(partitionName),
-				ApplicationID:    alloc.SchedulingAsk.ApplicationID,
-			},
-		},
-		RmID: rmID,
-	})
-}
-
-// Process the allocations to release.
-// Lock free call, all updates occur via events.
-func (s *Scheduler) processAllocationReleases(toReleases []*ReleaseAllocation) {
-	// Try to release allocations specified in the events
-	for _, toReleaseAllocation := range toReleases {
-		partitionInfo := s.GetPartition(toReleaseAllocation.PartitionName)
-		if partitionInfo == nil {
-			log.Logger().Info("Failed to find partition for allocation proposal",
-				zap.String("partitionName", toReleaseAllocation.PartitionName))
-			continue
-		}
-		// release the allocation from the partition
-		partitionInfo.releaseAllocationsForApplication(toReleaseAllocation)
-	}
 }
 
 func (s *Scheduler) processRemoveRMPartitionsEvent(event *commonevents.RemoveRMPartitionsEvent) {

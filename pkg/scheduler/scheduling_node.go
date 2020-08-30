@@ -26,7 +26,6 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
@@ -37,7 +36,6 @@ type SchedulingNode struct {
 	NodeID string
 
 	// Private info
-	allocating                  *resources.Resource     // resources being allocated
 	preempting                  *resources.Resource     // resources considered for preemption
 	reservations                map[string]*reservation // a map of reservations
 
@@ -50,7 +48,6 @@ type SchedulingNode struct {
 	occupiedResource      *resources.Resource
 	allocatedResource     *resources.Resource
 	availableResource     *resources.Resource
-	availableUpdateNeeded bool
 	allocations           map[string]*schedulingAllocation
 	schedulable           bool
 
@@ -64,13 +61,11 @@ func newSchedulingNode(proto *si.NewNodeInfo) *SchedulingNode {
 	}
 	m := &SchedulingNode{
 		NodeID:                proto.NodeID,
-		availableUpdateNeeded: true,
 		totalResource:         resources.NewResourceFromProto(proto.SchedulableResource),
 		allocatedResource:     resources.NewResource(),
 		occupiedResource:      resources.NewResourceFromProto(proto.OccupiedResource),
 		allocations:           make(map[string]*schedulingAllocation),
 		schedulable:           true,
-		allocating:            resources.NewResource(),
 		preempting:            resources.NewResource(),
 		reservations:          make(map[string]*reservation),
 	}
@@ -96,14 +91,6 @@ func (sn *SchedulingNode) GetReservations() []string {
 	return keys
 }
 
-// FIXME, update this for node update calls.
-func (sn *SchedulingNode) updateNodeInfo(newNodeInfo *cache.NodeInfo) {
-	sn.Lock()
-	defer sn.Unlock()
-
-	sn.nodeInfo = newNodeInfo
-}
-
 // Get the available resource on this node.
 // These resources are confirmed allocations (tracked in the cache node) minus the resources
 // currently being allocated but not confirmed in the cache.
@@ -112,37 +99,6 @@ func (sn *SchedulingNode) GetAvailableResource() *resources.Resource {
 	sn.Lock()
 	defer sn.Unlock()
 	return sn.availableResource
-}
-
-// Get the resource tagged for allocation on this node.
-// These resources are part of unconfirmed allocations.
-func (sn *SchedulingNode) getAllocatingResource() *resources.Resource {
-	sn.RLock()
-	defer sn.RUnlock()
-
-	return sn.allocating
-}
-
-// Update the number of resource proposed for allocation on this node
-func (sn *SchedulingNode) incAllocatingResource(delta *resources.Resource) {
-	sn.Lock()
-	defer sn.Unlock()
-
-	sn.allocating.AddTo(delta)
-}
-
-// Handle the allocation processing on the scheduler when the cache node is updated.
-func (sn *SchedulingNode) decAllocatingResource(delta *resources.Resource) {
-	sn.Lock()
-	defer sn.Unlock()
-
-	var err error
-	sn.allocating, err = resources.SubErrorNegative(sn.allocating, delta)
-	if err != nil {
-		log.Logger().Warn("Allocating resources went negative",
-			zap.String("nodeID", sn.NodeID),
-			zap.Error(err))
-	}
 }
 
 // Get the number of resource tagged for preemption on this node
@@ -177,6 +133,7 @@ func (sn *SchedulingNode) decPreemptingResource(delta *resources.Resource) {
 // If the proposed allocation fits in the available resources, taking into account resources marked for
 // preemption if applicable, the allocating resources are updated and true is returned.
 // If the proposed allocation does not fit false is returned and no changes are made.
+// FIXME: Revisit this when look at preemption
 func (sn *SchedulingNode) allocateResource(res *resources.Resource, preemptionPhase bool) bool {
 	sn.Lock()
 	defer sn.Unlock()
@@ -231,6 +188,7 @@ func (sn *SchedulingNode) preConditions(allocID string, allocate bool) error {
 // Check if the node should be considered as a possible node to allocate on.
 //
 // This is a lock free call. No updates are made this only performs a pre allocate checks
+// FIXME: Revisit this when look at preemption
 func (sn *SchedulingNode) preAllocateCheck(res *resources.Resource, resKey string, preemptionPhase bool) error {
 	// shortcut if a node is not schedulable
 	if !sn.IsSchedulable() {
@@ -476,7 +434,6 @@ func (sn *SchedulingNode) AddAllocation(alloc *schedulingAllocation) {
 	sn.allocations[alloc.GetUUID()] = alloc
 	sn.allocatedResource = resources.Add(sn.allocatedResource, alloc.SchedulingAsk.AllocatedResource)
 	sn.availableResource = resources.Sub(sn.availableResource, alloc.SchedulingAsk.AllocatedResource)
-	sn.availableUpdateNeeded = true
 }
 
 // Remove the allocation to the node.
@@ -492,7 +449,6 @@ func (sn *SchedulingNode) RemoveAllocation(uuid string) *schedulingAllocation {
 		delete(sn.allocations, uuid)
 		sn.allocatedResource = resources.Sub(sn.allocatedResource, info.SchedulingAsk.AllocatedResource)
 		sn.availableResource = resources.Add(sn.availableResource, info.SchedulingAsk.AllocatedResource)
-		sn.availableUpdateNeeded = true
 	}
 
 	return info
@@ -533,5 +489,4 @@ func (sn *SchedulingNode) refreshAvailableResource() {
 	sn.availableResource = sn.totalResource.Clone()
 	sn.availableResource = resources.Sub(sn.availableResource, sn.allocatedResource)
 	sn.availableResource = resources.Sub(sn.availableResource, sn.occupiedResource)
-	sn.availableUpdateNeeded = true
 }

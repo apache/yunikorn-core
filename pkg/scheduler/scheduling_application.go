@@ -34,7 +34,6 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/events"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -55,7 +54,6 @@ type SchedulingApplication struct {
 	user           security.UserGroup                  // owner of the application
 	tags           map[string]string                   // application tags used in scheduling
 	allocated      *resources.Resource                 // total allocated resources
-	allocating     *resources.Resource                 // allocating resource set by the scheduler
 	allocations    map[string]*schedulingAllocation    // list of all allocations
 	pending        *resources.Resource                 // pending resources from asks for the app
 	reservations   map[string]*reservation             // a map of reservations
@@ -90,7 +88,6 @@ func newSchedulingAppInternal(appID, partition, queueName string, ugi security.U
 		allocated:      resources.NewResource(),
 		allocations:    make(map[string]*schedulingAllocation),
 		stateMachine:   newAppState(),
-		allocating:     resources.NewResource(),
 		pending:        resources.NewResource(),
 		requests:       make(map[string]*schedulingAllocationAsk),
 		reservations:   make(map[string]*reservation),
@@ -131,40 +128,8 @@ func (sa *SchedulingApplication) GetPendingResource() *resources.Resource {
 	return sa.pending
 }
 
-// Return the allocating and allocated resources for this application
-func (sa *SchedulingApplication) getAssumeAllocated() *resources.Resource {
-	sa.RLock()
-	defer sa.RUnlock()
-	return resources.Add(sa.allocating, sa.GetAllocatedResource())
-}
-
-// Return the allocating resources for this application
-func (sa *SchedulingApplication) getAllocatingResource() *resources.Resource {
-	sa.RLock()
-	defer sa.RUnlock()
-	return sa.allocating
-}
-
-// Increment allocating resource for the app
-func (sa *SchedulingApplication) incAllocatingResource(delta *resources.Resource) {
-	sa.Lock()
-	defer sa.Unlock()
-	sa.allocating.AddTo(delta)
-}
-
-// Decrement allocating resource for the app
-func (sa *SchedulingApplication) decAllocatingResource(delta *resources.Resource) {
-	sa.Lock()
-	defer sa.Unlock()
-	var err error
-	sa.allocating, err = resources.SubErrorNegative(sa.allocating, delta)
-	if err != nil {
-		log.Logger().Warn("Allocating resources went negative",
-			zap.Error(err))
-	}
-}
-
-func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) {
+// Remove allocation ask and returns number of asks unreserved
+func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) int {
 	pending, unreserved := sa.removeAllocationAskInternal(allocKey)
 
 	// Avoid taking queue's lock while holding app's lock.
@@ -173,6 +138,8 @@ func (sa *SchedulingApplication) removeAllocationAsk(allocKey string) {
 		sa.queue.decPendingResource(pending)
 		sa.queue.unReserve(sa.ApplicationID, unreserved)
 	}
+
+	return unreserved
 }
 
 // Remove one or more allocation asks from this application.
@@ -187,8 +154,8 @@ func (sa *SchedulingApplication) removeAllocationAskInternal(allocKey string) (*
 	}
 	var deltaPendingResource *resources.Resource = nil
 	var unreserved = 0
+
 	// when allocation key not specified, cleanup all allocation ask
-	var toRelease int
 	if allocKey == "" {
 		// cleanup all reservations
 		for key, reserve := range sa.reservations {
@@ -234,7 +201,7 @@ func (sa *SchedulingApplication) removeAllocationAskInternal(allocKey string) (*
 	// 3) if there are no allocations in flight
 	// Change the state to waiting.
 	// When all 3 resources trackers are zero we should not expect anything to come in later.
-	if resources.IsZero(sa.pending) && resources.IsZero(sa.GetAllocatedResource()) && resources.IsZero(sa.allocating) {
+	if resources.IsZero(sa.pending) && resources.IsZero(sa.GetAllocatedResource()) {
 		if err := sa.HandleApplicationEvent(WaitApplication); err != nil {
 			log.Logger().Warn("Application state not changed to Waiting while updating ask(s)",
 				zap.String("currentState", sa.GetApplicationState()),
@@ -658,7 +625,7 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 			zap.Int("reservations", len(reservedAsks)),
 			zap.Int32("pendingRepeats", ask.pendingRepeatAsk))
 		// skip the node if conditions can not be satisfied
-		if !nodeToReserve.preReserveConditions(allocKey) {
+		if err := nodeToReserve.preReserveConditions(allocKey); err != nil {
 			return nil
 		}
 		// return allocation proposal and mark it as a reservation
@@ -680,41 +647,10 @@ func (sa *SchedulingApplication) tryNode(node *SchedulingNode, ask *schedulingAl
 		return nil
 	}
 	// skip the node if conditions can not be satisfied
-	if !node.preAllocateConditions(allocKey) {
+	if err := node.preAllocateConditions(allocKey); err != nil {
 		return nil
 	}
-	// everything OK really allocate
-	if node.allocateResource(toAllocate, false) {
-		// before deciding on an allocation, call the reconcile plugin to sync scheduler cache
-		// between core and shim if necessary. This is useful when running multiple allocations
-		// in parallel and need to handle inter container affinity and anti-affinity.
-		if rp := plugins.GetReconcilePlugin(); rp != nil {
-			if err := rp.ReSyncSchedulerCache(&si.ReSyncSchedulerCacheArgs{
-				AssumedAllocations: []*si.AssumedAllocation{
-					{
-						AllocationKey: allocKey,
-						NodeID:        node.NodeID,
-					},
-				},
-			}); err != nil {
-				log.Logger().Error("failed to sync shim cache",
-					zap.Error(err))
-			}
-		}
-		// update the allocating resources
-		sa.queue.incAllocatingResource(toAllocate)
-		sa.allocating.AddTo(toAllocate)
-		// mark this ask as allocating by lowering the repeat
-		_, err := sa.updateAskRepeatInternal(ask, -1)
-		if err != nil {
-			log.Logger().Debug("ask repeat update failed unexpectedly",
-				zap.Error(err))
-		}
-
-		// return allocation
-		return newSchedulingAllocation(ask, node.NodeID)
-	}
-	return nil
+	return newSchedulingAllocation(ask, node.NodeID)
 }
 
 // Application status methods reflecting the underlying app object state
@@ -983,11 +919,4 @@ func (sa *SchedulingApplication) GetQueue() *SchedulingQueue {
 	defer sa.RUnlock()
 
 	return sa.queue
-}
-
-func (sa *SchedulingApplication) SetQueue(queue *SchedulingQueue) {
-	sa.Lock()
-	defer sa.Unlock()
-
-	sa.queue = queue
 }

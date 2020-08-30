@@ -53,7 +53,6 @@ type SchedulingQueue struct {
 	applications   map[string]*SchedulingApplication // only for leaf queue
 	reservedApps   map[string]int                    // applications reserved within this queue, with reservation count
 	parent         *SchedulingQueue                  // link back to the parent in the scheduler
-	allocating     *resources.Resource               // resource being allocated in the queue but not confirmed
 	preempting     *resources.Resource               // resource considered for preemption in the queue
 	pending        *resources.Resource               // pending resource for the apps in the queue
 
@@ -134,7 +133,6 @@ func newBlankSchedulingQueue() *SchedulingQueue {
 		childrenQueues:    make(map[string]*SchedulingQueue),
 		applications:      make(map[string]*SchedulingApplication),
 		reservedApps:      make(map[string]int),
-		allocating:        resources.NewResource(),
 		preempting:        resources.NewResource(),
 		pending:           resources.NewResource(),
 		stateMachine:      newObjectState(),
@@ -187,6 +185,7 @@ func (sq *SchedulingQueue) updateSchedulingQueueInfo(updatedQueues map[string]*S
 		child := sq.getChildQueue(childName)
 		// create a new queue if it does not exist
 		if child == nil {
+			child = childQueue
 			parent.addChildQueue(child)
 		} else {
 			child.updateSchedulingQueueProperties(childQueue.GetProperties())
@@ -438,51 +437,6 @@ func (sq *SchedulingQueue) checkAdminAccess(user security.UserGroup) bool {
 	return sq.CheckAdminAccess(user)
 }
 
-// Return the allocated and allocating resources for this queue
-func (sq *SchedulingQueue) getAssumeAllocated() *resources.Resource {
-	sq.RLock()
-	defer sq.RUnlock()
-	return resources.Add(sq.allocating, sq.allocatedResource)
-}
-
-// Return the allocating resources for this queue
-func (sq *SchedulingQueue) getAllocatingResource() *resources.Resource {
-	sq.RLock()
-	defer sq.RUnlock()
-	return sq.allocating
-}
-
-// Increment the number of resource proposed for allocation in the queue.
-// Decrement will be triggered when the allocation is confirmed in the cache.
-func (sq *SchedulingQueue) incAllocatingResource(delta *resources.Resource) {
-	if sq.parent != nil {
-		sq.parent.incAllocatingResource(delta)
-	}
-	// update this queue
-	sq.Lock()
-	defer sq.Unlock()
-	sq.allocating = resources.Add(sq.allocating, delta)
-}
-
-// Decrement the number of resources proposed for allocation in the queue.
-// This is triggered when the cache queue is updated and the allocation is confirmed.
-func (sq *SchedulingQueue) decAllocatingResource(delta *resources.Resource) {
-	// update the parent
-	if sq.parent != nil {
-		sq.parent.decAllocatingResource(delta)
-	}
-	// update this queue
-	sq.Lock()
-	defer sq.Unlock()
-	var err error
-	sq.allocating, err = resources.SubErrorNegative(sq.allocating, delta)
-	if err != nil {
-		log.Logger().Warn("Allocating resources went negative on queue",
-			zap.String("queueName", sq.QueuePath),
-			zap.Error(err))
-	}
-}
-
 // Return a sorted copy of the applications in the queue. Applications are sorted using the
 // sorting type of the queue.
 // Only applications with a pending resource request are considered.
@@ -556,7 +510,6 @@ func (sq *SchedulingQueue) internalHeadRoom(parentHeadRoom *resources.Resource) 
 		return parentHeadRoom
 	}
 	// calculate unused
-	headRoom.SubFrom(sq.allocating)
 	headRoom.SubFrom(sq.GetAllocatedResource())
 	// check the minimum of the two: parentHeadRoom is nil for root
 	if parentHeadRoom == nil {

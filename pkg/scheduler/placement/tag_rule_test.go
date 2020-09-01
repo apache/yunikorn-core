@@ -145,9 +145,9 @@ partitions:
 	}
 }
 
-func TestTagRuleParent(t *testing.T) {
-	// Create the structure for the test
-	data := `
+// Create the structure for the parent rule tests
+// shared by a number of rule tests
+const confParentChild = `
 partitions:
   - name: default
     queues:
@@ -155,9 +155,11 @@ partitions:
       - name: testparent
         parent: true
 `
-	partInfo, err := CreatePartitionInfo([]byte(data))
+const nameParentChild = "root.testparentnew.testchild"
+
+func TestTagRuleParent(t *testing.T) {
+	partInfo, err := CreatePartitionInfo([]byte(confParentChild))
 	assert.NilError(t, err, "Partition create failed with error")
-	tags := make(map[string]string)
 	user := security.UserGroup{
 		User:   "testuser",
 		Groups: []string{},
@@ -179,7 +181,7 @@ partitions:
 		t.Errorf("tag rule create failed, err %v", err)
 	}
 
-	tags = map[string]string{"label1": "testchild", "label2": "testparent"}
+	tags := map[string]string{"label1": "testchild", "label2": "testparent"}
 	appInfo := cache.NewApplicationInfo("app1", "default", "unknown", user, tags)
 	var queue string
 	queue, err = ur.placeApplication(appInfo, partInfo)
@@ -226,7 +228,7 @@ partitions:
 		t.Errorf("tag rule create failed with queue name, err %v", err)
 	}
 	queue, err = ur.placeApplication(appInfo, partInfo)
-	if queue != "root.testparentnew.testchild" || err != nil {
+	if queue != nameParentChild || err != nil {
 		t.Errorf("user rule with non existing parent queue should create '%s', error %v", queue, err)
 	}
 

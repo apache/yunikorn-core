@@ -158,16 +158,7 @@ partitions:
 }
 
 func TestFixedRuleParent(t *testing.T) {
-	// Create the structure for the test
-	data := `
-partitions:
-  - name: default
-    queues:
-      - name: testchild
-      - name: testparent
-        parent: true
-`
-	partInfo, err := CreatePartitionInfo([]byte(data))
+	partInfo, err := CreatePartitionInfo([]byte(confParentChild))
 	assert.NilError(t, err, "Partition create failed with error")
 	user := security.UserGroup{
 		User:   "testuser",
@@ -233,7 +224,7 @@ partitions:
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
 	queue, err = fr.placeApplication(appInfo, partInfo)
-	if queue != "root.testparentnew.testchild" || err != nil {
+	if queue != nameParentChild || err != nil {
 		t.Errorf("fixed rule with non existing parent queue should created '%s', error %v", queue, err)
 	}
 

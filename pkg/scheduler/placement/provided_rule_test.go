@@ -116,16 +116,7 @@ partitions:
 }
 
 func TestProvidedRuleParent(t *testing.T) {
-	// Create the structure for the test
-	data := `
-partitions:
-  - name: default
-    queues:
-      - name: testchild
-      - name: testparent
-        parent: true
-`
-	partInfo, err := CreatePartitionInfo([]byte(data))
+	partInfo, err := CreatePartitionInfo([]byte(confParentChild))
 	assert.NilError(t, err, "Partition create failed with error")
 	tags := make(map[string]string)
 	user := security.UserGroup{
@@ -191,7 +182,7 @@ partitions:
 		t.Errorf("provided rule create failed, err %v", err)
 	}
 	queue, err = pr.placeApplication(appInfo, partInfo)
-	if queue != "root.testparentnew.testchild" || err != nil {
+	if queue != nameParentChild || err != nil {
 		t.Errorf("provided rule with non existing parent queue should create '%s', error %v", queue, err)
 	}
 

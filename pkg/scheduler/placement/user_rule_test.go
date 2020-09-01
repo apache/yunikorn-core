@@ -128,16 +128,7 @@ partitions:
 }
 
 func TestUserRuleParent(t *testing.T) {
-	// Create the structure for the test
-	data := `
-partitions:
-  - name: default
-    queues:
-      - name: testchild
-      - name: testparent
-        parent: true
-`
-	partInfo, err := CreatePartitionInfo([]byte(data))
+	partInfo, err := CreatePartitionInfo([]byte(confParentChild))
 	assert.NilError(t, err, "Partition create failed with error")
 	tags := make(map[string]string)
 	user := security.UserGroup{
@@ -203,7 +194,7 @@ partitions:
 		t.Errorf("user rule create failed with queue name, err %v", err)
 	}
 	queue, err = ur.placeApplication(appInfo, partInfo)
-	if queue != "root.testparentnew.testchild" || err != nil {
+	if queue != nameParentChild || err != nil {
 		t.Errorf("user rule with non existing parent queue should create '%s', error %v", queue, err)
 	}
 

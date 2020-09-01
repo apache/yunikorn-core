@@ -61,6 +61,12 @@ partitions:
 	if queue != "" || err != nil {
 		t.Errorf("provided rule placed app in incorrect queue '%s', err %v", queue, err)
 	}
+	// trying to place when no queue provided in the app
+	appInfo = cache.NewApplicationInfo("app1", "default", "", user, tags)
+	queue, err = pr.placeApplication(appInfo, partInfo)
+	if queue != "" || err != nil {
+		t.Errorf("provided rule placed app in incorrect queue '%s', error %v", queue, err)
+	}
 	// trying to place in a qualified queue that does not exist
 	appInfo = cache.NewApplicationInfo("app1", "default", "root.unknown", user, tags)
 	queue, err = pr.placeApplication(appInfo, partInfo)
@@ -106,5 +112,106 @@ partitions:
 	queue, err = pr.placeApplication(appInfo, partInfo)
 	if queue != "root.testparent" || err != nil {
 		t.Errorf("provided rule placed in to be created queue with create false '%s', err %v", queue, err)
+	}
+}
+
+func TestProvidedRuleParent(t *testing.T) {
+	// Create the structure for the test
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: testchild
+      - name: testparent
+        parent: true
+`
+	partInfo, err := CreatePartitionInfo([]byte(data))
+	assert.NilError(t, err, "Partition create failed with error")
+	tags := make(map[string]string)
+	user := security.UserGroup{
+		User:   "test",
+		Groups: []string{},
+	}
+
+	// trying to place in a child using a parent, fail to create child
+	conf := configs.PlacementRule{
+		Name:   "provided",
+		Create: false,
+		Parent: &configs.PlacementRule{
+			Name:  "fixed",
+			Value: "testparent",
+		},
+	}
+	var pr rule
+	pr, err = newRule(conf)
+	if err != nil || pr == nil {
+		t.Errorf("provided rule create failed, err %v", err)
+	}
+
+	appInfo := cache.NewApplicationInfo("app1", "default", "unknown", user, tags)
+	var queue string
+	queue, err = pr.placeApplication(appInfo, partInfo)
+	if queue != "" || err != nil {
+		t.Errorf("provided rule placed app in incorrect queue '%s', err %v", queue, err)
+	}
+
+	// trying to place in a child using a non creatable parent
+	conf = configs.PlacementRule{
+		Name:   "provided",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:   "fixed",
+			Value:  "testother",
+			Create: false,
+		},
+	}
+	pr, err = newRule(conf)
+	if err != nil || pr == nil {
+		t.Errorf("provided rule create failed, err %v", err)
+	}
+
+	appInfo = cache.NewApplicationInfo("app1", "default", "testchild", user, tags)
+	queue, err = pr.placeApplication(appInfo, partInfo)
+	if queue != "" || err != nil {
+		t.Errorf("provided rule placed app in incorrect queue '%s', err %v", queue, err)
+	}
+
+	// trying to place in a child using a creatable parent
+	conf = configs.PlacementRule{
+		Name:   "provided",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:   "fixed",
+			Value:  "testparentnew",
+			Create: true,
+		},
+	}
+	pr, err = newRule(conf)
+	if err != nil || pr == nil {
+		t.Errorf("provided rule create failed, err %v", err)
+	}
+	queue, err = pr.placeApplication(appInfo, partInfo)
+	if queue != "root.testparentnew.testchild" || err != nil {
+		t.Errorf("provided rule with non existing parent queue should create '%s', error %v", queue, err)
+	}
+
+	// trying to place in a child using a parent which is defined as a leaf
+	conf = configs.PlacementRule{
+		Name:   "provided",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:  "fixed",
+			Value: "testchild",
+		},
+	}
+	pr, err = newRule(conf)
+	if err != nil || pr == nil {
+		t.Errorf("provided rule create failed, err %v", err)
+	}
+
+	appInfo = cache.NewApplicationInfo("app1", "default", "unknown", user, tags)
+	queue, err = pr.placeApplication(appInfo, partInfo)
+	if queue != "" || err == nil {
+		t.Errorf("provided rule placed app in incorrect queue '%s', err %v", queue, err)
 	}
 }

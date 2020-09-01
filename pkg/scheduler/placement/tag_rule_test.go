@@ -144,3 +144,110 @@ partitions:
 		t.Errorf("tag rule with parent queue incorrect queue '%s', error %v", queue, err)
 	}
 }
+
+func TestTagRuleParent(t *testing.T) {
+	// Create the structure for the test
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: testchild
+      - name: testparent
+        parent: true
+`
+	partInfo, err := CreatePartitionInfo([]byte(data))
+	assert.NilError(t, err, "Partition create failed with error")
+	tags := make(map[string]string)
+	user := security.UserGroup{
+		User:   "testuser",
+		Groups: []string{},
+	}
+
+	// trying to place in a child using a parent, fail to create child
+	conf := configs.PlacementRule{
+		Name:   "tag",
+		Value:  "label1",
+		Create: false,
+		Parent: &configs.PlacementRule{
+			Name:  "tag",
+			Value: "label2",
+		},
+	}
+	var ur rule
+	ur, err = newRule(conf)
+	if err != nil || ur == nil {
+		t.Errorf("tag rule create failed, err %v", err)
+	}
+
+	tags = map[string]string{"label1": "testchild", "label2": "testparent"}
+	appInfo := cache.NewApplicationInfo("app1", "default", "unknown", user, tags)
+	var queue string
+	queue, err = ur.placeApplication(appInfo, partInfo)
+	if queue != "" || err != nil {
+		t.Errorf("tag rule placed app in incorrect queue '%s', err %v", queue, err)
+	}
+
+	// trying to place in a child using a non creatable parent
+	conf = configs.PlacementRule{
+		Name:   "tag",
+		Value:  "label1",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:   "tag",
+			Value:  "label2",
+			Create: false,
+		},
+	}
+	ur, err = newRule(conf)
+	if err != nil || ur == nil {
+		t.Errorf("tag rule create failed, err %v", err)
+	}
+
+	tags = map[string]string{"label1": "testchild", "label2": "testparentnew"}
+	appInfo = cache.NewApplicationInfo("app1", "default", "unknown", user, tags)
+	queue, err = ur.placeApplication(appInfo, partInfo)
+	if queue != "" || err != nil {
+		t.Errorf("tag rule placed app in incorrect queue '%s', err %v", queue, err)
+	}
+
+	// trying to place in a child using a creatable parent
+	conf = configs.PlacementRule{
+		Name:   "tag",
+		Value:  "label1",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:   "tag",
+			Value:  "label2",
+			Create: true,
+		},
+	}
+	ur, err = newRule(conf)
+	if err != nil || ur == nil {
+		t.Errorf("tag rule create failed with queue name, err %v", err)
+	}
+	queue, err = ur.placeApplication(appInfo, partInfo)
+	if queue != "root.testparentnew.testchild" || err != nil {
+		t.Errorf("user rule with non existing parent queue should create '%s', error %v", queue, err)
+	}
+
+	// trying to place in a child using a parent which is defined as a leaf
+	conf = configs.PlacementRule{
+		Name:   "tag",
+		Value:  "label2",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:  "tag",
+			Value: "label1",
+		},
+	}
+	ur, err = newRule(conf)
+	if err != nil || ur == nil {
+		t.Errorf("tag rule create failed, err %v", err)
+	}
+
+	appInfo = cache.NewApplicationInfo("app1", "default", "unknown", user, tags)
+	queue, err = ur.placeApplication(appInfo, partInfo)
+	if queue != "" || err == nil {
+		t.Errorf("tag rule placed app in incorrect queue '%s', err %v", queue, err)
+	}
+}

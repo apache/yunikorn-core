@@ -74,7 +74,9 @@ func (ur *userRule) placeApplication(app *cache.ApplicationInfo, info *cache.Par
 		if !strings.HasPrefix(parentName, configs.RootQueue+cache.DOT) {
 			parentName = configs.RootQueue + cache.DOT + parentName
 		}
-		if info.GetQueue(parentName).IsLeafQueue() {
+		// if the parent queue exists it cannot be a leaf
+		parentQueue := info.GetQueue(parentName)
+		if parentQueue != nil && parentQueue.IsLeafQueue() {
 			return "", fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
 		}
 	}

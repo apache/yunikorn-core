@@ -373,15 +373,15 @@ type fakeConfigPlugin struct {
 	generateError bool
 }
 
-func (f fakeConfigPlugin) UpdateConfiguration (args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
+func (f fakeConfigPlugin) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
 	if f.generateError {
 		return &si.UpdateConfigurationResponse{
 			Success: false,
-			Reason: "configuration update error",
+			Reason:  "configuration update error",
 		}
 	}
 	return &si.UpdateConfigurationResponse{
-		Success: true,
+		Success:   true,
 		OldConfig: startConf,
 	}
 }
@@ -471,10 +471,11 @@ func TestUpdateConfig(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			resp := &MockResponseWriter{}
-			req, _ := http.NewRequest("PUT", "", strings.NewReader(tc.newConf))
+			req, err := http.NewRequest("PUT", "", strings.NewReader(tc.newConf))
+			assert.NilError(t, err, "Failed to create the request")
 			updateConfig(resp, req)
 			var ucr dao.UpdateConfResponse
-			err := json.Unmarshal(resp.outputBytes, &ucr)
+			err = json.Unmarshal(resp.outputBytes, &ucr)
 			assert.NilError(t, err, "No error expected")
 			assert.DeepEqual(t, ucr, tc.expectedResponse)
 		})

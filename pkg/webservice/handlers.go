@@ -20,13 +20,14 @@ package webservice
 import (
 	"encoding/json"
 	"fmt"
-	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"net/http"
 	"runtime"
 	"strconv"
 	"strings"
+
+	"go.uber.org/zap"
+	"gopkg.in/yaml.v2"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
@@ -364,7 +365,10 @@ func updateConfig(w http.ResponseWriter, r *http.Request) {
 	err = gClusterInfo.UpdateSchedulerConfig(schedulerConf)
 	if err != nil {
 		// revert configmap changes
-		updateConfiguration(oldConf)
+		_, err := updateConfiguration(oldConf)
+		if err != nil {
+			log.Logger().Error("Configuration rollback failed")
+		}
 		buildUpdateResponse(false, err.Error(), w)
 		return
 	}
@@ -392,10 +396,8 @@ func updateConfiguration(conf string) (string, error) {
 		})
 		if resp.Success {
 			return resp.OldConfig, nil
-		} else {
-			return resp.OldConfig, fmt.Errorf(resp.Reason)
 		}
-
+		return resp.OldConfig, fmt.Errorf(resp.Reason)
 	}
 	return "", fmt.Errorf("config plugin not found")
 }

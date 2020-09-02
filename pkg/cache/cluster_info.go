@@ -48,7 +48,7 @@ type ClusterInfo struct {
 	pendingSchedulerEvents chan interface{}
 
 	// RM Event Handler
-	EventHandlers handler.EventHandlers
+	EventHandlers    handler.EventHandlers
 	skipConfigUpdate bool
 	sync.RWMutex
 }
@@ -510,7 +510,7 @@ func (m *ClusterInfo) processRMConfigUpdateEvent(event *commonevents.ConfigUpdat
 	event.Channel <- &commonevents.Result{Succeeded: true}
 }
 
-func(m *ClusterInfo) sendUpdatedPartitionsToScheduler(updatedPartitions []*PartitionInfo) *commonevents.Result {
+func (m *ClusterInfo) sendUpdatedPartitionsToScheduler(updatedPartitions []*PartitionInfo) *commonevents.Result {
 	updatedPartitionsInterfaces := make([]interface{}, 0)
 	for _, u := range updatedPartitions {
 		updatedPartitionsInterfaces = append(updatedPartitionsInterfaces, u)
@@ -526,7 +526,7 @@ func(m *ClusterInfo) sendUpdatedPartitionsToScheduler(updatedPartitions []*Parti
 	return result
 }
 
-func(m *ClusterInfo) sendDeletedPartitionsToScheduler(deletedPartitions []*PartitionInfo) *commonevents.Result {
+func (m *ClusterInfo) sendDeletedPartitionsToScheduler(deletedPartitions []*PartitionInfo) *commonevents.Result {
 	deletedPartitionsInterfaces := make([]interface{}, 0)
 	for _, u := range deletedPartitions {
 		deletedPartitionsInterfaces = append(deletedPartitionsInterfaces, u)
@@ -752,4 +752,3 @@ func (m *ClusterInfo) UpdateSchedulerConfig(conf *configs.SchedulerConfig) error
 	m.skipConfigUpdate = true
 	return nil
 }
-

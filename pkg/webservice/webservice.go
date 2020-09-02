@@ -34,7 +34,7 @@ import (
 
 var gClusterInfo *cache.ClusterInfo
 var imHistory *history.InternalMetricsHistory
-var lock        sync.RWMutex
+var lock sync.RWMutex
 
 type WebService struct {
 	httpServer  *http.Server

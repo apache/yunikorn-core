@@ -29,7 +29,7 @@ type SchedulerPlugins struct {
 	reconcilePlugin        ReconcilePlugin
 	eventPlugin            EventPlugin
 	schedulingStateUpdater ContainerSchedulingStateUpdater
-	configPlugin		   ConfigurationPlugin
+	configPlugin           ConfigurationPlugin
 
 	sync.RWMutex
 }

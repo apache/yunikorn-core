@@ -24,6 +24,6 @@ type ValidateConfResponse struct {
 }
 
 type UpdateConfResponse struct {
-	Success bool `json:"success"`
-	Reason string `json:"reason"`
+	Success bool   `json:"success"`
+	Reason  string `json:"reason"`
 }

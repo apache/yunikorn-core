@@ -126,3 +126,95 @@ partitions:
 		t.Errorf("user rule placed in to be created queue with create false '%s', err %v", queue, err)
 	}
 }
+
+func TestUserRuleParent(t *testing.T) {
+	partInfo, err := CreatePartitionInfo([]byte(confParentChild))
+	assert.NilError(t, err, "Partition create failed with error")
+	tags := make(map[string]string)
+	user := security.UserGroup{
+		User:   "testchild",
+		Groups: []string{},
+	}
+
+	// trying to place in a child using a parent, fail to create child
+	conf := configs.PlacementRule{
+		Name:   "user",
+		Create: false,
+		Parent: &configs.PlacementRule{
+			Name:  "fixed",
+			Value: "testparent",
+		},
+	}
+	var ur rule
+	ur, err = newRule(conf)
+	if err != nil || ur == nil {
+		t.Errorf("user rule create failed, err %v", err)
+	}
+
+	appInfo := cache.NewApplicationInfo("app1", "default", "unknown", user, tags)
+	var queue string
+	queue, err = ur.placeApplication(appInfo, partInfo)
+	if queue != "" || err != nil {
+		t.Errorf("user rule placed app in incorrect queue '%s', err %v", queue, err)
+	}
+
+	// trying to place in a child using a non creatable parent
+	conf = configs.PlacementRule{
+		Name:   "user",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:   "fixed",
+			Value:  "testother",
+			Create: false,
+		},
+	}
+	ur, err = newRule(conf)
+	if err != nil || ur == nil {
+		t.Errorf("user rule create failed, err %v", err)
+	}
+
+	appInfo = cache.NewApplicationInfo("app1", "default", "unknown", user, tags)
+	queue, err = ur.placeApplication(appInfo, partInfo)
+	if queue != "" || err != nil {
+		t.Errorf("user rule placed app in incorrect queue '%s', err %v", queue, err)
+	}
+
+	// trying to place in a child using a creatable parent
+	conf = configs.PlacementRule{
+		Name:   "user",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:   "fixed",
+			Value:  "testparentnew",
+			Create: true,
+		},
+	}
+	ur, err = newRule(conf)
+	if err != nil || ur == nil {
+		t.Errorf("user rule create failed with queue name, err %v", err)
+	}
+	queue, err = ur.placeApplication(appInfo, partInfo)
+	if queue != nameParentChild || err != nil {
+		t.Errorf("user rule with non existing parent queue should create '%s', error %v", queue, err)
+	}
+
+	// trying to place in a child using a parent which is defined as a leaf
+	conf = configs.PlacementRule{
+		Name:   "user",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:  "fixed",
+			Value: "testchild",
+		},
+	}
+	ur, err = newRule(conf)
+	if err != nil || ur == nil {
+		t.Errorf("user rule create failed, err %v", err)
+	}
+
+	appInfo = cache.NewApplicationInfo("app1", "default", "unknown", user, tags)
+	queue, err = ur.placeApplication(appInfo, partInfo)
+	if queue != "" || err == nil {
+		t.Errorf("user rule placed app in incorrect queue '%s', err %v", queue, err)
+	}
+}

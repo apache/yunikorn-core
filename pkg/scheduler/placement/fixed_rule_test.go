@@ -156,3 +156,94 @@ partitions:
 		t.Errorf("fixed rule with parent queue should not have failed '%s', error %v", queue, err)
 	}
 }
+
+func TestFixedRuleParent(t *testing.T) {
+	partInfo, err := CreatePartitionInfo([]byte(confParentChild))
+	assert.NilError(t, err, "Partition create failed with error")
+	user := security.UserGroup{
+		User:   "testuser",
+		Groups: []string{},
+	}
+	tags := make(map[string]string)
+	appInfo := cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
+
+	// trying to place in a child using a parent, fail to create child
+	conf := configs.PlacementRule{
+		Name:   "fixed",
+		Value:  "nonexist",
+		Create: false,
+		Parent: &configs.PlacementRule{
+			Name:  "fixed",
+			Value: "testparent",
+		},
+	}
+	var fr rule
+	fr, err = newRule(conf)
+	if err != nil || fr == nil {
+		t.Errorf("fixed rule create failed with queue name, err %v", err)
+	}
+	var queue string
+	queue, err = fr.placeApplication(appInfo, partInfo)
+	if queue != "" || err != nil {
+		t.Errorf("fixed rule with create false for child should have failed and gave '%s', error %v", queue, err)
+	}
+
+	// trying to place in a child using a non creatable parent
+	conf = configs.PlacementRule{
+		Name:   "fixed",
+		Value:  "testchild",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:   "fixed",
+			Value:  "testparentnew",
+			Create: false,
+		},
+	}
+	fr, err = newRule(conf)
+	if err != nil || fr == nil {
+		t.Errorf("fixed rule create failed with queue name, err %v", err)
+	}
+	queue, err = fr.placeApplication(appInfo, partInfo)
+	if queue != "" || err != nil {
+		t.Errorf("fixed rule with non existing parent queue should have failed '%s', error %v", queue, err)
+	}
+
+	// trying to place in a child using a creatable parent
+	conf = configs.PlacementRule{
+		Name:   "fixed",
+		Value:  "testchild",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:   "fixed",
+			Value:  "testparentnew",
+			Create: true,
+		},
+	}
+	fr, err = newRule(conf)
+	if err != nil || fr == nil {
+		t.Errorf("fixed rule create failed with queue name, err %v", err)
+	}
+	queue, err = fr.placeApplication(appInfo, partInfo)
+	if queue != nameParentChild || err != nil {
+		t.Errorf("fixed rule with non existing parent queue should created '%s', error %v", queue, err)
+	}
+
+	// trying to place in a child using a parent which is defined as a leaf
+	conf = configs.PlacementRule{
+		Name:   "fixed",
+		Value:  "nonexist",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:  "fixed",
+			Value: "testchild",
+		},
+	}
+	fr, err = newRule(conf)
+	if err != nil || fr == nil {
+		t.Errorf("fixed rule create failed with queue name, err %v", err)
+	}
+	queue, err = fr.placeApplication(appInfo, partInfo)
+	if queue != "" || err == nil {
+		t.Errorf("fixed rule with parent declared as leaf should have failed '%s', error %v", queue, err)
+	}
+}

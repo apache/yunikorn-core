@@ -48,7 +48,7 @@ type ClusterInfo struct {
 	pendingSchedulerEvents chan interface{}
 
 	// RM Event Handler
-	EventHandlers    handler.EventHandlers
+	EventHandlers handler.EventHandlers
 	sync.RWMutex
 }
 

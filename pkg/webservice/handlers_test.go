@@ -451,7 +451,6 @@ func TestUpdateConfig(t *testing.T) {
 	assert.NilError(t, err, "No error expected")
 	assert.Equal(t, true, ucr.Success, "Success is expected")
 	assert.Assert(t, len(ucr.Reason) == 0, "No error reason expected")
-
 }
 
 func TestUpdateConfigInvalidConf(t *testing.T) {

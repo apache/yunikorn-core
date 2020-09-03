@@ -384,8 +384,12 @@ func buildUpdateResponse(success bool, reason string, w http.ResponseWriter) {
 	}
 	result.Success = success
 	result.Reason = reason
-	if err := json.NewEncoder(w).Encode(result); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if success {
+		if err := json.NewEncoder(w).Encode(result); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	} else {
+		http.Error(w, reason, http.StatusConflict)
 	}
 }
 func updateConfiguration(conf string) (string, error) {

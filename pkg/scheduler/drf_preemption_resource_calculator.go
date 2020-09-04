@@ -45,7 +45,7 @@ func calculateIdealResources(scheduler *Scheduler) {
 
 func calculateIdealResourcesForPartition(scheduler *Scheduler, partitionName string, preemptionPartitionCtx *preemptionPartitionContext) {
 	// Sum of all node's total resource under the partition
-	partitionTotal := scheduler.clusterInfo.GetPartition(partitionName).GetTotalPartitionResource()
+	partitionTotal := scheduler.GetPartition(partitionName).GetTotalPartitionResource()
 	preemptionPartitionCtx.partitionTotalResource = partitionTotal
 
 	// Init queue resources from scheduler

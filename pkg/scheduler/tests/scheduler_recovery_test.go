@@ -21,9 +21,9 @@ package tests
 import (
 	"testing"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/entrypoint"
@@ -57,16 +57,16 @@ partitions:
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Check queues of clusterInfo and scheduler.
-	partitionInfo := ms.clusterInfo.GetPartition("[rm:123]default")
-	assert.Assert(t, nil == partitionInfo.Root.GetMaxResource())
+	partitionInfo := ms.scheduler.GetPartition("[rm:123]default")
+	assert.Assert(t, nil == partitionInfo.Root().GetMaxResource())
 
 	// Check scheduling queue root
 	schedulerQueueRoot := ms.getSchedulingQueue("root")
-	assert.Assert(t, nil == schedulerQueueRoot.QueueInfo.GetMaxResource())
+	assert.Assert(t, nil == schedulerQueueRoot.GetMaxResource())
 
 	// Check scheduling queue a
 	schedulerQueueA := ms.getSchedulingQueue("root.a")
-	assert.Assert(t, 150 == schedulerQueueA.QueueInfo.GetMaxResource().Resources[resources.MEMORY])
+	assert.Assert(t, 150 == schedulerQueueA.GetMaxResource().Resources[resources.MEMORY])
 
 	// Register nodes, and add apps
 	appID := "app-1"
@@ -109,7 +109,7 @@ partitions:
 	// Verify app initial state
 	app01, err := getApplicationInfoFromPartition(partitionInfo, appID)
 	assert.NilError(t, err, "app not found on partitionInfo")
-	assert.Equal(t, app01.GetApplicationState(), cache.New.String())
+	assert.Equal(t, app01.GetApplicationState(), scheduler.New.String())
 
 	err = ms.proxy.Update(&si.UpdateRequest{
 		Asks: []*si.AllocationAsk{
@@ -135,7 +135,7 @@ partitions:
 	waitForPendingQueueResource(t, schedulerQueueA, 20, 1000)
 	waitForPendingQueueResource(t, schedulerQueueRoot, 20, 1000)
 	waitForPendingAppResource(t, schedulingApp, 20, 1000)
-	assert.Equal(t, app01.GetApplicationState(), cache.Accepted.String())
+	assert.Equal(t, app01.GetApplicationState(), scheduler.Accepted.String())
 
 	ms.scheduler.MultiStepSchedule(16)
 
@@ -147,15 +147,15 @@ partitions:
 	waitForPendingAppResource(t, schedulingApp, 0, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Equal(t, schedulerQueueA.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(20))
-	assert.Equal(t, schedulerQueueRoot.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(20))
-	assert.Equal(t, schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(20))
+	assert.Equal(t, schedulerQueueA.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(20))
+	assert.Equal(t, schedulerQueueRoot.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(20))
+	assert.Equal(t, schedulingApp.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(20))
 
 	// once we start to process allocation asks from this app, verify the state again
-	assert.Equal(t, app01.GetApplicationState(), cache.Running.String())
+	assert.Equal(t, app01.GetApplicationState(), scheduler.Running.String())
 
 	// Check allocated resources of nodes
-	waitForNodesAllocatedResource(t, ms.clusterInfo, "[rm:123]default",
+	waitForNodesAllocatedResource(t, ms.scheduler, "[rm:123]default",
 		[]string{"node-1:1234", "node-2:1234"}, 20, 1000)
 
 	// Ask for two more resources
@@ -206,12 +206,12 @@ partitions:
 	waitForPendingAppResource(t, schedulingApp, 200, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Equal(t, schedulerQueueA.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
-	assert.Equal(t, schedulerQueueRoot.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
-	assert.Equal(t, schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
+	assert.Equal(t, schedulerQueueA.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
+	assert.Equal(t, schedulerQueueRoot.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
+	assert.Equal(t, schedulingApp.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
 
 	// Check allocated resources of nodes
-	waitForNodesAllocatedResource(t, ms.clusterInfo, "[rm:123]default",
+	waitForNodesAllocatedResource(t, ms.scheduler, "[rm:123]default",
 		[]string{"node-1:1234", "node-2:1234"}, 120, 1000)
 
 	// --------------------------------------------------
@@ -262,7 +262,7 @@ partitions:
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
 	// verify partitionInfo info
-	partitionInfo = ms.clusterInfo.GetPartition("[rm:123]default")
+	partitionInfo = ms.scheduler.GetPartition("[rm:123]default")
 	// verify apps in this partitionInfo
 	assert.Equal(t, 1, len(partitionInfo.GetApplications()))
 	assert.Equal(t, appID, partitionInfo.GetApplications()[0].ApplicationID)
@@ -287,12 +287,12 @@ partitions:
 
 	// verify queues
 	//  - verify root queue
-	assert.Equal(t, partitionInfo.Root.GetGuaranteedResource().Resources[resources.MEMORY], resources.Quantity(100), "guaranteed memory on root queue not as expected")
-	assert.Equal(t, partitionInfo.Root.GetGuaranteedResource().Resources[resources.VCORE], resources.Quantity(10), "guaranteed vcore on root queue not as expected")
-	assert.Equal(t, partitionInfo.Root.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120), "allocated memory on root queue not as expected")
-	assert.Equal(t, partitionInfo.Root.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12), "allocated vcore on root queue not as expected")
+	assert.Equal(t, partitionInfo.Root().GetGuaranteedResource().Resources[resources.MEMORY], resources.Quantity(100), "guaranteed memory on root queue not as expected")
+	assert.Equal(t, partitionInfo.Root().GetGuaranteedResource().Resources[resources.VCORE], resources.Quantity(10), "guaranteed vcore on root queue not as expected")
+	assert.Equal(t, partitionInfo.Root().GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120), "allocated memory on root queue not as expected")
+	assert.Equal(t, partitionInfo.Root().GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12), "allocated vcore on root queue not as expected")
 	//  - verify root.a queue
-	childQueues := partitionInfo.Root.GetCopyOfChildren()
+	childQueues := partitionInfo.Root().GetCopyOfChildren()
 	queueA := childQueues["a"]
 	assert.Assert(t, queueA != nil, "root.a doesn't exist in partitionInfo")
 	assert.Equal(t, queueA.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120), "allocated memory on root.a queue not as expected")
@@ -302,8 +302,8 @@ partitions:
 	ms.mockRM.waitForAcceptedApplication(t, appID, 1000)
 	recoveredApp := ms.getSchedulingApplication(appID)
 	assert.Assert(t, recoveredApp != nil)
-	assert.Equal(t, recoveredApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120), "allocated memory on app not as expected")
-	assert.Equal(t, recoveredApp.ApplicationInfo.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12), "allocated vcore on app not as expected")
+	assert.Equal(t, recoveredApp.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120), "allocated memory on app not as expected")
+	assert.Equal(t, recoveredApp.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12), "allocated vcore on app not as expected")
 
 	// there should be no pending resources
 	assert.Equal(t, recoveredApp.GetPendingResource().Resources[resources.MEMORY], resources.Quantity(0), "pending memory on app not as expected")
@@ -314,7 +314,7 @@ partitions:
 	}
 
 	// verify app state
-	assert.Equal(t, recoveredApp.ApplicationInfo.GetApplicationState(), cache.Running.String())
+	assert.Equal(t, recoveredApp.GetApplicationState(), scheduler.Running.String())
 }
 
 // test scheduler recovery when shim doesn't report existing application
@@ -400,7 +400,7 @@ partitions:
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
 	// verify partitionInfo resources
-	partitionInfo := ms.clusterInfo.GetPartition("[rm:123]default")
+	partitionInfo := ms.scheduler.GetPartition("[rm:123]default")
 	assert.Equal(t, partitionInfo.GetTotalNodeCount(), 1)
 	assert.Equal(t, partitionInfo.GetTotalApplicationCount(), 0)
 	assert.Equal(t, partitionInfo.GetTotalAllocationCount(), 0)
@@ -460,10 +460,10 @@ partitions:
 	t.Log("verifying scheduling queues")
 	recoveredQueueRoot := ms.getSchedulingQueue("root")
 	recoveredQueue := ms.getSchedulingQueue("root.a")
-	assert.Equal(t, recoveredQueue.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(100))
-	assert.Equal(t, recoveredQueue.QueueInfo.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(1))
-	assert.Equal(t, recoveredQueueRoot.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(100))
-	assert.Equal(t, recoveredQueueRoot.QueueInfo.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(1))
+	assert.Equal(t, recoveredQueue.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(100))
+	assert.Equal(t, recoveredQueue.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(1))
+	assert.Equal(t, recoveredQueueRoot.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(100))
+	assert.Equal(t, recoveredQueueRoot.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(1))
 }
 
 // test scheduler recovery that only registers nodes and apps
@@ -535,11 +535,10 @@ partitions:
 	mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
-	app01 := serviceContext.Scheduler.GetClusterSchedulingContext().
-		GetSchedulingApplication(appID, "[rm:123]default")
+	app01 := serviceContext.Scheduler.GetSchedulingApplication(appID, "[rm:123]default")
 	assert.Assert(t, app01 != nil)
-	assert.Equal(t, app01.ApplicationInfo.ApplicationID, appID)
-	assert.Equal(t, app01.ApplicationInfo.QueueName, "root.a")
+	assert.Equal(t, app01.ApplicationID, appID)
+	assert.Equal(t, app01.QueueName, "root.a")
 }
 
 // test scheduler recovery that only registers apps
@@ -589,11 +588,11 @@ partitions:
 	mockRM.waitForAcceptedApplication(t, "app-2", 1000)
 
 	// verify app state
-	apps := serviceContext.Cache.GetPartition("[rm:123]default").GetApplications()
+	apps := serviceContext.Scheduler.GetPartition("[rm:123]default").GetApplications()
 	found := 0
 	for _, app := range apps {
 		if app.ApplicationID == appID || app.ApplicationID == "app-2" {
-			assert.Equal(t, app.GetApplicationState(), cache.New.String())
+			assert.Equal(t, app.GetApplicationState(), scheduler.New.String())
 			found++
 		}
 	}
@@ -720,12 +719,12 @@ partitions:
 	waitForPendingAppResource(t, schedulingApp, 0, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Equal(t, appQueue.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(20))
-	assert.Equal(t, schedulerQueueRoot.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(20))
-	assert.Equal(t, schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(20))
+	assert.Equal(t, appQueue.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(20))
+	assert.Equal(t, schedulerQueueRoot.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(20))
+	assert.Equal(t, schedulingApp.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(20))
 
 	// once we start to process allocation asks from this app, verify the state again
-	assert.Equal(t, schedulingApp.ApplicationInfo.GetApplicationState(), cache.Running.String())
+	assert.Equal(t, schedulingApp.GetApplicationState(), scheduler.Running.String())
 
 	// --------------------------------------------------
 	// Phase 2) Restart the scheduler, test recovery

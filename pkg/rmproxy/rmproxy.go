@@ -336,7 +336,7 @@ func (m *RMProxy) Update(request *si.UpdateRequest) error {
 
 	go func() {
 		normalizeUpdateRequestByRMId(request)
-		m.EventHandlers.SchedulerEventHandler.HandleEvent(&cacheevent.RMUpdateRequestEvent{Request: request})
+		m.EventHandlers.SchedulerEventHandler.HandleEvent(&rmevent.RMUpdateRequestEvent{Request: request})
 	}()
 
 	return nil

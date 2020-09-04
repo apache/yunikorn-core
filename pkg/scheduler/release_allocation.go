@@ -36,6 +36,16 @@ type ReleaseAllocation struct {
 	ReleaseType si.AllocationReleaseResponse_TerminationType
 }
 
+func NewReleaseAllocation(uuid, appID, partitionName, message string, releaseType si.AllocationReleaseResponse_TerminationType) *ReleaseAllocation {
+	return &ReleaseAllocation{
+		UUID:          uuid,
+		ApplicationID: appID,
+		PartitionName: partitionName,
+		Message:       message,
+		ReleaseType:   releaseType,
+	}
+}
+
 func AllocationReleaseRequestToReleaseAllocation(request []*si.AllocationReleaseRequest, msg string, releaseType si.AllocationReleaseResponse_TerminationType) []*ReleaseAllocation {
 	ret := make([]*ReleaseAllocation, 0)
 	for _, r := range request {

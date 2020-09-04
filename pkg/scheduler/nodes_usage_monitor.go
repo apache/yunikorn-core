@@ -53,8 +53,8 @@ func (m *nodesResourceUsageMonitor) start() {
 }
 
 func (m *nodesResourceUsageMonitor) runOnce() {
-	for _, p := range m.scheduler.GetClusterSchedulingContext().getPartitionMapClone() {
-		usageMap := p.partition.CalculateNodesResourceUsage()
+	for _, p := range m.scheduler.getPartitionMapClone() {
+		usageMap := p.CalculateNodesResourceUsage()
 		if len(usageMap) > 0 {
 			for resourceName, usageBuckets := range usageMap {
 				for idx, bucketValue := range usageBuckets {

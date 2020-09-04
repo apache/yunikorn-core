@@ -59,10 +59,10 @@ type queuePreemptCalcResource struct {
 }
 
 func (m *queuePreemptCalcResource) initFromSchedulingQueue(queue *SchedulingQueue) {
-	m.guaranteed = queue.QueueInfo.GetGuaranteedResource()
-	m.used = queue.QueueInfo.GetAllocatedResource()
+	m.guaranteed = queue.GetGuaranteedResource()
+	m.used = queue.GetAllocatedResource()
 	m.pending = queue.GetPendingResource()
-	m.max = queue.QueueInfo.GetMaxResource()
+	m.max = queue.GetMaxResource()
 }
 
 func newQueuePreemptCalcResource() *queuePreemptCalcResource {
@@ -86,7 +86,7 @@ func getPreemptionPolicies() []PreemptionPolicy {
 // Visible by tests
 func (s *Scheduler) SingleStepPreemption() {
 	// Skip if no preemption needed.
-	if !s.clusterSchedulingContext.NeedPreemption() {
+	if !s.NeedPreemption() {
 		return
 	}
 
@@ -106,7 +106,7 @@ func (s *Scheduler) resetPreemptionContext() {
 	}
 
 	// Copy from scheduler
-	for partition, partitionContext := range s.clusterSchedulingContext.getPartitionMapClone() {
+	for partition, partitionContext := range s.getPartitionMapClone() {
 		preemptionPartitionCtx := &preemptionPartitionContext{
 			leafQueues: make(map[string]*preemptionQueueContext),
 		}

@@ -137,7 +137,7 @@ func (sn *SchedulingNode) decPreemptingResource(delta *resources.Resource) {
 func (sn *SchedulingNode) allocateResource(res *resources.Resource, preemptionPhase bool) bool {
 	sn.Lock()
 	defer sn.Unlock()
-	newAllocating := resources.Add(res, sn.allocating)
+	newAllocating := resources.Add(res, sn.allocatedResource)
 
 	availableResource := sn.availableResource.Clone()
 	if preemptionPhase {
@@ -148,7 +148,7 @@ func (sn *SchedulingNode) allocateResource(res *resources.Resource, preemptionPh
 		log.Logger().Debug("allocations in progress updated",
 			zap.String("nodeID", sn.NodeID),
 			zap.Any("total unconfirmed", newAllocating))
-		sn.allocating = newAllocating
+		sn.allocatedResource = newAllocating
 		return true
 	}
 	// allocation failed resource did not fit
@@ -217,8 +217,6 @@ func (sn *SchedulingNode) preAllocateCheck(res *resources.Resource, resKey strin
 	if preemptionPhase {
 		available.AddTo(sn.getPreemptingResource())
 	}
-	// remove the unconfirmed resources
-	available.SubFrom(sn.getAllocatingResource())
 	// check the request fits in what we have calculated
 	if !resources.FitIn(available, res) {
 		// requested resource is larger than currently available node resources

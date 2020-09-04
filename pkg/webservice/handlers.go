@@ -30,7 +30,6 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
@@ -191,7 +190,7 @@ func getPartitionJSON(name string) *dao.PartitionDAOInfo {
 	partitionInfo := &dao.PartitionDAOInfo{}
 
 	partitionContext := gscheduler.GetPartition(name)
-	queueDAOInfo := partitionContext.Root.GetQueueInfos()
+	queueDAOInfo := partitionContext.Root().GetQueueInfos()
 
 	partitionInfo.PartitionName = partitionContext.Name
 	partitionInfo.Capacity = dao.PartitionCapacity{
@@ -207,18 +206,7 @@ func getApplicationJSON(app *scheduler.SchedulingApplication) *dao.ApplicationDA
 	var allocationInfos []dao.AllocationDAOInfo
 	allocations := app.GetAllAllocations()
 	for _, alloc := range allocations {
-		allocInfo := dao.AllocationDAOInfo{
-			AllocationKey:    alloc.AllocationProto.AllocationKey,
-			AllocationTags:   alloc.AllocationProto.AllocationTags,
-			UUID:             alloc.AllocationProto.UUID,
-			ResourcePerAlloc: strings.Trim(alloc.AllocatedResource.String(), "map"),
-			Priority:         alloc.AllocationProto.Priority.String(),
-			QueueName:        alloc.AllocationProto.QueueName,
-			NodeID:           alloc.AllocationProto.NodeID,
-			ApplicationID:    alloc.AllocationProto.ApplicationID,
-			Partition:        alloc.AllocationProto.PartitionName,
-		}
-		allocationInfos = append(allocationInfos, allocInfo)
+		allocationInfos = append(allocationInfos, *alloc.GetAllocationDAO())
 	}
 
 	return &dao.ApplicationDAOInfo{
@@ -232,33 +220,22 @@ func getApplicationJSON(app *scheduler.SchedulingApplication) *dao.ApplicationDA
 	}
 }
 
-func getNodeJSON(nodeInfo *cache.NodeInfo) *dao.NodeDAOInfo {
+func getNodeJSON(node *scheduler.SchedulingNode) *dao.NodeDAOInfo {
 	var allocations []*dao.AllocationDAOInfo
-	for _, alloc := range nodeInfo.GetAllAllocations() {
-		allocInfo := &dao.AllocationDAOInfo{
-			AllocationKey:    alloc.AllocationProto.AllocationKey,
-			AllocationTags:   alloc.AllocationProto.AllocationTags,
-			UUID:             alloc.AllocationProto.UUID,
-			ResourcePerAlloc: strings.Trim(alloc.AllocatedResource.String(), "map"),
-			Priority:         alloc.AllocationProto.Priority.String(),
-			QueueName:        alloc.AllocationProto.QueueName,
-			NodeID:           alloc.AllocationProto.NodeID,
-			ApplicationID:    alloc.AllocationProto.ApplicationID,
-			Partition:        alloc.AllocationProto.PartitionName,
-		}
-		allocations = append(allocations, allocInfo)
+	for _, alloc := range node.GetAllAllocations() {
+		allocations = append(allocations, alloc.GetAllocationDAO())
 	}
 
 	return &dao.NodeDAOInfo{
-		NodeID:      nodeInfo.NodeID,
-		HostName:    nodeInfo.Hostname,
-		RackName:    nodeInfo.Rackname,
-		Capacity:    strings.Trim(nodeInfo.GetCapacity().String(), "map"),
-		Occupied:    strings.Trim(nodeInfo.GetOccupiedResource().String(), "map"),
-		Allocated:   strings.Trim(nodeInfo.GetAllocatedResource().String(), "map"),
-		Available:   strings.Trim(nodeInfo.GetAvailableResource().String(), "map"),
+		NodeID:      node.NodeID,
+		HostName:    node.Hostname,
+		RackName:    node.Rackname,
+		Capacity:    strings.Trim(node.GetCapacity().String(), "map"),
+		Occupied:    strings.Trim(node.GetOccupiedResource().String(), "map"),
+		Allocated:   strings.Trim(node.GetAllocatedResource().String(), "map"),
+		Available:   strings.Trim(node.GetAvailableResource().String(), "map"),
 		Allocations: allocations,
-		Schedulable: nodeInfo.IsSchedulable(),
+		Schedulable: node.IsSchedulable(),
 	}
 }
 

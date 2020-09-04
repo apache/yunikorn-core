@@ -100,7 +100,7 @@ func newAppState() *fsm.FSM {
 		},
 		fsm.Callbacks{
 			"enter_state": func(event *fsm.Event) {
-				appInfo, ok := event.Args[0].(*ApplicationInfo)
+				appInfo, ok := event.Args[0].(*SchedulingApplication)
 				if !ok {
 					log.Logger().Warn("The first argument is not an ApplicationInfo")
 					return
@@ -113,10 +113,10 @@ func newAppState() *fsm.FSM {
 				appInfo.onStateChange(event)
 			},
 			fmt.Sprintf("enter_%s", Starting.String()): func(event *fsm.Event) {
-				event.Args[0].(*ApplicationInfo).setStartingTimer()
+				event.Args[0].(*SchedulingApplication).setStartingTimer()
 			},
 			fmt.Sprintf("leave_%s", Starting.String()): func(event *fsm.Event) {
-				event.Args[0].(*ApplicationInfo).clearStartingTimer()
+				event.Args[0].(*SchedulingApplication).clearStartingTimer()
 			},
 			fmt.Sprintf("leave_%s", New.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsAdded()

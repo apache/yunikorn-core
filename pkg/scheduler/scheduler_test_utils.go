@@ -87,15 +87,6 @@ func createSchedulerConfig(configBytes []byte) (*configs.SchedulerConfig, error)
 	return conf, nil
 }
 
-// Create a partition for testing from a yaml configuration
-func createMockPartitionSchedulingContextFromConfig(configBytes []byte) (*PartitionSchedulingContext, error) {
-	config, err:= createSchedulerConfig(configBytes)
-	if err != nil {
-		return nil, err
-	}
-	return newSchedulingPartitionFromConfig(config.Partitions[0], "test")
-}
-
 func newSchedulingAppTestOnly(appID, partition, queueName string) *SchedulingApplication {
 	user := security.UserGroup{
 		User:   "testuser",

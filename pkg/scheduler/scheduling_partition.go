@@ -39,7 +39,6 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/placement"
 )
 
 type PartitionSchedulingContext struct {
@@ -51,7 +50,7 @@ type PartitionSchedulingContext struct {
 	applications           map[string]*SchedulingApplication // applications assigned to this partition
 	reservedApps           map[string]int                    // applications reserved within this partition, with reservation count
 	nodes                  map[string]*SchedulingNode        // nodes assigned to this partition
-	placementManager       *placement.AppPlacementManager    // placement manager for this partition
+	placementManager       *AppPlacementManager              // placement manager for this partition
 	partitionManager       *partitionManager                 // manager for this partition
 	allocations            map[string]*schedulingAllocation  // allocations
 	stateMachine           *fsm.FSM                          // the state of the queue for scheduling
@@ -91,7 +90,7 @@ func newSchedulingPartitionFromConfig(conf configs.PartitionConfig, rmID string,
 		return nil, err
 	}
 
-	p.placementManager = placement.NewPlacementManager(p)
+	p.placementManager = NewPlacementManager(p)
 	p.partitionManager = &partitionManager{
 		psc: p,
 		stop: false,
@@ -159,7 +158,7 @@ func (psc *PartitionSchedulingContext) updatePartitionSchedulingContext(updatePa
 		}
 	} else {
 		log.Logger().Info("Creating new placement manager on config reload")
-		psc.placementManager = placement.NewPlacementManager(psc)
+		psc.placementManager = NewPlacementManager(psc)
 	}
 	root := psc.root
 	// update the root queue properties

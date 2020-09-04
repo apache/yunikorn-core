@@ -55,7 +55,7 @@ func newReservation(node *SchedulingNode, app *SchedulingApplication, ask *sched
 	if appBased {
 		res.nodeID = node.NodeID
 	} else {
-		res.appID = app.ApplicationInfo.ApplicationID
+		res.appID = app.ApplicationID
 	}
 	return res
 }
@@ -69,7 +69,7 @@ func reservationKey(node *SchedulingNode, app *SchedulingApplication, ask *sched
 		return ""
 	}
 	if node == nil {
-		return app.ApplicationInfo.ApplicationID + "|" + ask.AskProto.AllocationKey
+		return app.ApplicationID + "|" + ask.AskProto.AllocationKey
 	}
 	return node.NodeID + "|" + ask.AskProto.AllocationKey
 }
@@ -86,5 +86,5 @@ func (r *reservation) String() string {
 	if r.nodeID == "" {
 		return r.node.NodeID + " -> " + r.appID + "|" + r.askKey
 	}
-	return r.app.ApplicationInfo.ApplicationID + " -> " + r.nodeID + "|" + r.askKey
+	return r.app.ApplicationID + " -> " + r.nodeID + "|" + r.askKey
 }

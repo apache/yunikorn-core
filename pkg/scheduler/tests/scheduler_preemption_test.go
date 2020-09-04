@@ -148,7 +148,7 @@ func TestBasicPreemption(t *testing.T) {
 	waitForPendingQueueResource(t, schedulerQueueA, 0, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Assert(t, schedulerQueueA.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 200)
+	assert.Assert(t, schedulerQueueA.GetAllocatedResource().Resources[resources.MEMORY] == 200)
 
 	// Application-2 Ask for 20 resources
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -181,7 +181,7 @@ func TestBasicPreemption(t *testing.T) {
 	waitForPendingQueueResource(t, schedulerQueueB, 1000, 1000)
 
 	// Check allocated resources of queue, should be 0
-	assert.Assert(t, schedulerQueueB.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 0)
+	assert.Assert(t, schedulerQueueB.GetAllocatedResource().Resources[resources.MEMORY] == 0)
 
 	// Now we do a preemption.
 	scheduler.SingleStepPreemption()

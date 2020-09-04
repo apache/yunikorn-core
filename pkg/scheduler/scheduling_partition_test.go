@@ -36,6 +36,15 @@ func newTestPartition() (*PartitionSchedulingContext, error) {
 	return newSchedulingPartitionFromConfig(config.Partitions[0], "test")
 }
 
+// Create a partition for testing from a yaml configuration
+func createMockPartitionSchedulingContextFromConfig(configBytes []byte) (*PartitionSchedulingContext, error) {
+	config, err:= createSchedulerConfig(configBytes)
+	if err != nil {
+		return nil, err
+	}
+	return newSchedulingPartitionFromConfig(config.Partitions[0], "test")
+}
+
 func TestNewPartition(t *testing.T) {
 	_, err := newTestPartition()
 	if err != nil {

@@ -16,6 +16,9 @@
  limitations under the License.
 */
 
+// FIXME: [wtan]: I'm not sure if this is still needed, in scheduler, we initial scheduling partition from config, that should have sufficient checks.
+// Thus disable it now for further examination
+
 package scheduler
 
 import (

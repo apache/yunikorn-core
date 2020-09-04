@@ -36,7 +36,6 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/schedulerevent"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -859,21 +858,21 @@ func (s *Scheduler) GetSchedulingNode(nodeID, partitionName string) *SchedulingN
 // Release preempted resources after the cache has been updated.
 // This is a lock free call: locks are taken while retrieving the node and when updating the node
 // FIXME: preemption logic isn't correct anyway ..
-func (s *Scheduler) releasePreemptedResources(resources []schedulerevent.PreemptedNodeResource) {
-	// no resources to release just return
-	if len(resources) == 0 {
-		return
-	}
-	// walk over the list of preempted resources
-	for _, nodeRes := range resources {
-		node := s.GetSchedulingNode(nodeRes.NodeID, nodeRes.Partition)
-		if node == nil {
-			log.Logger().Info("scheduling node not found trying to release preempted resources",
-				zap.String("nodeID", nodeRes.NodeID),
-				zap.String("partitionName", nodeRes.Partition),
-				zap.Any("resource", nodeRes.PreemptedRes))
-			continue
-		}
-		node.decPreemptingResource(nodeRes.PreemptedRes)
-	}
-}
+// func (s *Scheduler) releasePreemptedResources(resources []schedulerevent.PreemptedNodeResource) {
+// 	// no resources to release just return
+// 	if len(resources) == 0 {
+// 		return
+// 	}
+// 	// walk over the list of preempted resources
+// 	for _, nodeRes := range resources {
+// 		node := s.GetSchedulingNode(nodeRes.NodeID, nodeRes.Partition)
+// 		if node == nil {
+// 			log.Logger().Info("scheduling node not found trying to release preempted resources",
+// 				zap.String("nodeID", nodeRes.NodeID),
+// 				zap.String("partitionName", nodeRes.Partition),
+// 				zap.Any("resource", nodeRes.PreemptedRes))
+// 			continue
+// 		}
+// 		node.decPreemptingResource(nodeRes.PreemptedRes)
+// 	}
+// }

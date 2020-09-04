@@ -20,10 +20,12 @@ package scheduler
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -110,4 +112,31 @@ func (sa* schedulingAllocation) SetUUID(uuid string) {
 	defer sa.Unlock()
 
 	sa.uuid = uuid
+}
+
+func (sa* schedulingAllocation) GetNodeId() string {
+
+
+	return sa.nodeID
+}
+
+func (sa* schedulingAllocation) GetAllocationDAO() *dao.AllocationDAOInfo {
+	sa.RLock()
+	defer sa.RUnlock()
+
+	ask := sa.SchedulingAsk
+	askProto := ask.AskProto
+	allocInfo := dao.AllocationDAOInfo{
+		AllocationKey:    askProto.AllocationKey,
+		AllocationTags:   askProto.Tags,
+		UUID:             sa.uuid,
+		ResourcePerAlloc: strings.Trim(ask.AllocatedResource.String(), "map"),
+		Priority:         askProto.Priority.String(),
+		QueueName:        ask.QueueName,
+		NodeID:           sa.nodeID,
+		ApplicationID:    ask.ApplicationID,
+		Partition:        ask.PartitionName,
+	}
+
+	return &allocInfo
 }

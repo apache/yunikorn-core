@@ -50,7 +50,7 @@ func (filter Filter) allowUser(userObj security.UserGroup) bool {
 	filteredUser := filter.filterUser(user)
 	// if we have found the user in the list stop looking and return
 	if filteredUser {
-		log.Logger().Debug("Filter matched user getName", zap.String("user", user))
+		log.Logger().Debug("Filter matched user GetName", zap.String("user", user))
 		return filteredUser && filter.allow
 	}
 	// not in the user list, check the groups in the list
@@ -75,7 +75,7 @@ func (filter Filter) filterUser(user string) bool {
 	return filter.userList[user]
 }
 
-// Filter the user based on group getName: return true if the group is in the list or regexp and false if not
+// Filter the user based on group GetName: return true if the group is in the list or regexp and false if not
 func (filter Filter) filterGroup(group string) bool {
 	// if regexp is set run regexp
 	if filter.groupExp != nil {

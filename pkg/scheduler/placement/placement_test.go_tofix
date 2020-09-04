@@ -21,6 +21,7 @@ package placement
 import (
 	"testing"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
@@ -36,7 +37,7 @@ func TestManagerNew(t *testing.T) {
 		RmID: "test",
 	}
 	// basic info without rules, manager should not init
-	man := NewPlacementManager(&pi)
+	man := scheduler.NewPlacementManager(&pi)
 	if man.initialised {
 		t.Error("Placement manager marked initialised without rules")
 	}
@@ -55,7 +56,7 @@ func TestManagerInit(t *testing.T) {
 		RmID: "test",
 	}
 	// basic info without rules, manager should not init no error
-	man := NewPlacementManager(&pi)
+	man := scheduler.NewPlacementManager(&pi)
 	if man.initialised {
 		t.Error("Placement manager marked initialised without rules")
 	}
@@ -70,10 +71,10 @@ func TestManagerInit(t *testing.T) {
 	}
 	err = man.initialise(rules)
 	if err == nil || man.initialised {
-		t.Error("initialise with 'unknown' rule list should have failed")
+		t.Error("initialise with 'unknown' Rule list should have failed")
 	}
 
-	// init the manager with one rule
+	// init the manager with one Rule
 	rules = []configs.PlacementRule{
 		{Name: "test"},
 	}
@@ -101,7 +102,7 @@ func TestManagerUpdate(t *testing.T) {
 		RmID: "test",
 	}
 	// basic info without rules, manager should not init
-	man := NewPlacementManager(&pi)
+	man := scheduler.NewPlacementManager(&pi)
 	// update the manager
 	rules := []configs.PlacementRule{
 		{Name: "test"},
@@ -129,20 +130,20 @@ func TestManagerBuildRule(t *testing.T) {
 		Root: &cache.QueueInfo{Name: "Root"},
 		RmID: "test",
 	}
-	// basic with 1 rule
-	man := NewPlacementManager(&pi)
+	// basic with 1 Rule
+	man := scheduler.NewPlacementManager(&pi)
 	rules := []configs.PlacementRule{
 		{Name: "test"},
 	}
 	ruleObjs, err := man.buildRules(rules)
 	if err != nil {
-		t.Errorf("test rule build should not have failed, err: %v", err)
+		t.Errorf("test Rule build should not have failed, err: %v", err)
 	}
 	if len(ruleObjs) != 1 {
-		t.Errorf("test rule build should have created 1 rule found: %d", len(ruleObjs))
+		t.Errorf("test Rule build should have created 1 Rule found: %d", len(ruleObjs))
 	}
 
-	// rule with a parent rule should only be 1 rule in the list
+	// Rule with a parent Rule should only be 1 Rule in the list
 	rules = []configs.PlacementRule{
 		{Name: "test",
 			Parent: &configs.PlacementRule{
@@ -152,24 +153,24 @@ func TestManagerBuildRule(t *testing.T) {
 	}
 	ruleObjs, err = man.buildRules(rules)
 	if err != nil || len(ruleObjs) != 1 {
-		t.Errorf("test rule build should not have failed and created 1 top level rule, err: %v, rules: %v", err, ruleObjs)
+		t.Errorf("test Rule build should not have failed and created 1 top level Rule, err: %v, rules: %v", err, ruleObjs)
 	} else {
 		parent := ruleObjs[0].getParent()
-		if parent == nil || parent.getName() != "test" {
-			t.Error("test rule build should have created 2 rules: parent not found")
+		if parent == nil || parent.GetName() != "test" {
+			t.Error("test Rule build should have created 2 rules: parent not found")
 		}
 	}
 
-	// two rules in order: cannot use the same rule names as we can not check them
+	// two rules in order: cannot use the same Rule names as we can not check them
 	rules = []configs.PlacementRule{
 		{Name: "user"},
 		{Name: "test"},
 	}
 	ruleObjs, err = man.buildRules(rules)
 	if err != nil || len(ruleObjs) != 2 {
-		t.Errorf("rule build should not have failed and created 2 rule, err: %v, rules: %v", err, ruleObjs)
-	} else if ruleObjs[0].getName() != "user" || ruleObjs[1].getName() != "test" {
-		t.Errorf("rule build order is not preserved: %v", ruleObjs)
+		t.Errorf("Rule build should not have failed and created 2 Rule, err: %v, rules: %v", err, ruleObjs)
+	} else if ruleObjs[0].GetName() != "user" || ruleObjs[1].GetName() != "test" {
+		t.Errorf("Rule build order is not preserved: %v", ruleObjs)
 	}
 }
 
@@ -192,7 +193,7 @@ partitions:
 	partInfo, err := CreatePartitionInfo([]byte(data))
 	assert.NilError(t, err, "Partition create failed with error")
 	// basic info without rules, manager should init
-	man := NewPlacementManager(partInfo)
+	man := scheduler.NewPlacementManager(partInfo)
 	if man == nil {
 		t.Fatal("placement manager create failed")
 	}
@@ -220,7 +221,7 @@ partitions:
 	}
 	appInfo := cache.NewApplicationInfo("app1", "default", "", user, tags)
 
-	// user rule existing queue, acl allowed
+	// user Rule existing queue, acl allowed
 	err = man.PlaceApplication(appInfo)
 	queueName := appInfo.QueueName
 	if err != nil || queueName != "root.testparent.testchild" {
@@ -231,7 +232,7 @@ partitions:
 		Groups: []string{},
 	}
 
-	// user rule new queue: fails on create flag
+	// user Rule new queue: fails on create flag
 	appInfo = cache.NewApplicationInfo("app1", "default", "", user, tags)
 	err = man.PlaceApplication(appInfo)
 	queueName = appInfo.QueueName
@@ -239,7 +240,7 @@ partitions:
 		t.Errorf("leaf to create, no create flag: app should not have been placed, queue: '%s', error: %v", queueName, err)
 	}
 
-	// provided rule (2nd rule): queue acl allowed, anyone create
+	// provided Rule (2nd Rule): queue acl allowed, anyone create
 	appInfo = cache.NewApplicationInfo("app1", "default", "root.fixed.leaf", user, tags)
 	err = man.PlaceApplication(appInfo)
 	queueName = appInfo.QueueName
@@ -247,7 +248,7 @@ partitions:
 		t.Errorf("leave create, acl allow: app should have been placed, queue: '%s', error: %v", queueName, err)
 	}
 
-	// provided rule (2rd): queue acl deny, queue does not exist
+	// provided Rule (2rd): queue acl deny, queue does not exist
 	user = security.UserGroup{
 		User:   "unknown-user",
 		Groups: []string{},
@@ -259,7 +260,7 @@ partitions:
 		t.Errorf("leaf to create, acl deny: app should not have been placed, queue: '%s', error: %v", queueName, err)
 	}
 
-	// tag rule (3rd) check queue acl deny, queue was created above)
+	// tag Rule (3rd) check queue acl deny, queue was created above)
 	tags = map[string]string{"namespace": "root.fixed.leaf"}
 	appInfo = cache.NewApplicationInfo("app1", "default", "", user, tags)
 	err = man.PlaceApplication(appInfo)
@@ -268,7 +269,7 @@ partitions:
 		t.Errorf("existing leaf, acl deny: app should not have been placed, queue: '%s', error: %v", queueName, err)
 	}
 
-	// tag rule (3rd) queue acl allow, queue already exists
+	// tag Rule (3rd) queue acl allow, queue already exists
 	user = security.UserGroup{
 		User:   "other-user",
 		Groups: []string{},
@@ -280,7 +281,7 @@ partitions:
 		t.Errorf("existing leaf, acl allow: app should have been placed, queue: '%s', error: %v", queueName, err)
 	}
 
-	// provided rule (2rd): submit to parent
+	// provided Rule (2rd): submit to parent
 	user = security.UserGroup{
 		User:   "other-user",
 		Groups: []string{},

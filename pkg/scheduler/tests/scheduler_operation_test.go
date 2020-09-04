@@ -56,16 +56,16 @@ partitions:
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Check queues of cache and scheduler.
-	partitionInfo := ms.clusterInfo.GetPartition("[rm:123]default")
-	assert.Assert(t, partitionInfo.Root.GetMaxResource() == nil, "partition info max resource nil")
+	partitionInfo := ms.scheduler.GetPartition("[rm:123]default")
+	assert.Assert(t, partitionInfo.Root().GetMaxResource() == nil, "partition info max resource nil")
 
 	// Check scheduling queue root
 	schedulerQueueRoot := ms.getSchedulingQueue("root")
-	assert.Assert(t, schedulerQueueRoot.QueueInfo.GetMaxResource() == nil)
+	assert.Assert(t, schedulerQueueRoot.GetMaxResource() == nil)
 
 	// Check scheduling queue a
 	schedulerQueueA := ms.getSchedulingQueue("root.a")
-	assert.Assert(t, 150 == schedulerQueueA.QueueInfo.GetMaxResource().Resources[resources.MEMORY])
+	assert.Assert(t, 150 == schedulerQueueA.GetMaxResource().Resources[resources.MEMORY])
 
 	// Add one application
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -78,8 +78,8 @@ partitions:
 
 	// Check scheduling app
 	schedulingApp := ms.getSchedulingApplication("app-1")
-	assert.Equal(t, schedulingApp.ApplicationInfo.ApplicationID, "app-1")
-	assert.Equal(t, len(schedulingApp.ApplicationInfo.GetAllAllocations()), 0)
+	assert.Equal(t, schedulingApp.ApplicationID, "app-1")
+	assert.Equal(t, len(schedulingApp.GetAllAllocations()), 0)
 
 	// App asks for 2 allocations
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -175,16 +175,16 @@ partitions:
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Check queues of cache and scheduler.
-	partitionInfo := ms.clusterInfo.GetPartition("[rm:123]default")
-	assert.Assert(t, partitionInfo.Root.GetMaxResource() == nil, "partition info max resource nil")
+	partitionInfo := ms.scheduler.GetPartition("[rm:123]default")
+	assert.Assert(t, partitionInfo.Root().GetMaxResource() == nil, "partition info max resource nil")
 
 	// Check scheduling queue root
 	schedulerQueueRoot := ms.getSchedulingQueue("root")
-	assert.Assert(t, schedulerQueueRoot.QueueInfo.GetMaxResource() == nil)
+	assert.Assert(t, schedulerQueueRoot.GetMaxResource() == nil)
 
 	// Check scheduling queue a
 	schedulerQueueA := ms.getSchedulingQueue("root.a")
-	assert.Assert(t, 150 == schedulerQueueA.QueueInfo.GetMaxResource().Resources[resources.MEMORY])
+	assert.Assert(t, 150 == schedulerQueueA.GetMaxResource().Resources[resources.MEMORY])
 
 	// Add one application
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -197,8 +197,8 @@ partitions:
 
 	// Check scheduling app
 	schedulingApp := ms.getSchedulingApplication("app-1")
-	assert.Equal(t, schedulingApp.ApplicationInfo.ApplicationID, "app-1")
-	assert.Equal(t, len(schedulingApp.ApplicationInfo.GetAllAllocations()), 0)
+	assert.Equal(t, schedulingApp.ApplicationID, "app-1")
+	assert.Equal(t, len(schedulingApp.GetAllAllocations()), 0)
 
 	// App asks for 2 allocations
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -264,7 +264,7 @@ partitions:
 	waitForPendingAppResource(t, schedulingApp, 0, 1000)
 	waitForAllocatedQueueResource(t, schedulerQueueA, 20, 1000)
 	waitForAllocatedAppResource(t, schedulingApp, 20, 1000)
-	waitForNodesAllocatedResource(t, ms.clusterInfo, "[rm:123]default",
+	waitForNodesAllocatedResource(t, ms.scheduler, "[rm:123]default",
 		[]string{"node-1:1234"}, 20, 1000)
 
 	// Make sure we get correct allocations
@@ -315,8 +315,8 @@ partitions:
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Check queues of cache and scheduler.
-	partitionInfo := ms.clusterInfo.GetPartition("[rm:123]default")
-	assert.Assert(t, partitionInfo.Root.GetMaxResource() == nil, "partition info max resource nil")
+	partitionInfo := ms.scheduler.GetPartition("[rm:123]default")
+	assert.Assert(t, partitionInfo.Root().GetMaxResource() == nil, "partition info max resource nil")
 
 	// Register a node
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -338,16 +338,14 @@ partitions:
 	assert.NilError(t, err, "UpdateRequest failed")
 
 	// Wait until node is registered
-	context := ms.scheduler.GetClusterSchedulingContext()
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
-	waitForNewSchedulerNode(t, context, "node-1:1234", "[rm:123]default", 1000)
+	waitForNewSchedulerNode(t, ms.scheduler, "node-1:1234", "[rm:123]default", 1000)
 
 	// verify node capacity
 	assert.Equal(t, len(partitionInfo.GetNodes()), 1)
 	node1 := partitionInfo.GetNode("node-1:1234")
 	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.MEMORY]), int64(100))
-	schedulingNode1 := ms.scheduler.GetClusterSchedulingContext().
-		GetSchedulingNode("node-1:1234", "[rm:123]default")
+	schedulingNode1 := ms.scheduler.GetSchedulingNode("node-1:1234", "[rm:123]default")
 	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[resources.MEMORY]), int64(0))
 	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[resources.MEMORY]), int64(100))
 
@@ -371,7 +369,7 @@ partitions:
 
 	assert.NilError(t, err, "UpdateRequest failed")
 
-	waitForNodesAvailableResource(t, ms.clusterInfo, "[rm:123]default",
+	waitForNodesAvailableResource(t, ms.scheduler, "[rm:123]default",
 		[]string{"node-1:1234"}, 300, 1000)
 	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.MEMORY]), int64(300))
 	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.VCORE]), int64(10))
@@ -403,8 +401,8 @@ partitions:
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Check queues of cache and scheduler.
-	partitionInfo := ms.clusterInfo.GetPartition("[rm:123]default")
-	assert.Assert(t, partitionInfo.Root.GetMaxResource() == nil, "partition info max resource nil")
+	partitionInfo := ms.scheduler.GetPartition("[rm:123]default")
+	assert.Assert(t, partitionInfo.Root().GetMaxResource() == nil, "partition info max resource nil")
 
 	// Register a node
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -426,16 +424,14 @@ partitions:
 	assert.NilError(t, err, "UpdateRequest failed")
 
 	// Wait until node is registered
-	context := ms.scheduler.GetClusterSchedulingContext()
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
-	waitForNewSchedulerNode(t, context, "node-1:1234", "[rm:123]default", 1000)
+	waitForNewSchedulerNode(t, ms.scheduler, "node-1:1234", "[rm:123]default", 1000)
 
 	// verify node capacity
 	assert.Equal(t, len(partitionInfo.GetNodes()), 1)
 	node1 := partitionInfo.GetNode("node-1:1234")
 	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.MEMORY]), int64(100))
-	schedulingNode1 := ms.scheduler.GetClusterSchedulingContext().
-		GetSchedulingNode("node-1:1234", "[rm:123]default")
+	schedulingNode1 := ms.scheduler.GetSchedulingNode("node-1:1234", "[rm:123]default")
 	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[resources.MEMORY]), int64(0))
 	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[resources.MEMORY]), int64(100))
 
@@ -459,7 +455,7 @@ partitions:
 
 	assert.NilError(t, err, "UpdateRequest failed")
 
-	waitForNodesAvailableResource(t, ms.clusterInfo, "[rm:123]default",
+	waitForNodesAvailableResource(t, ms.scheduler, "[rm:123]default",
 		[]string{"node-1:1234"}, 20, 1000)
 	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.MEMORY]), int64(100))
 	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.VCORE]), int64(10))

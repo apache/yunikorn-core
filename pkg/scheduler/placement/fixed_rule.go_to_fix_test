@@ -32,17 +32,17 @@ func TestFixedRule(t *testing.T) {
 	conf := configs.PlacementRule{
 		Name: "fixed",
 	}
-	fr, err := newRule(conf)
+	fr, err := NewRule(conf)
 	if err == nil || fr != nil {
-		t.Errorf("fixed rule create did not fail without queue name, err 'nil', rule: %v", fr)
+		t.Errorf("fixed Rule create did not fail without queue name, err 'nil', Rule: %v", fr)
 	}
 	conf = configs.PlacementRule{
 		Name:  "fixed",
 		Value: "testqueue",
 	}
-	fr, err = newRule(conf)
+	fr, err = NewRule(conf)
 	if err != nil || fr == nil {
-		t.Errorf("fixed rule create failed with queue name, err %v", err)
+		t.Errorf("fixed Rule create failed with queue name, err %v", err)
 	}
 	// trying to create using a parent with a fully qualified child
 	conf = configs.PlacementRule{
@@ -53,9 +53,9 @@ func TestFixedRule(t *testing.T) {
 			Value: "testparent",
 		},
 	}
-	fr, err = newRule(conf)
+	fr, err = NewRule(conf)
 	if err == nil || fr != nil {
-		t.Errorf("fixed rule create did not fail with parent rule and qualified child queue name, err 'nil', rule: %v", fr)
+		t.Errorf("fixed Rule create did not fail with parent Rule and qualified child queue name, err 'nil', Rule: %v", fr)
 	}
 }
 
@@ -84,15 +84,15 @@ partitions:
 		Name:  "fixed",
 		Value: "testqueue",
 	}
-	var fr rule
-	fr, err = newRule(conf)
+	var fr Rule
+	fr, err = NewRule(conf)
 	if err != nil || fr == nil {
-		t.Errorf("fixed rule create failed with queue name, err %v", err)
+		t.Errorf("fixed Rule create failed with queue name, err %v", err)
 	}
 	var queue string
-	queue, err = fr.placeApplication(appInfo, partInfo)
+	queue, err = fr.PlaceApplication(appInfo, partInfo)
 	if queue != "root.testqueue" || err != nil {
-		t.Errorf("fixed rule failed to place queue in correct queue '%s', err %v", queue, err)
+		t.Errorf("fixed Rule failed to place queue in correct queue '%s', err %v", queue, err)
 	}
 
 	// fixed queue that exists directly in hierarchy
@@ -100,13 +100,13 @@ partitions:
 		Name:  "fixed",
 		Value: "root.testparent.testchild",
 	}
-	fr, err = newRule(conf)
+	fr, err = NewRule(conf)
 	if err != nil || fr == nil {
-		t.Errorf("fixed rule create failed with queue name, err %v", err)
+		t.Errorf("fixed Rule create failed with queue name, err %v", err)
 	}
-	queue, err = fr.placeApplication(appInfo, partInfo)
+	queue, err = fr.PlaceApplication(appInfo, partInfo)
 	if queue != "root.testparent.testchild" || err != nil {
-		t.Errorf("fixed rule failed to place queue in correct queue '%s', err %v", queue, err)
+		t.Errorf("fixed Rule failed to place queue in correct queue '%s', err %v", queue, err)
 	}
 
 	// fixed queue that does not exists
@@ -115,13 +115,13 @@ partitions:
 		Value:  "newqueue",
 		Create: true,
 	}
-	fr, err = newRule(conf)
+	fr, err = NewRule(conf)
 	if err != nil || fr == nil {
-		t.Errorf("fixed rule create failed with queue name, err %v", err)
+		t.Errorf("fixed Rule create failed with queue name, err %v", err)
 	}
-	queue, err = fr.placeApplication(appInfo, partInfo)
+	queue, err = fr.PlaceApplication(appInfo, partInfo)
 	if queue != "root.newqueue" || err != nil {
-		t.Errorf("fixed rule failed to place queue in to be created queue '%s', err %v", queue, err)
+		t.Errorf("fixed Rule failed to place queue in to be created queue '%s', err %v", queue, err)
 	}
 
 	// trying to place in a parent queue should not fail: failure happens on create in this case
@@ -129,13 +129,13 @@ partitions:
 		Name:  "fixed",
 		Value: "root.testparent",
 	}
-	fr, err = newRule(conf)
+	fr, err = NewRule(conf)
 	if err != nil || fr == nil {
-		t.Errorf("fixed rule create failed with queue name, err %v", err)
+		t.Errorf("fixed Rule create failed with queue name, err %v", err)
 	}
-	queue, err = fr.placeApplication(appInfo, partInfo)
+	queue, err = fr.PlaceApplication(appInfo, partInfo)
 	if queue != "root.testparent" || err != nil {
-		t.Errorf("fixed rule did fail with parent queue '%s', error %v", queue, err)
+		t.Errorf("fixed Rule did fail with parent queue '%s', error %v", queue, err)
 	}
 
 	// trying to place in a child using a parent
@@ -147,12 +147,12 @@ partitions:
 			Value: "testparent",
 		},
 	}
-	fr, err = newRule(conf)
+	fr, err = NewRule(conf)
 	if err != nil || fr == nil {
-		t.Errorf("fixed rule create failed with queue name, err %v", err)
+		t.Errorf("fixed Rule create failed with queue name, err %v", err)
 	}
-	queue, err = fr.placeApplication(appInfo, partInfo)
+	queue, err = fr.PlaceApplication(appInfo, partInfo)
 	if queue != "root.testparent.testchild" || err != nil {
-		t.Errorf("fixed rule with parent queue should not have failed '%s', error %v", queue, err)
+		t.Errorf("fixed Rule with parent queue should not have failed '%s', error %v", queue, err)
 	}
 }

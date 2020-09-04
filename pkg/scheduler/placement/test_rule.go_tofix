@@ -21,11 +21,10 @@ package placement
 import (
 	"fmt"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 )
 
-// A simple test rule to place an application based on a nil application.
+// A simple test Rule to place an application based on a nil application.
 // Testing only.
 type testRule struct {
 	basicRule
@@ -35,18 +34,18 @@ func (tr *testRule) getName() string {
 	return "test"
 }
 
-// Simple init for the test rule: allow everything as per a normal rule.
+// Simple init for the test Rule: allow everything as per a normal Rule.
 func (tr *testRule) initialise(conf configs.PlacementRule) error {
 	tr.create = conf.Create
 	tr.filter = newFilter(conf.Filter)
 	var err = error(nil)
 	if conf.Parent != nil {
-		tr.parent, err = newRule(*conf.Parent)
+		tr.parent, err = NewRule(*conf.Parent)
 	}
 	return err
 }
 
-// Simple test rule that just checks the app passed in and returns fixed queue names.
+// Simple test Rule that just checks the app passed in and returns fixed queue names.
 func (tr *testRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
 	if app == nil {
 		return "", fmt.Errorf("nil app passed in")

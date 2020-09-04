@@ -16,7 +16,7 @@
  limitations under the License.
 */
 
-package placement
+package scheduler
 
 import (
 	"fmt"
@@ -25,19 +25,19 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/placement"
 	"go.uber.org/zap"
 )
 
 type AppPlacementManager struct {
 	name        string
-	psc         *scheduler.PartitionSchedulingContext
-	rules       []rule
+	psc         *PartitionSchedulingContext
+	rules       []placement.Rule
 	initialised bool
 	lock        sync.RWMutex
 }
 
-func NewPlacementManager(psc *scheduler.PartitionSchedulingContext) *AppPlacementManager {
+func NewPlacementManager(psc *PartitionSchedulingContext) *AppPlacementManager {
 	m := &AppPlacementManager{
 		name: psc.Name,
 		psc:  psc,
@@ -69,7 +69,7 @@ func (m *AppPlacementManager) UpdateRules(rules []configs.PlacementRule) error {
 		defer m.lock.Unlock()
 		log.Logger().Info("Placement manager rules removed on config reload")
 		m.initialised = false
-		m.rules = make([]rule, 0)
+		m.rules = make([]placement.Rule, 0)
 	}
 	return nil
 }
@@ -85,7 +85,7 @@ func (m *AppPlacementManager) IsInitialised() bool {
 func (m *AppPlacementManager) initialise(rules []configs.PlacementRule) error {
 	log.Logger().Info("Building new rule list for placement manager")
 	// build temp list from new config
-	tempRules, err := m.buildRules(rules)
+	tempRules, err := placement.BuildRules(rules)
 	if err == nil {
 		m.lock.Lock()
 		defer m.lock.Unlock()
@@ -97,34 +97,14 @@ func (m *AppPlacementManager) initialise(rules []configs.PlacementRule) error {
 			for rule := range m.rules {
 				log.Logger().Debug("rule set",
 					zap.Int("ruleNumber", rule),
-					zap.String("ruleName", m.rules[rule].getName()))
+					zap.String("ruleName", m.rules[rule].GetName()))
 			}
 		}
 	}
 	return err
 }
 
-// Build the rule set based on the config.
-// If the rule set is correct and can be used the new set is returned.
-// If any error is encountered a nil array is returned and the error set
-func (m *AppPlacementManager) buildRules(rules []configs.PlacementRule) ([]rule, error) {
-	// catch an empty list
-	if len(rules) == 0 {
-		return nil, fmt.Errorf("placement manager rule list request is empty")
-	}
-	// build temp list from new config
-	var newRules []rule
-	for _, conf := range rules {
-		buildRule, err := newRule(conf)
-		if err != nil {
-			return nil, err
-		}
-		newRules = append(newRules, buildRule)
-	}
-	return newRules, nil
-}
-
-func (m *AppPlacementManager) PlaceApplication(app *scheduler.SchedulingApplication) error {
+func (m *AppPlacementManager) PlaceApplication(app *SchedulingApplication) error {
 	// Placement manager not initialised cannot place application, just return
 	m.lock.RLock()
 	defer m.lock.RUnlock()
@@ -135,12 +115,13 @@ func (m *AppPlacementManager) PlaceApplication(app *scheduler.SchedulingApplicat
 	var err error
 	for _, checkRule := range m.rules {
 		log.Logger().Debug("Executing rule for placing application",
-			zap.String("ruleName", checkRule.getName()),
+			zap.String("ruleName", checkRule.GetName()),
 			zap.String("application", app.ApplicationID))
-		queueName, err = checkRule.placeApplication(app, m.info)
+		// FIXME: Now disabled placement rule
+		// queueName, err = checkRule.PlaceApplication(app, m)
 		if err != nil {
 			log.Logger().Error("rule execution failed",
-				zap.String("ruleName", checkRule.getName()),
+				zap.String("ruleName", checkRule.GetName()),
 				zap.Error(err))
 			app.QueueName = ""
 			return err
@@ -153,7 +134,7 @@ func (m *AppPlacementManager) PlaceApplication(app *scheduler.SchedulingApplicat
 			if queue == nil {
 				current := queueName
 				for queue == nil {
-					current = current[0:strings.LastIndex(current, scheduler.DOT)]
+					current = current[0:strings.LastIndex(current, DOT)]
 					// check if the queue exist
 					queue = m.psc.GetQueue(current)
 				}
@@ -161,7 +142,7 @@ func (m *AppPlacementManager) PlaceApplication(app *scheduler.SchedulingApplicat
 				if !queue.CheckSubmitAccess(app.GetUser()) {
 					log.Logger().Debug("Submit access denied on queue",
 						zap.String("queueName", queue.QueuePath),
-						zap.String("ruleName", checkRule.getName()),
+						zap.String("ruleName", checkRule.GetName()),
 						zap.String("application", app.ApplicationID))
 					// reset the queue name for the last rule in the chain
 					queueName = ""
@@ -177,7 +158,7 @@ func (m *AppPlacementManager) PlaceApplication(app *scheduler.SchedulingApplicat
 				// Check if the user is allowed to submit to this queueName, if not next rule
 				log.Logger().Debug("Submit access denied on queue",
 					zap.String("queueName", queueName),
-					zap.String("ruleName", checkRule.getName()),
+					zap.String("ruleName", checkRule.GetName()),
 					zap.String("application", app.ApplicationID))
 				// reset the queue name for the last rule in the chain
 				queueName = ""

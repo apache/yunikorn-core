@@ -47,6 +47,9 @@ Want to know more about the value of the YuniKorn project, and what YuniKorn can
 Please read [get involved](http://yunikorn.apache.org/community/get_involved) document if you want to discuss issues,
 contribute your ideas, explore use cases, or participate the development.
 
+If you want to contribute code to this repo, please read the [developer doc](http://yunikorn.apache.org/docs/next/developer_guide/build).
+All the design docs are available [here](http://yunikorn.apache.org/docs/next/design/architecture).
+
 ## Code Structure
 
 Apache YuniKorn (Incubating) project has the following git repositories:
@@ -60,42 +63,3 @@ Apache YuniKorn (Incubating) project has the following git repositories:
 
 The `yunikorn-core` is the brain of the scheduler, which makes placement decisions (allocate container X on node Y) according
 to the builtin rich scheduling policies. Scheduler core implementation is agnostic to the underneath resource manager system.
-
-## Core component build
-
-The scheduler core, this repository build, by itself does not provide a functional scheduler. 
-It just builds the core scheduler functionality without any resource managers or shims.
-A functional scheduler must have at least one resource manager that registers.
-
-### Build steps
-
-The core component contains two command line tools: the `simplescheduler` and the `schedulerclient`.
-The two command line tools have been provided as examples only and are not supposed to implement all functionality.
-
-Building the example command line tools:
-```
-make commands
-```  
-
-Run all unit tests for the core component: 
-```
-make test
-```
-Any changes made to the core code should not cause any existing tests to fail.
-
-Running the lint tool over the current code:
-```
-make lint
-```
-See the [coding guidelines documentation](http://yunikorn.apache.org/community/coding_guidelines) for more details. 
-
-As a utility target you can check that all files that must have a license have the correct license by running: 
-```
-make common-check-license
-```
-
-## Design documents
-
-All design documents are located in the YuniKorn website. The core component design documents 
-also contains the design documents for cross component designs.
-[List of design documents](http://yunikorn.apache.org/docs/next/design/architecture)

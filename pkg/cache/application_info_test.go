@@ -26,6 +26,7 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/testUtils"
 )
 
 func newApplicationInfo(appID, partition, queueName string) *ApplicationInfo {
@@ -160,25 +161,17 @@ func TestGetTag(t *testing.T) {
 func TestOnStatusChangeCalled(t *testing.T) {
 	appInfo := newApplicationInfo("app-00001", "default", "root.a")
 	assert.Equal(t, appInfo.GetApplicationState(), New.String())
-	mockHandler := &MockEventHandler{eventHandled: false}
+	mockHandler := &testUtils.MockEventHandler{EventHandled: false}
 	appInfo.eventHandlers.RMProxyEventHandler = mockHandler
 
 	err := appInfo.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected")
-	assert.Assert(t, mockHandler.eventHandled)
+	assert.Assert(t, mockHandler.EventHandled)
 
-	mockHandler.eventHandled = false
+	mockHandler.EventHandled = false
 	// accepted to rejected: error expected
 	err = appInfo.HandleApplicationEvent(RejectApplication)
 	assert.Assert(t, err != nil, "error expected ")
 	assert.Equal(t, appInfo.GetApplicationState(), Accepted.String())
-	assert.Assert(t, !mockHandler.eventHandled)
-}
-
-type MockEventHandler struct {
-	eventHandled bool
-}
-
-func (m *MockEventHandler) HandleEvent(ev interface{}) {
-	m.eventHandled = true
+	assert.Assert(t, !mockHandler.EventHandled)
 }

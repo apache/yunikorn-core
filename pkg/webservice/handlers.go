@@ -376,18 +376,15 @@ func updateConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func buildUpdateResponse(success bool, reason string, w http.ResponseWriter) {
-	var result dao.UpdateConfResponse
 	if len(reason) > 0 {
 		log.Logger().Info("Result of configuration update: ",
 			zap.Bool("Result", success),
 			zap.String("Reason in case of failure", reason))
 	}
-	result.Success = success
-	result.Reason = reason
+
 	if success {
-		if err := json.NewEncoder(w).Encode(result); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Configuration updates successfully"))
 	} else {
 		http.Error(w, reason, http.StatusConflict)
 	}

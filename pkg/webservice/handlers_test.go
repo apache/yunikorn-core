@@ -24,18 +24,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
-	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/schedulerevent"
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
-
 	"gopkg.in/yaml.v2"
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/testUtils"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
+	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 const startConf = `
@@ -404,11 +402,7 @@ func TestSaveConfigMapErrorExpected(t *testing.T) {
 func TestBuildUpdateResponseSuccess(t *testing.T) {
 	resp := &MockResponseWriter{}
 	buildUpdateResponse(true, "", resp)
-	var ucr dao.UpdateConfResponse
-	err := json.Unmarshal(resp.outputBytes, &ucr)
-	assert.NilError(t, err, "No error expected")
-	assert.Equal(t, "", ucr.Reason, "Response reason should be empty")
-	assert.Equal(t, true, ucr.Success, "Response success flag should be true")
+	assert.Equal(t, http.StatusOK, resp.statusCode, "Response should be OK")
 }
 
 func TestBuildUpdateResponseFailure(t *testing.T) {
@@ -419,38 +413,14 @@ func TestBuildUpdateResponseFailure(t *testing.T) {
 	assert.Assert(t, strings.Contains(string(resp.outputBytes), reason), "Error message should contain the reason")
 }
 
-type mockScheduler struct {
-	clusterInfo *cache.ClusterInfo
-}
-
-func (m mockScheduler) HandleEvent(ev interface{}) {
-	go handlePartitionUpdates(ev)
-}
-
-func handlePartitionUpdates(ev interface{}) {
-	switch v := ev.(type) {
-	case *schedulerevent.SchedulerUpdatePartitionsConfigEvent:
-		v.ResultChannel <- &commonevents.Result{
-			Succeeded: true,
-		}
-	case *schedulerevent.SchedulerDeletePartitionsConfigEvent:
-		v.ResultChannel <- &commonevents.Result{
-			Succeeded: true,
-		}
-	}
-}
-
 func TestUpdateConfig(t *testing.T) {
 	prepareSchedulerForConfigChange(t)
 	resp := &MockResponseWriter{}
 	req, err := http.NewRequest("PUT", "", strings.NewReader(updatedConf))
 	assert.NilError(t, err, "Failed to create the request")
 	updateConfig(resp, req)
-	var ucr dao.UpdateConfResponse
-	err = json.Unmarshal(resp.outputBytes, &ucr)
 	assert.NilError(t, err, "No error expected")
-	assert.Equal(t, true, ucr.Success, "Success is expected")
-	assert.Assert(t, len(ucr.Reason) == 0, "No error reason expected")
+	assert.Equal(t, http.StatusOK, resp.statusCode, "No error expected")
 }
 
 func TestUpdateConfigInvalidConf(t *testing.T) {
@@ -466,7 +436,7 @@ func TestUpdateConfigInvalidConf(t *testing.T) {
 func prepareSchedulerForConfigChange(t *testing.T) {
 	plugins.RegisterSchedulerPlugin(&FakeConfigPlugin{generateError: false})
 	gClusterInfo = cache.NewClusterInfo()
-	scheduler := mockScheduler{gClusterInfo}
+	scheduler := &testUtils.MockEventHandler{EventHandled: false}
 	gClusterInfo.EventHandlers.SchedulerEventHandler = scheduler
 	configs.MockSchedulerConfigByData([]byte(startConf))
 	if _, err := cache.SetClusterInfoFromConfigFile(gClusterInfo, "rmID", "default-policy-group"); err != nil {

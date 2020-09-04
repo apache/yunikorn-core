@@ -23,7 +23,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Repo Size](https://img.shields.io/github/repo-size/apache/incubator-yunikorn-core)](https://img.shields.io/github/repo-size/apache/incubator-yunikorn-core)
 
-<img src="https://raw.githubusercontent.com/apache/incubator-yunikorn-core/master/docs/images/logo/yunikorn-logo-blue.png" width="200">
+<img src="https://raw.githubusercontent.com/apache/incubator-yunikorn-core/master/images/logo/yunikorn-logo-blue.png" width="200">
 
 ----
 
@@ -46,6 +46,9 @@ Want to know more about the value of the YuniKorn project, and what YuniKorn can
 
 Please read [get involved](http://yunikorn.apache.org/community/get_involved) document if you want to discuss issues,
 contribute your ideas, explore use cases, or participate the development.
+
+If you want to contribute code to this repo, please read the [developer doc](http://yunikorn.apache.org/docs/next/developer_guide/build).
+All the design docs are available [here](http://yunikorn.apache.org/docs/next/design/architecture).
 
 ## Code Structure
 

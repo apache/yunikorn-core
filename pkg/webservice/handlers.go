@@ -384,7 +384,10 @@ func buildUpdateResponse(success bool, reason string, w http.ResponseWriter) {
 
 	if success {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Configuration updates successfully"))
+		_, err := w.Write([]byte("Configuration updates successfully"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	} else {
 		http.Error(w, reason, http.StatusConflict)
 	}

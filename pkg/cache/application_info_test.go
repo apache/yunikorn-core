@@ -26,7 +26,7 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/testUtils"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/testutils"
 )
 
 func newApplicationInfo(appID, partition, queueName string) *ApplicationInfo {
@@ -161,7 +161,7 @@ func TestGetTag(t *testing.T) {
 func TestOnStatusChangeCalled(t *testing.T) {
 	appInfo := newApplicationInfo("app-00001", "default", "root.a")
 	assert.Equal(t, appInfo.GetApplicationState(), New.String())
-	mockHandler := &testUtils.MockEventHandler{EventHandled: false}
+	mockHandler := &testutils.MockEventHandler{EventHandled: false}
 	appInfo.eventHandlers.RMProxyEventHandler = mockHandler
 
 	err := appInfo.HandleApplicationEvent(RunApplication)

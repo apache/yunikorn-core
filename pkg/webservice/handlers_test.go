@@ -29,7 +29,7 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/testUtils"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/testutils"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
@@ -436,7 +436,7 @@ func TestUpdateConfigInvalidConf(t *testing.T) {
 func prepareSchedulerForConfigChange(t *testing.T) {
 	plugins.RegisterSchedulerPlugin(&FakeConfigPlugin{generateError: false})
 	gClusterInfo = cache.NewClusterInfo()
-	scheduler := &testUtils.MockEventHandler{EventHandled: false}
+	scheduler := &testutils.MockEventHandler{EventHandled: false}
 	gClusterInfo.EventHandlers.SchedulerEventHandler = scheduler
 	configs.MockSchedulerConfigByData([]byte(startConf))
 	if _, err := cache.SetClusterInfoFromConfigFile(gClusterInfo, "rmID", "default-policy-group"); err != nil {

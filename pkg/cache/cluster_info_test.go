@@ -24,7 +24,7 @@ import (
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/testUtils"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/testutils"
 )
 
 func TestUpdateSchedulerConfig(t *testing.T) {
@@ -62,7 +62,7 @@ func TestUpdateSchedulerConfig(t *testing.T) {
 				t.Errorf("Error when load clusterInfo from config %v", err)
 				return
 			}
-			mockHandler := &testUtils.MockEventHandler{EventHandled: false}
+			mockHandler := &testutils.MockEventHandler{EventHandled: false}
 			clusterInfo.EventHandlers.SchedulerEventHandler = mockHandler
 			err := clusterInfo.UpdateSchedulerConfig(&tc.newConfig)
 			assert.NilError(t, err, "Error is not expected")

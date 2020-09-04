@@ -16,7 +16,7 @@
  limitations under the License.
 */
 
-package testUtils
+package testutils
 
 import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"

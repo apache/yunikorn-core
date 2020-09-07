@@ -210,11 +210,7 @@ func getClusterJSON(name string) *dao.ClusterDAOInfo {
 func getClusterUtilJSON(partition *cache.PartitionInfo) []dao.ClusterUtilDAOInfo {
 	utilization := dao.ClusterUtilDAOInfo{}
 	var utilizations []dao.ClusterUtilDAOInfo
-	allocInfo := []*cache.AllocationInfo{}
-	appInfo := partition.GetApplications()
-	for _, value := range appInfo {
-		allocInfo = append(allocInfo, value.GetAllAllocations()...)
-	}
+
 	res := partition.Root.GetMaxResource()
 	for key, value := range res.Resources {
 		if key == "memory" || key == "vcore" {

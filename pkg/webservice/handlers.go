@@ -88,14 +88,13 @@ func getClusterUtilization(w http.ResponseWriter, r *http.Request) {
 	var clusterUtil []*dao.ClustersUtilDAOInfo
 	lists := gClusterInfo.ListPartitions()
 	for _, k := range lists {
-		//var clusterUtil []*dao.ClustersUtilDAOInfo
 		partition := gClusterInfo.GetPartition(k)
 		utilizations := getClusterUtilJSON(partition)
 
 		clusterUtil = append(clusterUtil, &dao.ClustersUtilDAOInfo{
-			PartitionName:	partition.Name,
-			ClustersUtil:	utilizations,
-		}) 
+			PartitionName: partition.Name,
+			ClustersUtil:  utilizations,
+		})
 	}
 
 	if err := json.NewEncoder(w).Encode(clusterUtil); err != nil {
@@ -216,17 +215,15 @@ func getClusterUtilJSON(partition *cache.PartitionInfo) []dao.ClusterUtilDAOInfo
 	for _, value := range appInfo {
 		allocInfo = append(allocInfo, value.GetAllAllocations()...)
 	}
-	//allocInfo := partition.GetAllAllocations()
-	//res := partition.GetTotalPartitionResource()
 	res := partition.Root.GetMaxResource()
 	for key, value := range res.Resources {
-		if (key == "memory" || key == "vcore") {
+		if key == "memory" || key == "vcore" {
 			utilization.ResourceType = key
 			utilization.Total = int64(value)
 			utilization.Used = int64(partition.Root.GetAllocatedResource().Resources[key])
 			percent := ((utilization.Used * int64(100)) / utilization.Total)
 			utilization.Usage = fmt.Sprintf("%d", percent) + "%"
-			utilizations = append(utilizations,utilization)
+			utilizations = append(utilizations, utilization)
 		}
 	}
 

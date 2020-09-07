@@ -83,6 +83,26 @@ func getClusterInfo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func getClusterUtilization(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	var clusterUtil []*dao.ClustersUtilDAOInfo
+	lists := gClusterInfo.ListPartitions()
+	for _, k := range lists {
+		//var clusterUtil []*dao.ClustersUtilDAOInfo
+		partition := gClusterInfo.GetPartition(k)
+		utilizations := getClusterUtilJSON(partition)
+
+		clusterUtil = append(clusterUtil, &dao.ClustersUtilDAOInfo{
+			PartitionName:	partition.Name,
+			ClustersUtil:	utilizations,
+		}) 
+	}
+
+	if err := json.NewEncoder(w).Encode(clusterUtil); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
@@ -186,6 +206,31 @@ func getClusterJSON(name string) *dao.ClusterDAOInfo {
 	clusterInfo.ActiveNodes = strconv.Itoa(partitionContext.GetTotalNodeCount())
 
 	return clusterInfo
+}
+
+func getClusterUtilJSON(partition *cache.PartitionInfo) []dao.ClusterUtilDAOInfo {
+	utilization := dao.ClusterUtilDAOInfo{}
+	var utilizations []dao.ClusterUtilDAOInfo
+	allocInfo := []*cache.AllocationInfo{}
+	appInfo := partition.GetApplications()
+	for _, value := range appInfo {
+		allocInfo = append(allocInfo, value.GetAllAllocations()...)
+	}
+	//allocInfo := partition.GetAllAllocations()
+	//res := partition.GetTotalPartitionResource()
+	res := partition.Root.GetMaxResource()
+	for key, value := range res.Resources {
+		if (key == "memory" || key == "vcore") {
+			utilization.ResourceType = key
+			utilization.Total = int64(value)
+			utilization.Used = int64(partition.Root.GetAllocatedResource().Resources[key])
+			percent := ((utilization.Used * int64(100)) / utilization.Total)
+			utilization.Usage = fmt.Sprintf("%d", percent) + "%"
+			utilizations = append(utilizations,utilization)
+		}
+	}
+
+	return utilizations
 }
 
 func getPartitionJSON(name string) *dao.PartitionDAOInfo {

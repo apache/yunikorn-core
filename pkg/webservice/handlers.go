@@ -364,12 +364,15 @@ func updateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	err = gClusterInfo.UpdateSchedulerConfig(schedulerConf)
 	if err != nil {
+		errorMsg := err.Error()
 		// revert configmap changes
 		_, err := updateConfiguration(oldConf)
 		if err != nil {
-			log.Logger().Error("Configuration rollback failed")
+			msg := "Configuration rollback failed" + "\n" + err.Error()
+			errorMsg += "\n" + msg
+			log.Logger().Error(msg)
 		}
-		buildUpdateResponse(false, err.Error(), w)
+		buildUpdateResponse(false, errorMsg, w)
 		return
 	}
 	buildUpdateResponse(true, "", w)

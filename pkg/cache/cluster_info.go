@@ -49,6 +49,7 @@ type ClusterInfo struct {
 
 	// RM Event Handler
 	EventHandlers handler.EventHandlers
+
 	sync.RWMutex
 }
 

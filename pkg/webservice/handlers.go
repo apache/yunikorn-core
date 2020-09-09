@@ -25,6 +25,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"math"
 
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
@@ -162,6 +163,25 @@ func getNodesInfo(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func getNodesUtilization(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+
+	lists := gClusterInfo.ListPartitions()
+	var result []*dao.NodesUtilDAOInfo 
+	for _, k := range lists {
+		partition := gClusterInfo.GetPartition(k)
+		for name, _ := range partition.GetTotalPartitionResource().Resources {
+			if name == "memory" ||name == "vcore"{
+				nodesUtil := getNodesUtilJSON(partition, name)
+				result = append(result,nodesUtil)
+			}
+		}
+	}
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -314,6 +334,38 @@ func getNodeJSON(nodeInfo *cache.NodeInfo) *dao.NodeDAOInfo {
 		Available:   nodeInfo.GetAvailableResource().DAOString(),
 		Allocations: allocations,
 		Schedulable: nodeInfo.IsSchedulable(),
+	}
+}
+
+func getNodesUtilJSON(partition *cache.PartitionInfo, name string) *dao.NodesUtilDAOInfo {
+	mapResult := make([]int, 10)
+	mapName := make([][]string, 10)
+	var nodeUtil []*dao.NodeUtilDAOInfo
+	for _, node := range partition.GetNodes() {
+		total := int64(node.GetCapacity().Resources[name]) 
+		if float64(total) > 0 {
+			resourceAllocated := float64(node.GetAllocatedResource().Resources[name])
+			v := resourceAllocated / float64(total)
+			idx := int(math.Dim(math.Ceil(v*10), 1))
+			for i := range mapResult {
+				mapResult[i] = 0
+			}
+			mapResult[idx]++
+			mapName[idx] = append(mapName[idx],node.NodeID)
+		}		
+	}
+	for k := 0 ; k < 10 ; k++ {
+		util := &dao.NodeUtilDAOInfo{
+			BucketID: 	fmt.Sprintf("%d",k+1),
+			BucketName: fmt.Sprintf("%d",k*10)+ "-" +fmt.Sprintf("%d",(k+1)*10) + "%",
+			NumOfNodes:	int64(mapResult[k]),
+			NodeNames:	mapName[k],
+		}
+		nodeUtil = append(nodeUtil,util)
+	}
+	return &dao.NodesUtilDAOInfo{
+		ResourceType:	name,
+		NodesUtil:		nodeUtil,
 	}
 }
 

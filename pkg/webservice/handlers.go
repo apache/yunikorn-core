@@ -21,11 +21,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"runtime"
 	"strconv"
 	"strings"
-	"math"
 
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
@@ -172,13 +172,13 @@ func getNodesUtilization(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	lists := gClusterInfo.ListPartitions()
-	var result []*dao.NodesUtilDAOInfo 
+	var result []*dao.NodesUtilDAOInfo
 	for _, k := range lists {
 		partition := gClusterInfo.GetPartition(k)
-		for name, _ := range partition.GetTotalPartitionResource().Resources {
-			if name == "memory" ||name == "vcore"{
+		for name := range partition.GetTotalPartitionResource().Resources {
+			if name == "memory" || name == "vcore" {
 				nodesUtil := getNodesUtilJSON(partition, name)
-				result = append(result,nodesUtil)
+				result = append(result, nodesUtil)
 			}
 		}
 	}
@@ -342,7 +342,7 @@ func getNodesUtilJSON(partition *cache.PartitionInfo, name string) *dao.NodesUti
 	mapName := make([][]string, 10)
 	var nodeUtil []*dao.NodeUtilDAOInfo
 	for _, node := range partition.GetNodes() {
-		total := int64(node.GetCapacity().Resources[name]) 
+		total := int64(node.GetCapacity().Resources[name])
 		if float64(total) > 0 {
 			resourceAllocated := float64(node.GetAllocatedResource().Resources[name])
 			v := resourceAllocated / float64(total)
@@ -351,21 +351,21 @@ func getNodesUtilJSON(partition *cache.PartitionInfo, name string) *dao.NodesUti
 				mapResult[i] = 0
 			}
 			mapResult[idx]++
-			mapName[idx] = append(mapName[idx],node.NodeID)
-		}		
-	}
-	for k := 0 ; k < 10 ; k++ {
-		util := &dao.NodeUtilDAOInfo{
-			BucketID: 	fmt.Sprintf("%d",k+1),
-			BucketName: fmt.Sprintf("%d",k*10)+ "-" +fmt.Sprintf("%d",(k+1)*10) + "%",
-			NumOfNodes:	int64(mapResult[k]),
-			NodeNames:	mapName[k],
+			mapName[idx] = append(mapName[idx], node.NodeID)
 		}
-		nodeUtil = append(nodeUtil,util)
+	}
+	for k := 0; k < 10; k++ {
+		util := &dao.NodeUtilDAOInfo{
+			BucketID:   fmt.Sprintf("%d", k+1),
+			BucketName: fmt.Sprintf("%d", k*10) + "-" + fmt.Sprintf("%d", (k+1)*10) + "%",
+			NumOfNodes: int64(mapResult[k]),
+			NodeNames:  mapName[k],
+		}
+		nodeUtil = append(nodeUtil, util)
 	}
 	return &dao.NodesUtilDAOInfo{
-		ResourceType:	name,
-		NodesUtil:		nodeUtil,
+		ResourceType: name,
+		NodesUtil:    nodeUtil,
 	}
 }
 

@@ -86,11 +86,16 @@ func getClusterInfo(w http.ResponseWriter, r *http.Request) {
 func getClusterUtilization(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	var clusterUtil []*dao.ClustersUtilDAOInfo
+	var utilizations []*dao.ClusterUtilDAOInfo
 	lists := gClusterInfo.ListPartitions()
 	for _, k := range lists {
 		partition := gClusterInfo.GetPartition(k)
-		utilizations := getClusterUtilJSON(partition)
-
+		for name := range partition.GetTotalPartitionResource().Resources {
+			if name == "memory" || name == "vcore" {
+				util := getClusterUtilJSON(partition, name)
+				utilizations = append(utilizations, util)
+			}
+		}
 		clusterUtil = append(clusterUtil, &dao.ClustersUtilDAOInfo{
 			PartitionName: partition.Name,
 			ClustersUtil:  utilizations,
@@ -207,23 +212,17 @@ func getClusterJSON(name string) *dao.ClusterDAOInfo {
 	return clusterInfo
 }
 
-func getClusterUtilJSON(partition *cache.PartitionInfo) []dao.ClusterUtilDAOInfo {
-	utilization := dao.ClusterUtilDAOInfo{}
-	var utilizations []dao.ClusterUtilDAOInfo
-
-	res := partition.Root.GetMaxResource()
-	for key, value := range res.Resources {
-		if key == "memory" || key == "vcore" {
-			utilization.ResourceType = key
-			utilization.Total = int64(value)
-			utilization.Used = int64(partition.Root.GetAllocatedResource().Resources[key])
-			percent := ((utilization.Used * int64(100)) / utilization.Total)
-			utilization.Usage = fmt.Sprintf("%d", percent) + "%"
-			utilizations = append(utilizations, utilization)
-		}
+func getClusterUtilJSON(partition *cache.PartitionInfo, name string) *dao.ClusterUtilDAOInfo {
+	total := int64(partition.Root.GetMaxResource().Resources[name])
+	used := int64(partition.Root.GetAllocatedResource().Resources[name])
+	percent := ((used * int64(100)) / total)
+	utilization := &dao.ClusterUtilDAOInfo{
+		ResourceType: name,
+		Total:        total,
+		Used:         used,
+		Usage:        fmt.Sprintf("%d", percent) + "%",
 	}
-
-	return utilizations
+	return utilization
 }
 
 func getPartitionJSON(name string) *dao.PartitionDAOInfo {

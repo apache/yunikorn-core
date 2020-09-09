@@ -84,6 +84,14 @@ var webRoutes = routes{
 		getClusterConfig,
 	},
 
+	// endpoint to retrieve the current conf
+	route{
+		"Scheduler",
+		"PUT",
+		"/ws/v1/config",
+		updateConfig,
+	},
+
 	// endpoint to validate conf
 	route{
 		"Scheduler",

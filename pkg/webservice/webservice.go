@@ -34,11 +34,11 @@ import (
 
 var gClusterInfo *cache.ClusterInfo
 var imHistory *history.InternalMetricsHistory
+var lock sync.RWMutex
 
 type WebService struct {
 	httpServer  *http.Server
 	clusterInfo *cache.ClusterInfo
-	lock        sync.RWMutex
 }
 
 func newRouter() *mux.Router {

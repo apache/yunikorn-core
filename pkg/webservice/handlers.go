@@ -32,7 +32,9 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
@@ -338,4 +340,71 @@ func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 	if _, err = w.Write(marshalledConf); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func updateConfig(w http.ResponseWriter, r *http.Request) {
+	lock.Lock()
+	defer lock.Unlock()
+	writeHeaders(w)
+	requestBytes, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		buildUpdateResponse(false, err.Error(), w)
+		return
+	}
+	// validation is already called when loading the config
+	schedulerConf, err := configs.LoadSchedulerConfigFromByteArray(requestBytes)
+	if err != nil {
+		buildUpdateResponse(false, err.Error(), w)
+		return
+	}
+	oldConf, err := updateConfiguration(string(requestBytes))
+	if err != nil {
+		buildUpdateResponse(false, err.Error(), w)
+		return
+	}
+	err = gClusterInfo.UpdateSchedulerConfig(schedulerConf)
+	if err != nil {
+		errorMsg := err.Error()
+		// revert configmap changes
+		_, err := updateConfiguration(oldConf)
+		if err != nil {
+			msg := "Configuration rollback failed" + "\n" + err.Error()
+			errorMsg += "\n" + msg
+			log.Logger().Error(msg)
+		}
+		buildUpdateResponse(false, errorMsg, w)
+		return
+	}
+	buildUpdateResponse(true, "", w)
+}
+
+func buildUpdateResponse(success bool, reason string, w http.ResponseWriter) {
+	if len(reason) > 0 {
+		log.Logger().Info("Result of configuration update: ",
+			zap.Bool("Result", success),
+			zap.String("Reason in case of failure", reason))
+	}
+
+	if success {
+		w.WriteHeader(http.StatusOK)
+		_, err := w.Write([]byte("Configuration updates successfully"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	} else {
+		http.Error(w, reason, http.StatusConflict)
+	}
+}
+func updateConfiguration(conf string) (string, error) {
+	if plugin := plugins.GetConfigPlugin(); plugin != nil {
+		// checking predicates
+		resp := plugin.UpdateConfiguration(&si.UpdateConfigurationRequest{
+			Configs: conf,
+		})
+		if resp.Success {
+			return resp.OldConfig, nil
+		}
+		return resp.OldConfig, fmt.Errorf(resp.Reason)
+	}
+	return "", fmt.Errorf("config plugin not found")
 }

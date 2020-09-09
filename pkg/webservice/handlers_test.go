@@ -29,8 +29,11 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/testutils"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
+	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 const startConf = `
@@ -55,6 +58,15 @@ partitions:
           first: "changedValue"
 `
 
+const invalidConf = `
+partitions:
+  - name: default
+    nodesortpolicy:
+        type: invalid
+    queues:
+      - name: root
+`
+
 func TestValidateConf(t *testing.T) {
 	tests := []struct {
 		content          string
@@ -75,14 +87,7 @@ partitions:
 			},
 		},
 		{
-			content: `
-partitions:
-  - name: default
-    nodesortpolicy:
-        type: invalid
-    queues:
-      - name: root
-`,
+			content: invalidConf,
 			expectedResponse: dao.ValidateConfResponse{
 				Allowed: false,
 				Reason:  "undefined policy: invalid",
@@ -361,4 +366,80 @@ partitions:
 	resp = &MockResponseWriter{}
 	getApplicationsInfo(resp, req)
 	assert.Equal(t, 400, resp.statusCode)
+}
+
+type FakeConfigPlugin struct {
+	generateError bool
+}
+
+func (f FakeConfigPlugin) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
+	if f.generateError {
+		return &si.UpdateConfigurationResponse{
+			Success: false,
+			Reason:  "configuration update error",
+		}
+	}
+	return &si.UpdateConfigurationResponse{
+		Success:   true,
+		OldConfig: startConf,
+	}
+}
+
+func TestSaveConfigMapNoError(t *testing.T) {
+	plugins.RegisterSchedulerPlugin(&FakeConfigPlugin{generateError: false})
+	oldConf, err := updateConfiguration(updatedConf)
+	assert.NilError(t, err, "No error expected")
+	assert.Equal(t, oldConf, startConf, " Wrong returned configuration")
+}
+
+func TestSaveConfigMapErrorExpected(t *testing.T) {
+	plugins.RegisterSchedulerPlugin(&FakeConfigPlugin{generateError: true})
+	oldConf, err := updateConfiguration(updatedConf)
+	assert.Assert(t, err != nil, "Missing expected error")
+	assert.Equal(t, oldConf, "", " Wrong returned configuration")
+}
+
+func TestBuildUpdateResponseSuccess(t *testing.T) {
+	resp := &MockResponseWriter{}
+	buildUpdateResponse(true, "", resp)
+	assert.Equal(t, http.StatusOK, resp.statusCode, "Response should be OK")
+}
+
+func TestBuildUpdateResponseFailure(t *testing.T) {
+	resp := &MockResponseWriter{}
+	reason := "ConfigMapUpdate failed"
+	buildUpdateResponse(false, reason, resp)
+	assert.Equal(t, http.StatusConflict, resp.statusCode, "Status code is wrong")
+	assert.Assert(t, strings.Contains(string(resp.outputBytes), reason), "Error message should contain the reason")
+}
+
+func TestUpdateConfig(t *testing.T) {
+	prepareSchedulerForConfigChange(t)
+	resp := &MockResponseWriter{}
+	req, err := http.NewRequest("PUT", "", strings.NewReader(updatedConf))
+	assert.NilError(t, err, "Failed to create the request")
+	updateConfig(resp, req)
+	assert.NilError(t, err, "No error expected")
+	assert.Equal(t, http.StatusOK, resp.statusCode, "No error expected")
+}
+
+func TestUpdateConfigInvalidConf(t *testing.T) {
+	prepareSchedulerForConfigChange(t)
+	resp := &MockResponseWriter{}
+	req, err := http.NewRequest("PUT", "", strings.NewReader(invalidConf))
+	assert.NilError(t, err, "Failed to create the request")
+	updateConfig(resp, req)
+	assert.Equal(t, http.StatusConflict, resp.statusCode, "Status code is wrong")
+	assert.Assert(t, len(string(resp.outputBytes)) > 0, "Error message is expected")
+}
+
+func prepareSchedulerForConfigChange(t *testing.T) {
+	plugins.RegisterSchedulerPlugin(&FakeConfigPlugin{generateError: false})
+	gClusterInfo = cache.NewClusterInfo()
+	scheduler := &testutils.MockEventHandler{EventHandled: false}
+	gClusterInfo.EventHandlers.SchedulerEventHandler = scheduler
+	configs.MockSchedulerConfigByData([]byte(startConf))
+	if _, err := cache.SetClusterInfoFromConfigFile(gClusterInfo, "rmID", "default-policy-group"); err != nil {
+		t.Fatalf("Error when load clusterInfo from config %v", err)
+	}
 }

@@ -803,7 +803,7 @@ func (pi *PartitionInfo) updateQueues(config []configs.QueueConfig, parent *Queu
 		if err != nil {
 			return err
 		}
-		visited[queueConfig.Name] = true
+		visited[queue.Name] = true
 	}
 	// remove all children that were not visited
 	for childName, childQueue := range parent.children {

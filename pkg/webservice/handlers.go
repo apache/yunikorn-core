@@ -176,10 +176,8 @@ func getNodesUtilization(w http.ResponseWriter, r *http.Request) {
 	for _, k := range lists {
 		partition := gClusterInfo.GetPartition(k)
 		for name := range partition.GetTotalPartitionResource().Resources {
-			if name == "memory" || name == "vcore" {
-				nodesUtil := getNodesUtilJSON(partition, name)
-				result = append(result, nodesUtil)
-			}
+			nodesUtil := getNodesUtilJSON(partition, name)
+			result = append(result, nodesUtil)
 		}
 	}
 	if err := json.NewEncoder(w).Encode(result); err != nil {
@@ -342,14 +340,17 @@ func getNodesUtilJSON(partition *cache.PartitionInfo, name string) *dao.NodesUti
 	mapName := make([][]string, 10)
 	var nodeUtil []*dao.NodeUtilDAOInfo
 	for _, node := range partition.GetNodes() {
-		total := int64(node.GetCapacity().Resources[name])
+		total, ok := node.GetCapacity().Resources[name]
+		if !ok {
+			total = 0
+		}
 		if float64(total) > 0 {
-			resourceAllocated := float64(node.GetAllocatedResource().Resources[name])
-			v := resourceAllocated / float64(total)
-			idx := int(math.Dim(math.Ceil(v*10), 1))
-			for i := range mapResult {
-				mapResult[i] = 0
+			resourceAllocated, ok := node.GetAllocatedResource().Resources[name]
+			if !ok {
+				resourceAllocated = 0
 			}
+			v := float64(resourceAllocated) / float64(total)
+			idx := int(math.Dim(math.Ceil(v*10), 1))
 			mapResult[idx]++
 			mapName[idx] = append(mapName[idx], node.NodeID)
 		}

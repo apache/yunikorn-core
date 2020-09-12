@@ -29,6 +29,7 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/testutils"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
@@ -442,4 +443,96 @@ func prepareSchedulerForConfigChange(t *testing.T) {
 	if _, err := cache.SetClusterInfoFromConfigFile(gClusterInfo, "rmID", "default-policy-group"); err != nil {
 		t.Fatalf("Error when load clusterInfo from config %v", err)
 	}
+}
+
+func TestGetClusterUtilJSON(t *testing.T) {
+	const configDefault = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        queues:
+        - name: default
+`
+	rmID := "Util"
+	policyGroup := "default-policy-group"
+	clusterInfo := cache.NewClusterInfo()
+
+	configs.MockSchedulerConfigByData([]byte(configDefault))
+	if _, err := cache.SetClusterInfoFromConfigFile(clusterInfo, rmID, policyGroup); err != nil {
+		t.Fatalf("Error when load clusterInfo from config %v", err)
+	}
+	assert.Equal(t, 1, len(clusterInfo.ListPartitions()))
+
+	// Check test partition
+	partitionName := "[" + rmID + "]default"
+	partition := clusterInfo.GetPartition(partitionName)
+	assert.Equal(t, partitionName, partition.Name)
+
+	queueName := "root.default"
+	appInfo := cache.CreateNewApplicationInfo("appID-1", "default", queueName)
+	err := cache.AddNewApplicationForTest(partition, appInfo, true)
+	if err != nil {
+		t.Errorf("add application to partition should not have failed: %v", err)
+	}
+	memval := resources.Quantity(1000)
+	coreval := resources.Quantity(1000)
+	nodeID := "node-1"
+	node1 := cache.NewNodeForTest(nodeID, resources.NewResourceFromMap(
+		map[string]resources.Quantity{"memory": memval, "vcore": coreval}))
+	resAlloc1 := &si.Resource{
+		Resources: map[string]*si.Quantity{
+			resources.MEMORY: {Value: 500},
+			resources.VCORE:  {Value: 300},
+		},
+	}
+	resAlloc2 := &si.Resource{
+		Resources: map[string]*si.Quantity{
+			resources.MEMORY: {Value: 300},
+			resources.VCORE:  {Value: 200},
+		},
+	}
+	alloc1 := &si.Allocation{
+		AllocationKey:    "alloc-1",
+		ResourcePerAlloc: resAlloc1,
+		QueueName:        queueName,
+		NodeID:           nodeID,
+		ApplicationID:    "appID-1",
+	}
+	alloc2 := &si.Allocation{
+		AllocationKey:    "alloc-2",
+		ResourcePerAlloc: resAlloc2,
+		QueueName:        queueName,
+		NodeID:           nodeID,
+		ApplicationID:    "appID-1",
+	}
+	alloc1.UUID = "alloc-1-uuid"
+	alloc2.UUID = "alloc-2-uuid"
+	allocs := []*si.Allocation{alloc1, alloc2}
+	err = cache.AddNewNodeForTest(partition, node1, allocs)
+	if err != nil || partition.GetNode(nodeID) == nil {
+		t.Fatalf("add node to partition should not have failed: %v", err)
+	}
+	utilMem := &dao.ClusterUtilDAOInfo{
+		ResourceType: "memory",
+		Total:        int64(1000),
+		Used:         int64(800),
+		Usage:        "80%",
+	}
+	utilCore := &dao.ClusterUtilDAOInfo{
+		ResourceType: "vcore",
+		Total:        int64(1000),
+		Used:         int64(500),
+		Usage:        "50%",
+	}
+	resMem := getClusterUtilJSON(partition, "memory")
+	resCore := getClusterUtilJSON(partition, "vcore")
+	assert.Equal(t, utilMem.ResourceType, resMem.ResourceType)
+	assert.Equal(t, utilMem.Total, resMem.Total)
+	assert.Equal(t, utilMem.Used, resMem.Used)
+	assert.Equal(t, utilMem.Usage, resMem.Usage)
+	assert.Equal(t, utilCore.ResourceType, resCore.ResourceType)
+	assert.Equal(t, utilCore.Total, resCore.Total)
+	assert.Equal(t, utilCore.Used, resCore.Used)
+	assert.Equal(t, utilCore.Usage, resCore.Usage)
 }

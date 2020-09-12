@@ -31,6 +31,7 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
@@ -91,10 +92,8 @@ func getClusterUtilization(w http.ResponseWriter, r *http.Request) {
 	for _, k := range lists {
 		partition := gClusterInfo.GetPartition(k)
 		for name := range partition.GetTotalPartitionResource().Resources {
-			if name == "memory" || name == "vcore" {
-				util := getClusterUtilJSON(partition, name)
-				utilizations = append(utilizations, util)
-			}
+			util := getClusterUtilJSON(partition, name)
+			utilizations = append(utilizations, util)
 		}
 		clusterUtil = append(clusterUtil, &dao.ClustersUtilDAOInfo{
 			PartitionName: partition.Name,
@@ -213,13 +212,25 @@ func getClusterJSON(name string) *dao.ClusterDAOInfo {
 }
 
 func getClusterUtilJSON(partition *cache.PartitionInfo, name string) *dao.ClusterUtilDAOInfo {
-	total := int64(partition.Root.GetMaxResource().Resources[name])
-	used := int64(partition.Root.GetAllocatedResource().Resources[name])
-	percent := ((used * int64(100)) / total)
+	var total, used resources.Quantity
+	var percent int64
+	total, ok := partition.GetTotalPartitionResource().Resources[name]
+	if !ok {
+		total = 0
+	}
+	used, ok = partition.Root.GetAllocatedResource().Resources[name]
+	if !ok {
+		used = 0
+	}
+	if total < used || total == 0 {
+		percent = int64(0)
+	} else {
+		percent = ((int64(used) * int64(100)) / int64(total))
+	}
 	utilization := &dao.ClusterUtilDAOInfo{
 		ResourceType: name,
-		Total:        total,
-		Used:         used,
+		Total:        int64(total),
+		Used:         int64(used),
 		Usage:        fmt.Sprintf("%d", percent) + "%",
 	}
 	return utilization

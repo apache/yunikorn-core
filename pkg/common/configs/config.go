@@ -35,7 +35,7 @@ import (
 // set of scheduler resources.
 type SchedulerConfig struct {
 	Partitions []PartitionConfig
-	Checksum   [32]byte `yaml:"-" json:"-"`
+	Checksum   [32]byte `yaml:",omitempty" json:",omitempty"`
 }
 
 // The partition object for each partition:
@@ -142,6 +142,20 @@ type LoadSchedulerConfigFunc func(policyGroup string) (*SchedulerConfig, error)
 
 // Visible by tests
 func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) {
+	conf, err := ParseAndValidateConfig(content)
+	if err != nil {
+		return nil, err
+	}
+	// Create a sha256 checksum for this validated config
+	PopulateChecksum(content, conf)
+	return conf, err
+}
+
+func PopulateChecksum(content []byte, conf *SchedulerConfig) {
+	conf.Checksum = sha256.Sum256(content)
+}
+
+func ParseAndValidateConfig(content []byte) (*SchedulerConfig, error) {
 	conf := &SchedulerConfig{}
 	err := yaml.Unmarshal(content, conf)
 	if err != nil {
@@ -156,10 +170,7 @@ func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) 
 			zap.Error(err))
 		return nil, err
 	}
-
-	// Create a sha256 checksum for this validated config
-	conf.Checksum = sha256.Sum256(content)
-	return conf, err
+	return conf, nil
 }
 
 func loadSchedulerConfigFromFile(policyGroup string) (*SchedulerConfig, error) {

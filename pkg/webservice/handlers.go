@@ -315,7 +315,6 @@ func getContainerHistory(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-
 }
 
 func getClusterConfig(w http.ResponseWriter, r *http.Request) {
@@ -352,12 +351,20 @@ func updateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// validation is already called when loading the config
-	schedulerConf, err := configs.LoadSchedulerConfigFromByteArray(requestBytes)
+	schedulerConf, err := configs.ParseAndValidateConfig(requestBytes)
 	if err != nil {
 		buildUpdateResponse(false, err.Error(), w)
 		return
 	}
-	oldConf, err := updateConfiguration(string(requestBytes))
+	baseChecksum := schedulerConf.Checksum
+	checksumValid := isChecksumValid(baseChecksum)
+	if !checksumValid {
+		buildUpdateResponse(false, "The base configuration is changed.", w)
+		return
+	}
+	configs.PopulateChecksum(requestBytes, schedulerConf)
+	newConf := getConfigurationString(requestBytes, baseChecksum)
+	oldConf, err := updateConfiguration(newConf)
 	if err != nil {
 		buildUpdateResponse(false, err.Error(), w)
 		return
@@ -376,6 +383,20 @@ func updateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	buildUpdateResponse(true, "", w)
+}
+
+func getConfigurationString(requestBytes []byte, checksum [32]byte) string {
+	newConf := string(requestBytes)
+	checksumString := fmt.Sprintf("%v", checksum)
+	checksumString = strings.ReplaceAll(checksumString, " ", ",")
+	checksumString = "checksum: " + checksumString
+	newConf = strings.Replace(newConf, checksumString, "", 1)
+	return newConf
+}
+
+func isChecksumValid(checksum [32]byte) bool {
+	actualConf := configs.ConfigContext.Get(gClusterInfo.GetPolicyGroup())
+	return actualConf.Checksum == checksum
 }
 
 func buildUpdateResponse(success bool, reason string, w http.ResponseWriter) {

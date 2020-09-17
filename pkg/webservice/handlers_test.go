@@ -19,7 +19,9 @@
 package webservice
 
 import (
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -416,7 +418,9 @@ func TestBuildUpdateResponseFailure(t *testing.T) {
 func TestUpdateConfig(t *testing.T) {
 	prepareSchedulerForConfigChange(t)
 	resp := &MockResponseWriter{}
-	req, err := http.NewRequest("PUT", "", strings.NewReader(updatedConf))
+	baseChecksum := configs.ConfigContext.Get(gClusterInfo.GetPolicyGroup()).Checksum
+	conf := appendChecksum(updatedConf, baseChecksum)
+	req, err := http.NewRequest("PUT", "", strings.NewReader(conf))
 	assert.NilError(t, err, "Failed to create the request")
 	updateConfig(resp, req)
 	assert.NilError(t, err, "No error expected")
@@ -426,11 +430,82 @@ func TestUpdateConfig(t *testing.T) {
 func TestUpdateConfigInvalidConf(t *testing.T) {
 	prepareSchedulerForConfigChange(t)
 	resp := &MockResponseWriter{}
-	req, err := http.NewRequest("PUT", "", strings.NewReader(invalidConf))
-	assert.NilError(t, err, "Failed to create the request")
-	updateConfig(resp, req)
-	assert.Equal(t, http.StatusConflict, resp.statusCode, "Status code is wrong")
-	assert.Assert(t, len(string(resp.outputBytes)) > 0, "Error message is expected")
+	baseChecksum := configs.ConfigContext.Get(gClusterInfo.GetPolicyGroup()).Checksum
+	testCases := []struct {
+		name          string
+		newConf       string
+		checksum      [32]byte
+		expectedError string
+	}{
+		{"Invalid config", invalidConf, baseChecksum, "undefined policy"},
+		{"Invalid checksum", updatedConf, sha256.Sum256([]byte(updatedConf)), "base configuration is changed"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			conf := appendChecksum(tc.newConf, tc.checksum)
+			req, err := http.NewRequest("PUT", "", strings.NewReader(conf))
+			assert.NilError(t, err, "Failed to create the request")
+			updateConfig(resp, req)
+			assert.Equal(t, http.StatusConflict, resp.statusCode, "Status code is wrong")
+			assert.Assert(t, strings.Contains(string(resp.outputBytes), tc.expectedError), "Wrong error message")
+		})
+	}
+}
+
+func TestIsChecksumValid(t *testing.T) {
+	gClusterInfo = cache.NewClusterInfo()
+	configs.MockSchedulerConfigByData([]byte(startConf))
+	if _, err := cache.SetClusterInfoFromConfigFile(gClusterInfo, "rmID", "default-policy-group"); err != nil {
+		t.Fatalf("Error when load clusterInfo from config %v", err)
+	}
+	testCases := []struct {
+		name     string
+		checksum [32]byte
+		expected bool
+	}{
+		{"Valid checksum", sha256.Sum256([]byte(startConf)), true},
+		{"Invalid checksum", sha256.Sum256([]byte("some conf")), false},
+		{"Empty checksum", [32]byte{}, false},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, isChecksumValid(tc.checksum), tc.expected, "Invalid result")
+		})
+	}
+}
+
+func TestGetConfigurationString(t *testing.T) {
+	conf := startConf
+	checksum := sha256.Sum256([]byte(conf))
+	conf = appendChecksum(conf, checksum)
+	confBytes := []byte(conf)
+	wrongChecksum := sha256.Sum256([]byte("conf"))
+
+	testCases := []struct {
+		name         string
+		requestBytes []byte
+		checksum     [32]byte
+		expected     string
+	}{
+		{"Valid case", confBytes, checksum, startConf},
+		{"Empty checksum", confBytes, [32]byte{}, conf},
+		{"Empty request bytes", []byte{}, checksum, ""},
+		{"Wrong checksum", confBytes, wrongChecksum, conf},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			configString := getConfigurationString(tc.requestBytes, tc.checksum)
+			assert.DeepEqual(t, tc.expected, configString)
+		})
+	}
+}
+
+func appendChecksum(conf string, checksum [32]byte) string {
+	checkSumString := fmt.Sprintf("%v", checksum)
+	checkSumString = strings.ReplaceAll(checkSumString, " ", ",")
+	conf += "checksum: " + checkSumString
+	return conf
 }
 
 func prepareSchedulerForConfigChange(t *testing.T) {

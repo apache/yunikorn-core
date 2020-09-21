@@ -87,6 +87,7 @@ func newSingleAllocationProposal(alloc *schedulingAllocation) *cacheevent.Alloca
 				QueueName:         alloc.schedulingAsk.QueueName,
 				AllocatedResource: alloc.schedulingAsk.AllocatedResource,
 				AllocationKey:     alloc.schedulingAsk.AskProto.AllocationKey,
+				Tags:              alloc.schedulingAsk.AskProto.Tags,
 				Priority:          alloc.schedulingAsk.AskProto.Priority,
 				PartitionName:     alloc.schedulingAsk.PartitionName,
 			},

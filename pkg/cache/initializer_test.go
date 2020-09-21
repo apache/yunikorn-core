@@ -54,7 +54,7 @@ partitions:
           x: 123
         queues:
          - name: test
-           Properties:
+           properties:
              x: 345
 `
 	clusterInfo := NewClusterInfo()
@@ -323,7 +323,7 @@ partitions:
           x: 123
         queues:
          - name: test
-           Properties:
+           properties:
              x: 345
 `
 

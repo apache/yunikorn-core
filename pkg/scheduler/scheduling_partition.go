@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/events"
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
@@ -30,7 +31,6 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
-	"github.com/apache/incubator-yunikorn-core/pkg/events"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/placement"
 )
@@ -639,6 +639,7 @@ func emitReserveEvent(ask *schedulingAllocationAsk, nodeID string) {
 		}
 	}
 }
+
 
 func emitUnreserveEvent(ask *schedulingAllocationAsk, nodeID string) {
 	if eventCache := events.GetEventCache(); eventCache != nil {

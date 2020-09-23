@@ -23,7 +23,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/events"
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
@@ -415,19 +414,13 @@ func (psc *partitionSchedulingContext) allocate(alloc *schedulingAllocation) boo
 	}
 	// reservation does not leave the scheduler
 	if alloc.result == reserved {
-		success := psc.reserve(app, node, alloc.schedulingAsk)
-		if success {
-			emitReserveEvent(alloc.schedulingAsk, node.NodeID)
-		}
+		psc.reserve(app, node, alloc.schedulingAsk)
 		return false
 	}
 	// unreserve does not leave the scheduler
 	if alloc.result == unreserved || alloc.result == allocatedReserved {
 		// unreserve only in the scheduler
-		success := psc.unReserve(app, node, alloc.schedulingAsk)
-		if success {
-			emitUnreserveEvent(alloc.schedulingAsk, node.NodeID)
-		}
+		psc.unReserve(app, node, alloc.schedulingAsk)
 		// real allocation after reservation does get passed on to the cache
 		if alloc.result == unreserved {
 			return false
@@ -511,21 +504,20 @@ func (psc *partitionSchedulingContext) confirmAllocation(allocProposal *commonev
 
 // Process the reservation in the scheduler
 // Lock free call this must be called holding the context lock
-// Returns true in case of a successful operation
-func (psc *partitionSchedulingContext) reserve(app *SchedulingApplication, node *SchedulingNode, ask *schedulingAllocationAsk) bool {
+func (psc *partitionSchedulingContext) reserve(app *SchedulingApplication, node *SchedulingNode, ask *schedulingAllocationAsk) {
 	appID := app.ApplicationInfo.ApplicationID
 	// app has node already reserved cannot reserve again
 	if app.isReservedOnNode(node.NodeID) {
 		log.Logger().Info("Application is already reserved on node",
 			zap.String("appID", appID),
 			zap.String("nodeID", node.NodeID))
-		return true
+		return
 	}
 	// all ok, add the reservation to the app, this will also reserve the node
 	if err := app.reserve(node, ask); err != nil {
 		log.Logger().Debug("Failed to handle reservation, error during update of app",
 			zap.Error(err))
-		return false
+		return
 	}
 
 	// add the reservation to the queue list
@@ -538,18 +530,16 @@ func (psc *partitionSchedulingContext) reserve(app *SchedulingApplication, node 
 		zap.String("queue", ask.QueueName),
 		zap.String("allocationKey", ask.AskProto.AllocationKey),
 		zap.String("node", node.NodeID))
-	return true
 }
 
 // Process the unreservation in the scheduler
 // Lock free call this must be called holding the context lock
-// Returns true in case of a successful operation
-func (psc *partitionSchedulingContext) unReserve(app *SchedulingApplication, node *SchedulingNode, ask *schedulingAllocationAsk) bool {
+func (psc *partitionSchedulingContext) unReserve(app *SchedulingApplication, node *SchedulingNode, ask *schedulingAllocationAsk) {
 	appID := app.ApplicationInfo.ApplicationID
 	if psc.reservedApps[appID] == 0 {
 		log.Logger().Info("Application is not reserved in partition",
 			zap.String("appID", appID))
-		return false
+		return
 	}
 	// all ok, remove the reservation of the app, this will also unReserve the node
 	var err error
@@ -557,7 +547,7 @@ func (psc *partitionSchedulingContext) unReserve(app *SchedulingApplication, nod
 	if num, err = app.unReserve(node, ask); err != nil {
 		log.Logger().Info("Failed to unreserve, error during allocate on the app",
 			zap.Error(err))
-		return false
+		return
 	}
 	// remove the reservation of the queue
 	app.queue.unReserve(appID, num)
@@ -570,7 +560,6 @@ func (psc *partitionSchedulingContext) unReserve(app *SchedulingApplication, nod
 		zap.String("allocationKey", ask.AskProto.AllocationKey),
 		zap.String("node", node.NodeID),
 		zap.Int("reservationsRemoved", num))
-	return true
 }
 
 // Get the iterator for the sorted nodes list from the partition.
@@ -610,59 +599,6 @@ func (psc *partitionSchedulingContext) unReserveCount(appID string, asks int) {
 			delete(psc.reservedApps, appID)
 		} else {
 			psc.reservedApps[appID] -= asks
-		}
-	}
-}
-
-func emitReserveEvent(ask *schedulingAllocationAsk, nodeID string) {
-	if eventCache := events.GetEventCache(); eventCache != nil {
-		allocationKey := ask.AskProto.AllocationKey
-
-		// emit event for the allocation
-		allocMessage := fmt.Sprintf("Ask %s is reserved on node %s", allocationKey, nodeID)
-		if event, err := events.CreateRequestEventRecord(allocationKey, ask.ApplicationID, "AllocationAskReserved", allocMessage); err != nil {
-			log.Logger().Warn("Event creation failed",
-				zap.String("event message", allocMessage),
-				zap.Error(err))
-		} else {
-			eventCache.AddEvent(event)
-		}
-
-		// emit event for the node
-		nodeMessage := fmt.Sprintf("Ask %s from application %s is reserved on this node", allocationKey, ask.ApplicationID)
-		if event, err := events.CreateNodeEventRecord(nodeID, "AllocationAskReservedOnNode", nodeMessage); err != nil {
-			log.Logger().Warn("Event creation failed",
-				zap.String("event message", nodeMessage),
-				zap.Error(err))
-		} else {
-			eventCache.AddEvent(event)
-		}
-	}
-}
-
-
-func emitUnreserveEvent(ask *schedulingAllocationAsk, nodeID string) {
-	if eventCache := events.GetEventCache(); eventCache != nil {
-		allocationKey := ask.AskProto.AllocationKey
-
-		// emit event for the allocation
-		allocMessage := fmt.Sprintf("Ask %s is unreserved on node %s", allocationKey, nodeID)
-		if event, err := events.CreateRequestEventRecord(allocationKey, ask.ApplicationID, "AllocationAskUnreserved", allocMessage); err != nil {
-			log.Logger().Warn("Event creation failed",
-				zap.String("event message", allocMessage),
-				zap.Error(err))
-		} else {
-			eventCache.AddEvent(event)
-		}
-
-		// emit event for the node
-		nodeMessage := fmt.Sprintf("Ask %s from application %s is unreserved on this node", allocationKey, ask.ApplicationID)
-		if event, err := events.CreateNodeEventRecord(nodeID, "AllocationAskUnreservedFromNode", nodeMessage); err != nil {
-			log.Logger().Warn("Event creation failed",
-				zap.String("event message", nodeMessage),
-				zap.Error(err))
-		} else {
-			eventCache.AddEvent(event)
 		}
 	}
 }

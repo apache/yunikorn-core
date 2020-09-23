@@ -22,8 +22,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common"
-	"github.com/apache/incubator-yunikorn-core/pkg/events"
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
@@ -369,11 +367,6 @@ func TestTryAllocateLarge(t *testing.T) {
 }
 
 func TestAllocReserveNewNode(t *testing.T) {
-	// start event caching mechanism
-	events.CreateAndSetEventCache()
-	eventCache := events.GetEventCache()
-	eventCache.StartService()
-
 	partition := createQueuesNodes(t)
 	if partition == nil {
 		t.Fatal("partition create failed")
@@ -436,22 +429,6 @@ func TestAllocReserveNewNode(t *testing.T) {
 	// check if updated (must be after allocate call)
 	assert.Equal(t, 1, len(app.reservations), "ask should have been reserved")
 
-	// check if reserved event is emitted
-	err = common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
-		return eventCache.Store.CountStoredEvents() >= 1
-	})
-	assert.NilError(t, err, "expected at least one event emitted")
-	records := eventCache.Store.CollectEvents()
-	found := false
-	for _, record := range records {
-		if record.Reason == "AllocationAskReserved" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("expected emitted reserved event")
-	}
-
 	// turn on 2nd node
 	node2.nodeInfo.SetSchedulable(true)
 	alloc = partition.tryReservedAllocate()
@@ -463,22 +440,6 @@ func TestAllocReserveNewNode(t *testing.T) {
 	}
 	// check if updated (must be after allocate call)
 	assert.Equal(t, 0, len(app.reservations), "ask should have been reserved")
-
-	// check if reserved event is emitted
-	err = common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
-		return eventCache.Store.CountStoredEvents() >= 1
-	})
-	assert.NilError(t, err, "expected at least one event emitted")
-	records = eventCache.Store.CollectEvents()
-	found = false
-	for _, record := range records {
-		if record.Reason == "AllocationAskUnreserved" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("expected emitted reserved event")
-	}
 }
 
 func TestTryAllocateReserve(t *testing.T) {
@@ -524,8 +485,7 @@ func TestTryAllocateReserve(t *testing.T) {
 	if node2 == nil {
 		t.Fatal("expected node-2 to be returned got nil")
 	}
-	success := partition.reserve(app, node2, ask2)
-	assert.Assert(t, success, "reservation should have succeeded")
+	partition.reserve(app, node2, ask2)
 	if !app.isReservedOnNode(node2.NodeID) || len(app.isAskReserved("alloc-2")) == 0 {
 		t.Fatalf("reservation failure for ask2 and node2")
 	}
@@ -606,8 +566,7 @@ func TestTryAllocateWithReserved(t *testing.T) {
 	if node2 == nil {
 		t.Fatal("expected node-2 to be returned got nil")
 	}
-	success := partition.reserve(app, node2, ask)
-	assert.Assert(t, success, "reservation should have succeeded")
+	partition.reserve(app, node2, ask)
 	if !app.isReservedOnNode(node2.NodeID) || len(app.isAskReserved("alloc-1")) == 0 {
 		t.Fatalf("reservation failure for ask and node2")
 	}

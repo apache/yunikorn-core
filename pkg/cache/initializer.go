@@ -94,7 +94,10 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmID string) ([]*
 	if err != nil {
 		return []*PartitionInfo{}, []*PartitionInfo{}, err
 	}
+	return clusterInfo.applyConfigChanges(conf, rmID)
+}
 
+func (clusterInfo *ClusterInfo) applyConfigChanges(conf *configs.SchedulerConfig, rmID string) ([]*PartitionInfo, []*PartitionInfo, error) {
 	// update global scheduler configs
 	configs.ConfigContext.Set(clusterInfo.policyGroup, conf)
 
@@ -103,6 +106,7 @@ func UpdateClusterInfoFromConfigFile(clusterInfo *ClusterInfo, rmID string) ([]*
 	// keep track of the deleted and updated partitions
 	updatedPartitions := make([]*PartitionInfo, 0)
 	visited := map[string]bool{}
+	var err error
 	// walk over the partitions in the config: update existing ones
 	for _, p := range conf.Partitions {
 		partitionName := common.GetNormalizedPartitionName(p.Name, rmID)

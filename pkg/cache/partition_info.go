@@ -141,7 +141,7 @@ func addQueueInfo(conf []configs.QueueConfig, parent *QueueInfo) error {
 	return nil
 }
 
-// Handle the state event for the application.
+// Handle the state event for the partition.
 // The state machine handles the locking.
 func (pi *PartitionInfo) handlePartitionEvent(event SchedulingObjectEvent) error {
 	err := pi.stateMachine.Event(event.String(), pi.Name)
@@ -803,7 +803,7 @@ func (pi *PartitionInfo) updateQueues(config []configs.QueueConfig, parent *Queu
 		if err != nil {
 			return err
 		}
-		visited[queueConfig.Name] = true
+		visited[queue.Name] = true
 	}
 	// remove all children that were not visited
 	for childName, childQueue := range parent.children {

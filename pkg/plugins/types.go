@@ -29,6 +29,7 @@ type SchedulerPlugins struct {
 	reconcilePlugin        ReconcilePlugin
 	eventPlugin            EventPlugin
 	schedulingStateUpdater ContainerSchedulingStateUpdater
+	configPlugin           ConfigurationPlugin
 
 	sync.RWMutex
 }
@@ -61,4 +62,8 @@ type ContainerSchedulingStateUpdater interface {
 	// the shim side cannot assume to only receive updates on state changes
 	// the shim side implementation must be thread safe
 	Update(request *si.UpdateContainerSchedulingStateRequest)
+}
+
+type ConfigurationPlugin interface {
+	UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse
 }

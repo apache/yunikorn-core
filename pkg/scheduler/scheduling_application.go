@@ -353,6 +353,14 @@ func (sa *SchedulingApplication) unReserveInternal(node *SchedulingNode, ask *sc
 	if num, err = node.unReserve(sa, ask); err != nil {
 		return 0, err
 	}
+	err = events.EmitUnReserveEvent(ask.AskProto.AllocationKey, ask.ApplicationID, node.NodeID)
+	if err != nil {
+		log.Logger().Debug("could not emit reserve events to shim",
+			zap.String("allocationKey", ask.AskProto.AllocationKey),
+			zap.String("appID", ask.ApplicationID),
+			zap.String("nodeID", node.NodeID),
+			zap.Error(err))
+	}
 	// if the unreserve worked on the node check the app
 	if _, found := sa.reservations[resKey]; found {
 		// worked on the node means either found or not but no error, log difference here
@@ -497,7 +505,16 @@ func (sa *SchedulingApplication) tryReservedAllocate(headRoom *resources.Resourc
 				unreserveAsk = ask
 			}
 			// remove the reservation as this should not be reserved
-			alloc := newSchedulingAllocation(unreserveAsk, reserve.nodeID)
+			nodeID := reserve.nodeID
+			alloc := newSchedulingAllocation(unreserveAsk, nodeID)
+			err := events.EmitUnReserveEvent(unreserveAsk.AskProto.AllocationKey, unreserveAsk.ApplicationID, nodeID)
+			if err != nil {
+				log.Logger().Debug("could not emit reserve events to shim",
+					zap.String("allocationKey", unreserveAsk.AskProto.AllocationKey),
+					zap.String("appID", unreserveAsk.ApplicationID),
+					zap.String("nodeID", nodeID),
+					zap.Error(err))
+			}
 			alloc.result = unreserved
 			return alloc
 		}
@@ -509,6 +526,14 @@ func (sa *SchedulingApplication) tryReservedAllocate(headRoom *resources.Resourc
 		alloc := sa.tryNode(reserve.node, ask)
 		// allocation worked set the result and return
 		if alloc != nil {
+			err := events.EmitAllocatedReservedEvent(ask.AskProto.AllocationKey, ask.ApplicationID, reserve.nodeID)
+			if err != nil {
+				log.Logger().Debug("could not emit allocatedReserved events to shim",
+					zap.String("allocationKey", ask.AskProto.AllocationKey),
+					zap.String("appID", ask.ApplicationID),
+					zap.String("nodeID", reserve.nodeID),
+					zap.Error(err))
+			}
 			alloc.result = allocatedReserved
 			return alloc
 		}
@@ -539,6 +564,7 @@ func (sa *SchedulingApplication) tryNodesNoReserve(ask *schedulingAllocationAsk,
 		// allocation worked so return
 		if alloc != nil {
 			alloc.reservedNodeID = reservedNode
+			emitReserveEventsWithUnreserve(ask.AskProto.AllocationKey, ask.ApplicationID, reservedNode, node.NodeID)
 			alloc.result = allocatedReserved
 			return alloc
 		}
@@ -569,10 +595,19 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 			// NOTE: this is a safeguard as reserved nodes should never be part of the iterator
 			// but we have no locking
 			if _, ok := sa.reservations[reservationKey(node, nil, ask)]; ok {
+				appID := sa.ApplicationInfo.ApplicationID
 				log.Logger().Debug("allocate found reserved ask during non reserved allocate",
-					zap.String("appID", sa.ApplicationInfo.ApplicationID),
+					zap.String("appID", appID),
 					zap.String("nodeID", node.NodeID),
 					zap.String("allocationKey", allocKey))
+				err := events.EmitAllocatedReservedEvent(allocKey, appID, node.NodeID)
+				if err != nil {
+					log.Logger().Debug("could not emit allocatedReserved events to shim",
+						zap.String("allocationKey", allocKey),
+						zap.String("appID", appID),
+						zap.String("nodeID", node.NodeID),
+						zap.Error(err))
+				}
 				alloc.result = allocatedReserved
 				return alloc
 			}
@@ -580,10 +615,12 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 			// the reserved nodes to unreserve (first one in the list)
 			if len(reservedAsks) > 0 {
 				nodeID := strings.TrimSuffix(reservedAsks[0], "|"+allocKey)
+				appID := sa.ApplicationInfo.ApplicationID
 				log.Logger().Debug("allocate picking reserved ask during non reserved allocate",
-					zap.String("appID", sa.ApplicationInfo.ApplicationID),
+					zap.String("appID", appID),
 					zap.String("nodeID", nodeID),
 					zap.String("allocationKey", allocKey))
+				emitReserveEventsWithUnreserve(allocKey, appID, nodeID, node.NodeID)
 				alloc.result = allocatedReserved
 				alloc.reservedNodeID = nodeID
 				return alloc
@@ -624,11 +661,51 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 		}
 		// return allocation proposal and mark it as a reservation
 		alloc := newSchedulingAllocation(ask, nodeToReserve.NodeID)
+		err := events.EmitReserveEvent(ask.AskProto.AllocationKey, ask.ApplicationID, nodeToReserve.NodeID)
+		if err != nil {
+			log.Logger().Debug("could not emit reserve events to shim",
+				zap.String("allocationKey", ask.AskProto.AllocationKey),
+				zap.String("appID", ask.ApplicationID),
+				zap.String("nodeID", nodeToReserve.NodeID),
+				zap.Error(err))
+		}
 		alloc.result = reserved
 		return alloc
 	}
 	// ask does not fit, skip to next ask
 	return nil
+}
+
+// this function emits events when a reserved ask is allocated for another node
+// than the one it was previously reserved
+func emitReserveEventsWithUnreserve(allocKey, appID, oldNodeID, newNodeID string) {
+	// first unreserve from the node that has been reserved
+	err := events.EmitUnReserveEvent(allocKey, appID, oldNodeID)
+	if err != nil {
+		log.Logger().Debug("could not emit unreserve events to shim",
+			zap.String("allocationKey", allocKey),
+			zap.String("appID", appID),
+			zap.String("nodeID", oldNodeID),
+			zap.Error(err))
+	}
+	// then reserve the new node for this allocation
+	err = events.EmitReserveEvent(allocKey, appID, newNodeID)
+	if err != nil {
+		log.Logger().Debug("could not emit reserve events to shim",
+			zap.String("allocationKey", allocKey),
+			zap.String("appID", appID),
+			zap.String("nodeID", newNodeID),
+			zap.Error(err))
+	}
+	// finally emit allocatedReserved on the new node
+	err = events.EmitAllocatedReservedEvent(allocKey, appID, newNodeID)
+	if err != nil {
+		log.Logger().Debug("could not emit allocatedReserved events to shim",
+			zap.String("allocationKey", allocKey),
+			zap.String("appID", appID),
+			zap.String("nodeID", newNodeID),
+			zap.Error(err))
+	}
 }
 
 // Try allocating on one specific node

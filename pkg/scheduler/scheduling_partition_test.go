@@ -682,7 +682,7 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 	if err != nil || !resources.Equals(res, delta) {
 		t.Errorf("failed to add ask 2 to app resource added: %v expected %v (err = %v)", delta, resources.Multiply(res, 2), err)
 	}
-	allocKey3 := "alloc-3"
+	allocKey3 := "allocation-3"
 	ask = newAllocationAskRepeat(allocKey3, appID, res, 1)
 	delta, err = app.addAllocationAsk(ask)
 	if err != nil || !resources.Equals(res, delta) {
@@ -720,8 +720,8 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 	// shim in processAllocationReleaseByAllocationKey()
 	// make sure we are counting correctly and leave the other reservation intact
 	removeAskID := "alloc-2"
-	if alloc.schedulingAsk.AskProto.AllocationKey == "alloc-3" {
-		removeAskID = "alloc-3"
+	if alloc.schedulingAsk.AskProto.AllocationKey == allocKey3 {
+		removeAskID = allocKey3
 	}
 	released := app.removeAllocationAsk(removeAskID)
 	assert.Equal(t, released, 1, "expected one reservations to be released")

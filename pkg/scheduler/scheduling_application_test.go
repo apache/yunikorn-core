@@ -160,8 +160,8 @@ func TestAppReservation(t *testing.T) {
 	}
 
 	// 2nd reservation for app
-	askKey2 := "alloc-2"
-	nodeID2 := "node-2"
+	askKey2 := "alloc-res-2"
+	nodeID2 := "node-res-2"
 	ask2 := newAllocationAsk(askKey2, appID, res)
 	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 10})
 	delta, err = app.addAllocationAsk(ask2)
@@ -680,8 +680,8 @@ func TestEmitAllocatedReservedEvents(t *testing.T) {
 	eventCache := events.GetEventCache()
 	eventCache.StartService()
 
-	allocKey := "alloc-1"
-	appID := "app-1"
+	allocKey := "allocation-1"
+	appID := "application-1"
 	nodeID := "node-1"
 
 	EmitAllocatedReservedEvents(allocKey, appID, nodeID)
@@ -696,7 +696,7 @@ func TestEmitUnReserveEventForNode(t *testing.T) {
 	eventCache.StartService()
 
 	allocKey := "alloc-2"
-	appID := "app-2"
+	appID := "application2"
 	nodeID := "node-2"
 
 	EmitUnReserveEventForNode(allocKey, appID, nodeID)

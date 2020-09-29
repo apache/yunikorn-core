@@ -85,7 +85,7 @@ func TestEmitReserveEventWithoutEventCache(t *testing.T) {
 
 func TestEmitReserveEvent(t *testing.T) {
 	CreateAndSetEventCache()
-	defer resetCache()
+	defer ResetCache()
 	cache := GetEventCache()
 	cache.StartService()
 
@@ -111,7 +111,7 @@ func TestEmitUnReserveEventWithoutEventCache(t *testing.T) {
 
 func TestEmitAllocatedReservedEvent(t *testing.T) {
 	CreateAndSetEventCache()
-	defer resetCache()
+	defer ResetCache()
 	cache := GetEventCache()
 	cache.StartService()
 
@@ -137,7 +137,7 @@ func TestEmitAllocatedReservedEventWithoutEventCache(t *testing.T) {
 
 func TestEmitUnReserveEvent(t *testing.T) {
 	CreateAndSetEventCache()
-	defer resetCache()
+	defer ResetCache()
 	cache := GetEventCache()
 	cache.StartService()
 

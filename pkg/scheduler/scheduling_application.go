@@ -564,7 +564,8 @@ func (sa *SchedulingApplication) tryNodesNoReserve(ask *schedulingAllocationAsk,
 		// allocation worked so return
 		if alloc != nil {
 			alloc.reservedNodeID = reservedNode
-			emitReserveEventsWithUnreserve(ask.AskProto.AllocationKey, ask.ApplicationID, reservedNode, node.NodeID)
+			EmitUnReserveEventForNode(ask.AskProto.AllocationKey, ask.ApplicationID, reservedNode)
+			EmitAllocatedReservedEvents(ask.AskProto.AllocationKey, ask.ApplicationID, node.NodeID)
 			alloc.result = allocatedReserved
 			return alloc
 		}
@@ -620,7 +621,8 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 					zap.String("appID", appID),
 					zap.String("nodeID", nodeID),
 					zap.String("allocationKey", allocKey))
-				emitReserveEventsWithUnreserve(allocKey, appID, nodeID, node.NodeID)
+				EmitUnReserveEventForNode(ask.AskProto.AllocationKey, ask.ApplicationID, nodeID)
+				EmitAllocatedReservedEvents(ask.AskProto.AllocationKey, ask.ApplicationID, node.NodeID)
 				alloc.result = allocatedReserved
 				alloc.reservedNodeID = nodeID
 				return alloc
@@ -676,34 +678,24 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 	return nil
 }
 
-// this function emits events when a reserved ask is allocated for another node
-// than the one it was previously reserved
-func emitReserveEventsWithUnreserve(allocKey, appID, oldNodeID, newNodeID string) {
-	// first unreserve from the node that has been reserved
-	err := events.EmitUnReserveEvent(allocKey, appID, oldNodeID)
+func EmitAllocatedReservedEvents(allocKey, appID, nodeID string) {
+	err := events.EmitAllocatedReservedEvent(allocKey, appID, nodeID)
 	if err != nil {
-		log.Logger().Debug("could not emit unreserve events to shim",
+		log.Logger().Warn("could not emit allocatedReserved events to shim",
 			zap.String("allocationKey", allocKey),
 			zap.String("appID", appID),
-			zap.String("nodeID", oldNodeID),
+			zap.String("nodeID", nodeID),
 			zap.Error(err))
 	}
-	// then reserve the new node for this allocation
-	err = events.EmitReserveEvent(allocKey, appID, newNodeID)
+}
+
+func EmitUnReserveEventForNode(allocKey, appID, nodeID string) {
+	err := events.EmitUnreserveEventForNode(allocKey, appID, nodeID)
 	if err != nil {
-		log.Logger().Debug("could not emit reserve events to shim",
+		log.Logger().Warn("could not emit node unreserved event to shim",
 			zap.String("allocationKey", allocKey),
 			zap.String("appID", appID),
-			zap.String("nodeID", newNodeID),
-			zap.Error(err))
-	}
-	// finally emit allocatedReserved on the new node
-	err = events.EmitAllocatedReservedEvent(allocKey, appID, newNodeID)
-	if err != nil {
-		log.Logger().Debug("could not emit allocatedReserved events to shim",
-			zap.String("allocationKey", allocKey),
-			zap.String("appID", appID),
-			zap.String("nodeID", newNodeID),
+			zap.String("nodeID", nodeID),
 			zap.Error(err))
 	}
 }

@@ -20,13 +20,18 @@ package scheduler
 
 import (
 	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
+	"github.com/apache/incubator-yunikorn-core/pkg/events"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 // test allocating calculation
@@ -73,6 +78,12 @@ func TestAppAllocating(t *testing.T) {
 
 // test basic reservations
 func TestAppReservation(t *testing.T) {
+	// init event cache
+	events.CreateAndSetEventCache()
+	defer events.ResetCache()
+	eventCache := events.GetEventCache()
+	eventCache.StartService()
+
 	appID := "app-1"
 	appInfo := cache.NewApplicationInfo(appID, "default", "root.unknown", security.UserGroup{}, nil)
 	app := newSchedulingApplication(appInfo)
@@ -149,8 +160,10 @@ func TestAppReservation(t *testing.T) {
 	}
 
 	// 2nd reservation for app
-	ask2 := newAllocationAsk("alloc-2", appID, res)
-	node2 := newNode("node-2", map[string]resources.Quantity{"first": 10})
+	askKey2 := "alloc-2"
+	nodeID2 := "node-2"
+	ask2 := newAllocationAsk(askKey2, appID, res)
+	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 10})
 	delta, err = app.addAllocationAsk(ask2)
 	if err != nil || !resources.Equals(res, delta) {
 		t.Errorf("ask2 should have been added to app, err %v, expected delta %v but was: %v", err, res, delta)
@@ -164,20 +177,20 @@ func TestAppReservation(t *testing.T) {
 		t.Errorf("reservation of 2nd node should not have failed: error %v", err)
 	}
 	_, err = app.unReserve(node2, ask2)
-	if err != nil {
-		t.Errorf("remove of reservation of 2nd node should not have failed: error %v", err)
-	}
-	// unreserve the same should fail
+	assertAllocAppAndNodeEvents(t, eventCache, askKey2, appID, nodeID2)
+	assert.NilError(t, err, "remove of reservation of 2nd node should not have failed: error %v", err)
+
+	// unreserve the same should not fail
 	_, err = app.unReserve(node2, ask2)
-	if err != nil {
-		t.Errorf("remove twice of reservation of 2nd node should have failed: error %v", err)
-	}
+	assertAllocAppAndNodeEvents(t, eventCache, askKey2, appID, nodeID2)
+	assert.NilError(t, err, "remove twice of reservation of 2nd node should not have failed: error %v", err)
 
 	// failure case: remove reservation from node, app still needs cleanup
 	num, err = node.unReserve(app, ask)
 	assert.NilError(t, err, "un-reserve on node should not have failed with error")
 	assert.Equal(t, num, 1, "un-reserve on node should have removed reservation")
 	num, err = app.unReserve(node, ask)
+	assertAllocAppAndNodeEvents(t, eventCache, askKey, appID, nodeID)
 	assert.NilError(t, err, "app has reservation should not have failed")
 	assert.Equal(t, num, 1, "un-reserve on app should have removed reservation from app")
 }
@@ -659,4 +672,81 @@ func TestStateChangeOnAskUpdate(t *testing.T) {
 	released = app.removeAllocationAsk(askID)
 	assert.Equal(t, released, 0, "allocation ask should not have been reserved")
 	assert.Assert(t, app.isStarting(), "application changed state unexpectedly: %s", app.ApplicationInfo.GetApplicationState())
+}
+
+func TestEmitAllocatedReservedEvents(t *testing.T) {
+	events.CreateAndSetEventCache()
+	defer events.ResetCache()
+	eventCache := events.GetEventCache()
+	eventCache.StartService()
+
+	allocKey := "alloc-1"
+	appID := "app-1"
+	nodeID := "node-1"
+
+	EmitAllocatedReservedEvents(allocKey, appID, nodeID)
+
+	assertAllocAppAndNodeEvents(t, eventCache, allocKey, appID, nodeID)
+}
+
+func TestEmitUnReserveEventForNode(t *testing.T) {
+	events.CreateAndSetEventCache()
+	defer events.ResetCache()
+	eventCache := events.GetEventCache()
+	eventCache.StartService()
+
+	allocKey := "alloc-2"
+	appID := "app-2"
+	nodeID := "node-2"
+
+	EmitUnReserveEventForNode(allocKey, appID, nodeID)
+
+	err := common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
+		return eventCache.Store.CountStoredEvents() >= 1
+	})
+	assert.NilError(t, err, "the event should have been processed")
+
+	records := eventCache.Store.CollectEvents()
+	assert.Equal(t, len(records), 1)
+	record := records[0]
+	msg := record.Message
+	assert.Assert(t, strings.Contains(msg, allocKey), "allocation key not found in event message")
+	assert.Assert(t, strings.Contains(msg, appID), "app ID not found in event message")
+	assert.Assert(t, strings.Contains(msg, nodeID), "node ID not found in event message")
+	assert.Equal(t, record.Type, si.EventRecord_NODE)
+	assert.Equal(t, record.ObjectID, nodeID, "the object ID is the not of the node")
+}
+
+func assertAllocAppAndNodeEvents(t *testing.T, eventCache *events.EventCache, allocKey, appID, nodeID string) {
+	err := common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
+		return eventCache.Store.CountStoredEvents() >= 3
+	})
+	assert.NilError(t, err, "the event should have been processed")
+
+	records := eventCache.Store.CollectEvents()
+	assert.Equal(t, len(records), 3)
+	var requestFound, appFound, nodeFound bool
+	for _, record := range records {
+		msg := record.Message
+		assert.Assert(t, strings.Contains(msg, allocKey), "allocation key not found in event message")
+		assert.Assert(t, strings.Contains(msg, appID), "app ID not found in event message")
+		assert.Assert(t, strings.Contains(msg, nodeID), "node ID not found in event message")
+		switch {
+		case record.ObjectID == allocKey:
+			requestFound = true
+			assert.Equal(t, record.Type, si.EventRecord_REQUEST)
+			assert.Equal(t, record.GroupID, appID)
+		case record.ObjectID == appID:
+			appFound = true
+			assert.Equal(t, record.Type, si.EventRecord_APP)
+		case record.ObjectID == nodeID:
+			nodeFound = true
+			assert.Equal(t, record.Type, si.EventRecord_NODE)
+		default:
+			t.Fatalf("unexpected event found")
+		}
+	}
+	assert.Assert(t, requestFound, "request event not found")
+	assert.Assert(t, appFound, "app event not found")
+	assert.Assert(t, nodeFound, "node not found")
 }

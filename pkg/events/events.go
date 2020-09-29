@@ -66,10 +66,29 @@ func EmitReserveEvent(allocKey, appID, nodeID string) error {
 		"Allocation %s from application %s reserved node %s", "AppReservedNode")
 }
 
-// emit an unreserve event to the node through the shim
+// emit an unreserve event for the allocation, the application and the node as well
 func EmitUnReserveEvent(allocKey, appID, nodeID string) error {
 	return emitRequestAppAndNodeEvents(allocKey, appID, nodeID,
 		"Allocation %s from application %s unreserved from node %s", "AppUnreservedNode")
+}
+
+// emit an unreserve event only to the node
+func EmitUnreserveEventForNode(allocKey, appID, nodeID string) error {
+	eventCache := GetEventCache()
+	if eventCache == nil {
+		// The event cache is disabled.
+		// It's not an error, let's return.
+		return nil
+	}
+	msg := fmt.Sprintf("Ask %s from application %s allocated to node %s", allocKey, appID, nodeID)
+
+	event, err := CreateNodeEventRecord(nodeID, "AppAllocatedReservedNode", msg)
+	if err != nil {
+		return err
+	}
+	eventCache.AddEvent(event)
+
+	return nil
 }
 
 // emit an allocation event to the node through the shim

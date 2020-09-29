@@ -48,8 +48,8 @@ func CreateAndSetEventCache() {
 	cache = createEventStoreAndCache()
 }
 
-// only for testing
-func resetCache() {
+// for testing
+func ResetCache() {
 	cache = nil
 }
 

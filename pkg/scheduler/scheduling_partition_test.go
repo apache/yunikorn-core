@@ -19,9 +19,13 @@
 package scheduler
 
 import (
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
+	"github.com/apache/incubator-yunikorn-core/pkg/events"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
@@ -367,6 +371,12 @@ func TestTryAllocateLarge(t *testing.T) {
 }
 
 func TestAllocReserveNewNode(t *testing.T) {
+	// init event cache
+	events.CreateAndSetEventCache()
+	defer events.ResetCache()
+	eventCache := events.GetEventCache()
+	eventCache.StartService()
+
 	partition := createQueuesNodes(t)
 	if partition == nil {
 		t.Fatal("partition create failed")
@@ -400,7 +410,8 @@ func TestAllocReserveNewNode(t *testing.T) {
 	leaf.addSchedulingApplication(app)
 	partition.applications[appID] = app
 	var delta *resources.Resource
-	ask := newAllocationAskRepeat("alloc-1", appID, res, 2)
+	allocKey := "alloc-1"
+	ask := newAllocationAskRepeat(allocKey, appID, res, 2)
 	delta, err = app.addAllocationAsk(ask)
 	if err != nil || !resources.Equals(resources.Multiply(res, 2), delta) {
 		t.Errorf("failed to add ask to app resource added: %v expected %v (err = %v)", delta, res, err)
@@ -422,6 +433,7 @@ func TestAllocReserveNewNode(t *testing.T) {
 	}
 	assert.Equal(t, reserved, alloc.result, "allocation result should have been reserved")
 	nodeReserved := alloc.nodeID
+	assertAllocAppAndNodeEvents(t, eventCache, allocKey, appID, nodeReserved)
 	toCache = partition.allocate(alloc)
 	if toCache {
 		t.Fatalf("2nd allocation reservation should not be passed back to cache")
@@ -434,6 +446,9 @@ func TestAllocReserveNewNode(t *testing.T) {
 	alloc = partition.tryReservedAllocate()
 	assert.Equal(t, allocatedReserved, alloc.result, "allocation result should have been allocatedReserved")
 	assert.Equal(t, alloc.reservedNodeID, nodeReserved, "node should be set from reserved with new node")
+
+	assertAllocatedReservedEventsToNewNode(t, eventCache, allocKey, appID, nodeReserved, alloc.nodeID)
+
 	toCache = partition.allocate(alloc)
 	if !toCache {
 		t.Fatalf("allocation from reservation should be passed back to cache")
@@ -443,6 +458,12 @@ func TestAllocReserveNewNode(t *testing.T) {
 }
 
 func TestTryAllocateReserve(t *testing.T) {
+	// init event cache
+	events.CreateAndSetEventCache()
+	defer events.ResetCache()
+	eventCache := events.GetEventCache()
+	eventCache.StartService()
+
 	partition := createQueuesNodes(t)
 	if partition == nil {
 		t.Fatal("partition create failed")
@@ -476,7 +497,8 @@ func TestTryAllocateReserve(t *testing.T) {
 	if err != nil || !resources.Equals(res, delta) {
 		t.Errorf("failed to add ask to app resource added: %v expected %v (err = %v)", delta, res, err)
 	}
-	ask2 := newAllocationAsk("alloc-2", appID, res)
+	allocKey2 := "alloc-2"
+	ask2 := newAllocationAsk(allocKey2, appID, res)
 	delta, err = app.addAllocationAsk(ask2)
 	if err != nil || !resources.Equals(res, delta) {
 		t.Errorf("failed to add ask to app resource added: %v expected %v (err = %v)", delta, res, err)
@@ -499,7 +521,8 @@ func TestTryAllocateReserve(t *testing.T) {
 	assert.Equal(t, alloc.reservedNodeID, "", "node should not be set for allocated from reserved")
 	assert.Equal(t, len(alloc.releases), 0, "released allocations should have been 0")
 	assert.Equal(t, alloc.schedulingAsk.ApplicationID, appID, "expected application app-1 to be allocated")
-	assert.Equal(t, alloc.schedulingAsk.AskProto.AllocationKey, "alloc-2", "expected ask alloc-2 to be allocated")
+	assert.Equal(t, alloc.schedulingAsk.AskProto.AllocationKey, allocKey2, "expected ask alloc-2 to be allocated")
+	assertAllocAppAndNodeEvents(t, eventCache, allocKey2, appID, alloc.nodeID)
 
 	// process the allocation like the scheduler does after a try
 	toCache := partition.allocate(alloc)
@@ -531,6 +554,12 @@ func TestTryAllocateReserve(t *testing.T) {
 }
 
 func TestTryAllocateWithReserved(t *testing.T) {
+	// init event cache
+	events.CreateAndSetEventCache()
+	defer events.ResetCache()
+	eventCache := events.GetEventCache()
+	eventCache.StartService()
+
 	partition := createQueuesNodes(t)
 	if partition == nil {
 		t.Fatal("partition create failed")
@@ -556,7 +585,8 @@ func TestTryAllocateWithReserved(t *testing.T) {
 	leaf.addSchedulingApplication(app)
 	partition.applications[appID] = app
 	var delta *resources.Resource
-	ask := newAllocationAskRepeat("alloc-1", appID, res, 2)
+	allocKey := "alloc-1"
+	ask := newAllocationAskRepeat(allocKey, appID, res, 2)
 	delta, err = app.addAllocationAsk(ask)
 	if err != nil || !resources.Equals(resources.Multiply(res, 2), delta) {
 		t.Errorf("failed to add ask to app resource added: %v expected %v (err = %v)", delta, resources.Multiply(res, 2), err)
@@ -577,6 +607,7 @@ func TestTryAllocateWithReserved(t *testing.T) {
 	}
 	assert.Equal(t, allocatedReserved, alloc.result, "expected reserved allocation to be returned")
 	assert.Equal(t, node2.NodeID, alloc.reservedNodeID, "expected nodeID to be set on tryAllocate")
+	assertAllocatedReservedEventsToNewNode(t, eventCache, allocKey, appID, node2.NodeID, alloc.nodeID)
 
 	// confirm the outcome
 	partition.allocate(alloc)
@@ -590,10 +621,17 @@ func TestTryAllocateWithReserved(t *testing.T) {
 	}
 	assert.Equal(t, allocated, alloc.result, "expected allocated allocation to be returned")
 	assert.Equal(t, node2.NodeID, alloc.nodeID, "expected allocation on node2 to be returned")
+	assertAllocAppAndNodeEvents(t, eventCache, allocKey, appID, node2.NodeID)
 }
 
 // remove the reserved ask while allocating in flight for the ask
 func TestScheduleRemoveReservedAsk(t *testing.T) {
+	// init event cache
+	events.CreateAndSetEventCache()
+	defer events.ResetCache()
+	eventCache := events.GetEventCache()
+	eventCache.StartService()
+
 	partition := createQueuesNodes(t)
 	if partition == nil {
 		t.Fatal("partition create failed")
@@ -638,12 +676,14 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 	}
 
 	// add a asks which should reserve
-	ask = newAllocationAskRepeat("alloc-2", appID, res, 1)
+	allocKey2 := "alloc-2"
+	ask = newAllocationAskRepeat(allocKey2, appID, res, 1)
 	delta, err = app.addAllocationAsk(ask)
 	if err != nil || !resources.Equals(res, delta) {
 		t.Errorf("failed to add ask 2 to app resource added: %v expected %v (err = %v)", delta, resources.Multiply(res, 2), err)
 	}
-	ask = newAllocationAskRepeat("alloc-3", appID, res, 1)
+	allocKey3 := "alloc-3"
+	ask = newAllocationAskRepeat(allocKey3, appID, res, 1)
 	delta, err = app.addAllocationAsk(ask)
 	if err != nil || !resources.Equals(res, delta) {
 		t.Errorf("failed to add ask 3 to app resource added: %v expected %v (err = %v)", delta, resources.Multiply(res, 2), err)
@@ -654,6 +694,13 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 		if alloc == nil || alloc.result != reserved {
 			t.Fatalf("expected reserved allocation to be returned (step %d) %v", i, alloc)
 		}
+		var key string
+		if i == 1 {
+			key = allocKey2
+		} else {
+			key = allocKey3
+		}
+		assertAllocAndAppEvents(t, eventCache, key, appID)
 		partition.allocate(alloc)
 	}
 	assert.Equal(t, len(partition.reservedApps), 1, "partition should have reserved app")
@@ -667,6 +714,8 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 	if alloc == nil || alloc.result != allocatedReserved {
 		t.Fatalf("expected allocatedReserved allocation to be returned %v", alloc)
 	}
+	assertAllocatedReservedEventsToNewNode(t, eventCache, alloc.schedulingAsk.AskProto.AllocationKey, appID, alloc.reservedNodeID, node3)
+
 	// before confirming remove the ask: do what the scheduler does when it gets a request from a
 	// shim in processAllocationReleaseByAllocationKey()
 	// make sure we are counting correctly and leave the other reservation intact
@@ -684,4 +733,75 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 	partition.allocate(alloc)
 	assert.Equal(t, len(partition.reservedApps), 1, "partition should still have reserved app")
 	assert.Equal(t, len(app.reservations), 1, "application reservations should be kept at 1")
+}
+
+func assertAllocAndAppEvents(t *testing.T, eventCache *events.EventCache, allocKey, appID string) {
+	err := common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
+		return eventCache.Store.CountStoredEvents() >= 3
+	})
+	assert.NilError(t, err, "the event should have been processed")
+
+	records := eventCache.Store.CollectEvents()
+	assert.Equal(t, len(records), 3)
+	var requestFound, appFound, nodeFound bool
+	for _, record := range records {
+		msg := record.Message
+		assert.Assert(t, strings.Contains(msg, allocKey), "allocation key not found in event message")
+		assert.Assert(t, strings.Contains(msg, appID), "app ID not found in event message")
+		switch {
+		case record.ObjectID == allocKey:
+			requestFound = true
+			assert.Equal(t, record.Type, si.EventRecord_REQUEST)
+			assert.Equal(t, record.GroupID, appID)
+		case record.ObjectID == appID:
+			appFound = true
+			assert.Equal(t, record.Type, si.EventRecord_APP)
+		case record.Type == si.EventRecord_NODE:
+			// we don't know in which node has the ask allocated
+			nodeFound = true
+		default:
+			t.Fatalf("unexpected event found")
+		}
+	}
+	assert.Assert(t, requestFound, "request event not found")
+	assert.Assert(t, appFound, "app event not found")
+	assert.Assert(t, nodeFound, "node not found")
+}
+
+func assertAllocatedReservedEventsToNewNode(t *testing.T, eventCache *events.EventCache, allocKey, appID, nodeReserved, nodeAllocated string) {
+	// check whether unreserved event has been emitted to the reserved node
+	// and that allocated reserved events has been emitted to the new allocation - node pair
+	err := common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
+		return eventCache.Store.CountStoredEvents() >= 4
+	})
+	assert.NilError(t, err, "the event should have been processed")
+	records := eventCache.Store.CollectEvents()
+	assert.Equal(t, len(records), 4)
+	var requestFound, appFound, reservedNodeFound, allocatedNodeFound bool
+	for _, record := range records {
+		msg := record.Message
+		assert.Assert(t, strings.Contains(msg, allocKey), "allocation key not found in event message")
+		assert.Assert(t, strings.Contains(msg, appID), "app ID not found in event message")
+		switch {
+		case record.ObjectID == allocKey:
+			requestFound = true
+			assert.Equal(t, record.Type, si.EventRecord_REQUEST)
+			assert.Equal(t, record.GroupID, appID)
+		case record.ObjectID == appID:
+			appFound = true
+			assert.Equal(t, record.Type, si.EventRecord_APP)
+		case record.ObjectID == nodeReserved:
+			reservedNodeFound = true
+			assert.Equal(t, record.Type, si.EventRecord_NODE)
+		case record.ObjectID == nodeAllocated:
+			allocatedNodeFound = true
+			assert.Equal(t, record.Type, si.EventRecord_NODE)
+		default:
+			t.Fatalf("unexpected event found")
+		}
+	}
+	assert.Assert(t, requestFound, "request event not found")
+	assert.Assert(t, appFound, "app event not found")
+	assert.Assert(t, reservedNodeFound, "node not found")
+	assert.Assert(t, allocatedNodeFound, "node not found")
 }

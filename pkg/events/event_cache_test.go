@@ -38,7 +38,7 @@ func TestGetEventCache(t *testing.T) {
 	cache := GetEventCache()
 	assert.Assert(t, cache == nil, "the cache should be nil by default")
 	CreateAndSetEventCache()
-	defer resetCache()
+	defer ResetCache()
 	cache = GetEventCache()
 	assert.Assert(t, cache != nil, "the cache should not be nil")
 }
@@ -46,7 +46,7 @@ func TestGetEventCache(t *testing.T) {
 // StartService() and Stop() must not cause panic
 func TestSimpleStartAndStop(t *testing.T) {
 	CreateAndSetEventCache()
-	defer resetCache()
+	defer ResetCache()
 	cache := GetEventCache()
 	// adding event to stopped cache does not cause panic
 	cache.AddEvent(nil)
@@ -62,7 +62,7 @@ func TestSimpleStartAndStop(t *testing.T) {
 // should be retrieved from the EventStore
 func TestSingleEventStoredCorrectly(t *testing.T) {
 	CreateAndSetEventCache()
-	defer resetCache()
+	defer ResetCache()
 	cache := GetEventCache()
 	cache.StartService()
 
@@ -100,7 +100,7 @@ func TestSingleEventStoredCorrectly(t *testing.T) {
 // least recently added one
 func TestEventWithMatchingObjectID(t *testing.T) {
 	CreateAndSetEventCache()
-	defer resetCache()
+	defer ResetCache()
 	cache := GetEventCache()
 	cache.StartService()
 

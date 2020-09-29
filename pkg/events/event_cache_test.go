@@ -38,6 +38,7 @@ func TestGetEventCache(t *testing.T) {
 	cache := GetEventCache()
 	assert.Assert(t, cache == nil, "the cache should be nil by default")
 	CreateAndSetEventCache()
+	defer resetCache()
 	cache = GetEventCache()
 	assert.Assert(t, cache != nil, "the cache should not be nil")
 }
@@ -45,6 +46,7 @@ func TestGetEventCache(t *testing.T) {
 // StartService() and Stop() must not cause panic
 func TestSimpleStartAndStop(t *testing.T) {
 	CreateAndSetEventCache()
+	defer resetCache()
 	cache := GetEventCache()
 	// adding event to stopped cache does not cause panic
 	cache.AddEvent(nil)
@@ -60,6 +62,7 @@ func TestSimpleStartAndStop(t *testing.T) {
 // should be retrieved from the EventStore
 func TestSingleEventStoredCorrectly(t *testing.T) {
 	CreateAndSetEventCache()
+	defer resetCache()
 	cache := GetEventCache()
 	cache.StartService()
 
@@ -97,6 +100,7 @@ func TestSingleEventStoredCorrectly(t *testing.T) {
 // least recently added one
 func TestEventWithMatchingObjectID(t *testing.T) {
 	CreateAndSetEventCache()
+	defer resetCache()
 	cache := GetEventCache()
 	cache.StartService()
 
@@ -182,7 +186,11 @@ func (ses *slowEventStore) CountStoredEvents() int {
 // than the rate the events are generated, it doesn't cause
 // panic by filling up the EventChannel
 func TestSlowChannelFillingUpEventChannel(t *testing.T) {
+	currentEventChannelSize := defaultEventChannelSize
 	defaultEventChannelSize = 2
+	defer func() {
+		defaultEventChannelSize = currentEventChannelSize
+	}()
 
 	store := slowEventStore{}
 	cache := createEventCacheInternal(&store)

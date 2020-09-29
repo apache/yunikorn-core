@@ -48,6 +48,11 @@ func CreateAndSetEventCache() {
 	cache = createEventStoreAndCache()
 }
 
+// only for testing
+func resetCache() {
+	cache = nil
+}
+
 func createEventStoreAndCache() *EventCache {
 	store := newEventStoreImpl()
 	return createEventCacheInternal(store)

@@ -19,8 +19,11 @@
 package events
 
 import (
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
@@ -67,4 +70,120 @@ func TestEmptyFields(t *testing.T) {
 
 	_, err = createEventRecord(si.EventRecord_QUEUE, "obj", "group", "", "message")
 	assert.Assert(t, err != nil, "the EventRecord should not be created with empty reason")
+}
+
+func TestEmitReserveEventWithoutEventCache(t *testing.T) {
+	cache := GetEventCache()
+	assert.Assert(t, cache == nil, "cache should not be initialized")
+
+	allocKey := "test-alloc"
+	appID := "app-1234"
+	nodeID := "node-6"
+	err := EmitReserveEvent(allocKey, appID, nodeID)
+	assert.NilError(t, err, "emitting event without event cache should succeed")
+}
+
+func TestEmitReserveEvent(t *testing.T) {
+	CreateAndSetEventCache()
+	defer resetCache()
+	cache := GetEventCache()
+	cache.StartService()
+
+	allocKey := "test-alloc"
+	appID := "app-1234"
+	nodeID := "node-6"
+	err := EmitReserveEvent(allocKey, appID, nodeID)
+	assert.NilError(t, err, "expected EmitReserveEvent to run without errors")
+
+	assertEmitRequestAppAndNodeEvents(t, allocKey, appID, nodeID, "AppReservedNode")
+}
+
+func TestEmitUnReserveEventWithoutEventCache(t *testing.T) {
+	evCache := GetEventCache()
+	assert.Assert(t, evCache == nil, "cache should not be initialized")
+
+	allocKey := "test-alloc"
+	appID := "app-1234"
+	nodeID := "node-6"
+	err := EmitUnReserveEvent(allocKey, appID, nodeID)
+	assert.NilError(t, err, "emitting event without event cache should succeed")
+}
+
+func TestEmitAllocatedReservedEvent(t *testing.T) {
+	CreateAndSetEventCache()
+	defer resetCache()
+	cache := GetEventCache()
+	cache.StartService()
+
+	allocKey := "test-alloc"
+	appID := "app-1234"
+	nodeID := "node-6"
+	err := EmitAllocatedReservedEvent(allocKey, appID, nodeID)
+	assert.NilError(t, err, "expected EmitReserveEvent to run without errors")
+
+	assertEmitRequestAppAndNodeEvents(t, allocKey, appID, nodeID, "AppAllocatedReservedNode")
+}
+
+func TestEmitAllocatedReservedEventWithoutEventCache(t *testing.T) {
+	evCache := GetEventCache()
+	assert.Assert(t, evCache == nil, "cache should not be initialized")
+
+	allocKey := "test-alloc"
+	appID := "app-1234"
+	nodeID := "node-6"
+	err := EmitAllocatedReservedEvent(allocKey, appID, nodeID)
+	assert.NilError(t, err, "emitting event without event cache should succeed")
+}
+
+func TestEmitUnReserveEvent(t *testing.T) {
+	CreateAndSetEventCache()
+	defer resetCache()
+	cache := GetEventCache()
+	cache.StartService()
+
+	allocKey := "test-alloc"
+	appID := "app-1234"
+	nodeID := "node-6"
+	err := EmitUnReserveEvent(allocKey, appID, nodeID)
+	assert.NilError(t, err, "expected EmitReserveEvent to run without errors")
+
+	assertEmitRequestAppAndNodeEvents(t, allocKey, appID, nodeID, "AppUnreservedNode")
+}
+
+func assertEmitRequestAppAndNodeEvents(t *testing.T, allocKey, appID, nodeID, reason string) {
+	cache := GetEventCache()
+
+	// wait for events to be processed
+	err := common.WaitFor(1*time.Millisecond, 100*time.Millisecond, func() bool {
+		return cache.Store.CountStoredEvents() == 3
+	})
+	assert.NilError(t, err, "the event should have been processed")
+
+	records := cache.Store.CollectEvents()
+	assert.Equal(t, len(records), 3)
+	var requestFound, appFound, nodeFound bool
+	for _, record := range records {
+		assert.Equal(t, record.Reason, reason)
+		msg := record.Message
+		assert.Assert(t, strings.Contains(msg, allocKey), "allocation key not found in event message")
+		assert.Assert(t, strings.Contains(msg, appID), "app ID not found in event message")
+		assert.Assert(t, strings.Contains(msg, nodeID), "node ID not found in event message")
+		switch {
+		case record.ObjectID == allocKey:
+			requestFound = true
+			assert.Equal(t, record.Type, si.EventRecord_REQUEST)
+			assert.Equal(t, record.GroupID, appID)
+		case record.ObjectID == appID:
+			appFound = true
+			assert.Equal(t, record.Type, si.EventRecord_APP)
+		case record.ObjectID == nodeID:
+			nodeFound = true
+			assert.Equal(t, record.Type, si.EventRecord_NODE)
+		default:
+			t.Fatalf("unexpected event found")
+		}
+	}
+	assert.Assert(t, requestFound, "request event not found")
+	assert.Assert(t, appFound, "app event not found")
+	assert.Assert(t, nodeFound, "node not found")
 }

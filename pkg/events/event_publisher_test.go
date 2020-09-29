@@ -80,8 +80,8 @@ func TestServiceStartStopInternal(t *testing.T) {
 	store := newEventStoreImpl()
 	publisher := createShimPublisherInternal(store)
 	publisher.StartService()
+	defer publisher.Stop()
 	assert.Equal(t, publisher.getEventStore(), store)
-	publisher.Stop()
 }
 
 func TestNoFillWithoutEventPluginRegistered(t *testing.T) {
@@ -90,6 +90,7 @@ func TestNoFillWithoutEventPluginRegistered(t *testing.T) {
 	store := newEventStoreImpl()
 	publisher := createShimPublisherWithParameters(store, pushEventInterval)
 	publisher.StartService()
+	defer publisher.Stop()
 
 	event := &si.EventRecord{
 		Type:          si.EventRecord_REQUEST,
@@ -116,6 +117,7 @@ func TestPublisherSendsEvent(t *testing.T) {
 	store := newEventStoreImpl()
 	publisher := createShimPublisherWithParameters(store, pushEventInterval)
 	publisher.StartService()
+	defer publisher.Stop()
 
 	event := &si.EventRecord{
 		Type:          si.EventRecord_REQUEST,
@@ -137,7 +139,5 @@ func TestPublisherSendsEvent(t *testing.T) {
 	assert.Equal(t, eventFromPlugin.Reason, "reason")
 	assert.Equal(t, eventFromPlugin.Message, "message")
 	assert.Equal(t, eventFromPlugin.TimestampNano, int64(123456))
-
-	publisher.Stop()
 }
 

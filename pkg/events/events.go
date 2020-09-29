@@ -62,98 +62,46 @@ func CreateQueueEventRecord(objectID, groupID, reason, message string) (*si.Even
 // emitting event to the shim for a reservation
 // the event will be sent to the node, the application and the allocation involved in the reservation
 func EmitReserveEvent(allocKey, appID, nodeID string) error {
-	eventCache := GetEventCache()
-	if eventCache == nil {
-		// The event cache is disabled.
-		// It's not an error, let's return.
-		return nil
-	}
-	msg := fmt.Sprintf("Allocation %s from application %s reserved node %s", allocKey, appID, nodeID)
-
-	// push event to the node
-	event, err := CreateNodeEventRecord(nodeID, "AppReservedNode", msg)
-	if err != nil {
-		return err
-	}
-	eventCache.AddEvent(event)
-
-	// push event to the app
-	event, err = CreateAppEventRecord(appID, "AppReservedNode", msg)
-	if err != nil {
-		return err
-	}
-	eventCache.AddEvent(event)
-
-	// push event to the request
-	event, err = CreateRequestEventRecord(allocKey, appID, "AppReservedNode", msg)
-	if err != nil {
-		return err
-	}
-	eventCache.AddEvent(event)
-
-	return nil
+	return emitRequestAppAndNodeEvents(allocKey, appID, nodeID,
+		"Allocation %s from application %s reserved node %s", "AppReservedNode")
 }
 
 // emit an unreserve event to the node through the shim
 func EmitUnReserveEvent(allocKey, appID, nodeID string) error {
-	eventCache := GetEventCache()
-	if eventCache == nil {
-		// The event cache is disabled.
-		// It's not an error, let's return.
-		return nil
-	}
-	msg := fmt.Sprintf("Allocation %s from application %s unreserved from node %s", allocKey, appID, nodeID)
-
-	event, err := CreateNodeEventRecord(nodeID, "AppUnreservedFromNode", msg)
-	if err != nil {
-		return err
-	}
-	eventCache.AddEvent(event)
-
-	// push event to the app
-	// keep in mind that the app might not exist anymore, so the shim might emit a warn log entry
-	event, err = CreateAppEventRecord(appID, "AppUnreservedNode", msg)
-	if err != nil {
-		return err
-	}
-	eventCache.AddEvent(event)
-
-	// push event to the request
-	// keep in mind that the request might not exist anymore, so the shim might emit a warn log entry
-	event, err = CreateRequestEventRecord(allocKey, appID, "AppUnreservedNode", msg)
-	if err != nil {
-		return err
-	}
-	eventCache.AddEvent(event)
-
-	return nil
+	return emitRequestAppAndNodeEvents(allocKey, appID, nodeID,
+		"Allocation %s from application %s unreserved from node %s", "AppUnreservedNode")
 }
 
 // emit an allocation event to the node through the shim
 func EmitAllocatedReservedEvent(allocKey, appID, nodeID string) error {
+	return emitRequestAppAndNodeEvents(allocKey, appID, nodeID,
+		"Ask %s from application %s allocated to node %s", "AppAllocatedReservedNode")
+}
+
+func emitRequestAppAndNodeEvents(allocKey, appID, nodeID, msgFmt, reason string) error {
 	eventCache := GetEventCache()
 	if eventCache == nil {
 		// The event cache is disabled.
 		// It's not an error, let's return.
 		return nil
 	}
-	msg := fmt.Sprintf("Ask %s from application %s allocated to node %s", allocKey, appID, nodeID)
+	msg := fmt.Sprintf(msgFmt, allocKey, appID, nodeID)
 
-	event, err := CreateNodeEventRecord(nodeID, "AppAllocatedReservedNode", msg)
+	event, err := CreateNodeEventRecord(nodeID, reason, msg)
 	if err != nil {
 		return err
 	}
 	eventCache.AddEvent(event)
 
 	// push event to the app
-	event, err = CreateAppEventRecord(appID, "AppAllocatedReservedNode", msg)
+	event, err = CreateAppEventRecord(appID, reason, msg)
 	if err != nil {
 		return err
 	}
 	eventCache.AddEvent(event)
 
 	// push event to the request
-	event, err = CreateRequestEventRecord(allocKey, appID, "AppAllocatedReservedNode", msg)
+	event, err = CreateRequestEventRecord(allocKey, appID, reason, msg)
 	if err != nil {
 		return err
 	}

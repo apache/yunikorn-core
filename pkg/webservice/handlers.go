@@ -338,22 +338,25 @@ func getNodeJSON(nodeInfo *cache.NodeInfo) *dao.NodeDAOInfo {
 func getNodesUtilJSON(partition *cache.PartitionInfo, name string) *dao.NodesUtilDAOInfo {
 	mapResult := make([]int, 10)
 	mapName := make([][]string, 10)
+	var v float64
 	var nodeUtil []*dao.NodeUtilDAOInfo
 	for _, node := range partition.GetNodes() {
 		total, ok := node.GetCapacity().Resources[name]
 		if !ok {
 			total = 0
 		}
-		if float64(total) > 0 {
-			resourceAllocated, ok := node.GetAllocatedResource().Resources[name]
-			if !ok {
-				resourceAllocated = 0
-			}
-			v := float64(resourceAllocated) / float64(total)
-			idx := int(math.Dim(math.Ceil(v*10), 1))
-			mapResult[idx]++
-			mapName[idx] = append(mapName[idx], node.NodeID)
+		resourceAllocated, ok := node.GetAllocatedResource().Resources[name]
+		if !ok {
+			resourceAllocated = 0
 		}
+		if float64(total) > 0 {
+			v = float64(resourceAllocated) / float64(total)
+		} else {
+			v = float64(0)
+		}
+		idx := int(math.Dim(math.Ceil(v*10), 1))
+		mapResult[idx]++
+		mapName[idx] = append(mapName[idx], node.NodeID)
 	}
 	for k := 0; k < 10; k++ {
 		util := &dao.NodeUtilDAOInfo{

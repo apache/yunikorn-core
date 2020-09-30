@@ -525,14 +525,28 @@ partitions:
 		Used:         int64(500),
 		Usage:        "50%",
 	}
+	utilNon := &dao.ClusterUtilDAOInfo{
+		ResourceType: "non-exist",
+		Total:        int64(0),
+		Used:         int64(0),
+		Usage:        "0%",
+	}
 	resMem := getClusterUtilJSON(partition, "memory")
 	resCore := getClusterUtilJSON(partition, "vcore")
+	resNon := getClusterUtilJSON(partition, "non-exist")
+
 	assert.Equal(t, utilMem.ResourceType, resMem.ResourceType)
 	assert.Equal(t, utilMem.Total, resMem.Total)
 	assert.Equal(t, utilMem.Used, resMem.Used)
 	assert.Equal(t, utilMem.Usage, resMem.Usage)
+
 	assert.Equal(t, utilCore.ResourceType, resCore.ResourceType)
 	assert.Equal(t, utilCore.Total, resCore.Total)
 	assert.Equal(t, utilCore.Used, resCore.Used)
 	assert.Equal(t, utilCore.Usage, resCore.Usage)
+
+	assert.Equal(t, utilNon.ResourceType, resNon.ResourceType)
+	assert.Equal(t, utilNon.Total, resNon.Total)
+	assert.Equal(t, utilNon.Used, resNon.Used)
+	assert.Equal(t, utilNon.Usage, resNon.Usage)
 }

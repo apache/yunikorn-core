@@ -377,7 +377,7 @@ func Validate(newConfig *SchedulerConfig) error {
 			partition.Name = DefaultPartition
 		}
 		// check the queue structure
-		log.Logger().Debug("checking partition",
+		log.Logger().Info("checking partition",
 			zap.String("partitionName", partition.Name))
 		err := checkQueuesStructure(&partition)
 		if err != nil {

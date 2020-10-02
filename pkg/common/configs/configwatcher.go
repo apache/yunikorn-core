@@ -107,10 +107,10 @@ func (cw *ConfigWatcher) runOnce() bool {
 	return false
 }
 
+var timer *time.Timer
 // if configWatcher is not running, kick-off running it
 // if configWatcher is already running, this is a noop
 func (cw *ConfigWatcher) Run() {
-	var timer *time.Timer
 	select {
 	case cw.soloChan <- 0:
 		ticker := time.NewTicker(1 * time.Second)

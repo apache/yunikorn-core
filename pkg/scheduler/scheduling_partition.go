@@ -114,6 +114,13 @@ func (psc *partitionSchedulingContext) addSchedulingApplication(schedulingApp *S
 	}
 	// we have a queue name either from placement or direct
 	schedulingQueue := psc.getQueue(queueName)
+
+	// Check if queue does not exist and placement rule is also not defined
+	if schedulingQueue == nil && !psc.placementManager.IsInitialised() {
+		return fmt.Errorf("application cannot be submitted to non existing queue %s for application %s",
+			schedulingApp.ApplicationInfo.QueueName, appID)
+	}
+
 	// check if the queue already exist and what we have is a leaf queue with submit access
 	if schedulingQueue != nil &&
 		(!schedulingQueue.isLeafQueue() || !schedulingQueue.checkSubmitAccess(schedulingApp.ApplicationInfo.GetUser())) {

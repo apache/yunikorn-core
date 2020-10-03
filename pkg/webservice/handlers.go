@@ -210,21 +210,32 @@ func getClusterJSON(name string) *dao.ClusterDAOInfo {
 
 func getClusterUtilJSON(partition *cache.PartitionInfo) []*dao.ClusterUtilDAOInfo {
 	var utils []*dao.ClusterUtilDAOInfo
+	var getResource bool = true
 	total := partition.GetTotalPartitionResource()
-	if total == nil {
-		total = resources.NewResource()
+	if resources.IsZero(total) {
+		getResource = false
 	}
 	used := partition.Root.GetAllocatedResource()
-	if used == nil {
-		used = resources.NewResource()
+	if len(used.Resources) == 0 {
+		getResource = false
 	}
-	percent := resources.CalculateAbsUsedCapacity(total, used)
-	for name, value := range percent.Resources {
+	if getResource {
+		percent := resources.CalculateAbsUsedCapacity(total, used)
+		for name, value := range percent.Resources {
+			utilization := &dao.ClusterUtilDAOInfo{
+				ResourceType: name,
+				Total:        int64(total.Resources[name]),
+				Used:         int64(used.Resources[name]),
+				Usage:        fmt.Sprintf("%d", int64(value)) + "%",
+			}
+			utils = append(utils, utilization)
+		}
+	} else if !getResource {
 		utilization := &dao.ClusterUtilDAOInfo{
-			ResourceType: name,
-			Total:        int64(total.Resources[name]),
-			Used:         int64(used.Resources[name]),
-			Usage:        fmt.Sprintf("%d", int64(value)) + "%",
+			ResourceType: "N/A",
+			Total:        int64(-1),
+			Used:         int64(-1),
+			Usage:        "N/A",
 		}
 		utils = append(utils, utilization)
 	}

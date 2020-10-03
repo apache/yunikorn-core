@@ -478,11 +478,23 @@ partitions:
 	if err != nil {
 		t.Errorf("add application to partition should not have failed: %v", err)
 	}
+	// case of total resource and allocated resource undefined
+	utilZero := &dao.ClusterUtilDAOInfo{
+		ResourceType: "N/A",
+		Total:        int64(-1),
+		Used:         int64(-1),
+		Usage:        "N/A",
+	}
+	result0 := getClusterUtilJSON(partition)
+	assert.Equal(t, ContainsObj(result0, utilZero), true)
+
+	// add totalPartitionResource to partition
 	memval := resources.Quantity(1000)
 	coreval := resources.Quantity(1000)
 	nodeID := "node-1"
 	node1 := cache.NewNodeForTest(nodeID, resources.NewResourceFromMap(
 		map[string]resources.Quantity{resources.MEMORY: memval, resources.VCORE: coreval}))
+	// add allocatedResource to partition
 	resAlloc1 := &si.Resource{
 		Resources: map[string]*si.Quantity{
 			resources.MEMORY: {Value: 500},
@@ -519,13 +531,13 @@ partitions:
 	}
 	// set expected result
 	utilMem := &dao.ClusterUtilDAOInfo{
-		ResourceType: "memory",
+		ResourceType: resources.MEMORY,
 		Total:        int64(1000),
 		Used:         int64(800),
 		Usage:        "80%",
 	}
 	utilCore := &dao.ClusterUtilDAOInfo{
-		ResourceType: "vcore",
+		ResourceType: resources.VCORE,
 		Total:        int64(1000),
 		Used:         int64(500),
 		Usage:        "50%",

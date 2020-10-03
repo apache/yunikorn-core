@@ -516,6 +516,7 @@ partitions:
 	if err != nil || partition.GetNode(nodeID) == nil {
 		t.Fatalf("add node to partition should not have failed: %v", err)
 	}
+	// set expected result
 	utilMem := &dao.ClusterUtilDAOInfo{
 		ResourceType: "memory",
 		Total:        int64(1000),
@@ -528,7 +529,7 @@ partitions:
 		Used:         int64(500),
 		Usage:        "50%",
 	}
-
+	// check result fit answer or not
 	result := getClusterUtilJSON(partition)
 	assert.Equal(t, slice.Contains(result, utilMem), true)
 	assert.Equal(t, slice.Contains(result, utilCore), true)

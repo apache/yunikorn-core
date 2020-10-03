@@ -24,6 +24,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/stew/slice"
 	"gopkg.in/yaml.v2"
 	"gotest.tools/assert"
 
@@ -464,13 +465,14 @@ partitions:
 	}
 	assert.Equal(t, 1, len(clusterInfo.ListPartitions()))
 
-	// Check test partition
+	// Check test partitions
 	partitionName := "[" + rmID + "]default"
 	partition := clusterInfo.GetPartition(partitionName)
 	assert.Equal(t, partitionName, partition.Name)
-
+	// new app to partition
 	queueName := "root.default"
-	appInfo := cache.CreateNewApplicationInfo("appID-1", "default", queueName)
+	appID := "appID-1"
+	appInfo := cache.CreateNewApplicationInfo(appID, "default", queueName)
 	err := cache.AddNewApplicationForTest(partition, appInfo, true)
 	if err != nil {
 		t.Errorf("add application to partition should not have failed: %v", err)
@@ -479,7 +481,7 @@ partitions:
 	coreval := resources.Quantity(1000)
 	nodeID := "node-1"
 	node1 := cache.NewNodeForTest(nodeID, resources.NewResourceFromMap(
-		map[string]resources.Quantity{"memory": memval, "vcore": coreval}))
+		map[string]resources.Quantity{resources.MEMORY: memval, resources.VCORE: coreval}))
 	resAlloc1 := &si.Resource{
 		Resources: map[string]*si.Quantity{
 			resources.MEMORY: {Value: 500},
@@ -497,17 +499,18 @@ partitions:
 		ResourcePerAlloc: resAlloc1,
 		QueueName:        queueName,
 		NodeID:           nodeID,
-		ApplicationID:    "appID-1",
+		ApplicationID:    appID,
 	}
 	alloc2 := &si.Allocation{
 		AllocationKey:    "alloc-2",
 		ResourcePerAlloc: resAlloc2,
 		QueueName:        queueName,
 		NodeID:           nodeID,
-		ApplicationID:    "appID-1",
+		ApplicationID:    appID,
 	}
 	alloc1.UUID = "alloc-1-uuid"
 	alloc2.UUID = "alloc-2-uuid"
+	// add alloc to node
 	allocs := []*si.Allocation{alloc1, alloc2}
 	err = cache.AddNewNodeForTest(partition, node1, allocs)
 	if err != nil || partition.GetNode(nodeID) == nil {
@@ -525,28 +528,8 @@ partitions:
 		Used:         int64(500),
 		Usage:        "50%",
 	}
-	utilNon := &dao.ClusterUtilDAOInfo{
-		ResourceType: "non-exist",
-		Total:        int64(0),
-		Used:         int64(0),
-		Usage:        "0%",
-	}
-	resMem := getClusterUtilJSON(partition, "memory")
-	resCore := getClusterUtilJSON(partition, "vcore")
-	resNon := getClusterUtilJSON(partition, "non-exist")
 
-	assert.Equal(t, utilMem.ResourceType, resMem.ResourceType)
-	assert.Equal(t, utilMem.Total, resMem.Total)
-	assert.Equal(t, utilMem.Used, resMem.Used)
-	assert.Equal(t, utilMem.Usage, resMem.Usage)
-
-	assert.Equal(t, utilCore.ResourceType, resCore.ResourceType)
-	assert.Equal(t, utilCore.Total, resCore.Total)
-	assert.Equal(t, utilCore.Used, resCore.Used)
-	assert.Equal(t, utilCore.Usage, resCore.Usage)
-
-	assert.Equal(t, utilNon.ResourceType, resNon.ResourceType)
-	assert.Equal(t, utilNon.Total, resNon.Total)
-	assert.Equal(t, utilNon.Used, resNon.Used)
-	assert.Equal(t, utilNon.Usage, resNon.Usage)
+	result := getClusterUtilJSON(partition)
+	assert.Equal(t, slice.Contains(result, utilMem), true)
+	assert.Equal(t, slice.Contains(result, utilCore), true)
 }

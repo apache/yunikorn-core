@@ -91,10 +91,7 @@ func getClusterUtilization(w http.ResponseWriter, r *http.Request) {
 	lists := gClusterInfo.ListPartitions()
 	for _, k := range lists {
 		partition := gClusterInfo.GetPartition(k)
-		for name := range partition.GetTotalPartitionResource().Resources {
-			util := getClusterUtilJSON(partition, name)
-			utilizations = append(utilizations, util)
-		}
+		utilizations = getClusterUtilJSON(partition)
 		clusterUtil = append(clusterUtil, &dao.ClustersUtilDAOInfo{
 			PartitionName: partition.Name,
 			ClustersUtil:  utilizations,
@@ -211,29 +208,27 @@ func getClusterJSON(name string) *dao.ClusterDAOInfo {
 	return clusterInfo
 }
 
-func getClusterUtilJSON(partition *cache.PartitionInfo, name string) *dao.ClusterUtilDAOInfo {
-	var total, used resources.Quantity
-	var percent int64
-	total, ok := partition.GetTotalPartitionResource().Resources[name]
-	if !ok {
-		total = 0
+func getClusterUtilJSON(partition *cache.PartitionInfo) []*dao.ClusterUtilDAOInfo {
+	var utils []*dao.ClusterUtilDAOInfo
+	total := partition.GetTotalPartitionResource()
+	if total == nil {
+		total = resources.NewResource()
 	}
-	used, ok = partition.Root.GetAllocatedResource().Resources[name]
-	if !ok {
-		used = 0
+	used := partition.Root.GetAllocatedResource()
+	if used == nil {
+		used = resources.NewResource()
 	}
-	if total < used || total == 0 {
-		percent = int64(0)
-	} else {
-		percent = ((int64(used) * int64(100)) / int64(total))
+	percent := resources.CalculateAbsUsedCapacity(total, used)
+	for name, value := range percent.Resources {
+		utilization := &dao.ClusterUtilDAOInfo{
+			ResourceType: name,
+			Total:        int64(total.Resources[name]),
+			Used:         int64(used.Resources[name]),
+			Usage:        fmt.Sprintf("%d", int64(value)) + "%",
+		}
+		utils = append(utils, utilization)
 	}
-	utilization := &dao.ClusterUtilDAOInfo{
-		ResourceType: name,
-		Total:        int64(total),
-		Used:         int64(used),
-		Usage:        fmt.Sprintf("%d", percent) + "%",
-	}
-	return utilization
+	return utils
 }
 
 func getPartitionJSON(name string) *dao.PartitionDAOInfo {

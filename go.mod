@@ -35,7 +35,6 @@ require (
 	github.com/prometheus/common v0.4.1
 	github.com/prometheus/procfs v0.0.8 // indirect
 	github.com/satori/go.uuid v1.2.0
-	github.com/stretchr/stew v0.0.0-20130812190256-80ef0842b48b
 	github.com/stretchr/testify v1.5.1 // indirect
 	go.uber.org/atomic v1.5.1 // indirect
 	go.uber.org/multierr v1.4.0 // indirect

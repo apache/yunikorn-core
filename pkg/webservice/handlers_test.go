@@ -20,11 +20,12 @@ package webservice
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/stretchr/stew/slice"
 	"gopkg.in/yaml.v2"
 	"gotest.tools/assert"
 
@@ -531,6 +532,22 @@ partitions:
 	}
 	// check result fit answer or not
 	result := getClusterUtilJSON(partition)
-	assert.Equal(t, slice.Contains(result, utilMem), true)
-	assert.Equal(t, slice.Contains(result, utilCore), true)
+	assert.Equal(t, ContainsObj(result, utilMem), true)
+	assert.Equal(t, ContainsObj(result, utilCore), true)
+}
+
+func ContainsObj(slice interface{}, contains interface{}) bool {
+	value := reflect.ValueOf(slice)
+	for i := 0; i < value.Len(); i++ {
+		if value.Index(i).Interface() == contains {
+			return true
+		}
+		if reflect.DeepEqual(value.Index(i).Interface(), contains) {
+			return true
+		}
+		if fmt.Sprintf("%#v", value.Index(i).Interface()) == fmt.Sprintf("%#v", contains) {
+			return true
+		}
+	}
+	return false
 }

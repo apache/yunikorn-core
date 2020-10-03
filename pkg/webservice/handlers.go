@@ -339,33 +339,42 @@ func getNodesUtilJSON(partition *cache.PartitionInfo, name string) *dao.NodesUti
 	mapResult := make([]int, 10)
 	mapName := make([][]string, 10)
 	var v float64
+	var resourceExist bool = true
 	var nodeUtil []*dao.NodeUtilDAOInfo
 	for _, node := range partition.GetNodes() {
-		total, ok := node.GetCapacity().Resources[name]
-		if !ok {
-			total = 0
+		total := node.GetCapacity()
+		if total.Resources[name] <= 0 {
+			resourceExist = false
 		}
-		resourceAllocated, ok := node.GetAllocatedResource().Resources[name]
-		if !ok {
-			resourceAllocated = 0
+		resourceAllocated := node.GetAllocatedResource()
+		if _, ok := resourceAllocated.Resources[name]; !ok {
+			resourceExist = false
 		}
-		if float64(total) > 0 {
-			v = float64(resourceAllocated) / float64(total)
-		} else {
-			v = float64(0)
+		if resourceExist {
+			v = float64(resources.CalculateAbsUsedCapacity(total, resourceAllocated).Resources[name])
+			idx := int(math.Dim(math.Ceil(v/10), 1))
+			mapResult[idx]++
+			mapName[idx] = append(mapName[idx], node.NodeID)
 		}
-		idx := int(math.Dim(math.Ceil(v*10), 1))
-		mapResult[idx]++
-		mapName[idx] = append(mapName[idx], node.NodeID)
 	}
 	for k := 0; k < 10; k++ {
-		util := &dao.NodeUtilDAOInfo{
-			BucketID:   fmt.Sprintf("%d", k+1),
-			BucketName: fmt.Sprintf("%d", k*10) + "-" + fmt.Sprintf("%d", (k+1)*10) + "%",
-			NumOfNodes: int64(mapResult[k]),
-			NodeNames:  mapName[k],
+		if resourceExist {
+			util := &dao.NodeUtilDAOInfo{
+				BucketName: fmt.Sprintf("%d", k*10) + "-" + fmt.Sprintf("%d", (k+1)*10) + "%",
+				NumOfNodes: int64(mapResult[k]),
+				NodeNames:  mapName[k],
+			}
+			nodeUtil = append(nodeUtil, util)
+		} else {
+			util := &dao.NodeUtilDAOInfo{
+				BucketName: fmt.Sprintf("%d", k*10) + "-" + fmt.Sprintf("%d", (k+1)*10) + "%",
+				NumOfNodes: int64(-1),
+				NodeNames:  []string{"N/A"},
+			}
+			nodeUtil = append(nodeUtil, util)
 		}
-		nodeUtil = append(nodeUtil, util)
+		mapResult[k] = 0
+		mapName[k] = []string{}
 	}
 	return &dao.NodesUtilDAOInfo{
 		ResourceType: name,

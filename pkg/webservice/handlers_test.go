@@ -561,30 +561,5 @@ func ContainsObj(slice interface{}, contains interface{}) bool {
 			return true
 		}
 	}
-<<<<<<< HEAD
 	return false
-=======
-	// get nodes utilization
-	res1 := getNodesUtilJSON(partition, "memory")
-	res2 := getNodesUtilJSON(partition, "vcore")
-	resNon := getNodesUtilJSON(partition, "non-exist")
-	subres1 := res1.NodesUtil
-	subres2 := res2.NodesUtil
-	subresNon := resNon.NodesUtil
-
-	assert.Equal(t, res1.ResourceType, "memory")
-	assert.Equal(t, subres1[2].NumOfNodes, int64(1))
-	assert.Equal(t, subres1[4].NumOfNodes, int64(1))
-	assert.Equal(t, subres1[2].NodeNames[0], "node-2")
-	assert.Equal(t, subres1[4].NodeNames[0], "node-1")
-
-	assert.Equal(t, res2.ResourceType, "vcore")
-	assert.Equal(t, subres2[2].NumOfNodes, int64(1))
-	assert.Equal(t, subres2[4].NumOfNodes, int64(1))
-	assert.Equal(t, subres2[2].NodeNames[0], "node-1")
-	assert.Equal(t, subres2[4].NodeNames[0], "node-2")
-
-	assert.Equal(t, resNon.ResourceType, "non-exist")
-	assert.Equal(t, subresNon[0].NumOfNodes, int64(2))
->>>>>>> add non-exist case to unit test
 }

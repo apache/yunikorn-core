@@ -24,7 +24,6 @@ type NodesUtilDAOInfo struct {
 }
 
 type NodeUtilDAOInfo struct {
-	BucketID   string   `json:"bucketID"`
 	BucketName string   `json:"bucketName"`
 	NumOfNodes int64    `json:"numOfNodes"`
 	NodeNames  []string `json:"nodeNames"`

@@ -108,6 +108,7 @@ func (cw *ConfigWatcher) runOnce() bool {
 }
 
 var timer *time.Timer
+
 // if configWatcher is not running, kick-off running it
 // if configWatcher is already running, this is a noop
 func (cw *ConfigWatcher) Run() {

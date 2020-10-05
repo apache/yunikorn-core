@@ -31,6 +31,7 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
@@ -80,6 +81,25 @@ func getClusterInfo(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewEncoder(w).Encode(clustersInfo); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
+	}
+}
+
+func getClusterUtilization(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	var clusterUtil []*dao.ClustersUtilDAOInfo
+	var utilizations []*dao.ClusterUtilDAOInfo
+	lists := gClusterInfo.ListPartitions()
+	for _, k := range lists {
+		partition := gClusterInfo.GetPartition(k)
+		utilizations = getClusterUtilJSON(partition)
+		clusterUtil = append(clusterUtil, &dao.ClustersUtilDAOInfo{
+			PartitionName: partition.Name,
+			ClustersUtil:  utilizations,
+		})
+	}
+
+	if err := json.NewEncoder(w).Encode(clusterUtil); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -186,6 +206,40 @@ func getClusterJSON(name string) *dao.ClusterDAOInfo {
 	clusterInfo.ActiveNodes = strconv.Itoa(partitionContext.GetTotalNodeCount())
 
 	return clusterInfo
+}
+
+func getClusterUtilJSON(partition *cache.PartitionInfo) []*dao.ClusterUtilDAOInfo {
+	var utils []*dao.ClusterUtilDAOInfo
+	var getResource bool = true
+	total := partition.GetTotalPartitionResource()
+	if resources.IsZero(total) {
+		getResource = false
+	}
+	used := partition.Root.GetAllocatedResource()
+	if len(used.Resources) == 0 {
+		getResource = false
+	}
+	if getResource {
+		percent := resources.CalculateAbsUsedCapacity(total, used)
+		for name, value := range percent.Resources {
+			utilization := &dao.ClusterUtilDAOInfo{
+				ResourceType: name,
+				Total:        int64(total.Resources[name]),
+				Used:         int64(used.Resources[name]),
+				Usage:        fmt.Sprintf("%d", int64(value)) + "%",
+			}
+			utils = append(utils, utilization)
+		}
+	} else if !getResource {
+		utilization := &dao.ClusterUtilDAOInfo{
+			ResourceType: "N/A",
+			Total:        int64(-1),
+			Used:         int64(-1),
+			Usage:        "N/A",
+		}
+		utils = append(utils, utilization)
+	}
+	return utils
 }
 
 func getPartitionJSON(name string) *dao.PartitionDAOInfo {

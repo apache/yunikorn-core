@@ -48,6 +48,12 @@ var webRoutes = routes{
 		getClusterInfo,
 	},
 	route{
+		"Cluster",
+		"GET",
+		"/ws/v1/clusters/utilization",
+		getClusterUtilization,
+	},
+	route{
 		"Scheduler",
 		"GET",
 		"/ws/v1/apps",

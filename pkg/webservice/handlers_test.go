@@ -20,7 +20,9 @@ package webservice
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -29,6 +31,7 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/testutils"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
@@ -442,4 +445,121 @@ func prepareSchedulerForConfigChange(t *testing.T) {
 	if _, err := cache.SetClusterInfoFromConfigFile(gClusterInfo, "rmID", "default-policy-group"); err != nil {
 		t.Fatalf("Error when load clusterInfo from config %v", err)
 	}
+}
+
+func TestGetClusterUtilJSON(t *testing.T) {
+	const configDefault = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        queues:
+        - name: default
+`
+	rmID := "Util"
+	policyGroup := "default-policy-group"
+	clusterInfo := cache.NewClusterInfo()
+
+	configs.MockSchedulerConfigByData([]byte(configDefault))
+	if _, err := cache.SetClusterInfoFromConfigFile(clusterInfo, rmID, policyGroup); err != nil {
+		t.Fatalf("Error when load clusterInfo from config %v", err)
+	}
+	assert.Equal(t, 1, len(clusterInfo.ListPartitions()))
+
+	// Check test partitions
+	partitionName := "[" + rmID + "]default"
+	partition := clusterInfo.GetPartition(partitionName)
+	assert.Equal(t, partitionName, partition.Name)
+	// new app to partition
+	queueName := "root.default"
+	appID := "appID-1"
+	appInfo := cache.CreateNewApplicationInfo(appID, "default", queueName)
+	err := cache.AddNewApplicationForTest(partition, appInfo, true)
+	if err != nil {
+		t.Errorf("add application to partition should not have failed: %v", err)
+	}
+	// case of total resource and allocated resource undefined
+	utilZero := &dao.ClusterUtilDAOInfo{
+		ResourceType: "N/A",
+		Total:        int64(-1),
+		Used:         int64(-1),
+		Usage:        "N/A",
+	}
+	result0 := getClusterUtilJSON(partition)
+	assert.Equal(t, ContainsObj(result0, utilZero), true)
+
+	// add totalPartitionResource to partition
+	memval := resources.Quantity(1000)
+	coreval := resources.Quantity(1000)
+	nodeID := "node-1"
+	node1 := cache.NewNodeForTest(nodeID, resources.NewResourceFromMap(
+		map[string]resources.Quantity{resources.MEMORY: memval, resources.VCORE: coreval}))
+	// add allocatedResource to partition
+	resAlloc1 := &si.Resource{
+		Resources: map[string]*si.Quantity{
+			resources.MEMORY: {Value: 500},
+			resources.VCORE:  {Value: 300},
+		},
+	}
+	resAlloc2 := &si.Resource{
+		Resources: map[string]*si.Quantity{
+			resources.MEMORY: {Value: 300},
+			resources.VCORE:  {Value: 200},
+		},
+	}
+	alloc1 := &si.Allocation{
+		AllocationKey:    "alloc-1",
+		ResourcePerAlloc: resAlloc1,
+		QueueName:        queueName,
+		NodeID:           nodeID,
+		ApplicationID:    appID,
+	}
+	alloc2 := &si.Allocation{
+		AllocationKey:    "alloc-2",
+		ResourcePerAlloc: resAlloc2,
+		QueueName:        queueName,
+		NodeID:           nodeID,
+		ApplicationID:    appID,
+	}
+	alloc1.UUID = "alloc-1-uuid"
+	alloc2.UUID = "alloc-2-uuid"
+	// add alloc to node
+	allocs := []*si.Allocation{alloc1, alloc2}
+	err = cache.AddNewNodeForTest(partition, node1, allocs)
+	if err != nil || partition.GetNode(nodeID) == nil {
+		t.Fatalf("add node to partition should not have failed: %v", err)
+	}
+	// set expected result
+	utilMem := &dao.ClusterUtilDAOInfo{
+		ResourceType: resources.MEMORY,
+		Total:        int64(1000),
+		Used:         int64(800),
+		Usage:        "80%",
+	}
+	utilCore := &dao.ClusterUtilDAOInfo{
+		ResourceType: resources.VCORE,
+		Total:        int64(1000),
+		Used:         int64(500),
+		Usage:        "50%",
+	}
+	// check result fit answer or not
+	result := getClusterUtilJSON(partition)
+	assert.Equal(t, ContainsObj(result, utilMem), true)
+	assert.Equal(t, ContainsObj(result, utilCore), true)
+}
+
+func ContainsObj(slice interface{}, contains interface{}) bool {
+	value := reflect.ValueOf(slice)
+	for i := 0; i < value.Len(); i++ {
+		if value.Index(i).Interface() == contains {
+			return true
+		}
+		if reflect.DeepEqual(value.Index(i).Interface(), contains) {
+			return true
+		}
+		if fmt.Sprintf("%#v", value.Index(i).Interface()) == fmt.Sprintf("%#v", contains) {
+			return true
+		}
+	}
+	return false
 }

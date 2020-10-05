@@ -140,6 +140,15 @@ func TestConfigWatcherExpiration(t *testing.T) {
 	// start again
 	cw.Run()
 	assert.Assert(t, waitForStarted(cw) == nil)
+
+	//test expiration reset
+	cw = CreateConfigWatcher("rm-id", "p-group", 5*time.Second)
+	cw.Run()
+	assert.Assert(t, waitForStarted(cw) == nil)
+	time.Sleep(3 * time.Second)
+	cw.Run()
+	time.Sleep(3 * time.Second)
+	assert.Assert(t, len(cw.soloChan) == 1, "Configwatcher should be running")
 }
 
 func waitForStarted(cw *ConfigWatcher) error {

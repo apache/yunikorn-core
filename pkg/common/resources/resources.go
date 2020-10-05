@@ -792,7 +792,7 @@ func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {
 				absResValue = math.MinInt64
 			}
 		} else {
-			log.Logger().Warn("Cannot calculate absolute usage for resource because of missing usage information",
+			log.Logger().Info("Cannot calculate absolute usage for resource because of missing usage information",
 				zap.String("resource name", resourceName))
 			continue
 		}

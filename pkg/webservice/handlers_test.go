@@ -69,6 +69,14 @@ partitions:
     queues:
       - name: root
 `
+const configDefault = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        queues:
+          - name: default
+`
 
 func TestValidateConf(t *testing.T) {
 	tests := []struct {
@@ -293,14 +301,6 @@ func TestGetConfigJSON(t *testing.T) {
 }
 
 func TestQueryParamInAppsHandler(t *testing.T) {
-	const configDefault = `
-partitions:
-  - name: default
-    queues:
-      - name: root
-        queues:
-        - name: default
-`
 	rmID := "rm-123"
 	policyGroup := "default-policy-group"
 	clusterInfo := cache.NewClusterInfo()
@@ -448,14 +448,6 @@ func prepareSchedulerForConfigChange(t *testing.T) {
 }
 
 func TestGetClusterUtilJSON(t *testing.T) {
-	const configDefault = `
-partitions:
-  - name: default
-    queues:
-      - name: root
-        queues:
-        - name: default
-`
 	rmID := "Util"
 	policyGroup := "default-policy-group"
 	clusterInfo := cache.NewClusterInfo()
@@ -562,4 +554,101 @@ func ContainsObj(slice interface{}, contains interface{}) bool {
 		}
 	}
 	return false
+}
+
+func TestGetNodesUtilJSON(t *testing.T) {
+	rmID := "Util"
+	policyGroup := "default-policy-group"
+	clusterInfo := cache.NewClusterInfo()
+
+	configs.MockSchedulerConfigByData([]byte(configDefault))
+	if _, err := cache.SetClusterInfoFromConfigFile(clusterInfo, rmID, policyGroup); err != nil {
+		t.Fatalf("Error when load clusterInfo from config %v", err)
+	}
+	assert.Equal(t, 1, len(clusterInfo.ListPartitions()))
+
+	// Check test partition
+	partitionName := "[" + rmID + "]default"
+	partition := clusterInfo.GetPartition(partitionName)
+	assert.Equal(t, partitionName, partition.Name)
+	// create test application
+	queueName := "root.default"
+	appInfo := cache.CreateNewApplicationInfo("appID-1", "default", queueName)
+	err := cache.AddNewApplicationForTest(partition, appInfo, true)
+	if err != nil {
+		t.Errorf("add application to partition should not have failed: %v", err)
+	}
+
+	memVal := resources.Quantity(1000)
+	coreVal := resources.Quantity(1000)
+	// create test nodes
+	node1ID := "node-1"
+	node1 := cache.NewNodeForTest(node1ID, resources.NewResourceFromMap(
+		map[string]resources.Quantity{resources.MEMORY: memVal, resources.VCORE: coreVal}))
+	node2ID := "node-2"
+	node2 := cache.NewNodeForTest(node2ID, resources.NewResourceFromMap(
+		map[string]resources.Quantity{resources.MEMORY: memVal, resources.VCORE: coreVal}))
+	// create test allocations
+	resAlloc1 := &si.Resource{
+		Resources: map[string]*si.Quantity{
+			resources.MEMORY: {Value: 500},
+			resources.VCORE:  {Value: 300},
+		},
+	}
+	resAlloc2 := &si.Resource{
+		Resources: map[string]*si.Quantity{
+			resources.MEMORY: {Value: 300},
+			resources.VCORE:  {Value: 500},
+		},
+	}
+	alloc1 := &si.Allocation{
+		AllocationKey:    "alloc-1",
+		ResourcePerAlloc: resAlloc1,
+		QueueName:        queueName,
+		NodeID:           node1ID,
+		ApplicationID:    "appID-1",
+	}
+	alloc2 := &si.Allocation{
+		AllocationKey:    "alloc-2",
+		ResourcePerAlloc: resAlloc2,
+		QueueName:        queueName,
+		NodeID:           node2ID,
+		ApplicationID:    "appID-1",
+	}
+	alloc1.UUID = "alloc-1-uuid"
+	alloc2.UUID = "alloc-2-uuid"
+	allocs1 := []*si.Allocation{alloc1}
+	allocs2 := []*si.Allocation{alloc2}
+	// add allocation to nodes
+	err = cache.AddNewNodeForTest(partition, node1, allocs1)
+	if err != nil || partition.GetNode(node1ID) == nil {
+		t.Fatalf("add node to partition should not have failed: %v", err)
+	}
+	err = cache.AddNewNodeForTest(partition, node2, allocs2)
+	if err != nil || partition.GetNode(node2ID) == nil {
+		t.Fatalf("add node to partition should not have failed: %v", err)
+	}
+	// get nodes utilization
+	res1 := getNodesUtilJSON(partition, resources.MEMORY)
+	res2 := getNodesUtilJSON(partition, resources.VCORE)
+	resNon := getNodesUtilJSON(partition, "non-exist")
+	subres1 := res1.NodesUtil
+	subres2 := res2.NodesUtil
+	subresNon := resNon.NodesUtil
+
+	assert.Equal(t, res1.ResourceType, resources.MEMORY)
+	assert.Equal(t, subres1[2].NumOfNodes, int64(1))
+	assert.Equal(t, subres1[4].NumOfNodes, int64(1))
+	assert.Equal(t, subres1[2].NodeNames[0], node2ID)
+	assert.Equal(t, subres1[4].NodeNames[0], node1ID)
+
+	assert.Equal(t, res2.ResourceType, resources.VCORE)
+	assert.Equal(t, subres2[2].NumOfNodes, int64(1))
+	assert.Equal(t, subres2[4].NumOfNodes, int64(1))
+	assert.Equal(t, subres2[2].NodeNames[0], node1ID)
+	assert.Equal(t, subres2[4].NodeNames[0], node2ID)
+
+	assert.Equal(t, resNon.ResourceType, "non-exist")
+	assert.Equal(t, subresNon[0].NumOfNodes, int64(-1))
+	assert.Equal(t, subresNon[0].NodeNames[0], "N/A")
 }

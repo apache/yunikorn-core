@@ -104,9 +104,9 @@ func TestEmitReserveEventWithoutAppID(t *testing.T) {
 	cache := GetEventCache()
 	cache.StartService()
 
-	allocKey := "test-alloc-2"
+	allocKey := "test-alloc-3"
 	appID := ""
-	nodeID := "node-2"
+	nodeID := "node-3"
 	err := EmitReserveEvent(allocKey, appID, nodeID)
 	if err == nil {
 		t.Errorf("empty allocation key is not allowed, error is expected")
@@ -119,8 +119,8 @@ func TestEmitReserveEventWithoutNodeID(t *testing.T) {
 	cache := GetEventCache()
 	cache.StartService()
 
-	allocKey := "test-alloc-2"
-	appID := "app-2"
+	allocKey := "test-alloc-4"
+	appID := "app-4"
 	nodeID := ""
 	err := EmitReserveEvent(allocKey, appID, nodeID)
 	if err == nil {
@@ -134,9 +134,9 @@ func TestEmitReserveEvent(t *testing.T) {
 	cache := GetEventCache()
 	cache.StartService()
 
-	allocKey := "test-alloc-2"
-	appID := "app-2"
-	nodeID := "node-2"
+	allocKey := "test-alloc-5"
+	appID := "app-5"
+	nodeID := "node-5"
 	err := EmitReserveEvent(allocKey, appID, nodeID)
 	assert.NilError(t, err, "expected EmitReserveEvent to run without errors")
 
@@ -147,9 +147,9 @@ func TestEmitUnReserveEventWithoutEventCache(t *testing.T) {
 	evCache := GetEventCache()
 	assert.Assert(t, evCache == nil, "cache should not be initialized")
 
-	allocKey := "test-alloc-3"
-	appID := "app-3"
-	nodeID := "node-3"
+	allocKey := "test-alloc-6"
+	appID := "app-6"
+	nodeID := "node-6"
 	err := EmitUnReserveEvent(allocKey, appID, nodeID)
 	assert.NilError(t, err, "emitting event without event cache should succeed")
 }
@@ -160,9 +160,9 @@ func TestEmitAllocatedReservedEvent(t *testing.T) {
 	cache := GetEventCache()
 	cache.StartService()
 
-	allocKey := "test-alloc-4"
-	appID := "app-4"
-	nodeID := "node-4"
+	allocKey := "test-alloc-7"
+	appID := "app-7"
+	nodeID := "node-7"
 	err := EmitAllocatedReservedEvent(allocKey, appID, nodeID)
 	assert.NilError(t, err, "expected EmitReserveEvent to run without errors")
 
@@ -173,9 +173,9 @@ func TestEmitAllocatedReservedEventWithoutEventCache(t *testing.T) {
 	evCache := GetEventCache()
 	assert.Assert(t, evCache == nil, "cache should not be initialized")
 
-	allocKey := "test-alloc-5"
-	appID := "app-5"
-	nodeID := "node-5"
+	allocKey := "test-alloc-8"
+	appID := "app-8"
+	nodeID := "node-8"
 	err := EmitAllocatedReservedEvent(allocKey, appID, nodeID)
 	assert.NilError(t, err, "emitting event without event cache should succeed")
 }
@@ -186,9 +186,9 @@ func TestEmitUnReserveEvent(t *testing.T) {
 	cache := GetEventCache()
 	cache.StartService()
 
-	allocKey := "test-alloc-6"
-	appID := "app-6"
-	nodeID := "node-6"
+	allocKey := "test-alloc-9"
+	appID := "app-9"
+	nodeID := "node-9"
 	err := EmitUnReserveEvent(allocKey, appID, nodeID)
 	assert.NilError(t, err, "expected EmitReserveEvent to run without errors")
 

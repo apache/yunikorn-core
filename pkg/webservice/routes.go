@@ -48,6 +48,12 @@ var webRoutes = routes{
 		getClusterInfo,
 	},
 	route{
+		"Cluster",
+		"GET",
+		"/ws/v1/clusters/utilization",
+		getClusterUtilization,
+	},
+	route{
 		"Scheduler",
 		"GET",
 		"/ws/v1/apps",
@@ -58,6 +64,12 @@ var webRoutes = routes{
 		"GET",
 		"/ws/v1/nodes",
 		getNodesInfo,
+	},
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/nodes/utilization",
+		getNodesUtilization,
 	},
 
 	// endpoint to retrieve goroutines info

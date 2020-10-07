@@ -104,3 +104,11 @@ func CreateNewApplicationInfo(appID, partition, queueName string) *ApplicationIn
 func AddAppToPartition(app *ApplicationInfo, partition *PartitionInfo) error {
 	return partition.addNewApplication(app, true)
 }
+
+func AddNewNodeForTest(pi *PartitionInfo, node *NodeInfo, existingAllocations []*si.Allocation) error {
+	return pi.addNewNode(node, existingAllocations)
+}
+
+func AddNewApplicationForTest(pi *PartitionInfo, info *ApplicationInfo, failIfExist bool) error {
+	return pi.addNewApplication(info, failIfExist)
+}

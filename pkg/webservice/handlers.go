@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"runtime"
 	"strconv"
@@ -31,6 +32,7 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
@@ -80,6 +82,25 @@ func getClusterInfo(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewEncoder(w).Encode(clustersInfo); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
+	}
+}
+
+func getClusterUtilization(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	var clusterUtil []*dao.ClustersUtilDAOInfo
+	var utilizations []*dao.ClusterUtilDAOInfo
+	lists := gClusterInfo.ListPartitions()
+	for _, k := range lists {
+		partition := gClusterInfo.GetPartition(k)
+		utilizations = getClusterUtilJSON(partition)
+		clusterUtil = append(clusterUtil, &dao.ClustersUtilDAOInfo{
+			PartitionName: partition.Name,
+			ClustersUtil:  utilizations,
+		})
+	}
+
+	if err := json.NewEncoder(w).Encode(clusterUtil); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -147,6 +168,23 @@ func getNodesInfo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func getNodesUtilization(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+
+	lists := gClusterInfo.ListPartitions()
+	var result []*dao.NodesUtilDAOInfo
+	for _, k := range lists {
+		partition := gClusterInfo.GetPartition(k)
+		for name := range partition.GetTotalPartitionResource().Resources {
+			nodesUtil := getNodesUtilJSON(partition, name)
+			result = append(result, nodesUtil)
+		}
+	}
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func validateConf(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	requestBytes, err := ioutil.ReadAll(r.Body)
@@ -186,6 +224,40 @@ func getClusterJSON(name string) *dao.ClusterDAOInfo {
 	clusterInfo.ActiveNodes = strconv.Itoa(partitionContext.GetTotalNodeCount())
 
 	return clusterInfo
+}
+
+func getClusterUtilJSON(partition *cache.PartitionInfo) []*dao.ClusterUtilDAOInfo {
+	var utils []*dao.ClusterUtilDAOInfo
+	var getResource bool = true
+	total := partition.GetTotalPartitionResource()
+	if resources.IsZero(total) {
+		getResource = false
+	}
+	used := partition.Root.GetAllocatedResource()
+	if len(used.Resources) == 0 {
+		getResource = false
+	}
+	if getResource {
+		percent := resources.CalculateAbsUsedCapacity(total, used)
+		for name, value := range percent.Resources {
+			utilization := &dao.ClusterUtilDAOInfo{
+				ResourceType: name,
+				Total:        int64(total.Resources[name]),
+				Used:         int64(used.Resources[name]),
+				Usage:        fmt.Sprintf("%d", int64(value)) + "%",
+			}
+			utils = append(utils, utilization)
+		}
+	} else if !getResource {
+		utilization := &dao.ClusterUtilDAOInfo{
+			ResourceType: "N/A",
+			Total:        int64(-1),
+			Used:         int64(-1),
+			Usage:        "N/A",
+		}
+		utils = append(utils, utilization)
+	}
+	return utils
 }
 
 func getPartitionJSON(name string) *dao.PartitionDAOInfo {
@@ -260,6 +332,53 @@ func getNodeJSON(nodeInfo *cache.NodeInfo) *dao.NodeDAOInfo {
 		Available:   nodeInfo.GetAvailableResource().DAOString(),
 		Allocations: allocations,
 		Schedulable: nodeInfo.IsSchedulable(),
+	}
+}
+
+func getNodesUtilJSON(partition *cache.PartitionInfo, name string) *dao.NodesUtilDAOInfo {
+	mapResult := make([]int, 10)
+	mapName := make([][]string, 10)
+	var v float64
+	var resourceExist bool = true
+	var nodeUtil []*dao.NodeUtilDAOInfo
+	for _, node := range partition.GetNodes() {
+		total := node.GetCapacity()
+		if total.Resources[name] <= 0 {
+			resourceExist = false
+		}
+		resourceAllocated := node.GetAllocatedResource()
+		if _, ok := resourceAllocated.Resources[name]; !ok {
+			resourceExist = false
+		}
+		if resourceExist {
+			v = float64(resources.CalculateAbsUsedCapacity(total, resourceAllocated).Resources[name])
+			idx := int(math.Dim(math.Ceil(v/10), 1))
+			mapResult[idx]++
+			mapName[idx] = append(mapName[idx], node.NodeID)
+		}
+	}
+	for k := 0; k < 10; k++ {
+		if resourceExist {
+			util := &dao.NodeUtilDAOInfo{
+				BucketName: fmt.Sprintf("%d", k*10) + "-" + fmt.Sprintf("%d", (k+1)*10) + "%",
+				NumOfNodes: int64(mapResult[k]),
+				NodeNames:  mapName[k],
+			}
+			nodeUtil = append(nodeUtil, util)
+		} else {
+			util := &dao.NodeUtilDAOInfo{
+				BucketName: fmt.Sprintf("%d", k*10) + "-" + fmt.Sprintf("%d", (k+1)*10) + "%",
+				NumOfNodes: int64(-1),
+				NodeNames:  []string{"N/A"},
+			}
+			nodeUtil = append(nodeUtil, util)
+		}
+		mapResult[k] = 0
+		mapName[k] = []string{}
+	}
+	return &dao.NodesUtilDAOInfo{
+		ResourceType: name,
+		NodesUtil:    nodeUtil,
 	}
 }
 

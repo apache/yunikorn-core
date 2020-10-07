@@ -40,7 +40,7 @@ const (
 
 // A queue can be a username with the dot replaced. Most systems allow a 32 character user name.
 // The queue name must thus allow for at least that length with the replacement of dots.
-var QueueNameRegExp = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
+var QueueNameRegExp = regexp.MustCompile(`^[a-z-z0-9_-]{1,64}$`)
 
 // User and group name check: systems allow different things POSIX is the base but we need to be lenient and allow more.
 // allow upper and lower case, add the @ and . (dot) and officially no length.
@@ -282,7 +282,7 @@ func checkQueues(queue *QueueConfig, level int) error {
 	queueMap := make(map[string]bool)
 	for _, child := range queue.Queues {
 		if !QueueNameRegExp.MatchString(child.Name) {
-			return fmt.Errorf("invalid child name %s, a name must only have alphanumeric characters,"+
+			return fmt.Errorf("invalid child name %s, a name must only have lower case alphanumeric characters,"+
 				" - or _, and be no longer than 64 characters", child.Name)
 		}
 		if queueMap[strings.ToLower(child.Name)] {

@@ -20,6 +20,7 @@ package cache
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -876,32 +877,9 @@ partitions:
               memory: 80000
               vcore: 8000
 `
-	updatedConf, err := configs.LoadSchedulerConfigFromByteArray([]byte(data))
-	assert.NilError(t, err)
-
-	err = partition.updatePartitionDetails(updatedConf.Partitions[0])
-	assert.NilError(t, err)
-
-	// post update, expected result:
-	// - root.someQueue is removed
-	// - root.a.b.c is added
-	// - root.upper-case-queue.upper-case-child is added
-	queueInfo := partition.getQueue("root.test")
-	assert.Assert(t, queueInfo != nil)
-	assert.Equal(t, queueInfo.IsDraining(), true)
-
-	queueInfo = partition.getQueue("root.a.b.c")
-	assert.Assert(t, queueInfo != nil)
-	assert.Equal(t, queueInfo.IsDraining(), false)
-
-	queueInfo = partition.getQueue("root.upper-case-queue")
-	assert.NilError(t, err)
-	assert.Assert(t, queueInfo != nil)
-	assert.Equal(t, queueInfo.IsDraining(), false)
-
-	queueInfo = partition.getQueue("root.upper-case-queue.upper-case-child")
-	assert.Assert(t, queueInfo != nil)
-	assert.Equal(t, queueInfo.IsDraining(), false)
+	_, err = configs.LoadSchedulerConfigFromByteArray([]byte(data))
+	assert.Assert(t, err != nil, "Error is expected")
+	assert.Assert(t, strings.Contains(err.Error(), "invalid child name"))
 
 	data = `
 partitions:
@@ -921,7 +899,7 @@ partitions:
           queues:
           - name: child11
 `
-	updatedConf, err = configs.LoadSchedulerConfigFromByteArray([]byte(data))
+	updatedConf, err := configs.LoadSchedulerConfigFromByteArray([]byte(data))
 	assert.NilError(t, err)
 
 	err = partition.updatePartitionDetails(updatedConf.Partitions[0])
@@ -931,20 +909,11 @@ partitions:
 	// - root.a.b.c retains
 	// - root.added-queue.child1.child11 is added
 	// - root.upper-case-queue.upper-case-child is marked for deletion
-	queueInfo = partition.getQueue("root.a.b.c")
+	queueInfo := partition.getQueue("root.a.b.c")
 	assert.Assert(t, queueInfo != nil)
 	assert.Equal(t, queueInfo.IsDraining(), false)
 
 	queueInfo = partition.getQueue("root.added-queue.child1.child11")
 	assert.Assert(t, queueInfo != nil)
 	assert.Equal(t, queueInfo.IsDraining(), false)
-
-	queueInfo = partition.getQueue("root.upper-case-queue")
-	assert.NilError(t, err)
-	assert.Assert(t, queueInfo != nil)
-	assert.Equal(t, queueInfo.IsDraining(), true)
-
-	queueInfo = partition.getQueue("root.upper-case-queue.upper-case-child")
-	assert.Assert(t, queueInfo != nil)
-	assert.Equal(t, queueInfo.IsDraining(), true)
 }

@@ -189,6 +189,7 @@ func TestAppReservation(t *testing.T) {
 	num, err = node.unReserve(app, ask)
 	assert.NilError(t, err, "un-reserve on node should not have failed with error")
 	assert.Equal(t, num, 1, "un-reserve on node should have removed reservation")
+
 	num, err = app.unReserve(node, ask)
 	assertAllocAppAndNodeEvents(t, eventCache, askKey, appID, nodeID)
 	assert.NilError(t, err, "app has reservation should not have failed")
@@ -674,6 +675,38 @@ func TestStateChangeOnAskUpdate(t *testing.T) {
 	assert.Assert(t, app.isStarting(), "application changed state unexpectedly: %s", app.ApplicationInfo.GetApplicationState())
 }
 
+func TestEmitAllocatedReservedEventsWithEmptyFields(t *testing.T) {
+	events.CreateAndSetEventCache()
+	defer events.ResetCache()
+	eventCache := events.GetEventCache()
+	eventCache.StartService()
+
+	allocKey := "allocation-1"
+	appID := "application-1"
+	nodeID := "node-1"
+
+	EmitAllocatedReservedEvents("", appID, nodeID)
+	err := common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
+		return eventCache.Store.CountStoredEvents() == 2
+	})
+	assert.NilError(t, err, "two events should have been processed")
+	eventCache.Store.CollectEvents()
+
+	EmitAllocatedReservedEvents(allocKey, "", nodeID)
+	err = common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
+		return eventCache.Store.CountStoredEvents() == 2
+	})
+	assert.NilError(t, err, "two events should have been processed")
+	eventCache.Store.CollectEvents()
+
+	EmitAllocatedReservedEvents(allocKey, appID, "")
+	err = common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
+		return eventCache.Store.CountStoredEvents() == 2
+	})
+	assert.NilError(t, err, "two events should have been processed")
+	eventCache.Store.CollectEvents()
+}
+
 func TestEmitAllocatedReservedEvents(t *testing.T) {
 	events.CreateAndSetEventCache()
 	defer events.ResetCache()
@@ -687,6 +720,21 @@ func TestEmitAllocatedReservedEvents(t *testing.T) {
 	EmitAllocatedReservedEvents(allocKey, appID, nodeID)
 
 	assertAllocAppAndNodeEvents(t, eventCache, allocKey, appID, nodeID)
+}
+
+func TestEmitUnReserveEventWithoutNodeID(t *testing.T) {
+	events.CreateAndSetEventCache()
+	defer events.ResetCache()
+	eventCache := events.GetEventCache()
+	eventCache.StartService()
+
+	allocKey := "alloc-2"
+	appID := "application2"
+	nodeID := ""
+
+	EmitUnReserveEventForNode(allocKey, appID, nodeID)
+
+	assert.Equal(t, 0, eventCache.Store.CountStoredEvents())
 }
 
 func TestEmitUnReserveEventForNode(t *testing.T) {

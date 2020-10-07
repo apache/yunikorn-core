@@ -83,6 +83,51 @@ func TestEmitReserveEventWithoutEventCache(t *testing.T) {
 	assert.NilError(t, err, "emitting event without event cache should succeed")
 }
 
+func TestEmitReserveEventWithoutAllocKey(t *testing.T) {
+	CreateAndSetEventCache()
+	defer ResetCache()
+	cache := GetEventCache()
+	cache.StartService()
+
+	allocKey := ""
+	appID := "app-2"
+	nodeID := "node-2"
+	err := EmitReserveEvent(allocKey, appID, nodeID)
+	if err == nil {
+		t.Errorf("empty allocation key is not allowed, error is expected")
+	}
+}
+
+func TestEmitReserveEventWithoutAppID(t *testing.T) {
+	CreateAndSetEventCache()
+	defer ResetCache()
+	cache := GetEventCache()
+	cache.StartService()
+
+	allocKey := "test-alloc-2"
+	appID := ""
+	nodeID := "node-2"
+	err := EmitReserveEvent(allocKey, appID, nodeID)
+	if err == nil {
+		t.Errorf("empty allocation key is not allowed, error is expected")
+	}
+}
+
+func TestEmitReserveEventWithoutNodeID(t *testing.T) {
+	CreateAndSetEventCache()
+	defer ResetCache()
+	cache := GetEventCache()
+	cache.StartService()
+
+	allocKey := "test-alloc-2"
+	appID := "app-2"
+	nodeID := ""
+	err := EmitReserveEvent(allocKey, appID, nodeID)
+	if err == nil {
+		t.Errorf("empty allocation key is not allowed, error is expected")
+	}
+}
+
 func TestEmitReserveEvent(t *testing.T) {
 	CreateAndSetEventCache()
 	defer ResetCache()

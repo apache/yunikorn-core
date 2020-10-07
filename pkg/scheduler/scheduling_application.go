@@ -621,8 +621,8 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 					zap.String("appID", appID),
 					zap.String("nodeID", nodeID),
 					zap.String("allocationKey", allocKey))
-				EmitUnReserveEventForNode(ask.AskProto.AllocationKey, ask.ApplicationID, nodeID)
-				EmitAllocatedReservedEvents(ask.AskProto.AllocationKey, ask.ApplicationID, node.NodeID)
+				EmitUnReserveEventForNode(ask.AskProto.AllocationKey, appID, nodeID)
+				EmitAllocatedReservedEvents(ask.AskProto.AllocationKey, appID, node.NodeID)
 				alloc.result = allocatedReserved
 				alloc.reservedNodeID = nodeID
 				return alloc
@@ -681,7 +681,7 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 func EmitAllocatedReservedEvents(allocKey, appID, nodeID string) {
 	err := events.EmitAllocatedReservedEvent(allocKey, appID, nodeID)
 	if err != nil {
-		log.Logger().Warn("could not emit allocatedReserved events to shim",
+		log.Logger().Debug("could not emit allocatedReserved events to shim",
 			zap.String("allocationKey", allocKey),
 			zap.String("appID", appID),
 			zap.String("nodeID", nodeID),
@@ -692,7 +692,7 @@ func EmitAllocatedReservedEvents(allocKey, appID, nodeID string) {
 func EmitUnReserveEventForNode(allocKey, appID, nodeID string) {
 	err := events.EmitUnreserveEventForNode(allocKey, appID, nodeID)
 	if err != nil {
-		log.Logger().Warn("could not emit node unreserved event to shim",
+		log.Logger().Debug("could not emit node unreserved event to shim",
 			zap.String("allocationKey", allocKey),
 			zap.String("appID", appID),
 			zap.String("nodeID", nodeID),

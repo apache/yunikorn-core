@@ -19,7 +19,9 @@
 package events
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
@@ -106,25 +108,32 @@ func emitRequestAppAndNodeEvents(allocKey, appID, nodeID, msgFmt, reason string)
 	}
 	msg := fmt.Sprintf(msgFmt, allocKey, appID, nodeID)
 
+	errs := make([]string, 0)
 	event, err := CreateNodeEventRecord(nodeID, reason, msg)
-	if err != nil {
-		return err
+	if err == nil {
+		eventCache.AddEvent(event)
+	} else {
+		errs = append(errs, err.Error())
 	}
-	eventCache.AddEvent(event)
 
 	// push event to the app
 	event, err = CreateAppEventRecord(appID, reason, msg)
-	if err != nil {
-		return err
+	if err == nil {
+		eventCache.AddEvent(event)
+	} else {
+		errs = append(errs, err.Error())
 	}
-	eventCache.AddEvent(event)
 
 	// push event to the request
 	event, err = CreateRequestEventRecord(allocKey, appID, reason, msg)
-	if err != nil {
-		return err
+	if err == nil {
+		eventCache.AddEvent(event)
+	} else {
+		errs = append(errs, err.Error())
 	}
-	eventCache.AddEvent(event)
 
+	if len(errs) != 0 {
+		return errors.New(strings.Join(errs, "\n"))
+	}
 	return nil
 }

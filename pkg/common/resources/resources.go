@@ -764,7 +764,7 @@ func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {
 		return NewResource()
 	}
 	absResource := make(map[string]Quantity)
-	missingResources :=  make([]string, 0)
+	missingResources := make([]string, 0)
 	for resourceName, availableResource := range capacity.Resources {
 		var absResValue int64
 		if usedResource, ok := used.Resources[resourceName]; ok {

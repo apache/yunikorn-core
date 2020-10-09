@@ -322,7 +322,8 @@ func (sa *SchedulingApplication) reserve(node *SchedulingNode, ask *schedulingAl
 		return err
 	}
 	sa.reservations[nodeReservation.getKey()] = nodeReservation
-	// reservation added successfully
+	log.Logger().Info("reservation added successfully", zap.String("node", node.NodeID),
+		zap.String("app", ask.ApplicationID), zap.String("ask", ask.AskProto.AllocationKey))
 	return nil
 }
 
@@ -363,6 +364,7 @@ func (sa *SchedulingApplication) unReserveInternal(node *SchedulingNode, ask *sc
 				zap.String("ask", ask.AskProto.AllocationKey))
 		}
 		delete(sa.reservations, resKey)
+		// TODO: unreserve successful
 		return 1, nil
 	}
 	// reservation was not found

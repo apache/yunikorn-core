@@ -61,13 +61,19 @@ func (s *SchedulerTracerImpl) StopOnDemand() {
 }
 
 func (s *SchedulerTracerImpl) Close() {
-	s.Closer.Close()
+	if s.Closer != nil {
+		s.Closer.Close()
+	}
 }
 
 func NewSchedulerTracer() (SchedulerTracer, error) {
 	tracer, closer, err := NewTracerFromEnv("yunikorn-core-scheduler")
 	if err != nil {
-		return nil, err
+		return &SchedulerTracerImpl{
+			Tracer:         opentracing.GlobalTracer(),
+			Closer:         nil,
+			OnDemandAtomic: 0,
+		}, err
 	} else {
 		return &SchedulerTracerImpl{
 			Tracer:         tracer,

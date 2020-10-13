@@ -57,9 +57,15 @@ const (
 )
 
 func startSpanWrapper(ctx trace.SchedulerTraceContext, level, phase, name string) (opentracing.Span, error) {
-	if len(level) == 0 {
-		return nil, fmt.Errorf("level field cannot be empty")
+	if ctx == nil {
+		return opentracing.NoopTracer{}.StartSpan(""), nil
 	}
+
+	if len(level) == 0 {
+		return opentracing.NoopTracer{}.StartSpan(""),
+		fmt.Errorf("level field cannot be empty")
+	}
+
 	span, err := ctx.StartSpan(fmt.Sprintf("[%v]%v", level, phase))
 	if err == nil {
 		span.SetTag(LevelKey, level)
@@ -74,6 +80,10 @@ func startSpanWrapper(ctx trace.SchedulerTraceContext, level, phase, name string
 }
 
 func finishActiveSpanWrapper(ctx trace.SchedulerTraceContext, state, info string) error {
+	if ctx == nil {
+		return nil
+	}
+
 	span, err := ctx.ActiveSpan()
 	if err == nil {
 		if len(state) != 0 {

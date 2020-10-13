@@ -20,7 +20,8 @@ package scheduler
 
 import (
 	"fmt"
-	
+	"github.com/opentracing/opentracing-go"
+
 	"github.com/apache/incubator-yunikorn-core/pkg/trace"
 )
 
@@ -55,81 +56,33 @@ const (
 	NodeAlreadyReservedInfo        = "node has already been reserved"
 )
 
-func startSpanWrapper(ctx trace.SchedulerTraceContext, level, phase, name string) {
-	span, _ := ctx.StartSpan(fmt.Sprintf("[%v]%v", level, phase))
-	span.SetTag(LevelKey, level).
-		SetTag(PhaseKey, phase).
-		SetTag(NameKey, name)
-}
-
-var _ trace.TagsBuilder = &TagsBuilder{}
-
-type TagsBuilder struct {
-	//tags map[string]interface{}
-	level string
-	phase string
-	name  string
-	info  string
-	state string
-}
-
-func NewTagsBuilder() *TagsBuilder {
-	return &TagsBuilder{}
-}
-
-//func (tb *TagsBuilder) with(key string, value string) *TagsBuilder {
-//	tb.tags[key] = value
-//	return tb
-//}
-
-func (tb *TagsBuilder) withLevel(level string) *TagsBuilder {
-	tb.level = level
-	return tb
-}
-
-func (tb *TagsBuilder) withPhase(phase string) *TagsBuilder {
-	tb.phase = phase
-	return tb
-}
-
-func (tb *TagsBuilder) withName(name string) *TagsBuilder {
-	tb.name = name
-	return tb
-}
-
-func (tb *TagsBuilder) withInfo(info string) *TagsBuilder {
-	tb.info = info
-	return tb
-}
-
-func (tb *TagsBuilder) withError(err error) *TagsBuilder {
-	if err != nil {
-		tb.info = err.Error()
+func startSpanWrapper(ctx trace.SchedulerTraceContext, level, phase, name string) (opentracing.Span, error) {
+	if len(level) == 0 {
+		return nil, fmt.Errorf("level field cannot be empty")
 	}
-	return tb
+	span, err := ctx.StartSpan(fmt.Sprintf("[%v]%v", level, phase))
+	if err == nil {
+		span.SetTag(LevelKey, level)
+		if len(phase) != 0 {
+			span.SetTag(PhaseKey, phase)
+		}
+		if len(name) != 0 {
+			span.SetTag(NameKey, name)
+		}
+	}
+	return span, err
 }
 
-func (tb *TagsBuilder) withState(state string) *TagsBuilder {
-	tb.state = state
-	return tb
-}
-
-func (tb *TagsBuilder) Build() map[string]interface{} {
-	tags := make(map[string]interface{})
-	if tb.level != "" {
-		tags[LevelKey] = tb.level
+func finishActiveSpanWrapper(ctx trace.SchedulerTraceContext, state, info string) error {
+	span, err := ctx.ActiveSpan()
+	if err == nil {
+		if len(state) != 0 {
+			span.SetTag(StateKey, state)
+		}
+		if len(info) != 0 {
+			span.SetTag(InfoKey, info)
+		}
+		ctx.FinishActiveSpan()
 	}
-	if tb.phase != "" {
-		tags[PhaseKey] = tb.phase
-	}
-	if tb.name != "" {
-		tags[NameKey] = tb.name
-	}
-	if tb.info != "" {
-		tags[InfoKey] = tb.info
-	}
-	if tb.state != "" {
-		tags[StateKey] = tb.state
-	}
-	return tags
+	return err
 }

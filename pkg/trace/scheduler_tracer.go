@@ -20,7 +20,7 @@ package trace
 
 import (
 	"io"
-	"sync/atomic"
+	"sync"
 
 	"github.com/opentracing/opentracing-go"
 )
@@ -28,36 +28,70 @@ import (
 type SchedulerTracer interface {
 	// trace collecting function
 	NewTraceContext() SchedulerTraceContext
-
-	// switch function for on-demand tracing requests
-	StartOnDemand()
-	StopOnDemand()
-
 	Close()
 }
 
 var _ SchedulerTracer = &SchedulerTracerImpl{}
 
+const (
+	Sampling = "Sampling"
+	OnDemand = "OnDemand"
+)
+
+type SchedulerTracerImplParams struct {
+	Mode         string
+	FilterTags   map[string]interface{}
+}
+
+var DefaultSchedulerTracerImplParams = &SchedulerTracerImplParams{
+	Mode:       Sampling,
+	FilterTags: nil,
+}
+
 type SchedulerTracerImpl struct {
 	Tracer         opentracing.Tracer
 	Closer         io.Closer
-	OnDemandAtomic int32
+	sync.RWMutex
+	*SchedulerTracerImplParams
 }
 
 func (s *SchedulerTracerImpl) NewTraceContext() SchedulerTraceContext {
-	return &SchedulerTraceContextImpl{
-		Tracer:       s.Tracer,
-		Spans:        []opentracing.Span{},
-		OnDemandFlag: atomic.LoadInt32(&s.OnDemandAtomic) != 0,
+	s.RLock()
+	defer s.RUnlock()
+	switch s.Mode {
+	case Sampling:
+		return &SchedulerTraceContextImpl{
+			Tracer:       s.Tracer,
+			SpanStack:    []opentracing.Span{},
+			OnDemandFlag: false,
+		}
+	case OnDemand:
+		if len(s.FilterTags) == 0 {
+			return &SchedulerTraceContextImpl{
+				Tracer:       s.Tracer,
+				SpanStack:    []opentracing.Span{},
+				OnDemandFlag: true,
+			}
+		} else {
+			return &DelaySchedulerTraceContextImpl{
+				Tracer:     s.Tracer,
+				SpanStack:  []*DelaySpan{},
+				Spans:      []*DelaySpan{},
+				FilterTags: s.FilterTags,
+			}
+		}
+	default:
+		return nil
 	}
 }
 
-func (s *SchedulerTracerImpl) StartOnDemand() {
-	atomic.StoreInt32(&s.OnDemandAtomic, 1)
-}
-
-func (s *SchedulerTracerImpl) StopOnDemand() {
-	atomic.StoreInt32(&s.OnDemandAtomic, 0)
+func (s *SchedulerTracerImpl) SetParams(params *SchedulerTracerImplParams) {
+	if params == nil {
+		return
+	}
+	s.Lock()
+	defer s.Unlock()
+	s.SchedulerTracerImplParams = params
 }
 
 func (s *SchedulerTracerImpl) Close() {
@@ -66,20 +100,20 @@ func (s *SchedulerTracerImpl) Close() {
 	}
 }
 
-func NewSchedulerTracer() (SchedulerTracer, error) {
-	tracer, closer, err := NewTracerFromEnv("yunikorn-core-scheduler")
-	if err != nil {
-		return &SchedulerTracerImpl{
-			Tracer:         opentracing.GlobalTracer(),
-			Closer:         nil,
-			OnDemandAtomic: 0,
-		}, err
-	} else {
-		return &SchedulerTracerImpl{
-			Tracer:         tracer,
-			Closer:         closer,
-			OnDemandAtomic: 0,
-		}, nil
+func NewSchedulerTracer(params *SchedulerTracerImplParams) (SchedulerTracer, error) {
+	if params == nil {
+		params = DefaultSchedulerTracerImplParams
 	}
 
+	tracer, closer, err := NewTracerFromEnv("yunikorn-core-scheduler")
+	if err != nil {
+		tracer = opentracing.GlobalTracer()
+		closer = nil
+	}
+
+	return &SchedulerTracerImpl{
+		Tracer:         tracer,
+		Closer:         closer,
+		SchedulerTracerImplParams: params,
+	}, nil
 }

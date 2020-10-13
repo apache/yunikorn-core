@@ -20,14 +20,16 @@ package trace
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
+	"github.com/uber/jaeger-client-go"
 )
 
 type SchedulerTraceContext interface {
-	StartSpan(name string) (opentracing.Span, error)
 	ActiveSpan() (opentracing.Span, error)
+	StartSpan(operationName string) (opentracing.Span, error)
 	FinishActiveSpan() error
 }
 
@@ -35,15 +37,15 @@ var _ SchedulerTraceContext = &SchedulerTraceContextImpl{}
 
 type SchedulerTraceContextImpl struct {
 	Tracer       opentracing.Tracer
-	Spans        []opentracing.Span
+	SpanStack    []opentracing.Span
 	OnDemandFlag bool
 }
 
 func (s *SchedulerTraceContextImpl) ActiveSpan() (opentracing.Span, error) {
-	if len(s.Spans) == 0 {
+	if len(s.SpanStack) == 0 {
 		return nil, fmt.Errorf("not found")
 	} else {
-		return s.Spans[len(s.Spans)-1], nil
+		return s.SpanStack[len(s.SpanStack)-1], nil
 	}
 }
 
@@ -57,7 +59,7 @@ func (s *SchedulerTraceContextImpl) StartSpan(operationName string) (opentracing
 	} else {
 		newSpan = s.Tracer.StartSpan(operationName, opentracing.ChildOf(span.Context()))
 	}
-	s.Spans = append(s.Spans, newSpan)
+	s.SpanStack = append(s.SpanStack, newSpan)
 	return newSpan, nil
 }
 
@@ -66,7 +68,92 @@ func (s *SchedulerTraceContextImpl) FinishActiveSpan() error {
 		return err
 	} else {
 		span.Finish()
-		s.Spans = s.Spans[:len(s.Spans)-1]
+		s.SpanStack = s.SpanStack[:len(s.SpanStack)-1]
 		return nil
 	}
+}
+
+var _ opentracing.Span = &DelaySpan{}
+
+type DelaySpan struct {
+	opentracing.Span
+	FinishTime time.Time
+}
+
+func (d *DelaySpan) Finish() {
+	panic("should not call it")
+}
+
+func (d *DelaySpan) FinishWithOptions(opentracing.FinishOptions) {
+	panic("should not call it")
+}
+
+var _ SchedulerTraceContext = &DelaySchedulerTraceContextImpl{}
+
+type DelaySchedulerTraceContextImpl struct {
+	Tracer       opentracing.Tracer
+	SpanStack    []*DelaySpan
+	Spans        []*DelaySpan
+	FilterTags   map[string]interface{}
+}
+
+func (d DelaySchedulerTraceContextImpl) ActiveSpan() (opentracing.Span, error) {
+	if len(d.SpanStack) == 0 {
+		return nil, fmt.Errorf("not found")
+	} else {
+		return d.SpanStack[len(d.SpanStack)-1], nil
+	}
+}
+
+func (d DelaySchedulerTraceContextImpl) StartSpan(operationName string) (opentracing.Span, error) {
+	var newSpan *DelaySpan
+	if span, err := d.ActiveSpan(); err != nil {
+		newSpan = &DelaySpan{
+			Span:       d.Tracer.StartSpan(operationName),
+		}
+		ext.SamplingPriority.Set(newSpan, 1)
+	} else {
+		newSpan = &DelaySpan{
+			Span:       d.Tracer.StartSpan(operationName, opentracing.ChildOf(span.Context())),
+		}
+	}
+	d.SpanStack = append(d.SpanStack, newSpan)
+	d.Spans = append(d.Spans, newSpan)
+	return newSpan, nil
+}
+
+func (d DelaySchedulerTraceContextImpl) FinishActiveSpan() error {
+	if _, err := d.ActiveSpan(); err != nil {
+		return err
+	}
+	span := d.SpanStack[len(d.SpanStack)-1]
+	span.FinishTime = time.Now()
+	d.SpanStack = d.SpanStack[:len(d.SpanStack)-1]
+
+	if len(d.SpanStack) == 0 {
+		MatchFlag := false
+		for _, span := range d.Spans {
+			tags := span.Span.(*jaeger.Span).Tags()
+			MatchFlag = true
+			for k, v := range d.FilterTags {
+				if tag, ok := tags[k]; !ok || tag != v {
+					MatchFlag = false
+					break
+				}
+			}
+			if MatchFlag {
+				break
+			}
+		}
+		if MatchFlag {
+			for _, span := range d.Spans {
+				span.Span.FinishWithOptions(opentracing.FinishOptions{
+					FinishTime: span.FinishTime,
+				})
+			}
+		}
+		d.Spans = []*DelaySpan{}
+	}
+
+	return nil
 }

@@ -18,7 +18,11 @@
 
 package scheduler
 
-import "github.com/apache/incubator-yunikorn-core/pkg/trace"
+import (
+	"fmt"
+	
+	"github.com/apache/incubator-yunikorn-core/pkg/trace"
+)
 
 const (
 	RootLevel      = "root"
@@ -50,6 +54,13 @@ const (
 	RequestBeyondTotalResourceInfo = "request resource beyond total resource of node: req=%v"
 	NodeAlreadyReservedInfo        = "node has already been reserved"
 )
+
+func startSpanWrapper(ctx trace.SchedulerTraceContext, level, phase, name string) {
+	span, _ := ctx.StartSpan(fmt.Sprintf("[%v]%v", level, phase))
+	span.SetTag(LevelKey, level).
+		SetTag(PhaseKey, phase).
+		SetTag(NameKey, name)
+}
 
 var _ trace.TagsBuilder = &TagsBuilder{}
 

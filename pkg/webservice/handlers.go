@@ -530,3 +530,47 @@ func updateConfiguration(conf string) (string, error) {
 	}
 	return "", fmt.Errorf("config plugin not found")
 }
+
+func getPartitions(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+
+	lists := gClusterInfo.ListPartitions()
+	for _, k := range lists {
+		partitionInfo := getPartition(k)
+
+		if err := json.NewEncoder(w).Encode(partitionInfo); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
+}
+
+func getPartition(name string) *dao.PartitionInfo {
+	partitionInfo := &dao.PartitionInfo{}
+	partitionContext := gClusterInfo.GetPartition(name)
+	partitionInfo.Name = partitionContext.Name
+	capacityInfo := dao.PartitionCapacity{}
+	capacityInfo.Capacity = partitionContext.GetTotalPartitionResource().String()
+	partitionInfo.Capacity = capacityInfo
+	partitionInfo.IsPremptable = partitionContext.NeedPreemption()
+	partitionInfo.NodeSortingPolicy = partitionContext.GetNodeSortingPolicy().String()
+
+	applicationsInfo := dao.Applications{}
+	appList := partitionContext.GetApplications()
+	for _, app := range appList {
+		if app.IsRunning() {
+			applicationsInfo.Running++
+			applicationsInfo.Total++
+		} else if app.IsWaiting() || app.IsNew() || app.IsStarting() || app.IsAccepted() {
+			applicationsInfo.Pending++
+			applicationsInfo.Total++
+		} else if app.IsCompleted() {
+			applicationsInfo.Completed++
+			applicationsInfo.Total++
+		} else if app.IsKilled() || app.IsRejected() {
+			applicationsInfo.Failed++
+			applicationsInfo.Total++
+		}
+	}
+	partitionInfo.Applications = applicationsInfo
+	return partitionInfo
+}

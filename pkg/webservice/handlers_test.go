@@ -607,3 +607,41 @@ func TestGetNodesUtilJSON(t *testing.T) {
 	assert.Equal(t, subresNon[0].NumOfNodes, int64(-1))
 	assert.Equal(t, subresNon[0].NodeNames[0], "N/A")
 }
+
+func TestPartitions(t *testing.T) {
+	rmID := "rm-123"
+	policyGroup := "default-policy-group"
+	clusterInfo := cache.NewClusterInfo()
+	configs.MockSchedulerConfigByData([]byte(configDefault))
+	if _, err := cache.SetClusterInfoFromConfigFile(clusterInfo, rmID, policyGroup); err != nil {
+		t.Fatalf("Error when load clusterInfo from config %v", err)
+	}
+	assert.Equal(t, 1, len(clusterInfo.ListPartitions()))
+
+	// Check default partition
+	partitionName := "[" + rmID + "]default"
+	defaultPartition := clusterInfo.GetPartition(partitionName)
+	assert.Equal(t, 0, len(defaultPartition.GetApplications()))
+
+	// add a new app
+	appInfo := cache.CreateNewApplicationInfo("app-1", partitionName, "root.default")
+	err := cache.AddAppToPartition(appInfo, defaultPartition)
+	assert.NilError(t, err, "Failed to add Application to Partition.")
+	assert.Equal(t, appInfo.GetApplicationState(), "New")
+	assert.Equal(t, 1, len(defaultPartition.GetApplications()))
+
+	NewWebApp(clusterInfo, nil)
+
+	var req *http.Request
+	req, err = http.NewRequest("GET", "/ws/v1/partitions", strings.NewReader(""))
+	assert.NilError(t, err, "App Handler request failed")
+	resp := &MockResponseWriter{}
+	var partitionInfo *dao.PartitionInfo
+	getPartitions(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &partitionInfo)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, partitionInfo.Name, "[rm-123]default")
+	assert.Equal(t, partitionInfo.NodeSortingPolicy, "fair")
+	assert.Equal(t, partitionInfo.IsPremptable, false)
+	assert.Equal(t, partitionInfo.Applications.Total, 1)
+}

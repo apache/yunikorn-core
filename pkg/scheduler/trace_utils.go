@@ -32,6 +32,29 @@ const (
 	NameKey  = "name"
 	StateKey = "state"
 	InfoKey  = "info"
+
+	RootLevel      = "root"
+	PartitionLevel = "partition"
+	QueueLevel     = "queue"
+	AppLevel       = "app"
+	RequestLevel   = "request"
+	NodesLevel     = "nodes"
+	NodeLevel      = "node"
+
+	ReservedAllocatePhase = "reservedAllocate"
+	TryAllocatePhase      = "tryAllocate"
+	AllocatePhase         = "allocate"
+	SortQueuesPhase       = "sortQueues"
+	SortAppsPhase         = "sortApps"
+	SortRequestsPhase     = "sortRequests"
+
+	SkipState = "skip"
+
+	NoMaxResourceInfo              = "max resource is nil"
+	NoPendingRequestInfo           = "no pending request left"
+	BeyondQueueHeadroomInfo        = "beyond queue headroom: headroom=%v, req=%v"
+	RequestBeyondTotalResourceInfo = "request resource beyond total resource of node: req=%v"
+	NodeAlreadyReservedInfo        = "node has already been reserved"
 )
 
 // startSpanWrapper simplifies span starting process by integrating general tags' setting.

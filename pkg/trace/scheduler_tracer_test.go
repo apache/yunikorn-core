@@ -24,7 +24,8 @@ import (
 	"gotest.tools/assert"
 )
 
-func TestSchedulerTracerImpl_NewTraceContext(t *testing.T) {
+// TestSchedulerTracerImpl tests SetParams and NewTraceContext
+func TestSchedulerTracerImpl(t *testing.T) {
 	type fields struct {
 		SchedulerTracerImplParams *SchedulerTracerImplParams
 	}

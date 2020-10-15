@@ -25,27 +25,13 @@ import (
 	"github.com/opentracing/opentracing-go"
 )
 
+// SchedulerTracer defines minimum interface for tracing
 type SchedulerTracer interface {
 	NewTraceContext() SchedulerTraceContext
 	Close()
 }
 
 var _ SchedulerTracer = &SchedulerTracerImpl{}
-
-const (
-	Sampling = "Sampling"
-	OnDemand = "OnDemand"
-)
-
-type SchedulerTracerImplParams struct {
-	Mode       string
-	FilterTags map[string]interface{}
-}
-
-var DefaultSchedulerTracerImplParams = &SchedulerTracerImplParams{
-	Mode:       Sampling,
-	FilterTags: nil,
-}
 
 type SchedulerTracerImpl struct {
 	Tracer opentracing.Tracer
@@ -54,6 +40,32 @@ type SchedulerTracerImpl struct {
 	*SchedulerTracerImplParams
 }
 
+type SchedulerTracerImplParams struct {
+	Mode       string
+	FilterTags map[string]interface{}
+}
+
+const (
+	Sampling = "Sampling"
+	OnDemand = "OnDemand"
+)
+
+var DefaultSchedulerTracerImplParams = &SchedulerTracerImplParams{
+	Mode:       Sampling,
+	FilterTags: nil,
+}
+
+// SetParams set runtime parameter for tracer
+func (s *SchedulerTracerImpl) SetParams(params *SchedulerTracerImplParams) {
+	if params == nil {
+		return
+	}
+	s.Lock()
+	defer s.Unlock()
+	s.SchedulerTracerImplParams = params
+}
+
+// NewTraceContext create SchedulerTraceContext based on parameter settings
 func (s *SchedulerTracerImpl) NewTraceContext() SchedulerTraceContext {
 	s.RLock()
 	defer s.RUnlock()
@@ -84,21 +96,15 @@ func (s *SchedulerTracerImpl) NewTraceContext() SchedulerTraceContext {
 	}
 }
 
-func (s *SchedulerTracerImpl) SetParams(params *SchedulerTracerImplParams) {
-	if params == nil {
-		return
-	}
-	s.Lock()
-	defer s.Unlock()
-	s.SchedulerTracerImplParams = params
-}
-
+// Close calls tracer's closer if exists
 func (s *SchedulerTracerImpl) Close() {
 	if s.Closer != nil {
 		s.Closer.Close()
 	}
 }
 
+// NewSchedulerTracer creates new tracer instance with params
+// params is set to default sampling mode if it is nil
 func NewSchedulerTracer(params *SchedulerTracerImplParams) (SchedulerTracer, error) {
 	if params == nil {
 		params = DefaultSchedulerTracerImplParams

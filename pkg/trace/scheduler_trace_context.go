@@ -27,14 +27,27 @@ import (
 	"github.com/uber/jaeger-client-go"
 )
 
+// SchedulerTraceContext manages spans for one trace.
+// it only designs for the scheduling process so we keeps the interface simple
 type SchedulerTraceContext interface {
+	// ActiveSpan returns current active (latest unfinished) span in this context object.
+	// Error returns if there doesn't exist an unfinished span.
 	ActiveSpan() (opentracing.Span, error)
+
+	// StartSpan creates and starts a new span based on the context state with the operationName parameter.
+	// The new span is the child of current active span if it exists.
+	// Or the new span will become the root span of this trace.
 	StartSpan(operationName string) (opentracing.Span, error)
+
+	// FinishActiveSpan finishes current active span and set its parent as active if exists.
+	// Error returns if there doesn't exist an unfinished span.
 	FinishActiveSpan() error
 }
 
 var _ SchedulerTraceContext = &SchedulerTraceContextImpl{}
 
+// SchedulerTraceContextImpl reports the spans to tracer once they are finished.
+// Root span's "sampling.priority" tag will be set to 1 to force reporting all spans if OnDemandFlag is true.
 type SchedulerTraceContextImpl struct {
 	Tracer       opentracing.Tracer
 	SpanStack    []opentracing.Span
@@ -75,29 +88,35 @@ func (s *SchedulerTraceContextImpl) FinishActiveSpan() error {
 
 var _ opentracing.Span = &DelaySpan{}
 
+// DelaySpan implements the opentracing.Span interface.
+// It will set the FinishTime field and delay reporting when finished.
 type DelaySpan struct {
 	opentracing.Span
 	FinishTime time.Time
 }
 
+// Finish implements the opentracing.Span interface and panics when calling.
 func (d *DelaySpan) Finish() {
 	panic("should not call it")
 }
 
+// FinishWithOptions implements the opentracing.Span interface and panics when calling.
 func (d *DelaySpan) FinishWithOptions(opentracing.FinishOptions) {
 	panic("should not call it")
 }
 
 var _ SchedulerTraceContext = &DelaySchedulerTraceContextImpl{}
 
+// DelaySchedulerTraceContextImpl delays reporting spans
+// and chooses whether to report based on FilterTags when the entire trace is collected.
 type DelaySchedulerTraceContextImpl struct {
-	Tracer       opentracing.Tracer
-	SpanStack    []*DelaySpan
-	Spans        []*DelaySpan
-	FilterTags   map[string]interface{}
+	Tracer     opentracing.Tracer
+	SpanStack  []*DelaySpan
+	Spans      []*DelaySpan
+	FilterTags map[string]interface{}
 }
 
-func (d DelaySchedulerTraceContextImpl) ActiveSpan() (opentracing.Span, error) {
+func (d *DelaySchedulerTraceContextImpl) ActiveSpan() (opentracing.Span, error) {
 	if len(d.SpanStack) == 0 {
 		return nil, fmt.Errorf("not found")
 	} else {
@@ -105,16 +124,16 @@ func (d DelaySchedulerTraceContextImpl) ActiveSpan() (opentracing.Span, error) {
 	}
 }
 
-func (d DelaySchedulerTraceContextImpl) StartSpan(operationName string) (opentracing.Span, error) {
+func (d *DelaySchedulerTraceContextImpl) StartSpan(operationName string) (opentracing.Span, error) {
 	var newSpan *DelaySpan
 	if span, err := d.ActiveSpan(); err != nil {
 		newSpan = &DelaySpan{
-			Span:       d.Tracer.StartSpan(operationName),
+			Span: d.Tracer.StartSpan(operationName),
 		}
 		ext.SamplingPriority.Set(newSpan, 1)
 	} else {
 		newSpan = &DelaySpan{
-			Span:       d.Tracer.StartSpan(operationName, opentracing.ChildOf(span.Context())),
+			Span: d.Tracer.StartSpan(operationName, opentracing.ChildOf(span.Context())),
 		}
 	}
 	d.SpanStack = append(d.SpanStack, newSpan)
@@ -122,7 +141,9 @@ func (d DelaySchedulerTraceContextImpl) StartSpan(operationName string) (opentra
 	return newSpan, nil
 }
 
-func (d DelaySchedulerTraceContextImpl) FinishActiveSpan() error {
+// FinishActiveSpan finishes current active span by setting its FinishTime
+// and pop it from the unfinished span stack.
+func (d *DelaySchedulerTraceContextImpl) FinishActiveSpan() error {
 	if _, err := d.ActiveSpan(); err != nil {
 		return err
 	}
@@ -131,21 +152,7 @@ func (d DelaySchedulerTraceContextImpl) FinishActiveSpan() error {
 	d.SpanStack = d.SpanStack[:len(d.SpanStack)-1]
 
 	if len(d.SpanStack) == 0 {
-		MatchFlag := false
-		for _, span := range d.Spans {
-			tags := span.Span.(*jaeger.Span).Tags()
-			MatchFlag = true
-			for k, v := range d.FilterTags {
-				if tag, ok := tags[k]; !ok || tag != v {
-					MatchFlag = false
-					break
-				}
-			}
-			if MatchFlag {
-				break
-			}
-		}
-		if MatchFlag {
+		if d.isMatch() {
 			for _, span := range d.Spans {
 				span.Span.FinishWithOptions(opentracing.FinishOptions{
 					FinishTime: span.FinishTime,
@@ -156,4 +163,25 @@ func (d DelaySchedulerTraceContextImpl) FinishActiveSpan() error {
 	}
 
 	return nil
+}
+
+// isMatch checks whether there is a span in the trace that matches the FilterTags.
+func (d *DelaySchedulerTraceContextImpl) isMatch() bool {
+	if len(d.FilterTags) == 0 {
+		return false
+	}
+	for _, span := range d.Spans {
+		tags := span.Span.(*jaeger.Span).Tags()
+		MatchFlag := true
+		for k, v := range d.FilterTags {
+			if tag, ok := tags[k]; !ok || tag != v {
+				MatchFlag = false
+				break
+			}
+		}
+		if MatchFlag {
+			return true
+		}
+	}
+	return false
 }

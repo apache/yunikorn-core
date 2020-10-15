@@ -20,65 +20,52 @@ package scheduler
 
 import (
 	"fmt"
+
 	"github.com/opentracing/opentracing-go"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/trace"
 )
 
 const (
-	RootLevel      = "root"
-	PartitionLevel = "partition"
-	QueueLevel     = "queue"
-	AppLevel       = "app"
-	RequestLevel   = "request"
-	NodesLevel     = "nodes"
-	NodeLevel      = "node"
-
-	ReservedAllocatePhase = "reservedAllocate"
-	TryAllocatePhase      = "tryAllocate"
-	AllocatePhase         = "allocate"
-	SortQueuesPhase       = "sortQueues"
-	SortAppsPhase         = "sortApps"
-	SortRequestsPhase     = "sortRequests"
-
 	LevelKey = "level"
 	PhaseKey = "phase"
 	NameKey  = "name"
 	StateKey = "state"
 	InfoKey  = "info"
-
-	SkipState = "skip"
-
-	NoMaxResourceInfo              = "max resource is nil"
-	NoPendingRequestInfo           = "no pending request left"
-	BeyondQueueHeadroomInfo        = "beyond queue headroom: headroom=%v, req=%v"
-	RequestBeyondTotalResourceInfo = "request resource beyond total resource of node: req=%v"
-	NodeAlreadyReservedInfo        = "node has already been reserved"
 )
 
+// startSpanWrapper simplifies span starting process by integrating general tags' setting.
+// The level tag logs span's scheduling level. (root, partition, queue, ...)
+// The phase tag logs span's calling phase. (reservedAllocate, tryAllocate, allocate, ...)
+// The name tag logs span's related object's identity. (resources' name or ID)
+// These tags can be decided when starting the span because they don't depend on the calling result.
+// Logs or special tags can be set with the returned span object.
 func startSpanWrapper(ctx trace.SchedulerTraceContext, level, phase, name string) (opentracing.Span, error) {
 	if ctx == nil {
 		return opentracing.NoopTracer{}.StartSpan(""), nil
 	}
-
-	if len(level) == 0 {
+	if level == "" {
 		return opentracing.NoopTracer{}.StartSpan(""),
-		fmt.Errorf("level field cannot be empty")
+			fmt.Errorf("level field cannot be empty")
 	}
 
 	span, err := ctx.StartSpan(fmt.Sprintf("[%v]%v", level, phase))
 	if err == nil {
 		span.SetTag(LevelKey, level)
-		if len(phase) != 0 {
+		if phase != "" {
 			span.SetTag(PhaseKey, phase)
 		}
-		if len(name) != 0 {
+		if name != "" {
 			span.SetTag(NameKey, name)
 		}
 	}
 	return span, err
 }
 
+// finishActiveSpanWrapper simplifies span finishing process by integrating result tags' setting.
+// The state tag logs span's calling result. (skip, allocated, reserved, ...)
+// The info tag logs span's result message. (errors or hints for the state)
+// These general tags depend on the calling result so they can be integrated with the finishing process
 func finishActiveSpanWrapper(ctx trace.SchedulerTraceContext, state, info string) error {
 	if ctx == nil {
 		return nil
@@ -86,10 +73,10 @@ func finishActiveSpanWrapper(ctx trace.SchedulerTraceContext, state, info string
 
 	span, err := ctx.ActiveSpan()
 	if err == nil {
-		if len(state) != 0 {
+		if state != "" {
 			span.SetTag(StateKey, state)
 		}
-		if len(info) != 0 {
+		if info != "" {
 			span.SetTag(InfoKey, info)
 		}
 		ctx.FinishActiveSpan()

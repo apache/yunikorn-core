@@ -26,7 +26,6 @@ import (
 )
 
 type SchedulerTracer interface {
-	// trace collecting function
 	NewTraceContext() SchedulerTraceContext
 	Close()
 }
@@ -39,8 +38,8 @@ const (
 )
 
 type SchedulerTracerImplParams struct {
-	Mode         string
-	FilterTags   map[string]interface{}
+	Mode       string
+	FilterTags map[string]interface{}
 }
 
 var DefaultSchedulerTracerImplParams = &SchedulerTracerImplParams{
@@ -49,8 +48,8 @@ var DefaultSchedulerTracerImplParams = &SchedulerTracerImplParams{
 }
 
 type SchedulerTracerImpl struct {
-	Tracer         opentracing.Tracer
-	Closer         io.Closer
+	Tracer opentracing.Tracer
+	Closer io.Closer
 	sync.RWMutex
 	*SchedulerTracerImplParams
 }
@@ -107,13 +106,12 @@ func NewSchedulerTracer(params *SchedulerTracerImplParams) (SchedulerTracer, err
 
 	tracer, closer, err := NewTracerFromEnv("yunikorn-core-scheduler")
 	if err != nil {
-		tracer = opentracing.GlobalTracer()
-		closer = nil
+		return nil, err
 	}
 
 	return &SchedulerTracerImpl{
-		Tracer:         tracer,
-		Closer:         closer,
+		Tracer:                    tracer,
+		Closer:                    closer,
 		SchedulerTracerImplParams: params,
 	}, nil
 }

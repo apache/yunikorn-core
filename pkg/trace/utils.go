@@ -16,14 +16,12 @@
  limitations under the License.
 */
 
+// Package trace provides functions and constants for tracing.
 package trace
 
 import (
-	"bytes"
-	"encoding/base64"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/uber/jaeger-client-go"
@@ -34,10 +32,14 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
 
-// NewConstTracer returns an instance of Jaeger Tracer that samples 100% of traces and logs all spans to stdout for test.
-func NewConstTracer(serviceName string) (opentracing.Tracer, io.Closer, error) {
-	if len(serviceName) == 0 {
+// NewConstTracer returns an instance of Jaeger Tracer that samples 100% or 0% of traces for test.
+func NewConstTracer(serviceName string, collect bool) (opentracing.Tracer, io.Closer, error) {
+	if serviceName == "" {
 		return nil, nil, fmt.Errorf("service name is empty")
+	}
+	param := 0.0
+	if collect {
+		param = 1.0
 	}
 	// Sample configuration for testing. Use constant sampling to sample every trace
 	// and enable LogSpan to log every span via configured Logger.
@@ -45,7 +47,7 @@ func NewConstTracer(serviceName string) (opentracing.Tracer, io.Closer, error) {
 		ServiceName: serviceName,
 		Sampler: &jaegercfg.SamplerConfig{
 			Type:  jaeger.SamplerTypeConst,
-			Param: 1,
+			Param: param,
 		},
 		Reporter: &jaegercfg.ReporterConfig{
 			LogSpans: true,
@@ -74,30 +76,4 @@ func NewTracerFromEnv(serviceName string) (opentracing.Tracer, io.Closer, error)
 		jaegercfg.Logger(zap.NewLogger(log.Logger().Named(cfg.ServiceName))),
 		jaegercfg.Metrics(metrics.NullFactory),
 	)
-}
-
-// build common tags for span, such as level, phase, name, state
-type TagsBuilder interface {
-	Build() map[string]interface{}
-}
-
-func SetTags(span opentracing.Span, builder TagsBuilder) {
-	for k, v := range builder.Build() {
-		span.SetTag(k, v)
-	}
-}
-
-// Inject span context to base64 string
-func Inject(tracer opentracing.Tracer, context opentracing.SpanContext) (string, error) {
-	var buffer = bytes.NewBuffer([]byte{})
-	if err := tracer.Inject(context, opentracing.Binary, buffer); err != nil {
-		return "", err
-	}
-	return base64.StdEncoding.EncodeToString(buffer.Bytes()), nil
-}
-
-// Extract span context from base64 string
-func Extract(tracer opentracing.Tracer, str string) (opentracing.SpanContext, error) {
-	spanCtxReader := base64.NewDecoder(base64.StdEncoding, strings.NewReader(str))
-	return tracer.Extract(opentracing.Binary, spanCtxReader)
 }

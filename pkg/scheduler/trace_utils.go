@@ -35,9 +35,9 @@ const (
 )
 
 // startSpanWrapper simplifies span starting process by integrating general tags' setting.
-// The level tag logs span's scheduling level. (root, partition, queue, ...)
-// The phase tag logs span's calling phase. (reservedAllocate, tryAllocate, allocate, ...)
-// The name tag logs span's related object's identity. (resources' name or ID)
+// The level tag is required, nonempty and logs span's scheduling level. (root, partition, queue, ...)
+// The phase tag is optional and logs span's calling phase. (reservedAllocate, tryAllocate, allocate, ...)
+// The name tag is optional and logs span's related object's identity. (resources' name or ID)
 // These tags can be decided when starting the span because they don't depend on the calling result.
 // Logs or special tags can be set with the returned span object.
 func startSpanWrapper(ctx trace.SchedulerTraceContext, level, phase, name string) (opentracing.Span, error) {
@@ -63,8 +63,8 @@ func startSpanWrapper(ctx trace.SchedulerTraceContext, level, phase, name string
 }
 
 // finishActiveSpanWrapper simplifies span finishing process by integrating result tags' setting.
-// The state tag logs span's calling result. (skip, allocated, reserved, ...)
-// The info tag logs span's result message. (errors or hints for the state)
+// The state tag is optional and logs span's calling result. (skip, allocated, reserved, ...)
+// The info tag is optional and logs span's result message. (errors or hints for the state)
 // These general tags depend on the calling result so they can be integrated with the finishing process
 func finishActiveSpanWrapper(ctx trace.SchedulerTraceContext, state, info string) error {
 	if ctx == nil {

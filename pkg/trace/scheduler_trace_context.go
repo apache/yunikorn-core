@@ -167,8 +167,9 @@ func (d *DelaySchedulerTraceContextImpl) FinishActiveSpan() error {
 
 // isMatch checks whether there is a span in the trace that matches the FilterTags.
 func (d *DelaySchedulerTraceContextImpl) isMatch() bool {
+	// matches if no filter tag condition exists
 	if len(d.FilterTags) == 0 {
-		return false
+		return true
 	}
 	for _, span := range d.Spans {
 		tags := span.Span.(*jaeger.Span).Tags()

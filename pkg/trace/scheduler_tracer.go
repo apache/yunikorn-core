@@ -19,6 +19,7 @@
 package trace
 
 import (
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"io"
 	"sync"
 
@@ -46,12 +47,13 @@ type SchedulerTracerImplParams struct {
 }
 
 const (
-	Sampling = "Sampling"
-	OnDemand = "OnDemand"
+	FromEnv         = "FromEnv"
+	Debug           = "Debug"
+	DebugWithFilter = "DebugWithFilter"
 )
 
 var DefaultSchedulerTracerImplParams = &SchedulerTracerImplParams{
-	Mode:       Sampling,
+	Mode:       FromEnv,
 	FilterTags: nil,
 }
 
@@ -59,6 +61,10 @@ var DefaultSchedulerTracerImplParams = &SchedulerTracerImplParams{
 func (s *SchedulerTracerImpl) SetParams(params *SchedulerTracerImplParams) {
 	if params == nil {
 		return
+	}
+	if params.Mode == DebugWithFilter && len(params.FilterTags) == 0 {
+		log.Logger().Warn("FilterTags is empty while trying to run in DebugWithFilter mode." +
+			" Please use Debug mode instead.")
 	}
 	s.Lock()
 	defer s.Unlock()
@@ -70,26 +76,24 @@ func (s *SchedulerTracerImpl) NewTraceContext() SchedulerTraceContext {
 	s.RLock()
 	defer s.RUnlock()
 	switch s.Mode {
-	case Sampling:
+	case FromEnv:
 		return &SchedulerTraceContextImpl{
 			Tracer:       s.Tracer,
 			SpanStack:    []opentracing.Span{},
 			OnDemandFlag: false,
 		}
-	case OnDemand:
-		if len(s.FilterTags) == 0 {
-			return &SchedulerTraceContextImpl{
-				Tracer:       s.Tracer,
-				SpanStack:    []opentracing.Span{},
-				OnDemandFlag: true,
-			}
-		} else {
-			return &DelaySchedulerTraceContextImpl{
-				Tracer:     s.Tracer,
-				SpanStack:  []*DelaySpan{},
-				Spans:      []*DelaySpan{},
-				FilterTags: s.FilterTags,
-			}
+	case Debug:
+		return &SchedulerTraceContextImpl{
+			Tracer:       s.Tracer,
+			SpanStack:    []opentracing.Span{},
+			OnDemandFlag: true,
+		}
+	case DebugWithFilter:
+		return &DelaySchedulerTraceContextImpl{
+			Tracer:     s.Tracer,
+			SpanStack:  []*DelaySpan{},
+			Spans:      []*DelaySpan{},
+			FilterTags: s.FilterTags,
 		}
 	default:
 		return nil

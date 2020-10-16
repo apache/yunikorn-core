@@ -44,10 +44,10 @@ func TestSchedulerTracerImpl(t *testing.T) {
 			wantOnDemand: false,
 		},
 		{
-			name: "Sampling",
+			name: "FromEnv",
 			fields: fields{
 				SchedulerTracerImplParams: &SchedulerTracerImplParams{
-					Mode:       Sampling,
+					Mode:       FromEnv,
 					FilterTags: nil,
 				},
 			},
@@ -58,7 +58,7 @@ func TestSchedulerTracerImpl(t *testing.T) {
 			name: "Debug",
 			fields: fields{
 				SchedulerTracerImplParams: &SchedulerTracerImplParams{
-					Mode:       OnDemand,
+					Mode:       Debug,
 					FilterTags: nil,
 				},
 			},
@@ -66,10 +66,10 @@ func TestSchedulerTracerImpl(t *testing.T) {
 			wantOnDemand: true,
 		},
 		{
-			name: "OnDemand",
+			name: "DebugWithFilter",
 			fields: fields{
 				SchedulerTracerImplParams: &SchedulerTracerImplParams{
-					Mode: OnDemand,
+					Mode: DebugWithFilter,
 					FilterTags: map[string]interface{}{
 						"foo": "bar",
 					},

@@ -373,12 +373,12 @@ func TestDelaySchedulerTraceContextImpl_isMatch(t *testing.T) {
 		want   bool
 	}{
 		{
-			name: "Empty",
+			name: "EmptyFilterTags",
 			fields: fields{
 				Spans:      openSpans,
 				FilterTags: map[string]interface{}{},
 			},
-			want: false,
+			want: true,
 		},
 		{
 			name: "NotWritable",

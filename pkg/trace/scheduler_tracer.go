@@ -19,11 +19,12 @@
 package trace
 
 import (
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"io"
 	"sync"
 
 	"github.com/opentracing/opentracing-go"
+
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
 
 // SchedulerTracer defines minimum interface for tracing
@@ -47,13 +48,13 @@ type SchedulerTracerImplParams struct {
 }
 
 const (
-	FromEnv         = "FromEnv"
+	Sampling        = "Sampling"
 	Debug           = "Debug"
 	DebugWithFilter = "DebugWithFilter"
 )
 
 var DefaultSchedulerTracerImplParams = &SchedulerTracerImplParams{
-	Mode:       FromEnv,
+	Mode:       Sampling,
 	FilterTags: nil,
 }
 
@@ -76,7 +77,7 @@ func (s *SchedulerTracerImpl) NewTraceContext() SchedulerTraceContext {
 	s.RLock()
 	defer s.RUnlock()
 	switch s.Mode {
-	case FromEnv:
+	case Sampling:
 		return &SchedulerTraceContextImpl{
 			Tracer:       s.Tracer,
 			SpanStack:    []opentracing.Span{},

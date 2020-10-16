@@ -44,7 +44,7 @@ func TestSchedulerTracerImpl(t *testing.T) {
 			wantOnDemand: false,
 		},
 		{
-			name: "FromEnv",
+			name: "Sampling",
 			fields: fields{
 				SchedulerTracerImplParams: &SchedulerTracerImplParams{
 					Mode:       Sampling,

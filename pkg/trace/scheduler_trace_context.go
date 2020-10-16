@@ -56,7 +56,7 @@ type SchedulerTraceContextImpl struct {
 
 func (s *SchedulerTraceContextImpl) ActiveSpan() (opentracing.Span, error) {
 	if len(s.SpanStack) == 0 {
-		return nil, fmt.Errorf("not found")
+		return nil, fmt.Errorf("active span is not found")
 	} else {
 		return s.SpanStack[len(s.SpanStack)-1], nil
 	}
@@ -118,7 +118,7 @@ type DelaySchedulerTraceContextImpl struct {
 
 func (d *DelaySchedulerTraceContextImpl) ActiveSpan() (opentracing.Span, error) {
 	if len(d.SpanStack) == 0 {
-		return nil, fmt.Errorf("not found")
+		return nil, fmt.Errorf("active span is not found")
 	} else {
 		return d.SpanStack[len(d.SpanStack)-1], nil
 	}

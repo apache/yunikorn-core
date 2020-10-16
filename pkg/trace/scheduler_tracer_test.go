@@ -86,14 +86,16 @@ func TestSchedulerTracerImpl(t *testing.T) {
 			defer tracer.Close()
 			tracer.(*SchedulerTracerImpl).SetParams(tt.fields.SchedulerTracerImplParams)
 			ctx := tracer.NewTraceContext()
-			switch ctx.(type) {
+			switch typeInfo := ctx.(type) {
+			case nil:
+				t.Errorf("Nil context object, type: %T", typeInfo)
 			case *SchedulerTraceContextImpl:
 				assert.Equal(t, tt.wantType, 0)
 				assert.Equal(t, tt.wantOnDemand, ctx.(*SchedulerTraceContextImpl).OnDemandFlag)
 			case *DelaySchedulerTraceContextImpl:
 				assert.Equal(t, tt.wantType, 1)
 			default:
-				t.Errorf("Unknown type")
+				t.Errorf("Unknown type: %T", typeInfo)
 			}
 		})
 	}

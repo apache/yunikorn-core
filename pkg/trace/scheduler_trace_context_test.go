@@ -28,9 +28,11 @@ import (
 )
 
 func TestSchedulerTraceContextImpl(t *testing.T) {
-	closeTracer, closer1, _ := NewConstTracer("close-tracer", false)
+	closeTracer, closer1, err := NewConstTracer("close-tracer", false)
+	assert.NilError(t, err)
 	defer closer1.Close()
-	openTracer, closer2, _ := NewConstTracer("open-tracer", true)
+	openTracer, closer2, err := NewConstTracer("open-tracer", true)
+	assert.NilError(t, err)
 	defer closer2.Close()
 
 	type fields struct {
@@ -96,12 +98,16 @@ func TestSchedulerTraceContextImpl(t *testing.T) {
 			rootSpan, err := s.StartSpan("root")
 			assert.Equal(t, rootSpan.(*jaeger.Span).SpanContext().IsDebug(), tt.wantDebugFlag)
 			assert.NilError(t, err)
-			_, _ = s.StartSpan("child")
+			_, err = s.StartSpan("child")
+			assert.NilError(t, err)
 			assert.Equal(t, len(s.SpanStack), 2)
-			span, _ := s.ActiveSpan()
+			span, err := s.ActiveSpan()
+			assert.NilError(t, err)
 			assert.Equal(t, span.(*jaeger.Span).OperationName(), "child")
 			err = s.FinishActiveSpan()
-			span, _ = s.ActiveSpan()
+			assert.NilError(t, err)
+			span, err = s.ActiveSpan()
+			assert.NilError(t, err)
 			assert.Equal(t, span.(*jaeger.Span).OperationName(), "root")
 			err = s.FinishActiveSpan()
 			assert.NilError(t, err)
@@ -163,7 +169,8 @@ func TestDelaySpan_ForbiddenFunctions(t *testing.T) {
 }
 
 func TestDelaySchedulerTraceContextImpl(t *testing.T) {
-	tracer, closer, _ := NewConstTracer("test-tracer", true)
+	tracer, closer, err := NewConstTracer("test-tracer", true)
+	assert.NilError(t, err)
 	defer closer.Close()
 
 	type fields struct {
@@ -230,7 +237,8 @@ func TestDelaySchedulerTraceContextImpl(t *testing.T) {
 			assert.Equal(t, len(d.Spans), 2)
 
 			// foo stem out
-			_ = d.FinishActiveSpan()
+			err = d.FinishActiveSpan()
+			assert.NilError(t, err)
 			assert.Equal(t, len(d.SpanStack), 1)
 			assert.Equal(t, len(d.Spans), 2)
 
@@ -253,45 +261,20 @@ func TestDelaySchedulerTraceContextImpl(t *testing.T) {
 			assert.Equal(t, len(d.Spans), 4)
 
 			// b leaf out
-			_ = d.FinishActiveSpan()
+			err = d.FinishActiveSpan()
+			assert.NilError(t, err)
 			assert.Equal(t, len(d.SpanStack), 2)
 			assert.Equal(t, len(d.Spans), 4)
 
-			// a leaf in
-			span, err = d.StartSpan("a")
-			assert.NilError(t, err)
-			span.SetTag("organ", "leaf").
-				SetTag("color", "yellow").
-				SetTag("depth", 2)
-			assert.Equal(t, len(d.SpanStack), 3)
-			assert.Equal(t, len(d.Spans), 5)
-
-			// a leaf out
-			_ = d.FinishActiveSpan()
-			assert.Equal(t, len(d.SpanStack), 2)
-			assert.Equal(t, len(d.Spans), 5)
-
-			// r leaf in
-			span, err = d.StartSpan("r")
-			assert.NilError(t, err)
-			span.SetTag("organ", "leaf").
-				SetTag("color", "green").
-				SetTag("depth", 2)
-			assert.Equal(t, len(d.SpanStack), 3)
-			assert.Equal(t, len(d.Spans), 6)
-
-			// r leaf out
-			_ = d.FinishActiveSpan()
-			assert.Equal(t, len(d.SpanStack), 2)
-			assert.Equal(t, len(d.Spans), 6)
-
 			// bar stem out
-			_ = d.FinishActiveSpan()
+			err = d.FinishActiveSpan()
+			assert.NilError(t, err)
 			assert.Equal(t, len(d.SpanStack), 1)
-			assert.Equal(t, len(d.Spans), 6)
+			assert.Equal(t, len(d.Spans), 4)
 
 			// foobar root out
-			_ = d.FinishActiveSpan()
+			err = d.FinishActiveSpan()
+			assert.NilError(t, err)
 			assert.Equal(t, len(d.SpanStack), 0)
 			assert.Equal(t, len(d.Spans), 0)
 
@@ -303,9 +286,11 @@ func TestDelaySchedulerTraceContextImpl(t *testing.T) {
 }
 
 func TestDelaySchedulerTraceContextImpl_isMatch(t *testing.T) {
-	closeTracer, closer1, _ := NewConstTracer("close-tracer", false)
+	closeTracer, closer1, err := NewConstTracer("close-tracer", false)
+	assert.NilError(t, err)
 	defer closer1.Close()
-	openTracer, closer2, _ := NewConstTracer("open-tracer", true)
+	openTracer, closer2, err := NewConstTracer("open-tracer", true)
+	assert.NilError(t, err)
 	defer closer2.Close()
 
 	closeSpans := []*DelaySpan{
@@ -337,28 +322,22 @@ func TestDelaySchedulerTraceContextImpl_isMatch(t *testing.T) {
 	openSpans := []*DelaySpan{
 		{Span: openTracer.StartSpan("foobar",
 			opentracing.Tag{Key: "organ", Value: "root"},
-			opentracing.Tag{Key: "color", Value: "black"},
-			opentracing.Tag{Key: "depth", Value: "0"})},
+			opentracing.Tag{Key: "color", Value: "black"})},
 		{Span: openTracer.StartSpan("foo",
 			opentracing.Tag{Key: "organ", Value: "stem"},
-			opentracing.Tag{Key: "color", Value: "green"},
-			opentracing.Tag{Key: "depth", Value: "1"})},
+			opentracing.Tag{Key: "color", Value: "green"})},
 		{Span: openTracer.StartSpan("bar",
 			opentracing.Tag{Key: "organ", Value: "stem"},
-			opentracing.Tag{Key: "color", Value: "brown"},
-			opentracing.Tag{Key: "depth", Value: "1"})},
+			opentracing.Tag{Key: "color", Value: "brown"})},
 		{Span: openTracer.StartSpan("b",
 			opentracing.Tag{Key: "organ", Value: "leaf"},
-			opentracing.Tag{Key: "color", Value: "green"},
-			opentracing.Tag{Key: "depth", Value: "2"})},
+			opentracing.Tag{Key: "color", Value: "green"})},
 		{Span: openTracer.StartSpan("a",
 			opentracing.Tag{Key: "organ", Value: "leaf"},
-			opentracing.Tag{Key: "color", Value: "yellow"},
-			opentracing.Tag{Key: "depth", Value: "2"})},
+			opentracing.Tag{Key: "color", Value: "yellow"})},
 		{Span: openTracer.StartSpan("r",
 			opentracing.Tag{Key: "organ", Value: "leaf"},
-			opentracing.Tag{Key: "color", Value: "green"},
-			opentracing.Tag{Key: "depth", Value: "2"})},
+			opentracing.Tag{Key: "color", Value: "green"})},
 	}
 
 	type fields struct {

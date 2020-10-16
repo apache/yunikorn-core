@@ -79,7 +79,7 @@ func finishActiveSpanWrapper(ctx trace.SchedulerTraceContext, state, info string
 		if info != "" {
 			span.SetTag(InfoKey, info)
 		}
-		ctx.FinishActiveSpan()
+		return ctx.FinishActiveSpan()
 	}
 	return err
 }

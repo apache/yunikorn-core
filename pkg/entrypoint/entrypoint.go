@@ -65,6 +65,7 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 	var eventCache *events.EventCache
 	var eventPublisher events.EventPublisher
 	if opts.eventCacheEnabled {
+		log.Logger().Info("creating event cache")
 		events.CreateAndSetEventCache()
 		eventCache = events.GetEventCache()
 		eventPublisher = events.CreateShimPublisher(eventCache.Store)
@@ -100,6 +101,7 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 
 	var imHistory *history.InternalMetricsHistory
 	if opts.metricsHistorySize != 0 {
+		log.Logger().Info("creating InternalMetricsHistory")
 		imHistory = history.NewInternalMetricsHistory(opts.metricsHistorySize)
 		metricsCollector := metrics.NewInternalMetricsCollector(imHistory)
 		metricsCollector.StartService()

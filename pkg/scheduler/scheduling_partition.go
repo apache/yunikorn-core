@@ -247,12 +247,12 @@ func (psc *partitionSchedulingContext) createSchedulingQueue(name string, user s
 	// Check the ACL before we really create
 	// The existing parent scheduling queue is the lowest we need to look at
 	if !parent.checkSubmitAccess(user) {
-		log.Logger().Debug("Submit access denied by scheduler on queue",
+		log.Logger().Info("Submit access denied by scheduler on queue",
 			zap.String("deniedQueueName", schedQueue),
 			zap.String("requestedQueue", name))
 		return
 	}
-	log.Logger().Debug("Creating scheduling queue(s)",
+	log.Logger().Info("Creating scheduling queue(s)",
 		zap.String("parent", schedQueue),
 		zap.String("child", cacheQueue),
 		zap.String("fullPath", name))

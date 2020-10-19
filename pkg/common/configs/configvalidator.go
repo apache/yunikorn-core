@@ -82,14 +82,14 @@ func checkResourceConfigurationsForQueue(cur *QueueConfig, parent *QueueConfig) 
 		return err
 	}
 	if curGuaranteedRes.HasNegativeValue() {
-		return fmt.Errorf("invalid guaranteed resource for queue %s, cannot be negative", cur.Name)
+		return fmt.Errorf("invalid guaranteed resource %v for queue %s, cannot be negative", curGuaranteedRes, cur.Name)
 	}
 	curMaxRes, err := resources.NewResourceFromConf(cur.Resources.Max)
 	if err != nil {
 		return err
 	}
 	if curMaxRes.HasNegativeValue() {
-		return fmt.Errorf("invalid max resource for queue %s, cannot be negative", cur.Name)
+		return fmt.Errorf("invalid max resource %v for queue %s, cannot be negative", curMaxRes, cur.Name)
 	}
 
 	if len(cur.Queues) > 0 {

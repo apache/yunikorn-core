@@ -157,7 +157,7 @@ func PopulateChecksum(content []byte, conf *SchedulerConfig) {
 
 func ParseAndValidateConfig(content []byte) (*SchedulerConfig, error) {
 	conf := &SchedulerConfig{}
-	err := yaml.Unmarshal(content, conf)
+	err := yaml.UnmarshalStrict(content, conf)
 	if err != nil {
 		log.Logger().Error("failed to parse queue configuration",
 			zap.Error(err))

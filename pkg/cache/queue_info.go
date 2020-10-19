@@ -88,7 +88,7 @@ func NewManagedQueue(conf configs.QueueConfig, parent *QueueInfo) (*QueueInfo, e
 		}
 	}
 
-	log.Logger().Debug("queue added",
+	log.Logger().Info("queue added",
 		zap.String("queueName", qi.Name),
 		zap.String("queuePath", qi.GetQueuePath()))
 	return qi, nil
@@ -99,7 +99,7 @@ func NewManagedQueue(conf configs.QueueConfig, parent *QueueInfo) (*QueueInfo, e
 func NewUnmanagedQueue(name string, leaf bool, parent *QueueInfo) (*QueueInfo, error) {
 	// name might not be checked do it here
 	if !configs.QueueNameRegExp.MatchString(name) {
-		return nil, fmt.Errorf("invalid queue name %s, a name must only have alphanumeric characters,"+
+		return nil, fmt.Errorf("invalid queue name %s, a name must only have lower case alphanumeric characters,"+
 			" - or _, and be no longer than 64 characters", name)
 	}
 	// create the object

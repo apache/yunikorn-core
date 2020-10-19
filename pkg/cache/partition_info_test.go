@@ -20,12 +20,14 @@ package cache
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
@@ -833,4 +835,85 @@ partitions:
 	m = partition.CalculateNodesResourceUsage()
 	assert.Equal(t, len(m), 2)
 	assert.Assert(t, reflect.DeepEqual(m["memory"], []int{1, 1, 0, 0, 0, 0, 0, 0, 1, 0}))
+}
+
+func TestUpdatePartitionWithUpperCaseQueueNames(t *testing.T) {
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        queues:
+          - name: test
+            resources:
+              guaranteed:
+                memory: 200
+                vcore: 200
+              max:
+                memory: 200
+                vcore: 200
+`
+
+	partition, err := CreatePartitionInfo([]byte(data))
+	assert.NilError(t, err)
+
+	data = `
+partitions:
+  - name: default
+    queues:
+    - name: root
+      submitacl: '*'
+      queues:
+      - name: a
+        queues:
+        - name: b
+          queues:
+          - name: c
+      - name: UPPER-CASE-QUEUE
+        queues:
+        - name: UPPER-CASE-CHILD
+          resources:
+            guaranteed:
+              memory: 80000
+              vcore: 8000
+`
+	_, err = configs.LoadSchedulerConfigFromByteArray([]byte(data))
+	assert.Assert(t, err != nil, "Error is expected")
+	assert.Assert(t, strings.Contains(err.Error(), "invalid child name"))
+
+	data = `
+partitions:
+  - name: default
+    queues:
+    - name: root
+      submitacl: '*'
+      queues:
+      - name: a
+        queues:
+        - name: b
+          queues:
+          - name: c
+      - name: added-queue
+        queues:
+        - name: child1
+          queues:
+          - name: child11
+`
+	updatedConf, err := configs.LoadSchedulerConfigFromByteArray([]byte(data))
+	assert.NilError(t, err)
+
+	err = partition.updatePartitionDetails(updatedConf.Partitions[0])
+	assert.NilError(t, err)
+
+	// post update, expected result:
+	// - root.a.b.c retains
+	// - root.added-queue.child1.child11 is added
+	// - root.upper-case-queue.upper-case-child is marked for deletion
+	queueInfo := partition.getQueue("root.a.b.c")
+	assert.Assert(t, queueInfo != nil)
+	assert.Equal(t, queueInfo.IsDraining(), false)
+
+	queueInfo = partition.getQueue("root.added-queue.child1.child11")
+	assert.Assert(t, queueInfo != nil)
+	assert.Equal(t, queueInfo.IsDraining(), false)
 }

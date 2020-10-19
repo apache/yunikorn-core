@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"path"
+	"strings"
 	"testing"
 
 	"gotest.tools/assert"
@@ -1124,5 +1125,72 @@ partitions:
 	conf, err = CreateConfig(data)
 	if err == nil {
 		t.Errorf("limit parsing should have failed group @: %v", conf)
+	}
+}
+
+func TestLoadSchedulerConfigFromByteArray(t *testing.T) {
+	validConf := `
+partitions:
+  -
+    name: default
+    placementrules:
+      - name: tag
+        value: namespace
+        create: true
+    queues:
+      - name: root
+        submitacl: '*'
+        properties:
+          application.sort.policy: stateaware
+          sample: value2
+`
+	invalidConf := `
+partitions:
+  -
+    name: default
+    placementrules:
+      - name: tag
+        value: namespace
+        create: true
+    queues:
+      - name: root
+        submitacl: '*'
+        sample: value1
+`
+	mixedSpacesConf := `
+partitions:
+  -
+    name: default
+    placementrules:
+      - name: tag
+        value: namespace
+        create: true
+    queues:
+      - name: root
+        submitacl: '*'
+        properties:
+            application.sort.policy: stateaware
+`
+	testCases := []struct {
+		name          string
+		config        string
+		errorExpected bool
+	}{
+		{"Valid config", validConf, false},
+		{"Invalid checksum", invalidConf, true},
+		{"Mixed space", mixedSpacesConf, false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			schedulerConf, err := LoadSchedulerConfigFromByteArray([]byte(tc.config))
+			if tc.errorExpected {
+				assert.Assert(t, err != nil, "Error is expected")
+				assert.Assert(t, strings.Contains(err.Error(), "unmarshal error"), "Unexpected error message")
+			} else {
+				assert.NilError(t, err, "No error is expected")
+				assert.Assert(t, schedulerConf != nil, "Returned conf should not be nil")
+			}
+		})
 	}
 }

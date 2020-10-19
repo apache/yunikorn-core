@@ -87,6 +87,7 @@ func newSingleAllocationProposal(alloc *schedulingAllocation) *cacheevent.Alloca
 				QueueName:         alloc.schedulingAsk.QueueName,
 				AllocatedResource: alloc.schedulingAsk.AllocatedResource,
 				AllocationKey:     alloc.schedulingAsk.AskProto.AllocationKey,
+				Tags:              alloc.schedulingAsk.AskProto.Tags,
 				Priority:          alloc.schedulingAsk.AskProto.Priority,
 				PartitionName:     alloc.schedulingAsk.PartitionName,
 			},
@@ -130,6 +131,8 @@ func (s *Scheduler) inspectOutstandingRequests() {
 	for _, psc := range s.clusterSchedulingContext.getPartitionMapClone() {
 		requests := psc.calculateOutstandingRequests()
 		if len(requests) > 0 {
+			log.Logger().Info("outstanding requests",
+				zap.Int("size", len(requests)))
 			for _, ask := range requests {
 				log.Logger().Debug("outstanding request",
 					zap.String("appID", ask.AskProto.ApplicationID),

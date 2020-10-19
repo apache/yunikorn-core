@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
-	"time"
 
 	"go.uber.org/zap"
 
@@ -239,7 +238,7 @@ func (m *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerReq
 		// create a config watcher for this RM
 		// config watcher will only be started when a reload is triggered
 		// it is configured with a expiration time, and will be auto exit once that reaches
-		configWatcher := configs.CreateConfigWatcher(request.RmID, request.PolicyGroup, 60*time.Second)
+		configWatcher := configs.CreateConfigWatcher(request.RmID, request.PolicyGroup, configs.DefaultConfigWatcherDuration)
 		configWatcher.RegisterCallback(&ConfigurationReloader{
 			rmID:    request.RmID,
 			rmProxy: m,

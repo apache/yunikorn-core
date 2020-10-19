@@ -263,6 +263,20 @@ func (ai *ApplicationInfo) removeAllAllocations() []*AllocationInfo {
 	return allocationsToRelease
 }
 
+func (ai *ApplicationInfo) RefreshAllocation(uuid string, alloc *si.Allocation) {
+	ai.Lock()
+	ai.Unlock()
+
+	if _, ok := ai.allocations[uuid]; !ok {
+		panic("allocation UUID not found in application!!!")
+	}
+	ai.allocations[uuid] = &AllocationInfo{
+		AllocationProto:   alloc,
+		ApplicationID:     ai.ApplicationID,
+		AllocatedResource: resources.NewResourceFromProto(alloc.ResourcePerAlloc),
+	}
+}
+
 // get a copy of the user details for the application
 func (ai *ApplicationInfo) GetUser() security.UserGroup {
 	ai.Lock()

@@ -33,23 +33,23 @@ func RegisterSchedulerPlugin(plugin interface{}) {
 	defer plugins.Unlock()
 
 	if t, ok := plugin.(PredicatesPlugin); ok {
-		log.Logger().Debug("register scheduler plugin: PredicatesPlugin")
+		log.Logger().Info("register scheduler plugin: PredicatesPlugin")
 		plugins.predicatesPlugin = t
 	}
 	if t, ok := plugin.(ReconcilePlugin); ok {
-		log.Logger().Debug("register scheduler plugin: ReconcilePlugin")
+		log.Logger().Info("register scheduler plugin: ReconcilePlugin")
 		plugins.reconcilePlugin = t
 	}
 	if t, ok := plugin.(EventPlugin); ok {
-		log.Logger().Debug("register scheduler plugin: EventPlugin")
+		log.Logger().Info("register scheduler plugin: EventPlugin")
 		plugins.eventPlugin = t
 	}
 	if t, ok := plugin.(ContainerSchedulingStateUpdater); ok {
-		log.Logger().Debug("register scheduler plugin: ContainerSchedulingStateUpdater")
+		log.Logger().Info("register scheduler plugin: ContainerSchedulingStateUpdater")
 		plugins.schedulingStateUpdater = t
 	}
 	if t, ok := plugin.(ConfigurationPlugin); ok {
-		log.Logger().Debug("register scheduler plugin: ConfigMapPlugin")
+		log.Logger().Info("register scheduler plugin: ConfigMapPlugin")
 		plugins.configPlugin = t
 	}
 }

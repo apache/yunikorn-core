@@ -65,6 +65,12 @@ var webRoutes = routes{
 		"/ws/v1/nodes",
 		getNodesInfo,
 	},
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/nodes/utilization",
+		getNodesUtilization,
+	},
 
 	// endpoint to retrieve goroutines info
 	route{

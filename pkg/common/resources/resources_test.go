@@ -1474,3 +1474,69 @@ func TestDAOString(t *testing.T) {
 		assert.Equal(t, test.res.DAOString(), test.dao, "unexpected dao string for %s", name)
 	}
 }
+
+func TestString(t *testing.T) {
+	testCases := []struct {
+		name           string
+		input          Quantity
+		expectedResult string
+	}{
+		{"Negative quantity", -1, "-1"},
+		{"Zero quantity", 0, "0"},
+		{"Positive quantity", 18, "18"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expectedResult, tc.input.string())
+		})
+	}
+}
+
+func TestToConf(t *testing.T) {
+	resourceMap := map[string]string{"memory": "50", "vcores": "33"}
+	resource, err := NewResourceFromConf(resourceMap)
+	assert.NilError(t, err)
+	zeroResourceMap := map[string]string{"memory": "0", "vcores": "0"}
+	zeroResource, err := NewResourceFromConf(zeroResourceMap)
+	assert.NilError(t, err)
+
+	testCases := []struct {
+		name           string
+		input          *Resource
+		expectedResult map[string]string
+	}{
+		{"Zero resource", zeroResource, zeroResourceMap},
+		{"Resources populated", resource, resourceMap},
+		{"Empty resource", NewResource(), map[string]string{}},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.DeepEqual(t, tc.input.ToConf(), tc.expectedResult)
+		})
+	}
+}
+
+func TestHasNegativeValue(t *testing.T) {
+	zeroResource, err := NewResourceFromConf(map[string]string{"memory": "0", "vcores": "0"})
+	assert.NilError(t, err)
+	positiveResource, err := NewResourceFromConf(map[string]string{"memory": "10", "vcores": "20"})
+	assert.NilError(t, err)
+	negativeResource, err := NewResourceFromConf(map[string]string{"memory": "-10", "vcores": "20"})
+	assert.NilError(t, err)
+
+	testCases := []struct {
+		name           string
+		input          *Resource
+		expectedResult bool
+	}{
+		{"Zero resource", zeroResource, false},
+		{"Only positive values", positiveResource, false},
+		{"Empty resource", NewResource(), false},
+		{"Negative values", negativeResource, true},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.input.HasNegativeValue(), tc.expectedResult)
+		})
+	}
+}

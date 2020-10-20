@@ -1371,3 +1371,15 @@ func TestNewResourceFromString(t *testing.T) {
 		}
 	}
 }
+
+func TestToString(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("String panic on nil resource")
+		}
+	}()
+	var res *Resource
+	// ignore nil check from IDE we really want to do this
+	resString := res.String()
+	assert.Equal(t, resString, "nil resource", "Unexpected string returned for nil resource")
+}

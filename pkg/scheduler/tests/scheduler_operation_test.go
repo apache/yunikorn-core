@@ -117,7 +117,7 @@ partitions:
 	err = ms.proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
-				NodeID: "node-1:1234",
+				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -236,7 +236,7 @@ partitions:
 	err = ms.proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
-				NodeID: "node-1:1234",
+				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -322,7 +322,7 @@ partitions:
 	err = ms.proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
-				NodeID: "node-1:1234",
+				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -332,7 +332,7 @@ partitions:
 				},
 			},
 		},
-		RmID:            "rm:123",
+		RmID: "rm:123",
 	})
 
 	assert.NilError(t, err, "UpdateRequest failed")
@@ -355,7 +355,7 @@ partitions:
 	err = ms.proxy.Update(&si.UpdateRequest{
 		UpdatedNodes: []*si.UpdateNodeInfo{
 			{
-				NodeID: "node-1:1234",
+				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -410,7 +410,7 @@ partitions:
 	err = ms.proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
-				NodeID: "node-1:1234",
+				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -443,7 +443,7 @@ partitions:
 	err = ms.proxy.Update(&si.UpdateRequest{
 		UpdatedNodes: []*si.UpdateNodeInfo{
 			{
-				NodeID: "node-1:1234",
+				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
 				OccupiedResource: &si.Resource{
 					Resources: map[string]*si.Quantity{

@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"go.uber.org/zap"
 	"gotest.tools/assert"
 
@@ -52,36 +53,36 @@ func caller() string {
 	return funcName
 }
 
-func waitForPendingQueueResource(t *testing.T, queue *scheduler.SchedulingQueue, memory resources.Quantity, timeoutMs int) {
+func waitForPendingQueueResource(t *testing.T, queue *objects.Queue, memory resources.Quantity, timeoutMs int) {
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		return queue.GetPendingResource().Resources[resources.MEMORY] == memory
 	})
 	if err != nil {
 		log.Logger().Info("queue detail",
 			zap.Any("queue", queue))
-		t.Fatalf("Failed to wait pending resource on queue %s, expected %v, actual %v, called from: %s", queue.Name, memory, queue.GetPendingResource().Resources[resources.MEMORY], caller())
+		t.Fatalf("Failed to wait pending resource on queue %s, expected %v, actual %v, called from: %s", queue.QueuePath, memory, queue.GetPendingResource().Resources[resources.MEMORY], caller())
 	}
 }
 
-func waitForPendingAppResource(t *testing.T, app *scheduler.SchedulingApplication, memory resources.Quantity, timeoutMs int) {
+func waitForPendingAppResource(t *testing.T, app *objects.Application, memory resources.Quantity, timeoutMs int) {
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		return app.GetPendingResource().Resources[resources.MEMORY] == memory
 	})
 	assert.NilError(t, err, "Failed to wait for pending resource, expected %v, actual %v, called from: %s", memory, app.GetPendingResource().Resources[resources.MEMORY], caller())
 }
 
-func waitForAllocatedAppResource(t *testing.T, app *scheduler.SchedulingApplication, memory resources.Quantity, timeoutMs int) {
+func waitForAllocatedAppResource(t *testing.T, app *objects.Application, memory resources.Quantity, timeoutMs int) {
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		return app.GetAllocatedResource().Resources[resources.MEMORY] == memory
 	})
 	assert.NilError(t, err, "Failed to wait for pending resource, expected %v, actual %v, called from: %s", memory, app.GetPendingResource().Resources[resources.MEMORY], caller())
 }
 
-func waitForAllocatedQueueResource(t *testing.T, queue *scheduler.SchedulingQueue, memory resources.Quantity, timeoutMs int) {
+func waitForAllocatedQueueResource(t *testing.T, queue *objects.Queue, memory resources.Quantity, timeoutMs int) {
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		return queue.GetAllocatedResource().Resources[resources.MEMORY] == memory
 	})
-	assert.NilError(t, err, "Failed to wait for allocations on queue %s, called from: %s", queue.Name, caller())
+	assert.NilError(t, err, "Failed to wait for allocations on queue %s, called from: %s", queue.QueuePath, caller())
 }
 
 func waitForNodesAllocatedResource(t *testing.T, cache *cache.ClusterInfo, partitionName string, nodeIDs []string, allocatedMemory resources.Quantity, timeoutMs int) {

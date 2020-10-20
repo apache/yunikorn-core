@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	uuid "github.com/satori/go.uuid"
 )
 
 func GetNormalizedPartitionName(partitionName string, rmID string) string {
@@ -65,4 +67,10 @@ func WaitFor(interval time.Duration, timeout time.Duration, condition func() boo
 		time.Sleep(interval)
 		continue
 	}
+}
+
+// Generate a new uuid. The chance that we generate a collision is really small.
+// As long as we check the UUID before we communicate it back to the RM we can still replace it without a problem.
+func GetNewUUID() string {
+	return uuid.NewV4().String()
 }

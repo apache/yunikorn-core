@@ -79,7 +79,7 @@ partitions:
 	err = proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
-				NodeID: "node-1:1234",
+				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -89,7 +89,7 @@ partitions:
 				},
 			},
 			{
-				NodeID: "node-2:1234",
+				NodeID:     "node-2:1234",
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{

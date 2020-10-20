@@ -19,7 +19,6 @@
 package entrypoint
 
 import (
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/events"
 	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
@@ -31,7 +30,7 @@ import (
 )
 
 // options used to control how services are started
-type StartupOptions struct {
+type startupOptions struct {
 	manualScheduleFlag bool
 	startWebAppFlag    bool
 	metricsHistorySize int
@@ -41,7 +40,7 @@ type StartupOptions struct {
 func StartAllServices() *ServiceContext {
 	log.Logger().Info("ServiceContext start all services")
 	return startAllServicesWithParameters(
-		StartupOptions{
+		startupOptions{
 			manualScheduleFlag: false,
 			startWebAppFlag:    true,
 			metricsHistorySize: 1440,
@@ -53,7 +52,7 @@ func StartAllServices() *ServiceContext {
 func StartAllServicesWithManualScheduler() *ServiceContext {
 	log.Logger().Info("ServiceContext start all services (manual scheduler)")
 	return startAllServicesWithParameters(
-		StartupOptions{
+		startupOptions{
 			manualScheduleFlag: true,
 			startWebAppFlag:    false,
 			metricsHistorySize: 0,
@@ -61,7 +60,7 @@ func StartAllServicesWithManualScheduler() *ServiceContext {
 		})
 }
 
-func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
+func startAllServicesWithParameters(opts startupOptions) *ServiceContext {
 	var eventCache *events.EventCache
 	var eventPublisher events.EventPublisher
 	if opts.eventCacheEnabled {
@@ -71,20 +70,17 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 		eventPublisher = events.CreateShimPublisher(eventCache.Store)
 	}
 
-	cache := cache.NewClusterInfo()
-	scheduler := scheduler.NewScheduler(cache)
+	sched := scheduler.NewScheduler()
 	proxy := rmproxy.NewRMProxy()
 
 	eventHandler := handler.EventHandlers{
-		CacheEventHandler:     cache,
-		SchedulerEventHandler: scheduler,
+		SchedulerEventHandler: sched,
 		RMProxyEventHandler:   proxy,
 	}
 
 	// start services
 	log.Logger().Info("ServiceContext start scheduling services")
-	cache.StartService(eventHandler)
-	scheduler.StartService(eventHandler, opts.manualScheduleFlag)
+	sched.StartService(eventHandler, opts.manualScheduleFlag)
 	proxy.StartService(eventHandler)
 	if opts.eventCacheEnabled && eventCache != nil {
 		eventCache.StartService()
@@ -95,8 +91,7 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 
 	context := &ServiceContext{
 		RMProxy:   proxy,
-		Cache:     cache,
-		Scheduler: scheduler,
+		Scheduler: sched,
 	}
 
 	var imHistory *history.InternalMetricsHistory
@@ -109,7 +104,7 @@ func startAllServicesWithParameters(opts StartupOptions) *ServiceContext {
 
 	if opts.startWebAppFlag {
 		log.Logger().Info("ServiceContext start web application service")
-		webapp := webservice.NewWebApp(cache, imHistory)
+		webapp := webservice.NewWebApp(sched.GetClusterSchedulingContext(), imHistory)
 		webapp.StartWebApp()
 		context.WebApp = webapp
 	}

@@ -15,30 +15,29 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 */
-package entrypoint
+
+package objects
 
 import (
-	"go.uber.org/zap"
-
-	"github.com/apache/incubator-yunikorn-core/pkg/api"
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
-	"github.com/apache/incubator-yunikorn-core/pkg/webservice"
+	"fmt"
 )
 
-type ServiceContext struct {
-	RMProxy   api.SchedulerAPI
-	Scheduler *scheduler.Scheduler
-	WebApp    *webservice.WebService
+type allocation struct {
+	SchedulingAsk  *AllocationAsk
+	NodeID         string
+	ReservedNodeID string
+	Releases       []*Allocation
+	Result         allocationResult
 }
 
-func (s *ServiceContext) StopAll() {
-	log.Logger().Info("ServiceContext stop all services")
-	// TODO implement stop for services
-	if s.WebApp != nil {
-		if err := s.WebApp.StopWebApp(); err != nil {
-			log.Logger().Error("failed to stop web-app",
-				zap.Error(err))
-		}
+func NewSchedulingAllocation(ask *AllocationAsk, nodeID string) *allocation {
+	return &allocation{
+		SchedulingAsk: ask,
+		NodeID:        nodeID,
+		Result:        None,
 	}
+}
+
+func (sa *allocation) String() string {
+	return fmt.Sprintf("AllocatioKey=%s, node=%s, result=%s", sa.SchedulingAsk.AllocationKey, sa.NodeID, sa.Result.String())
 }

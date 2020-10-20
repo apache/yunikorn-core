@@ -24,9 +24,9 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 )
 
 // A rule to place an application based on the queue provided by the user on submission.
@@ -51,7 +51,7 @@ func (pr *providedRule) initialise(conf configs.PlacementRule) error {
 	return err
 }
 
-func (pr *providedRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
+func (pr *providedRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, error) {
 	// since this is the provided rule we must have a queue in the info already
 	if app.QueueName == "" {
 		return "", nil
@@ -67,10 +67,10 @@ func (pr *providedRule) placeApplication(app *cache.ApplicationInfo, info *cache
 	var err error
 	queueName := app.QueueName
 	// if we have a fully qualified queue passed in do not run the parent rule
-	if !strings.HasPrefix(queueName, configs.RootQueue+cache.DOT) {
+	if !strings.HasPrefix(queueName, configs.RootQueue+configs.DOT) {
 		// run the parent rule if set
 		if pr.parent != nil {
-			parentName, err = pr.parent.placeApplication(app, info)
+			parentName, err = pr.parent.placeApplication(app, queueFn)
 			// failed parent rule, fail this rule
 			if err != nil {
 				return "", err
@@ -80,11 +80,11 @@ func (pr *providedRule) placeApplication(app *cache.ApplicationInfo, info *cache
 				return "", nil
 			}
 			// check if this is a parent queue and qualify it
-			if !strings.HasPrefix(parentName, configs.RootQueue+cache.DOT) {
-				parentName = configs.RootQueue + cache.DOT + parentName
+			if !strings.HasPrefix(parentName, configs.RootQueue+configs.DOT) {
+				parentName = configs.RootQueue + configs.DOT + parentName
 			}
 			// if the parent queue exists it cannot be a leaf
-			parentQueue := info.GetQueue(parentName)
+			parentQueue := queueFn(parentName)
 			if parentQueue != nil && parentQueue.IsLeafQueue() {
 				return "", fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
 			}
@@ -94,13 +94,13 @@ func (pr *providedRule) placeApplication(app *cache.ApplicationInfo, info *cache
 			parentName = configs.RootQueue
 		}
 		// Make it a fully qualified queue
-		queueName = parentName + cache.DOT + replaceDot(queueName)
+		queueName = parentName + configs.DOT + replaceDot(queueName)
 	}
 	log.Logger().Debug("Provided rule intermediate result",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
 	// get the queue object
-	queue := info.GetQueue(queueName)
+	queue := queueFn(queueName)
 	// if we cannot create the queue must exist
 	if !pr.create && queue == nil {
 		return "", nil

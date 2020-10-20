@@ -93,7 +93,7 @@ partitions:
 	for i := 0; i < numNodes; i++ {
 		nodeName := "node-" + strconv.Itoa(i)
 		node := &si.NewNodeInfo{
-			NodeID: nodeName + ":1234",
+			NodeID:     nodeName + ":1234",
 			Attributes: map[string]string{},
 			SchedulableResource: &si.Resource{
 				Resources: map[string]*si.Quantity{

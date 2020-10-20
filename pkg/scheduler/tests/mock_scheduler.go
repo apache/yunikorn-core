@@ -25,6 +25,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/entrypoint"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -79,8 +80,8 @@ func (m *mockScheduler) addNode(nodeID string, resource *si.Resource) error {
 	return m.proxy.Update(&si.UpdateRequest{
 		NewSchedulableNodes: []*si.NewNodeInfo{
 			{
-				NodeID: nodeID,
-				Attributes: map[string]string{},
+				NodeID:              nodeID,
+				Attributes:          map[string]string{},
 				SchedulableResource: resource,
 			},
 		},
@@ -174,22 +175,22 @@ func (m *mockScheduler) releaseAskRequest(appID, allocKey string) error {
 }
 
 // simple wrapper to limit the repeating code getting the queue
-func (m *mockScheduler) getSchedulingNode(nodeName string) *scheduler.SchedulingNode {
+func (m *mockScheduler) getSchedulingNode(nodeName string) *objects.Node {
 	return m.scheduler.GetClusterSchedulingContext().GetSchedulingNode(nodeName, m.partitionName)
 }
 
 // simple wrapper to limit the repeating code getting the queue
-func (m *mockScheduler) getSchedulingQueue(queueName string) *scheduler.SchedulingQueue {
+func (m *mockScheduler) getSchedulingQueue(queueName string) *objects.Queue {
 	return m.scheduler.GetClusterSchedulingContext().GetSchedulingQueue(queueName, m.partitionName)
 }
 
 // simple wrapper to limit the repeating code getting the queue with non default partition
-func (m *mockScheduler) getSchedulingQueuePartition(queueName, partitionName string) *scheduler.SchedulingQueue {
+func (m *mockScheduler) getSchedulingQueuePartition(queueName, partitionName string) *objects.Queue {
 	return m.scheduler.GetClusterSchedulingContext().GetSchedulingQueue(queueName, partitionName)
 }
 
 // simple wrapper to limit the repeating code getting the app
-func (m *mockScheduler) getSchedulingApplication(appID string) *scheduler.SchedulingApplication {
+func (m *mockScheduler) getSchedulingApplication(appID string) *objects.Application {
 	return m.scheduler.GetClusterSchedulingContext().GetSchedulingApplication(appID, m.partitionName)
 }
 

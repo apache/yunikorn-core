@@ -18,8 +18,40 @@
 
 package rmevent
 
-import "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+import (
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+)
 
+// Incoming events from the RM to the scheduler (async)
+type RMUpdateRequestEvent struct {
+	// The generic update does not wait for a result,
+	// results are communicated back via the outgoing events.
+	Request *si.UpdateRequest
+}
+
+// Incoming events from the RM to the scheduler (sync)
+type RMRegistrationEvent struct {
+	Registration *si.RegisterResourceManagerRequest
+	Channel      chan *Result
+}
+
+type RMConfigUpdateEvent struct {
+	RmID    string
+	Channel chan *Result
+}
+
+type RMPartitionsRemoveEvent struct {
+	RmID    string
+	Channel chan *Result
+}
+
+type Result struct {
+	Succeeded bool
+	Reason    string
+}
+
+// Outgoing events from the scheduler to the RM
+// These events communicate the response to the RMUpdateRequestEvent
 type RMNewAllocationsEvent struct {
 	RmID        string
 	Allocations []*si.Allocation

@@ -24,15 +24,18 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
+	//	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
 
 const (
 	RootQueue        = "root"
+	DOT              = "."
+	DotReplace       = "_dot_"
 	DefaultPartition = "default"
 	// How to sort applications in leaf queues, valid options are defined in the scheduler.policies
 	ApplicationSortPolicy = "application.sort.policy"
@@ -246,7 +249,7 @@ func checkNodeSortingPolicy(partition *PartitionConfig) error {
 	policy := partition.NodeSortPolicy
 
 	// Defined polices.
-	_, err := common.FromString(policy.Type)
+	_, err := policies.FromString(policy.Type)
 
 	return err
 }

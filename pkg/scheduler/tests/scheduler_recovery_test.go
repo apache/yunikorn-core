@@ -21,9 +21,9 @@ package tests
 import (
 	"testing"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/entrypoint"
@@ -109,7 +109,7 @@ partitions:
 	// Verify app initial state
 	app01, err := getApplicationInfoFromPartition(partitionInfo, appID)
 	assert.NilError(t, err, "app not found on partitionInfo")
-	assert.Equal(t, app01.GetApplicationState(), cache.New.String())
+	assert.Equal(t, app01.GetApplicationState(), objects.New.String())
 
 	err = ms.proxy.Update(&si.UpdateRequest{
 		Asks: []*si.AllocationAsk{
@@ -135,7 +135,7 @@ partitions:
 	waitForPendingQueueResource(t, schedulerQueueA, 20, 1000)
 	waitForPendingQueueResource(t, schedulerQueueRoot, 20, 1000)
 	waitForPendingAppResource(t, schedulingApp, 20, 1000)
-	assert.Equal(t, app01.GetApplicationState(), cache.Accepted.String())
+	assert.Equal(t, app01.GetApplicationState(), objects.Accepted.String())
 
 	ms.scheduler.MultiStepSchedule(16)
 
@@ -152,7 +152,7 @@ partitions:
 	assert.Equal(t, schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(20))
 
 	// once we start to process allocation asks from this app, verify the state again
-	assert.Equal(t, app01.GetApplicationState(), cache.Running.String())
+	assert.Equal(t, app01.GetApplicationState(), objects.Running.String())
 
 	// Check allocated resources of nodes
 	waitForNodesAllocatedResource(t, ms.clusterInfo, "[rm:123]default",
@@ -314,7 +314,7 @@ partitions:
 	}
 
 	// verify app state
-	assert.Equal(t, recoveredApp.ApplicationInfo.GetApplicationState(), cache.Running.String())
+	assert.Equal(t, recoveredApp.ApplicationInfo.GetApplicationState(), objects.Running.String())
 }
 
 // test scheduler recovery when shim doesn't report existing application
@@ -593,7 +593,7 @@ partitions:
 	found := 0
 	for _, app := range apps {
 		if app.ApplicationID == appID || app.ApplicationID == "app-2" {
-			assert.Equal(t, app.GetApplicationState(), cache.New.String())
+			assert.Equal(t, app.GetApplicationState(), objects.New.String())
 			found++
 		}
 	}
@@ -725,7 +725,7 @@ partitions:
 	assert.Equal(t, schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(20))
 
 	// once we start to process allocation asks from this app, verify the state again
-	assert.Equal(t, schedulingApp.ApplicationInfo.GetApplicationState(), cache.Running.String())
+	assert.Equal(t, schedulingApp.ApplicationInfo.GetApplicationState(), objects.Running.String())
 
 	// --------------------------------------------------
 	// Phase 2) Restart the scheduler, test recovery

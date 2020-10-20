@@ -15,30 +15,16 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 */
-package entrypoint
 
-import (
-	"go.uber.org/zap"
+package interfaces
 
-	"github.com/apache/incubator-yunikorn-core/pkg/api"
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
-	"github.com/apache/incubator-yunikorn-core/pkg/webservice"
-)
-
-type ServiceContext struct {
-	RMProxy   api.SchedulerAPI
-	Scheduler *scheduler.Scheduler
-	WebApp    *webservice.WebService
-}
-
-func (s *ServiceContext) StopAll() {
-	log.Logger().Info("ServiceContext stop all services")
-	// TODO implement stop for services
-	if s.WebApp != nil {
-		if err := s.WebApp.StopWebApp(); err != nil {
-			log.Logger().Error("failed to stop web-app",
-				zap.Error(err))
-		}
-	}
+// NodeIterator iterates over a list of nodes based on the defined policy
+type NodeIterator interface {
+	// returns true if there are more values to iterate over
+	HasNext() bool
+	// returns the next node from the iterator
+	//
+	Next() interface{}
+	// reset the iterator to a clean state
+	Reset()
 }

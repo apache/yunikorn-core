@@ -140,4 +140,3 @@ func TestPublisherSendsEvent(t *testing.T) {
 
 	publisher.Stop()
 }
-

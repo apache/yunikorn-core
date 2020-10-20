@@ -21,8 +21,8 @@ package placement
 import (
 	"fmt"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 )
 
 // A simple test rule to place an application based on a nil application.
@@ -47,7 +47,7 @@ func (tr *testRule) initialise(conf configs.PlacementRule) error {
 }
 
 // Simple test rule that just checks the app passed in and returns fixed queue names.
-func (tr *testRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
+func (tr *testRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, error) {
 	if app == nil {
 		return "", fmt.Errorf("nil app passed in")
 	}

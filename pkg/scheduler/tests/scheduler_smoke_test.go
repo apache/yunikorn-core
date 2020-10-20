@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
@@ -220,7 +221,7 @@ partitions:
 	app01, err = getApplicationInfoFromPartition(partitionInfo, appID)
 	assert.NilError(t, err, "application not found")
 
-	assert.Equal(t, app01.GetApplicationState(), cache.New.String())
+	assert.Equal(t, app01.GetApplicationState(), objects.New.String())
 
 	err = ms.proxy.Update(&si.UpdateRequest{
 		Asks: []*si.AllocationAsk{
@@ -245,7 +246,7 @@ partitions:
 	waitForPendingQueueResource(t, leaf, 20, 1000)
 	waitForPendingQueueResource(t, root, 20, 1000)
 	waitForPendingAppResource(t, schedulingApp, 20, 1000)
-	assert.Equal(t, app01.GetApplicationState(), cache.Accepted.String())
+	assert.Equal(t, app01.GetApplicationState(), objects.Accepted.String())
 
 	ms.scheduler.MultiStepSchedule(16)
 
@@ -262,7 +263,7 @@ partitions:
 	assert.Equal(t, int(schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY]), 20, "app allocated memory incorrect")
 
 	// once we start to process allocation asks from this app, verify the state again
-	assert.Equal(t, app01.GetApplicationState(), cache.Running.String())
+	assert.Equal(t, app01.GetApplicationState(), objects.Running.String())
 
 	// Check allocated resources of nodes
 	waitForNodesAllocatedResource(t, ms.clusterInfo, ms.partitionName, []string{"node-1:1234", "node-2:1234"}, 20, 1000)

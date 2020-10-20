@@ -21,12 +21,12 @@ package configs
 import (
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
@@ -72,37 +72,68 @@ func checkACL(acl string) error {
 	return nil
 }
 
-// Temporary convenience method: should use resource package to do this
-// currently no check for the type of resource as long as the value is OK all is OK
-func checkResource(res map[string]string) (int64, error) {
-	var totalres int64
-	for _, val := range res {
-		rescount, err := strconv.ParseInt(val, 10, 64)
-		if err != nil {
-			return 0, fmt.Errorf("resource parsing failed: %v", err)
-		}
-		if rescount < 0 {
-			return 0, fmt.Errorf("resource value invalid, cannot be negative: %d", rescount)
-		}
-		totalres += rescount
+// Check the queue resource configuration settings.
+// - child or children cannot have higher maximum or guaranteed limits than parents
+// - children (added together) cannot have a higher guaranteed setting than a parent
+func checkResourceConfigurationsForQueue(cur *QueueConfig, parent *QueueConfig) error {
+	// If cur has children, make sure sum of children's guaranteed <= cur.guaranteed
+	curGuaranteedRes, err := resources.NewResourceFromConf(cur.Resources.Guaranteed)
+	if err != nil {
+		return err
 	}
-	return totalres, nil
-}
+	if curGuaranteedRes.HasNegativeValue() {
+		return fmt.Errorf("invalid guaranteed resource %v for queue %s, cannot be negative", curGuaranteedRes, cur.Name)
+	}
+	curMaxRes, err := resources.NewResourceFromConf(cur.Resources.Max)
+	if err != nil {
+		return err
+	}
+	if curMaxRes.HasNegativeValue() {
+		return fmt.Errorf("invalid max resource %v for queue %s, cannot be negative", curMaxRes, cur.Name)
+	}
 
-// Check the resource configuration
-func checkResources(resource Resources) error {
-	// check guaranteed resources
-	if resource.Guaranteed != nil && len(resource.Guaranteed) != 0 {
-		_, err := checkResource(resource.Guaranteed)
-		if err != nil {
-			return err
+	if len(cur.Queues) > 0 {
+		// Check children
+		for i := range cur.Queues {
+			if err := checkResourceConfigurationsForQueue(&cur.Queues[i], cur); err != nil {
+				return err
+			}
+		}
+		sum := resources.NewResource()
+		for _, child := range cur.Queues {
+			childGuaranteed, err := resources.NewResourceFromConf(child.Resources.Guaranteed)
+			if err != nil {
+				return err
+			}
+			sum.AddTo(childGuaranteed)
+		}
+
+		if cur.Resources.Guaranteed != nil {
+			if !resources.FitIn(curGuaranteedRes, sum) {
+				return fmt.Errorf("queue %s has guaranteed-resources (%v) smaller than sum of children guaranteed resources (%v)", cur.Name, curGuaranteedRes, sum)
+			}
+		} else {
+			cur.Resources.Guaranteed = sum.ToConf()
 		}
 	}
-	// check max resources
-	if resource.Max != nil && len(resource.Max) != 0 {
-		total, err := checkResource(resource.Max)
-		if err != nil || total == 0 {
-			return fmt.Errorf("max resource total is '%d', or parsing failed: %v", total, err)
+
+	// If max resource exist, check guaranteed fits in max, cur.max fit in parent.max
+	if cur.Resources.Max != nil {
+		if resources.IsZero(curMaxRes) {
+			return fmt.Errorf("max resource total canno be 0")
+		}
+		if parent != nil && parent.Resources.Max != nil {
+			parentMaxRes, err := resources.NewResourceFromConf(parent.Resources.Max)
+			if err != nil {
+				return err
+			}
+			if !resources.FitIn(parentMaxRes, curMaxRes) {
+				return fmt.Errorf("queue %s has max resources (%v) set larger than parent's max resources (%v)", cur.Name, curMaxRes, parentMaxRes)
+			}
+		}
+
+		if !resources.FitIn(curMaxRes, curGuaranteedRes) {
+			return fmt.Errorf("queue %s has max resources (%v) set smaller than guaranteed resources (%v)", cur.Name, curMaxRes, curGuaranteedRes)
 		}
 	}
 	return nil
@@ -203,20 +234,22 @@ func checkLimit(limit Limit) error {
 			return fmt.Errorf("invalid limit group name '%s' in limit definition", name)
 		}
 	}
-	total := int64(-1)
+	var limitResource = resources.NewResource()
 	var err error
 	// check the resource (if defined)
 	if len(limit.MaxResources) != 0 {
-		total, err = checkResource(limit.MaxResources)
+		limitResource, err = resources.NewResourceFromConf(limit.MaxResources)
 		if err != nil {
 			log.Logger().Debug("resource parsing failed",
-				zap.Int64("resourceEntries", total),
 				zap.Error(err))
 			return err
 		}
+		if limitResource.HasNegativeValue() {
+			return fmt.Errorf("invalid limit resource value. It cannot be negative")
+		}
 	}
 	// at least some resource should be not null
-	if limit.MaxApplications == 0 && total <= 0 {
+	if limit.MaxApplications == 0 && resources.IsZero(limitResource) {
 		return fmt.Errorf("invalid resource combination for limit names '%s' all resource limits are null", limit.Users)
 	}
 	return nil
@@ -256,14 +289,9 @@ func checkNodeSortingPolicy(partition *PartitionConfig) error {
 // - queue name is alphanumeric (case ignore) with - and _
 // - queue name is maximum 16 char long
 func checkQueues(queue *QueueConfig, level int) error {
-	// check the resource (if defined)
-	err := checkResources(queue.Resources)
-	if err != nil {
-		return err
-	}
 
 	// check the ACLs (if defined)
-	err = checkACL(queue.AdminACL)
+	err := checkACL(queue.AdminACL)
 	if err != nil {
 		return err
 	}
@@ -378,6 +406,10 @@ func Validate(newConfig *SchedulerConfig) error {
 		}
 		// check the queue structure
 		err := checkQueuesStructure(&partition)
+		if err != nil {
+			return err
+		}
+		err = checkResourceConfigurationsForQueue(&partition.Queues[0], nil)
 		if err != nil {
 			return err
 		}

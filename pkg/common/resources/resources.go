@@ -45,6 +45,10 @@ type Resource struct {
 // No unit defined here for better performance
 type Quantity int64
 
+func (q Quantity) string() string {
+	return strconv.FormatInt(int64(q), 10)
+}
+
 // Never update value of Zero
 var Zero = NewResource()
 
@@ -111,6 +115,15 @@ func (r *Resource) ToProto() *si.Resource {
 		proto.Resources[k] = &si.Quantity{Value: int64(v)}
 	}
 	return proto
+}
+
+// convert to a configmap
+func (r *Resource) ToConf() map[string]string {
+	conf := make(map[string]string)
+	for k, v := range r.Resources {
+		conf[k] = v.string()
+	}
+	return conf
 }
 
 // Return a clone (copy) of the resource it is called on.
@@ -756,6 +769,15 @@ func IsZero(zero *Resource) bool {
 		}
 	}
 	return true
+}
+
+func (r *Resource) HasNegativeValue() bool {
+	for _, v := range r.Resources {
+		if v < 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {

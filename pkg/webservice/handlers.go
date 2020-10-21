@@ -548,29 +548,27 @@ func getPartition(name string) *dao.PartitionInfo {
 	partitionInfo := &dao.PartitionInfo{}
 	partitionContext := gClusterInfo.GetPartition(name)
 	partitionInfo.Name = partitionContext.Name
+	partitionInfo.State = partitionContext.StateMachine.Current()
+	partitionInfo.LastStateTransitionTime = partitionContext.StateTime.String()
+
 	capacityInfo := dao.PartitionCapacity{}
 	capacityInfo.Capacity = partitionContext.GetTotalPartitionResource().String()
+	capacityInfo.UsedCapacity = partitionContext.Root.GetAllocatedResource().String()
 	partitionInfo.Capacity = capacityInfo
-	partitionInfo.IsPremptable = partitionContext.NeedPreemption()
 	partitionInfo.NodeSortingPolicy = partitionContext.GetNodeSortingPolicy().String()
 
 	applicationsInfo := dao.Applications{}
 	appList := partitionContext.GetApplications()
+	applicationsState := make(map[string]int)
+
 	for _, app := range appList {
-		if app.IsRunning() {
-			applicationsInfo.Running++
-			applicationsInfo.Total++
-		} else if app.IsWaiting() || app.IsNew() || app.IsStarting() || app.IsAccepted() {
-			applicationsInfo.Pending++
-			applicationsInfo.Total++
-		} else if app.IsCompleted() {
-			applicationsInfo.Completed++
-			applicationsInfo.Total++
-		} else if app.IsKilled() || app.IsRejected() {
-			applicationsInfo.Failed++
-			applicationsInfo.Total++
-		}
+		applicationsState[app.GetApplicationState()]++
 	}
+	applicationsInfo.Running = applicationsState["Running"]
+	applicationsInfo.Pending = applicationsState["Waiting"] + applicationsState["Accepted"] + applicationsState["Starting"] + applicationsState["New"]
+	applicationsInfo.Completed = applicationsState["Completed"]
+	applicationsInfo.Failed = applicationsState["Killed"] + applicationsState["Rejected"]
+	applicationsInfo.Total = applicationsInfo.Running + applicationsInfo.Pending + applicationsInfo.Completed + applicationsInfo.Failed
 	partitionInfo.Applications = applicationsInfo
 	return partitionInfo
 }

@@ -25,16 +25,17 @@ type PartitionDAOInfo struct {
 }
 
 type PartitionInfo struct {
-	Name              string            `json:"name"`
-	Capacity          PartitionCapacity `json:"capacity"`
-	IsPremptable      bool              `json:"isPremptable"`
-	NodeSortingPolicy string            `json:"nodeSortingPolicy"`
-	Applications      Applications      `json:"applications"`
+	Name                    string            `json:"name"`
+	Capacity                PartitionCapacity `json:"capacity"`
+	NodeSortingPolicy       string            `json:"nodeSortingPolicy"`
+	Applications            Applications      `json:"applications"`
+	State                   string            `json:"state"`
+	LastStateTransitionTime string            `json:"lastStateTransitionTime"`
 }
 
 type PartitionCapacity struct {
 	Capacity     string `json:"capacity"`
-	UsedCapacity string `json:"usedcapacity"`
+	UsedCapacity string `json:"usedCapacity"`
 }
 
 type NodeInfo struct {

@@ -642,6 +642,7 @@ func TestPartitions(t *testing.T) {
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
 	assert.Equal(t, partitionInfo.Name, "[rm-123]default")
 	assert.Equal(t, partitionInfo.NodeSortingPolicy, "fair")
-	assert.Equal(t, partitionInfo.IsPremptable, false)
 	assert.Equal(t, partitionInfo.Applications.Total, 1)
+	assert.Equal(t, partitionInfo.State, "Active")
+	assert.Equal(t, partitionInfo.LastStateTransitionTime, "0001-01-01 00:00:00 +0000 UTC")
 }

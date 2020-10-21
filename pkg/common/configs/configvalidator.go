@@ -91,8 +91,8 @@ func checkResourceConfigurationsForQueue(cur QueueConfig, lastParentMax map[stri
 	if curMaxRes.HasNegativeValue() {
 		return fmt.Errorf("invalid max resource %v for queue %s, cannot be negative", curMaxRes, cur.Name)
 	}
-	parentMax := make(map[string]string)
-	parentMax = getLastValidMaxMap(cur.Resources.Max, lastParentMax)
+
+	parentMax := getLastValidMaxMap(cur.Resources.Max, lastParentMax)
 
 	if len(cur.Queues) > 0 {
 		// Check children
@@ -124,7 +124,7 @@ func checkResourceConfigurationsForQueue(cur QueueConfig, lastParentMax map[stri
 		if resources.IsZero(curMaxRes) {
 			return fmt.Errorf("max resource total cannot be 0")
 		}
-		if  len(lastParentMax) > 0 {
+		if len(lastParentMax) > 0 {
 			parentMaxRes, err := resources.NewResourceFromConf(lastParentMax)
 			if err != nil {
 				return err
@@ -143,7 +143,7 @@ func checkResourceConfigurationsForQueue(cur QueueConfig, lastParentMax map[stri
 
 func getLastValidMaxMap(actualParentMax map[string]string, lastParentMax map[string]string) map[string]string {
 	maxMap := make(map[string]string)
-	for k,v := range lastParentMax {
+	for k, v := range lastParentMax {
 		actualMax := actualParentMax[k]
 		if len(actualMax) != 0 {
 			maxMap[k] = actualMax
@@ -151,7 +151,7 @@ func getLastValidMaxMap(actualParentMax map[string]string, lastParentMax map[str
 			maxMap[k] = v
 		}
 	}
-	for k,v := range actualParentMax {
+	for k, v := range actualParentMax {
 		if len(maxMap[k]) == 0 {
 			maxMap[k] = v
 		}

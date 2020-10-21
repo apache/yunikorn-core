@@ -31,7 +31,7 @@ func TestCheckResourceConfigurationsForQueue(t *testing.T) {
 	zeroResourceMap := map[string]string{"memory": "0", "vcores": "0"}
 	higherResourceMap := map[string]string{"memory": "50", "vcores": "33"}
 	lowerResourceMap := map[string]string{"memory": "10", "vcores": "3"}
-		testCases := []struct {
+	testCases := []struct {
 		name             string
 		current          QueueConfig
 		lastParentMax    map[string]string
@@ -42,7 +42,7 @@ func TestCheckResourceConfigurationsForQueue(t *testing.T) {
 			Resources: Resources{
 				Guaranteed: negativeResourceMap,
 			},
-		},  nil, true, "cannot be negative"},
+		}, nil, true, "cannot be negative"},
 		{"Negative max resource", QueueConfig{
 			Resources: Resources{
 				Max: negativeResourceMap,
@@ -62,7 +62,7 @@ func TestCheckResourceConfigurationsForQueue(t *testing.T) {
 			Resources: Resources{
 				Guaranteed: resourceMapWithSyntaxError,
 			},
-		},  nil, true, "invalid syntax"},
+		}, nil, true, "invalid syntax"},
 		{"Syntax error in max resource", QueueConfig{
 			Resources: Resources{
 				Max: resourceMapWithSyntaxError,
@@ -87,7 +87,7 @@ func TestCheckResourceConfigurationsForQueue(t *testing.T) {
 			Resources: Resources{
 				Max: lowerResourceMap,
 			},
-			Queues: [] QueueConfig {{
+			Queues: []QueueConfig{{
 				Resources: Resources{
 					Max: higherResourceMap,
 				},
@@ -125,10 +125,10 @@ func TestGetLastValidMaxMap(t *testing.T) {
 	higherMemLowerVcores := map[string]string{"memory": "150", "vcores": "2"}
 	higherVcoresLowerMemAndGPU := map[string]string{"memory": "10", "vcores": "20", "GPU": "2"}
 	testCases := []struct {
-		name             string
+		name            string
 		actualParentMax map[string]string
-		lastParentMax map[string]string
-		expectedMap    map[string]string
+		lastParentMax   map[string]string
+		expectedMap     map[string]string
 	}{
 		{"Nil parent max", nil, higherMemLowerVcores, higherMemLowerVcores},
 		{"Nil last parent max", higherMemLowerVcores, nil, higherMemLowerVcores},
@@ -154,16 +154,16 @@ func createQueueWithSkippedMaxRes() QueueConfig {
 		},
 	}
 	parent1 := QueueConfig{
-		Queues: [] QueueConfig {child1},
+		Queues: []QueueConfig{child1},
 	}
 	parent := QueueConfig{
 		Resources: Resources{
 			Max: parentMaxMap,
 		},
-		Queues: [] QueueConfig {parent1},
+		Queues: []QueueConfig{parent1},
 	}
 	root := QueueConfig{
-		Queues: [] QueueConfig {parent},
+		Queues: []QueueConfig{parent},
 	}
 	return root
 }

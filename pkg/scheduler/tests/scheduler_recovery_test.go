@@ -287,8 +287,6 @@ partitions:
 
 	// verify queues
 	//  - verify root queue
-	assert.Equal(t, partitionInfo.Root.GetGuaranteedResource().Resources[resources.MEMORY], resources.Quantity(100), "guaranteed memory on root queue not as expected")
-	assert.Equal(t, partitionInfo.Root.GetGuaranteedResource().Resources[resources.VCORE], resources.Quantity(10), "guaranteed vcore on root queue not as expected")
 	assert.Equal(t, partitionInfo.Root.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120), "allocated memory on root queue not as expected")
 	assert.Equal(t, partitionInfo.Root.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12), "allocated vcore on root queue not as expected")
 	//  - verify root.a queue

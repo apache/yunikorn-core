@@ -75,7 +75,7 @@ func checkACL(acl string) error {
 // Check the queue resource configuration settings.
 // - child or children cannot have higher maximum or guaranteed limits than parents
 // - children (added together) cannot have a higher guaranteed setting than a parent
-func checkResourceConfigurationsForQueue(cur *QueueConfig, parent *QueueConfig) error {
+func checkResourceConfigurationsForQueue(cur QueueConfig, lastParentMax map[string]string) error {
 	// If cur has children, make sure sum of children's guaranteed <= cur.guaranteed
 	curGuaranteedRes, err := resources.NewResourceFromConf(cur.Resources.Guaranteed)
 	if err != nil {
@@ -91,11 +91,13 @@ func checkResourceConfigurationsForQueue(cur *QueueConfig, parent *QueueConfig) 
 	if curMaxRes.HasNegativeValue() {
 		return fmt.Errorf("invalid max resource %v for queue %s, cannot be negative", curMaxRes, cur.Name)
 	}
+	parentMax := make(map[string]string)
+	parentMax = getLastValidMaxMap(cur.Resources.Max, lastParentMax)
 
 	if len(cur.Queues) > 0 {
 		// Check children
 		for i := range cur.Queues {
-			if err := checkResourceConfigurationsForQueue(&cur.Queues[i], cur); err != nil {
+			if err := checkResourceConfigurationsForQueue(cur.Queues[i], parentMax); err != nil {
 				return err
 			}
 		}
@@ -120,10 +122,10 @@ func checkResourceConfigurationsForQueue(cur *QueueConfig, parent *QueueConfig) 
 	// If max resource exist, check guaranteed fits in max, cur.max fit in parent.max
 	if cur.Resources.Max != nil {
 		if resources.IsZero(curMaxRes) {
-			return fmt.Errorf("max resource total canno be 0")
+			return fmt.Errorf("max resource total cannot be 0")
 		}
-		if parent != nil && parent.Resources.Max != nil {
-			parentMaxRes, err := resources.NewResourceFromConf(parent.Resources.Max)
+		if  len(lastParentMax) > 0 {
+			parentMaxRes, err := resources.NewResourceFromConf(lastParentMax)
 			if err != nil {
 				return err
 			}
@@ -137,6 +139,24 @@ func checkResourceConfigurationsForQueue(cur *QueueConfig, parent *QueueConfig) 
 		}
 	}
 	return nil
+}
+
+func getLastValidMaxMap(actualParentMax map[string]string, lastParentMax map[string]string) map[string]string {
+	maxMap := make(map[string]string)
+	for k,v := range lastParentMax {
+		actualMax := actualParentMax[k]
+		if len(actualMax) != 0 {
+			maxMap[k] = actualMax
+		} else {
+			maxMap[k] = v
+		}
+	}
+	for k,v := range actualParentMax {
+		if len(maxMap[k]) == 0 {
+			maxMap[k] = v
+		}
+	}
+	return maxMap
 }
 
 // Check the placement rules for correctness
@@ -409,7 +429,7 @@ func Validate(newConfig *SchedulerConfig) error {
 		if err != nil {
 			return err
 		}
-		err = checkResourceConfigurationsForQueue(&partition.Queues[0], nil)
+		err = checkResourceConfigurationsForQueue(partition.Queues[0], nil)
 		if err != nil {
 			return err
 		}

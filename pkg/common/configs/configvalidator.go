@@ -98,7 +98,7 @@ func checkResourceConfigurationsForQueue(cur QueueConfig, parentMax *resources.R
 	if len(cur.Queues) > 0 {
 		// Check children
 		for i := range cur.Queues {
-			if err := checkResourceConfigurationsForQueue(cur.Queues[i], maxToPass, guaranteedToPass); err != nil {
+			if err = checkResourceConfigurationsForQueue(cur.Queues[i], maxToPass, guaranteedToPass); err != nil {
 				return err
 			}
 		}
@@ -110,7 +110,7 @@ func checkResourceConfigurationsForQueue(cur QueueConfig, parentMax *resources.R
 
 	// If max resource exist, check guaranteed fits in max, cur.max fit in parent.max
 	err = checkMaxResource(parentMax, actualMax, actualGuaranteed, cur.Name)
-	if err !=nil {
+	if err != nil {
 		return err
 	}
 	return nil

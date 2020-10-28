@@ -42,8 +42,8 @@ func TestCheckResourceConfigurationsForQueue(t *testing.T) {
 				Guaranteed: negativeResourceMap,
 			},
 		},
-		true,
-		"invalid guaranteed resource map[memory:-50 vcores:33] for queue , cannot be negative"},
+			true,
+			"invalid guaranteed resource map[memory:-50 vcores:33] for queue , cannot be negative"},
 		{"Negative max resource", QueueConfig{
 			Resources: Resources{
 				Max: negativeResourceMap,
@@ -102,7 +102,7 @@ func TestCheckResourceConfigurationsForQueue(t *testing.T) {
 				Guaranteed: higherResourceMap,
 			},
 		}, true,
-		"queue  has max resources (map[memory:10 vcores:3]) set smaller than guaranteed resources (map[memory:50 vcores:33])"},
+			"queue  has max resources (map[memory:10 vcores:3]) set smaller than guaranteed resources (map[memory:50 vcores:33])"},
 		{"Valid configuration",
 			QueueConfig{
 				Resources: Resources{

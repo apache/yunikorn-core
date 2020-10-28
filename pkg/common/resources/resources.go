@@ -804,7 +804,9 @@ func IsZero(zero *Resource) bool {
 }
 
 func IsEmpty(r *Resource) bool {
-	if r == nil {return true}
+	if r == nil {
+		return true
+	}
 	return len(r.Resources) == 0
 }
 

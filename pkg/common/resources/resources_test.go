@@ -369,6 +369,21 @@ func TestComponentWiseMin(t *testing.T) {
 	}
 }
 
+func TestComponentWiseMinPermissive(t *testing.T) {
+	res1 := NewResourceFromMap(map[string]Quantity{"first": 5})
+	res2 := NewResourceFromMap(map[string]Quantity{"second": 10})
+	result := ComponentWiseMinPermissive(res1, res2)
+	if result == nil || len(result.Resources) != 2 {
+		t.Fatalf("set resource should be greater than zero: %v", result)
+	}
+	if value, ok := result.Resources["first"]; !ok || value != 5 {
+		t.Errorf("resource key not set expected %v got %v", res1, result)
+	}
+	if value, ok := result.Resources["second"]; !ok || value != 10 {
+		t.Errorf("resource key not set expected %v got %v", res2, result)
+	}
+}
+
 func TestComponentWiseMax(t *testing.T) {
 	// simple case (nil checks)
 	result := ComponentWiseMax(nil, Zero)

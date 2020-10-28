@@ -75,88 +75,103 @@ func checkACL(acl string) error {
 // Check the queue resource configuration settings.
 // - child or children cannot have higher maximum or guaranteed limits than parents
 // - children (added together) cannot have a higher guaranteed setting than a parent
-func checkResourceConfigurationsForQueue(cur QueueConfig, lastParentMax map[string]string) error {
+func checkResourceConfigurationsForQueue(cur QueueConfig, parentMax *resources.Resource, parentGuaranteed *resources.Resource) error {
 	// If cur has children, make sure sum of children's guaranteed <= cur.guaranteed
-	curGuaranteedRes, err := resources.NewResourceFromConf(cur.Resources.Guaranteed)
+	actualGuaranteed, err := resources.NewResourceFromConf(cur.Resources.Guaranteed)
 	if err != nil {
 		return err
 	}
-	if curGuaranteedRes.HasNegativeValue() {
-		return fmt.Errorf("invalid guaranteed resource %v for queue %s, cannot be negative", curGuaranteedRes, cur.Name)
+	if actualGuaranteed.HasNegativeValue() {
+		return fmt.Errorf("invalid guaranteed resource %v for queue %s, cannot be negative", actualGuaranteed, cur.Name)
 	}
-	curMaxRes, err := resources.NewResourceFromConf(cur.Resources.Max)
+	actualMax, err := resources.NewResourceFromConf(cur.Resources.Max)
 	if err != nil {
 		return err
 	}
-	if curMaxRes.HasNegativeValue() {
-		return fmt.Errorf("invalid max resource %v for queue %s, cannot be negative", curMaxRes, cur.Name)
+	if actualMax.HasNegativeValue() {
+		return fmt.Errorf("invalid max resource %v for queue %s, cannot be negative", actualMax, cur.Name)
 	}
 
-	parentMax := getLastValidMaxMap(cur.Resources.Max, lastParentMax)
+	maxToPass := resources.ComponentWiseMinPermissive(actualMax, parentMax)
+	guaranteedToPass := resources.ComponentWiseMinPermissive(maxToPass, actualGuaranteed)
 
 	if len(cur.Queues) > 0 {
 		// Check children
 		for i := range cur.Queues {
-			if err := checkResourceConfigurationsForQueue(cur.Queues[i], parentMax); err != nil {
+			if err := checkResourceConfigurationsForQueue(cur.Queues[i], maxToPass, guaranteedToPass); err != nil {
 				return err
 			}
 		}
-		sum := resources.NewResource()
-		for _, child := range cur.Queues {
-			childGuaranteed, err := resources.NewResourceFromConf(child.Resources.Guaranteed)
-			if err != nil {
-				return err
-			}
-			sum.AddTo(childGuaranteed)
-		}
-
-		if cur.Resources.Guaranteed != nil {
-			if !resources.FitIn(curGuaranteedRes, sum) {
-				return fmt.Errorf("queue %s has guaranteed-resources (%v) smaller than sum of children guaranteed resources (%v)", cur.Name, curGuaranteedRes, sum)
-			}
-		} else {
-			cur.Resources.Guaranteed = sum.ToConf()
+		err = checkGuaranteedResource(cur.Queues, actualGuaranteed, parentGuaranteed, cur.Name)
+		if err != nil {
+			return err
 		}
 	}
 
 	// If max resource exist, check guaranteed fits in max, cur.max fit in parent.max
-	if cur.Resources.Max != nil {
-		if resources.IsZero(curMaxRes) {
-			return fmt.Errorf("max resource total cannot be 0")
-		}
-		if len(lastParentMax) > 0 {
-			parentMaxRes, err := resources.NewResourceFromConf(lastParentMax)
-			if err != nil {
-				return err
-			}
-			if !resources.FitIn(parentMaxRes, curMaxRes) {
-				return fmt.Errorf("queue %s has max resources (%v) set larger than parent's max resources (%v)", cur.Name, curMaxRes, parentMaxRes)
-			}
-		}
+	err = checkMaxResource(parentMax, actualMax, actualGuaranteed, cur.Name)
+	if err !=nil {
+		return err
+	}
+	return nil
+}
 
-		if !resources.FitIn(curMaxRes, curGuaranteedRes) {
-			return fmt.Errorf("queue %s has max resources (%v) set smaller than guaranteed resources (%v)", cur.Name, curMaxRes, curGuaranteedRes)
+func checkGuaranteedResource(childQueues []QueueConfig, actualGuaranteed *resources.Resource, parentGuaranteed *resources.Resource, queueName string) error {
+	sum := resources.NewResource()
+	for _, child := range childQueues {
+		childGuaranteed, err := resources.NewResourceFromConf(child.Resources.Guaranteed)
+		if err != nil {
+			return err
+		}
+		sum.AddTo(childGuaranteed)
+	}
+	//the sum of guaranteed resources of all child queues of a queue may not be larger
+	//than the guaranteed resources of that queue
+	if resources.IsEmpty(actualGuaranteed) {
+		*actualGuaranteed = *sum
+	}
+	if !resources.IsEmpty(actualGuaranteed) {
+		if !resources.FitIn(actualGuaranteed, sum) {
+			return fmt.Errorf("queue %s has guaranteed-resources (%v) smaller than sum of children guaranteed resources (%v)", queueName, actualGuaranteed, sum)
+		}
+	}
+	if !resources.IsEmpty(parentGuaranteed) {
+		if !resources.FitIn(parentGuaranteed, actualGuaranteed) {
+			return fmt.Errorf("queue %s has max resources (%v) set larger than parent's max resources (%v)", queueName, actualGuaranteed, parentGuaranteed)
 		}
 	}
 	return nil
 }
 
-func getLastValidMaxMap(actualParentMax map[string]string, lastParentMax map[string]string) map[string]string {
-	maxMap := make(map[string]string)
-	for k, v := range lastParentMax {
-		actualMax := actualParentMax[k]
-		if len(actualMax) != 0 {
-			maxMap[k] = actualMax
-		} else {
-			maxMap[k] = v
+func checkMaxResource(parentMax *resources.Resource, actualMax *resources.Resource, actualGuaranteed *resources.Resource, queueName string) error {
+	var err error
+	if !resources.IsEmpty(actualMax) {
+		if resources.IsZero(actualMax) {
+			return fmt.Errorf("max resource total cannot be 0")
+		}
+		err = checkGuaranteedFitsInMax(actualGuaranteed, actualMax, queueName)
+	} else {
+		err = checkGuaranteedFitsInMax(actualGuaranteed, parentMax, queueName)
+	}
+	if err != nil {
+		return err
+	}
+
+	if !resources.IsEmpty(parentMax) {
+		if !resources.FitIn(parentMax, actualMax) {
+			return fmt.Errorf("queue %s has max resources (%v) set larger than parent's max resources (%v)", queueName, actualMax, parentMax)
 		}
 	}
-	for k, v := range actualParentMax {
-		if len(maxMap[k]) == 0 {
-			maxMap[k] = v
+	return nil
+}
+
+func checkGuaranteedFitsInMax(guaranteed *resources.Resource, max *resources.Resource, queueName string) error {
+	if !resources.IsEmpty(max) {
+		if !resources.FitIn(max, guaranteed) {
+			return fmt.Errorf("queue %s has max resources (%v) set smaller than guaranteed resources (%v)", queueName, max, guaranteed)
 		}
 	}
-	return maxMap
+	return nil
 }
 
 // Check the placement rules for correctness
@@ -429,7 +444,7 @@ func Validate(newConfig *SchedulerConfig) error {
 		if err != nil {
 			return err
 		}
-		err = checkResourceConfigurationsForQueue(partition.Queues[0], nil)
+		err = checkResourceConfigurationsForQueue(partition.Queues[0], nil, nil)
 		if err != nil {
 			return err
 		}

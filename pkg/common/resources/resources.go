@@ -729,6 +729,7 @@ func MaxQuantity(x, y Quantity) Quantity {
 
 // Returns a new resource with the smallest value for each quantity in the resources
 // If either resource passed in is nil a zero resource is returned
+// If a resource type is missing from one of the Resource, it is considered 0
 func ComponentWiseMin(left, right *Resource) *Resource {
 	out := NewResource()
 	if left != nil && right != nil {
@@ -737,6 +738,37 @@ func ComponentWiseMin(left, right *Resource) *Resource {
 		}
 		for k, v := range right.Resources {
 			out.Resources[k] = MinQuantity(v, left.Resources[k])
+		}
+	}
+	return out
+}
+
+// Returns a new Resource with the smallest value for each quantity in the Resources
+// If either Resource passed in is nil the other Resource is returned
+// If a Resource type is missing from one of the Resource, it is considered empty and the quantity from the other Resource is returned
+func ComponentWiseMinPermissive(left, right *Resource) *Resource {
+	out := NewResource()
+	if right == nil && left == nil {
+		return out
+	}
+	if left == nil {
+		return right
+	}
+	if right == nil {
+		return left
+	}
+	for k, v := range left.Resources {
+		if val, ok := right.Resources[k]; ok {
+			out.Resources[k] = MinQuantity(v, val)
+		} else {
+			out.Resources[k] = v
+		}
+	}
+	for k, v := range right.Resources {
+		if val, ok := left.Resources[k]; ok {
+			out.Resources[k] = MinQuantity(v, val)
+		} else {
+			out.Resources[k] = v
 		}
 	}
 	return out
@@ -769,6 +801,11 @@ func IsZero(zero *Resource) bool {
 		}
 	}
 	return true
+}
+
+func IsEmpty(r *Resource) bool {
+	if r == nil {return true}
+	return len(r.Resources) == 0
 }
 
 func (r *Resource) HasNegativeValue() bool {

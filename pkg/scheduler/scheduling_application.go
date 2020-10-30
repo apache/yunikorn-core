@@ -28,6 +28,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/events"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
@@ -35,7 +36,14 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
+const DisableReservationVarName = "DISABLE_RESERVATION"
+
 var reservationDelay = 2 * time.Second
+var reservationDisabled = isReservationDisabled()
+
+func isReservationDisabled() bool {
+	return common.GetBoolEnvVar(DisableReservationVarName, false)
+}
 
 type SchedulingApplication struct {
 	ApplicationInfo *cache.ApplicationInfo
@@ -598,7 +606,7 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 		// nothing allocated should we look at a reservation?
 		// TODO make this smarter a hardcoded delay is not the right thing
 		askAge := time.Since(ask.getCreateTime())
-		if allowReserve && askAge > reservationDelay {
+		if !reservationDisabled && allowReserve && askAge > reservationDelay {
 			log.Logger().Debug("app reservation check",
 				zap.String("allocationKey", allocKey),
 				zap.Time("createTime", ask.getCreateTime()),

@@ -175,7 +175,6 @@ func TestDelaySchedulerTraceContextImpl(t *testing.T) {
 
 	type fields struct {
 		Tracer     opentracing.Tracer
-		SpanStack  []*DelaySpan
 		Spans      []*DelaySpan
 		FilterTags map[string]interface{}
 	}
@@ -189,9 +188,8 @@ func TestDelaySchedulerTraceContextImpl(t *testing.T) {
 		{
 			name: "Match",
 			fields: fields{
-				Tracer:    tracer,
-				SpanStack: []*DelaySpan{},
-				Spans:     []*DelaySpan{},
+				Tracer: tracer,
+				Spans:  []*DelaySpan{},
 				FilterTags: map[string]interface{}{
 					"organ": "stem",
 				},
@@ -200,9 +198,8 @@ func TestDelaySchedulerTraceContextImpl(t *testing.T) {
 		{
 			name: "NotMatch",
 			fields: fields{
-				Tracer:    tracer,
-				SpanStack: []*DelaySpan{},
-				Spans:     []*DelaySpan{},
+				Tracer: tracer,
+				Spans:  []*DelaySpan{},
 				FilterTags: map[string]interface{}{
 					"organ": "root",
 					"color": "green",
@@ -214,7 +211,6 @@ func TestDelaySchedulerTraceContextImpl(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			d := &DelaySchedulerTraceContextImpl{
 				Tracer:     tt.fields.Tracer,
-				SpanStack:  tt.fields.SpanStack,
 				Spans:      tt.fields.Spans,
 				FilterTags: tt.fields.FilterTags,
 			}
@@ -224,7 +220,7 @@ func TestDelaySchedulerTraceContextImpl(t *testing.T) {
 			span.SetTag("organ", "root").
 				SetTag("color", "black").
 				SetTag("depth", 0)
-			assert.Equal(t, len(d.SpanStack), 1)
+			assert.Equal(t, d.StackLen, 1)
 			assert.Equal(t, len(d.Spans), 1)
 
 			// foo stem in
@@ -233,13 +229,13 @@ func TestDelaySchedulerTraceContextImpl(t *testing.T) {
 			span.SetTag("organ", "stem").
 				SetTag("color", "green").
 				SetTag("depth", 1)
-			assert.Equal(t, len(d.SpanStack), 2)
+			assert.Equal(t, d.StackLen, 2)
 			assert.Equal(t, len(d.Spans), 2)
 
 			// foo stem out
 			err = d.FinishActiveSpan()
 			assert.NilError(t, err)
-			assert.Equal(t, len(d.SpanStack), 1)
+			assert.Equal(t, d.StackLen, 1)
 			assert.Equal(t, len(d.Spans), 2)
 
 			// bar stem in
@@ -248,7 +244,7 @@ func TestDelaySchedulerTraceContextImpl(t *testing.T) {
 			span.SetTag("organ", "stem").
 				SetTag("color", "brown").
 				SetTag("depth", 1)
-			assert.Equal(t, len(d.SpanStack), 2)
+			assert.Equal(t, d.StackLen, 2)
 			assert.Equal(t, len(d.Spans), 3)
 
 			// b leaf in
@@ -257,25 +253,25 @@ func TestDelaySchedulerTraceContextImpl(t *testing.T) {
 			span.SetTag("organ", "leaf").
 				SetTag("color", "green").
 				SetTag("depth", 2)
-			assert.Equal(t, len(d.SpanStack), 3)
+			assert.Equal(t, d.StackLen, 3)
 			assert.Equal(t, len(d.Spans), 4)
 
 			// b leaf out
 			err = d.FinishActiveSpan()
 			assert.NilError(t, err)
-			assert.Equal(t, len(d.SpanStack), 2)
+			assert.Equal(t, d.StackLen, 2)
 			assert.Equal(t, len(d.Spans), 4)
 
 			// bar stem out
 			err = d.FinishActiveSpan()
 			assert.NilError(t, err)
-			assert.Equal(t, len(d.SpanStack), 1)
+			assert.Equal(t, d.StackLen, 1)
 			assert.Equal(t, len(d.Spans), 4)
 
 			// foobar root out
 			err = d.FinishActiveSpan()
 			assert.NilError(t, err)
-			assert.Equal(t, len(d.SpanStack), 0)
+			assert.Equal(t, d.StackLen, 0)
 			assert.Equal(t, len(d.Spans), 0)
 
 			// err finish
@@ -342,7 +338,6 @@ func TestDelaySchedulerTraceContextImpl_isMatch(t *testing.T) {
 
 	type fields struct {
 		Tracer     opentracing.Tracer
-		SpanStack  []*DelaySpan
 		Spans      []*DelaySpan
 		FilterTags map[string]interface{}
 	}
@@ -395,7 +390,6 @@ func TestDelaySchedulerTraceContextImpl_isMatch(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			d := &DelaySchedulerTraceContextImpl{
 				Tracer:     tt.fields.Tracer,
-				SpanStack:  tt.fields.SpanStack,
 				Spans:      tt.fields.Spans,
 				FilterTags: tt.fields.FilterTags,
 			}

@@ -92,7 +92,6 @@ func (s *SchedulerTracerImpl) NewTraceContext() SchedulerTraceContext {
 	case DebugWithFilter:
 		return &DelaySchedulerTraceContextImpl{
 			Tracer:     s.Tracer,
-			SpanStack:  []*DelaySpan{},
 			Spans:      []*DelaySpan{},
 			FilterTags: s.FilterTags,
 		}

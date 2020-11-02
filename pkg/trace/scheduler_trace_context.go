@@ -110,16 +110,16 @@ var _ SchedulerTraceContext = &DelaySchedulerTraceContextImpl{}
 // and chooses whether to report based on FilterTags when the entire trace is collected.
 type DelaySchedulerTraceContextImpl struct {
 	Tracer     opentracing.Tracer
-	SpanStack  []*DelaySpan
 	Spans      []*DelaySpan
+	StackLen   int
 	FilterTags map[string]interface{}
 }
 
 func (d *DelaySchedulerTraceContextImpl) ActiveSpan() (opentracing.Span, error) {
-	if len(d.SpanStack) == 0 {
+	if d.StackLen == 0 {
 		return nil, fmt.Errorf("active span is not found")
 	}
-	return d.SpanStack[len(d.SpanStack)-1], nil
+	return d.Spans[d.StackLen-1], nil
 }
 
 func (d *DelaySchedulerTraceContextImpl) StartSpan(operationName string) (opentracing.Span, error) {
@@ -134,8 +134,11 @@ func (d *DelaySchedulerTraceContextImpl) StartSpan(operationName string) (opentr
 			Span: d.Tracer.StartSpan(operationName, opentracing.ChildOf(span.Context())),
 		}
 	}
-	d.SpanStack = append(d.SpanStack, newSpan)
 	d.Spans = append(d.Spans, newSpan)
+	if d.StackLen != len(d.Spans)-1 {
+		d.Spans[d.StackLen], d.Spans[len(d.Spans)-1] = d.Spans[len(d.Spans)-1], d.Spans[d.StackLen]
+	}
+	d.StackLen++
 	return newSpan, nil
 }
 
@@ -145,11 +148,11 @@ func (d *DelaySchedulerTraceContextImpl) FinishActiveSpan() error {
 	if _, err := d.ActiveSpan(); err != nil {
 		return err
 	}
-	span := d.SpanStack[len(d.SpanStack)-1]
+	span := d.Spans[d.StackLen-1]
 	span.FinishTime = time.Now()
-	d.SpanStack = d.SpanStack[:len(d.SpanStack)-1]
+	d.StackLen--
 
-	if len(d.SpanStack) == 0 {
+	if d.StackLen == 0 {
 		if d.isMatch() {
 			for _, span := range d.Spans {
 				span.Span.FinishWithOptions(opentracing.FinishOptions{

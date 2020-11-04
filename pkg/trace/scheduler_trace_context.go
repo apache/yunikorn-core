@@ -28,7 +28,17 @@ import (
 )
 
 // SchedulerTraceContext manages spans for one trace.
-// it only designs for the scheduling process so we keeps the interface simple
+// It only designs for the scheduling process so we keeps the interface simple.
+// We have to call StartSpan and FinishActiveSpan in pairs, like this:
+//  span, _ := ctx.StartSpan("op")
+//  defer ctx.FinishActiveSpan()
+//  ...
+//  span.SetTag("foo", "bar")
+//  ...
+// We should not call span.Finish or span.FinishWithOptions
+// because they won't change the structure in the trace context.
+// We should be careful if functions that might cause panic are involved in the procedure when tracing,
+// which is similar to resource opening and closing.
 type SchedulerTraceContext interface {
 	// ActiveSpan returns current active (latest unfinished) span in this context object.
 	// Error returns if there doesn't exist an unfinished span.

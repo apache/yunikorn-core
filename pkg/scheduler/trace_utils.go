@@ -40,6 +40,12 @@ const (
 // The name tag is optional and logs span's related object's identity. (resources' name or ID)
 // These tags can be decided when starting the span because they don't depend on the calling result.
 // Logs or special tags can be set with the returned span object.
+// It shares the restriction on trace.SchedulerTraceContext that we should start and finish span in pairs, like this:
+//  span, _ := startSpanWrapper(ctx, "root", "", "")
+//  defer finishActiveSpanWrapper(ctx)
+//  ...
+//  span.SetTag("foo", "bar") // if we have irregular tags to set
+//  ...
 func startSpanWrapper(ctx trace.SchedulerTraceContext, level, phase, name string) (opentracing.Span, error) {
 	if ctx == nil {
 		return opentracing.NoopTracer{}.StartSpan(""), nil

@@ -26,15 +26,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"go.uber.org/zap"
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -85,50 +84,50 @@ func waitForAllocatedQueueResource(t *testing.T, queue *objects.Queue, memory re
 	assert.NilError(t, err, "Failed to wait for allocations on queue %s, called from: %s", queue.QueuePath, caller())
 }
 
-func waitForNodesAllocatedResource(t *testing.T, cache *cache.ClusterInfo, partitionName string, nodeIDs []string, allocatedMemory resources.Quantity, timeoutMs int) {
+func waitForNodesAllocatedResource(t *testing.T, cc *scheduler.ClusterContext, partitionName string, nodeIDs []string, allocatedMemory resources.Quantity, timeoutMs int) {
 	var totalNodeResource resources.Quantity
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		totalNodeResource = 0
 		for _, nodeID := range nodeIDs {
-			totalNodeResource += cache.GetPartition(partitionName).GetNode(nodeID).GetAllocatedResource().Resources[resources.MEMORY]
+			totalNodeResource += cc.GetPartition(partitionName).GetNode(nodeID).GetAllocatedResource().Resources[resources.MEMORY]
 		}
 		return totalNodeResource == allocatedMemory
 	})
 	assert.NilError(t, err, "Failed to wait for allocations on partition %s and node %v, called from: %s", partitionName, nodeIDs, caller())
 }
 
-func waitForNodesAvailableResource(t *testing.T, cache *cache.ClusterInfo, partitionName string, nodeIDs []string, availableMemory resources.Quantity, timeoutMs int) {
+func waitForNodesAvailableResource(t *testing.T, cc *scheduler.ClusterContext, partitionName string, nodeIDs []string, availableMemory resources.Quantity, timeoutMs int) {
 	var totalNodeResource resources.Quantity
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		totalNodeResource = 0
 		for _, nodeID := range nodeIDs {
-			totalNodeResource += cache.GetPartition(partitionName).GetNode(nodeID).GetAvailableResource().Resources[resources.MEMORY]
+			totalNodeResource += cc.GetPartition(partitionName).GetNode(nodeID).GetAvailableResource().Resources[resources.MEMORY]
 		}
 		return totalNodeResource == availableMemory
 	})
 	assert.NilError(t, err, "Failed to wait for available resource %v and node %v, called from: %s", availableMemory, nodeIDs, caller())
 }
 
-func waitForNewSchedulerNode(t *testing.T, context *scheduler.ClusterSchedulingContext, nodeID string, partitionName string, timeoutMs int) {
+func waitForNewSchedulerNode(t *testing.T, cc *scheduler.ClusterContext, nodeID string, partitionName string, timeoutMs int) {
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
-		node := context.GetSchedulingNode(nodeID, partitionName)
+		node := cc.GetNode(nodeID, partitionName)
 		return node != nil
 	})
 	assert.NilError(t, err, "Failed to wait for new scheduling node on partition %s, node %v, called from: %s", partitionName, nodeID, caller())
 }
 
-func waitForRemovedSchedulerNode(t *testing.T, context *scheduler.ClusterSchedulingContext, nodeID string, partitionName string, timeoutMs int) {
+func waitForRemovedSchedulerNode(t *testing.T, context *scheduler.ClusterContext, nodeID string, partitionName string, timeoutMs int) {
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
-		node := context.GetSchedulingNode(nodeID, partitionName)
+		node := context.GetNode(nodeID, partitionName)
 		return node == nil
 	})
 	assert.NilError(t, err, "Failed to wait for removal of scheduling node on partition %s, node %v, called from: %s", partitionName, nodeID, caller())
 }
 
-func getApplicationInfoFromPartition(partitionInfo *cache.PartitionInfo, appID string) (*cache.ApplicationInfo, error) {
-	for _, appInfo := range partitionInfo.GetApplications() {
-		if appInfo.ApplicationID == appID {
-			return appInfo, nil
+func getApplicationInfoFromPartition(pc *scheduler.PartitionContext, appID string) (*objects.Application, error) {
+	for _, app := range pc.GetApplications() {
+		if app.ApplicationID == appID {
+			return app, nil
 		}
 	}
 	return nil, fmt.Errorf("cannot find app %s from cache", appID)

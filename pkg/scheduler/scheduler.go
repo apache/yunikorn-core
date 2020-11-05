@@ -33,15 +33,15 @@ import (
 
 // Main Scheduler service that starts the needed sub services
 type Scheduler struct {
-	clusterSchedulingContext *ClusterSchedulingContext // main context
-	preemptionContext        *preemptionContext        // Preemption context
-	eventHandlers            handler.EventHandlers     // list of event handlers
-	pendingEvents            chan interface{}          // queue for events
+	clusterContext    *ClusterContext       // main context
+	preemptionContext *preemptionContext    // Preemption context
+	eventHandlers     handler.EventHandlers // list of event handlers
+	pendingEvents     chan interface{}      // queue for events
 }
 
 func NewScheduler() *Scheduler {
 	m := &Scheduler{}
-	m.clusterSchedulingContext = newClusterSchedulingContext()
+	m.clusterContext = newClusterContext()
 	m.pendingEvents = make(chan interface{}, 1024*1024)
 	return m
 }
@@ -49,13 +49,13 @@ func NewScheduler() *Scheduler {
 // Start service
 func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule bool) {
 	// set the proxy handler in the context
-	s.clusterSchedulingContext.setEventHandler(handlers.RMProxyEventHandler)
+	s.clusterContext.setEventHandler(handlers.RMProxyEventHandler)
 
 	// Start event handlers
 	go s.handleRMEvent()
 
 	// Start resource monitor if necessary (majorly for testing)
-	monitor := newNodesResourceUsageMonitor(s.clusterSchedulingContext)
+	monitor := newNodesResourceUsageMonitor(s.clusterContext)
 	monitor.start()
 
 	if !manualSchedule {
@@ -68,7 +68,7 @@ func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 // Internal start scheduling service
 func (s *Scheduler) internalSchedule() {
 	for {
-		s.clusterSchedulingContext.schedule()
+		s.clusterContext.schedule()
 	}
 }
 
@@ -110,13 +110,13 @@ func (s *Scheduler) handleRMEvent() {
 		ev := <-s.pendingEvents
 		switch v := ev.(type) {
 		case *rmevent.RMUpdateRequestEvent:
-			s.clusterSchedulingContext.processRMUpdateEvent(v)
+			s.clusterContext.processRMUpdateEvent(v)
 		case *rmevent.RMPartitionsRemoveEvent:
-			s.clusterSchedulingContext.removePartitionsByRMID(v)
+			s.clusterContext.removePartitionsByRMID(v)
 		case *rmevent.RMRegistrationEvent:
-			s.clusterSchedulingContext.processRMRegistrationEvent(v)
+			s.clusterContext.processRMRegistrationEvent(v)
 		case *rmevent.RMConfigUpdateEvent:
-			s.clusterSchedulingContext.processRMConfigUpdateEvent(v)
+			s.clusterContext.processRMConfigUpdateEvent(v)
 		default:
 			log.Logger().Error("Received type is not an acceptable type for RM event.",
 				zap.String("received type", reflect.TypeOf(v).String()))
@@ -133,7 +133,7 @@ func (s *Scheduler) handleRMEvent() {
 func (s *Scheduler) inspectOutstandingRequests() {
 	log.Logger().Debug("inspect outstanding requests")
 	// schedule each partition defined in the cluster
-	for _, psc := range s.clusterSchedulingContext.GetPartitionMapClone() {
+	for _, psc := range s.clusterContext.GetPartitionMapClone() {
 		requests := psc.calculateOutstandingRequests()
 		if len(requests) > 0 {
 			for _, ask := range requests {
@@ -156,8 +156,8 @@ func (s *Scheduler) inspectOutstandingRequests() {
 }
 
 // Visible by tests
-func (s *Scheduler) GetClusterSchedulingContext() *ClusterSchedulingContext {
-	return s.clusterSchedulingContext
+func (s *Scheduler) GetClusterContext() *ClusterContext {
+	return s.clusterContext
 }
 
 // The scheduler for testing which runs nAlloc times the normal schedule routine.
@@ -166,7 +166,7 @@ func (s *Scheduler) MultiStepSchedule(nAlloc int) {
 	for i := 0; i < nAlloc; i++ {
 		log.Logger().Debug("Scheduler manual stepping",
 			zap.Int("count", i))
-		s.clusterSchedulingContext.schedule()
+		s.clusterContext.schedule()
 
 		// sometimes the smoke tests are failing because they are competing CPU resources.
 		// each scheduling cycle, let's sleep for a small amount of time (100ms),

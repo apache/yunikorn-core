@@ -183,20 +183,3 @@ func TestDefaultNodeIterating(t *testing.T) {
 		t.Errorf("incorrect node returned expected node-0 got: %v", node)
 	}
 }
-
-// Simple node with just an ID in the cache node.
-// That is all we need for iteration
-func newSchedNode(nodeID string) *objects.Node {
-	return objects.newNode(nodeID)
-}
-
-// A list of nodes that can be iterated over.
-func newSchedNodeList(number int) []*objects.Node {
-	list := make([]*objects.Node, number)
-	for i := 0; i < number; i++ {
-		num := strconv.Itoa(i)
-		node := newSchedNode("node-" + num)
-		list[i] = node
-	}
-	return list
-}

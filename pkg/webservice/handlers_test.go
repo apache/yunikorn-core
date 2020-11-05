@@ -29,12 +29,13 @@ import (
 	"gopkg.in/yaml.v2"
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/testutils"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
@@ -61,6 +62,16 @@ partitions:
           first: "changedValue"
 `
 
+const baseConf = `
+partitions:
+  - name: default
+    nodesortpolicy:
+        type: fair
+    queues:
+      - name: root
+        submitacl: "*"
+`
+
 const invalidConf = `
 partitions:
   - name: default
@@ -74,24 +85,26 @@ partitions:
   - name: default
     queues:
       - name: root
+        submitacl: "*"
         queues:
           - name: default
 `
 
+const rmID = "rm-123"
+const policyGroup = "default-policy-group"
+
+// simple wrapper to make creating an app easier
+func newApplication(appID, partitionName, queueName, rmID string) *objects.Application {
+	return objects.NewApplication(appID, partitionName, queueName, security.UserGroup{}, nil, nil, rmID)
+}
+
 func TestValidateConf(t *testing.T) {
-	tests := []struct {
+	confTests := []struct {
 		content          string
 		expectedResponse dao.ValidateConfResponse
 	}{
 		{
-			content: `
-partitions:
-  - name: default
-    nodesortpolicy:
-        type: fair
-    queues:
-      - name: root
-`,
+			content: baseConf,
 			expectedResponse: dao.ValidateConfResponse{
 				Allowed: true,
 				Reason:  "",
@@ -105,7 +118,7 @@ partitions:
 			},
 		},
 	}
-	for _, test := range tests {
+	for _, test := range confTests {
 		// No err check: new request always returns correctly
 		//nolint: errcheck
 		req, _ := http.NewRequest("POST", "", strings.NewReader(test.content))
@@ -114,8 +127,8 @@ partitions:
 		var vcr dao.ValidateConfResponse
 		err := json.Unmarshal(resp.outputBytes, &vcr)
 		assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
-		assert.Equal(t, vcr.Allowed, test.expectedResponse.Allowed)
-		assert.Equal(t, vcr.Reason, test.expectedResponse.Reason)
+		assert.Equal(t, vcr.Allowed, test.expectedResponse.Allowed, "allowed flag incorrect")
+		assert.Equal(t, vcr.Reason, test.expectedResponse.Reason, "response text not as expected")
 	}
 }
 
@@ -218,14 +231,10 @@ func TestContainerHistory(t *testing.T) {
 }
 
 func TestGetConfigYAML(t *testing.T) {
-	const rmID = "rm-123"
-	const policyGroup = "default-policy-group"
-	gClusterInfo = cache.NewClusterInfo()
-
 	configs.MockSchedulerConfigByData([]byte(startConf))
-	if _, err := cache.SetClusterInfoFromConfigFile(gClusterInfo, rmID, policyGroup); err != nil {
-		t.Fatalf("Error when load clusterInfo from config %v", err)
-	}
+	var err error
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	assert.NilError(t, err, "Error when load clusterInfo from config")
 	// No err check: new request always returns correctly
 	//nolint: errcheck
 	req, _ := http.NewRequest("GET", "", nil)
@@ -233,7 +242,7 @@ func TestGetConfigYAML(t *testing.T) {
 	getClusterConfig(resp, req)
 	// yaml unmarshal handles the checksum add the end automatically in this implementation
 	conf := &configs.SchedulerConfig{}
-	err := yaml.Unmarshal(resp.outputBytes, conf)
+	err = yaml.Unmarshal(resp.outputBytes, conf)
 	assert.NilError(t, err, "failed to unmarshal config from response body")
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "fair", "node sort policy set incorrectly, not fair")
 
@@ -244,9 +253,8 @@ func TestGetConfigYAML(t *testing.T) {
 
 	// change the config
 	configs.MockSchedulerConfigByData([]byte(updatedConf))
-	if _, _, err = cache.UpdateClusterInfoFromConfigFile(gClusterInfo, rmID); err != nil {
-		t.Fatalf("Error when updating clusterInfo from config %v", err)
-	}
+	err = schedulerContext.UpdateRMSchedulerConfig(rmID)
+	assert.NilError(t, err, "Error when updating clusterInfo from config")
 	// check that we return yaml by default, unmarshal will error when we don't
 	req.Header.Set("Accept", "unknown")
 	getClusterConfig(resp, req)
@@ -261,14 +269,10 @@ func TestGetConfigYAML(t *testing.T) {
 }
 
 func TestGetConfigJSON(t *testing.T) {
-	const rmID = "rm-123"
-	const policyGroup = "default-policy-group"
-	gClusterInfo = cache.NewClusterInfo()
-
 	configs.MockSchedulerConfigByData([]byte(startConf))
-	if _, err := cache.SetClusterInfoFromConfigFile(gClusterInfo, rmID, policyGroup); err != nil {
-		t.Fatalf("Error when load clusterInfo from config %v", err)
-	}
+	var err error
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	assert.NilError(t, err, "Error when load clusterInfo from config")
 	// No err check: new request always returns correctly
 	//nolint: errcheck
 	req, _ := http.NewRequest("GET", "", nil)
@@ -282,15 +286,15 @@ func TestGetConfigJSON(t *testing.T) {
 	assert.Equal(t, len(parts), 2, "checksum boundary not found (json)")
 	startConfSum := parts[1]
 	conf := &configs.SchedulerConfig{}
-	err := json.Unmarshal([]byte(parts[0]), conf)
+	err = json.Unmarshal([]byte(parts[0]), conf)
 	assert.NilError(t, err, "failed to unmarshal config from response body (json)")
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "fair", "node sort policy set incorrectly, not fair (json)")
 
 	// change the config
 	configs.MockSchedulerConfigByData([]byte(updatedConf))
-	if _, _, err = cache.UpdateClusterInfoFromConfigFile(gClusterInfo, rmID); err != nil {
-		t.Fatalf("Error when updating clusterInfo from config %v", err)
-	}
+	err = schedulerContext.UpdateRMSchedulerConfig(rmID)
+	assert.NilError(t, err, "Error when updating clusterInfo from config")
+
 	getClusterConfig(resp, req)
 	parts = strings.SplitAfter(string(resp.outputBytes), "\n")
 	assert.Equal(t, len(parts), 2, "checksum boundary not found (json changed)")
@@ -301,29 +305,26 @@ func TestGetConfigJSON(t *testing.T) {
 }
 
 func TestQueryParamInAppsHandler(t *testing.T) {
-	rmID := "rm-123"
-	policyGroup := "default-policy-group"
-	clusterInfo := cache.NewClusterInfo()
-
 	configs.MockSchedulerConfigByData([]byte(configDefault))
-	if _, err := cache.SetClusterInfoFromConfigFile(clusterInfo, rmID, policyGroup); err != nil {
-		t.Fatalf("Error when load clusterInfo from config %v", err)
-	}
-	assert.Equal(t, 1, len(clusterInfo.ListPartitions()))
+	var err error
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	assert.NilError(t, err, "Error when load clusterInfo from config")
+
+	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
 
 	// Check default partition
 	partitionName := "[" + rmID + "]default"
-	defaultPartition := clusterInfo.GetPartition(partitionName)
-	assert.Equal(t, 0, len(defaultPartition.GetApplications()))
+	part := schedulerContext.GetPartition(partitionName)
+	assert.Equal(t, 0, len(part.GetApplications()))
 
 	// add a new app
-	appInfo := cache.CreateNewApplicationInfo("app-1", partitionName, "root.default")
-	err := cache.AddAppToPartition(appInfo, defaultPartition)
+	app := newApplication("app-1", partitionName, "root.default", rmID)
+	err = part.AddApplication(app)
 	assert.NilError(t, err, "Failed to add Application to Partition.")
-	assert.Equal(t, appInfo.GetApplicationState(), "New")
-	assert.Equal(t, 1, len(defaultPartition.GetApplications()))
+	assert.Equal(t, app.CurrentState(), objects.New.String())
+	assert.Equal(t, 1, len(part.GetApplications()))
 
-	NewWebApp(clusterInfo, nil)
+	NewWebApp(schedulerContext, nil)
 
 	// Passing "root.default" as filter return 1 application
 	var req *http.Request
@@ -404,16 +405,16 @@ func TestSaveConfigMapErrorExpected(t *testing.T) {
 
 func TestBuildUpdateResponseSuccess(t *testing.T) {
 	resp := &MockResponseWriter{}
-	buildUpdateResponse(true, "", resp)
+	buildUpdateResponse(nil, resp)
 	assert.Equal(t, http.StatusOK, resp.statusCode, "Response should be OK")
 }
 
 func TestBuildUpdateResponseFailure(t *testing.T) {
 	resp := &MockResponseWriter{}
-	reason := "ConfigMapUpdate failed"
-	buildUpdateResponse(false, reason, resp)
+	err := fmt.Errorf("ConfigMapUpdate failed")
+	buildUpdateResponse(err, resp)
 	assert.Equal(t, http.StatusConflict, resp.statusCode, "Status code is wrong")
-	assert.Assert(t, strings.Contains(string(resp.outputBytes), reason), "Error message should contain the reason")
+	assert.Assert(t, strings.Contains(string(resp.outputBytes), err.Error()), "Error message should contain the reason")
 }
 
 func TestUpdateConfig(t *testing.T) {
@@ -438,38 +439,29 @@ func TestUpdateConfigInvalidConf(t *testing.T) {
 
 func prepareSchedulerForConfigChange(t *testing.T) {
 	plugins.RegisterSchedulerPlugin(&FakeConfigPlugin{generateError: false})
-	gClusterInfo = cache.NewClusterInfo()
-	scheduler := &testutils.MockEventHandler{EventHandled: false}
-	gClusterInfo.EventHandlers.SchedulerEventHandler = scheduler
 	configs.MockSchedulerConfigByData([]byte(startConf))
-	if _, err := cache.SetClusterInfoFromConfigFile(gClusterInfo, "rmID", "default-policy-group"); err != nil {
-		t.Fatalf("Error when load clusterInfo from config %v", err)
-	}
+	var err error
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	assert.NilError(t, err, "Error when load clusterInfo from config")
 }
 
 func TestGetClusterUtilJSON(t *testing.T) {
-	rmID := "Util"
-	policyGroup := "default-policy-group"
-	clusterInfo := cache.NewClusterInfo()
-
 	configs.MockSchedulerConfigByData([]byte(configDefault))
-	if _, err := cache.SetClusterInfoFromConfigFile(clusterInfo, rmID, policyGroup); err != nil {
-		t.Fatalf("Error when load clusterInfo from config %v", err)
-	}
-	assert.Equal(t, 1, len(clusterInfo.ListPartitions()))
+	var err error
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	assert.NilError(t, err, "Error when load clusterInfo from config")
+	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
 
 	// Check test partitions
 	partitionName := "[" + rmID + "]default"
-	partition := clusterInfo.GetPartition(partitionName)
+	partition := schedulerContext.GetPartition(partitionName)
 	assert.Equal(t, partitionName, partition.Name)
 	// new app to partition
 	queueName := "root.default"
 	appID := "appID-1"
-	appInfo := cache.CreateNewApplicationInfo(appID, "default", queueName)
-	err := cache.AddNewApplicationForTest(partition, appInfo, true)
-	if err != nil {
-		t.Errorf("add application to partition should not have failed: %v", err)
-	}
+	app := newApplication(appID, partitionName, queueName, rmID)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "add application to partition should not have failed")
 	// case of total resource and allocated resource undefined
 	utilZero := &dao.ClusterUtilDAOInfo{
 		ResourceType: "N/A",
@@ -480,47 +472,31 @@ func TestGetClusterUtilJSON(t *testing.T) {
 	result0 := getClusterUtilJSON(partition)
 	assert.Equal(t, ContainsObj(result0, utilZero), true)
 
-	// add totalPartitionResource to partition
-	memval := resources.Quantity(1000)
-	coreval := resources.Quantity(1000)
+	// add node to partition with allocations
 	nodeID := "node-1"
-	node1 := cache.NewNodeForTest(nodeID, resources.NewResourceFromMap(
-		map[string]resources.Quantity{resources.MEMORY: memval, resources.VCORE: coreval}))
-	// add allocatedResource to partition
-	resAlloc1 := &si.Resource{
-		Resources: map[string]*si.Quantity{
-			resources.MEMORY: {Value: 500},
-			resources.VCORE:  {Value: 300},
-		},
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 1000, resources.VCORE: 1000}).ToProto()
+	node1 := objects.NewNode(&si.NewNodeInfo{NodeID: nodeID, SchedulableResource: nodeRes})
+
+	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 500, resources.VCORE: 300})
+	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 300, resources.VCORE: 200})
+	ask1 := &objects.AllocationAsk{
+		AllocationKey:     "alloc-1",
+		QueueName:         queueName,
+		ApplicationID:     appID,
+		AllocatedResource: resAlloc1,
 	}
-	resAlloc2 := &si.Resource{
-		Resources: map[string]*si.Quantity{
-			resources.MEMORY: {Value: 300},
-			resources.VCORE:  {Value: 200},
-		},
+	ask2 := &objects.AllocationAsk{
+		AllocationKey:     "alloc-2",
+		QueueName:         queueName,
+		ApplicationID:     appID,
+		AllocatedResource: resAlloc2,
 	}
-	alloc1 := &si.Allocation{
-		AllocationKey:    "alloc-1",
-		ResourcePerAlloc: resAlloc1,
-		QueueName:        queueName,
-		NodeID:           nodeID,
-		ApplicationID:    appID,
-	}
-	alloc2 := &si.Allocation{
-		AllocationKey:    "alloc-2",
-		ResourcePerAlloc: resAlloc2,
-		QueueName:        queueName,
-		NodeID:           nodeID,
-		ApplicationID:    appID,
-	}
-	alloc1.UUID = "alloc-1-uuid"
-	alloc2.UUID = "alloc-2-uuid"
-	// add alloc to node
-	allocs := []*si.Allocation{alloc1, alloc2}
-	err = cache.AddNewNodeForTest(partition, node1, allocs)
-	if err != nil || partition.GetNode(nodeID) == nil {
-		t.Fatalf("add node to partition should not have failed: %v", err)
-	}
+	alloc1 := objects.NewAllocation("alloc-1-uuid", nodeID, ask1)
+	alloc2 := objects.NewAllocation("alloc-2-uuid", nodeID, ask2)
+	allocs := []*objects.Allocation{alloc1, alloc2}
+	err = partition.AddNode(node1, allocs)
+	assert.NilError(t, err, "add node to partition should not have failed")
+
 	// set expected result
 	utilMem := &dao.ClusterUtilDAOInfo{
 		ResourceType: resources.MEMORY,
@@ -557,77 +533,51 @@ func ContainsObj(slice interface{}, contains interface{}) bool {
 }
 
 func TestGetNodesUtilJSON(t *testing.T) {
-	rmID := "Util"
-	policyGroup := "default-policy-group"
-	clusterInfo := cache.NewClusterInfo()
-
 	configs.MockSchedulerConfigByData([]byte(configDefault))
-	if _, err := cache.SetClusterInfoFromConfigFile(clusterInfo, rmID, policyGroup); err != nil {
-		t.Fatalf("Error when load clusterInfo from config %v", err)
-	}
-	assert.Equal(t, 1, len(clusterInfo.ListPartitions()))
+	var err error
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	assert.NilError(t, err, "Error when load schedulerContext from config")
+	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
 
 	// Check test partition
 	partitionName := "[" + rmID + "]default"
-	partition := clusterInfo.GetPartition(partitionName)
+	partition := schedulerContext.GetPartition(partitionName)
 	assert.Equal(t, partitionName, partition.Name)
 	// create test application
 	queueName := "root.default"
-	appInfo := cache.CreateNewApplicationInfo("appID-1", "default", queueName)
-	err := cache.AddNewApplicationForTest(partition, appInfo, true)
-	if err != nil {
-		t.Errorf("add application to partition should not have failed: %v", err)
-	}
+	appID := "app1"
+	app := newApplication(appID, partitionName, queueName, rmID)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "add application to partition should not have failed")
 
-	memVal := resources.Quantity(1000)
-	coreVal := resources.Quantity(1000)
 	// create test nodes
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 1000, resources.VCORE: 1000}).ToProto()
 	node1ID := "node-1"
-	node1 := cache.NewNodeForTest(node1ID, resources.NewResourceFromMap(
-		map[string]resources.Quantity{resources.MEMORY: memVal, resources.VCORE: coreVal}))
+	node1 := objects.NewNode(&si.NewNodeInfo{NodeID: node1ID, SchedulableResource: nodeRes})
 	node2ID := "node-2"
-	node2 := cache.NewNodeForTest(node2ID, resources.NewResourceFromMap(
-		map[string]resources.Quantity{resources.MEMORY: memVal, resources.VCORE: coreVal}))
+	node2 := objects.NewNode(&si.NewNodeInfo{NodeID: node2ID, SchedulableResource: nodeRes})
 	// create test allocations
-	resAlloc1 := &si.Resource{
-		Resources: map[string]*si.Quantity{
-			resources.MEMORY: {Value: 500},
-			resources.VCORE:  {Value: 300},
-		},
+	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 500, resources.VCORE: 300})
+	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 300, resources.VCORE: 500})
+	ask1 := &objects.AllocationAsk{
+		AllocationKey:     "alloc-1",
+		QueueName:         queueName,
+		ApplicationID:     appID,
+		AllocatedResource: resAlloc1,
 	}
-	resAlloc2 := &si.Resource{
-		Resources: map[string]*si.Quantity{
-			resources.MEMORY: {Value: 300},
-			resources.VCORE:  {Value: 500},
-		},
+	ask2 := &objects.AllocationAsk{
+		AllocationKey:     "alloc-2",
+		QueueName:         queueName,
+		ApplicationID:     appID,
+		AllocatedResource: resAlloc2,
 	}
-	alloc1 := &si.Allocation{
-		AllocationKey:    "alloc-1",
-		ResourcePerAlloc: resAlloc1,
-		QueueName:        queueName,
-		NodeID:           node1ID,
-		ApplicationID:    "appID-1",
-	}
-	alloc2 := &si.Allocation{
-		AllocationKey:    "alloc-2",
-		ResourcePerAlloc: resAlloc2,
-		QueueName:        queueName,
-		NodeID:           node2ID,
-		ApplicationID:    "appID-1",
-	}
-	alloc1.UUID = "alloc-1-uuid"
-	alloc2.UUID = "alloc-2-uuid"
-	allocs1 := []*si.Allocation{alloc1}
-	allocs2 := []*si.Allocation{alloc2}
-	// add allocation to nodes
-	err = cache.AddNewNodeForTest(partition, node1, allocs1)
-	if err != nil || partition.GetNode(node1ID) == nil {
-		t.Fatalf("add node to partition should not have failed: %v", err)
-	}
-	err = cache.AddNewNodeForTest(partition, node2, allocs2)
-	if err != nil || partition.GetNode(node2ID) == nil {
-		t.Fatalf("add node to partition should not have failed: %v", err)
-	}
+	allocs := []*objects.Allocation{objects.NewAllocation("alloc-1-uuid", node1ID, ask1)}
+	err = partition.AddNode(node1, allocs)
+	assert.NilError(t, err, "add node to partition should not have failed")
+	allocs = []*objects.Allocation{objects.NewAllocation("alloc-2-uuid", node2ID, ask2)}
+	err = partition.AddNode(node2, allocs)
+	assert.NilError(t, err, "add node to partition should not have failed")
+
 	// get nodes utilization
 	res1 := getNodesUtilJSON(partition, resources.MEMORY)
 	res2 := getNodesUtilJSON(partition, resources.VCORE)

@@ -28,11 +28,10 @@ import (
 
 func TestNewReservation(t *testing.T) {
 	// create the input objects
-	q := map[string]resources.Quantity{"first": 1}
-	res := resources.NewResourceFromMap(q)
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	ask := newAllocationAsk("alloc-1", "app-1", res)
-	app := NewApplication("app-1")
-	node := NewNode("node-1", q)
+	app := newApplication("app-1", "default", "root.unknown")
+	node := newNodeRes("node-1", res)
 
 	// check the basics (failures)
 	reserve := newReservation(nil, nil, nil, true)
@@ -70,12 +69,10 @@ func TestNewReservation(t *testing.T) {
 
 func TestReservationKey(t *testing.T) {
 	// create the input objects
-	q := map[string]resources.Quantity{"first": 1}
-	res := resources.NewResourceFromMap(q)
-	appID := "app-1"
-	ask := newAllocationAsk("alloc-1", appID, res)
-	app := NewApplication(appInfo)
-	node := NewNode("node-1", q)
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	ask := newAllocationAsk("alloc-1", "app-1", res)
+	app := newApplication("app-1", "default", "root.unknown")
+	node := newNodeRes("node-1", res)
 
 	// check the basics
 	reserve := reservationKey(nil, nil, nil)

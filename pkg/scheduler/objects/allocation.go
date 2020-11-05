@@ -42,7 +42,7 @@ func (ar allocationResult) String() string {
 
 /* Related to Allocation */
 type Allocation struct {
-	SchedulingAsk     *AllocationAsk
+	Ask               *AllocationAsk
 	ApplicationID     string
 	AllocationKey     string
 	QueueName         string
@@ -59,7 +59,7 @@ type Allocation struct {
 
 func NewAllocation(uuid, nodeID string, ask *AllocationAsk) *Allocation {
 	return &Allocation{
-		SchedulingAsk:     ask,
+		Ask:               ask,
 		AllocationKey:     ask.AllocationKey,
 		ApplicationID:     ask.ApplicationID,
 		QueueName:         ask.QueueName,
@@ -73,11 +73,11 @@ func NewAllocation(uuid, nodeID string, ask *AllocationAsk) *Allocation {
 	}
 }
 
-func NewReservedAllocation(result allocationResult, nodeID string, ask *AllocationAsk) *Allocation {
+func newReservedAllocation(result allocationResult, nodeID string, ask *AllocationAsk) *Allocation {
 	return &Allocation{
+		Ask:               ask,
 		AllocationKey:     ask.AllocationKey,
 		ApplicationID:     ask.ApplicationID,
-		QueueName:         ask.QueueName,
 		NodeID:            nodeID,
 		PartitionName:     common.GetPartitionNameWithoutClusterID(ask.PartitionName),
 		AllocatedResource: ask.AllocatedResource,
@@ -89,7 +89,6 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 	return &Allocation{
 		NodeID:            alloc.NodeID,
 		ApplicationID:     alloc.ApplicationID,
-		QueueName:         alloc.QueueName,
 		PartitionName:     common.GetPartitionNameWithoutClusterID(alloc.PartitionName),
 		AllocatedResource: resources.NewResourceFromProto(alloc.ResourcePerAlloc),
 		AllocationKey:     alloc.AllocationKey,
@@ -100,7 +99,14 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 	}
 }
 
-func (a Allocation) NewSIFromAllocation() *si.Allocation {
+// Convert the Allocation into a SI object. This is a limited set of values that gets copied into the SI.
+// We only use this to communicate *back* to the RM. All other fields are considered incoming fields from
+// the RM into the core.
+// The limited set of fields link the Allocation to an Application, Node and AllocationAsk.
+func (a *Allocation) NewSIFromAllocation() *si.Allocation {
+	if a == nil {
+		return nil
+	}
 	return &si.Allocation{
 		NodeID:        a.NodeID,
 		ApplicationID: a.ApplicationID,
@@ -109,6 +115,13 @@ func (a Allocation) NewSIFromAllocation() *si.Allocation {
 	}
 }
 
-func (a Allocation) String() string {
-	return fmt.Sprintf("ApplicationID=%s, UUID=%s, AllocatioKey=%s, node=%s", a.ApplicationID, a.UUID, a.AllocationKey, a.NodeID)
+func (a *Allocation) String() string {
+	if a == nil {
+		return "nil allocation"
+	}
+	uuid := a.UUID
+	if a.Result == Reserved || a.Result == Unreserved {
+		uuid = "N/A"
+	}
+	return fmt.Sprintf("ApplicationID=%s, UUID=%s, AllocationKey=%s, Node=%s, Result=%s", a.ApplicationID, uuid, a.AllocationKey, a.NodeID, a.Result.String())
 }

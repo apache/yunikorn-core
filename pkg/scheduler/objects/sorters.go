@@ -27,7 +27,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 )
 
-func SortQueue(queues []*Queue, sortType policies.SortPolicy) {
+func sortQueue(queues []*Queue, sortType policies.SortPolicy) {
 	sortingStart := time.Now()
 	if sortType == policies.FairSortPolicy {
 		sort.SliceStable(queues, func(i, j int) bool {
@@ -44,7 +44,7 @@ func SortQueue(queues []*Queue, sortType policies.SortPolicy) {
 	metrics.GetSchedulerMetrics().ObserveQueueSortingLatency(sortingStart)
 }
 
-func SortApplications(apps map[string]*Application, sortType policies.SortPolicy, globalResource *resources.Resource) []*Application {
+func sortApplications(apps map[string]*Application, sortType policies.SortPolicy, globalResource *resources.Resource) []*Application {
 	sortingStart := time.Now()
 	var sortedApps []*Application
 	switch sortType {
@@ -146,7 +146,7 @@ func SortNodes(nodes []*Node, sortType policies.SortingPolicy) {
 	metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
 }
 
-func SortAskByPriority(requests []*AllocationAsk, ascending bool) {
+func sortAskByPriority(requests []*AllocationAsk, ascending bool) {
 	sort.SliceStable(requests, func(i, j int) bool {
 		l := requests[i]
 		r := requests[j]

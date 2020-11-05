@@ -29,32 +29,32 @@ import (
 // object events
 // these events are used for: partitions and managed queues
 // ----------------------------------
-type SchedulingObjectEvent int
+type ObjectEvent int
 
 const (
-	Remove SchedulingObjectEvent = iota
+	Remove ObjectEvent = iota
 	Start
 	Stop
 )
 
-func (soe SchedulingObjectEvent) String() string {
-	return [...]string{"Remove", "Start", "Stop"}[soe]
+func (oe ObjectEvent) String() string {
+	return [...]string{"Remove", "Start", "Stop"}[oe]
 }
 
 // ----------------------------------
 // object states
 // these states are used by: partitions and managed queues
 // ----------------------------------
-type SchedulingObjectState int
+type ObjectState int
 
 const (
-	Active SchedulingObjectState = iota
+	Active ObjectState = iota
 	Draining
 	Stopped
 )
 
-func (sos SchedulingObjectState) String() string {
-	return [...]string{"Active", "Draining", "Stopped"}[sos]
+func (os ObjectState) String() string {
+	return [...]string{"Active", "Draining", "Stopped"}[os]
 }
 
 func NewObjectState() *fsm.FSM {

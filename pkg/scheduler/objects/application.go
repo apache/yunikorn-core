@@ -71,17 +71,18 @@ type Application struct {
 
 func newBlankApplication(appID, partition, queueName string, ugi security.UserGroup, tags map[string]string) *Application {
 	return &Application{
-		ApplicationID:  appID,
-		Partition:      partition,
-		QueueName:      queueName,
-		SubmissionTime: time.Now(),
-		user:           ugi,
-		tags:           tags,
-		pending:        resources.NewResource(),
-		requests:       make(map[string]*AllocationAsk),
-		reservations:   make(map[string]*reservation),
-		allocations:    make(map[string]*Allocation),
-		stateMachine:   NewAppState(),
+		ApplicationID:     appID,
+		Partition:         partition,
+		QueueName:         queueName,
+		SubmissionTime:    time.Now(),
+		user:              ugi,
+		tags:              tags,
+		pending:           resources.NewResource(),
+		allocatedResource: resources.NewResource(),
+		requests:          make(map[string]*AllocationAsk),
+		reservations:      make(map[string]*reservation),
+		allocations:       make(map[string]*Allocation),
+		stateMachine:      NewAppState(),
 	}
 }
 
@@ -90,6 +91,14 @@ func NewApplication(appID, partition, queueName string, ugi security.UserGroup, 
 	app.rmEventHandler = eventHandler
 	app.rmID = rmID
 	return app
+}
+
+func (sa *Application) String() string {
+	if sa == nil {
+		return "application is nil"
+	}
+	return fmt.Sprintf("ApplicationID: %s, Partition: %s, QueueName: %s, SubmissionTime: %x",
+		sa.ApplicationID, sa.Partition, sa.QueueName, sa.SubmissionTime)
 }
 
 // override reservation delay for tests
@@ -160,9 +169,6 @@ func (sa *Application) OnStateChange(event *fsm.Event) {
 // This prevents an app from not progressing to Running when it only has 1 allocation.
 // Called when entering the Starting state by the state machine.
 func (sa *Application) SetStartingTimer() {
-	sa.Lock()
-	defer sa.Unlock()
-
 	log.Logger().Debug("Application Starting state timer initiated",
 		zap.String("appID", sa.ApplicationID),
 		zap.Duration("timeout", startingTimeout))
@@ -173,9 +179,6 @@ func (sa *Application) SetStartingTimer() {
 // timer and clean up.
 // Called when leaving the Starting state by the state machine.
 func (sa *Application) ClearStartingTimer() {
-	sa.Lock()
-	defer sa.Unlock()
-
 	sa.stateTimer.Stop()
 	sa.stateTimer = nil
 }
@@ -264,7 +267,7 @@ func (sa *Application) RemoveAllocationAsk(allocKey string) int {
 		sa.requests = make(map[string]*AllocationAsk)
 	} else {
 		// cleanup the reservation for this allocation
-		for _, key := range sa.isAskReserved(allocKey) {
+		for _, key := range sa.IsAskReserved(allocKey) {
 			reserve := sa.reservations[key]
 			releases, err := sa.unReserveInternal(reserve.node, reserve.ask)
 			if err != nil {
@@ -291,7 +294,7 @@ func (sa *Application) RemoveAllocationAsk(allocKey string) int {
 	// 2) if confirmed allocations is zero (nothing is running)
 	// Change the state to waiting.
 	// When the resource trackers are zero we should not expect anything to come in later.
-	if resources.IsZero(sa.pending) && resources.IsZero(sa.GetAllocatedResource()) {
+	if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) {
 		if err := sa.HandleApplicationEvent(waitApplication); err != nil {
 			log.Logger().Warn("Application state not changed to Waiting while updating ask(s)",
 				zap.String("currentState", sa.CurrentState()),
@@ -313,7 +316,7 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 	if ask.GetPendingAskRepeat() == 0 || resources.IsZero(ask.AllocatedResource) {
 		return fmt.Errorf("invalid ask added to app %s: %v", sa.ApplicationID, ask)
 	}
-	ask.QueueName = sa.queue.QueuePath
+	ask.setQueue(sa.queue.QueuePath)
 	delta := resources.Multiply(ask.AllocatedResource, int64(ask.GetPendingAskRepeat()))
 
 	var oldAskResource *resources.Resource = nil
@@ -414,7 +417,7 @@ func (sa *Application) Reserve(node *Node, ask *AllocationAsk) error {
 		return fmt.Errorf("reservation of ask exceeds pending repeat, pending ask repeat %d", ask.GetPendingAskRepeat())
 	}
 	// check if we can reserve the node before reserving on the app
-	if err := node.reserve(sa, ask); err != nil {
+	if err := node.Reserve(sa, ask); err != nil {
 		return err
 	}
 	sa.reservations[nodeReservation.getKey()] = nodeReservation
@@ -476,7 +479,7 @@ func (sa *Application) unReserveInternal(node *Node, ask *AllocationAsk) (int, e
 // Return the allocation reservations on any node.
 // The returned array is 0 or more keys into the reservations map.
 // No locking must be called while holding the lock
-func (sa *Application) isAskReserved(allocKey string) []string {
+func (sa *Application) IsAskReserved(allocKey string) []string {
 	reservationKeys := make([]string, 0)
 	if allocKey == "" {
 		return reservationKeys
@@ -495,7 +498,7 @@ func (sa *Application) isAskReserved(allocKey string) []string {
 func (sa *Application) canAskReserve(ask *AllocationAsk) bool {
 	allocKey := ask.AllocationKey
 	pending := int(ask.GetPendingAskRepeat())
-	resNumber := sa.isAskReserved(allocKey)
+	resNumber := sa.IsAskReserved(allocKey)
 	if len(resNumber) >= pending {
 		log.Logger().Debug("reservation exceeds repeats",
 			zap.String("askKey", allocKey),
@@ -518,7 +521,7 @@ func (sa *Application) sortRequests(ascending bool) {
 	}
 	// we might not have any requests
 	if len(sa.sortedRequests) > 0 {
-		SortAskByPriority(sa.sortedRequests, ascending)
+		sortAskByPriority(sa.sortedRequests, ascending)
 	}
 }
 
@@ -549,9 +552,9 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 	for _, request := range sa.sortedRequests {
 		// resource must fit in headroom otherwise skip the request
 		if !resources.FitIn(headRoom, request.AllocatedResource) {
-			// post scheduling events via the scheduler plugin
+			// post scheduling events via the event plugin
 			if eventCache := events.GetEventCache(); eventCache != nil {
-				message := fmt.Sprintf("Application %s does not fit into %s queue", request.ApplicationID, request.QueueName)
+				message := fmt.Sprintf("Application %s does not fit into %s queue", request.ApplicationID, sa.QueueName)
 				if event, err := events.CreateRequestEventRecord(request.AllocationKey, request.ApplicationID, "InsufficientQueueResources", message); err != nil {
 					log.Logger().Warn("Event creation failed",
 						zap.String("event message", message),
@@ -590,13 +593,12 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 				unreserveAsk = &AllocationAsk{
 					AllocationKey: reserve.askKey,
 					ApplicationID: sa.ApplicationID,
-					QueueName:     sa.queue.QueuePath,
 				}
 			} else {
 				unreserveAsk = ask
 			}
 			// remove the reservation as this should not be reserved
-			alloc := NewReservedAllocation(Unreserved, reserve.nodeID, unreserveAsk)
+			alloc := newReservedAllocation(Unreserved, reserve.nodeID, unreserveAsk)
 			return alloc
 		}
 		// check if this fits in the queue's head room
@@ -657,8 +659,8 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator interfaces.NodeIter
 	scoreReserved := math.Inf(1)
 	// check if the ask is reserved or not
 	allocKey := ask.AllocationKey
-	reservedAsks := sa.isAskReserved(allocKey)
-	allowReserve := len(reservedAsks) < int(ask.PendingRepeatAsk)
+	reservedAsks := sa.IsAskReserved(allocKey)
+	allowReserve := len(reservedAsks) < int(ask.pendingRepeatAsk)
 	for iterator.HasNext() {
 		node, ok := iterator.Next().(*Node)
 		if !ok {
@@ -723,13 +725,13 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator interfaces.NodeIter
 			zap.String("nodeID", nodeToReserve.NodeID),
 			zap.String("allocationKey", allocKey),
 			zap.Int("reservations", len(reservedAsks)),
-			zap.Int32("pendingRepeats", ask.PendingRepeatAsk))
+			zap.Int32("pendingRepeats", ask.pendingRepeatAsk))
 		// skip the node if conditions can not be satisfied
 		if !nodeToReserve.preReserveConditions(allocKey) {
 			return nil
 		}
 		// return reservation allocation and mark it as a reservation
-		alloc := NewReservedAllocation(Reserved, nodeToReserve.NodeID, ask)
+		alloc := newReservedAllocation(Reserved, nodeToReserve.NodeID, ask)
 		return alloc
 	}
 	// ask does not fit, skip to next ask
@@ -847,6 +849,14 @@ func (sa *Application) RemoveAllocation(uuid string) *Allocation {
 		// When app has the allocation, update map, and update allocated resource of the app
 		sa.allocatedResource = resources.Sub(sa.allocatedResource, alloc.AllocatedResource)
 		delete(sa.allocations, uuid)
+		// When the resource trackers are zero we should not expect anything to come in later.
+		if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) {
+			if err := sa.HandleApplicationEvent(waitApplication); err != nil {
+				log.Logger().Warn("Application state not changed to Waiting while removing some allocation(s)",
+					zap.String("currentState", sa.CurrentState()),
+					zap.Error(err))
+			}
+		}
 		return alloc
 	}
 
@@ -866,7 +876,14 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 	// cleanup allocated resource for app
 	sa.allocatedResource = resources.NewResource()
 	sa.allocations = make(map[string]*Allocation)
-
+	// When the resource trackers are zero we should not expect anything to come in later.
+	if resources.IsZero(sa.pending) {
+		if err := sa.HandleApplicationEvent(waitApplication); err != nil {
+			log.Logger().Warn("Application state not changed to Waiting while removing all allocations",
+				zap.String("currentState", sa.CurrentState()),
+				zap.Error(err))
+		}
+	}
 	return allocationsToRelease
 }
 
@@ -892,11 +909,4 @@ func (sa *Application) GetTag(tag string) string {
 		}
 	}
 	return tagVal
-}
-
-func (sa *Application) String() string {
-	sa.RLock()
-	defer sa.RUnlock()
-	return fmt.Sprintf("{ApplicationID: %s, Partition: %s, QueueName: %s, SubmissionTime: %x}",
-		sa.ApplicationID, sa.Partition, sa.QueueName, sa.SubmissionTime)
 }

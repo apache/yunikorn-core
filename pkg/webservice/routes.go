@@ -96,7 +96,7 @@ var webRoutes = routes{
 		getClusterConfig,
 	},
 
-	// endpoint to retrieve the current conf
+	// endpoint to update the current conf
 	route{
 		"Scheduler",
 		"PUT",

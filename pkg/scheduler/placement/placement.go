@@ -35,14 +35,16 @@ type AppPlacementManager struct {
 	rules       []rule
 	initialised bool
 	queueFn     func(string) *objects.Queue
-	lock        sync.RWMutex
+
+	sync.RWMutex
 }
 
 func NewPlacementManager(rules []configs.PlacementRule, queueFunc func(string) *objects.Queue) *AppPlacementManager {
 	m := &AppPlacementManager{}
-	//	if prov, ok := queueFunc.(common.QueueProvider); ok {
-	//		m.queueFn = prov.GetQueue
-	//	}
+	if queueFunc == nil {
+		log.Logger().Info("Placement manager created without queue function: not active")
+		return m
+	}
 	m.queueFn = queueFunc
 	if len(rules) > 0 {
 		if err := m.initialise(rules); err != nil {
@@ -66,8 +68,8 @@ func (m *AppPlacementManager) UpdateRules(rules []configs.PlacementRule) error {
 	}
 	// if there are no rules in the config we should turn off the placement manager
 	if len(rules) == 0 && m.initialised {
-		m.lock.Lock()
-		defer m.lock.Unlock()
+		m.Lock()
+		defer m.Unlock()
 		log.Logger().Info("Placement manager rules removed on config reload")
 		m.initialised = false
 		m.rules = make([]rule, 0)
@@ -77,8 +79,8 @@ func (m *AppPlacementManager) UpdateRules(rules []configs.PlacementRule) error {
 
 // Return the state of the placement manager
 func (m *AppPlacementManager) IsInitialised() bool {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
+	m.RLock()
+	defer m.RUnlock()
 	return m.initialised
 }
 
@@ -87,22 +89,27 @@ func (m *AppPlacementManager) initialise(rules []configs.PlacementRule) error {
 	log.Logger().Info("Building new rule list for placement manager")
 	// build temp list from new config
 	tempRules, err := m.buildRules(rules)
-	if err == nil {
-		m.lock.Lock()
-		defer m.lock.Unlock()
-		log.Logger().Info("Activated rule set in placement manager")
-		m.rules = tempRules
-		// all done manager is initialised
-		m.initialised = true
-		if log.IsDebugEnabled() {
-			for rule := range m.rules {
-				log.Logger().Debug("rule set",
-					zap.Int("ruleNumber", rule),
-					zap.String("ruleName", m.rules[rule].getName()))
-			}
+	if err != nil {
+		return err
+	}
+	m.Lock()
+	defer m.Unlock()
+	if m.queueFn == nil {
+		return fmt.Errorf("placement manager queue function nil")
+	}
+
+	log.Logger().Info("Activated rule set in placement manager")
+	m.rules = tempRules
+	// all done manager is initialised
+	m.initialised = true
+	if log.IsDebugEnabled() {
+		for rule := range m.rules {
+			log.Logger().Debug("rule set",
+				zap.Int("ruleNumber", rule),
+				zap.String("ruleName", m.rules[rule].getName()))
 		}
 	}
-	return err
+	return nil
 }
 
 // Build the rule set based on the config.
@@ -127,8 +134,8 @@ func (m *AppPlacementManager) buildRules(rules []configs.PlacementRule) ([]rule,
 
 func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
 	// Placement manager not initialised cannot place application, just return
-	m.lock.RLock()
-	defer m.lock.RUnlock()
+	m.RLock()
+	defer m.RUnlock()
 	if !m.initialised {
 		return nil
 	}

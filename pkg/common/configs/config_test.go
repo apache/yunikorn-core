@@ -199,7 +199,6 @@ func SerdeTest(t *testing.T, conf SchedulerConfig, description string) {
 	// convert the object to yaml
 	yamlConf, err := yaml.Marshal(&conf)
 	assert.NilError(t, err, "error marshalling yaml config '%s'", description)
-	t.Logf(string(yamlConf))
 
 	// unmarshal what we have just created
 	newConf := SchedulerConfig{}
@@ -210,7 +209,6 @@ func SerdeTest(t *testing.T, conf SchedulerConfig, description string) {
 
 	// marshal as json and we still should get the same objects
 	jsonConf, err := json.Marshal(conf)
-	t.Logf(string(jsonConf))
 	assert.NilError(t, err, "error marshalling yaml config '%s'", description)
 
 	jsonConf2, err := json.Marshal(newConf)

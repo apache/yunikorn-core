@@ -21,10 +21,10 @@ package scheduler
 import (
 	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 )
 
 const (
@@ -32,8 +32,8 @@ const (
 )
 
 type partitionManager struct {
-	psc      *PartitionContext
-	csc      *ClusterSchedulingContext
+	pc       *PartitionContext
+	cc       *ClusterContext
 	stop     bool
 	interval time.Duration
 }
@@ -49,13 +49,13 @@ func (manager partitionManager) Run() {
 	}
 
 	log.Logger().Info("starting partition manager",
-		zap.String("partition", manager.psc.Name),
+		zap.String("partition", manager.pc.Name),
 		zap.String("interval", manager.interval.String()))
 	// exit only when the partition this manager belongs to exits
 	for {
 		time.Sleep(manager.interval)
 		runStart := time.Now()
-		manager.cleanQueues(manager.psc.root)
+		manager.cleanQueues(manager.pc.root)
 		if manager.stop {
 			break
 		}
@@ -73,35 +73,35 @@ func (manager partitionManager) Stop() {
 
 // Remove drained managed and empty unmanaged queues. Perform the action recursively.
 // Only called internally and recursive, no locking
-func (manager partitionManager) cleanQueues(schedulingQueue *objects.Queue) {
-	if schedulingQueue == nil {
+func (manager partitionManager) cleanQueues(queue *objects.Queue) {
+	if queue == nil {
 		return
 	}
 	// check the children first: call recursive
-	if children := schedulingQueue.GetCopyOfChildren(); len(children) != 0 {
+	if children := queue.GetCopyOfChildren(); len(children) != 0 {
 		for _, child := range children {
 			manager.cleanQueues(child)
 		}
 	}
-	// when we have done the children (or have none) this schedulingQueue might be removable
-	if schedulingQueue.IsDraining() || !schedulingQueue.IsManaged() {
-		log.Logger().Debug("removing scheduling queue",
-			zap.String("queueName", schedulingQueue.QueuePath),
-			zap.String("partitionName", manager.psc.Name))
+	// when we have done the children (or have none) this queue might be removable
+	if queue.IsDraining() || !queue.IsManaged() {
+		log.Logger().Debug("removing queue",
+			zap.String("queueName", queue.QueuePath),
+			zap.String("partitionName", manager.pc.Name))
 		// make sure the queue is empty
-		if schedulingQueue.IsEmpty() {
+		if queue.IsEmpty() {
 			// all OK update the queue hierarchy and partition
-			if !schedulingQueue.RemoveQueue() {
-				log.Logger().Debug("unexpected failure removing the scheduling queue",
-					zap.String("partitionName", manager.psc.Name),
-					zap.String("schedulingQueue", schedulingQueue.QueuePath))
+			if !queue.RemoveQueue() {
+				log.Logger().Debug("unexpected failure removing the queue",
+					zap.String("partitionName", manager.pc.Name),
+					zap.String("queue", queue.QueuePath))
 			}
 		} else {
 			// TODO time out waiting for draining and removal
-			log.Logger().Debug("skip removing the scheduling queue",
+			log.Logger().Debug("skip removing the queue",
 				zap.String("reason", "there are existing assigned apps or leaf queues"),
-				zap.String("schedulingQueue", schedulingQueue.QueuePath),
-				zap.String("partitionName", manager.psc.Name))
+				zap.String("queue", queue.QueuePath),
+				zap.String("partitionName", manager.pc.Name))
 		}
 	}
 }
@@ -115,29 +115,29 @@ func (manager partitionManager) cleanQueues(schedulingQueue *objects.Queue) {
 //nolint:errcheck
 func (manager partitionManager) remove() {
 	log.Logger().Info("marking all queues for removal",
-		zap.String("partitionName", manager.psc.Name))
+		zap.String("partitionName", manager.pc.Name))
 	// mark all queues for removal
-	manager.psc.root.MarkQueueForRemoval()
+	manager.pc.root.MarkQueueForRemoval()
 	// remove applications: we do not care about return values or issues
-	apps := manager.psc.GetApplications()
+	apps := manager.pc.GetApplications()
 	log.Logger().Info("removing all applications from partition",
 		zap.Int("numOfApps", len(apps)),
-		zap.String("partitionName", manager.psc.Name))
+		zap.String("partitionName", manager.pc.Name))
 	for i := range apps {
 		_ = apps[i].HandleApplicationEvent(objects.KillApplication)
 		appID := apps[i].ApplicationID
-		_ = manager.psc.removeApplication(appID)
+		_ = manager.pc.removeApplication(appID)
 	}
 	// remove the nodes
-	nodes := manager.psc.GetNodes()
+	nodes := manager.pc.GetNodes()
 	log.Logger().Info("removing all nodes from partition",
 		zap.Int("numOfNodes", len(nodes)),
-		zap.String("partitionName", manager.psc.Name))
+		zap.String("partitionName", manager.pc.Name))
 	for i := range nodes {
-		_ = manager.psc.removeNode(nodes[i].NodeID)
+		_ = manager.pc.removeNode(nodes[i].NodeID)
 	}
 	log.Logger().Info("removing partition",
-		zap.String("partitionName", manager.psc.Name))
+		zap.String("partitionName", manager.pc.Name))
 	// remove the scheduler object
-	manager.csc.removeSchedulingPartition(manager.psc.Name)
+	manager.cc.removePartition(manager.pc.Name)
 }

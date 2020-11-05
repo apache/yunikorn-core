@@ -25,16 +25,16 @@ import (
 )
 
 type nodesResourceUsageMonitor struct {
-	done              chan bool
-	ticker            *time.Ticker
-	schedulingContext *ClusterSchedulingContext
+	done   chan bool
+	ticker *time.Ticker
+	cc     *ClusterContext
 }
 
-func newNodesResourceUsageMonitor(scheduler *ClusterSchedulingContext) *nodesResourceUsageMonitor {
+func newNodesResourceUsageMonitor(scheduler *ClusterContext) *nodesResourceUsageMonitor {
 	return &nodesResourceUsageMonitor{
-		done:              make(chan bool),
-		ticker:            time.NewTicker(1 * time.Second),
-		schedulingContext: scheduler,
+		done:   make(chan bool),
+		ticker: time.NewTicker(1 * time.Second),
+		cc:     scheduler,
 	}
 }
 
@@ -53,7 +53,7 @@ func (m *nodesResourceUsageMonitor) start() {
 }
 
 func (m *nodesResourceUsageMonitor) runOnce() {
-	for _, p := range m.schedulingContext.GetPartitionMapClone() {
+	for _, p := range m.cc.GetPartitionMapClone() {
 		usageMap := p.CalculateNodesResourceUsage()
 		if len(usageMap) > 0 {
 			for resourceName, usageBuckets := range usageMap {

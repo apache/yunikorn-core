@@ -102,7 +102,7 @@ func NewAppState() *fsm.FSM {
 			"enter_state": func(event *fsm.Event) {
 				app, ok := event.Args[0].(*Application)
 				if !ok {
-					log.Logger().Warn("The first argument is not an ApplicationInfo")
+					log.Logger().Warn("The first argument is not an Application")
 					return
 				}
 				log.Logger().Debug("Application state transition",

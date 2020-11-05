@@ -22,6 +22,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 )
@@ -120,7 +121,7 @@ type singleNodePreemptResult struct {
 func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionContext, preemptorQueue *preemptionQueueContext, node *objects.Node, candidate *objects.AllocationAsk,
 	headroomShortages map[string]*resources.Resource) *singleNodePreemptResult {
 	// If allocated resource can fit in the node, and no headroom shortage of preemptor queue, we can directly get it allocated. (lucky!)
-	if node.AllocateResource(candidate.AllocatedResource, true) {
+	if node.CanAllocate(candidate.AllocatedResource, true) {
 		log.Logger().Debug("No preemption needed candidate fits on node",
 			zap.String("nodeID", node.NodeID))
 		return &singleNodePreemptResult{
@@ -187,7 +188,7 @@ func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionCont
 	return nil
 }
 
-func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitionContext, nodeIterator NodeIterator, candidate *objects.AllocationAsk) *objects.Allocation {
+func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitionContext, nodeIterator interfaces.NodeIterator, candidate *objects.AllocationAsk) *objects.Allocation {
 	if preemptionPartitionContext == nil {
 		return nil
 	}
@@ -204,7 +205,11 @@ func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitio
 	var preemptResult *singleNodePreemptResult = nil
 
 	for nodeIterator.HasNext() {
-		node := nodeIterator.Next()
+		node, ok := nodeIterator.Next().(*objects.Node)
+		if !ok {
+			log.Logger().Debug("Node iterator failed to return a node")
+			return nil
+		}
 		if preemptResult = trySurgicalPreemptionOnNode(preemptionPartitionContext, preemptorQueue, node, candidate, headroomShortages); preemptResult != nil {
 			break
 		}

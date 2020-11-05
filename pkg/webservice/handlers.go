@@ -27,7 +27,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
@@ -36,6 +35,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
@@ -462,59 +462,54 @@ func updateConfig(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	requestBytes, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		buildUpdateResponse(false, err.Error(), w)
+		buildUpdateResponse(err, w)
 		return
 	}
 	// validation is already called when loading the config
-	schedulerConf, err := configs.LoadSchedulerConfigFromByteArray(requestBytes)
+	var newConf *configs.SchedulerConfig
+	newConf, err = configs.LoadSchedulerConfigFromByteArray(requestBytes)
 	if err != nil {
-		buildUpdateResponse(false, err.Error(), w)
+		buildUpdateResponse(err, w)
 		return
 	}
 	// This fails if we have more than 1 RM
 	// Do not think the plugins will even work with multiple RMs
-	oldConf, err := updateConfiguration(string(requestBytes))
+	var oldConf string
+	oldConf, err = updateConfiguration(string(requestBytes))
 	if err != nil {
-		buildUpdateResponse(false, err.Error(), w)
+		buildUpdateResponse(err, w)
 		return
 	}
 	// This fails if we have no RM registered or more than 1 RM
-	err = schedulerContext.UpdateSchedulerConfig(schedulerConf)
+	err = schedulerContext.UpdateSchedulerConfig(newConf)
 	if err != nil {
-		errorMsg := err.Error()
 		// revert configmap changes
-		_, err := updateConfiguration(oldConf)
-		if err != nil {
-			msg := "Configuration rollback failed" + "\n" + err.Error()
-			errorMsg += "\n" + msg
-			log.Logger().Error(msg)
+		_, err2 := updateConfiguration(oldConf)
+		if err2 != nil {
+			err = fmt.Errorf("update failed: %s\nupdate rollback failed: %s", err.Error(), err2.Error())
 		}
-		buildUpdateResponse(false, errorMsg, w)
+		buildUpdateResponse(err, w)
 		return
 	}
-	buildUpdateResponse(true, "", w)
+	buildUpdateResponse(nil, w)
 }
 
-func buildUpdateResponse(success bool, reason string, w http.ResponseWriter) {
-	if len(reason) > 0 {
-		log.Logger().Info("Result of configuration update: ",
-			zap.Bool("Result", success),
-			zap.String("Reason in case of failure", reason))
-	}
-
-	if success {
+func buildUpdateResponse(err error, w http.ResponseWriter) {
+	if err == nil {
 		w.WriteHeader(http.StatusOK)
-		_, err := w.Write([]byte("Configuration updated successfully"))
-		if err != nil {
+		if _, err = w.Write([]byte("Configuration updated successfully")); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	} else {
-		http.Error(w, reason, http.StatusConflict)
+		log.Logger().Info("Configuration update failed with errors",
+			zap.Error(err))
+		http.Error(w, err.Error(), http.StatusConflict)
 	}
 }
+
 func updateConfiguration(conf string) (string, error) {
 	if plugin := plugins.GetConfigPlugin(); plugin != nil {
-		// checking predicates
+		// use the plugin to update the configuration in the configMap
 		resp := plugin.UpdateConfiguration(&si.UpdateConfigurationRequest{
 			Configs: conf,
 		})

@@ -103,13 +103,13 @@ func TestBasicPreemption(t *testing.T) {
 	ms.mockRM.waitForAcceptedApplication(t, "app-2", 1000)
 
 	// Check scheduling queue root
-	schedulerQueueRoot := ms.getSchedulingQueue("root")
-	schedulerQueueA := ms.getSchedulingQueue("root.a")
-	schedulerQueueB := ms.getSchedulingQueue("root.b")
+	rootQ := ms.getQueue("root")
+	queueA := ms.getQueue("root.a")
+	queueB := ms.getQueue("root.b")
 
 	// Get scheduling app
-	schedulingApp1 := ms.getSchedulingApplication("app-1")
-	schedulingApp2 := ms.getSchedulingApplication("app-2")
+	app1 := ms.getApplication("app-1")
+	app2 := ms.getApplication("app-2")
 
 	// Ask (10, 10) resources * 20, which will fulfill the cluster.
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -134,9 +134,9 @@ func TestBasicPreemption(t *testing.T) {
 	}
 
 	// Make sure resource requests arrived queue
-	waitForPendingQueueResource(t, schedulerQueueA, 200, 1000)
-	waitForPendingQueueResource(t, schedulerQueueRoot, 200, 1000)
-	waitForPendingAppResource(t, schedulingApp1, 200, 1000)
+	waitForPendingQueueResource(t, queueA, 200, 1000)
+	waitForPendingQueueResource(t, rootQ, 200, 1000)
+	waitForPendingAppResource(t, app1, 200, 1000)
 
 	// Try to schedule 40 allocations
 	scheduler.MultiStepSchedule(20)
@@ -145,10 +145,10 @@ func TestBasicPreemption(t *testing.T) {
 	ms.mockRM.waitForAllocations(t, 20, 1000)
 
 	// Make sure pending resource updated to 0
-	waitForPendingQueueResource(t, schedulerQueueA, 0, 1000)
+	waitForPendingQueueResource(t, queueA, 0, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Assert(t, schedulerQueueA.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 200)
+	assert.Assert(t, queueA.GetAllocatedResource().Resources[resources.MEMORY] == 200)
 
 	// Application-2 Ask for 20 resources
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -172,21 +172,21 @@ func TestBasicPreemption(t *testing.T) {
 		t.Error(err.Error())
 	}
 
-	waitForPendingQueueResource(t, schedulerQueueB, 1000, 1000)
+	waitForPendingQueueResource(t, queueB, 1000, 1000)
 
 	// Now app-1 uses 20 resource, and queue-a's max = 150, so it can get two 50 container allocated.
 	scheduler.MultiStepSchedule(16)
 
 	// Check pending resource, should be still 1000, nothing will be allocated because cluster is full
-	waitForPendingQueueResource(t, schedulerQueueB, 1000, 1000)
+	waitForPendingQueueResource(t, queueB, 1000, 1000)
 
 	// Check allocated resources of queue, should be 0
-	assert.Assert(t, schedulerQueueB.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 0)
+	assert.Assert(t, queueB.GetAllocatedResource().Resources[resources.MEMORY] == 0)
 
 	// Now we do a preemption.
 	scheduler.SingleStepPreemption()
 
 	// Check pending resource, should be 900 now
-	waitForPendingQueueResource(t, schedulerQueueB, 900, 1000)
-	waitForPendingAppResource(t, schedulingApp2, 900, 1000)
+	waitForPendingQueueResource(t, queueB, 900, 1000)
+	waitForPendingAppResource(t, app2, 900, 1000)
 }

@@ -24,13 +24,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -62,20 +61,20 @@ partitions:
 	configChecksum := configs.ConfigContext.Get("policygroup").Checksum
 
 	// Check queues of cache and scheduler.
-	partitionInfo := ms.clusterInfo.GetPartition(partition)
-	assert.Assert(t, partitionInfo.Root.GetMaxResource() == nil, "partition info max resource not nil, first load")
+	partitionInfo := ms.scheduler.GetClusterContext().GetPartition(partition)
+	assert.Assert(t, partitionInfo.GetTotalPartitionResource() == nil, "partition info max resource not nil, first load")
 
 	// Check scheduling queue root
-	schedulerQueueRoot := ms.getSchedulingQueue("root")
-	assert.Assert(t, schedulerQueueRoot.QueueInfo.GetMaxResource() == nil, "root scheduling queue max resource not nil, first load")
+	rootQ := ms.getQueue("root")
+	assert.Assert(t, rootQ.GetMaxResource() == nil, "root scheduling queue max resource not nil, first load")
 
 	// Check scheduling queue root.base
-	schedulerQueue := ms.getSchedulingQueue("root.base")
-	assert.Equal(t, int(schedulerQueue.QueueInfo.GetMaxResource().Resources[resources.MEMORY]), 150, "max resource on leaf not set correctly")
+	queue := ms.getQueue("root.base")
+	assert.Equal(t, int(queue.GetMaxResource().Resources[resources.MEMORY]), 150, "max resource on leaf not set correctly")
 
 	// Check the queue which will be removed
-	schedulerQueue = ms.getSchedulingQueue("root.tobedeleted")
-	assert.Assert(t, schedulerQueue.QueueInfo.IsRunning(), "child queue root.tobedeleted is not in running state")
+	queue = ms.getQueue("root.tobedeleted")
+	assert.Assert(t, queue.IsRunning(), "child queue root.tobedeleted is not in running state")
 
 	configData = `
 partitions:
@@ -111,36 +110,36 @@ partitions:
 	}
 
 	// Check queues of cache and scheduler.
-	partitionInfo = ms.clusterInfo.GetPartition(partition)
-	assert.Assert(t, partitionInfo.Root.GetMaxResource() == nil, "partition info max resource not nil, reload")
+	partitionInfo = ms.scheduler.GetClusterContext().GetPartition(partition)
+	assert.Assert(t, partitionInfo.GetTotalPartitionResource() == nil, "partition info max resource not nil, reload")
 
 	// Check scheduling queue root
-	schedulerQueueRoot = ms.getSchedulingQueue("root")
-	assert.Assert(t, schedulerQueueRoot.QueueInfo.GetMaxResource() == nil, "root scheduling queue max resource not nil, reload")
+	rootQ = ms.getQueue("root")
+	assert.Assert(t, rootQ.GetMaxResource() == nil, "root scheduling queue max resource not nil, reload")
 
 	// Check scheduling queue root.base
-	schedulerQueue = ms.getSchedulingQueue("root.base")
-	assert.Equal(t, int(schedulerQueue.QueueInfo.GetMaxResource().Resources[resources.MEMORY]), 1000, "max resource on leaf not set correctly")
-	assert.Equal(t, int(schedulerQueue.QueueInfo.GetGuaranteedResource().Resources[resources.VCORE]), 250, "guaranteed resource on leaf not set correctly")
+	queue = ms.getQueue("root.base")
+	assert.Equal(t, int(queue.GetMaxResource().Resources[resources.MEMORY]), 1000, "max resource on leaf not set correctly")
+	assert.Equal(t, int(queue.GetGuaranteedResource().Resources[resources.VCORE]), 250, "guaranteed resource on leaf not set correctly")
 
-	schedulerQueue = ms.getSchedulingQueue("root.tobeadded")
-	assert.Assert(t, schedulerQueue != nil, "scheduling queue root.tobeadded is not found")
+	queue = ms.getQueue("root.tobeadded")
+	assert.Assert(t, queue != nil, "scheduling queue root.tobeadded is not found")
 	// check the removed queue state
-	schedulerQueue = ms.getSchedulingQueue("root.tobedeleted")
-	assert.Assert(t, schedulerQueue.QueueInfo.IsDraining(), "child queue root.tobedeleted is not in draining state")
+	queue = ms.getQueue("root.tobedeleted")
+	assert.Assert(t, queue.IsDraining(), "child queue root.tobedeleted is not in draining state")
 
 	// Check queues of cache and scheduler for the newly added partition
-	partitionInfo = ms.clusterInfo.GetPartition("[rm:123]gpu")
+	partitionInfo = ms.scheduler.GetClusterContext().GetPartition("[rm:123]gpu")
 	assert.Assert(t, partitionInfo != nil, "gpu partition not found")
-	assert.Assert(t, partitionInfo.Root.GetMaxResource() == nil, "GPU partition info max resource not nil")
+	assert.Assert(t, partitionInfo.GetTotalPartitionResource() == nil, "GPU partition info max resource not nil")
 
 	// Check scheduling queue root
-	schedulerQueueRoot = ms.getSchedulingQueuePartition("root", "[rm:123]gpu")
-	assert.Assert(t, schedulerQueueRoot.QueueInfo.GetMaxResource() == nil, "max resource on root set")
+	rootQ = ms.getPartitionQueue("root", "[rm:123]gpu")
+	assert.Assert(t, rootQ.GetMaxResource() == nil, "max resource on root set")
 
 	// Check scheduling queue root.production
-	schedulerQueue = ms.getSchedulingQueuePartition("root.production", "[rm:123]gpu")
-	assert.Assert(t, schedulerQueue != nil, "New partition: scheduling queue root.production is not found")
+	queue = ms.getPartitionQueue("root.production", "[rm:123]gpu")
+	assert.Assert(t, queue != nil, "New partition: scheduling queue root.production is not found")
 }
 
 // Test basic interactions from rm proxy to cache and to scheduler.
@@ -169,16 +168,16 @@ partitions:
 	leafName := "root.singleleaf"
 	appID := "app-1"
 	// Check queues of cache and scheduler.
-	partitionInfo := ms.clusterInfo.GetPartition(partition)
-	assert.Assert(t, partitionInfo.Root.GetMaxResource() == nil, "partition info max resource nil")
+	partitionInfo := ms.scheduler.GetClusterContext().GetPartition(partition)
+	assert.Assert(t, partitionInfo.GetTotalPartitionResource() == nil, "partition info max resource nil")
 
 	// Check scheduling queue root
-	root := ms.getSchedulingQueue("root")
-	assert.Assert(t, root.QueueInfo.GetMaxResource() == nil, "root queue max resource should be nil")
+	root := ms.getQueue("root")
+	assert.Assert(t, root.GetMaxResource() == nil, "root queue max resource should be nil")
 
 	// Check scheduling queue singleleaf
-	leaf := ms.getSchedulingQueue(leafName)
-	assert.Equal(t, int(leaf.QueueInfo.GetMaxResource().Resources[resources.MEMORY]), 150, "%s config not set correct", leafName)
+	leaf := ms.getQueue(leafName)
+	assert.Equal(t, int(leaf.GetMaxResource().Resources[resources.MEMORY]), 150, "%s config not set correct", leafName)
 
 	// Register a node, and add apps
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -214,14 +213,14 @@ partitions:
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
 	// Get scheduling app
-	schedulingApp := ms.getSchedulingApplication(appID)
+	schedulingApp := ms.getApplication(appID)
 
 	// Verify app initial state
-	var app01 *cache.ApplicationInfo
+	var app01 *objects.Application
 	app01, err = getApplicationInfoFromPartition(partitionInfo, appID)
 	assert.NilError(t, err, "application not found")
 
-	assert.Equal(t, app01.GetApplicationState(), objects.New.String())
+	assert.Equal(t, app01.CurrentState(), objects.New.String())
 
 	err = ms.proxy.Update(&si.UpdateRequest{
 		Asks: []*si.AllocationAsk{
@@ -246,7 +245,7 @@ partitions:
 	waitForPendingQueueResource(t, leaf, 20, 1000)
 	waitForPendingQueueResource(t, root, 20, 1000)
 	waitForPendingAppResource(t, schedulingApp, 20, 1000)
-	assert.Equal(t, app01.GetApplicationState(), objects.Accepted.String())
+	assert.Equal(t, app01.CurrentState(), objects.Accepted.String())
 
 	ms.scheduler.MultiStepSchedule(16)
 
@@ -258,15 +257,15 @@ partitions:
 	waitForPendingAppResource(t, schedulingApp, 0, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Equal(t, int(leaf.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY]), 20, "leaf allocated memory incorrect")
-	assert.Equal(t, int(root.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY]), 20, "root allocated memory incorrect")
-	assert.Equal(t, int(schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY]), 20, "app allocated memory incorrect")
+	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[resources.MEMORY]), 20, "leaf allocated memory incorrect")
+	assert.Equal(t, int(root.GetAllocatedResource().Resources[resources.MEMORY]), 20, "root allocated memory incorrect")
+	assert.Equal(t, int(schedulingApp.GetAllocatedResource().Resources[resources.MEMORY]), 20, "app allocated memory incorrect")
 
 	// once we start to process allocation asks from this app, verify the state again
-	assert.Equal(t, app01.GetApplicationState(), objects.Running.String())
+	assert.Equal(t, app01.CurrentState(), objects.Running.String())
 
 	// Check allocated resources of nodes
-	waitForNodesAllocatedResource(t, ms.clusterInfo, ms.partitionName, []string{"node-1:1234", "node-2:1234"}, 20, 1000)
+	waitForNodesAllocatedResource(t, ms.scheduler.GetClusterContext(), ms.partitionName, []string{"node-1:1234", "node-2:1234"}, 20, 1000)
 
 	// Ask for two more resources
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -315,12 +314,12 @@ partitions:
 	waitForPendingAppResource(t, schedulingApp, 200, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Equal(t, int(leaf.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY]), 120, "leaf allocated memory incorrect")
-	assert.Equal(t, int(root.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY]), 120, "root allocated memory incorrect")
-	assert.Equal(t, int(schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY]), 120, "app allocated memory incorrect")
+	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[resources.MEMORY]), 120, "leaf allocated memory incorrect")
+	assert.Equal(t, int(root.GetAllocatedResource().Resources[resources.MEMORY]), 120, "root allocated memory incorrect")
+	assert.Equal(t, int(schedulingApp.GetAllocatedResource().Resources[resources.MEMORY]), 120, "app allocated memory incorrect")
 
 	// Check allocated resources of nodes
-	waitForNodesAllocatedResource(t, ms.clusterInfo, partition, []string{"node-1:1234", "node-2:1234"}, 120, 1000)
+	waitForNodesAllocatedResource(t, ms.scheduler.GetClusterContext(), partition, []string{"node-1:1234", "node-2:1234"}, 120, 1000)
 
 	updateRequest := &si.UpdateRequest{
 		Releases: &si.AllocationReleasesRequest{
@@ -350,9 +349,9 @@ partitions:
 	waitForPendingAppResource(t, schedulingApp, 200, 1000)
 
 	// Check allocated resources of queues, apps should be 0 now
-	assert.Equal(t, int(leaf.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY]), 0, "leaf allocated memory incorrect")
-	assert.Equal(t, int(root.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY]), 0, "root allocated memory incorrect")
-	assert.Equal(t, int(schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY]), 0, "app allocated memory incorrect")
+	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[resources.MEMORY]), 0, "leaf allocated memory incorrect")
+	assert.Equal(t, int(root.GetAllocatedResource().Resources[resources.MEMORY]), 0, "root allocated memory incorrect")
+	assert.Equal(t, int(schedulingApp.GetAllocatedResource().Resources[resources.MEMORY]), 0, "app allocated memory incorrect")
 
 	// Release asks
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -454,13 +453,13 @@ partitions:
 	ms.mockRM.waitForAllocations(t, 15, 1000)
 
 	// Check scheduling queue root
-	schedulerQueueRoot := ms.getSchedulingQueue("root")
+	schedulerQueueRoot := ms.getQueue("root")
 
 	// Check scheduling leaf queue
-	schedulerQueue := ms.getSchedulingQueue(leafName)
+	schedulerQueue := ms.getQueue(leafName)
 
 	// Get scheduling app
-	schedulingApp := ms.getSchedulingApplication(appID)
+	schedulingApp := ms.getApplication(appID)
 
 	// Make sure pending resource decreased to 50
 	waitForPendingQueueResource(t, schedulerQueue, 50, 1000)
@@ -468,12 +467,12 @@ partitions:
 	waitForPendingAppResource(t, schedulingApp, 50, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Equal(t, int(schedulerQueue.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY]), 150, "leaf allocated memory incorrect")
-	assert.Equal(t, int(schedulerQueueRoot.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY]), 150, "root allocated memory incorrect")
-	assert.Equal(t, int(schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY]), 150, "app allocated memory incorrect")
+	assert.Equal(t, int(schedulerQueue.GetAllocatedResource().Resources[resources.MEMORY]), 150, "leaf allocated memory incorrect")
+	assert.Equal(t, int(schedulerQueueRoot.GetAllocatedResource().Resources[resources.MEMORY]), 150, "root allocated memory incorrect")
+	assert.Equal(t, int(schedulingApp.GetAllocatedResource().Resources[resources.MEMORY]), 150, "app allocated memory incorrect")
 
 	// Check allocated resources of nodes
-	waitForNodesAllocatedResource(t, ms.clusterInfo, partition, []string{"node-1:1234", "node-2:1234"}, 150, 1000)
+	waitForNodesAllocatedResource(t, ms.scheduler.GetClusterContext(), partition, []string{"node-1:1234", "node-2:1234"}, 150, 1000)
 }
 
 func TestFairnessAllocationForQueues(t *testing.T) {
@@ -564,15 +563,15 @@ partitions:
 	assert.NilError(t, err, "UpdateRequest 2 failed")
 
 	// Check scheduling queue root
-	schedulerQueueRoot := ms.getSchedulingQueue("root")
+	schedulerQueueRoot := ms.getQueue("root")
 
 	// Check scheduling leaf queue app1
-	schedulerQueue1 := ms.getSchedulingQueue(leafApp1)
-	app1 := ms.getSchedulingApplication(app1ID)
+	schedulerQueue1 := ms.getQueue(leafApp1)
+	app1 := ms.getApplication(app1ID)
 
 	// Check scheduling leaf queue app2
-	schedulerQueue2 := ms.getSchedulingQueue(leafApp2)
-	app2 := ms.getSchedulingApplication(app2ID)
+	schedulerQueue2 := ms.getQueue(leafApp2)
+	app2 := ms.getApplication(app2ID)
 
 	// Check pending resource, should be 100 (same)
 	waitForPendingQueueResource(t, schedulerQueue1, 200, 1000)
@@ -678,14 +677,14 @@ partitions:
 	assert.NilError(t, err, "UpdateRequest 2 failed")
 
 	// Check scheduling queue root
-	schedulerQueueRoot := ms.getSchedulingQueue("root")
+	schedulerQueueRoot := ms.getQueue("root")
 
 	// Check scheduling queue a
-	schedulerQueue := ms.getSchedulingQueue(leafName)
+	schedulerQueue := ms.getQueue(leafName)
 
 	// Get scheduling app
-	schedulingApp1 := ms.getSchedulingApplication("app-1")
-	schedulingApp2 := ms.getSchedulingApplication("app-2")
+	schedulingApp1 := ms.getApplication("app-1")
+	schedulingApp2 := ms.getApplication("app-2")
 
 	waitForPendingQueueResource(t, schedulerQueue, 400, 1000)
 	waitForPendingQueueResource(t, schedulerQueueRoot, 400, 1000)
@@ -703,8 +702,8 @@ partitions:
 	waitForPendingAppResource(t, schedulingApp2, 100, 1000)
 
 	// Both apps got 100 resources,
-	assert.Equal(t, int(schedulingApp1.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY]), 100, "app1 allocated resource incorrect")
-	assert.Equal(t, int(schedulingApp2.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY]), 100, "app2 allocated resource incorrect")
+	assert.Equal(t, int(schedulingApp1.GetAllocatedResource().Resources[resources.MEMORY]), 100, "app1 allocated resource incorrect")
+	assert.Equal(t, int(schedulingApp2.GetAllocatedResource().Resources[resources.MEMORY]), 100, "app2 allocated resource incorrect")
 }
 
 func TestRejectApplications(t *testing.T) {
@@ -856,7 +855,7 @@ partitions:
 
 			assert.NilError(t, err, "UpdateRequest 2 failed in run %s", param.name)
 
-			schedulingQueue := ms.getSchedulingQueue(param.leafQueue)
+			schedulingQueue := ms.getQueue(param.leafQueue)
 
 			waitForPendingQueueResource(t, schedulingQueue, 120, 1000)
 
@@ -864,13 +863,13 @@ partitions:
 
 			// 100 memory gets allocated, 20 pending because the capacity is 100
 			waitForPendingQueueResource(t, schedulingQueue, 20, 1000)
-			app1 := ms.getSchedulingApplication("app-1")
+			app1 := ms.getApplication("app-1")
 			if app1 == nil {
 				t.Fatal("application 'app-1' not found in cache")
 			}
 			waitForAllocatedAppResource(t, app1, 100, 1000)
 
-			assert.Equal(t, len(app1.ApplicationInfo.GetAllAllocations()), 10, "number of app allocations incorrect")
+			assert.Equal(t, len(app1.GetAllAllocations()), 10, "number of app allocations incorrect")
 			assert.Equal(t, int(app1.GetAllocatedResource().Resources[resources.MEMORY]), 100, "app allocated resource incorrect")
 			assert.Equal(t, len(ms.mockRM.getAllocations()), 10, "number of RM allocations incorrect")
 
@@ -955,13 +954,13 @@ partitions:
 	ms.mockRM.waitForAcceptedNode(t, node2ID, 1000)
 
 	// verify scheduling nodes
-	context := ms.scheduler.GetClusterSchedulingContext()
+	context := ms.scheduler.GetClusterContext()
 	waitForNewSchedulerNode(t, context, node1ID, partition, 1000)
 	waitForNewSchedulerNode(t, context, node2ID, partition, 1000)
 
 	// verify all nodes are schedule-able
-	assert.Equal(t, ms.clusterInfo.GetPartition(partition).GetNode(node1ID).IsSchedulable(), true)
-	assert.Equal(t, ms.clusterInfo.GetPartition(partition).GetNode(node2ID).IsSchedulable(), true)
+	assert.Equal(t, ms.scheduler.GetClusterContext().GetPartition(partition).GetNode(node1ID).IsSchedulable(), true)
+	assert.Equal(t, ms.scheduler.GetClusterContext().GetPartition(partition).GetNode(node2ID).IsSchedulable(), true)
 
 	// send RM node action DRAIN_NODE (move to unschedulable)
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -978,8 +977,8 @@ partitions:
 	assert.NilError(t, err, "UpdateRequest 2 failed")
 
 	err = common.WaitFor(10*time.Millisecond, 10*time.Second, func() bool {
-		return !ms.clusterInfo.GetPartition(partition).GetNode(node1ID).IsSchedulable() &&
-			ms.clusterInfo.GetPartition(partition).GetNode(node2ID).IsSchedulable()
+		return !ms.scheduler.GetClusterContext().GetPartition(partition).GetNode(node1ID).IsSchedulable() &&
+			ms.scheduler.GetClusterContext().GetPartition(partition).GetNode(node2ID).IsSchedulable()
 	})
 
 	assert.NilError(t, err, "timed out waiting for node in cache")
@@ -999,8 +998,8 @@ partitions:
 	assert.NilError(t, err, "UpdateRequest 3 failed")
 
 	err = common.WaitFor(10*time.Millisecond, 10*time.Second, func() bool {
-		return ms.clusterInfo.GetPartition(partition).GetNode(node1ID).IsSchedulable() &&
-			ms.clusterInfo.GetPartition(partition).GetNode(node2ID).IsSchedulable()
+		return ms.scheduler.GetClusterContext().GetPartition(partition).GetNode(node1ID).IsSchedulable() &&
+			ms.scheduler.GetClusterContext().GetPartition(partition).GetNode(node2ID).IsSchedulable()
 	})
 
 	assert.NilError(t, err, "timed out waiting for node in cache")
@@ -1113,14 +1112,14 @@ partitions:
 	assert.NilError(t, err, "UpdateRequest 2 failed")
 
 	// Check scheduling queue root
-	schedulerQueueRoot := ms.getSchedulingQueue("root")
+	schedulerQueueRoot := ms.getQueue("root")
 
 	// Check scheduling queue a
-	schedulingQueue := ms.getSchedulingQueue(leafName)
+	schedulingQueue := ms.getQueue(leafName)
 
 	// Get scheduling app
-	schedulingApp1 := ms.getSchedulingApplication(app1ID)
-	schedulingApp2 := ms.getSchedulingApplication(app2ID)
+	schedulingApp1 := ms.getApplication(app1ID)
+	schedulingApp2 := ms.getApplication(app2ID)
 
 	waitForPendingQueueResource(t, schedulingQueue, 400, 1000)
 	waitForPendingQueueResource(t, schedulerQueueRoot, 400, 1000)
@@ -1130,8 +1129,8 @@ partitions:
 	ms.scheduler.MultiStepSchedule(9)
 	ms.mockRM.waitForAllocations(t, 9, 1000)
 
-	node1Alloc := ms.clusterInfo.GetPartition(partition).GetNode("node-1:1234").GetAllocatedResource().Resources[resources.MEMORY]
-	node2Alloc := ms.clusterInfo.GetPartition(partition).GetNode("node-2:1234").GetAllocatedResource().Resources[resources.MEMORY]
+	node1Alloc := ms.scheduler.GetClusterContext().GetPartition(partition).GetNode("node-1:1234").GetAllocatedResource().Resources[resources.MEMORY]
+	node2Alloc := ms.scheduler.GetClusterContext().GetPartition(partition).GetNode("node-2:1234").GetAllocatedResource().Resources[resources.MEMORY]
 	// we do not know which node was chosen so we need to check:
 	// node1 == 90 && node2 == 0  || node1 == 0 && node2 == 90
 	if !(node1Alloc == 90 && node2Alloc == 0) && !(node1Alloc == 0 && node2Alloc == 90) {
@@ -1188,7 +1187,7 @@ partitions:
 		ms.mockRM.waitForAcceptedNode(t, node.NodeID, 1000)
 	}
 
-	context := ms.scheduler.GetClusterSchedulingContext()
+	context := ms.scheduler.GetClusterContext()
 	for _, node := range nodes {
 		waitForNewSchedulerNode(t, context, node.NodeID, partition, 1000)
 	}
@@ -1213,8 +1212,8 @@ partitions:
 
 	assert.NilError(t, err, "UpdateRequest failed")
 
-	schedulerQueue := ms.getSchedulingQueue(leafName)
-	schedulingApp := ms.getSchedulingApplication(appID)
+	schedulerQueue := ms.getQueue(leafName)
+	schedulingApp := ms.getApplication(appID)
 
 	waitForPendingQueueResource(t, schedulerQueue, 200, 1000)
 	waitForPendingAppResource(t, schedulingApp, 200, 1000)
@@ -1225,11 +1224,11 @@ partitions:
 	ms.mockRM.waitForAllocations(t, 20, 1000)
 	waitForPendingQueueResource(t, schedulerQueue, 0, 1000)
 	waitForPendingAppResource(t, schedulingApp, 0, 1000)
-	assert.Equal(t, int(schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY]), 200)
+	assert.Equal(t, int(schedulingApp.GetAllocatedResource().Resources[resources.MEMORY]), 200)
 
 	// Verify 2 allocations for every node
 	for _, node := range nodes {
-		schedulingNode := ms.scheduler.GetClusterSchedulingContext().GetSchedulingNode(node.NodeID, partition)
+		schedulingNode := ms.scheduler.GetClusterContext().GetNode(node.NodeID, partition)
 		assert.Equal(t, int(schedulingNode.GetAllocatedResource().Resources[resources.MEMORY]), 20, "node %s did not get 2 allocated", schedulingNode.NodeID)
 	}
 }

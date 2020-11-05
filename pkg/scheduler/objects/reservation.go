@@ -41,9 +41,9 @@ type reservation struct {
 func newReservation(node *Node, app *Application, ask *AllocationAsk, appBased bool) *reservation {
 	if ask == nil || app == nil || node == nil {
 		log.Logger().Warn("Illegal reservation requested: one input is nil",
-			zap.Any("node", node),
-			zap.Any("app", app),
-			zap.Any("ask", ask))
+			zap.String("node", node.String()),
+			zap.String("app", app.String()),
+			zap.String("ask", ask.String()))
 		return nil
 	}
 	res := &reservation{

@@ -25,23 +25,7 @@ import (
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
-
-func newAllocationAsk(allocKey, appID string, res *resources.Resource) *AllocationAsk {
-	return newAllocationAskRepeat(allocKey, appID, res, 1)
-}
-
-func newAllocationAskRepeat(allocKey, appID string, res *resources.Resource, repeat int) *AllocationAsk {
-	ask := &si.AllocationAsk{
-		AllocationKey:  allocKey,
-		ApplicationID:  appID,
-		PartitionName:  "default",
-		ResourceAsk:    res.ToProto(),
-		MaxAllocations: int32(repeat),
-	}
-	return NewAllocationAsk(ask)
-}
 
 func TestPendingAskRepeat(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})

@@ -71,11 +71,24 @@ func NewNode(proto *si.NewNodeInfo) *Node {
 		schedulable:       true,
 	}
 	// initialise available resources
-	sn.availableResource = resources.Sub(sn.totalResource, sn.occupiedResource)
+	var err error
+	sn.availableResource, err = resources.SubErrorNegative(sn.totalResource, sn.occupiedResource)
+	if err != nil {
+		log.Logger().Error("New node created with no available resources",
+			zap.Error(err))
+	}
 
 	sn.initializeAttribute(proto.Attributes)
 
 	return sn
+}
+
+func (sn *Node) String() string {
+	if sn == nil {
+		return "node is nil"
+	}
+	return fmt.Sprintf("NodeID %s, Partition %s, Schedulable %t, Total %s, Allocated %s, #allocations %d",
+		sn.NodeID, sn.Partition, sn.schedulable, sn.totalResource, sn.allocatedResource, len(sn.allocations))
 }
 
 // Set the attributes and fast access fields.
@@ -148,6 +161,14 @@ func (sn *Node) refreshAvailableResource() {
 	sn.availableResource = sn.totalResource.Clone()
 	sn.availableResource.SubFrom(sn.allocatedResource)
 	sn.availableResource.SubFrom(sn.occupiedResource)
+	// check if any quantity is negative: a nil resource is all 0's
+	if resources.StrictlyGreaterThanOrEquals(sn.availableResource, nil) {
+		log.Logger().Warn("Node update triggered over allocated node",
+			zap.String("available", sn.availableResource.String()),
+			zap.String("total", sn.totalResource.String()),
+			zap.String("occupied", sn.occupiedResource.String()),
+			zap.String("allocated", sn.allocatedResource.String()))
+	}
 }
 
 // Return the allocation based on the uuid of the allocation.
@@ -266,7 +287,7 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 	defer sn.Unlock()
 	// check if this still fits: it might have changed since pre check
 	res := alloc.AllocatedResource
-	if resources.FitIn(res, sn.availableResource) {
+	if resources.FitIn(sn.availableResource, res) {
 		sn.allocations[alloc.UUID] = alloc
 		sn.allocatedResource.AddTo(res)
 		sn.availableResource.SubFrom(res)
@@ -279,9 +300,7 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 // Taking into account resources marked for preemption if applicable.
 // If the proposed allocation does not fit false is returned.
 // TODO: remove when updating preemption
-func (sn *Node) AllocateResource(res *resources.Resource, preemptionPhase bool) bool {
-	sn.Lock()
-	defer sn.Unlock()
+func (sn *Node) CanAllocate(res *resources.Resource, preemptionPhase bool) bool {
 	err := sn.preAllocateCheck(res, "", preemptionPhase)
 	return err == nil
 }
@@ -388,7 +407,7 @@ func (sn *Node) isReservedForApp(key string) bool {
 // Reserve the node for this application and ask combination, if not reserved yet.
 // The reservation is checked against the node resources.
 // If the reservation fails the function returns false, if the reservation is made it returns true.
-func (sn *Node) reserve(app *Application, ask *AllocationAsk) error {
+func (sn *Node) Reserve(app *Application, ask *AllocationAsk) error {
 	sn.Lock()
 	defer sn.Unlock()
 	if len(sn.reservations) > 0 {

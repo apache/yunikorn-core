@@ -25,19 +25,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
+	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/placement"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
@@ -47,14 +46,14 @@ type PartitionContext struct {
 	Name string // name of the partition (logging mainly)
 
 	// Private fields need protection
-	root                   *objects.Queue                  // start of the scheduling queue hierarchy
+	root                   *objects.Queue                  // start of the queue hierarchy
 	applications           map[string]*objects.Application // applications assigned to this partition
 	reservedApps           map[string]int                  // applications reserved within this partition, with reservation count
 	nodes                  map[string]*objects.Node        // nodes assigned to this partition
 	allocations            map[string]*objects.Allocation  // allocations
 	placementManager       *placement.AppPlacementManager  // placement manager for this partition
 	partitionManager       *partitionManager               // manager for this partition
-	stateMachine           *fsm.FSM                        // the state of the queue for scheduling
+	stateMachine           *fsm.FSM                        // the state of the partition for scheduling
 	stateTime              time.Time                       // last time the state was updated (needed for cleanup)
 	isPreemptable          bool                            // can allocations be preempted
 	rules                  *[]configs.PlacementRule        // placement rules to be loaded by the scheduler
@@ -65,8 +64,15 @@ type PartitionContext struct {
 	sync.RWMutex
 }
 
-func newPartitionContext(conf configs.PartitionConfig, rmID string, csc *ClusterSchedulingContext) (*PartitionContext, error) {
-	psc := &PartitionContext{
+func newPartitionContext(conf configs.PartitionConfig, rmID string, cc *ClusterContext) (*PartitionContext, error) {
+	if conf.Name == "" || rmID == "" {
+		log.Logger().Info("partition cannot be created",
+			zap.String("partition name", conf.Name),
+			zap.String("rmID", rmID),
+			zap.Any("cluster context", cc))
+		return nil, fmt.Errorf("partition cannot be created without name or RM, one is not set")
+	}
+	pc := &PartitionContext{
 		Name:         conf.Name,
 		RmID:         rmID,
 		stateMachine: objects.NewObjectState(),
@@ -76,41 +82,45 @@ func newPartitionContext(conf configs.PartitionConfig, rmID string, csc *Cluster
 		nodes:        make(map[string]*objects.Node),
 		allocations:  make(map[string]*objects.Allocation),
 	}
-	psc.partitionManager = &partitionManager{
-		psc: psc,
-		csc: csc,
+	pc.partitionManager = &partitionManager{
+		pc: pc,
+		cc: cc,
 	}
-	if err := psc.initialPartitionFromConfig(conf); err != nil {
+	if err := pc.initialPartitionFromConfig(conf); err != nil {
 		return nil, err
 	}
-	return psc, nil
+	return pc, nil
 }
 
 // Initialise the partition
-func (psc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionConfig) error {
+func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionConfig) error {
+	if len(conf.Queues) == 0 || conf.Queues[0].Name != "root" {
+		return fmt.Errorf("partition cannot be created without root queue")
+	}
+
 	// Setup the queue structure: root first it should be the only queue at this level
 	// Add the rest of the queue structure recursively
 	queueConf := conf.Queues[0]
 	var err error
-	if psc.root, err = objects.NewConfiguredQueue(queueConf, nil); err != nil {
+	if pc.root, err = objects.NewConfiguredQueue(queueConf, nil); err != nil {
 		return err
 	}
 	// recursively add the queues to the root
-	if err = psc.addQueue(queueConf.Queues, psc.root); err != nil {
+	if err = pc.addQueue(queueConf.Queues, pc.root); err != nil {
 		return err
 	}
 	log.Logger().Info("root queue added",
-		zap.String("partitionName", psc.Name),
-		zap.String("rmID", psc.RmID))
+		zap.String("partitionName", pc.Name),
+		zap.String("rmID", pc.RmID))
 
 	// set preemption needed flag
-	psc.isPreemptable = conf.Preemption.Enabled
+	pc.isPreemptable = conf.Preemption.Enabled
 
-	psc.rules = &conf.PlacementRules
-	psc.placementManager = placement.NewPlacementManager(*psc.rules, psc.GetQueue)
+	pc.rules = &conf.PlacementRules
+	pc.placementManager = placement.NewPlacementManager(*pc.rules, pc.GetQueue)
 	// get the user group cache for the partition
 	// TODO get the resolver from the config
-	psc.userGroupCache = security.GetUserGroupCache("")
+	pc.userGroupCache = security.GetUserGroupCache("")
 
 	// TODO Need some more cleaner interface here.
 	var configuredPolicy policies.SortingPolicy
@@ -123,45 +133,48 @@ func (psc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionCo
 	case policies.BinPackingPolicy, policies.FairnessPolicy:
 		log.Logger().Info("NodeSorting policy set from config",
 			zap.String("policyName", configuredPolicy.String()))
-		psc.nodeSortingPolicy = policies.NewNodeSortingPolicy(conf.NodeSortPolicy.Type)
+		pc.nodeSortingPolicy = policies.NewNodeSortingPolicy(conf.NodeSortPolicy.Type)
 	case policies.Unknown:
 		log.Logger().Info("NodeSorting policy not set using 'fair' as default")
-		psc.nodeSortingPolicy = policies.NewNodeSortingPolicy("fair")
+		pc.nodeSortingPolicy = policies.NewNodeSortingPolicy("fair")
 	}
 	return nil
 }
 
-func (psc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig) error {
-	psc.Lock()
-	defer psc.Unlock()
+func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig) error {
+	pc.Lock()
+	defer pc.Unlock()
+	if len(conf.Queues) == 0 || conf.Queues[0].Name != "root" {
+		return fmt.Errorf("partition cannot be created without root queue")
+	}
 
-	if psc.placementManager.IsInitialised() {
+	if pc.placementManager.IsInitialised() {
 		log.Logger().Info("Updating placement manager rules on config reload")
-		err := psc.placementManager.UpdateRules(conf.PlacementRules)
+		err := pc.placementManager.UpdateRules(conf.PlacementRules)
 		if err != nil {
 			log.Logger().Info("New placement rules not activated, config reload failed", zap.Error(err))
 			return err
 		}
-		psc.rules = &conf.PlacementRules
+		pc.rules = &conf.PlacementRules
 	} else {
 		log.Logger().Info("Creating new placement manager on config reload")
-		psc.rules = &conf.PlacementRules
-		psc.placementManager = placement.NewPlacementManager(*psc.rules, psc.GetQueue)
+		pc.rules = &conf.PlacementRules
+		pc.placementManager = placement.NewPlacementManager(*pc.rules, pc.GetQueue)
 	}
 	// start at the root: there is only one queue
 	queueConf := conf.Queues[0]
-	root := psc.root
+	root := pc.root
 	// update the root queue
 	if err := root.SetQueueConfig(queueConf); err != nil {
 		return err
 	}
 	root.UpdateSortType()
 	// update the rest of the queues recursively
-	return psc.updateQueues(queueConf.Queues, root)
+	return pc.updateQueues(queueConf.Queues, root)
 }
 
 // Process the config structure and create a queue info tree for this partition
-func (psc *PartitionContext) addQueue(conf []configs.QueueConfig, parent *objects.Queue) error {
+func (pc *PartitionContext) addQueue(conf []configs.QueueConfig, parent *objects.Queue) error {
 	// create the queue at this level
 	for _, queueConf := range conf {
 		thisQueue, err := objects.NewConfiguredQueue(queueConf, parent)
@@ -170,7 +183,7 @@ func (psc *PartitionContext) addQueue(conf []configs.QueueConfig, parent *object
 		}
 		// recursive create the queues below
 		if len(queueConf.Queues) > 0 {
-			err = psc.addQueue(queueConf.Queues, thisQueue)
+			err = pc.addQueue(queueConf.Queues, thisQueue)
 			if err != nil {
 				return err
 			}
@@ -182,7 +195,7 @@ func (psc *PartitionContext) addQueue(conf []configs.QueueConfig, parent *object
 // Update the passed in queues and then do this recursively for the children
 //
 // NOTE: this is a lock free call. It should only be called holding the PartitionContext lock.
-func (psc *PartitionContext) updateQueues(config []configs.QueueConfig, parent *objects.Queue) error {
+func (pc *PartitionContext) updateQueues(config []configs.QueueConfig, parent *objects.Queue) error {
 	// get the name of the passed in queue
 	parentPath := parent.QueuePath + configs.DOT
 	// keep track of which children we have updated
@@ -190,7 +203,7 @@ func (psc *PartitionContext) updateQueues(config []configs.QueueConfig, parent *
 	// walk over the queues recursively
 	for _, queueConfig := range config {
 		pathName := parentPath + queueConfig.Name
-		queue := psc.getQueue(pathName)
+		queue := pc.getQueue(pathName)
 		var err error
 		if queue == nil {
 			queue, err = objects.NewConfiguredQueue(queueConfig, parent)
@@ -202,7 +215,7 @@ func (psc *PartitionContext) updateQueues(config []configs.QueueConfig, parent *
 		}
 		// special call to convert to a real policy from the property
 		queue.UpdateSortType()
-		if err = psc.updateQueues(queueConfig.Queues, queue); err != nil {
+		if err = pc.updateQueues(queueConfig.Queues, queue); err != nil {
 			return err
 		}
 		visited[queue.Name] = true
@@ -219,34 +232,34 @@ func (psc *PartitionContext) updateQueues(config []configs.QueueConfig, parent *
 // Mark the partition  for removal from the system.
 // This can be executed multiple times and is only effective the first time.
 // The current cleanup sequence is "immediate". This is implemented to allow a graceful cleanup.
-func (psc *PartitionContext) markPartitionForRemoval() {
-	if err := psc.handlePartitionEvent(objects.Remove); err != nil {
+func (pc *PartitionContext) markPartitionForRemoval() {
+	if err := pc.handlePartitionEvent(objects.Remove); err != nil {
 		log.Logger().Error("failed to mark partition for deletion",
-			zap.String("partitionName", psc.Name),
+			zap.String("partitionName", pc.Name),
 			zap.Error(err))
 	}
 }
 
 // Get the state of the partition.
 // No new nodes and applications will be accepted if stopped or being removed.
-func (psc *PartitionContext) isDraining() bool {
-	return psc.stateMachine.Current() == objects.Draining.String()
+func (pc *PartitionContext) isDraining() bool {
+	return pc.stateMachine.Current() == objects.Draining.String()
 }
 
-func (psc *PartitionContext) isRunning() bool {
-	return psc.stateMachine.Current() == objects.Active.String()
+func (pc *PartitionContext) isRunning() bool {
+	return pc.stateMachine.Current() == objects.Active.String()
 }
 
-func (psc *PartitionContext) isStopped() bool {
-	return psc.stateMachine.Current() == objects.Stopped.String()
+func (pc *PartitionContext) isStopped() bool {
+	return pc.stateMachine.Current() == objects.Stopped.String()
 }
 
 // Handle the state event for the partition.
 // The state machine handles the locking.
-func (psc *PartitionContext) handlePartitionEvent(event objects.SchedulingObjectEvent) error {
-	err := psc.stateMachine.Event(event.String(), psc.Name)
+func (pc *PartitionContext) handlePartitionEvent(event objects.ObjectEvent) error {
+	err := pc.stateMachine.Event(event.String(), pc.Name)
 	if err == nil {
-		psc.stateTime = time.Now()
+		pc.stateTime = time.Now()
 		return nil
 	}
 	// handle the same state transition not nil error (limit of fsm).
@@ -256,95 +269,95 @@ func (psc *PartitionContext) handlePartitionEvent(event objects.SchedulingObject
 	return err
 }
 
-// Add a new application to the scheduling partition.
-func (psc *PartitionContext) addApplication(schedulingApp *objects.Application) error {
-	psc.Lock()
-	defer psc.Unlock()
+// Add a new application to the partition.
+func (pc *PartitionContext) AddApplication(app *objects.Application) error {
+	pc.Lock()
+	defer pc.Unlock()
 
-	if psc.isDraining() || psc.isStopped() {
-		return fmt.Errorf("partition %s is stopped cannot add a new application %s", psc.Name, schedulingApp.ApplicationID)
+	if pc.isDraining() || pc.isStopped() {
+		return fmt.Errorf("partition %s is stopped cannot add a new application %s", pc.Name, app.ApplicationID)
 	}
 
 	// Add to applications
-	appID := schedulingApp.ApplicationID
-	if psc.applications[appID] != nil {
-		return fmt.Errorf("adding application %s to partition %s, but application already existed", appID, psc.Name)
+	appID := app.ApplicationID
+	if pc.applications[appID] != nil {
+		return fmt.Errorf("adding application %s to partition %s, but application already existed", appID, pc.Name)
 	}
 
-	// Put app under the scheduling queue
-	var queueName string
-	if psc.placementManager.IsInitialised() {
-		err := psc.placementManager.PlaceApplication(schedulingApp)
+	// Put app under the queue
+	queueName := app.QueueName
+	if pc.placementManager.IsInitialised() {
+		err := pc.placementManager.PlaceApplication(app)
 		if err != nil {
 			return fmt.Errorf("failed to place application %s: %v", appID, err)
 		}
-		queueName = schedulingApp.QueueName
+		queueName = app.QueueName
 		if queueName == "" {
 			return fmt.Errorf("application rejected by placement rules: %s", appID)
 		}
 	}
 	// we have a queue name either from placement or direct, get the queue
-	schedulingQueue := psc.getQueue(queueName)
-	if schedulingQueue == nil {
+	queue := pc.getQueue(queueName)
+	if queue == nil {
 		// queue must exist if not using placement rules
-		if !psc.placementManager.IsInitialised() {
+		if !pc.placementManager.IsInitialised() {
 			return fmt.Errorf("application '%s' rejected, cannot create queue '%s' without placement rules", appID, queueName)
 		}
 		// with placement rules the hierarchy might not exist so try and create it
 		var err error
-		schedulingQueue, err = psc.createQueue(queueName, schedulingApp.GetUser())
+		queue, err = pc.createQueue(queueName, app.GetUser())
 		if err != nil {
 			return fmt.Errorf("failed to create rule based queue %s for application %s", queueName, appID)
 		}
 	}
 	// check the queue: is a leaf queue with submit access
-	if !schedulingQueue.IsLeafQueue() || !schedulingQueue.CheckSubmitAccess(schedulingApp.GetUser()) {
+	if !queue.IsLeafQueue() || !queue.CheckSubmitAccess(app.GetUser()) {
 		return fmt.Errorf("failed to find queue %s for application %s", queueName, appID)
 	}
 
 	// all is OK update the app and partition
-	schedulingApp.SetQueue(schedulingQueue)
-	schedulingQueue.AddSchedulingApplication(schedulingApp)
-	psc.applications[appID] = schedulingApp
+	app.SetQueue(queue)
+	queue.AddApplication(app)
+	pc.applications[appID] = app
 
 	return nil
 }
 
-// Remove the application from the scheduling partition.
+// Remove the application from the partition.
 // This does not fail and handles missing /app/queue/node/allocations internally
-func (psc *PartitionContext) removeApplication(appID string) []*objects.Allocation {
-	psc.Lock()
-	defer psc.Unlock()
+func (pc *PartitionContext) removeApplication(appID string) []*objects.Allocation {
+	pc.Lock()
+	defer pc.Unlock()
 
 	// Remove from applications map
-	if psc.applications[appID] == nil {
+	if pc.applications[appID] == nil {
 		return nil
 	}
-	schedulingApp := psc.applications[appID]
+	app := pc.applications[appID]
 	// remove from partition then cleanup underlying objects
-	delete(psc.applications, appID)
-	delete(psc.reservedApps, appID)
+	delete(pc.applications, appID)
+	delete(pc.reservedApps, appID)
 
-	queueName := schedulingApp.QueueName
+	queueName := app.QueueName
 	// Remove all asks and thus all reservations and pending resources (queue included)
-	_ = schedulingApp.RemoveAllocationAsk("")
+	_ = app.RemoveAllocationAsk("")
 	// Remove all allocations (queue and nodes included)
-	allocations := schedulingApp.RemoveAllAllocations()
+	allocations := app.RemoveAllAllocations()
 	// Remove all allocations from nodes/queue
 	if len(allocations) != 0 {
 		for _, alloc := range allocations {
 			currentUUID := alloc.UUID
 			// Remove from partition
-			if globalAlloc := psc.allocations[currentUUID]; globalAlloc == nil {
+			if globalAlloc := pc.allocations[currentUUID]; globalAlloc == nil {
 				log.Logger().Warn("unknown allocation: not found on the partition",
 					zap.String("appID", appID),
 					zap.String("allocationId", currentUUID))
 			} else {
-				delete(psc.allocations, currentUUID)
+				delete(pc.allocations, currentUUID)
 			}
 
 			// Remove from node: even if not found on the partition to keep things clean
-			node := psc.nodes[alloc.NodeID]
+			node := pc.nodes[alloc.NodeID]
 			if node == nil {
 				log.Logger().Warn("unknown node: not found in active node list",
 					zap.String("appID", appID),
@@ -361,8 +374,8 @@ func (psc *PartitionContext) removeApplication(appID string) []*objects.Allocati
 	}
 
 	// Remove app from queue
-	if schedulingQueue := psc.getQueue(queueName); schedulingQueue != nil {
-		schedulingQueue.RemoveSchedulingApplication(schedulingApp)
+	if queue := pc.getQueue(queueName); queue != nil {
+		queue.RemoveApplication(app)
 	}
 
 	log.Logger().Debug("application removed from the scheduler",
@@ -372,21 +385,21 @@ func (psc *PartitionContext) removeApplication(appID string) []*objects.Allocati
 	return allocations
 }
 
-func (psc *PartitionContext) getApplication(appID string) *objects.Application {
-	psc.RLock()
-	defer psc.RUnlock()
+func (pc *PartitionContext) getApplication(appID string) *objects.Application {
+	pc.RLock()
+	defer pc.RUnlock()
 
-	return psc.applications[appID]
+	return pc.applications[appID]
 }
 
 // Return a copy of the map of all reservations for the partition.
 // This will return an empty map if there are no reservations.
 // Visible for tests
-func (psc *PartitionContext) getReservations() map[string]int {
-	psc.RLock()
-	defer psc.RUnlock()
+func (pc *PartitionContext) getReservations() map[string]int {
+	pc.RLock()
+	defer pc.RUnlock()
 	reserve := make(map[string]int)
-	for key, num := range psc.reservedApps {
+	for key, num := range pc.reservedApps {
 		reserve[key] = num
 	}
 	return reserve
@@ -395,10 +408,10 @@ func (psc *PartitionContext) getReservations() map[string]int {
 // Get the queue from the structure based on the fully qualified name.
 // Wrapper around the unlocked version getQueue()
 // Visible by tests
-func (psc *PartitionContext) GetQueue(name string) *objects.Queue {
-	psc.RLock()
-	defer psc.RUnlock()
-	return psc.getQueue(name)
+func (pc *PartitionContext) GetQueue(name string) *objects.Queue {
+	pc.RLock()
+	defer pc.RUnlock()
+	return pc.getQueue(name)
 }
 
 // Get the queue from the structure based on the fully qualified name.
@@ -406,12 +419,12 @@ func (psc *PartitionContext) GetQueue(name string) *objects.Queue {
 // Returns nil if the queue is not found otherwise the queue object.
 //
 // NOTE: this is a lock free call. It should only be called holding the PartitionContext lock.
-func (psc *PartitionContext) getQueue(name string) *objects.Queue {
+func (pc *PartitionContext) getQueue(name string) *objects.Queue {
 	// start at the root
-	queue := psc.root
+	queue := pc.root
 	part := strings.Split(strings.ToLower(name), configs.DOT)
 	// no input
-	if len(part) == 0 || part[0] != "root" {
+	if len(part) == 0 || part[0] != configs.RootQueue {
 		return nil
 	}
 	// walk over the parts going down towards the requested queue
@@ -425,34 +438,37 @@ func (psc *PartitionContext) getQueue(name string) *objects.Queue {
 }
 
 // Get the queue info for the whole queue structure to pass to the webservice
-func (psc *PartitionContext) GetQueueInfos() dao.QueueDAOInfo {
-	return psc.root.GetQueueInfos()
+func (pc *PartitionContext) GetQueueInfos() dao.QueueDAOInfo {
+	return pc.root.GetQueueInfos()
 }
 
-// Create a scheduling queue with full hierarchy. This is called when a new queue is created from a placement rule.
+// Create a queue with full hierarchy. This is called when a new queue is created from a placement rule.
 // The final leaf queue does not exist otherwise we would not get here.
 // This means that at least 1 queue (a leaf queue) will be created
 // NOTE: this is a lock free call. It should only be called holding the PartitionContext lock.
-func (psc *PartitionContext) createQueue(name string, user security.UserGroup) (*objects.Queue, error) {
-	// find the scheduling furthest down the hierarchy that exists
+func (pc *PartitionContext) createQueue(name string, user security.UserGroup) (*objects.Queue, error) {
+	// find the queue furthest down the hierarchy that exists
 	var toCreate []string
+	if !strings.HasPrefix(name, configs.RootQueue) || !strings.Contains(name, configs.DOT) {
+		return nil, fmt.Errorf("illegal queue name passed in: %s", name)
+	}
 	current := name
-	queue := psc.getQueue(current)
+	queue := pc.getQueue(current)
 	log.Logger().Debug("Checking queue creation")
 	for queue == nil {
 		toCreate = append(toCreate, current[strings.LastIndex(current, configs.DOT)+1:])
 		current = current[0:strings.LastIndex(current, configs.DOT)]
-		queue = psc.getQueue(current)
+		queue = pc.getQueue(current)
 	}
 	// Check the ACL before we really create
-	// The existing parent scheduling queue is the lowest we need to look at
+	// The existing parent queue is the lowest we need to look at
 	if !queue.CheckSubmitAccess(user) {
 		return nil, fmt.Errorf("submit access to queue %s denied during create of: %s", current, name)
 	}
 	if queue.IsLeafQueue() {
 		return nil, fmt.Errorf("creation of queue %s failed parent is already a leaf: %s", name, current)
 	}
-	log.Logger().Debug("Creating scheduling queue(s)",
+	log.Logger().Debug("Creating queue(s)",
 		zap.String("parent", current),
 		zap.String("fullPath", name))
 	for i := len(toCreate) - 1; i >= 0; i-- {
@@ -469,71 +485,75 @@ func (psc *PartitionContext) createQueue(name string, user security.UserGroup) (
 	return queue, nil
 }
 
-// Get a scheduling node from the partition by nodeID.
-func (psc *PartitionContext) getNode(nodeID string) *objects.Node {
-	psc.RLock()
-	defer psc.RUnlock()
+// Get a node from the partition by nodeID.
+func (pc *PartitionContext) GetNode(nodeID string) *objects.Node {
+	pc.RLock()
+	defer pc.RUnlock()
 
-	return psc.nodes[nodeID]
+	return pc.nodes[nodeID]
 }
 
-// Get a copy of the scheduling nodes from the partition.
+// Get a copy of the  nodes from the partition.
 // This list does not include reserved nodes or nodes marked unschedulable
-func (psc *PartitionContext) getSchedulableNodes() []*objects.Node {
-	return psc.getNodes(true)
+func (pc *PartitionContext) getSchedulableNodes() []*objects.Node {
+	return pc.getNodes(true)
 }
 
-// Get a copy of the scheduling nodes from the partition.
+// Get a copy of the nodes from the partition.
 // Excludes unschedulable nodes only, reserved node inclusion depends on the parameter passed in.
-func (psc *PartitionContext) getNodes(excludeReserved bool) []*objects.Node {
-	psc.RLock()
-	defer psc.RUnlock()
+func (pc *PartitionContext) getNodes(excludeReserved bool) []*objects.Node {
+	pc.RLock()
+	defer pc.RUnlock()
 
-	schedulingNodes := make([]*objects.Node, 0)
-	for _, node := range psc.nodes {
+	nodes := make([]*objects.Node, 0)
+	for _, node := range pc.nodes {
 		// filter out the nodes that are not scheduling
 		if !node.IsSchedulable() || (excludeReserved && node.IsReserved()) {
 			continue
 		}
-		schedulingNodes = append(schedulingNodes, node)
+		nodes = append(nodes, node)
 	}
-	return schedulingNodes
+	return nodes
 }
 
 // Add the node to the partition and process the allocations that are reported by the node.
-func (psc *PartitionContext) addNode(node *objects.Node, existingAllocations []*objects.Allocation) error {
+func (pc *PartitionContext) AddNode(node *objects.Node, existingAllocations []*objects.Allocation) error {
 	if node == nil {
-		return nil
+		return fmt.Errorf("cannot add 'nil' node to partition %s", pc.Name)
 	}
-	psc.Lock()
-	defer psc.Unlock()
+	pc.Lock()
+	defer pc.Unlock()
 
-	if psc.isDraining() || psc.isStopped() {
-		return fmt.Errorf("partition %s is stopped cannot add a new node %s", psc.Name, node.NodeID)
+	if pc.isDraining() || pc.isStopped() {
+		return fmt.Errorf("partition %s is stopped cannot add a new node %s", pc.Name, node.NodeID)
 	}
 
-	if psc.nodes[node.NodeID] != nil {
-		return fmt.Errorf("partition %s has an existing node %s, node name must be unique", psc.Name, node.NodeID)
+	if pc.nodes[node.NodeID] != nil {
+		return fmt.Errorf("partition %s has an existing node %s, node name must be unique", pc.Name, node.NodeID)
 	}
 
 	log.Logger().Debug("adding node to partition",
 		zap.String("nodeID", node.NodeID),
-		zap.String("partition", psc.Name))
+		zap.String("partition", pc.Name))
 
 	// update the resources available in the cluster
-	psc.totalPartitionResource.AddTo(node.GetCapacity())
-	psc.root.SetMaxResource(psc.totalPartitionResource)
+	if pc.totalPartitionResource == nil {
+		pc.totalPartitionResource = node.GetCapacity().Clone()
+	} else {
+		pc.totalPartitionResource.AddTo(node.GetCapacity())
+	}
+	pc.root.SetMaxResource(pc.totalPartitionResource)
 
 	// Node is added to the system to allow processing of the allocations
-	psc.nodes[node.NodeID] = node
+	pc.nodes[node.NodeID] = node
 	// Add allocations that exist on the node when added
 	if len(existingAllocations) > 0 {
 		log.Logger().Info("add existing allocations",
 			zap.String("nodeID", node.NodeID),
 			zap.Int("existingAllocations", len(existingAllocations)))
 		for current, alloc := range existingAllocations {
-			if err := psc.addAllocationInternal(alloc); err != nil {
-				released := psc.removeNode(node.NodeID)
+			if err := pc.addAllocation(alloc); err != nil {
+				released := pc.removeNodeInternal(node.NodeID)
 				log.Logger().Info("failed to add existing allocations",
 					zap.String("nodeID", node.NodeID),
 					zap.Int("existingAllocations", len(existingAllocations)),
@@ -549,46 +569,51 @@ func (psc *PartitionContext) addNode(node *objects.Node, existingAllocations []*
 	metrics.GetSchedulerMetrics().IncActiveNodes()
 	log.Logger().Info("added node to partition",
 		zap.String("nodeID", node.NodeID),
-		zap.String("partition", psc.Name))
+		zap.String("partition", pc.Name))
 
 	return nil
 }
 
 // Remove a node from the partition. It returns all removed allocations.
-func (psc *PartitionContext) removeNode(nodeID string) []*objects.Allocation {
-	psc.Lock()
-	defer psc.Unlock()
+func (pc *PartitionContext) removeNode(nodeID string) []*objects.Allocation {
+	pc.Lock()
+	defer pc.Unlock()
+	return pc.removeNodeInternal(nodeID)
+}
 
+// Remove a node from the partition. It returns all removed allocations.
+// Unlocked version must be called holding the partition lock.
+func (pc *PartitionContext) removeNodeInternal(nodeID string) []*objects.Allocation {
 	log.Logger().Info("remove node from partition",
 		zap.String("nodeID", nodeID),
-		zap.String("partition", psc.Name))
+		zap.String("partition", pc.Name))
 
-	node := psc.nodes[nodeID]
+	node := pc.nodes[nodeID]
 	if node == nil {
 		log.Logger().Debug("node was not found",
 			zap.String("nodeID", nodeID),
-			zap.String("partitionName", psc.Name))
+			zap.String("partitionName", pc.Name))
 		return nil
 	}
 
 	// Remove node from list of tracked nodes
-	delete(psc.nodes, nodeID)
+	delete(pc.nodes, nodeID)
 	metrics.GetSchedulerMetrics().DecActiveNodes()
 
 	// found the node cleanup the node and all linked data
-	released := psc.removeNodeAllocations(node)
-	psc.totalPartitionResource.SubFrom(node.GetCapacity())
-	psc.root.SetMaxResource(psc.totalPartitionResource)
+	released := pc.removeNodeAllocations(node)
+	pc.totalPartitionResource.SubFrom(node.GetCapacity())
+	pc.root.SetMaxResource(pc.totalPartitionResource)
 
 	// unreserve all the apps that were reserved on the node
 	reservedKeys, releasedAsks := node.UnReserveApps()
 	// update the partition reservations based on the node clean up
 	for i, appID := range reservedKeys {
-		psc.unReserveCount(appID, releasedAsks[i])
+		pc.unReserveCount(appID, releasedAsks[i])
 	}
 
 	log.Logger().Info("node removed",
-		zap.String("partitionName", psc.Name),
+		zap.String("partitionName", pc.Name),
 		zap.String("nodeID", node.NodeID))
 	return released
 }
@@ -596,7 +621,7 @@ func (psc *PartitionContext) removeNode(nodeID string) []*objects.Allocation {
 // Remove all allocations that are assigned to a node as part of the node removal. This is not part of the node object
 // as updating the applications and queues is the only goal. Applications and queues are not accessible from the node.
 // The removed allocations are returned.
-func (psc *PartitionContext) removeNodeAllocations(node *objects.Node) []*objects.Allocation {
+func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) []*objects.Allocation {
 	released := make([]*objects.Allocation, 0)
 	// walk over all allocations still registered for this node
 	for _, alloc := range node.GetAllAllocations() {
@@ -604,7 +629,7 @@ func (psc *PartitionContext) removeNodeAllocations(node *objects.Node) []*object
 		// since we are not locking the node and or application we could have had an update while processing
 		// note that we do not return the allocation if the app or allocation is not found and assume that it
 		// was already removed
-		app := psc.applications[alloc.ApplicationID]
+		app := pc.applications[alloc.ApplicationID]
 		if app == nil {
 			log.Logger().Info("app is not found, skipping while removing the node",
 				zap.String("appID", alloc.ApplicationID),
@@ -634,53 +659,53 @@ func (psc *PartitionContext) removeNodeAllocations(node *objects.Node) []*object
 	return released
 }
 
-func (psc *PartitionContext) calculateOutstandingRequests() []*objects.AllocationAsk {
-	if !resources.StrictlyGreaterThanZero(psc.root.GetPendingResource()) {
+func (pc *PartitionContext) calculateOutstandingRequests() []*objects.AllocationAsk {
+	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
 		return nil
 	}
 	outstanding := make([]*objects.AllocationAsk, 0)
-	psc.root.GetQueueOutstandingRequests(&outstanding)
+	pc.root.GetQueueOutstandingRequests(&outstanding)
 	return outstanding
 }
 
 // Try regular allocation for the partition
 // Lock free call this all locks are taken when needed in called functions
-func (psc *PartitionContext) tryAllocate() *objects.Allocation {
-	if !resources.StrictlyGreaterThanZero(psc.root.GetPendingResource()) {
+func (pc *PartitionContext) tryAllocate() *objects.Allocation {
+	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
 		// nothing to do just return
 		return nil
 	}
 	// try allocating from the root down
-	alloc := psc.root.TryAllocate(psc.GetNodeIterator)
+	alloc := pc.root.TryAllocate(pc.GetNodeIterator)
 	if alloc != nil {
-		return psc.allocate(alloc)
+		return pc.allocate(alloc)
 	}
 	return nil
 }
 
 // Try process reservations for the partition
 // Lock free call this all locks are taken when needed in called functions
-func (psc *PartitionContext) tryReservedAllocate() *objects.Allocation {
-	if !resources.StrictlyGreaterThanZero(psc.root.GetPendingResource()) {
+func (pc *PartitionContext) tryReservedAllocate() *objects.Allocation {
+	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
 		// nothing to do just return
 		return nil
 	}
 	// try allocating from the root down
-	alloc := psc.root.TryReservedAllocate(psc.GetNodeIterator)
+	alloc := pc.root.TryReservedAllocate(pc.GetNodeIterator)
 	if alloc != nil {
-		return psc.allocate(alloc)
+		return pc.allocate(alloc)
 	}
 	return nil
 }
 
 // Process the allocation and make the left over changes in the partition.
-func (psc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocation {
-	psc.Lock()
-	defer psc.Unlock()
+func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocation {
+	pc.Lock()
+	defer pc.Unlock()
 	// partition is locked nothing can change from now on
 	// find the app make sure it still exists
 	appID := alloc.ApplicationID
-	app := psc.applications[appID]
+	app := pc.applications[appID]
 	if app == nil {
 		log.Logger().Info("Application was removed while allocating",
 			zap.String("appID", appID))
@@ -699,7 +724,7 @@ func (psc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Alloca
 			zap.String("reserved node", nodeID),
 			zap.String("appID", appID))
 	}
-	node := psc.nodes[nodeID]
+	node := pc.nodes[nodeID]
 	if node == nil {
 		log.Logger().Info("Node was removed while allocating",
 			zap.String("nodeID", nodeID),
@@ -708,12 +733,12 @@ func (psc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Alloca
 	}
 	// reservation
 	if alloc.Result == objects.Reserved {
-		psc.reserve(app, node, alloc.SchedulingAsk)
+		pc.reserve(app, node, alloc.Ask)
 		return nil
 	}
 	// unreserve
 	if alloc.Result == objects.Unreserved || alloc.Result == objects.AllocatedReserved {
-		psc.unReserve(app, node, alloc.SchedulingAsk)
+		pc.unReserve(app, node, alloc.Ask)
 		if alloc.Result == objects.Unreserved {
 			return nil
 		}
@@ -723,19 +748,25 @@ func (psc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Alloca
 
 	// Safeguard against the unlikely case that we have clashes.
 	// A clash points to entropy issues on the node.
-	if _, found := psc.allocations[alloc.UUID]; found {
-		log.Logger().Warn("UUID clash, random generator might be lacking entropy")
-		for {
-			allocationUUID := common.GetNewUUID()
-			if psc.allocations[allocationUUID] == nil {
-				alloc.UUID = allocationUUID
-			}
-		}
+	tempUUID := alloc.UUID
+	if _, found := pc.allocations[alloc.UUID]; found {
+		msg := fmt.Sprintf("UUID clash passed in %s, new %s", tempUUID, alloc.UUID)
+		panic(msg)
+		// log.Logger().Warn("UUID clash, random generator might be lacking entropy")
+		// for {
+		// 	allocationUUID := common.GetNewUUID()
+		// 	log.Logger().Warn("UUID clash, random generator might be lacking entropy",
+		// 		zap.String("uuid", alloc.UUID),
+		// 		zap.String("new UUID", allocationUUID))
+		// 	if pc.allocations[allocationUUID] == nil {
+		// 		alloc.UUID = allocationUUID
+		// 		break
+		// 	}
+		// }
 	}
-	psc.allocations[alloc.UUID] = alloc
+	pc.allocations[alloc.UUID] = alloc
 	log.Logger().Info("scheduler allocation processed",
 		zap.String("appID", alloc.ApplicationID),
-		zap.String("queue", alloc.QueueName),
 		zap.String("allocationKey", alloc.AllocationKey),
 		zap.String("allocatedResource", alloc.AllocatedResource.String()),
 		zap.String("targetNode", alloc.NodeID))
@@ -745,7 +776,7 @@ func (psc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Alloca
 
 // Process the reservation in the scheduler
 // Lock free call this must be called holding the context lock
-func (psc *PartitionContext) reserve(app *objects.Application, node *objects.Node, ask *objects.AllocationAsk) {
+func (pc *PartitionContext) reserve(app *objects.Application, node *objects.Node, ask *objects.AllocationAsk) {
 	appID := app.ApplicationID
 	// app has node already reserved cannot reserve again
 	if app.IsReservedOnNode(node.NodeID) {
@@ -764,7 +795,7 @@ func (psc *PartitionContext) reserve(app *objects.Application, node *objects.Nod
 	// add the reservation to the queue list
 	app.GetQueue().Reserve(appID)
 	// increase the number of reservations for this app
-	psc.reservedApps[appID]++
+	pc.reservedApps[appID]++
 
 	log.Logger().Info("allocation ask is reserved",
 		zap.String("appID", ask.ApplicationID),
@@ -775,9 +806,9 @@ func (psc *PartitionContext) reserve(app *objects.Application, node *objects.Nod
 
 // Process the unreservation in the scheduler
 // Lock free call this must be called holding the context lock
-func (psc *PartitionContext) unReserve(app *objects.Application, node *objects.Node, ask *objects.AllocationAsk) {
+func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.Node, ask *objects.AllocationAsk) {
 	appID := app.ApplicationID
-	if psc.reservedApps[appID] == 0 {
+	if pc.reservedApps[appID] == 0 {
 		log.Logger().Info("Application is not reserved in partition",
 			zap.String("appID", appID))
 		return
@@ -793,7 +824,7 @@ func (psc *PartitionContext) unReserve(app *objects.Application, node *objects.N
 	// remove the reservation of the queue
 	app.GetQueue().UnReserve(appID, num)
 	// make sure we cannot go below 0
-	psc.unReserveCount(appID, num)
+	pc.unReserveCount(appID, num)
 
 	log.Logger().Info("allocation ask is unreserved",
 		zap.String("appID", ask.ApplicationID),
@@ -805,10 +836,10 @@ func (psc *PartitionContext) unReserve(app *objects.Application, node *objects.N
 
 // Get the iterator for the sorted nodes list from the partition.
 // Sorting should use a copy of the node list not the main list.
-func (psc *PartitionContext) getNodeIteratorForPolicy(nodes []*objects.Node) interfaces.NodeIterator {
-	psc.RLock()
-	configuredPolicy := psc.nodeSortingPolicy.PolicyType
-	psc.RUnlock()
+func (pc *PartitionContext) getNodeIteratorForPolicy(nodes []*objects.Node) interfaces.NodeIterator {
+	pc.RLock()
+	configuredPolicy := pc.nodeSortingPolicy.PolicyType
+	pc.RUnlock()
 	if configuredPolicy == policies.Unknown {
 		return nil
 	}
@@ -819,73 +850,73 @@ func (psc *PartitionContext) getNodeIteratorForPolicy(nodes []*objects.Node) int
 
 // Create a node iterator for the schedulable nodes based on the policy set for this partition.
 // The iterator is nil if there are no schedulable nodes available.
-func (psc *PartitionContext) GetNodeIterator() interfaces.NodeIterator {
-	if nodeList := psc.getSchedulableNodes(); len(nodeList) != 0 {
-		return psc.getNodeIteratorForPolicy(nodeList)
+func (pc *PartitionContext) GetNodeIterator() interfaces.NodeIterator {
+	if nodeList := pc.getSchedulableNodes(); len(nodeList) != 0 {
+		return pc.getNodeIteratorForPolicy(nodeList)
 	}
 	return nil
 }
 
 // Update the reservation counter for the app
 // Lock free call this must be called holding the context lock
-func (psc *PartitionContext) unReserveCount(appID string, asks int) {
-	if num, found := psc.reservedApps[appID]; found {
+func (pc *PartitionContext) unReserveCount(appID string, asks int) {
+	if num, found := pc.reservedApps[appID]; found {
 		// decrease the number of reservations for this app and cleanup
 		if num == asks {
-			delete(psc.reservedApps, appID)
+			delete(pc.reservedApps, appID)
 		} else {
-			psc.reservedApps[appID] -= asks
+			pc.reservedApps[appID] -= asks
 		}
 	}
 }
 
-func (psc *PartitionContext) GetTotalPartitionResource() *resources.Resource {
-	psc.RLock()
-	defer psc.RUnlock()
+func (pc *PartitionContext) GetTotalPartitionResource() *resources.Resource {
+	pc.RLock()
+	defer pc.RUnlock()
 
-	return psc.totalPartitionResource
+	return pc.totalPartitionResource
 }
 
-func (psc *PartitionContext) GetAllocatedResource() *resources.Resource {
-	psc.RLock()
-	defer psc.RUnlock()
+func (pc *PartitionContext) GetAllocatedResource() *resources.Resource {
+	pc.RLock()
+	defer pc.RUnlock()
 
-	return psc.root.GetAllocatedResource()
+	return pc.root.GetAllocatedResource()
 }
 
-func (psc *PartitionContext) GetTotalApplicationCount() int {
-	psc.RLock()
-	defer psc.RUnlock()
-	return len(psc.applications)
+func (pc *PartitionContext) GetTotalApplicationCount() int {
+	pc.RLock()
+	defer pc.RUnlock()
+	return len(pc.applications)
 }
 
-func (psc *PartitionContext) GetTotalAllocationCount() int {
-	psc.RLock()
-	defer psc.RUnlock()
-	return len(psc.allocations)
+func (pc *PartitionContext) GetTotalAllocationCount() int {
+	pc.RLock()
+	defer pc.RUnlock()
+	return len(pc.allocations)
 }
 
-func (psc *PartitionContext) GetTotalNodeCount() int {
-	psc.RLock()
-	defer psc.RUnlock()
-	return len(psc.nodes)
+func (pc *PartitionContext) GetTotalNodeCount() int {
+	pc.RLock()
+	defer pc.RUnlock()
+	return len(pc.nodes)
 }
 
-func (psc *PartitionContext) GetApplications() []*objects.Application {
-	psc.RLock()
-	defer psc.RUnlock()
+func (pc *PartitionContext) GetApplications() []*objects.Application {
+	pc.RLock()
+	defer pc.RUnlock()
 	var appList []*objects.Application
-	for _, app := range psc.applications {
+	for _, app := range pc.applications {
 		appList = append(appList, app)
 	}
 	return appList
 }
 
-func (psc *PartitionContext) GetNodes() []*objects.Node {
-	psc.RLock()
-	defer psc.RUnlock()
+func (pc *PartitionContext) GetNodes() []*objects.Node {
+	pc.RLock()
+	defer pc.RUnlock()
 	var nodeList []*objects.Node
-	for _, node := range psc.nodes {
+	for _, node := range pc.nodes {
 		nodeList = append(nodeList, node)
 	}
 	return nodeList
@@ -895,10 +926,9 @@ func (psc *PartitionContext) GetNodes() []*objects.Node {
 // Queue max allocation is not checked as the allocation is part of a new node addition.
 //
 // NOTE: this is a lock free call. It should only be called holding the Partition lock.
-// If access outside is needed a locked version must used, see addAllocation
-func (psc *PartitionContext) addAllocationInternal(alloc *objects.Allocation) error {
-	if psc.isStopped() {
-		return fmt.Errorf("partition %s is stopped cannot add new allocation %s", psc.Name, alloc.AllocationKey)
+func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
+	if pc.isStopped() {
+		return fmt.Errorf("partition %s is stopped cannot add new allocation %s", pc.Name, alloc.AllocationKey)
 	}
 
 	// if the allocation is node reported (aka recovery an existing allocation),
@@ -911,7 +941,7 @@ func (psc *PartitionContext) addAllocationInternal(alloc *objects.Allocation) er
 	}
 
 	log.Logger().Debug("adding recovered allocation",
-		zap.String("partitionName", psc.Name),
+		zap.String("partitionName", pc.Name),
 		zap.String("appID", alloc.ApplicationID),
 		zap.String("allocKey", alloc.AllocationKey),
 		zap.String("UUID", alloc.UUID))
@@ -922,12 +952,12 @@ func (psc *PartitionContext) addAllocationInternal(alloc *objects.Allocation) er
 	var app *objects.Application
 	var ok bool
 
-	if node, ok = psc.nodes[alloc.NodeID]; !ok {
+	if node, ok = pc.nodes[alloc.NodeID]; !ok {
 		metrics.GetSchedulerMetrics().IncSchedulingError()
 		return fmt.Errorf("failed to find node %s", alloc.NodeID)
 	}
 
-	if app, ok = psc.applications[alloc.ApplicationID]; !ok {
+	if app, ok = pc.applications[alloc.ApplicationID]; !ok {
 		metrics.GetSchedulerMetrics().IncSchedulingError()
 		return fmt.Errorf("failed to find application %s", alloc.ApplicationID)
 	}
@@ -949,20 +979,20 @@ func (psc *PartitionContext) addAllocationInternal(alloc *objects.Allocation) er
 
 	node.AddAllocation(alloc)
 	app.AddAllocation(alloc)
-	psc.allocations[alloc.UUID] = alloc
+	pc.allocations[alloc.UUID] = alloc
 
 	log.Logger().Debug("added allocation",
-		zap.String("partitionName", psc.Name),
+		zap.String("partitionName", pc.Name),
 		zap.String("appID", alloc.ApplicationID),
 		zap.String("allocationUid", alloc.UUID),
 		zap.String("allocKey", alloc.AllocationKey))
 	return nil
 }
 
-func (psc *PartitionContext) convertUGI(ugi *si.UserGroupInformation) (security.UserGroup, error) {
-	psc.RLock()
-	defer psc.RUnlock()
-	return psc.userGroupCache.ConvertUGI(ugi)
+func (pc *PartitionContext) convertUGI(ugi *si.UserGroupInformation) (security.UserGroup, error) {
+	pc.RLock()
+	defer pc.RUnlock()
+	return pc.userGroupCache.ConvertUGI(ugi)
 }
 
 // calculate overall nodes resource usage and returns a map as the result,
@@ -976,11 +1006,11 @@ func (psc *PartitionContext) convertUGI(ugi *si.UserGroupInformation) (security.
 //   9: 90% -> 100%
 // the element value represents number of nodes fall into this bucket.
 // if slice[9] = 3, this means there are 3 nodes resource usage is in the range 80% to 90%.
-func (psc *PartitionContext) CalculateNodesResourceUsage() map[string][]int {
-	psc.RLock()
-	defer psc.RUnlock()
+func (pc *PartitionContext) CalculateNodesResourceUsage() map[string][]int {
+	pc.RLock()
+	defer pc.RUnlock()
 	mapResult := make(map[string][]int)
-	for _, node := range psc.nodes {
+	for _, node := range pc.nodes {
 		for name, total := range node.GetCapacity().Resources {
 			if float64(total) > 0 {
 				resourceAllocated := float64(node.GetAllocatedResource().Resources[name])
@@ -1002,12 +1032,12 @@ func (psc *PartitionContext) CalculateNodesResourceUsage() map[string][]int {
 	return mapResult
 }
 
-func (psc *PartitionContext) removeAllocation(appID string, uuid string) []*objects.Allocation {
-	psc.Lock()
-	defer psc.Unlock()
+func (pc *PartitionContext) removeAllocation(appID string, uuid string) []*objects.Allocation {
+	pc.Lock()
+	defer pc.Unlock()
 	releasedAllocs := make([]*objects.Allocation, 0)
 	var queue *objects.Queue = nil
-	if app := psc.applications[appID]; app != nil {
+	if app := pc.applications[appID]; app != nil {
 		// when uuid not specified, remove all allocations from the app
 		if uuid == "" {
 			log.Logger().Debug("remove all allocations",
@@ -1028,15 +1058,15 @@ func (psc *PartitionContext) removeAllocation(appID string, uuid string) []*obje
 
 	for _, alloc := range releasedAllocs {
 		// remove allocation from node
-		node := psc.nodes[alloc.NodeID]
-		if node == nil || node.RemoveAllocation(uuid) == nil {
+		node := pc.nodes[alloc.NodeID]
+		if node == nil || node.RemoveAllocation(alloc.UUID) == nil {
 			log.Logger().Info("node allocation is not found while releasing resources",
 				zap.String("appID", appID),
-				zap.String("allocationId", uuid))
+				zap.String("allocationId", alloc.UUID))
 			continue
 		}
 		// remove from partition
-		delete(psc.allocations, uuid)
+		delete(pc.allocations, alloc.UUID)
 		// track total resources
 		total.AddTo(alloc.AllocatedResource)
 	}
@@ -1052,10 +1082,10 @@ func (psc *PartitionContext) removeAllocation(appID string, uuid string) []*obje
 	return releasedAllocs
 }
 
-func (psc *PartitionContext) removeAllocationAsk(appID string, allocationKey string) {
-	psc.Lock()
-	defer psc.Unlock()
-	if app := psc.applications[appID]; app != nil {
+func (pc *PartitionContext) removeAllocationAsk(appID string, allocationKey string) {
+	pc.Lock()
+	defer pc.Unlock()
+	if app := pc.applications[appID]; app != nil {
 		// remove the allocation asks from the app
 		reservedAsks := app.RemoveAllocationAsk(allocationKey)
 		log.Logger().Info("release allocation ask",
@@ -1064,7 +1094,7 @@ func (psc *PartitionContext) removeAllocationAsk(appID string, allocationKey str
 			zap.Int("reservedAskReleased", reservedAsks))
 		// update the partition if the asks were reserved (clean up)
 		if reservedAsks != 0 {
-			psc.unReserveCount(appID, reservedAsks)
+			pc.unReserveCount(appID, reservedAsks)
 		}
 	}
 }

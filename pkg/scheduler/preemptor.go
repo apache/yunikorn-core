@@ -63,7 +63,7 @@ func (m *queuePreemptCalcResource) initFromSchedulingQueue(queue *objects.Queue)
 	m.guaranteed = queue.GetGuaranteedResource()
 	m.used = queue.GetAllocatedResource()
 	m.pending = queue.GetPendingResource()
-	m.max = queue.getMaxResource()
+	m.max = queue.GetMaxResource()
 }
 
 func newQueuePreemptCalcResource() *queuePreemptCalcResource {
@@ -87,7 +87,7 @@ func getPreemptionPolicies() []PreemptionPolicy {
 // Visible by tests
 func (s *Scheduler) SingleStepPreemption() {
 	// Skip if no preemption needed.
-	if !s.clusterSchedulingContext.NeedPreemption() {
+	if !s.clusterContext.NeedPreemption() {
 		return
 	}
 
@@ -107,7 +107,7 @@ func (s *Scheduler) resetPreemptionContext() {
 	}
 
 	// Copy from scheduler
-	for partition, partitionContext := range s.clusterSchedulingContext.GetPartitionMapClone() {
+	for partition, partitionContext := range s.clusterContext.GetPartitionMapClone() {
 		preemptionPartitionCtx := &preemptionPartitionContext{
 			leafQueues: make(map[string]*preemptionQueueContext),
 		}
@@ -130,7 +130,7 @@ func (s *Scheduler) recursiveInitPreemptionQueueContext(preemptionPartitionCtx *
 		preemptionPartitionCtx.leafQueues[queue.QueuePath] = preemptionQueue
 	}
 
-	for childName, child := range queue.children {
+	for childName, child := range queue.GetCopyOfChildren() {
 		preemptionQueue.children[childName] = s.recursiveInitPreemptionQueueContext(preemptionPartitionCtx, preemptionQueue, child)
 	}
 

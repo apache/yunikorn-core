@@ -26,44 +26,10 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 )
-
-// create the root queue, base for all testing
-func createRootQueue(maxRes map[string]string) (*Queue, error) {
-	return createManagedQueueWithProps(nil, "root", true, maxRes, nil)
-}
-
-// wrapper around the create call using the one syntax for all queue types
-func createManagedQueue(parentSQ *Queue, name string, parent bool, maxRes map[string]string) (*Queue, error) {
-	return createManagedQueueWithProps(parentSQ, name, parent, maxRes, nil)
-}
-
-// create managed queue with props set
-func createManagedQueueWithProps(parentSQ *Queue, name string, parent bool, maxRes, props map[string]string) (*Queue, error) {
-	queueConfig := configs.QueueConfig{
-		Name:       name,
-		Parent:     parent,
-		Queues:     nil,
-		Properties: props,
-	}
-	if maxRes != nil {
-		queueConfig.Resources = configs.Resources{
-			Max: maxRes,
-		}
-	}
-	return NewConfiguredQueue(queueConfig, parentSQ)
-}
-
-// wrapper around the create call using the one syntax for all queue types
-// NOTE: test code uses a flag for parent=true, dynamic queues use leaf flag
-func createDynamicQueue(parentSQ *Queue, name string, parent bool) (*Queue, error) {
-	return NewDynamicQueue(name, !parent, parentSQ)
-}
 
 // base test for creating a managed queue
 func TestQueueBasics(t *testing.T) {
@@ -71,7 +37,7 @@ func TestQueueBasics(t *testing.T) {
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 	// check the state of the queue
-	if !root.IsManaged() && !root.isLeafQueue() && !root.IsRunning() {
+	if !root.IsManaged() && !root.IsLeafQueue() && !root.IsRunning() {
 		t.Error("root queue status is incorrect")
 	}
 	// allocations should be nil
@@ -89,7 +55,7 @@ func TestManagedSubQueues(t *testing.T) {
 	var parent *Queue
 	parent, err = createManagedQueue(root, "parent", true, nil)
 	assert.NilError(t, err, "failed to create parent queue")
-	if parent.isLeafQueue() || !parent.IsManaged() || !parent.IsRunning() {
+	if parent.IsLeafQueue() || !parent.IsManaged() || !parent.IsRunning() {
 		t.Error("parent queue is not marked as running managed parent")
 	}
 	if len(root.children) == 0 {
@@ -109,13 +75,13 @@ func TestManagedSubQueues(t *testing.T) {
 	if len(parent.children) == 0 {
 		t.Error("leaf queue is not added to the parent queue")
 	}
-	if !leaf.isLeafQueue() || !leaf.IsManaged() {
+	if !leaf.IsLeafQueue() || !leaf.IsManaged() {
 		t.Error("leaf queue is not marked as managed leaf")
 	}
 
 	// cannot remove child with app in it
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "test"})
-	leaf.AddSchedulingApplication(app)
+	app := newApplication("app-1", "default", "root.parent.leaf")
+	leaf.AddApplication(app)
 
 	// both parent and leaf are marked for removal
 	parent.MarkQueueForRemoval()
@@ -131,7 +97,7 @@ func TestManagedSubQueues(t *testing.T) {
 		t.Error("leaf queue should not have been removed")
 	}
 	// remove the app (dirty way)
-	delete(leaf.applications, "test")
+	delete(leaf.applications, "app-1")
 	if !leaf.RemoveQueue() && len(parent.children) != 0 {
 		t.Error("leaf queue should have been removed and parent updated and was not")
 	}
@@ -146,7 +112,7 @@ func TestDynamicSubQueues(t *testing.T) {
 	var parent *Queue
 	parent, err = createDynamicQueue(root, "parent", true)
 	assert.NilError(t, err, "failed to create parent queue")
-	if parent.isLeafQueue() || parent.IsManaged() {
+	if parent.IsLeafQueue() || parent.IsManaged() {
 		t.Errorf("parent queue is not marked as parent")
 	}
 	if len(root.children) == 0 {
@@ -159,13 +125,13 @@ func TestDynamicSubQueues(t *testing.T) {
 	if len(parent.children) == 0 {
 		t.Error("leaf queue is not added to the parent queue")
 	}
-	if !leaf.isLeafQueue() || leaf.IsManaged() {
+	if !leaf.IsLeafQueue() || leaf.IsManaged() {
 		t.Error("leaf queue is not marked as managed leaf")
 	}
 
 	// cannot remove child with app in it
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "test"})
-	leaf.AddSchedulingApplication(app)
+	app := newApplication("app-1", "default", "root.parent.leaf")
+	leaf.AddApplication(app)
 
 	// try to mark parent and leaf for removal
 	parent.MarkQueueForRemoval()
@@ -181,7 +147,7 @@ func TestDynamicSubQueues(t *testing.T) {
 		t.Error("leaf queue should not have been removed")
 	}
 	// remove the app (dirty way)
-	delete(leaf.applications, "test")
+	delete(leaf.applications, "app-1")
 	if !leaf.RemoveQueue() && len(parent.children) != 0 {
 		t.Error("leaf queue should have been removed and parent updated and was not")
 	}
@@ -196,17 +162,17 @@ func TestPendingCalc(t *testing.T) {
 	assert.NilError(t, err, "failed to create leaf queue")
 
 	res := map[string]string{"memory": "100", "vcores": "10"}
-	var allocation *resources.Resource
-	allocation, err = resources.NewResourceFromConf(res)
+	var allocRes *resources.Resource
+	allocRes, err = resources.NewResourceFromConf(res)
 	assert.NilError(t, err, "failed to create basic resource")
-	leaf.incPendingResource(allocation)
-	if !resources.Equals(root.pending, allocation) {
-		t.Errorf("root queue pending allocation failed to increment expected %v, got %v", allocation, root.pending)
+	leaf.incPendingResource(allocRes)
+	if !resources.Equals(root.pending, allocRes) {
+		t.Errorf("root queue pending allocation failed to increment expected %v, got %v", allocRes, root.pending)
 	}
-	if !resources.Equals(leaf.pending, allocation) {
-		t.Errorf("leaf queue pending allocation failed to increment expected %v, got %v", allocation, leaf.pending)
+	if !resources.Equals(leaf.pending, allocRes) {
+		t.Errorf("leaf queue pending allocation failed to increment expected %v, got %v", allocRes, leaf.pending)
 	}
-	leaf.decPendingResource(allocation)
+	leaf.decPendingResource(allocRes)
 	if !resources.IsZero(root.pending) {
 		t.Errorf("root queue pending allocation failed to decrement expected 0, got %v", root.pending)
 	}
@@ -214,7 +180,7 @@ func TestPendingCalc(t *testing.T) {
 		t.Errorf("leaf queue pending allocation failed to decrement expected 0, got %v", leaf.pending)
 	}
 	// Not allowed to go negative: both will be zero after this
-	newRes := resources.Multiply(allocation, 2)
+	newRes := resources.Multiply(allocRes, 2)
 	root.pending = newRes
 	leaf.decPendingResource(newRes)
 	// using the get function to access the value
@@ -272,15 +238,15 @@ func TestAddApplication(t *testing.T) {
 		map[string]resources.Quantity{
 			resources.MEMORY: 10,
 		})
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "test"})
+	app := newApplication("app-1", "default", "root.parent.leaf")
 	app.pending = pending
 	// adding the app must not update pending resources
-	leaf.AddSchedulingApplication(app)
+	leaf.AddApplication(app)
 	assert.Equal(t, len(leaf.applications), 1, "Application was not added to the queue as expected")
 	assert.Assert(t, resources.IsZero(leaf.pending), "leaf queue pending resource not zero")
 
 	// add the same app again should not increase the number of apps
-	leaf.AddSchedulingApplication(app)
+	leaf.AddApplication(app)
 	assert.Equal(t, len(leaf.applications), 1, "Application was not replaced in the queue as expected")
 }
 
@@ -294,18 +260,16 @@ func TestAddApplicationWithTag(t *testing.T) {
 	assert.NilError(t, err, "failed to create managed leaf queue")
 	leafUn, err = createDynamicQueue(root, "leaf-unman", false)
 	assert.NilError(t, err, "failed to create Dynamic leaf queue")
-	appInfo := cache.NewApplicationInfo("app-1", "default", "root.leaf-man", security.UserGroup{}, nil)
-	app1 := newSchedulingApplication(appInfo)
+	app := newApplication("app-1", "default", "root.leaf-man")
 
 	// adding the app to managed/Dynamic queue must not update queue settings, works
-	leaf.AddSchedulingApplication(app1)
+	leaf.AddApplication(app)
 	assert.Equal(t, len(leaf.applications), 1, "Application was not added to the managed queue as expected")
 	if leaf.GetMaxResource() != nil {
 		t.Errorf("Max resources should not be set on managed queue got: %s", leaf.GetMaxResource().String())
 	}
-	appInfo = cache.NewApplicationInfo("app-2", "default", "root.leaf-un", security.UserGroup{}, nil)
-	app2 := newSchedulingApplication(appInfo)
-	leafUn.AddSchedulingApplication(app2)
+	app = newApplication("app-2", "default", "root.leaf-un")
+	leafUn.AddApplication(app)
 	assert.Equal(t, len(leaf.applications), 1, "Application was not added to the Dynamic queue as expected")
 	if leafUn.GetMaxResource() != nil {
 		t.Errorf("Max resources should not be set on Dynamic queue got: %s", leafUn.GetMaxResource().String())
@@ -318,16 +282,14 @@ func TestAddApplicationWithTag(t *testing.T) {
 	tags := make(map[string]string)
 	tags[appTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":10}}}"
 	// add apps again now with the tag set
-	appInfo = cache.NewApplicationInfo("app-3", "default", "root.leaf-man", security.UserGroup{}, tags)
-	app3 := newSchedulingApplication(appInfo)
-	leaf.AddSchedulingApplication(app3)
+	app = newApplicationWithTags("app-3", "default", "root.leaf-man", tags)
+	leaf.AddApplication(app)
 	assert.Equal(t, len(leaf.applications), 2, "Application was not added to the managed queue as expected")
 	if leaf.GetMaxResource() != nil {
 		t.Errorf("Max resources should not be set on managed queue got: %s", leaf.GetMaxResource().String())
 	}
-	appInfo = cache.NewApplicationInfo("app-4", "default", "root.leaf-un", security.UserGroup{}, tags)
-	app4 := newSchedulingApplication(appInfo)
-	leafUn.AddSchedulingApplication(app4)
+	app = newApplicationWithTags("app-4", "default", "root.leaf-un", tags)
+	leafUn.AddApplication(app)
 	assert.Equal(t, len(leaf.applications), 2, "Application was not added to the Dynamic queue as expected")
 	if !resources.Equals(leafUn.GetMaxResource(), maxRes) {
 		t.Errorf("Max resources not set as expected: %s got: %v", maxRes.String(), leafUn.GetMaxResource())
@@ -335,9 +297,8 @@ func TestAddApplicationWithTag(t *testing.T) {
 
 	// set to illegal limit (0 value)
 	tags[appTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":0}}}"
-	appInfo = cache.NewApplicationInfo("app-4", "default", "root.leaf-un", security.UserGroup{}, tags)
-	app4 = newSchedulingApplication(appInfo)
-	leafUn.AddSchedulingApplication(app4)
+	app = newApplicationWithTags("app-4", "default", "root.leaf-un", tags)
+	leafUn.AddApplication(app)
 	assert.Equal(t, len(leaf.applications), 2, "Application was not added to the Dynamic queue as expected")
 	if !resources.Equals(leafUn.GetMaxResource(), maxRes) {
 		t.Errorf("Max resources not set as expected: %s got: %v", maxRes.String(), leafUn.GetMaxResource())
@@ -352,18 +313,18 @@ func TestRemoveApplication(t *testing.T) {
 	leaf, err = createManagedQueue(root, "leaf-man", false, nil)
 	assert.NilError(t, err, "failed to create managed leaf queue")
 	// try removing a non existing app
-	nonExist := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "test"})
-	leaf.RemoveSchedulingApplication(nonExist)
+	nonExist := newApplication("test", "", "")
+	leaf.RemoveApplication(nonExist)
 	assert.Equal(t, len(leaf.applications), 0, "Removal of non existing app updated unexpected")
 
 	// add an app and remove it
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "exists"})
-	leaf.AddSchedulingApplication(app)
+	app := newApplication("exists", "default", "root.leaf-man")
+	leaf.AddApplication(app)
 	assert.Equal(t, len(leaf.applications), 1, "Application was not added to the queue as expected")
 	assert.Assert(t, resources.IsZero(leaf.pending), "leaf queue pending resource not zero")
-	leaf.RemoveSchedulingApplication(nonExist)
+	leaf.RemoveApplication(nonExist)
 	assert.Equal(t, len(leaf.applications), 1, "Non existing application was removed from the queue")
-	leaf.RemoveSchedulingApplication(app)
+	leaf.RemoveApplication(app)
 	assert.Equal(t, len(leaf.applications), 0, "Application was not removed from the queue as expected")
 
 	// try the same again now with pending resources set
@@ -372,12 +333,12 @@ func TestRemoveApplication(t *testing.T) {
 			resources.MEMORY: 10,
 		})
 	app.pending.AddTo(pending)
-	leaf.AddSchedulingApplication(app)
+	leaf.AddApplication(app)
 	assert.Equal(t, len(leaf.applications), 1, "Application was not added to the queue as expected")
 	assert.Assert(t, resources.IsZero(leaf.pending), "leaf queue pending resource not zero")
 	// update pending resources for the hierarchy
 	leaf.incPendingResource(pending)
-	leaf.RemoveSchedulingApplication(app)
+	leaf.RemoveApplication(app)
 	assert.Equal(t, len(leaf.applications), 0, "Application was not removed from the queue as expected")
 	assert.Assert(t, resources.IsZero(leaf.pending), "leaf queue pending resource not updated correctly")
 	assert.Assert(t, resources.IsZero(root.pending), "root queue pending resource not updated correctly")
@@ -410,41 +371,6 @@ func TestQueueStates(t *testing.T) {
 	}
 }
 
-func TestAllocatingCalc(t *testing.T) {
-	// create the root
-	root, err := createRootQueue(nil)
-	assert.NilError(t, err, "queue create failed")
-	var leaf *Queue
-	leaf, err = createManagedQueue(root, "leaf", false, nil)
-	assert.NilError(t, err, "failed to create leaf queue")
-
-	res := map[string]string{"first": "1"}
-	var allocation *resources.Resource
-	allocation, err = resources.NewResourceFromConf(res)
-	assert.NilError(t, err, "failed to create basic resource")
-	leaf.incAllocatingResource(allocation)
-	if !resources.Equals(root.allocating, allocation) {
-		t.Errorf("root queue allocating failed to increment expected %v, got %v", allocation, root.allocating)
-	}
-	if !resources.Equals(leaf.allocating, allocation) {
-		t.Errorf("leaf queue allocating failed to increment expected %v, got %v", allocation, leaf.allocating)
-	}
-	leaf.decAllocatingResource(allocation)
-	if !resources.IsZero(root.allocating) {
-		t.Errorf("root queue allocating failed to decrement expected 0, got %v", root.allocating)
-	}
-	// Not allowed to go negative: both will be zero after this
-	root.incAllocatingResource(allocation)
-	leaf.decAllocatingResource(allocation)
-	// using the get function to access the value
-	if !resources.IsZero(root.getAllocatingResource()) {
-		t.Errorf("root queue allocating failed to decrement expected zero, got %v", root.allocating)
-	}
-	if !resources.IsZero(leaf.getAllocatingResource()) {
-		t.Errorf("leaf queue allocating should have failed to decrement expected zero, got %v", leaf.allocating)
-	}
-}
-
 func TestPreemptingCalc(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)
@@ -454,8 +380,8 @@ func TestPreemptingCalc(t *testing.T) {
 	assert.NilError(t, err, "failed to create leaf queue")
 
 	res := map[string]string{"first": "1"}
-	var allocation *resources.Resource
-	allocation, err = resources.NewResourceFromConf(res)
+	var allocRes *resources.Resource
+	allocRes, err = resources.NewResourceFromConf(res)
 	assert.NilError(t, err, "failed to create basic resource")
 	if !resources.IsZero(leaf.preempting) {
 		t.Errorf("leaf queue preempting resources not set as expected 0, got %v", leaf.preempting)
@@ -464,52 +390,22 @@ func TestPreemptingCalc(t *testing.T) {
 		t.Errorf("root queue preempting resources not set as expected 0, got %v", root.preempting)
 	}
 	// preempting does not filter up the hierarchy, check that
-	leaf.IncPreemptingResource(allocation)
+	leaf.IncPreemptingResource(allocRes)
 	// using the get function to access the value
-	if !resources.Equals(allocation, leaf.GetPreemptingResource()) {
-		t.Errorf("queue preempting resources not set as expected %v, got %v", allocation, leaf.preempting)
+	if !resources.Equals(allocRes, leaf.GetPreemptingResource()) {
+		t.Errorf("queue preempting resources not set as expected %v, got %v", allocRes, leaf.preempting)
 	}
 	if !resources.IsZero(root.GetPreemptingResource()) {
 		t.Errorf("root queue preempting resources not set as expected 0, got %v", root.preempting)
 	}
-	newRes := resources.Multiply(allocation, 2)
+	newRes := resources.Multiply(allocRes, 2)
 	leaf.decPreemptingResource(newRes)
 	if !resources.IsZero(leaf.GetPreemptingResource()) {
 		t.Errorf("queue preempting resources not set as expected 0, got %v", leaf.preempting)
 	}
 	leaf.setPreemptingResource(newRes)
-	if !resources.Equals(leaf.GetPreemptingResource(), resources.Multiply(allocation, 2)) {
+	if !resources.Equals(leaf.GetPreemptingResource(), resources.Multiply(allocRes, 2)) {
 		t.Errorf("queue preempting resources not set as expected %v, got %v", newRes, leaf.preempting)
-	}
-}
-
-func TestAssumedQueueCalc(t *testing.T) {
-	// create the root
-	root, err := createRootQueue(nil)
-	assert.NilError(t, err, "queue create failed")
-	var leaf *Queue
-	leaf, err = createManagedQueue(root, "leaf", false, nil)
-	assert.NilError(t, err, "failed to create leaf queue")
-	assumed := leaf.getAssumeAllocated()
-	if !resources.IsZero(assumed) {
-		t.Errorf("queue unconfirmed and allocated resources not set as expected 0, got %v", assumed)
-	}
-	res := map[string]string{"first": "1"}
-	var allocation *resources.Resource
-	allocation, err = resources.NewResourceFromConf(res)
-	assert.NilError(t, err, "failed to create basic resource")
-	leaf.incAllocatingResource(allocation)
-	assumed = leaf.getAssumeAllocated()
-	if !resources.Equals(assumed, allocation) {
-		t.Errorf("root queue allocating failed to increment expected %v, got %v", allocation, assumed)
-	}
-	// increase the allocated queue resource, use nodeReported true to bypass checks
-	err = leaf.IncAllocatedResource(allocation, true)
-	assert.NilError(t, err, "failed to increase cache queue allocated resource")
-	assumed = leaf.getAssumeAllocated()
-	allocation = resources.Multiply(allocation, 2)
-	if !resources.Equals(assumed, allocation) {
-		t.Errorf("root queue allocating failed to increment expected %v, got %v", allocation, assumed)
 	}
 }
 
@@ -534,23 +430,20 @@ func TestSortApplications(t *testing.T) {
 		t.Errorf("empty queue should return no app from sort: %v", leaf)
 	}
 	// new app does not have pending res, does not get returned
-	appInfo := cache.NewApplicationInfo("app-1", "default", leaf.QueuePath, security.UserGroup{}, nil)
-	app := newSchedulingApplication(appInfo)
+	app := newApplication("app-1", "default", leaf.QueuePath)
 	app.queue = leaf
-	leaf.AddSchedulingApplication(app)
+	leaf.AddApplication(app)
 	if len(leaf.sortApplications()) != 0 {
 		t.Errorf("app without ask should not be in sorted apps: %v", app)
 	}
-	var res, delta *resources.Resource
+	var res *resources.Resource
 	res, err = resources.NewResourceFromConf(map[string]string{"first": "1"})
 	assert.NilError(t, err, "failed to create basic resource")
 	// add an ask app must be returned
-	delta, err = app.addAllocationAsk(newAllocationAsk("alloc-1", "app-1", res))
-	if err != nil || !resources.Equals(res, delta) {
-		t.Errorf("allocation ask delta expected %v, got %v (err = %v)", res, delta, err)
-	}
+	err = app.AddAllocationAsk(newAllocationAsk("alloc-1", "app-1", res))
+	assert.NilError(t, err, "failed to add allocation ask")
 	sortedApp := leaf.sortApplications()
-	if len(sortedApp) != 1 || sortedApp[0].ApplicationInfo.ApplicationID != "app-1" {
+	if len(sortedApp) != 1 || sortedApp[0].ApplicationID != "app-1" {
 		t.Errorf("sorted application is missing expected app: %v", sortedApp)
 	}
 	// set 0 repeat
@@ -640,11 +533,7 @@ func TestHeadroom(t *testing.T) {
 
 	// allocating and allocated
 	var res *resources.Resource
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "1", "second": "1"})
-	assert.NilError(t, err, "failed to create resource")
-	leaf1.incAllocatingResource(res)
-	leaf2.incAllocatingResource(res)
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "4", "second": "2"})
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "5", "second": "3"})
 	assert.NilError(t, err, "failed to create resource")
 	err = leaf1.IncAllocatedResource(res, true)
 	assert.NilError(t, err, "failed to set allocated resource on leaf1")
@@ -686,8 +575,7 @@ func TestHeadroom(t *testing.T) {
 	}
 }
 
-//nolint: funlen
-func TestMaxHeadroom(t *testing.T) {
+func TestMaxHeadroomNoMax(t *testing.T) {
 	// create the root: nil test
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
@@ -721,13 +609,8 @@ func TestMaxHeadroom(t *testing.T) {
 	leaf2, err = createManagedQueue(parent, "leaf2", false, nil)
 	assert.NilError(t, err, "failed to create leaf2 queue")
 
-	// allocating and allocated
 	var res *resources.Resource
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "1", "second": "1"})
-	assert.NilError(t, err, "failed to create resource")
-	leaf1.incAllocatingResource(res)
-	leaf2.incAllocatingResource(res)
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "4", "second": "2"})
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "5", "second": "3"})
 	assert.NilError(t, err, "failed to create resource")
 	err = leaf1.IncAllocatedResource(res, true)
 	assert.NilError(t, err, "failed to set allocated resource on leaf1")
@@ -745,7 +628,9 @@ func TestMaxHeadroom(t *testing.T) {
 
 	headRoom = leaf2.getMaxHeadRoom()
 	assert.Assert(t, headRoom == nil, "headRoom of leaf2 should be nil because no max set for all queues")
+}
 
+func TestMaxHeadroomMax(t *testing.T) {
 	// recreate the structure, set max capacity in parent and a leaf queue
 	// structure is:
 	// root (max: nil)
@@ -753,8 +638,9 @@ func TestMaxHeadroom(t *testing.T) {
 	//     - leaf1 (max: 10, 8)  (alloc: 5,3)
 	//     - leaf2 (max: nil)    (alloc: 6,4)
 	resMap := map[string]string{"first": "20", "second": "8"}
-	root, err = createRootQueue(nil)
+	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "failed to create root queue with limit")
+	var parent, leaf1, leaf2 *Queue
 	parent, err = createManagedQueue(root, "parent", true, resMap)
 	assert.NilError(t, err, "failed to create parent queue")
 	resMap = map[string]string{"first": "10", "second": "8"}
@@ -763,13 +649,8 @@ func TestMaxHeadroom(t *testing.T) {
 	leaf2, err = createManagedQueue(parent, "leaf2", false, nil)
 	assert.NilError(t, err, "failed to create leaf2 queue")
 
-	// allocating and allocated
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "1", "second": "1"})
-	assert.NilError(t, err, "failed to create resource")
-	leaf1.incAllocatingResource(res)
-	leaf2.incAllocatingResource(res)
-	leaf2.incAllocatingResource(res)
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "4", "second": "2"})
+	var res *resources.Resource
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "5", "second": "3"})
 	assert.NilError(t, err, "failed to create resource")
 	err = leaf1.IncAllocatedResource(res, true)
 	assert.NilError(t, err, "failed to set allocated resource on leaf1")
@@ -777,27 +658,27 @@ func TestMaxHeadroom(t *testing.T) {
 	assert.NilError(t, err, "failed to set allocated resource on leaf2")
 
 	// root headroom should be nil
-	headRoom = root.getMaxHeadRoom()
+	headRoom := root.getMaxHeadRoom()
 	assert.Assert(t, headRoom == nil, "headRoom of root should be nil because no max set for all queues")
 
 	// parent headroom = parentMax - leaf1Allocated - leaf2Allocated
-	// parent headroom = (20 - 5 - 6, 8 - 3 - 4) = (9, 1)
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "9", "second": "1"})
+	// parent headroom = (20 - 5 - 5, 8 - 3 - 3) = (10, 2)
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "10", "second": "2"})
 	headRoom = parent.getMaxHeadRoom()
 	if err != nil || !resources.Equals(res, headRoom) {
 		t.Errorf("parent queue head room not as expected %v, got: %v (err %v)", res, headRoom, err)
 	}
 
 	// leaf1 headroom = MIN(parentHeadRoom, leaf1Max - leaf1Allocated)
-	// leaf1 headroom = MIN((9,1), (10-5, 8-3)) = MIN((9,1), (5,5)) = MIN(5, 1)
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "5", "second": "1"})
+	// leaf1 headroom = MIN((10,2), (10-5, 8-3)) = MIN((10,2), (5,5)) = MIN(5, 2)
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "5", "second": "2"})
 	headRoom = leaf1.getMaxHeadRoom()
 	if err != nil || !resources.Equals(res, headRoom) {
 		t.Errorf("leaf1 queue head room not as expected %v, got: %v (err %v)", res, headRoom, err)
 	}
 
 	// leaf2 headroom = parentMax - leaf1Allocated - leaf2Allocated
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "9", "second": "1"})
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "10", "second": "2"})
 	headRoom = leaf2.getMaxHeadRoom()
 	if err != nil || !resources.Equals(res, headRoom) {
 		t.Errorf("leaf2 queue head room not as expected %v, got: %v (err %v)", res, headRoom, err)
@@ -906,8 +787,8 @@ func TestGetApp(t *testing.T) {
 	}
 
 	// add app and check proper returns
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "app-1"})
-	leaf.AddSchedulingApplication(app)
+	app := newApplication("app-1", "default", leaf.QueuePath)
+	leaf.AddApplication(app)
 	assert.Equal(t, len(leaf.applications), 1, "queue should have one app registered")
 	if leaf.getApplication("app-1") == nil {
 		t.Errorf("registered app not found using appID")
@@ -929,12 +810,12 @@ func TestIsEmpty(t *testing.T) {
 	assert.Equal(t, leaf.IsEmpty(), true, "new leaf should have been empty")
 
 	// add app and check proper returns
-	app := newSchedulingApplication(&cache.ApplicationInfo{ApplicationID: "app-1"})
-	leaf.AddSchedulingApplication(app)
+	app := newApplication("app-1", "default", leaf.QueuePath)
+	leaf.AddApplication(app)
 	assert.Equal(t, leaf.IsEmpty(), false, "queue with registered app should not be empty")
 }
 
-func TestGetOutstandingRequest(t *testing.T) {
+func TestGetOutstandingRequestMax(t *testing.T) {
 	const app1ID = "app1"
 	const app2ID = "app1"
 
@@ -954,70 +835,73 @@ func TestGetOutstandingRequest(t *testing.T) {
 	queue2, err = createManagedQueue(root, "queue2", false, map[string]string{"cpu": "5"})
 	assert.NilError(t, err, "failed to create queue2 queue")
 
-	app1Info := cache.NewApplicationInfo(app1ID, "default", "root.queue1", security.UserGroup{}, nil)
-	app1 := newSchedulingApplication(app1Info)
+	app1 := newApplication(app1ID, "default", "root.queue1")
 	app1.queue = queue1
-	queue1.AddSchedulingApplication(app1)
-	res, err := resources.NewResourceFromConf(map[string]string{"cpu": "1"})
+	queue1.AddApplication(app1)
+	var res *resources.Resource
+	res, err = resources.NewResourceFromConf(map[string]string{"cpu": "1"})
 	assert.NilError(t, err, "failed to create basic resource")
 	for i := 0; i < 20; i++ {
-		_, err = app1.addAllocationAsk(
+		err = app1.AddAllocationAsk(
 			newAllocationAsk(fmt.Sprintf("alloc-%d", i), app1ID, res))
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 
-	app2Info := cache.NewApplicationInfo(app2ID, "default", "root.queue2", security.UserGroup{}, nil)
-	app2 := newSchedulingApplication(app2Info)
+	app2 := newApplication(app2ID, "default", "root.queue2")
 	app2.queue = queue2
-	queue2.AddSchedulingApplication(app2)
+	queue2.AddApplication(app2)
 	for i := 0; i < 20; i++ {
-		_, err = app2.addAllocationAsk(
+		err = app2.AddAllocationAsk(
 			newAllocationAsk(fmt.Sprintf("alloc-%d", i), app2ID, res))
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 
 	// verify get outstanding requests for root, and child queues
-	rootTotal := make([]*schedulingAllocationAsk, 0)
+	rootTotal := make([]*AllocationAsk, 0)
 	root.GetQueueOutstandingRequests(&rootTotal)
 	assert.Equal(t, len(rootTotal), 15)
 
-	queue1Total := make([]*schedulingAllocationAsk, 0)
+	queue1Total := make([]*AllocationAsk, 0)
 	queue1.GetQueueOutstandingRequests(&queue1Total)
 	assert.Equal(t, len(queue1Total), 10)
 
-	queue2Total := make([]*schedulingAllocationAsk, 0)
+	queue2Total := make([]*AllocationAsk, 0)
 	queue2.GetQueueOutstandingRequests(&queue2Total)
 	assert.Equal(t, len(queue2Total), 5)
 
-	// simulate queue1 has some allocating resources
+	// simulate queue1 has some allocated resources
 	// after allocation, the max available becomes to be 5
-	allocatingRest := map[string]string{"cpu": "5"}
-	allocation, err := resources.NewResourceFromConf(allocatingRest)
+	res, err = resources.NewResourceFromConf(map[string]string{"cpu": "5"})
 	assert.NilError(t, err, "failed to create basic resource")
-	queue1.incAllocatingResource(allocation)
+	err = queue1.IncAllocatedResource(res, false)
+	assert.NilError(t, err, "failed to increment allocated resources")
 
-	queue1Total = make([]*schedulingAllocationAsk, 0)
+	queue1Total = make([]*AllocationAsk, 0)
 	queue1.GetQueueOutstandingRequests(&queue1Total)
 	assert.Equal(t, len(queue1Total), 5)
 
-	queue2Total = make([]*schedulingAllocationAsk, 0)
+	queue2Total = make([]*AllocationAsk, 0)
 	queue2.GetQueueOutstandingRequests(&queue2Total)
 	assert.Equal(t, len(queue2Total), 5)
 
-	rootTotal = make([]*schedulingAllocationAsk, 0)
+	rootTotal = make([]*AllocationAsk, 0)
 	root.GetQueueOutstandingRequests(&rootTotal)
 	assert.Equal(t, len(rootTotal), 10)
 
 	// remove app2 from queue2
-	queue2.RemoveSchedulingApplication(app2)
-	queue2Total = make([]*schedulingAllocationAsk, 0)
+	queue2.RemoveApplication(app2)
+	queue2Total = make([]*AllocationAsk, 0)
 	queue2.GetQueueOutstandingRequests(&queue2Total)
 	assert.Equal(t, len(queue2Total), 0)
 
-	rootTotal = make([]*schedulingAllocationAsk, 0)
+	rootTotal = make([]*AllocationAsk, 0)
 	root.GetQueueOutstandingRequests(&rootTotal)
 	assert.Equal(t, len(rootTotal), 5)
+}
 
+func TestGetOutstandingRequestNoMax(t *testing.T) {
+	const app1ID = "app1"
+	const app2ID = "app1"
 	// queue structure:
 	// root
 	//   - queue1
@@ -1027,44 +911,44 @@ func TestGetOutstandingRequest(t *testing.T) {
 	// submit app1 to root.queue1, app2 to root.queue2
 	// app1 asks for 10 1x1CPU requests, app2 asks for 20 1x1CPU requests
 	// verify all these requests are outstanding
-	root, err = createRootQueue(nil)
+	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "failed to create root queue with limit")
+	var queue1, queue2 *Queue
 	queue1, err = createManagedQueue(root, "queue1", false, nil)
 	assert.NilError(t, err, "failed to create queue1 queue")
 	queue2, err = createManagedQueue(root, "queue2", false, nil)
 	assert.NilError(t, err, "failed to create queue2 queue")
 
-	app1Info = cache.NewApplicationInfo(app1ID, "default", "root.queue1", security.UserGroup{}, nil)
-	app1 = newSchedulingApplication(app1Info)
+	app1 := newApplication(app1ID, "default", "root.queue1")
 	app1.queue = queue1
-	queue1.AddSchedulingApplication(app1)
+	queue1.AddApplication(app1)
+	var res *resources.Resource
 	res, err = resources.NewResourceFromConf(map[string]string{"cpu": "1"})
 	assert.NilError(t, err, "failed to create basic resource")
 	for i := 0; i < 10; i++ {
-		_, err = app1.addAllocationAsk(
+		err = app1.AddAllocationAsk(
 			newAllocationAsk(fmt.Sprintf("alloc-%d", i), app1ID, res))
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 
-	app2Info = cache.NewApplicationInfo(app2ID, "default", "root.queue2", security.UserGroup{}, nil)
-	app2 = newSchedulingApplication(app2Info)
+	app2 := newApplication(app2ID, "default", "root.queue2")
 	app2.queue = queue2
-	queue2.AddSchedulingApplication(app2)
+	queue2.AddApplication(app2)
 	for i := 0; i < 20; i++ {
-		_, err = app2.addAllocationAsk(
+		err = app2.AddAllocationAsk(
 			newAllocationAsk(fmt.Sprintf("alloc-%d", i), app2ID, res))
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 
-	rootTotal = make([]*schedulingAllocationAsk, 0)
+	rootTotal := make([]*AllocationAsk, 0)
 	root.GetQueueOutstandingRequests(&rootTotal)
 	assert.Equal(t, len(rootTotal), 30)
 
-	queue1Total = make([]*schedulingAllocationAsk, 0)
+	queue1Total := make([]*AllocationAsk, 0)
 	queue1.GetQueueOutstandingRequests(&queue1Total)
 	assert.Equal(t, len(queue1Total), 10)
 
-	queue2Total = make([]*schedulingAllocationAsk, 0)
+	queue2Total := make([]*AllocationAsk, 0)
 	queue2.GetQueueOutstandingRequests(&queue2Total)
 	assert.Equal(t, len(queue2Total), 20)
 }
@@ -1073,19 +957,20 @@ func TestAllocationCalcRoot(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "failed to create basic root queue")
-	res := map[string]string{"memory": "100", "vcores": "10"}
-	var allocation *resources.Resource
-	allocation, err = resources.NewResourceFromConf(res)
+	var res *resources.Resource
+	res, err = resources.NewResourceFromConf(map[string]string{"memory": "100", "vcores": "10"})
 	assert.NilError(t, err, "failed to create basic resource")
-	err = root.IncAllocatedResource(allocation, false)
+	err = root.IncAllocatedResource(res, false)
 	assert.NilError(t, err, "root queue allocation failed on increment")
-	err = root.DecAllocatedResource(allocation)
+	err = root.DecAllocatedResource(res)
 	assert.NilError(t, err, "root queue allocation failed on decrement")
 	if !resources.IsZero(root.allocatedResource) {
 		t.Errorf("root queue allocations are not zero: %v", root.allocatedResource)
 	}
-	err = root.DecAllocatedResource(allocation)
-	assert.NilError(t, err, "root queue allocation should have failed to decrement")
+	err = root.DecAllocatedResource(res)
+	if err == nil {
+		t.Error("root queue allocation should have failed to decrement")
+	}
 }
 
 func TestAllocationCalcSub(t *testing.T) {
@@ -1096,27 +981,30 @@ func TestAllocationCalcSub(t *testing.T) {
 	parent, err = createManagedQueue(root, "parent", true, nil)
 	assert.NilError(t, err, "failed to create parent queue")
 
-	res := map[string]string{"memory": "100", "vcores": "10"}
-	var allocation *resources.Resource
-	allocation, err = resources.NewResourceFromConf(res)
+	var res *resources.Resource
+	res, err = resources.NewResourceFromConf(map[string]string{"memory": "100", "vcores": "10"})
 	assert.NilError(t, err, "failed to create basic resource")
-	err = parent.IncAllocatedResource(allocation, false)
+	err = parent.IncAllocatedResource(res, false)
 	assert.NilError(t, err, "parent queue allocation failed on increment")
-	err = parent.DecAllocatedResource(allocation)
+	err = parent.DecAllocatedResource(res)
 	assert.NilError(t, err, "parent queue allocation failed on decrement")
 	if !resources.IsZero(root.allocatedResource) {
 		t.Errorf("root queue allocations are not zero: %v", root.allocatedResource)
 	}
-	err = root.DecAllocatedResource(allocation)
-	assert.NilError(t, err, "root queue allocation should have failed to decrement %v", root.allocatedResource)
+	err = root.DecAllocatedResource(res)
+	if err == nil {
+		t.Error("root queue allocation should have failed to decrement")
+	}
 
 	// add to the parent, remove from root and then try to remove from parent: root should complain
-	err = parent.IncAllocatedResource(allocation, false)
+	err = parent.IncAllocatedResource(res, false)
 	assert.NilError(t, err, "parent queue allocation failed on increment")
-	err = root.DecAllocatedResource(allocation)
+	err = root.DecAllocatedResource(res)
 	assert.NilError(t, err, "root queue allocation failed on decrement")
-	err = parent.DecAllocatedResource(allocation)
-	assert.NilError(t, err, "parent queue allocation should have failed on decrement %v, %v", root.allocatedResource, parent.allocatedResource)
+	err = parent.DecAllocatedResource(res)
+	if err == nil {
+		t.Errorf("parent queue allocation should have failed on decrement %v, %v", root.allocatedResource, parent.allocatedResource)
+	}
 }
 
 func TestQueueProps(t *testing.T) {
@@ -1147,59 +1035,6 @@ func TestQueueProps(t *testing.T) {
 	assert.Assert(t, leaf.isLeaf && !leaf.isManaged, "leaf queue is not marked as unmanaged leaf")
 	assert.Equal(t, len(leaf.properties), 1, "leaf queue properties size incorrect")
 	assert.Equal(t, leaf.properties[configs.ApplicationSortPolicy], "stateaware", "leaf queue property value not as expected")
-}
-
-func TestUnManagedSubQueues(t *testing.T) {
-	// create the root
-	root, err := createRootQueue(nil)
-	assert.NilError(t, err, "failed to create basic root queue")
-	var parent *Queue
-	parent, err = createDynamicQueue(root, "parent-man", true)
-	assert.NilError(t, err, "failed to create parent queue")
-	if parent.isLeaf {
-		t.Errorf("parent queue is not marked as a parent")
-	}
-	if len(root.children) == 0 {
-		t.Errorf("parent queue is not added to the root queue")
-	}
-	var leaf *Queue
-	leaf, err = createDynamicQueue(parent, "leaf", false)
-	assert.NilError(t, err, "failed to create leaf queue")
-	if len(parent.children) == 0 {
-		t.Errorf("leaf queue is not added to the parent queue")
-	}
-	if !leaf.isLeaf || leaf.isManaged {
-		t.Errorf("leaf queue is not marked as managed leaf")
-	}
-
-	// try to mark parent and leaf for removal
-	parent.MarkQueueForRemoval()
-	if leaf.IsDraining() || parent.IsDraining() {
-		t.Errorf("queues are marked for removal (draining state not for unmanaged queues)")
-	}
-	// try to remove the parent
-	if parent.RemoveQueue() {
-		t.Errorf("parent queue should not have been removed as it has a child")
-	}
-	// remove the child
-	if !leaf.RemoveQueue() && len(parent.children) != 0 {
-		t.Errorf("leaf queue should have been removed and parent updated and was not")
-	}
-	// now set some allocation in the parent and try removal again
-	res := map[string]string{"memory": "100", "vcores": "10"}
-	var allocation *resources.Resource
-	allocation, err = resources.NewResourceFromConf(res)
-	assert.NilError(t, err, "failed to create basic resource")
-	err = parent.IncAllocatedResource(allocation, false)
-	assert.NilError(t, err, "allocation increase failed on parent")
-	if parent.RemoveQueue() {
-		t.Errorf("parent queue should not have been removed as it has an allocation")
-	}
-	err = parent.DecAllocatedResource(allocation)
-	assert.NilError(t, err, "parent queue allocation failed on decrement")
-	if !parent.RemoveQueue() {
-		t.Errorf("parent queue should have been removed and was not")
-	}
 }
 
 func TestMaxResource(t *testing.T) {

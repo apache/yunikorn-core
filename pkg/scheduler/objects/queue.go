@@ -24,13 +24,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
+	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
@@ -223,7 +223,7 @@ func (sq *Queue) setQueueConfig(conf configs.QueueConfig) error {
 	}
 	// Change from unmanaged to managed
 	if !sq.isManaged {
-		log.Logger().Info("changed un-managed queue to managed",
+		log.Logger().Info("changed dynamic queue to managed",
 			zap.String("queue", sq.QueuePath))
 		sq.isManaged = true
 	}
@@ -249,23 +249,17 @@ func (sq *Queue) setQueueConfig(conf configs.QueueConfig) error {
 	// Load the guaranteed resources
 	sq.guaranteedResource, err = resources.NewResourceFromConf(conf.Resources.Guaranteed)
 	if err != nil {
-		log.Logger().Error("parsing failed on max resources this should not happen",
+		log.Logger().Error("parsing failed on guaranteed resources this should not happen",
 			zap.Error(err))
 		return err
 	}
 	if len(sq.guaranteedResource.Resources) == 0 || resources.IsZero(sq.guaranteedResource) {
-		log.Logger().Debug("guaranteed resources config setting ignored: cannot set zero max resources")
+		log.Logger().Debug("guaranteed resources config setting ignored: guaranteed must be non-zero to take effect")
 		sq.guaranteedResource = nil
 	}
 
 	sq.properties = conf.Properties
 	return nil
-}
-
-// update the properties and trigger flow on updates if needed
-func (sq *Queue) updateQueueProperties(prop map[string]string) {
-	sq.properties = prop
-	sq.UpdateSortType()
 }
 
 // Update the sortType for the queue based on the current properties
@@ -329,7 +323,7 @@ func (sq *Queue) CurrentState() string {
 
 // Handle the state event for the queue.
 // The state machine handles the locking.
-func (sq *Queue) handleQueueEvent(event SchedulingObjectEvent) error {
+func (sq *Queue) handleQueueEvent(event ObjectEvent) error {
 	err := sq.stateMachine.Event(event.String(), sq.QueuePath)
 	// err is nil the state transition was done
 	if err == nil {
@@ -444,10 +438,10 @@ func (sq *Queue) decPendingResource(delta *resources.Resource) {
 	}
 }
 
-// Add scheduling app to the queue. All checks are assumed to have passed before we get here.
+// Add  app to the queue. All checks are assumed to have passed before we get here.
 // No update of pending resource is needed as it should not have any requests yet.
 // Replaces the existing application without further checks.
-func (sq *Queue) AddSchedulingApplication(app *Application) {
+func (sq *Queue) AddApplication(app *Application) {
 	sq.Lock()
 	defer sq.Unlock()
 	sq.applications[app.ApplicationID] = app
@@ -479,10 +473,10 @@ func (sq *Queue) AddSchedulingApplication(app *Application) {
 	sq.maxResource = res
 }
 
-// Remove the scheduling app from the list of tracked applications. Make sure that the app
+// Remove the app from the list of tracked applications. Make sure that the app
 // is assigned to this queue and not removed yet.
 // If not found this call is a noop
-func (sq *Queue) RemoveSchedulingApplication(app *Application) {
+func (sq *Queue) RemoveApplication(app *Application) {
 	// clean up any outstanding pending resources
 	appID := app.ApplicationID
 	if _, ok := sq.applications[appID]; !ok {
@@ -678,9 +672,9 @@ func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bo
 	defer sq.Unlock()
 
 	// check this queue: failure stops checks if the allocation is not part of a node addition
-	newAllocation := resources.Add(sq.allocatedResource, alloc)
+	newAllocated := resources.Add(sq.allocatedResource, alloc)
 	if !nodeReported {
-		if sq.maxResource != nil && !resources.FitIn(sq.maxResource, newAllocation) {
+		if sq.maxResource != nil && !resources.FitIn(sq.maxResource, newAllocated) {
 			return fmt.Errorf("allocation (%v) puts queue %s over maximum allocation (%v)",
 				alloc, sq.QueuePath, sq.maxResource)
 		}
@@ -696,7 +690,7 @@ func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bo
 		}
 	}
 	// all OK update this queue
-	sq.allocatedResource = newAllocation
+	sq.allocatedResource = newAllocated
 	sq.updateUsedResourceMetrics()
 	return nil
 }
@@ -709,7 +703,7 @@ func (sq *Queue) DecAllocatedResource(alloc *resources.Resource) error {
 
 	// check this queue: failure stops checks
 	if alloc != nil && !resources.FitIn(sq.allocatedResource, alloc) {
-		return fmt.Errorf("released allocation (%v) is larger than queue %s allocation (%v)",
+		return fmt.Errorf("released allocation (%v) is larger than '%s' queue allocation (%v)",
 			alloc, sq.QueuePath, sq.allocatedResource)
 	}
 	// check the parent: need to pass before updating
@@ -737,7 +731,7 @@ func (sq *Queue) sortApplications() []*Application {
 		return nil
 	}
 	// Sort the applications
-	return SortApplications(sq.getCopyOfApps(), sq.getSortType(), sq.GetGuaranteedResource())
+	return sortApplications(sq.getCopyOfApps(), sq.getSortType(), sq.GetGuaranteedResource())
 }
 
 // Return a sorted copy of the queues for this parent queue.
@@ -761,7 +755,7 @@ func (sq *Queue) sortQueues() []*Queue {
 		}
 	}
 	// Sort the queues
-	SortQueue(sortedQueues, sq.getSortType())
+	sortQueue(sortedQueues, sq.getSortType())
 
 	return sortedQueues
 }

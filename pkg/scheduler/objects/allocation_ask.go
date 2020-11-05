@@ -19,6 +19,7 @@
 package objects
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -36,9 +37,9 @@ type AllocationAsk struct {
 	Tags              map[string]string
 
 	// Private fields need protection
+	pendingRepeatAsk int32
 	createTime       time.Time // the time this ask was created (used in reservations)
 	priority         int32
-	PendingRepeatAsk int32
 	maxAllocations   int32
 
 	sync.RWMutex
@@ -48,7 +49,7 @@ func NewAllocationAsk(ask *si.AllocationAsk) *AllocationAsk {
 	saa := &AllocationAsk{
 		AllocationKey:     ask.AllocationKey,
 		AllocatedResource: resources.NewResourceFromProto(ask.ResourceAsk),
-		PendingRepeatAsk:  ask.MaxAllocations,
+		pendingRepeatAsk:  ask.MaxAllocations,
 		maxAllocations:    ask.MaxAllocations,
 		ApplicationID:     ask.ApplicationID,
 		PartitionName:     ask.PartitionName,
@@ -59,38 +60,60 @@ func NewAllocationAsk(ask *si.AllocationAsk) *AllocationAsk {
 	return saa
 }
 
+func (aa *AllocationAsk) String() string {
+	if aa == nil {
+		return "ask is nil"
+	}
+	return fmt.Sprintf("AllocationKey %s, ApplicationID %s, Resource %s, PendingRepeats %d", aa.AllocationKey, aa.ApplicationID, aa.AllocatedResource, aa.pendingRepeatAsk)
+}
+
 // Update pending ask repeat with the delta given.
 // Update the pending ask repeat counter with the delta (pos or neg). The pending repeat is always 0 or higher.
 // If the update would cause the repeat to go negative the update is discarded and false is returned.
 // In all other cases the repeat is updated and true is returned.
-func (saa *AllocationAsk) UpdatePendingAskRepeat(delta int32) bool {
-	saa.Lock()
-	defer saa.Unlock()
+func (aa *AllocationAsk) UpdatePendingAskRepeat(delta int32) bool {
+	aa.Lock()
+	defer aa.Unlock()
 
-	if saa.PendingRepeatAsk+delta >= 0 {
-		saa.PendingRepeatAsk += delta
+	if aa.pendingRepeatAsk+delta >= 0 {
+		aa.pendingRepeatAsk += delta
 		return true
 	}
 	return false
 }
 
 // Get the pending ask repeat
-func (saa *AllocationAsk) GetPendingAskRepeat() int32 {
-	saa.RLock()
-	defer saa.RUnlock()
-
-	return saa.PendingRepeatAsk
+func (aa *AllocationAsk) GetPendingAskRepeat() int32 {
+	aa.RLock()
+	defer aa.RUnlock()
+	return aa.pendingRepeatAsk
 }
 
 // Return the time this ask was created
 // Should be treated as read only not te be modified
-func (saa *AllocationAsk) GetCreateTime() time.Time {
-	return saa.createTime
+func (aa *AllocationAsk) GetCreateTime() time.Time {
+	aa.RLock()
+	defer aa.RUnlock()
+	return aa.createTime
 }
 
-// Normalised priority
+// Set the queue name after it is added to the application
+func (aa *AllocationAsk) setQueue(queueName string) {
+	aa.Lock()
+	defer aa.Unlock()
+	aa.QueueName = queueName
+}
+
+// Normalised priority set on create only
 // Currently a direct conversion.
-func (saa *AllocationAsk) normalizePriority(priority *si.Priority) int32 {
+func (aa *AllocationAsk) normalizePriority(priority *si.Priority) int32 {
 	// TODO, really normalize priority from ask
 	return priority.GetPriorityValue()
+}
+
+// Set the priority after it is created to the application
+func (aa *AllocationAsk) setPriority(prio int32) {
+	aa.Lock()
+	defer aa.Unlock()
+	aa.priority = prio
 }

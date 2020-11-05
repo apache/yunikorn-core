@@ -34,7 +34,7 @@ import (
 
 var imHistory *history.InternalMetricsHistory
 var lock sync.RWMutex
-var schedulerContext *scheduler.ClusterSchedulingContext
+var schedulerContext *scheduler.ClusterContext
 
 type WebService struct {
 	httpServer *http.Server
@@ -81,7 +81,7 @@ func (m *WebService) StartWebApp() {
 	}()
 }
 
-func NewWebApp(context *scheduler.ClusterSchedulingContext, internalMetrics *history.InternalMetricsHistory) *WebService {
+func NewWebApp(context *scheduler.ClusterContext, internalMetrics *history.InternalMetricsHistory) *WebService {
 	m := &WebService{}
 	schedulerContext = context
 	imHistory = internalMetrics

@@ -37,6 +37,12 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
+const (
+	partition = "[rm:123]default"
+	appID2    = "app-2"
+	appID1    = "app-1"
+)
+
 // Returns the calling function name, file name and line.
 // Used in waitFor.. functions to show where the call was made from.
 // The 2 caller skip steps over the waitFor.. caller back into the real test call
@@ -84,7 +90,7 @@ func waitForAllocatedQueueResource(t *testing.T, queue *objects.Queue, memory re
 	assert.NilError(t, err, "Failed to wait for allocations on queue %s, called from: %s", queue.QueuePath, caller())
 }
 
-func waitForNodesAllocatedResource(t *testing.T, cc *scheduler.ClusterContext, partitionName string, nodeIDs []string, allocatedMemory resources.Quantity, timeoutMs int) {
+func waitForAllocatedNodeResource(t *testing.T, cc *scheduler.ClusterContext, partitionName string, nodeIDs []string, allocatedMemory resources.Quantity, timeoutMs int) {
 	var totalNodeResource resources.Quantity
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		totalNodeResource = 0
@@ -96,7 +102,7 @@ func waitForNodesAllocatedResource(t *testing.T, cc *scheduler.ClusterContext, p
 	assert.NilError(t, err, "Failed to wait for allocations on partition %s and node %v, called from: %s", partitionName, nodeIDs, caller())
 }
 
-func waitForNodesAvailableResource(t *testing.T, cc *scheduler.ClusterContext, partitionName string, nodeIDs []string, availableMemory resources.Quantity, timeoutMs int) {
+func waitForAvailableNodeResource(t *testing.T, cc *scheduler.ClusterContext, partitionName string, nodeIDs []string, availableMemory resources.Quantity, timeoutMs int) {
 	var totalNodeResource resources.Quantity
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		totalNodeResource = 0
@@ -108,7 +114,7 @@ func waitForNodesAvailableResource(t *testing.T, cc *scheduler.ClusterContext, p
 	assert.NilError(t, err, "Failed to wait for available resource %v and node %v, called from: %s", availableMemory, nodeIDs, caller())
 }
 
-func waitForNewSchedulerNode(t *testing.T, cc *scheduler.ClusterContext, nodeID string, partitionName string, timeoutMs int) {
+func waitForNewNode(t *testing.T, cc *scheduler.ClusterContext, nodeID string, partitionName string, timeoutMs int) {
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		node := cc.GetNode(nodeID, partitionName)
 		return node != nil
@@ -116,7 +122,7 @@ func waitForNewSchedulerNode(t *testing.T, cc *scheduler.ClusterContext, nodeID 
 	assert.NilError(t, err, "Failed to wait for new scheduling node on partition %s, node %v, called from: %s", partitionName, nodeID, caller())
 }
 
-func waitForRemovedSchedulerNode(t *testing.T, context *scheduler.ClusterContext, nodeID string, partitionName string, timeoutMs int) {
+func waitForRemovedNode(t *testing.T, context *scheduler.ClusterContext, nodeID string, partitionName string, timeoutMs int) {
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		node := context.GetNode(nodeID, partitionName)
 		return node == nil
@@ -124,7 +130,7 @@ func waitForRemovedSchedulerNode(t *testing.T, context *scheduler.ClusterContext
 	assert.NilError(t, err, "Failed to wait for removal of scheduling node on partition %s, node %v, called from: %s", partitionName, nodeID, caller())
 }
 
-func getApplicationInfoFromPartition(pc *scheduler.PartitionContext, appID string) (*objects.Application, error) {
+func getApplication(pc *scheduler.PartitionContext, appID string) (*objects.Application, error) {
 	for _, app := range pc.GetApplications() {
 		if app.ApplicationID == appID {
 			return app, nil

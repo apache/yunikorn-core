@@ -42,8 +42,7 @@ type mockRMCallback struct {
 
 // This is only exported to allow the use in the simple_example.go.
 // Lint exclusion added as the non-export return is OK
-//nolint: golint
-func NewMockRMCallbackHandler() *mockRMCallback {
+func newMockRMCallbackHandler() *mockRMCallback {
 	return &mockRMCallback{
 		acceptedApplications: make(map[string]bool),
 		rejectedApplications: make(map[string]bool),

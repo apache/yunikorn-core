@@ -37,7 +37,7 @@ type mockScheduler struct {
 	partitionName  string
 }
 
-// Create the mock sceduler with the config provided.
+// Create the mock scheduler with the config provided.
 // The scheduler in the tests is normally the manual scheduler: the code must call
 // MultiStepSchedule(int) to allocate.
 // Auto scheduling does not give control over the scheduling steps and should only
@@ -56,7 +56,7 @@ func (m *mockScheduler) Init(config string, autoSchedule bool) error {
 	m.scheduler = m.serviceContext.Scheduler
 
 	configs.MockSchedulerConfigByData([]byte(config))
-	m.mockRM = NewMockRMCallbackHandler()
+	m.mockRM = newMockRMCallbackHandler()
 
 	_, err := m.proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{

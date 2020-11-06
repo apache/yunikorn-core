@@ -28,6 +28,8 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 )
 
+const noTransition = "no transition"
+
 // ----------------------------------
 // application events
 // ----------------------------------

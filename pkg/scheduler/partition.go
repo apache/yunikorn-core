@@ -28,6 +28,7 @@ import (
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
@@ -94,7 +95,7 @@ func newPartitionContext(conf configs.PartitionConfig, rmID string, cc *ClusterC
 
 // Initialise the partition
 func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionConfig) error {
-	if len(conf.Queues) == 0 || conf.Queues[0].Name != "root" {
+	if len(conf.Queues) == 0 || conf.Queues[0].Name != configs.RootQueue {
 		return fmt.Errorf("partition cannot be created without root queue")
 	}
 
@@ -117,7 +118,9 @@ func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionCon
 	pc.isPreemptable = conf.Preemption.Enabled
 
 	pc.rules = &conf.PlacementRules
-	pc.placementManager = placement.NewPlacementManager(*pc.rules, pc.GetQueue)
+	// We need to pass in the unlocked version of the getQueue function.
+	// Placing an application will already have a lock on the partition context.
+	pc.placementManager = placement.NewPlacementManager(*pc.rules, pc.getQueue)
 	// get the user group cache for the partition
 	// TODO get the resolver from the config
 	pc.userGroupCache = security.GetUserGroupCache("")
@@ -144,7 +147,7 @@ func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionCon
 func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig) error {
 	pc.Lock()
 	defer pc.Unlock()
-	if len(conf.Queues) == 0 || conf.Queues[0].Name != "root" {
+	if len(conf.Queues) == 0 || conf.Queues[0].Name != configs.RootQueue {
 		return fmt.Errorf("partition cannot be created without root queue")
 	}
 
@@ -159,7 +162,9 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 	} else {
 		log.Logger().Info("Creating new placement manager on config reload")
 		pc.rules = &conf.PlacementRules
-		pc.placementManager = placement.NewPlacementManager(*pc.rules, pc.GetQueue)
+		// We need to pass in the unlocked version of the getQueue function.
+		// Placing an application will already have a lock on the partition context.
+		pc.placementManager = placement.NewPlacementManager(*pc.rules, pc.getQueue)
 	}
 	// start at the root: there is only one queue
 	queueConf := conf.Queues[0]
@@ -341,9 +346,13 @@ func (pc *PartitionContext) removeApplication(appID string) []*objects.Allocatio
 	queueName := app.QueueName
 	// Remove all asks and thus all reservations and pending resources (queue included)
 	_ = app.RemoveAllocationAsk("")
-	// Remove all allocations (queue and nodes included)
+	// Remove app from queue
+	if queue := pc.getQueue(queueName); queue != nil {
+		queue.RemoveApplication(app)
+	}
+	// Remove all allocations
 	allocations := app.RemoveAllAllocations()
-	// Remove all allocations from nodes/queue
+	// Remove all allocations from nodes and the partition (queues have been updated already)
 	if len(allocations) != 0 {
 		for _, alloc := range allocations {
 			currentUUID := alloc.UUID
@@ -371,11 +380,6 @@ func (pc *PartitionContext) removeApplication(appID string) []*objects.Allocatio
 					zap.String("nodeID", alloc.NodeID))
 			}
 		}
-	}
-
-	// Remove app from queue
-	if queue := pc.getQueue(queueName); queue != nil {
-		queue.RemoveApplication(app)
 	}
 
 	log.Logger().Debug("application removed from the scheduler",
@@ -748,21 +752,17 @@ func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocat
 
 	// Safeguard against the unlikely case that we have clashes.
 	// A clash points to entropy issues on the node.
-	tempUUID := alloc.UUID
 	if _, found := pc.allocations[alloc.UUID]; found {
-		msg := fmt.Sprintf("UUID clash passed in %s, new %s", tempUUID, alloc.UUID)
-		panic(msg)
-		// log.Logger().Warn("UUID clash, random generator might be lacking entropy")
-		// for {
-		// 	allocationUUID := common.GetNewUUID()
-		// 	log.Logger().Warn("UUID clash, random generator might be lacking entropy",
-		// 		zap.String("uuid", alloc.UUID),
-		// 		zap.String("new UUID", allocationUUID))
-		// 	if pc.allocations[allocationUUID] == nil {
-		// 		alloc.UUID = allocationUUID
-		// 		break
-		// 	}
-		// }
+		for {
+			allocationUUID := common.GetNewUUID()
+			log.Logger().Warn("UUID clash, random generator might be lacking entropy",
+				zap.String("uuid", alloc.UUID),
+				zap.String("new UUID", allocationUUID))
+			if pc.allocations[allocationUUID] == nil {
+				alloc.UUID = allocationUUID
+				break
+			}
+		}
 	}
 	pc.allocations[alloc.UUID] = alloc
 	log.Logger().Info("scheduler allocation processed",
@@ -978,10 +978,11 @@ func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
 	}
 
 	node.AddAllocation(alloc)
+	app.RecoverAllocationAsk(alloc.Ask)
 	app.AddAllocation(alloc)
 	pc.allocations[alloc.UUID] = alloc
 
-	log.Logger().Debug("added allocation",
+	log.Logger().Debug("recovered allocation",
 		zap.String("partitionName", pc.Name),
 		zap.String("appID", alloc.ApplicationID),
 		zap.String("allocationUid", alloc.UUID),

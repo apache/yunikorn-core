@@ -38,7 +38,6 @@ var schedulerContext *scheduler.ClusterContext
 
 type WebService struct {
 	httpServer *http.Server
-	lock       sync.RWMutex
 }
 
 func newRouter() *mux.Router {

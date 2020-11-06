@@ -61,7 +61,7 @@ partitions:
                 vcore: 10000
 `
 	configs.MockSchedulerConfigByData([]byte(configData))
-	mockRM := NewMockRMCallbackHandler()
+	mockRM := newMockRMCallbackHandler()
 
 	_, err := proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{
@@ -74,12 +74,12 @@ partitions:
 
 	// Add two apps and wait for them to be accepted
 	err = proxy.Update(&si.UpdateRequest{
-		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a", "app-2": "root.b"}),
+		NewApplications: newAddAppRequest(map[string]string{appID1: "root.a", appID2: "root.b"}),
 		RmID:            "rm:123",
 	})
 	assert.NilError(b, err, "UpdateRequest application failed")
-	mockRM.waitForAcceptedApplication(b, "app-1", 1000)
-	mockRM.waitForAcceptedApplication(b, "app-2", 1000)
+	mockRM.waitForAcceptedApplication(b, appID1, 1000)
+	mockRM.waitForAcceptedApplication(b, appID2, 1000)
 
 	// Calculate node resources to make sure all required pods can be allocated
 	requestMem := 10
@@ -129,7 +129,7 @@ partitions:
 					},
 				},
 				MaxAllocations: int32(app1NumPods),
-				ApplicationID:  "app-1",
+				ApplicationID:  appID1,
 			},
 		},
 		RmID: "rm:123",
@@ -149,7 +149,7 @@ partitions:
 					},
 				},
 				MaxAllocations: int32(numPods - app1NumPods),
-				ApplicationID:  "app-2",
+				ApplicationID:  appID2,
 			},
 		},
 		RmID: "rm:123",

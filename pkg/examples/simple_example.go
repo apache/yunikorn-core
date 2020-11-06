@@ -19,11 +19,77 @@
 package examples
 
 import (
+	"sync"
+
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/entrypoint"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/tests"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
+
+type exampleRMCallback struct {
+	acceptedApplications map[string]bool
+	rejectedApplications map[string]bool
+	acceptedNodes        map[string]bool
+	rejectedNodes        map[string]bool
+	nodeAllocations      map[string][]*si.Allocation
+	Allocations          map[string]*si.Allocation
+
+	sync.RWMutex
+}
+
+func (m *exampleRMCallback) RecvUpdateResponse(response *si.UpdateResponse) error {
+	m.Lock()
+	defer m.Unlock()
+
+	for _, app := range response.AcceptedApplications {
+		m.acceptedApplications[app.ApplicationID] = true
+		delete(m.rejectedApplications, app.ApplicationID)
+	}
+
+	for _, app := range response.RejectedApplications {
+		m.rejectedApplications[app.ApplicationID] = true
+		delete(m.acceptedApplications, app.ApplicationID)
+	}
+
+	for _, node := range response.AcceptedNodes {
+		m.acceptedNodes[node.NodeID] = true
+		delete(m.rejectedNodes, node.NodeID)
+	}
+
+	for _, node := range response.RejectedNodes {
+		m.rejectedNodes[node.NodeID] = true
+		delete(m.acceptedNodes, node.NodeID)
+	}
+
+	for _, alloc := range response.NewAllocations {
+		m.Allocations[alloc.UUID] = alloc
+		if val, ok := m.nodeAllocations[alloc.NodeID]; ok {
+			val = append(val, alloc)
+			m.nodeAllocations[alloc.NodeID] = val
+		} else {
+			nodeAllocations := make([]*si.Allocation, 0)
+			nodeAllocations = append(nodeAllocations, alloc)
+			m.nodeAllocations[alloc.NodeID] = nodeAllocations
+		}
+	}
+
+	for _, alloc := range response.ReleasedAllocations {
+		delete(m.Allocations, alloc.UUID)
+	}
+
+	return nil
+}
+
+func newExampleRMCallback() *exampleRMCallback {
+	return &exampleRMCallback{
+		acceptedApplications: make(map[string]bool),
+		rejectedApplications: make(map[string]bool),
+		acceptedNodes:        make(map[string]bool),
+		rejectedNodes:        make(map[string]bool),
+		nodeAllocations:      make(map[string][]*si.Allocation),
+		Allocations:          make(map[string]*si.Allocation),
+	}
+}
 
 func exampleOfRunYourOwnRM() {
 	// Start all tests
@@ -62,7 +128,7 @@ partitions:
 	configs.MockSchedulerConfigByData([]byte(configData))
 
 	// Register RM
-	mockRM := tests.NewMockRMCallbackHandler() // [CHANGE THIS], should use your own implementation of api.ResourceManagerCallback
+	mockRM := newExampleRMCallback()
 
 	_, err := proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{

@@ -27,22 +27,24 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 )
 
+const testNode = "testnode"
+
 func TestNewNode(t *testing.T) {
 	// simple nil check
 	node := NewNode(nil)
 	if node != nil {
 		t.Error("node not returned correctly: node is nul or incorrect name")
 	}
-	proto := newProto("testnode", nil, nil, nil)
+	proto := newProto(testNode, nil, nil, nil)
 	node = NewNode(proto)
-	if node == nil || node.NodeID != "testnode" {
+	if node == nil || node.NodeID != testNode {
 		t.Error("node not returned correctly: node is nul or incorrect name")
 	}
 
 	totalRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100, "second": 100})
-	proto = newProto("testnode", totalRes, nil, map[string]string{})
+	proto = newProto(testNode, totalRes, nil, map[string]string{})
 	node = NewNode(proto)
-	if node == nil || node.NodeID != "testnode" {
+	if node == nil || node.NodeID != testNode {
 		t.Fatal("node not returned correctly: node is nul or incorrect name")
 	}
 	if !resources.Equals(node.totalResource, totalRes) ||
@@ -59,7 +61,7 @@ func TestNewNode(t *testing.T) {
 		common.NodePartition: "partition1",
 	}
 	node = NewNode(proto)
-	if node == nil || node.NodeID != "testnode" {
+	if node == nil || node.NodeID != testNode {
 		t.Fatal("node not returned correctly: node is nul or incorrect name")
 	}
 	assert.Equal(t, "host1", node.Hostname)
@@ -70,9 +72,9 @@ func TestNewNode(t *testing.T) {
 	totalResources := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100, "second": 100})
 	occupiedResources := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 30, "second": 20})
 	availableResources := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 70, "second": 80})
-	proto = newProto("testnode", totalResources, occupiedResources, map[string]string{})
+	proto = newProto(testNode, totalResources, occupiedResources, map[string]string{})
 	node = NewNode(proto)
-	assert.Equal(t, node.NodeID, "testnode", "node not returned correctly: node is nul or incorrect name")
+	assert.Equal(t, node.NodeID, testNode, "node not returned correctly: node is nul or incorrect name")
 	if !resources.Equals(node.GetCapacity(), totalResources) {
 		t.Errorf("node total resources not set correctly: %v expected got %v",
 			totalResources, node.GetCapacity())
@@ -385,13 +387,13 @@ func TestIsReservedForApp(t *testing.T) {
 }
 
 func TestAttributes(t *testing.T) {
-	proto := newProto("testnode", nil, nil, map[string]string{
+	proto := newProto(testNode, nil, nil, map[string]string{
 		common.NodePartition: "partition1",
 		"something":          "just a text",
 	})
 
 	node := NewNode(proto)
-	if node == nil || node.NodeID != "testnode" {
+	if node == nil || node.NodeID != testNode {
 		t.Fatal("node not returned correctly: node is nul or incorrect name")
 	}
 

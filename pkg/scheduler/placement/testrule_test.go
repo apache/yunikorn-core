@@ -63,6 +63,9 @@ func initQueueStructure(data []byte) error {
 	}
 	rootConf := conf.Partitions[0].Queues[0]
 	root, err = objects.NewConfiguredQueue(rootConf, nil)
+	if err != nil {
+		return err
+	}
 	return addQueue(rootConf.Queues, root)
 }
 

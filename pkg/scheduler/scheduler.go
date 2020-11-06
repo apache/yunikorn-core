@@ -33,10 +33,9 @@ import (
 
 // Main Scheduler service that starts the needed sub services
 type Scheduler struct {
-	clusterContext    *ClusterContext       // main context
-	preemptionContext *preemptionContext    // Preemption context
-	eventHandlers     handler.EventHandlers // list of event handlers
-	pendingEvents     chan interface{}      // queue for events
+	clusterContext    *ClusterContext    // main context
+	preemptionContext *preemptionContext // Preemption context
+	pendingEvents     chan interface{}   // queue for events
 }
 
 func NewScheduler() *Scheduler {

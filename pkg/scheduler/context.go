@@ -41,7 +41,6 @@ type ClusterContext struct {
 	partitions     map[string]*PartitionContext
 	needPreemption bool
 	policyGroup    string
-	rmEvents       chan interface{}
 	rmEventHandler handler.EventHandler
 
 	sync.RWMutex

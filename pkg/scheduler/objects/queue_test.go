@@ -307,7 +307,7 @@ func TestAddApplicationWithTag(t *testing.T) {
 
 func TestRemoveApplication(t *testing.T) {
 	// create the root
-	root, err := createRootQueue(nil)
+	root, err := createRootQueue(map[string]string{"first": "100"})
 	assert.NilError(t, err, "queue create failed")
 	var leaf *Queue
 	leaf, err = createManagedQueue(root, "leaf-man", false, nil)
@@ -328,20 +328,30 @@ func TestRemoveApplication(t *testing.T) {
 	assert.Equal(t, len(leaf.applications), 0, "Application was not removed from the queue as expected")
 
 	// try the same again now with pending resources set
-	pending := resources.NewResourceFromMap(
-		map[string]resources.Quantity{
-			resources.MEMORY: 10,
-		})
-	app.pending.AddTo(pending)
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	app.pending.AddTo(res)
 	leaf.AddApplication(app)
 	assert.Equal(t, len(leaf.applications), 1, "Application was not added to the queue as expected")
 	assert.Assert(t, resources.IsZero(leaf.pending), "leaf queue pending resource not zero")
 	// update pending resources for the hierarchy
-	leaf.incPendingResource(pending)
+	leaf.incPendingResource(res)
 	leaf.RemoveApplication(app)
 	assert.Equal(t, len(leaf.applications), 0, "Application was not removed from the queue as expected")
 	assert.Assert(t, resources.IsZero(leaf.pending), "leaf queue pending resource not updated correctly")
 	assert.Assert(t, resources.IsZero(root.pending), "root queue pending resource not updated correctly")
+
+	app.allocatedResource.AddTo(res)
+	app.pending = resources.NewResource()
+	leaf.AddApplication(app)
+	assert.Equal(t, len(leaf.applications), 1, "Application was not added to the queue as expected")
+	assert.Assert(t, resources.IsZero(leaf.allocatedResource), "leaf queue pending resource not zero")
+	// update allocated resources for the hierarchy
+	err = leaf.IncAllocatedResource(res, false)
+	assert.NilError(t, err, "increment of allocated resource on queue should not have failed")
+	leaf.RemoveApplication(app)
+	assert.Equal(t, len(leaf.applications), 0, "Application was not removed from the queue as expected")
+	assert.Assert(t, resources.IsZero(leaf.allocatedResource), "leaf queue allocated resource not updated correctly")
+	assert.Assert(t, resources.IsZero(root.allocatedResource), "root queue allocated resource not updated correctly")
 }
 
 func TestQueueStates(t *testing.T) {

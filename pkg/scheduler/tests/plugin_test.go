@@ -71,7 +71,6 @@ partitions:
 	plugins.RegisterSchedulerPlugin(fk)
 
 	const leafName = "root.singleleaf"
-	const appID = "app-1"
 	const node1 = "node-1"
 
 	// Register a node, and add apps
@@ -87,14 +86,14 @@ partitions:
 				},
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{appID: leafName}),
+		NewApplications: newAddAppRequest(map[string]string{appID1: leafName}),
 		RmID:            "rm:123",
 	})
 
 	assert.NilError(t, err, "UpdateRequest failed")
 
 	// wait until app and node gets registered
-	ms.mockRM.waitForAcceptedApplication(t, appID, 1000)
+	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
 	ms.mockRM.waitForAcceptedNode(t, node1, 1000)
 
 	// now submit a request, that uses 8/10 memory from the node
@@ -108,7 +107,7 @@ partitions:
 					},
 				},
 				MaxAllocations: 1,
-				ApplicationID:  appID,
+				ApplicationID:  appID1,
 			},
 		},
 		RmID: "rm:123",
@@ -133,7 +132,7 @@ partitions:
 					},
 				},
 				MaxAllocations: 1,
-				ApplicationID:  appID,
+				ApplicationID:  appID1,
 			},
 		},
 		RmID: "rm:123",
@@ -142,7 +141,7 @@ partitions:
 
 	err = common.WaitFor(100*time.Millisecond, 3000*time.Millisecond, func() bool {
 		reqSent := fk.getContainerUpdateRequest()
-		return reqSent != nil && reqSent.ApplicartionID == appID &&
+		return reqSent != nil && reqSent.ApplicartionID == appID1 &&
 			reqSent.GetState() == si.UpdateContainerSchedulingStateRequest_FAILED
 	})
 	assert.NilError(t, err)

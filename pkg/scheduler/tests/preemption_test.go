@@ -94,13 +94,13 @@ func TestBasicPreemption(t *testing.T) {
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
-	err = ms.addApp("app-1", "root.a", "")
+	err = ms.addApp(appID1, "root.a", "")
 	assert.NilError(t, err, "Adding application 1 to scheduler failed")
-	err = ms.addApp("app-2", "root.b", "")
+	err = ms.addApp(appID2, "root.b", "")
 	assert.NilError(t, err, "Adding application 2 to scheduler failed")
 
-	ms.mockRM.waitForAcceptedApplication(t, "app-1", 1000)
-	ms.mockRM.waitForAcceptedApplication(t, "app-2", 1000)
+	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
+	ms.mockRM.waitForAcceptedApplication(t, appID2, 1000)
 
 	// Check scheduling queue root
 	rootQ := ms.getQueue("root")
@@ -108,8 +108,8 @@ func TestBasicPreemption(t *testing.T) {
 	queueB := ms.getQueue("root.b")
 
 	// Get scheduling app
-	app1 := ms.getApplication("app-1")
-	app2 := ms.getApplication("app-2")
+	app1 := ms.getApplication(appID1)
+	app2 := ms.getApplication(appID2)
 
 	// Ask (10, 10) resources * 20, which will fulfill the cluster.
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -123,7 +123,7 @@ func TestBasicPreemption(t *testing.T) {
 					},
 				},
 				MaxAllocations: 20,
-				ApplicationID:  "app-1",
+				ApplicationID:  appID1,
 			},
 		},
 		RmID: "rm:123",
@@ -162,7 +162,7 @@ func TestBasicPreemption(t *testing.T) {
 					},
 				},
 				MaxAllocations: 100,
-				ApplicationID:  "app-2",
+				ApplicationID:  appID2,
 			},
 		},
 		RmID: "rm:123",

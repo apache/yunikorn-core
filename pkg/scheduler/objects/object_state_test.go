@@ -67,7 +67,7 @@ func TestTransitionToSelf(t *testing.T) {
 	// start on active
 	err := stateMachine.Event(Start.String(), "testobject")
 	assert.Assert(t, err != nil)
-	if err != nil && err.Error() != "no transition" {
+	if err != nil && err.Error() != noTransition {
 		t.Errorf("state change failed with error: %v", err)
 	}
 	assert.Equal(t, stateMachine.Current(), Active.String())
@@ -76,7 +76,7 @@ func TestTransitionToSelf(t *testing.T) {
 	stateMachine.SetState(Draining.String())
 	err = stateMachine.Event(Remove.String(), "testobject")
 	assert.Assert(t, err != nil)
-	if err != nil && err.Error() != "no transition" {
+	if err != nil && err.Error() != noTransition {
 		t.Errorf("state change failed with error: %v", err)
 	}
 	assert.Equal(t, stateMachine.Current(), Draining.String())
@@ -85,7 +85,7 @@ func TestTransitionToSelf(t *testing.T) {
 	stateMachine.SetState(Stopped.String())
 	err = stateMachine.Event(Stop.String(), "testobject")
 	assert.Assert(t, err != nil)
-	if err != nil && err.Error() != "no transition" {
+	if err != nil && err.Error() != noTransition {
 		t.Errorf("state change failed with error: %v", err)
 	}
 	assert.Equal(t, stateMachine.Current(), Stopped.String())

@@ -331,7 +331,7 @@ func (sq *Queue) handleQueueEvent(event ObjectEvent) error {
 		return nil
 	}
 	// handle the same state transition not nil error (limit of fsm).
-	if err.Error() == "no transition" {
+	if err.Error() == noTransition {
 		return nil
 	}
 	return err
@@ -488,6 +488,12 @@ func (sq *Queue) RemoveApplication(app *Application) {
 	if appPending := app.GetPendingResource(); !resources.IsZero(appPending) {
 		sq.decPendingResource(appPending)
 	}
+	// clean up the allocated resource
+	if appAllocated := app.GetAllocatedResource(); !resources.IsZero(appAllocated) {
+		// failures are logged in the decrement do not do it twice
+		//nolint:errcheck
+		_ = sq.DecAllocatedResource(appAllocated)
+	}
 	sq.Lock()
 	defer sq.Unlock()
 
@@ -498,7 +504,7 @@ func (sq *Queue) RemoveApplication(app *Application) {
 func (sq *Queue) getCopyOfApps() map[string]*Application {
 	sq.RLock()
 	defer sq.RUnlock()
-	appsCopy := make(map[string]*Application, 0)
+	appsCopy := make(map[string]*Application)
 	for appID, app := range sq.applications {
 		appsCopy[appID] = app
 	}

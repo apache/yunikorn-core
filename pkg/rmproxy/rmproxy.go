@@ -316,7 +316,7 @@ func normalizeUpdateRequestByRMId(request *si.UpdateRequest) {
 }
 
 func (rmp *RMProxy) Update(request *si.UpdateRequest) error {
-	if rmp.GetResourceManagerCallback(request.RmID) != nil {
+	if rmp.GetResourceManagerCallback(request.RmID) == nil {
 		return fmt.Errorf("received UpdateRequest, but RmID=\"%s\" not registered", request.RmID)
 	}
 

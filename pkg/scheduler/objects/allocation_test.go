@@ -84,14 +84,15 @@ func TestSIFromNilAlloc(t *testing.T) {
 }
 
 func TestSIFromAlloc(t *testing.T) {
-	expectedSI := &si.Allocation{
-		AllocationKey: "ask-1",
-		UUID:          "test-uuid",
-		NodeID:        "node-1",
-		ApplicationID: "app-1",
-	}
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
 	assert.NilError(t, err, "Resource creation failed")
+	expectedSI := &si.Allocation{
+		AllocationKey:    "ask-1",
+		UUID:             "test-uuid",
+		NodeID:           "node-1",
+		ApplicationID:    "app-1",
+		ResourcePerAlloc: res.ToProto(),
+	}
 	ask := newAllocationAsk("ask-1", "app-1", res)
 	alloc := NewAllocation("test-uuid", "node-1", ask)
 	if alloc == nil {

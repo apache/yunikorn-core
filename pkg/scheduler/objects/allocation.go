@@ -85,18 +85,20 @@ func newReservedAllocation(result allocationResult, nodeID string, ask *Allocati
 	}
 }
 
+// Create a new Allocation from a node recovered allocation.
+// Also creates an AllocationAsk to maintain backward compatible behaviour (cache)
 func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
-	return &Allocation{
-		NodeID:            alloc.NodeID,
-		ApplicationID:     alloc.ApplicationID,
-		PartitionName:     common.GetPartitionNameWithoutClusterID(alloc.PartitionName),
-		AllocatedResource: resources.NewResourceFromProto(alloc.ResourcePerAlloc),
+	ask := &AllocationAsk{
 		AllocationKey:     alloc.AllocationKey,
+		ApplicationID:     alloc.ApplicationID,
+		PartitionName:     alloc.PartitionName,
+		AllocatedResource: resources.NewResourceFromProto(alloc.ResourcePerAlloc),
 		Tags:              alloc.AllocationTags,
-		Priority:          alloc.Priority.GetPriorityValue(),
-		UUID:              alloc.UUID,
-		Result:            Allocated,
+		priority:          alloc.Priority.GetPriorityValue(),
+		pendingRepeatAsk:  0,
+		maxAllocations:    1,
 	}
+	return NewAllocation(alloc.UUID, alloc.NodeID, ask)
 }
 
 // Convert the Allocation into a SI object. This is a limited set of values that gets copied into the SI.
@@ -108,10 +110,11 @@ func (a *Allocation) NewSIFromAllocation() *si.Allocation {
 		return nil
 	}
 	return &si.Allocation{
-		NodeID:        a.NodeID,
-		ApplicationID: a.ApplicationID,
-		AllocationKey: a.AllocationKey,
-		UUID:          a.UUID,
+		NodeID:           a.NodeID,
+		ApplicationID:    a.ApplicationID,
+		AllocationKey:    a.AllocationKey,
+		UUID:             a.UUID,
+		ResourcePerAlloc: a.AllocatedResource.ToProto(), // needed in tests for restore
 	}
 }
 

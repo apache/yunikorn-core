@@ -61,25 +61,25 @@ partitions:
 	assert.Assert(t, part.GetTotalPartitionResource() == nil, "partition info max resource nil")
 
 	// Check scheduling queue root
-	rootQ := ms.getQueue("root")
+	rootQ := part.GetQueue("root")
 	assert.Assert(t, rootQ.GetMaxResource() == nil)
 
 	// Check scheduling queue a
-	queueA := ms.getQueue("root.a")
+	queueA := part.GetQueue("root.a")
 	assert.Assert(t, 150 == queueA.GetMaxResource().Resources[resources.MEMORY])
 
 	// Add one application
 	err = ms.proxy.Update(&si.UpdateRequest{
-		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a"}),
+		NewApplications: newAddAppRequest(map[string]string{appID1: "root.a"}),
 		RmID:            "rm:123",
 	})
 
 	// Application should be accepted
-	ms.mockRM.waitForAcceptedApplication(t, "app-1", 1000)
+	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
 
 	// Check scheduling app
-	app := ms.getApplication("app-1")
-	assert.Equal(t, app.ApplicationID, "app-1")
+	app := ms.getApplication(appID1)
+	assert.Equal(t, app.ApplicationID, appID1)
 	assert.Equal(t, len(app.GetAllAllocations()), 0)
 
 	// App asks for 2 allocations
@@ -94,7 +94,7 @@ partitions:
 					},
 				},
 				MaxAllocations: 2,
-				ApplicationID:  "app-1",
+				ApplicationID:  appID1,
 			},
 		},
 		RmID: "rm:123",
@@ -107,7 +107,7 @@ partitions:
 	waitForPendingAppResource(t, app, 20, 1000)
 
 	// no nodes available, no allocation can be made
-	ms.scheduler.MultiStepSchedule(16)
+	ms.scheduler.MultiStepSchedule(5)
 
 	// pending resources should not change
 	waitForPendingQueueResource(t, queueA, 20, 1000)
@@ -128,7 +128,7 @@ partitions:
 				},
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a"}),
+		NewApplications: newAddAppRequest(map[string]string{appID1: "root.a"}),
 		RmID:            "rm:123",
 	})
 
@@ -138,7 +138,7 @@ partitions:
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 
 	// Run scheduling
-	ms.scheduler.MultiStepSchedule(16)
+	ms.scheduler.MultiStepSchedule(5)
 
 	// Wait for allocating resources
 	waitForPendingQueueResource(t, queueA, 0, 1000)
@@ -180,25 +180,25 @@ partitions:
 	assert.Assert(t, part.GetTotalPartitionResource() == nil, "partition info max resource nil")
 
 	// Check scheduling queue root
-	rootQ := ms.getQueue("root")
+	rootQ := part.GetQueue("root")
 	assert.Assert(t, rootQ.GetMaxResource() == nil)
 
 	// Check scheduling queue a
-	queueA := ms.getQueue("root.a")
+	queueA := part.GetQueue("root.a")
 	assert.Assert(t, 150 == queueA.GetMaxResource().Resources[resources.MEMORY])
 
 	// Add one application
 	err = ms.proxy.Update(&si.UpdateRequest{
-		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a"}),
+		NewApplications: newAddAppRequest(map[string]string{appID1: "root.a"}),
 		RmID:            "rm:123",
 	})
 
 	// Application should be accepted
-	ms.mockRM.waitForAcceptedApplication(t, "app-1", 1000)
+	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
 
 	// Check scheduling app
-	app := ms.getApplication("app-1")
-	assert.Equal(t, app.ApplicationID, "app-1")
+	app := ms.getApplication(appID1)
+	assert.Equal(t, app.ApplicationID, appID1)
 	assert.Equal(t, len(app.GetAllAllocations()), 0)
 
 	// App asks for 2 allocations
@@ -213,7 +213,7 @@ partitions:
 					},
 				},
 				MaxAllocations: 2,
-				ApplicationID:  "app-1",
+				ApplicationID:  appID1,
 			},
 		},
 		RmID: "rm:123",
@@ -226,7 +226,7 @@ partitions:
 	waitForPendingAppResource(t, app, 20, 1000)
 
 	// no nodes available, no allocation can be made
-	ms.scheduler.MultiStepSchedule(16)
+	ms.scheduler.MultiStepSchedule(5)
 
 	// pending resources should not change
 	waitForPendingQueueResource(t, queueA, 20, 1000)
@@ -247,7 +247,7 @@ partitions:
 				},
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a"}),
+		NewApplications: newAddAppRequest(map[string]string{appID1: "root.a"}),
 		RmID:            "rm:123",
 	})
 
@@ -257,7 +257,7 @@ partitions:
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 
 	// Run scheduling
-	ms.scheduler.MultiStepSchedule(16)
+	ms.scheduler.MultiStepSchedule(5)
 
 	// Wait for allocating resources
 	waitForPendingQueueResource(t, queueA, 0, 1000)
@@ -265,7 +265,7 @@ partitions:
 	waitForPendingAppResource(t, app, 0, 1000)
 	waitForAllocatedQueueResource(t, queueA, 20, 1000)
 	waitForAllocatedAppResource(t, app, 20, 1000)
-	waitForNodesAllocatedResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
+	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
 		[]string{"node-1:1234"}, 20, 1000)
 
 	// Make sure we get correct allocations
@@ -341,7 +341,7 @@ partitions:
 	// Wait until node is registered
 	context := ms.scheduler.GetClusterContext()
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
-	waitForNewSchedulerNode(t, context, "node-1:1234", "[rm:123]default", 1000)
+	waitForNewNode(t, context, "node-1:1234", "[rm:123]default", 1000)
 
 	// verify node capacity
 	assert.Equal(t, len(partitionInfo.GetNodes()), 1)
@@ -372,7 +372,7 @@ partitions:
 
 	assert.NilError(t, err, "UpdateRequest failed")
 
-	waitForNodesAvailableResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
+	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
 		[]string{"node-1:1234"}, 300, 1000)
 	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.MEMORY]), int64(300))
 	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.VCORE]), int64(10))
@@ -429,7 +429,7 @@ partitions:
 	// Wait until node is registered
 	context := ms.scheduler.GetClusterContext()
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
-	waitForNewSchedulerNode(t, context, "node-1:1234", "[rm:123]default", 1000)
+	waitForNewNode(t, context, "node-1:1234", "[rm:123]default", 1000)
 
 	// verify node capacity
 	assert.Equal(t, len(partitionInfo.GetNodes()), 1)
@@ -460,7 +460,7 @@ partitions:
 
 	assert.NilError(t, err, "UpdateRequest failed")
 
-	waitForNodesAvailableResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
+	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
 		[]string{"node-1:1234"}, 20, 1000)
 	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.MEMORY]), int64(100))
 	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.VCORE]), int64(10))

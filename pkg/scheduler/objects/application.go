@@ -139,7 +139,7 @@ func (sa *Application) IsWaiting() bool {
 func (sa *Application) HandleApplicationEvent(event applicationEvent) error {
 	err := sa.stateMachine.Event(event.String(), sa)
 	// handle the same state transition not nil error (limit of fsm).
-	if err != nil && err.Error() == "no transition" {
+	if err != nil && err.Error() == noTransition {
 		return nil
 	}
 	return err
@@ -343,6 +343,19 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 	sa.queue.incPendingResource(delta)
 
 	return nil
+}
+
+// Add the ask when a node allocation is recovered. Maintaining the rule that an Allocation always has a
+// link to an AllocationAsk.
+// Safeguarded against a nil but the recovery generates the ask and should never be nil.
+func (sa *Application) RecoverAllocationAsk(ask *AllocationAsk) {
+	sa.Lock()
+	defer sa.Unlock()
+	if ask == nil {
+		return
+	}
+	ask.setQueue(sa.queue.QueuePath)
+	sa.requests[ask.AllocationKey] = ask
 }
 
 func (sa *Application) updateAskRepeat(allocKey string, delta int32) (*resources.Resource, error) {

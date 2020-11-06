@@ -22,15 +22,23 @@ import (
 	"strconv"
 	"testing"
 
+	"gotest.tools/assert"
+
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
-	"gotest.tools/assert"
 )
 
-const rmID = "testRM"
+const (
+	appID1   = "app-1"
+	appID2   = "app-2"
+	nodeID1  = "node-1"
+	nodeID2  = "node-2"
+	defQueue = "root.default"
+	rmID     = "testRM"
+)
 
 func newBasePartition() (*PartitionContext, error) {
 	conf := configs.PartitionConfig{

@@ -29,6 +29,12 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
+const (
+	appID1  = "app-1"
+	aKey    = "alloc-1"
+	nodeID1 = "node-1"
+)
+
 // Create the root queue, base for all testing
 func createRootQueue(maxRes map[string]string) (*Queue, error) {
 	return createManagedQueueWithProps(nil, "root", true, maxRes, nil)

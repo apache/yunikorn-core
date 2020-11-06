@@ -246,6 +246,7 @@ func TestSortAppsFair(t *testing.T) {
 		num := strconv.Itoa(i)
 		appID := "app-" + num
 		app := newApplication(appID, "partition", "queue")
+		app.allocatedResource = resources.Multiply(res, int64(i+1))
 		app.pending = res
 		input[appID] = app
 	}

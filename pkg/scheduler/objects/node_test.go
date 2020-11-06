@@ -90,8 +90,8 @@ func TestNewNode(t *testing.T) {
 }
 
 func TestCheckConditions(t *testing.T) {
-	node := newNode("node-1", map[string]resources.Quantity{"first": 100, "second": 100})
-	if node == nil || node.NodeID != "node-1" {
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 100, "second": 100})
+	if node == nil || node.NodeID != nodeID1 {
 		t.Fatalf("node create failed which should not have %v", node)
 	}
 
@@ -104,7 +104,7 @@ func TestCheckConditions(t *testing.T) {
 }
 
 func TestPreAllocateCheck(t *testing.T) {
-	nodeID := "node-1"
+	nodeID := nodeID1
 	resNode := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 1})
 	node := newNode(nodeID, resNode.Resources)
 	if node == nil || node.NodeID != nodeID {
@@ -131,7 +131,7 @@ func TestPreAllocateCheck(t *testing.T) {
 	}
 
 	// set allocated resource
-	node.AddAllocation(newAllocation("app-1", "UUID1", nodeID, "root.default", resSmall))
+	node.AddAllocation(newAllocation(appID1, "UUID1", nodeID, "root.default", resSmall))
 	err = node.preAllocateCheck(resSmall, "", false)
 	assert.NilError(t, err, "small resource should have fitted in available allocation (no preemption)")
 	if err = node.preAllocateCheck(resNode, "", false); err == nil {
@@ -151,9 +151,8 @@ func TestPreAllocateCheck(t *testing.T) {
 	// check if we can allocate on a reserved node
 	q := map[string]resources.Quantity{"first": 0}
 	res := resources.NewResourceFromMap(q)
-	appID := "app-1"
-	ask := newAllocationAsk("alloc-1", appID, res)
-	app := newApplication(appID, "default", "root.unknown")
+	ask := newAllocationAsk(aKey, appID1, res)
+	app := newApplication(appID1, "default", "root.unknown")
 
 	// standalone reservation unreserve returns false as app is not reserved
 	reserve := newReservation(node, app, ask, false)
@@ -164,7 +163,7 @@ func TestPreAllocateCheck(t *testing.T) {
 	if err = node.preAllocateCheck(resSmall, "app-1|alloc-2", true); err == nil {
 		t.Errorf("node was reserved for this app but not the alloc and check passed: %v", err)
 	}
-	err = node.preAllocateCheck(resSmall, appID, true)
+	err = node.preAllocateCheck(resSmall, appID1, true)
 	assert.NilError(t, err, "node was reserved for this app but check did not pass check")
 	err = node.preAllocateCheck(resSmall, "app-1|alloc-1", true)
 	assert.NilError(t, err, "node was reserved for this app/alloc but check did not pass check")
@@ -178,8 +177,8 @@ func TestPreAllocateCheck(t *testing.T) {
 
 // Only test the CanAllocate code, the used logic in preAllocateCheck has its own test
 func TestCanAllocate(t *testing.T) {
-	node := newNode("node-1", map[string]resources.Quantity{"first": 10})
-	if node == nil || node.NodeID != "node-1" {
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
+	if node == nil || node.NodeID != nodeID1 {
 		t.Fatalf("node create failed which should not have %v", node)
 	}
 	// normal alloc
@@ -202,8 +201,8 @@ func TestCanAllocate(t *testing.T) {
 }
 
 func TestPreemptingResources(t *testing.T) {
-	node := newNode("node-1", map[string]resources.Quantity{"first": 10})
-	if node == nil || node.NodeID != "node-1" {
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
+	if node == nil || node.NodeID != nodeID1 {
 		t.Fatalf("node create failed which should not have %v", node)
 	}
 
@@ -236,8 +235,8 @@ func TestPreemptingResources(t *testing.T) {
 }
 
 func TestNodeReservation(t *testing.T) {
-	node := newNode("node-1", map[string]resources.Quantity{"first": 10})
-	if node == nil || node.NodeID != "node-1" {
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
+	if node == nil || node.NodeID != nodeID1 {
 		t.Fatalf("node create failed which should not have %v", node)
 	}
 	if node.IsReserved() {
@@ -257,9 +256,8 @@ func TestNodeReservation(t *testing.T) {
 	}
 
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 15})
-	appID := "app-1"
-	ask := newAllocationAsk("alloc-1", appID, res)
-	app := newApplication(appID, "default", "root.unknown")
+	ask := newAllocationAsk(aKey, appID1, res)
+	app := newApplication(appID1, "default", "root.unknown")
 
 	// too large for node
 	err = node.Reserve(app, ask)
@@ -268,8 +266,8 @@ func TestNodeReservation(t *testing.T) {
 	}
 
 	res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-	ask = newAllocationAsk("alloc-1", appID, res)
-	app = newApplication(appID, "default", "root.unknown")
+	ask = newAllocationAsk(aKey, appID1, res)
+	app = newApplication(appID1, "default", "root.unknown")
 	// reserve that works
 	err = node.Reserve(app, ask)
 	assert.NilError(t, err, "reservation should not have failed")
@@ -279,7 +277,7 @@ func TestNodeReservation(t *testing.T) {
 	if node.isReservedForApp("unknown") {
 		t.Errorf("node should not have reservations for unknown key")
 	}
-	if node.IsReserved() && !node.isReservedForApp("app-1") {
+	if node.IsReserved() && !node.isReservedForApp(appID1) {
 		t.Errorf("node should have reservations for app-1")
 	}
 
@@ -294,9 +292,8 @@ func TestNodeReservation(t *testing.T) {
 	if err == nil {
 		t.Errorf("illegal reservation release but did not fail: error %v", err)
 	}
-	appID = "app-2"
-	ask2 := newAllocationAsk("alloc-2", appID, res)
-	app2 := newApplication(appID, "default", "root.unknown")
+	ask2 := newAllocationAsk("alloc-2", appID2, res)
+	app2 := newApplication(appID2, "default", "root.unknown")
 	var num int
 	num, err = node.unReserve(app2, ask2)
 	assert.NilError(t, err, "un-reserve different app should have failed without error")
@@ -307,8 +304,8 @@ func TestNodeReservation(t *testing.T) {
 }
 
 func TestUnReserveApps(t *testing.T) {
-	node := newNode("node-1", map[string]resources.Quantity{"first": 10})
-	if node == nil || node.NodeID != "node-1" {
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
+	if node == nil || node.NodeID != nodeID1 {
 		t.Fatalf("node create failed which should not have %v", node)
 	}
 	if node.IsReserved() {
@@ -321,8 +318,8 @@ func TestUnReserveApps(t *testing.T) {
 
 	// create some reservations and see it clean up via the app
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
-	appID := "app-1"
-	ask := newAllocationAsk("alloc-1", appID, res)
+	appID := appID1
+	ask := newAllocationAsk(aKey, appID, res)
 	app := newApplication(appID, "default", "root.unknown")
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
@@ -351,8 +348,8 @@ func TestUnReserveApps(t *testing.T) {
 }
 
 func TestIsReservedForApp(t *testing.T) {
-	node := newNode("node-1", map[string]resources.Quantity{"first": 10})
-	if node == nil || node.NodeID != "node-1" {
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
+	if node == nil || node.NodeID != nodeID1 {
 		t.Fatalf("node create failed which should not have %v", node)
 	}
 	if node.IsReserved() {
@@ -366,8 +363,8 @@ func TestIsReservedForApp(t *testing.T) {
 	// check if we can allocate on a reserved node
 	q := map[string]resources.Quantity{"first": 0}
 	res := resources.NewResourceFromMap(q)
-	ask := newAllocationAsk("alloc-1", "app-1", res)
-	app := newApplication("app-1", "default", "root.unknown")
+	ask := newAllocationAsk(aKey, appID1, res)
+	app := newApplication(appID1, "default", "root.unknown")
 
 	// standalone reservation unreserve returns false as app is not reserved
 	reserve := newReservation(node, app, ask, false)
@@ -378,7 +375,7 @@ func TestIsReservedForApp(t *testing.T) {
 	if node.isReservedForApp("app-1|alloc-2") {
 		t.Error("node was reserved for this app but not the alloc and check passed ")
 	}
-	if !node.isReservedForApp("app-1") {
+	if !node.isReservedForApp(appID1) {
 		t.Error("node was reserved for this app but check did not passed ")
 	}
 	if !node.isReservedForApp("app-1|alloc-1") {
@@ -420,7 +417,7 @@ func TestAddAllocation(t *testing.T) {
 	}
 	// allocate half of the resources available and check the calculation
 	half := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50, "second": 100})
-	node.AddAllocation(newAllocation("app1", "1", "node-1", "queue-1", half))
+	node.AddAllocation(newAllocation(appID1, "1", nodeID1, "queue-1", half))
 	if node.GetAllocation("1") == nil {
 		t.Fatal("failed to add allocations: allocation not returned")
 	}
@@ -433,7 +430,7 @@ func TestAddAllocation(t *testing.T) {
 
 	// second and check calculation
 	piece := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25, "second": 50})
-	node.AddAllocation(newAllocation("app1", "2", "node-1", "queue-1", piece))
+	node.AddAllocation(newAllocation(appID1, "2", nodeID1, "queue-1", piece))
 	if node.GetAllocation("2") == nil {
 		t.Fatal("failed to add allocations: allocation not returned")
 	}
@@ -455,7 +452,7 @@ func TestRemoveAllocation(t *testing.T) {
 
 	// allocate half of the resources available and check the calculation
 	half := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50, "second": 100})
-	node.AddAllocation(newAllocation("app1", "1", "node-1", "queue-1", half))
+	node.AddAllocation(newAllocation(appID1, "1", nodeID1, "queue-1", half))
 	if node.GetAllocation("1") == nil {
 		t.Fatal("failed to add allocations: allocation not returned")
 	}
@@ -472,7 +469,7 @@ func TestRemoveAllocation(t *testing.T) {
 
 	// add second alloc and remove first check calculation
 	piece := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25, "second": 50})
-	node.AddAllocation(newAllocation("app1", "2", "node-1", "queue-1", piece))
+	node.AddAllocation(newAllocation(appID1, "2", nodeID1, "queue-1", piece))
 	if node.GetAllocation("2") == nil {
 		t.Fatal("failed to add allocations: allocation not returned")
 	}
@@ -499,7 +496,7 @@ func TestGetAllocation(t *testing.T) {
 	if alloc != nil {
 		t.Fatalf("allocation should not have been found")
 	}
-	node.AddAllocation(newAllocation("app1", "1", "node-1", "queue-1", nil))
+	node.AddAllocation(newAllocation(appID1, "1", nodeID1, "queue-1", nil))
 	alloc = node.GetAllocation("1")
 	if alloc == nil {
 		t.Fatalf("allocation should have been found")
@@ -524,11 +521,11 @@ func TestGetAllocations(t *testing.T) {
 	}
 
 	// allocate
-	node.AddAllocation(newAllocation("app1", "1", "node-1", "queue-1", nil))
-	node.AddAllocation(newAllocation("app1", "2", "node-1", "queue-1", nil))
+	node.AddAllocation(newAllocation(appID1, "1", nodeID1, "queue-1", nil))
+	node.AddAllocation(newAllocation(appID1, "2", nodeID1, "queue-1", nil))
 	assert.Equal(t, 2, len(node.GetAllAllocations()), "allocation length mismatch")
 	// This should not happen in real code just making sure the code does do what is expected
-	node.AddAllocation(newAllocation("app1", "2", "node-1", "queue-1", nil))
+	node.AddAllocation(newAllocation(appID1, "2", nodeID1, "queue-1", nil))
 	assert.Equal(t, 2, len(node.GetAllAllocations()), "allocation length mismatch")
 }
 

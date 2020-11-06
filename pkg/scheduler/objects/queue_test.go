@@ -80,7 +80,7 @@ func TestManagedSubQueues(t *testing.T) {
 	}
 
 	// cannot remove child with app in it
-	app := newApplication("app-1", "default", "root.parent.leaf")
+	app := newApplication(appID1, "default", "root.parent.leaf")
 	leaf.AddApplication(app)
 
 	// both parent and leaf are marked for removal
@@ -97,7 +97,7 @@ func TestManagedSubQueues(t *testing.T) {
 		t.Error("leaf queue should not have been removed")
 	}
 	// remove the app (dirty way)
-	delete(leaf.applications, "app-1")
+	delete(leaf.applications, appID1)
 	if !leaf.RemoveQueue() && len(parent.children) != 0 {
 		t.Error("leaf queue should have been removed and parent updated and was not")
 	}
@@ -130,7 +130,7 @@ func TestDynamicSubQueues(t *testing.T) {
 	}
 
 	// cannot remove child with app in it
-	app := newApplication("app-1", "default", "root.parent.leaf")
+	app := newApplication(appID1, "default", "root.parent.leaf")
 	leaf.AddApplication(app)
 
 	// try to mark parent and leaf for removal
@@ -147,7 +147,7 @@ func TestDynamicSubQueues(t *testing.T) {
 		t.Error("leaf queue should not have been removed")
 	}
 	// remove the app (dirty way)
-	delete(leaf.applications, "app-1")
+	delete(leaf.applications, appID1)
 	if !leaf.RemoveQueue() && len(parent.children) != 0 {
 		t.Error("leaf queue should have been removed and parent updated and was not")
 	}
@@ -238,7 +238,7 @@ func TestAddApplication(t *testing.T) {
 		map[string]resources.Quantity{
 			resources.MEMORY: 10,
 		})
-	app := newApplication("app-1", "default", "root.parent.leaf")
+	app := newApplication(appID1, "default", "root.parent.leaf")
 	app.pending = pending
 	// adding the app must not update pending resources
 	leaf.AddApplication(app)
@@ -260,7 +260,7 @@ func TestAddApplicationWithTag(t *testing.T) {
 	assert.NilError(t, err, "failed to create managed leaf queue")
 	leafUn, err = createDynamicQueue(root, "leaf-unman", false)
 	assert.NilError(t, err, "failed to create Dynamic leaf queue")
-	app := newApplication("app-1", "default", "root.leaf-man")
+	app := newApplication(appID1, "default", "root.leaf-man")
 
 	// adding the app to managed/Dynamic queue must not update queue settings, works
 	leaf.AddApplication(app)
@@ -440,7 +440,7 @@ func TestSortApplications(t *testing.T) {
 		t.Errorf("empty queue should return no app from sort: %v", leaf)
 	}
 	// new app does not have pending res, does not get returned
-	app := newApplication("app-1", "default", leaf.QueuePath)
+	app := newApplication(appID1, "default", leaf.QueuePath)
 	app.queue = leaf
 	leaf.AddApplication(app)
 	if len(leaf.sortApplications()) != 0 {
@@ -450,10 +450,10 @@ func TestSortApplications(t *testing.T) {
 	res, err = resources.NewResourceFromConf(map[string]string{"first": "1"})
 	assert.NilError(t, err, "failed to create basic resource")
 	// add an ask app must be returned
-	err = app.AddAllocationAsk(newAllocationAsk("alloc-1", "app-1", res))
+	err = app.AddAllocationAsk(newAllocationAsk("alloc-1", appID1, res))
 	assert.NilError(t, err, "failed to add allocation ask")
 	sortedApp := leaf.sortApplications()
-	if len(sortedApp) != 1 || sortedApp[0].ApplicationID != "app-1" {
+	if len(sortedApp) != 1 || sortedApp[0].ApplicationID != appID1 {
 		t.Errorf("sorted application is missing expected app: %v", sortedApp)
 	}
 	// set 0 repeat
@@ -797,10 +797,10 @@ func TestGetApp(t *testing.T) {
 	}
 
 	// add app and check proper returns
-	app := newApplication("app-1", "default", leaf.QueuePath)
+	app := newApplication(appID1, "default", leaf.QueuePath)
 	leaf.AddApplication(app)
 	assert.Equal(t, len(leaf.applications), 1, "queue should have one app registered")
-	if leaf.getApplication("app-1") == nil {
+	if leaf.getApplication(appID1) == nil {
 		t.Errorf("registered app not found using appID")
 	}
 	if unknown := leaf.getApplication("unknown"); unknown != nil {
@@ -820,15 +820,12 @@ func TestIsEmpty(t *testing.T) {
 	assert.Equal(t, leaf.IsEmpty(), true, "new leaf should have been empty")
 
 	// add app and check proper returns
-	app := newApplication("app-1", "default", leaf.QueuePath)
+	app := newApplication(appID1, "default", leaf.QueuePath)
 	leaf.AddApplication(app)
 	assert.Equal(t, leaf.IsEmpty(), false, "queue with registered app should not be empty")
 }
 
 func TestGetOutstandingRequestMax(t *testing.T) {
-	const app1ID = "app1"
-	const app2ID = "app1"
-
 	// queue structure:
 	// root
 	//   - queue1 (max.cpu = 10)
@@ -845,7 +842,7 @@ func TestGetOutstandingRequestMax(t *testing.T) {
 	queue2, err = createManagedQueue(root, "queue2", false, map[string]string{"cpu": "5"})
 	assert.NilError(t, err, "failed to create queue2 queue")
 
-	app1 := newApplication(app1ID, "default", "root.queue1")
+	app1 := newApplication(appID1, "default", "root.queue1")
 	app1.queue = queue1
 	queue1.AddApplication(app1)
 	var res *resources.Resource
@@ -853,16 +850,16 @@ func TestGetOutstandingRequestMax(t *testing.T) {
 	assert.NilError(t, err, "failed to create basic resource")
 	for i := 0; i < 20; i++ {
 		err = app1.AddAllocationAsk(
-			newAllocationAsk(fmt.Sprintf("alloc-%d", i), app1ID, res))
+			newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, res))
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 
-	app2 := newApplication(app2ID, "default", "root.queue2")
+	app2 := newApplication(appID2, "default", "root.queue2")
 	app2.queue = queue2
 	queue2.AddApplication(app2)
 	for i := 0; i < 20; i++ {
 		err = app2.AddAllocationAsk(
-			newAllocationAsk(fmt.Sprintf("alloc-%d", i), app2ID, res))
+			newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID2, res))
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 
@@ -910,8 +907,6 @@ func TestGetOutstandingRequestMax(t *testing.T) {
 }
 
 func TestGetOutstandingRequestNoMax(t *testing.T) {
-	const app1ID = "app1"
-	const app2ID = "app1"
 	// queue structure:
 	// root
 	//   - queue1
@@ -929,7 +924,7 @@ func TestGetOutstandingRequestNoMax(t *testing.T) {
 	queue2, err = createManagedQueue(root, "queue2", false, nil)
 	assert.NilError(t, err, "failed to create queue2 queue")
 
-	app1 := newApplication(app1ID, "default", "root.queue1")
+	app1 := newApplication(appID1, "default", "root.queue1")
 	app1.queue = queue1
 	queue1.AddApplication(app1)
 	var res *resources.Resource
@@ -937,16 +932,16 @@ func TestGetOutstandingRequestNoMax(t *testing.T) {
 	assert.NilError(t, err, "failed to create basic resource")
 	for i := 0; i < 10; i++ {
 		err = app1.AddAllocationAsk(
-			newAllocationAsk(fmt.Sprintf("alloc-%d", i), app1ID, res))
+			newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, res))
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 
-	app2 := newApplication(app2ID, "default", "root.queue2")
+	app2 := newApplication(appID2, "default", "root.queue2")
 	app2.queue = queue2
 	queue2.AddApplication(app2)
 	for i := 0; i < 20; i++ {
 		err = app2.AddAllocationAsk(
-			newAllocationAsk(fmt.Sprintf("alloc-%d", i), app2ID, res))
+			newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID2, res))
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 

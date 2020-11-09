@@ -761,8 +761,8 @@ func TestTryAllocateLarge(t *testing.T) {
 	}
 
 	// override the reservation delay, and cleanup when done
-	objects.OverrideReservationDelay(10 * time.Nanosecond)
-	defer objects.OverrideReservationDelay(2 * time.Second)
+	objects.SetReservationDelay(10 * time.Nanosecond)
+	defer objects.SetReservationDelay(2 * time.Second)
 
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "100"})
 	assert.NilError(t, err, "failed to create resource")
@@ -792,8 +792,8 @@ func TestAllocReserveNewNode(t *testing.T) {
 	}
 
 	// override the reservation delay, and cleanup when done
-	objects.OverrideReservationDelay(10 * time.Nanosecond)
-	defer objects.OverrideReservationDelay(2 * time.Second)
+	objects.SetReservationDelay(10 * time.Nanosecond)
+	defer objects.SetReservationDelay(2 * time.Second)
 
 	// turn off the second node
 	node2 := partition.GetNode(nodeID2)
@@ -969,8 +969,8 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 	}
 
 	// override the reservation delay, and cleanup when done
-	objects.OverrideReservationDelay(10 * time.Nanosecond)
-	defer objects.OverrideReservationDelay(2 * time.Second)
+	objects.SetReservationDelay(10 * time.Nanosecond)
+	defer objects.SetReservationDelay(2 * time.Second)
 
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "4"})
 	assert.NilError(t, err, "resource creation failed")

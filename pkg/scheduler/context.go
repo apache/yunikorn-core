@@ -20,6 +20,7 @@ package scheduler
 
 import (
 	"fmt"
+	"math"
 	"sync"
 
 	"go.uber.org/zap"
@@ -37,11 +38,16 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
+const disableReservation = "DISABLE_RESERVATION"
+
 type ClusterContext struct {
 	partitions     map[string]*PartitionContext
-	needPreemption bool
 	policyGroup    string
 	rmEventHandler handler.EventHandler
+
+	// config values that change scheduling behaviour
+	needPreemption      bool
+	reservationDisabled bool
 
 	sync.RWMutex
 }
@@ -56,8 +62,14 @@ func NewClusterContext(rmID, policyGroup string) (*ClusterContext, error) {
 	}
 	// create the context and set the policyGroup
 	cc := &ClusterContext{
-		partitions:  make(map[string]*PartitionContext),
-		policyGroup: policyGroup,
+		partitions:          make(map[string]*PartitionContext),
+		policyGroup:         policyGroup,
+		reservationDisabled: common.GetBoolEnvVar(disableReservation, false),
+	}
+	// If reservation is turned off set the reservation delay to the maximum duration defined.
+	// The time package does not export maxDuration so use the equivalent from the math package.
+	if cc.reservationDisabled {
+		objects.SetReservationDelay(math.MaxInt64)
 	}
 	err = cc.updateSchedulerConfig(conf, rmID)
 	if err != nil {
@@ -69,9 +81,16 @@ func NewClusterContext(rmID, policyGroup string) (*ClusterContext, error) {
 }
 
 func newClusterContext() *ClusterContext {
-	return &ClusterContext{
-		partitions: make(map[string]*PartitionContext),
+	cc := &ClusterContext{
+		partitions:          make(map[string]*PartitionContext),
+		reservationDisabled: common.GetBoolEnvVar(disableReservation, false),
 	}
+	// If reservation is turned off set the reservation delay to the maximum duration defined.
+	// The time package does not export maxDuration so use the equivalent from the math package.
+	if cc.reservationDisabled {
+		objects.SetReservationDelay(math.MaxInt64)
+	}
+	return cc
 }
 
 func (cc *ClusterContext) setEventHandler(rmHandler handler.EventHandler) {

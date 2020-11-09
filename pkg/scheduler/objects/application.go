@@ -101,9 +101,10 @@ func (sa *Application) String() string {
 		sa.ApplicationID, sa.Partition, sa.QueueName, sa.SubmissionTime)
 }
 
-// override reservation delay for tests
-func OverrideReservationDelay(delay time.Duration) {
-	log.Logger().Debug("Test override reservation delay",
+// Set the reservation delay.
+// Set when the cluster context is created to disable reservation.
+func SetReservationDelay(delay time.Duration) {
+	log.Logger().Debug("Set reservation delay",
 		zap.Duration("delay", delay))
 	reservationDelay = delay
 }

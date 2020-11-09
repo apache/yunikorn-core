@@ -88,8 +88,8 @@ func TestBasicReservation(t *testing.T) {
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// override the reservation delay, and cleanup when done
-	objects.OverrideReservationDelay(10 * time.Nanosecond)
-	defer objects.OverrideReservationDelay(2 * time.Second)
+	objects.SetReservationDelay(10 * time.Nanosecond)
+	defer objects.SetReservationDelay(2 * time.Second)
 
 	nodes := createNodes(t, ms, 2, 50)
 	ms.mockRM.waitForMinAcceptedNodes(t, 2, 1000)
@@ -165,8 +165,8 @@ func TestReservationForTwoQueues(t *testing.T) {
 	err := ms.Init(DualQueueConfig, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 	// override the reservation delay, and cleanup when done
-	objects.OverrideReservationDelay(10 * time.Nanosecond)
-	defer objects.OverrideReservationDelay(2 * time.Second)
+	objects.SetReservationDelay(10 * time.Nanosecond)
+	defer objects.SetReservationDelay(2 * time.Second)
 
 	nodes := createNodes(t, ms, 2, 50)
 	ms.mockRM.waitForMinAcceptedNodes(t, 2, 1000)
@@ -273,8 +273,8 @@ func TestRemoveReservedNode(t *testing.T) {
 	err := ms.Init(SingleQueueConfig, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 	// override the reservation delay, and cleanup when done
-	objects.OverrideReservationDelay(10 * time.Nanosecond)
-	defer objects.OverrideReservationDelay(2 * time.Second)
+	objects.SetReservationDelay(10 * time.Nanosecond)
+	defer objects.SetReservationDelay(2 * time.Second)
 
 	nodes := createNodes(t, ms, 2, 50)
 	ms.mockRM.waitForMinAcceptedNodes(t, 2, 1000)
@@ -327,8 +327,8 @@ func TestAddNewNode(t *testing.T) {
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// override the reservation delay, and cleanup when done
-	objects.OverrideReservationDelay(10 * time.Nanosecond)
-	defer objects.OverrideReservationDelay(2 * time.Second)
+	objects.SetReservationDelay(10 * time.Nanosecond)
+	defer objects.SetReservationDelay(2 * time.Second)
 
 	nodes := createNodes(t, ms, 3, 50)
 	ms.mockRM.waitForMinAcceptedNodes(t, 3, 1000)
@@ -387,8 +387,8 @@ func TestUnReservationAndDeletion(t *testing.T) {
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// override the reservation delay, and cleanup when done
-	objects.OverrideReservationDelay(10 * time.Nanosecond)
-	defer objects.OverrideReservationDelay(2 * time.Second)
+	objects.SetReservationDelay(10 * time.Nanosecond)
+	defer objects.SetReservationDelay(2 * time.Second)
 
 	nodes := createNodes(t, ms, 2, 30)
 	ms.mockRM.waitForMinAcceptedNodes(t, 2, 1000)

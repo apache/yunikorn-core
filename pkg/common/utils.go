@@ -20,8 +20,14 @@ package common
 
 import (
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"time"
+
+	"go.uber.org/zap"
+
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
 
 func GetNormalizedPartitionName(partitionName string, rmID string) string {
@@ -65,4 +71,19 @@ func WaitFor(interval time.Duration, timeout time.Duration, condition func() boo
 		time.Sleep(interval)
 		continue
 	}
+}
+
+func GetBoolEnvVar(key string, defaultVal bool) bool {
+	if value, ok := os.LookupEnv(key); ok {
+		boolValue, err := strconv.ParseBool(value)
+		if err != nil {
+			log.Logger().Debug("Failed to parse ENV variable, using the default one",
+				zap.String("name", key),
+				zap.String("value", value),
+				zap.Bool("default", defaultVal))
+			return defaultVal
+		}
+		return boolValue
+	}
+	return defaultVal
 }

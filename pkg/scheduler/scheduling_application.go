@@ -35,6 +35,8 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
+const DisableReservationVarName = "DISABLE_RESERVATION"
+
 var reservationDelay = 2 * time.Second
 
 type SchedulingApplication struct {
@@ -558,7 +560,8 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 	// check if the ask is reserved or not
 	allocKey := ask.AskProto.AllocationKey
 	reservedAsks := sa.isAskReserved(allocKey)
-	allowReserve := len(reservedAsks) < int(ask.pendingRepeatAsk)
+	reservationDisabled := actualSchedulerOptions.reservationDisabled
+	allowReserve := !reservationDisabled && len(reservedAsks) < int(ask.pendingRepeatAsk)
 	for nodeIterator.HasNext() {
 		node := nodeIterator.Next()
 		// skip over the node if the resource does not fit the node at all.

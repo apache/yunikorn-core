@@ -25,9 +25,16 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/cache"
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/schedulerevent"
 )
+
+var actualSchedulerOptions Options
+
+type Options struct {
+	reservationDisabled bool
+}
 
 type ClusterSchedulingContext struct {
 	partitions map[string]*partitionSchedulingContext
@@ -38,6 +45,9 @@ type ClusterSchedulingContext struct {
 }
 
 func NewClusterSchedulingContext() *ClusterSchedulingContext {
+	actualSchedulerOptions = Options{
+		reservationDisabled: common.GetBoolEnvVar(DisableReservationVarName, false),
+	}
 	return &ClusterSchedulingContext{
 		partitions: make(map[string]*partitionSchedulingContext),
 	}

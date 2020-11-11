@@ -25,7 +25,6 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
 
@@ -160,58 +159,5 @@ func newPartitionInfoInternal(part configs.PartitionConfig, rmID string, info *C
 	if err != nil {
 		return nil, err
 	}
-	// sanity check the partition and the queues below it now that we have a full setup
-	err = checkResourceConfigurationsForQueue(partition.Root, nil)
-	if err != nil {
-		return nil, err
-	}
 	return partition, nil
-}
-
-// Check the queue resource configuration settings.
-// This is lock free and not protected against race conditions as it operates on a private new structure.
-// - child or children cannot have higher maximum or guaranteed limits than parents
-// - children (added together) cannot have a higher guaranteed setting than a parent
-// TODO add maximum number of running applications
-func checkResourceConfigurationsForQueue(cur *QueueInfo, parent *QueueInfo) error {
-	// If cur has children, make sure sum of children's guaranteed <= cur.guaranteed
-	if len(cur.children) > 0 {
-		// Check children
-		for _, child := range cur.children {
-			if err := checkResourceConfigurationsForQueue(child, cur); err != nil {
-				return err
-			}
-		}
-
-		sum := resources.NewResource()
-		for _, child := range cur.children {
-			sum.AddTo(child.guaranteedResource)
-		}
-
-		if cur.guaranteedResource != nil {
-			if !resources.FitIn(cur.guaranteedResource, sum) {
-				return fmt.Errorf("queue %s has guaranteed-resources (%v) smaller than sum of children guaranteed resources (%v)", cur.Name, cur.guaranteedResource, sum)
-			}
-		} else {
-			cur.guaranteedResource = sum
-		}
-	} else if cur.guaranteedResource == nil {
-		// When the queue doesn't have children, set guaranteed to zero if absent.
-		cur.guaranteedResource = resources.NewResource()
-	}
-
-	// If max resource exist, check guaranteed fits in max, cur.max fit in parent.max
-	if cur.maxResource != nil {
-		if parent != nil && parent.maxResource != nil {
-			if !resources.FitIn(parent.maxResource, cur.maxResource) {
-				return fmt.Errorf("queue %s has max resources (%v) set larger than parent's max resources (%v)", cur.Name, cur.maxResource, parent.maxResource)
-			}
-		}
-
-		if !resources.FitIn(cur.maxResource, cur.guaranteedResource) {
-			return fmt.Errorf("queue %s has max resources (%v) set smaller than guaranteed resources (%v)", cur.Name, cur.maxResource, cur.guaranteedResource)
-		}
-	}
-
-	return nil
 }

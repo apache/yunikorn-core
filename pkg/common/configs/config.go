@@ -35,7 +35,7 @@ import (
 // set of scheduler resources.
 type SchedulerConfig struct {
 	Partitions []PartitionConfig
-	Checksum   [32]byte `yaml:",omitempty" json:",omitempty"`
+	Checksum   string `yaml:",omitempty" json:",omitempty"`
 }
 
 // The partition object for each partition:
@@ -152,7 +152,7 @@ func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) 
 }
 
 func PopulateChecksum(content []byte, conf *SchedulerConfig) {
-	conf.Checksum = sha256.Sum256(content)
+	conf.Checksum = fmt.Sprintf("%X", sha256.Sum256(content))
 }
 
 func ParseAndValidateConfig(content []byte) (*SchedulerConfig, error) {

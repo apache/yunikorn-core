@@ -31,7 +31,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-var emptySum = [32]byte{}
+var emptySum = ""
 
 func TestConfigSerdeQueues(t *testing.T) {
 	conf := SchedulerConfig{

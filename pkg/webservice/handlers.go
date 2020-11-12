@@ -452,9 +452,6 @@ func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-	// add readable form of checksum
-	sha256 := fmt.Sprintf("\nsha256 checksum: %X", conf.Checksum)
-	marshalledConf = append(marshalledConf, sha256...)
 	if _, err = w.Write(marshalledConf); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -504,16 +501,14 @@ func updateConfig(w http.ResponseWriter, r *http.Request) {
 	buildUpdateResponse(true, "", w)
 }
 
-func getConfigurationString(requestBytes []byte, checksum [32]byte) string {
+func getConfigurationString(requestBytes []byte, checksum string) string {
 	newConf := string(requestBytes)
-	checksumString := fmt.Sprintf("%v", checksum)
-	checksumString = strings.ReplaceAll(checksumString, " ", ",")
-	checksumString = "checksum: " + checksumString
+	checksumString := "checksum: " + checksum
 	newConf = strings.Replace(newConf, checksumString, "", 1)
 	return newConf
 }
 
-func isChecksumValid(checksum [32]byte) bool {
+func isChecksumValid(checksum string) bool {
 	actualConf := configs.ConfigContext.Get(gClusterInfo.GetPolicyGroup())
 	return actualConf.Checksum == checksum
 }

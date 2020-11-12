@@ -49,7 +49,7 @@ func (r *FakeConfigReloader) DoReloadConfiguration() error {
 // it verifies the callback is not triggered until file state changes.
 func TestTriggerCallback(t *testing.T) {
 	var timesOfChecksum int
-	var modifiedSum = [32]byte{65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 48, 49, 50, 51, 52, 53}
+	var modifiedSum = "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447"
 	// init context
 	ConfigContext.Set("p-group", &SchedulerConfig{Checksum: emptySum})
 	SchedulerConfigLoader = func(policyGroup string) (config *SchedulerConfig, e error) {

@@ -436,11 +436,11 @@ func TestUpdateConfigInvalidConf(t *testing.T) {
 	testCases := []struct {
 		name          string
 		newConf       string
-		checksum      [32]byte
+		checksum      string
 		expectedError string
 	}{
 		{"Invalid config", invalidConf, baseChecksum, "undefined policy"},
-		{"Invalid checksum", updatedConf, sha256.Sum256([]byte(updatedConf)), "base configuration is changed"},
+		{"Invalid checksum", updatedConf, fmt.Sprintf("%X", sha256.Sum256([]byte(updatedConf))), "base configuration is changed"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -462,12 +462,12 @@ func TestIsChecksumValid(t *testing.T) {
 	}
 	testCases := []struct {
 		name     string
-		checksum [32]byte
+		checksum string
 		expected bool
 	}{
-		{"Valid checksum", sha256.Sum256([]byte(startConf)), true},
-		{"Invalid checksum", sha256.Sum256([]byte("some conf")), false},
-		{"Empty checksum", [32]byte{}, false},
+		{"Valid checksum", fmt.Sprintf("%X", sha256.Sum256([]byte(startConf))), true},
+		{"Invalid checksum", fmt.Sprintf("%X", sha256.Sum256([]byte("some conf"))), false},
+		{"Empty checksum", fmt.Sprintf("%X", [32]byte{}), false},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -478,19 +478,19 @@ func TestIsChecksumValid(t *testing.T) {
 
 func TestGetConfigurationString(t *testing.T) {
 	conf := startConf
-	checksum := sha256.Sum256([]byte(conf))
+	checksum := fmt.Sprintf("%X", sha256.Sum256([]byte(conf)))
 	conf = appendChecksum(conf, checksum)
 	confBytes := []byte(conf)
-	wrongChecksum := sha256.Sum256([]byte("conf"))
+	wrongChecksum := fmt.Sprintf("%X", sha256.Sum256([]byte("conf")))
 
 	testCases := []struct {
 		name         string
 		requestBytes []byte
-		checksum     [32]byte
+		checksum     string
 		expected     string
 	}{
 		{"Valid case", confBytes, checksum, startConf},
-		{"Empty checksum", confBytes, [32]byte{}, conf},
+		{"Empty checksum", confBytes, fmt.Sprintf("%X", [32]byte{}), conf},
 		{"Empty request bytes", []byte{}, checksum, ""},
 		{"Wrong checksum", confBytes, wrongChecksum, conf},
 	}
@@ -503,10 +503,8 @@ func TestGetConfigurationString(t *testing.T) {
 	}
 }
 
-func appendChecksum(conf string, checksum [32]byte) string {
-	checkSumString := fmt.Sprintf("%v", checksum)
-	checkSumString = strings.ReplaceAll(checkSumString, " ", ",")
-	conf += "checksum: " + checkSumString
+func appendChecksum(conf string, checksum string) string {
+	conf += "checksum: " + checksum
 	return conf
 }
 

@@ -238,10 +238,8 @@ func TestGetConfigYAML(t *testing.T) {
 	assert.NilError(t, err, "failed to unmarshal config from response body")
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "fair", "node sort policy set incorrectly, not fair")
 
-	// pull the checksum out of the response
-	parts := strings.SplitAfter(string(resp.outputBytes), "sha256 checksum: ")
-	assert.Equal(t, len(parts), 2, "checksum boundary not found")
-	startConfSum := parts[1]
+	startConfSum := conf.Checksum
+	assert.Assert(t, len(startConfSum) > 0, "checksum boundary not found")
 
 	// change the config
 	configs.MockSchedulerConfigByData([]byte(updatedConf))
@@ -255,9 +253,8 @@ func TestGetConfigYAML(t *testing.T) {
 	assert.NilError(t, err, "failed to unmarshal config from response body (updated config)")
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "binpacking", "node sort policy not updated")
 
-	parts = strings.SplitAfter(string(resp.outputBytes), "sha256 checksum: ")
-	assert.Equal(t, len(parts), 2, "checksum boundary not found")
-	updatedConfSum := parts[1]
+	assert.Assert(t, len(startConfSum) > 0, "checksum boundary not found")
+	updatedConfSum := conf.Checksum
 	assert.Assert(t, startConfSum != updatedConfSum, "checksums did not change in output")
 }
 
@@ -277,13 +274,9 @@ func TestGetConfigJSON(t *testing.T) {
 	resp := &MockResponseWriter{}
 	getClusterConfig(resp, req)
 
-	// json unmarshal does not handle the checksum add the end automatically
-	// need to remove it before unmarshalling
-	parts := strings.SplitAfter(string(resp.outputBytes), "\n")
-	assert.Equal(t, len(parts), 2, "checksum boundary not found (json)")
-	startConfSum := parts[1]
 	conf := &configs.SchedulerConfig{}
-	err := json.Unmarshal([]byte(parts[0]), conf)
+	err := json.Unmarshal(resp.outputBytes, conf)
+	startConfSum := conf.Checksum
 	assert.NilError(t, err, "failed to unmarshal config from response body (json)")
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "fair", "node sort policy set incorrectly, not fair (json)")
 
@@ -293,10 +286,9 @@ func TestGetConfigJSON(t *testing.T) {
 		t.Fatalf("Error when updating clusterInfo from config %v", err)
 	}
 	getClusterConfig(resp, req)
-	parts = strings.SplitAfter(string(resp.outputBytes), "\n")
-	assert.Equal(t, len(parts), 2, "checksum boundary not found (json changed)")
-	assert.Assert(t, startConfSum != parts[1], "checksums did not change in json output: %s, %s", startConfSum, parts[1])
-	err = json.Unmarshal([]byte(parts[0]), conf)
+	err = json.Unmarshal(resp.outputBytes, conf)
+	assert.Assert(t, startConfSum != conf.Checksum, "checksums did not change in json output: %s, %s", startConfSum, conf.Checksum)
+
 	assert.NilError(t, err, "failed to unmarshal config from response body (json, updated config)")
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "binpacking", "node sort policy not updated (json)")
 }

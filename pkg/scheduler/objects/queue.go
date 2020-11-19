@@ -917,6 +917,12 @@ func (sq *Queue) TryReservedAllocate(iterator func() interfaces.NodeIterator) *A
 						zap.Int("reservations", numRes))
 				}
 				app := sq.getApplication(appID)
+				if app == nil {
+					log.Logger().Debug("reservation(s) found but application did not exist in queue",
+						zap.String("queueName", sq.QueuePath),
+						zap.String("appID", appID))
+					return nil
+				}
 				alloc := app.tryReservedAllocate(headRoom, iterator)
 				if alloc != nil {
 					log.Logger().Debug("reservation found for allocation found on queue",

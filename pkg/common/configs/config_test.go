@@ -404,6 +404,21 @@ partitions:
 	}
 }
 
+func TestParseQueue(t *testing.T) {
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_
+`
+	// This tests two things:
+	// - every allowed char in the regexp
+	// - max length of the name
+	// there are 64 different allowed characters in the regexp and the max length is 64 too
+	_, err := CreateConfig(data)
+	assert.NilError(t, err, "every allowed char queue name should not have failed")
+}
+
 func TestParseQueueFail(t *testing.T) {
 	data := `
 partitions:

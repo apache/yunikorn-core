@@ -647,7 +647,7 @@ func (sa *Application) tryNodesNoReserve(ask *AllocationAsk, iterator interfaces
 	for iterator.HasNext() {
 		node, ok := iterator.Next().(*Node)
 		if !ok {
-			log.Logger().Debug("Node iterator failed to return a node")
+			log.Logger().Warn("Node iterator failed to return a node")
 			return nil
 		}
 		// skip over the node if the resource does not fit the node or this is the reserved node.
@@ -678,7 +678,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator interfaces.NodeIter
 	for iterator.HasNext() {
 		node, ok := iterator.Next().(*Node)
 		if !ok {
-			log.Logger().Debug("Node iterator failed to return a node")
+			log.Logger().Warn("Node iterator failed to return a node")
 			return nil
 		}
 		// skip over the node if the resource does not fit the node at all.
@@ -768,18 +768,18 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 	// everything OK really allocate
 	alloc := NewAllocation(common.GetNewUUID(), node.NodeID, ask)
 	if node.AddAllocation(alloc) {
-		// mark this ask as allocated by lowering the repeat
-		_, err := sa.updateAskRepeatInternal(ask, -1)
-		if err != nil {
-			log.Logger().Debug("ask repeat update failed unexpectedly",
-				zap.Error(err))
-		}
-		if err = sa.queue.IncAllocatedResource(alloc.AllocatedResource, false); err != nil {
-			log.Logger().Debug("queue update failed unexpectedly",
+		if err := sa.queue.IncAllocatedResource(alloc.AllocatedResource, false); err != nil {
+			log.Logger().Warn("queue update failed unexpectedly",
 				zap.Error(err))
 			// revert the node update
 			node.RemoveAllocation(alloc.UUID)
 			return nil
+		}
+		// mark this ask as allocated by lowering the repeat
+		_, err := sa.updateAskRepeatInternal(ask, -1)
+		if err != nil {
+			log.Logger().Warn("ask repeat update failed unexpectedly",
+				zap.Error(err))
 		}
 		// all is OK, last update for the app
 		sa.addAllocationInternal(alloc)

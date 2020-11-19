@@ -107,6 +107,10 @@ func (cc *ClusterContext) schedule() {
 		if psc.root.GetMaxResource() == nil {
 			continue
 		}
+		// a stopped partition does not allocate
+		if psc.isStopped() {
+			continue
+		}
 		// try reservations first
 		alloc := psc.tryReservedAllocate()
 		// nothing reserved that can be allocated try normal allocate
@@ -114,13 +118,15 @@ func (cc *ClusterContext) schedule() {
 			alloc = psc.tryAllocate()
 		}
 		if alloc != nil {
+			// TODO: The alloc is passed to the RM twice why do we need event + callback?
+			// See YUNIKORN-462, there are two separate communications for the same allocation
+			// between the core and the shim they should be merged into one communication.
+
 			// communicate the allocation to the RM
 			cc.rmEventHandler.HandleEvent(&rmevent.RMNewAllocationsEvent{
 				Allocations: []*si.Allocation{alloc.NewSIFromAllocation()},
 				RmID:        psc.RmID,
 			})
-			// TODO: The alloc is just passed to the RM why do we need a callback?
-			// TODO: The comments are from before the cache and scheduler merge
 			// if reconcile plugin is enabled, re-sync the cache now.
 			// before deciding on an allocation, call the reconcile plugin to sync scheduler cache
 			// between core and shim if necessary. This is useful when running multiple allocations
@@ -282,6 +288,7 @@ func (cc *ClusterContext) UpdateSchedulerConfig(conf *configs.SchedulerConfig) e
 
 // Locked version of the configuration update called outside of event system.
 // Updates the current config via the config loader.
+// Used in test only, normal updates use the internal call and the webservice must use the UpdateSchedulerConfig
 func (cc *ClusterContext) UpdateRMSchedulerConfig(rmID string) error {
 	cc.Lock()
 	defer cc.Unlock()
@@ -678,6 +685,10 @@ func (cc *ClusterContext) processAskReleases(releases []*si.AllocationAskRelease
 }
 
 func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationReleaseRequest, rmID string) {
+	// TODO: the release comes from the RM and confirmed twice why do we need event + callback?
+	// See YUNIKORN-462, there are two separate communications for the same allocation
+	// between the core and the shim they should be merged into one communication.
+
 	toReleaseAllocations := make([]*si.ForgotAllocation, 0)
 	for _, toRelease := range releases {
 		partition := cc.GetPartition(toRelease.PartitionName)
@@ -695,7 +706,6 @@ func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRel
 		}
 	}
 
-	// TODO: the release comes from the RM why do we need a callback?
 	// if reconcile plugin is enabled, re-sync the cache now.
 	// this gives the chance for the cache to update its memory about assumed pods
 	// whenever we release an allocation, we must ensure the corresponding pod is successfully

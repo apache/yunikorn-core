@@ -108,11 +108,14 @@ func (r *Resource) DAOString() string {
 }
 
 // Convert to a protobuf implementation
+// a nil resource passes back an empty proto object
 func (r *Resource) ToProto() *si.Resource {
 	proto := &si.Resource{}
 	proto.Resources = make(map[string]*si.Quantity)
-	for k, v := range r.Resources {
-		proto.Resources[k] = &si.Quantity{Value: int64(v)}
+	if r != nil {
+		for k, v := range r.Resources {
+			proto.Resources[k] = &si.Quantity{Value: int64(v)}
+		}
 	}
 	return proto
 }
@@ -131,34 +134,42 @@ func (r *Resource) ToConf() map[string]string {
 // NOTE: this is a clone not a sparse copy of the original.
 func (r *Resource) Clone() *Resource {
 	ret := NewResource()
-	for k, v := range r.Resources {
-		ret.Resources[k] = v
+	if r != nil {
+		for k, v := range r.Resources {
+			ret.Resources[k] = v
+		}
+		return ret
 	}
-	return ret
+	return nil
 }
 
 // Add additional resource to the base updating the base resource
 // Should be used by temporary computation only
-// A nil base resource is considered an empty resource
-// A nil addition is treated as a zero valued resource and leaves base unchanged
+// A nil base resource does not change
+// A nil passed in resource is treated as a zero valued resource and leaves base unchanged
 func (r *Resource) AddTo(add *Resource) {
-	if add == nil {
-		return
-	}
-	for k, v := range add.Resources {
-		r.Resources[k] = addVal(r.Resources[k], v)
+	if r != nil {
+		if add == nil {
+			return
+		}
+		for k, v := range add.Resources {
+			r.Resources[k] = addVal(r.Resources[k], v)
+		}
 	}
 }
 
 // Subtract from the resource the passed in resource by updating the resource it is called on.
-// A nil passed in resource is treated as a zero valued resource and leaves the called on resource unchanged.
 // Should be used by temporary computation only
+// A nil base resource does not change
+// A nil passed in resource is treated as a zero valued resource and leaves the base unchanged.
 func (r *Resource) SubFrom(sub *Resource) {
-	if sub == nil {
-		return
-	}
-	for k, v := range sub.Resources {
-		r.Resources[k] = subVal(r.Resources[k], v)
+	if r != nil {
+		if sub == nil {
+			return
+		}
+		for k, v := range sub.Resources {
+			r.Resources[k] = subVal(r.Resources[k], v)
+		}
 	}
 }
 

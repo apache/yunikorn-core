@@ -23,9 +23,9 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 )
 
 func TestFixedRule(t *testing.T) {
@@ -70,14 +70,15 @@ partitions:
         queues:
           - name: testchild
 `
-	partInfo, err := CreatePartitionInfo([]byte(data))
-	assert.NilError(t, err, "Partition create failed with error")
+	err := initQueueStructure([]byte(data))
+	assert.NilError(t, err, "setting up the queue config failed")
+
 	user := security.UserGroup{
 		User:   "testuser",
 		Groups: []string{},
 	}
 	tags := make(map[string]string)
-	appInfo := cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
+	app := objects.NewApplication("app1", "default", "ignored", user, tags, nil, "")
 
 	// fixed queue that exists directly under the root
 	conf := configs.PlacementRule{
@@ -90,7 +91,7 @@ partitions:
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
 	var queue string
-	queue, err = fr.placeApplication(appInfo, partInfo)
+	queue, err = fr.placeApplication(app, queueFunc)
 	if queue != "root.testqueue" || err != nil {
 		t.Errorf("fixed rule failed to place queue in correct queue '%s', err %v", queue, err)
 	}
@@ -104,7 +105,7 @@ partitions:
 	if err != nil || fr == nil {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
-	queue, err = fr.placeApplication(appInfo, partInfo)
+	queue, err = fr.placeApplication(app, queueFunc)
 	if queue != "root.testparent.testchild" || err != nil {
 		t.Errorf("fixed rule failed to place queue in correct queue '%s', err %v", queue, err)
 	}
@@ -119,7 +120,7 @@ partitions:
 	if err != nil || fr == nil {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
-	queue, err = fr.placeApplication(appInfo, partInfo)
+	queue, err = fr.placeApplication(app, queueFunc)
 	if queue != "root.newqueue" || err != nil {
 		t.Errorf("fixed rule failed to place queue in to be created queue '%s', err %v", queue, err)
 	}
@@ -133,7 +134,7 @@ partitions:
 	if err != nil || fr == nil {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
-	queue, err = fr.placeApplication(appInfo, partInfo)
+	queue, err = fr.placeApplication(app, queueFunc)
 	if queue != "root.testparent" || err != nil {
 		t.Errorf("fixed rule did fail with parent queue '%s', error %v", queue, err)
 	}
@@ -151,21 +152,22 @@ partitions:
 	if err != nil || fr == nil {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
-	queue, err = fr.placeApplication(appInfo, partInfo)
+	queue, err = fr.placeApplication(app, queueFunc)
 	if queue != "root.testparent.testchild" || err != nil {
 		t.Errorf("fixed rule with parent queue should not have failed '%s', error %v", queue, err)
 	}
 }
 
 func TestFixedRuleParent(t *testing.T) {
-	partInfo, err := CreatePartitionInfo([]byte(confParentChild))
-	assert.NilError(t, err, "Partition create failed with error")
+	err := initQueueStructure([]byte(confParentChild))
+	assert.NilError(t, err, "setting up the queue config failed")
+
 	user := security.UserGroup{
 		User:   "testuser",
 		Groups: []string{},
 	}
 	tags := make(map[string]string)
-	appInfo := cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
+	app := objects.NewApplication("app1", "default", "ignored", user, tags, nil, "")
 
 	// trying to place in a child using a parent, fail to create child
 	conf := configs.PlacementRule{
@@ -183,7 +185,7 @@ func TestFixedRuleParent(t *testing.T) {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
 	var queue string
-	queue, err = fr.placeApplication(appInfo, partInfo)
+	queue, err = fr.placeApplication(app, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("fixed rule with create false for child should have failed and gave '%s', error %v", queue, err)
 	}
@@ -203,7 +205,7 @@ func TestFixedRuleParent(t *testing.T) {
 	if err != nil || fr == nil {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
-	queue, err = fr.placeApplication(appInfo, partInfo)
+	queue, err = fr.placeApplication(app, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("fixed rule with non existing parent queue should have failed '%s', error %v", queue, err)
 	}
@@ -223,7 +225,7 @@ func TestFixedRuleParent(t *testing.T) {
 	if err != nil || fr == nil {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
-	queue, err = fr.placeApplication(appInfo, partInfo)
+	queue, err = fr.placeApplication(app, queueFunc)
 	if queue != nameParentChild || err != nil {
 		t.Errorf("fixed rule with non existing parent queue should created '%s', error %v", queue, err)
 	}
@@ -242,7 +244,7 @@ func TestFixedRuleParent(t *testing.T) {
 	if err != nil || fr == nil {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
-	queue, err = fr.placeApplication(appInfo, partInfo)
+	queue, err = fr.placeApplication(app, queueFunc)
 	if queue != "" || err == nil {
 		t.Errorf("fixed rule with parent declared as leaf should have failed '%s', error %v", queue, err)
 	}

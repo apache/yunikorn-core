@@ -24,9 +24,9 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 )
 
 // A rule to place an application based on the a tag on the application.
@@ -56,7 +56,7 @@ func (tr *tagRule) initialise(conf configs.PlacementRule) error {
 	return err
 }
 
-func (tr *tagRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
+func (tr *tagRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, error) {
 	// if the tag is not present we can skipp all other processing
 	tagVal := app.GetTag(tr.tagName)
 	if tagVal == "" {
@@ -74,10 +74,10 @@ func (tr *tagRule) placeApplication(app *cache.ApplicationInfo, info *cache.Part
 	var err error
 	queueName := tagVal
 	// if we have a fully qualified queue in the value do not run the parent rule
-	if !strings.HasPrefix(queueName, configs.RootQueue+cache.DOT) {
+	if !strings.HasPrefix(queueName, configs.RootQueue+configs.DOT) {
 		// run the parent rule if set
 		if tr.parent != nil {
-			parentName, err = tr.parent.placeApplication(app, info)
+			parentName, err = tr.parent.placeApplication(app, queueFn)
 			// failed parent rule, fail this rule
 			if err != nil {
 				return "", err
@@ -87,11 +87,11 @@ func (tr *tagRule) placeApplication(app *cache.ApplicationInfo, info *cache.Part
 				return "", nil
 			}
 			// check if this is a parent queue and qualify it
-			if !strings.HasPrefix(parentName, configs.RootQueue+cache.DOT) {
-				parentName = configs.RootQueue + cache.DOT + parentName
+			if !strings.HasPrefix(parentName, configs.RootQueue+configs.DOT) {
+				parentName = configs.RootQueue + configs.DOT + parentName
 			}
 			// if the parent queue exists it cannot be a leaf
-			parentQueue := info.GetQueue(parentName)
+			parentQueue := queueFn(parentName)
 			if parentQueue != nil && parentQueue.IsLeafQueue() {
 				return "", fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
 			}
@@ -100,13 +100,13 @@ func (tr *tagRule) placeApplication(app *cache.ApplicationInfo, info *cache.Part
 		if parentName == "" {
 			parentName = configs.RootQueue
 		}
-		queueName = parentName + cache.DOT + replaceDot(tagVal)
+		queueName = parentName + configs.DOT + replaceDot(tagVal)
 	}
 	log.Logger().Debug("Tag rule intermediate result",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
 	// get the queue object
-	queue := info.GetQueue(queueName)
+	queue := queueFn(queueName)
 	// if we cannot create the queue it must exist, rule does not match otherwise
 	if !tr.create && queue == nil {
 		return "", nil

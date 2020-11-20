@@ -25,14 +25,16 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 )
 
 const (
 	RootQueue        = "root"
+	DOT              = "."
+	DotReplace       = "_dot_"
 	DefaultPartition = "default"
 	// How to sort applications in leaf queues, valid options are defined in the scheduler.policies
 	ApplicationSortPolicy = "application.sort.policy"
@@ -40,7 +42,7 @@ const (
 
 // A queue can be a username with the dot replaced. Most systems allow a 32 character user name.
 // The queue name must thus allow for at least that length with the replacement of dots.
-var QueueNameRegExp = regexp.MustCompile(`^[a-z-z0-9_-]{1,64}$`)
+var QueueNameRegExp = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
 
 // User and group name check: systems allow different things POSIX is the base but we need to be lenient and allow more.
 // allow upper and lower case, add the @ and . (dot) and officially no length.
@@ -279,7 +281,7 @@ func checkNodeSortingPolicy(partition *PartitionConfig) error {
 	policy := partition.NodeSortPolicy
 
 	// Defined polices.
-	_, err := common.FromString(policy.Type)
+	_, err := policies.FromString(policy.Type)
 
 	return err
 }
@@ -289,7 +291,6 @@ func checkNodeSortingPolicy(partition *PartitionConfig) error {
 // - queue name is alphanumeric (case ignore) with - and _
 // - queue name is maximum 16 char long
 func checkQueues(queue *QueueConfig, level int) error {
-
 	// check the ACLs (if defined)
 	err := checkACL(queue.AdminACL)
 	if err != nil {
@@ -310,7 +311,7 @@ func checkQueues(queue *QueueConfig, level int) error {
 	queueMap := make(map[string]bool)
 	for _, child := range queue.Queues {
 		if !QueueNameRegExp.MatchString(child.Name) {
-			return fmt.Errorf("invalid child name %s, a name must only have lower case alphanumeric characters,"+
+			return fmt.Errorf("invalid child name %s, a name must only have alphanumeric characters,"+
 				" - or _, and be no longer than 64 characters", child.Name)
 		}
 		if queueMap[strings.ToLower(child.Name)] {

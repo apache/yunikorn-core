@@ -75,22 +75,23 @@ func TestGetPartitionNameWithoutClusterID(t *testing.T) {
 
 func TestGetBoolEnvVar(t *testing.T) {
 	envVarName := "VAR"
-	defaultValue := true
 	testCases := []struct {
 		name     string
 		value    string
 		expected bool
 	}{
-		{"ENV var not set", "", defaultValue},
+		{"ENV var not set", "", true},
 		{"ENV var set", "false", false},
-		{"Invalid value", "someValue", defaultValue},
+		{"Invalid value", "someValue", true},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			os.Setenv(envVarName, tc.value)
-			val := GetBoolEnvVar(envVarName, defaultValue)
+			err := os.Setenv(envVarName, tc.value)
+			assert.NilError(t, err, "setting environment variable failed")
+			val := GetBoolEnvVar(envVarName, true)
 			assert.DeepEqual(t, val, tc.expected)
-			os.Unsetenv(envVarName)
+			err = os.Unsetenv(envVarName)
+			assert.NilError(t, err, "cleaning up environment variable failed")
 		})
 	}
 }

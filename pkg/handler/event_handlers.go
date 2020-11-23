@@ -18,12 +18,11 @@
 
 package handler
 
-import (
-	"github.com/apache/incubator-yunikorn-core/pkg/common/commonevents"
-)
+type EventHandler interface {
+	HandleEvent(ev interface{})
+}
 
 type EventHandlers struct {
-	RMProxyEventHandler   commonevents.EventHandler
-	CacheEventHandler     commonevents.EventHandler
-	SchedulerEventHandler commonevents.EventHandler
+	RMProxyEventHandler   EventHandler
+	SchedulerEventHandler EventHandler
 }

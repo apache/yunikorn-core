@@ -24,6 +24,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"strings"
 
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
@@ -147,12 +148,13 @@ func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) 
 		return nil, err
 	}
 	// Create a sha256 checksum for this validated config
-	PopulateChecksum(content, conf)
+	UpdateChecksum(content, conf)
 	return conf, err
 }
 
-func PopulateChecksum(content []byte, conf *SchedulerConfig) {
-	conf.Checksum = fmt.Sprintf("%X", sha256.Sum256(content))
+func UpdateChecksum(content []byte, conf *SchedulerConfig) {
+	noChecksumContent := GetConfigurationString(content)
+	conf.Checksum = fmt.Sprintf("%X", sha256.Sum256([]byte(noChecksumContent)))
 }
 
 func ParseAndValidateConfig(content []byte) (*SchedulerConfig, error) {
@@ -201,6 +203,13 @@ func resolveConfigurationFileFunc(policyGroup string) string {
 		}
 	}
 	return filePath
+}
+func GetConfigurationString(requestBytes []byte) string {
+	conf := string(requestBytes)
+	if strings.Contains(conf, "checksum"){
+		conf = strings.Split(conf, "checksum: ")[0]
+	}
+	return conf
 }
 
 // Default loader, can be updated by tests

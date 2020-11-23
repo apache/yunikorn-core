@@ -463,24 +463,21 @@ func updateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// validation is already called when loading the config
-	schedulerConf, err := configs.ParseAndValidateConfig(requestBytes)
-	var newConf *configs.SchedulerConfig
-	newConf, err = configs.LoadSchedulerConfigFromByteArray(requestBytes)
+	newConf, err := configs.ParseAndValidateConfig(requestBytes)
 	if err != nil {
 		buildUpdateResponse(err, w)
 		return
 	}
-	baseChecksum := schedulerConf.Checksum
-	checksumValid := isChecksumValid(baseChecksum)
-	if !checksumValid {
-		buildUpdateResponse(false, "The base configuration is changed.", w)
+	baseChecksum := newConf.Checksum
+	if !isChecksumValid(baseChecksum) {
+		buildUpdateResponse(fmt.Errorf("the base configuration is changed"), w)
 		return
 	}
-	configs.PopulateChecksum(requestBytes, schedulerConf)
-	newConf := getConfigurationString(requestBytes, baseChecksum)
+	configs.UpdateChecksum(requestBytes, newConf)
+	newConfStr := configs.GetConfigurationString(requestBytes)
 	// This fails if we have more than 1 RM
 	// Do not think the plugins will even work with multiple RMs
-	oldConf, err := updateConfiguration(newConf)
+	oldConf, err := updateConfiguration(newConfStr)
 	if err != nil {
 		buildUpdateResponse(err, w)
 		return
@@ -499,24 +496,10 @@ func updateConfig(w http.ResponseWriter, r *http.Request) {
 	buildUpdateResponse(nil, w)
 }
 
-func getConfigurationString(requestBytes []byte, checksum string) string {
-	newConf := string(requestBytes)
-	checksumString := "checksum: " + checksum
-	newConf = strings.Replace(newConf, checksumString, "", 1)
-	return newConf
-}
-
 func isChecksumValid(checksum string) bool {
-	actualConf := configs.ConfigContext.Get(gClusterInfo.GetPolicyGroup())
+	actualConf := configs.ConfigContext.Get(schedulerContext.GetPolicyGroup())
 	return actualConf.Checksum == checksum
 }
-
-func buildUpdateResponse(success bool, reason string, w http.ResponseWriter) {
-	if len(reason) > 0 {
-		log.Logger().Info("Result of configuration update: ",
-			zap.Bool("Result", success),
-			zap.String("Reason in case of failure", reason))
-	}
 
 func buildUpdateResponse(err error, w http.ResponseWriter) {
 	if err == nil {

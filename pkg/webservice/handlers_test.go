@@ -19,7 +19,6 @@
 package webservice
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -279,7 +278,7 @@ func TestGetConfigJSON(t *testing.T) {
 	getClusterConfig(resp, req)
 
 	conf := &configs.SchedulerConfig{}
-	err := json.Unmarshal(resp.outputBytes, conf)
+	err = json.Unmarshal(resp.outputBytes, conf)
 	startConfSum := conf.Checksum
 	assert.NilError(t, err, "failed to unmarshal config from response body (json)")
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "fair", "node sort policy set incorrectly, not fair (json)")
@@ -413,7 +412,9 @@ func TestBuildUpdateResponseFailure(t *testing.T) {
 func TestUpdateConfig(t *testing.T) {
 	prepareSchedulerForConfigChange(t)
 	resp := &MockResponseWriter{}
-	req, err := http.NewRequest("PUT", "", strings.NewReader(updatedConf))
+	baseChecksum := configs.ConfigContext.Get(schedulerContext.GetPolicyGroup()).Checksum
+	conf := appendChecksum(updatedConf, baseChecksum)
+	req, err := http.NewRequest("PUT", "", strings.NewReader(conf))
 	assert.NilError(t, err, "Failed to create the request")
 	updateConfig(resp, req)
 	assert.NilError(t, err, "No error expected")
@@ -428,6 +429,11 @@ func TestUpdateConfigInvalidConf(t *testing.T) {
 	updateConfig(resp, req)
 	assert.Equal(t, http.StatusConflict, resp.statusCode, "Status code is wrong")
 	assert.Assert(t, len(string(resp.outputBytes)) > 0, "Error message is expected")
+}
+
+func appendChecksum(conf string, checksum string) string {
+	conf += "checksum: " + checksum
+	return conf
 }
 
 func prepareSchedulerForConfigChange(t *testing.T) {

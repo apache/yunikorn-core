@@ -34,6 +34,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	metrics2 "github.com/apache/incubator-yunikorn-core/pkg/metrics"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
@@ -265,7 +266,7 @@ func getPartitionJSON(partition *scheduler.PartitionContext) *dao.PartitionDAOIn
 	partitionInfo.PartitionName = partition.Name
 	partitionInfo.Capacity = dao.PartitionCapacity{
 		Capacity:     partition.GetTotalPartitionResource().DAOString(),
-		UsedCapacity: "0",
+		UsedCapacity: partition.GetAllocatedResource().DAOString(),
 	}
 	partitionInfo.Queues = queueDAOInfo
 
@@ -493,6 +494,95 @@ func updateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	buildUpdateResponse(nil, w)
+}
+func checkScheduingErrors(metrics metrics2.CoreSchedulerMetrics, w http.ResponseWriter, result *dao.SchedulerHealthDAOInfo) {
+	schedulingErrors, err := metrics.GetSchedulingErrors()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	result.SchedulingErrors = schedulingErrors
+}
+
+func checkFailedNodes(metrics metrics2.CoreSchedulerMetrics, w http.ResponseWriter, result *dao.SchedulerHealthDAOInfo) {
+	failedNodes, err := metrics.GetFailedNodes()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	result.FailedNodes = failedNodes
+}
+
+func checkSchedulingContext(result *dao.SchedulerHealthDAOInfo) {
+	// 1. check resources
+	// 1.1 check for negative resources
+	// 1.2 total partition resource = sum of node resources
+	// 1.3 node allocated resource <= total resource of the node
+	// 1.4 node total resource = allocated resource + occupied resource + available resource
+	// 2. check reservations
+	for _, part := range schedulerContext.GetPartitionMapClone() {
+		if part.GetAllocatedResource().HasNegativeValue() {
+			result.UnhealthyPartition[part.Name] = getPartitionJSON(part)
+		}
+		if part.GetTotalPartitionResource().HasNegativeValue() {
+			result.UnhealthyPartition[part.Name] = getPartitionJSON(part)
+		}
+		sumNodeResources := resources.NewResource()
+		sumNodeAllocatedResources := resources.NewResource()
+		sumReservation := 0
+		for _, node := range part.GetNodes() {
+			sumNodeResources.AddTo(node.GetCapacity())
+			sumNodeAllocatedResources.AddTo(node.GetAllocatedResource())
+			sumReservation += len(node.GetReservations())
+			calculatedTotalNodeRes := resources.Add(node.GetAllocatedResource(), node.GetOccupiedResource())
+			calculatedTotalNodeRes.AddTo(node.GetAvailableResource())
+			if !resources.Equals(node.GetCapacity(), calculatedTotalNodeRes) {
+				result.UnhealthyNodes[node.NodeID] = getNodeJSON(node)
+				continue
+			}
+			if node.GetAllocatedResource().HasNegativeValue() {
+				result.UnhealthyNodes[node.NodeID] = getNodeJSON(node)
+				continue
+			}
+			if node.GetAvailableResource().HasNegativeValue() {
+				result.UnhealthyNodes[node.NodeID] = getNodeJSON(node)
+				continue
+			}
+			if node.GetCapacity().HasNegativeValue() {
+				result.UnhealthyNodes[node.NodeID] = getNodeJSON(node)
+				continue
+			}
+			if node.GetOccupiedResource().HasNegativeValue() {
+				result.UnhealthyNodes[node.NodeID] = getNodeJSON(node)
+				continue
+			}
+			if !resources.StrictlyGreaterThanOrEquals(node.GetCapacity(), node.GetAllocatedResource()) {
+				result.UnhealthyNodes[node.NodeID] = getNodeJSON(node)
+				continue
+			}
+		}
+		result.ReservationNodeRatio = float32(sumReservation)/(float32(part.GetTotalNodeCount()))
+		if !resources.Equals(sumNodeAllocatedResources, part.GetAllocatedResource()) {
+			result.UnhealthyPartition[part.Name] = getPartitionJSON(part)
+			continue
+		}
+		if !resources.Equals(sumNodeResources, part.GetTotalPartitionResource()) {
+			result.UnhealthyPartition[part.Name] = getPartitionJSON(part)
+			continue
+		}
+	}
+}
+
+func checkHealthStatus(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	metrics := metrics2.GetSchedulerMetrics()
+	var result dao.SchedulerHealthDAOInfo
+	checkScheduingErrors(metrics, w, &result)
+	checkFailedNodes(metrics, w, &result)
+	checkSchedulingContext(&result)
+
+	result.SetHealthStatus()
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func buildUpdateResponse(err error, w http.ResponseWriter) {

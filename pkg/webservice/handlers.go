@@ -40,6 +40,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+	"github.com/gorilla/mux"
 )
 
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
@@ -608,5 +609,25 @@ func getPartitions(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewEncoder(w).Encode(partitionsInfo); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	writeHeaders(w)
+	if len(vars) == 0 {
+		http.Error(w, "partition not found", http.StatusInternalServerError)
+	}
+	lists := schedulerContext.GetPartitionMapClone()
+	for _, partition := range lists {
+		if partition.Name == vars["partition"] {
+			partitionQueuesDAOInfo := partition.GetPartitionQueues()
+			fmt.Println(partitionQueuesDAOInfo)
+			if err := json.NewEncoder(w).Encode(partitionQueuesDAOInfo); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		} else {
+			http.Error(w, "partition not found", http.StatusInternalServerError)
+		}
 	}
 }

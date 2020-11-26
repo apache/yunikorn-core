@@ -409,6 +409,28 @@ func (sq *Queue) GetQueueInfos() dao.QueueDAOInfo {
 	return queueInfo
 }
 
+func (sq *Queue) GetPartitionQueues() dao.PartitionQueueDAOInfo {
+	queueInfo := dao.PartitionQueueDAOInfo{}
+	if len(sq.children) > 0 {
+		for _, child := range sq.GetCopyOfChildren() {
+			queueInfo.Children = append(queueInfo.Children, child.GetPartitionQueues())
+		}
+	}
+	queueInfo.QueueName = sq.GetQueuePath()
+	queueInfo.Status = sq.stateMachine.Current()
+	queueInfo.MaxResource = sq.maxResource.DAOString()
+	queueInfo.GuaranteedResource = sq.guaranteedResource.DAOString()
+	queueInfo.AllocatedResource = sq.allocatedResource.DAOString()
+	queueInfo.IsLeaf = sq.IsLeafQueue()
+	queueInfo.IsManaged = sq.IsManaged()
+	if sq.parent == nil {
+		queueInfo.Parent = ""
+	} else {
+		queueInfo.Parent = sq.parent.GetQueuePath()
+	}
+	return queueInfo
+}
+
 // Return the pending resources for this queue
 func (sq *Queue) GetPendingResource() *resources.Resource {
 	sq.RLock()

@@ -28,6 +28,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gopkg.in/yaml.v2"
 	"gotest.tools/assert"
@@ -103,7 +104,14 @@ partitions:
   - 
     name: default
     nodesortpolicy: 
-      type: fair
+	  type: fair
+`
+const configTwoLevelQueues = `
+partitions: 
+  - 
+    name: default
+    nodesortpolicy: 
+      type: binpacking
     queues: 
       - 
         name: root
@@ -111,6 +119,43 @@ partitions:
           - 
             name: default
             submitacl: "*"
+            name: a
+            queues: 
+              - 
+                name: a1
+                resources: 
+                  guaranteed: 
+                    memory: 500000
+                    vcore: 50000
+                  max: 
+                    memory: 800000
+                    vcore: 80000
+            resources: 
+              guaranteed: 
+                memory: 500000
+                vcore: 50000
+              max: 
+                memory: 800000
+                vcore: 80000
+          - 
+            name: b
+            resources: 
+              guaranteed: 
+                memory: 400000
+                vcore: 40000
+              max: 
+                memory: 600000
+                vcore: 60000
+          - 
+            name: c
+            resources: 
+              guaranteed: 
+                memory: 100000
+                vcore: 10000
+              max: 
+                memory: 100000
+                vcore: 10000
+            submitacl: " sandbox"
 `
 
 const rmID = "rm-123"
@@ -835,4 +880,36 @@ func TestMetricsNotEmpty(t *testing.T) {
 	handler := loggingHandler(mux, "/ws/v1/metrics")
 	handler.ServeHTTP(rr, req)
 	assert.Assert(t, len(rr.Body.Bytes()) > 0, "Metrics response should not be empty")
+}
+
+func TestGetPartitionQueuesHandler(t *testing.T) {
+	configs.MockSchedulerConfigByData([]byte(configTwoLevelQueues))
+	var err error
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	assert.NilError(t, err, "Error when load clusterInfo from config")
+	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
+
+	// Check default partition
+	partitionName := "[" + rmID + "]default"
+	part := schedulerContext.GetPartition(partitionName)
+	assert.Equal(t, partitionName, part.Name)
+
+	NewWebApp(schedulerContext, nil)
+
+	var req *http.Request
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
+	vars := map[string]string{
+		"partition": "[rm-123]default",
+	}
+	req = mux.SetURLVars(req, vars)
+	assert.NilError(t, err, "Get Queues for PartitionQueues Handler request failed")
+	resp := &MockResponseWriter{}
+	var partitionQueuesDao *dao.PartitionQueueDAOInfo
+	getPartitionQueues(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &partitionQueuesDao)
+	assert.NilError(t, err, "failed to unmarshal PartitionQueues dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, len(partitionQueuesDao.Children), 3)
+	assert.Equal(t, partitionQueuesDao.Children[0].Parent, "root1")
+	assert.Equal(t, partitionQueuesDao.Children[1].Parent, "root")
+	assert.Equal(t, partitionQueuesDao.Children[2].Parent, "root")
 }

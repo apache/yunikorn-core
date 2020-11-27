@@ -109,6 +109,11 @@ partitions:
 const configTwoLevelQueues = `
 partitions: 
   - 
+    name: gpu
+    queues: 
+      - 
+        name: root
+  - 
     name: default
     nodesortpolicy: 
       type: binpacking
@@ -155,7 +160,6 @@ partitions:
               max: 
                 memory: 100000
                 vcore: 10000
-            submitacl: " sandbox"
 `
 
 const rmID = "rm-123"
@@ -887,7 +891,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	var err error
 	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
 	assert.NilError(t, err, "Error when load clusterInfo from config")
-	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
+	assert.Equal(t, 2, len(schedulerContext.GetPartitionMapClone()))
 
 	// Check default partition
 	partitionName := "[" + rmID + "]default"
@@ -899,17 +903,17 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	var req *http.Request
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
 	vars := map[string]string{
-		"partition": "[rm-123]default",
+		"partition": partitionName,
 	}
 	req = mux.SetURLVars(req, vars)
 	assert.NilError(t, err, "Get Queues for PartitionQueues Handler request failed")
 	resp := &MockResponseWriter{}
-	var partitionQueuesDao *dao.PartitionQueueDAOInfo
+	var partitionQueuesDao []dao.PartitionQueueDAOInfo
 	getPartitionQueues(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &partitionQueuesDao)
 	assert.NilError(t, err, "failed to unmarshal PartitionQueues dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, len(partitionQueuesDao.Children), 3)
-	assert.Equal(t, partitionQueuesDao.Children[0].Parent, "root1")
-	assert.Equal(t, partitionQueuesDao.Children[1].Parent, "root")
-	assert.Equal(t, partitionQueuesDao.Children[2].Parent, "root")
+	assert.Equal(t, len(partitionQueuesDao), 1)
+	assert.Equal(t, partitionQueuesDao[0].Children[0].Parent, "root")
+	assert.Equal(t, partitionQueuesDao[0].Children[1].Parent, "root")
+	assert.Equal(t, partitionQueuesDao[0].Children[2].Parent, "root")
 }

@@ -486,7 +486,10 @@ func (pc *PartitionContext) GetQueueInfos() dao.QueueDAOInfo {
 
 // Get the queue info for the whole queue structure to pass to the webservice
 func (pc *PartitionContext) GetPartitionQueues() dao.PartitionQueueDAOInfo {
-	return pc.root.GetPartitionQueues()
+	var PartitionQueueDAOInfo = dao.PartitionQueueDAOInfo{}
+	PartitionQueueDAOInfo = pc.root.GetPartitionQueues()
+	PartitionQueueDAOInfo.Partition = pc.Name
+	return PartitionQueueDAOInfo
 }
 
 // Create a queue with full hierarchy. This is called when a new queue is created from a placement rule.

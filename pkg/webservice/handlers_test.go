@@ -1084,7 +1084,11 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	var req1 *http.Request
 	req1, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/applications", strings.NewReader(""))
 	vars1 := map[string]string{
+<<<<<<< HEAD
 		"partition": "[rm-123]notexists",
+=======
+		"partition": "notexists",
+>>>>>>> First cut implementation
 		"queue":     "root.default",
 	}
 	req1 = mux.SetURLVars(req1, vars1)
@@ -1116,6 +1120,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp2.statusCode, "Incorrect Status code")
 	assert.Equal(t, errInfo2.Message, "Queue not found", "JSON error message is incorrect")
 	assert.Equal(t, errInfo2.StatusCode, http.StatusBadRequest)
+<<<<<<< HEAD
 	assert.Equal(t, http.StatusBadRequest, resp2.statusCode)
 }
 
@@ -1130,4 +1135,6 @@ func TestValidateQueue(t *testing.T) {
 
 	err2 := validateQueue("root")
 	assert.NilError(t, err2, "Queue path is correct but stil throwing error.")
+=======
+>>>>>>> First cut implementation
 }

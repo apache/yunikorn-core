@@ -1043,3 +1043,77 @@ func TestGetPartitionNodes(t *testing.T) {
 	assert.Equal(t, errInfo.Message, "Partition not found", "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
+
+func TestGetQueueApplicationsHandler(t *testing.T) {
+	configs.MockSchedulerConfigByData([]byte(configDefault))
+	var err error
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	assert.NilError(t, err, "Error when load clusterInfo from config")
+
+	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
+
+	// Check default partition
+	partitionName := "[" + rmID + "]default"
+	part := schedulerContext.GetPartition(partitionName)
+	assert.Equal(t, 0, len(part.GetApplications()))
+
+	// add a new app
+	app := newApplication("app-1", partitionName, "root.default", rmID)
+	err = part.AddApplication(app)
+	assert.NilError(t, err, "Failed to add Application to Partition.")
+	assert.Equal(t, app.CurrentState(), objects.New.String())
+	assert.Equal(t, 1, len(part.GetApplications()))
+
+	NewWebApp(schedulerContext, nil)
+
+	var req *http.Request
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/applications", strings.NewReader(""))
+	vars := map[string]string{
+		"partition": "[rm-123]default",
+		"queue":     "root.default",
+	}
+	req = mux.SetURLVars(req, vars)
+	assert.NilError(t, err, "Get Queue Applications Handler request failed")
+	resp := &MockResponseWriter{}
+	var appsDao []*dao.ApplicationDAOInfo
+	getQueueApplications(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &appsDao)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, len(appsDao), 1)
+
+	var req1 *http.Request
+	req1, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/applications", strings.NewReader(""))
+	vars1 := map[string]string{
+		"partition": "notexists",
+		"queue":     "root.default",
+	}
+	req1 = mux.SetURLVars(req1, vars1)
+	assert.NilError(t, err, "Get Queue Applications Handler request failed")
+	resp1 := &MockResponseWriter{}
+	getQueueApplications(resp1, req1)
+
+	var errInfo dao.YAPIError
+	err = json.Unmarshal(resp1.outputBytes, &errInfo)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
+	assert.Equal(t, http.StatusBadRequest, resp1.statusCode, "Incorrect Status code")
+	assert.Equal(t, errInfo.Message, "Partition not found", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+
+	var req2 *http.Request
+	req2, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/applications", strings.NewReader(""))
+	vars2 := map[string]string{
+		"partition": "[rm-123]default",
+		"queue":     "notexists",
+	}
+	req2 = mux.SetURLVars(req2, vars2)
+	assert.NilError(t, err, "Get Queue Applications Handler request failed")
+	resp2 := &MockResponseWriter{}
+	getQueueApplications(resp2, req2)
+
+	var errInfo2 dao.YAPIError
+	err = json.Unmarshal(resp2.outputBytes, &errInfo2)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
+	assert.Equal(t, http.StatusBadRequest, resp2.statusCode, "Incorrect Status code")
+	assert.Equal(t, errInfo2.Message, "Queue not found", "JSON error message is incorrect")
+	assert.Equal(t, errInfo2.StatusCode, http.StatusBadRequest)
+}

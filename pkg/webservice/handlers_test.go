@@ -42,6 +42,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+	"github.com/gorilla/mux"
 )
 
 const startConf = `
@@ -908,12 +909,11 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	req = mux.SetURLVars(req, vars)
 	assert.NilError(t, err, "Get Queues for PartitionQueues Handler request failed")
 	resp := &MockResponseWriter{}
-	var partitionQueuesDao []dao.PartitionQueueDAOInfo
+	var partitionQueuesDao dao.PartitionQueueDAOInfo
 	getPartitionQueues(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &partitionQueuesDao)
 	assert.NilError(t, err, "failed to unmarshal PartitionQueues dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, len(partitionQueuesDao), 1)
-	assert.Equal(t, partitionQueuesDao[0].Children[0].Parent, "root")
-	assert.Equal(t, partitionQueuesDao[0].Children[1].Parent, "root")
-	assert.Equal(t, partitionQueuesDao[0].Children[2].Parent, "root")
+	assert.Equal(t, partitionQueuesDao.Children[0].Parent, "root")
+	assert.Equal(t, partitionQueuesDao.Children[1].Parent, "root")
+	assert.Equal(t, partitionQueuesDao.Children[2].Parent, "root")
 }

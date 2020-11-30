@@ -303,8 +303,8 @@ func (sq *Queue) UpdateSortType() {
 }
 
 func (sq *Queue) GetQueuePath() string {
-	sq.Lock()
-	defer sq.Unlock()
+	sq.RLock()
+	defer sq.RUnlock()
 	return sq.QueuePath
 }
 
@@ -416,6 +416,8 @@ func (sq *Queue) GetPartitionQueues() dao.PartitionQueueDAOInfo {
 			queueInfo.Children = append(queueInfo.Children, child.GetPartitionQueues())
 		}
 	}
+	sq.RLock()
+	defer sq.RUnlock()
 	queueInfo.QueueName = sq.GetQueuePath()
 	queueInfo.Status = sq.stateMachine.Current()
 	queueInfo.MaxResource = sq.maxResource.DAOString()

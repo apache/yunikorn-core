@@ -40,6 +40,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+
 	"github.com/gorilla/mux"
 )
 
@@ -615,19 +616,16 @@ func getPartitions(w http.ResponseWriter, r *http.Request) {
 func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	writeHeaders(w)
-	if len(vars) == 0 {
+	_, partitionExists := vars["partition"]
+	if len(vars) == 0 || !partitionExists {
 		http.Error(w, "Mandatory parameters are missing in URL path. Please check the usage documentation", http.StatusBadRequest)
+		return
 	}
-	var partitionExists = false
-	var partitionQueuesDAOInfo []dao.PartitionQueueDAOInfo
-	lists := schedulerContext.GetPartitionMapClone()
-	for _, partition := range lists {
-		if partition.Name == vars["partition"] {
-			partitionExists = true
-			partitionQueuesDAOInfo = append(partitionQueuesDAOInfo, partition.GetPartitionQueues())
-		}
-	}
-	if !partitionExists {
+	var partitionQueuesDAOInfo dao.PartitionQueueDAOInfo
+	var partition = schedulerContext.GetPartition(vars["partition"])
+	if partition != nil {
+		partitionQueuesDAOInfo = partition.GetPartitionQueues()
+	} else {
 		http.Error(w, "partition not found", http.StatusInternalServerError)
 		return
 	}

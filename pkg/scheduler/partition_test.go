@@ -175,7 +175,7 @@ func TestAddNode(t *testing.T) {
 	assert.Equal(t, len(partition.nodes), 0, "node list not correct")
 
 	// reset the state (hard no checks)
-	partition.stateMachine.SetState(objects.Active.String())
+	partition.StateMachine.SetState(objects.Active.String())
 	err = partition.AddNode(node, nil)
 	assert.NilError(t, err, "test node add failed unexpected")
 	assert.Equal(t, len(partition.nodes), 1, "node list not correct")
@@ -383,7 +383,7 @@ func TestAddApp(t *testing.T) {
 	}
 
 	// mark partition for deletion, no new application can be added
-	partition.stateMachine.SetState(objects.Active.String())
+	partition.StateMachine.SetState(objects.Active.String())
 	err = partition.handlePartitionEvent(objects.Remove)
 	assert.NilError(t, err, "partition state change failed unexpectedly")
 	app = newApplication("app-3", "default", defQueue)

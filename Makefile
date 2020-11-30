@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Check if this is at least GO tools used is at least the version of go specified in
+# Check if this GO tools version used is at least the version of go specified in
 # the go.mod file. The version in go.mod should be in sync with other repos.
 GO_VERSION := $(shell go version | awk '{print substr($$3, 3, 10)}')
 MOD_VERSION := $(shell awk '/^go/ {print $$2}' go.mod)

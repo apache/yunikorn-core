@@ -667,7 +667,6 @@ func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
 func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	writeHeaders(w)
-
 	partition, partitionExists := vars["partition"]
 	if !partitionExists {
 		buildJSONErrorResponse(w, "Partition is missing in URL path. Please check the usage documentation", http.StatusBadRequest)

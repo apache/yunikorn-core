@@ -54,13 +54,13 @@ type PartitionContext struct {
 	allocations            map[string]*objects.Allocation  // allocations
 	placementManager       *placement.AppPlacementManager  // placement manager for this partition
 	partitionManager       *partitionManager               // manager for this partition
-	stateMachine           *fsm.FSM                        // the state of the partition for scheduling
-	stateTime              time.Time                       // last time the state was updated (needed for cleanup)
+	StateMachine           *fsm.FSM                        // the state of the partition for scheduling
+	StateTime              time.Time                       // last time the state was updated (needed for cleanup)
 	isPreemptable          bool                            // can allocations be preempted
 	rules                  *[]configs.PlacementRule        // placement rules to be loaded by the scheduler
 	userGroupCache         *security.UserGroupCache        // user cache per partition
 	totalPartitionResource *resources.Resource             // Total node resources
-	nodeSortingPolicy      *policies.NodeSortingPolicy     // Global Node Sorting Policies
+	NodeSortingPolicy      *policies.NodeSortingPolicy     // Global Node Sorting Policies
 
 	sync.RWMutex
 }
@@ -76,8 +76,8 @@ func newPartitionContext(conf configs.PartitionConfig, rmID string, cc *ClusterC
 	pc := &PartitionContext{
 		Name:         conf.Name,
 		RmID:         rmID,
-		stateMachine: objects.NewObjectState(),
-		stateTime:    time.Now(),
+		StateMachine: objects.NewObjectState(),
+		StateTime:    time.Now(),
 		applications: make(map[string]*objects.Application),
 		reservedApps: make(map[string]int),
 		nodes:        make(map[string]*objects.Node),
@@ -136,10 +136,10 @@ func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionCon
 	case policies.BinPackingPolicy, policies.FairnessPolicy:
 		log.Logger().Info("NodeSorting policy set from config",
 			zap.String("policyName", configuredPolicy.String()))
-		pc.nodeSortingPolicy = policies.NewNodeSortingPolicy(conf.NodeSortPolicy.Type)
+		pc.NodeSortingPolicy = policies.NewNodeSortingPolicy(conf.NodeSortPolicy.Type)
 	case policies.Unknown:
 		log.Logger().Info("NodeSorting policy not set using 'fair' as default")
-		pc.nodeSortingPolicy = policies.NewNodeSortingPolicy("fair")
+		pc.NodeSortingPolicy = policies.NewNodeSortingPolicy("fair")
 	}
 	return nil
 }
@@ -248,23 +248,23 @@ func (pc *PartitionContext) markPartitionForRemoval() {
 // Get the state of the partition.
 // No new nodes and applications will be accepted if stopped or being removed.
 func (pc *PartitionContext) isDraining() bool {
-	return pc.stateMachine.Current() == objects.Draining.String()
+	return pc.StateMachine.Current() == objects.Draining.String()
 }
 
 func (pc *PartitionContext) isRunning() bool {
-	return pc.stateMachine.Current() == objects.Active.String()
+	return pc.StateMachine.Current() == objects.Active.String()
 }
 
 func (pc *PartitionContext) isStopped() bool {
-	return pc.stateMachine.Current() == objects.Stopped.String()
+	return pc.StateMachine.Current() == objects.Stopped.String()
 }
 
 // Handle the state event for the partition.
 // The state machine handles the locking.
 func (pc *PartitionContext) handlePartitionEvent(event objects.ObjectEvent) error {
-	err := pc.stateMachine.Event(event.String(), pc.Name)
+	err := pc.StateMachine.Event(event.String(), pc.Name)
 	if err == nil {
-		pc.stateTime = time.Now()
+		pc.StateTime = time.Now()
 		return nil
 	}
 	// handle the same state transition not nil error (limit of fsm).
@@ -897,7 +897,7 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 // Sorting should use a copy of the node list not the main list.
 func (pc *PartitionContext) getNodeIteratorForPolicy(nodes []*objects.Node) interfaces.NodeIterator {
 	pc.RLock()
-	configuredPolicy := pc.nodeSortingPolicy.PolicyType
+	configuredPolicy := pc.NodeSortingPolicy.PolicyType
 	pc.RUnlock()
 	if configuredPolicy == policies.Unknown {
 		return nil

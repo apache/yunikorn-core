@@ -62,12 +62,12 @@ const (
 	Waiting
 	Rejected
 	Completed
-	killed
+	Killed
 	Expired
 )
 
 func (as applicationState) String() string {
-	return [...]string{"New", "Accepted", "Starting", "Running", "Waiting", "Rejected", "Completed", "killed", "Expired"}[as]
+	return [...]string{"New", "Accepted", "Starting", "Running", "Waiting", "Rejected", "Completed", "Killed", "Expired"}[as]
 }
 
 func NewAppState() *fsm.FSM {
@@ -99,8 +99,8 @@ func NewAppState() *fsm.FSM {
 				Dst:  Waiting.String(),
 			}, {
 				Name: KillApplication.String(),
-				Src:  []string{Accepted.String(), killed.String(), New.String(), Running.String(), Starting.String(), Waiting.String()},
-				Dst:  killed.String(),
+				Src:  []string{Accepted.String(), Killed.String(), New.String(), Running.String(), Starting.String(), Waiting.String()},
+				Dst:  Killed.String(),
 			}, {
 				Name: expireApplication.String(),
 				Src:  []string{Completed.String()},

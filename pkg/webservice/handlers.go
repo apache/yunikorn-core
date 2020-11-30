@@ -534,41 +534,35 @@ func updateConfiguration(conf string) (string, error) {
 func getPartitions(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
-	lists := gClusterInfo.ListPartitions()
-	for _, k := range lists {
-		partitionInfo := getPartition(k)
+	var partitionsInfo []*dao.PartitionInfo
+	lists := schedulerContext.GetPartitionMapClone()
+	for _, partitionContext := range lists {
+		partitionInfo := &dao.PartitionInfo{}
+		partitionInfo.Name = partitionContext.Name
+		partitionInfo.State = partitionContext.StateMachine.Current()
+		partitionInfo.LastStateTransitionTime = partitionContext.StateTime.String()
 
-		if err := json.NewEncoder(w).Encode(partitionInfo); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		capacityInfo := dao.PartitionCapacity{}
+		capacityInfo.Capacity = partitionContext.GetTotalPartitionResource().DAOString()
+		capacityInfo.UsedCapacity = partitionContext.GetAllocatedResource().DAOString()
+		partitionInfo.Capacity = capacityInfo
+		partitionInfo.NodeSortingPolicy = partitionContext.NodeSortingPolicy.PolicyType.String()
+
+		applicationsInfo := dao.Applications{}
+		appList := partitionContext.GetApplications()
+		applicationsState := make(map[string]int)
+		for _, app := range appList {
+			applicationsState[app.CurrentState()]++
 		}
+		applicationsInfo.Running = applicationsState["Running"]
+		applicationsInfo.Pending = applicationsState["Waiting"] + applicationsState["Accepted"] + applicationsState["Starting"] + applicationsState["New"]
+		applicationsInfo.Completed = applicationsState["Completed"]
+		applicationsInfo.Failed = applicationsState["Killed"] + applicationsState["Rejected"]
+		applicationsInfo.Total = applicationsInfo.Running + applicationsInfo.Pending + applicationsInfo.Completed + applicationsInfo.Failed
+		partitionInfo.Applications = applicationsInfo
+		partitionsInfo = append(partitionsInfo, partitionInfo)
 	}
-}
-
-func getPartition(name string) *dao.PartitionInfo {
-	partitionInfo := &dao.PartitionInfo{}
-	partitionContext := gClusterInfo.GetPartition(name)
-	partitionInfo.Name = partitionContext.Name
-	partitionInfo.State = partitionContext.StateMachine.Current()
-	partitionInfo.LastStateTransitionTime = partitionContext.StateTime.String()
-
-	capacityInfo := dao.PartitionCapacity{}
-	capacityInfo.Capacity = partitionContext.GetTotalPartitionResource().String()
-	capacityInfo.UsedCapacity = partitionContext.Root.GetAllocatedResource().String()
-	partitionInfo.Capacity = capacityInfo
-	partitionInfo.NodeSortingPolicy = partitionContext.GetNodeSortingPolicy().String()
-
-	applicationsInfo := dao.Applications{}
-	appList := partitionContext.GetApplications()
-	applicationsState := make(map[string]int)
-
-	for _, app := range appList {
-		applicationsState[app.GetApplicationState()]++
+	if err := json.NewEncoder(w).Encode(partitionsInfo); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-	applicationsInfo.Running = applicationsState["Running"]
-	applicationsInfo.Pending = applicationsState["Waiting"] + applicationsState["Accepted"] + applicationsState["Starting"] + applicationsState["New"]
-	applicationsInfo.Completed = applicationsState["Completed"]
-	applicationsInfo.Failed = applicationsState["Killed"] + applicationsState["Rejected"]
-	applicationsInfo.Total = applicationsInfo.Running + applicationsInfo.Pending + applicationsInfo.Completed + applicationsInfo.Failed
-	partitionInfo.Applications = applicationsInfo
-	return partitionInfo
 }

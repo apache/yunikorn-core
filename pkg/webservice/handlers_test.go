@@ -90,6 +90,26 @@ partitions:
           - name: default
 `
 
+const configMultiPartitions = `
+partitions: 
+  - 
+    name: gpu
+    queues: 
+      - 
+        name: root
+  - 
+    name: default
+    nodesortpolicy: 
+      type: fair
+    queues: 
+      - 
+        name: root
+        queues: 
+          - 
+            name: default
+            submitacl: "*"
+`
+
 const rmID = "rm-123"
 const policyGroup = "default-policy-group"
 
@@ -609,40 +629,44 @@ func TestGetNodesUtilJSON(t *testing.T) {
 }
 
 func TestPartitions(t *testing.T) {
-	rmID := "rm-123"
-	policyGroup := "default-policy-group"
-	clusterInfo := cache.NewClusterInfo()
-	configs.MockSchedulerConfigByData([]byte(configDefault))
-	if _, err := cache.SetClusterInfoFromConfigFile(clusterInfo, rmID, policyGroup); err != nil {
-		t.Fatalf("Error when load clusterInfo from config %v", err)
-	}
-	assert.Equal(t, 1, len(clusterInfo.ListPartitions()))
+	configs.MockSchedulerConfigByData([]byte(configMultiPartitions))
+	var err error
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	assert.NilError(t, err, "Error when load clusterInfo from config")
+	assert.Equal(t, 2, len(schedulerContext.GetPartitionMapClone()))
 
 	// Check default partition
 	partitionName := "[" + rmID + "]default"
-	defaultPartition := clusterInfo.GetPartition(partitionName)
+	defaultPartition := schedulerContext.GetPartition(partitionName)
 	assert.Equal(t, 0, len(defaultPartition.GetApplications()))
 
 	// add a new app
-	appInfo := cache.CreateNewApplicationInfo("app-1", partitionName, "root.default")
-	err := cache.AddAppToPartition(appInfo, defaultPartition)
+	app := newApplication("app-1", partitionName, "root.default", rmID)
+	err = defaultPartition.AddApplication(app)
 	assert.NilError(t, err, "Failed to add Application to Partition.")
-	assert.Equal(t, appInfo.GetApplicationState(), "New")
+	assert.Equal(t, app.CurrentState(), objects.New.String())
 	assert.Equal(t, 1, len(defaultPartition.GetApplications()))
 
-	NewWebApp(clusterInfo, nil)
+	NewWebApp(schedulerContext, nil)
 
 	var req *http.Request
 	req, err = http.NewRequest("GET", "/ws/v1/partitions", strings.NewReader(""))
 	assert.NilError(t, err, "App Handler request failed")
 	resp := &MockResponseWriter{}
-	var partitionInfo *dao.PartitionInfo
+	var partitionInfo []dao.PartitionInfo
 	getPartitions(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &partitionInfo)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, partitionInfo.Name, "[rm-123]default")
-	assert.Equal(t, partitionInfo.NodeSortingPolicy, "fair")
-	assert.Equal(t, partitionInfo.Applications.Total, 1)
-	assert.Equal(t, partitionInfo.State, "Active")
-	assert.Equal(t, partitionInfo.LastStateTransitionTime, "0001-01-01 00:00:00 +0000 UTC")
+	for _, part := range partitionInfo {
+		if part.Name == partitionName {
+			assert.Equal(t, part.Name, "[rm-123]default")
+			assert.Equal(t, part.NodeSortingPolicy, "fair")
+			assert.Equal(t, part.Applications.Total, 1)
+			assert.Equal(t, part.State, "Active")
+		} else {
+			assert.Equal(t, part.Name, "[rm-123]gpu")
+			assert.Equal(t, part.NodeSortingPolicy, "fair")
+			assert.Equal(t, part.Applications.Total, 0)
+		}
+	}
 }

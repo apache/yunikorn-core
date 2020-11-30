@@ -206,7 +206,7 @@ func resolveConfigurationFileFunc(policyGroup string) string {
 }
 func GetConfigurationString(requestBytes []byte) string {
 	conf := string(requestBytes)
-	if strings.Contains(conf, "checksum"){
+	if strings.Contains(conf, "checksum") {
 		conf = strings.Split(conf, "checksum: ")[0]
 	}
 	return conf

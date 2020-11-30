@@ -42,7 +42,7 @@ func TestAcceptStateTransition(t *testing.T) {
 	// accepted to killed
 	err = app.HandleApplicationEvent(KillApplication)
 	assert.NilError(t, err, "no error expected accepted to killed")
-	assert.Equal(t, app.CurrentState(), killed.String())
+	assert.Equal(t, app.CurrentState(), Killed.String())
 }
 
 func TestRejectStateTransition(t *testing.T) {
@@ -87,7 +87,7 @@ func TestStartStateTransition(t *testing.T) {
 	// start to killed
 	err = appInfo.HandleApplicationEvent(KillApplication)
 	assert.NilError(t, err, "no error expected starting to killed")
-	assert.Equal(t, appInfo.CurrentState(), killed.String())
+	assert.Equal(t, appInfo.CurrentState(), Killed.String())
 }
 
 func TestRunStateTransition(t *testing.T) {
@@ -118,12 +118,12 @@ func TestRunStateTransition(t *testing.T) {
 	// run to killed
 	err = appInfo.HandleApplicationEvent(KillApplication)
 	assert.NilError(t, err, "no error expected running to killed")
-	assert.Equal(t, appInfo.CurrentState(), killed.String())
+	assert.Equal(t, appInfo.CurrentState(), Killed.String())
 
 	// run fails from killing
 	err = appInfo.HandleApplicationEvent(runApplication)
 	assert.Assert(t, err != nil, "error expected killed to running")
-	assert.Equal(t, appInfo.CurrentState(), killed.String())
+	assert.Equal(t, appInfo.CurrentState(), Killed.String())
 }
 
 func TestCompletedStateTransition(t *testing.T) {
@@ -206,7 +206,7 @@ func TestWaitStateTransition(t *testing.T) {
 	// wait to killed
 	err = appInfo.HandleApplicationEvent(KillApplication)
 	assert.NilError(t, err, "no error expected wait to killed")
-	assert.Equal(t, appInfo.CurrentState(), killed.String())
+	assert.Equal(t, appInfo.CurrentState(), Killed.String())
 }
 
 func TestKilledStateTransition(t *testing.T) {
@@ -217,15 +217,15 @@ func TestKilledStateTransition(t *testing.T) {
 	// new to killed
 	err := appInfo.HandleApplicationEvent(KillApplication)
 	assert.NilError(t, err, "no error expected new to killed")
-	assert.Equal(t, appInfo.CurrentState(), killed.String())
+	assert.Equal(t, appInfo.CurrentState(), Killed.String())
 
 	// killed to killed
 	err = appInfo.HandleApplicationEvent(KillApplication)
 	assert.NilError(t, err, "no error expected killed to killed")
-	assert.Equal(t, appInfo.CurrentState(), killed.String())
+	assert.Equal(t, appInfo.CurrentState(), Killed.String())
 
 	// killed to rejected: error expected
 	err = appInfo.HandleApplicationEvent(rejectApplication)
 	assert.Assert(t, err != nil, "error expected killed to rejected")
-	assert.Equal(t, appInfo.CurrentState(), killed.String())
+	assert.Equal(t, appInfo.CurrentState(), Killed.String())
 }

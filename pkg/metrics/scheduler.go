@@ -66,7 +66,7 @@ type SchedulerMetrics struct {
 }
 
 // Initialize scheduler metrics
-func initSchedulerMetrics() *SchedulerMetrics {
+func InitSchedulerMetrics() *SchedulerMetrics {
 	s := &SchedulerMetrics{
 		lock: sync.RWMutex{},
 	}
@@ -394,7 +394,7 @@ func (m *SchedulerMetrics) GetFailedNodes() (int, error) {
 	metricDto := &dto.Metric{}
 	err := m.failedNodes.Write(metricDto)
 	if err == nil {
-		return int(*metricDto.Counter.Value), nil
+		return int(*metricDto.Gauge.Value), nil
 	}
 	return -1, err
 }

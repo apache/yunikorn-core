@@ -131,7 +131,7 @@ type CoreEventMetrics interface {
 func init() {
 	once.Do(func() {
 		m = &Metrics{
-			scheduler: initSchedulerMetrics(),
+			scheduler: InitSchedulerMetrics(),
 			queues:    make(map[string]CoreQueueMetrics),
 			event:     initEventMetrics(),
 			lock:      sync.RWMutex{},

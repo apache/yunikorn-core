@@ -19,19 +19,27 @@
 package dao
 
 type SchedulerHealthDAOInfo struct {
-	Healthy              bool                         `json:"healthy"`
-	SchedulingErrors     int                          `json:"schedulingErrors"`
-	FailedNodes          int                          `json:"failedNodes"`
-	UnhealthyPartition   map[string]*PartitionDAOInfo `json:"unhealthyPartitions"`
-	UnhealthyNodes       map[string]*NodeDAOInfo      `json:"unhealthyNodes"`
-	ReservationNodeRatio float32                      `json:"reservationRatio"`
+	Healthy      bool
+	HealthChecks []HealthCheckInfo
+}
+
+type HealthCheckInfo struct {
+	Name             string
+	Succeeded        bool
+	Description      string
+	DiagnosisMessage string
 }
 
 func (s *SchedulerHealthDAOInfo) SetHealthStatus() {
-	s.Healthy =
-		s.SchedulingErrors == 0 &&
-			s.FailedNodes == 0 &&
-			len(s.UnhealthyPartition) == 0 &&
-			len(s.UnhealthyNodes) == 0
-	//TODO: what is a healthy reservation/node ratio?
+	s.Healthy = len(s.HealthChecks) == 0
+}
+
+func (s *SchedulerHealthDAOInfo) AddHealthCheckInfo(succeeded bool, name, description, diagnosis string) {
+	info := HealthCheckInfo{
+		Name:             name,
+		Succeeded:        succeeded,
+		Description:      description,
+		DiagnosisMessage: diagnosis,
+	}
+	s.HealthChecks = append(s.HealthChecks, info)
 }

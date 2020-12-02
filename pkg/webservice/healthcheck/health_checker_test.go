@@ -19,8 +19,9 @@
 package healthcheck
 
 import (
-	"gotest.tools/assert"
 	"testing"
+
+	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
@@ -63,7 +64,7 @@ func TestGetSchedulerHealthStatusMetrics(t *testing.T) {
 	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, healthInfo.Healthy, "Scheduler should be healthy again")
 
-	//insert some scheduling errors
+	// insert some scheduling errors
 	schedulerMetrics.IncSchedulingError()
 	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, !healthInfo.Healthy, "Scheduler should not be healthy")

@@ -66,6 +66,7 @@ type SchedulerMetrics struct {
 }
 
 // Initialize scheduler metrics
+//nolint: funlen
 func InitSchedulerMetrics() *SchedulerMetrics {
 	s := &SchedulerMetrics{
 		lock: sync.RWMutex{},

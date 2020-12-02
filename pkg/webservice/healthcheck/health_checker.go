@@ -83,7 +83,7 @@ func checkSchedulingContext(schedulerContext *scheduler.ClusterContext) []dao.He
 	var nodeTotalMismatch []string
 	// 1.5 node capacity >= allocated resources on the node
 	var nodeCapacityMismatch []string
-	//2. check reservation/node ration
+	// 2. check reservation/node ration
 	var partitionReservationRatio []float32
 
 	for _, part := range schedulerContext.GetPartitionMapClone() {
@@ -148,7 +148,7 @@ func checkSchedulingContext(schedulerContext *scheduler.ClusterContext) []dao.He
 	infos[5] = CreateCheckInfo(len(nodeCapacityMismatch) == 0, "Consistency of data",
 		"Check if node capacity >= allocated resources on the node",
 		fmt.Sprintf("Nodes with inconsistent data: %q", nodeCapacityMismatch))
-	// TODO: leave it as it is for a while until we will know what is not considered a normal value anymore
+	// mark it as succeeded for a while until we will know what is not considered a normal value anymore
 	infos[6] = CreateCheckInfo(true, "Reservation check",
 		"Check the reservation nr compared to the number of nodes",
 		fmt.Sprintf("Reservation/node nr ratio: %f", partitionReservationRatio))

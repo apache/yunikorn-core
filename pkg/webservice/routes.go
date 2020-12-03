@@ -145,6 +145,12 @@ var webRoutes = routes{
 		"GET",
 		"/ws/v1/partition/{partition}/queues",
 		getPartitionQueues,
+	}
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/partition/{partition}/nodes",
+		getPartitionNodes,
 	},
 
 	// endpoint to retrieve CPU, Memory profiling data,

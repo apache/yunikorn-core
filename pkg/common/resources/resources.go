@@ -97,6 +97,9 @@ func NewResourceFromConf(configMap map[string]string) (*Resource, error) {
 }
 
 func (r *Resource) String() string {
+	if r == nil {
+		return "nil resource"
+	}
 	return fmt.Sprintf("%v", r.Resources)
 }
 

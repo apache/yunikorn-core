@@ -54,11 +54,6 @@ all:
 .PHONY: lint
 # Run lint against the previous commit for PR and branch build
 # In dev setup look at all changes on top of master
-REV := "HEAD^"
-DETACHED := $(findstring "fatal:", $(shell git symbolic-ref HEAD))
-ifndef DETACHED
-REV := "origin/HEAD"
-endif
 lint:
 	@echo "running golangci-lint"
 	@lintBin=$$(go env GOPATH)/bin/golangci-lint ; \
@@ -69,8 +64,9 @@ lint:
 			exit 1; \
 		fi \
 	fi ; \
-	headSHA=$$(git rev-parse --short=12 $(REV)) ; \
-	echo "checking against commit sha $${headSHA}" ; \
+        git symbolic-ref -q HEAD && REV="origin/HEAD" || REV="HEAD^" ; \
+        headSHA=$$(git rev-parse --short=12 $${REV}) ; \
+        echo "checking against commit sha $${headSHA}" ; \
 	$${lintBin} run --new-from-rev=$${headSHA}
 
 .PHONY: license-check

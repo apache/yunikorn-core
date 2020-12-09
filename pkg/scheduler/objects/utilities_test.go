@@ -59,7 +59,23 @@ func createManagedQueueWithProps(parentSQ *Queue, name string, parent bool, maxR
 			Max: maxRes,
 		}
 	}
-	return NewConfiguredQueue(queueConfig, parentSQ)
+	queue, err := NewConfiguredQueue(queueConfig, parentSQ)
+	if err != nil {
+		return nil, err
+	}
+	// root queue can not set the max via the config
+	if parentSQ == nil {
+		var max *resources.Resource
+		max, err = resources.NewResourceFromConf(maxRes)
+		if err != nil {
+			return nil, err
+		}
+		// only set if we have some limit
+		if len(max.Resources) > 0 && !resources.IsZero(max) {
+			queue.SetMaxResource(max)
+		}
+	}
+	return queue, nil
 }
 
 // wrapper around the create call using the one syntax for all queue types

@@ -330,6 +330,11 @@ func (sn *Node) preConditions(allocID string, allocate bool) bool {
 			NodeID:        sn.NodeID,
 			Allocate:      allocate,
 		}); err != nil {
+			log.Logger().Debug("running predicates failed",
+				zap.String("allocationKey", allocID),
+				zap.String("nodeID", sn.NodeID),
+				zap.Bool("allocateFlag", allocate),
+				zap.Error(err))
 			// running predicates failed
 			return false
 		}

@@ -497,7 +497,7 @@ func (pc *PartitionContext) GetNode(nodeID string) *objects.Node {
 	return pc.nodes[nodeID]
 }
 
-// Get a copy of the  nodes from the partition.
+// Get a copy of the nodes from the partition.
 // This list does not include reserved nodes or nodes marked unschedulable
 func (pc *PartitionContext) getSchedulableNodes() []*objects.Node {
 	return pc.getNodes(true)
@@ -537,8 +537,8 @@ func (pc *PartitionContext) AddNode(node *objects.Node, existingAllocations []*o
 	}
 
 	log.Logger().Debug("adding node to partition",
-		zap.String("nodeID", node.NodeID),
-		zap.String("partition", pc.Name))
+		zap.String("partition", pc.Name),
+		zap.String("nodeID", node.NodeID))
 
 	// update the resources available in the cluster
 	if pc.totalPartitionResource == nil {
@@ -572,8 +572,9 @@ func (pc *PartitionContext) AddNode(node *objects.Node, existingAllocations []*o
 	// Node is added update the metrics
 	metrics.GetSchedulerMetrics().IncActiveNodes()
 	log.Logger().Info("added node to partition",
+		zap.String("partitionName", pc.Name),
 		zap.String("nodeID", node.NodeID),
-		zap.String("partition", pc.Name))
+		zap.String("partitionResource", pc.totalPartitionResource.String()))
 
 	return nil
 }
@@ -588,9 +589,9 @@ func (pc *PartitionContext) removeNode(nodeID string) []*objects.Allocation {
 // Remove a node from the partition. It returns all removed allocations.
 // Unlocked version must be called holding the partition lock.
 func (pc *PartitionContext) removeNodeInternal(nodeID string) []*objects.Allocation {
-	log.Logger().Info("remove node from partition",
-		zap.String("nodeID", nodeID),
-		zap.String("partition", pc.Name))
+	log.Logger().Debug("removing node from partition",
+		zap.String("partition", pc.Name),
+		zap.String("nodeID", nodeID))
 
 	node := pc.nodes[nodeID]
 	if node == nil {
@@ -613,12 +614,13 @@ func (pc *PartitionContext) removeNodeInternal(nodeID string) []*objects.Allocat
 	reservedKeys, releasedAsks := node.UnReserveApps()
 	// update the partition reservations based on the node clean up
 	for i, appID := range reservedKeys {
-		pc.unReserveCount(appID, releasedAsks[i])
+		pc.unReserveCountInternal(appID, releasedAsks[i])
 	}
 
-	log.Logger().Info("node removed",
+	log.Logger().Info("node removed from partition",
 		zap.String("partitionName", pc.Name),
-		zap.String("nodeID", node.NodeID))
+		zap.String("nodeID", node.NodeID),
+		zap.String("partitionResource", pc.totalPartitionResource.String()))
 	return released
 }
 
@@ -656,9 +658,9 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) []*objects
 
 		// the allocation is removed so add it to the list that we return
 		released = append(released, alloc)
-		log.Logger().Info("allocation removed",
-			zap.String("allocationId", allocID),
-			zap.String("nodeID", node.NodeID))
+		log.Logger().Info("allocation removed from node",
+			zap.String("nodeID", node.NodeID),
+			zap.String("allocationId", allocID))
 	}
 	return released
 }
@@ -824,7 +826,7 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 	// remove the reservation of the queue
 	app.GetQueue().UnReserve(appID, num)
 	// make sure we cannot go below 0
-	pc.unReserveCount(appID, num)
+	pc.unReserveCountInternal(appID, num)
 
 	log.Logger().Info("allocation ask is unreserved",
 		zap.String("appID", ask.ApplicationID),
@@ -858,8 +860,16 @@ func (pc *PartitionContext) GetNodeIterator() interfaces.NodeIterator {
 }
 
 // Update the reservation counter for the app
-// Lock free call this must be called holding the context lock
+// Locked version of unReserveCountInternal
 func (pc *PartitionContext) unReserveCount(appID string, asks int) {
+	pc.Lock()
+	defer pc.Unlock()
+	pc.unReserveCountInternal(appID, asks)
+}
+
+// Update the reservation counter for the app
+// Lock free call this must be called holding the context lock
+func (pc *PartitionContext) unReserveCountInternal(appID string, asks int) {
 	if num, found := pc.reservedApps[appID]; found {
 		// decrease the number of reservations for this app and cleanup
 		if num == asks {
@@ -931,8 +941,7 @@ func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
 		return fmt.Errorf("partition %s is stopped cannot add new allocation %s", pc.Name, alloc.AllocationKey)
 	}
 
-	// if the allocation is node reported (aka recovery an existing allocation),
-	// we must not generate an UUID for it, we directly use the UUID reported by shim
+	// We must not generate a new UUID for it, we directly use the UUID reported by shim
 	// to track this allocation, a missing UUID is a broken allocation
 	if alloc.UUID == "" {
 		metrics.GetSchedulerMetrics().IncSchedulingError()
@@ -969,8 +978,8 @@ func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
 		return fmt.Errorf("node %s is not in schedulable state", node.NodeID)
 	}
 
-	// If the new allocation goes beyond the queue's max resource (recursive)?
-	// Only check if it is allocated not when it is node reported.
+	// Do not check if the new allocation goes beyond the queue's max resource (recursive).
+	// still handle a returned error but they should never happen.
 	if err := queue.IncAllocatedResource(alloc.AllocatedResource, true); err != nil {
 		metrics.GetSchedulerMetrics().IncSchedulingError()
 		return fmt.Errorf("cannot allocate resource from application %s: %v ",
@@ -1007,11 +1016,12 @@ func (pc *PartitionContext) convertUGI(ugi *si.UserGroupInformation) (security.U
 //   9: 90% -> 100%
 // the element value represents number of nodes fall into this bucket.
 // if slice[9] = 3, this means there are 3 nodes resource usage is in the range 80% to 90%.
+//
+// NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) CalculateNodesResourceUsage() map[string][]int {
-	pc.RLock()
-	defer pc.RUnlock()
+	nodesCopy := pc.getNodes(false)
 	mapResult := make(map[string][]int)
-	for _, node := range pc.nodes {
+	for _, node := range nodesCopy {
 		for name, total := range node.GetCapacity().Resources {
 			if float64(total) > 0 {
 				resourceAllocated := float64(node.GetAllocatedResource().Resources[name])
@@ -1033,6 +1043,8 @@ func (pc *PartitionContext) CalculateNodesResourceUsage() map[string][]int {
 	return mapResult
 }
 
+// Remove the allocation(s) from the app and nodes
+// YUNIKORN-461 proposes to remove this, with a side note that this currently could lead to a deadlock
 func (pc *PartitionContext) removeAllocation(appID string, uuid string) []*objects.Allocation {
 	pc.Lock()
 	defer pc.Unlock()
@@ -1083,10 +1095,11 @@ func (pc *PartitionContext) removeAllocation(appID string, uuid string) []*objec
 	return releasedAllocs
 }
 
+// Remove the allocation Ask from the specified application
+// NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) removeAllocationAsk(appID string, allocationKey string) {
-	pc.Lock()
-	defer pc.Unlock()
-	if app := pc.applications[appID]; app != nil {
+	app := pc.getApplication(appID)
+	if app != nil {
 		// remove the allocation asks from the app
 		reservedAsks := app.RemoveAllocationAsk(allocationKey)
 		log.Logger().Info("release allocation ask",

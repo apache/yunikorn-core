@@ -1071,6 +1071,7 @@ func TestUpdateRootQueue(t *testing.T) {
 	}
 
 	err = partition.updatePartitionDetails(conf)
+	assert.NilError(t, err, "partition update failed")
 	// resources should not have changed
 	assert.Assert(t, resources.Equals(res, partition.totalPartitionResource), "partition resource not set as expected")
 	assert.Assert(t, resources.Equals(res, partition.root.GetMaxResource()), "root max resource not set as expected")

@@ -68,7 +68,7 @@ func NewAllocation(uuid, nodeID string, ask *AllocationAsk) *Allocation {
 		UUID:              uuid,
 		Tags:              ask.Tags,
 		Priority:          ask.priority,
-		AllocatedResource: ask.AllocatedResource,
+		AllocatedResource: ask.AllocatedResource.Clone(),
 		Result:            Allocated,
 	}
 }
@@ -80,7 +80,7 @@ func newReservedAllocation(result allocationResult, nodeID string, ask *Allocati
 		ApplicationID:     ask.ApplicationID,
 		NodeID:            nodeID,
 		PartitionName:     common.GetPartitionNameWithoutClusterID(ask.PartitionName),
-		AllocatedResource: ask.AllocatedResource,
+		AllocatedResource: ask.AllocatedResource.Clone(),
 		Result:            result,
 	}
 }

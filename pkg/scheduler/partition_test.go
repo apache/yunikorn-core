@@ -1032,7 +1032,7 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 	}
 	released := app.RemoveAllocationAsk(removeAskID)
 	assert.Equal(t, released, 1, "expected one reservations to be released")
-	partition.unReserveCount(appID1, released)
+	partition.unReserveCountInternal(appID1, released)
 	assert.Equal(t, len(partition.reservedApps), 1, "partition should still have reserved app")
 	assert.Equal(t, len(app.GetReservations()), 1, "application reservations should be 1")
 
@@ -1041,4 +1041,41 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 	assert.Equal(t, "", rmAlloc.ReservedNodeID, "reserved node should be reset after processing")
 	assert.Equal(t, len(partition.reservedApps), 1, "partition should still have reserved app")
 	assert.Equal(t, len(app.GetReservations()), 1, "application reservations should be kept at 1")
+}
+
+// update the config with nodes registered and make sure that the root max and guaranteed are not changed
+func TestUpdateRootQueue(t *testing.T) {
+	partition := createQueuesNodes(t)
+	if partition == nil {
+		t.Fatal("partition create failed")
+	}
+	res, err := resources.NewResourceFromConf(map[string]string{"first": "20"})
+	assert.NilError(t, err, "resource creation failed")
+	assert.Assert(t, resources.Equals(res, partition.totalPartitionResource), "partition resource not set as expected")
+	assert.Assert(t, resources.Equals(res, partition.root.GetMaxResource()), "root max resource not set as expected")
+
+	conf := configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues:    nil,
+			},
+		},
+		PlacementRules: nil,
+		Limits:         nil,
+		Preemption:     configs.PartitionPreemptionConfig{},
+		NodeSortPolicy: configs.NodeSortingPolicy{},
+	}
+
+	err = partition.updatePartitionDetails(conf)
+	assert.NilError(t, err, "partition update failed")
+	// resources should not have changed
+	assert.Assert(t, resources.Equals(res, partition.totalPartitionResource), "partition resource not set as expected")
+	assert.Assert(t, resources.Equals(res, partition.root.GetMaxResource()), "root max resource not set as expected")
+	// make sure the update went through
+	assert.Equal(t, partition.GetQueue("root.leaf").CurrentState(), objects.Draining.String(), "leaf queue should have been marked for removal")
+	assert.Equal(t, partition.GetQueue("root.parent").CurrentState(), objects.Draining.String(), "parent queue should have been marked for removal")
 }

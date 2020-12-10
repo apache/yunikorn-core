@@ -24,7 +24,7 @@ go:
   - "1.15"
 
 git:
-  depth: 1
+  depth: 2
 
 env:
   - GO111MODULE=on

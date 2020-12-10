@@ -41,7 +41,7 @@ import (
 
 var (
 	reservationDelay = 2 * time.Second
-	startingTimeout  = time.Minute * 5
+	startingTimeout  = 5 * time.Minute
 )
 
 type Application struct {
@@ -97,8 +97,8 @@ func (sa *Application) String() string {
 	if sa == nil {
 		return "application is nil"
 	}
-	return fmt.Sprintf("ApplicationID: %s, Partition: %s, QueueName: %s, SubmissionTime: %x",
-		sa.ApplicationID, sa.Partition, sa.QueueName, sa.SubmissionTime)
+	return fmt.Sprintf("ApplicationID: %s, Partition: %s, QueueName: %s, SubmissionTime: %x, State: %s",
+		sa.ApplicationID, sa.Partition, sa.QueueName, sa.SubmissionTime, sa.stateMachine.Current())
 }
 
 // Set the reservation delay.
@@ -152,7 +152,7 @@ func (sa *Application) OnStateChange(event *fsm.Event) {
 		ApplicationID:            sa.ApplicationID,
 		State:                    sa.stateMachine.Current(),
 		StateTransitionTimestamp: time.Now().UnixNano(),
-		Message:                  fmt.Sprintf("{Status change triggered by the event : %v}", event),
+		Message:                  fmt.Sprintf("Status change triggered by the event : %s", event.Event),
 	})
 
 	if sa.rmEventHandler != nil {
@@ -303,6 +303,11 @@ func (sa *Application) RemoveAllocationAsk(allocKey string) int {
 		}
 	}
 
+	log.Logger().Info("Ask removed successfully from application",
+		zap.String("appID", sa.ApplicationID),
+		zap.String("ask", allocKey),
+		zap.String("pendingDelta", deltaPendingResource.String()))
+
 	return toRelease
 }
 
@@ -342,6 +347,11 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 	delta.SubFrom(oldAskResource)
 	sa.pending.AddTo(delta)
 	sa.queue.incPendingResource(delta)
+
+	log.Logger().Info("Ask added successfully to application",
+		zap.String("appID", sa.ApplicationID),
+		zap.String("ask", ask.AllocationKey),
+		zap.String("pendingDelta", delta.String()))
 
 	return nil
 }
@@ -435,8 +445,10 @@ func (sa *Application) Reserve(node *Node, ask *AllocationAsk) error {
 		return err
 	}
 	sa.reservations[nodeReservation.getKey()] = nodeReservation
-	log.Logger().Info("reservation added successfully", zap.String("node", node.NodeID),
-		zap.String("app", ask.ApplicationID), zap.String("ask", ask.AllocationKey))
+	log.Logger().Info("reservation added successfully",
+		zap.String("app", sa.ApplicationID),
+		zap.String("node", node.NodeID),
+		zap.String("ask", ask.AllocationKey))
 	return nil
 }
 
@@ -457,8 +469,8 @@ func (sa *Application) unReserveInternal(node *Node, ask *AllocationAsk) (int, e
 	if resKey == "" {
 		log.Logger().Debug("unreserve reservation key create failed unexpectedly",
 			zap.String("appID", sa.ApplicationID),
-			zap.Any("node", node),
-			zap.Any("ask", ask))
+			zap.String("node", node.String()),
+			zap.String("ask", ask.String()))
 		return 0, fmt.Errorf("reservation key failed node or ask are nil for appID %s", sa.ApplicationID)
 	}
 	// unReserve the node before removing from the app

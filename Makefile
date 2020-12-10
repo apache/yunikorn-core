@@ -52,6 +52,8 @@ all:
 	$(MAKE) -C $(dir $(BASE_DIR)) build
 
 .PHONY: lint
+# Run lint against the previous commit for PR and branch build
+# In dev setup look at all changes on top of master
 lint:
 	@echo "running golangci-lint"
 	@lintBin=$$(go env GOPATH)/bin/golangci-lint ; \
@@ -62,7 +64,9 @@ lint:
 			exit 1; \
 		fi \
 	fi ; \
-	headSHA=$$(git rev-parse --short=12 origin/HEAD) ; \
+        git symbolic-ref -q HEAD && REV="origin/HEAD" || REV="HEAD^" ; \
+        headSHA=$$(git rev-parse --short=12 $${REV}) ; \
+        echo "checking against commit sha $${headSHA}" ; \
 	$${lintBin} run --new-from-rev=$${headSHA}
 
 .PHONY: license-check

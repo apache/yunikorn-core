@@ -145,7 +145,7 @@ func NewDynamicQueue(name string, leaf bool, parent *Queue) (*Queue, error) {
 	// pull the properties from the parent that should be set on the child
 	sq.setTemplateProperties(parent.getProperties())
 	sq.UpdateSortType()
-	log.Logger().Debug("dynamic queue added to scheduler",
+	log.Logger().Info("dynamic queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
 
 	return sq, nil
@@ -188,10 +188,15 @@ func (sq *Queue) mergeProperties(parent, config map[string]string) {
 // Further implementation is part of YUNIKORN-193
 // lock free call
 func (sq *Queue) setTemplateProperties(parent map[string]string) {
+	if len(parent) == 0 {
+		return
+	}
 	// for a leaf queue pull out all values from the template and set each of them
 	// See YUNIKORN-193: for now just copy one attr from parent
 	if sq.isLeaf {
-		sq.properties[configs.ApplicationSortPolicy] = parent[configs.ApplicationSortPolicy]
+		if parent[configs.ApplicationSortPolicy] != "" {
+			sq.properties[configs.ApplicationSortPolicy] = parent[configs.ApplicationSortPolicy]
+		}
 	}
 	// for a parent queue we just copy the template from its parent (no need to be recursive)
 	// this stops at the first managed queue
@@ -234,28 +239,30 @@ func (sq *Queue) setQueueConfig(conf configs.QueueConfig) error {
 		sq.isLeaf = false
 	}
 
-	// Load the max resources
-	sq.maxResource, err = resources.NewResourceFromConf(conf.Resources.Max)
-	if err != nil {
-		log.Logger().Error("parsing failed on max resources this should not happen",
-			zap.Error(err))
-		return err
-	}
-	if len(sq.maxResource.Resources) == 0 || resources.IsZero(sq.maxResource) {
-		log.Logger().Debug("max resources config setting ignored: cannot set zero max resources")
-		sq.maxResource = nil
-	}
+	// Load the max & guaranteed resources for all but the root queue
+	if sq.Name != configs.RootQueue {
+		sq.maxResource, err = resources.NewResourceFromConf(conf.Resources.Max)
+		if err != nil {
+			log.Logger().Error("parsing failed on max resources this should not happen",
+				zap.Error(err))
+			return err
+		}
+		if len(sq.maxResource.Resources) == 0 || resources.IsZero(sq.maxResource) {
+			log.Logger().Debug("max resources config setting ignored: cannot set zero max resources")
+			sq.maxResource = nil
+		}
 
-	// Load the guaranteed resources
-	sq.guaranteedResource, err = resources.NewResourceFromConf(conf.Resources.Guaranteed)
-	if err != nil {
-		log.Logger().Error("parsing failed on guaranteed resources this should not happen",
-			zap.Error(err))
-		return err
-	}
-	if len(sq.guaranteedResource.Resources) == 0 || resources.IsZero(sq.guaranteedResource) {
-		log.Logger().Debug("guaranteed resources config setting ignored: guaranteed must be non-zero to take effect")
-		sq.guaranteedResource = nil
+		// Load the guaranteed resources
+		sq.guaranteedResource, err = resources.NewResourceFromConf(conf.Resources.Guaranteed)
+		if err != nil {
+			log.Logger().Error("parsing failed on guaranteed resources this should not happen",
+				zap.Error(err))
+			return err
+		}
+		if len(sq.guaranteedResource.Resources) == 0 || resources.IsZero(sq.guaranteedResource) {
+			log.Logger().Debug("guaranteed resources config setting ignored: guaranteed must be non-zero to take effect")
+			sq.guaranteedResource = nil
+		}
 	}
 
 	sq.properties = conf.Properties

@@ -15,6 +15,7 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 */
+
 package webservice
 
 import (
@@ -30,11 +31,12 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
@@ -60,9 +62,9 @@ func getStackInfo(w http.ResponseWriter, r *http.Request) {
 func getQueueInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
-	lists := gClusterInfo.ListPartitions()
-	for _, k := range lists {
-		partitionInfo := getPartitionJSON(k)
+	lists := schedulerContext.GetPartitionMapClone()
+	for _, partition := range lists {
+		partitionInfo := getPartitionJSON(partition)
 
 		if err := json.NewEncoder(w).Encode(partitionInfo); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -73,9 +75,9 @@ func getQueueInfo(w http.ResponseWriter, r *http.Request) {
 func getClusterInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
-	lists := gClusterInfo.ListPartitions()
-	for _, k := range lists {
-		clusterInfo := getClusterJSON(k)
+	lists := schedulerContext.GetPartitionMapClone()
+	for _, partition := range lists {
+		clusterInfo := getClusterJSON(partition)
 		var clustersInfo []dao.ClusterDAOInfo
 		clustersInfo = append(clustersInfo, *clusterInfo)
 
@@ -89,9 +91,8 @@ func getClusterUtilization(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	var clusterUtil []*dao.ClustersUtilDAOInfo
 	var utilizations []*dao.ClusterUtilDAOInfo
-	lists := gClusterInfo.ListPartitions()
-	for _, k := range lists {
-		partition := gClusterInfo.GetPartition(k)
+	lists := schedulerContext.GetPartitionMapClone()
+	for _, partition := range lists {
 		utilizations = getClusterUtilJSON(partition)
 		clusterUtil = append(clusterUtil, &dao.ClustersUtilDAOInfo{
 			PartitionName: partition.Name,
@@ -115,12 +116,11 @@ func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var appsDao []*dao.ApplicationDAOInfo
-	lists := gClusterInfo.ListPartitions()
-	for _, k := range lists {
-		partition := gClusterInfo.GetPartition(k)
+	lists := schedulerContext.GetPartitionMapClone()
+	for _, partition := range lists {
 		appList := partition.GetApplications()
 		for _, app := range appList {
-			if len(queueName) == 0 || strings.EqualFold(queueName, app.QueueName) {
+			if len(queueName) == 0 || strings.EqualFold(queueName, app.GetQueueName()) {
 				appsDao = append(appsDao, getApplicationJSON(app))
 			}
 		}
@@ -149,10 +149,9 @@ func getNodesInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	var result []*dao.NodesDAOInfo
-	lists := gClusterInfo.ListPartitions()
-	for _, k := range lists {
+	lists := schedulerContext.GetPartitionMapClone()
+	for _, partition := range lists {
 		var nodesDao []*dao.NodeDAOInfo
-		partition := gClusterInfo.GetPartition(k)
 		for _, node := range partition.GetNodes() {
 			nodeDao := getNodeJSON(node)
 			nodesDao = append(nodesDao, nodeDao)
@@ -171,10 +170,9 @@ func getNodesInfo(w http.ResponseWriter, r *http.Request) {
 func getNodesUtilization(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
-	lists := gClusterInfo.ListPartitions()
+	lists := schedulerContext.GetPartitionMapClone()
 	var result []*dao.NodesUtilDAOInfo
-	for _, k := range lists {
-		partition := gClusterInfo.GetPartition(k)
+	for _, partition := range lists {
 		for name := range partition.GetTotalPartitionResource().Resources {
 			nodesUtil := getNodesUtilJSON(partition, name)
 			result = append(result, nodesUtil)
@@ -211,29 +209,28 @@ func writeHeaders(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Headers", "X-Requested-With,Content-Type,Accept,Origin")
 }
 
-func getClusterJSON(name string) *dao.ClusterDAOInfo {
+func getClusterJSON(partition *scheduler.PartitionContext) *dao.ClusterDAOInfo {
 	clusterInfo := &dao.ClusterDAOInfo{}
-	partitionContext := gClusterInfo.GetPartition(name)
-	clusterInfo.TotalApplications = strconv.Itoa(partitionContext.GetTotalApplicationCount())
-	clusterInfo.TotalContainers = strconv.Itoa(partitionContext.GetTotalAllocationCount())
-	clusterInfo.TotalNodes = strconv.Itoa(partitionContext.GetTotalNodeCount())
+	clusterInfo.TotalApplications = strconv.Itoa(partition.GetTotalApplicationCount())
+	clusterInfo.TotalContainers = strconv.Itoa(partition.GetTotalAllocationCount())
+	clusterInfo.TotalNodes = strconv.Itoa(partition.GetTotalNodeCount())
 	clusterInfo.ClusterName = "kubernetes"
 
-	clusterInfo.RunningApplications = strconv.Itoa(partitionContext.GetTotalApplicationCount())
-	clusterInfo.RunningContainers = strconv.Itoa(partitionContext.GetTotalAllocationCount())
-	clusterInfo.ActiveNodes = strconv.Itoa(partitionContext.GetTotalNodeCount())
+	clusterInfo.RunningApplications = strconv.Itoa(partition.GetTotalApplicationCount())
+	clusterInfo.RunningContainers = strconv.Itoa(partition.GetTotalAllocationCount())
+	clusterInfo.ActiveNodes = strconv.Itoa(partition.GetTotalNodeCount())
 
 	return clusterInfo
 }
 
-func getClusterUtilJSON(partition *cache.PartitionInfo) []*dao.ClusterUtilDAOInfo {
+func getClusterUtilJSON(partition *scheduler.PartitionContext) []*dao.ClusterUtilDAOInfo {
 	var utils []*dao.ClusterUtilDAOInfo
 	var getResource bool = true
 	total := partition.GetTotalPartitionResource()
 	if resources.IsZero(total) {
 		getResource = false
 	}
-	used := partition.Root.GetAllocatedResource()
+	used := partition.GetAllocatedResource()
 	if len(used.Resources) == 0 {
 		getResource = false
 	}
@@ -260,15 +257,14 @@ func getClusterUtilJSON(partition *cache.PartitionInfo) []*dao.ClusterUtilDAOInf
 	return utils
 }
 
-func getPartitionJSON(name string) *dao.PartitionDAOInfo {
+func getPartitionJSON(partition *scheduler.PartitionContext) *dao.PartitionDAOInfo {
 	partitionInfo := &dao.PartitionDAOInfo{}
 
-	partitionContext := gClusterInfo.GetPartition(name)
-	queueDAOInfo := partitionContext.Root.GetQueueInfos()
+	queueDAOInfo := partition.GetQueueInfos()
 
-	partitionInfo.PartitionName = partitionContext.Name
+	partitionInfo.PartitionName = partition.Name
 	partitionInfo.Capacity = dao.PartitionCapacity{
-		Capacity:     partitionContext.GetTotalPartitionResource().String(),
+		Capacity:     partition.GetTotalPartitionResource().DAOString(),
 		UsedCapacity: "0",
 	}
 	partitionInfo.Queues = queueDAOInfo
@@ -276,20 +272,20 @@ func getPartitionJSON(name string) *dao.PartitionDAOInfo {
 	return partitionInfo
 }
 
-func getApplicationJSON(app *cache.ApplicationInfo) *dao.ApplicationDAOInfo {
+func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 	var allocationInfos []dao.AllocationDAOInfo
 	allocations := app.GetAllAllocations()
 	for _, alloc := range allocations {
 		allocInfo := dao.AllocationDAOInfo{
-			AllocationKey:    alloc.AllocationProto.AllocationKey,
-			AllocationTags:   alloc.AllocationProto.AllocationTags,
-			UUID:             alloc.AllocationProto.UUID,
+			AllocationKey:    alloc.AllocationKey,
+			AllocationTags:   alloc.Tags,
+			UUID:             alloc.UUID,
 			ResourcePerAlloc: alloc.AllocatedResource.DAOString(),
-			Priority:         alloc.AllocationProto.Priority.String(),
-			QueueName:        alloc.AllocationProto.QueueName,
-			NodeID:           alloc.AllocationProto.NodeID,
-			ApplicationID:    alloc.AllocationProto.ApplicationID,
-			Partition:        alloc.AllocationProto.PartitionName,
+			Priority:         strconv.Itoa(int(alloc.Priority)),
+			QueueName:        alloc.QueueName,
+			NodeID:           alloc.NodeID,
+			ApplicationID:    alloc.ApplicationID,
+			Partition:        alloc.PartitionName,
 		}
 		allocationInfos = append(allocationInfos, allocInfo)
 	}
@@ -299,47 +295,47 @@ func getApplicationJSON(app *cache.ApplicationInfo) *dao.ApplicationDAOInfo {
 		UsedResource:   app.GetAllocatedResource().DAOString(),
 		Partition:      app.Partition,
 		QueueName:      app.QueueName,
-		SubmissionTime: app.SubmissionTime,
+		SubmissionTime: app.SubmissionTime.Unix(),
 		Allocations:    allocationInfos,
-		State:          app.GetApplicationState(),
+		State:          app.CurrentState(),
 	}
 }
 
-func getNodeJSON(nodeInfo *cache.NodeInfo) *dao.NodeDAOInfo {
+func getNodeJSON(node *objects.Node) *dao.NodeDAOInfo {
 	var allocations []*dao.AllocationDAOInfo
-	for _, alloc := range nodeInfo.GetAllAllocations() {
+	for _, alloc := range node.GetAllAllocations() {
 		allocInfo := &dao.AllocationDAOInfo{
-			AllocationKey:    alloc.AllocationProto.AllocationKey,
-			AllocationTags:   alloc.AllocationProto.AllocationTags,
-			UUID:             alloc.AllocationProto.UUID,
+			AllocationKey:    alloc.AllocationKey,
+			AllocationTags:   alloc.Tags,
+			UUID:             alloc.UUID,
 			ResourcePerAlloc: alloc.AllocatedResource.DAOString(),
-			Priority:         alloc.AllocationProto.Priority.String(),
-			QueueName:        alloc.AllocationProto.QueueName,
-			NodeID:           alloc.AllocationProto.NodeID,
-			ApplicationID:    alloc.AllocationProto.ApplicationID,
-			Partition:        alloc.AllocationProto.PartitionName,
+			Priority:         strconv.Itoa(int(alloc.Priority)),
+			QueueName:        alloc.QueueName,
+			NodeID:           alloc.NodeID,
+			ApplicationID:    alloc.ApplicationID,
+			Partition:        alloc.PartitionName,
 		}
 		allocations = append(allocations, allocInfo)
 	}
 
 	return &dao.NodeDAOInfo{
-		NodeID:      nodeInfo.NodeID,
-		HostName:    nodeInfo.Hostname,
-		RackName:    nodeInfo.Rackname,
-		Capacity:    nodeInfo.GetCapacity().DAOString(),
-		Occupied:    nodeInfo.GetOccupiedResource().DAOString(),
-		Allocated:   nodeInfo.GetAllocatedResource().DAOString(),
-		Available:   nodeInfo.GetAvailableResource().DAOString(),
+		NodeID:      node.NodeID,
+		HostName:    node.Hostname,
+		RackName:    node.Rackname,
+		Capacity:    node.GetCapacity().DAOString(),
+		Occupied:    node.GetOccupiedResource().DAOString(),
+		Allocated:   node.GetAllocatedResource().DAOString(),
+		Available:   node.GetAvailableResource().DAOString(),
 		Allocations: allocations,
-		Schedulable: nodeInfo.IsSchedulable(),
+		Schedulable: node.IsSchedulable(),
 	}
 }
 
-func getNodesUtilJSON(partition *cache.PartitionInfo, name string) *dao.NodesUtilDAOInfo {
+func getNodesUtilJSON(partition *scheduler.PartitionContext, name string) *dao.NodesUtilDAOInfo {
 	mapResult := make([]int, 10)
 	mapName := make([][]string, 10)
 	var v float64
-	var resourceExist bool = true
+	var resourceExist = true
 	var nodeUtil []*dao.NodeUtilDAOInfo
 	for _, node := range partition.GetNodes() {
 		total := node.GetCapacity()
@@ -440,7 +436,7 @@ func getContainerHistory(w http.ResponseWriter, r *http.Request) {
 func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
-	conf := configs.ConfigContext.Get(gClusterInfo.GetPolicyGroup())
+	conf := configs.ConfigContext.Get(schedulerContext.GetPolicyGroup())
 	var marshalledConf []byte
 	var err error
 	// check if we have a request for json output
@@ -467,56 +463,54 @@ func updateConfig(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	requestBytes, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		buildUpdateResponse(false, err.Error(), w)
+		buildUpdateResponse(err, w)
 		return
 	}
 	// validation is already called when loading the config
-	schedulerConf, err := configs.LoadSchedulerConfigFromByteArray(requestBytes)
+	var newConf *configs.SchedulerConfig
+	newConf, err = configs.LoadSchedulerConfigFromByteArray(requestBytes)
 	if err != nil {
-		buildUpdateResponse(false, err.Error(), w)
+		buildUpdateResponse(err, w)
 		return
 	}
-	oldConf, err := updateConfiguration(string(requestBytes))
+	// This fails if we have more than 1 RM
+	// Do not think the plugins will even work with multiple RMs
+	var oldConf string
+	oldConf, err = updateConfiguration(string(requestBytes))
 	if err != nil {
-		buildUpdateResponse(false, err.Error(), w)
+		buildUpdateResponse(err, w)
 		return
 	}
-	err = gClusterInfo.UpdateSchedulerConfig(schedulerConf)
+	// This fails if we have no RM registered or more than 1 RM
+	err = schedulerContext.UpdateSchedulerConfig(newConf)
 	if err != nil {
-		errorMsg := err.Error()
 		// revert configmap changes
-		_, err := updateConfiguration(oldConf)
-		if err != nil {
-			msg := "Configuration rollback failed" + "\n" + err.Error()
-			errorMsg += "\n" + msg
-			log.Logger().Error(msg)
+		_, err2 := updateConfiguration(oldConf)
+		if err2 != nil {
+			err = fmt.Errorf("update failed: %s\nupdate rollback failed: %s", err.Error(), err2.Error())
 		}
-		buildUpdateResponse(false, errorMsg, w)
+		buildUpdateResponse(err, w)
 		return
 	}
-	buildUpdateResponse(true, "", w)
+	buildUpdateResponse(nil, w)
 }
 
-func buildUpdateResponse(success bool, reason string, w http.ResponseWriter) {
-	if len(reason) > 0 {
-		log.Logger().Info("Result of configuration update: ",
-			zap.Bool("Result", success),
-			zap.String("Reason in case of failure", reason))
-	}
-
-	if success {
+func buildUpdateResponse(err error, w http.ResponseWriter) {
+	if err == nil {
 		w.WriteHeader(http.StatusOK)
-		_, err := w.Write([]byte("Configuration updated successfully"))
-		if err != nil {
+		if _, err = w.Write([]byte("Configuration updated successfully")); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	} else {
-		http.Error(w, reason, http.StatusConflict)
+		log.Logger().Info("Configuration update failed with errors",
+			zap.Error(err))
+		http.Error(w, err.Error(), http.StatusConflict)
 	}
 }
+
 func updateConfiguration(conf string) (string, error) {
 	if plugin := plugins.GetConfigPlugin(); plugin != nil {
-		// checking predicates
+		// use the plugin to update the configuration in the configMap
 		resp := plugin.UpdateConfiguration(&si.UpdateConfigurationRequest{
 			Configs: conf,
 		})

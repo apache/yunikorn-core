@@ -20,24 +20,17 @@ package scheduler
 
 import (
 	"math/rand"
-)
 
-// NodeIterator iterates over a list of nodes based on the defined policy
-type NodeIterator interface {
-	// returns true if there are more values to iterate over
-	HasNext() (ok bool)
-	// returns the next node from the iterator
-	Next() (node *SchedulingNode)
-	// reset the iterator to a clean state
-	Reset()
-}
+	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
+)
 
 // All iterators extend the base iterator
 type baseIterator struct {
-	NodeIterator
+	interfaces.NodeIterator
 	countIdx int
 	size     int
-	nodes    []*SchedulingNode
+	nodes    []*objects.Node
 }
 
 // Reset the iterator to start from the beginning
@@ -53,7 +46,7 @@ func (bi *baseIterator) HasNext() bool {
 
 // Next returns the next element and advances to next element in array.
 // Returns nil at the end of iteration.
-func (bi *baseIterator) Next() *SchedulingNode {
+func (bi *baseIterator) Next() interface{} {
 	if (bi.countIdx + 1) > bi.size {
 		return nil
 	}
@@ -65,13 +58,13 @@ func (bi *baseIterator) Next() *SchedulingNode {
 
 // Default iterator, wraps the base iterator.
 // Iterates over the list from the start, position zero, to end.
-type DefaultNodeIterator struct {
+type defaultNodeIterator struct {
 	baseIterator
 }
 
 // Create a new default iterator
-func NewDefaultNodeIterator(schedulerNodes []*SchedulingNode) *DefaultNodeIterator {
-	it := &DefaultNodeIterator{}
+func newDefaultNodeIterator(schedulerNodes []*objects.Node) *defaultNodeIterator {
+	it := &defaultNodeIterator{}
 	it.nodes = schedulerNodes
 	it.size = len(schedulerNodes)
 	return it
@@ -80,14 +73,14 @@ func NewDefaultNodeIterator(schedulerNodes []*SchedulingNode) *DefaultNodeIterat
 // Random iterator, wraps the base iterator
 // Iterates over the list from a random starting position in the list.
 // The iterator automatically wraps at the end of the list.
-type RoundRobinNodeIterator struct {
+type roundRobinNodeIterator struct {
 	baseIterator
 	startIdx int
 }
 
 // The starting point is randomised in the slice.
-func NewRoundRobinNodeIterator(schedulerNodes []*SchedulingNode) *RoundRobinNodeIterator {
-	it := &RoundRobinNodeIterator{}
+func newRoundRobinNodeIterator(schedulerNodes []*objects.Node) *roundRobinNodeIterator {
+	it := &roundRobinNodeIterator{}
 	it.nodes = schedulerNodes
 	it.size = len(schedulerNodes)
 	if it.size > 0 {
@@ -98,7 +91,7 @@ func NewRoundRobinNodeIterator(schedulerNodes []*SchedulingNode) *RoundRobinNode
 
 // Next returns the next element and advances to next element in array.
 // Returns nil at the end of iteration.
-func (ri *RoundRobinNodeIterator) Next() *SchedulingNode {
+func (ri *roundRobinNodeIterator) Next() interface{} {
 	// prevent panic on Next when slice is empty
 	if (ri.countIdx + 1) > ri.size {
 		return nil
@@ -115,7 +108,7 @@ func (ri *RoundRobinNodeIterator) Next() *SchedulingNode {
 	return value
 }
 
-func (ri *RoundRobinNodeIterator) Reset() {
+func (ri *roundRobinNodeIterator) Reset() {
 	ri.countIdx = 0
 	ri.startIdx = -1
 }

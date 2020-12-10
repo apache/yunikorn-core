@@ -21,10 +21,10 @@ os:
   - linux
 
 go:
-  - "1.12"
+  - "1.15"
 
 git:
-  depth: 1
+  depth: 2
 
 env:
   - GO111MODULE=on
@@ -37,7 +37,7 @@ jobs:
       script:
         - make license-check
         - make test
-        - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.22.2
+        - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.33.0
         - make lint
       after_success: bash <(curl -s https://codecov.io/bash)
 

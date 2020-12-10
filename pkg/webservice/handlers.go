@@ -39,7 +39,6 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
-	"github.com/apache/incubator-yunikorn-core/pkg/webservice/healthcheck"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -499,7 +498,7 @@ func updateConfig(w http.ResponseWriter, r *http.Request) {
 func checkHealthStatus(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	metrics := metrics2.GetSchedulerMetrics()
-	result := healthcheck.GetSchedulerHealthStatus(metrics, schedulerContext)
+	result := scheduler.GetSchedulerHealthStatus(metrics, schedulerContext)
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}

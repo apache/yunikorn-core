@@ -16,16 +16,19 @@
  limitations under the License.
 */
 
-package healthcheck
+package scheduler
 
 import (
 	"testing"
+
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 )
 
 const configDefault = `
@@ -45,10 +48,48 @@ partitions:
                 vcore: 10000
 `
 
+func TestGetSchedulerHealthStatusContext(t *testing.T) {
+	partName := "[rmID]default"
+	configs.MockSchedulerConfigByData([]byte(configDefault))
+	metrics.Reset()
+	schedulerMetrics := metrics.GetSchedulerMetrics()
+	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
+	assert.NilError(t, err, "Error when load schedulerContext from config")
+	// everything OK
+	healthInfo := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	assert.Assert(t, healthInfo.Healthy, "Scheduler should be healthy")
+
+	//update resources to some negative value
+	negativeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": -10})
+	originalRes := schedulerContext.partitions[partName].totalPartitionResource
+	schedulerContext.partitions[partName].totalPartitionResource = negativeRes
+
+	// check should fail because of negative resources
+	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	assert.Assert(t, !healthInfo.Healthy, "Scheduler should not be healthy")
+
+	// set back the original resource, so both the negative and consistency check should pass
+	schedulerContext.partitions[partName].totalPartitionResource = originalRes
+	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	assert.Assert(t, healthInfo.Healthy, "Scheduler should be healthy")
+
+	//set some negative node resources
+	err = schedulerContext.partitions[partName].AddNode(objects.NewNode(&si.NewNodeInfo{
+		NodeID:     "node",
+		Attributes: nil,
+		SchedulableResource: &si.Resource{
+			Resources: map[string]*si.Quantity{"memory": {Value: -10}},
+		},
+	}), []*objects.Allocation{})
+	assert.NilError(t, err, "Unexpected error while adding a new node")
+	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	assert.Assert(t, !healthInfo.Healthy, "Scheduler should not be healthy")
+}
+
 func TestGetSchedulerHealthStatusMetrics(t *testing.T) {
 	configs.MockSchedulerConfigByData([]byte(configDefault))
 	schedulerMetrics := metrics.GetSchedulerMetrics()
-	schedulerContext, err := scheduler.NewClusterContext("rmID", "policyGroup")
+	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
 	assert.NilError(t, err, "Error when load schedulerContext from config")
 	// everything OK
 	healthInfo := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)

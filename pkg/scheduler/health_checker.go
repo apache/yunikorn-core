@@ -16,18 +16,17 @@
  limitations under the License.
 */
 
-package healthcheck
+package scheduler
 
 import (
 	"fmt"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 )
 
-func GetSchedulerHealthStatus(metrics metrics.CoreSchedulerMetrics, schedulerContext *scheduler.ClusterContext) dao.SchedulerHealthDAOInfo {
+func GetSchedulerHealthStatus(metrics metrics.CoreSchedulerMetrics, schedulerContext *ClusterContext) dao.SchedulerHealthDAOInfo {
 	var healthInfos []dao.HealthCheckInfo
 	healthInfos = append(healthInfos, checkSchedulingErrors(metrics))
 	healthInfos = append(healthInfos, checkFailedNodes(metrics))
@@ -70,7 +69,7 @@ func checkFailedNodes(metrics metrics.CoreSchedulerMetrics) dao.HealthCheckInfo 
 	return CreateCheckInfo(failedNodes == 0, "Failed nodes", "Check for failed nodes entries in metrics", diagnosisMsg)
 }
 
-func checkSchedulingContext(schedulerContext *scheduler.ClusterContext) []dao.HealthCheckInfo {
+func checkSchedulingContext(schedulerContext *ClusterContext) []dao.HealthCheckInfo {
 	// 1. check resources
 	// 1.1 check for negative resources
 	var partitionsWithNegResources []string

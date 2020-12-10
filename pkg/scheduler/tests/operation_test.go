@@ -352,6 +352,11 @@ partitions:
 	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[resources.MEMORY]), int64(0))
 	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[resources.MEMORY]), int64(100))
 
+	newRes, err := resources.NewResourceFromConf(map[string]string{"memory": "100", "vcore": "20"})
+	assert.NilError(t, err, "failed to create resource")
+	assert.Equal(t, newRes.DAOString(), partitionInfo.GetTotalPartitionResource().DAOString())
+	assert.Equal(t, newRes.DAOString(), partitionInfo.GetQueue("root").GetMaxResource().DAOString())
+
 	// update node capacity
 	err = ms.proxy.Update(&si.UpdateRequest{
 		UpdatedNodes: []*si.UpdateNodeInfo{
@@ -378,6 +383,67 @@ partitions:
 	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.VCORE]), int64(10))
 	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[resources.MEMORY]), int64(0))
 	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[resources.MEMORY]), int64(300))
+
+	newRes, err = resources.NewResourceFromConf(map[string]string{"memory": "300", "vcore": "10"})
+	assert.NilError(t, err, "failed to create resource")
+	assert.Equal(t, newRes.DAOString(), partitionInfo.GetTotalPartitionResource().DAOString())
+	assert.Equal(t, newRes.DAOString(), partitionInfo.GetQueue("root").GetMaxResource().DAOString())
+
+	// Register a node
+	err = ms.proxy.Update(&si.UpdateRequest{
+		NewSchedulableNodes: []*si.NewNodeInfo{
+			{
+				NodeID:     "node-2:1234",
+				Attributes: map[string]string{},
+				SchedulableResource: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 100},
+						"vcore":  {Value: 20},
+					},
+				},
+			},
+		},
+		RmID: "rm:123",
+	})
+
+	assert.NilError(t, err, "UpdateRequest failed")
+
+	// Wait until node is registered
+	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
+	waitForNewNode(t, context, "node-2:1234", "[rm:123]default", 1000)
+
+	newRes, err = resources.NewResourceFromConf(map[string]string{"memory": "400", "vcore": "30"})
+	assert.NilError(t, err, "failed to create resource")
+	assert.Equal(t, newRes.DAOString(), partitionInfo.GetTotalPartitionResource().DAOString())
+	assert.Equal(t, newRes.DAOString(), partitionInfo.GetQueue("root").GetMaxResource().DAOString())
+
+	// update node capacity
+	err = ms.proxy.Update(&si.UpdateRequest{
+		UpdatedNodes: []*si.UpdateNodeInfo{
+			{
+				NodeID:     "node-2:1234",
+				Attributes: map[string]string{},
+				SchedulableResource: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 50},
+						"vcore":  {Value: 25},
+					},
+				},
+				Action: si.UpdateNodeInfo_UPDATE,
+			},
+		},
+		RmID: "rm:123",
+	})
+
+	assert.NilError(t, err, "UpdateRequest failed")
+
+	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
+		[]string{"node-2:1234"}, 50, 1000)
+
+	newRes, err = resources.NewResourceFromConf(map[string]string{"memory": "350", "vcore": "35"})
+	assert.NilError(t, err, "failed to create resource")
+	assert.Equal(t, newRes.DAOString(), partitionInfo.GetTotalPartitionResource().DAOString())
+	assert.Equal(t, newRes.DAOString(), partitionInfo.GetQueue("root").GetMaxResource().DAOString())
 }
 
 func TestUpdateNodeOccupiedResources(t *testing.T) {

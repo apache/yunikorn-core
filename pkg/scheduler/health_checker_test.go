@@ -59,7 +59,7 @@ func TestGetSchedulerHealthStatusContext(t *testing.T) {
 	healthInfo := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, healthInfo.Healthy, "Scheduler should be healthy")
 
-	//update resources to some negative value
+	// update resources to some negative value
 	negativeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": -10})
 	originalRes := schedulerContext.partitions[partName].totalPartitionResource
 	schedulerContext.partitions[partName].totalPartitionResource = negativeRes
@@ -73,7 +73,7 @@ func TestGetSchedulerHealthStatusContext(t *testing.T) {
 	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, healthInfo.Healthy, "Scheduler should be healthy")
 
-	//set some negative node resources
+	// set some negative node resources
 	err = schedulerContext.partitions[partName].AddNode(objects.NewNode(&si.NewNodeInfo{
 		NodeID:     "node",
 		Attributes: nil,

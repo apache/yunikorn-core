@@ -587,13 +587,13 @@ func (pc *PartitionContext) removeNode(nodeID string) []*objects.Allocation {
 }
 
 // Update a node
-func (pc *PartitionContext) updateNode(node *objects.Node, newCapacity *resources.Resource) {
+func (pc *PartitionContext) updateNode(delta *resources.Resource) {
 	pc.Lock()
 	defer pc.Unlock()
-	pc.totalPartitionResource.AddTo(newCapacity)
-	pc.totalPartitionResource.SubFrom(node.GetCapacity())
-	pc.root.SetMaxResource(pc.totalPartitionResource)
-	node.SetCapacity(newCapacity)
+	if delta != nil {
+		pc.totalPartitionResource.AddTo(delta)
+		pc.root.SetMaxResource(pc.totalPartitionResource)
+	}
 }
 
 // Remove a node from the partition. It returns all removed allocations.

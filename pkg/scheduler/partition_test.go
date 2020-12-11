@@ -1079,3 +1079,55 @@ func TestUpdateRootQueue(t *testing.T) {
 	assert.Equal(t, partition.GetQueue("root.leaf").CurrentState(), objects.Draining.String(), "leaf queue should have been marked for removal")
 	assert.Equal(t, partition.GetQueue("root.parent").CurrentState(), objects.Draining.String(), "parent queue should have been marked for removal")
 }
+
+func TestUpdateNode(t *testing.T) {
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "test partition create failed with error")
+
+	newRes, err := resources.NewResourceFromConf(map[string]string{"memory": "400", "vcore": "30"})
+	assert.NilError(t, err, "failed to create resource")
+
+	err = partition.AddNode(newNodeMaxResource("test", newRes), nil)
+	assert.NilError(t, err, "test node add failed unexpected")
+	assert.Equal(t, 1, len(partition.nodes), "node list not correct")
+
+	if !resources.Equals(newRes, partition.GetTotalPartitionResource()) {
+		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partition.GetTotalPartitionResource())
+	}
+
+	//delta resource for a node with mem as 450 and vcores as 40 (both mem and vcores has increeased)
+	delta, err := resources.NewResourceFromConf(map[string]string{"memory": "50", "vcore": "10"})
+	assert.NilError(t, err, "failed to create resource")
+	partition.updateNode(delta)
+
+	expectedRes, err := resources.NewResourceFromConf(map[string]string{"memory": "450", "vcore": "40"})
+	assert.NilError(t, err, "failed to create resource")
+
+	if !resources.Equals(expectedRes, partition.GetTotalPartitionResource()) {
+		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", expectedRes, partition.GetTotalPartitionResource())
+	}
+
+	///delta resource for a node with mem as 400 and vcores as 30 (both mem and vcores has decreased)
+	delta, err = resources.NewResourceFromConf(map[string]string{"memory": "-50", "vcore": "-10"})
+	assert.NilError(t, err, "failed to create resource")
+	partition.updateNode(delta)
+
+	expectedRes, err = resources.NewResourceFromConf(map[string]string{"memory": "400", "vcore": "30"})
+	assert.NilError(t, err, "failed to create resource")
+
+	if !resources.Equals(expectedRes, partition.GetTotalPartitionResource()) {
+		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", expectedRes, partition.GetTotalPartitionResource())
+	}
+
+	//delta resource for a node with mem as 450 and vcores as 10 (mem has increeased but vcores has decreased)
+	delta, err = resources.NewResourceFromConf(map[string]string{"memory": "50", "vcore": "-20"})
+	assert.NilError(t, err, "failed to create resource")
+	partition.updateNode(delta)
+
+	expectedRes, err = resources.NewResourceFromConf(map[string]string{"memory": "450", "vcore": "10"})
+	assert.NilError(t, err, "failed to create resource")
+
+	if !resources.Equals(expectedRes, partition.GetTotalPartitionResource()) {
+		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", expectedRes, partition.GetTotalPartitionResource())
+	}
+}

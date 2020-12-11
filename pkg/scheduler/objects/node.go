@@ -127,15 +127,18 @@ func (sn *Node) GetCapacity() *resources.Resource {
 	return sn.totalResource.Clone()
 }
 
-func (sn *Node) SetCapacity(newCapacity *resources.Resource) {
+func (sn *Node) SetCapacity(newCapacity *resources.Resource) *resources.Resource {
 	sn.Lock()
 	defer sn.Unlock()
+	var delta *resources.Resource = nil
 	if resources.Equals(sn.totalResource, newCapacity) {
 		log.Logger().Debug("skip updating capacity, not changed")
-		return
+		return delta
 	}
+	delta = resources.Sub(newCapacity, sn.totalResource)
 	sn.totalResource = newCapacity
 	sn.refreshAvailableResource()
+	return delta
 }
 
 func (sn *Node) GetOccupiedResource() *resources.Resource {

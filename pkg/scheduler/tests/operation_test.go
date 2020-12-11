@@ -19,6 +19,7 @@
 package tests
 
 import (
+	"fmt"
 	"testing"
 
 	"gotest.tools/assert"
@@ -335,7 +336,6 @@ partitions:
 		},
 		RmID: "rm:123",
 	})
-
 	assert.NilError(t, err, "UpdateRequest failed")
 
 	// Wait until node is registered
@@ -352,12 +352,7 @@ partitions:
 	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[resources.MEMORY]), int64(0))
 	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[resources.MEMORY]), int64(100))
 
-	newRes, err := resources.NewResourceFromConf(map[string]string{"memory": "100", "vcore": "20"})
-	assert.NilError(t, err, "failed to create resource")
-	assert.Equal(t, newRes.DAOString(), partitionInfo.GetTotalPartitionResource().DAOString())
-	assert.Equal(t, newRes.DAOString(), partitionInfo.GetQueue("root").GetMaxResource().DAOString())
-
-	// update node capacity
+	// update node capacity with more mem and less vcores
 	err = ms.proxy.Update(&si.UpdateRequest{
 		UpdatedNodes: []*si.UpdateNodeInfo{
 			{
@@ -376,24 +371,26 @@ partitions:
 	})
 
 	assert.NilError(t, err, "UpdateRequest failed")
-
 	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
 		[]string{"node-1:1234"}, 300, 1000)
 	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.MEMORY]), int64(300))
 	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.VCORE]), int64(10))
 	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[resources.MEMORY]), int64(0))
 	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[resources.MEMORY]), int64(300))
-
-	newRes, err = resources.NewResourceFromConf(map[string]string{"memory": "300", "vcore": "10"})
+	newRes, err := resources.NewResourceFromConf(map[string]string{"memory": "300", "vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
-	assert.Equal(t, newRes.DAOString(), partitionInfo.GetTotalPartitionResource().DAOString())
-	assert.Equal(t, newRes.DAOString(), partitionInfo.GetQueue("root").GetMaxResource().DAOString())
+	if !resources.Equals(newRes, partitionInfo.GetTotalPartitionResource()) {
+		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetTotalPartitionResource())
+	}
+	if !resources.Equals(newRes, partitionInfo.GetQueue("root").GetMaxResource()) {
+		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetQueue("root").GetMaxResource())
+	}
 
-	// Register a node
+	// update node capacity with more mem and same vcores
 	err = ms.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+		UpdatedNodes: []*si.UpdateNodeInfo{
 			{
-				NodeID:     "node-2:1234",
+				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -401,23 +398,73 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.UpdateNodeInfo_UPDATE,
 			},
 		},
 		RmID: "rm:123",
 	})
-
 	assert.NilError(t, err, "UpdateRequest failed")
-
-	// Wait until node is registered
-	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
-	waitForNewNode(t, context, "node-2:1234", "[rm:123]default", 1000)
-
-	newRes, err = resources.NewResourceFromConf(map[string]string{"memory": "400", "vcore": "30"})
+	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
+		[]string{"node-1:1234"}, 100, 1000)
+	newRes, err = resources.NewResourceFromConf(map[string]string{"memory": "100", "vcore": "20"})
 	assert.NilError(t, err, "failed to create resource")
-	assert.Equal(t, newRes.DAOString(), partitionInfo.GetTotalPartitionResource().DAOString())
-	assert.Equal(t, newRes.DAOString(), partitionInfo.GetQueue("root").GetMaxResource().DAOString())
+	if !resources.Equals(newRes, partitionInfo.GetTotalPartitionResource()) {
+		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetTotalPartitionResource())
+	}
+	if !resources.Equals(newRes, partitionInfo.GetQueue("root").GetMaxResource()) {
+		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetQueue("root").GetMaxResource())
+	}
+}
 
-	// update node capacity
+func TestUpdateNodeCapacityWithMultipleNodes(t *testing.T) {
+	// Register RM
+	configData := `
+partitions:
+  -
+    name: default
+    queues:
+      - name: root
+        queues:
+          - name: a
+`
+	// Start all tests
+	ms := &mockScheduler{}
+	defer ms.Stop()
+
+	err := ms.Init(configData, false)
+	assert.NilError(t, err, "RegisterResourceManager failed")
+
+	// Check queues of cache and scheduler.
+	partitionInfo := ms.scheduler.GetClusterContext().GetPartition("[rm:123]default")
+	assert.Assert(t, partitionInfo.GetTotalPartitionResource() == nil, "partition info max resource nil")
+
+	for i := 1; i < 3; i++ {
+		var nodeName = fmt.Sprint("node-", i, ":1234")
+		// Register a node
+		err = ms.proxy.Update(&si.UpdateRequest{
+			NewSchedulableNodes: []*si.NewNodeInfo{
+				{
+					NodeID:     nodeName,
+					Attributes: map[string]string{},
+					SchedulableResource: &si.Resource{
+						Resources: map[string]*si.Quantity{
+							"memory": {Value: 100},
+							"vcore":  {Value: 20},
+						},
+					},
+				},
+			},
+			RmID: "rm:123",
+		})
+		assert.NilError(t, err, "UpdateRequest failed")
+
+		// Wait until node is registered
+		context := ms.scheduler.GetClusterContext()
+		ms.mockRM.waitForAcceptedNode(t, nodeName, 1000)
+		waitForNewNode(t, context, nodeName, "[rm:123]default", 1000)
+	}
+
+	// update 2nd node capacity with less mem and vcores
 	err = ms.proxy.Update(&si.UpdateRequest{
 		UpdatedNodes: []*si.UpdateNodeInfo{
 			{
@@ -426,7 +473,38 @@ partitions:
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 50},
-						"vcore":  {Value: 25},
+						"vcore":  {Value: 10},
+					},
+				},
+				Action: si.UpdateNodeInfo_UPDATE,
+			},
+		},
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "UpdateRequest failed")
+	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
+		[]string{"node-2:1234"}, 50, 1000)
+
+	newRes, err := resources.NewResourceFromConf(map[string]string{"memory": "150", "vcore": "30"})
+	assert.NilError(t, err, "failed to create resource")
+	if !resources.Equals(newRes, partitionInfo.GetTotalPartitionResource()) {
+		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetTotalPartitionResource())
+	}
+
+	if !resources.Equals(newRes, partitionInfo.GetQueue("root").GetMaxResource()) {
+		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetQueue("root").GetMaxResource())
+	}
+
+	// update 2nd node capacity with same mem and vcores
+	err = ms.proxy.Update(&si.UpdateRequest{
+		UpdatedNodes: []*si.UpdateNodeInfo{
+			{
+				NodeID:     "node-2:1234",
+				Attributes: map[string]string{},
+				SchedulableResource: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 50},
+						"vcore":  {Value: 10},
 					},
 				},
 				Action: si.UpdateNodeInfo_UPDATE,
@@ -440,10 +518,15 @@ partitions:
 	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
 		[]string{"node-2:1234"}, 50, 1000)
 
-	newRes, err = resources.NewResourceFromConf(map[string]string{"memory": "350", "vcore": "35"})
+	newRes, err = resources.NewResourceFromConf(map[string]string{"memory": "150", "vcore": "30"})
 	assert.NilError(t, err, "failed to create resource")
-	assert.Equal(t, newRes.DAOString(), partitionInfo.GetTotalPartitionResource().DAOString())
-	assert.Equal(t, newRes.DAOString(), partitionInfo.GetQueue("root").GetMaxResource().DAOString())
+	if !resources.Equals(newRes, partitionInfo.GetTotalPartitionResource()) {
+		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetTotalPartitionResource())
+	}
+
+	if !resources.Equals(newRes, partitionInfo.GetQueue("root").GetMaxResource()) {
+		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetQueue("root").GetMaxResource())
+	}
 }
 
 func TestUpdateNodeOccupiedResources(t *testing.T) {

@@ -91,6 +91,9 @@ func NewResourceFromConf(configMap map[string]string) (*Resource, error) {
 		if err != nil {
 			return nil, err
 		}
+		if intValue < 0 {
+			return nil, fmt.Errorf("negative resources not permitted: %v", configMap)
+		}
 		res.Resources[key] = Quantity(intValue)
 	}
 	return res, nil
@@ -121,15 +124,6 @@ func (r *Resource) ToProto() *si.Resource {
 		}
 	}
 	return proto
-}
-
-// convert to a configmap
-func (r *Resource) ToConf() map[string]string {
-	conf := make(map[string]string)
-	for k, v := range r.Resources {
-		conf[k] = v.string()
-	}
-	return conf
 }
 
 // Return a clone (copy) of the resource it is called on.
@@ -822,15 +816,6 @@ func IsEmpty(r *Resource) bool {
 		return true
 	}
 	return len(r.Resources) == 0
-}
-
-func (r *Resource) HasNegativeValue() bool {
-	for _, v := range r.Resources {
-		if v < 0 {
-			return true
-		}
-	}
-	return false
 }
 
 func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {

@@ -79,7 +79,7 @@ func checkQueueResource(cur QueueConfig, parentM *resources.Resource) (*resource
 	if err != nil {
 		return nil, err
 	}
-	if !resources.IsEmpty(parentM) && !resources.FitIn(parentM, curM) {
+	if !resources.IsZero(parentM) && !resources.FitIn(parentM, curM) {
 		return nil, fmt.Errorf("max resource of parent is smaller than maximum resource for queue %s", cur.Name)
 	}
 	curM = resources.ComponentWiseMinPermissive(curM, parentM)

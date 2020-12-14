@@ -27,7 +27,7 @@ import (
 )
 
 func TestNewResourceFromConf(t *testing.T) {
-	// resource wit nil input
+	// resource with nil input
 	original, err := NewResourceFromConf(nil)
 	if err != nil || len(original.Resources) != 0 {
 		t.Fatalf("new resource create from nil returned error or wrong resource: error %t, res %v", err, original)
@@ -44,6 +44,11 @@ func TestNewResourceFromConf(t *testing.T) {
 
 	// failure case: parse error
 	original, err = NewResourceFromConf(map[string]string{"fail": "xx"})
+	if err == nil || original != nil {
+		t.Fatalf("new resource create should have returned error %v, res %v", err, original)
+	}
+	// negative resource
+	original, err = NewResourceFromConf(map[string]string{"memory": "-15"})
 	if err == nil || original != nil {
 		t.Fatalf("new resource create should have returned error %v, res %v", err, original)
 	}

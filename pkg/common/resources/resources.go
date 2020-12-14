@@ -757,13 +757,13 @@ func ComponentWiseMin(left, right *Resource) *Resource {
 func ComponentWiseMinPermissive(left, right *Resource) *Resource {
 	out := NewResource()
 	if right == nil && left == nil {
-		return out
+		return nil
 	}
 	if left == nil {
-		return right
+		return right.Clone()
 	}
 	if right == nil {
-		return left
+		return left.Clone()
 	}
 	for k, v := range left.Resources {
 		if val, ok := right.Resources[k]; ok {
@@ -798,9 +798,9 @@ func ComponentWiseMax(left, right *Resource) *Resource {
 }
 
 // Check that the whole resource is zero
-// A nil resource is zero (contrary to StrictlyGreaterThanZero)
+// A nil or empty resource is zero (contrary to StrictlyGreaterThanZero)
 func IsZero(zero *Resource) bool {
-	if zero == nil {
+	if zero == nil || len(zero.Resources) == 0 {
 		return true
 	}
 	for _, v := range zero.Resources {
@@ -809,13 +809,6 @@ func IsZero(zero *Resource) bool {
 		}
 	}
 	return true
-}
-
-func IsEmpty(r *Resource) bool {
-	if r == nil {
-		return true
-	}
-	return len(r.Resources) == 0
 }
 
 func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {

@@ -42,6 +42,7 @@ import (
 var (
 	reservationDelay = 2 * time.Second
 	startingTimeout  = 5 * time.Minute
+	waitingTimeout   = 5 * time.Minute
 )
 
 type Application struct {
@@ -61,7 +62,8 @@ type Application struct {
 	allocatedResource *resources.Resource    // total allocated resources
 	allocations       map[string]*Allocation // list of all allocations
 	stateMachine      *fsm.FSM               // application state machine
-	stateTimer        *time.Timer            // timer for state time
+	startingTimer     *time.Timer            // timer for state time
+	waitingTimer      *time.Timer            // timer for state time
 
 	rmEventHandler handler.EventHandler
 	rmID           string
@@ -169,19 +171,21 @@ func (sa *Application) OnStateChange(event *fsm.Event) {
 // Set the starting timer to make sure the application will not get stuck in a starting state too long.
 // This prevents an app from not progressing to Running when it only has 1 allocation.
 // Called when entering the Starting state by the state machine.
-func (sa *Application) SetStartingTimer() {
-	log.Logger().Debug("Application Starting state timer initiated",
-		zap.String("appID", sa.ApplicationID),
-		zap.Duration("timeout", startingTimeout))
-	sa.stateTimer = time.AfterFunc(startingTimeout, sa.timeOutStarting)
+//nolint: staticcheck
+func GetInitializedTimer(timer *time.Timer, timeout time.Duration, timeoutFunction func()) *time.Timer {
+	log.Logger().Debug("Application state timer initiated",
+		zap.Duration("timeout", timeout))
+	timer = time.AfterFunc(timeout, timeoutFunction)
+	return timer
 }
 
 // Clear the starting timer. If the application has progressed out of the starting state we need to stop the
 // timer and clean up.
 // Called when leaving the Starting state by the state machine.
-func (sa *Application) ClearStartingTimer() {
-	sa.stateTimer.Stop()
-	sa.stateTimer = nil
+func GetClearedTimer(timer *time.Timer) *time.Timer {
+	timer.Stop()
+	timer = nil
+	return timer
 }
 
 // In case of state aware scheduling we do not want to get stuck in starting as we might have an application that only
@@ -197,6 +201,17 @@ func (sa *Application) timeOutStarting() {
 
 		//nolint: errcheck
 		_ = sa.HandleApplicationEvent(runApplication)
+	}
+}
+
+func (sa *Application) timeOutWaiting() {
+	if sa.IsWaiting() {
+		log.Logger().Warn("Application in waiting state timed out: marking it as completed",
+			zap.String("applicationID", sa.ApplicationID),
+			zap.String("state", sa.stateMachine.Current()))
+
+		//nolint: errcheck
+		_ = sa.HandleApplicationEvent(completeApplication)
 	}
 }
 

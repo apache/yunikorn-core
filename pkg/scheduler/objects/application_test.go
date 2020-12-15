@@ -590,8 +590,8 @@ func TestStateTimeOut(t *testing.T) {
 	if app.IsStarting() {
 		t.Fatal("Starting state should have timed out")
 	}
-	if app.stateTimer != nil {
-		t.Fatalf("Startup timer has not be cleared on time out as expected, %v", app.stateTimer)
+	if app.startingTimer != nil {
+		t.Fatalf("Startup timer has not be cleared on time out as expected, %v", app.startingTimer)
 	}
 
 	startingTimeout = time.Millisecond * 100
@@ -602,15 +602,33 @@ func TestStateTimeOut(t *testing.T) {
 	assert.NilError(t, err, "no error expected accepted to starting (timeout test2)")
 	// give it some time to run and progress
 	time.Sleep(time.Microsecond * 100)
-	if !app.IsStarting() || app.stateTimer == nil {
+	if !app.IsStarting() || app.startingTimer == nil {
 		t.Fatalf("Starting state and timer should not have timed out yet, state: %s", app.stateMachine.Current())
 	}
 	err = app.HandleApplicationEvent(runApplication)
 	assert.NilError(t, err, "no error expected starting to run (timeout test2)")
 	// give it some time to run and progress
 	time.Sleep(time.Microsecond * 100)
-	if !app.stateMachine.Is(Running.String()) || app.stateTimer != nil {
-		t.Fatalf("State is not running or timer was not cleared, state: %s, timer %v", app.stateMachine.Current(), app.stateTimer)
+	if !app.stateMachine.Is(Running.String()) || app.startingTimer != nil {
+		t.Fatalf("State is not running or timer was not cleared, state: %s, timer %v", app.stateMachine.Current(), app.startingTimer)
+	}
+}
+
+func TestCompleted(t *testing.T) {
+	waitingTimeout = time.Microsecond * 100
+	defer func() { waitingTimeout = time.Minute * 5 }()
+	app := newApplication(appID1, "default", "root.a")
+	err := app.HandleApplicationEvent(runApplication)
+	assert.NilError(t, err, "no error expected new to accepted (completed test)")
+	err = app.HandleApplicationEvent(waitApplication)
+	assert.NilError(t, err, "no error expected accepted to waiting (completed test)")
+	// give it some time to run and progress
+	time.Sleep(time.Millisecond * 100)
+	if app.IsWaiting() {
+		t.Fatal("Starting state should have timed out")
+	}
+	if app.waitingTimer != nil {
+		t.Fatalf("Waiting timer has not be cleared on time out as expected, %v", app.startingTimer)
 	}
 }
 

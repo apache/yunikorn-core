@@ -388,17 +388,27 @@ func TestComponentWiseMin(t *testing.T) {
 }
 
 func TestComponentWiseMinPermissive(t *testing.T) {
-	res1 := NewResourceFromMap(map[string]Quantity{"first": 5})
-	res2 := NewResourceFromMap(map[string]Quantity{"second": 10})
-	result := ComponentWiseMinPermissive(res1, res2)
-	if result == nil || len(result.Resources) != 2 {
-		t.Fatalf("set resource should be greater than zero: %v", result)
+	smallerRes := NewResourceFromMap(map[string]Quantity{"first": 5, "second": 15, "third": 6})
+	higherRes := NewResourceFromMap(map[string]Quantity{"first": 7, "second": 10, "forth": 6})
+	expected := NewResourceFromMap(map[string]Quantity{"first": 5, "second": 10, "third": 6, "forth": 6})
+
+	testCases := []struct {
+		name     string
+		res1     *Resource
+		res2     *Resource
+		expected *Resource
+	}{
+		{"Both resources nil", nil, nil, nil},
+		{"First resource nil", nil, smallerRes, smallerRes},
+		{"Second resource nil", smallerRes, nil, smallerRes},
+		{"First resource smaller than the second", smallerRes, higherRes, expected},
+		{"Second resource smaller than the first", higherRes, smallerRes, expected},
 	}
-	if value, ok := result.Resources["first"]; !ok || value != 5 {
-		t.Errorf("resource key not set expected %v got %v", res1, result)
-	}
-	if value, ok := result.Resources["second"]; !ok || value != 10 {
-		t.Errorf("resource key not set expected %v got %v", res2, result)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := ComponentWiseMinPermissive(tc.res1, tc.res2)
+			assert.DeepEqual(t, result, tc.expected)
+		})
 	}
 }
 

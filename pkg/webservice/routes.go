@@ -102,7 +102,15 @@ var webRoutes = routes{
 		"Scheduler",
 		"PUT",
 		"/ws/v1/config",
-		updateConfig,
+		updateClusterConfig,
+	},
+
+	// endpoint to update the current conf
+	route{
+		"Scheduler",
+		"POST",
+		"/ws/v1/config",
+		createClusterConfig,
 	},
 
 	// endpoint to validate conf

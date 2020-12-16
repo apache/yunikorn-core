@@ -458,7 +458,36 @@ func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func updateConfig(w http.ResponseWriter, r *http.Request) {
+func createClusterConfig(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+
+	queryParams := r.URL.Query()
+	_, dryRunExists := queryParams["dry_run"]
+	if len(queryParams) == 0 || !dryRunExists {
+		http.Error(w, "Mandatory parameters are missing in URL path. Please check the usage documentation", http.StatusBadRequest)
+		return
+	}
+	if queryParams.Get("dry_run") != "1" {
+		http.Error(w, "Invalid query params. Please check the usage documentation", http.StatusBadRequest)
+		return
+	}
+	requestBytes, err := ioutil.ReadAll(r.Body)
+	if err == nil {
+		_, err = configs.LoadSchedulerConfigFromByteArray(requestBytes)
+	}
+	var result dao.ValidateConfResponse
+	if err != nil {
+		result.Allowed = false
+		result.Reason = err.Error()
+	} else {
+		result.Allowed = true
+	}
+	if err = json.NewEncoder(w).Encode(result); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func updateClusterConfig(w http.ResponseWriter, r *http.Request) {
 	lock.Lock()
 	defer lock.Unlock()
 	writeHeaders(w)

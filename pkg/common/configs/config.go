@@ -148,11 +148,11 @@ func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) 
 		return nil, err
 	}
 	// Create a sha256 checksum for this validated config
-	UpdateChecksum(content, conf)
+	SetChecksum(content, conf)
 	return conf, err
 }
 
-func UpdateChecksum(content []byte, conf *SchedulerConfig) {
+func SetChecksum(content []byte, conf *SchedulerConfig) {
 	noChecksumContent := GetConfigurationString(content)
 	conf.Checksum = fmt.Sprintf("%X", sha256.Sum256([]byte(noChecksumContent)))
 }
@@ -204,12 +204,19 @@ func resolveConfigurationFileFunc(policyGroup string) string {
 	}
 	return filePath
 }
+
 func GetConfigurationString(requestBytes []byte) string {
 	conf := string(requestBytes)
-	if strings.Contains(conf, "checksum") {
-		conf = strings.Split(conf, "checksum: ")[0]
+	checksum := "Checksum: "
+	checksumLength := 64 + len(checksum)
+	if strings.Contains(conf, checksum) {
+		checksum += strings.Split(conf, checksum)[1]
+		checksum = strings.TrimRight(checksum, "\n")
+		if len(checksum) > checksumLength {
+			checksum = checksum[:checksumLength]
+		}
 	}
-	return conf
+	return strings.Replace(conf, checksum, "", -1)
 }
 
 // Default loader, can be updated by tests

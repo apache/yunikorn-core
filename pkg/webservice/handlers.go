@@ -462,18 +462,16 @@ func updateConfig(w http.ResponseWriter, r *http.Request) {
 		buildUpdateResponse(err, w)
 		return
 	}
-	// validation is already called when loading the config
 	newConf, err := configs.ParseAndValidateConfig(requestBytes)
 	if err != nil {
 		buildUpdateResponse(err, w)
 		return
 	}
-	baseChecksum := newConf.Checksum
-	if !isChecksumValid(baseChecksum) {
+	if !isChecksumEqual(newConf.Checksum) {
 		buildUpdateResponse(fmt.Errorf("the base configuration is changed"), w)
 		return
 	}
-	configs.UpdateChecksum(requestBytes, newConf)
+	configs.SetChecksum(requestBytes, newConf)
 	newConfStr := configs.GetConfigurationString(requestBytes)
 	// This fails if we have more than 1 RM
 	// Do not think the plugins will even work with multiple RMs
@@ -496,9 +494,8 @@ func updateConfig(w http.ResponseWriter, r *http.Request) {
 	buildUpdateResponse(nil, w)
 }
 
-func isChecksumValid(checksum string) bool {
-	actualConf := configs.ConfigContext.Get(schedulerContext.GetPolicyGroup())
-	return actualConf.Checksum == checksum
+func isChecksumEqual(checksum string) bool {
+	return configs.ConfigContext.Get(schedulerContext.GetPolicyGroup()).Checksum == checksum
 }
 
 func buildUpdateResponse(err error, w http.ResponseWriter) {

@@ -616,6 +616,21 @@ func Equals(left, right *Resource) bool {
 	return true
 }
 
+// Compare the resources equal returns the specific values for following cases:
+// left  right  return
+// nil   nil    true
+// nil   <set>  false
+// nil zero res true
+// <set>   nil    false
+// zero res nil true
+// <set> <set>  true/false  *based on the individual Quantity values
+func EqualsOrEmpty(left, right *Resource) bool {
+	if IsZero(left) && IsZero(right) {
+		return true
+	}
+	return Equals(left, right)
+}
+
 // Multiply the resource by the integer ratio returning a new resource.
 // Result is protected from overflow (positive and negative).
 // A nil resource passed in returns a new empty resource (zero)
@@ -786,6 +801,9 @@ func IsZero(zero *Resource) bool {
 }
 
 func (r *Resource) HasNegativeValue() bool {
+	if r == nil {
+		return false
+	}
 	for _, v := range r.Resources {
 		if v < 0 {
 			return true

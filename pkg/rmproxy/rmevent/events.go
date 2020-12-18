@@ -71,7 +71,7 @@ type RMRejectedAllocationAskEvent struct {
 
 type RMReleaseAllocationEvent struct {
 	RmID                string
-	ReleasedAllocations []*si.AllocationReleaseResponse
+	ReleasedAllocations []*si.AllocationRelease
 }
 
 type RMNodeUpdateEvent struct {

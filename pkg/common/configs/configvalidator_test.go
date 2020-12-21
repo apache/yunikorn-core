@@ -28,7 +28,7 @@ func TestCheckResourceConfigurationsForQueue(t *testing.T) {
 	negativeResourceMap := map[string]string{"memory": "-50", "vcores": "33"}
 	resourceMapWithSyntaxError := map[string]string{"memory": "ten", "vcores": ""}
 	higherResourceMap := map[string]string{"memory": "50", "vcores": "33"}
-	lowerResourceMap := map[string]string{"memory": "10", "vcores": "3"}
+	lowerResourceMap := map[string]string{"memory": "10", "vcores": "30"}
 	testCases := []struct {
 		name          string
 		current       QueueConfig
@@ -71,6 +71,23 @@ func TestCheckResourceConfigurationsForQueue(t *testing.T) {
 			Queues: []QueueConfig{{
 				Resources: Resources{
 					Guaranteed: higherResourceMap,
+				},
+			}},
+		}, true},
+		{"Higher sum of guaranteed resource in child queues than the parent's guaranteed", QueueConfig{
+			Resources: Resources{
+				Max: higherResourceMap,
+				Guaranteed: lowerResourceMap,
+			},
+			Queues: []QueueConfig{{
+				Resources: Resources{
+					Max: lowerResourceMap,
+					Guaranteed: lowerResourceMap,
+				},
+			},{
+				Resources: Resources{
+					Max: lowerResourceMap,
+					Guaranteed: lowerResourceMap,
 				},
 			}},
 		}, true},

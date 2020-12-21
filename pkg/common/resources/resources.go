@@ -610,6 +610,21 @@ func Equals(left, right *Resource) bool {
 	return true
 }
 
+// Compare the resources equal returns the specific values for following cases:
+// left  right  return
+// nil   nil    true
+// nil   <set>  false
+// nil zero res true
+// <set>   nil    false
+// zero res nil true
+// <set> <set>  true/false  *based on the individual Quantity values
+func EqualsOrEmpty(left, right *Resource) bool {
+	if IsZero(left) && IsZero(right) {
+		return true
+	}
+	return Equals(left, right)
+}
+
 // Multiply the resource by the integer ratio returning a new resource.
 // Result is protected from overflow (positive and negative).
 // A nil resource passed in returns a new empty resource (zero)
@@ -782,6 +797,18 @@ func ComponentWiseMinPermissive(left, right *Resource) *Resource {
 	return out
 }
 
+func (r *Resource) HasNegativeValue() bool {
+	if r == nil {
+		return false
+	}
+	for _, v := range r.Resources {
+		if v < 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // Returns a new resource with the largest value for each quantity in the resources
 // If either resource passed in is nil a zero resource is returned
 func ComponentWiseMax(left, right *Resource) *Resource {
@@ -800,7 +827,7 @@ func ComponentWiseMax(left, right *Resource) *Resource {
 // Check that the whole resource is zero
 // A nil or empty resource is zero (contrary to StrictlyGreaterThanZero)
 func IsZero(zero *Resource) bool {
-	if zero == nil || len(zero.Resources) == 0 {
+	if zero == nil {
 		return true
 	}
 	for _, v := range zero.Resources {

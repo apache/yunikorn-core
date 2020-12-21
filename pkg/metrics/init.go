@@ -66,6 +66,7 @@ type CoreSchedulerMetrics interface {
 	// Metrics Ops related to ScheduledAllocationErrors
 	IncSchedulingError()
 	AddSchedulingErrors(value int)
+	GetSchedulingErrors() (int, error)
 
 	// Metrics Ops related to released allocations
 	IncReleasedContainer()
@@ -108,6 +109,7 @@ type CoreSchedulerMetrics interface {
 	SubFailedNodes(value int)
 	SetFailedNodes(value int)
 	SetNodeResourceUsage(resourceName string, rangeIdx int, value float64)
+	GetFailedNodes() (int, error)
 
 	//latency change
 	ObserveSchedulingLatency(start time.Time)
@@ -129,7 +131,7 @@ type CoreEventMetrics interface {
 func init() {
 	once.Do(func() {
 		m = &Metrics{
-			scheduler: initSchedulerMetrics(),
+			scheduler: InitSchedulerMetrics(),
 			queues:    make(map[string]CoreQueueMetrics),
 			event:     initEventMetrics(),
 			lock:      sync.RWMutex{},

@@ -197,4 +197,11 @@ var webRoutes = routes{
 		Pattern:     "/debug/pprof/trace",
 		HandlerFunc: pprof.Trace,
 	},
+	// endpoint to check health status
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/scheduler/healthcheck",
+		checkHealthStatus,
+	},
 }

@@ -34,6 +34,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	metrics2 "github.com/apache/incubator-yunikorn-core/pkg/metrics"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
@@ -265,7 +266,7 @@ func getPartitionJSON(partition *scheduler.PartitionContext) *dao.PartitionDAOIn
 	partitionInfo.PartitionName = partition.Name
 	partitionInfo.Capacity = dao.PartitionCapacity{
 		Capacity:     partition.GetTotalPartitionResource().DAOString(),
-		UsedCapacity: "0",
+		UsedCapacity: partition.GetAllocatedResource().DAOString(),
 	}
 	partitionInfo.Queues = queueDAOInfo
 
@@ -496,6 +497,15 @@ func updateConfig(w http.ResponseWriter, r *http.Request) {
 
 func isChecksumEqual(checksum string) bool {
 	return configs.ConfigContext.Get(schedulerContext.GetPolicyGroup()).Checksum == checksum
+}
+
+func checkHealthStatus(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	metrics := metrics2.GetSchedulerMetrics()
+	result := scheduler.GetSchedulerHealthStatus(metrics, schedulerContext)
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func buildUpdateResponse(err error, w http.ResponseWriter) {

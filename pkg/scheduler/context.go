@@ -491,7 +491,7 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 			}
 			allocations := partition.removeApplication(app.ApplicationID)
 			if len(allocations) > 0 {
-				cc.notifyRMAllocationReleased(partition.RmID, allocations, si.AllocationReleaseResponse_STOPPED_BY_RM,
+				cc.notifyRMAllocationReleased(partition.RmID, allocations, si.AllocationRelease_STOPPED_BY_RM,
 					fmt.Sprintf("Application %s Removed", app.ApplicationID))
 			}
 		}
@@ -552,7 +552,7 @@ func (cc *ClusterContext) updateNodes(request *si.UpdateRequest) {
 				released := partition.removeNode(node.NodeID)
 				// notify the shim allocations have been released from node
 				if len(released) != 0 {
-					cc.notifyRMAllocationReleased(partition.RmID, released, si.AllocationReleaseResponse_STOPPED_BY_RM,
+					cc.notifyRMAllocationReleased(partition.RmID, released, si.AllocationRelease_STOPPED_BY_RM,
 						fmt.Sprintf("Node %s Removed", node.NodeID))
 				}
 			}
@@ -685,7 +685,7 @@ func (cc *ClusterContext) processAskReleases(releases []*si.AllocationAskRelease
 	}
 }
 
-func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationReleaseRequest, rmID string) {
+func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRelease, rmID string) {
 	// TODO: the release comes from the RM and confirmed twice why do we need event + callback?
 	// See YUNIKORN-462, there are two separate communications for the same allocation
 	// between the core and the shim they should be merged into one communication.
@@ -697,7 +697,7 @@ func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRel
 			allocs := partition.removeAllocation(toRelease.ApplicationID, toRelease.UUID)
 			// notify the RM of the exact released allocations
 			if len(allocs) > 0 {
-				cc.notifyRMAllocationReleased(rmID, allocs, si.AllocationReleaseResponse_STOPPED_BY_RM, "allocation remove as per RM request")
+				cc.notifyRMAllocationReleased(rmID, allocs, si.AllocationRelease_STOPPED_BY_RM, "allocation remove as per RM request")
 			}
 			for _, alloc := range allocs {
 				toReleaseAllocations = append(toReleaseAllocations, &si.ForgotAllocation{
@@ -738,13 +738,13 @@ func (cc *ClusterContext) convertAllocations(allocations []*si.Allocation) []*ob
 
 // Create a RM update event to notify RM of released allocations
 // Lock free call, all updates occur via events.
-func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, released []*objects.Allocation, terminationType si.AllocationReleaseResponse_TerminationType, message string) {
+func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, released []*objects.Allocation, terminationType si.AllocationRelease_TerminationType, message string) {
 	releaseEvent := &rmevent.RMReleaseAllocationEvent{
-		ReleasedAllocations: make([]*si.AllocationReleaseResponse, 0),
+		ReleasedAllocations: make([]*si.AllocationRelease, 0),
 		RmID:                rmID,
 	}
 	for _, alloc := range released {
-		releaseEvent.ReleasedAllocations = append(releaseEvent.ReleasedAllocations, &si.AllocationReleaseResponse{
+		releaseEvent.ReleasedAllocations = append(releaseEvent.ReleasedAllocations, &si.AllocationRelease{
 			UUID:            alloc.UUID,
 			TerminationType: terminationType,
 			Message:         message,

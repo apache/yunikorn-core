@@ -318,14 +318,14 @@ partitions:
 
 	updateRequest := &si.UpdateRequest{
 		Releases: &si.AllocationReleasesRequest{
-			AllocationsToRelease: make([]*si.AllocationReleaseRequest, 0),
+			AllocationsToRelease: make([]*si.AllocationRelease, 0),
 		},
 		RmID: "rm:123",
 	}
 
 	// Release all allocations
 	for _, v := range ms.mockRM.getAllocations() {
-		updateRequest.Releases.AllocationsToRelease = append(updateRequest.Releases.AllocationsToRelease, &si.AllocationReleaseRequest{
+		updateRequest.Releases.AllocationsToRelease = append(updateRequest.Releases.AllocationsToRelease, &si.AllocationRelease{
 			UUID:          v.UUID,
 			ApplicationID: v.ApplicationID,
 			PartitionName: v.PartitionName,
@@ -869,9 +869,9 @@ partitions:
 			assert.Equal(t, len(ms.mockRM.getAllocations()), 10, "number of RM allocations incorrect")
 
 			// release all allocated allocations
-			allocReleases := make([]*si.AllocationReleaseRequest, 0)
+			allocReleases := make([]*si.AllocationRelease, 0)
 			for _, alloc := range ms.mockRM.getAllocations() {
-				allocReleases = append(allocReleases, &si.AllocationReleaseRequest{
+				allocReleases = append(allocReleases, &si.AllocationRelease{
 					PartitionName: "default",
 					ApplicationID: appID1,
 					UUID:          alloc.UUID,

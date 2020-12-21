@@ -66,7 +66,8 @@ type SchedulerMetrics struct {
 }
 
 // Initialize scheduler metrics
-func initSchedulerMetrics() *SchedulerMetrics {
+//nolint: funlen
+func InitSchedulerMetrics() *SchedulerMetrics {
 	s := &SchedulerMetrics{
 		lock: sync.RWMutex{},
 	}
@@ -271,6 +272,15 @@ func (m *SchedulerMetrics) AddSchedulingErrors(value int) {
 	m.schedulingErrors.Add(float64(value))
 }
 
+func (m *SchedulerMetrics) GetSchedulingErrors() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.schedulingErrors.Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Counter.Value), nil
+	}
+	return -1, err
+}
+
 // Metrics Ops related to totalApplicationsAdded
 func (m *SchedulerMetrics) IncTotalApplicationsAdded() {
 	m.totalApplicationsAdded.Inc()
@@ -380,6 +390,14 @@ func (m *SchedulerMetrics) SubFailedNodes(value int) {
 
 func (m *SchedulerMetrics) SetFailedNodes(value int) {
 	m.failedNodes.Set(float64(value))
+}
+func (m *SchedulerMetrics) GetFailedNodes() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.failedNodes.Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Gauge.Value), nil
+	}
+	return -1, err
 }
 
 func (m *SchedulerMetrics) SetNodeResourceUsage(resourceName string, rangeIdx int, value float64) {

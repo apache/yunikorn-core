@@ -76,17 +76,17 @@ func TestCheckResourceConfigurationsForQueue(t *testing.T) {
 		}, true},
 		{"Higher sum of guaranteed resource in child queues than the parent's guaranteed", QueueConfig{
 			Resources: Resources{
-				Max: higherResourceMap,
+				Max:        higherResourceMap,
 				Guaranteed: lowerResourceMap,
 			},
 			Queues: []QueueConfig{{
 				Resources: Resources{
-					Max: lowerResourceMap,
+					Max:        lowerResourceMap,
 					Guaranteed: lowerResourceMap,
 				},
-			},{
+			}, {
 				Resources: Resources{
-					Max: lowerResourceMap,
+					Max:        lowerResourceMap,
 					Guaranteed: lowerResourceMap,
 				},
 			}},

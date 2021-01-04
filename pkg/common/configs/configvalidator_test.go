@@ -53,7 +53,7 @@ func TestCheckResourceConfigurationsForQueue(t *testing.T) {
 			Resources: Resources{
 				Guaranteed: lowerResourceMap,
 			},
-		}, true},
+		}, false},
 		{"Syntax error in guaranteed resource", QueueConfig{
 			Resources: Resources{
 				Guaranteed: resourceMapWithSyntaxError,

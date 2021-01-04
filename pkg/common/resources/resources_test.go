@@ -1533,3 +1533,21 @@ func TestString(t *testing.T) {
 		})
 	}
 }
+
+func TestHasNegativeValue(t *testing.T) {
+	testCases := []struct {
+		name           string
+		input          *Resource
+		expectedResult bool
+	}{
+		{"Nil resource", nil, false},
+		{"Empty resource", NewResource(), false},
+		{"Only positive values", NewResourceFromMap(map[string]Quantity{MEMORY: 100}), false},
+		{"Negative value", NewResourceFromMap(map[string]Quantity{MEMORY: -100}), true},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expectedResult, tc.input.HasNegativeValue())
+		})
+	}
+}

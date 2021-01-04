@@ -114,7 +114,7 @@ func checkResourceConfig(cur QueueConfig) (*resources.Resource, *resources.Resou
 	if err != nil {
 		return nil, nil, err
 	}
-	if !resources.FitIn(m, g) {
+	if !resources.IsZero(m) && !resources.FitIn(m, g) {
 		return nil, nil, fmt.Errorf("guaranteed resource is larger than maximum resource for queue %s", cur.Name)
 	}
 	return g, m, nil

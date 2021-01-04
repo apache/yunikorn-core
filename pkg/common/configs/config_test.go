@@ -1212,7 +1212,7 @@ partitions:
 
 func TestGetConfigurationString(t *testing.T) {
 	configBytes := []byte(validConf)
-	checksum := "Checksum: " + fmt.Sprintf("%X", sha256.Sum256(configBytes))
+	checksum := "checksum: " + fmt.Sprintf("%X", sha256.Sum256(configBytes))
 	testCases := []struct {
 		name           string
 		requestBytes   []byte
@@ -1223,7 +1223,7 @@ func TestGetConfigurationString(t *testing.T) {
 		{"Checksum at the end", []byte(validConf + checksum), validConf},
 		{"Checksum in the middle", []byte(validConf + checksum + "extra config"), validConf + "extra config"},
 		{"Empty config and checksum", []byte(""), ""},
-		{"Empty checksum", []byte(validConf + "Checksum: "), validConf},
+		{"Empty checksum", []byte(validConf + "checksum: "), validConf},
 		{"Empty config", []byte("" + checksum), ""},
 	}
 	for _, tc := range testCases {

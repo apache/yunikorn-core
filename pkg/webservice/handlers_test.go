@@ -19,6 +19,7 @@
 package webservice
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -429,6 +430,19 @@ func TestUpdateConfigInvalidConf(t *testing.T) {
 	updateConfig(resp, req)
 	assert.Equal(t, http.StatusConflict, resp.statusCode, "Status code is wrong")
 	assert.Assert(t, len(string(resp.outputBytes)) > 0, "Error message is expected")
+}
+
+func TestUpdateConfigWrongChecksum(t *testing.T) {
+	prepareSchedulerForConfigChange(t)
+	resp := &MockResponseWriter{}
+	baseChecksum := fmt.Sprintf("%X", sha256.Sum256([]byte(updatedConf)))
+	conf := appendChecksum(updatedConf, baseChecksum)
+	req, err := http.NewRequest("PUT", "", strings.NewReader(conf))
+	assert.NilError(t, err, "Failed to create the request")
+	updateConfig(resp, req)
+	assert.Equal(t, http.StatusConflict, resp.statusCode, "Status code is wrong")
+	assert.Assert(t, strings.Contains(string(resp.outputBytes), "the base configuration is changed"),
+		"Wrong error message received")
 }
 
 func appendChecksum(conf string, checksum string) string {

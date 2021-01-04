@@ -207,7 +207,7 @@ func resolveConfigurationFileFunc(policyGroup string) string {
 
 func GetConfigurationString(requestBytes []byte) string {
 	conf := string(requestBytes)
-	checksum := "Checksum: "
+	checksum := "checksum: "
 	checksumLength := 64 + len(checksum)
 	if strings.Contains(conf, checksum) {
 		checksum += strings.Split(conf, checksum)[1]

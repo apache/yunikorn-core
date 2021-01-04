@@ -39,9 +39,10 @@ type partitionManager struct {
 }
 
 // Run the manager for the partition.
-// The manager has two tasks:
+// The manager has three tasks:
 // - clean up the managed queues that are empty and removed from the configuration
 // - remove empty unmanaged queues
+// - remove completed applications from the partition
 // When the manager exits the partition is removed from the system and must be cleaned up
 func (manager partitionManager) Run() {
 	if manager.interval == 0 {
@@ -55,6 +56,7 @@ func (manager partitionManager) Run() {
 	for {
 		time.Sleep(manager.interval)
 		runStart := time.Now()
+		manager.pc.cleanupCompletedApps()
 		manager.cleanQueues(manager.pc.root)
 		if manager.stop {
 			break

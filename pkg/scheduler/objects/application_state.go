@@ -35,10 +35,10 @@ const noTransition = "no transition"
 type applicationEvent int
 
 const (
-	runApplication applicationEvent = iota
-	waitApplication
-	rejectApplication
-	completeApplication
+	RunApplication applicationEvent = iota
+	WaitApplication
+	RejectApplication
+	CompleteApplication
 	KillApplication
 )
 
@@ -70,27 +70,27 @@ func NewAppState() *fsm.FSM {
 	return fsm.NewFSM(
 		New.String(), fsm.Events{
 			{
-				Name: rejectApplication.String(),
+				Name: RejectApplication.String(),
 				Src:  []string{New.String()},
 				Dst:  Rejected.String(),
 			}, {
-				Name: runApplication.String(),
+				Name: RunApplication.String(),
 				Src:  []string{New.String()},
 				Dst:  Accepted.String(),
 			}, {
-				Name: runApplication.String(),
+				Name: RunApplication.String(),
 				Src:  []string{Accepted.String()},
 				Dst:  Starting.String(),
 			}, {
-				Name: runApplication.String(),
+				Name: RunApplication.String(),
 				Src:  []string{Running.String(), Starting.String(), Waiting.String()},
 				Dst:  Running.String(),
 			}, {
-				Name: completeApplication.String(),
+				Name: CompleteApplication.String(),
 				Src:  []string{Running.String(), Starting.String(), Waiting.String()},
 				Dst:  Completed.String(),
 			}, {
-				Name: waitApplication.String(),
+				Name: WaitApplication.String(),
 				Src:  []string{Accepted.String(), Running.String(), Starting.String()},
 				Dst:  Waiting.String(),
 			}, {
@@ -114,24 +114,16 @@ func NewAppState() *fsm.FSM {
 				app.OnStateChange(event)
 			},
 			fmt.Sprintf("enter_%s", Starting.String()): func(event *fsm.Event) {
-				if app, ok := event.Args[0].(*Application); ok {
-					app.startingTimer = GetInitializedTimer(event.Args[0].(*Application).startingTimer, startingTimeout, app.timeOutStarting)
-				}
+				event.Args[0].(*Application).SetStateTimer()
 			},
 			fmt.Sprintf("leave_%s", Starting.String()): func(event *fsm.Event) {
-				if app, ok := event.Args[0].(*Application); ok {
-					app.startingTimer = GetClearedTimer(app.startingTimer)
-				}
+				event.Args[0].(*Application).ClearStateTimer()
 			},
 			fmt.Sprintf("enter_%s", Waiting.String()): func(event *fsm.Event) {
-				if app, ok := event.Args[0].(*Application); ok {
-					app.waitingTimer = GetInitializedTimer(app.waitingTimer, waitingTimeout, app.timeOutWaiting)
-				}
+				event.Args[0].(*Application).SetStateTimer()
 			},
 			fmt.Sprintf("leave_%s", Waiting.String()): func(event *fsm.Event) {
-				if app, ok := event.Args[0].(*Application); ok {
-					app.waitingTimer = GetClearedTimer(app.waitingTimer)
-				}
+				event.Args[0].(*Application).ClearStateTimer()
 			},
 			fmt.Sprintf("leave_%s", New.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsAdded()

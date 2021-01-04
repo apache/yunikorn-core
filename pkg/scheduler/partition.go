@@ -1112,3 +1112,11 @@ func (pc *PartitionContext) removeAllocationAsk(appID string, allocationKey stri
 		}
 	}
 }
+
+func (pc *PartitionContext) cleanupCompletedApps() {
+	for _, app := range pc.GetApplications() {
+		if app.IsCompleted() {
+			pc.removeApplication(app.ApplicationID)
+		}
+	}
+}

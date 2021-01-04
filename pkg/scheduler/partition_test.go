@@ -1079,3 +1079,27 @@ func TestUpdateRootQueue(t *testing.T) {
 	assert.Equal(t, partition.GetQueue("root.leaf").CurrentState(), objects.Draining.String(), "leaf queue should have been marked for removal")
 	assert.Equal(t, partition.GetQueue("root.parent").CurrentState(), objects.Draining.String(), "parent queue should have been marked for removal")
 }
+
+func TestCleanupCompletedApps(t *testing.T) {
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	completedApp := newApplication("completed", "default", defQueue)
+	err = completedApp.HandleApplicationEvent(objects.RunApplication)
+	assert.NilError(t, err, "no error expected new to accepted")
+	err = completedApp.HandleApplicationEvent(objects.RunApplication)
+	assert.NilError(t, err, "no error expected accepted to starting")
+	err = completedApp.HandleApplicationEvent(objects.CompleteApplication)
+	assert.NilError(t, err, "no error expected starting to completed")
+
+	newApp := newApplication("running", "default", defQueue)
+	err = partition.AddApplication(completedApp)
+	assert.NilError(t, err, "no error expected while adding the application")
+	err = partition.AddApplication(newApp)
+	assert.NilError(t, err, "no error expected while adding the application")
+
+	assert.Assert(t, len(partition.applications) == 2, "the partition should have 2 apps")
+	partition.cleanupCompletedApps()
+	assert.Assert(t, len(partition.applications) == 1, "the partition should have 1 app")
+	assert.Assert(t, partition.getApplication(completedApp.ApplicationID) == nil, "completed application should have been deleted")
+	assert.Assert(t, partition.getApplication(newApp.ApplicationID) != nil, "new application should still be in the partition")
+}

@@ -42,7 +42,7 @@ import (
 var (
 	reservationDelay = 2 * time.Second
 	startingTimeout  = 5 * time.Minute
-	waitingTimeout   = 5 * time.Minute
+	waitingTimeout   = 30 * time.Second
 )
 
 type Application struct {
@@ -62,8 +62,7 @@ type Application struct {
 	allocatedResource *resources.Resource    // total allocated resources
 	allocations       map[string]*Allocation // list of all allocations
 	stateMachine      *fsm.FSM               // application state machine
-	startingTimer     *time.Timer            // timer for state time
-	waitingTimer      *time.Timer            // timer for state time
+	stateTimer        *time.Timer            // timer for state time
 
 	rmEventHandler handler.EventHandler
 	rmID           string
@@ -137,6 +136,10 @@ func (sa *Application) IsWaiting() bool {
 	return sa.stateMachine.Is(Waiting.String())
 }
 
+func (sa *Application) IsCompleted() bool {
+	return sa.stateMachine.Is(Completed.String())
+}
+
 // Handle the state event for the application.
 // The state machine handles the locking.
 func (sa *Application) HandleApplicationEvent(event applicationEvent) error {
@@ -171,21 +174,24 @@ func (sa *Application) OnStateChange(event *fsm.Event) {
 // Set the starting timer to make sure the application will not get stuck in a starting state too long.
 // This prevents an app from not progressing to Running when it only has 1 allocation.
 // Called when entering the Starting state by the state machine.
-//nolint: staticcheck
-func GetInitializedTimer(timer *time.Timer, timeout time.Duration, timeoutFunction func()) *time.Timer {
+func (sa *Application) SetStateTimer() {
 	log.Logger().Debug("Application state timer initiated",
-		zap.Duration("timeout", timeout))
-	timer = time.AfterFunc(timeout, timeoutFunction)
-	return timer
+		zap.String("appID", sa.ApplicationID),
+		zap.String("state", sa.stateMachine.Current()),
+		zap.Duration("timeout", startingTimeout))
+	if sa.IsWaiting() {
+		sa.stateTimer = time.AfterFunc(waitingTimeout, sa.timeOutWaiting)
+	} else {
+		sa.stateTimer = time.AfterFunc(startingTimeout, sa.timeOutStarting)
+	}
 }
 
 // Clear the starting timer. If the application has progressed out of the starting state we need to stop the
 // timer and clean up.
 // Called when leaving the Starting state by the state machine.
-func GetClearedTimer(timer *time.Timer) *time.Timer {
-	timer.Stop()
-	timer = nil
-	return timer
+func (sa *Application) ClearStateTimer() {
+	sa.stateTimer.Stop()
+	sa.stateTimer = nil
 }
 
 // In case of state aware scheduling we do not want to get stuck in starting as we might have an application that only
@@ -195,23 +201,23 @@ func (sa *Application) timeOutStarting() {
 	// make sure we are still in the right state
 	// we could have been killed or something might have happened while waiting for a lock
 	if sa.IsStarting() {
-		log.Logger().Warn("Application in starting state timed out: auto progress",
+		log.Logger().Debug("Application in starting state timed out: auto progress",
 			zap.String("applicationID", sa.ApplicationID),
 			zap.String("state", sa.stateMachine.Current()))
 
 		//nolint: errcheck
-		_ = sa.HandleApplicationEvent(runApplication)
+		_ = sa.HandleApplicationEvent(RunApplication)
 	}
 }
 
 func (sa *Application) timeOutWaiting() {
 	if sa.IsWaiting() {
-		log.Logger().Warn("Application in waiting state timed out: marking it as completed",
+		log.Logger().Debug("Application in waiting state timed out: marking it as completed",
 			zap.String("applicationID", sa.ApplicationID),
 			zap.String("state", sa.stateMachine.Current()))
 
 		//nolint: errcheck
-		_ = sa.HandleApplicationEvent(completeApplication)
+		_ = sa.HandleApplicationEvent(CompleteApplication)
 	}
 }
 
@@ -311,7 +317,7 @@ func (sa *Application) RemoveAllocationAsk(allocKey string) int {
 	// Change the state to waiting.
 	// When the resource trackers are zero we should not expect anything to come in later.
 	if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) {
-		if err := sa.HandleApplicationEvent(waitApplication); err != nil {
+		if err := sa.HandleApplicationEvent(WaitApplication); err != nil {
 			log.Logger().Warn("Application state not changed to Waiting while updating ask(s)",
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))
@@ -350,7 +356,7 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 	// 2) all asks and allocation have been removed: state is Waiting
 	// Move the state and get it scheduling (again)
 	if sa.stateMachine.Is(New.String()) || sa.stateMachine.Is(Waiting.String()) {
-		if err := sa.HandleApplicationEvent(runApplication); err != nil {
+		if err := sa.HandleApplicationEvent(RunApplication); err != nil {
 			log.Logger().Debug("Application state change failed while adding new ask",
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))
@@ -869,7 +875,7 @@ func (sa *Application) AddAllocation(info *Allocation) {
 func (sa *Application) addAllocationInternal(info *Allocation) {
 	// progress the state based on where we are, we should never fail in this case
 	// keep track of a failure in log.
-	if err := sa.HandleApplicationEvent(runApplication); err != nil {
+	if err := sa.HandleApplicationEvent(RunApplication); err != nil {
 		log.Logger().Error("Unexpected app state change failure while adding allocation",
 			zap.String("currentState", sa.stateMachine.Current()),
 			zap.Error(err))
@@ -892,7 +898,7 @@ func (sa *Application) RemoveAllocation(uuid string) *Allocation {
 		delete(sa.allocations, uuid)
 		// When the resource trackers are zero we should not expect anything to come in later.
 		if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) {
-			if err := sa.HandleApplicationEvent(waitApplication); err != nil {
+			if err := sa.HandleApplicationEvent(WaitApplication); err != nil {
 				log.Logger().Warn("Application state not changed to Waiting while removing some allocation(s)",
 					zap.String("currentState", sa.CurrentState()),
 					zap.Error(err))
@@ -919,7 +925,7 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 	sa.allocations = make(map[string]*Allocation)
 	// When the resource trackers are zero we should not expect anything to come in later.
 	if resources.IsZero(sa.pending) {
-		if err := sa.HandleApplicationEvent(waitApplication); err != nil {
+		if err := sa.HandleApplicationEvent(WaitApplication); err != nil {
 			log.Logger().Warn("Application state not changed to Waiting while removing all allocations",
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))

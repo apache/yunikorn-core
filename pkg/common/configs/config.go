@@ -216,7 +216,7 @@ func GetConfigurationString(requestBytes []byte) string {
 			checksum = checksum[:checksumLength]
 		}
 	}
-	return strings.Replace(conf, checksum, "", -1)
+	return strings.ReplaceAll(conf, checksum, "")
 }
 
 // Default loader, can be updated by tests

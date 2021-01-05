@@ -52,6 +52,14 @@ func RegisterSchedulerPlugin(plugin interface{}) {
 		log.Logger().Info("register scheduler plugin: ConfigMapPlugin")
 		plugins.configPlugin = t
 	}
+	if t, ok := plugin.(QueueRequestManagerPlugin); ok {
+		log.Logger().Info("register scheduler plugin: ConfigMapPlugin")
+		plugins.queueRequestManagerPlugin = t
+	}
+	if t, ok := plugin.(RequestsPlugin); ok {
+		log.Logger().Info("register scheduler plugin: ConfigMapPlugin")
+		plugins.requestsPlugin = t
+	}
 }
 
 func GetPredicatesPlugin() PredicatesPlugin {
@@ -87,4 +95,18 @@ func GetConfigPlugin() ConfigurationPlugin {
 	defer plugins.RUnlock()
 
 	return plugins.configPlugin
+}
+
+func GetQueueRequestManagerPlugin() QueueRequestManagerPlugin {
+	plugins.RLock()
+	defer plugins.RUnlock()
+
+	return plugins.queueRequestManagerPlugin
+}
+
+func GetRequestsPlugin() RequestsPlugin {
+	plugins.RLock()
+	defer plugins.RUnlock()
+
+	return plugins.requestsPlugin
 }

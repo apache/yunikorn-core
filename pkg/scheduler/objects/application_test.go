@@ -19,7 +19,6 @@
 package objects
 
 import (
-	"strconv"
 	"testing"
 	"time"
 
@@ -404,8 +403,8 @@ func TestRemoveAllocAsk(t *testing.T) {
 	ask = newAllocationAskRepeat("alloc-2", appID1, res, 2)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask 2 should have been added to app")
-	if len(app.requests) != 2 {
-		t.Fatalf("missing asks from app expected 2 got %d", len(app.requests))
+	if app.requests.Size() != 2 {
+		t.Fatalf("missing asks from app expected 2 got %d", app.requests.Size())
 	}
 	expected := resources.Multiply(res, 4)
 	if !resources.Equals(expected, app.GetPendingResource()) {
@@ -425,45 +424,11 @@ func TestRemoveAllocAsk(t *testing.T) {
 		t.Errorf("ask should have been removed from app, err %v, expected delta %v but was: %v, (reserved released = %d)", err, expected, delta, reservedAsks)
 	}
 	reservedAsks = app.RemoveAllocationAsk("")
-	if len(app.requests) != 0 || reservedAsks != 0 {
-		t.Fatalf("asks not removed as expected 0 got %d, (reserved released = %d)", len(app.requests), reservedAsks)
+	if app.requests.Size() != 0 || reservedAsks != 0 {
+		t.Fatalf("asks not removed as expected 0 got %d, (reserved released = %d)", app.requests.Size(), reservedAsks)
 	}
 	if !resources.IsZero(app.GetPendingResource()) {
 		t.Errorf("pending resource not updated correctly, expected zero but was: %v", app.GetPendingResource())
-	}
-}
-
-// This test must not test the sorter that is underlying.
-// It tests the Application specific parts of the code only.
-func TestSortRequests(t *testing.T) {
-	app := newApplication(appID1, "default", "root.unknown")
-	if app == nil || app.ApplicationID != appID1 {
-		t.Fatalf("app create failed which should not have %v", app)
-	}
-	if app.sortedRequests != nil {
-		t.Fatalf("new app create should not have sorted requests: %v", app)
-	}
-	app.sortRequests(true)
-	if app.sortedRequests != nil {
-		t.Fatalf("after sort call (no pending resources) list must be nil: %v", app.sortedRequests)
-	}
-
-	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
-	for i := 1; i < 4; i++ {
-		num := strconv.Itoa(i)
-		ask := newAllocationAsk("ask-"+num, appID1, res)
-		ask.priority = int32(i)
-		app.requests[ask.AllocationKey] = ask
-	}
-	app.sortRequests(true)
-	if len(app.sortedRequests) != 3 {
-		t.Fatalf("app sorted requests not correct: %v", app.sortedRequests)
-	}
-	allocKey := app.sortedRequests[0].AllocationKey
-	delete(app.requests, allocKey)
-	app.sortRequests(true)
-	if len(app.sortedRequests) != 2 {
-		t.Fatalf("app sorted requests not correct after removal: %v", app.sortedRequests)
 	}
 }
 

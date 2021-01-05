@@ -420,7 +420,7 @@ func TestPreemptingCalc(t *testing.T) {
 }
 
 // This test must not test the sorter that is underlying.
-// It tests the queue specific parts of the code only.
+// It tests the DefaultQueueRequestManager specific parts of the code only.
 func TestSortApplications(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)
@@ -429,38 +429,82 @@ func TestSortApplications(t *testing.T) {
 	// empty parent queue
 	parent, err = createManagedQueue(root, "parent", true, nil)
 	assert.NilError(t, err, "failed to create parent queue: %v")
-	if apps := parent.sortApplications(); apps != nil {
-		t.Errorf("parent queue should not return sorted apps: %v", apps)
-	}
+	appReqIt := parent.GetQueueRequestManager().SortForAllocation()
+	assert.Assert(t, !appReqIt.HasNext() && appReqIt.Size() == 0, "parent queue should return no app")
 
 	// empty leaf queue
 	leaf, err = createManagedQueue(parent, "leaf", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
-	if len(leaf.sortApplications()) != 0 {
-		t.Errorf("empty queue should return no app from sort: %v", leaf)
-	}
+	appReqIt = leaf.GetQueueRequestManager().SortForAllocation()
+	assert.Assert(t, !appReqIt.HasNext() && appReqIt.Size() == 0, "empty queue should return no app")
+
 	// new app does not have pending res, does not get returned
 	app := newApplication(appID1, "default", leaf.QueuePath)
 	app.queue = leaf
 	leaf.AddApplication(app)
-	if len(leaf.sortApplications()) != 0 {
-		t.Errorf("app without ask should not be in sorted apps: %v", app)
-	}
+	appReqIt = leaf.GetQueueRequestManager().SortForAllocation()
+	assert.Assert(t, !appReqIt.HasNext() && appReqIt.Size() == 0, "app without ask should not be in sorted apps")
+
 	var res *resources.Resource
 	res, err = resources.NewResourceFromConf(map[string]string{"first": "1"})
 	assert.NilError(t, err, "failed to create basic resource")
 	// add an ask app must be returned
 	err = app.AddAllocationAsk(newAllocationAsk("alloc-1", appID1, res))
 	assert.NilError(t, err, "failed to add allocation ask")
-	sortedApp := leaf.sortApplications()
-	if len(sortedApp) != 1 || sortedApp[0].ApplicationID != appID1 {
-		t.Errorf("sorted application is missing expected app: %v", sortedApp)
-	}
+	appReqIt = leaf.GetQueueRequestManager().SortForAllocation()
+	assert.Assert(t, appReqIt.HasNext() && appReqIt.Size() == 1, "sorted application is missing expected app")
+	checkApp, reqIt := appReqIt.Next()
+	assert.Assert(t, checkApp.GetApplicationID() == appID1, "sorted application is missing expected app")
+	assert.Assert(t, reqIt.HasNext() && reqIt.Size() == 1, "sorted application is missing expected request")
+
 	// set 0 repeat
 	_, err = app.updateAskRepeat("alloc-1", -1)
-	if err != nil || len(leaf.sortApplications()) != 0 {
-		t.Errorf("app with ask but 0 pending resources should not be in sorted apps: %v (err = %v)", app, err)
+	if err != nil {
+		t.Errorf("failed to update ask repeat: %v (err = %v)", app, err)
 	}
+	appReqIt = leaf.GetQueueRequestManager().SortForAllocation()
+	assert.Assert(t, !appReqIt.HasNext() && appReqIt.Size() == 0, "app with ask but 0 pending resources should not be in sorted apps")
+}
+
+// This test must not test the sorter that is underlying.
+// It tests the DefaultQueueRequestManager specific parts of the code only.
+func TestSortRequests(t *testing.T) {
+	// create the root and left queue
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	var leaf *Queue
+	leaf, err = createManagedQueue(root, "leaf", true, nil)
+	assert.NilError(t, err, "failed to create leaf queue: %v", err)
+	// create an application
+	app := newApplication(appID1, "default", leaf.QueuePath)
+	if app == nil || app.ApplicationID != appID1 {
+		t.Fatalf("app create failed which should not have %v", app)
+	}
+	app.queue = leaf
+	leaf.AddApplication(app)
+	// new app does not have pending res, does not get returned
+	appReqIt := leaf.GetQueueRequestManager().SortForAllocation()
+	assert.Assert(t, !appReqIt.HasNext() && appReqIt.Size() == 0, "app without ask should not be in sorted apps")
+	// new app has 3 asks, should be returned
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	for i := 1; i < 4; i++ {
+		num := strconv.Itoa(i)
+		ask := newAllocationAsk("ask-"+num, appID1, res)
+		ask.priority = int32(i)
+		app.AddAllocationAsk(ask)
+	}
+	appReqIt = leaf.GetQueueRequestManager().SortForAllocation()
+	assert.Assert(t, appReqIt.HasNext() && appReqIt.Size() == 1, "sorted application is missing expected app")
+	checkApp, reqIt := appReqIt.Next()
+	assert.Assert(t, checkApp.GetApplicationID() == appID1, "sorted application is missing expected app")
+	assert.Assert(t, reqIt.Size() == 3, "size of pending requests is not correct, expected %v, actual %v", 3, reqIt.Size())
+	// remove first ask, should have 2 asks left
+	allocKey := reqIt.Next().GetAllocationKey()
+	app.requests.RemoveRequest(allocKey)
+	appReqIt = leaf.GetQueueRequestManager().SortForAllocation()
+	checkApp, reqIt = appReqIt.Next()
+	assert.Assert(t, checkApp.GetApplicationID() == appID1, "sorted application is missing expected app")
+	assert.Assert(t, reqIt.Size() == 2, "size of pending requests is not correct, expected %v, actual %v", 2, reqIt.Size())
 }
 
 // This test must not test the sorter that is underlying.

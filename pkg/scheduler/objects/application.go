@@ -25,6 +25,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/plugins/default_plugins_impl"
+
+	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
+
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
@@ -51,17 +55,16 @@ type Application struct {
 	SubmissionTime time.Time
 
 	// Private fields need protection
-	queue             *Queue                    // queue the application is running in
-	pending           *resources.Resource       // pending resources from asks for the app
-	reservations      map[string]*reservation   // a map of reservations
-	requests          map[string]*AllocationAsk // a map of asks
-	sortedRequests    []*AllocationAsk
-	user              security.UserGroup     // owner of the application
-	tags              map[string]string      // application tags used in scheduling
-	allocatedResource *resources.Resource    // total allocated resources
-	allocations       map[string]*Allocation // list of all allocations
-	stateMachine      *fsm.FSM               // application state machine
-	stateTimer        *time.Timer            // timer for state time
+	queue             *Queue                  // queue the application is running in
+	pending           *resources.Resource     // pending resources from asks for the app
+	reservations      map[string]*reservation // a map of reservations
+	requests          interfaces.Requests     // a plugin intended for managing all requests
+	user              security.UserGroup      // owner of the application
+	tags              map[string]string       // application tags used in scheduling
+	allocatedResource *resources.Resource     // total allocated resources
+	allocations       map[string]*Allocation  // list of all allocations
+	stateMachine      *fsm.FSM                // application state machine
+	stateTimer        *time.Timer             // timer for state time
 
 	rmEventHandler handler.EventHandler
 	rmID           string
@@ -79,7 +82,7 @@ func newBlankApplication(appID, partition, queueName string, ugi security.UserGr
 		tags:              tags,
 		pending:           resources.NewResource(),
 		allocatedResource: resources.NewResource(),
-		requests:          make(map[string]*AllocationAsk),
+		requests:          newRequests(),
 		reservations:      make(map[string]*reservation),
 		allocations:       make(map[string]*Allocation),
 		stateMachine:      NewAppState(),
@@ -217,7 +220,10 @@ func (sa *Application) GetReservations() []string {
 func (sa *Application) GetSchedulingAllocationAsk(allocationKey string) *AllocationAsk {
 	sa.RLock()
 	defer sa.RUnlock()
-	return sa.requests[allocationKey]
+	if ask := sa.requests.GetRequest(allocationKey); ask != nil {
+		return ask.(*AllocationAsk)
+	}
+	return nil
 }
 
 // Return the allocated resources for this application
@@ -241,7 +247,7 @@ func (sa *Application) RemoveAllocationAsk(allocKey string) int {
 	sa.Lock()
 	defer sa.Unlock()
 	// shortcut no need to do anything
-	if len(sa.requests) == 0 {
+	if sa.requests.Size() == 0 {
 		return 0
 	}
 	var deltaPendingResource *resources.Resource = nil
@@ -265,7 +271,7 @@ func (sa *Application) RemoveAllocationAsk(allocKey string) int {
 		// Cleanup total pending resource
 		deltaPendingResource = sa.pending
 		sa.pending = resources.NewResource()
-		sa.requests = make(map[string]*AllocationAsk)
+		sa.requests.Reset()
 	} else {
 		// cleanup the reservation for this allocation
 		for _, key := range sa.GetAskReservations(allocKey) {
@@ -282,10 +288,10 @@ func (sa *Application) RemoveAllocationAsk(allocKey string) int {
 			sa.queue.UnReserve(sa.ApplicationID, releases)
 			toRelease += releases
 		}
-		if ask := sa.requests[allocKey]; ask != nil {
-			deltaPendingResource = resources.MultiplyBy(ask.AllocatedResource, float64(ask.GetPendingAskRepeat()))
+		if ask := sa.requests.RemoveRequest(allocKey); ask != nil {
+			deltaPendingResource = resources.MultiplyBy(ask.(*AllocationAsk).AllocatedResource,
+				float64(ask.(*AllocationAsk).GetPendingAskRepeat()))
 			sa.pending = resources.Sub(sa.pending, deltaPendingResource)
-			delete(sa.requests, allocKey)
 		}
 	}
 	// clean up the queue pending resources
@@ -326,8 +332,9 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 	delta := resources.Multiply(ask.AllocatedResource, int64(ask.GetPendingAskRepeat()))
 
 	var oldAskResource *resources.Resource = nil
-	if oldAsk := sa.requests[ask.AllocationKey]; oldAsk != nil {
-		oldAskResource = resources.Multiply(oldAsk.AllocatedResource, int64(oldAsk.GetPendingAskRepeat()))
+	if oldAsk := sa.requests.AddRequest(ask); oldAsk != nil {
+		oldAskResource = resources.Multiply(oldAsk.(*AllocationAsk).AllocatedResource,
+			int64(oldAsk.(*AllocationAsk).GetPendingAskRepeat()))
 	}
 
 	// Check if we need to change state based on the ask added, there are two cases:
@@ -341,7 +348,6 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 				zap.Error(err))
 		}
 	}
-	sa.requests[ask.AllocationKey] = ask
 
 	// Update total pending resource
 	delta.SubFrom(oldAskResource)
@@ -366,14 +372,14 @@ func (sa *Application) RecoverAllocationAsk(ask *AllocationAsk) {
 		return
 	}
 	ask.setQueue(sa.queue.QueuePath)
-	sa.requests[ask.AllocationKey] = ask
+	sa.requests.AddRequest(ask)
 }
 
 func (sa *Application) updateAskRepeat(allocKey string, delta int32) (*resources.Resource, error) {
 	sa.Lock()
 	defer sa.Unlock()
-	if ask := sa.requests[allocKey]; ask != nil {
-		return sa.updateAskRepeatInternal(ask, delta)
+	if ask := sa.requests.GetRequest(allocKey); ask != nil {
+		return sa.updateAskRepeatInternal(ask.(*AllocationAsk), delta)
 	}
 	return nil, fmt.Errorf("failed to locate ask with key %s", allocKey)
 }
@@ -431,7 +437,7 @@ func (sa *Application) Reserve(node *Node, ask *AllocationAsk) error {
 		return fmt.Errorf("reservation creation failed node or ask are nil on appID %s", sa.ApplicationID)
 	}
 	allocKey := ask.AllocationKey
-	if sa.requests[allocKey] == nil {
+	if sa.requests.GetRequest(allocKey) == nil {
 		log.Logger().Debug("ask is not registered to this app",
 			zap.String("app", sa.ApplicationID),
 			zap.String("allocKey", allocKey))
@@ -534,30 +540,18 @@ func (sa *Application) canAskReserve(ask *AllocationAsk) bool {
 	return pending > len(resNumber)
 }
 
-// Sort the request for the app in order based on the priority of the request.
-// The sorted list only contains candidates that have an outstanding repeat.
-// No locking must be called while holding the lock
-func (sa *Application) sortRequests(ascending bool) {
-	sa.sortedRequests = nil
-	for _, request := range sa.requests {
-		if request.GetPendingAskRepeat() == 0 {
-			continue
-		}
-		sa.sortedRequests = append(sa.sortedRequests, request)
-	}
-	// we might not have any requests
-	if len(sa.sortedRequests) > 0 {
-		sortAskByPriority(sa.sortedRequests, ascending)
-	}
-}
-
-func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, total *[]*AllocationAsk) {
+func (sa *Application) GetRequests(filter func(request interfaces.Request) bool) []interfaces.Request {
 	sa.RLock()
 	defer sa.RUnlock()
+	return sa.requests.GetRequests(filter)
+}
 
-	// make sure the request are sorted
-	sa.sortRequests(false)
-	for _, request := range sa.sortedRequests {
+func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, total *[]*AllocationAsk,
+	requestIt interfaces.RequestIterator) {
+	sa.RLock()
+	defer sa.RUnlock()
+	for requestIt.HasNext() {
+		request := requestIt.Next().(*AllocationAsk)
 		if headRoom == nil || resources.FitIn(headRoom, request.AllocatedResource) {
 			// if headroom is still enough for the resources
 			*total = append(*total, request)
@@ -569,13 +563,13 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, tota
 }
 
 // Try a regular allocation of the pending requests
-func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator func() interfaces.NodeIterator) *Allocation {
+func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator func() interfaces.NodeIterator,
+	requestIt interfaces.RequestIterator) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
-	// make sure the request are sorted
-	sa.sortRequests(false)
-	// get all the requests from the app sorted in order
-	for _, request := range sa.sortedRequests {
+	// get all the sorted requests from the app sorted in order
+	for requestIt.HasNext() {
+		request := requestIt.Next().(*AllocationAsk)
 		// resource must fit in headroom otherwise skip the request
 		if !resources.FitIn(headRoom, request.AllocatedResource) {
 			// post scheduling events via the event plugin
@@ -610,9 +604,9 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 	defer sa.Unlock()
 	// process all outstanding reservations and pick the first one that fits
 	for _, reserve := range sa.reservations {
-		ask := sa.requests[reserve.askKey]
+		ask := sa.requests.GetRequest(reserve.askKey)
 		// sanity check and cleanup if needed
-		if ask == nil || ask.GetPendingAskRepeat() == 0 {
+		if ask == nil || ask.(*AllocationAsk).GetPendingAskRepeat() == 0 {
 			var unreserveAsk *AllocationAsk
 			// if the ask was not found we need to construct one to unreserve
 			if ask == nil {
@@ -621,18 +615,18 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 					ApplicationID: sa.ApplicationID,
 				}
 			} else {
-				unreserveAsk = ask
+				unreserveAsk = ask.(*AllocationAsk)
 			}
 			// remove the reservation as this should not be reserved
 			alloc := newReservedAllocation(Unreserved, reserve.nodeID, unreserveAsk)
 			return alloc
 		}
 		// check if this fits in the queue's head room
-		if !resources.FitIn(headRoom, ask.AllocatedResource) {
+		if !resources.FitIn(headRoom, ask.(*AllocationAsk).AllocatedResource) {
 			continue
 		}
 		// check allocation possibility
-		alloc := sa.tryNode(reserve.node, ask)
+		alloc := sa.tryNode(reserve.node, ask.(*AllocationAsk))
 		// allocation worked fix the result and return
 		if alloc != nil {
 			alloc.Result = AllocatedReserved
@@ -813,6 +807,14 @@ func (sa *Application) GetQueue() *Queue {
 	return sa.queue
 }
 
+func (sa *Application) GetSubmissionTime() time.Time {
+	return sa.SubmissionTime
+}
+
+func (sa *Application) GetApplicationID() string {
+	return sa.ApplicationID
+}
+
 // Set the leaf queue the application runs in. The queue will be created when the app is added to the partition.
 // The queue name is set to what the placement rule returned.
 func (sa *Application) SetQueueName(queuePath string) {
@@ -935,4 +937,12 @@ func (sa *Application) GetTag(tag string) string {
 		}
 	}
 	return tagVal
+}
+
+func newRequests() interfaces.Requests {
+	plugin := plugins.GetRequestsPlugin()
+	if plugin == nil {
+		plugin = default_plugins_impl.DefaultRequestsPluginInstance
+	}
+	return plugin.NewRequests()
 }

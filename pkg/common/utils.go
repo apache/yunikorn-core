@@ -94,3 +94,22 @@ func GetBoolEnvVar(key string, defaultVal bool) bool {
 	}
 	return defaultVal
 }
+
+// Convert a SI execution timeout, given in milliseconds into a time.Duration object.
+// This will always return a positive value or zero (0).
+// A negative timeout will be converted into zero (0), which means never timeout.
+// The conversion handles overflows in the conversion by setting it to zero (0) also.
+func ConvertSITimeout(millis int64) time.Duration {
+	// handle negative and 0 value (no timeout)
+	if millis <= 0 {
+		return time.Duration(0)
+	}
+	// just handle max wrapping, no need to handle min wrapping
+	result := millis * int64(time.Millisecond)
+	if result/millis != int64(time.Millisecond) {
+		log.Logger().Warn("Timeout conversion wrapped: returned no timeout",
+			zap.Int64("configured timeout in ms", millis))
+		return time.Duration(0)
+	}
+	return time.Duration(result)
+}

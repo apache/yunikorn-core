@@ -762,6 +762,65 @@ func TestGetMaxUsage(t *testing.T) {
 	}
 }
 
+func TestGetMaxQueueSet(t *testing.T) {
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	var nilRes *resources.Resource
+	assert.Equal(t, root.GetMaxQueueSet(), nilRes, "root queue should always return max set nil")
+
+	var parent *Queue
+	// empty parent queue
+	parent, err = createManagedQueue(root, "parent", true, nil)
+	assert.NilError(t, err, "failed to create parent queue")
+	assert.Equal(t, parent.GetMaxQueueSet(), nilRes, "parent queue should not have max")
+
+	// set the max on the root: recreate the structure to pick up changes
+	var res *resources.Resource
+	resMap := map[string]string{"first": "10", "second": "10"}
+	res, err = resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err, "failed to create resource")
+	root, err = createRootQueue(resMap)
+	assert.NilError(t, err, "failed to create root queue with limit set")
+	assert.Equal(t, root.GetMaxQueueSet(), nilRes, "root queue should always return max set nil")
+	parent, err = createManagedQueue(root, "parent", true, nil)
+	assert.NilError(t, err, "failed to create parent queue")
+	assert.Equal(t, parent.GetMaxQueueSet(), nilRes, "parent queue should not have max even with root set")
+
+	// leaf queue with limit
+	// parent has no limit and root is ignored: expect the leaf limit returned
+	var leaf *Queue
+	resMap = map[string]string{"first": "5", "second": "5"}
+	leaf, err = createManagedQueue(parent, "leaf", false, resMap)
+	assert.NilError(t, err, "failed to create leaf queue")
+	res, err = resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err, "failed to create resource")
+	maxSet := leaf.GetMaxQueueSet()
+	if !resources.Equals(res, maxSet) {
+		t.Errorf("leaf queue should have max set expected %v, got: %v", res, maxSet)
+	}
+
+	// replace parent with one with limit on multiple resource
+	resMap = map[string]string{"second": "5", "third": "2"}
+	parent, err = createManagedQueue(root, "parent2", true, resMap)
+	assert.NilError(t, err, "failed to create parent2 queue")
+	maxSet = parent.GetMaxQueueSet()
+	res, err = resources.NewResourceFromConf(resMap)
+	if err != nil || !resources.Equals(res, maxSet) {
+		t.Errorf("parent2 queue should have max exclusing root expected %v, got: %v (err %v)", res, maxSet, err)
+	}
+	// a leaf with max set on different resource than parent
+	// parent has limit and root is ignored: expect the merged parent and leaf to be returned (0 for missing on either)
+	resMap = map[string]string{"first": "5", "second": "10"}
+	leaf, err = createManagedQueue(parent, "leaf2", false, resMap)
+	assert.NilError(t, err, "failed to create leaf2 queue")
+	maxSet = leaf.GetMaxQueueSet()
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "0", "second": "5", "third": "0"})
+	if err != nil || !resources.Equals(res, maxSet) {
+		t.Errorf("leaf2 queue should have reset merged max set expected %v, got: %v (err %v)", res, maxSet, err)
+	}
+}
+
 func TestReserveApp(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)
@@ -1180,4 +1239,32 @@ func compareQueueInfoWithDAO(t *testing.T, queue *Queue, dao dao.QueueDAOInfo) {
 			assert.Equal(t, v, dao.Properties[k])
 		}
 	}
+}
+
+func TestSupportTaskGroup(t *testing.T) {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "failed to create basic root queue: %v", err)
+	assert.Assert(t, !root.SupportTaskGroup(), "root queue should not support task group (parent)")
+
+	// parent with sort policy set
+	properties := map[string]string{configs.ApplicationSortPolicy: "fifo"}
+	var parent *Queue
+	parent, err = createManagedQueueWithProps(root, "parent", true, nil, properties)
+	assert.NilError(t, err, "failed to create queue: %v", err)
+	assert.Assert(t, !parent.SupportTaskGroup(), "parent queue (FIFO policy) should not support task group")
+
+	var leaf *Queue
+	leaf, err = createManagedQueueWithProps(parent, "leaf1", false, nil, properties)
+	assert.NilError(t, err, "failed to create queue: %v", err)
+	assert.Assert(t, leaf.SupportTaskGroup(), "leaf queue (FIFO policy) should support task group")
+
+	properties = map[string]string{configs.ApplicationSortPolicy: "StateAware"}
+	leaf, err = createManagedQueueWithProps(parent, "leaf2", false, nil, properties)
+	assert.NilError(t, err, "failed to create queue: %v", err)
+	assert.Assert(t, leaf.SupportTaskGroup(), "leaf queue (StateAware policy) should support task group")
+
+	properties = map[string]string{configs.ApplicationSortPolicy: "fair"}
+	leaf, err = createManagedQueueWithProps(parent, "leaf3", false, nil, properties)
+	assert.NilError(t, err, "failed to create queue: %v", err)
+	assert.Assert(t, !leaf.SupportTaskGroup(), "leaf queue (FAIR policy) should not support task group")
 }

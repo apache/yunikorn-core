@@ -111,13 +111,23 @@ func (cc *ClusterContext) schedule() {
 		if psc.isStopped() {
 			continue
 		}
-		// try reservations first
-		alloc := psc.tryReservedAllocate()
-		// nothing reserved that can be allocated try normal allocate
+		// placeholder replacement first
+		alloc := psc.tryPlaceholderAllocate()
+		// try reservations second
 		if alloc == nil {
-			alloc = psc.tryAllocate()
+			alloc = psc.tryReservedAllocate()
+			// nothing reserved that can be allocated try normal allocate
+			if alloc == nil {
+				alloc = psc.tryAllocate()
+			}
 		}
 		if alloc != nil {
+			if alloc.Result == objects.Replaced {
+				// communicate the removal to the RM
+				cc.notifyRMAllocationReleased(psc.RmID, alloc.Releases, si.AllocationRelease_PLACEHOLDER_REPLACED, "replacing UUID: "+alloc.UUID)
+				// only communicate the release rest happens on shim callback
+				continue
+			}
 			// TODO: The alloc is passed to the RM twice why do we need event + callback?
 			// See YUNIKORN-462, there are two separate communications for the same allocation
 			// between the core and the shim they should be merged into one communication.
@@ -448,6 +458,7 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 			continue
 		}
 		// convert and resolve the user: cache can be set per partition
+		// need to do this before we create the application
 		ugi, err := partition.convertUGI(app.Ugi)
 		if err != nil {
 			rejectedApps = append(rejectedApps, &si.RejectedApplication{
@@ -457,7 +468,7 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 			continue
 		}
 		// create a new app object and add it to the partition (partition logs details)
-		schedApp := objects.NewApplication(app.ApplicationID, app.PartitionName, app.QueueName, ugi, app.Tags, cc.rmEventHandler, request.RmID)
+		schedApp := objects.NewApplication(app, ugi, cc.rmEventHandler, request.RmID)
 		if err = partition.AddApplication(schedApp); err != nil {
 			rejectedApps = append(rejectedApps, &si.RejectedApplication{
 				ApplicationID: app.ApplicationID,
@@ -694,7 +705,8 @@ func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRel
 	for _, toRelease := range releases {
 		partition := cc.GetPartition(toRelease.PartitionName)
 		if partition != nil {
-			allocs := partition.removeAllocation(toRelease.ApplicationID, toRelease.UUID)
+
+			allocs := partition.removeAllocation(toRelease)
 			// notify the RM of the exact released allocations
 			if len(allocs) > 0 {
 				cc.notifyRMAllocationReleased(rmID, allocs, si.AllocationRelease_STOPPED_BY_RM, "allocation remove as per RM request")
@@ -745,6 +757,8 @@ func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, released []*ob
 	}
 	for _, alloc := range released {
 		releaseEvent.ReleasedAllocations = append(releaseEvent.ReleasedAllocations, &si.AllocationRelease{
+			ApplicationID:   alloc.ApplicationID,
+			PartitionName:   alloc.PartitionName,
 			UUID:            alloc.UUID,
 			TerminationType: terminationType,
 			Message:         message,

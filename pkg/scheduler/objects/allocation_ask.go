@@ -23,7 +23,11 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -33,10 +37,13 @@ type AllocationAsk struct {
 	AllocatedResource *resources.Resource
 	ApplicationID     string
 	PartitionName     string
-	QueueName         string
+	QueueName         string // TODO: why do we need this? the app is linked to the queue
 	Tags              map[string]string
 
 	// Private fields need protection
+	taskGroupName    string        // task group this allocation ask belongs to
+	placeholder      bool          // is this a placeholder allocation ask
+	execTimeout      time.Duration // execTimeout for the allocation ask
 	pendingRepeatAsk int32
 	createTime       time.Time // the time this ask was created (used in reservations)
 	priority         int32
@@ -55,8 +62,18 @@ func NewAllocationAsk(ask *si.AllocationAsk) *AllocationAsk {
 		PartitionName:     ask.PartitionName,
 		Tags:              ask.Tags,
 		createTime:        time.Now(),
+		execTimeout:       common.ConvertSITimeout(ask.ExecutionTimeoutMilliSeconds),
+		placeholder:       ask.Placeholder,
+		taskGroupName:     ask.TaskGroupName,
 	}
 	saa.priority = saa.normalizePriority(ask.Priority)
+	// this is a safety check placeholder and task group name must be set as a combo
+	// order is important as task group can be set without placeholder but not the other way around
+	if saa.placeholder && saa.taskGroupName == "" {
+		log.Logger().Debug("Ask cannot be a placeholder without a TaskGroupName",
+			zap.String("SI ask", ask.String()))
+		return nil
+	}
 	return saa
 }
 
@@ -71,7 +88,7 @@ func (aa *AllocationAsk) String() string {
 // Update the pending ask repeat counter with the delta (pos or neg). The pending repeat is always 0 or higher.
 // If the update would cause the repeat to go negative the update is discarded and false is returned.
 // In all other cases the repeat is updated and true is returned.
-func (aa *AllocationAsk) UpdatePendingAskRepeat(delta int32) bool {
+func (aa *AllocationAsk) updatePendingAskRepeat(delta int32) bool {
 	aa.Lock()
 	defer aa.Unlock()
 
@@ -116,4 +133,22 @@ func (aa *AllocationAsk) setPriority(prio int32) {
 	aa.Lock()
 	defer aa.Unlock()
 	aa.priority = prio
+}
+
+func (aa *AllocationAsk) isPlaceholder() bool {
+	aa.Lock()
+	defer aa.Unlock()
+	return aa.placeholder
+}
+
+func (aa *AllocationAsk) getTaskGroup() string {
+	aa.Lock()
+	defer aa.Unlock()
+	return aa.taskGroupName
+}
+
+func (aa *AllocationAsk) getTimeout() time.Duration {
+	aa.Lock()
+	defer aa.Unlock()
+	return aa.execTimeout
 }

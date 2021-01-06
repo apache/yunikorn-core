@@ -21,8 +21,11 @@ package objects
 import (
 	"fmt"
 
+	"go.uber.org/zap"
+
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -34,10 +37,11 @@ const (
 	AllocatedReserved
 	Reserved
 	Unreserved
+	Replaced
 )
 
 func (ar allocationResult) String() string {
-	return [...]string{"None", "Allocated", "AllocatedReserved", "Reserved", "Unreserved"}[ar]
+	return [...]string{"None", "Allocated", "AllocatedReserved", "Reserved", "Unreserved", "Replaced"}[ar]
 }
 
 /* Related to Allocation */
@@ -55,6 +59,9 @@ type Allocation struct {
 	AllocatedResource *resources.Resource
 	Result            allocationResult
 	Releases          []*Allocation
+	placeholder       bool
+	taskGroupName     string
+	released          bool
 }
 
 func NewAllocation(uuid, nodeID string, ask *AllocationAsk) *Allocation {
@@ -69,25 +76,33 @@ func NewAllocation(uuid, nodeID string, ask *AllocationAsk) *Allocation {
 		Tags:              ask.Tags,
 		Priority:          ask.priority,
 		AllocatedResource: ask.AllocatedResource.Clone(),
+		taskGroupName:     ask.taskGroupName,
+		placeholder:       ask.placeholder,
 		Result:            Allocated,
 	}
 }
 
 func newReservedAllocation(result allocationResult, nodeID string, ask *AllocationAsk) *Allocation {
-	return &Allocation{
-		Ask:               ask,
-		AllocationKey:     ask.AllocationKey,
-		ApplicationID:     ask.ApplicationID,
-		NodeID:            nodeID,
-		PartitionName:     common.GetPartitionNameWithoutClusterID(ask.PartitionName),
-		AllocatedResource: ask.AllocatedResource.Clone(),
-		Result:            result,
-	}
+	alloc := NewAllocation("", nodeID, ask)
+	alloc.Result = result
+	return alloc
 }
 
 // Create a new Allocation from a node recovered allocation.
-// Also creates an AllocationAsk to maintain backward compatible behaviour (cache)
+// Also creates an AllocationAsk to maintain backward compatible behaviour
+// This returns a nil Allocation on nil input or errors
 func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
+	if alloc == nil {
+		return nil
+	}
+	// this is a safety check placeholder and task group name must be set as a combo
+	// order is important as task group can be set without placeholder but not the other way around
+	if alloc.Placeholder && alloc.TaskGroupName == "" {
+		log.Logger().Debug("Allocation cannot be a placeholder without a TaskGroupName",
+			zap.String("SI alloc", alloc.String()))
+		return nil
+	}
+
 	ask := &AllocationAsk{
 		AllocationKey:     alloc.AllocationKey,
 		ApplicationID:     alloc.ApplicationID,
@@ -97,6 +112,8 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 		priority:          alloc.Priority.GetPriorityValue(),
 		pendingRepeatAsk:  0,
 		maxAllocations:    1,
+		taskGroupName:     alloc.TaskGroupName,
+		placeholder:       alloc.Placeholder,
 	}
 	return NewAllocation(alloc.UUID, alloc.NodeID, ask)
 }
@@ -115,6 +132,8 @@ func (a *Allocation) NewSIFromAllocation() *si.Allocation {
 		AllocationKey:    a.AllocationKey,
 		UUID:             a.UUID,
 		ResourcePerAlloc: a.AllocatedResource.ToProto(), // needed in tests for restore
+		TaskGroupName:    a.taskGroupName,
+		Placeholder:      a.placeholder,
 	}
 }
 
@@ -127,4 +146,12 @@ func (a *Allocation) String() string {
 		uuid = "N/A"
 	}
 	return fmt.Sprintf("ApplicationID=%s, UUID=%s, AllocationKey=%s, Node=%s, Result=%s", a.ApplicationID, uuid, a.AllocationKey, a.NodeID, a.Result.String())
+}
+
+func (a *Allocation) isPlaceholder() bool {
+	return a.placeholder
+}
+
+func (a *Allocation) getTaskGroup() string {
+	return a.taskGroupName
 }

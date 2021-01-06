@@ -95,7 +95,12 @@ const policyGroup = "default-policy-group"
 
 // simple wrapper to make creating an app easier
 func newApplication(appID, partitionName, queueName, rmID string) *objects.Application {
-	return objects.NewApplication(appID, partitionName, queueName, security.UserGroup{}, nil, nil, rmID)
+	siApp := &si.AddApplicationRequest{
+		ApplicationID: appID,
+		QueueName:     queueName,
+		PartitionName: partitionName,
+	}
+	return objects.NewApplication(siApp, security.UserGroup{}, nil, rmID)
 }
 
 func TestValidateConf(t *testing.T) {

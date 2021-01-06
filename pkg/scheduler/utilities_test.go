@@ -102,7 +102,22 @@ func newConfiguredPartition() (*PartitionContext, error) {
 }
 
 func newApplication(appID, partition, queueName string) *objects.Application {
-	return objects.NewApplication(appID, partition, queueName, security.UserGroup{}, nil, nil, rmID)
+	siApp := &si.AddApplicationRequest{
+		ApplicationID: appID,
+		QueueName:     queueName,
+		PartitionName: partition,
+	}
+	return objects.NewApplication(siApp, security.UserGroup{}, nil, rmID)
+}
+
+func newApplicationTG(appID, partition, queueName string, task *resources.Resource) *objects.Application {
+	siApp := &si.AddApplicationRequest{
+		ApplicationID:  appID,
+		QueueName:      queueName,
+		PartitionName:  partition,
+		PlaceholderAsk: task.ToProto(),
+	}
+	return objects.NewApplication(siApp, security.UserGroup{}, nil, rmID)
 }
 
 func newAllocationAsk(allocKey, appID string, res *resources.Resource) *objects.AllocationAsk {

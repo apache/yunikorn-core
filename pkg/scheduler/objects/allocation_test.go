@@ -49,6 +49,7 @@ func TestNewAlloc(t *testing.T) {
 	}
 	assert.Equal(t, alloc.Result, Allocated, "New alloc should default to result Allocated")
 	assert.Assert(t, resources.Equals(alloc.AllocatedResource, res), "Allocated resource not set correctly")
+	assert.Assert(t, !alloc.isPlaceholder(), "ask should not have been a placeholder")
 	allocStr := alloc.String()
 	expected := "ApplicationID=app-1, UUID=test-uuid, AllocationKey=ask-1, Node=node-1, Result=Allocated"
 	assert.Equal(t, allocStr, expected, "Strings should have been equal")
@@ -100,4 +101,38 @@ func TestSIFromAlloc(t *testing.T) {
 	}
 	allocSI := alloc.NewSIFromAllocation()
 	assert.DeepEqual(t, allocSI, expectedSI)
+}
+
+func TestNewAllocFromNilSI(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("panic on nil SI allocation")
+		}
+	}()
+	var nilAlloc *Allocation
+	alloc := NewAllocationFromSI(nil)
+	assert.Equal(t, alloc, nilAlloc, "Expected nil response from nil SI allocation")
+}
+
+func TestNewAllocFromSI(t *testing.T) {
+	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
+	assert.NilError(t, err, "Resource creation failed")
+	allocSI := &si.Allocation{
+		AllocationKey:    "ask-1",
+		UUID:             "test-uuid",
+		NodeID:           "node-1",
+		ApplicationID:    "app-1",
+		ResourcePerAlloc: res.ToProto(),
+		TaskGroupName:    "",
+		Placeholder:      true,
+	}
+	var nilAlloc *Allocation
+	alloc := NewAllocationFromSI(allocSI)
+	assert.Equal(t, alloc, nilAlloc, "placeholder allocation created without a TaskGroupName")
+	allocSI.TaskGroupName = "testgroup"
+	alloc = NewAllocationFromSI(allocSI)
+	assert.Assert(t, alloc != nilAlloc, "placeholder ask creation failed unexpectedly")
+	assert.Assert(t, alloc.isPlaceholder(), "ask should have been a placeholder")
+	assert.Equal(t, alloc.getTaskGroup(), "testgroup", "TaskGroupName not set as expected")
+
 }

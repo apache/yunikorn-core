@@ -320,6 +320,22 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 		return fmt.Errorf("failed to find queue %s for application %s", queueName, appID)
 	}
 
+	// check only for gang request
+	// - make sure the taskgroup request fits in the maximum set for the queue hierarchy
+	// - task groups should only be used in FIFO or StateAware queues
+	if placeHolder := app.GetPlaceholderAsk(); !resources.IsZero(placeHolder) {
+		// retrieve the max set
+		if maxQueue := queue.GetMaxQueueSet(); maxQueue != nil {
+			if !resources.FitIn(maxQueue, placeHolder) {
+				return fmt.Errorf("queue %s cannot fit application %s: task group request %s larger than max queue allocation", queueName, appID, placeHolder.String())
+			}
+		}
+		// check the queue sorting
+		if !queue.SupportTaskGroup() {
+			return fmt.Errorf("queue %s cannot run application %s with task group request: unsupported sort type", queueName, appID)
+		}
+	}
+
 	// all is OK update the app and partition
 	app.SetQueue(queue)
 	queue.AddApplication(app)
@@ -704,6 +720,57 @@ func (pc *PartitionContext) tryReservedAllocate() *objects.Allocation {
 	return nil
 }
 
+// Try process placeholder for the partition
+// Lock free call this all locks are taken when needed in called functions
+func (pc *PartitionContext) tryPlaceholderAllocate() *objects.Allocation {
+	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
+		// nothing to do just return
+		return nil
+	}
+	// try allocating from the root down
+	alloc := pc.root.TryPlaceholderAllocate(pc.GetAllNodeIterator)
+	if alloc != nil {
+		return pc.replace(alloc)
+	}
+	return nil
+}
+
+// Process the allocation and make the left over changes in the partition.
+func (pc *PartitionContext) replace(alloc *objects.Allocation) *objects.Allocation {
+	pc.Lock()
+	defer pc.Unlock()
+	// partition is locked nothing can change from now on
+	// find the app make sure it still exists
+	appID := alloc.ApplicationID
+	app := pc.applications[appID]
+	if app == nil {
+		log.Logger().Info("Application was removed while allocating",
+			zap.String("appID", appID))
+		return nil
+	}
+	// Safeguard against the unlikely case that we have clashes.
+	// A clash points to entropy issues on the node.
+	if _, found := pc.allocations[alloc.UUID]; found {
+		for {
+			allocationUUID := common.GetNewUUID()
+			log.Logger().Warn("UUID clash, random generator might be lacking entropy",
+				zap.String("uuid", alloc.UUID),
+				zap.String("new UUID", allocationUUID))
+			if pc.allocations[allocationUUID] == nil {
+				alloc.UUID = allocationUUID
+				break
+			}
+		}
+	}
+	pc.allocations[alloc.UUID] = alloc
+	log.Logger().Info("scheduler replace placeholder processed",
+		zap.String("appID", alloc.ApplicationID),
+		zap.String("allocationKey", alloc.AllocationKey),
+		zap.String("placeholder released", alloc.Releases[0].UUID))
+	// pass the release back to the RM via the cluster context
+	return alloc
+}
+
 // Process the allocation and make the left over changes in the partition.
 func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocation {
 	pc.Lock()
@@ -859,6 +926,15 @@ func (pc *PartitionContext) GetNodeIterator() interfaces.NodeIterator {
 	return nil
 }
 
+// Create a node iterator for all nodes based on the policy set for this partition.
+// The iterator is nil if there are no nodes available.
+func (pc *PartitionContext) GetAllNodeIterator() interfaces.NodeIterator {
+	if nodeList := pc.getNodes(false); len(nodeList) != 0 {
+		return pc.getNodeIteratorForPolicy(nodeList)
+	}
+	return nil
+}
+
 // Update the reservation counter for the app
 // Locked version of unReserveCountInternal
 func (pc *PartitionContext) unReserveCount(appID string, asks int) {
@@ -937,6 +1013,10 @@ func (pc *PartitionContext) GetNodes() []*objects.Node {
 //
 // NOTE: this is a lock free call. It should only be called holding the Partition lock.
 func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
+	// cannot do anything with a nil alloc, should only happen if the shim broke things badly
+	if alloc == nil {
+		return nil
+	}
 	if pc.isStopped() {
 		return fmt.Errorf("partition %s is stopped cannot add new allocation %s", pc.Name, alloc.AllocationKey)
 	}
@@ -1045,46 +1125,75 @@ func (pc *PartitionContext) CalculateNodesResourceUsage() map[string][]int {
 
 // Remove the allocation(s) from the app and nodes
 // YUNIKORN-461 proposes to remove this, with a side note that this currently could lead to a deadlock
-func (pc *PartitionContext) removeAllocation(appID string, uuid string) []*objects.Allocation {
+func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) []*objects.Allocation {
+	if release == nil {
+		return nil
+	}
 	pc.Lock()
 	defer pc.Unlock()
+	appID := release.ApplicationID
+	uuid := release.UUID
 	releasedAllocs := make([]*objects.Allocation, 0)
-	var queue *objects.Queue = nil
-	if app := pc.applications[appID]; app != nil {
-		// when uuid not specified, remove all allocations from the app
-		if uuid == "" {
-			log.Logger().Debug("remove all allocations",
-				zap.String("appID", app.ApplicationID))
-			releasedAllocs = append(releasedAllocs, app.RemoveAllAllocations()...)
+	app := pc.applications[appID]
+	// no app nothing to do everything should already be clean
+	if app == nil {
+		return releasedAllocs
+	}
+	// when uuid is not specified, remove all allocations from the app
+	if uuid == "" {
+		log.Logger().Debug("remove all allocations",
+			zap.String("appID", appID))
+		releasedAllocs = append(releasedAllocs, app.RemoveAllAllocations()...)
+	} else {
+		// if we have an uuid the termination type is important
+		if release.TerminationType == si.AllocationRelease_PLACEHOLDER_REPLACED {
+			log.Logger().Debug("replacing placeholder allocation",
+				zap.String("appID", appID),
+				zap.String("allocationId", uuid))
+			if alloc := app.ReplaceAllocation(uuid); alloc != nil {
+				releasedAllocs = append(releasedAllocs, alloc)
+			}
 		} else {
 			log.Logger().Debug("removing allocation",
-				zap.String("appID", app.ApplicationID),
+				zap.String("appID", appID),
 				zap.String("allocationId", uuid))
 			if alloc := app.RemoveAllocation(uuid); alloc != nil {
 				releasedAllocs = append(releasedAllocs, alloc)
 			}
 		}
-		queue = app.GetQueue()
 	}
 	// for each allocations to release, update node.
 	total := resources.NewResource()
-
 	for _, alloc := range releasedAllocs {
-		// remove allocation from node
 		node := pc.nodes[alloc.NodeID]
-		if node == nil || node.RemoveAllocation(alloc.UUID) == nil {
-			log.Logger().Info("node allocation is not found while releasing resources",
+		if node == nil {
+			log.Logger().Info("node not found while releasing allocation",
 				zap.String("appID", appID),
 				zap.String("allocationId", alloc.UUID))
 			continue
 		}
-		// remove from partition
+		if release.TerminationType == si.AllocationRelease_PLACEHOLDER_REPLACED {
+			// replacements could be on a different node but the queue should not change
+			replace := alloc.Releases[0]
+			if replace.NodeID == alloc.NodeID {
+				// this is the real swap on the node
+				node.ReplaceAllocation(alloc.UUID, replace)
+			} else {
+				// we have already added the allocation to the new node in this case just remove
+				// the old one, never update the queue
+				node.RemoveAllocation(alloc.UUID)
+			}
+		} else {
+			// all non replacement removes, update the queue
+			if node.RemoveAllocation(alloc.UUID) != nil {
+				total.AddTo(alloc.AllocatedResource)
+			}
+		}
+		// remove old one from partition
 		delete(pc.allocations, alloc.UUID)
-		// track total resources
-		total.AddTo(alloc.AllocatedResource)
 	}
-	// this nil check is not really needed as we can only reach here with a queue set, IDE complains without this
-	if queue != nil {
+	if resources.StrictlyGreaterThanZero(total) {
+		queue := app.GetQueue()
 		if err := queue.DecAllocatedResource(total); err != nil {
 			log.Logger().Warn("failed to release resources from queue",
 				zap.String("appID", appID),

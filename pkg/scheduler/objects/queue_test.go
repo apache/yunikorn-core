@@ -776,9 +776,7 @@ func TestGetMaxQueueSet(t *testing.T) {
 	assert.Equal(t, parent.GetMaxQueueSet(), nilRes, "parent queue should not have max")
 
 	// set the max on the root: recreate the structure to pick up changes
-	var res *resources.Resource
 	resMap := map[string]string{"first": "10", "second": "10"}
-	res, err = resources.NewResourceFromConf(resMap)
 	assert.NilError(t, err, "failed to create resource")
 	root, err = createRootQueue(resMap)
 	assert.NilError(t, err, "failed to create root queue with limit set")
@@ -793,6 +791,7 @@ func TestGetMaxQueueSet(t *testing.T) {
 	resMap = map[string]string{"first": "5", "second": "5"}
 	leaf, err = createManagedQueue(parent, "leaf", false, resMap)
 	assert.NilError(t, err, "failed to create leaf queue")
+	var res *resources.Resource
 	res, err = resources.NewResourceFromConf(resMap)
 	assert.NilError(t, err, "failed to create resource")
 	maxSet := leaf.GetMaxQueueSet()

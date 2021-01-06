@@ -1183,11 +1183,9 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) []*o
 				// the old one, never update the queue
 				node.RemoveAllocation(alloc.UUID)
 			}
-		} else {
+		} else if node.RemoveAllocation(alloc.UUID) != nil {
 			// all non replacement removes, update the queue
-			if node.RemoveAllocation(alloc.UUID) != nil {
-				total.AddTo(alloc.AllocatedResource)
-			}
+			total.AddTo(alloc.AllocatedResource)
 		}
 		// remove old one from partition
 		delete(pc.allocations, alloc.UUID)

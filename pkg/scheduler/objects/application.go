@@ -65,7 +65,7 @@ type Application struct {
 	stateMachine         *fsm.FSM               // application state machine
 	stateTimer           *time.Timer            // timer for state time
 	execTimeout          time.Duration          // execTimeout for the application run
-	appTimer             *time.Timer            // application run timer
+	// appTimer             *time.Timer            // application run timer
 
 	rmEventHandler handler.EventHandler
 	rmID           string

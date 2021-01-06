@@ -134,5 +134,4 @@ func TestNewAllocFromSI(t *testing.T) {
 	assert.Assert(t, alloc != nilAlloc, "placeholder ask creation failed unexpectedly")
 	assert.Assert(t, alloc.isPlaceholder(), "ask should have been a placeholder")
 	assert.Equal(t, alloc.getTaskGroup(), "testgroup", "TaskGroupName not set as expected")
-
 }

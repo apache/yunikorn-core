@@ -43,6 +43,7 @@ var (
 	reservationDelay = 2 * time.Second
 	startingTimeout  = 5 * time.Minute
 	waitingTimeout   = 30 * time.Second
+	completedTimeout = 30 * 24 * time.Hour
 )
 
 type Application struct {
@@ -140,6 +141,10 @@ func (sa *Application) IsCompleted() bool {
 	return sa.stateMachine.Is(Completed.String())
 }
 
+func (sa *Application) IsMarkedForRemoval() bool {
+	return sa.stateMachine.Is(Deleting.String())
+}
+
 // Handle the state event for the application.
 // The state machine handles the locking.
 func (sa *Application) HandleApplicationEvent(event applicationEvent) error {
@@ -177,12 +182,14 @@ func (sa *Application) OnStateChange(event *fsm.Event) {
 func (sa *Application) SetStateTimer() {
 	log.Logger().Debug("Application state timer initiated",
 		zap.String("appID", sa.ApplicationID),
-		zap.String("state", sa.stateMachine.Current()),
-		zap.Duration("timeout", startingTimeout))
-	if sa.IsWaiting() {
-		sa.stateTimer = time.AfterFunc(waitingTimeout, sa.timeOutWaiting)
-	} else {
+		zap.String("state", sa.stateMachine.Current()))
+	switch {
+	case sa.IsStarting():
 		sa.stateTimer = time.AfterFunc(startingTimeout, sa.timeOutStarting)
+	case sa.IsWaiting():
+		sa.stateTimer = time.AfterFunc(waitingTimeout, sa.timeOutWaiting)
+	case sa.IsCompleted():
+		sa.stateTimer = time.AfterFunc(completedTimeout, sa.timeOutCompleted)
 	}
 }
 
@@ -218,6 +225,17 @@ func (sa *Application) timeOutWaiting() {
 
 		//nolint: errcheck
 		_ = sa.HandleApplicationEvent(CompleteApplication)
+	}
+}
+
+func (sa *Application) timeOutCompleted() {
+	if sa.IsCompleted() {
+		log.Logger().Debug("Application in completed state timed out: marking it for removal ",
+			zap.String("applicationID", sa.ApplicationID),
+			zap.String("state", sa.stateMachine.Current()))
+
+		//nolint: errcheck
+		_ = sa.HandleApplicationEvent(DeleteApplication)
 	}
 }
 

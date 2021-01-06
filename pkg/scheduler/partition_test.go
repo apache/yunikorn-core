@@ -1098,8 +1098,19 @@ func TestCleanupCompletedApps(t *testing.T) {
 	assert.NilError(t, err, "no error expected while adding the application")
 
 	assert.Assert(t, len(partition.applications) == 2, "the partition should have 2 apps")
-	partition.cleanupCompletedApps()
+	assert.Assert(t, len(partition.completedApplications) == 0, "the partition should have 0 completed apps")
+	partition.cleanupApps()
 	assert.Assert(t, len(partition.applications) == 1, "the partition should have 1 app")
 	assert.Assert(t, partition.getApplication(completedApp.ApplicationID) == nil, "completed application should have been deleted")
 	assert.Assert(t, partition.getApplication(newApp.ApplicationID) != nil, "new application should still be in the partition")
+	assert.Assert(t, len(partition.completedApplications) == 1, "the partition should have 1 completed app")
+
+	// mark the app for removal
+	err = completedApp.HandleApplicationEvent(objects.DeleteApplication)
+	assert.NilError(t, err, "no error expected completed to deleting")
+	partition.cleanupApps()
+	assert.Assert(t, len(partition.applications) == 1, "the partition should have 1 app")
+	assert.Assert(t, partition.getApplication(completedApp.ApplicationID) == nil, "completed application should have been deleted")
+	assert.Assert(t, partition.getApplication(newApp.ApplicationID) != nil, "new application should still be in the partition")
+	assert.Assert(t, len(partition.completedApplications) == 0, "the partition should have 0 completed app")
 }

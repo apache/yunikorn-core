@@ -49,6 +49,7 @@ type PartitionContext struct {
 	// Private fields need protection
 	root                   *objects.Queue                  // start of the queue hierarchy
 	applications           map[string]*objects.Application // applications assigned to this partition
+	completedApplications  map[string]*objects.Application // completed applications from this partition
 	reservedApps           map[string]int                  // applications reserved within this partition, with reservation count
 	nodes                  map[string]*objects.Node        // nodes assigned to this partition
 	allocations            map[string]*objects.Allocation  // allocations
@@ -82,6 +83,7 @@ func newPartitionContext(conf configs.PartitionConfig, rmID string, cc *ClusterC
 		reservedApps: make(map[string]int),
 		nodes:        make(map[string]*objects.Node),
 		allocations:  make(map[string]*objects.Allocation),
+		completedApplications: make(map[string]*objects.Application),
 	}
 	pc.partitionManager = &partitionManager{
 		pc: pc,
@@ -381,7 +383,7 @@ func (pc *PartitionContext) removeApplication(appID string) []*objects.Allocatio
 			}
 		}
 	}
-
+	pc.completedApplications[app.ApplicationID] = app
 	log.Logger().Debug("application removed from the scheduler",
 		zap.String("queue", queueName),
 		zap.String("applicationID", appID))
@@ -919,6 +921,9 @@ func (pc *PartitionContext) GetApplications() []*objects.Application {
 	for _, app := range pc.applications {
 		appList = append(appList, app)
 	}
+	for _, app := range pc.completedApplications {
+		appList = append(appList, app)
+	}
 	return appList
 }
 
@@ -1113,10 +1118,15 @@ func (pc *PartitionContext) removeAllocationAsk(appID string, allocationKey stri
 	}
 }
 
-func (pc *PartitionContext) cleanupCompletedApps() {
+// Move all the completed apps into the completedApp list
+// Delete all the applications marked for removal
+func (pc *PartitionContext) cleanupApps() {
 	for _, app := range pc.GetApplications() {
 		if app.IsCompleted() {
 			pc.removeApplication(app.ApplicationID)
+		}
+		if app.IsMarkedForRemoval() {
+			delete(pc.completedApplications, app.ApplicationID)
 		}
 	}
 }

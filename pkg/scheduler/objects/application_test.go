@@ -627,9 +627,7 @@ func TestCompleted(t *testing.T) {
 	if app.IsWaiting() {
 		t.Fatal("Starting state should have timed out")
 	}
-	if app.stateTimer != nil {
-		t.Fatalf("Waiting timer has not be cleared on time out as expected, %v", app.stateTimer)
-	}
+	assert.Assert(t, Completed.String() == app.stateMachine.Current(), "Application should be in Completed state")
 }
 
 func TestGetTag(t *testing.T) {

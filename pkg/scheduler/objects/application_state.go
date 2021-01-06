@@ -40,10 +40,11 @@ const (
 	RejectApplication
 	CompleteApplication
 	KillApplication
+	DeleteApplication
 )
 
 func (ae applicationEvent) String() string {
-	return [...]string{"RunApplication", "WaitApplication", "RejectApplication", "CompleteApplication", "KillApplication"}[ae]
+	return [...]string{"RunApplication", "WaitApplication", "RejectApplication", "CompleteApplication", "KillApplication", "DeleteApplication"}[ae]
 }
 
 // ----------------------------------
@@ -60,10 +61,11 @@ const (
 	Rejected
 	Completed
 	killed
+	Deleting
 )
 
 func (as applicationState) String() string {
-	return [...]string{"New", "Accepted", "Starting", "Running", "Waiting", "Rejected", "Completed", "killed"}[as]
+	return [...]string{"New", "Accepted", "Starting", "Running", "Waiting", "Rejected", "Completed", "killed", "Deleting"}[as]
 }
 
 func NewAppState() *fsm.FSM {
@@ -97,6 +99,10 @@ func NewAppState() *fsm.FSM {
 				Name: KillApplication.String(),
 				Src:  []string{Accepted.String(), killed.String(), New.String(), Running.String(), Starting.String(), Waiting.String()},
 				Dst:  killed.String(),
+			}, {
+				Name: DeleteApplication.String(),
+				Src:  []string{Completed.String()},
+				Dst:  Deleting.String(),
 			},
 		},
 		fsm.Callbacks{
@@ -139,6 +145,7 @@ func NewAppState() *fsm.FSM {
 			},
 			fmt.Sprintf("enter_%s", Completed.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsCompleted()
+				event.Args[0].(*Application).SetStateTimer()
 			},
 		},
 	)

@@ -56,7 +56,7 @@ func (manager partitionManager) Run() {
 	for {
 		time.Sleep(manager.interval)
 		runStart := time.Now()
-		manager.pc.cleanupCompletedApps()
+		manager.pc.cleanupApps()
 		manager.cleanQueues(manager.pc.root)
 		if manager.stop {
 			break

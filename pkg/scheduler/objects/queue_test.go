@@ -1181,3 +1181,57 @@ func compareQueueInfoWithDAO(t *testing.T, queue *Queue, dao dao.QueueDAOInfo) {
 		}
 	}
 }
+
+func TestCopyApplications(t *testing.T) {
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+
+	// single parent under root
+	var leaf *Queue
+	leaf, err = createManagedQueue(root, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create a leaf queue")
+
+	// cannot remove child with app in it
+	app1 := newApplication(appID1, "default", "root.leaf")
+	app2 := newApplication(appID2, "default", "root.leaf")
+	leaf.AddApplication(app1)
+	leaf.AddApplication(app2)
+	app1.SetQueue(leaf)
+	app2.SetQueue(leaf)
+
+	// app sorter thread
+	stopChan := make(chan bool)
+	go func() {
+		for {
+			select {
+			case <-stopChan:
+				break
+			default:
+				leaf.sortApplications()
+			}
+		}
+	}()
+
+	// app add-ask thread
+	addAskDone := make(chan bool)
+	go func() {
+		for i := 0; i < 10; i++ {
+			res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10})
+			ask := newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, res)
+			err := app1.AddAllocationAsk(ask)
+			assert.NilError(t, err)
+		}
+		addAskDone <- true
+	}()
+
+	// wait for all asks are being added
+	// the sorter is running at the same time
+	// this can reveal potential data races between the sorter and add-ask thread
+	<-addAskDone
+	assert.Equal(t, app1.GetPendingResource().Resources["memory"], resources.Quantity(100))
+	assert.Equal(t, app2.GetPendingResource().Resources["memory"], resources.Quantity(0))
+
+	// stop the app sorting routine
+	stopChan <- true
+}

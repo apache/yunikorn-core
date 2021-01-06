@@ -616,7 +616,11 @@ func TestStateTimeOut(t *testing.T) {
 
 func TestCompleted(t *testing.T) {
 	waitingTimeout = time.Microsecond * 100
-	defer func() { waitingTimeout = time.Second * 30 }()
+	completedTimeout = time.Microsecond * 100
+	defer func() {
+		waitingTimeout = time.Second * 30
+		completedTimeout = 30 * 24 * time.Hour
+	}()
 	app := newApplication(appID1, "default", "root.a")
 	err := app.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (completed test)")
@@ -625,9 +629,10 @@ func TestCompleted(t *testing.T) {
 	// give it some time to run and progress
 	time.Sleep(time.Millisecond * 100)
 	if app.IsWaiting() {
-		t.Fatal("Starting state should have timed out")
+		t.Fatal("Waiting state should have timed out")
 	}
-	assert.Assert(t, Completed.String() == app.stateMachine.Current(), "Application should be in Completed state")
+	time.Sleep(time.Millisecond * 100)
+	assert.Assert(t, Deleting.String() == app.stateMachine.Current(), "Application should be in Deleting state")
 }
 
 func TestGetTag(t *testing.T) {

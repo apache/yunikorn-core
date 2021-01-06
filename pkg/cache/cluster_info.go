@@ -267,8 +267,7 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
 	}
 	// Send rejects back to RM
 	rejectedAsks := make([]*si.RejectedAllocationAsk, 0)
-	normalAsks := make([]*si.AllocationAsk, 0)
-	refreshedAllocs := make([]*si.Allocation, 0)
+
 	// Send to scheduler
 	for _, req := range request.Asks {
 		// try to get ApplicationInfo
@@ -297,25 +296,6 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
 				})
 			continue
 		}
-
-		if len(req.Victims) > 0 {
-			for _, victim := range req.Victims {
-				if refreshedAlloc := partitionInfo.refreshAllocation(req, victim); refreshedAlloc != nil {
-					appInfo.RefreshAllocation(victim.AllocationUUID, refreshedAlloc)
-					refreshedAllocs = append(refreshedAllocs, refreshedAlloc)
-				}
-			}
-		} else {
-			normalAsks = append(normalAsks, req)
-		}
-	}
-
-	// this is a preemption request
-	if len(refreshedAllocs) > 0 {
-		m.EventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMNewAllocationsEvent{
-			RmID:        request.RmID,
-			Allocations: refreshedAllocs,
-		})
 	}
 
 	// Reject asks returned to RM Proxy for the apps and partitions not found
@@ -328,7 +308,7 @@ func (m *ClusterInfo) processNewAndReleaseAllocationRequests(request *si.UpdateR
 
 	// Send all asks and release allocation requests to scheduler
 	m.EventHandlers.SchedulerEventHandler.HandleEvent(&schedulerevent.SchedulerAllocationUpdatesEvent{
-		NewAsks:    normalAsks,
+		NewAsks:    request.Asks,
 		ToReleases: request.Releases,
 	})
 }

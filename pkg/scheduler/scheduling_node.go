@@ -99,17 +99,11 @@ func (sn *SchedulingNode) GetAllocatedResource() *resources.Resource {
 func (sn *SchedulingNode) GetAvailableResource() *resources.Resource {
 	sn.Lock()
 	defer sn.Unlock()
-	// if sn.cachedAvailableUpdateNeeded || sn.nodeInfo.SyncAvailableResource() {
-	// 	sn.cachedAvailable = sn.nodeInfo.GetAvailableResource()
-	// 	sn.cachedAvailable.SubFrom(sn.allocating)
-	// 	sn.cachedAvailableUpdateNeeded = false
-	// }
-
-	// TODO: fixme
-	// always refresh from the cache
-	sn.cachedAvailable = sn.nodeInfo.GetAvailableResource()
-	sn.cachedAvailable.SubFrom(sn.allocating)
-	sn.cachedAvailableUpdateNeeded = true
+	if sn.cachedAvailableUpdateNeeded || sn.nodeInfo.SyncAvailableResource() {
+		sn.cachedAvailable = sn.nodeInfo.GetAvailableResource()
+		sn.cachedAvailable.SubFrom(sn.allocating)
+		sn.cachedAvailableUpdateNeeded = false
+	}
 	return sn.cachedAvailable
 }
 

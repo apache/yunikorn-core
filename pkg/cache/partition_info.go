@@ -934,36 +934,3 @@ func (pi *PartitionInfo) CalculateNodesResourceUsage() map[string][]int {
 	}
 	return mapResult
 }
-
-func (pi *PartitionInfo) refreshAllocation(ask *si.AllocationAsk, victim *si.PreemptionVictim) *si.Allocation {
-	pi.Lock()
-	defer pi.Unlock()
-
-	for UUID, alloc := range pi.allocations {
-		if UUID == victim.AllocationUUID {
-			// this is the existing allocation
-			// refresh the cache
-			delete(pi.allocations, UUID)
-			refreshedAlloc := &si.Allocation{
-				AllocationKey:    ask.AllocationKey,
-				AllocationTags:   ask.Tags,
-				UUID:             UUID,
-				ResourcePerAlloc: ask.ResourceAsk,
-				Priority:         ask.Priority,
-				QueueName:        alloc.AllocationProto.QueueName,
-				NodeID:           alloc.AllocationProto.NodeID, // existing node
-				ApplicationID:    alloc.ApplicationID,
-				PartitionName:    alloc.AllocationProto.PartitionName,
-				Victim:           victim,
-			}
-			pi.allocations[UUID] = &AllocationInfo{
-				AllocationProto:   refreshedAlloc,
-				ApplicationID:     alloc.ApplicationID,
-				AllocatedResource: alloc.AllocatedResource,
-			}
-			return refreshedAlloc
-		}
-	}
-
-	return nil
-}

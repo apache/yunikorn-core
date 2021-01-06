@@ -284,7 +284,7 @@ func (sa *Application) RemoveAllocationAsk(allocKey string) int {
 		}
 		if ask := sa.requests[allocKey]; ask != nil {
 			deltaPendingResource = resources.MultiplyBy(ask.AllocatedResource, float64(ask.GetPendingAskRepeat()))
-			sa.pending.SubFrom(deltaPendingResource)
+			sa.pending = resources.Sub(sa.pending, deltaPendingResource)
 			delete(sa.requests, allocKey)
 		}
 	}
@@ -345,7 +345,7 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 
 	// Update total pending resource
 	delta.SubFrom(oldAskResource)
-	sa.pending.AddTo(delta)
+	sa.pending = resources.Add(sa.pending, delta)
 	sa.queue.incPendingResource(delta)
 
 	log.Logger().Info("Ask added successfully to application",
@@ -385,7 +385,7 @@ func (sa *Application) updateAskRepeatInternal(ask *AllocationAsk, delta int32) 
 	}
 
 	deltaPendingResource := resources.Multiply(ask.AllocatedResource, int64(delta))
-	sa.pending.AddTo(deltaPendingResource)
+	sa.pending = resources.Add(sa.pending, deltaPendingResource)
 	// update the pending of the queue with the same delta
 	sa.queue.incPendingResource(deltaPendingResource)
 

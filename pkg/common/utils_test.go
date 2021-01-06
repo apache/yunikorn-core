@@ -19,6 +19,7 @@
 package common
 
 import (
+	"os"
 	"testing"
 
 	"gotest.tools/assert"
@@ -69,5 +70,28 @@ func TestGetPartitionNameWithoutClusterID(t *testing.T) {
 	for _, test := range tests {
 		got := GetPartitionNameWithoutClusterID(test.partitionName)
 		assert.Equal(t, got, test.want, "unexpected partitionName without clusterID!")
+	}
+}
+
+func TestGetBoolEnvVar(t *testing.T) {
+	envVarName := "VAR"
+	testCases := []struct {
+		name     string
+		value    string
+		expected bool
+	}{
+		{"ENV var not set", "", true},
+		{"ENV var set", "false", false},
+		{"Invalid value", "someValue", true},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := os.Setenv(envVarName, tc.value)
+			assert.NilError(t, err, "setting environment variable failed")
+			val := GetBoolEnvVar(envVarName, true)
+			assert.DeepEqual(t, val, tc.expected)
+			err = os.Unsetenv(envVarName)
+			assert.NilError(t, err, "cleaning up environment variable failed")
+		})
 	}
 }

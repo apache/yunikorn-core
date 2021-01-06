@@ -20,6 +20,7 @@ package scheduler
 
 import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 )
 
 // Below structures are intended to be used under single go routine, thus no
@@ -37,7 +38,7 @@ type preemptionPartitionContext struct {
 
 type preemptionQueueContext struct {
 	queuePath       string
-	schedulingQueue *SchedulingQueue
+	schedulingQueue *objects.Queue
 
 	// all resources-related for preemption decisions.
 	resources *queuePreemptCalcResource
@@ -58,11 +59,11 @@ type queuePreemptCalcResource struct {
 	preemptable *resources.Resource
 }
 
-func (m *queuePreemptCalcResource) initFromSchedulingQueue(queue *SchedulingQueue) {
-	m.guaranteed = queue.QueueInfo.GetGuaranteedResource()
-	m.used = queue.QueueInfo.GetAllocatedResource()
+func (m *queuePreemptCalcResource) initFromSchedulingQueue(queue *objects.Queue) {
+	m.guaranteed = queue.GetGuaranteedResource()
+	m.used = queue.GetAllocatedResource()
 	m.pending = queue.GetPendingResource()
-	m.max = queue.QueueInfo.GetMaxResource()
+	m.max = queue.GetMaxResource()
 }
 
 func newQueuePreemptCalcResource() *queuePreemptCalcResource {
@@ -86,7 +87,7 @@ func getPreemptionPolicies() []PreemptionPolicy {
 // Visible by tests
 func (s *Scheduler) SingleStepPreemption() {
 	// Skip if no preemption needed.
-	if !s.clusterSchedulingContext.NeedPreemption() {
+	if !s.clusterContext.NeedPreemption() {
 		return
 	}
 
@@ -106,7 +107,7 @@ func (s *Scheduler) resetPreemptionContext() {
 	}
 
 	// Copy from scheduler
-	for partition, partitionContext := range s.clusterSchedulingContext.getPartitionMapClone() {
+	for partition, partitionContext := range s.clusterContext.GetPartitionMapClone() {
 		preemptionPartitionCtx := &preemptionPartitionContext{
 			leafQueues: make(map[string]*preemptionQueueContext),
 		}
@@ -116,20 +117,20 @@ func (s *Scheduler) resetPreemptionContext() {
 }
 
 func (s *Scheduler) recursiveInitPreemptionQueueContext(preemptionPartitionCtx *preemptionPartitionContext, parent *preemptionQueueContext,
-	queue *SchedulingQueue) *preemptionQueueContext {
+	queue *objects.Queue) *preemptionQueueContext {
 	preemptionQueue := &preemptionQueueContext{
-		queuePath:       queue.Name,
+		queuePath:       queue.QueuePath,
 		parent:          parent,
 		schedulingQueue: queue,
 		resources:       newQueuePreemptCalcResource(),
 		children:        make(map[string]*preemptionQueueContext),
 	}
 
-	if queue.isLeafQueue() {
-		preemptionPartitionCtx.leafQueues[queue.Name] = preemptionQueue
+	if queue.IsLeafQueue() {
+		preemptionPartitionCtx.leafQueues[queue.QueuePath] = preemptionQueue
 	}
 
-	for childName, child := range queue.childrenQueues {
+	for childName, child := range queue.GetCopyOfChildren() {
 		preemptionQueue.children[childName] = s.recursiveInitPreemptionQueueContext(preemptionPartitionCtx, preemptionQueue, child)
 	}
 

@@ -20,8 +20,15 @@ package common
 
 import (
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"time"
+
+	uuid "github.com/satori/go.uuid"
+	"go.uber.org/zap"
+
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
 
 func GetNormalizedPartitionName(partitionName string, rmID string) string {
@@ -65,4 +72,25 @@ func WaitFor(interval time.Duration, timeout time.Duration, condition func() boo
 		time.Sleep(interval)
 		continue
 	}
+}
+
+// Generate a new uuid. The chance that we generate a collision is really small.
+// As long as we check the UUID before we communicate it back to the RM we can still replace it without a problem.
+func GetNewUUID() string {
+	return uuid.NewV4().String()
+}
+
+func GetBoolEnvVar(key string, defaultVal bool) bool {
+	if value, ok := os.LookupEnv(key); ok {
+		boolValue, err := strconv.ParseBool(value)
+		if err != nil {
+			log.Logger().Debug("Failed to parse environment variable, using default value",
+				zap.String("name", key),
+				zap.String("value", value),
+				zap.Bool("default", defaultVal))
+			return defaultVal
+		}
+		return boolValue
+	}
+	return defaultVal
 }

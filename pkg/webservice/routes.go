@@ -15,6 +15,7 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 */
+
 package webservice
 
 import (
@@ -96,7 +97,7 @@ var webRoutes = routes{
 		getClusterConfig,
 	},
 
-	// endpoint to retrieve the current conf
+	// endpoint to update the current conf
 	route{
 		"Scheduler",
 		"PUT",
@@ -195,5 +196,12 @@ var webRoutes = routes{
 		Method:      "GET",
 		Pattern:     "/debug/pprof/trace",
 		HandlerFunc: pprof.Trace,
+	},
+	// endpoint to check health status
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/scheduler/healthcheck",
+		checkHealthStatus,
 	},
 }

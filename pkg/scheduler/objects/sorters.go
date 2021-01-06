@@ -81,7 +81,7 @@ func filterOnPendingResources(apps map[string]*Application) []*Application {
 	filteredApps := make([]*Application, 0)
 	for _, app := range apps {
 		// Only look at app when pending-res > 0
-		if resources.StrictlyGreaterThanZero(app.GetPendingResource()) {
+		if app.hasPendingResource() {
 			filteredApps = append(filteredApps, app)
 		}
 	}
@@ -104,7 +104,7 @@ func stateAwareFilter(apps map[string]*Application) []*Application {
 			acceptedApp = nil
 		}
 		// Now just look at app when pending-res > 0
-		if resources.StrictlyGreaterThanZero(app.GetPendingResource()) {
+		if app.hasPendingResource() {
 			// filter accepted apps
 			if app.IsAccepted() {
 				// check if we have not seen a starting app

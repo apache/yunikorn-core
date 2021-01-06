@@ -234,6 +234,12 @@ func (sa *Application) GetPendingResource() *resources.Resource {
 	return sa.pending
 }
 
+func (sa *Application) hasPendingResource() bool {
+	sa.RLock()
+	defer sa.RUnlock()
+	return resources.StrictlyGreaterThanZero(sa.pending)
+}
+
 // Remove one or more allocation asks from this application.
 // This also removes any reservations that are linked to the ask.
 // The return value is the number of reservations released

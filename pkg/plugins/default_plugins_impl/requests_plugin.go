@@ -57,7 +57,6 @@ func (drp *DefaultRequests) AddRequest(request interfaces.Request) interfaces.Re
 func (drp *DefaultRequests) RemoveRequest(allocationKey string) interfaces.Request {
 	existingRequest := drp.requests[allocationKey]
 	if existingRequest != nil {
-		// remove from map
 		delete(drp.requests, allocationKey)
 	}
 	return existingRequest
@@ -70,7 +69,7 @@ func (drp *DefaultRequests) GetRequest(allocationKey string) interfaces.Request 
 func (drp *DefaultRequests) GetRequests(filter func(request interfaces.Request) bool) []interfaces.Request {
 	requests := make([]interfaces.Request, 0)
 	for _, req := range drp.requests {
-		if filter(req) {
+		if filter == nil || filter(req) {
 			requests = append(requests, req)
 		}
 	}

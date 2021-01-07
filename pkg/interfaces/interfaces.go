@@ -119,8 +119,13 @@ type Application interface {
 	IsNew() bool
 	IsRunning() bool
 	IsWaiting() bool
-	// get required requests via the specified filter
+	// get required requests via the specified filter,
+	// return all requests when the specified filter is nil.
 	GetRequests(filter func(request Request) bool) []Request
+	// Return requests wrapper, may be used by custom plugins to enhance flexibility.
+	// The caller should guarantee the consistence of requests to avoid race-condition
+	// via holding application lock or based on an implementation of Requests with internal lock.
+	GetRequestsWrapper() Requests
 }
 
 // This interface is used by scheduler plugins to get information of a request

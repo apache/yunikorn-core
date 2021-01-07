@@ -34,7 +34,7 @@ func SortApplications(apps map[string]interfaces.Application, sortType policies.
 	var sortedApps []interfaces.Application
 	switch sortType {
 	case policies.FairSortPolicy:
-		sortedApps = filterOnPendingResources(apps)
+		sortedApps = FilterOnPendingResources(apps)
 		// Sort by usage
 		sort.SliceStable(sortedApps, func(i, j int) bool {
 			l := sortedApps[i]
@@ -42,7 +42,7 @@ func SortApplications(apps map[string]interfaces.Application, sortType policies.
 			return resources.CompUsageRatio(l.GetAllocatedResource(), r.GetAllocatedResource(), globalResource) < 0
 		})
 	case policies.FifoSortPolicy:
-		sortedApps = filterOnPendingResources(apps)
+		sortedApps = FilterOnPendingResources(apps)
 		// Sort by submission time oldest first
 		sort.SliceStable(sortedApps, func(i, j int) bool {
 			l := sortedApps[i]
@@ -50,7 +50,7 @@ func SortApplications(apps map[string]interfaces.Application, sortType policies.
 			return l.GetSubmissionTime().Before(r.GetSubmissionTime())
 		})
 	case policies.StateAwarePolicy:
-		sortedApps = stateAwareFilter(apps)
+		sortedApps = StateAwareFilter(apps)
 		// Sort by submission time oldest first
 		sort.SliceStable(sortedApps, func(i, j int) bool {
 			l := sortedApps[i]
@@ -62,7 +62,7 @@ func SortApplications(apps map[string]interfaces.Application, sortType policies.
 	return sortedApps
 }
 
-func filterOnPendingResources(apps map[string]interfaces.Application) []interfaces.Application {
+func FilterOnPendingResources(apps map[string]interfaces.Application) []interfaces.Application {
 	filteredApps := make([]interfaces.Application, 0)
 	for _, app := range apps {
 		// Only look at app when pending-res > 0
@@ -78,7 +78,7 @@ func filterOnPendingResources(apps map[string]interfaces.Application) []interfac
 // with an Accepted state. However if there is an app with a Starting state even with no pending resource
 // requests, no Accepted apps can be scheduled. An app in New state does not have any asks and can never be
 // scheduled.
-func stateAwareFilter(apps map[string]interfaces.Application) []interfaces.Application {
+func StateAwareFilter(apps map[string]interfaces.Application) []interfaces.Application {
 	filteredApps := make([]interfaces.Application, 0)
 	var acceptedApp interfaces.Application
 	var foundStarting bool

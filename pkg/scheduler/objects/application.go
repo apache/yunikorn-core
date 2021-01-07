@@ -540,6 +540,10 @@ func (sa *Application) canAskReserve(ask *AllocationAsk) bool {
 	return pending > len(resNumber)
 }
 
+func (sa *Application) GetRequestsWrapper() interfaces.Requests {
+	return sa.requests
+}
+
 func (sa *Application) GetRequests(filter func(request interfaces.Request) bool) []interfaces.Request {
 	sa.RLock()
 	defer sa.RUnlock()

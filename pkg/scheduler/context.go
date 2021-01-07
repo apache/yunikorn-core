@@ -125,34 +125,8 @@ func (cc *ClusterContext) schedule() {
 			if alloc.Result == objects.Replaced {
 				// communicate the removal to the RM
 				cc.notifyRMAllocationReleased(psc.RmID, alloc.Releases, si.AllocationRelease_PLACEHOLDER_REPLACED, "replacing UUID: "+alloc.UUID)
-				// only communicate the release rest happens on shim callback
-				continue
-			}
-			// TODO: The alloc is passed to the RM twice why do we need event + callback?
-			// See YUNIKORN-462, there are two separate communications for the same allocation
-			// between the core and the shim they should be merged into one communication.
-
-			// communicate the allocation to the RM
-			cc.rmEventHandler.HandleEvent(&rmevent.RMNewAllocationsEvent{
-				Allocations: []*si.Allocation{alloc.NewSIFromAllocation()},
-				RmID:        psc.RmID,
-			})
-			// if reconcile plugin is enabled, re-sync the cache now.
-			// before deciding on an allocation, call the reconcile plugin to sync scheduler cache
-			// between core and shim if necessary. This is useful when running multiple allocations
-			// in parallel and need to handle inter container affinity and anti-affinity.
-			if rp := plugins.GetReconcilePlugin(); rp != nil {
-				if err := rp.ReSyncSchedulerCache(&si.ReSyncSchedulerCacheArgs{
-					AssumedAllocations: []*si.AssumedAllocation{
-						{
-							AllocationKey: alloc.AllocationKey,
-							NodeID:        alloc.NodeID,
-						},
-					},
-				}); err != nil {
-					log.Logger().Error("failed to sync shim",
-						zap.Error(err))
-				}
+			} else {
+				cc.notifyRMNewAllocation(psc.RmID, alloc)
 			}
 		}
 	}
@@ -706,7 +680,7 @@ func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRel
 		partition := cc.GetPartition(toRelease.PartitionName)
 		if partition != nil {
 
-			allocs := partition.removeAllocation(toRelease)
+			allocs, confirmed := partition.removeAllocation(toRelease)
 			// notify the RM of the exact released allocations
 			if len(allocs) > 0 {
 				cc.notifyRMAllocationReleased(rmID, allocs, si.AllocationRelease_STOPPED_BY_RM, "allocation remove as per RM request")
@@ -715,6 +689,10 @@ func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRel
 				toReleaseAllocations = append(toReleaseAllocations, &si.ForgotAllocation{
 					AllocationKey: alloc.AllocationKey,
 				})
+			}
+			// notify the RM of the confirmed allocations (placeholder swap & preemption)
+			if confirmed != nil {
+				cc.notifyRMNewAllocation(rmID, confirmed)
 			}
 		}
 	}
@@ -731,7 +709,7 @@ func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRel
 				ForgetAllocations: toReleaseAllocations,
 			})
 			if err != nil {
-				log.Logger().Error("failed to sync shim",
+				log.Logger().Error("failed to sync shim on allocation release",
 					zap.Error(err))
 			}
 		}
@@ -746,6 +724,37 @@ func (cc *ClusterContext) convertAllocations(allocations []*si.Allocation) []*ob
 	}
 
 	return convert
+}
+
+// Create a RM update event to notify RM of new allocations
+// Lock free call, all updates occur via events.
+func (cc *ClusterContext) notifyRMNewAllocation(rmID string, alloc *objects.Allocation) {
+	// CLEANUP: The alloc is passed to the RM twice why do we need event + callback?
+	// See YUNIKORN-462, there are two separate communications for the same allocation
+	// between the core and the shim they should be merged into one communication.
+
+	// communicate the allocation to the RM
+	cc.rmEventHandler.HandleEvent(&rmevent.RMNewAllocationsEvent{
+		Allocations: []*si.Allocation{alloc.NewSIFromAllocation()},
+		RmID:        rmID,
+	})
+	// if reconcile plugin is enabled, re-sync the cache now.
+	// before deciding on an allocation, call the reconcile plugin to sync scheduler cache
+	// between core and shim if necessary. This is useful when running multiple allocations
+	// in parallel and need to handle inter container affinity and anti-affinity.
+	if rp := plugins.GetReconcilePlugin(); rp != nil {
+		if err := rp.ReSyncSchedulerCache(&si.ReSyncSchedulerCacheArgs{
+			AssumedAllocations: []*si.AssumedAllocation{
+				{
+					AllocationKey: alloc.AllocationKey,
+					NodeID:        alloc.NodeID,
+				},
+			},
+		}); err != nil {
+			log.Logger().Error("failed to sync shim on allocation",
+				zap.Error(err))
+		}
+	}
 }
 
 // Create a RM update event to notify RM of released allocations

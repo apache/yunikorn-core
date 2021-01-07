@@ -543,26 +543,26 @@ func TestRemoveAppAllocs(t *testing.T) {
 		TerminationType: si.AllocationRelease_STOPPED_BY_RM,
 	}
 
-	allocs := partition.removeAllocation(release)
+	allocs, _ := partition.removeAllocation(release)
 	assert.Equal(t, 0, len(allocs), "empty removal request returned allocations: %v", allocs)
 	// create a new release without app: should just return
 	release.ApplicationID = "does_not_exist"
-	allocs = partition.removeAllocation(release)
+	allocs, _ = partition.removeAllocation(release)
 	assert.Equal(t, 0, len(allocs), "removal request for non existing application returned allocations: %v", allocs)
 	// create a new release with app, non existing allocation: should just return
 	release.ApplicationID = appNotRemoved
 	release.UUID = "does_not_exist"
-	allocs = partition.removeAllocation(release)
+	allocs, _ = partition.removeAllocation(release)
 	assert.Equal(t, 0, len(allocs), "removal request for non existing allocation returned allocations: %v", allocs)
 	// create a new release with app, existing allocation: should return 1 alloc
 	assert.Equal(t, 2, len(partition.allocations), "pre-remove allocation list incorrect: %v", partition.allocations)
 	release.UUID = uuid
-	allocs = partition.removeAllocation(release)
+	allocs, _ = partition.removeAllocation(release)
 	assert.Equal(t, 1, len(allocs), "removal request for existing allocation returned wrong allocations: %v", allocs)
 	assert.Equal(t, 1, len(partition.allocations), "allocation removal requests removed more than expected: %v", partition.allocations)
 	// create a new release with app, no uuid: should return last left alloc
 	release.UUID = ""
-	allocs = partition.removeAllocation(release)
+	allocs, _ = partition.removeAllocation(release)
 	assert.Equal(t, 1, len(allocs), "removal request for existing allocation returned wrong allocations: %v", allocs)
 	assert.Equal(t, 0, len(partition.allocations), "removal requests did not remove all allocations: %v", partition.allocations)
 }

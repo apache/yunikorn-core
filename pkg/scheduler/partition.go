@@ -867,8 +867,8 @@ func (pc *PartitionContext) reserve(app *objects.Application, node *objects.Node
 	pc.reservedApps[appID]++
 
 	log.Logger().Info("allocation ask is reserved",
-		zap.String("appID", ask.ApplicationID),
-		zap.String("queue", ask.QueueName),
+		zap.String("appID", appID),
+		zap.String("queue", app.QueueName),
 		zap.String("allocationKey", ask.AllocationKey),
 		zap.String("node", node.NodeID))
 }
@@ -896,8 +896,8 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 	pc.unReserveCountInternal(appID, num)
 
 	log.Logger().Info("allocation ask is unreserved",
-		zap.String("appID", ask.ApplicationID),
-		zap.String("queue", ask.QueueName),
+		zap.String("appID", appID),
+		zap.String("queue", app.QueueName),
 		zap.String("allocationKey", ask.AllocationKey),
 		zap.String("node", node.NodeID),
 		zap.Int("reservationsRemoved", num))
@@ -1125,25 +1125,27 @@ func (pc *PartitionContext) CalculateNodesResourceUsage() map[string][]int {
 
 // Remove the allocation(s) from the app and nodes
 // YUNIKORN-461 proposes to remove this, with a side note that this currently could lead to a deadlock
-func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) []*objects.Allocation {
+func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*objects.Allocation, *objects.Allocation) {
 	if release == nil {
-		return nil
+		return nil, nil
 	}
 	pc.Lock()
 	defer pc.Unlock()
 	appID := release.ApplicationID
 	uuid := release.UUID
-	releasedAllocs := make([]*objects.Allocation, 0)
 	app := pc.applications[appID]
 	// no app nothing to do everything should already be clean
 	if app == nil {
-		return releasedAllocs
+		return nil, nil
 	}
+	// temp store for allocations manipulated
+	released := make([]*objects.Allocation, 0)
+	var confirmed *objects.Allocation
 	// when uuid is not specified, remove all allocations from the app
 	if uuid == "" {
 		log.Logger().Debug("remove all allocations",
 			zap.String("appID", appID))
-		releasedAllocs = append(releasedAllocs, app.RemoveAllAllocations()...)
+		released = append(released, app.RemoveAllAllocations()...)
 	} else {
 		// if we have an uuid the termination type is important
 		if release.TerminationType == si.AllocationRelease_PLACEHOLDER_REPLACED {
@@ -1151,20 +1153,20 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) []*o
 				zap.String("appID", appID),
 				zap.String("allocationId", uuid))
 			if alloc := app.ReplaceAllocation(uuid); alloc != nil {
-				releasedAllocs = append(releasedAllocs, alloc)
+				released = append(released, alloc)
 			}
 		} else {
 			log.Logger().Debug("removing allocation",
 				zap.String("appID", appID),
 				zap.String("allocationId", uuid))
 			if alloc := app.RemoveAllocation(uuid); alloc != nil {
-				releasedAllocs = append(releasedAllocs, alloc)
+				released = append(released, alloc)
 			}
 		}
 	}
 	// for each allocations to release, update node.
 	total := resources.NewResource()
-	for _, alloc := range releasedAllocs {
+	for _, alloc := range released {
 		node := pc.nodes[alloc.NodeID]
 		if node == nil {
 			log.Logger().Info("node not found while releasing allocation",
@@ -1174,10 +1176,10 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) []*o
 		}
 		if release.TerminationType == si.AllocationRelease_PLACEHOLDER_REPLACED {
 			// replacements could be on a different node but the queue should not change
-			replace := alloc.Releases[0]
-			if replace.NodeID == alloc.NodeID {
+			confirmed = alloc.Releases[0]
+			if confirmed.NodeID == alloc.NodeID {
 				// this is the real swap on the node
-				node.ReplaceAllocation(alloc.UUID, replace)
+				node.ReplaceAllocation(alloc.UUID, confirmed)
 			} else {
 				// we have already added the allocation to the new node in this case just remove
 				// the old one, never update the queue
@@ -1199,7 +1201,12 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) []*o
 				zap.Error(err))
 		}
 	}
-	return releasedAllocs
+	// if confirmed is set we can assume there will just be one alloc in the released
+	// that allocation was already released by the shim, so clean up released
+	if confirmed != nil {
+		released = nil
+	}
+	return released, confirmed
 }
 
 // Remove the allocation Ask from the specified application

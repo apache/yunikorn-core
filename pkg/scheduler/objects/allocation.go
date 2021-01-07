@@ -49,7 +49,7 @@ type Allocation struct {
 	Ask               *AllocationAsk
 	ApplicationID     string
 	AllocationKey     string
-	QueueName         string
+	QueueName         string // CLEANUP: why do we need this? the app is linked to the queue
 	NodeID            string
 	ReservedNodeID    string
 	PartitionName     string

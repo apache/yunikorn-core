@@ -37,7 +37,7 @@ type AllocationAsk struct {
 	AllocatedResource *resources.Resource
 	ApplicationID     string
 	PartitionName     string
-	QueueName         string // TODO: why do we need this? the app is linked to the queue
+	QueueName         string // CLEANUP: why do we need this? the app is linked to the queue
 	Tags              map[string]string
 
 	// Private fields need protection

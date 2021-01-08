@@ -1084,12 +1084,7 @@ func TestCleanupCompletedApps(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
 	completedApp := newApplication("completed", "default", defQueue)
-	err = completedApp.HandleApplicationEvent(objects.RunApplication)
-	assert.NilError(t, err, "no error expected new to accepted")
-	err = completedApp.HandleApplicationEvent(objects.RunApplication)
-	assert.NilError(t, err, "no error expected accepted to starting")
-	err = completedApp.HandleApplicationEvent(objects.CompleteApplication)
-	assert.NilError(t, err, "no error expected starting to completed")
+	completedApp.SetState(objects.Completed.String())
 
 	newApp := newApplication("running", "default", defQueue)
 	err = partition.AddApplication(completedApp)
@@ -1106,9 +1101,8 @@ func TestCleanupCompletedApps(t *testing.T) {
 	assert.Assert(t, len(partition.completedApplications) == 1, "the partition should have 1 completed app")
 
 	// mark the app for removal
-	err = completedApp.HandleApplicationEvent(objects.DeleteApplication)
-	assert.NilError(t, err, "no error expected completed to deleting")
-	partition.cleanupApps()
+	completedApp.SetState(objects.Deleting.String())
+	partition.cleanupCompletedApps()
 	assert.Assert(t, len(partition.applications) == 1, "the partition should have 1 app")
 	assert.Assert(t, partition.getApplication(completedApp.ApplicationID) == nil, "completed application should have been deleted")
 	assert.Assert(t, partition.getApplication(newApp.ApplicationID) != nil, "new application should still be in the partition")

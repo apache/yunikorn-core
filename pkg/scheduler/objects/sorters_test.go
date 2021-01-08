@@ -288,7 +288,7 @@ func TestSortAppsStateAware(t *testing.T) {
 		app := newApplication(appID, "partition", "queue")
 		app.pending = res
 		input[appID] = app
-		err := app.HandleApplicationEvent(RunApplication)
+		err := app.HandleApplicationEvent(runApplication)
 		assert.NilError(t, err, "state change failed for app %v", appID)
 		// make sure the time stamps differ at least a bit (tracking in nano seconds)
 		time.Sleep(time.Nanosecond * 5)
@@ -305,16 +305,16 @@ func TestSortAppsStateAware(t *testing.T) {
 	assertAppListLength(t, list, []string{appID1}, "state no pending")
 
 	// move the first app to starting no pending resource should get nothing
-	err := input[appID0].HandleApplicationEvent(RunApplication)
+	err := input[appID0].HandleApplicationEvent(runApplication)
 	assert.NilError(t, err, "state change failed for app-0")
 	list = sortApplications(input, policies.StateAwarePolicy, nil)
 	assertAppListLength(t, list, []string{}, "state starting no pending")
 
 	// move first app to running (no pending resource) and 4th app to starting should get starting app
-	err = input[appID0].HandleApplicationEvent(RunApplication)
+	err = input[appID0].HandleApplicationEvent(runApplication)
 	assert.NilError(t, err, "state change failed for app-0")
 	appID3 := "app-3"
-	err = input[appID3].HandleApplicationEvent(RunApplication)
+	err = input[appID3].HandleApplicationEvent(runApplication)
 	assert.NilError(t, err, "state change failed for app-3")
 	list = sortApplications(input, policies.StateAwarePolicy, nil)
 	assertAppListLength(t, list, []string{appID3}, "state starting")
@@ -325,7 +325,7 @@ func TestSortAppsStateAware(t *testing.T) {
 	assertAppListLength(t, list, []string{appID0, appID3}, "state first pending")
 
 	// move 4th to running should get back: 1st, 2nd and 4th in that order
-	err = input[appID3].HandleApplicationEvent(RunApplication)
+	err = input[appID3].HandleApplicationEvent(runApplication)
 	assert.NilError(t, err, "state change failed for app-3")
 	list = sortApplications(input, policies.StateAwarePolicy, nil)
 	assertAppListLength(t, list, []string{appID0, appID1, appID3}, "state not app-2")

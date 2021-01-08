@@ -581,9 +581,9 @@ func TestStateTimeOut(t *testing.T) {
 	startingTimeout = time.Microsecond * 100
 	defer func() { startingTimeout = time.Minute * 5 }()
 	app := newApplication(appID1, "default", "root.a")
-	err := app.HandleApplicationEvent(RunApplication)
+	err := app.HandleApplicationEvent(runApplication)
 	assert.NilError(t, err, "no error expected new to accepted (timeout test)")
-	err = app.HandleApplicationEvent(RunApplication)
+	err = app.HandleApplicationEvent(runApplication)
 	assert.NilError(t, err, "no error expected accepted to starting (timeout test)")
 	// give it some time to run and progress
 	time.Sleep(time.Millisecond * 100)
@@ -596,16 +596,16 @@ func TestStateTimeOut(t *testing.T) {
 
 	startingTimeout = time.Millisecond * 100
 	app = newApplication(appID1, "default", "root.a")
-	err = app.HandleApplicationEvent(RunApplication)
+	err = app.HandleApplicationEvent(runApplication)
 	assert.NilError(t, err, "no error expected new to accepted (timeout test2)")
-	err = app.HandleApplicationEvent(RunApplication)
+	err = app.HandleApplicationEvent(runApplication)
 	assert.NilError(t, err, "no error expected accepted to starting (timeout test2)")
 	// give it some time to run and progress
 	time.Sleep(time.Microsecond * 100)
 	if !app.IsStarting() || app.stateTimer == nil {
 		t.Fatalf("Starting state and timer should not have timed out yet, state: %s", app.stateMachine.Current())
 	}
-	err = app.HandleApplicationEvent(RunApplication)
+	err = app.HandleApplicationEvent(runApplication)
 	assert.NilError(t, err, "no error expected starting to run (timeout test2)")
 	// give it some time to run and progress
 	time.Sleep(time.Microsecond * 100)
@@ -622,9 +622,9 @@ func TestCompleted(t *testing.T) {
 		completedTimeout = 30 * 24 * time.Hour
 	}()
 	app := newApplication(appID1, "default", "root.a")
-	err := app.HandleApplicationEvent(RunApplication)
+	err := app.HandleApplicationEvent(runApplication)
 	assert.NilError(t, err, "no error expected new to accepted (completed test)")
-	err = app.HandleApplicationEvent(WaitApplication)
+	err = app.HandleApplicationEvent(waitApplication)
 	assert.NilError(t, err, "no error expected accepted to waiting (completed test)")
 	// give it some time to run and progress
 	time.Sleep(time.Millisecond * 100)
@@ -657,12 +657,12 @@ func TestOnStatusChangeCalled(t *testing.T) {
 	testHandler := &appEventHandler{}
 	app.rmEventHandler = testHandler
 
-	err := app.HandleApplicationEvent(RunApplication)
+	err := app.HandleApplicationEvent(runApplication)
 	assert.NilError(t, err, "error returned which was not expected")
 	assert.Assert(t, testHandler.isHandled(), "handler did not get called as expected")
 
 	// accepted to rejected: error expected
-	err = app.HandleApplicationEvent(RejectApplication)
+	err = app.HandleApplicationEvent(rejectApplication)
 	assert.Assert(t, err != nil, "error expected and not seen")
 	assert.Equal(t, app.CurrentState(), Accepted.String(), "application state has been changed unexpectedly")
 	assert.Assert(t, !testHandler.isHandled(), "unexpected event send to the RM")

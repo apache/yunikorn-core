@@ -43,7 +43,7 @@ var (
 	reservationDelay = 2 * time.Second
 	startingTimeout  = 5 * time.Minute
 	waitingTimeout   = 30 * time.Second
-	completedTimeout = 30 * 24 * time.Hour
+	completedTimeout = 15 * 24 * time.Hour
 )
 
 type Application struct {
@@ -101,6 +101,10 @@ func (sa *Application) String() string {
 	}
 	return fmt.Sprintf("ApplicationID: %s, Partition: %s, QueueName: %s, SubmissionTime: %x, State: %s",
 		sa.ApplicationID, sa.Partition, sa.QueueName, sa.SubmissionTime, sa.stateMachine.Current())
+}
+
+func (sa *Application) SetState(state string) {
+	sa.stateMachine.SetState(state)
 }
 
 // Set the reservation delay.
@@ -213,7 +217,7 @@ func (sa *Application) timeOutStarting() {
 			zap.String("state", sa.stateMachine.Current()))
 
 		//nolint: errcheck
-		_ = sa.HandleApplicationEvent(RunApplication)
+		_ = sa.HandleApplicationEvent(runApplication)
 	}
 }
 
@@ -224,7 +228,7 @@ func (sa *Application) timeOutWaiting() {
 			zap.String("state", sa.stateMachine.Current()))
 
 		//nolint: errcheck
-		_ = sa.HandleApplicationEvent(CompleteApplication)
+		_ = sa.HandleApplicationEvent(completeApplication)
 	}
 }
 
@@ -235,7 +239,7 @@ func (sa *Application) timeOutCompleted() {
 			zap.String("state", sa.stateMachine.Current()))
 
 		//nolint: errcheck
-		_ = sa.HandleApplicationEvent(DeleteApplication)
+		_ = sa.HandleApplicationEvent(deleteApplication)
 	}
 }
 
@@ -335,7 +339,7 @@ func (sa *Application) RemoveAllocationAsk(allocKey string) int {
 	// Change the state to waiting.
 	// When the resource trackers are zero we should not expect anything to come in later.
 	if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) {
-		if err := sa.HandleApplicationEvent(WaitApplication); err != nil {
+		if err := sa.HandleApplicationEvent(waitApplication); err != nil {
 			log.Logger().Warn("Application state not changed to Waiting while updating ask(s)",
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))
@@ -374,7 +378,7 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 	// 2) all asks and allocation have been removed: state is Waiting
 	// Move the state and get it scheduling (again)
 	if sa.stateMachine.Is(New.String()) || sa.stateMachine.Is(Waiting.String()) {
-		if err := sa.HandleApplicationEvent(RunApplication); err != nil {
+		if err := sa.HandleApplicationEvent(runApplication); err != nil {
 			log.Logger().Debug("Application state change failed while adding new ask",
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))
@@ -893,7 +897,7 @@ func (sa *Application) AddAllocation(info *Allocation) {
 func (sa *Application) addAllocationInternal(info *Allocation) {
 	// progress the state based on where we are, we should never fail in this case
 	// keep track of a failure in log.
-	if err := sa.HandleApplicationEvent(RunApplication); err != nil {
+	if err := sa.HandleApplicationEvent(runApplication); err != nil {
 		log.Logger().Error("Unexpected app state change failure while adding allocation",
 			zap.String("currentState", sa.stateMachine.Current()),
 			zap.Error(err))
@@ -916,7 +920,7 @@ func (sa *Application) RemoveAllocation(uuid string) *Allocation {
 		delete(sa.allocations, uuid)
 		// When the resource trackers are zero we should not expect anything to come in later.
 		if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) {
-			if err := sa.HandleApplicationEvent(WaitApplication); err != nil {
+			if err := sa.HandleApplicationEvent(waitApplication); err != nil {
 				log.Logger().Warn("Application state not changed to Waiting while removing some allocation(s)",
 					zap.String("currentState", sa.CurrentState()),
 					zap.Error(err))
@@ -943,7 +947,7 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 	sa.allocations = make(map[string]*Allocation)
 	// When the resource trackers are zero we should not expect anything to come in later.
 	if resources.IsZero(sa.pending) {
-		if err := sa.HandleApplicationEvent(WaitApplication); err != nil {
+		if err := sa.HandleApplicationEvent(waitApplication); err != nil {
 			log.Logger().Warn("Application state not changed to Waiting while removing all allocations",
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))

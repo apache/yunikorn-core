@@ -75,14 +75,14 @@ func newPartitionContext(conf configs.PartitionConfig, rmID string, cc *ClusterC
 		return nil, fmt.Errorf("partition cannot be created without name or RM, one is not set")
 	}
 	pc := &PartitionContext{
-		Name:         conf.Name,
-		RmID:         rmID,
-		stateMachine: objects.NewObjectState(),
-		stateTime:    time.Now(),
-		applications: make(map[string]*objects.Application),
-		reservedApps: make(map[string]int),
-		nodes:        make(map[string]*objects.Node),
-		allocations:  make(map[string]*objects.Allocation),
+		Name:                  conf.Name,
+		RmID:                  rmID,
+		stateMachine:          objects.NewObjectState(),
+		stateTime:             time.Now(),
+		applications:          make(map[string]*objects.Application),
+		reservedApps:          make(map[string]int),
+		nodes:                 make(map[string]*objects.Node),
+		allocations:           make(map[string]*objects.Allocation),
 		completedApplications: make(map[string]*objects.Application),
 	}
 	pc.partitionManager = &partitionManager{
@@ -921,6 +921,13 @@ func (pc *PartitionContext) GetApplications() []*objects.Application {
 	for _, app := range pc.applications {
 		appList = append(appList, app)
 	}
+	return appList
+}
+
+func (pc *PartitionContext) GetCompletedApplications() []*objects.Application {
+	pc.RLock()
+	defer pc.RUnlock()
+	var appList []*objects.Application
 	for _, app := range pc.completedApplications {
 		appList = append(appList, app)
 	}
@@ -1125,6 +1132,11 @@ func (pc *PartitionContext) cleanupApps() {
 		if app.IsCompleted() {
 			pc.removeApplication(app.ApplicationID)
 		}
+	}
+}
+
+func (pc *PartitionContext) cleanupCompletedApps() {
+	for _, app := range pc.GetCompletedApplications() {
 		if app.IsMarkedForRemoval() {
 			delete(pc.completedApplications, app.ApplicationID)
 		}

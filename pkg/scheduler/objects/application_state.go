@@ -35,16 +35,16 @@ const noTransition = "no transition"
 type applicationEvent int
 
 const (
-	RunApplication applicationEvent = iota
-	WaitApplication
-	RejectApplication
-	CompleteApplication
+	runApplication applicationEvent = iota
+	waitApplication
+	rejectApplication
+	completeApplication
 	KillApplication
-	DeleteApplication
+	deleteApplication
 )
 
 func (ae applicationEvent) String() string {
-	return [...]string{"RunApplication", "WaitApplication", "RejectApplication", "CompleteApplication", "KillApplication", "DeleteApplication"}[ae]
+	return [...]string{"runApplication", "waitApplication", "rejectApplication", "completeApplication", "KillApplication", "deleteApplication"}[ae]
 }
 
 // ----------------------------------
@@ -72,27 +72,27 @@ func NewAppState() *fsm.FSM {
 	return fsm.NewFSM(
 		New.String(), fsm.Events{
 			{
-				Name: RejectApplication.String(),
+				Name: rejectApplication.String(),
 				Src:  []string{New.String()},
 				Dst:  Rejected.String(),
 			}, {
-				Name: RunApplication.String(),
+				Name: runApplication.String(),
 				Src:  []string{New.String()},
 				Dst:  Accepted.String(),
 			}, {
-				Name: RunApplication.String(),
+				Name: runApplication.String(),
 				Src:  []string{Accepted.String()},
 				Dst:  Starting.String(),
 			}, {
-				Name: RunApplication.String(),
+				Name: runApplication.String(),
 				Src:  []string{Running.String(), Starting.String(), Waiting.String()},
 				Dst:  Running.String(),
 			}, {
-				Name: CompleteApplication.String(),
+				Name: completeApplication.String(),
 				Src:  []string{Running.String(), Starting.String(), Waiting.String()},
 				Dst:  Completed.String(),
 			}, {
-				Name: WaitApplication.String(),
+				Name: waitApplication.String(),
 				Src:  []string{Accepted.String(), Running.String(), Starting.String()},
 				Dst:  Waiting.String(),
 			}, {
@@ -100,7 +100,7 @@ func NewAppState() *fsm.FSM {
 				Src:  []string{Accepted.String(), killed.String(), New.String(), Running.String(), Starting.String(), Waiting.String()},
 				Dst:  killed.String(),
 			}, {
-				Name: DeleteApplication.String(),
+				Name: deleteApplication.String(),
 				Src:  []string{Completed.String()},
 				Dst:  Deleting.String(),
 			},

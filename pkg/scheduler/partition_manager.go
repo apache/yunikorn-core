@@ -31,6 +31,8 @@ const (
 	cleanerInterval = 10000 // sleep between queue removal checks
 )
 
+var appRemovalInterval = 24 * time.Hour
+
 type partitionManager struct {
 	pc       *PartitionContext
 	cc       *ClusterContext
@@ -52,6 +54,7 @@ func (manager partitionManager) Run() {
 	log.Logger().Info("starting partition manager",
 		zap.String("partition", manager.pc.Name),
 		zap.String("interval", manager.interval.String()))
+	go manager.cleanupCompletedApps()
 	// exit only when the partition this manager belongs to exits
 	for {
 		time.Sleep(manager.interval)
@@ -142,4 +145,14 @@ func (manager partitionManager) remove() {
 		zap.String("partitionName", manager.pc.Name))
 	// remove the scheduler object
 	manager.cc.removePartition(manager.pc.Name)
+}
+
+func (manager partitionManager) cleanupCompletedApps() {
+	for {
+		if manager.stop {
+			break
+		}
+		manager.pc.cleanupCompletedApps()
+		time.Sleep(appRemovalInterval)
+	}
 }

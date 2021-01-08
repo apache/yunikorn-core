@@ -19,7 +19,12 @@
 package plugins
 
 import (
+	"reflect"
+
+	"github.com/apache/incubator-yunikorn-core/pkg/plugins/default_plugins_impl"
+
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"go.uber.org/zap"
 )
 
 var plugins SchedulerPlugins
@@ -52,12 +57,14 @@ func RegisterSchedulerPlugin(plugin interface{}) {
 		log.Logger().Info("register scheduler plugin: ConfigMapPlugin")
 		plugins.configPlugin = t
 	}
-	if t, ok := plugin.(QueueRequestManagerPlugin); ok {
-		log.Logger().Info("register scheduler plugin: ConfigMapPlugin")
-		plugins.queueRequestManagerPlugin = t
+	if t, ok := plugin.(ApplicationsPlugin); ok {
+		log.Logger().Info("register scheduler plugin: ApplicationsPlugin",
+			zap.String("type", reflect.TypeOf(plugin).String()))
+		plugins.applicationsPlugin = t
 	}
 	if t, ok := plugin.(RequestsPlugin); ok {
-		log.Logger().Info("register scheduler plugin: ConfigMapPlugin")
+		log.Logger().Info("register scheduler plugin: RequestsPlugin",
+			zap.String("type", reflect.TypeOf(plugin).String()))
 		plugins.requestsPlugin = t
 	}
 }
@@ -97,16 +104,22 @@ func GetConfigPlugin() ConfigurationPlugin {
 	return plugins.configPlugin
 }
 
-func GetQueueRequestManagerPlugin() QueueRequestManagerPlugin {
-	plugins.RLock()
-	defer plugins.RUnlock()
-
-	return plugins.queueRequestManagerPlugin
-}
-
 func GetRequestsPlugin() RequestsPlugin {
 	plugins.RLock()
 	defer plugins.RUnlock()
 
+	if plugins.requestsPlugin == nil {
+		return default_plugins_impl.DefaultRequestsPluginInstance
+	}
 	return plugins.requestsPlugin
+}
+
+func GetApplicationsPlugin() ApplicationsPlugin {
+	plugins.RLock()
+	defer plugins.RUnlock()
+
+	if plugins.applicationsPlugin == nil {
+		return default_plugins_impl.DefaultApplicationsPluginInstance
+	}
+	return plugins.applicationsPlugin
 }

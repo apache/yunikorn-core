@@ -36,6 +36,35 @@ type NodeIterator interface {
 	Reset()
 }
 
+// This interface helps to manage all application for a queue.
+type Applications interface {
+	// add or update an app,
+	// return old app if present, otherwise return nil.
+	AddApplication(app Application) Application
+	// remove the app with the specified allocation key,
+	// return removed request if present, otherwise return nil.
+	RemoveApplication(appID string) Application
+	// find the app with the specified appID,
+	// return matched app if present, otherwise return nil.
+	GetApplication(appID string) Application
+	// find requests which are matched by the specified filter,
+	// return a slice of matched requests (empty slice if not present).
+	GetApplications(filter func(app Application) bool) []Application
+	// return the size of all application
+	Size() int
+	// reset to a clean state
+	Reset()
+
+	// Return a iterator of sorted applications in the queue for allocation.
+	// Applications are sorted using the sorting type of the queue.
+	// Only applications with a pending resource request are considered.
+	SortForAllocation() AppIterator
+	// Return a iterator of sorted applications in the queue for preemption.
+	// Applications are sorted using the sorting type of the queue.
+	// Only applications with a allocated resource request are considered.
+	SortForPreemption() AppIterator
+}
+
 // This interface helps to manage all requests for an application.
 type Requests interface {
 	// add or update a request,
@@ -54,6 +83,13 @@ type Requests interface {
 	Size() int
 	// reset to a clean state
 	Reset()
+
+	// Return a iterator of sorted requests in the application for allocation.
+	// Only pending requests are considered.
+	SortForAllocation() RequestIterator
+	// Return a iterator of sorted requests in the application for preemption.
+	// Only allocated requests are considered.
+	SortForPreemption() RequestIterator
 }
 
 // This interface is used by queue to sort applications and their pending requests.
@@ -61,11 +97,11 @@ type QueueRequestManager interface {
 	// Return a iterator of sorted applications in the queue for allocation.
 	// Applications are sorted using the sorting type of the queue.
 	// Only applications with a pending resource request are considered.
-	SortForAllocation() AppRequestIterator
+	SortForAllocation() AppIterator
 	// Return a iterator of sorted applications in the queue for preemption.
 	// Applications are sorted using the sorting type of the queue.
 	// Only applications with a allocated resource request are considered.
-	SortForPreemption() AppRequestIterator
+	SortForPreemption() AppIterator
 }
 
 // This interface helps to iterate over a list of requests belong to the same app.
@@ -79,11 +115,11 @@ type RequestIterator interface {
 }
 
 // This interface helps to iterate over a list of applications and their pending requests.
-type AppRequestIterator interface {
+type AppIterator interface {
 	// return true if there is more app to iterate over
 	HasNext() (ok bool)
 	// return the next app and request iterator
-	Next() (Application, RequestIterator)
+	Next() Application
 	// return the size of elements
 	Size() int
 }

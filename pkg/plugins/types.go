@@ -27,13 +27,13 @@ import (
 )
 
 type SchedulerPlugins struct {
-	predicatesPlugin          PredicatesPlugin
-	reconcilePlugin           ReconcilePlugin
-	eventPlugin               EventPlugin
-	schedulingStateUpdater    ContainerSchedulingStateUpdater
-	configPlugin              ConfigurationPlugin
-	queueRequestManagerPlugin QueueRequestManagerPlugin
-	requestsPlugin            RequestsPlugin
+	predicatesPlugin       PredicatesPlugin
+	reconcilePlugin        ReconcilePlugin
+	eventPlugin            EventPlugin
+	schedulingStateUpdater ContainerSchedulingStateUpdater
+	configPlugin           ConfigurationPlugin
+	applicationsPlugin     ApplicationsPlugin
+	requestsPlugin         RequestsPlugin
 
 	sync.RWMutex
 }
@@ -73,9 +73,15 @@ type ConfigurationPlugin interface {
 }
 
 // This plugin is responsible for creating new instances of QueueRequestManager.
-type QueueRequestManagerPlugin interface {
-	// return a new instance of QueueRequestManager for specified queue
-	NewQueueRequestManager(queue interface{}) interfaces.QueueRequestManager
+//type QueueRequestManagerPlugin interface {
+//	// return a new instance of QueueRequestManager for specified queue
+//	NewQueueRequestManager(queue interface{}) interfaces.QueueRequestManager
+//}
+
+// This plugin is responsible for creating new instances of Applications.
+type ApplicationsPlugin interface {
+	// return a new instance of Applications
+	NewApplications(queue interfaces.Queue) interfaces.Applications
 }
 
 // This plugin is responsible for creating new instances of Requests.

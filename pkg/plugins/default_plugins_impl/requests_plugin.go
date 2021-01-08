@@ -35,51 +35,101 @@ func (drp *DefaultRequestsPlugin) NewRequests() interfaces.Requests {
 // This is an implementation of Requests which keeps all requests in a map.
 // It's not thread-safe, must be called while holding the lock of application.
 type DefaultRequests struct {
-	requests map[string]interfaces.Request
+	mapper *CommonMapper
 }
 
 func NewDefaultRequests() interfaces.Requests {
 	return &DefaultRequests{
-		requests: make(map[string]interfaces.Request),
+		mapper: NewCommonMapper(),
 	}
 }
 
-func (drp *DefaultRequests) AddRequest(request interfaces.Request) interfaces.Request {
+func (dr *DefaultRequests) AddRequest(request interfaces.Request) interfaces.Request {
 	if request == nil {
 		return nil
 	}
 	allocKey := request.(interfaces.Request).GetAllocationKey()
-	existingRequest := drp.requests[allocKey]
-	drp.requests[allocKey] = request
-	return existingRequest
-}
-
-func (drp *DefaultRequests) RemoveRequest(allocationKey string) interfaces.Request {
-	existingRequest := drp.requests[allocationKey]
-	if existingRequest != nil {
-		delete(drp.requests, allocationKey)
+	if existingRequest := dr.mapper.Add(allocKey, request); existingRequest != nil {
+		return existingRequest.(interfaces.Request)
 	}
-	return existingRequest
+	return nil
 }
 
-func (drp *DefaultRequests) GetRequest(allocationKey string) interfaces.Request {
-	return drp.requests[allocationKey]
+func (dr *DefaultRequests) RemoveRequest(allocationKey string) interfaces.Request {
+	if removedRequest := dr.mapper.Remove(allocationKey); removedRequest != nil {
+		return removedRequest.(interfaces.Request)
+	}
+	return nil
 }
 
-func (drp *DefaultRequests) GetRequests(filter func(request interfaces.Request) bool) []interfaces.Request {
+func (dr *DefaultRequests) GetRequest(allocationKey string) interfaces.Request {
+	if request := dr.mapper.Get(allocationKey); request != nil {
+		return request.(interfaces.Request)
+	}
+	return nil
+}
+
+func (dr *DefaultRequests) GetRequests(filter func(request interfaces.Request) bool) []interfaces.Request {
 	requests := make([]interfaces.Request, 0)
-	for _, req := range drp.requests {
-		if filter == nil || filter(req) {
-			requests = append(requests, req)
+	for _, req := range dr.mapper.GetItems() {
+		if filter == nil || filter(req.(interfaces.Request)) {
+			requests = append(requests, req.(interfaces.Request))
 		}
 	}
 	return requests
 }
 
-func (drp *DefaultRequests) Size() int {
-	return len(drp.requests)
+func (dr *DefaultRequests) Size() int {
+	return dr.mapper.Size()
 }
 
-func (drp *DefaultRequests) Reset() {
-	drp.requests = make(map[string]interfaces.Request)
+func (dr *DefaultRequests) Reset() {
+	dr.mapper.Reset()
+}
+
+func (dr *DefaultRequests) SortForAllocation() interfaces.RequestIterator {
+	// filter pending requests
+	sortedRequests := make([]interfaces.Request, 0)
+	for _, request := range dr.mapper.GetItems() {
+		if request.(interfaces.Request).GetPendingAskRepeat() > 0 {
+			sortedRequests = append(sortedRequests, request.(interfaces.Request))
+		}
+	}
+	// sort asks by priority
+	SortAskByPriority(sortedRequests, false)
+	return NewDefaultRequestIterator(sortedRequests)
+}
+
+func (dr *DefaultRequests) SortForPreemption() interfaces.RequestIterator {
+	//TODO this should be implemented when refactoring the preemption process
+	return nil
+}
+
+type DefaultRequestIterator struct {
+	requests []interfaces.Request
+	index    int
+}
+
+func NewDefaultRequestIterator(requests []interfaces.Request) *DefaultRequestIterator {
+	return &DefaultRequestIterator{
+		requests: requests,
+		index:    0,
+	}
+}
+
+func (dri *DefaultRequestIterator) HasNext() bool {
+	return dri.index < len(dri.requests)
+}
+
+func (dri *DefaultRequestIterator) Next() interfaces.Request {
+	if dri.index >= len(dri.requests) {
+		return nil
+	}
+	obj := dri.requests[dri.index]
+	dri.index++
+	return obj
+}
+
+func (dri *DefaultRequestIterator) Size() int {
+	return len(dri.requests)
 }

@@ -19,6 +19,7 @@
 package objects
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
@@ -430,6 +431,49 @@ func TestRemoveAllocAsk(t *testing.T) {
 	if !resources.IsZero(app.GetPendingResource()) {
 		t.Errorf("pending resource not updated correctly, expected zero but was: %v", app.GetPendingResource())
 	}
+}
+
+// This test must not test the sorter that is underlying.
+// It tests the DefaultQueueRequestManager specific parts of the code only.
+func TestSortRequests(t *testing.T) {
+	// create the root and left queue
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	var leaf *Queue
+	leaf, err = createManagedQueue(root, "leaf", true, nil)
+	assert.NilError(t, err, "failed to create leaf queue: %v", err)
+	// create an application
+	app := newApplication(appID1, "default", leaf.QueuePath)
+	if app == nil || app.ApplicationID != appID1 {
+		t.Fatalf("app create failed which should not have %v", app)
+	}
+	app.queue = leaf
+	leaf.AddApplication(app)
+	// new app does not have pending res, does not get returned
+	appIt := leaf.GetApplications().SortForAllocation()
+	assert.Assert(t, !appIt.HasNext() && appIt.Size() == 0, "app without ask should not be in sorted apps")
+	// new app has 3 asks, should be returned
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	for i := 1; i < 4; i++ {
+		num := strconv.Itoa(i)
+		ask := newAllocationAsk("ask-"+num, appID1, res)
+		ask.priority = int32(i)
+		app.AddAllocationAsk(ask)
+	}
+	appIt = leaf.GetApplications().SortForAllocation()
+	assert.Assert(t, appIt.HasNext() && appIt.Size() == 1, "sorted application is missing expected app")
+	checkApp := appIt.Next()
+	assert.Assert(t, checkApp.GetApplicationID() == appID1, "sorted application is missing expected app")
+	reqIt := checkApp.GetRequestsWrapper().SortForAllocation()
+	assert.Assert(t, reqIt.Size() == 3, "size of pending requests is not correct, expected %v, actual %v", 3, reqIt.Size())
+	// remove first ask, should have 2 asks left
+	allocKey := reqIt.Next().GetAllocationKey()
+	app.requests.RemoveRequest(allocKey)
+	appIt = leaf.GetApplications().SortForAllocation()
+	checkApp = appIt.Next()
+	assert.Assert(t, checkApp.GetApplicationID() == appID1, "sorted application is missing expected app")
+	reqIt = checkApp.GetRequestsWrapper().SortForAllocation()
+	assert.Assert(t, reqIt.Size() == 2, "size of pending requests is not correct, expected %v, actual %v", 2, reqIt.Size())
 }
 
 func TestStateChangeOnAskUpdate(t *testing.T) {

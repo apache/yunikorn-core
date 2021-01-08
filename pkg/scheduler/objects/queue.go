@@ -24,8 +24,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/plugins/default_plugins_impl"
-
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 
 	"github.com/looplab/fsm"
@@ -51,7 +49,7 @@ type Queue struct {
 	// Private fields need protection
 	sortType     policies.SortPolicy     // How applications (leaf) or queues (parents) are sorted
 	children     map[string]*Queue       // Only for direct children, parent queue only
-	applications map[string]*Application // only for leaf queue
+	applications interfaces.Applications // only for leaf queue
 	reservedApps map[string]int          // applications reserved within this queue, with reservation count
 	parent       *Queue                  // link back to the parent in the scheduler
 	preempting   *resources.Resource     // resource considered for preemption in the queue
@@ -79,7 +77,6 @@ type Queue struct {
 func newBlankQueue() *Queue {
 	return &Queue{
 		children:          make(map[string]*Queue),
-		applications:      make(map[string]*Application),
 		reservedApps:      make(map[string]int),
 		properties:        make(map[string]string),
 		stateMachine:      NewObjectState(),
@@ -115,7 +112,7 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 		sq.mergeProperties(parent.getProperties(), conf.Properties)
 	}
 	sq.UpdateSortType()
-	sq.initQueueRequestManager()
+	sq.initApplications()
 
 	log.Logger().Debug("configured queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
@@ -152,7 +149,7 @@ func NewDynamicQueue(name string, leaf bool, parent *Queue) (*Queue, error) {
 	// pull the properties from the parent that should be set on the child
 	sq.setTemplateProperties(parent.getProperties())
 	sq.UpdateSortType()
-	sq.initQueueRequestManager()
+	sq.initApplications()
 	log.Logger().Info("dynamic queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
 
@@ -459,7 +456,7 @@ func (sq *Queue) decPendingResource(delta *resources.Resource) {
 func (sq *Queue) AddApplication(app *Application) {
 	sq.Lock()
 	defer sq.Unlock()
-	sq.applications[app.ApplicationID] = app
+	sq.applications.AddApplication(app)
 	// YUNIKORN-199: update the quota from the namespace
 	// get the tag with the quota
 	quota := app.GetTag(appTagNamespaceResourceQuota)
@@ -494,7 +491,7 @@ func (sq *Queue) AddApplication(app *Application) {
 func (sq *Queue) RemoveApplication(app *Application) {
 	// clean up any outstanding pending resources
 	appID := app.ApplicationID
-	if _, ok := sq.applications[appID]; !ok {
+	if app := sq.applications.GetApplication(appID); app == nil {
 		log.Logger().Debug("Application not found while removing from queue",
 			zap.String("queueName", sq.QueuePath),
 			zap.String("applicationID", appID))
@@ -512,7 +509,7 @@ func (sq *Queue) RemoveApplication(app *Application) {
 	sq.Lock()
 	defer sq.Unlock()
 
-	delete(sq.applications, appID)
+	sq.applications.RemoveApplication(appID)
 }
 
 // Get a copy of all apps holding the lock
@@ -520,8 +517,8 @@ func (sq *Queue) GetCopyOfApps() map[string]interfaces.Application {
 	sq.RLock()
 	defer sq.RUnlock()
 	appsCopy := make(map[string]interfaces.Application)
-	for appID, app := range sq.applications {
-		appsCopy[appID] = app
+	for _, app := range sq.applications.GetApplications(nil) {
+		appsCopy[app.GetApplicationID()] = app
 	}
 	return appsCopy
 }
@@ -547,7 +544,7 @@ func (sq *Queue) IsEmpty() bool {
 	sq.RLock()
 	defer sq.RUnlock()
 	if sq.isLeaf {
-		return len(sq.applications) == 0
+		return sq.applications.Size() == 0
 	}
 	return len(sq.children) == 0
 }
@@ -623,7 +620,7 @@ func (sq *Queue) RemoveQueue() bool {
 		return false
 	}
 	// cannot remove a queue that has children or applications assigned
-	if len(sq.children) > 0 || len(sq.applications) > 0 {
+	if len(sq.children) > 0 || sq.applications.Size() > 0 {
 		return false
 	}
 	log.Logger().Info("removing queue", zap.String("queue", sq.QueuePath))
@@ -865,10 +862,10 @@ func (sq *Queue) TryAllocate(iterator func() interfaces.NodeIterator) *Allocatio
 		// get the headroom
 		headRoom := sq.getHeadRoom()
 		// process the apps (filters out app without pending requests)
-		appRequestIt := sq.GetQueueRequestManager().SortForAllocation()
-		for appRequestIt.HasNext() {
-			app, requestIt := appRequestIt.Next()
-			alloc := app.(*Application).tryAllocate(headRoom, iterator, requestIt)
+		appIt := sq.GetApplications().SortForAllocation()
+		for appIt.HasNext() {
+			app := appIt.Next()
+			alloc := app.(*Application).tryAllocate(headRoom, iterator)
 			if alloc != nil {
 				log.Logger().Debug("allocation found on queue",
 					zap.String("queueName", sq.QueuePath),
@@ -892,10 +889,10 @@ func (sq *Queue) TryAllocate(iterator func() interfaces.NodeIterator) *Allocatio
 func (sq *Queue) GetQueueOutstandingRequests(total *[]*AllocationAsk) {
 	if sq.IsLeafQueue() {
 		headRoom := sq.getMaxHeadRoom()
-		appRequestIt := sq.GetQueueRequestManager().SortForAllocation()
+		appRequestIt := sq.GetApplications().SortForAllocation()
 		for appRequestIt.HasNext() {
-			app, requestIt := appRequestIt.Next()
-			app.(*Application).getOutstandingRequests(headRoom, total, requestIt)
+			app := appRequestIt.Next()
+			app.(*Application).getOutstandingRequests(headRoom, total)
 		}
 	} else {
 		for _, child := range sq.sortQueues() {
@@ -995,7 +992,10 @@ func (sq *Queue) UnReserve(appID string, releases int) {
 func (sq *Queue) getApplication(appID string) *Application {
 	sq.RLock()
 	defer sq.RUnlock()
-	return sq.applications[appID]
+	if app := sq.applications.GetApplication(appID); app != nil {
+		return app.(*Application)
+	}
+	return nil
 }
 
 // get the queue sort type holding a lock
@@ -1021,14 +1021,10 @@ func (sq *Queue) String() string {
 		sq.QueuePath, sq.stateMachine.Current(), sq.stateTime, sq.maxResource)
 }
 
-func (sq *Queue) initQueueRequestManager() {
-	plugin := plugins.GetQueueRequestManagerPlugin()
-	if plugin == nil {
-		plugin = default_plugins_impl.DefaultQueueRequestManagerPluginInstance
-	}
-	sq.queueRequestManager = plugin.NewQueueRequestManager(sq)
+func (sq *Queue) initApplications() {
+	sq.applications = plugins.GetApplicationsPlugin().NewApplications(sq)
 }
 
-func (sq *Queue) GetQueueRequestManager() interfaces.QueueRequestManager {
-	return sq.queueRequestManager
+func (sq *Queue) GetApplications() interfaces.Applications {
+	return sq.applications
 }

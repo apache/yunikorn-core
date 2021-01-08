@@ -20,47 +20,11 @@ package default_plugins_impl
 
 import (
 	"sort"
-	"time"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 )
-
-func SortApplications(apps map[string]interfaces.Application, sortType policies.SortPolicy, globalResource *resources.Resource) []interfaces.Application {
-	sortingStart := time.Now()
-	var sortedApps []interfaces.Application
-	switch sortType {
-	case policies.FairSortPolicy:
-		sortedApps = FilterOnPendingResources(apps)
-		// Sort by usage
-		sort.SliceStable(sortedApps, func(i, j int) bool {
-			l := sortedApps[i]
-			r := sortedApps[j]
-			return resources.CompUsageRatio(l.GetAllocatedResource(), r.GetAllocatedResource(), globalResource) < 0
-		})
-	case policies.FifoSortPolicy:
-		sortedApps = FilterOnPendingResources(apps)
-		// Sort by submission time oldest first
-		sort.SliceStable(sortedApps, func(i, j int) bool {
-			l := sortedApps[i]
-			r := sortedApps[j]
-			return l.GetSubmissionTime().Before(r.GetSubmissionTime())
-		})
-	case policies.StateAwarePolicy:
-		sortedApps = StateAwareFilter(apps)
-		// Sort by submission time oldest first
-		sort.SliceStable(sortedApps, func(i, j int) bool {
-			l := sortedApps[i]
-			r := sortedApps[j]
-			return l.GetSubmissionTime().Before(r.GetSubmissionTime())
-		})
-	}
-	metrics.GetSchedulerMetrics().ObserveAppSortingLatency(sortingStart)
-	return sortedApps
-}
 
 func FilterOnPendingResources(apps map[string]interfaces.Application) []interfaces.Application {
 	filteredApps := make([]interfaces.Application, 0)
@@ -108,6 +72,22 @@ func StateAwareFilter(apps map[string]interfaces.Application) []interfaces.Appli
 		filteredApps = append(filteredApps, acceptedApp)
 	}
 	return filteredApps
+}
+
+func CompareSubmissionTime(l, r interfaces.Application, queue interfaces.Queue) (ok bool, less bool) {
+	if !l.GetSubmissionTime().Equal(r.GetSubmissionTime()) {
+		return true, l.GetSubmissionTime().Before(r.GetSubmissionTime())
+	}
+	return false, true
+}
+
+func CompareFairness(l, r interfaces.Application, queue interfaces.Queue) (ok bool, less bool) {
+	compValue := resources.CompUsageRatio(l.GetAllocatedResource(), r.GetAllocatedResource(),
+		queue.GetGuaranteedResource())
+	if compValue != 0 {
+		return true, compValue < 0
+	}
+	return false, true
 }
 
 func SortAskByPriority(requests []interfaces.Request, ascending bool) {

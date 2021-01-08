@@ -15,149 +15,181 @@ import (
 )
 
 func TestSortAppsNoPending(t *testing.T) {
-	// stable sort is used so equal values stay where they were
+	// init queue
+	queueName := "leaf"
+	leafQueue := createTestQueue(t, queueName)
+	// init apps
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"first": resources.Quantity(100)})
-	input := make(map[string]interfaces.Application, 4)
 	for i := 0; i < 2; i++ {
 		num := strconv.Itoa(i)
 		appID := "app-" + num
-		app := newApplication(appID, "partition", "queue")
-		input[appID] = app
+		app := newApplication(appID, "partition", queueName)
+		leafQueue.AddApplication(app)
+		app.SetQueue(leafQueue)
 	}
 
 	// no apps with pending resources should come back empty
-	list := default_plugins_impl.SortApplications(input, policies.FairSortPolicy, nil)
+	//list := default_plugins_impl.SortApplications(input, policies.FairSortPolicy, nil)
+	leafQueue.sortType = policies.FairSortPolicy
+	list := getApps(leafQueue.GetApplications().SortForAllocation())
 	assertAppListLength(t, list, []string{}, "fair no pending")
-	list = default_plugins_impl.SortApplications(input, policies.FifoSortPolicy, nil)
+	leafQueue.sortType = policies.FifoSortPolicy
+	list = getApps(leafQueue.GetApplications().SortForAllocation())
 	assertAppListLength(t, list, []string{}, "fifo no pending")
-	list = default_plugins_impl.SortApplications(input, policies.StateAwarePolicy, nil)
+	leafQueue.sortType = policies.StateAwarePolicy
+	list = getApps(leafQueue.GetApplications().SortForAllocation())
 	assertAppListLength(t, list, []string{}, "state no pending")
 
 	// set one app with pending
 	appID := "app-1"
-	input[appID].(*Application).pending = res
-	list = default_plugins_impl.SortApplications(input, policies.FairSortPolicy, nil)
+	ask := newAllocationAsk("ask-1", appID, res)
+	leafQueue.applications.GetApplication(appID).(*Application).AddAllocationAsk(ask)
+	leafQueue.sortType = policies.FairSortPolicy
+	list = getApps(leafQueue.GetApplications().SortForAllocation())
 	assertAppListLength(t, list, []string{appID}, "fair one pending")
-	list = default_plugins_impl.SortApplications(input, policies.FifoSortPolicy, nil)
+	leafQueue.sortType = policies.FifoSortPolicy
+	list = getApps(leafQueue.GetApplications().SortForAllocation())
 	assertAppListLength(t, list, []string{appID}, "fifo one pending")
-	list = default_plugins_impl.SortApplications(input, policies.StateAwarePolicy, nil)
+	leafQueue.sortType = policies.StateAwarePolicy
+	list = getApps(leafQueue.GetApplications().SortForAllocation())
 	assertAppListLength(t, list, []string{appID}, "state one pending")
 }
 
 func TestSortAppsFifo(t *testing.T) {
-	// stable sort is used so equal values stay where they were
+	// init queue
+	queueName := "leaf"
+	leafQueue := createTestQueue(t, queueName)
+	// init apps
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"first": resources.Quantity(100)})
-	// setup to sort descending: all apps have pending resources
 	input := make(map[string]interfaces.Application, 4)
 	for i := 0; i < 4; i++ {
 		num := strconv.Itoa(i)
 		appID := "app-" + num
-		app := newApplication(appID, "partition", "queue")
-		app.pending = res
+		app := newApplication(appID, "partition", queueName)
 		input[appID] = app
-		// make sure the time stamps differ at least a bit (tracking in nano seconds)
-		time.Sleep(time.Nanosecond * 5)
+		leafQueue.AddApplication(app)
+		app.SetQueue(leafQueue)
+		// add pending ask
+		ask := newAllocationAsk("ask-1", appID, res)
+		app.AddAllocationAsk(ask)
 	}
 	// map iteration is random so we do not need to check input
 	// apps should come back in order created 0, 1, 2, 3
-	list := default_plugins_impl.SortApplications(input, policies.FifoSortPolicy, nil)
+	leafQueue.sortType = policies.FifoSortPolicy
+	list := getApps(leafQueue.GetApplications().SortForAllocation())
 	assertAppList(t, list, []int{0, 1, 2, 3}, "fifo simple")
 }
 
 func TestSortAppsFair(t *testing.T) {
-	// stable sort is used so equal values stay where they were
+	// init queue
+	queueName := "leaf"
+	leafQueue := createTestQueue(t, queueName)
+	// init apps
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"first": resources.Quantity(100)})
-	// setup to sort descending: all apps have pending resources
-	input := make(map[string]interfaces.Application, 4)
 	for i := 0; i < 4; i++ {
 		num := strconv.Itoa(i)
 		appID := "app-" + num
-		app := newApplication(appID, "partition", "queue")
-		app.allocatedResource = resources.Multiply(res, int64(i+1))
-		app.pending = res
-		input[appID] = app
+		app := newApplication(appID, "partition", queueName)
+		leafQueue.AddApplication(app)
+		app.SetQueue(leafQueue)
+		// add pending ask
+		ask := newAllocationAsk("ask-1", appID, res)
+		app.AddAllocationAsk(ask)
+		// add allocation
+		alloc := newAllocation(appID, "uuid-1", nodeID1, queueName, resources.Multiply(res, int64(i+1)))
+		app.AddAllocation(alloc)
 	}
+
+	leafQueue.sortType = policies.FairSortPolicy
 	// nil resource: usage based sorting
 	// apps should come back in order: 0, 1, 2, 3
-	list := default_plugins_impl.SortApplications(input, policies.FairSortPolicy, nil)
+	list := getApps(leafQueue.GetApplications().SortForAllocation())
+	//list := default_plugins_impl.SortApplications(input, policies.FairSortPolicy, nil)
 	assertAppList(t, list, []int{0, 1, 2, 3}, "nil total")
 
 	// apps should come back in order: 0, 1, 2, 3
-	list = default_plugins_impl.SortApplications(input, policies.FairSortPolicy, resources.Multiply(res, 0))
+	//list = default_plugins_impl.SortApplications(input, policies.FairSortPolicy, resources.Multiply(res, 0))
+	leafQueue.guaranteedResource = resources.Multiply(res, 0)
+	list = getApps(leafQueue.GetApplications().SortForAllocation())
 	assertAppList(t, list, []int{0, 1, 2, 3}, "zero total")
 
 	// apps should come back in order: 0, 1, 2, 3
-	list = default_plugins_impl.SortApplications(input, policies.FairSortPolicy, resources.Multiply(res, 5))
+	//list = default_plugins_impl.SortApplications(input, policies.FairSortPolicy, resources.Multiply(res, 5))
+	leafQueue.guaranteedResource = resources.Multiply(res, 5)
+	list = getApps(leafQueue.GetApplications().SortForAllocation())
 	assertAppList(t, list, []int{0, 1, 2, 3}, "no alloc, set total")
 
 	// update allocated resource for app-1
-	input["app-1"].(*Application).allocatedResource = resources.Multiply(res, 10)
+	leafQueue.applications.GetApplication("app-1").(*Application).allocatedResource = resources.Multiply(res, 10)
+	list = getApps(leafQueue.GetApplications().SortForAllocation())
 	// apps should come back in order: 0, 2, 3, 1
-	list = default_plugins_impl.SortApplications(input, policies.FairSortPolicy, resources.Multiply(res, 5))
+	//list = default_plugins_impl.SortApplications(input, policies.FairSortPolicy, resources.Multiply(res, 5))
 	assertAppList(t, list, []int{0, 3, 1, 2}, "app-1 allocated")
 
 	// update allocated resource for app-3 to negative (move to head of the list)
-	input["app-3"].(*Application).allocatedResource = resources.Multiply(res, -10)
+	leafQueue.applications.GetApplication("app-3").(*Application).allocatedResource = resources.Multiply(res, -10)
 	// apps should come back in order: 3, 0, 2, 1
-	list = default_plugins_impl.SortApplications(input, policies.FairSortPolicy, resources.Multiply(res, 5))
+	list = getApps(leafQueue.GetApplications().SortForAllocation())
 	assertAppList(t, list, []int{1, 3, 2, 0}, "app-1 & app-3 allocated")
 }
 
 func TestSortAppsStateAware(t *testing.T) {
-	// stable sort is used so equal values stay where they were
+	// init queue
+	queueName := "leaf"
+	leafQueue := createTestQueue(t, queueName)
+	// init apps
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"first": resources.Quantity(100)})
 	// setup all apps with pending resources, all accepted state
-	input := make(map[string]interfaces.Application, 4)
 	for i := 0; i < 4; i++ {
 		num := strconv.Itoa(i)
 		appID := "app-" + num
-		app := newApplication(appID, "partition", "queue")
-		app.pending = res
-		input[appID] = app
-		err := app.HandleApplicationEvent(runApplication)
-		assert.NilError(t, err, "state change failed for app %v", appID)
-		// make sure the time stamps differ at least a bit (tracking in nano seconds)
+		app := newApplication(appID, "partition", queueName)
+		leafQueue.AddApplication(app)
+		app.SetQueue(leafQueue)
+		// add pending ask
+		ask := newAllocationAsk("ask-1", appID, res)
+		app.AddAllocationAsk(ask)
 		time.Sleep(time.Nanosecond * 5)
 	}
 	// only first app should be returned (all in accepted)
-	list := default_plugins_impl.SortApplications(input, policies.StateAwarePolicy, nil)
+	leafQueue.sortType = policies.StateAwarePolicy
+	list := getApps(leafQueue.GetApplications().SortForAllocation())
 	appID0 := "app-0"
 	assertAppListLength(t, list, []string{appID0}, "state all accepted")
 
 	// set first app pending to zero, should get 2nd app back
-	input[appID0].(*Application).pending = resources.NewResource()
-	list = default_plugins_impl.SortApplications(input, policies.StateAwarePolicy, nil)
+	leafQueue.applications.GetApplication(appID0).(*Application).pending = resources.NewResource()
+	list = getApps(leafQueue.GetApplications().SortForAllocation())
 	appID1 := "app-1"
 	assertAppListLength(t, list, []string{appID1}, "state no pending")
 
 	// move the first app to starting no pending resource should get nothing
-	err := input[appID0].(*Application).HandleApplicationEvent(runApplication)
+	err := leafQueue.applications.GetApplication(appID0).(*Application).HandleApplicationEvent(runApplication)
 	assert.NilError(t, err, "state change failed for app-0")
-	list = default_plugins_impl.SortApplications(input, policies.StateAwarePolicy, nil)
+	list = getApps(leafQueue.GetApplications().SortForAllocation())
 	assertAppListLength(t, list, []string{}, "state starting no pending")
 
 	// move first app to running (no pending resource) and 4th app to starting should get starting app
-	err = input[appID0].(*Application).HandleApplicationEvent(runApplication)
+	err = leafQueue.applications.GetApplication(appID0).(*Application).HandleApplicationEvent(runApplication)
 	assert.NilError(t, err, "state change failed for app-0")
 	appID3 := "app-3"
-	err = input[appID3].(*Application).HandleApplicationEvent(runApplication)
+	err = leafQueue.applications.GetApplication(appID3).(*Application).HandleApplicationEvent(runApplication)
 	assert.NilError(t, err, "state change failed for app-3")
-	list = default_plugins_impl.SortApplications(input, policies.StateAwarePolicy, nil)
+	list = getApps(leafQueue.GetApplications().SortForAllocation())
 	assertAppListLength(t, list, []string{appID3}, "state starting")
 
 	// set pending for first app, should get back 1st and 4th in that order
-	input[appID0].(*Application).pending = res
-	list = default_plugins_impl.SortApplications(input, policies.StateAwarePolicy, nil)
-	assertAppListLength(t, list, []string{appID0, appID3}, "state first pending")
+	leafQueue.applications.GetApplication(appID0).(*Application).pending = res
+	list = getApps(leafQueue.GetApplications().SortForAllocation())
 
 	// move 4th to running should get back: 1st, 2nd and 4th in that order
-	err = input[appID3].(*Application).HandleApplicationEvent(runApplication)
+	err = leafQueue.applications.GetApplication(appID3).(*Application).HandleApplicationEvent(runApplication)
 	assert.NilError(t, err, "state change failed for app-3")
-	list = default_plugins_impl.SortApplications(input, policies.StateAwarePolicy, nil)
+	list = getApps(leafQueue.GetApplications().SortForAllocation())
 	assertAppListLength(t, list, []string{appID0, appID1, appID3}, "state not app-2")
 }
 
@@ -221,4 +253,23 @@ func assertAppListLength(t *testing.T, list []interfaces.Application, apps []str
 	for i, app := range list {
 		assert.Equal(t, apps[i], app.GetApplicationID(), "test name: %s", name)
 	}
+}
+
+func createTestQueue(t *testing.T, queueName string) *Queue {
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	var leaf *Queue
+	// empty parent queue
+	leaf, err = createManagedQueue(root, queueName, true, nil)
+	assert.NilError(t, err, "failed to create leaf queue: %v", err)
+	return leaf
+}
+
+func getApps(appIt interfaces.AppIterator) []interfaces.Application {
+	apps := make([]interfaces.Application, 0)
+	for appIt.HasNext() {
+		apps = append(apps, appIt.Next())
+	}
+	return apps
 }

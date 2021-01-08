@@ -25,8 +25,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/plugins/default_plugins_impl"
-
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 
 	"github.com/looplab/fsm"
@@ -82,7 +80,7 @@ func newBlankApplication(appID, partition, queueName string, ugi security.UserGr
 		tags:              tags,
 		pending:           resources.NewResource(),
 		allocatedResource: resources.NewResource(),
-		requests:          newRequests(),
+		requests:          plugins.GetRequestsPlugin().NewRequests(),
 		reservations:      make(map[string]*reservation),
 		allocations:       make(map[string]*Allocation),
 		stateMachine:      NewAppState(),
@@ -550,10 +548,10 @@ func (sa *Application) GetRequests(filter func(request interfaces.Request) bool)
 	return sa.requests.GetRequests(filter)
 }
 
-func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, total *[]*AllocationAsk,
-	requestIt interfaces.RequestIterator) {
+func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, total *[]*AllocationAsk) {
 	sa.RLock()
 	defer sa.RUnlock()
+	requestIt := sa.requests.SortForAllocation()
 	for requestIt.HasNext() {
 		request := requestIt.Next().(*AllocationAsk)
 		if headRoom == nil || resources.FitIn(headRoom, request.AllocatedResource) {
@@ -567,11 +565,11 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, tota
 }
 
 // Try a regular allocation of the pending requests
-func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator func() interfaces.NodeIterator,
-	requestIt interfaces.RequestIterator) *Allocation {
+func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator func() interfaces.NodeIterator) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
 	// get all the sorted requests from the app sorted in order
+	requestIt := sa.requests.SortForAllocation()
 	for requestIt.HasNext() {
 		request := requestIt.Next().(*AllocationAsk)
 		// resource must fit in headroom otherwise skip the request
@@ -941,12 +939,4 @@ func (sa *Application) GetTag(tag string) string {
 		}
 	}
 	return tagVal
-}
-
-func newRequests() interfaces.Requests {
-	plugin := plugins.GetRequestsPlugin()
-	if plugin == nil {
-		plugin = default_plugins_impl.DefaultRequestsPluginInstance
-	}
-	return plugin.NewRequests()
 }

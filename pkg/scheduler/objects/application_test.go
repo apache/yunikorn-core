@@ -434,7 +434,7 @@ func TestRemoveAllocAsk(t *testing.T) {
 }
 
 // This test must not test the sorter that is underlying.
-// It tests the DefaultQueueRequestManager specific parts of the code only.
+// It tests the DefaultRequests specific parts of the code only.
 func TestSortRequests(t *testing.T) {
 	// create the root and left queue
 	root, err := createRootQueue(nil)

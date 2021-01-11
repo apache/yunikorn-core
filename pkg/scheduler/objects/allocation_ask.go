@@ -122,7 +122,6 @@ func (aa *AllocationAsk) GetAllocationKey() string {
 	return aa.AllocationKey
 }
 
-// Get priority
 func (aa *AllocationAsk) GetPriority() int32 {
 	return aa.priority
 }

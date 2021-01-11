@@ -16,7 +16,7 @@
  limitations under the License.
 */
 
-package default_plugins_impl
+package defaults
 
 import (
 	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"

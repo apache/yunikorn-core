@@ -16,7 +16,7 @@
  limitations under the License.
 */
 
-package default_plugins_impl
+package defaults
 
 import (
 	"sort"
@@ -48,14 +48,14 @@ func StateAwareFilter(apps map[string]interfaces.Application) []interfaces.Appli
 	var foundStarting bool
 	for _, app := range apps {
 		// found a starting app clear out the accepted app (independent of pending resources)
-		if app.IsStarting() {
+		if app.CurrentState() == "Starting" {
 			foundStarting = true
 			acceptedApp = nil
 		}
 		// Now just look at app when pending-res > 0
 		if resources.StrictlyGreaterThanZero(app.GetPendingResource()) {
 			// filter accepted apps
-			if app.IsAccepted() {
+			if app.CurrentState() == "Accepted" {
 				// check if we have not seen a starting app
 				// replace the currently tracked accepted app if this is an older one
 				if !foundStarting && (acceptedApp == nil || acceptedApp.GetSubmissionTime().After(app.GetSubmissionTime())) {

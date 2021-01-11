@@ -5,18 +5,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/plugins/default_plugins_impl"
-
-	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
-
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
+	"github.com/apache/incubator-yunikorn-core/pkg/plugins/defaults"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
+
 	"gotest.tools/assert"
 )
 
+const queueName = "leaf"
+
 func TestSortAppsNoPending(t *testing.T) {
 	// init queue
-	queueName := "leaf"
 	leafQueue := createTestQueue(t, queueName)
 	// init apps
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
@@ -30,7 +30,6 @@ func TestSortAppsNoPending(t *testing.T) {
 	}
 
 	// no apps with pending resources should come back empty
-	//list := default_plugins_impl.SortApplications(input, policies.FairSortPolicy, nil)
 	leafQueue.sortType = policies.FairSortPolicy
 	list := getApps(leafQueue.GetApplications().SortForAllocation())
 	assertAppListLength(t, list, []string{}, "fair no pending")
@@ -58,7 +57,6 @@ func TestSortAppsNoPending(t *testing.T) {
 
 func TestSortAppsFifo(t *testing.T) {
 	// init queue
-	queueName := "leaf"
 	leafQueue := createTestQueue(t, queueName)
 	// init apps
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
@@ -84,7 +82,6 @@ func TestSortAppsFifo(t *testing.T) {
 
 func TestSortAppsFair(t *testing.T) {
 	// init queue
-	queueName := "leaf"
 	leafQueue := createTestQueue(t, queueName)
 	// init apps
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
@@ -107,17 +104,14 @@ func TestSortAppsFair(t *testing.T) {
 	// nil resource: usage based sorting
 	// apps should come back in order: 0, 1, 2, 3
 	list := getApps(leafQueue.GetApplications().SortForAllocation())
-	//list := default_plugins_impl.SortApplications(input, policies.FairSortPolicy, nil)
 	assertAppList(t, list, []int{0, 1, 2, 3}, "nil total")
 
 	// apps should come back in order: 0, 1, 2, 3
-	//list = default_plugins_impl.SortApplications(input, policies.FairSortPolicy, resources.Multiply(res, 0))
 	leafQueue.guaranteedResource = resources.Multiply(res, 0)
 	list = getApps(leafQueue.GetApplications().SortForAllocation())
 	assertAppList(t, list, []int{0, 1, 2, 3}, "zero total")
 
 	// apps should come back in order: 0, 1, 2, 3
-	//list = default_plugins_impl.SortApplications(input, policies.FairSortPolicy, resources.Multiply(res, 5))
 	leafQueue.guaranteedResource = resources.Multiply(res, 5)
 	list = getApps(leafQueue.GetApplications().SortForAllocation())
 	assertAppList(t, list, []int{0, 1, 2, 3}, "no alloc, set total")
@@ -126,7 +120,6 @@ func TestSortAppsFair(t *testing.T) {
 	leafQueue.applications.GetApplication("app-1").(*Application).allocatedResource = resources.Multiply(res, 10)
 	list = getApps(leafQueue.GetApplications().SortForAllocation())
 	// apps should come back in order: 0, 2, 3, 1
-	//list = default_plugins_impl.SortApplications(input, policies.FairSortPolicy, resources.Multiply(res, 5))
 	assertAppList(t, list, []int{0, 3, 1, 2}, "app-1 allocated")
 
 	// update allocated resource for app-3 to negative (move to head of the list)
@@ -138,7 +131,6 @@ func TestSortAppsFair(t *testing.T) {
 
 func TestSortAppsStateAware(t *testing.T) {
 	// init queue
-	queueName := "leaf"
 	leafQueue := createTestQueue(t, queueName)
 	// init apps
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
@@ -185,6 +177,7 @@ func TestSortAppsStateAware(t *testing.T) {
 	// set pending for first app, should get back 1st and 4th in that order
 	leafQueue.applications.GetApplication(appID0).(*Application).pending = res
 	list = getApps(leafQueue.GetApplications().SortForAllocation())
+	assertAppListLength(t, list, []string{appID0, appID3}, "state first pending")
 
 	// move 4th to running should get back: 1st, 2nd and 4th in that order
 	err = leafQueue.applications.GetApplication(appID3).(*Application).HandleApplicationEvent(runApplication)
@@ -208,24 +201,24 @@ func TestSortAsks(t *testing.T) {
 	list[0], list[2] = list[2], list[0]
 	list[1], list[3] = list[3], list[1]
 	assertAskList(t, list, []int{2, 3, 0, 1}, "moved 1")
-	default_plugins_impl.SortAskByPriority(list, true)
+	defaults.SortAskByPriority(list, true)
 	// asks should come back in order: 0, 1, 2, 3
 	assertAskList(t, list, []int{0, 1, 2, 3}, "ascending")
 	// move things around
 	list[0], list[2] = list[2], list[0]
 	list[1], list[3] = list[3], list[1]
 	assertAskList(t, list, []int{2, 3, 0, 1}, "moved 2")
-	default_plugins_impl.SortAskByPriority(list, false)
+	defaults.SortAskByPriority(list, false)
 	// asks should come back in order: 3, 2, 1, 0
 	assertAskList(t, list, []int{3, 2, 1, 0}, "descending")
 	// make asks with same priority
 	// ask-3 and ask-1 both with prio 1 do not change order
 	// ask-3 must always be earlier in the list
 	list[0].(*AllocationAsk).priority = 1
-	default_plugins_impl.SortAskByPriority(list, true)
+	defaults.SortAskByPriority(list, true)
 	// asks should come back in order: 0, 2, 3, 1
 	assertAskList(t, list, []int{0, 1, 3, 2}, "ascending same prio")
-	default_plugins_impl.SortAskByPriority(list, false)
+	defaults.SortAskByPriority(list, false)
 	// asks should come back in order: 3, 2, 0, 1
 	assertAskList(t, list, []int{3, 1, 0, 2}, "descending same prio")
 }

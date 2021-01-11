@@ -92,18 +92,6 @@ type Requests interface {
 	SortForPreemption() RequestIterator
 }
 
-// This interface is used by queue to sort applications and their pending requests.
-type QueueRequestManager interface {
-	// Return a iterator of sorted applications in the queue for allocation.
-	// Applications are sorted using the sorting type of the queue.
-	// Only applications with a pending resource request are considered.
-	SortForAllocation() AppIterator
-	// Return a iterator of sorted applications in the queue for preemption.
-	// Applications are sorted using the sorting type of the queue.
-	// Only applications with a allocated resource request are considered.
-	SortForPreemption() AppIterator
-}
-
 // This interface helps to iterate over a list of requests belong to the same app.
 type RequestIterator interface {
 	// return true if there is more request to iterate over
@@ -150,11 +138,6 @@ type Application interface {
 	GetSubmissionTime() time.Time
 	// get or check current state of the application
 	CurrentState() string
-	IsStarting() bool
-	IsAccepted() bool
-	IsNew() bool
-	IsRunning() bool
-	IsWaiting() bool
 	// get required requests via the specified filter,
 	// return all requests when the specified filter is nil.
 	GetRequests(filter func(request Request) bool) []Request

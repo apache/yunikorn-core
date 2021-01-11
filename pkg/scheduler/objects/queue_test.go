@@ -420,7 +420,7 @@ func TestPreemptingCalc(t *testing.T) {
 }
 
 // This test must not test the sorter that is underlying.
-// It tests the DefaultQueueRequestManager specific parts of the code only.
+// It tests the DefaultApplications specific parts of the code only.
 func TestSortApplications(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)

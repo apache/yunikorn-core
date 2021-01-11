@@ -72,12 +72,6 @@ type ConfigurationPlugin interface {
 	UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse
 }
 
-// This plugin is responsible for creating new instances of QueueRequestManager.
-//type QueueRequestManagerPlugin interface {
-//	// return a new instance of QueueRequestManager for specified queue
-//	NewQueueRequestManager(queue interface{}) interfaces.QueueRequestManager
-//}
-
 // This plugin is responsible for creating new instances of Applications.
 type ApplicationsPlugin interface {
 	// return a new instance of Applications

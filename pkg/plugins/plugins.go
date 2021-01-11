@@ -21,10 +21,10 @@ package plugins
 import (
 	"reflect"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/plugins/default_plugins_impl"
+	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	"go.uber.org/zap"
+	"github.com/apache/incubator-yunikorn-core/pkg/plugins/defaults"
 )
 
 var plugins SchedulerPlugins
@@ -109,7 +109,7 @@ func GetRequestsPlugin() RequestsPlugin {
 	defer plugins.RUnlock()
 
 	if plugins.requestsPlugin == nil {
-		return default_plugins_impl.DefaultRequestsPluginInstance
+		return defaults.DefaultRequestsPluginInstance
 	}
 	return plugins.requestsPlugin
 }
@@ -119,7 +119,7 @@ func GetApplicationsPlugin() ApplicationsPlugin {
 	defer plugins.RUnlock()
 
 	if plugins.applicationsPlugin == nil {
-		return default_plugins_impl.DefaultApplicationsPluginInstance
+		return defaults.DefaultApplicationsPluginInstance
 	}
 	return plugins.applicationsPlugin
 }

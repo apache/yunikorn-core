@@ -69,8 +69,6 @@ type Queue struct {
 	stateMachine       *fsm.FSM            // the state of the queue for scheduling
 	stateTime          time.Time           // last time the state was updated (needed for cleanup)
 
-	queueRequestManager interfaces.QueueRequestManager
-
 	sync.RWMutex
 }
 

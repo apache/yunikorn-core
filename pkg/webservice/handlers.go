@@ -120,7 +120,6 @@ func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 	lists := schedulerContext.GetPartitionMapClone()
 	for _, partition := range lists {
 		appList := partition.GetApplications()
-		appList = append(appList, partition.GetCompletedApplications()...)
 		for _, app := range appList {
 			if len(queueName) == 0 || strings.EqualFold(queueName, app.GetQueueName()) {
 				appsDao = append(appsDao, getApplicationJSON(app))

@@ -383,7 +383,6 @@ func (pc *PartitionContext) removeApplication(appID string) []*objects.Allocatio
 			}
 		}
 	}
-	pc.completedApplications[app.ApplicationID] = app
 	log.Logger().Debug("application removed from the scheduler",
 		zap.String("queue", queueName),
 		zap.String("applicationID", appID))
@@ -1128,9 +1127,13 @@ func (pc *PartitionContext) removeAllocationAsk(appID string, allocationKey stri
 // Move all the completed apps into the completedApp list
 // Delete all the applications marked for removal
 func (pc *PartitionContext) cleanupApps() {
-	for _, app := range pc.GetApplications() {
+	pc.Lock()
+	defer pc.Unlock()
+	for _, app := range pc.applications {
 		if app.IsCompleted() {
-			pc.removeApplication(app.ApplicationID)
+			app.GetQueue().RemoveApplication(app)
+			delete(pc.applications, app.ApplicationID)
+			pc.completedApplications[app.ApplicationID] = app
 		}
 	}
 }

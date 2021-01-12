@@ -183,17 +183,27 @@ func (sa *Application) OnStateChange(event *fsm.Event) {
 // Set the starting timer to make sure the application will not get stuck in a starting state too long.
 // This prevents an app from not progressing to Running when it only has 1 allocation.
 // Called when entering the Starting state by the state machine.
-func (sa *Application) SetStateTimer() {
+func (sa *Application) SetStateTimer(timeout time.Duration, currentState string, event applicationEvent) {
 	log.Logger().Debug("Application state timer initiated",
 		zap.String("appID", sa.ApplicationID),
-		zap.String("state", sa.stateMachine.Current()))
-	switch {
-	case sa.IsStarting():
-		sa.stateTimer = time.AfterFunc(startingTimeout, sa.timeOutStarting)
-	case sa.IsWaiting():
-		sa.stateTimer = time.AfterFunc(waitingTimeout, sa.timeOutWaiting)
-	case sa.IsCompleted():
-		sa.stateTimer = time.AfterFunc(completedTimeout, sa.timeOutCompleted)
+		zap.String("state", sa.stateMachine.Current()),
+		zap.Any("timeout", timeout))
+
+	sa.stateTimer = time.AfterFunc(timeout, sa.timeoutTimer(currentState, event))
+}
+
+func (sa *Application) timeoutTimer(expectedState string, event applicationEvent) func() {
+	return func() {
+		// make sure we are still in the right state
+		// we could have been killed or something might have happened while waiting for a lock
+		if expectedState == sa.stateMachine.Current() {
+			log.Logger().Debug("Application state: auto progress",
+				zap.String("applicationID", sa.ApplicationID),
+				zap.String("state", sa.stateMachine.Current()))
+
+			//nolint: errcheck
+			_ = sa.HandleApplicationEvent(event)
+		}
 	}
 }
 
@@ -201,46 +211,11 @@ func (sa *Application) SetStateTimer() {
 // timer and clean up.
 // Called when leaving the Starting state by the state machine.
 func (sa *Application) ClearStateTimer() {
+	if sa == nil || sa.stateTimer == nil {
+		return
+	}
 	sa.stateTimer.Stop()
 	sa.stateTimer = nil
-}
-
-// In case of state aware scheduling we do not want to get stuck in starting as we might have an application that only
-// requires one allocation or is really slow asking for more than the first one.
-// This will progress the state of the application from Starting to Running
-func (sa *Application) timeOutStarting() {
-	// make sure we are still in the right state
-	// we could have been killed or something might have happened while waiting for a lock
-	if sa.IsStarting() {
-		log.Logger().Debug("Application in starting state timed out: auto progress",
-			zap.String("applicationID", sa.ApplicationID),
-			zap.String("state", sa.stateMachine.Current()))
-
-		//nolint: errcheck
-		_ = sa.HandleApplicationEvent(runApplication)
-	}
-}
-
-func (sa *Application) timeOutWaiting() {
-	if sa.IsWaiting() {
-		log.Logger().Debug("Application in waiting state timed out: marking it as completed",
-			zap.String("applicationID", sa.ApplicationID),
-			zap.String("state", sa.stateMachine.Current()))
-
-		//nolint: errcheck
-		_ = sa.HandleApplicationEvent(completeApplication)
-	}
-}
-
-func (sa *Application) timeOutCompleted() {
-	if sa.IsCompleted() {
-		log.Logger().Debug("Application in completed state timed out: marking it for removal ",
-			zap.String("applicationID", sa.ApplicationID),
-			zap.String("state", sa.stateMachine.Current()))
-
-		//nolint: errcheck
-		_ = sa.HandleApplicationEvent(deleteApplication)
-	}
 }
 
 // Return an array of all reservation keys for the app.

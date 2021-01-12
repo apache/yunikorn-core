@@ -20,6 +20,8 @@ package objects
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
@@ -119,17 +121,14 @@ func NewAppState() *fsm.FSM {
 					zap.String("event", event.Event))
 				app.OnStateChange(event)
 			},
-			fmt.Sprintf("enter_%s", Starting.String()): func(event *fsm.Event) {
-				event.Args[0].(*Application).SetStateTimer()
-			},
-			fmt.Sprintf("leave_%s", Starting.String()): func(event *fsm.Event) {
+			"leave_state": func(event *fsm.Event) {
 				event.Args[0].(*Application).ClearStateTimer()
+			},
+			fmt.Sprintf("enter_%s", Starting.String()): func(event *fsm.Event) {
+				setTimer(startingTimeout, event, runApplication)
 			},
 			fmt.Sprintf("enter_%s", Waiting.String()): func(event *fsm.Event) {
-				event.Args[0].(*Application).SetStateTimer()
-			},
-			fmt.Sprintf("leave_%s", Waiting.String()): func(event *fsm.Event) {
-				event.Args[0].(*Application).ClearStateTimer()
+				setTimer(waitingTimeout, event, completeApplication)
 			},
 			fmt.Sprintf("leave_%s", New.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsAdded()
@@ -145,8 +144,15 @@ func NewAppState() *fsm.FSM {
 			},
 			fmt.Sprintf("enter_%s", Completed.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsCompleted()
-				event.Args[0].(*Application).SetStateTimer()
+				setTimer(completedTimeout, event, deleteApplication)
 			},
 		},
 	)
+}
+
+func setTimer(timeout time.Duration, event *fsm.Event, eventToTrigger applicationEvent) {
+	app, ok := event.Args[0].(*Application)
+	if ok {
+		app.SetStateTimer(timeout, app.stateMachine.Current(), eventToTrigger)
+	}
 }

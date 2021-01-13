@@ -728,7 +728,7 @@ func (pc *PartitionContext) tryPlaceholderAllocate() *objects.Allocation {
 		return nil
 	}
 	// try allocating from the root down
-	alloc := pc.root.TryPlaceholderAllocate(pc.GetAllNodeIterator)
+	alloc := pc.root.TryPlaceholderAllocate(pc.GetNodeIterator, pc.GetNode)
 	if alloc != nil {
 		return pc.replace(alloc)
 	}
@@ -921,15 +921,6 @@ func (pc *PartitionContext) getNodeIteratorForPolicy(nodes []*objects.Node) inte
 // The iterator is nil if there are no schedulable nodes available.
 func (pc *PartitionContext) GetNodeIterator() interfaces.NodeIterator {
 	if nodeList := pc.getSchedulableNodes(); len(nodeList) != 0 {
-		return pc.getNodeIteratorForPolicy(nodeList)
-	}
-	return nil
-}
-
-// Create a node iterator for all nodes based on the policy set for this partition.
-// The iterator is nil if there are no nodes available.
-func (pc *PartitionContext) GetAllNodeIterator() interfaces.NodeIterator {
-	if nodeList := pc.getNodes(false); len(nodeList) != 0 {
 		return pc.getNodeIteratorForPolicy(nodeList)
 	}
 	return nil

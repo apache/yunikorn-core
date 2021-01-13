@@ -631,12 +631,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 }
 
 // Try to replace a placeholder with a real allocation
-func (sa *Application) tryPlaceholderAllocate(nodeIterator func() interfaces.NodeIterator) *Allocation {
-	// cannot allocate if the iterator is not giving us any nodes
-	iterator := nodeIterator()
-	if iterator == nil {
-		return nil
-	}
+func (sa *Application) tryPlaceholderAllocate(nodeIterator func() interfaces.NodeIterator, getnode func(string) *Node) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
 	// nothing to do if we have no placeholders allocated
@@ -667,25 +662,15 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() interfaces.Nod
 				phFit = ph
 				reqFit = request
 			}
-			// this is inefficient but needs to do for now as we only have the ID not the handle on the node itself
-			var ok bool
-			var node *Node
-			for iterator.HasNext() {
-				node, ok = iterator.Next().(*Node)
-				if !ok {
-					log.Logger().Warn("Node iterator failed to return a node")
-					return nil
-				}
-				if node.NodeID == ph.NodeID {
-					break
-				}
-			}
+			node := getnode(ph.NodeID)
 			// got the node run same checks as for reservation (all but fits)
 			// resource usage should not change anyway between placeholder and real one
 			if node != nil && node.preReserveConditions(request.AllocationKey) {
 				alloc := NewAllocation(common.GetNewUUID(), node.NodeID, request)
 				// double link to make it easier to find
+				// alloc (the real one) releases points to the placeholder in the releases list
 				alloc.Releases = []*Allocation{ph}
+				// placeholder point to the real one in the releases list
 				ph.Releases = []*Allocation{alloc}
 				alloc.Result = Replaced
 				// mark placeholder as released
@@ -697,8 +682,12 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() interfaces.Nod
 				}
 				return alloc
 			}
-			iterator.Reset()
 		}
+	}
+	// cannot allocate if the iterator is not giving us any schedulable nodes
+	iterator := nodeIterator()
+	if iterator == nil {
+		return nil
 	}
 	// we checked all placeholders and asks nothing worked as yet
 	// pick the first fit and try all nodes if that fails give up
@@ -719,7 +708,9 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() interfaces.Nod
 			// allocation worked: on a non placeholder node update result and return
 			alloc := NewAllocation(common.GetNewUUID(), node.NodeID, reqFit)
 			// double link to make it easier to find
+			// alloc (the real one) releases points to the placeholder in the releases list
 			alloc.Releases = []*Allocation{phFit}
+			// placeholder point to the real one in the releases list
 			phFit.Releases = []*Allocation{alloc}
 			alloc.Result = Replaced
 			// mark placeholder as released
@@ -1023,19 +1014,22 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
-	alloc := sa.removeAllocationInternal(uuid)
-	if len(alloc.Releases) != 1 {
+	// remove the placeholder that was just confirmed by the shim
+	ph := sa.removeAllocationInternal(uuid)
+	if len(ph.Releases) != 1 {
 		log.Logger().Error("Unexpected release number (more than 1), placeholder released, replacement error",
 			zap.String("applicationID", sa.ApplicationID),
 			zap.String("placeholderID", uuid),
-			zap.Int("releases", len(alloc.Releases)))
+			zap.Int("releases", len(ph.Releases)))
 	}
 	// update the replacing allocation
-	replacement := alloc.Releases[0]
-	replacement.Releases = nil
-	replacement.Result = Allocated
-	sa.addAllocationInternal(replacement)
-	return alloc
+	// we double linked the real and placeholder allocation
+	// ph is the placeholder, the releases entry points to the real one
+	real := ph.Releases[0]
+	real.Releases = nil
+	real.Result = Allocated
+	sa.addAllocationInternal(real)
+	return ph
 }
 
 // Remove the Allocation from the application.

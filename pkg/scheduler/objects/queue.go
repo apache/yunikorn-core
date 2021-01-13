@@ -915,11 +915,11 @@ func (sq *Queue) TryAllocate(iterator func() interfaces.NodeIterator) *Allocatio
 // the configured queue sortPolicy. Queues without pending resources are skipped.
 // Applications are sorted based on the application sortPolicy. Applications without pending resources are skipped.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *Queue) TryPlaceholderAllocate(iterator func() interfaces.NodeIterator) *Allocation {
+func (sq *Queue) TryPlaceholderAllocate(iterator func() interfaces.NodeIterator, getnode func(string) *Node) *Allocation {
 	if sq.IsLeafQueue() {
 		// process the apps (filters out app without pending requests)
 		for _, app := range sq.sortApplications() {
-			alloc := app.tryPlaceholderAllocate(iterator)
+			alloc := app.tryPlaceholderAllocate(iterator, getnode)
 			if alloc != nil {
 				log.Logger().Debug("allocation found on queue",
 					zap.String("queueName", sq.QueuePath),
@@ -931,7 +931,7 @@ func (sq *Queue) TryPlaceholderAllocate(iterator func() interfaces.NodeIterator)
 	} else {
 		// process the child queues (filters out queues without pending requests)
 		for _, child := range sq.sortQueues() {
-			alloc := child.TryPlaceholderAllocate(iterator)
+			alloc := child.TryPlaceholderAllocate(iterator, getnode)
 			if alloc != nil {
 				return alloc
 			}

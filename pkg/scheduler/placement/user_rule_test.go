@@ -25,7 +25,6 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 )
 
 func TestUserRulePlace(t *testing.T) {
@@ -48,7 +47,7 @@ partitions:
 		User:   "testchild",
 		Groups: []string{},
 	}
-	appInfo := objects.NewApplication("app1", "default", "ignored", user, tags, nil, "")
+	appInfo := newApplication("app1", "default", "ignored", user, tags, nil, "")
 
 	// user queue that exists directly under the root
 	conf := configs.PlacementRule{
@@ -69,7 +68,7 @@ partitions:
 		User:   "testparent",
 		Groups: []string{},
 	}
-	appInfo = objects.NewApplication("app1", "default", "ignored", user, tags, nil, "")
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
 	queue, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "root.testparent" || err != nil {
 		t.Errorf("user rule failed with parent queue '%s', error %v", queue, err)
@@ -79,7 +78,7 @@ partitions:
 		User:   "test.user",
 		Groups: []string{},
 	}
-	appInfo = objects.NewApplication("app1", "default", "ignored", user, tags, nil, "")
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
 	queue, err = ur.placeApplication(appInfo, queueFunc)
 	if queue == "" || err != nil {
 		t.Errorf("user rule with dotted user should not have failed '%s', error %v", queue, err)
@@ -97,7 +96,7 @@ partitions:
 		User:   "testchild",
 		Groups: []string{},
 	}
-	appInfo = objects.NewApplication("app1", "default", "ignored", user, tags, nil, "")
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
 	ur, err = newRule(conf)
 	if err != nil || ur == nil {
 		t.Errorf("user rule create failed with queue name, err %v", err)
@@ -112,7 +111,7 @@ partitions:
 		User:   "unknown",
 		Groups: []string{},
 	}
-	appInfo = objects.NewApplication("app1", "default", "ignored", user, tags, nil, "")
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
 
 	conf = configs.PlacementRule{
 		Name:   "user",
@@ -153,7 +152,7 @@ func TestUserRuleParent(t *testing.T) {
 		t.Errorf("user rule create failed, err %v", err)
 	}
 
-	appInfo := objects.NewApplication("app1", "default", "unknown", user, tags, nil, "")
+	appInfo := newApplication("app1", "default", "unknown", user, tags, nil, "")
 	var queue string
 	queue, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "" || err != nil {
@@ -175,7 +174,7 @@ func TestUserRuleParent(t *testing.T) {
 		t.Errorf("user rule create failed, err %v", err)
 	}
 
-	appInfo = objects.NewApplication("app1", "default", "unknown", user, tags, nil, "")
+	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
 	queue, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("user rule placed app in incorrect queue '%s', err %v", queue, err)
@@ -214,7 +213,7 @@ func TestUserRuleParent(t *testing.T) {
 		t.Errorf("user rule create failed, err %v", err)
 	}
 
-	appInfo = objects.NewApplication("app1", "default", "unknown", user, tags, nil, "")
+	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
 	queue, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "" || err == nil {
 		t.Errorf("user rule placed app in incorrect queue '%s', err %v", queue, err)

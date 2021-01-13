@@ -739,7 +739,6 @@ func (pc *PartitionContext) tryPlaceholderAllocate() *objects.Allocation {
 func (pc *PartitionContext) replace(alloc *objects.Allocation) *objects.Allocation {
 	pc.Lock()
 	defer pc.Unlock()
-	// partition is locked nothing can change from now on
 	// find the app make sure it still exists
 	appID := alloc.ApplicationID
 	app := pc.applications[appID]
@@ -748,20 +747,8 @@ func (pc *PartitionContext) replace(alloc *objects.Allocation) *objects.Allocati
 			zap.String("appID", appID))
 		return nil
 	}
-	// Safeguard against the unlikely case that we have clashes.
-	// A clash points to entropy issues on the node.
-	if _, found := pc.allocations[alloc.UUID]; found {
-		for {
-			allocationUUID := common.GetNewUUID()
-			log.Logger().Warn("UUID clash, random generator might be lacking entropy",
-				zap.String("uuid", alloc.UUID),
-				zap.String("new UUID", allocationUUID))
-			if pc.allocations[allocationUUID] == nil {
-				alloc.UUID = allocationUUID
-				break
-			}
-		}
-	}
+
+	pc.checkUUID(alloc)
 	pc.allocations[alloc.UUID] = alloc
 	log.Logger().Info("scheduler replace placeholder processed",
 		zap.String("appID", alloc.ApplicationID),
@@ -775,7 +762,6 @@ func (pc *PartitionContext) replace(alloc *objects.Allocation) *objects.Allocati
 func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocation {
 	pc.Lock()
 	defer pc.Unlock()
-	// partition is locked nothing can change from now on
 	// find the app make sure it still exists
 	appID := alloc.ApplicationID
 	app := pc.applications[appID]
@@ -819,8 +805,21 @@ func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocat
 		alloc.ReservedNodeID = ""
 	}
 
-	// Safeguard against the unlikely case that we have clashes.
-	// A clash points to entropy issues on the node.
+	pc.checkUUID(alloc)
+	pc.allocations[alloc.UUID] = alloc
+	log.Logger().Info("scheduler allocation processed",
+		zap.String("appID", alloc.ApplicationID),
+		zap.String("allocationKey", alloc.AllocationKey),
+		zap.String("allocatedResource", alloc.AllocatedResource.String()),
+		zap.String("targetNode", alloc.NodeID))
+	// pass the allocation back to the RM via the cluster context
+	return alloc
+}
+
+// Safeguard against the unlikely case that we have UUID clashes.
+// A clash points to entropy issues on the node.
+// Lock free call this must be called holding the context lock
+func (pc *PartitionContext) checkUUID(alloc *objects.Allocation) {
 	if _, found := pc.allocations[alloc.UUID]; found {
 		for {
 			allocationUUID := common.GetNewUUID()
@@ -833,14 +832,6 @@ func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocat
 			}
 		}
 	}
-	pc.allocations[alloc.UUID] = alloc
-	log.Logger().Info("scheduler allocation processed",
-		zap.String("appID", alloc.ApplicationID),
-		zap.String("allocationKey", alloc.AllocationKey),
-		zap.String("allocatedResource", alloc.AllocatedResource.String()),
-		zap.String("targetNode", alloc.NodeID))
-	// pass the allocation back to the RM via the cluster context
-	return alloc
 }
 
 // Process the reservation in the scheduler

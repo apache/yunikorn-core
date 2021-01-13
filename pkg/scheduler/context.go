@@ -111,11 +111,11 @@ func (cc *ClusterContext) schedule() {
 		if psc.isStopped() {
 			continue
 		}
-		// placeholder replacement first
-		alloc := psc.tryPlaceholderAllocate()
-		// try reservations second
+		// try reservations first
+		alloc := psc.tryReservedAllocate()
 		if alloc == nil {
-			alloc = psc.tryReservedAllocate()
+			// placeholder replacement second
+			alloc = psc.tryPlaceholderAllocate()
 			// nothing reserved that can be allocated try normal allocate
 			if alloc == nil {
 				alloc = psc.tryAllocate()

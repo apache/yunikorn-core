@@ -296,6 +296,16 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 	return false
 }
 
+// Replace the paceholder allocation on the node. No usage changes as the placeholder must
+// be the same size as the real allocation.
+func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation) {
+	sn.Lock()
+	defer sn.Unlock()
+
+	delete(sn.allocations, uuid)
+	sn.allocations[replace.UUID] = replace
+}
+
 // Check if the proposed allocation fits in the available resources.
 // Taking into account resources marked for preemption if applicable.
 // If the proposed allocation does not fit false is returned.

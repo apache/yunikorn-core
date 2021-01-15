@@ -49,7 +49,6 @@ type PartitionContext struct {
 	// Private fields need protection
 	root                   *objects.Queue                  // start of the queue hierarchy
 	applications           map[string]*objects.Application // applications assigned to this partition
-	completedApplications  map[string]*objects.Application // completed applications from this partition
 	reservedApps           map[string]int                  // applications reserved within this partition, with reservation count
 	nodes                  map[string]*objects.Node        // nodes assigned to this partition
 	allocations            map[string]*objects.Allocation  // allocations
@@ -75,15 +74,14 @@ func newPartitionContext(conf configs.PartitionConfig, rmID string, cc *ClusterC
 		return nil, fmt.Errorf("partition cannot be created without name or RM, one is not set")
 	}
 	pc := &PartitionContext{
-		Name:                  conf.Name,
-		RmID:                  rmID,
-		stateMachine:          objects.NewObjectState(),
-		stateTime:             time.Now(),
-		applications:          make(map[string]*objects.Application),
-		reservedApps:          make(map[string]int),
-		nodes:                 make(map[string]*objects.Node),
-		allocations:           make(map[string]*objects.Allocation),
-		completedApplications: make(map[string]*objects.Application),
+		Name:         conf.Name,
+		RmID:         rmID,
+		stateMachine: objects.NewObjectState(),
+		stateTime:    time.Now(),
+		applications: make(map[string]*objects.Application),
+		reservedApps: make(map[string]int),
+		nodes:        make(map[string]*objects.Node),
+		allocations:  make(map[string]*objects.Allocation),
 	}
 	pc.partitionManager = &partitionManager{
 		pc: pc,
@@ -981,12 +979,14 @@ func (pc *PartitionContext) GetApplications() []*objects.Application {
 	return appList
 }
 
-func (pc *PartitionContext) GetCompletedApplications() []*objects.Application {
+func (pc *PartitionContext) GetAppsByState(state string) []*objects.Application {
 	pc.RLock()
 	defer pc.RUnlock()
 	var appList []*objects.Application
-	for _, app := range pc.completedApplications {
-		appList = append(appList, app)
+	for _, app := range pc.applications {
+		if app.CurrentState() == state {
+			appList = append(appList, app)
+		}
 	}
 	return appList
 }
@@ -1220,24 +1220,10 @@ func (pc *PartitionContext) removeAllocationAsk(appID string, allocationKey stri
 	}
 }
 
-// Move all the completed apps into the completedApp list
-// Delete all the applications marked for removal
-func (pc *PartitionContext) cleanupApps() {
-	pc.Lock()
-	defer pc.Unlock()
-	for _, app := range pc.applications {
-		if app.IsCompleted() {
-			app.GetQueue().RemoveApplication(app)
-			delete(pc.applications, app.ApplicationID)
-			pc.completedApplications[app.ApplicationID] = app
-		}
-	}
-}
-
-func (pc *PartitionContext) cleanupCompletedApps() {
-	for _, app := range pc.GetCompletedApplications() {
+func (pc *PartitionContext) cleanupExpiredApps() {
+	for _, app := range pc.GetAppsByState(objects.Expired.String()) {
 		if app.IsMarkedForRemoval() {
-			delete(pc.completedApplications, app.ApplicationID)
+			delete(pc.applications, app.ApplicationID)
 		}
 	}
 }

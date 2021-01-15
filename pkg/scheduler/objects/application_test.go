@@ -689,7 +689,7 @@ func TestCompleted(t *testing.T) {
 		t.Fatal("Waiting state should have timed out")
 	}
 	time.Sleep(time.Millisecond * 100)
-	assert.Assert(t, Deleting.String() == app.stateMachine.Current(), "Application should be in Deleting state")
+	assert.Assert(t, Expired.String() == app.stateMachine.Current(), "Application should be in Expired state")
 }
 
 func TestGetTag(t *testing.T) {

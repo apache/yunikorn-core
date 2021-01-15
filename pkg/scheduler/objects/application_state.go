@@ -42,11 +42,11 @@ const (
 	rejectApplication
 	completeApplication
 	KillApplication
-	deleteApplication
+	expireApplication
 )
 
 func (ae applicationEvent) String() string {
-	return [...]string{"runApplication", "waitApplication", "rejectApplication", "completeApplication", "KillApplication", "deleteApplication"}[ae]
+	return [...]string{"runApplication", "waitApplication", "rejectApplication", "completeApplication", "KillApplication", "expireApplication"}[ae]
 }
 
 // ----------------------------------
@@ -63,11 +63,11 @@ const (
 	Rejected
 	Completed
 	killed
-	Deleting
+	Expired
 )
 
 func (as applicationState) String() string {
-	return [...]string{"New", "Accepted", "Starting", "Running", "Waiting", "Rejected", "Completed", "killed", "Deleting"}[as]
+	return [...]string{"New", "Accepted", "Starting", "Running", "Waiting", "Rejected", "Completed", "killed", "Expired"}[as]
 }
 
 func NewAppState() *fsm.FSM {
@@ -102,9 +102,9 @@ func NewAppState() *fsm.FSM {
 				Src:  []string{Accepted.String(), killed.String(), New.String(), Running.String(), Starting.String(), Waiting.String()},
 				Dst:  killed.String(),
 			}, {
-				Name: deleteApplication.String(),
+				Name: expireApplication.String(),
 				Src:  []string{Completed.String()},
-				Dst:  Deleting.String(),
+				Dst:  Expired.String(),
 			},
 		},
 		fsm.Callbacks{
@@ -122,7 +122,7 @@ func NewAppState() *fsm.FSM {
 				app.OnStateChange(event)
 			},
 			"leave_state": func(event *fsm.Event) {
-				event.Args[0].(*Application).ClearStateTimer()
+				event.Args[0].(*Application).clearStateTimer()
 			},
 			fmt.Sprintf("enter_%s", Starting.String()): func(event *fsm.Event) {
 				setTimer(startingTimeout, event, runApplication)
@@ -144,15 +144,17 @@ func NewAppState() *fsm.FSM {
 			},
 			fmt.Sprintf("enter_%s", Completed.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsCompleted()
-				setTimer(completedTimeout, event, deleteApplication)
+				app := setTimer(completedTimeout, event, expireApplication)
+				app.unSetQueue()
 			},
 		},
 	)
 }
 
-func setTimer(timeout time.Duration, event *fsm.Event, eventToTrigger applicationEvent) {
+func setTimer(timeout time.Duration, event *fsm.Event, eventToTrigger applicationEvent) *Application {
 	app, ok := event.Args[0].(*Application)
 	if ok {
-		app.SetStateTimer(timeout, app.stateMachine.Current(), eventToTrigger)
+		app.setStateTimer(timeout, app.stateMachine.Current(), eventToTrigger)
 	}
+	return app
 }

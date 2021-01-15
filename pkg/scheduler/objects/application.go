@@ -43,7 +43,7 @@ var (
 	reservationDelay = 2 * time.Second
 	startingTimeout  = 5 * time.Minute
 	waitingTimeout   = 30 * time.Second
-	completedTimeout = 15 * 24 * time.Hour
+	completedTimeout = 3 * 24 * time.Hour
 )
 
 type Application struct {
@@ -149,7 +149,7 @@ func (sa *Application) IsCompleted() bool {
 }
 
 func (sa *Application) IsMarkedForRemoval() bool {
-	return sa.stateMachine.Is(Deleting.String())
+	return sa.stateMachine.Is(Expired.String())
 }
 
 // Handle the state event for the application.
@@ -186,7 +186,7 @@ func (sa *Application) OnStateChange(event *fsm.Event) {
 // Set the starting timer to make sure the application will not get stuck in a starting state too long.
 // This prevents an app from not progressing to Running when it only has 1 allocation.
 // Called when entering the Starting state by the state machine.
-func (sa *Application) SetStateTimer(timeout time.Duration, currentState string, event applicationEvent) {
+func (sa *Application) setStateTimer(timeout time.Duration, currentState string, event applicationEvent) {
 	log.Logger().Debug("Application state timer initiated",
 		zap.String("appID", sa.ApplicationID),
 		zap.String("state", sa.stateMachine.Current()),
@@ -213,7 +213,7 @@ func (sa *Application) timeoutTimer(expectedState string, event applicationEvent
 // Clear the starting timer. If the application has progressed out of the starting state we need to stop the
 // timer and clean up.
 // Called when leaving the Starting state by the state machine.
-func (sa *Application) ClearStateTimer() {
+func (sa *Application) clearStateTimer() {
 	if sa == nil || sa.stateTimer == nil {
 		return
 	}
@@ -977,6 +977,16 @@ func (sa *Application) SetQueue(queue *Queue) {
 	defer sa.Unlock()
 	sa.QueueName = queue.QueuePath
 	sa.queue = queue
+}
+
+// remove the leaf queue the application runs in, used when completing the app
+func (sa *Application) unSetQueue() {
+	if sa.queue != nil {
+		sa.queue.RemoveApplication(sa)
+	}
+	sa.Lock()
+	defer sa.Unlock()
+	sa.queue = nil
 }
 
 // get a copy of all allocations of the application

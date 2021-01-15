@@ -22,13 +22,13 @@ MOD_VERSION := $(shell awk '/^go/ {print $$2}' go.mod)
 
 GM := $(word 1,$(subst ., ,$(GO_VERSION)))
 MM := $(word 1,$(subst ., ,$(MOD_VERSION)))
-FAIL := $(shell if [[ $(GM) -lt $(MM) ]]; then echo MAJOR; fi)
+FAIL := $(shell if [ $(GM) -lt $(MM) ]; then echo MAJOR; fi)
 ifdef FAIL
 $(error Build should be run with at least go $(MOD_VERSION) or later, found $(GO_VERSION))
 endif
 GM := $(word 2,$(subst ., ,$(GO_VERSION)))
 MM := $(word 2,$(subst ., ,$(MOD_VERSION)))
-FAIL := $(shell if [[ $(GM) -lt $(MM) ]]; then echo MINOR; fi)
+FAIL := $(shell if [ $(GM) -lt $(MM) ]; then echo MINOR; fi)
 ifdef FAIL
 $(error Build should be run with at least go $(MOD_VERSION) or later, found $(GO_VERSION))
 endif

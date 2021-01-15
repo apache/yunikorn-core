@@ -520,7 +520,64 @@ func TestStateChangeOnAskUpdate(t *testing.T) {
 
 	// remove the allocation, ask has been removed so nothing left
 	app.RemoveAllocation(uuid)
+	assert.Assert(t, app.IsWaiting(), "Application did not change as expected: %s", app.CurrentState())
+}
+
+func TestStateChangeOnPlaceholderAdd(t *testing.T) {
+	// create a fake queue
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+
+	app := newApplication(appID1, "default", "root.unknown")
+	if app == nil || app.ApplicationID != appID1 {
+		t.Fatalf("app create failed which should not have %v", app)
+	}
+	// fake the queue assignment
+	app.queue = queue
+	// app should be new
+	assert.Assert(t, app.IsNew(), "New application did not return new state: %s", app.CurrentState())
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	askID := "ask-1"
+	ask := newAllocationAskTG(askID, appID1, "TG1", res, 1)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+	// app with ask, even for placeholder, should be accepted
+	assert.Assert(t, app.IsAccepted(), "application did not change to accepted state: %s", app.CurrentState())
+
+	// removing the ask should move it to waiting
+	released := app.RemoveAllocationAsk(askID)
 	assert.Equal(t, released, 0, "allocation ask should not have been reserved")
+	assert.Assert(t, app.IsWaiting(), "application did not change to waiting state: %s", app.CurrentState())
+
+	// start with a fresh state machine
+	app = newApplication(appID1, "default", "root.unknown")
+	if app == nil || app.ApplicationID != appID1 {
+		t.Fatalf("app create failed which should not have %v", app)
+	}
+	// fake the queue assignment
+	app.queue = queue
+	// app should be new
+	assert.Assert(t, app.IsNew(), "New application did not return new state: %s", app.CurrentState())
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+	// app with ask should be accepted
+	assert.Assert(t, app.IsAccepted(), "Application did not change to accepted state: %s", app.CurrentState())
+	// add an alloc based on the placeholder ask
+	uuid := "uuid-1"
+	allocInfo := NewAllocation(uuid, nodeID1, ask)
+	app.AddAllocation(allocInfo)
+	// app should be in the same state as it was before as it is a placeholder allocation
+	assert.Assert(t, app.IsAccepted(), "Application did not return accepted state after alloc: %s", app.CurrentState())
+	assert.Assert(t, resources.Equals(app.GetPlaceholderResource(), res), "placeholder allocation not set as expected")
+	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()), "allocated resource should have been zero")
+
+	// removing the ask should not move anywhere as there is an allocation
+	released = app.RemoveAllocationAsk(askID)
+	assert.Equal(t, released, 0, "allocation ask should not have been reserved")
+	assert.Assert(t, app.IsAccepted(), "Application should have stayed same, changed unexpectedly: %s", app.CurrentState())
+
+	// remove the allocation, ask has been removed so nothing left
+	app.RemoveAllocation(uuid)
 	assert.Assert(t, app.IsWaiting(), "Application did not change as expected: %s", app.CurrentState())
 }
 

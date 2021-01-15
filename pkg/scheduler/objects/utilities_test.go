@@ -96,7 +96,13 @@ func newApplicationWithTags(appID, partition, queueName string, tags map[string]
 		User:   "testuser",
 		Groups: []string{},
 	}
-	return newBlankApplication(appID, partition, queueName, user, tags)
+	siApp := &si.AddApplicationRequest{
+		ApplicationID: appID,
+		QueueName:     queueName,
+		PartitionName: partition,
+		Tags:          tags,
+	}
+	return NewApplication(siApp, user, nil, "")
 }
 
 // Create node with minimal info
@@ -164,16 +170,21 @@ func newAllocation(appID, uuid, nodeID, queueName string, res *resources.Resourc
 }
 
 func newAllocationAsk(allocKey, appID string, res *resources.Resource) *AllocationAsk {
-	return newAllocationAskRepeat(allocKey, appID, res, 1)
+	return newAllocationAskTG(allocKey, appID, "", res, 1)
 }
 
 func newAllocationAskRepeat(allocKey, appID string, res *resources.Resource, repeat int) *AllocationAsk {
+	return newAllocationAskTG(allocKey, appID, "", res, repeat)
+}
+func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resource, repeat int) *AllocationAsk {
 	ask := &si.AllocationAsk{
 		AllocationKey:  allocKey,
 		ApplicationID:  appID,
 		PartitionName:  "default",
 		ResourceAsk:    res.ToProto(),
 		MaxAllocations: int32(repeat),
+		TaskGroupName:  taskGroup,
+		Placeholder:    taskGroup != "",
 	}
 	return NewAllocationAsk(ask)
 }

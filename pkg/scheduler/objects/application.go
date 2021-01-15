@@ -51,17 +51,21 @@ type Application struct {
 	SubmissionTime time.Time
 
 	// Private fields need protection
-	queue             *Queue                    // queue the application is running in
-	pending           *resources.Resource       // pending resources from asks for the app
-	reservations      map[string]*reservation   // a map of reservations
-	requests          map[string]*AllocationAsk // a map of asks
-	sortedRequests    []*AllocationAsk
-	user              security.UserGroup     // owner of the application
-	tags              map[string]string      // application tags used in scheduling
-	allocatedResource *resources.Resource    // total allocated resources
-	allocations       map[string]*Allocation // list of all allocations
-	stateMachine      *fsm.FSM               // application state machine
-	stateTimer        *time.Timer            // timer for state time
+	queue                *Queue                    // queue the application is running in
+	pending              *resources.Resource       // pending resources from asks for the app
+	reservations         map[string]*reservation   // a map of reservations
+	requests             map[string]*AllocationAsk // a map of asks
+	sortedRequests       []*AllocationAsk
+	user                 security.UserGroup     // owner of the application
+	tags                 map[string]string      // application tags used in scheduling
+	allocatedResource    *resources.Resource    // total allocated resources
+	allocatedPlaceholder *resources.Resource    // total allocated placeholder resources
+	allocations          map[string]*Allocation // list of all allocations
+	placeholderAsk       *resources.Resource    // total placeholder request for the app (all task groups)
+	stateMachine         *fsm.FSM               // application state machine
+	stateTimer           *time.Timer            // timer for state time
+	execTimeout          time.Duration          // execTimeout for the application run
+	// appTimer             *time.Timer            // application run timer
 
 	rmEventHandler handler.EventHandler
 	rmID           string
@@ -69,25 +73,24 @@ type Application struct {
 	sync.RWMutex
 }
 
-func newBlankApplication(appID, partition, queueName string, ugi security.UserGroup, tags map[string]string) *Application {
-	return &Application{
-		ApplicationID:     appID,
-		Partition:         partition,
-		QueueName:         queueName,
-		SubmissionTime:    time.Now(),
-		user:              ugi,
-		tags:              tags,
-		pending:           resources.NewResource(),
-		allocatedResource: resources.NewResource(),
-		requests:          make(map[string]*AllocationAsk),
-		reservations:      make(map[string]*reservation),
-		allocations:       make(map[string]*Allocation),
-		stateMachine:      NewAppState(),
+func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eventHandler handler.EventHandler, rmID string) *Application {
+	app := &Application{
+		ApplicationID:        siApp.ApplicationID,
+		Partition:            siApp.PartitionName,
+		QueueName:            siApp.QueueName,
+		SubmissionTime:       time.Now(),
+		tags:                 siApp.Tags,
+		pending:              resources.NewResource(),
+		allocatedResource:    resources.NewResource(),
+		allocatedPlaceholder: resources.NewResource(),
+		requests:             make(map[string]*AllocationAsk),
+		reservations:         make(map[string]*reservation),
+		allocations:          make(map[string]*Allocation),
+		stateMachine:         NewAppState(),
+		execTimeout:          common.ConvertSITimeout(siApp.ExecutionTimeoutMilliSeconds),
+		placeholderAsk:       resources.NewResourceFromProto(siApp.PlaceholderAsk),
 	}
-}
-
-func NewApplication(appID, partition, queueName string, ugi security.UserGroup, tags map[string]string, eventHandler handler.EventHandler, rmID string) *Application {
-	app := newBlankApplication(appID, partition, queueName, ugi, tags)
+	app.user = ugi
 	app.rmEventHandler = eventHandler
 	app.rmID = rmID
 	return app
@@ -214,7 +217,7 @@ func (sa *Application) GetReservations() []string {
 }
 
 // Return the allocation ask for the key, nil if not found
-func (sa *Application) GetSchedulingAllocationAsk(allocationKey string) *AllocationAsk {
+func (sa *Application) GetAllocationAsk(allocationKey string) *AllocationAsk {
 	sa.RLock()
 	defer sa.RUnlock()
 	return sa.requests[allocationKey]
@@ -225,6 +228,21 @@ func (sa *Application) GetAllocatedResource() *resources.Resource {
 	sa.RLock()
 	defer sa.RUnlock()
 	return sa.allocatedResource.Clone()
+}
+
+// Return the allocated placeholder resources for this application
+func (sa *Application) GetPlaceholderResource() *resources.Resource {
+	sa.RLock()
+	defer sa.RUnlock()
+	return sa.allocatedPlaceholder.Clone()
+}
+
+// Return the total placeholder ask for this application
+// Is only set on app creation and used when app is added to a queue
+func (sa *Application) GetPlaceholderAsk() *resources.Resource {
+	sa.RLock()
+	defer sa.RUnlock()
+	return sa.placeholderAsk
 }
 
 // Return the pending resources for this application
@@ -284,7 +302,7 @@ func (sa *Application) RemoveAllocationAsk(allocKey string) int {
 		}
 		if ask := sa.requests[allocKey]; ask != nil {
 			deltaPendingResource = resources.MultiplyBy(ask.AllocatedResource, float64(ask.GetPendingAskRepeat()))
-			sa.pending.SubFrom(deltaPendingResource)
+			sa.pending = resources.Sub(sa.pending, deltaPendingResource)
 			delete(sa.requests, allocKey)
 		}
 	}
@@ -292,10 +310,11 @@ func (sa *Application) RemoveAllocationAsk(allocKey string) int {
 	sa.queue.decPendingResource(deltaPendingResource)
 	// Check if we need to change state based on the ask removal:
 	// 1) if pending is zero (no more asks left)
-	// 2) if confirmed allocations is zero (nothing is running)
+	// 2) if confirmed allocations is zero (no real tasks running)
+	// 3) if placeholder allocations is zero (no placeholders running)
 	// Change the state to waiting.
 	// When the resource trackers are zero we should not expect anything to come in later.
-	if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) {
+	if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) && resources.IsZero(sa.allocatedPlaceholder) {
 		if err := sa.HandleApplicationEvent(waitApplication); err != nil {
 			log.Logger().Warn("Application state not changed to Waiting while updating ask(s)",
 				zap.String("currentState", sa.CurrentState()),
@@ -345,7 +364,7 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 
 	// Update total pending resource
 	delta.SubFrom(oldAskResource)
-	sa.pending.AddTo(delta)
+	sa.pending = resources.Add(sa.pending, delta)
 	sa.queue.incPendingResource(delta)
 
 	log.Logger().Info("Ask added successfully to application",
@@ -380,12 +399,12 @@ func (sa *Application) updateAskRepeat(allocKey string, delta int32) (*resources
 
 func (sa *Application) updateAskRepeatInternal(ask *AllocationAsk, delta int32) (*resources.Resource, error) {
 	// updating with delta does error checking internally
-	if !ask.UpdatePendingAskRepeat(delta) {
+	if !ask.updatePendingAskRepeat(delta) {
 		return nil, fmt.Errorf("ask repaeat not updated resulting repeat less than zero for ask %s on app %s", ask.AllocationKey, sa.ApplicationID)
 	}
 
 	deltaPendingResource := resources.Multiply(ask.AllocatedResource, int64(delta))
-	sa.pending.AddTo(deltaPendingResource)
+	sa.pending = resources.Add(sa.pending, deltaPendingResource)
 	// update the pending of the queue with the same delta
 	sa.queue.incPendingResource(deltaPendingResource)
 
@@ -569,6 +588,7 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, tota
 }
 
 // Try a regular allocation of the pending requests
+// This includes placeholders
 func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator func() interfaces.NodeIterator) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
@@ -576,6 +596,12 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 	sa.sortRequests(false)
 	// get all the requests from the app sorted in order
 	for _, request := range sa.sortedRequests {
+		// if request is not a placeholder but part of a task group and there are still placeholders allocated we do
+		// them on their own.
+		// the iterator might not have the node we need as it could be reserved
+		if !request.placeholder && request.taskGroupName != "" && !resources.IsZero(sa.allocatedPlaceholder) {
+			continue
+		}
 		// resource must fit in headroom otherwise skip the request
 		if !resources.FitIn(headRoom, request.AllocatedResource) {
 			// post scheduling events via the event plugin
@@ -601,6 +627,112 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 		}
 	}
 	// no requests fit, skip to next app
+	return nil
+}
+
+// Try to replace a placeholder with a real allocation
+func (sa *Application) tryPlaceholderAllocate(nodeIterator func() interfaces.NodeIterator, getnode func(string) *Node) *Allocation {
+	sa.Lock()
+	defer sa.Unlock()
+	// nothing to do if we have no placeholders allocated
+	if resources.IsZero(sa.allocatedPlaceholder) {
+		return nil
+	}
+	// make sure the request are sorted
+	sa.sortRequests(false)
+	// keep the first fits for later
+	var phFit *Allocation
+	var reqFit *AllocationAsk
+	// get all the requests from the app sorted in order
+	for _, request := range sa.sortedRequests {
+		// skip placeholders they follow standard allocation
+		// this should also be part of a task group just make sure it is
+		if request.placeholder || request.taskGroupName == "" {
+			continue
+		}
+		// walk over the placeholders, allow for processing all as we can have multiple task groups
+		phAllocs := sa.getPlaceholderAllocations()
+		for _, ph := range phAllocs {
+			// we could have already released this placeholder and are waiting for the shim to confirm
+			// and check that we have the correct task group before trying to swap
+			if ph.released || request.taskGroupName != ph.taskGroupName {
+				continue
+			}
+			if phFit == nil && reqFit == nil {
+				phFit = ph
+				reqFit = request
+			}
+			node := getnode(ph.NodeID)
+			// got the node run same checks as for reservation (all but fits)
+			// resource usage should not change anyway between placeholder and real one
+			if node != nil && node.preReserveConditions(request.AllocationKey) {
+				alloc := NewAllocation(common.GetNewUUID(), node.NodeID, request)
+				// double link to make it easier to find
+				// alloc (the real one) releases points to the placeholder in the releases list
+				alloc.Releases = []*Allocation{ph}
+				// placeholder point to the real one in the releases list
+				ph.Releases = []*Allocation{alloc}
+				alloc.Result = Replaced
+				// mark placeholder as released
+				ph.released = true
+				_, err := sa.updateAskRepeatInternal(request, -1)
+				if err != nil {
+					log.Logger().Warn("ask repeat update failed unexpectedly",
+						zap.Error(err))
+				}
+				return alloc
+			}
+		}
+	}
+	// cannot allocate if the iterator is not giving us any schedulable nodes
+	iterator := nodeIterator()
+	if iterator == nil {
+		return nil
+	}
+	// we checked all placeholders and asks nothing worked as yet
+	// pick the first fit and try all nodes if that fails give up
+	if phFit != nil && reqFit != nil {
+		for iterator.HasNext() {
+			node, ok := iterator.Next().(*Node)
+			if !ok {
+				log.Logger().Warn("Node iterator failed to return a node")
+				return nil
+			}
+			if err := node.preAllocateCheck(reqFit.AllocatedResource, reservationKey(nil, sa, reqFit), false); err != nil {
+				continue
+			}
+			// skip the node if conditions can not be satisfied
+			if !node.preAllocateConditions(reqFit.AllocationKey) {
+				continue
+			}
+			// allocation worked: on a non placeholder node update result and return
+			alloc := NewAllocation(common.GetNewUUID(), node.NodeID, reqFit)
+			// double link to make it easier to find
+			// alloc (the real one) releases points to the placeholder in the releases list
+			alloc.Releases = []*Allocation{phFit}
+			// placeholder point to the real one in the releases list
+			phFit.Releases = []*Allocation{alloc}
+			alloc.Result = Replaced
+			// mark placeholder as released
+			phFit.released = true
+			// update just the node to make sure we keep its spot
+			// no queue update as we're releasing the placeholder and are just temp over the size
+			if !node.AddAllocation(alloc) {
+				log.Logger().Debug("Node update failed unexpectedly",
+					zap.String("applicationID", sa.ApplicationID),
+					zap.String("ask", reqFit.String()),
+					zap.String("placeholder", phFit.String()))
+				return nil
+			}
+			_, err := sa.updateAskRepeatInternal(reqFit, -1)
+			if err != nil {
+				log.Logger().Warn("ask repeat update failed unexpectedly",
+					zap.Error(err))
+			}
+			return alloc
+		}
+	}
+	// still nothing worked give up and hope the next round works
 	return nil
 }
 
@@ -841,9 +973,20 @@ func (sa *Application) GetAllAllocations() []*Allocation {
 	return allocations
 }
 
+// get a copy of all placeholder allocations of the application
+// No locking must be called while holding the lock
+func (sa *Application) getPlaceholderAllocations() []*Allocation {
+	var allocations []*Allocation
+	for _, alloc := range sa.allocations {
+		if alloc.placeholder {
+			allocations = append(allocations, alloc)
+		}
+	}
+	return allocations
+}
+
 // Add a new Allocation to the application
 func (sa *Application) AddAllocation(info *Allocation) {
-	// add the allocation
 	sa.Lock()
 	defer sa.Unlock()
 	sa.addAllocationInternal(info)
@@ -852,41 +995,76 @@ func (sa *Application) AddAllocation(info *Allocation) {
 // Add the Allocation to the application
 // No locking must be called while holding the lock
 func (sa *Application) addAllocationInternal(info *Allocation) {
-	// progress the state based on where we are, we should never fail in this case
-	// keep track of a failure in log.
-	if err := sa.HandleApplicationEvent(runApplication); err != nil {
-		log.Logger().Error("Unexpected app state change failure while adding allocation",
-			zap.String("currentState", sa.stateMachine.Current()),
-			zap.Error(err))
+	// placeholder allocations do not progress the state of the app and are tracked in a separate total
+	if info.placeholder {
+		sa.allocatedPlaceholder = resources.Add(sa.allocatedPlaceholder, info.AllocatedResource)
+	} else {
+		// progress the state based on where we are, we should never fail in this case
+		// keep track of a failure in log.
+		if err := sa.HandleApplicationEvent(runApplication); err != nil {
+			log.Logger().Error("Unexpected app state change failure while adding allocation",
+				zap.String("currentState", sa.stateMachine.Current()),
+				zap.Error(err))
+		}
+		sa.allocatedResource = resources.Add(sa.allocatedResource, info.AllocatedResource)
 	}
 	sa.allocations[info.UUID] = info
-	sa.allocatedResource = resources.Add(sa.allocatedResource, info.AllocatedResource)
 }
 
-// Remove a specific allocation from the application.
-// Return the allocation that was removed.
+func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
+	sa.Lock()
+	defer sa.Unlock()
+	// remove the placeholder that was just confirmed by the shim
+	ph := sa.removeAllocationInternal(uuid)
+	if len(ph.Releases) != 1 {
+		log.Logger().Error("Unexpected release number (more than 1), placeholder released, replacement error",
+			zap.String("applicationID", sa.ApplicationID),
+			zap.String("placeholderID", uuid),
+			zap.Int("releases", len(ph.Releases)))
+	}
+	// update the replacing allocation
+	// we double linked the real and placeholder allocation
+	// ph is the placeholder, the releases entry points to the real one
+	real := ph.Releases[0]
+	real.Releases = nil
+	real.Result = Allocated
+	sa.addAllocationInternal(real)
+	return ph
+}
+
+// Remove the Allocation from the application.
+// Return the allocation that was removed or nil if not found.
 func (sa *Application) RemoveAllocation(uuid string) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
+	return sa.removeAllocationInternal(uuid)
+}
 
+// Remove the Allocation from the application
+// No locking must be called while holding the lock
+func (sa *Application) removeAllocationInternal(uuid string) *Allocation {
 	alloc := sa.allocations[uuid]
 
-	if alloc != nil {
-		// When app has the allocation, update map, and update allocated resource of the app
-		sa.allocatedResource = resources.Sub(sa.allocatedResource, alloc.AllocatedResource)
-		delete(sa.allocations, uuid)
-		// When the resource trackers are zero we should not expect anything to come in later.
-		if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) {
-			if err := sa.HandleApplicationEvent(waitApplication); err != nil {
-				log.Logger().Warn("Application state not changed to Waiting while removing some allocation(s)",
-					zap.String("currentState", sa.CurrentState()),
-					zap.Error(err))
-			}
-		}
-		return alloc
+	// When app has the allocation, update map, and update allocated resource of the app
+	if alloc == nil {
+		return nil
 	}
-
-	return nil
+	// update correct allocation tracker
+	if alloc.placeholder {
+		sa.allocatedPlaceholder = resources.Sub(sa.allocatedPlaceholder, alloc.AllocatedResource)
+	} else {
+		sa.allocatedResource = resources.Sub(sa.allocatedResource, alloc.AllocatedResource)
+	}
+	// When the resource trackers are zero we should not expect anything to come in later.
+	if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) && resources.IsZero(sa.allocatedPlaceholder) {
+		if err := sa.HandleApplicationEvent(waitApplication); err != nil {
+			log.Logger().Warn("Application state not changed to Waiting while removing some allocation(s)",
+				zap.String("currentState", sa.CurrentState()),
+				zap.Error(err))
+		}
+	}
+	delete(sa.allocations, uuid)
+	return alloc
 }
 
 // Remove all allocations from the application.
@@ -899,8 +1077,9 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 	for _, alloc := range sa.allocations {
 		allocationsToRelease = append(allocationsToRelease, alloc)
 	}
-	// cleanup allocated resource for app
+	// cleanup allocated resource for app (placeholders and normal)
 	sa.allocatedResource = resources.NewResource()
+	sa.allocatedPlaceholder = resources.NewResource()
 	sa.allocations = make(map[string]*Allocation)
 	// When the resource trackers are zero we should not expect anything to come in later.
 	if resources.IsZero(sa.pending) {

@@ -25,7 +25,6 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 )
 
 func TestProvidedRulePlace(t *testing.T) {
@@ -56,20 +55,20 @@ partitions:
 		t.Errorf("provided rule create failed, err %v", err)
 	}
 	// queue that does not exists directly under the root
-	appInfo := objects.NewApplication("app1", "default", "unknown", user, tags, nil, "")
+	appInfo := newApplication("app1", "default", "unknown", user, tags, nil, "")
 	var queue string
 	queue, err = pr.placeApplication(appInfo, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("provided rule placed app in incorrect queue '%s', err %v", queue, err)
 	}
 	// trying to place when no queue provided in the app
-	appInfo = objects.NewApplication("app1", "default", "", user, tags, nil, "")
+	appInfo = newApplication("app1", "default", "", user, tags, nil, "")
 	queue, err = pr.placeApplication(appInfo, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("provided rule placed app in incorrect queue '%s', error %v", queue, err)
 	}
 	// trying to place in a qualified queue that does not exist
-	appInfo = objects.NewApplication("app1", "default", "root.unknown", user, tags, nil, "")
+	appInfo = newApplication("app1", "default", "root.unknown", user, tags, nil, "")
 	queue, err = pr.placeApplication(appInfo, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("provided rule placed app in incorrect queue '%s', error %v", queue, err)
@@ -101,14 +100,14 @@ partitions:
 	}
 
 	// unqualified queue with parent rule that exists directly in hierarchy
-	appInfo = objects.NewApplication("app1", "default", "testchild", user, tags, nil, "")
+	appInfo = newApplication("app1", "default", "testchild", user, tags, nil, "")
 	queue, err = pr.placeApplication(appInfo, queueFunc)
 	if queue != "root.testparent.testchild" || err != nil {
 		t.Errorf("provided rule failed to place queue in correct queue '%s', err %v", queue, err)
 	}
 
 	// qualified queue with parent rule (parent rule ignored)
-	appInfo = objects.NewApplication("app1", "default", "root.testparent", user, tags, nil, "")
+	appInfo = newApplication("app1", "default", "root.testparent", user, tags, nil, "")
 
 	queue, err = pr.placeApplication(appInfo, queueFunc)
 	if queue != "root.testparent" || err != nil {
@@ -141,7 +140,7 @@ func TestProvidedRuleParent(t *testing.T) {
 		t.Errorf("provided rule create failed, err %v", err)
 	}
 
-	appInfo := objects.NewApplication("app1", "default", "unknown", user, tags, nil, "")
+	appInfo := newApplication("app1", "default", "unknown", user, tags, nil, "")
 	var queue string
 	queue, err = pr.placeApplication(appInfo, queueFunc)
 	if queue != "" || err != nil {
@@ -163,7 +162,7 @@ func TestProvidedRuleParent(t *testing.T) {
 		t.Errorf("provided rule create failed, err %v", err)
 	}
 
-	appInfo = objects.NewApplication("app1", "default", "testchild", user, tags, nil, "")
+	appInfo = newApplication("app1", "default", "testchild", user, tags, nil, "")
 	queue, err = pr.placeApplication(appInfo, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("provided rule placed app in incorrect queue '%s', err %v", queue, err)
@@ -202,7 +201,7 @@ func TestProvidedRuleParent(t *testing.T) {
 		t.Errorf("provided rule create failed, err %v", err)
 	}
 
-	appInfo = objects.NewApplication("app1", "default", "unknown", user, tags, nil, "")
+	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
 	queue, err = pr.placeApplication(appInfo, queueFunc)
 	if queue != "" || err == nil {
 		t.Errorf("provided rule placed app in incorrect queue '%s', err %v", queue, err)

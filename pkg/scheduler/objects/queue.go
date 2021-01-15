@@ -285,11 +285,12 @@ func (sq *Queue) UpdateSortType() {
 					log.Logger().Debug("application sort property configuration error",
 						zap.Error(err))
 				}
+			} else {
+				// skip unknown properties just log them
+				log.Logger().Debug("queue property skipped",
+					zap.String("key", key),
+					zap.String("value", value))
 			}
-			// for now skip the rest just log them
-			log.Logger().Debug("queue property skipped",
-				zap.String("key", key),
-				zap.String("value", value))
 		}
 		// if it is not defined default to fifo
 		if sq.sortType == policies.Undefined {
@@ -786,8 +787,9 @@ func (sq *Queue) getHeadRoom() *resources.Resource {
 	return sq.internalHeadRoom(parentHeadRoom)
 }
 
-// this function returns the max headRoom of a queue
-// this doesn't get the partition resources into the consideration
+// This function returns the max headRoom of a queue.
+// It doesn't get the partition resources into the consideration.
+// Used during scheduling in an auto scaling cluster.
 func (sq *Queue) getMaxHeadRoom() *resources.Resource {
 	var parentHeadRoom *resources.Resource
 	if sq.parent != nil {
@@ -828,21 +830,38 @@ func (sq *Queue) GetMaxResource() *resources.Resource {
 	if sq.parent != nil {
 		limit = sq.parent.GetMaxResource()
 	}
+	return sq.internalGetMax(limit)
+}
+
+// This function returns the max size of a queue.
+// It doesn't take the partition resources into the consideration.
+// Used during scheduling in an auto scaling cluster.
+func (sq *Queue) GetMaxQueueSet() *resources.Resource {
+	// get the limit for the parent first and check against the queue's own
+	var limit *resources.Resource
+	if sq.parent == nil {
+		return nil
+	}
+	limit = sq.parent.GetMaxQueueSet()
+	return sq.internalGetMax(limit)
+}
+
+func (sq *Queue) internalGetMax(parentLimit *resources.Resource) *resources.Resource {
 	sq.RLock()
 	defer sq.RUnlock()
-	// no queue limit set, not even for root
-	if limit == nil {
+	// no parent queue limit set, not even for root
+	if parentLimit == nil {
 		if sq.maxResource == nil {
 			return nil
 		}
 		return sq.maxResource.Clone()
 	}
-	// parent limit set no queue limit return parent
+	// parent limit set, no queue limit return parent
 	if sq.maxResource == nil {
-		return limit
+		return parentLimit
 	}
 	// calculate the smallest value for each type
-	return resources.ComponentWiseMin(limit, sq.maxResource)
+	return resources.ComponentWiseMin(parentLimit, sq.maxResource)
 }
 
 // Set the max resource for root the queue.
@@ -883,6 +902,36 @@ func (sq *Queue) TryAllocate(iterator func() interfaces.NodeIterator) *Allocatio
 		// process the child queues (filters out queues without pending requests)
 		for _, child := range sq.sortQueues() {
 			alloc := child.TryAllocate(iterator)
+			if alloc != nil {
+				return alloc
+			}
+		}
+	}
+	return nil
+}
+
+// Try replace placeholder allocations. This only gets called if there is a pending request on this queue or its children.
+// This is a depth first algorithm: descend into the depth of the queue tree first. Child queues are sorted based on
+// the configured queue sortPolicy. Queues without pending resources are skipped.
+// Applications are sorted based on the application sortPolicy. Applications without pending resources are skipped.
+// Lock free call this all locks are taken when needed in called functions
+func (sq *Queue) TryPlaceholderAllocate(iterator func() interfaces.NodeIterator, getnode func(string) *Node) *Allocation {
+	if sq.IsLeafQueue() {
+		// process the apps (filters out app without pending requests)
+		for _, app := range sq.sortApplications() {
+			alloc := app.tryPlaceholderAllocate(iterator, getnode)
+			if alloc != nil {
+				log.Logger().Debug("allocation found on queue",
+					zap.String("queueName", sq.QueuePath),
+					zap.String("appID", app.ApplicationID),
+					zap.String("allocation", alloc.String()))
+				return alloc
+			}
+		}
+	} else {
+		// process the child queues (filters out queues without pending requests)
+		for _, child := range sq.sortQueues() {
+			alloc := child.TryPlaceholderAllocate(iterator, getnode)
 			if alloc != nil {
 				return alloc
 			}
@@ -1003,6 +1052,18 @@ func (sq *Queue) getSortType() policies.SortPolicy {
 	sq.RLock()
 	defer sq.RUnlock()
 	return sq.sortType
+}
+
+// Can the queue support task groups based on the sorting policy
+// FIFO and StateAware can support this
+// NOTE: this call does not make sense for a parent queue, and always returns false
+func (sq *Queue) SupportTaskGroup() bool {
+	sq.RLock()
+	defer sq.RUnlock()
+	if !sq.isLeaf {
+		return false
+	}
+	return sq.sortType == policies.FifoSortPolicy || sq.sortType == policies.StateAwarePolicy
 }
 
 // update queue metrics when this is a leaf queue

@@ -19,8 +19,10 @@
 package common
 
 import (
+	"math"
 	"os"
 	"testing"
+	"time"
 
 	"gotest.tools/assert"
 )
@@ -89,9 +91,28 @@ func TestGetBoolEnvVar(t *testing.T) {
 			err := os.Setenv(envVarName, tc.value)
 			assert.NilError(t, err, "setting environment variable failed")
 			val := GetBoolEnvVar(envVarName, true)
-			assert.DeepEqual(t, val, tc.expected)
+			assert.Equal(t, val, tc.expected, "test case failure: %s", tc.name)
 			err = os.Unsetenv(envVarName)
 			assert.NilError(t, err, "cleaning up environment variable failed")
+		})
+	}
+}
+
+func TestConvertSITimeout(t *testing.T) {
+	testCases := []struct {
+		name     string
+		value    int64
+		expected time.Duration
+	}{
+		{"negative value", -1, 0},
+		{"zero value", 0, 0},
+		{"small value", 100, time.Millisecond * 100},
+		{"overflow value", math.MaxInt64 / 10, 0},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			val := ConvertSITimeout(tc.value)
+			assert.Equal(t, val, tc.expected, "test case failure: %s", tc.name)
 		})
 	}
 }

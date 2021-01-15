@@ -314,7 +314,7 @@ partitions:
 	assert.Equal(t, recoveredApp.GetPendingResource().Resources[resources.MEMORY], resources.Quantity(0), "pending memory on app not as expected")
 	assert.Equal(t, recoveredApp.GetPendingResource().Resources[resources.VCORE], resources.Quantity(0), "pending vcore on app not as expected")
 	for _, existingAllocation := range mockRM.Allocations {
-		schedulingAllocation := recoveredApp.GetSchedulingAllocationAsk(existingAllocation.AllocationKey)
+		schedulingAllocation := recoveredApp.GetAllocationAsk(existingAllocation.AllocationKey)
 		assert.Assert(t, schedulingAllocation != nil, "recovered scheduling allocation %s not found on app", existingAllocation.AllocationKey)
 	}
 

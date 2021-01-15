@@ -25,7 +25,6 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 )
 
 // basic test to check if no rules leave the manager unusable
@@ -216,7 +215,7 @@ partitions:
 		User:   "testchild",
 		Groups: []string{},
 	}
-	app := objects.NewApplication("app1", "default", "", user, tags, nil, "")
+	app := newApplication("app1", "default", "", user, tags, nil, "")
 
 	// user rule existing queue, acl allowed
 	err = man.PlaceApplication(app)
@@ -230,7 +229,7 @@ partitions:
 	}
 
 	// user rule new queue: fails on create flag
-	app = objects.NewApplication("app1", "default", "", user, tags, nil, "")
+	app = newApplication("app1", "default", "", user, tags, nil, "")
 	err = man.PlaceApplication(app)
 	queueName = app.QueueName
 	if err == nil || queueName != "" {
@@ -238,7 +237,7 @@ partitions:
 	}
 
 	// provided rule (2nd rule): queue acl allowed, anyone create
-	app = objects.NewApplication("app1", "default", "root.fixed.leaf", user, tags, nil, "")
+	app = newApplication("app1", "default", "root.fixed.leaf", user, tags, nil, "")
 	err = man.PlaceApplication(app)
 	queueName = app.QueueName
 	if err != nil || queueName != "root.fixed.leaf" {
@@ -250,7 +249,7 @@ partitions:
 		User:   "unknown-user",
 		Groups: []string{},
 	}
-	app = objects.NewApplication("app1", "default", "root.fixed.other", user, tags, nil, "")
+	app = newApplication("app1", "default", "root.fixed.other", user, tags, nil, "")
 	err = man.PlaceApplication(app)
 	queueName = app.QueueName
 	if err == nil || queueName != "" {
@@ -259,7 +258,7 @@ partitions:
 
 	// tag rule (3rd) check queue acl deny, queue was created above)
 	tags = map[string]string{"namespace": "root.fixed.leaf"}
-	app = objects.NewApplication("app1", "default", "", user, tags, nil, "")
+	app = newApplication("app1", "default", "", user, tags, nil, "")
 	err = man.PlaceApplication(app)
 	queueName = app.QueueName
 	if err == nil || queueName != "" {
@@ -271,7 +270,7 @@ partitions:
 		User:   "other-user",
 		Groups: []string{},
 	}
-	app = objects.NewApplication("app1", "default", "", user, tags, nil, "")
+	app = newApplication("app1", "default", "", user, tags, nil, "")
 	err = man.PlaceApplication(app)
 	queueName = app.QueueName
 	if err != nil || queueName != "root.fixed.leaf" {
@@ -279,7 +278,7 @@ partitions:
 	}
 
 	// provided rule (2nd): submit to parent
-	app = objects.NewApplication("app1", "default", "root.fixed", user, nil, nil, "")
+	app = newApplication("app1", "default", "root.fixed", user, nil, nil, "")
 	err = man.PlaceApplication(app)
 	queueName = app.QueueName
 	if err == nil || queueName != "" {

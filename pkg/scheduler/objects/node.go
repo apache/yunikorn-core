@@ -130,12 +130,11 @@ func (sn *Node) GetCapacity() *resources.Resource {
 func (sn *Node) SetCapacity(newCapacity *resources.Resource) *resources.Resource {
 	sn.Lock()
 	defer sn.Unlock()
-	var delta *resources.Resource = nil
 	if resources.Equals(sn.totalResource, newCapacity) {
 		log.Logger().Debug("skip updating capacity, not changed")
-		return delta
+		return nil
 	}
-	delta = resources.Sub(newCapacity, sn.totalResource)
+	delta := resources.Sub(newCapacity, sn.totalResource)
 	sn.totalResource = newCapacity
 	sn.refreshAvailableResource()
 	return delta

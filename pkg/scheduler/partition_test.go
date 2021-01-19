@@ -1095,7 +1095,7 @@ func TestUpdateNode(t *testing.T) {
 		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partition.GetTotalPartitionResource())
 	}
 
-	//delta resource for a node with mem as 450 and vcores as 40 (both mem and vcores has increeased)
+	// delta resource for a node with mem as 450 and vcores as 40 (both mem and vcores has increeased)
 	delta, err := resources.NewResourceFromConf(map[string]string{"memory": "50", "vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
 	partition.updateNode(delta)
@@ -1107,7 +1107,7 @@ func TestUpdateNode(t *testing.T) {
 		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", expectedRes, partition.GetTotalPartitionResource())
 	}
 
-	///delta resource for a node with mem as 400 and vcores as 30 (both mem and vcores has decreased)
+	// delta resource for a node with mem as 400 and vcores as 30 (both mem and vcores has decreased)
 	delta, err = resources.NewResourceFromConf(map[string]string{"memory": "-50", "vcore": "-10"})
 	assert.NilError(t, err, "failed to create resource")
 	partition.updateNode(delta)
@@ -1119,7 +1119,7 @@ func TestUpdateNode(t *testing.T) {
 		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", expectedRes, partition.GetTotalPartitionResource())
 	}
 
-	//delta resource for a node with mem as 450 and vcores as 10 (mem has increeased but vcores has decreased)
+	// delta resource for a node with mem as 450 and vcores as 10 (mem has increeased but vcores has decreased)
 	delta, err = resources.NewResourceFromConf(map[string]string{"memory": "50", "vcore": "-20"})
 	assert.NilError(t, err, "failed to create resource")
 	partition.updateNode(delta)

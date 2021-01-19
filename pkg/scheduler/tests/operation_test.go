@@ -347,8 +347,7 @@ partitions:
 	assert.Equal(t, len(partitionInfo.GetNodes()), 1)
 	node1 := partitionInfo.GetNode("node-1:1234")
 	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.MEMORY]), int64(100))
-	schedulingNode1 := ms.scheduler.GetClusterContext().
-		GetNode("node-1:1234", "[rm:123]default")
+	schedulingNode1 := ms.scheduler.GetClusterContext().GetNode("node-1:1234", "[rm:123]default")
 	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[resources.MEMORY]), int64(0))
 	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[resources.MEMORY]), int64(100))
 
@@ -371,8 +370,7 @@ partitions:
 	})
 
 	assert.NilError(t, err, "UpdateRequest failed")
-	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
-		[]string{"node-1:1234"}, 300, 1000)
+	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default", []string{"node-1:1234"}, 300, 1000)
 	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.MEMORY]), int64(300))
 	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.VCORE]), int64(10))
 	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[resources.MEMORY]), int64(0))
@@ -404,8 +402,7 @@ partitions:
 		RmID: "rm:123",
 	})
 	assert.NilError(t, err, "UpdateRequest failed")
-	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
-		[]string{"node-1:1234"}, 100, 1000)
+	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default", []string{"node-1:1234"}, 100, 1000)
 	newRes, err = resources.NewResourceFromConf(map[string]string{"memory": "100", "vcore": "20"})
 	assert.NilError(t, err, "failed to create resource")
 	if !resources.Equals(newRes, partitionInfo.GetTotalPartitionResource()) {

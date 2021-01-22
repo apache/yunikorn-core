@@ -20,6 +20,7 @@ package objects
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -492,4 +493,23 @@ func (sn *Node) UnReserveApps() ([]string, []int) {
 		askRelease = append(askRelease, num)
 	}
 	return appReserve, askRelease
+}
+
+// Get allocations to be preempted based on policy
+// Different Policies are LIFO, FIFO, Priority
+func (sn *Node) GetPreemptAllocations() []*Allocation {
+	allocations := sn.GetAllAllocations()
+	// to do: 1. Make it configurable 2. Define a new policy go file like nodesorting_policy.go to specify these policies
+	policy := "priority"
+	if policy == "priority" {
+		ascending := false
+		sort.SliceStable(allocations, func(i, j int) bool {
+			l := allocations[i]
+			r := allocations[j]
+			if ascending {
+				return l.Priority < r.Priority
+			}
+			return l.Priority > r.Priority
+		})
+	}
 }

@@ -535,6 +535,9 @@ func (cc *ClusterContext) updateNodes(request *si.UpdateRequest) {
 				if sr := update.SchedulableResource; sr != nil {
 					newCapacity := resources.NewResourceFromProto(sr)
 					node.SetCapacity(newCapacity)
+					// to do: fix this using YUNIKORN-466
+					delta := resources.Zero
+					removeOverUtilizedResources(partition, node, delta)
 				}
 				if or := update.OccupiedResource; or != nil {
 					newOccupied := resources.NewResourceFromProto(or)
@@ -769,4 +772,25 @@ func (cc *ClusterContext) GetNode(nodeID, partitionName string) *objects.Node {
 		return nil
 	}
 	return partition.GetNode(nodeID)
+}
+
+func (cc *ClusterContext) removeOverUtilizedResources(partition *PartitionContext, node *objects.Node, delta *resources.Resource) {
+	// Has Node capacity been decreased?
+	if !delta.HasNegativeValue() {
+		return
+	}
+	// to do : fix this properly for both +ve and -ve values
+	totalResourcesToBePreempted := resources.Multiply(delta, -1)
+	preemptedResources := resources.Zero
+	released := make([]*objects.Allocation, 0)
+	for _, alloc := range node.GetPreemptAllocations() {
+		// Is preempted resources (going to be) good enough?
+		if resources.StrictlyGreaterThan(preemptedResources, totalResourcesToBePreempted) {
+			break
+		}
+		released = append(released, alloc)
+		partition.removeAllocation(alloc.ApplicationID, alloc.UUID)
+	}
+	cc.notifyRMAllocationReleased(partition.RmID, released, si.AllocationReleaseResponse_PREEMPTED_BY_SCHEDULER,
+		fmt.Sprintf("Preempt allocation=%s to fix over utilization of node %s", released, node.NodeID))
 }

@@ -36,6 +36,11 @@ type NodeIterator interface {
 	Reset()
 }
 
+// Plugin is the parent type for all the scheduling framework plugins.
+type Plugin interface {
+	Name() string
+}
+
 // This interface helps to manage all application for a queue.
 type Applications interface {
 	// add or update an app,
@@ -69,7 +74,7 @@ type Applications interface {
 type Requests interface {
 	// add or update a request,
 	// return old request if present, otherwise return nil.
-	AddRequest(request Request) Request
+	AddOrUpdateRequest(request Request) Request
 	// remove the request with the specified allocation key,
 	// return removed request if present, otherwise return nil.
 	RemoveRequest(allocationKey string) Request

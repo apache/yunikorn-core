@@ -440,10 +440,10 @@ func TestSortRequests(t *testing.T) {
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 	var leaf *Queue
-	leaf, err = createManagedQueue(root, "leaf", true, nil)
+	leaf, err = createManagedQueue(root, queueName, true, nil)
 	assert.NilError(t, err, "failed to create leaf queue: %v", err)
 	// create an application
-	app := newApplication(appID1, "default", leaf.QueuePath)
+	app := newApplication(appID1, "default", queueName)
 	if app == nil || app.ApplicationID != appID1 {
 		t.Fatalf("app create failed which should not have %v", app)
 	}

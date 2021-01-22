@@ -19,13 +19,25 @@
 package defaults
 
 import (
+	"sort"
+
 	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
 )
 
-var DefaultRequestsPluginInstance = &DefaultRequestsPlugin{}
+const (
+	DefaultRequestsPluginName = "DefaultRequestsPlugin"
+)
+
+func NewDefaultRequestsPlugin(_ interface{}) (interfaces.Plugin, error) {
+	return &DefaultRequestsPlugin{}, nil
+}
 
 // This is the default implementation of RequestsPlugins
 type DefaultRequestsPlugin struct {
+}
+
+func (drp *DefaultRequestsPlugin) Name() string {
+	return DefaultRequestsPluginName
 }
 
 func (drp *DefaultRequestsPlugin) NewRequests() interfaces.Requests {
@@ -44,7 +56,7 @@ func NewDefaultRequests() interfaces.Requests {
 	}
 }
 
-func (dr *DefaultRequests) AddRequest(request interfaces.Request) interfaces.Request {
+func (dr *DefaultRequests) AddOrUpdateRequest(request interfaces.Request) interfaces.Request {
 	if request == nil {
 		return nil
 	}
@@ -132,4 +144,20 @@ func (dri *DefaultRequestIterator) Next() interfaces.Request {
 
 func (dri *DefaultRequestIterator) Size() int {
 	return len(dri.requests)
+}
+
+func SortAskByPriority(requests []interfaces.Request, ascending bool) {
+	sort.SliceStable(requests, func(i, j int) bool {
+		l := requests[i]
+		r := requests[j]
+
+		if l.GetPriority() == r.GetPriority() {
+			return l.GetCreateTime().Before(r.GetCreateTime())
+		}
+
+		if ascending {
+			return l.GetPriority() < r.GetPriority()
+		}
+		return l.GetPriority() > r.GetPriority()
+	})
 }

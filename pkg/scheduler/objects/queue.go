@@ -24,8 +24,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
-
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
@@ -35,6 +33,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
+	schedulingplugins "github.com/apache/incubator-yunikorn-core/pkg/scheduler/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 )
@@ -1020,7 +1019,7 @@ func (sq *Queue) String() string {
 }
 
 func (sq *Queue) initApplications() {
-	sq.applications = plugins.GetApplicationsPlugin().NewApplications(sq)
+	sq.applications = schedulingplugins.GetApplicationsPlugin().NewApplications(sq)
 }
 
 func (sq *Queue) GetApplications() interfaces.Applications {

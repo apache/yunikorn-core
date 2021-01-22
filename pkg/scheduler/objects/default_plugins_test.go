@@ -1,13 +1,15 @@
 package objects
 
 import (
+	"fmt"
+	"math/rand"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
-	"github.com/apache/incubator-yunikorn-core/pkg/plugins/defaults"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/plugins/defaults"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 
 	"gotest.tools/assert"
@@ -221,6 +223,177 @@ func TestSortAsks(t *testing.T) {
 	defaults.SortAskByPriority(list, false)
 	// asks should come back in order: 3, 2, 0, 1
 	assertAskList(t, list, []int{3, 1, 0, 2}, "descending same prio")
+}
+
+func BenchmarkIteratePendingRequests(b *testing.B) {
+	tests := []struct {
+		numPriorities          int
+		numRequestsPerPriority int
+		pendingPercentage      float32
+	}{
+		// expect the performance is only related to the number of pending requests,
+		// won't be affected by other factors such as the number of priorities and pending percentage.
+
+		// cases: 10,000 pending requests in total with different number of priorities
+		{numPriorities: 1, numRequestsPerPriority: 10000, pendingPercentage: 1.0},
+		{numPriorities: 2, numRequestsPerPriority: 5000, pendingPercentage: 1.0},
+		{numPriorities: 5, numRequestsPerPriority: 2000, pendingPercentage: 1.0},
+		{numPriorities: 10, numRequestsPerPriority: 1000, pendingPercentage: 1.0},
+
+		// cases: 10,000 pending requests in total with only 1 priority and different pending percentage
+		{numPriorities: 1, numRequestsPerPriority: 10000, pendingPercentage: 1.0},
+		{numPriorities: 1, numRequestsPerPriority: 10000, pendingPercentage: 0.5},
+		{numPriorities: 1, numRequestsPerPriority: 10000, pendingPercentage: 0.2},
+		{numPriorities: 1, numRequestsPerPriority: 10000, pendingPercentage: 0.1},
+	}
+	for _, test := range tests {
+		name := fmt.Sprintf("%dPriorities/%dRequests/%fPendingPercentage",
+			test.numPriorities, test.numRequestsPerPriority, test.pendingPercentage)
+		b.Run(name, func(b *testing.B) {
+			benchmarkIteratePendingRequests(b, test.numPriorities, test.numRequestsPerPriority,
+				test.pendingPercentage)
+		})
+	}
+}
+
+func benchmarkIteratePendingRequests(b *testing.B, numPriorities, numRequestsPerPriority int, pendingPercentage float32) {
+	// create the root and left queue
+	root, err := createRootQueue(nil)
+	assert.NilError(b, err, "queue create failed")
+	var leaf *Queue
+	leaf, err = createManagedQueue(root, queueName, true, nil)
+	assert.NilError(b, err, "failed to create leaf queue: %v", err)
+	// create an application
+	app := newApplication(appID1, "default", queueName)
+	app.queue = leaf
+	leaf.AddApplication(app)
+	// prepare asks for testing
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	pendingFlag := int(pendingPercentage * 100)
+	expectedPendingCount := 0
+	askIndex := 0
+	for i := 0; i < numPriorities; i++ {
+		for j := 0; j < numRequestsPerPriority; j++ {
+			allocKey := "ask-" + strconv.Itoa(askIndex)
+			ask := newAllocationAskRepeat(allocKey, appID1, res, 1)
+			ask.priority = int32(i)
+			err := app.AddAllocationAsk(ask)
+			assert.NilError(b, err, "failed to add allocation ask", err)
+			if rand.Intn(100) < pendingFlag {
+				expectedPendingCount++
+			} else {
+				// set 0 repeat
+				_, err = app.updateAskRepeat(allocKey, -1)
+				if err != nil {
+					b.Errorf("failed to update ask repeat: %v (err = %v)", app, err)
+				}
+			}
+			askIndex++
+		}
+	}
+
+	// check pending count
+	pendingCount := 0
+	reqIt := app.requests.SortForAllocation()
+	for reqIt.HasNext() {
+		reqIt.Next()
+		pendingCount++
+	}
+	if pendingCount != expectedPendingCount {
+		b.Fatalf("expected pending count: %v, but actually got: %v", expectedPendingCount, pendingCount)
+	}
+
+	// Reset timer for this benchmark
+	startTime := time.Now()
+	b.ResetTimer()
+
+	// execute get all pending for 1000 times
+	testTimes := 100
+	for i := 0; i < testTimes; i++ {
+		app.requests.SortForAllocation()
+		//for reqIt.HasNext() {
+		//	reqIt.Next()
+		//}
+	}
+
+	// Stop timer and calculate duration
+	b.StopTimer()
+	duration := time.Since(startTime)
+	b.Logf("Total time to iterate %d pending requests from %d request for %d times in %s, avg time: %s",
+		expectedPendingCount, numPriorities*numRequestsPerPriority, testTimes, duration, duration/100)
+}
+
+func BenchmarkSortApplications(b *testing.B) {
+	tests := []struct {
+		numApplications int
+		policyType      policies.SortPolicy
+	}{
+		{numApplications: 10, policyType: policies.FairSortPolicy},
+		{numApplications: 10, policyType: policies.FifoSortPolicy},
+		{numApplications: 100, policyType: policies.FairSortPolicy},
+		{numApplications: 100, policyType: policies.FifoSortPolicy},
+		{numApplications: 1000, policyType: policies.FairSortPolicy},
+		{numApplications: 1000, policyType: policies.FifoSortPolicy},
+	}
+	for _, test := range tests {
+		name := fmt.Sprintf("%vApps/%s", test.numApplications, test.policyType)
+		b.Run(name, func(b *testing.B) {
+			benchmarkSortApplications(b, test.numApplications, test.policyType)
+		})
+	}
+}
+
+func benchmarkSortApplications(b *testing.B, numApplications int, sortPolicy policies.SortPolicy) {
+	// create the root
+	root, err := createRootQueue(nil)
+	if err != nil {
+		b.Fatalf("failed to create basic root queue: %v", err)
+	}
+	var leaf, parent *Queue
+	// empty parent queue
+	parent, err = createManagedQueue(root, "parent", true, nil)
+	if err != nil {
+		b.Fatalf("failed to create parent queue: %v", err)
+	}
+	// empty leaf queue
+	leaf, err = createManagedQueue(parent, "leaf", false, nil)
+	leaf.sortType = sortPolicy
+	//leaf.appRequestSorter = newAppRequestSorter(sortPolicy)
+	if err != nil {
+		b.Fatalf("failed to create leaf queue: %v", err)
+	}
+	// add apps with a pending ask
+	for i := 0; i < numApplications; i++ {
+		appID := fmt.Sprintf("app-%d", i)
+		app := newApplication(appID, "default", leaf.Name)
+		app.queue = leaf
+		leaf.AddApplication(app)
+		res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
+		if err != nil {
+			b.Fatalf("failed to create basic resource: %v", err)
+		}
+		// add an ask app must be returned
+		err = app.AddAllocationAsk(newAllocationAsk("alloc-1", appID, res))
+		if err != nil {
+			b.Errorf("failed to add allocation ask (err = %v)", err)
+		}
+	}
+
+	// Reset  timer for this benchmark
+	startTime := time.Now()
+	b.ResetTimer()
+
+	// execute sorting for 1000 times
+	testTimes := 100
+	for i := 0; i < testTimes; i++ {
+		leaf.applications.SortForAllocation()
+	}
+
+	// Stop timer and calculate duration
+	b.StopTimer()
+	duration := time.Since(startTime)
+	b.Logf("Total time to sort %d apps for %d times in %s, avg time: %s",
+		numApplications, testTimes, duration, duration/100)
 }
 
 // list of application and the location of the named applications inside that list

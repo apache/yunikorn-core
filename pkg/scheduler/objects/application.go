@@ -25,8 +25,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
-
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
@@ -38,6 +36,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
+	schedulingplugins "github.com/apache/incubator-yunikorn-core/pkg/scheduler/plugins"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -80,7 +79,7 @@ func newBlankApplication(appID, partition, queueName string, ugi security.UserGr
 		tags:              tags,
 		pending:           resources.NewResource(),
 		allocatedResource: resources.NewResource(),
-		requests:          plugins.GetRequestsPlugin().NewRequests(),
+		requests:          schedulingplugins.GetRequestsPlugin().NewRequests(),
 		reservations:      make(map[string]*reservation),
 		allocations:       make(map[string]*Allocation),
 		stateMachine:      NewAppState(),
@@ -330,7 +329,7 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 	delta := resources.Multiply(ask.AllocatedResource, int64(ask.GetPendingAskRepeat()))
 
 	var oldAskResource *resources.Resource = nil
-	if oldAsk := sa.requests.AddRequest(ask); oldAsk != nil {
+	if oldAsk := sa.requests.AddOrUpdateRequest(ask); oldAsk != nil {
 		oldAskResource = resources.Multiply(oldAsk.(*AllocationAsk).AllocatedResource,
 			int64(oldAsk.(*AllocationAsk).GetPendingAskRepeat()))
 	}
@@ -370,7 +369,7 @@ func (sa *Application) RecoverAllocationAsk(ask *AllocationAsk) {
 		return
 	}
 	ask.setQueue(sa.queue.QueuePath)
-	sa.requests.AddRequest(ask)
+	sa.requests.AddOrUpdateRequest(ask)
 }
 
 func (sa *Application) updateAskRepeat(allocKey string, delta int32) (*resources.Resource, error) {
@@ -387,6 +386,8 @@ func (sa *Application) updateAskRepeatInternal(ask *AllocationAsk, delta int32) 
 	if !ask.UpdatePendingAskRepeat(delta) {
 		return nil, fmt.Errorf("ask repaeat not updated resulting repeat less than zero for ask %s on app %s", ask.AllocationKey, sa.ApplicationID)
 	}
+	// this must be called to update pending state
+	sa.requests.AddOrUpdateRequest(ask)
 
 	deltaPendingResource := resources.Multiply(ask.AllocatedResource, int64(delta))
 	sa.pending = resources.Add(sa.pending, deltaPendingResource)

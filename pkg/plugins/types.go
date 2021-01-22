@@ -21,8 +21,6 @@ package plugins
 import (
 	"sync"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
-
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -32,8 +30,6 @@ type SchedulerPlugins struct {
 	eventPlugin            EventPlugin
 	schedulingStateUpdater ContainerSchedulingStateUpdater
 	configPlugin           ConfigurationPlugin
-	applicationsPlugin     ApplicationsPlugin
-	requestsPlugin         RequestsPlugin
 
 	sync.RWMutex
 }
@@ -70,16 +66,4 @@ type ContainerSchedulingStateUpdater interface {
 
 type ConfigurationPlugin interface {
 	UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse
-}
-
-// This plugin is responsible for creating new instances of Applications.
-type ApplicationsPlugin interface {
-	// return a new instance of Applications
-	NewApplications(queue interfaces.Queue) interfaces.Applications
-}
-
-// This plugin is responsible for creating new instances of Requests.
-type RequestsPlugin interface {
-	// return a new instance of requests
-	NewRequests() interfaces.Requests
 }

@@ -15,6 +15,7 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 */
+
 package webservice
 
 import (
@@ -27,18 +28,17 @@ import (
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 )
 
-var gClusterInfo *cache.ClusterInfo
 var imHistory *history.InternalMetricsHistory
 var lock sync.RWMutex
+var schedulerContext *scheduler.ClusterContext
 
 type WebService struct {
-	httpServer  *http.Server
-	clusterInfo *cache.ClusterInfo
+	httpServer *http.Server
 }
 
 func newRouter() *mux.Router {
@@ -81,9 +81,9 @@ func (m *WebService) StartWebApp() {
 	}()
 }
 
-func NewWebApp(clusterInfo *cache.ClusterInfo, internalMetrics *history.InternalMetricsHistory) *WebService {
+func NewWebApp(context *scheduler.ClusterContext, internalMetrics *history.InternalMetricsHistory) *WebService {
 	m := &WebService{}
-	gClusterInfo = clusterInfo
+	schedulerContext = context
 	imHistory = internalMetrics
 	return m
 }

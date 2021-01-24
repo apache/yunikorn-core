@@ -45,6 +45,10 @@ type Resource struct {
 // No unit defined here for better performance
 type Quantity int64
 
+func (q Quantity) string() string {
+	return strconv.FormatInt(int64(q), 10)
+}
+
 // Never update value of Zero
 var Zero = NewResource()
 
@@ -93,6 +97,9 @@ func NewResourceFromConf(configMap map[string]string) (*Resource, error) {
 }
 
 func (r *Resource) String() string {
+	if r == nil {
+		return "nil resource"
+	}
 	return fmt.Sprintf("%v", r.Resources)
 }
 
@@ -104,13 +111,25 @@ func (r *Resource) DAOString() string {
 }
 
 // Convert to a protobuf implementation
+// a nil resource passes back an empty proto object
 func (r *Resource) ToProto() *si.Resource {
 	proto := &si.Resource{}
 	proto.Resources = make(map[string]*si.Quantity)
-	for k, v := range r.Resources {
-		proto.Resources[k] = &si.Quantity{Value: int64(v)}
+	if r != nil {
+		for k, v := range r.Resources {
+			proto.Resources[k] = &si.Quantity{Value: int64(v)}
+		}
 	}
 	return proto
+}
+
+// convert to a configmap
+func (r *Resource) ToConf() map[string]string {
+	conf := make(map[string]string)
+	for k, v := range r.Resources {
+		conf[k] = v.string()
+	}
+	return conf
 }
 
 // Return a clone (copy) of the resource it is called on.
@@ -118,34 +137,42 @@ func (r *Resource) ToProto() *si.Resource {
 // NOTE: this is a clone not a sparse copy of the original.
 func (r *Resource) Clone() *Resource {
 	ret := NewResource()
-	for k, v := range r.Resources {
-		ret.Resources[k] = v
+	if r != nil {
+		for k, v := range r.Resources {
+			ret.Resources[k] = v
+		}
+		return ret
 	}
-	return ret
+	return nil
 }
 
 // Add additional resource to the base updating the base resource
 // Should be used by temporary computation only
-// A nil base resource is considered an empty resource
-// A nil addition is treated as a zero valued resource and leaves base unchanged
+// A nil base resource does not change
+// A nil passed in resource is treated as a zero valued resource and leaves base unchanged
 func (r *Resource) AddTo(add *Resource) {
-	if add == nil {
-		return
-	}
-	for k, v := range add.Resources {
-		r.Resources[k] = addVal(r.Resources[k], v)
+	if r != nil {
+		if add == nil {
+			return
+		}
+		for k, v := range add.Resources {
+			r.Resources[k] = addVal(r.Resources[k], v)
+		}
 	}
 }
 
 // Subtract from the resource the passed in resource by updating the resource it is called on.
-// A nil passed in resource is treated as a zero valued resource and leaves the called on resource unchanged.
 // Should be used by temporary computation only
+// A nil base resource does not change
+// A nil passed in resource is treated as a zero valued resource and leaves the base unchanged.
 func (r *Resource) SubFrom(sub *Resource) {
-	if sub == nil {
-		return
-	}
-	for k, v := range sub.Resources {
-		r.Resources[k] = subVal(r.Resources[k], v)
+	if r != nil {
+		if sub == nil {
+			return
+		}
+		for k, v := range sub.Resources {
+			r.Resources[k] = subVal(r.Resources[k], v)
+		}
 	}
 }
 
@@ -589,6 +616,21 @@ func Equals(left, right *Resource) bool {
 	return true
 }
 
+// Compare the resources equal returns the specific values for following cases:
+// left  right  return
+// nil   nil    true
+// nil   <set>  false
+// nil zero res true
+// <set>   nil    false
+// zero res nil true
+// <set> <set>  true/false  *based on the individual Quantity values
+func EqualsOrEmpty(left, right *Resource) bool {
+	if IsZero(left) && IsZero(right) {
+		return true
+	}
+	return Equals(left, right)
+}
+
 // Multiply the resource by the integer ratio returning a new resource.
 // Result is protected from overflow (positive and negative).
 // A nil resource passed in returns a new empty resource (zero)
@@ -756,6 +798,18 @@ func IsZero(zero *Resource) bool {
 		}
 	}
 	return true
+}
+
+func (r *Resource) HasNegativeValue() bool {
+	if r == nil {
+		return false
+	}
+	for _, v := range r.Resources {
+		if v < 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {

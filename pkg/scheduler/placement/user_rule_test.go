@@ -23,7 +23,6 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 )
@@ -40,14 +39,15 @@ partitions:
         queues:
           - name: testchild
 `
-	partInfo, err := CreatePartitionInfo([]byte(data))
-	assert.NilError(t, err, "Partition create failed with error")
+	err := initQueueStructure([]byte(data))
+	assert.NilError(t, err, "setting up the queue config failed")
+
 	tags := make(map[string]string)
 	user := security.UserGroup{
 		User:   "testchild",
 		Groups: []string{},
 	}
-	appInfo := cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
+	appInfo := newApplication("app1", "default", "ignored", user, tags, nil, "")
 
 	// user queue that exists directly under the root
 	conf := configs.PlacementRule{
@@ -59,7 +59,7 @@ partitions:
 		t.Errorf("user rule create failed, err %v", err)
 	}
 	var queue string
-	queue, err = ur.placeApplication(appInfo, partInfo)
+	queue, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "root.testchild" || err != nil {
 		t.Errorf("user rule failed to place queue in correct queue '%s', err %v", queue, err)
 	}
@@ -68,8 +68,8 @@ partitions:
 		User:   "testparent",
 		Groups: []string{},
 	}
-	appInfo = cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
-	queue, err = ur.placeApplication(appInfo, partInfo)
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
+	queue, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "root.testparent" || err != nil {
 		t.Errorf("user rule failed with parent queue '%s', error %v", queue, err)
 	}
@@ -78,8 +78,8 @@ partitions:
 		User:   "test.user",
 		Groups: []string{},
 	}
-	appInfo = cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
-	queue, err = ur.placeApplication(appInfo, partInfo)
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
+	queue, err = ur.placeApplication(appInfo, queueFunc)
 	if queue == "" || err != nil {
 		t.Errorf("user rule with dotted user should not have failed '%s', error %v", queue, err)
 	}
@@ -96,12 +96,12 @@ partitions:
 		User:   "testchild",
 		Groups: []string{},
 	}
-	appInfo = cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
 	ur, err = newRule(conf)
 	if err != nil || ur == nil {
 		t.Errorf("user rule create failed with queue name, err %v", err)
 	}
-	queue, err = ur.placeApplication(appInfo, partInfo)
+	queue, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "root.testparent.testchild" || err != nil {
 		t.Errorf("user rule failed to place queue in correct queue '%s', err %v", queue, err)
 	}
@@ -111,7 +111,7 @@ partitions:
 		User:   "unknown",
 		Groups: []string{},
 	}
-	appInfo = cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
 
 	conf = configs.PlacementRule{
 		Name:   "user",
@@ -121,15 +121,16 @@ partitions:
 	if err != nil || ur == nil {
 		t.Errorf("user rule create failed with queue name, err %v", err)
 	}
-	queue, err = ur.placeApplication(appInfo, partInfo)
+	queue, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "root.unknown" || err != nil {
 		t.Errorf("user rule placed in to be created queue with create false '%s', err %v", queue, err)
 	}
 }
 
 func TestUserRuleParent(t *testing.T) {
-	partInfo, err := CreatePartitionInfo([]byte(confParentChild))
-	assert.NilError(t, err, "Partition create failed with error")
+	err := initQueueStructure([]byte(confParentChild))
+	assert.NilError(t, err, "setting up the queue config failed")
+
 	tags := make(map[string]string)
 	user := security.UserGroup{
 		User:   "testchild",
@@ -151,9 +152,9 @@ func TestUserRuleParent(t *testing.T) {
 		t.Errorf("user rule create failed, err %v", err)
 	}
 
-	appInfo := cache.NewApplicationInfo("app1", "default", "unknown", user, tags)
+	appInfo := newApplication("app1", "default", "unknown", user, tags, nil, "")
 	var queue string
-	queue, err = ur.placeApplication(appInfo, partInfo)
+	queue, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("user rule placed app in incorrect queue '%s', err %v", queue, err)
 	}
@@ -173,8 +174,8 @@ func TestUserRuleParent(t *testing.T) {
 		t.Errorf("user rule create failed, err %v", err)
 	}
 
-	appInfo = cache.NewApplicationInfo("app1", "default", "unknown", user, tags)
-	queue, err = ur.placeApplication(appInfo, partInfo)
+	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
+	queue, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("user rule placed app in incorrect queue '%s', err %v", queue, err)
 	}
@@ -193,7 +194,7 @@ func TestUserRuleParent(t *testing.T) {
 	if err != nil || ur == nil {
 		t.Errorf("user rule create failed with queue name, err %v", err)
 	}
-	queue, err = ur.placeApplication(appInfo, partInfo)
+	queue, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != nameParentChild || err != nil {
 		t.Errorf("user rule with non existing parent queue should create '%s', error %v", queue, err)
 	}
@@ -212,8 +213,8 @@ func TestUserRuleParent(t *testing.T) {
 		t.Errorf("user rule create failed, err %v", err)
 	}
 
-	appInfo = cache.NewApplicationInfo("app1", "default", "unknown", user, tags)
-	queue, err = ur.placeApplication(appInfo, partInfo)
+	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
+	queue, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "" || err == nil {
 		t.Errorf("user rule placed app in incorrect queue '%s', err %v", queue, err)
 	}

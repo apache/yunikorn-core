@@ -19,7 +19,10 @@
 package common
 
 import (
+	"math"
+	"os"
 	"testing"
+	"time"
 
 	"gotest.tools/assert"
 )
@@ -69,5 +72,47 @@ func TestGetPartitionNameWithoutClusterID(t *testing.T) {
 	for _, test := range tests {
 		got := GetPartitionNameWithoutClusterID(test.partitionName)
 		assert.Equal(t, got, test.want, "unexpected partitionName without clusterID!")
+	}
+}
+
+func TestGetBoolEnvVar(t *testing.T) {
+	envVarName := "VAR"
+	testCases := []struct {
+		name     string
+		value    string
+		expected bool
+	}{
+		{"ENV var not set", "", true},
+		{"ENV var set", "false", false},
+		{"Invalid value", "someValue", true},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := os.Setenv(envVarName, tc.value)
+			assert.NilError(t, err, "setting environment variable failed")
+			val := GetBoolEnvVar(envVarName, true)
+			assert.Equal(t, val, tc.expected, "test case failure: %s", tc.name)
+			err = os.Unsetenv(envVarName)
+			assert.NilError(t, err, "cleaning up environment variable failed")
+		})
+	}
+}
+
+func TestConvertSITimeout(t *testing.T) {
+	testCases := []struct {
+		name     string
+		value    int64
+		expected time.Duration
+	}{
+		{"negative value", -1, 0},
+		{"zero value", 0, 0},
+		{"small value", 100, time.Millisecond * 100},
+		{"overflow value", math.MaxInt64 / 10, 0},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			val := ConvertSITimeout(tc.value)
+			assert.Equal(t, val, tc.expected, "test case failure: %s", tc.name)
+		})
 	}
 }

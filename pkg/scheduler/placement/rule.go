@@ -24,9 +24,9 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 )
 
 // Interface that all placement rules need to implement.
@@ -38,7 +38,7 @@ type rule interface {
 	// Execute the rule and return the queue getName the application is placed in.
 	// Returns the fully qualified queue getName if the rule finds a queue or an empty string if the rule did not match.
 	// The error must only be set if there is a failure while executing the rule not if the rule did not match.
-	placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error)
+	placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, error)
 
 	// Return the getName of the rule which is defined in the rule.
 	// The basicRule provides a "unnamed rule" implementation.
@@ -117,5 +117,5 @@ func normalise(name string) string {
 
 // Replace all dots in the generated queue name before making it a fully qualified name.
 func replaceDot(name string) string {
-	return strings.Replace(name, cache.DOT, cache.DotReplace, -1)
+	return strings.Replace(name, configs.DOT, configs.DotReplace, -1)
 }

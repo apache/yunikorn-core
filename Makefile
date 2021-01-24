@@ -15,11 +15,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Check if this GO tools version used is at least the version of go specified in
+# the go.mod file. The version in go.mod should be in sync with other repos.
+GO_VERSION := $(shell go version | awk '{print substr($$3, 3, 10)}')
+MOD_VERSION := $(shell awk '/^go/ {print $$2}' go.mod)
 
-# Check if this is at least GO 1.11 for Go Modules
-GO_VERSION := $(shell go version | awk '$$3 ~ /go1.(10|0-9])/ {print $$3}')
-ifdef GO_VERSION
-$(error Build requires go 1.11 or later)
+GM := $(word 1,$(subst ., ,$(GO_VERSION)))
+MM := $(word 1,$(subst ., ,$(MOD_VERSION)))
+FAIL := $(shell if [ $(GM) -lt $(MM) ]; then echo MAJOR; fi)
+ifdef FAIL
+$(error Build should be run with at least go $(MOD_VERSION) or later, found $(GO_VERSION))
+endif
+GM := $(word 2,$(subst ., ,$(GO_VERSION)))
+MM := $(word 2,$(subst ., ,$(MOD_VERSION)))
+FAIL := $(shell if [ $(GM) -lt $(MM) ]; then echo MINOR; fi)
+ifdef FAIL
+$(error Build should be run with at least go $(MOD_VERSION) or later, found $(GO_VERSION))
 endif
 
 # Make sure we are in the same directory as the Makefile
@@ -41,6 +52,8 @@ all:
 	$(MAKE) -C $(dir $(BASE_DIR)) build
 
 .PHONY: lint
+# Run lint against the previous commit for PR and branch build
+# In dev setup look at all changes on top of master
 lint:
 	@echo "running golangci-lint"
 	@lintBin=$$(go env GOPATH)/bin/golangci-lint ; \
@@ -51,7 +64,9 @@ lint:
 			exit 1; \
 		fi \
 	fi ; \
-	headSHA=$$(git rev-parse --short=12 origin/HEAD) ; \
+        git symbolic-ref -q HEAD && REV="origin/HEAD" || REV="HEAD^" ; \
+        headSHA=$$(git rev-parse --short=12 $${REV}) ; \
+        echo "checking against commit sha $${headSHA}" ; \
 	$${lintBin} run --new-from-rev=$${headSHA}
 
 .PHONY: license-check

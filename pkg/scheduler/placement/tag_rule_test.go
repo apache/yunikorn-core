@@ -23,7 +23,6 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 )
@@ -70,8 +69,9 @@ partitions:
         queues:
           - name: testchild
 `
-	partInfo, err := CreatePartitionInfo([]byte(data))
-	assert.NilError(t, err, "Partition create failed with error")
+	err := initQueueStructure([]byte(data))
+	assert.NilError(t, err, "setting up the queue config failed")
+
 	user := security.UserGroup{
 		User:   "testuser",
 		Groups: []string{},
@@ -87,33 +87,33 @@ partitions:
 
 	// tag does not have a value
 	tags := make(map[string]string)
-	appInfo := cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
+	appInfo := newApplication("app1", "default", "ignored", user, tags, nil, "")
 	var queue string
-	queue, err = tr.placeApplication(appInfo, partInfo)
+	queue, err = tr.placeApplication(appInfo, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("tag rule failed with no tag value '%s', err %v", queue, err)
 	}
 
 	// tag queue that exists directly in hierarchy
 	tags = map[string]string{"label1": "testqueue"}
-	appInfo = cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
-	queue, err = tr.placeApplication(appInfo, partInfo)
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
+	queue, err = tr.placeApplication(appInfo, queueFunc)
 	if queue != "root.testqueue" || err != nil {
 		t.Errorf("tag rule failed to place queue in correct queue '%s', err %v", queue, err)
 	}
 
 	// tag queue that does not exists
 	tags = map[string]string{"label1": "unknown"}
-	appInfo = cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
-	queue, err = tr.placeApplication(appInfo, partInfo)
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
+	queue, err = tr.placeApplication(appInfo, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("tag rule placed in queue that does not exists '%s', err %v", queue, err)
 	}
 
 	// tag queue fully qualified
 	tags = map[string]string{"label1": "root.testparent.testchild"}
-	appInfo = cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
-	queue, err = tr.placeApplication(appInfo, partInfo)
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
+	queue, err = tr.placeApplication(appInfo, queueFunc)
 	if queue != "root.testparent.testchild" || err != nil {
 		t.Errorf("tag rule did fail with qualified queue '%s', error %v", queue, err)
 	}
@@ -132,34 +132,23 @@ partitions:
 		t.Errorf("tag rule create failed with parent rule and qualified value, err %v", err)
 	}
 	tags = map[string]string{"label1": "testchild"}
-	appInfo = cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
-	queue, err = tr.placeApplication(appInfo, partInfo)
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
+	queue, err = tr.placeApplication(appInfo, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("tag rule with parent queue should have failed value not set '%s', error %v", queue, err)
 	}
 	tags = map[string]string{"label1": "testchild", "label2": "testparent"}
-	appInfo = cache.NewApplicationInfo("app1", "default", "ignored", user, tags)
-	queue, err = tr.placeApplication(appInfo, partInfo)
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
+	queue, err = tr.placeApplication(appInfo, queueFunc)
 	if queue != "root.testparent.testchild" || err != nil {
 		t.Errorf("tag rule with parent queue incorrect queue '%s', error %v", queue, err)
 	}
 }
 
-// Create the structure for the parent rule tests
-// shared by a number of rule tests
-const confParentChild = `
-partitions:
-  - name: default
-    queues:
-      - name: testchild
-      - name: testparent
-        parent: true
-`
-const nameParentChild = "root.testparentnew.testchild"
-
 func TestTagRuleParent(t *testing.T) {
-	partInfo, err := CreatePartitionInfo([]byte(confParentChild))
-	assert.NilError(t, err, "Partition create failed with error")
+	err := initQueueStructure([]byte(confParentChild))
+	assert.NilError(t, err, "setting up the queue config failed")
+
 	user := security.UserGroup{
 		User:   "testuser",
 		Groups: []string{},
@@ -182,9 +171,9 @@ func TestTagRuleParent(t *testing.T) {
 	}
 
 	tags := map[string]string{"label1": "testchild", "label2": "testparent"}
-	appInfo := cache.NewApplicationInfo("app1", "default", "unknown", user, tags)
+	appInfo := newApplication("app1", "default", "unknown", user, tags, nil, "")
 	var queue string
-	queue, err = ur.placeApplication(appInfo, partInfo)
+	queue, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("tag rule placed app in incorrect queue '%s', err %v", queue, err)
 	}
@@ -206,8 +195,8 @@ func TestTagRuleParent(t *testing.T) {
 	}
 
 	tags = map[string]string{"label1": "testchild", "label2": "testparentnew"}
-	appInfo = cache.NewApplicationInfo("app1", "default", "unknown", user, tags)
-	queue, err = ur.placeApplication(appInfo, partInfo)
+	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
+	queue, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("tag rule placed app in incorrect queue '%s', err %v", queue, err)
 	}
@@ -227,7 +216,7 @@ func TestTagRuleParent(t *testing.T) {
 	if err != nil || ur == nil {
 		t.Errorf("tag rule create failed with queue name, err %v", err)
 	}
-	queue, err = ur.placeApplication(appInfo, partInfo)
+	queue, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != nameParentChild || err != nil {
 		t.Errorf("user rule with non existing parent queue should create '%s', error %v", queue, err)
 	}
@@ -247,8 +236,8 @@ func TestTagRuleParent(t *testing.T) {
 		t.Errorf("tag rule create failed, err %v", err)
 	}
 
-	appInfo = cache.NewApplicationInfo("app1", "default", "unknown", user, tags)
-	queue, err = ur.placeApplication(appInfo, partInfo)
+	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
+	queue, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "" || err == nil {
 		t.Errorf("tag rule placed app in incorrect queue '%s', err %v", queue, err)
 	}

@@ -24,9 +24,9 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/cache"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 )
 
 type fixedRule struct {
@@ -62,7 +62,7 @@ func (fr *fixedRule) initialise(conf configs.PlacementRule) error {
 	return err
 }
 
-func (fr *fixedRule) placeApplication(app *cache.ApplicationInfo, info *cache.PartitionInfo) (string, error) {
+func (fr *fixedRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, error) {
 	// before anything run the filter
 	if !fr.filter.allowUser(app.GetUser()) {
 		log.Logger().Debug("Fixed rule filtered",
@@ -78,7 +78,7 @@ func (fr *fixedRule) placeApplication(app *cache.ApplicationInfo, info *cache.Pa
 	if !fr.qualified {
 		// run the parent rule if set
 		if fr.parent != nil {
-			parentName, err = fr.parent.placeApplication(app, info)
+			parentName, err = fr.parent.placeApplication(app, queueFn)
 			// failed parent rule, fail this rule
 			if err != nil {
 				return "", err
@@ -88,11 +88,11 @@ func (fr *fixedRule) placeApplication(app *cache.ApplicationInfo, info *cache.Pa
 				return "", nil
 			}
 			// check if this is a parent queue and qualify it
-			if !strings.HasPrefix(parentName, configs.RootQueue+cache.DOT) {
-				parentName = configs.RootQueue + cache.DOT + parentName
+			if !strings.HasPrefix(parentName, configs.RootQueue+configs.DOT) {
+				parentName = configs.RootQueue + configs.DOT + parentName
 			}
 			// if the parent queue exists it cannot be a leaf
-			parentQueue := info.GetQueue(parentName)
+			parentQueue := queueFn(parentName)
 			if parentQueue != nil && parentQueue.IsLeafQueue() {
 				return "", fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
 			}
@@ -101,14 +101,14 @@ func (fr *fixedRule) placeApplication(app *cache.ApplicationInfo, info *cache.Pa
 		if parentName == "" {
 			parentName = configs.RootQueue
 		}
-		queueName = parentName + cache.DOT + fr.queue
+		queueName = parentName + configs.DOT + fr.queue
 	}
 	// Log the result before we really create
 	log.Logger().Debug("Fixed rule intermediate result",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
 	// get the queue object
-	queue := info.GetQueue(queueName)
+	queue := queueFn(queueName)
 	// if we cannot create the queue must exist
 	if !fr.create && queue == nil {
 		return "", nil

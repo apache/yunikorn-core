@@ -661,12 +661,12 @@ func TestPartitions(t *testing.T) {
 		if part.Name == partitionName {
 			assert.Equal(t, part.Name, "[rm-123]default")
 			assert.Equal(t, part.NodeSortingPolicy, "fair")
-			assert.Equal(t, part.Applications.Total, 1)
+			assert.Equal(t, part.Applications["total"], 1)
 			assert.Equal(t, part.State, "Active")
 		} else {
 			assert.Equal(t, part.Name, "[rm-123]gpu")
 			assert.Equal(t, part.NodeSortingPolicy, "fair")
-			assert.Equal(t, part.Applications.Total, 0)
+			assert.Equal(t, part.Applications["total"], 0)
 		}
 	}
 }

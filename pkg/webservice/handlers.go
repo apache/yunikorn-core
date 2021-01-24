@@ -539,27 +539,24 @@ func getPartitions(w http.ResponseWriter, r *http.Request) {
 	for _, partitionContext := range lists {
 		partitionInfo := &dao.PartitionInfo{}
 		partitionInfo.Name = partitionContext.Name
-		partitionInfo.State = partitionContext.StateMachine.Current()
-		partitionInfo.LastStateTransitionTime = partitionContext.StateTime.String()
+		partitionInfo.State = partitionContext.GetCurrentState()
+		partitionInfo.LastStateTransitionTime = partitionContext.GetStateTime().String()
 
 		capacityInfo := dao.PartitionCapacity{}
 		capacityInfo.Capacity = partitionContext.GetTotalPartitionResource().DAOString()
 		capacityInfo.UsedCapacity = partitionContext.GetAllocatedResource().DAOString()
 		partitionInfo.Capacity = capacityInfo
-		partitionInfo.NodeSortingPolicy = partitionContext.NodeSortingPolicy.PolicyType.String()
+		partitionInfo.NodeSortingPolicy = partitionContext.GetNodeSortingPolicy().PolicyType.String()
 
-		applicationsInfo := dao.Applications{}
 		appList := partitionContext.GetApplications()
 		applicationsState := make(map[string]int)
+		totalApplications := 0
 		for _, app := range appList {
 			applicationsState[app.CurrentState()]++
+			totalApplications++
 		}
-		applicationsInfo.Running = applicationsState["Running"]
-		applicationsInfo.Pending = applicationsState["Waiting"] + applicationsState["Accepted"] + applicationsState["Starting"] + applicationsState["New"]
-		applicationsInfo.Completed = applicationsState["Completed"]
-		applicationsInfo.Failed = applicationsState["Killed"] + applicationsState["Rejected"]
-		applicationsInfo.Total = applicationsInfo.Running + applicationsInfo.Pending + applicationsInfo.Completed + applicationsInfo.Failed
-		partitionInfo.Applications = applicationsInfo
+		applicationsState["total"] = totalApplications
+		partitionInfo.Applications = applicationsState
 		partitionsInfo = append(partitionsInfo, partitionInfo)
 	}
 	if err := json.NewEncoder(w).Encode(partitionsInfo); err != nil {

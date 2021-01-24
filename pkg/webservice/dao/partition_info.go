@@ -28,7 +28,7 @@ type PartitionInfo struct {
 	Name                    string            `json:"name"`
 	Capacity                PartitionCapacity `json:"capacity"`
 	NodeSortingPolicy       string            `json:"nodeSortingPolicy"`
-	Applications            Applications      `json:"applications"`
+	Applications            map[string]int    `json:"applications"`
 	State                   string            `json:"state"`
 	LastStateTransitionTime string            `json:"lastStateTransitionTime"`
 }

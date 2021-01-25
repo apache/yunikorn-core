@@ -262,6 +262,8 @@ func (pc *PartitionContext) isStopped() bool {
 // Handle the state event for the partition.
 // The state machine handles the locking.
 func (pc *PartitionContext) handlePartitionEvent(event objects.ObjectEvent) error {
+	pc.Lock()
+	defer pc.Unlock()
 	err := pc.stateMachine.Event(event.String(), pc.Name)
 	if err == nil {
 		pc.Lock()

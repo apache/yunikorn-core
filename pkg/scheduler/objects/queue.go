@@ -542,7 +542,7 @@ func (sq *Queue) RemoveApplication(app *Application) {
 }
 
 // Get a copy of all apps holding the lock
-func (sq *Queue) getCopyOfApps() map[string]*Application {
+func (sq *Queue) GetCopyOfApps() map[string]*Application {
 	sq.RLock()
 	defer sq.RUnlock()
 	appsCopy := make(map[string]*Application)

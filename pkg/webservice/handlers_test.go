@@ -1084,7 +1084,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	var req1 *http.Request
 	req1, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/applications", strings.NewReader(""))
 	vars1 := map[string]string{
-		"partition": "notexists",
+		"partition": "[rm-123]notexists",
 		"queue":     "root.default",
 	}
 	req1 = mux.SetURLVars(req1, vars1)
@@ -1116,4 +1116,18 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp2.statusCode, "Incorrect Status code")
 	assert.Equal(t, errInfo2.Message, "Queue not found", "JSON error message is incorrect")
 	assert.Equal(t, errInfo2.StatusCode, http.StatusBadRequest)
+	assert.Equal(t, http.StatusBadRequest, resp2.statusCode)
+}
+
+func TestValidateQueue(t *testing.T) {
+	err := validateQueue("root.test.test123")
+	assert.NilError(t, err, "Queue path is correct but stil throwing error.")
+
+	invalidQueuePath := "root.test.test123@"
+	invalidQueueName := "test123@"
+	err1 := validateQueue(invalidQueuePath)
+	assert.Error(t, err1, "problem in queue query parameter parsing as queue param "+invalidQueuePath+" contains invalid queue name "+invalidQueueName+". Queue name must only have alphanumeric characters, - or _, and be no longer than 64 characters")
+
+	err2 := validateQueue("root")
+	assert.NilError(t, err2, "Queue path is correct but stil throwing error.")
 }

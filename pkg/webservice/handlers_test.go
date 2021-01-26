@@ -763,12 +763,11 @@ func TestCreateClusterConfig(t *testing.T) {
 	mux := http.HandlerFunc(createClusterConfig)
 	handler := loggingHandler(mux, "/ws/v1/config")
 	handler.ServeHTTP(rr, req)
-	fmt.Println("dd is " + rr.Body.String())
 
 	var errInfo dao.YAPIError
 	err = json.Unmarshal(rr.Body.Bytes(), &errInfo)
 	assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
-	assert.Equal(t, errInfo.Message, "Mandatory parameters are missing in URL path. Please check the usage documentation\n", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.Message, "Dry run param is missing. Please check the usage documentation\n", "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 
 	// When "dry_run" value is invalid
@@ -783,6 +782,6 @@ func TestCreateClusterConfig(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 	err = json.Unmarshal(rr.Body.Bytes(), &errInfo)
 	assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
-	assert.Equal(t, errInfo.Message, "Invalid query params. Please check the usage documentation\n", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.Message, "Invalid \"dry_run\" query param. Currently, only dry_run=1 is supported. Please check the usage documentation\n", "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }

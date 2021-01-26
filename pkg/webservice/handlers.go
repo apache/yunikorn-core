@@ -462,13 +462,17 @@ func createClusterConfig(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	queryParams := r.URL.Query()
-	_, dryRunExists := queryParams["dry_run"]
-	if len(queryParams) == 0 || !dryRunExists {
-		http.Error(w, "Mandatory parameters are missing in URL path. Please check the usage documentation", http.StatusBadRequest)
+	dryRun, dryRunExists := queryParams["dry_run"]
+	if !dryRunExists {
+		http.Error(w, "Dry run param is missing. Please check the usage documentation", http.StatusBadRequest)
 		return
 	}
-	if queryParams.Get("dry_run") != "1" {
-		http.Error(w, "Invalid query params. Please check the usage documentation", http.StatusBadRequest)
+	if dryRun[0] != "1" {
+		http.Error(w, "Invalid \"dry_run\" query param. Currently, only dry_run=1 is supported. Please check the usage documentation", http.StatusBadRequest)
+		return
+	}
+	if len(queryParams) != 1 {
+		http.Error(w, "Invalid query parameters. Please check the usage documentation", http.StatusBadRequest)
 		return
 	}
 	requestBytes, err := ioutil.ReadAll(r.Body)

@@ -386,6 +386,13 @@ func (sa *Application) RecoverAllocationAsk(ask *AllocationAsk) {
 	}
 	ask.setQueue(sa.queue.QueuePath)
 	sa.requests[ask.AllocationKey] = ask
+	// progress the application from New to Accepted.
+	if sa.IsNew() {
+		if err := sa.HandleApplicationEvent(runApplication); err != nil {
+			log.Logger().Debug("Application state change failed while recovering allocation ask",
+				zap.Error(err))
+		}
+	}
 }
 
 func (sa *Application) updateAskRepeat(allocKey string, delta int32) (*resources.Resource, error) {

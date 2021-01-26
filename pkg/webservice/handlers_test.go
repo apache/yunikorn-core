@@ -1010,7 +1010,7 @@ func TestGetPartitionNodes(t *testing.T) {
 		"partition": "[rm-123]default",
 	}
 	req = mux.SetURLVars(req, vars)
-	assert.NilError(t, err, "Get Queues for PartitionNodes Handler request failed")
+	assert.NilError(t, err, "Get Nodes for PartitionNodes Handler request failed")
 	resp := &MockResponseWriter{}
 	var partitionNodesDao []*dao.NodeDAOInfo
 	getPartitionNodes(resp, req)
@@ -1029,4 +1029,15 @@ func TestGetPartitionNodes(t *testing.T) {
 			assert.Equal(t, "alloc-2-uuid", node.Allocations[0].UUID)
 		}
 	}
+
+	var req1 *http.Request
+	req1, err = http.NewRequest("GET", "/ws/v1/partition/default/nodes", strings.NewReader(""))
+	vars1 := map[string]string{
+		"partition": "notexists",
+	}
+	req1 = mux.SetURLVars(req1, vars1)
+	assert.NilError(t, err, "Get Nodes for PartitionNodes Handler request failed")
+	resp1 := &MockResponseWriter{}
+	getPartitionNodes(resp1, req1)
+	assert.Equal(t, http.StatusBadRequest, resp1.statusCode)
 }

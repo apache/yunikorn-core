@@ -641,15 +641,19 @@ func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
 func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	writeHeaders(w)
-	_, partitionExists := vars["partition"]
-	if len(vars) == 0 || !partitionExists {
-		buildJSONErrorResponse(w, "Mandatory parameters are missing in URL path. Please check the usage documentation", http.StatusBadRequest)
+	partition, partitionExists := vars["partition"]
+	if !partitionExists {
+		buildJSONErrorResponse(w, "Partition is missing in URL path. Please check the usage documentation", http.StatusBadRequest)
 		return
 	}
-	partition := schedulerContext.GetPartition(vars["partition"])
-	if partition != nil {
+	if len(vars) != 1 {
+		buildJSONErrorResponse(w, "Incorrect URL path. Please check the usage documentation", http.StatusBadRequest)
+		return
+	}
+	partitionContext := schedulerContext.GetPartition(partition)
+	if partitionContext != nil {
 		var nodesDao []*dao.NodeDAOInfo
-		for _, node := range partition.GetNodes() {
+		for _, node := range partitionContext.GetNodes() {
 			nodeDao := getNodeJSON(node)
 			nodesDao = append(nodesDao, nodeDao)
 		}

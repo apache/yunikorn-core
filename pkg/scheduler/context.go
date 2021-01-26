@@ -733,15 +733,13 @@ func (cc *ClusterContext) notifyRMNewAllocation(rmID string, alloc *objects.Allo
 	// See YUNIKORN-462, there are two separate communications for the same allocation
 	// between the core and the shim they should be merged into one communication.
 
-	// communicate the allocation to the RM
-	cc.rmEventHandler.HandleEvent(&rmevent.RMNewAllocationsEvent{
-		Allocations: []*si.Allocation{alloc.NewSIFromAllocation()},
-		RmID:        rmID,
-	})
 	// if reconcile plugin is enabled, re-sync the cache now.
 	// before deciding on an allocation, call the reconcile plugin to sync scheduler cache
 	// between core and shim if necessary. This is useful when running multiple allocations
 	// in parallel and need to handle inter container affinity and anti-affinity.
+	// note, this needs to happen before notifying the RM about this allocation, because
+	// the RM side needs to get its cache refreshed (via reconcile plugin) before allocating
+	// the actual container.
 	if rp := plugins.GetReconcilePlugin(); rp != nil {
 		if err := rp.ReSyncSchedulerCache(&si.ReSyncSchedulerCacheArgs{
 			AssumedAllocations: []*si.AssumedAllocation{
@@ -755,6 +753,12 @@ func (cc *ClusterContext) notifyRMNewAllocation(rmID string, alloc *objects.Allo
 				zap.Error(err))
 		}
 	}
+
+	// communicate the allocation to the RM
+	cc.rmEventHandler.HandleEvent(&rmevent.RMNewAllocationsEvent{
+		Allocations: []*si.Allocation{alloc.NewSIFromAllocation()},
+		RmID:        rmID,
+	})
 }
 
 // Create a RM update event to notify RM of released allocations

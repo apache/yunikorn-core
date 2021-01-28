@@ -34,6 +34,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/incubator-yunikorn-core/pkg/trace"
 	siCommon "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
@@ -48,6 +49,8 @@ type ClusterContext struct {
 	// config values that change scheduling behaviour
 	needPreemption      bool
 	reservationDisabled bool
+
+	tracer trace.SchedulerTracer
 
 	sync.RWMutex
 }
@@ -72,6 +75,11 @@ func NewClusterContext(rmID, policyGroup string) (*ClusterContext, error) {
 		objects.SetReservationDelay(math.MaxInt64)
 	}
 	err = cc.updateSchedulerConfig(conf, rmID)
+	if err != nil {
+		return nil, err
+	}
+	// init default scheduler tracer
+	cc.tracer, err = trace.NewSchedulerTracer(nil)
 	if err != nil {
 		return nil, err
 	}
@@ -101,14 +109,25 @@ func (cc *ClusterContext) setEventHandler(rmHandler handler.EventHandler) {
 // Process each partition in the scheduler, walk over each queue and app to check if anything can be scheduled.
 // This can be forked into a go routine per partition if needed to increase parallel allocations
 func (cc *ClusterContext) schedule() {
+	traceContext := cc.tracer.NewTraceContext()
+	_, err := trace.StartSpanWrapper(traceContext, trace.RootLevel, "", "")
+	if err != nil {
+		log.Logger().Error("failed to start trace span", zap.Error(err))
+	}
+	stateSummary := ""
+
 	// schedule each partition defined in the cluster
 	for _, psc := range cc.GetPartitionMapClone() {
+		psc.setTraceContext(traceContext)
+		_, _ = trace.StartSpanWrapper(traceContext, trace.PartitionLevel, "", psc.Name)
 		// if there are no resources in the partition just skip
 		if psc.root.GetMaxResource() == nil {
+			_ = trace.FinishActiveSpanWrapper(traceContext, trace.SkipState, trace.NoMaxResourceInfo)
 			continue
 		}
 		// a stopped partition does not allocate
 		if psc.isStopped() {
+			_ = trace.FinishActiveSpanWrapper(traceContext, trace.SkipState, trace.StoppedInfo)
 			continue
 		}
 		// try reservations first
@@ -128,7 +147,21 @@ func (cc *ClusterContext) schedule() {
 			} else {
 				cc.notifyRMNewAllocation(psc.RmID, alloc)
 			}
+			_ = trace.FinishActiveSpanWrapper(traceContext, alloc.Result.String(), "")
+			if stateSummary == "" || stateSummary == trace.SkipState {
+				stateSummary = alloc.Result.String()
+			}
+		} else {
+			_ = trace.FinishActiveSpanWrapper(traceContext, trace.SkipState, "")
+			if stateSummary == "" {
+				stateSummary = trace.SkipState
+			}
 		}
+	}
+	if stateSummary != "" {
+		// If there is no partition that have anything worth to trace,
+		// don't report this whole trace
+		_ = trace.FinishActiveSpanWrapper(traceContext, stateSummary, "")
 	}
 }
 

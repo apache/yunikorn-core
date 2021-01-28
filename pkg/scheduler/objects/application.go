@@ -36,6 +36,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
+	"github.com/apache/incubator-yunikorn-core/pkg/trace"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -589,17 +590,26 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, tota
 
 // Try a regular allocation of the pending requests
 // This includes placeholders
-func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator func() interfaces.NodeIterator) *Allocation {
+func (sa *Application) tryAllocate(traceCtx trace.SchedulerTraceContext, headRoom *resources.Resource, nodeIterator func() interfaces.NodeIterator) *Allocation {
+	_, _ = trace.StartSpanWrapper(traceCtx, trace.AppLevel, trace.TryAllocatePhase, sa.ApplicationID)
 	sa.Lock()
-	defer sa.Unlock()
+	defer func() {
+		sa.Unlock()
+		_ = trace.FinishActiveSpanWrapper(traceCtx, "", "")
+	}()
 	// make sure the request are sorted
+	_, _ = trace.StartSpanWrapper(traceCtx, trace.AppLevel, trace.SortRequestsPhase, sa.ApplicationID)
 	sa.sortRequests(false)
+	_ = trace.FinishActiveSpanWrapper(traceCtx, "", "")
 	// get all the requests from the app sorted in order
 	for _, request := range sa.sortedRequests {
+		_, _ = trace.StartSpanWrapper(traceCtx, trace.RequestLevel, trace.TryAllocatePhase, request.AllocationKey)
 		// if request is not a placeholder but part of a task group and there are still placeholders allocated we do
 		// them on their own.
 		// the iterator might not have the node we need as it could be reserved
 		if !request.placeholder && request.taskGroupName != "" && !resources.IsZero(sa.allocatedPlaceholder) {
+			_ = trace.FinishActiveSpanWrapper(traceCtx, trace.SkipState,
+				"Request is not a placeholder but part of a task group and there are still placeholders allocated")
 			continue
 		}
 		// resource must fit in headroom otherwise skip the request
@@ -615,39 +625,52 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 					eventCache.AddEvent(event)
 				}
 			}
+			_ = trace.FinishActiveSpanWrapper(traceCtx, trace.SkipState,
+				fmt.Sprintf(trace.BeyondQueueHeadroomInfo, headRoom, request.AllocatedResource))
 			continue
 		}
 		iterator := nodeIterator()
 		if iterator != nil {
-			alloc := sa.tryNodes(request, iterator)
+			alloc := sa.tryNodes(traceCtx, request, iterator)
 			// have a candidate return it
 			if alloc != nil {
+				_ = trace.FinishActiveSpanWrapper(traceCtx, alloc.Result.String(), "")
 				return alloc
 			}
 		}
+		_ = trace.FinishActiveSpanWrapper(traceCtx, trace.SkipState, "")
 	}
 	// no requests fit, skip to next app
 	return nil
 }
 
 // Try to replace a placeholder with a real allocation
-func (sa *Application) tryPlaceholderAllocate(nodeIterator func() interfaces.NodeIterator, getnode func(string) *Node) *Allocation {
+func (sa *Application) tryPlaceholderAllocate(traceCtx trace.SchedulerTraceContext, nodeIterator func() interfaces.NodeIterator, getnode func(string) *Node) *Allocation {
+	span, _ := trace.StartSpanWrapper(traceCtx, trace.AppLevel, trace.TryPlaceholderAllocatePhase, sa.ApplicationID)
 	sa.Lock()
-	defer sa.Unlock()
+	defer func() {
+		sa.Unlock()
+		_ = trace.FinishActiveSpanWrapper(traceCtx, "", "")
+	}()
 	// nothing to do if we have no placeholders allocated
 	if resources.IsZero(sa.allocatedPlaceholder) {
+		span.SetTag(trace.StateKey, trace.SkipState)
 		return nil
 	}
 	// make sure the request are sorted
+	_, _ = trace.StartSpanWrapper(traceCtx, trace.AppLevel, trace.SortRequestsPhase, sa.ApplicationID)
 	sa.sortRequests(false)
+	_ = trace.FinishActiveSpanWrapper(traceCtx, "", "")
 	// keep the first fits for later
 	var phFit *Allocation
 	var reqFit *AllocationAsk
 	// get all the requests from the app sorted in order
 	for _, request := range sa.sortedRequests {
+		_, _ = trace.StartSpanWrapper(traceCtx, trace.RequestLevel, trace.TryPlaceholderAllocatePhase, request.AllocationKey)
 		// skip placeholders they follow standard allocation
 		// this should also be part of a task group just make sure it is
 		if request.placeholder || request.taskGroupName == "" {
+			_ = trace.FinishActiveSpanWrapper(traceCtx, trace.SkipState, "")
 			continue
 		}
 		// walk over the placeholders, allow for processing all as we can have multiple task groups
@@ -680,9 +703,11 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() interfaces.Nod
 					log.Logger().Warn("ask repeat update failed unexpectedly",
 						zap.Error(err))
 				}
+				_ = trace.FinishActiveSpanWrapper(traceCtx, alloc.Result.String(), "")
 				return alloc
 			}
 		}
+		_ = trace.FinishActiveSpanWrapper(traceCtx, trace.SkipState, "")
 	}
 	// cannot allocate if the iterator is not giving us any schedulable nodes
 	iterator := nodeIterator()
@@ -692,17 +717,22 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() interfaces.Nod
 	// we checked all placeholders and asks nothing worked as yet
 	// pick the first fit and try all nodes if that fails give up
 	if phFit != nil && reqFit != nil {
+		_, _ = trace.StartSpanWrapper(traceCtx, trace.NodesLevel, trace.TryPlaceholderAllocatePhase, "")
+		defer trace.FinishActiveSpanWrapper(traceCtx, "", "")
 		for iterator.HasNext() {
 			node, ok := iterator.Next().(*Node)
 			if !ok {
 				log.Logger().Warn("Node iterator failed to return a node")
 				return nil
 			}
+			_, _ = trace.StartSpanWrapper(traceCtx, trace.NodeLevel, trace.TryPlaceholderAllocatePhase, "")
 			if err := node.preAllocateCheck(reqFit.AllocatedResource, reservationKey(nil, sa, reqFit), false); err != nil {
+				_ = trace.FinishActiveSpanWrapper(traceCtx, trace.SkipState, "Node do not satisfy the reservation")
 				continue
 			}
 			// skip the node if conditions can not be satisfied
 			if !node.preAllocateConditions(reqFit.AllocationKey) {
+				_ = trace.FinishActiveSpanWrapper(traceCtx, trace.SkipState, "Node do not satisfy the reservation")
 				continue
 			}
 			// allocation worked: on a non placeholder node update result and return
@@ -722,6 +752,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() interfaces.Nod
 					zap.String("applicationID", sa.ApplicationID),
 					zap.String("ask", reqFit.String()),
 					zap.String("placeholder", phFit.String()))
+				_ = trace.FinishActiveSpanWrapper(traceCtx, trace.SkipState, "Node update failed unexpectedly")
 				return nil
 			}
 			_, err := sa.updateAskRepeatInternal(reqFit, -1)
@@ -729,6 +760,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() interfaces.Nod
 				log.Logger().Warn("ask repeat update failed unexpectedly",
 					zap.Error(err))
 			}
+			_ = trace.FinishActiveSpanWrapper(traceCtx, alloc.Result.String(), "")
 			return alloc
 		}
 	}
@@ -737,11 +769,16 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() interfaces.Nod
 }
 
 // Try a reserved allocation of an outstanding reservation
-func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIterator func() interfaces.NodeIterator) *Allocation {
+func (sa *Application) tryReservedAllocate(traceCtx trace.SchedulerTraceContext, headRoom *resources.Resource, nodeIterator func() interfaces.NodeIterator) *Allocation {
+	_, _ = trace.StartSpanWrapper(traceCtx, trace.AppLevel, trace.TryReservedAllocatePhase, sa.ApplicationID)
 	sa.Lock()
-	defer sa.Unlock()
+	defer func() {
+		sa.Unlock()
+		_ = trace.FinishActiveSpanWrapper(traceCtx, "", "")
+	}()
 	// process all outstanding reservations and pick the first one that fits
 	for _, reserve := range sa.reservations {
+		_, _ = trace.StartSpanWrapper(traceCtx, trace.RequestLevel, trace.TryReservedAllocatePhase, reserve.askKey)
 		ask := sa.requests[reserve.askKey]
 		// sanity check and cleanup if needed
 		if ask == nil || ask.GetPendingAskRepeat() == 0 {
@@ -757,53 +794,75 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 			}
 			// remove the reservation as this should not be reserved
 			alloc := newReservedAllocation(Unreserved, reserve.nodeID, unreserveAsk)
+			_ = trace.FinishActiveSpanWrapper(traceCtx, alloc.Result.String(), trace.NoPendingRequestInfo)
 			return alloc
 		}
 		// check if this fits in the queue's head room
 		if !resources.FitIn(headRoom, ask.AllocatedResource) {
+			_ = trace.FinishActiveSpanWrapper(traceCtx, trace.SkipState,
+				fmt.Sprintf(trace.BeyondQueueHeadroomInfo, headRoom, ask.AllocatedResource))
 			continue
 		}
 		// check allocation possibility
-		alloc := sa.tryNode(reserve.node, ask)
+		alloc, err := sa.tryNode(reserve.node, ask)
 		// allocation worked fix the result and return
-		if alloc != nil {
+		if err == nil {
 			alloc.Result = AllocatedReserved
+			_ = trace.FinishActiveSpanWrapper(traceCtx, alloc.Result.String(), "")
 			return alloc
+		} else {
+			_ = trace.FinishActiveSpanWrapper(traceCtx, trace.SkipState, err.Error())
 		}
+
 	}
 	// lets try this on all other nodes
 	for _, reserve := range sa.reservations {
+		_, _ = trace.StartSpanWrapper(traceCtx, trace.RequestLevel, trace.TryReservedAllocatePhase, reserve.askKey)
 		iterator := nodeIterator()
 		if iterator != nil {
-			alloc := sa.tryNodesNoReserve(reserve.ask, iterator, reserve.nodeID)
+			alloc := sa.tryNodesNoReserve(traceCtx, reserve.ask, iterator, reserve.nodeID)
 			// have a candidate return it, including the node that was reserved
 			if alloc != nil {
+				_ = trace.FinishActiveSpanWrapper(traceCtx, alloc.Result.String(), "")
 				return alloc
 			}
 		}
+		_ = trace.FinishActiveSpanWrapper(traceCtx, trace.SkipState, "")
 	}
 	return nil
 }
 
 // Try all the nodes for a reserved request that have not been tried yet.
 // This should never result in a reservation as the ask is already reserved
-func (sa *Application) tryNodesNoReserve(ask *AllocationAsk, iterator interfaces.NodeIterator, reservedNode string) *Allocation {
+func (sa *Application) tryNodesNoReserve(traceCtx trace.SchedulerTraceContext, ask *AllocationAsk, iterator interfaces.NodeIterator, reservedNode string) *Allocation {
+	_, _ = trace.StartSpanWrapper(traceCtx, trace.NodesLevel, "", ask.AllocationKey)
+	defer trace.FinishActiveSpanWrapper(traceCtx, "", "")
 	for iterator.HasNext() {
 		node, ok := iterator.Next().(*Node)
 		if !ok {
 			log.Logger().Warn("Node iterator failed to return a node")
 			return nil
 		}
+		_, _ = trace.StartSpanWrapper(traceCtx, trace.NodeLevel, "", node.NodeID)
 		// skip over the node if the resource does not fit the node or this is the reserved node.
 		if !node.FitInNode(ask.AllocatedResource) || node.NodeID == reservedNode {
+			if node.NodeID == reservedNode {
+				_ = trace.FinishActiveSpanWrapper(traceCtx, trace.SkipState, trace.NodeAlreadyReservedInfo)
+			} else {
+				_ = trace.FinishActiveSpanWrapper(traceCtx, trace.SkipState,
+					fmt.Sprintf(trace.RequestBeyondTotalResourceInfo, ask.AllocatedResource))
+			}
 			continue
 		}
-		alloc := sa.tryNode(node, ask)
+		alloc, err := sa.tryNode(node, ask)
 		// allocation worked: update result and return
-		if alloc != nil {
+		if err == nil {
 			alloc.ReservedNodeID = reservedNode
 			alloc.Result = AllocatedReserved
+			_ = trace.FinishActiveSpanWrapper(traceCtx, alloc.Result.String(), "")
 			return alloc
+		} else {
+			_ = trace.FinishActiveSpanWrapper(traceCtx, trace.SkipState, err.Error())
 		}
 	}
 	// ask does not fit, skip to next ask
@@ -812,7 +871,9 @@ func (sa *Application) tryNodesNoReserve(ask *AllocationAsk, iterator interfaces
 
 // Try all the nodes for a request. The result is an allocation or reservation of a node.
 // New allocations can only be reserved after a delay.
-func (sa *Application) tryNodes(ask *AllocationAsk, iterator interfaces.NodeIterator) *Allocation {
+func (sa *Application) tryNodes(traceCtx trace.SchedulerTraceContext, ask *AllocationAsk, iterator interfaces.NodeIterator) *Allocation {
+	span, _ := trace.StartSpanWrapper(traceCtx, trace.NodesLevel, "", ask.AllocationKey)
+	defer trace.FinishActiveSpanWrapper(traceCtx, "", "")
 	var nodeToReserve *Node
 	scoreReserved := math.Inf(1)
 	// check if the ask is reserved or not
@@ -825,13 +886,16 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator interfaces.NodeIter
 			log.Logger().Warn("Node iterator failed to return a node")
 			return nil
 		}
+		_, _ = trace.StartSpanWrapper(traceCtx, trace.NodeLevel, "", node.NodeID)
 		// skip over the node if the resource does not fit the node at all.
 		if !node.FitInNode(ask.AllocatedResource) {
+			_ = trace.FinishActiveSpanWrapper(traceCtx, "",
+				fmt.Sprintf(trace.RequestBeyondTotalResourceInfo, ask.AllocatedResource))
 			continue
 		}
-		alloc := sa.tryNode(node, ask)
+		alloc, err := sa.tryNode(node, ask)
 		// allocation worked so return
-		if alloc != nil {
+		if err == nil {
 			// check if the node was reserved for this ask: if it is set the result and return
 			// NOTE: this is a safeguard as reserved nodes should never be part of the iterator
 			// but we have no locking
@@ -841,6 +905,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator interfaces.NodeIter
 					zap.String("nodeID", node.NodeID),
 					zap.String("allocationKey", allocKey))
 				alloc.Result = AllocatedReserved
+				_ = trace.FinishActiveSpanWrapper(traceCtx, alloc.Result.String(), "")
 				return alloc
 			}
 			// we could also have a different node reserved for this ask if it has pick one of
@@ -853,9 +918,11 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator interfaces.NodeIter
 					zap.String("allocationKey", allocKey))
 				alloc.Result = AllocatedReserved
 				alloc.ReservedNodeID = nodeID
+				_ = trace.FinishActiveSpanWrapper(traceCtx, alloc.Result.String(), "")
 				return alloc
 			}
 			// nothing reserved just return this as a normal alloc
+			_ = trace.FinishActiveSpanWrapper(traceCtx, alloc.Result.String(), "")
 			return alloc
 		}
 		// nothing allocated should we look at a reservation?
@@ -874,6 +941,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator interfaces.NodeIter
 				nodeToReserve = node
 			}
 		}
+		_ = trace.FinishActiveSpanWrapper(traceCtx, trace.SkipState, err.Error())
 	}
 	// we have not allocated yet, check if we should reserve
 	// NOTE: the node should not be reserved as the iterator filters them but we do not lock the nodes
@@ -890,24 +958,26 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator interfaces.NodeIter
 		}
 		// return reservation allocation and mark it as a reservation
 		alloc := newReservedAllocation(Reserved, nodeToReserve.NodeID, ask)
+		span.SetTag(trace.StateKey, alloc.Result.String())
 		return alloc
 	}
 	// ask does not fit, skip to next ask
+	span.SetTag(trace.StateKey, trace.SkipState)
 	return nil
 }
 
 // Try allocating on one specific node
-func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
+func (sa *Application) tryNode(node *Node, ask *AllocationAsk) (*Allocation, error) {
 	allocKey := ask.AllocationKey
 	toAllocate := ask.AllocatedResource
 	// create the key for the reservation
 	if err := node.preAllocateCheck(toAllocate, reservationKey(nil, sa, ask), false); err != nil {
 		// skip schedule onto node
-		return nil
+		return nil, err
 	}
 	// skip the node if conditions can not be satisfied
 	if !node.preAllocateConditions(allocKey) {
-		return nil
+		return nil, fmt.Errorf("node allocation's pre-conditions can not be satisfied")
 	}
 	// everything OK really allocate
 	alloc := NewAllocation(common.GetNewUUID(), node.NodeID, ask)
@@ -917,7 +987,7 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 				zap.Error(err))
 			// revert the node update
 			node.RemoveAllocation(alloc.UUID)
-			return nil
+			return nil, err
 		}
 		// mark this ask as allocated by lowering the repeat
 		_, err := sa.updateAskRepeatInternal(ask, -1)
@@ -928,9 +998,9 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 		// all is OK, last update for the app
 		sa.addAllocationInternal(alloc)
 		// return allocation
-		return alloc
+		return alloc, nil
 	}
-	return nil
+	return nil, fmt.Errorf("no enough resources for allocation")
 }
 
 func (sa *Application) GetQueueName() string {

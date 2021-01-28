@@ -38,6 +38,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/placement"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
+	"github.com/apache/incubator-yunikorn-core/pkg/trace"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
@@ -61,6 +62,8 @@ type PartitionContext struct {
 	userGroupCache         *security.UserGroupCache        // user cache per partition
 	totalPartitionResource *resources.Resource             // Total node resources
 	nodeSortingPolicy      *policies.NodeSortingPolicy     // Global Node Sorting Policies
+
+	traceContext trace.SchedulerTraceContext
 
 	sync.RWMutex
 }
@@ -693,13 +696,20 @@ func (pc *PartitionContext) calculateOutstandingRequests() []*objects.Allocation
 // Try regular allocation for the partition
 // Lock free call this all locks are taken when needed in called functions
 func (pc *PartitionContext) tryAllocate() *objects.Allocation {
+	span, _ := trace.StartSpanWrapper(pc.traceContext, trace.PartitionLevel, trace.TryAllocatePhase, pc.Name)
+	defer trace.FinishActiveSpanWrapper(pc.traceContext, "", "")
+
 	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
+		span.SetTag(trace.StateKey, trace.SkipState)
+		span.SetTag(trace.InfoKey, trace.NoPendingRequestInfo)
 		// nothing to do just return
 		return nil
 	}
+
 	// try allocating from the root down
-	alloc := pc.root.TryAllocate(pc.GetNodeIterator)
+	alloc := pc.root.TryAllocate(pc.traceContext, pc.GetNodeIterator)
 	if alloc != nil {
+		span.SetTag(trace.StateKey, alloc.Result.String())
 		return pc.allocate(alloc)
 	}
 	return nil
@@ -708,13 +718,20 @@ func (pc *PartitionContext) tryAllocate() *objects.Allocation {
 // Try process reservations for the partition
 // Lock free call this all locks are taken when needed in called functions
 func (pc *PartitionContext) tryReservedAllocate() *objects.Allocation {
+	span, _ := trace.StartSpanWrapper(pc.traceContext, trace.PartitionLevel, trace.TryReservedAllocatePhase, pc.Name)
+	defer trace.FinishActiveSpanWrapper(pc.traceContext, "", "")
+
 	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
+		span.SetTag(trace.StateKey, trace.SkipState)
+		span.SetTag(trace.InfoKey, trace.NoPendingRequestInfo)
 		// nothing to do just return
 		return nil
 	}
+
 	// try allocating from the root down
-	alloc := pc.root.TryReservedAllocate(pc.GetNodeIterator)
+	alloc := pc.root.TryReservedAllocate(pc.traceContext, pc.GetNodeIterator)
 	if alloc != nil {
+		span.SetTag(trace.StateKey, alloc.Result.String())
 		return pc.allocate(alloc)
 	}
 	return nil
@@ -723,13 +740,19 @@ func (pc *PartitionContext) tryReservedAllocate() *objects.Allocation {
 // Try process placeholder for the partition
 // Lock free call this all locks are taken when needed in called functions
 func (pc *PartitionContext) tryPlaceholderAllocate() *objects.Allocation {
+	span, _ := trace.StartSpanWrapper(pc.traceContext, trace.PartitionLevel, trace.TryPlaceholderAllocatePhase, pc.Name)
+	defer trace.FinishActiveSpanWrapper(pc.traceContext, "", "")
+
 	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
+		span.SetTag(trace.StateKey, trace.SkipState)
+		span.SetTag(trace.InfoKey, trace.NoPendingRequestInfo)
 		// nothing to do just return
 		return nil
 	}
 	// try allocating from the root down
-	alloc := pc.root.TryPlaceholderAllocate(pc.GetNodeIterator, pc.GetNode)
+	alloc := pc.root.TryPlaceholderAllocate(pc.traceContext, pc.GetNodeIterator, pc.GetNode)
 	if alloc != nil {
+		span.SetTag(trace.StateKey, alloc.Result.String())
 		return pc.replace(alloc)
 	}
 	return nil
@@ -739,12 +762,14 @@ func (pc *PartitionContext) tryPlaceholderAllocate() *objects.Allocation {
 func (pc *PartitionContext) replace(alloc *objects.Allocation) *objects.Allocation {
 	pc.Lock()
 	defer pc.Unlock()
+	span, _ := pc.traceContext.ActiveSpan()
 	// find the app make sure it still exists
 	appID := alloc.ApplicationID
 	app := pc.applications[appID]
 	if app == nil {
 		log.Logger().Info("Application was removed while allocating",
 			zap.String("appID", appID))
+		span.SetTag(trace.InfoKey, "Application was removed while replacing")
 		return nil
 	}
 
@@ -755,6 +780,7 @@ func (pc *PartitionContext) replace(alloc *objects.Allocation) *objects.Allocati
 		zap.String("allocationKey", alloc.AllocationKey),
 		zap.String("placeholder released", alloc.Releases[0].UUID))
 	// pass the release back to the RM via the cluster context
+	span.SetTag(trace.InfoKey, "scheduler replace placeholder processed")
 	return alloc
 }
 
@@ -762,12 +788,14 @@ func (pc *PartitionContext) replace(alloc *objects.Allocation) *objects.Allocati
 func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocation {
 	pc.Lock()
 	defer pc.Unlock()
+	span, _ := pc.traceContext.ActiveSpan()
 	// find the app make sure it still exists
 	appID := alloc.ApplicationID
 	app := pc.applications[appID]
 	if app == nil {
 		log.Logger().Info("Application was removed while allocating",
 			zap.String("appID", appID))
+		span.SetTag(trace.InfoKey, "Application was removed while allocating")
 		return nil
 	}
 	// find the node make sure it still exists
@@ -788,17 +816,23 @@ func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocat
 		log.Logger().Info("Node was removed while allocating",
 			zap.String("nodeID", nodeID),
 			zap.String("appID", appID))
+		span.SetTag(trace.InfoKey, "Node was removed while allocating")
 		return nil
 	}
 	// reservation
 	if alloc.Result == objects.Reserved {
 		pc.reserve(app, node, alloc.Ask)
+		// TODO: trace inside reserve process or after we get reservation result
+		// reserve don't have result value to infer its state
+		span.SetTag(trace.InfoKey, "scheduler tries to reserve resources")
 		return nil
 	}
 	// unreserve
 	if alloc.Result == objects.Unreserved || alloc.Result == objects.AllocatedReserved {
 		pc.unReserve(app, node, alloc.Ask)
 		if alloc.Result == objects.Unreserved {
+			// TODO: same question as tracing reserve
+			span.SetTag(trace.InfoKey, "scheduler tries to unreserve resources")
 			return nil
 		}
 		// remove the link to the reserved node
@@ -812,6 +846,7 @@ func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocat
 		zap.String("allocationKey", alloc.AllocationKey),
 		zap.String("allocatedResource", alloc.AllocatedResource.String()),
 		zap.String("targetNode", alloc.NodeID))
+	span.SetTag(trace.InfoKey, "scheduler allocation processed")
 	// pass the allocation back to the RM via the cluster context
 	return alloc
 }
@@ -1207,4 +1242,12 @@ func (pc *PartitionContext) removeAllocationAsk(appID string, allocationKey stri
 			pc.unReserveCount(appID, reservedAsks)
 		}
 	}
+}
+
+func (pc *PartitionContext) setTraceContext(traceContext trace.SchedulerTraceContext) {
+	pc.traceContext = traceContext
+}
+
+func (pc *PartitionContext) getTraceContext() trace.SchedulerTraceContext {
+	return pc.traceContext
 }

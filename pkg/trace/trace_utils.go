@@ -16,14 +16,12 @@
  limitations under the License.
 */
 
-package scheduler
+package trace
 
 import (
 	"fmt"
 
 	"github.com/opentracing/opentracing-go"
-
-	"github.com/apache/incubator-yunikorn-core/pkg/trace"
 )
 
 const (
@@ -32,6 +30,31 @@ const (
 	NameKey  = "name"
 	StateKey = "state"
 	InfoKey  = "info"
+
+	RootLevel      = "root"
+	PartitionLevel = "partition"
+	QueueLevel     = "queue"
+	AppLevel       = "app"
+	RequestLevel   = "request"
+	NodesLevel     = "nodes"
+	NodeLevel      = "node"
+
+	TryReservedAllocatePhase = "tryReservedAllocate"
+	TryPlaceholderAllocatePhase = "tryPlaceholderAllocate"
+	TryAllocatePhase      = "tryAllocate"
+	//AllocatePhase         = "allocate"
+	SortQueuesPhase       = "sortQueues"
+	SortAppsPhase         = "sortApps"
+	SortRequestsPhase     = "sortRequests"
+
+	SkipState = "skip"
+
+	NoMaxResourceInfo              = "max resource is nil"
+	StoppedInfo                    = "resource is stopped"
+	NoPendingRequestInfo           = "no pending request left"
+	BeyondQueueHeadroomInfo        = "beyond queue headroom: headroom=%v, req=%v"
+	RequestBeyondTotalResourceInfo = "request resource beyond total resource of node: req=%v"
+	NodeAlreadyReservedInfo        = "node has already been reserved"
 )
 
 // startSpanWrapper simplifies span starting process by integrating general tags' setting.
@@ -46,7 +69,7 @@ const (
 //  ...
 //  span.SetTag("foo", "bar") // if we have irregular tags to set
 //  ...
-func startSpanWrapper(ctx trace.SchedulerTraceContext, level, phase, name string) (opentracing.Span, error) {
+func StartSpanWrapper(ctx SchedulerTraceContext, level, phase, name string) (opentracing.Span, error) {
 	if ctx == nil {
 		return opentracing.NoopTracer{}.StartSpan(""), nil
 	}
@@ -72,7 +95,7 @@ func startSpanWrapper(ctx trace.SchedulerTraceContext, level, phase, name string
 // The state tag is optional and logs span's calling result. (skip, allocated, reserved, ...)
 // The info tag is optional and logs span's result message. (errors or hints for the state)
 // These general tags depend on the calling result so they can be integrated with the finishing process
-func finishActiveSpanWrapper(ctx trace.SchedulerTraceContext, state, info string) error {
+func FinishActiveSpanWrapper(ctx SchedulerTraceContext, state, info string) error {
 	if ctx == nil {
 		return nil
 	}

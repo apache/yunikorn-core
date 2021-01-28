@@ -16,24 +16,22 @@
  limitations under the License.
 */
 
-package scheduler
+package trace
 
 import (
 	"testing"
 
 	"github.com/opentracing/opentracing-go"
 	"gotest.tools/assert"
-
-	"github.com/apache/incubator-yunikorn-core/pkg/trace"
 )
 
 func Test_startSpanWrapper(t *testing.T) {
-	tracer, closer, err := trace.NewConstTracer("open-tracer", true)
+	tracer, closer, err := NewConstTracer("open-tracer", true)
 	assert.NilError(t, err)
 	defer closer.Close()
 
 	type args struct {
-		ctx   trace.SchedulerTraceContext
+		ctx   SchedulerTraceContext
 		level string
 		phase string
 		name  string
@@ -56,7 +54,7 @@ func Test_startSpanWrapper(t *testing.T) {
 		{
 			name: "EmptyLevel",
 			args: args{
-				ctx: &trace.SchedulerTraceContextImpl{
+				ctx: &SchedulerTraceContextImpl{
 					Tracer:    tracer,
 					SpanStack: []opentracing.Span{},
 				},
@@ -69,7 +67,7 @@ func Test_startSpanWrapper(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := startSpanWrapper(tt.args.ctx, tt.args.level, tt.args.phase, tt.args.name)
+			_, err := StartSpanWrapper(tt.args.ctx, tt.args.level, tt.args.phase, tt.args.name)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("startSpanWrapper() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -79,12 +77,12 @@ func Test_startSpanWrapper(t *testing.T) {
 }
 
 func Test_finishActiveSpanWrapper(t *testing.T) {
-	tracer, closer, err := trace.NewConstTracer("open-tracer", true)
+	tracer, closer, err := NewConstTracer("open-tracer", true)
 	assert.NilError(t, err)
 	defer closer.Close()
 
 	type args struct {
-		ctx   trace.SchedulerTraceContext
+		ctx   SchedulerTraceContext
 		state string
 		info  string
 	}
@@ -105,7 +103,7 @@ func Test_finishActiveSpanWrapper(t *testing.T) {
 		{
 			name: "EmptyContext",
 			args: args{
-				ctx: &trace.SchedulerTraceContextImpl{
+				ctx: &SchedulerTraceContextImpl{
 					Tracer:    tracer,
 					SpanStack: []opentracing.Span{},
 				},
@@ -117,7 +115,7 @@ func Test_finishActiveSpanWrapper(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := finishActiveSpanWrapper(tt.args.ctx, tt.args.state, tt.args.info); (err != nil) != tt.wantErr {
+			if err := FinishActiveSpanWrapper(tt.args.ctx, tt.args.state, tt.args.info); (err != nil) != tt.wantErr {
 				t.Errorf("finishActiveSpanWrapper() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

@@ -1222,8 +1222,8 @@ func (pc *PartitionContext) removeAllocationAsk(appID string, allocationKey stri
 
 func (pc *PartitionContext) cleanupExpiredApps() {
 	for _, app := range pc.GetAppsByState(objects.Expired.String()) {
-		if app.IsMarkedForRemoval() {
-			delete(pc.applications, app.ApplicationID)
-		}
+		pc.Lock()
+		delete(pc.applications, app.ApplicationID)
+		pc.Unlock()
 	}
 }

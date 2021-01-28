@@ -190,7 +190,7 @@ func (sa *Application) setStateTimer(timeout time.Duration, currentState string,
 	log.Logger().Debug("Application state timer initiated",
 		zap.String("appID", sa.ApplicationID),
 		zap.String("state", sa.stateMachine.Current()),
-		zap.Any("timeout", timeout))
+		zap.Duration("timeout", timeout))
 
 	sa.stateTimer = time.AfterFunc(timeout, sa.timeoutTimer(currentState, event))
 }

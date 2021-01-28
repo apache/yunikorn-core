@@ -1024,7 +1024,7 @@ func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
 	app.AddAllocation(alloc)
 
 	// track the number of allocations
-	pc.allocations += 1
+	pc.allocations++
 
 	log.Logger().Debug("recovered allocation",
 		zap.String("partitionName", pc.Name),

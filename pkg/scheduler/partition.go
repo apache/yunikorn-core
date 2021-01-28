@@ -397,7 +397,6 @@ func (pc *PartitionContext) removeApplication(appID string) []*objects.Allocatio
 			}
 		}
 	}
-
 	log.Logger().Debug("application removed from the scheduler",
 		zap.String("queue", queueName),
 		zap.String("applicationID", appID))
@@ -980,6 +979,18 @@ func (pc *PartitionContext) GetApplications() []*objects.Application {
 	return appList
 }
 
+func (pc *PartitionContext) GetAppsByState(state string) []*objects.Application {
+	pc.RLock()
+	defer pc.RUnlock()
+	var appList []*objects.Application
+	for _, app := range pc.applications {
+		if app.CurrentState() == state {
+			appList = append(appList, app)
+		}
+	}
+	return appList
+}
+
 func (pc *PartitionContext) GetNodes() []*objects.Node {
 	pc.RLock()
 	defer pc.RUnlock()
@@ -1206,5 +1217,13 @@ func (pc *PartitionContext) removeAllocationAsk(appID string, allocationKey stri
 		if reservedAsks != 0 {
 			pc.unReserveCount(appID, reservedAsks)
 		}
+	}
+}
+
+func (pc *PartitionContext) cleanupExpiredApps() {
+	for _, app := range pc.GetAppsByState(objects.Expired.String()) {
+		pc.Lock()
+		delete(pc.applications, app.ApplicationID)
+		pc.Unlock()
 	}
 }

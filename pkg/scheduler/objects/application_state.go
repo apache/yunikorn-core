@@ -20,6 +20,7 @@ package objects
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
@@ -41,10 +42,11 @@ const (
 	rejectApplication
 	completeApplication
 	KillApplication
+	expireApplication
 )
 
 func (ae applicationEvent) String() string {
-	return [...]string{"RunApplication", "WaitApplication", "RejectApplication", "CompleteApplication", "KillApplication"}[ae]
+	return [...]string{"runApplication", "waitApplication", "rejectApplication", "completeApplication", "KillApplication", "expireApplication"}[ae]
 }
 
 // ----------------------------------
@@ -61,10 +63,11 @@ const (
 	Rejected
 	Completed
 	killed
+	Expired
 )
 
 func (as applicationState) String() string {
-	return [...]string{"New", "Accepted", "Starting", "Running", "Waiting", "Rejected", "Completed", "killed"}[as]
+	return [...]string{"New", "Accepted", "Starting", "Running", "Waiting", "Rejected", "Completed", "killed", "Expired"}[as]
 }
 
 func NewAppState() *fsm.FSM {
@@ -98,6 +101,10 @@ func NewAppState() *fsm.FSM {
 				Name: KillApplication.String(),
 				Src:  []string{Accepted.String(), killed.String(), New.String(), Running.String(), Starting.String(), Waiting.String()},
 				Dst:  killed.String(),
+			}, {
+				Name: expireApplication.String(),
+				Src:  []string{Completed.String()},
+				Dst:  Expired.String(),
 			},
 		},
 		fsm.Callbacks{
@@ -114,11 +121,14 @@ func NewAppState() *fsm.FSM {
 					zap.String("event", event.Event))
 				app.OnStateChange(event)
 			},
-			fmt.Sprintf("enter_%s", Starting.String()): func(event *fsm.Event) {
-				event.Args[0].(*Application).SetStartingTimer()
+			"leave_state": func(event *fsm.Event) {
+				event.Args[0].(*Application).clearStateTimer()
 			},
-			fmt.Sprintf("leave_%s", Starting.String()): func(event *fsm.Event) {
-				event.Args[0].(*Application).ClearStartingTimer()
+			fmt.Sprintf("enter_%s", Starting.String()): func(event *fsm.Event) {
+				setTimer(startingTimeout, event, runApplication)
+			},
+			fmt.Sprintf("enter_%s", Waiting.String()): func(event *fsm.Event) {
+				setTimer(waitingTimeout, event, completeApplication)
 			},
 			fmt.Sprintf("leave_%s", New.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsAdded()
@@ -134,7 +144,17 @@ func NewAppState() *fsm.FSM {
 			},
 			fmt.Sprintf("enter_%s", Completed.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsCompleted()
+				app := setTimer(completedTimeout, event, expireApplication)
+				app.unSetQueue()
 			},
 		},
 	)
+}
+
+func setTimer(timeout time.Duration, event *fsm.Event, eventToTrigger applicationEvent) *Application {
+	app, ok := event.Args[0].(*Application)
+	if ok {
+		app.setStateTimer(timeout, app.stateMachine.Current(), eventToTrigger)
+	}
+	return app
 }

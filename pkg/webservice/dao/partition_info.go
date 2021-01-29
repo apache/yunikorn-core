@@ -35,18 +35,10 @@ type PartitionInfo struct {
 
 type PartitionCapacity struct {
 	Capacity     string `json:"capacity"`
-	UsedCapacity string `json:"usedCapacity"`
+	UsedCapacity string `json:"usedcapacity"`
 }
 
 type NodeInfo struct {
 	NodeID     string `json:"nodeId"`
 	Capability string `json:"capability"`
-}
-
-type Applications struct {
-	Total     int `json:"total"`
-	Running   int `json:"running"`
-	Pending   int `json:"pending"`
-	Completed int `json:"completed"`
-	Failed    int `json:"failed"`
 }

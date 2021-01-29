@@ -628,6 +628,15 @@ func TestGetNodesUtilJSON(t *testing.T) {
 	assert.Equal(t, subresNon[0].NodeNames[0], "N/A")
 }
 
+func addAndConfirmApplicationExists(t *testing.T, partitionName string, partition *scheduler.PartitionContext, appName string) *objects.Application {
+	// add a new app
+	app := newApplication(appName, partitionName, "root.default", rmID)
+	err := partition.AddApplication(app)
+	assert.NilError(t, err, "Failed to add Application to Partition.")
+	assert.Equal(t, app.CurrentState(), objects.New.String())
+	return app
+}
+
 func TestPartitions(t *testing.T) {
 	configs.MockSchedulerConfigByData([]byte(configMultiPartitions))
 	var err error
@@ -641,11 +650,79 @@ func TestPartitions(t *testing.T) {
 	assert.Equal(t, 0, len(defaultPartition.GetApplications()))
 
 	// add a new app
-	app := newApplication("app-1", partitionName, "root.default", rmID)
-	err = defaultPartition.AddApplication(app)
-	assert.NilError(t, err, "Failed to add Application to Partition.")
-	assert.Equal(t, app.CurrentState(), objects.New.String())
-	assert.Equal(t, 1, len(defaultPartition.GetApplications()))
+	addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-0")
+
+	// add a new app1
+	app1 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-1")
+
+	// app: new to accepted
+	err = app1.HandleApplicationEvent(objects.RunApplication)
+	assert.NilError(t, err, "no error expected new to accepted")
+	assert.Equal(t, app1.CurrentState(), objects.Accepted.String())
+
+	// add a new app2
+	app2 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-2")
+
+	// app2: new to starting
+	err = app2.HandleApplicationEvent(objects.RunApplication)
+	assert.NilError(t, err, "no error expected new to accepted (start test)")
+	err = app2.HandleApplicationEvent(objects.RunApplication)
+	assert.Assert(t, err, "no error expected new to starting")
+	assert.Equal(t, app2.CurrentState(), objects.Starting.String())
+
+	// add a new app3
+	app3 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-3")
+
+	// app3: new to running
+	err = app3.HandleApplicationEvent(objects.RunApplication)
+	assert.Assert(t, err, "no error expected new to accepted")
+	err = app3.HandleApplicationEvent(objects.RunApplication)
+	assert.Assert(t, err, "no error expected accepted to starting")
+	err = app3.HandleApplicationEvent(objects.RunApplication)
+	assert.NilError(t, err, "no error expected starting to running")
+	assert.Equal(t, app3.CurrentState(), objects.Running.String())
+
+	// add a new app4
+	app4 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-4")
+
+	// app4: new to accepted
+	err = app4.HandleApplicationEvent(objects.RunApplication)
+	assert.Assert(t, err, "no error expected new to accepted")
+
+	// app4: accepted to wait
+	err = app4.HandleApplicationEvent(objects.WaitApplication)
+	assert.NilError(t, err, "no error expected accepted to waiting")
+	assert.Equal(t, app4.CurrentState(), objects.Waiting.String())
+
+	// add a new app5
+	app5 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-5")
+
+	// app5: new to rejected
+	err = app5.HandleApplicationEvent(objects.RejectApplication)
+	assert.NilError(t, err, "no error expected new to rejected")
+	assert.Equal(t, app5.CurrentState(), objects.Rejected.String())
+
+	// add a new app6
+	app6 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-6")
+
+	// app6: new to starting
+	err = app6.HandleApplicationEvent(objects.RunApplication)
+	assert.NilError(t, err, "no error expected new to accepted")
+	err = app6.HandleApplicationEvent(objects.RunApplication)
+	assert.NilError(t, err, "no error expected accepted to starting")
+
+	// app6: starting to completed
+	err = app6.HandleApplicationEvent(objects.CompleteApplication)
+	assert.NilError(t, err, "no error expected starting to completed")
+	assert.Equal(t, app6.CurrentState(), objects.Completed.String())
+
+	// add a new app7
+	app7 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-7")
+
+	// app7: new to killed
+	err = app7.HandleApplicationEvent(objects.KillApplication)
+	assert.NilError(t, err, "no error expected new to killed")
+	assert.Equal(t, app7.CurrentState(), objects.Killed.String())
 
 	NewWebApp(schedulerContext, nil)
 
@@ -661,7 +738,15 @@ func TestPartitions(t *testing.T) {
 		if part.Name == partitionName {
 			assert.Equal(t, part.Name, "[rm-123]default")
 			assert.Equal(t, part.NodeSortingPolicy, "fair")
-			assert.Equal(t, part.Applications["total"], 1)
+			assert.Equal(t, part.Applications["total"], 8)
+			assert.Equal(t, part.Applications[objects.New.String()], 1)
+			assert.Equal(t, part.Applications[objects.Accepted.String()], 1)
+			assert.Equal(t, part.Applications[objects.Starting.String()], 1)
+			assert.Equal(t, part.Applications[objects.Running.String()], 1)
+			assert.Equal(t, part.Applications[objects.Waiting.String()], 1)
+			assert.Equal(t, part.Applications[objects.Rejected.String()], 1)
+			assert.Equal(t, part.Applications[objects.Completed.String()], 1)
+			assert.Equal(t, part.Applications[objects.Killed.String()], 1)
 			assert.Equal(t, part.State, "Active")
 		} else {
 			assert.Equal(t, part.Name, "[rm-123]gpu")

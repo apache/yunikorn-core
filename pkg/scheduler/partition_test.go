@@ -503,7 +503,7 @@ func TestRemoveApp(t *testing.T) {
 	allocs = partition.removeApplication(appID1)
 	assert.Equal(t, 1, len(allocs), "existing application with allocations returned unexpected allocations %v", allocs)
 	assert.Equal(t, 1, len(partition.applications), "existing application was not removed")
-	if partition.allocations[uuid] == nil {
+	if partition.GetTotalAllocationCount() != 1 {
 		t.Errorf("allocation that should have been left was removed")
 	}
 }
@@ -555,16 +555,16 @@ func TestRemoveAppAllocs(t *testing.T) {
 	allocs, _ = partition.removeAllocation(release)
 	assert.Equal(t, 0, len(allocs), "removal request for non existing allocation returned allocations: %v", allocs)
 	// create a new release with app, existing allocation: should return 1 alloc
-	assert.Equal(t, 2, len(partition.allocations), "pre-remove allocation list incorrect: %v", partition.allocations)
+	assert.Equal(t, 2, partition.GetTotalAllocationCount(), "pre-remove allocation list incorrect: %v", partition.allocations)
 	release.UUID = uuid
 	allocs, _ = partition.removeAllocation(release)
 	assert.Equal(t, 1, len(allocs), "removal request for existing allocation returned wrong allocations: %v", allocs)
-	assert.Equal(t, 1, len(partition.allocations), "allocation removal requests removed more than expected: %v", partition.allocations)
+	assert.Equal(t, 1, partition.GetTotalAllocationCount(), "allocation removal requests removed more than expected: %v", partition.allocations)
 	// create a new release with app, no uuid: should return last left alloc
 	release.UUID = ""
 	allocs, _ = partition.removeAllocation(release)
 	assert.Equal(t, 1, len(allocs), "removal request for existing allocation returned wrong allocations: %v", allocs)
-	assert.Equal(t, 0, len(partition.allocations), "removal requests did not remove all allocations: %v", partition.allocations)
+	assert.Equal(t, 0, partition.GetTotalAllocationCount(), "removal requests did not remove all allocations: %v", partition.allocations)
 }
 
 // Dynamic queue creation based on the name from the rules

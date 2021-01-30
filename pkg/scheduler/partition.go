@@ -28,7 +28,6 @@ import (
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
@@ -51,7 +50,6 @@ type PartitionContext struct {
 	applications           map[string]*objects.Application // applications assigned to this partition
 	reservedApps           map[string]int                  // applications reserved within this partition, with reservation count
 	nodes                  map[string]*objects.Node        // nodes assigned to this partition
-	allocations            map[string]*objects.Allocation  // allocations
 	placementManager       *placement.AppPlacementManager  // placement manager for this partition
 	partitionManager       *partitionManager               // manager for this partition
 	stateMachine           *fsm.FSM                        // the state of the partition for scheduling
@@ -61,6 +59,7 @@ type PartitionContext struct {
 	userGroupCache         *security.UserGroupCache        // user cache per partition
 	totalPartitionResource *resources.Resource             // Total node resources
 	nodeSortingPolicy      *policies.NodeSortingPolicy     // Global Node Sorting Policies
+	allocations            int                             // Number of allocations on the partition
 
 	sync.RWMutex
 }
@@ -81,7 +80,6 @@ func newPartitionContext(conf configs.PartitionConfig, rmID string, cc *ClusterC
 		applications: make(map[string]*objects.Application),
 		reservedApps: make(map[string]int),
 		nodes:        make(map[string]*objects.Node),
-		allocations:  make(map[string]*objects.Allocation),
 	}
 	pc.partitionManager = &partitionManager{
 		pc: pc,
@@ -345,44 +343,29 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 }
 
 // Remove the application from the partition.
-// This does not fail and handles missing /app/queue/node/allocations internally
+// This does not fail and handles missing app/queue/node/allocations internally
 func (pc *PartitionContext) removeApplication(appID string) []*objects.Allocation {
-	pc.Lock()
-	defer pc.Unlock()
-
-	// Remove from applications map
-	if pc.applications[appID] == nil {
+	// update the partition details, must be locked but all other updates should not hold partition lock
+	app := pc.removeAppInternal(appID)
+	if app == nil {
 		return nil
 	}
-	app := pc.applications[appID]
-	// remove from partition then cleanup underlying objects
-	delete(pc.applications, appID)
-	delete(pc.reservedApps, appID)
-
 	queueName := app.QueueName
 	// Remove all asks and thus all reservations and pending resources (queue included)
 	_ = app.RemoveAllocationAsk("")
 	// Remove app from queue
-	if queue := pc.getQueue(queueName); queue != nil {
+	if queue := pc.GetQueue(queueName); queue != nil {
 		queue.RemoveApplication(app)
 	}
 	// Remove all allocations
 	allocations := app.RemoveAllAllocations()
-	// Remove all allocations from nodes and the partition (queues have been updated already)
+	// Remove all allocations from node(s) (queues have been updated already)
 	if len(allocations) != 0 {
+		// track the number of allocations
+		pc.updateAllocationCount(-len(allocations))
 		for _, alloc := range allocations {
 			currentUUID := alloc.UUID
-			// Remove from partition
-			if globalAlloc := pc.allocations[currentUUID]; globalAlloc == nil {
-				log.Logger().Warn("unknown allocation: not found on the partition",
-					zap.String("appID", appID),
-					zap.String("allocationId", currentUUID))
-			} else {
-				delete(pc.allocations, currentUUID)
-			}
-
-			// Remove from node: even if not found on the partition to keep things clean
-			node := pc.nodes[alloc.NodeID]
+			node := pc.GetNode(alloc.NodeID)
 			if node == nil {
 				log.Logger().Warn("unknown node: not found in active node list",
 					zap.String("appID", appID),
@@ -402,6 +385,22 @@ func (pc *PartitionContext) removeApplication(appID string) []*objects.Allocatio
 		zap.String("applicationID", appID))
 
 	return allocations
+}
+
+// Locked updates of the partition tracking info
+func (pc *PartitionContext) removeAppInternal(appID string) *objects.Application {
+	pc.Lock()
+	defer pc.Unlock()
+
+	// Remove from applications map
+	app := pc.applications[appID]
+	if app == nil {
+		return nil
+	}
+	// remove from partition then cleanup underlying objects
+	delete(pc.applications, appID)
+	delete(pc.reservedApps, appID)
+	return app
 }
 
 func (pc *PartitionContext) getApplication(appID string) *objects.Application {
@@ -677,6 +676,8 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) []*objects
 			zap.String("nodeID", node.NodeID),
 			zap.String("allocationId", allocID))
 	}
+	// track the number of allocations
+	pc.allocations -= len(released)
 	return released
 }
 
@@ -729,41 +730,21 @@ func (pc *PartitionContext) tryPlaceholderAllocate() *objects.Allocation {
 	// try allocating from the root down
 	alloc := pc.root.TryPlaceholderAllocate(pc.GetNodeIterator, pc.GetNode)
 	if alloc != nil {
-		return pc.replace(alloc)
+		log.Logger().Info("scheduler replace placeholder processed",
+			zap.String("appID", alloc.ApplicationID),
+			zap.String("allocationKey", alloc.AllocationKey),
+			zap.String("placeholder released", alloc.Releases[0].UUID))
+		// pass the release back to the RM via the cluster context
+		return alloc
 	}
 	return nil
 }
 
 // Process the allocation and make the left over changes in the partition.
-func (pc *PartitionContext) replace(alloc *objects.Allocation) *objects.Allocation {
-	pc.Lock()
-	defer pc.Unlock()
-	// find the app make sure it still exists
-	appID := alloc.ApplicationID
-	app := pc.applications[appID]
-	if app == nil {
-		log.Logger().Info("Application was removed while allocating",
-			zap.String("appID", appID))
-		return nil
-	}
-
-	pc.checkUUID(alloc)
-	pc.allocations[alloc.UUID] = alloc
-	log.Logger().Info("scheduler replace placeholder processed",
-		zap.String("appID", alloc.ApplicationID),
-		zap.String("allocationKey", alloc.AllocationKey),
-		zap.String("placeholder released", alloc.Releases[0].UUID))
-	// pass the release back to the RM via the cluster context
-	return alloc
-}
-
-// Process the allocation and make the left over changes in the partition.
 func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocation {
-	pc.Lock()
-	defer pc.Unlock()
 	// find the app make sure it still exists
 	appID := alloc.ApplicationID
-	app := pc.applications[appID]
+	app := pc.getApplication(appID)
 	if app == nil {
 		log.Logger().Info("Application was removed while allocating",
 			zap.String("appID", appID))
@@ -782,7 +763,7 @@ func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocat
 			zap.String("reserved node", nodeID),
 			zap.String("appID", appID))
 	}
-	node := pc.nodes[nodeID]
+	node := pc.GetNode(nodeID)
 	if node == nil {
 		log.Logger().Info("Node was removed while allocating",
 			zap.String("nodeID", nodeID),
@@ -804,8 +785,9 @@ func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocat
 		alloc.ReservedNodeID = ""
 	}
 
-	pc.checkUUID(alloc)
-	pc.allocations[alloc.UUID] = alloc
+	// track the number of allocations
+	pc.updateAllocationCount(1)
+
 	log.Logger().Info("scheduler allocation processed",
 		zap.String("appID", alloc.ApplicationID),
 		zap.String("allocationKey", alloc.AllocationKey),
@@ -813,24 +795,6 @@ func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocat
 		zap.String("targetNode", alloc.NodeID))
 	// pass the allocation back to the RM via the cluster context
 	return alloc
-}
-
-// Safeguard against the unlikely case that we have UUID clashes.
-// A clash points to entropy issues on the node.
-// Lock free call this must be called holding the context lock
-func (pc *PartitionContext) checkUUID(alloc *objects.Allocation) {
-	if _, found := pc.allocations[alloc.UUID]; found {
-		for {
-			allocationUUID := common.GetNewUUID()
-			log.Logger().Warn("UUID clash, random generator might be lacking entropy",
-				zap.String("uuid", alloc.UUID),
-				zap.String("new UUID", allocationUUID))
-			if pc.allocations[allocationUUID] == nil {
-				alloc.UUID = allocationUUID
-				break
-			}
-		}
-	}
 }
 
 // Process the reservation in the scheduler
@@ -937,6 +901,13 @@ func (pc *PartitionContext) unReserveCountInternal(appID string, asks int) {
 	}
 }
 
+// Updated the allocations counter for the partition
+func (pc *PartitionContext) updateAllocationCount(allocs int) {
+	pc.Lock()
+	defer pc.Unlock()
+	pc.allocations += allocs
+}
+
 func (pc *PartitionContext) GetTotalPartitionResource() *resources.Resource {
 	pc.RLock()
 	defer pc.RUnlock()
@@ -960,7 +931,7 @@ func (pc *PartitionContext) GetTotalApplicationCount() int {
 func (pc *PartitionContext) GetTotalAllocationCount() int {
 	pc.RLock()
 	defer pc.RUnlock()
-	return len(pc.allocations)
+	return pc.allocations
 }
 
 func (pc *PartitionContext) GetTotalNodeCount() int {
@@ -1062,7 +1033,9 @@ func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
 	node.AddAllocation(alloc)
 	app.RecoverAllocationAsk(alloc.Ask)
 	app.AddAllocation(alloc)
-	pc.allocations[alloc.UUID] = alloc
+
+	// track the number of allocations
+	pc.allocations++
 
 	log.Logger().Debug("recovered allocation",
 		zap.String("partitionName", pc.Name),
@@ -1117,16 +1090,14 @@ func (pc *PartitionContext) CalculateNodesResourceUsage() map[string][]int {
 }
 
 // Remove the allocation(s) from the app and nodes
-// YUNIKORN-461 proposes to remove this, with a side note that this currently could lead to a deadlock
+// NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*objects.Allocation, *objects.Allocation) {
 	if release == nil {
 		return nil, nil
 	}
-	pc.Lock()
-	defer pc.Unlock()
 	appID := release.ApplicationID
 	uuid := release.UUID
-	app := pc.applications[appID]
+	app := pc.getApplication(appID)
 	// no app nothing to do everything should already be clean
 	if app == nil {
 		return nil, nil
@@ -1157,10 +1128,12 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 			}
 		}
 	}
+	// track the number of allocations
+	pc.updateAllocationCount(-len(released))
 	// for each allocations to release, update node.
 	total := resources.NewResource()
 	for _, alloc := range released {
-		node := pc.nodes[alloc.NodeID]
+		node := pc.GetNode(alloc.NodeID)
 		if node == nil {
 			log.Logger().Info("node not found while releasing allocation",
 				zap.String("appID", appID),
@@ -1182,8 +1155,6 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 			// all non replacement removes, update the queue
 			total.AddTo(alloc.AllocatedResource)
 		}
-		// remove old one from partition
-		delete(pc.allocations, alloc.UUID)
 	}
 	if resources.StrictlyGreaterThanZero(total) {
 		queue := app.GetQueue()

@@ -25,7 +25,6 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 )
 
 func TestFixedRule(t *testing.T) {
@@ -78,7 +77,7 @@ partitions:
 		Groups: []string{},
 	}
 	tags := make(map[string]string)
-	app := objects.NewApplication("app1", "default", "ignored", user, tags, nil, "")
+	app := newApplication("app1", "default", "ignored", user, tags, nil, "")
 
 	// fixed queue that exists directly under the root
 	conf := configs.PlacementRule{
@@ -167,7 +166,7 @@ func TestFixedRuleParent(t *testing.T) {
 		Groups: []string{},
 	}
 	tags := make(map[string]string)
-	app := objects.NewApplication("app1", "default", "ignored", user, tags, nil, "")
+	app := newApplication("app1", "default", "ignored", user, tags, nil, "")
 
 	// trying to place in a child using a parent, fail to create child
 	conf := configs.PlacementRule{

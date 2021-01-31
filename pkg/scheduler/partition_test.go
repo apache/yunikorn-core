@@ -28,6 +28,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 func TestNewPartition(t *testing.T) {
@@ -392,6 +393,63 @@ func TestAddApp(t *testing.T) {
 	}
 }
 
+func TestAddAppTaskGroup(t *testing.T) {
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+
+	// add a new app: TG specified with resource no max set on the queue
+	task := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	app := newApplicationTG(appID1, "default", defQueue, task)
+	assert.Assert(t, resources.Equals(app.GetPlaceholderAsk(), task), "placeholder ask not set as expected")
+	// queue sort policy is FIFO this should work
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "add application with zero task group to partition should not have failed")
+
+	app = newApplicationTG(appID2, "default", defQueue, task)
+	assert.Assert(t, resources.Equals(app.GetPlaceholderAsk(), task), "placeholder ask not set as expected")
+
+	// queue now has fair as sort policy app add should fail
+	queue := partition.GetQueue(defQueue)
+	err = queue.SetQueueConfig(configs.QueueConfig{
+		Name:       "default",
+		Parent:     false,
+		Queues:     nil,
+		Properties: map[string]string{configs.ApplicationSortPolicy: "fair"},
+	})
+	assert.NilError(t, err, "updating queue should not have failed")
+	queue.UpdateSortType()
+	err = partition.AddApplication(app)
+	if err == nil || partition.getApplication(appID2) != nil {
+		t.Errorf("add application should have failed due to queue sort policy but did not")
+	}
+
+	// queue with stateaware as sort policy, with a max set smaller than placeholder ask: app add should fail
+	err = queue.SetQueueConfig(configs.QueueConfig{
+		Name:       "default",
+		Parent:     false,
+		Queues:     nil,
+		Properties: map[string]string{configs.ApplicationSortPolicy: "stateaware"},
+		Resources:  configs.Resources{Max: map[string]string{"first": "5"}},
+	})
+	assert.NilError(t, err, "updating queue should not have failed (stateaware & max)")
+	queue.UpdateSortType()
+	err = partition.AddApplication(app)
+	if err == nil || partition.getApplication(appID2) != nil {
+		t.Errorf("add application should have failed due to max queue resource but did not")
+	}
+
+	// queue with stateaware as sort policy, with a max set larger than placeholder ask: app add works
+	err = queue.SetQueueConfig(configs.QueueConfig{
+		Name:      "default",
+		Parent:    false,
+		Queues:    nil,
+		Resources: configs.Resources{Max: map[string]string{"first": "20"}},
+	})
+	assert.NilError(t, err, "updating queue should not have failed (max resource)")
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "add application to partition should not have failed")
+}
+
 func TestRemoveApp(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
@@ -445,7 +503,7 @@ func TestRemoveApp(t *testing.T) {
 	allocs = partition.removeApplication(appID1)
 	assert.Equal(t, 1, len(allocs), "existing application with allocations returned unexpected allocations %v", allocs)
 	assert.Equal(t, 1, len(partition.applications), "existing application was not removed")
-	if partition.allocations[uuid] == nil {
+	if partition.GetTotalAllocationCount() != 1 {
 		t.Errorf("allocation that should have been left was removed")
 	}
 }
@@ -478,24 +536,35 @@ func TestRemoveAppAllocs(t *testing.T) {
 	alloc = objects.NewAllocation(uuid, nodeID1, ask)
 	err = partition.addAllocation(alloc)
 	assert.NilError(t, err, "add allocation to partition should not have failed")
+	release := &si.AllocationRelease{
+		PartitionName:   "default",
+		ApplicationID:   "",
+		UUID:            "",
+		TerminationType: si.AllocationRelease_STOPPED_BY_RM,
+	}
 
-	allocs := partition.removeAllocation("", "")
+	allocs, _ := partition.removeAllocation(release)
 	assert.Equal(t, 0, len(allocs), "empty removal request returned allocations: %v", allocs)
 	// create a new release without app: should just return
-	allocs = partition.removeAllocation("does_not_exist", "")
+	release.ApplicationID = "does_not_exist"
+	allocs, _ = partition.removeAllocation(release)
 	assert.Equal(t, 0, len(allocs), "removal request for non existing application returned allocations: %v", allocs)
 	// create a new release with app, non existing allocation: should just return
-	allocs = partition.removeAllocation(appNotRemoved, "does_not_exist")
+	release.ApplicationID = appNotRemoved
+	release.UUID = "does_not_exist"
+	allocs, _ = partition.removeAllocation(release)
 	assert.Equal(t, 0, len(allocs), "removal request for non existing allocation returned allocations: %v", allocs)
 	// create a new release with app, existing allocation: should return 1 alloc
-	assert.Equal(t, 2, len(partition.allocations), "pre-remove allocation list incorrect: %v", partition.allocations)
-	allocs = partition.removeAllocation(appNotRemoved, uuid)
+	assert.Equal(t, 2, partition.GetTotalAllocationCount(), "pre-remove allocation list incorrect: %v", partition.allocations)
+	release.UUID = uuid
+	allocs, _ = partition.removeAllocation(release)
 	assert.Equal(t, 1, len(allocs), "removal request for existing allocation returned wrong allocations: %v", allocs)
-	assert.Equal(t, 1, len(partition.allocations), "allocation removal requests removed more than expected: %v", partition.allocations)
+	assert.Equal(t, 1, partition.GetTotalAllocationCount(), "allocation removal requests removed more than expected: %v", partition.allocations)
 	// create a new release with app, no uuid: should return last left alloc
-	allocs = partition.removeAllocation(appNotRemoved, "")
+	release.UUID = ""
+	allocs, _ = partition.removeAllocation(release)
 	assert.Equal(t, 1, len(allocs), "removal request for existing allocation returned wrong allocations: %v", allocs)
-	assert.Equal(t, 0, len(partition.allocations), "removal requests did not remove all allocations: %v", partition.allocations)
+	assert.Equal(t, 0, partition.GetTotalAllocationCount(), "removal requests did not remove all allocations: %v", partition.allocations)
 }
 
 // Dynamic queue creation based on the name from the rules
@@ -1078,4 +1147,27 @@ func TestUpdateRootQueue(t *testing.T) {
 	// make sure the update went through
 	assert.Equal(t, partition.GetQueue("root.leaf").CurrentState(), objects.Draining.String(), "leaf queue should have been marked for removal")
 	assert.Equal(t, partition.GetQueue("root.parent").CurrentState(), objects.Draining.String(), "parent queue should have been marked for removal")
+}
+
+func TestCleanupCompletedApps(t *testing.T) {
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	completedApp := newApplication("completed", "default", defQueue)
+	completedApp.SetState(objects.Completed.String())
+
+	newApp := newApplication("running", "default", defQueue)
+	err = partition.AddApplication(completedApp)
+	assert.NilError(t, err, "no error expected while adding the application")
+	err = partition.AddApplication(newApp)
+	assert.NilError(t, err, "no error expected while adding the application")
+
+	assert.Assert(t, len(partition.applications) == 2, "the partition should have 2 apps")
+	// mark the app for removal
+	completedApp.SetState(objects.Expired.String())
+	partition.cleanupExpiredApps()
+	assert.Assert(t, len(partition.applications) == 1, "the partition should have 1 app")
+	assert.Assert(t, partition.getApplication(completedApp.ApplicationID) == nil, "completed application should have been deleted")
+	assert.Assert(t, partition.getApplication(newApp.ApplicationID) != nil, "new application should still be in the partition")
+	assert.Assert(t, len(partition.GetAppsByState(objects.Completed.String())) == 0, "the partition should have 0 completed app")
+	assert.Assert(t, len(partition.GetAppsByState(objects.Expired.String())) == 0, "the partition should have 0 expired app")
 }

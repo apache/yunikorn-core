@@ -1,4 +1,4 @@
-name: Green Build
+name: Pre-commit checks
 
 on:
   pull_request:

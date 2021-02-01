@@ -264,8 +264,6 @@ func (pc *PartitionContext) isStopped() bool {
 func (pc *PartitionContext) handlePartitionEvent(event objects.ObjectEvent) error {
 	err := pc.stateMachine.Event(event.String(), pc.Name)
 	if err == nil {
-		pc.Lock()
-		defer pc.Unlock()
 		pc.stateTime = time.Now()
 		return nil
 	}
@@ -898,9 +896,7 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 // Get the iterator for the sorted nodes list from the partition.
 // Sorting should use a copy of the node list not the main list.
 func (pc *PartitionContext) getNodeIteratorForPolicy(nodes []*objects.Node) interfaces.NodeIterator {
-	pc.RLock()
-	configuredPolicy := pc.nodeSortingPolicy.PolicyType
-	pc.RUnlock()
+	configuredPolicy := pc.GetNodeSortingPolicy()
 	if configuredPolicy == policies.Unknown {
 		return nil
 	}
@@ -1240,6 +1236,8 @@ func (pc *PartitionContext) GetStateTime() time.Time {
 	return pc.stateTime
 }
 
-func (pc *PartitionContext) GetNodeSortingPolicy() *policies.NodeSortingPolicy {
-	return pc.nodeSortingPolicy
+func (pc *PartitionContext) GetNodeSortingPolicy() policies.SortingPolicy {
+	pc.RLock()
+	defer pc.RUnlock()
+	return pc.nodeSortingPolicy.PolicyType
 }

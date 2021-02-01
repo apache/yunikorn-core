@@ -546,7 +546,7 @@ func getPartitions(w http.ResponseWriter, r *http.Request) {
 		capacityInfo.Capacity = partitionContext.GetTotalPartitionResource().DAOString()
 		capacityInfo.UsedCapacity = partitionContext.GetAllocatedResource().DAOString()
 		partitionInfo.Capacity = capacityInfo
-		partitionInfo.NodeSortingPolicy = partitionContext.GetNodeSortingPolicy().PolicyType.String()
+		partitionInfo.NodeSortingPolicy = partitionContext.GetNodeSortingPolicy().String()
 
 		appList := partitionContext.GetApplications()
 		applicationsState := make(map[string]int)

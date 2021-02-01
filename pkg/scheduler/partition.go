@@ -600,6 +600,16 @@ func (pc *PartitionContext) removeNode(nodeID string) []*objects.Allocation {
 	return pc.removeNodeInternal(nodeID)
 }
 
+// Update a node
+func (pc *PartitionContext) updateNode(delta *resources.Resource) {
+	pc.Lock()
+	defer pc.Unlock()
+	if delta != nil {
+		pc.totalPartitionResource.AddTo(delta)
+		pc.root.SetMaxResource(pc.totalPartitionResource)
+	}
+}
+
 // Remove a node from the partition. It returns all removed allocations.
 // Unlocked version must be called holding the partition lock.
 func (pc *PartitionContext) removeNodeInternal(nodeID string) []*objects.Allocation {

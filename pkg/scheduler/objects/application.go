@@ -1051,6 +1051,11 @@ func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
 	defer sa.Unlock()
 	// remove the placeholder that was just confirmed by the shim
 	ph := sa.removeAllocationInternal(uuid)
+	if ph == nil {
+		// if the allocation doesn't exist any more, no opt
+		// this may happen when the shim side sends dup release requests
+		return nil
+	}
 	if len(ph.Releases) != 1 {
 		log.Logger().Error("Unexpected release number (more than 1), placeholder released, replacement error",
 			zap.String("applicationID", sa.ApplicationID),

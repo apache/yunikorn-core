@@ -19,7 +19,6 @@
 package configs
 
 import (
-	"strings"
 	"testing"
 
 	"gotest.tools/assert"
@@ -28,47 +27,44 @@ import (
 func TestCheckResourceConfigurationsForQueue(t *testing.T) {
 	negativeResourceMap := map[string]string{"memory": "-50", "vcores": "33"}
 	resourceMapWithSyntaxError := map[string]string{"memory": "ten", "vcores": ""}
-	zeroResourceMap := map[string]string{"memory": "0", "vcores": "0"}
 	higherResourceMap := map[string]string{"memory": "50", "vcores": "33"}
-	lowerResourceMap := map[string]string{"memory": "10", "vcores": "3"}
+	lowerResourceMap := map[string]string{"memory": "10", "vcores": "30"}
 	testCases := []struct {
-		name             string
-		current          *QueueConfig
-		parent           *QueueConfig
-		errorExpected    bool
-		expectedErrorMsg string
+		name          string
+		current       QueueConfig
+		errorExpected bool
 	}{
-		{"Negative guaranteed resource", &QueueConfig{
+		{"Negative guaranteed resource", QueueConfig{
 			Resources: Resources{
 				Guaranteed: negativeResourceMap,
 			},
-		}, nil, true, "cannot be negative"},
-		{"Negative max resource", &QueueConfig{
+		}, true},
+		{"Negative max resource", QueueConfig{
 			Resources: Resources{
 				Max: negativeResourceMap,
 			},
-		}, nil, true, "cannot be negative"},
-		{"Nil guaranteed resource", &QueueConfig{
+		}, true},
+		{"Nil guaranteed resource", QueueConfig{
 			Resources: Resources{
 				Max: lowerResourceMap,
 			},
-		}, nil, false, ""},
-		{"Nil max resource", &QueueConfig{
+		}, false},
+		{"Nil max resource", QueueConfig{
 			Resources: Resources{
 				Guaranteed: lowerResourceMap,
 			},
-		}, nil, false, ""},
-		{"Syntax error in guaranteed resource", &QueueConfig{
+		}, false},
+		{"Syntax error in guaranteed resource", QueueConfig{
 			Resources: Resources{
 				Guaranteed: resourceMapWithSyntaxError,
 			},
-		}, nil, true, "invalid syntax"},
-		{"Syntax error in max resource", &QueueConfig{
+		}, true},
+		{"Syntax error in max resource", QueueConfig{
 			Resources: Resources{
 				Max: resourceMapWithSyntaxError,
 			},
-		}, nil, true, "invalid syntax"},
-		{"Higher guaranteed resource in child queues", &QueueConfig{
+		}, true},
+		{"Higher guaranteed resource in child queues", QueueConfig{
 			Resources: Resources{
 				Guaranteed: lowerResourceMap,
 			},
@@ -77,43 +73,158 @@ func TestCheckResourceConfigurationsForQueue(t *testing.T) {
 					Guaranteed: higherResourceMap,
 				},
 			}},
-		}, nil, true, "smaller than sum of children guaranteed resources"},
-		{"Zero max resource", &QueueConfig{
-			Resources: Resources{
-				Max: zeroResourceMap,
-			},
-		}, nil, true, "max resource total canno be 0"},
-		{"Higher max resource in child queues", &QueueConfig{
-			Resources: Resources{
-				Max: higherResourceMap,
-			},
-		}, &QueueConfig{
-			Resources: Resources{
-				Max: lowerResourceMap,
-			},
-		}, true, "larger than parent's max resources"},
-		{"Higher guaranteed than max resource", &QueueConfig{
-			Resources: Resources{
-				Max:        lowerResourceMap,
-				Guaranteed: higherResourceMap,
-			},
-		}, nil, true, "smaller than guaranteed resources"},
-		{"Valid configuration", &QueueConfig{
+		}, true},
+		{"Higher sum of guaranteed resource in child queues than the parent's guaranteed", QueueConfig{
 			Resources: Resources{
 				Max:        higherResourceMap,
 				Guaranteed: lowerResourceMap,
 			},
-		}, nil, false, ""},
+			Queues: []QueueConfig{{
+				Resources: Resources{
+					Max:        lowerResourceMap,
+					Guaranteed: lowerResourceMap,
+				},
+			}, {
+				Resources: Resources{
+					Max:        lowerResourceMap,
+					Guaranteed: lowerResourceMap,
+				},
+			}},
+		}, true},
+		{"Higher max resource in child queues", QueueConfig{
+			Resources: Resources{
+				Max: lowerResourceMap,
+			},
+			Queues: []QueueConfig{{
+				Resources: Resources{
+					Max: higherResourceMap,
+				},
+			}},
+		}, true},
+		{"Higher guaranteed than max resource", QueueConfig{
+			Resources: Resources{
+				Max:        lowerResourceMap,
+				Guaranteed: higherResourceMap,
+			},
+		}, true},
+		{"Valid configuration",
+			QueueConfig{
+				Resources: Resources{
+					Max:        higherResourceMap,
+					Guaranteed: lowerResourceMap,
+				},
+			},
+			false},
+		{"One level skipped while setting max resource",
+			createQueueWithSkippedMaxRes(),
+			true},
+		{"Sum of child guaranteed higher than parent max",
+			createQueueWithSumGuaranteedHigherThanParentMax(),
+			true},
+		{"One level skipped while setting guaranteed resource",
+			createQueueWithSkippedGuaranteedRes(),
+			true},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := checkResourceConfigurationsForQueue(tc.current, tc.parent)
+			_, err := checkQueueResource(tc.current, nil)
 			if tc.errorExpected {
 				assert.Assert(t, err != nil, "An error is expected")
-				assert.Assert(t, strings.Contains(err.Error(), tc.expectedErrorMsg), "Unexpected error message")
 			} else {
 				assert.NilError(t, err, "No error is expected")
 			}
 		})
 	}
+}
+
+func createQueueWithSkippedMaxRes() QueueConfig {
+	child1MaxMap := map[string]string{"memory": "150"}
+	parentMaxMap := map[string]string{"memory": "100"}
+	child1 := QueueConfig{
+		Resources: Resources{
+			Max: child1MaxMap,
+		},
+		Name: "child1",
+	}
+	parent1 := QueueConfig{
+		Queues: []QueueConfig{child1},
+		Name:   "parent1",
+	}
+	parent := QueueConfig{
+		Resources: Resources{
+			Max: parentMaxMap,
+		},
+		Queues: []QueueConfig{parent1},
+		Name:   "parent",
+	}
+	root := QueueConfig{
+		Queues: []QueueConfig{parent},
+		Name:   RootQueue,
+	}
+	return root
+}
+
+func createQueueWithSumGuaranteedHigherThanParentMax() QueueConfig {
+	child1GuaranteedMap := map[string]string{"memory": "50"}
+	child2GuaranteedMap := map[string]string{"memory": "40"}
+	parentMaxMap := map[string]string{"memory": "100"}
+	parent1MaxMap := map[string]string{"memory": "80"}
+	child1 := QueueConfig{
+		Resources: Resources{
+			Guaranteed: child1GuaranteedMap,
+		},
+		Name: "child1",
+	}
+	child2 := QueueConfig{
+		Resources: Resources{
+			Guaranteed: child2GuaranteedMap,
+		},
+		Name: "child1",
+	}
+	parent1 := QueueConfig{
+		Queues: []QueueConfig{child1, child2},
+		Name:   "parent1",
+		Resources: Resources{
+			Max: parent1MaxMap,
+		},
+	}
+	parent := QueueConfig{
+		Resources: Resources{
+			Max: parentMaxMap,
+		},
+		Queues: []QueueConfig{parent1},
+		Name:   "parent",
+	}
+	root := QueueConfig{
+		Queues: []QueueConfig{parent},
+		Name:   RootQueue,
+	}
+	return root
+}
+
+func createQueueWithSkippedGuaranteedRes() QueueConfig {
+	child1MaxMap := map[string]string{"memory": "150"}
+	parentMaxMap := map[string]string{"memory": "100"}
+	child1 := QueueConfig{
+		Resources: Resources{
+			Guaranteed: child1MaxMap,
+		},
+		Name: "child1",
+	}
+	parent1 := QueueConfig{
+		Queues: []QueueConfig{child1},
+		Name:   "parent1",
+	}
+	parent := QueueConfig{
+		Resources: Resources{
+			Guaranteed: parentMaxMap,
+		},
+		Queues: []QueueConfig{parent1},
+		Name:   "parent",
+	}
+	root := QueueConfig{
+		Queues: []QueueConfig{parent},
+		Name:   RootQueue,
+	}
+	return root
 }

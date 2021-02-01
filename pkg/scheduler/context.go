@@ -518,8 +518,7 @@ func (cc *ClusterContext) updateNodes(request *si.UpdateRequest) {
 			switch update.Action {
 			case si.UpdateNodeInfo_UPDATE:
 				if sr := update.SchedulableResource; sr != nil {
-					newCapacity := resources.NewResourceFromProto(sr)
-					node.SetCapacity(newCapacity)
+					partition.updateNode(node.SetCapacity(resources.NewResourceFromProto(sr)))
 				}
 				if or := update.OccupiedResource; or != nil {
 					newOccupied := resources.NewResourceFromProto(or)

@@ -333,7 +333,7 @@ func (sa *Application) RemoveAllocationAsk(allocKey string) int {
 	// Change the state to waiting.
 	// When the resource trackers are zero we should not expect anything to come in later.
 	if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) && resources.IsZero(sa.allocatedPlaceholder) {
-		if err := sa.HandleApplicationEvent(waitApplication); err != nil {
+		if err := sa.HandleApplicationEvent(WaitApplication); err != nil {
 			log.Logger().Warn("Application state not changed to Waiting while updating ask(s)",
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))
@@ -372,7 +372,7 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 	// 2) all asks and allocation have been removed: state is Waiting
 	// Move the state and get it scheduling (again)
 	if sa.stateMachine.Is(New.String()) || sa.stateMachine.Is(Waiting.String()) {
-		if err := sa.HandleApplicationEvent(runApplication); err != nil {
+		if err := sa.HandleApplicationEvent(RunApplication); err != nil {
 			log.Logger().Debug("Application state change failed while adding new ask",
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))
@@ -406,7 +406,7 @@ func (sa *Application) RecoverAllocationAsk(ask *AllocationAsk) {
 	sa.requests[ask.AllocationKey] = ask
 	// progress the application from New to Accepted.
 	if sa.IsNew() {
-		if err := sa.HandleApplicationEvent(runApplication); err != nil {
+		if err := sa.HandleApplicationEvent(RunApplication); err != nil {
 			log.Logger().Debug("Application state change failed while recovering allocation ask",
 				zap.Error(err))
 		}
@@ -1036,7 +1036,7 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 	} else {
 		// progress the state based on where we are, we should never fail in this case
 		// keep track of a failure in log.
-		if err := sa.HandleApplicationEvent(runApplication); err != nil {
+		if err := sa.HandleApplicationEvent(RunApplication); err != nil {
 			log.Logger().Error("Unexpected app state change failure while adding allocation",
 				zap.String("currentState", sa.stateMachine.Current()),
 				zap.Error(err))
@@ -1051,6 +1051,11 @@ func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
 	defer sa.Unlock()
 	// remove the placeholder that was just confirmed by the shim
 	ph := sa.removeAllocationInternal(uuid)
+	if ph == nil {
+		// if the allocation doesn't exist any more, no opt
+		// this may happen when the shim side sends dup release requests
+		return nil
+	}
 	if len(ph.Releases) != 1 {
 		log.Logger().Error("Unexpected release number (more than 1), placeholder released, replacement error",
 			zap.String("applicationID", sa.ApplicationID),
@@ -1092,7 +1097,7 @@ func (sa *Application) removeAllocationInternal(uuid string) *Allocation {
 	}
 	// When the resource trackers are zero we should not expect anything to come in later.
 	if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) && resources.IsZero(sa.allocatedPlaceholder) {
-		if err := sa.HandleApplicationEvent(waitApplication); err != nil {
+		if err := sa.HandleApplicationEvent(WaitApplication); err != nil {
 			log.Logger().Warn("Application state not changed to Waiting while removing some allocation(s)",
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))
@@ -1118,7 +1123,7 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 	sa.allocations = make(map[string]*Allocation)
 	// When the resource trackers are zero we should not expect anything to come in later.
 	if resources.IsZero(sa.pending) {
-		if err := sa.HandleApplicationEvent(waitApplication); err != nil {
+		if err := sa.HandleApplicationEvent(WaitApplication); err != nil {
 			log.Logger().Warn("Application state not changed to Waiting while removing all allocations",
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))

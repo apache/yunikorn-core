@@ -530,3 +530,36 @@ func updateConfiguration(conf string) (string, error) {
 	}
 	return "", fmt.Errorf("config plugin not found")
 }
+
+func getPartitions(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+
+	var partitionsInfo []*dao.PartitionInfo
+	lists := schedulerContext.GetPartitionMapClone()
+	for _, partitionContext := range lists {
+		partitionInfo := &dao.PartitionInfo{}
+		partitionInfo.Name = partitionContext.Name
+		partitionInfo.State = partitionContext.GetCurrentState()
+		partitionInfo.LastStateTransitionTime = partitionContext.GetStateTime().String()
+
+		capacityInfo := dao.PartitionCapacity{}
+		capacityInfo.Capacity = partitionContext.GetTotalPartitionResource().DAOString()
+		capacityInfo.UsedCapacity = partitionContext.GetAllocatedResource().DAOString()
+		partitionInfo.Capacity = capacityInfo
+		partitionInfo.NodeSortingPolicy = partitionContext.GetNodeSortingPolicy().String()
+
+		appList := partitionContext.GetApplications()
+		applicationsState := make(map[string]int)
+		totalApplications := 0
+		for _, app := range appList {
+			applicationsState[app.CurrentState()]++
+			totalApplications++
+		}
+		applicationsState["total"] = totalApplications
+		partitionInfo.Applications = applicationsState
+		partitionsInfo = append(partitionsInfo, partitionInfo)
+	}
+	if err := json.NewEncoder(w).Encode(partitionsInfo); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}

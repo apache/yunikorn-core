@@ -870,9 +870,7 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 // Get the iterator for the sorted nodes list from the partition.
 // Sorting should use a copy of the node list not the main list.
 func (pc *PartitionContext) getNodeIteratorForPolicy(nodes []*objects.Node) interfaces.NodeIterator {
-	pc.RLock()
-	configuredPolicy := pc.nodeSortingPolicy.PolicyType
-	pc.RUnlock()
+	configuredPolicy := pc.GetNodeSortingPolicy()
 	if configuredPolicy == policies.Unknown {
 		return nil
 	}
@@ -1226,4 +1224,20 @@ func (pc *PartitionContext) cleanupPlaceholders() []*objects.Allocation {
 		pc.removeAllocationAsk(app.ApplicationID, "")
 	}
 	return released
+}
+
+func (pc *PartitionContext) GetCurrentState() string {
+	return pc.stateMachine.Current()
+}
+
+func (pc *PartitionContext) GetStateTime() time.Time {
+	pc.RLock()
+	defer pc.RUnlock()
+	return pc.stateTime
+}
+
+func (pc *PartitionContext) GetNodeSortingPolicy() policies.SortingPolicy {
+	pc.RLock()
+	defer pc.RUnlock()
+	return pc.nodeSortingPolicy.PolicyType
 }

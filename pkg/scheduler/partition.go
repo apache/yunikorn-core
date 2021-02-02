@@ -1208,3 +1208,22 @@ func (pc *PartitionContext) cleanupExpiredApps() {
 		pc.Unlock()
 	}
 }
+
+func (pc *PartitionContext) cleanupPlaceholders() []*objects.Allocation {
+	var released []*objects.Allocation
+	for _, app := range pc.GetAppsByState(objects.Completed.String()) {
+		// at this point if we still have allocations those are placeholders
+		for _, alloc := range app.GetAllAllocations() {
+			r, _ := pc.removeAllocation(&si.AllocationRelease{
+				PartitionName:   pc.Name,
+				ApplicationID:   app.ApplicationID,
+				UUID:            alloc.UUID,
+				TerminationType: si.AllocationRelease_TIMEOUT,
+			})
+			released = append(released, r...)
+		}
+		// make sure to remove the pending requests as well
+		pc.removeAllocationAsk(app.ApplicationID, "")
+	}
+	return released
+}

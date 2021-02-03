@@ -839,12 +839,12 @@ func IsZero(zero *Resource) bool {
 }
 
 func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {
+	absResource := NewResource()
 	if capacity == nil || used == nil {
-		log.Logger().Warn("Cannot calculate absolute capacity because of missing capacity or usage")
-		return NewResource()
+		log.Logger().Debug("Cannot calculate absolute capacity because of missing capacity or usage")
+		return absResource
 	}
-	absResource := make(map[string]Quantity)
-	missingResources := make([]string, 0)
+	var missingResources strings.Builder
 	for resourceName, availableResource := range capacity.Resources {
 		var absResValue int64
 		if usedResource, ok := used.Resources[resourceName]; ok {
@@ -873,14 +873,17 @@ func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {
 				absResValue = math.MinInt64
 			}
 		} else {
-			missingResources = append(missingResources, resourceName)
+			if missingResources.Len() != 0 {
+				missingResources.WriteString(", ")
+			}
+			missingResources.WriteString(resourceName)
 			continue
 		}
-		absResource[resourceName] = Quantity(absResValue)
+		absResource.Resources[resourceName] = Quantity(absResValue)
 	}
-	if len(missingResources) > 0 {
-		log.Logger().Debug("Cannot calculate absolute usage for resources because of missing usage information",
-			zap.String("resource name", strings.Join(missingResources, ",")))
+	if missingResources.Len() != 0 {
+		log.Logger().Debug("Absolute usage result is missing resource information",
+			zap.String("missing resource(s)", missingResources.String()))
 	}
-	return NewResourceFromMap(absResource)
+	return absResource
 }

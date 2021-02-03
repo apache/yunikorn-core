@@ -62,7 +62,7 @@ func loggingHandler(inner http.Handler, name string) http.Handler {
 		rw := &YResponseWriter{ResponseWriter: w, statusCode: -1}
 		inner.ServeHTTP(rw, r)
 		var body = string(rw.body)
-		if rw.statusCode != 200 && rw.statusCode != -1 {
+		if rw.statusCode != http.StatusOK && rw.statusCode != -1 {
 			errorInfo := dao.NewYAPIError(nil, rw.statusCode, body)
 			if err := json.NewEncoder(w).Encode(errorInfo); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -82,7 +82,10 @@ type YResponseWriter struct {
 func (rw *YResponseWriter) Write(bytes []byte) (int, error) {
 	rw.body = bytes
 	if rw.statusCode == -1 {
-		rw.ResponseWriter.Write(bytes)
+		_, err := rw.ResponseWriter.Write(bytes)
+		if err != nil {
+			log.Logger().Error(fmt.Sprintf("Unable to serve response. Problem in writing the response \"%s\". Reason: %s", string(bytes), err.Error()))
+		}
 	}
 	return len(bytes), nil
 }

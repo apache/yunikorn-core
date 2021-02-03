@@ -756,9 +756,7 @@ func TestCreateClusterConfig(t *testing.T) {
 	// When "dry_run" is not passed
 	//nolint: errcheck
 	req, err := http.NewRequest("POST", "/ws/v1/config", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NilError(t, err, "Problem in creating the request")
 	rr := httptest.NewRecorder()
 	mux := http.HandlerFunc(createClusterConfig)
 	handler := loggingHandler(mux, "/ws/v1/config")
@@ -773,9 +771,7 @@ func TestCreateClusterConfig(t *testing.T) {
 	// When "dry_run" value is invalid
 	//nolint: errcheck
 	req, err = http.NewRequest("POST", "/ws/v1/config?dry_run=0", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NilError(t, err, "Problem in creating the request")
 	rr = httptest.NewRecorder()
 	mux = http.HandlerFunc(createClusterConfig)
 	handler = loggingHandler(mux, "/ws/v1/config?dry_run=0")

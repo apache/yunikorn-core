@@ -22,14 +22,12 @@ module github.com/apache/incubator-yunikorn-core
 go 1.12
 
 require (
-	github.com/HdrHistogram/hdrhistogram-go v0.9.0 // indirect
+	github.com/HdrHistogram/hdrhistogram-go v1.0.1 // indirect
 	github.com/apache/incubator-yunikorn-scheduler-interface v0.0.0-20210106054514-49c4f33ed27b
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/golang/protobuf v1.4.0 // indirect
 	github.com/gorilla/mux v1.7.3
-	github.com/kr/text v0.2.0 // indirect
 	github.com/looplab/fsm v0.1.0
-	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v0.9.4
@@ -37,7 +35,6 @@ require (
 	github.com/prometheus/common v0.4.1
 	github.com/prometheus/procfs v0.0.8 // indirect
 	github.com/satori/go.uuid v1.2.0
-	github.com/stretchr/testify v1.5.1 // indirect
 	github.com/uber/jaeger-client-go v2.25.0+incompatible
 	github.com/uber/jaeger-lib v2.4.0+incompatible
 	go.uber.org/atomic v1.5.1 // indirect
@@ -49,7 +46,6 @@ require (
 	golang.org/x/text v0.3.2 // indirect
 	golang.org/x/tools v0.0.0-20200415000939-92398ad77b89 // indirect
 	google.golang.org/grpc v1.26.0
-	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/yaml.v2 v2.2.8
 	gotest.tools v2.2.0+incompatible
 	honnef.co/go/tools v0.0.1-2020.1.3 // indirect

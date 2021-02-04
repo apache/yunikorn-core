@@ -430,6 +430,9 @@ func (sq *Queue) incPendingResource(delta *resources.Resource) {
 
 // Remove pending resource of this queue
 func (sq *Queue) decPendingResource(delta *resources.Resource) {
+	if sq == nil {
+		return
+	}
 	// update the parent
 	if sq.parent != nil {
 		sq.parent.decPendingResource(delta)

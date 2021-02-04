@@ -1134,8 +1134,8 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 
 // get a copy of the user details for the application
 func (sa *Application) GetUser() security.UserGroup {
-	sa.Lock()
-	defer sa.Unlock()
+	sa.RLock()
+	defer sa.RUnlock()
 
 	return sa.user
 }
@@ -1143,8 +1143,8 @@ func (sa *Application) GetUser() security.UserGroup {
 // Get a tag from the application
 // Note: Tags are not case sensitive
 func (sa *Application) GetTag(tag string) string {
-	sa.Lock()
-	defer sa.Unlock()
+	sa.RLock()
+	defer sa.RUnlock()
 
 	tagVal := ""
 	for key, val := range sa.tags {

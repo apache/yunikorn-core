@@ -164,7 +164,7 @@ func (sn *Node) refreshAvailableResource() {
 	sn.availableResource.SubFrom(sn.allocatedResource)
 	sn.availableResource.SubFrom(sn.occupiedResource)
 	// check if any quantity is negative: a nil resource is all 0's
-	if resources.StrictlyGreaterThanOrEquals(sn.availableResource, nil) {
+	if !resources.StrictlyGreaterThanOrEquals(sn.availableResource, nil) {
 		log.Logger().Warn("Node update triggered over allocated node",
 			zap.String("available", sn.availableResource.String()),
 			zap.String("total", sn.totalResource.String()),

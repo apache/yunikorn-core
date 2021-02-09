@@ -67,7 +67,7 @@ type Application struct {
 	stateMachine         *fsm.FSM               // application state machine
 	stateTimer           *time.Timer            // timer for state time
 	execTimeout          time.Duration          // execTimeout for the application run
-	// appTimer             *time.Timer            // application run timer
+	placeholderTimer     *time.Timer            // application run timer
 
 	rmEventHandler handler.EventHandler
 	rmID           string
@@ -219,6 +219,37 @@ func (sa *Application) clearStateTimer() {
 	}
 	sa.stateTimer.Stop()
 	sa.stateTimer = nil
+}
+
+func (sa *Application) initPlaceholderTimer() {
+	if sa.placeholderTimer != nil {
+		log.Logger().Debug("Application placeholder timer already initiated",
+			zap.String("AppID", sa.ApplicationID),
+			zap.Duration("Timeout", sa.execTimeout))
+		return
+	}
+	log.Logger().Debug("Application placeholder timer initiated",
+		zap.String("AppID", sa.ApplicationID),
+		zap.Duration("Timeout", sa.execTimeout))
+	sa.placeholderTimer = time.AfterFunc(sa.execTimeout, sa.timeoutPlaceholderProcessing)
+}
+
+func (sa *Application) timeoutPlaceholderProcessing() {
+	sa.Lock()
+	defer sa.Unlock()
+	// Case 1: if all app's placeholders are allocated, only part of them gets replaced, just delete the remaining placeholders
+	if sa.allPlaceholdersAllocated() && !sa.allPlaceholdersReplaced() {
+		for _, alloc := range sa.GetPlaceholderAllocations() {
+			alloc.Result = PlaceholderExpired
+		}
+	}
+	//Case 2: in every other case fail the application, then the placeholders will be cleaned up by the partition_manager
+	if err := sa.HandleApplicationEvent(KillApplication); err != nil {
+		log.Logger().Debug("Application state change failed when placeholder timed out",
+			zap.String("AppID", sa.ApplicationID),
+			zap.String("currentState", sa.CurrentState()),
+			zap.Error(err))
+	}
 }
 
 // Return an array of all reservation keys for the app.
@@ -627,6 +658,9 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 		if !request.placeholder && request.taskGroupName != "" && !resources.IsZero(sa.allocatedPlaceholder) {
 			continue
 		}
+		if request.placeholder && resources.IsZero(sa.allocatedPlaceholder) {
+			sa.initPlaceholderTimer()
+		}
 		// resource must fit in headroom otherwise skip the request
 		if !resources.FitIn(headRoom, request.AllocatedResource) {
 			// post scheduling events via the event plugin
@@ -676,7 +710,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() interfaces.Nod
 			continue
 		}
 		// walk over the placeholders, allow for processing all as we can have multiple task groups
-		phAllocs := sa.getPlaceholderAllocations()
+		phAllocs := sa.GetPlaceholderAllocations()
 		for _, ph := range phAllocs {
 			// we could have already released this placeholder and are waiting for the shim to confirm
 			// and check that we have the correct task group before trying to swap
@@ -1010,7 +1044,7 @@ func (sa *Application) GetAllAllocations() []*Allocation {
 
 // get a copy of all placeholder allocations of the application
 // No locking must be called while holding the lock
-func (sa *Application) getPlaceholderAllocations() []*Allocation {
+func (sa *Application) GetPlaceholderAllocations() []*Allocation {
 	var allocations []*Allocation
 	for _, alloc := range sa.allocations {
 		if alloc.placeholder {
@@ -1154,4 +1188,12 @@ func (sa *Application) GetTag(tag string) string {
 		}
 	}
 	return tagVal
+}
+
+func (sa *Application) allPlaceholdersAllocated() bool {
+	return resources.Equals(sa.allocatedPlaceholder, sa.placeholderAsk)
+}
+
+func (sa *Application) allPlaceholdersReplaced() bool {
+	return resources.StrictlyGreaterThan(sa.allocatedPlaceholder, sa.allocatedResource)
 }

@@ -243,7 +243,7 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 			alloc.Result = PlaceholderExpired
 		}
 	}
-	//Case 2: in every other case fail the application, then the placeholders will be cleaned up by the partition_manager
+	// Case 2: in every other case fail the application, then the placeholders will be cleaned up by the partition_manager
 	if err := sa.HandleApplicationEvent(KillApplication); err != nil {
 		log.Logger().Debug("Application state change failed when placeholder timed out",
 			zap.String("AppID", sa.ApplicationID),

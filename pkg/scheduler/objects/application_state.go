@@ -138,6 +138,12 @@ func NewAppState() *fsm.FSM {
 			},
 			fmt.Sprintf("enter_%s", Running.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsRunning()
+				app, ok := event.Args[0].(*Application)
+				if !ok {
+					log.Logger().Warn("The first argument is not an Application")
+					return
+				}
+				app.clearPlaceholderTimer()
 			},
 			fmt.Sprintf("leave_%s", Running.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()
@@ -145,6 +151,14 @@ func NewAppState() *fsm.FSM {
 			fmt.Sprintf("enter_%s", Completed.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsCompleted()
 				app := setTimer(completedTimeout, event, ExpireApplication)
+				app.unSetQueue()
+			},
+			fmt.Sprintf("enter_%s", Completed.String()): func(event *fsm.Event) {
+				app, ok := event.Args[0].(*Application)
+				if !ok {
+					log.Logger().Warn("The first argument is not an Application")
+					return
+				}
 				app.unSetQueue()
 			},
 		},

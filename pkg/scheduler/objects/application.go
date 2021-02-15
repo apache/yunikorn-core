@@ -223,15 +223,20 @@ func (sa *Application) clearStateTimer() {
 
 func (sa *Application) initPlaceholderTimer() {
 	if sa.placeholderTimer != nil {
-		log.Logger().Debug("Application placeholder timer already initiated",
-			zap.String("AppID", sa.ApplicationID),
-			zap.Duration("Timeout", sa.execTimeout))
 		return
 	}
 	log.Logger().Debug("Application placeholder timer initiated",
 		zap.String("AppID", sa.ApplicationID),
 		zap.Duration("Timeout", sa.execTimeout))
 	sa.placeholderTimer = time.AfterFunc(sa.execTimeout, sa.timeoutPlaceholderProcessing)
+}
+
+func (sa *Application) clearPlaceholderTimer() {
+	if sa == nil || sa.placeholderTimer == nil {
+		return
+	}
+	sa.placeholderTimer.Stop()
+	sa.placeholderTimer = nil
 }
 
 func (sa *Application) timeoutPlaceholderProcessing() {
@@ -363,7 +368,7 @@ func (sa *Application) RemoveAllocationAsk(allocKey string) int {
 	// 3) if placeholder allocations is zero (no placeholders running)
 	// Change the state to waiting.
 	// When the resource trackers are zero we should not expect anything to come in later.
-	if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) && resources.IsZero(sa.allocatedPlaceholder) {
+	if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) {
 		if err := sa.HandleApplicationEvent(WaitApplication); err != nil {
 			log.Logger().Warn("Application state not changed to Waiting while updating ask(s)",
 				zap.String("currentState", sa.CurrentState()),
@@ -1130,7 +1135,7 @@ func (sa *Application) removeAllocationInternal(uuid string) *Allocation {
 		sa.allocatedResource = resources.Sub(sa.allocatedResource, alloc.AllocatedResource)
 	}
 	// When the resource trackers are zero we should not expect anything to come in later.
-	if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) && resources.IsZero(sa.allocatedPlaceholder) {
+	if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) {
 		if err := sa.HandleApplicationEvent(WaitApplication); err != nil {
 			log.Logger().Warn("Application state not changed to Waiting while removing some allocation(s)",
 				zap.String("currentState", sa.CurrentState()),
@@ -1195,5 +1200,5 @@ func (sa *Application) allPlaceholdersAllocated() bool {
 }
 
 func (sa *Application) allPlaceholdersReplaced() bool {
-	return resources.StrictlyGreaterThan(sa.allocatedPlaceholder, sa.allocatedResource)
+	return resources.IsZero(sa.allocatedPlaceholder)
 }

@@ -219,6 +219,9 @@ func (sa *Application) clearStateTimer() {
 	}
 	sa.stateTimer.Stop()
 	sa.stateTimer = nil
+	log.Logger().Debug("Application state timer cleared",
+		zap.String("appID", sa.ApplicationID),
+		zap.String("state", sa.stateMachine.Current()))
 }
 
 // Return an array of all reservation keys for the app.
@@ -388,6 +391,7 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 	log.Logger().Info("Ask added successfully to application",
 		zap.String("appID", sa.ApplicationID),
 		zap.String("ask", ask.AllocationKey),
+		zap.Bool("placeholder", ask.placeholder),
 		zap.String("pendingDelta", delta.String()))
 
 	return nil

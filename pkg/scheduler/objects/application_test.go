@@ -267,9 +267,8 @@ func TestAddAllocAsk(t *testing.T) {
 	res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	ask = newAllocationAskRepeat(aKey, appID1, res, 1)
 	err = app.AddAllocationAsk(ask)
-	if err != nil {
-		t.Errorf("ask should have been added to app, err %v", err)
-	}
+	assert.NilError(t, err, "ask should have been updated on app")
+	assert.Assert(t, app.IsAccepted(), "Application should be in accepted state")
 	pending := app.GetPendingResource()
 	if !resources.Equals(res, pending) {
 		t.Errorf("pending resource not updated correctly, expected %v but was: %v", res, pending)
@@ -298,6 +297,65 @@ func TestAddAllocAsk(t *testing.T) {
 	if !resources.Equals(res, app.GetPendingResource()) {
 		t.Errorf("pending resource not updated correctly, expected %v but was: %v", res, app.GetPendingResource())
 	}
+	// after all this is must still be in an accepted state
+	assert.Assert(t, app.IsAccepted(), "Application should have stayed in accepted state")
+}
+
+// test state change on add and remove ask
+func TestAllocAskStateChange(t *testing.T) {
+	app := newApplication(appID1, "default", "root.unknown")
+	if app == nil || app.ApplicationID != appID1 {
+		t.Fatalf("app create failed which should not have %v", app)
+	}
+
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	ask := newAllocationAskRepeat(aKey, appID1, res, 1)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+	assert.Assert(t, app.IsAccepted(), "Application should be in accepted state")
+	// make sure the state changes to waiting
+	assert.Equal(t, app.RemoveAllocationAsk(aKey), 0, "ask should have been removed, no reservations")
+	assert.Assert(t, app.IsWaiting(), "Application should be in waiting state")
+
+	// make sure the state changes back correctly
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+	assert.Assert(t, app.IsRunning(), "Application should be in running state")
+
+	// and back to waiting again, now from running
+	assert.Equal(t, app.RemoveAllocationAsk(aKey), 0, "ask should have been removed, no reservations")
+	assert.Assert(t, app.IsWaiting(), "Application should be in waiting state")
+}
+
+// test recover ask
+func TestRecoverAllocAsk(t *testing.T) {
+	app := newApplication(appID1, "default", "root.unknown")
+	if app == nil || app.ApplicationID != appID1 {
+		t.Fatalf("app create failed which should not have %v", app)
+	}
+
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+
+	// failure cases
+	app.RecoverAllocationAsk(nil)
+	assert.Equal(t, len(app.requests), 0, "nil ask should not be added")
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	ask := newAllocationAskRepeat(aKey, appID1, res, 1)
+	app.RecoverAllocationAsk(ask)
+	assert.Equal(t, len(app.requests), 1, "ask should have been added")
+	assert.Assert(t, app.IsAccepted(), "Application should be in accepted state")
+
+	ask = newAllocationAskRepeat("ask-2", appID1, res, 1)
+	app.RecoverAllocationAsk(ask)
+	assert.Equal(t, len(app.requests), 2, "ask should have been added, total should be 2")
+	assert.Assert(t, app.IsAccepted(), "Application should have stayed in accepted state")
 }
 
 // test reservations removal by allocation
@@ -467,7 +525,7 @@ func TestSortRequests(t *testing.T) {
 	}
 }
 
-func TestStateChangeOnAskUpdate(t *testing.T) {
+func TestStateChangeOnUpdate(t *testing.T) {
 	// create a fake queue
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")

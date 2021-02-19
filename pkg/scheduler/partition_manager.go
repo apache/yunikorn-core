@@ -161,6 +161,6 @@ func (manager partitionManager) cleanupCompletedApps() {
 func (manager partitionManager) cleanupPlaceholders() {
 	released := manager.pc.cleanupPlaceholders()
 	if len(released) > 0 {
-		manager.cc.notifyRMAllocationReleased(manager.pc.RmID, released, si.AllocationRelease_TIMEOUT, "App is completed, cleanup placeholders")
+		manager.cc.notifyRMAllocationReleased(manager.pc.RmID, released, si.AllocationRelease_TIMEOUT, "App is terminated, cleanup placeholders")
 	}
 }

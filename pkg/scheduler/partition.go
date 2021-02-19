@@ -1219,19 +1219,21 @@ func (pc *PartitionContext) cleanupPlaceholders() []*objects.Allocation {
 	var released []*objects.Allocation
 	for _, app := range pc.GetAppsInTerminatedState() {
 		// at this point if we still have allocations those are placeholders
-		for _, alloc := range app.GetAllAllocations() {
+		if len(app.GetAllAllocations()) > 0 {
 			_, _ = pc.removeAllocation(&si.AllocationRelease{
 				PartitionName:   pc.Name,
 				ApplicationID:   app.ApplicationID,
-				UUID:            alloc.UUID,
+				UUID:            "",
 				TerminationType: si.AllocationRelease_TIMEOUT,
 			})
 		}
 		// make sure to remove the pending requests as well
-		pc.removeAllocationAsk(app.ApplicationID, "")
+		if len(app.GetAllRequests()) > 0 {
+			pc.removeAllocationAsk(app.ApplicationID, "")
+		}
 	}
 
-	// remove those placeholders, what were not replaced by the real pod, but it timed out
+	// remove those placeholders, what were not replaced by the real pod, but they timed out
 	for _, app := range pc.GetAppsByState(objects.Running.String()) {
 		for _, alloc := range app.GetPlaceholderAllocations() {
 			if alloc.Result == objects.PlaceholderExpired {

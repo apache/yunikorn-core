@@ -222,7 +222,7 @@ func (sa *Application) clearStateTimer() {
 }
 
 func (sa *Application) initPlaceholderTimer() {
-	if sa.placeholderTimer != nil {
+	if sa.placeholderTimer != nil || !sa.IsAccepted() || sa.execTimeout <= 0 {
 		return
 	}
 	log.Logger().Debug("Application placeholder timer initiated",
@@ -663,9 +663,6 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 		if !request.placeholder && request.taskGroupName != "" && !resources.IsZero(sa.allocatedPlaceholder) {
 			continue
 		}
-		if request.placeholder && resources.IsZero(sa.allocatedPlaceholder) {
-			sa.initPlaceholderTimer()
-		}
 		// resource must fit in headroom otherwise skip the request
 		if !resources.FitIn(headRoom, request.AllocatedResource) {
 			// post scheduling events via the event plugin
@@ -1059,6 +1056,17 @@ func (sa *Application) GetPlaceholderAllocations() []*Allocation {
 	return allocations
 }
 
+func (sa *Application) GetAllRequests() []*AllocationAsk {
+	sa.RLock()
+	defer sa.RUnlock()
+
+	var requests []*AllocationAsk
+	for _, req := range sa.requests {
+		requests = append(requests, req)
+	}
+	return requests
+}
+
 // Add a new Allocation to the application
 func (sa *Application) AddAllocation(info *Allocation) {
 	sa.Lock()
@@ -1071,6 +1079,9 @@ func (sa *Application) AddAllocation(info *Allocation) {
 func (sa *Application) addAllocationInternal(info *Allocation) {
 	// placeholder allocations do not progress the state of the app and are tracked in a separate total
 	if info.placeholder {
+		if resources.IsZero(sa.allocatedPlaceholder) {
+			sa.initPlaceholderTimer()
+		}
 		sa.allocatedPlaceholder = resources.Add(sa.allocatedPlaceholder, info.AllocatedResource)
 	} else {
 		// progress the state based on where we are, we should never fail in this case

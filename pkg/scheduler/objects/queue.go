@@ -715,6 +715,9 @@ func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bo
 // Decrement the allocated resources for this queue (recursively)
 // Guard against going below zero resources.
 func (sq *Queue) DecAllocatedResource(alloc *resources.Resource) error {
+	if sq == nil {
+		return fmt.Errorf("queue is nil")
+	}
 	sq.Lock()
 	defer sq.Unlock()
 

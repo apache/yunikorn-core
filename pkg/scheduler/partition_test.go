@@ -1422,10 +1422,10 @@ func TestFailReplacePlaceholder(t *testing.T) {
 	assert.Equal(t, alloc.NodeID, nodeID2, "should be allocated on node-2")
 	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()), "allocated resources should be zero")
 	if !resources.Equals(node.GetAllocatedResource(), res) {
-		t.Fatalf("node-1 allocation not updated as expected: got %s, expected %s", app.GetAllocatedResource(), res)
+		t.Fatalf("node-1 allocation not updated as expected: got %s, expected %s", node.GetAllocatedResource(), res)
 	}
 	if !resources.Equals(node2.GetAllocatedResource(), res) {
-		t.Fatalf("node-2 allocation not updated as expected: got %s, expected %s", app.GetAllocatedResource(), res)
+		t.Fatalf("node-2 allocation not updated as expected: got %s, expected %s", node2.GetAllocatedResource(), res)
 	}
 
 	phUUID := alloc.Releases[0].UUID

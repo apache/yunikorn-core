@@ -169,6 +169,15 @@ func newAllocation(appID, uuid, nodeID, queueName string, res *resources.Resourc
 	return NewAllocation(uuid, nodeID, ask)
 }
 
+// Create a new Allocation with a random ask key
+func newPlaceholderAlloc(appID, uuid, nodeID, queueName string, res *resources.Resource) *Allocation {
+	askKey := strconv.FormatInt((time.Now()).UnixNano(), 10)
+	ask := newAllocationAsk(askKey, appID, res)
+	ask.setQueue(queueName)
+	ask.placeholder = true
+	return NewAllocation(uuid, nodeID, ask)
+}
+
 func newAllocationAsk(allocKey, appID string, res *resources.Resource) *AllocationAsk {
 	return newAllocationAskTG(allocKey, appID, "", res, 1)
 }

@@ -54,7 +54,7 @@ func (manager partitionManager) Run() {
 	log.Logger().Info("starting partition manager",
 		zap.String("partition", manager.pc.Name),
 		zap.String("interval", manager.interval.String()))
-	go manager.cleanupCompletedApps()
+	go manager.cleanupExpiredApps()
 	// exit only when the partition this manager belongs to exits
 	for {
 		time.Sleep(manager.interval)
@@ -146,7 +146,7 @@ func (manager partitionManager) remove() {
 	manager.cc.removePartition(manager.pc.Name)
 }
 
-func (manager partitionManager) cleanupCompletedApps() {
+func (manager partitionManager) cleanupExpiredApps() {
 	for {
 		if manager.stop {
 			break

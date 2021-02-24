@@ -71,6 +71,7 @@ type Application struct {
 
 	rmEventHandler handler.EventHandler
 	rmID           string
+	callback       func(appID string)
 
 	sync.RWMutex
 }
@@ -1154,4 +1155,16 @@ func (sa *Application) GetTag(tag string) string {
 		}
 	}
 	return tagVal
+}
+
+func (sa *Application) SetCompletedCallback(callback func(appID string)) {
+	sa.Lock()
+	defer sa.Unlock()
+	sa.callback = callback
+}
+
+func (sa *Application) completedCallback() {
+	if sa.callback != nil {
+		go sa.callback(sa.ApplicationID)
+	}
 }

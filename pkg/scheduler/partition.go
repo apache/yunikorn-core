@@ -48,6 +48,7 @@ type PartitionContext struct {
 	// Private fields need protection
 	root                   *objects.Queue                  // start of the queue hierarchy
 	applications           map[string]*objects.Application // applications assigned to this partition
+	completedApplications  map[string]*objects.Application // completed applications from this partition
 	reservedApps           map[string]int                  // applications reserved within this partition, with reservation count
 	nodes                  map[string]*objects.Node        // nodes assigned to this partition
 	placementManager       *placement.AppPlacementManager  // placement manager for this partition
@@ -78,6 +79,7 @@ func newPartitionContext(conf configs.PartitionConfig, rmID string, cc *ClusterC
 		stateMachine: objects.NewObjectState(),
 		stateTime:    time.Now(),
 		applications: make(map[string]*objects.Application),
+		completedApplications: make(map[string]*objects.Application),
 		reservedApps: make(map[string]int),
 		nodes:        make(map[string]*objects.Node),
 	}
@@ -338,6 +340,7 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 	app.SetQueue(queue)
 	queue.AddApplication(app)
 	pc.applications[appID] = app
+	app.SetCompletedCallback(pc.moveCompletedApp)
 
 	return nil
 }
@@ -958,11 +961,26 @@ func (pc *PartitionContext) GetApplications() []*objects.Application {
 	return appList
 }
 
+func (pc *PartitionContext) GetCompletedApplications() []*objects.Application {
+	pc.RLock()
+	defer pc.RUnlock()
+	var appList []*objects.Application
+	for _, app := range pc.completedApplications {
+		appList = append(appList, app)
+	}
+	return appList
+}
+
 func (pc *PartitionContext) GetAppsByState(state string) []*objects.Application {
 	pc.RLock()
 	defer pc.RUnlock()
 	var appList []*objects.Application
 	for _, app := range pc.applications {
+		if app.CurrentState() == state {
+			appList = append(appList, app)
+		}
+	}
+	for _, app := range pc.completedApplications {
 		if app.CurrentState() == state {
 			appList = append(appList, app)
 		}
@@ -1221,4 +1239,16 @@ func (pc *PartitionContext) GetNodeSortingPolicy() policies.SortingPolicy {
 	pc.RLock()
 	defer pc.RUnlock()
 	return pc.nodeSortingPolicy.PolicyType
+}
+
+func (pc *PartitionContext) moveCompletedApp(appID string) {
+	actTime := time.Now()
+	newID := appID + "- " + actTime.Format("2006-01-02-15:04:05")
+	pc.Lock()
+	defer pc.Unlock()
+	if app, ok := pc.applications[appID]; ok {
+		delete(pc.applications, appID)
+		app.ApplicationID = newID
+		pc.completedApplications[newID] = app
+	}
 }

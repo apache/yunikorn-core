@@ -45,6 +45,12 @@ type RMPartitionsRemoveEvent struct {
 	Channel chan *Result
 }
 
+type RMPartitionAppTerminateEvent struct {
+	RmID            string
+	TerminatedAppID string
+	Partition		string
+}
+
 type Result struct {
 	Succeeded bool
 	Reason    string

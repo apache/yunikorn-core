@@ -159,7 +159,7 @@ func (m *mockScheduler) releaseAllocRequest(appID, uuid string) error {
 func (m *mockScheduler) releaseAskRequest(appID, allocKey string) error {
 	return m.proxy.Update(&si.UpdateRequest{
 		Releases: &si.AllocationReleasesRequest{
-			AllocationAsksToRelease: []*si.AllocationAskReleaseRequest{
+			AllocationAsksToRelease: []*si.AllocationAskRelease{
 				{
 					ApplicationID: appID,
 					Allocationkey: allocKey,

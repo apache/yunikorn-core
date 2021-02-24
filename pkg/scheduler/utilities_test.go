@@ -19,6 +19,7 @@
 package scheduler
 
 import (
+	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"strconv"
 	"testing"
 
@@ -107,7 +108,7 @@ func newApplication(appID, partition, queueName string) *objects.Application {
 		QueueName:     queueName,
 		PartitionName: partition,
 	}
-	return objects.NewApplication(siApp, security.UserGroup{}, nil, rmID)
+	return objects.NewApplication(siApp, security.UserGroup{}, handler.EventHandlers{}, rmID)
 }
 
 func newApplicationTG(appID, partition, queueName string, task *resources.Resource) *objects.Application {
@@ -117,7 +118,7 @@ func newApplicationTG(appID, partition, queueName string, task *resources.Resour
 		PartitionName:  partition,
 		PlaceholderAsk: task.ToProto(),
 	}
-	return objects.NewApplication(siApp, security.UserGroup{}, nil, rmID)
+	return objects.NewApplication(siApp, security.UserGroup{}, handler.EventHandlers{}, rmID)
 }
 
 func newAllocationAsk(allocKey, appID string, res *resources.Resource) *objects.AllocationAsk {

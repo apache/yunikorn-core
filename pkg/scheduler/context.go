@@ -41,9 +41,9 @@ import (
 const disableReservation = "DISABLE_RESERVATION"
 
 type ClusterContext struct {
-	partitions     map[string]*PartitionContext
-	policyGroup    string
-	rmEventHandler handler.EventHandler
+	partitions      map[string]*PartitionContext
+	policyGroup     string
+	rmEventHandlers handler.EventHandlers
 
 	// config values that change scheduling behaviour
 	needPreemption      bool
@@ -93,8 +93,8 @@ func newClusterContext() *ClusterContext {
 	return cc
 }
 
-func (cc *ClusterContext) setEventHandler(rmHandler handler.EventHandler) {
-	cc.rmEventHandler = rmHandler
+func (cc *ClusterContext) setEventHandlers(rmHandlers handler.EventHandlers) {
+	cc.rmEventHandlers = rmHandlers
 }
 
 // The main scheduling routine.
@@ -124,7 +124,7 @@ func (cc *ClusterContext) schedule() {
 		if alloc != nil {
 			if alloc.Result == objects.Replaced {
 				// communicate the removal to the RM
-				cc.notifyRMAllocationReleased(psc.RmID, alloc.Releases, si.AllocationRelease_PLACEHOLDER_REPLACED, "replacing UUID: "+alloc.UUID)
+				cc.notifyRMAllocationReleased(psc.RmID, alloc.Releases, si.TerminationType_PLACEHOLDER_REPLACED, "replacing UUID: "+alloc.UUID)
 			} else {
 				cc.notifyRMNewAllocation(psc.RmID, alloc)
 			}
@@ -442,7 +442,7 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 			continue
 		}
 		// create a new app object and add it to the partition (partition logs details)
-		schedApp := objects.NewApplication(app, ugi, cc.rmEventHandler, request.RmID)
+		schedApp := objects.NewApplication(app, ugi, cc.rmEventHandlers, request.RmID)
 		if err = partition.AddApplication(schedApp); err != nil {
 			rejectedApps = append(rejectedApps, &si.RejectedApplication{
 				ApplicationID: app.ApplicationID,
@@ -457,7 +457,7 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 
 	// Respond to RMProxy with accepted and rejected apps if needed
 	if len(rejectedApps) > 0 || len(acceptedApps) > 0 {
-		cc.rmEventHandler.HandleEvent(
+		cc.rmEventHandlers.RMProxyEventHandler.HandleEvent(
 			&rmevent.RMApplicationUpdateEvent{
 				RmID:                 request.RmID,
 				AcceptedApplications: acceptedApps,
@@ -476,7 +476,7 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 			}
 			allocations := partition.removeApplication(app.ApplicationID)
 			if len(allocations) > 0 {
-				cc.notifyRMAllocationReleased(partition.RmID, allocations, si.AllocationRelease_STOPPED_BY_RM,
+				cc.notifyRMAllocationReleased(partition.RmID, allocations, si.TerminationType_STOPPED_BY_RM,
 					fmt.Sprintf("Application %s Removed", app.ApplicationID))
 			}
 		}
@@ -536,7 +536,7 @@ func (cc *ClusterContext) updateNodes(request *si.UpdateRequest) {
 				released := partition.removeNode(node.NodeID)
 				// notify the shim allocations have been released from node
 				if len(released) != 0 {
-					cc.notifyRMAllocationReleased(partition.RmID, released, si.AllocationRelease_STOPPED_BY_RM,
+					cc.notifyRMAllocationReleased(partition.RmID, released, si.TerminationType_STOPPED_BY_RM,
 						fmt.Sprintf("Node %s Removed", node.NodeID))
 				}
 			}
@@ -581,7 +581,7 @@ func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
 	}
 
 	// inform the RM which nodes have been accepted/rejected
-	cc.rmEventHandler.HandleEvent(
+	cc.rmEventHandlers.RMProxyEventHandler.HandleEvent(
 		&rmevent.RMNodeUpdateEvent{
 			RmID:          request.RmID,
 			AcceptedNodes: acceptedNodes,
@@ -653,14 +653,14 @@ func (cc *ClusterContext) processAsks(request *si.UpdateRequest) {
 
 	// Reject asks returned to RM Proxy for the apps and partitions not found
 	if len(rejectedAsks) > 0 {
-		cc.rmEventHandler.HandleEvent(&rmevent.RMRejectedAllocationAskEvent{
+		cc.rmEventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMRejectedAllocationAskEvent{
 			RmID:                   request.RmID,
 			RejectedAllocationAsks: rejectedAsks,
 		})
 	}
 }
 
-func (cc *ClusterContext) processAskReleases(releases []*si.AllocationAskReleaseRequest) {
+func (cc *ClusterContext) processAskReleases(releases []*si.AllocationAskRelease) {
 	for _, toRelease := range releases {
 		partition := cc.GetPartition(toRelease.PartitionName)
 		if partition != nil {
@@ -682,7 +682,7 @@ func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRel
 			allocs, confirmed := partition.removeAllocation(toRelease)
 			// notify the RM of the exact released allocations
 			if len(allocs) > 0 {
-				cc.notifyRMAllocationReleased(rmID, allocs, si.AllocationRelease_STOPPED_BY_RM, "allocation remove as per RM request")
+				cc.notifyRMAllocationReleased(rmID, allocs, si.TerminationType_STOPPED_BY_RM, "allocation remove as per RM request")
 			}
 			for _, alloc := range allocs {
 				toReleaseAllocations = append(toReleaseAllocations, &si.ForgotAllocation{
@@ -754,7 +754,7 @@ func (cc *ClusterContext) notifyRMNewAllocation(rmID string, alloc *objects.Allo
 	}
 
 	// communicate the allocation to the RM
-	cc.rmEventHandler.HandleEvent(&rmevent.RMNewAllocationsEvent{
+	cc.rmEventHandlers.RMProxyEventHandler.HandleEvent(&rmevent.RMNewAllocationsEvent{
 		Allocations: []*si.Allocation{alloc.NewSIFromAllocation()},
 		RmID:        rmID,
 	})
@@ -762,7 +762,7 @@ func (cc *ClusterContext) notifyRMNewAllocation(rmID string, alloc *objects.Allo
 
 // Create a RM update event to notify RM of released allocations
 // Lock free call, all updates occur via events.
-func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, released []*objects.Allocation, terminationType si.AllocationRelease_TerminationType, message string) {
+func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, released []*objects.Allocation, terminationType si.TerminationType, message string) {
 	releaseEvent := &rmevent.RMReleaseAllocationEvent{
 		ReleasedAllocations: make([]*si.AllocationRelease, 0),
 		RmID:                rmID,
@@ -777,7 +777,7 @@ func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, released []*ob
 		})
 	}
 
-	cc.rmEventHandler.HandleEvent(releaseEvent)
+	cc.rmEventHandlers.RMProxyEventHandler.HandleEvent(releaseEvent)
 }
 
 // Get a scheduling node based on its name from the partition.
@@ -796,3 +796,37 @@ func (cc *ClusterContext) GetNode(nodeID, partitionName string) *objects.Node {
 	}
 	return partition.GetNode(nodeID)
 }
+
+func (cc *ClusterContext) beforeAppTerminates(v *rmevent.RMPartitionAppTerminateEvent) {
+	app := cc.GetApplication(v.TerminatedAppID, v.Partition)
+	if app == nil {
+		return
+	}
+	allocationsToRemove := app.GetPlaceholderAllocations()
+	// if the app will complete
+	if app.IsWaiting(){
+		cc.notifyRMAllocationReleased(app.GetRMID(), allocationsToRemove, si.TerminationType_TIMEOUT, "app is completed, removing the placeholders")
+	} else if app.IsRunning(){
+		// remove only those placeholders what were not replaced by real pods
+		var allocationsToRemove []*objects.Allocation
+		for _, alloc := range app.GetPlaceholderAllocations() {
+			// remove the expired placeholders, what were not replaced by real pods
+			if alloc.Result == objects.PlaceholderExpired {
+				allocationsToRemove = append(allocationsToRemove, alloc)
+			}
+		}
+		cc.notifyRMAllocationReleased(app.GetRMID(), allocationsToRemove, si.TerminationType_TIMEOUT, "app is completed, removing the placeholders")
+	} else {
+		var allocationsToRemove []*objects.Allocation
+		for _, alloc := range app.GetPlaceholderAllocations() {
+			// remove the expired placeholders, what were not replaced by real pods
+			if alloc.Result == objects.PlaceholderExpired {
+				allocationsToRemove = append(allocationsToRemove, alloc)
+			}
+		}
+	//	allocationAsksToRemove := app.GetAllRequests()
+	}
+	// if the app is killed
+	// TODO handle the kill
+}
+

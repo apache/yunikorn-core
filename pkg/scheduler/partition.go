@@ -1128,7 +1128,7 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 		released = append(released, app.RemoveAllAllocations()...)
 	} else {
 		// if we have an uuid the termination type is important
-		if release.TerminationType == si.AllocationRelease_PLACEHOLDER_REPLACED {
+		if release.TerminationType == si.TerminationType_PLACEHOLDER_REPLACED {
 			log.Logger().Debug("replacing placeholder allocation",
 				zap.String("appID", appID),
 				zap.String("allocationId", uuid))
@@ -1156,7 +1156,7 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 				zap.String("allocationId", alloc.UUID))
 			continue
 		}
-		if release.TerminationType == si.AllocationRelease_PLACEHOLDER_REPLACED {
+		if release.TerminationType == si.TerminationType_PLACEHOLDER_REPLACED {
 			// replacements could be on a different node but the queue should not change
 			confirmed = alloc.Releases[0]
 			if confirmed.NodeID == alloc.NodeID {
@@ -1215,17 +1215,18 @@ func (pc *PartitionContext) cleanupExpiredApps() {
 	}
 }
 
-func (pc *PartitionContext) cleanupPlaceholders() []*objects.Allocation {
+/*func (pc *PartitionContext) cleanupPlaceholders() ([]*objects.Allocation, []*objects.AllocationAsk){
 	var released []*objects.Allocation
 	for _, app := range pc.GetAppsInTerminatedState() {
 		// at this point if we still have allocations those are placeholders
 		if len(app.GetAllAllocations()) > 0 {
-			_, _ = pc.removeAllocation(&si.AllocationRelease{
+			allocations , _ := pc.removeAllocation(&si.AllocationRelease{
 				PartitionName:   pc.Name,
 				ApplicationID:   app.ApplicationID,
 				UUID:            "",
 				TerminationType: si.AllocationRelease_TIMEOUT,
 			})
+			released = append(released, allocations...)
 		}
 		// make sure to remove the pending requests as well
 		if len(app.GetAllRequests()) > 0 {
@@ -1249,7 +1250,7 @@ func (pc *PartitionContext) cleanupPlaceholders() []*objects.Allocation {
 		}
 	}
 	return released
-}
+}*/
 
 func (pc *PartitionContext) GetCurrentState() string {
 	return pc.stateMachine.Current()

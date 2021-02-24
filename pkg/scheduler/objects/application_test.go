@@ -19,6 +19,8 @@
 package objects
 
 import (
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
+	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"strconv"
 	"testing"
 	"time"
@@ -672,8 +674,8 @@ func TestStateTimeOut(t *testing.T) {
 }
 
 func TestCompleted(t *testing.T) {
-	waitingTimeout = time.Microsecond * 100
-	completedTimeout = time.Microsecond * 100
+	waitingTimeout = time.Millisecond * 100
+	completedTimeout = time.Millisecond * 100
 	defer func() {
 		waitingTimeout = time.Second * 30
 		completedTimeout = 30 * 24 * time.Hour
@@ -683,13 +685,16 @@ func TestCompleted(t *testing.T) {
 	assert.NilError(t, err, "no error expected new to accepted (completed test)")
 	err = app.HandleApplicationEvent(WaitApplication)
 	assert.NilError(t, err, "no error expected accepted to waiting (completed test)")
+	assert.Assert(t, app.IsWaiting(), "App should be waiting")
 	// give it some time to run and progress
-	time.Sleep(time.Millisecond * 100)
-	if app.IsWaiting() {
-		t.Fatal("Waiting state should have timed out")
-	}
-	time.Sleep(time.Millisecond * 100)
-	assert.Assert(t, Expired.String() == app.stateMachine.Current(), "Application should be in Expired state")
+	err = common.WaitFor(10*time.Microsecond, time.Millisecond * 200, func() bool {
+		return app.IsCompleted()
+	})
+	assert.NilError(t, err, "Application did not progress into Completed state")
+	err = common.WaitFor(1*time.Millisecond, time.Millisecond * 200, func() bool {
+		return app.IsExpired()
+	})
+	assert.NilError(t, err, "Application did not progress into Expired state")
 }
 
 func TestGetTag(t *testing.T) {
@@ -712,7 +717,9 @@ func TestOnStatusChangeCalled(t *testing.T) {
 	app := newApplication(appID1, "default", "root.a")
 	assert.Equal(t, New.String(), app.CurrentState(), "new app not in New state")
 	testHandler := &appEventHandler{}
-	app.rmEventHandler = testHandler
+	app.rmEventHandlers = handler.EventHandlers{
+		RMProxyEventHandler: testHandler,
+	}
 
 	err := app.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "error returned which was not expected")

@@ -96,5 +96,7 @@ func newApplication(appID, partition, queueName string, ugi security.UserGroup, 
 		PartitionName: partition,
 		Tags:          tags,
 	}
-	return objects.NewApplication(siApp, ugi, eventHandler, rmID)
+	return objects.NewApplication(siApp, ugi, handler.EventHandlers{
+		RMProxyEventHandler: eventHandler,
+	}, rmID)
 }

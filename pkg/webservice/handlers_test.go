@@ -32,6 +32,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
+	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
@@ -120,7 +121,7 @@ func newApplication(appID, partitionName, queueName, rmID string) *objects.Appli
 		QueueName:     queueName,
 		PartitionName: partitionName,
 	}
-	return objects.NewApplication(siApp, security.UserGroup{}, nil, rmID)
+	return objects.NewApplication(siApp, security.UserGroup{}, handler.EventHandlers{}, rmID)
 }
 
 func TestValidateConf(t *testing.T) {

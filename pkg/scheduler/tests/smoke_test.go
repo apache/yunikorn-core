@@ -352,7 +352,7 @@ partitions:
 	// Release asks
 	err = ms.proxy.Update(&si.UpdateRequest{
 		Releases: &si.AllocationReleasesRequest{
-			AllocationAsksToRelease: []*si.AllocationAskReleaseRequest{
+			AllocationAsksToRelease: []*si.AllocationAskRelease{
 				{
 					ApplicationID: appID1,
 					PartitionName: "default",
@@ -1374,7 +1374,7 @@ partitions:
 					PartitionName:   "default",
 					ApplicationID:   appID1,
 					UUID:            placeholderAlloc.UUID,
-					TerminationType: si.AllocationRelease_PLACEHOLDER_REPLACED,
+					TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
 				},
 			},
 		},
@@ -1403,7 +1403,7 @@ partitions:
 					PartitionName:   "default",
 					ApplicationID:   appID1,
 					UUID:            placeholderAlloc.UUID,
-					TerminationType: si.AllocationRelease_PLACEHOLDER_REPLACED,
+					TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
 				},
 			},
 		},

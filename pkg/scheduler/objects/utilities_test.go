@@ -19,6 +19,7 @@
 package objects
 
 import (
+	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"strconv"
 	"time"
 
@@ -102,7 +103,7 @@ func newApplicationWithTags(appID, partition, queueName string, tags map[string]
 		PartitionName: partition,
 		Tags:          tags,
 	}
-	return NewApplication(siApp, user, nil, "")
+	return NewApplication(siApp, user, handler.EventHandlers{}, "")
 }
 
 // Create node with minimal info

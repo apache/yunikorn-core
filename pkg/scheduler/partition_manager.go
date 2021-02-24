@@ -25,7 +25,6 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 const (
@@ -60,7 +59,6 @@ func (manager partitionManager) Run() {
 	for {
 		time.Sleep(manager.interval)
 		runStart := time.Now()
-		manager.cleanupPlaceholders()
 		manager.cleanQueues(manager.pc.root)
 		if manager.stop {
 			break
@@ -155,12 +153,5 @@ func (manager partitionManager) cleanupCompletedApps() {
 		}
 		manager.pc.cleanupExpiredApps()
 		time.Sleep(appRemovalInterval)
-	}
-}
-
-func (manager partitionManager) cleanupPlaceholders() {
-	released := manager.pc.cleanupPlaceholders()
-	if len(released) > 0 {
-		manager.cc.notifyRMAllocationReleased(manager.pc.RmID, released, si.AllocationRelease_TIMEOUT, "App is terminated, cleanup placeholders")
 	}
 }

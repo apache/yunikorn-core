@@ -48,7 +48,7 @@ func NewScheduler() *Scheduler {
 // Start service
 func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule bool) {
 	// set the proxy handler in the context
-	s.clusterContext.setEventHandler(handlers.RMProxyEventHandler)
+	s.clusterContext.setEventHandlers(handlers)
 
 	// Start event handlers
 	go s.handleRMEvent()
@@ -116,6 +116,8 @@ func (s *Scheduler) handleRMEvent() {
 			s.clusterContext.processRMRegistrationEvent(v)
 		case *rmevent.RMConfigUpdateEvent:
 			s.clusterContext.processRMConfigUpdateEvent(v)
+		case *rmevent.RMPartitionAppTerminateEvent:
+			s.clusterContext.beforeAppTerminates(v)
 		default:
 			log.Logger().Error("Received type is not an acceptable type for RM event.",
 				zap.String("received type", reflect.TypeOf(v).String()))

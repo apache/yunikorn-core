@@ -1242,13 +1242,10 @@ func (pc *PartitionContext) GetNodeSortingPolicy() policies.SortingPolicy {
 }
 
 func (pc *PartitionContext) moveCompletedApp(appID string) {
-	actTime := time.Now()
-	newID := appID + "- " + actTime.Format("2006-01-02-15:04:05")
 	pc.Lock()
 	defer pc.Unlock()
 	if app, ok := pc.applications[appID]; ok {
 		delete(pc.applications, appID)
-		app.ApplicationID = newID
-		pc.completedApplications[newID] = app
+		pc.completedApplications[appID] = app
 	}
 }

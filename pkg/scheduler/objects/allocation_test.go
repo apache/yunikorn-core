@@ -49,7 +49,7 @@ func TestNewAlloc(t *testing.T) {
 	}
 	assert.Equal(t, alloc.Result, Allocated, "New alloc should default to result Allocated")
 	assert.Assert(t, resources.Equals(alloc.AllocatedResource, res), "Allocated resource not set correctly")
-	assert.Assert(t, !alloc.isPlaceholder(), "ask should not have been a placeholder")
+	assert.Assert(t, !alloc.IsPlaceholder(), "ask should not have been a placeholder")
 	allocStr := alloc.String()
 	expected := "ApplicationID=app-1, UUID=test-uuid, AllocationKey=ask-1, Node=node-1, Result=Allocated"
 	assert.Equal(t, allocStr, expected, "Strings should have been equal")
@@ -132,6 +132,6 @@ func TestNewAllocFromSI(t *testing.T) {
 	allocSI.TaskGroupName = "testgroup"
 	alloc = NewAllocationFromSI(allocSI)
 	assert.Assert(t, alloc != nilAlloc, "placeholder ask creation failed unexpectedly")
-	assert.Assert(t, alloc.isPlaceholder(), "ask should have been a placeholder")
+	assert.Assert(t, alloc.IsPlaceholder(), "ask should have been a placeholder")
 	assert.Equal(t, alloc.getTaskGroup(), "testgroup", "TaskGroupName not set as expected")
 }

@@ -220,6 +220,9 @@ func (sa *Application) clearStateTimer() {
 	}
 	sa.stateTimer.Stop()
 	sa.stateTimer = nil
+	log.Logger().Debug("Application state timer cleared",
+		zap.String("appID", sa.ApplicationID),
+		zap.String("state", sa.stateMachine.Current()))
 }
 
 // Return an array of all reservation keys for the app.
@@ -389,6 +392,7 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 	log.Logger().Info("Ask added successfully to application",
 		zap.String("appID", sa.ApplicationID),
 		zap.String("ask", ask.AllocationKey),
+		zap.Bool("placeholder", ask.placeholder),
 		zap.String("pendingDelta", delta.String()))
 
 	return nil
@@ -1052,13 +1056,15 @@ func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
 	defer sa.Unlock()
 	// remove the placeholder that was just confirmed by the shim
 	ph := sa.removeAllocationInternal(uuid)
-	if ph == nil {
-		// if the allocation doesn't exist any more, no opt
-		// this may happen when the shim side sends dup release requests
+	// this has already been replaced or it is a duplicate message from the shim
+	if ph == nil || len(ph.Releases) == 0 {
+		log.Logger().Debug("Unexpected placeholder released",
+			zap.String("applicationID", sa.ApplicationID),
+			zap.String("placeholder", ph.String()))
 		return nil
 	}
-	if len(ph.Releases) != 1 {
-		log.Logger().Error("Unexpected release number (more than 1), placeholder released, replacement error",
+	if len(ph.Releases) > 1 {
+		log.Logger().Error("Unexpected release number, placeholder released, only 1 real allocations processed",
 			zap.String("applicationID", sa.ApplicationID),
 			zap.String("placeholderID", uuid),
 			zap.Int("releases", len(ph.Releases)))
@@ -1066,10 +1072,10 @@ func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
 	// update the replacing allocation
 	// we double linked the real and placeholder allocation
 	// ph is the placeholder, the releases entry points to the real one
-	real := ph.Releases[0]
-	real.Releases = nil
-	real.Result = Allocated
-	sa.addAllocationInternal(real)
+	alloc := ph.Releases[0]
+	alloc.Releases = nil
+	alloc.Result = Allocated
+	sa.addAllocationInternal(alloc)
 	return ph
 }
 

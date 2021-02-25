@@ -146,6 +146,7 @@ func NewAppState() *fsm.FSM {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsCompleted()
 				app := setTimer(completedTimeout, event, ExpireApplication)
 				app.unSetQueue()
+				app.executeCompletedCallback()
 			},
 		},
 	)

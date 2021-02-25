@@ -267,9 +267,8 @@ func TestAddAllocAsk(t *testing.T) {
 	res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	ask = newAllocationAskRepeat(aKey, appID1, res, 1)
 	err = app.AddAllocationAsk(ask)
-	if err != nil {
-		t.Errorf("ask should have been added to app, err %v", err)
-	}
+	assert.NilError(t, err, "ask should have been updated on app")
+	assert.Assert(t, app.IsAccepted(), "Application should be in accepted state")
 	pending := app.GetPendingResource()
 	if !resources.Equals(res, pending) {
 		t.Errorf("pending resource not updated correctly, expected %v but was: %v", res, pending)
@@ -298,6 +297,65 @@ func TestAddAllocAsk(t *testing.T) {
 	if !resources.Equals(res, app.GetPendingResource()) {
 		t.Errorf("pending resource not updated correctly, expected %v but was: %v", res, app.GetPendingResource())
 	}
+	// after all this is must still be in an accepted state
+	assert.Assert(t, app.IsAccepted(), "Application should have stayed in accepted state")
+}
+
+// test state change on add and remove ask
+func TestAllocAskStateChange(t *testing.T) {
+	app := newApplication(appID1, "default", "root.unknown")
+	if app == nil || app.ApplicationID != appID1 {
+		t.Fatalf("app create failed which should not have %v", app)
+	}
+
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	ask := newAllocationAskRepeat(aKey, appID1, res, 1)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+	assert.Assert(t, app.IsAccepted(), "Application should be in accepted state")
+	// make sure the state changes to waiting
+	assert.Equal(t, app.RemoveAllocationAsk(aKey), 0, "ask should have been removed, no reservations")
+	assert.Assert(t, app.IsWaiting(), "Application should be in waiting state")
+
+	// make sure the state changes back correctly
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+	assert.Assert(t, app.IsRunning(), "Application should be in running state")
+
+	// and back to waiting again, now from running
+	assert.Equal(t, app.RemoveAllocationAsk(aKey), 0, "ask should have been removed, no reservations")
+	assert.Assert(t, app.IsWaiting(), "Application should be in waiting state")
+}
+
+// test recover ask
+func TestRecoverAllocAsk(t *testing.T) {
+	app := newApplication(appID1, "default", "root.unknown")
+	if app == nil || app.ApplicationID != appID1 {
+		t.Fatalf("app create failed which should not have %v", app)
+	}
+
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+
+	// failure cases
+	app.RecoverAllocationAsk(nil)
+	assert.Equal(t, len(app.requests), 0, "nil ask should not be added")
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	ask := newAllocationAskRepeat(aKey, appID1, res, 1)
+	app.RecoverAllocationAsk(ask)
+	assert.Equal(t, len(app.requests), 1, "ask should have been added")
+	assert.Assert(t, app.IsAccepted(), "Application should be in accepted state")
+
+	ask = newAllocationAskRepeat("ask-2", appID1, res, 1)
+	app.RecoverAllocationAsk(ask)
+	assert.Equal(t, len(app.requests), 2, "ask should have been added, total should be 2")
+	assert.Assert(t, app.IsAccepted(), "Application should have stayed in accepted state")
 }
 
 // test reservations removal by allocation
@@ -467,7 +525,7 @@ func TestSortRequests(t *testing.T) {
 	}
 }
 
-func TestStateChangeOnAskUpdate(t *testing.T) {
+func TestStateChangeOnUpdate(t *testing.T) {
 	// create a fake queue
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
@@ -723,4 +781,65 @@ func TestOnStatusChangeCalled(t *testing.T) {
 	assert.Assert(t, err != nil, "error expected and not seen")
 	assert.Equal(t, app.CurrentState(), Accepted.String(), "application state has been changed unexpectedly")
 	assert.Assert(t, !testHandler.isHandled(), "unexpected event send to the RM")
+}
+
+func TestReplaceAllocation(t *testing.T) {
+	app := newApplication(appID1, "default", "root.a")
+	assert.Equal(t, New.String(), app.CurrentState(), "new app not in New state")
+	// state changes are not important
+	app.SetState(Running.String())
+
+	// non existing allocation
+	var nilAlloc *Allocation
+	alloc := app.ReplaceAllocation("")
+	assert.Equal(t, alloc, nilAlloc, "expected nil to be returned got a real alloc: %s", alloc)
+	// create an allocation and check the assignment
+	resMap := map[string]string{"memory": "100", "vcores": "10"}
+	res, err := resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err, "failed to create resource with error")
+	ph := newPlaceholderAlloc(appID1, "uuid-1", nodeID1, "root.a", res)
+	// add the placeholder to the app
+	app.AddAllocation(ph)
+	assert.Equal(t, len(app.allocations), 1, "allocation not added as expected")
+	assert.Assert(t, resources.IsZero(app.allocatedResource), "placeholder counted as real allocation")
+	if !resources.Equals(app.allocatedPlaceholder, res) {
+		t.Fatalf("placeholder allocation not updated as expected: got %s, expected %s", app.allocatedPlaceholder, res)
+	}
+	alloc = app.ReplaceAllocation("uuid-1")
+	assert.Equal(t, alloc, nilAlloc, "placeholder without releases expected nil to be returned got a real alloc: %s", alloc)
+	// add the placeholder back to the app, the failure test above changed state and removed the ph
+	app.SetState(Running.String())
+	app.AddAllocation(ph)
+	// set the real one to replace the placeholder
+	realAlloc := newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
+	realAlloc.Result = Replaced
+	ph.Releases = append(ph.Releases, realAlloc)
+	alloc = app.ReplaceAllocation("uuid-1")
+	assert.Equal(t, alloc, ph, "returned allocation is not the placeholder")
+	assert.Assert(t, resources.IsZero(app.allocatedPlaceholder), "real allocation counted as placeholder")
+	if !resources.Equals(app.allocatedResource, res) {
+		t.Fatalf("real allocation not updated as expected: got %s, expected %s", app.allocatedResource, res)
+	}
+
+	// add the placeholder back to the app, the failure test above changed state and removed the ph
+	app.SetState(Running.String())
+	ph.Releases = nil
+	app.AddAllocation(ph)
+	// set multiple real allocations to replace the placeholder
+	realAlloc = newAllocation(appID1, "uuid-3", nodeID1, "root.a", res)
+	realAlloc.Result = Replaced
+	ph.Releases = append(ph.Releases, realAlloc)
+	realAlloc = newAllocation(appID1, "not-added", nodeID1, "root.a", res)
+	realAlloc.Result = Replaced
+	ph.Releases = append(ph.Releases, realAlloc)
+	alloc = app.ReplaceAllocation("uuid-1")
+	assert.Equal(t, alloc, ph, "returned allocation is not the placeholder")
+	assert.Assert(t, resources.IsZero(app.allocatedPlaceholder), "real allocation counted as placeholder")
+	// after the second replace we have 2 real allocations
+	if !resources.Equals(app.allocatedResource, resources.Multiply(res, 2)) {
+		t.Fatalf("real allocation not updated as expected: got %s, expected %s", app.allocatedResource, resources.Multiply(res, 2))
+	}
+	if _, ok := app.allocations["not-added"]; ok {
+		t.Fatalf("real allocation added which shouldn't have been added")
+	}
 }

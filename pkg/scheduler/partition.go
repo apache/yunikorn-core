@@ -1194,14 +1194,14 @@ func (pc *PartitionContext) removeAllocationAsk(appID string, allocationKey stri
 	}
 }
 
-// Remove the allocation Ask from the specified application
+// Add the allocation Ask to the specified application
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) addAllocationAsk(siAsk *si.AllocationAsk) error {
 	app := pc.getApplication(siAsk.ApplicationID)
 	if app == nil {
 		return fmt.Errorf("failed to find application %s, for allocation ask %s", siAsk.ApplicationID, siAsk.AllocationKey)
 	}
-	// remove the allocation asks from the app
+	// add the allocation asks to the app
 	return app.AddAllocationAsk(objects.NewAllocationAsk(siAsk))
 }
 

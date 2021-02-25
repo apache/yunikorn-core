@@ -1242,6 +1242,7 @@ func TestAddTGApplication(t *testing.T) {
 	assert.NilError(t, err, "partition create failed")
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "app-1 should have been added to the partition")
+	assert.Equal(t, partition.getApplication(appID1), app, "partition failed to add app incorrect app returned")
 }
 
 // simple direct replace with one node

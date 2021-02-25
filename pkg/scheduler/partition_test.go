@@ -24,6 +24,7 @@ import (
 
 	"gotest.tools/assert"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
@@ -1147,6 +1148,28 @@ func TestUpdateRootQueue(t *testing.T) {
 	// make sure the update went through
 	assert.Equal(t, partition.GetQueue("root.leaf").CurrentState(), objects.Draining.String(), "leaf queue should have been marked for removal")
 	assert.Equal(t, partition.GetQueue("root.parent").CurrentState(), objects.Draining.String(), "parent queue should have been marked for removal")
+}
+
+func TestCompleteApp(t *testing.T) {
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	app := newApplication("completed", "default", defQueue)
+	app.SetState(objects.Waiting.String())
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "no error expected while adding the application")
+	assert.Assert(t, len(partition.applications) == 1, "the partition should have 1 app")
+	assert.Assert(t, len(partition.completedApplications) == 0, "the partition should not have any completed apps")
+	// complete the application
+	err = app.HandleApplicationEvent(objects.CompleteApplication)
+	assert.NilError(t, err, "no error expected while transitioning the app from waiting to completed state")
+	err = common.WaitFor(10*time.Millisecond, time.Duration(1000)*time.Millisecond, func() bool {
+		partition.RLock()
+		defer partition.RUnlock()
+		return len(partition.completedApplications) > 0
+	})
+	assert.NilError(t, err, "the completed application should have been processed")
+	assert.Assert(t, len(partition.applications) == 0, "the partition should have no active app")
+	assert.Assert(t, len(partition.completedApplications) == 1, "the partition should have 1 completed app")
 }
 
 func TestCleanupCompletedApps(t *testing.T) {

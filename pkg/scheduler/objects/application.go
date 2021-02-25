@@ -69,9 +69,9 @@ type Application struct {
 	execTimeout          time.Duration          // execTimeout for the application run
 	// appTimer             *time.Timer            // application run timer
 
-	rmEventHandler handler.EventHandler
-	rmID           string
-	callback       func(appID string)
+	rmEventHandler    handler.EventHandler
+	rmID              string
+	completedCallback func(appID string)
 
 	sync.RWMutex
 }
@@ -1160,11 +1160,11 @@ func (sa *Application) GetTag(tag string) string {
 func (sa *Application) SetCompletedCallback(callback func(appID string)) {
 	sa.Lock()
 	defer sa.Unlock()
-	sa.callback = callback
+	sa.completedCallback = callback
 }
 
-func (sa *Application) completedCallback() {
-	if sa.callback != nil {
-		go sa.callback(sa.ApplicationID)
+func (sa *Application) executeCompletedCallback() {
+	if sa.completedCallback != nil {
+		go sa.completedCallback(sa.ApplicationID)
 	}
 }

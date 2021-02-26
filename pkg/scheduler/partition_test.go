@@ -1196,41 +1196,6 @@ func TestCleanupCompletedApps(t *testing.T) {
 	assert.Assert(t, len(partition.GetAppsByState(objects.Expired.String())) == 0, "the partition should have 0 expired app")
 }
 
-/*func TestCleanupPlaceholders(t *testing.T) {
-	partition, err := newBasePartition()
-	assert.NilError(t, err, "partition create failed")
-	completedApp := newApplication("completed", "default", defQueue)
-	completedApp.SetState(objects.Completed.String())
-	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
-	ask := objects.NewAllocationAsk(&si.AllocationAsk{
-		AllocationKey:  "allocKey",
-		ApplicationID:  completedApp.ApplicationID,
-		PartitionName:  partition.Name,
-		ResourceAsk:    res.ToProto(),
-		MaxAllocations: 1,
-		Placeholder:    true,
-		TaskGroupName:  "tg",
-	})
-	alloc := objects.NewAllocation("alloc-1-uuid", nodeID1, ask)
-	completedApp.AddAllocation(alloc)
-	err = partition.AddApplication(completedApp)
-	assert.NilError(t, err, "Adding application to partition failed")
-
-	// check if allocated placeholder is removed
-	assert.Assert(t, len(completedApp.GetAllAllocations()) == 1, "The application should have exactly one allocation")
-	assert.Assert(t, resources.Equals(completedApp.GetPlaceholderResource(), res), "Placeholder resource should be zero")
-//	partition.cleanupPlaceholders()
-	assert.Assert(t, resources.IsZero(completedApp.GetPlaceholderResource()), "Placeholder resource should be zero")
-	assert.Assert(t, len(completedApp.GetAllAllocations()) == 0, "The application should not have any allocations anymore")
-
-	// test if unallocated placeholder is removed
-	err = completedApp.AddAllocationAsk(ask)
-	assert.NilError(t, err, "Adding ask to application failed")
-	assert.Assert(t, !resources.IsZero(completedApp.GetPendingResource()), "The application should have allocation asks")
-//	partition.cleanupPlaceholders()
-	assert.Assert(t, resources.IsZero(completedApp.GetPendingResource()), "The application should have no more pending resources")
-}*/
-
 func TestUpdateNode(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "test partition create failed with error")

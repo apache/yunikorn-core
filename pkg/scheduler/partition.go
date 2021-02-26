@@ -1244,43 +1244,6 @@ func (pc *PartitionContext) cleanupExpiredApps() {
 	}
 }
 
-/*func (pc *PartitionContext) cleanupPlaceholders() ([]*objects.Allocation, []*objects.AllocationAsk){
-	var released []*objects.Allocation
-	for _, app := range pc.GetAppsInTerminatedState() {
-		// at this point if we still have allocations those are placeholders
-		if len(app.GetAllAllocations()) > 0 {
-			allocations , _ := pc.removeAllocation(&si.AllocationRelease{
-				PartitionName:   pc.Name,
-				ApplicationID:   app.ApplicationID,
-				UUID:            "",
-				TerminationType: si.AllocationRelease_TIMEOUT,
-			})
-			released = append(released, allocations...)
-		}
-		// make sure to remove the pending requests as well
-		if len(app.GetAllRequests()) > 0 {
-			pc.removeAllocationAsk(app.ApplicationID, "")
-		}
-	}
-
-	// remove those placeholders, what were not replaced by the real pod, but they timed out
-	for _, app := range pc.GetAppsByState(objects.Running.String()) {
-		for _, alloc := range app.GetPlaceholderAllocations() {
-			if alloc.Result == objects.PlaceholderExpired {
-				r, _ := pc.removeAllocation(&si.AllocationRelease{
-					PartitionName:   pc.Name,
-					ApplicationID:   app.ApplicationID,
-					UUID:            alloc.UUID,
-					TerminationType: si.AllocationRelease_TIMEOUT,
-				})
-				// we need to send this releases to the scheduler, since the app is not yet in terminated state
-				released = append(released, r...)
-			}
-		}
-	}
-	return released
-}*/
-
 func (pc *PartitionContext) GetCurrentState() string {
 	return pc.stateMachine.Current()
 }

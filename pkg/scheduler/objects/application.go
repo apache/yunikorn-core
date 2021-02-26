@@ -153,6 +153,10 @@ func (sa *Application) IsExpired() bool {
 	return sa.stateMachine.Is(Expired.String())
 }
 
+func (sa *Application) IsKilled() bool {
+	return sa.stateMachine.Is(Killed.String())
+}
+
 // Handle the state event for the application.
 // The state machine handles the locking.
 func (sa *Application) HandleApplicationEvent(event applicationEvent) error {
@@ -206,7 +210,7 @@ func (sa *Application) timeoutStateTimer(expectedState string, event application
 				zap.String("state", sa.stateMachine.Current()))
 			// if the app is waiting, but there are placeholders left, first do the cleanup
 			if sa.IsWaiting() && !resources.IsZero(sa.GetPlaceholderResource()) && sa.rmEventHandlers.SchedulerEventHandler != nil {
-				sa.rmEventHandlers.SchedulerEventHandler.HandleEvent(&rmevent.RMPartitionAppTerminateEvent{
+				sa.rmEventHandlers.SchedulerEventHandler.HandleEvent(&rmevent.RMPartitionAppCompleteEvent{
 					RmID:            sa.rmID,
 					TerminatedAppID: sa.ApplicationID,
 					Partition:       sa.Partition,
@@ -259,25 +263,29 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 	sa.Lock()
 	defer sa.Unlock()
 	// Case 1: if all app's placeholders are allocated, only part of them gets replaced, just delete the remaining placeholders
-	if sa.allPlaceholdersAllocated() && !sa.allPlaceholdersReplaced() {
-		for _, alloc := range sa.GetPlaceholderAllocations() {
-			alloc.Result = PlaceholderExpired
+	switch {
+	case sa.allPlaceholdersAllocated() && !sa.allPlaceholdersReplaced():
+		{
+			for _, alloc := range sa.GetPlaceholderAllocations() {
+				alloc.Result = PlaceholderExpired
+			}
 		}
-		//sa.rmEventHandler.HandleEvent(*rmevent.RM{
-		//	UpdatedApplications: ,
-		//})
-		return
+	default:
+		{
+			// Case 2: in every other case fail the application, and notify the context about the expired placeholders
+			if err := sa.HandleApplicationEvent(KillApplication); err != nil {
+				log.Logger().Debug("Application state change failed when placeholder timed out",
+					zap.String("AppID", sa.ApplicationID),
+					zap.String("currentState", sa.CurrentState()),
+					zap.Error(err))
+			}
+		}
 	}
-	// Case 2: in every other case fail the application, then the placeholders will be cleaned up by the partition_manager
-	if err := sa.HandleApplicationEvent(KillApplication); err != nil {
-		log.Logger().Debug("Application state change failed when placeholder timed out",
-			zap.String("AppID", sa.ApplicationID),
-			zap.String("currentState", sa.CurrentState()),
-			zap.Error(err))
-	}
-	sa.rmEventHandlers.SchedulerEventHandler.HandleEvent(&rmevent.RMPartitionAppTerminateEvent{
-		RmID:            sa.rmID,
-		TerminatedAppID: sa.ApplicationID,
+
+	sa.rmEventHandlers.SchedulerEventHandler.HandleEvent(&rmevent.RMPartitionPlaceholderExpiredEvent{
+		RmID:         sa.rmID,
+		ExpiredAppID: sa.ApplicationID,
+		Partition:    sa.Partition,
 	})
 }
 

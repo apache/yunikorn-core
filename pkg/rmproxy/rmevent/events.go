@@ -45,10 +45,16 @@ type RMPartitionsRemoveEvent struct {
 	Channel chan *Result
 }
 
-type RMPartitionAppTerminateEvent struct {
+type RMPartitionAppCompleteEvent struct {
 	RmID            string
 	TerminatedAppID string
 	Partition       string
+}
+
+type RMPartitionPlaceholderExpiredEvent struct {
+	RmID         string
+	ExpiredAppID string
+	Partition    string
 }
 
 type Result struct {
@@ -78,6 +84,11 @@ type RMRejectedAllocationAskEvent struct {
 type RMReleaseAllocationEvent struct {
 	RmID                string
 	ReleasedAllocations []*si.AllocationRelease
+}
+
+type RMReleaseAllocationAskEvent struct {
+	RmID                   string
+	ReleasedAllocationAsks []*si.AllocationAskRelease
 }
 
 type RMNodeUpdateEvent struct {

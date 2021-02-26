@@ -806,6 +806,24 @@ func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, released []*ob
 	cc.rmEventHandlers.RMProxyEventHandler.HandleEvent(releaseEvent)
 }
 
+func (cc *ClusterContext) notifyRMAllocationAskReleased(rmID string, released []*objects.AllocationAsk, terminationType si.TerminationType, message string) {
+	releaseEvent := &rmevent.RMReleaseAllocationAskEvent{
+		ReleasedAllocationAsks: make([]*si.AllocationAskRelease, 0),
+		RmID:                   rmID,
+	}
+	for _, alloc := range released {
+		releaseEvent.ReleasedAllocationAsks = append(releaseEvent.ReleasedAllocationAsks, &si.AllocationAskRelease{
+			ApplicationID:   alloc.ApplicationID,
+			PartitionName:   alloc.PartitionName,
+			Allocationkey:   alloc.AllocationKey,
+			TerminationType: terminationType,
+			Message:         message,
+		})
+	}
+
+	cc.rmEventHandlers.RMProxyEventHandler.HandleEvent(releaseEvent)
+}
+
 // Get a scheduling node based on its name from the partition.
 // Returns nil if the partition or node cannot be found.
 // Visible for tests
@@ -823,7 +841,7 @@ func (cc *ClusterContext) GetNode(nodeID, partitionName string) *objects.Node {
 	return partition.GetNode(nodeID)
 }
 
-func (cc *ClusterContext) beforeAppTerminates(v *rmevent.RMPartitionAppTerminateEvent) {
+func (cc *ClusterContext) beforeAppComplete(v *rmevent.RMPartitionAppCompleteEvent) {
 	app := cc.GetApplication(v.TerminatedAppID, v.Partition)
 	if app == nil {
 		return
@@ -832,26 +850,25 @@ func (cc *ClusterContext) beforeAppTerminates(v *rmevent.RMPartitionAppTerminate
 	// if the app will complete
 	if app.IsWaiting() {
 		cc.notifyRMAllocationReleased(app.GetRMID(), allocationsToRemove, si.TerminationType_TIMEOUT, "app is completed, removing the placeholders")
-	} /*else if app.IsRunning(){
-		// remove only those placeholders what were not replaced by real pods
-		var allocationsToRemove []*objects.Allocation
-		for _, alloc := range app.GetPlaceholderAllocations() {
-			// remove the expired placeholders, what were not replaced by real pods
-			if alloc.Result == objects.PlaceholderExpired {
-				allocationsToRemove = append(allocationsToRemove, alloc)
-			}
-		}
-		cc.notifyRMAllocationReleased(app.GetRMID(), allocationsToRemove, si.TerminationType_TIMEOUT, "app is completed, removing the placeholders")
+	}
+}
+
+func (cc *ClusterContext) processExpiredPlaceholders(v *rmevent.RMPartitionPlaceholderExpiredEvent) {
+	app := cc.GetApplication(v.ExpiredAppID, v.Partition)
+	if app == nil {
+		return
+	}
+	if app.IsKilled() {
+		cc.notifyRMAllocationReleased(v.RmID, app.GetPlaceholderAllocations(), si.TerminationType_TIMEOUT, "Placeholders timed out, releasing allocated placeholders")
+		cc.notifyRMAllocationAskReleased(v.RmID, app.GetAllRequests(), si.TerminationType_TIMEOUT, "Placeholders timed out, releasing placeholder asks")
 	} else {
-		var allocationsToRemove []*objects.Allocation
+		// if the app is not killed, remove all those placeholders, what are marked as expired
+		var released []*objects.Allocation
 		for _, alloc := range app.GetPlaceholderAllocations() {
-			// remove the expired placeholders, what were not replaced by real pods
 			if alloc.Result == objects.PlaceholderExpired {
-				allocationsToRemove = append(allocationsToRemove, alloc)
+				released = append(released, alloc)
 			}
 		}
-	//	allocationAsksToRemove := app.GetAllRequests()
-	}*/
-	// if the app is killed
-	// TODO handle the kill
+		cc.notifyRMAllocationReleased(v.RmID, released, si.TerminationType_TIMEOUT, "Placeholders timed out, releasing allocated placeholders")
+	}
 }

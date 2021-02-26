@@ -145,7 +145,7 @@ func NewAppState() *fsm.FSM {
 			fmt.Sprintf("enter_%s", Completed.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsCompleted()
 				app := setTimer(completedTimeout, event, ExpireApplication)
-				app.unSetQueue()
+				app.executeCompletedCallback()
 				app.clearPlaceholderTimer()
 			},
 			fmt.Sprintf("enter_%s", Killed.String()): func(event *fsm.Event) {

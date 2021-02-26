@@ -424,11 +424,13 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 		partition := cc.GetPartition(app.PartitionName)
 		if partition == nil {
 			msg := fmt.Sprintf("Failed to add application %s to partition %s, partition doesn't exist", app.ApplicationID, app.PartitionName)
-			log.Logger().Info(msg)
 			rejectedApps = append(rejectedApps, &si.RejectedApplication{
 				ApplicationID: app.ApplicationID,
 				Reason:        msg,
 			})
+			log.Logger().Info("Failed to add application to non existing partition",
+				zap.String("applicationID", app.ApplicationID),
+				zap.String("partitionName", app.PartitionName))
 			continue
 		}
 		// convert and resolve the user: cache can be set per partition
@@ -439,6 +441,10 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 				ApplicationID: app.ApplicationID,
 				Reason:        err.Error(),
 			})
+			log.Logger().Info("Failed to add application to partition (user rejected)",
+				zap.String("applicationID", app.ApplicationID),
+				zap.String("partitionName", app.PartitionName),
+				zap.Error(err))
 			continue
 		}
 		// create a new app object and add it to the partition (partition logs details)
@@ -448,11 +454,20 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 				ApplicationID: app.ApplicationID,
 				Reason:        err.Error(),
 			})
+			log.Logger().Info("Failed to add application to partition (placement rejected)",
+				zap.String("applicationID", app.ApplicationID),
+				zap.String("partitionName", app.PartitionName),
+				zap.Error(err))
 			continue
 		}
 		acceptedApps = append(acceptedApps, &si.AcceptedApplication{
 			ApplicationID: schedApp.ApplicationID,
 		})
+		log.Logger().Info("Added application to partition",
+			zap.String("applicationID", app.ApplicationID),
+			zap.String("partitionName", app.PartitionName),
+			zap.String("requested queue", app.QueueName),
+			zap.String("placed queue", schedApp.GetQueueName()))
 	}
 
 	// Respond to RMProxy with accepted and rejected apps if needed
@@ -479,6 +494,10 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 				cc.notifyRMAllocationReleased(partition.RmID, allocations, si.TerminationType_STOPPED_BY_RM,
 					fmt.Sprintf("Application %s Removed", app.ApplicationID))
 			}
+			log.Logger().Info("Application removed from partition",
+				zap.String("applicationID", app.ApplicationID),
+				zap.String("partitionName", app.PartitionName),
+				zap.Int("allocations released", len(allocations)))
 		}
 	}
 }
@@ -504,13 +523,16 @@ func (cc *ClusterContext) updateNodes(request *si.UpdateRequest) {
 		if p, ok := update.Attributes[siCommon.NodePartition]; ok {
 			partition = cc.GetPartition(p)
 		} else {
-			log.Logger().Debug("node partition not specified",
+			log.Logger().Info("node partition not specified",
 				zap.String("nodeID", update.NodeID),
 				zap.String("nodeAction", update.Action.String()))
 			continue
 		}
 
 		if partition == nil {
+			log.Logger().Info("Failed to add node to non existing partition",
+				zap.String("nodeID", update.NodeID),
+				zap.String("partitionName", update.Attributes[siCommon.NodePartition]))
 			continue
 		}
 
@@ -552,32 +574,37 @@ func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
 		partition := cc.GetPartition(sn.Partition)
 		if partition == nil {
 			msg := fmt.Sprintf("Failed to find partition %s for new node %s", sn.Partition, node.NodeID)
-			log.Logger().Info(msg)
 			// TODO assess impact of partition metrics (this never hit the partition)
 			metrics.GetSchedulerMetrics().IncFailedNodes()
-			rejectedNodes = append(rejectedNodes,
-				&si.RejectedNode{
-					NodeID: node.NodeID,
-					Reason: msg,
-				})
+			rejectedNodes = append(rejectedNodes, &si.RejectedNode{
+				NodeID: node.NodeID,
+				Reason: msg,
+			})
+			log.Logger().Info("Failed to add node to non existing partition",
+				zap.String("nodeID", sn.NodeID),
+				zap.String("partitionName", sn.Partition))
 			continue
 		}
 		existingAllocations := cc.convertAllocations(node.ExistingAllocations)
 		err := partition.AddNode(sn, existingAllocations)
 		if err != nil {
 			msg := fmt.Sprintf("Failure while adding new node, node rejected with error %s", err.Error())
-			log.Logger().Warn(msg)
-			rejectedNodes = append(rejectedNodes,
-				&si.RejectedNode{
-					NodeID: node.NodeID,
-					Reason: msg,
-				})
+			rejectedNodes = append(rejectedNodes, &si.RejectedNode{
+				NodeID: node.NodeID,
+				Reason: msg,
+			})
+			log.Logger().Info("Failed to add node to partition (rejected)",
+				zap.String("nodeID", sn.NodeID),
+				zap.String("partitionName", sn.Partition),
+				zap.Error(err))
 			continue
 		}
+		acceptedNodes = append(acceptedNodes, &si.AcceptedNode{
+			NodeID: node.NodeID,
+		})
 		log.Logger().Info("successfully added node",
 			zap.String("nodeID", node.NodeID),
 			zap.String("partition", sn.Partition))
-		acceptedNodes = append(acceptedNodes, &si.AcceptedNode{NodeID: node.NodeID})
 	}
 
 	// inform the RM which nodes have been accepted/rejected
@@ -617,7 +644,10 @@ func (cc *ClusterContext) processAsks(request *si.UpdateRequest) {
 		partition := cc.GetPartition(siAsk.PartitionName)
 		if partition == nil {
 			msg := fmt.Sprintf("Failed to find partition %s, for application %s and allocation %s", siAsk.PartitionName, siAsk.ApplicationID, siAsk.AllocationKey)
-			log.Logger().Info(msg)
+			log.Logger().Info("Invalid ask add requested by shim, partition not found",
+				zap.String("partition", siAsk.PartitionName),
+				zap.String("applicationID", siAsk.ApplicationID),
+				zap.String("askKey", siAsk.AllocationKey))
 			rejectedAsks = append(rejectedAsks, &si.RejectedAllocationAsk{
 				AllocationKey: siAsk.AllocationKey,
 				ApplicationID: siAsk.ApplicationID,
@@ -626,27 +656,18 @@ func (cc *ClusterContext) processAsks(request *si.UpdateRequest) {
 			continue
 		}
 
-		// if app info doesn't exist, reject the request
-		app := partition.getApplication(siAsk.ApplicationID)
-		if app == nil {
-			msg := fmt.Sprintf("Failed to find application %s, for allocation %s", siAsk.ApplicationID, siAsk.AllocationKey)
-			log.Logger().Info(msg)
-			rejectedAsks = append(rejectedAsks,
-				&si.RejectedAllocationAsk{
-					AllocationKey: siAsk.AllocationKey,
-					ApplicationID: siAsk.ApplicationID,
-					Reason:        msg,
-				})
-			continue
-		}
-		if err := app.AddAllocationAsk(objects.NewAllocationAsk(siAsk)); err != nil {
+		// try adding to app
+		if err := partition.addAllocationAsk(siAsk); err != nil {
 			rejectedAsks = append(rejectedAsks,
 				&si.RejectedAllocationAsk{
 					AllocationKey: siAsk.AllocationKey,
 					ApplicationID: siAsk.ApplicationID,
 					Reason:        err.Error(),
 				})
-			log.Logger().Info("Invalid ask from shim for app",
+			log.Logger().Info("Invalid ask add requested by shim",
+				zap.String("partition", siAsk.PartitionName),
+				zap.String("applicationID", siAsk.ApplicationID),
+				zap.String("askKey", siAsk.AllocationKey),
 				zap.Error(err))
 		}
 	}
@@ -663,9 +684,14 @@ func (cc *ClusterContext) processAsks(request *si.UpdateRequest) {
 func (cc *ClusterContext) processAskReleases(releases []*si.AllocationAskRelease) {
 	for _, toRelease := range releases {
 		partition := cc.GetPartition(toRelease.PartitionName)
-		if partition != nil {
-			partition.removeAllocationAsk(toRelease.ApplicationID, toRelease.Allocationkey)
+		if partition == nil {
+			log.Logger().Info("Invalid ask release requested by shim, partition not found",
+				zap.String("partition", toRelease.PartitionName),
+				zap.String("applicationID", toRelease.ApplicationID),
+				zap.String("askKey", toRelease.Allocationkey))
+			continue
 		}
+		partition.removeAllocationAsk(toRelease.ApplicationID, toRelease.Allocationkey)
 	}
 }
 

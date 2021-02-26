@@ -33,12 +33,14 @@ import (
 )
 
 const (
-	appID1   = "app-1"
-	appID2   = "app-2"
-	nodeID1  = "node-1"
-	nodeID2  = "node-2"
-	defQueue = "root.default"
-	rmID     = "testRM"
+	appID1    = "app-1"
+	appID2    = "app-2"
+	nodeID1   = "node-1"
+	nodeID2   = "node-2"
+	defQueue  = "root.default"
+	rmID      = "testRM"
+	taskGroup = "tg-1"
+	phID      = "ph-1"
 )
 
 func newBasePartition() (*PartitionContext, error) {
@@ -102,6 +104,35 @@ func newConfiguredPartition() (*PartitionContext, error) {
 	return newPartitionContext(conf, rmID, nil)
 }
 
+func newLimitedPartition(resLimit map[string]string) (*PartitionContext, error) {
+	conf := configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues: []configs.QueueConfig{
+					{
+						Name:   "limited",
+						Parent: false,
+						Queues: nil,
+						Resources: configs.Resources{
+							Max: resLimit,
+						},
+					},
+				},
+			},
+		},
+		PlacementRules: nil,
+		Limits:         nil,
+		Preemption:     configs.PartitionPreemptionConfig{},
+		NodeSortPolicy: configs.NodeSortingPolicy{},
+	}
+
+	return newPartitionContext(conf, rmID, nil)
+}
+
 func newApplication(appID, partition, queueName string) *objects.Application {
 	siApp := &si.AddApplicationRequest{
 		ApplicationID: appID,
@@ -121,6 +152,10 @@ func newApplicationTG(appID, partition, queueName string, task *resources.Resour
 	return objects.NewApplication(siApp, security.UserGroup{}, handler.EventHandlers{}, rmID)
 }
 
+func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resource, placeHolder bool) *objects.AllocationAsk {
+	return newAllocationAskAll(allocKey, appID, taskGroup, res, 1, 1, placeHolder)
+}
+
 func newAllocationAsk(allocKey, appID string, res *resources.Resource) *objects.AllocationAsk {
 	return newAllocationAskRepeat(allocKey, appID, res, 1)
 }
@@ -130,6 +165,10 @@ func newAllocationAskRepeat(allocKey, appID string, res *resources.Resource, rep
 }
 
 func newAllocationAskPriority(allocKey, appID string, res *resources.Resource, repeat int32, prio int32) *objects.AllocationAsk {
+	return newAllocationAskAll(allocKey, appID, "", res, repeat, prio, false)
+}
+
+func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, repeat int32, prio int32, placeHolder bool) *objects.AllocationAsk {
 	return objects.NewAllocationAsk(&si.AllocationAsk{
 		AllocationKey:  allocKey,
 		ApplicationID:  appID,
@@ -139,6 +178,8 @@ func newAllocationAskPriority(allocKey, appID string, res *resources.Resource, r
 		Priority: &si.Priority{
 			Priority: &si.Priority_PriorityValue{PriorityValue: prio},
 		},
+		TaskGroupName: taskGroup,
+		Placeholder:   placeHolder,
 	})
 }
 

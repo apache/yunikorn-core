@@ -149,7 +149,7 @@ func (a *Allocation) String() string {
 	return fmt.Sprintf("ApplicationID=%s, UUID=%s, AllocationKey=%s, Node=%s, Result=%s", a.ApplicationID, uuid, a.AllocationKey, a.NodeID, a.Result.String())
 }
 
-func (a *Allocation) isPlaceholder() bool {
+func (a *Allocation) IsPlaceholder() bool {
 	return a.placeholder
 }
 

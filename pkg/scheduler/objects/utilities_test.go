@@ -19,13 +19,13 @@
 package objects
 
 import (
-	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"strconv"
 	"time"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
+	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )

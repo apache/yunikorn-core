@@ -19,15 +19,15 @@
 package objects
 
 import (
-	"github.com/apache/incubator-yunikorn-core/pkg/common"
-	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"strconv"
 	"testing"
 	"time"
 
 	"gotest.tools/assert"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 )
 
 // test basic reservations
@@ -745,13 +745,10 @@ func TestCompleted(t *testing.T) {
 	assert.NilError(t, err, "no error expected accepted to waiting (completed test)")
 	assert.Assert(t, app.IsWaiting(), "App should be waiting")
 	// give it some time to run and progress
-	err = common.WaitFor(10*time.Microsecond, time.Millisecond * 200, func() bool {
-		return app.IsCompleted()
-	})
+	err = common.WaitFor(10*time.Microsecond, time.Millisecond*200, app.IsCompleted)
 	assert.NilError(t, err, "Application did not progress into Completed state")
-	err = common.WaitFor(1*time.Millisecond, time.Millisecond * 200, func() bool {
-		return app.IsExpired()
-	})
+
+	err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, app.IsExpired)
 	assert.NilError(t, err, "Application did not progress into Expired state")
 }
 

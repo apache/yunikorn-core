@@ -830,9 +830,9 @@ func (cc *ClusterContext) beforeAppTerminates(v *rmevent.RMPartitionAppTerminate
 	}
 	allocationsToRemove := app.GetPlaceholderAllocations()
 	// if the app will complete
-	if app.IsWaiting(){
+	if app.IsWaiting() {
 		cc.notifyRMAllocationReleased(app.GetRMID(), allocationsToRemove, si.TerminationType_TIMEOUT, "app is completed, removing the placeholders")
-	} else if app.IsRunning(){
+	} /*else if app.IsRunning(){
 		// remove only those placeholders what were not replaced by real pods
 		var allocationsToRemove []*objects.Allocation
 		for _, alloc := range app.GetPlaceholderAllocations() {
@@ -851,8 +851,7 @@ func (cc *ClusterContext) beforeAppTerminates(v *rmevent.RMPartitionAppTerminate
 			}
 		}
 	//	allocationAsksToRemove := app.GetAllRequests()
-	}
+	}*/
 	// if the app is killed
 	// TODO handle the kill
 }
-

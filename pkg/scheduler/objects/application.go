@@ -69,8 +69,8 @@ type Application struct {
 	execTimeout          time.Duration          // execTimeout for the application run
 	placeholderTimer     *time.Timer            // application run timer
 
-	rmEventHandlers handler.EventHandlers
-	rmID            string
+	rmEventHandlers   handler.EventHandlers
+	rmID              string
 	completedCallback func(appID string)
 
 	sync.RWMutex
@@ -209,7 +209,7 @@ func (sa *Application) timeoutStateTimer(expectedState string, event application
 				sa.rmEventHandlers.SchedulerEventHandler.HandleEvent(&rmevent.RMPartitionAppTerminateEvent{
 					RmID:            sa.rmID,
 					TerminatedAppID: sa.ApplicationID,
-					Partition: sa.Partition,
+					Partition:       sa.Partition,
 				})
 				sa.clearStateTimer()
 			} else {

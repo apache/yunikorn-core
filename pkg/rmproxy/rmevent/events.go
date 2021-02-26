@@ -48,7 +48,7 @@ type RMPartitionsRemoveEvent struct {
 type RMPartitionAppTerminateEvent struct {
 	RmID            string
 	TerminatedAppID string
-	Partition		string
+	Partition       string
 }
 
 type Result struct {

@@ -991,7 +991,7 @@ func (pc *PartitionContext) GetAppsInTerminatedState() []*objects.Application {
 	pc.RLock()
 	defer pc.RUnlock()
 	appList := pc.GetAppsByState(objects.Completed.String())
-	appList = append(appList, pc.GetAppsByState(objects.Killed.String())...)
+	appList = append(appList, pc.GetAppsByState(objects.Failed.String())...)
 	return appList
 }
 

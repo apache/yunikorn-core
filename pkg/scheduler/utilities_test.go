@@ -27,7 +27,6 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
-	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
@@ -139,7 +138,7 @@ func newApplication(appID, partition, queueName string) *objects.Application {
 		QueueName:     queueName,
 		PartitionName: partition,
 	}
-	return objects.NewApplication(siApp, security.UserGroup{}, handler.EventHandlers{}, rmID)
+	return objects.NewApplication(siApp, security.UserGroup{}, nil, rmID)
 }
 
 func newApplicationTG(appID, partition, queueName string, task *resources.Resource) *objects.Application {
@@ -149,7 +148,7 @@ func newApplicationTG(appID, partition, queueName string, task *resources.Resour
 		PartitionName:  partition,
 		PlaceholderAsk: task.ToProto(),
 	}
-	return objects.NewApplication(siApp, security.UserGroup{}, handler.EventHandlers{}, rmID)
+	return objects.NewApplication(siApp, security.UserGroup{}, nil, rmID)
 }
 
 func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resource, placeHolder bool) *objects.AllocationAsk {

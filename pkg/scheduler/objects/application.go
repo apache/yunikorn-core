@@ -69,14 +69,14 @@ type Application struct {
 	execTimeout          time.Duration          // execTimeout for the application run
 	placeholderTimer     *time.Timer            // application run timer
 
-	rmEventHandlers   handler.EventHandlers
+	rmEventHandler    handler.EventHandler
 	rmID              string
 	completedCallback func(appID string)
 
 	sync.RWMutex
 }
 
-func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eventHandler handler.EventHandlers, rmID string) *Application {
+func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eventHandler handler.EventHandler, rmID string) *Application {
 	app := &Application{
 		ApplicationID:        siApp.ApplicationID,
 		Partition:            siApp.PartitionName,
@@ -94,7 +94,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		placeholderAsk:       resources.NewResourceFromProto(siApp.PlaceholderAsk),
 	}
 	app.user = ugi
-	app.rmEventHandlers = eventHandler
+	app.rmEventHandler = eventHandler
 	app.rmID = rmID
 	return app
 }
@@ -153,8 +153,8 @@ func (sa *Application) IsExpired() bool {
 	return sa.stateMachine.Is(Expired.String())
 }
 
-func (sa *Application) IsKilled() bool {
-	return sa.stateMachine.Is(Killed.String())
+func (sa *Application) IsFailed() bool {
+	return sa.stateMachine.Is(Failed.String())
 }
 
 // Handle the state event for the application.
@@ -177,8 +177,8 @@ func (sa *Application) OnStateChange(event *fsm.Event) {
 		Message:                  fmt.Sprintf("Status change triggered by the event : %s", event.Event),
 	})
 
-	if sa.rmEventHandlers.RMProxyEventHandler != nil {
-		sa.rmEventHandlers.RMProxyEventHandler.HandleEvent(
+	if sa.rmEventHandler != nil {
+		sa.rmEventHandler.HandleEvent(
 			&rmevent.RMApplicationUpdateEvent{
 				RmID:                 sa.rmID,
 				AcceptedApplications: make([]*si.AcceptedApplication, 0),
@@ -209,12 +209,8 @@ func (sa *Application) timeoutStateTimer(expectedState string, event application
 				zap.String("applicationID", sa.ApplicationID),
 				zap.String("state", sa.stateMachine.Current()))
 			// if the app is waiting, but there are placeholders left, first do the cleanup
-			if sa.IsWaiting() && !resources.IsZero(sa.GetPlaceholderResource()) && sa.rmEventHandlers.SchedulerEventHandler != nil {
-				sa.rmEventHandlers.SchedulerEventHandler.HandleEvent(&rmevent.RMPartitionAppCompleteEvent{
-					RmID:            sa.rmID,
-					TerminatedAppID: sa.ApplicationID,
-					Partition:       sa.Partition,
-				})
+			if sa.IsWaiting() && !resources.IsZero(sa.GetPlaceholderResource()) {
+				sa.notifyRMAllocationReleased(sa.rmID, sa.GetPlaceholderAllocations(), si.TerminationType_TIMEOUT, "releasing placeholders on app complete")
 				sa.clearStateTimer()
 			} else {
 				//nolint: errcheck
@@ -262,31 +258,30 @@ func (sa *Application) clearPlaceholderTimer() {
 func (sa *Application) timeoutPlaceholderProcessing() {
 	sa.Lock()
 	defer sa.Unlock()
+	var allocationsToRelease []*Allocation
 	// Case 1: if all app's placeholders are allocated, only part of them gets replaced, just delete the remaining placeholders
 	switch {
 	case sa.allPlaceholdersAllocated() && !sa.allPlaceholdersReplaced():
 		{
 			for _, alloc := range sa.GetPlaceholderAllocations() {
-				alloc.Result = PlaceholderExpired
+				allocationsToRelease = append(allocationsToRelease, alloc)
+				alloc.released = true
 			}
 		}
 	default:
 		{
 			// Case 2: in every other case fail the application, and notify the context about the expired placeholders
-			if err := sa.HandleApplicationEvent(KillApplication); err != nil {
+			if err := sa.HandleApplicationEvent(FailApplication); err != nil {
 				log.Logger().Debug("Application state change failed when placeholder timed out",
 					zap.String("AppID", sa.ApplicationID),
 					zap.String("currentState", sa.CurrentState()),
 					zap.Error(err))
 			}
+			sa.notifyRMAllocationAskReleased(sa.rmID, sa.GetAllRequests(), si.TerminationType_TIMEOUT, "releasing placeholders on placeholder timeout")
+			allocationsToRelease = append(allocationsToRelease, sa.GetPlaceholderAllocations()...)
 		}
 	}
-
-	sa.rmEventHandlers.SchedulerEventHandler.HandleEvent(&rmevent.RMPartitionPlaceholderExpiredEvent{
-		RmID:         sa.rmID,
-		ExpiredAppID: sa.ApplicationID,
-		Partition:    sa.Partition,
-	})
+	sa.notifyRMAllocationReleased(sa.rmID, allocationsToRelease, si.TerminationType_TIMEOUT, "releasing placeholders on placeholder timeout")
 }
 
 // Return an array of all reservation keys for the app.
@@ -1278,4 +1273,38 @@ func (sa *Application) executeCompletedCallback() {
 	if sa.completedCallback != nil {
 		go sa.completedCallback(sa.ApplicationID)
 	}
+}
+
+func (sa *Application) notifyRMAllocationReleased(rmID string, released []*Allocation, terminationType si.TerminationType, message string) {
+	releaseEvent := &rmevent.RMReleaseAllocationEvent{
+		ReleasedAllocations: make([]*si.AllocationRelease, 0),
+		RmID:                rmID,
+	}
+	for _, alloc := range released {
+		releaseEvent.ReleasedAllocations = append(releaseEvent.ReleasedAllocations, &si.AllocationRelease{
+			ApplicationID:   alloc.ApplicationID,
+			PartitionName:   alloc.PartitionName,
+			UUID:            alloc.UUID,
+			TerminationType: terminationType,
+			Message:         message,
+		})
+	}
+	sa.rmEventHandler.HandleEvent(releaseEvent)
+}
+
+func (sa *Application) notifyRMAllocationAskReleased(rmID string, released []*AllocationAsk, terminationType si.TerminationType, message string) {
+	releaseEvent := &rmevent.RMReleaseAllocationAskEvent{
+		ReleasedAllocationAsks: make([]*si.AllocationAskRelease, 0),
+		RmID:                   rmID,
+	}
+	for _, alloc := range released {
+		releaseEvent.ReleasedAllocationAsks = append(releaseEvent.ReleasedAllocationAsks, &si.AllocationAskRelease{
+			ApplicationID:   alloc.ApplicationID,
+			PartitionName:   alloc.PartitionName,
+			Allocationkey:   alloc.AllocationKey,
+			TerminationType: terminationType,
+			Message:         message,
+		})
+	}
+	sa.rmEventHandler.HandleEvent(releaseEvent)
 }

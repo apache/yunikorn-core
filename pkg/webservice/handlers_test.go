@@ -32,7 +32,6 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
-	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
@@ -121,7 +120,7 @@ func newApplication(appID, partitionName, queueName, rmID string) *objects.Appli
 		QueueName:     queueName,
 		PartitionName: partitionName,
 	}
-	return objects.NewApplication(siApp, security.UserGroup{}, handler.EventHandlers{}, rmID)
+	return objects.NewApplication(siApp, security.UserGroup{}, nil, rmID)
 }
 
 func TestValidateConf(t *testing.T) {
@@ -721,9 +720,9 @@ func TestPartitions(t *testing.T) {
 	app7 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-7")
 
 	// app7: new to killed
-	err = app7.HandleApplicationEvent(objects.KillApplication)
+	err = app7.HandleApplicationEvent(objects.FailApplication)
 	assert.NilError(t, err, "no error expected new to killed")
-	assert.Equal(t, app7.CurrentState(), objects.Killed.String())
+	assert.Equal(t, app7.CurrentState(), objects.Failed.String())
 
 	NewWebApp(schedulerContext, nil)
 
@@ -747,7 +746,7 @@ func TestPartitions(t *testing.T) {
 			assert.Equal(t, part.Applications[objects.Waiting.String()], 1)
 			assert.Equal(t, part.Applications[objects.Rejected.String()], 1)
 			assert.Equal(t, part.Applications[objects.Completed.String()], 1)
-			assert.Equal(t, part.Applications[objects.Killed.String()], 1)
+			assert.Equal(t, part.Applications[objects.Failed.String()], 1)
 			assert.Equal(t, part.State, "Active")
 		} else {
 			assert.Equal(t, part.Name, "[rm-123]gpu")

@@ -27,7 +27,6 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 )
 
 // test basic reservations
@@ -772,9 +771,7 @@ func TestOnStatusChangeCalled(t *testing.T) {
 	app := newApplication(appID1, "default", "root.a")
 	assert.Equal(t, New.String(), app.CurrentState(), "new app not in New state")
 	testHandler := &appEventHandler{}
-	app.rmEventHandlers = handler.EventHandlers{
-		RMProxyEventHandler: testHandler,
-	}
+	app.rmEventHandler = testHandler
 
 	err := app.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "error returned which was not expected")

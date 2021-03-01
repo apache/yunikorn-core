@@ -38,11 +38,10 @@ const (
 	Reserved
 	Unreserved
 	Replaced
-	PlaceholderExpired
 )
 
 func (ar allocationResult) String() string {
-	return [...]string{"None", "Allocated", "AllocatedReserved", "Reserved", "Unreserved", "Replaced", "PlaceholderExpired"}[ar]
+	return [...]string{"None", "Allocated", "AllocatedReserved", "Reserved", "Unreserved", "Replaced"}[ar]
 }
 
 /* Related to Allocation */

@@ -341,7 +341,7 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 	app.SetQueue(queue)
 	queue.AddApplication(app)
 	pc.applications[appID] = app
-	app.SetCompletedCallback(pc.moveCompletedApp)
+	app.SetTerminatedCallback(pc.moveTerminatedApp)
 
 	return nil
 }
@@ -1260,7 +1260,7 @@ func (pc *PartitionContext) GetNodeSortingPolicy() policies.SortingPolicy {
 	return pc.nodeSortingPolicy.PolicyType
 }
 
-func (pc *PartitionContext) moveCompletedApp(appID string) {
+func (pc *PartitionContext) moveTerminatedApp(appID string) {
 	// new ID as completedApplications map key, use negative value to get a divider
 	newID := appID + strconv.FormatInt(-(time.Now()).Unix(), 10)
 	pc.Lock()

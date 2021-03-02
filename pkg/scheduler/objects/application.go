@@ -67,11 +67,11 @@ type Application struct {
 	stateMachine         *fsm.FSM               // application state machine
 	stateTimer           *time.Timer            // timer for state time
 	execTimeout          time.Duration          // execTimeout for the application run
-	placeholderTimer     *time.Timer            // application run timer
+	placeholderTimer     *time.Timer            // placeholder replace timer
 
-	rmEventHandler    handler.EventHandler
-	rmID              string
-	completedCallback func(appID string)
+	rmEventHandler     handler.EventHandler
+	rmID               string
+	terminatedCallback func(appID string)
 
 	sync.RWMutex
 }
@@ -210,7 +210,7 @@ func (sa *Application) timeoutStateTimer(expectedState string, event application
 				zap.String("state", sa.stateMachine.Current()))
 			// if the app is waiting, but there are placeholders left, first do the cleanup
 			if sa.IsWaiting() && !resources.IsZero(sa.GetPlaceholderResource()) {
-				sa.notifyRMAllocationReleased(sa.rmID, sa.GetPlaceholderAllocations(), si.TerminationType_TIMEOUT, "releasing placeholders on app complete")
+				sa.notifyRMAllocationReleased(sa.rmID, sa.getPlaceholderAllocations(), si.TerminationType_TIMEOUT, "releasing placeholders on app complete")
 				sa.clearStateTimer()
 			} else {
 				//nolint: errcheck
@@ -258,30 +258,23 @@ func (sa *Application) clearPlaceholderTimer() {
 func (sa *Application) timeoutPlaceholderProcessing() {
 	sa.Lock()
 	defer sa.Unlock()
-	var allocationsToRelease []*Allocation
 	// Case 1: if all app's placeholders are allocated, only part of them gets replaced, just delete the remaining placeholders
 	switch {
-	case sa.allPlaceholdersAllocated() && !sa.allPlaceholdersReplaced():
-		{
-			for _, alloc := range sa.GetPlaceholderAllocations() {
-				allocationsToRelease = append(allocationsToRelease, alloc)
-				alloc.released = true
-			}
+	case (sa.IsRunning() || sa.IsStarting()) && !resources.IsZero(sa.allocatedPlaceholder):
+		for _, alloc := range sa.getPlaceholderAllocations() {
+			alloc.released = true
 		}
 	default:
-		{
-			// Case 2: in every other case fail the application, and notify the context about the expired placeholders
-			if err := sa.HandleApplicationEvent(FailApplication); err != nil {
-				log.Logger().Debug("Application state change failed when placeholder timed out",
-					zap.String("AppID", sa.ApplicationID),
-					zap.String("currentState", sa.CurrentState()),
-					zap.Error(err))
-			}
-			sa.notifyRMAllocationAskReleased(sa.rmID, sa.GetAllRequests(), si.TerminationType_TIMEOUT, "releasing placeholders on placeholder timeout")
-			allocationsToRelease = append(allocationsToRelease, sa.GetPlaceholderAllocations()...)
+		// Case 2: in every other case fail the application, and notify the context about the expired placeholders
+		if err := sa.HandleApplicationEvent(FailApplication); err != nil {
+			log.Logger().Debug("Application state change failed when placeholder timed out",
+				zap.String("AppID", sa.ApplicationID),
+				zap.String("currentState", sa.CurrentState()),
+				zap.Error(err))
 		}
+		sa.notifyRMAllocationAskReleased(sa.rmID, sa.getAllRequests(), si.TerminationType_TIMEOUT, "releasing placeholders on placeholder timeout")
 	}
-	sa.notifyRMAllocationReleased(sa.rmID, allocationsToRelease, si.TerminationType_TIMEOUT, "releasing placeholders on placeholder timeout")
+	sa.notifyRMAllocationReleased(sa.rmID, sa.getPlaceholderAllocations(), si.TerminationType_TIMEOUT, "releasing placeholders on placeholder timeout")
 }
 
 // Return an array of all reservation keys for the app.
@@ -740,7 +733,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() interfaces.Nod
 			continue
 		}
 		// walk over the placeholders, allow for processing all as we can have multiple task groups
-		phAllocs := sa.GetPlaceholderAllocations()
+		phAllocs := sa.getPlaceholderAllocations()
 		for _, ph := range phAllocs {
 			// we could have already released this placeholder and are waiting for the shim to confirm
 			// and check that we have the correct task group before trying to swap
@@ -1072,7 +1065,7 @@ func (sa *Application) GetAllAllocations() []*Allocation {
 
 // get a copy of all placeholder allocations of the application
 // No locking must be called while holding the lock
-func (sa *Application) GetPlaceholderAllocations() []*Allocation {
+func (sa *Application) getPlaceholderAllocations() []*Allocation {
 	var allocations []*Allocation
 	if sa == nil || len(sa.allocations) == 0 {
 		return allocations
@@ -1085,10 +1078,7 @@ func (sa *Application) GetPlaceholderAllocations() []*Allocation {
 	return allocations
 }
 
-func (sa *Application) GetAllRequests() []*AllocationAsk {
-	sa.RLock()
-	defer sa.RUnlock()
-
+func (sa *Application) getAllRequests() []*AllocationAsk {
 	var requests []*AllocationAsk
 	for _, req := range sa.requests {
 		requests = append(requests, req)
@@ -1108,6 +1098,11 @@ func (sa *Application) AddAllocation(info *Allocation) {
 func (sa *Application) addAllocationInternal(info *Allocation) {
 	// placeholder allocations do not progress the state of the app and are tracked in a separate total
 	if info.placeholder {
+		// when we have the first placeholder allocation start the placeholder timer.
+		// It will start to use the resources only after the first allocation, so we will count the time from this point.
+		// Also this is the first stable point on the placeholder handling, what is easy to explain and troubleshoot
+		// If we would start it when we just try to allocate, that is something very unstable, and we don't really have any
+		// impact on what is happening until this point
 		if resources.IsZero(sa.allocatedPlaceholder) {
 			sa.initPlaceholderTimer()
 		}
@@ -1173,6 +1168,10 @@ func (sa *Application) removeAllocationInternal(uuid string) *Allocation {
 	// update correct allocation tracker
 	if alloc.placeholder {
 		sa.allocatedPlaceholder = resources.Sub(sa.allocatedPlaceholder, alloc.AllocatedResource)
+		// if all the placeholders are replaced, clear the placeholder timer
+		if resources.IsZero(sa.allocatedPlaceholder) {
+			sa.clearPlaceholderTimer()
+		}
 	} else {
 		sa.allocatedResource = resources.Sub(sa.allocatedResource, alloc.AllocatedResource)
 	}
@@ -1245,33 +1244,15 @@ func (sa *Application) GetTag(tag string) string {
 	return tagVal
 }
 
-func (sa *Application) allPlaceholdersAllocated() bool {
-	return resources.Equals(sa.allocatedPlaceholder, sa.placeholderAsk)
-}
-
-func (sa *Application) allPlaceholdersReplaced() bool {
-	return resources.IsZero(sa.allocatedPlaceholder)
-}
-
-func (sa *Application) GetRMID() string {
-	return sa.rmID
-}
-
-func (sa *Application) GetStateTimer() *time.Timer {
-	sa.RLock()
-	defer sa.RUnlock()
-	return sa.stateTimer
-}
-
-func (sa *Application) SetCompletedCallback(callback func(appID string)) {
+func (sa *Application) SetTerminatedCallback(callback func(appID string)) {
 	sa.Lock()
 	defer sa.Unlock()
-	sa.completedCallback = callback
+	sa.terminatedCallback = callback
 }
 
-func (sa *Application) executeCompletedCallback() {
-	if sa.completedCallback != nil {
-		go sa.completedCallback(sa.ApplicationID)
+func (sa *Application) executeTerminatedCallback() {
+	if sa.terminatedCallback != nil {
+		go sa.terminatedCallback(sa.ApplicationID)
 	}
 }
 

@@ -530,37 +530,44 @@ func (cc *ClusterContext) updateNodes(request *si.UpdateRequest) {
 		}
 
 		if partition == nil {
-			log.Logger().Info("Failed to add node to non existing partition",
+			log.Logger().Info("Failed to update node on non existing partition",
 				zap.String("nodeID", update.NodeID),
-				zap.String("partitionName", update.Attributes[siCommon.NodePartition]))
+				zap.String("partitionName", update.Attributes[siCommon.NodePartition]),
+				zap.String("nodeAction", update.Action.String()))
 			continue
 		}
 
-		if node, ok := partition.nodes[update.NodeID]; ok {
-			switch update.Action {
-			case si.UpdateNodeInfo_UPDATE:
-				if sr := update.SchedulableResource; sr != nil {
-					partition.updateNode(node.SetCapacity(resources.NewResourceFromProto(sr)))
-				}
-				if or := update.OccupiedResource; or != nil {
-					newOccupied := resources.NewResourceFromProto(or)
-					node.SetOccupiedResource(newOccupied)
-				}
-			case si.UpdateNodeInfo_DRAIN_NODE:
-				// set the state to not schedulable
-				node.SetSchedulable(false)
-			case si.UpdateNodeInfo_DRAIN_TO_SCHEDULABLE:
-				// set the state to schedulable
-				node.SetSchedulable(true)
-			case si.UpdateNodeInfo_DECOMISSION:
-				// set the state to not schedulable then tell the partition to clean up
-				node.SetSchedulable(false)
-				released := partition.removeNode(node.NodeID)
-				// notify the shim allocations have been released from node
-				if len(released) != 0 {
-					cc.notifyRMAllocationReleased(partition.RmID, released, si.AllocationRelease_STOPPED_BY_RM,
-						fmt.Sprintf("Node %s Removed", node.NodeID))
-				}
+		node := partition.GetNode(update.NodeID)
+		if node == nil {
+			log.Logger().Info("Failed to update non existing node",
+				zap.String("nodeID", update.NodeID),
+				zap.String("partitionName", update.Attributes[siCommon.NodePartition]),
+				zap.String("nodeAction", update.Action.String()))
+			continue
+		}
+
+		switch update.Action {
+		case si.UpdateNodeInfo_UPDATE:
+			if sr := update.SchedulableResource; sr != nil {
+				partition.updatePartitionResource(node.SetCapacity(resources.NewResourceFromProto(sr)))
+			}
+			if or := update.OccupiedResource; or != nil {
+				node.SetOccupiedResource(resources.NewResourceFromProto(or))
+			}
+		case si.UpdateNodeInfo_DRAIN_NODE:
+			// set the state to not schedulable
+			node.SetSchedulable(false)
+		case si.UpdateNodeInfo_DRAIN_TO_SCHEDULABLE:
+			// set the state to schedulable
+			node.SetSchedulable(true)
+		case si.UpdateNodeInfo_DECOMISSION:
+			// set the state to not schedulable then tell the partition to clean up
+			node.SetSchedulable(false)
+			released := partition.removeNode(node.NodeID)
+			// notify the shim allocations have been released from node
+			if len(released) != 0 {
+				cc.notifyRMAllocationReleased(partition.RmID, released, si.AllocationRelease_STOPPED_BY_RM,
+					fmt.Sprintf("Node %s Removed", node.NodeID))
 			}
 		}
 	}
@@ -573,7 +580,7 @@ func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
 		sn := objects.NewNode(node)
 		partition := cc.GetPartition(sn.Partition)
 		if partition == nil {
-			msg := fmt.Sprintf("Failed to find partition %s for new node %s", sn.Partition, node.NodeID)
+			msg := fmt.Sprintf("Failed to find partition %s for new node %s", sn.Partition, sn.NodeID)
 			// TODO assess impact of partition metrics (this never hit the partition)
 			metrics.GetSchedulerMetrics().IncFailedNodes()
 			rejectedNodes = append(rejectedNodes, &si.RejectedNode{
@@ -590,7 +597,7 @@ func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
 		if err != nil {
 			msg := fmt.Sprintf("Failure while adding new node, node rejected with error %s", err.Error())
 			rejectedNodes = append(rejectedNodes, &si.RejectedNode{
-				NodeID: node.NodeID,
+				NodeID: sn.NodeID,
 				Reason: msg,
 			})
 			log.Logger().Info("Failed to add node to partition (rejected)",
@@ -600,10 +607,10 @@ func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
 			continue
 		}
 		acceptedNodes = append(acceptedNodes, &si.AcceptedNode{
-			NodeID: node.NodeID,
+			NodeID: sn.NodeID,
 		})
 		log.Logger().Info("successfully added node",
-			zap.String("nodeID", node.NodeID),
+			zap.String("nodeID", sn.NodeID),
 			zap.String("partition", sn.Partition))
 	}
 

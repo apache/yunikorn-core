@@ -54,7 +54,7 @@ func (m *nodesResourceUsageMonitor) start() {
 
 func (m *nodesResourceUsageMonitor) runOnce() {
 	for _, p := range m.cc.GetPartitionMapClone() {
-		usageMap := p.CalculateNodesResourceUsage()
+		usageMap := p.calculateNodesResourceUsage()
 		if len(usageMap) > 0 {
 			for resourceName, usageBuckets := range usageMap {
 				for idx, bucketValue := range usageBuckets {

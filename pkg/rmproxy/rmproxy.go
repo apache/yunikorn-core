@@ -153,6 +153,16 @@ func (rmp *RMProxy) processRMReleaseAllocationEvent(event *rmevent.RMReleaseAllo
 	metrics.GetSchedulerMetrics().AddReleasedContainers(len(event.ReleasedAllocations))
 }
 
+func (rmp *RMProxy) processRMReleaseAllocationAskEvent(event *rmevent.RMReleaseAllocationAskEvent) {
+	if len(event.ReleasedAllocationAsks) == 0 {
+		return
+	}
+	response := &si.UpdateResponse{
+		ReleasedAllocationAsks: event.ReleasedAllocationAsks,
+	}
+	rmp.processUpdateResponse(event.RmID, response)
+}
+
 func (rmp *RMProxy) processUpdatePartitionConfigsEvent(event *rmevent.RMRejectedAllocationAskEvent) {
 	if len(event.RejectedAllocationAsks) == 0 {
 		return
@@ -191,6 +201,8 @@ func (rmp *RMProxy) handleRMEvents() {
 			rmp.processUpdatePartitionConfigsEvent(v)
 		case *rmevent.RMNodeUpdateEvent:
 			rmp.processRMNodeUpdateEvent(v)
+		case *rmevent.RMReleaseAllocationAskEvent:
+			rmp.processRMReleaseAllocationAskEvent(v)
 		default:
 			panic(fmt.Sprintf("%s is not an acceptable type for RM event.", reflect.TypeOf(v).String()))
 		}

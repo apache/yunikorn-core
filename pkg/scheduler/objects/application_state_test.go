@@ -40,9 +40,9 @@ func TestAcceptStateTransition(t *testing.T) {
 	assert.Equal(t, app.CurrentState(), Accepted.String())
 
 	// accepted to killed
-	err = app.HandleApplicationEvent(KillApplication)
+	err = app.HandleApplicationEvent(FailApplication)
 	assert.NilError(t, err, "no error expected accepted to killed")
-	assert.Equal(t, app.CurrentState(), Killed.String())
+	assert.Equal(t, app.CurrentState(), Failed.String())
 }
 
 func TestRejectStateTransition(t *testing.T) {
@@ -61,7 +61,7 @@ func TestRejectStateTransition(t *testing.T) {
 	assert.Equal(t, app.CurrentState(), Rejected.String())
 
 	// rejected to killed: error expected
-	err = app.HandleApplicationEvent(KillApplication)
+	err = app.HandleApplicationEvent(FailApplication)
 	assert.Assert(t, err != nil, "error expected rejected to killed")
 	assert.Equal(t, app.CurrentState(), Rejected.String())
 }
@@ -85,9 +85,9 @@ func TestStartStateTransition(t *testing.T) {
 	assert.Equal(t, appInfo.CurrentState(), Starting.String())
 
 	// start to killed
-	err = appInfo.HandleApplicationEvent(KillApplication)
+	err = appInfo.HandleApplicationEvent(FailApplication)
 	assert.NilError(t, err, "no error expected starting to killed")
-	assert.Equal(t, appInfo.CurrentState(), Killed.String())
+	assert.Equal(t, appInfo.CurrentState(), Failed.String())
 }
 
 func TestRunStateTransition(t *testing.T) {
@@ -116,14 +116,14 @@ func TestRunStateTransition(t *testing.T) {
 	assert.Equal(t, appInfo.CurrentState(), Running.String())
 
 	// run to killed
-	err = appInfo.HandleApplicationEvent(KillApplication)
+	err = appInfo.HandleApplicationEvent(FailApplication)
 	assert.NilError(t, err, "no error expected running to killed")
-	assert.Equal(t, appInfo.CurrentState(), Killed.String())
+	assert.Equal(t, appInfo.CurrentState(), Failed.String())
 
 	// run fails from killing
 	err = appInfo.HandleApplicationEvent(RunApplication)
 	assert.Assert(t, err != nil, "error expected killed to running")
-	assert.Equal(t, appInfo.CurrentState(), Killed.String())
+	assert.Equal(t, appInfo.CurrentState(), Failed.String())
 }
 
 func TestCompletedStateTransition(t *testing.T) {
@@ -161,7 +161,7 @@ func TestCompletedStateTransition(t *testing.T) {
 	assert.Equal(t, appInfo.CurrentState(), Completed.String())
 
 	// completed to killed: error expected
-	err = appInfo.HandleApplicationEvent(KillApplication)
+	err = appInfo.HandleApplicationEvent(FailApplication)
 	assert.Assert(t, err != nil, "error expected completed to killed")
 	assert.Equal(t, appInfo.CurrentState(), Completed.String())
 
@@ -204,9 +204,9 @@ func TestWaitStateTransition(t *testing.T) {
 	assert.Equal(t, appInfo.CurrentState(), Waiting.String())
 
 	// wait to killed
-	err = appInfo.HandleApplicationEvent(KillApplication)
+	err = appInfo.HandleApplicationEvent(FailApplication)
 	assert.NilError(t, err, "no error expected wait to killed")
-	assert.Equal(t, appInfo.CurrentState(), Killed.String())
+	assert.Equal(t, appInfo.CurrentState(), Failed.String())
 }
 
 func TestKilledStateTransition(t *testing.T) {
@@ -215,17 +215,17 @@ func TestKilledStateTransition(t *testing.T) {
 	assert.Equal(t, appInfo.CurrentState(), New.String())
 
 	// new to killed
-	err := appInfo.HandleApplicationEvent(KillApplication)
+	err := appInfo.HandleApplicationEvent(FailApplication)
 	assert.NilError(t, err, "no error expected new to killed")
-	assert.Equal(t, appInfo.CurrentState(), Killed.String())
+	assert.Equal(t, appInfo.CurrentState(), Failed.String())
 
 	// killed to killed
-	err = appInfo.HandleApplicationEvent(KillApplication)
+	err = appInfo.HandleApplicationEvent(FailApplication)
 	assert.NilError(t, err, "no error expected killed to killed")
-	assert.Equal(t, appInfo.CurrentState(), Killed.String())
+	assert.Equal(t, appInfo.CurrentState(), Failed.String())
 
 	// killed to rejected: error expected
 	err = appInfo.HandleApplicationEvent(RejectApplication)
 	assert.Assert(t, err != nil, "error expected killed to rejected")
-	assert.Equal(t, appInfo.CurrentState(), Killed.String())
+	assert.Equal(t, appInfo.CurrentState(), Failed.String())
 }

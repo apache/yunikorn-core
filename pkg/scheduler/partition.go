@@ -346,12 +346,13 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 
 	// all is OK update the app and queue
 	app.SetQueue(queue)
-	app.SetCompletedCallback(pc.moveCompletedApp)
 	queue.AddApplication(app)
 	// lock the partition and make the last change
 	pc.Lock()
 	defer pc.Unlock()
 	pc.applications[appID] = app
+	app.SetTerminatedCallback(pc.moveTerminatedApp)
+
 	return nil
 }
 
@@ -1013,6 +1014,14 @@ func (pc *PartitionContext) GetAppsByState(state string) []*objects.Application 
 	return appList
 }
 
+func (pc *PartitionContext) GetAppsInTerminatedState() []*objects.Application {
+	pc.RLock()
+	defer pc.RUnlock()
+	appList := pc.GetAppsByState(objects.Completed.String())
+	appList = append(appList, pc.GetAppsByState(objects.Failed.String())...)
+	return appList
+}
+
 func (pc *PartitionContext) GetNodes() []*objects.Node {
 	pc.RLock()
 	defer pc.RUnlock()
@@ -1161,7 +1170,7 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 		released = append(released, app.RemoveAllAllocations()...)
 	} else {
 		// if we have an uuid the termination type is important
-		if release.TerminationType == si.AllocationRelease_PLACEHOLDER_REPLACED {
+		if release.TerminationType == si.TerminationType_PLACEHOLDER_REPLACED {
 			log.Logger().Debug("replacing placeholder allocation",
 				zap.String("appID", appID),
 				zap.String("allocationId", uuid))
@@ -1189,7 +1198,7 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 				zap.String("allocationId", alloc.UUID))
 			continue
 		}
-		if release.TerminationType == si.AllocationRelease_PLACEHOLDER_REPLACED {
+		if release.TerminationType == si.TerminationType_PLACEHOLDER_REPLACED {
 			// replacements could be on a different node but the queue should not change
 			confirmed = alloc.Releases[0]
 			if confirmed.NodeID == alloc.NodeID {
@@ -1275,12 +1284,13 @@ func (pc *PartitionContext) GetNodeSortingPolicy() policies.SortingPolicy {
 	return pc.nodeSortingPolicy.PolicyType
 }
 
-func (pc *PartitionContext) moveCompletedApp(appID string) {
+func (pc *PartitionContext) moveTerminatedApp(appID string) {
 	// new ID as completedApplications map key, use negative value to get a divider
 	newID := appID + strconv.FormatInt(-(time.Now()).Unix(), 10)
 	pc.Lock()
 	defer pc.Unlock()
 	if app, ok := pc.applications[appID]; ok {
+		app.UnSetQueue()
 		delete(pc.applications, appID)
 		pc.completedApplications[newID] = app
 	}

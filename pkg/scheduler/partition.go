@@ -119,9 +119,9 @@ func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionCon
 	pc.isPreemptable = conf.Preemption.Enabled
 
 	pc.rules = &conf.PlacementRules
-	// We need to pass in the unlocked version of the getQueue function.
-	// Placing an application will already have a lock on the partition context.
-	pc.placementManager = placement.NewPlacementManager(*pc.rules, pc.getQueue)
+	// We need to pass in the locked version of the GetQueue function.
+	// Placing an application will not have a lock on the partition context.
+	pc.placementManager = placement.NewPlacementManager(*pc.rules, pc.GetQueue)
 	// get the user group cache for the partition
 	// TODO get the resolver from the config
 	pc.userGroupCache = security.GetUserGroupCache("")
@@ -163,9 +163,9 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 	} else {
 		log.Logger().Info("Creating new placement manager on config reload")
 		pc.rules = &conf.PlacementRules
-		// We need to pass in the unlocked version of the getQueue function.
-		// Placing an application will already have a lock on the partition context.
-		pc.placementManager = placement.NewPlacementManager(*pc.rules, pc.getQueue)
+		// We need to pass in the locked version of the GetQueue function.
+		// Placing an application will not have a lock on the partition context.
+		pc.placementManager = placement.NewPlacementManager(*pc.rules, pc.GetQueue)
 	}
 	// start at the root: there is only one queue
 	queueConf := conf.Queues[0]
@@ -209,7 +209,7 @@ func (pc *PartitionContext) updateQueues(config []configs.QueueConfig, parent *o
 	// walk over the queues recursively
 	for _, queueConfig := range config {
 		pathName := parentPath + queueConfig.Name
-		queue := pc.getQueue(pathName)
+		queue := pc.getQueueInternal(pathName)
 		var err error
 		if queue == nil {
 			queue, err = objects.NewConfiguredQueue(queueConfig, parent)
@@ -275,25 +275,32 @@ func (pc *PartitionContext) handlePartitionEvent(event objects.ObjectEvent) erro
 	return err
 }
 
-// Add a new application to the partition.
-func (pc *PartitionContext) AddApplication(app *objects.Application) error {
-	pc.Lock()
-	defer pc.Unlock()
+// Get the placement manager. The manager could change when we process the configuration changes
+// we thus need to lock.
+func (pc *PartitionContext) getPlacementManager() *placement.AppPlacementManager {
+	pc.RLock()
+	defer pc.RUnlock()
+	return pc.placementManager
+}
 
+// Add a new application to the partition.
+// NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
+func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 	if pc.isDraining() || pc.isStopped() {
 		return fmt.Errorf("partition %s is stopped cannot add a new application %s", pc.Name, app.ApplicationID)
 	}
 
-	// Add to applications
+	// Check if the app exists
 	appID := app.ApplicationID
-	if pc.applications[appID] != nil {
+	if pc.getApplication(appID) != nil {
 		return fmt.Errorf("adding application %s to partition %s, but application already existed", appID, pc.Name)
 	}
 
 	// Put app under the queue
 	queueName := app.QueueName
-	if pc.placementManager.IsInitialised() {
-		err := pc.placementManager.PlaceApplication(app)
+	pm := pc.getPlacementManager()
+	if pm.IsInitialised() {
+		err := pm.PlaceApplication(app)
 		if err != nil {
 			return fmt.Errorf("failed to place application %s: %v", appID, err)
 		}
@@ -303,10 +310,10 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 		}
 	}
 	// we have a queue name either from placement or direct, get the queue
-	queue := pc.getQueue(queueName)
+	queue := pc.GetQueue(queueName)
 	if queue == nil {
 		// queue must exist if not using placement rules
-		if !pc.placementManager.IsInitialised() {
+		if !pm.IsInitialised() {
 			return fmt.Errorf("application '%s' rejected, cannot create queue '%s' without placement rules", appID, queueName)
 		}
 		// with placement rules the hierarchy might not exist so try and create it
@@ -337,9 +344,12 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 		}
 	}
 
-	// all is OK update the app and partition
+	// all is OK update the app and queue
 	app.SetQueue(queue)
 	queue.AddApplication(app)
+	// lock the partition and make the last change
+	pc.Lock()
+	defer pc.Unlock()
 	pc.applications[appID] = app
 	app.SetTerminatedCallback(pc.moveTerminatedApp)
 
@@ -424,12 +434,12 @@ func (pc *PartitionContext) getReservations() map[string]int {
 }
 
 // Get the queue from the structure based on the fully qualified name.
-// Wrapper around the unlocked version getQueue()
+// Wrapper around the unlocked version getQueueInternal()
 // Visible by tests
 func (pc *PartitionContext) GetQueue(name string) *objects.Queue {
 	pc.RLock()
 	defer pc.RUnlock()
-	return pc.getQueue(name)
+	return pc.getQueueInternal(name)
 }
 
 // Get the queue from the structure based on the fully qualified name.
@@ -437,7 +447,7 @@ func (pc *PartitionContext) GetQueue(name string) *objects.Queue {
 // Returns nil if the queue is not found otherwise the queue object.
 //
 // NOTE: this is a lock free call. It should only be called holding the PartitionContext lock.
-func (pc *PartitionContext) getQueue(name string) *objects.Queue {
+func (pc *PartitionContext) getQueueInternal(name string) *objects.Queue {
 	// start at the root
 	queue := pc.root
 	part := strings.Split(strings.ToLower(name), configs.DOT)
@@ -463,7 +473,7 @@ func (pc *PartitionContext) GetQueueInfos() dao.QueueDAOInfo {
 // Create a queue with full hierarchy. This is called when a new queue is created from a placement rule.
 // The final leaf queue does not exist otherwise we would not get here.
 // This means that at least 1 queue (a leaf queue) will be created
-// NOTE: this is a lock free call. It should only be called holding the PartitionContext lock.
+// NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) createQueue(name string, user security.UserGroup) (*objects.Queue, error) {
 	// find the queue furthest down the hierarchy that exists
 	var toCreate []string
@@ -471,12 +481,12 @@ func (pc *PartitionContext) createQueue(name string, user security.UserGroup) (*
 		return nil, fmt.Errorf("illegal queue name passed in: %s", name)
 	}
 	current := name
-	queue := pc.getQueue(current)
+	queue := pc.GetQueue(current)
 	log.Logger().Debug("Checking queue creation")
 	for queue == nil {
 		toCreate = append(toCreate, current[strings.LastIndex(current, configs.DOT)+1:])
 		current = current[0:strings.LastIndex(current, configs.DOT)]
-		queue = pc.getQueue(current)
+		queue = pc.GetQueue(current)
 	}
 	// Check the ACL before we really create
 	// The existing parent queue is the lowest we need to look at
@@ -535,40 +545,26 @@ func (pc *PartitionContext) getNodes(excludeReserved bool) []*objects.Node {
 }
 
 // Add the node to the partition and process the allocations that are reported by the node.
+// NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) AddNode(node *objects.Node, existingAllocations []*objects.Allocation) error {
 	if node == nil {
 		return fmt.Errorf("cannot add 'nil' node to partition %s", pc.Name)
 	}
-	pc.Lock()
-	defer pc.Unlock()
-
+	log.Logger().Info("adding node to partition",
+		zap.String("partition", pc.Name),
+		zap.String("nodeID", node.NodeID))
 	if pc.isDraining() || pc.isStopped() {
 		return fmt.Errorf("partition %s is stopped cannot add a new node %s", pc.Name, node.NodeID)
 	}
-
-	if pc.nodes[node.NodeID] != nil {
-		return fmt.Errorf("partition %s has an existing node %s, node name must be unique", pc.Name, node.NodeID)
+	if err := pc.addNodeToList(node); err != nil {
+		return err
 	}
 
-	// update the resources available in the cluster
-	if pc.totalPartitionResource == nil {
-		pc.totalPartitionResource = node.GetCapacity().Clone()
-	} else {
-		pc.totalPartitionResource.AddTo(node.GetCapacity())
-	}
-	pc.root.SetMaxResource(pc.totalPartitionResource)
-	log.Logger().Debug("Updated available resources from added node",
-		zap.String("partitionName", pc.Name),
-		zap.String("nodeID", node.NodeID),
-		zap.String("partitionResource", pc.totalPartitionResource.String()))
-
-	// Node is added to the system to allow processing of the allocations
-	pc.nodes[node.NodeID] = node
 	// Add allocations that exist on the node when added
 	if len(existingAllocations) > 0 {
 		for current, alloc := range existingAllocations {
 			if err := pc.addAllocation(alloc); err != nil {
-				released := pc.removeNodeInternal(node.NodeID)
+				released := pc.removeNode(node.NodeID)
 				log.Logger().Info("Failed to add existing allocations, changes reversed",
 					zap.String("nodeID", node.NodeID),
 					zap.Int("existingAllocations", len(existingAllocations)),
@@ -576,45 +572,65 @@ func (pc *PartitionContext) AddNode(node *objects.Node, existingAllocations []*o
 					zap.Int("processingAlloc", current),
 					zap.String("allocation", alloc.String()),
 					zap.Error(err))
+				// update failed metric, active metrics are tracked in add/remove from list
 				metrics.GetSchedulerMetrics().IncFailedNodes()
 				return err
 			}
 		}
 	}
-
-	// Node is added update the metrics
-	metrics.GetSchedulerMetrics().IncActiveNodes()
-
 	return nil
 }
 
-// Remove a node from the partition. It returns all removed allocations.
-func (pc *PartitionContext) removeNode(nodeID string) []*objects.Allocation {
-	pc.Lock()
-	defer pc.Unlock()
-	return pc.removeNodeInternal(nodeID)
-}
-
-// Update a node
-func (pc *PartitionContext) updateNode(delta *resources.Resource) {
+// Update the partition resources based on the change of the node information
+func (pc *PartitionContext) updatePartitionResource(delta *resources.Resource) {
 	pc.Lock()
 	defer pc.Unlock()
 	if delta != nil {
-		pc.totalPartitionResource.AddTo(delta)
+		if pc.totalPartitionResource == nil {
+			pc.totalPartitionResource = delta.Clone()
+		} else {
+			pc.totalPartitionResource.AddTo(delta)
+		}
 		pc.root.SetMaxResource(pc.totalPartitionResource)
 	}
 }
 
-// Remove a node from the partition. It returns all removed allocations.
-// Unlocked version must be called holding the partition lock.
-func (pc *PartitionContext) removeNodeInternal(nodeID string) []*objects.Allocation {
-	log.Logger().Debug("removing node from partition",
-		zap.String("partition", pc.Name),
-		zap.String("nodeID", nodeID))
+// Update the partition details when removing a node.
+// This locks the partition. The partition may not be locked when we process the allocation
+// additions to the node as that takes further app, queue or node locks
+func (pc *PartitionContext) addNodeToList(node *objects.Node) error {
+	pc.Lock()
+	defer pc.Unlock()
+	if pc.nodes[node.NodeID] != nil {
+		return fmt.Errorf("partition %s has an existing node %s, node name must be unique", pc.Name, node.NodeID)
+	}
+	// Node can be added to the system to allow processing of the allocations
+	pc.nodes[node.NodeID] = node
+	metrics.GetSchedulerMetrics().IncActiveNodes()
 
+	// update/set the resources available in the cluster
+	if pc.totalPartitionResource == nil {
+		pc.totalPartitionResource = node.GetCapacity().Clone()
+	} else {
+		pc.totalPartitionResource.AddTo(node.GetCapacity())
+	}
+	pc.root.SetMaxResource(pc.totalPartitionResource)
+	log.Logger().Info("Updated available resources from added node",
+		zap.String("partitionName", pc.Name),
+		zap.String("nodeID", node.NodeID),
+		zap.String("partitionResource", pc.totalPartitionResource.String()))
+	return nil
+}
+
+// Update the partition details when removing a node.
+// This locks the partition. The partition may not be locked when we process the allocation
+// removal from the node as that takes further app, queue or node locks
+func (pc *PartitionContext) removeNodeFromList(nodeID string) *objects.Node {
+	pc.Lock()
+	defer pc.Unlock()
 	node := pc.nodes[nodeID]
 	if node == nil {
-		log.Logger().Debug("node was not found",
+		log.Logger().Debug("node was not found, node already removed",
 			zap.String("nodeID", nodeID),
 			zap.String("partitionName", pc.Name))
 		return nil
@@ -624,28 +640,43 @@ func (pc *PartitionContext) removeNodeInternal(nodeID string) []*objects.Allocat
 	delete(pc.nodes, nodeID)
 	metrics.GetSchedulerMetrics().DecActiveNodes()
 
-	// found the node cleanup the node and all linked data
-	released := pc.removeNodeAllocations(node)
+	// found the node cleanup the available resources, partition resources cannot be nil at this point
 	pc.totalPartitionResource.SubFrom(node.GetCapacity())
 	pc.root.SetMaxResource(pc.totalPartitionResource)
+	log.Logger().Info("Updated available resources from removed node",
+		zap.String("partitionName", pc.Name),
+		zap.String("nodeID", node.NodeID),
+		zap.String("partitionResource", pc.totalPartitionResource.String()))
+	return node
+}
+
+// Remove a node from the partition. It returns all removed allocations.
+// NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
+func (pc *PartitionContext) removeNode(nodeID string) []*objects.Allocation {
+	log.Logger().Info("removing node from partition",
+		zap.String("partition", pc.Name),
+		zap.String("nodeID", nodeID))
+
+	node := pc.removeNodeFromList(nodeID)
+	if node == nil {
+		return nil
+	}
+	// found the node cleanup the allocations linked to the node
+	released := pc.removeNodeAllocations(node)
 
 	// unreserve all the apps that were reserved on the node
 	reservedKeys, releasedAsks := node.UnReserveApps()
 	// update the partition reservations based on the node clean up
 	for i, appID := range reservedKeys {
-		pc.unReserveCountInternal(appID, releasedAsks[i])
+		pc.unReserveCount(appID, releasedAsks[i])
 	}
-
-	log.Logger().Info("node removed from partition",
-		zap.String("partitionName", pc.Name),
-		zap.String("nodeID", node.NodeID),
-		zap.String("partitionResource", pc.totalPartitionResource.String()))
 	return released
 }
 
 // Remove all allocations that are assigned to a node as part of the node removal. This is not part of the node object
 // as updating the applications and queues is the only goal. Applications and queues are not accessible from the node.
 // The removed allocations are returned.
+// NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) []*objects.Allocation {
 	released := make([]*objects.Allocation, 0)
 	// walk over all allocations still registered for this node
@@ -654,7 +685,7 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) []*objects
 		// since we are not locking the node and or application we could have had an update while processing
 		// note that we do not return the allocation if the app or allocation is not found and assume that it
 		// was already removed
-		app := pc.applications[alloc.ApplicationID]
+		app := pc.getApplication(alloc.ApplicationID)
 		if app == nil {
 			log.Logger().Info("app is not found, skipping while removing the node",
 				zap.String("appID", alloc.ApplicationID),
@@ -682,7 +713,7 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) []*objects
 			zap.String("allocationId", allocID))
 	}
 	// track the number of allocations
-	pc.allocations -= len(released)
+	pc.updateAllocationCount(-len(released))
 	return released
 }
 
@@ -747,6 +778,7 @@ func (pc *PartitionContext) tryPlaceholderAllocate() *objects.Allocation {
 }
 
 // Process the allocation and make the left over changes in the partition.
+// NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocation {
 	// find the app make sure it still exists
 	appID := alloc.ApplicationID
@@ -836,7 +868,7 @@ func (pc *PartitionContext) reserve(app *objects.Application, node *objects.Node
 }
 
 // Process the unreservation in the scheduler
-// Lock free call this must be called holding the context lock
+// NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.Node, ask *objects.AllocationAsk) {
 	appID := app.ApplicationID
 	if pc.reservedApps[appID] == 0 {
@@ -855,7 +887,7 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 	// remove the reservation of the queue
 	app.GetQueue().UnReserve(appID, num)
 	// make sure we cannot go below 0
-	pc.unReserveCountInternal(appID, num)
+	pc.unReserveCount(appID, num)
 
 	log.Logger().Info("allocation ask is unreserved",
 		zap.String("appID", appID),
@@ -891,15 +923,10 @@ func (pc *PartitionContext) GetNodeIterator() interfaces.NodeIterator {
 func (pc *PartitionContext) unReserveCount(appID string, asks int) {
 	pc.Lock()
 	defer pc.Unlock()
-	pc.unReserveCountInternal(appID, asks)
-}
-
-// Update the reservation counter for the app
-// Lock free call this must be called holding the context lock
-func (pc *PartitionContext) unReserveCountInternal(appID string, asks int) {
 	if num, found := pc.reservedApps[appID]; found {
 		// decrease the number of reservations for this app and cleanup
-		if num == asks {
+		// do not go negative, if it would happen cleanup
+		if asks >= num {
 			delete(pc.reservedApps, appID)
 		} else {
 			pc.reservedApps[appID] -= asks
@@ -1008,7 +1035,7 @@ func (pc *PartitionContext) GetNodes() []*objects.Node {
 // Add an allocation to the partition/node/application/queue during node registration.
 // Queue max allocation is not checked as the allocation is part of a new node addition.
 //
-// NOTE: this is a lock free call. It should only be called holding the Partition lock.
+// NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
 	// cannot do anything with a nil alloc, should only happen if the shim broke things badly
 	if alloc == nil {
@@ -1034,26 +1061,23 @@ func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
 
 	// Check if allocation violates any resource restriction, or allocate on a
 	// non-existent application or nodes.
-	var node *objects.Node
-	var app *objects.Application
-	var ok bool
-
-	if node, ok = pc.nodes[alloc.NodeID]; !ok {
+	node := pc.GetNode(alloc.NodeID)
+	if node == nil {
 		metrics.GetSchedulerMetrics().IncSchedulingError()
 		return fmt.Errorf("failed to find node %s", alloc.NodeID)
 	}
-
-	if app, ok = pc.applications[alloc.ApplicationID]; !ok {
-		metrics.GetSchedulerMetrics().IncSchedulingError()
-		return fmt.Errorf("failed to find application %s", alloc.ApplicationID)
-	}
-	queue := app.GetQueue()
-
 	// check the node status again
 	if !node.IsSchedulable() {
 		metrics.GetSchedulerMetrics().IncSchedulingError()
 		return fmt.Errorf("node %s is not in schedulable state", node.NodeID)
 	}
+
+	app := pc.getApplication(alloc.ApplicationID)
+	if app == nil {
+		metrics.GetSchedulerMetrics().IncSchedulingError()
+		return fmt.Errorf("failed to find application %s", alloc.ApplicationID)
+	}
+	queue := app.GetQueue()
 
 	// Do not check if the new allocation goes beyond the queue's max resource (recursive).
 	// still handle a returned error but they should never happen.
@@ -1068,7 +1092,7 @@ func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
 	app.AddAllocation(alloc)
 
 	// track the number of allocations
-	pc.allocations++
+	pc.updateAllocationCount(1)
 
 	log.Logger().Info("recovered allocation",
 		zap.String("partitionName", pc.Name),
@@ -1098,7 +1122,7 @@ func (pc *PartitionContext) convertUGI(ugi *si.UserGroupInformation) (security.U
 // if slice[9] = 3, this means there are 3 nodes resource usage is in the range 80% to 90%.
 //
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
-func (pc *PartitionContext) CalculateNodesResourceUsage() map[string][]int {
+func (pc *PartitionContext) calculateNodesResourceUsage() map[string][]int {
 	nodesCopy := pc.getNodes(false)
 	mapResult := make(map[string][]int)
 	for _, node := range nodesCopy {

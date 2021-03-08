@@ -196,7 +196,7 @@ func TestAddNodeWithAllocations(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
 
-	q := partition.getQueue(defQueue)
+	q := partition.GetQueue(defQueue)
 	if q == nil {
 		t.Fatal("expected default queue not found")
 	}
@@ -605,7 +605,7 @@ func TestCreateQueue(t *testing.T) {
 	if !queue.IsLeafQueue() && queue.IsManaged() {
 		t.Errorf("'root.parent.test' queue not created with correct settings: %v", queue)
 	}
-	queue = partition.getQueue("root.parent")
+	queue = partition.GetQueue("root.parent")
 	if queue == nil {
 		t.Errorf("'root.parent' queue creation failed: parent is not set correctly")
 	}
@@ -660,13 +660,13 @@ func TestCreateDeepQueueConfig(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
 	// There is a queue setup as the config must be valid when we run
-	root := partition.getQueue("root")
+	root := partition.GetQueue("root")
 	if root == nil {
 		t.Error("root queue not found in partition")
 	}
 	err = partition.addQueue(conf, root)
 	assert.NilError(t, err, "'root.level1.level2.level3.level4.level5' queue creation from config failed")
-	queue := partition.getQueue("root.level1.level2.level3.level4.level5")
+	queue := partition.GetQueue("root.level1.level2.level3.level4.level5")
 	if queue == nil {
 		t.Fatal("root.level1.level2.level3.level4.level5 queue not found in partition")
 	}
@@ -685,13 +685,13 @@ func TestUpdateQueues(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
 	// There is a queue setup as the config must be valid when we run
-	root := partition.getQueue("root")
+	root := partition.GetQueue("root")
 	if root == nil {
 		t.Error("root queue not found in partition")
 	}
 	err = partition.updateQueues(conf, root)
 	assert.NilError(t, err, "queue update from config failed")
-	def := partition.getQueue(defQueue)
+	def := partition.GetQueue(defQueue)
 	if def == nil {
 		t.Fatal("default queue should still exist")
 	}
@@ -718,12 +718,12 @@ func TestUpdateQueues(t *testing.T) {
 	}
 	err = partition.updateQueues(conf, root)
 	assert.NilError(t, err, "queue update from config failed")
-	parent := partition.getQueue("root.parent")
+	parent := partition.GetQueue("root.parent")
 	if parent == nil {
 		t.Fatal("parent queue should still exist")
 	}
 	assert.Assert(t, resources.Equals(parent.GetMaxResource(), resExpect), "parent queue max resource should have been updated")
-	leaf := partition.getQueue("root.parent.leaf")
+	leaf := partition.GetQueue("root.parent.leaf")
 	if leaf == nil {
 		t.Fatal("leaf queue should have been created")
 	}
@@ -1103,7 +1103,7 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 	}
 	released := app.RemoveAllocationAsk(removeAskID)
 	assert.Equal(t, released, 1, "expected one reservations to be released")
-	partition.unReserveCountInternal(appID1, released)
+	partition.unReserveCount(appID1, released)
 	assert.Equal(t, len(partition.reservedApps), 1, "partition should still have reserved app")
 	assert.Equal(t, len(app.GetReservations()), 1, "application reservations should be 1")
 
@@ -1214,7 +1214,7 @@ func TestUpdateNode(t *testing.T) {
 	// delta resource for a node with mem as 450 and vcores as 40 (both mem and vcores has increased)
 	delta, err := resources.NewResourceFromConf(map[string]string{"memory": "50", "vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
-	partition.updateNode(delta)
+	partition.updatePartitionResource(delta)
 
 	expectedRes, err := resources.NewResourceFromConf(map[string]string{"memory": "450", "vcore": "40"})
 	assert.NilError(t, err, "failed to create resource")
@@ -1225,7 +1225,7 @@ func TestUpdateNode(t *testing.T) {
 
 	// delta resource for a node with mem as 400 and vcores as 30 (both mem and vcores has decreased)
 	delta = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": -50, "vcore": -10})
-	partition.updateNode(delta)
+	partition.updatePartitionResource(delta)
 
 	expectedRes, err = resources.NewResourceFromConf(map[string]string{"memory": "400", "vcore": "30"})
 	assert.NilError(t, err, "failed to create resource")
@@ -1236,7 +1236,7 @@ func TestUpdateNode(t *testing.T) {
 
 	// delta resource for a node with mem as 450 and vcores as 10 (mem has increased but vcores has decreased)
 	delta = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 50, "vcore": -20})
-	partition.updateNode(delta)
+	partition.updatePartitionResource(delta)
 
 	expectedRes, err = resources.NewResourceFromConf(map[string]string{"memory": "450", "vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")

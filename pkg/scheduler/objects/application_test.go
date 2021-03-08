@@ -844,3 +844,85 @@ func TestReplaceAllocation(t *testing.T) {
 		t.Fatalf("real allocation added which shouldn't have been added")
 	}
 }
+
+func TestTimeoutPlaceholderProcessing_NoTimeoutSet(t *testing.T) {
+	originalPhTimeout := defaultPlaceholderTimeout
+	defaultPlaceholderTimeout = time.Microsecond * 100
+	defer func() { defaultPlaceholderTimeout = originalPhTimeout }()
+
+	app := newApplication(appID1, "default", "root.a")
+	testHandler := &appEventHandler{}
+	app.rmEventHandler = testHandler
+	app.SetState(Accepted.String())
+
+	resMap := map[string]string{"memory": "100", "vcores": "10"}
+	res, err := resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err, "Unexpected error when creating resource from map")
+	ph := newPlaceholderAlloc(appID1, "uuid-1", nodeID1, "root.a", res)
+	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should be nil if there are no placeholder allocations")
+
+	// add the placeholder to the app
+	app.AddAllocation(ph)
+	assert.Assert(t, app.placeholderTimer != nil, "Placeholder timer should be initiated after the first placeholder allocation")
+	err = common.WaitFor(1*time.Millisecond, time.Millisecond*100, app.IsFailed)
+	assert.NilError(t, err, "Application did not progress into Failed state")
+}
+
+func TestTimeoutPlaceholderProcessing_TimeoutIsSet(t *testing.T) {
+	app := newApplicationWithPlaceholderTimeout(appID1, "default", "root.a", 100)
+	testHandler := &appEventHandler{}
+	app.rmEventHandler = testHandler
+	app.SetState(Accepted.String())
+
+	resMap := map[string]string{"memory": "100", "vcores": "10"}
+	res, err := resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err, "Unexpected error when creating resource from map")
+	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should be nil if there are no placeholder allocations")
+	ph := newPlaceholderAlloc(appID1, "uuid-1", nodeID1, "root.a", res)
+	// add the placeholder to the app
+	app.AddAllocation(ph)
+	// add a real allocation as well
+	alloc := newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
+	app.AddAllocation(alloc)
+	assert.Assert(t, app.IsStarting(), "App should be in starting state after the first allocation")
+
+	assert.Assert(t, app.placeholderTimer != nil, "Placeholder timer should be initiated after the first placeholder allocation")
+	err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, func() bool {
+		app.RLock()
+		defer app.RUnlock()
+		return app.placeholderTimer == nil
+	})
+	assert.NilError(t, err, "Placeholder timer didn't timed out as expected")
+	assert.Assert(t, app.IsStarting() || app.IsRunning(), "App state should not be changed, because there are some real allocations as well")
+	assert.Assert(t, resources.Equals(app.allocatedResource, res), "Unexpected allocated resources for the app")
+	assert.Assert(t, ph.released, "Placeholder allocation should be released")
+	assert.Assert(t, !alloc.released, "Real allocation should NOT be released")
+}
+
+func TestInitPlaceholderTimer_NoPlaceholders(t *testing.T) {
+	app := newApplicationWithPlaceholderTimeout(appID1, "default", "root.a", 100)
+	testHandler := &appEventHandler{}
+	app.rmEventHandler = testHandler
+	app.SetState(Accepted.String())
+
+	resMap := map[string]string{"memory": "100", "vcores": "10"}
+	res, err := resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err, "Unexpected error when creating resource from map")
+	alloc := newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
+	app.AddAllocation(alloc)
+	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should not be initialized if the allocation is not a placeholder")
+}
+
+func TestGetAllRequests(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	ask := newAllocationAsk(aKey, appID1, res)
+	app := newApplication(appID1, "default", "root.unknown")
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+	assert.Assert(t, len(app.getAllRequests()) == 0, "App should have no requests yet")
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "No error expected when adding an ask")
+	assert.Assert(t, len(app.getAllRequests()) == 1, "App should have only one request")
+	assert.Equal(t, app.getAllRequests()[0], ask, "Unexpected request found in the app")
+}

@@ -44,6 +44,7 @@ var (
 	startingTimeout  = 5 * time.Minute
 	waitingTimeout   = 30 * time.Second
 	completedTimeout = 3 * 24 * time.Hour
+	defaultPlaceholderTimeout = 15 * time.Minute
 )
 
 type Application struct {
@@ -90,9 +91,13 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		reservations:         make(map[string]*reservation),
 		allocations:          make(map[string]*Allocation),
 		stateMachine:         NewAppState(),
-		execTimeout:          common.ConvertSITimeout(siApp.ExecutionTimeoutMilliSeconds),
 		placeholderAsk:       resources.NewResourceFromProto(siApp.PlaceholderAsk),
 	}
+	placeholderTimeout := common.ConvertSITimeout(siApp.ExecutionTimeoutMilliSeconds)
+	if time.Duration(0) == placeholderTimeout {
+		placeholderTimeout = defaultPlaceholderTimeout
+	}
+	app.execTimeout = placeholderTimeout
 	app.user = ugi
 	app.rmEventHandler = eventHandler
 	app.rmID = rmID
@@ -275,6 +280,7 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 		sa.notifyRMAllocationAskReleased(sa.rmID, sa.getAllRequests(), si.TerminationType_TIMEOUT, "releasing placeholders on placeholder timeout")
 	}
 	sa.notifyRMAllocationReleased(sa.rmID, sa.getPlaceholderAllocations(), si.TerminationType_TIMEOUT, "releasing placeholders on placeholder timeout")
+	sa.clearPlaceholderTimer()
 }
 
 // Return an array of all reservation keys for the app.

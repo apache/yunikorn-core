@@ -105,6 +105,20 @@ func newApplicationWithTags(appID, partition, queueName string, tags map[string]
 	return NewApplication(siApp, user, nil, "")
 }
 
+func newApplicationWithPlaceholderTimeout(appID, partition, queueName string, phTimeout int64) *Application {
+	user := security.UserGroup{
+		User:   "testuser",
+		Groups: []string{},
+	}
+	siApp := &si.AddApplicationRequest{
+		ApplicationID:                appID,
+		QueueName:                    queueName,
+		PartitionName:                partition,
+		ExecutionTimeoutMilliSeconds: phTimeout,
+	}
+	return NewApplication(siApp, user, nil, "")
+}
+
 // Create node with minimal info
 func newNode(nodeID string, totalMap map[string]resources.Quantity) *Node {
 	total := resources.NewResourceFromMap(totalMap)

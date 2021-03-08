@@ -542,7 +542,7 @@ func TestRemoveAppAllocs(t *testing.T) {
 		PartitionName:   "default",
 		ApplicationID:   "",
 		UUID:            "",
-		TerminationType: si.AllocationRelease_STOPPED_BY_RM,
+		TerminationType: si.TerminationType_STOPPED_BY_RM,
 	}
 
 	allocs, _ := partition.removeAllocation(release)
@@ -1365,7 +1365,7 @@ func TestTryPlaceholderAllocate(t *testing.T) {
 		PartitionName:   "test",
 		ApplicationID:   appID1,
 		UUID:            phUUID,
-		TerminationType: si.AllocationRelease_PLACEHOLDER_REPLACED,
+		TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
 	}
 	released, confirmed := partition.removeAllocation(release)
 	assert.Equal(t, len(released), 0, "not expecting any released allocations")
@@ -1463,7 +1463,7 @@ func TestFailReplacePlaceholder(t *testing.T) {
 		PartitionName:   "test",
 		ApplicationID:   appID1,
 		UUID:            phUUID,
-		TerminationType: si.AllocationRelease_PLACEHOLDER_REPLACED,
+		TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
 	}
 	released, confirmed := partition.removeAllocation(release)
 	assert.Equal(t, len(released), 0, "not expecting any released allocations")

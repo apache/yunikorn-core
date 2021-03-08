@@ -430,6 +430,9 @@ func (sq *Queue) incPendingResource(delta *resources.Resource) {
 
 // Remove pending resource of this queue
 func (sq *Queue) decPendingResource(delta *resources.Resource) {
+	if sq == nil {
+		return
+	}
 	// update the parent
 	if sq.parent != nil {
 		sq.parent.decPendingResource(delta)
@@ -712,6 +715,9 @@ func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bo
 // Decrement the allocated resources for this queue (recursively)
 // Guard against going below zero resources.
 func (sq *Queue) DecAllocatedResource(alloc *resources.Resource) error {
+	if sq == nil {
+		return fmt.Errorf("queue is nil")
+	}
 	sq.Lock()
 	defer sq.Unlock()
 

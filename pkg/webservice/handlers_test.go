@@ -720,9 +720,9 @@ func TestPartitions(t *testing.T) {
 	app7 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-7")
 
 	// app7: new to killed
-	err = app7.HandleApplicationEvent(objects.KillApplication)
+	err = app7.HandleApplicationEvent(objects.FailApplication)
 	assert.NilError(t, err, "no error expected new to killed")
-	assert.Equal(t, app7.CurrentState(), objects.Killed.String())
+	assert.Equal(t, app7.CurrentState(), objects.Failed.String())
 
 	NewWebApp(schedulerContext, nil)
 
@@ -746,7 +746,7 @@ func TestPartitions(t *testing.T) {
 			assert.Equal(t, part.Applications[objects.Waiting.String()], 1)
 			assert.Equal(t, part.Applications[objects.Rejected.String()], 1)
 			assert.Equal(t, part.Applications[objects.Completed.String()], 1)
-			assert.Equal(t, part.Applications[objects.Killed.String()], 1)
+			assert.Equal(t, part.Applications[objects.Failed.String()], 1)
 			assert.Equal(t, part.State, "Active")
 		} else {
 			assert.Equal(t, part.Name, "[rm-123]gpu")

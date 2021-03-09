@@ -741,7 +741,7 @@ func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRel
 				ForgetAllocations: toReleaseAllocations,
 			})
 			if err != nil {
-				log.Logger().Error("failed to sync shim on allocation release",
+				log.Logger().Debug("failed to sync shim on allocation release",
 					zap.Error(err))
 			}
 		}

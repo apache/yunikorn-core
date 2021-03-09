@@ -20,6 +20,9 @@ package trace
 
 import (
 	"fmt"
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"go.uber.org/zap"
+	"sync"
 
 	"github.com/opentracing/opentracing-go"
 )
@@ -57,6 +60,43 @@ const (
 	NodeAlreadyReservedInfo        = "node has already been reserved"
 )
 
+var globalSchedulerTracer SchedulerTracer
+var once sync.Once
+var globalSchedulerTraceContext SchedulerTraceContext
+var mutex sync.RWMutex
+
+func GlobalSchedulerTracer() SchedulerTracer {
+	once.Do(func() {
+		if globalSchedulerTracer == nil {
+			// TODO: select correct tracer by config
+			var err error
+			globalSchedulerTracer, err = NewSchedulerTracer(nil)
+			if err != nil {
+				log.Logger().Error("Tracing disabled, tracer init failed", zap.Error(err))
+				globalSchedulerTracer = &NoopSchedulerTracerImpl{}
+			}
+		}
+	})
+	return globalSchedulerTracer
+}
+
+func InitGlobalSchedulerTraceContext() {
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	globalSchedulerTraceContext = GlobalSchedulerTracer().NewTraceContext()
+}
+
+func GlobalSchedulerTraceContext() SchedulerTraceContext {
+	mutex.RLock()
+	defer mutex.RUnlock()
+
+	if globalSchedulerTracer == nil {
+		return &NoopSchedulerTraceContextImpl{}
+	}
+	return globalSchedulerTraceContext
+}
+
 // startSpanWrapper simplifies span starting process by integrating general tags' setting.
 // The level tag is required, nonempty and logs span's scheduling level. (root, partition, queue, ...)
 // The phase tag is optional and logs span's calling phase. (reservedAllocate, tryAllocate, allocate, ...)
@@ -69,15 +109,13 @@ const (
 //  ...
 //  span.SetTag("foo", "bar") // if we have irregular tags to set
 //  ...
-func StartSpanWrapper(ctx SchedulerTraceContext, level, phase, name string) (opentracing.Span, error) {
-	if ctx == nil {
-		return opentracing.NoopTracer{}.StartSpan(""), nil
-	}
+func StartSpanWrapper(level, phase, name string) (opentracing.Span, error) {
 	if level == "" {
 		return opentracing.NoopTracer{}.StartSpan(""),
 			fmt.Errorf("level field cannot be empty")
 	}
 
+	ctx := GlobalSchedulerTraceContext()
 	span, err := ctx.StartSpan(fmt.Sprintf("[%v]%v", level, phase))
 	if err == nil {
 		span.SetTag(LevelKey, level)
@@ -95,11 +133,8 @@ func StartSpanWrapper(ctx SchedulerTraceContext, level, phase, name string) (ope
 // The state tag is optional and logs span's calling result. (skip, allocated, reserved, ...)
 // The info tag is optional and logs span's result message. (errors or hints for the state)
 // These general tags depend on the calling result so they can be integrated with the finishing process
-func FinishActiveSpanWrapper(ctx SchedulerTraceContext, state, info string) error {
-	if ctx == nil {
-		return nil
-	}
-
+func FinishActiveSpanWrapper(state, info string) error {
+	ctx := GlobalSchedulerTraceContext()
 	span, err := ctx.ActiveSpan()
 	if err == nil {
 		if state != "" {

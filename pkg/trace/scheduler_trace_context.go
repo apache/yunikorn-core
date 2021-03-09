@@ -197,3 +197,25 @@ func (d *DelaySchedulerTraceContextImpl) isMatch() bool {
 	}
 	return false
 }
+
+var _ SchedulerTraceContext = &NoopSchedulerTraceContextImpl{}
+
+type NoopSchedulerTraceContextImpl struct {
+}
+
+var (
+	noopTracer opentracing.Tracer = opentracing.NoopTracer{}
+)
+
+func (n *NoopSchedulerTraceContextImpl) ActiveSpan() (opentracing.Span, error) {
+	return noopTracer.StartSpan("noop"), nil
+}
+
+func (n *NoopSchedulerTraceContextImpl) StartSpan(operationName string) (opentracing.Span, error) {
+	return noopTracer.StartSpan(operationName), nil
+}
+
+func (n *NoopSchedulerTraceContextImpl) FinishActiveSpan() error {
+	return nil
+}
+

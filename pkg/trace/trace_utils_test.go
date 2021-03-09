@@ -20,16 +20,9 @@ package trace
 
 import (
 	"testing"
-
-	"github.com/opentracing/opentracing-go"
-	"gotest.tools/assert"
 )
 
 func Test_startSpanWrapper(t *testing.T) {
-	tracer, closer, err := NewConstTracer("open-tracer", true)
-	assert.NilError(t, err)
-	defer closer.Close()
-
 	type args struct {
 		ctx   SchedulerTraceContext
 		level string
@@ -42,22 +35,8 @@ func Test_startSpanWrapper(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "NilContext",
-			args: args{
-				ctx:   nil,
-				level: "foobar",
-				phase: "",
-				name:  "",
-			},
-			wantErr: false,
-		},
-		{
 			name: "EmptyLevel",
 			args: args{
-				ctx: &SchedulerTraceContextImpl{
-					Tracer:    tracer,
-					SpanStack: []opentracing.Span{},
-				},
 				level: "",
 				phase: "",
 				name:  "",
@@ -67,7 +46,8 @@ func Test_startSpanWrapper(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := StartSpanWrapper(tt.args.ctx, tt.args.level, tt.args.phase, tt.args.name)
+			InitGlobalSchedulerTraceContext()
+			_, err := StartSpanWrapper(tt.args.level, tt.args.phase, tt.args.name)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("startSpanWrapper() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -77,10 +57,6 @@ func Test_startSpanWrapper(t *testing.T) {
 }
 
 func Test_finishActiveSpanWrapper(t *testing.T) {
-	tracer, closer, err := NewConstTracer("open-tracer", true)
-	assert.NilError(t, err)
-	defer closer.Close()
-
 	type args struct {
 		ctx   SchedulerTraceContext
 		state string
@@ -92,21 +68,8 @@ func Test_finishActiveSpanWrapper(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "NilContext",
-			args: args{
-				ctx:   nil,
-				state: "",
-				info:  "",
-			},
-			wantErr: false,
-		},
-		{
 			name: "EmptyContext",
 			args: args{
-				ctx: &SchedulerTraceContextImpl{
-					Tracer:    tracer,
-					SpanStack: []opentracing.Span{},
-				},
 				state: "",
 				info:  "",
 			},
@@ -115,7 +78,8 @@ func Test_finishActiveSpanWrapper(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := FinishActiveSpanWrapper(tt.args.ctx, tt.args.state, tt.args.info); (err != nil) != tt.wantErr {
+			InitGlobalSchedulerTraceContext()
+			if err := FinishActiveSpanWrapper(tt.args.state, tt.args.info); (err != nil) != tt.wantErr {
 				t.Errorf("finishActiveSpanWrapper() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

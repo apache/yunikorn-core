@@ -884,19 +884,19 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 // the configured queue sortPolicy. Queues without pending resources are skipped.
 // Applications are sorted based on the application sortPolicy. Applications without pending resources are skipped.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *Queue) TryAllocate(traceCtx trace.SchedulerTraceContext, iterator func() interfaces.NodeIterator) *Allocation {
-	_, _ = trace.StartSpanWrapper(traceCtx, trace.QueueLevel, trace.TryAllocatePhase, sq.QueuePath)
-	defer trace.FinishActiveSpanWrapper(traceCtx, "", "")
+func (sq *Queue) TryAllocate(iterator func() interfaces.NodeIterator) *Allocation {
+	_, _ = trace.StartSpanWrapper(trace.QueueLevel, trace.TryAllocatePhase, sq.QueuePath)
+	defer trace.FinishActiveSpanWrapper("", "")
 
 	if sq.IsLeafQueue() {
 		// get the headroom
 		headRoom := sq.getHeadRoom()
-		_, _ = trace.StartSpanWrapper(traceCtx, trace.QueueLevel, trace.SortAppsPhase, sq.QueuePath)
+		_, _ = trace.StartSpanWrapper(trace.QueueLevel, trace.SortAppsPhase, sq.QueuePath)
 		sortedApps := sq.sortApplications()
-		_ = trace.FinishActiveSpanWrapper(traceCtx, "", "")
+		_ = trace.FinishActiveSpanWrapper("", "")
 		// process the apps (filters out app without pending requests)
 		for _, app := range sortedApps {
-			alloc := app.tryAllocate(traceCtx, headRoom, iterator)
+			alloc := app.tryAllocate(headRoom, iterator)
 			if alloc != nil {
 				log.Logger().Debug("allocation found on queue",
 					zap.String("queueName", sq.QueuePath),
@@ -906,12 +906,12 @@ func (sq *Queue) TryAllocate(traceCtx trace.SchedulerTraceContext, iterator func
 			}
 		}
 	} else {
-		_, _ = trace.StartSpanWrapper(traceCtx, trace.QueueLevel, trace.SortQueuesPhase, sq.QueuePath)
+		_, _ = trace.StartSpanWrapper(trace.QueueLevel, trace.SortQueuesPhase, sq.QueuePath)
 		sortedQueues := sq.sortQueues()
-		_ = trace.FinishActiveSpanWrapper(traceCtx, "", "")
+		_ = trace.FinishActiveSpanWrapper("", "")
 		// process the child queues (filters out queues without pending requests)
 		for _, child := range sortedQueues {
-			alloc := child.TryAllocate(traceCtx, iterator)
+			alloc := child.TryAllocate(iterator)
 			if alloc != nil {
 				return alloc
 			}
@@ -925,17 +925,17 @@ func (sq *Queue) TryAllocate(traceCtx trace.SchedulerTraceContext, iterator func
 // the configured queue sortPolicy. Queues without pending resources are skipped.
 // Applications are sorted based on the application sortPolicy. Applications without pending resources are skipped.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *Queue) TryPlaceholderAllocate(traceCtx trace.SchedulerTraceContext, iterator func() interfaces.NodeIterator, getnode func(string) *Node) *Allocation {
-	_, _ = trace.StartSpanWrapper(traceCtx, trace.QueueLevel, trace.TryPlaceholderAllocatePhase, sq.QueuePath)
-	defer trace.FinishActiveSpanWrapper(traceCtx, "", "")
+func (sq *Queue) TryPlaceholderAllocate(iterator func() interfaces.NodeIterator, getnode func(string) *Node) *Allocation {
+	_, _ = trace.StartSpanWrapper(trace.QueueLevel, trace.TryPlaceholderAllocatePhase, sq.QueuePath)
+	defer trace.FinishActiveSpanWrapper("", "")
 
 	if sq.IsLeafQueue() {
-		_, _ = trace.StartSpanWrapper(traceCtx, trace.QueueLevel, trace.SortAppsPhase, sq.QueuePath)
+		_, _ = trace.StartSpanWrapper(trace.QueueLevel, trace.SortAppsPhase, sq.QueuePath)
 		sortedApps := sq.sortApplications()
-		_ = trace.FinishActiveSpanWrapper(traceCtx, "", "")
+		_ = trace.FinishActiveSpanWrapper("", "")
 		// process the apps (filters out app without pending requests)
 		for _, app := range sortedApps {
-			alloc := app.tryPlaceholderAllocate(traceCtx, iterator, getnode)
+			alloc := app.tryPlaceholderAllocate(iterator, getnode)
 			if alloc != nil {
 				log.Logger().Debug("allocation found on queue",
 					zap.String("queueName", sq.QueuePath),
@@ -945,12 +945,12 @@ func (sq *Queue) TryPlaceholderAllocate(traceCtx trace.SchedulerTraceContext, it
 			}
 		}
 	} else {
-		_, _ = trace.StartSpanWrapper(traceCtx, trace.QueueLevel, trace.SortQueuesPhase, sq.QueuePath)
+		_, _ = trace.StartSpanWrapper(trace.QueueLevel, trace.SortQueuesPhase, sq.QueuePath)
 		sortedQueues := sq.sortQueues()
-		_ = trace.FinishActiveSpanWrapper(traceCtx, "", "")
+		_ = trace.FinishActiveSpanWrapper("", "")
 		// process the child queues (filters out queues without pending requests)
 		for _, child := range sortedQueues {
-			alloc := child.TryPlaceholderAllocate(traceCtx, iterator, getnode)
+			alloc := child.TryPlaceholderAllocate(iterator, getnode)
 			if alloc != nil {
 				return alloc
 			}
@@ -977,9 +977,9 @@ func (sq *Queue) GetQueueOutstandingRequests(total *[]*AllocationAsk) {
 // the configured queue sortPolicy. Queues without pending resources are skipped.
 // Applications are currently NOT sorted and are iterated over in a random order.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *Queue) TryReservedAllocate(traceCtx trace.SchedulerTraceContext, iterator func() interfaces.NodeIterator) *Allocation {
-	_, _ = trace.StartSpanWrapper(traceCtx, trace.QueueLevel, trace.TryReservedAllocatePhase, sq.QueuePath)
-	defer trace.FinishActiveSpanWrapper(traceCtx, "", "")
+func (sq *Queue) TryReservedAllocate(iterator func() interfaces.NodeIterator) *Allocation {
+	_, _ = trace.StartSpanWrapper(trace.QueueLevel, trace.TryReservedAllocatePhase, sq.QueuePath)
+	defer trace.FinishActiveSpanWrapper("", "")
 
 	if sq.IsLeafQueue() {
 		// skip if it has no reservations
@@ -1001,7 +1001,7 @@ func (sq *Queue) TryReservedAllocate(traceCtx trace.SchedulerTraceContext, itera
 						zap.String("appID", appID))
 					return nil
 				}
-				alloc := app.tryReservedAllocate(traceCtx, headRoom, iterator)
+				alloc := app.tryReservedAllocate(headRoom, iterator)
 				if alloc != nil {
 					log.Logger().Debug("reservation found for allocation found on queue",
 						zap.String("queueName", sq.QueuePath),
@@ -1012,12 +1012,12 @@ func (sq *Queue) TryReservedAllocate(traceCtx trace.SchedulerTraceContext, itera
 			}
 		}
 	} else {
-		_, _ = trace.StartSpanWrapper(traceCtx, trace.QueueLevel, trace.SortQueuesPhase, sq.QueuePath)
+		_, _ = trace.StartSpanWrapper(trace.QueueLevel, trace.SortQueuesPhase, sq.QueuePath)
 		sortedQueues := sq.sortQueues()
-		_ = trace.FinishActiveSpanWrapper(traceCtx, "", "")
+		_ = trace.FinishActiveSpanWrapper("", "")
 		// process the child queues (filters out queues that have no pending requests)
 		for _, child := range sortedQueues {
-			alloc := child.TryReservedAllocate(traceCtx, iterator)
+			alloc := child.TryReservedAllocate(iterator)
 			if alloc != nil {
 				return alloc
 			}

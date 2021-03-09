@@ -63,8 +63,6 @@ type PartitionContext struct {
 	totalPartitionResource *resources.Resource             // Total node resources
 	nodeSortingPolicy      *policies.NodeSortingPolicy     // Global Node Sorting Policies
 
-	traceContext trace.SchedulerTraceContext
-
 	sync.RWMutex
 }
 
@@ -696,8 +694,8 @@ func (pc *PartitionContext) calculateOutstandingRequests() []*objects.Allocation
 // Try regular allocation for the partition
 // Lock free call this all locks are taken when needed in called functions
 func (pc *PartitionContext) tryAllocate() *objects.Allocation {
-	span, _ := trace.StartSpanWrapper(pc.traceContext, trace.PartitionLevel, trace.TryAllocatePhase, pc.Name)
-	defer trace.FinishActiveSpanWrapper(pc.traceContext, "", "")
+	span, _ := trace.StartSpanWrapper(trace.PartitionLevel, trace.TryAllocatePhase, pc.Name)
+	defer trace.FinishActiveSpanWrapper("", "")
 
 	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
 		span.SetTag(trace.StateKey, trace.SkipState)
@@ -707,7 +705,7 @@ func (pc *PartitionContext) tryAllocate() *objects.Allocation {
 	}
 
 	// try allocating from the root down
-	alloc := pc.root.TryAllocate(pc.traceContext, pc.GetNodeIterator)
+	alloc := pc.root.TryAllocate(pc.GetNodeIterator)
 	if alloc != nil {
 		span.SetTag(trace.StateKey, alloc.Result.String())
 		return pc.allocate(alloc)
@@ -718,8 +716,8 @@ func (pc *PartitionContext) tryAllocate() *objects.Allocation {
 // Try process reservations for the partition
 // Lock free call this all locks are taken when needed in called functions
 func (pc *PartitionContext) tryReservedAllocate() *objects.Allocation {
-	span, _ := trace.StartSpanWrapper(pc.traceContext, trace.PartitionLevel, trace.TryReservedAllocatePhase, pc.Name)
-	defer trace.FinishActiveSpanWrapper(pc.traceContext, "", "")
+	span, _ := trace.StartSpanWrapper(trace.PartitionLevel, trace.TryReservedAllocatePhase, pc.Name)
+	defer trace.FinishActiveSpanWrapper("", "")
 
 	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
 		span.SetTag(trace.StateKey, trace.SkipState)
@@ -729,7 +727,7 @@ func (pc *PartitionContext) tryReservedAllocate() *objects.Allocation {
 	}
 
 	// try allocating from the root down
-	alloc := pc.root.TryReservedAllocate(pc.traceContext, pc.GetNodeIterator)
+	alloc := pc.root.TryReservedAllocate(pc.GetNodeIterator)
 	if alloc != nil {
 		span.SetTag(trace.StateKey, alloc.Result.String())
 		return pc.allocate(alloc)
@@ -740,8 +738,8 @@ func (pc *PartitionContext) tryReservedAllocate() *objects.Allocation {
 // Try process placeholder for the partition
 // Lock free call this all locks are taken when needed in called functions
 func (pc *PartitionContext) tryPlaceholderAllocate() *objects.Allocation {
-	span, _ := trace.StartSpanWrapper(pc.traceContext, trace.PartitionLevel, trace.TryPlaceholderAllocatePhase, pc.Name)
-	defer trace.FinishActiveSpanWrapper(pc.traceContext, "", "")
+	span, _ := trace.StartSpanWrapper(trace.PartitionLevel, trace.TryPlaceholderAllocatePhase, pc.Name)
+	defer trace.FinishActiveSpanWrapper("", "")
 
 	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
 		span.SetTag(trace.StateKey, trace.SkipState)
@@ -750,7 +748,7 @@ func (pc *PartitionContext) tryPlaceholderAllocate() *objects.Allocation {
 		return nil
 	}
 	// try allocating from the root down
-	alloc := pc.root.TryPlaceholderAllocate(pc.traceContext, pc.GetNodeIterator, pc.GetNode)
+	alloc := pc.root.TryPlaceholderAllocate(pc.GetNodeIterator, pc.GetNode)
 	if alloc != nil {
 		span.SetTag(trace.StateKey, alloc.Result.String())
 		return pc.replace(alloc)
@@ -762,7 +760,7 @@ func (pc *PartitionContext) tryPlaceholderAllocate() *objects.Allocation {
 func (pc *PartitionContext) replace(alloc *objects.Allocation) *objects.Allocation {
 	pc.Lock()
 	defer pc.Unlock()
-	span, _ := pc.traceContext.ActiveSpan()
+	span, _ := trace.GlobalSchedulerTraceContext().ActiveSpan()
 	// find the app make sure it still exists
 	appID := alloc.ApplicationID
 	app := pc.applications[appID]
@@ -788,7 +786,7 @@ func (pc *PartitionContext) replace(alloc *objects.Allocation) *objects.Allocati
 func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocation {
 	pc.Lock()
 	defer pc.Unlock()
-	span, _ := pc.traceContext.ActiveSpan()
+	span, _ := trace.GlobalSchedulerTraceContext().ActiveSpan()
 	// find the app make sure it still exists
 	appID := alloc.ApplicationID
 	app := pc.applications[appID]
@@ -1242,12 +1240,4 @@ func (pc *PartitionContext) removeAllocationAsk(appID string, allocationKey stri
 			pc.unReserveCount(appID, reservedAsks)
 		}
 	}
-}
-
-func (pc *PartitionContext) setTraceContext(traceContext trace.SchedulerTraceContext) {
-	pc.traceContext = traceContext
-}
-
-func (pc *PartitionContext) getTraceContext() trace.SchedulerTraceContext {
-	return pc.traceContext
 }

@@ -125,3 +125,15 @@ func NewSchedulerTracer(params *SchedulerTracerImplParams) (SchedulerTracer, err
 		SchedulerTracerImplParams: params,
 	}, nil
 }
+
+var _ SchedulerTracer = &NoopSchedulerTracerImpl{}
+
+type NoopSchedulerTracerImpl struct {
+}
+
+func (n *NoopSchedulerTracerImpl) NewTraceContext() SchedulerTraceContext {
+	return &NoopSchedulerTraceContextImpl{}
+}
+
+func (n *NoopSchedulerTracerImpl) Close() {
+}

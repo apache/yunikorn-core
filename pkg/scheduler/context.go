@@ -124,7 +124,7 @@ func (cc *ClusterContext) schedule() {
 		if alloc != nil {
 			if alloc.Result == objects.Replaced {
 				// communicate the removal to the RM
-				cc.notifyRMAllocationReleased(psc.RmID, alloc.Releases, si.AllocationRelease_PLACEHOLDER_REPLACED, "replacing UUID: "+alloc.UUID)
+				cc.notifyRMAllocationReleased(psc.RmID, alloc.Releases, si.TerminationType_PLACEHOLDER_REPLACED, "replacing UUID: "+alloc.UUID)
 			} else {
 				cc.notifyRMNewAllocation(psc.RmID, alloc)
 			}
@@ -424,11 +424,13 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 		partition := cc.GetPartition(app.PartitionName)
 		if partition == nil {
 			msg := fmt.Sprintf("Failed to add application %s to partition %s, partition doesn't exist", app.ApplicationID, app.PartitionName)
-			log.Logger().Info(msg)
 			rejectedApps = append(rejectedApps, &si.RejectedApplication{
 				ApplicationID: app.ApplicationID,
 				Reason:        msg,
 			})
+			log.Logger().Info("Failed to add application to non existing partition",
+				zap.String("applicationID", app.ApplicationID),
+				zap.String("partitionName", app.PartitionName))
 			continue
 		}
 		// convert and resolve the user: cache can be set per partition
@@ -439,6 +441,10 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 				ApplicationID: app.ApplicationID,
 				Reason:        err.Error(),
 			})
+			log.Logger().Info("Failed to add application to partition (user rejected)",
+				zap.String("applicationID", app.ApplicationID),
+				zap.String("partitionName", app.PartitionName),
+				zap.Error(err))
 			continue
 		}
 		// create a new app object and add it to the partition (partition logs details)
@@ -448,11 +454,20 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 				ApplicationID: app.ApplicationID,
 				Reason:        err.Error(),
 			})
+			log.Logger().Info("Failed to add application to partition (placement rejected)",
+				zap.String("applicationID", app.ApplicationID),
+				zap.String("partitionName", app.PartitionName),
+				zap.Error(err))
 			continue
 		}
 		acceptedApps = append(acceptedApps, &si.AcceptedApplication{
 			ApplicationID: schedApp.ApplicationID,
 		})
+		log.Logger().Info("Added application to partition",
+			zap.String("applicationID", app.ApplicationID),
+			zap.String("partitionName", app.PartitionName),
+			zap.String("requested queue", app.QueueName),
+			zap.String("placed queue", schedApp.GetQueueName()))
 	}
 
 	// Respond to RMProxy with accepted and rejected apps if needed
@@ -476,9 +491,13 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 			}
 			allocations := partition.removeApplication(app.ApplicationID)
 			if len(allocations) > 0 {
-				cc.notifyRMAllocationReleased(partition.RmID, allocations, si.AllocationRelease_STOPPED_BY_RM,
+				cc.notifyRMAllocationReleased(partition.RmID, allocations, si.TerminationType_STOPPED_BY_RM,
 					fmt.Sprintf("Application %s Removed", app.ApplicationID))
 			}
+			log.Logger().Info("Application removed from partition",
+				zap.String("applicationID", app.ApplicationID),
+				zap.String("partitionName", app.PartitionName),
+				zap.Int("allocations released", len(allocations)))
 		}
 	}
 }
@@ -504,41 +523,51 @@ func (cc *ClusterContext) updateNodes(request *si.UpdateRequest) {
 		if p, ok := update.Attributes[siCommon.NodePartition]; ok {
 			partition = cc.GetPartition(p)
 		} else {
-			log.Logger().Debug("node partition not specified",
+			log.Logger().Info("node partition not specified",
 				zap.String("nodeID", update.NodeID),
 				zap.String("nodeAction", update.Action.String()))
 			continue
 		}
 
 		if partition == nil {
+			log.Logger().Info("Failed to update node on non existing partition",
+				zap.String("nodeID", update.NodeID),
+				zap.String("partitionName", update.Attributes[siCommon.NodePartition]),
+				zap.String("nodeAction", update.Action.String()))
 			continue
 		}
 
-		if node, ok := partition.nodes[update.NodeID]; ok {
-			switch update.Action {
-			case si.UpdateNodeInfo_UPDATE:
-				if sr := update.SchedulableResource; sr != nil {
-					partition.updateNode(node.SetCapacity(resources.NewResourceFromProto(sr)))
-				}
-				if or := update.OccupiedResource; or != nil {
-					newOccupied := resources.NewResourceFromProto(or)
-					node.SetOccupiedResource(newOccupied)
-				}
-			case si.UpdateNodeInfo_DRAIN_NODE:
-				// set the state to not schedulable
-				node.SetSchedulable(false)
-			case si.UpdateNodeInfo_DRAIN_TO_SCHEDULABLE:
-				// set the state to schedulable
-				node.SetSchedulable(true)
-			case si.UpdateNodeInfo_DECOMISSION:
-				// set the state to not schedulable then tell the partition to clean up
-				node.SetSchedulable(false)
-				released := partition.removeNode(node.NodeID)
-				// notify the shim allocations have been released from node
-				if len(released) != 0 {
-					cc.notifyRMAllocationReleased(partition.RmID, released, si.AllocationRelease_STOPPED_BY_RM,
-						fmt.Sprintf("Node %s Removed", node.NodeID))
-				}
+		node := partition.GetNode(update.NodeID)
+		if node == nil {
+			log.Logger().Info("Failed to update non existing node",
+				zap.String("nodeID", update.NodeID),
+				zap.String("partitionName", update.Attributes[siCommon.NodePartition]),
+				zap.String("nodeAction", update.Action.String()))
+			continue
+		}
+
+		switch update.Action {
+		case si.UpdateNodeInfo_UPDATE:
+			if sr := update.SchedulableResource; sr != nil {
+				partition.updatePartitionResource(node.SetCapacity(resources.NewResourceFromProto(sr)))
+			}
+			if or := update.OccupiedResource; or != nil {
+				node.SetOccupiedResource(resources.NewResourceFromProto(or))
+			}
+		case si.UpdateNodeInfo_DRAIN_NODE:
+			// set the state to not schedulable
+			node.SetSchedulable(false)
+		case si.UpdateNodeInfo_DRAIN_TO_SCHEDULABLE:
+			// set the state to schedulable
+			node.SetSchedulable(true)
+		case si.UpdateNodeInfo_DECOMISSION:
+			// set the state to not schedulable then tell the partition to clean up
+			node.SetSchedulable(false)
+			released := partition.removeNode(node.NodeID)
+			// notify the shim allocations have been released from node
+			if len(released) != 0 {
+				cc.notifyRMAllocationReleased(partition.RmID, released, si.TerminationType_STOPPED_BY_RM,
+					fmt.Sprintf("Node %s Removed", node.NodeID))
 			}
 		}
 	}
@@ -551,33 +580,38 @@ func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
 		sn := objects.NewNode(node)
 		partition := cc.GetPartition(sn.Partition)
 		if partition == nil {
-			msg := fmt.Sprintf("Failed to find partition %s for new node %s", sn.Partition, node.NodeID)
-			log.Logger().Info(msg)
+			msg := fmt.Sprintf("Failed to find partition %s for new node %s", sn.Partition, sn.NodeID)
 			// TODO assess impact of partition metrics (this never hit the partition)
 			metrics.GetSchedulerMetrics().IncFailedNodes()
-			rejectedNodes = append(rejectedNodes,
-				&si.RejectedNode{
-					NodeID: node.NodeID,
-					Reason: msg,
-				})
+			rejectedNodes = append(rejectedNodes, &si.RejectedNode{
+				NodeID: node.NodeID,
+				Reason: msg,
+			})
+			log.Logger().Info("Failed to add node to non existing partition",
+				zap.String("nodeID", sn.NodeID),
+				zap.String("partitionName", sn.Partition))
 			continue
 		}
 		existingAllocations := cc.convertAllocations(node.ExistingAllocations)
 		err := partition.AddNode(sn, existingAllocations)
 		if err != nil {
 			msg := fmt.Sprintf("Failure while adding new node, node rejected with error %s", err.Error())
-			log.Logger().Warn(msg)
-			rejectedNodes = append(rejectedNodes,
-				&si.RejectedNode{
-					NodeID: node.NodeID,
-					Reason: msg,
-				})
+			rejectedNodes = append(rejectedNodes, &si.RejectedNode{
+				NodeID: sn.NodeID,
+				Reason: msg,
+			})
+			log.Logger().Info("Failed to add node to partition (rejected)",
+				zap.String("nodeID", sn.NodeID),
+				zap.String("partitionName", sn.Partition),
+				zap.Error(err))
 			continue
 		}
+		acceptedNodes = append(acceptedNodes, &si.AcceptedNode{
+			NodeID: sn.NodeID,
+		})
 		log.Logger().Info("successfully added node",
-			zap.String("nodeID", node.NodeID),
+			zap.String("nodeID", sn.NodeID),
 			zap.String("partition", sn.Partition))
-		acceptedNodes = append(acceptedNodes, &si.AcceptedNode{NodeID: node.NodeID})
 	}
 
 	// inform the RM which nodes have been accepted/rejected
@@ -617,7 +651,10 @@ func (cc *ClusterContext) processAsks(request *si.UpdateRequest) {
 		partition := cc.GetPartition(siAsk.PartitionName)
 		if partition == nil {
 			msg := fmt.Sprintf("Failed to find partition %s, for application %s and allocation %s", siAsk.PartitionName, siAsk.ApplicationID, siAsk.AllocationKey)
-			log.Logger().Info(msg)
+			log.Logger().Info("Invalid ask add requested by shim, partition not found",
+				zap.String("partition", siAsk.PartitionName),
+				zap.String("applicationID", siAsk.ApplicationID),
+				zap.String("askKey", siAsk.AllocationKey))
 			rejectedAsks = append(rejectedAsks, &si.RejectedAllocationAsk{
 				AllocationKey: siAsk.AllocationKey,
 				ApplicationID: siAsk.ApplicationID,
@@ -626,27 +663,18 @@ func (cc *ClusterContext) processAsks(request *si.UpdateRequest) {
 			continue
 		}
 
-		// if app info doesn't exist, reject the request
-		app := partition.getApplication(siAsk.ApplicationID)
-		if app == nil {
-			msg := fmt.Sprintf("Failed to find application %s, for allocation %s", siAsk.ApplicationID, siAsk.AllocationKey)
-			log.Logger().Info(msg)
-			rejectedAsks = append(rejectedAsks,
-				&si.RejectedAllocationAsk{
-					AllocationKey: siAsk.AllocationKey,
-					ApplicationID: siAsk.ApplicationID,
-					Reason:        msg,
-				})
-			continue
-		}
-		if err := app.AddAllocationAsk(objects.NewAllocationAsk(siAsk)); err != nil {
+		// try adding to app
+		if err := partition.addAllocationAsk(siAsk); err != nil {
 			rejectedAsks = append(rejectedAsks,
 				&si.RejectedAllocationAsk{
 					AllocationKey: siAsk.AllocationKey,
 					ApplicationID: siAsk.ApplicationID,
 					Reason:        err.Error(),
 				})
-			log.Logger().Info("Invalid ask from shim for app",
+			log.Logger().Info("Invalid ask add requested by shim",
+				zap.String("partition", siAsk.PartitionName),
+				zap.String("applicationID", siAsk.ApplicationID),
+				zap.String("askKey", siAsk.AllocationKey),
 				zap.Error(err))
 		}
 	}
@@ -660,12 +688,17 @@ func (cc *ClusterContext) processAsks(request *si.UpdateRequest) {
 	}
 }
 
-func (cc *ClusterContext) processAskReleases(releases []*si.AllocationAskReleaseRequest) {
+func (cc *ClusterContext) processAskReleases(releases []*si.AllocationAskRelease) {
 	for _, toRelease := range releases {
 		partition := cc.GetPartition(toRelease.PartitionName)
-		if partition != nil {
-			partition.removeAllocationAsk(toRelease.ApplicationID, toRelease.Allocationkey)
+		if partition == nil {
+			log.Logger().Info("Invalid ask release requested by shim, partition not found",
+				zap.String("partition", toRelease.PartitionName),
+				zap.String("applicationID", toRelease.ApplicationID),
+				zap.String("askKey", toRelease.Allocationkey))
+			continue
 		}
+		partition.removeAllocationAsk(toRelease.ApplicationID, toRelease.Allocationkey)
 	}
 }
 
@@ -682,7 +715,7 @@ func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRel
 			allocs, confirmed := partition.removeAllocation(toRelease)
 			// notify the RM of the exact released allocations
 			if len(allocs) > 0 {
-				cc.notifyRMAllocationReleased(rmID, allocs, si.AllocationRelease_STOPPED_BY_RM, "allocation remove as per RM request")
+				cc.notifyRMAllocationReleased(rmID, allocs, si.TerminationType_STOPPED_BY_RM, "allocation remove as per RM request")
 			}
 			for _, alloc := range allocs {
 				toReleaseAllocations = append(toReleaseAllocations, &si.ForgotAllocation{
@@ -762,7 +795,7 @@ func (cc *ClusterContext) notifyRMNewAllocation(rmID string, alloc *objects.Allo
 
 // Create a RM update event to notify RM of released allocations
 // Lock free call, all updates occur via events.
-func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, released []*objects.Allocation, terminationType si.AllocationRelease_TerminationType, message string) {
+func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, released []*objects.Allocation, terminationType si.TerminationType, message string) {
 	releaseEvent := &rmevent.RMReleaseAllocationEvent{
 		ReleasedAllocations: make([]*si.AllocationRelease, 0),
 		RmID:                rmID,

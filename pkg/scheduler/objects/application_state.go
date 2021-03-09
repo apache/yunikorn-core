@@ -41,7 +41,7 @@ const (
 	WaitApplication
 	RejectApplication
 	CompleteApplication
-	KillApplication
+	FailApplication
 	ExpireApplication
 )
 
@@ -62,12 +62,12 @@ const (
 	Waiting
 	Rejected
 	Completed
-	Killed
+	Failed
 	Expired
 )
 
 func (as applicationState) String() string {
-	return [...]string{"New", "Accepted", "Starting", "Running", "Waiting", "Rejected", "Completed", "Killed", "Expired"}[as]
+	return [...]string{"New", "Accepted", "Starting", "Running", "Waiting", "Rejected", "Completed", "Failed", "Expired"}[as]
 }
 
 func NewAppState() *fsm.FSM {
@@ -98,9 +98,9 @@ func NewAppState() *fsm.FSM {
 				Src:  []string{Accepted.String(), Running.String(), Starting.String()},
 				Dst:  Waiting.String(),
 			}, {
-				Name: KillApplication.String(),
-				Src:  []string{Accepted.String(), Killed.String(), New.String(), Running.String(), Starting.String(), Waiting.String()},
-				Dst:  Killed.String(),
+				Name: FailApplication.String(),
+				Src:  []string{Accepted.String(), Failed.String(), New.String(), Running.String(), Starting.String(), Waiting.String()},
+				Dst:  Failed.String(),
 			}, {
 				Name: ExpireApplication.String(),
 				Src:  []string{Completed.String()},
@@ -145,7 +145,12 @@ func NewAppState() *fsm.FSM {
 			fmt.Sprintf("enter_%s", Completed.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsCompleted()
 				app := setTimer(completedTimeout, event, ExpireApplication)
-				app.unSetQueue()
+				app.executeTerminatedCallback()
+				app.clearPlaceholderTimer()
+			},
+			fmt.Sprintf("enter_%s", Failed.String()): func(event *fsm.Event) {
+				app := setTimer(completedTimeout, event, ExpireApplication)
+				app.executeTerminatedCallback()
 			},
 		},
 	)

@@ -105,6 +105,20 @@ func newApplicationWithTags(appID, partition, queueName string, tags map[string]
 	return NewApplication(siApp, user, nil, "")
 }
 
+func newApplicationWithPlaceholderTimeout(appID, partition, queueName string, phTimeout int64) *Application {
+	user := security.UserGroup{
+		User:   "testuser",
+		Groups: []string{},
+	}
+	siApp := &si.AddApplicationRequest{
+		ApplicationID:                appID,
+		QueueName:                    queueName,
+		PartitionName:                partition,
+		ExecutionTimeoutMilliSeconds: phTimeout,
+	}
+	return NewApplication(siApp, user, nil, "")
+}
+
 // Create node with minimal info
 func newNode(nodeID string, totalMap map[string]resources.Quantity) *Node {
 	total := resources.NewResourceFromMap(totalMap)
@@ -166,6 +180,15 @@ func newAllocation(appID, uuid, nodeID, queueName string, res *resources.Resourc
 	askKey := strconv.FormatInt((time.Now()).UnixNano(), 10)
 	ask := newAllocationAsk(askKey, appID, res)
 	ask.setQueue(queueName)
+	return NewAllocation(uuid, nodeID, ask)
+}
+
+// Create a new Allocation with a random ask key
+func newPlaceholderAlloc(appID, uuid, nodeID, queueName string, res *resources.Resource) *Allocation {
+	askKey := strconv.FormatInt((time.Now()).UnixNano(), 10)
+	ask := newAllocationAsk(askKey, appID, res)
+	ask.setQueue(queueName)
+	ask.placeholder = true
 	return NewAllocation(uuid, nodeID, ask)
 }
 

@@ -120,6 +120,7 @@ func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 	lists := schedulerContext.GetPartitionMapClone()
 	for _, partition := range lists {
 		appList := partition.GetApplications()
+		appList = append(appList, partition.GetCompletedApplications()...)
 		for _, app := range appList {
 			if len(queueName) == 0 || strings.EqualFold(queueName, app.GetQueueName()) {
 				appsDao = append(appsDao, getApplicationJSON(app))
@@ -296,7 +297,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		UsedResource:   app.GetAllocatedResource().DAOString(),
 		Partition:      app.Partition,
 		QueueName:      app.QueueName,
-		SubmissionTime: app.SubmissionTime.Unix(),
+		SubmissionTime: app.SubmissionTime.UnixNano(),
 		Allocations:    allocationInfos,
 		State:          app.CurrentState(),
 	}
@@ -549,6 +550,7 @@ func getPartitions(w http.ResponseWriter, r *http.Request) {
 		partitionInfo.NodeSortingPolicy = partitionContext.GetNodeSortingPolicy().String()
 
 		appList := partitionContext.GetApplications()
+		appList = append(appList, partitionContext.GetCompletedApplications()...)
 		applicationsState := make(map[string]int)
 		totalApplications := 0
 		for _, app := range appList {

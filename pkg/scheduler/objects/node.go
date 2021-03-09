@@ -127,15 +127,17 @@ func (sn *Node) GetCapacity() *resources.Resource {
 	return sn.totalResource.Clone()
 }
 
-func (sn *Node) SetCapacity(newCapacity *resources.Resource) {
+func (sn *Node) SetCapacity(newCapacity *resources.Resource) *resources.Resource {
 	sn.Lock()
 	defer sn.Unlock()
 	if resources.Equals(sn.totalResource, newCapacity) {
 		log.Logger().Debug("skip updating capacity, not changed")
-		return
+		return nil
 	}
+	delta := resources.Sub(newCapacity, sn.totalResource)
 	sn.totalResource = newCapacity
 	sn.refreshAvailableResource()
+	return delta
 }
 
 func (sn *Node) GetOccupiedResource() *resources.Resource {
@@ -162,7 +164,7 @@ func (sn *Node) refreshAvailableResource() {
 	sn.availableResource.SubFrom(sn.allocatedResource)
 	sn.availableResource.SubFrom(sn.occupiedResource)
 	// check if any quantity is negative: a nil resource is all 0's
-	if resources.StrictlyGreaterThanOrEquals(sn.availableResource, nil) {
+	if !resources.StrictlyGreaterThanOrEquals(sn.availableResource, nil) {
 		log.Logger().Warn("Node update triggered over allocated node",
 			zap.String("available", sn.availableResource.String()),
 			zap.String("total", sn.totalResource.String()),

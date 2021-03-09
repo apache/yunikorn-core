@@ -91,6 +91,9 @@ func NewResourceFromConf(configMap map[string]string) (*Resource, error) {
 		if err != nil {
 			return nil, err
 		}
+		if intValue < 0 {
+			return nil, fmt.Errorf("negative resources not permitted: %v", configMap)
+		}
 		res.Resources[key] = Quantity(intValue)
 	}
 	return res, nil
@@ -121,15 +124,6 @@ func (r *Resource) ToProto() *si.Resource {
 		}
 	}
 	return proto
-}
-
-// convert to a configmap
-func (r *Resource) ToConf() map[string]string {
-	conf := make(map[string]string)
-	for k, v := range r.Resources {
-		conf[k] = v.string()
-	}
-	return conf
 }
 
 // Return a clone (copy) of the resource it is called on.
@@ -758,6 +752,7 @@ func MaxQuantity(x, y Quantity) Quantity {
 
 // Returns a new resource with the smallest value for each quantity in the resources
 // If either resource passed in is nil a zero resource is returned
+// If a resource type is missing from one of the Resource, it is considered 0
 func ComponentWiseMin(left, right *Resource) *Resource {
 	out := NewResource()
 	if left != nil && right != nil {
@@ -769,6 +764,49 @@ func ComponentWiseMin(left, right *Resource) *Resource {
 		}
 	}
 	return out
+}
+
+// Returns a new Resource with the smallest value for each quantity in the Resources
+// If either Resource passed in is nil the other Resource is returned
+// If a Resource type is missing from one of the Resource, it is considered empty and the quantity from the other Resource is returned
+func ComponentWiseMinPermissive(left, right *Resource) *Resource {
+	out := NewResource()
+	if right == nil && left == nil {
+		return nil
+	}
+	if left == nil {
+		return right.Clone()
+	}
+	if right == nil {
+		return left.Clone()
+	}
+	for k, v := range left.Resources {
+		if val, ok := right.Resources[k]; ok {
+			out.Resources[k] = MinQuantity(v, val)
+		} else {
+			out.Resources[k] = v
+		}
+	}
+	for k, v := range right.Resources {
+		if val, ok := left.Resources[k]; ok {
+			out.Resources[k] = MinQuantity(v, val)
+		} else {
+			out.Resources[k] = v
+		}
+	}
+	return out
+}
+
+func (r *Resource) HasNegativeValue() bool {
+	if r == nil {
+		return false
+	}
+	for _, v := range r.Resources {
+		if v < 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // Returns a new resource with the largest value for each quantity in the resources
@@ -787,7 +825,7 @@ func ComponentWiseMax(left, right *Resource) *Resource {
 }
 
 // Check that the whole resource is zero
-// A nil resource is zero (contrary to StrictlyGreaterThanZero)
+// A nil or empty resource is zero (contrary to StrictlyGreaterThanZero)
 func IsZero(zero *Resource) bool {
 	if zero == nil {
 		return true
@@ -800,25 +838,13 @@ func IsZero(zero *Resource) bool {
 	return true
 }
 
-func (r *Resource) HasNegativeValue() bool {
-	if r == nil {
-		return false
-	}
-	for _, v := range r.Resources {
-		if v < 0 {
-			return true
-		}
-	}
-	return false
-}
-
 func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {
+	absResource := NewResource()
 	if capacity == nil || used == nil {
-		log.Logger().Warn("Cannot calculate absolute capacity because of missing capacity or usage")
-		return NewResource()
+		log.Logger().Debug("Cannot calculate absolute capacity because of missing capacity or usage")
+		return absResource
 	}
-	absResource := make(map[string]Quantity)
-	missingResources := make([]string, 0)
+	var missingResources strings.Builder
 	for resourceName, availableResource := range capacity.Resources {
 		var absResValue int64
 		if usedResource, ok := used.Resources[resourceName]; ok {
@@ -847,14 +873,17 @@ func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {
 				absResValue = math.MinInt64
 			}
 		} else {
-			missingResources = append(missingResources, resourceName)
+			if missingResources.Len() != 0 {
+				missingResources.WriteString(", ")
+			}
+			missingResources.WriteString(resourceName)
 			continue
 		}
-		absResource[resourceName] = Quantity(absResValue)
+		absResource.Resources[resourceName] = Quantity(absResValue)
 	}
-	if len(missingResources) > 0 {
-		log.Logger().Debug("Cannot calculate absolute usage for resources because of missing usage information",
-			zap.String("resource name", strings.Join(missingResources, ",")))
+	if missingResources.Len() != 0 {
+		log.Logger().Debug("Absolute usage result is missing resource information",
+			zap.String("missing resource(s)", missingResources.String()))
 	}
-	return NewResourceFromMap(absResource)
+	return absResource
 }

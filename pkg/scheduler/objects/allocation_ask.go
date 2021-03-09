@@ -136,19 +136,19 @@ func (aa *AllocationAsk) setPriority(prio int32) {
 }
 
 func (aa *AllocationAsk) isPlaceholder() bool {
-	aa.Lock()
-	defer aa.Unlock()
+	aa.RLock()
+	defer aa.RUnlock()
 	return aa.placeholder
 }
 
 func (aa *AllocationAsk) getTaskGroup() string {
-	aa.Lock()
-	defer aa.Unlock()
+	aa.RLock()
+	defer aa.RUnlock()
 	return aa.taskGroupName
 }
 
 func (aa *AllocationAsk) getTimeout() time.Duration {
-	aa.Lock()
-	defer aa.Unlock()
+	aa.RLock()
+	defer aa.RUnlock()
 	return aa.execTimeout
 }

@@ -120,6 +120,7 @@ func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 	lists := schedulerContext.GetPartitionMapClone()
 	for _, partition := range lists {
 		appList := partition.GetApplications()
+		appList = append(appList, partition.GetCompletedApplications()...)
 		for _, app := range appList {
 			if len(queueName) == 0 || strings.EqualFold(queueName, app.GetQueueName()) {
 				appsDao = append(appsDao, getApplicationJSON(app))
@@ -296,7 +297,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		UsedResource:   app.GetAllocatedResource().DAOString(),
 		Partition:      app.Partition,
 		QueueName:      app.QueueName,
-		SubmissionTime: app.SubmissionTime.Unix(),
+		SubmissionTime: app.SubmissionTime.UnixNano(),
 		Allocations:    allocationInfos,
 		State:          app.CurrentState(),
 	}
@@ -529,4 +530,38 @@ func updateConfiguration(conf string) (string, error) {
 		return resp.OldConfig, fmt.Errorf(resp.Reason)
 	}
 	return "", fmt.Errorf("config plugin not found")
+}
+
+func getPartitions(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+
+	var partitionsInfo []*dao.PartitionInfo
+	lists := schedulerContext.GetPartitionMapClone()
+	for _, partitionContext := range lists {
+		partitionInfo := &dao.PartitionInfo{}
+		partitionInfo.Name = partitionContext.Name
+		partitionInfo.State = partitionContext.GetCurrentState()
+		partitionInfo.LastStateTransitionTime = partitionContext.GetStateTime().String()
+
+		capacityInfo := dao.PartitionCapacity{}
+		capacityInfo.Capacity = partitionContext.GetTotalPartitionResource().DAOString()
+		capacityInfo.UsedCapacity = partitionContext.GetAllocatedResource().DAOString()
+		partitionInfo.Capacity = capacityInfo
+		partitionInfo.NodeSortingPolicy = partitionContext.GetNodeSortingPolicy().String()
+
+		appList := partitionContext.GetApplications()
+		appList = append(appList, partitionContext.GetCompletedApplications()...)
+		applicationsState := make(map[string]int)
+		totalApplications := 0
+		for _, app := range appList {
+			applicationsState[app.CurrentState()]++
+			totalApplications++
+		}
+		applicationsState["total"] = totalApplications
+		partitionInfo.Applications = applicationsState
+		partitionsInfo = append(partitionsInfo, partitionInfo)
+	}
+	if err := json.NewEncoder(w).Encode(partitionsInfo); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }

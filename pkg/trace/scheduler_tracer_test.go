@@ -24,7 +24,73 @@ import (
 	"gotest.tools/assert"
 )
 
-// TestSchedulerTracerImpl tests SetParams and NewTraceContext
+
+func Test_startSpanWrapper(t *testing.T) {
+	type args struct {
+		level string
+		phase string
+		name  string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "EmptyLevel",
+			args: args{
+				level: "",
+				phase: "",
+				name:  "",
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tracer := GlobalSchedulerTracer()
+			_ = tracer.InitContext()
+			_, err := tracer.StartSpan(tt.args.level, tt.args.phase, tt.args.name)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("startSpanWrapper() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+		})
+	}
+}
+
+func Test_finishActiveSpanWrapper(t *testing.T) {
+	type args struct {
+		state string
+		info  string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "EmptyContext",
+			args: args{
+				state: "",
+				info:  "",
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tracer := GlobalSchedulerTracer()
+			_ = tracer.InitContext()
+			if err := tracer.FinishActiveSpan(tt.args.state, tt.args.info); (err != nil) != tt.wantErr {
+				t.Errorf("finishActiveSpanWrapper() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+
+// TestSchedulerTracerImpl tests SetParams and InitTraceContext
 func TestSchedulerTracerImpl(t *testing.T) {
 	type fields struct {
 		SchedulerTracerImplParams *SchedulerTracerImplParams
@@ -85,14 +151,14 @@ func TestSchedulerTracerImpl(t *testing.T) {
 			assert.NilError(t, err)
 			defer tracer.Close()
 			tracer.(*SchedulerTracerImpl).SetParams(tt.fields.SchedulerTracerImplParams)
-			ctx := tracer.NewTraceContext()
-			switch typeInfo := ctx.(type) {
+			_ = tracer.InitContext()
+			switch typeInfo := tracer.Context().(type) {
 			case nil:
 				t.Errorf("Nil context object, type: %T", typeInfo)
-			case *SchedulerTraceContextImpl:
+			case *ContextImpl:
 				assert.Equal(t, tt.wantType, 0)
-				assert.Equal(t, tt.wantOnDemand, ctx.(*SchedulerTraceContextImpl).OnDemandFlag)
-			case *DelaySchedulerTraceContextImpl:
+				assert.Equal(t, tt.wantOnDemand, tracer.Context().(*ContextImpl).OnDemandFlag)
+			case *DelayContextImpl:
 				assert.Equal(t, tt.wantType, 1)
 			default:
 				t.Errorf("Unknown type: %T", typeInfo)

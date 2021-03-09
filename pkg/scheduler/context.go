@@ -102,8 +102,11 @@ func (cc *ClusterContext) setEventHandler(rmHandler handler.EventHandler) {
 // Process each partition in the scheduler, walk over each queue and app to check if anything can be scheduled.
 // This can be forked into a go routine per partition if needed to increase parallel allocations
 func (cc *ClusterContext) schedule() {
-	trace.InitGlobalSchedulerTraceContext()
-	_, err := trace.StartSpanWrapper(trace.RootLevel, "", "")
+	tracer := trace.GlobalSchedulerTracer()
+	if err := tracer.InitContext(); err != nil {
+		log.Logger().Error("failed to init trace context", zap.Error(err))
+	}
+	_, err := tracer.StartSpan(trace.RootLevel, "", "")
 	if err != nil {
 		log.Logger().Error("failed to start trace span", zap.Error(err))
 	}
@@ -111,15 +114,15 @@ func (cc *ClusterContext) schedule() {
 
 	// schedule each partition defined in the cluster
 	for _, psc := range cc.GetPartitionMapClone() {
-		_, _ = trace.StartSpanWrapper(trace.PartitionLevel, "", psc.Name)
+		_, _ = tracer.StartSpan(trace.PartitionLevel, "", psc.Name)
 		// if there are no resources in the partition just skip
 		if psc.root.GetMaxResource() == nil {
-			_ = trace.FinishActiveSpanWrapper(trace.SkipState, trace.NoMaxResourceInfo)
+			_ = tracer.FinishActiveSpan(trace.SkipState, trace.NoMaxResourceInfo)
 			continue
 		}
 		// a stopped partition does not allocate
 		if psc.isStopped() {
-			_ = trace.FinishActiveSpanWrapper(trace.SkipState, trace.StoppedInfo)
+			_ = tracer.FinishActiveSpan(trace.SkipState, trace.StoppedInfo)
 			continue
 		}
 		// try reservations first
@@ -139,12 +142,12 @@ func (cc *ClusterContext) schedule() {
 			} else {
 				cc.notifyRMNewAllocation(psc.RmID, alloc)
 			}
-			_ = trace.FinishActiveSpanWrapper(alloc.Result.String(), "")
+			_ = tracer.FinishActiveSpan(alloc.Result.String(), "")
 			if stateSummary == "" || stateSummary == trace.SkipState {
 				stateSummary = alloc.Result.String()
 			}
 		} else {
-			_ = trace.FinishActiveSpanWrapper(trace.SkipState, "")
+			_ = tracer.FinishActiveSpan(trace.SkipState, "")
 			if stateSummary == "" {
 				stateSummary = trace.SkipState
 			}
@@ -153,7 +156,7 @@ func (cc *ClusterContext) schedule() {
 	if stateSummary != "" {
 		// If there is no partition that have anything worth to trace,
 		// don't report this whole trace
-		_ = trace.FinishActiveSpanWrapper(stateSummary, "")
+		_ = tracer.FinishActiveSpan(stateSummary, "")
 	}
 }
 

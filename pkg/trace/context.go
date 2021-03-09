@@ -20,6 +20,8 @@ package trace
 
 import (
 	"fmt"
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"go.uber.org/zap"
 	"time"
 
 	"github.com/opentracing/opentracing-go"
@@ -27,7 +29,7 @@ import (
 	"github.com/uber/jaeger-client-go"
 )
 
-// SchedulerTraceContext manages spans for one trace.
+// Context manages spans for one trace.
 // It only designs for the scheduling process so we keeps the interface simple.
 // We have to call StartSpan and FinishActiveSpan in pairs, like this:
 //  span, _ := ctx.StartSpan("op")
@@ -39,7 +41,7 @@ import (
 // because they won't change the structure in the trace context.
 // We should be careful if functions that might cause panic are involved in the procedure when tracing,
 // which is similar to resource opening and closing.
-type SchedulerTraceContext interface {
+type Context interface {
 	// ActiveSpan returns current active (latest unfinished) span in this context object.
 	// Error returns if there doesn't exist an unfinished span.
 	ActiveSpan() (opentracing.Span, error)
@@ -54,24 +56,24 @@ type SchedulerTraceContext interface {
 	FinishActiveSpan() error
 }
 
-var _ SchedulerTraceContext = &SchedulerTraceContextImpl{}
+var _ Context = &ContextImpl{}
 
-// SchedulerTraceContextImpl reports the spans to tracer once they are finished.
+// ContextImpl reports the spans to tracer once they are finished.
 // Root span's "sampling.priority" tag will be set to 1 to force reporting all spans if OnDemandFlag is true.
-type SchedulerTraceContextImpl struct {
+type ContextImpl struct {
 	Tracer       opentracing.Tracer
 	SpanStack    []opentracing.Span
 	OnDemandFlag bool
 }
 
-func (s *SchedulerTraceContextImpl) ActiveSpan() (opentracing.Span, error) {
+func (s *ContextImpl) ActiveSpan() (opentracing.Span, error) {
 	if len(s.SpanStack) == 0 {
 		return nil, fmt.Errorf("active span is not found")
 	}
 	return s.SpanStack[len(s.SpanStack)-1], nil
 }
 
-func (s *SchedulerTraceContextImpl) StartSpan(operationName string) (opentracing.Span, error) {
+func (s *ContextImpl) StartSpan(operationName string) (opentracing.Span, error) {
 	var newSpan opentracing.Span
 	if span, err := s.ActiveSpan(); err != nil {
 		newSpan = s.Tracer.StartSpan(operationName)
@@ -82,16 +84,19 @@ func (s *SchedulerTraceContextImpl) StartSpan(operationName string) (opentracing
 		newSpan = s.Tracer.StartSpan(operationName, opentracing.ChildOf(span.Context()))
 	}
 	s.SpanStack = append(s.SpanStack, newSpan)
+	log.Logger().Debug("start span", zap.Int("level", len(s.SpanStack) - 1), zap.String("name", operationName))
 	return newSpan, nil
 }
 
-func (s *SchedulerTraceContextImpl) FinishActiveSpan() error {
+func (s *ContextImpl) FinishActiveSpan() error {
 	span, err := s.ActiveSpan()
 	if err != nil {
 		return err
 	}
 	span.Finish()
+	log.Logger().Debug("finish span", zap.Int("level", len(s.SpanStack) - 1))
 	s.SpanStack = s.SpanStack[:len(s.SpanStack)-1]
+
 	return nil
 }
 
@@ -114,25 +119,25 @@ func (d *DelaySpan) FinishWithOptions(opentracing.FinishOptions) {
 	panic("should not call it")
 }
 
-var _ SchedulerTraceContext = &DelaySchedulerTraceContextImpl{}
+var _ Context = &DelayContextImpl{}
 
-// DelaySchedulerTraceContextImpl delays reporting spans
+// DelayContextImpl delays reporting spans
 // and chooses whether to report based on FilterTags when the entire trace is collected.
-type DelaySchedulerTraceContextImpl struct {
+type DelayContextImpl struct {
 	Tracer     opentracing.Tracer
 	Spans      []*DelaySpan
 	StackLen   int
 	FilterTags map[string]interface{}
 }
 
-func (d *DelaySchedulerTraceContextImpl) ActiveSpan() (opentracing.Span, error) {
+func (d *DelayContextImpl) ActiveSpan() (opentracing.Span, error) {
 	if d.StackLen == 0 {
 		return nil, fmt.Errorf("active span is not found")
 	}
 	return d.Spans[d.StackLen-1], nil
 }
 
-func (d *DelaySchedulerTraceContextImpl) StartSpan(operationName string) (opentracing.Span, error) {
+func (d *DelayContextImpl) StartSpan(operationName string) (opentracing.Span, error) {
 	var newSpan *DelaySpan
 	if span, err := d.ActiveSpan(); err != nil {
 		newSpan = &DelaySpan{
@@ -154,7 +159,7 @@ func (d *DelaySchedulerTraceContextImpl) StartSpan(operationName string) (opentr
 
 // FinishActiveSpan finishes current active span by setting its FinishTime
 // and pop it from the unfinished span stack.
-func (d *DelaySchedulerTraceContextImpl) FinishActiveSpan() error {
+func (d *DelayContextImpl) FinishActiveSpan() error {
 	if _, err := d.ActiveSpan(); err != nil {
 		return err
 	}
@@ -177,7 +182,7 @@ func (d *DelaySchedulerTraceContextImpl) FinishActiveSpan() error {
 }
 
 // isMatch checks whether there is a span in the trace that matches the FilterTags.
-func (d *DelaySchedulerTraceContextImpl) isMatch() bool {
+func (d *DelayContextImpl) isMatch() bool {
 	// matches if no filter tag condition exists
 	if len(d.FilterTags) == 0 {
 		return true
@@ -198,24 +203,24 @@ func (d *DelaySchedulerTraceContextImpl) isMatch() bool {
 	return false
 }
 
-var _ SchedulerTraceContext = &NoopSchedulerTraceContextImpl{}
+var _ Context = &NoopContextImpl{}
 
-type NoopSchedulerTraceContextImpl struct {
+type NoopContextImpl struct {
 }
 
 var (
-	noopTracer opentracing.Tracer = opentracing.NoopTracer{}
+	noopSpan = opentracing.NoopTracer{}.StartSpan("")
 )
 
-func (n *NoopSchedulerTraceContextImpl) ActiveSpan() (opentracing.Span, error) {
-	return noopTracer.StartSpan("noop"), nil
+func (n *NoopContextImpl) ActiveSpan() (opentracing.Span, error) {
+	return noopSpan, nil
 }
 
-func (n *NoopSchedulerTraceContextImpl) StartSpan(operationName string) (opentracing.Span, error) {
-	return noopTracer.StartSpan(operationName), nil
+func (n *NoopContextImpl) StartSpan(operationName string) (opentracing.Span, error) {
+	return noopSpan, nil
 }
 
-func (n *NoopSchedulerTraceContextImpl) FinishActiveSpan() error {
+func (n *NoopContextImpl) FinishActiveSpan() error {
 	return nil
 }
 

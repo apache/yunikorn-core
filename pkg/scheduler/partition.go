@@ -730,8 +730,9 @@ func (pc *PartitionContext) calculateOutstandingRequests() []*objects.Allocation
 // Try regular allocation for the partition
 // Lock free call this all locks are taken when needed in called functions
 func (pc *PartitionContext) tryAllocate() *objects.Allocation {
-	span, _ := trace.StartSpanWrapper(trace.PartitionLevel, trace.TryAllocatePhase, pc.Name)
-	defer trace.FinishActiveSpanWrapper("", "")
+	tracer := trace.GlobalSchedulerTracer()
+	span, _ := tracer.StartSpan(trace.PartitionLevel, trace.TryAllocatePhase, pc.Name)
+	defer tracer.FinishActiveSpan("", "")
 
 	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
 		span.SetTag(trace.StateKey, trace.SkipState)
@@ -752,8 +753,9 @@ func (pc *PartitionContext) tryAllocate() *objects.Allocation {
 // Try process reservations for the partition
 // Lock free call this all locks are taken when needed in called functions
 func (pc *PartitionContext) tryReservedAllocate() *objects.Allocation {
-	span, _ := trace.StartSpanWrapper(trace.PartitionLevel, trace.TryReservedAllocatePhase, pc.Name)
-	defer trace.FinishActiveSpanWrapper("", "")
+	tracer := trace.GlobalSchedulerTracer()
+	span, _ := tracer.StartSpan(trace.PartitionLevel, trace.TryReservedAllocatePhase, pc.Name)
+	defer tracer.FinishActiveSpan("", "")
 
 	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
 		span.SetTag(trace.StateKey, trace.SkipState)
@@ -774,8 +776,9 @@ func (pc *PartitionContext) tryReservedAllocate() *objects.Allocation {
 // Try process placeholder for the partition
 // Lock free call this all locks are taken when needed in called functions
 func (pc *PartitionContext) tryPlaceholderAllocate() *objects.Allocation {
-	span, _ := trace.StartSpanWrapper(trace.PartitionLevel, trace.TryPlaceholderAllocatePhase, pc.Name)
-	defer trace.FinishActiveSpanWrapper("", "")
+	tracer := trace.GlobalSchedulerTracer()
+	span, _ := tracer.StartSpan(trace.PartitionLevel, trace.TryPlaceholderAllocatePhase, pc.Name)
+	defer tracer.FinishActiveSpan("", "")
 
 	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
 		span.SetTag(trace.StateKey, trace.SkipState)
@@ -801,7 +804,8 @@ func (pc *PartitionContext) tryPlaceholderAllocate() *objects.Allocation {
 // Process the allocation and make the left over changes in the partition.
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocation {
-	span, _ := trace.GlobalSchedulerTraceContext().ActiveSpan()
+	tracer := trace.GlobalSchedulerTracer()
+	span, _ := tracer.Context().ActiveSpan()
 	// find the app make sure it still exists
 	appID := alloc.ApplicationID
 	app := pc.getApplication(appID)

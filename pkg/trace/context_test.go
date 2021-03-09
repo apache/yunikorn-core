@@ -90,7 +90,7 @@ func TestSchedulerTraceContextImpl(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &SchedulerTraceContextImpl{
+			s := &ContextImpl{
 				Tracer:       tt.fields.Tracer,
 				SpanStack:    tt.fields.SpanStack,
 				OnDemandFlag: tt.fields.OnDemandFlag,
@@ -209,7 +209,7 @@ func TestDelaySchedulerTraceContextImpl(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := &DelaySchedulerTraceContextImpl{
+			d := &DelayContextImpl{
 				Tracer:     tt.fields.Tracer,
 				Spans:      tt.fields.Spans,
 				FilterTags: tt.fields.FilterTags,
@@ -388,7 +388,7 @@ func TestDelaySchedulerTraceContextImpl_isMatch(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := &DelaySchedulerTraceContextImpl{
+			d := &DelayContextImpl{
 				Tracer:     tt.fields.Tracer,
 				Spans:      tt.fields.Spans,
 				FilterTags: tt.fields.FilterTags,

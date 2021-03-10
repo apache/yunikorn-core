@@ -740,8 +740,9 @@ func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRel
 			err := rp.ReSyncSchedulerCache(&si.ReSyncSchedulerCacheArgs{
 				ForgetAllocations: toReleaseAllocations,
 			})
+			// See YUNIKORN-462: this might not be a real error so log as DEBUG
 			if err != nil {
-				log.Logger().Error("failed to sync shim on allocation release",
+				log.Logger().Debug("failed to sync shim on allocation release",
 					zap.Error(err))
 			}
 		}

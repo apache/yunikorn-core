@@ -103,6 +103,8 @@ func (cc *ClusterContext) setEventHandler(rmHandler handler.EventHandler) {
 // This can be forked into a go routine per partition if needed to increase parallel allocations
 func (cc *ClusterContext) schedule() {
 	tracer := trace.GlobalSchedulerTracer()
+	tracer.Lock()
+	defer tracer.Unlock()
 	if err := tracer.InitContext(); err != nil {
 		log.Logger().Error("failed to init trace context", zap.Error(err))
 	}

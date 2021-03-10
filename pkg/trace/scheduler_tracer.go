@@ -63,6 +63,7 @@ const (
 
 type SchedulerTracerBase struct {
 	context Context
+	sync.Mutex
 }
 
 func (s *SchedulerTracerBase) Context() Context {
@@ -123,6 +124,8 @@ type SchedulerTracer interface {
 	StartSpan(level, phase, name string) (opentracing.Span, error)
 	FinishActiveSpan(state, info string) error
 	InitContext() error
+	Lock()
+	Unlock()
 	Close() error
 }
 
@@ -147,7 +150,7 @@ type SchedulerTracerImpl struct {
 	*SchedulerTracerBase
 	Tracer opentracing.Tracer
 	Closer io.Closer
-	sync.RWMutex
+	paramsMutex sync.RWMutex
 	*SchedulerTracerImplParams
 }
 
@@ -176,15 +179,15 @@ func (s *SchedulerTracerImpl) SetParams(params *SchedulerTracerImplParams) {
 		log.Logger().Warn("FilterTags is empty while trying to run in DebugWithFilter mode." +
 			" Please use Debug mode instead.")
 	}
-	s.Lock()
-	defer s.Unlock()
+	s.paramsMutex.Lock()
+	defer s.paramsMutex.Unlock()
 	s.SchedulerTracerImplParams = params
 }
 
 // InitTraceContext create Context based on parameter settings
 func (s *SchedulerTracerImpl) InitContext() error {
-	s.RLock()
-	defer s.RUnlock()
+	s.paramsMutex.RLock()
+	defer s.paramsMutex.RUnlock()
 	switch s.Mode {
 	case Sampling:
 		s.context = &ContextImpl{

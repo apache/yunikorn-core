@@ -20,11 +20,11 @@ package trace
 
 import (
 	"fmt"
-	"go.uber.org/zap"
 	"io"
 	"sync"
 
 	"github.com/opentracing/opentracing-go"
+	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
@@ -44,12 +44,12 @@ const (
 	NodesLevel     = "nodes"
 	NodeLevel      = "node"
 
-	TryReservedAllocatePhase = "tryReservedAllocate"
+	TryReservedAllocatePhase    = "tryReservedAllocate"
 	TryPlaceholderAllocatePhase = "tryPlaceholderAllocate"
-	TryAllocatePhase      = "tryAllocate"
-	SortQueuesPhase       = "sortQueues"
-	SortAppsPhase         = "sortApps"
-	SortRequestsPhase     = "sortRequests"
+	TryAllocatePhase            = "tryAllocate"
+	SortQueuesPhase             = "sortQueues"
+	SortAppsPhase               = "sortApps"
+	SortRequestsPhase           = "sortRequests"
 
 	SkipState = "skip"
 
@@ -148,8 +148,8 @@ var _ SchedulerTracer = &SchedulerTracerImpl{}
 
 type SchedulerTracerImpl struct {
 	*SchedulerTracerBase
-	Tracer opentracing.Tracer
-	Closer io.Closer
+	Tracer      opentracing.Tracer
+	Closer      io.Closer
 	paramsMutex sync.RWMutex
 	*SchedulerTracerImplParams
 }

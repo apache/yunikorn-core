@@ -20,8 +20,6 @@ package trace
 
 import (
 	"fmt"
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	"go.uber.org/zap"
 	"time"
 
 	"github.com/opentracing/opentracing-go"
@@ -84,7 +82,6 @@ func (s *ContextImpl) StartSpan(operationName string) (opentracing.Span, error) 
 		newSpan = s.Tracer.StartSpan(operationName, opentracing.ChildOf(span.Context()))
 	}
 	s.SpanStack = append(s.SpanStack, newSpan)
-	log.Logger().Debug("start span", zap.Int("level", len(s.SpanStack) - 1), zap.String("name", operationName))
 	return newSpan, nil
 }
 
@@ -94,7 +91,6 @@ func (s *ContextImpl) FinishActiveSpan() error {
 		return err
 	}
 	span.Finish()
-	log.Logger().Debug("finish span", zap.Int("level", len(s.SpanStack) - 1))
 	s.SpanStack = s.SpanStack[:len(s.SpanStack)-1]
 
 	return nil
@@ -223,4 +219,3 @@ func (n *NoopContextImpl) StartSpan(operationName string) (opentracing.Span, err
 func (n *NoopContextImpl) FinishActiveSpan() error {
 	return nil
 }
-

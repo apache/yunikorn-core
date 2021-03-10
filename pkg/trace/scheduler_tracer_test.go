@@ -24,7 +24,6 @@ import (
 	"gotest.tools/assert"
 )
 
-
 func Test_startSpanWrapper(t *testing.T) {
 	type args struct {
 		level string
@@ -49,8 +48,12 @@ func Test_startSpanWrapper(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tracer := GlobalSchedulerTracer()
-			_ = tracer.InitContext()
-			_, err := tracer.StartSpan(tt.args.level, tt.args.phase, tt.args.name)
+			tracer.Lock()
+			err := tracer.InitContext()
+			if err == nil {
+				_, err = tracer.StartSpan(tt.args.level, tt.args.phase, tt.args.name)
+			}
+			tracer.Unlock()
 			if (err != nil) != tt.wantErr {
 				t.Errorf("startSpanWrapper() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -81,14 +84,18 @@ func Test_finishActiveSpanWrapper(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tracer := GlobalSchedulerTracer()
-			_ = tracer.InitContext()
-			if err := tracer.FinishActiveSpan(tt.args.state, tt.args.info); (err != nil) != tt.wantErr {
+			tracer.Lock()
+			err := tracer.InitContext()
+			if err == nil {
+				err = tracer.FinishActiveSpan(tt.args.state, tt.args.info)
+			}
+			if (err != nil) != tt.wantErr {
 				t.Errorf("finishActiveSpanWrapper() error = %v, wantErr %v", err, tt.wantErr)
 			}
+			tracer.Unlock()
 		})
 	}
 }
-
 
 // TestSchedulerTracerImpl tests SetParams and InitTraceContext
 func TestSchedulerTracerImpl(t *testing.T) {

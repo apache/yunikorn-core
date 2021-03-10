@@ -50,6 +50,9 @@ const (
 	SortQueuesPhase             = "sortQueues"
 	SortAppsPhase               = "sortApps"
 	SortRequestsPhase           = "sortRequests"
+	AllocatePhase               = "allocate"
+	ReservePhase                = "reserve"
+	UnReservePhase              = "unReserve"
 
 	SkipState = "skip"
 
@@ -70,6 +73,15 @@ func (s *SchedulerTracerBase) Context() Context {
 	return s.context
 }
 
+func (s *SchedulerTracerBase) ActiveSpan() opentracing.Span {
+	span, err := s.context.ActiveSpan()
+	if err != nil {
+		log.Logger().Error("getting active span fail", zap.Error(err))
+		return noopSpan
+	}
+	return span
+}
+
 // startSpan simplifies span starting process by integrating general tags' setting.
 // The level tag is required, nonempty and logs span's scheduling level. (root, partition, queue, ...)
 // The phase tag is optional and logs span's calling phase. (reservedAllocate, tryAllocate, allocate, ...)
@@ -82,51 +94,58 @@ func (s *SchedulerTracerBase) Context() Context {
 //  ...
 //  span.SetTag("foo", "bar") // if we have irregular tags to set
 //  ...
-func (s *SchedulerTracerBase) StartSpan(level, phase, name string) (opentracing.Span, error) {
+func (s *SchedulerTracerBase) StartSpan(level, phase, name string) opentracing.Span {
 	if level == "" {
-		return noopSpan, fmt.Errorf("level field cannot be empty")
+		log.Logger().Error("level field cannot be empty")
+		return noopSpan
 	}
 	span, err := s.context.StartSpan(fmt.Sprintf("[%v]%v", level, phase))
-	if err == nil {
-		span.SetTag(LevelKey, level)
-		if phase != "" {
-			span.SetTag(PhaseKey, phase)
-		}
-		if name != "" {
-			span.SetTag(NameKey, name)
-		}
-		return span, nil
+	if err != nil {
+		log.Logger().Error("starting span fail", zap.Error(err))
+		return noopSpan
 	}
-	return noopSpan, err
+	span.SetTag(LevelKey, level)
+	if phase != "" {
+		span.SetTag(PhaseKey, phase)
+	}
+	if name != "" {
+		span.SetTag(NameKey, name)
+	}
+	return span
 }
 
 // finishActiveSpan simplifies span finishing process by integrating result tags' setting.
 // The state tag is optional and logs span's calling result. (skip, allocated, reserved, ...)
 // The info tag is optional and logs span's result message. (errors or hints for the state)
 // These general tags depend on the calling result so they can be integrated with the finishing process
-func (s *SchedulerTracerBase) FinishActiveSpan(state, info string) error {
+func (s *SchedulerTracerBase) FinishActiveSpan(state, info string) {
 	span, err := s.context.ActiveSpan()
-	if err == nil {
-		if state != "" {
-			span.SetTag(StateKey, state)
-		}
-		if info != "" {
-			span.SetTag(InfoKey, info)
-		}
-		return s.context.FinishActiveSpan()
+	if err != nil {
+		log.Logger().Error("getting active span fail when finish active span", zap.Error(err))
+		return
 	}
-	return err
+	if state != "" {
+		span.SetTag(StateKey, state)
+	}
+	if info != "" {
+		span.SetTag(InfoKey, info)
+	}
+	err = s.context.FinishActiveSpan()
+	if err != nil {
+		log.Logger().Error("finishing active span fail", zap.Error(err))
+	}
 }
 
 // SchedulerTracer defines minimum interface for tracing
 type SchedulerTracer interface {
-	Context() Context
-	StartSpan(level, phase, name string) (opentracing.Span, error)
-	FinishActiveSpan(state, info string) error
-	InitContext() error
+	Close() error
 	Lock()
 	Unlock()
-	Close() error
+	Context() Context
+	InitContext() error
+	ActiveSpan() opentracing.Span
+	StartSpan(level, phase, name string) opentracing.Span
+	FinishActiveSpan(state, info string)
 }
 
 var _ SchedulerTracer = &NoopSchedulerTracerImpl{}
@@ -135,12 +154,12 @@ type NoopSchedulerTracerImpl struct {
 	*SchedulerTracerBase
 }
 
-func (n *NoopSchedulerTracerImpl) InitContext() error {
-	n.SchedulerTracerBase.context = &NoopContextImpl{}
+func (n *NoopSchedulerTracerImpl) Close() error {
 	return nil
 }
 
-func (n *NoopSchedulerTracerImpl) Close() error {
+func (n *NoopSchedulerTracerImpl) InitContext() error {
+	n.SchedulerTracerBase.context = &NoopContextImpl{}
 	return nil
 }
 
@@ -184,6 +203,11 @@ func (s *SchedulerTracerImpl) SetParams(params *SchedulerTracerImplParams) {
 	s.SchedulerTracerImplParams = params
 }
 
+// Close calls tracer's closer if exists
+func (s *SchedulerTracerImpl) Close() error {
+	return s.Closer.Close()
+}
+
 // InitTraceContext create Context based on parameter settings
 func (s *SchedulerTracerImpl) InitContext() error {
 	s.paramsMutex.RLock()
@@ -211,13 +235,7 @@ func (s *SchedulerTracerImpl) InitContext() error {
 		s.context = &NoopContextImpl{}
 		return fmt.Errorf("error mode code")
 	}
-	log.Logger().Info("Init global scheduler trace context")
 	return nil
-}
-
-// Close calls tracer's closer if exists
-func (s *SchedulerTracerImpl) Close() error {
-	return s.Closer.Close()
 }
 
 // NewSchedulerTracer creates new tracer instance with params
@@ -248,7 +266,6 @@ var once sync.Once
 func GlobalSchedulerTracer() SchedulerTracer {
 	once.Do(func() {
 		if globalSchedulerTracer == nil {
-			// TODO: select correct tracer by config
 			var err error
 			globalSchedulerTracer, err = NewSchedulerTracer(nil)
 			if err != nil {

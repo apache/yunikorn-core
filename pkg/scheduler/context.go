@@ -108,23 +108,20 @@ func (cc *ClusterContext) schedule() {
 	if err := tracer.InitContext(); err != nil {
 		log.Logger().Error("failed to init trace context", zap.Error(err))
 	}
-	_, err := tracer.StartSpan(trace.RootLevel, "", "")
-	if err != nil {
-		log.Logger().Error("failed to start trace span", zap.Error(err))
-	}
+	tracer.StartSpan(trace.RootLevel, "", "")
 	stateSummary := ""
 
 	// schedule each partition defined in the cluster
 	for _, psc := range cc.GetPartitionMapClone() {
-		_, _ = tracer.StartSpan(trace.PartitionLevel, "", psc.Name)
+		tracer.StartSpan(trace.PartitionLevel, "", psc.Name)
 		// if there are no resources in the partition just skip
 		if psc.root.GetMaxResource() == nil {
-			_ = tracer.FinishActiveSpan(trace.SkipState, trace.NoMaxResourceInfo)
+			tracer.FinishActiveSpan(trace.SkipState, trace.NoMaxResourceInfo)
 			continue
 		}
 		// a stopped partition does not allocate
 		if psc.isStopped() {
-			_ = tracer.FinishActiveSpan(trace.SkipState, trace.StoppedInfo)
+			tracer.FinishActiveSpan(trace.SkipState, trace.StoppedInfo)
 			continue
 		}
 		// try reservations first
@@ -144,12 +141,12 @@ func (cc *ClusterContext) schedule() {
 			} else {
 				cc.notifyRMNewAllocation(psc.RmID, alloc)
 			}
-			_ = tracer.FinishActiveSpan(alloc.Result.String(), "")
+			tracer.FinishActiveSpan(alloc.Result.String(), "")
 			if stateSummary == "" || stateSummary == trace.SkipState {
 				stateSummary = alloc.Result.String()
 			}
 		} else {
-			_ = tracer.FinishActiveSpan(trace.SkipState, "")
+			tracer.FinishActiveSpan(trace.SkipState, "")
 			if stateSummary == "" {
 				stateSummary = trace.SkipState
 			}
@@ -158,7 +155,7 @@ func (cc *ClusterContext) schedule() {
 	if stateSummary != "" {
 		// If there is no partition that have anything worth to trace,
 		// don't report this whole trace
-		_ = tracer.FinishActiveSpan(stateSummary, "")
+		tracer.FinishActiveSpan(stateSummary, "")
 	}
 }
 

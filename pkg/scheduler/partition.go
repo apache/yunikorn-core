@@ -731,7 +731,7 @@ func (pc *PartitionContext) calculateOutstandingRequests() []*objects.Allocation
 // Lock free call this all locks are taken when needed in called functions
 func (pc *PartitionContext) tryAllocate() *objects.Allocation {
 	tracer := trace.GlobalSchedulerTracer()
-	span, _ := tracer.StartSpan(trace.PartitionLevel, trace.TryAllocatePhase, pc.Name)
+	span := tracer.StartSpan(trace.PartitionLevel, trace.TryAllocatePhase, pc.Name)
 	defer tracer.FinishActiveSpan("", "")
 
 	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
@@ -754,7 +754,7 @@ func (pc *PartitionContext) tryAllocate() *objects.Allocation {
 // Lock free call this all locks are taken when needed in called functions
 func (pc *PartitionContext) tryReservedAllocate() *objects.Allocation {
 	tracer := trace.GlobalSchedulerTracer()
-	span, _ := tracer.StartSpan(trace.PartitionLevel, trace.TryReservedAllocatePhase, pc.Name)
+	span := tracer.StartSpan(trace.PartitionLevel, trace.TryReservedAllocatePhase, pc.Name)
 	defer tracer.FinishActiveSpan("", "")
 
 	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
@@ -777,7 +777,7 @@ func (pc *PartitionContext) tryReservedAllocate() *objects.Allocation {
 // Lock free call this all locks are taken when needed in called functions
 func (pc *PartitionContext) tryPlaceholderAllocate() *objects.Allocation {
 	tracer := trace.GlobalSchedulerTracer()
-	span, _ := tracer.StartSpan(trace.PartitionLevel, trace.TryPlaceholderAllocatePhase, pc.Name)
+	span := tracer.StartSpan(trace.PartitionLevel, trace.TryPlaceholderAllocatePhase, pc.Name)
 	defer tracer.FinishActiveSpan("", "")
 
 	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
@@ -805,13 +805,16 @@ func (pc *PartitionContext) tryPlaceholderAllocate() *objects.Allocation {
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocation {
 	tracer := trace.GlobalSchedulerTracer()
-	span, _ := tracer.Context().ActiveSpan()
+	span := tracer.StartSpan(trace.PartitionLevel, trace.AllocatePhase, pc.Name)
+	defer tracer.FinishActiveSpan("", "")
+
 	// find the app make sure it still exists
 	appID := alloc.ApplicationID
 	app := pc.getApplication(appID)
 	if app == nil {
 		log.Logger().Info("Application was removed while allocating",
 			zap.String("appID", appID))
+		span.SetTag(trace.StateKey, trace.SkipState)
 		span.SetTag(trace.InfoKey, "Application was removed while allocating")
 		return nil
 	}
@@ -833,13 +836,13 @@ func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocat
 		log.Logger().Info("Node was removed while allocating",
 			zap.String("nodeID", nodeID),
 			zap.String("appID", appID))
+		span.SetTag(trace.StateKey, trace.SkipState)
 		span.SetTag(trace.InfoKey, "Node was removed while allocating")
 		return nil
 	}
 	// reservation
 	if alloc.Result == objects.Reserved {
 		pc.reserve(app, node, alloc.Ask)
-		// TODO: trace inside reserve process or after we get reservation result
 		// reserve don't have result value to infer its state
 		span.SetTag(trace.InfoKey, "scheduler tries to reserve resources")
 		return nil
@@ -848,7 +851,6 @@ func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocat
 	if alloc.Result == objects.Unreserved || alloc.Result == objects.AllocatedReserved {
 		pc.unReserve(app, node, alloc.Ask)
 		if alloc.Result == objects.Unreserved {
-			// TODO: same question as tracing reserve
 			span.SetTag(trace.InfoKey, "scheduler tries to unreserve resources")
 			return nil
 		}
@@ -866,6 +868,7 @@ func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocat
 		zap.String("allocatedResource", alloc.AllocatedResource.String()),
 		zap.Bool("placeholder", alloc.IsPlaceholder()),
 		zap.String("targetNode", alloc.NodeID))
+	span.SetTag(trace.StateKey, alloc.Result.String())
 	span.SetTag(trace.InfoKey, "scheduler allocation processed")
 	// pass the allocation back to the RM via the cluster context
 	return alloc
@@ -874,18 +877,26 @@ func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocat
 // Process the reservation in the scheduler
 // Lock free call this must be called holding the context lock
 func (pc *PartitionContext) reserve(app *objects.Application, node *objects.Node, ask *objects.AllocationAsk) {
+	tracer := trace.GlobalSchedulerTracer()
+	span := tracer.StartSpan(trace.PartitionLevel, trace.ReservePhase, app.ApplicationID)
+	defer tracer.FinishActiveSpan("", "")
+
 	appID := app.ApplicationID
 	// app has node already reserved cannot reserve again
 	if app.IsReservedOnNode(node.NodeID) {
 		log.Logger().Info("Application is already reserved on node",
 			zap.String("appID", appID),
 			zap.String("nodeID", node.NodeID))
+		span.SetTag(trace.StateKey, trace.SkipState)
+		span.SetTag(trace.InfoKey, "Application is already reserved on node")
 		return
 	}
 	// all ok, add the reservation to the app, this will also reserve the node
 	if err := app.Reserve(node, ask); err != nil {
 		log.Logger().Debug("Failed to handle reservation, error during update of app",
 			zap.Error(err))
+		span.SetTag(trace.StateKey, trace.SkipState)
+		span.SetTag(trace.InfoKey, err.Error())
 		return
 	}
 
@@ -899,15 +910,22 @@ func (pc *PartitionContext) reserve(app *objects.Application, node *objects.Node
 		zap.String("queue", app.QueueName),
 		zap.String("allocationKey", ask.AllocationKey),
 		zap.String("node", node.NodeID))
+	span.SetTag(trace.InfoKey, "allocation ask is reserved")
 }
 
 // Process the unreservation in the scheduler
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.Node, ask *objects.AllocationAsk) {
+	tracer := trace.GlobalSchedulerTracer()
+	span := tracer.StartSpan(trace.PartitionLevel, trace.UnReservePhase, app.ApplicationID)
+	defer tracer.FinishActiveSpan("", "")
+
 	appID := app.ApplicationID
 	if pc.reservedApps[appID] == 0 {
 		log.Logger().Info("Application is not reserved in partition",
 			zap.String("appID", appID))
+		span.SetTag(trace.StateKey, trace.SkipState)
+		span.SetTag(trace.InfoKey, "Application is not reserved in partition")
 		return
 	}
 	// all ok, remove the reservation of the app, this will also unReserve the node
@@ -916,6 +934,8 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 	if num, err = app.UnReserve(node, ask); err != nil {
 		log.Logger().Info("Failed to unreserve, error during allocate on the app",
 			zap.Error(err))
+		span.SetTag(trace.StateKey, trace.SkipState)
+		span.SetTag(trace.InfoKey, err.Error())
 		return
 	}
 	// remove the reservation of the queue
@@ -929,6 +949,7 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 		zap.String("allocationKey", ask.AllocationKey),
 		zap.String("node", node.NodeID),
 		zap.Int("reservationsRemoved", num))
+	span.SetTag(trace.InfoKey, "allocation ask is unreserved")
 }
 
 // Get the iterator for the sorted nodes list from the partition.

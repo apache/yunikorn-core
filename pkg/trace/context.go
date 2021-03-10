@@ -64,34 +64,34 @@ type ContextImpl struct {
 	OnDemandFlag bool
 }
 
-func (s *ContextImpl) ActiveSpan() (opentracing.Span, error) {
-	if len(s.SpanStack) == 0 {
+func (c *ContextImpl) ActiveSpan() (opentracing.Span, error) {
+	if len(c.SpanStack) == 0 {
 		return nil, fmt.Errorf("active span is not found")
 	}
-	return s.SpanStack[len(s.SpanStack)-1], nil
+	return c.SpanStack[len(c.SpanStack)-1], nil
 }
 
-func (s *ContextImpl) StartSpan(operationName string) (opentracing.Span, error) {
+func (c *ContextImpl) StartSpan(operationName string) (opentracing.Span, error) {
 	var newSpan opentracing.Span
-	if span, err := s.ActiveSpan(); err != nil {
-		newSpan = s.Tracer.StartSpan(operationName)
-		if s.OnDemandFlag {
+	if span, err := c.ActiveSpan(); err != nil {
+		newSpan = c.Tracer.StartSpan(operationName)
+		if c.OnDemandFlag {
 			ext.SamplingPriority.Set(newSpan, 1)
 		}
 	} else {
-		newSpan = s.Tracer.StartSpan(operationName, opentracing.ChildOf(span.Context()))
+		newSpan = c.Tracer.StartSpan(operationName, opentracing.ChildOf(span.Context()))
 	}
-	s.SpanStack = append(s.SpanStack, newSpan)
+	c.SpanStack = append(c.SpanStack, newSpan)
 	return newSpan, nil
 }
 
-func (s *ContextImpl) FinishActiveSpan() error {
-	span, err := s.ActiveSpan()
+func (c *ContextImpl) FinishActiveSpan() error {
+	span, err := c.ActiveSpan()
 	if err != nil {
 		return err
 	}
 	span.Finish()
-	s.SpanStack = s.SpanStack[:len(s.SpanStack)-1]
+	c.SpanStack = c.SpanStack[:len(c.SpanStack)-1]
 
 	return nil
 }

@@ -21,80 +21,35 @@ package trace
 import (
 	"testing"
 
+	"github.com/opentracing/opentracing-go"
 	"gotest.tools/assert"
+
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
 
-func Test_startSpanWrapper(t *testing.T) {
-	type args struct {
-		level string
-		phase string
-		name  string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		{
-			name: "EmptyLevel",
-			args: args{
-				level: "",
-				phase: "",
-				name:  "",
-			},
-			wantErr: true,
+func TestSchedulerTracerBase(t *testing.T) {
+	constTracer, closer, err := NewConstTracer("test", true)
+	assert.NilError(t, err)
+	defer closer.Close()
+	tracer := &SchedulerTracerBase{
+		context: &ContextImpl{
+			Tracer:       constTracer,
+			SpanStack:    []opentracing.Span{},
+			OnDemandFlag: false,
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tracer := GlobalSchedulerTracer()
-			tracer.Lock()
-			err := tracer.InitContext()
-			if err == nil {
-				_, err = tracer.StartSpan(tt.args.level, tt.args.phase, tt.args.name)
-			}
-			tracer.Unlock()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("startSpanWrapper() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-		})
-	}
-}
 
-func Test_finishActiveSpanWrapper(t *testing.T) {
-	type args struct {
-		state string
-		info  string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		{
-			name: "EmptyContext",
-			args: args{
-				state: "",
-				info:  "",
-			},
-			wantErr: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tracer := GlobalSchedulerTracer()
-			tracer.Lock()
-			err := tracer.InitContext()
-			if err == nil {
-				err = tracer.FinishActiveSpan(tt.args.state, tt.args.info)
-			}
-			if (err != nil) != tt.wantErr {
-				t.Errorf("finishActiveSpanWrapper() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			tracer.Unlock()
-		})
-	}
+	log.Logger().Info("---illegal operation---")
+	span := tracer.ActiveSpan()
+	assert.Equal(t, span, noopSpan)
+	tracer.FinishActiveSpan("", "")
+	span = tracer.StartSpan("", "", "")
+	assert.Equal(t, span, noopSpan)
+
+	log.Logger().Info("---legal operation---")
+	span = tracer.StartSpan("foo", "", "")
+	assert.Assert(t, span != noopSpan)
+	tracer.FinishActiveSpan("", "")
 }
 
 // TestSchedulerTracerImpl tests SetParams and InitTraceContext
@@ -158,7 +113,8 @@ func TestSchedulerTracerImpl(t *testing.T) {
 			assert.NilError(t, err)
 			defer tracer.Close()
 			tracer.(*SchedulerTracerImpl).SetParams(tt.fields.SchedulerTracerImplParams)
-			_ = tracer.InitContext()
+			err = tracer.InitContext()
+			assert.NilError(t, err)
 			switch typeInfo := tracer.Context().(type) {
 			case nil:
 				t.Errorf("Nil context object, type: %T", typeInfo)

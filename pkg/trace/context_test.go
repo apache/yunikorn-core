@@ -27,7 +27,7 @@ import (
 	"gotest.tools/assert"
 )
 
-func TestSchedulerTraceContextImpl(t *testing.T) {
+func TestContextImpl(t *testing.T) {
 	closeTracer, closer1, err := NewConstTracer("close-tracer", false)
 	assert.NilError(t, err)
 	defer closer1.Close()
@@ -168,7 +168,7 @@ func TestDelaySpan_ForbiddenFunctions(t *testing.T) {
 	}
 }
 
-func TestDelaySchedulerTraceContextImpl(t *testing.T) {
+func TestDelayContextImpl(t *testing.T) {
 	tracer, closer, err := NewConstTracer("test-tracer", true)
 	assert.NilError(t, err)
 	defer closer.Close()
@@ -281,7 +281,7 @@ func TestDelaySchedulerTraceContextImpl(t *testing.T) {
 	}
 }
 
-func TestDelaySchedulerTraceContextImpl_isMatch(t *testing.T) {
+func TestDelayContextImpl_isMatch(t *testing.T) {
 	closeTracer, closer1, err := NewConstTracer("close-tracer", false)
 	assert.NilError(t, err)
 	defer closer1.Close()

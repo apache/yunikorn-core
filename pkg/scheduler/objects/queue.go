@@ -505,6 +505,12 @@ func (sq *Queue) RemoveApplication(app *Application) {
 		//nolint:errcheck
 		_ = sq.DecAllocatedResource(appAllocated)
 	}
+	// clean up the allocated placeholder resource
+	if phAllocated := app.GetPlaceholderResource(); !resources.IsZero(phAllocated) {
+		// failures are logged in the decrement do not do it twice
+		//nolint:errcheck
+		_ = sq.DecAllocatedResource(phAllocated)
+	}
 	sq.Lock()
 	defer sq.Unlock()
 

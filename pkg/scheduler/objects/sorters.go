@@ -44,7 +44,13 @@ func sortQueue(queues []*Queue, sortType policies.SortPolicy) {
 	metrics.GetSchedulerMetrics().ObserveQueueSortingLatency(sortingStart)
 }
 
-func sortApplications(apps map[string]*Application, sortType policies.SortPolicy, globalResource *resources.Resource) []*Application {
+// sort applications based on the sorting policy
+// the output is a sorted app list that is ready for scheduling
+// apps that have no pending resources are excluded from this list.
+// if the filterApps flag is true, some apps might be filtered out
+// based on the conditions set in the policy. currently, only the
+// stateAware policy does the filtering (based on app state).
+func sortApplications(apps map[string]*Application, sortType policies.SortPolicy, globalResource *resources.Resource, filterApps bool) []*Application {
 	sortingStart := time.Now()
 	var sortedApps []*Application
 	switch sortType {
@@ -65,7 +71,11 @@ func sortApplications(apps map[string]*Application, sortType policies.SortPolicy
 			return l.SubmissionTime.Before(r.SubmissionTime)
 		})
 	case policies.StateAwarePolicy:
-		sortedApps = stateAwareFilter(apps)
+		if filterApps {
+			sortedApps = stateAwareFilter(apps)
+		} else {
+			sortedApps = filterOnPendingResources(apps)
+		}
 		// Sort by submission time oldest first
 		sort.SliceStable(sortedApps, func(i, j int) bool {
 			l := sortedApps[i]

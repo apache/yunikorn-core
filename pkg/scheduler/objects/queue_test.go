@@ -429,21 +429,21 @@ func TestSortApplications(t *testing.T) {
 	// empty parent queue
 	parent, err = createManagedQueue(root, "parent", true, nil)
 	assert.NilError(t, err, "failed to create parent queue: %v")
-	if apps := parent.sortApplications(); apps != nil {
+	if apps := parent.sortApplications(true); apps != nil {
 		t.Errorf("parent queue should not return sorted apps: %v", apps)
 	}
 
 	// empty leaf queue
 	leaf, err = createManagedQueue(parent, "leaf", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
-	if len(leaf.sortApplications()) != 0 {
+	if len(leaf.sortApplications(true)) != 0 {
 		t.Errorf("empty queue should return no app from sort: %v", leaf)
 	}
 	// new app does not have pending res, does not get returned
 	app := newApplication(appID1, "default", leaf.QueuePath)
 	app.queue = leaf
 	leaf.AddApplication(app)
-	if len(leaf.sortApplications()) != 0 {
+	if len(leaf.sortApplications(true)) != 0 {
 		t.Errorf("app without ask should not be in sorted apps: %v", app)
 	}
 	var res *resources.Resource
@@ -452,13 +452,13 @@ func TestSortApplications(t *testing.T) {
 	// add an ask app must be returned
 	err = app.AddAllocationAsk(newAllocationAsk("alloc-1", appID1, res))
 	assert.NilError(t, err, "failed to add allocation ask")
-	sortedApp := leaf.sortApplications()
+	sortedApp := leaf.sortApplications(true)
 	if len(sortedApp) != 1 || sortedApp[0].ApplicationID != appID1 {
 		t.Errorf("sorted application is missing expected app: %v", sortedApp)
 	}
 	// set 0 repeat
 	_, err = app.updateAskRepeat("alloc-1", -1)
-	if err != nil || len(leaf.sortApplications()) != 0 {
+	if err != nil || len(leaf.sortApplications(true)) != 0 {
 		t.Errorf("app with ask but 0 pending resources should not be in sorted apps: %v (err = %v)", app, err)
 	}
 }

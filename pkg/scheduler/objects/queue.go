@@ -750,8 +750,17 @@ func (sq *Queue) sortApplications(filterApps bool) []*Application {
 	if !sq.IsLeafQueue() {
 		return nil
 	}
-	// Sort the applications
-	return sortApplications(sq.getCopyOfApps(), sq.getSortType(), sq.GetGuaranteedResource(), filterApps)
+	// sort applications based on the sorting policy
+	// some apps might be filtered out based on the policy specific conditions.
+	// currently, only the stateAware policy does the filtering (based on app state).
+	// if the filterApps flag is true, the app filtering is skipped while doing the sorting.
+	queueSortType := sq.getSortType()
+	if !filterApps && queueSortType == policies.StateAwarePolicy {
+		// fallback to FIFO policy if the filterApps flag is false
+		// this is to skip the app filtering in the StateAware policy sorting
+		queueSortType = policies.FifoSortPolicy
+	}
+	return sortApplications(sq.getCopyOfApps(), queueSortType, sq.GetGuaranteedResource())
 }
 
 // Return a sorted copy of the queues for this parent queue.

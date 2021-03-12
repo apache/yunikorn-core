@@ -463,6 +463,62 @@ func TestSortApplications(t *testing.T) {
 	}
 }
 
+func TestSortApplicationsWithoutFiltering(t *testing.T) {
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+
+	var leaf *Queue
+	properties := map[string]string{configs.ApplicationSortPolicy: "stateaware"}
+	leaf, err = createManagedQueueWithProps(root, "leaf", false, nil, properties)
+	assert.NilError(t, err, "failed to create queue: %v", err)
+
+	// new app does not have pending res, does not get returned
+	app1 := newApplication(appID1, "default", leaf.QueuePath)
+	app1.queue = leaf
+	leaf.AddApplication(app1)
+
+	app2 := newApplication(appID2, "default", leaf.QueuePath)
+	app2.queue = leaf
+	leaf.AddApplication(app2)
+
+	// both apps have no pending resource, they will be excluded by the sorting result
+	apps := leaf.sortApplications(true)
+	assertAppListLength(t, apps, []string{}, "sort with the filter")
+	apps = leaf.sortApplications(false)
+	assertAppListLength(t, apps, []string{}, "sort without the filter")
+
+	// add pending ask to app1
+	var res *resources.Resource
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "1"})
+	assert.NilError(t, err, "failed to create basic resource")
+	// add an ask app must be returned
+	err = app1.AddAllocationAsk(newAllocationAsk("app1-alloc-1", appID1, res))
+	assert.NilError(t, err, "failed to add allocation ask")
+
+	// the sorting result will return app1
+	apps = leaf.sortApplications(true)
+	assertAppListLength(t, apps, []string{appID1}, "sort with the filter")
+	apps = leaf.sortApplications(false)
+	assertAppListLength(t, apps, []string{appID1}, "sort without the filter")
+
+	// add pending ask to app2
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "1"})
+	assert.NilError(t, err, "failed to create basic resource")
+	// add an ask app must be returned
+	err = app2.AddAllocationAsk(newAllocationAsk("app2-alloc-1", appID2, res))
+	assert.NilError(t, err, "failed to add allocation ask")
+
+	// now there are 2 apps in the queue
+	// according to the state aware policy, if we sort with the filter
+	// only 1 app will be returning in the result; if sort without the filter
+	// it should return the both 2 apps
+	apps = leaf.sortApplications(true)
+	assertAppListLength(t, apps, []string{appID1}, "sort with the filter")
+	apps = leaf.sortApplications(false)
+	assertAppListLength(t, apps, []string{appID1, appID2}, "sort without the filter")
+}
+
 // This test must not test the sorter that is underlying.
 // It tests the queue specific parts of the code only.
 func TestSortQueue(t *testing.T) {

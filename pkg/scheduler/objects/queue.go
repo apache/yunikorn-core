@@ -747,12 +747,21 @@ func (sq *Queue) DecAllocatedResource(alloc *resources.Resource) error {
 // sorting type of the queue.
 // Only applications with a pending resource request are considered.
 // Lock free call all locks are taken when needed in called functions
-func (sq *Queue) sortApplications() []*Application {
+func (sq *Queue) sortApplications(filterApps bool) []*Application {
 	if !sq.IsLeafQueue() {
 		return nil
 	}
-	// Sort the applications
-	return sortApplications(sq.getCopyOfApps(), sq.getSortType(), sq.GetGuaranteedResource())
+	// sort applications based on the sorting policy
+	// some apps might be filtered out based on the policy specific conditions.
+	// currently, only the stateAware policy does the filtering (based on app state).
+	// if the filterApps flag is true, the app filtering is skipped while doing the sorting.
+	queueSortType := sq.getSortType()
+	if !filterApps && queueSortType == policies.StateAwarePolicy {
+		// fallback to FIFO policy if the filterApps flag is false
+		// this is to skip the app filtering in the StateAware policy sorting
+		queueSortType = policies.FifoSortPolicy
+	}
+	return sortApplications(sq.getCopyOfApps(), queueSortType, sq.GetGuaranteedResource())
 }
 
 // Return a sorted copy of the queues for this parent queue.
@@ -899,7 +908,7 @@ func (sq *Queue) TryAllocate(iterator func() interfaces.NodeIterator) *Allocatio
 		// get the headroom
 		headRoom := sq.getHeadRoom()
 		tracer.StartSpan(trace.QueueLevel, trace.SortAppsPhase, sq.QueuePath)
-		sortedApps := sq.sortApplications()
+		sortedApps := sq.sortApplications(true)
 		tracer.FinishActiveSpan()
 		// process the apps (filters out app without pending requests)
 		for _, app := range sortedApps {
@@ -939,7 +948,7 @@ func (sq *Queue) TryPlaceholderAllocate(iterator func() interfaces.NodeIterator,
 
 	if sq.IsLeafQueue() {
 		tracer.StartSpan(trace.QueueLevel, trace.SortAppsPhase, sq.QueuePath)
-		sortedApps := sq.sortApplications()
+		sortedApps := sq.sortApplications(true)
 		tracer.FinishActiveSpan()
 		// process the apps (filters out app without pending requests)
 		for _, app := range sortedApps {
@@ -970,7 +979,11 @@ func (sq *Queue) TryPlaceholderAllocate(iterator func() interfaces.NodeIterator,
 func (sq *Queue) GetQueueOutstandingRequests(total *[]*AllocationAsk) {
 	if sq.IsLeafQueue() {
 		headRoom := sq.getMaxHeadRoom()
-		for _, app := range sq.sortApplications() {
+		// while calculating outstanding requests, we do not need to filter apps.
+		// e.g StateAware filters apps by state in order to schedule app one by one.
+		// we calculates all the requests that can fit into the queues headroom,
+		// all these requests are qualified to trigger the up scaling.
+		for _, app := range sq.sortApplications(false) {
 			app.getOutstandingRequests(headRoom, total)
 		}
 	} else {

@@ -116,12 +116,12 @@ func (cc *ClusterContext) schedule() {
 		tracer.StartSpan(trace.PartitionLevel, "", psc.Name)
 		// if there are no resources in the partition just skip
 		if psc.root.GetMaxResource() == nil {
-			tracer.FinishActiveSpan(trace.SkipState, trace.NoMaxResourceInfo)
+			tracer.FinishActiveSpanWithState(trace.SkipState, trace.NoMaxResourceInfo)
 			continue
 		}
 		// a stopped partition does not allocate
 		if psc.isStopped() {
-			tracer.FinishActiveSpan(trace.SkipState, trace.StoppedInfo)
+			tracer.FinishActiveSpanWithState(trace.SkipState, trace.StoppedInfo)
 			continue
 		}
 		// try reservations first
@@ -141,12 +141,12 @@ func (cc *ClusterContext) schedule() {
 			} else {
 				cc.notifyRMNewAllocation(psc.RmID, alloc)
 			}
-			tracer.FinishActiveSpan(alloc.Result.String(), "")
+			tracer.FinishActiveSpanWithState(alloc.Result.String(), "")
 			if stateSummary == "" || stateSummary == trace.SkipState {
 				stateSummary = alloc.Result.String()
 			}
 		} else {
-			tracer.FinishActiveSpan(trace.SkipState, "")
+			tracer.FinishActiveSpanWithState(trace.SkipState, "")
 			if stateSummary == "" {
 				stateSummary = trace.SkipState
 			}
@@ -155,7 +155,7 @@ func (cc *ClusterContext) schedule() {
 	if stateSummary != "" {
 		// If there is no partition that have anything worth to trace,
 		// don't report this whole trace
-		tracer.FinishActiveSpan(stateSummary, "")
+		tracer.FinishActiveSpanWithState(stateSummary, "")
 	}
 }
 

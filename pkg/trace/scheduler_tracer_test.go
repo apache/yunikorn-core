@@ -42,14 +42,14 @@ func TestSchedulerTracerBase(t *testing.T) {
 	log.Logger().Info("---illegal operation---")
 	span := tracer.ActiveSpan()
 	assert.Equal(t, span, noopSpan)
-	tracer.FinishActiveSpan("", "")
+	tracer.FinishActiveSpan()
 	span = tracer.StartSpan("", "", "")
 	assert.Equal(t, span, noopSpan)
 
 	log.Logger().Info("---legal operation---")
 	span = tracer.StartSpan("foo", "", "")
 	assert.Assert(t, span != noopSpan)
-	tracer.FinishActiveSpan("", "")
+	tracer.FinishActiveSpan()
 }
 
 // TestSchedulerTracerImpl tests SetParams and InitTraceContext

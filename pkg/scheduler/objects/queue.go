@@ -893,14 +893,14 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 func (sq *Queue) TryAllocate(iterator func() interfaces.NodeIterator) *Allocation {
 	tracer := trace.GlobalSchedulerTracer()
 	tracer.StartSpan(trace.QueueLevel, trace.TryAllocatePhase, sq.QueuePath)
-	defer tracer.FinishActiveSpan("", "")
+	defer tracer.FinishActiveSpan()
 
 	if sq.IsLeafQueue() {
 		// get the headroom
 		headRoom := sq.getHeadRoom()
 		tracer.StartSpan(trace.QueueLevel, trace.SortAppsPhase, sq.QueuePath)
 		sortedApps := sq.sortApplications()
-		tracer.FinishActiveSpan("", "")
+		tracer.FinishActiveSpan()
 		// process the apps (filters out app without pending requests)
 		for _, app := range sortedApps {
 			alloc := app.tryAllocate(headRoom, iterator)
@@ -915,7 +915,7 @@ func (sq *Queue) TryAllocate(iterator func() interfaces.NodeIterator) *Allocatio
 	} else {
 		tracer.StartSpan(trace.QueueLevel, trace.SortQueuesPhase, sq.QueuePath)
 		sortedQueues := sq.sortQueues()
-		tracer.FinishActiveSpan("", "")
+		tracer.FinishActiveSpan()
 		// process the child queues (filters out queues without pending requests)
 		for _, child := range sortedQueues {
 			alloc := child.TryAllocate(iterator)
@@ -935,12 +935,12 @@ func (sq *Queue) TryAllocate(iterator func() interfaces.NodeIterator) *Allocatio
 func (sq *Queue) TryPlaceholderAllocate(iterator func() interfaces.NodeIterator, getnode func(string) *Node) *Allocation {
 	tracer := trace.GlobalSchedulerTracer()
 	tracer.StartSpan(trace.QueueLevel, trace.TryPlaceholderAllocatePhase, sq.QueuePath)
-	defer tracer.FinishActiveSpan("", "")
+	defer tracer.FinishActiveSpan()
 
 	if sq.IsLeafQueue() {
 		tracer.StartSpan(trace.QueueLevel, trace.SortAppsPhase, sq.QueuePath)
 		sortedApps := sq.sortApplications()
-		tracer.FinishActiveSpan("", "")
+		tracer.FinishActiveSpan()
 		// process the apps (filters out app without pending requests)
 		for _, app := range sortedApps {
 			alloc := app.tryPlaceholderAllocate(iterator, getnode)
@@ -955,7 +955,7 @@ func (sq *Queue) TryPlaceholderAllocate(iterator func() interfaces.NodeIterator,
 	} else {
 		tracer.StartSpan(trace.QueueLevel, trace.SortQueuesPhase, sq.QueuePath)
 		sortedQueues := sq.sortQueues()
-		tracer.FinishActiveSpan("", "")
+		tracer.FinishActiveSpan()
 		// process the child queues (filters out queues without pending requests)
 		for _, child := range sortedQueues {
 			alloc := child.TryPlaceholderAllocate(iterator, getnode)
@@ -988,7 +988,7 @@ func (sq *Queue) GetQueueOutstandingRequests(total *[]*AllocationAsk) {
 func (sq *Queue) TryReservedAllocate(iterator func() interfaces.NodeIterator) *Allocation {
 	tracer := trace.GlobalSchedulerTracer()
 	tracer.StartSpan(trace.QueueLevel, trace.TryReservedAllocatePhase, sq.QueuePath)
-	defer tracer.FinishActiveSpan("", "")
+	defer tracer.FinishActiveSpan()
 
 	if sq.IsLeafQueue() {
 		// skip if it has no reservations
@@ -1023,7 +1023,7 @@ func (sq *Queue) TryReservedAllocate(iterator func() interfaces.NodeIterator) *A
 	} else {
 		tracer.StartSpan(trace.QueueLevel, trace.SortQueuesPhase, sq.QueuePath)
 		sortedQueues := sq.sortQueues()
-		tracer.FinishActiveSpan("", "")
+		tracer.FinishActiveSpan()
 		// process the child queues (filters out queues that have no pending requests)
 		for _, child := range sortedQueues {
 			alloc := child.TryReservedAllocate(iterator)

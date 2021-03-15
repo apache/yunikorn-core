@@ -732,7 +732,7 @@ func (pc *PartitionContext) calculateOutstandingRequests() []*objects.Allocation
 func (pc *PartitionContext) tryAllocate() *objects.Allocation {
 	tracer := trace.GlobalSchedulerTracer()
 	span := tracer.StartSpan(trace.PartitionLevel, trace.TryAllocatePhase, pc.Name)
-	defer tracer.FinishActiveSpan("", "")
+	defer tracer.FinishActiveSpan()
 
 	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
 		span.SetTag(trace.StateKey, trace.SkipState)
@@ -755,7 +755,7 @@ func (pc *PartitionContext) tryAllocate() *objects.Allocation {
 func (pc *PartitionContext) tryReservedAllocate() *objects.Allocation {
 	tracer := trace.GlobalSchedulerTracer()
 	span := tracer.StartSpan(trace.PartitionLevel, trace.TryReservedAllocatePhase, pc.Name)
-	defer tracer.FinishActiveSpan("", "")
+	defer tracer.FinishActiveSpan()
 
 	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
 		span.SetTag(trace.StateKey, trace.SkipState)
@@ -778,7 +778,7 @@ func (pc *PartitionContext) tryReservedAllocate() *objects.Allocation {
 func (pc *PartitionContext) tryPlaceholderAllocate() *objects.Allocation {
 	tracer := trace.GlobalSchedulerTracer()
 	span := tracer.StartSpan(trace.PartitionLevel, trace.TryPlaceholderAllocatePhase, pc.Name)
-	defer tracer.FinishActiveSpan("", "")
+	defer tracer.FinishActiveSpan()
 
 	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
 		span.SetTag(trace.StateKey, trace.SkipState)
@@ -806,7 +806,7 @@ func (pc *PartitionContext) tryPlaceholderAllocate() *objects.Allocation {
 func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocation {
 	tracer := trace.GlobalSchedulerTracer()
 	span := tracer.StartSpan(trace.PartitionLevel, trace.AllocatePhase, pc.Name)
-	defer tracer.FinishActiveSpan("", "")
+	defer tracer.FinishActiveSpan()
 
 	// find the app make sure it still exists
 	appID := alloc.ApplicationID
@@ -844,14 +844,14 @@ func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocat
 	if alloc.Result == objects.Reserved {
 		pc.reserve(app, node, alloc.Ask)
 		// reserve don't have result value to infer its state
-		span.SetTag(trace.InfoKey, "scheduler tries to reserve resources")
+		// so we don't set tags in trace span
 		return nil
 	}
 	// unreserve
 	if alloc.Result == objects.Unreserved || alloc.Result == objects.AllocatedReserved {
 		pc.unReserve(app, node, alloc.Ask)
 		if alloc.Result == objects.Unreserved {
-			span.SetTag(trace.InfoKey, "scheduler tries to unreserve resources")
+			span.SetTag(trace.StateKey, alloc.Result.String())
 			return nil
 		}
 		// remove the link to the reserved node
@@ -879,7 +879,7 @@ func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocat
 func (pc *PartitionContext) reserve(app *objects.Application, node *objects.Node, ask *objects.AllocationAsk) {
 	tracer := trace.GlobalSchedulerTracer()
 	span := tracer.StartSpan(trace.PartitionLevel, trace.ReservePhase, app.ApplicationID)
-	defer tracer.FinishActiveSpan("", "")
+	defer tracer.FinishActiveSpan()
 
 	appID := app.ApplicationID
 	// app has node already reserved cannot reserve again
@@ -910,6 +910,7 @@ func (pc *PartitionContext) reserve(app *objects.Application, node *objects.Node
 		zap.String("queue", app.QueueName),
 		zap.String("allocationKey", ask.AllocationKey),
 		zap.String("node", node.NodeID))
+	span.SetTag(trace.StateKey, objects.Reserved.String())
 	span.SetTag(trace.InfoKey, "allocation ask is reserved")
 }
 
@@ -918,7 +919,7 @@ func (pc *PartitionContext) reserve(app *objects.Application, node *objects.Node
 func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.Node, ask *objects.AllocationAsk) {
 	tracer := trace.GlobalSchedulerTracer()
 	span := tracer.StartSpan(trace.PartitionLevel, trace.UnReservePhase, app.ApplicationID)
-	defer tracer.FinishActiveSpan("", "")
+	defer tracer.FinishActiveSpan()
 
 	appID := app.ApplicationID
 	if pc.reservedApps[appID] == 0 {
@@ -949,6 +950,7 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 		zap.String("allocationKey", ask.AllocationKey),
 		zap.String("node", node.NodeID),
 		zap.Int("reservationsRemoved", num))
+	span.SetTag(trace.StateKey, objects.Unreserved.String())
 	span.SetTag(trace.InfoKey, "allocation ask is unreserved")
 }
 

@@ -114,11 +114,19 @@ func (s *SchedulerTracerBase) StartSpan(level, phase, name string) opentracing.S
 	return span
 }
 
-// finishActiveSpan simplifies span finishing process by integrating result tags' setting.
+// finishActiveSpan simplifies span finishing process.
+func (s *SchedulerTracerBase) FinishActiveSpan() {
+	err := s.context.FinishActiveSpan()
+	if err != nil {
+		log.Logger().Error("finishing active span fail", zap.Error(err))
+	}
+}
+
+// FinishActiveSpanWithState simplifies span finishing process by integrating result tags' setting.
 // The state tag is optional and logs span's calling result. (skip, allocated, reserved, ...)
 // The info tag is optional and logs span's result message. (errors or hints for the state)
 // These general tags depend on the calling result so they can be integrated with the finishing process
-func (s *SchedulerTracerBase) FinishActiveSpan(state, info string) {
+func (s *SchedulerTracerBase) FinishActiveSpanWithState(state, info string) {
 	span, err := s.context.ActiveSpan()
 	if err != nil {
 		log.Logger().Error("getting active span fail when finish active span", zap.Error(err))
@@ -145,7 +153,8 @@ type SchedulerTracer interface {
 	InitContext() error
 	ActiveSpan() opentracing.Span
 	StartSpan(level, phase, name string) opentracing.Span
-	FinishActiveSpan(state, info string)
+	FinishActiveSpan()
+	FinishActiveSpanWithState(state, info string)
 }
 
 var _ SchedulerTracer = &NoopSchedulerTracerImpl{}

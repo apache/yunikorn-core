@@ -1054,6 +1054,8 @@ func (sa *Application) UnSetQueue() {
 	if sa.queue != nil {
 		sa.queue.RemoveApplication(sa)
 	}
+	sa.Lock()
+	defer sa.Unlock()
 	sa.queue = nil
 }
 

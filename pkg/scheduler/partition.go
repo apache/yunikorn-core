@@ -63,6 +63,15 @@ type PartitionContext struct {
 	nodeSortingPolicy      *policies.NodeSortingPolicy     // Global Node Sorting Policies
 	allocations            int                             // Number of allocations on the partition
 
+	// The partition write lock must not be held while manipulating an application.
+	// Scheduling is running continuously as a lock free background task. Scheduling an application
+	// acquires a write lock of the application object. While holding the write lock a list of nodes is
+	// requested from the partition. This requires a read lock on the partition.
+	// If the partition write lock is held while manipulating an application a dead lock could occur.
+	// Since application objects handle their own locks there is no requirement to hold the partition lock
+	// while manipulating the application.
+	// Similarly adding, updating or removing a node or a queue should only hold the partition write lock
+	// while manipulating the partition information not while manipulating the underlying objects.
 	sync.RWMutex
 }
 
@@ -1288,16 +1297,21 @@ func (pc *PartitionContext) GetNodeSortingPolicy() policies.SortingPolicy {
 }
 
 func (pc *PartitionContext) moveTerminatedApp(appID string) {
+	app := pc.getApplication(appID)
+	// nothing to do if the app is not found on the partition
+	if app == nil {
+		log.Logger().Debug("Application already removed from app list",
+			zap.String("appID", appID))
+		return
+	}
+	app.UnSetQueue()
 	// new ID as completedApplications map key, use negative value to get a divider
 	newID := appID + strconv.FormatInt(-(time.Now()).Unix(), 10)
+	log.Logger().Info("Removing terminated application from the application list",
+		zap.String("appID", appID),
+		zap.String("app status", app.CurrentState()))
 	pc.Lock()
 	defer pc.Unlock()
-	if app, ok := pc.applications[appID]; ok {
-		log.Logger().Info("Moving terminated app out from the app list",
-			zap.String("AppID", appID),
-			zap.String("App status", app.CurrentState()))
-		app.UnSetQueue()
-		delete(pc.applications, appID)
-		pc.completedApplications[newID] = app
-	}
+	delete(pc.applications, appID)
+	pc.completedApplications[newID] = app
 }

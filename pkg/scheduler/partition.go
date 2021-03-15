@@ -1158,6 +1158,9 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 	app := pc.getApplication(appID)
 	// no app nothing to do everything should already be clean
 	if app == nil {
+		log.Logger().Info("Application not found while releasing allocation",
+			zap.String("appID", appID),
+			zap.String("allocationId", uuid))
 		return nil, nil
 	}
 	// temp store for allocations manipulated
@@ -1165,20 +1168,20 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 	var confirmed *objects.Allocation
 	// when uuid is not specified, remove all allocations from the app
 	if uuid == "" {
-		log.Logger().Debug("remove all allocations",
+		log.Logger().Info("remove all allocations",
 			zap.String("appID", appID))
 		released = append(released, app.RemoveAllAllocations()...)
 	} else {
 		// if we have an uuid the termination type is important
 		if release.TerminationType == si.TerminationType_PLACEHOLDER_REPLACED {
-			log.Logger().Debug("replacing placeholder allocation",
+			log.Logger().Info("replacing placeholder allocation",
 				zap.String("appID", appID),
 				zap.String("allocationId", uuid))
 			if alloc := app.ReplaceAllocation(uuid); alloc != nil {
 				released = append(released, alloc)
 			}
 		} else {
-			log.Logger().Debug("removing allocation",
+			log.Logger().Info("removing allocation",
 				zap.String("appID", appID),
 				zap.String("allocationId", uuid))
 			if alloc := app.RemoveAllocation(uuid); alloc != nil {
@@ -1290,6 +1293,9 @@ func (pc *PartitionContext) moveTerminatedApp(appID string) {
 	pc.Lock()
 	defer pc.Unlock()
 	if app, ok := pc.applications[appID]; ok {
+		log.Logger().Info("Moving terminated app out from the app list",
+			zap.String("AppID", appID),
+			zap.String("App status", app.CurrentState()))
 		app.UnSetQueue()
 		delete(pc.applications, appID)
 		pc.completedApplications[newID] = app

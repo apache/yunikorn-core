@@ -263,21 +263,22 @@ func (sa *Application) clearPlaceholderTimer() {
 func (sa *Application) timeoutPlaceholderProcessing() {
 	sa.Lock()
 	defer sa.Unlock()
-	// Case 1: if all app's placeholders are allocated, only part of them gets replaced, just delete the remaining placeholders
 	switch {
+	// Case 1: if all app's placeholders are allocated, only part of them gets replaced, just delete the remaining placeholders
 	case (sa.IsRunning() || sa.IsStarting()) && !resources.IsZero(sa.allocatedPlaceholder):
 		for _, alloc := range sa.getPlaceholderAllocations() {
 			alloc.released = true
 		}
+	// Case 2: in every other case fail the application, and notify the context about the expired placeholder asks
 	default:
-		// Case 2: in every other case fail the application, and notify the context about the expired placeholders
+		sa.notifyRMAllocationAskReleased(sa.rmID, sa.getAllRequests(), si.TerminationType_TIMEOUT, "releasing placeholders on placeholder timeout")
+		sa.removeAsksInternal("")
 		if err := sa.HandleApplicationEvent(FailApplication); err != nil {
 			log.Logger().Debug("Application state change failed when placeholder timed out",
 				zap.String("AppID", sa.ApplicationID),
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))
 		}
-		sa.notifyRMAllocationAskReleased(sa.rmID, sa.getAllRequests(), si.TerminationType_TIMEOUT, "releasing placeholders on placeholder timeout")
 	}
 	sa.notifyRMAllocationReleased(sa.rmID, sa.getPlaceholderAllocations(), si.TerminationType_TIMEOUT, "releasing placeholders on placeholder timeout")
 	sa.clearPlaceholderTimer()
@@ -338,6 +339,11 @@ func (sa *Application) GetPendingResource() *resources.Resource {
 func (sa *Application) RemoveAllocationAsk(allocKey string) int {
 	sa.Lock()
 	defer sa.Unlock()
+	return sa.removeAsksInternal(allocKey)
+}
+
+// unlocked version of the allocation ask removal
+func (sa *Application) removeAsksInternal(allocKey string) int {
 	// shortcut no need to do anything
 	if len(sa.requests) == 0 {
 		return 0

@@ -698,7 +698,7 @@ func (cc *ClusterContext) processAskReleases(releases []*si.AllocationAskRelease
 				zap.String("askKey", toRelease.Allocationkey))
 			continue
 		}
-		partition.removeAllocationAsk(toRelease.ApplicationID, toRelease.Allocationkey)
+		partition.removeAllocationAsk(toRelease)
 	}
 }
 

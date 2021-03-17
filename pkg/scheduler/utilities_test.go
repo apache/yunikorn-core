@@ -170,7 +170,7 @@ func newApplication(appID, partition, queueName string) *objects.Application {
 }
 
 func newApplicationTG(appID, partition, queueName string, task *resources.Resource) *objects.Application {
-	return newApplicationTGTags(appID,partition, queueName, task, nil)
+	return newApplicationTGTags(appID, partition, queueName, task, nil)
 }
 
 func newApplicationTGTags(appID, partition, queueName string, task *resources.Resource, tags map[string]string) *objects.Application {

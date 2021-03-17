@@ -25,10 +25,12 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"gopkg.in/yaml.v2"
 	"gotest.tools/assert"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
@@ -690,9 +692,9 @@ func TestPartitions(t *testing.T) {
 	assert.Assert(t, err, "no error expected new to accepted")
 
 	// app4: accepted to wait
-	err = app4.HandleApplicationEvent(objects.WaitApplication)
+	err = app4.HandleApplicationEvent(objects.CompleteApplication)
 	assert.NilError(t, err, "no error expected accepted to waiting")
-	assert.Equal(t, app4.CurrentState(), objects.Waiting.String())
+	assert.Equal(t, app4.CurrentState(), objects.Completing.String())
 
 	// add a new app5
 	app5 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-5")
@@ -713,7 +715,10 @@ func TestPartitions(t *testing.T) {
 
 	// app6: starting to completed
 	err = app6.HandleApplicationEvent(objects.CompleteApplication)
-	assert.NilError(t, err, "no error expected starting to completed")
+	assert.NilError(t, err, "no error expected starting to completing")
+	assert.Equal(t, app6.CurrentState(), objects.Completing.String())
+	err = app6.HandleApplicationEvent(objects.CompleteApplication)
+	assert.NilError(t, err, "no error expected completing to completed")
 	assert.Equal(t, app6.CurrentState(), objects.Completed.String())
 
 	// add a new app7
@@ -721,8 +726,9 @@ func TestPartitions(t *testing.T) {
 
 	// app7: new to killed
 	err = app7.HandleApplicationEvent(objects.FailApplication)
-	assert.NilError(t, err, "no error expected new to killed")
-	assert.Equal(t, app7.CurrentState(), objects.Failed.String())
+	assert.NilError(t, err, "no error expected new to failed")
+	err = common.WaitFor(10*time.Microsecond, time.Millisecond*100, app7.IsFailed)
+	assert.NilError(t, err, "App should be in Failed state")
 
 	NewWebApp(schedulerContext, nil)
 
@@ -743,7 +749,7 @@ func TestPartitions(t *testing.T) {
 			assert.Equal(t, part.Applications[objects.Accepted.String()], 1)
 			assert.Equal(t, part.Applications[objects.Starting.String()], 1)
 			assert.Equal(t, part.Applications[objects.Running.String()], 1)
-			assert.Equal(t, part.Applications[objects.Waiting.String()], 1)
+			assert.Equal(t, part.Applications[objects.Completing.String()], 1)
 			assert.Equal(t, part.Applications[objects.Rejected.String()], 1)
 			assert.Equal(t, part.Applications[objects.Completed.String()], 1)
 			assert.Equal(t, part.Applications[objects.Failed.String()], 1)

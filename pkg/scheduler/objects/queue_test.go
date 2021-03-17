@@ -280,7 +280,7 @@ func TestAddApplicationWithTag(t *testing.T) {
 			"first": 10,
 		})
 	tags := make(map[string]string)
-	tags[appTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":10}}}"
+	tags[AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":10}}}"
 	// add apps again now with the tag set
 	app = newApplicationWithTags("app-3", "default", "root.leaf-man", tags)
 	leaf.AddApplication(app)
@@ -296,7 +296,7 @@ func TestAddApplicationWithTag(t *testing.T) {
 	}
 
 	// set to illegal limit (0 value)
-	tags[appTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":0}}}"
+	tags[AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":0}}}"
 	app = newApplicationWithTags("app-4", "default", "root.leaf-un", tags)
 	leafUn.AddApplication(app)
 	assert.Equal(t, len(leaf.applications), 2, "Application was not added to the Dynamic queue as expected")

@@ -389,9 +389,9 @@ func TestAddApp(t *testing.T) {
 	partition.stateMachine.SetState(objects.Active.String())
 	err = partition.handlePartitionEvent(objects.Remove)
 	assert.NilError(t, err, "partition state change failed unexpectedly")
-	app = newApplication("app-3", "default", defQueue)
+	app = newApplication(appID3, "default", defQueue)
 	err = partition.AddApplication(app)
-	if err == nil || partition.getApplication("app-3") != nil {
+	if err == nil || partition.getApplication(appID3) != nil {
 		t.Errorf("add application on draining partition should have failed but did not")
 	}
 }
@@ -1267,6 +1267,43 @@ func TestAddTGApplication(t *testing.T) {
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "app-1 should have been added to the partition")
 	assert.Equal(t, partition.getApplication(appID1), app, "partition failed to add app incorrect app returned")
+}
+
+func TestAddTGAppDynamic(t *testing.T) {
+	partition, err := newPlacementPartition()
+	assert.NilError(t, err, "partition create failed")
+	// add a app with TG that does fit in the dynamic queue (no limit)
+	var tgRes *resources.Resource
+	tgRes, err = resources.NewResourceFromConf(map[string]string{"first": "10"})
+	assert.NilError(t, err, "failed to create resource")
+	tags := map[string]string{"taskqueue": "unlimited"}
+	app := newApplicationTGTags(appID1, "default", "unknown", tgRes, tags)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "app-1 should have been added to the partition")
+	assert.Equal(t, app.GetQueueName(), "root.unlimited", "app-1 not placed in expected queue")
+
+	jsonRes := "{\"resources\":{\"first\":{\"value\":10}}}"
+	tags = map[string]string{"taskqueue": "same", objects.AppTagNamespaceResourceQuota: jsonRes}
+	app = newApplicationTGTags(appID2, "default", "unknown", tgRes, tags)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "app-2 should have been added to the partition")
+	assert.Equal(t, partition.getApplication(appID2), app, "partition failed to add app incorrect app returned")
+	assert.Equal(t, app.GetQueueName(), "root.same", "app-2 not placed in expected queue")
+
+	jsonRes = "{\"resources\":{\"first\":{\"value\":1}}}"
+	tags = map[string]string{"taskqueue": "smaller", objects.AppTagNamespaceResourceQuota: jsonRes}
+	app = newApplicationTGTags(appID3, "default", "unknown", tgRes, tags)
+	err = partition.AddApplication(app)
+	if err == nil {
+		t.Error("app-3 should not have been added to the partition: TG & dynamic limit")
+	}
+	if partition.getApplication(appID3) != nil {
+		t.Fatal("partition added app incorrectly should have failed")
+	}
+	queue := partition.GetQueue("root.smaller")
+	if queue == nil {
+		t.Fatal("queue should have been added, even if app failed")
+	}
 }
 
 // simple direct replace with one node

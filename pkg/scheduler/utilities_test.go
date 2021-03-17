@@ -34,6 +34,7 @@ import (
 const (
 	appID1    = "app-1"
 	appID2    = "app-2"
+	appID3    = "app-3"
 	nodeID1   = "node-1"
 	nodeID2   = "node-2"
 	defQueue  = "root.default"
@@ -132,6 +133,33 @@ func newLimitedPartition(resLimit map[string]string) (*PartitionContext, error) 
 	return newPartitionContext(conf, rmID, nil)
 }
 
+func newPlacementPartition() (*PartitionContext, error) {
+	conf := configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues:    nil,
+			},
+		},
+		PlacementRules: []configs.PlacementRule{
+			{
+				Name:   "tag",
+				Create: true,
+				Parent: nil,
+				Value:  "taskqueue",
+			},
+		},
+		Limits:         nil,
+		Preemption:     configs.PartitionPreemptionConfig{},
+		NodeSortPolicy: configs.NodeSortingPolicy{},
+	}
+
+	return newPartitionContext(conf, rmID, nil)
+}
+
 func newApplication(appID, partition, queueName string) *objects.Application {
 	siApp := &si.AddApplicationRequest{
 		ApplicationID: appID,
@@ -142,11 +170,16 @@ func newApplication(appID, partition, queueName string) *objects.Application {
 }
 
 func newApplicationTG(appID, partition, queueName string, task *resources.Resource) *objects.Application {
+	return newApplicationTGTags(appID,partition, queueName, task, nil)
+}
+
+func newApplicationTGTags(appID, partition, queueName string, task *resources.Resource, tags map[string]string) *objects.Application {
 	siApp := &si.AddApplicationRequest{
 		ApplicationID:  appID,
 		QueueName:      queueName,
 		PartitionName:  partition,
 		PlaceholderAsk: task.ToProto(),
+		Tags:           tags,
 	}
 	return objects.NewApplication(siApp, security.UserGroup{}, nil, rmID)
 }

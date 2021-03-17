@@ -37,7 +37,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 )
 
-const appTagNamespaceResourceQuota = "namespace.resourcequota"
+const AppTagNamespaceResourceQuota = "namespace.resourcequota"
 
 // Represents Queue inside Scheduler
 type Queue struct {
@@ -458,7 +458,7 @@ func (sq *Queue) AddApplication(app *Application) {
 	sq.applications[app.ApplicationID] = app
 	// YUNIKORN-199: update the quota from the namespace
 	// get the tag with the quota
-	quota := app.GetTag(appTagNamespaceResourceQuota)
+	quota := app.GetTag(AppTagNamespaceResourceQuota)
 	if quota == "" {
 		return
 	}

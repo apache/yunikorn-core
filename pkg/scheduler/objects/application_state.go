@@ -38,7 +38,6 @@ type applicationEvent int
 
 const (
 	RunApplication applicationEvent = iota
-	WaitApplication
 	RejectApplication
 	CompleteApplication
 	FailApplication
@@ -46,7 +45,7 @@ const (
 )
 
 func (ae applicationEvent) String() string {
-	return [...]string{"runApplication", "waitApplication", "rejectApplication", "completeApplication", "KillApplication", "expireApplication"}[ae]
+	return [...]string{"runApplication", "rejectApplication", "completeApplication", "failApplication", "expireApplication"}[ae]
 }
 
 // ----------------------------------
@@ -59,15 +58,16 @@ const (
 	Accepted
 	Starting
 	Running
-	Waiting
 	Rejected
+	Completing
 	Completed
+	Failing
 	Failed
 	Expired
 )
 
 func (as applicationState) String() string {
-	return [...]string{"New", "Accepted", "Starting", "Running", "Waiting", "Rejected", "Completed", "Failed", "Expired"}[as]
+	return [...]string{"New", "Accepted", "Starting", "Running", "Rejected", "Completing", "Completed", "Failing", "Failed", "Expired"}[as]
 }
 
 func NewAppState() *fsm.FSM {
@@ -87,23 +87,27 @@ func NewAppState() *fsm.FSM {
 				Dst:  Starting.String(),
 			}, {
 				Name: RunApplication.String(),
-				Src:  []string{Running.String(), Starting.String(), Waiting.String()},
+				Src:  []string{Running.String(), Starting.String(), Completing.String()},
 				Dst:  Running.String(),
 			}, {
 				Name: CompleteApplication.String(),
-				Src:  []string{Running.String(), Starting.String(), Waiting.String()},
+				Src:  []string{Accepted.String(), Running.String(), Starting.String()},
+				Dst:  Completing.String(),
+			}, {
+				Name: CompleteApplication.String(),
+				Src:  []string{Completing.String()},
 				Dst:  Completed.String(),
 			}, {
-				Name: WaitApplication.String(),
-				Src:  []string{Accepted.String(), Running.String(), Starting.String()},
-				Dst:  Waiting.String(),
+				Name: FailApplication.String(),
+				Src:  []string{Accepted.String(), New.String(), Running.String(), Starting.String(), Completing.String()},
+				Dst:  Failing.String(),
 			}, {
 				Name: FailApplication.String(),
-				Src:  []string{Accepted.String(), Failed.String(), New.String(), Running.String(), Starting.String(), Waiting.String()},
+				Src:  []string{Failing.String()},
 				Dst:  Failed.String(),
 			}, {
 				Name: ExpireApplication.String(),
-				Src:  []string{Completed.String()},
+				Src:  []string{Completed.String(), Failed.String()},
 				Dst:  Expired.String(),
 			},
 		},
@@ -127,8 +131,8 @@ func NewAppState() *fsm.FSM {
 			fmt.Sprintf("enter_%s", Starting.String()): func(event *fsm.Event) {
 				setTimer(startingTimeout, event, RunApplication)
 			},
-			fmt.Sprintf("enter_%s", Waiting.String()): func(event *fsm.Event) {
-				setTimer(waitingTimeout, event, CompleteApplication)
+			fmt.Sprintf("enter_%s", Completing.String()): func(event *fsm.Event) {
+				setTimer(completingTimeout, event, CompleteApplication)
 			},
 			fmt.Sprintf("leave_%s", New.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsAdded()
@@ -144,12 +148,15 @@ func NewAppState() *fsm.FSM {
 			},
 			fmt.Sprintf("enter_%s", Completed.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsCompleted()
-				app := setTimer(completedTimeout, event, ExpireApplication)
+				app := setTimer(terminatedTimeout, event, ExpireApplication)
 				app.executeTerminatedCallback()
 				app.clearPlaceholderTimer()
 			},
+			fmt.Sprintf("enter_%s", Failing.String()): func(event *fsm.Event) {
+				event.Args[0].(*Application).failAppIfPossible()
+			},
 			fmt.Sprintf("enter_%s", Failed.String()): func(event *fsm.Event) {
-				app := setTimer(completedTimeout, event, ExpireApplication)
+				app := setTimer(terminatedTimeout, event, ExpireApplication)
 				app.executeTerminatedCallback()
 			},
 		},

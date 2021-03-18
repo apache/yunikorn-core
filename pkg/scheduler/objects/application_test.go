@@ -320,7 +320,7 @@ func TestAllocAskStateChange(t *testing.T) {
 	assert.Assert(t, app.IsAccepted(), "Application should be in accepted state")
 	// make sure the state changes to waiting
 	assert.Equal(t, app.RemoveAllocationAsk(aKey), 0, "ask should have been removed, no reservations")
-	assert.Assert(t, app.IsWaiting(), "Application should be in waiting state")
+	assert.Assert(t, app.IsCompleting(), "Application should be in waiting state")
 
 	// make sure the state changes back correctly
 	err = app.AddAllocationAsk(ask)
@@ -329,7 +329,7 @@ func TestAllocAskStateChange(t *testing.T) {
 
 	// and back to waiting again, now from running
 	assert.Equal(t, app.RemoveAllocationAsk(aKey), 0, "ask should have been removed, no reservations")
-	assert.Assert(t, app.IsWaiting(), "Application should be in waiting state")
+	assert.Assert(t, app.IsCompleting(), "Application should be in waiting state")
 }
 
 // test recover ask
@@ -550,7 +550,7 @@ func TestStateChangeOnUpdate(t *testing.T) {
 	// removing the ask should move it to waiting
 	released := app.RemoveAllocationAsk(askID)
 	assert.Equal(t, released, 0, "allocation ask should not have been reserved")
-	assert.Assert(t, app.IsWaiting(), "application did not change to waiting state: %s", app.CurrentState())
+	assert.Assert(t, app.IsCompleting(), "application did not change to waiting state: %s", app.CurrentState())
 
 	// start with a fresh state machine
 	app = newApplication(appID1, "default", "root.unknown")
@@ -579,7 +579,7 @@ func TestStateChangeOnUpdate(t *testing.T) {
 
 	// remove the allocation, ask has been removed so nothing left
 	app.RemoveAllocation(uuid)
-	assert.Assert(t, app.IsWaiting(), "Application did not change as expected: %s", app.CurrentState())
+	assert.Assert(t, app.IsCompleting(), "Application did not change as expected: %s", app.CurrentState())
 }
 
 func TestStateChangeOnPlaceholderAdd(t *testing.T) {
@@ -606,7 +606,7 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	// removing the ask should move it to waiting
 	released := app.RemoveAllocationAsk(askID)
 	assert.Equal(t, released, 0, "allocation ask should not have been reserved")
-	assert.Assert(t, app.IsWaiting(), "application did not change to waiting state: %s", app.CurrentState())
+	assert.Assert(t, app.IsCompleting(), "application did not change to waiting state: %s", app.CurrentState())
 
 	// start with a fresh state machine
 	app = newApplication(appID1, "default", "root.unknown")
@@ -633,11 +633,11 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	// removing the ask should move the application into the waiting state, because the allocation is only a placeholder allocation
 	released = app.RemoveAllocationAsk(askID)
 	assert.Equal(t, released, 0, "allocation ask should not have been reserved")
-	assert.Assert(t, app.IsWaiting(), "Application should have stayed same, changed unexpectedly: %s", app.CurrentState())
+	assert.Assert(t, app.IsCompleting(), "Application should have stayed same, changed unexpectedly: %s", app.CurrentState())
 
 	// remove the allocation, ask has been removed so nothing left
 	app.RemoveAllocation(uuid)
-	assert.Assert(t, app.IsWaiting(), "Application did not change as expected: %s", app.CurrentState())
+	assert.Assert(t, app.IsCompleting(), "Application did not change as expected: %s", app.CurrentState())
 }
 
 func TestAllocations(t *testing.T) {
@@ -731,18 +731,18 @@ func TestStateTimeOut(t *testing.T) {
 }
 
 func TestCompleted(t *testing.T) {
-	waitingTimeout = time.Millisecond * 100
-	completedTimeout = time.Millisecond * 100
+	completingTimeout = time.Millisecond * 100
+	terminatedTimeout = time.Millisecond * 100
 	defer func() {
-		waitingTimeout = time.Second * 30
-		completedTimeout = 30 * 24 * time.Hour
+		completingTimeout = time.Second * 30
+		terminatedTimeout = 30 * 24 * time.Hour
 	}()
 	app := newApplication(appID1, "default", "root.a")
 	err := app.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (completed test)")
-	err = app.HandleApplicationEvent(WaitApplication)
+	err = app.HandleApplicationEvent(CompleteApplication)
 	assert.NilError(t, err, "no error expected accepted to waiting (completed test)")
-	assert.Assert(t, app.IsWaiting(), "App should be waiting")
+	assert.Assert(t, app.IsCompleting(), "App should be waiting")
 	// give it some time to run and progress
 	err = common.WaitFor(10*time.Microsecond, time.Millisecond*200, app.IsCompleted)
 	assert.NilError(t, err, "Application did not progress into Completed state")
@@ -864,7 +864,7 @@ func TestTimeoutPlaceholderProcessing_NoTimeoutSet(t *testing.T) {
 	// add the placeholder to the app
 	app.AddAllocation(ph)
 	assert.Assert(t, app.placeholderTimer != nil, "Placeholder timer should be initiated after the first placeholder allocation")
-	err = common.WaitFor(1*time.Millisecond, time.Millisecond*100, app.IsFailed)
+	err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, app.IsFailing)
 	assert.NilError(t, err, "Application did not progress into Failed state")
 }
 

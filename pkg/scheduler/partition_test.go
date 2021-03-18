@@ -1156,7 +1156,7 @@ func TestCompleteApp(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
 	app := newApplication("completed", "default", defQueue)
-	app.SetState(objects.Waiting.String())
+	app.SetState(objects.Completing.String())
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "no error expected while adding the application")
 	assert.Assert(t, len(partition.applications) == 1, "the partition should have 1 app")

@@ -40,10 +40,10 @@ import (
 )
 
 var (
-	reservationDelay = 2 * time.Second
-	startingTimeout  = 5 * time.Minute
-	waitingTimeout   = 30 * time.Second
-	completedTimeout = 3 * 24 * time.Hour
+	reservationDelay          = 2 * time.Second
+	startingTimeout           = 5 * time.Minute
+	completingTimeout         = 30 * time.Second
+	terminatedTimeout         = 3 * 24 * time.Hour
 	defaultPlaceholderTimeout = 15 * time.Minute
 )
 
@@ -146,8 +146,8 @@ func (sa *Application) IsRunning() bool {
 	return sa.stateMachine.Is(Running.String())
 }
 
-func (sa *Application) IsWaiting() bool {
-	return sa.stateMachine.Is(Waiting.String())
+func (sa *Application) IsCompleting() bool {
+	return sa.stateMachine.Is(Completing.String())
 }
 
 func (sa *Application) IsCompleted() bool {
@@ -156,6 +156,10 @@ func (sa *Application) IsCompleted() bool {
 
 func (sa *Application) IsExpired() bool {
 	return sa.stateMachine.Is(Expired.String())
+}
+
+func (sa *Application) IsFailing() bool {
+	return sa.stateMachine.Is(Failing.String())
 }
 
 func (sa *Application) IsFailed() bool {
@@ -208,13 +212,13 @@ func (sa *Application) setStateTimer(timeout time.Duration, currentState string,
 func (sa *Application) timeoutStateTimer(expectedState string, event applicationEvent) func() {
 	return func() {
 		// make sure we are still in the right state
-		// we could have been killed or something might have happened while waiting for a lock
+		// we could have been failed or something might have happened while waiting for a lock
 		if expectedState == sa.stateMachine.Current() {
 			log.Logger().Debug("Application state: auto progress",
 				zap.String("applicationID", sa.ApplicationID),
 				zap.String("state", sa.stateMachine.Current()))
-			// if the app is waiting, but there are placeholders left, first do the cleanup
-			if sa.IsWaiting() && !resources.IsZero(sa.GetPlaceholderResource()) {
+			// if the app is completing, but there are placeholders left, first do the cleanup
+			if sa.IsCompleting() && !resources.IsZero(sa.GetPlaceholderResource()) {
 				sa.notifyRMAllocationReleased(sa.rmID, sa.getPlaceholderAllocations(), si.TerminationType_TIMEOUT, "releasing placeholders on app complete")
 				sa.clearStateTimer()
 			} else {
@@ -239,9 +243,6 @@ func (sa *Application) clearStateTimer() {
 		zap.String("state", sa.stateMachine.Current()))
 }
 
-func (sa *Application) isWaitingStateTimedOut() bool {
-	return sa.IsWaiting() && sa.stateTimer == nil
-}
 func (sa *Application) initPlaceholderTimer() {
 	if sa.placeholderTimer != nil || !sa.IsAccepted() || sa.execTimeout <= 0 {
 		return
@@ -271,16 +272,17 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 		}
 	// Case 2: in every other case fail the application, and notify the context about the expired placeholder asks
 	default:
-		sa.notifyRMAllocationAskReleased(sa.rmID, sa.getAllRequests(), si.TerminationType_TIMEOUT, "releasing placeholders on placeholder timeout")
-		sa.removeAsksInternal("")
+		// change the status of the app to Failing. Once all the placeholders are cleaned up, if will be changed to Failed
 		if err := sa.HandleApplicationEvent(FailApplication); err != nil {
 			log.Logger().Debug("Application state change failed when placeholder timed out",
 				zap.String("AppID", sa.ApplicationID),
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))
 		}
+		sa.notifyRMAllocationAskReleased(sa.rmID, sa.getAllRequests(), si.TerminationType_TIMEOUT, "releasing placeholders asks on placeholder timeout")
+		sa.removeAsksInternal("")
 	}
-	sa.notifyRMAllocationReleased(sa.rmID, sa.getPlaceholderAllocations(), si.TerminationType_TIMEOUT, "releasing placeholders on placeholder timeout")
+	sa.notifyRMAllocationReleased(sa.rmID, sa.getPlaceholderAllocations(), si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
 	sa.clearPlaceholderTimer()
 }
 
@@ -397,12 +399,11 @@ func (sa *Application) removeAsksInternal(allocKey string) int {
 	// Check if we need to change state based on the ask removal:
 	// 1) if pending is zero (no more asks left)
 	// 2) if confirmed allocations is zero (no real tasks running)
-	// 3) if placeholder allocations is zero (no placeholders running)
-	// Change the state to waiting.
+	// Change the state to completing.
 	// When the resource trackers are zero we should not expect anything to come in later.
-	if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) {
-		if err := sa.HandleApplicationEvent(WaitApplication); err != nil {
-			log.Logger().Warn("Application state not changed to Waiting while updating ask(s)",
+	if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) && !sa.IsFailing() {
+		if err := sa.HandleApplicationEvent(CompleteApplication); err != nil {
+			log.Logger().Warn("Application state not changed to Completing while updating ask(s)",
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))
 		}
@@ -437,9 +438,9 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 
 	// Check if we need to change state based on the ask added, there are two cases:
 	// 1) first ask added on a new app: state is New
-	// 2) all asks and allocation have been removed: state is Waiting
+	// 2) all asks and allocation have been removed: state is Completing
 	// Move the state and get it scheduling (again)
-	if sa.stateMachine.Is(New.String()) || sa.stateMachine.Is(Waiting.String()) {
+	if sa.stateMachine.Is(New.String()) || sa.stateMachine.Is(Completing.String()) {
 		if err := sa.HandleApplicationEvent(RunApplication); err != nil {
 			log.Logger().Debug("Application state change failed while adding new ask",
 				zap.String("currentState", sa.CurrentState()),
@@ -1185,21 +1186,25 @@ func (sa *Application) removeAllocationInternal(uuid string) *Allocation {
 		// if all the placeholders are replaced, clear the placeholder timer
 		if resources.IsZero(sa.allocatedPlaceholder) {
 			sa.clearPlaceholderTimer()
+			if (sa.IsCompleting() && sa.stateTimer == nil) || sa.IsFailing() {
+				event := CompleteApplication
+				if sa.IsFailing() {
+					event = FailApplication
+				}
+				if err := sa.HandleApplicationEvent(event); err != nil {
+					log.Logger().Warn("Application state not changed while removing a placeholder allocation",
+						zap.String("currentState", sa.CurrentState()),
+						zap.String("event", event.String()),
+						zap.Error(err))
+				}
+			}
 		}
 	} else {
 		sa.allocatedResource = resources.Sub(sa.allocatedResource, alloc.AllocatedResource)
-	}
-	// When the resource trackers are zero we should not expect anything to come in later.
-	if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) {
-		if sa.isWaitingStateTimedOut() && resources.IsZero(sa.allocatedPlaceholder) {
+		// When the resource trackers are zero we should not expect anything to come in later.
+		if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) {
 			if err := sa.HandleApplicationEvent(CompleteApplication); err != nil {
-				log.Logger().Warn("Application state not changed to Completed while removing some allocation(s)",
-					zap.String("currentState", sa.CurrentState()),
-					zap.Error(err))
-			}
-		} else {
-			if err := sa.HandleApplicationEvent(WaitApplication); err != nil {
-				log.Logger().Warn("Application state not changed to Waiting while removing some allocation(s)",
+				log.Logger().Warn("Application state not changed to Waiting while removing an allocation",
 					zap.String("currentState", sa.CurrentState()),
 					zap.Error(err))
 			}
@@ -1225,7 +1230,7 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 	sa.allocations = make(map[string]*Allocation)
 	// When the resource trackers are zero we should not expect anything to come in later.
 	if resources.IsZero(sa.pending) {
-		if err := sa.HandleApplicationEvent(WaitApplication); err != nil {
+		if err := sa.HandleApplicationEvent(CompleteApplication); err != nil {
 			log.Logger().Warn("Application state not changed to Waiting while removing all allocations",
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))
@@ -1302,4 +1307,15 @@ func (sa *Application) notifyRMAllocationAskReleased(rmID string, released []*Al
 		})
 	}
 	sa.rmEventHandler.HandleEvent(releaseEvent)
+}
+
+// Auto progress the application when it enters the Failing state if there is nothing to clean up.
+// Since this is called by the _locked_ state machine while processing an event we cannot call back
+// into the statemachine directly and we need a go routine to avoid a deadlock.
+func (sa *Application) failAppIfPossible() {
+	if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) && resources.IsZero(sa.allocatedPlaceholder) {
+		// The event handling cannot fail
+		//nolint: errcheck
+		go sa.HandleApplicationEvent(FailApplication)
+	}
 }

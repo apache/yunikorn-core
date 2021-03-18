@@ -731,11 +731,11 @@ func TestStateTimeOut(t *testing.T) {
 }
 
 func TestCompleted(t *testing.T) {
-	waitingTimeout = time.Millisecond * 100
-	completedTimeout = time.Millisecond * 100
+	completingTimeout = time.Millisecond * 100
+	terminatedTimeout = time.Millisecond * 100
 	defer func() {
-		waitingTimeout = time.Second * 30
-		completedTimeout = 30 * 24 * time.Hour
+		completingTimeout = time.Second * 30
+		terminatedTimeout = 30 * 24 * time.Hour
 	}()
 	app := newApplication(appID1, "default", "root.a")
 	err := app.HandleApplicationEvent(RunApplication)

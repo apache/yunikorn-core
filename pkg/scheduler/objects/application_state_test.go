@@ -44,7 +44,7 @@ func TestAcceptStateTransition(t *testing.T) {
 
 	// accepted to failed
 	err = app.HandleApplicationEvent(FailApplication)
-	assert.NilError(t, err, "no error expected accepted to killed")
+	assert.NilError(t, err, "no error expected accepted to failed")
 	err = common.WaitFor(10*time.Microsecond, time.Millisecond*100, app.IsFailed)
 	assert.NilError(t, err, "App should be in Failed state")
 }
@@ -64,9 +64,9 @@ func TestRejectStateTransition(t *testing.T) {
 	assert.Assert(t, err != nil, "error expected rejected to rejected")
 	assert.Equal(t, app.CurrentState(), Rejected.String())
 
-	// rejected to killed: error expected
+	// rejected to failed: error expected
 	err = app.HandleApplicationEvent(FailApplication)
-	assert.Assert(t, err != nil, "error expected rejected to killed")
+	assert.Assert(t, err != nil, "error expected rejected to failed")
 	assert.Equal(t, app.CurrentState(), Rejected.String())
 }
 
@@ -88,9 +88,9 @@ func TestStartStateTransition(t *testing.T) {
 	assert.Assert(t, err != nil, "error expected starting to rejected")
 	assert.Equal(t, appInfo.CurrentState(), Starting.String())
 
-	// start to killed
+	// start to failed
 	err = appInfo.HandleApplicationEvent(FailApplication)
-	assert.NilError(t, err, "no error expected starting to killed")
+	assert.NilError(t, err, "no error expected starting to failed")
 	err = common.WaitFor(10*time.Microsecond, time.Millisecond*100, appInfo.IsFailed)
 	assert.NilError(t, err, "App should be in Failed state")
 }
@@ -120,20 +120,20 @@ func TestRunStateTransition(t *testing.T) {
 	assert.Assert(t, err != nil, "error expected running to rejected")
 	assert.Equal(t, appInfo.CurrentState(), Running.String())
 
-	// run to killed
+	// run to failed
 	err = appInfo.HandleApplicationEvent(FailApplication)
 	assert.NilError(t, err, "no error expected running to failed")
 	err = common.WaitFor(10*time.Microsecond, time.Millisecond*100, appInfo.IsFailed)
 	assert.NilError(t, err, "App should be in Failed state")
 
-	// run fails from killing
+	// run fails from failing
 	err = appInfo.HandleApplicationEvent(RunApplication)
-	assert.Assert(t, err != nil, "error expected killed to running")
+	assert.Assert(t, err != nil, "error expected failed to running")
 	assert.Equal(t, appInfo.CurrentState(), Failed.String())
 }
 
 func TestCompletedStateTransition(t *testing.T) {
-	// complete only from run or waiting
+	// complete only from completing
 	appInfo := newApplication("app-00001", "default", "root.a")
 	assert.Equal(t, appInfo.CurrentState(), New.String())
 	err := appInfo.HandleApplicationEvent(RunApplication)
@@ -143,7 +143,7 @@ func TestCompletedStateTransition(t *testing.T) {
 	err = appInfo.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected starting to running (completed test)")
 	assert.Equal(t, appInfo.CurrentState(), Running.String())
-	// completed from run
+	// completed from run through completing
 	err = appInfo.HandleApplicationEvent(CompleteApplication)
 	assert.NilError(t, err, "no error expected running to completing")
 	assert.Equal(t, appInfo.CurrentState(), Completing.String())
@@ -151,7 +151,7 @@ func TestCompletedStateTransition(t *testing.T) {
 	assert.NilError(t, err, "no error expected completing to completed")
 	assert.Equal(t, appInfo.CurrentState(), Completed.String())
 
-	// complete only from run or waiting
+	// complete from run through completing
 	appInfo = newApplication("app-00002", "default", "root.a")
 	assert.Equal(t, appInfo.CurrentState(), New.String())
 	err = appInfo.HandleApplicationEvent(RunApplication)
@@ -169,12 +169,12 @@ func TestCompletedStateTransition(t *testing.T) {
 	assert.Assert(t, err != nil, "error expected completed to rejected")
 	assert.Equal(t, appInfo.CurrentState(), Completed.String())
 
-	// completed to killed: error expected
+	// completed to failed: error expected
 	err = appInfo.HandleApplicationEvent(FailApplication)
-	assert.Assert(t, err != nil, "error expected completed to killed")
+	assert.Assert(t, err != nil, "error expected completed to failled")
 	assert.Equal(t, appInfo.CurrentState(), Completed.String())
 
-	// completed fails from all but running and waiting
+	// completed fails from all completing
 	appInfo = newApplication("app-00003", "default", "root.a")
 	assert.Equal(t, appInfo.CurrentState(), New.String())
 	err = appInfo.HandleApplicationEvent(CompleteApplication)
@@ -182,39 +182,39 @@ func TestCompletedStateTransition(t *testing.T) {
 	assert.Equal(t, appInfo.CurrentState(), New.String())
 }
 
-func TestWaitStateTransition(t *testing.T) {
+func TestCompletingStateTransition(t *testing.T) {
 	appInfo := newApplication("app-00001", "default", "root.a")
 	assert.Equal(t, appInfo.CurrentState(), New.String())
 	err := appInfo.HandleApplicationEvent(RunApplication)
-	assert.NilError(t, err, "no error expected new to accepted (wait test)")
+	assert.NilError(t, err, "no error expected new to accepted (completing test)")
 
-	// accepted to wait and back again
+	// accepted to completing and back again
 	err = appInfo.HandleApplicationEvent(CompleteApplication)
-	assert.NilError(t, err, "no error expected accepted to waiting")
+	assert.NilError(t, err, "no error expected accepted to completing")
 	assert.Equal(t, appInfo.CurrentState(), Completing.String())
 
-	// starting to wait
+	// starting to completing
 	appInfo = newApplication("app-00002", "default", "root.a")
 	assert.Equal(t, appInfo.CurrentState(), New.String())
 	err = appInfo.HandleApplicationEvent(RunApplication)
-	assert.NilError(t, err, "no error expected new to accepted (wait test)")
+	assert.NilError(t, err, "no error expected new to accepted (completing test)")
 	err = appInfo.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected accepted to starting")
 	assert.Equal(t, appInfo.CurrentState(), Starting.String())
 	err = appInfo.HandleApplicationEvent(CompleteApplication)
-	assert.NilError(t, err, "no error expected starting to waiting")
+	assert.NilError(t, err, "no error expected starting to completing")
 	assert.Equal(t, appInfo.CurrentState(), Completing.String())
 
-	// wait to run and back again
+	// completing to run and back again
 	err = appInfo.HandleApplicationEvent(RunApplication)
-	assert.NilError(t, err, "no error expected starting to running (wait test)")
+	assert.NilError(t, err, "no error expected starting to running (completing test)")
 	err = appInfo.HandleApplicationEvent(CompleteApplication)
-	assert.NilError(t, err, "no error expected running to waiting")
+	assert.NilError(t, err, "no error expected running to completing")
 	assert.Equal(t, appInfo.CurrentState(), Completing.String())
 
-	// wait to killed
+	// completing to failed
 	err = appInfo.HandleApplicationEvent(FailApplication)
-	assert.NilError(t, err, "no error expected wait to killed")
+	assert.NilError(t, err, "no error expected completing to failed")
 	err = common.WaitFor(10*time.Microsecond, time.Millisecond*100, appInfo.IsFailed)
 	assert.NilError(t, err, "App should be in Failed state")
 }

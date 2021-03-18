@@ -132,7 +132,7 @@ func NewAppState() *fsm.FSM {
 				setTimer(startingTimeout, event, RunApplication)
 			},
 			fmt.Sprintf("enter_%s", Completing.String()): func(event *fsm.Event) {
-				setTimer(waitingTimeout, event, CompleteApplication)
+				setTimer(completingTimeout, event, CompleteApplication)
 			},
 			fmt.Sprintf("leave_%s", New.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsAdded()
@@ -148,7 +148,7 @@ func NewAppState() *fsm.FSM {
 			},
 			fmt.Sprintf("enter_%s", Completed.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsCompleted()
-				app := setTimer(completedTimeout, event, ExpireApplication)
+				app := setTimer(terminatedTimeout, event, ExpireApplication)
 				app.executeTerminatedCallback()
 				app.clearPlaceholderTimer()
 			},
@@ -156,7 +156,7 @@ func NewAppState() *fsm.FSM {
 				event.Args[0].(*Application).failAppIfPossible()
 			},
 			fmt.Sprintf("enter_%s", Failed.String()): func(event *fsm.Event) {
-				app := setTimer(completedTimeout, event, ExpireApplication)
+				app := setTimer(terminatedTimeout, event, ExpireApplication)
 				app.executeTerminatedCallback()
 			},
 		},

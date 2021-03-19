@@ -266,12 +266,29 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 	defer sa.Unlock()
 	switch {
 	// Case 1: if all app's placeholders are allocated, only part of them gets replaced, just delete the remaining placeholders
-	case (sa.IsRunning() || sa.IsStarting()) && !resources.IsZero(sa.allocatedPlaceholder):
+	case (sa.IsRunning() || sa.IsStarting() || sa.IsCompleting()) && !resources.IsZero(sa.allocatedPlaceholder):
+		var toRelease []*Allocation
+		replacing := 0
 		for _, alloc := range sa.getPlaceholderAllocations() {
+			// skip over the allocations that are already marked for release, they will be replaced soon
+			if alloc.released {
+				replacing++
+				continue
+			}
 			alloc.released = true
+			toRelease = append(toRelease, alloc)
 		}
+		log.Logger().Info("Placeholder timeout, releasing placeholders",
+			zap.String("AppID", sa.ApplicationID),
+			zap.Int("placeholders being replaced", replacing),
+			zap.Int("releasing placeholders", len(toRelease)))
+		sa.notifyRMAllocationReleased(sa.rmID, toRelease, si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
 	// Case 2: in every other case fail the application, and notify the context about the expired placeholder asks
 	default:
+		log.Logger().Info("Placeholder timeout, releasing asks and placeholders",
+			zap.String("AppID", sa.ApplicationID),
+			zap.Int("releasing placeholders", len(sa.allocations)),
+			zap.Int("releasing asks", len(sa.requests)))
 		// change the status of the app to Failing. Once all the placeholders are cleaned up, if will be changed to Failed
 		if err := sa.HandleApplicationEvent(FailApplication); err != nil {
 			log.Logger().Debug("Application state change failed when placeholder timed out",
@@ -281,8 +298,9 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 		}
 		sa.notifyRMAllocationAskReleased(sa.rmID, sa.getAllRequests(), si.TerminationType_TIMEOUT, "releasing placeholders asks on placeholder timeout")
 		sa.removeAsksInternal("")
+		// all allocations are placeholders but GetAllAllocations is locked and cannot be used
+		sa.notifyRMAllocationReleased(sa.rmID, sa.getPlaceholderAllocations(), si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
 	}
-	sa.notifyRMAllocationReleased(sa.rmID, sa.getPlaceholderAllocations(), si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
 	sa.clearPlaceholderTimer()
 }
 
@@ -1276,6 +1294,10 @@ func (sa *Application) executeTerminatedCallback() {
 }
 
 func (sa *Application) notifyRMAllocationReleased(rmID string, released []*Allocation, terminationType si.TerminationType, message string) {
+	// only generate event if needed
+	if len(released) == 0 {
+		return
+	}
 	releaseEvent := &rmevent.RMReleaseAllocationEvent{
 		ReleasedAllocations: make([]*si.AllocationRelease, 0),
 		RmID:                rmID,
@@ -1293,6 +1315,10 @@ func (sa *Application) notifyRMAllocationReleased(rmID string, released []*Alloc
 }
 
 func (sa *Application) notifyRMAllocationAskReleased(rmID string, released []*AllocationAsk, terminationType si.TerminationType, message string) {
+	// only generate event if needed
+	if len(released) == 0 {
+		return
+	}
 	releaseEvent := &rmevent.RMReleaseAllocationAskEvent{
 		ReleasedAllocationAsks: make([]*si.AllocationAskRelease, 0),
 		RmID:                   rmID,
@@ -1307,15 +1333,4 @@ func (sa *Application) notifyRMAllocationAskReleased(rmID string, released []*Al
 		})
 	}
 	sa.rmEventHandler.HandleEvent(releaseEvent)
-}
-
-// Auto progress the application when it enters the Failing state if there is nothing to clean up.
-// Since this is called by the _locked_ state machine while processing an event we cannot call back
-// into the statemachine directly and we need a go routine to avoid a deadlock.
-func (sa *Application) failAppIfPossible() {
-	if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) && resources.IsZero(sa.allocatedPlaceholder) {
-		// The event handling cannot fail
-		//nolint: errcheck
-		go sa.HandleApplicationEvent(FailApplication)
-	}
 }

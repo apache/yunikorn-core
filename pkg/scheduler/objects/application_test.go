@@ -19,15 +19,48 @@
 package objects
 
 import (
+	"math"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
+	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 )
+
+// basic app creating with timeout checks
+func TestNewApplication(t *testing.T) {
+	user := security.UserGroup{
+		User:   "testuser",
+		Groups: []string{},
+	}
+	siApp := &si.AddApplicationRequest{
+		ApplicationID: "appID",
+	}
+	app := NewApplication(siApp, user, nil, "")
+	assert.Equal(t, app.execTimeout, defaultPlaceholderTimeout, "No timeout passed in should be default")
+	siApp.ExecutionTimeoutMilliSeconds = -1
+	app = NewApplication(siApp, user, nil, "")
+	assert.Equal(t, app.execTimeout, defaultPlaceholderTimeout, "Negative timeout passed in should be default")
+	siApp.ExecutionTimeoutMilliSeconds = math.MaxInt64
+	app = NewApplication(siApp, user, nil, "")
+	assert.Equal(t, app.execTimeout, defaultPlaceholderTimeout, "overly large timeout should be set to default")
+	siApp.ExecutionTimeoutMilliSeconds = 60000
+	app = NewApplication(siApp, user, nil, "")
+	assert.Equal(t, app.execTimeout, 60*time.Second, "correct timeout should not set")
+
+	originalPhTimeout := defaultPlaceholderTimeout
+	defaultPlaceholderTimeout = 100 * time.Microsecond
+	defer func() { defaultPlaceholderTimeout = originalPhTimeout }()
+	siApp.ExecutionTimeoutMilliSeconds = 0
+	app = NewApplication(siApp, user, nil, "")
+	assert.Equal(t, app.execTimeout, defaultPlaceholderTimeout, "No timeout passed in should be modified default")
+}
 
 // test basic reservations
 func TestAppReservation(t *testing.T) {
@@ -658,6 +691,7 @@ func TestAllocations(t *testing.T) {
 	}
 	allocs := app.GetAllAllocations()
 	assert.Equal(t, len(allocs), 1)
+	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should not be initialized as the allocation is not a placeholder")
 
 	// add more allocations to test the removals
 	alloc = newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
@@ -741,7 +775,7 @@ func TestCompleted(t *testing.T) {
 	err := app.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (completed test)")
 	err = app.HandleApplicationEvent(CompleteApplication)
-	assert.NilError(t, err, "no error expected accepted to waiting (completed test)")
+	assert.NilError(t, err, "no error expected accepted to completing (completed test)")
 	assert.Assert(t, app.IsCompleting(), "App should be waiting")
 	// give it some time to run and progress
 	err = common.WaitFor(10*time.Microsecond, time.Millisecond*200, app.IsCompleted)
@@ -768,10 +802,8 @@ func TestGetTag(t *testing.T) {
 }
 
 func TestOnStatusChangeCalled(t *testing.T) {
-	app := newApplication(appID1, "default", "root.a")
+	app, testHandler := newApplicationWithHandler(appID1, "default", "root.a")
 	assert.Equal(t, New.String(), app.CurrentState(), "new app not in New state")
-	testHandler := &appEventHandler{}
-	app.rmEventHandler = testHandler
 
 	err := app.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "error returned which was not expected")
@@ -845,72 +877,151 @@ func TestReplaceAllocation(t *testing.T) {
 	}
 }
 
-func TestTimeoutPlaceholderProcessing_NoTimeoutSet(t *testing.T) {
+func TestTimeoutPlaceholderAllocAsk(t *testing.T) {
+	// create a fake queue
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+
 	originalPhTimeout := defaultPlaceholderTimeout
-	defaultPlaceholderTimeout = time.Microsecond * 100
+	defaultPlaceholderTimeout = 5 * time.Millisecond
 	defer func() { defaultPlaceholderTimeout = originalPhTimeout }()
 
-	app := newApplication(appID1, "default", "root.a")
-	testHandler := &appEventHandler{}
-	app.rmEventHandler = testHandler
-	app.SetState(Accepted.String())
+	app, testHandler := newApplicationWithHandler(appID1, "default", "root.a")
+	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should be nil on create")
+	// fake the queue assignment (needed with ask)
+	app.queue = queue
 
 	resMap := map[string]string{"memory": "100", "vcores": "10"}
 	res, err := resources.NewResourceFromConf(resMap)
 	assert.NilError(t, err, "Unexpected error when creating resource from map")
-	ph := newPlaceholderAlloc(appID1, "uuid-1", nodeID1, "root.a", res)
-	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should be nil if there are no placeholder allocations")
-
+	// add the placeholder ask to the app
+	phAsk := newAllocationAskTG("ask-1", appID1, "tg-1", res, 1)
+	err = app.AddAllocationAsk(phAsk)
+	assert.NilError(t, err, "Application ask should have been added")
+	assert.Assert(t, app.IsAccepted(), "Application should be in accepted state")
 	// add the placeholder to the app
+	ph := newPlaceholderAlloc(appID1, "uuid-1", nodeID1, "root.a", res)
 	app.AddAllocation(ph)
 	assert.Assert(t, app.placeholderTimer != nil, "Placeholder timer should be initiated after the first placeholder allocation")
-	err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, app.IsFailing)
-	assert.NilError(t, err, "Application did not progress into Failed state")
-}
-
-func TestTimeoutPlaceholderProcessing_TimeoutIsSet(t *testing.T) {
-	app := newApplicationWithPlaceholderTimeout(appID1, "default", "root.a", 100)
-	testHandler := &appEventHandler{}
-	app.rmEventHandler = testHandler
-	app.SetState(Accepted.String())
-
-	resMap := map[string]string{"memory": "100", "vcores": "10"}
-	res, err := resources.NewResourceFromConf(resMap)
-	assert.NilError(t, err, "Unexpected error when creating resource from map")
-	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should be nil if there are no placeholder allocations")
-	ph := newPlaceholderAlloc(appID1, "uuid-1", nodeID1, "root.a", res)
-	// add the placeholder to the app
+	// add a second one to check the filter
+	ph = newPlaceholderAlloc(appID1, "uuid-2", nodeID1, "root.a", res)
 	app.AddAllocation(ph)
-	// add a real allocation as well
-	alloc := newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
-	app.AddAllocation(alloc)
-	assert.Assert(t, app.IsStarting(), "App should be in starting state after the first allocation")
-
-	assert.Assert(t, app.placeholderTimer != nil, "Placeholder timer should be initiated after the first placeholder allocation")
-	err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, func() bool {
+	err = common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
 		app.RLock()
 		defer app.RUnlock()
 		return app.placeholderTimer == nil
 	})
-	assert.NilError(t, err, "Placeholder timer didn't timed out as expected")
-	assert.Assert(t, app.IsStarting() || app.IsRunning(), "App state should not be changed, because there are some real allocations as well")
-	assert.Assert(t, resources.Equals(app.allocatedResource, res), "Unexpected allocated resources for the app")
-	assert.Assert(t, ph.released, "Placeholder allocation should be released")
-	assert.Assert(t, !alloc.released, "Real allocation should NOT be released")
+	assert.NilError(t, err, "Placeholder timeout cleanup did not trigger unexpectedly")
+	assert.Assert(t, app.IsFailing(), "Application did not progress into Failing state")
+	events := testHandler.getEvents()
+	var found int
+	for _, event := range events {
+		if allocRelease, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {
+			assert.Equal(t, len(allocRelease.ReleasedAllocations), 2, "two allocations should have been released")
+			found++
+		}
+		if askRelease, ok := event.(*rmevent.RMReleaseAllocationAskEvent); ok {
+			assert.Equal(t, len(askRelease.ReleasedAllocationAsks), 1, "one allocation ask should have been released")
+			found++
+		}
+	}
+	assert.Equal(t, found, 2, "release allocation or ask event not found in list")
+	// asks are completely cleaned up
+	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "pending placeholder resources should be zero")
+	// a released placeholder still holds the resource until release confirmed by the RM
+	assert.Assert(t, resources.Equals(app.GetPlaceholderResource(), resources.Multiply(res, 2)), "Unexpected placeholder resources for the app")
 }
 
-func TestInitPlaceholderTimer_NoPlaceholders(t *testing.T) {
-	app := newApplicationWithPlaceholderTimeout(appID1, "default", "root.a", 100)
-	testHandler := &appEventHandler{}
-	app.rmEventHandler = testHandler
+func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
+	originalPhTimeout := defaultPlaceholderTimeout
+	defaultPlaceholderTimeout = 5 * time.Millisecond
+	defer func() { defaultPlaceholderTimeout = originalPhTimeout }()
+
+	app, testHandler := newApplicationWithHandler(appID1, "default", "root.a")
+	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should be nil on create")
 	app.SetState(Accepted.String())
 
 	resMap := map[string]string{"memory": "100", "vcores": "10"}
 	res, err := resources.NewResourceFromConf(resMap)
 	assert.NilError(t, err, "Unexpected error when creating resource from map")
-	alloc := newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
+	// add the placeholders to the app: one released, one still available.
+	ph := newPlaceholderAlloc(appID1, "released", nodeID1, "root.a", res)
+	ph.released = true
+	app.AddAllocation(ph)
+	assert.Assert(t, app.placeholderTimer != nil, "Placeholder timer should be initiated after the first placeholder allocation")
+	ph = newPlaceholderAlloc(appID1, "waiting", nodeID1, "root.a", res)
+	app.AddAllocation(ph)
+	alloc := newAllocation(appID1, "real", nodeID1, "root.a", res)
 	app.AddAllocation(alloc)
-	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should not be initialized if the allocation is not a placeholder")
+	assert.Assert(t, app.IsStarting(), "App should be in starting state after the first allocation")
+	err = common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
+		app.RLock()
+		defer app.RUnlock()
+		return app.placeholderTimer == nil
+	})
+	assert.NilError(t, err, "Placeholder timeout cleanup did not trigger unexpectedly")
+	assert.Assert(t, app.IsStarting(), "App should be in starting state after the first allocation")
+	// two state updates and 1 release event
+	events := testHandler.getEvents()
+	var found bool
+	for _, event := range events {
+		if allocRelease, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {
+			assert.Equal(t, len(allocRelease.ReleasedAllocations), 1, "one allocation should have been released")
+			assert.Equal(t, allocRelease.ReleasedAllocations[0].UUID, "waiting", "wrong placeholder allocation released on timeout")
+			found = true
+		}
+		if _, ok := event.(*rmevent.RMReleaseAllocationAskEvent); ok {
+			t.Fatal("unexpected release allocation ask event found in list of events")
+		}
+	}
+	assert.Assert(t, found, "release allocation event not found in list")
+	assert.Assert(t, resources.Equals(app.GetAllocatedResource(), res), "Unexpected allocated resources for the app")
+	// a released placeholder still holds the resource until release confirmed by the RM
+	assert.Assert(t, resources.Equals(app.GetPlaceholderResource(), resources.Multiply(res, 2)), "Unexpected placeholder resources for the app")
+}
+
+func TestTimeoutPlaceholderCompleting(t *testing.T) {
+	phTimeout := common.ConvertSITimeout(5)
+	app, testHandler := newApplicationWithPlaceholderTimeout(appID1, "default", "root.a", 5)
+	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should be nil on create")
+	assert.Equal(t, app.execTimeout, phTimeout, "placeholder timeout not initialised correctly")
+	app.SetState(Accepted.String())
+
+	resMap := map[string]string{"memory": "100", "vcores": "10"}
+	res, err := resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err, "Unexpected error when creating resource from map")
+	// add the placeholder to the app
+	ph := newPlaceholderAlloc(appID1, "waiting", nodeID1, "root.a", res)
+	app.AddAllocation(ph)
+	assert.Assert(t, app.placeholderTimer != nil, "Placeholder timer should be initiated after the first placeholder allocation")
+	// add a real allocation as well
+	alloc := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
+	app.AddAllocation(alloc)
+	// move on to running
+	app.SetState(Running.String())
+	// remove allocation to trigger state change
+	app.RemoveAllocation("uuid-1")
+	assert.Assert(t, app.IsCompleting(), "App should be in completing state all allocs have been removed")
+	// make sure the placeholders time out
+	err = common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
+		app.RLock()
+		defer app.RUnlock()
+		return app.placeholderTimer == nil
+	})
+	assert.NilError(t, err, "Placeholder timer did not time out as expected")
+	events := testHandler.getEvents()
+	var found bool
+	for _, event := range events {
+		if allocRelease, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {
+			assert.Equal(t, len(allocRelease.ReleasedAllocations), 1, "one allocation should have been released")
+			found = true
+		}
+		if _, ok := event.(*rmevent.RMReleaseAllocationAskEvent); ok {
+			t.Fatal("unexpected release allocation ask event found in list of events")
+		}
+	}
+	assert.Assert(t, found, "release allocation event not found in list")
+	assert.Assert(t, app.IsCompleting(), "App should still be in completing state")
 }
 
 func TestGetAllRequests(t *testing.T) {

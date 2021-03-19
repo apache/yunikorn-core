@@ -20,6 +20,7 @@ package objects
 
 import (
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
@@ -105,7 +106,11 @@ func newApplicationWithTags(appID, partition, queueName string, tags map[string]
 	return NewApplication(siApp, user, nil, "")
 }
 
-func newApplicationWithPlaceholderTimeout(appID, partition, queueName string, phTimeout int64) *Application {
+func newApplicationWithHandler(appID, partition, queueName string) (*Application, *appEventHandler) {
+	return newApplicationWithPlaceholderTimeout(appID, partition, queueName, 0)
+}
+
+func newApplicationWithPlaceholderTimeout(appID, partition, queueName string, phTimeout int64) (*Application, *appEventHandler) {
 	user := security.UserGroup{
 		User:   "testuser",
 		Groups: []string{},
@@ -116,7 +121,8 @@ func newApplicationWithPlaceholderTimeout(appID, partition, queueName string, ph
 		PartitionName:                partition,
 		ExecutionTimeoutMilliSeconds: phTimeout,
 	}
-	return NewApplication(siApp, user, nil, "")
+	aeh := &appEventHandler{}
+	return NewApplication(siApp, user, aeh, ""), aeh
 }
 
 // Create node with minimal info
@@ -215,10 +221,18 @@ func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resour
 // Resetting RM mock handler for the Application testing
 type appEventHandler struct {
 	handled bool
+	events  []interface{}
+	sync.RWMutex
 }
 
 // handle the RM update event
 func (aeh *appEventHandler) HandleEvent(ev interface{}) {
+	aeh.Lock()
+	defer aeh.Unlock()
+	if aeh.events == nil {
+		aeh.events = make([]interface{}, 0)
+	}
+	aeh.events = append(aeh.events, ev)
 	if _, ok := ev.(*rmevent.RMApplicationUpdateEvent); ok {
 		aeh.handled = true
 	} else {
@@ -228,7 +242,16 @@ func (aeh *appEventHandler) HandleEvent(ev interface{}) {
 
 // return the last action performed by the handler and reset
 func (aeh *appEventHandler) isHandled() bool {
+	aeh.Lock()
+	defer aeh.Unlock()
 	keep := aeh.handled
 	aeh.handled = false
 	return keep
+}
+
+// return the list of events processed by the handler and reset
+func (aeh *appEventHandler) getEvents() []interface{} {
+	aeh.RLock()
+	defer aeh.RUnlock()
+	return aeh.events
 }

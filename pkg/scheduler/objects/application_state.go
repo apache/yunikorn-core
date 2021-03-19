@@ -99,7 +99,7 @@ func NewAppState() *fsm.FSM {
 				Dst:  Completed.String(),
 			}, {
 				Name: FailApplication.String(),
-				Src:  []string{Accepted.String(), New.String(), Running.String(), Starting.String(), Completing.String()},
+				Src:  []string{New.String(), Accepted.String(), Starting.String(), Running.String()},
 				Dst:  Failing.String(),
 			}, {
 				Name: FailApplication.String(),
@@ -151,9 +151,6 @@ func NewAppState() *fsm.FSM {
 				app := setTimer(terminatedTimeout, event, ExpireApplication)
 				app.executeTerminatedCallback()
 				app.clearPlaceholderTimer()
-			},
-			fmt.Sprintf("enter_%s", Failing.String()): func(event *fsm.Event) {
-				event.Args[0].(*Application).failAppIfPossible()
 			},
 			fmt.Sprintf("enter_%s", Failed.String()): func(event *fsm.Event) {
 				app := setTimer(terminatedTimeout, event, ExpireApplication)

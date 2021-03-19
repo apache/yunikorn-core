@@ -118,7 +118,7 @@ func NewAppState() *fsm.FSM {
 					log.Logger().Warn("The first argument is not an Application")
 					return
 				}
-				log.Logger().Debug("Application state transition",
+				log.Logger().Info("Application state transition",
 					zap.String("appID", app.ApplicationID),
 					zap.String("source", event.Src),
 					zap.String("destination", event.Dst),

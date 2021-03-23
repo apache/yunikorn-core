@@ -24,13 +24,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
-	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
+	"github.com/apache/incubator-yunikorn-core/pkg/handler"
+	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 // basic app creating with timeout checks
@@ -39,10 +40,17 @@ func TestNewApplication(t *testing.T) {
 		User:   "testuser",
 		Groups: []string{},
 	}
-	siApp := &si.AddApplicationRequest{
-		ApplicationID: "appID",
-	}
+	siApp := &si.AddApplicationRequest{}
 	app := NewApplication(siApp, user, nil, "")
+	assert.Equal(t, app.ApplicationID, "", "application ID should not be set was not set in SI")
+	assert.Equal(t, app.QueueName, "", "queue name should not be set was not set in SI")
+	assert.Equal(t, app.Partition, "", "partition name should not be set was not set in SI")
+	assert.Equal(t, app.rmID, "", "RM ID should not be set was not passed in")
+	assert.Equal(t, app.rmEventHandler, handler.EventHandler(nil), "event handler should be nil")
+	// just check one of the resources...
+	assert.Assert(t, resources.IsZero(app.placeholderAsk), "placeholder ask should be zero")
+	assert.Assert(t, app.IsNew(), "new application must be in new state")
+	// with the basics check the one thing that can really change
 	assert.Equal(t, app.execTimeout, defaultPlaceholderTimeout, "No timeout passed in should be default")
 	siApp.ExecutionTimeoutMilliSeconds = -1
 	app = NewApplication(siApp, user, nil, "")
@@ -57,9 +65,24 @@ func TestNewApplication(t *testing.T) {
 	originalPhTimeout := defaultPlaceholderTimeout
 	defaultPlaceholderTimeout = 100 * time.Microsecond
 	defer func() { defaultPlaceholderTimeout = originalPhTimeout }()
-	siApp.ExecutionTimeoutMilliSeconds = 0
-	app = NewApplication(siApp, user, nil, "")
-	assert.Equal(t, app.execTimeout, defaultPlaceholderTimeout, "No timeout passed in should be modified default")
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	siApp = &si.AddApplicationRequest{
+		ApplicationID:                "appID",
+		QueueName:                    "some.queue",
+		PartitionName:                "AnotherPartition",
+		ExecutionTimeoutMilliSeconds: 0,
+		PlaceholderAsk:               &si.Resource{Resources: map[string]*si.Quantity{"first": {Value: 1}}},
+	}
+	app = NewApplication(siApp, user, &appEventHandler{}, "myRM")
+	assert.Equal(t, app.ApplicationID, "appID", "application ID should not be set to SI value")
+	assert.Equal(t, app.QueueName, "some.queue", "queue name should not be set to SI value")
+	assert.Equal(t, app.Partition, "AnotherPartition", "partition name should be set to SI value")
+	if app.rmEventHandler == nil {
+		t.Fatal("non nil handler was not set in the new app")
+	}
+	assert.Assert(t, app.IsNew(), "new application must be in new state")
+	assert.Equal(t, app.execTimeout, defaultPlaceholderTimeout, "no timeout passed in should be modified default")
+	assert.Assert(t, resources.Equals(app.placeholderAsk, res), "placeholder ask not set as expected")
 }
 
 // test basic reservations

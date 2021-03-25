@@ -7,6 +7,8 @@ github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuy
 github.com/alecthomas/units v0.0.0-20151022065526-2efee857e7cf/go.mod h1:ybxpYRFXyAe+OPACYpWeL0wqObRcbAqCMya13uyzqw0=
 github.com/apache/incubator-yunikorn-scheduler-interface v0.0.0-20210226143918-19a5cca5e428 h1:Rg+tSWMWaDgiPSo2wmE1+oc4y95qV5FyIjX59E+P2yE=
 github.com/apache/incubator-yunikorn-scheduler-interface v0.0.0-20210226143918-19a5cca5e428/go.mod h1:I61hISMIenZhepBL0fZ3UPXklb4WiSCjjX2JoRwxS+I=
+github.com/apache/incubator-yunikorn-scheduler-interface v0.10.0 h1:/OU5ieW+kTwoNYF0NwDC0zOYSC/s71h0V52zmSOO1SM=
+github.com/apache/incubator-yunikorn-scheduler-interface v0.10.0/go.mod h1:I61hISMIenZhepBL0fZ3UPXklb4WiSCjjX2JoRwxS+I=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
 github.com/beorn7/perks v1.0.0/go.mod h1:KWe93zE9D1o94FZ5RNwFwVgaQK1VOXiVxmqh+CedLV8=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=

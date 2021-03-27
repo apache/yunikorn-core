@@ -1,0 +1,28 @@
+### What is this PR for?
+A few sentences describing the overall goals of the pull request's commits.
+First time? Check out the contributing guide - http://yunikorn.apache.org/community/how_to_contribute   
+
+
+### What type of PR is it?
+* [ ] - Bug Fix
+* [ ] - Improvement
+* [ ] - Feature
+* [ ] - Documentation
+* [ ] - Hot Fix
+* [ ] - Refactoring
+
+### Todos
+* [ ] - Task
+
+### What is the Jira issue?
+* Open an issue on Jira https://issues.apache.org/jira/browse/YUNIKORN/
+* Put link here, and add [YUNIKORN-*Jira number*] in PR title, eg. `[YUNIKORN-2] Gang scheduling interface parameters`
+
+### How should this be tested?
+
+### Screenshots (if appropriate)
+
+### Questions:
+* [ ] - The licenses files need update.
+* [ ] - There is breaking changes for older versions.
+* [ ] - It needs documentation.

@@ -219,7 +219,16 @@ func (sa *Application) timeoutStateTimer(expectedState string, event application
 				zap.String("state", sa.stateMachine.Current()))
 			// if the app is completing, but there are placeholders left, first do the cleanup
 			if sa.IsCompleting() && !resources.IsZero(sa.GetPlaceholderResource()) {
-				sa.notifyRMAllocationReleased(sa.rmID, sa.getPlaceholderAllocations(), si.TerminationType_TIMEOUT, "releasing placeholders on app complete")
+				var toRelease []*Allocation
+				for _, alloc := range sa.getPlaceholderAllocations() {
+					// skip over the allocations that are already marked for release
+					if alloc.released {
+						continue
+					}
+					alloc.released = true
+					toRelease = append(toRelease, alloc)
+				}
+				sa.notifyRMAllocationReleased(sa.rmID, toRelease, si.TerminationType_TIMEOUT, "releasing placeholders on app complete")
 				sa.clearStateTimer()
 			} else {
 				//nolint: errcheck

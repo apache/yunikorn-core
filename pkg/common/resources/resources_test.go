@@ -27,7 +27,7 @@ import (
 )
 
 func TestNewResourceFromConf(t *testing.T) {
-	// resource wit nil input
+	// resource with nil input
 	original, err := NewResourceFromConf(nil)
 	if err != nil || len(original.Resources) != 0 {
 		t.Fatalf("new resource create from nil returned error or wrong resource: error %t, res %v", err, original)
@@ -44,6 +44,11 @@ func TestNewResourceFromConf(t *testing.T) {
 
 	// failure case: parse error
 	original, err = NewResourceFromConf(map[string]string{"fail": "xx"})
+	if err == nil || original != nil {
+		t.Fatalf("new resource create should have returned error %v, res %v", err, original)
+	}
+	// negative resource
+	original, err = NewResourceFromConf(map[string]string{"memory": "-15"})
 	if err == nil || original != nil {
 		t.Fatalf("new resource create should have returned error %v, res %v", err, original)
 	}
@@ -379,6 +384,31 @@ func TestComponentWiseMin(t *testing.T) {
 	}
 	if value, ok := result.Resources["second"]; !ok || value != -5 {
 		t.Errorf("resource key not set expected %v got %v", res1, result)
+	}
+}
+
+func TestComponentWiseMinPermissive(t *testing.T) {
+	smallerRes := NewResourceFromMap(map[string]Quantity{"first": 5, "second": 15, "third": 6})
+	higherRes := NewResourceFromMap(map[string]Quantity{"first": 7, "second": 10, "forth": 6})
+	expected := NewResourceFromMap(map[string]Quantity{"first": 5, "second": 10, "third": 6, "forth": 6})
+
+	testCases := []struct {
+		name     string
+		res1     *Resource
+		res2     *Resource
+		expected *Resource
+	}{
+		{"Both resources nil", nil, nil, nil},
+		{"First resource nil", nil, smallerRes, smallerRes},
+		{"Second resource nil", smallerRes, nil, smallerRes},
+		{"First resource smaller than the second", smallerRes, higherRes, expected},
+		{"Second resource smaller than the first", higherRes, smallerRes, expected},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := ComponentWiseMinPermissive(tc.res1, tc.res2)
+			assert.DeepEqual(t, result, tc.expected)
+		})
 	}
 }
 
@@ -1504,51 +1534,20 @@ func TestString(t *testing.T) {
 	}
 }
 
-func TestToConf(t *testing.T) {
-	resourceMap := map[string]string{"memory": "50", "vcores": "33"}
-	resource, err := NewResourceFromConf(resourceMap)
-	assert.NilError(t, err)
-	zeroResourceMap := map[string]string{"memory": "0", "vcores": "0"}
-	zeroResource, err := NewResourceFromConf(zeroResourceMap)
-	assert.NilError(t, err)
-
-	testCases := []struct {
-		name           string
-		input          *Resource
-		expectedResult map[string]string
-	}{
-		{"Zero resource", zeroResource, zeroResourceMap},
-		{"Resources populated", resource, resourceMap},
-		{"Empty resource", NewResource(), map[string]string{}},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			assert.DeepEqual(t, tc.input.ToConf(), tc.expectedResult)
-		})
-	}
-}
-
 func TestHasNegativeValue(t *testing.T) {
-	zeroResource, err := NewResourceFromConf(map[string]string{"memory": "0", "vcores": "0"})
-	assert.NilError(t, err)
-	positiveResource, err := NewResourceFromConf(map[string]string{"memory": "10", "vcores": "20"})
-	assert.NilError(t, err)
-	negativeResource, err := NewResourceFromConf(map[string]string{"memory": "-10", "vcores": "20"})
-	assert.NilError(t, err)
-
 	testCases := []struct {
 		name           string
 		input          *Resource
 		expectedResult bool
 	}{
-		{"Zero resource", zeroResource, false},
-		{"Only positive values", positiveResource, false},
+		{"Nil resource", nil, false},
 		{"Empty resource", NewResource(), false},
-		{"Negative values", negativeResource, true},
+		{"Only positive values", NewResourceFromMap(map[string]Quantity{MEMORY: 100}), false},
+		{"Negative value", NewResourceFromMap(map[string]Quantity{MEMORY: -100}), true},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.input.HasNegativeValue(), tc.expectedResult)
+			assert.Equal(t, tc.expectedResult, tc.input.HasNegativeValue())
 		})
 	}
 }

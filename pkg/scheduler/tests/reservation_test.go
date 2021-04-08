@@ -157,7 +157,7 @@ func TestBasicReservation(t *testing.T) {
 // queue1 with app1 takes all nodes, leaving small space
 // queue2 with app2 and app3, app2 has largest requests and reserves both nodes
 // app3 is starved
-// kill app1 and make sure app2 gets its reservations filled followed by app3
+// fail app1 and make sure app2 gets its reservations filled followed by app3
 func TestReservationForTwoQueues(t *testing.T) {
 	ms := &mockScheduler{}
 	defer ms.Stop()

@@ -20,6 +20,7 @@ package objects
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
@@ -36,15 +37,15 @@ const noTransition = "no transition"
 type applicationEvent int
 
 const (
-	runApplication applicationEvent = iota
-	waitApplication
-	rejectApplication
-	completeApplication
-	KillApplication
+	RunApplication applicationEvent = iota
+	RejectApplication
+	CompleteApplication
+	FailApplication
+	ExpireApplication
 )
 
 func (ae applicationEvent) String() string {
-	return [...]string{"RunApplication", "WaitApplication", "RejectApplication", "CompleteApplication", "KillApplication"}[ae]
+	return [...]string{"runApplication", "rejectApplication", "completeApplication", "failApplication", "expireApplication"}[ae]
 }
 
 // ----------------------------------
@@ -57,47 +58,57 @@ const (
 	Accepted
 	Starting
 	Running
-	Waiting
 	Rejected
+	Completing
 	Completed
-	killed
+	Failing
+	Failed
+	Expired
 )
 
 func (as applicationState) String() string {
-	return [...]string{"New", "Accepted", "Starting", "Running", "Waiting", "Rejected", "Completed", "killed"}[as]
+	return [...]string{"New", "Accepted", "Starting", "Running", "Rejected", "Completing", "Completed", "Failing", "Failed", "Expired"}[as]
 }
 
 func NewAppState() *fsm.FSM {
 	return fsm.NewFSM(
 		New.String(), fsm.Events{
 			{
-				Name: rejectApplication.String(),
+				Name: RejectApplication.String(),
 				Src:  []string{New.String()},
 				Dst:  Rejected.String(),
 			}, {
-				Name: runApplication.String(),
+				Name: RunApplication.String(),
 				Src:  []string{New.String()},
 				Dst:  Accepted.String(),
 			}, {
-				Name: runApplication.String(),
+				Name: RunApplication.String(),
 				Src:  []string{Accepted.String()},
 				Dst:  Starting.String(),
 			}, {
-				Name: runApplication.String(),
-				Src:  []string{Running.String(), Starting.String(), Waiting.String()},
+				Name: RunApplication.String(),
+				Src:  []string{Running.String(), Starting.String(), Completing.String()},
 				Dst:  Running.String(),
 			}, {
-				Name: completeApplication.String(),
-				Src:  []string{Running.String(), Starting.String(), Waiting.String()},
+				Name: CompleteApplication.String(),
+				Src:  []string{Accepted.String(), Running.String(), Starting.String()},
+				Dst:  Completing.String(),
+			}, {
+				Name: CompleteApplication.String(),
+				Src:  []string{Completing.String()},
 				Dst:  Completed.String(),
 			}, {
-				Name: waitApplication.String(),
-				Src:  []string{Accepted.String(), Running.String(), Starting.String()},
-				Dst:  Waiting.String(),
+				Name: FailApplication.String(),
+				Src:  []string{New.String(), Accepted.String(), Starting.String(), Running.String()},
+				Dst:  Failing.String(),
 			}, {
-				Name: KillApplication.String(),
-				Src:  []string{Accepted.String(), killed.String(), New.String(), Running.String(), Starting.String(), Waiting.String()},
-				Dst:  killed.String(),
+				Name: FailApplication.String(),
+				Src:  []string{Failing.String()},
+				Dst:  Failed.String(),
+			}, {
+				Name: ExpireApplication.String(),
+				Src:  []string{Completed.String(), Failed.String()},
+				Dst:  Expired.String(),
 			},
 		},
 		fsm.Callbacks{
@@ -107,18 +118,21 @@ func NewAppState() *fsm.FSM {
 					log.Logger().Warn("The first argument is not an Application")
 					return
 				}
-				log.Logger().Debug("Application state transition",
+				log.Logger().Info("Application state transition",
 					zap.String("appID", app.ApplicationID),
 					zap.String("source", event.Src),
 					zap.String("destination", event.Dst),
 					zap.String("event", event.Event))
 				app.OnStateChange(event)
 			},
-			fmt.Sprintf("enter_%s", Starting.String()): func(event *fsm.Event) {
-				event.Args[0].(*Application).SetStartingTimer()
+			"leave_state": func(event *fsm.Event) {
+				event.Args[0].(*Application).clearStateTimer()
 			},
-			fmt.Sprintf("leave_%s", Starting.String()): func(event *fsm.Event) {
-				event.Args[0].(*Application).ClearStartingTimer()
+			fmt.Sprintf("enter_%s", Starting.String()): func(event *fsm.Event) {
+				setTimer(startingTimeout, event, RunApplication)
+			},
+			fmt.Sprintf("enter_%s", Completing.String()): func(event *fsm.Event) {
+				setTimer(completingTimeout, event, CompleteApplication)
 			},
 			fmt.Sprintf("leave_%s", New.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsAdded()
@@ -134,7 +148,22 @@ func NewAppState() *fsm.FSM {
 			},
 			fmt.Sprintf("enter_%s", Completed.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsCompleted()
+				app := setTimer(terminatedTimeout, event, ExpireApplication)
+				app.executeTerminatedCallback()
+				app.clearPlaceholderTimer()
+			},
+			fmt.Sprintf("enter_%s", Failed.String()): func(event *fsm.Event) {
+				app := setTimer(terminatedTimeout, event, ExpireApplication)
+				app.executeTerminatedCallback()
 			},
 		},
 	)
+}
+
+func setTimer(timeout time.Duration, event *fsm.Event, eventToTrigger applicationEvent) *Application {
+	app, ok := event.Args[0].(*Application)
+	if ok {
+		app.setStateTimer(timeout, app.stateMachine.Current(), eventToTrigger)
+	}
+	return app
 }

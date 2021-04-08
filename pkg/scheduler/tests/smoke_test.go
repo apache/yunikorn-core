@@ -351,7 +351,7 @@ partitions:
 	// Release asks
 	err = ms.proxy.Update(&si.UpdateRequest{
 		Releases: &si.AllocationReleasesRequest{
-			AllocationAsksToRelease: []*si.AllocationAskReleaseRequest{
+			AllocationAsksToRelease: []*si.AllocationAskRelease{
 				{
 					ApplicationID: appID1,
 					PartitionName: "default",
@@ -1226,4 +1226,190 @@ partitions:
 		node := ms.scheduler.GetClusterContext().GetNode(node.NodeID, partition)
 		assert.Equal(t, int(node.GetAllocatedResource().Resources[resources.MEMORY]), 20, "node %s did not get 2 allocated", node.NodeID)
 	}
+}
+
+// this test cases covers a basic gang scheduling scenario, where an app has
+// 1 member in the gang and 1 actual request, it verifies each step of the
+// placeholder replacement works as expected.
+// it does an extra verification at the end, by simulating a dup release allocation
+// request, ensure this won't cause any NPE issue.
+// nolint: funlen
+func TestDupReleasesInGangScheduling(t *testing.T) {
+	// Register RM
+	configData := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        submitacl: "*"
+        queues:
+          - name: singleleaf
+            resources:
+              max:
+                memory: 150
+                vcore: 20
+`
+	// Start all tests
+	ms := &mockScheduler{}
+	defer ms.Stop()
+
+	err := ms.Init(configData, false)
+	assert.NilError(t, err, "RegisterResourceManager failed")
+
+	leafName := "root.singleleaf"
+	part := ms.scheduler.GetClusterContext().GetPartition(partition)
+	root := part.GetQueue("root")
+	leaf := part.GetQueue(leafName)
+
+	// Register a node, and add apps
+	err = ms.proxy.Update(&si.UpdateRequest{
+		NewSchedulableNodes: []*si.NewNodeInfo{
+			{
+				NodeID:     "node-1:1234",
+				Attributes: map[string]string{},
+				SchedulableResource: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 100},
+						"vcore":  {Value: 20},
+					},
+				},
+			},
+			{
+				NodeID:     "node-2:1234",
+				Attributes: map[string]string{},
+				SchedulableResource: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 100},
+						"vcore":  {Value: 20},
+					},
+				},
+			},
+		},
+		NewApplications: newAddAppRequest(map[string]string{appID1: leafName}),
+		RmID:            "rm:123",
+	})
+	assert.NilError(t, err)
+
+	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
+	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
+	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
+
+	// Get the app
+	app := ms.getApplication(appID1)
+
+	// Verify app initial state
+	var app01 *objects.Application
+	app01, err = getApplication(part, appID1)
+	assert.NilError(t, err, "application not found")
+	assert.Equal(t, app01.CurrentState(), objects.New.String())
+
+	// shim side creates a placeholder, and send the UpdateRequest
+	err = ms.proxy.Update(&si.UpdateRequest{
+		Asks: []*si.AllocationAsk{
+			{
+				AllocationKey: "alloc-1",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 10},
+						"vcore":  {Value: 1},
+					},
+				},
+				TaskGroupName:  "tg",
+				Placeholder:    true,
+				MaxAllocations: 1,
+				ApplicationID:  appID1,
+			},
+		},
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "UpdateRequest failed")
+
+	// schedule and make sure the placeholder gets allocated
+	ms.scheduler.MultiStepSchedule(5)
+	ms.mockRM.waitForAllocations(t, 1, 1000)
+
+	// verify the placeholder allocation
+	assert.Equal(t, len(app01.GetAllAllocations()), 1)
+	assert.Equal(t, int(app.GetPlaceholderResource().Resources[resources.MEMORY]), 10,
+		"app allocated memory incorrect")
+	placeholderAlloc := app01.GetAllAllocations()[0]
+
+	// Check allocated resources of nodes
+	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), ms.partitionName,
+		[]string{"node-1:1234", "node-2:1234"}, 10, 1000)
+
+	// shim submits the actual pod for scheduling
+	err = ms.proxy.Update(&si.UpdateRequest{
+		Asks: []*si.AllocationAsk{
+			{
+				AllocationKey: "alloc-2",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 10},
+						"vcore":  {Value: 1},
+					},
+				},
+				MaxAllocations: 1,
+				ApplicationID:  appID1,
+				Placeholder:    false,
+				TaskGroupName:  "tg",
+			},
+		},
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "UpdateRequest 3 failed")
+
+	// schedule and this triggers a placeholder REPLACE
+	ms.scheduler.MultiStepSchedule(10)
+	// the core releases the placeholder allocation,
+	// and it waits for the shim's confirmation
+	ms.mockRM.waitForAllocations(t, 0, 1000)
+
+	// shim responses the allocation has been released
+	err = ms.proxy.Update(&si.UpdateRequest{
+		Releases: &si.AllocationReleasesRequest{
+			AllocationsToRelease: []*si.AllocationRelease{
+				{
+					PartitionName:   "default",
+					ApplicationID:   appID1,
+					UUID:            placeholderAlloc.UUID,
+					TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
+				},
+			},
+		},
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err)
+
+	// schedule and verify the actual request gets allocated
+	ms.scheduler.MultiStepSchedule(5)
+	ms.mockRM.waitForAllocations(t, 1, 1000)
+
+	// actual request gets allocated
+	// placeholder requests have been all released
+	// and queue has no pending resources
+	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 10)
+	assert.Equal(t, int(app.GetPlaceholderResource().Resources[resources.MEMORY]), 0,
+		"app allocated memory incorrect")
+	waitForPendingQueueResource(t, leaf, 0, 1000)
+	waitForPendingQueueResource(t, root, 0, 1000)
+
+	// simulate the shim sends the release request again
+	err = ms.proxy.Update(&si.UpdateRequest{
+		Releases: &si.AllocationReleasesRequest{
+			AllocationsToRelease: []*si.AllocationRelease{
+				{
+					PartitionName:   "default",
+					ApplicationID:   appID1,
+					UUID:            placeholderAlloc.UUID,
+					TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
+				},
+			},
+		},
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err)
+
+	ms.scheduler.MultiStepSchedule(5)
+	ms.mockRM.waitForAllocations(t, 1, 1000)
 }

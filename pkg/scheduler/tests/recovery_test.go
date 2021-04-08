@@ -30,11 +30,7 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
-func TestSchedulerRecovery(t *testing.T) {
-	// --------------------------------------------------
-	// Phase 1) Fresh start
-	// --------------------------------------------------
-	configData := `
+const configData = `
 partitions:
   - name: default
     queues:
@@ -50,6 +46,12 @@ partitions:
                 memory: 150
                 vcore: 20
 `
+
+//nolint:funlen
+func TestSchedulerRecovery(t *testing.T) {
+	// --------------------------------------------------
+	// Phase 1) Fresh start
+	// --------------------------------------------------
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
@@ -318,6 +320,109 @@ partitions:
 		assert.Assert(t, schedulingAllocation != nil, "recovered scheduling allocation %s not found on app", existingAllocation.AllocationKey)
 	}
 
+	// verify app state
+	assert.Equal(t, recoveredApp.CurrentState(), objects.Running.String())
+}
+
+// Test case for YUNIKORN-513
+func TestSchedulerRecovery2Allocations(t *testing.T) {
+	// --------------------------------------------------
+	// Phase 1) Fresh start
+	// --------------------------------------------------
+	ms := &mockScheduler{}
+	defer ms.Stop()
+
+	err := ms.Init(configData, false)
+	assert.NilError(t, err, "RegisterResourceManager failed")
+
+	// Register node, and add app
+	err = ms.proxy.Update(&si.UpdateRequest{
+		NewSchedulableNodes: []*si.NewNodeInfo{
+			{
+				NodeID:     "node-1:1234",
+				Attributes: map[string]string{},
+				SchedulableResource: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 100},
+						"vcore":  {Value: 20},
+					},
+				},
+			},
+		},
+		NewApplications: newAddAppRequest(map[string]string{appID1: "root.a"}),
+		RmID:            "rm:123",
+	})
+
+	assert.NilError(t, err, "UpdateRequest nodes and app failed")
+
+	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
+	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
+
+	// Verify app initial state
+	part := ms.scheduler.GetClusterContext().GetPartition("[rm:123]default")
+	var app01 *objects.Application
+	app01, err = getApplication(part, appID1)
+	assert.NilError(t, err, "app not found on partition")
+	assert.Equal(t, app01.CurrentState(), objects.New.String())
+
+	err = ms.proxy.Update(&si.UpdateRequest{
+		Asks: []*si.AllocationAsk{
+			{
+				AllocationKey: "alloc-1",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 10},
+						"vcore":  {Value: 1},
+					},
+				},
+				MaxAllocations: 2,
+				ApplicationID:  appID1,
+			},
+		},
+		RmID: "rm:123",
+	})
+
+	assert.NilError(t, err, "UpdateRequest add resources failed")
+	ms.scheduler.MultiStepSchedule(3)
+	ms.mockRM.waitForAllocations(t, 2, 1000)
+	// once we start to process allocation asks from this app, verify the state again
+	assert.Equal(t, app01.CurrentState(), objects.Running.String())
+
+	// --------------------------------------------------
+	// Phase 2) Restart the scheduler, test recovery
+	// --------------------------------------------------
+	// keep the existing mockRM
+	mockRM := ms.mockRM
+	ms.serviceContext.StopAll()
+	// restart
+	err = ms.Init(configData, false)
+	assert.NilError(t, err, "2nd RegisterResourceManager failed")
+
+	// Register nodes, and add app
+	err = ms.proxy.Update(&si.UpdateRequest{
+		NewSchedulableNodes: []*si.NewNodeInfo{
+			{
+				NodeID:     "node-1:1234",
+				Attributes: map[string]string{},
+				SchedulableResource: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 100},
+						"vcore":  {Value: 20},
+					},
+				},
+				ExistingAllocations: mockRM.nodeAllocations["node-1:1234"],
+			},
+		},
+		NewApplications: newAddAppRequest(map[string]string{appID1: "root.a"}),
+		RmID:            "rm:123",
+	})
+
+	assert.NilError(t, err, "UpdateRequest nodes and app for recovery failed")
+
+	// waiting for recovery
+	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
+	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
+	recoveredApp := ms.getApplication(appID1)
 	// verify app state
 	assert.Equal(t, recoveredApp.CurrentState(), objects.Running.String())
 }

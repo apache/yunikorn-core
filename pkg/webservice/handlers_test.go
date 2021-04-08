@@ -91,6 +91,26 @@ partitions:
           - name: default
 `
 
+const configMultiPartitions = `
+partitions: 
+  - 
+    name: gpu
+    queues: 
+      - 
+        name: root
+  - 
+    name: default
+    nodesortpolicy: 
+      type: fair
+    queues: 
+      - 
+        name: root
+        queues: 
+          - 
+            name: default
+            submitacl: "*"
+`
+
 const rmID = "rm-123"
 const policyGroup = "default-policy-group"
 
@@ -619,4 +639,88 @@ func TestGetNodesUtilJSON(t *testing.T) {
 	assert.Equal(t, resNon.ResourceType, "non-exist")
 	assert.Equal(t, subresNon[0].NumOfNodes, int64(-1))
 	assert.Equal(t, subresNon[0].NodeNames[0], "N/A")
+}
+
+func addAndConfirmApplicationExists(t *testing.T, partitionName string, partition *scheduler.PartitionContext, appName string) *objects.Application {
+	// add a new app
+	app := newApplication(appName, partitionName, "root.default", rmID)
+	err := partition.AddApplication(app)
+	assert.NilError(t, err, "Failed to add Application to Partition.")
+	assert.Equal(t, app.CurrentState(), objects.New.String())
+	return app
+}
+
+func TestPartitions(t *testing.T) {
+	configs.MockSchedulerConfigByData([]byte(configMultiPartitions))
+	var err error
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	assert.NilError(t, err, "Error when load clusterInfo from config")
+	assert.Equal(t, 2, len(schedulerContext.GetPartitionMapClone()))
+
+	// Check default partition
+	partitionName := "[" + rmID + "]default"
+	defaultPartition := schedulerContext.GetPartition(partitionName)
+	assert.Equal(t, 0, len(defaultPartition.GetApplications()))
+
+	// add a new app
+	addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-0")
+
+	// add a new app1 - accepted
+	app1 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-1")
+	app1.SetState(objects.Accepted.String())
+
+	// add a new app2 - starting
+	app2 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-2")
+	app2.SetState(objects.Starting.String())
+
+	// add a new app3 - running
+	app3 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-3")
+	app3.SetState(objects.Running.String())
+
+	// add a new app4 - completing
+	app4 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-4")
+	app4.SetState(objects.Completing.String())
+
+	// add a new app5 - rejected
+	app5 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-5")
+	app5.SetState(objects.Rejected.String())
+
+	// add a new app6 - completed
+	app6 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-6")
+	app6.SetState(objects.Completed.String())
+
+	// add a new app7 - failed
+	app7 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-7")
+	app7.SetState(objects.Failed.String())
+
+	NewWebApp(schedulerContext, nil)
+
+	var req *http.Request
+	req, err = http.NewRequest("GET", "/ws/v1/partitions", strings.NewReader(""))
+	assert.NilError(t, err, "App Handler request failed")
+	resp := &MockResponseWriter{}
+	var partitionInfo []dao.PartitionInfo
+	getPartitions(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &partitionInfo)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
+	for _, part := range partitionInfo {
+		if part.Name == partitionName {
+			assert.Equal(t, part.Name, "[rm-123]default")
+			assert.Equal(t, part.NodeSortingPolicy, "fair")
+			assert.Equal(t, part.Applications["total"], 8)
+			assert.Equal(t, part.Applications[objects.New.String()], 1)
+			assert.Equal(t, part.Applications[objects.Accepted.String()], 1)
+			assert.Equal(t, part.Applications[objects.Starting.String()], 1)
+			assert.Equal(t, part.Applications[objects.Running.String()], 1)
+			assert.Equal(t, part.Applications[objects.Completing.String()], 1)
+			assert.Equal(t, part.Applications[objects.Rejected.String()], 1)
+			assert.Equal(t, part.Applications[objects.Completed.String()], 1)
+			assert.Equal(t, part.Applications[objects.Failed.String()], 1)
+			assert.Equal(t, part.State, "Active")
+		} else {
+			assert.Equal(t, part.Name, "[rm-123]gpu")
+			assert.Equal(t, part.NodeSortingPolicy, "fair")
+			assert.Equal(t, part.Applications["total"], 0)
+		}
+	}
 }

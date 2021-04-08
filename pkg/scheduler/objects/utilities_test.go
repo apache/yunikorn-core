@@ -20,6 +20,7 @@ package objects
 
 import (
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
@@ -105,6 +106,25 @@ func newApplicationWithTags(appID, partition, queueName string, tags map[string]
 	return NewApplication(siApp, user, nil, "")
 }
 
+func newApplicationWithHandler(appID, partition, queueName string) (*Application, *appEventHandler) {
+	return newApplicationWithPlaceholderTimeout(appID, partition, queueName, 0)
+}
+
+func newApplicationWithPlaceholderTimeout(appID, partition, queueName string, phTimeout int64) (*Application, *appEventHandler) {
+	user := security.UserGroup{
+		User:   "testuser",
+		Groups: []string{},
+	}
+	siApp := &si.AddApplicationRequest{
+		ApplicationID:                appID,
+		QueueName:                    queueName,
+		PartitionName:                partition,
+		ExecutionTimeoutMilliSeconds: phTimeout,
+	}
+	aeh := &appEventHandler{}
+	return NewApplication(siApp, user, aeh, ""), aeh
+}
+
 // Create node with minimal info
 func newNode(nodeID string, totalMap map[string]resources.Quantity) *Node {
 	total := resources.NewResourceFromMap(totalMap)
@@ -169,6 +189,15 @@ func newAllocation(appID, uuid, nodeID, queueName string, res *resources.Resourc
 	return NewAllocation(uuid, nodeID, ask)
 }
 
+// Create a new Allocation with a random ask key
+func newPlaceholderAlloc(appID, uuid, nodeID, queueName string, res *resources.Resource) *Allocation {
+	askKey := strconv.FormatInt((time.Now()).UnixNano(), 10)
+	ask := newAllocationAsk(askKey, appID, res)
+	ask.setQueue(queueName)
+	ask.placeholder = true
+	return NewAllocation(uuid, nodeID, ask)
+}
+
 func newAllocationAsk(allocKey, appID string, res *resources.Resource) *AllocationAsk {
 	return newAllocationAskTG(allocKey, appID, "", res, 1)
 }
@@ -192,10 +221,18 @@ func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resour
 // Resetting RM mock handler for the Application testing
 type appEventHandler struct {
 	handled bool
+	events  []interface{}
+	sync.RWMutex
 }
 
 // handle the RM update event
 func (aeh *appEventHandler) HandleEvent(ev interface{}) {
+	aeh.Lock()
+	defer aeh.Unlock()
+	if aeh.events == nil {
+		aeh.events = make([]interface{}, 0)
+	}
+	aeh.events = append(aeh.events, ev)
 	if _, ok := ev.(*rmevent.RMApplicationUpdateEvent); ok {
 		aeh.handled = true
 	} else {
@@ -205,7 +242,16 @@ func (aeh *appEventHandler) HandleEvent(ev interface{}) {
 
 // return the last action performed by the handler and reset
 func (aeh *appEventHandler) isHandled() bool {
+	aeh.Lock()
+	defer aeh.Unlock()
 	keep := aeh.handled
 	aeh.handled = false
 	return keep
+}
+
+// return the list of events processed by the handler and reset
+func (aeh *appEventHandler) getEvents() []interface{} {
+	aeh.RLock()
+	defer aeh.RUnlock()
+	return aeh.events
 }

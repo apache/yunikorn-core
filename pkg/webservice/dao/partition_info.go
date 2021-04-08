@@ -24,6 +24,15 @@ type PartitionDAOInfo struct {
 	Queues        QueueDAOInfo      `json:"queues"`
 }
 
+type PartitionInfo struct {
+	Name                    string            `json:"name"`
+	Capacity                PartitionCapacity `json:"capacity"`
+	NodeSortingPolicy       string            `json:"nodeSortingPolicy"`
+	Applications            map[string]int    `json:"applications"`
+	State                   string            `json:"state"`
+	LastStateTransitionTime string            `json:"lastStateTransitionTime"`
+}
+
 type PartitionCapacity struct {
 	Capacity     string `json:"capacity"`
 	UsedCapacity string `json:"usedcapacity"`

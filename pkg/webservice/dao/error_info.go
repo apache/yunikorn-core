@@ -25,9 +25,14 @@ type YAPIError struct {
 }
 
 func NewYAPIError(err error, statusCode int, message string) *YAPIError {
+	description := message
+	if err != nil {
+		description = message + ". Original Cause :" + err.Error()
+	}
+
 	return &YAPIError{
 		StatusCode:  statusCode,
 		Message:     message,
-		Description: message,
+		Description: description,
 	}
 }

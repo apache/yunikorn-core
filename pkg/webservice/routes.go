@@ -105,7 +105,7 @@ var webRoutes = routes{
 		updateClusterConfig,
 	},
 
-	// endpoint to update the current conf
+	// endpoint to create the conf, but currently limited for conf validation purpose alone
 	route{
 		"Scheduler",
 		"POST",

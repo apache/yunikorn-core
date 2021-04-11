@@ -1009,37 +1009,37 @@ func TestFinInNil(t *testing.T) {
 	}()
 	var res *Resource
 	// ignore nil check from IDE we really want to do this
-	assert.Assert(t, res.FitIn(nil), "fitin nil should fit in nil (skip undefined)")
-	assert.Assert(t, res.FitIn(NewResource()), "fitin nil should fit in empty resource failed (skip undefined)")
+	assert.Assert(t, res.FitInMaxUndef(nil), "fitin nil should fit in nil (skip undefined)")
+	assert.Assert(t, res.FitInMaxUndef(NewResource()), "fitin nil should fit in empty resource failed (skip undefined)")
 	smaller := &Resource{Resources: map[string]Quantity{"a": 1}}
-	assert.Assert(t, res.FitIn(smaller), "defined resource should fit in nil resource (skip undefined)")
+	assert.Assert(t, res.FitInMaxUndef(smaller), "defined resource should fit in nil resource (skip undefined)")
 }
 
 func TestFitInSkip(t *testing.T) {
 	larger := NewResource()
 	// zero set resources
 	smaller := &Resource{Resources: map[string]Quantity{"a": 1}}
-	assert.Assert(t, larger.FitIn(smaller), "defined resource %v should fit in empty (skip undefined)", smaller)
+	assert.Assert(t, larger.FitInMaxUndef(smaller), "defined resource %v should fit in empty (skip undefined)", smaller)
 
 	larger = NewResourceFromMap(map[string]Quantity{"a": 5})
-	assert.Assert(t, larger.FitIn(smaller), "fitin smaller resource with value %v should fit in larger %v (skip undefined)", smaller, larger)
+	assert.Assert(t, larger.FitInMaxUndef(smaller), "fitin smaller resource with value %v should fit in larger %v (skip undefined)", smaller, larger)
 
 	// check undefined in larger
 	larger = &Resource{Resources: map[string]Quantity{"not-in-smaller": 1}}
-	assert.Assert(t, larger.FitIn(smaller), "different type in smaller %v should fit in larger %v (skip undefined)", smaller, larger)
+	assert.Assert(t, larger.FitInMaxUndef(smaller), "different type in smaller %v should fit in larger %v (skip undefined)", smaller, larger)
 
 	// check undefined in smaller
 	smaller = &Resource{Resources: map[string]Quantity{"not-in-larger": 1}}
-	assert.Assert(t, larger.FitIn(smaller), "different type in smaller %v should fit in larger %v (skip undefined)", smaller, larger)
+	assert.Assert(t, larger.FitInMaxUndef(smaller), "different type in smaller %v should fit in larger %v (skip undefined)", smaller, larger)
 
 	// complex case: just checking the resource merge, values check is secondary
 	larger = &Resource{Resources: map[string]Quantity{"a": -10}}
 	smaller = &Resource{Resources: map[string]Quantity{"a": 0, "b": -10}}
-	assert.Assert(t, larger.FitIn(smaller), "fitin smaller resource with zero or neg values %v should fit in larger %v (skip undefined)", smaller, larger)
+	assert.Assert(t, larger.FitInMaxUndef(smaller), "fitin smaller resource with zero or neg values %v should fit in larger %v (skip undefined)", smaller, larger)
 
 	larger = &Resource{Resources: map[string]Quantity{"a": -5}}
 	smaller = &Resource{Resources: map[string]Quantity{"a": 0, "b": 10}}
-	assert.Assert(t, larger.FitIn(smaller), "fitin smaller resource with value %v should fit in larger %v (skip undefined)", smaller, larger)
+	assert.Assert(t, larger.FitInMaxUndef(smaller), "fitin smaller resource with value %v should fit in larger %v (skip undefined)", smaller, larger)
 }
 
 func TestGetShares(t *testing.T) {

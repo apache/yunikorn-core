@@ -79,7 +79,7 @@ func checkQueueResource(cur QueueConfig, parentM *resources.Resource) (*resource
 	if err != nil {
 		return nil, err
 	}
-	if !parentM.FitIn(curM) {
+	if !parentM.FitInMaxUndef(curM) {
 		return nil, fmt.Errorf("max resource of parent %s is smaller than maximum resource %s for queue %s", parentM.String(), curM.String(), cur.Name)
 	}
 	curM = resources.ComponentWiseMinPermissive(curM, parentM)
@@ -95,7 +95,7 @@ func checkQueueResource(cur QueueConfig, parentM *resources.Resource) (*resource
 	if !resources.IsZero(curG) && !resources.FitIn(curG, sumG) {
 		return nil, fmt.Errorf("guaranteed resource of parent %s is smaller than sum of guaranteed resources %s of the children for queue %s", curG.String(), sumG.String(), cur.Name)
 	}
-	if !curM.FitIn(sumG) {
+	if !curM.FitInMaxUndef(sumG) {
 		return nil, fmt.Errorf("max resource %s is smaller than sum of guaranteed resources %s of the children for queue %s", curM.String(), sumG.String(), cur.Name)
 	}
 	if resources.IsZero(curG) {
@@ -115,7 +115,7 @@ func checkResourceConfig(cur QueueConfig) (*resources.Resource, *resources.Resou
 	if err != nil {
 		return nil, nil, err
 	}
-	if !m.FitIn(g) {
+	if !m.FitInMaxUndef(g) {
 		return nil, nil, fmt.Errorf("guaranteed resource %s is larger than maximum resource %s for queue %s", g.String(), m.String(), cur.Name)
 	}
 	return g, m, nil

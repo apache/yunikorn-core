@@ -700,7 +700,7 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, tota
 	sa.sortRequests(false)
 	for _, request := range sa.sortedRequests {
 		// ignore nil checks resource function calls are nil safe
-		if headRoom.FitIn(request.AllocatedResource) {
+		if headRoom.FitInMaxUndef(request.AllocatedResource) {
 			// if headroom is still enough for the resources
 			*total = append(*total, request)
 			headRoom.SubFrom(request.AllocatedResource)
@@ -724,7 +724,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 			continue
 		}
 		// resource must fit in headroom otherwise skip the request
-		if !headRoom.FitIn(request.AllocatedResource) {
+		if !headRoom.FitInMaxUndef(request.AllocatedResource) {
 			// post scheduling events via the event plugin
 			if eventCache := events.GetEventCache(); eventCache != nil {
 				message := fmt.Sprintf("Application %s does not fit into %s queue", request.ApplicationID, sa.QueueName)
@@ -881,7 +881,7 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 			return alloc
 		}
 		// check if this fits in the queue's head room
-		if !headRoom.FitIn(ask.AllocatedResource) {
+		if !headRoom.FitInMaxUndef(ask.AllocatedResource) {
 			continue
 		}
 		// check allocation possibility

@@ -355,7 +355,7 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 		}
 		// retrieve the max set
 		if maxQueue := queue.GetMaxQueueSet(); maxQueue != nil {
-			if !maxQueue.FitIn(placeHolder) {
+			if !maxQueue.FitInMaxUndef(placeHolder) {
 				queue.RemoveApplication(app)
 				return fmt.Errorf("queue %s cannot fit application %s: task group request %s larger than max queue allocation %s", queueName, appID, placeHolder.String(), maxQueue.String())
 			}

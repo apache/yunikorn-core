@@ -395,7 +395,8 @@ func subNonNegative(left, right *Resource) (*Resource, string) {
 	}
 	return out, message
 }
-// Check if smaller fits in larger, negative values will be treated as 0
+
+// Check if smaller fits in larger
 // Types not defined in the larger resource are considered 0 values for Quantity
 // A nil resource is treated as an empty resource (all types are 0)
 func FitIn(larger, smaller *Resource) bool {
@@ -403,9 +404,9 @@ func FitIn(larger, smaller *Resource) bool {
 }
 
 // Check if smaller fits in the defined resource
-// Types not defined in resource this is called against are skipped and considered maximum value for Quantity
+// Types not defined in resource this is called against are considered the maximum value for Quantity
 // A nil resource is treated as an empty resource (no types defined)
-func (r *Resource) FitIn(smaller *Resource) bool {
+func (r *Resource) FitInMaxUndef(smaller *Resource) bool {
 	return r.fitIn(smaller, true)
 }
 
@@ -424,7 +425,7 @@ func (r *Resource) fitIn(smaller *Resource, skipUndef bool) bool {
 
 	for k, v := range smaller.Resources {
 		largerValue, ok := r.Resources[k]
-		// skip if not defined (queue quota checks: undefined resources are consider max)
+		// skip if not defined (queue quota checks: undefined resources are considered max)
 		if skipUndef && !ok {
 			continue
 		}
@@ -437,6 +438,7 @@ func (r *Resource) fitIn(smaller *Resource, skipUndef bool) bool {
 	}
 	return true
 }
+
 // Get the share of each resource quantity when compared to the total
 // resources quantity
 // NOTE: shares can be negative and positive in the current assumptions

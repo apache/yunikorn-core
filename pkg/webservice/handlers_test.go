@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
@@ -447,7 +448,7 @@ func TestUpdateConfig(t *testing.T) {
 	resp := &MockResponseWriter{}
 	req, err := http.NewRequest("PUT", "", strings.NewReader(updatedConf))
 	assert.NilError(t, err, "Failed to create the request")
-	updateConfig(resp, req)
+	updateClusterConfig(resp, req)
 	assert.NilError(t, err, "No error expected")
 	assert.Equal(t, http.StatusOK, resp.statusCode, "No error expected")
 }
@@ -457,7 +458,7 @@ func TestUpdateConfigInvalidConf(t *testing.T) {
 	resp := &MockResponseWriter{}
 	req, err := http.NewRequest("PUT", "", strings.NewReader(invalidConf))
 	assert.NilError(t, err, "Failed to create the request")
-	updateConfig(resp, req)
+	updateClusterConfig(resp, req)
 	assert.Equal(t, http.StatusConflict, resp.statusCode, "Status code is wrong")
 	assert.Assert(t, len(string(resp.outputBytes)) > 0, "Error message is expected")
 }
@@ -710,4 +711,73 @@ func TestPartitions(t *testing.T) {
 			assert.Equal(t, part.Applications["total"], 0)
 		}
 	}
+}
+
+func TestCreateClusterConfig(t *testing.T) {
+	confTests := []struct {
+		content          string
+		expectedResponse dao.ValidateConfResponse
+	}{
+		{
+			content: baseConf,
+			expectedResponse: dao.ValidateConfResponse{
+				Allowed: true,
+				Reason:  "",
+			},
+		},
+		{
+			content: invalidConf,
+			expectedResponse: dao.ValidateConfResponse{
+				Allowed: false,
+				Reason:  "undefined policy: invalid",
+			},
+		},
+	}
+
+	configs.MockSchedulerConfigByData([]byte(configDefault))
+	var err error
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	assert.NilError(t, err, "Error when load clusterInfo from config")
+	for _, test := range confTests {
+		// No err check: new request always returns correctly
+		//nolint: errcheck
+		req, _ := http.NewRequest("POST", "/ws/v1/config?dry_run=1", strings.NewReader(test.content))
+		rr := httptest.NewRecorder()
+		mux := http.HandlerFunc(createClusterConfig)
+		handler := loggingHandler(mux, "/ws/v1/config")
+		handler.ServeHTTP(rr, req)
+		var vcr dao.ValidateConfResponse
+		err = json.Unmarshal(rr.Body.Bytes(), &vcr)
+		assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
+		assert.Equal(t, vcr.Allowed, test.expectedResponse.Allowed, "allowed flag incorrect")
+		assert.Equal(t, vcr.Reason, test.expectedResponse.Reason, "response text not as expected")
+	}
+
+	// When "dry_run" is not passed
+	//nolint: errcheck
+	req, err := http.NewRequest("POST", "/ws/v1/config", nil)
+	assert.NilError(t, err, "Problem in creating the request")
+	rr := httptest.NewRecorder()
+	mux := http.HandlerFunc(createClusterConfig)
+	handler := loggingHandler(mux, "/ws/v1/config")
+	handler.ServeHTTP(rr, req)
+
+	var errInfo dao.YAPIError
+	err = json.Unmarshal(rr.Body.Bytes(), &errInfo)
+	assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
+	assert.Equal(t, errInfo.Message, "Dry run param is missing. Please check the usage documentation\n", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+
+	// When "dry_run" value is invalid
+	//nolint: errcheck
+	req, err = http.NewRequest("POST", "/ws/v1/config?dry_run=0", nil)
+	assert.NilError(t, err, "Problem in creating the request")
+	rr = httptest.NewRecorder()
+	mux = http.HandlerFunc(createClusterConfig)
+	handler = loggingHandler(mux, "/ws/v1/config?dry_run=0")
+	handler.ServeHTTP(rr, req)
+	err = json.Unmarshal(rr.Body.Bytes(), &errInfo)
+	assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
+	assert.Equal(t, errInfo.Message, "Invalid \"dry_run\" query param. Currently, only dry_run=1 is supported. Please check the usage documentation\n", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }

@@ -20,6 +20,7 @@ package webservice
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
@@ -31,6 +32,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
+	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 )
 
 var imHistory *history.InternalMetricsHistory
@@ -45,7 +47,6 @@ func newRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 	for _, webRoute := range webRoutes {
 		handler := loggingHandler(webRoute.HandlerFunc, webRoute.Name)
-
 		router.
 			Methods(webRoute.Method).
 			Path(webRoute.Pattern).
@@ -58,12 +59,41 @@ func newRouter() *mux.Router {
 func loggingHandler(inner http.Handler, name string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-
-		inner.ServeHTTP(w, r)
-
+		rw := &YResponseWriter{ResponseWriter: w, statusCode: -1}
+		inner.ServeHTTP(rw, r)
+		var body = string(rw.body)
+		if rw.statusCode != http.StatusOK && rw.statusCode != -1 {
+			errorInfo := dao.NewYAPIError(nil, rw.statusCode, body)
+			if err := json.NewEncoder(w).Encode(errorInfo); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		}
 		log.Logger().Debug(fmt.Sprintf("%s\t%s\t%s\t%s",
 			r.Method, r.RequestURI, name, time.Since(start)))
 	})
+}
+
+type YResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+	body       []byte
+}
+
+func (rw *YResponseWriter) Write(bytes []byte) (int, error) {
+	rw.body = bytes
+	if rw.statusCode == -1 {
+		_, err := rw.ResponseWriter.Write(bytes)
+		if err != nil {
+			log.Logger().Error(fmt.Sprintf("Unable to serve response. Problem in writing the response \"%s\". Reason: %s", string(bytes), err.Error()))
+		}
+	}
+	return len(bytes), nil
+}
+
+func (rw *YResponseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+	writeHeaders(rw.ResponseWriter)
 }
 
 // TODO we need the port to be configurable

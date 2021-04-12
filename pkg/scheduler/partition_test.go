@@ -1261,7 +1261,16 @@ func TestAddTGApplication(t *testing.T) {
 		t.Error("app-1 should be rejected due to TG request")
 	}
 
+	// add a app with TG that does fit in the queue
 	limit = map[string]string{"first": "100"}
+	partition, err = newLimitedPartition(limit)
+	assert.NilError(t, err, "partition create failed")
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "app-1 should have been added to the partition")
+	assert.Equal(t, partition.getApplication(appID1), app, "partition failed to add app incorrect app returned")
+
+	// add a app with TG that does fit in the queue as the resource is not limited in the queue
+	limit = map[string]string{"second": "100"}
 	partition, err = newLimitedPartition(limit)
 	assert.NilError(t, err, "partition create failed")
 	err = partition.AddApplication(app)

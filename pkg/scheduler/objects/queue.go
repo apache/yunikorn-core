@@ -697,7 +697,7 @@ func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bo
 	// check this queue: failure stops checks if the allocation is not part of a node addition
 	newAllocated := resources.Add(sq.allocatedResource, alloc)
 	if !nodeReported {
-		if sq.maxResource != nil && !resources.FitIn(sq.maxResource, newAllocated) {
+		if !sq.maxResource.FitInMaxUndef(newAllocated) {
 			return fmt.Errorf("allocation (%v) puts queue %s over maximum allocation (%v)",
 				alloc, sq.QueuePath, sq.maxResource)
 		}

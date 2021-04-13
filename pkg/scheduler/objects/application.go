@@ -1149,13 +1149,25 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 			sa.initPlaceholderTimer()
 		}
 		sa.allocatedPlaceholder = resources.Add(sa.allocatedPlaceholder, info.AllocatedResource)
+		// If there are no more placeholder to allocate we should move state
+		if resources.Equals(sa.allocatedPlaceholder, sa.placeholderAsk) {
+			if err := sa.HandleApplicationEvent(RunApplication); err != nil {
+				log.Logger().Error("Unexpected app state change failure while adding allocation",
+					zap.String("currentState", sa.stateMachine.Current()),
+					zap.Error(err))
+			}
+		}
 	} else {
-		// progress the state based on where we are, we should never fail in this case
-		// keep track of a failure in log.
-		if err := sa.HandleApplicationEvent(RunApplication); err != nil {
-			log.Logger().Error("Unexpected app state change failure while adding allocation",
-				zap.String("currentState", sa.stateMachine.Current()),
-				zap.Error(err))
+		// skip the state change if this is the first replacement allocation as we have done that change
+		// already when the last placeholder was allocated
+		if info.Result != Replaced || !resources.IsZero(sa.allocatedResource) {
+			// progress the state based on where we are, we should never fail in this case
+			// keep track of a failure in log.
+			if err := sa.HandleApplicationEvent(RunApplication); err != nil {
+				log.Logger().Error("Unexpected app state change failure while adding allocation",
+					zap.String("currentState", sa.stateMachine.Current()),
+					zap.Error(err))
+			}
 		}
 		sa.allocatedResource = resources.Add(sa.allocatedResource, info.AllocatedResource)
 	}
@@ -1184,9 +1196,11 @@ func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
 	// we double linked the real and placeholder allocation
 	// ph is the placeholder, the releases entry points to the real one
 	alloc := ph.Releases[0]
+	sa.addAllocationInternal(alloc)
+	// order is important: clean up the allocation after adding it to the app
+	// we need the original Replaced allocation result.
 	alloc.Releases = nil
 	alloc.Result = Allocated
-	sa.addAllocationInternal(alloc)
 	return ph
 }
 

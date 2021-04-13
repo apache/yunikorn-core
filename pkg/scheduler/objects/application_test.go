@@ -739,6 +739,80 @@ func TestAllocations(t *testing.T) {
 	assert.Equal(t, len(allocs), 0)
 }
 
+func TestGangAllocChange(t *testing.T) {
+	resMap := map[string]string{"first": "4"}
+	totalPH, err := resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err, "failed to create resource with error")
+
+	app := newApplication(appID1, "default", "root.a")
+	app.placeholderAsk = totalPH
+	assert.Assert(t, app.IsNew(), "newly created app should be in new state")
+	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()), "new application has allocated resources")
+	assert.Assert(t, resources.IsZero(app.GetPlaceholderResource()), "new application has placeholder allocated resources")
+	assert.Assert(t, resources.Equals(app.GetPlaceholderAsk(), totalPH), "placeholder ask resource not set as expected")
+
+	// move the app to the accepted state as if we added an ask
+	app.SetState(Accepted.String())
+	// create an allocation and check the assignment
+	resMap = map[string]string{"first": "2"}
+	var res *resources.Resource
+	res, err = resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err, "failed to create resource with error")
+	alloc := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
+	alloc.placeholder = true
+	app.AddAllocation(alloc)
+	assert.Assert(t, resources.Equals(app.allocatedPlaceholder, res), "allocated placeholders resources is not updated correctly: %s", app.allocatedPlaceholder.String())
+	assert.Equal(t, len(app.GetAllAllocations()), 1)
+	assert.Assert(t, app.IsAccepted(), "app should still be in accepted state")
+
+	// add second placeholder this should trigger state update
+	alloc = newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
+	alloc.placeholder = true
+	app.AddAllocation(alloc)
+	assert.Assert(t, resources.Equals(app.allocatedPlaceholder, totalPH), "allocated placeholders resources is not updated correctly: %s", app.allocatedPlaceholder.String())
+	assert.Equal(t, len(app.GetAllAllocations()), 2)
+	assert.Assert(t, app.IsStarting(), "app should have changed to starting state")
+
+	// add a real alloc this should NOT trigger state update
+	alloc = newAllocation(appID1, "uuid-3", nodeID1, "root.a", res)
+	alloc.Result = Replaced
+	app.AddAllocation(alloc)
+	assert.Equal(t, len(app.GetAllAllocations()), 3)
+	assert.Assert(t, app.IsStarting(), "app should still be in starting state")
+
+	// add a second real alloc this should trigger state update
+	alloc = newAllocation(appID1, "uuid-4", nodeID1, "root.a", res)
+	alloc.Result = Replaced
+	app.AddAllocation(alloc)
+	assert.Equal(t, len(app.GetAllAllocations()), 4)
+	assert.Assert(t, app.IsRunning(), "app should be in running state")
+}
+
+func TestAllocChange(t *testing.T) {
+	app := newApplication(appID1, "default", "root.a")
+	assert.Assert(t, app.IsNew(), "newly created app should be in new state")
+	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()), "new application has allocated resources")
+
+	// move the app to the accepted state as if we added an ask
+	app.SetState(Accepted.String())
+	// create an allocation and check the assignment
+	resMap := map[string]string{"first": "2"}
+	res, err := resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err, "failed to create resource with error")
+	alloc := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
+	// adding a normal allocation should change the state
+	app.AddAllocation(alloc)
+	assert.Assert(t, resources.Equals(app.allocatedResource, res), "allocated resources is not updated correctly: %s", app.allocatedResource.String())
+	assert.Equal(t, len(app.GetAllAllocations()), 1)
+	assert.Assert(t, app.IsStarting(), "app should be in starting state")
+
+	// add a second real alloc this should trigger state update
+	alloc = newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
+	app.AddAllocation(alloc)
+	assert.Equal(t, len(app.GetAllAllocations()), 2)
+	assert.Assert(t, app.IsRunning(), "app should have changed to running` state")
+}
+
 func TestQueueUpdate(t *testing.T) {
 	app := newApplication(appID1, "default", "root.a")
 

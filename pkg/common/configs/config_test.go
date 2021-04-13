@@ -19,6 +19,7 @@
 package configs
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -31,7 +32,23 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-var emptySum = [32]byte{}
+var emptySum = ""
+
+const validConf = `
+partitions:
+  -
+    name: default
+    placementrules:
+      - name: tag
+        value: namespace
+        create: true
+    queues:
+      - name: root
+        submitacl: '*'
+        properties:
+          application.sort.policy: stateaware
+          sample: value2
+`
 
 func TestConfigSerdeQueues(t *testing.T) {
 	conf := SchedulerConfig{
@@ -1142,21 +1159,6 @@ partitions:
 }
 
 func TestLoadSchedulerConfigFromByteArray(t *testing.T) {
-	validConf := `
-partitions:
-  -
-    name: default
-    placementrules:
-      - name: tag
-        value: namespace
-        create: true
-    queues:
-      - name: root
-        submitacl: '*'
-        properties:
-          application.sort.policy: stateaware
-          sample: value2
-`
 	invalidConf := `
 partitions:
   -
@@ -1204,6 +1206,29 @@ partitions:
 				assert.NilError(t, err, "No error is expected")
 				assert.Assert(t, schedulerConf != nil, "Returned conf should not be nil")
 			}
+		})
+	}
+}
+
+func TestGetConfigurationString(t *testing.T) {
+	configBytes := []byte(validConf)
+	checksum := "checksum: " + fmt.Sprintf("%X", sha256.Sum256(configBytes))
+	testCases := []struct {
+		name           string
+		requestBytes   []byte
+		expectedConfig string
+	}{
+		{"No checksum", configBytes, validConf},
+		{"Checksum at the beginning", []byte(checksum + validConf), validConf},
+		{"Checksum at the end", []byte(validConf + checksum), validConf},
+		{"Checksum in the middle", []byte(validConf + checksum + "extra config"), validConf + "extra config"},
+		{"Empty config and checksum", []byte(""), ""},
+		{"Empty checksum", []byte(validConf + "checksum: "), validConf},
+		{"Empty config", []byte("" + checksum), ""},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.DeepEqual(t, tc.expectedConfig, GetConfigurationString(tc.requestBytes))
 		})
 	}
 }

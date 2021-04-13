@@ -450,9 +450,6 @@ func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-	// add readable form of checksum
-	sha256 := fmt.Sprintf("\nsha256 checksum: %X", conf.Checksum)
-	marshalledConf = append(marshalledConf, sha256...)
 	if _, err = w.Write(marshalledConf); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -500,17 +497,21 @@ func updateClusterConfig(w http.ResponseWriter, r *http.Request) {
 		buildUpdateResponse(err, w)
 		return
 	}
-	// validation is already called when loading the config
-	var newConf *configs.SchedulerConfig
-	newConf, err = configs.LoadSchedulerConfigFromByteArray(requestBytes)
+	newConf, err := configs.ParseAndValidateConfig(requestBytes)
 	if err != nil {
 		buildUpdateResponse(err, w)
 		return
 	}
+	if !isChecksumEqual(newConf.Checksum) {
+		buildUpdateResponse(fmt.Errorf("the base configuration is changed"), w)
+		return
+	}
+	configs.SetChecksum(requestBytes, newConf)
+	newConfStr := configs.GetConfigurationString(requestBytes)
 	// This fails if we have more than 1 RM
 	// Do not think the plugins will even work with multiple RMs
 	var oldConf string
-	oldConf, err = updateConfiguration(string(requestBytes))
+	oldConf, err = updateConfiguration(newConfStr)
 	if err != nil {
 		buildUpdateResponse(err, w)
 		return
@@ -527,6 +528,10 @@ func updateClusterConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	buildUpdateResponse(nil, w)
+}
+
+func isChecksumEqual(checksum string) bool {
+	return configs.ConfigContext.Get(schedulerContext.GetPolicyGroup()).Checksum == checksum
 }
 
 func checkHealthStatus(w http.ResponseWriter, r *http.Request) {

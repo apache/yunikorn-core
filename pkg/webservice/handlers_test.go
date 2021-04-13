@@ -19,6 +19,7 @@
 package webservice
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -272,10 +273,8 @@ func TestGetConfigYAML(t *testing.T) {
 	assert.NilError(t, err, "failed to unmarshal config from response body")
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "fair", "node sort policy set incorrectly, not fair")
 
-	// pull the checksum out of the response
-	parts := strings.SplitAfter(string(resp.outputBytes), "sha256 checksum: ")
-	assert.Equal(t, len(parts), 2, "checksum boundary not found")
-	startConfSum := parts[1]
+	startConfSum := conf.Checksum
+	assert.Assert(t, len(startConfSum) > 0, "checksum boundary not found")
 
 	// change the config
 	configs.MockSchedulerConfigByData([]byte(updatedConf))
@@ -287,11 +286,7 @@ func TestGetConfigYAML(t *testing.T) {
 	err = yaml.Unmarshal(resp.outputBytes, conf)
 	assert.NilError(t, err, "failed to unmarshal config from response body (updated config)")
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "binpacking", "node sort policy not updated")
-
-	parts = strings.SplitAfter(string(resp.outputBytes), "sha256 checksum: ")
-	assert.Equal(t, len(parts), 2, "checksum boundary not found")
-	updatedConfSum := parts[1]
-	assert.Assert(t, startConfSum != updatedConfSum, "checksums did not change in output")
+	assert.Assert(t, startConfSum != conf.Checksum, "checksums did not change in output")
 }
 
 func TestGetConfigJSON(t *testing.T) {
@@ -306,14 +301,10 @@ func TestGetConfigJSON(t *testing.T) {
 	resp := &MockResponseWriter{}
 	getClusterConfig(resp, req)
 
-	// json unmarshal does not handle the checksum add the end automatically
-	// need to remove it before unmarshalling
-	parts := strings.SplitAfter(string(resp.outputBytes), "\n")
-	assert.Equal(t, len(parts), 2, "checksum boundary not found (json)")
-	startConfSum := parts[1]
 	conf := &configs.SchedulerConfig{}
-	err = json.Unmarshal([]byte(parts[0]), conf)
+	err = json.Unmarshal(resp.outputBytes, conf)
 	assert.NilError(t, err, "failed to unmarshal config from response body (json)")
+	startConfSum := conf.Checksum
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "fair", "node sort policy set incorrectly, not fair (json)")
 
 	// change the config
@@ -322,11 +313,9 @@ func TestGetConfigJSON(t *testing.T) {
 	assert.NilError(t, err, "Error when updating clusterInfo from config")
 
 	getClusterConfig(resp, req)
-	parts = strings.SplitAfter(string(resp.outputBytes), "\n")
-	assert.Equal(t, len(parts), 2, "checksum boundary not found (json changed)")
-	assert.Assert(t, startConfSum != parts[1], "checksums did not change in json output: %s, %s", startConfSum, parts[1])
-	err = json.Unmarshal([]byte(parts[0]), conf)
+	err = json.Unmarshal(resp.outputBytes, conf)
 	assert.NilError(t, err, "failed to unmarshal config from response body (json, updated config)")
+	assert.Assert(t, startConfSum != conf.Checksum, "checksums did not change in json output: %s, %s", startConfSum, conf.Checksum)
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "binpacking", "node sort policy not updated (json)")
 }
 
@@ -446,10 +435,11 @@ func TestBuildUpdateResponseFailure(t *testing.T) {
 func TestUpdateConfig(t *testing.T) {
 	prepareSchedulerForConfigChange(t)
 	resp := &MockResponseWriter{}
-	req, err := http.NewRequest("PUT", "", strings.NewReader(updatedConf))
+	baseChecksum := configs.ConfigContext.Get(schedulerContext.GetPolicyGroup()).Checksum
+	conf := appendChecksum(updatedConf, baseChecksum)
+	req, err := http.NewRequest("PUT", "", strings.NewReader(conf))
 	assert.NilError(t, err, "Failed to create the request")
 	updateClusterConfig(resp, req)
-	assert.NilError(t, err, "No error expected")
 	assert.Equal(t, http.StatusOK, resp.statusCode, "No error expected")
 }
 
@@ -461,6 +451,23 @@ func TestUpdateConfigInvalidConf(t *testing.T) {
 	updateClusterConfig(resp, req)
 	assert.Equal(t, http.StatusConflict, resp.statusCode, "Status code is wrong")
 	assert.Assert(t, len(string(resp.outputBytes)) > 0, "Error message is expected")
+}
+
+func TestUpdateConfigWrongChecksum(t *testing.T) {
+	prepareSchedulerForConfigChange(t)
+	resp := &MockResponseWriter{}
+	baseChecksum := fmt.Sprintf("%X", sha256.Sum256([]byte(updatedConf)))
+	conf := appendChecksum(updatedConf, baseChecksum)
+	req, err := http.NewRequest("PUT", "", strings.NewReader(conf))
+	assert.NilError(t, err, "Failed to create the request")
+	updateClusterConfig(resp, req)
+	assert.Equal(t, http.StatusConflict, resp.statusCode, "Status code is wrong")
+	assert.Assert(t, strings.Contains(string(resp.outputBytes), "the base configuration is changed"), "Wrong error message received")
+}
+
+func appendChecksum(conf string, checksum string) string {
+	conf += "checksum: " + checksum
+	return conf
 }
 
 func prepareSchedulerForConfigChange(t *testing.T) {

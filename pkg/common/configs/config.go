@@ -24,6 +24,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"strings"
 
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
@@ -35,7 +36,7 @@ import (
 // set of scheduler resources.
 type SchedulerConfig struct {
 	Partitions []PartitionConfig
-	Checksum   [32]byte `yaml:"-" json:"-"`
+	Checksum   string `yaml:",omitempty" json:",omitempty"`
 }
 
 // The partition object for each partition:
@@ -142,6 +143,21 @@ type LoadSchedulerConfigFunc func(policyGroup string) (*SchedulerConfig, error)
 
 // Visible by tests
 func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) {
+	conf, err := ParseAndValidateConfig(content)
+	if err != nil {
+		return nil, err
+	}
+	// Create a sha256 checksum for this validated config
+	SetChecksum(content, conf)
+	return conf, err
+}
+
+func SetChecksum(content []byte, conf *SchedulerConfig) {
+	noChecksumContent := GetConfigurationString(content)
+	conf.Checksum = fmt.Sprintf("%X", sha256.Sum256([]byte(noChecksumContent)))
+}
+
+func ParseAndValidateConfig(content []byte) (*SchedulerConfig, error) {
 	conf := &SchedulerConfig{}
 	err := yaml.UnmarshalStrict(content, conf)
 	if err != nil {
@@ -156,10 +172,7 @@ func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) 
 			zap.Error(err))
 		return nil, err
 	}
-
-	// Create a sha256 checksum for this validated config
-	conf.Checksum = sha256.Sum256(content)
-	return conf, err
+	return conf, nil
 }
 
 func loadSchedulerConfigFromFile(policyGroup string) (*SchedulerConfig, error) {
@@ -190,6 +203,20 @@ func resolveConfigurationFileFunc(policyGroup string) string {
 		}
 	}
 	return filePath
+}
+
+func GetConfigurationString(requestBytes []byte) string {
+	conf := string(requestBytes)
+	checksum := "checksum: "
+	checksumLength := 64 + len(checksum)
+	if strings.Contains(conf, checksum) {
+		checksum += strings.Split(conf, checksum)[1]
+		checksum = strings.TrimRight(checksum, "\n")
+		if len(checksum) > checksumLength {
+			checksum = checksum[:checksumLength]
+		}
+	}
+	return strings.ReplaceAll(conf, checksum, "")
 }
 
 // Default loader, can be updated by tests

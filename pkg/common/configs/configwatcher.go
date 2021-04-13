@@ -19,7 +19,6 @@
 package configs
 
 import (
-	"bytes"
 	"sync"
 	"time"
 
@@ -94,7 +93,7 @@ func (cw *ConfigWatcher) runOnce() bool {
 		return false
 	}
 
-	if bytes.Equal(newConfig.Checksum[:], ConfigContext.Get(cw.policyGroup).Checksum[:]) {
+	if newConfig.Checksum == ConfigContext.Get(cw.policyGroup).Checksum {
 		// check sum equals, file not changed
 		time.Sleep(1 * time.Second)
 		return true

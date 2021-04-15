@@ -21,14 +21,14 @@ package entrypoint
 import (
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/api"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice"
+	apiCommon "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/api"
 )
 
 type ServiceContext struct {
-	RMProxy   api.SchedulerAPI
+	RMProxy   apiCommon.SchedulerAPI
 	Scheduler *scheduler.Scheduler
 	WebApp    *webservice.WebService
 }

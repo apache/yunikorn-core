@@ -25,7 +25,6 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/api"
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/handler"
@@ -33,6 +32,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
+	apiCommon "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/api"
 	siCommon "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
@@ -44,7 +44,7 @@ type RMProxy struct {
 	// Internal fields
 	pendingRMEvents chan interface{}
 
-	rmIDToCallback map[string]api.ResourceManagerCallback
+	rmIDToCallback map[string]apiCommon.ResourceManagerCallback
 
 	// config version is tracked per RM,
 	// it is used to determine if configs need to be reloaded
@@ -75,7 +75,7 @@ func (rmp *RMProxy) HandleEvent(ev interface{}) {
 
 func NewRMProxy() *RMProxy {
 	rm := &RMProxy{
-		rmIDToCallback:      make(map[string]api.ResourceManagerCallback),
+		rmIDToCallback:      make(map[string]apiCommon.ResourceManagerCallback),
 		rmIDToConfigWatcher: make(map[string]*configs.ConfigWatcher),
 		pendingRMEvents:     make(chan interface{}, 1024*1024),
 	}
@@ -209,7 +209,7 @@ func (rmp *RMProxy) handleRMEvents() {
 	}
 }
 
-func (rmp *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerRequest, callback api.ResourceManagerCallback) (*si.RegisterResourceManagerResponse, error) {
+func (rmp *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerRequest, callback apiCommon.ResourceManagerCallback) (*si.RegisterResourceManagerResponse, error) {
 	rmp.Lock()
 	defer rmp.Unlock()
 	c := make(chan *rmevent.Result)
@@ -265,7 +265,7 @@ func (rmp *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerR
 	return nil, fmt.Errorf("registration of RM failed: %v", result.Reason)
 }
 
-func (rmp *RMProxy) GetResourceManagerCallback(rmID string) api.ResourceManagerCallback {
+func (rmp *RMProxy) GetResourceManagerCallback(rmID string) apiCommon.ResourceManagerCallback {
 	rmp.RLock()
 	defer rmp.RUnlock()
 

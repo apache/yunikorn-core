@@ -22,14 +22,14 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"gopkg.in/yaml.v2"
+	"gotest.tools/assert"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
-
-	"gopkg.in/yaml.v2"
-	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
@@ -788,3 +788,15 @@ func TestCreateClusterConfig(t *testing.T) {
 	assert.Equal(t, errInfo.Message, "Invalid \"dry_run\" query param. Currently, only dry_run=1 is supported. Please check the usage documentation\n", "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
+
+func TestMetricsNotEmpty(t *testing.T) {
+	req, err := http.NewRequest("GET", "/ws/v1/metrics", strings.NewReader(""))
+	assert.NilError(t, err, "Error while creating the request")
+	rr := httptest.NewRecorder()
+	mux := http.HandlerFunc(promhttp.Handler().ServeHTTP)
+	handler := loggingHandler(mux, "/ws/v1/metrics")
+	handler.ServeHTTP(rr, req)
+	assert.Assert(t, len(rr.Body.Bytes()) > 0, "Metrics response should not be empty")
+	fmt.Println(string(rr.Body.Bytes()))
+}
+

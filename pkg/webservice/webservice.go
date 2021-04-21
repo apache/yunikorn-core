@@ -81,7 +81,7 @@ type YResponseWriter struct {
 
 func (rw *YResponseWriter) Write(bytes []byte) (int, error) {
 	rw.body = bytes
-	if rw.statusCode == -1 {
+	if rw.statusCode == -1  || rw.statusCode == http.StatusOK {
 		_, err := rw.ResponseWriter.Write(bytes)
 		if err != nil {
 			log.Logger().Error(fmt.Sprintf("Unable to serve response. Problem in writing the response \"%s\". Reason: %s", string(bytes), err.Error()))

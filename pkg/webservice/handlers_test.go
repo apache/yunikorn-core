@@ -22,8 +22,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"gopkg.in/yaml.v2"
-	"gotest.tools/assert"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -31,6 +29,8 @@ import (
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"gopkg.in/yaml.v2"
+	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"

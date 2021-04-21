@@ -22,7 +22,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gopkg.in/yaml.v2"
 	"gotest.tools/assert"
 	"net/http"
@@ -30,6 +29,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
@@ -797,6 +798,4 @@ func TestMetricsNotEmpty(t *testing.T) {
 	handler := loggingHandler(mux, "/ws/v1/metrics")
 	handler.ServeHTTP(rr, req)
 	assert.Assert(t, len(rr.Body.Bytes()) > 0, "Metrics response should not be empty")
-	fmt.Println(string(rr.Body.Bytes()))
 }
-

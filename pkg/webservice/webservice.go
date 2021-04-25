@@ -65,7 +65,8 @@ func loggingHandler(inner http.Handler, name string) http.Handler {
 		if rw.statusCode != http.StatusOK && rw.statusCode != -1 {
 			errorInfo := dao.NewYAPIError(nil, rw.statusCode, body)
 			if err := json.NewEncoder(w).Encode(errorInfo); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				log.Logger().Error(fmt.Sprintf("Problem in sending error response in JSON format. %s\t%s\t%s\t%s",
+					r.Method, r.RequestURI, name, time.Since(start)))
 			}
 		}
 		log.Logger().Debug(fmt.Sprintf("%s\t%s\t%s\t%s",
@@ -81,7 +82,7 @@ type YResponseWriter struct {
 
 func (rw *YResponseWriter) Write(bytes []byte) (int, error) {
 	rw.body = bytes
-	if rw.statusCode == -1 {
+	if rw.statusCode == -1 || (rw.statusCode >= http.StatusOK && rw.statusCode <= http.StatusIMUsed) {
 		_, err := rw.ResponseWriter.Write(bytes)
 		if err != nil {
 			log.Logger().Error(fmt.Sprintf("Unable to serve response. Problem in writing the response \"%s\". Reason: %s", string(bytes), err.Error()))

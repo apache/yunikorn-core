@@ -24,11 +24,11 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice"
-	apiCommon "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/api"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/api"
 )
 
 type ServiceContext struct {
-	RMProxy   apiCommon.SchedulerAPI
+	RMProxy   api.SchedulerAPI
 	Scheduler *scheduler.Scheduler
 	WebApp    *webservice.WebService
 }

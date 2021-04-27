@@ -19,12 +19,12 @@
 package tests
 
 import (
-	"github.com/apache/incubator-yunikorn-core/pkg/api"
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/entrypoint"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/api"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 

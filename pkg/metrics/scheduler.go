@@ -254,6 +254,15 @@ func (m *SchedulerMetrics) AddReleasedContainers(value int) {
 	m.releasedContainers.Add(float64(value))
 }
 
+func (m *SchedulerMetrics) getReleasedContainers() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.releasedContainers.Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Counter.Value), nil
+	}
+	return -1, err
+}
+
 // Metrics Ops related to allocationScheduleFailures
 func (m *SchedulerMetrics) IncRejectedContainer() {
 	m.rejectedContainers.Inc()

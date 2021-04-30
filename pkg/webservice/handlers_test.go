@@ -40,6 +40,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const startConf = `
@@ -787,4 +788,14 @@ func TestCreateClusterConfig(t *testing.T) {
 	assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
 	assert.Equal(t, errInfo.Message, "Invalid \"dry_run\" query param. Currently, only dry_run=1 is supported. Please check the usage documentation", "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+}
+
+func TestMetricsNotEmpty(t *testing.T) {
+	req, err := http.NewRequest("GET", "/ws/v1/metrics", strings.NewReader(""))
+	assert.NilError(t, err, "Error while creating the request")
+	rr := httptest.NewRecorder()
+	mux := http.HandlerFunc(promhttp.Handler().ServeHTTP)
+	handler := loggingHandler(mux, "/ws/v1/metrics")
+	handler.ServeHTTP(rr, req)
+	assert.Assert(t, len(rr.Body.Bytes()) > 0, "Metrics response should not be empty")
 }

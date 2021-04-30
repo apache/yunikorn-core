@@ -71,7 +71,7 @@ type CoreSchedulerMetrics interface {
 	// Metrics Ops related to released allocations
 	IncReleasedContainer()
 	AddReleasedContainers(value int)
-
+	getReleasedContainers() (int, error)
 	// Metrics Ops related to TotalApplicationsAdded
 	IncTotalApplicationsAdded()
 	AddTotalApplicationsAdded(value int)

@@ -211,6 +211,14 @@ func writeHeaders(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Headers", "X-Requested-With,Content-Type,Accept,Origin")
 }
 
+func buildJSONErrorResponse(w http.ResponseWriter, detail string, code int) {
+	w.WriteHeader(code)
+	errorInfo := dao.NewYAPIError(nil, code, detail)
+	if jsonErr := json.NewEncoder(w).Encode(errorInfo); jsonErr != nil {
+		log.Logger().Error(fmt.Sprintf("Problem in sending error response in JSON format. Error response: %s", detail))
+	}
+}
+
 func getClusterJSON(partition *scheduler.PartitionContext) *dao.ClusterDAOInfo {
 	clusterInfo := &dao.ClusterDAOInfo{}
 	clusterInfo.TotalApplications = strconv.Itoa(partition.GetTotalApplicationCount())
@@ -457,19 +465,18 @@ func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 
 func createClusterConfig(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
-
 	queryParams := r.URL.Query()
 	dryRun, dryRunExists := queryParams["dry_run"]
 	if !dryRunExists {
-		http.Error(w, "Dry run param is missing. Please check the usage documentation", http.StatusBadRequest)
+		buildJSONErrorResponse(w, "Dry run param is missing. Please check the usage documentation", http.StatusBadRequest)
 		return
 	}
 	if dryRun[0] != "1" {
-		http.Error(w, "Invalid \"dry_run\" query param. Currently, only dry_run=1 is supported. Please check the usage documentation", http.StatusBadRequest)
+		buildJSONErrorResponse(w, "Invalid \"dry_run\" query param. Currently, only dry_run=1 is supported. Please check the usage documentation", http.StatusBadRequest)
 		return
 	}
 	if len(queryParams) != 1 {
-		http.Error(w, "Invalid query parameters. Please check the usage documentation", http.StatusBadRequest)
+		buildJSONErrorResponse(w, "Invalid query parameters. Please check the usage documentation", http.StatusBadRequest)
 		return
 	}
 	requestBytes, err := ioutil.ReadAll(r.Body)
@@ -484,7 +491,7 @@ func createClusterConfig(w http.ResponseWriter, r *http.Request) {
 		result.Allowed = true
 	}
 	if err = json.NewEncoder(w).Encode(result); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 

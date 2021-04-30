@@ -772,7 +772,7 @@ func TestCreateClusterConfig(t *testing.T) {
 	var errInfo dao.YAPIError
 	err = json.Unmarshal(rr.Body.Bytes(), &errInfo)
 	assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
-	assert.Equal(t, errInfo.Message, "Dry run param is missing. Please check the usage documentation\n", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.Message, "Dry run param is missing. Please check the usage documentation", "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 
 	// When "dry_run" value is invalid
@@ -785,6 +785,6 @@ func TestCreateClusterConfig(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 	err = json.Unmarshal(rr.Body.Bytes(), &errInfo)
 	assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
-	assert.Equal(t, errInfo.Message, "Invalid \"dry_run\" query param. Currently, only dry_run=1 is supported. Please check the usage documentation\n", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.Message, "Invalid \"dry_run\" query param. Currently, only dry_run=1 is supported. Please check the usage documentation", "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }

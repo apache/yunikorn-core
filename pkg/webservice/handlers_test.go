@@ -28,6 +28,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gopkg.in/yaml.v2"
 	"gotest.tools/assert"
 
@@ -755,6 +756,7 @@ func TestCreateClusterConfig(t *testing.T) {
 		handler.ServeHTTP(rr, req)
 		var vcr dao.ValidateConfResponse
 		err = json.Unmarshal(rr.Body.Bytes(), &vcr)
+		assert.Equal(t, http.StatusOK, rr.Result().StatusCode, "Incorrect Status code")
 		assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
 		assert.Equal(t, vcr.Allowed, test.expectedResponse.Allowed, "allowed flag incorrect")
 		assert.Equal(t, vcr.Reason, test.expectedResponse.Reason, "response text not as expected")
@@ -772,7 +774,8 @@ func TestCreateClusterConfig(t *testing.T) {
 	var errInfo dao.YAPIError
 	err = json.Unmarshal(rr.Body.Bytes(), &errInfo)
 	assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
-	assert.Equal(t, errInfo.Message, "Dry run param is missing. Please check the usage documentation\n", "JSON error message is incorrect")
+	assert.Equal(t, http.StatusBadRequest, rr.Result().StatusCode, "Incorrect Status code")
+	assert.Equal(t, errInfo.Message, "Dry run param is missing. Please check the usage documentation", "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 
 	// When "dry_run" value is invalid
@@ -785,6 +788,17 @@ func TestCreateClusterConfig(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 	err = json.Unmarshal(rr.Body.Bytes(), &errInfo)
 	assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
-	assert.Equal(t, errInfo.Message, "Invalid \"dry_run\" query param. Currently, only dry_run=1 is supported. Please check the usage documentation\n", "JSON error message is incorrect")
+	assert.Equal(t, http.StatusBadRequest, rr.Result().StatusCode, "Incorrect Status code")
+	assert.Equal(t, errInfo.Message, "Invalid \"dry_run\" query param. Currently, only dry_run=1 is supported. Please check the usage documentation", "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+}
+
+func TestMetricsNotEmpty(t *testing.T) {
+	req, err := http.NewRequest("GET", "/ws/v1/metrics", strings.NewReader(""))
+	assert.NilError(t, err, "Error while creating the request")
+	rr := httptest.NewRecorder()
+	mux := http.HandlerFunc(promhttp.Handler().ServeHTTP)
+	handler := loggingHandler(mux, "/ws/v1/metrics")
+	handler.ServeHTTP(rr, req)
+	assert.Assert(t, len(rr.Body.Bytes()) > 0, "Metrics response should not be empty")
 }

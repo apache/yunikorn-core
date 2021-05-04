@@ -169,14 +169,20 @@ func TestApplicationHistory(t *testing.T) {
 	resp := &MockResponseWriter{}
 	// no init should return nothing
 	getApplicationHistory(resp, req)
-	assert.Equal(t, resp.statusCode, http.StatusNotImplemented, "app history handler returned wrong status")
+
+	var errInfo dao.YAPIError
+	err := json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, "failed to unmarshal app history response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, http.StatusNotImplemented, resp.statusCode, "app history handler returned wrong status")
+	assert.Equal(t, errInfo.Message, "Internal metrics collection is not enabled.", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.StatusCode, http.StatusNotImplemented)
 
 	// init should return null and thus no records
 	imHistory = history.NewInternalMetricsHistory(5)
 	resp = &MockResponseWriter{}
 	getApplicationHistory(resp, req)
 	var appHist []dao.ApplicationHistoryDAOInfo
-	err := json.Unmarshal(resp.outputBytes, &appHist)
+	err = json.Unmarshal(resp.outputBytes, &appHist)
 	assert.NilError(t, err, "failed to unmarshal app history response from response body: %s", string(resp.outputBytes))
 	assert.Equal(t, resp.statusCode, 0, "app response should have no status")
 	assert.Equal(t, len(appHist), 0, "empty response must have no records")
@@ -218,14 +224,20 @@ func TestContainerHistory(t *testing.T) {
 	resp := &MockResponseWriter{}
 	// no init should return nothing
 	getContainerHistory(resp, req)
-	assert.Equal(t, resp.statusCode, http.StatusNotImplemented, "container history handler returned wrong status")
+
+	var errInfo dao.YAPIError
+	err := json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, "failed to unmarshal container history response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, http.StatusNotImplemented, resp.statusCode, "container history handler returned wrong status")
+	assert.Equal(t, errInfo.Message, "Internal metrics collection is not enabled.", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.StatusCode, http.StatusNotImplemented)
 
 	// init should return null and thus no records
 	imHistory = history.NewInternalMetricsHistory(5)
 	resp = &MockResponseWriter{}
 	getContainerHistory(resp, req)
 	var contHist []dao.ContainerHistoryDAOInfo
-	err := json.Unmarshal(resp.outputBytes, &contHist)
+	err = json.Unmarshal(resp.outputBytes, &contHist)
 	assert.NilError(t, err, "failed to unmarshal container history response from response body: %s", string(resp.outputBytes))
 	assert.Equal(t, resp.statusCode, 0, "container response should have no status")
 	assert.Equal(t, len(contHist), 0, "empty response must have no records")
@@ -385,7 +397,14 @@ func TestQueryParamInAppsHandler(t *testing.T) {
 	assert.NilError(t, err, "App Handler request failed")
 	resp = &MockResponseWriter{}
 	getApplicationsInfo(resp, req)
-	assert.Equal(t, 400, resp.statusCode)
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode)
+
+	var errInfo dao.YAPIError
+	err = json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "App Handler returned wrong status")
+	assert.Equal(t, errInfo.Message, "problem in queue query parameter parsing as queue param root.default(spe contains invalid queue name default(spe. Queue name must only have alphanumeric characters, - or _, and be no longer than 64 characters", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
 type FakeConfigPlugin struct {
@@ -429,8 +448,13 @@ func TestBuildUpdateResponseFailure(t *testing.T) {
 	resp := &MockResponseWriter{}
 	err := fmt.Errorf("ConfigMapUpdate failed")
 	buildUpdateResponse(err, resp)
+
+	var errInfo dao.YAPIError
+	err1 := json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err1, "failed to unmarshal updateconfig dao response from response body: %s", string(resp.outputBytes))
 	assert.Equal(t, http.StatusConflict, resp.statusCode, "Status code is wrong")
-	assert.Assert(t, strings.Contains(string(resp.outputBytes), err.Error()), "Error message should contain the reason")
+	assert.Assert(t, strings.Contains(string(errInfo.Message), err.Error()), "Error message should contain the reason")
+	assert.Equal(t, errInfo.StatusCode, http.StatusConflict)
 }
 
 func TestUpdateConfig(t *testing.T) {
@@ -450,8 +474,13 @@ func TestUpdateConfigInvalidConf(t *testing.T) {
 	req, err := http.NewRequest("PUT", "", strings.NewReader(invalidConf))
 	assert.NilError(t, err, "Failed to create the request")
 	updateClusterConfig(resp, req)
+
+	var errInfo dao.YAPIError
+	err1 := json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err1, "failed to unmarshal updateconfig dao response from response body: %s", string(resp.outputBytes))
 	assert.Equal(t, http.StatusConflict, resp.statusCode, "Status code is wrong")
-	assert.Assert(t, len(string(resp.outputBytes)) > 0, "Error message is expected")
+	assert.Assert(t, len(string(errInfo.Message)) > 0, "Error message is expected")
+	assert.Equal(t, errInfo.StatusCode, http.StatusConflict)
 }
 
 func TestUpdateConfigWrongChecksum(t *testing.T) {
@@ -462,8 +491,13 @@ func TestUpdateConfigWrongChecksum(t *testing.T) {
 	req, err := http.NewRequest("PUT", "", strings.NewReader(conf))
 	assert.NilError(t, err, "Failed to create the request")
 	updateClusterConfig(resp, req)
+
+	var errInfo dao.YAPIError
+	err1 := json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err1, "failed to unmarshal updateconfig dao response from response body: %s", string(resp.outputBytes))
 	assert.Equal(t, http.StatusConflict, resp.statusCode, "Status code is wrong")
-	assert.Assert(t, strings.Contains(string(resp.outputBytes), "the base configuration is changed"), "Wrong error message received")
+	assert.Assert(t, strings.Contains(string(errInfo.Message), "the base configuration is changed"), "Wrong error message received")
+	assert.Equal(t, errInfo.StatusCode, http.StatusConflict)
 }
 
 func appendChecksum(conf string, checksum string) string {

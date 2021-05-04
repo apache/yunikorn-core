@@ -56,7 +56,7 @@ func getStackInfo(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := w.Write(stack()); err != nil {
 		log.Logger().Error("GetStackInfo error", zap.Error(err))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -68,7 +68,7 @@ func getQueueInfo(w http.ResponseWriter, r *http.Request) {
 		partitionInfo := getPartitionJSON(partition)
 
 		if err := json.NewEncoder(w).Encode(partitionInfo); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		}
 	}
 }
@@ -83,7 +83,7 @@ func getClusterInfo(w http.ResponseWriter, r *http.Request) {
 		clustersInfo = append(clustersInfo, *clusterInfo)
 
 		if err := json.NewEncoder(w).Encode(clustersInfo); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		}
 	}
 }
@@ -102,7 +102,7 @@ func getClusterUtilization(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewEncoder(w).Encode(clusterUtil); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -112,7 +112,7 @@ func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 	queueName := r.URL.Query().Get("queue")
 	queueErr := validateQueue(queueName)
 	if queueErr != nil {
-		http.Error(w, queueErr.Error(), http.StatusBadRequest)
+		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -129,7 +129,7 @@ func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -165,7 +165,7 @@ func getNodesInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewEncoder(w).Encode(result); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -181,7 +181,7 @@ func getNodesUtilization(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := json.NewEncoder(w).Encode(result); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -199,7 +199,7 @@ func validateConf(w http.ResponseWriter, r *http.Request) {
 		result.Allowed = true
 	}
 	if err = json.NewEncoder(w).Encode(result); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -393,7 +393,7 @@ func getApplicationHistory(w http.ResponseWriter, r *http.Request) {
 
 	// There is nothing to return but we did not really encounter a problem
 	if imHistory == nil {
-		http.Error(w, "Internal metrics collection is not enabled.", http.StatusNotImplemented)
+		buildJSONErrorResponse(w, "Internal metrics collection is not enabled.", http.StatusNotImplemented)
 		return
 	}
 	var result []*dao.ApplicationHistoryDAOInfo
@@ -411,7 +411,7 @@ func getApplicationHistory(w http.ResponseWriter, r *http.Request) {
 		result = append(result, element)
 	}
 	if err := json.NewEncoder(w).Encode(result); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -420,7 +420,7 @@ func getContainerHistory(w http.ResponseWriter, r *http.Request) {
 
 	// There is nothing to return but we did not really encounter a problem
 	if imHistory == nil {
-		http.Error(w, "Internal metrics collection is not enabled.", http.StatusNotImplemented)
+		buildJSONErrorResponse(w, "Internal metrics collection is not enabled.", http.StatusNotImplemented)
 		return
 	}
 	var result []*dao.ContainerHistoryDAOInfo
@@ -438,7 +438,7 @@ func getContainerHistory(w http.ResponseWriter, r *http.Request) {
 		result = append(result, element)
 	}
 	if err := json.NewEncoder(w).Encode(result); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -456,10 +456,10 @@ func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 		marshalledConf, err = yaml.Marshal(&conf)
 	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 	if _, err = w.Write(marshalledConf); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -546,7 +546,7 @@ func checkHealthStatus(w http.ResponseWriter, r *http.Request) {
 	metrics := metrics2.GetSchedulerMetrics()
 	result := scheduler.GetSchedulerHealthStatus(metrics, schedulerContext)
 	if err := json.NewEncoder(w).Encode(result); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -554,12 +554,12 @@ func buildUpdateResponse(err error, w http.ResponseWriter) {
 	if err == nil {
 		w.WriteHeader(http.StatusOK)
 		if _, err = w.Write([]byte("Configuration updated successfully")); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		}
 	} else {
 		log.Logger().Info("Configuration update failed with errors",
 			zap.Error(err))
-		http.Error(w, err.Error(), http.StatusConflict)
+		buildJSONErrorResponse(w, err.Error(), http.StatusConflict)
 	}
 }
 
@@ -607,6 +607,6 @@ func getPartitions(w http.ResponseWriter, r *http.Request) {
 		partitionsInfo = append(partitionsInfo, partitionInfo)
 	}
 	if err := json.NewEncoder(w).Encode(partitionsInfo); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }

@@ -1039,5 +1039,11 @@ func TestGetPartitionNodes(t *testing.T) {
 	assert.NilError(t, err, "Get Nodes for PartitionNodes Handler request failed")
 	resp1 := &MockResponseWriter{}
 	getPartitionNodes(resp1, req1)
-	assert.Equal(t, http.StatusBadRequest, resp1.statusCode)
+
+	var errInfo dao.YAPIError
+	err = json.Unmarshal(resp1.outputBytes, &errInfo)
+	assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
+	assert.Equal(t, http.StatusBadRequest, resp1.statusCode, "Incorrect Status code")
+	assert.Equal(t, errInfo.Message, "Partition not found", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }

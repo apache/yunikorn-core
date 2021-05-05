@@ -42,7 +42,6 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
-	"github.com/gorilla/mux"
 )
 
 const startConf = `
@@ -104,8 +103,15 @@ partitions:
         name: root
   - 
     name: default
-    nodesortpolicy: 
-	  type: fair
+    nodesortpolicy:
+        type: fair
+    queues: 
+      - 
+        name: root
+        queues: 
+          - 
+            name: default
+            submitacl: "*"
 `
 const configTwoLevelQueues = `
 partitions: 
@@ -123,8 +129,6 @@ partitions:
         name: root
         queues: 
           - 
-            name: default
-            submitacl: "*"
             name: a
             queues: 
               - 
@@ -914,6 +918,39 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	err = json.Unmarshal(resp.outputBytes, &partitionQueuesDao)
 	assert.NilError(t, err, "failed to unmarshal PartitionQueues dao response from response body: %s", string(resp.outputBytes))
 	assert.Equal(t, partitionQueuesDao.Children[0].Parent, "root")
+	assert.Equal(t, partitionQueuesDao.Children[0].QueueName, "root.a")
 	assert.Equal(t, partitionQueuesDao.Children[1].Parent, "root")
+	assert.Equal(t, partitionQueuesDao.Children[1].QueueName, "root.b")
 	assert.Equal(t, partitionQueuesDao.Children[2].Parent, "root")
+	assert.Equal(t, partitionQueuesDao.Children[2].QueueName, "root.c")
+
+	// Partition not sent as part of request
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
+	vars = map[string]string{}
+	req = mux.SetURLVars(req, vars)
+	assert.NilError(t, err, "Get Queues for PartitionQueues Handler request failed")
+	resp = &MockResponseWriter{}
+	getPartitionQueues(resp, req)
+	var errInfo dao.YAPIError
+	err = json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, "failed to unmarshal PartitionQueues Handler response from response body")
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
+	assert.Equal(t, errInfo.Message, "Partition is missing in URL path. Please check the usage documentation", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+
+	// Partition not exists
+	partitionNotExists := "[" + rmID + "]notexists"
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
+	vars = map[string]string{
+		"partition": partitionNotExists,
+	}
+	req = mux.SetURLVars(req, vars)
+	assert.NilError(t, err, "Get Queues for PartitionQueues Handler request failed")
+	resp = &MockResponseWriter{}
+	getPartitionQueues(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, "failed to unmarshal PartitionQueues Handler response from response body")
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
+	assert.Equal(t, errInfo.Message, "Partition not found", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }

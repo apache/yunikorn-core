@@ -618,11 +618,11 @@ func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	partitionName, partitionExists := vars["partition"]
 	if !partitionExists {
-		http.Error(w, "Partition is missing in URL path. Please check the usage documentation", http.StatusBadRequest)
+		buildJSONErrorResponse(w, "Partition is missing in URL path. Please check the usage documentation", http.StatusBadRequest)
 		return
 	}
 	if len(vars) != 1 {
-		http.Error(w, "Incorrect URL path. Please check the usage documentation", http.StatusBadRequest)
+		buildJSONErrorResponse(w, "Incorrect URL path. Please check the usage documentation", http.StatusBadRequest)
 		return
 	}
 	var partitionQueuesDAOInfo dao.PartitionQueueDAOInfo
@@ -630,10 +630,10 @@ func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
 	if partition != nil {
 		partitionQueuesDAOInfo = partition.GetPartitionQueues()
 	} else {
-		http.Error(w, "Partition not found", http.StatusBadRequest)
+		buildJSONErrorResponse(w, "Partition not found", http.StatusBadRequest)
 		return
 	}
 	if err := json.NewEncoder(w).Encode(partitionQueuesDAOInfo); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }

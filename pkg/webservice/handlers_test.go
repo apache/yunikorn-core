@@ -918,11 +918,8 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	err = json.Unmarshal(resp.outputBytes, &partitionQueuesDao)
 	assert.NilError(t, err, "failed to unmarshal PartitionQueues dao response from response body: %s", string(resp.outputBytes))
 	assert.Equal(t, partitionQueuesDao.Children[0].Parent, "root")
-	assert.Equal(t, partitionQueuesDao.Children[0].QueueName, "root.a")
 	assert.Equal(t, partitionQueuesDao.Children[1].Parent, "root")
-	assert.Equal(t, partitionQueuesDao.Children[1].QueueName, "root.b")
 	assert.Equal(t, partitionQueuesDao.Children[2].Parent, "root")
-	assert.Equal(t, partitionQueuesDao.Children[2].QueueName, "root.c")
 
 	// Partition not sent as part of request
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))

@@ -268,6 +268,9 @@ func (sa *Application) clearPlaceholderTimer() {
 	}
 	sa.placeholderTimer.Stop()
 	sa.placeholderTimer = nil
+	log.Logger().Debug("Application placeholder timer cleared",
+		zap.String("AppID", sa.ApplicationID),
+		zap.Duration("Timeout", sa.execTimeout))
 }
 
 func (sa *Application) timeoutPlaceholderProcessing() {
@@ -1267,6 +1270,7 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 	// cleanup allocated resource for app (placeholders and normal)
 	sa.allocatedResource = resources.NewResource()
 	sa.allocatedPlaceholder = resources.NewResource()
+	sa.clearPlaceholderTimer()
 	sa.allocations = make(map[string]*Allocation)
 	// When the resource trackers are zero we should not expect anything to come in later.
 	if resources.IsZero(sa.pending) {

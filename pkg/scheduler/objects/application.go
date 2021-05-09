@@ -190,7 +190,7 @@ func (sa *Application) OnStateChange(event *fsm.Event, eventInfo string) {
 	updatedApps := make([]*si.UpdatedApplication, 0)
 	var message string
 	if len(eventInfo) == 0 {
-		message = fmt.Sprintf("Status change triggered by the event: %s", event.Event)
+		message = event.Event
 	} else {
 		message = eventInfo
 	}
@@ -314,7 +314,7 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 			zap.Int("releasing placeholders", len(sa.allocations)),
 			zap.Int("releasing asks", len(sa.requests)))
 		// change the status of the app to Failing. Once all the placeholders are cleaned up, if will be changed to Failed
-		if err := sa.HandleApplicationEventWithInfo(FailApplication, "InsufficientResources"); err != nil {
+		if err := sa.HandleApplicationEventWithInfo(FailApplication, "ResourceReservationTimeout"); err != nil {
 			log.Logger().Debug("Application state change failed when placeholder timed out",
 				zap.String("AppID", sa.ApplicationID),
 				zap.String("currentState", sa.CurrentState()),

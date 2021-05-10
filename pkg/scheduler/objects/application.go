@@ -166,7 +166,7 @@ func (sa *Application) IsFailed() bool {
 	return sa.stateMachine.Is(Failed.String())
 }
 
-// Handle the state event for the application.
+// HandleApplicationEvent handles the state event for the application.
 // The state machine handles the locking.
 func (sa *Application) HandleApplicationEvent(event applicationEvent) error {
 	err := sa.stateMachine.Event(event.String(), sa)
@@ -177,13 +177,28 @@ func (sa *Application) HandleApplicationEvent(event applicationEvent) error {
 	return err
 }
 
-func (sa *Application) OnStateChange(event *fsm.Event) {
+func (sa *Application) HandleApplicationEventWithInfo(event applicationEvent, eventInfo string) error {
+	err := sa.stateMachine.Event(event.String(), sa, eventInfo)
+	// handle the same state transition not nil error (limit of fsm).
+	if err != nil && err.Error() == noTransition {
+		return nil
+	}
+	return err
+}
+
+func (sa *Application) OnStateChange(event *fsm.Event, eventInfo string) {
 	updatedApps := make([]*si.UpdatedApplication, 0)
+	var message string
+	if len(eventInfo) == 0 {
+		message = event.Event
+	} else {
+		message = eventInfo
+	}
 	updatedApps = append(updatedApps, &si.UpdatedApplication{
 		ApplicationID:            sa.ApplicationID,
 		State:                    sa.stateMachine.Current(),
 		StateTransitionTimestamp: time.Now().UnixNano(),
-		Message:                  fmt.Sprintf("Status change triggered by the event : %s", event.Event),
+		Message:                  message,
 	})
 
 	if sa.rmEventHandler != nil {
@@ -299,7 +314,7 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 			zap.Int("releasing placeholders", len(sa.allocations)),
 			zap.Int("releasing asks", len(sa.requests)))
 		// change the status of the app to Failing. Once all the placeholders are cleaned up, if will be changed to Failed
-		if err := sa.HandleApplicationEvent(FailApplication); err != nil {
+		if err := sa.HandleApplicationEventWithInfo(FailApplication, "ResourceReservationTimeout"); err != nil {
 			log.Logger().Debug("Application state change failed when placeholder timed out",
 				zap.String("AppID", sa.ApplicationID),
 				zap.String("currentState", sa.CurrentState()),

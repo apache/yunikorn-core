@@ -22,11 +22,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
+
+	"github.com/looplab/fsm"
 )
 
 const noTransition = "no transition"
@@ -123,7 +124,17 @@ func NewAppState() *fsm.FSM {
 					zap.String("source", event.Src),
 					zap.String("destination", event.Dst),
 					zap.String("event", event.Event))
-				app.OnStateChange(event)
+				if len(event.Args) == 2 {
+					eventInfo, ok := event.Args[1].(string)
+					if ok {
+						app.OnStateChange(event, eventInfo)
+					} else {
+						log.Logger().Warn("unable to get additional event info")
+						app.OnStateChange(event, "")
+					}
+				} else {
+					app.OnStateChange(event, "")
+				}
 			},
 			"leave_state": func(event *fsm.Event) {
 				event.Args[0].(*Application).clearStateTimer()

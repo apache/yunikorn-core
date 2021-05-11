@@ -80,7 +80,7 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "container_allocation_attempt_total",
-			Help:      "Total number of attempts to allocate containers. State of the attempt includes `allocated`, " +
+			Help: "Total number of attempts to allocate containers. State of the attempt includes `allocated`, " +
 				"`rejected`, `error`, `released`",
 		}, []string{"state"})
 	s.allocatedContainers = s.containerAllocation.With(prometheus.Labels{"state": "allocated"})
@@ -213,7 +213,6 @@ func (m *SchedulerMetrics) ObserveAppSortingLatency(start time.Time) {
 func (m *SchedulerMetrics) ObserveQueueSortingLatency(start time.Time) {
 	m.queueSortingLatency.Observe(SinceInSeconds(start))
 }
-
 
 // Below is to define and implement all the metrics operation for Prometheus.
 

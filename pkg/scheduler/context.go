@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math"
 	"sync"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -101,6 +102,7 @@ func (cc *ClusterContext) setEventHandler(rmHandler handler.EventHandler) {
 // Process each partition in the scheduler, walk over each queue and app to check if anything can be scheduled.
 // This can be forked into a go routine per partition if needed to increase parallel allocations
 func (cc *ClusterContext) schedule() {
+	schedulingStart := time.Now()
 	// schedule each partition defined in the cluster
 	for _, psc := range cc.GetPartitionMapClone() {
 		// if there are no resources in the partition just skip
@@ -130,6 +132,7 @@ func (cc *ClusterContext) schedule() {
 			}
 		}
 	}
+	metrics.GetSchedulerMetrics().ObserveSchedulingLatency(schedulingStart)
 }
 
 func (cc *ClusterContext) processRMRegistrationEvent(event *rmevent.RMRegistrationEvent) {

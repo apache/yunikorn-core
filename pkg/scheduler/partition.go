@@ -484,6 +484,14 @@ func (pc *PartitionContext) GetQueueInfos() dao.QueueDAOInfo {
 	return pc.root.GetQueueInfos()
 }
 
+// Get the queue info for the whole queue structure to pass to the webservice
+func (pc *PartitionContext) GetPartitionQueues() dao.PartitionQueueDAOInfo {
+	var PartitionQueueDAOInfo = dao.PartitionQueueDAOInfo{}
+	PartitionQueueDAOInfo = pc.root.GetPartitionQueues()
+	PartitionQueueDAOInfo.Partition = pc.Name
+	return PartitionQueueDAOInfo
+}
+
 // Create a queue with full hierarchy. This is called when a new queue is created from a placement rule.
 // The final leaf queue does not exist otherwise we would not get here.
 // This means that at least 1 queue (a leaf queue) will be created

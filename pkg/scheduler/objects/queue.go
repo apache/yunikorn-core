@@ -303,8 +303,8 @@ func (sq *Queue) UpdateSortType() {
 }
 
 func (sq *Queue) GetQueuePath() string {
-	sq.Lock()
-	defer sq.Unlock()
+	sq.RLock()
+	defer sq.RUnlock()
 	return sq.QueuePath
 }
 
@@ -405,6 +405,30 @@ func (sq *Queue) GetQueueInfos() dao.QueueDAOInfo {
 	queueInfo.Properties = make(map[string]string)
 	for k, v := range sq.properties {
 		queueInfo.Properties[k] = v
+	}
+	return queueInfo
+}
+
+func (sq *Queue) GetPartitionQueues() dao.PartitionQueueDAOInfo {
+	queueInfo := dao.PartitionQueueDAOInfo{}
+	if len(sq.children) > 0 {
+		for _, child := range sq.GetCopyOfChildren() {
+			queueInfo.Children = append(queueInfo.Children, child.GetPartitionQueues())
+		}
+	}
+	sq.RLock()
+	defer sq.RUnlock()
+	queueInfo.QueueName = sq.GetQueuePath()
+	queueInfo.Status = sq.stateMachine.Current()
+	queueInfo.MaxResource = sq.maxResource.DAOString()
+	queueInfo.GuaranteedResource = sq.guaranteedResource.DAOString()
+	queueInfo.AllocatedResource = sq.allocatedResource.DAOString()
+	queueInfo.IsLeaf = sq.IsLeafQueue()
+	queueInfo.IsManaged = sq.IsManaged()
+	if sq.parent == nil {
+		queueInfo.Parent = ""
+	} else {
+		queueInfo.Parent = sq.parent.GetQueuePath()
 	}
 	return queueInfo
 }

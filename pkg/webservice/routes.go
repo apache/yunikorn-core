@@ -134,13 +134,17 @@ var webRoutes = routes{
 		"/ws/v1/history/containers",
 		getContainerHistory,
 	},
-
-	//
 	route{
 		"Partitions",
 		"GET",
 		"/ws/v1/partitions",
 		getPartitions,
+	},
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/partition/{partition}/queues",
+		getPartitionQueues,
 	},
 
 	// endpoint to retrieve CPU, Memory profiling data,

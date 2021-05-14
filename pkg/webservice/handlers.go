@@ -661,6 +661,6 @@ func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
 			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		}
 	} else {
-		buildJSONErrorResponse(w, "Partition not found", http.StatusInternalServerError)
+		buildJSONErrorResponse(w, "Partition not found", http.StatusBadRequest)
 	}
 }

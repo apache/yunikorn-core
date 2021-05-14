@@ -42,8 +42,6 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
-
-	"github.com/gorilla/mux"
 )
 
 const startConf = `
@@ -171,6 +169,8 @@ partitions:
 
 const rmID = "rm-123"
 const policyGroup = "default-policy-group"
+const queueName = "root.default"
+const nodeID = "node-1"
 
 // simple wrapper to make creating an app easier
 func newApplication(appID, partitionName, queueName, rmID string) *objects.Application {
@@ -581,7 +581,6 @@ func TestGetClusterUtilJSON(t *testing.T) {
 	partition := schedulerContext.GetPartition(partitionName)
 	assert.Equal(t, partitionName, partition.Name)
 	// new app to partition
-	queueName := "root.default"
 	appID := "appID-1"
 	app := newApplication(appID, partitionName, queueName, rmID)
 	err = partition.AddApplication(app)
@@ -597,7 +596,6 @@ func TestGetClusterUtilJSON(t *testing.T) {
 	assert.Equal(t, ContainsObj(result0, utilZero), true)
 
 	// add node to partition with allocations
-	nodeID := "node-1"
 	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 1000, resources.VCORE: 1000}).ToProto()
 	node1 := objects.NewNode(&si.NewNodeInfo{NodeID: nodeID, SchedulableResource: nodeRes})
 
@@ -668,7 +666,6 @@ func TestGetNodesUtilJSON(t *testing.T) {
 	partition := schedulerContext.GetPartition(partitionName)
 	assert.Equal(t, partitionName, partition.Name)
 	// create test application
-	queueName := "root.default"
 	appID := "app1"
 	app := newApplication(appID, partitionName, queueName, rmID)
 	err = partition.AddApplication(app)
@@ -967,7 +964,6 @@ func TestGetPartitionNodes(t *testing.T) {
 	assert.Equal(t, partitionName, partition.Name)
 
 	// create test application
-	queueName := "root.default"
 	appID := "app1"
 	app := newApplication(appID, partitionName, queueName, rmID)
 	err = partition.AddApplication(app)
@@ -1042,7 +1038,7 @@ func TestGetPartitionNodes(t *testing.T) {
 
 	var errInfo dao.YAPIError
 	err = json.Unmarshal(resp1.outputBytes, &errInfo)
-	assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
+	assert.NilError(t, err, "failed to unmarshal PartitionNodes response from response body")
 	assert.Equal(t, http.StatusBadRequest, resp1.statusCode, "Incorrect Status code")
 	assert.Equal(t, errInfo.Message, "Partition not found", "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)

@@ -1121,7 +1121,7 @@ func TestTimeoutPlaceholderCompleting(t *testing.T) {
 	assert.Assert(t, app.IsCompleting(), "App should still be in completing state")
 }
 
-func TestPlaceholderTimerAfterAppRemoval(t *testing.T) {
+func TestAppTimersAfterAppRemoval(t *testing.T) {
 	phTimeout := common.ConvertSITimeout(50)
 	app, _ := newApplicationWithPlaceholderTimeout(appID1, "default", "root.a", 50)
 	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should be nil on create")
@@ -1144,6 +1144,9 @@ func TestPlaceholderTimerAfterAppRemoval(t *testing.T) {
 	assert.Assert(t, app.IsCompleting(), "App should be in completing state all allocs have been removed")
 	if app.placeholderTimer != nil {
 		t.Fatalf("Placeholder timer has not be cleared after app removal as expected, %v", app.placeholderTimer)
+	}
+	if app.stateTimer != nil {
+		t.Fatalf("State timer has not be cleared after app removal as expected, %v", app.stateTimer)
 	}
 }
 

@@ -1270,7 +1270,6 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 	// cleanup allocated resource for app (placeholders and normal)
 	sa.allocatedResource = resources.NewResource()
 	sa.allocatedPlaceholder = resources.NewResource()
-	sa.clearPlaceholderTimer()
 	sa.allocations = make(map[string]*Allocation)
 	// When the resource trackers are zero we should not expect anything to come in later.
 	if resources.IsZero(sa.pending) {
@@ -1280,6 +1279,8 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 				zap.Error(err))
 		}
 	}
+	sa.clearPlaceholderTimer()
+	sa.clearStateTimer()
 	return allocationsToRelease
 }
 

@@ -169,6 +169,8 @@ partitions:
 
 const rmID = "rm-123"
 const policyGroup = "default-policy-group"
+const queueName = "root.default"
+const nodeID = "node-1"
 
 // simple wrapper to make creating an app easier
 func newApplication(appID, partitionName, queueName, rmID string) *objects.Application {
@@ -579,7 +581,6 @@ func TestGetClusterUtilJSON(t *testing.T) {
 	partition := schedulerContext.GetPartition(partitionName)
 	assert.Equal(t, partitionName, partition.Name)
 	// new app to partition
-	queueName := "root.default"
 	appID := "appID-1"
 	app := newApplication(appID, partitionName, queueName, rmID)
 	err = partition.AddApplication(app)
@@ -595,7 +596,6 @@ func TestGetClusterUtilJSON(t *testing.T) {
 	assert.Equal(t, ContainsObj(result0, utilZero), true)
 
 	// add node to partition with allocations
-	nodeID := "node-1"
 	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 1000, resources.VCORE: 1000}).ToProto()
 	node1 := objects.NewNode(&si.NewNodeInfo{NodeID: nodeID, SchedulableResource: nodeRes})
 
@@ -666,7 +666,6 @@ func TestGetNodesUtilJSON(t *testing.T) {
 	partition := schedulerContext.GetPartition(partitionName)
 	assert.Equal(t, partitionName, partition.Name)
 	// create test application
-	queueName := "root.default"
 	appID := "app1"
 	app := newApplication(appID, partitionName, queueName, rmID)
 	err = partition.AddApplication(app)
@@ -948,6 +947,99 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	err = json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, "failed to unmarshal PartitionQueues Handler response from response body")
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
+	assert.Equal(t, errInfo.Message, "Partition not found", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+}
+
+func TestGetPartitionNodes(t *testing.T) {
+	configs.MockSchedulerConfigByData([]byte(configDefault))
+	var err error
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	assert.NilError(t, err, "Error when load schedulerContext from config")
+	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
+
+	// Check test partition
+	partitionName := "[" + rmID + "]default"
+	partition := schedulerContext.GetPartition(partitionName)
+	assert.Equal(t, partitionName, partition.Name)
+
+	// create test application
+	appID := "app1"
+	app := newApplication(appID, partitionName, queueName, rmID)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "add application to partition should not have failed")
+
+	// create test nodes
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 1000, resources.VCORE: 1000}).ToProto()
+	node1ID := "node-1"
+	node1 := objects.NewNode(&si.NewNodeInfo{NodeID: node1ID, SchedulableResource: nodeRes})
+	node2ID := "node-2"
+	node2 := objects.NewNode(&si.NewNodeInfo{NodeID: node2ID, SchedulableResource: nodeRes})
+
+	// create test allocations
+	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 500, resources.VCORE: 300})
+	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 300, resources.VCORE: 500})
+	ask1 := &objects.AllocationAsk{
+		AllocationKey:     "alloc-1",
+		QueueName:         queueName,
+		ApplicationID:     appID,
+		AllocatedResource: resAlloc1,
+	}
+	ask2 := &objects.AllocationAsk{
+		AllocationKey:     "alloc-2",
+		QueueName:         queueName,
+		ApplicationID:     appID,
+		AllocatedResource: resAlloc2,
+	}
+	allocs := []*objects.Allocation{objects.NewAllocation("alloc-1-uuid", node1ID, ask1)}
+	err = partition.AddNode(node1, allocs)
+	assert.NilError(t, err, "add node to partition should not have failed")
+	allocs = []*objects.Allocation{objects.NewAllocation("alloc-2-uuid", node2ID, ask2)}
+	err = partition.AddNode(node2, allocs)
+	assert.NilError(t, err, "add node to partition should not have failed")
+
+	NewWebApp(schedulerContext, nil)
+
+	var req *http.Request
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/nodes", strings.NewReader(""))
+	vars := map[string]string{
+		"partition": "[rm-123]default",
+	}
+	req = mux.SetURLVars(req, vars)
+	assert.NilError(t, err, "Get Nodes for PartitionNodes Handler request failed")
+	resp := &MockResponseWriter{}
+	var partitionNodesDao []*dao.NodeDAOInfo
+	getPartitionNodes(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &partitionNodesDao)
+	assert.NilError(t, err, "failed to unmarshal PartitionNodes dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, 1, len(partitionNodesDao[0].Allocations))
+	for _, node := range partitionNodesDao {
+		assert.Equal(t, 1, len(node.Allocations))
+		if node.NodeID == node1ID {
+			assert.Equal(t, node.NodeID, node1ID)
+			assert.Equal(t, "alloc-1", node.Allocations[0].AllocationKey)
+			assert.Equal(t, "alloc-1-uuid", node.Allocations[0].UUID)
+		} else {
+			assert.Equal(t, node.NodeID, node2ID)
+			assert.Equal(t, "alloc-2", node.Allocations[0].AllocationKey)
+			assert.Equal(t, "alloc-2-uuid", node.Allocations[0].UUID)
+		}
+	}
+
+	var req1 *http.Request
+	req1, err = http.NewRequest("GET", "/ws/v1/partition/default/nodes", strings.NewReader(""))
+	vars1 := map[string]string{
+		"partition": "notexists",
+	}
+	req1 = mux.SetURLVars(req1, vars1)
+	assert.NilError(t, err, "Get Nodes for PartitionNodes Handler request failed")
+	resp1 := &MockResponseWriter{}
+	getPartitionNodes(resp1, req1)
+
+	var errInfo dao.YAPIError
+	err = json.Unmarshal(resp1.outputBytes, &errInfo)
+	assert.NilError(t, err, "failed to unmarshal PartitionNodes response from response body")
+	assert.Equal(t, http.StatusBadRequest, resp1.statusCode, "Incorrect Status code")
 	assert.Equal(t, errInfo.Message, "Partition not found", "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }

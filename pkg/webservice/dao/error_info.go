@@ -16,30 +16,23 @@
  limitations under the License.
 */
 
-package entrypoint
+package dao
 
-import (
-	"go.uber.org/zap"
-
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
-	"github.com/apache/incubator-yunikorn-core/pkg/webservice"
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/api"
-)
-
-type ServiceContext struct {
-	RMProxy   api.SchedulerAPI
-	Scheduler *scheduler.Scheduler
-	WebApp    *webservice.WebService
+type YAPIError struct {
+	StatusCode  int    `json:"status_code"`
+	Message     string `json:"message"`
+	Description string `json:"description"`
 }
 
-func (s *ServiceContext) StopAll() {
-	log.Logger().Info("ServiceContext stop all services")
-	// TODO implement stop for services
-	if s.WebApp != nil {
-		if err := s.WebApp.StopWebApp(); err != nil {
-			log.Logger().Error("failed to stop web-app",
-				zap.Error(err))
-		}
+func NewYAPIError(err error, statusCode int, message string) *YAPIError {
+	description := message
+	if err != nil {
+		description = message + ". Original Cause :" + err.Error()
+	}
+
+	return &YAPIError{
+		StatusCode:  statusCode,
+		Message:     message,
+		Description: description,
 	}
 }

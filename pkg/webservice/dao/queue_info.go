@@ -31,3 +31,16 @@ type QueueCapacity struct {
 	UsedCapacity    string `json:"usedcapacity"`
 	AbsUsedCapacity string `json:"absusedcapacity"`
 }
+
+type PartitionQueueDAOInfo struct {
+	QueueName          string                  `json:"queuename"`
+	Status             string                  `json:"status"`
+	Partition          string                  `json:"partition"`
+	MaxResource        string                  `json:"maxResource"`
+	GuaranteedResource string                  `json:"guaranteedResource"`
+	AllocatedResource  string                  `json:"allocatedResource"`
+	IsLeaf             bool                    `json:"isLeaf"`
+	IsManaged          bool                    `json:"isManaged"`
+	Parent             string                  `json:"parent"`
+	Children           []PartitionQueueDAOInfo `json:"children"`
+}

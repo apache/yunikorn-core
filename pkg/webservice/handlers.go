@@ -40,6 +40,8 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+
+	"github.com/gorilla/mux"
 )
 
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
@@ -56,7 +58,7 @@ func getStackInfo(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := w.Write(stack()); err != nil {
 		log.Logger().Error("GetStackInfo error", zap.Error(err))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -68,7 +70,7 @@ func getQueueInfo(w http.ResponseWriter, r *http.Request) {
 		partitionInfo := getPartitionJSON(partition)
 
 		if err := json.NewEncoder(w).Encode(partitionInfo); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		}
 	}
 }
@@ -83,7 +85,7 @@ func getClusterInfo(w http.ResponseWriter, r *http.Request) {
 		clustersInfo = append(clustersInfo, *clusterInfo)
 
 		if err := json.NewEncoder(w).Encode(clustersInfo); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		}
 	}
 }
@@ -102,7 +104,7 @@ func getClusterUtilization(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewEncoder(w).Encode(clusterUtil); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -112,7 +114,7 @@ func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 	queueName := r.URL.Query().Get("queue")
 	queueErr := validateQueue(queueName)
 	if queueErr != nil {
-		http.Error(w, queueErr.Error(), http.StatusBadRequest)
+		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -129,7 +131,7 @@ func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -165,7 +167,7 @@ func getNodesInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewEncoder(w).Encode(result); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -181,7 +183,7 @@ func getNodesUtilization(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := json.NewEncoder(w).Encode(result); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -199,7 +201,7 @@ func validateConf(w http.ResponseWriter, r *http.Request) {
 		result.Allowed = true
 	}
 	if err = json.NewEncoder(w).Encode(result); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -209,6 +211,14 @@ func writeHeaders(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Credentials", "true")
 	w.Header().Set("Access-Control-Allow-Methods", "GET,POST,HEAD,OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "X-Requested-With,Content-Type,Accept,Origin")
+}
+
+func buildJSONErrorResponse(w http.ResponseWriter, detail string, code int) {
+	w.WriteHeader(code)
+	errorInfo := dao.NewYAPIError(nil, code, detail)
+	if jsonErr := json.NewEncoder(w).Encode(errorInfo); jsonErr != nil {
+		log.Logger().Error(fmt.Sprintf("Problem in sending error response in JSON format. Error response: %s", detail))
+	}
 }
 
 func getClusterJSON(partition *scheduler.PartitionContext) *dao.ClusterDAOInfo {
@@ -385,7 +395,7 @@ func getApplicationHistory(w http.ResponseWriter, r *http.Request) {
 
 	// There is nothing to return but we did not really encounter a problem
 	if imHistory == nil {
-		http.Error(w, "Internal metrics collection is not enabled.", http.StatusNotImplemented)
+		buildJSONErrorResponse(w, "Internal metrics collection is not enabled.", http.StatusNotImplemented)
 		return
 	}
 	var result []*dao.ApplicationHistoryDAOInfo
@@ -403,7 +413,7 @@ func getApplicationHistory(w http.ResponseWriter, r *http.Request) {
 		result = append(result, element)
 	}
 	if err := json.NewEncoder(w).Encode(result); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -412,7 +422,7 @@ func getContainerHistory(w http.ResponseWriter, r *http.Request) {
 
 	// There is nothing to return but we did not really encounter a problem
 	if imHistory == nil {
-		http.Error(w, "Internal metrics collection is not enabled.", http.StatusNotImplemented)
+		buildJSONErrorResponse(w, "Internal metrics collection is not enabled.", http.StatusNotImplemented)
 		return
 	}
 	var result []*dao.ContainerHistoryDAOInfo
@@ -430,7 +440,7 @@ func getContainerHistory(w http.ResponseWriter, r *http.Request) {
 		result = append(result, element)
 	}
 	if err := json.NewEncoder(w).Encode(result); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -448,17 +458,46 @@ func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 		marshalledConf, err = yaml.Marshal(&conf)
 	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
-	// add readable form of checksum
-	sha256 := fmt.Sprintf("\nsha256 checksum: %X", conf.Checksum)
-	marshalledConf = append(marshalledConf, sha256...)
 	if _, err = w.Write(marshalledConf); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
-func updateConfig(w http.ResponseWriter, r *http.Request) {
+func createClusterConfig(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	queryParams := r.URL.Query()
+	dryRun, dryRunExists := queryParams["dry_run"]
+	if !dryRunExists {
+		buildJSONErrorResponse(w, "Dry run param is missing. Please check the usage documentation", http.StatusBadRequest)
+		return
+	}
+	if dryRun[0] != "1" {
+		buildJSONErrorResponse(w, "Invalid \"dry_run\" query param. Currently, only dry_run=1 is supported. Please check the usage documentation", http.StatusBadRequest)
+		return
+	}
+	if len(queryParams) != 1 {
+		buildJSONErrorResponse(w, "Invalid query parameters. Please check the usage documentation", http.StatusBadRequest)
+		return
+	}
+	requestBytes, err := ioutil.ReadAll(r.Body)
+	if err == nil {
+		_, err = configs.LoadSchedulerConfigFromByteArray(requestBytes)
+	}
+	var result dao.ValidateConfResponse
+	if err != nil {
+		result.Allowed = false
+		result.Reason = err.Error()
+	} else {
+		result.Allowed = true
+	}
+	if err = json.NewEncoder(w).Encode(result); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func updateClusterConfig(w http.ResponseWriter, r *http.Request) {
 	lock.Lock()
 	defer lock.Unlock()
 	writeHeaders(w)
@@ -467,17 +506,21 @@ func updateConfig(w http.ResponseWriter, r *http.Request) {
 		buildUpdateResponse(err, w)
 		return
 	}
-	// validation is already called when loading the config
-	var newConf *configs.SchedulerConfig
-	newConf, err = configs.LoadSchedulerConfigFromByteArray(requestBytes)
+	newConf, err := configs.ParseAndValidateConfig(requestBytes)
 	if err != nil {
 		buildUpdateResponse(err, w)
 		return
 	}
+	if !isChecksumEqual(newConf.Checksum) {
+		buildUpdateResponse(fmt.Errorf("the base configuration is changed"), w)
+		return
+	}
+	configs.SetChecksum(requestBytes, newConf)
+	newConfStr := configs.GetConfigurationString(requestBytes)
 	// This fails if we have more than 1 RM
 	// Do not think the plugins will even work with multiple RMs
 	var oldConf string
-	oldConf, err = updateConfiguration(string(requestBytes))
+	oldConf, err = updateConfiguration(newConfStr)
 	if err != nil {
 		buildUpdateResponse(err, w)
 		return
@@ -496,12 +539,16 @@ func updateConfig(w http.ResponseWriter, r *http.Request) {
 	buildUpdateResponse(nil, w)
 }
 
+func isChecksumEqual(checksum string) bool {
+	return configs.ConfigContext.Get(schedulerContext.GetPolicyGroup()).Checksum == checksum
+}
+
 func checkHealthStatus(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	metrics := metrics2.GetSchedulerMetrics()
 	result := scheduler.GetSchedulerHealthStatus(metrics, schedulerContext)
 	if err := json.NewEncoder(w).Encode(result); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -509,12 +556,12 @@ func buildUpdateResponse(err error, w http.ResponseWriter) {
 	if err == nil {
 		w.WriteHeader(http.StatusOK)
 		if _, err = w.Write([]byte("Configuration updated successfully")); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		}
 	} else {
 		log.Logger().Info("Configuration update failed with errors",
 			zap.Error(err))
-		http.Error(w, err.Error(), http.StatusConflict)
+		buildJSONErrorResponse(w, err.Error(), http.StatusConflict)
 	}
 }
 
@@ -562,6 +609,58 @@ func getPartitions(w http.ResponseWriter, r *http.Request) {
 		partitionsInfo = append(partitionsInfo, partitionInfo)
 	}
 	if err := json.NewEncoder(w).Encode(partitionsInfo); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	writeHeaders(w)
+	partitionName, partitionExists := vars["partition"]
+	if !partitionExists {
+		buildJSONErrorResponse(w, "Partition is missing in URL path. Please check the usage documentation", http.StatusBadRequest)
+		return
+	}
+	if len(vars) != 1 {
+		buildJSONErrorResponse(w, "Incorrect URL path. Please check the usage documentation", http.StatusBadRequest)
+		return
+	}
+	var partitionQueuesDAOInfo dao.PartitionQueueDAOInfo
+	var partition = schedulerContext.GetPartition(partitionName)
+	if partition != nil {
+		partitionQueuesDAOInfo = partition.GetPartitionQueues()
+	} else {
+		buildJSONErrorResponse(w, "Partition not found", http.StatusBadRequest)
+		return
+	}
+	if err := json.NewEncoder(w).Encode(partitionQueuesDAOInfo); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	writeHeaders(w)
+	partition, partitionExists := vars["partition"]
+	if !partitionExists {
+		buildJSONErrorResponse(w, "Partition is missing in URL path. Please check the usage documentation", http.StatusBadRequest)
+		return
+	}
+	if len(vars) != 1 {
+		buildJSONErrorResponse(w, "Incorrect URL path. Please check the usage documentation", http.StatusBadRequest)
+		return
+	}
+	partitionContext := schedulerContext.GetPartition(partition)
+	if partitionContext != nil {
+		var nodesDao []*dao.NodeDAOInfo
+		for _, node := range partitionContext.GetNodes() {
+			nodeDao := getNodeJSON(node)
+			nodesDao = append(nodesDao, nodeDao)
+		}
+		if err := json.NewEncoder(w).Encode(nodesDao); err != nil {
+			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		}
+	} else {
+		buildJSONErrorResponse(w, "Partition not found", http.StatusBadRequest)
 	}
 }

@@ -45,7 +45,6 @@ func newRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 	for _, webRoute := range webRoutes {
 		handler := loggingHandler(webRoute.HandlerFunc, webRoute.Name)
-
 		router.
 			Methods(webRoute.Method).
 			Path(webRoute.Pattern).
@@ -58,9 +57,7 @@ func newRouter() *mux.Router {
 func loggingHandler(inner http.Handler, name string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-
 		inner.ServeHTTP(w, r)
-
 		log.Logger().Debug(fmt.Sprintf("%s\t%s\t%s\t%s",
 			r.Method, r.RequestURI, name, time.Since(start)))
 	})

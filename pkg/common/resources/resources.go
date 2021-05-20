@@ -396,11 +396,26 @@ func subNonNegative(left, right *Resource) (*Resource, string) {
 	return out, message
 }
 
-// Check if smaller fitin larger, negative values will be treated as 0
-// A nil resource is treated as an empty resource (zero)
+// Check if smaller fits in larger
+// Types not defined in the larger resource are considered 0 values for Quantity
+// A nil resource is treated as an empty resource (all types are 0)
 func FitIn(larger, smaller *Resource) bool {
-	if larger == nil {
-		larger = Zero
+	return larger.fitIn(smaller, false)
+}
+
+// Check if smaller fits in the defined resource
+// Types not defined in resource this is called against are considered the maximum value for Quantity
+// A nil resource is treated as an empty resource (no types defined)
+func (r *Resource) FitInMaxUndef(smaller *Resource) bool {
+	return r.fitIn(smaller, true)
+}
+
+// Check if smaller fits in the defined resource
+// Negative values will be treated as 0
+// A nil resource is treated as an empty resource, behaviour defined by skipUndef
+func (r *Resource) fitIn(smaller *Resource, skipUndef bool) bool {
+	if r == nil {
+		r = Zero // shadows in the local function not seen by the callers.
 	}
 	// shortcut: a nil resource always fits because negative values are treated as 0
 	// this step explicitly does not check for zero values or an empty resource that is handled by the loop
@@ -409,7 +424,11 @@ func FitIn(larger, smaller *Resource) bool {
 	}
 
 	for k, v := range smaller.Resources {
-		largerValue := larger.Resources[k]
+		largerValue, ok := r.Resources[k]
+		// skip if not defined (queue quota checks: undefined resources are considered max)
+		if skipUndef && !ok {
+			continue
+		}
 		if largerValue < 0 {
 			largerValue = 0
 		}

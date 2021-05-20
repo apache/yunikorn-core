@@ -128,7 +128,7 @@ func (manager partitionManager) remove() {
 		zap.Int("numOfApps", len(apps)),
 		zap.String("partitionName", manager.pc.Name))
 	for i := range apps {
-		_ = apps[i].HandleApplicationEvent(objects.FailApplication)
+		_ = apps[i].HandleApplicationEventWithInfo(objects.FailApplication, "PartitionRemoved")
 		appID := apps[i].ApplicationID
 		_ = manager.pc.removeApplication(appID)
 	}

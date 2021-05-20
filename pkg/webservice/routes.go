@@ -102,7 +102,15 @@ var webRoutes = routes{
 		"Scheduler",
 		"PUT",
 		"/ws/v1/config",
-		updateConfig,
+		updateClusterConfig,
+	},
+
+	// endpoint to create the conf, but currently limited for conf validation purpose alone
+	route{
+		"Scheduler",
+		"POST",
+		"/ws/v1/config",
+		createClusterConfig,
 	},
 
 	// endpoint to validate conf
@@ -126,13 +134,23 @@ var webRoutes = routes{
 		"/ws/v1/history/containers",
 		getContainerHistory,
 	},
-
-	//
 	route{
 		"Partitions",
 		"GET",
 		"/ws/v1/partitions",
 		getPartitions,
+	},
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/partition/{partition}/queues",
+		getPartitionQueues,
+	},
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/partition/{partition}/nodes",
+		getPartitionNodes,
 	},
 
 	// endpoint to retrieve CPU, Memory profiling data,

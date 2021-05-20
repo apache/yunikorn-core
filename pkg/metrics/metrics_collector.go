@@ -62,10 +62,19 @@ func (u *internalMetricsCollector) StartService() {
 					log.Logger().Warn("Could not encode totalApplications metric.", zap.Error(err))
 					totalAppsRunning = -1
 				}
-				totalContainersRunning, err := m.scheduler.getAllocatedContainers()
+				allocatedContainers, err := m.scheduler.getAllocatedContainers()
 				if err != nil {
-					log.Logger().Warn("Could not encode totalContainers metric.", zap.Error(err))
-					totalContainersRunning = -1
+					log.Logger().Warn("Could not encode allocatedContainers metric.", zap.Error(err))
+				}
+				releasedContainers, err := m.scheduler.getReleasedContainers()
+				if err != nil {
+					log.Logger().Warn("Could not encode releasedContainers metric.", zap.Error(err))
+				}
+				totalContainersRunning := allocatedContainers - releasedContainers
+				if totalContainersRunning < 0 {
+					log.Logger().Warn("Could not calculate the totalContainersRunning.",
+						zap.Int("allocatedContainers", allocatedContainers),
+						zap.Int("releasedContainers", releasedContainers))
 				}
 				u.metricsHistory.Store(totalAppsRunning, totalContainersRunning)
 			}

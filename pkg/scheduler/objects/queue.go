@@ -542,7 +542,7 @@ func (sq *Queue) RemoveApplication(app *Application) {
 }
 
 // Get a copy of all apps holding the lock
-func (sq *Queue) getCopyOfApps() map[string]*Application {
+func (sq *Queue) GetCopyOfApps() map[string]*Application {
 	sq.RLock()
 	defer sq.RUnlock()
 	appsCopy := make(map[string]*Application)
@@ -790,7 +790,7 @@ func (sq *Queue) sortApplications(filterApps bool) []*Application {
 		// this is to skip the app filtering in the StateAware policy sorting
 		queueSortType = policies.FifoSortPolicy
 	}
-	return sortApplications(sq.getCopyOfApps(), queueSortType, sq.GetGuaranteedResource())
+	return sortApplications(sq.GetCopyOfApps(), queueSortType, sq.GetGuaranteedResource())
 }
 
 // Return a sorted copy of the queues for this parent queue.

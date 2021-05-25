@@ -33,6 +33,7 @@ import (
 	"gopkg.in/yaml.v2"
 	"gotest.tools/assert"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
@@ -397,7 +398,7 @@ func TestQueryParamInAppsHandler(t *testing.T) {
 	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
 
 	// Check default partition
-	partitionName := "[" + rmID + "]default"
+	partitionName := common.GetNormalizedPartitionName("default", rmID)
 	part := schedulerContext.GetPartition(partitionName)
 	assert.Equal(t, 0, len(part.GetApplications()))
 
@@ -577,7 +578,7 @@ func TestGetClusterUtilJSON(t *testing.T) {
 	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
 
 	// Check test partitions
-	partitionName := "[" + rmID + "]default"
+	partitionName := common.GetNormalizedPartitionName("default", rmID)
 	partition := schedulerContext.GetPartition(partitionName)
 	assert.Equal(t, partitionName, partition.Name)
 	// new app to partition
@@ -662,7 +663,7 @@ func TestGetNodesUtilJSON(t *testing.T) {
 	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
 
 	// Check test partition
-	partitionName := "[" + rmID + "]default"
+	partitionName := common.GetNormalizedPartitionName("default", rmID)
 	partition := schedulerContext.GetPartition(partitionName)
 	assert.Equal(t, partitionName, partition.Name)
 	// create test application
@@ -741,7 +742,7 @@ func TestPartitions(t *testing.T) {
 	assert.Equal(t, 2, len(schedulerContext.GetPartitionMapClone()))
 
 	// Check default partition
-	partitionName := "[" + rmID + "]default"
+	partitionName := common.GetNormalizedPartitionName("default", rmID)
 	defaultPartition := schedulerContext.GetPartition(partitionName)
 	assert.Equal(t, 0, len(defaultPartition.GetApplications()))
 
@@ -898,7 +899,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	assert.Equal(t, 2, len(schedulerContext.GetPartitionMapClone()))
 
 	// Check default partition
-	partitionName := "[" + rmID + "]default"
+	partitionName := common.GetNormalizedPartitionName("default", rmID)
 	part := schedulerContext.GetPartition(partitionName)
 	assert.Equal(t, partitionName, part.Name)
 
@@ -935,20 +936,15 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 
 	// Partition not exists
-	partitionNotExists := "[" + rmID + "]notexists"
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
 	vars = map[string]string{
-		"partition": partitionNotExists,
+		"partition": common.GetNormalizedPartitionName("notexists", rmID),
 	}
 	req = mux.SetURLVars(req, vars)
 	assert.NilError(t, err, "Get Queues for PartitionQueues Handler request failed")
 	resp = &MockResponseWriter{}
 	getPartitionQueues(resp, req)
-	err = json.Unmarshal(resp.outputBytes, &errInfo)
-	assert.NilError(t, err, "failed to unmarshal PartitionQueues Handler response from response body")
-	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, "Partition not found", "JSON error message is incorrect")
-	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+	assertPartitionExists(t, resp)
 }
 
 func TestGetPartitionNodes(t *testing.T) {
@@ -959,7 +955,7 @@ func TestGetPartitionNodes(t *testing.T) {
 	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
 
 	// Check test partition
-	partitionName := "[" + rmID + "]default"
+	partitionName := common.GetNormalizedPartitionName("default", rmID)
 	partition := schedulerContext.GetPartition(partitionName)
 	assert.Equal(t, partitionName, partition.Name)
 
@@ -1003,7 +999,7 @@ func TestGetPartitionNodes(t *testing.T) {
 	var req *http.Request
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/nodes", strings.NewReader(""))
 	vars := map[string]string{
-		"partition": "[rm-123]default",
+		"partition": partitionName,
 	}
 	req = mux.SetURLVars(req, vars)
 	assert.NilError(t, err, "Get Nodes for PartitionNodes Handler request failed")
@@ -1029,19 +1025,13 @@ func TestGetPartitionNodes(t *testing.T) {
 	var req1 *http.Request
 	req1, err = http.NewRequest("GET", "/ws/v1/partition/default/nodes", strings.NewReader(""))
 	vars1 := map[string]string{
-		"partition": "notexists",
+		"partition": common.GetNormalizedPartitionName("notexists", rmID),
 	}
 	req1 = mux.SetURLVars(req1, vars1)
 	assert.NilError(t, err, "Get Nodes for PartitionNodes Handler request failed")
 	resp1 := &MockResponseWriter{}
 	getPartitionNodes(resp1, req1)
-
-	var errInfo dao.YAPIError
-	err = json.Unmarshal(resp1.outputBytes, &errInfo)
-	assert.NilError(t, err, "failed to unmarshal PartitionNodes response from response body")
-	assert.Equal(t, http.StatusBadRequest, resp1.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, "Partition not found", "JSON error message is incorrect")
-	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+	assertPartitionExists(t, resp1)
 }
 
 func TestGetQueueApplicationsHandler(t *testing.T) {
@@ -1053,7 +1043,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
 
 	// Check default partition
-	partitionName := "[" + rmID + "]default"
+	partitionName := common.GetNormalizedPartitionName("default", rmID)
 	part := schedulerContext.GetPartition(partitionName)
 	assert.Equal(t, 0, len(part.GetApplications()))
 
@@ -1069,7 +1059,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	var req *http.Request
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/applications", strings.NewReader(""))
 	vars := map[string]string{
-		"partition": "[rm-123]default",
+		"partition": partitionName,
 		"queue":     "root.default",
 	}
 	req = mux.SetURLVars(req, vars)
@@ -1091,31 +1081,37 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	assert.NilError(t, err, "Get Queue Applications Handler request failed")
 	resp1 := &MockResponseWriter{}
 	getQueueApplications(resp1, req1)
-
-	var errInfo dao.YAPIError
-	err = json.Unmarshal(resp1.outputBytes, &errInfo)
-	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
-	assert.Equal(t, http.StatusBadRequest, resp1.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, "Partition not found", "JSON error message is incorrect")
-	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+	assertPartitionExists(t, resp1)
 
 	var req2 *http.Request
 	req2, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/applications", strings.NewReader(""))
 	vars2 := map[string]string{
-		"partition": "[rm-123]default",
+		"partition": partitionName,
 		"queue":     "notexists",
 	}
 	req2 = mux.SetURLVars(req2, vars2)
 	assert.NilError(t, err, "Get Queue Applications Handler request failed")
 	resp2 := &MockResponseWriter{}
 	getQueueApplications(resp2, req2)
+	assertQueueExists(t, resp2)
+}
 
-	var errInfo2 dao.YAPIError
-	err = json.Unmarshal(resp2.outputBytes, &errInfo2)
+func assertPartitionExists(t *testing.T, resp *MockResponseWriter) {
+	var errInfo dao.YAPIError
+	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
-	assert.Equal(t, http.StatusBadRequest, resp2.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo2.Message, "Queue not found", "JSON error message is incorrect")
-	assert.Equal(t, errInfo2.StatusCode, http.StatusBadRequest)
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
+	assert.Equal(t, errInfo.Message, "Partition not found", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+}
+
+func assertQueueExists(t *testing.T, resp *MockResponseWriter) {
+	var errInfo dao.YAPIError
+	err := json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
+	assert.Equal(t, errInfo.Message, "Queue not found", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
 func TestValidateQueue(t *testing.T) {

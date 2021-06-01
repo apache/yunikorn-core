@@ -1121,6 +1121,35 @@ func TestTimeoutPlaceholderCompleting(t *testing.T) {
 	assert.Assert(t, app.IsCompleting(), "App should still be in completing state")
 }
 
+func TestAppTimersAfterAppRemoval(t *testing.T) {
+	phTimeout := common.ConvertSITimeout(50)
+	app, _ := newApplicationWithPlaceholderTimeout(appID1, "default", "root.a", 50)
+	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should be nil on create")
+	assert.Equal(t, app.execTimeout, phTimeout, "placeholder timeout not initialised correctly")
+	app.SetState(Accepted.String())
+
+	resMap := map[string]string{"memory": "100", "vcores": "10"}
+	res, err := resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err, "Unexpected error when creating resource from map")
+	// add the placeholder to the app
+	ph := newPlaceholderAlloc(appID1, "waiting", nodeID1, "root.a", res)
+	app.AddAllocation(ph)
+	assert.Assert(t, app.placeholderTimer != nil, "Placeholder timer should be initiated after the first placeholder allocation")
+	// add a real allocation as well
+	alloc := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
+	app.AddAllocation(alloc)
+	// move on to running
+	app.SetState(Running.String())
+	app.RemoveAllAllocations()
+	assert.Assert(t, app.IsCompleting(), "App should be in completing state all allocs have been removed")
+	if app.placeholderTimer != nil {
+		t.Fatalf("Placeholder timer has not be cleared after app removal as expected, %v", app.placeholderTimer)
+	}
+	if app.stateTimer != nil {
+		t.Fatalf("State timer has not be cleared after app removal as expected, %v", app.stateTimer)
+	}
+}
+
 func TestGetAllRequests(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	ask := newAllocationAsk(aKey, appID1, res)

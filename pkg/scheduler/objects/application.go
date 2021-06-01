@@ -283,6 +283,9 @@ func (sa *Application) clearPlaceholderTimer() {
 	}
 	sa.placeholderTimer.Stop()
 	sa.placeholderTimer = nil
+	log.Logger().Debug("Application placeholder timer cleared",
+		zap.String("AppID", sa.ApplicationID),
+		zap.Duration("Timeout", sa.execTimeout))
 }
 
 func (sa *Application) timeoutPlaceholderProcessing() {
@@ -1291,6 +1294,8 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 				zap.Error(err))
 		}
 	}
+	sa.clearPlaceholderTimer()
+	sa.clearStateTimer()
 	return allocationsToRelease
 }
 

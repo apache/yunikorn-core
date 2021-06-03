@@ -331,7 +331,7 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 			zap.String("AppID", sa.ApplicationID),
 			zap.Int("releasing placeholders", len(sa.allocations)),
 			zap.Int("releasing asks", len(sa.requests)),
-			zap.String("used Scheduling type", sa.gangSchedulingStyle))
+			zap.String("gang scheduling style", sa.gangSchedulingStyle))
 		// change the status of the app to Failing. Once all the placeholders are cleaned up, if will be changed to Failed
 		event := ResumeApplication
 		if sa.gangSchedulingStyle == Hard {

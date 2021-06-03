@@ -106,9 +106,9 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	}
 	gangSchedStyle := siApp.GetGangSchedulingStyle()
 	if gangSchedStyle != Soft && gangSchedStyle != Hard {
-		log.Logger().Info("Unknown gang scheduling style, using hard style as default",
+		log.Logger().Info("Unknown gang scheduling style, using soft style as default",
 			zap.String("gang scheduling style", gangSchedStyle))
-		gangSchedStyle = Hard
+		gangSchedStyle = Soft
 	}
 	app.gangSchedulingStyle = gangSchedStyle
 	app.execTimeout = placeholderTimeout

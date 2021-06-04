@@ -50,7 +50,7 @@ var (
 
 const(
 	Soft string = "Soft"
-	Hard = "Hard"
+	Hard string = "Hard"
 	)
 
 type Application struct {

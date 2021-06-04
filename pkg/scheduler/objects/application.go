@@ -47,11 +47,10 @@ var (
 	defaultPlaceholderTimeout = 15 * time.Minute
 )
 
-
-const(
+const (
 	Soft string = "Soft"
 	Hard string = "Hard"
-	)
+)
 
 type Application struct {
 	ApplicationID  string

@@ -974,7 +974,15 @@ func TestReplaceAllocation(t *testing.T) {
 	}
 }
 
+func TestTimeoutPlaceholderSoftStyle(t *testing.T) {
+	runTimeoutPlaceholderTest(t, Resuming.String(), Soft)
+}
+
 func TestTimeoutPlaceholderAllocAsk(t *testing.T) {
+	runTimeoutPlaceholderTest(t, Failing.String(), Hard)
+}
+
+func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulingStyle string) {
 	// create a fake queue
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
@@ -984,6 +992,7 @@ func TestTimeoutPlaceholderAllocAsk(t *testing.T) {
 	defer func() { defaultPlaceholderTimeout = originalPhTimeout }()
 
 	app, testHandler := newApplicationWithHandler(appID1, "default", "root.a")
+	app.gangSchedulingStyle = gangSchedulingStyle
 	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should be nil on create")
 	// fake the queue assignment (needed with ask)
 	app.queue = queue
@@ -1009,7 +1018,7 @@ func TestTimeoutPlaceholderAllocAsk(t *testing.T) {
 		return app.placeholderTimer == nil
 	})
 	assert.NilError(t, err, "Placeholder timeout cleanup did not trigger unexpectedly")
-	assert.Assert(t, app.IsFailing(), "Application did not progress into Failing state")
+	assert.Equal(t, app.stateMachine.Current(), expectedState, "Application did not progress into expected state")
 	events := testHandler.getEvents()
 	var found int
 	for _, event := range events {

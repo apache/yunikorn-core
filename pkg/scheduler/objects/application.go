@@ -47,6 +47,11 @@ var (
 	defaultPlaceholderTimeout = 15 * time.Minute
 )
 
+const (
+	Soft string = "Soft"
+	Hard string = "Hard"
+)
+
 type Application struct {
 	ApplicationID  string
 	Partition      string
@@ -69,6 +74,7 @@ type Application struct {
 	stateTimer           *time.Timer            // timer for state time
 	execTimeout          time.Duration          // execTimeout for the application run
 	placeholderTimer     *time.Timer            // placeholder replace timer
+	gangSchedulingStyle  string                 // gang scheduling style can be hard (after timeout we fail the application), or soft (after timeeout we schedule it as a normal application)
 
 	rmEventHandler     handler.EventHandler
 	rmID               string
@@ -97,6 +103,13 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	if time.Duration(0) == placeholderTimeout {
 		placeholderTimeout = defaultPlaceholderTimeout
 	}
+	gangSchedStyle := siApp.GetGangSchedulingStyle()
+	if gangSchedStyle != Soft && gangSchedStyle != Hard {
+		log.Logger().Info("Unknown gang scheduling style, using soft style as default",
+			zap.String("gang scheduling style", gangSchedStyle))
+		gangSchedStyle = Soft
+	}
+	app.gangSchedulingStyle = gangSchedStyle
 	app.execTimeout = placeholderTimeout
 	app.user = ugi
 	app.rmEventHandler = eventHandler
@@ -164,6 +177,10 @@ func (sa *Application) IsFailing() bool {
 
 func (sa *Application) IsFailed() bool {
 	return sa.stateMachine.Is(Failed.String())
+}
+
+func (sa *Application) IsResuming() bool {
+	return sa.stateMachine.Is(Resuming.String())
 }
 
 // HandleApplicationEvent handles the state event for the application.
@@ -315,9 +332,14 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 		log.Logger().Info("Placeholder timeout, releasing asks and placeholders",
 			zap.String("AppID", sa.ApplicationID),
 			zap.Int("releasing placeholders", len(sa.allocations)),
-			zap.Int("releasing asks", len(sa.requests)))
+			zap.Int("releasing asks", len(sa.requests)),
+			zap.String("gang scheduling style", sa.gangSchedulingStyle))
 		// change the status of the app to Failing. Once all the placeholders are cleaned up, if will be changed to Failed
-		if err := sa.HandleApplicationEventWithInfo(FailApplication, "ResourceReservationTimeout"); err != nil {
+		event := ResumeApplication
+		if sa.gangSchedulingStyle == Hard {
+			event = FailApplication
+		}
+		if err := sa.HandleApplicationEventWithInfo(event, "ResourceReservationTimeout"); err != nil {
 			log.Logger().Debug("Application state change failed when placeholder timed out",
 				zap.String("AppID", sa.ApplicationID),
 				zap.String("currentState", sa.CurrentState()),
@@ -1248,6 +1270,9 @@ func (sa *Application) removeAllocationInternal(uuid string) *Allocation {
 				event := CompleteApplication
 				if sa.IsFailing() {
 					event = FailApplication
+				}
+				if sa.IsResuming() {
+					event = RunApplication
 				}
 				if err := sa.HandleApplicationEvent(event); err != nil {
 					log.Logger().Warn("Application state not changed while removing a placeholder allocation",

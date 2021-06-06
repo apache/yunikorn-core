@@ -899,6 +899,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	assert.Equal(t, 2, len(schedulerContext.GetPartitionMapClone()))
 
 	// Check default partition
+	partitionNameWithoutClusterID := "default"
 	partitionName := common.GetNormalizedPartitionName("default", rmID)
 	part := schedulerContext.GetPartition(partitionName)
 	assert.Equal(t, partitionName, part.Name)
@@ -908,7 +909,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	var req *http.Request
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
 	vars := map[string]string{
-		"partition": partitionName,
+		"partition": partitionNameWithoutClusterID,
 	}
 	req = mux.SetURLVars(req, vars)
 	assert.NilError(t, err, "Get Queues for PartitionQueues Handler request failed")
@@ -938,7 +939,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	// Partition not exists
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
 	vars = map[string]string{
-		"partition": common.GetNormalizedPartitionName("notexists", rmID),
+		"partition": "notexists",
 	}
 	req = mux.SetURLVars(req, vars)
 	assert.NilError(t, err, "Get Queues for PartitionQueues Handler request failed")
@@ -955,6 +956,7 @@ func TestGetPartitionNodes(t *testing.T) {
 	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
 
 	// Check test partition
+	partitionNameWithoutClusterID := "default"
 	partitionName := common.GetNormalizedPartitionName("default", rmID)
 	partition := schedulerContext.GetPartition(partitionName)
 	assert.Equal(t, partitionName, partition.Name)
@@ -999,7 +1001,7 @@ func TestGetPartitionNodes(t *testing.T) {
 	var req *http.Request
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/nodes", strings.NewReader(""))
 	vars := map[string]string{
-		"partition": partitionName,
+		"partition": partitionNameWithoutClusterID,
 	}
 	req = mux.SetURLVars(req, vars)
 	assert.NilError(t, err, "Get Nodes for PartitionNodes Handler request failed")
@@ -1025,7 +1027,7 @@ func TestGetPartitionNodes(t *testing.T) {
 	var req1 *http.Request
 	req1, err = http.NewRequest("GET", "/ws/v1/partition/default/nodes", strings.NewReader(""))
 	vars1 := map[string]string{
-		"partition": common.GetNormalizedPartitionName("notexists", rmID),
+		"partition": "notexists",
 	}
 	req1 = mux.SetURLVars(req1, vars1)
 	assert.NilError(t, err, "Get Nodes for PartitionNodes Handler request failed")
@@ -1043,6 +1045,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
 
 	// Check default partition
+	partitionNameWithoutClusterID := "default"
 	partitionName := common.GetNormalizedPartitionName("default", rmID)
 	part := schedulerContext.GetPartition(partitionName)
 	assert.Equal(t, 0, len(part.GetApplications()))
@@ -1059,7 +1062,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	var req *http.Request
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/applications", strings.NewReader(""))
 	vars := map[string]string{
-		"partition": partitionName,
+		"partition": partitionNameWithoutClusterID,
 		"queue":     "root.default",
 	}
 	req = mux.SetURLVars(req, vars)
@@ -1074,7 +1077,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	var req1 *http.Request
 	req1, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/applications", strings.NewReader(""))
 	vars1 := map[string]string{
-		"partition": common.GetNormalizedPartitionName("notexists", rmID),
+		"partition": "notexists",
 		"queue":     "root.default",
 	}
 	req1 = mux.SetURLVars(req1, vars1)
@@ -1086,7 +1089,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	var req2 *http.Request
 	req2, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/applications", strings.NewReader(""))
 	vars2 := map[string]string{
-		"partition": partitionName,
+		"partition": partitionNameWithoutClusterID,
 		"queue":     "notexists",
 	}
 	req2 = mux.SetURLVars(req2, vars2)

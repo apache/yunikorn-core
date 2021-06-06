@@ -45,6 +45,7 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
+const partitionNameWithoutClusterID = "default"
 const startConf = `
 partitions:
   - name: default
@@ -899,7 +900,6 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	assert.Equal(t, 2, len(schedulerContext.GetPartitionMapClone()))
 
 	// Check default partition
-	partitionNameWithoutClusterID := "default"
 	partitionName := common.GetNormalizedPartitionName("default", rmID)
 	part := schedulerContext.GetPartition(partitionName)
 	assert.Equal(t, partitionName, part.Name)
@@ -956,7 +956,6 @@ func TestGetPartitionNodes(t *testing.T) {
 	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
 
 	// Check test partition
-	partitionNameWithoutClusterID := "default"
 	partitionName := common.GetNormalizedPartitionName("default", rmID)
 	partition := schedulerContext.GetPartition(partitionName)
 	assert.Equal(t, partitionName, partition.Name)
@@ -1045,7 +1044,6 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
 
 	// Check default partition
-	partitionNameWithoutClusterID := "default"
 	partitionName := common.GetNormalizedPartitionName("default", rmID)
 	part := schedulerContext.GetPartition(partitionName)
 	assert.Equal(t, 0, len(part.GetApplications()))

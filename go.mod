@@ -25,6 +25,7 @@ require (
 	github.com/HdrHistogram/hdrhistogram-go v1.0.1 // indirect
 	github.com/apache/incubator-yunikorn-scheduler-interface v0.9.1-0.20210603182012-da24a8edf1ce
 	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/google/uuid v1.2.0
 	github.com/gorilla/mux v1.7.3
 	github.com/looplab/fsm v0.1.0
 	github.com/opentracing/opentracing-go v1.2.0
@@ -33,7 +34,6 @@ require (
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.4.1
 	github.com/prometheus/procfs v0.0.8 // indirect
-	github.com/satori/go.uuid v1.2.0
 	github.com/uber/jaeger-client-go v2.25.0+incompatible
 	github.com/uber/jaeger-lib v2.4.0+incompatible
 	go.uber.org/atomic v1.5.1 // indirect

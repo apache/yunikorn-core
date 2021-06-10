@@ -1266,7 +1266,7 @@ func (sa *Application) removeAllocationInternal(uuid string) *Allocation {
 		// if all the placeholders are replaced, clear the placeholder timer
 		if resources.IsZero(sa.allocatedPlaceholder) {
 			sa.clearPlaceholderTimer()
-			if (sa.IsCompleting() && sa.stateTimer == nil) || sa.IsFailing() {
+			if (sa.IsCompleting() && sa.stateTimer == nil) || sa.IsFailing() || sa.IsResuming() {
 				event := CompleteApplication
 				if sa.IsFailing() {
 					event = FailApplication

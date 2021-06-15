@@ -372,6 +372,17 @@ func (cc *ClusterContext) GetPartition(partitionName string) *PartitionContext {
 	return cc.partitions[partitionName]
 }
 
+func (cc *ClusterContext) GetPartitionWithoutClusterID(partitionName string) *PartitionContext {
+	cc.RLock()
+	defer cc.RUnlock()
+	for k, v := range cc.partitions {
+		if len(partitionName) > 0 && common.GetPartitionNameWithoutClusterID(k) == partitionName {
+			return v
+		}
+	}
+	return nil
+}
+
 // Get the scheduling application based on the ID from the partition.
 // Returns nil if the partition or app cannot be found.
 // Visible for tests

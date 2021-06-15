@@ -626,7 +626,7 @@ func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var partitionQueuesDAOInfo dao.PartitionQueueDAOInfo
-	var partition = schedulerContext.GetPartition(partitionName)
+	var partition = schedulerContext.GetPartitionWithoutClusterID(partitionName)
 	if partition != nil {
 		partitionQueuesDAOInfo = partition.GetPartitionQueues()
 	} else {
@@ -650,7 +650,7 @@ func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, "Incorrect URL path. Please check the usage documentation", http.StatusBadRequest)
 		return
 	}
-	partitionContext := schedulerContext.GetPartition(partition)
+	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext != nil {
 		var nodesDao []*dao.NodeDAOInfo
 		for _, node := range partitionContext.GetNodes() {
@@ -690,16 +690,14 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 	var appExistsInPartition = false
 	var appExistsInQueue = false
 	var appsDao []*dao.ApplicationDAOInfo
-	lists := schedulerContext.GetPartitionMapClone()
-	for _, partitionContext := range lists {
-		if partitionContext.Name == partition {
-			appExistsInPartition = true
-			appList := partitionContext.GetApplications()
-			for _, app := range appList {
-				if strings.EqualFold(queueName, app.GetQueueName()) {
-					appExistsInQueue = true
-					appsDao = append(appsDao, getApplicationJSON(app))
-				}
+	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
+	if partitionContext != nil {
+		appExistsInPartition = true
+		appList := partitionContext.GetApplications()
+		for _, app := range appList {
+			if strings.EqualFold(queueName, app.GetQueueName()) {
+				appExistsInQueue = true
+				appsDao = append(appsDao, getApplicationJSON(app))
 			}
 		}
 	}

@@ -46,10 +46,6 @@ var resourceUsageRangeBuckets = []string{
 // SchedulerMetrics includes all core metrics variables to be declared
 type SchedulerMetrics struct {
 	containerAllocation        *prometheus.CounterVec
-	allocatedContainers        prometheus.Counter
-	rejectedContainers         prometheus.Counter
-	schedulingErrors           prometheus.Counter
-	releasedContainers         prometheus.Counter
 	applicationSubmissions     *prometheus.CounterVec
 	totalApplicationsRunning   prometheus.Gauge
 	totalApplicationsCompleted prometheus.Gauge
@@ -78,13 +74,8 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "container_allocation_attempt_total",
-			Help: "Total number of attempts to allocate containers. State of the attempt includes `allocated`, " +
-				"`rejected`, `error`, `released`",
+			Help:      "Total number of attempts to allocate containers. State of the attempt includes `allocated`, `rejected`, `error`, `released`",
 		}, []string{"state"})
-	s.allocatedContainers = s.containerAllocation.With(prometheus.Labels{"state": "allocated"})
-	s.rejectedContainers = s.containerAllocation.With(prometheus.Labels{"state": "rejected"})
-	s.schedulingErrors = s.containerAllocation.With(prometheus.Labels{"state": "error"})
-	s.releasedContainers = s.containerAllocation.With(prometheus.Labels{"state": "released"})
 
 	// Application submission
 	s.applicationSubmissions = prometheus.NewCounterVec(
@@ -213,16 +204,16 @@ func (m *SchedulerMetrics) ObserveQueueSortingLatency(start time.Time) {
 // Below is to define and implement all the metrics operation for Prometheus
 
 func (m *SchedulerMetrics) IncAllocatedContainer() {
-	m.allocatedContainers.Inc()
+	m.containerAllocation.With(prometheus.Labels{"state": "allocated"}).Inc()
 }
 
 func (m *SchedulerMetrics) AddAllocatedContainers(value int) {
-	m.allocatedContainers.Add(float64(value))
+	m.containerAllocation.With(prometheus.Labels{"state": "allocated"}).Add(float64(value))
 }
 
 func (m *SchedulerMetrics) getAllocatedContainers() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.allocatedContainers.Write(metricDto)
+	err := m.containerAllocation.With(prometheus.Labels{"state": "allocated"}).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Counter.Value), nil
 	}
@@ -230,16 +221,16 @@ func (m *SchedulerMetrics) getAllocatedContainers() (int, error) {
 }
 
 func (m *SchedulerMetrics) IncReleasedContainer() {
-	m.releasedContainers.Inc()
+	m.containerAllocation.With(prometheus.Labels{"state": "released"}).Inc()
 }
 
 func (m *SchedulerMetrics) AddReleasedContainers(value int) {
-	m.releasedContainers.Add(float64(value))
+	m.containerAllocation.With(prometheus.Labels{"state": "released"}).Add(float64(value))
 }
 
 func (m *SchedulerMetrics) getReleasedContainers() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.releasedContainers.Write(metricDto)
+	err := m.containerAllocation.With(prometheus.Labels{"state": "released"}).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Counter.Value), nil
 	}
@@ -249,24 +240,24 @@ func (m *SchedulerMetrics) getReleasedContainers() (int, error) {
 // Metrics Ops related to allocationScheduleFailures
 
 func (m *SchedulerMetrics) IncRejectedContainer() {
-	m.rejectedContainers.Inc()
+	m.containerAllocation.With(prometheus.Labels{"state": "rejected"}).Inc()
 }
 
 func (m *SchedulerMetrics) AddRejectedContainers(value int) {
-	m.rejectedContainers.Add(float64(value))
+	m.containerAllocation.With(prometheus.Labels{"state": "rejected"}).Add(float64(value))
 }
 
 func (m *SchedulerMetrics) IncSchedulingError() {
-	m.schedulingErrors.Inc()
+	m.containerAllocation.With(prometheus.Labels{"state": "error"}).Inc()
 }
 
 func (m *SchedulerMetrics) AddSchedulingErrors(value int) {
-	m.schedulingErrors.Add(float64(value))
+	m.containerAllocation.With(prometheus.Labels{"state": "error"}).Add(float64(value))
 }
 
 func (m *SchedulerMetrics) GetSchedulingErrors() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.schedulingErrors.Write(metricDto)
+	err := m.containerAllocation.With(prometheus.Labels{"state": "error"}).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Counter.Value), nil
 	}

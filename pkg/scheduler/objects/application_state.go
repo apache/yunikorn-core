@@ -152,7 +152,7 @@ func NewAppState() *fsm.FSM {
 				setTimer(completingTimeout, event, CompleteApplication)
 			},
 			fmt.Sprintf("leave_%s", New.String()): func(event *fsm.Event) {
-				metrics.GetSchedulerMetrics().IncTotalApplicationsAdded()
+				metrics.GetSchedulerMetrics().IncTotalApplicationsAccepted()
 			},
 			fmt.Sprintf("enter_%s", Rejected.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsRejected()

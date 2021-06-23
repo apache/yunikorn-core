@@ -843,15 +843,15 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() interfaces.Nod
 				}
 				// Is real allocation matches with placeholder resource?
 				if ! resources.Equals(alloc.AllocatedResource, ph.AllocatedResource) {
+					log.Logger().Warn("Real allocation is not matching with placeholder allocation", zap.String("Real alloc: ", alloc.AllocationKey), zap.String("Real alloc resource: ", alloc.AllocatedResource.DAOString()), zap.String("Placeholder alloc: ", ph.AllocationKey), zap.String("Placeholder alloc resource: ", ph.AllocatedResource.DAOString()))
 					// post scheduling events via the event plugin
 					if eventCache := events.GetEventCache(); eventCache != nil {
-						message := fmt.Sprintf("Real Pod allocation %s is not matching with placeholder allocation %s in application %s", request.AllocationKey, ph.AllocationKey, request.ApplicationID)
+						message := fmt.Sprintf("Real Pod %s allocation %s is not matching with placeholder %s allocation %s in application %s", request.AllocationKey, request.AllocatedResource.DAOString(), ph.AllocationKey, ph.AllocatedResource.DAOString(), request.ApplicationID)
 						if event, err := events.CreateRequestEventRecord(request.AllocationKey, request.ApplicationID, "Resource Allocation Mismatch between real and placeholder", message); err != nil {
-							log.Logger().Info("Event creation failed",
+							log.Logger().Warn("Event creation failed",
 								zap.String("event message", message),
 								zap.Error(err))
 						} else {
-							log.Logger().Info("added event")
 							eventCache.AddEvent(event)
 						}
 					}

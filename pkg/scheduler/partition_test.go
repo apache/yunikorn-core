@@ -1388,7 +1388,7 @@ func TestPlaceholderAndRealAllocationResMismatch(t *testing.T) {
 	assert.Equal(t, record.Type, si.EventRecord_REQUEST)
 	assert.Equal(t, record.ObjectID, "real-2")
 	assert.Equal(t, record.GroupID, "app-1")
-	assert.Equal(t, record.Message, "Real Pod allocation real-2 is not matching with placeholder allocation ph-1 in application app-1")
+	assert.Equal(t, record.Message, "Real Pod real-2 allocation [first:2] is not matching with placeholder ph-1 allocation [first:1] in application app-1")
 	assert.Equal(t, record.Reason, "Resource Allocation Mismatch between real and placeholder")
 }
 

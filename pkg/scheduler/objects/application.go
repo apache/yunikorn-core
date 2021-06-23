@@ -468,7 +468,7 @@ func (sa *Application) removeAsksInternal(allocKey string) int {
 	// 2) if confirmed allocations is zero (no real tasks running)
 	// Change the state to completing.
 	// When the resource trackers are zero we should not expect anything to come in later.
-	if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) && !sa.IsFailing() {
+	if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) && !sa.IsFailing() && !sa.IsCompleting() {
 		if err := sa.HandleApplicationEvent(CompleteApplication); err != nil {
 			log.Logger().Warn("Application state not changed to Completing while updating ask(s)",
 				zap.String("currentState", sa.CurrentState()),

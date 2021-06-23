@@ -842,7 +842,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() interfaces.Nod
 						zap.Error(err))
 				}
 				// Is real allocation matches with placeholder resource?
-				if ! resources.Equals(alloc.AllocatedResource, ph.AllocatedResource) {
+				if !resources.Equals(alloc.AllocatedResource, ph.AllocatedResource) {
 					log.Logger().Warn("Real allocation is not matching with placeholder allocation", zap.String("Real alloc: ", alloc.AllocationKey), zap.String("Real alloc resource: ", alloc.AllocatedResource.DAOString()), zap.String("Placeholder alloc: ", ph.AllocationKey), zap.String("Placeholder alloc resource: ", ph.AllocatedResource.DAOString()))
 					// post scheduling events via the event plugin
 					if eventCache := events.GetEventCache(); eventCache != nil {

@@ -23,8 +23,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/events"
 	"gotest.tools/assert"
+
+	"github.com/apache/incubator-yunikorn-core/pkg/events"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"

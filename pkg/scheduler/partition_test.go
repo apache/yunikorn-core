@@ -25,6 +25,8 @@ import (
 
 	"gotest.tools/assert"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/events"
+
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
@@ -1313,6 +1315,82 @@ func TestAddTGAppDynamic(t *testing.T) {
 	if queue == nil {
 		t.Fatal("queue should have been added, even if app failed")
 	}
+}
+
+func TestPlaceholderAndRealAllocationResMismatch(t *testing.T) {
+	events.CreateAndSetEventCache()
+	cache := events.GetEventCache()
+	cache.StartService()
+
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	if alloc := partition.tryPlaceholderAllocate(); alloc != nil {
+		t.Fatalf("empty cluster placeholder allocate returned allocation: %s", alloc)
+	}
+
+	var tgRes, res *resources.Resource
+	var res1 *resources.Resource
+	tgRes, err = resources.NewResourceFromConf(map[string]string{"first": "10"})
+	assert.NilError(t, err, "failed to create resource")
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "1"})
+	assert.NilError(t, err, "failed to create resource")
+	res1, err = resources.NewResourceFromConf(map[string]string{"first": "2"})
+	assert.NilError(t, err, "failed to create resource")
+
+	// add node to allow allocation
+	err = partition.AddNode(newNodeMaxResource(nodeID1, tgRes), nil)
+	assert.NilError(t, err, "test node-1 add failed unexpected")
+	node := partition.GetNode(nodeID1)
+	if node == nil {
+		t.Fatal("new node was not found on the partition")
+	}
+
+	// add the app with placeholder request
+	app := newApplicationTG(appID1, "default", "root.default", tgRes)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "app-1 should have been added to the partition")
+	// add an ask for a placeholder and allocate
+	const taskGroup = "tg-1"
+	ask := newAllocationAskTG(phID, appID1, taskGroup, res, true)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "failed to add placeholder ask ph-1 to app")
+	// try to allocate placeholder should just return
+	alloc := partition.tryPlaceholderAllocate()
+	if alloc != nil {
+		t.Fatalf("placeholder ask should not be allocated: %s", alloc)
+	}
+	// try to allocate a placeholder via normal allocate
+	alloc = partition.tryAllocate()
+	if alloc == nil {
+		t.Fatal("expected first placeholder to be allocated")
+	}
+
+	// add an ask with TG but different resource
+	ask = newAllocationAskTG("real-2", appID1, taskGroup, res1, false)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "failed to add ask real-2 to app with correct TG")
+	alloc = partition.tryPlaceholderAllocate()
+	if alloc == nil {
+		t.Fatal("allocation should have matched placeholder")
+	}
+
+	// wait for events to be processed
+	err = common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
+		return cache.Store.CountStoredEvents() == 1
+	})
+	assert.NilError(t, err, "the event should have been processed")
+
+	records := cache.Store.CollectEvents()
+	if records == nil {
+		t.Fatal("collecting eventChannel should return something")
+	}
+	assert.Equal(t, len(records), 1)
+	record := records[0]
+	assert.Equal(t, record.Type, si.EventRecord_REQUEST)
+	assert.Equal(t, record.ObjectID, "real-2")
+	assert.Equal(t, record.GroupID, "app-1")
+	assert.Equal(t, record.Message, "Real Pod real-2 allocation [first:2] is not matching with placeholder ph-1 allocation [first:1] in application app-1")
+	assert.Equal(t, record.Reason, "Resource Allocation Mismatch between real and placeholder")
 }
 
 // simple direct replace with one node

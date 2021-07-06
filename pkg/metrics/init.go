@@ -72,9 +72,9 @@ type CoreSchedulerMetrics interface {
 	IncReleasedContainer()
 	AddReleasedContainers(value int)
 	getReleasedContainers() (int, error)
-	// Metrics Ops related to TotalApplicationsAdded
-	IncTotalApplicationsAdded()
-	AddTotalApplicationsAdded(value int)
+	// Metrics Ops related to totalApplicationsAccepted
+	IncTotalApplicationsAccepted()
+	AddTotalApplicationsAccepted(value int)
 
 	// Metrics Ops related to TotalApplicationsRejected
 	IncTotalApplicationsRejected()

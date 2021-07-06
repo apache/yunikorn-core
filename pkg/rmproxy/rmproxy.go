@@ -137,7 +137,7 @@ func (rmp *RMProxy) processApplicationUpdateEvent(event *rmevent.RMApplicationUp
 		metrics.GetSchedulerMetrics().AddTotalApplicationsRejected(len(event.RejectedApplications))
 	}
 	if len(event.AcceptedApplications) > 0 {
-		metrics.GetSchedulerMetrics().AddTotalApplicationsAdded(len(event.AcceptedApplications))
+		metrics.GetSchedulerMetrics().AddTotalApplicationsAccepted(len(event.AcceptedApplications))
 	}
 }
 

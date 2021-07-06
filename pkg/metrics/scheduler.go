@@ -51,8 +51,6 @@ type SchedulerMetrics struct {
 	schedulingErrors           prometheus.Counter
 	releasedContainers         prometheus.Counter
 	applicationSubmissions     *prometheus.CounterVec
-	totalApplicationsAccepted  prometheus.Counter
-	totalApplicationsRejected  prometheus.Counter
 	totalApplicationsRunning   prometheus.Gauge
 	totalApplicationsCompleted prometheus.Gauge
 	totalNodesActive           prometheus.Gauge
@@ -96,8 +94,6 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Name:      "application_submission_total",
 			Help:      "Total number of application submissions. State of the attempt includes `accepted` and `rejected`.",
 		}, []string{"result"})
-	s.totalApplicationsAccepted = s.applicationSubmissions.With(prometheus.Labels{"result": "accepted"})
-	s.totalApplicationsRejected = s.applicationSubmissions.With(prometheus.Labels{"result": "rejected"})
 
 	// Application status
 	s.totalApplicationsRunning = prometheus.NewGauge(
@@ -278,19 +274,19 @@ func (m *SchedulerMetrics) GetSchedulingErrors() (int, error) {
 }
 
 func (m *SchedulerMetrics) IncTotalApplicationsAccepted() {
-	m.totalApplicationsAccepted.Inc()
+	m.applicationSubmissions.With(prometheus.Labels{"result": "accepted"}).Inc()
 }
 
 func (m *SchedulerMetrics) AddTotalApplicationsAccepted(value int) {
-	m.totalApplicationsAccepted.Add(float64(value))
+	m.applicationSubmissions.With(prometheus.Labels{"result": "accepted"}).Add(float64(value))
 }
 
 func (m *SchedulerMetrics) IncTotalApplicationsRejected() {
-	m.totalApplicationsRejected.Inc()
+	m.applicationSubmissions.With(prometheus.Labels{"result": "rejected"}).Inc()
 }
 
 func (m *SchedulerMetrics) AddTotalApplicationsRejected(value int) {
-	m.totalApplicationsRejected.Add(float64(value))
+	m.applicationSubmissions.With(prometheus.Labels{"result": "rejected"}).Add(float64(value))
 }
 
 func (m *SchedulerMetrics) IncTotalApplicationsRunning() {

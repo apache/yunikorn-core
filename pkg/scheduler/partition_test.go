@@ -344,23 +344,7 @@ func TestGetNodes(t *testing.T) {
 
 	assert.Equal(t, 4, len(partition.nodes), "node list not correct length")
 	nodes = partition.getSchedulableNodes()
-	// returned list should be only two long
-	assert.Equal(t, 2, len(nodes), "node list not filtered")
-	// map iteration is random so don't know which we get first
-	for _, node = range nodes {
-		if node.NodeID != nodeID1 && node.NodeID != nodeID2 {
-			t.Fatalf("unexpected node returned in list: %s", node.NodeID)
-		}
-	}
-	nodes = partition.getNodes(false)
-	// returned list should be 3 long: no reserved filter
-	assert.Equal(t, 3, len(nodes), "node list was incorrectly filtered")
-	// check if we have all nodes: since there is a backing map we cannot have duplicates
-	for _, node = range nodes {
-		if node.NodeID == node3 {
-			t.Fatalf("unexpected node returned in list: %s", node.NodeID)
-		}
-	}
+	assert.Equal(t, 4, len(nodes), "node list not correct length")
 }
 
 func TestAddApp(t *testing.T) {

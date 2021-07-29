@@ -23,7 +23,7 @@ go 1.12
 
 require (
 	github.com/HdrHistogram/hdrhistogram-go v1.0.1 // indirect
-	github.com/apache/incubator-yunikorn-scheduler-interface v0.11.0
+	github.com/apache/incubator-yunikorn-scheduler-interface v0.11.1-0.20210723194917-606421b15601
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/google/uuid v1.2.0
 	github.com/gorilla/mux v1.7.3
@@ -49,3 +49,5 @@ require (
 	gotest.tools v2.2.0+incompatible
 	honnef.co/go/tools v0.0.1-2020.1.3 // indirect
 )
+
+replace github.com/apache/incubator-yunikorn-scheduler-interface => ../incubator-yunikorn-scheduler-interface

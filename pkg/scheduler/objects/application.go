@@ -21,6 +21,7 @@ package objects
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -36,6 +37,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
+	interfaceCommon "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -874,7 +876,8 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() interfaces.Nod
 				log.Logger().Warn("Node iterator failed to return a node")
 				return nil
 			}
-			if err := node.preAllocateCheck(reqFit.AllocatedResource, reservationKey(nil, sa, reqFit), false); err != nil {
+			// placeholder is not daemonSet pod, so set ignoreUnschedulable node to false
+			if err := node.preAllocateCheck(reqFit.AllocatedResource, reservationKey(nil, sa, reqFit), false, false); err != nil {
 				continue
 			}
 			// skip the node if conditions can not be satisfied
@@ -1077,7 +1080,12 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 	allocKey := ask.AllocationKey
 	toAllocate := ask.AllocatedResource
 	// create the key for the reservation
-	if err := node.preAllocateCheck(toAllocate, reservationKey(nil, sa, ask), false); err != nil {
+	ignore, err := strconv.ParseBool(ask.Tags[interfaceCommon.DomainYuniKorn+interfaceCommon.KeyIgnoreUnschedulable])
+	if err != nil {
+		log.Logger().Debug("Failed to convert allocationTag ignoreUnschedulable from string to bool")
+		ignore = false
+	}
+	if err := node.preAllocateCheck(toAllocate, reservationKey(nil, sa, ask), false, ignore); err != nil {
 		// skip schedule onto node
 		return nil
 	}

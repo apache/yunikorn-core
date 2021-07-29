@@ -1080,12 +1080,19 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 	allocKey := ask.AllocationKey
 	toAllocate := ask.AllocatedResource
 	// create the key for the reservation
-	ignore, err := strconv.ParseBool(ask.Tags[interfaceCommon.DomainYuniKorn+interfaceCommon.KeyIgnoreUnschedulable])
-	if err != nil {
-		log.Logger().Debug("Failed to convert allocationTag ignoreUnschedulable from string to bool")
+	var ignore bool
+	var err error
+	if ignoreUnschedulable, ok := ask.Tags[interfaceCommon.DomainYuniKorn+interfaceCommon.KeyIgnoreUnschedulable]; !ok {
+		// if there isn't ignoreUnschedulable tag, set it to false
 		ignore = false
+	} else {
+		ignore, err = strconv.ParseBool(ignoreUnschedulable)
+		if err != nil {
+			log.Logger().Warn("Failed to convert allocationTag ignoreUnschedulable from string to bool")
+			ignore = false
+		}
 	}
-	if err := node.preAllocateCheck(toAllocate, reservationKey(nil, sa, ask), false, ignore); err != nil {
+	if err = node.preAllocateCheck(toAllocate, reservationKey(nil, sa, ask), false, ignore); err != nil {
 		// skip schedule onto node
 		return nil
 	}

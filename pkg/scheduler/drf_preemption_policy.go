@@ -123,10 +123,17 @@ type singleNodePreemptResult struct {
 func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionContext, preemptorQueue *preemptionQueueContext, node *objects.Node, candidate *objects.AllocationAsk,
 	headroomShortages map[string]*resources.Resource) *singleNodePreemptResult {
 	// If allocated resource can fit in the node, and no headroom shortage of preemptor queue, we can directly get it allocated. (lucky!)
-	ignore, err := strconv.ParseBool(candidate.Tags[interfaceCommon.DomainYuniKorn+interfaceCommon.KeyIgnoreUnschedulable])
-	if err != nil {
-		log.Logger().Warn("Failed to convert allocationTag ignoreUnschedulable from string to bool")
+	var ignore bool
+	var err error
+	if ignoreUnschedulable, ok := candidate.Tags[interfaceCommon.DomainYuniKorn+interfaceCommon.KeyIgnoreUnschedulable]; !ok {
+		// if there isn't ignoreUnschedulable tag, set it to false
 		ignore = false
+	} else {
+		ignore, err = strconv.ParseBool(ignoreUnschedulable)
+		if err != nil {
+			log.Logger().Warn("Failed to convert allocationTag ignoreUnschedulable from string to bool")
+			ignore = false
+		}
 	}
 	if node.CanAllocate(candidate.AllocatedResource, true, ignore) {
 		log.Logger().Debug("No preemption needed candidate fits on node",

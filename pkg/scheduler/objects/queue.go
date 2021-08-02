@@ -363,8 +363,8 @@ func (sq *Queue) GetGuaranteedResource() *resources.Resource {
 // This will check the submit ACL and the admin ACL.
 func (sq *Queue) CheckSubmitAccess(user security.UserGroup) bool {
 	sq.RLock()
+	defer sq.RUnlock()
 	allow := sq.submitACL.CheckAccess(user) || sq.adminACL.CheckAccess(user)
-	sq.RUnlock()
 	if !allow && sq.parent != nil {
 		allow = sq.parent.CheckSubmitAccess(user)
 	}
@@ -374,8 +374,8 @@ func (sq *Queue) CheckSubmitAccess(user security.UserGroup) bool {
 // Check if the user has access to the queue for admin actions recursively.
 func (sq *Queue) CheckAdminAccess(user security.UserGroup) bool {
 	sq.RLock()
+	defer sq.RUnlock()
 	allow := sq.adminACL.CheckAccess(user)
-	sq.RUnlock()
 	if !allow && sq.parent != nil {
 		allow = sq.parent.CheckAdminAccess(user)
 	}

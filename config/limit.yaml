@@ -55,7 +55,7 @@ partitions:
                     users:
                     - user@domain
                     maxapplications: 1
-              - name: level2-2
+              - name: level2-3
                 limits:
                   - limit:
                     users:

@@ -25,7 +25,7 @@ partitions:
       - name: User
         create: true
         parent:
-          name: Group
+          name: Provided
           create: false
         filter:
           type: allow
@@ -70,14 +70,15 @@ partitions:
                 memory: 100000
                 vcore: 10000
   - name: gpu
-    - name: production
-      adminacl: "admin admin"
-      maxapplications: 10
-    - name: test
-      properties:
-        x: y
-      limits:
-      - limit: "resource limit for user"
-        users:
-        - gpuuser
-        maxresources: {memory: 10000, vcore: 10, gpu: 50}
+    queues:
+      - name: production
+        adminacl: "admin admin"
+        maxapplications: 10
+      - name: test
+        properties:
+          x: y
+        limits:
+          - limit: "resource limit for user"
+            users:
+              - gpuuser
+            maxresources: { memory: 10000, vcore: 10, gpu: 50 }

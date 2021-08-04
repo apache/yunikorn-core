@@ -425,6 +425,10 @@ func (sq *Queue) GetPartitionQueues() dao.PartitionQueueDAOInfo {
 	queueInfo.AllocatedResource = sq.allocatedResource.DAOString()
 	queueInfo.IsLeaf = sq.IsLeafQueue()
 	queueInfo.IsManaged = sq.IsManaged()
+	queueInfo.Properties = make(map[string]string)
+	for k, v := range sq.properties {
+		queueInfo.Properties[k] = v
+	}
 	if sq.parent == nil {
 		queueInfo.Parent = ""
 	} else {

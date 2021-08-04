@@ -1339,7 +1339,8 @@ func TestSupportTaskGroup(t *testing.T) {
 }
 
 func TestGetPartitionQueues(t *testing.T) {
-	root, _ := createRootQueue(nil)
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "failed to create basic root queue: %v", err)
 	root.properties = make(map[string]string)
 	root.properties["key"] = "value"
 	assert.Equal(t, "value", root.GetPartitionQueues().Properties["key"])

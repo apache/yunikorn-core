@@ -36,15 +36,15 @@ type NodeSortingPolicy interface {
 type binPackingNodeSortingPolicy struct{}
 type fairnessNodeSortingPolicy struct{}
 
-func (_ binPackingNodeSortingPolicy) PolicyType() policies.SortingPolicy {
+func (binPackingNodeSortingPolicy) PolicyType() policies.SortingPolicy {
 	return policies.BinPackingPolicy
 }
 
-func (_ fairnessNodeSortingPolicy) PolicyType() policies.SortingPolicy {
+func (fairnessNodeSortingPolicy) PolicyType() policies.SortingPolicy {
 	return policies.FairnessPolicy
 }
 
-func (_ binPackingNodeSortingPolicy) SortNodes(nodes []*Node) {
+func (binPackingNodeSortingPolicy) SortNodes(nodes []*Node) {
 	// Sort by available resource, ascending order
 	sort.SliceStable(nodes, func(i, j int) bool {
 		l := nodes[i]
@@ -53,7 +53,7 @@ func (_ binPackingNodeSortingPolicy) SortNodes(nodes []*Node) {
 	})
 }
 
-func (_ fairnessNodeSortingPolicy) SortNodes(nodes []*Node) {
+func (fairnessNodeSortingPolicy) SortNodes(nodes []*Node) {
 	// Sort by available resource, descending order
 	sort.SliceStable(nodes, func(i, j int) bool {
 		l := nodes[i]

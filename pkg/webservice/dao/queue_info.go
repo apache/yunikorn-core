@@ -41,6 +41,7 @@ type PartitionQueueDAOInfo struct {
 	AllocatedResource  string                  `json:"allocatedResource"`
 	IsLeaf             bool                    `json:"isLeaf"`
 	IsManaged          bool                    `json:"isManaged"`
+	Properties         map[string]string       `json:"properties"`
 	Parent             string                  `json:"parent"`
 	Children           []PartitionQueueDAOInfo `json:"children"`
 }

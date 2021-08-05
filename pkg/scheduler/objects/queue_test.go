@@ -1337,3 +1337,11 @@ func TestSupportTaskGroup(t *testing.T) {
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	assert.Assert(t, !leaf.SupportTaskGroup(), "leaf queue (FAIR policy) should not support task group")
 }
+
+func TestGetPartitionQueues(t *testing.T) {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "failed to create basic root queue: %v", err)
+	root.properties = make(map[string]string)
+	root.properties["key"] = "value"
+	assert.Equal(t, "value", root.GetPartitionQueues().Properties["key"])
+}

@@ -193,10 +193,8 @@ func (sq *Queue) setTemplateProperties(parent map[string]string) {
 	}
 	// for a leaf queue pull out all values from the template and set each of them
 	// See YUNIKORN-193: for now just copy one attr from parent
-	if sq.isLeaf {
-		if parent[configs.ApplicationSortPolicy] != "" {
-			sq.properties[configs.ApplicationSortPolicy] = parent[configs.ApplicationSortPolicy]
-		}
+	if parent[configs.ApplicationSortPolicy] != "" {
+		sq.properties[configs.ApplicationSortPolicy] = parent[configs.ApplicationSortPolicy]
 	}
 	// for a parent queue we just copy the template from its parent (no need to be recursive)
 	// this stops at the first managed queue

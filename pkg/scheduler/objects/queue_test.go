@@ -1337,3 +1337,21 @@ func TestSupportTaskGroup(t *testing.T) {
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	assert.Assert(t, !leaf.SupportTaskGroup(), "leaf queue (FAIR policy) should not support task group")
 }
+
+func TestPropertiesFromNewDynamicQueue(t *testing.T) {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "failed to create basic root queue: %v", err)
+	root.properties = make(map[string]string)
+	root.properties["this key should not be propagated"] = "value"
+	root.properties[configs.ApplicationSortPolicy] = "value"
+
+	check := func(leaf bool) {
+		q, err := NewDynamicQueue("new", leaf, root)
+		assert.NilError(t, err, "failed to create dynamic queue: %v", err)
+		assert.Equal(t, "value", q.properties[configs.ApplicationSortPolicy])
+		assert.Equal(t, "", q.properties["this key should not be propagated"])
+	}
+
+	check(false)
+	check(true)
+}

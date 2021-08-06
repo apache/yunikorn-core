@@ -27,8 +27,6 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
 )
 
-var tickerDefault = 1 * time.Minute
-
 // collecting metrics for YuniKorn-internal usage
 // will fill missing values with -1, in case of failures
 type internalMetricsCollector struct {
@@ -38,6 +36,11 @@ type internalMetricsCollector struct {
 }
 
 func NewInternalMetricsCollector(hcInfo *history.InternalMetricsHistory) *internalMetricsCollector {
+	return newInternalMetricsCollector(hcInfo, 1*time.Minute)
+}
+
+// create a internalMetricsCollector with specify tick duration.
+func newInternalMetricsCollector(hcInfo *history.InternalMetricsHistory, tickerDefault time.Duration) *internalMetricsCollector {
 	finished := make(chan bool)
 	ticker := time.NewTicker(tickerDefault)
 
@@ -55,38 +58,37 @@ func (u *internalMetricsCollector) StartService() {
 			case <-u.stopped:
 				return
 			case <-u.ticker.C:
-				log.Logger().Debug("Adding current status to historical partition data")
-
-				totalAppsRunning, err := m.scheduler.getTotalApplicationsRunning()
-				if err != nil {
-					log.Logger().Warn("Could not encode totalApplications metric.", zap.Error(err))
-					totalAppsRunning = -1
-				}
-				allocatedContainers, err := m.scheduler.getAllocatedContainers()
-				if err != nil {
-					log.Logger().Warn("Could not encode allocatedContainers metric.", zap.Error(err))
-				}
-				releasedContainers, err := m.scheduler.getReleasedContainers()
-				if err != nil {
-					log.Logger().Warn("Could not encode releasedContainers metric.", zap.Error(err))
-				}
-				totalContainersRunning := allocatedContainers - releasedContainers
-				if totalContainersRunning < 0 {
-					log.Logger().Warn("Could not calculate the totalContainersRunning.",
-						zap.Int("allocatedContainers", allocatedContainers),
-						zap.Int("releasedContainers", releasedContainers))
-				}
-				u.metricsHistory.Store(totalAppsRunning, totalContainersRunning)
+				u.store()
 			}
 		}
 	}()
 }
 
-func (u *internalMetricsCollector) Stop() {
-	u.stopped <- true
+func (u *internalMetricsCollector) store() {
+	log.Logger().Debug("Adding current status to historical partition data")
+
+	totalAppsRunning, err := m.scheduler.getTotalApplicationsRunning()
+	if err != nil {
+		log.Logger().Warn("Could not encode totalApplications metric.", zap.Error(err))
+		totalAppsRunning = -1
+	}
+	allocatedContainers, err := m.scheduler.getAllocatedContainers()
+	if err != nil {
+		log.Logger().Warn("Could not encode allocatedContainers metric.", zap.Error(err))
+	}
+	releasedContainers, err := m.scheduler.getReleasedContainers()
+	if err != nil {
+		log.Logger().Warn("Could not encode releasedContainers metric.", zap.Error(err))
+	}
+	totalContainersRunning := allocatedContainers - releasedContainers
+	if totalContainersRunning < 0 {
+		log.Logger().Warn("Could not calculate the totalContainersRunning.",
+			zap.Int("allocatedContainers", allocatedContainers),
+			zap.Int("releasedContainers", releasedContainers))
+	}
+	u.metricsHistory.Store(totalAppsRunning, totalContainersRunning)
 }
 
-// visible only for test
-func setInternalMetricsCollectorTicker(newDefault time.Duration) {
-	tickerDefault = newDefault
+func (u *internalMetricsCollector) Stop() {
+	u.stopped <- true
 }

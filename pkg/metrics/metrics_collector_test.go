@@ -27,32 +27,66 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
 )
 
-func TestHistoricalPartitionInfoUpdater(t *testing.T) {
+func TestStop(t *testing.T) {
 	metricsHistory := history.NewInternalMetricsHistory(3)
-	setInternalMetricsCollectorTicker(5 * time.Millisecond)
-	metricsCollector := NewInternalMetricsCollector(metricsHistory)
+	metricsCollector := newInternalMetricsCollector(metricsHistory, 1*time.Second)
 	metricsCollector.StartService()
 
-	go func() {
-		metrics := GetSchedulerMetrics()
-		for i := 0; i < 3; i++ {
-			metrics.IncTotalApplicationsRunning()
-			metrics.AddAllocatedContainers(2)
-			time.Sleep(4 * time.Millisecond)
-		}
-	}()
-
-	time.Sleep(11 * time.Millisecond)
 	metricsCollector.Stop()
+	// wait for the thread to store record. it should not happen
+	time.Sleep(1500 * time.Millisecond)
+
+	records := metricsHistory.GetRecords()
+	assert.Equal(t, 3, len(records), "Expected exactly 3 history records")
+	for _, record := range records {
+		assert.Assert(t, record == nil, "The 1st item should be nil!")
+	}
+}
+
+func TestStartService(t *testing.T) {
+	metricsHistory := history.NewInternalMetricsHistory(3)
+	metricsCollector := newInternalMetricsCollector(metricsHistory, 1*time.Second)
+	metricsCollector.StartService()
+
+	// wait for the thread to store record
+	time.Sleep(1500 * time.Millisecond)
+	metricsCollector.Stop()
+
+	records := metricsHistory.GetRecords()
+	assert.Equal(t, 3, len(records), "Expected exactly 3 history records")
+	for i, record := range records {
+		if i == 2 {
+			assert.Assert(t, record != nil, "The 1st item should NOT be nil!")
+		} else {
+			assert.Assert(t, record == nil, "All items should be nil!")
+		}
+	}
+}
+
+func TestHistoricalPartitionInfoUpdater(t *testing.T) {
+	metricsHistory := history.NewInternalMetricsHistory(3)
+	metricsCollector := NewInternalMetricsCollector(metricsHistory)
+
+	metrics := GetSchedulerMetrics()
+
+	// skip to store record for first application
+	metrics.IncTotalApplicationsRunning()
+	metrics.AddAllocatedContainers(2)
+
+	metrics.IncTotalApplicationsRunning()
+	metrics.AddAllocatedContainers(2)
+	metricsCollector.store()
+
+	metrics.IncTotalApplicationsRunning()
+	metrics.AddAllocatedContainers(2)
+	metricsCollector.store()
 
 	records := metricsHistory.GetRecords()
 	assert.Equal(t, 3, len(records), "Expected exactly 3 history records")
 	for i, record := range records {
 		switch i {
 		case 0:
-			if record != nil {
-				t.Fatal("The 1st item should be nil!")
-			}
+			assert.Assert(t, record == nil, "The 1st item should be nil!")
 		case 1:
 			assert.Equal(t, 2, record.TotalApplications, "Expected exactly 2 applications at 10 msec")
 			assert.Equal(t, 4, record.TotalContainers, "Expected exactly 4 allocations at 10 msec")

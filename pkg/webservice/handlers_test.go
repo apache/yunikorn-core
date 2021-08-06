@@ -129,6 +129,8 @@ partitions:
     queues: 
       - 
         name: root
+        properties:
+          application.sort.policy: stateaware
         queues: 
           - 
             name: a
@@ -921,6 +923,8 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	assert.Equal(t, partitionQueuesDao.Children[0].Parent, "root")
 	assert.Equal(t, partitionQueuesDao.Children[1].Parent, "root")
 	assert.Equal(t, partitionQueuesDao.Children[2].Parent, "root")
+	assert.Equal(t, len(partitionQueuesDao.Properties), 1)
+	assert.Equal(t, partitionQueuesDao.Properties["application.sort.policy"], "stateaware")
 
 	// Partition not sent as part of request
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))

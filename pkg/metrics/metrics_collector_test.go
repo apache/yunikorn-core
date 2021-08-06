@@ -19,6 +19,7 @@
 package metrics
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -56,9 +57,9 @@ func TestStartService(t *testing.T) {
 	assert.Equal(t, 3, len(records), "Expected exactly 3 history records")
 	for i, record := range records {
 		if i == 2 {
-			assert.Assert(t, record != nil, "The 1st item should NOT be nil!")
+			assert.Assert(t, record != nil, fmt.Sprintf("record should not be nil, index: %d", i))
 		} else {
-			assert.Assert(t, record == nil, "All items should be nil!")
+			assert.Assert(t, record == nil, fmt.Sprintf("record should be nil, index: %d", i))
 		}
 	}
 }
@@ -86,13 +87,13 @@ func TestHistoricalPartitionInfoUpdater(t *testing.T) {
 	for i, record := range records {
 		switch i {
 		case 0:
-			assert.Assert(t, record == nil, "The 1st item should be nil!")
+			assert.Assert(t, record == nil, fmt.Sprintf("record should be nil, index: %d", i))
 		case 1:
-			assert.Equal(t, 2, record.TotalApplications, "Expected exactly 2 applications at 10 msec")
-			assert.Equal(t, 4, record.TotalContainers, "Expected exactly 4 allocations at 10 msec")
+			assert.Equal(t, 2, record.TotalApplications, "Expected exactly 2 applications")
+			assert.Equal(t, 4, record.TotalContainers, "Expected exactly 4 allocations")
 		case 2:
-			assert.Equal(t, 3, record.TotalApplications, "Expected exactly 3 applications at 20 msec")
-			assert.Equal(t, 6, record.TotalContainers, "Expected exactly 4 allocations at 20 msec")
+			assert.Equal(t, 3, record.TotalApplications, "Expected exactly 3 applications")
+			assert.Equal(t, 6, record.TotalContainers, "Expected exactly 6 allocations")
 		}
 	}
 }

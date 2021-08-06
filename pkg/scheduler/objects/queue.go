@@ -30,7 +30,6 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
-	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects/template"
@@ -984,7 +983,7 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 // the configured queue sortPolicy. Queues without pending resources are skipped.
 // Applications are sorted based on the application sortPolicy. Applications without pending resources are skipped.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *Queue) TryAllocate(iterator func() interfaces.NodeIterator) *Allocation {
+func (sq *Queue) TryAllocate(iterator func() NodeIterator) *Allocation {
 	if sq.IsLeafQueue() {
 		// get the headroom
 		headRoom := sq.getHeadRoom()
@@ -1016,7 +1015,7 @@ func (sq *Queue) TryAllocate(iterator func() interfaces.NodeIterator) *Allocatio
 // the configured queue sortPolicy. Queues without pending resources are skipped.
 // Applications are sorted based on the application sortPolicy. Applications without pending resources are skipped.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *Queue) TryPlaceholderAllocate(iterator func() interfaces.NodeIterator, getnode func(string) *Node) *Allocation {
+func (sq *Queue) TryPlaceholderAllocate(iterator func() NodeIterator, getnode func(string) *Node) *Allocation {
 	if sq.IsLeafQueue() {
 		// process the apps (filters out app without pending requests)
 		for _, app := range sq.sortApplications(true) {
@@ -1063,7 +1062,7 @@ func (sq *Queue) GetQueueOutstandingRequests(total *[]*AllocationAsk) {
 // the configured queue sortPolicy. Queues without pending resources are skipped.
 // Applications are currently NOT sorted and are iterated over in a random order.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *Queue) TryReservedAllocate(iterator func() interfaces.NodeIterator) *Allocation {
+func (sq *Queue) TryReservedAllocate(iterator func() NodeIterator) *Allocation {
 	if sq.IsLeafQueue() {
 		// skip if it has no reservations
 		reservedCopy := sq.getReservedApps()

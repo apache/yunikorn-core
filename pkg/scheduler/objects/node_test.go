@@ -683,3 +683,24 @@ func TestIsValidFor(t *testing.T) {
 		})
 	}
 }
+
+type testListener struct {
+	updateCount int
+}
+
+func (tl *testListener) NodeUpdated(node *Node) {
+	tl.updateCount++
+}
+
+func TestAddRemoveListener(t *testing.T) {
+	tl := testListener{}
+	total := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 10})
+	node := newNodeRes("node-123", total)
+	node.AddListener(&tl)
+	assert.Equal(t, 0, tl.updateCount, "listener should not have fired")
+	node.SetSchedulable(false)
+	assert.Equal(t, 1, tl.updateCount, "listener should have fired once")
+	node.RemoveListener(&tl)
+	node.SetSchedulable(true)
+	assert.Equal(t, 1, tl.updateCount, "listener should not have fired again")
+}

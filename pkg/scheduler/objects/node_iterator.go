@@ -16,21 +16,28 @@
  limitations under the License.
 */
 
-package scheduler
+package objects
 
 import (
 	"math/rand"
-
-	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 )
+
+// NodeIterator iterates over a list of nodes based on the defined policy
+type NodeIterator interface {
+	// returns true if there are more values to iterate over
+	HasNext() bool
+	// returns the next node from the iterator
+	Next() *Node
+	// reset the iterator to a clean state
+	Reset()
+}
 
 // All iterators extend the base iterator
 type baseIterator struct {
-	interfaces.NodeIterator
+	NodeIterator
 	countIdx int
 	size     int
-	nodes    []*objects.Node
+	nodes    []*Node
 }
 
 // Reset the iterator to start from the beginning
@@ -46,7 +53,7 @@ func (bi *baseIterator) HasNext() bool {
 
 // Next returns the next element and advances to next element in array.
 // Returns nil at the end of iteration.
-func (bi *baseIterator) Next() interface{} {
+func (bi *baseIterator) Next() *Node {
 	if (bi.countIdx + 1) > bi.size {
 		return nil
 	}
@@ -63,7 +70,7 @@ type defaultNodeIterator struct {
 }
 
 // Create a new default iterator
-func newDefaultNodeIterator(schedulerNodes []*objects.Node) *defaultNodeIterator {
+func NewDefaultNodeIterator(schedulerNodes []*Node) NodeIterator {
 	it := &defaultNodeIterator{}
 	it.nodes = schedulerNodes
 	it.size = len(schedulerNodes)
@@ -79,7 +86,7 @@ type roundRobinNodeIterator struct {
 }
 
 // The starting point is randomised in the slice.
-func newRoundRobinNodeIterator(schedulerNodes []*objects.Node) *roundRobinNodeIterator {
+func NewRoundRobinNodeIterator(schedulerNodes []*Node) NodeIterator {
 	it := &roundRobinNodeIterator{}
 	it.nodes = schedulerNodes
 	it.size = len(schedulerNodes)
@@ -91,7 +98,7 @@ func newRoundRobinNodeIterator(schedulerNodes []*objects.Node) *roundRobinNodeIt
 
 // Next returns the next element and advances to next element in array.
 // Returns nil at the end of iteration.
-func (ri *roundRobinNodeIterator) Next() interface{} {
+func (ri *roundRobinNodeIterator) Next() *Node {
 	// prevent panic on Next when slice is empty
 	if (ri.countIdx + 1) > ri.size {
 		return nil

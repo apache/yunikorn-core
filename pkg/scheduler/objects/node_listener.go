@@ -16,15 +16,8 @@
  limitations under the License.
 */
 
-package interfaces
+package objects
 
-// NodeIterator iterates over a list of nodes based on the defined policy
-type NodeIterator interface {
-	// returns true if there are more values to iterate over
-	HasNext() bool
-	// returns the next node from the iterator
-	//
-	Next() interface{}
-	// reset the iterator to a clean state
-	Reset()
+type NodeListener interface {
+	NodeUpdated(sn *Node)
 }

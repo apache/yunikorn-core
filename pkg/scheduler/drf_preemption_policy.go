@@ -22,7 +22,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 )
@@ -188,7 +187,7 @@ func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionCont
 	return nil
 }
 
-func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitionContext, nodeIterator interfaces.NodeIterator, candidate *objects.AllocationAsk) *objects.Allocation {
+func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitionContext, nodeIterator objects.NodeIterator, candidate *objects.AllocationAsk) *objects.Allocation {
 	if preemptionPartitionContext == nil {
 		return nil
 	}
@@ -205,8 +204,8 @@ func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitio
 	var preemptResult *singleNodePreemptResult = nil
 
 	for nodeIterator.HasNext() {
-		node, ok := nodeIterator.Next().(*objects.Node)
-		if !ok {
+		node := nodeIterator.Next()
+		if node == nil {
 			log.Logger().Debug("Node iterator failed to return a node")
 			return nil
 		}

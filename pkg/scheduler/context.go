@@ -633,7 +633,7 @@ func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
 			})
 			continue
 		}
-		if sn.IsUnlimited() && len(partition.nodes) > 0 {
+		if sn.IsUnlimited() && partition.nodes.GetNodeCount() > 0 {
 			rejectedNodes = append(rejectedNodes, &si.RejectedNode{
 				NodeID: node.NodeID,
 				Reason: "The unlimited node should be registered first, there are other nodes registered in the partition",

@@ -169,7 +169,7 @@ func TestAddNode(t *testing.T) {
 	if err == nil {
 		t.Fatal("nil node add did not return error")
 	}
-	assert.Equal(t, 0, len(partition.nodes), "nil node should not be added")
+	assert.Equal(t, 0, partition.nodes.GetNodeCount(), "nil node should not be added")
 	node := newNodeMaxResource("test1", resources.NewResource())
 	// stop the partition node should be rejected
 	partition.markPartitionForRemoval()
@@ -178,22 +178,22 @@ func TestAddNode(t *testing.T) {
 	if err == nil {
 		t.Error("test node add to draining partition should have failed")
 	}
-	assert.Equal(t, len(partition.nodes), 0, "node list not correct")
+	assert.Equal(t, partition.nodes.GetNodeCount(), 0, "node list not correct")
 
 	// reset the state (hard no checks)
 	partition.stateMachine.SetState(objects.Active.String())
 	err = partition.AddNode(node, nil)
 	assert.NilError(t, err, "test node add failed unexpected")
-	assert.Equal(t, len(partition.nodes), 1, "node list not correct")
+	assert.Equal(t, partition.nodes.GetNodeCount(), 1, "node list not correct")
 	// add the same node nothing changes
 	err = partition.AddNode(node, nil)
 	if err == nil {
 		t.Fatal("add same test node worked unexpected")
 	}
-	assert.Equal(t, len(partition.nodes), 1, "node list not correct")
+	assert.Equal(t, partition.nodes.GetNodeCount(), 1, "node list not correct")
 	err = partition.AddNode(newNodeMaxResource("test2", resources.NewResource()), nil)
 	assert.NilError(t, err, "test node2 add failed unexpected")
-	assert.Equal(t, len(partition.nodes), 2, "node list not correct")
+	assert.Equal(t, partition.nodes.GetNodeCount(), 2, "node list not correct")
 }
 
 func TestAddNodeWithAllocations(t *testing.T) {
@@ -223,7 +223,7 @@ func TestAddNodeWithAllocations(t *testing.T) {
 	if err == nil {
 		t.Errorf("add node to partition should have failed (app missing)")
 	}
-	assert.Equal(t, len(partition.nodes), 0, "error returned but node still added to the partition (app)")
+	assert.Equal(t, partition.nodes.GetNodeCount(), 0, "error returned but node still added to the partition (app)")
 
 	// fail with a broken alloc
 	ask = newAllocationAsk("alloc-1", appID1, appRes)
@@ -233,7 +233,7 @@ func TestAddNodeWithAllocations(t *testing.T) {
 	if err == nil {
 		t.Errorf("add node to partition should have failed (uuid missing)")
 	}
-	assert.Equal(t, len(partition.nodes), 0, "error returned but node still added to the partition (uuid)")
+	assert.Equal(t, partition.nodes.GetNodeCount(), 0, "error returned but node still added to the partition (uuid)")
 
 	// fix the alloc add the node will work now
 	alloc = objects.NewAllocation("alloc-1-uuid", nodeID1, ask)
@@ -242,7 +242,7 @@ func TestAddNodeWithAllocations(t *testing.T) {
 	err = partition.AddNode(node, allocs)
 	// check the partition
 	assert.NilError(t, err, "add node to partition should not have failed")
-	assert.Equal(t, len(partition.nodes), 1, "no error returned but node not added to the partition")
+	assert.Equal(t, partition.nodes.GetNodeCount(), 1, "no error returned but node not added to the partition")
 	assert.Assert(t, resources.Equals(nodeRes, partition.GetTotalPartitionResource()), "add node to partition did not update total resources expected %v got %d", nodeRes, partition.GetTotalPartitionResource())
 	assert.Equal(t, partition.GetTotalAllocationCount(), 1, "add node to partition did not add allocation")
 
@@ -255,16 +255,16 @@ func TestRemoveNode(t *testing.T) {
 	assert.NilError(t, err, "test partition create failed with error")
 	err = partition.AddNode(newNodeMaxResource("test", resources.NewResource()), nil)
 	assert.NilError(t, err, "test node add failed unexpected")
-	assert.Equal(t, 1, len(partition.nodes), "node list not correct")
+	assert.Equal(t, 1, partition.nodes.GetNodeCount(), "node list not correct")
 
 	// remove non existing node
 	_ = partition.removeNode("")
-	assert.Equal(t, 1, len(partition.nodes), "nil node should not remove anything")
+	assert.Equal(t, 1, partition.nodes.GetNodeCount(), "nil node should not remove anything")
 	_ = partition.removeNode("does not exist")
-	assert.Equal(t, 1, len(partition.nodes), "non existing node was removed")
+	assert.Equal(t, 1, partition.nodes.GetNodeCount(), "non existing node was removed")
 
 	_ = partition.removeNode("test")
-	assert.Equal(t, 0, len(partition.nodes), "node was not removed")
+	assert.Equal(t, 0, partition.nodes.GetNodeCount(), "node was not removed")
 }
 
 func TestRemoveNodeWithAllocations(t *testing.T) {
@@ -343,7 +343,7 @@ func TestGetNodes(t *testing.T) {
 	err = node.Reserve(app, ask)
 	assert.NilError(t, err, "reserve on node4 should not have failed")
 
-	assert.Equal(t, 4, len(partition.nodes), "node list not correct length")
+	assert.Equal(t, 4, partition.nodes.GetNodeCount(), "node list not correct length")
 	nodes = partition.getSchedulableNodes()
 	// returned list should be only three long: without reserved node
 	assert.Equal(t, 3, len(nodes), "node list not filtered")
@@ -1203,7 +1203,7 @@ func TestUpdateNode(t *testing.T) {
 
 	err = partition.AddNode(newNodeMaxResource("test", newRes), nil)
 	assert.NilError(t, err, "test node add failed unexpected")
-	assert.Equal(t, 1, len(partition.nodes), "node list not correct")
+	assert.Equal(t, 1, partition.nodes.GetNodeCount(), "node list not correct")
 
 	if !resources.Equals(newRes, partition.GetTotalPartitionResource()) {
 		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partition.GetTotalPartitionResource())
@@ -1703,7 +1703,7 @@ func TestUpdateNodeSortingPolicy(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
 
-	assert.Equal(t, partition.nodeSortingPolicy.PolicyType(), policies.FairnessPolicy)
+	assert.Equal(t, partition.nodes.GetNodeSortingPolicy().PolicyType(), policies.FairnessPolicy)
 
 	partition.updateNodeSortingPolicy(configs.PartitionConfig{
 		Name: "test",
@@ -1727,5 +1727,5 @@ func TestUpdateNodeSortingPolicy(t *testing.T) {
 		NodeSortPolicy: configs.NodeSortingPolicy{Type: policies.BinPackingPolicy.String()},
 	})
 
-	assert.Equal(t, partition.nodeSortingPolicy.PolicyType(), policies.BinPackingPolicy)
+	assert.Equal(t, partition.nodes.GetNodeSortingPolicy().PolicyType(), policies.BinPackingPolicy)
 }

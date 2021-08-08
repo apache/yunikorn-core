@@ -16,55 +16,38 @@
  limitations under the License.
 */
 
-package policies
+package configs
 
 import (
 	"fmt"
-
-	"go.uber.org/zap"
-
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
 
+// NodeSortingPolicy Global Node Sorting Policy section
+// - type: different type of policies supported (binpacking, fair etc)
 type NodeSortingPolicy struct {
-	PolicyType SortingPolicy
+	Type string
 }
-
-type SortingPolicy int
 
 const (
-	BinPackingPolicy SortingPolicy = iota
-	FairnessPolicy
-	Unknown
+	BinPackingPolicy string = "binpacking"
+	FairnessPolicy   string = "fair"
+	UnknownPolicy    string = "undefined"
 )
 
-func (nsp SortingPolicy) String() string {
-	return [...]string{"binpacking", "fair", "undefined"}[nsp]
-}
-
-func FromString(str string) (SortingPolicy, error) {
-	switch str {
+// CheckPolicyType returns adjusted type string and error (if the input string is undefined)
+func CheckPolicyType(policyType string) (string, error) {
+	switch policyType {
 	// fair is the default policy when not set
-	case FairnessPolicy.String(), "":
+	case FairnessPolicy, "":
 		return FairnessPolicy, nil
-	case BinPackingPolicy.String():
+	case BinPackingPolicy:
 		return BinPackingPolicy, nil
 	default:
-		return Unknown, fmt.Errorf("undefined policy: %s", str)
+		return UnknownPolicy, fmt.Errorf("undefined policy: %s", policyType)
 	}
 }
 
-func NewNodeSortingPolicy(policyType string) *NodeSortingPolicy {
-	pType, err := FromString(policyType)
-	if err != nil {
-		log.Logger().Debug("node sorting policy defaulted to 'undefined'",
-			zap.Error(err))
-	}
-	sp := &NodeSortingPolicy{
-		PolicyType: pType,
-	}
-
-	log.Logger().Debug("new node sorting policy added",
-		zap.String("type", pType.String()))
-	return sp
+func checkNodeSortingPolicy(policy *NodeSortingPolicy) error {
+	_, err := CheckPolicyType(policy.Type)
+	return err
 }

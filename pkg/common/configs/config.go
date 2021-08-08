@@ -133,12 +133,6 @@ type Limit struct {
 	MaxApplications uint64            `yaml:",omitempty" json:",omitempty"`
 }
 
-// Global Node Sorting Policy section
-// - type: different type of policies supported (binpacking, fair etc)
-type NodeSortingPolicy struct {
-	Type string
-}
-
 type LoadSchedulerConfigFunc func(policyGroup string) (*SchedulerConfig, error)
 
 // Visible by tests

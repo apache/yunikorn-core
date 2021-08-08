@@ -28,7 +28,6 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 )
 
 const (
@@ -252,17 +251,6 @@ func checkLimits(limits []Limit, obj string) error {
 	return nil
 }
 
-// Check for global policy
-func checkNodeSortingPolicy(partition *PartitionConfig) error {
-	// get the policy
-	policy := partition.NodeSortPolicy
-
-	// Defined polices.
-	_, err := policies.FromString(policy.Type)
-
-	return err
-}
-
 // Check the queue names configured for compliance and uniqueness
 // - no duplicate names at each branched level in the tree
 // - queue name is alphanumeric (case ignore) with - and _
@@ -399,7 +387,7 @@ func Validate(newConfig *SchedulerConfig) error {
 		if err != nil {
 			return err
 		}
-		err = checkNodeSortingPolicy(&partition)
+		err = checkNodeSortingPolicy(&partition.NodeSortPolicy)
 		if err != nil {
 			return err
 		}

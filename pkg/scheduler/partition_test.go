@@ -1703,3 +1703,24 @@ func TestRemoveAllocationAsk(t *testing.T) {
 	partition.removeAllocationAsk(release)
 	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "app should not have pending asks")
 }
+
+func TestNewNodeSortingPolicy(t *testing.T) {
+	tests := []struct {
+		name string
+		arg  string
+		want string
+	}{
+		{"EmptyString", "", configs.FairnessPolicy},
+		{"FairString", "fair", configs.FairnessPolicy},
+		{"BinString", "binpacking", configs.BinPackingPolicy},
+		{"UnknownString", "unknown", configs.FairnessPolicy},
+	}
+	for _, tt := range tests {
+		got := refineNodeSortingPolicy(&configs.NodeSortingPolicy{
+			Type: tt.want,
+		})
+		if got == nil || got.Type != tt.want {
+			t.Errorf("%s unexpected policy returned, expected = '%s', got '%v'", tt.name, tt.want, got)
+		}
+	}
+}

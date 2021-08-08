@@ -37,7 +37,6 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/placement"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
@@ -60,7 +59,7 @@ type PartitionContext struct {
 	rules                  *[]configs.PlacementRule        // placement rules to be loaded by the scheduler
 	userGroupCache         *security.UserGroupCache        // user cache per partition
 	totalPartitionResource *resources.Resource             // Total node resources
-	nodeSortingPolicy      *policies.NodeSortingPolicy     // Global Node Sorting Policies
+	nodeSortingPolicy      *configs.NodeSortingPolicy      // Global Node Sorting Policies
 	allocations            int                             // Number of allocations on the partition
 
 	// The partition write lock must not be held while manipulating an application.
@@ -134,24 +133,19 @@ func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionCon
 	// get the user group cache for the partition
 	// TODO get the resolver from the config
 	pc.userGroupCache = security.GetUserGroupCache("")
-
-	// TODO Need some more cleaner interface here.
-	var configuredPolicy policies.SortingPolicy
-	configuredPolicy, err = policies.FromString(conf.NodeSortPolicy.Type)
-	if err != nil {
-		log.Logger().Debug("NodeSorting policy incorrectly set or unknown",
-			zap.Error(err))
-	}
-	switch configuredPolicy {
-	case policies.BinPackingPolicy, policies.FairnessPolicy:
-		log.Logger().Info("NodeSorting policy set from config",
-			zap.String("policyName", configuredPolicy.String()))
-		pc.nodeSortingPolicy = policies.NewNodeSortingPolicy(conf.NodeSortPolicy.Type)
-	case policies.Unknown:
-		log.Logger().Info("NodeSorting policy not set using 'fair' as default")
-		pc.nodeSortingPolicy = policies.NewNodeSortingPolicy("fair")
-	}
+	pc.nodeSortingPolicy = refineNodeSortingPolicy(&conf.NodeSortPolicy)
 	return nil
+}
+
+func refineNodeSortingPolicy(policy *configs.NodeSortingPolicy) *configs.NodeSortingPolicy {
+	policyType, err := configs.CheckPolicyType(policy.Type)
+	if err != nil {
+		log.Logger().Warn("using 'fair' as default since NodeSorting policy incorrectly set or unknown", zap.Error(err))
+		return &configs.NodeSortingPolicy{Type: configs.FairnessPolicy}
+	}
+
+	log.Logger().Info("NodeSorting policy set from config", zap.String("policyName", policy.Type))
+	return &configs.NodeSortingPolicy{Type: policyType}
 }
 
 func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig) error {
@@ -921,8 +915,8 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 // Get the iterator for the sorted nodes list from the partition.
 // Sorting should use a copy of the node list not the main list.
 func (pc *PartitionContext) getNodeIteratorForPolicy(nodes []*objects.Node) interfaces.NodeIterator {
-	configuredPolicy := pc.GetNodeSortingPolicy()
-	if configuredPolicy == policies.Unknown {
+	configuredPolicy := pc.GetNodeSortingPolicyType()
+	if configuredPolicy == configs.UnknownPolicy {
 		return nil
 	}
 	// Sort Nodes based on the policy configured.
@@ -1329,10 +1323,10 @@ func (pc *PartitionContext) GetStateTime() time.Time {
 	return pc.stateTime
 }
 
-func (pc *PartitionContext) GetNodeSortingPolicy() policies.SortingPolicy {
+func (pc *PartitionContext) GetNodeSortingPolicyType() string {
 	pc.RLock()
 	defer pc.RUnlock()
-	return pc.nodeSortingPolicy.PolicyType
+	return pc.nodeSortingPolicy.Type
 }
 
 func (pc *PartitionContext) moveTerminatedApp(appID string) {

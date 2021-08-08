@@ -22,6 +22,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
@@ -125,17 +126,17 @@ func stateAwareFilter(apps map[string]*Application) []*Application {
 	return filteredApps
 }
 
-func SortNodes(nodes []*Node, sortType policies.SortingPolicy) {
+func SortNodes(nodes []*Node, sortType string) {
 	sortingStart := time.Now()
 	switch sortType {
-	case policies.FairnessPolicy:
+	case configs.FairnessPolicy:
 		// Sort by available resource, descending order
 		sort.SliceStable(nodes, func(i, j int) bool {
 			l := nodes[i]
 			r := nodes[j]
 			return resources.CompUsageShares(l.GetAvailableResource(), r.GetAvailableResource()) > 0
 		})
-	case policies.BinPackingPolicy:
+	case configs.BinPackingPolicy:
 		// Sort by available resource, ascending order
 		sort.SliceStable(nodes, func(i, j int) bool {
 			l := nodes[i]

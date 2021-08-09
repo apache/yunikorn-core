@@ -344,7 +344,7 @@ func TestGetNodes(t *testing.T) {
 
 	assert.Equal(t, 4, len(partition.nodes), "node list not correct length")
 	nodes = partition.getSchedulableNodes()
-	assert.Equal(t, 4, len(nodes), "node list not correct length")
+	assert.Equal(t, 3, len(nodes), "node list not correct length")
 }
 
 func TestAddApp(t *testing.T) {

@@ -376,6 +376,14 @@ func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string, preempt
 			}
 		}
 	}
+	// if sn.IsReserved() {
+	// 	if !sn.isReservedForApp(resKey) {
+	// 		log.Logger().Debug("pre alloc check: node reserved for different app or ask",
+	// 			zap.String("nodeID", sn.NodeID),
+	// 			zap.String("resKey", resKey))
+	// 		return fmt.Errorf("pre alloc check: node %s reserved for different app or ask: %s", sn.NodeID, resKey)
+	// 	}
+	// }
 	// cannot allocate zero or negative resource
 	if !resources.StrictlyGreaterThanZero(res) {
 		log.Logger().Debug("pre alloc check: requested resource is zero",

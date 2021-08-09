@@ -555,6 +555,10 @@ func (pc *PartitionContext) getNodes() []*objects.Node {
 
 	nodes := make([]*objects.Node, 0)
 	for _, node := range pc.nodes {
+		if node.IsReserved() {
+			fmt.Println("node reserved")
+			continue
+		}
 		nodes = append(nodes, node)
 	}
 	return nodes

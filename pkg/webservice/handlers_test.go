@@ -131,6 +131,16 @@ partitions:
         name: root
         properties:
           application.sort.policy: stateaware
+        childtemplate:
+          properties:
+            application.sort.policy: stateaware
+          resources:
+            guaranteed:
+              memory: 400000
+              vcore: 40000
+            max:
+              memory: 600000
+              vcore: 60000
         queues: 
           - 
             name: a
@@ -925,6 +935,22 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	assert.Equal(t, partitionQueuesDao.Children[2].Parent, "root")
 	assert.Equal(t, len(partitionQueuesDao.Properties), 1)
 	assert.Equal(t, partitionQueuesDao.Properties["application.sort.policy"], "stateaware")
+	assert.Equal(t, len(partitionQueuesDao.TemplateInfo.Properties), 1)
+	assert.Equal(t, partitionQueuesDao.TemplateInfo.Properties["application.sort.policy"], "stateaware")
+
+	maxResourcesConf := make(map[string]string)
+	maxResourcesConf["memory"] = "600000"
+	maxResourcesConf["vcore"] = "60000"
+	maxResource, err := resources.NewResourceFromConf(maxResourcesConf)
+	assert.NilError(t, err)
+	assert.Equal(t, partitionQueuesDao.TemplateInfo.MaxResource, maxResource.DAOString())
+
+	guaranteedResourcesConf := make(map[string]string)
+	guaranteedResourcesConf["memory"] = "400000"
+	guaranteedResourcesConf["vcore"] = "40000"
+	guaranteedResources, err := resources.NewResourceFromConf(guaranteedResourcesConf)
+	assert.NilError(t, err)
+	assert.Equal(t, partitionQueuesDao.TemplateInfo.GuaranteedResource, guaranteedResources.DAOString())
 
 	// Partition not sent as part of request
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))

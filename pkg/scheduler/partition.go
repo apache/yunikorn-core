@@ -180,7 +180,7 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 	queueConf := conf.Queues[0]
 	root := pc.root
 	// update the root queue
-	if err := root.SetQueueConfig(queueConf); err != nil {
+	if err := root.ApplyConf(queueConf); err != nil {
 		return err
 	}
 	root.UpdateSortType()
@@ -223,7 +223,7 @@ func (pc *PartitionContext) updateQueues(config []configs.QueueConfig, parent *o
 		if queue == nil {
 			queue, err = objects.NewConfiguredQueue(queueConfig, parent)
 		} else {
-			err = queue.SetQueueConfig(queueConfig)
+			err = queue.ApplyConf(queueConfig)
 		}
 		if err != nil {
 			return err
@@ -487,7 +487,7 @@ func (pc *PartitionContext) GetQueueInfos() dao.QueueDAOInfo {
 // Get the queue info for the whole queue structure to pass to the webservice
 func (pc *PartitionContext) GetPartitionQueues() dao.PartitionQueueDAOInfo {
 	var PartitionQueueDAOInfo = dao.PartitionQueueDAOInfo{}
-	PartitionQueueDAOInfo = pc.root.GetPartitionQueues()
+	PartitionQueueDAOInfo = pc.root.GetPartitionQueueDAOInfo()
 	PartitionQueueDAOInfo.Partition = pc.Name
 	return PartitionQueueDAOInfo
 }

@@ -33,6 +33,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects/template"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 )
@@ -66,6 +67,7 @@ type Queue struct {
 	isManaged          bool                // queue is part of the config, not auto created
 	stateMachine       *fsm.FSM            // the state of the queue for scheduling
 	stateTime          time.Time           // last time the state was updated (needed for cleanup)
+	template           *template.Template
 
 	sync.RWMutex
 }
@@ -93,7 +95,7 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 	sq.isManaged = true
 
 	// update the properties
-	if err := sq.setQueueConfig(conf); err != nil {
+	if err := sq.applyConf(conf); err != nil {
 		return nil, fmt.Errorf("configured queue creation failed: %s", err)
 	}
 
@@ -142,13 +144,24 @@ func NewDynamicQueue(name string, leaf bool, parent *Queue) (*Queue, error) {
 	if err != nil {
 		return nil, fmt.Errorf("dynamic queue creation failed: %s", err)
 	}
-	// pull the properties from the parent that should be set on the child
-	sq.setTemplateProperties(parent.getProperties())
+
+	sq.applyTemplate(lookupTemplate(parent))
 	sq.UpdateSortType()
 	log.Logger().Info("dynamic queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
 
 	return sq, nil
+}
+
+// use input template to initialize properties, maxResource, and guaranteedResource
+// only leaf queue can use template as the values from template is meaningful to leaf only.
+func (sq *Queue) applyTemplate(childTemplate *template.Template) {
+	if childTemplate != nil {
+		if sq.isLeaf {
+			sq.properties = childTemplate.GetProperties()
+			sq.checkAndSetResources(childTemplate.GetMaxResource(), childTemplate.GetGuaranteedResource())
+		}
+	}
 }
 
 // Return a copy of the properties for this queue
@@ -182,36 +195,86 @@ func (sq *Queue) mergeProperties(parent, config map[string]string) {
 	}
 }
 
-// Set the properties that the dynamic child queue inherits from the parent
-// The properties list for the parent must be retrieved using getProperties()
-// This currently only sets the sort policy as it is set on the parent
-// Further implementation is part of YUNIKORN-193
-// lock free call
-func (sq *Queue) setTemplateProperties(parent map[string]string) {
-	if len(parent) == 0 {
-		return
+// try to find a template from closet parent
+func lookupTemplate(sq *Queue) *template.Template {
+	if sq == nil {
+		return nil
 	}
-	// for a leaf queue pull out all values from the template and set each of them
-	// See YUNIKORN-193: for now just copy one attr from parent
-	if sq.isLeaf {
-		if parent[configs.ApplicationSortPolicy] != "" {
-			sq.properties[configs.ApplicationSortPolicy] = parent[configs.ApplicationSortPolicy]
-		}
+	if current := sq.template; current != nil {
+		return current
 	}
-	// for a parent queue we just copy the template from its parent (no need to be recursive)
-	// this stops at the first managed queue
-	// See YUNIKORN-193
+	return lookupTemplate(sq.parent)
 }
 
-func (sq *Queue) SetQueueConfig(conf configs.QueueConfig) error {
+func (sq *Queue) ApplyConf(conf configs.QueueConfig) error {
 	sq.Lock()
 	defer sq.Unlock()
-	return sq.setQueueConfig(conf)
+	return sq.applyConf(conf)
+}
+
+// set inner resource only if input resource is valid
+func (sq *Queue) checkAndSetResources(maxResource, guaranteedResource *resources.Resource) {
+	isInvalidResource := func(resource *resources.Resource) bool {
+		return resource == nil || len(resource.Resources) == 0 || resources.IsZero(resource)
+	}
+
+	if isInvalidResource(maxResource) {
+		log.Logger().Debug("max resources setting ignored: cannot set zero max resources")
+	} else {
+		sq.maxResource = maxResource
+	}
+
+	if isInvalidResource(guaranteedResource) {
+		log.Logger().Debug("guaranteed resources setting ignored: cannot set zero max resources")
+	} else {
+		sq.guaranteedResource = guaranteedResource
+	}
+}
+
+func (sq *Queue) setResources(resource configs.Resources) error {
+	// Load the max & guaranteed resources for all but the root queue
+	if sq.Name != configs.RootQueue {
+		maxResource, err := resources.NewResourceFromConf(resource.Max)
+		if err != nil {
+			log.Logger().Error("parsing failed on max resources this should not happen",
+				zap.Error(err))
+			return err
+		}
+
+		guaranteedResource, err := resources.NewResourceFromConf(resource.Guaranteed)
+		if err != nil {
+			log.Logger().Error("parsing failed on guaranteed resources this should not happen",
+				zap.Error(err))
+			return err
+		}
+		sq.checkAndSetResources(maxResource, guaranteedResource)
+	}
+	return nil
+}
+
+func (sq *Queue) setTemplate(conf configs.ChildTemplate) error {
+	// Empty returns true if all elements in this template are "0". otherwise, it returns false.
+	// This method is used to check whether there is template in yaml file.
+	configIsNotEmpty := func() bool {
+		return len(conf.Properties) != 0 || len(conf.Resources.Guaranteed) != 0 || len(conf.Resources.Max) != 0
+	}
+
+	if configIsNotEmpty() {
+		if sq.isLeaf {
+			return fmt.Errorf("only non-leaf queue can have template")
+		}
+		t, err := template.FromConf(&conf)
+		if err != nil {
+			return err
+		}
+		sq.template = t
+	}
+	return nil
 }
 
 // Apply all the properties to the queue from the config
 // lock free call, must be called holding the queue lock or during create only
-func (sq *Queue) setQueueConfig(conf configs.QueueConfig) error {
+func (sq *Queue) applyConf(conf configs.QueueConfig) error {
 	// Set the ACLs
 	var err error
 	sq.submitACL, err = security.NewACL(conf.SubmitACL)
@@ -239,30 +302,12 @@ func (sq *Queue) setQueueConfig(conf configs.QueueConfig) error {
 		sq.isLeaf = false
 	}
 
-	// Load the max & guaranteed resources for all but the root queue
-	if sq.Name != configs.RootQueue {
-		sq.maxResource, err = resources.NewResourceFromConf(conf.Resources.Max)
-		if err != nil {
-			log.Logger().Error("parsing failed on max resources this should not happen",
-				zap.Error(err))
-			return err
-		}
-		if len(sq.maxResource.Resources) == 0 || resources.IsZero(sq.maxResource) {
-			log.Logger().Debug("max resources config setting ignored: cannot set zero max resources")
-			sq.maxResource = nil
-		}
+	if err = sq.setTemplate(conf.ChildTemplate); err != nil {
+		return nil
+	}
 
-		// Load the guaranteed resources
-		sq.guaranteedResource, err = resources.NewResourceFromConf(conf.Resources.Guaranteed)
-		if err != nil {
-			log.Logger().Error("parsing failed on guaranteed resources this should not happen",
-				zap.Error(err))
-			return err
-		}
-		if len(sq.guaranteedResource.Resources) == 0 || resources.IsZero(sq.guaranteedResource) {
-			log.Logger().Debug("guaranteed resources config setting ignored: guaranteed must be non-zero to take effect")
-			sq.guaranteedResource = nil
-		}
+	if err = sq.setResources(conf.Resources); err != nil {
+		return err
 	}
 
 	sq.properties = conf.Properties
@@ -409,22 +454,25 @@ func (sq *Queue) GetQueueInfos() dao.QueueDAOInfo {
 	return queueInfo
 }
 
-func (sq *Queue) GetPartitionQueues() dao.PartitionQueueDAOInfo {
+func (sq *Queue) GetPartitionQueueDAOInfo() dao.PartitionQueueDAOInfo {
 	queueInfo := dao.PartitionQueueDAOInfo{}
 	if len(sq.children) > 0 {
 		for _, child := range sq.GetCopyOfChildren() {
-			queueInfo.Children = append(queueInfo.Children, child.GetPartitionQueues())
+			queueInfo.Children = append(queueInfo.Children, child.GetPartitionQueueDAOInfo())
 		}
 	}
 	sq.RLock()
 	defer sq.RUnlock()
-	queueInfo.QueueName = sq.GetQueuePath()
+
+	// we have held the read lock so following method should not take lock again.
+	queueInfo.QueueName = sq.QueuePath
 	queueInfo.Status = sq.stateMachine.Current()
 	queueInfo.MaxResource = sq.maxResource.DAOString()
 	queueInfo.GuaranteedResource = sq.guaranteedResource.DAOString()
 	queueInfo.AllocatedResource = sq.allocatedResource.DAOString()
-	queueInfo.IsLeaf = sq.IsLeafQueue()
-	queueInfo.IsManaged = sq.IsManaged()
+	queueInfo.IsLeaf = sq.isLeaf
+	queueInfo.IsManaged = sq.isManaged
+	queueInfo.TemplateInfo = sq.template.GetTemplateInfo()
 	queueInfo.Properties = make(map[string]string)
 	for k, v := range sq.properties {
 		queueInfo.Properties[k] = v

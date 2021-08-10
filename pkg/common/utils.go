@@ -29,6 +29,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	interfaceCommon "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 )
 
 func GetNormalizedPartitionName(partitionName string, rmID string) string {
@@ -112,4 +113,20 @@ func ConvertSITimeout(millis int64) time.Duration {
 		return time.Duration(0)
 	}
 	return time.Duration(result)
+}
+
+func GetIgnoreUnschedulable(tag map[string]string) bool {
+	var ignore bool
+	var err error
+	if ignoreUnschedulable, ok := tag[interfaceCommon.DomainYuniKorn+interfaceCommon.KeyIgnoreUnschedulable]; !ok {
+		// if there isn't ignoreUnschedulable tag, set it to false
+		ignore = false
+	} else {
+		ignore, err = strconv.ParseBool(ignoreUnschedulable)
+		if err != nil {
+			log.Logger().Warn("Failed to convert allocationTag ignoreUnschedulable from string to bool")
+			ignore = false
+		}
+	}
+	return ignore
 }

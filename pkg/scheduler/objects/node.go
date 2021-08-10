@@ -366,24 +366,15 @@ func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string, preempt
 				zap.String("nodeID", sn.NodeID))
 			return fmt.Errorf("pre alloc check, node is unschedulable: %s", sn.NodeID)
 		}
-		// check if the node is reserved for this app/alloc
-		if sn.IsReserved() {
-			if !sn.isReservedForApp(resKey) {
-				log.Logger().Debug("pre alloc check: node reserved for different app or ask",
-					zap.String("nodeID", sn.NodeID),
-					zap.String("resKey", resKey))
-				return fmt.Errorf("pre alloc check: node %s reserved for different app or ask: %s", sn.NodeID, resKey)
-			}
+	}
+	if sn.IsReserved() {
+		if !sn.isReservedForApp(resKey) {
+			log.Logger().Debug("pre alloc check: node reserved for different app or ask",
+				zap.String("nodeID", sn.NodeID),
+				zap.String("resKey", resKey))
+			return fmt.Errorf("pre alloc check: node %s reserved for different app or ask: %s", sn.NodeID, resKey)
 		}
 	}
-	// if sn.IsReserved() {
-	// 	if !sn.isReservedForApp(resKey) {
-	// 		log.Logger().Debug("pre alloc check: node reserved for different app or ask",
-	// 			zap.String("nodeID", sn.NodeID),
-	// 			zap.String("resKey", resKey))
-	// 		return fmt.Errorf("pre alloc check: node %s reserved for different app or ask: %s", sn.NodeID, resKey)
-	// 	}
-	// }
 	// cannot allocate zero or negative resource
 	if !resources.StrictlyGreaterThanZero(res) {
 		log.Logger().Debug("pre alloc check: requested resource is zero",

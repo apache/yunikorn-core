@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	interfaceCommon "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"gotest.tools/assert"
 )
 
@@ -115,4 +116,19 @@ func TestConvertSITimeout(t *testing.T) {
 			assert.Equal(t, val, tc.expected, "test case failure: %s", tc.name)
 		})
 	}
+}
+
+func TestGetIgnoreUnschedulable(t *testing.T) {
+	tag := make(map[string]string)
+	ignore := GetIgnoreUnschedulable(tag)
+	assert.Equal(t, ignore, false)
+	tag["TestValue"] = "true"
+	ignore = GetIgnoreUnschedulable(tag)
+	assert.Equal(t, ignore, false)
+	tag[interfaceCommon.DomainYuniKorn+interfaceCommon.KeyIgnoreUnschedulable] = "true"
+	ignore = GetIgnoreUnschedulable(tag)
+	assert.Equal(t, ignore, true)
+	tag[interfaceCommon.DomainYuniKorn+interfaceCommon.KeyIgnoreUnschedulable] = "false"
+	ignore = GetIgnoreUnschedulable(tag)
+	assert.Equal(t, ignore, false)
 }

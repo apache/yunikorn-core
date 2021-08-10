@@ -20,13 +20,12 @@ package scheduler
 
 import (
 	"go.uber.org/zap"
-	"strconv"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
-	interfaceCommon "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 )
 
 // Preemption policy based-on DRF
@@ -123,18 +122,7 @@ type singleNodePreemptResult struct {
 func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionContext, preemptorQueue *preemptionQueueContext, node *objects.Node, candidate *objects.AllocationAsk,
 	headroomShortages map[string]*resources.Resource) *singleNodePreemptResult {
 	// If allocated resource can fit in the node, and no headroom shortage of preemptor queue, we can directly get it allocated. (lucky!)
-	var ignore bool
-	var err error
-	if ignoreUnschedulable, ok := candidate.Tags[interfaceCommon.DomainYuniKorn+interfaceCommon.KeyIgnoreUnschedulable]; !ok {
-		// if there isn't ignoreUnschedulable tag, set it to false
-		ignore = false
-	} else {
-		ignore, err = strconv.ParseBool(ignoreUnschedulable)
-		if err != nil {
-			log.Logger().Warn("Failed to convert allocationTag ignoreUnschedulable from string to bool")
-			ignore = false
-		}
-	}
+	ignore := common.GetIgnoreUnschedulable(candidate.Tags)
 	if node.CanAllocate(candidate.AllocatedResource, true, ignore) {
 		log.Logger().Debug("No preemption needed candidate fits on node",
 			zap.String("nodeID", node.NodeID))

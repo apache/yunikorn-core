@@ -174,6 +174,11 @@ func TestPreAllocateCheck(t *testing.T) {
 		t.Errorf("node with scheduling set to false should not allow allocation: %v", err)
 	}
 	// Check the DaemonSet case in non scheduling node
+	if err = node.preAllocateCheck(resSmall, "", false, true); err == nil {
+		t.Errorf("DaemonSet pod should schedule failed in reserved node: %v", err)
+	}
+	// clear the reservations in node
+	delete(node.reservations, reserve.getKey())
 	err = node.preAllocateCheck(resSmall, "", false, true)
 	assert.NilError(t, err, "DaemonSet pod should ignore the tag of Unschedulable node")
 }

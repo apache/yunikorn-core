@@ -24,8 +24,9 @@ import (
 	"testing"
 	"time"
 
-	interfaceCommon "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"gotest.tools/assert"
+
+	common "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 )
 
 func TestGetNormalizedPartitionName(t *testing.T) {
@@ -125,10 +126,10 @@ func TestGetIgnoreUnschedulable(t *testing.T) {
 	tag["TestValue"] = "true"
 	ignore = GetIgnoreUnschedulable(tag)
 	assert.Equal(t, ignore, false)
-	tag[interfaceCommon.DomainYuniKorn+interfaceCommon.KeyIgnoreUnschedulable] = "true"
+	tag[common.DomainYuniKorn+common.KeyIgnoreUnschedulable] = "true"
 	ignore = GetIgnoreUnschedulable(tag)
 	assert.Equal(t, ignore, true)
-	tag[interfaceCommon.DomainYuniKorn+interfaceCommon.KeyIgnoreUnschedulable] = "false"
+	tag[common.DomainYuniKorn+common.KeyIgnoreUnschedulable] = "false"
 	ignore = GetIgnoreUnschedulable(tag)
 	assert.Equal(t, ignore, false)
 }

@@ -359,8 +359,9 @@ func (sn *Node) preConditions(allocID string, allocate bool) bool {
 //
 // This is a lock free call. No updates are made this only performs a pre allocate checks
 func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string, preemptionPhase, ignoreUnschedulable bool) error {
-	// shortcut if a node is not schedulable
+	// skip schedulable check if ignoreUnschedulable is true
 	if !ignoreUnschedulable {
+		// shortcut if a node is not schedulable
 		if !sn.IsSchedulable() {
 			log.Logger().Debug("node is unschedulable",
 				zap.String("nodeID", sn.NodeID))

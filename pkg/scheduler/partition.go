@@ -60,7 +60,7 @@ type PartitionContext struct {
 	rules                  *[]configs.PlacementRule        // placement rules to be loaded by the scheduler
 	userGroupCache         *security.UserGroupCache        // user cache per partition
 	totalPartitionResource *resources.Resource             // Total node resources
-	nodeSortingPolicy      *policies.NodeSortingPolicy     // Global Node Sorting Policies
+	nodeSortingPolicy      objects.NodeSortingPolicy       // Global Node Sorting Policies
 	allocations            int                             // Number of allocations on the partition
 
 	// The partition write lock must not be held while manipulating an application.
@@ -135,22 +135,17 @@ func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionCon
 	// TODO get the resolver from the config
 	pc.userGroupCache = security.GetUserGroupCache("")
 
-	// TODO Need some more cleaner interface here.
 	var configuredPolicy policies.SortingPolicy
-	configuredPolicy, err = policies.FromString(conf.NodeSortPolicy.Type)
+	configuredPolicy, err = policies.SortingPolicyFromString(conf.NodeSortPolicy.Type)
 	if err != nil {
 		log.Logger().Debug("NodeSorting policy incorrectly set or unknown",
 			zap.Error(err))
-	}
-	switch configuredPolicy {
-	case policies.BinPackingPolicy, policies.FairnessPolicy:
+		log.Logger().Info(fmt.Sprintf("NodeSorting policy not set using '%s' as default", configuredPolicy))
+	} else {
 		log.Logger().Info("NodeSorting policy set from config",
 			zap.String("policyName", configuredPolicy.String()))
-		pc.nodeSortingPolicy = policies.NewNodeSortingPolicy(conf.NodeSortPolicy.Type)
-	case policies.Unknown:
-		log.Logger().Info("NodeSorting policy not set using 'fair' as default")
-		pc.nodeSortingPolicy = policies.NewNodeSortingPolicy("fair")
 	}
+	pc.nodeSortingPolicy = objects.NewNodeSortingPolicy(conf.NodeSortPolicy.Type)
 	return nil
 }
 
@@ -921,12 +916,8 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 // Get the iterator for the sorted nodes list from the partition.
 // Sorting should use a copy of the node list not the main list.
 func (pc *PartitionContext) getNodeIteratorForPolicy(nodes []*objects.Node) interfaces.NodeIterator {
-	configuredPolicy := pc.GetNodeSortingPolicy()
-	if configuredPolicy == policies.Unknown {
-		return nil
-	}
 	// Sort Nodes based on the policy configured.
-	objects.SortNodes(nodes, configuredPolicy)
+	objects.SortNodes(nodes, pc.nodeSortingPolicy)
 	return newDefaultNodeIterator(nodes)
 }
 
@@ -1332,7 +1323,7 @@ func (pc *PartitionContext) GetStateTime() time.Time {
 func (pc *PartitionContext) GetNodeSortingPolicy() policies.SortingPolicy {
 	pc.RLock()
 	defer pc.RUnlock()
-	return pc.nodeSortingPolicy.PolicyType
+	return pc.nodeSortingPolicy.PolicyType()
 }
 
 func (pc *PartitionContext) moveTerminatedApp(appID string) {

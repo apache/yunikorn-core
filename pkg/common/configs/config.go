@@ -80,8 +80,9 @@ type QueueConfig struct {
 }
 
 type ChildTemplate struct {
-	Properties map[string]string `yaml:",omitempty" json:",omitempty"`
-	Resources  Resources         `yaml:",omitempty" json:",omitempty"`
+	MaxApplications uint64            `yaml:",omitempty" json:",omitempty"`
+	Properties      map[string]string `yaml:",omitempty" json:",omitempty"`
+	Resources       Resources         `yaml:",omitempty" json:",omitempty"`
 }
 
 // The resource limits to set on the queue. The definition allows for an unlimited number of types to be used.

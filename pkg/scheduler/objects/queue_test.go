@@ -1169,7 +1169,7 @@ func TestQueueProps(t *testing.T) {
 	leaf, err = createDynamicQueue(parent, "leaf", false)
 	assert.NilError(t, err, "failed to create leaf queue")
 	assert.Assert(t, leaf.isLeaf && !leaf.isManaged, "leaf queue is not marked as unmanaged leaf")
-	assert.Equal(t, len(leaf.properties), 0, "leaf queue properties size incorrect")
+	assert.Equal(t, leaf.properties[configs.ApplicationSortPolicy], "stateaware", "leaf queue property value not as expected")
 }
 
 func TestMaxResource(t *testing.T) {
@@ -1340,6 +1340,13 @@ func TestSupportTaskGroup(t *testing.T) {
 	assert.Assert(t, !leaf.SupportTaskGroup(), "leaf queue (FAIR policy) should not support task group")
 }
 
+func checkDAOString(t *testing.T, actual string, expected *resources.Resource) {
+	assert.Equal(t, len(actual), len(expected.DAOString()))
+	for k, v := range expected.Resources {
+		assert.Assert(t, strings.Contains(actual, fmt.Sprintf("%+v:%+v", k, v)))
+	}
+}
+
 func TestGetPartitionQueueDAOInfo(t *testing.T) {
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "failed to create basic root queue: %v", err)
@@ -1349,16 +1356,23 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 	assert.Assert(t, reflect.DeepEqual(root.properties, root.GetPartitionQueueDAOInfo().Properties))
 
 	// test template
-	root.template = template.NewTemplate(getProperties(), getResource(t), getResource(t))
+	root.template, err = template.FromConf(&configs.ChildTemplate{
+		Properties: getProperties(),
+		Resources: configs.Resources{
+			Max: getResourceConf(),
+			Guaranteed: getResourceConf(),
+		},
+	})
+	assert.NilError(t, err)
 	assert.Assert(t, reflect.DeepEqual(root.template.GetProperties(), root.GetPartitionQueueDAOInfo().TemplateInfo.Properties))
-	assert.Equal(t, root.template.GetMaxResource().DAOString(), root.GetPartitionQueueDAOInfo().TemplateInfo.MaxResource)
-	assert.Equal(t, root.template.GetGuaranteedResource().DAOString(), root.GetPartitionQueueDAOInfo().TemplateInfo.GuaranteedResource)
+	checkDAOString(t, root.template.GetMaxResource().DAOString(), root.template.GetMaxResource())
+	checkDAOString(t, root.template.GetGuaranteedResource().DAOString(), root.template.GetGuaranteedResource())
 
 	// test resources
 	root.maxResource = getResource(t)
 	root.guaranteedResource = getResource(t)
-	assert.Equal(t, root.GetMaxResource().DAOString(), root.GetPartitionQueueDAOInfo().MaxResource)
-	assert.Equal(t, root.GetGuaranteedResource().DAOString(), root.GetPartitionQueueDAOInfo().GuaranteedResource)
+	checkDAOString(t, root.GetMaxResource().DAOString(), root.GetMaxResource())
+	checkDAOString(t, root.GetGuaranteedResource().DAOString(), root.GetGuaranteedResource())
 }
 
 func getResourceConf() map[string]string {
@@ -1463,21 +1477,7 @@ func TestSetTemplate(t *testing.T) {
 	assert.NilError(t, err, "failed to set resources: %v", err)
 	checkTemplate(queue)
 
-	// case 1: leaf can't have template
-	leaf, err := createManagedQueueWithProps(nil, "tmp", false, nil, nil)
-	assert.NilError(t, err, "failed to create basic queue queue: %v", err)
-
-	err = leaf.setTemplate(configs.ChildTemplate{
-		Properties: properties,
-		Resources: configs.Resources{
-			Guaranteed: guaranteedResource,
-			Max:        maxResource,
-		},
-	})
-	assert.Assert(t, err != nil)
-	assert.Assert(t, leaf.template == nil)
-
-	// case 2: empty config does nothing
+	// case 1: empty config does nothing
 	err = queue.setTemplate(configs.ChildTemplate{
 		Properties: make(map[string]string),
 		Resources: configs.Resources{
@@ -1486,14 +1486,21 @@ func TestSetTemplate(t *testing.T) {
 		},
 	})
 	assert.NilError(t, err)
-	checkTemplate(queue)
+	assert.Assert(t, queue.template == nil)
 }
 
 func TestLookupTemplate(t *testing.T) {
 	root, err := createManagedQueueWithProps(nil, "root", true, nil, nil)
 	assert.NilError(t, err, "failed to create basic queue queue: %v", err)
 
-	root.template = template.NewTemplate(getProperties(), getResource(t), getResource(t))
+	root.template, err = template.FromConf(&configs.ChildTemplate{
+		Properties: getProperties(),
+		Resources: configs.Resources{
+			Max: getResourceConf(),
+			Guaranteed: getResourceConf(),
+		},
+	})
+	assert.NilError(t, err)
 
 	// case 0: c0 has no template so the lookup returns template of root
 	c0, err := createManagedQueueWithProps(root, "c0", true, nil, nil)
@@ -1503,7 +1510,14 @@ func TestLookupTemplate(t *testing.T) {
 	// case 1: c1 has template so the lookup returns its template
 	c1, err := createManagedQueueWithProps(root, "c1", true, nil, nil)
 	assert.NilError(t, err, "failed to create basic queue queue: %v", err)
-	c1.template = template.NewTemplate(getProperties(), getResource(t), getResource(t))
+	c1.template, err = template.FromConf(&configs.ChildTemplate{
+		Properties: getProperties(),
+		Resources: configs.Resources{
+			Max: getResourceConf(),
+			Guaranteed: getResourceConf(),
+		},
+	})
+	assert.NilError(t, err)
 	assert.Equal(t, c1.template, lookupTemplate(c1))
 
 	// case 2: both c2 and its parent (c0) have no template so lookup returns template of root
@@ -1513,17 +1527,16 @@ func TestLookupTemplate(t *testing.T) {
 }
 
 func TestApplyTemplate(t *testing.T) {
-	// case 0: non-leaf can't use template to generate resources and properties
-	childTemplate := template.NewTemplate(getProperties(), getResource(t), getResource(t))
+	childTemplate, err := template.FromConf(&configs.ChildTemplate{
+		Properties: getProperties(),
+		Resources: configs.Resources{
+			Max: getResourceConf(),
+			Guaranteed: getResourceConf(),
+		},
+	})
+	assert.NilError(t, err)
 
-	queue, err := createManagedQueueWithProps(nil, "tmp", true, nil, nil)
-	assert.NilError(t, err, "failed to create basic queue queue: %v", err)
-	queue.applyTemplate(nil)
-	assert.Assert(t, queue.template == nil)
-	queue.applyTemplate(childTemplate)
-	assert.Assert(t, queue.template == nil)
-
-	// case 1: leaf queue can apply template
+	// case 0: leaf queue can apply template
 	leaf, err := createManagedQueueWithProps(nil, "tmp", false, nil, nil)
 	assert.NilError(t, err, "failed to create basic queue queue: %v", err)
 	leaf.applyTemplate(childTemplate)
@@ -1532,11 +1545,101 @@ func TestApplyTemplate(t *testing.T) {
 	assert.Assert(t, reflect.DeepEqual(leaf.guaranteedResource, childTemplate.GetGuaranteedResource()))
 	assert.Assert(t, reflect.DeepEqual(leaf.maxResource, childTemplate.GetMaxResource()))
 
-	// case 2: zero resource template generates nil resource
+	// case 1: zero resource template generates nil resource
 	leaf2, err := createManagedQueueWithProps(nil, "tmp", false, nil, nil)
 	assert.NilError(t, err, "failed to create basic queue queue: %v", err)
-	leaf2.applyTemplate(template.NewTemplate(getProperties(), getZeroResource(t), getZeroResource(t)))
+	zeroTemplate, err := template.FromConf(&configs.ChildTemplate{
+		Properties: getProperties(),
+		Resources: configs.Resources{
+			Max: getZeroResourceConf(),
+			Guaranteed: getZeroResourceConf(),
+		},
+	})
+	assert.NilError(t, err)
+	leaf2.applyTemplate(zeroTemplate)
 	assert.Assert(t, leaf2.template == nil)
 	assert.Assert(t, leaf2.maxResource == nil)
 	assert.Assert(t, leaf2.guaranteedResource == nil)
+}
+
+func TestApplyConf(t *testing.T) {
+	conf := configs.QueueConfig{
+		SubmitACL: "",
+		AdminACL: "",
+		Resources: configs.Resources{
+			Max: getResourceConf(),
+			Guaranteed: getResourceConf(),
+		},
+		ChildTemplate: configs.ChildTemplate {
+			Properties: make(map[string]string),
+			Resources: configs.Resources{
+				Max: getResourceConf(),
+				Guaranteed: getResourceConf(),
+			},
+		},
+	}
+
+	// case 0: leaf can't set template
+	leaf, err := createManagedQueueWithProps(nil, "tmp", false, nil, nil)
+	assert.NilError(t, err, "failed to create basic queue: %v", err)
+
+	validTemplate, err := template.FromConf(&conf.ChildTemplate)
+	assert.NilError(t, err, "failed to parse conf: %v", err)
+	assert.Assert(t, validTemplate != nil)
+
+	conf.Parent = false
+	err = leaf.applyConf(conf)
+	assert.NilError(t, err, "failed to apply conf: %v", err)
+	assert.Assert(t, leaf.template == nil)
+	assert.Assert(t, leaf.maxResource != nil)
+	assert.Assert(t, leaf.guaranteedResource != nil)
+
+	// case 1: non-leaf queue can have template
+	queue, err := createManagedQueueWithProps(nil, "tmp", true, nil, nil)
+	assert.NilError(t, err, "failed to create basic queue: %v", err)
+
+	conf.Parent = true
+	err = queue.applyConf(conf)
+	assert.NilError(t, err, "failed to apply conf: %v", err)
+	assert.Assert(t, queue.template != nil)
+	assert.Assert(t, queue.maxResource != nil)
+	assert.Assert(t, queue.guaranteedResource != nil)
+
+	// root can't set resources
+	root, err := createManagedQueueWithProps(nil, "root", true, nil, nil)
+	assert.NilError(t, err, "failed to create basic queue: %v", err)
+
+	err = queue.applyConf(conf)
+	assert.NilError(t, err, "failed to apply conf: %v", err)
+	assert.Assert(t, root.maxResource == nil)
+	assert.Assert(t, root.guaranteedResource == nil)
+}
+
+func TestNewDynamicQueue(t *testing.T) {
+	parent, err := createManagedQueueWithProps(nil, "parent", true, nil, nil)
+	assert.NilError(t, err, "failed to create queue: %v", err)
+	parent.template, err = template.FromConf(&configs.ChildTemplate{
+		Properties: getProperties(),
+		Resources: configs.Resources{
+			Max: getResourceConf(),
+			Guaranteed: getResourceConf(),
+		},
+	})
+	assert.NilError(t, err)
+	
+	// case 0: leaf can use template
+	childLeaf, err := NewDynamicQueue("leaf", true, parent)
+	assert.NilError(t, err, "failed to create dynamic queue: %v", err)
+	assert.Assert(t, childLeaf.template == nil)
+	assert.Assert(t, reflect.DeepEqual(childLeaf.properties, parent.template.GetProperties()))
+	assert.Assert(t, reflect.DeepEqual(childLeaf.maxResource, parent.template.GetMaxResource()))
+	assert.Assert(t, reflect.DeepEqual(childLeaf.guaranteedResource, parent.template.GetGuaranteedResource()))
+
+	// case 1: non-leaf can't use template
+	childNonLeaf, err := NewDynamicQueue("nonleaf", false, parent)
+	assert.NilError(t, err, "failed to create dynamic queue: %v", err)
+	assert.Assert(t, childNonLeaf.template == nil)
+	assert.Equal(t, len(childNonLeaf.properties), 0)
+	assert.Assert(t, childNonLeaf.guaranteedResource == nil)
+	assert.Assert(t, childNonLeaf.maxResource == nil)
 }

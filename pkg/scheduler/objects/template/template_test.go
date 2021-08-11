@@ -66,7 +66,7 @@ func TestNewTemplate(t *testing.T) {
 	guaranteedResource := getResource(t)
 	maxResource := getResource(t)
 
-	checkMembers(t, NewTemplate(properties, maxResource, guaranteedResource), properties, maxResource, guaranteedResource)
+	checkMembers(t, newTemplate(properties, maxResource, guaranteedResource), properties, maxResource, guaranteedResource)
 }
 
 func TestFromConf(t *testing.T) {
@@ -74,6 +74,7 @@ func TestFromConf(t *testing.T) {
 	guaranteedResourceConf := getResourceConf()
 	maxResourceConf := getResourceConf()
 
+	// case 0: normal case
 	template, err := FromConf(&configs.ChildTemplate{
 		Properties: properties,
 		Resources: configs.Resources{
@@ -88,4 +89,45 @@ func TestFromConf(t *testing.T) {
 	guaranteedResource, err := resources.NewResourceFromConf(guaranteedResourceConf)
 	assert.NilError(t, err, "failed to parse resource: %v", err)
 	checkMembers(t, template, properties, maxResource, guaranteedResource)
+
+	// case 1: empty map produces nil template
+	empty0, err := FromConf(&configs.ChildTemplate{
+		Properties: make(map[string]string),
+		Resources: configs.Resources{
+			Max:        make(map[string]string),
+			Guaranteed: make(map[string]string),
+		},
+	})
+	assert.NilError(t, err)
+	assert.Assert(t, empty0 == nil)
+
+	empty1, err := FromConf(nil)
+	assert.NilError(t, err)
+	assert.Assert(t, empty1 == nil)
+
+	// case 2: empty key-value produces nil template
+	emptyProps := make(map[string]string)
+	emptyProps[""] = ""
+	empty2, err := FromConf(&configs.ChildTemplate{
+		Properties: emptyProps,
+		Resources: configs.Resources{
+			Max:        emptyProps,
+			Guaranteed: emptyProps,
+		},
+	})
+	assert.NilError(t, err)
+	assert.Assert(t, empty2 == nil)
+
+	// case 3: one item can produce template
+	props := make(map[string]string)
+	props["k"] = "v"
+	validTemplate, err := FromConf(&configs.ChildTemplate{
+		Properties: make(map[string]string),
+		Resources: configs.Resources{
+			Max:        getResourceConf(),
+			Guaranteed: make(map[string]string),
+		},
+	})
+	assert.NilError(t, err)
+	assert.Assert(t, validTemplate != nil)
 }

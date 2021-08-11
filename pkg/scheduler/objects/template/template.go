@@ -30,7 +30,24 @@ type Template struct {
 	guaranteedResource *resources.Resource
 }
 
+// FromConf converts the configs.ChildTemplate to a Template.
+// It returns error if it fails to parse configs.
+// It returns nil value if the configs.ChildTemplate is empty
 func FromConf(template *configs.ChildTemplate) (*Template, error) {
+	// A non-empty list of empty property values is also empty
+	isMapEmpty := func(m map[string]string) bool {
+		for k, v := range m {
+			if k != "" && v != "" {
+				return false
+			}
+		}
+		return true
+	}
+
+	if template == nil || (isMapEmpty(template.Properties) && isMapEmpty(template.Resources.Guaranteed) && isMapEmpty(template.Resources.Max)) {
+		return nil, nil
+	}
+
 	maxResource, err := resources.NewResourceFromConf(template.Resources.Max)
 	if err != nil {
 		return nil, err
@@ -40,17 +57,29 @@ func FromConf(template *configs.ChildTemplate) (*Template, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewTemplate(template.Properties, maxResource, guaranteedResource), nil
+
+	return newTemplate(template.Properties, maxResource, guaranteedResource), nil
 }
 
-func NewTemplate(properties map[string]string, maxResource *resources.Resource, guaranteedResource *resources.Resource) *Template {
+func newTemplate(properties map[string]string, maxResource *resources.Resource, guaranteedResource *resources.Resource) *Template {
 	template := &Template{
 		properties:         make(map[string]string),
-		maxResource:        maxResource.Clone(),
-		guaranteedResource: guaranteedResource.Clone(),
+		maxResource:        nil,
+		guaranteedResource: nil,
 	}
+
+	if resources.StrictlyGreaterThanZero(maxResource) {
+		template.maxResource = maxResource.Clone()
+	}
+
+	if resources.StrictlyGreaterThanZero(guaranteedResource) {
+		template.guaranteedResource = guaranteedResource.Clone()
+	}
+
 	for k, v := range properties {
-		template.properties[k] = v
+		if k != "" && v != "" {
+			template.properties[k] = v
+		}
 	}
 	return template
 }

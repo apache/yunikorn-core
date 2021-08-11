@@ -48,6 +48,7 @@ type Node struct {
 	availableResource *resources.Resource
 	allocations       map[string]*Allocation
 	schedulable       bool
+	unlimited         bool
 
 	preempting   *resources.Resource     // resources considered for preemption
 	reservations map[string]*reservation // a map of reservations
@@ -87,8 +88,8 @@ func (sn *Node) String() string {
 	if sn == nil {
 		return "node is nil"
 	}
-	return fmt.Sprintf("NodeID %s, Partition %s, Schedulable %t, Total %s, Allocated %s, #allocations %d",
-		sn.NodeID, sn.Partition, sn.schedulable, sn.totalResource, sn.allocatedResource, len(sn.allocations))
+	return fmt.Sprintf("NodeID %s, Partition %s, Schedulable %t, Unlimited: %t, Total %s, Allocated %s, #allocations %d",
+		sn.NodeID, sn.Partition, sn.schedulable, sn.unlimited, sn.totalResource, sn.allocatedResource, len(sn.allocations))
 }
 
 // Set the attributes and fast access fields.
@@ -99,6 +100,12 @@ func (sn *Node) initializeAttribute(newAttributes map[string]string) {
 	sn.Hostname = sn.attributes[common.HostName]
 	sn.Rackname = sn.attributes[common.RackName]
 	sn.Partition = sn.attributes[common.NodePartition]
+
+	if v, ok := sn.attributes["yunikorn.apache.org/nodeType"]; ok {
+		if v == "unlimited" {
+			sn.unlimited = true
+		}
+	}
 }
 
 // Get an attribute by name. The most used attributes can be directly accessed via the
@@ -228,6 +235,9 @@ func (sn *Node) GetAvailableResource() *resources.Resource {
 func (sn *Node) FitInNode(resRequest *resources.Resource) bool {
 	sn.RLock()
 	defer sn.RUnlock()
+	if sn.unlimited {
+		return true
+	}
 	return resources.FitIn(sn.totalResource, resRequest)
 }
 
@@ -270,8 +280,10 @@ func (sn *Node) RemoveAllocation(uuid string) *Allocation {
 	alloc := sn.allocations[uuid]
 	if alloc != nil {
 		delete(sn.allocations, uuid)
-		sn.allocatedResource.SubFrom(alloc.AllocatedResource)
-		sn.availableResource.AddTo(alloc.AllocatedResource)
+		if !sn.unlimited {
+			sn.allocatedResource.SubFrom(alloc.AllocatedResource)
+			sn.availableResource.AddTo(alloc.AllocatedResource)
+		}
 		return alloc
 	}
 
@@ -289,6 +301,10 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 	defer sn.Unlock()
 	// check if this still fits: it might have changed since pre check
 	res := alloc.AllocatedResource
+	if sn.unlimited {
+		sn.allocations[alloc.UUID] = alloc
+		return true
+	}
 	if resources.FitIn(sn.availableResource, res) {
 		sn.allocations[alloc.UUID] = alloc
 		sn.allocatedResource.AddTo(res)
@@ -313,17 +329,26 @@ func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation) {
 // If the proposed allocation does not fit false is returned.
 // TODO: remove when updating preemption
 func (sn *Node) CanAllocate(res *resources.Resource, preemptionPhase bool) bool {
+	if sn.unlimited {
+		return true
+	}
 	err := sn.preAllocateCheck(res, "", preemptionPhase)
 	return err == nil
 }
 
 // Checking pre-conditions in the shim for an allocation.
 func (sn *Node) preAllocateConditions(allocID string) bool {
+	if sn.unlimited {
+		return true
+	}
 	return sn.preConditions(allocID, true)
 }
 
 // Checking pre-conditions in the shim for a reservation.
 func (sn *Node) preReserveConditions(allocID string) bool {
+	if sn.unlimited {
+		return true
+	}
 	return sn.preConditions(allocID, false)
 }
 
@@ -334,6 +359,9 @@ func (sn *Node) preReserveConditions(allocID string) bool {
 // This is a lock free call as it does not change the node and multiple predicate checks could be
 // run at the same time.
 func (sn *Node) preConditions(allocID string, allocate bool) bool {
+	if sn.unlimited {
+		return true
+	}
 	// Check the predicates plugin (k8shim)
 	if plugin := plugins.GetPredicatesPlugin(); plugin != nil {
 		// checking predicates
@@ -359,6 +387,9 @@ func (sn *Node) preConditions(allocID string, allocate bool) bool {
 //
 // This is a lock free call. No updates are made this only performs a pre allocate checks
 func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string, preemptionPhase bool) error {
+	if sn.unlimited {
+		return nil
+	}
 	// shortcut if a node is not schedulable
 	if !sn.IsSchedulable() {
 		log.Logger().Debug("node is unschedulable",
@@ -439,6 +470,10 @@ func (sn *Node) Reserve(app *Application, ask *AllocationAsk) error {
 			zap.Any("app", app),
 			zap.Any("ask", ask))
 		return fmt.Errorf("reservation creation failed app or ask are nil on nodeID %s", sn.NodeID)
+	}
+	if sn.unlimited {
+		sn.reservations[appReservation.getKey()] = appReservation
+		return nil
 	}
 	// reservation must fit on the empty node
 	if !resources.FitIn(sn.totalResource, ask.AllocatedResource) {

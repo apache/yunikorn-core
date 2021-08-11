@@ -179,6 +179,7 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 		return err
 	}
 	root.UpdateSortType()
+	root.LogUnknownProperties()
 	// update the rest of the queues recursively
 	return pc.updateQueues(queueConf.Queues, root)
 }
@@ -225,6 +226,7 @@ func (pc *PartitionContext) updateQueues(config []configs.QueueConfig, parent *o
 		}
 		// special call to convert to a real policy from the property
 		queue.UpdateSortType()
+		queue.LogUnknownProperties()
 		if err = pc.updateQueues(queueConfig.Queues, queue); err != nil {
 			return err
 		}

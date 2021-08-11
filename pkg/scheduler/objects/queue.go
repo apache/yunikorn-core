@@ -275,31 +275,35 @@ func (sq *Queue) UpdateSortType() {
 	defer sq.Unlock()
 	// set the defaults, override with what is in the configured properties
 	if sq.isLeaf {
-		// walk over all properties and process
-		var err error
-		sq.sortType = policies.Undefined
-		for key, value := range sq.properties {
-			if key == configs.ApplicationSortPolicy {
-				sq.sortType, err = policies.SortPolicyFromString(value)
-				if err != nil {
-					log.Logger().Debug("application sort property configuration error",
-						zap.Error(err))
-				}
-			} else {
-				// skip unknown properties just log them
-				log.Logger().Debug("queue property skipped",
-					zap.String("key", key),
-					zap.String("value", value))
+		policyString, ok := sq.properties[configs.ApplicationSortPolicy]
+		if ok {
+			policy, err := policies.SortPolicyFromString(policyString)
+			if err != nil {
+				log.Logger().Debug("application sort property configuration error",
+					zap.Error(err))
 			}
-		}
-		// if it is not defined default to fifo
-		if sq.sortType == policies.Undefined {
-			sq.sortType = policies.FifoSortPolicy
+			sq.sortType = policy
+		} else {
+			sq.sortType = policies.DefaultSortPolicy
 		}
 		return
 	}
 	// set the sorting type for parent queues
 	sq.sortType = policies.FairSortPolicy
+}
+
+func (sq *Queue) LogUnknownProperties() {
+	sq.RLock()
+	defer sq.RUnlock()
+	for key, value := range sq.properties {
+		_, ok := configs.KnownProperties[key]
+		if !ok {
+			// skip unknown properties just log them
+			log.Logger().Debug("unknown property skipped",
+				zap.String("key", key),
+				zap.String("value", value))
+		}
+	}
 }
 
 func (sq *Queue) GetQueuePath() string {

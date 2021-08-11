@@ -29,23 +29,26 @@ const (
 	FifoSortPolicy   SortPolicy = iota // first in first out, submit time
 	FairSortPolicy                     // fair based on usage
 	StateAwarePolicy                   // only 1 app in starting state
-	Undefined                          // not initialised or parsing failed
 )
 
+const DefaultSortPolicy = FifoSortPolicy
+
 func (s SortPolicy) String() string {
-	return [...]string{"fifo", "fair", "stateaware", "undefined"}[s]
+	return [...]string{"fifo", "fair", "stateaware"}[s]
 }
 
 func SortPolicyFromString(str string) (SortPolicy, error) {
 	switch str {
-	// fifo is the default policy when not set
-	case FifoSortPolicy.String(), "":
+	// return default policy when not set
+	case "":
+		return DefaultSortPolicy, nil
+	case FifoSortPolicy.String():
 		return FifoSortPolicy, nil
 	case FairSortPolicy.String():
 		return FairSortPolicy, nil
 	case StateAwarePolicy.String():
 		return StateAwarePolicy, nil
 	default:
-		return Undefined, fmt.Errorf("undefined policy: %s", str)
+		return DefaultSortPolicy, fmt.Errorf("undefined policy: %s", str)
 	}
 }

@@ -40,6 +40,8 @@ const (
 	ApplicationSortPolicy = "application.sort.policy"
 )
 
+var KnownProperties = map[string]string{ApplicationSortPolicy: policies.DefaultSortPolicy.String()}
+
 // A queue can be a username with the dot replaced. Most systems allow a 32 character user name.
 // The queue name must thus allow for at least that length with the replacement of dots.
 var QueueNameRegExp = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)

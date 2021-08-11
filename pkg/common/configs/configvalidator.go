@@ -258,7 +258,7 @@ func checkNodeSortingPolicy(partition *PartitionConfig) error {
 	policy := partition.NodeSortPolicy
 
 	// Defined polices.
-	_, err := policies.FromString(policy.Type)
+	_, err := policies.SortingPolicyFromString(policy.Type)
 
 	return err
 }

@@ -16,32 +16,29 @@
  limitations under the License.
 */
 
-package policies
+package objects
 
 import (
-	"fmt"
+	"testing"
+
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 )
 
-type SortingPolicy int
-
-const (
-	BinPackingPolicy SortingPolicy = iota
-	FairnessPolicy
-)
-
-func (nsp SortingPolicy) String() string {
-	return [...]string{"binpacking", "fair"}[nsp]
-}
-
-func SortingPolicyFromString(str string) (SortingPolicy, error) {
-	switch str {
-	// fair is the default policy when not set
-	case FairnessPolicy.String(), "":
-		return FairnessPolicy, nil
-	case BinPackingPolicy.String():
-		return BinPackingPolicy, nil
-	default:
-		return FairnessPolicy, fmt.Errorf("undefined policy: %s", str)
+func TestNewNodeSortingPolicy(t *testing.T) {
+	tests := []struct {
+		name string
+		arg  string
+		want policies.SortingPolicy
+	}{
+		{"EmptyString", "", policies.FairnessPolicy},
+		{"FairString", "fair", policies.FairnessPolicy},
+		{"BinString", "binpacking", policies.BinPackingPolicy},
+		{"UnknownString", "unknown", policies.FairnessPolicy},
+	}
+	for _, tt := range tests {
+		got := NewNodeSortingPolicy(tt.arg)
+		if got == nil || got.PolicyType() != tt.want {
+			t.Errorf("%s unexpected policy returned, expected = '%s', got '%v'", tt.name, tt.want, got)
+		}
 	}
 }
-

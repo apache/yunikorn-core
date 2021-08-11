@@ -22,7 +22,7 @@ import (
 	"testing"
 )
 
-func TestFromString(t *testing.T) {
+func TestSortingPolicyFromString(t *testing.T) {
 	tests := []struct {
 		name    string
 		arg     string
@@ -32,10 +32,10 @@ func TestFromString(t *testing.T) {
 		{"EmptyString", "", FairnessPolicy, false},
 		{"FairString", "fair", FairnessPolicy, false},
 		{"BinString", "binpacking", BinPackingPolicy, false},
-		{"UnknownString", "unknown", Unknown, true},
+		{"UnknownString", "unknown", FairnessPolicy, true},
 	}
 	for _, tt := range tests {
-		got, err := FromString(tt.arg)
+		got, err := SortingPolicyFromString(tt.arg)
 		if (err != nil) != tt.wantErr {
 			t.Errorf("%s unexpected error returned, expected error: %t, got error '%v'", tt.name, tt.wantErr, err)
 			return
@@ -46,7 +46,7 @@ func TestFromString(t *testing.T) {
 	}
 }
 
-func TestToString(t *testing.T) {
+func TestSortingPolicyToString(t *testing.T) {
 	var someSP SortingPolicy // since SortingPolicy is an iota it defaults to first in the list
 	tests := []struct {
 		name string
@@ -55,7 +55,6 @@ func TestToString(t *testing.T) {
 	}{
 		{"FairString", FairnessPolicy, "fair"},
 		{"BinString", BinPackingPolicy, "binpacking"},
-		{"DefaultString", Unknown, "undefined"},
 		{"NoneString", someSP, "binpacking"},
 	}
 	for _, tt := range tests {
@@ -65,21 +64,3 @@ func TestToString(t *testing.T) {
 	}
 }
 
-func TestNewNodeSortingPolicy(t *testing.T) {
-	tests := []struct {
-		name string
-		arg  string
-		want SortingPolicy
-	}{
-		{"EmptyString", "", FairnessPolicy},
-		{"FairString", "fair", FairnessPolicy},
-		{"BinString", "binpacking", BinPackingPolicy},
-		{"UnknownString", "unknown", Unknown},
-	}
-	for _, tt := range tests {
-		got := NewNodeSortingPolicy(tt.arg)
-		if got == nil || got.PolicyType != tt.want {
-			t.Errorf("%s unexpected policy returned, expected = '%s', got '%v'", tt.name, tt.want, got)
-		}
-	}
-}

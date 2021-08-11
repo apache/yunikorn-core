@@ -1359,7 +1359,7 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 	root.template, err = template.FromConf(&configs.ChildTemplate{
 		Properties: getProperties(),
 		Resources: configs.Resources{
-			Max: getResourceConf(),
+			Max:        getResourceConf(),
 			Guaranteed: getResourceConf(),
 		},
 	})
@@ -1393,12 +1393,6 @@ func getZeroResourceConf() map[string]string {
 	resource["memory"] = "0"
 	resource["vcore"] = "0"
 	return resource
-}
-
-func getZeroResource(t *testing.T) *resources.Resource {
-	r, err := resources.NewResourceFromConf(getZeroResourceConf())
-	assert.NilError(t, err, "failed to parse resource: %v", err)
-	return r
 }
 
 func getProperties() map[string]string {
@@ -1496,7 +1490,7 @@ func TestLookupTemplate(t *testing.T) {
 	root.template, err = template.FromConf(&configs.ChildTemplate{
 		Properties: getProperties(),
 		Resources: configs.Resources{
-			Max: getResourceConf(),
+			Max:        getResourceConf(),
 			Guaranteed: getResourceConf(),
 		},
 	})
@@ -1513,7 +1507,7 @@ func TestLookupTemplate(t *testing.T) {
 	c1.template, err = template.FromConf(&configs.ChildTemplate{
 		Properties: getProperties(),
 		Resources: configs.Resources{
-			Max: getResourceConf(),
+			Max:        getResourceConf(),
 			Guaranteed: getResourceConf(),
 		},
 	})
@@ -1530,7 +1524,7 @@ func TestApplyTemplate(t *testing.T) {
 	childTemplate, err := template.FromConf(&configs.ChildTemplate{
 		Properties: getProperties(),
 		Resources: configs.Resources{
-			Max: getResourceConf(),
+			Max:        getResourceConf(),
 			Guaranteed: getResourceConf(),
 		},
 	})
@@ -1551,7 +1545,7 @@ func TestApplyTemplate(t *testing.T) {
 	zeroTemplate, err := template.FromConf(&configs.ChildTemplate{
 		Properties: getProperties(),
 		Resources: configs.Resources{
-			Max: getZeroResourceConf(),
+			Max:        getZeroResourceConf(),
 			Guaranteed: getZeroResourceConf(),
 		},
 	})
@@ -1565,15 +1559,15 @@ func TestApplyTemplate(t *testing.T) {
 func TestApplyConf(t *testing.T) {
 	conf := configs.QueueConfig{
 		SubmitACL: "",
-		AdminACL: "",
+		AdminACL:  "",
 		Resources: configs.Resources{
-			Max: getResourceConf(),
+			Max:        getResourceConf(),
 			Guaranteed: getResourceConf(),
 		},
-		ChildTemplate: configs.ChildTemplate {
+		ChildTemplate: configs.ChildTemplate{
 			Properties: make(map[string]string),
 			Resources: configs.Resources{
-				Max: getResourceConf(),
+				Max:        getResourceConf(),
 				Guaranteed: getResourceConf(),
 			},
 		},
@@ -1621,12 +1615,12 @@ func TestNewDynamicQueue(t *testing.T) {
 	parent.template, err = template.FromConf(&configs.ChildTemplate{
 		Properties: getProperties(),
 		Resources: configs.Resources{
-			Max: getResourceConf(),
+			Max:        getResourceConf(),
 			Guaranteed: getResourceConf(),
 		},
 	})
 	assert.NilError(t, err)
-	
+
 	// case 0: leaf can use template
 	childLeaf, err := NewDynamicQueue("leaf", true, parent)
 	assert.NilError(t, err, "failed to create dynamic queue: %v", err)

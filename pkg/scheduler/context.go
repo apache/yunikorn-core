@@ -537,14 +537,14 @@ func (cc *ClusterContext) updateNodes(request *si.UpdateRequest) {
 		if p, ok := update.Attributes[siCommon.NodePartition]; ok {
 			partition = cc.GetPartition(p)
 		} else {
-			log.Logger().Info("node partition not specified",
+			log.Logger().Error("node partition not specified",
 				zap.String("nodeID", update.NodeID),
 				zap.String("nodeAction", update.Action.String()))
 			continue
 		}
 
 		if partition == nil {
-			log.Logger().Info("Failed to update node on non existing partition",
+			log.Logger().Error("Failed to update node on non existing partition",
 				zap.String("nodeID", update.NodeID),
 				zap.String("partitionName", update.Attributes[siCommon.NodePartition]),
 				zap.String("nodeAction", update.Action.String()))
@@ -553,7 +553,7 @@ func (cc *ClusterContext) updateNodes(request *si.UpdateRequest) {
 
 		node := partition.GetNode(update.NodeID)
 		if node == nil {
-			log.Logger().Info("Failed to update non existing node",
+			log.Logger().Error("Failed to update non existing node",
 				zap.String("nodeID", update.NodeID),
 				zap.String("partitionName", update.Attributes[siCommon.NodePartition]),
 				zap.String("nodeAction", update.Action.String()))
@@ -601,7 +601,7 @@ func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
 				NodeID: node.NodeID,
 				Reason: msg,
 			})
-			log.Logger().Info("Failed to add node to non existing partition",
+			log.Logger().Error("Failed to add node to non existing partition",
 				zap.String("nodeID", sn.NodeID),
 				zap.String("partitionName", sn.Partition))
 			continue
@@ -614,7 +614,7 @@ func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
 				NodeID: sn.NodeID,
 				Reason: msg,
 			})
-			log.Logger().Info("Failed to add node to partition (rejected)",
+			log.Logger().Error("Failed to add node to partition (rejected)",
 				zap.String("nodeID", sn.NodeID),
 				zap.String("partitionName", sn.Partition),
 				zap.Error(err))
@@ -665,7 +665,7 @@ func (cc *ClusterContext) processAsks(request *si.UpdateRequest) {
 		partition := cc.GetPartition(siAsk.PartitionName)
 		if partition == nil {
 			msg := fmt.Sprintf("Failed to find partition %s, for application %s and allocation %s", siAsk.PartitionName, siAsk.ApplicationID, siAsk.AllocationKey)
-			log.Logger().Info("Invalid ask add requested by shim, partition not found",
+			log.Logger().Error("Invalid ask add requested by shim, partition not found",
 				zap.String("partition", siAsk.PartitionName),
 				zap.String("applicationID", siAsk.ApplicationID),
 				zap.String("askKey", siAsk.AllocationKey))
@@ -685,7 +685,7 @@ func (cc *ClusterContext) processAsks(request *si.UpdateRequest) {
 					ApplicationID: siAsk.ApplicationID,
 					Reason:        err.Error(),
 				})
-			log.Logger().Info("Invalid ask add requested by shim",
+			log.Logger().Error("Invalid ask add requested by shim",
 				zap.String("partition", siAsk.PartitionName),
 				zap.String("applicationID", siAsk.ApplicationID),
 				zap.String("askKey", siAsk.AllocationKey),
@@ -706,7 +706,7 @@ func (cc *ClusterContext) processAskReleases(releases []*si.AllocationAskRelease
 	for _, toRelease := range releases {
 		partition := cc.GetPartition(toRelease.PartitionName)
 		if partition == nil {
-			log.Logger().Info("Invalid ask release requested by shim, partition not found",
+			log.Logger().Error("Invalid ask release requested by shim, partition not found",
 				zap.String("partition", toRelease.PartitionName),
 				zap.String("applicationID", toRelease.ApplicationID),
 				zap.String("askKey", toRelease.Allocationkey))

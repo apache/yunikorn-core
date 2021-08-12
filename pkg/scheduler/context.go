@@ -442,7 +442,7 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 				ApplicationID: app.ApplicationID,
 				Reason:        msg,
 			})
-			log.Logger().Info("Failed to add application to non existing partition",
+			log.Logger().Error("Failed to add application to non existing partition",
 				zap.String("applicationID", app.ApplicationID),
 				zap.String("partitionName", app.PartitionName))
 			continue
@@ -455,7 +455,7 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 				ApplicationID: app.ApplicationID,
 				Reason:        err.Error(),
 			})
-			log.Logger().Info("Failed to add application to partition (user rejected)",
+			log.Logger().Error("Failed to add application to partition (user rejected)",
 				zap.String("applicationID", app.ApplicationID),
 				zap.String("partitionName", app.PartitionName),
 				zap.Error(err))
@@ -468,7 +468,7 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 				ApplicationID: app.ApplicationID,
 				Reason:        err.Error(),
 			})
-			log.Logger().Info("Failed to add application to partition (placement rejected)",
+			log.Logger().Error("Failed to add application to partition (placement rejected)",
 				zap.String("applicationID", app.ApplicationID),
 				zap.String("partitionName", app.PartitionName),
 				zap.Error(err))

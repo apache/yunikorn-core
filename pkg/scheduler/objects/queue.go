@@ -1107,8 +1107,8 @@ func (sq *Queue) TryReservedAllocate(iterator func() interfaces.NodeIterator) *A
 // Get a copy of the reserved app list
 // locked to prevent race conditions from event updates
 func (sq *Queue) getReservedApps() map[string]int {
-	sq.Lock()
-	defer sq.Unlock()
+	sq.RLock()
+	defer sq.RUnlock()
 
 	copied := make(map[string]int)
 	for appID, numRes := range sq.reservedApps {

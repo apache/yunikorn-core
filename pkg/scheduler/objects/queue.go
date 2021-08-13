@@ -145,21 +145,6 @@ func NewDynamicQueue(name string, leaf bool, parent *Queue) (*Queue, error) {
 		return nil, fmt.Errorf("dynamic queue creation failed: %s", err)
 	}
 
-	// this is a story about compatibility. the template is a new feature, and we want to keep old behavior.
-	// 1) try to use template. if template is nonexistent,
-	// 2) we set the properties that the dynamic child queue inherits from the parent
-	childTemplate := lookupTemplate(parent)
-	if sq.isLeaf {
-		if childTemplate != nil {
-			sq.applyTemplate(childTemplate)
-		} else {
-			// for a leaf queue pull out all values from the template and set each of them
-			policyValue, ok := parent.properties[configs.ApplicationSortPolicy]
-			if ok {
-				sq.properties[configs.ApplicationSortPolicy] = policyValue
-			}
-		}
-	}
 	sq.UpdateSortType()
 	log.Logger().Info("dynamic queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
@@ -206,67 +191,10 @@ func (sq *Queue) mergeProperties(parent, config map[string]string) {
 	}
 }
 
-func (sq *Queue) getTemplate() *template.Template {
-	sq.RLock()
-	defer sq.RUnlock()
-	return sq.template
-}
-
-// try to find a template from the closest parent
-func lookupTemplate(sq *Queue) *template.Template {
-	if sq == nil {
-		return nil
-	}
-	if current := sq.getTemplate(); current != nil {
-		return current
-	}
-	return lookupTemplate(sq.parent)
-}
-
 func (sq *Queue) ApplyConf(conf configs.QueueConfig) error {
 	sq.Lock()
 	defer sq.Unlock()
 	return sq.applyConf(conf)
-}
-
-func (sq *Queue) setResources(resource configs.Resources) error {
-	maxResource, err := resources.NewResourceFromConf(resource.Max)
-	if err != nil {
-		log.Logger().Error("parsing failed on max resources this should not happen",
-			zap.Error(err))
-		return err
-	}
-
-	guaranteedResource, err := resources.NewResourceFromConf(resource.Guaranteed)
-	if err != nil {
-		log.Logger().Error("parsing failed on guaranteed resources this should not happen",
-			zap.Error(err))
-		return err
-	}
-
-	if resources.StrictlyGreaterThanZero(maxResource) {
-		sq.maxResource = maxResource
-	} else {
-		log.Logger().Debug("max resources setting ignored: cannot set zero max resources")
-	}
-
-	if resources.StrictlyGreaterThanZero(guaranteedResource) {
-		sq.guaranteedResource = guaranteedResource
-	} else {
-		log.Logger().Debug("guaranteed resources setting ignored: cannot set zero max resources")
-	}
-
-	return nil
-}
-
-// lock free call, must be called holding the queue lock or during create only
-func (sq *Queue) setTemplate(conf configs.ChildTemplate) error {
-	t, err := template.FromConf(&conf)
-	if err != nil {
-		return err
-	}
-	sq.template = t
-	return nil
 }
 
 // Apply all the properties to the queue from the config
@@ -313,6 +241,46 @@ func (sq *Queue) applyConf(conf configs.QueueConfig) error {
 	}
 
 	sq.properties = conf.Properties
+	return nil
+}
+
+func (sq *Queue) setResources(resource configs.Resources) error {
+	maxResource, err := resources.NewResourceFromConf(resource.Max)
+	if err != nil {
+		log.Logger().Error("parsing failed on max resources this should not happen",
+			zap.Error(err))
+		return err
+	}
+
+	guaranteedResource, err := resources.NewResourceFromConf(resource.Guaranteed)
+	if err != nil {
+		log.Logger().Error("parsing failed on guaranteed resources this should not happen",
+			zap.Error(err))
+		return err
+	}
+
+	if resources.StrictlyGreaterThanZero(maxResource) {
+		sq.maxResource = maxResource
+	} else {
+		log.Logger().Debug("max resources setting ignored: cannot set zero max resources")
+	}
+
+	if resources.StrictlyGreaterThanZero(guaranteedResource) {
+		sq.guaranteedResource = guaranteedResource
+	} else {
+		log.Logger().Debug("guaranteed resources setting ignored: cannot set zero max resources")
+	}
+
+	return nil
+}
+
+// lock free call, must be called holding the queue lock or during create only
+func (sq *Queue) setTemplate(conf configs.ChildTemplate) error {
+	t, err := template.FromConf(&conf)
+	if err != nil {
+		return err
+	}
+	sq.template = t
 	return nil
 }
 
@@ -644,6 +612,7 @@ func (sq *Queue) removeChildQueue(name string) {
 }
 
 // Add a child queue to this queue.
+// note: both child.isLeaf and child.isManaged must be already configured
 func (sq *Queue) addChildQueue(child *Queue) error {
 	sq.Lock()
 	defer sq.Unlock()
@@ -656,6 +625,25 @@ func (sq *Queue) addChildQueue(child *Queue) error {
 
 	// no need to lock child as it is a new queue which cannot be accessed yet
 	sq.children[child.Name] = child
+
+	if child.isLeaf {
+		if !child.isManaged {
+			// this is a story about compatibility. the template is a new feature, and we want to keep old behavior.
+			// 1) try to use template if it is not nil
+			// 2) otherwise, child leaf copy the configs.ApplicationSortPolicy from parent (old behavior)
+			if sq.template != nil {
+				child.applyTemplate(sq.template)
+			} else {
+				policyValue, ok := sq.properties[configs.ApplicationSortPolicy]
+				if ok {
+					child.properties[configs.ApplicationSortPolicy] = policyValue
+				}
+			}
+		}
+		// managed (configured) leaf queue can't use template
+	} else {
+		child.template = sq.template
+	}
 	return nil
 }
 

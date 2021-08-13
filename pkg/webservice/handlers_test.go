@@ -137,10 +137,8 @@ partitions:
           resources:
             guaranteed:
               memory: 400000
-              vcore: 40000
             max:
               memory: 600000
-              vcore: 60000
         queues: 
           - 
             name: a
@@ -904,13 +902,6 @@ func TestMetricsNotEmpty(t *testing.T) {
 	assert.Assert(t, len(rr.Body.Bytes()) > 0, "Metrics response should not be empty")
 }
 
-func checkDAOString(t *testing.T, actual string, expected *resources.Resource) {
-	assert.Equal(t, len(actual), len(expected.DAOString()))
-	for k, v := range expected.Resources {
-		assert.Assert(t, strings.Contains(actual, fmt.Sprintf("%+v:%+v", k, v)))
-	}
-}
-
 func TestGetPartitionQueuesHandler(t *testing.T) {
 	configs.MockSchedulerConfigByData([]byte(configTwoLevelQueues))
 	var err error
@@ -947,17 +938,15 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 
 	maxResourcesConf := make(map[string]string)
 	maxResourcesConf["memory"] = "600000"
-	maxResourcesConf["vcore"] = "60000"
 	maxResource, err := resources.NewResourceFromConf(maxResourcesConf)
 	assert.NilError(t, err)
-	checkDAOString(t, partitionQueuesDao.TemplateInfo.MaxResource, maxResource)
+	assert.Equal(t, partitionQueuesDao.TemplateInfo.MaxResource, maxResource.DAOString())
 
 	guaranteedResourcesConf := make(map[string]string)
 	guaranteedResourcesConf["memory"] = "400000"
-	guaranteedResourcesConf["vcore"] = "40000"
 	guaranteedResources, err := resources.NewResourceFromConf(guaranteedResourcesConf)
 	assert.NilError(t, err)
-	checkDAOString(t, partitionQueuesDao.TemplateInfo.GuaranteedResource, guaranteedResources)
+	assert.Equal(t, partitionQueuesDao.TemplateInfo.GuaranteedResource, guaranteedResources.DAOString())
 
 	// Partition not sent as part of request
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))

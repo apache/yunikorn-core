@@ -134,9 +134,14 @@ func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionCon
 	// get the user group cache for the partition
 	// TODO get the resolver from the config
 	pc.userGroupCache = security.GetUserGroupCache("")
+	pc.updateNodeSortingPolicy(conf)
+	return nil
+}
 
+// NOTE: this is a lock free call. It should only be called holding the PartitionContext lock.
+func (pc *PartitionContext) updateNodeSortingPolicy(conf configs.PartitionConfig) {
 	var configuredPolicy policies.SortingPolicy
-	configuredPolicy, err = policies.SortingPolicyFromString(conf.NodeSortPolicy.Type)
+	configuredPolicy, err := policies.SortingPolicyFromString(conf.NodeSortPolicy.Type)
 	if err != nil {
 		log.Logger().Debug("NodeSorting policy incorrectly set or unknown",
 			zap.Error(err))
@@ -146,7 +151,6 @@ func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionCon
 			zap.String("policyName", configuredPolicy.String()))
 	}
 	pc.nodeSortingPolicy = objects.NewNodeSortingPolicy(conf.NodeSortPolicy.Type)
-	return nil
 }
 
 func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig) error {
@@ -171,6 +175,7 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 		// Placing an application will not have a lock on the partition context.
 		pc.placementManager = placement.NewPlacementManager(*pc.rules, pc.GetQueue)
 	}
+	pc.updateNodeSortingPolicy(conf)
 	// start at the root: there is only one queue
 	queueConf := conf.Queues[0]
 	root := pc.root

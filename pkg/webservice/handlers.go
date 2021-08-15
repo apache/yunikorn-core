@@ -687,28 +687,25 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, "Incorrect URL path. Please check the usage documentation", http.StatusBadRequest)
 		return
 	}
-	var appExistsInPartition = false
-	var appExistsInQueue = false
-	var appsDao []*dao.ApplicationDAOInfo
+
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
-	if partitionContext != nil {
-		appExistsInPartition = true
-		appList := partitionContext.GetApplications()
-		for _, app := range appList {
-			if strings.EqualFold(queueName, app.GetQueueName()) {
-				appExistsInQueue = true
-				appsDao = append(appsDao, getApplicationJSON(app))
-			}
-		}
-	}
-	if !appExistsInPartition {
+	if partitionContext == nil {
 		buildJSONErrorResponse(w, "Partition not found", http.StatusBadRequest)
 		return
 	}
-	if !appExistsInQueue {
+
+	queue := partitionContext.GetQueue(queueName)
+	if queue == nil {
 		buildJSONErrorResponse(w, "Queue not found", http.StatusBadRequest)
 		return
 	}
+
+	apps := queue.GetCopyOfApps()
+	appsDao := make([]*dao.ApplicationDAOInfo, 0, len(apps))
+	for _, app := range apps {
+		appsDao = append(appsDao, getApplicationJSON(app))
+	}
+
 	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}

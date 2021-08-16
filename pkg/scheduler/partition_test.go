@@ -33,6 +33,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -1702,4 +1703,35 @@ func TestRemoveAllocationAsk(t *testing.T) {
 	release.TerminationType = si.TerminationType_STOPPED_BY_RM
 	partition.removeAllocationAsk(release)
 	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "app should not have pending asks")
+}
+
+func TestUpdateNodeSortingPolicy(t *testing.T) {
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+
+	assert.Equal(t, partition.nodeSortingPolicy.PolicyType(), policies.FairnessPolicy)
+
+	partition.updateNodeSortingPolicy(configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues: []configs.QueueConfig{
+					{
+						Name:   "default",
+						Parent: false,
+						Queues: nil,
+					},
+				},
+			},
+		},
+		PlacementRules: nil,
+		Limits:         nil,
+		Preemption:     configs.PartitionPreemptionConfig{},
+		NodeSortPolicy: configs.NodeSortingPolicy{Type: policies.BinPackingPolicy.String()},
+	})
+
+	assert.Equal(t, partition.nodeSortingPolicy.PolicyType(), policies.BinPackingPolicy)
 }

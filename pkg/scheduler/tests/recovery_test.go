@@ -649,7 +649,7 @@ partitions:
 		t.Fatal("application not found after recovery")
 	}
 	assert.Equal(t, app.ApplicationID, appID1)
-	assert.Equal(t, app.QueueName, "root.a")
+	assert.Equal(t, app.QueuePath, "root.a")
 }
 
 // test scheduler recovery that only registers apps

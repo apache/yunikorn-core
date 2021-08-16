@@ -51,8 +51,8 @@ func (tr *testRule) placeApplication(app *objects.Application, queueFn func(stri
 	if app == nil {
 		return "", fmt.Errorf("nil app passed in")
 	}
-	if app.QueueName != "" {
-		return replaceDot(app.QueueName), nil
+	if app.QueuePath != "" {
+		return replaceDot(app.QueuePath), nil
 	}
 	return "test", nil
 }

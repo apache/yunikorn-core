@@ -1132,6 +1132,6 @@ func (sq *Queue) updateUsedResourceMetrics() {
 func (sq *Queue) String() string {
 	sq.RLock()
 	defer sq.RUnlock()
-	return fmt.Sprintf("{QueueName: %s, State: %s, StateTime: %x, MaxResource: %s}",
+	return fmt.Sprintf("{QueuePath: %s, State: %s, StateTime: %x, MaxResource: %s}",
 		sq.QueuePath, sq.stateMachine.Current(), sq.stateTime, sq.maxResource)
 }

@@ -481,7 +481,7 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 			zap.String("applicationID", app.ApplicationID),
 			zap.String("partitionName", app.PartitionName),
 			zap.String("requested queue", app.QueueName),
-			zap.String("placed queue", schedApp.GetQueueName()))
+			zap.String("placed queue", schedApp.GetQueuePath()))
 	}
 
 	// Respond to RMProxy with accepted and rejected apps if needed

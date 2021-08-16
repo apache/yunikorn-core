@@ -94,6 +94,7 @@ partitions:
         submitacl: "*"
         queues:
           - name: default
+          - name: noapps
 `
 
 const configMultiPartitions = `
@@ -1076,6 +1077,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
 	assert.Equal(t, len(appsDao), 1)
 
+	// test nonexistent partition
 	var req1 *http.Request
 	req1, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/applications", strings.NewReader(""))
 	vars1 := map[string]string{
@@ -1088,6 +1090,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	getQueueApplications(resp1, req1)
 	assertPartitionExists(t, resp1)
 
+	// test nonexistent queue
 	var req2 *http.Request
 	req2, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/applications", strings.NewReader(""))
 	vars2 := map[string]string{
@@ -1099,6 +1102,22 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	resp2 := &MockResponseWriter{}
 	getQueueApplications(resp2, req2)
 	assertQueueExists(t, resp2)
+
+	// test queue without applications
+	var req3 *http.Request
+	req3, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.noapps/applications", strings.NewReader(""))
+	vars3 := map[string]string{
+		"partition": partitionNameWithoutClusterID,
+		"queue":     "root.noapps",
+	}
+	req3 = mux.SetURLVars(req3, vars3)
+	assert.NilError(t, err, "Get Queue Applications Handler request failed")
+	resp3 := &MockResponseWriter{}
+	var appsDao3 []*dao.ApplicationDAOInfo
+	getQueueApplications(resp3, req3)
+	err = json.Unmarshal(resp3.outputBytes, &appsDao3)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, len(appsDao3), 0)
 }
 
 func assertPartitionExists(t *testing.T, resp *MockResponseWriter) {

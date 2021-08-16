@@ -1053,12 +1053,22 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	part := schedulerContext.GetPartition(partitionName)
 	assert.Equal(t, 0, len(part.GetApplications()))
 
-	// add a new app
-	app := newApplication("app-1", partitionName, "root.default", rmID)
-	err = part.AddApplication(app)
-	assert.NilError(t, err, "Failed to add Application to Partition.")
-	assert.Equal(t, app.CurrentState(), objects.New.String())
-	assert.Equal(t, 1, len(part.GetApplications()))
+	addApp := func(id string, queueName string, isCompleted bool) {
+		initSize := len(part.GetApplications())
+		app := newApplication(id, partitionName, queueName, rmID)
+		err = part.AddApplication(app)
+		assert.NilError(t, err, "Failed to add Application to Partition.")
+		assert.Equal(t, app.CurrentState(), objects.New.String())
+		assert.Equal(t, 1+initSize, len(part.GetApplications()))
+		if isCompleted {
+			// we don't test partition, so it is fine to skip to update partition
+			app.UnSetQueue()
+		}
+	}
+
+	// add two applications
+	addApp("app-1", "root.default", false)
+	addApp("app-2", "root.default", true)
 
 	NewWebApp(schedulerContext, nil)
 
@@ -1075,7 +1085,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	getQueueApplications(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &appsDao)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, len(appsDao), 1)
+	assert.Equal(t, len(appsDao), 2)
 
 	// test nonexistent partition
 	var req1 *http.Request

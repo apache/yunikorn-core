@@ -416,15 +416,16 @@ func (sq *Queue) GetPartitionQueues() dao.PartitionQueueDAOInfo {
 			queueInfo.Children = append(queueInfo.Children, child.GetPartitionQueues())
 		}
 	}
+	// we have held the read lock so following method should not take lock again.
 	sq.RLock()
 	defer sq.RUnlock()
-	queueInfo.QueueName = sq.GetQueuePath()
+	queueInfo.QueueName = sq.QueuePath
 	queueInfo.Status = sq.stateMachine.Current()
 	queueInfo.MaxResource = sq.maxResource.DAOString()
 	queueInfo.GuaranteedResource = sq.guaranteedResource.DAOString()
 	queueInfo.AllocatedResource = sq.allocatedResource.DAOString()
-	queueInfo.IsLeaf = sq.IsLeafQueue()
-	queueInfo.IsManaged = sq.IsManaged()
+	queueInfo.IsLeaf = sq.isLeaf
+	queueInfo.IsManaged = sq.isManaged
 	queueInfo.Properties = make(map[string]string)
 	for k, v := range sq.properties {
 		queueInfo.Properties[k] = v
@@ -432,7 +433,7 @@ func (sq *Queue) GetPartitionQueues() dao.PartitionQueueDAOInfo {
 	if sq.parent == nil {
 		queueInfo.Parent = ""
 	} else {
-		queueInfo.Parent = sq.parent.GetQueuePath()
+		queueInfo.Parent = sq.QueuePath[:strings.LastIndex(sq.QueuePath, configs.DOT)]
 	}
 	return queueInfo
 }
@@ -1057,8 +1058,8 @@ func (sq *Queue) TryReservedAllocate(iterator func() interfaces.NodeIterator) *A
 // Get a copy of the reserved app list
 // locked to prevent race conditions from event updates
 func (sq *Queue) getReservedApps() map[string]int {
-	sq.Lock()
-	defer sq.Unlock()
+	sq.RLock()
+	defer sq.RUnlock()
 
 	copied := make(map[string]int)
 	for appID, numRes := range sq.reservedApps {

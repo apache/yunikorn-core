@@ -1172,3 +1172,15 @@ func TestGetAllRequests(t *testing.T) {
 	assert.Assert(t, len(app.getAllRequests()) == 1, "App should have only one request")
 	assert.Equal(t, app.getAllRequests()[0], ask, "Unexpected request found in the app")
 }
+
+func TestGetQueueNameAfterUnsetQueue(t *testing.T) {
+	app := newApplication(appID1, "default", "root.unknown")
+	assert.Equal(t, app.GetQueueName(), app.QueueName)
+	assert.Equal(t, app.GetQueueName(), "root.unknown")
+
+	// the queue is reset to nil but GetQueueName should work well
+	app.UnSetQueue()
+	assert.Assert(t, app.queue == nil)
+	assert.Equal(t, app.GetQueueName(), app.QueueName)
+	assert.Equal(t, app.GetQueueName(), "root.unknown")
+}

@@ -1112,7 +1112,7 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 func (sa *Application) GetQueueName() string {
 	sa.RLock()
 	defer sa.RUnlock()
-	return sa.queue.QueuePath
+	return sa.QueueName
 }
 
 func (sa *Application) GetQueue() *Queue {

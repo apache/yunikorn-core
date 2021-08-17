@@ -590,8 +590,39 @@ func (cc *ClusterContext) updateNodes(request *si.UpdateRequest) {
 func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
 	acceptedNodes := make([]*si.AcceptedNode, 0)
 	rejectedNodes := make([]*si.RejectedNode, 0)
+	// if we have an unlimited node, reject all new nodes
+	// if we have an unlimited node between the new nodes, register only that node
+	unlimitedNodeRegistered, visitedNodes := cc.checkForUnlimitedNodes()
+	if unlimitedNodeRegistered {
+		for _, node := range request.NewSchedulableNodes {
+			rejectedNodes = append(rejectedNodes, &si.RejectedNode{
+				NodeID: node.NodeID,
+				Reason: "There is an unlimited node registered, registering regular nodes is forbidden",
+			})
+		}
+		return
+	}
 	for _, node := range request.NewSchedulableNodes {
 		sn := objects.NewNode(node)
+		// if the node is unlimited, check the following things:
+		// 1. reservation is enabled or not. If yes, reject the node
+		// 2. this is the first node. If not reject if
+		if sn.IsUnlimited() {
+			// if we have other nodes as well or we already have some registered nodes, reject the node registration
+			if len(request.NewSchedulableNodes) > 1 || visitedNodes > 0 {
+				rejectedNodes = append(rejectedNodes, &si.RejectedNode{
+					NodeID: node.NodeID,
+					Reason: "There are other nodes as well, registering unlimited nodes is forbidden",
+				})
+				continue
+			} else if !cc.reservationDisabled {
+				rejectedNodes = append(rejectedNodes, &si.RejectedNode{
+					NodeID: node.NodeID,
+					Reason: "Reservation is enabled, registering unlimited node is forbidden",
+				})
+				continue
+			}
+		}
 		partition := cc.GetPartition(sn.Partition)
 		if partition == nil {
 			msg := fmt.Sprintf("Failed to find partition %s for new node %s", sn.Partition, sn.NodeID)
@@ -843,4 +874,20 @@ func (cc *ClusterContext) GetNode(nodeID, partitionName string) *objects.Node {
 		return nil
 	}
 	return partition.GetNode(nodeID)
+}
+
+func (cc *ClusterContext) checkForUnlimitedNodes() (bool, int) {
+	nrOfVisitedNodes := 0
+	for _, psc := range cc.GetPartitionMapClone() {
+		for _, node := range psc.GetNodes() {
+			// We allow only one unlimited node, so if we have an unlimited node we cannot have regular nodes.
+			// And if we have regular nodes, we cannot register unlimited node
+			if node.IsUnlimited() {
+				return true, nrOfVisitedNodes
+			} else {
+				return false, nrOfVisitedNodes
+			}
+		}
+	}
+	return false, nrOfVisitedNodes
 }

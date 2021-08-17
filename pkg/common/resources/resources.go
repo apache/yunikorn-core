@@ -403,6 +403,13 @@ func FitIn(larger, smaller *Resource) bool {
 	return larger.fitIn(smaller, false)
 }
 
+// Check if smaller fits in larger
+// Types not defined in the larger resource are considered 0 values for Quantity
+// A nil resource is treated as max resource
+func FitInUndef(larger, smaller *Resource) bool {
+	return larger.fitIn(smaller, true)
+}
+
 // Check if smaller fits in the defined resource
 // Types not defined in resource this is called against are considered the maximum value for Quantity
 // A nil resource is treated as an empty resource (no types defined)

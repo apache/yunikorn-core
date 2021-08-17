@@ -592,7 +592,7 @@ func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
 	rejectedNodes := make([]*si.RejectedNode, 0)
 	// if we have an unlimited node, reject all new nodes
 	// if we have an unlimited node between the new nodes, register only that node
-	unlimitedNodeRegistered, visitedNodes := cc.checkForUnlimitedNodes()
+	unlimitedNodeRegistered := cc.checkForUnlimitedNodes()
 	if unlimitedNodeRegistered {
 		for _, node := range request.NewSchedulableNodes {
 			rejectedNodes = append(rejectedNodes, &si.RejectedNode{
@@ -612,10 +612,11 @@ func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
 		sn := objects.NewNode(node)
 		// if the node is unlimited, check the following things:
 		// 1. reservation is enabled or not. If yes, reject the node
-		// 2. this is the first node. If not reject if
+		// 2. wre there any other nodes in the list, if yes reject the node
+		// 3. this is the first node. If not reject it
 		if sn.IsUnlimited() {
 			// if we have other nodes as well or we already have some registered nodes, reject the node registration
-			if len(request.NewSchedulableNodes) > 1 || visitedNodes > 0 {
+			if len(request.NewSchedulableNodes) > 1 {
 				rejectedNodes = append(rejectedNodes, &si.RejectedNode{
 					NodeID: node.NodeID,
 					Reason: "There are other nodes as well, registering unlimited nodes is forbidden",
@@ -625,6 +626,12 @@ func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
 				rejectedNodes = append(rejectedNodes, &si.RejectedNode{
 					NodeID: node.NodeID,
 					Reason: "Reservation is enabled, registering unlimited node is forbidden",
+				})
+				continue
+			} else if partition := cc.GetPartition(sn.Partition); partition != nil && len(partition.nodes) > 0 {
+				rejectedNodes = append(rejectedNodes, &si.RejectedNode{
+					NodeID: node.NodeID,
+					Reason: "The unlimited node should be registered first, there are other nodes registered in the partition",
 				})
 				continue
 			}
@@ -882,18 +889,15 @@ func (cc *ClusterContext) GetNode(nodeID, partitionName string) *objects.Node {
 	return partition.GetNode(nodeID)
 }
 
-func (cc *ClusterContext) checkForUnlimitedNodes() (bool, int) {
-	nrOfVisitedNodes := 0
+func (cc *ClusterContext) checkForUnlimitedNodes() bool {
 	for _, psc := range cc.GetPartitionMapClone() {
 		for _, node := range psc.GetNodes() {
 			// We allow only one unlimited node, so if we have an unlimited node we cannot have regular nodes.
 			// And if we have regular nodes, we cannot register unlimited node
-			nrOfVisitedNodes++
 			if node.IsUnlimited() {
-				return true, nrOfVisitedNodes
+				return true
 			}
-			return false, nrOfVisitedNodes
 		}
 	}
-	return false, nrOfVisitedNodes
+	return false
 }

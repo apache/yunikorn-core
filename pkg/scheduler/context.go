@@ -600,6 +600,12 @@ func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
 				Reason: "There is an unlimited node registered, registering regular nodes is forbidden",
 			})
 		}
+		cc.rmEventHandler.HandleEvent(
+			&rmevent.RMNodeUpdateEvent{
+				RmID:          request.RmID,
+				AcceptedNodes: acceptedNodes,
+				RejectedNodes: rejectedNodes,
+			})
 		return
 	}
 	for _, node := range request.NewSchedulableNodes {
@@ -882,11 +888,11 @@ func (cc *ClusterContext) checkForUnlimitedNodes() (bool, int) {
 		for _, node := range psc.GetNodes() {
 			// We allow only one unlimited node, so if we have an unlimited node we cannot have regular nodes.
 			// And if we have regular nodes, we cannot register unlimited node
+			nrOfVisitedNodes++
 			if node.IsUnlimited() {
 				return true, nrOfVisitedNodes
-			} else {
-				return false, nrOfVisitedNodes
 			}
+			return false, nrOfVisitedNodes
 		}
 	}
 	return false, nrOfVisitedNodes

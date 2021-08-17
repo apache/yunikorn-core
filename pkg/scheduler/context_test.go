@@ -34,7 +34,7 @@ type mockEventHandler struct {
 	acceptedNodes []*si.AcceptedNode
 }
 
-func NewMockEventHandler() *mockEventHandler {
+func newMockEventHandler() *mockEventHandler {
 	return &mockEventHandler{
 		eventHandled:  false,
 		rejectedNodes: make([]*si.RejectedNode, 0),
@@ -49,14 +49,15 @@ func (m *mockEventHandler) reset() {
 }
 
 func (m *mockEventHandler) HandleEvent(ev interface{}) {
-	m.eventHandled = true
-	nodeEvent := ev.(*rmevent.RMNodeUpdateEvent)
-	m.rejectedNodes = append(m.rejectedNodes, nodeEvent.RejectedNodes...)
-	m.acceptedNodes = append(m.acceptedNodes, nodeEvent.AcceptedNodes...)
+	if nodeEvent, ok := ev.(*rmevent.RMNodeUpdateEvent); ok {
+		m.eventHandled = true
+		m.rejectedNodes = append(m.rejectedNodes, nodeEvent.RejectedNodes...)
+		m.acceptedNodes = append(m.acceptedNodes, nodeEvent.AcceptedNodes...)
+	}
 }
 
 func TestAddUnlimitedNode(t *testing.T) {
-	handler := NewMockEventHandler()
+	handler := newMockEventHandler()
 	context := &ClusterContext{
 		partitions:     map[string]*PartitionContext{},
 		rmEventHandler: handler,

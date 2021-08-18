@@ -41,30 +41,32 @@ type AllocationAsk struct {
 	Tags              map[string]string
 
 	// Private fields need protection
-	taskGroupName    string        // task group this allocation ask belongs to
-	placeholder      bool          // is this a placeholder allocation ask
-	execTimeout      time.Duration // execTimeout for the allocation ask
-	pendingRepeatAsk int32
-	createTime       time.Time // the time this ask was created (used in reservations)
-	priority         int32
-	maxAllocations   int32
+	taskGroupName       string        // task group this allocation ask belongs to
+	placeholder         bool          // is this a placeholder allocation ask
+	execTimeout         time.Duration // execTimeout for the allocation ask
+	pendingRepeatAsk    int32
+	createTime          time.Time // the time this ask was created (used in reservations)
+	priority            int32
+	maxAllocations      int32
+	ignoreUnschedulable bool
 
 	sync.RWMutex
 }
 
 func NewAllocationAsk(ask *si.AllocationAsk) *AllocationAsk {
 	saa := &AllocationAsk{
-		AllocationKey:     ask.AllocationKey,
-		AllocatedResource: resources.NewResourceFromProto(ask.ResourceAsk),
-		pendingRepeatAsk:  ask.MaxAllocations,
-		maxAllocations:    ask.MaxAllocations,
-		ApplicationID:     ask.ApplicationID,
-		PartitionName:     ask.PartitionName,
-		Tags:              ask.Tags,
-		createTime:        time.Now(),
-		execTimeout:       common.ConvertSITimeout(ask.ExecutionTimeoutMilliSeconds),
-		placeholder:       ask.Placeholder,
-		taskGroupName:     ask.TaskGroupName,
+		AllocationKey:       ask.AllocationKey,
+		AllocatedResource:   resources.NewResourceFromProto(ask.ResourceAsk),
+		pendingRepeatAsk:    ask.MaxAllocations,
+		maxAllocations:      ask.MaxAllocations,
+		ApplicationID:       ask.ApplicationID,
+		PartitionName:       ask.PartitionName,
+		Tags:                ask.Tags,
+		createTime:          time.Now(),
+		execTimeout:         common.ConvertSITimeout(ask.ExecutionTimeoutMilliSeconds),
+		placeholder:         ask.Placeholder,
+		taskGroupName:       ask.TaskGroupName,
+		ignoreUnschedulable: common.GetIgnoreUnschedulable(ask.Tags),
 	}
 	saa.priority = saa.normalizePriority(ask.Priority)
 	// this is a safety check placeholder and task group name must be set as a combo
@@ -151,4 +153,10 @@ func (aa *AllocationAsk) getTimeout() time.Duration {
 	aa.RLock()
 	defer aa.RUnlock()
 	return aa.execTimeout
+}
+
+func (aa *AllocationAsk) GetIgnoreUnschedulable() bool {
+	aa.RLock()
+	defer aa.RUnlock()
+	return aa.ignoreUnschedulable
 }

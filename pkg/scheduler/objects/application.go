@@ -1078,8 +1078,7 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 	allocKey := ask.AllocationKey
 	toAllocate := ask.AllocatedResource
 	// create the key for the reservation
-	ignore := common.GetIgnoreUnschedulable(ask.Tags)
-	if err := node.preAllocateCheck(toAllocate, reservationKey(nil, sa, ask), false, ignore); err != nil {
+	if err := node.preAllocateCheck(toAllocate, reservationKey(nil, sa, ask), false, ask.ignoreUnschedulable); err != nil {
 		// skip schedule onto node
 		return nil
 	}

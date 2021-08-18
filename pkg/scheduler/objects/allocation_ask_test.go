@@ -25,6 +25,7 @@ import (
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -130,4 +131,45 @@ func TestGetTimeout(t *testing.T) {
 	}
 	ask = NewAllocationAsk(siAsk)
 	assert.Equal(t, ask.getTimeout(), 10*time.Millisecond, "ask timeout not set as expected")
+}
+
+func TestGetIgnoreUnschedulable(t *testing.T) {
+	siAsk := &si.AllocationAsk{
+		AllocationKey: "ask1",
+		ApplicationID: "app1",
+		PartitionName: "default",
+	}
+	ask := NewAllocationAsk(siAsk)
+	assert.Equal(t, ask.GetIgnoreUnschedulable(), false, "ignoreUnschedulable should be false if unset")
+	tag := make(map[string]string)
+	// false case
+	tag[common.DomainYuniKorn+common.KeyIgnoreUnschedulable] = "false"
+	siAsk = &si.AllocationAsk{
+		AllocationKey: "ask1",
+		ApplicationID: "app1",
+		PartitionName: "default",
+		Tags:          tag,
+	}
+	ask = NewAllocationAsk(siAsk)
+	assert.Equal(t, ask.GetIgnoreUnschedulable(), false, "ignoreUnschedulable should be false as expected")
+	// error format case
+	tag[common.DomainYuniKorn+common.KeyIgnoreUnschedulable] = "ERROR"
+	siAsk = &si.AllocationAsk{
+		AllocationKey: "ask1",
+		ApplicationID: "app1",
+		PartitionName: "default",
+		Tags:          tag,
+	}
+	ask = NewAllocationAsk(siAsk)
+	assert.Equal(t, ask.GetIgnoreUnschedulable(), false, "ignoreUnschedulable should be false if it tag isn't bool")
+	// true case
+	tag[common.DomainYuniKorn+common.KeyIgnoreUnschedulable] = "true"
+	siAsk = &si.AllocationAsk{
+		AllocationKey: "ask1",
+		ApplicationID: "app1",
+		PartitionName: "default",
+		Tags:          tag,
+	}
+	ask = NewAllocationAsk(siAsk)
+	assert.Equal(t, ask.GetIgnoreUnschedulable(), true, "ignoreUnschedulable should be true as expected")
 }

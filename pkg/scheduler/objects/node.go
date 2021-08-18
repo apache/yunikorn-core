@@ -237,7 +237,7 @@ func (sn *Node) GetAvailableResource() *resources.Resource {
 func (sn *Node) FitInNode(resRequest *resources.Resource) bool {
 	sn.RLock()
 	defer sn.RUnlock()
-	return resources.FitInUndef(sn.totalResource, resRequest)
+	return sn.totalResource.FitInMaxUndef(resRequest)
 }
 
 // Get the number of resource tagged for preemption on this node
@@ -298,7 +298,7 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 	defer sn.Unlock()
 	// check if this still fits: it might have changed since pre check
 	res := alloc.AllocatedResource
-	if resources.FitInUndef(sn.availableResource, res) {
+	if sn.availableResource.FitInMaxUndef(res) {
 		sn.allocations[alloc.UUID] = alloc
 		sn.allocatedResource.AddTo(res)
 		sn.availableResource.SubFrom(res)
@@ -400,7 +400,7 @@ func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string, preempt
 		available.AddTo(sn.getPreemptingResource())
 	}
 	// check the request fits in what we have calculated
-	if !resources.FitInUndef(available, res) {
+	if !available.FitInMaxUndef(res) {
 		// requested resource is larger than currently available node resources
 		return fmt.Errorf("pre alloc check: requested resource %s is larger than currently available %s resource on %s", res.String(), available.String(), sn.NodeID)
 	}

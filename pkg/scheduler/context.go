@@ -590,29 +590,11 @@ func (cc *ClusterContext) updateNodes(request *si.UpdateRequest) {
 func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
 	acceptedNodes := make([]*si.AcceptedNode, 0)
 	rejectedNodes := make([]*si.RejectedNode, 0)
-	// if we have an unlimited node, reject all new nodes
-	// if we have an unlimited node between the new nodes, register only that node
-	unlimitedNodeRegistered := cc.checkForUnlimitedNodes()
-	if unlimitedNodeRegistered {
-		for _, node := range request.NewSchedulableNodes {
-			rejectedNodes = append(rejectedNodes, &si.RejectedNode{
-				NodeID: node.NodeID,
-				Reason: "There is an unlimited node registered, registering regular nodes is forbidden",
-			})
-		}
-		cc.rmEventHandler.HandleEvent(
-			&rmevent.RMNodeUpdateEvent{
-				RmID:          request.RmID,
-				AcceptedNodes: acceptedNodes,
-				RejectedNodes: rejectedNodes,
-			})
-		return
-	}
 	for _, node := range request.NewSchedulableNodes {
 		sn := objects.NewNode(node)
 		// if the node is unlimited, check the following things:
 		// 1. reservation is enabled or not. If yes, reject the node
-		// 2. wre there any other nodes in the list, if yes reject the node
+		// 2. are there any other nodes in the list, if yes reject the node
 		// 3. this is the first node. If not reject it
 		if sn.IsUnlimited() {
 			// if we have other nodes as well or we already have some registered nodes, reject the node registration
@@ -626,12 +608,6 @@ func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
 				rejectedNodes = append(rejectedNodes, &si.RejectedNode{
 					NodeID: node.NodeID,
 					Reason: "Reservation is enabled, registering unlimited node is forbidden",
-				})
-				continue
-			} else if partition := cc.GetPartition(sn.Partition); partition != nil && len(partition.nodes) > 0 {
-				rejectedNodes = append(rejectedNodes, &si.RejectedNode{
-					NodeID: node.NodeID,
-					Reason: "The unlimited node should be registered first, there are other nodes registered in the partition",
 				})
 				continue
 			}
@@ -650,6 +626,21 @@ func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
 				zap.String("partitionName", sn.Partition))
 			continue
 		}
+		if partition.hasUnlimitedNode() {
+			rejectedNodes = append(rejectedNodes, &si.RejectedNode{
+				NodeID: node.NodeID,
+				Reason: "The partition has an unlimited node registered, registering other nodes is forbidden",
+			})
+			continue
+		}
+		if sn.IsUnlimited() && len(partition.nodes) > 0 {
+			rejectedNodes = append(rejectedNodes, &si.RejectedNode{
+				NodeID: node.NodeID,
+				Reason: "The unlimited node should be registered first, there are other nodes registered in the partition",
+			})
+			continue
+		}
+
 		existingAllocations := cc.convertAllocations(node.ExistingAllocations)
 		err := partition.AddNode(sn, existingAllocations)
 		if err != nil {
@@ -887,17 +878,4 @@ func (cc *ClusterContext) GetNode(nodeID, partitionName string) *objects.Node {
 		return nil
 	}
 	return partition.GetNode(nodeID)
-}
-
-func (cc *ClusterContext) checkForUnlimitedNodes() bool {
-	for _, psc := range cc.GetPartitionMapClone() {
-		for _, node := range psc.GetNodes() {
-			// We allow only one unlimited node, so if we have an unlimited node we cannot have regular nodes.
-			// And if we have regular nodes, we cannot register unlimited node
-			if node.IsUnlimited() {
-				return true
-			}
-		}
-	}
-	return false
 }

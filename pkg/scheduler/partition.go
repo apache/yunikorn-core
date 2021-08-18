@@ -1345,3 +1345,15 @@ func (pc *PartitionContext) moveTerminatedApp(appID string) {
 	delete(pc.applications, appID)
 	pc.completedApplications[newID] = app
 }
+
+// Check for unlimited nodes in the partition
+func (pc *PartitionContext) hasUnlimitedNode() bool {
+	// We can have only one unlimited node registered
+	if len(pc.nodes) != 1 {
+		return false
+	}
+	for _, v := range pc.nodes {
+		return v.IsUnlimited()
+	}
+	return false
+}

@@ -951,6 +951,20 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getPartitionQueues(resp, req)
 	assertPartitionExists(t, resp)
+
+	getClusterInfo(resp, req)
+	var data []*dao.ClusterDAOInfo
+	err = json.Unmarshal(resp.outputBytes, &data)
+	assert.NilError(t, err)
+	assert.Equal(t, 2, len(data))
+
+	cs := make(map[string]*dao.ClusterDAOInfo, 2)
+	for _, d := range data {
+		cs[d.PartitionName] = d
+	}
+
+	assert.Assert(t, cs["[rm-123]default"] != nil)
+	assert.Assert(t, cs["[rm-123]gpu"] != nil)
 }
 
 func TestGetPartitionNodes(t *testing.T) {

@@ -564,11 +564,11 @@ func (sq *Queue) GetCopyOfApps() map[string]*Application {
 func (sq *Queue) GetCopyOfCompletedApps() map[string]*Application {
 	sq.RLock()
 	defer sq.RUnlock()
-	appsCopy := make(map[string]*Application, len(sq.completedApplications))
+	completedAppsCopy := make(map[string]*Application, len(sq.completedApplications))
 	for appID, app := range sq.completedApplications {
-		appsCopy[appID] = app
+		completedAppsCopy[appID] = app
 	}
-	return appsCopy
+	return completedAppsCopy
 }
 
 // Get a copy of the child queues

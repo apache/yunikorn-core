@@ -45,13 +45,14 @@ type Queue struct {
 	Name      string // Queue name as in the config etc.
 
 	// Private fields need protection
-	sortType     policies.SortPolicy     // How applications (leaf) or queues (parents) are sorted
-	children     map[string]*Queue       // Only for direct children, parent queue only
-	applications map[string]*Application // only for leaf queue
-	reservedApps map[string]int          // applications reserved within this queue, with reservation count
-	parent       *Queue                  // link back to the parent in the scheduler
-	preempting   *resources.Resource     // resource considered for preemption in the queue
-	pending      *resources.Resource     // pending resource for the apps in the queue
+	sortType              policies.SortPolicy     // How applications (leaf) or queues (parents) are sorted
+	children              map[string]*Queue       // Only for direct children, parent queue only
+	applications          map[string]*Application // only for leaf queue
+	completedApplications map[string]*Application // completed applications from this leaf queue
+	reservedApps          map[string]int          // applications reserved within this queue, with reservation count
+	parent                *Queue                  // link back to the parent in the scheduler
+	preempting            *resources.Resource     // resource considered for preemption in the queue
+	pending               *resources.Resource     // pending resource for the apps in the queue
 
 	// The queue properties should be treated as immutable the value is a merge of the
 	// parent properties with the config for this queue only manipulated during creation
@@ -72,14 +73,15 @@ type Queue struct {
 
 func newBlankQueue() *Queue {
 	return &Queue{
-		children:          make(map[string]*Queue),
-		applications:      make(map[string]*Application),
-		reservedApps:      make(map[string]int),
-		properties:        make(map[string]string),
-		stateMachine:      NewObjectState(),
-		allocatedResource: resources.NewResource(),
-		preempting:        resources.NewResource(),
-		pending:           resources.NewResource(),
+		children:              make(map[string]*Queue),
+		applications:          make(map[string]*Application),
+		completedApplications: make(map[string]*Application),
+		reservedApps:          make(map[string]int),
+		properties:            make(map[string]string),
+		stateMachine:          NewObjectState(),
+		allocatedResource:     resources.NewResource(),
+		preempting:            resources.NewResource(),
+		pending:               resources.NewResource(),
 	}
 }
 
@@ -544,17 +546,29 @@ func (sq *Queue) RemoveApplication(app *Application) {
 	defer sq.Unlock()
 
 	delete(sq.applications, appID)
+	sq.completedApplications[appID] = app
 }
 
-// Get a copy of all apps holding the lock
+// GetCopyOfApps Get a copy of all non-complated apps holding the lock
 func (sq *Queue) GetCopyOfApps() map[string]*Application {
 	sq.RLock()
 	defer sq.RUnlock()
-	appsCopy := make(map[string]*Application)
+	appsCopy := make(map[string]*Application, len(sq.applications))
 	for appID, app := range sq.applications {
 		appsCopy[appID] = app
 	}
 	return appsCopy
+}
+
+// GetCopyOfCompletedApps Get a copy of all completed apps holding the lock
+func (sq *Queue) GetCopyOfCompletedApps() map[string]*Application {
+	sq.RLock()
+	defer sq.RUnlock()
+	completedAppsCopy := make(map[string]*Application, len(sq.completedApplications))
+	for appID, app := range sq.completedApplications {
+		completedAppsCopy[appID] = app
+	}
+	return completedAppsCopy
 }
 
 // Get a copy of the child queues

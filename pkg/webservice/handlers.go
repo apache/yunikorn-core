@@ -701,8 +701,12 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 	}
 
 	apps := queue.GetCopyOfApps()
-	appsDao := make([]*dao.ApplicationDAOInfo, 0, len(apps))
+	completedApps := queue.GetCopyOfCompletedApps()
+	appsDao := make([]*dao.ApplicationDAOInfo, 0, len(apps)+len(completedApps))
 	for _, app := range apps {
+		appsDao = append(appsDao, getApplicationJSON(app))
+	}
+	for _, app := range completedApps {
 		appsDao = append(appsDao, getApplicationJSON(app))
 	}
 

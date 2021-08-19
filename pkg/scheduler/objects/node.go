@@ -360,13 +360,17 @@ func (sn *Node) preConditions(allocID string, allocate bool) bool {
 // This is a lock free call. No updates are made this only performs a pre allocate checks
 func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string, preemptionPhase, ignoreUnschedulable bool) error {
 	// skip schedulable check if ignoreUnschedulable is true
-	if !ignoreUnschedulable {
-		// shortcut if a node is not schedulable
-		if !sn.IsSchedulable() {
-			log.Logger().Debug("node is unschedulable",
-				zap.String("nodeID", sn.NodeID))
-			return fmt.Errorf("pre alloc check, node is unschedulable: %s", sn.NodeID)
-		}
+	// shortcut if a node is not schedulable
+	if !ignoreUnschedulable && !sn.IsSchedulable() {
+		log.Logger().Debug("node is unschedulable",
+			zap.String("nodeID", sn.NodeID))
+		return fmt.Errorf("pre alloc check, node is unschedulable: %s", sn.NodeID)
+	}
+	// cannot allocate zero or negative resource
+	if !resources.StrictlyGreaterThanZero(res) {
+		log.Logger().Debug("pre alloc check: requested resource is zero",
+			zap.String("nodeID", sn.NodeID))
+		return fmt.Errorf("pre alloc check: requested resource is zero: %s", sn.NodeID)
 	}
 	if sn.IsReserved() {
 		if !sn.isReservedForApp(resKey) {
@@ -375,12 +379,6 @@ func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string, preempt
 				zap.String("resKey", resKey))
 			return fmt.Errorf("pre alloc check: node %s reserved for different app or ask: %s", sn.NodeID, resKey)
 		}
-	}
-	// cannot allocate zero or negative resource
-	if !resources.StrictlyGreaterThanZero(res) {
-		log.Logger().Debug("pre alloc check: requested resource is zero",
-			zap.String("nodeID", sn.NodeID))
-		return fmt.Errorf("pre alloc check: requested resource is zero: %s", sn.NodeID)
 	}
 
 	// check if resources are available

@@ -116,17 +116,12 @@ func ConvertSITimeout(millis int64) time.Duration {
 }
 
 func GetIgnoreUnschedulable(tag map[string]string) bool {
-	var ignore bool
-	var err error
-	if ignoreUnschedulable, ok := tag[interfaceCommon.DomainYuniKorn+interfaceCommon.KeyIgnoreUnschedulable]; !ok {
-		// if there isn't ignoreUnschedulable tag, set it to false
-		ignore = false
-	} else {
-		ignore, err = strconv.ParseBool(ignoreUnschedulable)
-		if err != nil {
+	if ignoreUnschedulable, ok := tag[interfaceCommon.DomainYuniKorn+interfaceCommon.KeyIgnoreUnschedulable]; ok {
+		if ignore, err := strconv.ParseBool(ignoreUnschedulable); err == nil {
+			return ignore
+		} else if err != nil {
 			log.Logger().Warn("Failed to convert allocationTag ignoreUnschedulable from string to bool")
-			ignore = false
 		}
 	}
-	return ignore
+	return false
 }

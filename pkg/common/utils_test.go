@@ -132,4 +132,7 @@ func TestGetIgnoreUnschedulable(t *testing.T) {
 	tag[common.DomainYuniKorn+common.KeyIgnoreUnschedulable] = "false"
 	ignore = GetIgnoreUnschedulable(tag)
 	assert.Equal(t, ignore, false)
+	tag[common.DomainYuniKorn+common.KeyIgnoreUnschedulable] = "errorFormat"
+	ignore = GetIgnoreUnschedulable(tag)
+	assert.Equal(t, ignore, false)
 }

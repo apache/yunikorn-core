@@ -1598,3 +1598,28 @@ func TestNewDynamicQueue(t *testing.T) {
 	assert.Assert(t, childNonLeaf.guaranteedResource == nil)
 	assert.Assert(t, childNonLeaf.maxResource == nil)
 }
+
+func TestTemplateIsNotOverrideByParent(t *testing.T) {
+	parent, err := createManagedQueueWithProps(nil, "parent", true, nil, nil)
+	assert.NilError(t, err)
+	parent.template, err = template.FromConf(&configs.ChildTemplate{
+		Properties: map[string]string{
+			"k": "v",
+		},
+	})
+	assert.NilError(t, err)
+
+	leaf, err := createManagedQueueWithProps(nil, "leaf", false, nil, nil)
+	assert.NilError(t, err)
+	leaf.template, err = template.FromConf(&configs.ChildTemplate{
+		Properties: map[string]string{
+			"k0": "v0",
+		},
+	})
+	assert.NilError(t, err)
+
+	err = parent.addChildQueue(leaf)
+	assert.NilError(t, err)
+
+	assert.Assert(t, !reflect.DeepEqual(leaf.template, parent.template))
+}

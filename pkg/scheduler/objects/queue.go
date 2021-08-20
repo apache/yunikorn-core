@@ -656,7 +656,9 @@ func (sq *Queue) addChildQueue(child *Queue) error {
 		}
 		// managed (configured) leaf queue can't use template
 	} else {
-		child.template = sq.template
+		if child.template == nil {
+			child.template = sq.template
+		}
 	}
 	return nil
 }

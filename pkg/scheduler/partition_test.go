@@ -416,7 +416,7 @@ func TestAddAppTaskGroup(t *testing.T) {
 
 	// queue now has fair as sort policy app add should fail
 	queue := partition.GetQueue(defQueue)
-	err = queue.SetQueueConfig(configs.QueueConfig{
+	err = queue.ApplyConf(configs.QueueConfig{
 		Name:       "default",
 		Parent:     false,
 		Queues:     nil,
@@ -430,7 +430,7 @@ func TestAddAppTaskGroup(t *testing.T) {
 	}
 
 	// queue with stateaware as sort policy, with a max set smaller than placeholder ask: app add should fail
-	err = queue.SetQueueConfig(configs.QueueConfig{
+	err = queue.ApplyConf(configs.QueueConfig{
 		Name:       "default",
 		Parent:     false,
 		Queues:     nil,
@@ -445,7 +445,7 @@ func TestAddAppTaskGroup(t *testing.T) {
 	}
 
 	// queue with stateaware as sort policy, with a max set larger than placeholder ask: app add works
-	err = queue.SetQueueConfig(configs.QueueConfig{
+	err = queue.ApplyConf(configs.QueueConfig{
 		Name:      "default",
 		Parent:    false,
 		Queues:    nil,

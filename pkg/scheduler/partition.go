@@ -306,14 +306,14 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 	}
 
 	// Put app under the queue
-	queueName := app.QueueName
+	queueName := app.QueuePath
 	pm := pc.getPlacementManager()
 	if pm.IsInitialised() {
 		err := pm.PlaceApplication(app)
 		if err != nil {
 			return fmt.Errorf("failed to place application %s: %v", appID, err)
 		}
-		queueName = app.QueueName
+		queueName = app.QueuePath
 		if queueName == "" {
 			return fmt.Errorf("application rejected by placement rules: %s", appID)
 		}
@@ -883,7 +883,7 @@ func (pc *PartitionContext) reserve(app *objects.Application, node *objects.Node
 
 	log.Logger().Info("allocation ask is reserved",
 		zap.String("appID", appID),
-		zap.String("queue", app.QueueName),
+		zap.String("queue", app.QueuePath),
 		zap.String("allocationKey", ask.AllocationKey),
 		zap.String("node", node.NodeID))
 }
@@ -912,7 +912,7 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 
 	log.Logger().Info("allocation ask is unreserved",
 		zap.String("appID", appID),
-		zap.String("queue", app.QueueName),
+		zap.String("queue", app.QueuePath),
 		zap.String("allocationKey", ask.AllocationKey),
 		zap.String("node", node.NodeID),
 		zap.Int("reservationsRemoved", num))

@@ -1292,7 +1292,7 @@ func TestAddTGAppDynamic(t *testing.T) {
 	app := newApplicationTGTags(appID1, "default", "unknown", tgRes, tags)
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "app-1 should have been added to the partition")
-	assert.Equal(t, app.GetQueueName(), "root.unlimited", "app-1 not placed in expected queue")
+	assert.Equal(t, app.GetQueuePath(), "root.unlimited", "app-1 not placed in expected queue")
 
 	jsonRes := "{\"resources\":{\"first\":{\"value\":10}}}"
 	tags = map[string]string{"taskqueue": "same", objects.AppTagNamespaceResourceQuota: jsonRes}
@@ -1300,7 +1300,7 @@ func TestAddTGAppDynamic(t *testing.T) {
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "app-2 should have been added to the partition")
 	assert.Equal(t, partition.getApplication(appID2), app, "partition failed to add app incorrect app returned")
-	assert.Equal(t, app.GetQueueName(), "root.same", "app-2 not placed in expected queue")
+	assert.Equal(t, app.GetQueuePath(), "root.same", "app-2 not placed in expected queue")
 
 	jsonRes = "{\"resources\":{\"first\":{\"value\":1}}}"
 	tags = map[string]string{"taskqueue": "smaller", objects.AppTagNamespaceResourceQuota: jsonRes}

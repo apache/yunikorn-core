@@ -55,7 +55,7 @@ const (
 type Application struct {
 	ApplicationID  string
 	Partition      string
-	QueueName      string
+	QueuePath      string
 	SubmissionTime time.Time
 
 	// Private fields need protection
@@ -87,7 +87,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	app := &Application{
 		ApplicationID:        siApp.ApplicationID,
 		Partition:            siApp.PartitionName,
-		QueueName:            siApp.QueueName,
+		QueuePath:            siApp.QueueName,
 		SubmissionTime:       time.Now(),
 		tags:                 siApp.Tags,
 		pending:              resources.NewResource(),
@@ -121,8 +121,8 @@ func (sa *Application) String() string {
 	if sa == nil {
 		return "application is nil"
 	}
-	return fmt.Sprintf("ApplicationID: %s, Partition: %s, QueueName: %s, SubmissionTime: %x, State: %s",
-		sa.ApplicationID, sa.Partition, sa.QueueName, sa.SubmissionTime, sa.stateMachine.Current())
+	return fmt.Sprintf("ApplicationID: %s, Partition: %s, QueuePath: %s, SubmissionTime: %x, State: %s",
+		sa.ApplicationID, sa.Partition, sa.QueuePath, sa.SubmissionTime, sa.stateMachine.Current())
 }
 
 func (sa *Application) SetState(state string) {
@@ -767,7 +767,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 		if !headRoom.FitInMaxUndef(request.AllocatedResource) {
 			// post scheduling events via the event plugin
 			if eventCache := events.GetEventCache(); eventCache != nil {
-				message := fmt.Sprintf("Application %s does not fit into %s queue", request.ApplicationID, sa.QueueName)
+				message := fmt.Sprintf("Application %s does not fit into %s queue", request.ApplicationID, sa.QueuePath)
 				if event, err := events.CreateRequestEventRecord(request.AllocationKey, request.ApplicationID, "InsufficientQueueResources", message); err != nil {
 					log.Logger().Warn("Event creation failed",
 						zap.String("event message", message),
@@ -1109,10 +1109,10 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 	return nil
 }
 
-func (sa *Application) GetQueueName() string {
+func (sa *Application) GetQueuePath() string {
 	sa.RLock()
 	defer sa.RUnlock()
-	return sa.queue.QueuePath
+	return sa.QueuePath
 }
 
 func (sa *Application) GetQueue() *Queue {
@@ -1123,17 +1123,17 @@ func (sa *Application) GetQueue() *Queue {
 
 // Set the leaf queue the application runs in. The queue will be created when the app is added to the partition.
 // The queue name is set to what the placement rule returned.
-func (sa *Application) SetQueueName(queuePath string) {
+func (sa *Application) SetQueuePath(queuePath string) {
 	sa.Lock()
 	defer sa.Unlock()
-	sa.QueueName = queuePath
+	sa.QueuePath = queuePath
 }
 
 // Set the leaf queue the application runs in.
 func (sa *Application) SetQueue(queue *Queue) {
 	sa.Lock()
 	defer sa.Unlock()
-	sa.QueueName = queue.QueuePath
+	sa.QueuePath = queue.QueuePath
 	sa.queue = queue
 }
 

@@ -321,8 +321,8 @@ func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation) {
 // Taking into account resources marked for preemption if applicable.
 // If the proposed allocation does not fit false is returned.
 // TODO: remove when updating preemption
-func (sn *Node) CanAllocate(res *resources.Resource, preemptionPhase bool) bool {
-	err := sn.preAllocateCheck(res, "", preemptionPhase)
+func (sn *Node) CanAllocate(res *resources.Resource, preemptionPhase, ignore bool) bool {
+	err := sn.preAllocateCheck(res, "", preemptionPhase, ignore)
 	return err == nil
 }
 
@@ -371,9 +371,9 @@ func (sn *Node) preConditions(allocID string, allocate bool) bool {
 // Check if the node should be considered as a possible node to allocate on.
 //
 // This is a lock free call. No updates are made this only performs a pre allocate checks
-func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string, preemptionPhase bool) error {
+func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string, preemptionPhase, ignoreUnschedulable bool) error {
 	// shortcut if a node is not schedulable
-	if !sn.IsSchedulable() {
+	if !ignoreUnschedulable && !sn.IsSchedulable() {
 		log.Logger().Debug("node is unschedulable",
 			zap.String("nodeID", sn.NodeID))
 		return fmt.Errorf("pre alloc check, node is unschedulable: %s", sn.NodeID)

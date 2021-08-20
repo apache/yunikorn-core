@@ -25,6 +25,8 @@ import (
 	"time"
 
 	"gotest.tools/assert"
+
+	common "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 )
 
 func TestGetNormalizedPartitionName(t *testing.T) {
@@ -115,4 +117,19 @@ func TestConvertSITimeout(t *testing.T) {
 			assert.Equal(t, val, tc.expected, "test case failure: %s", tc.name)
 		})
 	}
+}
+
+func TestGetRequiredNodeFromAsk(t *testing.T) {
+	tag := make(map[string]string)
+	nodeName := GetRequiredNodeFromTag(tag)
+	assert.Equal(t, nodeName, "")
+	tag["TestValue"] = "ERROR"
+	nodeName = GetRequiredNodeFromTag(tag)
+	assert.Equal(t, nodeName, "")
+	tag[common.DomainYuniKorn+common.KeyRequiredNode] = "Node1"
+	nodeName = GetRequiredNodeFromTag(tag)
+	assert.Equal(t, nodeName, "Node1")
+	tag[common.DomainYuniKorn+common.KeyRequiredNode] = "Node2"
+	nodeName = GetRequiredNodeFromTag(tag)
+	assert.Equal(t, nodeName, "Node2")
 }

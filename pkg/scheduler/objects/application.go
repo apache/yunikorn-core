@@ -986,6 +986,13 @@ func (sa *Application) tryNodesNoReserve(ask *AllocationAsk, iterator interfaces
 	return nil
 }
 
+func filterNode(ask *AllocationAsk, node *Node) bool {
+	if ask.requiredNode == node.NodeID {
+		return true
+	}
+	return false
+}
+
 // Try all the nodes for a request. The result is an allocation or reservation of a node.
 // New allocations can only be reserved after a delay.
 func (sa *Application) tryNodes(ask *AllocationAsk, iterator interfaces.NodeIterator) *Allocation {
@@ -1000,6 +1007,10 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator interfaces.NodeIter
 		if !ok {
 			log.Logger().Warn("Node iterator failed to return a node")
 			return nil
+		}
+		// check the node is required node or not
+		if !filterNode(ask, node) {
+			continue
 		}
 		// skip over the node if the resource does not fit the node at all.
 		if !node.FitInNode(ask.AllocatedResource) {
@@ -1077,7 +1088,8 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 	allocKey := ask.AllocationKey
 	toAllocate := ask.AllocatedResource
 	// create the key for the reservation
-	if err := node.preAllocateCheck(toAllocate, reservationKey(nil, sa, ask), false); err != nil {
+	ignore := !(candidate.GetRequiredNode() == "")
+	if err := node.preAllocateCheck(toAllocate, reservationKey(nil, sa, ask), false, ignore); err != nil {
 		// skip schedule onto node
 		return nil
 	}

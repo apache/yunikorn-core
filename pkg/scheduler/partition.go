@@ -557,7 +557,7 @@ func (pc *PartitionContext) getNodes(excludeReserved bool) []*objects.Node {
 	nodes := make([]*objects.Node, 0)
 	for _, node := range pc.nodes {
 		// filter out the nodes that are not scheduling
-		if !node.IsSchedulable() || (excludeReserved && node.IsReserved()) {
+		if excludeReserved && node.IsReserved() {
 			continue
 		}
 		nodes = append(nodes, node)

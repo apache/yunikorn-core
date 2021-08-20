@@ -25,6 +25,7 @@ import (
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -130,4 +131,27 @@ func TestGetTimeout(t *testing.T) {
 	}
 	ask = NewAllocationAsk(siAsk)
 	assert.Equal(t, ask.getTimeout(), 10*time.Millisecond, "ask timeout not set as expected")
+}
+
+func TestGetRequiredNode(t *testing.T) {
+	tag := make(map[string]string)
+	// unset case
+	siAsk = &si.AllocationAsk{
+		AllocationKey: "ask1",
+		ApplicationID: "app1",
+		PartitionName: "default",
+		Tags:          tag,
+	}
+	ask = NewAllocationAsk(siAsk)
+	assert.Equal(t, ask.GetRequiredNode(), "", "required node is empty as expected")
+	// set case
+	tag[common.DomainYuniKorn+common.KeyRequiredNode] = "NodeName"
+	siAsk = &si.AllocationAsk{
+		AllocationKey: "ask1",
+		ApplicationID: "app1",
+		PartitionName: "default",
+		Tags:          tag,
+	}
+	ask = NewAllocationAsk(siAsk)
+	assert.Equal(t, ask.GetRequiredNode(), "NodeName", "required node should be NodeName")
 }

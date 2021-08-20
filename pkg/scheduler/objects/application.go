@@ -1009,7 +1009,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator interfaces.NodeIter
 			return nil
 		}
 		// check the node is required node or not
-		if !filterNode(ask, node) {
+		if (ask.requiredNode != "") && !filterNode(ask, node) {
 			continue
 		}
 		// skip over the node if the resource does not fit the node at all.

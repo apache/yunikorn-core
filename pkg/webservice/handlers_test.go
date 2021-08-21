@@ -1182,3 +1182,23 @@ func TestValidateQueue(t *testing.T) {
 	err2 := validateQueue("root")
 	assert.NilError(t, err2, "Queue path is correct but stil throwing error.")
 }
+
+func TestGetNodesUtilization(t *testing.T) {
+	configs.MockSchedulerConfigByData([]byte(configMultiPartitions))
+	var err error
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	assert.NilError(t, err)
+	assert.Equal(t, 2, len(schedulerContext.GetPartitionMapClone()))
+
+	var req *http.Request
+	req, err = http.NewRequest("GET", "/ws/v1/nodes/utilization", strings.NewReader(""))
+	req = mux.SetURLVars(req, make(map[string]string))
+	assert.NilError(t, err)
+	resp := &MockResponseWriter{}
+	var nodesDao []*dao.NodesUtilDAOInfo
+	// all partitions have no nodes, but it should be fine to get utilization
+	getNodesUtilization(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &nodesDao)
+	assert.NilError(t, err)
+	assert.Equal(t, len(nodesDao), 0)
+}

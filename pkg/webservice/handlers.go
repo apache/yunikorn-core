@@ -178,6 +178,7 @@ func getNodesUtilization(w http.ResponseWriter, r *http.Request) {
 	var result []*dao.NodesUtilDAOInfo
 	for _, partition := range lists {
 		partitionResource := partition.GetTotalPartitionResource()
+		// partitionResource can be null if the partition has no node
 		if partitionResource != nil {
 			for name := range partitionResource.Resources {
 				result = append(result, getNodesUtilJSON(partition, name))

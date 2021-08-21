@@ -416,7 +416,7 @@ func TestAddAppTaskGroup(t *testing.T) {
 
 	// queue now has fair as sort policy app add should fail
 	queue := partition.GetQueue(defQueue)
-	err = queue.SetQueueConfig(configs.QueueConfig{
+	err = queue.ApplyConf(configs.QueueConfig{
 		Name:       "default",
 		Parent:     false,
 		Queues:     nil,
@@ -430,7 +430,7 @@ func TestAddAppTaskGroup(t *testing.T) {
 	}
 
 	// queue with stateaware as sort policy, with a max set smaller than placeholder ask: app add should fail
-	err = queue.SetQueueConfig(configs.QueueConfig{
+	err = queue.ApplyConf(configs.QueueConfig{
 		Name:       "default",
 		Parent:     false,
 		Queues:     nil,
@@ -445,7 +445,7 @@ func TestAddAppTaskGroup(t *testing.T) {
 	}
 
 	// queue with stateaware as sort policy, with a max set larger than placeholder ask: app add works
-	err = queue.SetQueueConfig(configs.QueueConfig{
+	err = queue.ApplyConf(configs.QueueConfig{
 		Name:      "default",
 		Parent:    false,
 		Queues:    nil,
@@ -1292,7 +1292,7 @@ func TestAddTGAppDynamic(t *testing.T) {
 	app := newApplicationTGTags(appID1, "default", "unknown", tgRes, tags)
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "app-1 should have been added to the partition")
-	assert.Equal(t, app.GetQueueName(), "root.unlimited", "app-1 not placed in expected queue")
+	assert.Equal(t, app.GetQueuePath(), "root.unlimited", "app-1 not placed in expected queue")
 
 	jsonRes := "{\"resources\":{\"first\":{\"value\":10}}}"
 	tags = map[string]string{"taskqueue": "same", objects.AppTagNamespaceResourceQuota: jsonRes}
@@ -1300,7 +1300,7 @@ func TestAddTGAppDynamic(t *testing.T) {
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "app-2 should have been added to the partition")
 	assert.Equal(t, partition.getApplication(appID2), app, "partition failed to add app incorrect app returned")
-	assert.Equal(t, app.GetQueueName(), "root.same", "app-2 not placed in expected queue")
+	assert.Equal(t, app.GetQueuePath(), "root.same", "app-2 not placed in expected queue")
 
 	jsonRes = "{\"resources\":{\"first\":{\"value\":1}}}"
 	tags = map[string]string{"taskqueue": "smaller", objects.AppTagNamespaceResourceQuota: jsonRes}

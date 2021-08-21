@@ -109,8 +109,8 @@ func getClusterUtilization(w http.ResponseWriter, r *http.Request) {
 func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
-	queueName := r.URL.Query().Get("queue")
-	queueErr := validateQueue(queueName)
+	queuePath := r.URL.Query().Get("queue")
+	queueErr := validateQueue(queuePath)
 	if queueErr != nil {
 		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
 		return
@@ -122,7 +122,7 @@ func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 		appList := partition.GetApplications()
 		appList = append(appList, partition.GetCompletedApplications()...)
 		for _, app := range appList {
-			if len(queueName) == 0 || strings.EqualFold(queueName, app.GetQueueName()) {
+			if len(queuePath) == 0 || strings.EqualFold(queuePath, app.GetQueuePath()) {
 				appsDao = append(appsDao, getApplicationJSON(app))
 			}
 		}
@@ -133,14 +133,14 @@ func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func validateQueue(queueName string) error {
-	if queueName != "" {
-		queueNameArr := strings.Split(queueName, ".")
+func validateQueue(queuePath string) error {
+	if queuePath != "" {
+		queueNameArr := strings.Split(queuePath, ".")
 		for _, name := range queueNameArr {
 			if !configs.QueueNameRegExp.MatchString(name) {
 				return fmt.Errorf("problem in queue query parameter parsing as queue param "+
 					"%s contains invalid queue name %s. Queue name must only have "+
-					"alphanumeric characters, - or _, and be no longer than 64 characters", queueName, name)
+					"alphanumeric characters, - or _, and be no longer than 64 characters", queuePath, name)
 			}
 		}
 	}
@@ -305,7 +305,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		ApplicationID:  app.ApplicationID,
 		UsedResource:   app.GetAllocatedResource().DAOString(),
 		Partition:      app.Partition,
-		QueueName:      app.QueueName,
+		QueueName:      app.QueuePath,
 		SubmissionTime: app.SubmissionTime.UnixNano(),
 		Allocations:    allocationInfos,
 		State:          app.CurrentState(),
@@ -700,8 +700,12 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 	}
 
 	apps := queue.GetCopyOfApps()
-	appsDao := make([]*dao.ApplicationDAOInfo, 0, len(apps))
+	completedApps := queue.GetCopyOfCompletedApps()
+	appsDao := make([]*dao.ApplicationDAOInfo, 0, len(apps)+len(completedApps))
 	for _, app := range apps {
+		appsDao = append(appsDao, getApplicationJSON(app))
+	}
+	for _, app := range completedApps {
 		appsDao = append(appsDao, getApplicationJSON(app))
 	}
 

@@ -481,7 +481,7 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 			zap.String("applicationID", app.ApplicationID),
 			zap.String("partitionName", app.PartitionName),
 			zap.String("requested queue", app.QueueName),
-			zap.String("placed queue", schedApp.GetQueueName()))
+			zap.String("placed queue", schedApp.GetQueuePath()))
 	}
 
 	// Respond to RMProxy with accepted and rejected apps if needed
@@ -592,6 +592,26 @@ func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
 	rejectedNodes := make([]*si.RejectedNode, 0)
 	for _, node := range request.NewSchedulableNodes {
 		sn := objects.NewNode(node)
+		// if the node is unlimited, check the following things:
+		// 1. reservation is enabled or not. If yes, reject the node
+		// 2. are there any other nodes in the list, if yes reject the node
+		// 3. this is the first node. If not reject it
+		if sn.IsUnlimited() {
+			// if we have other nodes as well or we already have some registered nodes, reject the node registration
+			if len(request.NewSchedulableNodes) > 1 {
+				rejectedNodes = append(rejectedNodes, &si.RejectedNode{
+					NodeID: node.NodeID,
+					Reason: "There are other nodes as well, registering unlimited nodes is forbidden",
+				})
+				continue
+			} else if !cc.reservationDisabled {
+				rejectedNodes = append(rejectedNodes, &si.RejectedNode{
+					NodeID: node.NodeID,
+					Reason: "Reservation is enabled, registering unlimited node is forbidden",
+				})
+				continue
+			}
+		}
 		partition := cc.GetPartition(sn.Partition)
 		if partition == nil {
 			msg := fmt.Sprintf("Failed to find partition %s for new node %s", sn.Partition, sn.NodeID)
@@ -606,6 +626,21 @@ func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
 				zap.String("partitionName", sn.Partition))
 			continue
 		}
+		if partition.hasUnlimitedNode() {
+			rejectedNodes = append(rejectedNodes, &si.RejectedNode{
+				NodeID: node.NodeID,
+				Reason: "The partition has an unlimited node registered, registering other nodes is forbidden",
+			})
+			continue
+		}
+		if sn.IsUnlimited() && len(partition.nodes) > 0 {
+			rejectedNodes = append(rejectedNodes, &si.RejectedNode{
+				NodeID: node.NodeID,
+				Reason: "The unlimited node should be registered first, there are other nodes registered in the partition",
+			})
+			continue
+		}
+
 		existingAllocations := cc.convertAllocations(node.ExistingAllocations)
 		err := partition.AddNode(sn, existingAllocations)
 		if err != nil {

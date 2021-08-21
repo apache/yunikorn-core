@@ -33,6 +33,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects/template"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 )
@@ -45,13 +46,14 @@ type Queue struct {
 	Name      string // Queue name as in the config etc.
 
 	// Private fields need protection
-	sortType     policies.SortPolicy     // How applications (leaf) or queues (parents) are sorted
-	children     map[string]*Queue       // Only for direct children, parent queue only
-	applications map[string]*Application // only for leaf queue
-	reservedApps map[string]int          // applications reserved within this queue, with reservation count
-	parent       *Queue                  // link back to the parent in the scheduler
-	preempting   *resources.Resource     // resource considered for preemption in the queue
-	pending      *resources.Resource     // pending resource for the apps in the queue
+	sortType              policies.SortPolicy     // How applications (leaf) or queues (parents) are sorted
+	children              map[string]*Queue       // Only for direct children, parent queue only
+	applications          map[string]*Application // only for leaf queue
+	completedApplications map[string]*Application // completed applications from this leaf queue
+	reservedApps          map[string]int          // applications reserved within this queue, with reservation count
+	parent                *Queue                  // link back to the parent in the scheduler
+	preempting            *resources.Resource     // resource considered for preemption in the queue
+	pending               *resources.Resource     // pending resource for the apps in the queue
 
 	// The queue properties should be treated as immutable the value is a merge of the
 	// parent properties with the config for this queue only manipulated during creation
@@ -66,20 +68,22 @@ type Queue struct {
 	isManaged          bool                // queue is part of the config, not auto created
 	stateMachine       *fsm.FSM            // the state of the queue for scheduling
 	stateTime          time.Time           // last time the state was updated (needed for cleanup)
+	template           *template.Template
 
 	sync.RWMutex
 }
 
 func newBlankQueue() *Queue {
 	return &Queue{
-		children:          make(map[string]*Queue),
-		applications:      make(map[string]*Application),
-		reservedApps:      make(map[string]int),
-		properties:        make(map[string]string),
-		stateMachine:      NewObjectState(),
-		allocatedResource: resources.NewResource(),
-		preempting:        resources.NewResource(),
-		pending:           resources.NewResource(),
+		children:              make(map[string]*Queue),
+		applications:          make(map[string]*Application),
+		completedApplications: make(map[string]*Application),
+		reservedApps:          make(map[string]int),
+		properties:            make(map[string]string),
+		stateMachine:          NewObjectState(),
+		allocatedResource:     resources.NewResource(),
+		preempting:            resources.NewResource(),
+		pending:               resources.NewResource(),
 	}
 }
 
@@ -93,7 +97,7 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 	sq.isManaged = true
 
 	// update the properties
-	if err := sq.setQueueConfig(conf); err != nil {
+	if err := sq.applyConf(conf); err != nil {
 		return nil, fmt.Errorf("configured queue creation failed: %s", err)
 	}
 
@@ -142,13 +146,20 @@ func NewDynamicQueue(name string, leaf bool, parent *Queue) (*Queue, error) {
 	if err != nil {
 		return nil, fmt.Errorf("dynamic queue creation failed: %s", err)
 	}
-	// pull the properties from the parent that should be set on the child
-	sq.setTemplateProperties(parent.getProperties())
+
 	sq.UpdateSortType()
 	log.Logger().Info("dynamic queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
 
 	return sq, nil
+}
+
+// use input template to initialize properties, maxResource, and guaranteedResource
+func (sq *Queue) applyTemplate(childTemplate *template.Template) {
+	sq.properties = childTemplate.GetProperties()
+	// the resources in template are already checked
+	sq.guaranteedResource = childTemplate.GetGuaranteedResource()
+	sq.maxResource = childTemplate.GetMaxResource()
 }
 
 // Return a copy of the properties for this queue
@@ -182,36 +193,15 @@ func (sq *Queue) mergeProperties(parent, config map[string]string) {
 	}
 }
 
-// Set the properties that the dynamic child queue inherits from the parent
-// The properties list for the parent must be retrieved using getProperties()
-// This currently only sets the sort policy as it is set on the parent
-// Further implementation is part of YUNIKORN-193
-// lock free call
-func (sq *Queue) setTemplateProperties(parent map[string]string) {
-	if len(parent) == 0 {
-		return
-	}
-	// for a leaf queue pull out all values from the template and set each of them
-	// See YUNIKORN-193: for now just copy one attr from parent
-	if sq.isLeaf {
-		if parent[configs.ApplicationSortPolicy] != "" {
-			sq.properties[configs.ApplicationSortPolicy] = parent[configs.ApplicationSortPolicy]
-		}
-	}
-	// for a parent queue we just copy the template from its parent (no need to be recursive)
-	// this stops at the first managed queue
-	// See YUNIKORN-193
-}
-
-func (sq *Queue) SetQueueConfig(conf configs.QueueConfig) error {
+func (sq *Queue) ApplyConf(conf configs.QueueConfig) error {
 	sq.Lock()
 	defer sq.Unlock()
-	return sq.setQueueConfig(conf)
+	return sq.applyConf(conf)
 }
 
 // Apply all the properties to the queue from the config
 // lock free call, must be called holding the queue lock or during create only
-func (sq *Queue) setQueueConfig(conf configs.QueueConfig) error {
+func (sq *Queue) applyConf(conf configs.QueueConfig) error {
 	// Set the ACLs
 	var err error
 	sq.submitACL, err = security.NewACL(conf.SubmitACL)
@@ -239,33 +229,60 @@ func (sq *Queue) setQueueConfig(conf configs.QueueConfig) error {
 		sq.isLeaf = false
 	}
 
+	if !sq.isLeaf {
+		if err = sq.setTemplate(conf.ChildTemplate); err != nil {
+			return nil
+		}
+	}
+
 	// Load the max & guaranteed resources for all but the root queue
 	if sq.Name != configs.RootQueue {
-		sq.maxResource, err = resources.NewResourceFromConf(conf.Resources.Max)
-		if err != nil {
-			log.Logger().Error("parsing failed on max resources this should not happen",
-				zap.Error(err))
+		if err = sq.setResources(conf.Resources); err != nil {
 			return err
-		}
-		if len(sq.maxResource.Resources) == 0 || resources.IsZero(sq.maxResource) {
-			log.Logger().Debug("max resources config setting ignored: cannot set zero max resources")
-			sq.maxResource = nil
-		}
-
-		// Load the guaranteed resources
-		sq.guaranteedResource, err = resources.NewResourceFromConf(conf.Resources.Guaranteed)
-		if err != nil {
-			log.Logger().Error("parsing failed on guaranteed resources this should not happen",
-				zap.Error(err))
-			return err
-		}
-		if len(sq.guaranteedResource.Resources) == 0 || resources.IsZero(sq.guaranteedResource) {
-			log.Logger().Debug("guaranteed resources config setting ignored: guaranteed must be non-zero to take effect")
-			sq.guaranteedResource = nil
 		}
 	}
 
 	sq.properties = conf.Properties
+	return nil
+}
+
+func (sq *Queue) setResources(resource configs.Resources) error {
+	maxResource, err := resources.NewResourceFromConf(resource.Max)
+	if err != nil {
+		log.Logger().Error("parsing failed on max resources this should not happen",
+			zap.Error(err))
+		return err
+	}
+
+	guaranteedResource, err := resources.NewResourceFromConf(resource.Guaranteed)
+	if err != nil {
+		log.Logger().Error("parsing failed on guaranteed resources this should not happen",
+			zap.Error(err))
+		return err
+	}
+
+	if resources.StrictlyGreaterThanZero(maxResource) {
+		sq.maxResource = maxResource
+	} else {
+		log.Logger().Debug("max resources setting ignored: cannot set zero max resources")
+	}
+
+	if resources.StrictlyGreaterThanZero(guaranteedResource) {
+		sq.guaranteedResource = guaranteedResource
+	} else {
+		log.Logger().Debug("guaranteed resources setting ignored: cannot set zero max resources")
+	}
+
+	return nil
+}
+
+// lock free call, must be called holding the queue lock or during create only
+func (sq *Queue) setTemplate(conf configs.ChildTemplate) error {
+	t, err := template.FromConf(&conf)
+	if err != nil {
+		return err
+	}
+	sq.template = t
 	return nil
 }
 
@@ -409,16 +426,17 @@ func (sq *Queue) GetQueueInfos() dao.QueueDAOInfo {
 	return queueInfo
 }
 
-func (sq *Queue) GetPartitionQueues() dao.PartitionQueueDAOInfo {
+func (sq *Queue) GetPartitionQueueDAOInfo() dao.PartitionQueueDAOInfo {
 	queueInfo := dao.PartitionQueueDAOInfo{}
 	if len(sq.children) > 0 {
 		for _, child := range sq.GetCopyOfChildren() {
-			queueInfo.Children = append(queueInfo.Children, child.GetPartitionQueues())
+			queueInfo.Children = append(queueInfo.Children, child.GetPartitionQueueDAOInfo())
 		}
 	}
 	// we have held the read lock so following method should not take lock again.
 	sq.RLock()
 	defer sq.RUnlock()
+
 	queueInfo.QueueName = sq.QueuePath
 	queueInfo.Status = sq.stateMachine.Current()
 	queueInfo.MaxResource = sq.maxResource.DAOString()
@@ -426,6 +444,7 @@ func (sq *Queue) GetPartitionQueues() dao.PartitionQueueDAOInfo {
 	queueInfo.AllocatedResource = sq.allocatedResource.DAOString()
 	queueInfo.IsLeaf = sq.isLeaf
 	queueInfo.IsManaged = sq.isManaged
+	queueInfo.TemplateInfo = sq.template.GetTemplateInfo()
 	queueInfo.Properties = make(map[string]string)
 	for k, v := range sq.properties {
 		queueInfo.Properties[k] = v
@@ -544,17 +563,29 @@ func (sq *Queue) RemoveApplication(app *Application) {
 	defer sq.Unlock()
 
 	delete(sq.applications, appID)
+	sq.completedApplications[appID] = app
 }
 
-// Get a copy of all apps holding the lock
+// GetCopyOfApps Get a copy of all non-complated apps holding the lock
 func (sq *Queue) GetCopyOfApps() map[string]*Application {
 	sq.RLock()
 	defer sq.RUnlock()
-	appsCopy := make(map[string]*Application)
+	appsCopy := make(map[string]*Application, len(sq.applications))
 	for appID, app := range sq.applications {
 		appsCopy[appID] = app
 	}
 	return appsCopy
+}
+
+// GetCopyOfCompletedApps Get a copy of all completed apps holding the lock
+func (sq *Queue) GetCopyOfCompletedApps() map[string]*Application {
+	sq.RLock()
+	defer sq.RUnlock()
+	completedAppsCopy := make(map[string]*Application, len(sq.completedApplications))
+	for appID, app := range sq.completedApplications {
+		completedAppsCopy[appID] = app
+	}
+	return completedAppsCopy
 }
 
 // Get a copy of the child queues
@@ -595,6 +626,7 @@ func (sq *Queue) removeChildQueue(name string) {
 }
 
 // Add a child queue to this queue.
+// note: both child.isLeaf and child.isManaged must be already configured
 func (sq *Queue) addChildQueue(child *Queue) error {
 	sq.Lock()
 	defer sq.Unlock()
@@ -607,6 +639,25 @@ func (sq *Queue) addChildQueue(child *Queue) error {
 
 	// no need to lock child as it is a new queue which cannot be accessed yet
 	sq.children[child.Name] = child
+
+	if child.isLeaf {
+		if !child.isManaged {
+			// this is a story about compatibility. the template is a new feature, and we want to keep old behavior.
+			// 1) try to use template if it is not nil
+			// 2) otherwise, child leaf copy the configs.ApplicationSortPolicy from parent (old behavior)
+			if sq.template != nil {
+				child.applyTemplate(sq.template)
+			} else {
+				policyValue, ok := sq.properties[configs.ApplicationSortPolicy]
+				if ok {
+					child.properties[configs.ApplicationSortPolicy] = policyValue
+				}
+			}
+		}
+		// managed (configured) leaf queue can't use template
+	} else {
+		child.template = sq.template
+	}
 	return nil
 }
 
@@ -1132,6 +1183,6 @@ func (sq *Queue) updateUsedResourceMetrics() {
 func (sq *Queue) String() string {
 	sq.RLock()
 	defer sq.RUnlock()
-	return fmt.Sprintf("{QueueName: %s, State: %s, StateTime: %x, MaxResource: %s}",
+	return fmt.Sprintf("{QueuePath: %s, State: %s, StateTime: %x, MaxResource: %s}",
 		sq.QueuePath, sq.stateMachine.Current(), sq.stateTime, sq.maxResource)
 }

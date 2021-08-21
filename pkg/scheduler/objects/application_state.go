@@ -43,10 +43,11 @@ const (
 	CompleteApplication
 	FailApplication
 	ExpireApplication
+	ResumeApplication
 )
 
 func (ae applicationEvent) String() string {
-	return [...]string{"runApplication", "rejectApplication", "completeApplication", "failApplication", "expireApplication"}[ae]
+	return [...]string{"runApplication", "rejectApplication", "completeApplication", "failApplication", "expireApplication", "resumeApplication"}[ae]
 }
 
 // ----------------------------------
@@ -65,10 +66,11 @@ const (
 	Failing
 	Failed
 	Expired
+	Resuming
 )
 
 func (as applicationState) String() string {
-	return [...]string{"New", "Accepted", "Starting", "Running", "Rejected", "Completing", "Completed", "Failing", "Failed", "Expired"}[as]
+	return [...]string{"New", "Accepted", "Starting", "Running", "Rejected", "Completing", "Completed", "Failing", "Failed", "Expired", "Resuming"}[as]
 }
 
 func NewAppState() *fsm.FSM {
@@ -80,7 +82,7 @@ func NewAppState() *fsm.FSM {
 				Dst:  Rejected.String(),
 			}, {
 				Name: RunApplication.String(),
-				Src:  []string{New.String()},
+				Src:  []string{New.String(), Resuming.String()},
 				Dst:  Accepted.String(),
 			}, {
 				Name: RunApplication.String(),
@@ -106,6 +108,10 @@ func NewAppState() *fsm.FSM {
 				Name: FailApplication.String(),
 				Src:  []string{Failing.String()},
 				Dst:  Failed.String(),
+			}, {
+				Name: ResumeApplication.String(),
+				Src:  []string{New.String(), Accepted.String()},
+				Dst:  Resuming.String(),
 			}, {
 				Name: ExpireApplication.String(),
 				Src:  []string{Completed.String(), Failed.String()},
@@ -146,7 +152,7 @@ func NewAppState() *fsm.FSM {
 				setTimer(completingTimeout, event, CompleteApplication)
 			},
 			fmt.Sprintf("leave_%s", New.String()): func(event *fsm.Event) {
-				metrics.GetSchedulerMetrics().IncTotalApplicationsAdded()
+				metrics.GetSchedulerMetrics().IncTotalApplicationsAccepted()
 			},
 			fmt.Sprintf("enter_%s", Rejected.String()): func(event *fsm.Event) {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsRejected()

@@ -372,6 +372,17 @@ func (cc *ClusterContext) GetPartition(partitionName string) *PartitionContext {
 	return cc.partitions[partitionName]
 }
 
+func (cc *ClusterContext) GetPartitionWithoutClusterID(partitionName string) *PartitionContext {
+	cc.RLock()
+	defer cc.RUnlock()
+	for k, v := range cc.partitions {
+		if len(partitionName) > 0 && common.GetPartitionNameWithoutClusterID(k) == partitionName {
+			return v
+		}
+	}
+	return nil
+}
+
 // Get the scheduling application based on the ID from the partition.
 // Returns nil if the partition or app cannot be found.
 // Visible for tests
@@ -431,7 +442,7 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 				ApplicationID: app.ApplicationID,
 				Reason:        msg,
 			})
-			log.Logger().Info("Failed to add application to non existing partition",
+			log.Logger().Error("Failed to add application to non existing partition",
 				zap.String("applicationID", app.ApplicationID),
 				zap.String("partitionName", app.PartitionName))
 			continue
@@ -444,7 +455,7 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 				ApplicationID: app.ApplicationID,
 				Reason:        err.Error(),
 			})
-			log.Logger().Info("Failed to add application to partition (user rejected)",
+			log.Logger().Error("Failed to add application to partition (user rejected)",
 				zap.String("applicationID", app.ApplicationID),
 				zap.String("partitionName", app.PartitionName),
 				zap.Error(err))
@@ -457,7 +468,7 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 				ApplicationID: app.ApplicationID,
 				Reason:        err.Error(),
 			})
-			log.Logger().Info("Failed to add application to partition (placement rejected)",
+			log.Logger().Error("Failed to add application to partition (placement rejected)",
 				zap.String("applicationID", app.ApplicationID),
 				zap.String("partitionName", app.PartitionName),
 				zap.Error(err))
@@ -470,7 +481,7 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 			zap.String("applicationID", app.ApplicationID),
 			zap.String("partitionName", app.PartitionName),
 			zap.String("requested queue", app.QueueName),
-			zap.String("placed queue", schedApp.GetQueueName()))
+			zap.String("placed queue", schedApp.GetQueuePath()))
 	}
 
 	// Respond to RMProxy with accepted and rejected apps if needed
@@ -526,14 +537,14 @@ func (cc *ClusterContext) updateNodes(request *si.UpdateRequest) {
 		if p, ok := update.Attributes[siCommon.NodePartition]; ok {
 			partition = cc.GetPartition(p)
 		} else {
-			log.Logger().Info("node partition not specified",
+			log.Logger().Error("node partition not specified",
 				zap.String("nodeID", update.NodeID),
 				zap.String("nodeAction", update.Action.String()))
 			continue
 		}
 
 		if partition == nil {
-			log.Logger().Info("Failed to update node on non existing partition",
+			log.Logger().Error("Failed to update node on non existing partition",
 				zap.String("nodeID", update.NodeID),
 				zap.String("partitionName", update.Attributes[siCommon.NodePartition]),
 				zap.String("nodeAction", update.Action.String()))
@@ -542,7 +553,7 @@ func (cc *ClusterContext) updateNodes(request *si.UpdateRequest) {
 
 		node := partition.GetNode(update.NodeID)
 		if node == nil {
-			log.Logger().Info("Failed to update non existing node",
+			log.Logger().Error("Failed to update non existing node",
 				zap.String("nodeID", update.NodeID),
 				zap.String("partitionName", update.Attributes[siCommon.NodePartition]),
 				zap.String("nodeAction", update.Action.String()))
@@ -581,6 +592,26 @@ func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
 	rejectedNodes := make([]*si.RejectedNode, 0)
 	for _, node := range request.NewSchedulableNodes {
 		sn := objects.NewNode(node)
+		// if the node is unlimited, check the following things:
+		// 1. reservation is enabled or not. If yes, reject the node
+		// 2. are there any other nodes in the list, if yes reject the node
+		// 3. this is the first node. If not reject it
+		if sn.IsUnlimited() {
+			// if we have other nodes as well or we already have some registered nodes, reject the node registration
+			if len(request.NewSchedulableNodes) > 1 {
+				rejectedNodes = append(rejectedNodes, &si.RejectedNode{
+					NodeID: node.NodeID,
+					Reason: "There are other nodes as well, registering unlimited nodes is forbidden",
+				})
+				continue
+			} else if !cc.reservationDisabled {
+				rejectedNodes = append(rejectedNodes, &si.RejectedNode{
+					NodeID: node.NodeID,
+					Reason: "Reservation is enabled, registering unlimited node is forbidden",
+				})
+				continue
+			}
+		}
 		partition := cc.GetPartition(sn.Partition)
 		if partition == nil {
 			msg := fmt.Sprintf("Failed to find partition %s for new node %s", sn.Partition, sn.NodeID)
@@ -590,11 +621,26 @@ func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
 				NodeID: node.NodeID,
 				Reason: msg,
 			})
-			log.Logger().Info("Failed to add node to non existing partition",
+			log.Logger().Error("Failed to add node to non existing partition",
 				zap.String("nodeID", sn.NodeID),
 				zap.String("partitionName", sn.Partition))
 			continue
 		}
+		if partition.hasUnlimitedNode() {
+			rejectedNodes = append(rejectedNodes, &si.RejectedNode{
+				NodeID: node.NodeID,
+				Reason: "The partition has an unlimited node registered, registering other nodes is forbidden",
+			})
+			continue
+		}
+		if sn.IsUnlimited() && len(partition.nodes) > 0 {
+			rejectedNodes = append(rejectedNodes, &si.RejectedNode{
+				NodeID: node.NodeID,
+				Reason: "The unlimited node should be registered first, there are other nodes registered in the partition",
+			})
+			continue
+		}
+
 		existingAllocations := cc.convertAllocations(node.ExistingAllocations)
 		err := partition.AddNode(sn, existingAllocations)
 		if err != nil {
@@ -603,7 +649,7 @@ func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
 				NodeID: sn.NodeID,
 				Reason: msg,
 			})
-			log.Logger().Info("Failed to add node to partition (rejected)",
+			log.Logger().Error("Failed to add node to partition (rejected)",
 				zap.String("nodeID", sn.NodeID),
 				zap.String("partitionName", sn.Partition),
 				zap.Error(err))
@@ -654,7 +700,7 @@ func (cc *ClusterContext) processAsks(request *si.UpdateRequest) {
 		partition := cc.GetPartition(siAsk.PartitionName)
 		if partition == nil {
 			msg := fmt.Sprintf("Failed to find partition %s, for application %s and allocation %s", siAsk.PartitionName, siAsk.ApplicationID, siAsk.AllocationKey)
-			log.Logger().Info("Invalid ask add requested by shim, partition not found",
+			log.Logger().Error("Invalid ask add requested by shim, partition not found",
 				zap.String("partition", siAsk.PartitionName),
 				zap.String("applicationID", siAsk.ApplicationID),
 				zap.String("askKey", siAsk.AllocationKey))
@@ -674,7 +720,7 @@ func (cc *ClusterContext) processAsks(request *si.UpdateRequest) {
 					ApplicationID: siAsk.ApplicationID,
 					Reason:        err.Error(),
 				})
-			log.Logger().Info("Invalid ask add requested by shim",
+			log.Logger().Error("Invalid ask add requested by shim",
 				zap.String("partition", siAsk.PartitionName),
 				zap.String("applicationID", siAsk.ApplicationID),
 				zap.String("askKey", siAsk.AllocationKey),
@@ -695,7 +741,7 @@ func (cc *ClusterContext) processAskReleases(releases []*si.AllocationAskRelease
 	for _, toRelease := range releases {
 		partition := cc.GetPartition(toRelease.PartitionName)
 		if partition == nil {
-			log.Logger().Info("Invalid ask release requested by shim, partition not found",
+			log.Logger().Error("Invalid ask release requested by shim, partition not found",
 				zap.String("partition", toRelease.PartitionName),
 				zap.String("applicationID", toRelease.ApplicationID),
 				zap.String("askKey", toRelease.Allocationkey))

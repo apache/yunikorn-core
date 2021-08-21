@@ -43,7 +43,7 @@ func TestNewApplication(t *testing.T) {
 	siApp := &si.AddApplicationRequest{}
 	app := NewApplication(siApp, user, nil, "")
 	assert.Equal(t, app.ApplicationID, "", "application ID should not be set was not set in SI")
-	assert.Equal(t, app.QueueName, "", "queue name should not be set was not set in SI")
+	assert.Equal(t, app.QueuePath, "", "queue name should not be set was not set in SI")
 	assert.Equal(t, app.Partition, "", "partition name should not be set was not set in SI")
 	assert.Equal(t, app.rmID, "", "RM ID should not be set was not passed in")
 	assert.Equal(t, app.rmEventHandler, handler.EventHandler(nil), "event handler should be nil")
@@ -75,7 +75,7 @@ func TestNewApplication(t *testing.T) {
 	}
 	app = NewApplication(siApp, user, &appEventHandler{}, "myRM")
 	assert.Equal(t, app.ApplicationID, "appID", "application ID should not be set to SI value")
-	assert.Equal(t, app.QueueName, "some.queue", "queue name should not be set to SI value")
+	assert.Equal(t, app.QueuePath, "some.queue", "queue name should not be set to SI value")
 	assert.Equal(t, app.Partition, "AnotherPartition", "partition name should be set to SI value")
 	if app.rmEventHandler == nil {
 		t.Fatal("non nil handler was not set in the new app")
@@ -821,7 +821,7 @@ func TestQueueUpdate(t *testing.T) {
 	queue, err := createDynamicQueue(root, "test", false)
 	assert.NilError(t, err, "failed to create test queue")
 	app.SetQueue(queue)
-	assert.Equal(t, app.QueueName, "root.test")
+	assert.Equal(t, app.QueuePath, "root.test")
 }
 
 func TestStateTimeOut(t *testing.T) {
@@ -974,7 +974,15 @@ func TestReplaceAllocation(t *testing.T) {
 	}
 }
 
+func TestTimeoutPlaceholderSoftStyle(t *testing.T) {
+	runTimeoutPlaceholderTest(t, Resuming.String(), Soft)
+}
+
 func TestTimeoutPlaceholderAllocAsk(t *testing.T) {
+	runTimeoutPlaceholderTest(t, Failing.String(), Hard)
+}
+
+func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulingStyle string) {
 	// create a fake queue
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
@@ -984,6 +992,7 @@ func TestTimeoutPlaceholderAllocAsk(t *testing.T) {
 	defer func() { defaultPlaceholderTimeout = originalPhTimeout }()
 
 	app, testHandler := newApplicationWithHandler(appID1, "default", "root.a")
+	app.gangSchedulingStyle = gangSchedulingStyle
 	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should be nil on create")
 	// fake the queue assignment (needed with ask)
 	app.queue = queue
@@ -1009,7 +1018,7 @@ func TestTimeoutPlaceholderAllocAsk(t *testing.T) {
 		return app.placeholderTimer == nil
 	})
 	assert.NilError(t, err, "Placeholder timeout cleanup did not trigger unexpectedly")
-	assert.Assert(t, app.IsFailing(), "Application did not progress into Failing state")
+	assert.Equal(t, app.stateMachine.Current(), expectedState, "Application did not progress into expected state")
 	events := testHandler.getEvents()
 	var found int
 	for _, event := range events {
@@ -1121,6 +1130,35 @@ func TestTimeoutPlaceholderCompleting(t *testing.T) {
 	assert.Assert(t, app.IsCompleting(), "App should still be in completing state")
 }
 
+func TestAppTimersAfterAppRemoval(t *testing.T) {
+	phTimeout := common.ConvertSITimeout(50)
+	app, _ := newApplicationWithPlaceholderTimeout(appID1, "default", "root.a", 50)
+	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should be nil on create")
+	assert.Equal(t, app.execTimeout, phTimeout, "placeholder timeout not initialised correctly")
+	app.SetState(Accepted.String())
+
+	resMap := map[string]string{"memory": "100", "vcores": "10"}
+	res, err := resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err, "Unexpected error when creating resource from map")
+	// add the placeholder to the app
+	ph := newPlaceholderAlloc(appID1, "waiting", nodeID1, "root.a", res)
+	app.AddAllocation(ph)
+	assert.Assert(t, app.placeholderTimer != nil, "Placeholder timer should be initiated after the first placeholder allocation")
+	// add a real allocation as well
+	alloc := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
+	app.AddAllocation(alloc)
+	// move on to running
+	app.SetState(Running.String())
+	app.RemoveAllAllocations()
+	assert.Assert(t, app.IsCompleting(), "App should be in completing state all allocs have been removed")
+	if app.placeholderTimer != nil {
+		t.Fatalf("Placeholder timer has not be cleared after app removal as expected, %v", app.placeholderTimer)
+	}
+	if app.stateTimer != nil {
+		t.Fatalf("State timer has not be cleared after app removal as expected, %v", app.stateTimer)
+	}
+}
+
 func TestGetAllRequests(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	ask := newAllocationAsk(aKey, appID1, res)
@@ -1133,4 +1171,16 @@ func TestGetAllRequests(t *testing.T) {
 	assert.NilError(t, err, "No error expected when adding an ask")
 	assert.Assert(t, len(app.getAllRequests()) == 1, "App should have only one request")
 	assert.Equal(t, app.getAllRequests()[0], ask, "Unexpected request found in the app")
+}
+
+func TestGetQueueNameAfterUnsetQueue(t *testing.T) {
+	app := newApplication(appID1, "default", "root.unknown")
+	assert.Equal(t, app.GetQueuePath(), app.QueuePath)
+	assert.Equal(t, app.GetQueuePath(), "root.unknown")
+
+	// the queue is reset to nil but GetQueuePath should work well
+	app.UnSetQueue()
+	assert.Assert(t, app.queue == nil)
+	assert.Equal(t, app.GetQueuePath(), app.QueuePath)
+	assert.Equal(t, app.GetQueuePath(), "root.unknown")
 }

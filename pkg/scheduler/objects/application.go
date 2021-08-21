@@ -47,10 +47,15 @@ var (
 	defaultPlaceholderTimeout = 15 * time.Minute
 )
 
+const (
+	Soft string = "Soft"
+	Hard string = "Hard"
+)
+
 type Application struct {
 	ApplicationID  string
 	Partition      string
-	QueueName      string
+	QueuePath      string
 	SubmissionTime time.Time
 
 	// Private fields need protection
@@ -69,6 +74,7 @@ type Application struct {
 	stateTimer           *time.Timer            // timer for state time
 	execTimeout          time.Duration          // execTimeout for the application run
 	placeholderTimer     *time.Timer            // placeholder replace timer
+	gangSchedulingStyle  string                 // gang scheduling style can be hard (after timeout we fail the application), or soft (after timeeout we schedule it as a normal application)
 
 	rmEventHandler     handler.EventHandler
 	rmID               string
@@ -81,7 +87,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	app := &Application{
 		ApplicationID:        siApp.ApplicationID,
 		Partition:            siApp.PartitionName,
-		QueueName:            siApp.QueueName,
+		QueuePath:            siApp.QueueName,
 		SubmissionTime:       time.Now(),
 		tags:                 siApp.Tags,
 		pending:              resources.NewResource(),
@@ -97,6 +103,13 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	if time.Duration(0) == placeholderTimeout {
 		placeholderTimeout = defaultPlaceholderTimeout
 	}
+	gangSchedStyle := siApp.GetGangSchedulingStyle()
+	if gangSchedStyle != Soft && gangSchedStyle != Hard {
+		log.Logger().Info("Unknown gang scheduling style, using soft style as default",
+			zap.String("gang scheduling style", gangSchedStyle))
+		gangSchedStyle = Soft
+	}
+	app.gangSchedulingStyle = gangSchedStyle
 	app.execTimeout = placeholderTimeout
 	app.user = ugi
 	app.rmEventHandler = eventHandler
@@ -108,8 +121,8 @@ func (sa *Application) String() string {
 	if sa == nil {
 		return "application is nil"
 	}
-	return fmt.Sprintf("ApplicationID: %s, Partition: %s, QueueName: %s, SubmissionTime: %x, State: %s",
-		sa.ApplicationID, sa.Partition, sa.QueueName, sa.SubmissionTime, sa.stateMachine.Current())
+	return fmt.Sprintf("ApplicationID: %s, Partition: %s, QueuePath: %s, SubmissionTime: %x, State: %s",
+		sa.ApplicationID, sa.Partition, sa.QueuePath, sa.SubmissionTime, sa.stateMachine.Current())
 }
 
 func (sa *Application) SetState(state string) {
@@ -164,6 +177,10 @@ func (sa *Application) IsFailing() bool {
 
 func (sa *Application) IsFailed() bool {
 	return sa.stateMachine.Is(Failed.String())
+}
+
+func (sa *Application) IsResuming() bool {
+	return sa.stateMachine.Is(Resuming.String())
 }
 
 // HandleApplicationEvent handles the state event for the application.
@@ -283,6 +300,9 @@ func (sa *Application) clearPlaceholderTimer() {
 	}
 	sa.placeholderTimer.Stop()
 	sa.placeholderTimer = nil
+	log.Logger().Debug("Application placeholder timer cleared",
+		zap.String("AppID", sa.ApplicationID),
+		zap.Duration("Timeout", sa.execTimeout))
 }
 
 func (sa *Application) timeoutPlaceholderProcessing() {
@@ -312,9 +332,14 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 		log.Logger().Info("Placeholder timeout, releasing asks and placeholders",
 			zap.String("AppID", sa.ApplicationID),
 			zap.Int("releasing placeholders", len(sa.allocations)),
-			zap.Int("releasing asks", len(sa.requests)))
+			zap.Int("releasing asks", len(sa.requests)),
+			zap.String("gang scheduling style", sa.gangSchedulingStyle))
 		// change the status of the app to Failing. Once all the placeholders are cleaned up, if will be changed to Failed
-		if err := sa.HandleApplicationEventWithInfo(FailApplication, "ResourceReservationTimeout"); err != nil {
+		event := ResumeApplication
+		if sa.gangSchedulingStyle == Hard {
+			event = FailApplication
+		}
+		if err := sa.HandleApplicationEventWithInfo(event, "ResourceReservationTimeout"); err != nil {
 			log.Logger().Debug("Application state change failed when placeholder timed out",
 				zap.String("AppID", sa.ApplicationID),
 				zap.String("currentState", sa.CurrentState()),
@@ -443,7 +468,7 @@ func (sa *Application) removeAsksInternal(allocKey string) int {
 	// 2) if confirmed allocations is zero (no real tasks running)
 	// Change the state to completing.
 	// When the resource trackers are zero we should not expect anything to come in later.
-	if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) && !sa.IsFailing() {
+	if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) && !sa.IsFailing() && !sa.IsCompleting() {
 		if err := sa.HandleApplicationEvent(CompleteApplication); err != nil {
 			log.Logger().Warn("Application state not changed to Completing while updating ask(s)",
 				zap.String("currentState", sa.CurrentState()),
@@ -742,7 +767,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 		if !headRoom.FitInMaxUndef(request.AllocatedResource) {
 			// post scheduling events via the event plugin
 			if eventCache := events.GetEventCache(); eventCache != nil {
-				message := fmt.Sprintf("Application %s does not fit into %s queue", request.ApplicationID, sa.QueueName)
+				message := fmt.Sprintf("Application %s does not fit into %s queue", request.ApplicationID, sa.QueuePath)
 				if event, err := events.CreateRequestEventRecord(request.AllocationKey, request.ApplicationID, "InsufficientQueueResources", message); err != nil {
 					log.Logger().Warn("Event creation failed",
 						zap.String("event message", message),
@@ -815,6 +840,21 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() interfaces.Nod
 				if err != nil {
 					log.Logger().Warn("ask repeat update failed unexpectedly",
 						zap.Error(err))
+				}
+				// Is real allocation matches with placeholder resource?
+				if !resources.Equals(alloc.AllocatedResource, ph.AllocatedResource) {
+					log.Logger().Warn("Real allocation is not matching with placeholder allocation", zap.String("Real alloc: ", alloc.AllocationKey), zap.String("Real alloc resource: ", alloc.AllocatedResource.DAOString()), zap.String("Placeholder alloc: ", ph.AllocationKey), zap.String("Placeholder alloc resource: ", ph.AllocatedResource.DAOString()))
+					// post scheduling events via the event plugin
+					if eventCache := events.GetEventCache(); eventCache != nil {
+						message := fmt.Sprintf("Real Pod %s allocation %s is not matching with placeholder %s allocation %s in application %s", request.AllocationKey, request.AllocatedResource.DAOString(), ph.AllocationKey, ph.AllocatedResource.DAOString(), request.ApplicationID)
+						if event, err := events.CreateRequestEventRecord(request.AllocationKey, request.ApplicationID, "Resource Allocation Mismatch between real and placeholder", message); err != nil {
+							log.Logger().Warn("Event creation failed",
+								zap.String("event message", message),
+								zap.Error(err))
+						} else {
+							eventCache.AddEvent(event)
+						}
+					}
 				}
 				return alloc
 			}
@@ -1069,10 +1109,10 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 	return nil
 }
 
-func (sa *Application) GetQueueName() string {
+func (sa *Application) GetQueuePath() string {
 	sa.RLock()
 	defer sa.RUnlock()
-	return sa.queue.QueuePath
+	return sa.QueuePath
 }
 
 func (sa *Application) GetQueue() *Queue {
@@ -1083,17 +1123,17 @@ func (sa *Application) GetQueue() *Queue {
 
 // Set the leaf queue the application runs in. The queue will be created when the app is added to the partition.
 // The queue name is set to what the placement rule returned.
-func (sa *Application) SetQueueName(queuePath string) {
+func (sa *Application) SetQueuePath(queuePath string) {
 	sa.Lock()
 	defer sa.Unlock()
-	sa.QueueName = queuePath
+	sa.QueuePath = queuePath
 }
 
 // Set the leaf queue the application runs in.
 func (sa *Application) SetQueue(queue *Queue) {
 	sa.Lock()
 	defer sa.Unlock()
-	sa.QueueName = queue.QueuePath
+	sa.QueuePath = queue.QueuePath
 	sa.queue = queue
 }
 
@@ -1241,10 +1281,13 @@ func (sa *Application) removeAllocationInternal(uuid string) *Allocation {
 		// if all the placeholders are replaced, clear the placeholder timer
 		if resources.IsZero(sa.allocatedPlaceholder) {
 			sa.clearPlaceholderTimer()
-			if (sa.IsCompleting() && sa.stateTimer == nil) || sa.IsFailing() {
+			if (sa.IsCompleting() && sa.stateTimer == nil) || sa.IsFailing() || sa.IsResuming() {
 				event := CompleteApplication
 				if sa.IsFailing() {
 					event = FailApplication
+				}
+				if sa.IsResuming() {
+					event = RunApplication
 				}
 				if err := sa.HandleApplicationEvent(event); err != nil {
 					log.Logger().Warn("Application state not changed while removing a placeholder allocation",
@@ -1291,6 +1334,8 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 				zap.Error(err))
 		}
 	}
+	sa.clearPlaceholderTimer()
+	sa.clearStateTimer()
 	return allocationsToRelease
 }
 

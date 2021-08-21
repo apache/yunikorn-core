@@ -60,7 +60,7 @@ type PartitionContext struct {
 	rules                  *[]configs.PlacementRule        // placement rules to be loaded by the scheduler
 	userGroupCache         *security.UserGroupCache        // user cache per partition
 	totalPartitionResource *resources.Resource             // Total node resources
-	nodeSortingPolicy      *policies.NodeSortingPolicy     // Global Node Sorting Policies
+	nodeSortingPolicy      objects.NodeSortingPolicy       // Global Node Sorting Policies
 	allocations            int                             // Number of allocations on the partition
 
 	// The partition write lock must not be held while manipulating an application.
@@ -134,24 +134,23 @@ func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionCon
 	// get the user group cache for the partition
 	// TODO get the resolver from the config
 	pc.userGroupCache = security.GetUserGroupCache("")
+	pc.updateNodeSortingPolicy(conf)
+	return nil
+}
 
-	// TODO Need some more cleaner interface here.
+// NOTE: this is a lock free call. It should only be called holding the PartitionContext lock.
+func (pc *PartitionContext) updateNodeSortingPolicy(conf configs.PartitionConfig) {
 	var configuredPolicy policies.SortingPolicy
-	configuredPolicy, err = policies.FromString(conf.NodeSortPolicy.Type)
+	configuredPolicy, err := policies.SortingPolicyFromString(conf.NodeSortPolicy.Type)
 	if err != nil {
 		log.Logger().Debug("NodeSorting policy incorrectly set or unknown",
 			zap.Error(err))
-	}
-	switch configuredPolicy {
-	case policies.BinPackingPolicy, policies.FairnessPolicy:
+		log.Logger().Info(fmt.Sprintf("NodeSorting policy not set using '%s' as default", configuredPolicy))
+	} else {
 		log.Logger().Info("NodeSorting policy set from config",
 			zap.String("policyName", configuredPolicy.String()))
-		pc.nodeSortingPolicy = policies.NewNodeSortingPolicy(conf.NodeSortPolicy.Type)
-	case policies.Unknown:
-		log.Logger().Info("NodeSorting policy not set using 'fair' as default")
-		pc.nodeSortingPolicy = policies.NewNodeSortingPolicy("fair")
 	}
-	return nil
+	pc.nodeSortingPolicy = objects.NewNodeSortingPolicy(conf.NodeSortPolicy.Type)
 }
 
 func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig) error {
@@ -176,11 +175,12 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 		// Placing an application will not have a lock on the partition context.
 		pc.placementManager = placement.NewPlacementManager(*pc.rules, pc.GetQueue)
 	}
+	pc.updateNodeSortingPolicy(conf)
 	// start at the root: there is only one queue
 	queueConf := conf.Queues[0]
 	root := pc.root
 	// update the root queue
-	if err := root.SetQueueConfig(queueConf); err != nil {
+	if err := root.ApplyConf(queueConf); err != nil {
 		return err
 	}
 	root.UpdateSortType()
@@ -223,7 +223,7 @@ func (pc *PartitionContext) updateQueues(config []configs.QueueConfig, parent *o
 		if queue == nil {
 			queue, err = objects.NewConfiguredQueue(queueConfig, parent)
 		} else {
-			err = queue.SetQueueConfig(queueConfig)
+			err = queue.ApplyConf(queueConfig)
 		}
 		if err != nil {
 			return err
@@ -306,14 +306,14 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 	}
 
 	// Put app under the queue
-	queueName := app.QueueName
+	queueName := app.QueuePath
 	pm := pc.getPlacementManager()
 	if pm.IsInitialised() {
 		err := pm.PlaceApplication(app)
 		if err != nil {
 			return fmt.Errorf("failed to place application %s: %v", appID, err)
 		}
-		queueName = app.QueueName
+		queueName = app.QueuePath
 		if queueName == "" {
 			return fmt.Errorf("application rejected by placement rules: %s", appID)
 		}
@@ -487,7 +487,7 @@ func (pc *PartitionContext) GetQueueInfos() dao.QueueDAOInfo {
 // Get the queue info for the whole queue structure to pass to the webservice
 func (pc *PartitionContext) GetPartitionQueues() dao.PartitionQueueDAOInfo {
 	var PartitionQueueDAOInfo = dao.PartitionQueueDAOInfo{}
-	PartitionQueueDAOInfo = pc.root.GetPartitionQueues()
+	PartitionQueueDAOInfo = pc.root.GetPartitionQueueDAOInfo()
 	PartitionQueueDAOInfo.Partition = pc.Name
 	return PartitionQueueDAOInfo
 }
@@ -883,7 +883,7 @@ func (pc *PartitionContext) reserve(app *objects.Application, node *objects.Node
 
 	log.Logger().Info("allocation ask is reserved",
 		zap.String("appID", appID),
-		zap.String("queue", app.QueueName),
+		zap.String("queue", app.QueuePath),
 		zap.String("allocationKey", ask.AllocationKey),
 		zap.String("node", node.NodeID))
 }
@@ -912,7 +912,7 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 
 	log.Logger().Info("allocation ask is unreserved",
 		zap.String("appID", appID),
-		zap.String("queue", app.QueueName),
+		zap.String("queue", app.QueuePath),
 		zap.String("allocationKey", ask.AllocationKey),
 		zap.String("node", node.NodeID),
 		zap.Int("reservationsRemoved", num))
@@ -921,12 +921,8 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 // Get the iterator for the sorted nodes list from the partition.
 // Sorting should use a copy of the node list not the main list.
 func (pc *PartitionContext) getNodeIteratorForPolicy(nodes []*objects.Node) interfaces.NodeIterator {
-	configuredPolicy := pc.GetNodeSortingPolicy()
-	if configuredPolicy == policies.Unknown {
-		return nil
-	}
 	// Sort Nodes based on the policy configured.
-	objects.SortNodes(nodes, configuredPolicy)
+	objects.SortNodes(nodes, pc.nodeSortingPolicy)
 	return newDefaultNodeIterator(nodes)
 }
 
@@ -1332,7 +1328,7 @@ func (pc *PartitionContext) GetStateTime() time.Time {
 func (pc *PartitionContext) GetNodeSortingPolicy() policies.SortingPolicy {
 	pc.RLock()
 	defer pc.RUnlock()
-	return pc.nodeSortingPolicy.PolicyType
+	return pc.nodeSortingPolicy.PolicyType()
 }
 
 func (pc *PartitionContext) moveTerminatedApp(appID string) {
@@ -1353,4 +1349,16 @@ func (pc *PartitionContext) moveTerminatedApp(appID string) {
 	defer pc.Unlock()
 	delete(pc.applications, appID)
 	pc.completedApplications[newID] = app
+}
+
+// Check for unlimited nodes in the partition
+func (pc *PartitionContext) hasUnlimitedNode() bool {
+	// We can have only one unlimited node registered
+	if len(pc.nodes) != 1 {
+		return false
+	}
+	for _, v := range pc.nodes {
+		return v.IsUnlimited()
+	}
+	return false
 }

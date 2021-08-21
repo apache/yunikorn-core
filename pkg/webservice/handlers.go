@@ -111,8 +111,8 @@ func getClusterUtilization(w http.ResponseWriter, r *http.Request) {
 func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
-	queueName := r.URL.Query().Get("queue")
-	queueErr := validateQueue(queueName)
+	queuePath := r.URL.Query().Get("queue")
+	queueErr := validateQueue(queuePath)
 	if queueErr != nil {
 		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
 		return
@@ -124,7 +124,7 @@ func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 		appList := partition.GetApplications()
 		appList = append(appList, partition.GetCompletedApplications()...)
 		for _, app := range appList {
-			if len(queueName) == 0 || strings.EqualFold(queueName, app.GetQueueName()) {
+			if len(queuePath) == 0 || strings.EqualFold(queuePath, app.GetQueuePath()) {
 				appsDao = append(appsDao, getApplicationJSON(app))
 			}
 		}
@@ -135,14 +135,14 @@ func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func validateQueue(queueName string) error {
-	if queueName != "" {
-		queueNameArr := strings.Split(queueName, ".")
+func validateQueue(queuePath string) error {
+	if queuePath != "" {
+		queueNameArr := strings.Split(queuePath, ".")
 		for _, name := range queueNameArr {
 			if !configs.QueueNameRegExp.MatchString(name) {
 				return fmt.Errorf("problem in queue query parameter parsing as queue param "+
 					"%s contains invalid queue name %s. Queue name must only have "+
-					"alphanumeric characters, - or _, and be no longer than 64 characters", queueName, name)
+					"alphanumeric characters, - or _, and be no longer than 64 characters", queuePath, name)
 			}
 		}
 	}
@@ -306,7 +306,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		ApplicationID:  app.ApplicationID,
 		UsedResource:   app.GetAllocatedResource().DAOString(),
 		Partition:      app.Partition,
-		QueueName:      app.QueueName,
+		QueueName:      app.QueuePath,
 		SubmissionTime: app.SubmissionTime.UnixNano(),
 		Allocations:    allocationInfos,
 		State:          app.CurrentState(),
@@ -626,7 +626,7 @@ func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var partitionQueuesDAOInfo dao.PartitionQueueDAOInfo
-	var partition = schedulerContext.GetPartition(partitionName)
+	var partition = schedulerContext.GetPartitionWithoutClusterID(partitionName)
 	if partition != nil {
 		partitionQueuesDAOInfo = partition.GetPartitionQueues()
 	} else {
@@ -650,7 +650,7 @@ func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, "Incorrect URL path. Please check the usage documentation", http.StatusBadRequest)
 		return
 	}
-	partitionContext := schedulerContext.GetPartition(partition)
+	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext != nil {
 		var nodesDao []*dao.NodeDAOInfo
 		for _, node := range partitionContext.GetNodes() {
@@ -662,5 +662,55 @@ func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		buildJSONErrorResponse(w, "Partition not found", http.StatusBadRequest)
+	}
+}
+
+func getQueueApplications(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	writeHeaders(w)
+	partition, partitionExists := vars["partition"]
+	if !partitionExists {
+		buildJSONErrorResponse(w, "Partition is missing in URL path. Please check the usage documentation", http.StatusBadRequest)
+		return
+	}
+	queueName, queueNameExists := vars["queue"]
+	if !queueNameExists {
+		buildJSONErrorResponse(w, "Queue is missing in URL path. Please check the usage documentation", http.StatusBadRequest)
+		return
+	}
+	queueErr := validateQueue(queueName)
+	if queueErr != nil {
+		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
+		return
+	}
+	if len(vars) != 2 {
+		buildJSONErrorResponse(w, "Incorrect URL path. Please check the usage documentation", http.StatusBadRequest)
+		return
+	}
+
+	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
+	if partitionContext == nil {
+		buildJSONErrorResponse(w, "Partition not found", http.StatusBadRequest)
+		return
+	}
+
+	queue := partitionContext.GetQueue(queueName)
+	if queue == nil {
+		buildJSONErrorResponse(w, "Queue not found", http.StatusBadRequest)
+		return
+	}
+
+	apps := queue.GetCopyOfApps()
+	completedApps := queue.GetCopyOfCompletedApps()
+	appsDao := make([]*dao.ApplicationDAOInfo, 0, len(apps)+len(completedApps))
+	for _, app := range apps {
+		appsDao = append(appsDao, getApplicationJSON(app))
+	}
+	for _, app := range completedApps {
+		appsDao = append(appsDao, getApplicationJSON(app))
+	}
+
+	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }

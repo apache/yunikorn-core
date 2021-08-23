@@ -910,12 +910,31 @@ func (sq *Queue) internalHeadRoom(parentHeadRoom *resources.Resource) *resources
 	if headRoom == nil {
 		return parentHeadRoom
 	}
+
+	// we will replace all incorrect values, which are caused by undefined resources, by resources of parent headroom after headRoom
+	// get the unused resources by calling SubFrom
+	undefinedResources := make(map[string]resources.Quantity)
+	if parentHeadRoom != nil {
+		for k, v := range parentHeadRoom.Resources {
+			if _, ok := headRoom.Resources[k]; !ok {
+				undefinedResources[k] = v
+			}
+		}
+	}
+
 	// calculate unused
 	headRoom.SubFrom(sq.allocatedResource)
+
 	// check the minimum of the two: parentHeadRoom is nil for root
 	if parentHeadRoom == nil {
 		return headRoom
 	}
+
+	// replace the incorrect result by resources of parent headroom
+	for k, v := range undefinedResources {
+		headRoom.Resources[k] = v
+	}
+
 	return resources.ComponentWiseMin(headRoom, parentHeadRoom)
 }
 

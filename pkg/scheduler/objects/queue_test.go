@@ -1598,3 +1598,37 @@ func TestNewDynamicQueue(t *testing.T) {
 	assert.Assert(t, childNonLeaf.guaranteedResource == nil)
 	assert.Assert(t, childNonLeaf.maxResource == nil)
 }
+
+func TestGetHeadRoom(t *testing.T) {
+	allocatedResource := &resources.Resource{
+		Resources: map[string]resources.Quantity{
+			"vcore":  2000,
+			"memory": 2000,
+		},
+	}
+
+	parent, err := createManagedQueueWithProps(nil, "parent", true, nil, nil)
+	assert.NilError(t, err)
+	parent.maxResource = &resources.Resource{
+		Resources: map[string]resources.Quantity{
+			"vcore":  3000,
+			"memory": 3000,
+		},
+	}
+	parent.allocatedResource = allocatedResource
+
+	// this child is not set with max memory, so it should follow parent max memory
+	child, err := createManagedQueueWithProps(parent, "child", true, nil, nil)
+	assert.NilError(t, err)
+	child.maxResource = &resources.Resource{
+		Resources: map[string]resources.Quantity{
+			"vcore": 4000,
+		},
+	}
+	child.allocatedResource = allocatedResource
+
+	result := child.getHeadRoom()
+
+	assert.Equal(t, resources.Quantity(1000), result.Resources["vcore"])
+	assert.Equal(t, resources.Quantity(1000), result.Resources["memory"])
+}

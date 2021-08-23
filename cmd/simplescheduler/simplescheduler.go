@@ -29,6 +29,7 @@ import (
 )
 
 type SimpleScheduler struct {
+	si.UnimplementedSchedulerServer
 }
 
 func (scheduler *SimpleScheduler) Run(endpoint string) {

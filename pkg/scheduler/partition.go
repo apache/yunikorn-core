@@ -613,8 +613,8 @@ func (pc *PartitionContext) addNodeToList(node *objects.Node) error {
 	pc.Lock()
 	defer pc.Unlock()
 	// Node can be added to the system to allow processing of the allocations
-	if pc.nodes.AddNode(node) != nil {
-		return fmt.Errorf("partition %s has an existing node %s, node name must be unique", pc.Name, node.NodeID)
+	if err := pc.nodes.AddNode(node); err != nil {
+		return fmt.Errorf("failed to add node %s to partition %s, error: %v", node.NodeID, pc.Name, err)
 	}
 	metrics.GetSchedulerMetrics().IncActiveNodes()
 

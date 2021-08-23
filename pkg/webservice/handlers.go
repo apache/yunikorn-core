@@ -177,9 +177,12 @@ func getNodesUtilization(w http.ResponseWriter, r *http.Request) {
 	lists := schedulerContext.GetPartitionMapClone()
 	var result []*dao.NodesUtilDAOInfo
 	for _, partition := range lists {
-		for name := range partition.GetTotalPartitionResource().Resources {
-			nodesUtil := getNodesUtilJSON(partition, name)
-			result = append(result, nodesUtil)
+		partitionResource := partition.GetTotalPartitionResource()
+		// partitionResource can be null if the partition has no node
+		if partitionResource != nil {
+			for name := range partitionResource.Resources {
+				result = append(result, getNodesUtilJSON(partition, name))
+			}
 		}
 	}
 	if err := json.NewEncoder(w).Encode(result); err != nil {

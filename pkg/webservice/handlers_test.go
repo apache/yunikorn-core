@@ -973,8 +973,17 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getPartitionQueues(resp, req)
 	assertPartitionExists(t, resp)
+}
 
-	getClusterInfo(resp, req)
+func TestGetClusterInfo(t *testing.T) {
+	configs.MockSchedulerConfigByData([]byte(configTwoLevelQueues))
+	var err error
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	assert.NilError(t, err)
+	assert.Equal(t, 2, len(schedulerContext.GetPartitionMapClone()))
+
+	resp := &MockResponseWriter{}
+	getClusterInfo(resp, nil)
 	var data []*dao.ClusterDAOInfo
 	err = json.Unmarshal(resp.outputBytes, &data)
 	assert.NilError(t, err)

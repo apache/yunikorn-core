@@ -116,10 +116,8 @@ func ConvertSITimeout(millis int64) time.Duration {
 }
 
 func GetRequiredNodeFromTag(tags map[string]string) string {
-	var nodeName string
-	if nodeName, ok := tags[interfaceCommon.DomainYuniKorn+interfaceCommon.KeyRequiredNode]; !ok {
-		log.Logger().Debug("The required Node in allocationAsk is empty")
-		return ""
+	if nodeName, ok := tags[interfaceCommon.DomainYuniKorn+interfaceCommon.KeyRequiredNode]; ok {
+		return nodeName
 	}
-	return nodeName
+	return ""
 }

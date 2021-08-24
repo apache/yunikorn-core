@@ -136,13 +136,13 @@ func TestGetTimeout(t *testing.T) {
 func TestGetRequiredNode(t *testing.T) {
 	tag := make(map[string]string)
 	// unset case
-	siAsk = &si.AllocationAsk{
+	siAsk := &si.AllocationAsk{
 		AllocationKey: "ask1",
 		ApplicationID: "app1",
 		PartitionName: "default",
 		Tags:          tag,
 	}
-	ask = NewAllocationAsk(siAsk)
+	ask := NewAllocationAsk(siAsk)
 	assert.Equal(t, ask.GetRequiredNode(), "", "required node is empty as expected")
 	// set case
 	tag[common.DomainYuniKorn+common.KeyRequiredNode] = "NodeName"

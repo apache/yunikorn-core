@@ -240,6 +240,6 @@ func NewNodeCollection(partition string) NodeCollection {
 		Partition:   partition,
 		nsp:         nil,
 		nodes:       make(map[string]*nodeRef),
-		activeNodes: btree.New(5),
+		activeNodes: btree.New(7),
 	}
 }

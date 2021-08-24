@@ -49,6 +49,6 @@ type PartitionQueueDAOInfo struct {
 	IsManaged          bool                    `json:"isManaged"`
 	Properties         map[string]string       `json:"properties"`
 	Parent             string                  `json:"parent"`
-	TemplateInfo       *TemplateInfo           `json:"Template"`
+	TemplateInfo       *TemplateInfo           `json:"template"`
 	Children           []PartitionQueueDAOInfo `json:"children"`
 }

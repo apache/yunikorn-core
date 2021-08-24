@@ -428,10 +428,10 @@ func (sq *Queue) GetQueueInfos() dao.QueueDAOInfo {
 
 func (sq *Queue) GetPartitionQueueDAOInfo() dao.PartitionQueueDAOInfo {
 	queueInfo := dao.PartitionQueueDAOInfo{}
-	if len(sq.children) > 0 {
-		for _, child := range sq.GetCopyOfChildren() {
-			queueInfo.Children = append(queueInfo.Children, child.GetPartitionQueueDAOInfo())
-		}
+	childes := sq.GetCopyOfChildren()
+	queueInfo.Children = make([]dao.PartitionQueueDAOInfo, 0, len(childes))
+	for _, child := range childes {
+		queueInfo.Children = append(queueInfo.Children, child.GetPartitionQueueDAOInfo())
 	}
 	// we have held the read lock so following method should not take lock again.
 	sq.RLock()

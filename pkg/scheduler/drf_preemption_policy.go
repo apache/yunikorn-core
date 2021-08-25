@@ -187,6 +187,7 @@ func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionCont
 	return nil
 }
 
+//nolint:deadcode,unused
 func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitionContext, nodeIterator objects.NodeIterator, candidate *objects.AllocationAsk) *objects.Allocation {
 	if preemptionPartitionContext == nil {
 		return nil

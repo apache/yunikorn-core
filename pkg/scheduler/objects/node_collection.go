@@ -240,6 +240,6 @@ func NewNodeCollection(partition string) NodeCollection {
 		Partition:   partition,
 		nsp:         nil,
 		nodes:       make(map[string]*nodeRef),
-		activeNodes: btree.New(7),
+		activeNodes: btree.New(7), // Degree=7 here is experimentally the most efficient for up to around 5k nodes
 	}
 }

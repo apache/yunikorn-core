@@ -21,11 +21,13 @@ package objects
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/google/btree"
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 )
 
 type NodeCollection interface {
@@ -169,6 +171,7 @@ func (nc *baseNodeCollection) GetSchedulableNodes(excludeReserved bool) []*Node 
 // Create a node iterator for the schedulable nodes based on the policy set for this partition.
 // The iterator is nil if there are no schedulable nodes available.
 func (nc *baseNodeCollection) GetSchedulableNodeIterator() NodeIterator {
+	sortingStart := time.Now()
 	tree := nc.cloneActiveNodes()
 
 	length := tree.Len()
@@ -181,6 +184,7 @@ func (nc *baseNodeCollection) GetSchedulableNodeIterator() NodeIterator {
 		nodes = append(nodes, item.(nodeRef).node)
 		return true
 	})
+	metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
 	return NewDefaultNodeIterator(nodes)
 }
 

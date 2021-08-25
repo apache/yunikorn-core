@@ -11,6 +11,8 @@ github.com/apache/incubator-yunikorn-scheduler-interface v0.11.0 h1:nm6AQGbCaFHK
 github.com/apache/incubator-yunikorn-scheduler-interface v0.11.0/go.mod h1:rcxZj0JQxYrdYKWckgpZDasyyjsBcWtOz68hj13WYOU=
 github.com/apache/incubator-yunikorn-scheduler-interface v0.11.1-0.20210823155809-b2784934085e h1:FKOxPDx1Y0rEjfpBzyzSAkhkY19D+BZvCjdZWNXqq8s=
 github.com/apache/incubator-yunikorn-scheduler-interface v0.11.1-0.20210823155809-b2784934085e/go.mod h1:pegp54e2ystvWVFWKP9OpoUPHBWxr2uNRv7js3loxMw=
+github.com/apache/incubator-yunikorn-scheduler-interface v0.11.1-0.20210825113556-88f21e44dc01 h1:oU0+6l0g3NjFAnXPJRaTbxDEgxhW37ogvGPL0/y4X9M=
+github.com/apache/incubator-yunikorn-scheduler-interface v0.11.1-0.20210825113556-88f21e44dc01/go.mod h1:t5QdMEL8rq6rI2XzpJ8S/BFIgiJGIQ6V1Zh90ZvhSXc=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
 github.com/beorn7/perks v1.0.0/go.mod h1:KWe93zE9D1o94FZ5RNwFwVgaQK1VOXiVxmqh+CedLV8=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=

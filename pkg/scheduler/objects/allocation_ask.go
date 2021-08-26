@@ -48,6 +48,7 @@ type AllocationAsk struct {
 	createTime       time.Time // the time this ask was created (used in reservations)
 	priority         int32
 	maxAllocations   int32
+	requiredNode     string
 
 	sync.RWMutex
 }
@@ -65,6 +66,7 @@ func NewAllocationAsk(ask *si.AllocationAsk) *AllocationAsk {
 		execTimeout:       common.ConvertSITimeout(ask.ExecutionTimeoutMilliSeconds),
 		placeholder:       ask.Placeholder,
 		taskGroupName:     ask.TaskGroupName,
+		requiredNode:      common.GetRequiredNodeFromTag(ask.Tags),
 	}
 	saa.priority = saa.normalizePriority(ask.Priority)
 	// this is a safety check placeholder and task group name must be set as a combo
@@ -151,4 +153,10 @@ func (aa *AllocationAsk) getTimeout() time.Duration {
 	aa.RLock()
 	defer aa.RUnlock()
 	return aa.execTimeout
+}
+
+func (aa *AllocationAsk) GetRequiredNode() string {
+	aa.RLock()
+	defer aa.RUnlock()
+	return aa.requiredNode
 }

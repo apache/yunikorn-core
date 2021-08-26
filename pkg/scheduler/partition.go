@@ -557,7 +557,7 @@ func (pc *PartitionContext) getNodes(excludeReserved bool) []*objects.Node {
 	nodes := make([]*objects.Node, 0)
 	for _, node := range pc.nodes {
 		// filter out the nodes that are not scheduling
-		if !node.IsSchedulable() || (excludeReserved && node.IsReserved()) {
+		if excludeReserved && node.IsReserved() {
 			continue
 		}
 		nodes = append(nodes, node)
@@ -1082,11 +1082,6 @@ func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
 	if node == nil {
 		metrics.GetSchedulerMetrics().IncSchedulingError()
 		return fmt.Errorf("failed to find node %s", alloc.NodeID)
-	}
-	// check the node status again
-	if !node.IsSchedulable() {
-		metrics.GetSchedulerMetrics().IncSchedulingError()
-		return fmt.Errorf("node %s is not in schedulable state", node.NodeID)
 	}
 
 	app := pc.getApplication(alloc.ApplicationID)

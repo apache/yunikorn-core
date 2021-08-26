@@ -85,7 +85,6 @@ func TestSIFromNilAlloc(t *testing.T) {
 }
 
 func TestSIFromAlloc(t *testing.T) {
-	t.SkipNow()
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
 	assert.NilError(t, err, "Resource creation failed")
 	expectedSI := &si.Allocation{

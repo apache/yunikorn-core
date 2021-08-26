@@ -321,8 +321,8 @@ func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation) {
 // Taking into account resources marked for preemption if applicable.
 // If the proposed allocation does not fit false is returned.
 // TODO: remove when updating preemption
-func (sn *Node) CanAllocate(res *resources.Resource, preemptionPhase bool) bool {
-	err := sn.preAllocateCheck(res, "", preemptionPhase)
+func (sn *Node) CanAllocate(res *resources.Resource, preemptionPhase, ignore bool) bool {
+	err := sn.preAllocateCheck(res, "", preemptionPhase, ignore)
 	return err == nil
 }
 
@@ -368,30 +368,16 @@ func (sn *Node) preConditions(allocID string, allocate bool) bool {
 	return true
 }
 
-// IsValidFor checks if the node is valid for this allocationAsk
-func (sn *Node) IsValidFor(ask *AllocationAsk) error {
-	if ask.GetRequiredNode() == "" {
-		// ask can be allocated to any node
-		// just check if the node is unschedulable
-		if !sn.IsSchedulable() {
-			return fmt.Errorf("skip ask %s on unschedulable node %s",
-				ask.AllocationKey, sn.NodeID)
-		}
-		return nil
-	}
-	// ask has required node, just check if the node is with the expected ID
-	// ignore the unschedulable flag in this case
-	if ask.requiredNode != sn.NodeID {
-		return fmt.Errorf("ask %s is restricted to node %s, skipping node %s",
-			ask.AllocationKey, ask.requiredNode, sn.NodeID)
-	}
-	return nil
-}
-
 // Check if the node should be considered as a possible node to allocate on.
 //
 // This is a lock free call. No updates are made this only performs a pre allocate checks
-func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string, preemptionPhase bool) error {
+func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string, preemptionPhase, ignoreUnschedulable bool) error {
+	// shortcut if a node is not schedulable
+	if !ignoreUnschedulable && !sn.IsSchedulable() {
+		log.Logger().Debug("node is unschedulable",
+			zap.String("nodeID", sn.NodeID))
+		return fmt.Errorf("pre alloc check, node is unschedulable: %s", sn.NodeID)
+	}
 	// cannot allocate zero or negative resource
 	if !resources.StrictlyGreaterThanZero(res) {
 		log.Logger().Debug("pre alloc check: requested resource is zero",

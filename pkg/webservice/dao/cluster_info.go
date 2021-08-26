@@ -18,6 +18,7 @@
 package dao
 
 type ClusterDAOInfo struct {
+	PartitionName         string `json:"partition"`
 	ClusterName           string `json:"clusterName"`
 	TotalApplications     string `json:"totalApplications"`
 	FailedApplications    string `json:"failedApplications"`

@@ -975,6 +975,29 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	assertPartitionExists(t, resp)
 }
 
+func TestGetClusterInfo(t *testing.T) {
+	configs.MockSchedulerConfigByData([]byte(configTwoLevelQueues))
+	var err error
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	assert.NilError(t, err)
+	assert.Equal(t, 2, len(schedulerContext.GetPartitionMapClone()))
+
+	resp := &MockResponseWriter{}
+	getClusterInfo(resp, nil)
+	var data []*dao.ClusterDAOInfo
+	err = json.Unmarshal(resp.outputBytes, &data)
+	assert.NilError(t, err)
+	assert.Equal(t, 2, len(data))
+
+	cs := make(map[string]*dao.ClusterDAOInfo, 2)
+	for _, d := range data {
+		cs[d.PartitionName] = d
+	}
+
+	assert.Assert(t, cs["[rm-123]default"] != nil)
+	assert.Assert(t, cs["[rm-123]gpu"] != nil)
+}
+
 func TestGetPartitionNodes(t *testing.T) {
 	configs.MockSchedulerConfigByData([]byte(configDefault))
 	var err error

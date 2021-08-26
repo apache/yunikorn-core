@@ -874,7 +874,14 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() interfaces.Nod
 				log.Logger().Warn("Node iterator failed to return a node")
 				return nil
 			}
-			if err := node.preAllocateCheck(reqFit.AllocatedResource, reservationKey(nil, sa, reqFit), false, false); err != nil {
+			if err := node.IsValidFor(reqFit); err != nil {
+				log.Logger().Debug("skipping node for placeholder ask",
+					zap.String("allocationKey", reqFit.AllocationKey),
+					zap.String("node", node.NodeID),
+					zap.String("reason", err.Error()))
+				continue
+			}
+			if err := node.preAllocateCheck(reqFit.AllocatedResource, reservationKey(nil, sa, reqFit), false); err != nil {
 				continue
 			}
 			// skip the node if conditions can not be satisfied
@@ -970,6 +977,13 @@ func (sa *Application) tryNodesNoReserve(ask *AllocationAsk, iterator interfaces
 			log.Logger().Warn("Node iterator failed to return a node")
 			return nil
 		}
+		if err := node.IsValidFor(ask); err != nil {
+			log.Logger().Debug("skipping node for reserved ask",
+				zap.String("allocationKey", ask.AllocationKey),
+				zap.String("node", node.NodeID),
+				zap.String("reason", err.Error()))
+			continue
+		}
 		// skip over the node if the resource does not fit the node or this is the reserved node.
 		if !node.FitInNode(ask.AllocatedResource) || node.NodeID == reservedNode {
 			continue
@@ -984,10 +998,6 @@ func (sa *Application) tryNodesNoReserve(ask *AllocationAsk, iterator interfaces
 	}
 	// ask does not fit, skip to next ask
 	return nil
-}
-
-func filterNode(ask *AllocationAsk, node *Node) bool {
-	return ask.requiredNode == node.NodeID
 }
 
 // Try all the nodes for a request. The result is an allocation or reservation of a node.
@@ -1005,8 +1015,12 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator interfaces.NodeIter
 			log.Logger().Warn("Node iterator failed to return a node")
 			return nil
 		}
-		// check the node is required node or not
-		if (ask.requiredNode != "") && !filterNode(ask, node) {
+		// skip the node if the node is not valid for the ask
+		if err := node.IsValidFor(ask); err != nil {
+			log.Logger().Debug("skipping node for ask",
+				zap.String("allocationKey", ask.AllocationKey),
+				zap.String("node", node.NodeID),
+				zap.String("reason", err.Error()))
 			continue
 		}
 		// skip over the node if the resource does not fit the node at all.
@@ -1085,8 +1099,7 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 	allocKey := ask.AllocationKey
 	toAllocate := ask.AllocatedResource
 	// create the key for the reservation
-	ignore := !(ask.GetRequiredNode() == "")
-	if err := node.preAllocateCheck(toAllocate, reservationKey(nil, sa, ask), false, ignore); err != nil {
+	if err := node.preAllocateCheck(toAllocate, reservationKey(nil, sa, ask), false); err != nil {
 		// skip schedule onto node
 		return nil
 	}

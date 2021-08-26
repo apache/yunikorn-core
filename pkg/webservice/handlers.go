@@ -79,14 +79,12 @@ func getClusterInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	lists := schedulerContext.GetPartitionMapClone()
+	clustersInfo := make([]*dao.ClusterDAOInfo, 0, len(lists))
 	for _, partition := range lists {
-		clusterInfo := getClusterJSON(partition)
-		var clustersInfo []dao.ClusterDAOInfo
-		clustersInfo = append(clustersInfo, *clusterInfo)
-
-		if err := json.NewEncoder(w).Encode(clustersInfo); err != nil {
-			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
-		}
+		clustersInfo = append(clustersInfo, getClusterJSON(partition))
+	}
+	if err := json.NewEncoder(w).Encode(clustersInfo); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -225,6 +223,7 @@ func buildJSONErrorResponse(w http.ResponseWriter, detail string, code int) {
 
 func getClusterJSON(partition *scheduler.PartitionContext) *dao.ClusterDAOInfo {
 	clusterInfo := &dao.ClusterDAOInfo{}
+	clusterInfo.PartitionName = partition.Name
 	clusterInfo.TotalApplications = strconv.Itoa(partition.GetTotalApplicationCount())
 	clusterInfo.TotalContainers = strconv.Itoa(partition.GetTotalAllocationCount())
 	clusterInfo.TotalNodes = strconv.Itoa(partition.GetTotalNodeCount())

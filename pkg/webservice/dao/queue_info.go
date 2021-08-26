@@ -28,7 +28,7 @@ type QueueDAOInfo struct {
 type QueueCapacity struct {
 	Capacity        string `json:"capacity"`
 	MaxCapacity     string `json:"maxcapacity"`
-	UsedCapacity    string `json:"usedcapacity"`
+	UsedCapacity    string `json:"usedCapacity"`
 	AbsUsedCapacity string `json:"absusedcapacity"`
 }
 

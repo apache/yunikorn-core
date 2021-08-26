@@ -1083,11 +1083,6 @@ func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
 		metrics.GetSchedulerMetrics().IncSchedulingError()
 		return fmt.Errorf("failed to find node %s", alloc.NodeID)
 	}
-	// check the node status again
-	if !node.IsSchedulable() {
-		metrics.GetSchedulerMetrics().IncSchedulingError()
-		return fmt.Errorf("node %s is not in schedulable state", node.NodeID)
-	}
 
 	app := pc.getApplication(alloc.ApplicationID)
 	if app == nil {

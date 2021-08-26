@@ -115,39 +115,39 @@ func TestPreAllocateCheck(t *testing.T) {
 	}
 
 	// special cases
-	if err := node.preAllocateCheck(nil, "", false, false); err == nil {
+	if err := node.preAllocateCheck(nil, "", false); err == nil {
 		t.Errorf("nil resource should not have fitted on node (no preemption)")
 	}
 	resNeg := resources.NewResourceFromMap(map[string]resources.Quantity{"first": -1})
-	if err := node.preAllocateCheck(resNeg, "", false, false); err == nil {
+	if err := node.preAllocateCheck(resNeg, "", false); err == nil {
 		t.Errorf("negative resource should not have fitted on node (no preemption)")
 	}
 	// Check if we can allocate on scheduling node
 	resSmall := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	resLarge := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 15})
-	err := node.preAllocateCheck(resNode, "", false, false)
+	err := node.preAllocateCheck(resNode, "", false)
 	assert.NilError(t, err, "node resource should have fitted on node (no preemption)")
-	err = node.preAllocateCheck(resSmall, "", false, false)
+	err = node.preAllocateCheck(resSmall, "", false)
 	assert.NilError(t, err, "small resource should have fitted on node (no preemption)")
-	if err = node.preAllocateCheck(resLarge, "", false, false); err == nil {
+	if err = node.preAllocateCheck(resLarge, "", false); err == nil {
 		t.Errorf("too large resource should not have fitted on node (no preemption): %v", err)
 	}
 
 	// set allocated resource
 	node.AddAllocation(newAllocation(appID1, "UUID1", nodeID, "root.default", resSmall))
-	err = node.preAllocateCheck(resSmall, "", false, false)
+	err = node.preAllocateCheck(resSmall, "", false)
 	assert.NilError(t, err, "small resource should have fitted in available allocation (no preemption)")
-	if err = node.preAllocateCheck(resNode, "", false, false); err == nil {
+	if err = node.preAllocateCheck(resNode, "", false); err == nil {
 		t.Errorf("node resource should not have fitted in available allocation (no preemption): %v", err)
 	}
 
 	// set preempting resources
 	node.preempting = resSmall
-	err = node.preAllocateCheck(resSmall, "", true, false)
+	err = node.preAllocateCheck(resSmall, "", true)
 	assert.NilError(t, err, "small resource should have fitted in available allocation (preemption)")
-	err = node.preAllocateCheck(resNode, "", true, false)
+	err = node.preAllocateCheck(resNode, "", true)
 	assert.NilError(t, err, "node resource should have fitted in available allocation (preemption)")
-	if err = node.preAllocateCheck(resLarge, "", true, false); err == nil {
+	if err = node.preAllocateCheck(resLarge, "", true); err == nil {
 		t.Errorf("too large resource should not have fitted on node (preemption): %v", err)
 	}
 
@@ -160,30 +160,30 @@ func TestPreAllocateCheck(t *testing.T) {
 	// standalone reservation unreserve returns false as app is not reserved
 	reserve := newReservation(node, app, ask, false)
 	node.reservations[reserve.getKey()] = reserve
-	if err = node.preAllocateCheck(resSmall, "app-2", true, false); err == nil {
+	if err = node.preAllocateCheck(resSmall, "app-2", true); err == nil {
 		t.Errorf("node was reserved for different app but check passed: %v", err)
 	}
-	if err = node.preAllocateCheck(resSmall, "app-1|alloc-2", true, false); err == nil {
+	if err = node.preAllocateCheck(resSmall, "app-1|alloc-2", true); err == nil {
 		t.Errorf("node was reserved for this app but not the alloc and check passed: %v", err)
 	}
-	err = node.preAllocateCheck(resSmall, appID1, true, false)
+	err = node.preAllocateCheck(resSmall, appID1, true)
 	assert.NilError(t, err, "node was reserved for this app but check did not pass check")
-	err = node.preAllocateCheck(resSmall, "app-1|alloc-1", true, false)
+	err = node.preAllocateCheck(resSmall, "app-1|alloc-1", true)
 	assert.NilError(t, err, "node was reserved for this app/alloc but check did not pass check")
 
 	// Check if we can allocate on non scheduling node
 	node.SetSchedulable(false)
-	if err = node.preAllocateCheck(resSmall, "", false, false); err == nil {
+	if err = node.preAllocateCheck(resSmall, "", false); err == nil {
 		t.Errorf("node with scheduling set to false should not allow allocation: %v", err)
 	}
 
 	// Check the DaemonSet case in non scheduling node
-	if err = node.preAllocateCheck(resSmall, "", false, true); err == nil {
+	if err = node.preAllocateCheck(resSmall, "", false); err == nil {
 		t.Errorf("DaemonSet pod should schedule failed in reserved node: %v", err)
 	}
 	// clear the reservations in node
 	delete(node.reservations, reserve.getKey())
-	err = node.preAllocateCheck(resSmall, "", false, true)
+	err = node.preAllocateCheck(resSmall, "", false)
 	assert.NilError(t, err, "DaemonSet pod should ignore the tag of Unschedulable node")
 }
 
@@ -195,24 +195,24 @@ func TestCanAllocate(t *testing.T) {
 	}
 	// normal alloc
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-	if !node.CanAllocate(res, false, false) {
+	if !node.CanAllocate(res, false) {
 		t.Error("node should have accepted allocation")
 	}
 	// check one that pushes node over its size
 	res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11})
-	if node.CanAllocate(res, false, false) {
+	if node.CanAllocate(res, false) {
 		t.Error("node should have rejected allocation (oversize)")
 	}
 
 	// check if the resource request is from DaemosSet
-	if node.CanAllocate(res, false, true) {
+	if node.CanAllocate(res, false) {
 		t.Error("node should have rejected allocation (oversize)")
 	}
 
 	// check if preempting adds to available
 	node.IncPreemptingResource(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
 	// preemption alloc
-	if !node.CanAllocate(res, true, false) {
+	if !node.CanAllocate(res, true) {
 		t.Error("resource should have fitted in with preemption set")
 	}
 }
@@ -633,7 +633,7 @@ func TestUnlimitedNode(t *testing.T) {
 
 	resource := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: resources.Quantity(math.MaxInt64)})
 	assert.Assert(t, node.FitInNode(resource), "Any resource should fit in an unlimited node")
-	assert.Assert(t, node.CanAllocate(resource, false, false), "Node should be able to allocate")
+	assert.Assert(t, node.CanAllocate(resource, false), "Node should be able to allocate")
 
 	allocation := NewAllocation("UUID", node.NodeID, newAllocationAsk("key", "appID", resource))
 	node.AddAllocation(allocation)
@@ -641,4 +641,60 @@ func TestUnlimitedNode(t *testing.T) {
 
 	node.RemoveAllocation(allocation.UUID)
 	assert.Assert(t, len(node.allocations) == 0, "Node should have no allocations")
+}
+
+func TestIsValidFor(t *testing.T) {
+	resource := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 10})
+
+	// ask 1 is a normal ask
+	ask1 := newAllocationAsk("key", "appID", resource)
+	// ask 2 is a ask that has requiredNode set
+	ask2 := newAllocationAsk("key", "appID", resource)
+	ask2.requiredNode = "node-1"
+
+	// node 1: schedulable
+	node1 := NewNode(&si.NewNodeInfo{
+		NodeID: "node-1",
+	})
+	// node 1: unschedulable
+	node1Unschedulable := NewNode(&si.NewNodeInfo{
+		NodeID: "node-1",
+	})
+	node1Unschedulable.SetSchedulable(false)
+	// node 2: schedulable
+	node2 := NewNode(&si.NewNodeInfo{
+		NodeID: "node-2",
+	})
+	// node 2: unschedulable
+	node2Unschedulable := NewNode(&si.NewNodeInfo{
+		NodeID: "node-2",
+	})
+	node2Unschedulable.SetSchedulable(false)
+
+	var tests = []struct {
+		name    string
+		ask     *AllocationAsk
+		node    *Node
+		isValid bool
+	}{
+		{"normal ask1 on schedulable node1", ask1, node1, true},
+		{"normal ask1 on schedulable node2", ask1, node2, true},
+		{"normal ask1 on unschedulable node1", ask1, node1Unschedulable, false},
+		{"normal ask1 on unschedulable node2", ask1, node2Unschedulable, false},
+		{"ask2 required node1 on schedulable node1", ask2, node1, true},
+		{"ask2 required node1 on unschedulable node1", ask2, node1Unschedulable, true},
+		{"ask2 required node1 on schedulable node2", ask2, node2, false},
+		{"ask2 required node1 on unschedulable node2", ask2, node2Unschedulable, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.node.IsValidFor(tt.ask)
+			if got == nil && !tt.isValid {
+				t.Error("expected node is not valid for the ask")
+			} else if got != nil && tt.isValid {
+				t.Error("expected node is valid for the ask")
+			}
+		})
+	}
 }

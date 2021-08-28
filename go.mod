@@ -19,7 +19,7 @@
 
 module github.com/apache/incubator-yunikorn-core
 
-go 1.12
+go 1.15
 
 require (
 	github.com/HdrHistogram/hdrhistogram-go v1.0.1 // indirect

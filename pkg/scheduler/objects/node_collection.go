@@ -36,7 +36,7 @@ type NodeCollection interface {
 	GetNode(nodeID string) *Node
 	GetNodeCount() int
 	GetNodes() []*Node
-	GetSchedulableNodeIterator() NodeIterator
+	GetNodeIterator() NodeIterator
 	SetNodeSortingPolicy(policy NodeSortingPolicy)
 	GetNodeSortingPolicy() NodeSortingPolicy
 }
@@ -149,9 +149,9 @@ func (nc *baseNodeCollection) GetNodes() []*Node {
 	return nodes
 }
 
-// Create a node iterator for the schedulable nodes based on the policy set for this partition.
-// The iterator is nil if there are no schedulable nodes available.
-func (nc *baseNodeCollection) GetSchedulableNodeIterator() NodeIterator {
+// Create an ordered node iterator based on the sort policy set for this collection.
+// The iterator is nil if there are no unreserved nodes available.
+func (nc *baseNodeCollection) GetNodeIterator() NodeIterator {
 	sortingStart := time.Now()
 	tree := nc.cloneSortedNodes()
 
@@ -163,7 +163,7 @@ func (nc *baseNodeCollection) GetSchedulableNodeIterator() NodeIterator {
 	nodes := make([]*Node, 0, length)
 	tree.Ascend(func(item btree.Item) bool {
 		node := item.(nodeRef).node
-		if node.IsSchedulable() && !node.IsReserved() {
+		if !node.IsReserved() {
 			nodes = append(nodes, node)
 		}
 		return true

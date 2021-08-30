@@ -892,10 +892,10 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 		zap.Int("reservationsRemoved", num))
 }
 
-// Create a node iterator for the schedulable nodes based on the policy set for this partition.
-// The iterator is nil if there are no schedulable nodes available.
+// Create an ordered node iterator based on the node sort policy set for this partition.
+// The iterator is nil if there are no unreserved nodes available.
 func (pc *PartitionContext) GetNodeIterator() objects.NodeIterator {
-	return pc.nodes.GetSchedulableNodeIterator()
+	return pc.nodes.GetNodeIterator()
 }
 
 // Update the reservation counter for the app

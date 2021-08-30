@@ -120,25 +120,3 @@ func TestNodeCollection_GetNodes(t *testing.T) {
 	nodes = nc.GetNodes()
 	assert.Equal(t, 1, len(nodes), "list is missing node")
 }
-
-func TestBaseNodeCollection_GetSchedulableNodes(t *testing.T) {
-	var err error
-	nc := initBaseCollection()
-	nodes := nc.GetSchedulableNodes(false)
-	assert.Equal(t, 0, len(nodes), "list should have been empty")
-
-	node := initNode("test1")
-	node.SetSchedulable(true)
-	err = nc.AddNode(node)
-	assert.NilError(t, err, "test node add failed unexpected")
-
-	nodes = nc.GetSchedulableNodes(false)
-	assert.Equal(t, 1, len(nodes), "list is missing schedulable node")
-
-	node.reservations["test"] = nil // fake a reservation
-	nodes = nc.GetSchedulableNodes(false)
-	assert.Equal(t, 1, len(nodes), "list is missing reserved node")
-
-	nodes = nc.GetSchedulableNodes(true)
-	assert.Equal(t, 0, len(nodes), "list is returning reserved node")
-}

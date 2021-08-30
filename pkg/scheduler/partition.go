@@ -541,20 +541,6 @@ func (pc *PartitionContext) GetNode(nodeID string) *objects.Node {
 	return pc.nodes.GetNode(nodeID)
 }
 
-// Get a copy of the nodes from the partition.
-// This list does not include reserved nodes or nodes marked unschedulable
-func (pc *PartitionContext) getSchedulableNodes() []*objects.Node {
-	return pc.getNodes(true)
-}
-
-// Get a copy of the nodes from the partition.
-// Excludes unschedulable nodes only, reserved node inclusion depends on the parameter passed in.
-func (pc *PartitionContext) getNodes(excludeReserved bool) []*objects.Node {
-	pc.RLock()
-	defer pc.RUnlock()
-	return pc.nodes.GetSchedulableNodes(excludeReserved)
-}
-
 // Add the node to the partition and process the allocations that are reported by the node.
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) AddNode(node *objects.Node, existingAllocations []*objects.Allocation) error {
@@ -1108,7 +1094,7 @@ func (pc *PartitionContext) convertUGI(ugi *si.UserGroupInformation) (security.U
 //
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) calculateNodesResourceUsage() map[string][]int {
-	nodesCopy := pc.getNodes(false)
+	nodesCopy := pc.GetNodes()
 	mapResult := make(map[string][]int)
 	for _, node := range nodesCopy {
 		for name, total := range node.GetCapacity().Resources {

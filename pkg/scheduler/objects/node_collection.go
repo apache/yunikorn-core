@@ -36,7 +36,6 @@ type NodeCollection interface {
 	GetNode(nodeID string) *Node
 	GetNodeCount() int
 	GetNodes() []*Node
-	GetSchedulableNodes(excludeReserved bool) []*Node
 	GetSchedulableNodeIterator() NodeIterator
 	SetNodeSortingPolicy(policy NodeSortingPolicy)
 	GetNodeSortingPolicy() NodeSortingPolicy
@@ -67,7 +66,7 @@ type baseNodeCollection struct {
 	// Private fields need protection
 	nsp         NodeSortingPolicy   // node sorting policy
 	nodes       map[string]*nodeRef // nodes assigned to this collection
-	activeNodes *btree.BTree        // nodes which are active
+	sortedNodes *btree.BTree        // nodes sorted by score
 
 	sync.RWMutex
 }
@@ -97,9 +96,7 @@ func (nc *baseNodeCollection) AddNode(node *Node) error {
 		nodeScore: nc.scoreNode(node),
 	}
 	nc.nodes[node.NodeID] = &nref
-	if node.IsSchedulable() && !node.IsReserved() {
-		nc.activeNodes.ReplaceOrInsert(nref)
-	}
+	nc.sortedNodes.ReplaceOrInsert(nref)
 	return nil
 }
 
@@ -116,7 +113,7 @@ func (nc *baseNodeCollection) RemoveNode(nodeID string) *Node {
 	}
 
 	// Remove node from list of tracked nodes
-	nc.activeNodes.Delete(*nref)
+	nc.sortedNodes.Delete(*nref)
 	delete(nc.nodes, nodeID)
 	nref.node.RemoveListener(nc)
 
@@ -152,27 +149,11 @@ func (nc *baseNodeCollection) GetNodes() []*Node {
 	return nodes
 }
 
-// Return a list of schedulable nodes (optionally excluding reserved as well).
-func (nc *baseNodeCollection) GetSchedulableNodes(excludeReserved bool) []*Node {
-	nc.RLock()
-	defer nc.RUnlock()
-	nodes := make([]*Node, 0)
-	for _, nref := range nc.nodes {
-		node := nref.node
-		// filter out the nodes that are not scheduling
-		if excludeReserved && node.IsReserved() {
-			continue
-		}
-		nodes = append(nodes, node)
-	}
-	return nodes
-}
-
 // Create a node iterator for the schedulable nodes based on the policy set for this partition.
 // The iterator is nil if there are no schedulable nodes available.
 func (nc *baseNodeCollection) GetSchedulableNodeIterator() NodeIterator {
 	sortingStart := time.Now()
-	tree := nc.cloneActiveNodes()
+	tree := nc.cloneSortedNodes()
 
 	length := tree.Len()
 	if length == 0 {
@@ -181,18 +162,26 @@ func (nc *baseNodeCollection) GetSchedulableNodeIterator() NodeIterator {
 
 	nodes := make([]*Node, 0, length)
 	tree.Ascend(func(item btree.Item) bool {
-		nodes = append(nodes, item.(nodeRef).node)
+		node := item.(nodeRef).node
+		if node.IsSchedulable() && !node.IsReserved() {
+			nodes = append(nodes, node)
+		}
 		return true
 	})
 	metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
+
+	if len(nodes) == 0 {
+		return nil
+	}
+
 	return NewDefaultNodeIterator(nodes)
 }
 
-func (nc *baseNodeCollection) cloneActiveNodes() *btree.BTree {
+func (nc *baseNodeCollection) cloneSortedNodes() *btree.BTree {
 	nc.Lock()
 	defer nc.Unlock()
 
-	return nc.activeNodes.Clone()
+	return nc.sortedNodes.Clone()
 }
 
 // Sets the node sorting policy.
@@ -201,15 +190,12 @@ func (nc *baseNodeCollection) SetNodeSortingPolicy(policy NodeSortingPolicy) {
 	defer nc.Unlock()
 	nc.nsp = policy
 
-	// activeNodes must be rebuilt since sort ordering is different
-	nc.activeNodes.Clear(false)
+	// sortedNodes must be rebuilt since sort ordering is different
+	nc.sortedNodes.Clear(false)
 	for _, nref := range nc.nodes {
 		node := nref.node
 		nref.nodeScore = nc.scoreNode(node)
-		if !node.IsSchedulable() || node.IsReserved() {
-			continue
-		}
-		nc.activeNodes.ReplaceOrInsert(*nref)
+		nc.sortedNodes.ReplaceOrInsert(*nref)
 	}
 }
 
@@ -230,12 +216,12 @@ func (nc *baseNodeCollection) NodeUpdated(node *Node) {
 		return
 	}
 
-	nc.activeNodes.Delete(*nref)
-	nref.nodeScore = nc.scoreNode(node)
-	if !node.IsSchedulable() || node.IsReserved() {
-		return
+	updatedScore := nc.scoreNode(node)
+	if nref.nodeScore != updatedScore {
+		nc.sortedNodes.Delete(*nref)
+		nref.nodeScore = nc.scoreNode(node)
+		nc.sortedNodes.ReplaceOrInsert(*nref)
 	}
-	nc.activeNodes.ReplaceOrInsert(*nref)
 }
 
 // Create a new collection for the given partition.
@@ -244,6 +230,6 @@ func NewNodeCollection(partition string) NodeCollection {
 		Partition:   partition,
 		nsp:         nil,
 		nodes:       make(map[string]*nodeRef),
-		activeNodes: btree.New(7), // Degree=7 here is experimentally the most efficient for up to around 5k nodes
+		sortedNodes: btree.New(7), // Degree=7 here is experimentally the most efficient for up to around 5k nodes
 	}
 }

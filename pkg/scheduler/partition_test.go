@@ -305,59 +305,6 @@ func TestRemoveNodeWithAllocations(t *testing.T) {
 	assert.Equal(t, released[0].UUID, allocUUID, "UUID returned by release not the same as on allocation")
 }
 
-func TestGetNodes(t *testing.T) {
-	partition, err := newBasePartition()
-	assert.NilError(t, err, "test partition create failed with error")
-
-	nodes := partition.getSchedulableNodes()
-	assert.Equal(t, 0, len(nodes), "list should have been empty")
-
-	err = partition.AddNode(newNodeMaxResource(nodeID1, resources.NewResource()), nil)
-	assert.NilError(t, err, "test node1 add failed unexpected")
-
-	err = partition.AddNode(newNodeMaxResource(nodeID2, resources.NewResource()), nil)
-	assert.NilError(t, err, "test node2 add failed unexpected")
-	// add one node that will not be returned in the node list
-	node3 := "notScheduling"
-	node := newNodeMaxResource(node3, resources.NewResource())
-	node.SetSchedulable(false)
-	err = partition.AddNode(node, nil)
-	assert.NilError(t, err, "test node3 add failed unexpected")
-	node4 := "reserved"
-	node4Max := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
-	err = partition.AddNode(newNodeMaxResource(node4, node4Max), nil)
-	assert.NilError(t, err, "test node4 add failed unexpected")
-	// get individual nodes
-	node = partition.GetNode("")
-	var nilNode *objects.Node
-	assert.Equal(t, nilNode, node, "retrieved non existing node with no name")
-	node = partition.GetNode("does not exist")
-	assert.Equal(t, nilNode, node, "existing node returned for non existing name")
-	node = partition.GetNode(node3)
-	assert.Equal(t, node3, node.NodeID, "failed to retrieve correct node3")
-	node = partition.GetNode(node4)
-	assert.Equal(t, node4, node.NodeID, "failed to retrieve correct node4")
-	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
-	ask := newAllocationAsk("alloc-1", appID1, appRes)
-	app := newApplication(appID1, "default", defQueue)
-	err = node.Reserve(app, ask)
-	assert.NilError(t, err, "reserve on node4 should not have failed")
-
-	assert.Equal(t, 4, partition.nodes.GetNodeCount(), "node list not correct length")
-	nodes = partition.getSchedulableNodes()
-	// returned list should be only three long: without reserved node
-	assert.Equal(t, 3, len(nodes), "node list not filtered")
-	// map iteration is random so don't know which we get first
-	for _, node = range nodes {
-		if node.NodeID != nodeID1 && node.NodeID != nodeID2 && node.NodeID != node3 {
-			t.Fatalf("unexpected node returned in list: %s", node.NodeID)
-		}
-	}
-	nodes = partition.getNodes(false)
-	// returned list should be all nodes: no reserved filter
-	assert.Equal(t, 4, len(nodes), "node list was incorrectly filtered")
-}
-
 func TestAddApp(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")

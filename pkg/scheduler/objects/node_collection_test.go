@@ -128,14 +128,10 @@ func TestBaseNodeCollection_GetSchedulableNodes(t *testing.T) {
 	assert.Equal(t, 0, len(nodes), "list should have been empty")
 
 	node := initNode("test1")
-	node.SetSchedulable(false)
+	node.SetSchedulable(true)
 	err = nc.AddNode(node)
 	assert.NilError(t, err, "test node add failed unexpected")
 
-	nodes = nc.GetSchedulableNodes(false)
-	assert.Equal(t, 0, len(nodes), "list is returning unschedulable node")
-
-	node.SetSchedulable(true)
 	nodes = nc.GetSchedulableNodes(false)
 	assert.Equal(t, 1, len(nodes), "list is missing schedulable node")
 

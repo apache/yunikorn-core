@@ -160,7 +160,7 @@ func (nc *baseNodeCollection) GetSchedulableNodes(excludeReserved bool) []*Node 
 	for _, nref := range nc.nodes {
 		node := nref.node
 		// filter out the nodes that are not scheduling
-		if !node.IsSchedulable() || (excludeReserved && node.IsReserved()) {
+		if excludeReserved && node.IsReserved() {
 			continue
 		}
 		nodes = append(nodes, node)

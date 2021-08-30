@@ -791,6 +791,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 }
 
 // Try to replace a placeholder with a real allocation
+//nolint:funlen
 func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, getnode func(string) *Node) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()

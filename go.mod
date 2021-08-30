@@ -25,6 +25,7 @@ require (
 	github.com/HdrHistogram/hdrhistogram-go v1.0.1 // indirect
 	github.com/apache/incubator-yunikorn-scheduler-interface v0.11.1-0.20210825113556-88f21e44dc01
 	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/google/btree v1.0.1
 	github.com/google/uuid v1.2.0
 	github.com/gorilla/mux v1.7.3
 	github.com/looplab/fsm v0.1.0

@@ -523,6 +523,16 @@ func CompUsageShares(left, right *Resource) int {
 	return compareShares(lshares, rshares)
 }
 
+// Get largest usage share as a float64.
+func LargestUsageShare(resource *Resource) float64 {
+	shares := getShares(resource, nil)
+	share := float64(0)
+	if shareLen := len(shares); shareLen != 0 {
+		share = shares[shareLen-1]
+	}
+	return share
+}
+
 // Get fairness ratio calculated by:
 // highest share for left resource from total divided by
 // highest share for right resource from total.

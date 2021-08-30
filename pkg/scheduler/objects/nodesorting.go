@@ -19,8 +19,6 @@
 package objects
 
 import (
-	"sort"
-
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
@@ -30,7 +28,7 @@ import (
 
 type NodeSortingPolicy interface {
 	PolicyType() policies.SortingPolicy
-	SortNodes(nodes []*Node)
+	ScoreNode(node *Node) float64
 }
 
 type binPackingNodeSortingPolicy struct{}
@@ -44,22 +42,14 @@ func (fairnessNodeSortingPolicy) PolicyType() policies.SortingPolicy {
 	return policies.FairnessPolicy
 }
 
-func (binPackingNodeSortingPolicy) SortNodes(nodes []*Node) {
-	// Sort by available resource, ascending order
-	sort.SliceStable(nodes, func(i, j int) bool {
-		l := nodes[i]
-		r := nodes[j]
-		return resources.CompUsageShares(r.GetAvailableResource(), l.GetAvailableResource()) > 0
-	})
+func (binPackingNodeSortingPolicy) ScoreNode(node *Node) float64 {
+	// choose most loaded node first
+	return resources.LargestUsageShare(node.GetAvailableResource())
 }
 
-func (fairnessNodeSortingPolicy) SortNodes(nodes []*Node) {
-	// Sort by available resource, descending order
-	sort.SliceStable(nodes, func(i, j int) bool {
-		l := nodes[i]
-		r := nodes[j]
-		return resources.CompUsageShares(l.GetAvailableResource(), r.GetAvailableResource()) > 0
-	})
+func (fairnessNodeSortingPolicy) ScoreNode(node *Node) float64 {
+	// choose least loaded node first
+	return -resources.LargestUsageShare(node.GetAvailableResource())
 }
 
 func NewNodeSortingPolicy(policyType string) NodeSortingPolicy {

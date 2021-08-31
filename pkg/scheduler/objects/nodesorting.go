@@ -28,7 +28,7 @@ import (
 
 type NodeSortingPolicy interface {
 	PolicyType() policies.SortingPolicy
-	ScoreNode(node *Node) float64
+	ScoreNode(node *Node) []float64
 }
 
 type binPackingNodeSortingPolicy struct{}
@@ -42,14 +42,19 @@ func (fairnessNodeSortingPolicy) PolicyType() policies.SortingPolicy {
 	return policies.FairnessPolicy
 }
 
-func (binPackingNodeSortingPolicy) ScoreNode(node *Node) float64 {
+func (binPackingNodeSortingPolicy) ScoreNode(node *Node) []float64 {
 	// choose most loaded node first
-	return resources.LargestUsageShare(node.GetAvailableResource())
+	return resources.GetShares(node.GetAvailableResource())
 }
 
-func (fairnessNodeSortingPolicy) ScoreNode(node *Node) float64 {
+func (fairnessNodeSortingPolicy) ScoreNode(node *Node) []float64 {
 	// choose least loaded node first
-	return -resources.LargestUsageShare(node.GetAvailableResource())
+	result := resources.GetShares(node.GetAvailableResource())
+	reverse := make([]float64, 0, len(result))
+	for _, v := range result {
+		reverse = append(reverse, -v)
+	}
+	return reverse
 }
 
 func NewNodeSortingPolicy(policyType string) NodeSortingPolicy {

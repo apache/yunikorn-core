@@ -26,6 +26,7 @@ import (
 	"github.com/google/btree"
 	"go.uber.org/zap"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 )
@@ -42,8 +43,8 @@ type NodeCollection interface {
 }
 
 type nodeRef struct {
-	node      *Node   // node reference
-	nodeScore float64 // node score
+	node      *Node     // node reference
+	nodeScore []float64 // node score
 }
 
 func (nr nodeRef) Less(than btree.Item) bool {
@@ -51,13 +52,14 @@ func (nr nodeRef) Less(than btree.Item) bool {
 	if !ok {
 		return false
 	}
-	if nr.nodeScore < other.nodeScore {
+	switch result := resources.CompareShares(nr.nodeScore, other.nodeScore); {
+	case result < 0:
 		return true
-	}
-	if other.nodeScore < nr.nodeScore {
+	case result > 0:
 		return false
+	default:
+		return nr.node.NodeID < other.node.NodeID
 	}
-	return nr.node.NodeID < other.node.NodeID
 }
 
 type baseNodeCollection struct {
@@ -71,9 +73,9 @@ type baseNodeCollection struct {
 	sync.RWMutex
 }
 
-func (nc *baseNodeCollection) scoreNode(node *Node) float64 {
+func (nc *baseNodeCollection) scoreNode(node *Node) []float64 {
 	if nc.nsp == nil {
-		return 0
+		return make([]float64, 0)
 	}
 	return nc.nsp.ScoreNode(node)
 }
@@ -211,13 +213,7 @@ func (nc *baseNodeCollection) NodeUpdated(node *Node) {
 	nc.Lock()
 	defer nc.Unlock()
 
-	nref := nc.nodes[node.NodeID]
-	if nref == nil {
-		return
-	}
-
-	updatedScore := nc.scoreNode(node)
-	if nref.nodeScore != updatedScore {
+	if nref, ok := nc.nodes[node.NodeID]; ok {
 		nc.sortedNodes.Delete(*nref)
 		nref.nodeScore = nc.scoreNode(node)
 		nc.sortedNodes.ReplaceOrInsert(*nref)

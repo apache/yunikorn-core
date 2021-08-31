@@ -418,6 +418,6 @@ func sortNodes(nodes []*Node, sortType NodeSortingPolicy) {
 	sort.SliceStable(nodes, func(i, j int) bool {
 		l := nodes[i]
 		r := nodes[j]
-		return sortType.ScoreNode(l) < sortType.ScoreNode(r)
+		return resources.CompareShares(sortType.ScoreNode(l), sortType.ScoreNode(r)) < 0
 	})
 }

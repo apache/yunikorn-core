@@ -439,6 +439,12 @@ func (r *Resource) fitIn(smaller *Resource, skipUndef bool) bool {
 	return true
 }
 
+// GetShares return an array consisting of value of each resource quantity
+// the result is sort by increasing order
+func GetShares(res *Resource) []float64 {
+	return getShares(res, nil)
+}
+
 // Get the share of each resource quantity when compared to the total
 // resources quantity
 // NOTE: shares can be negative and positive in the current assumptions
@@ -495,7 +501,7 @@ func CompUsageRatio(left, right, total *Resource) int {
 	lshares := getShares(left, total)
 	rshares := getShares(right, total)
 
-	return compareShares(lshares, rshares)
+	return CompareShares(lshares, rshares)
 }
 
 // Calculate share for left of total and right of total separately.
@@ -507,7 +513,7 @@ func CompUsageRatioSeparately(left, leftTotal, right, rightTotal *Resource) int 
 	lshares := getShares(left, leftTotal)
 	rshares := getShares(right, rightTotal)
 
-	return compareShares(lshares, rshares)
+	return CompareShares(lshares, rshares)
 }
 
 // Compare two resources usage shares and assumes a nil total resource.
@@ -520,17 +526,7 @@ func CompUsageShares(left, right *Resource) int {
 	lshares := getShares(left, nil)
 	rshares := getShares(right, nil)
 
-	return compareShares(lshares, rshares)
-}
-
-// Get largest usage share as a float64.
-func LargestUsageShare(resource *Resource) float64 {
-	shares := getShares(resource, nil)
-	share := float64(0)
-	if shareLen := len(shares); shareLen != 0 {
-		share = shares[shareLen-1]
-	}
-	return share
+	return CompareShares(lshares, rshares)
 }
 
 // Get fairness ratio calculated by:
@@ -563,7 +559,7 @@ func FairnessRatio(left, right, total *Resource) float64 {
 // 0 for equal shares
 // 1 if the left share is larger
 // -1 if the right share is larger
-func compareShares(lshares, rshares []float64) int {
+func CompareShares(lshares, rshares []float64) int {
 	// get the length of the shares: a nil or empty share list gives -1
 	lIdx := len(lshares) - 1
 	rIdx := len(rshares) - 1

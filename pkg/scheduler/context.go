@@ -239,7 +239,7 @@ func (cc *ClusterContext) removePartitionsByRMID(event *rmevent.RMPartitionsRemo
 	// Just remove corresponding partitions
 	for k, partition := range cc.partitions {
 		if partition.RmID == event.RmID {
-			partition.partitionManager.stop = true
+			partition.partitionManager.Stop()
 			partitionToRemove[k] = true
 		}
 	}

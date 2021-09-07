@@ -155,3 +155,39 @@ func TestGetRequiredNode(t *testing.T) {
 	ask = NewAllocationAsk(siAsk)
 	assert.Equal(t, ask.GetRequiredNode(), "NodeName", "required node should be NodeName")
 }
+
+func TestSetPriority(t *testing.T) {
+	var tests = []struct {
+		testMessage string
+		in          int32
+		out         int32
+	}{
+		{"no priority setting", -1, 0},
+		{"set default priority value", 0, 0},
+		{"set priority", 2, 2},
+	}
+
+	for _, tt := range tests {
+		res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+		siAsk := &si.AllocationAsk{
+			AllocationKey:  "ask-1",
+			ApplicationID:  "app-1",
+			MaxAllocations: 1,
+			ResourceAsk:    res.ToProto(),
+		}
+		t.Run(tt.testMessage, func(t *testing.T) {
+			ask := NewAllocationAsk(siAsk)
+			if tt.in >= 0 {
+				priority := si.Priority_PriorityValue{PriorityValue: tt.in}
+				siAsk.Priority = &si.Priority{
+					Priority: &priority,
+				}
+				ask.setPriority(siAsk.Priority.GetPriorityValue())
+			}
+
+			if ask.priority != tt.out {
+				t.Errorf("%s, Want %v, got %v", tt.testMessage, tt.out, ask.priority)
+			}
+		})
+	}
+}

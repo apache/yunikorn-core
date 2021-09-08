@@ -158,35 +158,55 @@ func TestGetRequiredNode(t *testing.T) {
 
 func TestSetPriority(t *testing.T) {
 	var tests = []struct {
-		testMessage string
-		in          int32
-		out         int32
+		testMessage           string
+		in                    int32
+		out                   int32
+		isSiArg, isReassigned bool
+		reassign              int32
 	}{
-		{"no priority setting", -1, 0},
-		{"set default priority value", 0, 0},
-		{"set priority", 2, 2},
+		// Set priorirty via NewAllocationAsk
+		{"No priority setting", -1, 0, false, false, 0},
+		{"Set priority via new", 3, 3, true, false, 0},
+		// Set priority via SetPriority function
+		{"Set default priority value", 0, 0, false, false, 0},
+		{"Set priority", 2, 2, false, false, 0},
+		// change priority
+		{"Change priority", 2, 5, true, true, 5},
 	}
 
 	for _, tt := range tests {
 		res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
-		siAsk := &si.AllocationAsk{
-			AllocationKey:  "ask-1",
-			ApplicationID:  "app-1",
-			MaxAllocations: 1,
-			ResourceAsk:    res.ToProto(),
-		}
 		t.Run(tt.testMessage, func(t *testing.T) {
-			ask := NewAllocationAsk(siAsk)
-			if tt.in >= 0 {
-				priority := si.Priority_PriorityValue{PriorityValue: tt.in}
+			siAsk := &si.AllocationAsk{
+				AllocationKey:  "ask-1",
+				ApplicationID:  "app-1",
+				MaxAllocations: 1,
+				ResourceAsk:    res.ToProto(),
+			}
+
+			priority := si.Priority_PriorityValue{PriorityValue: tt.in}
+			if tt.isSiArg {
 				siAsk.Priority = &si.Priority{
 					Priority: &priority,
 				}
-				ask.setPriority(siAsk.Priority.GetPriorityValue())
+			}
+
+			ask := NewAllocationAsk(siAsk)
+			if tt.in >= 0 && !tt.isSiArg {
+				siAsk.Priority = &si.Priority{
+					Priority: &priority,
+				}
+				ask.setPriority(ask.normalizePriority(siAsk.Priority))
+			} else if tt.in >= 0 && tt.isReassigned {
+				priority = si.Priority_PriorityValue{PriorityValue: tt.reassign}
+				siAsk.Priority = &si.Priority{
+					Priority: &priority,
+				}
+				ask.setPriority(ask.normalizePriority(siAsk.Priority))
 			}
 
 			if ask.priority != tt.out {
-				t.Errorf("%s, Want %v, got %v", tt.testMessage, tt.out, ask.priority)
+				t.Errorf("result %s, Want %v, got %v", tt.testMessage, tt.out, ask.priority)
 			}
 		})
 	}

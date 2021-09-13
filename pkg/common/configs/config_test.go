@@ -413,11 +413,39 @@ partitions:
     queues:
       - name: root
   - name: default
+    queues:
+      - name: root
+  - name: part1
+    queues:
+      - name: root
 `
 	// validate the config and check after the update
 	conf, err = CreateConfig(data)
+	assert.Error(t, err, "duplicate partition name found with name default")
 	if err == nil {
 		t.Errorf("multiple default partitions parsing should have failed: %v", conf)
+	}
+
+	data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+  - name: part1
+    queues:
+      - name: root
+  - name: part1
+    queues:
+      - name: root
+  - name: part2
+    queues:
+      - name: root
+`
+	// validate the config and check after the update
+	conf, err = CreateConfig(data)
+	assert.Error(t, err, "duplicate partition name found with name part1")
+	if err == nil {
+		t.Errorf("duplicate partitions parsing should have failed: %v", conf)
 	}
 }
 

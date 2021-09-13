@@ -372,16 +372,16 @@ func Validate(newConfig *SchedulerConfig) error {
 		return fmt.Errorf("scheduler config is not set")
 	}
 
-	// check for the default partition, if the partion is unnamed set it to default
-	var defaultPartition bool
+	// check uniqueness
+	partitionMap := make(map[string]bool)
 	for i, partition := range newConfig.Partitions {
 		if partition.Name == "" || strings.ToLower(partition.Name) == DefaultPartition {
-			if defaultPartition {
-				return fmt.Errorf("multiple default partitions defined")
-			}
-			defaultPartition = true
 			partition.Name = DefaultPartition
 		}
+		if partitionMap[strings.ToLower(partition.Name)] {
+			return fmt.Errorf("duplicate partition name found with name %s", partition.Name)
+		}
+		partitionMap[strings.ToLower(partition.Name)] = true
 		// check the queue structure
 		err := checkQueuesStructure(&partition)
 		if err != nil {

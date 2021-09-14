@@ -118,6 +118,10 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 	return NewAllocation(alloc.UUID, alloc.NodeID, ask)
 }
 
+func (a *Allocation) GetPartitionNameWithoutClusterID() string {
+	return common.GetPartitionNameWithoutClusterID(a.PartitionName)
+}
+
 // Convert the Allocation into a SI object. This is a limited set of values that gets copied into the SI.
 // We only use this to communicate *back* to the RM. All other fields are considered incoming fields from
 // the RM into the core.

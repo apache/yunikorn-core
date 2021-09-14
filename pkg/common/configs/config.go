@@ -143,7 +143,8 @@ type Limit struct {
 // Global Node Sorting Policy section
 // - type: different type of policies supported (binpacking, fair etc)
 type NodeSortingPolicy struct {
-	Type string
+	Type            string
+	ResourceWeights map[string]float64 `yaml:",omitempty" json:",omitempty"`
 }
 
 type LoadSchedulerConfigFunc func(policyGroup string) (*SchedulerConfig, error)

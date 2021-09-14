@@ -149,7 +149,7 @@ func (pc *PartitionContext) updateNodeSortingPolicy(conf configs.PartitionConfig
 		log.Logger().Info("NodeSorting policy set from config",
 			zap.String("policyName", configuredPolicy.String()))
 	}
-	pc.nodes.SetNodeSortingPolicy(objects.NewNodeSortingPolicy(conf.NodeSortPolicy.Type))
+	pc.nodes.SetNodeSortingPolicy(objects.NewNodeSortingPolicy(conf.NodeSortPolicy.Type, conf.NodeSortPolicy.ResourceWeights))
 }
 
 func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig) error {

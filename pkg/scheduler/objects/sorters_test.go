@@ -19,7 +19,6 @@
 package objects
 
 import (
-	"sort"
 	"strconv"
 	"testing"
 	"time"
@@ -102,97 +101,10 @@ func TestNoQueueLimits(t *testing.T) {
 	assertQueueList(t, queues, []int{1, 2, 0}, "fair no limit second")
 }
 
-func TestSortNodesBin(t *testing.T) {
-	policy := NewNodeSortingPolicy(policies.BinPackingPolicy.String())
-
-	// nil or empty list cannot panic
-	sortNodes(nil, policy)
-	list := make([]*Node, 0)
-	sortNodes(list, policy)
-	list = append(list, newNode("node-nil", nil))
-	sortNodes(list, policy)
-
-	// stable sort is used so equal resources stay where they were
-	res := resources.NewResourceFromMap(map[string]resources.Quantity{
-		"first": resources.Quantity(100)})
-
-	// setup to sort ascending
-	list = make([]*Node, 3)
-	for i := 0; i < 3; i++ {
-		num := strconv.Itoa(i)
-		node := newNodeRes("node-"+num, resources.Multiply(res, int64(3-i)))
-		list[i] = node
-	}
-	// nodes should come back in order 2 (100), 1 (200), 0 (300)
-	sortNodes(list, policy)
-	assertNodeList(t, list, []int{2, 1, 0}, "bin base order")
-
-	// change node-1 on place 1 in the slice to have no res
-	list[1] = newNodeRes("node-1", resources.Multiply(res, 0))
-	// nodes should come back in order 1 (0), 2 (100), 0 (300)
-	sortNodes(list, policy)
-	assertNodeList(t, list, []int{2, 0, 1}, "bin no res node-1")
-
-	// change node-1 on place 0 in the slice to have 300 res
-	list[0] = newNodeRes("node-1", resources.Multiply(res, 3))
-	// nodes should come back in order 2 (100), 1 (300), 0 (300)
-	sortNodes(list, policy)
-	assertNodeList(t, list, []int{2, 1, 0}, "bin node-1 same as node-0")
-
-	// change node-0 on place 2 in the slice to have -300 res
-	list[2] = newNodeRes("node-0", resources.Multiply(res, -3))
-	// nodes should come back in order 0 (-300), 2 (100), 1 (300)
-	sortNodes(list, policy)
-	assertNodeList(t, list, []int{0, 2, 1}, "bin node-0 negative")
-}
-
-func TestSortNodesFair(t *testing.T) {
-	policy := NewNodeSortingPolicy(policies.FairnessPolicy.String())
-
-	// nil or empty list cannot panic
-	sortNodes(nil, policy)
-	list := make([]*Node, 0)
-	sortNodes(list, policy)
-	list = append(list, newNode("node-nil", nil))
-	sortNodes(list, policy)
-
-	// stable sort is used so equal resources stay where they were
-	res := resources.NewResourceFromMap(map[string]resources.Quantity{
-		"first": resources.Quantity(100)})
-	// setup to sort descending
-	list = make([]*Node, 3)
-	for i := 0; i < 3; i++ {
-		num := strconv.Itoa(i)
-		node := newNodeRes("node-"+num, resources.Multiply(res, int64(1+i)))
-		list[i] = node
-	}
-	// nodes should come back in order 2 (300), 1 (200), 0 (100)
-	sortNodes(list, policy)
-	assertNodeList(t, list, []int{2, 1, 0}, "fair base order")
-
-	// change node-1 on place 1 in the slice to have no res
-	list[1] = newNodeRes("node-1", resources.Multiply(res, 0))
-	// nodes should come back in order 2 (300), 0 (100), 1 (0)
-	sortNodes(list, policy)
-	assertNodeList(t, list, []int{1, 2, 0}, "fair no res node-1")
-
-	// change node-1 on place 2 in the slice to have 300 res
-	list[2] = newNodeRes("node-1", resources.Multiply(res, 3))
-	// nodes should come back in order 2 (300), 1 (300), 0 (100)
-	sortNodes(list, policy)
-	assertNodeList(t, list, []int{2, 1, 0}, "fair node-1 same as node-2")
-
-	// change node-2 on place 0 in the slice to have -300 res
-	list[0] = newNodeRes("node-2", resources.Multiply(res, -3))
-	// nodes should come back in order 1 (300), 0 (100), 2 (-300)
-	sortNodes(list, policy)
-	assertNodeList(t, list, []int{1, 0, 2}, "fair node-2 negative")
-}
-
 func TestSortAppsNoPending(t *testing.T) {
 	// stable sort is used so equal values stay where they were
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
-		"first": resources.Quantity(100)})
+		"vcore": resources.Quantity(100)})
 	input := make(map[string]*Application, 4)
 	for i := 0; i < 2; i++ {
 		num := strconv.Itoa(i)
@@ -223,7 +135,7 @@ func TestSortAppsNoPending(t *testing.T) {
 func TestSortAppsFifo(t *testing.T) {
 	// stable sort is used so equal values stay where they were
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
-		"first": resources.Quantity(100)})
+		"vcore": resources.Quantity(100)})
 	// setup to sort descending: all apps have pending resources
 	input := make(map[string]*Application, 4)
 	for i := 0; i < 4; i++ {
@@ -244,7 +156,7 @@ func TestSortAppsFifo(t *testing.T) {
 func TestSortAppsFair(t *testing.T) {
 	// stable sort is used so equal values stay where they were
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
-		"first": resources.Quantity(100)})
+		"vcore": resources.Quantity(100)})
 	// setup to sort descending: all apps have pending resources
 	input := make(map[string]*Application, 4)
 	for i := 0; i < 4; i++ {
@@ -284,7 +196,7 @@ func TestSortAppsFair(t *testing.T) {
 func TestSortAppsStateAware(t *testing.T) {
 	// stable sort is used so equal values stay where they were
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
-		"first": resources.Quantity(100)})
+		"vcore": resources.Quantity(100)})
 	// setup all apps with pending resources, all accepted state
 	input := make(map[string]*Application, 4)
 	for i := 0; i < 4; i++ {
@@ -339,7 +251,7 @@ func TestSortAppsStateAware(t *testing.T) {
 func TestSortAsks(t *testing.T) {
 	// stable sort is used so equal values stay where they were
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
-		"first": resources.Quantity(1)})
+		"vcore": resources.Quantity(1)})
 	list := make([]*AllocationAsk, 4)
 	for i := 0; i < 4; i++ {
 		num := strconv.Itoa(i)
@@ -412,12 +324,4 @@ func assertAppListLength(t *testing.T, list []*Application, apps []string, name 
 	for i, app := range list {
 		assert.Equal(t, apps[i], app.ApplicationID, "test name: %s", name)
 	}
-}
-
-func sortNodes(nodes []*Node, sortType NodeSortingPolicy) {
-	sort.SliceStable(nodes, func(i, j int) bool {
-		l := nodes[i]
-		r := nodes[j]
-		return sortType.ScoreNode(l) < sortType.ScoreNode(r)
-	})
 }

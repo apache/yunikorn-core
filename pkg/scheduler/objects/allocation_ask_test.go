@@ -156,22 +156,31 @@ func TestGetRequiredNode(t *testing.T) {
 	assert.Equal(t, ask.GetRequiredNode(), "NodeName", "required node should be NodeName")
 }
 
+func newPriorityValue(v int32) *si.Priority {
+	return &si.Priority{
+		Priority: &si.Priority_PriorityValue{
+			PriorityValue: v},
+	}
+}
+
+func newPriorityClass(priorityClassName string) *si.Priority {
+	return &si.Priority{
+		Priority: &si.Priority_PriorityClassName{
+			PriorityClassName: priorityClassName},
+	}
+}
 func TestSetPriority(t *testing.T) {
 	var tests = []struct {
-		testMessage           string
-		in                    int32
-		out                   int32
-		isSiArg, isReassigned bool
-		reassign              int32
+		testMessage string
+		priority    *si.Priority
+		out         int32
 	}{
 		// Set priorirty via NewAllocationAsk
-		{"No priority setting", -1, 0, false, false, 0},
-		{"Set priority via new", 3, 3, true, false, 0},
-		// Set priority via SetPriority function
-		{"Set default priority value", 0, 0, false, false, 0},
-		{"Set priority", 2, 2, false, false, 0},
-		// change priority
-		{"Change priority", 2, 5, true, true, 5},
+		{"No priority setting", nil, 0},
+		{"Set empty priority", &si.Priority{}, 0},
+		{"Set positive priority value", newPriorityValue(1), 1},
+		{"Set negative priority value", newPriorityValue(-100), -100},
+		{"Set priority class", newPriorityClass("p0"), 0},
 	}
 
 	for _, tt := range tests {
@@ -181,30 +190,11 @@ func TestSetPriority(t *testing.T) {
 				AllocationKey:  "ask-1",
 				ApplicationID:  "app-1",
 				MaxAllocations: 1,
+				Priority:       tt.priority,
 				ResourceAsk:    res.ToProto(),
 			}
 
-			priority := si.Priority_PriorityValue{PriorityValue: tt.in}
-			if tt.isSiArg {
-				siAsk.Priority = &si.Priority{
-					Priority: &priority,
-				}
-			}
-
 			ask := NewAllocationAsk(siAsk)
-			if tt.in >= 0 && !tt.isSiArg {
-				siAsk.Priority = &si.Priority{
-					Priority: &priority,
-				}
-				ask.setPriority(ask.normalizePriority(siAsk.Priority))
-			} else if tt.in >= 0 && tt.isReassigned {
-				priority = si.Priority_PriorityValue{PriorityValue: tt.reassign}
-				siAsk.Priority = &si.Priority{
-					Priority: &priority,
-				}
-				ask.setPriority(ask.normalizePriority(siAsk.Priority))
-			}
-
 			if ask.priority != tt.out {
 				t.Errorf("result %s, Want %v, got %v", tt.testMessage, tt.out, ask.priority)
 			}

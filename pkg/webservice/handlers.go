@@ -31,6 +31,7 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
@@ -94,7 +95,7 @@ func getClusterUtilization(w http.ResponseWriter, r *http.Request) {
 	clusterUtil := make([]*dao.ClustersUtilDAOInfo, 0, len(lists))
 	for _, partition := range lists {
 		clusterUtil = append(clusterUtil, &dao.ClustersUtilDAOInfo{
-			PartitionName: partition.GetPartitionNameWithoutClusterID(),
+			PartitionName: common.GetPartitionNameWithoutClusterID(partition.Name),
 			ClustersUtil:  getClusterUtilJSON(partition),
 		})
 	}
@@ -158,7 +159,7 @@ func getNodesInfo(w http.ResponseWriter, r *http.Request) {
 			nodesDao = append(nodesDao, nodeDao)
 		}
 		result = append(result, &dao.NodesDAOInfo{
-			PartitionName: partition.GetPartitionNameWithoutClusterID(),
+			PartitionName: common.GetPartitionNameWithoutClusterID(partition.Name),
 			Nodes:         nodesDao,
 		})
 	}
@@ -223,7 +224,7 @@ func buildJSONErrorResponse(w http.ResponseWriter, detail string, code int) {
 
 func getClusterJSON(partition *scheduler.PartitionContext) *dao.ClusterDAOInfo {
 	clusterInfo := &dao.ClusterDAOInfo{}
-	clusterInfo.PartitionName = partition.GetPartitionNameWithoutClusterID()
+	clusterInfo.PartitionName = common.GetPartitionNameWithoutClusterID(partition.Name)
 	clusterInfo.TotalApplications = strconv.Itoa(partition.GetTotalApplicationCount())
 	clusterInfo.TotalContainers = strconv.Itoa(partition.GetTotalAllocationCount())
 	clusterInfo.TotalNodes = strconv.Itoa(partition.GetTotalNodeCount())
@@ -307,7 +308,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 	return &dao.ApplicationDAOInfo{
 		ApplicationID:  app.ApplicationID,
 		UsedResource:   app.GetAllocatedResource().DAOString(),
-		Partition:      app.GetPartitionNameWithoutClusterID(),
+		Partition:      common.GetPartitionNameWithoutClusterID(app.Partition),
 		QueueName:      app.QueuePath,
 		SubmissionTime: app.SubmissionTime.UnixNano(),
 		Allocations:    allocationInfos,
@@ -590,7 +591,7 @@ func getPartitions(w http.ResponseWriter, r *http.Request) {
 	for _, partitionContext := range lists {
 		partitionInfo := &dao.PartitionInfo{}
 		partitionInfo.ClusterID = partitionContext.RmID
-		partitionInfo.Name = partitionContext.GetPartitionNameWithoutClusterID()
+		partitionInfo.Name = common.GetPartitionNameWithoutClusterID(partitionContext.Name)
 		partitionInfo.State = partitionContext.GetCurrentState()
 		partitionInfo.LastStateTransitionTime = partitionContext.GetStateTime().String()
 

@@ -128,10 +128,6 @@ func (sa *Application) SetState(state string) {
 	sa.stateMachine.SetState(state)
 }
 
-func (sa *Application) GetPartitionNameWithoutClusterID() string {
-	return common.GetPartitionNameWithoutClusterID(sa.Partition)
-}
-
 // Set the reservation delay.
 // Set when the cluster context is created to disable reservation.
 func SetReservationDelay(delay time.Duration) {

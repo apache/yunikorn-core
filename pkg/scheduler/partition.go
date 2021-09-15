@@ -484,15 +484,11 @@ func (pc *PartitionContext) GetQueueInfos() dao.QueueDAOInfo {
 	return pc.root.GetQueueInfos()
 }
 
-func (pc *PartitionContext) GetPartitionNameWithoutClusterID() string {
-	return common.GetPartitionNameWithoutClusterID(pc.Name)
-}
-
 // Get the queue info for the whole queue structure to pass to the webservice
 func (pc *PartitionContext) GetPartitionQueues() dao.PartitionQueueDAOInfo {
 	var PartitionQueueDAOInfo = dao.PartitionQueueDAOInfo{}
 	PartitionQueueDAOInfo = pc.root.GetPartitionQueueDAOInfo()
-	PartitionQueueDAOInfo.Partition = pc.GetPartitionNameWithoutClusterID()
+	PartitionQueueDAOInfo.Partition = common.GetPartitionNameWithoutClusterID(pc.Name)
 	return PartitionQueueDAOInfo
 }
 

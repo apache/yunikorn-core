@@ -276,8 +276,7 @@ func getPartitionJSON(partition *scheduler.PartitionContext) *dao.PartitionDAOIn
 
 	queueDAOInfo := partition.GetQueueInfos()
 
-	// this method is used by a deprecated API, so it keeps returning normalized name
-	partitionInfo.PartitionName = partition.Name
+	partitionInfo.PartitionName = common.GetPartitionNameWithoutClusterID(partition.Name)
 	partitionInfo.Capacity = dao.PartitionCapacity{
 		Capacity:     partition.GetTotalPartitionResource().DAOString(),
 		UsedCapacity: partition.GetAllocatedResource().DAOString(),

@@ -29,6 +29,7 @@ import (
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
@@ -487,7 +488,7 @@ func (pc *PartitionContext) GetQueueInfos() dao.QueueDAOInfo {
 func (pc *PartitionContext) GetPartitionQueues() dao.PartitionQueueDAOInfo {
 	var PartitionQueueDAOInfo = dao.PartitionQueueDAOInfo{}
 	PartitionQueueDAOInfo = pc.root.GetPartitionQueueDAOInfo()
-	PartitionQueueDAOInfo.Partition = pc.Name
+	PartitionQueueDAOInfo.Partition = common.GetPartitionNameWithoutClusterID(pc.Name)
 	return PartitionQueueDAOInfo
 }
 

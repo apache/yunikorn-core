@@ -25,6 +25,7 @@ type PartitionDAOInfo struct {
 }
 
 type PartitionInfo struct {
+	ClusterID               string            `json:"clusterId"`
 	Name                    string            `json:"name"`
 	Capacity                PartitionCapacity `json:"capacity"`
 	NodeSortingPolicy       string            `json:"nodeSortingPolicy"`

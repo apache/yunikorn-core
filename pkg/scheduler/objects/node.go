@@ -557,13 +557,12 @@ func (sn *Node) GetResourceUsageShares() map[string]float64 {
 	sn.RLock()
 	defer sn.RUnlock()
 	res := make(map[string]float64)
-	used := resources.Add(sn.allocatedResource, sn.occupiedResource)
 	if sn.totalResource == nil {
 		// no resources present, so no usage
 		return res
 	}
 	for k, v := range sn.totalResource.Resources {
-		res[k] = float64(used.Resources[k]) / float64(v)
+		res[k] = float64(1) - (float64(sn.availableResource.Resources[k]) / float64(v))
 	}
 	return res
 }

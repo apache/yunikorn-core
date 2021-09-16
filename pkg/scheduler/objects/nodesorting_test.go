@@ -82,8 +82,26 @@ partitions:
 	assert.Equal(t, policy.resourceWeights["memory"], 1.0, "Wrong weight for memory")
 }
 
+func TestInvalidResourceWeightsFromConfig(t *testing.T) {
+	badConf := `
+partitions:
+  - name: default
+    nodesortpolicy:
+      type: fair
+      resourceweights:
+        vcore: -1.0
+        memory: 0.5
+        gpu: 5.0
+    queues:
+      - name: root
+        submitacl: '*'
+`
+	_, err := configs.LoadSchedulerConfigFromByteArray([]byte(badConf))
+	assert.ErrorContains(t, err, "negative", "Expected error")
+}
+
 func TestSpecifiedResourceWeightsFromConfig(t *testing.T) {
-	emptyConf := `
+	explicitConf := `
 partitions:
   - name: default
     nodesortpolicy:
@@ -96,7 +114,7 @@ partitions:
       - name: root
         submitacl: '*'
 `
-	conf, err := configs.LoadSchedulerConfigFromByteArray([]byte(emptyConf))
+	conf, err := configs.LoadSchedulerConfigFromByteArray([]byte(explicitConf))
 	assert.NilError(t, err, "No error is expected")
 	if conf == nil {
 		t.Fatal("Returned conf was nil")

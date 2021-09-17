@@ -259,8 +259,17 @@ func checkNodeSortingPolicy(partition *PartitionConfig) error {
 
 	// Defined polices.
 	_, err := policies.SortingPolicyFromString(policy.Type)
+	if err != nil {
+		return err
+	}
 
-	return err
+	for k, v := range policy.ResourceWeights {
+		if v < float64(0) {
+			return fmt.Errorf("negative resource weight for %s is not allowed", k)
+		}
+	}
+
+	return nil
 }
 
 // Check the queue names configured for compliance and uniqueness

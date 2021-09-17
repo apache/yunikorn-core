@@ -552,6 +552,21 @@ func (sn *Node) UnReserveApps() ([]string, []int) {
 	return appReserve, askRelease
 }
 
+// Gets map of name -> resource usages per type in shares (0 to 1). Can return NaN.
+func (sn *Node) GetResourceUsageShares() map[string]float64 {
+	sn.RLock()
+	defer sn.RUnlock()
+	res := make(map[string]float64)
+	if sn.totalResource == nil {
+		// no resources present, so no usage
+		return res
+	}
+	for k, v := range sn.totalResource.Resources {
+		res[k] = float64(1) - (float64(sn.availableResource.Resources[k]) / float64(v))
+	}
+	return res
+}
+
 func (sn *Node) AddListener(listener NodeListener) {
 	sn.Lock()
 	defer sn.Unlock()

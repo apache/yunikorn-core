@@ -258,7 +258,7 @@ func createQueuesNodes(t *testing.T) *PartitionContext {
 	partition, err := newConfiguredPartition()
 	assert.NilError(t, err, "test partition create failed with error")
 	var res *resources.Resource
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "10"})
+	res, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
 	assert.NilError(t, err, "failed to create basic resource")
 	err = partition.AddNode(newNodeMaxResource("node-1", res), nil)
 	assert.NilError(t, err, "test node1 add failed unexpected")

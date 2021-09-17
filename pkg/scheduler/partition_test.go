@@ -207,12 +207,12 @@ func TestAddNodeWithAllocations(t *testing.T) {
 
 	// add a new app
 	app := newApplication(appID1, "default", defQueue)
-	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1})
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "add application to partition should not have failed")
 
 	// add a node with allocations
-	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10})
 	node := newNodeMaxResource(nodeID1, nodeRes)
 
 	// fail with an unknown app
@@ -277,9 +277,9 @@ func TestRemoveNodeWithAllocations(t *testing.T) {
 	assert.NilError(t, err, "add application to partition should not have failed")
 
 	// add a node with allocations: must have the correct app added already
-	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1000})
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1000})
 	node := newNodeMaxResource(nodeID1, nodeRes)
-	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1})
 	ask := newAllocationAsk("alloc-1", appID1, appRes)
 	allocUUID := "alloc-1-uuid"
 	alloc := objects.NewAllocation(allocUUID, nodeID1, ask)
@@ -345,7 +345,7 @@ func TestAddAppTaskGroup(t *testing.T) {
 	assert.NilError(t, err, "partition create failed")
 
 	// add a new app: TG specified with resource no max set on the queue
-	task := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	task := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10})
 	app := newApplicationTG(appID1, "default", defQueue, task)
 	assert.Assert(t, resources.Equals(app.GetPlaceholderAsk(), task), "placeholder ask not set as expected")
 	// queue sort policy is FIFO this should work
@@ -376,7 +376,7 @@ func TestAddAppTaskGroup(t *testing.T) {
 		Parent:     false,
 		Queues:     nil,
 		Properties: map[string]string{configs.ApplicationSortPolicy: "stateaware"},
-		Resources:  configs.Resources{Max: map[string]string{"first": "5"}},
+		Resources:  configs.Resources{Max: map[string]string{"vcore": "5"}},
 	})
 	assert.NilError(t, err, "updating queue should not have failed (stateaware & max)")
 	queue.UpdateSortType()
@@ -390,7 +390,7 @@ func TestAddAppTaskGroup(t *testing.T) {
 		Name:      "default",
 		Parent:    false,
 		Queues:    nil,
-		Resources: configs.Resources{Max: map[string]string{"first": "20"}},
+		Resources: configs.Resources{Max: map[string]string{"vcore": "20"}},
 	})
 	assert.NilError(t, err, "updating queue should not have failed (max resource)")
 	err = partition.AddApplication(app)
@@ -407,7 +407,7 @@ func TestRemoveApp(t *testing.T) {
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "add application to partition should not have failed")
 	// add a node to allow adding an allocation
-	node1 := newNodeMaxResource(nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1000}))
+	node1 := newNodeMaxResource(nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1000}))
 	// add a node this must work
 	err = partition.AddNode(node1, nil)
 	assert.NilError(t, err, "add node to partition should not have failed")
@@ -415,7 +415,7 @@ func TestRemoveApp(t *testing.T) {
 		t.Fatalf("node not added to partition as expected (node nil)")
 	}
 
-	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1})
 	ask := newAllocationAsk("alloc-nr", appNotRemoved, appRes)
 	uuid := "alloc-nr-uuid"
 	alloc := objects.NewAllocation(uuid, nodeID1, ask)
@@ -465,14 +465,14 @@ func TestRemoveAppAllocs(t *testing.T) {
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "add application to partition should not have failed")
 	// add a node to allow adding an allocation
-	node1 := newNodeMaxResource(nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1000}))
+	node1 := newNodeMaxResource(nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1000}))
 	// add a node this must work
 	err = partition.AddNode(node1, nil)
 	assert.NilError(t, err, "add node to partition should not have failed")
 	if partition.GetNode(nodeID1) == nil {
 		t.Fatalf("node not added to partition as expected (node nil)")
 	}
-	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1})
 	ask := newAllocationAsk("alloc-nr", appNotRemoved, appRes)
 	alloc := objects.NewAllocation("alloc-nr-uuid", nodeID1, ask)
 	err = partition.addAllocation(alloc)
@@ -643,7 +643,7 @@ func TestUpdateQueues(t *testing.T) {
 	assert.Assert(t, def.IsDraining(), "'root.default' queue should have been marked for removal")
 
 	var resExpect *resources.Resource
-	resMap := map[string]string{"first": "1"}
+	resMap := map[string]string{"vcore": "1"}
 	resExpect, err = resources.NewResourceFromConf(resMap)
 	assert.NilError(t, err, "resource from conf failed")
 
@@ -717,7 +717,7 @@ func TestTryAllocate(t *testing.T) {
 	// the ask with the higher priority is the second one added alloc-2 for app-1
 	app := newApplication(appID1, "default", "root.parent.sub-leaf")
 
-	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
+	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "1"})
 	assert.NilError(t, err, "failed to create resource")
 
 	// add to the partition
@@ -780,7 +780,7 @@ func TestTryAllocateLarge(t *testing.T) {
 	objects.SetReservationDelay(10 * time.Nanosecond)
 	defer objects.SetReservationDelay(2 * time.Second)
 
-	res, err := resources.NewResourceFromConf(map[string]string{"first": "100"})
+	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "100"})
 	assert.NilError(t, err, "failed to create resource")
 
 	app := newApplication(appID1, "default", "root.parent.sub-leaf")
@@ -815,7 +815,7 @@ func TestAllocReserveNewNode(t *testing.T) {
 	node2 := partition.GetNode(nodeID2)
 	node2.SetSchedulable(false)
 
-	res, err := resources.NewResourceFromConf(map[string]string{"first": "8"})
+	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "8"})
 	assert.NilError(t, err, "failed to create resource")
 
 	// only one resource for alloc fits on a node
@@ -870,7 +870,7 @@ func TestTryAllocateReserve(t *testing.T) {
 	// sub-leaf will have an app with 2 requests and thus more unconfirmed resources compared to leaf2
 	// this should filter up in the parent and the 1st allocate should show an app-1 allocation
 	// the ask with the higher priority is the second one added alloc-2 for app-1
-	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
+	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "1"})
 	assert.NilError(t, err, "failed to create resource")
 
 	app := newApplication(appID1, "default", "root.parent.sub-leaf")
@@ -935,7 +935,7 @@ func TestTryAllocateWithReserved(t *testing.T) {
 		t.Fatalf("empty cluster reserved allocate returned allocation: %v", alloc)
 	}
 
-	res, err := resources.NewResourceFromConf(map[string]string{"first": "5"})
+	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "5"})
 	assert.NilError(t, err, "failed to create resource")
 
 	app := newApplication(appID1, "default", "root.parent.sub-leaf")
@@ -988,7 +988,7 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 	objects.SetReservationDelay(10 * time.Nanosecond)
 	defer objects.SetReservationDelay(2 * time.Second)
 
-	res, err := resources.NewResourceFromConf(map[string]string{"first": "4"})
+	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "4"})
 	assert.NilError(t, err, "resource creation failed")
 	app := newApplication(appID1, "default", "root.parent.sub-leaf")
 	err = partition.AddApplication(app)
@@ -1065,7 +1065,7 @@ func TestUpdateRootQueue(t *testing.T) {
 	if partition == nil {
 		t.Fatal("partition create failed")
 	}
-	res, err := resources.NewResourceFromConf(map[string]string{"first": "20"})
+	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "20"})
 	assert.NilError(t, err, "resource creation failed")
 	assert.Assert(t, resources.Equals(res, partition.totalPartitionResource), "partition resource not set as expected")
 	assert.Assert(t, resources.Equals(res, partition.root.GetMaxResource()), "root max resource not set as expected")
@@ -1192,12 +1192,12 @@ func TestUpdateNode(t *testing.T) {
 }
 
 func TestAddTGApplication(t *testing.T) {
-	limit := map[string]string{"first": "1"}
+	limit := map[string]string{"vcore": "1"}
 	partition, err := newLimitedPartition(limit)
 	assert.NilError(t, err, "partition create failed")
 	// add a app with TG that does not fit in the queue
 	var tgRes *resources.Resource
-	tgRes, err = resources.NewResourceFromConf(map[string]string{"first": "10"})
+	tgRes, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
 	app := newApplicationTG(appID1, "default", "root.limited", tgRes)
 	err = partition.AddApplication(app)
@@ -1206,7 +1206,7 @@ func TestAddTGApplication(t *testing.T) {
 	}
 
 	// add a app with TG that does fit in the queue
-	limit = map[string]string{"first": "100"}
+	limit = map[string]string{"vcore": "100"}
 	partition, err = newLimitedPartition(limit)
 	assert.NilError(t, err, "partition create failed")
 	err = partition.AddApplication(app)
@@ -1227,7 +1227,7 @@ func TestAddTGAppDynamic(t *testing.T) {
 	assert.NilError(t, err, "partition create failed")
 	// add a app with TG that does fit in the dynamic queue (no limit)
 	var tgRes *resources.Resource
-	tgRes, err = resources.NewResourceFromConf(map[string]string{"first": "10"})
+	tgRes, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
 	tags := map[string]string{"taskqueue": "unlimited"}
 	app := newApplicationTGTags(appID1, "default", "unknown", tgRes, tags)
@@ -1235,7 +1235,7 @@ func TestAddTGAppDynamic(t *testing.T) {
 	assert.NilError(t, err, "app-1 should have been added to the partition")
 	assert.Equal(t, app.GetQueuePath(), "root.unlimited", "app-1 not placed in expected queue")
 
-	jsonRes := "{\"resources\":{\"first\":{\"value\":10}}}"
+	jsonRes := "{\"resources\":{\"vcore\":{\"value\":10}}}"
 	tags = map[string]string{"taskqueue": "same", objects.AppTagNamespaceResourceQuota: jsonRes}
 	app = newApplicationTGTags(appID2, "default", "unknown", tgRes, tags)
 	err = partition.AddApplication(app)
@@ -1243,7 +1243,7 @@ func TestAddTGAppDynamic(t *testing.T) {
 	assert.Equal(t, partition.getApplication(appID2), app, "partition failed to add app incorrect app returned")
 	assert.Equal(t, app.GetQueuePath(), "root.same", "app-2 not placed in expected queue")
 
-	jsonRes = "{\"resources\":{\"first\":{\"value\":1}}}"
+	jsonRes = "{\"resources\":{\"vcore\":{\"value\":1}}}"
 	tags = map[string]string{"taskqueue": "smaller", objects.AppTagNamespaceResourceQuota: jsonRes}
 	app = newApplicationTGTags(appID3, "default", "unknown", tgRes, tags)
 	err = partition.AddApplication(app)
@@ -1272,11 +1272,11 @@ func TestPlaceholderAndRealAllocationResMismatch(t *testing.T) {
 
 	var tgRes, res *resources.Resource
 	var res1 *resources.Resource
-	tgRes, err = resources.NewResourceFromConf(map[string]string{"first": "10"})
+	tgRes, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "1"})
+	res, err = resources.NewResourceFromConf(map[string]string{"vcore": "1"})
 	assert.NilError(t, err, "failed to create resource")
-	res1, err = resources.NewResourceFromConf(map[string]string{"first": "2"})
+	res1, err = resources.NewResourceFromConf(map[string]string{"vcore": "2"})
 	assert.NilError(t, err, "failed to create resource")
 
 	// add node to allow allocation
@@ -1331,7 +1331,7 @@ func TestPlaceholderAndRealAllocationResMismatch(t *testing.T) {
 	assert.Equal(t, record.Type, si.EventRecord_REQUEST)
 	assert.Equal(t, record.ObjectID, "real-2")
 	assert.Equal(t, record.GroupID, "app-1")
-	assert.Equal(t, record.Message, "Real Pod real-2 allocation [first:2] is not matching with placeholder ph-1 allocation [first:1] in application app-1")
+	assert.Equal(t, record.Message, "Real Pod real-2 allocation [vcore:2] is not matching with placeholder ph-1 allocation [vcore:1] in application app-1")
 	assert.Equal(t, record.Reason, "Resource Allocation Mismatch between real and placeholder")
 }
 
@@ -1344,9 +1344,9 @@ func TestTryPlaceholderAllocate(t *testing.T) {
 	}
 
 	var tgRes, res *resources.Resource
-	tgRes, err = resources.NewResourceFromConf(map[string]string{"first": "10"})
+	tgRes, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "1"})
+	res, err = resources.NewResourceFromConf(map[string]string{"vcore": "1"})
 	assert.NilError(t, err, "failed to create resource")
 
 	// add node to allow allocation
@@ -1463,9 +1463,9 @@ func TestFailReplacePlaceholder(t *testing.T) {
 	plugin := newFakePredicatePlugin(false, map[string]int{nodeID1: -1})
 	plugins.RegisterSchedulerPlugin(plugin)
 	var tgRes, res *resources.Resource
-	tgRes, err = resources.NewResourceFromConf(map[string]string{"first": "10"})
+	tgRes, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "1"})
+	res, err = resources.NewResourceFromConf(map[string]string{"vcore": "1"})
 	assert.NilError(t, err, "failed to create resource")
 
 	// add node to allow allocation
@@ -1572,7 +1572,7 @@ func TestAddAllocationAsk(t *testing.T) {
 	assert.NilError(t, err, "app-1 should have been added to the partition")
 	// a simple ask (no repeat should fail)
 	var res *resources.Resource
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "10"})
+	res, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
 	askKey := "ask-key-1"
 	ask := si.AllocationAsk{
@@ -1603,7 +1603,7 @@ func TestRemoveAllocationAsk(t *testing.T) {
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "app-1 should have been added to the partition")
 	var res *resources.Resource
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "10"})
+	res, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
 	askKey := "ask-key-1"
 	ask := newAllocationAsk(askKey, appID1, res)

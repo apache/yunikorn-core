@@ -258,12 +258,12 @@ func TestRemoveNode(t *testing.T) {
 	assert.Equal(t, 1, partition.nodes.GetNodeCount(), "node list not correct")
 
 	// remove non existing node
-	_ = partition.removeNode("")
+	_, _ = partition.removeNode("")
 	assert.Equal(t, 1, partition.nodes.GetNodeCount(), "nil node should not remove anything")
-	_ = partition.removeNode("does not exist")
+	_, _ = partition.removeNode("does not exist")
 	assert.Equal(t, 1, partition.nodes.GetNodeCount(), "non existing node was removed")
 
-	_ = partition.removeNode("test")
+	_, _ = partition.removeNode("test")
 	assert.Equal(t, 0, partition.nodes.GetNodeCount(), "node was not removed")
 }
 
@@ -288,7 +288,7 @@ func TestRemoveNodeWithAllocations(t *testing.T) {
 	assert.NilError(t, err, "add node to partition should not have failed")
 	// get what was allocated
 	allocated := node.GetAllAllocations()
-	assert.Equal(t, 1, len(allocated), "allocation not added correctly expected 1 got: %v", allocated)
+	assert.Equal(t, 1, len(allocated), "allocation not added correctly")
 
 	// add broken allocations
 	ask = newAllocationAsk("alloc-na", "not-an-app", appRes)
@@ -299,10 +299,198 @@ func TestRemoveNodeWithAllocations(t *testing.T) {
 	node.AddAllocation(alloc)
 
 	// remove the node this cannot fail
-	released := partition.removeNode(nodeID1)
-	assert.Equal(t, 0, partition.GetTotalNodeCount(), "node list was not updated, node was not removed expected 0 got %d", partition.GetTotalNodeCount())
-	assert.Equal(t, 1, len(released), "node did not release correct allocation expected 1 got %d", len(released))
+	released, confirmed := partition.removeNode(nodeID1)
+	assert.Equal(t, 0, partition.GetTotalNodeCount(), "node list was not updated, node was not removed")
+	assert.Equal(t, 1, len(released), "node did not release correct allocation")
+	assert.Equal(t, 0, len(confirmed), "node did not confirm correct allocation")
 	assert.Equal(t, released[0].UUID, allocUUID, "UUID returned by release not the same as on allocation")
+}
+
+// test with a replacement of a placeholder: placeholder and real on the same node that gets removed
+func TestRemoveNodeWithPlaceholders(t *testing.T) {
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+
+	// add a new app
+	app := newApplication(appID1, "default", defQueue)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "add application to partition should not have failed")
+
+	// add a node with allocation: must have the correct app added already
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	node1 := newNodeMaxResource(nodeID1, nodeRes)
+	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	ask := newAllocationAskTG("placeholder", appID1, taskGroup, appRes, true)
+	ph := objects.NewAllocation(phID, nodeID1, ask)
+	allocs := []*objects.Allocation{ph}
+	err = partition.AddNode(node1, allocs)
+	assert.NilError(t, err, "add node1 to partition should not have failed")
+	// get what was allocated
+	allocated := node1.GetAllAllocations()
+	assert.Equal(t, 1, len(allocated), "allocation not added correctly to node1 expected 1 got: %v", allocated)
+	assert.Assert(t, resources.Equals(node1.GetAllocatedResource(), appRes), "allocation not added correctly to node1")
+
+	// fake an ask that is used
+	ask = newAllocationAskAll("real", appID1, taskGroup, appRes, 1, 1, false)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should be added to app")
+	_, err = app.UpdateAskRepeat("real", -1)
+	assert.NilError(t, err, "ask should have been updated without error")
+	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "app should not have pending resources")
+
+	// add real allocation that is replacing the placeholder
+	alloc := objects.NewAllocation(allocID, nodeID1, ask)
+	alloc.Releases = []*objects.Allocation{ph}
+	// double link as if the replacement is ongoing
+	ph.Releases = []*objects.Allocation{alloc}
+	alloc.Result = objects.Replaced
+
+	allocs = app.GetAllAllocations()
+	assert.Equal(t, len(allocs), 1, "expected one allocation for the app (placeholder)")
+
+	// remove the node that has both placeholder and real allocation
+	released, confirmed := partition.removeNode(nodeID1)
+	assert.Equal(t, 0, partition.GetTotalNodeCount(), "node list was not updated, node was not removed")
+	assert.Equal(t, 1, len(released), "node removal did not release correct allocation")
+	assert.Equal(t, 0, len(confirmed), "node removal should not have confirmed allocation")
+	assert.Equal(t, phID, released[0].UUID, "UUID returned by release not the same as the placeholder")
+	allocs = app.GetAllAllocations()
+	assert.Equal(t, 0, len(allocs), "expected no allocations for the app")
+	assert.Assert(t, resources.Equals(app.GetPendingResource(), appRes), "app should have updated pending resources")
+	// check the interim state of the placeholder involved
+	assert.Equal(t, 0, len(ph.Releases), "placeholder should have no releases linked anymore")
+}
+
+// test with a replacement of a placeholder: placeholder on the removed node, real on the 2nd node
+func TestRemoveNodeWithReplacement(t *testing.T) {
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+
+	// add a new app
+	app := newApplication(appID1, "default", defQueue)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "add application to partition should not have failed")
+
+	// add a node with allocation: must have the correct app added already
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	node1 := newNodeMaxResource(nodeID1, nodeRes)
+	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	ask := newAllocationAskAll("placeholder", appID1, taskGroup, appRes, 0, 1, true)
+	ph := objects.NewAllocation(phID, nodeID1, ask)
+	allocs := []*objects.Allocation{ph}
+	err = partition.AddNode(node1, allocs)
+	assert.NilError(t, err, "add node1 to partition should not have failed")
+	// get what was allocated
+	allocated := node1.GetAllAllocations()
+	assert.Equal(t, 1, len(allocated), "allocation not added correctly to node1")
+	assert.Assert(t, resources.Equals(node1.GetAllocatedResource(), appRes), "allocation not added correctly to node1")
+
+	node2 := newNodeMaxResource(nodeID2, nodeRes)
+	err = partition.AddNode(node2, nil)
+	assert.NilError(t, err, "add node2 to partition should not have failed")
+	assert.Equal(t, 2, partition.GetTotalNodeCount(), "node list was not updated as expected")
+
+	// fake an ask that is used
+	ask = newAllocationAskAll("real", appID1, taskGroup, appRes, 1, 1, false)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should be added to app")
+	_, err = app.UpdateAskRepeat("real", -1)
+	assert.NilError(t, err, "ask should have been updated without error")
+	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "app should not have pending resources")
+
+	// add real allocation that is replacing the placeholder on the 2nd node
+	alloc := objects.NewAllocation(allocID, nodeID2, ask)
+	alloc.Releases = []*objects.Allocation{ph}
+	alloc.Result = objects.Replaced
+	node2.AddAllocation(alloc)
+	allocated = node2.GetAllAllocations()
+	assert.Equal(t, 1, len(allocated), "allocation not added correctly to node2")
+	assert.Assert(t, resources.Equals(node2.GetAllocatedResource(), appRes), "allocation not added correctly to node2 (resource count)")
+
+	// double link as if the replacement is ongoing
+	ph.Releases = []*objects.Allocation{alloc}
+
+	allocs = app.GetAllAllocations()
+	assert.Equal(t, len(allocs), 1, "expected one allocation for the app (placeholder)")
+
+	// remove the node with the placeholder
+	released, confirmed := partition.removeNode(nodeID1)
+	assert.Equal(t, 1, partition.GetTotalNodeCount(), "node list was not updated, node was not removed")
+	assert.Equal(t, 1, len(node2.GetAllAllocations()), "remaining node should have allocation")
+	assert.Equal(t, 1, len(released), "node removal did not release correct allocation")
+	assert.Equal(t, 1, len(confirmed), "node removal did not confirm correct allocation")
+	assert.Equal(t, phID, released[0].UUID, "UUID returned by release not the same as the placeholder")
+	assert.Equal(t, allocID, confirmed[0].UUID, "UUID returned by confirmed not the same as the real allocation")
+	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "app should not have pending resources")
+	allocs = app.GetAllAllocations()
+	assert.Equal(t, 1, len(allocs), "expected one allocation for the app (real)")
+	assert.Equal(t, allocID, allocs[0].UUID, "UUID for the app is not the same as the real allocation")
+	assert.Equal(t, objects.Allocated, allocs[0].Result, "allocation state should be allocated")
+	assert.Equal(t, 0, len(allocs[0].Releases), "real allocation should have no releases linked anymore")
+}
+
+// test with a replacement of a placeholder: real on the removed node placeholder on the 2nd node
+func TestRemoveNodeWithReal(t *testing.T) {
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+
+	// add a new app
+	app := newApplication(appID1, "default", defQueue)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "add application to partition should not have failed")
+
+	// add a node with allocation: must have the correct app added already
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	node1 := newNodeMaxResource(nodeID1, nodeRes)
+	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	ask := newAllocationAskAll("placeholder", appID1, taskGroup, appRes, 0, 1, true)
+	ph := objects.NewAllocation(phID, nodeID1, ask)
+	allocs := []*objects.Allocation{ph}
+	err = partition.AddNode(node1, allocs)
+	assert.NilError(t, err, "add node1 to partition should not have failed")
+	// get what was allocated
+	allocated := node1.GetAllAllocations()
+	assert.Equal(t, 1, len(allocated), "allocation not added correctly to node1")
+	assert.Assert(t, resources.Equals(node1.GetAllocatedResource(), appRes), "allocation not added correctly to node1")
+
+	node2 := newNodeMaxResource(nodeID2, nodeRes)
+	err = partition.AddNode(node2, nil)
+	assert.NilError(t, err, "add node2 to partition should not have failed")
+	assert.Equal(t, 2, partition.GetTotalNodeCount(), "node list was not updated as expected")
+
+	// fake an ask that is used
+	ask = newAllocationAskAll("real", appID1, taskGroup, appRes, 1, 1, false)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should be added to app")
+	_, err = app.UpdateAskRepeat("real", -1)
+	assert.NilError(t, err, "ask should have been updated without error")
+	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "app should not have pending resources")
+
+	// add real allocation that is replacing the placeholder on the 2nd node
+	alloc := objects.NewAllocation(allocID, nodeID2, ask)
+	alloc.Releases = []*objects.Allocation{ph}
+	alloc.Result = objects.Replaced
+	node2.AddAllocation(alloc)
+	allocated = node2.GetAllAllocations()
+	assert.Equal(t, 1, len(allocated), "allocation not added correctly to node2")
+	assert.Assert(t, resources.Equals(node2.GetAllocatedResource(), appRes), "allocation not added correctly to node2 (resource count)")
+
+	// double link as if the replacement is ongoing
+	ph.Releases = []*objects.Allocation{alloc}
+
+	allocs = app.GetAllAllocations()
+	assert.Equal(t, len(allocs), 1, "expected one allocation for the app (placeholder)")
+
+	// remove the node with the real allocation
+	released, confirmed := partition.removeNode(nodeID2)
+	assert.Equal(t, 1, partition.GetTotalNodeCount(), "node list was not updated, node was not removed")
+	assert.Equal(t, 0, len(released), "node removal did not release correct allocation")
+	assert.Equal(t, 0, len(confirmed), "node removal did not confirm correct allocation")
+	assert.Assert(t, resources.Equals(app.GetPendingResource(), appRes), "app should have updated pending resources")
+	allocs = app.GetAllAllocations()
+	assert.Equal(t, 1, len(allocs), "expected one allocation for the app (placeholder")
+	assert.Equal(t, phID, allocs[0].UUID, "UUID for the app is not the same as the real allocation")
+	assert.Equal(t, 0, len(ph.Releases), "no inflight replacements linked")
 }
 
 func TestAddApp(t *testing.T) {
@@ -1292,7 +1480,6 @@ func TestPlaceholderAndRealAllocationResMismatch(t *testing.T) {
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "app-1 should have been added to the partition")
 	// add an ask for a placeholder and allocate
-	const taskGroup = "tg-1"
 	ask := newAllocationAskTG(phID, appID1, taskGroup, res, true)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "failed to add placeholder ask ph-1 to app")
@@ -1362,7 +1549,6 @@ func TestTryPlaceholderAllocate(t *testing.T) {
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "app-1 should have been added to the partition")
 	// add an ask for a placeholder and allocate
-	const taskGroup = "tg-1"
 	ask := newAllocationAskTG(phID, appID1, taskGroup, res, true)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "failed to add placeholder ask ph-1 to app")

@@ -480,7 +480,7 @@ func TestSortApplications(t *testing.T) {
 		t.Errorf("sorted application is missing expected app: %v", sortedApp)
 	}
 	// set 0 repeat
-	_, err = app.updateAskRepeat("alloc-1", -1)
+	_, err = app.UpdateAskRepeat("alloc-1", -1)
 	if err != nil || len(leaf.sortApplications(true)) != 0 {
 		t.Errorf("app with ask but 0 pending resources should not be in sorted apps: %v (err = %v)", app, err)
 	}

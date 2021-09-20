@@ -103,7 +103,7 @@ func TestAddUnlimitedNode(t *testing.T) {
 	assert.Assert(t, len(handler.rejectedNodes) == 0, "There should be no rejected nodes")
 	assert.Equal(t, handler.acceptedNodes[0].NodeID, unlimitedNode.NodeID, "The accepted node is not the unlimited one")
 
-	// 3. there is already an unlimited node registeredvar newNodes []*si.NewNodeInfo
+	// 3. there is already an unlimited node registered
 	unlimitedNode2 := &si.NewNodeInfo{
 		NodeID:     "unlimited2",
 		Attributes: map[string]string{"yunikorn.apache.org/nodeType": "unlimited", "si/node-partition": "default"},
@@ -128,7 +128,7 @@ func TestAddUnlimitedNode(t *testing.T) {
 	newNodes2 = append(newNodes2, unlimitedNode, regularNode)
 	request2.NewSchedulableNodes = newNodes2
 	handler.reset()
-	partition.removeNode(unlimitedNode.NodeID)
+	_, _ = partition.removeNode(unlimitedNode.NodeID)
 	context.addNodes(request2)
 	assert.Assert(t, handler.eventHandled, "Event should have been handled")
 	assert.Assert(t, len(handler.acceptedNodes) == 1, "There should be only one accepted node")

@@ -19,7 +19,6 @@
 package scheduler
 
 import (
-	"strconv"
 	"testing"
 
 	"gotest.tools/assert"
@@ -41,6 +40,7 @@ const (
 	rmID      = "testRM"
 	taskGroup = "tg-1"
 	phID      = "ph-1"
+	allocID   = "alloc-1"
 )
 
 func newBasePartition() (*PartitionContext, error) {
@@ -227,27 +227,6 @@ func newNodeWithResources(nodeID string, max, occupied *resources.Resource) *obj
 
 func newNodeMaxResource(nodeID string, max *resources.Resource) *objects.Node {
 	return newNodeWithResources(nodeID, max, nil)
-}
-
-// Simple node with just an ID in the node.
-// That is all we need for iteration
-func newNode(nodeID string) *objects.Node {
-	proto := &si.NewNodeInfo{
-		NodeID:     nodeID,
-		Attributes: nil,
-	}
-	return objects.NewNode(proto)
-}
-
-// A list of nodes that can be iterated over.
-func newSchedNodeList(number int) []*objects.Node {
-	list := make([]*objects.Node, number)
-	for i := 0; i < number; i++ {
-		num := strconv.Itoa(i)
-		node := newNode("node-" + num)
-		list[i] = node
-	}
-	return list
 }
 
 // partition with an expected basic queue hierarchy

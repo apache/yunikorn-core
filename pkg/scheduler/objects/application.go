@@ -549,7 +549,7 @@ func (sa *Application) RecoverAllocationAsk(ask *AllocationAsk) {
 	}
 }
 
-func (sa *Application) updateAskRepeat(allocKey string, delta int32) (*resources.Resource, error) {
+func (sa *Application) UpdateAskRepeat(allocKey string, delta int32) (*resources.Resource, error) {
 	sa.Lock()
 	defer sa.Unlock()
 	if ask := sa.requests[allocKey]; ask != nil {

@@ -562,7 +562,8 @@ func (pc *PartitionContext) AddNode(node *objects.Node, existingAllocations []*o
 	if len(existingAllocations) > 0 {
 		for current, alloc := range existingAllocations {
 			if err := pc.addAllocation(alloc); err != nil {
-				released := pc.removeNode(node.NodeID)
+				// not expecting any inflight replacements on node recovery
+				released, _ := pc.removeNode(node.NodeID)
 				log.Logger().Info("Failed to add existing allocations, changes reversed",
 					zap.String("nodeID", node.NodeID),
 					zap.Int("existingAllocations", len(existingAllocations)),
@@ -646,19 +647,22 @@ func (pc *PartitionContext) removeNodeFromList(nodeID string) *objects.Node {
 	return node
 }
 
-// Remove a node from the partition. It returns all removed allocations.
+// Remove a node from the partition. It returns all removed and confirmed allocations.
+// The removed allocations are all linked to the current node.
+// The confirmed allocations are real allocations that are linked to placeholders on the current node and are linked to
+// other nodes.
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
-func (pc *PartitionContext) removeNode(nodeID string) []*objects.Allocation {
+func (pc *PartitionContext) removeNode(nodeID string) ([]*objects.Allocation, []*objects.Allocation) {
 	log.Logger().Info("removing node from partition",
 		zap.String("partition", pc.Name),
 		zap.String("nodeID", nodeID))
 
 	node := pc.removeNodeFromList(nodeID)
 	if node == nil {
-		return nil
+		return nil, nil
 	}
 	// found the node cleanup the allocations linked to the node
-	released := pc.removeNodeAllocations(node)
+	released, confirmed := pc.removeNodeAllocations(node)
 
 	// unreserve all the apps that were reserved on the node
 	reservedKeys, releasedAsks := node.UnReserveApps()
@@ -666,15 +670,16 @@ func (pc *PartitionContext) removeNode(nodeID string) []*objects.Allocation {
 	for i, appID := range reservedKeys {
 		pc.unReserveCount(appID, releasedAsks[i])
 	}
-	return released
+	return released, confirmed
 }
 
 // Remove all allocations that are assigned to a node as part of the node removal. This is not part of the node object
 // as updating the applications and queues is the only goal. Applications and queues are not accessible from the node.
-// The removed allocations are returned.
+// The removed and confirmed allocations are returned.
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
-func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) []*objects.Allocation {
+func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*objects.Allocation, []*objects.Allocation) {
 	released := make([]*objects.Allocation, 0)
+	confirmed := make([]*objects.Allocation, 0)
 	// walk over all allocations still registered for this node
 	for _, alloc := range node.GetAllAllocations() {
 		allocID := alloc.UUID
@@ -687,6 +692,52 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) []*objects
 				zap.String("appID", alloc.ApplicationID),
 				zap.String("nodeID", node.NodeID))
 			continue
+		}
+		// check for an inflight replacement.
+		if len(alloc.Releases) != 0 {
+			release := alloc.Releases[0]
+			// allocation to update the ask on: this needs to happen on the real alloc never the placeholder
+			askAlloc := alloc
+			// placeholder gets handled differently from normal
+			if alloc.IsPlaceholder() {
+				// Check if the real allocation is made on the same node if not we should trigger a confirmation of
+				// the replacement. Trigger the replacement only if it is NOT on the same node.
+				// If it is on the same node we just keep going as the real allocation will be unlinked as a result of
+				// the removal of this placeholder. The ask update will trigger rescheduling later for the real alloc.
+				if alloc.NodeID != release.NodeID {
+					// ignore the return as that is the same as alloc, the alloc is gone after this call
+					_ = app.ReplaceAllocation(allocID)
+					// track what we confirm on the other node to confirm it in the shim and get is bound
+					confirmed = append(confirmed, release)
+					// the allocation is removed so add it to the list that we return
+					released = append(released, alloc)
+					log.Logger().Info("allocation removed from node and replacement confirmed",
+						zap.String("nodeID", node.NodeID),
+						zap.String("allocationId", allocID),
+						zap.String("replacement nodeID", release.NodeID),
+						zap.String("replacement allocationId", release.UUID))
+					continue
+				}
+				askAlloc = release
+			}
+			// unlink the placeholder and allocation
+			release.Releases = nil
+			alloc.Releases = nil
+			// update the repeat on the real alloc to get it re-scheduled
+			_, err := app.UpdateAskRepeat(askAlloc.Ask.AllocationKey, 1)
+			if err == nil {
+				log.Logger().Info("inflight placeholder replacement reversed due to node removal",
+					zap.String("appID", askAlloc.ApplicationID),
+					zap.String("allocationKey", askAlloc.Ask.AllocationKey),
+					zap.String("nodeID", node.NodeID),
+					zap.String("replacement allocationId", askAlloc.UUID))
+			} else {
+				log.Logger().Error("node removal: repeat update failure for inflight replacement",
+					zap.String("appID", askAlloc.ApplicationID),
+					zap.String("allocationKey", askAlloc.Ask.AllocationKey),
+					zap.String("nodeID", node.NodeID),
+					zap.Error(err))
+			}
 		}
 		// check allocations on the app
 		if app.RemoveAllocation(allocID) == nil {
@@ -708,9 +759,9 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) []*objects
 			zap.String("nodeID", node.NodeID),
 			zap.String("allocationId", allocID))
 	}
-	// track the number of allocations
-	pc.updateAllocationCount(-len(released))
-	return released
+	// track the number of allocations: decrement the released allocation AND increment with the confirmed
+	pc.updateAllocationCount(len(confirmed) - len(released))
+	return released, confirmed
 }
 
 func (pc *PartitionContext) calculateOutstandingRequests() []*objects.AllocationAsk {

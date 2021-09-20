@@ -577,11 +577,14 @@ func (cc *ClusterContext) updateNodes(request *si.UpdateRequest) {
 		case si.UpdateNodeInfo_DECOMISSION:
 			// set the state to not schedulable then tell the partition to clean up
 			node.SetSchedulable(false)
-			released := partition.removeNode(node.NodeID)
+			released, confirmed := partition.removeNode(node.NodeID)
 			// notify the shim allocations have been released from node
 			if len(released) != 0 {
 				cc.notifyRMAllocationReleased(partition.RmID, released, si.TerminationType_STOPPED_BY_RM,
 					fmt.Sprintf("Node %s Removed", node.NodeID))
+			}
+			for _, confirm := range confirmed {
+				cc.notifyRMNewAllocation(partition.RmID, confirm)
 			}
 		}
 	}

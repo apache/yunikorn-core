@@ -86,20 +86,20 @@ func (p fairnessNodeSortingPolicy) ScoreNode(node *Node) float64 {
 	return absResourceUsage(node, &p.resourceWeights)
 }
 
-func (p binPackingNodeSortingPolicy) ResourceWeights() map[string]float64 {
-	weights := make(map[string]float64, len(p.resourceWeights))
-	for k, v := range p.resourceWeights {
+func cloneWeights(source map[string]float64) map[string]float64 {
+	weights := make(map[string]float64, len(source))
+	for k, v := range source {
 		weights[k] = v
 	}
 	return weights
 }
 
+func (p binPackingNodeSortingPolicy) ResourceWeights() map[string]float64 {
+	return cloneWeights(p.resourceWeights)
+}
+
 func (p fairnessNodeSortingPolicy) ResourceWeights() map[string]float64 {
-	weights := make(map[string]float64, len(p.resourceWeights))
-	for k, v := range p.resourceWeights {
-		weights[k] = v
-	}
-	return weights
+	return cloneWeights(p.resourceWeights)
 }
 
 // Return a default set of resource weights if not otherwise specified.

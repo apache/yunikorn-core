@@ -1331,7 +1331,7 @@ func (pc *PartitionContext) GetStateTime() time.Time {
 	return pc.stateTime
 }
 
-func (pc *PartitionContext) GetNodeSortingPolicy() policies.SortingPolicy {
+func (pc *PartitionContext) GetNodeSortingPolicyType() policies.SortingPolicy {
 	pc.RLock()
 	defer pc.RUnlock()
 	policy := pc.nodes.GetNodeSortingPolicy()
@@ -1339,6 +1339,16 @@ func (pc *PartitionContext) GetNodeSortingPolicy() policies.SortingPolicy {
 		return policies.FairnessPolicy
 	}
 	return policy.PolicyType()
+}
+
+func (pc *PartitionContext) GetNodeSortingResourceWeights() map[string]float64 {
+	pc.RLock()
+	defer pc.RUnlock()
+	policy := pc.nodes.GetNodeSortingPolicy()
+	if policy == nil {
+		return make(map[string]float64)
+	}
+	return policy.ResourceWeights()
 }
 
 func (pc *PartitionContext) moveTerminatedApp(appID string) {

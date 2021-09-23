@@ -30,6 +30,7 @@ import (
 type NodeSortingPolicy interface {
 	PolicyType() policies.SortingPolicy
 	ScoreNode(node *Node) float64
+	ResourceWeights() map[string]float64
 }
 
 type binPackingNodeSortingPolicy struct {
@@ -83,6 +84,22 @@ func (p binPackingNodeSortingPolicy) ScoreNode(node *Node) float64 {
 func (p fairnessNodeSortingPolicy) ScoreNode(node *Node) float64 {
 	// choose least loaded node first (score == percentage used)
 	return absResourceUsage(node, &p.resourceWeights)
+}
+
+func cloneWeights(source map[string]float64) map[string]float64 {
+	weights := make(map[string]float64, len(source))
+	for k, v := range source {
+		weights[k] = v
+	}
+	return weights
+}
+
+func (p binPackingNodeSortingPolicy) ResourceWeights() map[string]float64 {
+	return cloneWeights(p.resourceWeights)
+}
+
+func (p fairnessNodeSortingPolicy) ResourceWeights() map[string]float64 {
+	return cloneWeights(p.resourceWeights)
 }
 
 // Return a default set of resource weights if not otherwise specified.

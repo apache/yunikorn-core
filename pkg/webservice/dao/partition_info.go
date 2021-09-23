@@ -28,7 +28,7 @@ type PartitionInfo struct {
 	ClusterID               string            `json:"clusterId"`
 	Name                    string            `json:"name"`
 	Capacity                PartitionCapacity `json:"capacity"`
-	NodeSortingPolicy       string            `json:"nodeSortingPolicy"`
+	NodeSortingPolicy       NodeSortingPolicy `json:"nodeSortingPolicy"`
 	Applications            map[string]int    `json:"applications"`
 	State                   string            `json:"state"`
 	LastStateTransitionTime string            `json:"lastStateTransitionTime"`
@@ -42,4 +42,9 @@ type PartitionCapacity struct {
 type NodeInfo struct {
 	NodeID     string `json:"nodeId"`
 	Capability string `json:"capability"`
+}
+
+type NodeSortingPolicy struct {
+	Type            string             `json:"type"`
+	ResourceWeights map[string]float64 `json:"resourceWeights"`
 }

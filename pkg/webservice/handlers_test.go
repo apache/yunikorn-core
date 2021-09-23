@@ -808,7 +808,9 @@ func TestPartitions(t *testing.T) {
 	assert.Assert(t, cs["default"] != nil)
 	assert.Equal(t, cs["default"].ClusterID, "rm-123")
 	assert.Equal(t, cs["default"].Name, "default")
-	assert.Equal(t, cs["default"].NodeSortingPolicy, "fair")
+	assert.Equal(t, cs["default"].NodeSortingPolicy.Type, "fair")
+	assert.Equal(t, cs["default"].NodeSortingPolicy.ResourceWeights["vcore"], 1.0)
+	assert.Equal(t, cs["default"].NodeSortingPolicy.ResourceWeights["memory"], 1.0)
 	assert.Equal(t, cs["default"].Applications["total"], 8)
 	assert.Equal(t, cs["default"].Applications[objects.New.String()], 1)
 	assert.Equal(t, cs["default"].Applications[objects.Accepted.String()], 1)
@@ -823,7 +825,9 @@ func TestPartitions(t *testing.T) {
 	assert.Assert(t, cs["gpu"] != nil)
 	assert.Equal(t, cs["gpu"].ClusterID, "rm-123")
 	assert.Equal(t, cs["gpu"].Name, "gpu")
-	assert.Equal(t, cs["gpu"].NodeSortingPolicy, "fair")
+	assert.Equal(t, cs["default"].NodeSortingPolicy.Type, "fair")
+	assert.Equal(t, cs["default"].NodeSortingPolicy.ResourceWeights["vcore"], 1.0)
+	assert.Equal(t, cs["default"].NodeSortingPolicy.ResourceWeights["memory"], 1.0)
 	assert.Equal(t, cs["gpu"].Applications["total"], 0)
 }
 

@@ -28,16 +28,28 @@ import (
 )
 
 const (
-	cleanerInterval = 10000 // sleep between queue removal checks
+	DefaultCleanRootInterval        = 10000 * time.Millisecond // sleep between queue removal checks
+	DefaultCleanExpiredAppsInterval = 24 * time.Hour           // sleep between apps removal checks
 )
 
-var appRemovalInterval = 24 * time.Hour
-
 type partitionManager struct {
-	pc       *PartitionContext
-	cc       *ClusterContext
-	stop     bool
-	interval time.Duration
+	pc                       *PartitionContext
+	cc                       *ClusterContext
+	stopCleanRoot            chan struct{}
+	stopCleanExpiredApps     chan struct{}
+	cleanRootInterval        time.Duration
+	cleanExpiredAppsInterval time.Duration
+}
+
+func newPartitionManager(pc *PartitionContext, cc *ClusterContext) *partitionManager {
+	return &partitionManager{
+		pc:                       pc,
+		cc:                       cc,
+		stopCleanRoot:            make(chan struct{}),
+		stopCleanExpiredApps:     make(chan struct{}),
+		cleanRootInterval:        DefaultCleanRootInterval,
+		cleanExpiredAppsInterval: DefaultCleanExpiredAppsInterval,
+	}
 }
 
 // Run the manager for the partition.
@@ -46,38 +58,46 @@ type partitionManager struct {
 // - remove empty unmanaged queues
 // - remove completed applications from the partition
 // When the manager exits the partition is removed from the system and must be cleaned up
-func (manager partitionManager) Run() {
-	if manager.interval == 0 {
-		manager.interval = cleanerInterval * time.Millisecond
-	}
-
+func (manager *partitionManager) Run() {
 	log.Logger().Info("starting partition manager",
 		zap.String("partition", manager.pc.Name),
-		zap.String("interval", manager.interval.String()))
-	go manager.cleanupExpiredApps()
+		zap.String("cleanRootInterval", manager.cleanRootInterval.String()))
+	go manager.cleanExpiredApps()
+	go manager.cleanRoot()
+}
+
+func (manager *partitionManager) cleanRoot() {
 	// exit only when the partition this manager belongs to exits
 	for {
-		time.Sleep(manager.interval)
-		runStart := time.Now()
-		manager.cleanQueues(manager.pc.root)
-		if manager.stop {
-			break
+		cleanRootInterval := manager.cleanRootInterval
+		if cleanRootInterval <= 0 {
+			cleanRootInterval = DefaultCleanRootInterval
 		}
-		log.Logger().Debug("time consumed for queue cleaner",
-			zap.String("duration", time.Since(runStart).String()))
+		select {
+		case <-manager.stopCleanRoot:
+			return
+		case <-time.After(cleanRootInterval):
+			runStart := time.Now()
+			manager.cleanQueues(manager.pc.root)
+			log.Logger().Debug("time consumed for queue cleaner",
+				zap.String("duration", time.Since(runStart).String()))
+		}
 	}
-	manager.remove()
 }
 
 // Set the flag that the will allow the manager to exit.
 // No locking needed as there is just one place where this is called which is already locked.
-func (manager partitionManager) Stop() {
-	manager.stop = true
+func (manager *partitionManager) Stop() {
+	go func() {
+		manager.stopCleanExpiredApps <- struct{}{}
+		manager.stopCleanRoot <- struct{}{}
+		manager.remove()
+	}()
 }
 
 // Remove drained managed and empty unmanaged queues. Perform the action recursively.
 // Only called internally and recursive, no locking
-func (manager partitionManager) cleanQueues(queue *objects.Queue) {
+func (manager *partitionManager) cleanQueues(queue *objects.Queue) {
 	if queue == nil {
 		return
 	}
@@ -117,7 +137,7 @@ func (manager partitionManager) cleanQueues(queue *objects.Queue) {
 // - nodes
 // last action is to remove the cluster links
 //nolint:errcheck
-func (manager partitionManager) remove() {
+func (manager *partitionManager) remove() {
 	log.Logger().Info("marking all queues for removal",
 		zap.String("partitionName", manager.pc.Name))
 	// mark all queues for removal
@@ -146,12 +166,17 @@ func (manager partitionManager) remove() {
 	manager.cc.removePartition(manager.pc.Name)
 }
 
-func (manager partitionManager) cleanupExpiredApps() {
+func (manager *partitionManager) cleanExpiredApps() {
 	for {
-		if manager.stop {
-			break
+		cleanExpiredAppsInterval := manager.cleanExpiredAppsInterval
+		if cleanExpiredAppsInterval <= 0 {
+			cleanExpiredAppsInterval = DefaultCleanExpiredAppsInterval
 		}
-		manager.pc.cleanupExpiredApps()
-		time.Sleep(appRemovalInterval)
+		select {
+		case <-manager.stopCleanExpiredApps:
+			return
+		case <-time.After(cleanExpiredAppsInterval):
+			manager.pc.cleanupExpiredApps()
+		}
 	}
 }

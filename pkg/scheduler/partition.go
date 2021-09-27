@@ -92,10 +92,7 @@ func newPartitionContext(conf configs.PartitionConfig, rmID string, cc *ClusterC
 		reservedApps:          make(map[string]int),
 		nodes:                 objects.NewNodeCollection(conf.Name),
 	}
-	pc.partitionManager = &partitionManager{
-		pc: pc,
-		cc: cc,
-	}
+	pc.partitionManager = newPartitionManager(pc, cc)
 	if err := pc.initialPartitionFromConfig(conf); err != nil {
 		return nil, err
 	}

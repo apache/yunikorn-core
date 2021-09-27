@@ -655,7 +655,13 @@ func (sq *Queue) addChildQueue(child *Queue) error {
 		}
 		// managed (configured) leaf queue can't use template
 	} else {
-		child.template = sq.template
+		// don't override the template of non-leaf queue
+		if child.template == nil {
+			child.template = sq.template
+			log.Logger().Debug("inheriting child template for queue",
+				zap.String("child queue", child.QueuePath),
+				zap.String("parent queue", sq.QueuePath))
+		}
 	}
 	return nil
 }

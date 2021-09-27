@@ -19,7 +19,6 @@
 package scheduler
 
 import (
-	"strconv"
 	"testing"
 
 	"gotest.tools/assert"
@@ -41,6 +40,7 @@ const (
 	rmID      = "testRM"
 	taskGroup = "tg-1"
 	phID      = "ph-1"
+	allocID   = "alloc-1"
 )
 
 func newBasePartition() (*PartitionContext, error) {
@@ -229,27 +229,6 @@ func newNodeMaxResource(nodeID string, max *resources.Resource) *objects.Node {
 	return newNodeWithResources(nodeID, max, nil)
 }
 
-// Simple node with just an ID in the node.
-// That is all we need for iteration
-func newNode(nodeID string) *objects.Node {
-	proto := &si.NewNodeInfo{
-		NodeID:     nodeID,
-		Attributes: nil,
-	}
-	return objects.NewNode(proto)
-}
-
-// A list of nodes that can be iterated over.
-func newSchedNodeList(number int) []*objects.Node {
-	list := make([]*objects.Node, number)
-	for i := 0; i < number; i++ {
-		num := strconv.Itoa(i)
-		node := newNode("node-" + num)
-		list[i] = node
-	}
-	return list
-}
-
 // partition with an expected basic queue hierarchy
 // root -> parent -> leaf1
 //      -> leaf2
@@ -258,7 +237,7 @@ func createQueuesNodes(t *testing.T) *PartitionContext {
 	partition, err := newConfiguredPartition()
 	assert.NilError(t, err, "test partition create failed with error")
 	var res *resources.Resource
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "10"})
+	res, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
 	assert.NilError(t, err, "failed to create basic resource")
 	err = partition.AddNode(newNodeMaxResource("node-1", res), nil)
 	assert.NilError(t, err, "test node1 add failed unexpected")

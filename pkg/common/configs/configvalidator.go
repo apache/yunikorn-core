@@ -259,8 +259,17 @@ func checkNodeSortingPolicy(partition *PartitionConfig) error {
 
 	// Defined polices.
 	_, err := policies.SortingPolicyFromString(policy.Type)
+	if err != nil {
+		return err
+	}
 
-	return err
+	for k, v := range policy.ResourceWeights {
+		if v < float64(0) {
+			return fmt.Errorf("negative resource weight for %s is not allowed", k)
+		}
+	}
+
+	return nil
 }
 
 // Check the queue names configured for compliance and uniqueness
@@ -372,16 +381,16 @@ func Validate(newConfig *SchedulerConfig) error {
 		return fmt.Errorf("scheduler config is not set")
 	}
 
-	// check for the default partition, if the partion is unnamed set it to default
-	var defaultPartition bool
+	// check uniqueness
+	partitionMap := make(map[string]bool)
 	for i, partition := range newConfig.Partitions {
 		if partition.Name == "" || strings.ToLower(partition.Name) == DefaultPartition {
-			if defaultPartition {
-				return fmt.Errorf("multiple default partitions defined")
-			}
-			defaultPartition = true
 			partition.Name = DefaultPartition
 		}
+		if partitionMap[strings.ToLower(partition.Name)] {
+			return fmt.Errorf("duplicate partition name found with name %s", partition.Name)
+		}
+		partitionMap[strings.ToLower(partition.Name)] = true
 		// check the queue structure
 		err := checkQueuesStructure(&partition)
 		if err != nil {

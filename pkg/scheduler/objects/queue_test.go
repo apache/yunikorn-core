@@ -480,7 +480,7 @@ func TestSortApplications(t *testing.T) {
 		t.Errorf("sorted application is missing expected app: %v", sortedApp)
 	}
 	// set 0 repeat
-	_, err = app.updateAskRepeat("alloc-1", -1)
+	_, err = app.UpdateAskRepeat("alloc-1", -1)
 	if err != nil || len(leaf.sortApplications(true)) != 0 {
 		t.Errorf("app with ask but 0 pending resources should not be in sorted apps: %v (err = %v)", app, err)
 	}
@@ -1597,6 +1597,31 @@ func TestNewDynamicQueue(t *testing.T) {
 	assert.Equal(t, len(childNonLeaf.properties), 0)
 	assert.Assert(t, childNonLeaf.guaranteedResource == nil)
 	assert.Assert(t, childNonLeaf.maxResource == nil)
+}
+
+func TestTemplateIsNotOverrideByParent(t *testing.T) {
+	parent, err := createManagedQueueWithProps(nil, "parent", true, nil, nil)
+	assert.NilError(t, err)
+	parent.template, err = template.FromConf(&configs.ChildTemplate{
+		Properties: map[string]string{
+			"k": "v",
+		},
+	})
+	assert.NilError(t, err)
+
+	leaf, err := createManagedQueueWithProps(nil, "leaf", false, nil, nil)
+	assert.NilError(t, err)
+	leaf.template, err = template.FromConf(&configs.ChildTemplate{
+		Properties: map[string]string{
+			"k0": "v0",
+		},
+	})
+	assert.NilError(t, err)
+
+	err = parent.addChildQueue(leaf)
+	assert.NilError(t, err)
+
+	assert.Assert(t, !reflect.DeepEqual(leaf.template, parent.template))
 }
 
 func TestGetHeadRoom(t *testing.T) {

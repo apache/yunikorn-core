@@ -795,30 +795,40 @@ func TestPartitions(t *testing.T) {
 	req, err = http.NewRequest("GET", "/ws/v1/partitions", strings.NewReader(""))
 	assert.NilError(t, err, "App Handler request failed")
 	resp := &MockResponseWriter{}
-	var partitionInfo []dao.PartitionInfo
+	var partitionInfo []*dao.PartitionInfo
 	getPartitions(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &partitionInfo)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
-	for _, part := range partitionInfo {
-		if part.Name == partitionName {
-			assert.Equal(t, part.Name, "[rm-123]default")
-			assert.Equal(t, part.NodeSortingPolicy, "fair")
-			assert.Equal(t, part.Applications["total"], 8)
-			assert.Equal(t, part.Applications[objects.New.String()], 1)
-			assert.Equal(t, part.Applications[objects.Accepted.String()], 1)
-			assert.Equal(t, part.Applications[objects.Starting.String()], 1)
-			assert.Equal(t, part.Applications[objects.Running.String()], 1)
-			assert.Equal(t, part.Applications[objects.Completing.String()], 1)
-			assert.Equal(t, part.Applications[objects.Rejected.String()], 1)
-			assert.Equal(t, part.Applications[objects.Completed.String()], 1)
-			assert.Equal(t, part.Applications[objects.Failed.String()], 1)
-			assert.Equal(t, part.State, "Active")
-		} else {
-			assert.Equal(t, part.Name, "[rm-123]gpu")
-			assert.Equal(t, part.NodeSortingPolicy, "fair")
-			assert.Equal(t, part.Applications["total"], 0)
-		}
+
+	cs := make(map[string]*dao.PartitionInfo, 2)
+	for _, d := range partitionInfo {
+		cs[d.Name] = d
 	}
+
+	assert.Assert(t, cs["default"] != nil)
+	assert.Equal(t, cs["default"].ClusterID, "rm-123")
+	assert.Equal(t, cs["default"].Name, "default")
+	assert.Equal(t, cs["default"].NodeSortingPolicy.Type, "fair")
+	assert.Equal(t, cs["default"].NodeSortingPolicy.ResourceWeights["vcore"], 1.0)
+	assert.Equal(t, cs["default"].NodeSortingPolicy.ResourceWeights["memory"], 1.0)
+	assert.Equal(t, cs["default"].Applications["total"], 8)
+	assert.Equal(t, cs["default"].Applications[objects.New.String()], 1)
+	assert.Equal(t, cs["default"].Applications[objects.Accepted.String()], 1)
+	assert.Equal(t, cs["default"].Applications[objects.Starting.String()], 1)
+	assert.Equal(t, cs["default"].Applications[objects.Running.String()], 1)
+	assert.Equal(t, cs["default"].Applications[objects.Completing.String()], 1)
+	assert.Equal(t, cs["default"].Applications[objects.Rejected.String()], 1)
+	assert.Equal(t, cs["default"].Applications[objects.Completed.String()], 1)
+	assert.Equal(t, cs["default"].Applications[objects.Failed.String()], 1)
+	assert.Equal(t, cs["default"].State, "Active")
+
+	assert.Assert(t, cs["gpu"] != nil)
+	assert.Equal(t, cs["gpu"].ClusterID, "rm-123")
+	assert.Equal(t, cs["gpu"].Name, "gpu")
+	assert.Equal(t, cs["default"].NodeSortingPolicy.Type, "fair")
+	assert.Equal(t, cs["default"].NodeSortingPolicy.ResourceWeights["vcore"], 1.0)
+	assert.Equal(t, cs["default"].NodeSortingPolicy.ResourceWeights["memory"], 1.0)
+	assert.Equal(t, cs["gpu"].Applications["total"], 0)
 }
 
 func TestCreateClusterConfig(t *testing.T) {
@@ -973,6 +983,73 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getPartitionQueues(resp, req)
 	assertPartitionExists(t, resp)
+}
+
+func TestGetClusterInfo(t *testing.T) {
+	configs.MockSchedulerConfigByData([]byte(configTwoLevelQueues))
+	var err error
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	assert.NilError(t, err)
+	assert.Equal(t, 2, len(schedulerContext.GetPartitionMapClone()))
+
+	resp := &MockResponseWriter{}
+	getClusterInfo(resp, nil)
+	var data []*dao.ClusterDAOInfo
+	err = json.Unmarshal(resp.outputBytes, &data)
+	assert.NilError(t, err)
+	assert.Equal(t, 2, len(data))
+
+	cs := make(map[string]*dao.ClusterDAOInfo, 2)
+	for _, d := range data {
+		cs[d.PartitionName] = d
+	}
+
+	assert.Assert(t, cs["default"] != nil)
+	assert.Assert(t, cs["gpu"] != nil)
+}
+
+func TestGetClusterUtilization(t *testing.T) {
+	configs.MockSchedulerConfigByData([]byte(configTwoLevelQueues))
+	var err error
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	assert.NilError(t, err)
+	assert.Equal(t, 2, len(schedulerContext.GetPartitionMapClone()))
+
+	resp := &MockResponseWriter{}
+	getClusterUtilization(resp, nil)
+	var data []*dao.ClustersUtilDAOInfo
+	err = json.Unmarshal(resp.outputBytes, &data)
+	assert.NilError(t, err)
+
+	cs := make(map[string]*dao.ClustersUtilDAOInfo, 2)
+	for _, d := range data {
+		cs[d.PartitionName] = d
+	}
+
+	assert.Assert(t, cs["default"] != nil)
+	assert.Assert(t, cs["gpu"] != nil)
+}
+
+func TestGetNodeInfo(t *testing.T) {
+	configs.MockSchedulerConfigByData([]byte(configTwoLevelQueues))
+	var err error
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	assert.NilError(t, err)
+	assert.Equal(t, 2, len(schedulerContext.GetPartitionMapClone()))
+
+	resp := &MockResponseWriter{}
+	getNodesInfo(resp, nil)
+	var data []*dao.NodesDAOInfo
+	err = json.Unmarshal(resp.outputBytes, &data)
+	assert.NilError(t, err)
+
+	cs := make(map[string]*dao.NodesDAOInfo, 2)
+	for _, d := range data {
+		cs[d.PartitionName] = d
+	}
+
+	assert.Assert(t, cs["default"] != nil)
+	assert.Assert(t, cs["gpu"] != nil)
 }
 
 func TestGetPartitionNodes(t *testing.T) {

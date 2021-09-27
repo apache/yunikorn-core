@@ -16,19 +16,22 @@
  limitations under the License.
 */
 
-package scheduler
+package objects
 
 import (
 	"strconv"
 	"testing"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 )
 
 // empty test for random iterator
 func TestRoundRobinIteratorEmpty(t *testing.T) {
 	// nil list
-	rni := newRoundRobinNodeIterator(nil)
+	rni, ok := NewRoundRobinNodeIterator(nil).(*roundRobinNodeIterator)
+	if !ok {
+		t.Fatal("wrong iterator type returned")
+	}
 	if rni == nil {
 		t.Fatal("failed to create basic iterator")
 	}
@@ -40,7 +43,10 @@ func TestRoundRobinIteratorEmpty(t *testing.T) {
 	}
 
 	// slice with a length of 0: first HasNext call
-	rni = newRoundRobinNodeIterator(make([]*objects.Node, 0))
+	rni, ok = NewRoundRobinNodeIterator(make([]*Node, 0)).(*roundRobinNodeIterator)
+	if !ok {
+		t.Fatal("wrong iterator type returned")
+	}
 	if rni == nil {
 		t.Fatal("failed to create iterator with empty slice")
 	}
@@ -51,7 +57,10 @@ func TestRoundRobinIteratorEmpty(t *testing.T) {
 		t.Errorf("empty node list does not have Next: %v", node)
 	}
 	// slice with a length of 0: direct Next call
-	rni = newRoundRobinNodeIterator(make([]*objects.Node, 0))
+	rni, ok = NewRoundRobinNodeIterator(make([]*Node, 0)).(*roundRobinNodeIterator)
+	if !ok {
+		t.Fatal("wrong iterator type returned")
+	}
 	if rni == nil {
 		t.Fatal("failed to create iterator with empty slice")
 	}
@@ -69,7 +78,10 @@ func TestRoundRobinIteratorEmpty(t *testing.T) {
 func TestRoundRobinNodeIterating(t *testing.T) {
 	// slice with a length of 5
 	length := 5
-	rni := newRoundRobinNodeIterator(newSchedNodeList(length))
+	rni, ok := NewRoundRobinNodeIterator(newSchedNodeList(length)).(*roundRobinNodeIterator)
+	if !ok {
+		t.Fatal("wrong iterator type returned")
+	}
 	if rni == nil {
 		t.Fatal("failed to create iterator with set slice")
 	}
@@ -80,10 +92,7 @@ func TestRoundRobinNodeIterating(t *testing.T) {
 	// walk over the whole list
 	for i := 0; i < length; i++ {
 		loc := (i + start) % length
-		node, ok := rni.Next().(*objects.Node)
-		if !ok {
-			t.Fatal("iterator does not return node objects")
-		}
+		node := rni.Next()
 		if node == nil || node.NodeID != "node-"+strconv.Itoa(loc) {
 			t.Errorf("incorrect node returned: %v", node)
 		}
@@ -102,10 +111,7 @@ func TestRoundRobinNodeIterating(t *testing.T) {
 		t.Fatal("reset did not set counters back")
 	}
 	// next will set a start point and return node
-	node, ok := rni.Next().(*objects.Node)
-	if !ok {
-		t.Fatal("iterator does not return node objects")
-	}
+	node := rni.Next()
 	if node == nil || rni.startIdx == -1 {
 		t.Fatalf("next should have set the start %d, and returned node: %v", rni.startIdx, node)
 	}
@@ -117,7 +123,10 @@ func TestRoundRobinNodeIterating(t *testing.T) {
 // base test for default iterator
 func TestDefaultNodeEmpty(t *testing.T) {
 	// nil list
-	dni := newDefaultNodeIterator(nil)
+	dni, ok := NewDefaultNodeIterator(nil).(*defaultNodeIterator)
+	if !ok {
+		t.Fatal("wrong iterator type returned")
+	}
 	if dni == nil {
 		t.Fatal("failed to create basic iterator")
 	}
@@ -128,7 +137,10 @@ func TestDefaultNodeEmpty(t *testing.T) {
 		t.Errorf("nil node list does not have next node: %v", node)
 	}
 	// slice with a length of 0
-	dni = newDefaultNodeIterator(make([]*objects.Node, 0))
+	dni, ok = NewDefaultNodeIterator(make([]*Node, 0)).(*defaultNodeIterator)
+	if !ok {
+		t.Fatal("wrong iterator type returned")
+	}
 	if dni == nil {
 		t.Fatal("failed to create iterator with empty slice")
 	}
@@ -144,16 +156,16 @@ func TestDefaultNodeEmpty(t *testing.T) {
 func TestDefaultNodeIterating(t *testing.T) {
 	// slice with a length of 5
 	length := 5
-	dni := newDefaultNodeIterator(newSchedNodeList(length))
+	dni, ok := NewDefaultNodeIterator(newSchedNodeList(length)).(*defaultNodeIterator)
+	if !ok {
+		t.Fatal("wrong iterator type returned")
+	}
 	if dni == nil {
 		t.Fatal("failed to create iterator with set slice")
 	}
 	// walk over the whole list
 	for i := 0; i < length; i++ {
-		node, ok := dni.Next().(*objects.Node)
-		if !ok {
-			t.Fatal("iterator does not return node objects")
-		}
+		node := dni.Next()
 		if node == nil || node.NodeID != "node-"+strconv.Itoa(i) {
 			t.Errorf("incorrect node returned: %v", node)
 		}
@@ -172,14 +184,22 @@ func TestDefaultNodeIterating(t *testing.T) {
 		t.Fatalf("reset did not set counter back: %d", dni.countIdx)
 	}
 	// next will restart from the beginning
-	node, ok := dni.Next().(*objects.Node)
-	if !ok {
-		t.Fatal("iterator does not return node objects")
-	}
+	node := dni.Next()
 	if node == nil {
 		t.Fatal("next should have returned a node")
 	}
 	if node.NodeID != "node-0" {
 		t.Errorf("incorrect node returned expected node-0 got: %v", node)
 	}
+}
+
+// A list of nodes that can be iterated over.
+func newSchedNodeList(number int) []*Node {
+	list := make([]*Node, number)
+	for i := 0; i < number; i++ {
+		num := strconv.Itoa(i)
+		node := newNode("node-"+num, make(map[string]resources.Quantity))
+		list[i] = node
+	}
+	return list
 }

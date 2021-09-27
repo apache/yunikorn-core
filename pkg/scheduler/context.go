@@ -239,7 +239,7 @@ func (cc *ClusterContext) removePartitionsByRMID(event *rmevent.RMPartitionsRemo
 	// Just remove corresponding partitions
 	for k, partition := range cc.partitions {
 		if partition.RmID == event.RmID {
-			partition.partitionManager.stop = true
+			partition.partitionManager.Stop()
 			partitionToRemove[k] = true
 		}
 	}
@@ -577,11 +577,14 @@ func (cc *ClusterContext) updateNodes(request *si.UpdateRequest) {
 		case si.UpdateNodeInfo_DECOMISSION:
 			// set the state to not schedulable then tell the partition to clean up
 			node.SetSchedulable(false)
-			released := partition.removeNode(node.NodeID)
+			released, confirmed := partition.removeNode(node.NodeID)
 			// notify the shim allocations have been released from node
 			if len(released) != 0 {
 				cc.notifyRMAllocationReleased(partition.RmID, released, si.TerminationType_STOPPED_BY_RM,
 					fmt.Sprintf("Node %s Removed", node.NodeID))
+			}
+			for _, confirm := range confirmed {
+				cc.notifyRMNewAllocation(partition.RmID, confirm)
 			}
 		}
 	}
@@ -633,7 +636,7 @@ func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
 			})
 			continue
 		}
-		if sn.IsUnlimited() && len(partition.nodes) > 0 {
+		if sn.IsUnlimited() && partition.nodes.GetNodeCount() > 0 {
 			rejectedNodes = append(rejectedNodes, &si.RejectedNode{
 				NodeID: node.NodeID,
 				Reason: "The unlimited node should be registered first, there are other nodes registered in the partition",

@@ -25,9 +25,10 @@ type PartitionDAOInfo struct {
 }
 
 type PartitionInfo struct {
+	ClusterID               string            `json:"clusterId"`
 	Name                    string            `json:"name"`
 	Capacity                PartitionCapacity `json:"capacity"`
-	NodeSortingPolicy       string            `json:"nodeSortingPolicy"`
+	NodeSortingPolicy       NodeSortingPolicy `json:"nodeSortingPolicy"`
 	Applications            map[string]int    `json:"applications"`
 	State                   string            `json:"state"`
 	LastStateTransitionTime string            `json:"lastStateTransitionTime"`
@@ -35,10 +36,15 @@ type PartitionInfo struct {
 
 type PartitionCapacity struct {
 	Capacity     string `json:"capacity"`
-	UsedCapacity string `json:"usedcapacity"`
+	UsedCapacity string `json:"usedCapacity"`
 }
 
 type NodeInfo struct {
 	NodeID     string `json:"nodeId"`
 	Capability string `json:"capability"`
+}
+
+type NodeSortingPolicy struct {
+	Type            string             `json:"type"`
+	ResourceWeights map[string]float64 `json:"resourceWeights"`
 }

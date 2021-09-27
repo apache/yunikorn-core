@@ -125,12 +125,6 @@ func stateAwareFilter(apps map[string]*Application) []*Application {
 	return filteredApps
 }
 
-func SortNodes(nodes []*Node, sortType NodeSortingPolicy) {
-	sortingStart := time.Now()
-	sortType.SortNodes(nodes)
-	metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
-}
-
 func sortAskByPriority(requests []*AllocationAsk, ascending bool) {
 	sort.SliceStable(requests, func(i, j int) bool {
 		l := requests[i]

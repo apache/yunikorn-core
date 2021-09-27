@@ -52,6 +52,7 @@ type Node struct {
 
 	preempting   *resources.Resource     // resources considered for preemption
 	reservations map[string]*reservation // a map of reservations
+	listeners    []NodeListener          // a list of node listeners
 
 	sync.RWMutex
 }
@@ -70,6 +71,7 @@ func NewNode(proto *si.NewNodeInfo) *Node {
 		occupiedResource:  resources.NewResourceFromProto(proto.OccupiedResource),
 		allocations:       make(map[string]*Allocation),
 		schedulable:       true,
+		listeners:         make([]NodeListener, 0),
 	}
 	// initialise available resources
 	var err error
@@ -137,6 +139,7 @@ func (sn *Node) GetCapacity() *resources.Resource {
 }
 
 func (sn *Node) SetCapacity(newCapacity *resources.Resource) *resources.Resource {
+	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
 	if resources.Equals(sn.totalResource, newCapacity) {
@@ -156,6 +159,7 @@ func (sn *Node) GetOccupiedResource() *resources.Resource {
 }
 
 func (sn *Node) SetOccupiedResource(occupiedResource *resources.Resource) {
+	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
 	if resources.Equals(sn.occupiedResource, occupiedResource) {
@@ -208,6 +212,7 @@ func (sn *Node) GetAllAllocations() []*Allocation {
 // This will cause the node to be skipped during the scheduling cycle.
 // Visible for testing only
 func (sn *Node) SetSchedulable(schedulable bool) {
+	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
 	sn.schedulable = schedulable
@@ -250,6 +255,7 @@ func (sn *Node) getPreemptingResource() *resources.Resource {
 
 // Update the number of resource tagged for preemption on this node
 func (sn *Node) IncPreemptingResource(preempting *resources.Resource) {
+	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
 
@@ -257,6 +263,7 @@ func (sn *Node) IncPreemptingResource(preempting *resources.Resource) {
 }
 
 func (sn *Node) decPreemptingResource(delta *resources.Resource) {
+	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
 	var err error
@@ -273,6 +280,7 @@ func (sn *Node) decPreemptingResource(delta *resources.Resource) {
 // is found the Allocation removed is returned. Used resources will decrease available
 // will increase as per the allocation removed.
 func (sn *Node) RemoveAllocation(uuid string) *Allocation {
+	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
 
@@ -294,6 +302,7 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 	if alloc == nil {
 		return false
 	}
+	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
 	// check if this still fits: it might have changed since pre check
@@ -310,6 +319,7 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 // Replace the paceholder allocation on the node. No usage changes as the placeholder must
 // be the same size as the real allocation.
 func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation) {
+	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
 
@@ -368,16 +378,30 @@ func (sn *Node) preConditions(allocID string, allocate bool) bool {
 	return true
 }
 
+// IsValidFor checks if the node is valid for this allocationAsk
+func (sn *Node) IsValidFor(ask *AllocationAsk) error {
+	if ask.GetRequiredNode() == "" {
+		// ask can be allocated to any node
+		// just check if the node is unschedulable
+		if !sn.IsSchedulable() {
+			return fmt.Errorf("skip ask %s on unschedulable node %s",
+				ask.AllocationKey, sn.NodeID)
+		}
+		return nil
+	}
+	// ask has required node, just check if the node is with the expected ID
+	// ignore the unschedulable flag in this case
+	if ask.requiredNode != sn.NodeID {
+		return fmt.Errorf("ask %s is restricted to node %s, skipping node %s",
+			ask.AllocationKey, ask.requiredNode, sn.NodeID)
+	}
+	return nil
+}
+
 // Check if the node should be considered as a possible node to allocate on.
 //
 // This is a lock free call. No updates are made this only performs a pre allocate checks
 func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string, preemptionPhase bool) error {
-	// shortcut if a node is not schedulable
-	if !sn.IsSchedulable() {
-		log.Logger().Debug("node is unschedulable",
-			zap.String("nodeID", sn.NodeID))
-		return fmt.Errorf("pre alloc check, node is unschedulable: %s", sn.NodeID)
-	}
 	// cannot allocate zero or negative resource
 	if !resources.StrictlyGreaterThanZero(res) {
 		log.Logger().Debug("pre alloc check: requested resource is zero",
@@ -445,6 +469,7 @@ func (sn *Node) isReservedForApp(key string) bool {
 // The reservation is checked against the node resources.
 // If the reservation fails the function returns false, if the reservation is made it returns true.
 func (sn *Node) Reserve(app *Application, ask *AllocationAsk) error {
+	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
 	if len(sn.reservations) > 0 {
@@ -478,6 +503,7 @@ func (sn *Node) Reserve(app *Application, ask *AllocationAsk) error {
 // If the reservation does not exist it returns 0 for reservations removed, if the reservation is removed it returns 1.
 // The error is set if the reservation key cannot be generated.
 func (sn *Node) unReserve(app *Application, ask *AllocationAsk) (int, error) {
+	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
 	resKey := reservationKey(nil, app, ask)
@@ -524,4 +550,54 @@ func (sn *Node) UnReserveApps() ([]string, []int) {
 		askRelease = append(askRelease, num)
 	}
 	return appReserve, askRelease
+}
+
+// Gets map of name -> resource usages per type in shares (0 to 1). Can return NaN.
+func (sn *Node) GetResourceUsageShares() map[string]float64 {
+	sn.RLock()
+	defer sn.RUnlock()
+	res := make(map[string]float64)
+	if sn.totalResource == nil {
+		// no resources present, so no usage
+		return res
+	}
+	for k, v := range sn.totalResource.Resources {
+		res[k] = float64(1) - (float64(sn.availableResource.Resources[k]) / float64(v))
+	}
+	return res
+}
+
+func (sn *Node) AddListener(listener NodeListener) {
+	sn.Lock()
+	defer sn.Unlock()
+	sn.listeners = append(sn.listeners, listener)
+}
+
+func (sn *Node) RemoveListener(listener NodeListener) {
+	sn.Lock()
+	defer sn.Unlock()
+
+	newListeners := make([]NodeListener, 0)
+	for _, entry := range sn.listeners {
+		if entry == listener {
+			continue
+		}
+		newListeners = append(newListeners, entry)
+	}
+	sn.listeners = newListeners
+}
+
+// Notifies listeners of changes to this node. This method must not be called while locks are held.
+func (sn *Node) notifyListeners() {
+	for _, listener := range sn.getListeners() {
+		listener.NodeUpdated(sn)
+	}
+}
+
+func (sn *Node) getListeners() []NodeListener {
+	sn.RLock()
+	defer sn.RUnlock()
+	list := make([]NodeListener, len(sn.listeners))
+	copy(list, sn.listeners)
+	return list
 }

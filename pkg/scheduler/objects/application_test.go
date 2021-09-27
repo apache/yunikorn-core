@@ -256,11 +256,12 @@ func TestUpdateRepeat(t *testing.T) {
 	app.queue = queue
 
 	// failure cases
-	delta, err := app.updateAskRepeat("", 0)
+	var delta *resources.Resource
+	delta, err = app.UpdateAskRepeat("", 0)
 	if err == nil || delta != nil {
 		t.Error("empty ask key should not have been found")
 	}
-	delta, err = app.updateAskRepeat("unknown", 0)
+	delta, err = app.UpdateAskRepeat("unknown", 0)
 	if err == nil || delta != nil {
 		t.Error("unknown ask key should not have been found")
 	}
@@ -270,22 +271,22 @@ func TestUpdateRepeat(t *testing.T) {
 	ask := newAllocationAskRepeat(aKey, appID1, res, 1)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been added to app")
-	delta, err = app.updateAskRepeat(aKey, 0)
+	delta, err = app.UpdateAskRepeat(aKey, 0)
 	if err != nil || !resources.IsZero(delta) {
 		t.Errorf("0 increase should return zero delta and did not: %v, err %v", delta, err)
 	}
-	delta, err = app.updateAskRepeat(aKey, 1)
+	delta, err = app.UpdateAskRepeat(aKey, 1)
 	if err != nil || !resources.Equals(res, delta) {
 		t.Errorf("increase did not return correct delta, err %v, expected %v got %v", err, res, delta)
 	}
 
 	// decrease to zero
-	delta, err = app.updateAskRepeat(aKey, -2)
+	delta, err = app.UpdateAskRepeat(aKey, -2)
 	if err != nil || !resources.Equals(resources.Multiply(res, -2), delta) {
 		t.Errorf("decrease did not return correct delta, err %v, expected %v got %v", err, resources.Multiply(res, -2), delta)
 	}
 	// decrease to below zero
-	delta, err = app.updateAskRepeat(aKey, -1)
+	delta, err = app.UpdateAskRepeat(aKey, -1)
 	if err == nil || delta != nil {
 		t.Errorf("decrease did not return correct delta, err %v, delta %v", err, delta)
 	}

@@ -29,6 +29,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	interfaceCommon "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 )
 
 func GetNormalizedPartitionName(partitionName string, rmID string) string {
@@ -112,4 +113,11 @@ func ConvertSITimeout(millis int64) time.Duration {
 		return time.Duration(0)
 	}
 	return time.Duration(result)
+}
+
+func GetRequiredNodeFromTag(tags map[string]string) string {
+	if nodeName, ok := tags[interfaceCommon.DomainYuniKorn+interfaceCommon.KeyRequiredNode]; ok {
+		return nodeName
+	}
+	return ""
 }

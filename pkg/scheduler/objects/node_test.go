@@ -194,7 +194,6 @@ func TestCanAllocate(t *testing.T) {
 	if node.CanAllocate(res, false) {
 		t.Error("node should have rejected allocation (oversize)")
 	}
-
 	// check if preempting adds to available
 	node.IncPreemptingResource(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
 	// preemption alloc
@@ -627,4 +626,81 @@ func TestUnlimitedNode(t *testing.T) {
 
 	node.RemoveAllocation(allocation.UUID)
 	assert.Assert(t, len(node.allocations) == 0, "Node should have no allocations")
+}
+
+func TestIsValidFor(t *testing.T) {
+	resource := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 10})
+
+	// ask 1 is a normal ask
+	ask1 := newAllocationAsk("key", "appID", resource)
+	// ask 2 is a ask that has requiredNode set
+	ask2 := newAllocationAsk("key", "appID", resource)
+	ask2.requiredNode = "node-1"
+
+	// node 1: schedulable
+	node1 := NewNode(&si.NewNodeInfo{
+		NodeID: "node-1",
+	})
+	// node 1: unschedulable
+	node1Unschedulable := NewNode(&si.NewNodeInfo{
+		NodeID: "node-1",
+	})
+	node1Unschedulable.SetSchedulable(false)
+	// node 2: schedulable
+	node2 := NewNode(&si.NewNodeInfo{
+		NodeID: "node-2",
+	})
+	// node 2: unschedulable
+	node2Unschedulable := NewNode(&si.NewNodeInfo{
+		NodeID: "node-2",
+	})
+	node2Unschedulable.SetSchedulable(false)
+
+	var tests = []struct {
+		name    string
+		ask     *AllocationAsk
+		node    *Node
+		isValid bool
+	}{
+		{"normal ask1 on schedulable node1", ask1, node1, true},
+		{"normal ask1 on schedulable node2", ask1, node2, true},
+		{"normal ask1 on unschedulable node1", ask1, node1Unschedulable, false},
+		{"normal ask1 on unschedulable node2", ask1, node2Unschedulable, false},
+		{"ask2 required node1 on schedulable node1", ask2, node1, true},
+		{"ask2 required node1 on unschedulable node1", ask2, node1Unschedulable, true},
+		{"ask2 required node1 on schedulable node2", ask2, node2, false},
+		{"ask2 required node1 on unschedulable node2", ask2, node2Unschedulable, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.node.IsValidFor(tt.ask)
+			if got == nil && !tt.isValid {
+				t.Error("expected node is not valid for the ask")
+			} else if got != nil && tt.isValid {
+				t.Error("expected node is valid for the ask")
+			}
+		})
+	}
+}
+
+type testListener struct {
+	updateCount int
+}
+
+func (tl *testListener) NodeUpdated(node *Node) {
+	tl.updateCount++
+}
+
+func TestAddRemoveListener(t *testing.T) {
+	tl := testListener{}
+	total := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 10})
+	node := newNodeRes("node-123", total)
+	node.AddListener(&tl)
+	assert.Equal(t, 0, tl.updateCount, "listener should not have fired")
+	node.SetSchedulable(false)
+	assert.Equal(t, 1, tl.updateCount, "listener should have fired once")
+	node.RemoveListener(&tl)
+	node.SetSchedulable(true)
+	assert.Equal(t, 1, tl.updateCount, "listener should not have fired again")
 }

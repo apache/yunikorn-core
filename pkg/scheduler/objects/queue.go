@@ -30,7 +30,6 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
-	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects/template"
@@ -428,10 +427,10 @@ func (sq *Queue) GetQueueInfos() dao.QueueDAOInfo {
 
 func (sq *Queue) GetPartitionQueueDAOInfo() dao.PartitionQueueDAOInfo {
 	queueInfo := dao.PartitionQueueDAOInfo{}
-	if len(sq.children) > 0 {
-		for _, child := range sq.GetCopyOfChildren() {
-			queueInfo.Children = append(queueInfo.Children, child.GetPartitionQueueDAOInfo())
-		}
+	childes := sq.GetCopyOfChildren()
+	queueInfo.Children = make([]dao.PartitionQueueDAOInfo, 0, len(childes))
+	for _, child := range childes {
+		queueInfo.Children = append(queueInfo.Children, child.GetPartitionQueueDAOInfo())
 	}
 	// we have held the read lock so following method should not take lock again.
 	sq.RLock()
@@ -656,7 +655,13 @@ func (sq *Queue) addChildQueue(child *Queue) error {
 		}
 		// managed (configured) leaf queue can't use template
 	} else {
-		child.template = sq.template
+		// don't override the template of non-leaf queue
+		if child.template == nil {
+			child.template = sq.template
+			log.Logger().Debug("inheriting child template for queue",
+				zap.String("child queue", child.QueuePath),
+				zap.String("parent queue", sq.QueuePath))
+		}
 	}
 	return nil
 }
@@ -1003,7 +1008,7 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 // the configured queue sortPolicy. Queues without pending resources are skipped.
 // Applications are sorted based on the application sortPolicy. Applications without pending resources are skipped.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *Queue) TryAllocate(iterator func() interfaces.NodeIterator) *Allocation {
+func (sq *Queue) TryAllocate(iterator func() NodeIterator) *Allocation {
 	if sq.IsLeafQueue() {
 		// get the headroom
 		headRoom := sq.getHeadRoom()
@@ -1035,7 +1040,7 @@ func (sq *Queue) TryAllocate(iterator func() interfaces.NodeIterator) *Allocatio
 // the configured queue sortPolicy. Queues without pending resources are skipped.
 // Applications are sorted based on the application sortPolicy. Applications without pending resources are skipped.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *Queue) TryPlaceholderAllocate(iterator func() interfaces.NodeIterator, getnode func(string) *Node) *Allocation {
+func (sq *Queue) TryPlaceholderAllocate(iterator func() NodeIterator, getnode func(string) *Node) *Allocation {
 	if sq.IsLeafQueue() {
 		// process the apps (filters out app without pending requests)
 		for _, app := range sq.sortApplications(true) {
@@ -1082,7 +1087,7 @@ func (sq *Queue) GetQueueOutstandingRequests(total *[]*AllocationAsk) {
 // the configured queue sortPolicy. Queues without pending resources are skipped.
 // Applications are currently NOT sorted and are iterated over in a random order.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *Queue) TryReservedAllocate(iterator func() interfaces.NodeIterator) *Allocation {
+func (sq *Queue) TryReservedAllocate(iterator func() NodeIterator) *Allocation {
 	if sq.IsLeafQueue() {
 		// skip if it has no reservations
 		reservedCopy := sq.getReservedApps()

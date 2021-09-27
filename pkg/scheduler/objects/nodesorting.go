@@ -19,22 +19,27 @@
 package objects
 
 import (
-	"sort"
+	"math"
 
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 )
 
 type NodeSortingPolicy interface {
 	PolicyType() policies.SortingPolicy
-	SortNodes(nodes []*Node)
+	ScoreNode(node *Node) float64
+	ResourceWeights() map[string]float64
 }
 
-type binPackingNodeSortingPolicy struct{}
-type fairnessNodeSortingPolicy struct{}
+type binPackingNodeSortingPolicy struct {
+	resourceWeights map[string]float64
+}
+
+type fairnessNodeSortingPolicy struct {
+	resourceWeights map[string]float64
+}
 
 func (binPackingNodeSortingPolicy) PolicyType() policies.SortingPolicy {
 	return policies.BinPackingPolicy
@@ -44,41 +49,95 @@ func (fairnessNodeSortingPolicy) PolicyType() policies.SortingPolicy {
 	return policies.FairnessPolicy
 }
 
-func (binPackingNodeSortingPolicy) SortNodes(nodes []*Node) {
-	// Sort by available resource, ascending order
-	sort.SliceStable(nodes, func(i, j int) bool {
-		l := nodes[i]
-		r := nodes[j]
-		return resources.CompUsageShares(r.GetAvailableResource(), l.GetAvailableResource()) > 0
-	})
+func absResourceUsage(node *Node, weights *map[string]float64) float64 {
+	totalWeight := float64(0)
+	usage := float64(0)
+
+	shares := node.GetResourceUsageShares()
+	for k, v := range shares {
+		weight, found := (*weights)[k]
+		if !found || weight == float64(0) {
+			continue
+		}
+		if math.IsNaN(v) {
+			continue
+		}
+		usage += v * weight
+		totalWeight += weight
+	}
+
+	var result float64
+
+	if totalWeight == float64(0) {
+		result = float64(0)
+	} else {
+		result = usage / totalWeight
+	}
+	return result
 }
 
-func (fairnessNodeSortingPolicy) SortNodes(nodes []*Node) {
-	// Sort by available resource, descending order
-	sort.SliceStable(nodes, func(i, j int) bool {
-		l := nodes[i]
-		r := nodes[j]
-		return resources.CompUsageShares(l.GetAvailableResource(), r.GetAvailableResource()) > 0
-	})
+func (p binPackingNodeSortingPolicy) ScoreNode(node *Node) float64 {
+	// choose most loaded node first (score == percentage free)
+	return float64(1) - absResourceUsage(node, &p.resourceWeights)
 }
 
-func NewNodeSortingPolicy(policyType string) NodeSortingPolicy {
+func (p fairnessNodeSortingPolicy) ScoreNode(node *Node) float64 {
+	// choose least loaded node first (score == percentage used)
+	return absResourceUsage(node, &p.resourceWeights)
+}
+
+func cloneWeights(source map[string]float64) map[string]float64 {
+	weights := make(map[string]float64, len(source))
+	for k, v := range source {
+		weights[k] = v
+	}
+	return weights
+}
+
+func (p binPackingNodeSortingPolicy) ResourceWeights() map[string]float64 {
+	return cloneWeights(p.resourceWeights)
+}
+
+func (p fairnessNodeSortingPolicy) ResourceWeights() map[string]float64 {
+	return cloneWeights(p.resourceWeights)
+}
+
+// Return a default set of resource weights if not otherwise specified.
+func defaultResourceWeights() map[string]float64 {
+	weights := make(map[string]float64)
+	weights["vcore"] = 1.0
+	weights["memory"] = 1.0
+	return weights
+}
+
+func NewNodeSortingPolicy(policyType string, resourceWeights map[string]float64) NodeSortingPolicy {
 	pType, err := policies.SortingPolicyFromString(policyType)
 	if err != nil {
 		log.Logger().Debug("node sorting policy defaulted to 'undefined'",
 			zap.Error(err))
 	}
+	weights := resourceWeights
+	if len(weights) == 0 {
+		weights = defaultResourceWeights()
+	}
+
 	var sp NodeSortingPolicy
 	switch pType {
 	case policies.BinPackingPolicy:
-		sp = binPackingNodeSortingPolicy{}
+		sp = binPackingNodeSortingPolicy{
+			resourceWeights: weights,
+		}
 	case policies.FairnessPolicy:
-		sp = fairnessNodeSortingPolicy{}
+		sp = fairnessNodeSortingPolicy{
+			resourceWeights: weights,
+		}
 	default:
-		sp = fairnessNodeSortingPolicy{}
+		sp = fairnessNodeSortingPolicy{
+			resourceWeights: weights,
+		}
 	}
 
 	log.Logger().Debug("new node sorting policy added",
-		zap.String("type", pType.String()))
+		zap.String("type", pType.String()), zap.Any("resourceWeights", weights))
 	return sp
 }

@@ -33,7 +33,6 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"github.com/apache/incubator-yunikorn-core/pkg/events"
 	"github.com/apache/incubator-yunikorn-core/pkg/handler"
-	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
@@ -550,7 +549,7 @@ func (sa *Application) RecoverAllocationAsk(ask *AllocationAsk) {
 	}
 }
 
-func (sa *Application) updateAskRepeat(allocKey string, delta int32) (*resources.Resource, error) {
+func (sa *Application) UpdateAskRepeat(allocKey string, delta int32) (*resources.Resource, error) {
 	sa.Lock()
 	defer sa.Unlock()
 	if ask := sa.requests[allocKey]; ask != nil {
@@ -750,7 +749,7 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, tota
 
 // Try a regular allocation of the pending requests
 // This includes placeholders
-func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator func() interfaces.NodeIterator) *Allocation {
+func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator func() NodeIterator) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
 	// make sure the request are sorted
@@ -792,7 +791,8 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 }
 
 // Try to replace a placeholder with a real allocation
-func (sa *Application) tryPlaceholderAllocate(nodeIterator func() interfaces.NodeIterator, getnode func(string) *Node) *Allocation {
+//nolint:funlen
+func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, getnode func(string) *Node) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
 	// nothing to do if we have no placeholders allocated
@@ -869,10 +869,17 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() interfaces.Nod
 	// pick the first fit and try all nodes if that fails give up
 	if phFit != nil && reqFit != nil {
 		for iterator.HasNext() {
-			node, ok := iterator.Next().(*Node)
-			if !ok {
+			node := iterator.Next()
+			if node == nil {
 				log.Logger().Warn("Node iterator failed to return a node")
 				return nil
+			}
+			if err := node.IsValidFor(reqFit); err != nil {
+				log.Logger().Debug("skipping node for placeholder ask",
+					zap.String("allocationKey", reqFit.AllocationKey),
+					zap.String("node", node.NodeID),
+					zap.String("reason", err.Error()))
+				continue
 			}
 			if err := node.preAllocateCheck(reqFit.AllocatedResource, reservationKey(nil, sa, reqFit), false); err != nil {
 				continue
@@ -913,7 +920,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() interfaces.Nod
 }
 
 // Try a reserved allocation of an outstanding reservation
-func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIterator func() interfaces.NodeIterator) *Allocation {
+func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIterator func() NodeIterator) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
 	// process all outstanding reservations and pick the first one that fits
@@ -963,12 +970,19 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 
 // Try all the nodes for a reserved request that have not been tried yet.
 // This should never result in a reservation as the ask is already reserved
-func (sa *Application) tryNodesNoReserve(ask *AllocationAsk, iterator interfaces.NodeIterator, reservedNode string) *Allocation {
+func (sa *Application) tryNodesNoReserve(ask *AllocationAsk, iterator NodeIterator, reservedNode string) *Allocation {
 	for iterator.HasNext() {
-		node, ok := iterator.Next().(*Node)
-		if !ok {
+		node := iterator.Next()
+		if node == nil {
 			log.Logger().Warn("Node iterator failed to return a node")
 			return nil
+		}
+		if err := node.IsValidFor(ask); err != nil {
+			log.Logger().Debug("skipping node for reserved ask",
+				zap.String("allocationKey", ask.AllocationKey),
+				zap.String("node", node.NodeID),
+				zap.String("reason", err.Error()))
+			continue
 		}
 		// skip over the node if the resource does not fit the node or this is the reserved node.
 		if !node.FitInNode(ask.AllocatedResource) || node.NodeID == reservedNode {
@@ -988,7 +1002,7 @@ func (sa *Application) tryNodesNoReserve(ask *AllocationAsk, iterator interfaces
 
 // Try all the nodes for a request. The result is an allocation or reservation of a node.
 // New allocations can only be reserved after a delay.
-func (sa *Application) tryNodes(ask *AllocationAsk, iterator interfaces.NodeIterator) *Allocation {
+func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allocation {
 	var nodeToReserve *Node
 	scoreReserved := math.Inf(1)
 	// check if the ask is reserved or not
@@ -996,10 +1010,18 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator interfaces.NodeIter
 	reservedAsks := sa.GetAskReservations(allocKey)
 	allowReserve := len(reservedAsks) < int(ask.pendingRepeatAsk)
 	for iterator.HasNext() {
-		node, ok := iterator.Next().(*Node)
-		if !ok {
+		node := iterator.Next()
+		if node == nil {
 			log.Logger().Warn("Node iterator failed to return a node")
 			return nil
+		}
+		// skip the node if the node is not valid for the ask
+		if err := node.IsValidFor(ask); err != nil {
+			log.Logger().Debug("skipping node for ask",
+				zap.String("allocationKey", ask.AllocationKey),
+				zap.String("node", node.NodeID),
+				zap.String("reason", err.Error()))
+			continue
 		}
 		// skip over the node if the resource does not fit the node at all.
 		if !node.FitInNode(ask.AllocatedResource) {
@@ -1011,7 +1033,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator interfaces.NodeIter
 			// check if the node was reserved for this ask: if it is set the result and return
 			// NOTE: this is a safeguard as reserved nodes should never be part of the iterator
 			// but we have no locking
-			if _, ok = sa.reservations[reservationKey(node, nil, ask)]; ok {
+			if _, ok := sa.reservations[reservationKey(node, nil, ask)]; ok {
 				log.Logger().Debug("allocate found reserved ask during non reserved allocate",
 					zap.String("appID", sa.ApplicationID),
 					zap.String("nodeID", node.NodeID),

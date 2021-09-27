@@ -25,6 +25,7 @@ import (
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -130,4 +131,73 @@ func TestGetTimeout(t *testing.T) {
 	}
 	ask = NewAllocationAsk(siAsk)
 	assert.Equal(t, ask.getTimeout(), 10*time.Millisecond, "ask timeout not set as expected")
+}
+
+func TestGetRequiredNode(t *testing.T) {
+	tag := make(map[string]string)
+	// unset case
+	siAsk := &si.AllocationAsk{
+		AllocationKey: "ask1",
+		ApplicationID: "app1",
+		PartitionName: "default",
+		Tags:          tag,
+	}
+	ask := NewAllocationAsk(siAsk)
+	assert.Equal(t, ask.GetRequiredNode(), "", "required node is empty as expected")
+	// set case
+	tag[common.DomainYuniKorn+common.KeyRequiredNode] = "NodeName"
+	siAsk = &si.AllocationAsk{
+		AllocationKey: "ask1",
+		ApplicationID: "app1",
+		PartitionName: "default",
+		Tags:          tag,
+	}
+	ask = NewAllocationAsk(siAsk)
+	assert.Equal(t, ask.GetRequiredNode(), "NodeName", "required node should be NodeName")
+}
+
+func newPriorityValue(v int32) *si.Priority {
+	return &si.Priority{
+		Priority: &si.Priority_PriorityValue{
+			PriorityValue: v},
+	}
+}
+
+func newPriorityClass(priorityClassName string) *si.Priority {
+	return &si.Priority{
+		Priority: &si.Priority_PriorityClassName{
+			PriorityClassName: priorityClassName},
+	}
+}
+func TestSetPriority(t *testing.T) {
+	var tests = []struct {
+		testMessage string
+		priority    *si.Priority
+		out         int32
+	}{
+		// Set priorirty via NewAllocationAsk
+		{"No priority setting", nil, 0},
+		{"Set empty priority", &si.Priority{}, 0},
+		{"Set positive priority value", newPriorityValue(1), 1},
+		{"Set negative priority value", newPriorityValue(-100), -100},
+		{"Set priority class", newPriorityClass("p0"), 0},
+	}
+
+	for _, tt := range tests {
+		res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+		t.Run(tt.testMessage, func(t *testing.T) {
+			siAsk := &si.AllocationAsk{
+				AllocationKey:  "ask-1",
+				ApplicationID:  "app-1",
+				MaxAllocations: 1,
+				Priority:       tt.priority,
+				ResourceAsk:    res.ToProto(),
+			}
+
+			ask := NewAllocationAsk(siAsk)
+			if ask.priority != tt.out {
+				t.Errorf("result %s, Want %v, got %v", tt.testMessage, tt.out, ask.priority)
+			}
+		})
+	}
 }

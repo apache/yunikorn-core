@@ -1640,6 +1640,7 @@ func TestGetHeadRoom(t *testing.T) {
 			"memory": 3000,
 		},
 	}
+	// make sure parent queue see all allocated resources
 	parent.allocatedResource = allocatedResource
 
 	// this child is not set with max memory, so it should follow parent max memory

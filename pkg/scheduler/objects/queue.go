@@ -883,8 +883,7 @@ func (sq *Queue) sortQueues() []*Queue {
 // Get the headroom for the queue this should never be more than the headroom for the parent.
 // In case there are no nodes in a newly started cluster and no queues have a limit configured this call
 // will return nil.
-// NOTE: if a resource quantity is missing and a limit is defined the missing quantity will be seen as a limit of 0.
-// When defining a limit you therefore should define all resource quantities.
+// NOTE: if a resource quantity is missing and a limit is defined the missing quantity will be seen as no limit.
 func (sq *Queue) getHeadRoom() *resources.Resource {
 	var parentHeadRoom *resources.Resource
 	if sq.parent != nil {
@@ -916,12 +915,13 @@ func (sq *Queue) internalHeadRoom(parentHeadRoom *resources.Resource) *resources
 		return parentHeadRoom
 	}
 
-	// we will replace all incorrect values, which are caused by undefined resources, by resources of parent headroom after headRoom
-	// get the unused resources by calling SubFrom
+	// we will replace all incorrect values, which are caused by undefined resources, by resources of parent headroom later
 	undefinedResources := make(map[string]resources.Quantity)
 	if parentHeadRoom != nil {
 		for k, v := range parentHeadRoom.Resources {
 			if _, ok := headRoom.Resources[k]; !ok {
+				// parent headroom already subtracts the allocated resources, so we can't assign the value to this headroom.
+				// Otherwise, the headroom will subtract the allocated resources twice.
 				undefinedResources[k] = v
 			}
 		}

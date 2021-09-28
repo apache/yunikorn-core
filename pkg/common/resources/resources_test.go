@@ -949,7 +949,7 @@ func TestSubErrorNegative(t *testing.T) {
 
 	// complex case: just checking the resource merge, values check is secondary
 	res1 = &Resource{Resources: map[string]Quantity{"a": 0, "b": 1}}
-	res2 := &Resource{Resources: map[string]Quantity{"a": 1, "c": 0, "d": -1}}
+	res2 := &Resource{Resources: map[string]Quantity{"a": 1, "c": 1, "d": -1}}
 	result, err = SubErrorNegative(res1, res2)
 	if err == nil {
 		t.Errorf("sub should have set error message and did not: %v", result)
@@ -958,6 +958,31 @@ func TestSubErrorNegative(t *testing.T) {
 	expected := map[string]Quantity{"a": 0, "b": 1, "c": 0, "d": 1}
 	if !reflect.DeepEqual(result.Resources, expected) {
 		t.Errorf("sub failed expected %v, actual %v", expected, result.Resources)
+	}
+}
+
+func newResource(in map[string]Quantity) *Resource {
+	return &Resource{Resources: in}
+}
+
+func TestEqualsOrEmpty(t *testing.T) {
+	var tests = []struct {
+		left, right *Resource
+		want        bool
+	}{
+		{nil, nil, true},
+		{nil, newResource(map[string]Quantity{"a": 0, "b": 1}), false},
+		{newResource(map[string]Quantity{"a": 0, "b": 1}), nil, false},
+		{nil, NewResource(), true},
+		{NewResource(), nil, true},
+		{newResource(map[string]Quantity{"a": 0, "b": 1}), newResource(map[string]Quantity{"a": 0, "b": 1}), true},
+		{newResource(map[string]Quantity{"a": 0, "c": 1}), newResource(map[string]Quantity{"a": 0, "d": 3}), false},
+	}
+
+	for _, tt := range tests {
+		if got := EqualsOrEmpty(tt.left, tt.right); got != tt.want {
+			t.Errorf("got %v, want %v", got, tt.want)
+		}
 	}
 }
 

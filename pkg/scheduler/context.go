@@ -525,8 +525,8 @@ func (cc *ClusterContext) NeedPreemption() bool {
 
 // Callback from the partition manager to finalise the removal of the partition
 func (cc *ClusterContext) removePartition(partitionName string) {
-	cc.RLock()
-	defer cc.RUnlock()
+	cc.Lock()
+	defer cc.Unlock()
 
 	delete(cc.partitions, partitionName)
 }

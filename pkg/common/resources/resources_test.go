@@ -961,22 +961,18 @@ func TestSubErrorNegative(t *testing.T) {
 	}
 }
 
-func newResource(in map[string]Quantity) *Resource {
-	return &Resource{Resources: in}
-}
-
 func TestEqualsOrEmpty(t *testing.T) {
 	var tests = []struct {
 		left, right *Resource
 		want        bool
 	}{
 		{nil, nil, true},
-		{nil, newResource(map[string]Quantity{"a": 0, "b": 1}), false},
-		{newResource(map[string]Quantity{"a": 0, "b": 1}), nil, false},
+		{nil, NewResourceFromMap(map[string]Quantity{"a": 0, "b": 1}), false},
+		{NewResourceFromMap(map[string]Quantity{"a": 0, "b": 1}), nil, false},
 		{nil, NewResource(), true},
 		{NewResource(), nil, true},
-		{newResource(map[string]Quantity{"a": 0, "b": 1}), newResource(map[string]Quantity{"a": 0, "b": 1}), true},
-		{newResource(map[string]Quantity{"a": 0, "c": 1}), newResource(map[string]Quantity{"a": 0, "d": 3}), false},
+		{NewResourceFromMap(map[string]Quantity{"a": 0, "b": 1}), NewResourceFromMap(map[string]Quantity{"a": 0, "b": 1}), true},
+		{NewResourceFromMap(map[string]Quantity{"a": 0, "c": 1}), NewResourceFromMap(map[string]Quantity{"a": 0, "d": 3}), false},
 	}
 
 	for _, tt := range tests {

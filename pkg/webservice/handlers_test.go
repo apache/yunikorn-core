@@ -27,6 +27,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -186,13 +187,13 @@ const queueName = "root.default"
 const nodeID = "node-1"
 
 // simple wrapper to make creating an app easier
-func newApplication(appID, partitionName, queueName, rmID string) *objects.Application {
+func newApplication(appID, partitionName, queueName, rmID string, ugi security.UserGroup) *objects.Application {
 	siApp := &si.AddApplicationRequest{
 		ApplicationID: appID,
 		QueueName:     queueName,
 		PartitionName: partitionName,
 	}
-	return objects.NewApplication(siApp, security.UserGroup{}, nil, rmID)
+	return objects.NewApplication(siApp, ugi, nil, rmID)
 }
 
 func TestValidateConf(t *testing.T) {
@@ -415,12 +416,17 @@ func TestQueryParamInAppsHandler(t *testing.T) {
 	assert.Equal(t, 0, len(part.GetApplications()))
 
 	// add a new app
-	app := newApplication("app-1", partitionName, "root.default", rmID)
+	app := newApplication("app-1", partitionName, "root.default", rmID, security.UserGroup{User: "abc"})
 	err = part.AddApplication(app)
 	assert.NilError(t, err, "Failed to add Application to Partition.")
 	assert.Equal(t, app.CurrentState(), objects.New.String())
 	assert.Equal(t, 1, len(part.GetApplications()))
 
+	app.AddAllocation(&objects.Allocation{
+		AllocatedResource: &resources.Resource{
+			Resources: map[string]resources.Quantity{"vcore": 1},
+		},
+	})
 	NewWebApp(schedulerContext, nil)
 
 	// Passing "root.default" as filter return 1 application
@@ -429,10 +435,33 @@ func TestQueryParamInAppsHandler(t *testing.T) {
 	assert.NilError(t, err, "App Handler request failed")
 	resp := &MockResponseWriter{}
 	var appsDao []*dao.ApplicationDAOInfo
+	// sleep for making elapsed time
+	time.Sleep(1 * time.Second)
 	getApplicationsInfo(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &appsDao)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
 	assert.Equal(t, len(appsDao), 1)
+	assert.Equal(t, appsDao[0].User, "abc")
+	assert.Assert(t, appsDao[0].ElapsedTime > 0)
+	assert.Equal(t, appsDao[0].MaxUsedResource, "[vcore:1]")
+
+	// Passing "root.q1" as filter return 0 application as there is no app related to user: who
+	req, err = http.NewRequest("GET", "/ws/v1/apps?user=who", strings.NewReader(""))
+	assert.NilError(t, err, "App Handler request failed")
+	resp = &MockResponseWriter{}
+	getApplicationsInfo(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &appsDao)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, len(appsDao), 0)
+
+	// Passing "root.q1" as filter return 0 application as there is no app having state:why
+	req, err = http.NewRequest("GET", "/ws/v1/apps?applicationState=why", strings.NewReader(""))
+	assert.NilError(t, err, "App Handler request failed")
+	resp = &MockResponseWriter{}
+	getApplicationsInfo(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &appsDao)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, len(appsDao), 0)
 
 	// Passing "root.q1" as filter return 0 application as there is no app running in "root.q1" queue
 	req, err = http.NewRequest("GET", "/ws/v1/apps?queue=root.q1", strings.NewReader(""))
@@ -595,7 +624,7 @@ func TestGetClusterUtilJSON(t *testing.T) {
 	assert.Equal(t, partitionName, partition.Name)
 	// new app to partition
 	appID := "appID-1"
-	app := newApplication(appID, partitionName, queueName, rmID)
+	app := newApplication(appID, partitionName, queueName, rmID, security.UserGroup{})
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "add application to partition should not have failed")
 	// case of total resource and allocated resource undefined
@@ -680,7 +709,7 @@ func TestGetNodesUtilJSON(t *testing.T) {
 	assert.Equal(t, partitionName, partition.Name)
 	// create test application
 	appID := "app1"
-	app := newApplication(appID, partitionName, queueName, rmID)
+	app := newApplication(appID, partitionName, queueName, rmID, security.UserGroup{})
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "add application to partition should not have failed")
 
@@ -739,7 +768,7 @@ func TestGetNodesUtilJSON(t *testing.T) {
 
 func addAndConfirmApplicationExists(t *testing.T, partitionName string, partition *scheduler.PartitionContext, appName string) *objects.Application {
 	// add a new app
-	app := newApplication(appName, partitionName, "root.default", rmID)
+	app := newApplication(appName, partitionName, "root.default", rmID, security.UserGroup{})
 	err := partition.AddApplication(app)
 	assert.NilError(t, err, "Failed to add Application to Partition.")
 	assert.Equal(t, app.CurrentState(), objects.New.String())
@@ -1066,7 +1095,7 @@ func TestGetPartitionNodes(t *testing.T) {
 
 	// create test application
 	appID := "app1"
-	app := newApplication(appID, partitionName, queueName, rmID)
+	app := newApplication(appID, partitionName, queueName, rmID, security.UserGroup{})
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "add application to partition should not have failed")
 
@@ -1154,7 +1183,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 
 	addApp := func(id string, queueName string, isCompleted bool) {
 		initSize := len(part.GetApplications())
-		app := newApplication(id, partitionName, queueName, rmID)
+		app := newApplication(id, partitionName, queueName, rmID, security.UserGroup{})
 		err = part.AddApplication(app)
 		assert.NilError(t, err, "Failed to add Application to Partition.")
 		assert.Equal(t, app.CurrentState(), objects.New.String())

@@ -66,6 +66,7 @@ type Application struct {
 	user                 security.UserGroup     // owner of the application
 	tags                 map[string]string      // application tags used in scheduling
 	allocatedResource    *resources.Resource    // total allocated resources
+	maxAllocatedResource *resources.Resource    // max allocated resources
 	allocatedPlaceholder *resources.Resource    // total allocated placeholder resources
 	allocations          map[string]*Allocation // list of all allocations
 	placeholderAsk       *resources.Resource    // total placeholder request for the app (all task groups)
@@ -74,6 +75,7 @@ type Application struct {
 	execTimeout          time.Duration          // execTimeout for the application run
 	placeholderTimer     *time.Timer            // placeholder replace timer
 	gangSchedulingStyle  string                 // gang scheduling style can be hard (after timeout we fail the application), or soft (after timeeout we schedule it as a normal application)
+	elapsedTime          time.Duration
 
 	rmEventHandler     handler.EventHandler
 	rmID               string
@@ -91,12 +93,14 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		tags:                 siApp.Tags,
 		pending:              resources.NewResource(),
 		allocatedResource:    resources.NewResource(),
+		maxAllocatedResource: resources.NewResource(),
 		allocatedPlaceholder: resources.NewResource(),
 		requests:             make(map[string]*AllocationAsk),
 		reservations:         make(map[string]*reservation),
 		allocations:          make(map[string]*Allocation),
 		stateMachine:         NewAppState(),
 		placeholderAsk:       resources.NewResourceFromProto(siApp.PlaceholderAsk),
+		elapsedTime:          time.Duration(0),
 	}
 	placeholderTimeout := common.ConvertSITimeout(siApp.ExecutionTimeoutMilliSeconds)
 	if time.Duration(0) == placeholderTimeout {
@@ -377,6 +381,12 @@ func (sa *Application) GetAllocatedResource() *resources.Resource {
 	sa.RLock()
 	defer sa.RUnlock()
 	return sa.allocatedResource.Clone()
+}
+
+func (sa *Application) GetMaxAllocatedResource() *resources.Resource {
+	sa.RLock()
+	defer sa.RUnlock()
+	return sa.maxAllocatedResource.Clone()
 }
 
 // Return the allocated placeholder resources for this application
@@ -1167,6 +1177,15 @@ func (sa *Application) UnSetQueue() {
 	sa.Lock()
 	defer sa.Unlock()
 	sa.queue = nil
+	sa.elapsedTime = time.Since(sa.SubmissionTime)
+}
+
+// ElapsedTime return the elapsed time if this application is terminated. Otherwise, it returns (current time - SubmissionTime)
+func (sa *Application) ElapsedTime() time.Duration {
+	if sa.elapsedTime <= 0 {
+		return time.Since(sa.SubmissionTime)
+	}
+	return sa.elapsedTime
 }
 
 // get a copy of all allocations of the application
@@ -1225,6 +1244,7 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 			sa.initPlaceholderTimer()
 		}
 		sa.allocatedPlaceholder = resources.Add(sa.allocatedPlaceholder, info.AllocatedResource)
+		sa.maxAllocatedResource = resources.ComponentWiseMax(sa.allocatedPlaceholder, sa.maxAllocatedResource)
 		// If there are no more placeholder to allocate we should move state
 		if resources.Equals(sa.allocatedPlaceholder, sa.placeholderAsk) {
 			if err := sa.HandleApplicationEvent(RunApplication); err != nil {
@@ -1246,6 +1266,7 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 			}
 		}
 		sa.allocatedResource = resources.Add(sa.allocatedResource, info.AllocatedResource)
+		sa.maxAllocatedResource = resources.ComponentWiseMax(sa.allocatedResource, sa.maxAllocatedResource)
 	}
 	sa.allocations[info.UUID] = info
 }

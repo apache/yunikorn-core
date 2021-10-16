@@ -55,6 +55,7 @@ type SchedulerMetrics struct {
 	nodeSortingLatency    prometheus.Histogram
 	appSortingLatency     prometheus.Histogram
 	queueSortingLatency   prometheus.Histogram
+	tryNodeLatency        prometheus.Histogram
 	lock                  sync.RWMutex
 }
 
@@ -141,6 +142,15 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), //start from 0.1ms
 		},
 	)
+	s.tryNodeLatency = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: Namespace,
+			Subsystem: SchedulerSubsystem,
+			Name:      "try_node_latency_seconds",
+			Help:      "Latency of trynode, in seconds.",
+			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), //start from 0.1ms
+		},
+	)
 
 	// To register metrics
 	var metricsList = []prometheus.Collector{
@@ -150,6 +160,7 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 		s.schedulingLatency,
 		s.nodeSortingLatency,
 		s.queueSortingLatency,
+		s.tryNodeLatency,
 		s.appSortingLatency,
 		s.totalNodeActive,
 		s.totalNodeFailed,
@@ -183,6 +194,10 @@ func (m *SchedulerMetrics) ObserveAppSortingLatency(start time.Time) {
 
 func (m *SchedulerMetrics) ObserveQueueSortingLatency(start time.Time) {
 	m.queueSortingLatency.Observe(SinceInSeconds(start))
+}
+
+func (m *SchedulerMetrics) ObserveTryNodeLatency(start time.Time) {
+	m.tryNodeLatency.Observe(SinceInSeconds(start))
 }
 
 // To define and implement all metrics operation for Prometheus

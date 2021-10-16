@@ -116,6 +116,7 @@ type CoreSchedulerMetrics interface {
 	ObserveNodeSortingLatency(start time.Time)
 	ObserveAppSortingLatency(start time.Time)
 	ObserveQueueSortingLatency(start time.Time)
+	ObserveTryNodeLatency(start time.Time)
 }
 
 type CoreEventMetrics interface {

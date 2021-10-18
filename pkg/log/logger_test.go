@@ -19,6 +19,7 @@
 package log
 
 import (
+	"sync"
 	"testing"
 
 	"go.uber.org/zap"
@@ -78,12 +79,15 @@ func TestIsDebugEnabled(t *testing.T) {
 func resetGlobals() {
 	logger = nil
 	config = nil
+	once = sync.Once{}
 	zap.ReplaceGlobals(zap.NewNop())
 }
 
 // This test triggers the once.Do() and will have an impact on other tests in this file.
 // resetGlobals() will not undo the impact this test has.
 func TestCreateConfig(t *testing.T) {
+	defer resetGlobals()
+
 	// direct call
 	zapConfig := createConfig()
 	localLogger, err := zapConfig.Build()
@@ -99,4 +103,59 @@ func TestCreateConfig(t *testing.T) {
 	// change log level to info
 	InitAndSetLevel(zap.InfoLevel)
 	assert.Equal(t, false, IsDebugEnabled())
+}
+
+func TestInitializeLogger(t *testing.T) {
+	defer resetGlobals()
+
+	zapConfig := zap.Config{
+		Level:    zap.NewAtomicLevelAt(zapcore.InfoLevel),
+		Encoding: "console",
+	}
+	localLogger, err := zapConfig.Build()
+	assert.NilError(t, err, "failed to create local logger")
+	localLogger2, err2 := zapConfig.Build()
+	assert.NilError(t, err2, "failed to create local logger")
+
+	InitializeLogger(localLogger, &zapConfig)
+	assert.Equal(t, Logger(), localLogger)
+	// second initialization should not do anything
+	InitializeLogger(localLogger2, &zapConfig)
+	assert.Equal(t, Logger(), localLogger)
+}
+
+func TestChangeValidLogLevel(t *testing.T) {
+	defer resetGlobals()
+
+	zapConfig := zap.Config{
+		Level:    zap.NewAtomicLevelAt(zapcore.InfoLevel),
+		Encoding: "console",
+	}
+	localLogger, err := zapConfig.Build()
+	assert.NilError(t, err, "failed to create local logger")
+	InitializeLogger(localLogger, &zapConfig)
+
+	err = SetLogLevel("DEBUG")
+	assert.NilError(t, err, "failed to change log level")
+	assert.Equal(t, zapConfig.Level.Level(), zapcore.DebugLevel)
+
+	// set again to see that we keep DEBUG without issues
+	err = SetLogLevel("DEBUG")
+	assert.NilError(t, err, "failed to change log level")
+	assert.Equal(t, zapConfig.Level.Level(), zapcore.DebugLevel)
+}
+
+func TestChangeInvalidLogLevel(t *testing.T) {
+	defer resetGlobals()
+
+	zapConfig := zap.Config{
+		Level:    zap.NewAtomicLevelAt(zapcore.InfoLevel),
+		Encoding: "console",
+	}
+	localLogger, err := zapConfig.Build()
+	assert.NilError(t, err, "default config logger create failed")
+	InitializeLogger(localLogger, &zapConfig)
+
+	err = SetLogLevel("INVALID")
+	assert.Error(t, err, "failed to change log level, old level active")
 }

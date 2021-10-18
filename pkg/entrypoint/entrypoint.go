@@ -27,6 +27,8 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice"
+
+	"go.uber.org/zap"
 )
 
 // options used to control how services are started
@@ -46,6 +48,11 @@ func StartAllServices() *ServiceContext {
 			metricsHistorySize: 1440,
 			eventCacheEnabled:  false,
 		})
+}
+
+func StartAllServicesWithLogger(logger *zap.Logger, zapConfigs *zap.Config) *ServiceContext {
+	log.InitializeLogger(logger, zapConfigs)
+	return StartAllServices()
 }
 
 // Visible by tests

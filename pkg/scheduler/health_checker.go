@@ -128,7 +128,7 @@ func checkSchedulingContext(schedulerContext *ClusterContext) []dao.HealthCheckI
 		}
 		// check if there are allocations assigned to an app but there are missing from the nodes
 		for _, app := range part.GetApplications() {
-			orphanAllocationsOnApp = append(orphanAllocationsOnNode, checkAppAllocations(app, part.nodes)...)
+			orphanAllocationsOnApp = append(orphanAllocationsOnApp, checkAppAllocations(app, part.nodes)...)
 		}
 		partitionReservationRatio = append(partitionReservationRatio, float32(sumReservation)/(float32(part.GetTotalNodeCount())))
 		if !resources.Equals(sumNodeAllocatedResources, part.GetAllocatedResource()) {

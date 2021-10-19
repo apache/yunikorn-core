@@ -21,6 +21,8 @@ package scheduler
 import (
 	"fmt"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
+
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
@@ -84,6 +86,9 @@ func checkSchedulingContext(schedulerContext *ClusterContext) []dao.HealthCheckI
 	var nodeCapacityMismatch []string
 	// 2. check reservation/node ration
 	var partitionReservationRatio []float32
+	// 3. check for orphan allocations
+	orphanAllocationsOnNode := make([]*objects.Allocation, 0)
+	orphanAllocationsOnApp := make([]*objects.Allocation, 0)
 
 	for _, part := range schedulerContext.GetPartitionMapClone() {
 		if part.GetAllocatedResource().HasNegativeValue() {
@@ -119,6 +124,11 @@ func checkSchedulingContext(schedulerContext *ClusterContext) []dao.HealthCheckI
 			if !resources.StrictlyGreaterThanOrEquals(node.GetCapacity(), node.GetAllocatedResource()) {
 				nodeCapacityMismatch = append(nodeCapacityMismatch, node.NodeID)
 			}
+			orphanAllocationsOnNode = append(orphanAllocationsOnNode, checkNodeAllocations(node, part.applications)...)
+		}
+		// check if there are allocations assigned to an app but there are missing from the nodes
+		for _, app := range part.GetApplications() {
+			orphanAllocationsOnApp = append(orphanAllocationsOnNode, checkAppAllocations(app, part.nodes)...)
 		}
 		partitionReservationRatio = append(partitionReservationRatio, float32(sumReservation)/(float32(part.GetTotalNodeCount())))
 		if !resources.Equals(sumNodeAllocatedResources, part.GetAllocatedResource()) {
@@ -128,7 +138,7 @@ func checkSchedulingContext(schedulerContext *ClusterContext) []dao.HealthCheckI
 			totalResourceMismatch = append(totalResourceMismatch, part.Name)
 		}
 	}
-	var infos = make([]dao.HealthCheckInfo, 7)
+	var infos = make([]dao.HealthCheckInfo, 9)
 	infos[0] = CreateCheckInfo(len(partitionsWithNegResources) == 0, "Negative resources",
 		"Check for negative resources in the partitions",
 		fmt.Sprintf("Partitions with negative resources: %q", partitionsWithNegResources))
@@ -151,5 +161,40 @@ func checkSchedulingContext(schedulerContext *ClusterContext) []dao.HealthCheckI
 	infos[6] = CreateCheckInfo(true, "Reservation check",
 		"Check the reservation nr compared to the number of nodes",
 		fmt.Sprintf("Reservation/node nr ratio: %f", partitionReservationRatio))
+	infos[7] = CreateCheckInfo(len(orphanAllocationsOnNode) == 0, "Orphan allocation on node check",
+		"Check if there are orphan allocations on the nodes",
+		fmt.Sprintf("Orphan allocations: %v", orphanAllocationsOnNode))
+	infos[8] = CreateCheckInfo(len(orphanAllocationsOnApp) == 0, "Orphan allocation on app check",
+		"Check if there are orphan allocations on the applications",
+		fmt.Sprintf("OrphanAllocations: %v", orphanAllocationsOnApp))
 	return infos
+}
+
+func checkAppAllocations(app *objects.Application, nodes objects.NodeCollection) []*objects.Allocation {
+	orphanAllocationsOnApp := make([]*objects.Allocation, 0)
+	for _, alloc := range app.GetAllAllocations() {
+		if node := nodes.GetNode(alloc.NodeID); node != nil {
+			node.GetAllocation(alloc.UUID)
+			if node.GetAllocation(alloc.UUID) == nil {
+				orphanAllocationsOnApp = append(orphanAllocationsOnApp, alloc)
+			}
+		} else {
+			orphanAllocationsOnApp = append(orphanAllocationsOnApp, alloc)
+		}
+	}
+	return orphanAllocationsOnApp
+}
+
+func checkNodeAllocations(node *objects.Node, applications map[string]*objects.Application) []*objects.Allocation {
+	orphanAllocationsOnNode := make([]*objects.Allocation, 0)
+	for _, alloc := range node.GetAllAllocations() {
+		if app, ok := applications[alloc.ApplicationID]; ok {
+			if !app.IsAllocationAssignedToApp(alloc) {
+				orphanAllocationsOnNode = append(orphanAllocationsOnNode, alloc)
+			}
+		} else {
+			orphanAllocationsOnNode = append(orphanAllocationsOnNode, alloc)
+		}
+	}
+	return orphanAllocationsOnNode
 }

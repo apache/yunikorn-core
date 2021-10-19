@@ -1438,3 +1438,10 @@ func (sa *Application) notifyRMAllocationAskReleased(rmID string, released []*Al
 	}
 	sa.rmEventHandler.HandleEvent(releaseEvent)
 }
+
+func (sa *Application) IsAllocationAssignedToApp(alloc *Allocation) bool {
+	sa.RLock()
+	defer sa.RLock()
+	_, ok := sa.allocations[alloc.UUID]
+	return ok
+}

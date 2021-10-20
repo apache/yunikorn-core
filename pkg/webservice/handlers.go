@@ -722,3 +722,21 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
+
+func setLogLevel(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	writeHeaders(w)
+	level := vars["level"]
+	if err := log.SetLogLevel(level); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+	}
+}
+
+func getLogLevel(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	zapConfig := log.GetConfig()
+	if _, err := w.Write([]byte(zapConfig.Level.Level().String())); err != nil {
+		log.Logger().Error("Could not get log level", zap.Error(err))
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}

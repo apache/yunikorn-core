@@ -148,6 +148,18 @@ var webRoutes = routes{
 	},
 	route{
 		"Scheduler",
+		"PUT",
+		"/ws/v1/loglevel/{level}",
+		setLogLevel,
+	},
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/loglevel",
+		getLogLevel,
+	},
+	route{
+		"Scheduler",
 		"GET",
 		"/ws/v1/partition/{partition}/nodes",
 		getPartitionNodes,

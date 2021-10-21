@@ -550,6 +550,10 @@ func checkHealthStatus(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	metrics := metrics2.GetSchedulerMetrics()
 	result := scheduler.GetSchedulerHealthStatus(metrics, schedulerContext)
+	if !result.Healthy {
+		log.Logger().Error("Scheduler is not healthy", zap.Any("health check values", result.HealthChecks))
+		buildJSONErrorResponse(w, "Scheduler is not healthy", http.StatusServiceUnavailable)
+	}
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}

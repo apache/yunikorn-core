@@ -108,6 +108,13 @@ test: clean
 	go test ./... $(RACE) -tags deadlock -coverprofile=coverage.txt -covermode=atomic
 	go vet $(REPO)...
 
+# Generate FSM graphs (dot/png)
+.PHONY: fsm_graph
+fsm_graph: clean
+	@echo "generating FSM graphs"
+	go test -tags graphviz -run 'Test.*FsmGraph' ./pkg/scheduler/objects
+	scripts/generate-fsm-graph-images.sh
+
 # Simple clean of generated files only (no local cleanup).
 .PHONY: clean
 clean:

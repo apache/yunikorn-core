@@ -174,7 +174,6 @@ func checkAppAllocations(app *objects.Application, nodes objects.NodeCollection)
 	orphanAllocationsOnApp := make([]*objects.Allocation, 0)
 	for _, alloc := range app.GetAllAllocations() {
 		if node := nodes.GetNode(alloc.NodeID); node != nil {
-			node.GetAllocation(alloc.UUID)
 			if node.GetAllocation(alloc.UUID) == nil {
 				orphanAllocationsOnApp = append(orphanAllocationsOnApp, alloc)
 			}

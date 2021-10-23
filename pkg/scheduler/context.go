@@ -122,9 +122,9 @@ func (cc *ClusterContext) schedule() {
 			if alloc == nil {
 				alloc = psc.tryAllocate()
 			}
-			metrics.GetSchedulerMetrics().ObserveSchedulingLatency(schedulingStart)
 		}
 		if alloc != nil {
+			metrics.GetSchedulerMetrics().ObserveSchedulingLatency(schedulingStart)
 			if alloc.Result == objects.Replaced {
 				// communicate the removal to the RM
 				cc.notifyRMAllocationReleased(psc.RmID, alloc.Releases, si.TerminationType_PLACEHOLDER_REPLACED, "replacing UUID: "+alloc.UUID)

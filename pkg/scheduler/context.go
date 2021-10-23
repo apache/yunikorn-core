@@ -102,7 +102,6 @@ func (cc *ClusterContext) setEventHandler(rmHandler handler.EventHandler) {
 // Process each partition in the scheduler, walk over each queue and app to check if anything can be scheduled.
 // This can be forked into a go routine per partition if needed to increase parallel allocations
 func (cc *ClusterContext) schedule() {
-	schedulingStart := time.Now()
 	// schedule each partition defined in the cluster
 	for _, psc := range cc.GetPartitionMapClone() {
 		// if there are no resources in the partition just skip
@@ -114,6 +113,7 @@ func (cc *ClusterContext) schedule() {
 			continue
 		}
 		// try reservations first
+		schedulingStart := time.Now()
 		alloc := psc.tryReservedAllocate()
 		if alloc == nil {
 			// placeholder replacement second
@@ -124,6 +124,7 @@ func (cc *ClusterContext) schedule() {
 			}
 		}
 		if alloc != nil {
+			metrics.GetSchedulerMetrics().ObserveSchedulingLatency(schedulingStart)
 			if alloc.Result == objects.Replaced {
 				// communicate the removal to the RM
 				cc.notifyRMAllocationReleased(psc.RmID, alloc.Releases, si.TerminationType_PLACEHOLDER_REPLACED, "replacing UUID: "+alloc.UUID)
@@ -132,7 +133,6 @@ func (cc *ClusterContext) schedule() {
 			}
 		}
 	}
-	metrics.GetSchedulerMetrics().ObserveSchedulingLatency(schedulingStart)
 }
 
 func (cc *ClusterContext) processRMRegistrationEvent(event *rmevent.RMRegistrationEvent) {

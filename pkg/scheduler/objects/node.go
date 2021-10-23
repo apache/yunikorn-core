@@ -57,7 +57,7 @@ type Node struct {
 	sync.RWMutex
 }
 
-func NewNode(proto *si.NewNodeInfo) *Node {
+func NewNode(proto *si.NodeInfo) *Node {
 	// safe guard against panic
 	if proto == nil {
 		return nil

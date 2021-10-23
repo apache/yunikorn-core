@@ -50,7 +50,7 @@ func main() {
 	}
 	log.Printf("Responded")
 
-	stream, err := c.Update(ctx)
+	stream, err := c.UpdateAllocation(ctx)
 	if err != nil {
 		log.Fatalf("error on update: %v", err)
 	}
@@ -60,7 +60,7 @@ func main() {
 	// first goroutine sends requests
 	go func() {
 		for i := 1; i <= 10; i++ {
-			req := si.UpdateRequest{}
+			req := si.AllocationRequest{}
 			if err := stream.Send(&req); err != nil {
 				log.Fatalf("can not send %v", err)
 			}

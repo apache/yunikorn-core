@@ -609,7 +609,7 @@ func TestUpdateResources(t *testing.T) {
 }
 
 func TestUnlimitedNode(t *testing.T) {
-	nodeInfo := &si.NewNodeInfo{
+	nodeInfo := &si.NodeInfo{
 		NodeID:     "Unlimited",
 		Attributes: map[string]string{"yunikorn.apache.org/nodeType": "unlimited"},
 	}
@@ -638,20 +638,20 @@ func TestIsValidFor(t *testing.T) {
 	ask2.requiredNode = "node-1"
 
 	// node 1: schedulable
-	node1 := NewNode(&si.NewNodeInfo{
+	node1 := NewNode(&si.NodeInfo{
 		NodeID: "node-1",
 	})
 	// node 1: unschedulable
-	node1Unschedulable := NewNode(&si.NewNodeInfo{
+	node1Unschedulable := NewNode(&si.NodeInfo{
 		NodeID: "node-1",
 	})
 	node1Unschedulable.SetSchedulable(false)
 	// node 2: schedulable
-	node2 := NewNode(&si.NewNodeInfo{
+	node2 := NewNode(&si.NodeInfo{
 		NodeID: "node-2",
 	})
 	// node 2: unschedulable
-	node2Unschedulable := NewNode(&si.NewNodeInfo{
+	node2Unschedulable := NewNode(&si.NodeInfo{
 		NodeID: "node-2",
 	})
 	node2Unschedulable.SetSchedulable(false)

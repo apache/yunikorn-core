@@ -49,7 +49,7 @@ func (scheduler *SimpleScheduler) RegisterResourceManager(ctx context.Context, i
 	return &(si.RegisterResourceManagerResponse{}), nil
 }
 
-func (scheduler *SimpleScheduler) Update(conn si.Scheduler_UpdateServer) error {
+func (scheduler *SimpleScheduler) UpdateAllocation(conn si.Scheduler_UpdateAllocationServer) error {
 	log.Println("start new server")
 	ctx := conn.Context()
 
@@ -78,7 +78,92 @@ func (scheduler *SimpleScheduler) Update(conn si.Scheduler_UpdateServer) error {
 		}
 
 		// Send response to stream
-		resp := si.UpdateResponse{}
+		resp := si.AllocationResponse{}
+
+		time.Sleep(2 * time.Second)
+
+		if err := conn.Send(&resp); err != nil {
+			log.Printf("send error %v", err)
+			return err
+		}
+
+		log.Printf("Responded")
+	}
+}
+
+func (scheduler *SimpleScheduler) UpdateApplication(conn si.Scheduler_UpdateApplicationServer) error {
+	log.Println("start new server")
+	ctx := conn.Context()
+
+	for {
+		// exit if context is done
+		// or continue
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		// receive data from stream
+		_, err := conn.Recv()
+
+		log.Printf("Requested recved")
+
+		if err == io.EOF {
+			// return will close stream from server side
+			log.Println("exit")
+			return nil
+		}
+		if err != nil {
+			log.Printf("receive error %v", err)
+			continue
+		}
+
+		// Send response to stream
+		resp := si.ApplicationResponse{}
+
+		time.Sleep(2 * time.Second)
+
+		if err := conn.Send(&resp); err != nil {
+			log.Printf("send error %v", err)
+			return err
+		}
+
+		log.Printf("Responded")
+	}
+}
+
+
+func (scheduler *SimpleScheduler) UpdateNode(conn si.Scheduler_UpdateNodeServer) error {
+	log.Println("start new server")
+	ctx := conn.Context()
+
+	for {
+		// exit if context is done
+		// or continue
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		// receive data from stream
+		_, err := conn.Recv()
+
+		log.Printf("Requested recved")
+
+		if err == io.EOF {
+			// return will close stream from server side
+			log.Println("exit")
+			return nil
+		}
+		if err != nil {
+			log.Printf("receive error %v", err)
+			continue
+		}
+
+		// Send response to stream
+		resp := si.NodeResponse{}
 
 		time.Sleep(2 * time.Second)
 

@@ -34,6 +34,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/events"
 	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
@@ -1027,9 +1028,11 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 		if !node.FitInNode(ask.AllocatedResource) {
 			continue
 		}
+		tryNodeStart := time.Now()
 		alloc := sa.tryNode(node, ask)
 		// allocation worked so return
 		if alloc != nil {
+			metrics.GetSchedulerMetrics().ObserveTryNodeLatency(tryNodeStart)
 			// check if the node was reserved for this ask: if it is set the result and return
 			// NOTE: this is a safeguard as reserved nodes should never be part of the iterator
 			// but we have no locking

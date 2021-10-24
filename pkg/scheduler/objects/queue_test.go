@@ -1624,7 +1624,7 @@ func TestTemplateIsNotOverrideByParent(t *testing.T) {
 	assert.Assert(t, !reflect.DeepEqual(leaf.template, parent.template))
 }
 
-func TestGetHeadRoom(t *testing.T) {
+func TestGetHeadRoomFromTwoQueues(t *testing.T) {
 	allocatedResource := &resources.Resource{
 		Resources: map[string]resources.Quantity{
 			"vcore":  2000,
@@ -1644,6 +1644,50 @@ func TestGetHeadRoom(t *testing.T) {
 	parent.allocatedResource = allocatedResource
 
 	// this child is not set with max memory, so it should follow parent max memory
+	child, err := createManagedQueueWithProps(parent, "child", true, nil, nil)
+	assert.NilError(t, err)
+	child.maxResource = &resources.Resource{
+		Resources: map[string]resources.Quantity{
+			"vcore": 4000,
+		},
+	}
+	child.allocatedResource = allocatedResource
+
+	result := child.getHeadRoom()
+
+	assert.Equal(t, resources.Quantity(1000), result.Resources["vcore"])
+	assert.Equal(t, resources.Quantity(1000), result.Resources["memory"])
+}
+
+func TestGetHeadRoomFromThreeQueues(t *testing.T) {
+	allocatedResource := &resources.Resource{
+		Resources: map[string]resources.Quantity{
+			"vcore":  2000,
+			"memory": 2000,
+		},
+	}
+
+	rootQueue, err := createManagedQueueWithProps(nil, "rootQueue", true, nil, nil)
+	assert.NilError(t, err)
+	rootQueue.maxResource = &resources.Resource{
+		Resources: map[string]resources.Quantity{
+			"vcore":  3000,
+			"memory": 3000,
+		},
+	}
+	// make sure rootQueue queue see all allocated resources
+	rootQueue.allocatedResource = allocatedResource
+
+	parent, err := createManagedQueueWithProps(rootQueue, "parent", true, nil, nil)
+	assert.NilError(t, err)
+	// this parent has no limit for all resource types
+	parent.maxResource = &resources.Resource{
+		Resources: make(map[string]resources.Quantity),
+	}
+	// make sure parent queue see all allocated resources
+	parent.allocatedResource = allocatedResource
+
+	// this child is not set with max memory, so it should follow rootQueue max memory
 	child, err := createManagedQueueWithProps(parent, "child", true, nil, nil)
 	assert.NilError(t, err)
 	child.maxResource = &resources.Resource{

@@ -19,6 +19,8 @@
 package entrypoint
 
 import (
+	"go.uber.org/zap"
+
 	"github.com/apache/incubator-yunikorn-core/pkg/events"
 	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
@@ -46,6 +48,11 @@ func StartAllServices() *ServiceContext {
 			metricsHistorySize: 1440,
 			eventCacheEnabled:  false,
 		})
+}
+
+func StartAllServicesWithLogger(logger *zap.Logger, zapConfigs *zap.Config) *ServiceContext {
+	log.InitializeLogger(logger, zapConfigs)
+	return StartAllServices()
 }
 
 // Visible by tests

@@ -148,7 +148,7 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Subsystem: SchedulerSubsystem,
 			Name:      "try_node_latency_seconds",
 			Help:      "Latency of trynode, in seconds.",
-			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), //start from 0.1ms
+			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6),
 		},
 	)
 

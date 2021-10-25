@@ -101,6 +101,24 @@ func (m *mockRMCallback) UpdateNode(response *si.NodeResponse) error {
 	return nil
 }
 
+func (f *mockRMCallback) Predicates(args *si.PredicatesArgs) error {
+	// do nothing
+	return nil
+}
+
+func (f *mockRMCallback) ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error {
+	// do nothing
+	return nil
+}
+
+func (f *mockRMCallback) SendEvent(events []*si.EventRecord) {
+	// do nothing
+}
+
+func (f *mockRMCallback) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
+	// do nothing
+}
+
 func (m *mockRMCallback) getAllocations() map[string]*si.Allocation {
 	m.RLock()
 	defer m.RUnlock()

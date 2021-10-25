@@ -778,7 +778,7 @@ func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRel
 	if len(toReleaseAllocations) > 0 {
 		log.Logger().Debug("notify shim to forget assumed pods",
 			zap.Int("size", len(toReleaseAllocations)))
-		if rp := plugins.GetReconcilePlugin(); rp != nil {
+		if rp := plugins.GetResourceManagerCallbackPlugin(); rp != nil {
 			err := rp.ReSyncSchedulerCache(&si.ReSyncSchedulerCacheArgs{
 				ForgetAllocations: toReleaseAllocations,
 			})
@@ -815,7 +815,7 @@ func (cc *ClusterContext) notifyRMNewAllocation(rmID string, alloc *objects.Allo
 	// note, this needs to happen before notifying the RM about this allocation, because
 	// the RM side needs to get its cache refreshed (via reconcile plugin) before allocating
 	// the actual container.
-	if rp := plugins.GetReconcilePlugin(); rp != nil {
+	if rp := plugins.GetResourceManagerCallbackPlugin(); rp != nil {
 		if err := rp.ReSyncSchedulerCache(&si.ReSyncSchedulerCacheArgs{
 			AssumedAllocations: []*si.AssumedAllocation{
 				{

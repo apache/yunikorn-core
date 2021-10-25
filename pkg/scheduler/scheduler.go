@@ -145,8 +145,8 @@ func (s *Scheduler) inspectOutstandingRequests() {
 					zap.String("allocationKey", ask.AllocationKey))
 				// these asks are queue outstanding requests,
 				// they can fit into the max head room, but they are pending because lack of partition resources
-				if updater := plugins.GetContainerSchedulingStateUpdaterPlugin(); updater != nil {
-					updater.Update(&si.UpdateContainerSchedulingStateRequest{
+				if updater := plugins.GetResourceManagerCallbackPlugin(); updater != nil {
+					updater.UpdateContainerSchedulingState(&si.UpdateContainerSchedulingStateRequest{
 						ApplicartionID: ask.ApplicationID,
 						AllocationKey:  ask.AllocationKey,
 						State:          si.UpdateContainerSchedulingStateRequest_FAILED,

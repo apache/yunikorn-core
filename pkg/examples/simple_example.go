@@ -88,6 +88,24 @@ func (m *exampleRMCallback) UpdateNode(response *si.NodeResponse) error {
 	return nil
 }
 
+func (f *exampleRMCallback) Predicates(args *si.PredicatesArgs) error {
+	// do nothing
+	return nil
+}
+
+func (f *exampleRMCallback) ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error {
+	// do nothing
+	return nil
+}
+
+func (f *exampleRMCallback) SendEvent(events []*si.EventRecord) {
+	// do nothing
+}
+
+func (f *exampleRMCallback) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
+	// do nothing
+}
+
 func newExampleRMCallback() *exampleRMCallback {
 	return &exampleRMCallback{
 		acceptedApplications: make(map[string]bool),

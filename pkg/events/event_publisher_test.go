@@ -42,7 +42,7 @@ func createEventPluginForTest() (*mockEventPlugin, error) {
 		records: make(chan *si.EventRecord, 3),
 	}
 	plugins.RegisterSchedulerPlugin(&eventPlugin)
-	if plugins.GetEventPlugin() == nil {
+	if plugins.GetResourceManagerCallbackPlugin() == nil {
 		return nil, fmt.Errorf("event plugin is not registered")
 	}
 	return &eventPlugin, nil
@@ -55,6 +55,35 @@ func (ep *mockEventPlugin) SendEvent(events []*si.EventRecord) {
 	for _, event := range events {
 		ep.records <- event
 	}
+}
+
+func (f *mockEventPlugin) UpdateAllocation(response *si.AllocationResponse) error {
+	// do nothing
+	return nil
+}
+
+func (f *mockEventPlugin) UpdateApplication(response *si.ApplicationResponse) error {
+	// do nothing
+	return nil
+}
+
+func (f *mockEventPlugin) UpdateNode(response *si.NodeResponse) error {
+	// do nothing
+	return nil
+}
+
+func (f *mockEventPlugin) Predicates(args *si.PredicatesArgs) error {
+	// do nothing
+	return nil
+}
+
+func (f *mockEventPlugin) ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error {
+	// do nothing
+	return nil
+}
+
+func (f *mockEventPlugin) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
+	// do nothing
 }
 
 func (ep *mockEventPlugin) getNextEventRecord() *si.EventRecord {

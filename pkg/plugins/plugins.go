@@ -20,6 +20,7 @@ package plugins
 
 import (
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/api"
 )
 
 var plugins SchedulerPlugins
@@ -31,22 +32,9 @@ func init() {
 func RegisterSchedulerPlugin(plugin interface{}) {
 	plugins.Lock()
 	defer plugins.Unlock()
-
-	if t, ok := plugin.(PredicatesPlugin); ok {
-		log.Logger().Info("register scheduler plugin: PredicatesPlugin")
-		plugins.predicatesPlugin = t
-	}
-	if t, ok := plugin.(ReconcilePlugin); ok {
-		log.Logger().Info("register scheduler plugin: ReconcilePlugin")
-		plugins.reconcilePlugin = t
-	}
-	if t, ok := plugin.(EventPlugin); ok {
-		log.Logger().Info("register scheduler plugin: EventPlugin")
-		plugins.eventPlugin = t
-	}
-	if t, ok := plugin.(ContainerSchedulingStateUpdater); ok {
-		log.Logger().Info("register scheduler plugin: ContainerSchedulingStateUpdater")
-		plugins.schedulingStateUpdater = t
+	if t, ok := plugin.(api.ResourceManagerCallback); ok {
+		log.Logger().Info("register scheduler plugin: ResourceManagerCallback")
+		plugins.ResourceManagerCallbackPlugin = t
 	}
 	if t, ok := plugin.(ConfigurationPlugin); ok {
 		log.Logger().Info("register scheduler plugin: ConfigMapPlugin")
@@ -54,32 +42,10 @@ func RegisterSchedulerPlugin(plugin interface{}) {
 	}
 }
 
-func GetPredicatesPlugin() PredicatesPlugin {
+func GetResourceManagerCallbackPlugin() api.ResourceManagerCallback {
 	plugins.RLock()
 	defer plugins.RUnlock()
-
-	return plugins.predicatesPlugin
-}
-
-func GetReconcilePlugin() ReconcilePlugin {
-	plugins.RLock()
-	defer plugins.RUnlock()
-
-	return plugins.reconcilePlugin
-}
-
-func GetEventPlugin() EventPlugin {
-	plugins.RLock()
-	defer plugins.RUnlock()
-
-	return plugins.eventPlugin
-}
-
-func GetContainerSchedulingStateUpdaterPlugin() ContainerSchedulingStateUpdater {
-	plugins.RLock()
-	defer plugins.RUnlock()
-
-	return plugins.schedulingStateUpdater
+	return plugins.ResourceManagerCallbackPlugin
 }
 
 func GetConfigPlugin() ConfigurationPlugin {

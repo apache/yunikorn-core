@@ -146,7 +146,12 @@ func NewAppState() *fsm.FSM {
 				event.Args[0].(*Application).clearStateTimer()
 			},
 			fmt.Sprintf("enter_%s", Starting.String()): func(event *fsm.Event) {
-				setTimer(startingTimeout, event, RunApplication)
+				app, ok := event.Args[0].(*Application)
+				if !ok {
+					log.Logger().Warn("The first argument is not an Application")
+					return
+				}
+				setTimer(app.startTimeout, event, RunApplication)
 			},
 			fmt.Sprintf("enter_%s", Completing.String()): func(event *fsm.Event) {
 				setTimer(completingTimeout, event, CompleteApplication)

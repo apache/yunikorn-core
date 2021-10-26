@@ -47,8 +47,9 @@ var (
 )
 
 const (
-	Soft string = "Soft"
-	Hard string = "Hard"
+	Soft                    string = "Soft"
+	Hard                    string = "Hard"
+	AppTagStateAwareDisable string = "application.stateaware.disable"
 )
 
 type Application struct {
@@ -71,6 +72,7 @@ type Application struct {
 	placeholderAsk       *resources.Resource    // total placeholder request for the app (all task groups)
 	stateMachine         *fsm.FSM               // application state machine
 	stateTimer           *time.Timer            // timer for state time
+	startTimeout         time.Duration          // timeout for the application starting state
 	execTimeout          time.Duration          // execTimeout for the application run
 	placeholderTimer     *time.Timer            // placeholder replace timer
 	gangSchedulingStyle  string                 // gang scheduling style can be hard (after timeout we fail the application), or soft (after timeeout we schedule it as a normal application)
@@ -110,6 +112,11 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	}
 	app.gangSchedulingStyle = gangSchedStyle
 	app.execTimeout = placeholderTimeout
+	if app.GetTag(AppTagStateAwareDisable) != "" {
+		app.startTimeout = 0 // transition immediately to Running
+	} else {
+		app.startTimeout = startingTimeout
+	}
 	app.user = ugi
 	app.rmEventHandler = eventHandler
 	app.rmID = rmID

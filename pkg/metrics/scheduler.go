@@ -146,8 +146,8 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 		prometheus.HistogramOpts{
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
-			Name:      "try_node_latency_seconds",
-			Help:      "Latency of trynode, in seconds.",
+			Name:      "trynode_latency_seconds",
+			Help:      "Latency of node condition checks for container allocations, such as placement constraints, in seconds, in seconds.",
 			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6),
 		},
 	)

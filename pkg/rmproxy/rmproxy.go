@@ -362,7 +362,7 @@ func (rmp *RMProxy) UpdateNode(request *si.NodeRequest) error {
 }
 
 // Triggers scheduler to reload configuration and apply the changes on-the-fly to the scheduler itself.
-func (rmp *RMProxy) ReloadConfiguration(rmID string) error {
+func (rmp *RMProxy) UpdateConfiguration(rmID string) error {
 	rmp.RLock()
 	defer rmp.RUnlock()
 

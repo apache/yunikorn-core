@@ -95,7 +95,7 @@ partitions:
           gpu: test queue property
 `
 	configs.MockSchedulerConfigByData([]byte(configData))
-	err = ms.proxy.ReloadConfiguration("rm:123")
+	err = ms.proxy.UpdateConfiguration("rm:123")
 
 	assert.NilError(t, err, "configuration reload failed")
 

@@ -36,21 +36,10 @@ func RegisterSchedulerPlugin(plugin interface{}) {
 		log.Logger().Info("register scheduler plugin: ResourceManagerCallback")
 		plugins.ResourceManagerCallbackPlugin = t
 	}
-	if t, ok := plugin.(ConfigurationPlugin); ok {
-		log.Logger().Info("register scheduler plugin: ConfigMapPlugin")
-		plugins.configPlugin = t
-	}
 }
 
 func GetResourceManagerCallbackPlugin() api.ResourceManagerCallback {
 	plugins.RLock()
 	defer plugins.RUnlock()
 	return plugins.ResourceManagerCallbackPlugin
-}
-
-func GetConfigPlugin() ConfigurationPlugin {
-	plugins.RLock()
-	defer plugins.RUnlock()
-
-	return plugins.configPlugin
 }

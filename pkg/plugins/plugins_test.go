@@ -73,12 +73,10 @@ func TestRegisterPlugins(t *testing.T) {
 	plugins = SchedulerPlugins{}
 	RegisterSchedulerPlugin(&FakeResourceManagerCallback{})
 	assert.Assert(t, GetResourceManagerCallbackPlugin() != nil, "ResourceManagerCallbackPlugin plugin should have been registered")
-	assert.Assert(t, GetConfigPlugin() == nil, "config plugin should not have been registered")
 }
 
 func TestRegisterConfigPlugin(t *testing.T) {
 	plugins = SchedulerPlugins{}
 	RegisterSchedulerPlugin(&FakeConfigPlugin{})
 	assert.Assert(t, GetResourceManagerCallbackPlugin() == nil, "ResourceManagerCallback plugin should not have been registered")
-	assert.Assert(t, GetConfigPlugin() != nil, "config plugin should have been registered")
 }

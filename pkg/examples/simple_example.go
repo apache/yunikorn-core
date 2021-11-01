@@ -106,6 +106,11 @@ func (f *exampleRMCallback) UpdateContainerSchedulingState(request *si.UpdateCon
 	// do nothing
 }
 
+func (f *exampleRMCallback) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
+	// do nothing
+	return nil
+}
+
 func newExampleRMCallback() *exampleRMCallback {
 	return &exampleRMCallback{
 		acceptedApplications: make(map[string]bool),

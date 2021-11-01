@@ -573,7 +573,7 @@ func buildUpdateResponse(err error, w http.ResponseWriter) {
 }
 
 func updateConfiguration(conf string) (string, error) {
-	if plugin := plugins.GetConfigPlugin(); plugin != nil {
+	if plugin := plugins.GetResourceManagerCallbackPlugin(); plugin != nil {
 		// use the plugin to update the configuration in the configMap
 		resp := plugin.UpdateConfiguration(&si.UpdateConfigurationRequest{
 			Configs: conf,

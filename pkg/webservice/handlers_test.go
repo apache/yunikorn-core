@@ -480,6 +480,39 @@ type FakeConfigPlugin struct {
 	generateError bool
 }
 
+func (m *FakeConfigPlugin) UpdateAllocation(response *si.AllocationResponse) error {
+	// do nothing
+	return nil
+}
+
+func (m *FakeConfigPlugin) UpdateApplication(response *si.ApplicationResponse) error {
+	// do nothing
+	return nil
+}
+
+func (m *FakeConfigPlugin) UpdateNode(response *si.NodeResponse) error {
+	// do nothing
+	return nil
+}
+
+func (f *FakeConfigPlugin) Predicates(args *si.PredicatesArgs) error {
+	// do nothing
+	return nil
+}
+
+func (f *FakeConfigPlugin) ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error {
+	// do nothing
+	return nil
+}
+
+func (f *FakeConfigPlugin) SendEvent(events []*si.EventRecord) {
+	// do nothing
+}
+
+func (f *FakeConfigPlugin) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
+	// do nothing
+}
+
 func (f FakeConfigPlugin) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
 	if f.generateError {
 		return &si.UpdateConfigurationResponse{

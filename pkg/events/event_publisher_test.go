@@ -86,6 +86,11 @@ func (f *mockEventPlugin) UpdateContainerSchedulingState(request *si.UpdateConta
 	// do nothing
 }
 
+func (f *mockEventPlugin) UpdateConfiguration(request *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse{
+	// do nothing
+	return nil
+}
+
 func (ep *mockEventPlugin) getNextEventRecord() *si.EventRecord {
 	ep.Lock()
 	defer ep.Unlock()

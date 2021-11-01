@@ -22,16 +22,10 @@ import (
 	"sync"
 
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/api"
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 type SchedulerPlugins struct {
-	configPlugin           ConfigurationPlugin
 	ResourceManagerCallbackPlugin	api.ResourceManagerCallback
 
 	sync.RWMutex
-}
-
-type ConfigurationPlugin interface {
-	UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse
 }

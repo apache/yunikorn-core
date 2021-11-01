@@ -119,6 +119,11 @@ func (f *mockRMCallback) UpdateContainerSchedulingState(request *si.UpdateContai
 	// do nothing
 }
 
+func (f *mockRMCallback) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
+	// do nothing
+	return nil
+}
+
 func (m *mockRMCallback) getAllocations() map[string]*si.Allocation {
 	m.RLock()
 	defer m.RUnlock()

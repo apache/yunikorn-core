@@ -79,7 +79,7 @@ func TestAddUnlimitedNode(t *testing.T) {
 	unlimitedNode := &si.NodeInfo{
 		NodeID:     "unlimited",
 		Attributes: map[string]string{"yunikorn.apache.org/nodeType": "unlimited", "si/node-partition": "default"},
-		Action: si.NodeInfo_CREATE,
+		Action:     si.NodeInfo_CREATE,
 	}
 	var newNodes []*si.NodeInfo
 	newNodes = append(newNodes, unlimitedNode)
@@ -108,7 +108,7 @@ func TestAddUnlimitedNode(t *testing.T) {
 	unlimitedNode2 := &si.NodeInfo{
 		NodeID:     "unlimited2",
 		Attributes: map[string]string{"yunikorn.apache.org/nodeType": "unlimited", "si/node-partition": "default"},
-		Action: si.NodeInfo_CREATE,
+		Action:     si.NodeInfo_CREATE,
 	}
 	var newNodes2 []*si.NodeInfo
 	newNodes2 = append(newNodes2, unlimitedNode2)
@@ -126,7 +126,7 @@ func TestAddUnlimitedNode(t *testing.T) {
 	regularNode := &si.NodeInfo{
 		NodeID:     "regularNode",
 		Attributes: map[string]string{"si/node-partition": "default"},
-		Action: si.NodeInfo_CREATE,
+		Action:     si.NodeInfo_CREATE,
 	}
 	newNodes2 = append(newNodes2, unlimitedNode, regularNode)
 	request2.Nodes = newNodes2

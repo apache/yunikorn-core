@@ -480,17 +480,17 @@ type FakeConfigPlugin struct {
 	generateError bool
 }
 
-func (m *FakeConfigPlugin) UpdateAllocation(response *si.AllocationResponse) error {
+func (f *FakeConfigPlugin) UpdateAllocation(response *si.AllocationResponse) error {
 	// do nothing
 	return nil
 }
 
-func (m *FakeConfigPlugin) UpdateApplication(response *si.ApplicationResponse) error {
+func (f *FakeConfigPlugin) UpdateApplication(response *si.ApplicationResponse) error {
 	// do nothing
 	return nil
 }
 
-func (m *FakeConfigPlugin) UpdateNode(response *si.NodeResponse) error {
+func (f *FakeConfigPlugin) UpdateNode(response *si.NodeResponse) error {
 	// do nothing
 	return nil
 }

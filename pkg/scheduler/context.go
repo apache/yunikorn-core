@@ -231,7 +231,7 @@ func (cc *ClusterContext) processNodes(request *si.NodeRequest) {
 			}
 		}
 
-		if (len(acceptedNodes) > 0 || len(rejectedNodes) > 0) {
+		if len(acceptedNodes) > 0 || len(rejectedNodes) > 0 {
 			// inform the RM which nodes have been accepted/rejected
 			cc.rmEventHandler.HandleEvent(
 				&rmevent.RMNodeUpdateEvent{
@@ -546,7 +546,7 @@ func (cc *ClusterContext) removePartition(partitionName string) {
 	delete(cc.partitions, partitionName)
 }
 
-func(cc *ClusterContext) addNode(nodeInfo *si.NodeInfo, nodeCount int) error {
+func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo, nodeCount int) error {
 	sn := objects.NewNode(nodeInfo)
 	// if the node is unlimited, check the following things:
 	// 1. reservation is enabled or not. If yes, reject the node
@@ -596,60 +596,60 @@ func(cc *ClusterContext) addNode(nodeInfo *si.NodeInfo, nodeCount int) error {
 }
 
 func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
-		var partition *PartitionContext
-		if p, ok := nodeInfo.Attributes[siCommon.NodePartition]; ok {
-			partition = cc.GetPartition(p)
-		} else {
-			log.Logger().Error("node partition not specified",
-				zap.String("nodeID", nodeInfo.NodeID),
-				zap.String("nodeAction", nodeInfo.Action.String()))
-			return
-		}
+	var partition *PartitionContext
+	if p, ok := nodeInfo.Attributes[siCommon.NodePartition]; ok {
+		partition = cc.GetPartition(p)
+	} else {
+		log.Logger().Error("node partition not specified",
+			zap.String("nodeID", nodeInfo.NodeID),
+			zap.String("nodeAction", nodeInfo.Action.String()))
+		return
+	}
 
-		if partition == nil {
-			log.Logger().Error("Failed to update node on non existing partition",
-				zap.String("nodeID", nodeInfo.NodeID),
-				zap.String("partitionName", nodeInfo.Attributes[siCommon.NodePartition]),
-				zap.String("nodeAction", nodeInfo.Action.String()))
-			return
-		}
+	if partition == nil {
+		log.Logger().Error("Failed to update node on non existing partition",
+			zap.String("nodeID", nodeInfo.NodeID),
+			zap.String("partitionName", nodeInfo.Attributes[siCommon.NodePartition]),
+			zap.String("nodeAction", nodeInfo.Action.String()))
+		return
+	}
 
-		node := partition.GetNode(nodeInfo.NodeID)
-		if node == nil {
-			log.Logger().Error("Failed to update non existing node",
-				zap.String("nodeID", node.NodeID),
-				zap.String("partitionName", nodeInfo.Attributes[siCommon.NodePartition]),
-				zap.String("nodeAction", nodeInfo.Action.String()))
-			return
-		}
+	node := partition.GetNode(nodeInfo.NodeID)
+	if node == nil {
+		log.Logger().Error("Failed to update non existing node",
+			zap.String("nodeID", node.NodeID),
+			zap.String("partitionName", nodeInfo.Attributes[siCommon.NodePartition]),
+			zap.String("nodeAction", nodeInfo.Action.String()))
+		return
+	}
 
-		switch nodeInfo.Action {
-		case si.NodeInfo_UPDATE:
-			if sr := nodeInfo.SchedulableResource; sr != nil {
-				partition.updatePartitionResource(node.SetCapacity(resources.NewResourceFromProto(sr)))
-			}
-			if or := nodeInfo.OccupiedResource; or != nil {
-				node.SetOccupiedResource(resources.NewResourceFromProto(or))
-			}
-		case si.NodeInfo_DRAIN_NODE:
-			// set the state to not schedulable
-			node.SetSchedulable(false)
-		case si.NodeInfo_DRAIN_TO_SCHEDULABLE:
-			// set the state to schedulable
-			node.SetSchedulable(true)
-		case si.NodeInfo_DECOMISSION:
-			// set the state to not schedulable then tell the partition to clean up
-			node.SetSchedulable(false)
-			released, confirmed := partition.removeNode(node.NodeID)
-			// notify the shim allocations have been released from node
-			if len(released) != 0 {
-				cc.notifyRMAllocationReleased(partition.RmID, released, si.TerminationType_STOPPED_BY_RM,
-					fmt.Sprintf("Node %s Removed", node.NodeID))
-			}
-			for _, confirm := range confirmed {
-				cc.notifyRMNewAllocation(partition.RmID, confirm)
-			}
+	switch nodeInfo.Action {
+	case si.NodeInfo_UPDATE:
+		if sr := nodeInfo.SchedulableResource; sr != nil {
+			partition.updatePartitionResource(node.SetCapacity(resources.NewResourceFromProto(sr)))
 		}
+		if or := nodeInfo.OccupiedResource; or != nil {
+			node.SetOccupiedResource(resources.NewResourceFromProto(or))
+		}
+	case si.NodeInfo_DRAIN_NODE:
+		// set the state to not schedulable
+		node.SetSchedulable(false)
+	case si.NodeInfo_DRAIN_TO_SCHEDULABLE:
+		// set the state to schedulable
+		node.SetSchedulable(true)
+	case si.NodeInfo_DECOMISSION:
+		// set the state to not schedulable then tell the partition to clean up
+		node.SetSchedulable(false)
+		released, confirmed := partition.removeNode(node.NodeID)
+		// notify the shim allocations have been released from node
+		if len(released) != 0 {
+			cc.notifyRMAllocationReleased(partition.RmID, released, si.TerminationType_STOPPED_BY_RM,
+				fmt.Sprintf("Node %s Removed", node.NodeID))
+		}
+		for _, confirm := range confirmed {
+			cc.notifyRMNewAllocation(partition.RmID, confirm)
+		}
+	}
 }
 
 // Process an ask and allocation update request.
@@ -741,7 +741,6 @@ func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRel
 	for _, toRelease := range releases {
 		partition := cc.GetPartition(toRelease.PartitionName)
 		if partition != nil {
-
 			allocs, confirmed := partition.removeAllocation(toRelease)
 			// notify the RM of the exact released allocations
 			if len(allocs) > 0 {

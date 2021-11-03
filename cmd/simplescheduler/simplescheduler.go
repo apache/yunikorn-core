@@ -133,7 +133,6 @@ func (scheduler *SimpleScheduler) UpdateApplication(conn si.Scheduler_UpdateAppl
 	}
 }
 
-
 func (scheduler *SimpleScheduler) UpdateNode(conn si.Scheduler_UpdateNodeServer) error {
 	log.Println("start new server")
 	ctx := conn.Context()

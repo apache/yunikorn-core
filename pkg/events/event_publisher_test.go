@@ -57,36 +57,36 @@ func (ep *mockEventPlugin) SendEvent(events []*si.EventRecord) {
 	}
 }
 
-func (f *mockEventPlugin) UpdateAllocation(response *si.AllocationResponse) error {
+func (ep *mockEventPlugin) UpdateAllocation(response *si.AllocationResponse) error {
 	// do nothing
 	return nil
 }
 
-func (f *mockEventPlugin) UpdateApplication(response *si.ApplicationResponse) error {
+func (ep *mockEventPlugin) UpdateApplication(response *si.ApplicationResponse) error {
 	// do nothing
 	return nil
 }
 
-func (f *mockEventPlugin) UpdateNode(response *si.NodeResponse) error {
+func (ep *mockEventPlugin) UpdateNode(response *si.NodeResponse) error {
 	// do nothing
 	return nil
 }
 
-func (f *mockEventPlugin) Predicates(args *si.PredicatesArgs) error {
+func (ep *mockEventPlugin) Predicates(args *si.PredicatesArgs) error {
 	// do nothing
 	return nil
 }
 
-func (f *mockEventPlugin) ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error {
+func (ep *mockEventPlugin) ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error {
 	// do nothing
 	return nil
 }
 
-func (f *mockEventPlugin) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
+func (ep *mockEventPlugin) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
 	// do nothing
 }
 
-func (f *mockEventPlugin) UpdateConfiguration(request *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse{
+func (ep *mockEventPlugin) UpdateConfiguration(request *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
 	// do nothing
 	return nil
 }

@@ -25,7 +25,7 @@ import (
 )
 
 type SchedulerPlugins struct {
-	ResourceManagerCallbackPlugin	api.ResourceManagerCallback
+	ResourceManagerCallbackPlugin api.ResourceManagerCallback
 
 	sync.RWMutex
 }

@@ -101,25 +101,25 @@ func (m *mockRMCallback) UpdateNode(response *si.NodeResponse) error {
 	return nil
 }
 
-func (f *mockRMCallback) Predicates(args *si.PredicatesArgs) error {
+func (m *mockRMCallback) Predicates(args *si.PredicatesArgs) error {
 	// do nothing
 	return nil
 }
 
-func (f *mockRMCallback) ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error {
+func (m *mockRMCallback) ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error {
 	// do nothing
 	return nil
 }
 
-func (f *mockRMCallback) SendEvent(events []*si.EventRecord) {
+func (m *mockRMCallback) SendEvent(events []*si.EventRecord) {
 	// do nothing
 }
 
-func (f *mockRMCallback) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
+func (m *mockRMCallback) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
 	// do nothing
 }
 
-func (f *mockRMCallback) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
+func (m *mockRMCallback) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
 	// do nothing
 	return nil
 }

@@ -61,10 +61,7 @@ func (f *FakeResourceManagerCallback) UpdateContainerSchedulingState(request *si
 	// do nothing
 }
 
-type FakeConfigPlugin struct {
-}
-
-func (f FakeConfigPlugin) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
+func (f FakeResourceManagerCallback) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
 	// do nothing
 	return nil
 }
@@ -73,10 +70,4 @@ func TestRegisterPlugins(t *testing.T) {
 	plugins = SchedulerPlugins{}
 	RegisterSchedulerPlugin(&FakeResourceManagerCallback{})
 	assert.Assert(t, GetResourceManagerCallbackPlugin() != nil, "ResourceManagerCallbackPlugin plugin should have been registered")
-}
-
-func TestRegisterConfigPlugin(t *testing.T) {
-	plugins = SchedulerPlugins{}
-	RegisterSchedulerPlugin(&FakeConfigPlugin{})
-	assert.Assert(t, GetResourceManagerCallbackPlugin() == nil, "ResourceManagerCallback plugin should not have been registered")
 }

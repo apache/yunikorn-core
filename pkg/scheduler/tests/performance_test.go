@@ -74,8 +74,8 @@ partitions:
 
 	// Add two apps and wait for them to be accepted
 	err = proxy.UpdateApplication(&si.ApplicationRequest{
-		New: newAddAppRequest(map[string]string{appID1: "root.a", appID2: "root.b"}),
-		RmID:            "rm:123",
+		New:  newAddAppRequest(map[string]string{appID1: "root.a", appID2: "root.b"}),
+		RmID: "rm:123",
 	})
 	assert.NilError(b, err, "UpdateRequest application failed")
 	mockRM.waitForAcceptedApplication(b, appID1, 1000)
@@ -106,7 +106,7 @@ partitions:
 		newNodes = append(newNodes, node)
 	}
 	err = proxy.UpdateNode(&si.NodeRequest{
-		RmID:                "rm:123",
+		RmID:  "rm:123",
 		Nodes: newNodes,
 	})
 	assert.NilError(b, err, "NodeRequest nodes failed")

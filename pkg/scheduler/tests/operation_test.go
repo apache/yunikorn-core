@@ -71,9 +71,10 @@ partitions:
 
 	// Add one application
 	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
-		New: newAddAppRequest(map[string]string{appID1: "root.a"}),
-		RmID:            "rm:123",
+		New:  newAddAppRequest(map[string]string{appID1: "root.a"}),
+		RmID: "rm:123",
 	})
+	assert.NilError(t, err, "ApplicationRequest failed")
 
 	// Application should be accepted
 	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
@@ -137,8 +138,8 @@ partitions:
 
 	// Add one application
 	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
-		New: newAddAppRequest(map[string]string{appID1: "root.a"}),
-		RmID:            "rm:123",
+		New:  newAddAppRequest(map[string]string{appID1: "root.a"}),
+		RmID: "rm:123",
 	})
 
 	assert.NilError(t, err, "ApplicationRequest failed")
@@ -198,9 +199,10 @@ partitions:
 
 	// Add one application
 	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
-		New: newAddAppRequest(map[string]string{appID1: "root.a"}),
-		RmID:            "rm:123",
+		New:  newAddAppRequest(map[string]string{appID1: "root.a"}),
+		RmID: "rm:123",
 	})
+	assert.NilError(t, err, "ApplicationRequest failed")
 
 	// Application should be accepted
 	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
@@ -264,8 +266,8 @@ partitions:
 
 	// Add one application
 	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
-		New: newAddAppRequest(map[string]string{appID1: "root.a"}),
-		RmID:            "rm:123",
+		New:  newAddAppRequest(map[string]string{appID1: "root.a"}),
+		RmID: "rm:123",
 	})
 
 	assert.NilError(t, err, "ApplicationRequest failed")

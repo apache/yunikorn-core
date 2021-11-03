@@ -32,6 +32,20 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
+const configDataSmokeTest = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        submitacl: "*"
+        queues:
+          - name: singleleaf
+            resources:
+              max:
+                memory: 150
+                vcore: 20
+`
+
 // Test scheduler reconfiguration
 func TestConfigScheduler(t *testing.T) {
 	configData := `
@@ -141,24 +155,11 @@ partitions:
 // Test basic interactions from rm proxy to cache and to scheduler.
 func TestBasicScheduler(t *testing.T) {
 	// Register RM
-	configData := `
-partitions:
-  - name: default
-    queues:
-      - name: root
-        submitacl: "*"
-        queues:
-          - name: singleleaf
-            resources:
-              max:
-                memory: 150
-                vcore: 20
-`
 	// Start all tests
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configDataSmokeTest, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	leafName := "root.singleleaf"
@@ -205,8 +206,8 @@ partitions:
 	assert.NilError(t, err, "NodeRequest failed")
 
 	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
-		New: newAddAppRequest(map[string]string{appID1: leafName}),
-		RmID:            "rm:123",
+		New:  newAddAppRequest(map[string]string{appID1: leafName}),
+		RmID: "rm:123",
 	})
 
 	assert.NilError(t, err, "ApplicationRequest failed")
@@ -377,23 +378,10 @@ partitions:
 }
 
 func TestBasicSchedulerAutoAllocation(t *testing.T) {
-	configData := `
-partitions:
-  - name: default
-    queues:
-      - name: root
-        submitacl: "*"
-        queues:
-          - name: singleleaf
-            resources:
-              max:
-                memory: 150
-                vcore: 20
-`
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, true)
+	err := ms.Init(configDataSmokeTest, true)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	leafName := "root.singleleaf"
@@ -431,8 +419,8 @@ partitions:
 	assert.NilError(t, err, "NodeRequest failed")
 
 	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
-		New: newAddAppRequest(map[string]string{appID: leafName}),
-		RmID:            "rm:123",
+		New:  newAddAppRequest(map[string]string{appID: leafName}),
+		RmID: "rm:123",
 	})
 
 	assert.NilError(t, err, "ApplicationRequest failed")
@@ -540,8 +528,8 @@ partitions:
 	assert.NilError(t, err, "NodeRequest failed")
 
 	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
-		New: newAddAppRequest(map[string]string{app1ID: leafApp1, app2ID: leafApp2}),
-		RmID:            "rm:123",
+		New:  newAddAppRequest(map[string]string{app1ID: leafApp1, app2ID: leafApp2}),
+		RmID: "rm:123",
 	})
 
 	assert.NilError(t, err, "ApplicationRequest failed")
@@ -662,8 +650,8 @@ partitions:
 	assert.NilError(t, err, "NodeRequest failed")
 
 	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
-		New: newAddAppRequest(map[string]string{app1ID: leafName, app2ID: leafName}),
-		RmID:            "rm:123",
+		New:  newAddAppRequest(map[string]string{app1ID: leafName, app2ID: leafName}),
+		RmID: "rm:123",
 	})
 
 	assert.NilError(t, err, "ApplicationRequest failed")
@@ -774,8 +762,8 @@ partitions:
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 
 	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
-		New: newAddAppRequest(map[string]string{"app-reject-1": "root.non-exist-queue"}),
-		RmID:            "rm:123",
+		New:  newAddAppRequest(map[string]string{"app-reject-1": "root.non-exist-queue"}),
+		RmID: "rm:123",
 	})
 
 	assert.NilError(t, err, "UpdateRequest 2 failed")
@@ -783,8 +771,8 @@ partitions:
 	ms.mockRM.waitForRejectedApplication(t, "app-reject-1", 1000)
 
 	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
-		New: newAddAppRequest(map[string]string{"app-added-2": "root.leaf"}),
-		RmID:            "rm:123",
+		New:  newAddAppRequest(map[string]string{"app-added-2": "root.leaf"}),
+		RmID: "rm:123",
 	})
 
 	assert.NilError(t, err, "UpdateRequest 3 failed")
@@ -863,8 +851,8 @@ partitions:
 			assert.NilError(t, err, "NodeRequest failed in run %s", param.name)
 
 			err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
-				New: newAddAppRequest(map[string]string{appID1: param.leafQueue}),
-				RmID:            "rm:123",
+				New:  newAddAppRequest(map[string]string{appID1: param.leafQueue}),
+				RmID: "rm:123",
 			})
 
 			assert.NilError(t, err, "ApplicationRequest failed in run %s", param.name)
@@ -1115,8 +1103,8 @@ partitions:
 	assert.NilError(t, err, "NodeRequest failed")
 
 	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
-		New: newAddAppRequest(map[string]string{app1ID: leafName, app2ID: leafName}),
-		RmID:            "rm:123",
+		New:  newAddAppRequest(map[string]string{app1ID: leafName, app2ID: leafName}),
+		RmID: "rm:123",
 	})
 	assert.NilError(t, err, "ApplicationRequest failed")
 	ms.mockRM.waitForAcceptedApplication(t, app1ID, 1000)
@@ -1219,14 +1207,14 @@ partitions:
 
 	err = ms.proxy.UpdateNode(&si.NodeRequest{
 		Nodes: nodes,
-		RmID:                "rm:123",
+		RmID:  "rm:123",
 	})
 
 	assert.NilError(t, err, "NodeRequest failed")
 
 	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
-		New: newAddAppRequest(map[string]string{appID: leafName}),
-		RmID:            "rm:123",
+		New:  newAddAppRequest(map[string]string{appID: leafName}),
+		RmID: "rm:123",
 	})
 
 	assert.NilError(t, err, "ApplicationRequest failed")
@@ -1291,24 +1279,11 @@ partitions:
 // nolint: funlen
 func TestDupReleasesInGangScheduling(t *testing.T) {
 	// Register RM
-	configData := `
-partitions:
-  - name: default
-    queues:
-      - name: root
-        submitacl: "*"
-        queues:
-          - name: singleleaf
-            resources:
-              max:
-                memory: 150
-                vcore: 20
-`
 	// Start all tests
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configDataSmokeTest, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	leafName := "root.singleleaf"
@@ -1347,8 +1322,8 @@ partitions:
 	assert.NilError(t, err)
 
 	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
-		New: newAddAppRequest(map[string]string{appID1: leafName}),
-		RmID:            "rm:123",
+		New:  newAddAppRequest(map[string]string{appID1: leafName}),
+		RmID: "rm:123",
 	})
 	assert.NilError(t, err)
 

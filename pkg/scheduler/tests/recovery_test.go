@@ -111,9 +111,7 @@ func TestSchedulerRecovery(t *testing.T) {
 		New:  newAddAppRequest(map[string]string{appID1: "root.a"}),
 		RmID: "rm:123",
 	})
-
 	assert.NilError(t, err, "ApplicationRequest failed")
-
 	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
 
 	// Get scheduling app
@@ -239,6 +237,13 @@ func TestSchedulerRecovery(t *testing.T) {
 	assert.NilError(t, err, "2nd RegisterResourceManager failed")
 
 	// Register nodes, and add apps
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{appID1: "root.a"}),
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "ApplicationRequest failed")
+	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
+
 	err = ms.proxy.UpdateNode(&si.NodeRequest{
 		Nodes: []*si.NodeInfo{
 			{
@@ -268,18 +273,7 @@ func TestSchedulerRecovery(t *testing.T) {
 		},
 		RmID: "rm:123",
 	})
-
 	assert.NilError(t, err, "NodeRequest nodes and app for recovery failed")
-
-	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
-		New:  newAddAppRequest(map[string]string{appID1: "root.a"}),
-		RmID: "rm:123",
-	})
-
-	assert.NilError(t, err, "ApplicationRequest failed")
-
-	// waiting for recovery
-	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
@@ -377,7 +371,6 @@ func TestSchedulerRecovery2Allocations(t *testing.T) {
 		New:  newAddAppRequest(map[string]string{appID1: "root.a"}),
 		RmID: "rm:123",
 	})
-
 	assert.NilError(t, err, "ApplicationRequest failed")
 	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
 
@@ -421,7 +414,14 @@ func TestSchedulerRecovery2Allocations(t *testing.T) {
 	err = ms.Init(configData, false)
 	assert.NilError(t, err, "2nd RegisterResourceManager failed")
 
-	// Register nodes, and add app
+	// Register nodes, and add apps
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{appID1: "root.a"}),
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "ApplicationRequest failed")
+	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
+
 	err = ms.proxy.UpdateNode(&si.NodeRequest{
 		Nodes: []*si.NodeInfo{
 			{
@@ -439,18 +439,7 @@ func TestSchedulerRecovery2Allocations(t *testing.T) {
 		},
 		RmID: "rm:123",
 	})
-
 	assert.NilError(t, err, "NodeRequest nodes and app for recovery failed")
-
-	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
-		New:  newAddAppRequest(map[string]string{appID1: "root.a"}),
-		RmID: "rm:123",
-	})
-
-	assert.NilError(t, err, "ApplicationRequest failed")
-
-	// waiting for recovery
-	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	recoveredApp := ms.getApplication(appID1)
 	// verify app state
@@ -532,6 +521,13 @@ func TestSchedulerRecoveryWithoutAppInfo(t *testing.T) {
 		resources.Quantity(0))
 
 	// register the node again, with application info attached
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{"app-01": "root.a"}),
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "ApplicationRequest re-register nodes and app failed")
+	ms.mockRM.waitForAcceptedApplication(t, "app-01", 1000)
+
 	err = ms.proxy.UpdateNode(&si.NodeRequest{
 		Nodes: []*si.NodeInfo{
 			{
@@ -569,13 +565,6 @@ func TestSchedulerRecoveryWithoutAppInfo(t *testing.T) {
 		RmID: "rm:123",
 	})
 	assert.NilError(t, err, "NodeRequest re-register nodes and app failed")
-
-	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
-		New:  newAddAppRequest(map[string]string{"app-01": "root.a"}),
-		RmID: "rm:123",
-	})
-	assert.NilError(t, err, "ApplicationRequest re-register nodes and app failed")
-
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 
 	assert.Equal(t, part.GetTotalNodeCount(), 2)
@@ -614,6 +603,13 @@ func TestAppRecovery(t *testing.T) {
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Register nodes, and add apps
+	err = proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{appID1: "root.a"}),
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "ApplicationRequest nodes and apps failed")
+	mockRM.waitForAcceptedApplication(t, appID1, 1000)
+
 	err = proxy.UpdateNode(&si.NodeRequest{
 		Nodes: []*si.NodeInfo{
 			{
@@ -641,15 +637,7 @@ func TestAppRecovery(t *testing.T) {
 		},
 		RmID: "rm:123",
 	})
-
 	assert.NilError(t, err, "NodeRequest nodes and apps failed")
-
-	err = proxy.UpdateApplication(&si.ApplicationRequest{
-		New:  newAddAppRequest(map[string]string{appID1: "root.a"}),
-		RmID: "rm:123",
-	})
-
-	assert.NilError(t, err, "ApplicationRequest nodes and apps failed")
 
 	// waiting for recovery
 	mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)

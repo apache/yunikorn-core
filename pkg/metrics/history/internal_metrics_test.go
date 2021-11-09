@@ -24,7 +24,7 @@ import (
 	"gotest.tools/assert"
 )
 
-func countNils(records []*metricsRecord) int {
+func countNils(records []*MetricsRecord) int {
 	count := 0
 	for _, record := range records {
 		if record == nil {

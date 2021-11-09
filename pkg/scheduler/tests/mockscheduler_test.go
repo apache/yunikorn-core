@@ -74,12 +74,13 @@ func (m *mockScheduler) Stop() {
 }
 
 func (m *mockScheduler) addNode(nodeID string, resource *si.Resource) error {
-	return m.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	return m.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:              nodeID,
 				Attributes:          map[string]string{},
 				SchedulableResource: resource,
+				Action:              si.NodeInfo_CREATE,
 			},
 		},
 		RmID: m.rmID,
@@ -87,11 +88,11 @@ func (m *mockScheduler) addNode(nodeID string, resource *si.Resource) error {
 }
 
 func (m *mockScheduler) removeNode(nodeID string) error {
-	return m.proxy.Update(&si.UpdateRequest{
-		UpdatedNodes: []*si.UpdateNodeInfo{
+	return m.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     nodeID,
-				Action:     si.UpdateNodeInfo_DECOMISSION,
+				Action:     si.NodeInfo_DECOMISSION,
 				Attributes: map[string]string{},
 			},
 		},
@@ -100,8 +101,8 @@ func (m *mockScheduler) removeNode(nodeID string) error {
 }
 
 func (m *mockScheduler) addApp(appID string, queue string, partition string) error {
-	return m.proxy.Update(&si.UpdateRequest{
-		NewApplications: []*si.AddApplicationRequest{
+	return m.proxy.UpdateApplication(&si.ApplicationRequest{
+		New: []*si.AddApplicationRequest{
 			{
 				ApplicationID: appID,
 				QueueName:     queue,
@@ -116,8 +117,8 @@ func (m *mockScheduler) addApp(appID string, queue string, partition string) err
 }
 
 func (m *mockScheduler) removeApp(appID, partition string) error {
-	return m.proxy.Update(&si.UpdateRequest{
-		RemoveApplications: []*si.RemoveApplicationRequest{
+	return m.proxy.UpdateApplication(&si.ApplicationRequest{
+		Remove: []*si.RemoveApplicationRequest{
 			{
 				ApplicationID: appID,
 				PartitionName: partition,
@@ -128,7 +129,7 @@ func (m *mockScheduler) removeApp(appID, partition string) error {
 }
 
 func (m *mockScheduler) addAppRequest(appID, allocID string, resource *si.Resource, repeat int32) error {
-	return m.proxy.Update(&si.UpdateRequest{
+	return m.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
 				AllocationKey:  allocID,
@@ -142,7 +143,7 @@ func (m *mockScheduler) addAppRequest(appID, allocID string, resource *si.Resour
 }
 
 func (m *mockScheduler) releaseAllocRequest(appID, uuid string) error {
-	return m.proxy.Update(&si.UpdateRequest{
+	return m.proxy.UpdateAllocation(&si.AllocationRequest{
 		Releases: &si.AllocationReleasesRequest{
 			AllocationsToRelease: []*si.AllocationRelease{
 				{
@@ -157,7 +158,7 @@ func (m *mockScheduler) releaseAllocRequest(appID, uuid string) error {
 }
 
 func (m *mockScheduler) releaseAskRequest(appID, allocKey string) error {
-	return m.proxy.Update(&si.UpdateRequest{
+	return m.proxy.UpdateAllocation(&si.AllocationRequest{
 		Releases: &si.AllocationReleasesRequest{
 			AllocationAsksToRelease: []*si.AllocationAskRelease{
 				{

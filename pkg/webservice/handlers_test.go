@@ -480,6 +480,39 @@ type FakeConfigPlugin struct {
 	generateError bool
 }
 
+func (f *FakeConfigPlugin) UpdateAllocation(response *si.AllocationResponse) error {
+	// do nothing
+	return nil
+}
+
+func (f *FakeConfigPlugin) UpdateApplication(response *si.ApplicationResponse) error {
+	// do nothing
+	return nil
+}
+
+func (f *FakeConfigPlugin) UpdateNode(response *si.NodeResponse) error {
+	// do nothing
+	return nil
+}
+
+func (f *FakeConfigPlugin) Predicates(args *si.PredicatesArgs) error {
+	// do nothing
+	return nil
+}
+
+func (f *FakeConfigPlugin) ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error {
+	// do nothing
+	return nil
+}
+
+func (f *FakeConfigPlugin) SendEvent(events []*si.EventRecord) {
+	// do nothing
+}
+
+func (f *FakeConfigPlugin) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
+	// do nothing
+}
+
 func (f FakeConfigPlugin) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
 	if f.generateError {
 		return &si.UpdateConfigurationResponse{
@@ -610,7 +643,7 @@ func TestGetClusterUtilJSON(t *testing.T) {
 
 	// add node to partition with allocations
 	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 1000, resources.VCORE: 1000}).ToProto()
-	node1 := objects.NewNode(&si.NewNodeInfo{NodeID: nodeID, SchedulableResource: nodeRes})
+	node1 := objects.NewNode(&si.NodeInfo{NodeID: nodeID, SchedulableResource: nodeRes})
 
 	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 500, resources.VCORE: 300})
 	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 300, resources.VCORE: 200})
@@ -687,9 +720,9 @@ func TestGetNodesUtilJSON(t *testing.T) {
 	// create test nodes
 	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 1000, resources.VCORE: 1000}).ToProto()
 	node1ID := "node-1"
-	node1 := objects.NewNode(&si.NewNodeInfo{NodeID: node1ID, SchedulableResource: nodeRes})
+	node1 := objects.NewNode(&si.NodeInfo{NodeID: node1ID, SchedulableResource: nodeRes})
 	node2ID := "node-2"
-	node2 := objects.NewNode(&si.NewNodeInfo{NodeID: node2ID, SchedulableResource: nodeRes})
+	node2 := objects.NewNode(&si.NodeInfo{NodeID: node2ID, SchedulableResource: nodeRes})
 	// create test allocations
 	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 500, resources.VCORE: 300})
 	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 300, resources.VCORE: 500})
@@ -1073,9 +1106,9 @@ func TestGetPartitionNodes(t *testing.T) {
 	// create test nodes
 	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 1000, resources.VCORE: 1000}).ToProto()
 	node1ID := "node-1"
-	node1 := objects.NewNode(&si.NewNodeInfo{NodeID: node1ID, SchedulableResource: nodeRes})
+	node1 := objects.NewNode(&si.NodeInfo{NodeID: node1ID, SchedulableResource: nodeRes})
 	node2ID := "node-2"
-	node2 := objects.NewNode(&si.NewNodeInfo{NodeID: node2ID, SchedulableResource: nodeRes})
+	node2 := objects.NewNode(&si.NodeInfo{NodeID: node2ID, SchedulableResource: nodeRes})
 
 	// create test allocations
 	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 500, resources.VCORE: 300})

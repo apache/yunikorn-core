@@ -201,31 +201,45 @@ func (cc *ClusterContext) processRMConfigUpdateEvent(event *rmevent.RMConfigUpda
 	configs.ConfigContext.Set(cc.policyGroup, conf)
 }
 
-// Main update processing: the RM passes a large multi part update which needs to be unravelled.
-// Order of following operations is fixed, don't change unless carefully thought through.
-// 1) applications
-// 2) allocations on existing applications
-// 3) nodes
-// Updating allocations on existing applications requires the application to exist.
-// Node updates include recovered nodes which are linked to applications that must exist.
-func (cc *ClusterContext) processRMUpdateEvent(event *rmevent.RMUpdateRequestEvent) {
+func (cc *ClusterContext) handleRMUpdateNodeEvent(event *rmevent.RMUpdateNodeEvent) {
 	request := event.Request
-	// 1) Add / remove app requested by RM.
-	cc.processApplications(request)
-	// 2) Add new request, release allocation, cancel request
-	cc.processAllocations(request)
-	// 3) Add / remove / update Nodes
 	cc.processNodes(request)
 }
 
-func (cc *ClusterContext) processNodes(request *si.UpdateRequest) {
-	// 3) Add / remove / update Nodes
-	// Process add node
-	if len(request.NewSchedulableNodes) > 0 {
-		cc.addNodes(request)
-	}
-	if len(request.UpdatedNodes) > 0 {
-		cc.updateNodes(request)
+func (cc *ClusterContext) processNodes(request *si.NodeRequest) {
+	// 1) Add / remove / update Nodes
+	if len(request.GetNodes()) > 0 {
+		acceptedNodes := make([]*si.AcceptedNode, 0)
+		rejectedNodes := make([]*si.RejectedNode, 0)
+		nodeCount := len(request.GetNodes())
+		for _, nodeInfo := range request.GetNodes() {
+			switch nodeInfo.Action {
+			case si.NodeInfo_CREATE:
+				err := cc.addNode(nodeInfo, nodeCount)
+				if err == nil {
+					acceptedNodes = append(acceptedNodes, &si.AcceptedNode{
+						NodeID: nodeInfo.NodeID,
+					})
+				} else {
+					rejectedNodes = append(rejectedNodes, &si.RejectedNode{
+						NodeID: nodeInfo.NodeID,
+						Reason: err.Error(),
+					})
+				}
+			default:
+				cc.updateNode(nodeInfo)
+			}
+		}
+
+		if len(acceptedNodes) > 0 || len(rejectedNodes) > 0 {
+			// inform the RM which nodes have been accepted/rejected
+			cc.rmEventHandler.HandleEvent(
+				&rmevent.RMNodeUpdateEvent{
+					RmID:          request.RmID,
+					AcceptedNodes: acceptedNodes,
+					RejectedNodes: rejectedNodes,
+				})
+		}
 	}
 }
 
@@ -427,14 +441,15 @@ func (cc *ClusterContext) GetReservations(partitionName string) map[string]int {
 
 // Process the application update. Add and remove applications from the partitions.
 // Lock free call, all updates occur on the underlying partition which is locked, or via events.
-func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
-	if len(request.NewApplications) == 0 && len(request.RemoveApplications) == 0 {
+func (cc *ClusterContext) handleRMUpdateApplicationEvent(event *rmevent.RMUpdateApplicationEvent) {
+	request := event.Request
+	if len(request.New) == 0 && len(request.Remove) == 0 {
 		return
 	}
 	acceptedApps := make([]*si.AcceptedApplication, 0)
 	rejectedApps := make([]*si.RejectedApplication, 0)
 
-	for _, app := range request.NewApplications {
+	for _, app := range request.New {
 		partition := cc.GetPartition(app.PartitionName)
 		if partition == nil {
 			msg := fmt.Sprintf("Failed to add application %s to partition %s, partition doesn't exist", app.ApplicationID, app.PartitionName)
@@ -494,11 +509,11 @@ func (cc *ClusterContext) processApplications(request *si.UpdateRequest) {
 			})
 	}
 	// Update metrics with removed applications
-	if len(request.RemoveApplications) > 0 {
-		metrics.GetSchedulerMetrics().SubTotalApplicationsRunning(len(request.RemoveApplications))
+	if len(request.Remove) > 0 {
+		metrics.GetSchedulerMetrics().SubTotalApplicationsRunning(len(request.Remove))
 		// ToDO: need to improve this once we have state in YuniKorn for apps.
-		metrics.GetSchedulerMetrics().AddTotalApplicationsCompleted(len(request.RemoveApplications))
-		for _, app := range request.RemoveApplications {
+		metrics.GetSchedulerMetrics().AddTotalApplicationsCompleted(len(request.Remove))
+		for _, app := range request.Remove {
 			partition := cc.GetPartition(app.PartitionName)
 			if partition == nil {
 				continue
@@ -531,155 +546,118 @@ func (cc *ClusterContext) removePartition(partitionName string) {
 	delete(cc.partitions, partitionName)
 }
 
-func (cc *ClusterContext) updateNodes(request *si.UpdateRequest) {
-	for _, update := range request.UpdatedNodes {
-		var partition *PartitionContext
-		if p, ok := update.Attributes[siCommon.NodePartition]; ok {
-			partition = cc.GetPartition(p)
-		} else {
-			log.Logger().Error("node partition not specified",
-				zap.String("nodeID", update.NodeID),
-				zap.String("nodeAction", update.Action.String()))
-			continue
-		}
-
-		if partition == nil {
-			log.Logger().Error("Failed to update node on non existing partition",
-				zap.String("nodeID", update.NodeID),
-				zap.String("partitionName", update.Attributes[siCommon.NodePartition]),
-				zap.String("nodeAction", update.Action.String()))
-			continue
-		}
-
-		node := partition.GetNode(update.NodeID)
-		if node == nil {
-			log.Logger().Error("Failed to update non existing node",
-				zap.String("nodeID", update.NodeID),
-				zap.String("partitionName", update.Attributes[siCommon.NodePartition]),
-				zap.String("nodeAction", update.Action.String()))
-			continue
-		}
-
-		switch update.Action {
-		case si.UpdateNodeInfo_UPDATE:
-			if sr := update.SchedulableResource; sr != nil {
-				partition.updatePartitionResource(node.SetCapacity(resources.NewResourceFromProto(sr)))
-			}
-			if or := update.OccupiedResource; or != nil {
-				node.SetOccupiedResource(resources.NewResourceFromProto(or))
-			}
-		case si.UpdateNodeInfo_DRAIN_NODE:
-			// set the state to not schedulable
-			node.SetSchedulable(false)
-		case si.UpdateNodeInfo_DRAIN_TO_SCHEDULABLE:
-			// set the state to schedulable
-			node.SetSchedulable(true)
-		case si.UpdateNodeInfo_DECOMISSION:
-			// set the state to not schedulable then tell the partition to clean up
-			node.SetSchedulable(false)
-			released, confirmed := partition.removeNode(node.NodeID)
-			// notify the shim allocations have been released from node
-			if len(released) != 0 {
-				cc.notifyRMAllocationReleased(partition.RmID, released, si.TerminationType_STOPPED_BY_RM,
-					fmt.Sprintf("Node %s Removed", node.NodeID))
-			}
-			for _, confirm := range confirmed {
-				cc.notifyRMNewAllocation(partition.RmID, confirm)
-			}
+func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo, nodeCount int) error {
+	sn := objects.NewNode(nodeInfo)
+	// if the node is unlimited, check the following things:
+	// 1. reservation is enabled or not. If yes, reject the node
+	// 2. are there any other nodes in the list, if yes reject the node
+	// 3. this is the first node. If not reject it
+	if sn.IsUnlimited() {
+		// if we have other nodes as well or we already have some registered nodes, reject the node registration
+		// to do: fix this. Is there any chance of getting request for both create and update together?
+		// If ans is yes, then this needs to be fixed accordingly
+		if nodeCount > 1 {
+			return fmt.Errorf("There are other nodes as well, registering unlimited nodes is forbidden")
+		} else if !cc.reservationDisabled {
+			return fmt.Errorf("Reservation is enabled, registering unlimited node is forbidden")
 		}
 	}
+	partition := cc.GetPartition(sn.Partition)
+	if partition == nil {
+		msg := fmt.Sprintf("Failed to find partition %s for new node %s", sn.Partition, sn.NodeID)
+		//nolint: TODO assess impact of partition metrics (this never hit the partition)
+		metrics.GetSchedulerMetrics().IncFailedNodes()
+		log.Logger().Error("Failed to add node to non existing partition",
+			zap.String("nodeID", sn.NodeID),
+			zap.String("partitionName", sn.Partition))
+		return fmt.Errorf(msg)
+	}
+	if partition.hasUnlimitedNode() {
+		return fmt.Errorf("The partition has an unlimited node registered, registering other nodes is forbidden")
+	}
+	if sn.IsUnlimited() && partition.nodes.GetNodeCount() > 0 {
+		return fmt.Errorf("The unlimited node should be registered first, there are other nodes registered in the partition")
+	}
+
+	existingAllocations := cc.convertAllocations(nodeInfo.ExistingAllocations)
+	err := partition.AddNode(sn, existingAllocations)
+	if err != nil {
+		msg := fmt.Sprintf("Failure while adding new node, node rejected with error %s", err.Error())
+		log.Logger().Error("Failed to add node to partition (rejected)",
+			zap.String("nodeID", sn.NodeID),
+			zap.String("partitionName", sn.Partition),
+			zap.Error(err))
+		return fmt.Errorf(msg)
+	}
+	log.Logger().Info("successfully added node",
+		zap.String("nodeID", sn.NodeID),
+		zap.String("partition", sn.Partition))
+	return nil
 }
 
-func (cc *ClusterContext) addNodes(request *si.UpdateRequest) {
-	acceptedNodes := make([]*si.AcceptedNode, 0)
-	rejectedNodes := make([]*si.RejectedNode, 0)
-	for _, node := range request.NewSchedulableNodes {
-		sn := objects.NewNode(node)
-		// if the node is unlimited, check the following things:
-		// 1. reservation is enabled or not. If yes, reject the node
-		// 2. are there any other nodes in the list, if yes reject the node
-		// 3. this is the first node. If not reject it
-		if sn.IsUnlimited() {
-			// if we have other nodes as well or we already have some registered nodes, reject the node registration
-			if len(request.NewSchedulableNodes) > 1 {
-				rejectedNodes = append(rejectedNodes, &si.RejectedNode{
-					NodeID: node.NodeID,
-					Reason: "There are other nodes as well, registering unlimited nodes is forbidden",
-				})
-				continue
-			} else if !cc.reservationDisabled {
-				rejectedNodes = append(rejectedNodes, &si.RejectedNode{
-					NodeID: node.NodeID,
-					Reason: "Reservation is enabled, registering unlimited node is forbidden",
-				})
-				continue
-			}
-		}
-		partition := cc.GetPartition(sn.Partition)
-		if partition == nil {
-			msg := fmt.Sprintf("Failed to find partition %s for new node %s", sn.Partition, sn.NodeID)
-			// TODO assess impact of partition metrics (this never hit the partition)
-			metrics.GetSchedulerMetrics().IncFailedNodes()
-			rejectedNodes = append(rejectedNodes, &si.RejectedNode{
-				NodeID: node.NodeID,
-				Reason: msg,
-			})
-			log.Logger().Error("Failed to add node to non existing partition",
-				zap.String("nodeID", sn.NodeID),
-				zap.String("partitionName", sn.Partition))
-			continue
-		}
-		if partition.hasUnlimitedNode() {
-			rejectedNodes = append(rejectedNodes, &si.RejectedNode{
-				NodeID: node.NodeID,
-				Reason: "The partition has an unlimited node registered, registering other nodes is forbidden",
-			})
-			continue
-		}
-		if sn.IsUnlimited() && partition.nodes.GetNodeCount() > 0 {
-			rejectedNodes = append(rejectedNodes, &si.RejectedNode{
-				NodeID: node.NodeID,
-				Reason: "The unlimited node should be registered first, there are other nodes registered in the partition",
-			})
-			continue
-		}
-
-		existingAllocations := cc.convertAllocations(node.ExistingAllocations)
-		err := partition.AddNode(sn, existingAllocations)
-		if err != nil {
-			msg := fmt.Sprintf("Failure while adding new node, node rejected with error %s", err.Error())
-			rejectedNodes = append(rejectedNodes, &si.RejectedNode{
-				NodeID: sn.NodeID,
-				Reason: msg,
-			})
-			log.Logger().Error("Failed to add node to partition (rejected)",
-				zap.String("nodeID", sn.NodeID),
-				zap.String("partitionName", sn.Partition),
-				zap.Error(err))
-			continue
-		}
-		acceptedNodes = append(acceptedNodes, &si.AcceptedNode{
-			NodeID: sn.NodeID,
-		})
-		log.Logger().Info("successfully added node",
-			zap.String("nodeID", sn.NodeID),
-			zap.String("partition", sn.Partition))
+func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
+	var partition *PartitionContext
+	if p, ok := nodeInfo.Attributes[siCommon.NodePartition]; ok {
+		partition = cc.GetPartition(p)
+	} else {
+		log.Logger().Error("node partition not specified",
+			zap.String("nodeID", nodeInfo.NodeID),
+			zap.String("nodeAction", nodeInfo.Action.String()))
+		return
 	}
 
-	// inform the RM which nodes have been accepted/rejected
-	cc.rmEventHandler.HandleEvent(
-		&rmevent.RMNodeUpdateEvent{
-			RmID:          request.RmID,
-			AcceptedNodes: acceptedNodes,
-			RejectedNodes: rejectedNodes,
-		})
+	if partition == nil {
+		log.Logger().Error("Failed to update node on non existing partition",
+			zap.String("nodeID", nodeInfo.NodeID),
+			zap.String("partitionName", nodeInfo.Attributes[siCommon.NodePartition]),
+			zap.String("nodeAction", nodeInfo.Action.String()))
+		return
+	}
+
+	node := partition.GetNode(nodeInfo.NodeID)
+	if node == nil {
+		log.Logger().Error("Failed to update non existing node",
+			zap.String("nodeID", node.NodeID),
+			zap.String("partitionName", nodeInfo.Attributes[siCommon.NodePartition]),
+			zap.String("nodeAction", nodeInfo.Action.String()))
+		return
+	}
+
+	switch nodeInfo.Action {
+	case si.NodeInfo_UPDATE:
+		if sr := nodeInfo.SchedulableResource; sr != nil {
+			partition.updatePartitionResource(node.SetCapacity(resources.NewResourceFromProto(sr)))
+		}
+		if or := nodeInfo.OccupiedResource; or != nil {
+			node.SetOccupiedResource(resources.NewResourceFromProto(or))
+		}
+	case si.NodeInfo_DRAIN_NODE:
+		// set the state to not schedulable
+		node.SetSchedulable(false)
+	case si.NodeInfo_DRAIN_TO_SCHEDULABLE:
+		// set the state to schedulable
+		node.SetSchedulable(true)
+	case si.NodeInfo_DECOMISSION:
+		// set the state to not schedulable then tell the partition to clean up
+		node.SetSchedulable(false)
+		released, confirmed := partition.removeNode(node.NodeID)
+		// notify the shim allocations have been released from node
+		if len(released) != 0 {
+			cc.notifyRMAllocationReleased(partition.RmID, released, si.TerminationType_STOPPED_BY_RM,
+				fmt.Sprintf("Node %s Removed", node.NodeID))
+		}
+		for _, confirm := range confirmed {
+			cc.notifyRMNewAllocation(partition.RmID, confirm)
+		}
+	}
 }
 
 // Process an ask and allocation update request.
 // - Add new asks and remove released asks for the application(s).
 // - Release allocations for the application(s).
 // Lock free call, all updates occur on the underlying application which is locked or via events.
-func (cc *ClusterContext) processAllocations(request *si.UpdateRequest) {
+func (cc *ClusterContext) handleRMUpdateAllocationEvent(event *rmevent.RMUpdateAllocationEvent) {
+	request := event.Request
 	if len(request.Asks) != 0 {
 		cc.processAsks(request)
 	}
@@ -693,7 +671,7 @@ func (cc *ClusterContext) processAllocations(request *si.UpdateRequest) {
 	}
 }
 
-func (cc *ClusterContext) processAsks(request *si.UpdateRequest) {
+func (cc *ClusterContext) processAsks(request *si.AllocationRequest) {
 	// Send rejects back to RM
 	rejectedAsks := make([]*si.RejectedAllocationAsk, 0)
 
@@ -763,7 +741,6 @@ func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRel
 	for _, toRelease := range releases {
 		partition := cc.GetPartition(toRelease.PartitionName)
 		if partition != nil {
-
 			allocs, confirmed := partition.removeAllocation(toRelease)
 			// notify the RM of the exact released allocations
 			if len(allocs) > 0 {
@@ -788,7 +765,7 @@ func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRel
 	if len(toReleaseAllocations) > 0 {
 		log.Logger().Debug("notify shim to forget assumed pods",
 			zap.Int("size", len(toReleaseAllocations)))
-		if rp := plugins.GetReconcilePlugin(); rp != nil {
+		if rp := plugins.GetResourceManagerCallbackPlugin(); rp != nil {
 			err := rp.ReSyncSchedulerCache(&si.ReSyncSchedulerCacheArgs{
 				ForgetAllocations: toReleaseAllocations,
 			})
@@ -825,7 +802,7 @@ func (cc *ClusterContext) notifyRMNewAllocation(rmID string, alloc *objects.Allo
 	// note, this needs to happen before notifying the RM about this allocation, because
 	// the RM side needs to get its cache refreshed (via reconcile plugin) before allocating
 	// the actual container.
-	if rp := plugins.GetReconcilePlugin(); rp != nil {
+	if rp := plugins.GetResourceManagerCallbackPlugin(); rp != nil {
 		if err := rp.ReSyncSchedulerCache(&si.ReSyncSchedulerCacheArgs{
 			AssumedAllocations: []*si.AssumedAllocation{
 				{

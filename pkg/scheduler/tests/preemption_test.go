@@ -112,7 +112,7 @@ func TestBasicPreemption(t *testing.T) {
 	app2 := ms.getApplication(appID2)
 
 	// Ask (10, 10) resources * 20, which will fulfill the cluster.
-	err = ms.proxy.Update(&si.UpdateRequest{
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
 				AllocationKey: "alloc-1",
@@ -151,7 +151,7 @@ func TestBasicPreemption(t *testing.T) {
 	assert.Assert(t, queueA.GetAllocatedResource().Resources[resources.MEMORY] == 200)
 
 	// Application-2 Ask for 20 resources
-	err = ms.proxy.Update(&si.UpdateRequest{
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
 				AllocationKey: "alloc-2",

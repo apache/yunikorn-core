@@ -26,40 +26,48 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
-type fakePredicatePluginImpl struct{}
+type FakeResourceManagerCallback struct{}
 
-func (f *fakePredicatePluginImpl) Predicates(args *si.PredicatesArgs) error {
+func (f *FakeResourceManagerCallback) UpdateAllocation(response *si.AllocationResponse) error {
 	// do nothing
 	return nil
 }
 
-func (f *fakePredicatePluginImpl) ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error {
+func (f *FakeResourceManagerCallback) UpdateApplication(response *si.ApplicationResponse) error {
 	// do nothing
 	return nil
 }
 
-type FakeConfigPlugin struct {
+func (f *FakeResourceManagerCallback) UpdateNode(response *si.NodeResponse) error {
+	// do nothing
+	return nil
 }
 
-func (f FakeConfigPlugin) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
+func (f *FakeResourceManagerCallback) Predicates(args *si.PredicatesArgs) error {
+	// do nothing
+	return nil
+}
+
+func (f *FakeResourceManagerCallback) ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error {
+	// do nothing
+	return nil
+}
+
+func (f *FakeResourceManagerCallback) SendEvent(events []*si.EventRecord) {
+	// do nothing
+}
+
+func (f *FakeResourceManagerCallback) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
+	// do nothing
+}
+
+func (f FakeResourceManagerCallback) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
 	// do nothing
 	return nil
 }
 
 func TestRegisterPlugins(t *testing.T) {
 	plugins = SchedulerPlugins{}
-	RegisterSchedulerPlugin(&fakePredicatePluginImpl{})
-	assert.Assert(t, GetPredicatesPlugin() != nil, "predicates plugin should have been registered")
-	assert.Assert(t, GetReconcilePlugin() != nil, "reconcile plugin should have been registered")
-	assert.Assert(t, GetContainerSchedulingStateUpdaterPlugin() == nil, "volume plugin should not have been registered")
-	assert.Assert(t, GetConfigPlugin() == nil, "config plugin should not have been registered")
-}
-
-func TestRegisterConfigPlugin(t *testing.T) {
-	plugins = SchedulerPlugins{}
-	RegisterSchedulerPlugin(&FakeConfigPlugin{})
-	assert.Assert(t, GetPredicatesPlugin() == nil, "predicates plugin should not have been registered")
-	assert.Assert(t, GetReconcilePlugin() == nil, "reconcile plugin should have been registered")
-	assert.Assert(t, GetContainerSchedulingStateUpdaterPlugin() == nil, "volume plugin should not have been registered")
-	assert.Assert(t, GetConfigPlugin() != nil, "config plugin should have been registered")
+	RegisterSchedulerPlugin(&FakeResourceManagerCallback{})
+	assert.Assert(t, GetResourceManagerCallbackPlugin() != nil, "ResourceManagerCallbackPlugin plugin should have been registered")
 }

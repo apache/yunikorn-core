@@ -88,49 +88,44 @@ func (rmp *RMProxy) StartService(handlers handler.EventHandlers) {
 	go rmp.handleRMEvents()
 }
 
-func (rmp *RMProxy) handleRMRecvUpdateResponseError(rmID string, err error) {
+func (rmp *RMProxy) handleUpdateResponseError(rmID string, err error) {
 	log.Logger().Error("failed to handle response",
 		zap.String("rmID", rmID),
 		zap.Error(err))
 }
 
-func (rmp *RMProxy) processUpdateResponse(rmID string, response *si.UpdateResponse) {
+func (rmp *RMProxy) processAllocationUpdateEvent(event *rmevent.RMNewAllocationsEvent) {
 	rmp.RLock()
 	defer rmp.RUnlock()
-
-	if callback := rmp.rmIDToCallback[rmID]; callback != nil {
-		if err := callback.RecvUpdateResponse(response); err != nil {
-			rmp.handleRMRecvUpdateResponseError(rmID, err)
-		}
-	} else {
-		log.Logger().DPanic("RM is not registered",
-			zap.String("rmID", rmID))
-	}
-}
-
-func (rmp *RMProxy) processAllocationUpdateEvent(event *rmevent.RMNewAllocationsEvent) {
 	if len(event.Allocations) == 0 {
 		return
 	}
-	response := &si.UpdateResponse{
-		NewAllocations: event.Allocations,
+	response := &si.AllocationResponse{
+		New: event.Allocations,
 	}
-
-	rmp.processUpdateResponse(event.RmID, response)
+	rmp.triggerUpdateAllocation(event.RmID, response)
 	metrics.GetSchedulerMetrics().AddAllocatedContainers(len(event.Allocations))
 }
 
 func (rmp *RMProxy) processApplicationUpdateEvent(event *rmevent.RMApplicationUpdateEvent) {
+	rmp.RLock()
+	defer rmp.RUnlock()
 	if len(event.RejectedApplications) == 0 && len(event.AcceptedApplications) == 0 && len(event.UpdatedApplications) == 0 {
 		return
 	}
-	response := &si.UpdateResponse{
-		RejectedApplications: event.RejectedApplications,
-		AcceptedApplications: event.AcceptedApplications,
-		UpdatedApplications:  event.UpdatedApplications,
+	response := &si.ApplicationResponse{
+		Rejected: event.RejectedApplications,
+		Accepted: event.AcceptedApplications,
+		Updated:  event.UpdatedApplications,
 	}
-
-	rmp.processUpdateResponse(event.RmID, response)
+	if callback := rmp.rmIDToCallback[event.RmID]; callback != nil {
+		if err := callback.UpdateApplication(response); err != nil {
+			rmp.handleUpdateResponseError(event.RmID, err)
+		}
+	} else {
+		log.Logger().DPanic("RM is not registered",
+			zap.String("rmID", event.RmID))
+	}
 
 	// update app metrics
 	if len(event.RejectedApplications) > 0 {
@@ -142,49 +137,73 @@ func (rmp *RMProxy) processApplicationUpdateEvent(event *rmevent.RMApplicationUp
 }
 
 func (rmp *RMProxy) processRMReleaseAllocationEvent(event *rmevent.RMReleaseAllocationEvent) {
+	rmp.RLock()
+	defer rmp.RUnlock()
 	if len(event.ReleasedAllocations) == 0 {
 		return
 	}
-	response := &si.UpdateResponse{
-		ReleasedAllocations: event.ReleasedAllocations,
+	response := &si.AllocationResponse{
+		Released: event.ReleasedAllocations,
 	}
-
-	rmp.processUpdateResponse(event.RmID, response)
+	rmp.triggerUpdateAllocation(event.RmID, response)
 	metrics.GetSchedulerMetrics().AddReleasedContainers(len(event.ReleasedAllocations))
 }
 
+func (rmp *RMProxy) triggerUpdateAllocation(rmID string, response *si.AllocationResponse) {
+	if callback := rmp.rmIDToCallback[rmID]; callback != nil {
+		if err := callback.UpdateAllocation(response); err != nil {
+			rmp.handleUpdateResponseError(rmID, err)
+		}
+	} else {
+		log.Logger().DPanic("RM is not registered",
+			zap.String("rmID", rmID))
+	}
+}
+
 func (rmp *RMProxy) processRMReleaseAllocationAskEvent(event *rmevent.RMReleaseAllocationAskEvent) {
+	rmp.RLock()
+	defer rmp.RUnlock()
 	if len(event.ReleasedAllocationAsks) == 0 {
 		return
 	}
-	response := &si.UpdateResponse{
-		ReleasedAllocationAsks: event.ReleasedAllocationAsks,
+	response := &si.AllocationResponse{
+		ReleasedAsks: event.ReleasedAllocationAsks,
 	}
-	rmp.processUpdateResponse(event.RmID, response)
+	rmp.triggerUpdateAllocation(event.RmID, response)
 }
 
 func (rmp *RMProxy) processUpdatePartitionConfigsEvent(event *rmevent.RMRejectedAllocationAskEvent) {
+	rmp.RLock()
+	defer rmp.RUnlock()
 	if len(event.RejectedAllocationAsks) == 0 {
 		return
 	}
-	response := &si.UpdateResponse{
-		RejectedAllocations: event.RejectedAllocationAsks,
+	response := &si.AllocationResponse{
+		Rejected: event.RejectedAllocationAsks,
 	}
-
-	rmp.processUpdateResponse(event.RmID, response)
+	rmp.triggerUpdateAllocation(event.RmID, response)
 	metrics.GetSchedulerMetrics().AddRejectedContainers(len(event.RejectedAllocationAsks))
 }
 
 func (rmp *RMProxy) processRMNodeUpdateEvent(event *rmevent.RMNodeUpdateEvent) {
+	rmp.RLock()
+	defer rmp.RUnlock()
 	if len(event.RejectedNodes) == 0 && len(event.AcceptedNodes) == 0 {
 		return
 	}
-	response := &si.UpdateResponse{
-		RejectedNodes: event.RejectedNodes,
-		AcceptedNodes: event.AcceptedNodes,
+	response := &si.NodeResponse{
+		Rejected: event.RejectedNodes,
+		Accepted: event.AcceptedNodes,
 	}
 
-	rmp.processUpdateResponse(event.RmID, response)
+	if callback := rmp.rmIDToCallback[event.RmID]; callback != nil {
+		if err := callback.UpdateNode(response); err != nil {
+			rmp.handleUpdateResponseError(event.RmID, err)
+		}
+	} else {
+		log.Logger().DPanic("RM is not registered",
+			zap.String("rmID", event.RmID))
+	}
 }
 
 func (rmp *RMProxy) handleRMEvents() {
@@ -272,76 +291,78 @@ func (rmp *RMProxy) GetResourceManagerCallback(rmID string) api.ResourceManagerC
 	return rmp.rmIDToCallback[rmID]
 }
 
-// Do normalize.
-func normalizeUpdateRequestByRMId(request *si.UpdateRequest) {
-	// Update asks
-	if len(request.Asks) > 0 {
-		for _, ask := range request.Asks {
-			ask.PartitionName = common.GetNormalizedPartitionName(ask.PartitionName, request.RmID)
-		}
+func (rmp *RMProxy) UpdateAllocation(request *si.AllocationRequest) error {
+	if rmp.GetResourceManagerCallback(request.RmID) == nil {
+		return fmt.Errorf("received AllocationRequest, but RmID=\"%s\" not registered", request.RmID)
 	}
-
-	// Update Schedulable Nodes
-	if len(request.NewSchedulableNodes) > 0 {
-		for _, node := range request.NewSchedulableNodes {
-			partition := node.Attributes[siCommon.NodePartition]
-			node.Attributes[siCommon.NodePartition] = common.GetNormalizedPartitionName(partition, request.RmID)
-		}
-	}
-
-	// Update New apps
-	if len(request.NewApplications) > 0 {
-		for _, app := range request.NewApplications {
-			app.PartitionName = common.GetNormalizedPartitionName(app.PartitionName, request.RmID)
-		}
-	}
-
-	// Update Updated nodes
-	if len(request.UpdatedNodes) > 0 {
-		for _, node := range request.UpdatedNodes {
-			partition := node.Attributes[siCommon.NodePartition]
-			node.Attributes[siCommon.NodePartition] = common.GetNormalizedPartitionName(partition, request.RmID)
-		}
-	}
-
-	// Update Remove apps
-	if len(request.RemoveApplications) > 0 {
-		for _, app := range request.RemoveApplications {
-			app.PartitionName = common.GetNormalizedPartitionName(app.PartitionName, request.RmID)
-		}
-	}
-
-	// Update releases
-	if request.Releases != nil {
-		if len(request.Releases.AllocationsToRelease) > 0 {
-			for _, rel := range request.Releases.AllocationsToRelease {
-				rel.PartitionName = common.GetNormalizedPartitionName(rel.PartitionName, request.RmID)
+	go func() {
+		// Update asks
+		if len(request.Asks) > 0 {
+			for _, ask := range request.Asks {
+				ask.PartitionName = common.GetNormalizedPartitionName(ask.PartitionName, request.RmID)
 			}
 		}
 
-		if len(request.Releases.AllocationAsksToRelease) > 0 {
-			for _, rel := range request.Releases.AllocationAsksToRelease {
-				rel.PartitionName = common.GetNormalizedPartitionName(rel.PartitionName, request.RmID)
+		// Update releases
+		if request.Releases != nil {
+			if len(request.Releases.AllocationsToRelease) > 0 {
+				for _, rel := range request.Releases.AllocationsToRelease {
+					rel.PartitionName = common.GetNormalizedPartitionName(rel.PartitionName, request.RmID)
+				}
+			}
+
+			if len(request.Releases.AllocationAsksToRelease) > 0 {
+				for _, rel := range request.Releases.AllocationAsksToRelease {
+					rel.PartitionName = common.GetNormalizedPartitionName(rel.PartitionName, request.RmID)
+				}
 			}
 		}
-	}
+		rmp.EventHandlers.SchedulerEventHandler.HandleEvent(&rmevent.RMUpdateAllocationEvent{Request: request})
+	}()
+	return nil
 }
 
-func (rmp *RMProxy) Update(request *si.UpdateRequest) error {
+func (rmp *RMProxy) UpdateApplication(request *si.ApplicationRequest) error {
 	if rmp.GetResourceManagerCallback(request.RmID) == nil {
-		return fmt.Errorf("received UpdateRequest, but RmID=\"%s\" not registered", request.RmID)
+		return fmt.Errorf("received ApplicationRequest, but RmID=\"%s\" not registered", request.RmID)
 	}
 
 	go func() {
-		normalizeUpdateRequestByRMId(request)
-		rmp.EventHandlers.SchedulerEventHandler.HandleEvent(&rmevent.RMUpdateRequestEvent{Request: request})
+		// Update New apps
+		if len(request.New) > 0 {
+			for _, app := range request.New {
+				app.PartitionName = common.GetNormalizedPartitionName(app.PartitionName, request.RmID)
+			}
+		}
+		// Update Remove apps
+		if len(request.Remove) > 0 {
+			for _, app := range request.Remove {
+				app.PartitionName = common.GetNormalizedPartitionName(app.PartitionName, request.RmID)
+			}
+		}
+		rmp.EventHandlers.SchedulerEventHandler.HandleEvent(&rmevent.RMUpdateApplicationEvent{Request: request})
 	}()
+	return nil
+}
 
+func (rmp *RMProxy) UpdateNode(request *si.NodeRequest) error {
+	if rmp.GetResourceManagerCallback(request.RmID) == nil {
+		return fmt.Errorf("received NodeRequest, but RmID=\"%s\" not registered", request.RmID)
+	}
+	go func() {
+		if len(request.Nodes) > 0 {
+			for _, node := range request.Nodes {
+				partition := node.Attributes[siCommon.NodePartition]
+				node.Attributes[siCommon.NodePartition] = common.GetNormalizedPartitionName(partition, request.RmID)
+			}
+		}
+		rmp.EventHandlers.SchedulerEventHandler.HandleEvent(&rmevent.RMUpdateNodeEvent{Request: request})
+	}()
 	return nil
 }
 
 // Triggers scheduler to reload configuration and apply the changes on-the-fly to the scheduler itself.
-func (rmp *RMProxy) ReloadConfiguration(rmID string) error {
+func (rmp *RMProxy) UpdateConfiguration(rmID string) error {
 	rmp.RLock()
 	defer rmp.RUnlock()
 

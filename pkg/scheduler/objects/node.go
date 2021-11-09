@@ -57,7 +57,7 @@ type Node struct {
 	sync.RWMutex
 }
 
-func NewNode(proto *si.NewNodeInfo) *Node {
+func NewNode(proto *si.NodeInfo) *Node {
 	// safe guard against panic
 	if proto == nil {
 		return nil
@@ -358,7 +358,7 @@ func (sn *Node) preConditions(allocID string, allocate bool) bool {
 		return true
 	}
 	// Check the predicates plugin (k8shim)
-	if plugin := plugins.GetPredicatesPlugin(); plugin != nil {
+	if plugin := plugins.GetResourceManagerCallbackPlugin(); plugin != nil {
 		// checking predicates
 		if err := plugin.Predicates(&si.PredicatesArgs{
 			AllocationKey: allocID,

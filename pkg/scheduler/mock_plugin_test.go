@@ -56,6 +56,39 @@ func (f *fakePredicatePlugin) Predicates(args *si.PredicatesArgs) error {
 	return nil
 }
 
+func (f *fakePredicatePlugin) UpdateAllocation(response *si.AllocationResponse) error {
+	// do nothing
+	return nil
+}
+
+func (f *fakePredicatePlugin) UpdateApplication(response *si.ApplicationResponse) error {
+	// do nothing
+	return nil
+}
+
+func (f *fakePredicatePlugin) UpdateNode(response *si.NodeResponse) error {
+	// do nothing
+	return nil
+}
+
+func (f *fakePredicatePlugin) ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error {
+	// do nothing
+	return nil
+}
+
+func (f *fakePredicatePlugin) SendEvent(events []*si.EventRecord) {
+	// do nothing
+}
+
+func (f *fakePredicatePlugin) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
+	// do nothing
+}
+
+func (f fakePredicatePlugin) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
+	// do nothing
+	return nil
+}
+
 // A fake predicate plugin that can either always fail or fail based on the node that is checked.
 // mustFail will cause the predicate check to always fail
 // nodes allows specifying which node to fail for which check using the nodeID:

@@ -74,7 +74,7 @@ func TestGetSchedulerHealthStatusContext(t *testing.T) {
 	assert.Assert(t, healthInfo.Healthy, "Scheduler should be healthy")
 
 	// set some negative node resources
-	err = schedulerContext.partitions[partName].AddNode(objects.NewNode(&si.NewNodeInfo{
+	err = schedulerContext.partitions[partName].AddNode(objects.NewNode(&si.NodeInfo{
 		NodeID:     "node",
 		Attributes: nil,
 		SchedulableResource: &si.Resource{

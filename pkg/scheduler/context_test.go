@@ -76,19 +76,20 @@ func TestAddUnlimitedNode(t *testing.T) {
 	partition, err := newPartitionContext(conf, "test", context)
 	context.partitions[partition.Name] = partition
 	assert.NilError(t, err, "partition create should not have failed with error")
-	unlimitedNode := &si.NewNodeInfo{
+	unlimitedNode := &si.NodeInfo{
 		NodeID:     "unlimited",
 		Attributes: map[string]string{"yunikorn.apache.org/nodeType": "unlimited", "si/node-partition": "default"},
+		Action:     si.NodeInfo_CREATE,
 	}
-	var newNodes []*si.NewNodeInfo
+	var newNodes []*si.NodeInfo
 	newNodes = append(newNodes, unlimitedNode)
 
-	request := &si.UpdateRequest{
-		NewSchedulableNodes: newNodes,
+	request := &si.NodeRequest{
+		Nodes: newNodes,
 	}
 
 	// 1. add the first unlimited node, but keep reservation enabled
-	context.addNodes(request)
+	context.processNodes(request)
 	assert.Assert(t, handler.eventHandled, "Event should have been handled")
 	assert.Assert(t, len(handler.acceptedNodes) == 0, "There should be no accepted nodes")
 	assert.Assert(t, len(handler.rejectedNodes) == 1, "The node should be rejected")
@@ -97,39 +98,41 @@ func TestAddUnlimitedNode(t *testing.T) {
 	// 2. add the first unlimited node, but disable reservation
 	context.reservationDisabled = true
 	handler.reset()
-	context.addNodes(request)
+	context.processNodes(request)
 	assert.Assert(t, handler.eventHandled, "Event should have been handled")
 	assert.Assert(t, len(handler.acceptedNodes) == 1, "The node should be accepted")
 	assert.Assert(t, len(handler.rejectedNodes) == 0, "There should be no rejected nodes")
 	assert.Equal(t, handler.acceptedNodes[0].NodeID, unlimitedNode.NodeID, "The accepted node is not the unlimited one")
 
 	// 3. there is already an unlimited node registered
-	unlimitedNode2 := &si.NewNodeInfo{
+	unlimitedNode2 := &si.NodeInfo{
 		NodeID:     "unlimited2",
 		Attributes: map[string]string{"yunikorn.apache.org/nodeType": "unlimited", "si/node-partition": "default"},
+		Action:     si.NodeInfo_CREATE,
 	}
-	var newNodes2 []*si.NewNodeInfo
+	var newNodes2 []*si.NodeInfo
 	newNodes2 = append(newNodes2, unlimitedNode2)
-	request2 := &si.UpdateRequest{
-		NewSchedulableNodes: newNodes2,
+	request2 := &si.NodeRequest{
+		Nodes: newNodes2,
 	}
 	handler.reset()
-	context.addNodes(request2)
+	context.processNodes(request2)
 	assert.Assert(t, handler.eventHandled, "Event should have been handled")
 	assert.Assert(t, len(handler.acceptedNodes) == 0, "There should be no accepted nodes")
 	assert.Assert(t, len(handler.rejectedNodes) == 1, "The node should be rejected")
 	assert.Equal(t, handler.rejectedNodes[0].NodeID, unlimitedNode2.NodeID, "The rejected node is not the unlimited one")
 
 	// 4. there are other nodes in the list as well
-	regularNode := &si.NewNodeInfo{
+	regularNode := &si.NodeInfo{
 		NodeID:     "regularNode",
 		Attributes: map[string]string{"si/node-partition": "default"},
+		Action:     si.NodeInfo_CREATE,
 	}
 	newNodes2 = append(newNodes2, unlimitedNode, regularNode)
-	request2.NewSchedulableNodes = newNodes2
+	request2.Nodes = newNodes2
 	handler.reset()
 	_, _ = partition.removeNode(unlimitedNode.NodeID)
-	context.addNodes(request2)
+	context.processNodes(request2)
 	assert.Assert(t, handler.eventHandled, "Event should have been handled")
 	assert.Assert(t, len(handler.acceptedNodes) == 1, "There should be only one accepted node")
 	assert.Assert(t, len(handler.rejectedNodes) == 2, "There should be 2 rejected nodes")
@@ -137,7 +140,7 @@ func TestAddUnlimitedNode(t *testing.T) {
 
 	// 5. there is a regular node registered
 	handler.reset()
-	context.addNodes(request)
+	context.processNodes(request)
 	assert.Assert(t, handler.eventHandled, "Event should have been handled")
 	assert.Assert(t, len(handler.acceptedNodes) == 0, "There should be no accepted node")
 	assert.Assert(t, len(handler.rejectedNodes) == 1, "The node should be rejected")

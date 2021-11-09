@@ -216,7 +216,7 @@ func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resou
 }
 
 func newNodeWithResources(nodeID string, max, occupied *resources.Resource) *objects.Node {
-	proto := &si.NewNodeInfo{
+	proto := &si.NodeInfo{
 		NodeID:              nodeID,
 		Attributes:          nil,
 		SchedulableResource: max.ToProto(),

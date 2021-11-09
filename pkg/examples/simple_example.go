@@ -37,31 +37,10 @@ type exampleRMCallback struct {
 	sync.RWMutex
 }
 
-func (m *exampleRMCallback) RecvUpdateResponse(response *si.UpdateResponse) error {
+func (m *exampleRMCallback) UpdateAllocation(response *si.AllocationResponse) error {
 	m.Lock()
 	defer m.Unlock()
-
-	for _, app := range response.AcceptedApplications {
-		m.acceptedApplications[app.ApplicationID] = true
-		delete(m.rejectedApplications, app.ApplicationID)
-	}
-
-	for _, app := range response.RejectedApplications {
-		m.rejectedApplications[app.ApplicationID] = true
-		delete(m.acceptedApplications, app.ApplicationID)
-	}
-
-	for _, node := range response.AcceptedNodes {
-		m.acceptedNodes[node.NodeID] = true
-		delete(m.rejectedNodes, node.NodeID)
-	}
-
-	for _, node := range response.RejectedNodes {
-		m.rejectedNodes[node.NodeID] = true
-		delete(m.acceptedNodes, node.NodeID)
-	}
-
-	for _, alloc := range response.NewAllocations {
+	for _, alloc := range response.New {
 		m.Allocations[alloc.UUID] = alloc
 		if val, ok := m.nodeAllocations[alloc.NodeID]; ok {
 			val = append(val, alloc)
@@ -73,10 +52,62 @@ func (m *exampleRMCallback) RecvUpdateResponse(response *si.UpdateResponse) erro
 		}
 	}
 
-	for _, alloc := range response.ReleasedAllocations {
+	for _, alloc := range response.Released {
 		delete(m.Allocations, alloc.UUID)
 	}
+	return nil
+}
 
+func (m *exampleRMCallback) UpdateApplication(response *si.ApplicationResponse) error {
+	m.Lock()
+	defer m.Unlock()
+	for _, app := range response.Accepted {
+		m.acceptedApplications[app.ApplicationID] = true
+		delete(m.rejectedApplications, app.ApplicationID)
+	}
+
+	for _, app := range response.Rejected {
+		m.rejectedApplications[app.ApplicationID] = true
+		delete(m.acceptedApplications, app.ApplicationID)
+	}
+	return nil
+}
+
+func (m *exampleRMCallback) UpdateNode(response *si.NodeResponse) error {
+	m.Lock()
+	defer m.Unlock()
+	for _, node := range response.Accepted {
+		m.acceptedNodes[node.NodeID] = true
+		delete(m.rejectedNodes, node.NodeID)
+	}
+
+	for _, node := range response.Rejected {
+		m.rejectedNodes[node.NodeID] = true
+		delete(m.acceptedNodes, node.NodeID)
+	}
+	return nil
+}
+
+func (f *exampleRMCallback) Predicates(args *si.PredicatesArgs) error {
+	// do nothing
+	return nil
+}
+
+func (f *exampleRMCallback) ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error {
+	// do nothing
+	return nil
+}
+
+func (f *exampleRMCallback) SendEvent(events []*si.EventRecord) {
+	// do nothing
+}
+
+func (f *exampleRMCallback) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
+	// do nothing
+}
+
+func (f *exampleRMCallback) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
+	// do nothing
 	return nil
 }
 
@@ -142,8 +173,8 @@ partitions:
 	}
 
 	// Register a node
-	err = proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	err = proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -177,8 +208,8 @@ partitions:
 	// (IMPORTANT)
 	// Different from kubernetes, we need app for allocation ask. You can put all pod requests under the same app.
 	// app name can be anything non-empty. Partition name can be empty (and internally becomes "default").
-	err = proxy.Update(&si.UpdateRequest{
-		NewApplications: []*si.AddApplicationRequest{
+	err = proxy.UpdateApplication(&si.ApplicationRequest{
+		New: []*si.AddApplicationRequest{
 			{
 				ApplicationID: "app-1",
 				QueueName:     "a",
@@ -199,7 +230,7 @@ partitions:
 	// You need to check app accepted by scheduler before proceed.
 
 	// Send request
-	err = proxy.Update(&si.UpdateRequest{
+	err = proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
 				AllocationKey: "alloc-1",

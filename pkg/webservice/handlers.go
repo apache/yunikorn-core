@@ -351,9 +351,8 @@ func getNodesUtilJSON(partition *scheduler.PartitionContext, name string) *dao.N
 	mapName := make([][]string, 10)
 	var v float64
 	var nodeUtil []*dao.NodeUtilDAOInfo
-	resourceExist := true
 	for _, node := range partition.GetNodes() {
-		resourceExist = true
+		resourceExist := true
 		// check resource exist or not
 		total := node.GetCapacity()
 		if total.Resources[name] <= 0 {

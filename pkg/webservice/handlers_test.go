@@ -702,12 +702,12 @@ func ContainsObj(slice interface{}, contains interface{}) bool {
 
 func TestGetNodesUtilJSON(t *testing.T) {
 	configs.MockSchedulerConfigByData([]byte(configDefault))
-	schedulerContext, err := scheduler.NewClusterContext(rmID, policyGroup)
+	context, err := scheduler.NewClusterContext(rmID, policyGroup)
 	assert.NilError(t, err, "Error when load schedulerContext from config")
-	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
+	assert.Equal(t, 1, len(context.GetPartitionMapClone()))
 	// Check test partition
 	partitionName := common.GetNormalizedPartitionName("default", rmID)
-	partition := schedulerContext.GetPartition(partitionName)
+	partition := context.GetPartition(partitionName)
 	assert.Equal(t, partitionName, partition.Name)
 
 	// create test application

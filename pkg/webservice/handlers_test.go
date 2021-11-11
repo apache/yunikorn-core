@@ -1386,7 +1386,13 @@ func prepareSchedulerContext(t *testing.T) *scheduler.ClusterContext {
 func waitForStateDumpFile(t *testing.T) {
 	for {
 		var attempts int
-		info, _ := os.Stat(stateDumpFilePath)
+
+		info, err := os.Stat(stateDumpFilePath)
+
+		// tolerate only "file not found" errors
+		if err != nil && !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
 
 		if info != nil && info.Size() > 0 {
 			break

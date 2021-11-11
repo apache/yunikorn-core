@@ -1327,7 +1327,7 @@ func TestEnableDisablePeriodicStateDump(t *testing.T) {
 	waitForStateDumpFile(t)
 	fileContents, err2 := ioutil.ReadFile(stateDumpFilePath)
 	if err2 != nil {
-		t.Fatal("unable to open state dump file")
+		t.Fatal(err2)
 	}
 	var aggregated AggregatedStateInfo
 	if err3 := json.Unmarshal(fileContents, &aggregated); err3 != nil {

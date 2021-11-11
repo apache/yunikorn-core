@@ -39,6 +39,7 @@ import (
 
 const (
 	defaultStateDumpPeriod = 60
+	stateDumpFilePath      = "yunikorn-state.txt"
 )
 
 var (
@@ -49,17 +50,18 @@ var (
 )
 
 type AggregatedStateInfo struct {
-	Timestamp        string
-	Partitions       []*dao.PartitionInfo
-	Applications     []*dao.ApplicationDAOInfo
-	AppHistory       []*dao.ApplicationHistoryDAOInfo
-	Nodes            []*dao.NodesDAOInfo
-	NodesUtilization []*dao.NodesUtilDAOInfo
-	ClusterInfo      []*dao.ClusterDAOInfo
-	ContainerHistory []*dao.ContainerHistoryDAOInfo
-	Queues           []*dao.PartitionDAOInfo
-	SchedulerHealth  *dao.SchedulerHealthDAOInfo
-	LogLevel         string
+	Timestamp          string
+	Partitions         []*dao.PartitionInfo
+	Applications       []*dao.ApplicationDAOInfo
+	AppHistory         []*dao.ApplicationHistoryDAOInfo
+	Nodes              []*dao.NodesDAOInfo
+	NodesUtilization   []*dao.NodesUtilDAOInfo
+	ClusterInfo        []*dao.ClusterDAOInfo
+	ClusterUtilization []*dao.ClustersUtilDAOInfo
+	ContainerHistory   []*dao.ContainerHistoryDAOInfo
+	Queues             []*dao.PartitionDAOInfo
+	SchedulerHealth    *dao.SchedulerHealthDAOInfo
+	LogLevel           string
 }
 
 func getFullStateDump(w http.ResponseWriter, r *http.Request) {
@@ -114,17 +116,18 @@ func doStateDump(w io.Writer) error {
 	zapConfig := log.GetConfig()
 
 	var aggregated = AggregatedStateInfo{
-		Timestamp:        time.Now().Format(time.RFC3339),
-		Partitions:       getPartitionInfoDao(partitionContext),
-		Applications:     getApplicationsDao(partitionContext),
-		AppHistory:       getAppHistoryDao(records),
-		Nodes:            getNodesDao(partitionContext),
-		NodesUtilization: getNodesUtilizationDao(partitionContext),
-		ClusterInfo:      getClusterInfoDao(partitionContext),
-		ContainerHistory: getContainerHistoryDao(records),
-		Queues:           getPartitionDAOInfo(partitionContext),
-		SchedulerHealth:  &schedulerHealth,
-		LogLevel:         zapConfig.Level.Level().String(),
+		Timestamp:          time.Now().Format(time.RFC3339),
+		Partitions:         getPartitionInfoDao(partitionContext),
+		Applications:       getApplicationsDao(partitionContext),
+		AppHistory:         getAppHistoryDao(records),
+		Nodes:              getNodesDao(partitionContext),
+		NodesUtilization:   getNodesUtilizationDao(partitionContext),
+		ClusterInfo:        getClusterInfoDao(partitionContext),
+		ClusterUtilization: getClustersUtilDAOInfo(partitionContext),
+		ContainerHistory:   getContainerHistoryDao(records),
+		Queues:             getPartitionDAOInfo(partitionContext),
+		SchedulerHealth:    &schedulerHealth,
+		LogLevel:           zapConfig.Level.Level().String(),
 	}
 
 	var prettyJSON []byte
@@ -145,12 +148,14 @@ func startBackGroundStateDump(period int) error {
 	defer startStop.Unlock()
 
 	if periodicStateDump {
-		return fmt.Errorf("state dump already running")
+		var errMsg = "state dump already running"
+		log.Logger().Error(errMsg)
+		return fmt.Errorf(errMsg)
 	}
-	const fileName = "/tmp/yunikorn_statedump.txt" // TODO: configurable?
-	file, err := os.Create(fileName)
+
+	file, err := os.OpenFile(stateDumpFilePath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
-		log.Logger().Error("unable to create file",
+		log.Logger().Error("unable to open/create file",
 			zap.Error(err))
 		return err
 	}
@@ -179,7 +184,7 @@ func startBackGroundStateDump(period int) error {
 		}
 	}()
 
-	log.Logger().Info("started periodic state dump", zap.String("filename", fileName),
+	log.Logger().Info("started periodic state dump", zap.String("filename", stateDumpFilePath),
 		zap.Int("period", period))
 	return nil
 }

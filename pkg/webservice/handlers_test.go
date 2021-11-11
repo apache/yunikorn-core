@@ -22,11 +22,14 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -1278,4 +1281,155 @@ func TestGetNodesUtilization(t *testing.T) {
 	err = json.Unmarshal(resp.outputBytes, &nodesDao)
 	assert.NilError(t, err)
 	assert.Equal(t, len(nodesDao), 0)
+}
+
+func TestGetFullStateDump(t *testing.T) {
+	schedulerContext = prepareSchedulerContext(t)
+
+	imHistory = history.NewInternalMetricsHistory(5)
+	req, err := http.NewRequest("GET", "/ws/v1/getfullstatedump", strings.NewReader(""))
+	req = mux.SetURLVars(req, make(map[string]string))
+	assert.NilError(t, err)
+	resp := &MockResponseWriter{}
+
+	getFullStateDump(resp, req)
+	receivedBytes := resp.outputBytes
+	statusCode := resp.statusCode
+	assert.Assert(t, len(receivedBytes) > 0, "json response is empty")
+	assert.Check(t, statusCode != http.StatusInternalServerError, "response status code")
+	var aggregated AggregatedStateInfo
+	if err := json.Unmarshal(receivedBytes, &aggregated); err != nil {
+		t.Fatal(err)
+	}
+	verifyStateDumpJSON(t, &aggregated)
+}
+
+func TestEnableDisablePeriodicStateDump(t *testing.T) {
+	schedulerContext = prepareSchedulerContext(t)
+	defer deleteStateDumpFile()
+	defer terminateGoroutine()
+
+	imHistory = history.NewInternalMetricsHistory(5)
+	req, err := http.NewRequest("GET", "/ws/v1/enableperiodicstatedump", strings.NewReader(""))
+	vars := map[string]string{
+		"period": "3",
+	}
+	req = mux.SetURLVars(req, vars)
+
+	assert.NilError(t, err)
+	resp := &MockResponseWriter{}
+
+	// enable state dump, check file contents
+	enablePeriodicStateDump(resp, req)
+	statusCode := resp.statusCode
+	assert.Check(t, statusCode != http.StatusInternalServerError, "response status code")
+
+	waitForStateDumpFile(t)
+	fileContents, err2 := ioutil.ReadFile(stateDumpFilePath)
+	if err2 != nil {
+		t.Fatal("unable to open state dump file")
+	}
+	var aggregated AggregatedStateInfo
+	if err3 := json.Unmarshal(fileContents, &aggregated); err3 != nil {
+		t.Fatal(err3)
+	}
+	verifyStateDumpJSON(t, &aggregated)
+
+	// disable
+	req, err = http.NewRequest("GET", "/ws/v1/disableperiodicstatedump", strings.NewReader(""))
+	req = mux.SetURLVars(req, make(map[string]string))
+	assert.NilError(t, err)
+	resp = &MockResponseWriter{}
+	disablePeriodicStateDump(resp, req)
+	statusCode = resp.statusCode
+	assert.Assert(t, statusCode != http.StatusInternalServerError, "response status code")
+}
+
+func TestTryEnableStateDumpTwice(t *testing.T) {
+	defer deleteStateDumpFile()
+	defer terminateGoroutine()
+
+	req, err := http.NewRequest("GET", "/ws/v1/enableperiodicstatedump", strings.NewReader(""))
+	req = mux.SetURLVars(req, make(map[string]string))
+	assert.NilError(t, err)
+	resp := &MockResponseWriter{}
+
+	enablePeriodicStateDump(resp, req)
+	enablePeriodicStateDump(resp, req)
+
+	statusCode := resp.statusCode
+	assert.Assert(t, statusCode == http.StatusInternalServerError, "response status code")
+}
+
+func TestTryDisableNotRunningStateDump(t *testing.T) {
+	req, err := http.NewRequest("GET", "/ws/v1/disableperiodicstatedump", strings.NewReader(""))
+	req = mux.SetURLVars(req, make(map[string]string))
+	assert.NilError(t, err)
+	resp := &MockResponseWriter{}
+
+	disablePeriodicStateDump(resp, req)
+
+	statusCode := resp.statusCode
+	assert.Assert(t, statusCode == http.StatusInternalServerError, "response status code")
+}
+
+func prepareSchedulerContext(t *testing.T) *scheduler.ClusterContext {
+	configs.MockSchedulerConfigByData([]byte(configDefault))
+	var err error
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	assert.NilError(t, err, "Error when load clusterInfo from config")
+	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
+
+	return schedulerContext
+}
+
+func waitForStateDumpFile(t *testing.T) {
+	for {
+		var attempts int
+		info, err := os.Stat(stateDumpFilePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Size() > 0 {
+			break
+		}
+		if attempts++; attempts > 10 {
+			t.Fatal("Nothing has been written to the state dump file")
+		}
+		time.Sleep(1 * time.Second)
+	}
+}
+
+func deleteStateDumpFile() {
+	_ = os.Remove(stateDumpFilePath)
+}
+
+func terminateGoroutine() {
+	if !isAbortClosed() {
+		abort <- struct{}{}
+		close(abort)
+		periodicStateDump = false
+	}
+}
+
+func isAbortClosed() bool {
+	select {
+	case <-abort:
+		return true
+	default:
+	}
+	return false
+}
+
+func verifyStateDumpJSON(t *testing.T, aggregated *AggregatedStateInfo) {
+	// verify some basic fields
+	assert.Check(t, len(aggregated.Timestamp) > 0)
+	assert.Check(t, len(aggregated.Partitions) > 0)
+	assert.Check(t, len(aggregated.Nodes) > 0)
+	assert.Check(t, len(aggregated.ClusterInfo) > 0)
+	assert.Check(t, len(aggregated.ClusterUtilization) > 0)
+	assert.Check(t, len(aggregated.Queues) > 0)
+	assert.Check(t, aggregated.SchedulerHealth.Healthy)
+	assert.Check(t, len(aggregated.SchedulerHealth.HealthChecks) > 0)
+	assert.Check(t, len(aggregated.LogLevel) > 0)
 }

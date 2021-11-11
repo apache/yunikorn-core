@@ -1386,13 +1386,12 @@ func prepareSchedulerContext(t *testing.T) *scheduler.ClusterContext {
 func waitForStateDumpFile(t *testing.T) {
 	for {
 		var attempts int
-		info, err := os.Stat(stateDumpFilePath)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if info.Size() > 0 {
+		info, _ := os.Stat(stateDumpFilePath)
+
+		if info != nil && info.Size() > 0 {
 			break
 		}
+
 		if attempts++; attempts > 10 {
 			t.Fatal("Nothing has been written to the state dump file")
 		}

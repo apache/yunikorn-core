@@ -350,9 +350,10 @@ func getNodesUtilJSON(partition *scheduler.PartitionContext, name string) *dao.N
 	mapResult := make([]int, 10)
 	mapName := make([][]string, 10)
 	var v float64
-	var resourceExist = true
 	var nodeUtil []*dao.NodeUtilDAOInfo
 	for _, node := range partition.GetNodes() {
+		resourceExist := true
+		// check resource exist or not
 		total := node.GetCapacity()
 		if total.Resources[name] <= 0 {
 			resourceExist = false
@@ -361,6 +362,7 @@ func getNodesUtilJSON(partition *scheduler.PartitionContext, name string) *dao.N
 		if _, ok := resourceAllocated.Resources[name]; !ok {
 			resourceExist = false
 		}
+		// if resource exist in node, record the bucket it should go
 		if resourceExist {
 			v = float64(resources.CalculateAbsUsedCapacity(total, resourceAllocated).Resources[name])
 			idx := int(math.Dim(math.Ceil(v/10), 1))
@@ -368,24 +370,14 @@ func getNodesUtilJSON(partition *scheduler.PartitionContext, name string) *dao.N
 			mapName[idx] = append(mapName[idx], node.NodeID)
 		}
 	}
+	// put number of nodes and node name to different buckets
 	for k := 0; k < 10; k++ {
-		if resourceExist {
-			util := &dao.NodeUtilDAOInfo{
-				BucketName: fmt.Sprintf("%d", k*10) + "-" + fmt.Sprintf("%d", (k+1)*10) + "%",
-				NumOfNodes: int64(mapResult[k]),
-				NodeNames:  mapName[k],
-			}
-			nodeUtil = append(nodeUtil, util)
-		} else {
-			util := &dao.NodeUtilDAOInfo{
-				BucketName: fmt.Sprintf("%d", k*10) + "-" + fmt.Sprintf("%d", (k+1)*10) + "%",
-				NumOfNodes: int64(-1),
-				NodeNames:  []string{"N/A"},
-			}
-			nodeUtil = append(nodeUtil, util)
+		util := &dao.NodeUtilDAOInfo{
+			BucketName: fmt.Sprintf("%d", k*10) + "-" + fmt.Sprintf("%d", (k+1)*10) + "%",
+			NumOfNodes: int64(mapResult[k]),
+			NodeNames:  mapName[k],
 		}
-		mapResult[k] = 0
-		mapName[k] = []string{}
+		nodeUtil = append(nodeUtil, util)
 	}
 	return &dao.NodesUtilDAOInfo{
 		ResourceType: name,

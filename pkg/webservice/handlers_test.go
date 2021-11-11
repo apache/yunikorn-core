@@ -702,15 +702,14 @@ func ContainsObj(slice interface{}, contains interface{}) bool {
 
 func TestGetNodesUtilJSON(t *testing.T) {
 	configs.MockSchedulerConfigByData([]byte(configDefault))
-	var err error
-	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	context, err := scheduler.NewClusterContext(rmID, policyGroup)
 	assert.NilError(t, err, "Error when load schedulerContext from config")
-	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
-
+	assert.Equal(t, 1, len(context.GetPartitionMapClone()))
 	// Check test partition
 	partitionName := common.GetNormalizedPartitionName("default", rmID)
-	partition := schedulerContext.GetPartition(partitionName)
+	partition := context.GetPartition(partitionName)
 	assert.Equal(t, partitionName, partition.Name)
+
 	// create test application
 	appID := "app1"
 	app := newApplication(appID, partitionName, queueName, rmID)
@@ -719,13 +718,15 @@ func TestGetNodesUtilJSON(t *testing.T) {
 
 	// create test nodes
 	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 1000, resources.VCORE: 1000}).ToProto()
+	nodeRes2 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 1000, resources.VCORE: 1000, "GPU": 10}).ToProto()
 	node1ID := "node-1"
 	node1 := objects.NewNode(&si.NodeInfo{NodeID: node1ID, SchedulableResource: nodeRes})
 	node2ID := "node-2"
-	node2 := objects.NewNode(&si.NodeInfo{NodeID: node2ID, SchedulableResource: nodeRes})
+	node2 := objects.NewNode(&si.NodeInfo{NodeID: node2ID, SchedulableResource: nodeRes2})
+
 	// create test allocations
 	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 500, resources.VCORE: 300})
-	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 300, resources.VCORE: 500})
+	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 300, resources.VCORE: 500, "GPU": 5})
 	ask1 := &objects.AllocationAsk{
 		AllocationKey:     "alloc-1",
 		QueueName:         queueName,
@@ -748,9 +749,11 @@ func TestGetNodesUtilJSON(t *testing.T) {
 	// get nodes utilization
 	res1 := getNodesUtilJSON(partition, resources.MEMORY)
 	res2 := getNodesUtilJSON(partition, resources.VCORE)
+	res3 := getNodesUtilJSON(partition, "GPU")
 	resNon := getNodesUtilJSON(partition, "non-exist")
 	subres1 := res1.NodesUtil
 	subres2 := res2.NodesUtil
+	subres3 := res3.NodesUtil
 	subresNon := resNon.NodesUtil
 
 	assert.Equal(t, res1.ResourceType, resources.MEMORY)
@@ -765,9 +768,13 @@ func TestGetNodesUtilJSON(t *testing.T) {
 	assert.Equal(t, subres2[2].NodeNames[0], node1ID)
 	assert.Equal(t, subres2[4].NodeNames[0], node2ID)
 
+	assert.Equal(t, res3.ResourceType, "GPU")
+	assert.Equal(t, subres3[4].NumOfNodes, int64(1))
+	assert.Equal(t, subres3[4].NodeNames[0], node2ID)
+
 	assert.Equal(t, resNon.ResourceType, "non-exist")
-	assert.Equal(t, subresNon[0].NumOfNodes, int64(-1))
-	assert.Equal(t, subresNon[0].NodeNames[0], "N/A")
+	assert.Equal(t, subresNon[0].NumOfNodes, int64(0))
+	assert.Equal(t, len(subresNon[0].NodeNames), 0)
 }
 
 func addAndConfirmApplicationExists(t *testing.T, partitionName string, partition *scheduler.PartitionContext, appName string) *objects.Application {

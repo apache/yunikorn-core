@@ -1393,7 +1393,7 @@ func waitForStateDumpFile(t *testing.T) {
 		}
 
 		if attempts++; attempts > 10 {
-			t.Fatal("Nothing has been written to the state dump file")
+			t.Fatal("state dump file has not been created")
 		}
 		time.Sleep(1 * time.Second)
 	}

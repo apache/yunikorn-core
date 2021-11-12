@@ -1402,8 +1402,9 @@ func waitForStateDumpFile(t *testing.T) {
 }
 
 func deleteStateDumpFile(t *testing.T) {
-	err := os.Remove(stateDumpFilePath)
-	t.Fatal(t, err, "could not delete file")
+	if err := os.Remove(stateDumpFilePath); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func terminateGoroutine() {

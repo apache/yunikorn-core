@@ -1338,7 +1338,7 @@ func TestEnableDisablePeriodicStateDump(t *testing.T) {
 	resp = &MockResponseWriter{}
 	disablePeriodicStateDump(resp, req)
 	statusCode = resp.statusCode
-	assert.Assert(t, statusCode == 0, "response status code")
+	assert.Equal(t, statusCode, 0, "response status code")
 }
 
 func TestTryEnableStateDumpTwice(t *testing.T) {
@@ -1354,7 +1354,7 @@ func TestTryEnableStateDumpTwice(t *testing.T) {
 	enablePeriodicStateDump(resp, req)
 
 	statusCode := resp.statusCode
-	assert.Assert(t, statusCode == http.StatusInternalServerError, "response status code")
+	assert.Equal(t, statusCode, http.StatusInternalServerError, "response status code")
 }
 
 func TestTryDisableNotRunningStateDump(t *testing.T) {
@@ -1366,7 +1366,7 @@ func TestTryDisableNotRunningStateDump(t *testing.T) {
 	disablePeriodicStateDump(resp, req)
 
 	statusCode := resp.statusCode
-	assert.Assert(t, statusCode == http.StatusInternalServerError, "response status code")
+	assert.Equal(t, statusCode, http.StatusInternalServerError, "response status code")
 }
 
 func prepareSchedulerContext(t *testing.T) *scheduler.ClusterContext {
@@ -1395,7 +1395,7 @@ func waitForStateDumpFile(t *testing.T) {
 		}
 
 		if attempts++; attempts > 10 {
-			t.Fatal("state dump file has not been created")
+			t.Fatal("state dump file has not been created or still empty")
 		}
 		time.Sleep(1 * time.Second)
 	}
@@ -1403,7 +1403,7 @@ func waitForStateDumpFile(t *testing.T) {
 
 func deleteStateDumpFile(t *testing.T) {
 	err := os.Remove(stateDumpFilePath)
-	assert.NilError(t, err, "could not delete file")
+	t.Fatal(t, err, "could not delete file")
 }
 
 func terminateGoroutine() {

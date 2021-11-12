@@ -29,8 +29,6 @@ import (
 	"time"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	metrics2 "github.com/apache/incubator-yunikorn-core/pkg/metrics"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 
 	"github.com/gorilla/mux"
@@ -38,8 +36,8 @@ import (
 )
 
 const (
-	defaultStateDumpPeriod = 60
-	stateDumpFilePath      = "yunikorn-state.txt"
+	defaultStateDumpPeriod time.Duration = 60
+	stateDumpFilePath                    = "yunikorn-state.txt"
 )
 
 var (
@@ -60,7 +58,6 @@ type AggregatedStateInfo struct {
 	ClusterUtilization []*dao.ClustersUtilDAOInfo
 	ContainerHistory   []*dao.ContainerHistoryDAOInfo
 	Queues             []*dao.PartitionDAOInfo
-	SchedulerHealth    *dao.SchedulerHealthDAOInfo
 	LogLevel           string
 }
 
@@ -74,26 +71,29 @@ func getFullStateDump(w http.ResponseWriter, r *http.Request) {
 func enablePeriodicStateDump(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	writeHeaders(w)
-	var period int
+	const defaultPeriod = int(defaultStateDumpPeriod)
+	var periodFromHeader int
+	var period time.Duration
 	var err error
-	var zapField = zap.Int("defaultStateDumpPeriod", defaultStateDumpPeriod)
+	var zapField = zap.Duration("defaultStateDumpPeriod", defaultStateDumpPeriod)
 
 	if len(vars["period"]) == 0 {
 		log.Logger().Info("using the default period for state dump",
 			zapField)
-		period = defaultStateDumpPeriod
-	} else if period, err = strconv.Atoi(vars["period"]); err != nil {
+		periodFromHeader = defaultPeriod
+	} else if periodFromHeader, err = strconv.Atoi(vars["period"]); err != nil {
 		log.Logger().Warn("illegal value for period, using the default",
 			zapField)
-		period = defaultStateDumpPeriod
+		periodFromHeader = defaultPeriod
 	}
 
-	if period < 0 {
+	if periodFromHeader < 0 {
 		log.Logger().Warn("period value is negative, using the default",
 			zapField)
-		period = defaultStateDumpPeriod
+		periodFromHeader = defaultPeriod
 	}
 
+	period = time.Duration(periodFromHeader)
 	if err = startBackGroundStateDump(period); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -111,22 +111,19 @@ func doStateDump(w io.Writer) error {
 
 	partitionContext := schedulerContext.GetPartitionMapClone()
 	records := imHistory.GetRecords()
-	metrics := metrics2.GetSchedulerMetrics()
-	schedulerHealth := scheduler.GetSchedulerHealthStatus(metrics, schedulerContext)
 	zapConfig := log.GetConfig()
 
 	var aggregated = AggregatedStateInfo{
 		Timestamp:          time.Now().Format(time.RFC3339),
-		Partitions:         getPartitionInfoDao(partitionContext),
-		Applications:       getApplicationsDao(partitionContext),
-		AppHistory:         getAppHistoryDao(records),
-		Nodes:              getNodesDao(partitionContext),
-		NodesUtilization:   getNodesUtilizationDao(partitionContext),
-		ClusterInfo:        getClusterInfoDao(partitionContext),
-		ClusterUtilization: getClustersUtilDAOInfo(partitionContext),
-		ContainerHistory:   getContainerHistoryDao(records),
-		Queues:             getPartitionDAOInfo(partitionContext),
-		SchedulerHealth:    &schedulerHealth,
+		Partitions:         getPartitionInfoDAO(partitionContext),
+		Applications:       getApplicationsDAO(partitionContext),
+		AppHistory:         getAppHistoryDAO(records),
+		Nodes:              getNodesDAO(partitionContext),
+		NodesUtilization:   getNodesUtilDAO(partitionContext),
+		ClusterInfo:        getClusterDAO(partitionContext),
+		ClusterUtilization: getClustersUtilDAO(partitionContext),
+		ContainerHistory:   getContainerHistoryDAO(records),
+		Queues:             getPartitionDAO(partitionContext),
 		LogLevel:           zapConfig.Level.Level().String(),
 	}
 
@@ -143,7 +140,7 @@ func doStateDump(w io.Writer) error {
 	return nil
 }
 
-func startBackGroundStateDump(period int) error {
+func startBackGroundStateDump(period time.Duration) error {
 	startStop.Lock()
 	defer startStop.Unlock()
 
@@ -163,7 +160,7 @@ func startBackGroundStateDump(period int) error {
 	periodicStateDump = true
 
 	go func() {
-		ticker := time.NewTicker(time.Duration(period) * time.Second)
+		ticker := time.NewTicker(period * time.Second)
 
 		for {
 			select {
@@ -185,7 +182,7 @@ func startBackGroundStateDump(period int) error {
 	}()
 
 	log.Logger().Info("started periodic state dump", zap.String("filename", stateDumpFilePath),
-		zap.Int("period", period))
+		zap.Duration("period", period))
 	return nil
 }
 

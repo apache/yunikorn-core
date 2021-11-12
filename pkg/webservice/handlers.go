@@ -81,7 +81,7 @@ func getClusterInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	lists := schedulerContext.GetPartitionMapClone()
-	clustersInfo := getClusterInfoDao(lists)
+	clustersInfo := getClusterDAO(lists)
 	if err := json.NewEncoder(w).Encode(clustersInfo); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -90,7 +90,7 @@ func getClusterInfo(w http.ResponseWriter, r *http.Request) {
 func getClusterUtilization(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	lists := schedulerContext.GetPartitionMapClone()
-	clusterUtil := getClustersUtilDAOInfo(lists)
+	clusterUtil := getClustersUtilDAO(lists)
 	if err := json.NewEncoder(w).Encode(clusterUtil); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -141,7 +141,7 @@ func getNodesInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	lists := schedulerContext.GetPartitionMapClone()
-	result := getNodesDao(lists)
+	result := getNodesDAO(lists)
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -151,7 +151,7 @@ func getNodesUtilization(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	lists := schedulerContext.GetPartitionMapClone()
-	result := getNodesUtilizationDao(lists)
+	result := getNodesUtilDAO(lists)
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -373,7 +373,7 @@ func getApplicationHistory(w http.ResponseWriter, r *http.Request) {
 	// get a copy of the records: if the array contains nil values they will always be at the
 	// start and we cannot shortcut the loop using a break, we must finish iterating
 	records := imHistory.GetRecords()
-	result := getAppHistoryDao(records)
+	result := getAppHistoryDAO(records)
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -390,7 +390,7 @@ func getContainerHistory(w http.ResponseWriter, r *http.Request) {
 	// get a copy of the records: if the array contains nil values they will always be at the
 	// start and we cannot shortcut the loop using a break, we must finish iterating
 	records := imHistory.GetRecords()
-	result := getContainerHistoryDao(records)
+	result := getContainerHistoryDAO(records)
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -539,7 +539,7 @@ func getPartitions(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	lists := schedulerContext.GetPartitionMapClone()
-	partitionsInfo := getPartitionInfoDao(lists)
+	partitionsInfo := getPartitionInfoDAO(lists)
 	if err := json.NewEncoder(w).Encode(partitionsInfo); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -666,7 +666,7 @@ func getLogLevel(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getPartitionInfoDao(lists map[string]*scheduler.PartitionContext) []*dao.PartitionInfo {
+func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.PartitionInfo {
 	result := make([]*dao.PartitionInfo, 0, len(lists))
 
 	for _, partitionContext := range lists {
@@ -701,7 +701,7 @@ func getPartitionInfoDao(lists map[string]*scheduler.PartitionContext) []*dao.Pa
 	return result
 }
 
-func getAppHistoryDao(records []*history.MetricsRecord) []*dao.ApplicationHistoryDAOInfo {
+func getAppHistoryDAO(records []*history.MetricsRecord) []*dao.ApplicationHistoryDAOInfo {
 	result := make([]*dao.ApplicationHistoryDAOInfo, 0, len(records))
 	for _, record := range records {
 		if record == nil {
@@ -717,7 +717,7 @@ func getAppHistoryDao(records []*history.MetricsRecord) []*dao.ApplicationHistor
 	return result
 }
 
-func getNodesDao(lists map[string]*scheduler.PartitionContext) []*dao.NodesDAOInfo {
+func getNodesDAO(lists map[string]*scheduler.PartitionContext) []*dao.NodesDAOInfo {
 	result := make([]*dao.NodesDAOInfo, 0, len(lists))
 	for _, partition := range lists {
 		ns := partition.GetNodes()
@@ -735,7 +735,7 @@ func getNodesDao(lists map[string]*scheduler.PartitionContext) []*dao.NodesDAOIn
 	return result
 }
 
-func getContainerHistoryDao(records []*history.MetricsRecord) []*dao.ContainerHistoryDAOInfo {
+func getContainerHistoryDAO(records []*history.MetricsRecord) []*dao.ContainerHistoryDAOInfo {
 	result := make([]*dao.ContainerHistoryDAOInfo, 0, len(records))
 	for _, record := range records {
 		if record == nil {
@@ -751,7 +751,7 @@ func getContainerHistoryDao(records []*history.MetricsRecord) []*dao.ContainerHi
 	return result
 }
 
-func getClustersUtilDAOInfo(lists map[string]*scheduler.PartitionContext) []*dao.ClustersUtilDAOInfo {
+func getClustersUtilDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClustersUtilDAOInfo {
 	result := make([]*dao.ClustersUtilDAOInfo, 0, len(lists))
 	for _, partition := range lists {
 		result = append(result, &dao.ClustersUtilDAOInfo{
@@ -762,7 +762,7 @@ func getClustersUtilDAOInfo(lists map[string]*scheduler.PartitionContext) []*dao
 
 	return result
 }
-func getNodesUtilizationDao(lists map[string]*scheduler.PartitionContext) []*dao.NodesUtilDAOInfo {
+func getNodesUtilDAO(lists map[string]*scheduler.PartitionContext) []*dao.NodesUtilDAOInfo {
 	var result []*dao.NodesUtilDAOInfo
 
 	for _, partition := range lists {
@@ -778,7 +778,7 @@ func getNodesUtilizationDao(lists map[string]*scheduler.PartitionContext) []*dao
 	return result
 }
 
-func getApplicationsDao(lists map[string]*scheduler.PartitionContext) []*dao.ApplicationDAOInfo {
+func getApplicationsDAO(lists map[string]*scheduler.PartitionContext) []*dao.ApplicationDAOInfo {
 	result := make([]*dao.ApplicationDAOInfo, 0, 32)
 
 	for _, partition := range lists {
@@ -795,17 +795,17 @@ func getApplicationsDao(lists map[string]*scheduler.PartitionContext) []*dao.App
 	return result
 }
 
-func getPartitionDAOInfo(lists map[string]*scheduler.PartitionContext) []*dao.PartitionDAOInfo {
-	queues := make([]*dao.PartitionDAOInfo, len(lists))
+func getPartitionDAO(lists map[string]*scheduler.PartitionContext) []*dao.PartitionDAOInfo {
+	result := make([]*dao.PartitionDAOInfo, len(lists))
 
 	for _, partition := range lists {
-		queues = append(queues, getPartitionJSON(partition))
+		result = append(result, getPartitionJSON(partition))
 	}
 
-	return queues
+	return result
 }
 
-func getClusterInfoDao(lists map[string]*scheduler.PartitionContext) []*dao.ClusterDAOInfo {
+func getClusterDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClusterDAOInfo {
 	result := make([]*dao.ClusterDAOInfo, 0, len(lists))
 	for _, partition := range lists {
 		result = append(result, getClusterJSON(partition))

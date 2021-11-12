@@ -1298,15 +1298,14 @@ func TestGetFullStateDump(t *testing.T) {
 	assert.Assert(t, len(receivedBytes) > 0, "json response is empty")
 	assert.Check(t, statusCode != http.StatusInternalServerError, "response status code")
 	var aggregated AggregatedStateInfo
-	if err := json.Unmarshal(receivedBytes, &aggregated); err != nil {
-		t.Fatal(err)
-	}
+	err = json.Unmarshal(receivedBytes, &aggregated)
+	assert.NilError(t, err)
 	verifyStateDumpJSON(t, &aggregated)
 }
 
 func TestEnableDisablePeriodicStateDump(t *testing.T) {
 	schedulerContext = prepareSchedulerContext(t)
-	defer deleteStateDumpFile()
+	defer deleteStateDumpFile(t)
 	defer terminateGoroutine()
 
 	imHistory = history.NewInternalMetricsHistory(5)
@@ -1322,17 +1321,14 @@ func TestEnableDisablePeriodicStateDump(t *testing.T) {
 	// enable state dump, check file contents
 	enablePeriodicStateDump(resp, req)
 	statusCode := resp.statusCode
-	assert.Check(t, statusCode != http.StatusInternalServerError, "response status code")
+	assert.Check(t, statusCode == 0, "response status code")
 
 	waitForStateDumpFile(t)
 	fileContents, err2 := ioutil.ReadFile(stateDumpFilePath)
-	if err2 != nil {
-		t.Fatal(err2)
-	}
+	assert.NilError(t, err2)
 	var aggregated AggregatedStateInfo
-	if err3 := json.Unmarshal(fileContents, &aggregated); err3 != nil {
-		t.Fatal(err3)
-	}
+	err3 := json.Unmarshal(fileContents, &aggregated)
+	assert.NilError(t, err3)
 	verifyStateDumpJSON(t, &aggregated)
 
 	// disable
@@ -1342,11 +1338,11 @@ func TestEnableDisablePeriodicStateDump(t *testing.T) {
 	resp = &MockResponseWriter{}
 	disablePeriodicStateDump(resp, req)
 	statusCode = resp.statusCode
-	assert.Assert(t, statusCode != http.StatusInternalServerError, "response status code")
+	assert.Assert(t, statusCode == 0, "response status code")
 }
 
 func TestTryEnableStateDumpTwice(t *testing.T) {
-	defer deleteStateDumpFile()
+	defer deleteStateDumpFile(t)
 	defer terminateGoroutine()
 
 	req, err := http.NewRequest("GET", "/ws/v1/enableperiodicstatedump", strings.NewReader(""))
@@ -1405,8 +1401,9 @@ func waitForStateDumpFile(t *testing.T) {
 	}
 }
 
-func deleteStateDumpFile() {
-	_ = os.Remove(stateDumpFilePath)
+func deleteStateDumpFile(t *testing.T) {
+	err := os.Remove(stateDumpFilePath)
+	assert.NilError(t, err, "could not delete file")
 }
 
 func terminateGoroutine() {
@@ -1427,14 +1424,11 @@ func isAbortClosed() bool {
 }
 
 func verifyStateDumpJSON(t *testing.T, aggregated *AggregatedStateInfo) {
-	// verify some basic fields
 	assert.Check(t, len(aggregated.Timestamp) > 0)
 	assert.Check(t, len(aggregated.Partitions) > 0)
 	assert.Check(t, len(aggregated.Nodes) > 0)
 	assert.Check(t, len(aggregated.ClusterInfo) > 0)
 	assert.Check(t, len(aggregated.ClusterUtilization) > 0)
 	assert.Check(t, len(aggregated.Queues) > 0)
-	assert.Check(t, aggregated.SchedulerHealth.Healthy)
-	assert.Check(t, len(aggregated.SchedulerHealth.HealthChecks) > 0)
 	assert.Check(t, len(aggregated.LogLevel) > 0)
 }

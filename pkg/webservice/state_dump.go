@@ -37,7 +37,7 @@ import (
 
 const (
 	defaultStateDumpPeriod time.Duration = 60
-	stateDumpFilePath      string = "yunikorn-state.txt"
+	stateDumpFilePath      string        = "yunikorn-state.txt"
 )
 
 var (

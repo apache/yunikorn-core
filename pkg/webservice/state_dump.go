@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,8 +37,8 @@ import (
 )
 
 const (
-	defaultStateDumpPeriod time.Duration = 60
-	stateDumpFilePath      string        = "yunikorn-state.txt"
+	defaultStateDumpPeriodSeconds time.Duration = 60 //nolint
+	stateDumpFilePath             string        = "yunikorn-state.txt"
 )
 
 var (
@@ -68,14 +69,34 @@ func getFullStateDump(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func enablePeriodicStateDump(w http.ResponseWriter, r *http.Request) {
+func handlePeriodicStateDump(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	writeHeaders(w)
-	const defaultPeriod = int(defaultStateDumpPeriod)
+	if len(vars["switch"]) == 0 {
+		buildJSONErrorResponse(w, "required parameter enabled/disabled is missing",
+			http.StatusBadRequest)
+		return
+	}
+
+	enabledSwitch := strings.ToLower(vars["switch"])
+	switch enabledSwitch {
+	case "enable":
+		enablePeriodicStateDump(w, r)
+	case "disable":
+		disablePeriodicStateDump(w, r)
+	default:
+		buildJSONErrorResponse(w, fmt.Sprintf("required parameter enable/disable is illegal: %s", enabledSwitch),
+			http.StatusBadRequest)
+	}
+}
+
+func enablePeriodicStateDump(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	const defaultPeriod = int(defaultStateDumpPeriodSeconds)
 	var periodFromHeader int
 	var period time.Duration
 	var err error
-	var zapField = zap.Duration("defaultStateDumpPeriod", defaultStateDumpPeriod)
+	var zapField = zap.Duration("defaultStateDumpPeriodSeconds", defaultStateDumpPeriodSeconds)
 
 	if len(vars["period"]) == 0 {
 		log.Logger().Info("using the default period for state dump",

@@ -1309,9 +1309,10 @@ func TestEnableDisablePeriodicStateDump(t *testing.T) {
 	defer terminateGoroutine()
 
 	imHistory = history.NewInternalMetricsHistory(5)
-	req, err := http.NewRequest("GET", "/ws/v1/enableperiodicstatedump", strings.NewReader(""))
+	req, err := http.NewRequest("GET", "/ws/v1/periodicstatedump", strings.NewReader(""))
 	vars := map[string]string{
 		"period": "3",
+		"switch": "enable",
 	}
 	req = mux.SetURLVars(req, vars)
 
@@ -1319,9 +1320,9 @@ func TestEnableDisablePeriodicStateDump(t *testing.T) {
 	resp := &MockResponseWriter{}
 
 	// enable state dump, check file contents
-	enablePeriodicStateDump(resp, req)
+	handlePeriodicStateDump(resp, req)
 	statusCode := resp.statusCode
-	assert.Check(t, statusCode == 0, "response status code")
+	assert.Equal(t, statusCode, 0, "response status code")
 
 	waitForStateDumpFile(t)
 	fileContents, err2 := ioutil.ReadFile(stateDumpFilePath)
@@ -1332,11 +1333,14 @@ func TestEnableDisablePeriodicStateDump(t *testing.T) {
 	verifyStateDumpJSON(t, &aggregated)
 
 	// disable
-	req, err = http.NewRequest("GET", "/ws/v1/disableperiodicstatedump", strings.NewReader(""))
-	req = mux.SetURLVars(req, make(map[string]string))
+	req, err = http.NewRequest("GET", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	vars = map[string]string{
+		"switch": "disable",
+	}
+	req = mux.SetURLVars(req, vars)
 	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
-	disablePeriodicStateDump(resp, req)
+	handlePeriodicStateDump(resp, req)
 	statusCode = resp.statusCode
 	assert.Equal(t, statusCode, 0, "response status code")
 }
@@ -1345,28 +1349,60 @@ func TestTryEnableStateDumpTwice(t *testing.T) {
 	defer deleteStateDumpFile(t)
 	defer terminateGoroutine()
 
-	req, err := http.NewRequest("GET", "/ws/v1/enableperiodicstatedump", strings.NewReader(""))
-	req = mux.SetURLVars(req, make(map[string]string))
+	req, err := http.NewRequest("GET", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	vars := map[string]string{
+		"switch": "enable",
+	}
+	req = mux.SetURLVars(req, vars)
 	assert.NilError(t, err)
 	resp := &MockResponseWriter{}
 
-	enablePeriodicStateDump(resp, req)
-	enablePeriodicStateDump(resp, req)
+	// first call - succeeds
+	handlePeriodicStateDump(resp, req)
+	statusCode := resp.statusCode
+	assert.Equal(t, statusCode, 0, "response status code")
+
+	// second call - expected to fail
+	handlePeriodicStateDump(resp, req)
+	statusCode = resp.statusCode
+	assert.Equal(t, statusCode, http.StatusInternalServerError, "response status code")
+}
+
+func TestTryDisableNotRunningStateDump(t *testing.T) {
+	req, err := http.NewRequest("GET", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	vars := map[string]string{
+		"switch": "disable",
+	}
+	req = mux.SetURLVars(req, vars)
+	assert.NilError(t, err)
+	resp := &MockResponseWriter{}
+
+	handlePeriodicStateDump(resp, req)
 
 	statusCode := resp.statusCode
 	assert.Equal(t, statusCode, http.StatusInternalServerError, "response status code")
 }
 
-func TestTryDisableNotRunningStateDump(t *testing.T) {
-	req, err := http.NewRequest("GET", "/ws/v1/disableperiodicstatedump", strings.NewReader(""))
-	req = mux.SetURLVars(req, make(map[string]string))
+func TestIllegalStateDumpRequests(t *testing.T) {
+	// missing
+	req, err := http.NewRequest("GET", "/ws/v1/periodicstatedump", strings.NewReader(""))
 	assert.NilError(t, err)
 	resp := &MockResponseWriter{}
-
-	disablePeriodicStateDump(resp, req)
-
+	handlePeriodicStateDump(resp, req)
 	statusCode := resp.statusCode
-	assert.Equal(t, statusCode, http.StatusInternalServerError, "response status code")
+	assert.Equal(t, statusCode, http.StatusBadRequest, "response status code")
+
+	// illegal
+	req, err = http.NewRequest("GET", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	assert.NilError(t, err)
+	vars := map[string]string{
+		"switch": "illegal",
+	}
+	req = mux.SetURLVars(req, vars)
+	resp = &MockResponseWriter{}
+	handlePeriodicStateDump(resp, req)
+	statusCode = resp.statusCode
+	assert.Equal(t, statusCode, http.StatusBadRequest, "response status code")
 }
 
 func prepareSchedulerContext(t *testing.T) *scheduler.ClusterContext {

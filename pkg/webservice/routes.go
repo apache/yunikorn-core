@@ -179,14 +179,8 @@ var webRoutes = routes{
 	route{
 		"Scheduler",
 		"PUT",
-		"/ws/v1/enableperiodicstatedump/{period}",
-		enablePeriodicStateDump,
-	},
-	route{
-		"Scheduler",
-		"PUT",
-		"/ws/v1/disableperiodicstatedump",
-		disablePeriodicStateDump,
+		"/ws/v1/periodicstatedump/{switch}/{period}",
+		handlePeriodicStateDump,
 	},
 	// endpoint to retrieve CPU, Memory profiling data,
 	// this works with pprof tool. By default, pprof endpoints

@@ -1311,8 +1311,8 @@ func TestEnableDisablePeriodicStateDump(t *testing.T) {
 	imHistory = history.NewInternalMetricsHistory(5)
 	req, err := http.NewRequest("GET", "/ws/v1/periodicstatedump", strings.NewReader(""))
 	vars := map[string]string{
-		"period": "3",
-		"switch": "enable",
+		"periodSeconds": "3",
+		"switch":        "enable",
 	}
 	req = mux.SetURLVars(req, vars)
 

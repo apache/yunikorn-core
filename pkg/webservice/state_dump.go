@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	defaultStateDumpPeriodSeconds time.Duration = 60 //nolint
+	defaultStateDumpPeriodSeconds time.Duration = 60 * time.Second //nolint:golint
 	stateDumpFilePath             string        = "yunikorn-state.txt"
 )
 
@@ -92,8 +92,7 @@ func handlePeriodicStateDump(w http.ResponseWriter, r *http.Request) {
 
 func enablePeriodicStateDump(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	const defaultPeriod = int(defaultStateDumpPeriodSeconds)
-	var periodFromHeader int
+	var convertedPeriod int
 	var period time.Duration
 	var err error
 	var zapField = zap.Duration("defaultStateDumpPeriodSeconds", defaultStateDumpPeriodSeconds)
@@ -101,20 +100,24 @@ func enablePeriodicStateDump(w http.ResponseWriter, r *http.Request) {
 	if len(vars["period"]) == 0 {
 		log.Logger().Info("using the default period for state dump",
 			zapField)
-		periodFromHeader = defaultPeriod
-	} else if periodFromHeader, err = strconv.Atoi(vars["period"]); err != nil {
-		log.Logger().Warn("illegal value for period, using the default",
-			zapField)
-		periodFromHeader = defaultPeriod
+		period = defaultStateDumpPeriodSeconds
+	} else {
+		convertedPeriod, err = strconv.Atoi(vars["periodSeconds"])
+		if err != nil {
+			log.Logger().Warn("illegal value for period, using the default",
+				zapField)
+			period = defaultStateDumpPeriodSeconds
+		} else {
+			period = time.Duration(convertedPeriod) * time.Second
+		}
+
+		if period < 0 {
+			log.Logger().Warn("period value is negative, using the default",
+				zapField)
+			period = defaultStateDumpPeriodSeconds
+		}
 	}
 
-	if periodFromHeader < 0 {
-		log.Logger().Warn("period value is negative, using the default",
-			zapField)
-		periodFromHeader = defaultPeriod
-	}
-
-	period = time.Duration(periodFromHeader)
 	if err = startBackGroundStateDump(period); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -181,7 +184,7 @@ func startBackGroundStateDump(period time.Duration) error {
 	periodicStateDump = true
 
 	go func() {
-		ticker := time.NewTicker(period * time.Second)
+		ticker := time.NewTicker(period)
 
 		for {
 			select {

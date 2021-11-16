@@ -179,7 +179,7 @@ var webRoutes = routes{
 	route{
 		"Scheduler",
 		"PUT",
-		"/ws/v1/periodicstatedump/{switch}/{period}",
+		"/ws/v1/periodicstatedump/{switch}/{periodSeconds}",
 		handlePeriodicStateDump,
 	},
 	// endpoint to retrieve CPU, Memory profiling data,

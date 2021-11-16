@@ -36,6 +36,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	metrics2 "github.com/apache/incubator-yunikorn-core/pkg/metrics"
+	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
@@ -80,10 +81,7 @@ func getClusterInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	lists := schedulerContext.GetPartitionMapClone()
-	clustersInfo := make([]*dao.ClusterDAOInfo, 0, len(lists))
-	for _, partition := range lists {
-		clustersInfo = append(clustersInfo, getClusterJSON(partition))
-	}
+	clustersInfo := getClusterDAO(lists)
 	if err := json.NewEncoder(w).Encode(clustersInfo); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -92,14 +90,7 @@ func getClusterInfo(w http.ResponseWriter, r *http.Request) {
 func getClusterUtilization(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	lists := schedulerContext.GetPartitionMapClone()
-	clusterUtil := make([]*dao.ClustersUtilDAOInfo, 0, len(lists))
-	for _, partition := range lists {
-		clusterUtil = append(clusterUtil, &dao.ClustersUtilDAOInfo{
-			PartitionName: common.GetPartitionNameWithoutClusterID(partition.Name),
-			ClustersUtil:  getClusterUtilJSON(partition),
-		})
-	}
-
+	clusterUtil := getClustersUtilDAO(lists)
 	if err := json.NewEncoder(w).Encode(clusterUtil); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -150,20 +141,7 @@ func getNodesInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	lists := schedulerContext.GetPartitionMapClone()
-	result := make([]*dao.NodesDAOInfo, 0, len(lists))
-	for _, partition := range lists {
-		ns := partition.GetNodes()
-		nodesDao := make([]*dao.NodeDAOInfo, 0, len(ns))
-		for _, node := range ns {
-			nodeDao := getNodeJSON(node)
-			nodesDao = append(nodesDao, nodeDao)
-		}
-		result = append(result, &dao.NodesDAOInfo{
-			PartitionName: common.GetPartitionNameWithoutClusterID(partition.Name),
-			Nodes:         nodesDao,
-		})
-	}
-
+	result := getNodesDAO(lists)
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -173,16 +151,7 @@ func getNodesUtilization(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	lists := schedulerContext.GetPartitionMapClone()
-	var result []*dao.NodesUtilDAOInfo
-	for _, partition := range lists {
-		partitionResource := partition.GetTotalPartitionResource()
-		// partitionResource can be null if the partition has no node
-		if partitionResource != nil {
-			for name := range partitionResource.Resources {
-				result = append(result, getNodesUtilJSON(partition, name))
-			}
-		}
-	}
+	result := getNodesUtilDAO(lists)
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -396,17 +365,7 @@ func getApplicationHistory(w http.ResponseWriter, r *http.Request) {
 	// get a copy of the records: if the array contains nil values they will always be at the
 	// start and we cannot shortcut the loop using a break, we must finish iterating
 	records := imHistory.GetRecords()
-	result := make([]*dao.ApplicationHistoryDAOInfo, 0, len(records))
-	for _, record := range records {
-		if record == nil {
-			continue
-		}
-		element := &dao.ApplicationHistoryDAOInfo{
-			Timestamp:         record.Timestamp.UnixNano(),
-			TotalApplications: strconv.Itoa(record.TotalApplications),
-		}
-		result = append(result, element)
-	}
+	result := getAppHistoryDAO(records)
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -423,17 +382,7 @@ func getContainerHistory(w http.ResponseWriter, r *http.Request) {
 	// get a copy of the records: if the array contains nil values they will always be at the
 	// start and we cannot shortcut the loop using a break, we must finish iterating
 	records := imHistory.GetRecords()
-	result := make([]*dao.ContainerHistoryDAOInfo, 0, len(records))
-	for _, record := range records {
-		if record == nil {
-			continue
-		}
-		element := &dao.ContainerHistoryDAOInfo{
-			Timestamp:       record.Timestamp.UnixNano(),
-			TotalContainers: strconv.Itoa(record.TotalContainers),
-		}
-		result = append(result, element)
-	}
+	result := getContainerHistoryDAO(records)
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -582,35 +531,7 @@ func getPartitions(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	lists := schedulerContext.GetPartitionMapClone()
-	partitionsInfo := make([]*dao.PartitionInfo, 0, len(lists))
-	for _, partitionContext := range lists {
-		partitionInfo := &dao.PartitionInfo{}
-		partitionInfo.ClusterID = partitionContext.RmID
-		partitionInfo.Name = common.GetPartitionNameWithoutClusterID(partitionContext.Name)
-		partitionInfo.State = partitionContext.GetCurrentState()
-		partitionInfo.LastStateTransitionTime = partitionContext.GetStateTime().String()
-
-		capacityInfo := dao.PartitionCapacity{}
-		capacityInfo.Capacity = partitionContext.GetTotalPartitionResource().DAOString()
-		capacityInfo.UsedCapacity = partitionContext.GetAllocatedResource().DAOString()
-		partitionInfo.Capacity = capacityInfo
-		partitionInfo.NodeSortingPolicy = dao.NodeSortingPolicy{
-			Type:            partitionContext.GetNodeSortingPolicyType().String(),
-			ResourceWeights: partitionContext.GetNodeSortingResourceWeights(),
-		}
-
-		appList := partitionContext.GetApplications()
-		appList = append(appList, partitionContext.GetCompletedApplications()...)
-		applicationsState := make(map[string]int)
-		totalApplications := 0
-		for _, app := range appList {
-			applicationsState[app.CurrentState()]++
-			totalApplications++
-		}
-		applicationsState["total"] = totalApplications
-		partitionInfo.Applications = applicationsState
-		partitionsInfo = append(partitionsInfo, partitionInfo)
-	}
+	partitionsInfo := getPartitionInfoDAO(lists)
 	if err := json.NewEncoder(w).Encode(partitionsInfo); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -735,4 +656,152 @@ func getLogLevel(w http.ResponseWriter, r *http.Request) {
 		log.Logger().Error("Could not get log level", zap.Error(err))
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.PartitionInfo {
+	result := make([]*dao.PartitionInfo, 0, len(lists))
+
+	for _, partitionContext := range lists {
+		partitionInfo := &dao.PartitionInfo{}
+		partitionInfo.ClusterID = partitionContext.RmID
+		partitionInfo.Name = common.GetPartitionNameWithoutClusterID(partitionContext.Name)
+		partitionInfo.State = partitionContext.GetCurrentState()
+		partitionInfo.LastStateTransitionTime = partitionContext.GetStateTime().String()
+
+		capacityInfo := dao.PartitionCapacity{}
+		capacityInfo.Capacity = partitionContext.GetTotalPartitionResource().DAOString()
+		capacityInfo.UsedCapacity = partitionContext.GetAllocatedResource().DAOString()
+		partitionInfo.Capacity = capacityInfo
+		partitionInfo.NodeSortingPolicy = dao.NodeSortingPolicy{
+			Type:            partitionContext.GetNodeSortingPolicyType().String(),
+			ResourceWeights: partitionContext.GetNodeSortingResourceWeights(),
+		}
+
+		appList := partitionContext.GetApplications()
+		appList = append(appList, partitionContext.GetCompletedApplications()...)
+		applicationsState := make(map[string]int)
+		totalApplications := 0
+		for _, app := range appList {
+			applicationsState[app.CurrentState()]++
+			totalApplications++
+		}
+		applicationsState["total"] = totalApplications
+		partitionInfo.Applications = applicationsState
+		result = append(result, partitionInfo)
+	}
+
+	return result
+}
+
+func getAppHistoryDAO(records []*history.MetricsRecord) []*dao.ApplicationHistoryDAOInfo {
+	result := make([]*dao.ApplicationHistoryDAOInfo, 0, len(records))
+	for _, record := range records {
+		if record == nil {
+			continue
+		}
+		element := &dao.ApplicationHistoryDAOInfo{
+			Timestamp:         record.Timestamp.UnixNano(),
+			TotalApplications: strconv.Itoa(record.TotalApplications),
+		}
+		result = append(result, element)
+	}
+
+	return result
+}
+
+func getNodesDAO(lists map[string]*scheduler.PartitionContext) []*dao.NodesDAOInfo {
+	result := make([]*dao.NodesDAOInfo, 0, len(lists))
+	for _, partition := range lists {
+		ns := partition.GetNodes()
+		nodesDao := make([]*dao.NodeDAOInfo, 0, len(ns))
+		for _, node := range ns {
+			nodeDao := getNodeJSON(node)
+			nodesDao = append(nodesDao, nodeDao)
+		}
+		result = append(result, &dao.NodesDAOInfo{
+			PartitionName: common.GetPartitionNameWithoutClusterID(partition.Name),
+			Nodes:         nodesDao,
+		})
+	}
+
+	return result
+}
+
+func getContainerHistoryDAO(records []*history.MetricsRecord) []*dao.ContainerHistoryDAOInfo {
+	result := make([]*dao.ContainerHistoryDAOInfo, 0, len(records))
+	for _, record := range records {
+		if record == nil {
+			continue
+		}
+		element := &dao.ContainerHistoryDAOInfo{
+			Timestamp:       record.Timestamp.UnixNano(),
+			TotalContainers: strconv.Itoa(record.TotalContainers),
+		}
+		result = append(result, element)
+	}
+
+	return result
+}
+
+func getClustersUtilDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClustersUtilDAOInfo {
+	result := make([]*dao.ClustersUtilDAOInfo, 0, len(lists))
+	for _, partition := range lists {
+		result = append(result, &dao.ClustersUtilDAOInfo{
+			PartitionName: common.GetPartitionNameWithoutClusterID(partition.Name),
+			ClustersUtil:  getClusterUtilJSON(partition),
+		})
+	}
+
+	return result
+}
+func getNodesUtilDAO(lists map[string]*scheduler.PartitionContext) []*dao.NodesUtilDAOInfo {
+	var result []*dao.NodesUtilDAOInfo
+
+	for _, partition := range lists {
+		partitionResource := partition.GetTotalPartitionResource()
+		// partitionResource can be null if the partition has no node
+		if partitionResource != nil {
+			for name := range partitionResource.Resources {
+				result = append(result, getNodesUtilJSON(partition, name))
+			}
+		}
+	}
+
+	return result
+}
+
+func getApplicationsDAO(lists map[string]*scheduler.PartitionContext) []*dao.ApplicationDAOInfo {
+	result := make([]*dao.ApplicationDAOInfo, 0, 32)
+
+	for _, partition := range lists {
+		size := partition.GetTotalCompletedApplicationCount() + partition.GetTotalApplicationCount()
+		appList := make([]*objects.Application, size)
+		appList = append(appList, partition.GetApplications()...)
+		appList = append(appList, partition.GetCompletedApplications()...)
+
+		for _, app := range appList {
+			result = append(result, getApplicationJSON(app))
+		}
+	}
+
+	return result
+}
+
+func getPartitionDAO(lists map[string]*scheduler.PartitionContext) []*dao.PartitionDAOInfo {
+	result := make([]*dao.PartitionDAOInfo, len(lists))
+
+	for _, partition := range lists {
+		result = append(result, getPartitionJSON(partition))
+	}
+
+	return result
+}
+
+func getClusterDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClusterDAOInfo {
+	result := make([]*dao.ClusterDAOInfo, 0, len(lists))
+	for _, partition := range lists {
+		result = append(result, getClusterJSON(partition))
+	}
+
+	return result
 }

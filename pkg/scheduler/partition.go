@@ -990,6 +990,12 @@ func (pc *PartitionContext) GetTotalApplicationCount() int {
 	return len(pc.applications)
 }
 
+func (pc *PartitionContext) GetTotalCompletedApplicationCount() int {
+	pc.RLock()
+	defer pc.RUnlock()
+	return len(pc.completedApplications)
+}
+
 func (pc *PartitionContext) GetTotalAllocationCount() int {
 	pc.RLock()
 	defer pc.RUnlock()

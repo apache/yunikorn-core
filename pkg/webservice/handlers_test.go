@@ -22,11 +22,14 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -1318,4 +1321,191 @@ func TestGetNodesUtilization(t *testing.T) {
 	err = json.Unmarshal(resp.outputBytes, &nodesDao)
 	assert.NilError(t, err)
 	assert.Equal(t, len(nodesDao), 0)
+}
+
+func TestGetFullStateDump(t *testing.T) {
+	schedulerContext = prepareSchedulerContext(t)
+
+	imHistory = history.NewInternalMetricsHistory(5)
+	req, err := http.NewRequest("GET", "/ws/v1/getfullstatedump", strings.NewReader(""))
+	req = mux.SetURLVars(req, make(map[string]string))
+	assert.NilError(t, err)
+	resp := &MockResponseWriter{}
+
+	getFullStateDump(resp, req)
+	receivedBytes := resp.outputBytes
+	statusCode := resp.statusCode
+	assert.Assert(t, len(receivedBytes) > 0, "json response is empty")
+	assert.Check(t, statusCode != http.StatusInternalServerError, "response status code")
+	var aggregated AggregatedStateInfo
+	err = json.Unmarshal(receivedBytes, &aggregated)
+	assert.NilError(t, err)
+	verifyStateDumpJSON(t, &aggregated)
+}
+
+func TestEnableDisablePeriodicStateDump(t *testing.T) {
+	schedulerContext = prepareSchedulerContext(t)
+	defer deleteStateDumpFile(t)
+	defer terminateGoroutine()
+
+	imHistory = history.NewInternalMetricsHistory(5)
+	req, err := http.NewRequest("GET", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	vars := map[string]string{
+		"periodSeconds": "3",
+		"switch":        "enable",
+	}
+	req = mux.SetURLVars(req, vars)
+
+	assert.NilError(t, err)
+	resp := &MockResponseWriter{}
+
+	// enable state dump, check file contents
+	handlePeriodicStateDump(resp, req)
+	statusCode := resp.statusCode
+	assert.Equal(t, statusCode, 0, "response status code")
+
+	waitForStateDumpFile(t)
+	fileContents, err2 := ioutil.ReadFile(stateDumpFilePath)
+	assert.NilError(t, err2)
+	var aggregated AggregatedStateInfo
+	err3 := json.Unmarshal(fileContents, &aggregated)
+	assert.NilError(t, err3)
+	verifyStateDumpJSON(t, &aggregated)
+
+	// disable
+	req, err = http.NewRequest("GET", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	vars = map[string]string{
+		"switch": "disable",
+	}
+	req = mux.SetURLVars(req, vars)
+	assert.NilError(t, err)
+	resp = &MockResponseWriter{}
+	handlePeriodicStateDump(resp, req)
+	statusCode = resp.statusCode
+	assert.Equal(t, statusCode, 0, "response status code")
+}
+
+func TestTryEnableStateDumpTwice(t *testing.T) {
+	defer deleteStateDumpFile(t)
+	defer terminateGoroutine()
+
+	req, err := http.NewRequest("GET", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	vars := map[string]string{
+		"switch": "enable",
+	}
+	req = mux.SetURLVars(req, vars)
+	assert.NilError(t, err)
+	resp := &MockResponseWriter{}
+
+	// first call - succeeds
+	handlePeriodicStateDump(resp, req)
+	statusCode := resp.statusCode
+	assert.Equal(t, statusCode, 0, "response status code")
+
+	// second call - expected to fail
+	handlePeriodicStateDump(resp, req)
+	statusCode = resp.statusCode
+	assert.Equal(t, statusCode, http.StatusInternalServerError, "response status code")
+}
+
+func TestTryDisableNotRunningStateDump(t *testing.T) {
+	req, err := http.NewRequest("GET", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	vars := map[string]string{
+		"switch": "disable",
+	}
+	req = mux.SetURLVars(req, vars)
+	assert.NilError(t, err)
+	resp := &MockResponseWriter{}
+
+	handlePeriodicStateDump(resp, req)
+
+	statusCode := resp.statusCode
+	assert.Equal(t, statusCode, http.StatusInternalServerError, "response status code")
+}
+
+func TestIllegalStateDumpRequests(t *testing.T) {
+	// missing
+	req, err := http.NewRequest("GET", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	assert.NilError(t, err)
+	resp := &MockResponseWriter{}
+	handlePeriodicStateDump(resp, req)
+	statusCode := resp.statusCode
+	assert.Equal(t, statusCode, http.StatusBadRequest, "response status code")
+
+	// illegal
+	req, err = http.NewRequest("GET", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	assert.NilError(t, err)
+	vars := map[string]string{
+		"switch": "illegal",
+	}
+	req = mux.SetURLVars(req, vars)
+	resp = &MockResponseWriter{}
+	handlePeriodicStateDump(resp, req)
+	statusCode = resp.statusCode
+	assert.Equal(t, statusCode, http.StatusBadRequest, "response status code")
+}
+
+func prepareSchedulerContext(t *testing.T) *scheduler.ClusterContext {
+	configs.MockSchedulerConfigByData([]byte(configDefault))
+	var err error
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	assert.NilError(t, err, "Error when load clusterInfo from config")
+	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
+
+	return schedulerContext
+}
+
+func waitForStateDumpFile(t *testing.T) {
+	for {
+		var attempts int
+
+		info, err := os.Stat(stateDumpFilePath)
+
+		// tolerate only "file not found" errors
+		if err != nil && !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+
+		if info != nil && info.Size() > 0 {
+			break
+		}
+
+		if attempts++; attempts > 10 {
+			t.Fatal("state dump file has not been created or still empty")
+		}
+		time.Sleep(1 * time.Second)
+	}
+}
+
+func deleteStateDumpFile(t *testing.T) {
+	if err := os.Remove(stateDumpFilePath); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func terminateGoroutine() {
+	if !isAbortClosed() {
+		abort <- struct{}{}
+		close(abort)
+		periodicStateDump = false
+	}
+}
+
+func isAbortClosed() bool {
+	select {
+	case <-abort:
+		return true
+	default:
+	}
+	return false
+}
+
+func verifyStateDumpJSON(t *testing.T, aggregated *AggregatedStateInfo) {
+	assert.Check(t, len(aggregated.Timestamp) > 0)
+	assert.Check(t, len(aggregated.Partitions) > 0)
+	assert.Check(t, len(aggregated.Nodes) > 0)
+	assert.Check(t, len(aggregated.ClusterInfo) > 0)
+	assert.Check(t, len(aggregated.ClusterUtilization) > 0)
+	assert.Check(t, len(aggregated.Queues) > 0)
+	assert.Check(t, len(aggregated.LogLevel) > 0)
 }

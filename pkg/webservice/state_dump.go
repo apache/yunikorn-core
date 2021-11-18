@@ -97,7 +97,7 @@ func enablePeriodicStateDump(w http.ResponseWriter, r *http.Request) {
 	var err error
 	var zapField = zap.Duration("defaultStateDumpPeriodSeconds", defaultStateDumpPeriodSeconds)
 
-	if len(vars["period"]) == 0 {
+	if len(vars["periodSeconds"]) == 0 {
 		log.Logger().Info("using the default period for state dump",
 			zapField)
 		period = defaultStateDumpPeriodSeconds

@@ -1328,8 +1328,8 @@ func TestGetFullStateDump(t *testing.T) {
 
 	imHistory = history.NewInternalMetricsHistory(5)
 	req, err := http.NewRequest("GET", "/ws/v1/getfullstatedump", strings.NewReader(""))
-	req = mux.SetURLVars(req, make(map[string]string))
 	assert.NilError(t, err)
+	req = mux.SetURLVars(req, make(map[string]string))
 	resp := &MockResponseWriter{}
 
 	getFullStateDump(resp, req)
@@ -1349,14 +1349,13 @@ func TestEnableDisablePeriodicStateDump(t *testing.T) {
 	defer terminateGoroutine()
 
 	imHistory = history.NewInternalMetricsHistory(5)
-	req, err := http.NewRequest("GET", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	req, err := http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	assert.NilError(t, err)
 	vars := map[string]string{
 		"periodSeconds": "3",
 		"switch":        "enable",
 	}
 	req = mux.SetURLVars(req, vars)
-
-	assert.NilError(t, err)
 	resp := &MockResponseWriter{}
 
 	// enable state dump, check file contents
@@ -1373,12 +1372,12 @@ func TestEnableDisablePeriodicStateDump(t *testing.T) {
 	verifyStateDumpJSON(t, &aggregated)
 
 	// disable
-	req, err = http.NewRequest("GET", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	req, err = http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	assert.NilError(t, err)
 	vars = map[string]string{
 		"switch": "disable",
 	}
 	req = mux.SetURLVars(req, vars)
-	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
 	handlePeriodicStateDump(resp, req)
 	statusCode = resp.statusCode
@@ -1389,12 +1388,12 @@ func TestTryEnableStateDumpTwice(t *testing.T) {
 	defer deleteStateDumpFile(t)
 	defer terminateGoroutine()
 
-	req, err := http.NewRequest("GET", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	req, err := http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	assert.NilError(t, err)
 	vars := map[string]string{
 		"switch": "enable",
 	}
 	req = mux.SetURLVars(req, vars)
-	assert.NilError(t, err)
 	resp := &MockResponseWriter{}
 
 	// first call - succeeds
@@ -1409,12 +1408,12 @@ func TestTryEnableStateDumpTwice(t *testing.T) {
 }
 
 func TestTryDisableNotRunningStateDump(t *testing.T) {
-	req, err := http.NewRequest("GET", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	req, err := http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	assert.NilError(t, err)
 	vars := map[string]string{
 		"switch": "disable",
 	}
 	req = mux.SetURLVars(req, vars)
-	assert.NilError(t, err)
 	resp := &MockResponseWriter{}
 
 	handlePeriodicStateDump(resp, req)
@@ -1425,7 +1424,7 @@ func TestTryDisableNotRunningStateDump(t *testing.T) {
 
 func TestIllegalStateDumpRequests(t *testing.T) {
 	// missing
-	req, err := http.NewRequest("GET", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	req, err := http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
 	assert.NilError(t, err)
 	resp := &MockResponseWriter{}
 	handlePeriodicStateDump(resp, req)
@@ -1433,7 +1432,7 @@ func TestIllegalStateDumpRequests(t *testing.T) {
 	assert.Equal(t, statusCode, http.StatusBadRequest, "response status code")
 
 	// illegal
-	req, err = http.NewRequest("GET", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	req, err = http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
 	assert.NilError(t, err)
 	vars := map[string]string{
 		"switch": "illegal",
@@ -1456,11 +1455,9 @@ func prepareSchedulerContext(t *testing.T) *scheduler.ClusterContext {
 }
 
 func waitForStateDumpFile(t *testing.T) {
+	var attempts int
 	for {
-		var attempts int
-
 		info, err := os.Stat(stateDumpFilePath)
-
 		// tolerate only "file not found" errors
 		if err != nil && !os.IsNotExist(err) {
 			t.Fatal(err)
@@ -1473,6 +1470,7 @@ func waitForStateDumpFile(t *testing.T) {
 		if attempts++; attempts > 10 {
 			t.Fatal("state dump file has not been created or still empty")
 		}
+
 		time.Sleep(1 * time.Second)
 	}
 }

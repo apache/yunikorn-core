@@ -95,9 +95,10 @@ func TestGetSchedulerHealthStatusContext(t *testing.T) {
 
 	// add the allocation to the app as well
 	part := schedulerContext.partitions[partName]
-	app := newApplication("appID", partName, "queue")
+	app := newApplication("appID", partName, "root.default")
 	app.AddAllocation(alloc)
-	part.applications["appID"] = app
+	err = part.AddApplication(app)
+	assert.NilError(t, err, "Could not add application")
 	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, healthInfo.HealthChecks[9].Succeeded, "The orphan allocation check on the node should be successful")
 

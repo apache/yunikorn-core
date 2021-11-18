@@ -1028,7 +1028,7 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	// add a second one to check the filter
 	ph = newPlaceholderAlloc(appID1, "uuid-2", nodeID1, "root.a", res)
 	app.AddAllocation(ph)
-	err = common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
+	err = common.WaitFor(10*time.Millisecond, 1*time.Second, func() bool {
 		app.RLock()
 		defer app.RUnlock()
 		return app.placeholderTimer == nil
@@ -1076,7 +1076,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	alloc := newAllocation(appID1, "real", nodeID1, "root.a", res)
 	app.AddAllocation(alloc)
 	assert.Assert(t, app.IsStarting(), "App should be in starting state after the first allocation")
-	err = common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
+	err = common.WaitFor(10*time.Millisecond, 1*time.Second, func() bool {
 		app.RLock()
 		defer app.RUnlock()
 		return app.placeholderTimer == nil
@@ -1125,7 +1125,7 @@ func TestTimeoutPlaceholderCompleting(t *testing.T) {
 	app.RemoveAllocation("uuid-1")
 	assert.Assert(t, app.IsCompleting(), "App should be in completing state all allocs have been removed")
 	// make sure the placeholders time out
-	err = common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
+	err = common.WaitFor(10*time.Millisecond, 1*time.Second, func() bool {
 		app.RLock()
 		defer app.RUnlock()
 		return app.placeholderTimer == nil

@@ -182,6 +182,18 @@ var webRoutes = routes{
 		"/ws/v1/periodicstatedump/{switch}/{periodSeconds}",
 		handlePeriodicStateDump,
 	},
+	route{
+		"Scheduler",
+		"PUT",
+		"/ws/v1/periodicstatedump/{switch}/",
+		handlePeriodicStateDump,
+	},
+	route{
+		"Scheduler",
+		"PUT",
+		"/ws/v1/periodicstatedump/",
+		handlePeriodicStateDump,
+	},
 	// endpoint to retrieve CPU, Memory profiling data,
 	// this works with pprof tool. By default, pprof endpoints
 	// are only registered to http.DefaultServeMux. Here, we

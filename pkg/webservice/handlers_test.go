@@ -49,6 +49,7 @@ import (
 )
 
 const partitionNameWithoutClusterID = "default"
+const normalizedPartitionName = "[rm-123]default"
 const startConf = `
 partitions:
   - name: default
@@ -1326,9 +1327,15 @@ func TestGetNodesUtilization(t *testing.T) {
 func TestGetFullStateDump(t *testing.T) {
 	schedulerContext = prepareSchedulerContext(t)
 
+	partitionContext := schedulerContext.GetPartitionMapClone()
+	context := partitionContext[normalizedPartitionName]
+	app := newApplication("appID", normalizedPartitionName, "root.default", rmID)
+	err := context.AddApplication(app)
+	assert.NilError(t, err, "failed to add Application to partition")
+
 	imHistory = history.NewInternalMetricsHistory(5)
-	req, err := http.NewRequest("GET", "/ws/v1/getfullstatedump", strings.NewReader(""))
-	assert.NilError(t, err)
+	req, err2 := http.NewRequest("GET", "/ws/v1/getfullstatedump", strings.NewReader(""))
+	assert.NilError(t, err2)
 	req = mux.SetURLVars(req, make(map[string]string))
 	resp := &MockResponseWriter{}
 

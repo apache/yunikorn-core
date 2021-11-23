@@ -774,8 +774,7 @@ func getApplicationsDAO(lists map[string]*scheduler.PartitionContext) []*dao.App
 	result := make([]*dao.ApplicationDAOInfo, 0, 32)
 
 	for _, partition := range lists {
-		size := partition.GetTotalCompletedApplicationCount() + partition.GetTotalApplicationCount()
-		appList := make([]*objects.Application, 0, size)
+		var appList []*objects.Application
 		appList = append(appList, partition.GetApplications()...)
 		appList = append(appList, partition.GetCompletedApplications()...)
 

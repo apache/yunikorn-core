@@ -659,7 +659,7 @@ func getLogLevel(w http.ResponseWriter, r *http.Request) {
 }
 
 func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.PartitionInfo {
-	result := make([]*dao.PartitionInfo, 0, len(lists))
+	var result []*dao.PartitionInfo
 
 	for _, partitionContext := range lists {
 		partitionInfo := &dao.PartitionInfo{}
@@ -694,7 +694,8 @@ func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.Pa
 }
 
 func getAppHistoryDAO(records []*history.MetricsRecord) []*dao.ApplicationHistoryDAOInfo {
-	result := make([]*dao.ApplicationHistoryDAOInfo, 0, len(records))
+	var result []*dao.ApplicationHistoryDAOInfo
+
 	for _, record := range records {
 		if record == nil {
 			continue
@@ -710,7 +711,8 @@ func getAppHistoryDAO(records []*history.MetricsRecord) []*dao.ApplicationHistor
 }
 
 func getNodesDAO(lists map[string]*scheduler.PartitionContext) []*dao.NodesDAOInfo {
-	result := make([]*dao.NodesDAOInfo, 0, len(lists))
+	var result []*dao.NodesDAOInfo
+
 	for _, partition := range lists {
 		ns := partition.GetNodes()
 		nodesDao := make([]*dao.NodeDAOInfo, 0, len(ns))
@@ -728,7 +730,8 @@ func getNodesDAO(lists map[string]*scheduler.PartitionContext) []*dao.NodesDAOIn
 }
 
 func getContainerHistoryDAO(records []*history.MetricsRecord) []*dao.ContainerHistoryDAOInfo {
-	result := make([]*dao.ContainerHistoryDAOInfo, 0, len(records))
+	var result []*dao.ContainerHistoryDAOInfo
+
 	for _, record := range records {
 		if record == nil {
 			continue
@@ -744,7 +747,8 @@ func getContainerHistoryDAO(records []*history.MetricsRecord) []*dao.ContainerHi
 }
 
 func getClustersUtilDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClustersUtilDAOInfo {
-	result := make([]*dao.ClustersUtilDAOInfo, 0, len(lists))
+	var result []*dao.ClustersUtilDAOInfo
+
 	for _, partition := range lists {
 		result = append(result, &dao.ClustersUtilDAOInfo{
 			PartitionName: common.GetPartitionNameWithoutClusterID(partition.Name),
@@ -771,11 +775,10 @@ func getNodesUtilDAO(lists map[string]*scheduler.PartitionContext) []*dao.NodesU
 }
 
 func getApplicationsDAO(lists map[string]*scheduler.PartitionContext) []*dao.ApplicationDAOInfo {
-	result := make([]*dao.ApplicationDAOInfo, 0, 32)
+	var result []*dao.ApplicationDAOInfo
 
 	for _, partition := range lists {
-		size := partition.GetTotalCompletedApplicationCount() + partition.GetTotalApplicationCount()
-		appList := make([]*objects.Application, size)
+		var appList []*objects.Application
 		appList = append(appList, partition.GetApplications()...)
 		appList = append(appList, partition.GetCompletedApplications()...)
 
@@ -788,7 +791,7 @@ func getApplicationsDAO(lists map[string]*scheduler.PartitionContext) []*dao.App
 }
 
 func getPartitionDAO(lists map[string]*scheduler.PartitionContext) []*dao.PartitionDAOInfo {
-	result := make([]*dao.PartitionDAOInfo, len(lists))
+	var result []*dao.PartitionDAOInfo
 
 	for _, partition := range lists {
 		result = append(result, getPartitionJSON(partition))
@@ -798,7 +801,8 @@ func getPartitionDAO(lists map[string]*scheduler.PartitionContext) []*dao.Partit
 }
 
 func getClusterDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClusterDAOInfo {
-	result := make([]*dao.ClusterDAOInfo, 0, len(lists))
+	var result []*dao.ClusterDAOInfo
+
 	for _, partition := range lists {
 		result = append(result, getClusterJSON(partition))
 	}

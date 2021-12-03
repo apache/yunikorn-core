@@ -1156,7 +1156,7 @@ func (pc *PartitionContext) calculateNodesResourceUsage() map[string][]int {
 			if float64(total) > 0 {
 				resourceAllocated := float64(node.GetAllocatedResource().Resources[name])
 				// Consider over-allocated node as 100% utilized.
-				v := math.Min(resourceAllocated / float64(total), 1)
+				v := math.Min(resourceAllocated/float64(total), 1)
 				idx := int(math.Dim(math.Ceil(v*10), 1))
 				if dist, ok := mapResult[name]; !ok {
 					newDist := make([]int, 10)

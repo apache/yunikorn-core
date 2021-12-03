@@ -366,7 +366,8 @@ func TestCalculateNodesResourceUsage(t *testing.T) {
 	assert.NilError(t, err, "partition create failed")
 	oldCapacity := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100})
 	node := newNodeMaxResource(nodeID1, oldCapacity)
-	partition.AddNode(node, nil)
+	err = partition.AddNode(node, nil)
+	assert.NilError(t, err)
 
 	occupiedResources := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
 	alloc := objects.NewAllocation(allocID, nodeID1, newAllocationAsk("key", "appID", occupiedResources))

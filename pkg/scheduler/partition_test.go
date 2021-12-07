@@ -361,6 +361,35 @@ func TestRemoveNodeWithPlaceholders(t *testing.T) {
 	assert.Equal(t, 0, len(ph.Releases), "placeholder should have no releases linked anymore")
 }
 
+func TestCalculateNodesResourceUsage(t *testing.T) {
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	oldCapacity := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100})
+	node := newNodeMaxResource(nodeID1, oldCapacity)
+	err = partition.AddNode(node, nil)
+	assert.NilError(t, err)
+
+	occupiedResources := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
+	alloc := objects.NewAllocation(allocID, nodeID1, newAllocationAsk("key", "appID", occupiedResources))
+	node.AddAllocation(alloc)
+	usageMap := partition.calculateNodesResourceUsage()
+	assert.Equal(t, node.GetAvailableResource().Resources["first"], resources.Quantity(50))
+	assert.Equal(t, usageMap["first"][4], 1)
+
+	occupiedResources = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
+	alloc = objects.NewAllocation(allocID, nodeID1, newAllocationAsk("key", "appID", occupiedResources))
+	node.AddAllocation(alloc)
+	usageMap = partition.calculateNodesResourceUsage()
+	assert.Equal(t, node.GetAvailableResource().Resources["first"], resources.Quantity(0))
+	assert.Equal(t, usageMap["first"][9], 1)
+
+	newCapacity := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 80})
+	node.SetCapacity(newCapacity)
+	usageMap = partition.calculateNodesResourceUsage()
+	assert.Assert(t, node.GetAvailableResource().HasNegativeValue())
+	assert.Equal(t, usageMap["first"][9], 1)
+}
+
 // test with a replacement of a placeholder: placeholder on the removed node, real on the 2nd node
 func TestRemoveNodeWithReplacement(t *testing.T) {
 	partition, err := newBasePartition()

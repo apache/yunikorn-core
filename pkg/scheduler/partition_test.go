@@ -373,14 +373,14 @@ func TestCalculateNodesResourceUsage(t *testing.T) {
 	alloc := objects.NewAllocation(allocID, nodeID1, newAllocationAsk("key", "appID", occupiedResources))
 	node.AddAllocation(alloc)
 	usageMap := partition.calculateNodesResourceUsage()
-	assert.Assert(t, node.GetAvailableResource().Resources["first"] == resources.Quantity(50))
+	assert.Equal(t, node.GetAvailableResource().Resources["first"], resources.Quantity(50))
 	assert.Equal(t, usageMap["first"][4], 1)
 
 	occupiedResources = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
 	alloc = objects.NewAllocation(allocID, nodeID1, newAllocationAsk("key", "appID", occupiedResources))
 	node.AddAllocation(alloc)
 	usageMap = partition.calculateNodesResourceUsage()
-	assert.Assert(t, node.GetAvailableResource().Resources["first"] == resources.Quantity(0))
+	assert.Equal(t, node.GetAvailableResource().Resources["first"], resources.Quantity(0))
 	assert.Equal(t, usageMap["first"][9], 1)
 
 	newCapacity := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 80})

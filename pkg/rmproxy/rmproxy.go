@@ -98,6 +98,10 @@ func (rmp *RMProxy) processAllocationUpdateEvent(event *rmevent.RMNewAllocations
 	rmp.RLock()
 	defer rmp.RUnlock()
 	if len(event.Allocations) == 0 {
+		event.Channel <- &rmevent.Result{
+			Reason:    "RMNewAllocationsEvent has zero allocations"	,
+			Succeeded: false,
+		}
 		return
 	}
 	response := &si.AllocationResponse{
@@ -105,6 +109,10 @@ func (rmp *RMProxy) processAllocationUpdateEvent(event *rmevent.RMNewAllocations
 	}
 	rmp.triggerUpdateAllocation(event.RmID, response)
 	metrics.GetSchedulerMetrics().AddAllocatedContainers(len(event.Allocations))
+	// Done, notify channel
+	event.Channel <- &rmevent.Result{
+		Succeeded: true,
+	}
 }
 
 func (rmp *RMProxy) processApplicationUpdateEvent(event *rmevent.RMApplicationUpdateEvent) {
@@ -147,6 +155,27 @@ func (rmp *RMProxy) processRMReleaseAllocationEvent(event *rmevent.RMReleaseAllo
 	}
 	rmp.triggerUpdateAllocation(event.RmID, response)
 	metrics.GetSchedulerMetrics().AddReleasedContainers(len(event.ReleasedAllocations))
+}
+
+func (rmp *RMProxy) processRMReleaseAllocationSyncEvent(event *rmevent.RMReleaseAllocationSyncEvent) {
+	rmp.RLock()
+	defer rmp.RUnlock()
+	if len(event.ReleasedAllocations) == 0 {
+		event.Channel <- &rmevent.Result{
+			Reason:    "RMReleaseAllocationSyncEvent has zero allocations",
+			Succeeded: false,
+		}
+		return
+	}
+	response := &si.AllocationResponse{
+		Released: event.ReleasedAllocations,
+	}
+	rmp.triggerUpdateAllocation(event.RmID, response)
+	metrics.GetSchedulerMetrics().AddReleasedContainers(len(event.ReleasedAllocations))
+	// Done, notify channel
+	event.Channel <- &rmevent.Result{
+		Succeeded: true,
+	}
 }
 
 func (rmp *RMProxy) triggerUpdateAllocation(rmID string, response *si.AllocationResponse) {
@@ -216,6 +245,8 @@ func (rmp *RMProxy) handleRMEvents() {
 			rmp.processApplicationUpdateEvent(v)
 		case *rmevent.RMReleaseAllocationEvent:
 			rmp.processRMReleaseAllocationEvent(v)
+		case *rmevent.RMReleaseAllocationSyncEvent:
+			rmp.processRMReleaseAllocationSyncEvent(v)
 		case *rmevent.RMRejectedAllocationAskEvent:
 			rmp.processUpdatePartitionConfigsEvent(v)
 		case *rmevent.RMNodeUpdateEvent:

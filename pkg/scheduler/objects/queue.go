@@ -815,7 +815,8 @@ func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bo
 	// check the parent: need to pass before updating
 	if sq.parent != nil {
 		if err := sq.parent.IncAllocatedResource(alloc, nodeReported); err != nil {
-			// only log the warning if we get to the leaf
+			// only log the warning if we get to the leaf: otherwise we could spam the log with the same message
+			// each time we return from a recursive call. Worst case (hierarchy depth-1) times.
 			if sq.isLeaf {
 				log.Logger().Warn("parent queue exceeds maximum resource",
 					zap.String("leafQueue", sq.QueuePath),
@@ -850,7 +851,8 @@ func (sq *Queue) DecAllocatedResource(alloc *resources.Resource) error {
 	// check the parent: need to pass before updating
 	if sq.parent != nil {
 		if err := sq.parent.DecAllocatedResource(alloc); err != nil {
-			// only log the warning if we get to the leaf
+			// only log the warning if we get to the leaf: otherwise we spam the log with the same message
+			// each time we return from a recursive call. Worst case (hierarchy depth-1) times.
 			if sq.isLeaf {
 				log.Logger().Warn("released allocation is larger than parent queue allocated resource",
 					zap.String("leafQueue", sq.QueuePath),

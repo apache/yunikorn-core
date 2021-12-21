@@ -110,8 +110,8 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 		prometheus.HistogramOpts{
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
-			Name:      "scheduling_latency_seconds",
-			Help:      "Latency of the main scheduling routine, in seconds.",
+			Name:      "scheduling_latency_milliseconds",
+			Help:      "Latency of the main scheduling routine, in milliseconds.",
 			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), //start from 0.1ms
 		},
 	)
@@ -119,8 +119,8 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 		prometheus.HistogramOpts{
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
-			Name:      "node_sorting_latency_seconds",
-			Help:      "Latency of all nodes sorting, in seconds.",
+			Name:      "node_sorting_latency_milliseconds",
+			Help:      "Latency of all nodes sorting, in milliseconds.",
 			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), //start from 0.1ms
 		},
 	)
@@ -128,8 +128,8 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 		prometheus.HistogramOpts{
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
-			Name:      "queue_sorting_latency_seconds",
-			Help:      "Latency of all queues sorting, in seconds.",
+			Name:      "queue_sorting_latency_milliseconds",
+			Help:      "Latency of all queues sorting, in milliseconds.",
 			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), //start from 0.1ms
 		},
 	)
@@ -137,8 +137,8 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 		prometheus.HistogramOpts{
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
-			Name:      "app_sorting_latency_seconds",
-			Help:      "Latency of all applications sorting, in seconds.",
+			Name:      "app_sorting_latency_milliseconds",
+			Help:      "Latency of all applications sorting, in milliseconds.",
 			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), //start from 0.1ms
 		},
 	)
@@ -146,13 +146,12 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 		prometheus.HistogramOpts{
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
-			Name:      "trynode_latency_seconds",
-			Help:      "Latency of node condition checks for container allocations, such as placement constraints, in seconds, in seconds.",
+			Name:      "trynode_latency_milliseconds",
+			Help:      "Latency of node condition checks for container allocations, such as placement constraints, in milliseconds.",
 			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6),
 		},
 	)
 
-	// To register metrics
 	var metricsList = []prometheus.Collector{
 		s.containerAllocation,
 		s.applicationSubmission,
@@ -173,7 +172,6 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 	return s
 }
 
-// To reset metrics
 func Reset() {}
 
 func SinceInSeconds(start time.Time) float64 {
@@ -199,8 +197,6 @@ func (m *SchedulerMetrics) ObserveQueueSortingLatency(start time.Time) {
 func (m *SchedulerMetrics) ObserveTryNodeLatency(start time.Time) {
 	m.tryNodeLatency.Observe(SinceInSeconds(start))
 }
-
-// To define and implement all metrics operation for Prometheus
 
 func (m *SchedulerMetrics) IncAllocatedContainer() {
 	m.containerAllocation.With(prometheus.Labels{"state": "allocated"}).Inc()

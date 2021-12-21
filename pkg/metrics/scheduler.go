@@ -152,6 +152,7 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 		},
 	)
 
+	// Register the metrics
 	var metricsList = []prometheus.Collector{
 		s.containerAllocation,
 		s.applicationSubmission,

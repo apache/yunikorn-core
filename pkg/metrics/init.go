@@ -150,7 +150,7 @@ func GetQueueMetrics(name string) CoreQueueMetrics {
 	if qm, ok := m.queues[name]; ok {
 		return qm
 	}
-	queueMetrics := forQueue(name)
+	queueMetrics := InitQueueMetrics(name)
 	m.queues[name] = queueMetrics
 	return queueMetrics
 }

@@ -28,26 +28,24 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
 
+// QueueMetrics to declare queue metrics
 type QueueMetrics struct {
-	// metrics related to app
-	appMetrics *prometheus.CounterVec
-
-	// metrics related to resource
+	appMetrics               *prometheus.CounterVec
 	usedResourceMetrics      *prometheus.GaugeVec
 	pendingResourceMetrics   *prometheus.GaugeVec
 	availableResourceMetrics *prometheus.GaugeVec
 }
 
-func forQueue(name string) CoreQueueMetrics {
+// InitQueueMetrics to initialize queue metrics
+func InitQueueMetrics(name string) CoreQueueMetrics {
 	q := &QueueMetrics{}
 
-	// Queue Metrics
 	q.appMetrics = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: Namespace,
 			Subsystem: substituteQueueName(name),
 			Name:      "queue_app_metrics",
-			Help:      "Application metrics from a queue",
+			Help:      "Queue application metrics",
 		}, []string{"state"})
 
 	q.usedResourceMetrics = prometheus.NewGaugeVec(
@@ -81,7 +79,7 @@ func forQueue(name string) CoreQueueMetrics {
 		q.availableResourceMetrics,
 	}
 
-	// Register the metrics.
+	// Register the metrics
 	for _, metric := range queueMetricsList {
 		// registration might be failed if queue name is not valid
 		// metrics name must be complied with regex: [a-zA-Z_:][a-zA-Z0-9_:]*,

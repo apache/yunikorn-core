@@ -64,19 +64,6 @@ func getStackInfo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getQueueInfo(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
-
-	lists := schedulerContext.GetPartitionMapClone()
-	for _, partition := range lists {
-		partitionInfo := getPartitionJSON(partition)
-
-		if err := json.NewEncoder(w).Encode(partitionInfo); err != nil {
-			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
-		}
-	}
-}
-
 func getClusterInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
@@ -96,33 +83,6 @@ func getClusterUtilization(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
-
-	queuePath := r.URL.Query().Get("queue")
-	queueErr := validateQueue(queuePath)
-	if queueErr != nil {
-		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
-		return
-	}
-
-	lists := schedulerContext.GetPartitionMapClone()
-	appsDao := make([]*dao.ApplicationDAOInfo, 0, len(lists))
-	for _, partition := range lists {
-		appList := partition.GetApplications()
-		appList = append(appList, partition.GetCompletedApplications()...)
-		for _, app := range appList {
-			if len(queuePath) == 0 || strings.EqualFold(queuePath, app.GetQueuePath()) {
-				appsDao = append(appsDao, getApplicationJSON(app))
-			}
-		}
-	}
-
-	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
-		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
 func validateQueue(queuePath string) error {
 	if queuePath != "" {
 		queueNameArr := strings.Split(queuePath, ".")
@@ -135,16 +95,6 @@ func validateQueue(queuePath string) error {
 		}
 	}
 	return nil
-}
-
-func getNodesInfo(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
-
-	lists := schedulerContext.GetPartitionMapClone()
-	result := getNodesDAO(lists)
-	if err := json.NewEncoder(w).Encode(result); err != nil {
-		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
-	}
 }
 
 func getNodesUtilization(w http.ResponseWriter, r *http.Request) {

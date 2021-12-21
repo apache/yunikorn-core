@@ -37,12 +37,6 @@ type routes []route
 var webRoutes = routes{
 	// endpoints to retrieve general scheduler info
 	route{
-		"Scheduler",
-		"GET",
-		"/ws/v1/queues",
-		getQueueInfo,
-	},
-	route{
 		"Cluster",
 		"GET",
 		"/ws/v1/clusters",
@@ -53,18 +47,6 @@ var webRoutes = routes{
 		"GET",
 		"/ws/v1/clusters/utilization",
 		getClusterUtilization,
-	},
-	route{
-		"Scheduler",
-		"GET",
-		"/ws/v1/apps",
-		getApplicationsInfo,
-	},
-	route{
-		"Scheduler",
-		"GET",
-		"/ws/v1/nodes",
-		getNodesInfo,
 	},
 	route{
 		"Scheduler",

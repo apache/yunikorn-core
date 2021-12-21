@@ -46,8 +46,8 @@ func forQueue(name string) CoreQueueMetrics {
 		prometheus.CounterOpts{
 			Namespace: Namespace,
 			Subsystem: substituteQueueName(name),
-			Name:      "app_metrics",
-			Help:      "Application Metrics",
+			Name:      "queue_app_metrics",
+			Help:      "Application metrics from a queue",
 		}, []string{"state"})
 
 	q.usedResourceMetrics = prometheus.NewGaugeVec(
@@ -100,15 +100,15 @@ func substituteQueueName(queueName string) string {
 	return strings.Replace(str, "-", "_", -1)
 }
 
-func (m *QueueMetrics) IncApplicationsAccepted() {
+func (m *QueueMetrics) IncQueueApplicationsAccepted() {
 	m.appMetrics.With(prometheus.Labels{"state": "accepted"}).Inc()
 }
 
-func (m *QueueMetrics) IncApplicationsRejected() {
+func (m *QueueMetrics) IncQueueApplicationsRejected() {
 	m.appMetrics.With(prometheus.Labels{"state": "rejected"}).Inc()
 }
 
-func (m *QueueMetrics) IncApplicationsCompleted() {
+func (m *QueueMetrics) IncQueueApplicationsCompleted() {
 	m.appMetrics.With(prometheus.Labels{"state": "completed"}).Inc()
 }
 

@@ -45,9 +45,9 @@ type Metrics struct {
 }
 
 type CoreQueueMetrics interface {
-	IncApplicationsAccepted()
-	IncApplicationsRejected()
-	IncApplicationsCompleted()
+	IncQueueApplicationsAccepted()
+	IncQueueApplicationsRejected()
+	IncQueueApplicationsCompleted()
 	AddQueueUsedResourceMetrics(resourceName string, value float64)
 	SetQueueUsedResourceMetrics(resourceName string, value float64)
 }

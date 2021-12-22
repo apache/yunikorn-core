@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	ugm "github.com/apache/incubator-yunikorn-core/pkg/scheduler/usergroupmanagement"
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
@@ -68,6 +69,8 @@ type Queue struct {
 	stateMachine       *fsm.FSM            // the state of the queue for scheduling
 	stateTime          time.Time           // last time the state was updated (needed for cleanup)
 	template           *template.Template
+	limits			   []configs.Limit
+	userGroupManager   *ugm.UserGroupManager // UserGroupManager
 
 	sync.RWMutex
 }
@@ -111,6 +114,8 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 		}
 		// pull the properties from the parent that should be set on the child
 		sq.mergeProperties(parent.getProperties(), conf.Properties)
+
+		sq.userGroupManager = ugm.UserGroupManager.NewUsersManager(sq, sq)
 	}
 	sq.UpdateSortType()
 
@@ -246,7 +251,12 @@ func (sq *Queue) applyConf(conf configs.QueueConfig) error {
 	}
 
 	sq.properties = conf.Properties
+	sq.limits = conf.Limits
 	return nil
+}
+
+func (sq *Queue) GetConfigLimits() []configs.Limit{
+	return sq.limits
 }
 
 // setResources sets the maxResource and guaranteedResource of the queue from the config.
@@ -1279,6 +1289,10 @@ func (sq *Queue) updateAllocatedResourceMetrics() {
 			metrics.GetQueueMetrics(sq.QueuePath).SetQueueAllocatedResourceMetrics(k, float64(v))
 		}
 	}
+}
+
+func (sq *Queue) GetUserGroupManager() *ugm.UserGroupManager {
+	return sq.userGroupManager
 }
 
 func (sq *Queue) String() string {

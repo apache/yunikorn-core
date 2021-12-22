@@ -338,6 +338,32 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 		return fmt.Errorf("failed to find queue %s for application %s", queueName, appID)
 	}
 
+	// Has user or group defined with any limits? If yes, Is there a room to operate?
+	user := queue.GetUserGroupManager().GetUser(app.GetUser().User)
+	if user != nil {
+		if user.CanRun() {
+			user.IncRunningApplications()
+		} else {
+			return fmt.Errorf("user '%s' has reached max applications limit in queue %s", app.GetUser().User,
+				queueName)
+		}
+	}
+
+	for _, group := range app.GetUser().Groups {
+		// Is there any group (to which user belongs to) config has limit settings?
+		g := queue.GetUserGroupManager().GetGroup(group)
+		if g != nil && g.CanRun() {
+			g.IncRunningApplications()
+			if user != nil {
+				user.SetUsedGroup(g.GetName())
+			}
+			break
+		} else if g != nil {
+			return fmt.Errorf("group '%s' to which user '%s' belongs to has reached max applications limit " +
+				"in queue %s", g.GetName(), app.GetUser().User, queueName)
+		}
+	}
+
 	// add the app to the queue to set the quota on the queue if needed
 	queue.AddApplication(app)
 	// check only for gang request
@@ -380,7 +406,33 @@ func (pc *PartitionContext) removeApplication(appID string) []*objects.Allocatio
 	// Remove app from queue
 	if queue := app.GetQueue(); queue != nil {
 		queue.RemoveApplication(app)
+
+		var updateGroupMetrics bool
+		if len(app.GetUser().User) > 0 {
+			user := queue.GetUserGroupManager().GetUser(app.GetUser().User)
+			if user != nil {
+				user.DecRunningApplications()
+				g := queue.GetUserGroupManager().GetGroup(user.GetUsedGroup())
+				if g != nil {
+					g.DecRunningApplications()
+					updateGroupMetrics = true
+				}
+			}
+		}
+
+		// Used when limit has been configured only for group, not for individual user
+		if ! updateGroupMetrics && len(app.GetUser().User) > 0 {
+			for _, group := range app.GetUser().Groups {
+				// Is there any group (to which user belongs to) config has limit settings?
+				g := queue.GetUserGroupManager().GetGroup(group)
+				if g != nil {
+					g.DecRunningApplications()
+					break
+				}
+			}
+		}
 	}
+
 	// Remove all allocations
 	allocations := app.RemoveAllAllocations()
 	// Remove all allocations from node(s) (queues have been updated already)

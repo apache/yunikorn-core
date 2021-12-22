@@ -52,7 +52,7 @@ func InitQueueMetrics(name string) CoreQueueMetrics {
 			Subsystem: substituteQueueName(name),
 			Name:      "queue_resource",
 			Help:      "Queue resource metrics. State of the resource includes `guaranteed`, `max`, `used`, `pending`, `available`.",
-		}, []string{"state"})
+		}, []string{"state", "resource"})
 
 	var queueMetricsList = []prometheus.Collector{
 		q.appMetrics,

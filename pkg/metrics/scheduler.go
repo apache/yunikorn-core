@@ -48,13 +48,10 @@ type SchedulerMetrics struct {
 	containerAllocation   *prometheus.CounterVec
 	applicationSubmission *prometheus.CounterVec
 	applicationStatus     *prometheus.GaugeVec
-	totalNodeActive       prometheus.Gauge
-	totalNodeFailed       prometheus.Gauge
+	node                  *prometheus.GaugeVec
 	nodeResourceUsage     map[string]*prometheus.GaugeVec
 	schedulingLatency     prometheus.Histogram
-	nodeSortingLatency    prometheus.Histogram
-	appSortingLatency     prometheus.Histogram
-	queueSortingLatency   prometheus.Histogram
+	sortingLatency        *prometheus.HistogramVec
 	tryNodeLatency        prometheus.Histogram
 	lock                  sync.RWMutex
 }
@@ -91,20 +88,13 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Help:      "Total number of application status. State of the application includes `running` and `completed`.",
 		}, []string{"state"})
 
-	s.totalNodeActive = prometheus.NewGauge(
+	s.node = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
-			Name:      "node_active_total",
-			Help:      "Total number of active nodes.",
-		})
-	s.totalNodeFailed = prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Namespace: Namespace,
-			Subsystem: SchedulerSubsystem,
-			Name:      "node_failed_total",
-			Help:      "Total number of failed nodes.",
-		})
+			Name:      "node",
+			Help:      "Total number of nodes. State of the node includes `active` and `failed`.",
+		}, []string{"state"})
 
 	s.schedulingLatency = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
@@ -115,33 +105,15 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), //start from 0.1ms
 		},
 	)
-	s.nodeSortingLatency = prometheus.NewHistogram(
+	s.sortingLatency = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "node_sorting_latency_seconds",
 			Help:      "Latency of all nodes sorting, in seconds.",
 			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), //start from 0.1ms
-		},
-	)
-	s.queueSortingLatency = prometheus.NewHistogram(
-		prometheus.HistogramOpts{
-			Namespace: Namespace,
-			Subsystem: SchedulerSubsystem,
-			Name:      "queue_sorting_latency_seconds",
-			Help:      "Latency of all queues sorting, in seconds.",
-			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), //start from 0.1ms
-		},
-	)
-	s.appSortingLatency = prometheus.NewHistogram(
-		prometheus.HistogramOpts{
-			Namespace: Namespace,
-			Subsystem: SchedulerSubsystem,
-			Name:      "app_sorting_latency_seconds",
-			Help:      "Latency of all applications sorting, in seconds.",
-			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), //start from 0.1ms
-		},
-	)
+		}, []string{"level"})
+
 	s.tryNodeLatency = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Namespace: Namespace,
@@ -157,13 +129,10 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 		s.containerAllocation,
 		s.applicationSubmission,
 		s.applicationStatus,
+		s.node,
 		s.schedulingLatency,
-		s.nodeSortingLatency,
-		s.queueSortingLatency,
+		s.sortingLatency,
 		s.tryNodeLatency,
-		s.appSortingLatency,
-		s.totalNodeActive,
-		s.totalNodeFailed,
 	}
 	for _, metric := range metricsList {
 		if err := prometheus.Register(metric); err != nil {
@@ -185,15 +154,15 @@ func (m *SchedulerMetrics) ObserveSchedulingLatency(start time.Time) {
 }
 
 func (m *SchedulerMetrics) ObserveNodeSortingLatency(start time.Time) {
-	m.nodeSortingLatency.Observe(SinceInSeconds(start))
+	m.sortingLatency.With(prometheus.Labels{"level": "node"}).Observe(SinceInSeconds(start))
 }
 
 func (m *SchedulerMetrics) ObserveAppSortingLatency(start time.Time) {
-	m.appSortingLatency.Observe(SinceInSeconds(start))
+	m.sortingLatency.With(prometheus.Labels{"level": "app"}).Observe(SinceInSeconds(start))
 }
 
 func (m *SchedulerMetrics) ObserveQueueSortingLatency(start time.Time) {
-	m.queueSortingLatency.Observe(SinceInSeconds(start))
+	m.sortingLatency.With(prometheus.Labels{"level": "queue"}).Observe(SinceInSeconds(start))
 }
 
 func (m *SchedulerMetrics) ObserveTryNodeLatency(start time.Time) {
@@ -327,47 +296,47 @@ func (m *SchedulerMetrics) SetTotalApplicationsCompleted(value int) {
 }
 
 func (m *SchedulerMetrics) IncActiveNodes() {
-	m.totalNodeActive.Inc()
+	m.node.With(prometheus.Labels{"state": "active"}).Inc()
 }
 
 func (m *SchedulerMetrics) AddActiveNodes(value int) {
-	m.totalNodeActive.Add(float64(value))
+	m.node.With(prometheus.Labels{"state": "active"}).Add(float64(value))
 }
 
 func (m *SchedulerMetrics) DecActiveNodes() {
-	m.totalNodeActive.Dec()
+	m.node.With(prometheus.Labels{"state": "active"}).Dec()
 }
 
 func (m *SchedulerMetrics) SubActiveNodes(value int) {
-	m.totalNodeActive.Sub(float64(value))
+	m.node.With(prometheus.Labels{"state": "active"}).Sub(float64(value))
 }
 
 func (m *SchedulerMetrics) SetActiveNodes(value int) {
-	m.totalNodeActive.Set(float64(value))
+	m.node.With(prometheus.Labels{"state": "active"}).Set(float64(value))
 }
 
 func (m *SchedulerMetrics) IncFailedNodes() {
-	m.totalNodeFailed.Inc()
+	m.node.With(prometheus.Labels{"state": "failed"}).Inc()
 }
 
 func (m *SchedulerMetrics) AddFailedNodes(value int) {
-	m.totalNodeFailed.Add(float64(value))
+	m.node.With(prometheus.Labels{"state": "failed"}).Add(float64(value))
 }
 
 func (m *SchedulerMetrics) DecFailedNodes() {
-	m.totalNodeFailed.Dec()
+	m.node.With(prometheus.Labels{"state": "failed"}).Dec()
 }
 
 func (m *SchedulerMetrics) SubFailedNodes(value int) {
-	m.totalNodeFailed.Sub(float64(value))
+	m.node.With(prometheus.Labels{"state": "failed"}).Sub(float64(value))
 }
 
 func (m *SchedulerMetrics) SetFailedNodes(value int) {
-	m.totalNodeFailed.Set(float64(value))
+	m.node.With(prometheus.Labels{"state": "failed"}).Set(float64(value))
 }
 func (m *SchedulerMetrics) GetFailedNodes() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.totalNodeFailed.Write(metricDto)
+	err := m.node.With(prometheus.Labels{"state": "failed"}).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Gauge.Value), nil
 	}

@@ -47,7 +47,7 @@ var resourceUsageRangeBuckets = []string{
 type SchedulerMetrics struct {
 	containerAllocation   *prometheus.CounterVec
 	applicationSubmission *prometheus.CounterVec
-	applicationStatus     *prometheus.GaugeVec
+	application           *prometheus.GaugeVec
 	node                  *prometheus.GaugeVec
 	nodeResourceUsage     map[string]*prometheus.GaugeVec
 	schedulingLatency     prometheus.Histogram
@@ -80,12 +80,12 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Help:      "Total number of application submissions. State of the attempt includes `accepted` and `rejected`.",
 		}, []string{"result"})
 
-	s.applicationStatus = prometheus.NewGaugeVec(
+	s.application = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
-			Name:      "application_status_total",
-			Help:      "Total number of application status. State of the application includes `running` and `completed`.",
+			Name:      "application_total",
+			Help:      "Total number of applications. State of the application includes `running` and `completed`.",
 		}, []string{"state"})
 
 	s.node = prometheus.NewGaugeVec(
@@ -100,8 +100,8 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 		prometheus.HistogramOpts{
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
-			Name:      "scheduling_latency_seconds",
-			Help:      "Latency of the main scheduling routine, in seconds.",
+			Name:      "scheduling_latency_milliseconds",
+			Help:      "Latency of the main scheduling routine, in milliseconds.",
 			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), //start from 0.1ms
 		},
 	)
@@ -109,8 +109,8 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 		prometheus.HistogramOpts{
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
-			Name:      "node_sorting_latency_seconds",
-			Help:      "Latency of all nodes sorting, in seconds.",
+			Name:      "node_sorting_latency_milliseconds",
+			Help:      "Latency of all nodes sorting, in milliseconds.",
 			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), //start from 0.1ms
 		}, []string{"level"})
 
@@ -118,17 +118,17 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 		prometheus.HistogramOpts{
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
-			Name:      "trynode_latency_seconds",
-			Help:      "Latency of node condition checks for container allocations, such as placement constraints, in seconds, in seconds.",
+			Name:      "trynode_latency_milliseconds",
+			Help:      "Latency of node condition checks for container allocations, such as placement constraints, in milliseconds.",
 			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6),
 		},
 	)
 
-	// To register metrics
+	// Register the metrics
 	var metricsList = []prometheus.Collector{
 		s.containerAllocation,
 		s.applicationSubmission,
-		s.applicationStatus,
+		s.application,
 		s.node,
 		s.schedulingLatency,
 		s.sortingLatency,
@@ -142,7 +142,6 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 	return s
 }
 
-// To reset metrics
 func Reset() {}
 
 func SinceInSeconds(start time.Time) float64 {
@@ -168,8 +167,6 @@ func (m *SchedulerMetrics) ObserveQueueSortingLatency(start time.Time) {
 func (m *SchedulerMetrics) ObserveTryNodeLatency(start time.Time) {
 	m.tryNodeLatency.Observe(SinceInSeconds(start))
 }
-
-// To define and implement all metrics operation for Prometheus
 
 func (m *SchedulerMetrics) IncAllocatedContainer() {
 	m.containerAllocation.With(prometheus.Labels{"state": "allocated"}).Inc()
@@ -247,28 +244,28 @@ func (m *SchedulerMetrics) AddTotalApplicationsRejected(value int) {
 }
 
 func (m *SchedulerMetrics) IncTotalApplicationsRunning() {
-	m.applicationStatus.With(prometheus.Labels{"state": "running"}).Inc()
+	m.application.With(prometheus.Labels{"state": "running"}).Inc()
 }
 
 func (m *SchedulerMetrics) AddTotalApplicationsRunning(value int) {
-	m.applicationStatus.With(prometheus.Labels{"state": "running"}).Add(float64(value))
+	m.application.With(prometheus.Labels{"state": "running"}).Add(float64(value))
 }
 
 func (m *SchedulerMetrics) DecTotalApplicationsRunning() {
-	m.applicationStatus.With(prometheus.Labels{"state": "running"}).Dec()
+	m.application.With(prometheus.Labels{"state": "running"}).Dec()
 }
 
 func (m *SchedulerMetrics) SubTotalApplicationsRunning(value int) {
-	m.applicationStatus.With(prometheus.Labels{"state": "running"}).Sub(float64(value))
+	m.application.With(prometheus.Labels{"state": "running"}).Sub(float64(value))
 }
 
 func (m *SchedulerMetrics) SetTotalApplicationsRunning(value int) {
-	m.applicationStatus.With(prometheus.Labels{"state": "running"}).Set(float64(value))
+	m.application.With(prometheus.Labels{"state": "running"}).Set(float64(value))
 }
 
 func (m *SchedulerMetrics) getTotalApplicationsRunning() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.applicationStatus.With(prometheus.Labels{"state": "running"}).Write(metricDto)
+	err := m.application.With(prometheus.Labels{"state": "running"}).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Gauge.Value), nil
 	}
@@ -276,23 +273,23 @@ func (m *SchedulerMetrics) getTotalApplicationsRunning() (int, error) {
 }
 
 func (m *SchedulerMetrics) IncTotalApplicationsCompleted() {
-	m.applicationStatus.With(prometheus.Labels{"state": "completed"}).Inc()
+	m.application.With(prometheus.Labels{"state": "completed"}).Inc()
 }
 
 func (m *SchedulerMetrics) AddTotalApplicationsCompleted(value int) {
-	m.applicationStatus.With(prometheus.Labels{"state": "completed"}).Add(float64(value))
+	m.application.With(prometheus.Labels{"state": "completed"}).Add(float64(value))
 }
 
 func (m *SchedulerMetrics) DecTotalApplicationsCompleted() {
-	m.applicationStatus.With(prometheus.Labels{"state": "completed"}).Dec()
+	m.application.With(prometheus.Labels{"state": "completed"}).Dec()
 }
 
 func (m *SchedulerMetrics) SubTotalApplicationsCompleted(value int) {
-	m.applicationStatus.With(prometheus.Labels{"state": "completed"}).Sub(float64(value))
+	m.application.With(prometheus.Labels{"state": "completed"}).Sub(float64(value))
 }
 
 func (m *SchedulerMetrics) SetTotalApplicationsCompleted(value int) {
-	m.applicationStatus.With(prometheus.Labels{"state": "completed"}).Set(float64(value))
+	m.application.With(prometheus.Labels{"state": "completed"}).Set(float64(value))
 }
 
 func (m *SchedulerMetrics) IncActiveNodes() {

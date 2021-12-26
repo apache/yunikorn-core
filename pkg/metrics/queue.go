@@ -28,60 +28,38 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 )
 
+// QueueMetrics to declare queue metrics
 type QueueMetrics struct {
-	// metrics related to app
-	appMetrics *prometheus.CounterVec
-
-	// metrics related to resource
-	usedResourceMetrics      *prometheus.GaugeVec
-	pendingResourceMetrics   *prometheus.GaugeVec
-	availableResourceMetrics *prometheus.GaugeVec
+	appMetrics      *prometheus.GaugeVec
+	ResourceMetrics *prometheus.GaugeVec
 }
 
-func forQueue(name string) CoreQueueMetrics {
+// InitQueueMetrics to initialize queue metrics
+func InitQueueMetrics(name string) CoreQueueMetrics {
 	q := &QueueMetrics{}
 
-	// Queue Metrics
-	q.appMetrics = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
+	q.appMetrics = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
 			Namespace: Namespace,
 			Subsystem: substituteQueueName(name),
-			Name:      "app_metrics",
-			Help:      "Application Metrics",
+			Name:      "queue_app",
+			Help:      "Queue application metrics. State of the application includes `running`.",
 		}, []string{"state"})
 
-	q.usedResourceMetrics = prometheus.NewGaugeVec(
+	q.ResourceMetrics = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: Namespace,
 			Subsystem: substituteQueueName(name),
-			Name:      "used_resource",
-			Help:      "Queue used resource",
-		}, []string{"resource"})
-
-	q.pendingResourceMetrics = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: Namespace,
-			Subsystem: substituteQueueName(name),
-			Name:      "pending_resource",
-			Help:      "Queue pending resource",
-		}, []string{"resource"})
-
-	q.availableResourceMetrics = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: Namespace,
-			Subsystem: substituteQueueName(name),
-			Name:      "used_resource_metrics",
-			Help:      "used resource metrics related to queues etc.",
-		}, []string{"resource"})
+			Name:      "queue_resource",
+			Help:      "Queue resource metrics. State of the resource includes `guaranteed`, `max`, `allocated`, `pending`, `available`.",
+		}, []string{"state", "resource"})
 
 	var queueMetricsList = []prometheus.Collector{
 		q.appMetrics,
-		q.usedResourceMetrics,
-		q.pendingResourceMetrics,
-		q.availableResourceMetrics,
+		q.ResourceMetrics,
 	}
 
-	// Register the metrics.
+	// Register the metrics
 	for _, metric := range queueMetricsList {
 		// registration might be failed if queue name is not valid
 		// metrics name must be complied with regex: [a-zA-Z_:][a-zA-Z0-9_:]*,
@@ -100,22 +78,34 @@ func substituteQueueName(queueName string) string {
 	return strings.Replace(str, "-", "_", -1)
 }
 
-func (m *QueueMetrics) IncApplicationsAccepted() {
-	m.appMetrics.With(prometheus.Labels{"state": "accepted"}).Inc()
+func (m *QueueMetrics) IncQueueApplicationsRunning() {
+	m.appMetrics.With(prometheus.Labels{"state": "running"}).Inc()
 }
 
-func (m *QueueMetrics) IncApplicationsRejected() {
-	m.appMetrics.With(prometheus.Labels{"state": "rejected"}).Inc()
+func (m *QueueMetrics) DecQueueApplicationsRunning() {
+	m.appMetrics.With(prometheus.Labels{"state": "running"}).Dec()
 }
 
-func (m *QueueMetrics) IncApplicationsCompleted() {
-	m.appMetrics.With(prometheus.Labels{"state": "completed"}).Inc()
+func (m *QueueMetrics) SetQueueGuaranteedResourceMetrics(resourceName string, value float64) {
+	m.ResourceMetrics.With(prometheus.Labels{"state": "guaranteed", "resource": resourceName}).Set(value)
 }
 
-func (m *QueueMetrics) AddQueueUsedResourceMetrics(resourceName string, value float64) {
-	m.usedResourceMetrics.With(prometheus.Labels{"resource": resourceName}).Add(value)
+func (m *QueueMetrics) SetQueueMaxResourceMetrics(resourceName string, value float64) {
+	m.ResourceMetrics.With(prometheus.Labels{"state": "max", "resource": resourceName}).Set(value)
 }
 
 func (m *QueueMetrics) SetQueueUsedResourceMetrics(resourceName string, value float64) {
-	m.usedResourceMetrics.With(prometheus.Labels{"resource": resourceName}).Set(value)
+	m.ResourceMetrics.With(prometheus.Labels{"state": "allocated", "resource": resourceName}).Set(value)
+}
+
+func (m *QueueMetrics) AddQueueUsedResourceMetrics(resourceName string, value float64) {
+	m.ResourceMetrics.With(prometheus.Labels{"state": "allocated", "resource": resourceName}).Add(value)
+}
+
+func (m *QueueMetrics) SetQueuePendingResourceMetrics(resourceName string, value float64) {
+	m.ResourceMetrics.With(prometheus.Labels{"state": "pending", "resource": resourceName}).Set(value)
+}
+
+func (m *QueueMetrics) AddQueuePendingResourceMetrics(resourceName string, value float64) {
+	m.ResourceMetrics.With(prometheus.Labels{"state": "pending", "resource": resourceName}).Add(value)
 }

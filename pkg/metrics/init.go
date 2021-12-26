@@ -45,11 +45,14 @@ type Metrics struct {
 }
 
 type CoreQueueMetrics interface {
-	IncApplicationsAccepted()
-	IncApplicationsRejected()
-	IncApplicationsCompleted()
-	AddQueueUsedResourceMetrics(resourceName string, value float64)
+	IncQueueApplicationsRunning()
+	DecQueueApplicationsRunning()
+	SetQueueGuaranteedResourceMetrics(resourceName string, value float64)
+	SetQueueMaxResourceMetrics(resourceName string, value float64)
 	SetQueueUsedResourceMetrics(resourceName string, value float64)
+	AddQueueUsedResourceMetrics(resourceName string, value float64)
+	SetQueuePendingResourceMetrics(resourceName string, value float64)
+	AddQueuePendingResourceMetrics(resourceName string, value float64)
 }
 
 // Declare all core metrics ops in this interface
@@ -111,7 +114,7 @@ type CoreSchedulerMetrics interface {
 	SetNodeResourceUsage(resourceName string, rangeIdx int, value float64)
 	GetFailedNodes() (int, error)
 
-	//latency change
+	// Metrics Ops related to latency change
 	ObserveSchedulingLatency(start time.Time)
 	ObserveNodeSortingLatency(start time.Time)
 	ObserveAppSortingLatency(start time.Time)
@@ -150,7 +153,7 @@ func GetQueueMetrics(name string) CoreQueueMetrics {
 	if qm, ok := m.queues[name]; ok {
 		return qm
 	}
-	queueMetrics := forQueue(name)
+	queueMetrics := InitQueueMetrics(name)
 	m.queues[name] = queueMetrics
 	return queueMetrics
 }

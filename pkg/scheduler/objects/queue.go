@@ -159,6 +159,9 @@ func (sq *Queue) applyTemplate(childTemplate *template.Template) {
 	// the resources in template are already checked
 	sq.guaranteedResource = childTemplate.GetGuaranteedResource()
 	sq.maxResource = childTemplate.GetMaxResource()
+	// update metrics for guaranteed and max resource
+	sq.updateGuaranteedResourceMetrics()
+	sq.updateMaxResourceMetrics()
 }
 
 // getProperties returns a copy of the properties for this queue
@@ -830,7 +833,7 @@ func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bo
 	}
 	// all OK update this queue
 	sq.allocatedResource = newAllocated
-	sq.updateUsedResourceMetrics()
+	sq.updateAllocatedResourceMetrics()
 	return nil
 }
 
@@ -866,7 +869,7 @@ func (sq *Queue) DecAllocatedResource(alloc *resources.Resource) error {
 	}
 	// all OK update the queue
 	sq.allocatedResource = resources.Sub(sq.allocatedResource, alloc)
-	sq.updateUsedResourceMetrics()
+	sq.updateAllocatedResourceMetrics()
 	return nil
 }
 
@@ -1247,11 +1250,33 @@ func (sq *Queue) SupportTaskGroup() bool {
 	return sq.sortType == policies.FifoSortPolicy || sq.sortType == policies.StateAwarePolicy
 }
 
-// updateUsedResourceMetrics updates allocated resource metrics if this is a leaf queue.
-func (sq *Queue) updateUsedResourceMetrics() {
+// updateGuaranteedResourceMetrics updates guaranteed resource metrics if this is a leaf queue.
+func (sq *Queue) updateGuaranteedResourceMetrics() {
+	if sq.isLeaf {
+		if sq.guaranteedResource != nil {
+			for k, v := range sq.guaranteedResource.Resources {
+				metrics.GetQueueMetrics(sq.QueuePath).SetQueueGuaranteedResourceMetrics(k, float64(v))
+			}
+		}
+	}
+}
+
+// updateMaxResourceMetrics updates max resource metrics if this is a leaf queue.
+func (sq *Queue) updateMaxResourceMetrics() {
+	if sq.isLeaf {
+		if sq.maxResource != nil {
+			for k, v := range sq.maxResource.Resources {
+				metrics.GetQueueMetrics(sq.QueuePath).SetQueueMaxResourceMetrics(k, float64(v))
+			}
+		}
+	}
+}
+
+// updateAllocatedResourceMetrics updates allocated resource metrics if this is a leaf queue.
+func (sq *Queue) updateAllocatedResourceMetrics() {
 	if sq.isLeaf {
 		for k, v := range sq.allocatedResource.Resources {
-			metrics.GetQueueMetrics(sq.QueuePath).SetQueueUsedResourceMetrics(k, float64(v))
+			metrics.GetQueueMetrics(sq.QueuePath).SetQueueAllocatedResourceMetrics(k, float64(v))
 		}
 	}
 }

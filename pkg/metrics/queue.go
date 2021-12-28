@@ -51,7 +51,7 @@ func InitQueueMetrics(name string) CoreQueueMetrics {
 			Namespace: Namespace,
 			Subsystem: substituteQueueName(name),
 			Name:      "queue_resource",
-			Help:      "Queue resource metrics. State of the resource includes `guaranteed`, `max`, `allocated`, `pending`, `available`.",
+			Help:      "Queue resource metrics. State of the resource includes `guaranteed`, `max`, `allocated`, `pending`.",
 		}, []string{"state", "resource"})
 
 	var queueMetricsList = []prometheus.Collector{
@@ -94,11 +94,11 @@ func (m *QueueMetrics) SetQueueMaxResourceMetrics(resourceName string, value flo
 	m.ResourceMetrics.With(prometheus.Labels{"state": "max", "resource": resourceName}).Set(value)
 }
 
-func (m *QueueMetrics) SetQueueUsedResourceMetrics(resourceName string, value float64) {
+func (m *QueueMetrics) SetQueueAllocatedResourceMetrics(resourceName string, value float64) {
 	m.ResourceMetrics.With(prometheus.Labels{"state": "allocated", "resource": resourceName}).Set(value)
 }
 
-func (m *QueueMetrics) AddQueueUsedResourceMetrics(resourceName string, value float64) {
+func (m *QueueMetrics) AddQueueAllocatedResourceMetrics(resourceName string, value float64) {
 	m.ResourceMetrics.With(prometheus.Labels{"state": "allocated", "resource": resourceName}).Add(value)
 }
 

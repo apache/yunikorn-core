@@ -49,8 +49,8 @@ type CoreQueueMetrics interface {
 	DecQueueApplicationsRunning()
 	SetQueueGuaranteedResourceMetrics(resourceName string, value float64)
 	SetQueueMaxResourceMetrics(resourceName string, value float64)
-	SetQueueUsedResourceMetrics(resourceName string, value float64)
-	AddQueueUsedResourceMetrics(resourceName string, value float64)
+	SetQueueAllocatedResourceMetrics(resourceName string, value float64)
+	AddQueueAllocatedResourceMetrics(resourceName string, value float64)
 	SetQueuePendingResourceMetrics(resourceName string, value float64)
 	AddQueuePendingResourceMetrics(resourceName string, value float64)
 }

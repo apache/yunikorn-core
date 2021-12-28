@@ -1253,8 +1253,10 @@ func (sq *Queue) SupportTaskGroup() bool {
 // updateGuaranteedResourceMetrics updates guaranteed resource metrics if this is a leaf queue.
 func (sq *Queue) updateGuaranteedResourceMetrics() {
 	if sq.isLeaf {
-		for k, v := range sq.guaranteedResource.Resources {
-			metrics.GetQueueMetrics(sq.QueuePath).SetQueueGuaranteedResourceMetrics(k, float64(v))
+		if sq.guaranteedResource != nil {
+			for k, v := range sq.guaranteedResource.Resources {
+				metrics.GetQueueMetrics(sq.QueuePath).SetQueueGuaranteedResourceMetrics(k, float64(v))
+			}
 		}
 	}
 }
@@ -1262,8 +1264,10 @@ func (sq *Queue) updateGuaranteedResourceMetrics() {
 // updateMaxResourceMetrics updates max resource metrics if this is a leaf queue.
 func (sq *Queue) updateMaxResourceMetrics() {
 	if sq.isLeaf {
-		for k, v := range sq.maxResource.Resources {
-			metrics.GetQueueMetrics(sq.QueuePath).SetQueueMaxResourceMetrics(k, float64(v))
+		if sq.maxResource != nil {
+			for k, v := range sq.maxResource.Resources {
+				metrics.GetQueueMetrics(sq.QueuePath).SetQueueMaxResourceMetrics(k, float64(v))
+			}
 		}
 	}
 }

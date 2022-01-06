@@ -86,11 +86,6 @@ type RMRejectedAllocationAskEvent struct {
 type RMReleaseAllocationEvent struct {
 	RmID                string
 	ReleasedAllocations []*si.AllocationRelease
-}
-
-type RMReleaseAllocationSyncEvent struct {
-	RmID                string
-	ReleasedAllocations []*si.AllocationRelease
 	Channel             chan *Result
 }
 

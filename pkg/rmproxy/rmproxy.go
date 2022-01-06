@@ -97,13 +97,6 @@ func (rmp *RMProxy) handleUpdateResponseError(rmID string, err error) {
 func (rmp *RMProxy) processAllocationUpdateEvent(event *rmevent.RMNewAllocationsEvent) {
 	rmp.RLock()
 	defer rmp.RUnlock()
-	if len(event.Allocations) == 0 {
-		event.Channel <- &rmevent.Result{
-			Reason:    "RMNewAllocationsEvent has zero allocations"	,
-			Succeeded: false,
-		}
-		return
-	}
 	response := &si.AllocationResponse{
 		New: event.Allocations,
 	}
@@ -147,34 +140,17 @@ func (rmp *RMProxy) processApplicationUpdateEvent(event *rmevent.RMApplicationUp
 func (rmp *RMProxy) processRMReleaseAllocationEvent(event *rmevent.RMReleaseAllocationEvent) {
 	rmp.RLock()
 	defer rmp.RUnlock()
-	if len(event.ReleasedAllocations) == 0 {
-		return
-	}
 	response := &si.AllocationResponse{
 		Released: event.ReleasedAllocations,
 	}
 	rmp.triggerUpdateAllocation(event.RmID, response)
 	metrics.GetSchedulerMetrics().AddReleasedContainers(len(event.ReleasedAllocations))
-}
 
-func (rmp *RMProxy) processRMReleaseAllocationSyncEvent(event *rmevent.RMReleaseAllocationSyncEvent) {
-	rmp.RLock()
-	defer rmp.RUnlock()
-	if len(event.ReleasedAllocations) == 0 {
-		event.Channel <- &rmevent.Result{
-			Reason:    "RMReleaseAllocationSyncEvent has zero allocations",
-			Succeeded: false,
-		}
-		return
-	}
-	response := &si.AllocationResponse{
-		Released: event.ReleasedAllocations,
-	}
-	rmp.triggerUpdateAllocation(event.RmID, response)
-	metrics.GetSchedulerMetrics().AddReleasedContainers(len(event.ReleasedAllocations))
 	// Done, notify channel
-	event.Channel <- &rmevent.Result{
-		Succeeded: true,
+	if event.Channel != nil {
+		event.Channel <- &rmevent.Result{
+			Succeeded: true,
+		}
 	}
 }
 
@@ -245,8 +221,6 @@ func (rmp *RMProxy) handleRMEvents() {
 			rmp.processApplicationUpdateEvent(v)
 		case *rmevent.RMReleaseAllocationEvent:
 			rmp.processRMReleaseAllocationEvent(v)
-		case *rmevent.RMReleaseAllocationSyncEvent:
-			rmp.processRMReleaseAllocationSyncEvent(v)
 		case *rmevent.RMRejectedAllocationAskEvent:
 			rmp.processUpdatePartitionConfigsEvent(v)
 		case *rmevent.RMNodeUpdateEvent:

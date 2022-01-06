@@ -772,6 +772,7 @@ func (cc *ClusterContext) convertAllocations(allocations []*si.Allocation) []*ob
 // Create a RM update event to notify RM of new allocations
 // Lock free call, all updates occur via events.
 func (cc *ClusterContext) notifyRMNewAllocation(rmID string, alloc *objects.Allocation) {
+
 	c := make(chan *rmevent.Result)
 	// communicate the allocation to the RM synchronously
 	cc.rmEventHandler.HandleEvent(&rmevent.RMNewAllocationsEvent{
@@ -796,6 +797,7 @@ func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, released []*ob
 	releaseEvent := &rmevent.RMReleaseAllocationEvent{
 		ReleasedAllocations: make([]*si.AllocationRelease, 0),
 		RmID:                rmID,
+		Channel:             nil,
 	}
 	for _, alloc := range released {
 		releaseEvent.ReleasedAllocations = append(releaseEvent.ReleasedAllocations, &si.AllocationRelease{
@@ -806,14 +808,17 @@ func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, released []*ob
 			Message:         message,
 		})
 	}
-	cc.rmEventHandler.HandleEvent(releaseEvent)
+
+	if len(releaseEvent.ReleasedAllocations) > 0 {
+		cc.rmEventHandler.HandleEvent(releaseEvent)
+	}
 }
 
 // Create a RM update event to notify RM of released allocations synchronously
 // Lock free call, all updates occur via events.
 func (cc *ClusterContext) notifyRMAllocationReleasedSynchronously(rmID string, released []*objects.Allocation, terminationType si.TerminationType, message string) {
 	c := make(chan *rmevent.Result)
-	releaseEvent := &rmevent.RMReleaseAllocationSyncEvent{
+	releaseEvent := &rmevent.RMReleaseAllocationEvent{
 		ReleasedAllocations: make([]*si.AllocationRelease, 0),
 		RmID:                rmID,
 		Channel:             c,
@@ -830,13 +835,15 @@ func (cc *ClusterContext) notifyRMAllocationReleasedSynchronously(rmID string, r
 		})
 	}
 
-	cc.rmEventHandler.HandleEvent(releaseEvent)
-	// Wait from channel
-	result := <-c
-	if result.Succeeded {
-		log.Logger().Debug("Successfully synced shim on released allocations")
-	} else {
-		log.Logger().Info("failed to sync shim on released allocations")
+	if len(releaseEvent.ReleasedAllocations) > 0 {
+		cc.rmEventHandler.HandleEvent(releaseEvent)
+		// Wait from channel
+		result := <-c
+		if result.Succeeded {
+			log.Logger().Debug("Successfully synced shim on released allocations")
+		} else {
+			log.Logger().Info("failed to sync shim on released allocations")
+		}
 	}
 }
 

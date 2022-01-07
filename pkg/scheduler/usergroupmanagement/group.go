@@ -7,10 +7,10 @@ import (
 )
 
 type Group struct {
-	name	string // Name of the group
-	maxResources	*resources.Resource // Max Resource configured per group
-	maxApplications	int32 // Max Applications configured per group
-	runningApplications	*int32 // Running Applications
+	name	string
+	maxResources	*resources.Resource
+	maxApplications	int32
+	runningApplications	*int32
 }
 
 func NewGroup(group string) *Group {

@@ -114,9 +114,13 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 		}
 		// pull the properties from the parent that should be set on the child
 		sq.mergeProperties(parent.getProperties(), conf.Properties)
+	}
 
+	// UGM is required only for leaf queues
+	if ! conf.Parent {
 		sq.userGroupManager = ugm.UserGroupManager.NewUsersManager(sq, sq)
 	}
+
 	sq.UpdateSortType()
 
 	log.Logger().Info("configured queue added to scheduler",
@@ -255,7 +259,29 @@ func (sq *Queue) applyConf(conf configs.QueueConfig) error {
 	return nil
 }
 
-func (sq *Queue) GetConfigLimits() []configs.Limit{
+func (sq *Queue) GetConfigLimits() []configs.Limit {
+	var limit []configs.Limit
+	// get the limit for the parent first
+	if sq.parent != nil {
+		limit = sq.parent.GetConfigLimits()
+	}
+	return sq.internalGetConfigLimits(limit)
+}
+
+func (sq *Queue) internalGetConfigLimits(parentLimit []configs.Limit) []configs.Limit {
+	sq.RLock()
+	defer sq.RUnlock()
+	// no limit set in parent queue, not even for root
+	if parentLimit == nil {
+		if sq.limits == nil {
+			return nil
+		}
+		return sq.limits
+	}
+	// parent limit set, no queue limit return parent
+	if sq.limits == nil {
+		return parentLimit
+	}
 	return sq.limits
 }
 

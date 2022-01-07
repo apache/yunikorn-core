@@ -316,15 +316,17 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 	return false
 }
 
-// Replace the paceholder allocation on the node. No usage changes as the placeholder must
-// be the same size as the real allocation.
-func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation) {
+// ReplaceAllocation replaces the placeholder with the real allocation on the node.
+// The delta passed in is the difference in resource usage between placeholder and real allocation.
+// It should always be a negative value (really a decreased usage).
+func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation, delta *resources.Resource) {
 	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
 
 	delete(sn.allocations, uuid)
 	sn.allocations[replace.UUID] = replace
+	sn.allocatedResource.AddTo(delta)
 }
 
 // Check if the proposed allocation fits in the available resources.

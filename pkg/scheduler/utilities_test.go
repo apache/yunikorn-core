@@ -41,6 +41,7 @@ const (
 	taskGroup = "tg-1"
 	phID      = "ph-1"
 	allocID   = "alloc-1"
+	allocID2  = "alloc-2"
 )
 
 func newBasePartition() (*PartitionContext, error) {

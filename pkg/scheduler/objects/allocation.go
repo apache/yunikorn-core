@@ -148,10 +148,17 @@ func (a *Allocation) String() string {
 	return fmt.Sprintf("ApplicationID=%s, UUID=%s, AllocationKey=%s, Node=%s, Result=%s", a.ApplicationID, uuid, a.AllocationKey, a.NodeID, a.Result.String())
 }
 
+// IsPlaceholder returns true if the allocation is a placeholder, false otherwise.
 func (a *Allocation) IsPlaceholder() bool {
 	return a.placeholder
 }
 
+// IsReleased returns the release status of the allocation.
+func (a *Allocation) IsReleased() bool {
+	return a.released
+}
+
+// getTaskGroup returns the task group name if set.
 func (a *Allocation) getTaskGroup() string {
 	return a.taskGroupName
 }

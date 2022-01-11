@@ -830,8 +830,9 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			// before we check anything we need to check the resources equality
 			delta := resources.Sub(ph.AllocatedResource, request.AllocatedResource)
 			// Any negative value in the delta means that at least one of the requested resource in the real
-			// allocation is larger than the placeholder. We need to cancel the placeholder and check the next
-			// placeholder. This should trigger a cleanup of all the placeholder as a task group is always one size.
+			// allocation is larger than the placeholder. We need to cancel this placeholder and check the next
+			// placeholder. This should trigger the removal of all the placeholder that are part of this task group.
+			// All placeholders in the same task group are always the same size.
 			if delta.HasNegativeValue() {
 				log.Logger().Warn("releasing placeholder: real allocation is larger than placeholder",
 					zap.String("requested resource", request.AllocatedResource.String()),

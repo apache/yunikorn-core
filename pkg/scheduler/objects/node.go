@@ -318,7 +318,7 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 
 // ReplaceAllocation replaces the placeholder with the real allocation on the node.
 // The delta passed in is the difference in resource usage between placeholder and real allocation.
-// It should always be a negative value (really a decreased usage).
+// It should always be a negative value or zero: it is a decrease in usage or no change
 func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation, delta *resources.Resource) {
 	defer sn.notifyListeners()
 	sn.Lock()
@@ -326,7 +326,14 @@ func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation, delta *resou
 
 	delete(sn.allocations, uuid)
 	sn.allocations[replace.UUID] = replace
+	before := sn.allocatedResource.Clone()
 	sn.allocatedResource.AddTo(delta)
+	if !resources.FitIn(before, sn.allocatedResource) {
+		log.Logger().Warn("unexpected increase in node usage after placeholder replacement",
+			zap.String("placeholder UUID", uuid),
+			zap.String("allocation UUID", replace.UUID),
+			zap.String("delta", delta.String()))
+	}
 }
 
 // Check if the proposed allocation fits in the available resources.

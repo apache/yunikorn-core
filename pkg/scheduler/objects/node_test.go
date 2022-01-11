@@ -497,9 +497,7 @@ func TestNodeReplaceAllocation(t *testing.T) {
 	half := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50, "second": 100})
 	ph := newPlaceholderAlloc(appID1, phID, nodeID1, "queue-1", half)
 	node.AddAllocation(ph)
-	if node.GetAllocation(phID) == nil {
-		t.Fatal("failed to add placeholder allocation")
-	}
+	assert.Assert(t, node.GetAllocation(phID) != nil, "failed to add placeholder allocation")
 	assert.Assert(t, resources.Equals(node.GetAllocatedResource(), half), "allocated resource not set correctly %v got %v", half, node.GetAllocatedResource())
 
 	allocID := "real-1"
@@ -510,15 +508,11 @@ func TestNodeReplaceAllocation(t *testing.T) {
 	assert.Assert(t, delta.HasNegativeValue(), "expected negative values in delta")
 	// swap and check the calculation
 	node.ReplaceAllocation(phID, alloc, delta)
-	if node.GetAllocation(allocID) == nil {
-		t.Fatal("failed to replace allocation: allocation not returned")
-	}
+	assert.Assert(t, node.GetAllocation(allocID) != nil, "failed to replace allocation: allocation not returned")
 	assert.Assert(t, resources.Equals(node.GetAllocatedResource(), piece), "allocated resource not set correctly %v got %v", piece, node.GetAllocatedResource())
 
 	// clean up all should be zero
-	if node.RemoveAllocation(allocID) == nil {
-		t.Error("allocation should have been removed but was not")
-	}
+	assert.Assert(t, node.RemoveAllocation(allocID) != nil, "allocation should have been removed but was not")
 	assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "allocated resource not updated correctly")
 }
 

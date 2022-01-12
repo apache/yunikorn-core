@@ -1,4 +1,4 @@
-package usergroupmanagement
+package objects
 
 import (
 	"sync/atomic"
@@ -6,17 +6,20 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 )
 
+const ALL_USER = "*"
+
 type User struct {
 	name	string
 	maxResources	*resources.Resource
 	maxApplications	int32
-	runningApplications	*int32
+	runningApplications	int32
 	usedGroup	string
 }
 
 func NewUser(user string) *User {
 	return &User{
 		name:	user,
+		runningApplications: 0,
 	}
 }
 
@@ -28,16 +31,20 @@ func (u *User) SetMaxApplications(maxApplications int32) {
 	u.maxApplications = maxApplications
 }
 
+func (u *User) GetMaxApplications() int32 {
+	return u.maxApplications
+}
+
 func (u *User) IncRunningApplications() {
-	atomic.AddInt32(u.runningApplications, 1)
+	atomic.AddInt32(&u.runningApplications, 1)
 }
 
 func (u *User) DecRunningApplications() {
-	atomic.AddInt32(u.runningApplications, -1)
+	atomic.AddInt32(&u.runningApplications, -1)
 }
 
 func (u *User) CanRun() bool {
-	if atomic.LoadInt32(u.runningApplications) < u.maxApplications {
+	if atomic.LoadInt32(&u.runningApplications) < u.maxApplications {
 		return true
 	} else {
 		return false

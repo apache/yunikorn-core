@@ -1,28 +1,30 @@
-package usergroupmanagement
+package objects
 
 import (
 	"sync"
-
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 )
 
 type UserGroupManager struct {
-	queue	*objects.Queue
+	queue	*Queue
 	users	map[string]*User
 	groups	map[string]*Group
+	allUsersAllowed bool
+	allGroupsAllowed bool
 
 	sync.RWMutex
 }
 
-func userGroupManager(queue *objects.Queue) *UserGroupManager {
+func userGroupManager(queue *Queue) *UserGroupManager {
 	return &UserGroupManager{
 		queue:	queue,
 		users:	make(map[string]*User),
 		groups:	make(map[string]*Group),
+		allUsersAllowed: false,
+		allGroupsAllowed: false,
 	}
 }
 
-func (ugm *UserGroupManager) NewUsersManager(queue *objects.Queue) *UserGroupManager {
+func NewUserGroupManager(queue *Queue) *UserGroupManager {
 	u  := userGroupManager(queue)
 	limits := queue.GetConfigLimits()
 
@@ -32,13 +34,23 @@ func (ugm *UserGroupManager) NewUsersManager(queue *objects.Queue) *UserGroupMan
 			// Add user
 			for _, user := range limit.Users {
 				newUser := NewUser(user)
-				ugm.addUserIfAbsent(newUser)
+				newUser.SetMaxApplications(int32(limit.MaxApplications))
+				u.AddUserIfAbsent(newUser)
+				if user == ALL_USER {
+					u.allUsersAllowed = true
+					break
+				}
 			}
 
 			// Add group
 			for _, group := range limit.Groups {
 				newGroup := NewGroup(group)
-				ugm.addGroupIfAbsent(newGroup)
+				newGroup.SetMaxApplications(int32(limit.MaxApplications))
+				u.AddGroupIfAbsent(newGroup)
+				if group == ALL_GROUP {
+					u.allGroupsAllowed = true
+					break
+				}
 			}
 		}
 	}
@@ -57,7 +69,7 @@ func (ugm *UserGroupManager) GetUser(user string) *User {
 	return ugm.users[user]
 }
 
-func (ugm *UserGroupManager) addUserIfAbsent(user *User) {
+func (ugm *UserGroupManager) AddUserIfAbsent(user *User) {
 	ugm.Lock()
 	defer ugm.Unlock()
 	if _, ok := ugm.users[user.GetName()]; ! ok {
@@ -77,10 +89,18 @@ func (ugm *UserGroupManager) GetGroups() map[string]*Group {
 	return ugm.groups
 }
 
-func (ugm *UserGroupManager) addGroupIfAbsent(group *Group) {
+func (ugm *UserGroupManager) AddGroupIfAbsent(group *Group) {
 	ugm.Lock()
 	defer ugm.Unlock()
 	if _, ok := ugm.groups[group.GetName()]; ! ok {
 		ugm.groups[group.GetName()] = group
 	}
+}
+
+func (ugm *UserGroupManager) IsAllUserAllowed() bool {
+	return ugm.allUsersAllowed
+}
+
+func (ugm *UserGroupManager) IsAllGroupAllowed() bool {
+	return ugm.allGroupsAllowed
 }

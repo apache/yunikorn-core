@@ -170,6 +170,15 @@ func newApplication(appID, partition, queueName string) *objects.Application {
 	return objects.NewApplication(siApp, security.UserGroup{}, nil, rmID)
 }
 
+func newApplicationWithUser(appID, partition, queueName string, user security.UserGroup) *objects.Application {
+	siApp := &si.AddApplicationRequest{
+		ApplicationID: appID,
+		QueueName:     queueName,
+		PartitionName: partition,
+	}
+	return objects.NewApplication(siApp, user, nil, rmID)
+}
+
 func newApplicationTG(appID, partition, queueName string, task *resources.Resource) *objects.Application {
 	return newApplicationTGTags(appID, partition, queueName, task, nil)
 }
@@ -245,4 +254,198 @@ func createQueuesNodes(t *testing.T) *PartitionContext {
 	err = partition.AddNode(newNodeMaxResource("node-2", res), nil)
 	assert.NilError(t, err, "test node2 add failed unexpected")
 	return partition
+}
+
+func newUserLimitsPartition() (*PartitionContext, error) {
+	conf := configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues: []configs.QueueConfig{
+					{
+						Name:   "default",
+						Parent: false,
+						Queues: nil,
+						Limits:         []configs.Limit {
+							{
+								Limit:   "sample limit config",
+								Users: []string{"testuser"},
+								MaxApplications: 2,
+							},
+						},
+					},
+				},
+			},
+		},
+		PlacementRules: nil,
+		Preemption:     configs.PartitionPreemptionConfig{},
+		NodeSortPolicy: configs.NodeSortingPolicy{},
+	}
+
+	return newPartitionContext(conf, rmID, nil)
+}
+
+func newUserWildCharLimitsPartition() (*PartitionContext, error) {
+	conf := configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues: []configs.QueueConfig{
+					{
+						Name:   "default",
+						Parent: false,
+						Queues: nil,
+						Limits:         []configs.Limit {
+							{
+								Limit:   "sample limit config",
+								Users: []string{"*"},
+								MaxApplications: 2,
+							},
+						},
+					},
+				},
+			},
+		},
+		PlacementRules: nil,
+		Preemption:     configs.PartitionPreemptionConfig{},
+		NodeSortPolicy: configs.NodeSortingPolicy{},
+	}
+
+	return newPartitionContext(conf, rmID, nil)
+}
+
+func newGroupLimitsPartition() (*PartitionContext, error) {
+	conf := configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues: []configs.QueueConfig{
+					{
+						Name:   "default",
+						Parent: false,
+						Queues: nil,
+						Limits:         []configs.Limit {
+							{
+								Limit:   "sample limit config",
+								Groups: []string{"testgroup"},
+								MaxApplications: 2,
+							},
+						},
+					},
+				},
+			},
+		},
+		PlacementRules: nil,
+		Preemption:     configs.PartitionPreemptionConfig{},
+		NodeSortPolicy: configs.NodeSortingPolicy{},
+	}
+
+	return newPartitionContext(conf, rmID, nil)
+}
+
+func newGroupWildCharLimitsPartition() (*PartitionContext, error) {
+	conf := configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues: []configs.QueueConfig{
+					{
+						Name:   "default",
+						Parent: false,
+						Queues: nil,
+						Limits:         []configs.Limit {
+							{
+								Limit:   "sample limit config",
+								Groups: []string{"*"},
+								MaxApplications: 2,
+							},
+						},
+					},
+				},
+			},
+		},
+		PlacementRules: nil,
+		Preemption:     configs.PartitionPreemptionConfig{},
+		NodeSortPolicy: configs.NodeSortingPolicy{},
+	}
+
+	return newPartitionContext(conf, rmID, nil)
+}
+
+func newUserGroupLimitsPartition() (*PartitionContext, error) {
+	conf := configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues: []configs.QueueConfig{
+					{
+						Name:   "default",
+						Parent: false,
+						Queues: nil,
+						Limits:         []configs.Limit {
+							{
+								Limit:   "sample limit config",
+								Users: []string{"testuser1", "testuser2"},
+								Groups: []string{"testgroup3"},
+								MaxApplications: 2,
+							},
+						},
+					},
+				},
+			},
+		},
+		PlacementRules: nil,
+		Preemption:     configs.PartitionPreemptionConfig{},
+		NodeSortPolicy: configs.NodeSortingPolicy{},
+	}
+
+	return newPartitionContext(conf, rmID, nil)
+}
+
+func newUserGroupWildCharLimitsPartition() (*PartitionContext, error) {
+	conf := configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues: []configs.QueueConfig{
+					{
+						Name:   "default",
+						Parent: false,
+						Queues: nil,
+						Limits:         []configs.Limit {
+							{
+								Limit:   "sample limit config",
+								Users: []string{"*",},
+								Groups: []string{"*"},
+								MaxApplications: 2,
+							},
+						},
+					},
+				},
+			},
+		},
+		PlacementRules: nil,
+		Preemption:     configs.PartitionPreemptionConfig{},
+		NodeSortPolicy: configs.NodeSortingPolicy{},
+	}
+
+	return newPartitionContext(conf, rmID, nil)
 }

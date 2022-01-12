@@ -338,31 +338,50 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 		return fmt.Errorf("failed to find queue %s for application %s", queueName, appID)
 	}
 
-	// Has user or group defined with any limits? If yes, Is there a room to operate?
-	user := queue.GetUserGroupManager().GetUser(app.GetUser().User)
-	if user != nil {
-		if user.CanRun() {
-			user.IncRunningApplications()
-		} else {
-			return fmt.Errorf("user '%s' has reached max applications limit in queue %s", app.GetUser().User,
-				queueName)
+	if app.GetUser().User != "" {
+		// Has user limit configured with "*" ?
+		user := queue.GetUserGroupManager().GetUser(app.GetUser().User)
+		if queue.GetUserGroupManager().IsAllUserAllowed() && user == nil {
+			user := objects.NewUser(app.GetUser().User)
+			user.SetMaxApplications(queue.GetUserGroupManager().GetUser(objects.ALL_USER).GetMaxApplications())
+			queue.GetUserGroupManager().AddUserIfAbsent(user)
+		}
+
+		// Has user or group defined with any limits? If yes, Is there a room to operate?
+		user = queue.GetUserGroupManager().GetUser(app.GetUser().User)
+		if user != nil {
+			if user.CanRun() {
+				user.IncRunningApplications()
+			} else {
+				return fmt.Errorf("user '%s' has reached max applications limit in queue %s", app.GetUser().User,
+					queueName)
+			}
+		}
+		for _, group := range app.GetUser().Groups {
+			g := queue.GetUserGroupManager().GetGroup(group)
+
+			// Has group limit configured with "*" ?
+			if queue.GetUserGroupManager().IsAllGroupAllowed() && g == nil {
+				newGroup := objects.NewGroup(group)
+				newGroup.SetMaxApplications(queue.GetUserGroupManager().GetGroup(objects.ALL_GROUP).GetMaxApplications())
+				queue.GetUserGroupManager().AddGroupIfAbsent(newGroup)
+			}
+
+			// Is there any group (to which user belongs to) config has limit settings?
+			g = queue.GetUserGroupManager().GetGroup(group)
+			if g != nil && g.CanRun() {
+				g.IncRunningApplications()
+				if user != nil {
+					user.SetUsedGroup(g.GetName())
+				}
+				break
+			} else if g != nil {
+				return fmt.Errorf("group '%s' to which user '%s' belongs to has reached max applications limit " +
+					"in queue %s", g.GetName(), app.GetUser().User, queueName)
+			}
 		}
 	}
 
-	for _, group := range app.GetUser().Groups {
-		// Is there any group (to which user belongs to) config has limit settings?
-		g := queue.GetUserGroupManager().GetGroup(group)
-		if g != nil && g.CanRun() {
-			g.IncRunningApplications()
-			if user != nil {
-				user.SetUsedGroup(g.GetName())
-			}
-			break
-		} else if g != nil {
-			return fmt.Errorf("group '%s' to which user '%s' belongs to has reached max applications limit " +
-				"in queue %s", g.GetName(), app.GetUser().User, queueName)
-		}
-	}
 
 	// add the app to the queue to set the quota on the queue if needed
 	queue.AddApplication(app)

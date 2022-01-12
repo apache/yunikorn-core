@@ -24,7 +24,6 @@ import (
 	"sync"
 	"time"
 
-	ugm "github.com/apache/incubator-yunikorn-core/pkg/scheduler/usergroupmanagement"
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
@@ -70,7 +69,7 @@ type Queue struct {
 	stateTime          time.Time           // last time the state was updated (needed for cleanup)
 	template           *template.Template
 	limits			   []configs.Limit
-	userGroupManager   *ugm.UserGroupManager // UserGroupManager
+	userGroupManager   *UserGroupManager // UserGroupManager
 
 	sync.RWMutex
 }
@@ -118,7 +117,7 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 
 	// UGM is required only for leaf queues
 	if ! conf.Parent {
-		sq.userGroupManager = ugm.UserGroupManager.NewUsersManager(sq, sq)
+		sq.userGroupManager = NewUserGroupManager(sq)
 	}
 
 	sq.UpdateSortType()
@@ -153,6 +152,11 @@ func NewDynamicQueue(name string, leaf bool, parent *Queue) (*Queue, error) {
 	err := parent.addChildQueue(sq)
 	if err != nil {
 		return nil, fmt.Errorf("dynamic queue creation failed: %w", err)
+	}
+
+	// UGM is required only for leaf queues
+	if leaf {
+		sq.userGroupManager = NewUserGroupManager(sq)
 	}
 
 	sq.UpdateSortType()
@@ -1317,7 +1321,7 @@ func (sq *Queue) updateAllocatedResourceMetrics() {
 	}
 }
 
-func (sq *Queue) GetUserGroupManager() *ugm.UserGroupManager {
+func (sq *Queue) GetUserGroupManager() *UserGroupManager {
 	return sq.userGroupManager
 }
 

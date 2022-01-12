@@ -5,8 +5,8 @@ github.com/HdrHistogram/hdrhistogram-go v1.0.1 h1:GX8GAYDuhlFQnI2fRDHQhTlkHMz8bE
 github.com/HdrHistogram/hdrhistogram-go v1.0.1/go.mod h1:BWJ+nMSHY3L41Zj7CA3uXnloDp7xxV0YvstAE7nKTaM=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
 github.com/alecthomas/units v0.0.0-20151022065526-2efee857e7cf/go.mod h1:ybxpYRFXyAe+OPACYpWeL0wqObRcbAqCMya13uyzqw0=
-github.com/apache/incubator-yunikorn-scheduler-interface v0.12.1 h1:JmqC0H6ATxaOAROZucJm/RZucYS7j8ZAdfjKKq1QfBQ=
-github.com/apache/incubator-yunikorn-scheduler-interface v0.12.1/go.mod h1:3tRnilDaaJISjaG8REYnsnRsfr+NymQ02Yjs983zRYY=
+github.com/apache/incubator-yunikorn-scheduler-interface v0.12.2-1 h1:xc0CeJc3NF5CyB1QzvD2tGSatiXzqJXV2QdE3ll6ywA=
+github.com/apache/incubator-yunikorn-scheduler-interface v0.12.2-1/go.mod h1:3tRnilDaaJISjaG8REYnsnRsfr+NymQ02Yjs983zRYY=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
 github.com/beorn7/perks v1.0.0/go.mod h1:KWe93zE9D1o94FZ5RNwFwVgaQK1VOXiVxmqh+CedLV8=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=

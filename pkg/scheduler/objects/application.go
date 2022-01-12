@@ -798,7 +798,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 	return nil
 }
 
-// Try to replace a placeholder with a real allocation
+// tryPlaceholderAllocate tries to replace a placeholder that is allocated with a real allocation
 //nolint:funlen
 func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, getnode func(string) *Node) *Allocation {
 	sa.Lock()
@@ -827,13 +827,42 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			if ph.released || request.taskGroupName != ph.taskGroupName {
 				continue
 			}
+			// before we check anything we need to check the resources equality
+			delta := resources.Sub(ph.AllocatedResource, request.AllocatedResource)
+			// Any negative value in the delta means that at least one of the requested resource in the real
+			// allocation is larger than the placeholder. We need to cancel this placeholder and check the next
+			// placeholder. This should trigger the removal of all the placeholder that are part of this task group.
+			// All placeholders in the same task group are always the same size.
+			if delta.HasNegativeValue() {
+				log.Logger().Warn("releasing placeholder: real allocation is larger than placeholder",
+					zap.String("requested resource", request.AllocatedResource.String()),
+					zap.String("placeholderID", ph.UUID),
+					zap.String("placeholder resource", ph.AllocatedResource.String()))
+				// release the placeholder and tell the RM
+				ph.released = true
+				sa.notifyRMAllocationReleased(sa.rmID, []*Allocation{ph}, si.TerminationType_TIMEOUT, "cancel placeholder: resource incompatible")
+				// add an event on the app to show the release
+				if eventCache := events.GetEventCache(); eventCache != nil {
+					message := fmt.Sprintf("Task group '%s' in application '%s': allocation resources '%s' are not matching placeholder '%s' allocation with ID '%s'", ph.taskGroupName, sa.ApplicationID, request.AllocatedResource.String(), ph.AllocatedResource.String(), ph.AllocationKey)
+					if event, err := events.CreateRequestEventRecord(ph.AllocationKey, sa.ApplicationID, "releasing placeholder: real allocation is larger than placeholder", message); err != nil {
+						log.Logger().Warn("Event creation failed",
+							zap.String("event message", message),
+							zap.Error(err))
+					} else {
+						eventCache.AddEvent(event)
+					}
+				}
+				continue
+			}
+			// placeholder is the same or larger continue processing and difference is handled when the placeholder
+			// is swapped with the real one.
 			if phFit == nil && reqFit == nil {
 				phFit = ph
 				reqFit = request
 			}
 			node := getnode(ph.NodeID)
 			// got the node run same checks as for reservation (all but fits)
-			// resource usage should not change anyway between placeholder and real one
+			// resource usage should not change anyway between placeholder and real one at this point
 			if node != nil && node.preReserveConditions(request.AllocationKey) {
 				alloc := NewAllocation(common.GetNewUUID(), node.NodeID, request)
 				// double link to make it easier to find
@@ -848,21 +877,6 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				if err != nil {
 					log.Logger().Warn("ask repeat update failed unexpectedly",
 						zap.Error(err))
-				}
-				// Is real allocation matches with placeholder resource?
-				if !resources.Equals(alloc.AllocatedResource, ph.AllocatedResource) {
-					log.Logger().Warn("Real allocation is not matching with placeholder allocation", zap.String("Real alloc: ", alloc.AllocationKey), zap.String("Real alloc resource: ", alloc.AllocatedResource.DAOString()), zap.String("Placeholder alloc: ", ph.AllocationKey), zap.String("Placeholder alloc resource: ", ph.AllocatedResource.DAOString()))
-					// post scheduling events via the event plugin
-					if eventCache := events.GetEventCache(); eventCache != nil {
-						message := fmt.Sprintf("Real Pod %s allocation %s is not matching with placeholder %s allocation %s in application %s", request.AllocationKey, request.AllocatedResource.DAOString(), ph.AllocationKey, ph.AllocatedResource.DAOString(), request.ApplicationID)
-						if event, err := events.CreateRequestEventRecord(request.AllocationKey, request.ApplicationID, "Resource Allocation Mismatch between real and placeholder", message); err != nil {
-							log.Logger().Warn("Event creation failed",
-								zap.String("event message", message),
-								zap.Error(err))
-						} else {
-							eventCache.AddEvent(event)
-						}
-					}
 				}
 				return alloc
 			}
@@ -1272,6 +1286,7 @@ func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
 			zap.String("placeholder", ph.String()))
 		return nil
 	}
+	// weird issue we should never have more than 1 log it for debugging this error
 	if len(ph.Releases) > 1 {
 		log.Logger().Error("Unexpected release number, placeholder released, only 1 real allocations processed",
 			zap.String("applicationID", sa.ApplicationID),
@@ -1407,9 +1422,12 @@ func (sa *Application) executeTerminatedCallback() {
 	}
 }
 
+// notifyRMAllocationReleased send an allocation release event to the RM to if the event handler is configured
+// and at least one allocation has been released.
+// No locking must be called while holding the lock
 func (sa *Application) notifyRMAllocationReleased(rmID string, released []*Allocation, terminationType si.TerminationType, message string) {
 	// only generate event if needed
-	if len(released) == 0 {
+	if len(released) == 0 || sa.rmEventHandler == nil {
 		return
 	}
 	releaseEvent := &rmevent.RMReleaseAllocationEvent{
@@ -1428,9 +1446,12 @@ func (sa *Application) notifyRMAllocationReleased(rmID string, released []*Alloc
 	sa.rmEventHandler.HandleEvent(releaseEvent)
 }
 
+// notifyRMAllocationAskReleased send an ask release event to the RM to if the event handler is configured
+// and at least one ask has been released.
+// No locking must be called while holding the lock
 func (sa *Application) notifyRMAllocationAskReleased(rmID string, released []*AllocationAsk, terminationType si.TerminationType, message string) {
 	// only generate event if needed
-	if len(released) == 0 {
+	if len(released) == 0 || sa.rmEventHandler == nil {
 		return
 	}
 	releaseEvent := &rmevent.RMReleaseAllocationAskEvent{

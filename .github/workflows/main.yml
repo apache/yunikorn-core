@@ -30,6 +30,7 @@ jobs:
         run: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.33.0
           make lint
+        if: ${{ github.event_name == 'pull_request' }}
       - name: unit test
         run: make test
 

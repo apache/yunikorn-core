@@ -310,6 +310,7 @@ func getNodeJSON(node *objects.Node) *dao.NodeDAOInfo {
 		Occupied:    node.GetOccupiedResource().DAOString(),
 		Allocated:   node.GetAllocatedResource().DAOString(),
 		Available:   node.GetAvailableResource().DAOString(),
+		Utilized:    node.GetUtilizedResource().DAOString(),
 		Allocations: allocations,
 		Schedulable: node.IsSchedulable(),
 	}

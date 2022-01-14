@@ -239,6 +239,27 @@ func (sn *Node) GetAvailableResource() *resources.Resource {
 	return sn.availableResource.Clone()
 }
 
+// Get the utilized resource on this node.
+func (sn *Node) GetUtilizedResource() *resources.Resource {
+	total := sn.GetCapacity()
+	resourceAllocated := sn.GetAllocatedResource()
+	m := make(map[string]bool)
+	utilizedResource := make(map[string]resources.Quantity)
+
+	for name, v := range total.Resources {
+		if v > 0 {
+			m[name] = true
+		}
+	}
+
+	for name := range resourceAllocated.Resources {
+		if _, ok := m[name]; ok {
+			utilizedResource[name] = resources.CalculateAbsUsedCapacity(total, resourceAllocated).Resources[name]
+		}
+	}
+	return &resources.Resource{Resources: utilizedResource}
+}
+
 func (sn *Node) FitInNode(resRequest *resources.Resource) bool {
 	sn.RLock()
 	defer sn.RUnlock()

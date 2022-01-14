@@ -429,7 +429,10 @@ func TestAddAllocation(t *testing.T) {
 	if !resources.Equals(node.GetAvailableResource(), half) {
 		t.Errorf("failed to update available resources expected %v, got %v", half, node.GetAvailableResource())
 	}
-
+	expectedUtilizedResource := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50, "second": 50})
+	if !resources.Equals(node.GetUtilizedResource(), expectedUtilizedResource) {
+		t.Errorf("failed to get utilized resources expected %v, got %v", expectedUtilizedResource, node.GetUtilizedResource())
+	}
 	// second and check calculation
 	piece := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25, "second": 50})
 	node.AddAllocation(newAllocation(appID1, "2", nodeID1, "queue-1", piece))
@@ -443,6 +446,10 @@ func TestAddAllocation(t *testing.T) {
 	left := resources.Sub(node.GetCapacity(), piece)
 	if !resources.Equals(node.GetAvailableResource(), left) {
 		t.Errorf("failed to update available resources expected %v, got %v", left, node.GetAvailableResource())
+	}
+	expectedUtilizedResource1 := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 75, "second": 75})
+	if !resources.Equals(node.GetUtilizedResource(), expectedUtilizedResource1) {
+		t.Errorf("failed to get utilized resources expected %v, got %v", expectedUtilizedResource1, node.GetUtilizedResource())
 	}
 }
 
@@ -485,6 +492,10 @@ func TestRemoveAllocation(t *testing.T) {
 	left := resources.Sub(node.GetCapacity(), piece)
 	if !resources.Equals(node.GetAvailableResource(), left) {
 		t.Errorf("allocated resource not set correctly %v got %v", left, node.GetAvailableResource())
+	}
+	expectedUtilizedResource := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25, "second": 25})
+	if !resources.Equals(node.GetUtilizedResource(), expectedUtilizedResource) {
+		t.Errorf("failed to get utilized resources expected %v, got %v", expectedUtilizedResource, node.GetUtilizedResource())
 	}
 }
 

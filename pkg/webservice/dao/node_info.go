@@ -31,6 +31,7 @@ type NodeDAOInfo struct {
 	Allocated   string               `json:"allocated"`
 	Occupied    string               `json:"occupied"`
 	Available   string               `json:"available"`
+	Utilized    string               `json:"utilized"`
 	Allocations []*AllocationDAOInfo `json:"allocations"`
 	Schedulable bool                 `json:"schedulable"`
 }

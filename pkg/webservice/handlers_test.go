@@ -1164,10 +1164,12 @@ func TestGetPartitionNodes(t *testing.T) {
 			assert.Equal(t, node.NodeID, node1ID)
 			assert.Equal(t, "alloc-1", node.Allocations[0].AllocationKey)
 			assert.Equal(t, "alloc-1-uuid", node.Allocations[0].UUID)
+			assert.Equal(t, "[memory:50 vcore:30]", node.Utilized)
 		} else {
 			assert.Equal(t, node.NodeID, node2ID)
 			assert.Equal(t, "alloc-2", node.Allocations[0].AllocationKey)
 			assert.Equal(t, "alloc-2-uuid", node.Allocations[0].UUID)
+			assert.Equal(t, "[memory:30 vcore:50]", node.Utilized)
 		}
 	}
 

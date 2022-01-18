@@ -2256,18 +2256,8 @@ func TestUserGroupMaxAppLimit(t *testing.T) {
 	partition, err := newUserGroupLimitsPartition()
 	assert.NilError(t, err, "partition create failed")
 
-	// user 'testuser1' belong to group 'testgroup1', user 'testuser2' belong to group 'testgroup2'
-	user1 := security.UserGroup{
-		User:   "testuser1",
-		Groups: []string{"testgroup1"},
-	}
-	user2 := security.UserGroup{
-		User:   "testuser2",
-		Groups: []string{"testgroup2"},
-	}
-
 	for i := 1; i <= 2; i++ {
-		user1 = security.UserGroup{
+		user1 := security.UserGroup{
 			User:   "testuser" + strconv.Itoa(i),
 			Groups: []string{"testgroup" + strconv.Itoa(i)},
 		}
@@ -2278,6 +2268,16 @@ func TestUserGroupMaxAppLimit(t *testing.T) {
 			err = partition.AddApplication(app)
 			assert.NilError(t, err, appID+" should have been added to the partition")
 		}
+	}
+
+	// user 'testuser1' belong to group 'testgroup1', user 'testuser2' belong to group 'testgroup2'
+	user1 := security.UserGroup{
+		User:   "testuser1",
+		Groups: []string{"testgroup1"},
+	}
+	user2 := security.UserGroup{
+		User:   "testuser2",
+		Groups: []string{"testgroup2"},
 	}
 
 	// 'testuser1', 'testuser2' users are not allowed to run as they have reached max apps limit

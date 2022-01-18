@@ -21,7 +21,6 @@ package configs
 import (
 	"crypto/sha256"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"strings"
@@ -185,7 +184,7 @@ func ParseAndValidateConfig(content []byte) (*SchedulerConfig, error) {
 
 func loadSchedulerConfigFromFile(policyGroup string) (*SchedulerConfig, error) {
 	filePath := resolveConfigurationFileFunc(policyGroup)
-	buf, err := ioutil.ReadFile(filePath)
+	buf, err := os.ReadFile(filePath)
 	if err != nil {
 		log.Logger().Error("failed to load configuration",
 			zap.String("configFilePath", filePath),

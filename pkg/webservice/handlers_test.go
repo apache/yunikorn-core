@@ -22,7 +22,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1373,7 +1372,7 @@ func TestEnableDisablePeriodicStateDump(t *testing.T) {
 	assert.Equal(t, statusCode, 0, "response status code")
 
 	waitForStateDumpFile(t)
-	fileContents, err2 := ioutil.ReadFile(stateDumpFilePath)
+	fileContents, err2 := os.ReadFile(stateDumpFilePath)
 	assert.NilError(t, err2)
 	var aggregated AggregatedStateInfo
 	err3 := json.Unmarshal(fileContents, &aggregated)

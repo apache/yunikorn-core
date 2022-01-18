@@ -2,6 +2,7 @@ package objects
 
 import (
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"gotest.tools/assert"
@@ -37,8 +38,8 @@ func TestUserLimitsConcurrently(t *testing.T) {
 	wgRead.Add(readCount)
 	for i := 1; i <= readCount; i++ {
 		go func() {
-			assert.DeepEqual(t, userGroupManager.GetUser(user).CanRun(), true)
-			if ! userGroupManager.GetUser(user).CanRun() {
+			assert.DeepEqual(t, userGroupManager.GetUser(user).IsRunningAppsUnderLimit(), true)
+			if ! userGroupManager.GetUser(user).IsRunningAppsUnderLimit() {
 				t.Error("Not yet reached user limit. Should allow user to run apps.")
 			}
 			wgRead.Done()
@@ -81,15 +82,16 @@ func TestUserLimitsExceedingMaxConcurrently(t *testing.T) {
 	var wgRead sync.WaitGroup
 	readCount := newc*2
 	wgRead.Add(readCount)
-	exceeded := false
+	var exceeded int32
+	atomic.StoreInt32(&exceeded, 0)
 	for i := 1; i <= readCount; i++ {
 		go func() {
-			if ! userGroupManager.GetUser(user).CanRun() {
-				exceeded = true
+			if ! userGroupManager.GetUser(user).IsRunningAppsUnderLimit() {
+				atomic.StoreInt32(&exceeded, 1)
 			}
 			// once exceeded, cannot allow user to run apps.
-			if exceeded {
-				if ! userGroupManager.GetUser(user).CanRun() {
+			if atomic.LoadInt32(&exceeded)  == 1 {
+				if userGroupManager.GetUser(user).IsRunningAppsUnderLimit() {
 					t.Error("Reached user limit. Cannot allow user to run application anymore from this moment")
 				}
 			}
@@ -133,8 +135,8 @@ func TestGroupLimitsConcurrently(t *testing.T) {
 	wgRead.Add(readCount)
 	for i := 1; i <= readCount; i++ {
 		go func() {
-			assert.DeepEqual(t, userGroupManager.GetGroup(group).CanRun(), true)
-			if ! userGroupManager.GetGroup(group).CanRun() {
+			assert.DeepEqual(t, userGroupManager.GetGroup(group).IsRunningAppsUnderLimit(), true)
+			if ! userGroupManager.GetGroup(group).IsRunningAppsUnderLimit() {
 				t.Error("Not yet reached group limit. Should allow users of the group to run apps.")
 			}
 			wgRead.Done()
@@ -176,15 +178,16 @@ func TestGroupLimitsExceedingMaxConcurrently(t *testing.T) {
 	var wgRead sync.WaitGroup
 	readCount := newc*2
 	wgRead.Add(readCount)
-	exceeded := false
+	var exceeded int32
+	atomic.StoreInt32(&exceeded, 0)
 	for i := 1; i <= readCount; i++ {
 		go func() {
-			if ! userGroupManager.GetGroup(group).CanRun() {
-				exceeded = true
+			if ! userGroupManager.GetGroup(group).IsRunningAppsUnderLimit() {
+				atomic.StoreInt32(&exceeded, 1)
 			}
-			if exceeded {
+			if atomic.LoadInt32(&exceeded)  == 1 {
 				// once exceeded, cannot allow users of group to run apps.
-				if userGroupManager.GetGroup(group).CanRun() {
+				if userGroupManager.GetGroup(group).IsRunningAppsUnderLimit() {
 					t.Error("Reached group limit. Cannot allow users of group to run application anymore from this moment")
 				}
 			}

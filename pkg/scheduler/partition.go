@@ -349,8 +349,8 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 
 		// Has user or group defined with any limits? If yes, Is there a room to operate?
 		user = queue.GetUserGroupManager().GetUser(app.GetUser().User)
-		if user != nil {
-			if user.CanRun() {
+		if user != nil && user.IsMaxAppsLimitSet() {
+			if user.IsRunningAppsUnderLimit() {
 				user.IncRunningApplications()
 			} else {
 				return fmt.Errorf("user '%s' has reached max applications limit in queue %s", app.GetUser().User,
@@ -369,13 +369,13 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 
 			// Is there any group (to which user belongs to) config has limit settings?
 			g = queue.GetUserGroupManager().GetGroup(group)
-			if g != nil && g.CanRun() {
+			if g != nil && g.IsMaxAppsLimitSet() && g.IsRunningAppsUnderLimit() {
 				g.IncRunningApplications()
 				if user != nil {
 					user.SetUsedGroup(g.GetName())
 				}
 				break
-			} else if g != nil {
+			} else if g != nil && g.IsMaxAppsLimitSet()  {
 				return fmt.Errorf("group '%s' to which user '%s' belongs to has reached max applications limit " +
 					"in queue %s", g.GetName(), app.GetUser().User, queueName)
 			}
@@ -426,8 +426,8 @@ func (pc *PartitionContext) removeApplication(appID string) []*objects.Allocatio
 	if queue := app.GetQueue(); queue != nil {
 		queue.RemoveApplication(app)
 
-		var updateGroupMetrics bool
-		if len(app.GetUser().User) > 0 {
+		if app.GetUser().User != "" {
+			var updateGroupMetrics bool
 			user := queue.GetUserGroupManager().GetUser(app.GetUser().User)
 			if user != nil {
 				user.DecRunningApplications()
@@ -437,16 +437,16 @@ func (pc *PartitionContext) removeApplication(appID string) []*objects.Allocatio
 					updateGroupMetrics = true
 				}
 			}
-		}
 
-		// Used when limit has been configured only for group, not for individual user
-		if ! updateGroupMetrics && len(app.GetUser().User) > 0 {
-			for _, group := range app.GetUser().Groups {
-				// Is there any group (to which user belongs to) config has limit settings?
-				g := queue.GetUserGroupManager().GetGroup(group)
-				if g != nil {
-					g.DecRunningApplications()
-					break
+			// Used when limit has been configured only for group, not for individual user
+			if ! updateGroupMetrics {
+				for _, group := range app.GetUser().Groups {
+					// Is there any group (to which user belongs to) config has limit settings?
+					g := queue.GetUserGroupManager().GetGroup(group)
+					if g != nil {
+						g.DecRunningApplications()
+						break
+					}
 				}
 			}
 		}

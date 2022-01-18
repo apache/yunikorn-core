@@ -7,6 +7,7 @@ import (
 )
 
 const ALL_USER = "*"
+const USER_MAX_APPLICATION_LIMIT_NOT_SET = -1
 
 type User struct {
 	name	string
@@ -20,6 +21,7 @@ func NewUser(user string) *User {
 	return &User{
 		name:	user,
 		runningApplications: 0,
+		maxApplications: USER_MAX_APPLICATION_LIMIT_NOT_SET,
 	}
 }
 
@@ -43,12 +45,16 @@ func (u *User) DecRunningApplications() {
 	atomic.AddInt32(&u.runningApplications, -1)
 }
 
-func (u *User) CanRun() bool {
+func (u *User) IsRunningAppsUnderLimit() bool {
 	if atomic.LoadInt32(&u.runningApplications) < u.maxApplications {
 		return true
 	} else {
 		return false
 	}
+}
+
+func (u *User) IsMaxAppsLimitSet() bool {
+	return u.GetMaxApplications() != USER_MAX_APPLICATION_LIMIT_NOT_SET
 }
 
 // SetUsedGroup A user may belong to more than one group. In case of any group changes for

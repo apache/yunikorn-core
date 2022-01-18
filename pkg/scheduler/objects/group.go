@@ -7,6 +7,7 @@ import (
 )
 
 const ALL_GROUP = "*"
+const GROUP_MAX_APPLICATION_LIMIT_NOT_SET = -1
 
 type Group struct {
 	name	string
@@ -19,6 +20,7 @@ func NewGroup(group string) *Group {
 	return &Group{
 		name:	group,
 		runningApplications: 0,
+		maxApplications: GROUP_MAX_APPLICATION_LIMIT_NOT_SET,
 	}
 }
 
@@ -42,10 +44,14 @@ func (g *Group) DecRunningApplications() {
 	atomic.AddInt32(&g.runningApplications, -1)
 }
 
-func (g *Group) CanRun() bool {
+func (g *Group) IsRunningAppsUnderLimit() bool {
 	if atomic.LoadInt32(&g.runningApplications) < g.maxApplications {
 		return true
 	} else {
 		return false
 	}
+}
+
+func (g *Group) IsMaxAppsLimitSet() bool {
+	return g.GetMaxApplications() != GROUP_MAX_APPLICATION_LIMIT_NOT_SET
 }

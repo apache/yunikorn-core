@@ -2097,6 +2097,20 @@ func TestUserMaxAppLimit(t *testing.T) {
 	app3 = newApplicationWithUser("app-3", "default", "root.default", user)
 	err = partition.AddApplication(app3)
 	assert.NilError(t, err, "app-3 should have been added to the partition")
+
+	// add 2 apps by 'testuser' user in dynamic queue 'root.child'
+	for i := 1; i <= 2; i++ {
+		appId := "app-dynamic-" + strconv.Itoa(i)
+		app := newApplicationWithUser(appId, "default", "root.child", user)
+
+		err = partition.AddApplication(app)
+		assert.NilError(t, err, appId + " should have been added to the partition")
+	}
+
+	// adding the app3 by 'testuser' user fails because user max app limit has reached
+	app3 = newApplicationWithUser("app-dynamic-3", "default", "root.child", user)
+	err = partition.AddApplication(app3)
+	assert.Error(t, err, "user 'testuser' has reached max applications limit in queue root.child")
 }
 
 // only user limit is configured as "*"

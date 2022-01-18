@@ -278,9 +278,23 @@ func newUserLimitsPartition() (*PartitionContext, error) {
 						},
 					},
 				},
+				Limits:         []configs.Limit {
+					{
+						Limit:   "sample limit config",
+						Users: []string{"testuser"},
+						MaxApplications: 2,
+					},
+				},
 			},
 		},
-		PlacementRules: nil,
+		PlacementRules: []configs.PlacementRule{
+			{
+				Name:   "provided",
+				Create: true,
+				Parent: nil,
+				Value:  "root.child",
+			},
+		},
 		Preemption:     configs.PartitionPreemptionConfig{},
 		NodeSortPolicy: configs.NodeSortingPolicy{},
 	}

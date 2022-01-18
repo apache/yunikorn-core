@@ -342,8 +342,8 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 		// Has user limit configured with "*" ?
 		user := queue.GetUserGroupManager().GetUser(app.GetUser().User)
 		if queue.GetUserGroupManager().IsAllUserAllowed() && user == nil {
-			user := objects.NewUser(app.GetUser().User)
-			user.SetMaxApplications(queue.GetUserGroupManager().GetUser(objects.ALL_USER).GetMaxApplications())
+			user = objects.NewUser(app.GetUser().User)
+			user.SetMaxApplications(queue.GetUserGroupManager().GetUser(objects.AllUser).GetMaxApplications())
 			queue.GetUserGroupManager().AddUserIfAbsent(user)
 		}
 
@@ -363,7 +363,7 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 			// Has group limit configured with "*" ?
 			if queue.GetUserGroupManager().IsAllGroupAllowed() && g == nil {
 				newGroup := objects.NewGroup(group)
-				newGroup.SetMaxApplications(queue.GetUserGroupManager().GetGroup(objects.ALL_GROUP).GetMaxApplications())
+				newGroup.SetMaxApplications(queue.GetUserGroupManager().GetGroup(objects.AllGroup).GetMaxApplications())
 				queue.GetUserGroupManager().AddGroupIfAbsent(newGroup)
 			}
 
@@ -375,13 +375,12 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 					user.SetUsedGroup(g.GetName())
 				}
 				break
-			} else if g != nil && g.IsMaxAppsLimitSet()  {
-				return fmt.Errorf("group '%s' to which user '%s' belongs to has reached max applications limit " +
+			} else if g != nil && g.IsMaxAppsLimitSet() {
+				return fmt.Errorf("group '%s' to which user '%s' belongs to has reached max applications limit "+
 					"in queue %s", g.GetName(), app.GetUser().User, queueName)
 			}
 		}
 	}
-
 
 	// add the app to the queue to set the quota on the queue if needed
 	queue.AddApplication(app)
@@ -439,7 +438,7 @@ func (pc *PartitionContext) removeApplication(appID string) []*objects.Allocatio
 			}
 
 			// Used when limit has been configured only for group, not for individual user
-			if ! updateGroupMetrics {
+			if !updateGroupMetrics {
 				for _, group := range app.GetUser().Groups {
 					// Is there any group (to which user belongs to) config has limit settings?
 					g := queue.GetUserGroupManager().GetGroup(group)

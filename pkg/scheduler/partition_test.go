@@ -2051,7 +2051,6 @@ func TestUpdateNodeSortingPolicy(t *testing.T) {
 
 // only user limit is configured
 func TestUserMaxAppLimit(t *testing.T) {
-
 	// 'testuser' user max apps limit is 2. so 'testuser' is allowed to run max 2 apps.
 	partition, err := newUserLimitsPartition()
 	assert.NilError(t, err, "partition create failed")
@@ -2063,11 +2062,11 @@ func TestUserMaxAppLimit(t *testing.T) {
 
 	// add 2 apps by 'testuser' user
 	for i := 1; i <= 2; i++ {
-		appId := "app-" + strconv.Itoa(i)
-		app := newApplicationWithUser(appId, "default", "root.default", user)
+		appID := "app-" + strconv.Itoa(i)
+		app := newApplicationWithUser(appID, "default", "root.default", user)
 
 		err = partition.AddApplication(app)
-		assert.NilError(t, err, appId + " should have been added to the partition")
+		assert.NilError(t, err, appID+" should have been added to the partition")
 	}
 
 	// adding the app3 by 'testuser' user fails because user max app limit has reached
@@ -2075,18 +2074,18 @@ func TestUserMaxAppLimit(t *testing.T) {
 	err = partition.AddApplication(app3)
 	assert.Error(t, err, "user 'testuser' has reached max applications limit in queue root.default")
 
-	user1 := security.UserGroup {
+	user1 := security.UserGroup{
 		User:   "testuser1",
 		Groups: []string{},
 	}
 
 	// add 5 apps by 'testuser1' user to ensure other restrictions on 'testuser' doesn't apply for other users
 	for i := 1; i <= 5; i++ {
-		appId := "app-testuser1-" + strconv.Itoa(i)
-		app := newApplicationWithUser(appId, "default", "root.default", user1)
+		appID := "app-testuser1-" + strconv.Itoa(i)
+		app := newApplicationWithUser(appID, "default", "root.default", user1)
 
 		err = partition.AddApplication(app)
-		assert.NilError(t, err, appId + " should have been added to the partition")
+		assert.NilError(t, err, appID+" should have been added to the partition")
 	}
 
 	// remove the app1
@@ -2100,11 +2099,11 @@ func TestUserMaxAppLimit(t *testing.T) {
 
 	// add 2 apps by 'testuser' user in dynamic queue 'root.child'
 	for i := 1; i <= 2; i++ {
-		appId := "app-dynamic-" + strconv.Itoa(i)
-		app := newApplicationWithUser(appId, "default", "root.child", user)
+		appID := "app-dynamic-" + strconv.Itoa(i)
+		app := newApplicationWithUser(appID, "default", "root.child", user)
 
 		err = partition.AddApplication(app)
-		assert.NilError(t, err, appId + " should have been added to the partition")
+		assert.NilError(t, err, appID+" should have been added to the partition")
 	}
 
 	// adding the app3 by 'testuser' user fails because user max app limit has reached
@@ -2115,50 +2114,47 @@ func TestUserMaxAppLimit(t *testing.T) {
 
 // only user limit is configured as "*"
 func TestWildCharUserMaxAppLimit(t *testing.T) {
-
 	// user limit configured as '*' with max app count 2. so, each user is allowed to run max 2 apps.
 	partition, err := newUserWildCharLimitsPartition()
 	assert.NilError(t, err, "partition create failed")
 
 	// add 2 apps by 'testuser1' & 'testuser2' users
-	for j  := 1; j <= 2; j++ {
-		user := security.UserGroup {
+	for j := 1; j <= 2; j++ {
+		user := security.UserGroup{
 			User:   "testuser" + strconv.Itoa(j),
 			Groups: []string{},
 		}
 		for i := 1; i <= 2; i++ {
-			appId := "app-testuser-" + strconv.Itoa(j) + "-" + strconv.Itoa(i)
-			app := newApplicationWithUser(appId, "default", "root.default", user)
+			appID := "app-testuser-" + strconv.Itoa(j) + "-" + strconv.Itoa(i)
+			app := newApplicationWithUser(appID, "default", "root.default", user)
 
 			err = partition.AddApplication(app)
-			assert.NilError(t, err, appId + " should have been added to the partition")
+			assert.NilError(t, err, appID+" should have been added to the partition")
 		}
 		// adding the app3 by 'testuser1' & 'testuser2' users fails because user max app limit has reached
-		app3 := newApplicationWithUser("app-testuser-" + strconv.Itoa(j) + "-3", "default", "root.default", user)
+		app3 := newApplicationWithUser("app-testuser-"+strconv.Itoa(j)+"-3", "default", "root.default", user)
 		err = partition.AddApplication(app3)
-		assert.Error(t, err, "user 'testuser" + strconv.Itoa(j) + "' has reached max applications limit in queue root.default")
+		assert.Error(t, err, "user 'testuser"+strconv.Itoa(j)+"' has reached max applications limit in queue root.default")
 	}
 
 	// remove app 'app-testuser-1-1' added by "testuser1"
-	appId := "app-testuser-1-1"
-	allocs := partition.removeApplication(appId)
+	appID := "app-testuser-1-1"
+	allocs := partition.removeApplication(appID)
 	assert.Equal(t, 0, len(allocs), "existing application with allocations returned unexpected allocations %v", allocs)
 
-
 	// adding app 'app-testuser-1-1' again by 'testuser1' succeeds as 'testuser1' user current running apps equals or falls below the max apps count
-	appId = "app-testuser-1-3"
-	user := security.UserGroup {
+	appID = "app-testuser-1-3"
+	user := security.UserGroup{
 		User:   "testuser1",
 		Groups: []string{},
 	}
-	app := newApplicationWithUser(appId, "default", "root.default", user)
+	app := newApplicationWithUser(appID, "default", "root.default", user)
 	err = partition.AddApplication(app)
-	assert.NilError(t, err, appId + " should have been added to the partition")
+	assert.NilError(t, err, appID+" should have been added to the partition")
 }
 
 // only group limit is configured
 func TestGroupMaxAppLimit(t *testing.T) {
-
 	// 'testgroup' group max apps limit is 2
 	partition, err := newGroupLimitsPartition()
 	assert.NilError(t, err, "partition create failed")
@@ -2170,15 +2166,15 @@ func TestGroupMaxAppLimit(t *testing.T) {
 			Groups: []string{"testgroup"},
 		}
 
-		appId := "app-" + strconv.Itoa(i)
-		app := newApplicationWithUser(appId, "default", "root.default", user)
+		appID := "app-" + strconv.Itoa(i)
+		app := newApplicationWithUser(appID, "default", "root.default", user)
 
 		err = partition.AddApplication(app)
-		assert.NilError(t, err, appId + " should have been added to the partition")
+		assert.NilError(t, err, appID+" should have been added to the partition")
 	}
 
 	// 'testuser3' belong to 'testgroup' group.
-	user := security.UserGroup {
+	user := security.UserGroup{
 		User:   "testuser3",
 		Groups: []string{"testgroup"},
 	}
@@ -2189,18 +2185,18 @@ func TestGroupMaxAppLimit(t *testing.T) {
 	assert.Error(t, err, "group 'testgroup' to which user 'testuser3' belongs to has reached max applications limit in queue root.default")
 
 	// 'testuser4' belong to 'testgroup1' group.
-	user1 := security.UserGroup {
+	user1 := security.UserGroup{
 		User:   "testuser4",
 		Groups: []string{"testgroup1"},
 	}
 
 	// add 5 apps by 'testuser4' user to ensure other restrictions on 'testgroup' doesn't apply for other groups
 	for i := 1; i <= 5; i++ {
-		appId := "app-testuser4-" + strconv.Itoa(i)
-		app := newApplicationWithUser(appId, "default", "root.default", user1)
+		appID := "app-testuser4-" + strconv.Itoa(i)
+		app := newApplicationWithUser(appID, "default", "root.default", user1)
 
 		err = partition.AddApplication(app)
-		assert.NilError(t, err, appId + " should have been added to the partition")
+		assert.NilError(t, err, appID+" should have been added to the partition")
 	}
 
 	// remove the app
@@ -2214,74 +2210,73 @@ func TestGroupMaxAppLimit(t *testing.T) {
 }
 
 // only group limit is configured as "*"
-func TestWildCharGroupMaxAppLimit(t *testing.T)  {
+func TestWildCharGroupMaxAppLimit(t *testing.T) {
 	// group limit configured as '*' with max app count 2. so, each group is allowed to run max 2 apps.
 	partition, err := newGroupWildCharLimitsPartition()
 	assert.NilError(t, err, "partition create failed")
 
 	// add 2 apps by 'testuser1' (belong to 'testgroup1') & 'testuser2' (belong to 'testgroup2') users
-	for j  := 1; j <= 2; j++ {
-		user := security.UserGroup {
+	for j := 1; j <= 2; j++ {
+		user := security.UserGroup{
 			User:   "testuser" + strconv.Itoa(j),
 			Groups: []string{"testgroup" + strconv.Itoa(j)},
 		}
 		for i := 1; i <= 2; i++ {
-			appId := "app-testuser-" + strconv.Itoa(j) + "-" + strconv.Itoa(i)
-			app := newApplicationWithUser(appId, "default", "root.default", user)
+			appID := "app-testuser-" + strconv.Itoa(j) + "-" + strconv.Itoa(i)
+			app := newApplicationWithUser(appID, "default", "root.default", user)
 
 			err = partition.AddApplication(app)
-			assert.NilError(t, err, appId + " should have been added to the partition")
+			assert.NilError(t, err, appID+" should have been added to the partition")
 		}
 		// adding the app3 by 'testuser1' & 'testuser2' users fails because each user's group max app limit has reached
-		app3 := newApplicationWithUser("app-testuser-" + strconv.Itoa(j) + "-3", "default", "root.default", user)
+		app3 := newApplicationWithUser("app-testuser-"+strconv.Itoa(j)+"-3", "default", "root.default", user)
 		err = partition.AddApplication(app3)
-		assert.Error(t, err, "group 'testgroup" + strconv.Itoa(j) + "' to which user 'testuser" + strconv.Itoa(j) + "' belongs to has reached max applications limit in queue root.default")
+		assert.Error(t, err, "group 'testgroup"+strconv.Itoa(j)+"' to which user 'testuser"+strconv.Itoa(j)+"' belongs to has reached max applications limit in queue root.default")
 	}
 
 	// remove app 'app-testuser-1-1' added by "testuser1"
-	appId := "app-testuser-1-1"
-	allocs := partition.removeApplication(appId)
+	appID := "app-testuser-1-1"
+	allocs := partition.removeApplication(appID)
 	assert.Equal(t, 0, len(allocs), "existing application with allocations returned unexpected allocations %v", allocs)
 
 	// adding app 'app-testuser-3-3' by 'testuser3' succeeds as 'testgroup1' group current running apps equals or falls below the max apps count
-	appId = "app-testuser-3-3"
-	user := security.UserGroup {
+	appID = "app-testuser-3-3"
+	user := security.UserGroup{
 		User:   "testuser3",
 		Groups: []string{"testgroup1"},
 	}
-	app := newApplicationWithUser(appId, "default", "root.default", user)
+	app := newApplicationWithUser(appID, "default", "root.default", user)
 	err = partition.AddApplication(app)
-	assert.NilError(t, err, appId + " should have been added to the partition")
+	assert.NilError(t, err, appID+" should have been added to the partition")
 }
 
 // both user and group limit is configured
 func TestUserGroupMaxAppLimit(t *testing.T) {
-
 	// 'testuser1', 'testuser2' users and 'testgroup3' group max apps limit is 2
 	partition, err := newUserGroupLimitsPartition()
 	assert.NilError(t, err, "partition create failed")
 
 	// user 'testuser1' belong to group 'testgroup1', user 'testuser2' belong to group 'testgroup2'
-	user1 := security.UserGroup {
+	user1 := security.UserGroup{
 		User:   "testuser1",
 		Groups: []string{"testgroup1"},
 	}
-	user2 := security.UserGroup {
+	user2 := security.UserGroup{
 		User:   "testuser2",
 		Groups: []string{"testgroup2"},
 	}
 
 	for i := 1; i <= 2; i++ {
-		user1 := security.UserGroup {
+		user1 = security.UserGroup{
 			User:   "testuser" + strconv.Itoa(i),
 			Groups: []string{"testgroup" + strconv.Itoa(i)},
 		}
 		for j := 1; j <= 2; j++ {
-			appId := "app-testuser-" + strconv.Itoa(i) + "-" + strconv.Itoa(j)
-			app := newApplicationWithUser(appId, "default", "root.default", user1)
+			appID := "app-testuser-" + strconv.Itoa(i) + "-" + strconv.Itoa(j)
+			app := newApplicationWithUser(appID, "default", "root.default", user1)
 
-			err := partition.AddApplication(app)
-			assert.NilError(t, err, appId+" should have been added to the partition")
+			err = partition.AddApplication(app)
+			assert.NilError(t, err, appID+" should have been added to the partition")
 		}
 	}
 
@@ -2295,22 +2290,22 @@ func TestUserGroupMaxAppLimit(t *testing.T) {
 	assert.Error(t, err, "user 'testuser2' has reached max applications limit in queue root.default")
 
 	// user 'testuser3' belong to group 'testgroup3'
-	user3 := security.UserGroup {
+	user3 := security.UserGroup{
 		User:   "testuser3",
 		Groups: []string{"testgroup3"},
 	}
 
 	// Ensure 'testgroup3' group has reached max apps limit
 	for j := 1; j <= 2; j++ {
-		appId := "app-testuser3-" + strconv.Itoa(j)
-		app := newApplicationWithUser(appId, "default", "root.default", user3)
+		appID := "app-testuser3-" + strconv.Itoa(j)
+		app := newApplicationWithUser(appID, "default", "root.default", user3)
 
-		err := partition.AddApplication(app)
-		assert.NilError(t, err, appId+" should have been added to the partition")
+		err = partition.AddApplication(app)
+		assert.NilError(t, err, appID+" should have been added to the partition")
 	}
 
 	// user 'testuser4' belong to group 'testgroup3'
-	user4 := security.UserGroup {
+	user4 := security.UserGroup{
 		User:   "testuser4",
 		Groups: []string{"testgroup3"},
 	}
@@ -2323,27 +2318,26 @@ func TestUserGroupMaxAppLimit(t *testing.T) {
 
 // both user and group is configured as "*"
 func TestWildCharUserGroupMaxAppLimit(t *testing.T) {
-
 	// user and group limit configured as '*' with max app count 2. so, each user and group is allowed to run max 2 apps.
 	partition, err := newUserGroupWildCharLimitsPartition()
 	assert.NilError(t, err, "partition create failed")
 
 	for i := 1; i <= 2; i++ {
-		user1 := security.UserGroup {
+		user1 := security.UserGroup{
 			User:   "testuser" + strconv.Itoa(i),
 			Groups: []string{"testgroup" + strconv.Itoa(i)},
 		}
 		for j := 1; j <= 2; j++ {
-			appId := "app-testuser-" + strconv.Itoa(i) + "-" + strconv.Itoa(j)
-			app := newApplicationWithUser(appId, "default", "root.default", user1)
+			appID := "app-testuser-" + strconv.Itoa(i) + "-" + strconv.Itoa(j)
+			app := newApplicationWithUser(appID, "default", "root.default", user1)
 
-			err := partition.AddApplication(app)
-			assert.NilError(t, err, appId+" should have been added to the partition")
+			err = partition.AddApplication(app)
+			assert.NilError(t, err, appID+" should have been added to the partition")
 		}
 	}
 
 	// user 'testuser3' belong to group 'testgroup1',
-	user3 := security.UserGroup {
+	user3 := security.UserGroup{
 		User:   "testuser3",
 		Groups: []string{"testgroup1"},
 	}
@@ -2354,7 +2348,7 @@ func TestWildCharUserGroupMaxAppLimit(t *testing.T) {
 	assert.Error(t, err, "group 'testgroup1' to which user 'testuser3' belongs to has reached max applications limit in queue root.default")
 
 	// user 'testuser4' belong to group 'testgroup2',
-	user4 := security.UserGroup {
+	user4 := security.UserGroup{
 		User:   "testuser4",
 		Groups: []string{"testgroup2"},
 	}

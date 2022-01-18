@@ -269,19 +269,19 @@ func newUserLimitsPartition() (*PartitionContext, error) {
 						Name:   "default",
 						Parent: false,
 						Queues: nil,
-						Limits:         []configs.Limit {
+						Limits: []configs.Limit{
 							{
-								Limit:   "sample limit config",
-								Users: []string{"testuser"},
+								Limit:           "sample limit config",
+								Users:           []string{"testuser"},
 								MaxApplications: 2,
 							},
 						},
 					},
 				},
-				Limits:         []configs.Limit {
+				Limits: []configs.Limit{
 					{
-						Limit:   "sample limit config",
-						Users: []string{"testuser"},
+						Limit:           "sample limit config",
+						Users:           []string{"testuser"},
 						MaxApplications: 2,
 					},
 				},
@@ -315,10 +315,10 @@ func newUserWildCharLimitsPartition() (*PartitionContext, error) {
 						Name:   "default",
 						Parent: false,
 						Queues: nil,
-						Limits:         []configs.Limit {
+						Limits: []configs.Limit{
 							{
-								Limit:   "sample limit config",
-								Users: []string{"*"},
+								Limit:           "sample limit config",
+								Users:           []string{"*"},
 								MaxApplications: 2,
 							},
 						},
@@ -347,10 +347,10 @@ func newGroupLimitsPartition() (*PartitionContext, error) {
 						Name:   "default",
 						Parent: false,
 						Queues: nil,
-						Limits:         []configs.Limit {
+						Limits: []configs.Limit{
 							{
-								Limit:   "sample limit config",
-								Groups: []string{"testgroup"},
+								Limit:           "sample limit config",
+								Groups:          []string{"testgroup"},
 								MaxApplications: 2,
 							},
 						},
@@ -379,10 +379,10 @@ func newGroupWildCharLimitsPartition() (*PartitionContext, error) {
 						Name:   "default",
 						Parent: false,
 						Queues: nil,
-						Limits:         []configs.Limit {
+						Limits: []configs.Limit{
 							{
-								Limit:   "sample limit config",
-								Groups: []string{"*"},
+								Limit:           "sample limit config",
+								Groups:          []string{"*"},
 								MaxApplications: 2,
 							},
 						},
@@ -411,11 +411,11 @@ func newUserGroupLimitsPartition() (*PartitionContext, error) {
 						Name:   "default",
 						Parent: false,
 						Queues: nil,
-						Limits:         []configs.Limit {
+						Limits: []configs.Limit{
 							{
-								Limit:   "sample limit config",
-								Users: []string{"testuser1", "testuser2"},
-								Groups: []string{"testgroup3"},
+								Limit:           "sample limit config",
+								Users:           []string{"testuser1", "testuser2"},
+								Groups:          []string{"testgroup3"},
 								MaxApplications: 2,
 							},
 						},
@@ -444,11 +444,11 @@ func newUserGroupWildCharLimitsPartition() (*PartitionContext, error) {
 						Name:   "default",
 						Parent: false,
 						Queues: nil,
-						Limits:         []configs.Limit {
+						Limits: []configs.Limit{
 							{
-								Limit:   "sample limit config",
-								Users: []string{"*",},
-								Groups: []string{"*"},
+								Limit:           "sample limit config",
+								Users:           []string{"*"},
+								Groups:          []string{"*"},
 								MaxApplications: 2,
 							},
 						},

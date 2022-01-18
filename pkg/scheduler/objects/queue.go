@@ -68,7 +68,7 @@ type Queue struct {
 	stateMachine       *fsm.FSM            // the state of the queue for scheduling
 	stateTime          time.Time           // last time the state was updated (needed for cleanup)
 	template           *template.Template
-	limits			   []configs.Limit
+	limits             []configs.Limit
 	userGroupManager   *UserGroupManager // UserGroupManager
 
 	sync.RWMutex
@@ -116,7 +116,7 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 	}
 
 	// UGM is required only for leaf queues
-	if ! conf.Parent {
+	if !conf.Parent {
 		sq.userGroupManager = NewUserGroupManager(sq)
 	}
 

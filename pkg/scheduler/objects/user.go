@@ -1,27 +1,42 @@
+/*
+ Licensed to the Apache Software Foundation (ASF) under one
+ or more contributor license agreements.  See the NOTICE file
+ distributed with this work for additional information
+ regarding copyright ownership.  The ASF licenses this file
+ to you under the Apache License, Version 2.0 (the
+ "License"); you may not use this file except in compliance
+ with the License.  You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+*/
+
 package objects
 
 import (
 	"sync/atomic"
-
-	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 )
 
-const ALL_USER = "*"
-const USER_MAX_APPLICATION_LIMIT_NOT_SET = -1
+const AllUser = "*"
+const UserMaxApplicationLimitNotSet = -1
 
 type User struct {
-	name	string
-	maxResources	*resources.Resource
-	maxApplications	int32
-	runningApplications	int32
-	usedGroup	string
+	name                string
+	maxApplications     int32
+	runningApplications int32
+	usedGroup           string
 }
 
 func NewUser(user string) *User {
 	return &User{
-		name:	user,
+		name:                user,
 		runningApplications: 0,
-		maxApplications: USER_MAX_APPLICATION_LIMIT_NOT_SET,
+		maxApplications:     UserMaxApplicationLimitNotSet,
 	}
 }
 
@@ -46,15 +61,11 @@ func (u *User) DecRunningApplications() {
 }
 
 func (u *User) IsRunningAppsUnderLimit() bool {
-	if atomic.LoadInt32(&u.runningApplications) < u.maxApplications {
-		return true
-	} else {
-		return false
-	}
+	return atomic.LoadInt32(&u.runningApplications) < u.maxApplications
 }
 
 func (u *User) IsMaxAppsLimitSet() bool {
-	return u.GetMaxApplications() != USER_MAX_APPLICATION_LIMIT_NOT_SET
+	return u.GetMaxApplications() != UserMaxApplicationLimitNotSet
 }
 
 // SetUsedGroup A user may belong to more than one group. In case of any group changes for

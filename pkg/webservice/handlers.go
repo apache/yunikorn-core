@@ -670,8 +670,11 @@ func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.Pa
 		partitionInfo.LastStateTransitionTime = partitionContext.GetStateTime().String()
 
 		capacityInfo := dao.PartitionCapacity{}
-		capacityInfo.Capacity = partitionContext.GetTotalPartitionResource().DAOString()
-		capacityInfo.UsedCapacity = partitionContext.GetAllocatedResource().DAOString()
+		capacity := partitionContext.GetTotalPartitionResource()
+		usedCapacity := partitionContext.GetAllocatedResource()
+		capacityInfo.Capacity = capacity.DAOString()
+		capacityInfo.UsedCapacity = usedCapacity.DAOString()
+		capacityInfo.Utilization = resources.CalculateAbsUsedCapacity(capacity, usedCapacity).DAOString()
 		partitionInfo.Capacity = capacityInfo
 		partitionInfo.NodeSortingPolicy = dao.NodeSortingPolicy{
 			Type:            partitionContext.GetNodeSortingPolicyType().String(),

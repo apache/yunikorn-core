@@ -275,18 +275,12 @@ func (sq *Queue) GetConfigLimits() []configs.Limit {
 func (sq *Queue) internalGetConfigLimits(parentLimit []configs.Limit) []configs.Limit {
 	sq.RLock()
 	defer sq.RUnlock()
-	// no limit set in parent queue, not even for root
-	if parentLimit == nil {
-		if sq.limits == nil {
-			return nil
-		}
+
+	if sq.limits != nil {
 		return sq.limits
 	}
-	// parent limit set, no queue limit return parent
-	if sq.limits == nil {
-		return parentLimit
-	}
-	return sq.limits
+
+	return parentLimit
 }
 
 // setResources sets the maxResource and guaranteedResource of the queue from the config.

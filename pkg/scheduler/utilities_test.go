@@ -282,7 +282,7 @@ func newUserLimitsPartition() (*PartitionContext, error) {
 					{
 						Limit:           "sample limit config",
 						Users:           []string{"testuser"},
-						MaxApplications: 2,
+						MaxApplications: 4,
 					},
 				},
 			},

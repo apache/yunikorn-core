@@ -102,7 +102,7 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Subsystem: SchedulerSubsystem,
 			Name:      "scheduling_latency_milliseconds",
 			Help:      "Latency of the main scheduling routine, in milliseconds.",
-			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), //start from 0.1ms
+			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), // start from 0.1ms
 		},
 	)
 	s.sortingLatency = prometheus.NewHistogramVec(
@@ -111,7 +111,7 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Subsystem: SchedulerSubsystem,
 			Name:      "node_sorting_latency_milliseconds",
 			Help:      "Latency of all nodes sorting, in milliseconds.",
-			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), //start from 0.1ms
+			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), // start from 0.1ms
 		}, []string{"level"})
 
 	s.tryNodeLatency = prometheus.NewHistogram(
@@ -142,7 +142,12 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 	return s
 }
 
-func Reset() {}
+func (m *SchedulerMetrics) Reset() {
+	m.node.Reset()
+	m.application.Reset()
+	m.applicationSubmission.Reset()
+	m.containerAllocation.Reset()
+}
 
 func SinceInSeconds(start time.Time) float64 {
 	return time.Since(start).Seconds()

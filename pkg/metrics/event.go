@@ -86,6 +86,16 @@ func initEventMetrics() CoreEventMetrics {
 	return metrics
 }
 
+func (em *eventMetrics) Reset() {
+	em.totalEventsCollected.Set(0)
+	em.totalEventsCreated.Set(0)
+	em.totalEventsChanneled.Set(0)
+	em.totalEventsNotChanneled.Set(0)
+	em.totalEventsStored.Set(0)
+	em.totalEventsNotStored.Set(0)
+	em.totalEventsProcessed.Set(0)
+}
+
 func (em *eventMetrics) IncEventsCreated() {
 	em.totalEventsCreated.Inc()
 }

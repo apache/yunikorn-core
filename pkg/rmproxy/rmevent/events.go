@@ -86,6 +86,7 @@ type RMRejectedAllocationAskEvent struct {
 type RMReleaseAllocationEvent struct {
 	RmID                string
 	ReleasedAllocations []*si.AllocationRelease
+	QueueNames          []string // probably should be in AllocationRelease, adding here temporarily
 }
 
 type RMReleaseAllocationAskEvent struct {

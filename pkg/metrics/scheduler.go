@@ -277,6 +277,10 @@ func (m *SchedulerMetrics) getTotalApplicationsRunning() (int, error) {
 	return -1, err
 }
 
+func (m *SchedulerMetrics) IncTotalApplicationsFailed() {
+	m.application.With(prometheus.Labels{"state": "failed"}).Inc()
+}
+
 func (m *SchedulerMetrics) IncTotalApplicationsCompleted() {
 	m.application.With(prometheus.Labels{"state": "completed"}).Inc()
 }

@@ -45,8 +45,14 @@ type Metrics struct {
 }
 
 type CoreQueueMetrics interface {
+	IncQueueApplicationsAccepted()
+	IncQueueApplicationsRejected()
 	IncQueueApplicationsRunning()
 	DecQueueApplicationsRunning()
+	IncQueueApplicationsFailed()
+	IncQueueApplicationsCompleted()
+	IncAllocatedContainer()
+	IncReleasedContainer()
 	SetQueueGuaranteedResourceMetrics(resourceName string, value float64)
 	SetQueueMaxResourceMetrics(resourceName string, value float64)
 	SetQueueAllocatedResourceMetrics(resourceName string, value float64)
@@ -93,6 +99,9 @@ type CoreSchedulerMetrics interface {
 	SubTotalApplicationsRunning(value int)
 	SetTotalApplicationsRunning(value int)
 	getTotalApplicationsRunning() (int, error)
+
+	// Metrics Ops related to TotalApplicationsFailed
+	IncTotalApplicationsFailed()
 
 	// Metrics Ops related to TotalApplicationsCompleted
 	IncTotalApplicationsCompleted()

@@ -84,6 +84,30 @@ func (m *QueueMetrics) DecQueueApplicationsRunning() {
 	m.appMetrics.With(prometheus.Labels{"state": "running"}).Dec()
 }
 
+func (m *QueueMetrics) IncQueueApplicationsAccepted() {
+	m.appMetrics.With(prometheus.Labels{"state": "accepted"}).Inc()
+}
+
+func (m *QueueMetrics) IncQueueApplicationsRejected() {
+	m.appMetrics.With(prometheus.Labels{"state": "rejected"}).Inc()
+}
+
+func (m *QueueMetrics) IncQueueApplicationsFailed() {
+	m.appMetrics.With(prometheus.Labels{"state": "failed"}).Inc()
+}
+
+func (m *QueueMetrics) IncQueueApplicationsCompleted() {
+	m.appMetrics.With(prometheus.Labels{"state": "completed"}).Inc()
+}
+
+func (m *QueueMetrics) IncAllocatedContainer() {
+	m.appMetrics.With(prometheus.Labels{"state": "allocated"}).Inc()
+}
+
+func (m *QueueMetrics) IncReleasedContainer() {
+	m.appMetrics.With(prometheus.Labels{"state": "released"}).Inc()
+}
+
 func (m *QueueMetrics) SetQueueGuaranteedResourceMetrics(resourceName string, value float64) {
 	m.ResourceMetrics.With(prometheus.Labels{"state": "guaranteed", "resource": resourceName}).Set(value)
 }

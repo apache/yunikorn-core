@@ -834,6 +834,35 @@ func TestPartitions(t *testing.T) {
 
 	NewWebApp(schedulerContext, nil)
 
+	// create test nodes
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 500, resources.VCORE: 500}).ToProto()
+	node1ID := "node-1"
+	node1 := objects.NewNode(&si.NodeInfo{NodeID: node1ID, SchedulableResource: nodeRes})
+	node2ID := "node-2"
+	node2 := objects.NewNode(&si.NodeInfo{NodeID: node2ID, SchedulableResource: nodeRes})
+
+	// create test allocations
+	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 100, resources.VCORE: 400})
+	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 200, resources.VCORE: 300})
+	ask1 := &objects.AllocationAsk{
+		AllocationKey:     "alloc-1",
+		QueueName:         queueName,
+		ApplicationID:     app6.ApplicationID,
+		AllocatedResource: resAlloc1,
+	}
+	ask2 := &objects.AllocationAsk{
+		AllocationKey:     "alloc-2",
+		QueueName:         queueName,
+		ApplicationID:     app3.ApplicationID,
+		AllocatedResource: resAlloc2,
+	}
+	allocs := []*objects.Allocation{objects.NewAllocation("alloc-1-uuid", node1ID, ask1)}
+	err = defaultPartition.AddNode(node1, allocs)
+	assert.NilError(t, err, "add node to partition should not have failed")
+	allocs = []*objects.Allocation{objects.NewAllocation("alloc-2-uuid", node2ID, ask2)}
+	err = defaultPartition.AddNode(node2, allocs)
+	assert.NilError(t, err, "add node to partition should not have failed")
+
 	var req *http.Request
 	req, err = http.NewRequest("GET", "/ws/v1/partitions", strings.NewReader(""))
 	assert.NilError(t, err, "App Handler request failed")
@@ -863,6 +892,9 @@ func TestPartitions(t *testing.T) {
 	assert.Equal(t, cs["default"].Applications[objects.Rejected.String()], 1)
 	assert.Equal(t, cs["default"].Applications[objects.Completed.String()], 1)
 	assert.Equal(t, cs["default"].Applications[objects.Failed.String()], 1)
+	assert.Equal(t, cs["default"].Capacity.Capacity, "[memory:1000 vcore:1000]")
+	assert.Equal(t, cs["default"].Capacity.UsedCapacity, "[memory:300 vcore:700]")
+	assert.Equal(t, cs["default"].Capacity.Utilization, "[memory:30 vcore:70]")
 	assert.Equal(t, cs["default"].State, "Active")
 
 	assert.Assert(t, cs["gpu"] != nil)

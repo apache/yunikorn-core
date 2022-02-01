@@ -78,6 +78,11 @@ func substituteQueueName(queueName string) string {
 	return strings.Replace(str, "-", "_", -1)
 }
 
+func (m *QueueMetrics) Reset() {
+	m.appMetrics.Reset()
+	m.ResourceMetrics.Reset()
+}
+
 func (m *QueueMetrics) IncQueueApplicationsRunning() {
 	m.appMetrics.With(prometheus.Labels{"state": "running"}).Inc()
 }

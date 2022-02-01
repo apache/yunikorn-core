@@ -206,13 +206,17 @@ func (cc *ClusterContext) handleRMUpdateNodeEvent(event *rmevent.RMUpdateNodeEve
 	cc.processNodes(request)
 }
 
+// processNodes process all node requests: add, remove and update.
 func (cc *ClusterContext) processNodes(request *si.NodeRequest) {
-	// 1) Add / remove / update Nodes
-	if len(request.GetNodes()) > 0 {
+	nodeCount := len(request.GetNodes())
+	if nodeCount > 0 {
 		acceptedNodes := make([]*si.AcceptedNode, 0)
 		rejectedNodes := make([]*si.RejectedNode, 0)
-		nodeCount := len(request.GetNodes())
 		for _, nodeInfo := range request.GetNodes() {
+			// nil nodes must be skipped
+			if nodeInfo == nil {
+				continue
+			}
 			switch nodeInfo.Action {
 			case si.NodeInfo_CREATE:
 				err := cc.addNode(nodeInfo, nodeCount)
@@ -546,48 +550,48 @@ func (cc *ClusterContext) removePartition(partitionName string) {
 	delete(cc.partitions, partitionName)
 }
 
+// addNode adds a new node to the cluster enforcing just one unlimited node in the cluster.
+// nil nodeInfo objects must be filtered out before calling this function
 func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo, nodeCount int) error {
 	sn := objects.NewNode(nodeInfo)
-	// if the node is unlimited, check the following things:
-	// 1. reservation is enabled or not. If yes, reject the node
-	// 2. are there any other nodes in the list, if yes reject the node
-	// 3. this is the first node. If not reject it
+	// if this node is unlimited, check the following things:
+	// 1. if reservation is enabled, reject the node
+	// 2. any other nodes in the list, reject the node
 	if sn.IsUnlimited() {
-		// if we have other nodes as well or we already have some registered nodes, reject the node registration
-		// to do: fix this. Is there any chance of getting request for both create and update together?
-		// If ans is yes, then this needs to be fixed accordingly
 		if nodeCount > 1 {
-			return fmt.Errorf("There are other nodes as well, registering unlimited nodes is forbidden")
-		} else if !cc.reservationDisabled {
-			return fmt.Errorf("Reservation is enabled, registering unlimited node is forbidden")
+			return fmt.Errorf("more than one node to be added cannot register a unlimited node")
+		}
+		if !cc.reservationDisabled {
+			return fmt.Errorf("reservations must be disabled when registering a unlimited node")
 		}
 	}
 	partition := cc.GetPartition(sn.Partition)
 	if partition == nil {
-		msg := fmt.Sprintf("Failed to find partition %s for new node %s", sn.Partition, sn.NodeID)
+		err := fmt.Errorf("failed to find partition %s for new node %s", sn.Partition, sn.NodeID)
 		//nolint: TODO assess impact of partition metrics (this never hit the partition)
 		metrics.GetSchedulerMetrics().IncFailedNodes()
 		log.Logger().Error("Failed to add node to non existing partition",
 			zap.String("nodeID", sn.NodeID),
 			zap.String("partitionName", sn.Partition))
-		return fmt.Errorf(msg)
+		return err
 	}
+	// check that we only have one unlimited node and never a mix of unlimited and limited
 	if partition.hasUnlimitedNode() {
-		return fmt.Errorf("The partition has an unlimited node registered, registering other nodes is forbidden")
+		return fmt.Errorf("the partition has an unlimited node registered, registering other nodes is forbidden")
 	}
 	if sn.IsUnlimited() && partition.nodes.GetNodeCount() > 0 {
-		return fmt.Errorf("The unlimited node should be registered first, there are other nodes registered in the partition")
+		return fmt.Errorf("the unlimited node should be registered first, there are other nodes registered in the partition")
 	}
 
 	existingAllocations := cc.convertAllocations(nodeInfo.ExistingAllocations)
 	err := partition.AddNode(sn, existingAllocations)
 	if err != nil {
-		msg := fmt.Sprintf("Failure while adding new node, node rejected with error %s", err.Error())
+		wrapped := fmt.Errorf("failure while adding new node, node rejected with error: %w", err)
 		log.Logger().Error("Failed to add node to partition (rejected)",
 			zap.String("nodeID", sn.NodeID),
 			zap.String("partitionName", sn.Partition),
 			zap.Error(err))
-		return fmt.Errorf(msg)
+		return wrapped
 	}
 	log.Logger().Info("successfully added node",
 		zap.String("nodeID", sn.NodeID),
@@ -595,6 +599,8 @@ func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo, nodeCount int) error {
 	return nil
 }
 
+// updateNode updates an existing node of the cluster.
+// nil nodeInfo objects must be filtered out before calling this function
 func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
 	var partition *PartitionContext
 	if p, ok := nodeInfo.Attributes[siCommon.NodePartition]; ok {
@@ -617,7 +623,7 @@ func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
 	node := partition.GetNode(nodeInfo.NodeID)
 	if node == nil {
 		log.Logger().Error("Failed to update non existing node",
-			zap.String("nodeID", node.NodeID),
+			zap.String("nodeID", nodeInfo.NodeID),
 			zap.String("partitionName", nodeInfo.Attributes[siCommon.NodePartition]),
 			zap.String("nodeAction", nodeInfo.Action.String()))
 		return
@@ -649,6 +655,11 @@ func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
 		for _, confirm := range confirmed {
 			cc.notifyRMNewAllocation(partition.RmID, confirm)
 		}
+	default:
+		log.Logger().Debug("unknown action for node update",
+			zap.String("nodeID", nodeInfo.NodeID),
+			zap.String("partitionName", nodeInfo.Attributes[siCommon.NodePartition]),
+			zap.String("nodeAction", nodeInfo.Action.String()))
 	}
 }
 

@@ -111,6 +111,7 @@ func TestGetSchedulerHealthStatusContext(t *testing.T) {
 
 func TestGetSchedulerHealthStatusMetrics(t *testing.T) {
 	configs.MockSchedulerConfigByData([]byte(configDefault))
+	metrics.Reset()
 	schedulerMetrics := metrics.GetSchedulerMetrics()
 	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
 	assert.NilError(t, err, "Error when load schedulerContext from config")

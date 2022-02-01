@@ -83,11 +83,11 @@ func createTestContext(t *testing.T, partitionName string) *ClusterContext {
 }
 
 func TestAddUnlimitedNode(t *testing.T) {
-	context := createTestContext(t, "default")
+	context := createTestContext(t, pName)
 
 	unlimitedNode := &si.NodeInfo{
 		NodeID:     "unlimited",
-		Attributes: map[string]string{"yunikorn.apache.org/nodeType": "unlimited", "si/node-partition": "default"},
+		Attributes: map[string]string{"yunikorn.apache.org/nodeType": "unlimited", "si/node-partition": pName},
 		Action:     si.NodeInfo_CREATE,
 	}
 	var newNodes []*si.NodeInfo
@@ -119,7 +119,7 @@ func TestAddUnlimitedNode(t *testing.T) {
 	// 3. there is already an unlimited node registered
 	unlimitedNode2 := &si.NodeInfo{
 		NodeID:     "unlimited2",
-		Attributes: map[string]string{"yunikorn.apache.org/nodeType": "unlimited", "si/node-partition": "default"},
+		Attributes: map[string]string{"yunikorn.apache.org/nodeType": "unlimited", "si/node-partition": pName},
 		Action:     si.NodeInfo_CREATE,
 	}
 	var newNodes2 []*si.NodeInfo
@@ -137,13 +137,16 @@ func TestAddUnlimitedNode(t *testing.T) {
 	// 4. there are other nodes in the list as well
 	regularNode := &si.NodeInfo{
 		NodeID:     "regularNode",
-		Attributes: map[string]string{"si/node-partition": "default"},
+		Attributes: map[string]string{"si/node-partition": pName},
 		Action:     si.NodeInfo_CREATE,
 	}
 	newNodes2 = append(newNodes2, unlimitedNode, regularNode)
 	request2.Nodes = newNodes2
 	handler.reset()
 	partition := context.GetPartition(pName)
+	if partition == nil {
+		t.Fatalf("partition should have been found")
+	}
 	_, _ = partition.removeNode(unlimitedNode.NodeID)
 	context.processNodes(request2)
 	assert.Assert(t, handler.eventHandled, "Event should have been handled")
@@ -170,6 +173,9 @@ func TestContext_UpdateNode(t *testing.T) {
 	full := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
 	half := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	partition := context.GetPartition(pName)
+	if partition == nil {
+		t.Fatalf("partition should have been found")
+	}
 	// no partition set
 	context.updateNode(n)
 	assert.Equal(t, 0, len(partition.GetNodes()), "unexpected node found on partition (no partition set)")
@@ -231,6 +237,9 @@ func TestContext_AddNode(t *testing.T) {
 	err = context.addNode(n, 1)
 	assert.NilError(t, err, "unexpected error returned adding node")
 	partition := context.GetPartition(pName)
+	if partition == nil {
+		t.Fatalf("partition should have been found")
+	}
 	assert.Equal(t, 1, len(partition.GetNodes()), "expected node not found on partition")
 	// add same node again should show an error
 	err = context.addNode(n, 1)

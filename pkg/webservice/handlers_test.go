@@ -44,6 +44,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/tests"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
@@ -481,40 +482,8 @@ func TestQueryParamInAppsHandler(t *testing.T) {
 }
 
 type FakeConfigPlugin struct {
+	tests.MockResourceManagerCallback
 	generateError bool
-}
-
-func (f *FakeConfigPlugin) UpdateAllocation(response *si.AllocationResponse) error {
-	// do nothing
-	return nil
-}
-
-func (f *FakeConfigPlugin) UpdateApplication(response *si.ApplicationResponse) error {
-	// do nothing
-	return nil
-}
-
-func (f *FakeConfigPlugin) UpdateNode(response *si.NodeResponse) error {
-	// do nothing
-	return nil
-}
-
-func (f *FakeConfigPlugin) Predicates(args *si.PredicatesArgs) error {
-	// do nothing
-	return nil
-}
-
-func (f *FakeConfigPlugin) ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error {
-	// do nothing
-	return nil
-}
-
-func (f *FakeConfigPlugin) SendEvent(events []*si.EventRecord) {
-	// do nothing
-}
-
-func (f *FakeConfigPlugin) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
-	// do nothing
 }
 
 func (f FakeConfigPlugin) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {

@@ -34,9 +34,9 @@ type QueueMetrics struct {
 // InitQueueMetrics to initialize queue metrics
 func InitQueueMetrics(name string) CoreQueueMetrics {
 	q := &QueueMetrics{}
-	
+
 	replaceStr := formatMetricName(name)
-	
+
 	q.appMetrics = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: Namespace,

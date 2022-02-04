@@ -20,6 +20,7 @@ package objects
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -49,6 +50,7 @@ type Node struct {
 	allocations       map[string]*Allocation
 	schedulable       bool
 	unlimited         bool
+	ready             bool
 
 	preempting   *resources.Resource     // resources considered for preemption
 	reservations map[string]*reservation // a map of reservations
@@ -62,6 +64,13 @@ func NewNode(proto *si.NodeInfo) *Node {
 	if proto == nil {
 		return nil
 	}
+
+	var ready bool
+	var err error
+	if ready, err = strconv.ParseBool(proto.Attributes["ready"]); err != nil {
+		log.Logger().Error("Could not parse ready flag, assuming true")
+		ready = true
+	}
 	sn := &Node{
 		NodeID:            proto.NodeID,
 		preempting:        resources.NewResource(),
@@ -72,9 +81,9 @@ func NewNode(proto *si.NodeInfo) *Node {
 		allocations:       make(map[string]*Allocation),
 		schedulable:       true,
 		listeners:         make([]NodeListener, 0),
+		ready:             ready,
 	}
 	// initialise available resources
-	var err error
 	sn.availableResource, err = resources.SubErrorNegative(sn.totalResource, sn.occupiedResource)
 	if err != nil {
 		log.Logger().Error("New node created with no available resources",
@@ -623,4 +632,16 @@ func (sn *Node) getListeners() []NodeListener {
 	list := make([]NodeListener, len(sn.listeners))
 	copy(list, sn.listeners)
 	return list
+}
+
+func (sn *Node) IsReady() bool {
+	sn.RLock()
+	defer sn.RUnlock()
+	return sn.ready
+}
+
+func (sn *Node) SetReady(ready bool) {
+	sn.Lock()
+	defer sn.Unlock()
+	sn.ready = ready
 }

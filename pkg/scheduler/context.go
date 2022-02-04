@@ -21,6 +21,7 @@ package scheduler
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"sync"
 	"time"
 
@@ -553,6 +554,9 @@ func (cc *ClusterContext) removePartition(partitionName string) {
 // nil nodeInfo objects must be filtered out before calling this function
 func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo, nodeCount int) error {
 	sn := objects.NewNode(nodeInfo)
+	if !sn.IsReady() {
+		metrics.GetSchedulerMetrics().IncUnhealthyNodes()
+	}
 	// if this node is unlimited, check the following things:
 	// 1. if reservation is enabled, reject the node
 	// 2. any other nodes in the list, reject the node
@@ -630,6 +634,23 @@ func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
 
 	switch nodeInfo.Action {
 	case si.NodeInfo_UPDATE:
+		var newReadyStatus bool
+		var err error
+		if newReadyStatus, err = strconv.ParseBool(nodeInfo.Attributes["ready"]); err != nil {
+			log.Logger().Error("Could not parse ready attribute, assuming true", zap.Any("attributes", nodeInfo.Attributes))
+			newReadyStatus = true
+		}
+
+		if node.IsReady() && !newReadyStatus {
+			log.Logger().Info("Node has become unhealthy", zap.String("Node ID", node.NodeID))
+			metrics.GetSchedulerMetrics().IncUnhealthyNodes()
+		}
+		if !node.IsReady() && newReadyStatus {
+			log.Logger().Info("Node has become healthy", zap.String("Node ID", node.NodeID))
+			metrics.GetSchedulerMetrics().DecUnhealthyNodes()
+		}
+		node.SetReady(newReadyStatus)
+
 		if sr := nodeInfo.SchedulableResource; sr != nil {
 			partition.updatePartitionResource(node.SetCapacity(resources.NewResourceFromProto(sr)))
 		}
@@ -639,10 +660,21 @@ func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
 	case si.NodeInfo_DRAIN_NODE:
 		// set the state to not schedulable
 		node.SetSchedulable(false)
+		metrics.GetSchedulerMetrics().IncDrainingNodes()
 	case si.NodeInfo_DRAIN_TO_SCHEDULABLE:
+		if !node.IsSchedulable() {
+			metrics.GetSchedulerMetrics().DecDrainingNodes()
+		}
 		// set the state to schedulable
 		node.SetSchedulable(true)
 	case si.NodeInfo_DECOMISSION:
+		if !node.IsSchedulable() {
+			metrics.GetSchedulerMetrics().DecDrainingNodes()
+		}
+		if !node.IsReady() {
+			metrics.GetSchedulerMetrics().DecUnhealthyNodes()
+		}
+		metrics.GetSchedulerMetrics().IncTotalDecommissionedNodes()
 		// set the state to not schedulable then tell the partition to clean up
 		node.SetSchedulable(false)
 		released, confirmed := partition.removeNode(node.NodeID)

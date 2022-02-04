@@ -105,10 +105,6 @@ func (rmp *RMProxy) processAllocationUpdateEvent(event *rmevent.RMNewAllocations
 	}
 	rmp.triggerUpdateAllocation(event.RmID, response)
 	metrics.GetSchedulerMetrics().AddAllocatedContainers(len(event.Allocations))
-	for _, alloc := range event.Allocations {
-		queue := alloc.GetQueueName()
-		metrics.GetQueueMetrics(queue).IncAllocatedContainer()
-	}
 }
 
 func (rmp *RMProxy) processApplicationUpdateEvent(event *rmevent.RMApplicationUpdateEvent) {
@@ -151,9 +147,6 @@ func (rmp *RMProxy) processRMReleaseAllocationEvent(event *rmevent.RMReleaseAllo
 	}
 	rmp.triggerUpdateAllocation(event.RmID, response)
 	metrics.GetSchedulerMetrics().AddReleasedContainers(len(event.ReleasedAllocations))
-	for _, queue := range event.QueueNames {
-		metrics.GetQueueMetrics(queue).IncReleasedContainer()
-	}
 }
 
 func (rmp *RMProxy) triggerUpdateAllocation(rmID string, response *si.AllocationResponse) {

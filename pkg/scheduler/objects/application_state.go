@@ -117,25 +117,21 @@ func NewAppState() *fsm.FSM {
 			},
 		},
 		fsm.Callbacks{
+			// The state machine is tightly tied to the Application object.
+			//
+			// The first argument must always be an Application and if there is a second,
+			// that must be a string. If this precondition is not met, a runtime panic
+			// will occur.
 			"enter_state": func(event *fsm.Event) {
-				app, ok := event.Args[0].(*Application)
-				if !ok {
-					log.Logger().Warn("The first argument is not an Application")
-					return
-				}
+				app := event.Args[0].(*Application) //nolint:errcheck
 				log.Logger().Info("Application state transition",
 					zap.String("appID", app.ApplicationID),
 					zap.String("source", event.Src),
 					zap.String("destination", event.Dst),
 					zap.String("event", event.Event))
 				if len(event.Args) == 2 {
-					eventInfo, ok := event.Args[1].(string)
-					if ok {
-						app.OnStateChange(event, eventInfo)
-					} else {
-						log.Logger().Warn("unable to get additional event info")
-						app.OnStateChange(event, "")
-					}
+					eventInfo := event.Args[1].(string) //nolint:errcheck
+					app.OnStateChange(event, eventInfo)
 				} else {
 					app.OnStateChange(event, "")
 				}

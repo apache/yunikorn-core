@@ -837,14 +837,9 @@ func (cc *ClusterContext) notifyRMNewAllocation(rmID string, alloc *objects.Allo
 // Create a RM update event to notify RM of released allocations
 // Lock free call, all updates occur via events.
 func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, released []*objects.Allocation, terminationType si.TerminationType, message string) {
-	queueNames := make([]string, 0)
-	for _, release := range released {
-		queueNames = append(queueNames, release.QueueName)
-	}
 	releaseEvent := &rmevent.RMReleaseAllocationEvent{
 		ReleasedAllocations: make([]*si.AllocationRelease, 0),
 		RmID:                rmID,
-		QueueNames:          queueNames,
 	}
 	for _, alloc := range released {
 		releaseEvent.ReleasedAllocations = append(releaseEvent.ReleasedAllocations, &si.AllocationRelease{

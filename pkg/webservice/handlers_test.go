@@ -44,6 +44,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/tests"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
@@ -90,9 +91,22 @@ partitions:
     queues:
       - name: root
 `
+
 const configDefault = `
 partitions:
   - name: default
+    queues:
+      - name: root
+        submitacl: "*"
+        queues:
+          - name: default
+          - name: noapps
+`
+
+const configStateDumpFilePath = `
+partitions:
+  - name: default
+    statedumpfilepath: "tmp/non-default-yunikorn-state.txt"
     queues:
       - name: root
         submitacl: "*"
@@ -481,40 +495,8 @@ func TestQueryParamInAppsHandler(t *testing.T) {
 }
 
 type FakeConfigPlugin struct {
+	tests.MockResourceManagerCallback
 	generateError bool
-}
-
-func (f *FakeConfigPlugin) UpdateAllocation(response *si.AllocationResponse) error {
-	// do nothing
-	return nil
-}
-
-func (f *FakeConfigPlugin) UpdateApplication(response *si.ApplicationResponse) error {
-	// do nothing
-	return nil
-}
-
-func (f *FakeConfigPlugin) UpdateNode(response *si.NodeResponse) error {
-	// do nothing
-	return nil
-}
-
-func (f *FakeConfigPlugin) Predicates(args *si.PredicatesArgs) error {
-	// do nothing
-	return nil
-}
-
-func (f *FakeConfigPlugin) ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error {
-	// do nothing
-	return nil
-}
-
-func (f *FakeConfigPlugin) SendEvent(events []*si.EventRecord) {
-	// do nothing
-}
-
-func (f *FakeConfigPlugin) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
-	// do nothing
 }
 
 func (f FakeConfigPlugin) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
@@ -1358,8 +1340,9 @@ func TestGetNodesUtilization(t *testing.T) {
 	assert.Equal(t, len(nodesDao), 0)
 }
 
-func TestGetFullStateDump(t *testing.T) {
-	schedulerContext = prepareSchedulerContext(t)
+func TestGetFullStateDumpDefaultPath(t *testing.T) {
+	schedulerContext = prepareSchedulerContext(t, false)
+	defer deleteStateDumpFile(t, schedulerContext)
 
 	partitionContext := schedulerContext.GetPartitionMapClone()
 	context := partitionContext[normalizedPartitionName]
@@ -1374,19 +1357,54 @@ func TestGetFullStateDump(t *testing.T) {
 	resp := &MockResponseWriter{}
 
 	getFullStateDump(resp, req)
-	receivedBytes := resp.outputBytes
 	statusCode := resp.statusCode
-	assert.Assert(t, len(receivedBytes) > 0, "json response is empty")
+	fi, err := os.Stat(defaultStateDumpFilePath)
+	assert.NilError(t, err)
+	assert.Assert(t, fi.Size() > 0, "json response is empty")
 	assert.Check(t, statusCode != http.StatusInternalServerError, "response status code")
 	var aggregated AggregatedStateInfo
+	receivedBytes, err := ioutil.ReadFile(defaultStateDumpFilePath)
+	assert.NilError(t, err)
+	err = json.Unmarshal(receivedBytes, &aggregated)
+	assert.NilError(t, err)
+	verifyStateDumpJSON(t, &aggregated)
+}
+
+func TestGetFullStateDumpNonDefaultPath(t *testing.T) {
+	stateDumpFilePath := "tmp/non-default-yunikorn-state.txt"
+	defer deleteStateDumpDir(t)
+	schedulerContext = prepareSchedulerContext(t, true)
+	defer deleteStateDumpFile(t, schedulerContext)
+
+	partitionContext := schedulerContext.GetPartitionMapClone()
+	context := partitionContext[normalizedPartitionName]
+	app := newApplication("appID", normalizedPartitionName, "root.default", rmID)
+	err := context.AddApplication(app)
+	assert.NilError(t, err, "failed to add Application to partition")
+
+	imHistory = history.NewInternalMetricsHistory(5)
+	req, err2 := http.NewRequest("GET", "/ws/v1/getfullstatedump", strings.NewReader(""))
+	assert.NilError(t, err2)
+	req = mux.SetURLVars(req, make(map[string]string))
+	resp := &MockResponseWriter{}
+
+	getFullStateDump(resp, req)
+	statusCode := resp.statusCode
+	fi, err := os.Stat(stateDumpFilePath)
+	assert.NilError(t, err)
+	assert.Assert(t, fi.Size() > 0, "json response is empty")
+	assert.Check(t, statusCode != http.StatusInternalServerError, "response status code")
+	var aggregated AggregatedStateInfo
+	receivedBytes, err := ioutil.ReadFile(stateDumpFilePath)
+	assert.NilError(t, err)
 	err = json.Unmarshal(receivedBytes, &aggregated)
 	assert.NilError(t, err)
 	verifyStateDumpJSON(t, &aggregated)
 }
 
 func TestEnableDisablePeriodicStateDump(t *testing.T) {
-	schedulerContext = prepareSchedulerContext(t)
-	defer deleteStateDumpFile(t)
+	schedulerContext = prepareSchedulerContext(t, false)
+	defer deleteStateDumpFile(t, schedulerContext)
 	defer terminateGoroutine()
 
 	imHistory = history.NewInternalMetricsHistory(5)
@@ -1405,7 +1423,7 @@ func TestEnableDisablePeriodicStateDump(t *testing.T) {
 	assert.Equal(t, statusCode, 0, "response status code")
 
 	waitForStateDumpFile(t)
-	fileContents, err2 := ioutil.ReadFile(stateDumpFilePath)
+	fileContents, err2 := ioutil.ReadFile(defaultStateDumpFilePath)
 	assert.NilError(t, err2)
 	var aggregated AggregatedStateInfo
 	err3 := json.Unmarshal(fileContents, &aggregated)
@@ -1426,7 +1444,7 @@ func TestEnableDisablePeriodicStateDump(t *testing.T) {
 }
 
 func TestTryEnableStateDumpTwice(t *testing.T) {
-	defer deleteStateDumpFile(t)
+	defer deleteStateDumpFile(t, schedulerContext)
 	defer terminateGoroutine()
 
 	req, err := http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
@@ -1485,8 +1503,12 @@ func TestIllegalStateDumpRequests(t *testing.T) {
 	assert.Equal(t, statusCode, http.StatusBadRequest, "response status code")
 }
 
-func prepareSchedulerContext(t *testing.T) *scheduler.ClusterContext {
-	configs.MockSchedulerConfigByData([]byte(configDefault))
+func prepareSchedulerContext(t *testing.T, stateDumpConf bool) *scheduler.ClusterContext {
+	if !stateDumpConf {
+		configs.MockSchedulerConfigByData([]byte(configDefault))
+	} else {
+		configs.MockSchedulerConfigByData([]byte(configStateDumpFilePath))
+	}
 	var err error
 	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
 	assert.NilError(t, err, "Error when load clusterInfo from config")
@@ -1498,7 +1520,7 @@ func prepareSchedulerContext(t *testing.T) *scheduler.ClusterContext {
 func waitForStateDumpFile(t *testing.T) {
 	var attempts int
 	for {
-		info, err := os.Stat(stateDumpFilePath)
+		info, err := os.Stat(defaultStateDumpFilePath)
 		// tolerate only "file not found" errors
 		if err != nil && !os.IsNotExist(err) {
 			t.Fatal(err)
@@ -1516,8 +1538,15 @@ func waitForStateDumpFile(t *testing.T) {
 	}
 }
 
-func deleteStateDumpFile(t *testing.T) {
+func deleteStateDumpFile(t *testing.T, cc *scheduler.ClusterContext) {
+	stateDumpFilePath := getStateDumpFilePath(cc)
 	if err := os.Remove(stateDumpFilePath); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func deleteStateDumpDir(t *testing.T) {
+	if err := os.Remove("tmp"); err != nil {
 		t.Fatal(err)
 	}
 }

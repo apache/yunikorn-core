@@ -23,10 +23,12 @@ import (
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/entrypoint"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/tests"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 type exampleRMCallback struct {
+	tests.MockResourceManagerCallback
 	acceptedApplications map[string]bool
 	rejectedApplications map[string]bool
 	acceptedNodes        map[string]bool
@@ -85,29 +87,6 @@ func (m *exampleRMCallback) UpdateNode(response *si.NodeResponse) error {
 		m.rejectedNodes[node.NodeID] = true
 		delete(m.acceptedNodes, node.NodeID)
 	}
-	return nil
-}
-
-func (f *exampleRMCallback) Predicates(args *si.PredicatesArgs) error {
-	// do nothing
-	return nil
-}
-
-func (f *exampleRMCallback) ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error {
-	// do nothing
-	return nil
-}
-
-func (f *exampleRMCallback) SendEvent(events []*si.EventRecord) {
-	// do nothing
-}
-
-func (f *exampleRMCallback) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
-	// do nothing
-}
-
-func (f *exampleRMCallback) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
-	// do nothing
 	return nil
 }
 

@@ -20,6 +20,8 @@ package configs
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -366,6 +368,27 @@ func checkQueuesStructure(partition *PartitionConfig) error {
 	return checkQueues(&rootQueue, 1)
 }
 
+// Check the state dump file path, if configured, is a valid path that can be written to.
+func checkStateDumpFilePath(partition *PartitionConfig) error {
+	fileName := partition.StateDumpFilePath
+	if fileName != "" {
+		if err := ensureDir(fileName); err != nil {
+			return err
+		}
+		if _, cerr := os.Create(fileName); cerr != nil {
+			return cerr
+		}
+	}
+	return nil
+}
+
+func ensureDir(fileName string) error {
+	if err := os.MkdirAll(filepath.Dir(fileName), os.ModePerm); err != nil {
+		return err
+	}
+	return nil
+}
+
 // Check the partition configuration. Any parsing issues will return an error which means that the
 // configuration is invalid. This *must* be called before the configuration is activated. Any
 // configuration that does not pass must be rejected.
@@ -409,6 +432,10 @@ func Validate(newConfig *SchedulerConfig) error {
 			return err
 		}
 		err = checkNodeSortingPolicy(&partition)
+		if err != nil {
+			return err
+		}
+		err = checkStateDumpFilePath(&newConfig.Partitions[i])
 		if err != nil {
 			return err
 		}

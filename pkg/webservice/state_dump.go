@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -29,16 +30,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	yunikornLog "github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
+	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 )
 
 const (
 	defaultStateDumpPeriodSeconds time.Duration = 60 * time.Second //nolint:golint
-	stateDumpFilePath             string        = "yunikorn-state.txt"
+	defaultStateDumpFilePath                    = "yunikorn-state.txt"
+	stateLogCallDepth                           = 2
 )
 
 var (
@@ -98,13 +102,13 @@ func enablePeriodicStateDump(w http.ResponseWriter, r *http.Request) {
 	var zapField = zap.Duration("defaultStateDumpPeriodSeconds", defaultStateDumpPeriodSeconds)
 
 	if len(vars["periodSeconds"]) == 0 {
-		log.Logger().Info("using the default period for state dump",
+		yunikornLog.Logger().Info("using the default period for state dump",
 			zapField)
 		period = defaultStateDumpPeriodSeconds
 	} else {
 		convertedPeriod, err = strconv.Atoi(vars["periodSeconds"])
 		if err != nil {
-			log.Logger().Warn("illegal value for period, using the default",
+			yunikornLog.Logger().Warn("illegal value for period, using the default",
 				zapField)
 			period = defaultStateDumpPeriodSeconds
 		} else {
@@ -112,7 +116,7 @@ func enablePeriodicStateDump(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if period < 0 {
-			log.Logger().Warn("period value is negative, using the default",
+			yunikornLog.Logger().Warn("period value is negative, using the default",
 				zapField)
 			period = defaultStateDumpPeriodSeconds
 		}
@@ -135,7 +139,7 @@ func doStateDump(w io.Writer) error {
 
 	partitionContext := schedulerContext.GetPartitionMapClone()
 	records := imHistory.GetRecords()
-	zapConfig := log.GetConfig()
+	zapConfig := yunikornLog.GetConfig()
 
 	var aggregated = AggregatedStateInfo{
 		Timestamp:          time.Now().Format(time.RFC3339),
@@ -157,11 +161,32 @@ func doStateDump(w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if _, err = w.Write(prettyJSON); err != nil {
+
+	stateLog := log.New(w, "", 0)
+	stateDumpFilePath := getStateDumpFilePath(schedulerContext)
+	stateLog.SetOutput(&lumberjack.Logger{
+		Filename:   stateDumpFilePath,
+		MaxSize:    10,
+		MaxBackups: 10,
+	})
+
+	if err = stateLog.Output(stateLogCallDepth, string(prettyJSON)); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func getStateDumpFilePath(cc *scheduler.ClusterContext) string {
+	cc.RLock()
+	defer cc.RUnlock()
+
+	for _, partition := range cc.GetPartitionMapClone() {
+		if partition.GetStateDumpFilePath() != "" {
+			return partition.GetStateDumpFilePath()
+		}
+	}
+	return defaultStateDumpFilePath
 }
 
 func startBackGroundStateDump(period time.Duration) error {
@@ -170,16 +195,18 @@ func startBackGroundStateDump(period time.Duration) error {
 
 	if periodicStateDump {
 		var errMsg = "state dump already running"
-		log.Logger().Error(errMsg)
+		yunikornLog.Logger().Error(errMsg)
 		return fmt.Errorf(errMsg)
 	}
 
+	stateDumpFilePath := getStateDumpFilePath(schedulerContext)
 	file, err := os.OpenFile(stateDumpFilePath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
-		log.Logger().Error("unable to open/create file",
+		yunikornLog.Logger().Error("unable to open/create file",
 			zap.Error(err))
 		return err
 	}
+
 	abort = make(chan struct{})
 	periodicStateDump = true
 
@@ -194,9 +221,9 @@ func startBackGroundStateDump(period time.Duration) error {
 				return
 			case <-ticker.C:
 				if err := doStateDump(file); err != nil {
-					log.Logger().Error("state dump failed", zap.Error(err))
+					yunikornLog.Logger().Error("state dump failed", zap.Error(err))
 					if err := stopBackGroundStateDump(); err != nil {
-						log.Logger().Error("background stop failed",
+						yunikornLog.Logger().Error("background stop failed",
 							zap.Error(err))
 					}
 					return
@@ -205,7 +232,7 @@ func startBackGroundStateDump(period time.Duration) error {
 		}
 	}()
 
-	log.Logger().Info("started periodic state dump", zap.String("filename", stateDumpFilePath),
+	yunikornLog.Logger().Info("started periodic state dump", zap.String("filename", stateDumpFilePath),
 		zap.Duration("period", period))
 	return nil
 }
@@ -216,7 +243,7 @@ func stopBackGroundStateDump() error {
 
 	if !periodicStateDump {
 		var errMsg = "state dump not running"
-		log.Logger().Error(errMsg)
+		yunikornLog.Logger().Error(errMsg)
 		return fmt.Errorf(errMsg)
 	}
 

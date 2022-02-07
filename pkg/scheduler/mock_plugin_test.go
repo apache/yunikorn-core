@@ -24,10 +24,12 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/tests"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 type fakePredicatePlugin struct {
+	tests.MockResourceManagerCallback
 	mustFail bool
 	nodes    map[string]int
 }
@@ -53,39 +55,6 @@ func (f *fakePredicatePlugin) Predicates(args *si.PredicatesArgs) error {
 	}
 	log.Logger().Info("fake predicate plugin pass",
 		zap.String("node", args.NodeID))
-	return nil
-}
-
-func (f *fakePredicatePlugin) UpdateAllocation(response *si.AllocationResponse) error {
-	// do nothing
-	return nil
-}
-
-func (f *fakePredicatePlugin) UpdateApplication(response *si.ApplicationResponse) error {
-	// do nothing
-	return nil
-}
-
-func (f *fakePredicatePlugin) UpdateNode(response *si.NodeResponse) error {
-	// do nothing
-	return nil
-}
-
-func (f *fakePredicatePlugin) ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error {
-	// do nothing
-	return nil
-}
-
-func (f *fakePredicatePlugin) SendEvent(events []*si.EventRecord) {
-	// do nothing
-}
-
-func (f *fakePredicatePlugin) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
-	// do nothing
-}
-
-func (f fakePredicatePlugin) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
-	// do nothing
 	return nil
 }
 

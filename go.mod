@@ -23,7 +23,7 @@ go 1.15
 
 require (
 	github.com/HdrHistogram/hdrhistogram-go v1.0.1 // indirect
-	github.com/apache/incubator-yunikorn-scheduler-interface v0.12.2-1
+	github.com/apache/incubator-yunikorn-scheduler-interface v0.0.0-20220113193536-681c62202d1f
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/google/btree v1.0.1
 	github.com/google/uuid v1.2.0
@@ -46,6 +46,7 @@ require (
 	golang.org/x/text v0.3.2 // indirect
 	golang.org/x/tools v0.0.0-20200415000939-92398ad77b89 // indirect
 	google.golang.org/grpc v1.26.0
+	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	gopkg.in/yaml.v2 v2.2.8
 	gotest.tools v2.2.0+incompatible
 	honnef.co/go/tools v0.0.1-2020.1.3 // indirect

@@ -239,7 +239,7 @@ func SerdeTest(t *testing.T, conf SchedulerConfig, description string) {
 }
 
 func CreateConfig(data string) (*SchedulerConfig, error) {
-	dir, err := os.TempDir("", "test-scheduler-config")
+	dir, err := os.MkdirTemp("", "test-scheduler-config")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp dir: %v", err)
 	}

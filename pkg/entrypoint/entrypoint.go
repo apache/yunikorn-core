@@ -19,6 +19,8 @@
 package entrypoint
 
 import (
+	"time"
+
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/events"
@@ -41,6 +43,7 @@ type startupOptions struct {
 
 func StartAllServices() *ServiceContext {
 	log.Logger().Info("ServiceContext start all services")
+	webservice.ScheduleStartDate = time.Now().Format("2006-01-02T15:04:05-0700")
 	return startAllServicesWithParameters(
 		startupOptions{
 			manualScheduleFlag: false,

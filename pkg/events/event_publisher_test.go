@@ -27,10 +27,12 @@ import (
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/tests"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 type mockEventPlugin struct {
+	tests.MockResourceManagerCallback
 	records chan *si.EventRecord
 
 	sync.Mutex
@@ -55,40 +57,6 @@ func (ep *mockEventPlugin) SendEvent(events []*si.EventRecord) {
 	for _, event := range events {
 		ep.records <- event
 	}
-}
-
-func (ep *mockEventPlugin) UpdateAllocation(response *si.AllocationResponse) error {
-	// do nothing
-	return nil
-}
-
-func (ep *mockEventPlugin) UpdateApplication(response *si.ApplicationResponse) error {
-	// do nothing
-	return nil
-}
-
-func (ep *mockEventPlugin) UpdateNode(response *si.NodeResponse) error {
-	// do nothing
-	return nil
-}
-
-func (ep *mockEventPlugin) Predicates(args *si.PredicatesArgs) error {
-	// do nothing
-	return nil
-}
-
-func (ep *mockEventPlugin) ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error {
-	// do nothing
-	return nil
-}
-
-func (ep *mockEventPlugin) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
-	// do nothing
-}
-
-func (ep *mockEventPlugin) UpdateConfiguration(request *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
-	// do nothing
-	return nil
 }
 
 func (ep *mockEventPlugin) getNextEventRecord() *si.EventRecord {

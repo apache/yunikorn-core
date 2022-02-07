@@ -31,39 +31,9 @@ import (
 )
 
 type fakeContainerStateUpdater struct {
+	MockResourceManagerCallback
 	sentUpdate *si.UpdateContainerSchedulingStateRequest
 	sync.RWMutex
-}
-
-func (f *fakeContainerStateUpdater) UpdateApplication(response *si.ApplicationResponse) error {
-	return nil
-}
-
-func (f *fakeContainerStateUpdater) UpdateAllocation(response *si.AllocationResponse) error {
-	return nil
-}
-
-func (f *fakeContainerStateUpdater) UpdateNode(response *si.NodeResponse) error {
-	return nil
-}
-
-func (f *fakeContainerStateUpdater) Predicates(args *si.PredicatesArgs) error {
-	// do nothing
-	return nil
-}
-
-func (f *fakeContainerStateUpdater) ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error {
-	// do nothing
-	return nil
-}
-
-func (f *fakeContainerStateUpdater) SendEvent(events []*si.EventRecord) {
-	// do nothing
-}
-
-func (f *fakeContainerStateUpdater) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
-	// do nothing
-	return nil
 }
 
 func (f *fakeContainerStateUpdater) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {

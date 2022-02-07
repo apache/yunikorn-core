@@ -19,9 +19,6 @@
 package metrics
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 
@@ -38,10 +35,12 @@ type QueueMetrics struct {
 func InitQueueMetrics(name string) CoreQueueMetrics {
 	q := &QueueMetrics{}
 
+	replaceStr := formatMetricName(name)
+
 	q.appMetrics = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: Namespace,
-			Subsystem: substituteQueueName(name),
+			Subsystem: replaceStr,
 			Name:      "queue_app",
 			Help:      "Queue application metrics. State of the application includes `running`.",
 		}, []string{"state"})
@@ -49,7 +48,7 @@ func InitQueueMetrics(name string) CoreQueueMetrics {
 	q.ResourceMetrics = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: Namespace,
-			Subsystem: substituteQueueName(name),
+			Subsystem: replaceStr,
 			Name:      "queue_resource",
 			Help:      "Queue resource metrics. State of the resource includes `guaranteed`, `max`, `allocated`, `pending`.",
 		}, []string{"state", "resource"})
@@ -72,10 +71,9 @@ func InitQueueMetrics(name string) CoreQueueMetrics {
 	return q
 }
 
-func substituteQueueName(queueName string) string {
-	str := fmt.Sprintf("queue_%s",
-		strings.Replace(queueName, ".", "_", -1))
-	return strings.Replace(str, "-", "_", -1)
+func (m *QueueMetrics) Reset() {
+	m.appMetrics.Reset()
+	m.ResourceMetrics.Reset()
 }
 
 func (m *QueueMetrics) IncQueueApplicationsRunning() {

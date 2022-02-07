@@ -24,13 +24,13 @@ import (
 )
 
 const (
-	// all metrics should be declared under this namespace
+	// Namespace for all metrics inside the scheduler
 	Namespace = "yunikorn"
 	// SchedulerSubsystem - subsystem name used by scheduler
 	SchedulerSubsystem = "scheduler"
 	// EventSubsystem - subsystem name used by event cache
 	EventSubsystem = "event"
-	// replacement of invalid byte for prometheus metric names
+	// MetricNameInvalidByteReplacement byte used to replace invalid bytes in prometheus metric names
 	MetricNameInvalidByteReplacement = '_'
 )
 
@@ -53,6 +53,9 @@ type CoreQueueMetrics interface {
 	AddQueueAllocatedResourceMetrics(resourceName string, value float64)
 	SetQueuePendingResourceMetrics(resourceName string, value float64)
 	AddQueuePendingResourceMetrics(resourceName string, value float64)
+	// Reset all metrics that implement the Reset functionality.
+	// should only be used in tests
+	Reset()
 }
 
 // Declare all core metrics ops in this interface
@@ -120,6 +123,9 @@ type CoreSchedulerMetrics interface {
 	ObserveAppSortingLatency(start time.Time)
 	ObserveQueueSortingLatency(start time.Time)
 	ObserveTryNodeLatency(start time.Time)
+	// Reset all metrics that implement the Reset functionality.
+	// should only be used in tests
+	Reset()
 }
 
 type CoreEventMetrics interface {
@@ -130,6 +136,9 @@ type CoreEventMetrics interface {
 	IncEventsStored()
 	IncEventsNotStored()
 	AddEventsCollected(collectedEvents int)
+	// Reset all metrics that implement the Set functionality.
+	// Should only be used in tests
+	Reset()
 }
 
 func init() {
@@ -141,6 +150,16 @@ func init() {
 			lock:      sync.RWMutex{},
 		}
 	})
+}
+
+func Reset() {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.scheduler.Reset()
+	m.event.Reset()
+	for _, qm := range m.queues {
+		qm.Reset()
+	}
 }
 
 func GetSchedulerMetrics() CoreSchedulerMetrics {

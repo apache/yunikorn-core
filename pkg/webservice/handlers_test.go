@@ -1362,7 +1362,7 @@ func TestGetFullStateDumpDefaultPath(t *testing.T) {
 	assert.Assert(t, fi.Size() > 0, "json response is empty")
 	assert.Check(t, statusCode != http.StatusInternalServerError, "response status code")
 	var aggregated AggregatedStateInfo
-	receivedBytes, err := ioutil.ReadFile(defaultStateDumpFilePath)
+	receivedBytes, err := os.ReadFile(defaultStateDumpFilePath)
 	assert.NilError(t, err)
 	err = json.Unmarshal(receivedBytes, &aggregated)
 	assert.NilError(t, err)

@@ -21,7 +21,6 @@ package configs
 import (
 	"crypto/sha256"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"strings"
@@ -46,12 +45,13 @@ type SchedulerConfig struct {
 // - a list of users specifying limits on the partition
 // - the preemption configuration for the partition
 type PartitionConfig struct {
-	Name           string
-	Queues         []QueueConfig
-	PlacementRules []PlacementRule           `yaml:",omitempty" json:",omitempty"`
-	Limits         []Limit                   `yaml:",omitempty" json:",omitempty"`
-	Preemption     PartitionPreemptionConfig `yaml:",omitempty" json:",omitempty"`
-	NodeSortPolicy NodeSortingPolicy         `yaml:",omitempty" json:",omitempty"`
+	Name              string
+	Queues            []QueueConfig
+	PlacementRules    []PlacementRule           `yaml:",omitempty" json:",omitempty"`
+	Limits            []Limit                   `yaml:",omitempty" json:",omitempty"`
+	Preemption        PartitionPreemptionConfig `yaml:",omitempty" json:",omitempty"`
+	NodeSortPolicy    NodeSortingPolicy         `yaml:",omitempty" json:",omitempty"`
+	StateDumpFilePath string                    `yaml:",omitempty" json:",omitempty"`
 }
 
 type PartitionPreemptionConfig struct {
@@ -185,7 +185,7 @@ func ParseAndValidateConfig(content []byte) (*SchedulerConfig, error) {
 
 func loadSchedulerConfigFromFile(policyGroup string) (*SchedulerConfig, error) {
 	filePath := resolveConfigurationFileFunc(policyGroup)
-	buf, err := ioutil.ReadFile(filePath)
+	buf, err := os.ReadFile(filePath)
 	if err != nil {
 		log.Logger().Error("failed to load configuration",
 			zap.String("configFilePath", filePath),

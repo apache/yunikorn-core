@@ -23,47 +23,11 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/tests"
 )
 
-type FakeResourceManagerCallback struct{}
-
-func (f *FakeResourceManagerCallback) UpdateAllocation(response *si.AllocationResponse) error {
-	// do nothing
-	return nil
-}
-
-func (f *FakeResourceManagerCallback) UpdateApplication(response *si.ApplicationResponse) error {
-	// do nothing
-	return nil
-}
-
-func (f *FakeResourceManagerCallback) UpdateNode(response *si.NodeResponse) error {
-	// do nothing
-	return nil
-}
-
-func (f *FakeResourceManagerCallback) Predicates(args *si.PredicatesArgs) error {
-	// do nothing
-	return nil
-}
-
-func (f *FakeResourceManagerCallback) ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error {
-	// do nothing
-	return nil
-}
-
-func (f *FakeResourceManagerCallback) SendEvent(events []*si.EventRecord) {
-	// do nothing
-}
-
-func (f *FakeResourceManagerCallback) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
-	// do nothing
-}
-
-func (f FakeResourceManagerCallback) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
-	// do nothing
-	return nil
+type FakeResourceManagerCallback struct {
+	tests.MockResourceManagerCallback
 }
 
 func TestRegisterPlugins(t *testing.T) {

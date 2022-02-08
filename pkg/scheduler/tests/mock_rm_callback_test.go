@@ -30,6 +30,7 @@ import (
 )
 
 type mockRMCallback struct {
+	MockResourceManagerCallback
 	acceptedApplications map[string]bool
 	rejectedApplications map[string]bool
 	acceptedNodes        map[string]bool
@@ -98,29 +99,6 @@ func (m *mockRMCallback) UpdateNode(response *si.NodeResponse) error {
 		m.rejectedNodes[node.NodeID] = true
 		delete(m.acceptedNodes, node.NodeID)
 	}
-	return nil
-}
-
-func (m *mockRMCallback) Predicates(args *si.PredicatesArgs) error {
-	// do nothing
-	return nil
-}
-
-func (m *mockRMCallback) ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error {
-	// do nothing
-	return nil
-}
-
-func (m *mockRMCallback) SendEvent(events []*si.EventRecord) {
-	// do nothing
-}
-
-func (m *mockRMCallback) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
-	// do nothing
-}
-
-func (m *mockRMCallback) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
-	// do nothing
 	return nil
 }
 

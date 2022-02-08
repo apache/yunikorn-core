@@ -18,8 +18,6 @@
 
 package dao
 
-import "sync"
-
 type BuildInfo struct {
 	Version            string `json:"version"`
 	Date               string `json:"date"`
@@ -29,12 +27,9 @@ type BuildInfo struct {
 var (
 	ScheduleStartDate string
 	BuildInfoMap      map[string]string
-	mu                sync.Mutex
 )
 
 func GetEntrypointBuildInfo() BuildInfo {
-	mu.Lock()
-	defer mu.Unlock()
 	version := BuildInfoMap["version"]
 	date := BuildInfoMap["date"]
 	return BuildInfo{version, date, ScheduleStartDate}

@@ -234,6 +234,9 @@ func (rmp *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerR
 	defer rmp.Unlock()
 	c := make(chan *rmevent.Result)
 
+	// store the build info data
+	dao.BuildInfoMap = request.BuildInfo
+
 	// If this is a re-register we need to clean up first
 	if rmp.rmIDToCallback[request.RmID] != nil {
 		go func() {
@@ -279,9 +282,6 @@ func (rmp *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerR
 		// RM callback can optionally implement one or more scheduler plugin interfaces,
 		// register scheduler plugin if the callback implements any plugin interface
 		plugins.RegisterSchedulerPlugin(callback)
-
-		// store the build info data
-		dao.BuildInfoMap = request.BuildInfo
 
 		return &si.RegisterResourceManagerResponse{}, nil
 	}

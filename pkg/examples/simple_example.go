@@ -133,15 +133,14 @@ partitions:
             memory: 150
             vcore: 20
 `
+	BuildInfoMap := make(map[string]string)
+	BuildInfoMap["k"] = "v"
 
 	// Existing scheduler already supports read from config file, but to make test easier, you can
 	configs.MockSchedulerConfigByData([]byte(configData))
 
 	// Register RM
 	mockRM := newExampleRMCallback()
-
-	BuildInfoMap := make(map[string]string)
-	BuildInfoMap["k"] = "v"
 
 	_, err := proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{

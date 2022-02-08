@@ -589,12 +589,12 @@ func TestAppRecovery(t *testing.T) {
 	serviceContext := entrypoint.StartAllServicesWithManualScheduler()
 	proxy := serviceContext.RMProxy
 
+	BuildInfoMap := make(map[string]string)
+	BuildInfoMap["k"] = "v"
+
 	// Register RM
 	configs.MockSchedulerConfigByData([]byte(configData))
 	mockRM := newMockRMCallbackHandler()
-
-	BuildInfoMap := make(map[string]string)
-	BuildInfoMap["k"] = "v"
 
 	_, err := proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{
@@ -660,12 +660,12 @@ func TestAppRecoveryAlone(t *testing.T) {
 	serviceContext := entrypoint.StartAllServicesWithManualScheduler()
 	proxy := serviceContext.RMProxy
 
+	BuildInfoMap := make(map[string]string)
+	BuildInfoMap["k"] = "v"
+
 	// Register RM
 	configs.MockSchedulerConfigByData([]byte(configData))
 	mockRM := newMockRMCallbackHandler()
-
-	BuildInfoMap := make(map[string]string)
-	BuildInfoMap["k"] = "v"
 
 	_, err := proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{

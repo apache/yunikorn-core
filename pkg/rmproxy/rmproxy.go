@@ -32,6 +32,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
+	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/api"
 	siCommon "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
@@ -278,6 +279,9 @@ func (rmp *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerR
 		// RM callback can optionally implement one or more scheduler plugin interfaces,
 		// register scheduler plugin if the callback implements any plugin interface
 		plugins.RegisterSchedulerPlugin(callback)
+
+		// store the build info data
+		dao.BuildInfoMap = request.BuildInfo
 
 		return &si.RegisterResourceManagerResponse{}, nil
 	}

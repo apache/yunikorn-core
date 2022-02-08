@@ -73,6 +73,14 @@ var webRoutes = routes{
 		getNodesUtilization,
 	},
 
+	// endpoint to retrieve go build info
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/info",
+		getBuildInfo,
+	},
+
 	// endpoint to retrieve goroutines info
 	route{
 		"Scheduler",

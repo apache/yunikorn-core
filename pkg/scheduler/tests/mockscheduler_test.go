@@ -58,11 +58,15 @@ func (m *mockScheduler) Init(config string, autoSchedule bool) error {
 	configs.MockSchedulerConfigByData([]byte(config))
 	m.mockRM = newMockRMCallbackHandler()
 
+	BuildInfoMap := make(map[string]string)
+	BuildInfoMap["k"] = "v"
+
 	_, err := m.proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{
 			RmID:        m.rmID,
 			PolicyGroup: "policygroup",
 			Version:     "0.0.2",
+			BuildInfo:   BuildInfoMap,
 		}, m.mockRM)
 	return err
 }

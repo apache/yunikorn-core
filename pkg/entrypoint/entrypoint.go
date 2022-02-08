@@ -19,6 +19,8 @@
 package entrypoint
 
 import (
+	"time"
+
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/events"
@@ -29,6 +31,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice"
+	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 )
 
 // options used to control how services are started
@@ -41,6 +44,7 @@ type startupOptions struct {
 
 func StartAllServices() *ServiceContext {
 	log.Logger().Info("ServiceContext start all services")
+	dao.ScheduleStartDate = time.Now().Format("2006-01-02T15:04:05-0700")
 	return startAllServicesWithParameters(
 		startupOptions{
 			manualScheduleFlag: false,

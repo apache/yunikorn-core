@@ -161,11 +161,15 @@ partitions:
 	// Register RM
 	mockRM := newExampleRMCallback()
 
+	BuildInfoMap := make(map[string]string)
+	BuildInfoMap["k"] = "v"
+
 	_, err := proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{
 			RmID:        "rm:123",
 			PolicyGroup: "policygroup",
 			Version:     "0.0.2",
+			BuildInfo:   BuildInfoMap,
 		}, mockRM)
 
 	if err != nil {

@@ -46,6 +46,14 @@ import (
 	"github.com/gorilla/mux"
 )
 
+func getBuildInfo(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	info := dao.GetEntrypointBuildInfo()
+	if err := json.NewEncoder(w).Encode(info); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	var stack = func() []byte {

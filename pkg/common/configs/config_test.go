@@ -22,7 +22,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path"
 	"strings"
 	"testing"
@@ -239,12 +239,12 @@ func SerdeTest(t *testing.T, conf SchedulerConfig, description string) {
 }
 
 func CreateConfig(data string) (*SchedulerConfig, error) {
-	dir, err := ioutil.TempDir("", "test-scheduler-config")
+	dir, err := os.MkdirTemp("", "test-scheduler-config")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp dir: %v", err)
 	}
 
-	err = ioutil.WriteFile(path.Join(dir, "test-scheduler-config.yaml"), []byte(data), 0644)
+	err = os.WriteFile(path.Join(dir, "test-scheduler-config.yaml"), []byte(data), 0644)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write config file: %v", err)
 	}

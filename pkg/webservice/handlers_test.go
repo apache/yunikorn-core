@@ -22,7 +22,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1363,7 +1362,7 @@ func TestGetFullStateDumpDefaultPath(t *testing.T) {
 	assert.Assert(t, fi.Size() > 0, "json response is empty")
 	assert.Check(t, statusCode != http.StatusInternalServerError, "response status code")
 	var aggregated AggregatedStateInfo
-	receivedBytes, err := ioutil.ReadFile(defaultStateDumpFilePath)
+	receivedBytes, err := os.ReadFile(defaultStateDumpFilePath)
 	assert.NilError(t, err)
 	err = json.Unmarshal(receivedBytes, &aggregated)
 	assert.NilError(t, err)
@@ -1395,7 +1394,7 @@ func TestGetFullStateDumpNonDefaultPath(t *testing.T) {
 	assert.Assert(t, fi.Size() > 0, "json response is empty")
 	assert.Check(t, statusCode != http.StatusInternalServerError, "response status code")
 	var aggregated AggregatedStateInfo
-	receivedBytes, err := ioutil.ReadFile(stateDumpFilePath)
+	receivedBytes, err := os.ReadFile(stateDumpFilePath)
 	assert.NilError(t, err)
 	err = json.Unmarshal(receivedBytes, &aggregated)
 	assert.NilError(t, err)
@@ -1423,7 +1422,7 @@ func TestEnableDisablePeriodicStateDump(t *testing.T) {
 	assert.Equal(t, statusCode, 0, "response status code")
 
 	waitForStateDumpFile(t)
-	fileContents, err2 := ioutil.ReadFile(defaultStateDumpFilePath)
+	fileContents, err2 := os.ReadFile(defaultStateDumpFilePath)
 	assert.NilError(t, err2)
 	var aggregated AggregatedStateInfo
 	err3 := json.Unmarshal(fileContents, &aggregated)

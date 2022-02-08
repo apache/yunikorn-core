@@ -21,7 +21,7 @@ package webservice
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math"
 	"net/http"
 	"runtime"
@@ -167,7 +167,7 @@ func getNodesUtilization(w http.ResponseWriter, r *http.Request) {
 
 func validateConf(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
-	requestBytes, err := ioutil.ReadAll(r.Body)
+	requestBytes, err := io.ReadAll(r.Body)
 	if err == nil {
 		_, err = configs.LoadSchedulerConfigFromByteArray(requestBytes)
 	}
@@ -434,7 +434,7 @@ func createClusterConfig(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, "Invalid query parameters. Please check the usage documentation", http.StatusBadRequest)
 		return
 	}
-	requestBytes, err := ioutil.ReadAll(r.Body)
+	requestBytes, err := io.ReadAll(r.Body)
 	if err == nil {
 		_, err = configs.LoadSchedulerConfigFromByteArray(requestBytes)
 	}
@@ -454,7 +454,7 @@ func updateClusterConfig(w http.ResponseWriter, r *http.Request) {
 	lock.Lock()
 	defer lock.Unlock()
 	writeHeaders(w)
-	requestBytes, err := ioutil.ReadAll(r.Body)
+	requestBytes, err := io.ReadAll(r.Body)
 	if err != nil {
 		buildUpdateResponse(err, w)
 		return

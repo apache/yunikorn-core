@@ -232,10 +232,10 @@ func (rmp *RMProxy) handleRMEvents() {
 func (rmp *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerRequest, callback api.ResourceManagerCallback) (*si.RegisterResourceManagerResponse, error) {
 	rmp.Lock()
 	defer rmp.Unlock()
-	c := make(chan *rmevent.Result)
-
 	// store the build info data
 	dao.BuildInfoMap = request.BuildInfo
+
+	c := make(chan *rmevent.Result)
 
 	// If this is a re-register we need to clean up first
 	if rmp.rmIDToCallback[request.RmID] != nil {

@@ -21,8 +21,6 @@ package webservice
 import (
 	"net/http"
 	"net/http/pprof"
-
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type route struct {
@@ -86,7 +84,7 @@ var webRoutes = routes{
 		"Scheduler",
 		"GET",
 		"/ws/v1/metrics",
-		promhttp.Handler().ServeHTTP,
+		getMetrics,
 	},
 
 	// endpoint to retrieve the current conf

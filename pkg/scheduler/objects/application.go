@@ -1462,7 +1462,7 @@ func (sa *Application) notifyRMAllocationAskReleased(rmID string, released []*Al
 		releaseEvent.ReleasedAllocationAsks = append(releaseEvent.ReleasedAllocationAsks, &si.AllocationAskRelease{
 			ApplicationID:   alloc.ApplicationID,
 			PartitionName:   alloc.PartitionName,
-			Allocationkey:   alloc.AllocationKey,
+			AllocationKey:   alloc.AllocationKey,
 			TerminationType: terminationType,
 			Message:         message,
 		})

@@ -736,7 +736,7 @@ func (cc *ClusterContext) processAskReleases(releases []*si.AllocationAskRelease
 			log.Logger().Error("Invalid ask release requested by shim, partition not found",
 				zap.String("partition", toRelease.PartitionName),
 				zap.String("applicationID", toRelease.ApplicationID),
-				zap.String("askKey", toRelease.Allocationkey))
+				zap.String("askKey", toRelease.AllocationKey))
 			continue
 		}
 		partition.removeAllocationAsk(toRelease)

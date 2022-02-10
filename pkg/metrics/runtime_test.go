@@ -102,11 +102,15 @@ func TestGenericMetrics(t *testing.T) {
 	mfs, err := prometheus.DefaultGatherer.Gather()
 	assert.NilError(t, err)
 
+	var metricsChecked bool
 	for _, metric := range mfs {
 		if strings.Contains(metric.GetName(), "yunikorn_runtime_go_generic") {
 			validateMetrics(t, metric, expectedNoOfMetrics, "Generic")
+			metricsChecked = true
 		}
 	}
+
+	assert.Assert(t, metricsChecked)
 }
 
 func validateMetrics(t *testing.T, metric *dto.MetricFamily, expectedLabelCount int, expectedLabel string) {

@@ -830,8 +830,7 @@ func (cc *ClusterContext) notifyRMAllocationReleasedSynchronously(rmID string, r
 			UUID:            alloc.UUID,
 			TerminationType: terminationType,
 			Message:         message,
-			Allocationkey:   alloc.AllocationKey,
-			UpdateCache:     true,
+			AllocationKey:   alloc.AllocationKey,
 		})
 	}
 

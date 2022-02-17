@@ -2004,7 +2004,7 @@ func TestRemoveAllocationAsk(t *testing.T) {
 	// we don't care about the partition name as we test just the partition code
 	release := &si.AllocationAskRelease{
 		ApplicationID:   "fake-app",
-		Allocationkey:   askKey,
+		AllocationKey:   askKey,
 		TerminationType: si.TerminationType_STOPPED_BY_RM,
 	}
 	// unknown app should do nothing
@@ -2015,14 +2015,14 @@ func TestRemoveAllocationAsk(t *testing.T) {
 
 	// known app, unknown ask no change
 	release.ApplicationID = appID1
-	release.Allocationkey = "fake"
+	release.AllocationKey = "fake"
 	partition.removeAllocationAsk(release)
 	if !resources.Equals(app.GetPendingResource(), res) {
 		t.Fatal("app updated removing unknown ask")
 	}
 
 	// known app, known ask, ignore timeout as it originates in the core
-	release.Allocationkey = askKey
+	release.AllocationKey = askKey
 	release.TerminationType = si.TerminationType_TIMEOUT
 	partition.removeAllocationAsk(release)
 	if !resources.Equals(app.GetPendingResource(), res) {

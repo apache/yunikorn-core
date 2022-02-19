@@ -50,7 +50,13 @@ type ClusterContext struct {
 	needPreemption      bool
 	reservationDisabled bool
 
+	rmInfos map[string]*RMInformation
+
 	sync.RWMutex
+}
+
+type RMInformation struct {
+	RMBuildInformation map[string]string
 }
 
 // Create a new cluster context to be used outside of the event system.
@@ -163,6 +169,12 @@ func (cc *ClusterContext) processRMRegistrationEvent(event *rmevent.RMRegistrati
 	// update global scheduler configs, set the policyGroup for this cluster
 	cc.policyGroup = policyGroup
 	configs.ConfigContext.Set(policyGroup, conf)
+
+	//store the build information of RM
+	cc.rmInfos = make(map[string]*RMInformation)
+	cc.rmInfos[rmID] = &RMInformation{
+		RMBuildInformation: event.Registration.BuildInfo,
+	}
 
 	// Done, notify channel
 	event.Channel <- &rmevent.Result{
@@ -371,6 +383,17 @@ func (cc *ClusterContext) GetPolicyGroup() string {
 	cc.RLock()
 	defer cc.RUnlock()
 	return cc.policyGroup
+}
+
+func (cc *ClusterContext) GetRMInfoMapClone() map[string]*RMInformation {
+	cc.RLock()
+	defer cc.RUnlock()
+
+	newMap := make(map[string]*RMInformation)
+	for k, v := range cc.rmInfos {
+		newMap[k] = v
+	}
+	return newMap
 }
 
 func (cc *ClusterContext) GetPartitionMapClone() map[string]*PartitionContext {
@@ -736,7 +759,7 @@ func (cc *ClusterContext) processAskReleases(releases []*si.AllocationAskRelease
 			log.Logger().Error("Invalid ask release requested by shim, partition not found",
 				zap.String("partition", toRelease.PartitionName),
 				zap.String("applicationID", toRelease.ApplicationID),
-				zap.String("askKey", toRelease.Allocationkey))
+				zap.String("askKey", toRelease.AllocationKey))
 			continue
 		}
 		partition.removeAllocationAsk(toRelease)

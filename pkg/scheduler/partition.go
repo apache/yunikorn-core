@@ -1333,7 +1333,7 @@ func (pc *PartitionContext) removeAllocationAsk(release *si.AllocationAskRelease
 		return
 	}
 	appID := release.ApplicationID
-	allocKey := release.Allocationkey
+	allocKey := release.AllocationKey
 	// A timeout termination is send by the core to the shim, ignore on return.
 	if release.TerminationType == si.TerminationType_TIMEOUT {
 		log.Logger().Debug("Ignoring ask release with termination type Timeout",

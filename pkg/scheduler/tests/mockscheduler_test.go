@@ -167,7 +167,7 @@ func (m *mockScheduler) releaseAskRequest(appID, allocKey string) error {
 			AllocationAsksToRelease: []*si.AllocationAskRelease{
 				{
 					ApplicationID: appID,
-					Allocationkey: allocKey,
+					AllocationKey: allocKey,
 					PartitionName: m.partitionName,
 				},
 			},

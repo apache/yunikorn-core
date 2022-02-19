@@ -46,14 +46,6 @@ import (
 	"github.com/gorilla/mux"
 )
 
-func getBuildInfo(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
-	info := dao.GetEntrypointBuildInfo()
-	if err := json.NewEncoder(w).Encode(info); err != nil {
-		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	var stack = func() []byte {
@@ -88,8 +80,16 @@ func getQueueInfo(w http.ResponseWriter, r *http.Request) {
 func getClusterInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
+	rmInfolists := schedulerContext.GetRMInfoMapClone()
+	rmInfo := getBuildInfoDAO(rmInfolists)
+
+	if err := json.NewEncoder(w).Encode(rmInfo); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+
 	lists := schedulerContext.GetPartitionMapClone()
 	clustersInfo := getClusterDAO(lists)
+
 	if err := json.NewEncoder(w).Encode(clustersInfo); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -196,6 +196,23 @@ func buildJSONErrorResponse(w http.ResponseWriter, detail string, code int) {
 	errorInfo := dao.NewYAPIError(nil, code, detail)
 	if jsonErr := json.NewEncoder(w).Encode(errorInfo); jsonErr != nil {
 		log.Logger().Error(fmt.Sprintf("Problem in sending error response in JSON format. Error response: %s", detail))
+	}
+}
+
+func getBuildInfoJSON(rmInfo *scheduler.RMInformation) *dao.BuildInfo {
+	rmInfos := schedulerContext.GetRMInfoMapClone()
+	rmBuildInfos := make([]dao.RMBuildInfo, 0, len(rmInfos))
+
+	for _, rmInfo := range rmInfos {
+		rmInformation := dao.RMBuildInfo{
+			RMBuildInformation: rmInfo.RMBuildInformation,
+		}
+		rmBuildInfos = append(rmBuildInfos, rmInformation)
+	}
+
+	return &dao.BuildInfo{
+		ScheduleStartDate: dao.ScheduleStartDate,
+		RMBuildInfo:       rmBuildInfos,
 	}
 }
 
@@ -817,6 +834,15 @@ func getClusterDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClusterD
 
 	for _, partition := range lists {
 		result = append(result, getClusterJSON(partition))
+	}
+
+	return result
+}
+
+func getBuildInfoDAO(lists map[string]*scheduler.RMInformation) []*dao.BuildInfo {
+	var result []*dao.BuildInfo
+	for _, buildInfo := range lists {
+		result = append(result, getBuildInfoJSON(buildInfo))
 	}
 
 	return result

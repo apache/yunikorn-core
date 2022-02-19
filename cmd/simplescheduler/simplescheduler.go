@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
-	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -46,8 +45,6 @@ func newSchedulerServer() si.SchedulerServer {
 
 func (scheduler *SimpleScheduler) RegisterResourceManager(ctx context.Context, in *si.RegisterResourceManagerRequest) (*si.RegisterResourceManagerResponse, error) {
 	log.Printf("Received registeration")
-	// store the build info data
-	dao.BuildInfoMap = in.BuildInfo
 
 	return &(si.RegisterResourceManagerResponse{}), nil
 }

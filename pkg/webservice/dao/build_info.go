@@ -19,18 +19,12 @@
 package dao
 
 type BuildInfo struct {
-	Version            string `json:"version"`
-	Date               string `json:"date"`
-	SchedulerStartDate string `json:"scheduleStartDate"`
+	ScheduleStartDate string        `json:"scheduleStartDate"`
+	RMBuildInfo       []RMBuildInfo `json:"rmBuildInfo"`
 }
 
-var (
-	ScheduleStartDate string
-	BuildInfoMap      map[string]string
-)
-
-func GetEntrypointBuildInfo() BuildInfo {
-	version := BuildInfoMap["version"]
-	date := BuildInfoMap["date"]
-	return BuildInfo{version, date, ScheduleStartDate}
+type RMBuildInfo struct {
+	RMBuildInformation map[string]string `json:"rmBuildInformation"`
 }
+
+var ScheduleStartDate string

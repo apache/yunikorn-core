@@ -32,7 +32,6 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
-	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/api"
 	siCommon "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
@@ -232,9 +231,6 @@ func (rmp *RMProxy) handleRMEvents() {
 func (rmp *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerRequest, callback api.ResourceManagerCallback) (*si.RegisterResourceManagerResponse, error) {
 	rmp.Lock()
 	defer rmp.Unlock()
-	// store the build info data
-	dao.BuildInfoMap = request.BuildInfo
-
 	c := make(chan *rmevent.Result)
 
 	// If this is a re-register we need to clean up first

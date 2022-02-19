@@ -170,7 +170,7 @@ func (cc *ClusterContext) processRMRegistrationEvent(event *rmevent.RMRegistrati
 	cc.policyGroup = policyGroup
 	configs.ConfigContext.Set(policyGroup, conf)
 
-	//store the build information of RM
+	// store the build information of RM
 	cc.rmInfos = make(map[string]*RMInformation)
 	cc.rmInfos[rmID] = &RMInformation{
 		RMBuildInformation: event.Registration.BuildInfo,

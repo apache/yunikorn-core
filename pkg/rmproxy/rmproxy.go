@@ -147,10 +147,8 @@ func (rmp *RMProxy) processRMReleaseAllocationEvent(event *rmevent.RMReleaseAllo
 	metrics.GetSchedulerMetrics().AddReleasedContainers(len(event.ReleasedAllocations))
 
 	// Done, notify channel
-	if event.Channel != nil {
-		event.Channel <- &rmevent.Result{
-			Succeeded: true,
-		}
+	event.Channel <- &rmevent.Result{
+		Succeeded: true,
 	}
 }
 

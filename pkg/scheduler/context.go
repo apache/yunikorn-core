@@ -749,7 +749,7 @@ func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRel
 			allocs, confirmed := partition.removeAllocation(toRelease)
 			// notify the RM of the exact released allocations
 			if len(allocs) > 0 {
-				cc.notifyRMAllocationReleasedSynchronously(rmID, allocs, si.TerminationType_STOPPED_BY_RM, "allocation remove as per RM request")
+				cc.notifyRMAllocationReleased(rmID, allocs, si.TerminationType_STOPPED_BY_RM, "allocation remove as per RM request")
 			}
 			// notify the RM of the confirmed allocations (placeholder swap & preemption)
 			if confirmed != nil {
@@ -772,7 +772,9 @@ func (cc *ClusterContext) convertAllocations(allocations []*si.Allocation) []*ob
 // Create a RM update event to notify RM of new allocations
 // Lock free call, all updates occur via events.
 func (cc *ClusterContext) notifyRMNewAllocation(rmID string, alloc *objects.Allocation) {
-
+	if alloc == nil {
+		return
+	}
 	c := make(chan *rmevent.Result)
 	// communicate the allocation to the RM synchronously
 	cc.rmEventHandler.HandleEvent(&rmevent.RMNewAllocationsEvent{
@@ -794,29 +796,9 @@ func (cc *ClusterContext) notifyRMNewAllocation(rmID string, alloc *objects.Allo
 // Create a RM update event to notify RM of released allocations
 // Lock free call, all updates occur via events.
 func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, released []*objects.Allocation, terminationType si.TerminationType, message string) {
-	releaseEvent := &rmevent.RMReleaseAllocationEvent{
-		ReleasedAllocations: make([]*si.AllocationRelease, 0),
-		RmID:                rmID,
-		Channel:             nil,
+	if len(released) == 0 {
+		return
 	}
-	for _, alloc := range released {
-		releaseEvent.ReleasedAllocations = append(releaseEvent.ReleasedAllocations, &si.AllocationRelease{
-			ApplicationID:   alloc.ApplicationID,
-			PartitionName:   alloc.PartitionName,
-			UUID:            alloc.UUID,
-			TerminationType: terminationType,
-			Message:         message,
-		})
-	}
-
-	if len(releaseEvent.ReleasedAllocations) > 0 {
-		cc.rmEventHandler.HandleEvent(releaseEvent)
-	}
-}
-
-// Create a RM update event to notify RM of released allocations synchronously
-// Lock free call, all updates occur via events.
-func (cc *ClusterContext) notifyRMAllocationReleasedSynchronously(rmID string, released []*objects.Allocation, terminationType si.TerminationType, message string) {
 	c := make(chan *rmevent.Result)
 	releaseEvent := &rmevent.RMReleaseAllocationEvent{
 		ReleasedAllocations: make([]*si.AllocationRelease, 0),
@@ -834,15 +816,13 @@ func (cc *ClusterContext) notifyRMAllocationReleasedSynchronously(rmID string, r
 		})
 	}
 
-	if len(releaseEvent.ReleasedAllocations) > 0 {
-		cc.rmEventHandler.HandleEvent(releaseEvent)
-		// Wait from channel
-		result := <-c
-		if result.Succeeded {
-			log.Logger().Debug("Successfully synced shim on released allocations")
-		} else {
-			log.Logger().Info("failed to sync shim on released allocations")
-		}
+	cc.rmEventHandler.HandleEvent(releaseEvent)
+	// Wait from channel
+	result := <-c
+	if result.Succeeded {
+		log.Logger().Debug("Successfully synced shim on released allocations")
+	} else {
+		log.Logger().Info("failed to sync shim on released allocations")
 	}
 }
 

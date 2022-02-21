@@ -171,10 +171,13 @@ func (cc *ClusterContext) processRMRegistrationEvent(event *rmevent.RMRegistrati
 	configs.ConfigContext.Set(policyGroup, conf)
 
 	// store the build information of RM
-	cc.rmInfos = make(map[string]*RMInformation)
+	if cc.rmInfos == nil {
+		cc.rmInfos = make(map[string]*RMInformation)
+	}
 	cc.rmInfos[rmID] = &RMInformation{
 		RMBuildInformation: event.Registration.BuildInfo,
 	}
+	cc.rmInfos[rmID].RMBuildInformation["rmId"] = rmID
 
 	// Done, notify channel
 	event.Channel <- &rmevent.Result{

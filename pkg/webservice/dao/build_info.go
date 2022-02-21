@@ -18,12 +18,7 @@
 
 package dao
 
-type BuildInfo struct {
-	ScheduleStartDate string        `json:"scheduleStartDate"`
-	RMBuildInfo       []RMBuildInfo `json:"rmBuildInfo"`
-}
-
-type RMBuildInfo struct {
+type RMInfo struct {
 	RMBuildInformation map[string]string `json:"rmBuildInformation"`
 }
 

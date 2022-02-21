@@ -80,13 +80,6 @@ func getQueueInfo(w http.ResponseWriter, r *http.Request) {
 func getClusterInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
-	rmInfolists := schedulerContext.GetRMInfoMapClone()
-	rmInfo := getBuildInfoDAO(rmInfolists)
-
-	if err := json.NewEncoder(w).Encode(rmInfo); err != nil {
-		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
-	}
-
 	lists := schedulerContext.GetPartitionMapClone()
 	clustersInfo := getClusterDAO(lists)
 
@@ -199,25 +192,19 @@ func buildJSONErrorResponse(w http.ResponseWriter, detail string, code int) {
 	}
 }
 
-func getBuildInfoJSON(rmInfo *scheduler.RMInformation) *dao.BuildInfo {
-	rmInfos := schedulerContext.GetRMInfoMapClone()
-	rmBuildInfos := make([]dao.RMBuildInfo, 0, len(rmInfos))
-
-	for _, rmInfo := range rmInfos {
-		rmInformation := dao.RMBuildInfo{
-			RMBuildInformation: rmInfo.RMBuildInformation,
-		}
-		rmBuildInfos = append(rmBuildInfos, rmInformation)
-	}
-
-	return &dao.BuildInfo{
-		ScheduleStartDate: dao.ScheduleStartDate,
-		RMBuildInfo:       rmBuildInfos,
+func getRMInfoJSON(rmInfo *scheduler.RMInformation) *dao.RMInfo {
+	return &dao.RMInfo{
+		RMBuildInformation: rmInfo.RMBuildInformation,
 	}
 }
 
 func getClusterJSON(partition *scheduler.PartitionContext) *dao.ClusterDAOInfo {
 	clusterInfo := &dao.ClusterDAOInfo{}
+	clusterInfo.ScheduleStartDate = dao.ScheduleStartDate
+
+	rmInfos := schedulerContext.GetRMInfoMapClone()
+	clusterInfo.RMBuildInformation = getRMInfoDAO(rmInfos)
+
 	clusterInfo.PartitionName = common.GetPartitionNameWithoutClusterID(partition.Name)
 	clusterInfo.TotalApplications = strconv.Itoa(partition.GetTotalApplicationCount())
 	clusterInfo.TotalContainers = strconv.Itoa(partition.GetTotalAllocationCount())
@@ -839,10 +826,10 @@ func getClusterDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClusterD
 	return result
 }
 
-func getBuildInfoDAO(lists map[string]*scheduler.RMInformation) []*dao.BuildInfo {
-	var result []*dao.BuildInfo
-	for _, buildInfo := range lists {
-		result = append(result, getBuildInfoJSON(buildInfo))
+func getRMInfoDAO(lists map[string]*scheduler.RMInformation) []*dao.RMInfo {
+	var result []*dao.RMInfo
+	for _, rmInfo := range lists {
+		result = append(result, getRMInfoJSON(rmInfo))
 	}
 
 	return result

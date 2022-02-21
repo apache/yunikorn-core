@@ -21,6 +21,7 @@ package rmproxy
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"sync"
 
 	"go.uber.org/zap"
@@ -108,7 +109,7 @@ func (rmp *RMProxy) processAllocationUpdateEvent(event *rmevent.RMNewAllocations
 	// Done, notify channel
 	event.Channel <- &rmevent.Result{
 		Succeeded: true,
-		Reason:    fmt.Sprintf("no. of allocations: #{allocationsCount}"),
+		Reason:    "no. of allocations: " + strconv.Itoa(allocationsCount),
 	}
 }
 
@@ -156,7 +157,7 @@ func (rmp *RMProxy) processRMReleaseAllocationEvent(event *rmevent.RMReleaseAllo
 	// Done, notify channel
 	event.Channel <- &rmevent.Result{
 		Succeeded: true,
-		Reason:    fmt.Sprintf("no. of allocations: #{allocationsCount}"),
+		Reason:    "no. of allocations: " + strconv.Itoa(allocationsCount),
 	}
 }
 

@@ -193,18 +193,12 @@ func buildJSONErrorResponse(w http.ResponseWriter, detail string, code int) {
 	}
 }
 
-func getRMInfoJSON(rmInfo *scheduler.RMInformation) *dao.RMInfo {
-	return &dao.RMInfo{
-		RMBuildInformation: rmInfo.RMBuildInformation,
-	}
-}
-
 func getClusterJSON(partition *scheduler.PartitionContext) *dao.ClusterDAOInfo {
 	clusterInfo := &dao.ClusterDAOInfo{}
 	clusterInfo.ScheduleStartDate = dao.ScheduleStartDate
 
 	rmInfos := schedulerContext.GetRMInfoMapClone()
-	clusterInfo.RMBuildInformation = getRMInfoDAO(rmInfos)
+	clusterInfo.RMBuildInformation = getRMBuildInformations(rmInfos)
 
 	clusterInfo.PartitionName = common.GetPartitionNameWithoutClusterID(partition.Name)
 	clusterInfo.TotalApplications = strconv.Itoa(partition.GetTotalApplicationCount())
@@ -827,10 +821,10 @@ func getClusterDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClusterD
 	return result
 }
 
-func getRMInfoDAO(lists map[string]*scheduler.RMInformation) []*dao.RMInfo {
-	var result []*dao.RMInfo
+func getRMBuildInformations(lists map[string]*scheduler.RMInformation) []map[string]string {
+	var result []map[string]string
 	for _, rmInfo := range lists {
-		result = append(result, getRMInfoJSON(rmInfo))
+		result = append(result, rmInfo.RMBuildInformation)
 	}
 
 	return result

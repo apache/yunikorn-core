@@ -23,7 +23,7 @@ go 1.16
 
 require (
 	github.com/HdrHistogram/hdrhistogram-go v1.0.1 // indirect
-	github.com/apache/incubator-yunikorn-scheduler-interface v0.11.1-0.20220218043513-e19a1b0c381f
+	github.com/apache/incubator-yunikorn-scheduler-interface v0.0.0-20220218043513-e19a1b0c381f
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/google/btree v1.0.1
 	github.com/google/uuid v1.2.0

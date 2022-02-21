@@ -772,9 +772,6 @@ func (cc *ClusterContext) convertAllocations(allocations []*si.Allocation) []*ob
 // Create a RM update event to notify RM of new allocations
 // Lock free call, all updates occur via events.
 func (cc *ClusterContext) notifyRMNewAllocation(rmID string, alloc *objects.Allocation) {
-	if alloc == nil {
-		return
-	}
 	c := make(chan *rmevent.Result)
 	// communicate the allocation to the RM synchronously
 	cc.rmEventHandler.HandleEvent(&rmevent.RMNewAllocationsEvent{
@@ -785,8 +782,7 @@ func (cc *ClusterContext) notifyRMNewAllocation(rmID string, alloc *objects.Allo
 	// Wait from channel
 	result := <-c
 	if result.Succeeded {
-		log.Logger().Debug("Successfully synced shim on new allocation",
-			zap.String("Allocation key: ", alloc.AllocationKey))
+		log.Logger().Debug("Successfully synced shim on new allocation. response: " + result.Reason)
 	} else {
 		log.Logger().Info("failed to sync shim on new allocation",
 			zap.String("Allocation key: ", alloc.AllocationKey))
@@ -796,9 +792,6 @@ func (cc *ClusterContext) notifyRMNewAllocation(rmID string, alloc *objects.Allo
 // Create a RM update event to notify RM of released allocations
 // Lock free call, all updates occur via events.
 func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, released []*objects.Allocation, terminationType si.TerminationType, message string) {
-	if len(released) == 0 {
-		return
-	}
 	c := make(chan *rmevent.Result)
 	releaseEvent := &rmevent.RMReleaseAllocationEvent{
 		ReleasedAllocations: make([]*si.AllocationRelease, 0),
@@ -820,7 +813,7 @@ func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, released []*ob
 	// Wait from channel
 	result := <-c
 	if result.Succeeded {
-		log.Logger().Debug("Successfully synced shim on released allocations")
+		log.Logger().Debug("Successfully synced shim on released allocations. response: " + result.Reason)
 	} else {
 		log.Logger().Info("failed to sync shim on released allocations")
 	}

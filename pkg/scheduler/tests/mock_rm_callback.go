@@ -41,11 +41,6 @@ func (f *MockResourceManagerCallback) Predicates(args *si.PredicatesArgs) error 
 	return nil
 }
 
-func (f *MockResourceManagerCallback) ReSyncSchedulerCache(args *si.ReSyncSchedulerCacheArgs) error {
-	// do nothing
-	return nil
-}
-
 func (f *MockResourceManagerCallback) SendEvent(events []*si.EventRecord) {
 	// do nothing
 }

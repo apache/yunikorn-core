@@ -41,6 +41,7 @@ type Metrics struct {
 	scheduler CoreSchedulerMetrics
 	queues    map[string]CoreQueueMetrics
 	event     CoreEventMetrics
+	runtime   GoRuntimeMetrics
 	lock      sync.RWMutex
 }
 
@@ -53,6 +54,13 @@ type CoreQueueMetrics interface {
 	AddQueueAllocatedResourceMetrics(resourceName string, value float64)
 	SetQueuePendingResourceMetrics(resourceName string, value float64)
 	AddQueuePendingResourceMetrics(resourceName string, value float64)
+	// Reset all metrics that implement the Reset functionality.
+	// should only be used in tests
+	Reset()
+}
+
+type GoRuntimeMetrics interface {
+	Collect()
 	// Reset all metrics that implement the Reset functionality.
 	// should only be used in tests
 	Reset()
@@ -148,6 +156,7 @@ func init() {
 			queues:    make(map[string]CoreQueueMetrics),
 			event:     initEventMetrics(),
 			lock:      sync.RWMutex{},
+			runtime:   initRuntimeMetrics(),
 		}
 	})
 }
@@ -160,6 +169,7 @@ func Reset() {
 	for _, qm := range m.queues {
 		qm.Reset()
 	}
+	m.runtime.Reset()
 }
 
 func GetSchedulerMetrics() CoreSchedulerMetrics {
@@ -179,6 +189,10 @@ func GetQueueMetrics(name string) CoreQueueMetrics {
 
 func GetEventMetrics() CoreEventMetrics {
 	return m.event
+}
+
+func GetRuntimeMetrics() GoRuntimeMetrics {
+	return m.runtime
 }
 
 // Format metric name based on the definition of metric name in prometheus, as per

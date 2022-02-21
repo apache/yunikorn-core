@@ -28,6 +28,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
@@ -833,4 +834,9 @@ func getRMInfoDAO(lists map[string]*scheduler.RMInformation) []*dao.RMInfo {
 	}
 
 	return result
+}
+
+func getMetrics(w http.ResponseWriter, r *http.Request) {
+	metrics2.GetRuntimeMetrics().Collect()
+	promhttp.Handler().ServeHTTP(w, r)
 }

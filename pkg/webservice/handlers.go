@@ -28,6 +28,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
@@ -812,4 +813,9 @@ func getClusterDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClusterD
 	}
 
 	return result
+}
+
+func getMetrics(w http.ResponseWriter, r *http.Request) {
+	metrics2.GetRuntimeMetrics().Collect()
+	promhttp.Handler().ServeHTTP(w, r)
 }

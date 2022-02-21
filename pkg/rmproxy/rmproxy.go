@@ -21,6 +21,7 @@ package rmproxy
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"sync"
 
 	"go.uber.org/zap"
@@ -95,16 +96,21 @@ func (rmp *RMProxy) handleUpdateResponseError(rmID string, err error) {
 }
 
 func (rmp *RMProxy) processAllocationUpdateEvent(event *rmevent.RMNewAllocationsEvent) {
-	rmp.RLock()
-	defer rmp.RUnlock()
-	if len(event.Allocations) == 0 {
-		return
+	allocationsCount := len(event.Allocations)
+	if allocationsCount != 0 {
+		rmp.RLock()
+		defer rmp.RUnlock()
+		response := &si.AllocationResponse{
+			New: event.Allocations,
+		}
+		rmp.triggerUpdateAllocation(event.RmID, response)
+		metrics.GetSchedulerMetrics().AddAllocatedContainers(len(event.Allocations))
 	}
-	response := &si.AllocationResponse{
-		New: event.Allocations,
+	// Done, notify channel
+	event.Channel <- &rmevent.Result{
+		Succeeded: true,
+		Reason:    "no. of allocations: " + strconv.Itoa(allocationsCount),
 	}
-	rmp.triggerUpdateAllocation(event.RmID, response)
-	metrics.GetSchedulerMetrics().AddAllocatedContainers(len(event.Allocations))
 }
 
 func (rmp *RMProxy) processApplicationUpdateEvent(event *rmevent.RMApplicationUpdateEvent) {
@@ -137,16 +143,22 @@ func (rmp *RMProxy) processApplicationUpdateEvent(event *rmevent.RMApplicationUp
 }
 
 func (rmp *RMProxy) processRMReleaseAllocationEvent(event *rmevent.RMReleaseAllocationEvent) {
-	rmp.RLock()
-	defer rmp.RUnlock()
-	if len(event.ReleasedAllocations) == 0 {
-		return
+	allocationsCount := len(event.ReleasedAllocations)
+	if allocationsCount != 0 {
+		rmp.RLock()
+		defer rmp.RUnlock()
+		response := &si.AllocationResponse{
+			Released: event.ReleasedAllocations,
+		}
+		rmp.triggerUpdateAllocation(event.RmID, response)
+		metrics.GetSchedulerMetrics().AddReleasedContainers(len(event.ReleasedAllocations))
 	}
-	response := &si.AllocationResponse{
-		Released: event.ReleasedAllocations,
+
+	// Done, notify channel
+	event.Channel <- &rmevent.Result{
+		Succeeded: true,
+		Reason:    "no. of allocations: " + strconv.Itoa(allocationsCount),
 	}
-	rmp.triggerUpdateAllocation(event.RmID, response)
-	metrics.GetSchedulerMetrics().AddReleasedContainers(len(event.ReleasedAllocations))
 }
 
 func (rmp *RMProxy) triggerUpdateAllocation(rmID string, response *si.AllocationResponse) {

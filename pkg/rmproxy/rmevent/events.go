@@ -65,10 +65,10 @@ type Result struct {
 }
 
 // Outgoing events from the scheduler to the RM
-// These events communicate the response to the RMUpdateRequestEvent
 type RMNewAllocationsEvent struct {
 	RmID        string
 	Allocations []*si.Allocation
+	Channel     chan *Result
 }
 
 type RMApplicationUpdateEvent struct {
@@ -86,6 +86,7 @@ type RMRejectedAllocationAskEvent struct {
 type RMReleaseAllocationEvent struct {
 	RmID                string
 	ReleasedAllocations []*si.AllocationRelease
+	Channel             chan *Result
 }
 
 type RMReleaseAllocationAskEvent struct {

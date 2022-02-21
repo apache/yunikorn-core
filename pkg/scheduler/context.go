@@ -32,7 +32,6 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
-	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	siCommon "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
@@ -744,11 +743,6 @@ func (cc *ClusterContext) processAskReleases(releases []*si.AllocationAskRelease
 }
 
 func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRelease, rmID string) {
-	// TODO: the release comes from the RM and confirmed twice why do we need event + callback?
-	// See YUNIKORN-462, there are two separate communications for the same allocation
-	// between the core and the shim they should be merged into one communication.
-
-	toReleaseAllocations := make([]*si.ForgotAllocation, 0)
 	for _, toRelease := range releases {
 		partition := cc.GetPartition(toRelease.PartitionName)
 		if partition != nil {
@@ -757,33 +751,9 @@ func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRel
 			if len(allocs) > 0 {
 				cc.notifyRMAllocationReleased(rmID, allocs, si.TerminationType_STOPPED_BY_RM, "allocation remove as per RM request")
 			}
-			for _, alloc := range allocs {
-				toReleaseAllocations = append(toReleaseAllocations, &si.ForgotAllocation{
-					AllocationKey: alloc.AllocationKey,
-				})
-			}
 			// notify the RM of the confirmed allocations (placeholder swap & preemption)
 			if confirmed != nil {
 				cc.notifyRMNewAllocation(rmID, confirmed)
-			}
-		}
-	}
-
-	// if reconcile plugin is enabled, re-sync the cache now.
-	// this gives the chance for the cache to update its memory about assumed pods
-	// whenever we release an allocation, we must ensure the corresponding pod is successfully
-	// removed from external cache, otherwise predicates will run into problems.
-	if len(toReleaseAllocations) > 0 {
-		log.Logger().Debug("notify shim to forget assumed pods",
-			zap.Int("size", len(toReleaseAllocations)))
-		if rp := plugins.GetResourceManagerCallbackPlugin(); rp != nil {
-			err := rp.ReSyncSchedulerCache(&si.ReSyncSchedulerCacheArgs{
-				ForgetAllocations: toReleaseAllocations,
-			})
-			// See YUNIKORN-462: this might not be a real error so log as DEBUG
-			if err != nil {
-				log.Logger().Debug("failed to sync shim on allocation release",
-					zap.Error(err))
 			}
 		}
 	}
@@ -802,44 +772,31 @@ func (cc *ClusterContext) convertAllocations(allocations []*si.Allocation) []*ob
 // Create a RM update event to notify RM of new allocations
 // Lock free call, all updates occur via events.
 func (cc *ClusterContext) notifyRMNewAllocation(rmID string, alloc *objects.Allocation) {
-	// CLEANUP: The alloc is passed to the RM twice why do we need event + callback?
-	// See YUNIKORN-462, there are two separate communications for the same allocation
-	// between the core and the shim they should be merged into one communication.
-
-	// if reconcile plugin is enabled, re-sync the cache now.
-	// before deciding on an allocation, call the reconcile plugin to sync scheduler cache
-	// between core and shim if necessary. This is useful when running multiple allocations
-	// in parallel and need to handle inter container affinity and anti-affinity.
-	// note, this needs to happen before notifying the RM about this allocation, because
-	// the RM side needs to get its cache refreshed (via reconcile plugin) before allocating
-	// the actual container.
-	if rp := plugins.GetResourceManagerCallbackPlugin(); rp != nil {
-		if err := rp.ReSyncSchedulerCache(&si.ReSyncSchedulerCacheArgs{
-			AssumedAllocations: []*si.AssumedAllocation{
-				{
-					AllocationKey: alloc.AllocationKey,
-					NodeID:        alloc.NodeID,
-				},
-			},
-		}); err != nil {
-			log.Logger().Error("failed to sync shim on allocation",
-				zap.Error(err))
-		}
-	}
-
-	// communicate the allocation to the RM
+	c := make(chan *rmevent.Result)
+	// communicate the allocation to the RM synchronously
 	cc.rmEventHandler.HandleEvent(&rmevent.RMNewAllocationsEvent{
 		Allocations: []*si.Allocation{alloc.NewSIFromAllocation()},
 		RmID:        rmID,
+		Channel:     c,
 	})
+	// Wait from channel
+	result := <-c
+	if result.Succeeded {
+		log.Logger().Debug("Successfully synced shim on new allocation. response: " + result.Reason)
+	} else {
+		log.Logger().Info("failed to sync shim on new allocation",
+			zap.String("Allocation key: ", alloc.AllocationKey))
+	}
 }
 
 // Create a RM update event to notify RM of released allocations
 // Lock free call, all updates occur via events.
 func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, released []*objects.Allocation, terminationType si.TerminationType, message string) {
+	c := make(chan *rmevent.Result)
 	releaseEvent := &rmevent.RMReleaseAllocationEvent{
 		ReleasedAllocations: make([]*si.AllocationRelease, 0),
 		RmID:                rmID,
+		Channel:             c,
 	}
 	for _, alloc := range released {
 		releaseEvent.ReleasedAllocations = append(releaseEvent.ReleasedAllocations, &si.AllocationRelease{
@@ -848,10 +805,18 @@ func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, released []*ob
 			UUID:            alloc.UUID,
 			TerminationType: terminationType,
 			Message:         message,
+			AllocationKey:   alloc.AllocationKey,
 		})
 	}
 
 	cc.rmEventHandler.HandleEvent(releaseEvent)
+	// Wait from channel
+	result := <-c
+	if result.Succeeded {
+		log.Logger().Debug("Successfully synced shim on released allocations. response: " + result.Reason)
+	} else {
+		log.Logger().Info("failed to sync shim on released allocations")
+	}
 }
 
 // Get a scheduling node based on its name from the partition.

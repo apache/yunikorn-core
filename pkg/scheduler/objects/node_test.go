@@ -743,3 +743,34 @@ func TestAddRemoveListener(t *testing.T) {
 	node.SetSchedulable(true)
 	assert.Equal(t, 1, tl.updateCount, "listener should not have fired again")
 }
+
+func TestReadyAttribute(t *testing.T) {
+	// missing
+	proto := newProto(testNode, nil, nil, nil)
+	node := NewNode(proto)
+	assert.Equal(t, true, node.ready, "Node should be in ready state")
+
+	// exists, but faulty
+	attr := map[string]string{
+		"readyX": "true",
+	}
+	proto = newProto(testNode, nil, nil, attr)
+	node = NewNode(proto)
+	assert.Equal(t, true, node.ready, "Node should be in ready state")
+
+	// exists, true
+	attr = map[string]string{
+		"ready": "true",
+	}
+	proto = newProto(testNode, nil, nil, attr)
+	node = NewNode(proto)
+	assert.Equal(t, true, node.ready, "Node should be in ready state")
+
+	// exists, false
+	attr = map[string]string{
+		"ready": "false",
+	}
+	proto = newProto(testNode, nil, nil, attr)
+	node = NewNode(proto)
+	assert.Equal(t, false, node.ready, "Node should not be in ready state")
+}

@@ -636,7 +636,7 @@ func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
 	case si.NodeInfo_UPDATE:
 		var newReadyStatus bool
 		var err error
-		if newReadyStatus, err = strconv.ParseBool(nodeInfo.Attributes["ready"]); err != nil {
+		if newReadyStatus, err = strconv.ParseBool(nodeInfo.Attributes[objects.ReadyFlag]); err != nil {
 			log.Logger().Error("Could not parse ready attribute, assuming true", zap.Any("attributes", nodeInfo.Attributes))
 			newReadyStatus = true
 		}

@@ -1318,7 +1318,7 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 				zap.String("allocationId", uuid),
 				zap.Error(err))
 		} else {
-			metrics.GetQueueMetrics(queue.QueuePath).IncReleasedContainer()
+			metrics.GetQueueMetrics(queue.GetQueuePath()).IncReleasedContainer()
 		}
 	}
 	// if confirmed is set we can assume there will just be one alloc in the released

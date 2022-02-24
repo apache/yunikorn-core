@@ -32,7 +32,7 @@ var cqm CoreQueueMetrics
 
 func TestApplicationsRunning(t *testing.T) {
 	cqm = getQueueMetrics()
-	defer unregisterMetrics(t)
+	defer unregisterQueueMetrics(t)
 
 	cqm.IncQueueApplicationsRunning()
 	verifyAppMetrics(t, "running")
@@ -40,7 +40,7 @@ func TestApplicationsRunning(t *testing.T) {
 
 func TestApplicationsAccepted(t *testing.T) {
 	cqm = getQueueMetrics()
-	defer unregisterMetrics(t)
+	defer unregisterQueueMetrics(t)
 
 	cqm.IncQueueApplicationsAccepted()
 	verifyAppMetrics(t, "accepted")
@@ -48,7 +48,7 @@ func TestApplicationsAccepted(t *testing.T) {
 
 func TestApplicationsRejected(t *testing.T) {
 	cqm = getQueueMetrics()
-	defer unregisterMetrics(t)
+	defer unregisterQueueMetrics(t)
 
 	cqm.IncQueueApplicationsRejected()
 	verifyAppMetrics(t, "rejected")
@@ -56,7 +56,7 @@ func TestApplicationsRejected(t *testing.T) {
 
 func TestApplicationsFailed(t *testing.T) {
 	cqm = getQueueMetrics()
-	defer unregisterMetrics(t)
+	defer unregisterQueueMetrics(t)
 
 	cqm.IncQueueApplicationsFailed()
 	verifyAppMetrics(t, "failed")
@@ -64,7 +64,7 @@ func TestApplicationsFailed(t *testing.T) {
 
 func TestApplicationsCompleted(t *testing.T) {
 	cqm = getQueueMetrics()
-	defer unregisterMetrics(t)
+	defer unregisterQueueMetrics(t)
 
 	cqm.IncQueueApplicationsCompleted()
 	verifyAppMetrics(t, "completed")
@@ -72,7 +72,7 @@ func TestApplicationsCompleted(t *testing.T) {
 
 func TestAllocatedContainers(t *testing.T) {
 	cqm = getQueueMetrics()
-	defer unregisterMetrics(t)
+	defer unregisterQueueMetrics(t)
 
 	cqm.IncAllocatedContainer()
 	verifyAppMetrics(t, "allocated")
@@ -80,7 +80,7 @@ func TestAllocatedContainers(t *testing.T) {
 
 func TestReleasedContainers(t *testing.T) {
 	cqm = getQueueMetrics()
-	defer unregisterMetrics(t)
+	defer unregisterQueueMetrics(t)
 
 	cqm.IncReleasedContainer()
 	verifyAppMetrics(t, "released")
@@ -88,7 +88,7 @@ func TestReleasedContainers(t *testing.T) {
 
 func TestQueueGuaranteedResourceMetrics(t *testing.T) {
 	cqm = getQueueMetrics()
-	defer unregisterMetrics(t)
+	defer unregisterQueueMetrics(t)
 
 	cqm.SetQueueGuaranteedResourceMetrics("cpu", 1)
 	verifyResourceMetrics(t, "guaranteed", "cpu")
@@ -96,7 +96,7 @@ func TestQueueGuaranteedResourceMetrics(t *testing.T) {
 
 func TestQueueMaxResourceMetrics(t *testing.T) {
 	cqm = getQueueMetrics()
-	defer unregisterMetrics(t)
+	defer unregisterQueueMetrics(t)
 
 	cqm.SetQueueMaxResourceMetrics("cpu", 1)
 	verifyResourceMetrics(t, "max", "cpu")
@@ -104,7 +104,7 @@ func TestQueueMaxResourceMetrics(t *testing.T) {
 
 func TestQueueAllocatedResourceMetrics(t *testing.T) {
 	cqm = getQueueMetrics()
-	defer unregisterMetrics(t)
+	defer unregisterQueueMetrics(t)
 
 	cqm.SetQueueAllocatedResourceMetrics("cpu", 1)
 	verifyResourceMetrics(t, "allocated", "cpu")
@@ -112,7 +112,7 @@ func TestQueueAllocatedResourceMetrics(t *testing.T) {
 
 func TestQueuePendingResourceMetrics(t *testing.T) {
 	cqm = getQueueMetrics()
-	defer unregisterMetrics(t)
+	defer unregisterQueueMetrics(t)
 
 	cqm.SetQueuePendingResourceMetrics("cpu", 1)
 	verifyResourceMetrics(t, "pending", "cpu")
@@ -164,7 +164,7 @@ func verifyMetrics(t *testing.T, checkLabel func(label []*dto.LabelPair)) {
 
 	assert.Assert(t, checked, "Failed to find metric")
 }
-func unregisterMetrics(t *testing.T) {
+func unregisterQueueMetrics(t *testing.T) {
 	qm, ok := cqm.(*QueueMetrics)
 	if !ok {
 		t.Fatalf("Type assertion failed, metrics is not QueueMetrics")

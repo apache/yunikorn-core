@@ -124,6 +124,11 @@ type CoreSchedulerMetrics interface {
 	DecActiveNodes()
 	SubActiveNodes(value int)
 	SetActiveNodes(value int)
+	IncDrainingNodes()
+	DecDrainingNodes()
+	IncUnhealthyNodes()
+	DecUnhealthyNodes()
+	IncTotalDecommissionedNodes()
 
 	// Metrics Ops related to failedNodes
 	IncFailedNodes()

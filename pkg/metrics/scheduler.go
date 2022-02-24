@@ -371,3 +371,23 @@ func (m *SchedulerMetrics) SetNodeResourceUsage(resourceName string, rangeIdx in
 	}
 	resourceMetrics.With(prometheus.Labels{"range": resourceUsageRangeBuckets[rangeIdx]}).Set(value)
 }
+
+func (m *SchedulerMetrics) IncDrainingNodes() {
+	m.node.With(prometheus.Labels{"state": "draining"}).Inc()
+}
+
+func (m *SchedulerMetrics) DecDrainingNodes() {
+	m.node.With(prometheus.Labels{"state": "draining"}).Dec()
+}
+
+func (m *SchedulerMetrics) IncTotalDecommissionedNodes() {
+	m.node.With(prometheus.Labels{"state": "decommissioned"}).Inc()
+}
+
+func (m *SchedulerMetrics) IncUnhealthyNodes() {
+	m.node.With(prometheus.Labels{"state": "unhealthy"}).Inc()
+}
+
+func (m *SchedulerMetrics) DecUnhealthyNodes() {
+	m.node.With(prometheus.Labels{"state": "unhealthy"}).Dec()
+}

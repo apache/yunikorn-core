@@ -658,15 +658,17 @@ func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
 			node.SetOccupiedResource(resources.NewResourceFromProto(or))
 		}
 	case si.NodeInfo_DRAIN_NODE:
-		// set the state to not schedulable
-		node.SetSchedulable(false)
-		metrics.GetSchedulerMetrics().IncDrainingNodes()
+		if node.IsSchedulable() {
+			// set the state to not schedulable
+			node.SetSchedulable(false)
+			metrics.GetSchedulerMetrics().IncDrainingNodes()
+		}
 	case si.NodeInfo_DRAIN_TO_SCHEDULABLE:
 		if !node.IsSchedulable() {
 			metrics.GetSchedulerMetrics().DecDrainingNodes()
+			// set the state to schedulable
+			node.SetSchedulable(true)
 		}
-		// set the state to schedulable
-		node.SetSchedulable(true)
 	case si.NodeInfo_DECOMISSION:
 		if !node.IsSchedulable() {
 			metrics.GetSchedulerMetrics().DecDrainingNodes()

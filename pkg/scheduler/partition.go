@@ -788,6 +788,8 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 			log.Logger().Warn("failed to release resources from queue",
 				zap.String("appID", alloc.ApplicationID),
 				zap.Error(err))
+		} else {
+			metrics.GetQueueMetrics(app.GetQueuePath()).IncReleasedContainer()
 		}
 
 		// the allocation is removed so add it to the list that we return
@@ -1153,6 +1155,7 @@ func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
 			alloc.ApplicationID, err)
 	}
 
+	metrics.GetQueueMetrics(queue.GetQueuePath()).IncAllocatedContainer()
 	node.AddAllocation(alloc)
 	app.RecoverAllocationAsk(alloc.Ask)
 	app.AddAllocation(alloc)
@@ -1314,6 +1317,8 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 				zap.String("appID", appID),
 				zap.String("allocationId", uuid),
 				zap.Error(err))
+		} else {
+			metrics.GetQueueMetrics(queue.GetQueuePath()).IncReleasedContainer()
 		}
 	}
 	// if confirmed is set we can assume there will just be one alloc in the released

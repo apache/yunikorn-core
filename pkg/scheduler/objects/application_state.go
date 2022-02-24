@@ -20,8 +20,6 @@ package objects
 
 import (
 	"fmt"
-	"time"
-
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
@@ -119,73 +117,73 @@ func NewAppState() *fsm.FSM {
 			},
 		},
 		fsm.Callbacks{
+			// The state machine is tightly tied to the Application object.
+			//
+			// The first argument must always be an Application and if there is a second,
+			// that must be a string. If this precondition is not met, a runtime panic
+			// will occur.
 			"enter_state": func(event *fsm.Event) {
-				app, ok := event.Args[0].(*Application)
-				if !ok {
-					log.Logger().Warn("The first argument is not an Application")
-					return
-				}
+				app := event.Args[0].(*Application) //nolint:errcheck
 				log.Logger().Info("Application state transition",
 					zap.String("appID", app.ApplicationID),
 					zap.String("source", event.Src),
 					zap.String("destination", event.Dst),
 					zap.String("event", event.Event))
 				if len(event.Args) == 2 {
-					eventInfo, ok := event.Args[1].(string)
-					if ok {
-						app.OnStateChange(event, eventInfo)
-					} else {
-						log.Logger().Warn("unable to get additional event info")
-						app.OnStateChange(event, "")
-					}
+					eventInfo := event.Args[1].(string) //nolint:errcheck
+					app.OnStateChange(event, eventInfo)
 				} else {
 					app.OnStateChange(event, "")
 				}
 			},
 			"leave_state": func(event *fsm.Event) {
-				event.Args[0].(*Application).clearStateTimer()
+				event.Args[0].(*Application).clearStateTimer() //nolint:errcheck
 			},
 			fmt.Sprintf("enter_%s", Starting.String()): func(event *fsm.Event) {
-				app, ok := event.Args[0].(*Application)
-				if !ok {
-					log.Logger().Warn("The first argument is not an Application")
-					return
-				}
-				setTimer(app.startTimeout, event, RunApplication)
+				app := event.Args[0].(*Application) //nolint:errcheck
+				app.setStateTimer(app.startTimeout, app.stateMachine.Current(), RunApplication)
 			},
 			fmt.Sprintf("enter_%s", Completing.String()): func(event *fsm.Event) {
-				setTimer(completingTimeout, event, CompleteApplication)
+				app := event.Args[0].(*Application) //nolint:errcheck
+				app.setStateTimer(completingTimeout, app.stateMachine.Current(), CompleteApplication)
 			},
 			fmt.Sprintf("leave_%s", New.String()): func(event *fsm.Event) {
+				app := event.Args[0].(*Application) //nolint:errcheck
+				metrics.GetQueueMetrics(app.QueuePath).IncQueueApplicationsAccepted()
 				metrics.GetSchedulerMetrics().IncTotalApplicationsAccepted()
 			},
 			fmt.Sprintf("enter_%s", Rejected.String()): func(event *fsm.Event) {
+				app := event.Args[0].(*Application) //nolint:errcheck
+				metrics.GetQueueMetrics(app.QueuePath).IncQueueApplicationsRejected()
 				metrics.GetSchedulerMetrics().IncTotalApplicationsRejected()
 			},
 			fmt.Sprintf("enter_%s", Running.String()): func(event *fsm.Event) {
+				app := event.Args[0].(*Application) //nolint:errcheck
+				metrics.GetQueueMetrics(app.QueuePath).IncQueueApplicationsRunning()
 				metrics.GetSchedulerMetrics().IncTotalApplicationsRunning()
 			},
 			fmt.Sprintf("leave_%s", Running.String()): func(event *fsm.Event) {
+				app := event.Args[0].(*Application) //nolint:errcheck
+				metrics.GetQueueMetrics(app.QueuePath).DecQueueApplicationsRunning()
 				metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()
 			},
 			fmt.Sprintf("enter_%s", Completed.String()): func(event *fsm.Event) {
+				app := event.Args[0].(*Application) //nolint:errcheck
 				metrics.GetSchedulerMetrics().IncTotalApplicationsCompleted()
-				app := setTimer(terminatedTimeout, event, ExpireApplication)
+				metrics.GetQueueMetrics(app.QueuePath).IncQueueApplicationsCompleted()
+				app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
 				app.executeTerminatedCallback()
 				app.clearPlaceholderTimer()
 			},
 			fmt.Sprintf("enter_%s", Failed.String()): func(event *fsm.Event) {
-				app := setTimer(terminatedTimeout, event, ExpireApplication)
+				app := event.Args[0].(*Application) //nolint:errcheck
+				metrics.GetQueueMetrics(app.QueuePath).DecQueueApplicationsRunning()
+				metrics.GetQueueMetrics(app.QueuePath).IncQueueApplicationsFailed()
+				metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()
+				metrics.GetSchedulerMetrics().IncTotalApplicationsFailed()
+				app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
 				app.executeTerminatedCallback()
 			},
 		},
 	)
-}
-
-func setTimer(timeout time.Duration, event *fsm.Event, eventToTrigger applicationEvent) *Application {
-	app, ok := event.Args[0].(*Application)
-	if ok {
-		app.setStateTimer(timeout, app.stateMachine.Current(), eventToTrigger)
-	}
-	return app
 }

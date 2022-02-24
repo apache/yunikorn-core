@@ -383,6 +383,11 @@ func TestIsReservedForApp(t *testing.T) {
 	if !node.isReservedForApp("app-1|alloc-1") {
 		t.Error("node was reserved for this app/alloc but check did not passed ")
 	}
+	// app name similarity check: chop of the last char to make sure we check the full name
+	similar := appID1[:len(appID1)-1]
+	if node.isReservedForApp(similar) {
+		t.Errorf("similar app should not have reservations on node %s", similar)
+	}
 }
 
 func TestAttributes(t *testing.T) {

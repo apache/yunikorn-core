@@ -587,7 +587,7 @@ func (sa *Application) hasReserved() bool {
 	return len(sa.reservations) > 0
 }
 
-// Return if the application has the node reserved.
+// IsReservedOnNode returns true if and only if the node has been reserved by the application
 // An empty nodeID is never reserved.
 func (sa *Application) IsReservedOnNode(nodeID string) bool {
 	if nodeID == "" {
@@ -595,8 +595,10 @@ func (sa *Application) IsReservedOnNode(nodeID string) bool {
 	}
 	sa.RLock()
 	defer sa.RUnlock()
+	// make sure matches only for the whole nodeID
+	separator := nodeID + "|"
 	for key := range sa.reservations {
-		if strings.HasPrefix(key, nodeID) {
+		if strings.HasPrefix(key, separator) {
 			return true
 		}
 	}

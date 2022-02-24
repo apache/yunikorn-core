@@ -469,7 +469,7 @@ func (sn *Node) IsUnlimited() bool {
 	return sn.unlimited
 }
 
-// Return true if and only if the node has been reserved by the application
+// isReservedForApp returns true if and only if the node has been reserved by the application
 // NOTE: a return value of false does not mean the node is not reserved by a different app
 func (sn *Node) isReservedForApp(key string) bool {
 	if key == "" {
@@ -480,8 +480,10 @@ func (sn *Node) isReservedForApp(key string) bool {
 	if strings.Contains(key, "|") {
 		return sn.reservations[key] != nil
 	}
+	// make sure matches only for the whole appID
+	separator := key + "|"
 	for resKey := range sn.reservations {
-		if strings.HasPrefix(resKey, key) {
+		if strings.HasPrefix(resKey, separator) {
 			return true
 		}
 	}

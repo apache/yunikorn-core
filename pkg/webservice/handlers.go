@@ -83,7 +83,6 @@ func getClusterInfo(w http.ResponseWriter, r *http.Request) {
 
 	lists := schedulerContext.GetPartitionMapClone()
 	clustersInfo := getClusterDAO(lists)
-
 	if err := json.NewEncoder(w).Encode(clustersInfo); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}

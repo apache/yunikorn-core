@@ -833,7 +833,7 @@ func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bo
 	}
 	// all OK update this queue
 	sq.allocatedResource = newAllocated
-	sq.updateAllocatedResourceMetrics()
+	sq.updateAllocatedAndPendingResourceMetrics()
 	return nil
 }
 
@@ -869,7 +869,7 @@ func (sq *Queue) DecAllocatedResource(alloc *resources.Resource) error {
 	}
 	// all OK update the queue
 	sq.allocatedResource = resources.Sub(sq.allocatedResource, alloc)
-	sq.updateAllocatedResourceMetrics()
+	sq.updateAllocatedAndPendingResourceMetrics()
 	return nil
 }
 
@@ -1272,11 +1272,14 @@ func (sq *Queue) updateMaxResourceMetrics() {
 	}
 }
 
-// updateAllocatedResourceMetrics updates allocated resource metrics if this is a leaf queue.
-func (sq *Queue) updateAllocatedResourceMetrics() {
+// updateAllocatedAndPendingResourceMetrics updates allocated and pending resource metrics if this is a leaf queue.
+func (sq *Queue) updateAllocatedAndPendingResourceMetrics() {
 	if sq.isLeaf {
 		for k, v := range sq.allocatedResource.Resources {
 			metrics.GetQueueMetrics(sq.QueuePath).SetQueueAllocatedResourceMetrics(k, float64(v))
+		}
+		for k, v := range sq.pending.Resources {
+			metrics.GetQueueMetrics(sq.QueuePath).SetQueuePendingResourceMetrics(k, float64(v))
 		}
 	}
 }

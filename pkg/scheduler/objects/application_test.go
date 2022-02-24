@@ -140,6 +140,12 @@ func TestAppReservation(t *testing.T) {
 		t.Errorf("app should have reservations for node %s", nodeID1)
 	}
 
+	// node name similarity check: chop of the last char to make sure we check the full name
+	similar := nodeID1[:len(nodeID1)-1]
+	if app.hasReserved() && app.IsReservedOnNode(similar) {
+		t.Errorf("similar app should not have reservations for node %s", similar)
+	}
+
 	// reserve the same reservation
 	err = app.Reserve(node, ask)
 	if err == nil {

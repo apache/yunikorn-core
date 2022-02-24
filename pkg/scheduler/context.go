@@ -49,7 +49,8 @@ type ClusterContext struct {
 	needPreemption      bool
 	reservationDisabled bool
 
-	rmInfos map[string]*RMInformation
+	rmInfos   map[string]*RMInformation
+	startTime time.Time
 
 	sync.RWMutex
 }
@@ -71,6 +72,7 @@ func NewClusterContext(rmID, policyGroup string) (*ClusterContext, error) {
 		partitions:          make(map[string]*PartitionContext),
 		policyGroup:         policyGroup,
 		reservationDisabled: common.GetBoolEnvVar(disableReservation, false),
+		startTime:           time.Now(),
 	}
 	// If reservation is turned off set the reservation delay to the maximum duration defined.
 	// The time package does not export maxDuration so use the equivalent from the math package.
@@ -90,6 +92,7 @@ func newClusterContext() *ClusterContext {
 	cc := &ClusterContext{
 		partitions:          make(map[string]*PartitionContext),
 		reservationDisabled: common.GetBoolEnvVar(disableReservation, false),
+		startTime:           time.Now(),
 	}
 	// If reservation is turned off set the reservation delay to the maximum duration defined.
 	// The time package does not export maxDuration so use the equivalent from the math package.
@@ -385,6 +388,12 @@ func (cc *ClusterContext) GetPolicyGroup() string {
 	cc.RLock()
 	defer cc.RUnlock()
 	return cc.policyGroup
+}
+
+func (cc *ClusterContext) GetStartTime() time.Time {
+	cc.RLock()
+	defer cc.RUnlock()
+	return cc.startTime
 }
 
 func (cc *ClusterContext) GetRMInfoMapClone() map[string]*RMInformation {

@@ -18,7 +18,7 @@
 package dao
 
 type ClusterDAOInfo struct {
-	ScheduleStartDate     string              `json:"scheduleStartDate"`
+	StartTime             string              `json:"startTime"`
 	RMBuildInformation    []map[string]string `json:"rmBuildInformation"`
 	PartitionName         string              `json:"partition"`
 	ClusterName           string              `json:"clusterName"`
@@ -35,5 +35,3 @@ type ClusterDAOInfo struct {
 	TotalNodes            string              `json:"totalNodes"`
 	FailedNodes           string              `json:"failedNodes"`
 }
-
-var ScheduleStartDate string

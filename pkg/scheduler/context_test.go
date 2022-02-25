@@ -19,13 +19,20 @@
 package scheduler
 
 import (
+	"strconv"
+	"strings"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
+	siCommon "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -268,4 +275,118 @@ func TestContext_ProcessNode(t *testing.T) {
 	if node == nil {
 		t.Fatalf("expected node to be added skipping nil node in list")
 	}
+}
+
+func TestContextUpdateNodeMetrics(t *testing.T) {
+	metrics.GetSchedulerMetrics().Reset()
+	context := createTestContext(t, pName)
+
+	n := getNodeInfoForAddingNode(true)
+
+	err := context.addNode(n, 1)
+	assert.NilError(t, err, "unexpected error returned from addNode")
+	verifyMetrics(t, 1, "active")
+
+	// Update: node became unhealthy
+	n = getNodeInfoForUpdatingNode(si.NodeInfo_UPDATE, false)
+	context.updateNode(n)
+	verifyMetrics(t, 1, "unhealthy")
+
+	// Update: node became healthy
+	n = getNodeInfoForUpdatingNode(si.NodeInfo_UPDATE, true)
+	context.updateNode(n)
+	verifyMetrics(t, 0, "unhealthy")
+}
+
+func TestContextAddUnhealthyNodeMetrics(t *testing.T) {
+	metrics.GetSchedulerMetrics().Reset()
+	context := createTestContext(t, pName)
+
+	n := getNodeInfoForAddingNode(false)
+
+	err := context.addNode(n, 1)
+	assert.NilError(t, err, "unexpected error returned from addNode")
+	verifyMetrics(t, 1, "active")
+	verifyMetrics(t, 1, "unhealthy")
+}
+
+func TestContextDrainingNodeMetrics(t *testing.T) {
+	metrics.GetSchedulerMetrics().Reset()
+	context := createTestContext(t, pName)
+
+	n := getNodeInfoForAddingNode(true)
+	err := context.addNode(n, 1)
+	assert.NilError(t, err, "unexpected error returned from addNode")
+
+	n = getNodeInfoForUpdatingNode(si.NodeInfo_DRAIN_NODE, true)
+	context.updateNode(n)
+	verifyMetrics(t, 1, "draining")
+}
+
+func TestContextDrainingNodeBackToSchedulableMetrics(t *testing.T) {
+	metrics.GetSchedulerMetrics().Reset()
+	context := createTestContext(t, pName)
+
+	n := getNodeInfoForAddingNode(true)
+	err := context.addNode(n, 1)
+	assert.NilError(t, err, "unexpected error returned from addNode")
+
+	n = getNodeInfoForUpdatingNode(si.NodeInfo_DRAIN_NODE, true)
+	context.updateNode(n)
+
+	n = getNodeInfoForUpdatingNode(si.NodeInfo_DRAIN_TO_SCHEDULABLE, true)
+	context.updateNode(n)
+	verifyMetrics(t, 0, "draining")
+}
+
+func getNodeInfoForAddingNode(ready bool) *si.NodeInfo {
+	n := &si.NodeInfo{
+		NodeID:              "test-1",
+		Action:              si.NodeInfo_UNKNOWN_ACTION_FROM_RM,
+		SchedulableResource: &si.Resource{Resources: map[string]*si.Quantity{"first": {Value: 10}}},
+		Attributes: map[string]string{
+			siCommon.NodePartition: pName,
+			objects.ReadyFlag:      strconv.FormatBool(ready),
+		},
+	}
+
+	return n
+}
+
+func getNodeInfoForUpdatingNode(action si.NodeInfo_ActionFromRM, ready bool) *si.NodeInfo {
+	n := &si.NodeInfo{
+		NodeID: "test-1",
+		Action: action,
+		Attributes: map[string]string{
+			siCommon.NodePartition: pName,
+			objects.ReadyFlag:      strconv.FormatBool(ready),
+		},
+	}
+
+	return n
+}
+
+func verifyMetrics(t *testing.T, expectedCounter float64, expectedState string) {
+	mfs, err := prometheus.DefaultGatherer.Gather()
+	assert.NilError(t, err)
+
+	var checked bool
+outer:
+	for _, metric := range mfs {
+		if strings.Contains(metric.GetName(), "yunikorn_scheduler_node") {
+			assert.Equal(t, dto.MetricType_GAUGE, metric.GetType())
+			for _, m := range metric.Metric {
+				if len(m.GetLabel()) == 1 &&
+					*m.GetLabel()[0].Name == "state" &&
+					*m.GetLabel()[0].Value == expectedState {
+					assert.Assert(t, m.Gauge != nil)
+					assert.Equal(t, expectedCounter, *m.Gauge.Value)
+					checked = true
+					break outer
+				}
+			}
+		}
+	}
+
+	assert.Assert(t, checked, "Failed to find metric")
 }

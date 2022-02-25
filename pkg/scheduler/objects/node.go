@@ -20,6 +20,7 @@ package objects
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -31,6 +32,8 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
+
+const ReadyFlag = "ready"
 
 type Node struct {
 	// Fields for fast access These fields are considered read only.
@@ -49,6 +52,7 @@ type Node struct {
 	allocations       map[string]*Allocation
 	schedulable       bool
 	unlimited         bool
+	ready             bool
 
 	preempting   *resources.Resource     // resources considered for preemption
 	reservations map[string]*reservation // a map of reservations
@@ -62,6 +66,13 @@ func NewNode(proto *si.NodeInfo) *Node {
 	if proto == nil {
 		return nil
 	}
+
+	var ready bool
+	var err error
+	if ready, err = strconv.ParseBool(proto.Attributes[ReadyFlag]); err != nil {
+		log.Logger().Error("Could not parse ready flag, assuming true")
+		ready = true
+	}
 	sn := &Node{
 		NodeID:            proto.NodeID,
 		preempting:        resources.NewResource(),
@@ -72,9 +83,9 @@ func NewNode(proto *si.NodeInfo) *Node {
 		allocations:       make(map[string]*Allocation),
 		schedulable:       true,
 		listeners:         make([]NodeListener, 0),
+		ready:             ready,
 	}
 	// initialise available resources
-	var err error
 	sn.availableResource, err = resources.SubErrorNegative(sn.totalResource, sn.occupiedResource)
 	if err != nil {
 		log.Logger().Error("New node created with no available resources",
@@ -469,7 +480,7 @@ func (sn *Node) IsUnlimited() bool {
 	return sn.unlimited
 }
 
-// Return true if and only if the node has been reserved by the application
+// isReservedForApp returns true if and only if the node has been reserved by the application
 // NOTE: a return value of false does not mean the node is not reserved by a different app
 func (sn *Node) isReservedForApp(key string) bool {
 	if key == "" {
@@ -480,8 +491,10 @@ func (sn *Node) isReservedForApp(key string) bool {
 	if strings.Contains(key, "|") {
 		return sn.reservations[key] != nil
 	}
+	// make sure matches only for the whole appID
+	separator := key + "|"
 	for resKey := range sn.reservations {
-		if strings.HasPrefix(resKey, key) {
+		if strings.HasPrefix(resKey, separator) {
 			return true
 		}
 	}
@@ -623,4 +636,16 @@ func (sn *Node) getListeners() []NodeListener {
 	list := make([]NodeListener, len(sn.listeners))
 	copy(list, sn.listeners)
 	return list
+}
+
+func (sn *Node) IsReady() bool {
+	sn.RLock()
+	defer sn.RUnlock()
+	return sn.ready
+}
+
+func (sn *Node) SetReady(ready bool) {
+	sn.Lock()
+	defer sn.Unlock()
+	sn.ready = ready
 }

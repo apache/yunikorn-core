@@ -245,8 +245,10 @@ func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resou
 
 func newNodeWithResources(nodeID string, max, occupied *resources.Resource) *objects.Node {
 	proto := &si.NodeInfo{
-		NodeID:              nodeID,
-		Attributes:          nil,
+		NodeID: nodeID,
+		Attributes: map[string]string{
+			objects.ReadyFlag: "true",
+		},
 		SchedulableResource: max.ToProto(),
 		OccupiedResource:    occupied.ToProto(),
 	}

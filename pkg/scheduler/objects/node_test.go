@@ -383,6 +383,11 @@ func TestIsReservedForApp(t *testing.T) {
 	if !node.isReservedForApp("app-1|alloc-1") {
 		t.Error("node was reserved for this app/alloc but check did not passed ")
 	}
+	// app name similarity check: chop of the last char to make sure we check the full name
+	similar := appID1[:len(appID1)-1]
+	if node.isReservedForApp(similar) {
+		t.Errorf("similar app should not have reservations on node %s", similar)
+	}
 }
 
 func TestAttributes(t *testing.T) {
@@ -742,4 +747,35 @@ func TestAddRemoveListener(t *testing.T) {
 	node.RemoveListener(&tl)
 	node.SetSchedulable(true)
 	assert.Equal(t, 1, tl.updateCount, "listener should not have fired again")
+}
+
+func TestReadyAttribute(t *testing.T) {
+	// missing
+	proto := newProto(testNode, nil, nil, nil)
+	node := NewNode(proto)
+	assert.Equal(t, true, node.ready, "Node should be in ready state")
+
+	// exists, but faulty
+	attr := map[string]string{
+		"readyX": "true",
+	}
+	proto = newProto(testNode, nil, nil, attr)
+	node = NewNode(proto)
+	assert.Equal(t, true, node.ready, "Node should be in ready state")
+
+	// exists, true
+	attr = map[string]string{
+		"ready": "true",
+	}
+	proto = newProto(testNode, nil, nil, attr)
+	node = NewNode(proto)
+	assert.Equal(t, true, node.ready, "Node should be in ready state")
+
+	// exists, false
+	attr = map[string]string{
+		"ready": "false",
+	}
+	proto = newProto(testNode, nil, nil, attr)
+	node = NewNode(proto)
+	assert.Equal(t, false, node.ready, "Node should not be in ready state")
 }

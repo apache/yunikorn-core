@@ -820,6 +820,7 @@ func getClusterDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClusterD
 
 func getRMBuildInformations(lists map[string]*scheduler.RMInformation) []map[string]string {
 	var result []map[string]string
+
 	for _, rmInfo := range lists {
 		result = append(result, rmInfo.RMBuildInformation)
 	}

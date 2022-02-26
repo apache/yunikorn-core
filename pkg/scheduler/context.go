@@ -916,4 +916,5 @@ func (cc *ClusterContext) SetRMInfos(rmID string, rmBuildInformation map[string]
 	cc.rmInfos[rmID] = &RMInformation{
 		RMBuildInformation: rmBuildInformation,
 	}
+	cc.rmInfos[rmID].RMBuildInformation["rmId"] = rmID
 }

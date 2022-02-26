@@ -612,10 +612,13 @@ func TestGetClusterUtilJSON(t *testing.T) {
 	BuildInfoMap["buildDate"] = "2006-01-02T15:04:05-0700"
 	BuildInfoMap["buildVersion"] = "latest"
 	BuildInfoMap["isPluginVersion"] = "false"
-	BuildInfoMap["rmId"] = rmID
 	schedulerContext.SetRMInfos(rmID, BuildInfoMap)
 	rmInfos := schedulerContext.GetRMInfoMapClone()
-	assert.DeepEqual(t, rmInfos[rmID].RMBuildInformation, BuildInfoMap)
+	assert.Equal(t, 1, len(rmInfos))
+	assert.Equal(t, rmInfos[rmID].RMBuildInformation["buildDate"], BuildInfoMap["buildDate"])
+	assert.Equal(t, rmInfos[rmID].RMBuildInformation["buildVersion"], BuildInfoMap["buildVersion"])
+	assert.Equal(t, rmInfos[rmID].RMBuildInformation["isPluginVersion"], BuildInfoMap["isPluginVersion"])
+	assert.Equal(t, rmInfos[rmID].RMBuildInformation["rmId"], rmID)
 
 	// Check test partitions
 	partitionName := common.GetNormalizedPartitionName("default", rmID)

@@ -74,7 +74,7 @@ func TestGetSchedulerHealthStatusContext(t *testing.T) {
 	assert.Assert(t, healthInfo.Healthy, "Scheduler should be healthy")
 
 	// set some negative node resources
-	err = schedulerContext.partitions[partName].AddNode(objects.NewNode(&si.NewNodeInfo{
+	err = schedulerContext.partitions[partName].AddNode(objects.NewNode(&si.NodeInfo{
 		NodeID:     "node",
 		Attributes: nil,
 		SchedulableResource: &si.Resource{
@@ -84,10 +84,34 @@ func TestGetSchedulerHealthStatusContext(t *testing.T) {
 	assert.NilError(t, err, "Unexpected error while adding a new node")
 	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, !healthInfo.Healthy, "Scheduler should not be healthy")
+
+	// add orphan allocation to a node
+	node := schedulerContext.partitions[partName].nodes.GetNode("node")
+	alloc := objects.NewAllocation(allocID, "node", newAllocationAsk("key", "appID", resources.NewResource()))
+	node.AddAllocation(alloc)
+	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	assert.Assert(t, !healthInfo.Healthy, "Scheduler should not be healthy")
+	assert.Assert(t, !healthInfo.HealthChecks[9].Succeeded, "The orphan allocation check on the node should not be successful")
+
+	// add the allocation to the app as well
+	part := schedulerContext.partitions[partName]
+	app := newApplication("appID", partName, "root.default")
+	app.AddAllocation(alloc)
+	err = part.AddApplication(app)
+	assert.NilError(t, err, "Could not add application")
+	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	assert.Assert(t, healthInfo.HealthChecks[9].Succeeded, "The orphan allocation check on the node should be successful")
+
+	// remove the allocation from the node, so we will have an orphan allocation assigned to the app
+	node.RemoveAllocation(allocID)
+	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	assert.Assert(t, healthInfo.HealthChecks[9].Succeeded, "The orphan allocation check on the node should be successful")
+	assert.Assert(t, !healthInfo.HealthChecks[10].Succeeded, "The orphan allocation check on the app should not be successful")
 }
 
 func TestGetSchedulerHealthStatusMetrics(t *testing.T) {
 	configs.MockSchedulerConfigByData([]byte(configDefault))
+	metrics.Reset()
 	schedulerMetrics := metrics.GetSchedulerMetrics()
 	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
 	assert.NilError(t, err, "Error when load schedulerContext from config")

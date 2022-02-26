@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -42,11 +43,13 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/tests"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 const partitionNameWithoutClusterID = "default"
+const normalizedPartitionName = "[rm-123]default"
 const startConf = `
 partitions:
   - name: default
@@ -87,9 +90,22 @@ partitions:
     queues:
       - name: root
 `
+
 const configDefault = `
 partitions:
   - name: default
+    queues:
+      - name: root
+        submitacl: "*"
+        queues:
+          - name: default
+          - name: noapps
+`
+
+const configStateDumpFilePath = `
+partitions:
+  - name: default
+    statedumpfilepath: "tmp/non-default-yunikorn-state.txt"
     queues:
       - name: root
         submitacl: "*"
@@ -506,6 +522,7 @@ func TestQueryParamInAppsHandler(t *testing.T) {
 }
 
 type FakeConfigPlugin struct {
+	tests.MockResourceManagerCallback
 	generateError bool
 }
 
@@ -639,7 +656,7 @@ func TestGetClusterUtilJSON(t *testing.T) {
 
 	// add node to partition with allocations
 	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 1000, resources.VCORE: 1000}).ToProto()
-	node1 := objects.NewNode(&si.NewNodeInfo{NodeID: nodeID, SchedulableResource: nodeRes})
+	node1 := objects.NewNode(&si.NodeInfo{NodeID: nodeID, SchedulableResource: nodeRes})
 
 	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 500, resources.VCORE: 300})
 	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 300, resources.VCORE: 200})
@@ -698,15 +715,14 @@ func ContainsObj(slice interface{}, contains interface{}) bool {
 
 func TestGetNodesUtilJSON(t *testing.T) {
 	configs.MockSchedulerConfigByData([]byte(configDefault))
-	var err error
-	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	context, err := scheduler.NewClusterContext(rmID, policyGroup)
 	assert.NilError(t, err, "Error when load schedulerContext from config")
-	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
-
+	assert.Equal(t, 1, len(context.GetPartitionMapClone()))
 	// Check test partition
 	partitionName := common.GetNormalizedPartitionName("default", rmID)
-	partition := schedulerContext.GetPartition(partitionName)
+	partition := context.GetPartition(partitionName)
 	assert.Equal(t, partitionName, partition.Name)
+
 	// create test application
 	appID := "app1"
 	app := newApplication(appID, partitionName, queueName, rmID, security.UserGroup{})
@@ -715,13 +731,15 @@ func TestGetNodesUtilJSON(t *testing.T) {
 
 	// create test nodes
 	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 1000, resources.VCORE: 1000}).ToProto()
+	nodeRes2 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 1000, resources.VCORE: 1000, "GPU": 10}).ToProto()
 	node1ID := "node-1"
-	node1 := objects.NewNode(&si.NewNodeInfo{NodeID: node1ID, SchedulableResource: nodeRes})
+	node1 := objects.NewNode(&si.NodeInfo{NodeID: node1ID, SchedulableResource: nodeRes})
 	node2ID := "node-2"
-	node2 := objects.NewNode(&si.NewNodeInfo{NodeID: node2ID, SchedulableResource: nodeRes})
+	node2 := objects.NewNode(&si.NodeInfo{NodeID: node2ID, SchedulableResource: nodeRes2})
+
 	// create test allocations
 	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 500, resources.VCORE: 300})
-	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 300, resources.VCORE: 500})
+	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 300, resources.VCORE: 500, "GPU": 5})
 	ask1 := &objects.AllocationAsk{
 		AllocationKey:     "alloc-1",
 		QueueName:         queueName,
@@ -744,9 +762,11 @@ func TestGetNodesUtilJSON(t *testing.T) {
 	// get nodes utilization
 	res1 := getNodesUtilJSON(partition, resources.MEMORY)
 	res2 := getNodesUtilJSON(partition, resources.VCORE)
+	res3 := getNodesUtilJSON(partition, "GPU")
 	resNon := getNodesUtilJSON(partition, "non-exist")
 	subres1 := res1.NodesUtil
 	subres2 := res2.NodesUtil
+	subres3 := res3.NodesUtil
 	subresNon := resNon.NodesUtil
 
 	assert.Equal(t, res1.ResourceType, resources.MEMORY)
@@ -761,9 +781,13 @@ func TestGetNodesUtilJSON(t *testing.T) {
 	assert.Equal(t, subres2[2].NodeNames[0], node1ID)
 	assert.Equal(t, subres2[4].NodeNames[0], node2ID)
 
+	assert.Equal(t, res3.ResourceType, "GPU")
+	assert.Equal(t, subres3[4].NumOfNodes, int64(1))
+	assert.Equal(t, subres3[4].NodeNames[0], node2ID)
+
 	assert.Equal(t, resNon.ResourceType, "non-exist")
-	assert.Equal(t, subresNon[0].NumOfNodes, int64(-1))
-	assert.Equal(t, subresNon[0].NodeNames[0], "N/A")
+	assert.Equal(t, subresNon[0].NumOfNodes, int64(0))
+	assert.Equal(t, len(subresNon[0].NodeNames), 0)
 }
 
 func addAndConfirmApplicationExists(t *testing.T, partitionName string, partition *scheduler.PartitionContext, appName string) *objects.Application {
@@ -820,6 +844,35 @@ func TestPartitions(t *testing.T) {
 
 	NewWebApp(schedulerContext, nil)
 
+	// create test nodes
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 500, resources.VCORE: 500}).ToProto()
+	node1ID := "node-1"
+	node1 := objects.NewNode(&si.NodeInfo{NodeID: node1ID, SchedulableResource: nodeRes})
+	node2ID := "node-2"
+	node2 := objects.NewNode(&si.NodeInfo{NodeID: node2ID, SchedulableResource: nodeRes})
+
+	// create test allocations
+	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 100, resources.VCORE: 400})
+	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 200, resources.VCORE: 300})
+	ask1 := &objects.AllocationAsk{
+		AllocationKey:     "alloc-1",
+		QueueName:         queueName,
+		ApplicationID:     app6.ApplicationID,
+		AllocatedResource: resAlloc1,
+	}
+	ask2 := &objects.AllocationAsk{
+		AllocationKey:     "alloc-2",
+		QueueName:         queueName,
+		ApplicationID:     app3.ApplicationID,
+		AllocatedResource: resAlloc2,
+	}
+	allocs := []*objects.Allocation{objects.NewAllocation("alloc-1-uuid", node1ID, ask1)}
+	err = defaultPartition.AddNode(node1, allocs)
+	assert.NilError(t, err, "add node to partition should not have failed")
+	allocs = []*objects.Allocation{objects.NewAllocation("alloc-2-uuid", node2ID, ask2)}
+	err = defaultPartition.AddNode(node2, allocs)
+	assert.NilError(t, err, "add node to partition should not have failed")
+
 	var req *http.Request
 	req, err = http.NewRequest("GET", "/ws/v1/partitions", strings.NewReader(""))
 	assert.NilError(t, err, "App Handler request failed")
@@ -849,6 +902,9 @@ func TestPartitions(t *testing.T) {
 	assert.Equal(t, cs["default"].Applications[objects.Rejected.String()], 1)
 	assert.Equal(t, cs["default"].Applications[objects.Completed.String()], 1)
 	assert.Equal(t, cs["default"].Applications[objects.Failed.String()], 1)
+	assert.Equal(t, cs["default"].Capacity.Capacity, "[memory:1000 vcore:1000]")
+	assert.Equal(t, cs["default"].Capacity.UsedCapacity, "[memory:300 vcore:700]")
+	assert.Equal(t, cs["default"].Capacity.Utilization, "[memory:30 vcore:70]")
 	assert.Equal(t, cs["default"].State, "Active")
 
 	assert.Assert(t, cs["gpu"] != nil)
@@ -1102,9 +1158,9 @@ func TestGetPartitionNodes(t *testing.T) {
 	// create test nodes
 	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 1000, resources.VCORE: 1000}).ToProto()
 	node1ID := "node-1"
-	node1 := objects.NewNode(&si.NewNodeInfo{NodeID: node1ID, SchedulableResource: nodeRes})
+	node1 := objects.NewNode(&si.NodeInfo{NodeID: node1ID, SchedulableResource: nodeRes})
 	node2ID := "node-2"
-	node2 := objects.NewNode(&si.NewNodeInfo{NodeID: node2ID, SchedulableResource: nodeRes})
+	node2 := objects.NewNode(&si.NodeInfo{NodeID: node2ID, SchedulableResource: nodeRes})
 
 	// create test allocations
 	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 500, resources.VCORE: 300})
@@ -1149,10 +1205,12 @@ func TestGetPartitionNodes(t *testing.T) {
 			assert.Equal(t, node.NodeID, node1ID)
 			assert.Equal(t, "alloc-1", node.Allocations[0].AllocationKey)
 			assert.Equal(t, "alloc-1-uuid", node.Allocations[0].UUID)
+			assert.Equal(t, "[memory:50 vcore:30]", node.Utilized)
 		} else {
 			assert.Equal(t, node.NodeID, node2ID)
 			assert.Equal(t, "alloc-2", node.Allocations[0].AllocationKey)
 			assert.Equal(t, "alloc-2-uuid", node.Allocations[0].UUID)
+			assert.Equal(t, "[memory:30 vcore:50]", node.Utilized)
 		}
 	}
 
@@ -1307,4 +1365,242 @@ func TestGetNodesUtilization(t *testing.T) {
 	err = json.Unmarshal(resp.outputBytes, &nodesDao)
 	assert.NilError(t, err)
 	assert.Equal(t, len(nodesDao), 0)
+}
+
+func TestGetFullStateDumpDefaultPath(t *testing.T) {
+	schedulerContext = prepareSchedulerContext(t, false)
+	defer deleteStateDumpFile(t, schedulerContext)
+
+	partitionContext := schedulerContext.GetPartitionMapClone()
+	context := partitionContext[normalizedPartitionName]
+	app := newApplication("appID", normalizedPartitionName, "root.default", rmID)
+	err := context.AddApplication(app)
+	assert.NilError(t, err, "failed to add Application to partition")
+
+	imHistory = history.NewInternalMetricsHistory(5)
+	req, err2 := http.NewRequest("GET", "/ws/v1/getfullstatedump", strings.NewReader(""))
+	assert.NilError(t, err2)
+	req = mux.SetURLVars(req, make(map[string]string))
+	resp := &MockResponseWriter{}
+
+	getFullStateDump(resp, req)
+	statusCode := resp.statusCode
+	fi, err := os.Stat(defaultStateDumpFilePath)
+	assert.NilError(t, err)
+	assert.Assert(t, fi.Size() > 0, "json response is empty")
+	assert.Check(t, statusCode != http.StatusInternalServerError, "response status code")
+	var aggregated AggregatedStateInfo
+	receivedBytes, err := os.ReadFile(defaultStateDumpFilePath)
+	assert.NilError(t, err)
+	err = json.Unmarshal(receivedBytes, &aggregated)
+	assert.NilError(t, err)
+	verifyStateDumpJSON(t, &aggregated)
+}
+
+func TestGetFullStateDumpNonDefaultPath(t *testing.T) {
+	stateDumpFilePath := "tmp/non-default-yunikorn-state.txt"
+	defer deleteStateDumpDir(t)
+	schedulerContext = prepareSchedulerContext(t, true)
+	defer deleteStateDumpFile(t, schedulerContext)
+
+	partitionContext := schedulerContext.GetPartitionMapClone()
+	context := partitionContext[normalizedPartitionName]
+	app := newApplication("appID", normalizedPartitionName, "root.default", rmID)
+	err := context.AddApplication(app)
+	assert.NilError(t, err, "failed to add Application to partition")
+
+	imHistory = history.NewInternalMetricsHistory(5)
+	req, err2 := http.NewRequest("GET", "/ws/v1/getfullstatedump", strings.NewReader(""))
+	assert.NilError(t, err2)
+	req = mux.SetURLVars(req, make(map[string]string))
+	resp := &MockResponseWriter{}
+
+	getFullStateDump(resp, req)
+	statusCode := resp.statusCode
+	fi, err := os.Stat(stateDumpFilePath)
+	assert.NilError(t, err)
+	assert.Assert(t, fi.Size() > 0, "json response is empty")
+	assert.Check(t, statusCode != http.StatusInternalServerError, "response status code")
+	var aggregated AggregatedStateInfo
+	receivedBytes, err := os.ReadFile(stateDumpFilePath)
+	assert.NilError(t, err)
+	err = json.Unmarshal(receivedBytes, &aggregated)
+	assert.NilError(t, err)
+	verifyStateDumpJSON(t, &aggregated)
+}
+
+func TestEnableDisablePeriodicStateDump(t *testing.T) {
+	schedulerContext = prepareSchedulerContext(t, false)
+	defer deleteStateDumpFile(t, schedulerContext)
+	defer terminateGoroutine()
+
+	imHistory = history.NewInternalMetricsHistory(5)
+	req, err := http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	assert.NilError(t, err)
+	vars := map[string]string{
+		"periodSeconds": "3",
+		"switch":        "enable",
+	}
+	req = mux.SetURLVars(req, vars)
+	resp := &MockResponseWriter{}
+
+	// enable state dump, check file contents
+	handlePeriodicStateDump(resp, req)
+	statusCode := resp.statusCode
+	assert.Equal(t, statusCode, 0, "response status code")
+
+	waitForStateDumpFile(t)
+	fileContents, err2 := os.ReadFile(defaultStateDumpFilePath)
+	assert.NilError(t, err2)
+	var aggregated AggregatedStateInfo
+	err3 := json.Unmarshal(fileContents, &aggregated)
+	assert.NilError(t, err3)
+	verifyStateDumpJSON(t, &aggregated)
+
+	// disable
+	req, err = http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	assert.NilError(t, err)
+	vars = map[string]string{
+		"switch": "disable",
+	}
+	req = mux.SetURLVars(req, vars)
+	resp = &MockResponseWriter{}
+	handlePeriodicStateDump(resp, req)
+	statusCode = resp.statusCode
+	assert.Equal(t, statusCode, 0, "response status code")
+}
+
+func TestTryEnableStateDumpTwice(t *testing.T) {
+	defer deleteStateDumpFile(t, schedulerContext)
+	defer terminateGoroutine()
+
+	req, err := http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	assert.NilError(t, err)
+	vars := map[string]string{
+		"switch": "enable",
+	}
+	req = mux.SetURLVars(req, vars)
+	resp := &MockResponseWriter{}
+
+	// first call - succeeds
+	handlePeriodicStateDump(resp, req)
+	statusCode := resp.statusCode
+	assert.Equal(t, statusCode, 0, "response status code")
+
+	// second call - expected to fail
+	handlePeriodicStateDump(resp, req)
+	statusCode = resp.statusCode
+	assert.Equal(t, statusCode, http.StatusInternalServerError, "response status code")
+}
+
+func TestTryDisableNotRunningStateDump(t *testing.T) {
+	req, err := http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	assert.NilError(t, err)
+	vars := map[string]string{
+		"switch": "disable",
+	}
+	req = mux.SetURLVars(req, vars)
+	resp := &MockResponseWriter{}
+
+	handlePeriodicStateDump(resp, req)
+
+	statusCode := resp.statusCode
+	assert.Equal(t, statusCode, http.StatusInternalServerError, "response status code")
+}
+
+func TestIllegalStateDumpRequests(t *testing.T) {
+	// missing
+	req, err := http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	assert.NilError(t, err)
+	resp := &MockResponseWriter{}
+	handlePeriodicStateDump(resp, req)
+	statusCode := resp.statusCode
+	assert.Equal(t, statusCode, http.StatusBadRequest, "response status code")
+
+	// illegal
+	req, err = http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	assert.NilError(t, err)
+	vars := map[string]string{
+		"switch": "illegal",
+	}
+	req = mux.SetURLVars(req, vars)
+	resp = &MockResponseWriter{}
+	handlePeriodicStateDump(resp, req)
+	statusCode = resp.statusCode
+	assert.Equal(t, statusCode, http.StatusBadRequest, "response status code")
+}
+
+func prepareSchedulerContext(t *testing.T, stateDumpConf bool) *scheduler.ClusterContext {
+	if !stateDumpConf {
+		configs.MockSchedulerConfigByData([]byte(configDefault))
+	} else {
+		configs.MockSchedulerConfigByData([]byte(configStateDumpFilePath))
+	}
+	var err error
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	assert.NilError(t, err, "Error when load clusterInfo from config")
+	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
+
+	return schedulerContext
+}
+
+func waitForStateDumpFile(t *testing.T) {
+	var attempts int
+	for {
+		info, err := os.Stat(defaultStateDumpFilePath)
+		// tolerate only "file not found" errors
+		if err != nil && !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+
+		if info != nil && info.Size() > 0 {
+			break
+		}
+
+		if attempts++; attempts > 10 {
+			t.Fatal("state dump file has not been created or still empty")
+		}
+
+		time.Sleep(1 * time.Second)
+	}
+}
+
+func deleteStateDumpFile(t *testing.T, cc *scheduler.ClusterContext) {
+	stateDumpFilePath := getStateDumpFilePath(cc)
+	if err := os.Remove(stateDumpFilePath); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func deleteStateDumpDir(t *testing.T) {
+	if err := os.Remove("tmp"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func terminateGoroutine() {
+	if !isAbortClosed() {
+		abort <- struct{}{}
+		close(abort)
+		periodicStateDump = false
+	}
+}
+
+func isAbortClosed() bool {
+	select {
+	case <-abort:
+		return true
+	default:
+	}
+	return false
+}
+
+func verifyStateDumpJSON(t *testing.T, aggregated *AggregatedStateInfo) {
+	assert.Check(t, len(aggregated.Timestamp) > 0)
+	assert.Check(t, len(aggregated.Partitions) > 0)
+	assert.Check(t, len(aggregated.Nodes) > 0)
+	assert.Check(t, len(aggregated.ClusterInfo) > 0)
+	assert.Check(t, len(aggregated.ClusterUtilization) > 0)
+	assert.Check(t, len(aggregated.Queues) > 0)
+	assert.Check(t, len(aggregated.LogLevel) > 0)
 }

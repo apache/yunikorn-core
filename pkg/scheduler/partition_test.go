@@ -19,18 +19,19 @@
 package scheduler
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/events"
-
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
+	"github.com/apache/incubator-yunikorn-core/pkg/events"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
@@ -331,10 +332,10 @@ func TestRemoveNodeWithPlaceholders(t *testing.T) {
 	assert.Assert(t, resources.Equals(node1.GetAllocatedResource(), appRes), "allocation not added correctly to node1")
 
 	// fake an ask that is used
-	ask = newAllocationAskAll("real", appID1, taskGroup, appRes, 1, 1, false)
+	ask = newAllocationAskAll(allocID, appID1, taskGroup, appRes, 1, 1, false)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should be added to app")
-	_, err = app.UpdateAskRepeat("real", -1)
+	_, err = app.UpdateAskRepeat(allocID, -1)
 	assert.NilError(t, err, "ask should have been updated without error")
 	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "app should not have pending resources")
 
@@ -359,6 +360,35 @@ func TestRemoveNodeWithPlaceholders(t *testing.T) {
 	assert.Assert(t, resources.Equals(app.GetPendingResource(), appRes), "app should have updated pending resources")
 	// check the interim state of the placeholder involved
 	assert.Equal(t, 0, len(ph.Releases), "placeholder should have no releases linked anymore")
+}
+
+func TestCalculateNodesResourceUsage(t *testing.T) {
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	oldCapacity := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100})
+	node := newNodeMaxResource(nodeID1, oldCapacity)
+	err = partition.AddNode(node, nil)
+	assert.NilError(t, err)
+
+	occupiedResources := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
+	alloc := objects.NewAllocation(allocID, nodeID1, newAllocationAsk("key", "appID", occupiedResources))
+	node.AddAllocation(alloc)
+	usageMap := partition.calculateNodesResourceUsage()
+	assert.Equal(t, node.GetAvailableResource().Resources["first"], resources.Quantity(50))
+	assert.Equal(t, usageMap["first"][4], 1)
+
+	occupiedResources = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
+	alloc = objects.NewAllocation(allocID, nodeID1, newAllocationAsk("key", "appID", occupiedResources))
+	node.AddAllocation(alloc)
+	usageMap = partition.calculateNodesResourceUsage()
+	assert.Equal(t, node.GetAvailableResource().Resources["first"], resources.Quantity(0))
+	assert.Equal(t, usageMap["first"][9], 1)
+
+	newCapacity := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 80})
+	node.SetCapacity(newCapacity)
+	usageMap = partition.calculateNodesResourceUsage()
+	assert.Assert(t, node.GetAvailableResource().HasNegativeValue())
+	assert.Equal(t, usageMap["first"][9], 1)
 }
 
 // test with a replacement of a placeholder: placeholder on the removed node, real on the 2nd node
@@ -391,10 +421,10 @@ func TestRemoveNodeWithReplacement(t *testing.T) {
 	assert.Equal(t, 2, partition.GetTotalNodeCount(), "node list was not updated as expected")
 
 	// fake an ask that is used
-	ask = newAllocationAskAll("real", appID1, taskGroup, appRes, 1, 1, false)
+	ask = newAllocationAskAll(allocID, appID1, taskGroup, appRes, 1, 1, false)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should be added to app")
-	_, err = app.UpdateAskRepeat("real", -1)
+	_, err = app.UpdateAskRepeat(allocID, -1)
 	assert.NilError(t, err, "ask should have been updated without error")
 	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "app should not have pending resources")
 
@@ -459,10 +489,10 @@ func TestRemoveNodeWithReal(t *testing.T) {
 	assert.Equal(t, 2, partition.GetTotalNodeCount(), "node list was not updated as expected")
 
 	// fake an ask that is used
-	ask = newAllocationAskAll("real", appID1, taskGroup, appRes, 1, 1, false)
+	ask = newAllocationAskAll(allocID, appID1, taskGroup, appRes, 1, 1, false)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should be added to app")
-	_, err = app.UpdateAskRepeat("real", -1)
+	_, err = app.UpdateAskRepeat(allocID, -1)
 	assert.NilError(t, err, "ask should have been updated without error")
 	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "app should not have pending resources")
 
@@ -888,6 +918,23 @@ func TestGetQueue(t *testing.T) {
 	assert.Equal(t, queue, nilQueue, "partition returned not nil for non existing queue name request: %v", queue)
 	queue = partition.GetQueue("root.parent")
 	assert.Equal(t, queue, parent, "partition returned nil for existing queue name request")
+}
+
+func TestGetStateDumpFilePath(t *testing.T) {
+	// get the partition
+	partition, err := newBasePartition()
+	partition.RLock()
+	defer partition.RUnlock()
+
+	assert.NilError(t, err, "test partition create failed with error")
+	stateDumpFilePath := partition.GetStateDumpFilePath()
+	assert.Equal(t, stateDumpFilePath, "")
+
+	partition, err = newStateDumpFilePartition()
+	assert.NilError(t, err, "test partition create failed with error")
+	fileName := "yunikorn-state.txt"
+	stateDumpFilePath = partition.GetStateDumpFilePath()
+	assert.Equal(t, stateDumpFilePath, fileName)
 }
 
 func TestTryAllocate(t *testing.T) {
@@ -1447,25 +1494,16 @@ func TestAddTGAppDynamic(t *testing.T) {
 	}
 }
 
-func TestPlaceholderAndRealAllocationResMismatch(t *testing.T) {
+func TestPlaceholderSmallerThanReal(t *testing.T) {
 	events.CreateAndSetEventCache()
 	cache := events.GetEventCache()
 	cache.StartService()
 
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
-	if alloc := partition.tryPlaceholderAllocate(); alloc != nil {
-		t.Fatalf("empty cluster placeholder allocate returned allocation: %s", alloc)
-	}
 
-	var tgRes, res *resources.Resource
-	var res1 *resources.Resource
-	tgRes, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
-	assert.NilError(t, err, "failed to create resource")
-	res, err = resources.NewResourceFromConf(map[string]string{"vcore": "1"})
-	assert.NilError(t, err, "failed to create resource")
-	res1, err = resources.NewResourceFromConf(map[string]string{"vcore": "2"})
-	assert.NilError(t, err, "failed to create resource")
+	tgRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 5})
+	phRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2, "second": 2})
 
 	// add node to allow allocation
 	err = partition.AddNode(newNodeMaxResource(nodeID1, tgRes), nil)
@@ -1480,28 +1518,28 @@ func TestPlaceholderAndRealAllocationResMismatch(t *testing.T) {
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "app-1 should have been added to the partition")
 	// add an ask for a placeholder and allocate
-	ask := newAllocationAskTG(phID, appID1, taskGroup, res, true)
+	ask := newAllocationAskTG(phID, appID1, taskGroup, phRes, true)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "failed to add placeholder ask ph-1 to app")
-	// try to allocate placeholder should just return
-	alloc := partition.tryPlaceholderAllocate()
-	if alloc != nil {
-		t.Fatalf("placeholder ask should not be allocated: %s", alloc)
-	}
 	// try to allocate a placeholder via normal allocate
-	alloc = partition.tryAllocate()
-	if alloc == nil {
-		t.Fatal("expected first placeholder to be allocated")
+	ph := partition.tryAllocate()
+	if ph == nil {
+		t.Fatal("expected placeholder ph-1 to be allocated")
 	}
+	assert.Equal(t, phID, ph.AllocationKey, "expected allocation of ph-1 to be returned")
+	assert.Assert(t, resources.Equals(phRes, app.GetQueue().GetAllocatedResource()), "placeholder size should be allocated on queue")
+	assert.Assert(t, resources.Equals(phRes, node.GetAllocatedResource()), "placeholder size should be allocated on node")
+	assert.Equal(t, 1, partition.GetTotalAllocationCount(), "placeholder allocation should be registered on the partition")
 
-	// add an ask with TG but different resource
-	ask = newAllocationAskTG("real-2", appID1, taskGroup, res1, false)
+	// add an ask which is larger than the placeholder
+	ask = newAllocationAskTG(allocID, appID1, taskGroup, tgRes, false)
 	err = app.AddAllocationAsk(ask)
-	assert.NilError(t, err, "failed to add ask real-2 to app with correct TG")
-	alloc = partition.tryPlaceholderAllocate()
-	if alloc == nil {
-		t.Fatal("allocation should have matched placeholder")
+	assert.NilError(t, err, "failed to add ask alloc-1 to app with correct TG")
+	// allocate should trigger release of placeholder nothing else
+	if partition.tryPlaceholderAllocate() != nil {
+		t.Fatal("allocation should not have matched placeholder")
 	}
+	assert.Assert(t, ph.IsReleased(), "placeholder should be released")
 
 	// wait for events to be processed
 	err = common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
@@ -1513,13 +1551,178 @@ func TestPlaceholderAndRealAllocationResMismatch(t *testing.T) {
 	if records == nil {
 		t.Fatal("collecting eventChannel should return something")
 	}
-	assert.Equal(t, len(records), 1)
+	assert.Equal(t, 1, len(records), "expecting one event for placeholder mismatch")
 	record := records[0]
-	assert.Equal(t, record.Type, si.EventRecord_REQUEST)
-	assert.Equal(t, record.ObjectID, "real-2")
-	assert.Equal(t, record.GroupID, "app-1")
-	assert.Equal(t, record.Message, "Real Pod real-2 allocation [vcore:2] is not matching with placeholder ph-1 allocation [vcore:1] in application app-1")
-	assert.Equal(t, record.Reason, "Resource Allocation Mismatch between real and placeholder")
+	assert.Equal(t, si.EventRecord_REQUEST, record.Type, "incorrect event type")
+	assert.Equal(t, phID, record.ObjectID, "incorrect allocation ID, expected placeholder alloc ID")
+	assert.Equal(t, appID1, record.GroupID, "event should reference application ID")
+	assert.Assert(t, strings.Contains(record.Reason, "releasing placeholder"), "reason should contain 'releasing placeholder'")
+
+	// release placeholder: do what the context would do after the shim processing
+	release := &si.AllocationRelease{
+		PartitionName:   ph.PartitionName,
+		ApplicationID:   appID1,
+		UUID:            ph.UUID,
+		TerminationType: si.TerminationType_TIMEOUT,
+	}
+	released, _ := partition.removeAllocation(release)
+	assert.Equal(t, 1, len(released), "one allocation should be released")
+	assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "nothing should be allocated on node")
+	assert.Assert(t, resources.IsZero(app.GetQueue().GetAllocatedResource()), "nothing should be allocated on queue")
+	assert.Equal(t, 0, partition.GetTotalAllocationCount(), "no allocation should be registered on the partition")
+}
+
+// one real allocation should trigger cleanup of all placeholders
+func TestPlaceholderSmallerMulti(t *testing.T) {
+	events.CreateAndSetEventCache()
+	cache := events.GetEventCache()
+	cache.StartService()
+
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+
+	phCount := 5
+	phRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2, "second": 2})
+	tgRes := resources.Multiply(phRes, int64(phCount))
+
+	// add node to allow allocation
+	err = partition.AddNode(newNodeMaxResource(nodeID1, tgRes), nil)
+	assert.NilError(t, err, "test node-1 add failed unexpected")
+	node := partition.GetNode(nodeID1)
+	if node == nil {
+		t.Fatal("new node was not found on the partition")
+	}
+
+	// add the app with placeholder request
+	app := newApplicationTG(appID1, "default", "root.default", tgRes)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "app-1 should have been added to the partition")
+	phs := make(map[string]*objects.Allocation, 5)
+	for i := 0; i < phCount; i++ {
+		// add an ask for a placeholder and allocate
+		id := "ph-" + strconv.Itoa(i)
+		ask := newAllocationAskTG(id, appID1, taskGroup, phRes, true)
+		err = app.AddAllocationAsk(ask)
+		assert.NilError(t, err, "failed to add placeholder ask %s to app", id)
+		// try to allocate a placeholder via normal allocate
+		ph := partition.tryAllocate()
+		if ph == nil {
+			t.Fatalf("expected placeholder %s to be allocated", id)
+		}
+		assert.Equal(t, id, ph.AllocationKey, "expected allocation of %s to be returned", id)
+		phs[id] = ph
+	}
+	assert.Assert(t, resources.Equals(tgRes, app.GetQueue().GetAllocatedResource()), "all placeholders should be allocated on queue")
+	assert.Assert(t, resources.Equals(tgRes, node.GetAllocatedResource()), "all placeholders should be allocated on node")
+	assert.Equal(t, phCount, partition.GetTotalAllocationCount(), "placeholder allocation should be registered on the partition")
+
+	// add an ask which is larger than the placeholder
+	ask := newAllocationAskTG(allocID, appID1, taskGroup, tgRes, false)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "failed to add ask alloc-1 to app with correct TG")
+	// allocate should trigger release of placeholder nothing else
+	if partition.tryPlaceholderAllocate() != nil {
+		t.Fatal("allocation should not have matched placeholder")
+	}
+	for id, ph := range phs {
+		assert.Assert(t, ph.IsReleased(), "placeholder %s should be released", id)
+	}
+
+	// wait for events to be processed
+	err = common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
+		fmt.Printf("checking event length: %d\n", cache.Store.CountStoredEvents())
+		return cache.Store.CountStoredEvents() == phCount
+	})
+	assert.NilError(t, err, "the events should have been processed")
+
+	records := cache.Store.CollectEvents()
+	if records == nil {
+		t.Fatal("collecting eventChannel should return something")
+	}
+	assert.Equal(t, phCount, len(records), "expecting %d events for placeholder mismatch", phCount)
+
+	// release placeholders: do what the context would do after the shim processing
+	for id, ph := range phs {
+		assert.Assert(t, ph.IsReleased(), "placeholder %s should be released", id)
+		release := &si.AllocationRelease{
+			PartitionName:   ph.PartitionName,
+			ApplicationID:   appID1,
+			UUID:            ph.UUID,
+			TerminationType: si.TerminationType_TIMEOUT,
+		}
+		released, _ := partition.removeAllocation(release)
+		assert.Equal(t, 1, len(released), "one allocation should be released")
+	}
+	assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "nothing should be allocated on node")
+	assert.Assert(t, resources.IsZero(app.GetQueue().GetAllocatedResource()), "nothing should be allocated on queue")
+	assert.Equal(t, 0, partition.GetTotalAllocationCount(), "no allocation should be registered on the partition")
+}
+
+func TestPlaceholderBiggerThanReal(t *testing.T) {
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	if alloc := partition.tryPlaceholderAllocate(); alloc != nil {
+		t.Fatalf("empty cluster placeholder allocate returned allocation: %s", alloc)
+	}
+
+	tgRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 5})
+	phRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2, "second": 2})
+	smallRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 1})
+
+	// add node to allow allocation
+	err = partition.AddNode(newNodeMaxResource(nodeID1, tgRes), nil)
+	assert.NilError(t, err, "test node-1 add failed unexpected")
+	node := partition.GetNode(nodeID1)
+	if node == nil {
+		t.Fatal("new node was not found on the partition")
+	}
+
+	// add the app with placeholder request
+	app := newApplicationTG(appID1, "default", "root.default", tgRes)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "app-1 should have been added to the partition")
+	// add an ask for a placeholder and allocate
+	ask := newAllocationAskTG(phID, appID1, taskGroup, phRes, true)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "failed to add placeholder ask ph-1 to app")
+	// try to allocate a placeholder via normal allocate
+	ph := partition.tryAllocate()
+	if ph == nil {
+		t.Fatal("expected placeholder ph-1 to be allocated")
+	}
+	assert.Equal(t, phID, ph.AllocationKey, "expected allocation of ph-1 to be returned")
+	assert.Assert(t, resources.Equals(phRes, app.GetQueue().GetAllocatedResource()), "placeholder size should be allocated on queue")
+	assert.Assert(t, resources.Equals(phRes, node.GetAllocatedResource()), "placeholder size should be allocated on node")
+	assert.Equal(t, 1, partition.GetTotalAllocationCount(), "placeholder allocation should be registered on the partition")
+	// add a new ask with smaller request and allocate
+	ask = newAllocationAskTG(allocID, appID1, taskGroup, smallRes, false)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "failed to add ask alloc-1 to app with correct TG")
+	alloc := partition.tryPlaceholderAllocate()
+	if alloc == nil {
+		t.Fatal("allocation should have matched placeholder")
+	}
+	assert.Equal(t, objects.Replaced, alloc.Result, "expected replacement result to be returned")
+	assert.Equal(t, 1, len(alloc.Releases), "placeholder should have been linked")
+	// no updates yet on queue and node
+	assert.Assert(t, resources.Equals(phRes, app.GetQueue().GetAllocatedResource()), "placeholder size should still be allocated on queue")
+	assert.Assert(t, resources.Equals(phRes, node.GetAllocatedResource()), "placeholder size should still be allocated on node")
+
+	// replace the placeholder: do what the context would do after the shim processing
+	release := &si.AllocationRelease{
+		PartitionName:   ph.PartitionName,
+		ApplicationID:   appID1,
+		UUID:            ph.UUID,
+		TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
+	}
+	released, confirmed := partition.removeAllocation(release)
+	assert.Equal(t, 0, len(released), "no allocation should be released")
+	if confirmed == nil {
+		t.Fatal("one allocation should be confirmed")
+	}
+	assert.Equal(t, 1, partition.GetTotalAllocationCount(), "real allocation should be registered on the partition")
+	assert.Assert(t, resources.Equals(smallRes, app.GetQueue().GetAllocatedResource()), "real size should be allocated on queue")
+	assert.Assert(t, resources.Equals(smallRes, node.GetAllocatedResource()), "real size should be allocated on node")
 }
 
 // simple direct replace with one node
@@ -1591,18 +1794,18 @@ func TestTryPlaceholderAllocate(t *testing.T) {
 	assert.Equal(t, partition.GetTotalAllocationCount(), 2, "placeholder allocation should be counted as alloc")
 
 	// not mapping to the same taskgroup should not do anything
-	ask = newAllocationAskTG("real-1", appID1, "tg-unk", res, false)
+	ask = newAllocationAskTG(allocID, appID1, "tg-unk", res, false)
 	err = app.AddAllocationAsk(ask)
-	assert.NilError(t, err, "failed to add ask real-1 to app")
+	assert.NilError(t, err, "failed to add ask alloc-1 to app")
 	alloc = partition.tryPlaceholderAllocate()
 	if alloc != nil {
 		t.Fatalf("allocation should not have matched placeholder: %s", alloc)
 	}
 
 	// add an ask with the TG
-	ask = newAllocationAskTG("real-2", appID1, taskGroup, res, false)
+	ask = newAllocationAskTG(allocID2, appID1, taskGroup, res, false)
 	err = app.AddAllocationAsk(ask)
-	assert.NilError(t, err, "failed to add ask real-2 to app with correct TG")
+	assert.NilError(t, err, "failed to add ask alloc-2 to app with correct TG")
 	alloc = partition.tryPlaceholderAllocate()
 	if alloc == nil {
 		t.Fatal("allocation should have matched placeholder")
@@ -1692,9 +1895,9 @@ func TestFailReplacePlaceholder(t *testing.T) {
 		t.Fatal("new node was not found on the partition")
 	}
 	// add an ask with the TG
-	ask = newAllocationAskTG("real-1", appID1, taskGroup, res, false)
+	ask = newAllocationAskTG(allocID, appID1, taskGroup, res, false)
 	err = app.AddAllocationAsk(ask)
-	assert.NilError(t, err, "failed to add ask real-1 to app with correct TG")
+	assert.NilError(t, err, "failed to add ask alloc-1 to app with correct TG")
 	alloc = partition.tryPlaceholderAllocate()
 	if alloc == nil {
 		t.Fatal("allocation should have matched placeholder")
@@ -1801,7 +2004,7 @@ func TestRemoveAllocationAsk(t *testing.T) {
 	// we don't care about the partition name as we test just the partition code
 	release := &si.AllocationAskRelease{
 		ApplicationID:   "fake-app",
-		Allocationkey:   askKey,
+		AllocationKey:   askKey,
 		TerminationType: si.TerminationType_STOPPED_BY_RM,
 	}
 	// unknown app should do nothing
@@ -1812,14 +2015,14 @@ func TestRemoveAllocationAsk(t *testing.T) {
 
 	// known app, unknown ask no change
 	release.ApplicationID = appID1
-	release.Allocationkey = "fake"
+	release.AllocationKey = "fake"
 	partition.removeAllocationAsk(release)
 	if !resources.Equals(app.GetPendingResource(), res) {
 		t.Fatal("app updated removing unknown ask")
 	}
 
 	// known app, known ask, ignore timeout as it originates in the core
-	release.Allocationkey = askKey
+	release.AllocationKey = askKey
 	release.TerminationType = si.TerminationType_TIMEOUT
 	partition.removeAllocationAsk(release)
 	if !resources.Equals(app.GetPendingResource(), res) {
@@ -1861,4 +2064,39 @@ func TestUpdateNodeSortingPolicy(t *testing.T) {
 	})
 
 	assert.Equal(t, partition.nodes.GetNodeSortingPolicy().PolicyType(), policies.BinPackingPolicy)
+}
+
+func TestUpdateStateDumpFilePath(t *testing.T) {
+	partition, err := newBasePartition()
+	partition.RLock()
+	defer partition.RUnlock()
+	assert.NilError(t, err, "partition create failed")
+
+	assert.Equal(t, partition.GetStateDumpFilePath(), "")
+	stateDumpFilePath := "yunikorn-state.txt"
+
+	partition.updateStateDumpFilePath(configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues: []configs.QueueConfig{
+					{
+						Name:   "default",
+						Parent: false,
+						Queues: nil,
+					},
+				},
+			},
+		},
+		PlacementRules:    nil,
+		Limits:            nil,
+		Preemption:        configs.PartitionPreemptionConfig{},
+		NodeSortPolicy:    configs.NodeSortingPolicy{},
+		StateDumpFilePath: stateDumpFilePath,
+	})
+
+	assert.Equal(t, partition.GetStateDumpFilePath(), stateDumpFilePath)
 }

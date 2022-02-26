@@ -140,6 +140,12 @@ func TestAppReservation(t *testing.T) {
 		t.Errorf("app should have reservations for node %s", nodeID1)
 	}
 
+	// node name similarity check: chop of the last char to make sure we check the full name
+	similar := nodeID1[:len(nodeID1)-1]
+	if app.hasReserved() && app.IsReservedOnNode(similar) {
+		t.Errorf("similar app should not have reservations for node %s", similar)
+	}
+
 	// reserve the same reservation
 	err = app.Reserve(node, ask)
 	if err == nil {
@@ -860,6 +866,21 @@ func TestStateTimeOut(t *testing.T) {
 	if !app.stateMachine.Is(Running.String()) || app.stateTimer != nil {
 		t.Fatalf("State is not running or timer was not cleared, state: %s, timer %v", app.stateMachine.Current(), app.stateTimer)
 	}
+
+	startingTimeout = time.Minute * 5
+	app = newApplicationWithTags(appID2, "default", "root.a", map[string]string{AppTagStateAwareDisable: "true"})
+	err = app.HandleApplicationEvent(RunApplication)
+	assert.NilError(t, err, "no error expected new to accepted (timeout test)")
+	err = app.HandleApplicationEvent(RunApplication)
+	assert.NilError(t, err, "no error expected accepted to starting (timeout test)")
+	// give it some time to run and progress
+	time.Sleep(time.Millisecond * 100)
+	if app.IsStarting() {
+		t.Fatal("Starting state should have timed out")
+	}
+	if app.stateTimer != nil {
+		t.Fatalf("Startup timer has not be cleared on time out as expected, %v", app.stateTimer)
+	}
 }
 
 func TestCompleted(t *testing.T) {
@@ -1013,7 +1034,7 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	// add a second one to check the filter
 	ph = newPlaceholderAlloc(appID1, "uuid-2", nodeID1, "root.a", res)
 	app.AddAllocation(ph)
-	err = common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
+	err = common.WaitFor(10*time.Millisecond, 1*time.Second, func() bool {
 		app.RLock()
 		defer app.RUnlock()
 		return app.placeholderTimer == nil
@@ -1061,7 +1082,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	alloc := newAllocation(appID1, "real", nodeID1, "root.a", res)
 	app.AddAllocation(alloc)
 	assert.Assert(t, app.IsStarting(), "App should be in starting state after the first allocation")
-	err = common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
+	err = common.WaitFor(10*time.Millisecond, 1*time.Second, func() bool {
 		app.RLock()
 		defer app.RUnlock()
 		return app.placeholderTimer == nil
@@ -1110,7 +1131,7 @@ func TestTimeoutPlaceholderCompleting(t *testing.T) {
 	app.RemoveAllocation("uuid-1")
 	assert.Assert(t, app.IsCompleting(), "App should be in completing state all allocs have been removed")
 	// make sure the placeholders time out
-	err = common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
+	err = common.WaitFor(10*time.Millisecond, 1*time.Second, func() bool {
 		app.RLock()
 		defer app.RUnlock()
 		return app.placeholderTimer == nil

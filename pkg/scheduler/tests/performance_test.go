@@ -73,9 +73,9 @@ partitions:
 	assert.NilError(b, err, "RegisterResourceManager failed")
 
 	// Add two apps and wait for them to be accepted
-	err = proxy.Update(&si.UpdateRequest{
-		NewApplications: newAddAppRequest(map[string]string{appID1: "root.a", appID2: "root.b"}),
-		RmID:            "rm:123",
+	err = proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{appID1: "root.a", appID2: "root.b"}),
+		RmID: "rm:123",
 	})
 	assert.NilError(b, err, "UpdateRequest application failed")
 	mockRM.waitForAcceptedApplication(b, appID1, 1000)
@@ -89,10 +89,10 @@ partitions:
 	nodeVcore := requestVcore * numPodsPerNode
 
 	// Register nodes
-	var newNodes []*si.NewNodeInfo
+	var newNodes []*si.NodeInfo
 	for i := 0; i < numNodes; i++ {
 		nodeName := "node-" + strconv.Itoa(i)
-		node := &si.NewNodeInfo{
+		node := &si.NodeInfo{
 			NodeID:     nodeName + ":1234",
 			Attributes: map[string]string{},
 			SchedulableResource: &si.Resource{
@@ -101,14 +101,15 @@ partitions:
 					"vcore":  {Value: int64(nodeVcore)},
 				},
 			},
+			Action: si.NodeInfo_CREATE,
 		}
 		newNodes = append(newNodes, node)
 	}
-	err = proxy.Update(&si.UpdateRequest{
-		RmID:                "rm:123",
-		NewSchedulableNodes: newNodes,
+	err = proxy.UpdateNode(&si.NodeRequest{
+		RmID:  "rm:123",
+		Nodes: newNodes,
 	})
-	assert.NilError(b, err, "UpdateRequest nodes failed")
+	assert.NilError(b, err, "NodeRequest nodes failed")
 
 	// Wait for all nodes to be accepted
 	startTime := time.Now()
@@ -118,7 +119,7 @@ partitions:
 
 	// Request pods
 	app1NumPods := numPods / 2
-	err = proxy.Update(&si.UpdateRequest{
+	err = proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
 				AllocationKey: "alloc-1",
@@ -138,7 +139,7 @@ partitions:
 		b.Error(err.Error())
 	}
 
-	err = proxy.Update(&si.UpdateRequest{
+	err = proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
 				AllocationKey: "alloc-1",

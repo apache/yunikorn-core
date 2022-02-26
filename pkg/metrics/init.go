@@ -24,13 +24,13 @@ import (
 )
 
 const (
-	// all metrics should be declared under this namespace
+	// Namespace for all metrics inside the scheduler
 	Namespace = "yunikorn"
 	// SchedulerSubsystem - subsystem name used by scheduler
 	SchedulerSubsystem = "scheduler"
 	// EventSubsystem - subsystem name used by event cache
 	EventSubsystem = "event"
-	// replacement of invalid byte for prometheus metric names
+	// MetricNameInvalidByteReplacement byte used to replace invalid bytes in prometheus metric names
 	MetricNameInvalidByteReplacement = '_'
 )
 
@@ -41,15 +41,35 @@ type Metrics struct {
 	scheduler CoreSchedulerMetrics
 	queues    map[string]CoreQueueMetrics
 	event     CoreEventMetrics
+	runtime   GoRuntimeMetrics
 	lock      sync.RWMutex
 }
 
 type CoreQueueMetrics interface {
-	IncApplicationsAccepted()
-	IncApplicationsRejected()
-	IncApplicationsCompleted()
-	AddQueueUsedResourceMetrics(resourceName string, value float64)
-	SetQueueUsedResourceMetrics(resourceName string, value float64)
+	IncQueueApplicationsAccepted()
+	IncQueueApplicationsRejected()
+	IncQueueApplicationsRunning()
+	DecQueueApplicationsRunning()
+	IncQueueApplicationsFailed()
+	IncQueueApplicationsCompleted()
+	IncAllocatedContainer()
+	IncReleasedContainer()
+	SetQueueGuaranteedResourceMetrics(resourceName string, value float64)
+	SetQueueMaxResourceMetrics(resourceName string, value float64)
+	SetQueueAllocatedResourceMetrics(resourceName string, value float64)
+	AddQueueAllocatedResourceMetrics(resourceName string, value float64)
+	SetQueuePendingResourceMetrics(resourceName string, value float64)
+	AddQueuePendingResourceMetrics(resourceName string, value float64)
+	// Reset all metrics that implement the Reset functionality.
+	// should only be used in tests
+	Reset()
+}
+
+type GoRuntimeMetrics interface {
+	Collect()
+	// Reset all metrics that implement the Reset functionality.
+	// should only be used in tests
+	Reset()
 }
 
 // Declare all core metrics ops in this interface
@@ -88,6 +108,9 @@ type CoreSchedulerMetrics interface {
 	SetTotalApplicationsRunning(value int)
 	getTotalApplicationsRunning() (int, error)
 
+	// Metrics Ops related to TotalApplicationsFailed
+	IncTotalApplicationsFailed()
+
 	// Metrics Ops related to TotalApplicationsCompleted
 	IncTotalApplicationsCompleted()
 	AddTotalApplicationsCompleted(value int)
@@ -101,6 +124,11 @@ type CoreSchedulerMetrics interface {
 	DecActiveNodes()
 	SubActiveNodes(value int)
 	SetActiveNodes(value int)
+	IncDrainingNodes()
+	DecDrainingNodes()
+	IncUnhealthyNodes()
+	DecUnhealthyNodes()
+	IncTotalDecommissionedNodes()
 
 	// Metrics Ops related to failedNodes
 	IncFailedNodes()
@@ -111,11 +139,15 @@ type CoreSchedulerMetrics interface {
 	SetNodeResourceUsage(resourceName string, rangeIdx int, value float64)
 	GetFailedNodes() (int, error)
 
-	//latency change
+	// Metrics Ops related to latency change
 	ObserveSchedulingLatency(start time.Time)
 	ObserveNodeSortingLatency(start time.Time)
 	ObserveAppSortingLatency(start time.Time)
 	ObserveQueueSortingLatency(start time.Time)
+	ObserveTryNodeLatency(start time.Time)
+	// Reset all metrics that implement the Reset functionality.
+	// should only be used in tests
+	Reset()
 }
 
 type CoreEventMetrics interface {
@@ -126,6 +158,9 @@ type CoreEventMetrics interface {
 	IncEventsStored()
 	IncEventsNotStored()
 	AddEventsCollected(collectedEvents int)
+	// Reset all metrics that implement the Set functionality.
+	// Should only be used in tests
+	Reset()
 }
 
 func init() {
@@ -135,8 +170,20 @@ func init() {
 			queues:    make(map[string]CoreQueueMetrics),
 			event:     initEventMetrics(),
 			lock:      sync.RWMutex{},
+			runtime:   initRuntimeMetrics(),
 		}
 	})
+}
+
+func Reset() {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.scheduler.Reset()
+	m.event.Reset()
+	for _, qm := range m.queues {
+		qm.Reset()
+	}
+	m.runtime.Reset()
 }
 
 func GetSchedulerMetrics() CoreSchedulerMetrics {
@@ -149,13 +196,17 @@ func GetQueueMetrics(name string) CoreQueueMetrics {
 	if qm, ok := m.queues[name]; ok {
 		return qm
 	}
-	queueMetrics := forQueue(name)
+	queueMetrics := InitQueueMetrics(name)
 	m.queues[name] = queueMetrics
 	return queueMetrics
 }
 
 func GetEventMetrics() CoreEventMetrics {
 	return m.event
+}
+
+func GetRuntimeMetrics() GoRuntimeMetrics {
+	return m.runtime
 }
 
 // Format metric name based on the definition of metric name in prometheus, as per

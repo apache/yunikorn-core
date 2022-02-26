@@ -22,7 +22,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path"
 	"strings"
 	"testing"
@@ -239,12 +239,12 @@ func SerdeTest(t *testing.T, conf SchedulerConfig, description string) {
 }
 
 func CreateConfig(data string) (*SchedulerConfig, error) {
-	dir, err := ioutil.TempDir("", "test-scheduler-config")
+	dir, err := os.MkdirTemp("", "test-scheduler-config")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp dir: %v", err)
 	}
 
-	err = ioutil.WriteFile(path.Join(dir, "test-scheduler-config.yaml"), []byte(data), 0644)
+	err = os.WriteFile(path.Join(dir, "test-scheduler-config.yaml"), []byte(data), 0644)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write config file: %v", err)
 	}
@@ -639,6 +639,40 @@ partitions:
 
 	if conf.Partitions[1].Preemption.Enabled {
 		t.Error("partition-0's preemption should NOT be enabled by default")
+	}
+}
+
+func TestPartitionStateDumpFilePathParameter(t *testing.T) {
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+    statedumpfilepath: "yunikorn-state.txt"
+  - name: "partition-0"
+    queues:
+      - name: root
+`
+	// validate the config and check after the update
+	conf, err := CreateConfig(data)
+	assert.NilError(t, err, "should expect no error")
+	stateDumpFilePath := "yunikorn-state.txt"
+	assert.Equal(t, conf.Partitions[0].StateDumpFilePath, stateDumpFilePath)
+	assert.Equal(t, conf.Partitions[1].StateDumpFilePath, "")
+}
+
+func TestPartitionStateDumpFilePathParameterFail(t *testing.T) {
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+    statedumpfilepath: "/yunikorn-state.txt"
+`
+	// validate the config and check after the update
+	conf, err := CreateConfig(data)
+	if err == nil {
+		t.Errorf("stateDumpFilePath field should have failed due to insufficient permissions: %v", conf)
 	}
 }
 

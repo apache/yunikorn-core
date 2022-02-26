@@ -383,6 +383,11 @@ func TestIsReservedForApp(t *testing.T) {
 	if !node.isReservedForApp("app-1|alloc-1") {
 		t.Error("node was reserved for this app/alloc but check did not passed ")
 	}
+	// app name similarity check: chop of the last char to make sure we check the full name
+	similar := appID1[:len(appID1)-1]
+	if node.isReservedForApp(similar) {
+		t.Errorf("similar app should not have reservations on node %s", similar)
+	}
 }
 
 func TestAttributes(t *testing.T) {
@@ -429,7 +434,10 @@ func TestAddAllocation(t *testing.T) {
 	if !resources.Equals(node.GetAvailableResource(), half) {
 		t.Errorf("failed to update available resources expected %v, got %v", half, node.GetAvailableResource())
 	}
-
+	expectedUtilizedResource := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50, "second": 50})
+	if !resources.Equals(node.GetUtilizedResource(), expectedUtilizedResource) {
+		t.Errorf("failed to get utilized resources expected %v, got %v", expectedUtilizedResource, node.GetUtilizedResource())
+	}
 	// second and check calculation
 	piece := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25, "second": 50})
 	node.AddAllocation(newAllocation(appID1, "2", nodeID1, "queue-1", piece))
@@ -443,6 +451,10 @@ func TestAddAllocation(t *testing.T) {
 	left := resources.Sub(node.GetCapacity(), piece)
 	if !resources.Equals(node.GetAvailableResource(), left) {
 		t.Errorf("failed to update available resources expected %v, got %v", left, node.GetAvailableResource())
+	}
+	expectedUtilizedResource1 := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 75, "second": 75})
+	if !resources.Equals(node.GetUtilizedResource(), expectedUtilizedResource1) {
+		t.Errorf("failed to get utilized resources expected %v, got %v", expectedUtilizedResource1, node.GetUtilizedResource())
 	}
 }
 
@@ -486,6 +498,38 @@ func TestRemoveAllocation(t *testing.T) {
 	if !resources.Equals(node.GetAvailableResource(), left) {
 		t.Errorf("allocated resource not set correctly %v got %v", left, node.GetAvailableResource())
 	}
+	expectedUtilizedResource := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25, "second": 25})
+	if !resources.Equals(node.GetUtilizedResource(), expectedUtilizedResource) {
+		t.Errorf("failed to get utilized resources expected %v, got %v", expectedUtilizedResource, node.GetUtilizedResource())
+	}
+}
+
+func TestNodeReplaceAllocation(t *testing.T) {
+	node := newNode("node-123", map[string]resources.Quantity{"first": 100, "second": 200})
+	assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "failed to initialize node")
+
+	// allocate half of the resources available and check the calculation
+	phID := "ph-1"
+	half := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50, "second": 100})
+	ph := newPlaceholderAlloc(appID1, phID, nodeID1, "queue-1", half)
+	node.AddAllocation(ph)
+	assert.Assert(t, node.GetAllocation(phID) != nil, "failed to add placeholder allocation")
+	assert.Assert(t, resources.Equals(node.GetAllocatedResource(), half), "allocated resource not set correctly %v got %v", half, node.GetAllocatedResource())
+
+	allocID := "real-1"
+	piece := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25, "second": 50})
+	alloc := newAllocation(appID1, allocID, nodeID1, "queue-1", piece)
+	// calculate the delta: new allocation resource - placeholder (should be negative!)
+	delta := resources.Sub(piece, half)
+	assert.Assert(t, delta.HasNegativeValue(), "expected negative values in delta")
+	// swap and check the calculation
+	node.ReplaceAllocation(phID, alloc, delta)
+	assert.Assert(t, node.GetAllocation(allocID) != nil, "failed to replace allocation: allocation not returned")
+	assert.Assert(t, resources.Equals(node.GetAllocatedResource(), piece), "allocated resource not set correctly %v got %v", piece, node.GetAllocatedResource())
+
+	// clean up all should be zero
+	assert.Assert(t, node.RemoveAllocation(allocID) != nil, "allocation should have been removed but was not")
+	assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "allocated resource not updated correctly")
 }
 
 func TestGetAllocation(t *testing.T) {
@@ -609,7 +653,7 @@ func TestUpdateResources(t *testing.T) {
 }
 
 func TestUnlimitedNode(t *testing.T) {
-	nodeInfo := &si.NewNodeInfo{
+	nodeInfo := &si.NodeInfo{
 		NodeID:     "Unlimited",
 		Attributes: map[string]string{"yunikorn.apache.org/nodeType": "unlimited"},
 	}
@@ -638,20 +682,20 @@ func TestIsValidFor(t *testing.T) {
 	ask2.requiredNode = "node-1"
 
 	// node 1: schedulable
-	node1 := NewNode(&si.NewNodeInfo{
+	node1 := NewNode(&si.NodeInfo{
 		NodeID: "node-1",
 	})
 	// node 1: unschedulable
-	node1Unschedulable := NewNode(&si.NewNodeInfo{
+	node1Unschedulable := NewNode(&si.NodeInfo{
 		NodeID: "node-1",
 	})
 	node1Unschedulable.SetSchedulable(false)
 	// node 2: schedulable
-	node2 := NewNode(&si.NewNodeInfo{
+	node2 := NewNode(&si.NodeInfo{
 		NodeID: "node-2",
 	})
 	// node 2: unschedulable
-	node2Unschedulable := NewNode(&si.NewNodeInfo{
+	node2Unschedulable := NewNode(&si.NodeInfo{
 		NodeID: "node-2",
 	})
 	node2Unschedulable.SetSchedulable(false)
@@ -703,4 +747,35 @@ func TestAddRemoveListener(t *testing.T) {
 	node.RemoveListener(&tl)
 	node.SetSchedulable(true)
 	assert.Equal(t, 1, tl.updateCount, "listener should not have fired again")
+}
+
+func TestReadyAttribute(t *testing.T) {
+	// missing
+	proto := newProto(testNode, nil, nil, nil)
+	node := NewNode(proto)
+	assert.Equal(t, true, node.ready, "Node should be in ready state")
+
+	// exists, but faulty
+	attr := map[string]string{
+		"readyX": "true",
+	}
+	proto = newProto(testNode, nil, nil, attr)
+	node = NewNode(proto)
+	assert.Equal(t, true, node.ready, "Node should be in ready state")
+
+	// exists, true
+	attr = map[string]string{
+		"ready": "true",
+	}
+	proto = newProto(testNode, nil, nil, attr)
+	node = NewNode(proto)
+	assert.Equal(t, true, node.ready, "Node should be in ready state")
+
+	// exists, false
+	attr = map[string]string{
+		"ready": "false",
+	}
+	proto = newProto(testNode, nil, nil, attr)
+	node = NewNode(proto)
+	assert.Equal(t, false, node.ready, "Node should not be in ready state")
 }

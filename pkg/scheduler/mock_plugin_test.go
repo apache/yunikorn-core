@@ -24,10 +24,12 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/tests"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 type fakePredicatePlugin struct {
+	tests.MockResourceManagerCallback
 	mustFail bool
 	nodes    map[string]int
 }

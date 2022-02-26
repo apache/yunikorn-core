@@ -1,3 +1,6 @@
+//go:build graphviz
+// +build graphviz
+
 /*
  Licensed to the Apache Software Foundation (ASF) under one
  or more contributor license agreements.  See the NOTICE file
@@ -16,22 +19,21 @@
  limitations under the License.
 */
 
-package dao
+package objects
 
-type NodesDAOInfo struct {
-	PartitionName string         `json:"partitionName"`
-	Nodes         []*NodeDAOInfo `json:"nodesInfo"`
-}
+import (
+	"os"
+	"testing"
 
-type NodeDAOInfo struct {
-	NodeID      string               `json:"nodeID"`
-	HostName    string               `json:"hostName"`
-	RackName    string               `json:"rackName"`
-	Capacity    string               `json:"capacity"`
-	Allocated   string               `json:"allocated"`
-	Occupied    string               `json:"occupied"`
-	Available   string               `json:"available"`
-	Utilized    string               `json:"utilized"`
-	Allocations []*AllocationDAOInfo `json:"allocations"`
-	Schedulable bool                 `json:"schedulable"`
+	"github.com/looplab/fsm"
+	"gotest.tools/assert"
+)
+
+func TestApplicationFsmGraph(t *testing.T) {
+	graph := fsm.Visualize(NewAppState())
+
+	err := os.MkdirAll("../../../_output/fsm", 0755)
+	assert.NilError(t, err, "Creating output dir failed")
+	os.WriteFile("../../../_output/fsm/application-state.dot", []byte(graph), 0644)
+	assert.NilError(t, err, "Writing graph failed")
 }

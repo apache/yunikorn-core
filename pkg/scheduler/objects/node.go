@@ -20,6 +20,7 @@ package objects
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -31,6 +32,8 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
+
+const ReadyFlag = "ready"
 
 type Node struct {
 	// Fields for fast access These fields are considered read only.
@@ -49,6 +52,7 @@ type Node struct {
 	allocations       map[string]*Allocation
 	schedulable       bool
 	unlimited         bool
+	ready             bool
 
 	preempting   *resources.Resource     // resources considered for preemption
 	reservations map[string]*reservation // a map of reservations
@@ -57,10 +61,17 @@ type Node struct {
 	sync.RWMutex
 }
 
-func NewNode(proto *si.NewNodeInfo) *Node {
+func NewNode(proto *si.NodeInfo) *Node {
 	// safe guard against panic
 	if proto == nil {
 		return nil
+	}
+
+	var ready bool
+	var err error
+	if ready, err = strconv.ParseBool(proto.Attributes[ReadyFlag]); err != nil {
+		log.Logger().Error("Could not parse ready flag, assuming true")
+		ready = true
 	}
 	sn := &Node{
 		NodeID:            proto.NodeID,
@@ -72,9 +83,9 @@ func NewNode(proto *si.NewNodeInfo) *Node {
 		allocations:       make(map[string]*Allocation),
 		schedulable:       true,
 		listeners:         make([]NodeListener, 0),
+		ready:             ready,
 	}
 	// initialise available resources
-	var err error
 	sn.availableResource, err = resources.SubErrorNegative(sn.totalResource, sn.occupiedResource)
 	if err != nil {
 		log.Logger().Error("New node created with no available resources",
@@ -239,6 +250,20 @@ func (sn *Node) GetAvailableResource() *resources.Resource {
 	return sn.availableResource.Clone()
 }
 
+// Get the utilized resource on this node.
+func (sn *Node) GetUtilizedResource() *resources.Resource {
+	total := sn.GetCapacity()
+	resourceAllocated := sn.GetAllocatedResource()
+	utilizedResource := make(map[string]resources.Quantity)
+
+	for name := range resourceAllocated.Resources {
+		if total.Resources[name] > 0 {
+			utilizedResource[name] = resources.CalculateAbsUsedCapacity(total, resourceAllocated).Resources[name]
+		}
+	}
+	return &resources.Resource{Resources: utilizedResource}
+}
+
 func (sn *Node) FitInNode(resRequest *resources.Resource) bool {
 	sn.RLock()
 	defer sn.RUnlock()
@@ -316,15 +341,24 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 	return false
 }
 
-// Replace the paceholder allocation on the node. No usage changes as the placeholder must
-// be the same size as the real allocation.
-func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation) {
+// ReplaceAllocation replaces the placeholder with the real allocation on the node.
+// The delta passed in is the difference in resource usage between placeholder and real allocation.
+// It should always be a negative value or zero: it is a decrease in usage or no change
+func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation, delta *resources.Resource) {
 	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
 
 	delete(sn.allocations, uuid)
 	sn.allocations[replace.UUID] = replace
+	before := sn.allocatedResource.Clone()
+	sn.allocatedResource.AddTo(delta)
+	if !resources.FitIn(before, sn.allocatedResource) {
+		log.Logger().Warn("unexpected increase in node usage after placeholder replacement",
+			zap.String("placeholder UUID", uuid),
+			zap.String("allocation UUID", replace.UUID),
+			zap.String("delta", delta.String()))
+	}
 }
 
 // Check if the proposed allocation fits in the available resources.
@@ -358,7 +392,7 @@ func (sn *Node) preConditions(allocID string, allocate bool) bool {
 		return true
 	}
 	// Check the predicates plugin (k8shim)
-	if plugin := plugins.GetPredicatesPlugin(); plugin != nil {
+	if plugin := plugins.GetResourceManagerCallbackPlugin(); plugin != nil {
 		// checking predicates
 		if err := plugin.Predicates(&si.PredicatesArgs{
 			AllocationKey: allocID,
@@ -446,7 +480,7 @@ func (sn *Node) IsUnlimited() bool {
 	return sn.unlimited
 }
 
-// Return true if and only if the node has been reserved by the application
+// isReservedForApp returns true if and only if the node has been reserved by the application
 // NOTE: a return value of false does not mean the node is not reserved by a different app
 func (sn *Node) isReservedForApp(key string) bool {
 	if key == "" {
@@ -457,8 +491,10 @@ func (sn *Node) isReservedForApp(key string) bool {
 	if strings.Contains(key, "|") {
 		return sn.reservations[key] != nil
 	}
+	// make sure matches only for the whole appID
+	separator := key + "|"
 	for resKey := range sn.reservations {
-		if strings.HasPrefix(resKey, key) {
+		if strings.HasPrefix(resKey, separator) {
 			return true
 		}
 	}
@@ -600,4 +636,16 @@ func (sn *Node) getListeners() []NodeListener {
 	list := make([]NodeListener, len(sn.listeners))
 	copy(list, sn.listeners)
 	return list
+}
+
+func (sn *Node) IsReady() bool {
+	sn.RLock()
+	defer sn.RUnlock()
+	return sn.ready
+}
+
+func (sn *Node) SetReady(ready bool) {
+	sn.Lock()
+	defer sn.Unlock()
+	sn.ready = ready
 }

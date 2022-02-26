@@ -41,6 +41,7 @@ const (
 	taskGroup = "tg-1"
 	phID      = "ph-1"
 	allocID   = "alloc-1"
+	allocID2  = "alloc-2"
 )
 
 func newBasePartition() (*PartitionContext, error) {
@@ -160,6 +161,33 @@ func newPlacementPartition() (*PartitionContext, error) {
 	return newPartitionContext(conf, rmID, nil)
 }
 
+func newStateDumpFilePartition() (*PartitionContext, error) {
+	conf := configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues: []configs.QueueConfig{
+					{
+						Name:   "default",
+						Parent: false,
+						Queues: nil,
+					},
+				},
+			},
+		},
+		PlacementRules:    nil,
+		Limits:            nil,
+		Preemption:        configs.PartitionPreemptionConfig{},
+		NodeSortPolicy:    configs.NodeSortingPolicy{},
+		StateDumpFilePath: "yunikorn-state.txt",
+	}
+
+	return newPartitionContext(conf, rmID, nil)
+}
+
 func newApplication(appID, partition, queueName string) *objects.Application {
 	siApp := &si.AddApplicationRequest{
 		ApplicationID: appID,
@@ -216,9 +244,11 @@ func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resou
 }
 
 func newNodeWithResources(nodeID string, max, occupied *resources.Resource) *objects.Node {
-	proto := &si.NewNodeInfo{
-		NodeID:              nodeID,
-		Attributes:          nil,
+	proto := &si.NodeInfo{
+		NodeID: nodeID,
+		Attributes: map[string]string{
+			objects.ReadyFlag: "true",
+		},
 		SchedulableResource: max.ToProto(),
 		OccupiedResource:    occupied.ToProto(),
 	}

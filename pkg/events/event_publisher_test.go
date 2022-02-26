@@ -27,10 +27,12 @@ import (
 	"gotest.tools/assert"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/tests"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
 type mockEventPlugin struct {
+	tests.MockResourceManagerCallback
 	records chan *si.EventRecord
 
 	sync.Mutex
@@ -42,7 +44,7 @@ func createEventPluginForTest() (*mockEventPlugin, error) {
 		records: make(chan *si.EventRecord, 3),
 	}
 	plugins.RegisterSchedulerPlugin(&eventPlugin)
-	if plugins.GetEventPlugin() == nil {
+	if plugins.GetResourceManagerCallbackPlugin() == nil {
 		return nil, fmt.Errorf("event plugin is not registered")
 	}
 	return &eventPlugin, nil

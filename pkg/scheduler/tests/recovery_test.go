@@ -74,8 +74,8 @@ func TestSchedulerRecovery(t *testing.T) {
 	assert.Assert(t, 150 == queue.GetMaxResource().Resources[resources.MEMORY])
 
 	// Register nodes, and add apps
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -85,6 +85,7 @@ func TestSchedulerRecovery(t *testing.T) {
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 			{
 				NodeID:     "node-2:1234",
@@ -95,17 +96,23 @@ func TestSchedulerRecovery(t *testing.T) {
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{appID1: "root.a"}),
-		RmID:            "rm:123",
+		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest nodes and app failed")
-
-	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
+	assert.NilError(t, err, "NodeRequest failed")
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
+
+	// Add two apps and wait for them to be accepted
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{appID1: "root.a"}),
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "ApplicationRequest failed")
+	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
 
 	// Get scheduling app
 	app := ms.getApplication(appID1)
@@ -116,7 +123,7 @@ func TestSchedulerRecovery(t *testing.T) {
 	assert.NilError(t, err, "app not found on partition")
 	assert.Equal(t, app01.CurrentState(), objects.New.String())
 
-	err = ms.proxy.Update(&si.UpdateRequest{
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
 				AllocationKey: "alloc-1",
@@ -164,7 +171,7 @@ func TestSchedulerRecovery(t *testing.T) {
 		[]string{"node-1:1234", "node-2:1234"}, 20, 1000)
 
 	// Ask for two more resources
-	err = ms.proxy.Update(&si.UpdateRequest{
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
 				AllocationKey: "alloc-2",
@@ -230,8 +237,15 @@ func TestSchedulerRecovery(t *testing.T) {
 	assert.NilError(t, err, "2nd RegisterResourceManager failed")
 
 	// Register nodes, and add apps
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{appID1: "root.a"}),
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "ApplicationRequest failed")
+	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
+
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -241,6 +255,7 @@ func TestSchedulerRecovery(t *testing.T) {
 						"vcore":  {Value: 20},
 					},
 				},
+				Action:              si.NodeInfo_CREATE,
 				ExistingAllocations: mockRM.nodeAllocations["node-1:1234"],
 			},
 			{
@@ -252,17 +267,13 @@ func TestSchedulerRecovery(t *testing.T) {
 						"vcore":  {Value: 20},
 					},
 				},
+				Action:              si.NodeInfo_CREATE,
 				ExistingAllocations: mockRM.nodeAllocations["node-2:1234"],
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{appID1: "root.a"}),
-		RmID:            "rm:123",
+		RmID: "rm:123",
 	})
-
-	assert.NilError(t, err, "UpdateRequest nodes and app for recovery failed")
-
-	// waiting for recovery
-	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
+	assert.NilError(t, err, "NodeRequest nodes and app for recovery failed")
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
@@ -336,8 +347,8 @@ func TestSchedulerRecovery2Allocations(t *testing.T) {
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Register node, and add app
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -347,16 +358,21 @@ func TestSchedulerRecovery2Allocations(t *testing.T) {
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{appID1: "root.a"}),
-		RmID:            "rm:123",
+		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest nodes and app failed")
-
-	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
+	assert.NilError(t, err, "NodeRequest failed")
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
+
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{appID1: "root.a"}),
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "ApplicationRequest failed")
+	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
 
 	// Verify app initial state
 	part := ms.scheduler.GetClusterContext().GetPartition("[rm:123]default")
@@ -365,7 +381,7 @@ func TestSchedulerRecovery2Allocations(t *testing.T) {
 	assert.NilError(t, err, "app not found on partition")
 	assert.Equal(t, app01.CurrentState(), objects.New.String())
 
-	err = ms.proxy.Update(&si.UpdateRequest{
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
 				AllocationKey: "alloc-1",
@@ -382,7 +398,7 @@ func TestSchedulerRecovery2Allocations(t *testing.T) {
 		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest add resources failed")
+	assert.NilError(t, err, "AllocationRequest add resources failed")
 	ms.scheduler.MultiStepSchedule(3)
 	ms.mockRM.waitForAllocations(t, 2, 1000)
 	// once we start to process allocation asks from this app, verify the state again
@@ -398,9 +414,16 @@ func TestSchedulerRecovery2Allocations(t *testing.T) {
 	err = ms.Init(configData, false)
 	assert.NilError(t, err, "2nd RegisterResourceManager failed")
 
-	// Register nodes, and add app
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	// Register nodes, and add apps
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{appID1: "root.a"}),
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "ApplicationRequest failed")
+	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
+
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -410,17 +433,13 @@ func TestSchedulerRecovery2Allocations(t *testing.T) {
 						"vcore":  {Value: 20},
 					},
 				},
+				Action:              si.NodeInfo_CREATE,
 				ExistingAllocations: mockRM.nodeAllocations["node-1:1234"],
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{appID1: "root.a"}),
-		RmID:            "rm:123",
+		RmID: "rm:123",
 	})
-
-	assert.NilError(t, err, "UpdateRequest nodes and app for recovery failed")
-
-	// waiting for recovery
-	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
+	assert.NilError(t, err, "NodeRequest nodes and app for recovery failed")
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	recoveredApp := ms.getApplication(appID1)
 	// verify app state
@@ -431,23 +450,6 @@ func TestSchedulerRecovery2Allocations(t *testing.T) {
 // but only include existing allocations of this app.
 func TestSchedulerRecoveryWithoutAppInfo(t *testing.T) {
 	// Register RM
-	configData := `
-partitions:
-  -
-    name: default
-    queues:
-      - name: root
-        submitacl: "*"
-        queues:
-          - name: a
-            resources:
-              guaranteed:
-                memory: 100
-                vcore: 10
-              max:
-                memory: 150
-                vcore: 20
-`
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
@@ -456,8 +458,8 @@ partitions:
 
 	// Register nodes, and add apps
 	// here we only report back existing allocations, without registering applications
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -467,6 +469,7 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 				ExistingAllocations: []*si.Allocation{
 					{
 						AllocationKey: "allocation-key-01",
@@ -497,12 +500,12 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 		},
 		RmID: "rm:123",
 	})
-
-	assert.NilError(t, err, "UpdateRequest nodes and apps failed")
+	assert.NilError(t, err, "NodeRequest nodes and apps failed")
 
 	// waiting for recovery
 	// node-1 should be rejected as some of allocations cannot be recovered
@@ -518,8 +521,15 @@ partitions:
 		resources.Quantity(0))
 
 	// register the node again, with application info attached
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{"app-01": "root.a"}),
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "ApplicationRequest re-register nodes and app failed")
+	ms.mockRM.waitForAcceptedApplication(t, "app-01", 1000)
+
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -529,6 +539,7 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 				ExistingAllocations: []*si.Allocation{
 					{
 						AllocationKey: "allocation-key-01",
@@ -551,12 +562,9 @@ partitions:
 				},
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{"app-01": "root.a"}),
-		RmID:            "rm:123",
+		RmID: "rm:123",
 	})
-
-	assert.NilError(t, err, "UpdateRequest re-register nodes and app failed")
-
+	assert.NilError(t, err, "NodeRequest re-register nodes and app failed")
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 
 	assert.Equal(t, part.GetTotalNodeCount(), 2)
@@ -582,22 +590,6 @@ func TestAppRecovery(t *testing.T) {
 	proxy := serviceContext.RMProxy
 
 	// Register RM
-	configData := `
-partitions:
-  - name: default
-    queues:
-      - name: root
-        submitacl: "*"
-        queues:
-          - name: a
-            resources:
-              guaranteed:
-                memory: 100
-                vcore: 10
-              max:
-                memory: 150
-                vcore: 20
-`
 	configs.MockSchedulerConfigByData([]byte(configData))
 	mockRM := newMockRMCallbackHandler()
 
@@ -611,8 +603,15 @@ partitions:
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Register nodes, and add apps
-	err = proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	err = proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{appID1: "root.a"}),
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "ApplicationRequest nodes and apps failed")
+	mockRM.waitForAcceptedApplication(t, appID1, 1000)
+
+	err = proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -622,6 +621,7 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 			{
 				NodeID:     "node-2:1234",
@@ -632,13 +632,12 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{appID1: "root.a"}),
-		RmID:            "rm:123",
+		RmID: "rm:123",
 	})
-
-	assert.NilError(t, err, "UpdateRequest nodes and apps failed")
+	assert.NilError(t, err, "NodeRequest nodes and apps failed")
 
 	// waiting for recovery
 	mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
@@ -658,22 +657,6 @@ func TestAppRecoveryAlone(t *testing.T) {
 	proxy := serviceContext.RMProxy
 
 	// Register RM
-	configData := `
-partitions:
-  - name: default
-    queues:
-      - name: root
-        submitacl: "*"
-        queues:
-          - name: a
-            resources:
-              guaranteed:
-                memory: 100
-                vcore: 10
-              max:
-                memory: 150
-                vcore: 20
-`
 	configs.MockSchedulerConfigByData([]byte(configData))
 	mockRM := newMockRMCallbackHandler()
 
@@ -687,12 +670,12 @@ partitions:
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Register apps alone
-	err = proxy.Update(&si.UpdateRequest{
-		NewApplications: newAddAppRequest(map[string]string{appID1: "root.a", appID2: "root.a"}),
-		RmID:            "rm:123",
+	err = proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{appID1: "root.a", appID2: "root.a"}),
+		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest app failed")
+	assert.NilError(t, err, "ApplicationRequest app failed")
 
 	mockRM.waitForAcceptedApplication(t, appID1, 1000)
 	mockRM.waitForAcceptedApplication(t, appID2, 1000)
@@ -747,8 +730,8 @@ partitions:
 	assert.Equal(t, len(rootQ.GetCopyOfChildren()), 0, "unexpected child queue(s) found")
 
 	// Register nodes, and add apps
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -758,6 +741,7 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 			{
 				NodeID:     "node-2:1234",
@@ -768,9 +752,16 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 		},
-		NewApplications: []*si.AddApplicationRequest{{
+		RmID: "rm:123",
+	})
+
+	assert.NilError(t, err, "NodeRequest nodes and apps failed")
+
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New: []*si.AddApplicationRequest{{
 			ApplicationID: appID1,
 			QueueName:     "",
 			PartitionName: "",
@@ -782,7 +773,7 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest nodes and apps failed")
+	assert.NilError(t, err, "ApplicationRequest nodes and apps failed")
 
 	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
@@ -793,7 +784,7 @@ partitions:
 	appQueue := part.GetQueue("root.app-1-namespace")
 	assert.Assert(t, appQueue != nil, "application queue was not created")
 
-	err = ms.proxy.Update(&si.UpdateRequest{
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
 				AllocationKey: "alloc-1",
@@ -810,7 +801,7 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest add allocations failed")
+	assert.NilError(t, err, "AllocationRequest add allocations failed")
 	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
 
 	// Wait pending resource of queue a and scheduler queue
@@ -873,8 +864,8 @@ partitions:
 	assert.Equal(t, len(rootQ.GetCopyOfChildren()), 0)
 
 	// first recover apps
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewApplications: []*si.AddApplicationRequest{
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New: []*si.AddApplicationRequest{
 			{
 				ApplicationID: appID1,
 				QueueName:     "",
@@ -888,14 +879,14 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest add app failed")
+	assert.NilError(t, err, "ApplicationRequest add app failed")
 
 	// waiting for recovery
 	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
 
 	// recover nodes
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -905,6 +896,7 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action:              si.NodeInfo_CREATE,
 				ExistingAllocations: toRecover["node-1:1234"],
 			},
 			{
@@ -916,13 +908,14 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action:              si.NodeInfo_CREATE,
 				ExistingAllocations: toRecover["node-2:1234"],
 			},
 		},
 		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest nodes failed")
+	assert.NilError(t, err, "NodeRequest nodes failed")
 
 	// waiting for recovery
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)

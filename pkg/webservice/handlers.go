@@ -21,13 +21,14 @@ package webservice
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math"
 	"net/http"
 	"runtime"
 	"strconv"
 	"strings"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
@@ -36,6 +37,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	metrics2 "github.com/apache/incubator-yunikorn-core/pkg/metrics"
+	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
@@ -80,10 +82,7 @@ func getClusterInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	lists := schedulerContext.GetPartitionMapClone()
-	clustersInfo := make([]*dao.ClusterDAOInfo, 0, len(lists))
-	for _, partition := range lists {
-		clustersInfo = append(clustersInfo, getClusterJSON(partition))
-	}
+	clustersInfo := getClusterDAO(lists)
 	if err := json.NewEncoder(w).Encode(clustersInfo); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -92,14 +91,7 @@ func getClusterInfo(w http.ResponseWriter, r *http.Request) {
 func getClusterUtilization(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	lists := schedulerContext.GetPartitionMapClone()
-	clusterUtil := make([]*dao.ClustersUtilDAOInfo, 0, len(lists))
-	for _, partition := range lists {
-		clusterUtil = append(clusterUtil, &dao.ClustersUtilDAOInfo{
-			PartitionName: common.GetPartitionNameWithoutClusterID(partition.Name),
-			ClustersUtil:  getClusterUtilJSON(partition),
-		})
-	}
-
+	clusterUtil := getClustersUtilDAO(lists)
 	if err := json.NewEncoder(w).Encode(clusterUtil); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -162,20 +154,7 @@ func getNodesInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	lists := schedulerContext.GetPartitionMapClone()
-	result := make([]*dao.NodesDAOInfo, 0, len(lists))
-	for _, partition := range lists {
-		ns := partition.GetNodes()
-		nodesDao := make([]*dao.NodeDAOInfo, 0, len(ns))
-		for _, node := range ns {
-			nodeDao := getNodeJSON(node)
-			nodesDao = append(nodesDao, nodeDao)
-		}
-		result = append(result, &dao.NodesDAOInfo{
-			PartitionName: common.GetPartitionNameWithoutClusterID(partition.Name),
-			Nodes:         nodesDao,
-		})
-	}
-
+	result := getNodesDAO(lists)
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -185,16 +164,7 @@ func getNodesUtilization(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	lists := schedulerContext.GetPartitionMapClone()
-	var result []*dao.NodesUtilDAOInfo
-	for _, partition := range lists {
-		partitionResource := partition.GetTotalPartitionResource()
-		// partitionResource can be null if the partition has no node
-		if partitionResource != nil {
-			for name := range partitionResource.Resources {
-				result = append(result, getNodesUtilJSON(partition, name))
-			}
-		}
-	}
+	result := getNodesUtilDAO(lists)
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -202,7 +172,7 @@ func getNodesUtilization(w http.ResponseWriter, r *http.Request) {
 
 func validateConf(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
-	requestBytes, err := ioutil.ReadAll(r.Body)
+	requestBytes, err := io.ReadAll(r.Body)
 	if err == nil {
 		_, err = configs.LoadSchedulerConfigFromByteArray(requestBytes)
 	}
@@ -356,6 +326,7 @@ func getNodeJSON(node *objects.Node) *dao.NodeDAOInfo {
 		Occupied:    node.GetOccupiedResource().DAOString(),
 		Allocated:   node.GetAllocatedResource().DAOString(),
 		Available:   node.GetAvailableResource().DAOString(),
+		Utilized:    node.GetUtilizedResource().DAOString(),
 		Allocations: allocations,
 		Schedulable: node.IsSchedulable(),
 	}
@@ -365,9 +336,10 @@ func getNodesUtilJSON(partition *scheduler.PartitionContext, name string) *dao.N
 	mapResult := make([]int, 10)
 	mapName := make([][]string, 10)
 	var v float64
-	var resourceExist = true
 	var nodeUtil []*dao.NodeUtilDAOInfo
 	for _, node := range partition.GetNodes() {
+		resourceExist := true
+		// check resource exist or not
 		total := node.GetCapacity()
 		if total.Resources[name] <= 0 {
 			resourceExist = false
@@ -376,6 +348,7 @@ func getNodesUtilJSON(partition *scheduler.PartitionContext, name string) *dao.N
 		if _, ok := resourceAllocated.Resources[name]; !ok {
 			resourceExist = false
 		}
+		// if resource exist in node, record the bucket it should go
 		if resourceExist {
 			v = float64(resources.CalculateAbsUsedCapacity(total, resourceAllocated).Resources[name])
 			idx := int(math.Dim(math.Ceil(v/10), 1))
@@ -383,24 +356,14 @@ func getNodesUtilJSON(partition *scheduler.PartitionContext, name string) *dao.N
 			mapName[idx] = append(mapName[idx], node.NodeID)
 		}
 	}
+	// put number of nodes and node name to different buckets
 	for k := 0; k < 10; k++ {
-		if resourceExist {
-			util := &dao.NodeUtilDAOInfo{
-				BucketName: fmt.Sprintf("%d", k*10) + "-" + fmt.Sprintf("%d", (k+1)*10) + "%",
-				NumOfNodes: int64(mapResult[k]),
-				NodeNames:  mapName[k],
-			}
-			nodeUtil = append(nodeUtil, util)
-		} else {
-			util := &dao.NodeUtilDAOInfo{
-				BucketName: fmt.Sprintf("%d", k*10) + "-" + fmt.Sprintf("%d", (k+1)*10) + "%",
-				NumOfNodes: int64(-1),
-				NodeNames:  []string{"N/A"},
-			}
-			nodeUtil = append(nodeUtil, util)
+		util := &dao.NodeUtilDAOInfo{
+			BucketName: fmt.Sprintf("%d", k*10) + "-" + fmt.Sprintf("%d", (k+1)*10) + "%",
+			NumOfNodes: int64(mapResult[k]),
+			NodeNames:  mapName[k],
 		}
-		mapResult[k] = 0
-		mapName[k] = []string{}
+		nodeUtil = append(nodeUtil, util)
 	}
 	return &dao.NodesUtilDAOInfo{
 		ResourceType: name,
@@ -419,17 +382,7 @@ func getApplicationHistory(w http.ResponseWriter, r *http.Request) {
 	// get a copy of the records: if the array contains nil values they will always be at the
 	// start and we cannot shortcut the loop using a break, we must finish iterating
 	records := imHistory.GetRecords()
-	result := make([]*dao.ApplicationHistoryDAOInfo, 0, len(records))
-	for _, record := range records {
-		if record == nil {
-			continue
-		}
-		element := &dao.ApplicationHistoryDAOInfo{
-			Timestamp:         record.Timestamp.UnixNano(),
-			TotalApplications: strconv.Itoa(record.TotalApplications),
-		}
-		result = append(result, element)
-	}
+	result := getAppHistoryDAO(records)
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -446,17 +399,7 @@ func getContainerHistory(w http.ResponseWriter, r *http.Request) {
 	// get a copy of the records: if the array contains nil values they will always be at the
 	// start and we cannot shortcut the loop using a break, we must finish iterating
 	records := imHistory.GetRecords()
-	result := make([]*dao.ContainerHistoryDAOInfo, 0, len(records))
-	for _, record := range records {
-		if record == nil {
-			continue
-		}
-		element := &dao.ContainerHistoryDAOInfo{
-			Timestamp:       record.Timestamp.UnixNano(),
-			TotalContainers: strconv.Itoa(record.TotalContainers),
-		}
-		result = append(result, element)
-	}
+	result := getContainerHistoryDAO(records)
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -499,7 +442,7 @@ func createClusterConfig(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, "Invalid query parameters. Please check the usage documentation", http.StatusBadRequest)
 		return
 	}
-	requestBytes, err := ioutil.ReadAll(r.Body)
+	requestBytes, err := io.ReadAll(r.Body)
 	if err == nil {
 		_, err = configs.LoadSchedulerConfigFromByteArray(requestBytes)
 	}
@@ -519,7 +462,7 @@ func updateClusterConfig(w http.ResponseWriter, r *http.Request) {
 	lock.Lock()
 	defer lock.Unlock()
 	writeHeaders(w)
-	requestBytes, err := ioutil.ReadAll(r.Body)
+	requestBytes, err := io.ReadAll(r.Body)
 	if err != nil {
 		buildUpdateResponse(err, w)
 		return
@@ -565,6 +508,10 @@ func checkHealthStatus(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	metrics := metrics2.GetSchedulerMetrics()
 	result := scheduler.GetSchedulerHealthStatus(metrics, schedulerContext)
+	if !result.Healthy {
+		log.Logger().Error("Scheduler is not healthy", zap.Any("health check values", result.HealthChecks))
+		buildJSONErrorResponse(w, "Scheduler is not healthy", http.StatusServiceUnavailable)
+	}
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -584,7 +531,7 @@ func buildUpdateResponse(err error, w http.ResponseWriter) {
 }
 
 func updateConfiguration(conf string) (string, error) {
-	if plugin := plugins.GetConfigPlugin(); plugin != nil {
+	if plugin := plugins.GetResourceManagerCallbackPlugin(); plugin != nil {
 		// use the plugin to update the configuration in the configMap
 		resp := plugin.UpdateConfiguration(&si.UpdateConfigurationRequest{
 			Configs: conf,
@@ -601,35 +548,7 @@ func getPartitions(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	lists := schedulerContext.GetPartitionMapClone()
-	partitionsInfo := make([]*dao.PartitionInfo, 0, len(lists))
-	for _, partitionContext := range lists {
-		partitionInfo := &dao.PartitionInfo{}
-		partitionInfo.ClusterID = partitionContext.RmID
-		partitionInfo.Name = common.GetPartitionNameWithoutClusterID(partitionContext.Name)
-		partitionInfo.State = partitionContext.GetCurrentState()
-		partitionInfo.LastStateTransitionTime = partitionContext.GetStateTime().String()
-
-		capacityInfo := dao.PartitionCapacity{}
-		capacityInfo.Capacity = partitionContext.GetTotalPartitionResource().DAOString()
-		capacityInfo.UsedCapacity = partitionContext.GetAllocatedResource().DAOString()
-		partitionInfo.Capacity = capacityInfo
-		partitionInfo.NodeSortingPolicy = dao.NodeSortingPolicy{
-			Type:            partitionContext.GetNodeSortingPolicyType().String(),
-			ResourceWeights: partitionContext.GetNodeSortingResourceWeights(),
-		}
-
-		appList := partitionContext.GetApplications()
-		appList = append(appList, partitionContext.GetCompletedApplications()...)
-		applicationsState := make(map[string]int)
-		totalApplications := 0
-		for _, app := range appList {
-			applicationsState[app.CurrentState()]++
-			totalApplications++
-		}
-		applicationsState["total"] = totalApplications
-		partitionInfo.Applications = applicationsState
-		partitionsInfo = append(partitionsInfo, partitionInfo)
-	}
+	partitionsInfo := getPartitionInfoDAO(lists)
 	if err := json.NewEncoder(w).Encode(partitionsInfo); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -736,4 +655,182 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func setLogLevel(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	writeHeaders(w)
+	level := vars["level"]
+	if err := log.SetLogLevel(level); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+	}
+}
+
+func getLogLevel(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	zapConfig := log.GetConfig()
+	if _, err := w.Write([]byte(zapConfig.Level.Level().String())); err != nil {
+		log.Logger().Error("Could not get log level", zap.Error(err))
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.PartitionInfo {
+	var result []*dao.PartitionInfo
+
+	for _, partitionContext := range lists {
+		partitionInfo := &dao.PartitionInfo{}
+		partitionInfo.ClusterID = partitionContext.RmID
+		partitionInfo.Name = common.GetPartitionNameWithoutClusterID(partitionContext.Name)
+		partitionInfo.State = partitionContext.GetCurrentState()
+		partitionInfo.LastStateTransitionTime = partitionContext.GetStateTime().String()
+
+		capacityInfo := dao.PartitionCapacity{}
+		capacity := partitionContext.GetTotalPartitionResource()
+		usedCapacity := partitionContext.GetAllocatedResource()
+		capacityInfo.Capacity = capacity.DAOString()
+		capacityInfo.UsedCapacity = usedCapacity.DAOString()
+		capacityInfo.Utilization = resources.CalculateAbsUsedCapacity(capacity, usedCapacity).DAOString()
+		partitionInfo.Capacity = capacityInfo
+		partitionInfo.NodeSortingPolicy = dao.NodeSortingPolicy{
+			Type:            partitionContext.GetNodeSortingPolicyType().String(),
+			ResourceWeights: partitionContext.GetNodeSortingResourceWeights(),
+		}
+
+		appList := partitionContext.GetApplications()
+		appList = append(appList, partitionContext.GetCompletedApplications()...)
+		applicationsState := make(map[string]int)
+		totalApplications := 0
+		for _, app := range appList {
+			applicationsState[app.CurrentState()]++
+			totalApplications++
+		}
+		applicationsState["total"] = totalApplications
+		partitionInfo.Applications = applicationsState
+		result = append(result, partitionInfo)
+	}
+
+	return result
+}
+
+func getAppHistoryDAO(records []*history.MetricsRecord) []*dao.ApplicationHistoryDAOInfo {
+	var result []*dao.ApplicationHistoryDAOInfo
+
+	for _, record := range records {
+		if record == nil {
+			continue
+		}
+		element := &dao.ApplicationHistoryDAOInfo{
+			Timestamp:         record.Timestamp.UnixNano(),
+			TotalApplications: strconv.Itoa(record.TotalApplications),
+		}
+		result = append(result, element)
+	}
+
+	return result
+}
+
+func getNodesDAO(lists map[string]*scheduler.PartitionContext) []*dao.NodesDAOInfo {
+	var result []*dao.NodesDAOInfo
+
+	for _, partition := range lists {
+		ns := partition.GetNodes()
+		nodesDao := make([]*dao.NodeDAOInfo, 0, len(ns))
+		for _, node := range ns {
+			nodeDao := getNodeJSON(node)
+			nodesDao = append(nodesDao, nodeDao)
+		}
+		result = append(result, &dao.NodesDAOInfo{
+			PartitionName: common.GetPartitionNameWithoutClusterID(partition.Name),
+			Nodes:         nodesDao,
+		})
+	}
+
+	return result
+}
+
+func getContainerHistoryDAO(records []*history.MetricsRecord) []*dao.ContainerHistoryDAOInfo {
+	var result []*dao.ContainerHistoryDAOInfo
+
+	for _, record := range records {
+		if record == nil {
+			continue
+		}
+		element := &dao.ContainerHistoryDAOInfo{
+			Timestamp:       record.Timestamp.UnixNano(),
+			TotalContainers: strconv.Itoa(record.TotalContainers),
+		}
+		result = append(result, element)
+	}
+
+	return result
+}
+
+func getClustersUtilDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClustersUtilDAOInfo {
+	var result []*dao.ClustersUtilDAOInfo
+
+	for _, partition := range lists {
+		result = append(result, &dao.ClustersUtilDAOInfo{
+			PartitionName: common.GetPartitionNameWithoutClusterID(partition.Name),
+			ClustersUtil:  getClusterUtilJSON(partition),
+		})
+	}
+
+	return result
+}
+func getNodesUtilDAO(lists map[string]*scheduler.PartitionContext) []*dao.NodesUtilDAOInfo {
+	var result []*dao.NodesUtilDAOInfo
+
+	for _, partition := range lists {
+		partitionResource := partition.GetTotalPartitionResource()
+		// partitionResource can be null if the partition has no node
+		if partitionResource != nil {
+			for name := range partitionResource.Resources {
+				result = append(result, getNodesUtilJSON(partition, name))
+			}
+		}
+	}
+
+	return result
+}
+
+func getApplicationsDAO(lists map[string]*scheduler.PartitionContext) []*dao.ApplicationDAOInfo {
+	var result []*dao.ApplicationDAOInfo
+
+	for _, partition := range lists {
+		var appList []*objects.Application
+		appList = append(appList, partition.GetApplications()...)
+		appList = append(appList, partition.GetCompletedApplications()...)
+
+		for _, app := range appList {
+			result = append(result, getApplicationJSON(app))
+		}
+	}
+
+	return result
+}
+
+func getPartitionDAO(lists map[string]*scheduler.PartitionContext) []*dao.PartitionDAOInfo {
+	var result []*dao.PartitionDAOInfo
+
+	for _, partition := range lists {
+		result = append(result, getPartitionJSON(partition))
+	}
+
+	return result
+}
+
+func getClusterDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClusterDAOInfo {
+	var result []*dao.ClusterDAOInfo
+
+	for _, partition := range lists {
+		result = append(result, getClusterJSON(partition))
+	}
+
+	return result
+}
+
+func getMetrics(w http.ResponseWriter, r *http.Request) {
+	metrics2.GetRuntimeMetrics().Collect()
+	promhttp.Handler().ServeHTTP(w, r)
 }

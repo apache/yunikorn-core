@@ -32,6 +32,20 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
+const configDataSmokeTest = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        submitacl: "*"
+        queues:
+          - name: singleleaf
+            resources:
+              max:
+                memory: 150
+                vcore: 20
+`
+
 // Test scheduler reconfiguration
 func TestConfigScheduler(t *testing.T) {
 	configData := `
@@ -95,7 +109,7 @@ partitions:
           gpu: test queue property
 `
 	configs.MockSchedulerConfigByData([]byte(configData))
-	err = ms.proxy.ReloadConfiguration("rm:123")
+	err = ms.proxy.UpdateConfiguration("rm:123")
 
 	assert.NilError(t, err, "configuration reload failed")
 
@@ -141,24 +155,11 @@ partitions:
 // Test basic interactions from rm proxy to cache and to scheduler.
 func TestBasicScheduler(t *testing.T) {
 	// Register RM
-	configData := `
-partitions:
-  - name: default
-    queues:
-      - name: root
-        submitacl: "*"
-        queues:
-          - name: singleleaf
-            resources:
-              max:
-                memory: 150
-                vcore: 20
-`
 	// Start all tests
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configDataSmokeTest, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	leafName := "root.singleleaf"
@@ -175,8 +176,8 @@ partitions:
 	assert.Equal(t, int(leaf.GetMaxResource().Resources[resources.MEMORY]), 150, "%s config not set correct", leafName)
 
 	// Register a node, and add apps
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -186,6 +187,7 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 			{
 				NodeID:     "node-2:1234",
@@ -196,12 +198,19 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{appID1: leafName}),
-		RmID:            "rm:123",
+		RmID: "rm:123",
 	})
-	assert.NilError(t, err, "UpdateRequest failed")
+	assert.NilError(t, err, "NodeRequest failed")
+
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{appID1: leafName}),
+		RmID: "rm:123",
+	})
+
+	assert.NilError(t, err, "ApplicationRequest failed")
 
 	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
@@ -217,7 +226,7 @@ partitions:
 
 	assert.Equal(t, app01.CurrentState(), objects.New.String())
 
-	err = ms.proxy.Update(&si.UpdateRequest{
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
 				AllocationKey: "alloc-1",
@@ -233,7 +242,7 @@ partitions:
 		},
 		RmID: "rm:123",
 	})
-	assert.NilError(t, err, "UpdateRequest 2 failed")
+	assert.NilError(t, err, "AllocationRequest 2 failed")
 
 	// Wait pending resource of queue a and scheduler queue
 	// Both pending memory = 10 * 2 = 20;
@@ -263,7 +272,7 @@ partitions:
 	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), ms.partitionName, []string{"node-1:1234", "node-2:1234"}, 20, 1000)
 
 	// Ask for two more resources
-	err = ms.proxy.Update(&si.UpdateRequest{
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
 				AllocationKey: "alloc-2",
@@ -290,7 +299,7 @@ partitions:
 		},
 		RmID: "rm:123",
 	})
-	assert.NilError(t, err, "UpdateRequest 3 failed")
+	assert.NilError(t, err, "AllocationRequest 3 failed")
 
 	// Wait pending resource of queue a and scheduler queue
 	// Both pending memory = 50 * 2 + 100 * 2 = 300;
@@ -316,7 +325,7 @@ partitions:
 	// Check allocated resources of nodes
 	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), partition, []string{"node-1:1234", "node-2:1234"}, 120, 1000)
 
-	updateRequest := &si.UpdateRequest{
+	updateRequest := &si.AllocationRequest{
 		Releases: &si.AllocationReleasesRequest{
 			AllocationsToRelease: make([]*si.AllocationRelease, 0),
 		},
@@ -333,8 +342,8 @@ partitions:
 	}
 
 	// Release Allocations.
-	err = ms.proxy.Update(updateRequest)
-	assert.NilError(t, err, "UpdateRequest 4 failed")
+	err = ms.proxy.UpdateAllocation(updateRequest)
+	assert.NilError(t, err, "AllocationRequest 4 failed")
 
 	ms.mockRM.waitForAllocations(t, 0, 1000)
 
@@ -349,7 +358,7 @@ partitions:
 	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 0, "app allocated memory incorrect")
 
 	// Release asks
-	err = ms.proxy.Update(&si.UpdateRequest{
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Releases: &si.AllocationReleasesRequest{
 			AllocationAsksToRelease: []*si.AllocationAskRelease{
 				{
@@ -360,7 +369,7 @@ partitions:
 		},
 		RmID: "rm:123",
 	})
-	assert.NilError(t, err, "UpdateRequest 5 failed")
+	assert.NilError(t, err, "AllocationRequest 5 failed")
 
 	// Check pending resource
 	waitForPendingQueueResource(t, leaf, 0, 1000)
@@ -369,31 +378,18 @@ partitions:
 }
 
 func TestBasicSchedulerAutoAllocation(t *testing.T) {
-	configData := `
-partitions:
-  - name: default
-    queues:
-      - name: root
-        submitacl: "*"
-        queues:
-          - name: singleleaf
-            resources:
-              max:
-                memory: 150
-                vcore: 20
-`
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, true)
+	err := ms.Init(configDataSmokeTest, true)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	leafName := "root.singleleaf"
 	appID := appID1
 
 	// Register a node, and add apps
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -403,6 +399,7 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 			{
 				NodeID:     "node-2:1234",
@@ -413,19 +410,26 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{appID: leafName}),
-		RmID:            "rm:123",
+		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest failed")
+	assert.NilError(t, err, "NodeRequest failed")
+
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{appID: leafName}),
+		RmID: "rm:123",
+	})
+
+	assert.NilError(t, err, "ApplicationRequest failed")
 
 	ms.mockRM.waitForAcceptedApplication(t, appID, 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
-	err = ms.proxy.Update(&si.UpdateRequest{
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
 				AllocationKey: "alloc-1",
@@ -442,7 +446,7 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest 2 failed")
+	assert.NilError(t, err, "AllocationRequest 2 failed")
 
 	// wait until we have maxed out the leaf queue
 	ms.mockRM.waitForAllocations(t, 15, 1000)
@@ -493,8 +497,8 @@ partitions:
 	app2ID := appID2
 
 	// Register a node, and add apps
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -504,6 +508,7 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 			{
 				NodeID:     "node-2:1234",
@@ -514,20 +519,27 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{app1ID: leafApp1, app2ID: leafApp2}),
-		RmID:            "rm:123",
+		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest failed")
+	assert.NilError(t, err, "NodeRequest failed")
+
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{app1ID: leafApp1, app2ID: leafApp2}),
+		RmID: "rm:123",
+	})
+
+	assert.NilError(t, err, "ApplicationRequest failed")
 
 	ms.mockRM.waitForAcceptedApplication(t, app1ID, 1000)
 	ms.mockRM.waitForAcceptedApplication(t, app2ID, 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
-	err = ms.proxy.Update(&si.UpdateRequest{
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
 				AllocationKey: "alloc-1",
@@ -555,7 +567,7 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest 2 failed")
+	assert.NilError(t, err, "AllocationRequest 2 failed")
 
 	// Check the queue root
 	root := ms.getQueue("root")
@@ -607,8 +619,8 @@ partitions:
 	app2ID := appID2
 
 	// Register a node, and add applications
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -618,6 +630,7 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 			{
 				NodeID:     "node-2:1234",
@@ -628,20 +641,27 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{app1ID: leafName, app2ID: leafName}),
-		RmID:            "rm:123",
+		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest failed")
+	assert.NilError(t, err, "NodeRequest failed")
+
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{app1ID: leafName, app2ID: leafName}),
+		RmID: "rm:123",
+	})
+
+	assert.NilError(t, err, "ApplicationRequest failed")
 
 	ms.mockRM.waitForAcceptedApplication(t, app1ID, 1000)
 	ms.mockRM.waitForAcceptedApplication(t, app2ID, 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
-	err = ms.proxy.Update(&si.UpdateRequest{
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
 				AllocationKey: "alloc-1",
@@ -669,7 +689,7 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest 2 failed")
+	assert.NilError(t, err, "AllocationRequest 2 failed")
 
 	// Check the queue root
 	root := ms.getQueue("root")
@@ -720,8 +740,8 @@ partitions:
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Register a node, and add applications
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -731,27 +751,28 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 		},
 		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest failed")
+	assert.NilError(t, err, "NodeRequest failed")
 
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewApplications: newAddAppRequest(map[string]string{"app-reject-1": "root.non-exist-queue"}),
-		RmID:            "rm:123",
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{"app-reject-1": "root.non-exist-queue"}),
+		RmID: "rm:123",
 	})
 
 	assert.NilError(t, err, "UpdateRequest 2 failed")
 
 	ms.mockRM.waitForRejectedApplication(t, "app-reject-1", 1000)
 
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewApplications: newAddAppRequest(map[string]string{"app-added-2": "root.leaf"}),
-		RmID:            "rm:123",
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{"app-added-2": "root.leaf"}),
+		RmID: "rm:123",
 	})
 
 	assert.NilError(t, err, "UpdateRequest 3 failed")
@@ -810,8 +831,8 @@ partitions:
 			assert.NilError(t, err, "RegisterResourceManager failed in run %s", param.name)
 
 			// Register a node, and add applications
-			err = ms.proxy.Update(&si.UpdateRequest{
-				NewSchedulableNodes: []*si.NewNodeInfo{
+			err = ms.proxy.UpdateNode(&si.NodeRequest{
+				Nodes: []*si.NodeInfo{
 					{
 						NodeID:     "node-1:1234",
 						Attributes: map[string]string{},
@@ -821,17 +842,24 @@ partitions:
 								"vcore":  {Value: 15},
 							},
 						},
+						Action: si.NodeInfo_CREATE,
 					},
 				},
-				NewApplications: newAddAppRequest(map[string]string{appID1: param.leafQueue}),
-				RmID:            "rm:123",
+				RmID: "rm:123",
 			})
 
-			assert.NilError(t, err, "UpdateRequest failed in run %s", param.name)
+			assert.NilError(t, err, "NodeRequest failed in run %s", param.name)
+
+			err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+				New:  newAddAppRequest(map[string]string{appID1: param.leafQueue}),
+				RmID: "rm:123",
+			})
+
+			assert.NilError(t, err, "ApplicationRequest failed in run %s", param.name)
 
 			ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 
-			err = ms.proxy.Update(&si.UpdateRequest{
+			err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 				Asks: []*si.AllocationAsk{
 					{
 						AllocationKey: "alloc-1",
@@ -848,7 +876,7 @@ partitions:
 				RmID: "rm:123",
 			})
 
-			assert.NilError(t, err, "UpdateRequest 2 failed in run %s", param.name)
+			assert.NilError(t, err, "AllocationRequest 2 failed in run %s", param.name)
 
 			leaf := ms.getQueue(param.leafQueue)
 
@@ -879,14 +907,14 @@ partitions:
 				})
 			}
 
-			err = ms.proxy.Update(&si.UpdateRequest{
+			err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 				Releases: &si.AllocationReleasesRequest{
 					AllocationsToRelease: allocReleases,
 				},
 				RmID: "rm:123",
 			})
 
-			assert.NilError(t, err, "UpdateRequest 3 failed in run %s", param.name)
+			assert.NilError(t, err, "AllocationRequest 3 failed in run %s", param.name)
 			waitForAllocatedQueueResource(t, leaf, 0, 1000)
 
 			// schedule again, pending requests should be satisfied now
@@ -917,8 +945,8 @@ partitions:
 	node1ID := "node-1:1234"
 	node2ID := "node-2:1234"
 
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     node1ID,
 				Attributes: map[string]string{},
@@ -928,6 +956,7 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 			{
 				NodeID:     node2ID,
@@ -938,12 +967,13 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 		},
 		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest failed")
+	assert.NilError(t, err, "NodeRequest failed")
 
 	ms.mockRM.waitForAcceptedNode(t, node1ID, 1000)
 	ms.mockRM.waitForAcceptedNode(t, node2ID, 1000)
@@ -958,18 +988,18 @@ partitions:
 	assert.Equal(t, ms.scheduler.GetClusterContext().GetPartition(partition).GetNode(node2ID).IsSchedulable(), true)
 
 	// send RM node action DRAIN_NODE (move to unschedulable)
-	err = ms.proxy.Update(&si.UpdateRequest{
-		UpdatedNodes: []*si.UpdateNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     node1ID,
-				Action:     si.UpdateNodeInfo_DRAIN_NODE,
+				Action:     si.NodeInfo_DRAIN_NODE,
 				Attributes: make(map[string]string),
 			},
 		},
 		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest 2 failed")
+	assert.NilError(t, err, "NodeRequest 2 failed")
 
 	err = common.WaitFor(10*time.Millisecond, 10*time.Second, func() bool {
 		return !ms.scheduler.GetClusterContext().GetPartition(partition).GetNode(node1ID).IsSchedulable() &&
@@ -979,18 +1009,18 @@ partitions:
 	assert.NilError(t, err, "timed out waiting for node in cache")
 
 	// send RM node action: DRAIN_TO_SCHEDULABLE (make it schedulable again)
-	err = ms.proxy.Update(&si.UpdateRequest{
-		UpdatedNodes: []*si.UpdateNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     node1ID,
-				Action:     si.UpdateNodeInfo_DRAIN_TO_SCHEDULABLE,
+				Action:     si.NodeInfo_DRAIN_TO_SCHEDULABLE,
 				Attributes: make(map[string]string),
 			},
 		},
 		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest 3 failed")
+	assert.NilError(t, err, "NodeRequest 3 failed")
 
 	err = common.WaitFor(10*time.Millisecond, 10*time.Second, func() bool {
 		return ms.scheduler.GetClusterContext().GetPartition(partition).GetNode(node1ID).IsSchedulable() &&
@@ -1000,18 +1030,18 @@ partitions:
 	assert.NilError(t, err, "timed out waiting for node in cache")
 
 	// send RM node action: DECOMMISSION (make it unschedulable and tell partition to delete)
-	err = ms.proxy.Update(&si.UpdateRequest{
-		UpdatedNodes: []*si.UpdateNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     node2ID,
-				Action:     si.UpdateNodeInfo_DECOMISSION,
+				Action:     si.NodeInfo_DECOMISSION,
 				Attributes: make(map[string]string),
 			},
 		},
 		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest 3 failed")
+	assert.NilError(t, err, "NodeRequest 3 failed")
 
 	// node removal can be really quick: cannot test for unschedulable state (nil pointer)
 	// verify that the node (node-2) was removed
@@ -1042,8 +1072,8 @@ partitions:
 	app2ID := appID2
 
 	// Register a node, and add applications
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -1053,6 +1083,7 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 			{
 				NodeID:     "node-2:1234",
@@ -1063,20 +1094,25 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{app1ID: leafName, app2ID: leafName}),
-		RmID:            "rm:123",
+		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest failed")
+	assert.NilError(t, err, "NodeRequest failed")
 
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{app1ID: leafName, app2ID: leafName}),
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "ApplicationRequest failed")
 	ms.mockRM.waitForAcceptedApplication(t, app1ID, 1000)
 	ms.mockRM.waitForAcceptedApplication(t, app2ID, 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
-	err = ms.proxy.Update(&si.UpdateRequest{
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
 				AllocationKey: "alloc-1",
@@ -1150,10 +1186,10 @@ partitions:
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Register 10 nodes, and add applications
-	nodes := make([]*si.NewNodeInfo, 0)
+	nodes := make([]*si.NodeInfo, 0)
 	for i := 0; i < 10; i++ {
 		nodeID := "node-" + strconv.Itoa(i)
-		nodes = append(nodes, &si.NewNodeInfo{
+		nodes = append(nodes, &si.NodeInfo{
 			NodeID:     nodeID + ":1234",
 			Attributes: map[string]string{},
 			SchedulableResource: &si.Resource{
@@ -1162,19 +1198,26 @@ partitions:
 					"vcore":  {Value: 20},
 				},
 			},
+			Action: si.NodeInfo_CREATE,
 		})
 	}
 
 	leafName := "root.leaf"
 	appID := appID1
 
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: nodes,
-		NewApplications:     newAddAppRequest(map[string]string{appID: leafName}),
-		RmID:                "rm:123",
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: nodes,
+		RmID:  "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest failed")
+	assert.NilError(t, err, "NodeRequest failed")
+
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{appID: leafName}),
+		RmID: "rm:123",
+	})
+
+	assert.NilError(t, err, "ApplicationRequest failed")
 
 	// verify app and all nodes are accepted
 	ms.mockRM.waitForAcceptedApplication(t, appID, 1000)
@@ -1188,7 +1231,7 @@ partitions:
 	}
 
 	// Request ask with 20 allocations
-	err = ms.proxy.Update(&si.UpdateRequest{
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
 				AllocationKey: "alloc-1",
@@ -1205,7 +1248,7 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest failed")
+	assert.NilError(t, err, "AllocationRequest failed")
 
 	leaf := ms.getQueue(leafName)
 	app := ms.getApplication(appID)
@@ -1236,24 +1279,11 @@ partitions:
 // nolint: funlen
 func TestDupReleasesInGangScheduling(t *testing.T) {
 	// Register RM
-	configData := `
-partitions:
-  - name: default
-    queues:
-      - name: root
-        submitacl: "*"
-        queues:
-          - name: singleleaf
-            resources:
-              max:
-                memory: 150
-                vcore: 20
-`
 	// Start all tests
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configDataSmokeTest, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	leafName := "root.singleleaf"
@@ -1262,8 +1292,8 @@ partitions:
 	leaf := part.GetQueue(leafName)
 
 	// Register a node, and add apps
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -1273,6 +1303,7 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 			{
 				NodeID:     "node-2:1234",
@@ -1283,10 +1314,16 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{appID1: leafName}),
-		RmID:            "rm:123",
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err)
+
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{appID1: leafName}),
+		RmID: "rm:123",
 	})
 	assert.NilError(t, err)
 
@@ -1304,7 +1341,7 @@ partitions:
 	assert.Equal(t, app01.CurrentState(), objects.New.String())
 
 	// shim side creates a placeholder, and send the UpdateRequest
-	err = ms.proxy.Update(&si.UpdateRequest{
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
 				AllocationKey: "alloc-1",
@@ -1322,7 +1359,7 @@ partitions:
 		},
 		RmID: "rm:123",
 	})
-	assert.NilError(t, err, "UpdateRequest failed")
+	assert.NilError(t, err, "AllocationRequest failed")
 
 	// schedule and make sure the placeholder gets allocated
 	ms.scheduler.MultiStepSchedule(5)
@@ -1339,7 +1376,7 @@ partitions:
 		[]string{"node-1:1234", "node-2:1234"}, 10, 1000)
 
 	// shim submits the actual pod for scheduling
-	err = ms.proxy.Update(&si.UpdateRequest{
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
 				AllocationKey: "alloc-2",
@@ -1357,7 +1394,7 @@ partitions:
 		},
 		RmID: "rm:123",
 	})
-	assert.NilError(t, err, "UpdateRequest 3 failed")
+	assert.NilError(t, err, "AllocationRequest 3 failed")
 
 	// schedule and this triggers a placeholder REPLACE
 	ms.scheduler.MultiStepSchedule(10)
@@ -1366,7 +1403,7 @@ partitions:
 	ms.mockRM.waitForAllocations(t, 0, 1000)
 
 	// shim responses the allocation has been released
-	err = ms.proxy.Update(&si.UpdateRequest{
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Releases: &si.AllocationReleasesRequest{
 			AllocationsToRelease: []*si.AllocationRelease{
 				{
@@ -1395,7 +1432,7 @@ partitions:
 	waitForPendingQueueResource(t, root, 0, 1000)
 
 	// simulate the shim sends the release request again
-	err = ms.proxy.Update(&si.UpdateRequest{
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Releases: &si.AllocationReleasesRequest{
 			AllocationsToRelease: []*si.AllocationRelease{
 				{

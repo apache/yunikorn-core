@@ -61,6 +61,7 @@ type PartitionContext struct {
 	userGroupCache         *security.UserGroupCache        // user cache per partition
 	totalPartitionResource *resources.Resource             // Total node resources
 	allocations            int                             // Number of allocations on the partition
+	stateDumpFilePath      string                          // Path of output file for state dumps
 
 	// The partition write lock must not be held while manipulating an application.
 	// Scheduling is running continuously as a lock free background task. Scheduling an application
@@ -132,6 +133,7 @@ func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionCon
 	// TODO get the resolver from the config
 	pc.userGroupCache = security.GetUserGroupCache("")
 	pc.updateNodeSortingPolicy(conf)
+	pc.updateStateDumpFilePath(conf)
 	return nil
 }
 
@@ -148,6 +150,15 @@ func (pc *PartitionContext) updateNodeSortingPolicy(conf configs.PartitionConfig
 			zap.String("policyName", configuredPolicy.String()))
 	}
 	pc.nodes.SetNodeSortingPolicy(objects.NewNodeSortingPolicy(conf.NodeSortPolicy.Type, conf.NodeSortPolicy.ResourceWeights))
+}
+
+// NOTE: this is a lock free call. It should only be called holding the PartitionContext lock.
+func (pc *PartitionContext) updateStateDumpFilePath(conf configs.PartitionConfig) {
+	stateDumpFilePath := pc.GetStateDumpFilePath()
+	if stateDumpFilePath != conf.StateDumpFilePath {
+		log.Logger().Info(fmt.Sprintf("State dump file path was %s, changing to %s", stateDumpFilePath, conf.StateDumpFilePath))
+		pc.stateDumpFilePath = conf.StateDumpFilePath
+	}
 }
 
 func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig) error {
@@ -173,6 +184,7 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 		pc.placementManager = placement.NewPlacementManager(*pc.rules, pc.GetQueue)
 	}
 	pc.updateNodeSortingPolicy(conf)
+	pc.updateStateDumpFilePath(conf)
 	// start at the root: there is only one queue
 	queueConf := conf.Queues[0]
 	root := pc.root
@@ -531,6 +543,12 @@ func (pc *PartitionContext) createQueue(name string, user security.UserGroup) (*
 	return queue, nil
 }
 
+// Get the state dump output file path from the partition.
+// NOTE: this is a lock free call. It should only be called holding the PartitionContext lock.
+func (pc *PartitionContext) GetStateDumpFilePath() string {
+	return pc.stateDumpFilePath
+}
+
 // Get a node from the partition by nodeID.
 func (pc *PartitionContext) GetNode(nodeID string) *objects.Node {
 	pc.RLock()
@@ -704,6 +722,28 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 				if alloc.NodeID != release.NodeID {
 					// ignore the return as that is the same as alloc, the alloc is gone after this call
 					_ = app.ReplaceAllocation(allocID)
+					// we need to check the resources equality
+					delta := resources.Sub(release.AllocatedResource, alloc.AllocatedResource)
+					// Any negative value in the delta means that at least one of the requested resource in the
+					// placeholder is larger than the real allocation. The nodes are correct the queue needs adjusting.
+					// The reverse case is handled during allocation.
+					if delta.HasNegativeValue() {
+						// this looks incorrect but the delta is negative and the result will be a real decrease
+						err := app.GetQueue().IncAllocatedResource(delta, false)
+						// this should not happen as we really decrease the value
+						if err != nil {
+							log.Logger().Warn("unexpected failure during queue update: replacing placeholder",
+								zap.String("appID", alloc.ApplicationID),
+								zap.String("placeholderID", alloc.UUID),
+								zap.String("allocationID", release.UUID),
+								zap.Error(err))
+						}
+						log.Logger().Warn("replacing placeholder: placeholder is larger than real allocation",
+							zap.String("allocationID", release.UUID),
+							zap.String("requested resource", release.AllocatedResource.String()),
+							zap.String("placeholderID", alloc.UUID),
+							zap.String("placeholder resource", alloc.AllocatedResource.String()))
+					}
 					// track what we confirm on the other node to confirm it in the shim and get is bound
 					confirmed = append(confirmed, release)
 					// the allocation is removed so add it to the list that we return
@@ -748,6 +788,8 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 			log.Logger().Warn("failed to release resources from queue",
 				zap.String("appID", alloc.ApplicationID),
 				zap.Error(err))
+		} else {
+			metrics.GetQueueMetrics(app.GetQueuePath()).IncReleasedContainer()
 		}
 
 		// the allocation is removed so add it to the list that we return
@@ -990,6 +1032,12 @@ func (pc *PartitionContext) GetTotalApplicationCount() int {
 	return len(pc.applications)
 }
 
+func (pc *PartitionContext) GetTotalCompletedApplicationCount() int {
+	pc.RLock()
+	defer pc.RUnlock()
+	return len(pc.completedApplications)
+}
+
 func (pc *PartitionContext) GetTotalAllocationCount() int {
 	pc.RLock()
 	defer pc.RUnlock()
@@ -1107,6 +1155,7 @@ func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
 			alloc.ApplicationID, err)
 	}
 
+	metrics.GetQueueMetrics(queue.GetQueuePath()).IncAllocatedContainer()
 	node.AddAllocation(alloc)
 	app.RecoverAllocationAsk(alloc.Ask)
 	app.AddAllocation(alloc)
@@ -1149,7 +1198,8 @@ func (pc *PartitionContext) calculateNodesResourceUsage() map[string][]int {
 		for name, total := range node.GetCapacity().Resources {
 			if float64(total) > 0 {
 				resourceAllocated := float64(node.GetAllocatedResource().Resources[name])
-				v := resourceAllocated / float64(total)
+				// Consider over-allocated node as 100% utilized.
+				v := math.Min(resourceAllocated/float64(total), 1)
 				idx := int(math.Dim(math.Ceil(v*10), 1))
 				if dist, ok := mapResult[name]; !ok {
 					newDist := make([]int, 10)
@@ -1167,7 +1217,7 @@ func (pc *PartitionContext) calculateNodesResourceUsage() map[string][]int {
 	return mapResult
 }
 
-// Remove the allocation(s) from the app and nodes
+// removeAllocation removes the referenced allocation(s) from the applications and nodes
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*objects.Allocation, *objects.Allocation) {
 	if release == nil {
@@ -1212,7 +1262,7 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 		}
 	}
 
-	// for each allocations to release, update node.
+	// for each allocation to release, update the node and queue.
 	total := resources.NewResource()
 	for _, alloc := range released {
 		node := pc.GetNode(alloc.NodeID)
@@ -1224,14 +1274,28 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 			continue
 		}
 		if release.TerminationType == si.TerminationType_PLACEHOLDER_REPLACED {
-			// replacements could be on a different node but the queue should not change
 			confirmed = alloc.Releases[0]
+			// we need to check the resources equality
+			delta := resources.Sub(confirmed.AllocatedResource, alloc.AllocatedResource)
+			// Any negative value in the delta means that at least one of the requested resource in the
+			// placeholder is larger than the real allocation. The node and queue need adjusting.
+			// The reverse case is handled during allocation.
+			if delta.HasNegativeValue() {
+				// This looks incorrect but the delta is negative and the result will be an increase of the
+				// total tracked. The total will later be deducted from the queue usage.
+				total.SubFrom(delta)
+				log.Logger().Warn("replacing placeholder: placeholder is larger than real allocation",
+					zap.String("allocationID", confirmed.UUID),
+					zap.String("requested resource", confirmed.AllocatedResource.String()),
+					zap.String("placeholderID", alloc.UUID),
+					zap.String("placeholder resource", alloc.AllocatedResource.String()))
+			}
+			// replacements could be on a different node and different size handle all cases
 			if confirmed.NodeID == alloc.NodeID {
-				// this is the real swap on the node
-				node.ReplaceAllocation(alloc.UUID, confirmed)
+				// this is the real swap on the node, adjust usage if needed
+				node.ReplaceAllocation(alloc.UUID, confirmed, delta)
 			} else {
-				// we have already added the allocation to the new node in this case just remove
-				// the old one, never update the queue
+				// we have already added the real allocation to the new node, just remove the placeholder
 				node.RemoveAllocation(alloc.UUID)
 			}
 			log.Logger().Info("replacing placeholder allocation on node",
@@ -1239,7 +1303,7 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 				zap.String("allocationId", alloc.UUID),
 				zap.String("allocation nodeID", confirmed.NodeID))
 		} else if node.RemoveAllocation(alloc.UUID) != nil {
-			// all non replacement removes, update the queue
+			// all non replacement are real removes: must update the queue usage
 			total.AddTo(alloc.AllocatedResource)
 			log.Logger().Info("removing allocation from node",
 				zap.String("nodeID", alloc.NodeID),
@@ -1253,6 +1317,8 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 				zap.String("appID", appID),
 				zap.String("allocationId", uuid),
 				zap.Error(err))
+		} else {
+			metrics.GetQueueMetrics(queue.GetQueuePath()).IncReleasedContainer()
 		}
 	}
 	// if confirmed is set we can assume there will just be one alloc in the released
@@ -1272,7 +1338,7 @@ func (pc *PartitionContext) removeAllocationAsk(release *si.AllocationAskRelease
 		return
 	}
 	appID := release.ApplicationID
-	allocKey := release.Allocationkey
+	allocKey := release.AllocationKey
 	// A timeout termination is send by the core to the shim, ignore on return.
 	if release.TerminationType == si.TerminationType_TIMEOUT {
 		log.Logger().Debug("Ignoring ask release with termination type Timeout",

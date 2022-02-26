@@ -31,11 +31,12 @@ import (
 )
 
 type fakeContainerStateUpdater struct {
+	MockResourceManagerCallback
 	sentUpdate *si.UpdateContainerSchedulingStateRequest
 	sync.RWMutex
 }
 
-func (f *fakeContainerStateUpdater) Update(request *si.UpdateContainerSchedulingStateRequest) {
+func (f *fakeContainerStateUpdater) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
 	f.Lock()
 	defer f.Unlock()
 	f.sentUpdate = request
@@ -74,8 +75,8 @@ partitions:
 	const node1 = "node-1"
 
 	// Register a node, and add apps
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     node1,
 				Attributes: map[string]string{},
@@ -84,20 +85,28 @@ partitions:
 						"memory": {Value: 10},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{appID1: leafName}),
-		RmID:            "rm:123",
+		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest failed")
+	assert.NilError(t, err, "NodeRequest failed")
+
+	// Add one application
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{appID1: leafName}),
+		RmID: "rm:123",
+	})
+
+	assert.NilError(t, err, "ApplicationRequest failed")
 
 	// wait until app and node gets registered
 	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
 	ms.mockRM.waitForAcceptedNode(t, node1, 1000)
 
 	// now submit a request, that uses 8/10 memory from the node
-	err = ms.proxy.Update(&si.UpdateRequest{
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
 				AllocationKey: "alloc-1",
@@ -113,7 +122,7 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest 2 failed")
+	assert.NilError(t, err, "AllocationRequest failed")
 
 	// the request should be able to get 1 allocation
 	ms.mockRM.waitForAllocations(t, 1, 1000)
@@ -122,7 +131,7 @@ partitions:
 	//  - node has 2 left,
 	//  - queue has plenty of resources
 	// we expect the plugin to be called to trigger an update
-	err = ms.proxy.Update(&si.UpdateRequest{
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
 				AllocationKey: "alloc-2",

@@ -70,10 +70,11 @@ partitions:
 	assert.Assert(t, 150 == queueA.GetMaxResource().Resources[resources.MEMORY])
 
 	// Add one application
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewApplications: newAddAppRequest(map[string]string{appID1: "root.a"}),
-		RmID:            "rm:123",
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{appID1: "root.a"}),
+		RmID: "rm:123",
 	})
+	assert.NilError(t, err, "ApplicationRequest failed")
 
 	// Application should be accepted
 	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
@@ -84,7 +85,7 @@ partitions:
 	assert.Equal(t, len(app.GetAllAllocations()), 0)
 
 	// App asks for 2 allocations
-	err = ms.proxy.Update(&si.UpdateRequest{
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
 				AllocationKey: "alloc-1",
@@ -101,7 +102,7 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest failed")
+	assert.NilError(t, err, "AllocationRequest failed")
 
 	waitForPendingQueueResource(t, queueA, 20, 1000)
 	waitForPendingQueueResource(t, rootQ, 20, 1000)
@@ -116,8 +117,8 @@ partitions:
 	waitForPendingAppResource(t, app, 20, 1000)
 
 	// Register a node
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -127,13 +128,21 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{appID1: "root.a"}),
-		RmID:            "rm:123",
+		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest failed")
+	assert.NilError(t, err, "NodeRequest failed")
+
+	// Add one application
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{appID1: "root.a"}),
+		RmID: "rm:123",
+	})
+
+	assert.NilError(t, err, "ApplicationRequest failed")
 
 	// Wait until node is registered
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
@@ -189,10 +198,11 @@ partitions:
 	assert.Assert(t, 150 == queueA.GetMaxResource().Resources[resources.MEMORY])
 
 	// Add one application
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewApplications: newAddAppRequest(map[string]string{appID1: "root.a"}),
-		RmID:            "rm:123",
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{appID1: "root.a"}),
+		RmID: "rm:123",
 	})
+	assert.NilError(t, err, "ApplicationRequest failed")
 
 	// Application should be accepted
 	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
@@ -203,7 +213,7 @@ partitions:
 	assert.Equal(t, len(app.GetAllAllocations()), 0)
 
 	// App asks for 2 allocations
-	err = ms.proxy.Update(&si.UpdateRequest{
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
 				AllocationKey: "alloc-1",
@@ -220,7 +230,7 @@ partitions:
 		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest failed")
+	assert.NilError(t, err, "AllocationRequest failed")
 
 	waitForPendingQueueResource(t, queueA, 20, 1000)
 	waitForPendingQueueResource(t, rootQ, 20, 1000)
@@ -235,8 +245,8 @@ partitions:
 	waitForPendingAppResource(t, app, 20, 1000)
 
 	// Register a node
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -246,13 +256,21 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{appID1: "root.a"}),
-		RmID:            "rm:123",
+		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest failed")
+	assert.NilError(t, err, "NodeRequest failed")
+
+	// Add one application
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{appID1: "root.a"}),
+		RmID: "rm:123",
+	})
+
+	assert.NilError(t, err, "ApplicationRequest failed")
 
 	// Wait until node is registered
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
@@ -273,18 +291,18 @@ partitions:
 	ms.mockRM.waitForAllocations(t, 2, 1000)
 
 	// now remove the node
-	err = ms.proxy.Update(&si.UpdateRequest{
-		UpdatedNodes: []*si.UpdateNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
-				Action:     si.UpdateNodeInfo_DECOMISSION,
+				Action:     si.NodeInfo_DECOMISSION,
 				Attributes: map[string]string{},
 			},
 		},
 		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest failed")
+	assert.NilError(t, err, "NodeRequest failed")
 
 	// make sure the resources are released from queue/app
 	waitForAllocatedQueueResource(t, queueA, 0, 1000)
@@ -321,8 +339,8 @@ partitions:
 	assert.Assert(t, partitionInfo.GetTotalPartitionResource() == nil, "partition info max resource nil")
 
 	// Register a node
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -332,11 +350,12 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 		},
 		RmID: "rm:123",
 	})
-	assert.NilError(t, err, "UpdateRequest failed")
+	assert.NilError(t, err, "NodeRequest failed")
 
 	// Wait until node is registered
 	context := ms.scheduler.GetClusterContext()
@@ -352,8 +371,8 @@ partitions:
 	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[resources.MEMORY]), int64(100))
 
 	// update node capacity with more mem and less vcores
-	err = ms.proxy.Update(&si.UpdateRequest{
-		UpdatedNodes: []*si.UpdateNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -363,13 +382,13 @@ partitions:
 						"vcore":  {Value: 10},
 					},
 				},
-				Action: si.UpdateNodeInfo_UPDATE,
+				Action: si.NodeInfo_UPDATE,
 			},
 		},
 		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest failed")
+	assert.NilError(t, err, "NodeRequest failed")
 	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default", []string{"node-1:1234"}, 300, 1000)
 	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.MEMORY]), int64(300))
 	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.VCORE]), int64(10))
@@ -385,8 +404,8 @@ partitions:
 	}
 
 	// update node capacity with more mem and same vcores
-	err = ms.proxy.Update(&si.UpdateRequest{
-		UpdatedNodes: []*si.UpdateNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -396,12 +415,12 @@ partitions:
 						"vcore":  {Value: 20},
 					},
 				},
-				Action: si.UpdateNodeInfo_UPDATE,
+				Action: si.NodeInfo_UPDATE,
 			},
 		},
 		RmID: "rm:123",
 	})
-	assert.NilError(t, err, "UpdateRequest failed")
+	assert.NilError(t, err, "NodeRequest failed")
 	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default", []string{"node-1:1234"}, 100, 1000)
 	newRes, err = resources.NewResourceFromConf(map[string]string{"memory": "100", "vcore": "20"})
 	assert.NilError(t, err, "failed to create resource")
@@ -438,8 +457,8 @@ partitions:
 	for i := 1; i < 3; i++ {
 		var nodeName = fmt.Sprint("node-", i, ":1234")
 		// Register a node
-		err = ms.proxy.Update(&si.UpdateRequest{
-			NewSchedulableNodes: []*si.NewNodeInfo{
+		err = ms.proxy.UpdateNode(&si.NodeRequest{
+			Nodes: []*si.NodeInfo{
 				{
 					NodeID:     nodeName,
 					Attributes: map[string]string{},
@@ -449,11 +468,12 @@ partitions:
 							"vcore":  {Value: 20},
 						},
 					},
+					Action: si.NodeInfo_CREATE,
 				},
 			},
 			RmID: "rm:123",
 		})
-		assert.NilError(t, err, "UpdateRequest failed")
+		assert.NilError(t, err, "NodeRequest failed")
 
 		// Wait until node is registered
 		context := ms.scheduler.GetClusterContext()
@@ -462,8 +482,8 @@ partitions:
 	}
 
 	// update 2nd node capacity with less mem and vcores
-	err = ms.proxy.Update(&si.UpdateRequest{
-		UpdatedNodes: []*si.UpdateNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-2:1234",
 				Attributes: map[string]string{},
@@ -473,12 +493,12 @@ partitions:
 						"vcore":  {Value: 10},
 					},
 				},
-				Action: si.UpdateNodeInfo_UPDATE,
+				Action: si.NodeInfo_UPDATE,
 			},
 		},
 		RmID: "rm:123",
 	})
-	assert.NilError(t, err, "UpdateRequest failed")
+	assert.NilError(t, err, "NodeRequest failed")
 	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
 		[]string{"node-2:1234"}, 50, 1000)
 
@@ -493,8 +513,8 @@ partitions:
 	}
 
 	// update 2nd node capacity with same mem and vcores
-	err = ms.proxy.Update(&si.UpdateRequest{
-		UpdatedNodes: []*si.UpdateNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-2:1234",
 				Attributes: map[string]string{},
@@ -504,13 +524,13 @@ partitions:
 						"vcore":  {Value: 10},
 					},
 				},
-				Action: si.UpdateNodeInfo_UPDATE,
+				Action: si.NodeInfo_UPDATE,
 			},
 		},
 		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest failed")
+	assert.NilError(t, err, "NodeRequest failed")
 
 	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
 		[]string{"node-2:1234"}, 50, 1000)
@@ -554,8 +574,8 @@ partitions:
 	assert.Assert(t, partitionInfo.GetTotalPartitionResource() == nil, "partition info max resource nil")
 
 	// Register a node
-	err = ms.proxy.Update(&si.UpdateRequest{
-		NewSchedulableNodes: []*si.NewNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -565,12 +585,13 @@ partitions:
 						"vcore":  {Value: 10},
 					},
 				},
+				Action: si.NodeInfo_CREATE,
 			},
 		},
 		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest failed")
+	assert.NilError(t, err, "NodeRequest failed")
 
 	// Wait until node is registered
 	context := ms.scheduler.GetClusterContext()
@@ -587,8 +608,8 @@ partitions:
 	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[resources.MEMORY]), int64(100))
 
 	// update node capacity
-	err = ms.proxy.Update(&si.UpdateRequest{
-		UpdatedNodes: []*si.UpdateNodeInfo{
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
 			{
 				NodeID:     "node-1:1234",
 				Attributes: map[string]string{},
@@ -598,13 +619,13 @@ partitions:
 						"vcore":  {Value: 5},
 					},
 				},
-				Action: si.UpdateNodeInfo_UPDATE,
+				Action: si.NodeInfo_UPDATE,
 			},
 		},
 		RmID: "rm:123",
 	})
 
-	assert.NilError(t, err, "UpdateRequest failed")
+	assert.NilError(t, err, "NodeRequest failed")
 
 	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
 		[]string{"node-1:1234"}, 20, 1000)

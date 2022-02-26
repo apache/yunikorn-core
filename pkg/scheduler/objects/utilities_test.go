@@ -153,8 +153,8 @@ func newNodeInternal(nodeID string, total, occupied *resources.Resource) *Node {
 	}
 }
 
-func newProto(nodeID string, totalResource, occupiedResource *resources.Resource, attributes map[string]string) *si.NewNodeInfo {
-	proto := si.NewNodeInfo{
+func newProto(nodeID string, totalResource, occupiedResource *resources.Resource, attributes map[string]string) *si.NodeInfo {
+	proto := si.NodeInfo{
 		NodeID:     nodeID,
 		Attributes: attributes,
 	}

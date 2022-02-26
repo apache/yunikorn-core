@@ -27,7 +27,7 @@ import (
 // for the web UI's front page.
 // For more detailed metrics collection use Prometheus.
 type InternalMetricsHistory struct {
-	records []*metricsRecord
+	records []*MetricsRecord
 	limit   int
 
 	// internal implementation of limited array
@@ -36,7 +36,7 @@ type InternalMetricsHistory struct {
 	sync.RWMutex
 }
 
-type metricsRecord struct {
+type MetricsRecord struct {
 	Timestamp         time.Time
 	TotalApplications int
 	TotalContainers   int
@@ -44,7 +44,7 @@ type metricsRecord struct {
 
 func NewInternalMetricsHistory(limit int) *InternalMetricsHistory {
 	return &InternalMetricsHistory{
-		records: make([]*metricsRecord, limit),
+		records: make([]*MetricsRecord, limit),
 		limit:   limit,
 	}
 }
@@ -53,7 +53,7 @@ func (h *InternalMetricsHistory) Store(totalApplications, totalContainers int) {
 	h.Lock()
 	defer h.Unlock()
 
-	h.records[h.pointer] = &metricsRecord{
+	h.records[h.pointer] = &MetricsRecord{
 		time.Now(),
 		totalApplications,
 		totalContainers,
@@ -66,11 +66,11 @@ func (h *InternalMetricsHistory) Store(totalApplications, totalContainers int) {
 
 // contract: the non-nil values are ordered by the time of addition
 // may contains nil values, those should be handled (filtered) on the caller's side
-func (h *InternalMetricsHistory) GetRecords() []*metricsRecord {
+func (h *InternalMetricsHistory) GetRecords() []*MetricsRecord {
 	h.RLock()
 	defer h.RUnlock()
 
-	returnRecords := make([]*metricsRecord, h.limit-h.pointer)
+	returnRecords := make([]*MetricsRecord, h.limit-h.pointer)
 	copy(returnRecords, h.records[h.pointer:])
 	returnRecords = append(returnRecords, h.records[:h.pointer]...)
 	return returnRecords

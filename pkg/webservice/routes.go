@@ -21,8 +21,6 @@ package webservice
 import (
 	"net/http"
 	"net/http/pprof"
-
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type route struct {
@@ -86,7 +84,7 @@ var webRoutes = routes{
 		"Scheduler",
 		"GET",
 		"/ws/v1/metrics",
-		promhttp.Handler().ServeHTTP,
+		getMetrics,
 	},
 
 	// endpoint to retrieve the current conf
@@ -148,6 +146,18 @@ var webRoutes = routes{
 	},
 	route{
 		"Scheduler",
+		"PUT",
+		"/ws/v1/loglevel/{level}",
+		setLogLevel,
+	},
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/loglevel",
+		getLogLevel,
+	},
+	route{
+		"Scheduler",
 		"GET",
 		"/ws/v1/partition/{partition}/nodes",
 		getPartitionNodes,
@@ -157,6 +167,30 @@ var webRoutes = routes{
 		"GET",
 		"/ws/v1/partition/{partition}/queue/{queue}/applications",
 		getQueueApplications,
+	},
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/fullstatedump",
+		getFullStateDump,
+	},
+	route{
+		"Scheduler",
+		"PUT",
+		"/ws/v1/periodicstatedump/{switch}/{periodSeconds}",
+		handlePeriodicStateDump,
+	},
+	route{
+		"Scheduler",
+		"PUT",
+		"/ws/v1/periodicstatedump/{switch}/",
+		handlePeriodicStateDump,
+	},
+	route{
+		"Scheduler",
+		"PUT",
+		"/ws/v1/periodicstatedump/",
+		handlePeriodicStateDump,
 	},
 	// endpoint to retrieve CPU, Memory profiling data,
 	// this works with pprof tool. By default, pprof endpoints

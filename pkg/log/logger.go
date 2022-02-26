@@ -19,6 +19,7 @@
 package log
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"sync"
@@ -48,7 +49,16 @@ func Logger() *zap.Logger {
 			}
 		}
 	})
+
 	return logger
+}
+
+func InitializeLogger(log *zap.Logger, zapConfig *zap.Config) {
+	once.Do(func() {
+		logger = log
+		config = zapConfig
+		logger.Info("Using an already initialized logger")
+	})
 }
 
 func IsDebugEnabled() bool {
@@ -103,4 +113,29 @@ func createConfig() *zap.Config {
 		OutputPaths:      []string{"stderr"},
 		ErrorOutputPaths: []string{"stderr"},
 	}
+}
+
+func SetLogLevel(newLevel string) error {
+	oldLevel := config.Level.String()
+
+	// noop if the input is the same as what is set
+	if newLevel == oldLevel {
+		return nil
+	}
+
+	logger.Info("Updating log level",
+		zap.String("new level", newLevel))
+	text := []byte(newLevel)
+	if err := config.Level.UnmarshalText(text); err != nil {
+		var errorMsg = "failed to change log level, old level active"
+		logger.Error(errorMsg, zap.String("loglevel", oldLevel))
+		return errors.New(errorMsg)
+	}
+	logger.Info("Log level updated", zap.String("old level", oldLevel),
+		zap.String("new level", newLevel))
+	return nil
+}
+
+func GetConfig() *zap.Config {
+	return config
 }

@@ -30,6 +30,7 @@ import (
 )
 
 type mockRMCallback struct {
+	MockResourceManagerCallback
 	acceptedApplications map[string]bool
 	rejectedApplications map[string]bool
 	acceptedNodes        map[string]bool
@@ -53,31 +54,24 @@ func newMockRMCallbackHandler() *mockRMCallback {
 	}
 }
 
-func (m *mockRMCallback) RecvUpdateResponse(response *si.UpdateResponse) error {
+func (m *mockRMCallback) UpdateApplication(response *si.ApplicationResponse) error {
 	m.Lock()
 	defer m.Unlock()
-
-	for _, app := range response.AcceptedApplications {
+	for _, app := range response.Accepted {
 		m.acceptedApplications[app.ApplicationID] = true
 		delete(m.rejectedApplications, app.ApplicationID)
 	}
-
-	for _, app := range response.RejectedApplications {
+	for _, app := range response.Rejected {
 		m.rejectedApplications[app.ApplicationID] = true
 		delete(m.acceptedApplications, app.ApplicationID)
 	}
+	return nil
+}
 
-	for _, node := range response.AcceptedNodes {
-		m.acceptedNodes[node.NodeID] = true
-		delete(m.rejectedNodes, node.NodeID)
-	}
-
-	for _, node := range response.RejectedNodes {
-		m.rejectedNodes[node.NodeID] = true
-		delete(m.acceptedNodes, node.NodeID)
-	}
-
-	for _, alloc := range response.NewAllocations {
+func (m *mockRMCallback) UpdateAllocation(response *si.AllocationResponse) error {
+	m.Lock()
+	defer m.Unlock()
+	for _, alloc := range response.New {
 		m.Allocations[alloc.UUID] = alloc
 		if val, ok := m.nodeAllocations[alloc.NodeID]; ok {
 			val = append(val, alloc)
@@ -88,11 +82,23 @@ func (m *mockRMCallback) RecvUpdateResponse(response *si.UpdateResponse) error {
 			m.nodeAllocations[alloc.NodeID] = nodeAllocations
 		}
 	}
-
-	for _, alloc := range response.ReleasedAllocations {
+	for _, alloc := range response.Released {
 		delete(m.Allocations, alloc.UUID)
 	}
+	return nil
+}
 
+func (m *mockRMCallback) UpdateNode(response *si.NodeResponse) error {
+	m.Lock()
+	defer m.Unlock()
+	for _, node := range response.Accepted {
+		m.acceptedNodes[node.NodeID] = true
+		delete(m.rejectedNodes, node.NodeID)
+	}
+	for _, node := range response.Rejected {
+		m.rejectedNodes[node.NodeID] = true
+		delete(m.acceptedNodes, node.NodeID)
+	}
 	return nil
 }
 

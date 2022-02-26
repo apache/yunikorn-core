@@ -22,11 +22,25 @@ import (
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
-// Incoming events from the RM to the scheduler (async)
-type RMUpdateRequestEvent struct {
-	// The generic update does not wait for a result,
+// Incoming UpdateAllocation events from the RM to the scheduler (async)
+type RMUpdateAllocationEvent struct {
+	// The generic UpdateAllocation does not wait for a result,
 	// results are communicated back via the outgoing events.
-	Request *si.UpdateRequest
+	Request *si.AllocationRequest
+}
+
+// Incoming UpdateApplication events from the RM to the scheduler (async)
+type RMUpdateApplicationEvent struct {
+	// The generic UpdateApplication does not wait for a result,
+	// results are communicated back via the outgoing events.
+	Request *si.ApplicationRequest
+}
+
+// Incoming UpdateNode events from the RM to the scheduler (async)
+type RMUpdateNodeEvent struct {
+	// The generic UpdateNode does not wait for a result,
+	// results are communicated back via the outgoing events.
+	Request *si.NodeRequest
 }
 
 // Incoming events from the RM to the scheduler (sync)
@@ -51,10 +65,10 @@ type Result struct {
 }
 
 // Outgoing events from the scheduler to the RM
-// These events communicate the response to the RMUpdateRequestEvent
 type RMNewAllocationsEvent struct {
 	RmID        string
 	Allocations []*si.Allocation
+	Channel     chan *Result
 }
 
 type RMApplicationUpdateEvent struct {
@@ -72,6 +86,7 @@ type RMRejectedAllocationAskEvent struct {
 type RMReleaseAllocationEvent struct {
 	RmID                string
 	ReleasedAllocations []*si.AllocationRelease
+	Channel             chan *Result
 }
 
 type RMReleaseAllocationAskEvent struct {

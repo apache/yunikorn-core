@@ -258,46 +258,46 @@ func TestContext_AddNode(t *testing.T) {
 func TestContext_AddRMInformation(t *testing.T) {
 	context := createTestContext(t, pName)
 
-	rmId1 := "myCluster1"
+	rmID1 := "myCluster1"
 	BuildInfoMap1 := make(map[string]string)
 	BuildInfoMap1["buildDate"] = "2006-01-02T15:04:05-0700"
 	BuildInfoMap1["buildVersion"] = "latest"
 	BuildInfoMap1["isPluginVersion"] = "false"
-	BuildInfoMap1["rmId"] = rmId1
+	BuildInfoMap1["rmId"] = rmID1
 
 	rm1 := &si.RegisterResourceManagerRequest{
-		RmID:        rmId1,
+		RmID:        rmID1,
 		PolicyGroup: "policygroup",
 		Version:     "0.0.2",
 		BuildInfo:   BuildInfoMap1,
 	}
 
-	rmId2 := "myCluster2"
+	rmID2 := "myCluster2"
 	BuildInfoMap2 := make(map[string]string)
 	BuildInfoMap2["buildDate"] = "2022-01-02T15:04:05-0700"
 	BuildInfoMap2["buildVersion"] = "latest"
 	BuildInfoMap2["isPluginVersion"] = "true"
-	BuildInfoMap2["rmId"] = rmId2
+	BuildInfoMap2["rmId"] = rmID2
 
 	rm2 := &si.RegisterResourceManagerRequest{
-		RmID:        rmId2,
+		RmID:        rmID2,
 		PolicyGroup: "policygroup",
 		Version:     "0.0.2",
 		BuildInfo:   BuildInfoMap2,
 	}
 
 	context.rmInfos = make(map[string]*RMInformation)
-	context.rmInfos[rmId1] = &RMInformation{
+	context.rmInfos[rmID1] = &RMInformation{
 		RMBuildInformation: rm1.BuildInfo,
 	}
-	assert.Equal(t, context.rmInfos[rmId1].RMBuildInformation["rmId"], rm1.RmID)
-	assert.DeepEqual(t, context.rmInfos[rmId1].RMBuildInformation, rm1.BuildInfo)
+	assert.Equal(t, context.rmInfos[rmID1].RMBuildInformation["rmId"], rm1.RmID)
+	assert.DeepEqual(t, context.rmInfos[rmID1].RMBuildInformation, rm1.BuildInfo)
 
-	context.rmInfos[rmId2] = &RMInformation{
+	context.rmInfos[rmID2] = &RMInformation{
 		RMBuildInformation: rm2.BuildInfo,
 	}
-	assert.Equal(t, context.rmInfos[rmId2].RMBuildInformation["rmId"], rm2.RmID)
-	assert.DeepEqual(t, context.rmInfos[rmId2].RMBuildInformation, rm2.BuildInfo)
+	assert.Equal(t, context.rmInfos[rmID2].RMBuildInformation["rmId"], rm2.RmID)
+	assert.DeepEqual(t, context.rmInfos[rmID2].RMBuildInformation, rm2.BuildInfo)
 }
 
 func TestContext_ProcessNode(t *testing.T) {

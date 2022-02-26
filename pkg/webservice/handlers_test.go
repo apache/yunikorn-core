@@ -607,6 +607,16 @@ func TestGetClusterUtilJSON(t *testing.T) {
 	assert.NilError(t, err, "Error when load clusterInfo from config")
 	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
 
+	//check build information of RM
+	BuildInfoMap := make(map[string]string)
+	BuildInfoMap["buildDate"] = "2006-01-02T15:04:05-0700"
+	BuildInfoMap["buildVersion"] = "latest"
+	BuildInfoMap["isPluginVersion"] = "false"
+	BuildInfoMap["rmId"] = rmID
+	schedulerContext.SetRMInfos(rmID, BuildInfoMap)
+	rmInfos := schedulerContext.GetRMInfoMapClone()
+	assert.DeepEqual(t, rmInfos[rmID].RMBuildInformation, BuildInfoMap)
+
 	// Check test partitions
 	partitionName := common.GetNormalizedPartitionName("default", rmID)
 	partition := schedulerContext.GetPartition(partitionName)

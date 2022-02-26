@@ -904,3 +904,16 @@ func (cc *ClusterContext) GetNode(nodeID, partitionName string) *objects.Node {
 	}
 	return partition.GetNode(nodeID)
 }
+
+// test only
+func (cc *ClusterContext) SetRMInfos(rmID string, rmBuildInformation map[string]string) {
+	cc.Lock()
+	defer cc.Unlock()
+
+	if cc.rmInfos == nil {
+		cc.rmInfos = make(map[string]*RMInformation)
+	}
+	cc.rmInfos[rmID] = &RMInformation{
+		RMBuildInformation: rmBuildInformation,
+	}
+}

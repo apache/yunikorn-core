@@ -78,7 +78,7 @@ type Application struct {
 	execTimeout          time.Duration          // execTimeout for the application run
 	placeholderTimer     *time.Timer            // placeholder replace timer
 	gangSchedulingStyle  string                 // gang scheduling style can be hard (after timeout we fail the application), or soft (after timeeout we schedule it as a normal application)
-	finishedTime         *time.Time             // the time of finishing this application. the default value is zero time
+	finishedTime         *time.Time             // the time of finishing this application. the default value is nil
 
 	rmEventHandler     handler.EventHandler
 	rmID               string

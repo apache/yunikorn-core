@@ -1206,3 +1206,16 @@ func TestGetQueueNameAfterUnsetQueue(t *testing.T) {
 	assert.Equal(t, app.GetQueuePath(), app.QueuePath)
 	assert.Equal(t, app.GetQueuePath(), "root.unknown")
 }
+
+func TestFinishedTime(t *testing.T) {
+	app := newApplication(appID1, "default", "root.unknown")
+	assert.Assert(t, app.finishedTime == nil)
+	assert.Assert(t, app.FinishedTimeInUnixNano() == nil)
+
+	// sleep 1 second to make finished time bigger than zero
+	time.Sleep(1 * time.Second)
+	app.UnSetQueue()
+	assert.Assert(t, app.finishedTime != nil)
+	assert.Assert(t, app.FinishedTimeInUnixNano() != nil)
+	assert.Assert(t, *app.FinishedTimeInUnixNano() > 0)
+}

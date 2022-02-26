@@ -293,7 +293,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		Partition:       common.GetPartitionNameWithoutClusterID(app.Partition),
 		QueueName:       app.QueuePath,
 		SubmissionTime:  app.SubmissionTime.UnixNano(),
-		ElapsedTime:     app.ElapsedTime().Milliseconds(),
+		FinishedTime:    app.FinishedTimeInUnixNano(),
 		Allocations:     allocationInfos,
 		State:           app.CurrentState(),
 		User:            app.GetUser().User,

@@ -451,14 +451,12 @@ func TestQueryParamInAppsHandler(t *testing.T) {
 	assert.NilError(t, err, "App Handler request failed")
 	resp := &MockResponseWriter{}
 	var appsDao []*dao.ApplicationDAOInfo
-	// sleep for making elapsed time
-	time.Sleep(1 * time.Second)
 	getApplicationsInfo(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &appsDao)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
 	assert.Equal(t, len(appsDao), 1)
 	assert.Equal(t, appsDao[0].User, "abc")
-	assert.Assert(t, appsDao[0].ElapsedTime > 0)
+	assert.Assert(t, appsDao[0].FinishedTime == nil)
 	assert.Equal(t, appsDao[0].MaxUsedResource, "[vcore:1]")
 
 	// Passing "root.q1" as filter return 0 application as there is no app related to user: who
@@ -1373,7 +1371,7 @@ func TestGetFullStateDumpDefaultPath(t *testing.T) {
 
 	partitionContext := schedulerContext.GetPartitionMapClone()
 	context := partitionContext[normalizedPartitionName]
-	app := newApplication("appID", normalizedPartitionName, "root.default", rmID)
+	app := newApplication("appID", normalizedPartitionName, "root.default", rmID, security.UserGroup{})
 	err := context.AddApplication(app)
 	assert.NilError(t, err, "failed to add Application to partition")
 
@@ -1405,7 +1403,7 @@ func TestGetFullStateDumpNonDefaultPath(t *testing.T) {
 
 	partitionContext := schedulerContext.GetPartitionMapClone()
 	context := partitionContext[normalizedPartitionName]
-	app := newApplication("appID", normalizedPartitionName, "root.default", rmID)
+	app := newApplication("appID", normalizedPartitionName, "root.default", rmID, security.UserGroup{})
 	err := context.AddApplication(app)
 	assert.NilError(t, err, "failed to add Application to partition")
 

@@ -29,7 +29,7 @@ type ApplicationDAOInfo struct {
 	Partition       string              `json:"partition"`
 	QueueName       string              `json:"queueName"`
 	SubmissionTime  int64               `json:"submissionTime"`
-	ElapsedTime     int64               `json:"elapsedTime"`
+	FinishedTime    *int64              `json:"finishedTime"`
 	Allocations     []AllocationDAOInfo `json:"allocations"`
 	State           string              `json:"applicationState"`
 	User            string              `json:"user"`

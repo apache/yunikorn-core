@@ -78,7 +78,7 @@ type Application struct {
 	execTimeout          time.Duration          // execTimeout for the application run
 	placeholderTimer     *time.Timer            // placeholder replace timer
 	gangSchedulingStyle  string                 // gang scheduling style can be hard (after timeout we fail the application), or soft (after timeeout we schedule it as a normal application)
-	elapsedTime          time.Duration
+	finishedTime         *time.Time             // the time of finishing this application. the default value is zero time
 
 	rmEventHandler     handler.EventHandler
 	rmID               string
@@ -103,7 +103,6 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		allocations:          make(map[string]*Allocation),
 		stateMachine:         NewAppState(),
 		placeholderAsk:       resources.NewResourceFromProto(siApp.PlaceholderAsk),
-		elapsedTime:          time.Duration(0),
 	}
 	placeholderTimeout := common.ConvertSITimeout(siApp.ExecutionTimeoutMilliSeconds)
 	if time.Duration(0) == placeholderTimeout {
@@ -1203,15 +1202,19 @@ func (sa *Application) UnSetQueue() {
 	sa.Lock()
 	defer sa.Unlock()
 	sa.queue = nil
-	sa.elapsedTime = time.Since(sa.SubmissionTime)
+	now := time.Now()
+	sa.finishedTime = &now
 }
 
-// ElapsedTime return the elapsed time if this application is terminated. Otherwise, it returns (current time - SubmissionTime)
-func (sa *Application) ElapsedTime() time.Duration {
-	if sa.elapsedTime <= 0 {
-		return time.Since(sa.SubmissionTime)
+// FinishedTimeInUnixNano return the finished time if this application is terminated. Otherwise, it returns null
+func (sa *Application) FinishedTimeInUnixNano() *int64 {
+	sa.RLock()
+	defer sa.RUnlock()
+	if sa.finishedTime == nil {
+		return nil
 	}
-	return sa.elapsedTime
+	t := sa.finishedTime.UnixNano()
+	return &t
 }
 
 // get a copy of all allocations of the application

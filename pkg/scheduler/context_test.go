@@ -255,7 +255,7 @@ func TestContext_AddNode(t *testing.T) {
 	}
 }
 
-func TestContext_AddRMInformation(t *testing.T) {
+func TestContext_AddRMBuildInformation(t *testing.T) {
 	context := createTestContext(t, pName)
 
 	rmID1 := "myCluster1"

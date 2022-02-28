@@ -261,7 +261,7 @@ func TestContext_AddRMBuildInformation(t *testing.T) {
 	rmID1 := "myCluster1"
 	buildInfoMap1 := make(map[string]string)
 	buildInfoMap1["buildDate"] = "2006-01-02T15:04:05-0700"
-	buildInfoMap1["buildVersion"] = "0.0.2"
+	buildInfoMap1["buildVersion"] = "latest"
 	buildInfoMap1["isPluginVersion"] = "false"
 	rm1 := &si.RegisterResourceManagerRequest{
 		RmID:        rmID1,
@@ -273,7 +273,7 @@ func TestContext_AddRMBuildInformation(t *testing.T) {
 	rmID2 := "myCluster2"
 	buildInfoMap2 := make(map[string]string)
 	buildInfoMap2["buildDate"] = "2022-01-02T15:04:05-0700"
-	buildInfoMap2["buildVersion"] = "0.0.2"
+	buildInfoMap2["buildVersion"] = "latest"
 	buildInfoMap2["isPluginVersion"] = "true"
 	rm2 := &si.RegisterResourceManagerRequest{
 		RmID:        rmID2,

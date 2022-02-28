@@ -174,13 +174,7 @@ func (cc *ClusterContext) processRMRegistrationEvent(event *rmevent.RMRegistrati
 	configs.ConfigContext.Set(policyGroup, conf)
 
 	// store the build information of RM
-	if cc.rmInfos == nil {
-		cc.rmInfos = make(map[string]*RMInformation)
-	}
-	cc.rmInfos[rmID] = &RMInformation{
-		RMBuildInformation: event.Registration.BuildInfo,
-	}
-	cc.rmInfos[rmID].RMBuildInformation["rmId"] = rmID
+	cc.SetRMInfos(rmID, event.Registration.BuildInfo)
 
 	// Done, notify channel
 	event.Channel <- &rmevent.Result{
@@ -905,7 +899,6 @@ func (cc *ClusterContext) GetNode(nodeID, partitionName string) *objects.Node {
 	return partition.GetNode(nodeID)
 }
 
-// test only
 func (cc *ClusterContext) SetRMInfos(rmID string, rmBuildInformation map[string]string) {
 	cc.Lock()
 	defer cc.Unlock()

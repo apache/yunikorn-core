@@ -608,18 +608,18 @@ func TestGetClusterUtilJSON(t *testing.T) {
 	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
 
 	// check build information of RM
-	BuildInfoMap := make(map[string]string)
-	BuildInfoMap["buildDate"] = "2006-01-02T15:04:05-0700"
-	BuildInfoMap["buildVersion"] = "latest"
-	BuildInfoMap["isPluginVersion"] = "false"
-	schedulerContext.SetRMInfos(rmID, BuildInfoMap)
+	buildInfoMap := make(map[string]string)
+	buildInfoMap["buildDate"] = "2006-01-02T15:04:05-0700"
+	buildInfoMap["buildVersion"] = "latest"
+	buildInfoMap["isPluginVersion"] = "false"
+	schedulerContext.SetRMInfos(rmID, buildInfoMap)
 	rmInfos := schedulerContext.GetRMInfoMapClone()
 	assert.Equal(t, 1, len(rmInfos))
 	rmBuildInformationMaps := getRMBuildInformations(rmInfos)
 	assert.Equal(t, 1, len(rmBuildInformationMaps))
-	assert.Equal(t, rmBuildInformationMaps[0]["buildDate"], BuildInfoMap["buildDate"])
-	assert.Equal(t, rmBuildInformationMaps[0]["buildVersion"], BuildInfoMap["buildVersion"])
-	assert.Equal(t, rmBuildInformationMaps[0]["isPluginVersion"], BuildInfoMap["isPluginVersion"])
+	assert.Equal(t, rmBuildInformationMaps[0]["buildDate"], buildInfoMap["buildDate"])
+	assert.Equal(t, rmBuildInformationMaps[0]["buildVersion"], buildInfoMap["buildVersion"])
+	assert.Equal(t, rmBuildInformationMaps[0]["isPluginVersion"], buildInfoMap["isPluginVersion"])
 	assert.Equal(t, rmBuildInformationMaps[0]["rmId"], rmID)
 
 	// Check test partitions

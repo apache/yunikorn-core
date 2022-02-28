@@ -259,43 +259,45 @@ func TestContext_AddRMBuildInformation(t *testing.T) {
 	context := createTestContext(t, pName)
 
 	rmID1 := "myCluster1"
-	BuildInfoMap1 := make(map[string]string)
-	BuildInfoMap1["buildDate"] = "2006-01-02T15:04:05-0700"
-	BuildInfoMap1["buildVersion"] = "latest"
-	BuildInfoMap1["isPluginVersion"] = "false"
+	buildInfoMap1 := make(map[string]string)
+	buildInfoMap1["buildDate"] = "2006-01-02T15:04:05-0700"
+	buildInfoMap1["buildVersion"] = "latest"
+	buildInfoMap1["isPluginVersion"] = "false"
 	rm1 := &si.RegisterResourceManagerRequest{
 		RmID:        rmID1,
 		PolicyGroup: "policygroup",
 		Version:     "0.0.2",
-		BuildInfo:   BuildInfoMap1,
+		BuildInfo:   buildInfoMap1,
 	}
 
 	rmID2 := "myCluster2"
-	BuildInfoMap2 := make(map[string]string)
-	BuildInfoMap2["buildDate"] = "2022-01-02T15:04:05-0700"
-	BuildInfoMap2["buildVersion"] = "latest"
-	BuildInfoMap2["isPluginVersion"] = "true"
+	buildInfoMap2 := make(map[string]string)
+	buildInfoMap2["buildDate"] = "2022-01-02T15:04:05-0700"
+	buildInfoMap2["buildVersion"] = "latest"
+	buildInfoMap2["isPluginVersion"] = "true"
 	rm2 := &si.RegisterResourceManagerRequest{
 		RmID:        rmID2,
 		PolicyGroup: "policygroup",
 		Version:     "0.0.2",
-		BuildInfo:   BuildInfoMap2,
+		BuildInfo:   buildInfoMap2,
 	}
 
-	context.rmInfos = make(map[string]*RMInformation)
-	context.rmInfos[rmID1] = &RMInformation{
-		RMBuildInformation: rm1.BuildInfo,
-	}
+	context.SetRMInfos(rmID1, rm1.BuildInfo)
+	assert.Equal(t, 1, len(context.rmInfos))
 	assert.DeepEqual(t, context.rmInfos[rmID1].RMBuildInformation, rm1.BuildInfo)
 	context.rmInfos[rmID1].RMBuildInformation["rmId"] = rmID1
 	assert.Equal(t, context.rmInfos[rmID1].RMBuildInformation["rmId"], rm1.RmID)
 
-	context.rmInfos[rmID2] = &RMInformation{
-		RMBuildInformation: rm2.BuildInfo,
-	}
+	context.SetRMInfos(rmID2, rm2.BuildInfo)
+	assert.Equal(t, 2, len(context.rmInfos))
 	assert.DeepEqual(t, context.rmInfos[rmID2].RMBuildInformation, rm2.BuildInfo)
 	context.rmInfos[rmID2].RMBuildInformation["rmId"] = rmID2
 	assert.Equal(t, context.rmInfos[rmID2].RMBuildInformation["rmId"], rm2.RmID)
+
+	//update a value,make sure it is replaced as expected
+	buildInfoMap2["buildVersion"] = "1.0.0"
+	context.SetRMInfos(rmID2, buildInfoMap2)
+	assert.Equal(t, context.rmInfos[rmID2].RMBuildInformation["buildVersion"], buildInfoMap2["buildVersion"])
 }
 
 func TestContext_ProcessNode(t *testing.T) {

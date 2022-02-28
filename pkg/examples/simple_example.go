@@ -133,6 +133,8 @@ partitions:
             memory: 150
             vcore: 20
 `
+	BuildInfoMap := make(map[string]string)
+	BuildInfoMap["k"] = "v"
 
 	// Existing scheduler already supports read from config file, but to make test easier, you can
 	configs.MockSchedulerConfigByData([]byte(configData))
@@ -145,6 +147,7 @@ partitions:
 			RmID:        "rm:123",
 			PolicyGroup: "policygroup",
 			Version:     "0.0.2",
+			BuildInfo:   BuildInfoMap,
 		}, mockRM)
 
 	if err != nil {

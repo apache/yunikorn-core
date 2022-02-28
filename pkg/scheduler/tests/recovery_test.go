@@ -589,6 +589,9 @@ func TestAppRecovery(t *testing.T) {
 	serviceContext := entrypoint.StartAllServicesWithManualScheduler()
 	proxy := serviceContext.RMProxy
 
+	BuildInfoMap := make(map[string]string)
+	BuildInfoMap["k"] = "v"
+
 	// Register RM
 	configs.MockSchedulerConfigByData([]byte(configData))
 	mockRM := newMockRMCallbackHandler()
@@ -598,6 +601,7 @@ func TestAppRecovery(t *testing.T) {
 			RmID:        "rm:123",
 			PolicyGroup: "policygroup",
 			Version:     "0.0.2",
+			BuildInfo:   BuildInfoMap,
 		}, mockRM)
 
 	assert.NilError(t, err, "RegisterResourceManager failed")
@@ -656,6 +660,9 @@ func TestAppRecoveryAlone(t *testing.T) {
 	serviceContext := entrypoint.StartAllServicesWithManualScheduler()
 	proxy := serviceContext.RMProxy
 
+	BuildInfoMap := make(map[string]string)
+	BuildInfoMap["k"] = "v"
+
 	// Register RM
 	configs.MockSchedulerConfigByData([]byte(configData))
 	mockRM := newMockRMCallbackHandler()
@@ -665,6 +672,7 @@ func TestAppRecoveryAlone(t *testing.T) {
 			RmID:        "rm:123",
 			PolicyGroup: "policygroup",
 			Version:     "0.0.2",
+			BuildInfo:   BuildInfoMap,
 		}, mockRM)
 
 	assert.NilError(t, err, "RegisterResourceManager failed")

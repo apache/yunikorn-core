@@ -194,6 +194,9 @@ func buildJSONErrorResponse(w http.ResponseWriter, detail string, code int) {
 
 func getClusterJSON(partition *scheduler.PartitionContext) *dao.ClusterDAOInfo {
 	clusterInfo := &dao.ClusterDAOInfo{}
+	clusterInfo.StartTime = schedulerContext.GetStartTime().Format("2006-01-02T15:04:05-0700")
+	rmInfos := schedulerContext.GetRMInfoMapClone()
+	clusterInfo.RMBuildInformation = getRMBuildInformations(rmInfos)
 	clusterInfo.PartitionName = common.GetPartitionNameWithoutClusterID(partition.Name)
 	clusterInfo.TotalApplications = strconv.Itoa(partition.GetTotalApplicationCount())
 	clusterInfo.TotalContainers = strconv.Itoa(partition.GetTotalAllocationCount())
@@ -810,6 +813,16 @@ func getClusterDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClusterD
 
 	for _, partition := range lists {
 		result = append(result, getClusterJSON(partition))
+	}
+
+	return result
+}
+
+func getRMBuildInformations(lists map[string]*scheduler.RMInformation) []map[string]string {
+	var result []map[string]string
+
+	for _, rmInfo := range lists {
+		result = append(result, rmInfo.RMBuildInformation)
 	}
 
 	return result

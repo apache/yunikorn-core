@@ -255,6 +255,43 @@ func TestContext_AddNode(t *testing.T) {
 	}
 }
 
+func TestContext_AddRMBuildInformation(t *testing.T) {
+	context := createTestContext(t, pName)
+
+	rmID1 := "myCluster1"
+	buildInfoMap1 := make(map[string]string)
+	buildInfoMap1["buildDate"] = "2006-01-02T15:04:05-0700"
+	buildInfoMap1["buildVersion"] = "latest"
+	buildInfoMap1["isPluginVersion"] = "false"
+
+	rmID2 := "myCluster2"
+	buildInfoMap2 := make(map[string]string)
+	buildInfoMap2["buildDate"] = "2022-01-02T15:04:05-0700"
+	buildInfoMap2["buildVersion"] = "latest"
+	buildInfoMap2["isPluginVersion"] = "true"
+
+	context.SetRMInfos(rmID1, buildInfoMap1)
+	assert.Equal(t, 1, len(context.rmInfos))
+	assert.DeepEqual(t, context.rmInfos[rmID1].RMBuildInformation, buildInfoMap1)
+	assert.Equal(t, context.rmInfos[rmID1].RMBuildInformation["rmId"], rmID1)
+
+	context.SetRMInfos(rmID2, buildInfoMap2)
+	assert.Equal(t, 2, len(context.rmInfos))
+	assert.DeepEqual(t, context.rmInfos[rmID2].RMBuildInformation, buildInfoMap2)
+	assert.Equal(t, context.rmInfos[rmID2].RMBuildInformation["rmId"], rmID2)
+
+	// update a value,make sure it is replaced as expected
+	// since we store the pointer and not a copy we need to create a new object to replace the old one
+	buildInfoMap3 := make(map[string]string)
+	buildInfoMap3["buildDate"] = "2022-01-02T19:04:05-0700"
+	buildInfoMap3["isPluginVersion"] = "true"
+	buildInfoMap3["buildVersion"] = "1.0.0"
+	context.SetRMInfos(rmID2, buildInfoMap3)
+	assert.Equal(t, 2, len(context.rmInfos))
+	assert.DeepEqual(t, context.rmInfos[rmID2].RMBuildInformation, buildInfoMap3)
+	assert.Equal(t, context.rmInfos[rmID2].RMBuildInformation["buildVersion"], buildInfoMap3["buildVersion"])
+}
+
 func TestContext_ProcessNode(t *testing.T) {
 	// make sure we're nil safe IDE will complain about the non nil check
 	defer func() {

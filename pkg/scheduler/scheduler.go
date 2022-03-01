@@ -96,7 +96,7 @@ func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
 	case queue <- ev:
 		log.Logger().Debug("enqueued event",
 			zap.String("eventType", reflect.TypeOf(ev).String()),
-			zap.Any("event", ev),
+			zap.Any("event", rmevent.GetEventWithoutChan(ev)),
 			zap.Int("currentQueueSize", len(queue)))
 	default:
 		log.Logger().DPanic("failed to enqueue event",

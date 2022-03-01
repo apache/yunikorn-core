@@ -68,7 +68,7 @@ type AggregatedStateInfo struct {
 
 func getFullStateDump(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
-	if err := doStateDump(w); err != nil {
+	if err := doStateDump(w, false); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -133,7 +133,7 @@ func disablePeriodicStateDump(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func doStateDump(w io.Writer) error {
+func doStateDump(w io.Writer, periodic bool) error {
 	stateDump.Lock()
 	defer stateDump.Unlock()
 
@@ -163,12 +163,14 @@ func doStateDump(w io.Writer) error {
 	}
 
 	stateLog := log.New(w, "", 0)
-	stateDumpFilePath := getStateDumpFilePath(schedulerContext)
-	stateLog.SetOutput(&lumberjack.Logger{
-		Filename:   stateDumpFilePath,
-		MaxSize:    10,
-		MaxBackups: 10,
-	})
+	if periodic {
+		stateDumpFilePath := getStateDumpFilePath(schedulerContext)
+		stateLog.SetOutput(&lumberjack.Logger{
+			Filename:   stateDumpFilePath,
+			MaxSize:    10,
+			MaxBackups: 10,
+		})
+	}
 
 	if err = stateLog.Output(stateLogCallDepth, string(prettyJSON)); err != nil {
 		return err
@@ -220,7 +222,7 @@ func startBackGroundStateDump(period time.Duration) error {
 				file.Close()
 				return
 			case <-ticker.C:
-				if err := doStateDump(file); err != nil {
+				if err := doStateDump(file, true); err != nil {
 					yunikornLog.Logger().Error("state dump failed", zap.Error(err))
 					if err := stopBackGroundStateDump(); err != nil {
 						yunikornLog.Logger().Error("background stop failed",

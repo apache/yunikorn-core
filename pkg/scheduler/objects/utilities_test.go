@@ -233,13 +233,10 @@ func (aeh *appEventHandler) HandleEvent(ev interface{}) {
 		aeh.events = make([]interface{}, 0)
 	}
 	aeh.events = append(aeh.events, ev)
-	if _, ok := ev.(*rmevent.RMApplicationUpdateEvent); ok {
-		aeh.handled = true
-	} else {
-		aeh.handled = false
-	}
 	var c chan *rmevent.Result
 	switch v := ev.(type) {
+	case *rmevent.RMApplicationUpdateEvent:
+		aeh.handled = true
 	case *rmevent.RMNewAllocationsEvent:
 		c = v.Channel
 	case *rmevent.RMReleaseAllocationEvent:

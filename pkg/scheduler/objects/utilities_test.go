@@ -238,6 +238,18 @@ func (aeh *appEventHandler) HandleEvent(ev interface{}) {
 	} else {
 		aeh.handled = false
 	}
+	var c chan *rmevent.Result
+	switch v := ev.(type) {
+	case *rmevent.RMNewAllocationsEvent:
+		c = v.Channel
+	case *rmevent.RMReleaseAllocationEvent:
+		c = v.Channel
+	}
+	if c != nil {
+		go func(rc chan *rmevent.Result) {
+			rc <- &rmevent.Result{Succeeded: true, Reason: "test"}
+		}(c)
+	}
 }
 
 // return the last action performed by the handler and reset

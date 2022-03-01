@@ -100,34 +100,33 @@ type RMNodeUpdateEvent struct {
 	RejectedNodes []*si.RejectedNode
 }
 
-//log only
+// log only
 func GetEventWithoutChan(ev interface{}) interface{} {
-	m := map[string]interface{}{}
 	switch v := ev.(type) {
 	case *RMRegistrationEvent:
 		c := <-v.Channel
-		m = map[string]interface{}{
+		m := map[string]interface{}{
 			"Registration": v.Registration,
 			"Channel":      c,
 		}
 		return m
 	case *RMConfigUpdateEvent:
 		c := <-v.Channel
-		m = map[string]interface{}{
+		m := map[string]interface{}{
 			"RmID":    v.RmID,
 			"Channel": c,
 		}
 		return m
 	case *RMPartitionsRemoveEvent:
 		c := <-v.Channel
-		m = map[string]interface{}{
+		m := map[string]interface{}{
 			"RmID":    v.RmID,
 			"Channel": c,
 		}
 		return m
 	case *RMNewAllocationsEvent:
 		c := <-v.Channel
-		m = map[string]interface{}{
+		m := map[string]interface{}{
 			"RmID":        v.RmID,
 			"Allocations": v.Allocations,
 			"Channel":     c,
@@ -135,7 +134,7 @@ func GetEventWithoutChan(ev interface{}) interface{} {
 		return m
 	case *RMReleaseAllocationEvent:
 		c := <-v.Channel
-		m = map[string]interface{}{
+		m := map[string]interface{}{
 			"RmID":                v.RmID,
 			"ReleasedAllocations": v.ReleasedAllocations,
 			"Channel":             c,

@@ -1354,9 +1354,8 @@ func TestGetNodesUtilization(t *testing.T) {
 	assert.Equal(t, len(nodesDao), 0)
 }
 
-func TestGetFullStateDumpDefaultPath(t *testing.T) {
+func TestFullStateDumpPath(t *testing.T) {
 	schedulerContext = prepareSchedulerContext(t, false)
-	defer deleteStateDumpFile(t, schedulerContext)
 
 	partitionContext := schedulerContext.GetPartitionMapClone()
 	context := partitionContext[normalizedPartitionName]
@@ -1372,10 +1371,32 @@ func TestGetFullStateDumpDefaultPath(t *testing.T) {
 
 	getFullStateDump(resp, req)
 	statusCode := resp.statusCode
+	assert.Check(t, statusCode != http.StatusInternalServerError, "response status code")
+	var aggregated AggregatedStateInfo
+	err = json.Unmarshal(resp.outputBytes, &aggregated)
+	assert.NilError(t, err)
+	verifyStateDumpJSON(t, &aggregated)
+}
+
+func TestPeriodicStateDumpDefaultPath(t *testing.T) {
+	schedulerContext = prepareSchedulerContext(t, false)
+	defer deleteStateDumpFile(t, schedulerContext)
+
+	partitionContext := schedulerContext.GetPartitionMapClone()
+	context := partitionContext[normalizedPartitionName]
+	app := newApplication("appID", normalizedPartitionName, "root.default", rmID)
+	err := context.AddApplication(app)
+	assert.NilError(t, err, "failed to add Application to partition")
+
+	imHistory = history.NewInternalMetricsHistory(5)
+	file, err := os.OpenFile(defaultStateDumpFilePath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
+	assert.NilError(t, err, "failed to open state dump file")
+
+	err = doStateDump(file, true)
+	assert.NilError(t, err)
 	fi, err := os.Stat(defaultStateDumpFilePath)
 	assert.NilError(t, err)
 	assert.Assert(t, fi.Size() > 0, "json response is empty")
-	assert.Check(t, statusCode != http.StatusInternalServerError, "response status code")
 	var aggregated AggregatedStateInfo
 	receivedBytes, err := os.ReadFile(defaultStateDumpFilePath)
 	assert.NilError(t, err)
@@ -1384,7 +1405,7 @@ func TestGetFullStateDumpDefaultPath(t *testing.T) {
 	verifyStateDumpJSON(t, &aggregated)
 }
 
-func TestGetFullStateDumpNonDefaultPath(t *testing.T) {
+func TestPeriodicStateDumpNonDefaultPath(t *testing.T) {
 	stateDumpFilePath := "tmp/non-default-yunikorn-state.txt"
 	defer deleteStateDumpDir(t)
 	schedulerContext = prepareSchedulerContext(t, true)
@@ -1397,17 +1418,14 @@ func TestGetFullStateDumpNonDefaultPath(t *testing.T) {
 	assert.NilError(t, err, "failed to add Application to partition")
 
 	imHistory = history.NewInternalMetricsHistory(5)
-	req, err2 := http.NewRequest("GET", "/ws/v1/getfullstatedump", strings.NewReader(""))
-	assert.NilError(t, err2)
-	req = mux.SetURLVars(req, make(map[string]string))
-	resp := &MockResponseWriter{}
+	file, err := os.OpenFile(stateDumpFilePath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
+	assert.NilError(t, err, "failed to open state dump file")
 
-	getFullStateDump(resp, req)
-	statusCode := resp.statusCode
+	err = doStateDump(file, true)
+	assert.NilError(t, err)
 	fi, err := os.Stat(stateDumpFilePath)
 	assert.NilError(t, err)
 	assert.Assert(t, fi.Size() > 0, "json response is empty")
-	assert.Check(t, statusCode != http.StatusInternalServerError, "response status code")
 	var aggregated AggregatedStateInfo
 	receivedBytes, err := os.ReadFile(stateDumpFilePath)
 	assert.NilError(t, err)

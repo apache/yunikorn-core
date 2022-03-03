@@ -109,13 +109,25 @@ func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 
 	lists := schedulerContext.GetPartitionMapClone()
 	appsDao := make([]*dao.ApplicationDAOInfo, 0, len(lists))
-	for _, partition := range lists {
-		appList := partition.GetApplications()
-		appList = append(appList, partition.GetCompletedApplications()...)
-		for _, app := range appList {
-			if len(queuePath) == 0 || strings.EqualFold(queuePath, app.GetQueuePath()) {
-				appsDao = append(appsDao, getApplicationJSON(app))
+	state := r.URL.Query().Get("applicationState")
+	user := r.URL.Query().Get("user")
+	addDao := func(app *objects.Application) {
+		if (len(queuePath) == 0 || strings.EqualFold(queuePath, app.GetQueuePath())) &&
+			(len(user) == 0 || strings.EqualFold(user, app.GetUser().User)) {
+			appJSON := getApplicationJSON(app)
+			// the application state may get changed before we convert it to dao
+			if len(state) == 0 || strings.EqualFold(state, appJSON.State) {
+				appsDao = append(appsDao, appJSON)
 			}
+		}
+	}
+
+	for _, partition := range lists {
+		for _, app := range partition.GetApplications() {
+			addDao(app)
+		}
+		for _, app := range partition.GetCompletedApplications() {
+			addDao(app)
 		}
 	}
 
@@ -278,13 +290,16 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 	}
 
 	return &dao.ApplicationDAOInfo{
-		ApplicationID:  app.ApplicationID,
-		UsedResource:   app.GetAllocatedResource().DAOString(),
-		Partition:      common.GetPartitionNameWithoutClusterID(app.Partition),
-		QueueName:      app.QueuePath,
-		SubmissionTime: app.SubmissionTime.UnixNano(),
-		Allocations:    allocationInfos,
-		State:          app.CurrentState(),
+		ApplicationID:   app.ApplicationID,
+		UsedResource:    app.GetAllocatedResource().DAOString(),
+		MaxUsedResource: app.GetMaxAllocatedResource().DAOString(),
+		Partition:       common.GetPartitionNameWithoutClusterID(app.Partition),
+		QueueName:       app.QueuePath,
+		SubmissionTime:  app.SubmissionTime.UnixNano(),
+		FinishedTime:    common.ZeroTimeInUnixNano(app.FinishedTime()),
+		Allocations:     allocationInfos,
+		State:           app.CurrentState(),
+		User:            app.GetUser().User,
 	}
 }
 

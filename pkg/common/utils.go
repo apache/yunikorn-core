@@ -121,3 +121,12 @@ func GetRequiredNodeFromTag(tags map[string]string) string {
 	}
 	return ""
 }
+
+// ZeroTimeInUnixNano return the unix nano or nil if the time is zero.
+func ZeroTimeInUnixNano(t time.Time) *int64 {
+	if t.IsZero() {
+		return nil
+	}
+	tInt := t.UnixNano()
+	return &tInt
+}

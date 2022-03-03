@@ -1456,20 +1456,30 @@ func (sa *Application) notifyRMAllocationReleased(rmID string, released []*Alloc
 	if len(released) == 0 || sa.rmEventHandler == nil {
 		return
 	}
+	c := make(chan *rmevent.Result)
 	releaseEvent := &rmevent.RMReleaseAllocationEvent{
 		ReleasedAllocations: make([]*si.AllocationRelease, 0),
 		RmID:                rmID,
+		Channel:             c,
 	}
 	for _, alloc := range released {
 		releaseEvent.ReleasedAllocations = append(releaseEvent.ReleasedAllocations, &si.AllocationRelease{
 			ApplicationID:   alloc.ApplicationID,
 			PartitionName:   alloc.PartitionName,
+			AllocationKey:   alloc.AllocationKey,
 			UUID:            alloc.UUID,
 			TerminationType: terminationType,
 			Message:         message,
 		})
 	}
 	sa.rmEventHandler.HandleEvent(releaseEvent)
+	// Wait from channel
+	result := <-c
+	if result.Succeeded {
+		log.Logger().Debug("Successfully synced shim on released allocations. response: " + result.Reason)
+	} else {
+		log.Logger().Info("failed to sync shim on released allocations")
+	}
 }
 
 // notifyRMAllocationAskReleased send an ask release event to the RM to if the event handler is configured

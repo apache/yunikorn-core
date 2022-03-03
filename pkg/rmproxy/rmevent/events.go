@@ -46,17 +46,17 @@ type RMUpdateNodeEvent struct {
 // Incoming events from the RM to the scheduler (sync)
 type RMRegistrationEvent struct {
 	Registration *si.RegisterResourceManagerRequest
-	Channel      chan *Result
+	Channel      chan *Result `json:"-"`
 }
 
 type RMConfigUpdateEvent struct {
 	RmID    string
-	Channel chan *Result
+	Channel chan *Result `json:"-"`
 }
 
 type RMPartitionsRemoveEvent struct {
 	RmID    string
-	Channel chan *Result
+	Channel chan *Result `json:"-"`
 }
 
 type Result struct {
@@ -68,7 +68,7 @@ type Result struct {
 type RMNewAllocationsEvent struct {
 	RmID        string
 	Allocations []*si.Allocation
-	Channel     chan *Result
+	Channel     chan *Result `json:"-"`
 }
 
 type RMApplicationUpdateEvent struct {
@@ -86,7 +86,7 @@ type RMRejectedAllocationAskEvent struct {
 type RMReleaseAllocationEvent struct {
 	RmID                string
 	ReleasedAllocations []*si.AllocationRelease
-	Channel             chan *Result
+	Channel             chan *Result `json:"-"`
 }
 
 type RMReleaseAllocationAskEvent struct {

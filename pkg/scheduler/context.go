@@ -50,7 +50,14 @@ type ClusterContext struct {
 	needPreemption      bool
 	reservationDisabled bool
 
+	rmInfos   map[string]*RMInformation
+	startTime time.Time
+
 	sync.RWMutex
+}
+
+type RMInformation struct {
+	RMBuildInformation map[string]string
 }
 
 // Create a new cluster context to be used outside of the event system.
@@ -66,6 +73,7 @@ func NewClusterContext(rmID, policyGroup string) (*ClusterContext, error) {
 		partitions:          make(map[string]*PartitionContext),
 		policyGroup:         policyGroup,
 		reservationDisabled: common.GetBoolEnvVar(disableReservation, false),
+		startTime:           time.Now(),
 	}
 	// If reservation is turned off set the reservation delay to the maximum duration defined.
 	// The time package does not export maxDuration so use the equivalent from the math package.
@@ -85,6 +93,7 @@ func newClusterContext() *ClusterContext {
 	cc := &ClusterContext{
 		partitions:          make(map[string]*PartitionContext),
 		reservationDisabled: common.GetBoolEnvVar(disableReservation, false),
+		startTime:           time.Now(),
 	}
 	// If reservation is turned off set the reservation delay to the maximum duration defined.
 	// The time package does not export maxDuration so use the equivalent from the math package.
@@ -163,6 +172,9 @@ func (cc *ClusterContext) processRMRegistrationEvent(event *rmevent.RMRegistrati
 	// update global scheduler configs, set the policyGroup for this cluster
 	cc.policyGroup = policyGroup
 	configs.ConfigContext.Set(policyGroup, conf)
+
+	// store the build information of RM
+	cc.SetRMInfos(rmID, event.Registration.BuildInfo)
 
 	// Done, notify channel
 	event.Channel <- &rmevent.Result{
@@ -371,6 +383,23 @@ func (cc *ClusterContext) GetPolicyGroup() string {
 	cc.RLock()
 	defer cc.RUnlock()
 	return cc.policyGroup
+}
+
+func (cc *ClusterContext) GetStartTime() time.Time {
+	cc.RLock()
+	defer cc.RUnlock()
+	return cc.startTime
+}
+
+func (cc *ClusterContext) GetRMInfoMapClone() map[string]*RMInformation {
+	cc.RLock()
+	defer cc.RUnlock()
+
+	newMap := make(map[string]*RMInformation)
+	for k, v := range cc.rmInfos {
+		newMap[k] = v
+	}
+	return newMap
 }
 
 func (cc *ClusterContext) GetPartitionMapClone() map[string]*PartitionContext {
@@ -868,4 +897,14 @@ func (cc *ClusterContext) GetNode(nodeID, partitionName string) *objects.Node {
 		return nil
 	}
 	return partition.GetNode(nodeID)
+}
+
+func (cc *ClusterContext) SetRMInfos(rmID string, rmBuildInformation map[string]string) {
+	if cc.rmInfos == nil {
+		cc.rmInfos = make(map[string]*RMInformation)
+	}
+	cc.rmInfos[rmID] = &RMInformation{
+		RMBuildInformation: rmBuildInformation,
+	}
+	cc.rmInfos[rmID].RMBuildInformation["rmId"] = rmID
 }

@@ -63,11 +63,15 @@ partitions:
 	configs.MockSchedulerConfigByData([]byte(configData))
 	mockRM := newMockRMCallbackHandler()
 
+	BuildInfoMap := make(map[string]string)
+	BuildInfoMap["k"] = "v"
+
 	_, err := proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{
 			RmID:        "rm:123",
 			PolicyGroup: "policygroup",
 			Version:     "0.0.2",
+			BuildInfo:   BuildInfoMap,
 		}, mockRM)
 
 	assert.NilError(b, err, "RegisterResourceManager failed")

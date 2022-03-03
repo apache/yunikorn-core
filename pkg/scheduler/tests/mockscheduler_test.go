@@ -46,6 +46,9 @@ func (m *mockScheduler) Init(config string, autoSchedule bool) error {
 	m.rmID = "rm:123"
 	m.partitionName = common.GetNormalizedPartitionName("default", m.rmID)
 
+	BuildInfoMap := make(map[string]string)
+	BuildInfoMap["k"] = "v"
+
 	// Start all tests
 	if autoSchedule {
 		m.serviceContext = entrypoint.StartAllServices()
@@ -63,6 +66,7 @@ func (m *mockScheduler) Init(config string, autoSchedule bool) error {
 			RmID:        m.rmID,
 			PolicyGroup: "policygroup",
 			Version:     "0.0.2",
+			BuildInfo:   BuildInfoMap,
 		}, m.mockRM)
 	return err
 }

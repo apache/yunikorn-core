@@ -1410,7 +1410,7 @@ func TestPeriodicStateDumpDefaultPath(t *testing.T) {
 
 	partitionContext := schedulerContext.GetPartitionMapClone()
 	context := partitionContext[normalizedPartitionName]
-	app := newApplication("appID", normalizedPartitionName, "root.default", rmID)
+	app := newApplication("appID", normalizedPartitionName, "root.default", rmID, security.UserGroup{})
 	err := context.AddApplication(app)
 	assert.NilError(t, err, "failed to add Application to partition")
 

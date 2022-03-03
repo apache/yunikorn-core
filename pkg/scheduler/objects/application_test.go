@@ -1209,13 +1209,12 @@ func TestGetQueueNameAfterUnsetQueue(t *testing.T) {
 
 func TestFinishedTime(t *testing.T) {
 	app := newApplication(appID1, "default", "root.unknown")
-	assert.Assert(t, app.finishedTime == nil)
-	assert.Assert(t, app.FinishedTimeInUnixNano() == nil)
+	assert.Assert(t, app.finishedTime.IsZero())
+	assert.Assert(t, app.FinishedTime().IsZero())
 
 	// sleep 1 second to make finished time bigger than zero
 	time.Sleep(1 * time.Second)
 	app.UnSetQueue()
-	assert.Assert(t, app.finishedTime != nil)
-	assert.Assert(t, app.FinishedTimeInUnixNano() != nil)
-	assert.Assert(t, *app.FinishedTimeInUnixNano() > 0)
+	assert.Assert(t, !app.finishedTime.IsZero())
+	assert.Assert(t, !app.FinishedTime().IsZero())
 }

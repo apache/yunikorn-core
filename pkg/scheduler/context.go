@@ -20,7 +20,6 @@ package scheduler
 
 import (
 	"fmt"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"math"
 	"strconv"
 	"sync"
@@ -491,10 +490,6 @@ func (cc *ClusterContext) handleRMUpdateApplicationEvent(event *rmevent.RMUpdate
 				ApplicationID: app.ApplicationID,
 				Reason:        msg,
 			})
-			rejectedApp := objects.NewApplication(app, security.UserGroup{}, cc.rmEventHandler, request.RmID)
-			if rejectedApp != nil {
-				partition.addRejectedApplication(rejectedApp, msg)
-			}
 			log.Logger().Error("Failed to add application to non existing partition",
 				zap.String("applicationID", app.ApplicationID),
 				zap.String("partitionName", app.PartitionName))
@@ -509,9 +504,8 @@ func (cc *ClusterContext) handleRMUpdateApplicationEvent(event *rmevent.RMUpdate
 				Reason:        err.Error(),
 			})
 			rejectedApp := objects.NewApplication(app, ugi, cc.rmEventHandler, request.RmID)
-			if rejectedApp != nil {
-				partition.addRejectedApplication(rejectedApp, err.Error())
-			}
+			partition.addRejectedApplication(rejectedApp, err.Error())
+
 			log.Logger().Error("Failed to add application to partition (user rejected)",
 				zap.String("applicationID", app.ApplicationID),
 				zap.String("partitionName", app.PartitionName),
@@ -526,9 +520,8 @@ func (cc *ClusterContext) handleRMUpdateApplicationEvent(event *rmevent.RMUpdate
 				Reason:        err.Error(),
 			})
 			rejectedApp := objects.NewApplication(app, ugi, cc.rmEventHandler, request.RmID)
-			if rejectedApp != nil {
-				partition.addRejectedApplication(rejectedApp, err.Error())
-			}
+			partition.addRejectedApplication(rejectedApp, err.Error())
+
 			log.Logger().Error("Failed to add application to partition (placement rejected)",
 				zap.String("applicationID", app.ApplicationID),
 				zap.String("partitionName", app.PartitionName),

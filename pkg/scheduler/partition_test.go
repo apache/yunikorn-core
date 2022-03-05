@@ -1376,6 +1376,33 @@ func TestCleanupCompletedApps(t *testing.T) {
 	assert.Assert(t, len(partition.GetAppsByState(objects.Expired.String())) == 0, "the partition should have 0 expired app")
 }
 
+func TestCleanupRejectedApps(t *testing.T) {
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	rejectedApp1 := newApplication("new", "default", defQueue)
+	rejectedApp2 := newApplication("running", "default", defQueue)
+	rejectedApp2.SetState(objects.Running.String())
+
+	rejectionMessage := fmt.Sprintf("Failed to add application %s to partition %s, partition doesn't exist", rejectedApp1.ApplicationID, rejectedApp1.Partition)
+	err = partition.addRejectedApplication(rejectedApp1,rejectionMessage)
+	assert.NilError(t, err, "no error expected while adding the application from new to rejected state")
+	assert.Assert(t, len(partition.rejectedApplications) == 1, "the rejectedApplications of the partition should have 1 app")
+	assert.Equal(t, rejectedApp1.CurrentState(), objects.Rejected.String())
+	assert.Equal(t, rejectedApp1.GetRejectionMessage(), rejectionMessage)
+	assert.Assert(t,!rejectedApp1.FinishedTime().IsZero())
+
+	err = partition.addRejectedApplication(rejectedApp2,rejectionMessage)
+	assert.Assert(t,err!=nil,"error expected while adding the application from running to rejected state")
+	assert.Assert(t, len(partition.rejectedApplications) == 1, "the rejectedApplications of the partition should have 1 app")
+
+	rejectedApp1.SetState(objects.Expired.String())
+	partition.cleanupExpiredApps()
+	assert.Assert(t, len(partition.rejectedApplications) == 0, "the partition should not have app")
+	assert.Assert(t, partition.getRejectedApplication(rejectedApp1.ApplicationID) == nil, "rejected application should have been deleted")
+	assert.Assert(t, len(partition.GetRejectedAppsByState(objects.Rejected.String())) == 0, "the partition should have 0 rejected app")
+	assert.Assert(t, len(partition.GetRejectedAppsByState(objects.Expired.String())) == 0, "the partition should have 0 expired app")
+}
+
 func TestUpdateNode(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "test partition create failed with error")

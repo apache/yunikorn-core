@@ -50,6 +50,7 @@ type PartitionContext struct {
 	root                   *objects.Queue                  // start of the queue hierarchy
 	applications           map[string]*objects.Application // applications assigned to this partition
 	completedApplications  map[string]*objects.Application // completed applications from this partition
+	rejectedApplications   map[string]*objects.Application // rejected applications from this partition
 	reservedApps           map[string]int                  // applications reserved within this partition, with reservation count
 	nodes                  objects.NodeCollection          // nodes assigned to this partition
 	placementManager       *placement.AppPlacementManager  // placement manager for this partition
@@ -441,6 +442,13 @@ func (pc *PartitionContext) getApplication(appID string) *objects.Application {
 	defer pc.RUnlock()
 
 	return pc.applications[appID]
+}
+
+func (pc *PartitionContext) getRejectedApplication(appID string) *objects.Application {
+	pc.RLock()
+	defer pc.RUnlock()
+
+	return pc.rejectedApplications[appID]
 }
 
 // Return a copy of the map of all reservations for the partition.
@@ -1070,6 +1078,16 @@ func (pc *PartitionContext) GetCompletedApplications() []*objects.Application {
 	return appList
 }
 
+func (pc *PartitionContext) GetRejectedApplications() []*objects.Application {
+	pc.RLock()
+	defer pc.RUnlock()
+	var appList []*objects.Application
+	for _, app := range pc.rejectedApplications {
+		appList = append(appList, app)
+	}
+	return appList
+}
+
 func (pc *PartitionContext) GetAppsByState(state string) []*objects.Application {
 	pc.RLock()
 	defer pc.RUnlock()
@@ -1083,12 +1101,33 @@ func (pc *PartitionContext) GetAppsByState(state string) []*objects.Application 
 		return appList
 	}
 
+	if state == objects.Rejected.String() {
+		for _, app := range pc.rejectedApplications {
+			if app.CurrentState() == state {
+				appList = append(appList, app)
+			}
+		}
+		return appList
+	}
+
 	for _, app := range pc.applications {
 		if app.CurrentState() == state {
 			appList = append(appList, app)
 		}
 	}
 	return appList
+}
+
+func (pc *PartitionContext) GetRejectedAppsByState(state string) []*objects.Application {
+	pc.RLock()
+	defer pc.RUnlock()
+	var appList []*objects.Application
+	for _, app := range pc.rejectedApplications {
+		if app.CurrentState() == state {
+			appList = append(appList, app)
+		}
+	}
+    return appList
 }
 
 func (pc *PartitionContext) GetAppsInTerminatedState() []*objects.Application {
@@ -1382,6 +1421,11 @@ func (pc *PartitionContext) cleanupExpiredApps() {
 		delete(pc.applications, app.ApplicationID)
 		pc.Unlock()
 	}
+	for _, app := range pc.GetRejectedAppsByState(objects.Expired.String()) {
+		pc.Lock()
+		delete(pc.rejectedApplications, app.ApplicationID)
+		pc.Unlock()
+	}
 }
 
 func (pc *PartitionContext) GetCurrentState() string {
@@ -1444,4 +1488,21 @@ func (pc *PartitionContext) hasUnlimitedNode() bool {
 		return v.IsUnlimited()
 	}
 	return false
+}
+
+func (pc *PartitionContext) addRejectedApplication(rejectedApplication *objects.Application,rejectionMessage string) error {
+	if err := rejectedApplication.HandleApplicationEvent(objects.RejectApplication); err != nil {
+		log.Logger().Warn("Application state not changed to Rejected",
+			zap.String("currentState", rejectedApplication.CurrentState()),
+			zap.Error(err))
+		return err
+	}
+	rejectedApplication.HandleApplicationEvent(objects.RejectApplication)
+	rejectedApplication.SetFinishedTime()
+	rejectedApplication.SetRejectionMessage(rejectionMessage)
+	if pc.rejectedApplications == nil{
+		pc.rejectedApplications = make(map[string]*objects.Application)
+	}
+	pc.rejectedApplications[rejectedApplication.ApplicationID] = rejectedApplication
+	return nil
 }

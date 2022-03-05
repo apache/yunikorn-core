@@ -79,6 +79,7 @@ type Application struct {
 	placeholderTimer     *time.Timer            // placeholder replace timer
 	gangSchedulingStyle  string                 // gang scheduling style can be hard (after timeout we fail the application), or soft (after timeeout we schedule it as a normal application)
 	finishedTime         time.Time              // the time of finishing this application. the default value is zero time
+	rejectionMessage     string                 // If the application is rejected, save the rejection message
 
 	rmEventHandler     handler.EventHandler
 	rmID               string
@@ -1506,4 +1507,23 @@ func (sa *Application) IsAllocationAssignedToApp(alloc *Allocation) bool {
 	defer sa.RUnlock()
 	_, ok := sa.allocations[alloc.UUID]
 	return ok
+}
+
+func (sa *Application) SetRejectionMessage(rejectionMessage string) {
+	sa.Lock()
+	defer sa.Unlock()
+	sa.rejectionMessage = rejectionMessage
+}
+
+func (sa *Application) GetRejectionMessage() string {
+	sa.RLock()
+	defer sa.RUnlock()
+	return sa.rejectionMessage
+}
+
+//only for rejected application
+func (sa *Application) SetFinishedTime() {
+	sa.Lock()
+	defer sa.Unlock()
+	sa.finishedTime = time.Now()
 }

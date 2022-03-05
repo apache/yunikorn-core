@@ -105,6 +105,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		stateMachine:         NewAppState(),
 		placeholderAsk:       resources.NewResourceFromProto(siApp.PlaceholderAsk),
 		finishedTime:         time.Time{},
+		rejectionMessage:     "",
 	}
 	placeholderTimeout := common.ConvertSITimeout(siApp.ExecutionTimeoutMilliSeconds)
 	if time.Duration(0) == placeholderTimeout {

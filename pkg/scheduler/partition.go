@@ -1491,13 +1491,14 @@ func (pc *PartitionContext) hasUnlimitedNode() bool {
 }
 
 func (pc *PartitionContext) addRejectedApplication(rejectedApplication *objects.Application,rejectionMessage string) error {
+	pc.Lock()
+	pc.Unlock()
 	if err := rejectedApplication.HandleApplicationEvent(objects.RejectApplication); err != nil {
 		log.Logger().Warn("Application state not changed to Rejected",
 			zap.String("currentState", rejectedApplication.CurrentState()),
 			zap.Error(err))
 		return err
 	}
-	rejectedApplication.HandleApplicationEvent(objects.RejectApplication)
 	rejectedApplication.SetFinishedTime()
 	rejectedApplication.SetRejectionMessage(rejectionMessage)
 	if pc.rejectedApplications == nil{

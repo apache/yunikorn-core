@@ -20,7 +20,6 @@ package objects
 
 import (
 	"fmt"
-
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"

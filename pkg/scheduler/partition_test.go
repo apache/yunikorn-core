@@ -1387,6 +1387,8 @@ func TestCleanupRejectedApps(t *testing.T) {
 	err = partition.addRejectedApplication(rejectedApp1, rejectionMessage)
 	assert.NilError(t, err, "no error expected while adding the application from new to rejected state")
 	assert.Assert(t, len(partition.rejectedApplications) == 1, "the rejectedApplications of the partition should have 1 app")
+	assert.Assert(t, len(partition.GetAppsByState(objects.Rejected.String())) == 1, "the partition should have 1 rejected app")
+	assert.Assert(t, len(partition.GetRejectedAppsByState(objects.Rejected.String())) == 1, "the partition should have 1 rejected app")
 	assert.Equal(t, rejectedApp1.CurrentState(), objects.Rejected.String())
 	assert.Equal(t, rejectedApp1.GetRejectionMessage(), rejectionMessage)
 	assert.Assert(t, !rejectedApp1.FinishedTime().IsZero())
@@ -1399,6 +1401,7 @@ func TestCleanupRejectedApps(t *testing.T) {
 	partition.cleanupExpiredApps()
 	assert.Assert(t, len(partition.rejectedApplications) == 0, "the partition should not have app")
 	assert.Assert(t, partition.getRejectedApplication(rejectedApp1.ApplicationID) == nil, "rejected application should have been deleted")
+	assert.Assert(t, len(partition.GetAppsByState(objects.Rejected.String())) == 0, "the partition should have 0 rejected app")
 	assert.Assert(t, len(partition.GetRejectedAppsByState(objects.Rejected.String())) == 0, "the partition should have 0 rejected app")
 	assert.Assert(t, len(partition.GetRejectedAppsByState(objects.Expired.String())) == 0, "the partition should have 0 expired app")
 }

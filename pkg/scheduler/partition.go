@@ -1118,6 +1118,7 @@ func (pc *PartitionContext) GetAppsByState(state string) []*objects.Application 
 	return appList
 }
 
+// used to find expired apps in rejected applications
 func (pc *PartitionContext) GetRejectedAppsByState(state string) []*objects.Application {
 	pc.RLock()
 	defer pc.RUnlock()

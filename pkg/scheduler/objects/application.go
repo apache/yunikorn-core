@@ -1522,7 +1522,7 @@ func (sa *Application) GetRejectionMessage() string {
 	return sa.rejectionMessage
 }
 
-//only for rejected application
+// only for rejected application
 func (sa *Application) SetFinishedTime() {
 	sa.Lock()
 	defer sa.Unlock()

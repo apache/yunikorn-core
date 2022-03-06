@@ -20,6 +20,7 @@ package objects
 
 import (
 	"fmt"
+
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
@@ -112,7 +113,7 @@ func NewAppState() *fsm.FSM {
 				Dst:  Resuming.String(),
 			}, {
 				Name: ExpireApplication.String(),
-				Src:  []string{Completed.String(), Failed.String(),Rejected.String()},
+				Src:  []string{Completed.String(), Failed.String(), Rejected.String()},
 				Dst:  Expired.String(),
 			},
 		},

@@ -1384,15 +1384,15 @@ func TestCleanupRejectedApps(t *testing.T) {
 	rejectedApp2.SetState(objects.Running.String())
 
 	rejectionMessage := fmt.Sprintf("Failed to add application %s to partition %s, partition doesn't exist", rejectedApp1.ApplicationID, rejectedApp1.Partition)
-	err = partition.addRejectedApplication(rejectedApp1,rejectionMessage)
+	err = partition.addRejectedApplication(rejectedApp1, rejectionMessage)
 	assert.NilError(t, err, "no error expected while adding the application from new to rejected state")
 	assert.Assert(t, len(partition.rejectedApplications) == 1, "the rejectedApplications of the partition should have 1 app")
 	assert.Equal(t, rejectedApp1.CurrentState(), objects.Rejected.String())
 	assert.Equal(t, rejectedApp1.GetRejectionMessage(), rejectionMessage)
-	assert.Assert(t,!rejectedApp1.FinishedTime().IsZero())
+	assert.Assert(t, !rejectedApp1.FinishedTime().IsZero())
 
-	err = partition.addRejectedApplication(rejectedApp2,rejectionMessage)
-	assert.Assert(t,err!=nil,"error expected while adding the application from running to rejected state")
+	err = partition.addRejectedApplication(rejectedApp2, rejectionMessage)
+	assert.Assert(t, err != nil, "error expected while adding the application from running to rejected state")
 	assert.Assert(t, len(partition.rejectedApplications) == 1, "the rejectedApplications of the partition should have 1 app")
 
 	rejectedApp1.SetState(objects.Expired.String())

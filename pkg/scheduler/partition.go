@@ -1128,7 +1128,7 @@ func (pc *PartitionContext) GetRejectedAppsByState(state string) []*objects.Appl
 			appList = append(appList, app)
 		}
 	}
-    return appList
+	return appList
 }
 
 func (pc *PartitionContext) GetAppsInTerminatedState() []*objects.Application {
@@ -1491,7 +1491,7 @@ func (pc *PartitionContext) hasUnlimitedNode() bool {
 	return false
 }
 
-func (pc *PartitionContext) addRejectedApplication(rejectedApplication *objects.Application,rejectionMessage string) error {
+func (pc *PartitionContext) addRejectedApplication(rejectedApplication *objects.Application, rejectionMessage string) error {
 	if err := rejectedApplication.HandleApplicationEvent(objects.RejectApplication); err != nil {
 		log.Logger().Warn("Application state not changed to Rejected",
 			zap.String("currentState", rejectedApplication.CurrentState()),
@@ -1500,7 +1500,7 @@ func (pc *PartitionContext) addRejectedApplication(rejectedApplication *objects.
 	}
 	rejectedApplication.SetFinishedTime()
 	rejectedApplication.SetRejectionMessage(rejectionMessage)
-	if pc.rejectedApplications == nil{
+	if pc.rejectedApplications == nil {
 		pc.rejectedApplications = make(map[string]*objects.Application)
 	}
 	pc.rejectedApplications[rejectedApplication.ApplicationID] = rejectedApplication

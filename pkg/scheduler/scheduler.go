@@ -20,6 +20,7 @@ package scheduler
 
 import (
 	"reflect"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -36,6 +37,7 @@ type Scheduler struct {
 	clusterContext    *ClusterContext    // main context
 	preemptionContext *preemptionContext // Preemption context
 	pendingEvents     chan interface{}   // queue for events
+	activityStatus    int32              // atomic marker for activity
 }
 
 func NewScheduler() *Scheduler {
@@ -67,7 +69,12 @@ func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 // Internal start scheduling service
 func (s *Scheduler) internalSchedule() {
 	for {
-		s.clusterContext.schedule()
+		if !s.clearActivity() {
+			time.Sleep(10 * time.Millisecond)
+		}
+		if s.clusterContext.schedule() {
+			s.setActivity()
+		}
 	}
 }
 
@@ -124,7 +131,18 @@ func (s *Scheduler) handleRMEvent() {
 			log.Logger().Error("Received type is not an acceptable type for RM event.",
 				zap.String("received type", reflect.TypeOf(v).String()))
 		}
+		s.setActivity()
 	}
+}
+
+// setActivity is used to notify the scheduler that some activity that may impact scheduling results has occurred.
+func (s *Scheduler) setActivity() {
+	atomic.StoreInt32(&s.activityStatus, 1)
+}
+
+// clearActivity marks activity status as cleared and returns previous status.
+func (s *Scheduler) clearActivity() bool {
+	return atomic.CompareAndSwapInt32(&s.activityStatus, 1, 0)
 }
 
 // inspect on the outstanding requests for each of the queues,

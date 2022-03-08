@@ -919,6 +919,7 @@ func TestRejected(t *testing.T) {
 	assert.NilError(t, err, "Application did not progress into Rejected state")
 	assert.Assert(t, !app.FinishedTime().IsZero())
 	assert.Equal(t, app.rejectedMessage, rejectedMessage)
+	assert.Equal(t, app.GetRejectedMessage(), rejectedMessage)
 
 	err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, app.IsExpired)
 	assert.NilError(t, err, "Application did not progress into Expired state")

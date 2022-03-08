@@ -20,12 +20,13 @@ package objects
 
 import (
 	"fmt"
+	"go.uber.org/zap"
 	"time"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
+
 	"github.com/looplab/fsm"
-	"go.uber.org/zap"
 )
 
 const noTransition = "no transition"

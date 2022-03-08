@@ -906,10 +906,8 @@ func TestCompleted(t *testing.T) {
 }
 
 func TestRejected(t *testing.T) {
-	rejectedTimeout = time.Millisecond * 100
 	terminatedTimeout = time.Millisecond * 100
 	defer func() {
-		rejectedTimeout = time.Second * 2
 		terminatedTimeout = 3 * 24 * time.Hour
 	}()
 	app := newApplication(appID1, "default", "root.a")

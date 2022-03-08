@@ -43,8 +43,6 @@ var (
 	reservationDelay          = 2 * time.Second
 	startingTimeout           = 5 * time.Minute
 	completingTimeout         = 30 * time.Second
-	rejectedTimeout           = 2 * time.Second
-	expiredTimeout            = 30 * time.Second
 	terminatedTimeout         = 3 * 24 * time.Hour
 	defaultPlaceholderTimeout = 15 * time.Minute
 )

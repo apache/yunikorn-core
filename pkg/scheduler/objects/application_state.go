@@ -160,7 +160,7 @@ func NewAppState() *fsm.FSM {
 				app.finishedTime = time.Now()
 				// No rejected message when use app.HandleApplicationEvent(RejectApplication)
 				if len(event.Args) == 2 {
-					app.rejectedMessage = event.Args[1].(string)
+					app.rejectedMessage = event.Args[1].(string) //nolint:errcheck
 				}
 			},
 			fmt.Sprintf("enter_%s", Running.String()): func(event *fsm.Event) {

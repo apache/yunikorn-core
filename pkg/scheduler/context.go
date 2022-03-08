@@ -107,11 +107,13 @@ func (cc *ClusterContext) setEventHandler(rmHandler handler.EventHandler) {
 	cc.rmEventHandler = rmHandler
 }
 
-// The main scheduling routine.
+// schedule is the main scheduling routine.
 // Process each partition in the scheduler, walk over each queue and app to check if anything can be scheduled.
-// This can be forked into a go routine per partition if needed to increase parallel allocations
-func (cc *ClusterContext) schedule() {
+// This can be forked into a go routine per partition if needed to increase parallel allocations.
+// Returns true if an allocation was able to be scheduled.
+func (cc *ClusterContext) schedule() bool {
 	// schedule each partition defined in the cluster
+	activity := false
 	for _, psc := range cc.GetPartitionMapClone() {
 		// if there are no resources in the partition just skip
 		if psc.root.GetMaxResource() == nil {
@@ -140,8 +142,10 @@ func (cc *ClusterContext) schedule() {
 			} else {
 				cc.notifyRMNewAllocation(psc.RmID, alloc)
 			}
+			activity = true
 		}
 	}
+	return activity
 }
 
 func (cc *ClusterContext) processRMRegistrationEvent(event *rmevent.RMRegistrationEvent) {

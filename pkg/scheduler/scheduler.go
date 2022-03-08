@@ -20,7 +20,6 @@ package scheduler
 
 import (
 	"reflect"
-	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -37,13 +36,14 @@ type Scheduler struct {
 	clusterContext    *ClusterContext    // main context
 	preemptionContext *preemptionContext // Preemption context
 	pendingEvents     chan interface{}   // queue for events
-	activityStatus    int32              // atomic marker for activity
+	activityPending   chan bool          // activity pending channel
 }
 
 func NewScheduler() *Scheduler {
 	m := &Scheduler{}
 	m.clusterContext = newClusterContext()
 	m.pendingEvents = make(chan interface{}, 1024*1024)
+	m.activityPending = make(chan bool, 1)
 	return m
 }
 
@@ -69,11 +69,9 @@ func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 // Internal start scheduling service
 func (s *Scheduler) internalSchedule() {
 	for {
-		if !s.clearActivity() {
-			time.Sleep(10 * time.Millisecond)
-		}
+		s.awaitActivity()
 		if s.clusterContext.schedule() {
-			s.setActivity()
+			s.registerActivity()
 		}
 	}
 }
@@ -131,18 +129,28 @@ func (s *Scheduler) handleRMEvent() {
 			log.Logger().Error("Received type is not an acceptable type for RM event.",
 				zap.String("received type", reflect.TypeOf(v).String()))
 		}
-		s.setActivity()
+		s.registerActivity()
 	}
 }
 
-// setActivity is used to notify the scheduler that some activity that may impact scheduling results has occurred.
-func (s *Scheduler) setActivity() {
-	atomic.StoreInt32(&s.activityStatus, 1)
+// registerActivity is used to notify the scheduler that some activity that may impact scheduling results has occurred.
+func (s *Scheduler) registerActivity() {
+	select {
+	case s.activityPending <- true:
+		// activity registered
+	default:
+		// buffer is full, activity will be processed at the next available opportunity
+	}
 }
 
-// clearActivity marks activity status as cleared and returns previous status.
-func (s *Scheduler) clearActivity() bool {
-	return atomic.CompareAndSwapInt32(&s.activityStatus, 1, 0)
+// awaitActivity waits for scheduler activity to occur.
+func (s *Scheduler) awaitActivity() {
+	select {
+	case <-s.activityPending:
+		// activity pending
+	case <-time.After(100 * time.Millisecond):
+		// timeout, run scheduler anyway
+	}
 }
 
 // inspect on the outstanding requests for each of the queues,

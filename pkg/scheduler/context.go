@@ -907,8 +907,12 @@ func (cc *ClusterContext) SetRMInfos(rmID string, rmBuildInformation map[string]
 	if cc.rmInfos == nil {
 		cc.rmInfos = make(map[string]*RMInformation)
 	}
-	cc.rmInfos[rmID] = &RMInformation{
-		RMBuildInformation: rmBuildInformation,
+	buildInfo := make(map[string]string)
+	for k, v := range rmBuildInformation {
+		buildInfo[k] = v
 	}
-	cc.rmInfos[rmID].RMBuildInformation["rmId"] = rmID
+	buildInfo["rmId"] = rmID
+	cc.rmInfos[rmID] = &RMInformation{
+		RMBuildInformation: buildInfo,
+	}
 }

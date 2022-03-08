@@ -19,6 +19,7 @@
 package objects
 
 import (
+	"fmt"
 	"math"
 	"strconv"
 	"testing"
@@ -888,7 +889,7 @@ func TestCompleted(t *testing.T) {
 	terminatedTimeout = time.Millisecond * 100
 	defer func() {
 		completingTimeout = time.Second * 30
-		terminatedTimeout = 30 * 24 * time.Hour
+		terminatedTimeout = 3 * 24 * time.Hour
 	}()
 	app := newApplication(appID1, "default", "root.a")
 	err := app.HandleApplicationEvent(RunApplication)
@@ -899,6 +900,27 @@ func TestCompleted(t *testing.T) {
 	// give it some time to run and progress
 	err = common.WaitFor(10*time.Microsecond, time.Millisecond*200, app.IsCompleted)
 	assert.NilError(t, err, "Application did not progress into Completed state")
+
+	err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, app.IsExpired)
+	assert.NilError(t, err, "Application did not progress into Expired state")
+}
+
+func TestRejected(t *testing.T) {
+	rejectedTimeout = time.Millisecond * 100
+	terminatedTimeout = time.Millisecond * 100
+	defer func() {
+		rejectedTimeout = time.Second * 2
+		terminatedTimeout = 3 * 24 * time.Hour
+	}()
+	app := newApplication(appID1, "default", "root.a")
+	rejectedMessage := fmt.Sprintf("Failed to place application %s: application rejected: no placment rule matched", app.ApplicationID)
+	err := app.HandleApplicationEventWithInfo(RejectApplication, rejectedMessage)
+	assert.NilError(t, err, "no error expected new to rejected")
+
+	err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, app.IsRejected)
+	assert.NilError(t, err, "Application did not progress into Rejected state")
+	assert.Assert(t, !app.FinishedTime().IsZero())
+	assert.Equal(t, app.rejectedMessage, rejectedMessage)
 
 	err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, app.IsExpired)
 	assert.NilError(t, err, "Application did not progress into Expired state")
@@ -1215,6 +1237,12 @@ func TestFinishedTime(t *testing.T) {
 	// sleep 1 second to make finished time bigger than zero
 	time.Sleep(1 * time.Second)
 	app.UnSetQueue()
+	assert.Assert(t, !app.finishedTime.IsZero())
+	assert.Assert(t, !app.FinishedTime().IsZero())
+
+	// when app is rejected, finishedTime is rejectedTime
+	app1 := newApplication(appID1, "default", "root.unknown")
+	app1.SetState(Rejected.String())
 	assert.Assert(t, !app.finishedTime.IsZero())
 	assert.Assert(t, !app.FinishedTime().IsZero())
 }

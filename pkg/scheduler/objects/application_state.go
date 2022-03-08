@@ -20,12 +20,12 @@ package objects
 
 import (
 	"fmt"
-	"go.uber.org/zap"
+	"time"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
-
 	"github.com/looplab/fsm"
+	"go.uber.org/zap"
 )
 
 const noTransition = "no transition"
@@ -157,6 +157,11 @@ func NewAppState() *fsm.FSM {
 				metrics.GetQueueMetrics(app.QueuePath).IncQueueApplicationsRejected()
 				metrics.GetSchedulerMetrics().IncTotalApplicationsRejected()
 				app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
+				app.finishedTime = time.Now()
+				// No rejected message when use app.HandleApplicationEvent(RejectApplication)
+				if len(event.Args) > 1 {
+					app.rejectedMessage = event.Args[1].(string)
+				}
 			},
 			fmt.Sprintf("enter_%s", Running.String()): func(event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck

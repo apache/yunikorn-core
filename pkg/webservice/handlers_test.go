@@ -443,6 +443,12 @@ func TestQueryParamInAppsHandler(t *testing.T) {
 			Resources: map[string]resources.Quantity{"vcore": 1},
 		},
 	})
+
+	// add a rejected app
+	rejectedApp := newApplication("app-1", partitionName, "root.default", rmID, security.UserGroup{User: "abc"})
+	rejectedMessage := fmt.Sprintf("Failed to place application %s: application rejected: no placment rule matched", rejectedApp.ApplicationID)
+	part.AddRejectedApplication(rejectedApp, rejectedMessage)
+
 	NewWebApp(schedulerContext, nil)
 
 	// Passing "root.default" as filter return 1 application
@@ -454,11 +460,13 @@ func TestQueryParamInAppsHandler(t *testing.T) {
 	getApplicationsInfo(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &appsDao)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, len(appsDao), 1)
+	assert.Equal(t, len(appsDao), 2)
 	assert.Equal(t, appsDao[0].User, "abc")
 	assert.Assert(t, appsDao[0].FinishedTime == nil)
 	assert.Equal(t, appsDao[0].MaxUsedResource, "[vcore:1]")
 
+	assert.Equal(t, appsDao[1].RejectedMessage, rejectedMessage)
+	assert.Assert(t, appsDao[1].FinishedTime != nil)
 	// Passing "root.q1" as filter return 0 application as there is no app related to user: who
 	req, err = http.NewRequest("GET", "/ws/v1/apps?user=who", strings.NewReader(""))
 	assert.NilError(t, err, "App Handler request failed")
@@ -493,7 +501,7 @@ func TestQueryParamInAppsHandler(t *testing.T) {
 	getApplicationsInfo(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &appsDao)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, len(appsDao), 1)
+	assert.Equal(t, len(appsDao), 2)
 
 	// Passing "root.q1.default" as filter return 0 application though child queue name is same but different queue path
 	req, err = http.NewRequest("GET", "/ws/v1/apps?queue=root.q1.default", strings.NewReader(""))

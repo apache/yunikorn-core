@@ -303,7 +303,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		Allocations:     allocationInfos,
 		State:           app.CurrentState(),
 		User:            app.GetUser().User,
-		RejectionMessage: app.GetRejectionMessage(),
+		RejectedMessage: app.GetRejectedMessage(),
 	}
 }
 

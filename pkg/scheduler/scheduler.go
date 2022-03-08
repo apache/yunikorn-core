@@ -43,7 +43,7 @@ func NewScheduler() *Scheduler {
 	m := &Scheduler{}
 	m.clusterContext = newClusterContext()
 	m.pendingEvents = make(chan interface{}, 1024*1024)
-	m.activityPending = make(chan bool, 2) // size of 2 so that we process again immediately if already in progress
+	m.activityPending = make(chan bool, 1)
 	return m
 }
 

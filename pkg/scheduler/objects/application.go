@@ -79,6 +79,7 @@ type Application struct {
 	placeholderTimer     *time.Timer            // placeholder replace timer
 	gangSchedulingStyle  string                 // gang scheduling style can be hard (after timeout we fail the application), or soft (after timeeout we schedule it as a normal application)
 	finishedTime         time.Time              // the time of finishing this application. the default value is zero time
+	rejectedMessage      string                 // If the application is rejected, save the rejected message
 
 	rmEventHandler     handler.EventHandler
 	rmID               string
@@ -104,6 +105,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		stateMachine:         NewAppState(),
 		placeholderAsk:       resources.NewResourceFromProto(siApp.PlaceholderAsk),
 		finishedTime:         time.Time{},
+		rejectedMessage:      "",
 	}
 	placeholderTimeout := common.ConvertSITimeout(siApp.ExecutionTimeoutMilliSeconds)
 	if time.Duration(0) == placeholderTimeout {
@@ -178,6 +180,10 @@ func (sa *Application) IsCompleted() bool {
 	return sa.stateMachine.Is(Completed.String())
 }
 
+func (sa *Application) IsRejected() bool {
+	return sa.stateMachine.Is(Rejected.String())
+}
+
 func (sa *Application) IsExpired() bool {
 	return sa.stateMachine.Is(Expired.String())
 }
@@ -214,30 +220,31 @@ func (sa *Application) HandleApplicationEventWithInfo(event applicationEvent, ev
 	return err
 }
 
+// OnStatChange every time the application enters a new state.
+// It sends an event about the state change to the shim as an application update.
+// The only state that does not generate an event is Rejected.
 func (sa *Application) OnStateChange(event *fsm.Event, eventInfo string) {
-	updatedApps := make([]*si.UpdatedApplication, 0)
+	if event.Dst == Rejected.String() || sa.rmEventHandler == nil {
+		return
+	}
 	var message string
 	if len(eventInfo) == 0 {
 		message = event.Event
 	} else {
 		message = eventInfo
 	}
-	updatedApps = append(updatedApps, &si.UpdatedApplication{
-		ApplicationID:            sa.ApplicationID,
-		State:                    sa.stateMachine.Current(),
-		StateTransitionTimestamp: time.Now().UnixNano(),
-		Message:                  message,
-	})
-
-	if sa.rmEventHandler != nil {
-		sa.rmEventHandler.HandleEvent(
-			&rmevent.RMApplicationUpdateEvent{
-				RmID:                 sa.rmID,
-				AcceptedApplications: make([]*si.AcceptedApplication, 0),
-				RejectedApplications: make([]*si.RejectedApplication, 0),
-				UpdatedApplications:  updatedApps,
-			})
-	}
+	sa.rmEventHandler.HandleEvent(
+		&rmevent.RMApplicationUpdateEvent{
+			RmID:                 sa.rmID,
+			AcceptedApplications: make([]*si.AcceptedApplication, 0),
+			RejectedApplications: make([]*si.RejectedApplication, 0),
+			UpdatedApplications: []*si.UpdatedApplication{{
+				ApplicationID:            sa.ApplicationID,
+				State:                    sa.stateMachine.Current(),
+				StateTransitionTimestamp: time.Now().UnixNano(),
+				Message:                  message,
+			}},
+		})
 }
 
 // Set the starting timer to make sure the application will not get stuck in a starting state too long.
@@ -1506,4 +1513,10 @@ func (sa *Application) IsAllocationAssignedToApp(alloc *Allocation) bool {
 	defer sa.RUnlock()
 	_, ok := sa.allocations[alloc.UUID]
 	return ok
+}
+
+func (sa *Application) GetRejectedMessage() string {
+	sa.RLock()
+	defer sa.RUnlock()
+	return sa.rejectedMessage
 }

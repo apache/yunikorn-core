@@ -21,6 +21,7 @@ package objects
 import (
 	"fmt"
 	"go.uber.org/zap"
+	"time"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
@@ -112,7 +113,7 @@ func NewAppState() *fsm.FSM {
 				Dst:  Resuming.String(),
 			}, {
 				Name: ExpireApplication.String(),
-				Src:  []string{Completed.String(), Failed.String()},
+				Src:  []string{Completed.String(), Failed.String(), Rejected.String()},
 				Dst:  Expired.String(),
 			},
 		},
@@ -156,6 +157,12 @@ func NewAppState() *fsm.FSM {
 				app := event.Args[0].(*Application) //nolint:errcheck
 				metrics.GetQueueMetrics(app.QueuePath).IncQueueApplicationsRejected()
 				metrics.GetSchedulerMetrics().IncTotalApplicationsRejected()
+				app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
+				app.finishedTime = time.Now()
+				// No rejected message when use app.HandleApplicationEvent(RejectApplication)
+				if len(event.Args) == 2 {
+					app.rejectedMessage = event.Args[1].(string) //nolint:errcheck
+				}
 			},
 			fmt.Sprintf("enter_%s", Running.String()): func(event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck

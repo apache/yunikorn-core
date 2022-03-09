@@ -1376,6 +1376,33 @@ func TestCleanupCompletedApps(t *testing.T) {
 	assert.Assert(t, len(partition.GetAppsByState(objects.Expired.String())) == 0, "the partition should have 0 expired app")
 }
 
+func TestCleanupRejectedApps(t *testing.T) {
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	rejectedApp := newApplication("new", "default", defQueue)
+	rejectedMessage := fmt.Sprintf("Failed to place application %s: application rejected: no placment rule matched", rejectedApp.ApplicationID)
+
+	partition.AddRejectedApplication(rejectedApp, rejectedMessage)
+	cloneRejectedApp := partition.getRejectedApplication(rejectedApp.ApplicationID)
+	assert.Equal(t, rejectedApp, cloneRejectedApp)
+	assert.Equal(t, partition.rejectedApplications[rejectedApp.ApplicationID], cloneRejectedApp)
+	assert.Equal(t, cloneRejectedApp.GetRejectedMessage(), rejectedMessage)
+	assert.Equal(t, cloneRejectedApp.CurrentState(), objects.Rejected.String())
+	assert.Assert(t, !cloneRejectedApp.FinishedTime().IsZero())
+
+	assert.Assert(t, len(partition.rejectedApplications) == 1, "the rejectedApplications of the partition should have 1 app")
+	assert.Assert(t, len(partition.GetAppsByState(objects.Rejected.String())) == 1, "the partition should have 1 rejected app")
+	assert.Assert(t, len(partition.GetRejectedAppsByState(objects.Rejected.String())) == 1, "the partition should have 1 rejected app")
+
+	rejectedApp.SetState(objects.Expired.String())
+	partition.cleanupExpiredApps()
+	assert.Assert(t, len(partition.rejectedApplications) == 0, "the partition should not have app")
+	assert.Assert(t, partition.getRejectedApplication(rejectedApp.ApplicationID) == nil, "rejected application should have been deleted")
+	assert.Assert(t, len(partition.GetAppsByState(objects.Rejected.String())) == 0, "the partition should have 0 rejected app")
+	assert.Assert(t, len(partition.GetRejectedAppsByState(objects.Rejected.String())) == 0, "the partition should have 0 rejected app")
+	assert.Assert(t, len(partition.GetRejectedAppsByState(objects.Expired.String())) == 0, "the partition should have 0 expired app")
+}
+
 func TestUpdateNode(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "test partition create failed with error")

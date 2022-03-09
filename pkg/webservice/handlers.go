@@ -129,6 +129,9 @@ func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
 		for _, app := range partition.GetCompletedApplications() {
 			addDao(app)
 		}
+		for _, app := range partition.GetRejectedApplications() {
+			addDao(app)
+		}
 	}
 
 	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
@@ -300,6 +303,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		Allocations:     allocationInfos,
 		State:           app.CurrentState(),
 		User:            app.GetUser().User,
+		RejectedMessage: app.GetRejectedMessage(),
 	}
 }
 

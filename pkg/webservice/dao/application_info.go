@@ -33,6 +33,7 @@ type ApplicationDAOInfo struct {
 	Allocations     []AllocationDAOInfo `json:"allocations"`
 	State           string              `json:"applicationState"`
 	User            string              `json:"user"`
+	RejectedMessage string              `json:"rejectedMessage"`
 }
 
 type AllocationDAOInfo struct {

@@ -507,6 +507,7 @@ func (cc *ClusterContext) handleRMUpdateApplicationEvent(event *rmevent.RMUpdate
 				ApplicationID: app.ApplicationID,
 				Reason:        err.Error(),
 			})
+			partition.AddRejectedApplication(objects.NewApplication(app, ugi, cc.rmEventHandler, request.RmID), err.Error())
 			log.Logger().Error("Failed to add application to partition (user rejected)",
 				zap.String("applicationID", app.ApplicationID),
 				zap.String("partitionName", app.PartitionName),
@@ -520,6 +521,7 @@ func (cc *ClusterContext) handleRMUpdateApplicationEvent(event *rmevent.RMUpdate
 				ApplicationID: app.ApplicationID,
 				Reason:        err.Error(),
 			})
+			partition.AddRejectedApplication(schedApp, err.Error())
 			log.Logger().Error("Failed to add application to partition (placement rejected)",
 				zap.String("applicationID", app.ApplicationID),
 				zap.String("partitionName", app.PartitionName),

@@ -53,10 +53,11 @@ func newPartitionManager(pc *PartitionContext, cc *ClusterContext) *partitionMan
 }
 
 // Run the manager for the partition.
-// The manager has three tasks:
+// The manager has four tasks:
 // - clean up the managed queues that are empty and removed from the configuration
 // - remove empty unmanaged queues
 // - remove completed applications from the partition
+// - remove rejected applications from the partition
 // When the manager exits the partition is removed from the system and must be cleaned up
 func (manager *partitionManager) Run() {
 	log.Logger().Info("starting partition manager",

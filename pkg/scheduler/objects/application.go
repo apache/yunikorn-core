@@ -54,11 +54,11 @@ const (
 )
 
 type PlaceholderData struct {
-	TaskGroupName     string
-	RequiredNode      string
-	AllocatedResource *resources.Resource
-	Count             int64
-	Replaced          int64
+	TaskGroupName string
+	Count         int64
+	MinResource   *resources.Resource
+	RequiredNode  string
+	Replaced      int64
 }
 
 type Application struct {
@@ -1535,7 +1535,7 @@ func (sa *Application) GetRejectedMessage() string {
 	return sa.rejectedMessage
 }
 
-func (sa *Application) SetPlaceholderData(taskGroupName string, allocatedResource *resources.Resource, requiredNode string) {
+func (sa *Application) SetPlaceholderData(taskGroupName string, minResource *resources.Resource, requiredNode string) {
 	sa.Lock()
 	defer sa.Unlock()
 	if sa.PlaceholderDatas == nil {
@@ -1543,9 +1543,9 @@ func (sa *Application) SetPlaceholderData(taskGroupName string, allocatedResourc
 	}
 	if _, ok := sa.PlaceholderDatas[taskGroupName]; !ok {
 		sa.PlaceholderDatas[taskGroupName] = &PlaceholderData{
-			TaskGroupName:     taskGroupName,
-			RequiredNode:      requiredNode,
-			AllocatedResource: allocatedResource,
+			TaskGroupName: taskGroupName,
+			MinResource:   minResource,
+			RequiredNode:  requiredNode,
 		}
 	}
 	sa.PlaceholderDatas[taskGroupName].Count++

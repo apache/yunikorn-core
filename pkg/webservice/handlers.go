@@ -278,6 +278,8 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 	allocations := app.GetAllAllocations()
 	allocationInfos := make([]dao.AllocationDAOInfo, 0, len(allocations))
 	placeHolderInfos := make([]dao.PlaceholderDAOInfo, 0, len(app.PlaceholderDatas))
+	// Used to confirm whether the taskGroupName is duplicated
+	taskGroupNames := map[string]bool{}
 
 	for _, alloc := range allocations {
 		allocInfo := dao.AllocationDAOInfo{
@@ -295,14 +297,17 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 
 		if alloc.IsPlaceholder() {
 			taskGroupName := alloc.GetTaskGroup()
-			placeHolderInfo := dao.PlaceholderDAOInfo{
-				TaskGroupName:     taskGroupName,
-				RequiredNode:      app.PlaceholderDatas[taskGroupName].RequiredNode,
-				AllocatedResource: app.PlaceholderDatas[taskGroupName].AllocatedResource,
-				Count:             app.PlaceholderDatas[taskGroupName].Count,
-				Replaced:          app.PlaceholderDatas[taskGroupName].Replaced,
+			if _, ok := taskGroupNames[taskGroupName]; !ok {
+				taskGroupNames[taskGroupName] = true
+				placeHolderInfo := dao.PlaceholderDAOInfo{
+					TaskGroupName:     taskGroupName,
+					RequiredNode:      app.PlaceholderDatas[taskGroupName].RequiredNode,
+					AllocatedResource: app.PlaceholderDatas[taskGroupName].AllocatedResource,
+					Count:             app.PlaceholderDatas[taskGroupName].Count,
+					Replaced:          app.PlaceholderDatas[taskGroupName].Replaced,
+				}
+				placeHolderInfos = append(placeHolderInfos, placeHolderInfo)
 			}
-			placeHolderInfos = append(placeHolderInfos, placeHolderInfo)
 		}
 	}
 

@@ -1541,10 +1541,12 @@ func (sa *Application) SetPlaceholderData(taskGroupName string, allocatedResourc
 	if sa.PlaceholderDatas == nil {
 		sa.PlaceholderDatas = make(map[string]*PlaceholderData)
 	}
-	sa.PlaceholderDatas[taskGroupName] = &PlaceholderData{
-		TaskGroupName:     taskGroupName,
-		RequiredNode:      requiredNode,
-		AllocatedResource: allocatedResource,
+	if _, ok := sa.PlaceholderDatas[taskGroupName]; !ok {
+		sa.PlaceholderDatas[taskGroupName] = &PlaceholderData{
+			TaskGroupName:     taskGroupName,
+			RequiredNode:      requiredNode,
+			AllocatedResource: allocatedResource,
+		}
 	}
 	sa.PlaceholderDatas[taskGroupName].Count++
 }

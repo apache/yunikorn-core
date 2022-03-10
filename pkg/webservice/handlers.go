@@ -321,7 +321,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		State:           app.CurrentState(),
 		User:            app.GetUser().User,
 		RejectedMessage: app.GetRejectedMessage(),
-		PlaceholderData: placeHolderInfos,
+		PlaceholderDatas: placeHolderInfos,
 	}
 }
 

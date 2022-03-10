@@ -905,7 +905,6 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				if sa.PlaceholderDatas != nil {
 					sa.PlaceholderDatas[ph.taskGroupName].Replaced++
 				}
-				// The number of replaced placeHolder
 				_, err := sa.updateAskRepeatInternal(request, -1)
 				if err != nil {
 					log.Logger().Warn("ask repeat update failed unexpectedly",

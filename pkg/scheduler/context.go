@@ -785,8 +785,8 @@ func (cc *ClusterContext) processAsks(request *si.AllocationRequest) {
 				zap.String("applicationID", siAsk.ApplicationID),
 				zap.String("askKey", siAsk.AllocationKey),
 				zap.Error(err))
-		} else if err == nil && siAsk.Placeholder {
-			    partition.applications[siAsk.ApplicationID].SetPlaceholderData(siAsk.TaskGroupName, resources.NewResourceFromProto(siAsk.ResourceAsk), common.GetRequiredNodeFromTag(siAsk.Tags))
+		} else if siAsk.Placeholder {
+			partition.applications[siAsk.ApplicationID].SetPlaceholderData(siAsk.TaskGroupName, resources.NewResourceFromProto(siAsk.ResourceAsk), common.GetRequiredNodeFromTag(siAsk.Tags))
 		}
 	}
 

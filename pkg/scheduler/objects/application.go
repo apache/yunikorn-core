@@ -53,11 +53,20 @@ const (
 	AppTagStateAwareDisable string = "application.stateaware.disable"
 )
 
+type PlaceholderData struct {
+	TaskGroupName     string
+	RequiredNode      string
+	AllocatedResource *resources.Resource
+	Count             int64
+	Replaced          int64
+}
+
 type Application struct {
-	ApplicationID  string
-	Partition      string
-	QueuePath      string
-	SubmissionTime time.Time
+	ApplicationID    string
+	Partition        string
+	QueuePath        string
+	SubmissionTime   time.Time
+	PlaceholderDatas map[string]*PlaceholderData
 
 	// Private fields need protection
 	queue                *Queue                    // queue the application is running in
@@ -892,6 +901,11 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				alloc.Result = Replaced
 				// mark placeholder as released
 				ph.released = true
+				// store number of palceHolders that have been replaced so far
+				if sa.PlaceholderDatas != nil {
+					sa.PlaceholderDatas[ph.taskGroupName].Replaced++
+				}
+				// The number of replaced placeHolder
 				_, err := sa.updateAskRepeatInternal(request, -1)
 				if err != nil {
 					log.Logger().Warn("ask repeat update failed unexpectedly",
@@ -1519,4 +1533,18 @@ func (sa *Application) GetRejectedMessage() string {
 	sa.RLock()
 	defer sa.RUnlock()
 	return sa.rejectedMessage
+}
+
+func (sa *Application) SetPlaceholderData(taskGroupName string, allocatedResource *resources.Resource, requiredNode string) {
+	sa.Lock()
+	defer sa.Unlock()
+	if sa.PlaceholderDatas == nil {
+		sa.PlaceholderDatas = make(map[string]*PlaceholderData)
+	}
+	sa.PlaceholderDatas[taskGroupName] = &PlaceholderData{
+		TaskGroupName:     taskGroupName,
+		RequiredNode:      requiredNode,
+		AllocatedResource: allocatedResource,
+	}
+	sa.PlaceholderDatas[taskGroupName].Count++
 }

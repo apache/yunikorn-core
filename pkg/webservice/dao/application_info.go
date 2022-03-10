@@ -18,22 +18,25 @@
 
 package dao
 
+import "github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+
 type ApplicationsDAOInfo struct {
 	Applications []ApplicationDAOInfo `json:"applications"`
 }
 
 type ApplicationDAOInfo struct {
-	ApplicationID   string              `json:"applicationID"`
-	UsedResource    string              `json:"usedResource"`
-	MaxUsedResource string              `json:"maxUsedResource"`
-	Partition       string              `json:"partition"`
-	QueueName       string              `json:"queueName"`
-	SubmissionTime  int64               `json:"submissionTime"`
-	FinishedTime    *int64              `json:"finishedTime"`
-	Allocations     []AllocationDAOInfo `json:"allocations"`
-	State           string              `json:"applicationState"`
-	User            string              `json:"user"`
-	RejectedMessage string              `json:"rejectedMessage"`
+	ApplicationID   string               `json:"applicationID"`
+	UsedResource    string               `json:"usedResource"`
+	MaxUsedResource string               `json:"maxUsedResource"`
+	Partition       string               `json:"partition"`
+	QueueName       string               `json:"queueName"`
+	SubmissionTime  int64                `json:"submissionTime"`
+	FinishedTime    *int64               `json:"finishedTime"`
+	Allocations     []AllocationDAOInfo  `json:"allocations"`
+	State           string               `json:"applicationState"`
+	User            string               `json:"user"`
+	RejectedMessage string               `json:"rejectedMessage"`
+	PlaceholderData []PlaceholderDAOInfo `json:"placeholderData"`
 }
 
 type AllocationDAOInfo struct {
@@ -46,4 +49,12 @@ type AllocationDAOInfo struct {
 	NodeID           string            `json:"nodeId"`
 	ApplicationID    string            `json:"applicationId"`
 	Partition        string            `json:"partition"`
+}
+
+type PlaceholderDAOInfo struct {
+	TaskGroupName     string              `json:"taskGroupName"`
+	RequiredNode      string              `json:"requiredNode"`
+	AllocatedResource *resources.Resource `json:"allocatedResource"`
+	Count             int64               `json:"count"`
+	Replaced          int64               `json:"replaced"`
 }

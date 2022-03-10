@@ -277,6 +277,8 @@ func getPartitionJSON(partition *scheduler.PartitionContext) *dao.PartitionDAOIn
 func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 	allocations := app.GetAllAllocations()
 	allocationInfos := make([]dao.AllocationDAOInfo, 0, len(allocations))
+	placeHolderInfos := make([]dao.PlaceholderDAOInfo, 0, len(app.PlaceholderDatas))
+
 	for _, alloc := range allocations {
 		allocInfo := dao.AllocationDAOInfo{
 			AllocationKey:    alloc.AllocationKey,
@@ -290,6 +292,18 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 			Partition:        alloc.PartitionName,
 		}
 		allocationInfos = append(allocationInfos, allocInfo)
+
+		if alloc.IsPlaceholder() {
+			taskGroupName := alloc.GetTaskGroup()
+			placeHolderInfo := dao.PlaceholderDAOInfo{
+				TaskGroupName:     taskGroupName,
+				RequiredNode:      app.PlaceholderDatas[taskGroupName].RequiredNode,
+				AllocatedResource: app.PlaceholderDatas[taskGroupName].AllocatedResource,
+				Count:             app.PlaceholderDatas[taskGroupName].Count,
+				Replaced:          app.PlaceholderDatas[taskGroupName].Replaced,
+			}
+			placeHolderInfos = append(placeHolderInfos, placeHolderInfo)
+		}
 	}
 
 	return &dao.ApplicationDAOInfo{
@@ -304,6 +318,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		State:           app.CurrentState(),
 		User:            app.GetUser().User,
 		RejectedMessage: app.GetRejectedMessage(),
+		PlaceholderData: placeHolderInfos,
 	}
 }
 

@@ -678,6 +678,7 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	// add second placeholder
 	ask2 := newAllocationAskTG(askID, appID1, tgName, res, 1)
 	err = app.AddAllocationAsk(ask2)
+	assert.NilError(t, err, "ask should have been added to app")
 	app.SetPlaceholderData(tgName, res, "node-1")
 	assert.Assert(t, len(app.PlaceholderDatas) == 1, "PlaceholderDatas should have 1 taskGroup information")
 	assert.Equal(t, app.PlaceholderDatas[tgName].TaskGroupName, "TG1")

@@ -23,17 +23,17 @@ type ApplicationsDAOInfo struct {
 }
 
 type ApplicationDAOInfo struct {
-	ApplicationID    string               `json:"applicationID"`
-	UsedResource     string               `json:"usedResource"`
-	MaxUsedResource  string               `json:"maxUsedResource"`
-	Partition        string               `json:"partition"`
-	QueueName        string               `json:"queueName"`
-	SubmissionTime   int64                `json:"submissionTime"`
-	FinishedTime     *int64               `json:"finishedTime"`
-	Allocations      []AllocationDAOInfo  `json:"allocations"`
-	State            string               `json:"applicationState"`
-	User             string               `json:"user"`
-	RejectedMessage  string               `json:"rejectedMessage"`
+	ApplicationID   string               `json:"applicationID"`
+	UsedResource    string               `json:"usedResource"`
+	MaxUsedResource string               `json:"maxUsedResource"`
+	Partition       string               `json:"partition"`
+	QueueName       string               `json:"queueName"`
+	SubmissionTime  int64                `json:"submissionTime"`
+	FinishedTime    *int64               `json:"finishedTime"`
+	Allocations     []AllocationDAOInfo  `json:"allocations"`
+	State           string               `json:"applicationState"`
+	User            string               `json:"user"`
+	RejectedMessage string               `json:"rejectedMessage"`
 	PlaceholderData []PlaceholderDAOInfo `json:"placeholderData"`
 }
 

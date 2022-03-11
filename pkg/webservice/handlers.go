@@ -211,7 +211,7 @@ func getClusterJSON(partition *scheduler.PartitionContext) *dao.ClusterDAOInfo {
 	clusterInfo := &dao.ClusterDAOInfo{}
 	clusterInfo.StartTime = schedulerContext.GetStartTime().Format("2006-01-02T15:04:05-0700")
 	rmInfo := schedulerContext.GetRMInfoMapClone()
-	clusterInfo.RMBuildInformation = getRMBuildInformations(rmInfo)
+	clusterInfo.RMBuildInformation = getRMBuildInformation(rmInfo)
 	clusterInfo.PartitionName = common.GetPartitionNameWithoutClusterID(partition.Name)
 	clusterInfo.TotalApplications = strconv.Itoa(partition.GetTotalApplicationCount())
 	clusterInfo.TotalContainers = strconv.Itoa(partition.GetTotalAllocationCount())
@@ -852,7 +852,7 @@ func getClusterDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClusterD
 	return result
 }
 
-func getRMBuildInformations(lists map[string]*scheduler.RMInformation) []map[string]string {
+func getRMBuildInformation(lists map[string]*scheduler.RMInformation) []map[string]string {
 	var result []map[string]string
 
 	for _, rmInfo := range lists {

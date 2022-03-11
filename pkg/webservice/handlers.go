@@ -210,8 +210,8 @@ func buildJSONErrorResponse(w http.ResponseWriter, detail string, code int) {
 func getClusterJSON(partition *scheduler.PartitionContext) *dao.ClusterDAOInfo {
 	clusterInfo := &dao.ClusterDAOInfo{}
 	clusterInfo.StartTime = schedulerContext.GetStartTime().Format("2006-01-02T15:04:05-0700")
-	rmInfos := schedulerContext.GetRMInfoMapClone()
-	clusterInfo.RMBuildInformation = getRMBuildInformations(rmInfos)
+	rmInfo := schedulerContext.GetRMInfoMapClone()
+	clusterInfo.RMBuildInformation = getRMBuildInformations(rmInfo)
 	clusterInfo.PartitionName = common.GetPartitionNameWithoutClusterID(partition.Name)
 	clusterInfo.TotalApplications = strconv.Itoa(partition.GetTotalApplicationCount())
 	clusterInfo.TotalContainers = strconv.Itoa(partition.GetTotalAllocationCount())
@@ -262,7 +262,7 @@ func getClusterUtilJSON(partition *scheduler.PartitionContext) []*dao.ClusterUti
 func getPartitionJSON(partition *scheduler.PartitionContext) *dao.PartitionDAOInfo {
 	partitionInfo := &dao.PartitionDAOInfo{}
 
-	queueDAOInfo := partition.GetQueueInfos()
+	queueDAOInfo := partition.GetQueueInfo()
 
 	partitionInfo.PartitionName = common.GetPartitionNameWithoutClusterID(partition.Name)
 	partitionInfo.Capacity = dao.PartitionCapacity{
@@ -276,9 +276,9 @@ func getPartitionJSON(partition *scheduler.PartitionContext) *dao.PartitionDAOIn
 
 func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 	allocations := app.GetAllAllocations()
-	allocationInfos := make([]dao.AllocationDAOInfo, 0, len(allocations))
-	placeholders := app.GetAllPlaceholderDatas()
-	placeholderInfos := make([]dao.PlaceholderDAOInfo, 0, len(placeholders))
+	allocationInfo := make([]dao.AllocationDAOInfo, 0, len(allocations))
+	placeholders := app.GetAllPlaceholderData()
+	placeholderInfo := make([]dao.PlaceholderDAOInfo, 0, len(placeholders))
 
 	for _, alloc := range allocations {
 		allocInfo := dao.AllocationDAOInfo{
@@ -292,18 +292,18 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 			ApplicationID:    alloc.ApplicationID,
 			Partition:        alloc.PartitionName,
 		}
-		allocationInfos = append(allocationInfos, allocInfo)
+		allocationInfo = append(allocationInfo, allocInfo)
 	}
 
 	for _, taskGroup := range placeholders {
-		placeholderInfo := dao.PlaceholderDAOInfo{
+		phInfo := dao.PlaceholderDAOInfo{
 			TaskGroupName: taskGroup.TaskGroupName,
 			Count:         taskGroup.Count,
 			MinResource:   taskGroup.MinResource.DAOString(),
 			RequiredNode:  taskGroup.RequiredNode,
 			Replaced:      taskGroup.Replaced,
 		}
-		placeholderInfos = append(placeholderInfos, placeholderInfo)
+		placeholderInfo = append(placeholderInfo, phInfo)
 	}
 
 	return &dao.ApplicationDAOInfo{
@@ -314,11 +314,11 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		QueueName:        app.QueuePath,
 		SubmissionTime:   app.SubmissionTime.UnixNano(),
 		FinishedTime:     common.ZeroTimeInUnixNano(app.FinishedTime()),
-		Allocations:      allocationInfos,
+		Allocations:      allocationInfo,
 		State:            app.CurrentState(),
 		User:             app.GetUser().User,
 		RejectedMessage:  app.GetRejectedMessage(),
-		PlaceholderDatas: placeholderInfos,
+		PlaceholderData: placeholderInfo,
 	}
 }
 

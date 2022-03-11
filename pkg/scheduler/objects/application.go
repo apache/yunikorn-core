@@ -88,7 +88,7 @@ type Application struct {
 	gangSchedulingStyle  string                      // gang scheduling style can be hard (after timeout we fail the application), or soft (after timeeout we schedule it as a normal application)
 	finishedTime         time.Time                   // the time of finishing this application. the default value is zero time
 	rejectedMessage      string                      // If the application is rejected, save the rejected message
-	placeholderDatas     map[string]*PlaceholderData // expose gang related info in application REST info
+	placeholderData     map[string]*PlaceholderData // expose gang related info in application REST info
 
 	rmEventHandler     handler.EventHandler
 	rmID               string
@@ -904,8 +904,8 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				// mark placeholder as released
 				ph.released = true
 				// store number of palceHolders that have been replaced so far
-				if sa.placeholderDatas != nil {
-					sa.placeholderDatas[ph.taskGroupName].Replaced++
+				if sa.placeholderData != nil {
+					sa.placeholderData[ph.taskGroupName].Replaced++
 				}
 				_, err := sa.updateAskRepeatInternal(request, -1)
 				if err != nil {
@@ -1537,25 +1537,25 @@ func (sa *Application) GetRejectedMessage() string {
 }
 
 func (sa *Application) addPlaceholderData(ask *AllocationAsk) {
-	if sa.placeholderDatas == nil {
-		sa.placeholderDatas = make(map[string]*PlaceholderData)
+	if sa.placeholderData == nil {
+		sa.placeholderData = make(map[string]*PlaceholderData)
 	}
 	taskGroupName := ask.taskGroupName
-	if _, ok := sa.placeholderDatas[taskGroupName]; !ok {
-		sa.placeholderDatas[taskGroupName] = &PlaceholderData{
+	if _, ok := sa.placeholderData[taskGroupName]; !ok {
+		sa.placeholderData[taskGroupName] = &PlaceholderData{
 			TaskGroupName: taskGroupName,
 			MinResource:   ask.AllocatedResource,
 			RequiredNode:  ask.requiredNode,
 		}
 	}
-	sa.placeholderDatas[taskGroupName].Count++
+	sa.placeholderData[taskGroupName].Count++
 }
 
-func (sa *Application) GetAllPlaceholderDatas() []*PlaceholderData {
+func (sa *Application) GetAllPlaceholderData() []*PlaceholderData {
 	sa.RLock()
 	defer sa.RUnlock()
 	var placeholders []*PlaceholderData
-	for _, taskGroup := range sa.placeholderDatas {
+	for _, taskGroup := range sa.placeholderData {
 		placeholders = append(placeholders, taskGroup)
 	}
 	return placeholders

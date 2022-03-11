@@ -646,10 +646,10 @@ func TestGetClusterUtilJSON(t *testing.T) {
 	buildInfoMap["buildDate"] = "2006-01-02T15:04:05-0700"
 	buildInfoMap["buildVersion"] = "latest"
 	buildInfoMap["isPluginVersion"] = "false"
-	schedulerContext.SetRMInfos(rmID, buildInfoMap)
-	rmInfos := schedulerContext.GetRMInfoMapClone()
-	assert.Equal(t, 1, len(rmInfos))
-	rmBuildInformationMaps := getRMBuildInformations(rmInfos)
+	schedulerContext.SetRMInfo(rmID, buildInfoMap)
+	rmInfo := schedulerContext.GetRMInfoMapClone()
+	assert.Equal(t, 1, len(rmInfo))
+	rmBuildInformationMaps := getRMBuildInformations(rmInfo)
 	assert.Equal(t, 1, len(rmBuildInformationMaps))
 	assert.Equal(t, rmBuildInformationMaps[0]["buildDate"], buildInfoMap["buildDate"])
 	assert.Equal(t, rmBuildInformationMaps[0]["buildVersion"], buildInfoMap["buildVersion"])

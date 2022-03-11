@@ -412,10 +412,10 @@ func (sq *Queue) CheckAdminAccess(user security.UserGroup) bool {
 
 // GetQueueInfos returns the queue hierarchy as an object for a REST call.
 // This object is used by the deprecated REST API and is succeeded by the GetPartitionQueueDAOInfo call.
-func (sq *Queue) GetQueueInfos() dao.QueueDAOInfo {
+func (sq *Queue) GetQueueInfo() dao.QueueDAOInfo {
 	queueInfo := dao.QueueDAOInfo{}
 	for _, child := range sq.GetCopyOfChildren() {
-		queueInfo.ChildQueues = append(queueInfo.ChildQueues, child.GetQueueInfos())
+		queueInfo.ChildQueues = append(queueInfo.ChildQueues, child.GetQueueInfo())
 	}
 
 	// children are done we can now lock just this queue.

@@ -1554,10 +1554,9 @@ func (sa *Application) addPlaceholderData(ask *AllocationAsk) {
 func (sa *Application) GetAllPlaceholderDatas() []*PlaceholderData {
 	sa.RLock()
 	defer sa.RUnlock()
-
 	var placeholders []*PlaceholderData
-	for _, placeholder := range sa.placeholderDatas {
-		placeholders = append(placeholders, placeholder)
+	for _, taskGroup := range sa.placeholderDatas {
+		placeholders = append(placeholders, taskGroup)
 	}
 	return placeholders
 }

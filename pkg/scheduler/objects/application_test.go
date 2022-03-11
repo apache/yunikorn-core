@@ -662,8 +662,9 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	askID := "ask-1"
 	tgName := "TG1"
+	requiredNode := "node-1"
 	ask := newAllocationAskTG(askID, appID1, tgName, res, 1)
-	ask.requiredNode = "node-1"
+	ask.requiredNode = requiredNode
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been added to app")
 	// app with ask, even for placeholder, should be accepted
@@ -672,25 +673,25 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	clonePlaceholderData := app.GetAllPlaceholderData()
 	assert.Assert(t, len(clonePlaceholderData) == 1)
 	assert.Assert(t, len(app.placeholderData) == 1)
-	assert.Equal(t,clonePlaceholderData[0],app.placeholderData[tgName])
-	assert.Equal(t, app.placeholderData[tgName].TaskGroupName, "TG1")
+	assert.Equal(t, clonePlaceholderData[0], app.placeholderData[tgName])
+	assert.Equal(t, app.placeholderData[tgName].TaskGroupName, tgName)
 	assert.Equal(t, app.placeholderData[tgName].Count, int64(1))
 	assert.Assert(t, resources.Equals(app.placeholderData[tgName].MinResource, res))
-	assert.Equal(t, app.placeholderData[tgName].RequiredNode, "node-1")
+	assert.Equal(t, app.placeholderData[tgName].RequiredNode, requiredNode)
 	assert.Equal(t, app.placeholderData[tgName].Replaced, int64(0))
 	// add second placeholder
 	ask2 := newAllocationAskTG(askID, appID1, tgName, res, 1)
-	ask2.requiredNode = "node-1"
+	ask2.requiredNode = requiredNode
 	err = app.AddAllocationAsk(ask2)
 	assert.NilError(t, err, "ask should have been added to app")
 	clonePlaceholderData = app.GetAllPlaceholderData()
 	assert.Assert(t, len(clonePlaceholderData) == 1)
 	assert.Assert(t, len(app.placeholderData) == 1)
-	assert.Equal(t,clonePlaceholderData[0],app.placeholderData[tgName])
-	assert.Equal(t, app.placeholderData[tgName].TaskGroupName, "TG1")
+	assert.Equal(t, clonePlaceholderData[0], app.placeholderData[tgName])
+	assert.Equal(t, app.placeholderData[tgName].TaskGroupName, tgName)
 	assert.Equal(t, app.placeholderData[tgName].Count, int64(2))
 	assert.Assert(t, resources.Equals(app.placeholderData[tgName].MinResource, res))
-	assert.Equal(t, app.placeholderData[tgName].RequiredNode, "node-1")
+	assert.Equal(t, app.placeholderData[tgName].RequiredNode, requiredNode)
 	assert.Equal(t, app.placeholderData[tgName].Replaced, int64(0))
 
 	// removing the ask should move it to waiting

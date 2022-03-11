@@ -307,17 +307,17 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 	}
 
 	return &dao.ApplicationDAOInfo{
-		ApplicationID:    app.ApplicationID,
-		UsedResource:     app.GetAllocatedResource().DAOString(),
-		MaxUsedResource:  app.GetMaxAllocatedResource().DAOString(),
-		Partition:        common.GetPartitionNameWithoutClusterID(app.Partition),
-		QueueName:        app.QueuePath,
-		SubmissionTime:   app.SubmissionTime.UnixNano(),
-		FinishedTime:     common.ZeroTimeInUnixNano(app.FinishedTime()),
-		Allocations:      allocationInfo,
-		State:            app.CurrentState(),
-		User:             app.GetUser().User,
-		RejectedMessage:  app.GetRejectedMessage(),
+		ApplicationID:   app.ApplicationID,
+		UsedResource:    app.GetAllocatedResource().DAOString(),
+		MaxUsedResource: app.GetMaxAllocatedResource().DAOString(),
+		Partition:       common.GetPartitionNameWithoutClusterID(app.Partition),
+		QueueName:       app.QueuePath,
+		SubmissionTime:  app.SubmissionTime.UnixNano(),
+		FinishedTime:    common.ZeroTimeInUnixNano(app.FinishedTime()),
+		Allocations:     allocationInfo,
+		State:           app.CurrentState(),
+		User:            app.GetUser().User,
+		RejectedMessage: app.GetRejectedMessage(),
 		PlaceholderData: placeholderInfo,
 	}
 }

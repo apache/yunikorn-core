@@ -88,7 +88,7 @@ type Application struct {
 	gangSchedulingStyle  string                      // gang scheduling style can be hard (after timeout we fail the application), or soft (after timeeout we schedule it as a normal application)
 	finishedTime         time.Time                   // the time of finishing this application. the default value is zero time
 	rejectedMessage      string                      // If the application is rejected, save the rejected message
-	placeholderData     map[string]*PlaceholderData // expose gang related info in application REST info
+	placeholderData      map[string]*PlaceholderData // expose gang related info in application REST info
 
 	rmEventHandler     handler.EventHandler
 	rmID               string

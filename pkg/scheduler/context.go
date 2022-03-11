@@ -50,7 +50,7 @@ type ClusterContext struct {
 	needPreemption      bool
 	reservationDisabled bool
 
-	rmInfo   map[string]*RMInformation
+	rmInfo    map[string]*RMInformation
 	startTime time.Time
 
 	sync.RWMutex

@@ -67,6 +67,8 @@ type Queue struct {
 	isManaged          bool                // queue is part of the config, not auto created
 	stateMachine       *fsm.FSM            // the state of the queue for scheduling
 	stateTime          time.Time           // last time the state was updated (needed for cleanup)
+	maxRunningApps     uint64
+	runningApps        uint64
 	template           *template.Template
 
 	sync.RWMutex
@@ -95,6 +97,7 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 	sq.QueuePath = strings.ToLower(conf.Name)
 	sq.parent = parent
 	sq.isManaged = true
+	sq.maxRunningApps = conf.MaxApplications
 
 	// update the properties
 	if err := sq.applyConf(conf); err != nil {
@@ -656,6 +659,10 @@ func (sq *Queue) addChildQueue(child *Queue) error {
 	}
 	if sq.IsDraining() {
 		return fmt.Errorf("cannot add a child queue when queue is marked for deletion: %s", sq.QueuePath)
+	}
+
+	if sq.maxRunningApps != 0 && sq.maxRunningApps < child.maxRunningApps {
+		return fmt.Errorf("parent maxApplication must be larger than child maxApplication")
 	}
 
 	// no need to lock child as it is a new queue which cannot be accessed yet

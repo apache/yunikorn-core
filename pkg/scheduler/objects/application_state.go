@@ -143,6 +143,9 @@ func NewAppState() *fsm.FSM {
 			},
 			fmt.Sprintf("enter_%s", Starting.String()): func(event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
+				if app.queue != nil {
+					app.queue.runningApps++
+				}
 				app.setStateTimer(app.startTimeout, app.stateMachine.Current(), RunApplication)
 			},
 			fmt.Sprintf("enter_%s", Completing.String()): func(event *fsm.Event) {
@@ -172,6 +175,9 @@ func NewAppState() *fsm.FSM {
 			},
 			fmt.Sprintf("leave_%s", Running.String()): func(event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
+				if app.queue != nil {
+					app.queue.runningApps--
+				}
 				metrics.GetQueueMetrics(app.queuePath).DecQueueApplicationsRunning()
 				metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()
 			},

@@ -277,9 +277,9 @@ func getPartitionJSON(partition *scheduler.PartitionContext) *dao.PartitionDAOIn
 func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 	allocations := app.GetAllAllocations()
 	allocationInfos := make([]dao.AllocationDAOInfo, 0, len(allocations))
-	placeholderInfos := make([]dao.PlaceholderDAOInfo, 0, len(app.PlaceholderDatas))
-	// Used to confirm whether the taskGroupName is duplicated
-	taskGroupNames := map[string]bool{}
+	placeholders := app.GetAllPlaceholderDatas()
+	placeholderInfos := make([]dao.PlaceholderDAOInfo, 0, len(placeholders))
+
 	for _, alloc := range allocations {
 		allocInfo := dao.AllocationDAOInfo{
 			AllocationKey:    alloc.AllocationKey,
@@ -293,34 +293,31 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 			Partition:        alloc.PartitionName,
 		}
 		allocationInfos = append(allocationInfos, allocInfo)
-		if alloc.IsPlaceholder() {
-			taskGroupName := alloc.GetTaskGroup()
-			if _, ok := taskGroupNames[taskGroupName]; !ok {
-				taskGroupNames[taskGroupName] = true
-				placeholderInfo := dao.PlaceholderDAOInfo{
-					TaskGroupName: taskGroupName,
-					Count:         app.PlaceholderDatas[taskGroupName].Count,
-					MinResource:   app.PlaceholderDatas[taskGroupName].MinResource,
-					RequiredNode:  app.PlaceholderDatas[taskGroupName].RequiredNode,
-					Replaced:      app.PlaceholderDatas[taskGroupName].Replaced,
-				}
-				placeholderInfos = append(placeholderInfos, placeholderInfo)
-			}
+	}
+
+	for _, taskGroup := range placeholders {
+		placeholderInfo := dao.PlaceholderDAOInfo{
+			TaskGroupName: taskGroup.TaskGroupName,
+			Count:         taskGroup.Count,
+			MinResource:   taskGroup.MinResource.DAOString(),
+			RequiredNode:  taskGroup.RequiredNode,
+			Replaced:      taskGroup.Replaced,
 		}
+		placeholderInfos = append(placeholderInfos, placeholderInfo)
 	}
 
 	return &dao.ApplicationDAOInfo{
-		ApplicationID:   app.ApplicationID,
-		UsedResource:    app.GetAllocatedResource().DAOString(),
-		MaxUsedResource: app.GetMaxAllocatedResource().DAOString(),
-		Partition:       common.GetPartitionNameWithoutClusterID(app.Partition),
-		QueueName:       app.QueuePath,
-		SubmissionTime:  app.SubmissionTime.UnixNano(),
-		FinishedTime:    common.ZeroTimeInUnixNano(app.FinishedTime()),
-		Allocations:     allocationInfos,
-		State:           app.CurrentState(),
-		User:            app.GetUser().User,
-		RejectedMessage: app.GetRejectedMessage(),
+		ApplicationID:    app.ApplicationID,
+		UsedResource:     app.GetAllocatedResource().DAOString(),
+		MaxUsedResource:  app.GetMaxAllocatedResource().DAOString(),
+		Partition:        common.GetPartitionNameWithoutClusterID(app.Partition),
+		QueueName:        app.QueuePath,
+		SubmissionTime:   app.SubmissionTime.UnixNano(),
+		FinishedTime:     common.ZeroTimeInUnixNano(app.FinishedTime()),
+		Allocations:      allocationInfos,
+		State:            app.CurrentState(),
+		User:             app.GetUser().User,
+		RejectedMessage:  app.GetRejectedMessage(),
 		PlaceholderDatas: placeholderInfos,
 	}
 }

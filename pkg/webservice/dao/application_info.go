@@ -18,8 +18,6 @@
 
 package dao
 
-import "github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-
 type ApplicationsDAOInfo struct {
 	Applications []ApplicationDAOInfo `json:"applications"`
 }
@@ -52,9 +50,9 @@ type AllocationDAOInfo struct {
 }
 
 type PlaceholderDAOInfo struct {
-	TaskGroupName string              `json:"taskGroupName"`
-	Count         int64               `json:"count"`
-	MinResource   *resources.Resource `json:"minResource"`
-	RequiredNode  string              `json:"requiredNode"`
-	Replaced      int64               `json:"replaced"`
+	TaskGroupName string `json:"taskGroupName"`
+	Count         int64  `json:"count"`
+	MinResource   string `json:"minResource"`
+	RequiredNode  string `json:"requiredNode"`
+	Replaced      int64  `json:"replaced"`
 }

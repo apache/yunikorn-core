@@ -663,29 +663,28 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	askID := "ask-1"
 	tgName := "TG1"
 	ask := newAllocationAskTG(askID, appID1, tgName, res, 1)
+	ask.requiredNode = "node-1"
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been added to app")
 	// app with ask, even for placeholder, should be accepted
 	assert.Assert(t, app.IsAccepted(), "application did not change to accepted state: %s", app.CurrentState())
-	// save placeholder data
-	app.SetPlaceholderData(tgName, res, "node-1")
-	assert.Assert(t, len(app.PlaceholderDatas) == 1, "PlaceholderDatas should have 1 taskGroup information")
-	assert.Equal(t, app.PlaceholderDatas[tgName].TaskGroupName, "TG1")
-	assert.Equal(t, app.PlaceholderDatas[tgName].Count, int64(1))
-	assert.Equal(t, app.PlaceholderDatas[tgName].MinResource, res)
-	assert.Equal(t, app.PlaceholderDatas[tgName].RequiredNode, "node-1")
-	assert.Equal(t, app.PlaceholderDatas[tgName].Replaced, int64(0))
+	// check placeholder data
+	assert.Assert(t, len(app.placeholderDatas) == 1, "PlaceholderDatas should have 1 taskGroup information")
+	assert.Equal(t, app.placeholderDatas[tgName].TaskGroupName, "TG1")
+	assert.Equal(t, app.placeholderDatas[tgName].Count, int64(1))
+	assert.Assert(t, resources.Equals(app.placeholderDatas[tgName].MinResource, res))
+	assert.Equal(t, app.placeholderDatas[tgName].RequiredNode, "node-1")
+	assert.Equal(t, app.placeholderDatas[tgName].Replaced, int64(0))
 	// add second placeholder
 	ask2 := newAllocationAskTG(askID, appID1, tgName, res, 1)
 	err = app.AddAllocationAsk(ask2)
 	assert.NilError(t, err, "ask should have been added to app")
-	app.SetPlaceholderData(tgName, res, "node-1")
-	assert.Assert(t, len(app.PlaceholderDatas) == 1, "PlaceholderDatas should have 1 taskGroup information")
-	assert.Equal(t, app.PlaceholderDatas[tgName].TaskGroupName, "TG1")
-	assert.Equal(t, app.PlaceholderDatas[tgName].Count, int64(2))
-	assert.Equal(t, app.PlaceholderDatas[tgName].MinResource, res)
-	assert.Equal(t, app.PlaceholderDatas[tgName].RequiredNode, "node-1")
-	assert.Equal(t, app.PlaceholderDatas[tgName].Replaced, int64(0))
+	assert.Assert(t, len(app.placeholderDatas) == 1, "PlaceholderDatas should have 1 taskGroup information")
+	assert.Equal(t, app.placeholderDatas[tgName].TaskGroupName, "TG1")
+	assert.Equal(t, app.placeholderDatas[tgName].Count, int64(2))
+	assert.Assert(t, resources.Equals(app.placeholderDatas[tgName].MinResource, res))
+	assert.Equal(t, app.placeholderDatas[tgName].RequiredNode, "node-1")
+	assert.Equal(t, app.placeholderDatas[tgName].Replaced, int64(0))
 
 	// removing the ask should move it to waiting
 	released := app.RemoveAllocationAsk(askID)

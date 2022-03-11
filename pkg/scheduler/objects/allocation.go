@@ -159,6 +159,6 @@ func (a *Allocation) IsReleased() bool {
 }
 
 // getTaskGroup returns the task group name if set.
-func (a *Allocation) GetTaskGroup() string {
+func (a *Allocation) getTaskGroup() string {
 	return a.taskGroupName
 }

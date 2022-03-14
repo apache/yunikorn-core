@@ -938,7 +938,7 @@ func TestRejected(t *testing.T) {
 		terminatedTimeout = 3 * 24 * time.Hour
 	}()
 	app := newApplication(appID1, "default", "root.a")
-	rejectedMessage := fmt.Sprintf("Failed to place application %s: application rejected: no placment rule matched", app.ApplicationID)
+	rejectedMessage := fmt.Sprintf("Failed to place application %s: application rejected: no placement rule matched", app.ApplicationID)
 	err := app.HandleApplicationEventWithInfo(RejectApplication, rejectedMessage)
 	assert.NilError(t, err, "no error expected new to rejected")
 

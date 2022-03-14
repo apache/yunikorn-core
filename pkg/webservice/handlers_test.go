@@ -446,7 +446,7 @@ func TestQueryParamInAppsHandler(t *testing.T) {
 
 	// add a rejected app
 	rejectedApp := newApplication("app-1", partitionName, "root.default", rmID, security.UserGroup{User: "abc"})
-	rejectedMessage := fmt.Sprintf("Failed to place application %s: application rejected: no placment rule matched", rejectedApp.ApplicationID)
+	rejectedMessage := fmt.Sprintf("Failed to place application %s: application rejected: no placement rule matched", rejectedApp.ApplicationID)
 	part.AddRejectedApplication(rejectedApp, rejectedMessage)
 
 	NewWebApp(schedulerContext, nil)

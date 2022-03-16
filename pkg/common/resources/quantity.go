@@ -23,21 +23,19 @@ import (
 	"math/big"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 // This code handles parsing of SI units in quantities:
-// <quantity>     ::= <signedNumber><suffix>
-// <signedNumber> ::= <digits> | <sign><digits>
-// <sign>         ::= "+" | "-"
+// <quantity>     ::= <digits><suffix>
 // <digit>        ::= 0 | 1 | ... | 9
 // <digits>       ::= <digit> | <digit><digits>
 // <suffix>       ::= <binarySI> | <decimalSI>
 // <binarySI>     ::= Ki | Mi | Gi | Ti | Pi | Ei
-// <decimalSI>    ::= "" | k | K | M | G | T | P | E
-// Additionally, ParseVCore supports decimalSI of 'm' to indicate millicore.
+// <decimalSI>    ::= "" | k | M | G | T | P | E
+// Additionally, ParseVCore supports decimalSI of 'm' to indicate millicores.
 
-var whitespace = regexp.MustCompile(`\s+`)
-var legal = regexp.MustCompile(`^(?P<Number>[+-]?[0-9]+)(?P<Suffix>[A-Za-z]*)$`)
+var legal = regexp.MustCompile(`^(?P<Number>[0-9]+)\s*(?P<Suffix>([mkKMGTPE]i?)?)$`)
 
 var multipliers = map[string]int64{
 	"":   1,
@@ -69,10 +67,10 @@ func ParseVCore(value string) (Quantity, error) {
 }
 
 func parse(value string, milli bool) (Quantity, error) {
-	value = whitespace.ReplaceAllLiteralString(value, "")
+	value = strings.TrimSpace(value)
 
 	parts := legal.FindStringSubmatch(value)
-	if parts == nil || len(parts) != 3 {
+	if len(parts) == 0 {
 		return 0, errors.New("invalid quantity")
 	}
 	number := parts[1]

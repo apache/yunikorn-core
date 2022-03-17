@@ -1299,3 +1299,37 @@ func (sq *Queue) String() string {
 	return fmt.Sprintf("{QueuePath: %s, State: %s, StateTime: %x, MaxResource: %s}",
 		sq.QueuePath, sq.stateMachine.Current(), sq.stateTime, sq.maxResource)
 }
+
+func (sq *Queue) incRunningApps() {
+	sq.Lock()
+	defer sq.Unlock()
+	sq.runningApps++
+	if sq.parent != nil {
+		sq.parent.incRunningApps()
+	}
+}
+
+func (sq *Queue) decRunningApps() {
+	sq.Lock()
+	defer sq.Unlock()
+	sq.runningApps--
+	if sq.parent != nil {
+		sq.parent.decRunningApps()
+	}
+}
+
+func (sq *Queue) canRun() bool {
+	sq.RLock()
+	defer sq.RUnlock()
+
+	if sq.maxRunningApps == 0 {
+		return true
+	}
+
+	ok := sq.runningApps < sq.maxRunningApps
+	if sq.parent != nil {
+		return ok && sq.parent.canRun()
+	} else {
+		return ok
+	}
+}

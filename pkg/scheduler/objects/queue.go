@@ -1325,11 +1325,9 @@ func (sq *Queue) canRun() bool {
 	if sq.maxRunningApps == 0 {
 		return true
 	}
-
 	ok := sq.runningApps < sq.maxRunningApps
 	if sq.parent != nil {
 		return ok && sq.parent.canRun()
-	} else {
-		return ok
 	}
+	return ok
 }

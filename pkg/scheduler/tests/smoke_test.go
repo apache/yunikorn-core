@@ -991,9 +991,8 @@ partitions:
 	err = ms.proxy.UpdateNode(&si.NodeRequest{
 		Nodes: []*si.NodeInfo{
 			{
-				NodeID:     node1ID,
-				Action:     si.NodeInfo_DRAIN_NODE,
-				Attributes: make(map[string]string),
+				NodeID: node1ID,
+				Action: si.NodeInfo_DRAIN_NODE,
 			},
 		},
 		RmID: "rm:123",
@@ -1012,9 +1011,8 @@ partitions:
 	err = ms.proxy.UpdateNode(&si.NodeRequest{
 		Nodes: []*si.NodeInfo{
 			{
-				NodeID:     node1ID,
-				Action:     si.NodeInfo_DRAIN_TO_SCHEDULABLE,
-				Attributes: make(map[string]string),
+				NodeID: node1ID,
+				Action: si.NodeInfo_DRAIN_TO_SCHEDULABLE,
 			},
 		},
 		RmID: "rm:123",
@@ -1033,9 +1031,8 @@ partitions:
 	err = ms.proxy.UpdateNode(&si.NodeRequest{
 		Nodes: []*si.NodeInfo{
 			{
-				NodeID:     node2ID,
-				Action:     si.NodeInfo_DECOMISSION,
-				Attributes: make(map[string]string),
+				NodeID: node2ID,
+				Action: si.NodeInfo_DECOMISSION,
 			},
 		},
 		RmID: "rm:123",

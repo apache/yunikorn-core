@@ -42,6 +42,35 @@ func TestNewResourceFromConf(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, original)
 	}
 
+	// normal multipliers
+	original, err = NewResourceFromConf(map[string]string{"memory": "10M"})
+	if err != nil || len(original.Resources) != 1 {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, original)
+	}
+	assert.Equal(t, "map[memory:10000000]", original.String(), "wrong memory value")
+	original, err = NewResourceFromConf(map[string]string{"memory": "10Mi"})
+	if err != nil || len(original.Resources) != 1 {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, original)
+	}
+	assert.Equal(t, "map[memory:10485760]", original.String(), "wrong memory value")
+
+	// vcore multipliers
+	original, err = NewResourceFromConf(map[string]string{"vcore": "10k"})
+	if err != nil || len(original.Resources) != 1 {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, original)
+	}
+	assert.Equal(t, "map[vcore:10000000]", original.String(), "wrong vcore value")
+	original, err = NewResourceFromConf(map[string]string{"vcore": "10"})
+	if err != nil || len(original.Resources) != 1 {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, original)
+	}
+	assert.Equal(t, "map[vcore:10000]", original.String(), "wrong vcore value")
+	original, err = NewResourceFromConf(map[string]string{"vcore": "10m"})
+	if err != nil || len(original.Resources) != 1 {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, original)
+	}
+	assert.Equal(t, "map[vcore:10]", original.String(), "wrong vcore value")
+
 	// failure case: parse error
 	original, err = NewResourceFromConf(map[string]string{"fail": "xx"})
 	if err == nil || original != nil {
@@ -49,6 +78,11 @@ func TestNewResourceFromConf(t *testing.T) {
 	}
 	// negative resource
 	original, err = NewResourceFromConf(map[string]string{"memory": "-15"})
+	if err == nil || original != nil {
+		t.Fatalf("new resource create should have returned error %v, res %v", err, original)
+	}
+	// 'milli' used for anything other than vcore
+	original, err = NewResourceFromConf(map[string]string{"memory": "10m"})
 	if err == nil || original != nil {
 		t.Fatalf("new resource create should have returned error %v, res %v", err, original)
 	}

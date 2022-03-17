@@ -44,10 +44,10 @@ partitions:
           - name: a
             resources:
               guaranteed:
-                memory: 100
+                memory: 100M
                 vcore: 10
               max:
-                memory: 150
+                memory: 150M
                 vcore: 20
 `
 	// Start all tests
@@ -67,7 +67,7 @@ partitions:
 
 	// Check scheduling queue a
 	queueA := part.GetQueue("root.a")
-	assert.Assert(t, 150 == queueA.GetMaxResource().Resources[resources.MEMORY])
+	assert.Assert(t, 150000000 == queueA.GetMaxResource().Resources[resources.MEMORY])
 
 	// Add one application
 	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
@@ -91,8 +91,8 @@ partitions:
 				AllocationKey: "alloc-1",
 				ResourceAsk: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 10},
-						"vcore":  {Value: 1},
+						"memory": {Value: 10000000},
+						"vcore":  {Value: 1000},
 					},
 				},
 				MaxAllocations: 2,
@@ -104,17 +104,17 @@ partitions:
 
 	assert.NilError(t, err, "AllocationRequest failed")
 
-	waitForPendingQueueResource(t, queueA, 20, 1000)
-	waitForPendingQueueResource(t, rootQ, 20, 1000)
-	waitForPendingAppResource(t, app, 20, 1000)
+	waitForPendingQueueResource(t, queueA, 20000000, 1000)
+	waitForPendingQueueResource(t, rootQ, 20000000, 1000)
+	waitForPendingAppResource(t, app, 20000000, 1000)
 
 	// no nodes available, no allocation can be made
 	ms.scheduler.MultiStepSchedule(5)
 
 	// pending resources should not change
-	waitForPendingQueueResource(t, queueA, 20, 1000)
-	waitForPendingQueueResource(t, rootQ, 20, 1000)
-	waitForPendingAppResource(t, app, 20, 1000)
+	waitForPendingQueueResource(t, queueA, 20000000, 1000)
+	waitForPendingQueueResource(t, rootQ, 20000000, 1000)
+	waitForPendingAppResource(t, app, 20000000, 1000)
 
 	// Register a node
 	err = ms.proxy.UpdateNode(&si.NodeRequest{
@@ -124,8 +124,8 @@ partitions:
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 100},
-						"vcore":  {Value: 20},
+						"memory": {Value: 100000000},
+						"vcore":  {Value: 20000},
 					},
 				},
 				Action: si.NodeInfo_CREATE,
@@ -172,10 +172,10 @@ partitions:
           - name: a
             resources:
               guaranteed:
-                memory: 100
+                memory: 100M
                 vcore: 10
               max:
-                memory: 150
+                memory: 150M
                 vcore: 20
 `
 	// Start all tests
@@ -195,7 +195,7 @@ partitions:
 
 	// Check scheduling queue a
 	queueA := part.GetQueue("root.a")
-	assert.Assert(t, 150 == queueA.GetMaxResource().Resources[resources.MEMORY])
+	assert.Assert(t, 150000000 == queueA.GetMaxResource().Resources[resources.MEMORY])
 
 	// Add one application
 	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
@@ -219,8 +219,8 @@ partitions:
 				AllocationKey: "alloc-1",
 				ResourceAsk: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 10},
-						"vcore":  {Value: 1},
+						"memory": {Value: 10000000},
+						"vcore":  {Value: 1000},
 					},
 				},
 				MaxAllocations: 2,
@@ -232,17 +232,17 @@ partitions:
 
 	assert.NilError(t, err, "AllocationRequest failed")
 
-	waitForPendingQueueResource(t, queueA, 20, 1000)
-	waitForPendingQueueResource(t, rootQ, 20, 1000)
-	waitForPendingAppResource(t, app, 20, 1000)
+	waitForPendingQueueResource(t, queueA, 20000000, 1000)
+	waitForPendingQueueResource(t, rootQ, 20000000, 1000)
+	waitForPendingAppResource(t, app, 20000000, 1000)
 
 	// no nodes available, no allocation can be made
 	ms.scheduler.MultiStepSchedule(5)
 
 	// pending resources should not change
-	waitForPendingQueueResource(t, queueA, 20, 1000)
-	waitForPendingQueueResource(t, rootQ, 20, 1000)
-	waitForPendingAppResource(t, app, 20, 1000)
+	waitForPendingQueueResource(t, queueA, 20000000, 1000)
+	waitForPendingQueueResource(t, rootQ, 20000000, 1000)
+	waitForPendingAppResource(t, app, 20000000, 1000)
 
 	// Register a node
 	err = ms.proxy.UpdateNode(&si.NodeRequest{
@@ -252,8 +252,8 @@ partitions:
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 100},
-						"vcore":  {Value: 20},
+						"memory": {Value: 100000000},
+						"vcore":  {Value: 20000},
 					},
 				},
 				Action: si.NodeInfo_CREATE,
@@ -282,10 +282,10 @@ partitions:
 	waitForPendingQueueResource(t, queueA, 0, 1000)
 	waitForPendingQueueResource(t, rootQ, 0, 1000)
 	waitForPendingAppResource(t, app, 0, 1000)
-	waitForAllocatedQueueResource(t, queueA, 20, 1000)
-	waitForAllocatedAppResource(t, app, 20, 1000)
+	waitForAllocatedQueueResource(t, queueA, 20000000, 1000)
+	waitForAllocatedAppResource(t, app, 20000000, 1000)
 	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
-		[]string{"node-1:1234"}, 20, 1000)
+		[]string{"node-1:1234"}, 20000000, 1000)
 
 	// Make sure we get correct allocations
 	ms.mockRM.waitForAllocations(t, 2, 1000)
@@ -324,7 +324,7 @@ partitions:
           - name: a
             resources:
               max:
-                memory: 150
+                memory: 150M
                 vcore: 20
 `
 	// Start all tests
@@ -346,8 +346,8 @@ partitions:
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 100},
-						"vcore":  {Value: 20},
+						"memory": {Value: 100000000},
+						"vcore":  {Value: 20000},
 					},
 				},
 				Action: si.NodeInfo_CREATE,
@@ -365,10 +365,10 @@ partitions:
 	// verify node capacity
 	assert.Equal(t, len(partitionInfo.GetNodes()), 1)
 	node1 := partitionInfo.GetNode("node-1:1234")
-	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.MEMORY]), int64(100))
+	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.MEMORY]), int64(100000000))
 	schedulingNode1 := ms.scheduler.GetClusterContext().GetNode("node-1:1234", "[rm:123]default")
 	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[resources.MEMORY]), int64(0))
-	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[resources.MEMORY]), int64(100))
+	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[resources.MEMORY]), int64(100000000))
 
 	// update node capacity with more mem and less vcores
 	err = ms.proxy.UpdateNode(&si.NodeRequest{
@@ -378,8 +378,8 @@ partitions:
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 300},
-						"vcore":  {Value: 10},
+						"memory": {Value: 300000000},
+						"vcore":  {Value: 10000},
 					},
 				},
 				Action: si.NodeInfo_UPDATE,
@@ -389,12 +389,12 @@ partitions:
 	})
 
 	assert.NilError(t, err, "NodeRequest failed")
-	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default", []string{"node-1:1234"}, 300, 1000)
-	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.MEMORY]), int64(300))
-	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.VCORE]), int64(10))
+	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default", []string{"node-1:1234"}, 300000000, 1000)
+	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.MEMORY]), int64(300000000))
+	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.VCORE]), int64(10000))
 	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[resources.MEMORY]), int64(0))
-	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[resources.MEMORY]), int64(300))
-	newRes, err := resources.NewResourceFromConf(map[string]string{"memory": "300", "vcore": "10"})
+	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[resources.MEMORY]), int64(300000000))
+	newRes, err := resources.NewResourceFromConf(map[string]string{"memory": "300M", "vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
 	if !resources.Equals(newRes, partitionInfo.GetTotalPartitionResource()) {
 		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetTotalPartitionResource())
@@ -411,8 +411,8 @@ partitions:
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 100},
-						"vcore":  {Value: 20},
+						"memory": {Value: 100000000},
+						"vcore":  {Value: 20000},
 					},
 				},
 				Action: si.NodeInfo_UPDATE,
@@ -421,8 +421,8 @@ partitions:
 		RmID: "rm:123",
 	})
 	assert.NilError(t, err, "NodeRequest failed")
-	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default", []string{"node-1:1234"}, 100, 1000)
-	newRes, err = resources.NewResourceFromConf(map[string]string{"memory": "100", "vcore": "20"})
+	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default", []string{"node-1:1234"}, 100000000, 1000)
+	newRes, err = resources.NewResourceFromConf(map[string]string{"memory": "100M", "vcore": "20"})
 	assert.NilError(t, err, "failed to create resource")
 	if !resources.Equals(newRes, partitionInfo.GetTotalPartitionResource()) {
 		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetTotalPartitionResource())
@@ -464,8 +464,8 @@ partitions:
 					Attributes: map[string]string{},
 					SchedulableResource: &si.Resource{
 						Resources: map[string]*si.Quantity{
-							"memory": {Value: 100},
-							"vcore":  {Value: 20},
+							"memory": {Value: 100000000},
+							"vcore":  {Value: 20000},
 						},
 					},
 					Action: si.NodeInfo_CREATE,
@@ -489,8 +489,8 @@ partitions:
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 50},
-						"vcore":  {Value: 10},
+						"memory": {Value: 50000000},
+						"vcore":  {Value: 10000},
 					},
 				},
 				Action: si.NodeInfo_UPDATE,
@@ -500,9 +500,9 @@ partitions:
 	})
 	assert.NilError(t, err, "NodeRequest failed")
 	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
-		[]string{"node-2:1234"}, 50, 1000)
+		[]string{"node-2:1234"}, 50000000, 1000)
 
-	newRes, err := resources.NewResourceFromConf(map[string]string{"memory": "150", "vcore": "30"})
+	newRes, err := resources.NewResourceFromConf(map[string]string{"memory": "150M", "vcore": "30"})
 	assert.NilError(t, err, "failed to create resource")
 	if !resources.Equals(newRes, partitionInfo.GetTotalPartitionResource()) {
 		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetTotalPartitionResource())
@@ -520,8 +520,8 @@ partitions:
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 50},
-						"vcore":  {Value: 10},
+						"memory": {Value: 50000000},
+						"vcore":  {Value: 10000},
 					},
 				},
 				Action: si.NodeInfo_UPDATE,
@@ -533,9 +533,9 @@ partitions:
 	assert.NilError(t, err, "NodeRequest failed")
 
 	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
-		[]string{"node-2:1234"}, 50, 1000)
+		[]string{"node-2:1234"}, 50000000, 1000)
 
-	newRes, err = resources.NewResourceFromConf(map[string]string{"memory": "150", "vcore": "30"})
+	newRes, err = resources.NewResourceFromConf(map[string]string{"memory": "150M", "vcore": "30"})
 	assert.NilError(t, err, "failed to create resource")
 	if !resources.Equals(newRes, partitionInfo.GetTotalPartitionResource()) {
 		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetTotalPartitionResource())

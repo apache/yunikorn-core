@@ -83,18 +83,24 @@ func NewResourceFromString(str string) (*Resource, error) {
 
 // Create a new resource from the config map.
 // The config map must have been checked before being applied. The check here is just for safety so we do not crash.
-// TODO support size modifiers
 func NewResourceFromConf(configMap map[string]string) (*Resource, error) {
 	res := NewResource()
 	for key, strVal := range configMap {
-		intValue, err := strconv.ParseInt(strVal, 10, 64)
+		var intValue Quantity
+		var err error
+		switch key {
+		case VCORE:
+			intValue, err = ParseVCore(strVal)
+		default:
+			intValue, err = ParseQuantity(strVal)
+		}
 		if err != nil {
 			return nil, err
 		}
 		if intValue < 0 {
 			return nil, fmt.Errorf("negative resources not permitted: %v", configMap)
 		}
-		res.Resources[key] = Quantity(intValue)
+		res.Resources[key] = intValue
 	}
 	return res, nil
 }

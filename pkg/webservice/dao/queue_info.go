@@ -51,4 +51,5 @@ type PartitionQueueDAOInfo struct {
 	Parent             string                  `json:"parent"`
 	TemplateInfo       *TemplateInfo           `json:"template"`
 	Children           []PartitionQueueDAOInfo `json:"children"`
+	AbsUsedCapacity    string                  `json:"absUsedCapacity"`
 }

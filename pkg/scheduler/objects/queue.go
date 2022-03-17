@@ -457,6 +457,8 @@ func (sq *Queue) GetPartitionQueueDAOInfo() dao.PartitionQueueDAOInfo {
 	queueInfo.IsLeaf = sq.isLeaf
 	queueInfo.IsManaged = sq.isManaged
 	queueInfo.TemplateInfo = sq.template.GetTemplateInfo()
+	queueInfo.AbsUsedCapacity = resources.CalculateAbsUsedCapacity(
+		sq.maxResource, sq.allocatedResource).DAOString()
 	queueInfo.Properties = make(map[string]string)
 	for k, v := range sq.properties {
 		queueInfo.Properties[k] = v

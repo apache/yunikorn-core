@@ -1380,7 +1380,7 @@ func TestCleanupRejectedApps(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
 	rejectedApp := newApplication("new", "default", defQueue)
-	rejectedMessage := fmt.Sprintf("Failed to place application %s: application rejected: no placment rule matched", rejectedApp.ApplicationID)
+	rejectedMessage := fmt.Sprintf("Failed to place application %s: application rejected: no placement rule matched", rejectedApp.ApplicationID)
 
 	partition.AddRejectedApplication(rejectedApp, rejectedMessage)
 	cloneRejectedApp := partition.getRejectedApplication(rejectedApp.ApplicationID)

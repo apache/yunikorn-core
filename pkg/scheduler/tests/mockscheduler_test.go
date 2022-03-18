@@ -95,9 +95,8 @@ func (m *mockScheduler) removeNode(nodeID string) error {
 	return m.proxy.UpdateNode(&si.NodeRequest{
 		Nodes: []*si.NodeInfo{
 			{
-				NodeID:     nodeID,
-				Action:     si.NodeInfo_DECOMISSION,
-				Attributes: map[string]string{},
+				NodeID: nodeID,
+				Action: si.NodeInfo_DECOMISSION,
 			},
 		},
 		RmID: m.rmID,

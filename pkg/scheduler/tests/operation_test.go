@@ -294,9 +294,8 @@ partitions:
 	err = ms.proxy.UpdateNode(&si.NodeRequest{
 		Nodes: []*si.NodeInfo{
 			{
-				NodeID:     "node-1:1234",
-				Action:     si.NodeInfo_DECOMISSION,
-				Attributes: map[string]string{},
+				NodeID: "node-1:1234",
+				Action: si.NodeInfo_DECOMISSION,
 			},
 		},
 		RmID: "rm:123",

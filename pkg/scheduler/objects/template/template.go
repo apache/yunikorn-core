@@ -116,7 +116,7 @@ func (t *Template) GetTemplateInfo() *dao.TemplateInfo {
 	}
 	return &dao.TemplateInfo{
 		Properties:         t.GetProperties(),
-		MaxResource:        t.maxResource.DAOString(),
-		GuaranteedResource: t.guaranteedResource.DAOString(),
+		MaxResource:        t.maxResource.DAOMap(),
+		GuaranteedResource: t.guaranteedResource.DAOMap(),
 	}
 }

@@ -463,7 +463,7 @@ func TestQueryParamInAppsHandler(t *testing.T) {
 	assert.Equal(t, len(appsDao), 2)
 	assert.Equal(t, appsDao[0].User, "abc")
 	assert.Assert(t, appsDao[0].FinishedTime == nil)
-	assert.Equal(t, appsDao[0].MaxUsedResource, "[vcore:1]")
+	assert.DeepEqual(t, appsDao[0].MaxUsedResource, map[string]int64{"vcore": 1})
 
 	assert.Equal(t, appsDao[1].RejectedMessage, rejectedMessage)
 	assert.Assert(t, appsDao[1].FinishedTime != nil)
@@ -923,9 +923,9 @@ func TestPartitions(t *testing.T) {
 	assert.Equal(t, cs["default"].Applications[objects.Rejected.String()], 1)
 	assert.Equal(t, cs["default"].Applications[objects.Completed.String()], 1)
 	assert.Equal(t, cs["default"].Applications[objects.Failed.String()], 1)
-	assert.Equal(t, cs["default"].Capacity.Capacity, "[memory:1000 vcore:1000]")
-	assert.Equal(t, cs["default"].Capacity.UsedCapacity, "[memory:300 vcore:700]")
-	assert.Equal(t, cs["default"].Capacity.Utilization, "[memory:30 vcore:70]")
+	assert.DeepEqual(t, cs["default"].Capacity.Capacity, map[string]int64{"memory": 1000, "vcore": 1000})
+	assert.DeepEqual(t, cs["default"].Capacity.UsedCapacity, map[string]int64{"memory": 300, "vcore": 700})
+	assert.DeepEqual(t, cs["default"].Capacity.Utilization, map[string]int64{"memory": 30, "vcore": 70})
 	assert.Equal(t, cs["default"].State, "Active")
 
 	assert.Assert(t, cs["gpu"] != nil)
@@ -1057,13 +1057,13 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	maxResourcesConf["memory"] = "600000"
 	maxResource, err := resources.NewResourceFromConf(maxResourcesConf)
 	assert.NilError(t, err)
-	assert.Equal(t, partitionQueuesDao.TemplateInfo.MaxResource, maxResource.DAOString())
+	assert.DeepEqual(t, partitionQueuesDao.TemplateInfo.MaxResource, maxResource.DAOMap())
 
 	guaranteedResourcesConf := make(map[string]string)
 	guaranteedResourcesConf["memory"] = "400000"
 	guaranteedResources, err := resources.NewResourceFromConf(guaranteedResourcesConf)
 	assert.NilError(t, err)
-	assert.Equal(t, partitionQueuesDao.TemplateInfo.GuaranteedResource, guaranteedResources.DAOString())
+	assert.DeepEqual(t, partitionQueuesDao.TemplateInfo.GuaranteedResource, guaranteedResources.DAOMap())
 
 	// Partition not sent as part of request
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
@@ -1226,12 +1226,12 @@ func TestGetPartitionNodes(t *testing.T) {
 			assert.Equal(t, node.NodeID, node1ID)
 			assert.Equal(t, "alloc-1", node.Allocations[0].AllocationKey)
 			assert.Equal(t, "alloc-1-uuid", node.Allocations[0].UUID)
-			assert.Equal(t, "[memory:50 vcore:30]", node.Utilized)
+			assert.DeepEqual(t, map[string]int64{"memory": 50, "vcore": 30}, node.Utilized)
 		} else {
 			assert.Equal(t, node.NodeID, node2ID)
 			assert.Equal(t, "alloc-2", node.Allocations[0].AllocationKey)
 			assert.Equal(t, "alloc-2-uuid", node.Allocations[0].UUID)
-			assert.Equal(t, "[memory:30 vcore:50]", node.Utilized)
+			assert.DeepEqual(t, map[string]int64{"memory": 30, "vcore": 50}, node.Utilized)
 		}
 	}
 

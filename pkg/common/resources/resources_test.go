@@ -1572,37 +1572,39 @@ func TestNewResourceFromString(t *testing.T) {
 	}
 }
 
-func TestDAOStringNil(t *testing.T) {
+func TestDAOMapNil(t *testing.T) {
 	// make sure we're nil safe IDE will complain about the non nil check
 	defer func() {
 		if r := recover(); r != nil {
-			t.Fatal("panic on nil resource in daostring test")
+			t.Fatal("panic on nil resource in daomap test")
 		}
 	}()
 	var empty *Resource
-	assert.Equal(t, empty.DAOString(), "[]", "expected empty brackets on nil")
+	assert.DeepEqual(t, empty.DAOMap(), map[string]int64{})
 }
 
-func TestDAOString(t *testing.T) {
+func TestDAOMap(t *testing.T) {
 	tests := map[string]struct {
-		dao string
+		dao map[string]int64
 		res *Resource
 	}{
 		"empty resource": {
-			dao: "[]",
+			dao: map[string]int64{},
 			res: NewResource(),
 		},
 		"single value": {
-			dao: "[first:1]",
+			dao: map[string]int64{"first": 1},
 			res: NewResourceFromMap(map[string]Quantity{"first": 1}),
 		},
 		"two values": {
-			dao: "[first:10 second:-10]",
+			dao: map[string]int64{"first": 10, "second": -10},
 			res: NewResourceFromMap(map[string]Quantity{"first": 10, "second": -10}),
 		},
 	}
 	for name, test := range tests {
-		assert.Equal(t, test.res.DAOString(), test.dao, "unexpected dao string for %s", name)
+		t.Run(name, func(t *testing.T) {
+			assert.DeepEqual(t, test.res.DAOMap(), test.dao)
+		})
 	}
 }
 

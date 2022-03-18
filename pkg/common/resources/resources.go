@@ -112,11 +112,14 @@ func (r *Resource) String() string {
 	return fmt.Sprintf("%v", r.Resources)
 }
 
-func (r *Resource) DAOString() string {
+func (r *Resource) DAOMap() map[string]int64 {
+	res := make(map[string]int64)
 	if r != nil {
-		return strings.Trim(r.String(), "map")
+		for k, v := range r.Resources {
+			res[k] = int64(v)
+		}
 	}
-	return "[]"
+	return res
 }
 
 // Convert to a protobuf implementation

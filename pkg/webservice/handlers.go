@@ -265,9 +265,12 @@ func getPartitionJSON(partition *scheduler.PartitionContext) *dao.PartitionDAOIn
 	queueDAOInfo := partition.GetQueueInfos()
 
 	partitionInfo.PartitionName = common.GetPartitionNameWithoutClusterID(partition.Name)
+	capacity := partition.GetTotalPartitionResource()
+	usedCapacity := partition.GetAllocatedResource()
 	partitionInfo.Capacity = dao.PartitionCapacity{
-		Capacity:     partition.GetTotalPartitionResource().DAOString(),
-		UsedCapacity: partition.GetAllocatedResource().DAOString(),
+		Capacity:     capacity.DAOMap(),
+		UsedCapacity: usedCapacity.DAOMap(),
+		Utilization:  resources.CalculateAbsUsedCapacity(capacity, usedCapacity).DAOMap(),
 	}
 	partitionInfo.Queues = queueDAOInfo
 
@@ -282,7 +285,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 			AllocationKey:    alloc.AllocationKey,
 			AllocationTags:   alloc.Tags,
 			UUID:             alloc.UUID,
-			ResourcePerAlloc: alloc.AllocatedResource.DAOString(),
+			ResourcePerAlloc: alloc.AllocatedResource.DAOMap(),
 			Priority:         strconv.Itoa(int(alloc.Priority)),
 			QueueName:        alloc.QueueName,
 			NodeID:           alloc.NodeID,
@@ -294,8 +297,8 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 
 	return &dao.ApplicationDAOInfo{
 		ApplicationID:   app.ApplicationID,
-		UsedResource:    app.GetAllocatedResource().DAOString(),
-		MaxUsedResource: app.GetMaxAllocatedResource().DAOString(),
+		UsedResource:    app.GetAllocatedResource().DAOMap(),
+		MaxUsedResource: app.GetMaxAllocatedResource().DAOMap(),
 		Partition:       common.GetPartitionNameWithoutClusterID(app.Partition),
 		QueueName:       app.QueuePath,
 		SubmissionTime:  app.SubmissionTime.UnixNano(),
@@ -315,7 +318,7 @@ func getNodeJSON(node *objects.Node) *dao.NodeDAOInfo {
 			AllocationKey:    alloc.AllocationKey,
 			AllocationTags:   alloc.Tags,
 			UUID:             alloc.UUID,
-			ResourcePerAlloc: alloc.AllocatedResource.DAOString(),
+			ResourcePerAlloc: alloc.AllocatedResource.DAOMap(),
 			Priority:         strconv.Itoa(int(alloc.Priority)),
 			QueueName:        alloc.QueueName,
 			NodeID:           alloc.NodeID,
@@ -329,11 +332,11 @@ func getNodeJSON(node *objects.Node) *dao.NodeDAOInfo {
 		NodeID:      node.NodeID,
 		HostName:    node.Hostname,
 		RackName:    node.Rackname,
-		Capacity:    node.GetCapacity().DAOString(),
-		Occupied:    node.GetOccupiedResource().DAOString(),
-		Allocated:   node.GetAllocatedResource().DAOString(),
-		Available:   node.GetAvailableResource().DAOString(),
-		Utilized:    node.GetUtilizedResource().DAOString(),
+		Capacity:    node.GetCapacity().DAOMap(),
+		Occupied:    node.GetOccupiedResource().DAOMap(),
+		Allocated:   node.GetAllocatedResource().DAOMap(),
+		Available:   node.GetAvailableResource().DAOMap(),
+		Utilized:    node.GetUtilizedResource().DAOMap(),
 		Allocations: allocations,
 		Schedulable: node.IsSchedulable(),
 	}
@@ -695,9 +698,9 @@ func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.Pa
 		capacityInfo := dao.PartitionCapacity{}
 		capacity := partitionContext.GetTotalPartitionResource()
 		usedCapacity := partitionContext.GetAllocatedResource()
-		capacityInfo.Capacity = capacity.DAOString()
-		capacityInfo.UsedCapacity = usedCapacity.DAOString()
-		capacityInfo.Utilization = resources.CalculateAbsUsedCapacity(capacity, usedCapacity).DAOString()
+		capacityInfo.Capacity = capacity.DAOMap()
+		capacityInfo.UsedCapacity = usedCapacity.DAOMap()
+		capacityInfo.Utilization = resources.CalculateAbsUsedCapacity(capacity, usedCapacity).DAOMap()
 		partitionInfo.Capacity = capacityInfo
 		partitionInfo.NodeSortingPolicy = dao.NodeSortingPolicy{
 			Type:            partitionContext.GetNodeSortingPolicyType().String(),

@@ -270,17 +270,17 @@ func TestContext_AddRMBuildInformation(t *testing.T) {
 	buildInfoMap2["buildVersion"] = "latest"
 	buildInfoMap2["isPluginVersion"] = "true"
 
-	context.SetRMInfos(rmID1, buildInfoMap1)
-	assert.Equal(t, 1, len(context.rmInfos))
+	context.SetRMInfo(rmID1, buildInfoMap1)
+	assert.Equal(t, 1, len(context.rmInfo))
 	buildInfoMap1["rmId"] = rmID1
-	assert.DeepEqual(t, context.rmInfos[rmID1].RMBuildInformation, buildInfoMap1)
-	assert.Equal(t, context.rmInfos[rmID1].RMBuildInformation["rmId"], rmID1)
+	assert.DeepEqual(t, context.rmInfo[rmID1].RMBuildInformation, buildInfoMap1)
+	assert.Equal(t, context.rmInfo[rmID1].RMBuildInformation["rmId"], rmID1)
 
-	context.SetRMInfos(rmID2, buildInfoMap2)
-	assert.Equal(t, 2, len(context.rmInfos))
+	context.SetRMInfo(rmID2, buildInfoMap2)
+	assert.Equal(t, 2, len(context.rmInfo))
 	buildInfoMap2["rmId"] = rmID2
-	assert.DeepEqual(t, context.rmInfos[rmID2].RMBuildInformation, buildInfoMap2)
-	assert.Equal(t, context.rmInfos[rmID2].RMBuildInformation["rmId"], rmID2)
+	assert.DeepEqual(t, context.rmInfo[rmID2].RMBuildInformation, buildInfoMap2)
+	assert.Equal(t, context.rmInfo[rmID2].RMBuildInformation["rmId"], rmID2)
 
 	// update a value,make sure it is replaced as expected
 	// since we store the pointer and not a copy we need to create a new object to replace the old one
@@ -288,11 +288,11 @@ func TestContext_AddRMBuildInformation(t *testing.T) {
 	buildInfoMap3["buildDate"] = "2022-01-02T19:04:05-0700"
 	buildInfoMap3["isPluginVersion"] = "true"
 	buildInfoMap3["buildVersion"] = "1.0.0"
-	context.SetRMInfos(rmID2, buildInfoMap3)
-	assert.Equal(t, 2, len(context.rmInfos))
+	context.SetRMInfo(rmID2, buildInfoMap3)
+	assert.Equal(t, 2, len(context.rmInfo))
 	buildInfoMap3["rmId"] = rmID2
-	assert.DeepEqual(t, context.rmInfos[rmID2].RMBuildInformation, buildInfoMap3)
-	assert.Equal(t, context.rmInfos[rmID2].RMBuildInformation["buildVersion"], buildInfoMap3["buildVersion"])
+	assert.DeepEqual(t, context.rmInfo[rmID2].RMBuildInformation, buildInfoMap3)
+	assert.Equal(t, context.rmInfo[rmID2].RMBuildInformation["buildVersion"], buildInfoMap3["buildVersion"])
 }
 
 func TestContext_ProcessNode(t *testing.T) {

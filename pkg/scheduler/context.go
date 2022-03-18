@@ -50,7 +50,7 @@ type ClusterContext struct {
 	needPreemption      bool
 	reservationDisabled bool
 
-	rmInfos   map[string]*RMInformation
+	rmInfo    map[string]*RMInformation
 	startTime time.Time
 
 	sync.RWMutex
@@ -178,7 +178,7 @@ func (cc *ClusterContext) processRMRegistrationEvent(event *rmevent.RMRegistrati
 	configs.ConfigContext.Set(policyGroup, conf)
 
 	// store the build information of RM
-	cc.SetRMInfos(rmID, event.Registration.BuildInfo)
+	cc.SetRMInfo(rmID, event.Registration.BuildInfo)
 
 	// Done, notify channel
 	event.Channel <- &rmevent.Result{
@@ -400,7 +400,7 @@ func (cc *ClusterContext) GetRMInfoMapClone() map[string]*RMInformation {
 	defer cc.RUnlock()
 
 	newMap := make(map[string]*RMInformation)
-	for k, v := range cc.rmInfos {
+	for k, v := range cc.rmInfo {
 		newMap[k] = v
 	}
 	return newMap
@@ -905,16 +905,16 @@ func (cc *ClusterContext) GetNode(nodeID, partitionName string) *objects.Node {
 	return partition.GetNode(nodeID)
 }
 
-func (cc *ClusterContext) SetRMInfos(rmID string, rmBuildInformation map[string]string) {
-	if cc.rmInfos == nil {
-		cc.rmInfos = make(map[string]*RMInformation)
+func (cc *ClusterContext) SetRMInfo(rmID string, rmBuildInformation map[string]string) {
+	if cc.rmInfo == nil {
+		cc.rmInfo = make(map[string]*RMInformation)
 	}
 	buildInfo := make(map[string]string)
 	for k, v := range rmBuildInformation {
 		buildInfo[k] = v
 	}
 	buildInfo["rmId"] = rmID
-	cc.rmInfos[rmID] = &RMInformation{
+	cc.rmInfo[rmID] = &RMInformation{
 		RMBuildInformation: buildInfo,
 	}
 }

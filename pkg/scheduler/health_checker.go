@@ -29,12 +29,12 @@ import (
 )
 
 func GetSchedulerHealthStatus(metrics metrics.CoreSchedulerMetrics, schedulerContext *ClusterContext) dao.SchedulerHealthDAOInfo {
-	var healthInfos []dao.HealthCheckInfo
-	healthInfos = append(healthInfos, checkSchedulingErrors(metrics))
-	healthInfos = append(healthInfos, checkFailedNodes(metrics))
-	healthInfos = append(healthInfos, checkSchedulingContext(schedulerContext)...)
+	var healthInfo []dao.HealthCheckInfo
+	healthInfo = append(healthInfo, checkSchedulingErrors(metrics))
+	healthInfo = append(healthInfo, checkFailedNodes(metrics))
+	healthInfo = append(healthInfo, checkSchedulingContext(schedulerContext)...)
 	healthy := true
-	for _, h := range healthInfos {
+	for _, h := range healthInfo {
 		if !h.Succeeded {
 			healthy = false
 			break
@@ -42,7 +42,7 @@ func GetSchedulerHealthStatus(metrics metrics.CoreSchedulerMetrics, schedulerCon
 	}
 	return dao.SchedulerHealthDAOInfo{
 		Healthy:      healthy,
-		HealthChecks: healthInfos,
+		HealthChecks: healthInfo,
 	}
 }
 func CreateCheckInfo(succeeded bool, name, description, message string) dao.HealthCheckInfo {
@@ -138,36 +138,36 @@ func checkSchedulingContext(schedulerContext *ClusterContext) []dao.HealthCheckI
 			totalResourceMismatch = append(totalResourceMismatch, part.Name)
 		}
 	}
-	var infos = make([]dao.HealthCheckInfo, 9)
-	infos[0] = CreateCheckInfo(len(partitionsWithNegResources) == 0, "Negative resources",
+	var info = make([]dao.HealthCheckInfo, 9)
+	info[0] = CreateCheckInfo(len(partitionsWithNegResources) == 0, "Negative resources",
 		"Check for negative resources in the partitions",
 		fmt.Sprintf("Partitions with negative resources: %q", partitionsWithNegResources))
-	infos[1] = CreateCheckInfo(len(nodesWithNegResources) == 0, "Negative resources",
+	info[1] = CreateCheckInfo(len(nodesWithNegResources) == 0, "Negative resources",
 		"Check for negative resources in the nodes",
 		fmt.Sprintf("Nodes with negative resources: %q", partitionsWithNegResources))
-	infos[2] = CreateCheckInfo(len(allocationMismatch) == 0, "Consistency of data",
+	info[2] = CreateCheckInfo(len(allocationMismatch) == 0, "Consistency of data",
 		"Check if a node's allocated resource <= total resource of the node",
 		fmt.Sprintf("Nodes with inconsistent data: %q", allocationMismatch))
-	infos[3] = CreateCheckInfo(len(totalResourceMismatch) == 0, "Consistency of data",
+	info[3] = CreateCheckInfo(len(totalResourceMismatch) == 0, "Consistency of data",
 		"Check if total partition resource == sum of the node resources from the partition",
 		fmt.Sprintf("Partitions with inconsistent data: %q", totalResourceMismatch))
-	infos[4] = CreateCheckInfo(len(nodeTotalMismatch) == 0, "Consistency of data",
+	info[4] = CreateCheckInfo(len(nodeTotalMismatch) == 0, "Consistency of data",
 		"Check if node total resource = allocated resource + occupied resource + available resource",
 		fmt.Sprintf("Nodes with inconsistent data: %q", nodeTotalMismatch))
-	infos[5] = CreateCheckInfo(len(nodeCapacityMismatch) == 0, "Consistency of data",
+	info[5] = CreateCheckInfo(len(nodeCapacityMismatch) == 0, "Consistency of data",
 		"Check if node capacity >= allocated resources on the node",
 		fmt.Sprintf("Nodes with inconsistent data: %q", nodeCapacityMismatch))
 	// mark it as succeeded for a while until we will know what is not considered a normal value anymore
-	infos[6] = CreateCheckInfo(true, "Reservation check",
+	info[6] = CreateCheckInfo(true, "Reservation check",
 		"Check the reservation nr compared to the number of nodes",
 		fmt.Sprintf("Reservation/node nr ratio: %f", partitionReservationRatio))
-	infos[7] = CreateCheckInfo(len(orphanAllocationsOnNode) == 0, "Orphan allocation on node check",
+	info[7] = CreateCheckInfo(len(orphanAllocationsOnNode) == 0, "Orphan allocation on node check",
 		"Check if there are orphan allocations on the nodes",
 		fmt.Sprintf("Orphan allocations: %v", orphanAllocationsOnNode))
-	infos[8] = CreateCheckInfo(len(orphanAllocationsOnApp) == 0, "Orphan allocation on app check",
+	info[8] = CreateCheckInfo(len(orphanAllocationsOnApp) == 0, "Orphan allocation on app check",
 		"Check if there are orphan allocations on the applications",
 		fmt.Sprintf("OrphanAllocations: %v", orphanAllocationsOnApp))
-	return infos
+	return info
 }
 
 func checkAppAllocations(app *objects.Application, nodes objects.NodeCollection) []*objects.Allocation {

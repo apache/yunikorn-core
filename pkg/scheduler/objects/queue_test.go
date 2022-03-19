@@ -194,7 +194,7 @@ func TestPendingCalc(t *testing.T) {
 	}
 }
 
-func TestGetChildQueueInfos(t *testing.T) {
+func TestGetChildQueueInfo(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
@@ -1203,7 +1203,7 @@ func TestMaxResource(t *testing.T) {
 	}
 }
 
-func TestGetQueueInfos(t *testing.T) {
+func TestGetQueueInfo(t *testing.T) {
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "failed to create basic root queue: %v", err)
 	var rootMax *resources.Resource
@@ -1233,7 +1233,7 @@ func TestGetQueueInfos(t *testing.T) {
 	child2, err = createManagedQueue(parent, "child2", true, nil)
 	assert.NilError(t, err, "failed to create child queue: %v", err)
 	child2.SetMaxResource(resources.NewResource())
-	rootDaoInfo := root.GetQueueInfos()
+	rootDaoInfo := root.GetQueueInfo()
 
 	compareQueueInfoWithDAO(t, root, rootDaoInfo)
 	parentDaoInfo := rootDaoInfo.ChildQueues[0]
@@ -1274,7 +1274,7 @@ func TestGetQueueInfoPropertiesSet(t *testing.T) {
 	_, err = createDynamicQueue(parent, "child3", true)
 	assert.NilError(t, err, "failed to create child queue: %v", err)
 
-	rootDaoInfo := root.GetQueueInfos()
+	rootDaoInfo := root.GetQueueInfo()
 
 	compareQueueInfoWithDAO(t, root, rootDaoInfo)
 	parentDaoInfo := rootDaoInfo.ChildQueues[0]

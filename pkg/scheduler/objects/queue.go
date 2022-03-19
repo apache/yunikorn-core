@@ -410,7 +410,7 @@ func (sq *Queue) CheckAdminAccess(user security.UserGroup) bool {
 	return allow
 }
 
-// GetQueueInfos returns the queue hierarchy as an object for a REST call.
+// GetQueueInfo returns the queue hierarchy as an object for a REST call.
 // This object is used by the deprecated REST API and is succeeded by the GetPartitionQueueDAOInfo call.
 func (sq *Queue) GetQueueInfo() dao.QueueDAOInfo {
 	queueInfo := dao.QueueDAOInfo{}
@@ -424,11 +424,11 @@ func (sq *Queue) GetQueueInfo() dao.QueueDAOInfo {
 	queueInfo.QueueName = sq.Name
 	queueInfo.Status = sq.stateMachine.Current()
 	queueInfo.Capacities = dao.QueueCapacity{
-		Capacity:     sq.guaranteedResource.DAOString(),
-		MaxCapacity:  sq.maxResource.DAOString(),
-		UsedCapacity: sq.allocatedResource.DAOString(),
+		Capacity:     sq.guaranteedResource.DAOMap(),
+		MaxCapacity:  sq.maxResource.DAOMap(),
+		UsedCapacity: sq.allocatedResource.DAOMap(),
 		AbsUsedCapacity: resources.CalculateAbsUsedCapacity(
-			sq.maxResource, sq.allocatedResource).DAOString(),
+			sq.maxResource, sq.allocatedResource).DAOMap(),
 	}
 	queueInfo.Properties = make(map[string]string)
 	for k, v := range sq.properties {
@@ -451,12 +451,14 @@ func (sq *Queue) GetPartitionQueueDAOInfo() dao.PartitionQueueDAOInfo {
 
 	queueInfo.QueueName = sq.QueuePath
 	queueInfo.Status = sq.stateMachine.Current()
-	queueInfo.MaxResource = sq.maxResource.DAOString()
-	queueInfo.GuaranteedResource = sq.guaranteedResource.DAOString()
-	queueInfo.AllocatedResource = sq.allocatedResource.DAOString()
+	queueInfo.MaxResource = sq.maxResource.DAOMap()
+	queueInfo.GuaranteedResource = sq.guaranteedResource.DAOMap()
+	queueInfo.AllocatedResource = sq.allocatedResource.DAOMap()
 	queueInfo.IsLeaf = sq.isLeaf
 	queueInfo.IsManaged = sq.isManaged
 	queueInfo.TemplateInfo = sq.template.GetTemplateInfo()
+	queueInfo.AbsUsedCapacity = resources.CalculateAbsUsedCapacity(
+		sq.maxResource, sq.allocatedResource).DAOMap()
 	queueInfo.Properties = make(map[string]string)
 	for k, v := range sq.properties {
 		queueInfo.Properties[k] = v

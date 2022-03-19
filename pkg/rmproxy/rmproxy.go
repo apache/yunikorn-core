@@ -365,6 +365,9 @@ func (rmp *RMProxy) UpdateNode(request *si.NodeRequest) error {
 	go func() {
 		if len(request.Nodes) > 0 {
 			for _, node := range request.Nodes {
+				if len(node.GetAttributes()) == 0 {
+					node.Attributes = map[string]string{}
+				}
 				partition := node.Attributes[siCommon.NodePartition]
 				node.Attributes[siCommon.NodePartition] = common.GetNormalizedPartitionName(partition, request.RmID)
 			}

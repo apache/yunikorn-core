@@ -208,12 +208,12 @@ func TestAddNodeWithAllocations(t *testing.T) {
 
 	// add a new app
 	app := newApplication(appID1, "default", defQueue)
-	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1})
+	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1000})
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "add application to partition should not have failed")
 
 	// add a node with allocations
-	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10})
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10000})
 	node := newNodeMaxResource(nodeID1, nodeRes)
 
 	// fail with an unknown app
@@ -278,9 +278,9 @@ func TestRemoveNodeWithAllocations(t *testing.T) {
 	assert.NilError(t, err, "add application to partition should not have failed")
 
 	// add a node with allocations: must have the correct app added already
-	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1000})
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1000000})
 	node := newNodeMaxResource(nodeID1, nodeRes)
-	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1})
+	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1000})
 	ask := newAllocationAsk("alloc-1", appID1, appRes)
 	allocUUID := "alloc-1-uuid"
 	alloc := objects.NewAllocation(allocUUID, nodeID1, ask)
@@ -563,7 +563,7 @@ func TestAddAppTaskGroup(t *testing.T) {
 	assert.NilError(t, err, "partition create failed")
 
 	// add a new app: TG specified with resource no max set on the queue
-	task := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10})
+	task := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10000})
 	app := newApplicationTG(appID1, "default", defQueue, task)
 	assert.Assert(t, resources.Equals(app.GetPlaceholderAsk(), task), "placeholder ask not set as expected")
 	// queue sort policy is FIFO this should work
@@ -625,7 +625,7 @@ func TestRemoveApp(t *testing.T) {
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "add application to partition should not have failed")
 	// add a node to allow adding an allocation
-	node1 := newNodeMaxResource(nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1000}))
+	node1 := newNodeMaxResource(nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1000000}))
 	// add a node this must work
 	err = partition.AddNode(node1, nil)
 	assert.NilError(t, err, "add node to partition should not have failed")
@@ -633,7 +633,7 @@ func TestRemoveApp(t *testing.T) {
 		t.Fatalf("node not added to partition as expected (node nil)")
 	}
 
-	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1})
+	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1000})
 	ask := newAllocationAsk("alloc-nr", appNotRemoved, appRes)
 	uuid := "alloc-nr-uuid"
 	alloc := objects.NewAllocation(uuid, nodeID1, ask)
@@ -683,14 +683,14 @@ func TestRemoveAppAllocs(t *testing.T) {
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "add application to partition should not have failed")
 	// add a node to allow adding an allocation
-	node1 := newNodeMaxResource(nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1000}))
+	node1 := newNodeMaxResource(nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1000000}))
 	// add a node this must work
 	err = partition.AddNode(node1, nil)
 	assert.NilError(t, err, "add node to partition should not have failed")
 	if partition.GetNode(nodeID1) == nil {
 		t.Fatalf("node not added to partition as expected (node nil)")
 	}
-	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1})
+	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1000})
 	ask := newAllocationAsk("alloc-nr", appNotRemoved, appRes)
 	alloc := objects.NewAllocation("alloc-nr-uuid", nodeID1, ask)
 	err = partition.addAllocation(alloc)
@@ -1407,7 +1407,7 @@ func TestUpdateNode(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "test partition create failed with error")
 
-	newRes, err := resources.NewResourceFromConf(map[string]string{"memory": "400", "vcore": "30"})
+	newRes, err := resources.NewResourceFromConf(map[string]string{"memory": "400M", "vcore": "30"})
 	assert.NilError(t, err, "failed to create resource")
 
 	err = partition.AddNode(newNodeMaxResource("test", newRes), nil)
@@ -1419,11 +1419,11 @@ func TestUpdateNode(t *testing.T) {
 	}
 
 	// delta resource for a node with mem as 450 and vcores as 40 (both mem and vcores has increased)
-	delta, err := resources.NewResourceFromConf(map[string]string{"memory": "50", "vcore": "10"})
+	delta, err := resources.NewResourceFromConf(map[string]string{"memory": "50M", "vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
 	partition.updatePartitionResource(delta)
 
-	expectedRes, err := resources.NewResourceFromConf(map[string]string{"memory": "450", "vcore": "40"})
+	expectedRes, err := resources.NewResourceFromConf(map[string]string{"memory": "450M", "vcore": "40"})
 	assert.NilError(t, err, "failed to create resource")
 
 	if !resources.Equals(expectedRes, partition.GetTotalPartitionResource()) {
@@ -1431,10 +1431,10 @@ func TestUpdateNode(t *testing.T) {
 	}
 
 	// delta resource for a node with mem as 400 and vcores as 30 (both mem and vcores has decreased)
-	delta = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": -50, "vcore": -10})
+	delta = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": -50000000, "vcore": -10000})
 	partition.updatePartitionResource(delta)
 
-	expectedRes, err = resources.NewResourceFromConf(map[string]string{"memory": "400", "vcore": "30"})
+	expectedRes, err = resources.NewResourceFromConf(map[string]string{"memory": "400M", "vcore": "30"})
 	assert.NilError(t, err, "failed to create resource")
 
 	if !resources.Equals(expectedRes, partition.GetTotalPartitionResource()) {
@@ -1442,10 +1442,10 @@ func TestUpdateNode(t *testing.T) {
 	}
 
 	// delta resource for a node with mem as 450 and vcores as 10 (mem has increased but vcores has decreased)
-	delta = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 50, "vcore": -20})
+	delta = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 50000000, "vcore": -20000})
 	partition.updatePartitionResource(delta)
 
-	expectedRes, err = resources.NewResourceFromConf(map[string]string{"memory": "450", "vcore": "10"})
+	expectedRes, err = resources.NewResourceFromConf(map[string]string{"memory": "450M", "vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
 
 	if !resources.Equals(expectedRes, partition.GetTotalPartitionResource()) {
@@ -1497,7 +1497,7 @@ func TestAddTGAppDynamic(t *testing.T) {
 	assert.NilError(t, err, "app-1 should have been added to the partition")
 	assert.Equal(t, app.GetQueuePath(), "root.unlimited", "app-1 not placed in expected queue")
 
-	jsonRes := "{\"resources\":{\"vcore\":{\"value\":10}}}"
+	jsonRes := "{\"resources\":{\"vcore\":{\"value\":10000}}}"
 	tags = map[string]string{"taskqueue": "same", objects.AppTagNamespaceResourceQuota: jsonRes}
 	app = newApplicationTGTags(appID2, "default", "unknown", tgRes, tags)
 	err = partition.AddApplication(app)
@@ -1505,7 +1505,7 @@ func TestAddTGAppDynamic(t *testing.T) {
 	assert.Equal(t, partition.getApplication(appID2), app, "partition failed to add app incorrect app returned")
 	assert.Equal(t, app.GetQueuePath(), "root.same", "app-2 not placed in expected queue")
 
-	jsonRes = "{\"resources\":{\"vcore\":{\"value\":1}}}"
+	jsonRes = "{\"resources\":{\"vcore\":{\"value\":1000}}}"
 	tags = map[string]string{"taskqueue": "smaller", objects.AppTagNamespaceResourceQuota: jsonRes}
 	app = newApplicationTGTags(appID3, "default", "unknown", tgRes, tags)
 	err = partition.AddApplication(app)

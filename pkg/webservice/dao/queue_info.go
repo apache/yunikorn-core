@@ -26,15 +26,15 @@ type QueueDAOInfo struct {
 }
 
 type QueueCapacity struct {
-	Capacity        string `json:"capacity"`
-	MaxCapacity     string `json:"maxCapacity"`
-	UsedCapacity    string `json:"usedCapacity"`
-	AbsUsedCapacity string `json:"absUsedCapacity"`
+	Capacity        map[string]int64 `json:"capacity"`
+	MaxCapacity     map[string]int64 `json:"maxCapacity"`
+	UsedCapacity    map[string]int64 `json:"usedCapacity"`
+	AbsUsedCapacity map[string]int64 `json:"absUsedCapacity"`
 }
 
 type TemplateInfo struct {
-	MaxResource        string            `json:"maxResource"`
-	GuaranteedResource string            `json:"guaranteedResource"`
+	MaxResource        map[string]int64  `json:"maxResource"`
+	GuaranteedResource map[string]int64  `json:"guaranteedResource"`
 	Properties         map[string]string `json:"properties"`
 }
 
@@ -42,13 +42,14 @@ type PartitionQueueDAOInfo struct {
 	QueueName          string                  `json:"queuename"`
 	Status             string                  `json:"status"`
 	Partition          string                  `json:"partition"`
-	MaxResource        string                  `json:"maxResource"`
-	GuaranteedResource string                  `json:"guaranteedResource"`
-	AllocatedResource  string                  `json:"allocatedResource"`
+	MaxResource        map[string]int64        `json:"maxResource"`
+	GuaranteedResource map[string]int64        `json:"guaranteedResource"`
+	AllocatedResource  map[string]int64        `json:"allocatedResource"`
 	IsLeaf             bool                    `json:"isLeaf"`
 	IsManaged          bool                    `json:"isManaged"`
 	Properties         map[string]string       `json:"properties"`
 	Parent             string                  `json:"parent"`
 	TemplateInfo       *TemplateInfo           `json:"template"`
 	Children           []PartitionQueueDAOInfo `json:"children"`
+	AbsUsedCapacity    map[string]int64        `json:"absUsedCapacity"`
 }

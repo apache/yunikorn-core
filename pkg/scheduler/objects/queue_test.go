@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -1294,21 +1293,21 @@ func compareQueueInfoWithDAO(t *testing.T, queue *Queue, dao dao.QueueDAOInfo) {
 	assert.Equal(t, queue.Name, dao.QueueName)
 	assert.Equal(t, len(queue.children), len(dao.ChildQueues))
 	assert.Equal(t, queue.stateMachine.Current(), dao.Status)
-	emptyRes := "[]"
+	emptyRes := map[string]int64{}
 	if queue.allocatedResource == nil {
-		assert.Equal(t, emptyRes, dao.Capacities.UsedCapacity)
+		assert.DeepEqual(t, emptyRes, dao.Capacities.UsedCapacity)
 	} else {
-		assert.Equal(t, strings.Trim(queue.allocatedResource.String(), "map"), dao.Capacities.UsedCapacity)
+		assert.DeepEqual(t, queue.allocatedResource.DAOMap(), dao.Capacities.UsedCapacity)
 	}
 	if queue.maxResource == nil {
-		assert.Equal(t, emptyRes, dao.Capacities.MaxCapacity)
+		assert.DeepEqual(t, emptyRes, dao.Capacities.MaxCapacity)
 	} else {
-		assert.Equal(t, strings.Trim(queue.maxResource.String(), "map"), dao.Capacities.MaxCapacity)
+		assert.DeepEqual(t, queue.maxResource.DAOMap(), dao.Capacities.MaxCapacity)
 	}
 	if queue.guaranteedResource == nil {
-		assert.Equal(t, emptyRes, dao.Capacities.Capacity)
+		assert.DeepEqual(t, emptyRes, dao.Capacities.Capacity)
 	} else {
-		assert.Equal(t, strings.Trim(queue.guaranteedResource.String(), "map"), dao.Capacities.Capacity)
+		assert.DeepEqual(t, queue.guaranteedResource.DAOMap(), dao.Capacities.Capacity)
 	}
 	assert.Equal(t, len(queue.properties), len(dao.Properties))
 	if len(queue.properties) > 0 {
@@ -1364,14 +1363,14 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 	})
 	assert.NilError(t, err)
 	assert.Assert(t, reflect.DeepEqual(root.template.GetProperties(), root.GetPartitionQueueDAOInfo().TemplateInfo.Properties))
-	assert.Equal(t, root.template.GetMaxResource().DAOString(), root.template.GetMaxResource().DAOString())
-	assert.Equal(t, root.template.GetGuaranteedResource().DAOString(), root.template.GetGuaranteedResource().DAOString())
+	assert.DeepEqual(t, root.template.GetMaxResource().DAOMap(), root.template.GetMaxResource().DAOMap())
+	assert.DeepEqual(t, root.template.GetGuaranteedResource().DAOMap(), root.template.GetGuaranteedResource().DAOMap())
 
 	// test resources
 	root.maxResource = getResource(t)
 	root.guaranteedResource = getResource(t)
-	assert.Equal(t, root.GetMaxResource().DAOString(), root.GetMaxResource().DAOString())
-	assert.Equal(t, root.GetGuaranteedResource().DAOString(), root.GetGuaranteedResource().DAOString())
+	assert.DeepEqual(t, root.GetMaxResource().DAOMap(), root.GetMaxResource().DAOMap())
+	assert.DeepEqual(t, root.GetGuaranteedResource().DAOMap(), root.GetGuaranteedResource().DAOMap())
 }
 
 func getResourceConf() map[string]string {

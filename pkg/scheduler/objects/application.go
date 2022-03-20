@@ -905,10 +905,6 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				alloc.Result = Replaced
 				// mark placeholder as released
 				ph.released = true
-				// store number of placeholders that have been replaced so far
-				if sa.placeholderData != nil {
-					sa.placeholderData[ph.taskGroupName].Replaced++
-				}
 				_, err := sa.updateAskRepeatInternal(request, -1)
 				if err != nil {
 					log.Logger().Warn("ask repeat update failed unexpectedly",

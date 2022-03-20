@@ -367,22 +367,28 @@ func TestAddAllocAsk(t *testing.T) {
 
 	// test PlaceholderData
 	tg1 := "tg-1"
-	ask = newAllocationAskTG(aKey, appID1, tg1, res, 2)
+	requiredNode := "node-1"
+	ask = newAllocationAskTG(aKey, appID1, tg1, res, 1)
+	ask.requiredNode = requiredNode
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been updated on app")
+	clonePlaceholderData := app.GetAllPlaceholderData()
+	assert.Equal(t, len(clonePlaceholderData), 1)
 	assert.Equal(t, len(app.placeholderData), 1)
+	assert.Equal(t, clonePlaceholderData[0], app.placeholderData[tg1])
 	assert.Equal(t, app.placeholderData[tg1].TaskGroupName, tg1)
-	assert.Equal(t, app.placeholderData[tg1].RequiredNode, "")
+	assert.Equal(t, app.placeholderData[tg1].RequiredNode, requiredNode)
 	assert.Equal(t, app.placeholderData[tg1].Count, int64(1))
 	assert.Equal(t, app.placeholderData[tg1].Replaced, int64(0))
 	assert.DeepEqual(t, app.placeholderData[tg1].MinResource, res)
 
 	ask = newAllocationAskTG(aKey, appID1, tg1, res, 1)
+	ask.requiredNode = requiredNode
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been updated on app")
 	assert.Equal(t, len(app.placeholderData), 1)
 	assert.Equal(t, app.placeholderData[tg1].TaskGroupName, tg1)
-	assert.Equal(t, app.placeholderData[tg1].RequiredNode, "")
+	assert.Equal(t, app.placeholderData[tg1].RequiredNode, requiredNode)
 	assert.Equal(t, app.placeholderData[tg1].Count, int64(2))
 	assert.Equal(t, app.placeholderData[tg1].Replaced, int64(0))
 	assert.DeepEqual(t, app.placeholderData[tg1].MinResource, res)
@@ -694,24 +700,11 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	assert.Assert(t, app.IsNew(), "New application did not return new state: %s", app.CurrentState())
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	askID := "ask-1"
-	tgName := "TG1"
-	requiredNode := "node-1"
-	ask := newAllocationAskTG(askID, appID1, tgName, res, 1)
-	ask.requiredNode = requiredNode
+	ask := newAllocationAskTG(askID, appID1, "TG1", res, 1)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been added to app")
 	// app with ask, even for placeholder, should be accepted
 	assert.Assert(t, app.IsAccepted(), "application did not change to accepted state: %s", app.CurrentState())
-	// check PlaceholderData
-	clonePlaceholderData := app.GetAllPlaceholderData()
-	assert.Assert(t, len(clonePlaceholderData) == 1)
-	assert.Assert(t, len(app.placeholderData) == 1)
-	assert.Equal(t, clonePlaceholderData[0], app.placeholderData[tgName])
-	assert.Equal(t, app.placeholderData[tgName].TaskGroupName, tgName)
-	assert.Equal(t, app.placeholderData[tgName].Count, int64(1))
-	assert.Assert(t, resources.Equals(app.placeholderData[tgName].MinResource, res))
-	assert.Equal(t, app.placeholderData[tgName].RequiredNode, requiredNode)
-	assert.Equal(t, app.placeholderData[tgName].Replaced, int64(0))
 
 	// removing the ask should move it to waiting
 	released := app.RemoveAllocationAsk(askID)

@@ -482,9 +482,9 @@ func TestQueryParamInAppsHandler(t *testing.T) {
 
 	// check PlaceholderData
 	assert.Equal(t, len(appsDao[0].PlaceholderData), 1)
-    assert.Equal(t, appsDao[0].PlaceholderData[0].TaskGroupName, tg)
+	assert.Equal(t, appsDao[0].PlaceholderData[0].TaskGroupName, tg)
 	assert.Equal(t, appsDao[0].PlaceholderData[0].RequiredNode, "")
-	assert.DeepEqual(t, appsDao[0].PlaceholderData[0].MinResource, map[string]int64{"vcore":1})
+	assert.DeepEqual(t, appsDao[0].PlaceholderData[0].MinResource, map[string]int64{"vcore": 1})
 	assert.Equal(t, appsDao[0].PlaceholderData[0].Replaced, int64(0))
 	assert.Equal(t, appsDao[0].PlaceholderData[0].Count, int64(1))
 

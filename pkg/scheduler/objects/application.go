@@ -553,9 +553,11 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 	delta.SubFrom(oldAskResource)
 	sa.pending = resources.Add(sa.pending, delta)
 	sa.queue.incPendingResource(delta)
+
 	if ask.placeholder {
 		sa.addPlaceholderData(ask)
 	}
+
 	log.Logger().Info("Ask added successfully to application",
 		zap.String("appID", sa.ApplicationID),
 		zap.String("ask", ask.AllocationKey),
@@ -903,7 +905,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				alloc.Result = Replaced
 				// mark placeholder as released
 				ph.released = true
-				// store number of palceHolders that have been replaced so far
+				// store number of placeholders that have been replaced so far
 				if sa.placeholderData != nil {
 					sa.placeholderData[ph.taskGroupName].Replaced++
 				}

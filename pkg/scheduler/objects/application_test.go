@@ -366,8 +366,9 @@ func TestAddAllocAsk(t *testing.T) {
 
 	// test PlaceholderData
 	tg1 := "tg-1"
-	ask = newAllocationAskTG(aKey,appID1,tg1,res,2)
+	ask = newAllocationAskTG(aKey, appID1, tg1, res, 2)
 	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been updated on app")
 	assert.Equal(t, len(app.placeholderData), 1)
 	assert.Equal(t, app.placeholderData[tg1].TaskGroupName, tg1)
 	assert.Equal(t, app.placeholderData[tg1].RequiredNode, "")
@@ -375,8 +376,9 @@ func TestAddAllocAsk(t *testing.T) {
 	assert.Equal(t, app.placeholderData[tg1].Replaced, int64(0))
 	assert.DeepEqual(t, app.placeholderData[tg1].MinResource, res)
 
-	ask = newAllocationAskTG(aKey,appID1,tg1,res,1)
+	ask = newAllocationAskTG(aKey, appID1, tg1, res, 1)
 	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been updated on app")
 	assert.Equal(t, len(app.placeholderData), 1)
 	assert.Equal(t, app.placeholderData[tg1].TaskGroupName, tg1)
 	assert.Equal(t, app.placeholderData[tg1].RequiredNode, "")
@@ -385,8 +387,9 @@ func TestAddAllocAsk(t *testing.T) {
 	assert.DeepEqual(t, app.placeholderData[tg1].MinResource, res)
 
 	tg2 := "tg-2"
-	ask = newAllocationAskTG(aKey,appID1,tg2,res,1)
+	ask = newAllocationAskTG(aKey, appID1, tg2, res, 1)
 	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been updated on app")
 	assert.Equal(t, len(app.placeholderData), 2)
 	assert.Equal(t, app.placeholderData[tg2].TaskGroupName, tg2)
 	assert.Equal(t, app.placeholderData[tg2].RequiredNode, "")
@@ -698,27 +701,13 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	assert.NilError(t, err, "ask should have been added to app")
 	// app with ask, even for placeholder, should be accepted
 	assert.Assert(t, app.IsAccepted(), "application did not change to accepted state: %s", app.CurrentState())
-	// check placeholder data
+	// check PlaceholderData
 	clonePlaceholderData := app.GetAllPlaceholderData()
 	assert.Assert(t, len(clonePlaceholderData) == 1)
 	assert.Assert(t, len(app.placeholderData) == 1)
 	assert.Equal(t, clonePlaceholderData[0], app.placeholderData[tgName])
 	assert.Equal(t, app.placeholderData[tgName].TaskGroupName, tgName)
 	assert.Equal(t, app.placeholderData[tgName].Count, int64(1))
-	assert.Assert(t, resources.Equals(app.placeholderData[tgName].MinResource, res))
-	assert.Equal(t, app.placeholderData[tgName].RequiredNode, requiredNode)
-	assert.Equal(t, app.placeholderData[tgName].Replaced, int64(0))
-	// add second placeholder
-	ask2 := newAllocationAskTG(askID, appID1, tgName, res, 1)
-	ask2.requiredNode = requiredNode
-	err = app.AddAllocationAsk(ask2)
-	assert.NilError(t, err, "ask should have been added to app")
-	clonePlaceholderData = app.GetAllPlaceholderData()
-	assert.Assert(t, len(clonePlaceholderData) == 1)
-	assert.Assert(t, len(app.placeholderData) == 1)
-	assert.Equal(t, clonePlaceholderData[0], app.placeholderData[tgName])
-	assert.Equal(t, app.placeholderData[tgName].TaskGroupName, tgName)
-	assert.Equal(t, app.placeholderData[tgName].Count, int64(2))
 	assert.Assert(t, resources.Equals(app.placeholderData[tgName].MinResource, res))
 	assert.Equal(t, app.placeholderData[tgName].RequiredNode, requiredNode)
 	assert.Equal(t, app.placeholderData[tgName].Replaced, int64(0))

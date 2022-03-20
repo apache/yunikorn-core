@@ -163,7 +163,3 @@ func (a *Allocation) getTaskGroup() string {
 	return a.taskGroupName
 }
 
-// test only
-func (a *Allocation) SetTaskGroupName(taskGroupName string) {
-	a.taskGroupName = taskGroupName
-}

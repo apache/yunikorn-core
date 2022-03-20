@@ -327,6 +327,7 @@ func TestAddAllocAsk(t *testing.T) {
 	if err == nil {
 		t.Errorf("ask with zero repeat should not have been added to app")
 	}
+
 	// working cases
 	res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	ask = newAllocationAskRepeat(aKey, appID1, res, 1)

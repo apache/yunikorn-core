@@ -162,4 +162,3 @@ func (a *Allocation) IsReleased() bool {
 func (a *Allocation) getTaskGroup() string {
 	return a.taskGroupName
 }
-

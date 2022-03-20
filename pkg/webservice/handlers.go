@@ -282,6 +282,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 	allocationInfo := make([]dao.AllocationDAOInfo, 0, len(allocations))
 	placeholders := app.GetAllPlaceholderData()
 	placeholderInfo := make([]dao.PlaceholderDAOInfo, 0, len(placeholders))
+
 	for _, alloc := range allocations {
 		allocInfo := dao.AllocationDAOInfo{
 			AllocationKey:    alloc.AllocationKey,

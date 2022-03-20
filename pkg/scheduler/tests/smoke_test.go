@@ -42,7 +42,7 @@ partitions:
           - name: singleleaf
             resources:
               max:
-                memory: 150
+                memory: 150M
                 vcore: 20
 `
 
@@ -57,8 +57,8 @@ partitions:
         queues:
           - name: base
             resources:
-              guaranteed: {memory: 100, vcore: 10}
-              max: {memory: 150, vcore: 20}
+              guaranteed: {memory: 100M, vcore: 10}
+              max: {memory: 150M, vcore: 20}
           - name: tobedeleted
 `
 	// Start all tests
@@ -81,7 +81,7 @@ partitions:
 
 	// Check the queue root.base
 	queue := part.GetQueue("root.base")
-	assert.Equal(t, int(queue.GetMaxResource().Resources[resources.MEMORY]), 150, "max resource on leaf not set correctly")
+	assert.Equal(t, int(queue.GetMaxResource().Resources[resources.MEMORY]), 150000000, "max resource on leaf not set correctly")
 
 	// Check the queue which will be removed
 	queue = part.GetQueue("root.tobedeleted")
@@ -96,8 +96,8 @@ partitions:
         queues:
           - name: base
             resources:
-              guaranteed: {memory: 500, vcore: 250}
-              max: {memory: 1000, vcore: 500}
+              guaranteed: {memory: 500M, vcore: 250m}
+              max: {memory: 1G, vcore: 500m}
           - name: tobeadded
             properties:
               something: withAvalue
@@ -129,7 +129,7 @@ partitions:
 
 	// Check the queue root.base
 	queue = part.GetQueue("root.base")
-	assert.Equal(t, int(queue.GetMaxResource().Resources[resources.MEMORY]), 1000, "max resource on leaf not set correctly")
+	assert.Equal(t, int(queue.GetMaxResource().Resources[resources.MEMORY]), 1000000000, "max resource on leaf not set correctly")
 	assert.Equal(t, int(queue.GetGuaranteedResource().Resources[resources.VCORE]), 250, "guaranteed resource on leaf not set correctly")
 
 	queue = part.GetQueue("root.tobeadded")
@@ -173,7 +173,7 @@ func TestBasicScheduler(t *testing.T) {
 
 	// Check the queue singleleaf
 	leaf := part.GetQueue(leafName)
-	assert.Equal(t, int(leaf.GetMaxResource().Resources[resources.MEMORY]), 150, "%s config not set correct", leafName)
+	assert.Equal(t, int(leaf.GetMaxResource().Resources[resources.MEMORY]), 150000000, "%s config not set correct", leafName)
 
 	// Register a node, and add apps
 	err = ms.proxy.UpdateNode(&si.NodeRequest{
@@ -183,8 +183,8 @@ func TestBasicScheduler(t *testing.T) {
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 100},
-						"vcore":  {Value: 20},
+						"memory": {Value: 100000000},
+						"vcore":  {Value: 20000},
 					},
 				},
 				Action: si.NodeInfo_CREATE,
@@ -194,8 +194,8 @@ func TestBasicScheduler(t *testing.T) {
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 100},
-						"vcore":  {Value: 20},
+						"memory": {Value: 100000000},
+						"vcore":  {Value: 20000},
 					},
 				},
 				Action: si.NodeInfo_CREATE,
@@ -232,8 +232,8 @@ func TestBasicScheduler(t *testing.T) {
 				AllocationKey: "alloc-1",
 				ResourceAsk: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 10},
-						"vcore":  {Value: 1},
+						"memory": {Value: 10000000},
+						"vcore":  {Value: 1000},
 					},
 				},
 				MaxAllocations: 2,
@@ -246,9 +246,9 @@ func TestBasicScheduler(t *testing.T) {
 
 	// Wait pending resource of queue a and scheduler queue
 	// Both pending memory = 10 * 2 = 20;
-	waitForPendingQueueResource(t, leaf, 20, 1000)
-	waitForPendingQueueResource(t, root, 20, 1000)
-	waitForPendingAppResource(t, app, 20, 1000)
+	waitForPendingQueueResource(t, leaf, 20000000, 1000)
+	waitForPendingQueueResource(t, root, 20000000, 1000)
+	waitForPendingAppResource(t, app, 20000000, 1000)
 	assert.Equal(t, app01.CurrentState(), objects.Accepted.String())
 
 	ms.scheduler.MultiStepSchedule(5)
@@ -261,15 +261,15 @@ func TestBasicScheduler(t *testing.T) {
 	waitForPendingAppResource(t, app, 0, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[resources.MEMORY]), 20, "leaf allocated memory incorrect")
-	assert.Equal(t, int(root.GetAllocatedResource().Resources[resources.MEMORY]), 20, "root allocated memory incorrect")
-	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 20, "app allocated memory incorrect")
+	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[resources.MEMORY]), 20000000, "leaf allocated memory incorrect")
+	assert.Equal(t, int(root.GetAllocatedResource().Resources[resources.MEMORY]), 20000000, "root allocated memory incorrect")
+	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 20000000, "app allocated memory incorrect")
 
 	// once we start to process allocation asks from this app, verify the state again
 	assert.Equal(t, app01.CurrentState(), objects.Running.String())
 
 	// Check allocated resources of nodes
-	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), ms.partitionName, []string{"node-1:1234", "node-2:1234"}, 20, 1000)
+	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), ms.partitionName, []string{"node-1:1234", "node-2:1234"}, 20000000, 1000)
 
 	// Ask for two more resources
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
@@ -278,8 +278,8 @@ func TestBasicScheduler(t *testing.T) {
 				AllocationKey: "alloc-2",
 				ResourceAsk: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 50},
-						"vcore":  {Value: 5},
+						"memory": {Value: 50000000},
+						"vcore":  {Value: 5000},
 					},
 				},
 				MaxAllocations: 2,
@@ -289,8 +289,8 @@ func TestBasicScheduler(t *testing.T) {
 				AllocationKey: "alloc-3",
 				ResourceAsk: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 100},
-						"vcore":  {Value: 5},
+						"memory": {Value: 100000000},
+						"vcore":  {Value: 5000},
 					},
 				},
 				MaxAllocations: 2,
@@ -303,9 +303,9 @@ func TestBasicScheduler(t *testing.T) {
 
 	// Wait pending resource of queue a and scheduler queue
 	// Both pending memory = 50 * 2 + 100 * 2 = 300;
-	waitForPendingQueueResource(t, leaf, 300, 1000)
-	waitForPendingQueueResource(t, root, 300, 1000)
-	waitForPendingAppResource(t, app, 300, 1000)
+	waitForPendingQueueResource(t, leaf, 300000000, 1000)
+	waitForPendingQueueResource(t, root, 300000000, 1000)
+	waitForPendingAppResource(t, app, 300000000, 1000)
 
 	// Now app-1 uses 20 resource, and queue-a's max = 150, so it can get two 50 container allocated.
 	ms.scheduler.MultiStepSchedule(6)
@@ -313,17 +313,17 @@ func TestBasicScheduler(t *testing.T) {
 	ms.mockRM.waitForAllocations(t, 4, 1000)
 
 	// Check pending resource, should be 200 now.
-	waitForPendingQueueResource(t, leaf, 200, 1000)
-	waitForPendingQueueResource(t, root, 200, 1000)
-	waitForPendingAppResource(t, app, 200, 1000)
+	waitForPendingQueueResource(t, leaf, 200000000, 1000)
+	waitForPendingQueueResource(t, root, 200000000, 1000)
+	waitForPendingAppResource(t, app, 200000000, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[resources.MEMORY]), 120, "leaf allocated memory incorrect")
-	assert.Equal(t, int(root.GetAllocatedResource().Resources[resources.MEMORY]), 120, "root allocated memory incorrect")
-	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 120, "app allocated memory incorrect")
+	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[resources.MEMORY]), 120000000, "leaf allocated memory incorrect")
+	assert.Equal(t, int(root.GetAllocatedResource().Resources[resources.MEMORY]), 120000000, "root allocated memory incorrect")
+	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 120000000, "app allocated memory incorrect")
 
 	// Check allocated resources of nodes
-	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), partition, []string{"node-1:1234", "node-2:1234"}, 120, 1000)
+	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), partition, []string{"node-1:1234", "node-2:1234"}, 120000000, 1000)
 
 	updateRequest := &si.AllocationRequest{
 		Releases: &si.AllocationReleasesRequest{
@@ -348,9 +348,9 @@ func TestBasicScheduler(t *testing.T) {
 	ms.mockRM.waitForAllocations(t, 0, 1000)
 
 	// Check pending resource, should be 200 (same)
-	waitForPendingQueueResource(t, leaf, 200, 1000)
-	waitForPendingQueueResource(t, root, 200, 1000)
-	waitForPendingAppResource(t, app, 200, 1000)
+	waitForPendingQueueResource(t, leaf, 200000000, 1000)
+	waitForPendingQueueResource(t, root, 200000000, 1000)
+	waitForPendingAppResource(t, app, 200000000, 1000)
 
 	// Check allocated resources of queues, apps should be 0 now
 	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[resources.MEMORY]), 0, "leaf allocated memory incorrect")
@@ -395,8 +395,8 @@ func TestBasicSchedulerAutoAllocation(t *testing.T) {
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 100},
-						"vcore":  {Value: 20},
+						"memory": {Value: 100000000},
+						"vcore":  {Value: 20000},
 					},
 				},
 				Action: si.NodeInfo_CREATE,
@@ -406,8 +406,8 @@ func TestBasicSchedulerAutoAllocation(t *testing.T) {
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 100},
-						"vcore":  {Value: 20},
+						"memory": {Value: 100000000},
+						"vcore":  {Value: 20000},
 					},
 				},
 				Action: si.NodeInfo_CREATE,
@@ -435,8 +435,8 @@ func TestBasicSchedulerAutoAllocation(t *testing.T) {
 				AllocationKey: "alloc-1",
 				ResourceAsk: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 10},
-						"vcore":  {Value: 1},
+						"memory": {Value: 10000000},
+						"vcore":  {Value: 1000},
 					},
 				},
 				MaxAllocations: 20,
@@ -461,17 +461,17 @@ func TestBasicSchedulerAutoAllocation(t *testing.T) {
 	app := ms.getApplication(appID)
 
 	// Make sure pending resource decreased to 50
-	waitForPendingQueueResource(t, leaf, 50, 1000)
-	waitForPendingQueueResource(t, root, 50, 1000)
-	waitForPendingAppResource(t, app, 50, 1000)
+	waitForPendingQueueResource(t, leaf, 50000000, 1000)
+	waitForPendingQueueResource(t, root, 50000000, 1000)
+	waitForPendingAppResource(t, app, 50000000, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[resources.MEMORY]), 150, "leaf allocated memory incorrect")
-	assert.Equal(t, int(root.GetAllocatedResource().Resources[resources.MEMORY]), 150, "root allocated memory incorrect")
-	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 150, "app allocated memory incorrect")
+	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[resources.MEMORY]), 150000000, "leaf allocated memory incorrect")
+	assert.Equal(t, int(root.GetAllocatedResource().Resources[resources.MEMORY]), 150000000, "root allocated memory incorrect")
+	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 150000000, "app allocated memory incorrect")
 
 	// Check allocated resources of nodes
-	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), partition, []string{"node-1:1234", "node-2:1234"}, 150, 1000)
+	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), partition, []string{"node-1:1234", "node-2:1234"}, 150000000, 1000)
 }
 
 func TestFairnessAllocationForQueues(t *testing.T) {
@@ -504,8 +504,8 @@ partitions:
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 100},
-						"vcore":  {Value: 20},
+						"memory": {Value: 100000000},
+						"vcore":  {Value: 20000},
 					},
 				},
 				Action: si.NodeInfo_CREATE,
@@ -515,8 +515,8 @@ partitions:
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 100},
-						"vcore":  {Value: 20},
+						"memory": {Value: 100000000},
+						"vcore":  {Value: 20000},
 					},
 				},
 				Action: si.NodeInfo_CREATE,
@@ -545,8 +545,8 @@ partitions:
 				AllocationKey: "alloc-1",
 				ResourceAsk: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 10},
-						"vcore":  {Value: 1},
+						"memory": {Value: 10000000},
+						"vcore":  {Value: 1000},
 					},
 				},
 				MaxAllocations: 20,
@@ -556,8 +556,8 @@ partitions:
 				AllocationKey: "alloc-1",
 				ResourceAsk: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 10},
-						"vcore":  {Value: 1},
+						"memory": {Value: 10000000},
+						"vcore":  {Value: 1000},
 					},
 				},
 				MaxAllocations: 20,
@@ -581,19 +581,19 @@ partitions:
 	app2 := ms.getApplication(app2ID)
 
 	// Check pending resource, should be 100 (same)
-	waitForPendingQueueResource(t, leaf1, 200, 1000)
-	waitForPendingQueueResource(t, leaf2, 200, 1000)
-	waitForPendingQueueResource(t, root, 400, 1000)
+	waitForPendingQueueResource(t, leaf1, 200000000, 1000)
+	waitForPendingQueueResource(t, leaf2, 200000000, 1000)
+	waitForPendingQueueResource(t, root, 400000000, 1000)
 
 	ms.scheduler.MultiStepSchedule(25)
 	ms.mockRM.waitForAllocations(t, 20, 1500)
 
-	waitForAllocatedAppResource(t, app1, 100, 1000)
-	waitForAllocatedAppResource(t, app2, 100, 1000)
+	waitForAllocatedAppResource(t, app1, 100000000, 1000)
+	waitForAllocatedAppResource(t, app2, 100000000, 1000)
 	// Make sure pending resource updated to 0
-	waitForPendingQueueResource(t, leaf1, 100, 1000)
-	waitForPendingQueueResource(t, leaf2, 100, 1000)
-	waitForPendingQueueResource(t, root, 200, 1000)
+	waitForPendingQueueResource(t, leaf1, 100000000, 1000)
+	waitForPendingQueueResource(t, leaf2, 100000000, 1000)
+	waitForPendingQueueResource(t, root, 200000000, 1000)
 }
 
 func TestFairnessAllocationForApplications(t *testing.T) {
@@ -626,8 +626,8 @@ partitions:
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 100},
-						"vcore":  {Value: 20},
+						"memory": {Value: 100000000},
+						"vcore":  {Value: 20000},
 					},
 				},
 				Action: si.NodeInfo_CREATE,
@@ -637,8 +637,8 @@ partitions:
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 100},
-						"vcore":  {Value: 20},
+						"memory": {Value: 100000000},
+						"vcore":  {Value: 20000},
 					},
 				},
 				Action: si.NodeInfo_CREATE,
@@ -667,8 +667,8 @@ partitions:
 				AllocationKey: "alloc-1",
 				ResourceAsk: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 10},
-						"vcore":  {Value: 1},
+						"memory": {Value: 10000000},
+						"vcore":  {Value: 1000},
 					},
 				},
 				MaxAllocations: 20,
@@ -678,8 +678,8 @@ partitions:
 				AllocationKey: "alloc-1",
 				ResourceAsk: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 10},
-						"vcore":  {Value: 1},
+						"memory": {Value: 10000000},
+						"vcore":  {Value: 1000},
 					},
 				},
 				MaxAllocations: 20,
@@ -701,24 +701,24 @@ partitions:
 	app1 := ms.getApplication(appID1)
 	app2 := ms.getApplication(appID2)
 
-	waitForPendingQueueResource(t, leaf, 400, 1000)
-	waitForPendingQueueResource(t, root, 400, 1000)
-	waitForPendingAppResource(t, app1, 200, 1000)
-	waitForPendingAppResource(t, app2, 200, 1000)
+	waitForPendingQueueResource(t, leaf, 400000000, 1000)
+	waitForPendingQueueResource(t, root, 400000000, 1000)
+	waitForPendingAppResource(t, app1, 200000000, 1000)
+	waitForPendingAppResource(t, app2, 200000000, 1000)
 
 	ms.scheduler.MultiStepSchedule(25)
 
 	ms.mockRM.waitForAllocations(t, 20, 1000)
 
 	// Make sure pending resource updated to 100, which means
-	waitForPendingQueueResource(t, leaf, 200, 1000)
-	waitForPendingQueueResource(t, root, 200, 1000)
-	waitForPendingAppResource(t, app1, 100, 1000)
-	waitForPendingAppResource(t, app2, 100, 1000)
+	waitForPendingQueueResource(t, leaf, 200000000, 1000)
+	waitForPendingQueueResource(t, root, 200000000, 1000)
+	waitForPendingAppResource(t, app1, 100000000, 1000)
+	waitForPendingAppResource(t, app2, 100000000, 1000)
 
 	// Both apps got 100 resources,
-	assert.Equal(t, int(app1.GetAllocatedResource().Resources[resources.MEMORY]), 100, "app1 allocated resource incorrect")
-	assert.Equal(t, int(app2.GetAllocatedResource().Resources[resources.MEMORY]), 100, "app2 allocated resource incorrect")
+	assert.Equal(t, int(app1.GetAllocatedResource().Resources[resources.MEMORY]), 100000000, "app1 allocated resource incorrect")
+	assert.Equal(t, int(app2.GetAllocatedResource().Resources[resources.MEMORY]), 100000000, "app2 allocated resource incorrect")
 }
 
 func TestRejectApplications(t *testing.T) {
@@ -747,8 +747,8 @@ partitions:
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 100},
-						"vcore":  {Value: 20},
+						"memory": {Value: 100000000},
+						"vcore":  {Value: 20000},
 					},
 				},
 				Action: si.NodeInfo_CREATE,
@@ -800,12 +800,12 @@ partitions:
           - name: parent
             resources:
               max:
-                memory: 100
+                memory: 100M
                 vcore: 10
             queues:
               - name: child-1
               - name: child-2
-`, "root.parent.child-1", 10, 1, 12},
+`, "root.parent.child-1", 10000000, 1000, 12},
 		{"scheduleOverLeafQueueCapacity",
 			`
 partitions:
@@ -817,9 +817,9 @@ partitions:
           - name: default
             resources:
               max:
-                memory: 100
+                memory: 100M
                 vcore: 10
-`, "root.default", 10, 1, 12},
+`, "root.default", 10000000, 1000, 12},
 	}
 
 	for _, param := range parameters {
@@ -838,8 +838,8 @@ partitions:
 						Attributes: map[string]string{},
 						SchedulableResource: &si.Resource{
 							Resources: map[string]*si.Quantity{
-								"memory": {Value: 150},
-								"vcore":  {Value: 15},
+								"memory": {Value: 150000000},
+								"vcore":  {Value: 15000},
 							},
 						},
 						Action: si.NodeInfo_CREATE,
@@ -880,20 +880,20 @@ partitions:
 
 			leaf := ms.getQueue(param.leafQueue)
 
-			waitForPendingQueueResource(t, leaf, 120, 1000)
+			waitForPendingQueueResource(t, leaf, 120000000, 1000)
 
 			ms.scheduler.MultiStepSchedule(20)
 
 			// 100 memory gets allocated, 20 pending because the capacity is 100
-			waitForPendingQueueResource(t, leaf, 20, 1000)
+			waitForPendingQueueResource(t, leaf, 20000000, 1000)
 			app1 := ms.getApplication(appID1)
 			if app1 == nil {
 				t.Fatal("application 'app-1' not found in cache")
 			}
-			waitForAllocatedAppResource(t, app1, 100, 1000)
+			waitForAllocatedAppResource(t, app1, 100000000, 1000)
 
 			assert.Equal(t, len(app1.GetAllAllocations()), 10, "number of app allocations incorrect")
-			assert.Equal(t, int(app1.GetAllocatedResource().Resources[resources.MEMORY]), 100, "app allocated resource incorrect")
+			assert.Equal(t, int(app1.GetAllocatedResource().Resources[resources.MEMORY]), 100000000, "app allocated resource incorrect")
 			assert.Equal(t, len(ms.mockRM.getAllocations()), 10, "number of RM allocations incorrect")
 
 			// release all allocated allocations
@@ -952,8 +952,8 @@ partitions:
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 100},
-						"vcore":  {Value: 20},
+						"memory": {Value: 100000000},
+						"vcore":  {Value: 20000},
 					},
 				},
 				Action: si.NodeInfo_CREATE,
@@ -963,8 +963,8 @@ partitions:
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 100},
-						"vcore":  {Value: 20},
+						"memory": {Value: 100000000},
+						"vcore":  {Value: 20000},
 					},
 				},
 				Action: si.NodeInfo_CREATE,
@@ -991,9 +991,8 @@ partitions:
 	err = ms.proxy.UpdateNode(&si.NodeRequest{
 		Nodes: []*si.NodeInfo{
 			{
-				NodeID:     node1ID,
-				Action:     si.NodeInfo_DRAIN_NODE,
-				Attributes: make(map[string]string),
+				NodeID: node1ID,
+				Action: si.NodeInfo_DRAIN_NODE,
 			},
 		},
 		RmID: "rm:123",
@@ -1012,9 +1011,8 @@ partitions:
 	err = ms.proxy.UpdateNode(&si.NodeRequest{
 		Nodes: []*si.NodeInfo{
 			{
-				NodeID:     node1ID,
-				Action:     si.NodeInfo_DRAIN_TO_SCHEDULABLE,
-				Attributes: make(map[string]string),
+				NodeID: node1ID,
+				Action: si.NodeInfo_DRAIN_TO_SCHEDULABLE,
 			},
 		},
 		RmID: "rm:123",
@@ -1033,9 +1031,8 @@ partitions:
 	err = ms.proxy.UpdateNode(&si.NodeRequest{
 		Nodes: []*si.NodeInfo{
 			{
-				NodeID:     node2ID,
-				Action:     si.NodeInfo_DECOMISSION,
-				Attributes: make(map[string]string),
+				NodeID: node2ID,
+				Action: si.NodeInfo_DECOMISSION,
 			},
 		},
 		RmID: "rm:123",
@@ -1079,8 +1076,8 @@ partitions:
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 100},
-						"vcore":  {Value: 20},
+						"memory": {Value: 100000000},
+						"vcore":  {Value: 20000},
 					},
 				},
 				Action: si.NodeInfo_CREATE,
@@ -1090,8 +1087,8 @@ partitions:
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 100},
-						"vcore":  {Value: 20},
+						"memory": {Value: 100000000},
+						"vcore":  {Value: 20000},
 					},
 				},
 				Action: si.NodeInfo_CREATE,
@@ -1118,8 +1115,8 @@ partitions:
 				AllocationKey: "alloc-1",
 				ResourceAsk: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 10},
-						"vcore":  {Value: 1},
+						"memory": {Value: 10000000},
+						"vcore":  {Value: 1000},
 					},
 				},
 				MaxAllocations: 20,
@@ -1129,8 +1126,8 @@ partitions:
 				AllocationKey: "alloc-1",
 				ResourceAsk: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 10},
-						"vcore":  {Value: 1},
+						"memory": {Value: 10000000},
+						"vcore":  {Value: 1000},
 					},
 				},
 				MaxAllocations: 20,
@@ -1152,10 +1149,10 @@ partitions:
 	app1 := ms.getApplication(app1ID)
 	app2 := ms.getApplication(app2ID)
 
-	waitForPendingQueueResource(t, leaf, 400, 1000)
-	waitForPendingQueueResource(t, root, 400, 1000)
-	waitForPendingAppResource(t, app1, 200, 1000)
-	waitForPendingAppResource(t, app2, 200, 1000)
+	waitForPendingQueueResource(t, leaf, 400000000, 1000)
+	waitForPendingQueueResource(t, root, 400000000, 1000)
+	waitForPendingAppResource(t, app1, 200000000, 1000)
+	waitForPendingAppResource(t, app2, 200000000, 1000)
 
 	ms.scheduler.MultiStepSchedule(9)
 	ms.mockRM.waitForAllocations(t, 9, 1000)
@@ -1164,7 +1161,7 @@ partitions:
 	node2Alloc := ms.scheduler.GetClusterContext().GetPartition(partition).GetNode("node-2:1234").GetAllocatedResource().Resources[resources.MEMORY]
 	// we do not know which node was chosen so we need to check:
 	// node1 == 90 && node2 == 0  || node1 == 0 && node2 == 90
-	if !(node1Alloc == 90 && node2Alloc == 0) && !(node1Alloc == 0 && node2Alloc == 90) {
+	if !(node1Alloc == 90000000 && node2Alloc == 0) && !(node1Alloc == 0 && node2Alloc == 90000000) {
 		t.Errorf("allocation not contained on one: node1 = %d, node2 = %d", node1Alloc, node2Alloc)
 	}
 }
@@ -1194,8 +1191,8 @@ partitions:
 			Attributes: map[string]string{},
 			SchedulableResource: &si.Resource{
 				Resources: map[string]*si.Quantity{
-					"memory": {Value: 100},
-					"vcore":  {Value: 20},
+					"memory": {Value: 100000000},
+					"vcore":  {Value: 20000},
 				},
 			},
 			Action: si.NodeInfo_CREATE,
@@ -1237,8 +1234,8 @@ partitions:
 				AllocationKey: "alloc-1",
 				ResourceAsk: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 10},
-						"vcore":  {Value: 1},
+						"memory": {Value: 10000000},
+						"vcore":  {Value: 1000},
 					},
 				},
 				MaxAllocations: 20,
@@ -1253,8 +1250,8 @@ partitions:
 	leaf := ms.getQueue(leafName)
 	app := ms.getApplication(appID)
 
-	waitForPendingQueueResource(t, leaf, 200, 1000)
-	waitForPendingAppResource(t, app, 200, 1000)
+	waitForPendingQueueResource(t, leaf, 200000000, 1000)
+	waitForPendingAppResource(t, app, 200000000, 1000)
 
 	ms.scheduler.MultiStepSchedule(20)
 
@@ -1262,12 +1259,12 @@ partitions:
 	ms.mockRM.waitForAllocations(t, 20, 1000)
 	waitForPendingQueueResource(t, leaf, 0, 1000)
 	waitForPendingAppResource(t, app, 0, 1000)
-	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 200)
+	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 200000000)
 
 	// Verify 2 allocations for every node
 	for _, node := range nodes {
 		node := ms.scheduler.GetClusterContext().GetNode(node.NodeID, partition)
-		assert.Equal(t, int(node.GetAllocatedResource().Resources[resources.MEMORY]), 20, "node %s did not get 2 allocated", node.NodeID)
+		assert.Equal(t, int(node.GetAllocatedResource().Resources[resources.MEMORY]), 20000000, "node %s did not get 2 allocated", node.NodeID)
 	}
 }
 
@@ -1299,8 +1296,8 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 100},
-						"vcore":  {Value: 20},
+						"memory": {Value: 100000000},
+						"vcore":  {Value: 20000},
 					},
 				},
 				Action: si.NodeInfo_CREATE,
@@ -1310,8 +1307,8 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 				Attributes: map[string]string{},
 				SchedulableResource: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 100},
-						"vcore":  {Value: 20},
+						"memory": {Value: 100000000},
+						"vcore":  {Value: 20000},
 					},
 				},
 				Action: si.NodeInfo_CREATE,
@@ -1347,8 +1344,8 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 				AllocationKey: "alloc-1",
 				ResourceAsk: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 10},
-						"vcore":  {Value: 1},
+						"memory": {Value: 10000000},
+						"vcore":  {Value: 1000},
 					},
 				},
 				TaskGroupName:  "tg",
@@ -1367,13 +1364,13 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 
 	// verify the placeholder allocation
 	assert.Equal(t, len(app01.GetAllAllocations()), 1)
-	assert.Equal(t, int(app.GetPlaceholderResource().Resources[resources.MEMORY]), 10,
+	assert.Equal(t, int(app.GetPlaceholderResource().Resources[resources.MEMORY]), 10000000,
 		"app allocated memory incorrect")
 	placeholderAlloc := app01.GetAllAllocations()[0]
 
 	// Check allocated resources of nodes
 	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), ms.partitionName,
-		[]string{"node-1:1234", "node-2:1234"}, 10, 1000)
+		[]string{"node-1:1234", "node-2:1234"}, 10000000, 1000)
 
 	// shim submits the actual pod for scheduling
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
@@ -1382,8 +1379,8 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 				AllocationKey: "alloc-2",
 				ResourceAsk: &si.Resource{
 					Resources: map[string]*si.Quantity{
-						"memory": {Value: 10},
-						"vcore":  {Value: 1},
+						"memory": {Value: 10000000},
+						"vcore":  {Value: 1000},
 					},
 				},
 				MaxAllocations: 1,
@@ -1425,7 +1422,7 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 	// actual request gets allocated
 	// placeholder requests have been all released
 	// and queue has no pending resources
-	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 10)
+	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 10000000)
 	assert.Equal(t, int(app.GetPlaceholderResource().Resources[resources.MEMORY]), 0,
 		"app allocated memory incorrect")
 	waitForPendingQueueResource(t, leaf, 0, 1000)

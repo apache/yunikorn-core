@@ -1345,6 +1345,9 @@ func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
 	// we need the original Replaced allocation result.
 	alloc.Releases = nil
 	alloc.Result = Allocated
+	if sa.placeholderData != nil {
+		sa.placeholderData[ph.taskGroupName].Replaced++
+	}
 	return ph
 }
 

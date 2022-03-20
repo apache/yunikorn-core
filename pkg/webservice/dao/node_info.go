@@ -27,11 +27,11 @@ type NodeDAOInfo struct {
 	NodeID      string               `json:"nodeID"`
 	HostName    string               `json:"hostName"`
 	RackName    string               `json:"rackName"`
-	Capacity    string               `json:"capacity"`
-	Allocated   string               `json:"allocated"`
-	Occupied    string               `json:"occupied"`
-	Available   string               `json:"available"`
-	Utilized    string               `json:"utilized"`
+	Capacity    map[string]int64     `json:"capacity"`
+	Allocated   map[string]int64     `json:"allocated"`
+	Occupied    map[string]int64     `json:"occupied"`
+	Available   map[string]int64     `json:"available"`
+	Utilized    map[string]int64     `json:"utilized"`
 	Allocations []*AllocationDAOInfo `json:"allocations"`
 	Schedulable bool                 `json:"schedulable"`
 }

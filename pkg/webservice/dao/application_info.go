@@ -24,8 +24,8 @@ type ApplicationsDAOInfo struct {
 
 type ApplicationDAOInfo struct {
 	ApplicationID   string               `json:"applicationID"`
-	UsedResource    string               `json:"usedResource"`
-	MaxUsedResource string               `json:"maxUsedResource"`
+	UsedResource    map[string]int64     `json:"usedResource"`
+	MaxUsedResource map[string]int64     `json:"maxUsedResource"`
 	Partition       string               `json:"partition"`
 	QueueName       string               `json:"queueName"`
 	SubmissionTime  int64                `json:"submissionTime"`
@@ -41,7 +41,7 @@ type AllocationDAOInfo struct {
 	AllocationKey    string            `json:"allocationKey"`
 	AllocationTags   map[string]string `json:"allocationTags"`
 	UUID             string            `json:"uuid"`
-	ResourcePerAlloc string            `json:"resource"`
+	ResourcePerAlloc map[string]int64  `json:"resource"`
 	Priority         string            `json:"priority"`
 	QueueName        string            `json:"queueName"`
 	NodeID           string            `json:"nodeId"`
@@ -52,7 +52,7 @@ type AllocationDAOInfo struct {
 type PlaceholderDAOInfo struct {
 	TaskGroupName string `json:"taskGroupName"`
 	Count         int64  `json:"count"`
-	MinResource   string `json:"minResource"`
+	MinResource   map[string]int64 `json:"minResource"`
 	RequiredNode  string `json:"requiredNode"`
 	Replaced      int64  `json:"replaced"`
 }

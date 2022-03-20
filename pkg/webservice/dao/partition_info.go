@@ -35,9 +35,9 @@ type PartitionInfo struct {
 }
 
 type PartitionCapacity struct {
-	Capacity     string `json:"capacity"`
-	UsedCapacity string `json:"usedCapacity"`
-	Utilization  string `json:"utilization"`
+	Capacity     map[string]int64 `json:"capacity"`
+	UsedCapacity map[string]int64 `json:"usedCapacity"`
+	Utilization  map[string]int64 `json:"utilization"`
 }
 
 type NodeInfo struct {

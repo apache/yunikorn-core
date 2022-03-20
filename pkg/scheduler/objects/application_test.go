@@ -327,7 +327,6 @@ func TestAddAllocAsk(t *testing.T) {
 	if err == nil {
 		t.Errorf("ask with zero repeat should not have been added to app")
 	}
-
 	// working cases
 	res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	ask = newAllocationAskRepeat(aKey, appID1, res, 1)
@@ -364,6 +363,36 @@ func TestAddAllocAsk(t *testing.T) {
 	}
 	// after all this is must still be in an accepted state
 	assert.Assert(t, app.IsAccepted(), "Application should have stayed in accepted state")
+
+	// test PlaceholderData
+	tg1 := "tg-1"
+	ask = newAllocationAskTG(aKey,appID1,tg1,res,2)
+	err = app.AddAllocationAsk(ask)
+	assert.Equal(t, len(app.placeholderData), 1)
+	assert.Equal(t, app.placeholderData[tg1].TaskGroupName, tg1)
+	assert.Equal(t, app.placeholderData[tg1].RequiredNode, "")
+	assert.Equal(t, app.placeholderData[tg1].Count, int64(1))
+	assert.Equal(t, app.placeholderData[tg1].Replaced, int64(0))
+	assert.DeepEqual(t, app.placeholderData[tg1].MinResource, res)
+
+	ask = newAllocationAskTG(aKey,appID1,tg1,res,1)
+	err = app.AddAllocationAsk(ask)
+	assert.Equal(t, len(app.placeholderData), 1)
+	assert.Equal(t, app.placeholderData[tg1].TaskGroupName, tg1)
+	assert.Equal(t, app.placeholderData[tg1].RequiredNode, "")
+	assert.Equal(t, app.placeholderData[tg1].Count, int64(2))
+	assert.Equal(t, app.placeholderData[tg1].Replaced, int64(0))
+	assert.DeepEqual(t, app.placeholderData[tg1].MinResource, res)
+
+	tg2 := "tg-2"
+	ask = newAllocationAskTG(aKey,appID1,tg2,res,1)
+	err = app.AddAllocationAsk(ask)
+	assert.Equal(t, len(app.placeholderData), 2)
+	assert.Equal(t, app.placeholderData[tg2].TaskGroupName, tg2)
+	assert.Equal(t, app.placeholderData[tg2].RequiredNode, "")
+	assert.Equal(t, app.placeholderData[tg2].Count, int64(1))
+	assert.Equal(t, app.placeholderData[tg2].Replaced, int64(0))
+	assert.DeepEqual(t, app.placeholderData[tg2].MinResource, res)
 }
 
 // test state change on add and remove ask
@@ -1000,6 +1029,15 @@ func TestReplaceAllocation(t *testing.T) {
 	ph := newPlaceholderAlloc(appID1, "uuid-1", nodeID1, "root.a", res)
 	// add the placeholder to the app
 	app.AddAllocation(ph)
+	// add PlaceholderData
+	app.addPlaceholderData(ph.Ask)
+	assert.Equal(t, len(app.placeholderData), 1)
+	assert.Equal(t, app.placeholderData[""].TaskGroupName, "")
+	assert.Equal(t, app.placeholderData[""].RequiredNode, "")
+	assert.Equal(t, app.placeholderData[""].Count, int64(1))
+	assert.Equal(t, app.placeholderData[""].Replaced, int64(0))
+	assert.DeepEqual(t, app.placeholderData[""].MinResource, res)
+
 	assert.Equal(t, len(app.allocations), 1, "allocation not added as expected")
 	assert.Assert(t, resources.IsZero(app.allocatedResource), "placeholder counted as real allocation")
 	if !resources.Equals(app.allocatedPlaceholder, res) {
@@ -1007,9 +1045,13 @@ func TestReplaceAllocation(t *testing.T) {
 	}
 	alloc = app.ReplaceAllocation("uuid-1")
 	assert.Equal(t, alloc, nilAlloc, "placeholder without releases expected nil to be returned got a real alloc: %s", alloc)
+	assert.Equal(t, app.placeholderData[""].Replaced, int64(0))
 	// add the placeholder back to the app, the failure test above changed state and removed the ph
 	app.SetState(Running.String())
 	app.AddAllocation(ph)
+	app.addPlaceholderData(ph.Ask)
+	assert.Equal(t, app.placeholderData[""].Count, int64(2))
+
 	// set the real one to replace the placeholder
 	realAlloc := newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
 	realAlloc.Result = Replaced
@@ -1020,11 +1062,15 @@ func TestReplaceAllocation(t *testing.T) {
 	if !resources.Equals(app.allocatedResource, res) {
 		t.Fatalf("real allocation not updated as expected: got %s, expected %s", app.allocatedResource, res)
 	}
+	assert.Equal(t, app.placeholderData[""].Replaced, int64(1))
 
 	// add the placeholder back to the app, the failure test above changed state and removed the ph
 	app.SetState(Running.String())
 	ph.Releases = nil
 	app.AddAllocation(ph)
+	app.addPlaceholderData(ph.Ask)
+	assert.Equal(t, app.placeholderData[""].Count, int64(3))
+
 	// set multiple real allocations to replace the placeholder
 	realAlloc = newAllocation(appID1, "uuid-3", nodeID1, "root.a", res)
 	realAlloc.Result = Replaced
@@ -1035,6 +1081,7 @@ func TestReplaceAllocation(t *testing.T) {
 	alloc = app.ReplaceAllocation("uuid-1")
 	assert.Equal(t, alloc, ph, "returned allocation is not the placeholder")
 	assert.Assert(t, resources.IsZero(app.allocatedPlaceholder), "real allocation counted as placeholder")
+	assert.Equal(t, app.placeholderData[""].Replaced, int64(2))
 	// after the second replace we have 2 real allocations
 	if !resources.Equals(app.allocatedResource, resources.Multiply(res, 2)) {
 		t.Fatalf("real allocation not updated as expected: got %s, expected %s", app.allocatedResource, resources.Multiply(res, 2))

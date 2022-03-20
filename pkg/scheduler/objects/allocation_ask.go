@@ -108,6 +108,13 @@ func (aa *AllocationAsk) GetPendingAskRepeat() int32 {
 	return aa.pendingRepeatAsk
 }
 
+// test only
+func (aa *AllocationAsk) SetPendingAskRepeat(pendingRepeatAsk int32) {
+	aa.Lock()
+	defer aa.Unlock()
+	aa.pendingRepeatAsk = pendingRepeatAsk
+}
+
 // Return the time this ask was created
 // Should be treated as read only not te be modified
 func (aa *AllocationAsk) GetCreateTime() time.Time {

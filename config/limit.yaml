@@ -27,7 +27,7 @@ partitions:
             - john
             - sue
             maxapplications: 10
-            maxresources: {memory: 10000, vcore: 10}
+            maxresources: {memory: 10G, vcore: 10}
           - limit:
             users:
             - bob

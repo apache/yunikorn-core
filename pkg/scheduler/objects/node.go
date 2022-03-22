@@ -51,7 +51,6 @@ type Node struct {
 	availableResource *resources.Resource
 	allocations       map[string]*Allocation
 	schedulable       bool
-	unlimited         bool
 	ready             bool
 
 	preempting   *resources.Resource     // resources considered for preemption
@@ -101,8 +100,8 @@ func (sn *Node) String() string {
 	if sn == nil {
 		return "node is nil"
 	}
-	return fmt.Sprintf("NodeID %s, Partition %s, Schedulable %t, Unlimited: %t, Total %s, Allocated %s, #allocations %d",
-		sn.NodeID, sn.Partition, sn.schedulable, sn.unlimited, sn.totalResource, sn.allocatedResource, len(sn.allocations))
+	return fmt.Sprintf("NodeID %s, Partition %s, Schedulable %t, Total %s, Allocated %s, #allocations %d",
+		sn.NodeID, sn.Partition, sn.schedulable, sn.totalResource, sn.allocatedResource, len(sn.allocations))
 }
 
 // Set the attributes and fast access fields.
@@ -113,14 +112,6 @@ func (sn *Node) initializeAttribute(newAttributes map[string]string) {
 	sn.Hostname = sn.attributes[common.HostName]
 	sn.Rackname = sn.attributes[common.RackName]
 	sn.Partition = sn.attributes[common.NodePartition]
-
-	if v, ok := sn.attributes["yunikorn.apache.org/nodeType"]; ok {
-		if v == "unlimited" {
-			sn.unlimited = true
-			sn.totalResource = nil
-			sn.availableResource = nil
-		}
-	}
 }
 
 // Get an attribute by name. The most used attributes can be directly accessed via the
@@ -387,10 +378,6 @@ func (sn *Node) preReserveConditions(allocID string) bool {
 // This is a lock free call as it does not change the node and multiple predicate checks could be
 // run at the same time.
 func (sn *Node) preConditions(allocID string, allocate bool) bool {
-	// skip predicate check in case of unlimited node
-	if sn.unlimited {
-		return true
-	}
 	// Check the predicates plugin (k8shim)
 	if plugin := plugins.GetResourceManagerCallbackPlugin(); plugin != nil {
 		// checking predicates
@@ -471,13 +458,6 @@ func (sn *Node) IsReserved() bool {
 	sn.RLock()
 	defer sn.RUnlock()
 	return len(sn.reservations) > 0
-}
-
-// Check if the node is unlimited
-func (sn *Node) IsUnlimited() bool {
-	sn.RLock()
-	defer sn.RUnlock()
-	return sn.unlimited
 }
 
 // isReservedForApp returns true if and only if the node has been reserved by the application

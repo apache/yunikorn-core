@@ -592,17 +592,7 @@ func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo, nodeCount int) error {
 	if !sn.IsReady() {
 		metrics.GetSchedulerMetrics().IncUnhealthyNodes()
 	}
-	// if this node is unlimited, check the following things:
-	// 1. if reservation is enabled, reject the node
-	// 2. any other nodes in the list, reject the node
-	if sn.IsUnlimited() {
-		if nodeCount > 1 {
-			return fmt.Errorf("more than one node to be added cannot register a unlimited node")
-		}
-		if !cc.reservationDisabled {
-			return fmt.Errorf("reservations must be disabled when registering a unlimited node")
-		}
-	}
+
 	partition := cc.GetPartition(sn.Partition)
 	if partition == nil {
 		err := fmt.Errorf("failed to find partition %s for new node %s", sn.Partition, sn.NodeID)
@@ -612,13 +602,6 @@ func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo, nodeCount int) error {
 			zap.String("nodeID", sn.NodeID),
 			zap.String("partitionName", sn.Partition))
 		return err
-	}
-	// check that we only have one unlimited node and never a mix of unlimited and limited
-	if partition.hasUnlimitedNode() {
-		return fmt.Errorf("the partition has an unlimited node registered, registering other nodes is forbidden")
-	}
-	if sn.IsUnlimited() && partition.nodes.GetNodeCount() > 0 {
-		return fmt.Errorf("the unlimited node should be registered first, there are other nodes registered in the partition")
 	}
 
 	existingAllocations := cc.convertAllocations(nodeInfo.ExistingAllocations)

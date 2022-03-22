@@ -1593,7 +1593,7 @@ func TestPlaceholderSmallerThanReal(t *testing.T) {
 		TerminationType: si.TerminationType_TIMEOUT,
 	}
 	released, _ := partition.removeAllocation(release)
-	assert.Equal(t, 1, len(released), "one allocation should be released")
+	assert.Equal(t, 0, len(released), "expected no releases")
 	assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "nothing should be allocated on node")
 	assert.Assert(t, resources.IsZero(app.GetQueue().GetAllocatedResource()), "nothing should be allocated on queue")
 	assert.Equal(t, 0, partition.GetTotalAllocationCount(), "no allocation should be registered on the partition")
@@ -1678,7 +1678,7 @@ func TestPlaceholderSmallerMulti(t *testing.T) {
 			TerminationType: si.TerminationType_TIMEOUT,
 		}
 		released, _ := partition.removeAllocation(release)
-		assert.Equal(t, 1, len(released), "one allocation should be released")
+		assert.Equal(t, 0, len(released), "expected no releases")
 	}
 	assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "nothing should be allocated on node")
 	assert.Assert(t, resources.IsZero(app.GetQueue().GetAllocatedResource()), "nothing should be allocated on queue")

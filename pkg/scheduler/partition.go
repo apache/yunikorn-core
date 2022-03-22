@@ -1363,11 +1363,18 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 	}
 	// if confirmed is set we can assume there will just be one alloc in the released
 	// that allocation was already released by the shim, so clean up released
+
 	if confirmed != nil {
 		released = nil
 	}
 	// track the number of allocations, when we replace the result is no change
 	pc.updateAllocationCount(-len(released))
+
+	// if the termination type is timeout, we don't notify the shim, because it's
+	// originated from that side
+	if release.TerminationType == si.TerminationType_TIMEOUT {
+		released = nil
+	}
 	return released, confirmed
 }
 

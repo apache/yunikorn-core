@@ -48,6 +48,24 @@ partitions:
                 vcore: 10000
 `
 
+func TestUpdateHealthCheckCache(t *testing.T) {
+	configs.MockSchedulerConfigByData([]byte(configDefault))
+	metrics.Reset()
+	schedulerMetrics := metrics.GetSchedulerMetrics()
+	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
+	assert.NilError(t, err, "Error when load schedulerContext from config")
+	if schedulerContext.healthCheckCache != nil {
+		t.Fatal("Health status cache should be nil initially")
+	}
+
+	healthInfo := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	UpdateSchedulerHealthStatusCache(healthInfo, schedulerContext)
+	assert.Equal(t, healthInfo.Healthy, (*schedulerContext).healthCheckCache.Healthy, "Health status cache should be updated")
+	for i := 0; i < len(healthInfo.HealthChecks); i++ {
+		assert.Equal(t, healthInfo.HealthChecks[i], (*schedulerContext).healthCheckCache.HealthChecks[i], "Health status cache should be updated")
+	}
+}
+
 func TestGetSchedulerHealthStatusContext(t *testing.T) {
 	partName := "[rmID]default"
 	configs.MockSchedulerConfigByData([]byte(configDefault))

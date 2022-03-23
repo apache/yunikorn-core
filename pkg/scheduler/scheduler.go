@@ -59,6 +59,10 @@ func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 	monitor := newNodesResourceUsageMonitor(s.clusterContext)
 	monitor.start()
 
+	// Start health check periodically
+	c := NewHealthChecker()
+	c.start(s.clusterContext)
+
 	if !manualSchedule {
 		go s.internalSchedule()
 		go s.internalInspectOutstandingRequests()

@@ -516,14 +516,23 @@ func isChecksumEqual(checksum string) bool {
 
 func checkHealthStatus(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
-	metrics := metrics2.GetSchedulerMetrics()
-	result := scheduler.GetSchedulerHealthStatus(metrics, schedulerContext)
-	if !result.Healthy {
-		log.Logger().Error("Scheduler is not healthy", zap.Any("health check values", result.HealthChecks))
-		buildJSONErrorResponse(w, "Scheduler is not healthy", http.StatusServiceUnavailable)
-	}
-	if err := json.NewEncoder(w).Encode(result); err != nil {
-		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+
+	// Fetch health check from cache
+	cache := schedulerContext.GetHealthCheckCache()
+	if cache != nil {
+		if !cache.Healthy {
+			log.Logger().Error("Scheduler is not healthy", zap.Any("health check info", *cache))
+			buildJSONErrorResponse(w, "Scheduler is not healthy", http.StatusServiceUnavailable)
+		} else {
+			log.Logger().Info("Scheduler is healthy", zap.Any("health check info", *cache))
+			buildJSONErrorResponse(w, "Scheduler is healthy", http.StatusOK)
+		}
+		if err := json.NewEncoder(w).Encode(cache); err != nil {
+			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		}
+	} else {
+		log.Logger().Info("The healthy status of scheduler is not found", zap.Any("health check info", ""))
+		buildJSONErrorResponse(w, "The healthy status of scheduler is not found", http.StatusNotFound)
 	}
 }
 

@@ -20,13 +20,71 @@ package scheduler
 
 import (
 	"fmt"
+	"time"
 
+	"go.uber.org/zap"
+
+	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 )
+
+const defaultPeriod = 30 * time.Second
+
+type HealthChecker struct {
+	period   time.Duration
+	stopChan chan struct{}
+}
+
+func NewHealthChecker() *HealthChecker {
+	return &HealthChecker{
+		period:   defaultPeriod,
+		stopChan: make(chan struct{}),
+	}
+}
+
+// start execute healthCheck service in the background,
+func (c *HealthChecker) start(schedulerContext *ClusterContext) {
+	go func() {
+		ticker := time.NewTicker(c.period)
+		for {
+			select {
+			case <-c.stopChan:
+				ticker.Stop()
+				return
+			case <-ticker.C:
+				schedulerMetrics := metrics.GetSchedulerMetrics()
+				result := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+				UpdateSchedulerHealthStatusCache(result, schedulerContext)
+				if !result.Healthy {
+					log.Logger().Error("Scheduler is not healthy",
+						zap.Any("health check values", result.HealthChecks))
+				} else {
+					log.Logger().Info("Scheduler is healthy",
+						zap.Any("health check values", result.HealthChecks))
+				}
+			}
+		}
+	}()
+}
+
+func (c *HealthChecker) stop() {
+	c.stopChan <- struct{}{}
+	close(c.stopChan)
+}
+
+func UpdateSchedulerHealthStatusCache(latest dao.SchedulerHealthDAOInfo, schedulerContext *ClusterContext) {
+	cache := schedulerContext.GetHealthCheckCache()
+	if cache == nil {
+		cache = new(dao.SchedulerHealthDAOInfo)
+	}
+	cache.Healthy = latest.Healthy
+	cache.HealthChecks = latest.HealthChecks
+	schedulerContext.SetHealthCheckCache(cache)
+}
 
 func GetSchedulerHealthStatus(metrics metrics.CoreSchedulerMetrics, schedulerContext *ClusterContext) dao.SchedulerHealthDAOInfo {
 	var healthInfo []dao.HealthCheckInfo

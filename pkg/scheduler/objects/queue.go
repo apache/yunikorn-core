@@ -118,7 +118,9 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 	sq.UpdateSortType()
 
 	log.Logger().Info("configured queue added to scheduler",
-		zap.String("queueName", sq.QueuePath))
+		zap.String("queueName", sq.QueuePath),
+		zap.Uint64("maxApp", sq.maxRunningApps),
+		zap.Uint64("runningApp", sq.runningApps))
 
 	return sq, nil
 }
@@ -520,6 +522,11 @@ func (sq *Queue) decPendingResource(delta *resources.Resource) {
 func (sq *Queue) AddApplication(app *Application) {
 	sq.Lock()
 	defer sq.Unlock()
+	if !sq.canRun() {
+		log.Logger().Error("application has reached max applications limit in queue ",
+			zap.String("queue path", sq.QueuePath))
+		return
+	}
 	sq.applications[app.ApplicationID] = app
 	// YUNIKORN-199: update the quota from the namespace
 	// get the tag with the quota

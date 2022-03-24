@@ -1412,9 +1412,6 @@ func (sa *Application) AddAllocation(info *Allocation) {
 // Add the Allocation to the application
 // No locking must be called while holding the lock
 func (sa *Application) addAllocationInternal(info *Allocation) {
-	if sa.queue != nil && !sa.queue.canRun() && sa.stateMachine.Is(Accepted.String()) {
-		return
-	}
 	// placeholder allocations do not progress the state of the app and are tracked in a separate total
 	if info.IsPlaceholder() {
 		// when we have the first placeholder allocation start the placeholder timer.

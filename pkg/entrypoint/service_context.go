@@ -21,10 +21,10 @@ package entrypoint
 import (
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
-	"github.com/apache/incubator-yunikorn-core/pkg/webservice"
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/api"
+	"github.com/apache/yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-core/pkg/scheduler"
+	"github.com/apache/yunikorn-core/pkg/webservice"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/api"
 )
 
 type ServiceContext struct {

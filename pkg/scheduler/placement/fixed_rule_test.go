@@ -23,8 +23,8 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
+	"github.com/apache/yunikorn-core/pkg/common/security"
 )
 
 func TestFixedRule(t *testing.T) {

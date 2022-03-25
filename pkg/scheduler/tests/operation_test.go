@@ -24,8 +24,8 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 // this test simulates the scenario the cluster starts up with 0 nodes

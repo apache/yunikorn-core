@@ -22,7 +22,7 @@ import (
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-core/pkg/log"
 )
 
 // ----------------------------------

@@ -23,7 +23,7 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/tests"
+	"github.com/apache/yunikorn-core/pkg/scheduler/tests"
 )
 
 type FakeResourceManagerCallback struct {

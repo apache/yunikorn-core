@@ -21,8 +21,8 @@ package placement
 import (
 	"fmt"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
+	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 )
 
 // A simple test rule to place an application based on a nil application.

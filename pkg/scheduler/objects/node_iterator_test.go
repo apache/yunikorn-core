@@ -22,7 +22,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
 )
 
 // empty test for random iterator

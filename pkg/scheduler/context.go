@@ -27,16 +27,16 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-	"github.com/apache/incubator-yunikorn-core/pkg/handler"
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
-	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
-	siCommon "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/handler"
+	"github.com/apache/yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-core/pkg/metrics"
+	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
+	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 const disableReservation = "DISABLE_RESERVATION"

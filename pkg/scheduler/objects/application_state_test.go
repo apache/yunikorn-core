@@ -24,7 +24,7 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common"
 )
 
 func TestAcceptStateTransition(t *testing.T) {

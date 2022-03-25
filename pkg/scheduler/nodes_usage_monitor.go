@@ -21,7 +21,7 @@ package scheduler
 import (
 	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
+	"github.com/apache/yunikorn-core/pkg/metrics"
 )
 
 type nodesResourceUsageMonitor struct {

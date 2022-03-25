@@ -23,8 +23,8 @@ import (
 	"go.uber.org/zap"
 	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
+	"github.com/apache/yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-core/pkg/metrics"
 
 	"github.com/looplab/fsm"
 )

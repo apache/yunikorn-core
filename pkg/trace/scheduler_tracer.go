@@ -24,7 +24,7 @@ import (
 
 	"github.com/opentracing/opentracing-go"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-core/pkg/log"
 )
 
 // SchedulerTracer defines minimum interface for tracing

@@ -60,9 +60,9 @@ func TestUpdateHealthCheckCache(t *testing.T) {
 
 	healthInfo := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	UpdateSchedulerHealthStatusCache(healthInfo, schedulerContext)
-	assert.Equal(t, healthInfo.Healthy, (*schedulerContext).healthCheckCache.Healthy, "Health status cache should be updated")
+	assert.Equal(t, healthInfo.Healthy, schedulerContext.healthCheckCache.Healthy, "Health status cache should be updated")
 	for i := 0; i < len(healthInfo.HealthChecks); i++ {
-		assert.Equal(t, healthInfo.HealthChecks[i], (*schedulerContext).healthCheckCache.HealthChecks[i], "Health status cache should be updated")
+		assert.Equal(t, healthInfo.HealthChecks[i], schedulerContext.healthCheckCache.HealthChecks[i], "Health status cache should be updated")
 	}
 }
 

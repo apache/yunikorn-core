@@ -71,6 +71,7 @@ func (c *HealthChecker) start(schedulerContext *ClusterContext) {
 	}()
 }
 
+//nolint:unused
 func (c *HealthChecker) stop() {
 	c.stopChan <- struct{}{}
 	close(c.stopChan)

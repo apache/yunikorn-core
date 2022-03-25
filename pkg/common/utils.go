@@ -28,8 +28,8 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	interfaceCommon "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
+	"github.com/apache/yunikorn-core/pkg/log"
+	interfaceCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 )
 
 func GetNormalizedPartitionName(partitionName string, rmID string) string {

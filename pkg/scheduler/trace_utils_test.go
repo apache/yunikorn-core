@@ -24,7 +24,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/trace"
+	"github.com/apache/yunikorn-core/pkg/trace"
 )
 
 func Test_startSpanWrapper(t *testing.T) {

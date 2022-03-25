@@ -23,7 +23,7 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
 )
 
 func TestNewNodeCollection(t *testing.T) {

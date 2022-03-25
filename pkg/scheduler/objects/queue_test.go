@@ -27,10 +27,10 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects/template"
-	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/scheduler/objects/template"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
 // base test for creating a managed queue

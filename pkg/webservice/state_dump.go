@@ -30,9 +30,9 @@ import (
 	"sync"
 	"time"
 
-	yunikornLog "github.com/apache/incubator-yunikorn-core/pkg/log"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
-	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
+	yunikornLog "github.com/apache/yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-core/pkg/scheduler"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"

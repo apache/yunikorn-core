@@ -24,7 +24,7 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 // the fields of an event should match after stored and retrieved

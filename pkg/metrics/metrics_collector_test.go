@@ -25,7 +25,7 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
+	"github.com/apache/yunikorn-core/pkg/metrics/history"
 )
 
 func TestStop(t *testing.T) {

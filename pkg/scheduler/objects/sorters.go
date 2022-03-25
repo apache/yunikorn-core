@@ -22,9 +22,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/metrics"
+	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 )
 
 func sortQueue(queues []*Queue, sortType policies.SortPolicy) {

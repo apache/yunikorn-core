@@ -40,7 +40,7 @@ BASE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 GO111MODULE := on
 export GO111MODULE
 
-REPO=github.com/apache/incubator-yunikorn-core/pkg
+REPO=github.com/apache/yunikorn-core/pkg
 # when using the -race option CGO_ENABLED is set to 1 (automatically)
 # it breaks cross compilation.
 RACE=-race

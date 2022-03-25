@@ -21,7 +21,7 @@ package plugins
 import (
 	"sync"
 
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/api"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/api"
 )
 
 type SchedulerPlugins struct {

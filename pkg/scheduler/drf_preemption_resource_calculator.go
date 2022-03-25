@@ -21,7 +21,7 @@ package scheduler
 import (
 	"math"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
 )
 
 // Temp object for better readability.

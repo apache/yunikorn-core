@@ -17,13 +17,13 @@
 // under the License.
 //
 
-module github.com/apache/incubator-yunikorn-core
+module github.com/apache/yunikorn-core
 
 go 1.16
 
 require (
 	github.com/HdrHistogram/hdrhistogram-go v1.0.1 // indirect
-	github.com/apache/incubator-yunikorn-scheduler-interface v0.0.0-20220218043513-e19a1b0c381f
+	github.com/apache/yunikorn-scheduler-interface v0.0.0-20220325134135-4a644b388bc4
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/google/btree v1.0.1
 	github.com/google/uuid v1.2.0

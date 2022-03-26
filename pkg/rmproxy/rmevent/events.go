@@ -19,7 +19,7 @@
 package rmevent
 
 import (
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 // Incoming UpdateAllocation events from the RM to the scheduler (async)

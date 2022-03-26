@@ -27,7 +27,7 @@ import (
 	dto "github.com/prometheus/client_model/go"
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-core/pkg/log"
 )
 
 var resourceUsageRangeBuckets = []string{

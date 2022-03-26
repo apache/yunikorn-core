@@ -29,7 +29,7 @@ import (
 	"github.com/uber/jaeger-client-go/log/zap"
 	"github.com/uber/jaeger-lib/metrics"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-core/pkg/log"
 )
 
 // NewConstTracer returns an instance of Jaeger Tracer that samples 100% or 0% of traces for test.

@@ -24,12 +24,11 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
-
-	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
-	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-core/pkg/metrics"
+	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
 const defaultPeriod = 30 * time.Second

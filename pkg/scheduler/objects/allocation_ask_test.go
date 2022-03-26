@@ -24,9 +24,9 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 func TestAskToString(t *testing.T) {

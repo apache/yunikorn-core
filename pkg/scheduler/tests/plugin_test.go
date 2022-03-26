@@ -25,9 +25,9 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common"
-	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/plugins"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 type fakeContainerStateUpdater struct {

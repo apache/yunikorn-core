@@ -29,17 +29,17 @@ import (
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/placement"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
-	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-core/pkg/metrics"
+	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/scheduler/placement"
+	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 type PartitionContext struct {
@@ -1363,11 +1363,18 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 	}
 	// if confirmed is set we can assume there will just be one alloc in the released
 	// that allocation was already released by the shim, so clean up released
+
 	if confirmed != nil {
 		released = nil
 	}
 	// track the number of allocations, when we replace the result is no change
 	pc.updateAllocationCount(-len(released))
+
+	// if the termination type is timeout, we don't notify the shim, because it's
+	// originated from that side
+	if release.TerminationType == si.TerminationType_TIMEOUT {
+		released = nil
+	}
 	return released, confirmed
 }
 

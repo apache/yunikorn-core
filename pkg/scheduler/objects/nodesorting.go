@@ -23,8 +23,8 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
+	"github.com/apache/yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 )
 
 type NodeSortingPolicy interface {

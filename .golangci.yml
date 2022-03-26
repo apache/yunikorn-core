@@ -34,7 +34,7 @@ linters-settings:
   gofmt:
     simplify: true
   goimports:
-    local-prefixes: github.com/apache/incubator-yunikorn
+    local-prefixes: github.com/apache/yunikorn
   govet:
     check-shadowing: true
   funlen:

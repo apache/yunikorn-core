@@ -54,15 +54,15 @@ func TestUpdateHealthCheckCache(t *testing.T) {
 	schedulerMetrics := metrics.GetSchedulerMetrics()
 	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
 	assert.NilError(t, err, "Error when load schedulerContext from config")
-	if schedulerContext.healthCheckCache != nil {
-		t.Fatal("Health status cache should be nil initially")
+	if schedulerContext.lastHealthCheckResult != nil {
+		t.Fatal("lastHealthCheckResult should be nil initially")
 	}
 
 	healthInfo := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
-	UpdateSchedulerHealthStatusCache(healthInfo, schedulerContext)
-	assert.Equal(t, healthInfo.Healthy, schedulerContext.healthCheckCache.Healthy, "Health status cache should be updated")
+	updateSchedulerLastHealthStatus(healthInfo, schedulerContext)
+	assert.Equal(t, healthInfo.Healthy, schedulerContext.lastHealthCheckResult.Healthy, "lastHealthCheckResult should be updated")
 	for i := 0; i < len(healthInfo.HealthChecks); i++ {
-		assert.Equal(t, healthInfo.HealthChecks[i], schedulerContext.healthCheckCache.HealthChecks[i], "Health status cache should be updated")
+		assert.Equal(t, healthInfo.HealthChecks[i], schedulerContext.lastHealthCheckResult.HealthChecks[i], "lastHealthCheckResult should be updated")
 	}
 }
 

@@ -517,17 +517,17 @@ func isChecksumEqual(checksum string) bool {
 func checkHealthStatus(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
-	// Fetch health check from cache
-	cache := schedulerContext.GetHealthCheckCache()
-	if cache != nil {
-		if !cache.Healthy {
-			log.Logger().Error("Scheduler is not healthy", zap.Any("health check info", *cache))
+	// Fetch last healthCheck result
+	result := schedulerContext.GetLastHealthCheckResult()
+	if result != nil {
+		if !result.Healthy {
+			log.Logger().Error("Scheduler is not healthy", zap.Any("health check info", *result))
 			buildJSONErrorResponse(w, "Scheduler is not healthy", http.StatusServiceUnavailable)
 		} else {
-			log.Logger().Info("Scheduler is healthy", zap.Any("health check info", *cache))
+			log.Logger().Info("Scheduler is healthy", zap.Any("health check info", *result))
 			buildJSONErrorResponse(w, "Scheduler is healthy", http.StatusOK)
 		}
-		if err := json.NewEncoder(w).Encode(cache); err != nil {
+		if err := json.NewEncoder(w).Encode(result); err != nil {
 			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		}
 	} else {

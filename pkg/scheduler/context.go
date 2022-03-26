@@ -56,7 +56,7 @@ type ClusterContext struct {
 
 	sync.RWMutex
 
-	healthCheckCache *dao.SchedulerHealthDAOInfo
+	lastHealthCheckResult *dao.SchedulerHealthDAOInfo
 }
 
 type RMInformation struct {
@@ -922,10 +922,14 @@ func (cc *ClusterContext) SetRMInfo(rmID string, rmBuildInformation map[string]s
 	}
 }
 
-func (cc *ClusterContext) GetHealthCheckCache() *dao.SchedulerHealthDAOInfo {
-	return cc.healthCheckCache
+func (cc *ClusterContext) GetLastHealthCheckResult() *dao.SchedulerHealthDAOInfo {
+	cc.RLock()
+	defer cc.RUnlock()
+	return cc.lastHealthCheckResult
 }
 
-func (cc *ClusterContext) SetHealthCheckCache(c *dao.SchedulerHealthDAOInfo) {
-	cc.healthCheckCache = c
+func (cc *ClusterContext) SetLastHealthCheckResult(c *dao.SchedulerHealthDAOInfo) {
+	cc.Lock()
+	defer cc.Unlock()
+	cc.lastHealthCheckResult = c
 }

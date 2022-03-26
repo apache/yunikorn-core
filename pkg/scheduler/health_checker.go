@@ -58,7 +58,7 @@ func (c *HealthChecker) start(schedulerContext *ClusterContext) {
 			case <-ticker.C:
 				schedulerMetrics := metrics.GetSchedulerMetrics()
 				result := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
-				UpdateSchedulerHealthStatusCache(result, schedulerContext)
+				updateSchedulerLastHealthStatus(result, schedulerContext)
 				if !result.Healthy {
 					log.Logger().Error("Scheduler is not healthy",
 						zap.Any("health check values", result.HealthChecks))
@@ -77,14 +77,14 @@ func (c *HealthChecker) stop() {
 	close(c.stopChan)
 }
 
-func UpdateSchedulerHealthStatusCache(latest dao.SchedulerHealthDAOInfo, schedulerContext *ClusterContext) {
-	cache := schedulerContext.GetHealthCheckCache()
-	if cache == nil {
-		cache = new(dao.SchedulerHealthDAOInfo)
+func updateSchedulerLastHealthStatus(latest dao.SchedulerHealthDAOInfo, schedulerContext *ClusterContext) {
+	result := schedulerContext.GetLastHealthCheckResult()
+	if result == nil {
+		result = new(dao.SchedulerHealthDAOInfo)
 	}
-	cache.Healthy = latest.Healthy
-	cache.HealthChecks = latest.HealthChecks
-	schedulerContext.SetHealthCheckCache(cache)
+	result.Healthy = latest.Healthy
+	result.HealthChecks = latest.HealthChecks
+	schedulerContext.SetLastHealthCheckResult(result)
 }
 
 func GetSchedulerHealthStatus(metrics metrics.CoreSchedulerMetrics, schedulerContext *ClusterContext) dao.SchedulerHealthDAOInfo {

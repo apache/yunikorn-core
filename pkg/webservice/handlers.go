@@ -525,10 +525,9 @@ func checkHealthStatus(w http.ResponseWriter, r *http.Request) {
 			buildJSONErrorResponse(w, "Scheduler is not healthy", http.StatusServiceUnavailable)
 		} else {
 			log.Logger().Info("Scheduler is healthy", zap.Any("health check info", *result))
-			buildJSONErrorResponse(w, "Scheduler is healthy", http.StatusOK)
-		}
-		if err := json.NewEncoder(w).Encode(result); err != nil {
-			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+			if err := json.NewEncoder(w).Encode(result); err != nil {
+				buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+			}
 		}
 	} else {
 		log.Logger().Info("The healthy status of scheduler is not found", zap.Any("health check info", ""))

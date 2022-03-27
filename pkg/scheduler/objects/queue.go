@@ -118,9 +118,7 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 	sq.UpdateSortType()
 
 	log.Logger().Info("configured queue added to scheduler",
-		zap.String("queueName", sq.QueuePath),
-		zap.Uint64("maxApp", sq.maxRunningApps),
-		zap.Uint64("runningApp", sq.runningApps))
+		zap.String("queueName", sq.QueuePath))
 
 	return sq, nil
 }
@@ -522,11 +520,6 @@ func (sq *Queue) decPendingResource(delta *resources.Resource) {
 func (sq *Queue) AddApplication(app *Application) {
 	sq.Lock()
 	defer sq.Unlock()
-	if !sq.canRun() {
-		log.Logger().Error("application has reached max applications limit in queue ",
-			zap.String("queue path", sq.QueuePath))
-		return
-	}
 	sq.applications[app.ApplicationID] = app
 	// YUNIKORN-199: update the quota from the namespace
 	// get the tag with the quota
@@ -667,9 +660,8 @@ func (sq *Queue) addChildQueue(child *Queue) error {
 	if sq.IsDraining() {
 		return fmt.Errorf("cannot add a child queue when queue is marked for deletion: %s", sq.QueuePath)
 	}
-
 	if sq.maxRunningApps != 0 && sq.maxRunningApps < child.maxRunningApps {
-		return fmt.Errorf("parent maxApplication must be larger than child maxApplication")
+		return fmt.Errorf("parent maxRunningApps must be larger than child maxRunningApps")
 	}
 
 	// no need to lock child as it is a new queue which cannot be accessed yet
@@ -1076,6 +1068,11 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 // Applications are sorted based on the application sortPolicy. Applications without pending resources are skipped.
 // Lock free call this all locks are taken when needed in called functions
 func (sq *Queue) TryAllocate(iterator func() NodeIterator, getnode func(string) *Node) *Allocation {
+	if !sq.canRun() { // maxApplications reached
+		log.Logger().Info("maxApplications reached",
+			zap.String("queuePath", sq.GetQueuePath()))
+		return nil
+	}
 	if sq.IsLeafQueue() {
 		// get the headroom
 		headRoom := sq.getHeadRoom()
@@ -1308,8 +1305,6 @@ func (sq *Queue) String() string {
 }
 
 func (sq *Queue) incRunningApps() {
-	sq.Lock()
-	defer sq.Unlock()
 	sq.runningApps++
 	if sq.parent != nil {
 		sq.parent.incRunningApps()
@@ -1317,8 +1312,6 @@ func (sq *Queue) incRunningApps() {
 }
 
 func (sq *Queue) decRunningApps() {
-	sq.Lock()
-	defer sq.Unlock()
 	sq.runningApps--
 	if sq.parent != nil {
 		sq.parent.decRunningApps()
@@ -1328,13 +1321,20 @@ func (sq *Queue) decRunningApps() {
 func (sq *Queue) canRun() bool {
 	sq.RLock()
 	defer sq.RUnlock()
-
 	if sq.maxRunningApps == 0 {
 		return true
 	}
-	ok := sq.runningApps < sq.maxRunningApps
-	if sq.parent != nil {
-		return ok && sq.parent.canRun()
-	}
-	return ok
+	return sq.runningApps < sq.maxRunningApps
+}
+
+func (sq *Queue) GetRunningApps() uint64 {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.runningApps
+}
+
+func (sq *Queue) SetMaxRunningApps(maxApps uint64) {
+	sq.RLock()
+	defer sq.RUnlock()
+	sq.maxRunningApps = maxApps
 }

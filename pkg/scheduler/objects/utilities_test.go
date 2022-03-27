@@ -34,25 +34,27 @@ const (
 	appID2  = "app-2"
 	aKey    = "alloc-1"
 	nodeID1 = "node-1"
+	zero    = uint64(0)
 )
 
 // Create the root queue, base for all testing
 func createRootQueue(maxRes map[string]string) (*Queue, error) {
-	return createManagedQueueWithProps(nil, "root", true, maxRes, nil)
+	return createManagedQueueWithProps(nil, "root", true, maxRes, nil, zero)
 }
 
 // wrapper around the create call using the one syntax for all queue types
-func createManagedQueue(parentSQ *Queue, name string, parent bool, maxRes map[string]string) (*Queue, error) {
-	return createManagedQueueWithProps(parentSQ, name, parent, maxRes, nil)
+func createManagedQueue(parentSQ *Queue, name string, parent bool, maxRes map[string]string, maxApps uint64) (*Queue, error) {
+	return createManagedQueueWithProps(parentSQ, name, parent, maxRes, nil, maxApps)
 }
 
 // create managed queue with props set
-func createManagedQueueWithProps(parentSQ *Queue, name string, parent bool, maxRes, props map[string]string) (*Queue, error) {
+func createManagedQueueWithProps(parentSQ *Queue, name string, parent bool, maxRes, props map[string]string, maxApps uint64) (*Queue, error) {
 	queueConfig := configs.QueueConfig{
-		Name:       name,
-		Parent:     parent,
-		Queues:     nil,
-		Properties: props,
+		Name:            name,
+		Parent:          parent,
+		Queues:          nil,
+		Properties:      props,
+		MaxApplications: maxApps,
 	}
 	if maxRes != nil {
 		queueConfig.Resources = configs.Resources{

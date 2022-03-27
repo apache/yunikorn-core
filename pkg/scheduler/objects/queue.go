@@ -1078,6 +1078,11 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, getnode func(string) 
 		headRoom := sq.getHeadRoom()
 		// process the apps (filters out app without pending requests)
 		for _, app := range sq.sortApplications(true) {
+			if !app.queue.canRun() && !app.IsRunning() {
+				log.Logger().Info("maxApplications reached",
+					zap.String("queuePath", sq.GetQueuePath()))
+				return nil
+			}
 			alloc := app.tryAllocate(headRoom, iterator, getnode)
 			if alloc != nil {
 				log.Logger().Debug("allocation found on queue",
@@ -1095,6 +1100,11 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, getnode func(string) 
 				return alloc
 			}
 		}
+	}
+	if !sq.canRun() { // maxApplications reached
+		log.Logger().Info("maxApplications reached",
+			zap.String("queuePath", sq.GetQueuePath()))
+		return nil
 	}
 	return nil
 }

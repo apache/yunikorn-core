@@ -976,10 +976,20 @@ func TestTryAllocate(t *testing.T) {
 	if alloc == nil {
 		t.Fatal("allocation did not return any allocation")
 	}
+	<<<<<<< HEAD
 	assert.Equal(t, alloc.GetResult(), objects.Allocated, "result is not the expected allocated")
 	assert.Equal(t, alloc.GetReleaseCount(), 0, "released allocations should have been 0")
 	assert.Equal(t, alloc.GetApplicationID(), appID1, "expected application app-1 to be allocated")
 	assert.Equal(t, alloc.GetAllocationKey(), allocID2, "expected ask alloc-2 to be allocated")
+	====== =
+	assert.Equal(t, alloc.Result, objects.Allocated, "result is not the expected allocated")
+	assert.Equal(t, len(alloc.Releases), 0, "released allocations should have been 0")
+	assert.Equal(t, alloc.ApplicationID, appID1, "expected application app-1 to be allocated")
+	assert.Equal(t, alloc.AllocationKey, "alloc-2", "expected ask alloc-2 to be allocated")
+	>>>>>>> 549e2
+	df([YUNIKORN - 790]Implement
+	MaxApplications
+	enforcement)
 
 	// second allocation should be app-2 and alloc-1: higher up in the queue hierarchy
 	alloc = partition.tryAllocate()
@@ -2542,44 +2552,4 @@ func TestGetNodeSortingPolicyWhenNewPartitionFromConfig(t *testing.T) {
 			}
 		})
 	}
-}
-func TestTryAllocateMaxApps(t *testing.T) {
-	partition, err := newBasePartition()
-	assert.NilError(t, err, "partition create failed")
-	var tgRes *resources.Resource
-	tgRes, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
-	err = partition.AddNode(newNodeMaxResource(nodeID1, tgRes), nil)
-	assert.NilError(t, err, "test node-1 add failed unexpected")
-	node := partition.GetNode(nodeID1)
-	if node == nil {
-		t.Fatal("new node was not found on the partition")
-	}
-	app := newApplication(appID1, "default", "root.default")
-	err = partition.AddApplication(app)
-	assert.NilError(t, err, "app-1 should have been added to the partition")
-	var res *resources.Resource
-	res, err = resources.NewResourceFromConf(map[string]string{"vcore": "1"})
-	assert.NilError(t, err, "failed to create resource")
-	err = app.AddAllocationAsk(newAllocationAsk(allocID, appID1, res))
-	assert.NilError(t, err, "failed to ask to application")
-
-	partition.getQueueInternal(defQueue).SetMaxRunningApps(uint64(1))
-	if partition == nil {
-		t.Fatal("partition create failed")
-	}
-	if alloc := partition.tryAllocate(); alloc == nil {
-		t.Fatal("allocation did not return any allocation")
-	}
-	app = newApplication(appID2, "default", defQueue)
-	err = partition.AddApplication(app)
-	assert.NilError(t, err, "failed to add app-1 to partition")
-	err = app.AddAllocationAsk(newAllocationAsk(allocID, appID1, res))
-	assert.NilError(t, err, "failed to add ask alloc-1 to app-1")
-
-	alloc := partition.tryAllocate()
-	if alloc != nil {
-		t.Fatal("maxRunningApps was not work")
-	}
-	assert.Equal(t, partition.GetQueue("root").GetRunningApps(), uint64(1))
-	assert.Equal(t, partition.GetQueue(defQueue).GetRunningApps(), uint64(1))
 }

@@ -1324,7 +1324,7 @@ func (sq *Queue) canRun() bool {
 	if sq.maxRunningApps == 0 {
 		return true
 	}
-	return sq.runningApps < sq.maxRunningApps
+	return sq.runningApps <= sq.maxRunningApps
 }
 
 func (sq *Queue) GetRunningApps() uint64 {

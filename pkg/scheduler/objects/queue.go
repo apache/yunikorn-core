@@ -1104,7 +1104,6 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, getnode func(string) 
 	if !sq.canRun() { // maxApplications reached
 		log.Logger().Info("maxApplications reached",
 			zap.String("queuePath", sq.GetQueuePath()))
-		return nil
 	}
 	return nil
 }

@@ -1078,7 +1078,7 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, getnode func(string) 
 		headRoom := sq.getHeadRoom()
 		// process the apps (filters out app without pending requests)
 		for _, app := range sq.sortApplications(true) {
-			if !app.queue.canRun() && !app.IsRunning() {
+			if !app.IsRunning() && !app.queue.canRun() {
 				log.Logger().Info("maxApplications reached",
 					zap.String("queuePath", sq.GetQueuePath()))
 				return nil
@@ -1100,10 +1100,6 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, getnode func(string) 
 				return alloc
 			}
 		}
-	}
-	if !sq.canRun() { // maxApplications reached
-		log.Logger().Info("maxApplications reached",
-			zap.String("queuePath", sq.GetQueuePath()))
 	}
 	return nil
 }
@@ -1333,7 +1329,11 @@ func (sq *Queue) canRun() bool {
 	if sq.maxRunningApps == 0 {
 		return true
 	}
-	return sq.runningApps <= sq.maxRunningApps
+	ok := sq.runningApps <= sq.maxRunningApps
+	if sq.parent != nil {
+		return ok && sq.parent.canRun()
+	}
+	return ok
 }
 
 func (sq *Queue) GetRunningApps() uint64 {

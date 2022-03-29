@@ -20,6 +20,8 @@ package objects
 
 import (
 	"fmt"
+	"sync"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -59,9 +61,16 @@ type Allocation struct {
 	AllocatedResource *resources.Resource
 	Result            allocationResult
 	Releases          []*Allocation
-	placeholder       bool
-	taskGroupName     string
-	released          bool
+
+	// private fields need protection
+	createTime            time.Time // the time this allocation was created
+	placeholder           bool
+	placeholderUsed       bool
+	placeholderCreateTime time.Time
+	taskGroupName         string
+	released              bool
+
+	sync.RWMutex
 }
 
 func NewAllocation(uuid, nodeID string, ask *AllocationAsk) *Allocation {
@@ -69,6 +78,7 @@ func NewAllocation(uuid, nodeID string, ask *AllocationAsk) *Allocation {
 		Ask:               ask,
 		AllocationKey:     ask.AllocationKey,
 		ApplicationID:     ask.ApplicationID,
+		createTime:        time.Now(),
 		QueueName:         ask.QueueName,
 		NodeID:            nodeID,
 		PartitionName:     common.GetPartitionNameWithoutClusterID(ask.PartitionName),
@@ -146,6 +156,28 @@ func (a *Allocation) String() string {
 		uuid = "N/A"
 	}
 	return fmt.Sprintf("ApplicationID=%s, UUID=%s, AllocationKey=%s, Node=%s, Result=%s", a.ApplicationID, uuid, a.AllocationKey, a.NodeID, a.Result.String())
+}
+
+// Return the time this alloc was created
+// Should be treated as read only not to be modified
+func (a *Allocation) GetCreateTime() time.Time {
+	a.RLock()
+	defer a.RUnlock()
+	return a.createTime
+}
+
+// Return whether this alloc is replacing a placeholder or not
+func (a *Allocation) GetPlaceholderUsed() bool {
+	a.RLock()
+	defer a.RUnlock()
+	return a.placeholderUsed
+}
+
+// Return the placeholder's create time for this alloc, if applicable
+func (a *Allocation) GetPlaceholderCreateTime() time.Time {
+	a.RLock()
+	defer a.RUnlock()
+	return a.placeholderCreateTime
 }
 
 // IsPlaceholder returns true if the allocation is a placeholder, false otherwise.

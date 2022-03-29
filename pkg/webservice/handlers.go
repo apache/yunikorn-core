@@ -280,12 +280,23 @@ func getPartitionJSON(partition *scheduler.PartitionContext) *dao.PartitionDAOIn
 func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 	allocations := app.GetAllAllocations()
 	allocationInfo := make([]dao.AllocationDAOInfo, 0, len(allocations))
+	var requestTime int64
 	for _, alloc := range allocations {
+		if alloc.GetPlaceholderUsed() {
+			requestTime = alloc.GetPlaceholderCreateTime().UnixNano()
+		} else {
+			requestTime = alloc.Ask.GetCreateTime().UnixNano()
+		}
+		allocTime := alloc.GetCreateTime().UnixNano()
 		allocInfo := dao.AllocationDAOInfo{
 			AllocationKey:    alloc.AllocationKey,
 			AllocationTags:   alloc.Tags,
+			RequestTime:      requestTime,
+			AllocationTime:   allocTime,
+			AllocationDelay:  allocTime - requestTime,
 			UUID:             alloc.UUID,
 			ResourcePerAlloc: alloc.AllocatedResource.DAOMap(),
+			PlaceholderUsed:  alloc.GetPlaceholderUsed(),
 			Priority:         strconv.Itoa(int(alloc.Priority)),
 			QueueName:        alloc.QueueName,
 			NodeID:           alloc.NodeID,
@@ -313,16 +324,27 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 func getNodeJSON(node *objects.Node) *dao.NodeDAOInfo {
 	apps := node.GetAllAllocations()
 	allocations := make([]*dao.AllocationDAOInfo, 0, len(apps))
+	var requestTime int64
 	for _, alloc := range apps {
+		if alloc.GetPlaceholderUsed() {
+			requestTime = alloc.GetPlaceholderCreateTime().UnixNano()
+		} else {
+			requestTime = alloc.Ask.GetCreateTime().UnixNano()
+		}
+		allocTime := alloc.GetCreateTime().UnixNano()
 		allocInfo := &dao.AllocationDAOInfo{
 			AllocationKey:    alloc.AllocationKey,
 			AllocationTags:   alloc.Tags,
+			RequestTime:      requestTime,
+			AllocationTime:   allocTime,
+			AllocationDelay:  allocTime - requestTime,
 			UUID:             alloc.UUID,
 			ResourcePerAlloc: alloc.AllocatedResource.DAOMap(),
 			Priority:         strconv.Itoa(int(alloc.Priority)),
 			QueueName:        alloc.QueueName,
 			NodeID:           alloc.NodeID,
 			ApplicationID:    alloc.ApplicationID,
+			PlaceholderUsed:  alloc.GetPlaceholderUsed(),
 			Partition:        alloc.PartitionName,
 		}
 		allocations = append(allocations, allocInfo)

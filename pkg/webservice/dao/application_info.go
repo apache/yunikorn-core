@@ -34,6 +34,12 @@ type ApplicationDAOInfo struct {
 	State           string              `json:"applicationState"`
 	User            string              `json:"user"`
 	RejectedMessage string              `json:"rejectedMessage"`
+	Events          []EventDAOInfo      `json:"events"`
+}
+
+type EventDAOInfo struct {
+	EventTime int64  `json:"eventTime"`
+	State     string `json:"applicationState"`
 }
 
 type AllocationDAOInfo struct {

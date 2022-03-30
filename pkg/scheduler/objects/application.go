@@ -53,8 +53,8 @@ const (
 	AppTagStateAwareDisable string = "application.stateaware.disable"
 )
 
-type EventLogEntry struct {
-	EventTime        time.Time
+type StateLogEntry struct {
+	Time             time.Time
 	ApplicationState string
 }
 
@@ -85,7 +85,7 @@ type Application struct {
 	gangSchedulingStyle  string                 // gang scheduling style can be hard (after timeout we fail the application), or soft (after timeeout we schedule it as a normal application)
 	finishedTime         time.Time              // the time of finishing this application. the default value is zero time
 	rejectedMessage      string                 // If the application is rejected, save the rejected message
-	eventLog             []*EventLogEntry       // event log for this application
+	stateLog             []*StateLogEntry       // state log for this application
 
 	rmEventHandler     handler.EventHandler
 	rmID               string
@@ -112,7 +112,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		placeholderAsk:       resources.NewResourceFromProto(siApp.PlaceholderAsk),
 		finishedTime:         time.Time{},
 		rejectedMessage:      "",
-		eventLog:             make([]*EventLogEntry, 0),
+		stateLog:             make([]*StateLogEntry, 0),
 	}
 	placeholderTimeout := common.ConvertSITimeout(siApp.ExecutionTimeoutMilliSeconds)
 	if time.Duration(0) == placeholderTimeout {
@@ -149,18 +149,18 @@ func (sa *Application) SetState(state string) {
 	sa.stateMachine.SetState(state)
 }
 
-func (sa *Application) recordEvent(time time.Time, appState string, prevState string) {
-	// lock is not acquired here as it is already held during HandleApplicationEvent() / OnStateChange()
-	sa.eventLog = append(sa.eventLog, &EventLogEntry{
-		EventTime:        time,
+func (sa *Application) recordState(appState string) {
+	// lock not acquired here as it is already held during HandleApplicationEvent() / OnStateChange()
+	sa.stateLog = append(sa.stateLog, &StateLogEntry{
+		Time:             time.Now(),
 		ApplicationState: appState,
 	})
 }
 
-func (sa *Application) GetEventLog() []*EventLogEntry {
+func (sa *Application) GetStateLog() []*StateLogEntry {
 	sa.RLock()
 	defer sa.RUnlock()
-	return sa.eventLog
+	return sa.stateLog
 }
 
 // Set the reservation delay.
@@ -245,7 +245,7 @@ func (sa *Application) HandleApplicationEventWithInfo(event applicationEvent, ev
 // It sends an event about the state change to the shim as an application update.
 // The only state that does not generate an event is Rejected.
 func (sa *Application) OnStateChange(event *fsm.Event, eventInfo string) {
-	sa.recordEvent(time.Now(), event.Dst, event.Src)
+	sa.recordState(event.Dst)
 	if event.Dst == Rejected.String() || sa.rmEventHandler == nil {
 		return
 	}
@@ -303,9 +303,6 @@ func (sa *Application) timeoutStateTimer(expectedState string, event application
 				sa.notifyRMAllocationReleased(sa.rmID, toRelease, si.TerminationType_TIMEOUT, "releasing placeholders on app complete")
 				sa.clearStateTimer()
 			} else {
-				// HandleApplicationEvent assumes the lock to be held
-				sa.Lock()
-				defer sa.Unlock()
 				//nolint: errcheck
 				_ = sa.HandleApplicationEvent(event)
 			}

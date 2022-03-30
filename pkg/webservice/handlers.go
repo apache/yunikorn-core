@@ -294,14 +294,14 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		}
 		allocationInfo = append(allocationInfo, allocInfo)
 	}
-	events := app.GetEventLog()
-	eventsInfo := make([]dao.EventDAOInfo, 0, len(events))
-	for _, event := range events {
-		eventInfo := dao.EventDAOInfo{
-			EventTime: event.EventTime.UnixNano(),
-			State:     event.ApplicationState,
+	stateLog := app.GetStateLog()
+	stateLogInfo := make([]dao.StateDAOInfo, 0, len(stateLog))
+	for _, state := range stateLog {
+		stateInfo := dao.StateDAOInfo{
+			Time:             state.Time.UnixNano(),
+			ApplicationState: state.ApplicationState,
 		}
-		eventsInfo = append(eventsInfo, eventInfo)
+		stateLogInfo = append(stateLogInfo, stateInfo)
 	}
 
 	return &dao.ApplicationDAOInfo{
@@ -316,7 +316,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		State:           app.CurrentState(),
 		User:            app.GetUser().User,
 		RejectedMessage: app.GetRejectedMessage(),
-		Events:          eventsInfo,
+		StateLog:        stateLogInfo,
 	}
 }
 

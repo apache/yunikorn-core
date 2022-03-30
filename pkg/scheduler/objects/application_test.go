@@ -395,7 +395,7 @@ func TestAllocAskStateChange(t *testing.T) {
 	assert.Equal(t, app.RemoveAllocationAsk(aKey), 0, "ask should have been removed, no reservations")
 	assert.Assert(t, app.IsCompleting(), "Application should be in waiting state")
 
-	log := app.GetEventLog()
+	log := app.GetStateLog()
 	assert.Equal(t, len(log), 4, "wrong number of app events")
 	assert.Equal(t, log[0].ApplicationState, Accepted.String())
 	assert.Equal(t, log[1].ApplicationState, Completing.String())
@@ -652,7 +652,7 @@ func TestStateChangeOnUpdate(t *testing.T) {
 	app.RemoveAllocation(uuid)
 	assert.Assert(t, app.IsCompleting(), "Application did not change as expected: %s", app.CurrentState())
 
-	log := app.GetEventLog()
+	log := app.GetStateLog()
 	assert.Equal(t, len(log), 3, "wrong number of app events")
 	assert.Equal(t, log[0].ApplicationState, Accepted.String())
 	assert.Equal(t, log[1].ApplicationState, Starting.String())
@@ -716,7 +716,7 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	app.RemoveAllocation(uuid)
 	assert.Assert(t, app.IsCompleting(), "Application did not change as expected: %s", app.CurrentState())
 
-	log := app.GetEventLog()
+	log := app.GetStateLog()
 	assert.Equal(t, len(log), 2, "wrong number of app events")
 	assert.Equal(t, log[0].ApplicationState, Accepted.String())
 	assert.Equal(t, log[1].ApplicationState, Completing.String())
@@ -900,7 +900,7 @@ func TestStateTimeOut(t *testing.T) {
 	if app.stateTimer != nil {
 		t.Fatalf("Startup timer has not be cleared on time out as expected, %v", app.stateTimer)
 	}
-	log := app.GetEventLog()
+	log := app.GetStateLog()
 	assert.Equal(t, len(log), 3, "wrong number of app events")
 	assert.Equal(t, log[0].ApplicationState, Accepted.String())
 	assert.Equal(t, log[1].ApplicationState, Starting.String())
@@ -927,7 +927,7 @@ func TestCompleted(t *testing.T) {
 	err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, app.IsExpired)
 	assert.NilError(t, err, "Application did not progress into Expired state")
 
-	log := app.GetEventLog()
+	log := app.GetStateLog()
 	assert.Equal(t, len(log), 4, "wrong number of app events")
 	assert.Equal(t, log[0].ApplicationState, Accepted.String())
 	assert.Equal(t, log[1].ApplicationState, Completing.String())
@@ -954,7 +954,7 @@ func TestRejected(t *testing.T) {
 	err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, app.IsExpired)
 	assert.NilError(t, err, "Application did not progress into Expired state")
 
-	log := app.GetEventLog()
+	log := app.GetStateLog()
 	assert.Equal(t, len(log), 2, "wrong number of app events")
 	assert.Equal(t, log[0].ApplicationState, Rejected.String())
 	assert.Equal(t, log[1].ApplicationState, Expired.String())
@@ -990,7 +990,7 @@ func TestOnStatusChangeCalled(t *testing.T) {
 	assert.Equal(t, app.CurrentState(), Accepted.String(), "application state has been changed unexpectedly")
 	assert.Assert(t, !testHandler.isHandled(), "unexpected event send to the RM")
 
-	log := app.GetEventLog()
+	log := app.GetStateLog()
 	assert.Equal(t, len(log), 1, "wrong number of app events")
 	assert.Equal(t, log[0].ApplicationState, Accepted.String())
 }
@@ -1119,7 +1119,7 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	// a released placeholder still holds the resource until release confirmed by the RM
 	assert.Assert(t, resources.Equals(app.GetPlaceholderResource(), resources.Multiply(res, 2)), "Unexpected placeholder resources for the app")
 
-	log := app.GetEventLog()
+	log := app.GetStateLog()
 	assert.Equal(t, len(log), 2, "wrong number of app events")
 	assert.Equal(t, log[0].ApplicationState, Accepted.String())
 	assert.Equal(t, log[1].ApplicationState, expectedState)

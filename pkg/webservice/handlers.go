@@ -294,6 +294,15 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		}
 		allocationInfo = append(allocationInfo, allocInfo)
 	}
+	stateLog := app.GetStateLog()
+	stateLogInfo := make([]dao.StateDAOInfo, 0, len(stateLog))
+	for _, state := range stateLog {
+		stateInfo := dao.StateDAOInfo{
+			Time:             state.Time.UnixNano(),
+			ApplicationState: state.ApplicationState,
+		}
+		stateLogInfo = append(stateLogInfo, stateInfo)
+	}
 
 	return &dao.ApplicationDAOInfo{
 		ApplicationID:   app.ApplicationID,
@@ -307,6 +316,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		State:           app.CurrentState(),
 		User:            app.GetUser().User,
 		RejectedMessage: app.GetRejectedMessage(),
+		StateLog:        stateLogInfo,
 	}
 }
 

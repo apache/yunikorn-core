@@ -47,6 +47,9 @@ func NewHealthChecker() *HealthChecker {
 
 // start execute healthCheck service in the background,
 func (c *HealthChecker) start(schedulerContext *ClusterContext) {
+	// immediate first tick
+	c.runOnce(schedulerContext)
+
 	go func() {
 		ticker := time.NewTicker(c.period)
 		for {
@@ -55,16 +58,7 @@ func (c *HealthChecker) start(schedulerContext *ClusterContext) {
 				ticker.Stop()
 				return
 			case <-ticker.C:
-				schedulerMetrics := metrics.GetSchedulerMetrics()
-				result := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
-				updateSchedulerLastHealthStatus(result, schedulerContext)
-				if !result.Healthy {
-					log.Logger().Error("Scheduler is not healthy",
-						zap.Any("health check values", result.HealthChecks))
-				} else {
-					log.Logger().Info("Scheduler is healthy",
-						zap.Any("health check values", result.HealthChecks))
-				}
+				c.runOnce(schedulerContext)
 			}
 		}
 	}()
@@ -74,6 +68,19 @@ func (c *HealthChecker) start(schedulerContext *ClusterContext) {
 func (c *HealthChecker) stop() {
 	c.stopChan <- struct{}{}
 	close(c.stopChan)
+}
+
+func (c *HealthChecker) runOnce(schedulerContext *ClusterContext) {
+	schedulerMetrics := metrics.GetSchedulerMetrics()
+	result := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	updateSchedulerLastHealthStatus(result, schedulerContext)
+	if !result.Healthy {
+		log.Logger().Error("Scheduler is not healthy",
+			zap.Any("health check values", result.HealthChecks))
+	} else {
+		log.Logger().Info("Scheduler is healthy",
+			zap.Any("health check values", result.HealthChecks))
+	}
 }
 
 func updateSchedulerLastHealthStatus(latest dao.SchedulerHealthDAOInfo, schedulerContext *ClusterContext) {

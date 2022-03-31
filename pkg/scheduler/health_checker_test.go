@@ -48,15 +48,32 @@ partitions:
                 vcore: 10000
 `
 
-func TestUpdateHealthCheckCache(t *testing.T) {
+func TestNewHealthChecker(t *testing.T) {
+	c := NewHealthChecker()
+	assert.Assert(t, c != nil, "HealthChecker shouldn't be nil")
+}
+
+func TestStartStop(t *testing.T) {
 	configs.MockSchedulerConfigByData([]byte(configDefault))
 	metrics.Reset()
-	schedulerMetrics := metrics.GetSchedulerMetrics()
 	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
 	assert.NilError(t, err, "Error when load schedulerContext from config")
 	if schedulerContext.lastHealthCheckResult != nil {
 		t.Fatal("lastHealthCheckResult should be nil initially")
 	}
+
+	healthChecker := NewHealthChecker()
+	healthChecker.start(schedulerContext)
+	assert.Assert(t, schedulerContext.GetLastHealthCheckResult() != nil, "lastHealthCheckResult shouldn't be nil")
+	healthChecker.stop()
+}
+
+func TestUpdateSchedulerLastHealthStatus(t *testing.T) {
+	configs.MockSchedulerConfigByData([]byte(configDefault))
+	metrics.Reset()
+	schedulerMetrics := metrics.GetSchedulerMetrics()
+	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
+	assert.NilError(t, err, "Error when load schedulerContext from config")
 
 	healthInfo := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	updateSchedulerLastHealthStatus(healthInfo, schedulerContext)

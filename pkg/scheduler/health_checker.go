@@ -45,6 +45,13 @@ func NewHealthChecker() *HealthChecker {
 	}
 }
 
+func NewHealthCheckerWithParameters(period time.Duration) *HealthChecker {
+	return &HealthChecker{
+		period:   period,
+		stopChan: make(chan struct{}),
+	}
+}
+
 // start execute healthCheck service in the background,
 func (c *HealthChecker) start(schedulerContext *ClusterContext) {
 	// immediate first tick
@@ -64,7 +71,6 @@ func (c *HealthChecker) start(schedulerContext *ClusterContext) {
 	}()
 }
 
-//nolint:unused
 func (c *HealthChecker) stop() {
 	c.stopChan <- struct{}{}
 	close(c.stopChan)

@@ -20,6 +20,7 @@ package scheduler
 
 import (
 	"testing"
+	"time"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
@@ -53,18 +54,39 @@ func TestNewHealthChecker(t *testing.T) {
 	assert.Assert(t, c != nil, "HealthChecker shouldn't be nil")
 }
 
-func TestStartStop(t *testing.T) {
+func TestRunOnce(t *testing.T) {
 	configs.MockSchedulerConfigByData([]byte(configDefault))
 	metrics.Reset()
 	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
 	assert.NilError(t, err, "Error when load schedulerContext from config")
-	if schedulerContext.lastHealthCheckResult != nil {
-		t.Fatal("lastHealthCheckResult should be nil initially")
-	}
+	lastHealthCheckResult := schedulerContext.GetLastHealthCheckResult()
+	assert.Assert(t, lastHealthCheckResult == nil, "lastHealthCheckResult should be nil initially")
 
 	healthChecker := NewHealthChecker()
+	healthChecker.runOnce(schedulerContext)
+	lastHealthCheckResult = schedulerContext.GetLastHealthCheckResult()
+	assert.Assert(t, lastHealthCheckResult != nil, "lastHealthCheckResult shouldn't be nil")
+	assert.Assert(t, lastHealthCheckResult.Healthy, "Scheduler should be healthy")
+}
+
+func TestStartStop(t *testing.T) {
+	partName := "[rmID]default"
+	configs.MockSchedulerConfigByData([]byte(configDefault))
+	metrics.Reset()
+	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
+	assert.NilError(t, err, "Error when load schedulerContext from config")
+	lastHealthCheckResult := schedulerContext.GetLastHealthCheckResult()
+	assert.Assert(t, lastHealthCheckResult == nil, "lastHealthCheckResult should be nil initially")
+
+	// update resources to some negative value
+	negativeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": -10})
+	schedulerContext.partitions[partName].totalPartitionResource = negativeRes
+
+	healthChecker := NewHealthCheckerWithParameters(3 * time.Second)
 	healthChecker.start(schedulerContext)
-	assert.Assert(t, schedulerContext.GetLastHealthCheckResult() != nil, "lastHealthCheckResult shouldn't be nil")
+	lastHealthCheckResult = schedulerContext.GetLastHealthCheckResult()
+	assert.Assert(t, lastHealthCheckResult != nil, "lastHealthCheckResult shouldn't be nil")
+	assert.Assert(t, !lastHealthCheckResult.Healthy, "Scheduler should be unhealthy")
 	healthChecker.stop()
 }
 

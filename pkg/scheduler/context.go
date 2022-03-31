@@ -35,6 +35,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -54,6 +55,8 @@ type ClusterContext struct {
 	startTime time.Time
 
 	sync.RWMutex
+
+	lastHealthCheckResult *dao.SchedulerHealthDAOInfo
 }
 
 type RMInformation struct {
@@ -917,4 +920,16 @@ func (cc *ClusterContext) SetRMInfo(rmID string, rmBuildInformation map[string]s
 	cc.rmInfo[rmID] = &RMInformation{
 		RMBuildInformation: buildInfo,
 	}
+}
+
+func (cc *ClusterContext) GetLastHealthCheckResult() *dao.SchedulerHealthDAOInfo {
+	cc.RLock()
+	defer cc.RUnlock()
+	return cc.lastHealthCheckResult
+}
+
+func (cc *ClusterContext) SetLastHealthCheckResult(c *dao.SchedulerHealthDAOInfo) {
+	cc.Lock()
+	defer cc.Unlock()
+	cc.lastHealthCheckResult = c
 }

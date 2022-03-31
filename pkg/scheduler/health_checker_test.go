@@ -20,6 +20,7 @@ package scheduler
 
 import (
 	"testing"
+	"time"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
@@ -47,6 +48,58 @@ partitions:
                 memory: 100000
                 vcore: 10000
 `
+
+func TestNewHealthChecker(t *testing.T) {
+	c := NewHealthChecker()
+	assert.Assert(t, c != nil, "HealthChecker shouldn't be nil")
+}
+
+func TestRunOnce(t *testing.T) {
+	configs.MockSchedulerConfigByData([]byte(configDefault))
+	metrics.Reset()
+	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
+	assert.NilError(t, err, "Error when load schedulerContext from config")
+	assert.Assert(t, schedulerContext.lastHealthCheckResult == nil, "lastHealthCheckResult should be nil initially")
+
+	healthChecker := NewHealthChecker()
+	healthChecker.runOnce(schedulerContext)
+	assert.Assert(t, schedulerContext.lastHealthCheckResult != nil, "lastHealthCheckResult shouldn't be nil")
+	assert.Assert(t, schedulerContext.lastHealthCheckResult.Healthy == true, "Scheduler should be healthy")
+}
+
+func TestStartStop(t *testing.T) {
+	partName := "[rmID]default"
+	configs.MockSchedulerConfigByData([]byte(configDefault))
+	metrics.Reset()
+	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
+	assert.NilError(t, err, "Error when load schedulerContext from config")
+	assert.Assert(t, schedulerContext.lastHealthCheckResult == nil, "lastHealthCheckResult should be nil initially")
+
+	// update resources to some negative value
+	negativeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": -10})
+	schedulerContext.partitions[partName].totalPartitionResource = negativeRes
+
+	healthChecker := NewHealthCheckerWithParameters(3 * time.Second)
+	healthChecker.start(schedulerContext)
+	assert.Assert(t, schedulerContext.lastHealthCheckResult != nil, "lastHealthCheckResult shouldn't be nil")
+	assert.Assert(t, schedulerContext.lastHealthCheckResult.Healthy == false, "Scheduler should be unhealthy")
+	healthChecker.stop()
+}
+
+func TestUpdateSchedulerLastHealthStatus(t *testing.T) {
+	configs.MockSchedulerConfigByData([]byte(configDefault))
+	metrics.Reset()
+	schedulerMetrics := metrics.GetSchedulerMetrics()
+	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
+	assert.NilError(t, err, "Error when load schedulerContext from config")
+
+	healthInfo := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	updateSchedulerLastHealthStatus(healthInfo, schedulerContext)
+	assert.Equal(t, healthInfo.Healthy, schedulerContext.lastHealthCheckResult.Healthy, "lastHealthCheckResult should be updated")
+	for i := 0; i < len(healthInfo.HealthChecks); i++ {
+		assert.Equal(t, healthInfo.HealthChecks[i], schedulerContext.lastHealthCheckResult.HealthChecks[i], "lastHealthCheckResult should be updated")
+	}
+}
 
 func TestGetSchedulerHealthStatusContext(t *testing.T) {
 	partName := "[rmID]default"

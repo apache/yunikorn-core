@@ -438,7 +438,14 @@ func TestQueryParamInAppsHandler(t *testing.T) {
 	assert.Equal(t, app.CurrentState(), objects.New.String())
 	assert.Equal(t, 1, len(part.GetApplications()))
 
+	ask := objects.NewAllocationAsk(&si.AllocationAsk{
+		AllocationKey: "ask1",
+		ApplicationID: "app1",
+		PartitionName: "default",
+	})
+
 	app.AddAllocation(&objects.Allocation{
+		Ask: ask,
 		AllocatedResource: &resources.Resource{
 			Resources: map[string]resources.Quantity{"vcore": 1},
 		},

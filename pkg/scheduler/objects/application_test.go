@@ -1032,6 +1032,7 @@ func TestReplaceAllocation(t *testing.T) {
 	if !resources.Equals(app.allocatedResource, res) {
 		t.Fatalf("real allocation not updated as expected: got %s, expected %s", app.allocatedResource, res)
 	}
+	assert.Equal(t, realAlloc.GetPlaceholderCreateTime(), ph.GetCreateTime(), "real allocation's placeholder create time not updated as expected: got %s, expected %s", realAlloc.GetPlaceholderCreateTime(), ph.GetCreateTime())
 
 	// add the placeholder back to the app, the failure test above changed state and removed the ph
 	app.SetState(Running.String())
@@ -1041,8 +1042,8 @@ func TestReplaceAllocation(t *testing.T) {
 	realAlloc = newAllocation(appID1, "uuid-3", nodeID1, "root.a", res)
 	realAlloc.Result = Replaced
 	ph.Releases = append(ph.Releases, realAlloc)
-	realAlloc = newAllocation(appID1, "not-added", nodeID1, "root.a", res)
-	realAlloc.Result = Replaced
+	realAllocNoAdd := newAllocation(appID1, "not-added", nodeID1, "root.a", res)
+	realAllocNoAdd.Result = Replaced
 	ph.Releases = append(ph.Releases, realAlloc)
 	alloc = app.ReplaceAllocation("uuid-1")
 	assert.Equal(t, alloc, ph, "returned allocation is not the placeholder")
@@ -1051,6 +1052,7 @@ func TestReplaceAllocation(t *testing.T) {
 	if !resources.Equals(app.allocatedResource, resources.Multiply(res, 2)) {
 		t.Fatalf("real allocation not updated as expected: got %s, expected %s", app.allocatedResource, resources.Multiply(res, 2))
 	}
+	assert.Equal(t, realAlloc.GetPlaceholderCreateTime(), ph.GetCreateTime(), "real allocation's placeholder create time not updated as expected: got %s, expected %s", realAlloc.GetPlaceholderCreateTime(), ph.GetCreateTime())
 	if _, ok := app.allocations["not-added"]; ok {
 		t.Fatalf("real allocation added which shouldn't have been added")
 	}

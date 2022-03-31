@@ -349,7 +349,9 @@ func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation, delta *resou
 	sn.Lock()
 	defer sn.Unlock()
 
+	replace.placeholderCreateTime = sn.allocations[uuid].createTime
 	delete(sn.allocations, uuid)
+	replace.placeholderUsed = true
 	sn.allocations[replace.UUID] = replace
 	before := sn.allocatedResource.Clone()
 	sn.allocatedResource.AddTo(delta)

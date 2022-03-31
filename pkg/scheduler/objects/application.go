@@ -1347,6 +1347,9 @@ func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
 	// we double linked the real and placeholder allocation
 	// ph is the placeholder, the releases entry points to the real one
 	alloc := ph.Releases[0]
+	alloc.placeholderUsed = true
+	alloc.placeholderCreateTime = ph.createTime
+	alloc.createTime = time.Now()
 	sa.addAllocationInternal(alloc)
 	// order is important: clean up the allocation after adding it to the app
 	// we need the original Replaced allocation result.

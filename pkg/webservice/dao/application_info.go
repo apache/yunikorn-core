@@ -41,15 +41,3 @@ type StateDAOInfo struct {
 	Time             int64  `json:"time"`
 	ApplicationState string `json:"applicationState"`
 }
-
-type AllocationDAOInfo struct {
-	AllocationKey    string            `json:"allocationKey"`
-	AllocationTags   map[string]string `json:"allocationTags"`
-	UUID             string            `json:"uuid"`
-	ResourcePerAlloc map[string]int64  `json:"resource"`
-	Priority         string            `json:"priority"`
-	QueueName        string            `json:"queueName"`
-	NodeID           string            `json:"nodeId"`
-	ApplicationID    string            `json:"applicationId"`
-	Partition        string            `json:"partition"`
-}

@@ -19,7 +19,11 @@
 package objects
 
 import (
+	"fmt"
+
 	"testing"
+
+	"time"
 
 	"gotest.tools/assert"
 
@@ -53,6 +57,14 @@ func TestNewAlloc(t *testing.T) {
 	allocStr := alloc.String()
 	expected := "ApplicationID=app-1, UUID=test-uuid, AllocationKey=ask-1, Node=node-1, Result=Allocated"
 	assert.Equal(t, allocStr, expected, "Strings should have been equal")
+	assert.Assert(t, !alloc.GetPlaceholderUsed(), fmt.Sprintf("Alloc should not be placeholder replacement by default: got %t, expected %t", alloc.GetPlaceholderUsed(), false))
+	created := alloc.GetCreateTime()
+	// move time 10 seconds back
+	alloc.createTime = created.Add(time.Second * -10)
+	createdNow := alloc.GetCreateTime()
+	if createdNow.Equal(created) {
+		t.Fatal("create time stamp should have been modified")
+	}
 }
 
 func TestNewReservedAlloc(t *testing.T) {

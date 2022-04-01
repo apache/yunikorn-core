@@ -73,12 +73,16 @@ func TestPlaceApp(t *testing.T) {
 		t.Errorf("test rule place application did not fail, err: %v, ", err)
 	}
 	// place application that should not fail and return the queue in the object
-	queue, err = nr.placeApplication(&objects.Application{QueuePath: "passedin"}, nil)
+	app := &objects.Application{}
+	app.SetQueuePath("passedin")
+	queue, err = nr.placeApplication(app, nil)
 	if err != nil || queue != "passedin" {
 		t.Errorf("test rule place application did not fail, err: %v, ", err)
 	}
 	// place application that should not fail and return the queue in the object
-	queue, err = nr.placeApplication(&objects.Application{QueuePath: "user.name"}, nil)
+	app = &objects.Application{}
+	app.SetQueuePath("user.name")
+	queue, err = nr.placeApplication(app, nil)
 	if err != nil || queue != "user_dot_name" {
 		t.Errorf("test rule place application did not fail, err: %v, ", err)
 	}

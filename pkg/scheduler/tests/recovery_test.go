@@ -652,7 +652,7 @@ func TestAppRecovery(t *testing.T) {
 		t.Fatal("application not found after recovery")
 	}
 	assert.Equal(t, app.ApplicationID, appID1)
-	assert.Equal(t, app.QueuePath, "root.a")
+	assert.Equal(t, app.GetQueuePath(), "root.a")
 }
 
 // test scheduler recovery that only registers apps

@@ -150,7 +150,7 @@ func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
 			log.Logger().Error("rule execution failed",
 				zap.String("ruleName", checkRule.getName()),
 				zap.Error(err))
-			app.QueuePath = ""
+			app.SetQueuePath("")
 			return err
 		}
 		// queueName returned make sure ACL allows access and create the queueName if not exist
@@ -206,7 +206,7 @@ func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
 		zap.String("queueName", queueName))
 	// no more rules to check no queueName found reject placement
 	if queueName == "" {
-		app.QueuePath = ""
+		app.SetQueuePath("")
 		return fmt.Errorf("application rejected: no placement rule matched")
 	}
 	// Add the queue into the application, overriding what was submitted

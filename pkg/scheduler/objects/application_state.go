@@ -20,8 +20,9 @@ package objects
 
 import (
 	"fmt"
-	"go.uber.org/zap"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
@@ -150,12 +151,12 @@ func NewAppState() *fsm.FSM {
 			},
 			fmt.Sprintf("leave_%s", New.String()): func(event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
-				metrics.GetQueueMetrics(app.QueuePath).IncQueueApplicationsAccepted()
+				metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsAccepted()
 				metrics.GetSchedulerMetrics().IncTotalApplicationsAccepted()
 			},
 			fmt.Sprintf("enter_%s", Rejected.String()): func(event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
-				metrics.GetQueueMetrics(app.QueuePath).IncQueueApplicationsRejected()
+				metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsRejected()
 				metrics.GetSchedulerMetrics().IncTotalApplicationsRejected()
 				app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
 				app.finishedTime = time.Now()
@@ -166,26 +167,26 @@ func NewAppState() *fsm.FSM {
 			},
 			fmt.Sprintf("enter_%s", Running.String()): func(event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
-				metrics.GetQueueMetrics(app.QueuePath).IncQueueApplicationsRunning()
+				metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsRunning()
 				metrics.GetSchedulerMetrics().IncTotalApplicationsRunning()
 			},
 			fmt.Sprintf("leave_%s", Running.String()): func(event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
-				metrics.GetQueueMetrics(app.QueuePath).DecQueueApplicationsRunning()
+				metrics.GetQueueMetrics(app.queuePath).DecQueueApplicationsRunning()
 				metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()
 			},
 			fmt.Sprintf("enter_%s", Completed.String()): func(event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
 				metrics.GetSchedulerMetrics().IncTotalApplicationsCompleted()
-				metrics.GetQueueMetrics(app.QueuePath).IncQueueApplicationsCompleted()
+				metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsCompleted()
 				app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
 				app.executeTerminatedCallback()
 				app.clearPlaceholderTimer()
 			},
 			fmt.Sprintf("enter_%s", Failed.String()): func(event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
-				metrics.GetQueueMetrics(app.QueuePath).DecQueueApplicationsRunning()
-				metrics.GetQueueMetrics(app.QueuePath).IncQueueApplicationsFailed()
+				metrics.GetQueueMetrics(app.queuePath).DecQueueApplicationsRunning()
+				metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsFailed()
 				metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()
 				metrics.GetSchedulerMetrics().IncTotalApplicationsFailed()
 				app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)

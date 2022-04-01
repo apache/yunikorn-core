@@ -219,7 +219,7 @@ partitions:
 
 	// user rule existing queue, acl allowed
 	err = man.PlaceApplication(app)
-	queueName := app.QueuePath
+	queueName := app.GetQueuePath()
 	if err != nil || queueName != "root.testparent.testchild" {
 		t.Errorf("leaf exist: app should have been placed in user queue, queue: '%s', error: %v", queueName, err)
 	}
@@ -231,7 +231,7 @@ partitions:
 	// user rule new queue: fails on create flag
 	app = newApplication("app1", "default", "", user, tags, nil, "")
 	err = man.PlaceApplication(app)
-	queueName = app.QueuePath
+	queueName = app.GetQueuePath()
 	if err == nil || queueName != "" {
 		t.Errorf("leaf to create, no create flag: app should not have been placed, queue: '%s', error: %v", queueName, err)
 	}
@@ -239,7 +239,7 @@ partitions:
 	// provided rule (2nd rule): queue acl allowed, anyone create
 	app = newApplication("app1", "default", "root.fixed.leaf", user, tags, nil, "")
 	err = man.PlaceApplication(app)
-	queueName = app.QueuePath
+	queueName = app.GetQueuePath()
 	if err != nil || queueName != "root.fixed.leaf" {
 		t.Errorf("leave create, acl allow: app should have been placed, queue: '%s', error: %v", queueName, err)
 	}
@@ -251,7 +251,7 @@ partitions:
 	}
 	app = newApplication("app1", "default", "root.fixed.other", user, tags, nil, "")
 	err = man.PlaceApplication(app)
-	queueName = app.QueuePath
+	queueName = app.GetQueuePath()
 	if err == nil || queueName != "" {
 		t.Errorf("leaf to create, acl deny: app should not have been placed, queue: '%s', error: %v", queueName, err)
 	}
@@ -260,7 +260,7 @@ partitions:
 	tags = map[string]string{"namespace": "root.fixed.leaf"}
 	app = newApplication("app1", "default", "", user, tags, nil, "")
 	err = man.PlaceApplication(app)
-	queueName = app.QueuePath
+	queueName = app.GetQueuePath()
 	if err == nil || queueName != "" {
 		t.Errorf("existing leaf, acl deny: app should not have been placed, queue: '%s', error: %v", queueName, err)
 	}
@@ -272,7 +272,7 @@ partitions:
 	}
 	app = newApplication("app1", "default", "", user, tags, nil, "")
 	err = man.PlaceApplication(app)
-	queueName = app.QueuePath
+	queueName = app.GetQueuePath()
 	if err != nil || queueName != "root.fixed.leaf" {
 		t.Errorf("existing leaf, acl allow: app should have been placed, queue: '%s', error: %v", queueName, err)
 	}
@@ -280,7 +280,7 @@ partitions:
 	// provided rule (2nd): submit to parent
 	app = newApplication("app1", "default", "root.fixed", user, nil, nil, "")
 	err = man.PlaceApplication(app)
-	queueName = app.QueuePath
+	queueName = app.GetQueuePath()
 	if err == nil || queueName != "" {
 		t.Errorf("parent queue: app should not have been placed, queue: '%s', error: %v", queueName, err)
 	}

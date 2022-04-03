@@ -851,6 +851,7 @@ func getApplicationsDAO(lists map[string]*scheduler.PartitionContext) []*dao.App
 		var appList []*objects.Application
 		appList = append(appList, partition.GetApplications()...)
 		appList = append(appList, partition.GetCompletedApplications()...)
+		appList = append(appList, partition.GetRejectedApplications()...)
 
 		for _, app := range appList {
 			result = append(result, getApplicationJSON(app))
@@ -860,11 +861,11 @@ func getApplicationsDAO(lists map[string]*scheduler.PartitionContext) []*dao.App
 	return result
 }
 
-func getPartitionDAO(lists map[string]*scheduler.PartitionContext) []*dao.PartitionDAOInfo {
-	var result []*dao.PartitionDAOInfo
+func getPartitionQueuesDAO(lists map[string]*scheduler.PartitionContext) []dao.PartitionQueueDAOInfo {
+	var result []dao.PartitionQueueDAOInfo
 
 	for _, partition := range lists {
-		result = append(result, getPartitionJSON(partition))
+		result = append(result, partition.GetPartitionQueues())
 	}
 
 	return result

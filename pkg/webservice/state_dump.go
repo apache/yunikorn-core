@@ -53,17 +53,15 @@ var (
 )
 
 type AggregatedStateInfo struct {
-	Timestamp          string
-	Partitions         []*dao.PartitionInfo
-	Applications       []*dao.ApplicationDAOInfo
-	AppHistory         []*dao.ApplicationHistoryDAOInfo
-	Nodes              []*dao.NodesDAOInfo
-	NodesUtilization   []*dao.NodesUtilDAOInfo
-	ClusterInfo        []*dao.ClusterDAOInfo
-	ClusterUtilization []*dao.ClustersUtilDAOInfo
-	ContainerHistory   []*dao.ContainerHistoryDAOInfo
-	Queues             []*dao.PartitionDAOInfo
-	LogLevel           string
+	Timestamp        string
+	Partitions       []*dao.PartitionInfo
+	Applications     []*dao.ApplicationDAOInfo
+	AppHistory       []*dao.ApplicationHistoryDAOInfo
+	Nodes            []*dao.NodesDAOInfo
+	ClusterInfo      []*dao.ClusterDAOInfo
+	ContainerHistory []*dao.ContainerHistoryDAOInfo
+	Queues           []dao.PartitionQueueDAOInfo
+	LogLevel         string
 }
 
 func getFullStateDump(w http.ResponseWriter, r *http.Request) {
@@ -142,17 +140,15 @@ func doStateDump(w io.Writer, periodic bool) error {
 	zapConfig := yunikornLog.GetConfig()
 
 	var aggregated = AggregatedStateInfo{
-		Timestamp:          time.Now().Format(time.RFC3339),
-		Partitions:         getPartitionInfoDAO(partitionContext),
-		Applications:       getApplicationsDAO(partitionContext),
-		AppHistory:         getAppHistoryDAO(records),
-		Nodes:              getNodesDAO(partitionContext),
-		NodesUtilization:   getNodesUtilDAO(partitionContext),
-		ClusterInfo:        getClusterDAO(partitionContext),
-		ClusterUtilization: getClustersUtilDAO(partitionContext),
-		ContainerHistory:   getContainerHistoryDAO(records),
-		Queues:             getPartitionDAO(partitionContext),
-		LogLevel:           zapConfig.Level.Level().String(),
+		Timestamp:        time.Now().Format(time.RFC3339),
+		Partitions:       getPartitionInfoDAO(partitionContext),
+		Applications:     getApplicationsDAO(partitionContext),
+		AppHistory:       getAppHistoryDAO(records),
+		Nodes:            getNodesDAO(partitionContext),
+		ClusterInfo:      getClusterDAO(partitionContext),
+		ContainerHistory: getContainerHistoryDAO(records),
+		Queues:           getPartitionQueuesDAO(partitionContext),
+		LogLevel:         zapConfig.Level.Level().String(),
 	}
 
 	var prettyJSON []byte

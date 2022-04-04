@@ -61,10 +61,10 @@ type StateLogEntry struct {
 type Application struct {
 	ApplicationID  string
 	Partition      string
-	QueuePath      string
 	SubmissionTime time.Time
 
 	// Private fields need protection
+	queuePath            string
 	queue                *Queue                    // queue the application is running in
 	pending              *resources.Resource       // pending resources from asks for the app
 	reservations         map[string]*reservation   // a map of reservations
@@ -98,8 +98,8 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	app := &Application{
 		ApplicationID:        siApp.ApplicationID,
 		Partition:            siApp.PartitionName,
-		QueuePath:            siApp.QueueName,
 		SubmissionTime:       time.Now(),
+		queuePath:            siApp.QueueName,
 		tags:                 siApp.Tags,
 		pending:              resources.NewResource(),
 		allocatedResource:    resources.NewResource(),
@@ -141,8 +141,8 @@ func (sa *Application) String() string {
 	if sa == nil {
 		return "application is nil"
 	}
-	return fmt.Sprintf("ApplicationID: %s, Partition: %s, QueuePath: %s, SubmissionTime: %x, State: %s",
-		sa.ApplicationID, sa.Partition, sa.QueuePath, sa.SubmissionTime, sa.stateMachine.Current())
+	return fmt.Sprintf("ApplicationID: %s, Partition: %s, SubmissionTime: %x, State: %s",
+		sa.ApplicationID, sa.Partition, sa.SubmissionTime, sa.stateMachine.Current())
 }
 
 func (sa *Application) SetState(state string) {
@@ -222,7 +222,7 @@ func (sa *Application) IsResuming() bool {
 }
 
 // HandleApplicationEvent handles the state event for the application.
-// The state machine handles the locking.
+// The application lock is expected to be held.
 func (sa *Application) HandleApplicationEvent(event applicationEvent) error {
 	err := sa.stateMachine.Event(event.String(), sa)
 	// handle the same state transition not nil error (limit of fsm).
@@ -232,6 +232,8 @@ func (sa *Application) HandleApplicationEvent(event applicationEvent) error {
 	return err
 }
 
+// HandleApplicationEventWithInfo handles the state event for the application with associated info object.
+// The application lock is expected to be held.
 func (sa *Application) HandleApplicationEventWithInfo(event applicationEvent, eventInfo string) error {
 	err := sa.stateMachine.Event(event.String(), sa, eventInfo)
 	// handle the same state transition not nil error (limit of fsm).
@@ -283,6 +285,9 @@ func (sa *Application) setStateTimer(timeout time.Duration, currentState string,
 
 func (sa *Application) timeoutStateTimer(expectedState string, event applicationEvent) func() {
 	return func() {
+		sa.Lock()
+		defer sa.Unlock()
+
 		// make sure we are still in the right state
 		// we could have been failed or something might have happened while waiting for a lock
 		if expectedState == sa.stateMachine.Current() {
@@ -290,7 +295,7 @@ func (sa *Application) timeoutStateTimer(expectedState string, event application
 				zap.String("applicationID", sa.ApplicationID),
 				zap.String("state", sa.stateMachine.Current()))
 			// if the app is completing, but there are placeholders left, first do the cleanup
-			if sa.IsCompleting() && !resources.IsZero(sa.GetPlaceholderResource()) {
+			if sa.IsCompleting() && !resources.IsZero(sa.allocatedPlaceholder) {
 				var toRelease []*Allocation
 				for _, alloc := range sa.getPlaceholderAllocations() {
 					// skip over the allocations that are already marked for release
@@ -781,11 +786,14 @@ func (sa *Application) sortRequests(ascending bool) {
 }
 
 func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, total *[]*AllocationAsk) {
+	// make sure the request are sorted
+	sa.Lock()
+	sa.sortRequests(false)
+	sa.Unlock()
+
 	sa.RLock()
 	defer sa.RUnlock()
 
-	// make sure the request are sorted
-	sa.sortRequests(false)
 	for _, request := range sa.sortedRequests {
 		// ignore nil checks resource function calls are nil safe
 		if headRoom.FitInMaxUndef(request.AllocatedResource) {
@@ -815,7 +823,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 		if !headRoom.FitInMaxUndef(request.AllocatedResource) {
 			// post scheduling events via the event plugin
 			if eventCache := events.GetEventCache(); eventCache != nil {
-				message := fmt.Sprintf("Application %s does not fit into %s queue", request.ApplicationID, sa.QueuePath)
+				message := fmt.Sprintf("Application %s does not fit into %s queue", request.ApplicationID, sa.queuePath)
 				if event, err := events.CreateRequestEventRecord(request.AllocationKey, request.ApplicationID, "InsufficientQueueResources", message); err != nil {
 					log.Logger().Warn("Event creation failed",
 						zap.String("event message", message),
@@ -1199,7 +1207,7 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 func (sa *Application) GetQueuePath() string {
 	sa.RLock()
 	defer sa.RUnlock()
-	return sa.QueuePath
+	return sa.queuePath
 }
 
 func (sa *Application) GetQueue() *Queue {
@@ -1213,14 +1221,14 @@ func (sa *Application) GetQueue() *Queue {
 func (sa *Application) SetQueuePath(queuePath string) {
 	sa.Lock()
 	defer sa.Unlock()
-	sa.QueuePath = queuePath
+	sa.queuePath = queuePath
 }
 
 // Set the leaf queue the application runs in.
 func (sa *Application) SetQueue(queue *Queue) {
 	sa.Lock()
 	defer sa.Unlock()
-	sa.QueuePath = queue.QueuePath
+	sa.queuePath = queue.QueuePath
 	sa.queue = queue
 }
 
@@ -1437,6 +1445,22 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 	sa.clearPlaceholderTimer()
 	sa.clearStateTimer()
 	return allocationsToRelease
+}
+
+// RejectApplication rejects this application.
+func (sa *Application) RejectApplication(rejectedMessage string) error {
+	sa.Lock()
+	defer sa.Unlock()
+
+	return sa.HandleApplicationEventWithInfo(RejectApplication, rejectedMessage)
+}
+
+// FailApplication fails this application.
+func (sa *Application) FailApplication(failureMessage string) error {
+	sa.Lock()
+	defer sa.Unlock()
+
+	return sa.HandleApplicationEventWithInfo(FailApplication, failureMessage)
 }
 
 // get a copy of the user details for the application

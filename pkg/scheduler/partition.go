@@ -316,14 +316,14 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 	}
 
 	// Put app under the queue
-	queueName := app.QueuePath
+	queueName := app.GetQueuePath()
 	pm := pc.getPlacementManager()
 	if pm.IsInitialised() {
 		err := pm.PlaceApplication(app)
 		if err != nil {
 			return fmt.Errorf("failed to place application %s: %v", appID, err)
 		}
-		queueName = app.QueuePath
+		queueName = app.GetQueuePath()
 		if queueName == "" {
 			return fmt.Errorf("application rejected by placement rules: %s", appID)
 		}
@@ -956,7 +956,7 @@ func (pc *PartitionContext) reserve(app *objects.Application, node *objects.Node
 
 	log.Logger().Info("allocation ask is reserved",
 		zap.String("appID", appID),
-		zap.String("queue", app.QueuePath),
+		zap.String("queue", app.GetQueuePath()),
 		zap.String("allocationKey", ask.AllocationKey),
 		zap.String("node", node.NodeID))
 }
@@ -985,7 +985,7 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 
 	log.Logger().Info("allocation ask is unreserved",
 		zap.String("appID", appID),
-		zap.String("queue", app.QueuePath),
+		zap.String("queue", app.GetQueuePath()),
 		zap.String("allocationKey", ask.AllocationKey),
 		zap.String("node", node.NodeID),
 		zap.Int("reservationsRemoved", num))
@@ -1499,7 +1499,7 @@ func (pc *PartitionContext) hasUnlimitedNode() bool {
 }
 
 func (pc *PartitionContext) AddRejectedApplication(rejectedApplication *objects.Application, rejectedMessage string) {
-	if err := rejectedApplication.HandleApplicationEventWithInfo(objects.RejectApplication, rejectedMessage); err != nil {
+	if err := rejectedApplication.RejectApplication(rejectedMessage); err != nil {
 		log.Logger().Warn("BUG: Unexpected failure: Application state not changed to Rejected",
 			zap.String("currentState", rejectedApplication.CurrentState()),
 			zap.Error(err))

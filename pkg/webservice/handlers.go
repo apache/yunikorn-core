@@ -320,7 +320,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		UsedResource:    app.GetAllocatedResource().DAOMap(),
 		MaxUsedResource: app.GetMaxAllocatedResource().DAOMap(),
 		Partition:       common.GetPartitionNameWithoutClusterID(app.Partition),
-		QueueName:       app.QueuePath,
+		QueueName:       app.GetQueuePath(),
 		SubmissionTime:  app.SubmissionTime.UnixNano(),
 		FinishedTime:    common.ZeroTimeInUnixNano(app.FinishedTime()),
 		Allocations:     allocationInfo,

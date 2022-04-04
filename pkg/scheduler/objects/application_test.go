@@ -44,7 +44,7 @@ func TestNewApplication(t *testing.T) {
 	siApp := &si.AddApplicationRequest{}
 	app := NewApplication(siApp, user, nil, "")
 	assert.Equal(t, app.ApplicationID, "", "application ID should not be set was not set in SI")
-	assert.Equal(t, app.QueuePath, "", "queue name should not be set was not set in SI")
+	assert.Equal(t, app.GetQueuePath(), "", "queue name should not be set was not set in SI")
 	assert.Equal(t, app.Partition, "", "partition name should not be set was not set in SI")
 	assert.Equal(t, app.rmID, "", "RM ID should not be set was not passed in")
 	assert.Equal(t, app.rmEventHandler, handler.EventHandler(nil), "event handler should be nil")
@@ -76,7 +76,7 @@ func TestNewApplication(t *testing.T) {
 	}
 	app = NewApplication(siApp, user, &appEventHandler{}, "myRM")
 	assert.Equal(t, app.ApplicationID, "appID", "application ID should not be set to SI value")
-	assert.Equal(t, app.QueuePath, "some.queue", "queue name should not be set to SI value")
+	assert.Equal(t, app.GetQueuePath(), "some.queue", "queue name should not be set to SI value")
 	assert.Equal(t, app.Partition, "AnotherPartition", "partition name should be set to SI value")
 	if app.rmEventHandler == nil {
 		t.Fatal("non nil handler was not set in the new app")
@@ -847,7 +847,7 @@ func TestQueueUpdate(t *testing.T) {
 	queue, err := createDynamicQueue(root, "test", false)
 	assert.NilError(t, err, "failed to create test queue")
 	app.SetQueue(queue)
-	assert.Equal(t, app.QueuePath, "root.test")
+	assert.Equal(t, app.GetQueuePath(), "root.test")
 }
 
 func TestStateTimeOut(t *testing.T) {
@@ -1264,13 +1264,11 @@ func TestGetAllRequests(t *testing.T) {
 
 func TestGetQueueNameAfterUnsetQueue(t *testing.T) {
 	app := newApplication(appID1, "default", "root.unknown")
-	assert.Equal(t, app.GetQueuePath(), app.QueuePath)
 	assert.Equal(t, app.GetQueuePath(), "root.unknown")
 
 	// the queue is reset to nil but GetQueuePath should work well
 	app.UnSetQueue()
 	assert.Assert(t, app.queue == nil)
-	assert.Equal(t, app.GetQueuePath(), app.QueuePath)
 	assert.Equal(t, app.GetQueuePath(), "root.unknown")
 }
 

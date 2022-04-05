@@ -1486,18 +1486,6 @@ func (pc *PartitionContext) moveTerminatedApp(appID string) {
 	pc.completedApplications[newID] = app
 }
 
-// Check for unlimited nodes in the partition
-func (pc *PartitionContext) hasUnlimitedNode() bool {
-	// We can have only one unlimited node registered
-	if pc.nodes.GetNodeCount() != 1 {
-		return false
-	}
-	for _, v := range pc.nodes.GetNodes() {
-		return v.IsUnlimited()
-	}
-	return false
-}
-
 func (pc *PartitionContext) AddRejectedApplication(rejectedApplication *objects.Application, rejectedMessage string) {
 	if err := rejectedApplication.RejectApplication(rejectedMessage); err != nil {
 		log.Logger().Warn("BUG: Unexpected failure: Application state not changed to Rejected",

@@ -36,7 +36,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
-	lumberjack "gopkg.in/natefinch/lumberjack.v2"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 const (
@@ -53,7 +53,7 @@ var (
 )
 
 type AggregatedStateInfo struct {
-	Timestamp        string
+	Timestamp        int64
 	Partitions       []*dao.PartitionInfo
 	Applications     []*dao.ApplicationDAOInfo
 	AppHistory       []*dao.ApplicationHistoryDAOInfo
@@ -140,7 +140,7 @@ func doStateDump(w io.Writer, periodic bool) error {
 	zapConfig := yunikornLog.GetConfig()
 
 	var aggregated = AggregatedStateInfo{
-		Timestamp:        time.Now().Format(time.RFC3339),
+		Timestamp:        time.Now().UnixNano(),
 		Partitions:       getPartitionInfoDAO(partitionContext),
 		Applications:     getApplicationsDAO(partitionContext),
 		AppHistory:       getAppHistoryDAO(records),

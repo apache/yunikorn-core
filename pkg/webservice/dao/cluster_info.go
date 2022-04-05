@@ -18,7 +18,7 @@
 package dao
 
 type ClusterDAOInfo struct {
-	StartTime             string              `json:"startTime"`
+	StartTime             int64               `json:"startTime"`
 	RMBuildInformation    []map[string]string `json:"rmBuildInformation"`
 	PartitionName         string              `json:"partition"`
 	ClusterName           string              `json:"clusterName"`

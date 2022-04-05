@@ -1642,7 +1642,7 @@ func isAbortClosed() bool {
 }
 
 func verifyStateDumpJSON(t *testing.T, aggregated *AggregatedStateInfo) {
-	assert.Check(t, len(aggregated.Timestamp) > 0)
+	assert.Check(t, aggregated.Timestamp != 0)
 	assert.Check(t, len(aggregated.Partitions) > 0)
 	assert.Check(t, len(aggregated.Nodes) > 0)
 	assert.Check(t, len(aggregated.ClusterInfo) > 0)

@@ -209,7 +209,7 @@ func buildJSONErrorResponse(w http.ResponseWriter, detail string, code int) {
 
 func getClusterJSON(partition *scheduler.PartitionContext) *dao.ClusterDAOInfo {
 	clusterInfo := &dao.ClusterDAOInfo{}
-	clusterInfo.StartTime = schedulerContext.GetStartTime().Format("2006-01-02T15:04:05-0700")
+	clusterInfo.StartTime = schedulerContext.GetStartTime().UnixNano()
 	rmInfo := schedulerContext.GetRMInfoMapClone()
 	clusterInfo.RMBuildInformation = getRMBuildInformation(rmInfo)
 	clusterInfo.PartitionName = common.GetPartitionNameWithoutClusterID(partition.Name)
@@ -733,7 +733,7 @@ func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.Pa
 		partitionInfo.ClusterID = partitionContext.RmID
 		partitionInfo.Name = common.GetPartitionNameWithoutClusterID(partitionContext.Name)
 		partitionInfo.State = partitionContext.GetCurrentState()
-		partitionInfo.LastStateTransitionTime = partitionContext.GetStateTime().String()
+		partitionInfo.LastStateTransitionTime = partitionContext.GetStateTime().UnixNano()
 
 		capacityInfo := dao.PartitionCapacity{}
 		capacity := partitionContext.GetTotalPartitionResource()

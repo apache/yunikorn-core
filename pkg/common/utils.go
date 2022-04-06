@@ -132,29 +132,31 @@ func ConvertSITimeoutWithAdjustment(siApp *si.AddApplicationRequest) time.Durati
 
 func adjustTimeout(placeholderTimeout time.Duration, siApp *si.AddApplicationRequest) time.Duration {
 	creationTimeTag := siApp.Tags[interfaceCommon.DomainYuniKorn+CreationTime]
-	if creationTimeTag != "" {
-		created := ConvertSITimestamp(creationTimeTag)
-		if created == Undefined {
-			return placeholderTimeout
-		}
-		now := time.Now()
-		expectedTimeout := created.Add(placeholderTimeout)
-
-		if now.After(expectedTimeout) {
-			log.Logger().Info("Placeholder timeout reached - expected timeout is in the past",
-				zap.Duration("timeout duration", placeholderTimeout),
-				zap.Time("creation time", created),
-				zap.Time("expected timeout", expectedTimeout))
-			return time.Millisecond // smallest allowed timeout value
-		}
-
-		log.Logger().Info("Adjusting placeholder timeout", zap.Duration("original", placeholderTimeout),
-			zap.Time("since creation", expectedTimeout))
-
-		return expectedTimeout.Sub(now)
+	if creationTimeTag == "" {
+		return placeholderTimeout
 	}
 
-	return placeholderTimeout
+	created := ConvertSITimestamp(creationTimeTag)
+	if created == Undefined {
+		return placeholderTimeout
+	}
+	now := time.Now()
+	expectedTimeout := created.Add(placeholderTimeout)
+
+	if now.After(expectedTimeout) {
+		log.Logger().Info("Placeholder timeout reached - expected timeout is in the past",
+			zap.Duration("timeout duration", placeholderTimeout),
+			zap.Time("creation time", created),
+			zap.Time("expected timeout", expectedTimeout))
+		return time.Millisecond // smallest allowed timeout value
+	}
+
+	log.Logger().Info("Adjusting placeholder timeout",
+		zap.Duration("timeout duration", placeholderTimeout),
+		zap.Time("creation time", created),
+		zap.Time("expected timeout", expectedTimeout))
+
+	return expectedTimeout.Sub(now)
 }
 
 func ConvertSITimestamp(ts string) time.Time {

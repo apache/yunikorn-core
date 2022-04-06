@@ -1298,7 +1298,7 @@ func TestPlaceholderTimeoutReached(t *testing.T) {
 	}
 	tenMinutesAgo := time.Now().Unix() - 600
 	siApp.Tags = map[string]string{
-		"creationTime": strconv.FormatInt(tenMinutesAgo, 10),
+		"yunikorn.apache.org/CreationTime": strconv.FormatInt(tenMinutesAgo, 10),
 	}
 
 	// 2min timeout --> timeout
@@ -1320,7 +1320,7 @@ func TestPlaceholderTimeoutReached(t *testing.T) {
 
 	// Illegal string --> no change
 	siApp.Tags = map[string]string{
-		"creationTime": "illegal",
+		"yunikorn.apache.org/CreationTime": "illegal",
 	}
 	siApp.ExecutionTimeoutMilliSeconds = (20 * time.Minute).Milliseconds()
 	app = NewApplication(siApp, user, nil, "")

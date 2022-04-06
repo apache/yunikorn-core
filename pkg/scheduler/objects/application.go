@@ -21,7 +21,6 @@ package objects
 import (
 	"fmt"
 	"math"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -116,16 +115,9 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		stateLog:             make([]*StateLogEntry, 0),
 	}
 
-	placeholderTimeout := common.ConvertSITimeout(siApp.ExecutionTimeoutMilliSeconds)
+	placeholderTimeout := common.ConvertSITimeoutWithAdjustment(siApp)
 	if time.Duration(0) == placeholderTimeout {
 		placeholderTimeout = defaultPlaceholderTimeout
-	}
-
-	var timeoutReached bool
-	timeoutReached, placeholderTimeout = app.adjustPlaceholderTimeout(placeholderTimeout, siApp)
-	if timeoutReached {
-		// Yunikorn was restarted and the placeholder timed out in the meantime
-		placeholderTimeout = time.Millisecond
 	}
 
 	gangSchedStyle := siApp.GetGangSchedulingStyle()
@@ -145,37 +137,6 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	app.rmEventHandler = eventHandler
 	app.rmID = rmID
 	return app
-}
-
-// Adjust the placeholder timeout if "creationTime" is defined. It's used during Yunikorn restart,
-// in order to properly track how long a placeholder pod should be in "Running" state.
-func (sa *Application) adjustPlaceholderTimeout(placeholderTimeout time.Duration, siApp *si.AddApplicationRequest) (bool, time.Duration) {
-	creationTimeTag := siApp.Tags["creationTime"]
-	var creationTime int64
-	if creationTimeTag != "" {
-		var err error
-		creationTime, err = strconv.ParseInt(creationTimeTag, 10, 64)
-		if err != nil {
-			log.Logger().Warn("Unable to parse creationTime", zap.String("creationTime tag", creationTimeTag),
-				zap.Error(err))
-			return false, placeholderTimeout
-		}
-		now := time.Now()
-		created := time.Unix(creationTime, 0)
-		elapsed := now.Sub(created) // duration since the creation time
-
-		if elapsed.Nanoseconds() > placeholderTimeout.Nanoseconds() {
-			log.Logger().Info("Placeholder timeout reached", zap.Duration("original", placeholderTimeout),
-				zap.Duration("new", elapsed))
-			return true, elapsed
-		}
-
-		log.Logger().Info("Adjusting placeholder timeout", zap.Duration("original", placeholderTimeout),
-			zap.Duration("new", elapsed))
-		return false, elapsed
-	}
-
-	return false, placeholderTimeout
 }
 
 func (sa *Application) String() string {

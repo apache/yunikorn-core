@@ -1710,10 +1710,12 @@ func TestMaxApps(t *testing.T) {
 	assert.NilError(t, err)
 	var leaf1 *Queue
 	leaf1, err = createManagedQueue(nil, "leaf1", false, nil, 1)
+	assert.NilError(t, err)
 	err = parent.addChildQueue(leaf1)
 	assert.NilError(t, err)
 	var leaf2 *Queue
 	leaf2, err = createManagedQueue(nil, "leaf1", false, nil, 2)
+	assert.NilError(t, err)
 	err = parent.addChildQueue(leaf2)
 	assert.Error(t, err, "parent maxRunningApps must be larger than child maxRunningApps")
 }

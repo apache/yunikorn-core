@@ -456,7 +456,7 @@ func TestQueryParamInAppsHandler(t *testing.T) {
 	res := &si.Resource{
 		Resources: map[string]*si.Quantity{"vcore": {Value: 1}},
 	}
-	ask := objects.NewAllocationAsk(&si.AllocationAsk{
+	ask = objects.NewAllocationAsk(&si.AllocationAsk{
 		ApplicationID: app.ApplicationID,
 		PartitionName: partitionName,
 		TaskGroupName: tg,

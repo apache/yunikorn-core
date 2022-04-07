@@ -1446,4 +1446,41 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 
 	ms.scheduler.MultiStepSchedule(5)
 	ms.mockRM.waitForAllocations(t, 1, 1000)
+
+	// Check allocated resources of queues, apps
+	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[resources.MEMORY]), 10000000, "leaf allocated memory incorrect")
+	assert.Equal(t, int(root.GetAllocatedResource().Resources[resources.MEMORY]), 10000000, "root allocated memory incorrect")
+	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 10000000, "app allocated memory incorrect")
+
+	assert.Assert(t, app.GetQueue() != nil)
+
+	// Simulate Allocation being Released, causing the app to go to Completed and then to Completed state after 30 seconds.
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
+		Releases: &si.AllocationReleasesRequest{
+			AllocationsToRelease: []*si.AllocationRelease{
+				{
+					PartitionName:   "default",
+					ApplicationID:   appID1,
+					TerminationType: si.TerminationType_STOPPED_BY_RM,
+				},
+			},
+		},
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err)
+	ms.mockRM.waitForAllocations(t, 0, 1000)
+
+	// Check allocated resources of queues, apps
+	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[resources.MEMORY]), 0, "leaf allocated memory incorrect")
+	assert.Equal(t, int(root.GetAllocatedResource().Resources[resources.MEMORY]), 0, "root allocated memory incorrect")
+	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 0, "app allocated memory incorrect")
+
+	assert.Equal(t, app.CurrentState(), objects.Completing.String())
+	assert.Assert(t, app.GetQueue() != nil)
+
+	// give it some time to run and progress
+	err = app.HandleApplicationEvent(objects.CompleteApplication)
+	err = common.WaitFor(time.Second, time.Minute, app.IsCompleted)
+	assert.NilError(t, err, "Application did not progress into Completed state")
+
 }

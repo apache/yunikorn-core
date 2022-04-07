@@ -19,8 +19,8 @@
 package scheduler
 
 import (
-	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 )
 
 // Below structures are intended to be used under single go routine, thus no

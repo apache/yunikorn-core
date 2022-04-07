@@ -37,7 +37,7 @@ partitions:
       - limit: "resource limit for user"
         users:
         - user1
-        maxresources: {memory: 10000, vcore: 10}
+        maxresources: {memory: 10G, vcore: 10}
       - limit: "application limit for group"
         groups:
           - sandbox
@@ -48,27 +48,27 @@ partitions:
           - name: advertisement
             resources:
               guaranteed:
-                {memory: 500000, vcore: 50000}
+                {memory: 500G, vcore: 50}
               max:
-                {memory: 800000, vcore: 80000}
+                {memory: 800G, vcore: 80}
           - name: search
             resources:
               guaranteed:
-                memory: 400000
-                vcore: 40000
+                memory: 400G
+                vcore: 40
               max:
-                memory: 600000
-                vcore: 60000
+                memory: 600G
+                vcore: 60
           - name: sandbox
             parent: true
             submitacl: " sandbox"
             resources:
               guaranteed:
-                memory: 100000
-                vcore: 10000
+                memory: 100G
+                vcore: 10
               max:
-                memory: 100000
-                vcore: 10000
+                memory: 100G
+                vcore: 10
   - name: gpu
     queues:
       - name: production
@@ -81,4 +81,4 @@ partitions:
           - limit: "resource limit for user"
             users:
               - gpuuser
-            maxresources: { memory: 10000, vcore: 10, gpu: 50 }
+            maxresources: { memory: 10G, vcore: 10, gpu: 50 }

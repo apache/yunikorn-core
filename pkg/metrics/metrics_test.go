@@ -26,7 +26,7 @@ import (
 	"go.uber.org/zap"
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-core/pkg/log"
 )
 
 func TestFormatMetricName(t *testing.T) {

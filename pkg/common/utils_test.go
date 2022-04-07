@@ -26,7 +26,7 @@ import (
 
 	"gotest.tools/assert"
 
-	common "github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
+	common "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 )
 
 func TestGetNormalizedPartitionName(t *testing.T) {

@@ -32,17 +32,17 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	metrics2 "github.com/apache/incubator-yunikorn-core/pkg/metrics"
-	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
-	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
-	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/log"
+	metrics2 "github.com/apache/yunikorn-core/pkg/metrics"
+	"github.com/apache/yunikorn-core/pkg/metrics/history"
+	"github.com/apache/yunikorn-core/pkg/plugins"
+	"github.com/apache/yunikorn-core/pkg/scheduler"
+	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 
 	"github.com/gorilla/mux"
 )
@@ -209,7 +209,7 @@ func buildJSONErrorResponse(w http.ResponseWriter, detail string, code int) {
 
 func getClusterJSON(partition *scheduler.PartitionContext) *dao.ClusterDAOInfo {
 	clusterInfo := &dao.ClusterDAOInfo{}
-	clusterInfo.StartTime = schedulerContext.GetStartTime().Format("2006-01-02T15:04:05-0700")
+	clusterInfo.StartTime = schedulerContext.GetStartTime().UnixNano()
 	rmInfo := schedulerContext.GetRMInfoMapClone()
 	clusterInfo.RMBuildInformation = getRMBuildInformation(rmInfo)
 	clusterInfo.PartitionName = common.GetPartitionNameWithoutClusterID(partition.Name)
@@ -282,13 +282,24 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 	allocationInfo := make([]dao.AllocationDAOInfo, 0, len(allocations))
 	placeholders := app.GetAllPlaceholderData()
 	placeholderInfo := make([]dao.PlaceholderDAOInfo, 0, len(placeholders))
+	var requestTime int64
 
 	for _, alloc := range allocations {
+		if alloc.GetPlaceholderUsed() {
+			requestTime = alloc.GetPlaceholderCreateTime().UnixNano()
+		} else {
+			requestTime = alloc.Ask.GetCreateTime().UnixNano()
+		}
+		allocTime := alloc.GetCreateTime().UnixNano()
 		allocInfo := dao.AllocationDAOInfo{
 			AllocationKey:    alloc.AllocationKey,
 			AllocationTags:   alloc.Tags,
+			RequestTime:      requestTime,
+			AllocationTime:   allocTime,
+			AllocationDelay:  allocTime - requestTime,
 			UUID:             alloc.UUID,
 			ResourcePerAlloc: alloc.AllocatedResource.DAOMap(),
+			PlaceholderUsed:  alloc.GetPlaceholderUsed(),
 			Priority:         strconv.Itoa(int(alloc.Priority)),
 			QueueName:        alloc.QueueName,
 			NodeID:           alloc.NodeID,
@@ -296,6 +307,15 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 			Partition:        alloc.PartitionName,
 		}
 		allocationInfo = append(allocationInfo, allocInfo)
+	}
+	stateLog := app.GetStateLog()
+	stateLogInfo := make([]dao.StateDAOInfo, 0, len(stateLog))
+	for _, state := range stateLog {
+		stateInfo := dao.StateDAOInfo{
+			Time:             state.Time.UnixNano(),
+			ApplicationState: state.ApplicationState,
+		}
+		stateLogInfo = append(stateLogInfo, stateInfo)
 	}
 
 	for _, taskGroup := range placeholders {
@@ -314,7 +334,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		UsedResource:    app.GetAllocatedResource().DAOMap(),
 		MaxUsedResource: app.GetMaxAllocatedResource().DAOMap(),
 		Partition:       common.GetPartitionNameWithoutClusterID(app.Partition),
-		QueueName:       app.QueuePath,
+		QueueName:       app.GetQueuePath(),
 		SubmissionTime:  app.SubmissionTime.UnixNano(),
 		FinishedTime:    common.ZeroTimeInUnixNano(app.FinishedTime()),
 		Allocations:     allocationInfo,
@@ -322,22 +342,34 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		User:            app.GetUser().User,
 		RejectedMessage: app.GetRejectedMessage(),
 		PlaceholderData: placeholderInfo,
+		StateLog:        stateLogInfo,
 	}
 }
 
 func getNodeJSON(node *objects.Node) *dao.NodeDAOInfo {
 	apps := node.GetAllAllocations()
 	allocations := make([]*dao.AllocationDAOInfo, 0, len(apps))
+	var requestTime int64
 	for _, alloc := range apps {
+		if alloc.GetPlaceholderUsed() {
+			requestTime = alloc.GetPlaceholderCreateTime().UnixNano()
+		} else {
+			requestTime = alloc.Ask.GetCreateTime().UnixNano()
+		}
+		allocTime := alloc.GetCreateTime().UnixNano()
 		allocInfo := &dao.AllocationDAOInfo{
 			AllocationKey:    alloc.AllocationKey,
 			AllocationTags:   alloc.Tags,
+			RequestTime:      requestTime,
+			AllocationTime:   allocTime,
+			AllocationDelay:  allocTime - requestTime,
 			UUID:             alloc.UUID,
 			ResourcePerAlloc: alloc.AllocatedResource.DAOMap(),
 			Priority:         strconv.Itoa(int(alloc.Priority)),
 			QueueName:        alloc.QueueName,
 			NodeID:           alloc.NodeID,
 			ApplicationID:    alloc.ApplicationID,
+			PlaceholderUsed:  alloc.GetPlaceholderUsed(),
 			Partition:        alloc.PartitionName,
 		}
 		allocations = append(allocations, allocInfo)
@@ -531,14 +563,22 @@ func isChecksumEqual(checksum string) bool {
 
 func checkHealthStatus(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
-	metrics := metrics2.GetSchedulerMetrics()
-	result := scheduler.GetSchedulerHealthStatus(metrics, schedulerContext)
-	if !result.Healthy {
-		log.Logger().Error("Scheduler is not healthy", zap.Any("health check values", result.HealthChecks))
-		buildJSONErrorResponse(w, "Scheduler is not healthy", http.StatusServiceUnavailable)
-	}
-	if err := json.NewEncoder(w).Encode(result); err != nil {
-		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+
+	// Fetch last healthCheck result
+	result := schedulerContext.GetLastHealthCheckResult()
+	if result != nil {
+		if !result.Healthy {
+			log.Logger().Error("Scheduler is not healthy", zap.Any("health check info", *result))
+			buildJSONErrorResponse(w, "Scheduler is not healthy", http.StatusServiceUnavailable)
+		} else {
+			log.Logger().Info("Scheduler is healthy", zap.Any("health check info", *result))
+			if err := json.NewEncoder(w).Encode(result); err != nil {
+				buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+			}
+		}
+	} else {
+		log.Logger().Info("The healthy status of scheduler is not found", zap.Any("health check info", ""))
+		buildJSONErrorResponse(w, "The healthy status of scheduler is not found", http.StatusNotFound)
 	}
 }
 
@@ -708,7 +748,7 @@ func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.Pa
 		partitionInfo.ClusterID = partitionContext.RmID
 		partitionInfo.Name = common.GetPartitionNameWithoutClusterID(partitionContext.Name)
 		partitionInfo.State = partitionContext.GetCurrentState()
-		partitionInfo.LastStateTransitionTime = partitionContext.GetStateTime().String()
+		partitionInfo.LastStateTransitionTime = partitionContext.GetStateTime().UnixNano()
 
 		capacityInfo := dao.PartitionCapacity{}
 		capacity := partitionContext.GetTotalPartitionResource()
@@ -826,6 +866,7 @@ func getApplicationsDAO(lists map[string]*scheduler.PartitionContext) []*dao.App
 		var appList []*objects.Application
 		appList = append(appList, partition.GetApplications()...)
 		appList = append(appList, partition.GetCompletedApplications()...)
+		appList = append(appList, partition.GetRejectedApplications()...)
 
 		for _, app := range appList {
 			result = append(result, getApplicationJSON(app))
@@ -835,11 +876,11 @@ func getApplicationsDAO(lists map[string]*scheduler.PartitionContext) []*dao.App
 	return result
 }
 
-func getPartitionDAO(lists map[string]*scheduler.PartitionContext) []*dao.PartitionDAOInfo {
-	var result []*dao.PartitionDAOInfo
+func getPartitionQueuesDAO(lists map[string]*scheduler.PartitionContext) []dao.PartitionQueueDAOInfo {
+	var result []dao.PartitionQueueDAOInfo
 
 	for _, partition := range lists {
-		result = append(result, getPartitionJSON(partition))
+		result = append(result, partition.GetPartitionQueues())
 	}
 
 	return result

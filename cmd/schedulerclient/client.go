@@ -24,7 +24,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 
 	"google.golang.org/grpc"
 )

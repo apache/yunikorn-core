@@ -15,19 +15,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  -->
-# Apache YuniKorn (Incubating) - A Universal Scheduler
+# Apache YuniKorn - A Universal Scheduler
 
-[![Build Status](https://github.com/apache/incubator-yunikorn-core/actions/workflows/main.yml/badge.svg)](https://github.com/apache/incubator-yunikorn-core/actions)
-[![codecov](https://codecov.io/gh/apache/incubator-yunikorn-core/branch/master/graph/badge.svg)](https://codecov.io/gh/apache/incubator-yunikorn-core)
-[![Go Report Card](https://goreportcard.com/badge/github.com/apache/incubator-yunikorn-core)](https://goreportcard.com/report/github.com/apache/incubator-yunikorn-core)
+[![Build Status](https://github.com/apache/yunikorn-core/actions/workflows/main.yml/badge.svg)](https://github.com/apache/yunikorn-core/actions)
+[![codecov](https://codecov.io/gh/apache/yunikorn-core/branch/master/graph/badge.svg)](https://codecov.io/gh/apache/yunikorn-core)
+[![Go Report Card](https://goreportcard.com/badge/github.com/apache/yunikorn-core)](https://goreportcard.com/report/github.com/apache/yunikorn-core)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Repo Size](https://img.shields.io/github/repo-size/apache/incubator-yunikorn-core)](https://img.shields.io/github/repo-size/apache/incubator-yunikorn-core)
+[![Repo Size](https://img.shields.io/github/repo-size/apache/yunikorn-core)](https://img.shields.io/github/repo-size/apache/yunikorn-core)
 
-<img src="https://raw.githubusercontent.com/apache/incubator-yunikorn-core/master/images/logo/yunikorn-logo-blue.png" width="200">
+<img src="https://raw.githubusercontent.com/apache/yunikorn-core/master/images/logo/yunikorn-logo-blue.png" width="200">
 
 ----
 
-Apache YuniKorn (Incubating) is a light-weight, universal resource scheduler for container orchestrator systems.
+Apache YuniKorn is a light-weight, universal resource scheduler for container orchestrator systems.
 It is created to achieve fine-grained resource sharing for various workloads efficiently on a large scale, multi-tenant,
 and cloud-native environment. YuniKorn brings a unified, cross-platform, scheduling experience for mixed workloads that consist
 of stateless batch workloads and stateful services. 
@@ -52,14 +52,14 @@ All the design docs are available [here](http://yunikorn.apache.org/docs/next/de
 
 ## Code Structure
 
-Apache YuniKorn (Incubating) project has the following git repositories:
+Apache YuniKorn project has the following git repositories:
 
-- [yunikorn-core](https://github.com/apache/incubator-yunikorn-core/) : the scheduler brain :round_pushpin: 
-- [yunikorn-k8shim](https://github.com/apache/incubator-yunikorn-k8shim) : the adaptor to Kubernetes
-- [yunikorn-scheduler-interface](https://github.com/apache/incubator-yunikorn-scheduler-interface) : the common scheduling interface
-- [yunikorn-web](https://github.com/apache/incubator-yunikorn-web) : the web UI
-- [yunikorn-release](https://github.com/apache/incubator-yunikorn-release/): the repo manages yunikorn releases, including the helm charts
-- [yunikorn-site](https://github.com/apache/incubator-yunikorn-site/): the source code for [yunikorn website](http://yunikorn.apache.org/)
+- [yunikorn-core](https://github.com/apache/yunikorn-core/) : the scheduler brain :round_pushpin: 
+- [yunikorn-k8shim](https://github.com/apache/yunikorn-k8shim) : the adaptor to Kubernetes
+- [yunikorn-scheduler-interface](https://github.com/apache/yunikorn-scheduler-interface) : the common scheduling interface
+- [yunikorn-web](https://github.com/apache/yunikorn-web) : the web UI
+- [yunikorn-release](https://github.com/apache/yunikorn-release/): the repo manages yunikorn releases, including the helm charts
+- [yunikorn-site](https://github.com/apache/yunikorn-site/): the source code for [yunikorn website](http://yunikorn.apache.org/)
 
 The `yunikorn-core` is the brain of the scheduler, which makes placement decisions (allocate container X on node Y) according
 to the builtin rich scheduling policies. Scheduler core implementation is agnostic to the underneath resource manager system.

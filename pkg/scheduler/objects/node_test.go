@@ -19,15 +19,14 @@
 package objects
 
 import (
-	"math"
 	"testing"
 
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/common"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 )
 
 const testNode = "testnode"
@@ -650,26 +649,6 @@ func TestUpdateResources(t *testing.T) {
 	if !resources.Equals(available, node.GetAvailableResource()) {
 		t.Errorf("available resources should have been updated to: %s, got %s", available, node.GetAvailableResource())
 	}
-}
-
-func TestUnlimitedNode(t *testing.T) {
-	nodeInfo := &si.NodeInfo{
-		NodeID:     "Unlimited",
-		Attributes: map[string]string{"yunikorn.apache.org/nodeType": "unlimited"},
-	}
-	node := NewNode(nodeInfo)
-	assert.Assert(t, node.unlimited, "Created node should be unlimited")
-
-	resource := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: resources.Quantity(math.MaxInt64)})
-	assert.Assert(t, node.FitInNode(resource), "Any resource should fit in an unlimited node")
-	assert.Assert(t, node.CanAllocate(resource, false), "Node should be able to allocate")
-
-	allocation := NewAllocation("UUID", node.NodeID, newAllocationAsk("key", "appID", resource))
-	node.AddAllocation(allocation)
-	assert.Assert(t, len(node.allocations) == 1, "Node should have one allocation")
-
-	node.RemoveAllocation(allocation.UUID)
-	assert.Assert(t, len(node.allocations) == 0, "Node should have no allocations")
 }
 
 func TestIsValidFor(t *testing.T) {

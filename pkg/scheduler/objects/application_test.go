@@ -27,12 +27,12 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
-	"github.com/apache/incubator-yunikorn-core/pkg/handler"
-	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/handler"
+	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 // basic app creating with timeout checks
@@ -44,7 +44,7 @@ func TestNewApplication(t *testing.T) {
 	siApp := &si.AddApplicationRequest{}
 	app := NewApplication(siApp, user, nil, "")
 	assert.Equal(t, app.ApplicationID, "", "application ID should not be set was not set in SI")
-	assert.Equal(t, app.QueuePath, "", "queue name should not be set was not set in SI")
+	assert.Equal(t, app.GetQueuePath(), "", "queue name should not be set was not set in SI")
 	assert.Equal(t, app.Partition, "", "partition name should not be set was not set in SI")
 	assert.Equal(t, app.rmID, "", "RM ID should not be set was not passed in")
 	assert.Equal(t, app.rmEventHandler, handler.EventHandler(nil), "event handler should be nil")
@@ -76,7 +76,7 @@ func TestNewApplication(t *testing.T) {
 	}
 	app = NewApplication(siApp, user, &appEventHandler{}, "myRM")
 	assert.Equal(t, app.ApplicationID, "appID", "application ID should not be set to SI value")
-	assert.Equal(t, app.QueuePath, "some.queue", "queue name should not be set to SI value")
+	assert.Equal(t, app.GetQueuePath(), "some.queue", "queue name should not be set to SI value")
 	assert.Equal(t, app.Partition, "AnotherPartition", "partition name should be set to SI value")
 	if app.rmEventHandler == nil {
 		t.Fatal("non nil handler was not set in the new app")
@@ -433,6 +433,13 @@ func TestAllocAskStateChange(t *testing.T) {
 	// and back to waiting again, now from running
 	assert.Equal(t, app.RemoveAllocationAsk(aKey), 0, "ask should have been removed, no reservations")
 	assert.Assert(t, app.IsCompleting(), "Application should be in waiting state")
+
+	log := app.GetStateLog()
+	assert.Equal(t, len(log), 4, "wrong number of app events")
+	assert.Equal(t, log[0].ApplicationState, Accepted.String())
+	assert.Equal(t, log[1].ApplicationState, Completing.String())
+	assert.Equal(t, log[2].ApplicationState, Running.String())
+	assert.Equal(t, log[3].ApplicationState, Completing.String())
 }
 
 // test recover ask
@@ -683,6 +690,12 @@ func TestStateChangeOnUpdate(t *testing.T) {
 	// remove the allocation, ask has been removed so nothing left
 	app.RemoveAllocation(uuid)
 	assert.Assert(t, app.IsCompleting(), "Application did not change as expected: %s", app.CurrentState())
+
+	log := app.GetStateLog()
+	assert.Equal(t, len(log), 3, "wrong number of app events")
+	assert.Equal(t, log[0].ApplicationState, Accepted.String())
+	assert.Equal(t, log[1].ApplicationState, Starting.String())
+	assert.Equal(t, log[2].ApplicationState, Completing.String())
 }
 
 func TestStateChangeOnPlaceholderAdd(t *testing.T) {
@@ -741,6 +754,11 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	// remove the allocation, ask has been removed so nothing left
 	app.RemoveAllocation(uuid)
 	assert.Assert(t, app.IsCompleting(), "Application did not change as expected: %s", app.CurrentState())
+
+	log := app.GetStateLog()
+	assert.Equal(t, len(log), 2, "wrong number of app events")
+	assert.Equal(t, log[0].ApplicationState, Accepted.String())
+	assert.Equal(t, log[1].ApplicationState, Completing.String())
 }
 
 func TestAllocations(t *testing.T) {
@@ -868,7 +886,7 @@ func TestQueueUpdate(t *testing.T) {
 	queue, err := createDynamicQueue(root, "test", false)
 	assert.NilError(t, err, "failed to create test queue")
 	app.SetQueue(queue)
-	assert.Equal(t, app.QueuePath, "root.test")
+	assert.Equal(t, app.GetQueuePath(), "root.test")
 }
 
 func TestStateTimeOut(t *testing.T) {
@@ -921,6 +939,11 @@ func TestStateTimeOut(t *testing.T) {
 	if app.stateTimer != nil {
 		t.Fatalf("Startup timer has not be cleared on time out as expected, %v", app.stateTimer)
 	}
+	log := app.GetStateLog()
+	assert.Equal(t, len(log), 3, "wrong number of app events")
+	assert.Equal(t, log[0].ApplicationState, Accepted.String())
+	assert.Equal(t, log[1].ApplicationState, Starting.String())
+	assert.Equal(t, log[2].ApplicationState, Running.String())
 }
 
 func TestCompleted(t *testing.T) {
@@ -942,6 +965,13 @@ func TestCompleted(t *testing.T) {
 
 	err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, app.IsExpired)
 	assert.NilError(t, err, "Application did not progress into Expired state")
+
+	log := app.GetStateLog()
+	assert.Equal(t, len(log), 4, "wrong number of app events")
+	assert.Equal(t, log[0].ApplicationState, Accepted.String())
+	assert.Equal(t, log[1].ApplicationState, Completing.String())
+	assert.Equal(t, log[2].ApplicationState, Completed.String())
+	assert.Equal(t, log[3].ApplicationState, Expired.String())
 }
 
 func TestRejected(t *testing.T) {
@@ -962,6 +992,11 @@ func TestRejected(t *testing.T) {
 
 	err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, app.IsExpired)
 	assert.NilError(t, err, "Application did not progress into Expired state")
+
+	log := app.GetStateLog()
+	assert.Equal(t, len(log), 2, "wrong number of app events")
+	assert.Equal(t, log[0].ApplicationState, Rejected.String())
+	assert.Equal(t, log[1].ApplicationState, Expired.String())
 }
 
 func TestGetTag(t *testing.T) {
@@ -993,6 +1028,10 @@ func TestOnStatusChangeCalled(t *testing.T) {
 	assert.Assert(t, err != nil, "error expected and not seen")
 	assert.Equal(t, app.CurrentState(), Accepted.String(), "application state has been changed unexpectedly")
 	assert.Assert(t, !testHandler.isHandled(), "unexpected event send to the RM")
+
+	log := app.GetStateLog()
+	assert.Equal(t, len(log), 1, "wrong number of app events")
+	assert.Equal(t, log[0].ApplicationState, Accepted.String())
 }
 
 func TestReplaceAllocation(t *testing.T) {
@@ -1046,6 +1085,7 @@ func TestReplaceAllocation(t *testing.T) {
 		t.Fatalf("real allocation not updated as expected: got %s, expected %s", app.allocatedResource, res)
 	}
 	assert.Equal(t, app.placeholderData[""].Replaced, int64(1))
+	assert.Equal(t, realAlloc.GetPlaceholderCreateTime(), ph.GetCreateTime(), "real allocation's placeholder create time not updated as expected: got %s, expected %s", realAlloc.GetPlaceholderCreateTime(), ph.GetCreateTime())
 
 	// add the placeholder back to the app, the failure test above changed state and removed the ph
 	app.SetState(Running.String())
@@ -1058,8 +1098,8 @@ func TestReplaceAllocation(t *testing.T) {
 	realAlloc = newAllocation(appID1, "uuid-3", nodeID1, "root.a", res)
 	realAlloc.Result = Replaced
 	ph.Releases = append(ph.Releases, realAlloc)
-	realAlloc = newAllocation(appID1, "not-added", nodeID1, "root.a", res)
-	realAlloc.Result = Replaced
+	realAllocNoAdd := newAllocation(appID1, "not-added", nodeID1, "root.a", res)
+	realAllocNoAdd.Result = Replaced
 	ph.Releases = append(ph.Releases, realAlloc)
 	alloc = app.ReplaceAllocation("uuid-1")
 	assert.Equal(t, alloc, ph, "returned allocation is not the placeholder")
@@ -1069,6 +1109,7 @@ func TestReplaceAllocation(t *testing.T) {
 	if !resources.Equals(app.allocatedResource, resources.Multiply(res, 2)) {
 		t.Fatalf("real allocation not updated as expected: got %s, expected %s", app.allocatedResource, resources.Multiply(res, 2))
 	}
+	assert.Equal(t, realAlloc.GetPlaceholderCreateTime(), ph.GetCreateTime(), "real allocation's placeholder create time not updated as expected: got %s, expected %s", realAlloc.GetPlaceholderCreateTime(), ph.GetCreateTime())
 	if _, ok := app.allocations["not-added"]; ok {
 		t.Fatalf("real allocation added which shouldn't have been added")
 	}
@@ -1151,6 +1192,11 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "pending placeholder resources should be zero")
 	// a released placeholder still holds the resource until release confirmed by the RM
 	assert.Assert(t, resources.Equals(app.GetPlaceholderResource(), resources.Multiply(res, 2)), "Unexpected placeholder resources for the app")
+
+	log := app.GetStateLog()
+	assert.Equal(t, len(log), 2, "wrong number of app events")
+	assert.Equal(t, log[0].ApplicationState, Accepted.String())
+	assert.Equal(t, log[1].ApplicationState, expectedState)
 }
 
 func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
@@ -1304,13 +1350,11 @@ func TestGetAllRequests(t *testing.T) {
 
 func TestGetQueueNameAfterUnsetQueue(t *testing.T) {
 	app := newApplication(appID1, "default", "root.unknown")
-	assert.Equal(t, app.GetQueuePath(), app.QueuePath)
 	assert.Equal(t, app.GetQueuePath(), "root.unknown")
 
 	// the queue is reset to nil but GetQueuePath should work well
 	app.UnSetQueue()
 	assert.Assert(t, app.queue == nil)
-	assert.Equal(t, app.GetQueuePath(), app.QueuePath)
 	assert.Equal(t, app.GetQueuePath(), "root.unknown")
 }
 

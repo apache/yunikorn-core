@@ -23,7 +23,7 @@ import (
 
 	"github.com/opentracing/opentracing-go"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/trace"
+	"github.com/apache/yunikorn-core/pkg/trace"
 )
 
 const (

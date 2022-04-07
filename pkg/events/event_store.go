@@ -21,8 +21,8 @@ package events
 import (
 	"sync"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/yunikorn-core/pkg/metrics"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 var maxEventStoreSize = 1000

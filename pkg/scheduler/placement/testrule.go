@@ -21,8 +21,8 @@ package placement
 import (
 	"fmt"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
+	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 )
 
 // A simple test rule to place an application based on a nil application.
@@ -51,8 +51,8 @@ func (tr *testRule) placeApplication(app *objects.Application, queueFn func(stri
 	if app == nil {
 		return "", fmt.Errorf("nil app passed in")
 	}
-	if app.QueuePath != "" {
-		return replaceDot(app.QueuePath), nil
+	if queuePath := app.GetQueuePath(); queuePath != "" {
+		return replaceDot(queuePath), nil
 	}
 	return "test", nil
 }

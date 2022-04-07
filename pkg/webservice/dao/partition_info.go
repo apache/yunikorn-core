@@ -31,7 +31,7 @@ type PartitionInfo struct {
 	NodeSortingPolicy       NodeSortingPolicy `json:"nodeSortingPolicy"`
 	Applications            map[string]int    `json:"applications"`
 	State                   string            `json:"state"`
-	LastStateTransitionTime string            `json:"lastStateTransitionTime"`
+	LastStateTransitionTime int64             `json:"lastStateTransitionTime"`
 }
 
 type PartitionCapacity struct {

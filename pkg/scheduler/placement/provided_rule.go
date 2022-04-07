@@ -24,9 +24,9 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
+	"github.com/apache/yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 )
 
 // A rule to place an application based on the queue provided by the user on submission.
@@ -53,7 +53,8 @@ func (pr *providedRule) initialise(conf configs.PlacementRule) error {
 
 func (pr *providedRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, error) {
 	// since this is the provided rule we must have a queue in the info already
-	if app.QueuePath == "" {
+	queueName := app.GetQueuePath()
+	if queueName == "" {
 		return "", nil
 	}
 	// before anything run the filter
@@ -65,7 +66,6 @@ func (pr *providedRule) placeApplication(app *objects.Application, queueFn func(
 	}
 	var parentName string
 	var err error
-	queueName := app.QueuePath
 	// if we have a fully qualified queue passed in do not run the parent rule
 	if !strings.HasPrefix(queueName, configs.RootQueue+configs.DOT) {
 		// run the parent rule if set

@@ -20,13 +20,84 @@ package scheduler
 
 import (
 	"fmt"
+	"time"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
+	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
-	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-core/pkg/metrics"
+	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
+
+const defaultPeriod = 30 * time.Second
+
+type HealthChecker struct {
+	period   time.Duration
+	stopChan chan struct{}
+}
+
+func NewHealthChecker() *HealthChecker {
+	return &HealthChecker{
+		period:   defaultPeriod,
+		stopChan: make(chan struct{}),
+	}
+}
+
+func NewHealthCheckerWithParameters(period time.Duration) *HealthChecker {
+	return &HealthChecker{
+		period:   period,
+		stopChan: make(chan struct{}),
+	}
+}
+
+// start execute healthCheck service in the background,
+func (c *HealthChecker) start(schedulerContext *ClusterContext) {
+	// immediate first tick
+	c.runOnce(schedulerContext)
+
+	go func() {
+		ticker := time.NewTicker(c.period)
+		for {
+			select {
+			case <-c.stopChan:
+				ticker.Stop()
+				return
+			case <-ticker.C:
+				c.runOnce(schedulerContext)
+			}
+		}
+	}()
+}
+
+func (c *HealthChecker) stop() {
+	c.stopChan <- struct{}{}
+	close(c.stopChan)
+}
+
+func (c *HealthChecker) runOnce(schedulerContext *ClusterContext) {
+	schedulerMetrics := metrics.GetSchedulerMetrics()
+	result := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	updateSchedulerLastHealthStatus(result, schedulerContext)
+	if !result.Healthy {
+		log.Logger().Error("Scheduler is not healthy",
+			zap.Any("health check values", result.HealthChecks))
+	} else {
+		log.Logger().Info("Scheduler is healthy",
+			zap.Any("health check values", result.HealthChecks))
+	}
+}
+
+func updateSchedulerLastHealthStatus(latest dao.SchedulerHealthDAOInfo, schedulerContext *ClusterContext) {
+	result := schedulerContext.GetLastHealthCheckResult()
+	if result == nil {
+		result = new(dao.SchedulerHealthDAOInfo)
+	}
+	result.Healthy = latest.Healthy
+	result.HealthChecks = latest.HealthChecks
+	schedulerContext.SetLastHealthCheckResult(result)
+}
 
 func GetSchedulerHealthStatus(metrics metrics.CoreSchedulerMetrics, schedulerContext *ClusterContext) dao.SchedulerHealthDAOInfo {
 	var healthInfo []dao.HealthCheckInfo

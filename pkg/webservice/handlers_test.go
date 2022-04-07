@@ -35,17 +35,17 @@ import (
 	"gopkg.in/yaml.v2"
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
-	"github.com/apache/incubator-yunikorn-core/pkg/metrics/history"
-	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/tests"
-	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/metrics/history"
+	"github.com/apache/yunikorn-core/pkg/plugins"
+	"github.com/apache/yunikorn-core/pkg/scheduler"
+	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/scheduler/tests"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 const partitionNameWithoutClusterID = "default"
@@ -438,7 +438,14 @@ func TestQueryParamInAppsHandler(t *testing.T) {
 	assert.Equal(t, app.CurrentState(), objects.New.String())
 	assert.Equal(t, 1, len(part.GetApplications()))
 
+	ask := objects.NewAllocationAsk(&si.AllocationAsk{
+		AllocationKey: "ask1",
+		ApplicationID: "app1",
+		PartitionName: "default",
+	})
+
 	app.AddAllocation(&objects.Allocation{
+		Ask: ask,
 		AllocatedResource: &resources.Resource{
 			Resources: map[string]resources.Quantity{"vcore": 1},
 		},
@@ -1658,11 +1665,10 @@ func isAbortClosed() bool {
 }
 
 func verifyStateDumpJSON(t *testing.T, aggregated *AggregatedStateInfo) {
-	assert.Check(t, len(aggregated.Timestamp) > 0)
+	assert.Check(t, aggregated.Timestamp != 0)
 	assert.Check(t, len(aggregated.Partitions) > 0)
 	assert.Check(t, len(aggregated.Nodes) > 0)
 	assert.Check(t, len(aggregated.ClusterInfo) > 0)
-	assert.Check(t, len(aggregated.ClusterUtilization) > 0)
 	assert.Check(t, len(aggregated.Queues) > 0)
 	assert.Check(t, len(aggregated.LogLevel) > 0)
 }

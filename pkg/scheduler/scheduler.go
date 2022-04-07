@@ -24,11 +24,11 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/handler"
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
-	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/yunikorn-core/pkg/handler"
+	"github.com/apache/yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-core/pkg/plugins"
+	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 // Main Scheduler service that starts the needed sub services
@@ -58,6 +58,10 @@ func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 	// Start resource monitor if necessary (majorly for testing)
 	monitor := newNodesResourceUsageMonitor(s.clusterContext)
 	monitor.start()
+
+	// Start health check periodically
+	c := NewHealthChecker()
+	c.start(s.clusterContext)
 
 	if !manualSchedule {
 		go s.internalSchedule()

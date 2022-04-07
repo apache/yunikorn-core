@@ -29,17 +29,17 @@ import (
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
-	"github.com/apache/incubator-yunikorn-core/pkg/log"
-	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/placement"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
-	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-core/pkg/metrics"
+	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/scheduler/placement"
+	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 type PartitionContext struct {
@@ -316,14 +316,14 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 	}
 
 	// Put app under the queue
-	queueName := app.QueuePath
+	queueName := app.GetQueuePath()
 	pm := pc.getPlacementManager()
 	if pm.IsInitialised() {
 		err := pm.PlaceApplication(app)
 		if err != nil {
 			return fmt.Errorf("failed to place application %s: %v", appID, err)
 		}
-		queueName = app.QueuePath
+		queueName = app.GetQueuePath()
 		if queueName == "" {
 			return fmt.Errorf("application rejected by placement rules: %s", appID)
 		}
@@ -956,7 +956,7 @@ func (pc *PartitionContext) reserve(app *objects.Application, node *objects.Node
 
 	log.Logger().Info("allocation ask is reserved",
 		zap.String("appID", appID),
-		zap.String("queue", app.QueuePath),
+		zap.String("queue", app.GetQueuePath()),
 		zap.String("allocationKey", ask.AllocationKey),
 		zap.String("node", node.NodeID))
 }
@@ -985,7 +985,7 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 
 	log.Logger().Info("allocation ask is unreserved",
 		zap.String("appID", appID),
-		zap.String("queue", app.QueuePath),
+		zap.String("queue", app.GetQueuePath()),
 		zap.String("allocationKey", ask.AllocationKey),
 		zap.String("node", node.NodeID),
 		zap.Int("reservationsRemoved", num))
@@ -1363,11 +1363,18 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 	}
 	// if confirmed is set we can assume there will just be one alloc in the released
 	// that allocation was already released by the shim, so clean up released
+
 	if confirmed != nil {
 		released = nil
 	}
 	// track the number of allocations, when we replace the result is no change
 	pc.updateAllocationCount(-len(released))
+
+	// if the termination type is timeout, we don't notify the shim, because it's
+	// originated from that side
+	if release.TerminationType == si.TerminationType_TIMEOUT {
+		released = nil
+	}
 	return released, confirmed
 }
 
@@ -1479,20 +1486,8 @@ func (pc *PartitionContext) moveTerminatedApp(appID string) {
 	pc.completedApplications[newID] = app
 }
 
-// Check for unlimited nodes in the partition
-func (pc *PartitionContext) hasUnlimitedNode() bool {
-	// We can have only one unlimited node registered
-	if pc.nodes.GetNodeCount() != 1 {
-		return false
-	}
-	for _, v := range pc.nodes.GetNodes() {
-		return v.IsUnlimited()
-	}
-	return false
-}
-
 func (pc *PartitionContext) AddRejectedApplication(rejectedApplication *objects.Application, rejectedMessage string) {
-	if err := rejectedApplication.HandleApplicationEventWithInfo(objects.RejectApplication, rejectedMessage); err != nil {
+	if err := rejectedApplication.RejectApplication(rejectedMessage); err != nil {
 		log.Logger().Warn("BUG: Unexpected failure: Application state not changed to Rejected",
 			zap.String("currentState", rejectedApplication.CurrentState()),
 			zap.Error(err))

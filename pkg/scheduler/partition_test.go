@@ -27,15 +27,15 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/apache/incubator-yunikorn-core/pkg/common"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
-	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
-	"github.com/apache/incubator-yunikorn-core/pkg/events"
-	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
-	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
+	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/events"
+	"github.com/apache/yunikorn-core/pkg/plugins"
+	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 func TestNewPartition(t *testing.T) {
@@ -1593,7 +1593,7 @@ func TestPlaceholderSmallerThanReal(t *testing.T) {
 		TerminationType: si.TerminationType_TIMEOUT,
 	}
 	released, _ := partition.removeAllocation(release)
-	assert.Equal(t, 1, len(released), "one allocation should be released")
+	assert.Equal(t, 0, len(released), "expected no releases")
 	assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "nothing should be allocated on node")
 	assert.Assert(t, resources.IsZero(app.GetQueue().GetAllocatedResource()), "nothing should be allocated on queue")
 	assert.Equal(t, 0, partition.GetTotalAllocationCount(), "no allocation should be registered on the partition")
@@ -1678,7 +1678,7 @@ func TestPlaceholderSmallerMulti(t *testing.T) {
 			TerminationType: si.TerminationType_TIMEOUT,
 		}
 		released, _ := partition.removeAllocation(release)
-		assert.Equal(t, 1, len(released), "one allocation should be released")
+		assert.Equal(t, 0, len(released), "expected no releases")
 	}
 	assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "nothing should be allocated on node")
 	assert.Assert(t, resources.IsZero(app.GetQueue().GetAllocatedResource()), "nothing should be allocated on queue")

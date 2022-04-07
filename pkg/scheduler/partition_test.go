@@ -976,20 +976,10 @@ func TestTryAllocate(t *testing.T) {
 	if alloc == nil {
 		t.Fatal("allocation did not return any allocation")
 	}
-	<<<<<<< HEAD
 	assert.Equal(t, alloc.GetResult(), objects.Allocated, "result is not the expected allocated")
 	assert.Equal(t, alloc.GetReleaseCount(), 0, "released allocations should have been 0")
 	assert.Equal(t, alloc.GetApplicationID(), appID1, "expected application app-1 to be allocated")
 	assert.Equal(t, alloc.GetAllocationKey(), allocID2, "expected ask alloc-2 to be allocated")
-	====== =
-	assert.Equal(t, alloc.Result, objects.Allocated, "result is not the expected allocated")
-	assert.Equal(t, len(alloc.Releases), 0, "released allocations should have been 0")
-	assert.Equal(t, alloc.ApplicationID, appID1, "expected application app-1 to be allocated")
-	assert.Equal(t, alloc.AllocationKey, "alloc-2", "expected ask alloc-2 to be allocated")
-	>>>>>>> 549e2
-	df([YUNIKORN - 790]Implement
-	MaxApplications
-	enforcement)
 
 	// second allocation should be app-2 and alloc-1: higher up in the queue hierarchy
 	alloc = partition.tryAllocate()

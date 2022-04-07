@@ -53,6 +53,14 @@ const (
 	AppTagStateAwareDisable string = "application.stateaware.disable"
 )
 
+type PlaceholderData struct {
+	TaskGroupName string
+	Count         int64
+	MinResource   *resources.Resource
+	RequiredNode  string
+	Replaced      int64
+}
+
 type StateLogEntry struct {
 	Time             time.Time
 	ApplicationState string
@@ -70,22 +78,23 @@ type Application struct {
 	reservations         map[string]*reservation   // a map of reservations
 	requests             map[string]*AllocationAsk // a map of asks
 	sortedRequests       []*AllocationAsk
-	user                 security.UserGroup     // owner of the application
-	tags                 map[string]string      // application tags used in scheduling
-	allocatedResource    *resources.Resource    // total allocated resources
-	maxAllocatedResource *resources.Resource    // max allocated resources
-	allocatedPlaceholder *resources.Resource    // total allocated placeholder resources
-	allocations          map[string]*Allocation // list of all allocations
-	placeholderAsk       *resources.Resource    // total placeholder request for the app (all task groups)
-	stateMachine         *fsm.FSM               // application state machine
-	stateTimer           *time.Timer            // timer for state time
-	startTimeout         time.Duration          // timeout for the application starting state
-	execTimeout          time.Duration          // execTimeout for the application run
-	placeholderTimer     *time.Timer            // placeholder replace timer
-	gangSchedulingStyle  string                 // gang scheduling style can be hard (after timeout we fail the application), or soft (after timeeout we schedule it as a normal application)
-	finishedTime         time.Time              // the time of finishing this application. the default value is zero time
-	rejectedMessage      string                 // If the application is rejected, save the rejected message
-	stateLog             []*StateLogEntry       // state log for this application
+	user                 security.UserGroup          // owner of the application
+	tags                 map[string]string           // application tags used in scheduling
+	allocatedResource    *resources.Resource         // total allocated resources
+	maxAllocatedResource *resources.Resource         // max allocated resources
+	allocatedPlaceholder *resources.Resource         // total allocated placeholder resources
+	allocations          map[string]*Allocation      // list of all allocations
+	placeholderAsk       *resources.Resource         // total placeholder request for the app (all task groups)
+	stateMachine         *fsm.FSM                    // application state machine
+	stateTimer           *time.Timer                 // timer for state time
+	startTimeout         time.Duration               // timeout for the application starting state
+	execTimeout          time.Duration               // execTimeout for the application run
+	placeholderTimer     *time.Timer                 // placeholder replace timer
+	gangSchedulingStyle  string                      // gang scheduling style can be hard (after timeout we fail the application), or soft (after timeeout we schedule it as a normal application)
+	finishedTime         time.Time                   // the time of finishing this application. the default value is zero time
+	rejectedMessage      string                      // If the application is rejected, save the rejected message
+	stateLog             []*StateLogEntry            // state log for this application
+	placeholderData      map[string]*PlaceholderData // expose gang related info in application REST info
 
 	rmEventHandler     handler.EventHandler
 	rmID               string
@@ -571,6 +580,10 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 	delta.SubFrom(oldAskResource)
 	sa.pending = resources.Add(sa.pending, delta)
 	sa.queue.incPendingResource(delta)
+
+	if ask.placeholder {
+		sa.addPlaceholderData(ask)
+	}
 
 	log.Logger().Info("Ask added successfully to application",
 		zap.String("appID", sa.ApplicationID),
@@ -1363,6 +1376,9 @@ func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
 	// we need the original Replaced allocation result.
 	alloc.Releases = nil
 	alloc.Result = Allocated
+	if sa.placeholderData != nil {
+		sa.placeholderData[ph.taskGroupName].Replaced++
+	}
 	return ph
 }
 
@@ -1568,4 +1584,29 @@ func (sa *Application) GetRejectedMessage() string {
 	sa.RLock()
 	defer sa.RUnlock()
 	return sa.rejectedMessage
+}
+
+func (sa *Application) addPlaceholderData(ask *AllocationAsk) {
+	if sa.placeholderData == nil {
+		sa.placeholderData = make(map[string]*PlaceholderData)
+	}
+	taskGroupName := ask.taskGroupName
+	if _, ok := sa.placeholderData[taskGroupName]; !ok {
+		sa.placeholderData[taskGroupName] = &PlaceholderData{
+			TaskGroupName: taskGroupName,
+			MinResource:   ask.AllocatedResource,
+			RequiredNode:  ask.requiredNode,
+		}
+	}
+	sa.placeholderData[taskGroupName].Count++
+}
+
+func (sa *Application) GetAllPlaceholderData() []*PlaceholderData {
+	sa.RLock()
+	defer sa.RUnlock()
+	var placeholders []*PlaceholderData
+	for _, taskGroup := range sa.placeholderData {
+		placeholders = append(placeholders, taskGroup)
+	}
+	return placeholders
 }

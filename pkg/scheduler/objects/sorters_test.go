@@ -35,17 +35,17 @@ func TestSortQueues(t *testing.T) {
 	assert.NilError(t, err, "queue create failed")
 
 	var q0, q1, q2 *Queue
-	q0, err = createManagedQueue(root, "q0", false, nil, zero)
+	q0, err = createManagedQueue(root, "q0", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	q0.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500, "vcore": 500})
 	q0.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300, "vcore": 300})
 
-	q1, err = createManagedQueue(root, "q1", false, nil, zero)
+	q1, err = createManagedQueue(root, "q1", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	q1.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300, "vcore": 300})
 	q1.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 200, "vcore": 200})
 
-	q2, err = createManagedQueue(root, "q2", false, nil, zero)
+	q2, err = createManagedQueue(root, "q2", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	q2.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 200, "vcore": 200})
 	q2.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 100, "vcore": 100})
@@ -77,15 +77,15 @@ func TestNoQueueLimits(t *testing.T) {
 	assert.NilError(t, err, "queue create failed")
 
 	var q0, q1, q2 *Queue
-	q0, err = createManagedQueue(root, "q0", false, nil, zero)
+	q0, err = createManagedQueue(root, "q0", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	q0.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300, "vcore": 300})
 
-	q1, err = createManagedQueue(root, "q1", false, nil, zero)
+	q1, err = createManagedQueue(root, "q1", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	q1.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 200, "vcore": 200})
 
-	q2, err = createManagedQueue(root, "q2", false, nil, zero)
+	q2, err = createManagedQueue(root, "q2", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	q2.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 100, "vcore": 100})
 

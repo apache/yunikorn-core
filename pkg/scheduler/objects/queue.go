@@ -1075,10 +1075,11 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, getnode func(string) 
 	}
 	if sq.IsLeafQueue() {
 		// get the headroom
+		canRun := sq.canRun()
 		headRoom := sq.getHeadRoom()
 		// process the apps (filters out app without pending requests)
 		for _, app := range sq.sortApplications(true) {
-			if !app.IsRunning() && !app.queue.canRun() {
+			if !app.IsRunning() && !canRun {
 				log.Logger().Info("maxApplications reached",
 					zap.String("queuePath", sq.GetQueuePath()))
 				return nil
@@ -1310,30 +1311,35 @@ func (sq *Queue) String() string {
 }
 
 func (sq *Queue) incRunningApps() {
-	sq.runningApps++
 	if sq.parent != nil {
 		sq.parent.incRunningApps()
 	}
+	sq.Lock()
+	defer sq.Unlock()
+	sq.runningApps++
 }
 
 func (sq *Queue) decRunningApps() {
-	sq.runningApps--
 	if sq.parent != nil {
 		sq.parent.decRunningApps()
 	}
+	sq.Lock()
+	defer sq.Unlock()
+	sq.runningApps--
 }
 
 func (sq *Queue) canRun() bool {
+	ok := true
+	if sq.parent != nil {
+		ok = sq.parent.canRun()
+	}
+
 	sq.RLock()
 	defer sq.RUnlock()
 	if sq.maxRunningApps == 0 {
-		return true
+		return true && ok
 	}
-	ok := sq.runningApps <= sq.maxRunningApps
-	if sq.parent != nil {
-		return ok && sq.parent.canRun()
-	}
-	return ok
+	return ok && sq.runningApps <= sq.maxRunningApps
 }
 
 func (sq *Queue) GetRunningApps() uint64 {

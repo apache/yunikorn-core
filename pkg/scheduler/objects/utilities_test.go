@@ -43,7 +43,11 @@ func createRootQueue(maxRes map[string]string) (*Queue, error) {
 }
 
 // wrapper around the create call using the one syntax for all queue types
-func createManagedQueue(parentSQ *Queue, name string, parent bool, maxRes map[string]string, maxApps uint64) (*Queue, error) {
+func createManagedQueue(parentSQ *Queue, name string, parent bool, maxRes map[string]string) (*Queue, error) {
+	return createManagedQueueWithProps(parentSQ, name, parent, maxRes, nil, zero)
+}
+
+func createManagedQueueMaxApps(parentSQ *Queue, name string, parent bool, maxRes map[string]string, maxApps uint64) (*Queue, error) {
 	return createManagedQueueWithProps(parentSQ, name, parent, maxRes, nil, maxApps)
 }
 

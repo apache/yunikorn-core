@@ -35,7 +35,10 @@ import (
 
 const CreationTime = "CreationTime"
 
-var Undefined = time.Time{}
+var (
+	currentTime = time.Now
+	Undefined   = time.Time{}
+)
 
 func GetNormalizedPartitionName(partitionName string, rmID string) string {
 	if partitionName == "" {
@@ -130,29 +133,29 @@ func ConvertSITimeoutWithAdjustment(siApp *si.AddApplicationRequest) time.Durati
 	return adjusted
 }
 
-func adjustTimeout(placeholderTimeout time.Duration, siApp *si.AddApplicationRequest) time.Duration {
+func adjustTimeout(timeout time.Duration, siApp *si.AddApplicationRequest) time.Duration {
 	creationTimeTag := siApp.Tags[interfaceCommon.DomainYuniKorn+CreationTime]
 	if creationTimeTag == "" {
-		return placeholderTimeout
+		return timeout
 	}
 
 	created := ConvertSITimestamp(creationTimeTag)
 	if created == Undefined {
-		return placeholderTimeout
+		return timeout
 	}
-	now := time.Now()
-	expectedTimeout := created.Add(placeholderTimeout)
+	now := currentTime()
+	expectedTimeout := created.Add(timeout)
 
 	if now.After(expectedTimeout) {
 		log.Logger().Info("Placeholder timeout reached - expected timeout is in the past",
-			zap.Duration("timeout duration", placeholderTimeout),
+			zap.Duration("timeout duration", timeout),
 			zap.Time("creation time", created),
 			zap.Time("expected timeout", expectedTimeout))
 		return time.Millisecond // smallest allowed timeout value
 	}
 
 	log.Logger().Info("Adjusting placeholder timeout",
-		zap.Duration("timeout duration", placeholderTimeout),
+		zap.Duration("timeout duration", timeout),
 		zap.Time("creation time", created),
 		zap.Time("expected timeout", expectedTimeout))
 

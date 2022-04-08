@@ -123,7 +123,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		rejectedMessage:      "",
 		stateLog:             make([]*StateLogEntry, 0),
 	}
-	placeholderTimeout := common.ConvertSITimeout(siApp.ExecutionTimeoutMilliSeconds)
+	placeholderTimeout := common.ConvertSITimeoutWithAdjustment(siApp)
 	if time.Duration(0) == placeholderTimeout {
 		placeholderTimeout = defaultPlaceholderTimeout
 	}

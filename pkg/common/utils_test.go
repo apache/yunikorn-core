@@ -21,12 +21,14 @@ package common
 import (
 	"math"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
 	"gotest.tools/assert"
 
 	common "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 func TestGetNormalizedPartitionName(t *testing.T) {
@@ -132,4 +134,56 @@ func TestGetRequiredNodeFromAsk(t *testing.T) {
 	tag[common.DomainYuniKorn+common.KeyRequiredNode] = "Node2"
 	nodeName = GetRequiredNodeFromTag(tag)
 	assert.Equal(t, nodeName, "Node2")
+}
+
+func TestConvertSITimeoutWithAdjustment(t *testing.T) {
+	var err error
+	var current time.Time
+	current, err = time.Parse(time.RFC1123Z, "Mon, 02 Jan 2020 12:00:00 -0000")
+	assert.NilError(t, err, "Could not parse time")
+
+	var created time.Time
+	created, err = time.Parse(time.RFC1123Z, "Mon, 02 Jan 2020 11:50:00 -0000")
+	assert.NilError(t, err, "Could not parse time")
+	currentTime = func() time.Time {
+		return current
+	}
+
+	siApp := &si.AddApplicationRequest{
+		Tags: map[string]string{
+			"yunikorn.apache.org/CreationTime": strconv.FormatInt(created.Unix(), 10),
+		},
+	}
+
+	// 2min timeout --> timeout
+	siApp.ExecutionTimeoutMilliSeconds = (2 * time.Minute).Milliseconds()
+	timeout := ConvertSITimeoutWithAdjustment(siApp)
+	assert.Equal(t, timeout, time.Millisecond)
+
+	// 20min timeout --> no timeout, corrected to 10min
+	siApp.ExecutionTimeoutMilliSeconds = (20 * time.Minute).Milliseconds()
+	timeout = ConvertSITimeoutWithAdjustment(siApp)
+	assert.Equal(t, timeout, 10*time.Minute)
+
+	// 20min timeout, no creationTime --> no change
+	siApp.Tags = map[string]string{}
+	siApp.ExecutionTimeoutMilliSeconds = (20 * time.Minute).Milliseconds()
+	timeout = ConvertSITimeoutWithAdjustment(siApp)
+	assert.Equal(t, timeout, 20*time.Minute)
+
+	// Illegal string --> no change
+	siApp.Tags = map[string]string{
+		"yunikorn.apache.org/CreationTime": "illegal",
+	}
+	siApp.ExecutionTimeoutMilliSeconds = (20 * time.Minute).Milliseconds()
+	timeout = ConvertSITimeoutWithAdjustment(siApp)
+	assert.Equal(t, timeout, 20*time.Minute)
+}
+
+func TestConvertSITimestamp(t *testing.T) {
+	result := ConvertSITimestamp("160")
+	assert.Equal(t, result, time.Unix(160, 0))
+
+	result = ConvertSITimestamp("xzy")
+	assert.Equal(t, result, time.Time{})
 }

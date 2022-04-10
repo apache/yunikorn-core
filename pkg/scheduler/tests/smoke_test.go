@@ -1446,41 +1446,175 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 
 	ms.scheduler.MultiStepSchedule(5)
 	ms.mockRM.waitForAllocations(t, 1, 1000)
+}
 
-	// Check allocated resources of queues, apps
-	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[resources.MEMORY]), 10000000, "leaf allocated memory incorrect")
-	assert.Equal(t, int(root.GetAllocatedResource().Resources[resources.MEMORY]), 10000000, "root allocated memory incorrect")
-	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 10000000, "app allocated memory incorrect")
+func TestDynamicQueueCleanUp(t *testing.T) {
+	configData := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        submitacl: "*"
+    placementrules:
+      - name: fixed
+        value: cleanup_test
+        create: true
+`
+	// Register RM
+	// Start all tests
+	ms := &mockScheduler{}
+	defer ms.Stop()
 
-	assert.Assert(t, app.GetQueue() != nil)
+	err := ms.Init(configData, false)
+	assert.NilError(t, err, "RegisterResourceManager failed")
 
-	// Simulate Allocation being Released, causing the app to go to Completed and then to Completed state after 30 seconds.
-	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Releases: &si.AllocationReleasesRequest{
-			AllocationsToRelease: []*si.AllocationRelease{
-				{
-					PartitionName:   "default",
-					ApplicationID:   appID1,
-					TerminationType: si.TerminationType_STOPPED_BY_RM,
+	// Check queues of cache and scheduler.
+	part := ms.scheduler.GetClusterContext().GetPartition(partition)
+	assert.Assert(t, part.GetTotalPartitionResource() == nil, "partition info max resource nil")
+
+	// Check the queue root
+	root := part.GetQueue("root")
+	assert.Assert(t, root.GetMaxResource() == nil, "root queue max resource should be nil")
+
+	leafName := ""
+	app1ID := appID1
+
+	// Register a node, and add apps
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
+			{
+				NodeID:     "node-1:1234",
+				Attributes: map[string]string{},
+				SchedulableResource: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 100000000},
+						"vcore":  {Value: 20000},
+					},
 				},
+				Action: si.NodeInfo_CREATE,
+			},
+			{
+				NodeID:     "node-2:1234",
+				Attributes: map[string]string{},
+				SchedulableResource: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 100000000},
+						"vcore":  {Value: 20000},
+					},
+				},
+				Action: si.NodeInfo_CREATE,
 			},
 		},
 		RmID: "rm:123",
 	})
-	assert.NilError(t, err)
-	ms.mockRM.waitForAllocations(t, 0, 1000)
+
+	assert.NilError(t, err, "NodeRequest failed")
+
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{app1ID: leafName}),
+		RmID: "rm:123",
+	})
+
+	assert.NilError(t, err, "ApplicationRequest failed")
+
+	ms.mockRM.waitForAcceptedApplication(t, app1ID, 1000)
+	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
+	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
+
+	// Get the app
+	app := ms.getApplication(appID1)
+
+	// Get the queue cleanup_test
+	leafName = "root.cleanup_test"
+	leaf := part.GetQueue(leafName)
+
+	// Verify app initial state
+	var app01 *objects.Application
+	app01, err = getApplication(part, appID1)
+	assert.NilError(t, err, "application not found")
+
+	assert.Equal(t, app01.CurrentState(), objects.New.String())
+
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
+		Asks: []*si.AllocationAsk{
+			{
+				AllocationKey: "alloc-1",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 10000000},
+						"vcore":  {Value: 1000},
+					},
+				},
+				MaxAllocations: 2,
+				ApplicationID:  appID1,
+			},
+		},
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "AllocationRequest 2 failed")
+
+	// Wait pending resource of queue a and scheduler queue
+	// Both pending memory = 10 * 2 = 20;
+	waitForPendingQueueResource(t, leaf, 20000000, 1000)
+	waitForPendingQueueResource(t, root, 20000000, 1000)
+	waitForPendingAppResource(t, app, 20000000, 1000)
+	assert.Equal(t, app01.CurrentState(), objects.Accepted.String())
+
+	ms.scheduler.MultiStepSchedule(5)
+
+	ms.mockRM.waitForAllocations(t, 2, 1000)
+
+	// Make sure pending resource updated to 0
+	waitForPendingQueueResource(t, leaf, 0, 1000)
+	waitForPendingQueueResource(t, root, 0, 1000)
+	waitForPendingAppResource(t, app, 0, 1000)
 
 	// Check allocated resources of queues, apps
+	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[resources.MEMORY]), 20000000, "leaf allocated memory incorrect")
+	assert.Equal(t, int(root.GetAllocatedResource().Resources[resources.MEMORY]), 20000000, "root allocated memory incorrect")
+	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 20000000, "app allocated memory incorrect")
+
+	// once we start to process allocation asks from this app, verify the state again
+	assert.Equal(t, app01.CurrentState(), objects.Running.String())
+
+	// Check allocated resources of nodes
+	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), ms.partitionName, []string{"node-1:1234", "node-2:1234"}, 20000000, 1000)
+
+	updateRequest := &si.AllocationRequest{
+		Releases: &si.AllocationReleasesRequest{
+			AllocationsToRelease: make([]*si.AllocationRelease, 0),
+		},
+		RmID: "rm:123",
+	}
+
+	// Release all allocations
+	for _, v := range ms.mockRM.getAllocations() {
+		updateRequest.Releases.AllocationsToRelease = append(updateRequest.Releases.AllocationsToRelease, &si.AllocationRelease{
+			UUID:          v.UUID,
+			ApplicationID: v.ApplicationID,
+			PartitionName: v.PartitionName,
+		})
+	}
+
+	// Release Allocations.
+	err = ms.proxy.UpdateAllocation(updateRequest)
+	assert.NilError(t, err, "AllocationRequest 3 failed")
+
+	ms.mockRM.waitForAllocations(t, 0, 1000)
+
+	// Check allocated resources of queues, apps should be 0 now
 	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[resources.MEMORY]), 0, "leaf allocated memory incorrect")
 	assert.Equal(t, int(root.GetAllocatedResource().Resources[resources.MEMORY]), 0, "root allocated memory incorrect")
 	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 0, "app allocated memory incorrect")
 
-	assert.Equal(t, app.CurrentState(), objects.Completing.String())
-	assert.Assert(t, app.GetQueue() != nil)
-
-	// give it some time to run and progress
-	err = app.HandleApplicationEvent(objects.CompleteApplication)
-	err = common.WaitFor(time.Second, time.Minute, app.IsCompleted)
-	assert.NilError(t, err, "Application did not progress into Completed state")
-
+	// Check app to Completing status
+	assert.Equal(t, app01.CurrentState(), objects.Completing.String())
+	// the app changes from completing state to completed state
+	waitForAppCompletedState(t, app01, 30100)
+	// partition manager should be able to clean up the dynamically created queue.
+	if err = common.WaitFor(time.Second, 11*time.Second, func() bool {
+		return part.GetQueue(leafName) == nil
+	}); err != nil {
+		t.Errorf("timeout waiting for queue is cleared")
+	}
 }

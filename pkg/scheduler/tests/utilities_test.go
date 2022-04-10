@@ -130,6 +130,20 @@ func waitForRemovedNode(t *testing.T, context *scheduler.ClusterContext, nodeID 
 	assert.NilError(t, err, "Failed to wait for removal of scheduling node on partition %s, node %v, called from: %s", partitionName, nodeID, caller())
 }
 
+func waitForQueueCleanUp(t *testing.T, queue *objects.Queue, timeoutMs int) {
+	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+		return queue == nil
+	})
+	assert.NilError(t, err, "Failed to wait for app state becomes completed")
+}
+
+func waitForAppCompletedState(t *testing.T, app *objects.Application, timeoutMs int) {
+	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+		return app.IsCompleted()
+	})
+	assert.NilError(t, err, "Failed to wait for app state becomes completed")
+}
+
 func getApplication(pc *scheduler.PartitionContext, appID string) (*objects.Application, error) {
 	for _, app := range pc.GetApplications() {
 		if app.ApplicationID == appID {

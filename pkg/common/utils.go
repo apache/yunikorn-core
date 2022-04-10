@@ -30,6 +30,14 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/log"
 	interfaceCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
+)
+
+const CreationTime = "CreationTime"
+
+var (
+	currentTime = time.Now
+	Undefined   = time.Time{}
 )
 
 func GetNormalizedPartitionName(partitionName string, rmID string) string {
@@ -96,7 +104,7 @@ func GetBoolEnvVar(key string, defaultVal bool) bool {
 	return defaultVal
 }
 
-// Convert a SI execution timeout, given in milliseconds into a time.Duration object.
+// ConvertSITimeout Convert a SI execution timeout, given in milliseconds into a time.Duration object.
 // This will always return a positive value or zero (0).
 // A negative timeout will be converted into zero (0), which means never timeout.
 // The conversion handles overflows in the conversion by setting it to zero (0) also.
@@ -113,6 +121,56 @@ func ConvertSITimeout(millis int64) time.Duration {
 		return time.Duration(0)
 	}
 	return time.Duration(result)
+}
+
+// ConvertSITimeoutWithAdjustment Similar to ConvertSITimeout, but this function also adjusts the timeout if
+// "creationTime" is defined. It's used during Yunikorn restart, in order to properly track how long a placeholder pod should
+// be in "Running" state.
+func ConvertSITimeoutWithAdjustment(siApp *si.AddApplicationRequest) time.Duration {
+	result := ConvertSITimeout(siApp.ExecutionTimeoutMilliSeconds)
+	adjusted := adjustTimeout(result, siApp)
+
+	return adjusted
+}
+
+func adjustTimeout(timeout time.Duration, siApp *si.AddApplicationRequest) time.Duration {
+	creationTimeTag := siApp.Tags[interfaceCommon.DomainYuniKorn+CreationTime]
+	if creationTimeTag == "" {
+		return timeout
+	}
+
+	created := ConvertSITimestamp(creationTimeTag)
+	if created == Undefined {
+		return timeout
+	}
+	now := currentTime()
+	expectedTimeout := created.Add(timeout)
+
+	if now.After(expectedTimeout) {
+		log.Logger().Info("Placeholder timeout reached - expected timeout is in the past",
+			zap.Duration("timeout duration", timeout),
+			zap.Time("creation time", created),
+			zap.Time("expected timeout", expectedTimeout))
+		return time.Millisecond // smallest allowed timeout value
+	}
+
+	log.Logger().Info("Adjusting placeholder timeout",
+		zap.Duration("timeout duration", timeout),
+		zap.Time("creation time", created),
+		zap.Time("expected timeout", expectedTimeout))
+
+	return expectedTimeout.Sub(now)
+}
+
+func ConvertSITimestamp(ts string) time.Time {
+	tm, err := strconv.ParseInt(ts, 10, 64)
+	if err != nil {
+		log.Logger().Warn("Unable to parse timestamp string", zap.String("timestamp", ts),
+			zap.Error(err))
+		return time.Time{}
+	}
+
+	return time.Unix(tm, 0)
 }
 
 func GetRequiredNodeFromTag(tags map[string]string) string {

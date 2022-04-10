@@ -451,6 +451,21 @@ func TestQueryParamInAppsHandler(t *testing.T) {
 		},
 	})
 
+	// add placeholder to test PlaceholderDAOInfo
+	tg := "tg-1"
+	res := &si.Resource{
+		Resources: map[string]*si.Quantity{"vcore": {Value: 1}},
+	}
+	ask = objects.NewAllocationAsk(&si.AllocationAsk{
+		ApplicationID: app.ApplicationID,
+		PartitionName: partitionName,
+		TaskGroupName: tg,
+		ResourceAsk:   res,
+		Placeholder:   true})
+	ask.SetPendingAskRepeat(1)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+
 	// add a rejected app
 	rejectedApp := newApplication("app-1", partitionName, "root.default", rmID, security.UserGroup{User: "abc"})
 	rejectedMessage := fmt.Sprintf("Failed to place application %s: application rejected: no placement rule matched", rejectedApp.ApplicationID)
@@ -471,6 +486,14 @@ func TestQueryParamInAppsHandler(t *testing.T) {
 	assert.Equal(t, appsDao[0].User, "abc")
 	assert.Assert(t, appsDao[0].FinishedTime == nil)
 	assert.DeepEqual(t, appsDao[0].MaxUsedResource, map[string]int64{"vcore": 1})
+
+	// check PlaceholderData
+	assert.Equal(t, len(appsDao[0].PlaceholderData), 1)
+	assert.Equal(t, appsDao[0].PlaceholderData[0].TaskGroupName, tg)
+	assert.Equal(t, appsDao[0].PlaceholderData[0].RequiredNode, "")
+	assert.DeepEqual(t, appsDao[0].PlaceholderData[0].MinResource, map[string]int64{"vcore": 1})
+	assert.Equal(t, appsDao[0].PlaceholderData[0].Replaced, int64(0))
+	assert.Equal(t, appsDao[0].PlaceholderData[0].Count, int64(1))
 
 	assert.Equal(t, appsDao[1].RejectedMessage, rejectedMessage)
 	assert.Assert(t, appsDao[1].FinishedTime != nil)

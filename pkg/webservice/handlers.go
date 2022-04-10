@@ -280,7 +280,10 @@ func getPartitionJSON(partition *scheduler.PartitionContext) *dao.PartitionDAOIn
 func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 	allocations := app.GetAllAllocations()
 	allocationInfo := make([]dao.AllocationDAOInfo, 0, len(allocations))
+	placeholders := app.GetAllPlaceholderData()
+	placeholderInfo := make([]dao.PlaceholderDAOInfo, 0, len(placeholders))
 	var requestTime int64
+
 	for _, alloc := range allocations {
 		if alloc.GetPlaceholderUsed() {
 			requestTime = alloc.GetPlaceholderCreateTime().UnixNano()
@@ -315,6 +318,17 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		stateLogInfo = append(stateLogInfo, stateInfo)
 	}
 
+	for _, taskGroup := range placeholders {
+		phInfo := dao.PlaceholderDAOInfo{
+			TaskGroupName: taskGroup.TaskGroupName,
+			Count:         taskGroup.Count,
+			MinResource:   taskGroup.MinResource.DAOMap(),
+			RequiredNode:  taskGroup.RequiredNode,
+			Replaced:      taskGroup.Replaced,
+		}
+		placeholderInfo = append(placeholderInfo, phInfo)
+	}
+
 	return &dao.ApplicationDAOInfo{
 		ApplicationID:   app.ApplicationID,
 		UsedResource:    app.GetAllocatedResource().DAOMap(),
@@ -327,6 +341,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		State:           app.CurrentState(),
 		User:            app.GetUser().User,
 		RejectedMessage: app.GetRejectedMessage(),
+		PlaceholderData: placeholderInfo,
 		StateLog:        stateLogInfo,
 	}
 }

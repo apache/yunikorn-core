@@ -1448,7 +1448,7 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 	ms.mockRM.waitForAllocations(t, 1, 1000)
 }
 
-func TestDynamicQueueCleanUp(t *testing.T) {
+func TestQueueCleanUp(t *testing.T) {
 	configData := `
 partitions:
   - name: default

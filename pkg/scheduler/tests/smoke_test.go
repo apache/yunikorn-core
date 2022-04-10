@@ -1610,11 +1610,15 @@ partitions:
 	// Check app to Completing status
 	assert.Equal(t, app01.CurrentState(), objects.Completing.String())
 	// the app changes from completing state to completed state
-	waitForAppCompletedState(t, app01, 30100)
+	if err = common.WaitFor(time.Second, 31*time.Second, func() bool {
+		return app.IsCompleted()
+	}); err != nil {
+		t.Errorf("Failed to wait for app state becomes completed %v", err)
+	}
 	// partition manager should be able to clean up the dynamically created queue.
 	if err = common.WaitFor(time.Second, 11*time.Second, func() bool {
 		return part.GetQueue(leafName) == nil
 	}); err != nil {
-		t.Errorf("timeout waiting for queue is cleared")
+		t.Errorf("timeout waiting for queue is cleared %v", err)
 	}
 }

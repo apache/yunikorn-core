@@ -19,6 +19,7 @@
 package objects
 
 import (
+	"fmt"
 	"testing"
 
 	"gotest.tools/assert"
@@ -119,4 +120,33 @@ func TestNodeCollection_GetNodes(t *testing.T) {
 
 	nodes = nc.GetNodes()
 	assert.Equal(t, 1, len(nodes), "list is missing node")
+}
+
+func TestGetNodeSortingPolicy(t *testing.T) {
+	nc := NewNodeCollection("test")
+	weights := map[string]float64 {
+		"vcore":  2.0,
+		"memory": 3.0,
+	}
+
+	var tests = []struct {
+		input	string
+		except	string
+	}{
+		{"fair", "fair"},
+		{"bin", "bin"},
+	}
+
+	for _, tt := range tests {
+		testname := fmt.Sprintf("Get method of base_collection:%s %s", tt.input, tt.except)
+		t.Run(testname, func(t *testing.T) {
+			policy := NewNodeSortingPolicy(tt.input, weights)
+			nc.SetNodeSortingPolicy(policy)
+			ans := nc.GetNodeSortingPolicy()
+
+			if policy.PolicyType() != ans.PolicyType() {
+				t.Errorf("Got %d, want %d", policy.PolicyType(), ans.PolicyType())
+			}
+		})
+	}
 }

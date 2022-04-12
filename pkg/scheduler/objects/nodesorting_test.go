@@ -157,6 +157,10 @@ func TestSortPolicyWeighting(t *testing.T) {
 	nc.SetNodeSortingPolicy(fair)
 	totalRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 2000, "memory": 16000})
 
+	if nc.GetNodeIterator() != nil {
+		t.Fatal("Shouldn't have any nodes when there are not any nodes in nodeCollection.")
+	}
+
 	proto1 := newProto("test1", totalRes, nil, map[string]string{})
 	node1 := NewNode(proto1)
 	if err := nc.AddNode(node1); err != nil {

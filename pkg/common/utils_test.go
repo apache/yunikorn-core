@@ -192,4 +192,7 @@ func TestConvertSITimestamp(t *testing.T) {
 
 	result = ConvertSITimestamp("-2000000")
 	assert.Equal(t, result, time.Unix(0, 0))
+
+	result = ConvertSITimestamp("")
+	assert.Equal(t, result, time.Time{})
 }

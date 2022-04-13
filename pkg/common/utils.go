@@ -139,10 +139,9 @@ func adjustTimeout(timeout time.Duration, siApp *si.AddApplicationRequest) time.
 		return timeout
 	}
 	expectedTimeout := created.Add(timeout)
-	adjusted := expectedTimeout.Sub(time.Now())
+	adjusted := time.Until(expectedTimeout)
 
 	if adjusted <= 0 {
-
 		log.Logger().Info("Placeholder timeout reached - expected timeout is in the past",
 			zap.Duration("timeout duration", timeout),
 			zap.Time("creation time", created),

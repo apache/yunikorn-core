@@ -162,11 +162,15 @@ func TestGetNodeIterator(t *testing.T) {
 	var nc NodeCollection = bc
 	// Register callback listener
 	node.AddListener(bc)
-	nc.AddNode(node)
+	if err := nc.AddNode(node); err != nil {
+		t.Errorf("Adding a node should be worked.")
+	}
 	// Callback trigger
-	node.Reserve(app, ask)
+	if err := node.Reserve(app, ask); err != nil {
+		t.Errorf("Reserving should be worked.")
+	}
 
 	if nc.GetNodeIterator() != nil {
-		t.Errorf("Should be empty")
+		t.Errorf("Node iterator should be nil.")
 	}
 }

@@ -140,10 +140,10 @@ func TestConvertSITimeoutWithAdjustment(t *testing.T) {
 	created := time.Now().Unix() - 600
 	defaultTimeout := 15 * time.Minute
 	tagsWithCreationTime := map[string]string{
-		"yunikorn.apache.org/CreationTime": strconv.FormatInt(created, 10),
+		common.DomainYuniKorn + common.CreationTime: strconv.FormatInt(created, 10),
 	}
 	tagsWithIllegalCreationTime := map[string]string{
-		"yunikorn.apache.org/CreationTime": "illegal",
+		common.DomainYuniKorn + common.CreationTime: "illegal",
 	}
 	siApp := &si.AddApplicationRequest{}
 

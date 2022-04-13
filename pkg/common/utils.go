@@ -33,8 +33,6 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-const CreationTime = "CreationTime"
-
 func GetNormalizedPartitionName(partitionName string, rmID string) string {
 	if partitionName == "" {
 		partitionName = "default"
@@ -131,7 +129,7 @@ func ConvertSITimeoutWithAdjustment(siApp *si.AddApplicationRequest, defaultTime
 }
 
 func adjustTimeout(timeout time.Duration, siApp *si.AddApplicationRequest) time.Duration {
-	creationTimeTag := siApp.Tags[interfaceCommon.DomainYuniKorn+CreationTime]
+	creationTimeTag := siApp.Tags[interfaceCommon.DomainYuniKorn+interfaceCommon.CreationTime]
 	if creationTimeTag == "" {
 		return timeout
 	}

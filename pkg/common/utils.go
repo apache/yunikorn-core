@@ -126,9 +126,8 @@ func ConvertSITimeoutWithAdjustment(siApp *si.AddApplicationRequest, defaultTime
 	if result == 0 {
 		result = defaultTimeout
 	}
-	adjusted := adjustTimeout(result, siApp)
-
-	return adjusted
+	result = adjustTimeout(result, siApp)
+	return result
 }
 
 func adjustTimeout(timeout time.Duration, siApp *si.AddApplicationRequest) time.Duration {
@@ -145,6 +144,7 @@ func adjustTimeout(timeout time.Duration, siApp *si.AddApplicationRequest) time.
 	adjusted := expectedTimeout.Sub(time.Now())
 
 	if adjusted <= 0 {
+
 		log.Logger().Info("Placeholder timeout reached - expected timeout is in the past",
 			zap.Duration("timeout duration", timeout),
 			zap.Time("creation time", created),

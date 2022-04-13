@@ -418,122 +418,6 @@ func TestGetConfigJSON(t *testing.T) {
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "binpacking", "node sort policy not updated (json)")
 }
 
-func TestQueryParamInAppsHandler(t *testing.T) {
-	configs.MockSchedulerConfigByData([]byte(configDefault))
-	var err error
-	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
-	assert.NilError(t, err, "Error when load clusterInfo from config")
-
-	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
-
-	// Check default partition
-	partitionName := common.GetNormalizedPartitionName("default", rmID)
-	part := schedulerContext.GetPartition(partitionName)
-	assert.Equal(t, 0, len(part.GetApplications()))
-
-	// add a new app
-	app := newApplication("app-1", partitionName, "root.default", rmID, security.UserGroup{User: "abc"})
-	err = part.AddApplication(app)
-	assert.NilError(t, err, "Failed to add Application to Partition.")
-	assert.Equal(t, app.CurrentState(), objects.New.String())
-	assert.Equal(t, 1, len(part.GetApplications()))
-
-	ask := objects.NewAllocationAsk(&si.AllocationAsk{
-		AllocationKey: "ask1",
-		ApplicationID: "app1",
-		PartitionName: "default",
-	})
-
-	app.AddAllocation(&objects.Allocation{
-		Ask: ask,
-		AllocatedResource: &resources.Resource{
-			Resources: map[string]resources.Quantity{"vcore": 1},
-		},
-	})
-
-	// add a rejected app
-	rejectedApp := newApplication("app-1", partitionName, "root.default", rmID, security.UserGroup{User: "abc"})
-	rejectedMessage := fmt.Sprintf("Failed to place application %s: application rejected: no placement rule matched", rejectedApp.ApplicationID)
-	part.AddRejectedApplication(rejectedApp, rejectedMessage)
-
-	NewWebApp(schedulerContext, nil)
-
-	// Passing "root.default" as filter return 1 application
-	var req *http.Request
-	req, err = http.NewRequest("GET", "/ws/v1/apps?queue=root.default", strings.NewReader(""))
-	assert.NilError(t, err, "App Handler request failed")
-	resp := &MockResponseWriter{}
-	var appsDao []*dao.ApplicationDAOInfo
-	getApplicationsInfo(resp, req)
-	err = json.Unmarshal(resp.outputBytes, &appsDao)
-	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, len(appsDao), 2)
-	assert.Equal(t, appsDao[0].User, "abc")
-	assert.Assert(t, appsDao[0].FinishedTime == nil)
-	assert.DeepEqual(t, appsDao[0].MaxUsedResource, map[string]int64{"vcore": 1})
-
-	assert.Equal(t, appsDao[1].RejectedMessage, rejectedMessage)
-	assert.Assert(t, appsDao[1].FinishedTime != nil)
-	// Passing "root.q1" as filter return 0 application as there is no app related to user: who
-	req, err = http.NewRequest("GET", "/ws/v1/apps?user=who", strings.NewReader(""))
-	assert.NilError(t, err, "App Handler request failed")
-	resp = &MockResponseWriter{}
-	getApplicationsInfo(resp, req)
-	err = json.Unmarshal(resp.outputBytes, &appsDao)
-	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, len(appsDao), 0)
-
-	// Passing "root.q1" as filter return 0 application as there is no app having state:why
-	req, err = http.NewRequest("GET", "/ws/v1/apps?applicationState=why", strings.NewReader(""))
-	assert.NilError(t, err, "App Handler request failed")
-	resp = &MockResponseWriter{}
-	getApplicationsInfo(resp, req)
-	err = json.Unmarshal(resp.outputBytes, &appsDao)
-	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, len(appsDao), 0)
-
-	// Passing "root.q1" as filter return 0 application as there is no app running in "root.q1" queue
-	req, err = http.NewRequest("GET", "/ws/v1/apps?queue=root.q1", strings.NewReader(""))
-	assert.NilError(t, err, "App Handler request failed")
-	resp = &MockResponseWriter{}
-	getApplicationsInfo(resp, req)
-	err = json.Unmarshal(resp.outputBytes, &appsDao)
-	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, len(appsDao), 0)
-
-	// Not passing any queue filter (only handler endpoint) return all applications
-	req, err = http.NewRequest("GET", "/ws/v1/apps", strings.NewReader(""))
-	assert.NilError(t, err, "App Handler request failed")
-	resp = &MockResponseWriter{}
-	getApplicationsInfo(resp, req)
-	err = json.Unmarshal(resp.outputBytes, &appsDao)
-	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, len(appsDao), 2)
-
-	// Passing "root.q1.default" as filter return 0 application though child queue name is same but different queue path
-	req, err = http.NewRequest("GET", "/ws/v1/apps?queue=root.q1.default", strings.NewReader(""))
-	assert.NilError(t, err, "App Handler request failed")
-	resp = &MockResponseWriter{}
-	getApplicationsInfo(resp, req)
-	err = json.Unmarshal(resp.outputBytes, &appsDao)
-	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, len(appsDao), 0)
-
-	// Passing "root.default(spe" as filter throws bad request error as queue name doesn't comply with expected characters
-	req, err = http.NewRequest("GET", "/ws/v1/apps?queue=root.default(spe", strings.NewReader(""))
-	assert.NilError(t, err, "App Handler request failed")
-	resp = &MockResponseWriter{}
-	getApplicationsInfo(resp, req)
-	assert.Equal(t, http.StatusBadRequest, resp.statusCode)
-
-	var errInfo dao.YAPIError
-	err = json.Unmarshal(resp.outputBytes, &errInfo)
-	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "App Handler returned wrong status")
-	assert.Equal(t, errInfo.Message, "problem in queue query parameter parsing as queue param root.default(spe contains invalid queue name default(spe. Queue name must only have alphanumeric characters, - or _, and be no longer than 64 characters", "JSON error message is incorrect")
-	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
-}
-
 type FakeConfigPlugin struct {
 	tests.MockResourceManagerCallback
 	generateError bool
@@ -1121,50 +1005,6 @@ func TestGetClusterInfo(t *testing.T) {
 	assert.Assert(t, cs["gpu"] != nil)
 }
 
-func TestGetClusterUtilization(t *testing.T) {
-	configs.MockSchedulerConfigByData([]byte(configTwoLevelQueues))
-	var err error
-	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
-	assert.NilError(t, err)
-	assert.Equal(t, 2, len(schedulerContext.GetPartitionMapClone()))
-
-	resp := &MockResponseWriter{}
-	getClusterUtilization(resp, nil)
-	var data []*dao.ClustersUtilDAOInfo
-	err = json.Unmarshal(resp.outputBytes, &data)
-	assert.NilError(t, err)
-
-	cs := make(map[string]*dao.ClustersUtilDAOInfo, 2)
-	for _, d := range data {
-		cs[d.PartitionName] = d
-	}
-
-	assert.Assert(t, cs["default"] != nil)
-	assert.Assert(t, cs["gpu"] != nil)
-}
-
-func TestGetNodeInfo(t *testing.T) {
-	configs.MockSchedulerConfigByData([]byte(configTwoLevelQueues))
-	var err error
-	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
-	assert.NilError(t, err)
-	assert.Equal(t, 2, len(schedulerContext.GetPartitionMapClone()))
-
-	resp := &MockResponseWriter{}
-	getNodesInfo(resp, nil)
-	var data []*dao.NodesDAOInfo
-	err = json.Unmarshal(resp.outputBytes, &data)
-	assert.NilError(t, err)
-
-	cs := make(map[string]*dao.NodesDAOInfo, 2)
-	for _, d := range data {
-		cs[d.PartitionName] = d
-	}
-
-	assert.Assert(t, cs["default"] != nil)
-	assert.Assert(t, cs["gpu"] != nil)
-}
-
 func TestGetPartitionNodes(t *testing.T) {
 	configs.MockSchedulerConfigByData([]byte(configDefault))
 	var err error
@@ -1373,26 +1213,6 @@ func TestValidateQueue(t *testing.T) {
 
 	err2 := validateQueue("root")
 	assert.NilError(t, err2, "Queue path is correct but stil throwing error.")
-}
-
-func TestGetNodesUtilization(t *testing.T) {
-	configs.MockSchedulerConfigByData([]byte(configMultiPartitions))
-	var err error
-	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
-	assert.NilError(t, err)
-	assert.Equal(t, 2, len(schedulerContext.GetPartitionMapClone()))
-
-	var req *http.Request
-	req, err = http.NewRequest("GET", "/ws/v1/nodes/utilization", strings.NewReader(""))
-	req = mux.SetURLVars(req, make(map[string]string))
-	assert.NilError(t, err)
-	resp := &MockResponseWriter{}
-	var nodesDao []*dao.NodesUtilDAOInfo
-	// all partitions have no nodes, but it should be fine to get utilization
-	getNodesUtilization(resp, req)
-	err = json.Unmarshal(resp.outputBytes, &nodesDao)
-	assert.NilError(t, err)
-	assert.Equal(t, len(nodesDao), 0)
 }
 
 func TestFullStateDumpPath(t *testing.T) {

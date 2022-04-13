@@ -65,76 +65,12 @@ func getStackInfo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getQueueInfo(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
-
-	lists := schedulerContext.GetPartitionMapClone()
-	for _, partition := range lists {
-		partitionInfo := getPartitionJSON(partition)
-
-		if err := json.NewEncoder(w).Encode(partitionInfo); err != nil {
-			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
-		}
-	}
-}
-
 func getClusterInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	lists := schedulerContext.GetPartitionMapClone()
 	clustersInfo := getClusterDAO(lists)
 	if err := json.NewEncoder(w).Encode(clustersInfo); err != nil {
-		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
-func getClusterUtilization(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
-	lists := schedulerContext.GetPartitionMapClone()
-	clusterUtil := getClustersUtilDAO(lists)
-	if err := json.NewEncoder(w).Encode(clusterUtil); err != nil {
-		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
-func getApplicationsInfo(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
-
-	queuePath := r.URL.Query().Get("queue")
-	queueErr := validateQueue(queuePath)
-	if queueErr != nil {
-		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
-		return
-	}
-
-	lists := schedulerContext.GetPartitionMapClone()
-	appsDao := make([]*dao.ApplicationDAOInfo, 0, len(lists))
-	state := r.URL.Query().Get("applicationState")
-	user := r.URL.Query().Get("user")
-	addDao := func(app *objects.Application) {
-		if (len(queuePath) == 0 || strings.EqualFold(queuePath, app.GetQueuePath())) &&
-			(len(user) == 0 || strings.EqualFold(user, app.GetUser().User)) {
-			appJSON := getApplicationJSON(app)
-			// the application state may get changed before we convert it to dao
-			if len(state) == 0 || strings.EqualFold(state, appJSON.State) {
-				appsDao = append(appsDao, appJSON)
-			}
-		}
-	}
-
-	for _, partition := range lists {
-		for _, app := range partition.GetApplications() {
-			addDao(app)
-		}
-		for _, app := range partition.GetCompletedApplications() {
-			addDao(app)
-		}
-		for _, app := range partition.GetRejectedApplications() {
-			addDao(app)
-		}
-	}
-
-	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -151,26 +87,6 @@ func validateQueue(queuePath string) error {
 		}
 	}
 	return nil
-}
-
-func getNodesInfo(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
-
-	lists := schedulerContext.GetPartitionMapClone()
-	result := getNodesDAO(lists)
-	if err := json.NewEncoder(w).Encode(result); err != nil {
-		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
-func getNodesUtilization(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
-
-	lists := schedulerContext.GetPartitionMapClone()
-	result := getNodesUtilDAO(lists)
-	if err := json.NewEncoder(w).Encode(result); err != nil {
-		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
-	}
 }
 
 func validateConf(w http.ResponseWriter, r *http.Request) {
@@ -280,7 +196,10 @@ func getPartitionJSON(partition *scheduler.PartitionContext) *dao.PartitionDAOIn
 func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 	allocations := app.GetAllAllocations()
 	allocationInfo := make([]dao.AllocationDAOInfo, 0, len(allocations))
+	placeholders := app.GetAllPlaceholderData()
+	placeholderInfo := make([]dao.PlaceholderDAOInfo, 0, len(placeholders))
 	var requestTime int64
+
 	for _, alloc := range allocations {
 		if alloc.GetPlaceholderUsed() {
 			requestTime = alloc.GetPlaceholderCreateTime().UnixNano()
@@ -315,6 +234,17 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		stateLogInfo = append(stateLogInfo, stateInfo)
 	}
 
+	for _, taskGroup := range placeholders {
+		phInfo := dao.PlaceholderDAOInfo{
+			TaskGroupName: taskGroup.TaskGroupName,
+			Count:         taskGroup.Count,
+			MinResource:   taskGroup.MinResource.DAOMap(),
+			RequiredNode:  taskGroup.RequiredNode,
+			Replaced:      taskGroup.Replaced,
+		}
+		placeholderInfo = append(placeholderInfo, phInfo)
+	}
+
 	return &dao.ApplicationDAOInfo{
 		ApplicationID:   app.ApplicationID,
 		UsedResource:    app.GetAllocatedResource().DAOMap(),
@@ -327,6 +257,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		State:           app.CurrentState(),
 		User:            app.GetUser().User,
 		RejectedMessage: app.GetRejectedMessage(),
+		PlaceholderData: placeholderInfo,
 		StateLog:        stateLogInfo,
 	}
 }

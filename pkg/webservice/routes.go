@@ -33,42 +33,12 @@ type route struct {
 type routes []route
 
 var webRoutes = routes{
-	// endpoints to retrieve general scheduler info
-	route{
-		"Scheduler",
-		"GET",
-		"/ws/v1/queues",
-		getQueueInfo,
-	},
+	// endpoints to retrieve general cluster info
 	route{
 		"Cluster",
 		"GET",
 		"/ws/v1/clusters",
 		getClusterInfo,
-	},
-	route{
-		"Cluster",
-		"GET",
-		"/ws/v1/clusters/utilization",
-		getClusterUtilization,
-	},
-	route{
-		"Scheduler",
-		"GET",
-		"/ws/v1/apps",
-		getApplicationsInfo,
-	},
-	route{
-		"Scheduler",
-		"GET",
-		"/ws/v1/nodes",
-		getNodesInfo,
-	},
-	route{
-		"Scheduler",
-		"GET",
-		"/ws/v1/nodes/utilization",
-		getNodesUtilization,
 	},
 
 	// endpoint to retrieve goroutines info

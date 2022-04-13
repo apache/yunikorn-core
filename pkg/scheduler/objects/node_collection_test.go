@@ -124,14 +124,14 @@ func TestNodeCollection_GetNodes(t *testing.T) {
 
 func TestGetNodeSortingPolicy(t *testing.T) {
 	nc := NewNodeCollection("test")
-	weights := map[string]float64 {
+	weights := map[string]float64{
 		"vcore":  2.0,
 		"memory": 3.0,
 	}
 
 	var tests = []struct {
-		input	string
-		except	string
+		input  string
+		except string
 	}{
 		{"fair", "fair"},
 		{"bin", "bin"},
@@ -148,5 +148,25 @@ func TestGetNodeSortingPolicy(t *testing.T) {
 				t.Errorf("Got %d, want %d", policy.PolicyType(), ans.PolicyType())
 			}
 		})
+	}
+}
+
+func TestGetNodeIterator(t *testing.T) {
+	// Basic node, allocation and application
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	ask := newAllocationAsk("alloc-01", "app-01", res)
+	app := newApplication("app-01", "default", "root.test")
+
+	bc := initBaseCollection()
+	var nc NodeCollection = bc
+	// Register callback listener
+	node.AddListener(bc)
+	nc.AddNode(node)
+	// Callback trigger
+	node.Reserve(app, ask)
+
+	if nc.GetNodeIterator() != nil {
+		t.Errorf("Should be empty")
 	}
 }

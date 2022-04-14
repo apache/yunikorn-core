@@ -5,8 +5,8 @@ github.com/HdrHistogram/hdrhistogram-go v1.0.1 h1:GX8GAYDuhlFQnI2fRDHQhTlkHMz8bE
 github.com/HdrHistogram/hdrhistogram-go v1.0.1/go.mod h1:BWJ+nMSHY3L41Zj7CA3uXnloDp7xxV0YvstAE7nKTaM=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
 github.com/alecthomas/units v0.0.0-20151022065526-2efee857e7cf/go.mod h1:ybxpYRFXyAe+OPACYpWeL0wqObRcbAqCMya13uyzqw0=
-github.com/apache/yunikorn-scheduler-interface v0.0.0-20220325134135-4a644b388bc4 h1:1zlxKqug3zod+nwl+vk+2wr115Nh5vdYPVW0n+w07JQ=
-github.com/apache/yunikorn-scheduler-interface v0.0.0-20220325134135-4a644b388bc4/go.mod h1:Pboapmj82OLjl65yVNaKit1l0Jd1GJrSUaUVr13h68s=
+github.com/apache/yunikorn-scheduler-interface v0.0.0-20220413101040-d6ba6ec504f9 h1:c4VJQMAj0iHqWIEZ1bItiaY6CCkyd9/4Rib16a3o+e4=
+github.com/apache/yunikorn-scheduler-interface v0.0.0-20220413101040-d6ba6ec504f9/go.mod h1:Pboapmj82OLjl65yVNaKit1l0Jd1GJrSUaUVr13h68s=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
 github.com/beorn7/perks v1.0.0/go.mod h1:KWe93zE9D1o94FZ5RNwFwVgaQK1VOXiVxmqh+CedLV8=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=

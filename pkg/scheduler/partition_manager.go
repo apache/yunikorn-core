@@ -19,7 +19,6 @@
 package scheduler
 
 import (
-	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -40,8 +39,6 @@ type partitionManager struct {
 	stopCleanExpiredApps     chan struct{}
 	cleanRootInterval        time.Duration
 	cleanExpiredAppsInterval time.Duration
-
-	sync.RWMutex
 }
 
 func newPartitionManager(pc *PartitionContext, cc *ClusterContext) *partitionManager {
@@ -183,11 +180,4 @@ func (manager *partitionManager) cleanExpiredApps() {
 			manager.pc.cleanupExpiredApps()
 		}
 	}
-}
-
-// test only
-func (manager *partitionManager) SetCleanRootInterval(interval time.Duration) {
-	manager.Lock()
-	defer manager.Unlock()
-	manager.cleanRootInterval = interval
 }

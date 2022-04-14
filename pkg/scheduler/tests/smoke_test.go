@@ -1473,9 +1473,6 @@ partitions:
 	part := ms.scheduler.GetClusterContext().GetPartition(partition)
 	assert.Assert(t, part.GetTotalPartitionResource() == nil, "partition info max resource nil")
 
-	// shorten the cleanRootInterval first, otherwise it will clear the queue every 10 seconds.
-	part.GetPartitionManager().SetCleanRootInterval(time.Millisecond * 100)
-
 	// Check the queue root
 	root := part.GetQueue("root")
 	assert.Assert(t, root.GetMaxResource() == nil, "root queue max resource should be nil")
@@ -1621,7 +1618,7 @@ partitions:
 	err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, app.IsCompleted)
 	assert.NilError(t, err, "App should be in Completed state")
 	// partition manager should be able to clean up the dynamically created queue.
-	if err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, func() bool {
+	if err = common.WaitFor(1*time.Millisecond, time.Second*11, func() bool {
 		return part.GetQueue(leafName) == nil
 	}); err != nil {
 		t.Errorf("timeout waiting for queue is cleared %v", err)

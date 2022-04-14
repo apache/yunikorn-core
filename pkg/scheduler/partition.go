@@ -1499,7 +1499,7 @@ func (pc *PartitionContext) AddRejectedApplication(rejectedApplication *objects.
 }
 
 // test only
-//nolint: errcheck
+// nolint: errcheck
 func (pc *PartitionContext) GetPartitionManager() *partitionManager {
 	pc.RLock()
 	defer pc.RUnlock()

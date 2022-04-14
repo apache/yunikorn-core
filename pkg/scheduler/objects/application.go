@@ -123,10 +123,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		rejectedMessage:      "",
 		stateLog:             make([]*StateLogEntry, 0),
 	}
-	placeholderTimeout := common.ConvertSITimeoutWithAdjustment(siApp)
-	if time.Duration(0) == placeholderTimeout {
-		placeholderTimeout = defaultPlaceholderTimeout
-	}
+	placeholderTimeout := common.ConvertSITimeoutWithAdjustment(siApp, defaultPlaceholderTimeout)
 	gangSchedStyle := siApp.GetGangSchedulingStyle()
 	if gangSchedStyle != Soft && gangSchedStyle != Hard {
 		log.Logger().Info("Unknown gang scheduling style, using soft style as default",

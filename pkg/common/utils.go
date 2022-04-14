@@ -33,13 +33,6 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-const CreationTime = "CreationTime"
-
-var (
-	currentTime = time.Now
-	Undefined   = time.Time{}
-)
-
 func GetNormalizedPartitionName(partitionName string, rmID string) string {
 	if partitionName == "" {
 		partitionName = "default"
@@ -126,27 +119,29 @@ func ConvertSITimeout(millis int64) time.Duration {
 // ConvertSITimeoutWithAdjustment Similar to ConvertSITimeout, but this function also adjusts the timeout if
 // "creationTime" is defined. It's used during Yunikorn restart, in order to properly track how long a placeholder pod should
 // be in "Running" state.
-func ConvertSITimeoutWithAdjustment(siApp *si.AddApplicationRequest) time.Duration {
+func ConvertSITimeoutWithAdjustment(siApp *si.AddApplicationRequest, defaultTimeout time.Duration) time.Duration {
 	result := ConvertSITimeout(siApp.ExecutionTimeoutMilliSeconds)
-	adjusted := adjustTimeout(result, siApp)
-
-	return adjusted
+	if result == 0 {
+		result = defaultTimeout
+	}
+	result = adjustTimeout(result, siApp)
+	return result
 }
 
 func adjustTimeout(timeout time.Duration, siApp *si.AddApplicationRequest) time.Duration {
-	creationTimeTag := siApp.Tags[interfaceCommon.DomainYuniKorn+CreationTime]
+	creationTimeTag := siApp.Tags[interfaceCommon.DomainYuniKorn+interfaceCommon.CreationTime]
 	if creationTimeTag == "" {
 		return timeout
 	}
 
 	created := ConvertSITimestamp(creationTimeTag)
-	if created == Undefined {
+	if created.IsZero() {
 		return timeout
 	}
-	now := currentTime()
 	expectedTimeout := created.Add(timeout)
+	adjusted := time.Until(expectedTimeout)
 
-	if now.After(expectedTimeout) {
+	if adjusted <= 0 {
 		log.Logger().Info("Placeholder timeout reached - expected timeout is in the past",
 			zap.Duration("timeout duration", timeout),
 			zap.Time("creation time", created),
@@ -159,15 +154,23 @@ func adjustTimeout(timeout time.Duration, siApp *si.AddApplicationRequest) time.
 		zap.Time("creation time", created),
 		zap.Time("expected timeout", expectedTimeout))
 
-	return expectedTimeout.Sub(now)
+	return adjusted
 }
 
 func ConvertSITimestamp(ts string) time.Time {
+	if ts == "" {
+		return time.Time{}
+	}
+
 	tm, err := strconv.ParseInt(ts, 10, 64)
 	if err != nil {
 		log.Logger().Warn("Unable to parse timestamp string", zap.String("timestamp", ts),
 			zap.Error(err))
 		return time.Time{}
+	}
+
+	if tm < 0 {
+		tm = 0
 	}
 
 	return time.Unix(tm, 0)

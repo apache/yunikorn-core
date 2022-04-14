@@ -1497,3 +1497,10 @@ func (pc *PartitionContext) AddRejectedApplication(rejectedApplication *objects.
 	}
 	pc.rejectedApplications[rejectedApplication.ApplicationID] = rejectedApplication
 }
+
+// test only
+func (pc *PartitionContext) GetPartitionManager() *partitionManager {
+	pc.RLock()
+	defer pc.RUnlock()
+	return pc.partitionManager
+}

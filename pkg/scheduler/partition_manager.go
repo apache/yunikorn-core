@@ -181,3 +181,8 @@ func (manager *partitionManager) cleanExpiredApps() {
 		}
 	}
 }
+
+// test only
+func (manager *partitionManager) SetCleanRootInterval(interval time.Duration) {
+	manager.cleanRootInterval = interval
+}

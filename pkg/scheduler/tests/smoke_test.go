@@ -1473,6 +1473,9 @@ partitions:
 	part := ms.scheduler.GetClusterContext().GetPartition(partition)
 	assert.Assert(t, part.GetTotalPartitionResource() == nil, "partition info max resource nil")
 
+	// shorten the cleanRootInterval first, otherwise it will clear the queue every 10 seconds.
+	part.GetPartitionManager().SetCleanRootInterval(time.Millisecond * 100)
+
 	// Check the queue root
 	root := part.GetQueue("root")
 	assert.Assert(t, root.GetMaxResource() == nil, "root queue max resource should be nil")
@@ -1597,6 +1600,10 @@ partitions:
 		})
 	}
 
+	// Before allocations, shorten the completingTimeout first, otherwise it will take 30 seconds for the app to become completed state.
+	objects.SetCompletingTimeout(time.Millisecond * 100)
+	defer objects.SetCompletingTimeout(time.Second * 30)
+
 	// Release Allocations.
 	err = ms.proxy.UpdateAllocation(updateRequest)
 	assert.NilError(t, err, "AllocationRequest 3 failed")
@@ -1611,10 +1618,10 @@ partitions:
 	// Check app to Completing status
 	assert.Equal(t, app01.CurrentState(), objects.Completing.String())
 	// the app changes from completing state to completed state
-	err = common.WaitFor(time.Second, 31*time.Second, app.IsCompleted)
+	err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, app.IsCompleted)
 	assert.NilError(t, err, "App should be in Completed state")
 	// partition manager should be able to clean up the dynamically created queue.
-	if err = common.WaitFor(time.Second, 11*time.Second, func() bool {
+	if err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, func() bool {
 		return part.GetQueue(leafName) == nil
 	}); err != nil {
 		t.Errorf("timeout waiting for queue is cleared %v", err)

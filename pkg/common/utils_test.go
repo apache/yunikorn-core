@@ -137,46 +137,49 @@ func TestGetRequiredNodeFromAsk(t *testing.T) {
 }
 
 func TestConvertSITimeoutWithAdjustment(t *testing.T) {
-	var err error
-	var current time.Time
-	current, err = time.Parse(time.RFC1123Z, "Mon, 02 Jan 2020 12:00:00 -0000")
-	assert.NilError(t, err, "Could not parse time")
-
-	var created time.Time
-	created, err = time.Parse(time.RFC1123Z, "Mon, 02 Jan 2020 11:50:00 -0000")
-	assert.NilError(t, err, "Could not parse time")
-	currentTime = func() time.Time {
-		return current
+	created := time.Now().Unix() - 600
+	defaultTimeout := 15 * time.Minute
+	tagsWithCreationTime := map[string]string{
+		common.DomainYuniKorn + common.CreationTime: strconv.FormatInt(created, 10),
 	}
-
-	siApp := &si.AddApplicationRequest{
-		Tags: map[string]string{
-			"yunikorn.apache.org/CreationTime": strconv.FormatInt(created.Unix(), 10),
-		},
+	tagsWithIllegalCreationTime := map[string]string{
+		common.DomainYuniKorn + common.CreationTime: "illegal",
 	}
+	siApp := &si.AddApplicationRequest{}
+
+	// no timeout, no creationTime --> default
+	siApp.ExecutionTimeoutMilliSeconds = 0
+	timeout := ConvertSITimeoutWithAdjustment(siApp, defaultTimeout)
+	assert.Equal(t, timeout, defaultTimeout)
+
+	// no timeout, illegal string --> default
+	siApp.ExecutionTimeoutMilliSeconds = 0
+	siApp.Tags = tagsWithIllegalCreationTime
+	timeout = ConvertSITimeoutWithAdjustment(siApp, defaultTimeout)
+	assert.Equal(t, timeout, defaultTimeout)
 
 	// 2min timeout --> timeout
+	siApp.Tags = tagsWithCreationTime
 	siApp.ExecutionTimeoutMilliSeconds = (2 * time.Minute).Milliseconds()
-	timeout := ConvertSITimeoutWithAdjustment(siApp)
+	timeout = ConvertSITimeoutWithAdjustment(siApp, defaultTimeout)
 	assert.Equal(t, timeout, time.Millisecond)
 
 	// 20min timeout --> no timeout, corrected to 10min
+	siApp.Tags = tagsWithCreationTime
 	siApp.ExecutionTimeoutMilliSeconds = (20 * time.Minute).Milliseconds()
-	timeout = ConvertSITimeoutWithAdjustment(siApp)
+	timeout = ConvertSITimeoutWithAdjustment(siApp, defaultTimeout).Round(time.Minute)
 	assert.Equal(t, timeout, 10*time.Minute)
 
 	// 20min timeout, no creationTime --> no change
 	siApp.Tags = map[string]string{}
 	siApp.ExecutionTimeoutMilliSeconds = (20 * time.Minute).Milliseconds()
-	timeout = ConvertSITimeoutWithAdjustment(siApp)
+	timeout = ConvertSITimeoutWithAdjustment(siApp, defaultTimeout)
 	assert.Equal(t, timeout, 20*time.Minute)
 
 	// Illegal string --> no change
-	siApp.Tags = map[string]string{
-		"yunikorn.apache.org/CreationTime": "illegal",
-	}
+	siApp.Tags = tagsWithIllegalCreationTime
 	siApp.ExecutionTimeoutMilliSeconds = (20 * time.Minute).Milliseconds()
-	timeout = ConvertSITimeoutWithAdjustment(siApp)
+	timeout = ConvertSITimeoutWithAdjustment(siApp, defaultTimeout)
 	assert.Equal(t, timeout, 20*time.Minute)
 }
 
@@ -185,5 +188,11 @@ func TestConvertSITimestamp(t *testing.T) {
 	assert.Equal(t, result, time.Unix(160, 0))
 
 	result = ConvertSITimestamp("xzy")
+	assert.Equal(t, result, time.Time{})
+
+	result = ConvertSITimestamp("-2000000")
+	assert.Equal(t, result, time.Unix(0, 0))
+
+	result = ConvertSITimestamp("")
 	assert.Equal(t, result, time.Time{})
 }

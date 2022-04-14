@@ -1607,3 +1607,8 @@ func (sa *Application) GetAllPlaceholderData() []*PlaceholderData {
 	}
 	return placeholders
 }
+
+// test only
+func SetCompletingTimeout(duration time.Duration) {
+	completingTimeout = duration
+}

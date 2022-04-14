@@ -1597,7 +1597,7 @@ partitions:
 		})
 	}
 
-	// Before allocations, shorten the completingTimeout first, otherwise it will take 30 seconds for the app to become completed state.
+	// Before release allocations, shorten the completingTimeout first, otherwise it will take 30 seconds for the app to become completed state.
 	objects.SetCompletingTimeout(time.Millisecond * 100)
 	defer objects.SetCompletingTimeout(time.Second * 30)
 

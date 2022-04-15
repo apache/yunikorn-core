@@ -122,7 +122,7 @@ func TestNodeCollection_GetNodes(t *testing.T) {
 	assert.Equal(t, 1, len(nodes), "list is missing node")
 }
 
-//func TestSetNodeSortingPolicy(t *testing.T) {}
+// func TestSetNodeSortingPolicy(t *testing.T) {}
 
 func TestGetNodeSortingPolicy(t *testing.T) {
 	weights := map[string]float64{

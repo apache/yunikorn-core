@@ -122,30 +122,46 @@ func TestNodeCollection_GetNodes(t *testing.T) {
 	assert.Equal(t, 1, len(nodes), "list is missing node")
 }
 
+//func TestSetNodeSortingPolicy(t *testing.T) {}
+
 func TestGetNodeSortingPolicy(t *testing.T) {
-	nc := NewNodeCollection("test")
 	weights := map[string]float64{
 		"vcore":  2.0,
 		"memory": 3.0,
 	}
 
 	var tests = []struct {
-		input  string
-		except string
+		name   string
+		before string
+		after  string
 	}{
-		{"fair", "fair"},
-		{"bin", "bin"},
+		{"Set fair policy and what's policy that node_collection returns", "", "fair"},
+		{"Set bin policy and what's policy that node_collection returns", "", "bin"},
+		{"Change bin policy to fair policy", "bin", "fair"},
+		{"Change fair policy to bin policy", "fair", "bin"},
 	}
 
 	for _, tt := range tests {
-		testname := fmt.Sprintf("Get method of base_collection:%s %s", tt.input, tt.except)
+		testname := fmt.Sprintf("%s:%s %s", tt.name, tt.before, tt.after)
 		t.Run(testname, func(t *testing.T) {
-			policy := NewNodeSortingPolicy(tt.input, weights)
-			nc.SetNodeSortingPolicy(policy)
-			ans := nc.GetNodeSortingPolicy()
+			nc := NewNodeCollection("test")
+			if ans := nc.GetNodeSortingPolicy(); ans != nil {
+				t.Errorf("Instance policy from NewNodeCollection should be nil: Got %s", ans.PolicyType().String())
+			}
 
-			if policy.PolicyType() != ans.PolicyType() {
-				t.Errorf("Got %d, want %d", policy.PolicyType(), ans.PolicyType())
+			var policy NodeSortingPolicy
+			if tt.before != "" {
+				policy = NewNodeSortingPolicy(tt.before, weights)
+				nc.SetNodeSortingPolicy(policy)
+				if ans := nc.GetNodeSortingPolicy(); policy.PolicyType() != ans.PolicyType() {
+					t.Errorf("Set initialization nodeSortingPolicy: Got %s, want %s", policy.PolicyType().String(), ans.PolicyType().String())
+				}
+			}
+
+			policy = NewNodeSortingPolicy(tt.after, weights)
+			nc.SetNodeSortingPolicy(policy)
+			if ans := nc.GetNodeSortingPolicy(); policy.PolicyType() != ans.PolicyType() {
+				t.Errorf("Got %s, want %s", policy.PolicyType().String(), ans.PolicyType().String())
 			}
 		})
 	}
@@ -165,6 +181,11 @@ func TestGetNodeIterator(t *testing.T) {
 	if err := nc.AddNode(node); err != nil {
 		t.Errorf("Adding a node should be worked.")
 	}
+
+	if nc.GetNodeIterator() == nil {
+		t.Errorf("Node iterator should not be nil.")
+	}
+
 	// Callback trigger
 	if err := node.Reserve(app, ask); err != nil {
 		t.Errorf("Reserving should be worked.")

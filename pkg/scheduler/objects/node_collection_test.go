@@ -122,7 +122,66 @@ func TestNodeCollection_GetNodes(t *testing.T) {
 	assert.Equal(t, 1, len(nodes), "list is missing node")
 }
 
-// func TestSetNodeSortingPolicy(t *testing.T) {}
+func TestSetNodeSortingPolicy(t *testing.T) {
+	weights := map[string]float64{
+		"vcore":  2.0,
+		"memory": 3.0,
+	}
+
+	var nodesInfo = []struct {
+		nodeID string
+		vcore  int64
+		mem    int64
+	}{
+		{"node-01", 250, 1000},
+		{"node-02", 500, 750},
+		{"node-03", 750, 500},
+		{"node-04", 1000, 250},
+	}
+
+	order := make(map[string][]string, 0)
+	order["nil"] = []string{nodesInfo[0].nodeID, nodesInfo[1].nodeID, nodesInfo[2].nodeID, nodesInfo[3].nodeID}
+	// order["fair"] = []string{nodesInfo[0].nodeID, nodesInfo[1].nodeID, nodesInfo[2].nodeID, nodesInfo[3].nodeID}
+	// order["binpacking"] = []string{nodesInfo[0].nodeID, nodesInfo[1].nodeID, nodesInfo[2].nodeID, nodesInfo[3].nodeID}
+
+	var tests = []struct {
+		name   string
+		before string
+		after  string
+	}{
+		{"Initialized policy set fair", "nil", "fair"},
+		{"Initialized policy set binpacking", "nil", "binpacking"},
+		// {"Change fair with binpacking", "fair", "binpacking"},
+		// {"Change binpacking with fair", "binpacking", "fair"},
+	}
+
+	for _, tt := range tests {
+		testname := fmt.Sprintf("%s:%s %s", tt.name, tt.before, tt.after)
+		t.Run(testname, func(t *testing.T) {
+			nc := NewNodeCollection("test")
+			for _, nodeInfo := range nodesInfo {
+				err := nc.AddNode(newNode(nodeInfo.nodeID, map[string]resources.Quantity{"vcore": resources.Quantity(nodeInfo.vcore), "memory": resources.Quantity(nodeInfo.mem)}))
+				if err != nil {
+					t.Errorf("AddNode error:%s", err.Error())
+				}
+			}
+			nodeIterator := nc.GetNodeIterator()
+			for index := 0; nodeIterator.HasNext(); index++ {
+				node := nodeIterator.Next()
+				ansOrder := order[tt.before]
+				if len(ansOrder) == 0 {
+					t.Error("map length is 0\n")
+				}
+				if ansOrder[index] != node.NodeID {
+					t.Errorf("%s policy, got %s, except %s", tt.before, node.NodeID, ansOrder[index])
+				}
+			}
+
+			policy := NewNodeSortingPolicy(tt.after, weights)
+			nc.SetNodeSortingPolicy(policy)
+		})
+	}
+}
 
 func TestGetNodeSortingPolicy(t *testing.T) {
 	weights := map[string]float64{
@@ -136,9 +195,9 @@ func TestGetNodeSortingPolicy(t *testing.T) {
 		after  string
 	}{
 		{"Set fair policy and what's policy that node_collection returns", "", "fair"},
-		{"Set bin policy and what's policy that node_collection returns", "", "bin"},
-		{"Change bin policy to fair policy", "bin", "fair"},
-		{"Change fair policy to bin policy", "fair", "bin"},
+		{"Set binpacking policy and what's policy that node_collection returns", "", "bbinpackingin"},
+		{"Change binpacking policy to fair policy", "binpacking", "fair"},
+		{"Change fair policy to binpacking policy", "fair", "binpacking"},
 	}
 
 	for _, tt := range tests {
@@ -169,8 +228,8 @@ func TestGetNodeSortingPolicy(t *testing.T) {
 
 func TestGetNodeIterator(t *testing.T) {
 	// Basic node, allocation and application
-	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
-	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	node := newNode(nodeID1, map[string]resources.Quantity{"vcore": 10})
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 5})
 	ask := newAllocationAsk("alloc-01", "app-01", res)
 	app := newApplication("app-01", "default", "root.test")
 

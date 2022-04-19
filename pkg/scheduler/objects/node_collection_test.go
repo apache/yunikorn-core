@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/google/uuid"
 	"gotest.tools/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
@@ -129,17 +130,19 @@ func TestSetNodeSortingPolicy(t *testing.T) {
 	}
 
 	var nodesInfo = []struct {
-		nodeID string
-		vcore  int64
-		mem    int64
+		nodeID         string
+		vcore          int64
+		mem            int64
+		allocatedVcore int64
+		allocatedMem   int64
 	}{
-		{"node-01", 250, 1000},
-		{"node-02", 500, 750},
-		{"node-03", 750, 500},
-		{"node-04", 1000, 250},
+		{"node-01", 250, 1000, 120, 530},
+		{"node-02", 500, 750, 380, 250},
+		{"node-03", 750, 500, 500, 200},
+		{"node-04", 1000, 250, 800, 200},
 	}
 
-	order := make(map[string][]string, 0)
+	order := make(map[string][]string, 3)
 	order["nil"] = []string{nodesInfo[0].nodeID, nodesInfo[1].nodeID, nodesInfo[2].nodeID, nodesInfo[3].nodeID}
 	// order["fair"] = []string{nodesInfo[0].nodeID, nodesInfo[1].nodeID, nodesInfo[2].nodeID, nodesInfo[3].nodeID}
 	// order["binpacking"] = []string{nodesInfo[0].nodeID, nodesInfo[1].nodeID, nodesInfo[2].nodeID, nodesInfo[3].nodeID}
@@ -160,7 +163,12 @@ func TestSetNodeSortingPolicy(t *testing.T) {
 		t.Run(testname, func(t *testing.T) {
 			nc := NewNodeCollection("test")
 			for _, nodeInfo := range nodesInfo {
-				err := nc.AddNode(newNode(nodeInfo.nodeID, map[string]resources.Quantity{"vcore": resources.Quantity(nodeInfo.vcore), "memory": resources.Quantity(nodeInfo.mem)}))
+				node := newNode(nodeInfo.nodeID, map[string]resources.Quantity{"vcore": resources.Quantity(nodeInfo.vcore), "memory": resources.Quantity(nodeInfo.mem)})
+				res := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(nodeInfo.allocatedVcore), "memory": resources.Quantity(nodeInfo.allocatedMem)})
+				alloc := newAllocation("test-app-1", uuid.NewString(), "test1", "root.default", res)
+				node.AddAllocation(alloc)
+
+				err := nc.AddNode(node)
 				if err != nil {
 					t.Errorf("AddNode error:%s", err.Error())
 				}
@@ -169,9 +177,6 @@ func TestSetNodeSortingPolicy(t *testing.T) {
 			for index := 0; nodeIterator.HasNext(); index++ {
 				node := nodeIterator.Next()
 				ansOrder := order[tt.before]
-				if len(ansOrder) == 0 {
-					t.Error("map length is 0\n")
-				}
 				if ansOrder[index] != node.NodeID {
 					t.Errorf("%s policy, got %s, except %s", tt.before, node.NodeID, ansOrder[index])
 				}

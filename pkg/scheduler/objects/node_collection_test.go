@@ -141,11 +141,18 @@ func TestSetNodeSortingPolicy(t *testing.T) {
 		{"node-03", 750, 500, 500, 200},
 		{"node-04", 1000, 250, 800, 200},
 	}
+	/*
+	*  node\policy			fair																		binpacking(1-fair)
+	*	1					[2*(120/250)+3*(530/1000)]/5=(0.96+1.59)/5=2.55/5=0.51		(3)				0.39					(2)
+	*	2					[2*(380/500)+3*(250/750)]/5=(1.52+1)/5=2.52/5=0.502			(1)				0.498					(4)
+	*	3					[2*(500/750)+3*(200/500)]/5=(1.333+1.2)/5=2.533/5=0.5066	(2)				0.4934					(3)
+	*	4					[2*(800/1000)+3*(200/250)]/5=(1.6+2.4)/5=4/5=0.8			(4)				0.2						(1)
+	 */
 
-	order := make(map[string][]string, 3)
+	order := make(map[string][]string, 0)
 	order["nil"] = []string{nodesInfo[0].nodeID, nodesInfo[1].nodeID, nodesInfo[2].nodeID, nodesInfo[3].nodeID}
-	// order["fair"] = []string{nodesInfo[0].nodeID, nodesInfo[1].nodeID, nodesInfo[2].nodeID, nodesInfo[3].nodeID}
-	// order["binpacking"] = []string{nodesInfo[0].nodeID, nodesInfo[1].nodeID, nodesInfo[2].nodeID, nodesInfo[3].nodeID}
+	order["fair"] = []string{nodesInfo[1].nodeID, nodesInfo[2].nodeID, nodesInfo[0].nodeID, nodesInfo[3].nodeID}
+	order["binpacking"] = []string{nodesInfo[3].nodeID, nodesInfo[0].nodeID, nodesInfo[2].nodeID, nodesInfo[1].nodeID}
 
 	var tests = []struct {
 		name   string
@@ -154,8 +161,8 @@ func TestSetNodeSortingPolicy(t *testing.T) {
 	}{
 		{"Initialized policy set fair", "nil", "fair"},
 		{"Initialized policy set binpacking", "nil", "binpacking"},
-		// {"Change fair with binpacking", "fair", "binpacking"},
-		// {"Change binpacking with fair", "binpacking", "fair"},
+		{"Change fair with binpacking", "fair", "binpacking"},
+		{"Change binpacking with fair", "binpacking", "fair"},
 	}
 
 	for _, tt := range tests {
@@ -173,17 +180,35 @@ func TestSetNodeSortingPolicy(t *testing.T) {
 					t.Errorf("AddNode error:%s", err.Error())
 				}
 			}
+
+			if tt.before != "nil" {
+				policy := NewNodeSortingPolicy(tt.before, weights)
+				nc.SetNodeSortingPolicy(policy)
+				if policy.PolicyType().String() != tt.before {
+					t.Errorf("Got %s, want %s", policy.PolicyType().String(), tt.before)
+				}
+			}
+
 			nodeIterator := nc.GetNodeIterator()
 			for index := 0; nodeIterator.HasNext(); index++ {
 				node := nodeIterator.Next()
-				ansOrder := order[tt.before]
-				if ansOrder[index] != node.NodeID {
+				if ansOrder := order[tt.before]; ansOrder[index] != node.NodeID {
 					t.Errorf("%s policy, got %s, except %s", tt.before, node.NodeID, ansOrder[index])
 				}
 			}
 
 			policy := NewNodeSortingPolicy(tt.after, weights)
 			nc.SetNodeSortingPolicy(policy)
+			if policy.PolicyType().String() != tt.after {
+				t.Errorf("Got %s, want %s", policy.PolicyType().String(), tt.after)
+			}
+			nodeIterator = nc.GetNodeIterator()
+			for index := 0; nodeIterator.HasNext(); index++ {
+				node := nodeIterator.Next()
+				if ansOrder := order[tt.after]; ansOrder[index] != node.NodeID {
+					t.Errorf("%s policy, got %s, except %s", tt.after, node.NodeID, ansOrder[index])
+				}
+			}
 		})
 	}
 }
@@ -199,10 +224,10 @@ func TestGetNodeSortingPolicy(t *testing.T) {
 		before string
 		after  string
 	}{
-		{"Set fair policy and what's policy that node_collection returns", "", "fair"},
-		{"Set binpacking policy and what's policy that node_collection returns", "", "bbinpackingin"},
-		{"Change binpacking policy to fair policy", "binpacking", "fair"},
-		{"Change fair policy to binpacking policy", "fair", "binpacking"},
+		{"Set fair policy and what's policy that node_collection returns", "nil", "fair"},
+		{"Set binpacking policy and what's policy that node_collection returns", "nil", "bbinpackingin"},
+		// {"Change binpacking policy to fair policy", "binpacking", "fair"},
+		// {"Change fair policy to binpacking policy", "fair", "binpacking"},
 	}
 
 	for _, tt := range tests {
@@ -214,7 +239,7 @@ func TestGetNodeSortingPolicy(t *testing.T) {
 			}
 
 			var policy NodeSortingPolicy
-			if tt.before != "" {
+			if tt.before != "nil" {
 				policy = NewNodeSortingPolicy(tt.before, weights)
 				nc.SetNodeSortingPolicy(policy)
 				if ans := nc.GetNodeSortingPolicy(); policy.PolicyType() != ans.PolicyType() {

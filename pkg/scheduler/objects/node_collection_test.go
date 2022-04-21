@@ -149,7 +149,8 @@ func TestSetNodeSortingPolicy(t *testing.T) {
 	*	4					[2*(800/1000)+3*(200/250)]/5=(1.6+2.4)/5=4/5=0.8			(4)				0.2						(1)
 	 */
 
-	order := make(map[string][]string, 0)
+	// Yunikorn support fair and binpacking policy, nil shows when nc policy unsets.
+	order := make(map[string][]string, 3)
 	order["nil"] = []string{nodesInfo[0].nodeID, nodesInfo[1].nodeID, nodesInfo[2].nodeID, nodesInfo[3].nodeID}
 	order["fair"] = []string{nodesInfo[1].nodeID, nodesInfo[2].nodeID, nodesInfo[0].nodeID, nodesInfo[3].nodeID}
 	order["binpacking"] = []string{nodesInfo[3].nodeID, nodesInfo[0].nodeID, nodesInfo[2].nodeID, nodesInfo[1].nodeID}
@@ -159,6 +160,7 @@ func TestSetNodeSortingPolicy(t *testing.T) {
 		before string
 		after  string
 	}{
+		{"Set a no exsiting policy and it should be set to fair", "nil", "unknown"},
 		{"Initialized policy set fair", "nil", "fair"},
 		{"Initialized policy set binpacking", "nil", "binpacking"},
 		{"Change fair with binpacking", "fair", "binpacking"},
@@ -170,17 +172,20 @@ func TestSetNodeSortingPolicy(t *testing.T) {
 		t.Run(testname, func(t *testing.T) {
 			nc := NewNodeCollection("test")
 			for _, nodeInfo := range nodesInfo {
+				// Initialize allocation and add it to node
 				node := newNode(nodeInfo.nodeID, map[string]resources.Quantity{"vcore": resources.Quantity(nodeInfo.vcore), "memory": resources.Quantity(nodeInfo.mem)})
 				res := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(nodeInfo.allocatedVcore), "memory": resources.Quantity(nodeInfo.allocatedMem)})
 				alloc := newAllocation("test-app-1", uuid.NewString(), "test1", "root.default", res)
 				node.AddAllocation(alloc)
 
+				// Add node to nc and make sure this operation is valid.
 				err := nc.AddNode(node)
 				if err != nil {
 					t.Errorf("AddNode error:%s", err.Error())
 				}
 			}
 
+			// nil pass, but we need to check fair and binpacking policy setting is correct.
 			if tt.before != "nil" {
 				policy := NewNodeSortingPolicy(tt.before, weights)
 				nc.SetNodeSortingPolicy(policy)
@@ -189,6 +194,7 @@ func TestSetNodeSortingPolicy(t *testing.T) {
 				}
 			}
 
+			// Check the order when policy is unset or set with fair or binpacking.
 			nodeIterator := nc.GetNodeIterator()
 			for index := 0; nodeIterator.HasNext(); index++ {
 				node := nodeIterator.Next()
@@ -197,15 +203,29 @@ func TestSetNodeSortingPolicy(t *testing.T) {
 				}
 			}
 
+			// Policy setting check that is set with fair or binpacking.
 			policy := NewNodeSortingPolicy(tt.after, weights)
 			nc.SetNodeSortingPolicy(policy)
-			if policy.PolicyType().String() != tt.after {
+			if tt.after == "unknown" {
+				if policy.PolicyType().String() != "fair" {
+					t.Errorf("Got %s, want %s", policy.PolicyType().String(), "fair")
+				}
+			} else if policy.PolicyType().String() != tt.after {
 				t.Errorf("Got %s, want %s", policy.PolicyType().String(), tt.after)
 			}
+
+			// Compare node order after setting node sorting policy which contains fair or binpacking.
 			nodeIterator = nc.GetNodeIterator()
 			for index := 0; nodeIterator.HasNext(); index++ {
 				node := nodeIterator.Next()
-				if ansOrder := order[tt.after]; ansOrder[index] != node.NodeID {
+				var ansOrder []string
+				if tt.after == "unknown" {
+					ansOrder = order["fair"]
+				} else {
+					ansOrder = order[tt.after]
+				}
+
+				if ansOrder[index] != node.NodeID {
 					t.Errorf("%s policy, got %s, except %s", tt.after, node.NodeID, ansOrder[index])
 				}
 			}
@@ -225,7 +245,7 @@ func TestGetNodeSortingPolicy(t *testing.T) {
 		after  string
 	}{
 		{"Set fair policy and what's policy that node_collection returns", "nil", "fair"},
-		{"Set binpacking policy and what's policy that node_collection returns", "nil", "bbinpackingin"},
+		{"Set binpacking policy and what's policy that node_collection returns", "nil", "binpacking"},
 		// {"Change binpacking policy to fair policy", "binpacking", "fair"},
 		// {"Change fair policy to binpacking policy", "fair", "binpacking"},
 	}

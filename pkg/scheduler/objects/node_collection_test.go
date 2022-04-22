@@ -235,9 +235,24 @@ func TestSetNodeSortingPolicy(t *testing.T) {
 
 func TestGetNodeSortingPolicy(t *testing.T) {
 	weights := map[string]float64{
-		"vcore":  2.0,
-		"memory": 3.0,
+		"memory": 1.0,
 	}
+
+	var nodesInfo = []struct {
+		nodeID       string
+		mem          int64
+		allocatedMem int64
+	}{
+		{"node-01", 1000, 250},
+		{"node-02", 1000, 500},
+		{"node-03", 1000, 750},
+		{"node-04", 1000, 1000},
+	}
+
+	order := make(map[string][]string, 3)
+	order["nil"] = []string{nodesInfo[0].nodeID, nodesInfo[1].nodeID, nodesInfo[2].nodeID, nodesInfo[3].nodeID}
+	order["fair"] = []string{nodesInfo[0].nodeID, nodesInfo[1].nodeID, nodesInfo[2].nodeID, nodesInfo[3].nodeID}
+	order["binpacking"] = []string{nodesInfo[3].nodeID, nodesInfo[2].nodeID, nodesInfo[1].nodeID, nodesInfo[0].nodeID}
 
 	var tests = []struct {
 		name   string
@@ -246,8 +261,6 @@ func TestGetNodeSortingPolicy(t *testing.T) {
 	}{
 		{"Set fair policy and what's policy that node_collection returns", "nil", "fair"},
 		{"Set binpacking policy and what's policy that node_collection returns", "nil", "binpacking"},
-		// {"Change binpacking policy to fair policy", "binpacking", "fair"},
-		// {"Change fair policy to binpacking policy", "fair", "binpacking"},
 	}
 
 	for _, tt := range tests {
@@ -256,6 +269,20 @@ func TestGetNodeSortingPolicy(t *testing.T) {
 			nc := NewNodeCollection("test")
 			if ans := nc.GetNodeSortingPolicy(); ans != nil {
 				t.Errorf("Instance policy from NewNodeCollection should be nil: Got %s", ans.PolicyType().String())
+			}
+
+			for _, nodeInfo := range nodesInfo {
+				// Initialize allocation and add it to node.
+				node := newNode(nodeInfo.nodeID, map[string]resources.Quantity{"memory": resources.Quantity(nodeInfo.mem)})
+				res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": resources.Quantity(nodeInfo.allocatedMem)})
+				alloc := newAllocation("test-app-1", uuid.NewString(), "test1", "root.default", res)
+				node.AddAllocation(alloc)
+
+				// Add node to nc and make sure this operation is valid.
+				err := nc.AddNode(node)
+				if err != nil {
+					t.Errorf("AddNode error:%s", err.Error())
+				}
 			}
 
 			var policy NodeSortingPolicy
@@ -267,17 +294,35 @@ func TestGetNodeSortingPolicy(t *testing.T) {
 				}
 			}
 
+			// Check the order when policy is unset or sets with fair or binpacking.
+			nodeIterator := nc.GetNodeIterator()
+			for index := 0; nodeIterator.HasNext(); index++ {
+				node := nodeIterator.Next()
+				if ansOrder := order[tt.before]; ansOrder[index] != node.NodeID {
+					t.Errorf("%s policy, got %s, except %s", tt.before, node.NodeID, ansOrder[index])
+				}
+			}
+
 			policy = NewNodeSortingPolicy(tt.after, weights)
 			nc.SetNodeSortingPolicy(policy)
 			if ans := nc.GetNodeSortingPolicy(); policy.PolicyType() != ans.PolicyType() {
 				t.Errorf("Got %s, want %s", policy.PolicyType().String(), ans.PolicyType().String())
+			}
+
+			// Check the order when policy set with fair or binpacking.
+			nodeIterator = nc.GetNodeIterator()
+			for index := 0; nodeIterator.HasNext(); index++ {
+				node := nodeIterator.Next()
+				if ansOrder := order[tt.after]; ansOrder[index] != node.NodeID {
+					t.Errorf("%s policy, got %s, except %s", tt.after, node.NodeID, ansOrder[index])
+				}
 			}
 		})
 	}
 }
 
 func TestGetNodeIterator(t *testing.T) {
-	// Basic node, allocation and application
+	// Basic node, allocation and application.
 	node := newNode(nodeID1, map[string]resources.Quantity{"vcore": 10})
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 5})
 	ask := newAllocationAsk("alloc-01", "app-01", res)
@@ -285,7 +330,7 @@ func TestGetNodeIterator(t *testing.T) {
 
 	bc := initBaseCollection()
 	var nc NodeCollection = bc
-	// Register callback listener
+	// Register callback listener.
 	node.AddListener(bc)
 	if err := nc.AddNode(node); err != nil {
 		t.Errorf("Adding a node should be worked.")

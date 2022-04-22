@@ -81,10 +81,10 @@ func (c *HealthChecker) runOnce(schedulerContext *ClusterContext) {
 	result := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	updateSchedulerLastHealthStatus(result, schedulerContext)
 	if !result.Healthy {
-		log.Logger().Error("Scheduler is not healthy",
+		log.Logger().Warn("Scheduler is not healthy",
 			zap.Any("health check values", result.HealthChecks))
 	} else {
-		log.Logger().Info("Scheduler is healthy",
+		log.Logger().Debug("Scheduler is healthy",
 			zap.Any("health check values", result.HealthChecks))
 	}
 }

@@ -656,9 +656,6 @@ func TestIsValidFor(t *testing.T) {
 
 	// ask 1 is a normal ask
 	ask1 := newAllocationAsk("key", "appID", resource)
-	// ask 2 is a ask that has requiredNode set
-	ask2 := newAllocationAsk("key", "appID", resource)
-	ask2.requiredNode = "node-1"
 
 	// node 1: schedulable
 	node1 := NewNode(&si.NodeInfo{
@@ -689,10 +686,6 @@ func TestIsValidFor(t *testing.T) {
 		{"normal ask1 on schedulable node2", ask1, node2, true},
 		{"normal ask1 on unschedulable node1", ask1, node1Unschedulable, false},
 		{"normal ask1 on unschedulable node2", ask1, node2Unschedulable, false},
-		{"ask2 required node1 on schedulable node1", ask2, node1, true},
-		{"ask2 required node1 on unschedulable node1", ask2, node1Unschedulable, true},
-		{"ask2 required node1 on schedulable node2", ask2, node2, false},
-		{"ask2 required node1 on unschedulable node2", ask2, node2Unschedulable, false},
 	}
 
 	for _, tt := range tests {

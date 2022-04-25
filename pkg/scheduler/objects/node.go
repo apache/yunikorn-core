@@ -412,12 +412,6 @@ func (sn *Node) IsValidFor(ask *AllocationAsk) error {
 		}
 		return nil
 	}
-	// ask has required node, just check if the node is with the expected ID
-	// ignore the unschedulable flag in this case
-	if ask.requiredNode != sn.NodeID {
-		return fmt.Errorf("ask %s is restricted to node %s, skipping node %s",
-			ask.AllocationKey, ask.requiredNode, sn.NodeID)
-	}
 	return nil
 }
 

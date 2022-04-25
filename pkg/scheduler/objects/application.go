@@ -663,8 +663,6 @@ func (sa *Application) IsReservedOnNode(nodeID string) bool {
 // If the reservation fails the function returns false, if the reservation is made it returns true.
 // If the node and ask combination was already reserved for the application this is a noop and returns true.
 func (sa *Application) Reserve(node *Node, ask *AllocationAsk) error {
-	sa.Lock()
-	defer sa.Unlock()
 	// create the reservation (includes nil checks)
 	nodeReservation := newReservation(node, sa, ask, true)
 	if nodeReservation == nil {
@@ -816,7 +814,7 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, tota
 
 // Try a regular allocation of the pending requests
 // This includes placeholders
-func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator func() NodeIterator) *Allocation {
+func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator func() NodeIterator, getnode func(string) *Node) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
 	// make sure the request are sorted
@@ -844,6 +842,27 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 			}
 			continue
 		}
+
+		requiredNode := request.GetRequiredNode()
+		// does request (daemon set pods?) has any constraint to run on specific node?
+		if requiredNode != "" {
+			node := getnode(requiredNode)
+			alloc := sa.tryNode(node, request)
+			if alloc != nil {
+				log.Logger().Debug("allocation on required node is completed",
+					zap.String("required node", node.NodeID),
+					zap.String("allocation key", request.AllocationKey))
+				return alloc
+			}
+			if err := sa.Reserve(node, request); err != nil {
+				log.Logger().Warn("Failed to reserve the required node",
+					zap.String("required node", node.NodeID),
+					zap.String("allocation key", request.AllocationKey),
+					zap.String("reason", err.Error()))
+			}
+			continue
+		}
+
 		iterator := nodeIterator()
 		if iterator != nil {
 			alloc := sa.tryNodes(request, iterator)

@@ -828,7 +828,7 @@ func (pc *PartitionContext) tryAllocate() *objects.Allocation {
 		return nil
 	}
 	// try allocating from the root down
-	alloc := pc.root.TryAllocate(pc.GetNodeIterator)
+	alloc := pc.root.TryAllocate(pc.GetNodeIterator, pc.GetNode)
 	if alloc != nil {
 		return pc.allocate(alloc)
 	}

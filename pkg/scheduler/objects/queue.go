@@ -1061,13 +1061,13 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 // resources are skipped.
 // Applications are sorted based on the application sortPolicy. Applications without pending resources are skipped.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *Queue) TryAllocate(iterator func() NodeIterator) *Allocation {
+func (sq *Queue) TryAllocate(iterator func() NodeIterator, getnode func(string) *Node) *Allocation {
 	if sq.IsLeafQueue() {
 		// get the headroom
 		headRoom := sq.getHeadRoom()
 		// process the apps (filters out app without pending requests)
 		for _, app := range sq.sortApplications(true) {
-			alloc := app.tryAllocate(headRoom, iterator)
+			alloc := app.tryAllocate(headRoom, iterator, getnode)
 			if alloc != nil {
 				log.Logger().Debug("allocation found on queue",
 					zap.String("queueName", sq.QueuePath),
@@ -1079,7 +1079,7 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator) *Allocation {
 	} else {
 		// process the child queues (filters out queues without pending requests)
 		for _, child := range sq.sortQueues() {
-			alloc := child.TryAllocate(iterator)
+			alloc := child.TryAllocate(iterator, getnode)
 			if alloc != nil {
 				return alloc
 			}

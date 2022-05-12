@@ -664,6 +664,14 @@ func (sa *Application) IsReservedOnNode(nodeID string) bool {
 // If the reservation fails the function returns false, if the reservation is made it returns true.
 // If the node and ask combination was already reserved for the application this is a noop and returns true.
 func (sa *Application) Reserve(node *Node, ask *AllocationAsk) error {
+	sa.Lock()
+	defer sa.Unlock()
+	return sa.ReserveInternal(node, ask)
+}
+
+// Unlocked version for Reserve that really does the work.
+// Must only be called while holding the application lock.
+func (sa *Application) ReserveInternal(node *Node, ask *AllocationAsk) error {
 	// create the reservation (includes nil checks)
 	nodeReservation := newReservation(node, sa, ask, true)
 	if nodeReservation == nil {
@@ -855,7 +863,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 					zap.String("allocation key", request.AllocationKey))
 				return alloc
 			}
-			if err := sa.Reserve(node, request); err != nil {
+			if err := sa.ReserveInternal(node, request); err != nil {
 				log.Logger().Warn("Failed to reserve the required node",
 					zap.String("required node", node.NodeID),
 					zap.String("allocation key", request.AllocationKey),
@@ -975,11 +983,10 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				log.Logger().Warn("Node iterator failed to return a node")
 				return nil
 			}
-			if err := node.IsValidFor(reqFit); err != nil {
-				log.Logger().Debug("skipping node for placeholder ask",
+			if !node.IsSchedulable() {
+				log.Logger().Debug("skipping node for placeholder ask as state is unschedulable",
 					zap.String("allocationKey", reqFit.AllocationKey),
-					zap.String("node", node.NodeID),
-					zap.String("reason", err.Error()))
+					zap.String("node", node.NodeID))
 				continue
 			}
 			if err := node.preAllocateCheck(reqFit.AllocatedResource, reservationKey(nil, sa, reqFit), false); err != nil {
@@ -1078,11 +1085,10 @@ func (sa *Application) tryNodesNoReserve(ask *AllocationAsk, iterator NodeIterat
 			log.Logger().Warn("Node iterator failed to return a node")
 			return nil
 		}
-		if err := node.IsValidFor(ask); err != nil {
-			log.Logger().Debug("skipping node for reserved ask",
+		if !node.IsSchedulable() {
+			log.Logger().Debug("skipping node for reserved ask as state is unschedulable",
 				zap.String("allocationKey", ask.AllocationKey),
-				zap.String("node", node.NodeID),
-				zap.String("reason", err.Error()))
+				zap.String("node", node.NodeID))
 			continue
 		}
 		// skip over the node if the resource does not fit the node or this is the reserved node.
@@ -1117,11 +1123,10 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 			return nil
 		}
 		// skip the node if the node is not valid for the ask
-		if err := node.IsValidFor(ask); err != nil {
-			log.Logger().Debug("skipping node for ask",
+		if !node.IsSchedulable() {
+			log.Logger().Debug("skipping node for ask as state is unschedulable",
 				zap.String("allocationKey", ask.AllocationKey),
-				zap.String("node", node.NodeID),
-				zap.String("reason", err.Error()))
+				zap.String("node", node.NodeID))
 			continue
 		}
 		// skip over the node if the resource does not fit the node at all.

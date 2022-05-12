@@ -21,8 +21,6 @@ package objects
 import (
 	"testing"
 
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
-
 	"gotest.tools/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
@@ -648,55 +646,6 @@ func TestUpdateResources(t *testing.T) {
 	available.SubFrom(occupied)
 	if !resources.Equals(available, node.GetAvailableResource()) {
 		t.Errorf("available resources should have been updated to: %s, got %s", available, node.GetAvailableResource())
-	}
-}
-
-func TestIsValidFor(t *testing.T) {
-	resource := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 10})
-
-	// ask 1 is a normal ask
-	ask1 := newAllocationAsk("key", "appID", resource)
-
-	// node 1: schedulable
-	node1 := NewNode(&si.NodeInfo{
-		NodeID: "node-1",
-	})
-	// node 1: unschedulable
-	node1Unschedulable := NewNode(&si.NodeInfo{
-		NodeID: "node-1",
-	})
-	node1Unschedulable.SetSchedulable(false)
-	// node 2: schedulable
-	node2 := NewNode(&si.NodeInfo{
-		NodeID: "node-2",
-	})
-	// node 2: unschedulable
-	node2Unschedulable := NewNode(&si.NodeInfo{
-		NodeID: "node-2",
-	})
-	node2Unschedulable.SetSchedulable(false)
-
-	var tests = []struct {
-		name    string
-		ask     *AllocationAsk
-		node    *Node
-		isValid bool
-	}{
-		{"normal ask1 on schedulable node1", ask1, node1, true},
-		{"normal ask1 on schedulable node2", ask1, node2, true},
-		{"normal ask1 on unschedulable node1", ask1, node1Unschedulable, false},
-		{"normal ask1 on unschedulable node2", ask1, node2Unschedulable, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := tt.node.IsValidFor(tt.ask)
-			if got == nil && !tt.isValid {
-				t.Error("expected node is not valid for the ask")
-			} else if got != nil && tt.isValid {
-				t.Error("expected node is valid for the ask")
-			}
-		})
 	}
 }
 

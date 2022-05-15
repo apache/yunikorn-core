@@ -659,6 +659,8 @@ partitions:
 	stateDumpFilePath := "yunikorn-state.txt"
 	assert.Equal(t, conf.Partitions[0].StateDumpFilePath, stateDumpFilePath)
 	assert.Equal(t, conf.Partitions[1].StateDumpFilePath, "")
+	err = os.Remove(stateDumpFilePath)
+	assert.Equal(t, err, nil)
 }
 
 func TestPartitionStateDumpFilePathParameterFail(t *testing.T) {

@@ -602,6 +602,35 @@ func TestRemoveAllocAsk(t *testing.T) {
 	}
 }
 
+// test pending calculation and ask removal
+func TestRemoveAllocAskWithPlaceholders(t *testing.T) {
+	app := newApplication(appID1, "default", "root.unknown")
+	if app == nil || app.ApplicationID != appID1 {
+		t.Fatalf("app create failed which should not have %v", app)
+	}
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	ask := newAllocationAskRepeat(aKey, appID1, res, 2)
+	ask.placeholder = true
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask 1 should have been added to app")
+
+	ask = newAllocationAskRepeat("alloc-2", appID1, res, 2)
+	ask.placeholder = true
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask 2 should have been added to app")
+
+	reservedAsks := app.RemoveAllocationAsk("alloc-1")
+	assert.Equal(t, 0, reservedAsks)
+	assert.Equal(t, Accepted.String(), app.stateMachine.Current())
+	reservedAsks = app.RemoveAllocationAsk("alloc-2")
+	assert.Equal(t, 0, reservedAsks)
+	assert.Equal(t, Completing.String(), app.stateMachine.Current())
+}
+
 // This test must not test the sorter that is underlying.
 // It tests the Application specific parts of the code only.
 func TestSortRequests(t *testing.T) {

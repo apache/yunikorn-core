@@ -167,9 +167,3 @@ func (aa *AllocationAsk) GetRequiredNode() string {
 	defer aa.RUnlock()
 	return aa.requiredNode
 }
-
-func (aa *AllocationAsk) SetRequiredNode(node string) {
-	aa.Lock()
-	defer aa.Unlock()
-	aa.requiredNode = node
-}

@@ -49,6 +49,22 @@ partitions:
                 vcore: 10000
 `
 
+const configHealthCheckEnabled = `
+partitions:
+  - name: default
+	healthcheck:
+	  - enabled: true
+		interval: 99s
+`
+
+const configHealthCheckDisabled = `
+partitions:
+  - name: default
+	healthcheck:
+	  - enabled: false
+		interval: 99s
+`
+
 func TestNewHealthChecker(t *testing.T) {
 	c := NewHealthChecker()
 	assert.Assert(t, c != nil, "HealthChecker shouldn't be nil")

@@ -33,20 +33,30 @@ import (
 
 const defaultPeriod = 30 * time.Second
 
+const healthCheckDisabledMsg = "Health checks are disabled."
+
 type HealthChecker struct {
+	enabled  bool
 	period   time.Duration
 	stopChan chan struct{}
 }
 
 func NewHealthChecker() *HealthChecker {
+
+	// Configure Health Check parameters based on settings in Context.
+	var checkPeriod = defaultPeriod
+	var checkEnabled = true
+
 	return &HealthChecker{
-		period:   defaultPeriod,
+		enabled:  checkEnabled,
+		period:   checkPeriod,
 		stopChan: make(chan struct{}),
 	}
 }
 
 func NewHealthCheckerWithParameters(period time.Duration) *HealthChecker {
 	return &HealthChecker{
+		enabled:  true,
 		period:   period,
 		stopChan: make(chan struct{}),
 	}

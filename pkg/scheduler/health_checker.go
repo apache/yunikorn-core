@@ -32,13 +32,13 @@ import (
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
-const defaultPeriod = 30 * time.Second
+const defaultInterval = 30 * time.Second
 
 const healthCheckDisabledMsg = "Health checks are disabled."
 
 type HealthChecker struct {
 	enabled  bool
-	period   time.Duration
+	interval time.Duration
 	stopChan chan struct{}
 }
 
@@ -46,18 +46,19 @@ func NewHealthChecker(schedulerContext *ClusterContext) *HealthChecker {
 
 	// Configure Health Check parameters based on settings in Context.
 	context := configs.ConfigContext.Get(schedulerContext.GetPolicyGroup())
-	checkPeriod := context.Partitions[0].HealthCheck.Period
+	checkInterval := context.Partitions[0].HealthCheck.Interval
 	checkEnabled := context.Partitions[0].HealthCheck.Enabled
 
-	// Default health check: YAML parsing sets missing entries for HealthCheck as false and 0s.
-	if !checkEnabled && checkPeriod == time.Duration(0) {
-		checkEnabled = true
-		checkPeriod = defaultPeriod
+	// Default health check configurations.
+	if checkEnabled == nil {
+		checkEnabled = new(bool)
+		*checkEnabled = true
+		checkInterval = defaultInterval
 	}
 
 	return &HealthChecker{
-		enabled:  checkEnabled,
-		period:   checkPeriod,
+		enabled:  *checkEnabled,
+		interval: checkInterval,
 		stopChan: make(chan struct{}),
 	}
 }
@@ -65,7 +66,7 @@ func NewHealthChecker(schedulerContext *ClusterContext) *HealthChecker {
 func NewHealthCheckerWithParameters(period time.Duration) *HealthChecker {
 	return &HealthChecker{
 		enabled:  true,
-		period:   period,
+		interval: period,
 		stopChan: make(chan struct{}),
 	}
 }
@@ -76,7 +77,7 @@ func (c *HealthChecker) start(schedulerContext *ClusterContext) {
 	c.runOnce(schedulerContext)
 
 	go func() {
-		ticker := time.NewTicker(c.period)
+		ticker := time.NewTicker(c.interval)
 		for {
 			select {
 			case <-c.stopChan:

@@ -458,7 +458,7 @@ partitions:
       - name: root
     healthcheck:
       enabled: %s
-      period: 99s
+      interval: 99s
 `
 	expectedDuration, err := time.ParseDuration("99s")
 	assert.NilError(t, err, "failed to parse expected interval duration")
@@ -467,11 +467,11 @@ partitions:
 	conf, err := CreateConfig(fmt.Sprintf(data, "true"))
 	assert.NilError(t, err, "loading config failed for health check enabled")
 
-	if !conf.Partitions[0].HealthCheck.Enabled {
+	if !*conf.Partitions[0].HealthCheck.Enabled {
 		t.Errorf("failed to to parse enabled status from %v", conf)
 	}
 
-	if conf.Partitions[0].HealthCheck.Period != expectedDuration {
+	if conf.Partitions[0].HealthCheck.Interval != expectedDuration {
 		t.Errorf("failed to to parse interval from %v", conf)
 	}
 
@@ -479,11 +479,11 @@ partitions:
 	conf, err = CreateConfig(fmt.Sprintf(data, "false"))
 	assert.NilError(t, err, "loading config failed for health check enabled")
 
-	if conf.Partitions[0].HealthCheck.Enabled {
+	if *conf.Partitions[0].HealthCheck.Enabled {
 		t.Errorf("failed to to parse disabled status from %v", conf)
 	}
 
-	if conf.Partitions[0].HealthCheck.Period != expectedDuration {
+	if conf.Partitions[0].HealthCheck.Interval != expectedDuration {
 		t.Errorf("failed to to parse interval from %v", conf)
 	}
 }

@@ -62,8 +62,8 @@ type PartitionPreemptionConfig struct {
 }
 
 type PartitionHealthCheckConfig struct {
-	Enabled bool
-	Period  time.Duration
+	Enabled  *bool
+	Interval time.Duration
 }
 
 // The queue object for each queue:

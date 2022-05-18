@@ -24,6 +24,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
@@ -44,18 +45,25 @@ type SchedulerConfig struct {
 // - a list of placement rule definition objects
 // - a list of users specifying limits on the partition
 // - the preemption configuration for the partition
+// - the health check interval and whether it is enabled
 type PartitionConfig struct {
 	Name              string
 	Queues            []QueueConfig
-	PlacementRules    []PlacementRule           `yaml:",omitempty" json:",omitempty"`
-	Limits            []Limit                   `yaml:",omitempty" json:",omitempty"`
-	Preemption        PartitionPreemptionConfig `yaml:",omitempty" json:",omitempty"`
-	NodeSortPolicy    NodeSortingPolicy         `yaml:",omitempty" json:",omitempty"`
-	StateDumpFilePath string                    `yaml:",omitempty" json:",omitempty"`
+	PlacementRules    []PlacementRule            `yaml:",omitempty" json:",omitempty"`
+	Limits            []Limit                    `yaml:",omitempty" json:",omitempty"`
+	Preemption        PartitionPreemptionConfig  `yaml:",omitempty" json:",omitempty"`
+	NodeSortPolicy    NodeSortingPolicy          `yaml:",omitempty" json:",omitempty"`
+	StateDumpFilePath string                     `yaml:",omitempty" json:",omitempty"`
+	HealthCheck       PartitionHealthCheckConfig `yaml:",omitempty" json:",omitempty"`
 }
 
 type PartitionPreemptionConfig struct {
 	Enabled bool
+}
+
+type PartitionHealthCheckConfig struct {
+	Enabled bool
+	Period  time.Duration
 }
 
 // The queue object for each queue:

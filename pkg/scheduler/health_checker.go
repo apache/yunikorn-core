@@ -195,7 +195,7 @@ func checkSchedulingContext(schedulerContext *ClusterContext) []dao.HealthCheckI
 			if !resources.StrictlyGreaterThanOrEquals(node.GetCapacity(), node.GetAllocatedResource()) {
 				nodeCapacityMismatch = append(nodeCapacityMismatch, node.NodeID)
 			}
-			orphanAllocationsOnNode = append(orphanAllocationsOnNode, checkNodeAllocations(node, part.applications)...)
+			orphanAllocationsOnNode = append(orphanAllocationsOnNode, checkNodeAllocations(node, part)...)
 		}
 		// check if there are allocations assigned to an app but there are missing from the nodes
 		for _, app := range part.GetApplications() {
@@ -255,10 +255,10 @@ func checkAppAllocations(app *objects.Application, nodes objects.NodeCollection)
 	return orphanAllocationsOnApp
 }
 
-func checkNodeAllocations(node *objects.Node, applications map[string]*objects.Application) []*objects.Allocation {
+func checkNodeAllocations(node *objects.Node, partitionContext *PartitionContext) []*objects.Allocation {
 	orphanAllocationsOnNode := make([]*objects.Allocation, 0)
 	for _, alloc := range node.GetAllAllocations() {
-		if app, ok := applications[alloc.ApplicationID]; ok {
+		if app := partitionContext.getApplication(alloc.ApplicationID); app != nil {
 			if !app.IsAllocationAssignedToApp(alloc) {
 				orphanAllocationsOnNode = append(orphanAllocationsOnNode, alloc)
 			}

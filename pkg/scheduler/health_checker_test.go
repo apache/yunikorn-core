@@ -66,7 +66,12 @@ partitions:
 `
 
 func TestNewHealthChecker(t *testing.T) {
-	c := NewHealthChecker()
+	configs.MockSchedulerConfigByData([]byte(configDefault))
+	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
+	assert.NilError(t, err, "Error when load schedulerContext from config")
+	assert.Assert(t, schedulerContext.lastHealthCheckResult == nil, "lastHealthCheckResult should be nil initially")
+
+	c := NewHealthChecker(schedulerContext)
 	assert.Assert(t, c != nil, "HealthChecker shouldn't be nil")
 }
 
@@ -77,7 +82,7 @@ func TestRunOnce(t *testing.T) {
 	assert.NilError(t, err, "Error when load schedulerContext from config")
 	assert.Assert(t, schedulerContext.lastHealthCheckResult == nil, "lastHealthCheckResult should be nil initially")
 
-	healthChecker := NewHealthChecker()
+	healthChecker := NewHealthChecker(schedulerContext)
 	healthChecker.runOnce(schedulerContext)
 	assert.Assert(t, schedulerContext.lastHealthCheckResult != nil, "lastHealthCheckResult shouldn't be nil")
 	assert.Assert(t, schedulerContext.lastHealthCheckResult.Healthy == true, "Scheduler should be healthy")

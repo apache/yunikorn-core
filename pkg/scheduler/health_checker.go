@@ -41,7 +41,7 @@ type HealthChecker struct {
 	stopChan chan struct{}
 }
 
-func NewHealthChecker() *HealthChecker {
+func NewHealthChecker(schedulerContext *ClusterContext) *HealthChecker {
 
 	// Configure Health Check parameters based on settings in Context.
 	var checkPeriod = defaultPeriod

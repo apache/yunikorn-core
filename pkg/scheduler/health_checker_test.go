@@ -19,6 +19,7 @@
 package scheduler
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -49,20 +50,14 @@ partitions:
                 vcore: 10000
 `
 
-const configHealthCheckEnabled = `
+const configHealthCheck = `
 partitions:
   - name: default
-	healthcheck:
-	  - enabled: true
-		interval: 99s
-`
-
-const configHealthCheckDisabled = `
-partitions:
-  - name: default
-	healthcheck:
-	  - enabled: false
-		interval: 99s
+    queues:
+      - name: root
+    healthcheck:
+      enabled: %s
+      period: 99s
 `
 
 func TestNewHealthChecker(t *testing.T) {
@@ -73,6 +68,44 @@ func TestNewHealthChecker(t *testing.T) {
 
 	c := NewHealthChecker(schedulerContext)
 	assert.Assert(t, c != nil, "HealthChecker shouldn't be nil")
+
+	assert.Assert(t, c.enabled, "HealthChecker shouldn't be enabled")
+
+	assert.Assert(t, c.period == defaultPeriod, "HealthChecker should have default period")
+}
+
+func TestNewHealthCheckerCustom(t *testing.T) {
+	configs.MockSchedulerConfigByData([]byte(fmt.Sprintf(configHealthCheck, "true")))
+	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
+	assert.NilError(t, err, "Error when load schedulerContext from config")
+	assert.Assert(t, schedulerContext.lastHealthCheckResult == nil, "lastHealthCheckResult should be nil initially")
+
+	expectedPeriod, err := time.ParseDuration("99s")
+	assert.NilError(t, err, "failed to parse expected interval duration")
+
+	c := NewHealthChecker(schedulerContext)
+	assert.Assert(t, c != nil, "HealthChecker shouldn't be nil")
+
+	assert.Assert(t, c.enabled, "HealthChecker shouldn't be enabled")
+
+	assert.Assert(t, c.period == expectedPeriod, "HealthChecker should have custom period")
+}
+
+func TestNewHealthCheckerDisabled(t *testing.T) {
+	configs.MockSchedulerConfigByData([]byte(fmt.Sprintf(configHealthCheck, "false")))
+	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
+	assert.NilError(t, err, "Error when load schedulerContext from config")
+	assert.Assert(t, schedulerContext.lastHealthCheckResult == nil, "lastHealthCheckResult should be nil initially")
+
+	expectedPeriod, err := time.ParseDuration("99s")
+	assert.NilError(t, err, "failed to parse expected interval duration")
+
+	c := NewHealthChecker(schedulerContext)
+	assert.Assert(t, c != nil, "HealthChecker shouldn't be nil")
+
+	assert.Assert(t, !c.enabled, "HealthChecker shouldn't be disabled")
+
+	assert.Assert(t, c.period == expectedPeriod, "HealthChecker should have custom period")
 }
 
 func TestRunOnce(t *testing.T) {

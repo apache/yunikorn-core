@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
@@ -44,8 +45,15 @@ type HealthChecker struct {
 func NewHealthChecker(schedulerContext *ClusterContext) *HealthChecker {
 
 	// Configure Health Check parameters based on settings in Context.
-	var checkPeriod = defaultPeriod
-	var checkEnabled = true
+	context := configs.ConfigContext.Get(schedulerContext.GetPolicyGroup())
+	checkPeriod := context.Partitions[0].HealthCheck.Period
+	checkEnabled := context.Partitions[0].HealthCheck.Enabled
+
+	// Default health check: YAML parsing sets missing entries for HealthCheck as false and 0s.
+	if !checkEnabled && checkPeriod == time.Duration(0) {
+		checkEnabled = true
+		checkPeriod = defaultPeriod
+	}
 
 	return &HealthChecker{
 		enabled:  checkEnabled,

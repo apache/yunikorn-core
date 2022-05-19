@@ -41,7 +41,6 @@ type HealthChecker struct {
 }
 
 func NewHealthChecker(schedulerContext *ClusterContext) *HealthChecker {
-
 	// Configure Health Check parameters based on settings in Context.
 	context := configs.ConfigContext.Get(schedulerContext.GetPolicyGroup())
 	checkInterval := context.HealthCheck.Interval

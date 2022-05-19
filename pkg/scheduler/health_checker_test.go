@@ -51,9 +51,10 @@ partitions:
 `
 
 const configHealthCheck = `
-healthcheck:
-  enabled: %s
-  interval: 99s
+scheduler:
+  healthcheck:
+    enabled: %s
+    interval: 99s
 partitions:
   - name: default
     queues:
@@ -104,6 +105,23 @@ func TestNewHealthCheckerDisabled(t *testing.T) {
 	assert.Assert(t, c != nil, "HealthChecker shouldn't be nil")
 
 	assert.Assert(t, c != nil && !c.enabled, "HealthChecker should be disabled")
+
+	assert.Assert(t, c != nil && c.interval == expectedPeriod, "HealthChecker should have custom interval")
+}
+
+func TestNewHealthCheckerDefault(t *testing.T) {
+	configs.MockSchedulerConfigByData([]byte(configDefault))
+	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
+	assert.NilError(t, err, "Error when load schedulerContext from config")
+	assert.Assert(t, schedulerContext.lastHealthCheckResult == nil, "lastHealthCheckResult should be nil initially")
+
+	expectedPeriod := defaultInterval
+	assert.NilError(t, err, "failed to parse expected interval duration")
+
+	c := NewHealthChecker(schedulerContext)
+	assert.Assert(t, c != nil, "HealthChecker shouldn't be nil")
+
+	assert.Assert(t, c != nil && c.enabled, "HealthChecker should be enabled")
 
 	assert.Assert(t, c != nil && c.interval == expectedPeriod, "HealthChecker should have custom interval")
 }

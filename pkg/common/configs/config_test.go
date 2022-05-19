@@ -452,9 +452,10 @@ partitions:
 
 func TestHealthCheck(t *testing.T) {
 	const data = `
-healthcheck:
-  enabled: %s
-  interval: 99s
+scheduler:
+  healthcheck:
+    enabled: %s
+    interval: 99s
 partitions:
   - name: default
     queues:
@@ -467,11 +468,11 @@ partitions:
 	conf, err := CreateConfig(fmt.Sprintf(data, "true"))
 	assert.NilError(t, err, "loading config failed for health check enabled")
 
-	if !*conf.HealthCheck.Enabled {
+	if !*conf.Scheduler.HealthCheck.Enabled {
 		t.Errorf("failed to to parse enabled status from %v", conf)
 	}
 
-	if conf.HealthCheck.Interval != expectedDuration {
+	if conf.Scheduler.HealthCheck.Interval != expectedDuration {
 		t.Errorf("failed to to parse interval from %v", conf)
 	}
 
@@ -479,11 +480,11 @@ partitions:
 	conf, err = CreateConfig(fmt.Sprintf(data, "false"))
 	assert.NilError(t, err, "loading config failed for health check enabled")
 
-	if *conf.HealthCheck.Enabled {
+	if *conf.Scheduler.HealthCheck.Enabled {
 		t.Errorf("failed to to parse disabled status from %v", conf)
 	}
 
-	if conf.HealthCheck.Interval != expectedDuration {
+	if conf.Scheduler.HealthCheck.Interval != expectedDuration {
 		t.Errorf("failed to to parse interval from %v", conf)
 	}
 }

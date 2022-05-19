@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
@@ -31,34 +32,53 @@ import (
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
-const defaultPeriod = 30 * time.Second
+const defaultInterval = 30 * time.Second
 
 type HealthChecker struct {
-	period   time.Duration
+	enabled  bool
+	interval time.Duration
 	stopChan chan struct{}
 }
 
-func NewHealthChecker() *HealthChecker {
+func NewHealthChecker(schedulerContext *ClusterContext) *HealthChecker {
+	// Configure Health Check parameters based on settings in Context.
+	context := configs.ConfigContext.Get(schedulerContext.GetPolicyGroup())
+	checkInterval := context.HealthCheck.Interval
+	checkEnabled := context.HealthCheck.Enabled
+
+	// Default health check configurations.
+	if checkEnabled == nil {
+		checkEnabled = new(bool)
+		*checkEnabled = true
+		checkInterval = defaultInterval
+	}
+
 	return &HealthChecker{
-		period:   defaultPeriod,
+		enabled:  *checkEnabled,
+		interval: checkInterval,
 		stopChan: make(chan struct{}),
 	}
 }
 
 func NewHealthCheckerWithParameters(period time.Duration) *HealthChecker {
 	return &HealthChecker{
-		period:   period,
+		enabled:  true,
+		interval: period,
 		stopChan: make(chan struct{}),
 	}
 }
 
 // start execute healthCheck service in the background,
 func (c *HealthChecker) start(schedulerContext *ClusterContext) {
+	if !c.enabled {
+		return
+	}
+
 	// immediate first tick
 	c.runOnce(schedulerContext)
 
 	go func() {
-		ticker := time.NewTicker(c.period)
+		ticker := time.NewTicker(c.interval)
 		for {
 			select {
 			case <-c.stopChan:
@@ -72,6 +92,10 @@ func (c *HealthChecker) start(schedulerContext *ClusterContext) {
 }
 
 func (c *HealthChecker) stop() {
+	if !c.enabled {
+		return
+	}
+
 	c.stopChan <- struct{}{}
 	close(c.stopChan)
 }

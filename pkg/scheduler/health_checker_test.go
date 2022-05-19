@@ -19,6 +19,7 @@
 package scheduler
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -49,9 +50,62 @@ partitions:
                 vcore: 10000
 `
 
+const configHealthCheck = `
+healthcheck:
+  enabled: %s
+  interval: 99s
+partitions:
+  - name: default
+    queues:
+      - name: root
+`
+
 func TestNewHealthChecker(t *testing.T) {
-	c := NewHealthChecker()
+	configs.MockSchedulerConfigByData([]byte(configDefault))
+	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
+	assert.NilError(t, err, "Error when load schedulerContext from config")
+	assert.Assert(t, schedulerContext.lastHealthCheckResult == nil, "lastHealthCheckResult should be nil initially")
+
+	c := NewHealthChecker(schedulerContext)
 	assert.Assert(t, c != nil, "HealthChecker shouldn't be nil")
+
+	assert.Assert(t, c != nil && c.enabled, "HealthChecker shouldn't be enabled")
+
+	assert.Assert(t, c != nil && c.interval == defaultInterval, "HealthChecker should have default interval")
+}
+
+func TestNewHealthCheckerCustom(t *testing.T) {
+	configs.MockSchedulerConfigByData([]byte(fmt.Sprintf(configHealthCheck, "true")))
+	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
+	assert.NilError(t, err, "Error when load schedulerContext from config")
+	assert.Assert(t, schedulerContext.lastHealthCheckResult == nil, "lastHealthCheckResult should be nil initially")
+
+	expectedPeriod, err := time.ParseDuration("99s")
+	assert.NilError(t, err, "failed to parse expected interval duration")
+
+	c := NewHealthChecker(schedulerContext)
+	assert.Assert(t, c != nil, "HealthChecker shouldn't be nil")
+
+	assert.Assert(t, c != nil && c.enabled, "HealthChecker shouldn't be enabled")
+
+	assert.Assert(t, c != nil && c.interval == expectedPeriod, "HealthChecker should have custom interval")
+}
+
+func TestNewHealthCheckerDisabled(t *testing.T) {
+	configs.MockSchedulerConfigByData([]byte(fmt.Sprintf(configHealthCheck, "false")))
+	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
+	assert.NilError(t, err, "Error when load schedulerContext from config")
+	assert.Assert(t, schedulerContext.lastHealthCheckResult == nil, "lastHealthCheckResult should be nil initially")
+
+	expectedPeriod, err := time.ParseDuration("99s")
+	assert.NilError(t, err, "failed to parse expected interval duration")
+
+	c := NewHealthChecker(schedulerContext)
+	assert.Assert(t, c != nil, "HealthChecker shouldn't be nil")
+
+	assert.Assert(t, c != nil && !c.enabled, "HealthChecker should be disabled")
+
+	assert.Assert(t, c != nil && c.interval == expectedPeriod, "HealthChecker should have custom interval")
 }
 
 func TestRunOnce(t *testing.T) {
@@ -61,7 +115,7 @@ func TestRunOnce(t *testing.T) {
 	assert.NilError(t, err, "Error when load schedulerContext from config")
 	assert.Assert(t, schedulerContext.lastHealthCheckResult == nil, "lastHealthCheckResult should be nil initially")
 
-	healthChecker := NewHealthChecker()
+	healthChecker := NewHealthChecker(schedulerContext)
 	healthChecker.runOnce(schedulerContext)
 	assert.Assert(t, schedulerContext.lastHealthCheckResult != nil, "lastHealthCheckResult shouldn't be nil")
 	assert.Assert(t, schedulerContext.lastHealthCheckResult.Healthy == true, "Scheduler should be healthy")
@@ -83,6 +137,19 @@ func TestStartStop(t *testing.T) {
 	healthChecker.start(schedulerContext)
 	assert.Assert(t, schedulerContext.lastHealthCheckResult != nil, "lastHealthCheckResult shouldn't be nil")
 	assert.Assert(t, schedulerContext.lastHealthCheckResult.Healthy == false, "Scheduler should be unhealthy")
+	healthChecker.stop()
+}
+
+func TestStartStopDisabled(t *testing.T) {
+	configs.MockSchedulerConfigByData([]byte(fmt.Sprintf(configHealthCheck, "false")))
+	metrics.Reset()
+	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
+	assert.NilError(t, err, "Error when load schedulerContext from config")
+	assert.Assert(t, schedulerContext.lastHealthCheckResult == nil, "lastHealthCheckResult should be nil initially")
+
+	healthChecker := NewHealthChecker(schedulerContext)
+	healthChecker.start(schedulerContext)
+	assert.Assert(t, schedulerContext.lastHealthCheckResult == nil, "lastHealthCheckResult should still be nil")
 	healthChecker.stop()
 }
 

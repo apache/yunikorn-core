@@ -22,9 +22,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"

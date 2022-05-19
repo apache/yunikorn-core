@@ -69,9 +69,9 @@ func TestNewHealthChecker(t *testing.T) {
 	c := NewHealthChecker(schedulerContext)
 	assert.Assert(t, c != nil, "HealthChecker shouldn't be nil")
 
-	assert.Assert(t, c.enabled, "HealthChecker shouldn't be enabled")
+	assert.Assert(t, c != nil && c.enabled, "HealthChecker shouldn't be enabled")
 
-	assert.Assert(t, c.interval == defaultInterval, "HealthChecker should have default interval")
+	assert.Assert(t, c != nil && c.interval == defaultInterval, "HealthChecker should have default interval")
 }
 
 func TestNewHealthCheckerCustom(t *testing.T) {
@@ -86,9 +86,9 @@ func TestNewHealthCheckerCustom(t *testing.T) {
 	c := NewHealthChecker(schedulerContext)
 	assert.Assert(t, c != nil, "HealthChecker shouldn't be nil")
 
-	assert.Assert(t, c.enabled, "HealthChecker shouldn't be enabled")
+	assert.Assert(t, c != nil && c.enabled, "HealthChecker shouldn't be enabled")
 
-	assert.Assert(t, c.interval == expectedPeriod, "HealthChecker should have custom interval")
+	assert.Assert(t, c != nil && c.interval == expectedPeriod, "HealthChecker should have custom interval")
 }
 
 func TestNewHealthCheckerDisabled(t *testing.T) {
@@ -103,9 +103,9 @@ func TestNewHealthCheckerDisabled(t *testing.T) {
 	c := NewHealthChecker(schedulerContext)
 	assert.Assert(t, c != nil, "HealthChecker shouldn't be nil")
 
-	assert.Assert(t, !c.enabled, "HealthChecker should be disabled")
+	assert.Assert(t, c != nil && !c.enabled, "HealthChecker should be disabled")
 
-	assert.Assert(t, c.interval == expectedPeriod, "HealthChecker should have custom interval")
+	assert.Assert(t, c != nil && c.interval == expectedPeriod, "HealthChecker should have custom interval")
 }
 
 func TestRunOnce(t *testing.T) {

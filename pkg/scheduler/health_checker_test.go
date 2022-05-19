@@ -51,13 +51,13 @@ partitions:
 `
 
 const configHealthCheck = `
+healthcheck:
+  enabled: %s
+  interval: 99s
 partitions:
   - name: default
     queues:
       - name: root
-    healthcheck:
-      enabled: %s
-      interval: 99s
 `
 
 func TestNewHealthChecker(t *testing.T) {

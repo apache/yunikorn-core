@@ -450,15 +450,15 @@ partitions:
 	}
 }
 
-func TestPartitionHealthCheck(t *testing.T) {
+func TestHealthCheck(t *testing.T) {
 	const data = `
+healthcheck:
+  enabled: %s
+  interval: 99s
 partitions:
   - name: default
     queues:
       - name: root
-    healthcheck:
-      enabled: %s
-      interval: 99s
 `
 	expectedDuration, err := time.ParseDuration("99s")
 	assert.NilError(t, err, "failed to parse expected interval duration")
@@ -467,11 +467,11 @@ partitions:
 	conf, err := CreateConfig(fmt.Sprintf(data, "true"))
 	assert.NilError(t, err, "loading config failed for health check enabled")
 
-	if !*conf.Partitions[0].HealthCheck.Enabled {
+	if !*conf.HealthCheck.Enabled {
 		t.Errorf("failed to to parse enabled status from %v", conf)
 	}
 
-	if conf.Partitions[0].HealthCheck.Interval != expectedDuration {
+	if conf.HealthCheck.Interval != expectedDuration {
 		t.Errorf("failed to to parse interval from %v", conf)
 	}
 
@@ -479,11 +479,11 @@ partitions:
 	conf, err = CreateConfig(fmt.Sprintf(data, "false"))
 	assert.NilError(t, err, "loading config failed for health check enabled")
 
-	if *conf.Partitions[0].HealthCheck.Enabled {
+	if *conf.HealthCheck.Enabled {
 		t.Errorf("failed to to parse disabled status from %v", conf)
 	}
 
-	if conf.Partitions[0].HealthCheck.Interval != expectedDuration {
+	if conf.HealthCheck.Interval != expectedDuration {
 		t.Errorf("failed to to parse interval from %v", conf)
 	}
 }

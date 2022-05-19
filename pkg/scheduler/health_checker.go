@@ -46,8 +46,8 @@ func NewHealthChecker(schedulerContext *ClusterContext) *HealthChecker {
 
 	// Configure Health Check parameters based on settings in Context.
 	context := configs.ConfigContext.Get(schedulerContext.GetPolicyGroup())
-	checkInterval := context.Partitions[0].HealthCheck.Interval
-	checkEnabled := context.Partitions[0].HealthCheck.Enabled
+	checkInterval := context.HealthCheck.Interval
+	checkEnabled := context.HealthCheck.Enabled
 
 	// Default health check configurations.
 	if checkEnabled == nil {

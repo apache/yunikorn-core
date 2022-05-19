@@ -602,6 +602,35 @@ func TestRemoveAllocAsk(t *testing.T) {
 	}
 }
 
+// test pending calculation and ask removal
+func TestRemoveAllocAskWithPlaceholders(t *testing.T) {
+	app := newApplication(appID1, "default", "root.unknown")
+	if app == nil || app.ApplicationID != appID1 {
+		t.Fatalf("app create failed which should not have %v", app)
+	}
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	ask := newAllocationAskRepeat(aKey, appID1, res, 2)
+	ask.placeholder = true
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask 1 should have been added to app")
+
+	ask = newAllocationAskRepeat("alloc-2", appID1, res, 2)
+	ask.placeholder = true
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask 2 should have been added to app")
+
+	reservedAsks := app.RemoveAllocationAsk("alloc-1")
+	assert.Equal(t, 0, reservedAsks)
+	assert.Equal(t, Accepted.String(), app.stateMachine.Current())
+	reservedAsks = app.RemoveAllocationAsk("alloc-2")
+	assert.Equal(t, 0, reservedAsks)
+	assert.Equal(t, Completing.String(), app.stateMachine.Current())
+}
+
 // This test must not test the sorter that is underlying.
 // It tests the Application specific parts of the code only.
 func TestSortRequests(t *testing.T) {
@@ -746,14 +775,14 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	assert.Assert(t, resources.Equals(app.GetPlaceholderResource(), res), "placeholder allocation not set as expected")
 	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()), "allocated resource should have been zero")
 
+	// first we have to remove the allocation itself
+	alloc := app.RemoveAllocation(uuid)
+	assert.Assert(t, alloc != nil, "Nil allocation was returned")
+	assert.Assert(t, app.IsAccepted(), "Application should have stayed in Accepted, changed unexpectedly: %s", app.CurrentState())
 	// removing the ask should move the application into the waiting state, because the allocation is only a placeholder allocation
 	released = app.RemoveAllocationAsk(askID)
 	assert.Equal(t, released, 0, "allocation ask should not have been reserved")
 	assert.Assert(t, app.IsCompleting(), "Application should have stayed same, changed unexpectedly: %s", app.CurrentState())
-
-	// remove the allocation, ask has been removed so nothing left
-	app.RemoveAllocation(uuid)
-	assert.Assert(t, app.IsCompleting(), "Application did not change as expected: %s", app.CurrentState())
 
 	log := app.GetStateLog()
 	assert.Equal(t, len(log), 2, "wrong number of app events")

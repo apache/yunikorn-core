@@ -140,6 +140,19 @@ func TestStartStop(t *testing.T) {
 	healthChecker.stop()
 }
 
+func TestStartStopDisabled(t *testing.T) {
+	configs.MockSchedulerConfigByData([]byte(fmt.Sprintf(configHealthCheck, "false")))
+	metrics.Reset()
+	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
+	assert.NilError(t, err, "Error when load schedulerContext from config")
+	assert.Assert(t, schedulerContext.lastHealthCheckResult == nil, "lastHealthCheckResult should be nil initially")
+
+	healthChecker := NewHealthChecker(schedulerContext)
+	healthChecker.start(schedulerContext)
+	assert.Assert(t, schedulerContext.lastHealthCheckResult == nil, "lastHealthCheckResult should still be nil")
+	healthChecker.stop()
+}
+
 func TestUpdateSchedulerLastHealthStatus(t *testing.T) {
 	configs.MockSchedulerConfigByData([]byte(configDefault))
 	metrics.Reset()

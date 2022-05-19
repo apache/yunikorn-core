@@ -34,8 +34,6 @@ import (
 
 const defaultInterval = 30 * time.Second
 
-const healthCheckDisabledMsg = "Health checks are disabled."
-
 type HealthChecker struct {
 	enabled  bool
 	interval time.Duration
@@ -73,6 +71,10 @@ func NewHealthCheckerWithParameters(period time.Duration) *HealthChecker {
 
 // start execute healthCheck service in the background,
 func (c *HealthChecker) start(schedulerContext *ClusterContext) {
+	if !c.enabled {
+		return
+	}
+
 	// immediate first tick
 	c.runOnce(schedulerContext)
 
@@ -91,6 +93,10 @@ func (c *HealthChecker) start(schedulerContext *ClusterContext) {
 }
 
 func (c *HealthChecker) stop() {
+	if !c.enabled {
+		return
+	}
+
 	c.stopChan <- struct{}{}
 	close(c.stopChan)
 }

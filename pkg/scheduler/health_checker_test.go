@@ -178,7 +178,7 @@ func TestUpdateSchedulerLastHealthStatus(t *testing.T) {
 	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
 	assert.NilError(t, err, "Error when load schedulerContext from config")
 
-	healthInfo := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	healthInfo := getSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	updateSchedulerLastHealthStatus(healthInfo, schedulerContext)
 	assert.Equal(t, healthInfo.Healthy, schedulerContext.lastHealthCheckResult.Healthy, "lastHealthCheckResult should be updated")
 	for i := 0; i < len(healthInfo.HealthChecks); i++ {
@@ -194,7 +194,7 @@ func TestGetSchedulerHealthStatusContext(t *testing.T) {
 	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
 	assert.NilError(t, err, "Error when load schedulerContext from config")
 	// everything OK
-	healthInfo := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	healthInfo := getSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, healthInfo.Healthy, "Scheduler should be healthy")
 
 	// update resources to some negative value
@@ -203,12 +203,12 @@ func TestGetSchedulerHealthStatusContext(t *testing.T) {
 	schedulerContext.partitions[partName].totalPartitionResource = negativeRes
 
 	// check should fail because of negative resources
-	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	healthInfo = getSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, !healthInfo.Healthy, "Scheduler should not be healthy")
 
 	// set back the original resource, so both the negative and consistency check should pass
 	schedulerContext.partitions[partName].totalPartitionResource = originalRes
-	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	healthInfo = getSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, healthInfo.Healthy, "Scheduler should be healthy")
 
 	// set some negative node resources
@@ -220,14 +220,14 @@ func TestGetSchedulerHealthStatusContext(t *testing.T) {
 		},
 	}), []*objects.Allocation{})
 	assert.NilError(t, err, "Unexpected error while adding a new node")
-	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	healthInfo = getSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, !healthInfo.Healthy, "Scheduler should not be healthy")
 
 	// add orphan allocation to a node
 	node := schedulerContext.partitions[partName].nodes.GetNode("node")
 	alloc := objects.NewAllocation(allocID, "node", newAllocationAsk("key", "appID", resources.NewResource()))
 	node.AddAllocation(alloc)
-	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	healthInfo = getSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, !healthInfo.Healthy, "Scheduler should not be healthy")
 	assert.Assert(t, !healthInfo.HealthChecks[9].Succeeded, "The orphan allocation check on the node should not be successful")
 
@@ -237,12 +237,12 @@ func TestGetSchedulerHealthStatusContext(t *testing.T) {
 	app.AddAllocation(alloc)
 	err = part.AddApplication(app)
 	assert.NilError(t, err, "Could not add application")
-	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	healthInfo = getSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, healthInfo.HealthChecks[9].Succeeded, "The orphan allocation check on the node should be successful")
 
 	// remove the allocation from the node, so we will have an orphan allocation assigned to the app
 	node.RemoveAllocation(allocID)
-	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	healthInfo = getSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, healthInfo.HealthChecks[9].Succeeded, "The orphan allocation check on the node should be successful")
 	assert.Assert(t, !healthInfo.HealthChecks[10].Succeeded, "The orphan allocation check on the app should not be successful")
 }
@@ -254,21 +254,21 @@ func TestGetSchedulerHealthStatusMetrics(t *testing.T) {
 	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
 	assert.NilError(t, err, "Error when load schedulerContext from config")
 	// everything OK
-	healthInfo := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	healthInfo := getSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, healthInfo.Healthy, "Scheduler should be healthy")
 
 	// Add some failed nodes
 	schedulerMetrics.IncFailedNodes()
-	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	healthInfo = getSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, !healthInfo.Healthy, "Scheduler should not be healthy")
 
 	// decrease the failed nodes
 	schedulerMetrics.DecFailedNodes()
-	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	healthInfo = getSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, healthInfo.Healthy, "Scheduler should be healthy again")
 
 	// insert some scheduling errors
 	schedulerMetrics.IncSchedulingError()
-	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	healthInfo = getSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, !healthInfo.Healthy, "Scheduler should not be healthy")
 }

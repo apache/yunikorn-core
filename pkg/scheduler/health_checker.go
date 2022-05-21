@@ -105,7 +105,7 @@ func (c *HealthChecker) stop() {
 
 func (c *HealthChecker) runOnce(schedulerContext *ClusterContext) {
 	schedulerMetrics := metrics.GetSchedulerMetrics()
-	result := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	result := getSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	updateSchedulerLastHealthStatus(result, schedulerContext)
 	if !result.Healthy {
 		log.Logger().Warn("Scheduler is not healthy",
@@ -126,7 +126,7 @@ func updateSchedulerLastHealthStatus(latest dao.SchedulerHealthDAOInfo, schedule
 	schedulerContext.SetLastHealthCheckResult(result)
 }
 
-func GetSchedulerHealthStatus(metrics metrics.CoreSchedulerMetrics, schedulerContext *ClusterContext) dao.SchedulerHealthDAOInfo {
+func getSchedulerHealthStatus(metrics metrics.CoreSchedulerMetrics, schedulerContext *ClusterContext) dao.SchedulerHealthDAOInfo {
 	var healthInfo []dao.HealthCheckInfo
 	healthInfo = append(healthInfo, checkSchedulingErrors(metrics))
 	healthInfo = append(healthInfo, checkFailedNodes(metrics))
@@ -143,7 +143,7 @@ func GetSchedulerHealthStatus(metrics metrics.CoreSchedulerMetrics, schedulerCon
 		HealthChecks: healthInfo,
 	}
 }
-func CreateCheckInfo(succeeded bool, name, description, message string) dao.HealthCheckInfo {
+func createCheckInfo(succeeded bool, name, description, message string) dao.HealthCheckInfo {
 	return dao.HealthCheckInfo{
 		Name:             name,
 		Succeeded:        succeeded,
@@ -154,19 +154,19 @@ func CreateCheckInfo(succeeded bool, name, description, message string) dao.Heal
 func checkSchedulingErrors(metrics metrics.CoreSchedulerMetrics) dao.HealthCheckInfo {
 	schedulingErrors, err := metrics.GetSchedulingErrors()
 	if err != nil {
-		return CreateCheckInfo(false, "Scheduling errors", "Check for scheduling error entries in metrics", err.Error())
+		return createCheckInfo(false, "Scheduling errors", "Check for scheduling error entries in metrics", err.Error())
 	}
 	diagnosisMsg := fmt.Sprintf("There were %v scheduling errors logged in the metrics", schedulingErrors)
-	return CreateCheckInfo(schedulingErrors == 0, "Scheduling errors", "Check for scheduling error entries in metrics", diagnosisMsg)
+	return createCheckInfo(schedulingErrors == 0, "Scheduling errors", "Check for scheduling error entries in metrics", diagnosisMsg)
 }
 
 func checkFailedNodes(metrics metrics.CoreSchedulerMetrics) dao.HealthCheckInfo {
 	failedNodes, err := metrics.GetFailedNodes()
 	if err != nil {
-		return CreateCheckInfo(false, "Failed nodes", "Check for failed nodes entries in metrics", err.Error())
+		return createCheckInfo(false, "Failed nodes", "Check for failed nodes entries in metrics", err.Error())
 	}
 	diagnosisMsg := fmt.Sprintf("There were %v failed nodes logged in the metrics", failedNodes)
-	return CreateCheckInfo(failedNodes == 0, "Failed nodes", "Check for failed nodes entries in metrics", diagnosisMsg)
+	return createCheckInfo(failedNodes == 0, "Failed nodes", "Check for failed nodes entries in metrics", diagnosisMsg)
 }
 
 func checkSchedulingContext(schedulerContext *ClusterContext) []dao.HealthCheckInfo {
@@ -237,32 +237,32 @@ func checkSchedulingContext(schedulerContext *ClusterContext) []dao.HealthCheckI
 		}
 	}
 	var info = make([]dao.HealthCheckInfo, 9)
-	info[0] = CreateCheckInfo(len(partitionsWithNegResources) == 0, "Negative resources",
+	info[0] = createCheckInfo(len(partitionsWithNegResources) == 0, "Negative resources",
 		"Check for negative resources in the partitions",
 		fmt.Sprintf("Partitions with negative resources: %q", partitionsWithNegResources))
-	info[1] = CreateCheckInfo(len(nodesWithNegResources) == 0, "Negative resources",
+	info[1] = createCheckInfo(len(nodesWithNegResources) == 0, "Negative resources",
 		"Check for negative resources in the nodes",
 		fmt.Sprintf("Nodes with negative resources: %q", partitionsWithNegResources))
-	info[2] = CreateCheckInfo(len(allocationMismatch) == 0, "Consistency of data",
+	info[2] = createCheckInfo(len(allocationMismatch) == 0, "Consistency of data",
 		"Check if a node's allocated resource <= total resource of the node",
 		fmt.Sprintf("Nodes with inconsistent data: %q", allocationMismatch))
-	info[3] = CreateCheckInfo(len(totalResourceMismatch) == 0, "Consistency of data",
+	info[3] = createCheckInfo(len(totalResourceMismatch) == 0, "Consistency of data",
 		"Check if total partition resource == sum of the node resources from the partition",
 		fmt.Sprintf("Partitions with inconsistent data: %q", totalResourceMismatch))
-	info[4] = CreateCheckInfo(len(nodeTotalMismatch) == 0, "Consistency of data",
+	info[4] = createCheckInfo(len(nodeTotalMismatch) == 0, "Consistency of data",
 		"Check if node total resource = allocated resource + occupied resource + available resource",
 		fmt.Sprintf("Nodes with inconsistent data: %q", nodeTotalMismatch))
-	info[5] = CreateCheckInfo(len(nodeCapacityMismatch) == 0, "Consistency of data",
+	info[5] = createCheckInfo(len(nodeCapacityMismatch) == 0, "Consistency of data",
 		"Check if node capacity >= allocated resources on the node",
 		fmt.Sprintf("Nodes with inconsistent data: %q", nodeCapacityMismatch))
 	// mark it as succeeded for a while until we will know what is not considered a normal value anymore
-	info[6] = CreateCheckInfo(true, "Reservation check",
+	info[6] = createCheckInfo(true, "Reservation check",
 		"Check the reservation nr compared to the number of nodes",
 		fmt.Sprintf("Reservation/node nr ratio: %f", partitionReservationRatio))
-	info[7] = CreateCheckInfo(len(orphanAllocationsOnNode) == 0, "Orphan allocation on node check",
+	info[7] = createCheckInfo(len(orphanAllocationsOnNode) == 0, "Orphan allocation on node check",
 		"Check if there are orphan allocations on the nodes",
 		fmt.Sprintf("Orphan allocations: %v", orphanAllocationsOnNode))
-	info[8] = CreateCheckInfo(len(orphanAllocationsOnApp) == 0, "Orphan allocation on app check",
+	info[8] = createCheckInfo(len(orphanAllocationsOnApp) == 0, "Orphan allocation on app check",
 		"Check if there are orphan allocations on the applications",
 		fmt.Sprintf("OrphanAllocations: %v", orphanAllocationsOnApp))
 	return info

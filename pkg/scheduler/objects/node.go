@@ -401,26 +401,6 @@ func (sn *Node) preConditions(allocID string, allocate bool) bool {
 	return true
 }
 
-// IsValidFor checks if the node is valid for this allocationAsk
-func (sn *Node) IsValidFor(ask *AllocationAsk) error {
-	if ask.GetRequiredNode() == "" {
-		// ask can be allocated to any node
-		// just check if the node is unschedulable
-		if !sn.IsSchedulable() {
-			return fmt.Errorf("skip ask %s on unschedulable node %s",
-				ask.AllocationKey, sn.NodeID)
-		}
-		return nil
-	}
-	// ask has required node, just check if the node is with the expected ID
-	// ignore the unschedulable flag in this case
-	if ask.requiredNode != sn.NodeID {
-		return fmt.Errorf("ask %s is restricted to node %s, skipping node %s",
-			ask.AllocationKey, ask.requiredNode, sn.NodeID)
-	}
-	return nil
-}
-
 // Check if the node should be considered as a possible node to allocate on.
 //
 // This is a lock free call. No updates are made this only performs a pre allocate checks

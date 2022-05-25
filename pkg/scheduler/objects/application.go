@@ -666,12 +666,12 @@ func (sa *Application) IsReservedOnNode(nodeID string) bool {
 func (sa *Application) Reserve(node *Node, ask *AllocationAsk) error {
 	sa.Lock()
 	defer sa.Unlock()
-	return sa.ReserveInternal(node, ask)
+	return sa.reserveInternal(node, ask)
 }
 
 // Unlocked version for Reserve that really does the work.
 // Must only be called while holding the application lock.
-func (sa *Application) ReserveInternal(node *Node, ask *AllocationAsk) error {
+func (sa *Application) reserveInternal(node *Node, ask *AllocationAsk) error {
 	// create the reservation (includes nil checks)
 	nodeReservation := newReservation(node, sa, ask, true)
 	if nodeReservation == nil {
@@ -823,7 +823,7 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, tota
 
 // Try a regular allocation of the pending requests
 // This includes placeholders
-func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator func() NodeIterator, getnode func(string) *Node) *Allocation {
+func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator func() NodeIterator, getNodeFn func(string) *Node) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
 	// make sure the request are sorted
@@ -855,7 +855,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 		requiredNode := request.GetRequiredNode()
 		// does request (daemon set pods?) has any constraint to run on specific node?
 		if requiredNode != "" {
-			node := getnode(requiredNode)
+			node := getNodeFn(requiredNode)
 			alloc := sa.tryNode(node, request)
 			if alloc != nil {
 				log.Logger().Debug("allocation on required node is completed",
@@ -863,7 +863,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 					zap.String("allocation key", request.AllocationKey))
 				return alloc
 			}
-			if err := sa.ReserveInternal(node, request); err != nil {
+			if err := sa.reserveInternal(node, request); err != nil {
 				log.Logger().Warn("Failed to reserve the required node",
 					zap.String("required node", node.NodeID),
 					zap.String("allocation key", request.AllocationKey),
@@ -887,7 +887,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 
 // tryPlaceholderAllocate tries to replace a placeholder that is allocated with a real allocation
 //nolint:funlen
-func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, getnode func(string) *Node) *Allocation {
+func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, getNodeFn func(string) *Node) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
 	// nothing to do if we have no placeholders allocated
@@ -947,7 +947,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				phFit = ph
 				reqFit = request
 			}
-			node := getnode(ph.NodeID)
+			node := getNodeFn(ph.NodeID)
 			// got the node run same checks as for reservation (all but fits)
 			// resource usage should not change anyway between placeholder and real one at this point
 			if node != nil && node.preReserveConditions(request.AllocationKey) {

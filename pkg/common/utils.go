@@ -183,6 +183,19 @@ func GetRequiredNodeFromTag(tags map[string]string) string {
 	return ""
 }
 
+func GetPreemptionFromTag(tags map[string]string) bool {
+	if allowPreemption, ok := tags[interfaceCommon.DomainYuniKorn+interfaceCommon.KeyAllowPreemption]; ok {
+		preemption, err := strconv.ParseBool(allowPreemption)
+		if err != nil {
+			log.Logger().Warn("Unable to parse allow-preemption string", zap.String("allow-preemption", allowPreemption),
+				zap.Error(err))
+			return false
+		}
+		return preemption
+	}
+	return false
+}
+
 // ZeroTimeInUnixNano return the unix nano or nil if the time is zero.
 func ZeroTimeInUnixNano(t time.Time) *int64 {
 	if t.IsZero() {

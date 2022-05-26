@@ -49,6 +49,8 @@ type AllocationAsk struct {
 	priority         int32
 	maxAllocations   int32
 	requiredNode     string
+	allowPreemption  bool
+	originator       bool
 
 	sync.RWMutex
 }
@@ -67,6 +69,8 @@ func NewAllocationAsk(ask *si.AllocationAsk) *AllocationAsk {
 		placeholder:       ask.Placeholder,
 		taskGroupName:     ask.TaskGroupName,
 		requiredNode:      common.GetRequiredNodeFromTag(ask.Tags),
+		allowPreemption:   common.GetPreemptionFromTag(ask.Tags),
+		originator:        ask.Originator,
 	}
 	saa.priority = saa.normalizePriority(ask.Priority)
 	// this is a safety check placeholder and task group name must be set as a combo
@@ -172,4 +176,35 @@ func (aa *AllocationAsk) SetRequiredNode(node string) {
 	aa.Lock()
 	defer aa.Unlock()
 	aa.requiredNode = node
+}
+
+func (aa *AllocationAsk) GetAllowPreemption() bool {
+	aa.RLock()
+	defer aa.RUnlock()
+	return aa.allowPreemption
+}
+
+func (aa *AllocationAsk) IsOriginator() bool {
+	aa.RLock()
+	defer aa.RUnlock()
+	return aa.originator
+}
+
+func (aa *AllocationAsk) GetPriority() int32 {
+	aa.RLock()
+	defer aa.RUnlock()
+	return aa.priority
+}
+
+func (aa *AllocationAsk) GetAllocatedResource() *resources.Resource {
+	aa.RLock()
+	defer aa.RUnlock()
+	return aa.AllocatedResource
+}
+
+// for test only
+func (aa *AllocationAsk) SetCreateTime(createTime time.Time) {
+	aa.Lock()
+	defer aa.Unlock()
+	aa.createTime = createTime
 }

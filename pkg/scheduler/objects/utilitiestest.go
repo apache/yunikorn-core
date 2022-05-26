@@ -106,7 +106,7 @@ func newApplicationWithTags(appID, partition, queueName string, tags map[string]
 	return NewApplication(siApp, user, nil, "")
 }
 
-func newApplicationWithHandler(appID, partition, queueName string) (*Application, *appEventHandler) {
+func NewApplicationWithHandler(appID, partition, queueName string) (*Application, *appEventHandler) {
 	return newApplicationWithPlaceholderTimeout(appID, partition, queueName, 0)
 }
 
@@ -259,7 +259,7 @@ func (aeh *appEventHandler) isHandled() bool {
 }
 
 // return the list of events processed by the handler and reset
-func (aeh *appEventHandler) getEvents() []interface{} {
+func (aeh *appEventHandler) GetEvents() []interface{} {
 	aeh.RLock()
 	defer aeh.RUnlock()
 	return aeh.events

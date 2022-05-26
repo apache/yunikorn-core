@@ -1045,7 +1045,7 @@ func TestGetTag(t *testing.T) {
 }
 
 func TestOnStatusChangeCalled(t *testing.T) {
-	app, testHandler := newApplicationWithHandler(appID1, "default", "root.a")
+	app, testHandler := NewApplicationWithHandler(appID1, "default", "root.a")
 	assert.Equal(t, New.String(), app.CurrentState(), "new app not in New state")
 
 	err := app.HandleApplicationEvent(RunApplication)
@@ -1161,7 +1161,7 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	defaultPlaceholderTimeout = 5 * time.Millisecond
 	defer func() { defaultPlaceholderTimeout = originalPhTimeout }()
 
-	app, testHandler := newApplicationWithHandler(appID1, "default", "root.a")
+	app, testHandler := NewApplicationWithHandler(appID1, "default", "root.a")
 	app.gangSchedulingStyle = gangSchedulingStyle
 	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should be nil on create")
 	// fake the queue assignment (needed with ask)
@@ -1199,7 +1199,7 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	})
 	assert.NilError(t, err, "Placeholder timeout cleanup did not trigger unexpectedly")
 	assert.Equal(t, app.stateMachine.Current(), expectedState, "Application did not progress into expected state")
-	events := testHandler.getEvents()
+	events := testHandler.GetEvents()
 	var found int
 	for _, event := range events {
 		if allocRelease, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {
@@ -1233,7 +1233,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	defaultPlaceholderTimeout = 5 * time.Millisecond
 	defer func() { defaultPlaceholderTimeout = originalPhTimeout }()
 
-	app, testHandler := newApplicationWithHandler(appID1, "default", "root.a")
+	app, testHandler := NewApplicationWithHandler(appID1, "default", "root.a")
 	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should be nil on create")
 	app.SetState(Accepted.String())
 
@@ -1270,7 +1270,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	assert.NilError(t, err, "Placeholder timeout cleanup did not trigger unexpectedly")
 	assert.Assert(t, app.IsStarting(), "App should be in starting state after the first allocation")
 	// two state updates and 1 release event
-	events := testHandler.getEvents()
+	events := testHandler.GetEvents()
 	var found bool
 	for _, event := range events {
 		if allocRelease, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {
@@ -1319,7 +1319,7 @@ func TestTimeoutPlaceholderCompleting(t *testing.T) {
 		return app.placeholderTimer == nil
 	})
 	assert.NilError(t, err, "Placeholder timer did not time out as expected")
-	events := testHandler.getEvents()
+	events := testHandler.GetEvents()
 	var found bool
 	for _, event := range events {
 		if allocRelease, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {

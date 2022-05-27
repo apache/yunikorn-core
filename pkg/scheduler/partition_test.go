@@ -20,7 +20,6 @@ package scheduler
 
 import (
 	"fmt"
-	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	"strconv"
 	"strings"
 	"testing"
@@ -34,6 +33,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/plugins"
+	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
@@ -1101,7 +1101,7 @@ func TestPreemptionForDSAsk(t *testing.T) {
 	err = app.AddAllocationAsk(ask2)
 	assert.NilError(t, err, "failed to add ask alloc-2 to app-1")
 
-	//since node-1 available resource is less, same node reserved for alloc-2 daemon set ask
+	// since node-1 available resource is less, same node reserved for alloc-2 daemon set ask
 	partition.tryAllocate()
 
 	// check if updated (must be after allocate call)

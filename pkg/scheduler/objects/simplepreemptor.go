@@ -19,9 +19,10 @@
 package objects
 
 import (
+	"sort"
+
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/log"
-	"sort"
 )
 
 type PreemptionContext struct {
@@ -59,16 +60,16 @@ func (p *PreemptionContext) sortAllocations() {
 		r := p.allocations[j]
 
 		// sort based on the type
-		lAskType := 1                 // regular pod
-		if l.IsOriginator() == true { // driver/owner pod
+		lAskType := 1         // regular pod
+		if l.IsOriginator() { // driver/owner pod
 			lAskType = 3
-		} else if l.GetAllowPreemption() == false { // opted out pod
+		} else if !l.GetAllowPreemption() { // opted out pod
 			lAskType = 2
 		}
 		rAskType := 1
-		if r.IsOriginator() == true {
+		if r.IsOriginator() {
 			rAskType = 3
-		} else if r.GetAllowPreemption() == false {
+		} else if !r.GetAllowPreemption() {
 			rAskType = 2
 		}
 		if lAskType < rAskType {
@@ -99,11 +100,7 @@ func (p *PreemptionContext) sortAllocations() {
 		rResource := r.GetAllocatedResource()
 		if !resources.Equals(lResource, rResource) {
 			delta := resources.Sub(lResource, rResource)
-			if resources.StrictlyGreaterThanZero(delta) {
-				return false
-			} else {
-				return true
-			}
+			return !resources.StrictlyGreaterThanZero(delta)
 		}
 		return true
 	})
@@ -126,9 +123,8 @@ func (p *PreemptionContext) GetVictims(sourceAsk *AllocationAsk) []*AllocationAs
 	if len(victims) > 0 && resources.StrictlyGreaterThanOrEquals(
 		resources.Add(currentResource, p.Node.GetAvailableResource()), requiredResource) {
 		return victims
-	} else {
-		return nil
 	}
+	return nil
 }
 
 // for test only

@@ -20,14 +20,16 @@ package objects
 
 import (
 	"sort"
+	"sync"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
-	"github.com/apache/yunikorn-core/pkg/log"
 )
 
 type PreemptionContext struct {
 	Node        *Node
 	allocations []*AllocationAsk
+
+	sync.RWMutex
 }
 
 func NewSimplePreemptor(node *Node) *PreemptionContext {
@@ -40,6 +42,8 @@ func NewSimplePreemptor(node *Node) *PreemptionContext {
 }
 
 func (p *PreemptionContext) filterAllocations() {
+	p.Lock()
+	defer p.Unlock()
 	for _, allocation := range p.Node.GetAllAllocations() {
 		// skip daemon set pods
 		if allocation.Ask.GetRequiredNode() != "" {
@@ -55,6 +59,8 @@ func (p *PreemptionContext) filterAllocations() {
 // 3. By Create time or age of the ask (younger ask placed first),
 // 4. By resource (ask with lesser allocated resources placed first)
 func (p *PreemptionContext) sortAllocations() {
+	p.Lock()
+	defer p.Unlock()
 	sort.SliceStable(p.allocations, func(i, j int) bool {
 		l := p.allocations[i]
 		r := p.allocations[j]
@@ -91,7 +97,6 @@ func (p *PreemptionContext) sortAllocations() {
 
 		// sort based on the age
 		if !l.GetCreateTime().Equal(r.GetCreateTime()) {
-			log.Logger().Info("step 21")
 			return l.GetCreateTime().After(r.GetCreateTime())
 		}
 
@@ -107,6 +112,8 @@ func (p *PreemptionContext) sortAllocations() {
 }
 
 func (p *PreemptionContext) GetVictims(sourceAsk *AllocationAsk) []*AllocationAsk {
+	p.RLock()
+	defer p.RUnlock()
 	var victims []*AllocationAsk
 	requiredResource := resources.Multiply(sourceAsk.GetAllocatedResource(), int64(sourceAsk.GetPendingAskRepeat()))
 	currentResource := resources.Zero
@@ -119,7 +126,7 @@ func (p *PreemptionContext) GetVictims(sourceAsk *AllocationAsk) []*AllocationAs
 		}
 	}
 
-	// Did we found the meaning full set of victims?
+	// Did we found the useful set of victims?
 	if len(victims) > 0 && resources.StrictlyGreaterThanOrEquals(
 		resources.Add(currentResource, p.Node.GetAvailableResource()), requiredResource) {
 		return victims
@@ -129,10 +136,14 @@ func (p *PreemptionContext) GetVictims(sourceAsk *AllocationAsk) []*AllocationAs
 
 // for test only
 func (p *PreemptionContext) setAllocations(allocations []*AllocationAsk) {
+	p.Lock()
+	defer p.Unlock()
 	p.allocations = allocations
 }
 
 // for test only
 func (p *PreemptionContext) getAllocations() []*AllocationAsk {
+	p.RLock()
+	defer p.RUnlock()
 	return p.allocations
 }

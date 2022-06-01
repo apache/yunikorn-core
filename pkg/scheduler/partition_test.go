@@ -1068,7 +1068,7 @@ func TestPreemptionForDSAsk(t *testing.T) {
 		t.Fatalf("empty cluster allocate returned allocation: %v", alloc.String())
 	}
 
-	app, testHandler := objects.NewApplicationWithHandler(appID1, "default", "root.parent.sub-leaf")
+	app, testHandler := newApplicationWithHandler(appID1, "default", "root.parent.sub-leaf")
 	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "8"})
 	assert.NilError(t, err, "failed to create resource")
 

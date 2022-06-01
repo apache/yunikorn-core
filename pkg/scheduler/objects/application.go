@@ -1065,7 +1065,7 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 				alloc.Result = AllocatedReserved
 				return alloc
 			}
-		} else if reserve.node.GetCapacity().FitInMaxUndef(ask.AllocatedResource) {
+		} else if reserve.node.GetCapacity().FitInMaxUndef(ask.GetAllocatedResource()) {
 			log.Logger().Info("Triggering preemption process for daemon set ask",
 				zap.String("ds allocation key", ask.AllocationKey))
 

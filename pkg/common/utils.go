@@ -187,13 +187,13 @@ func GetPreemptionFromTag(tags map[string]string) bool {
 	if allowPreemption, ok := tags[interfaceCommon.DomainYuniKorn+interfaceCommon.KeyAllowPreemption]; ok {
 		preemption, err := strconv.ParseBool(allowPreemption)
 		if err != nil {
-			log.Logger().Warn("Unable to parse allow-preemption string", zap.String("allow-preemption", allowPreemption),
-				zap.Error(err))
-			return false
+			log.Logger().Warn("Unable to parse allow-preemption string, considering as opted in (default)",
+				zap.String("allow-preemption", allowPreemption), zap.Error(err))
+			return true
 		}
 		return preemption
 	}
-	return false
+	return true
 }
 
 // ZeroTimeInUnixNano return the unix nano or nil if the time is zero.

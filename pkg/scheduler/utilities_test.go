@@ -19,6 +19,7 @@
 package scheduler
 
 import (
+	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"testing"
 
 	"gotest.tools/assert"
@@ -195,6 +196,16 @@ func newApplication(appID, partition, queueName string) *objects.Application {
 		PartitionName: partition,
 	}
 	return objects.NewApplication(siApp, security.UserGroup{}, nil, rmID)
+}
+
+func newApplicationWithHandler(appID, partition, queueName string) (*objects.Application, *rmproxy.MockedRMProxy) {
+	siApp := &si.AddApplicationRequest{
+		ApplicationID: appID,
+		QueueName:     queueName,
+		PartitionName: partition,
+	}
+	mockEventHandler := rmproxy.NewMockedRMProxy()
+	return objects.NewApplication(siApp, security.UserGroup{}, mockEventHandler, rmID), mockEventHandler
 }
 
 func newApplicationTG(appID, partition, queueName string, task *resources.Resource) *objects.Application {

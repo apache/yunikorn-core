@@ -20,7 +20,6 @@ package objects
 
 import (
 	"fmt"
-	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"math"
 	"strconv"
 	"testing"
@@ -32,6 +31,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/handler"
+	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )

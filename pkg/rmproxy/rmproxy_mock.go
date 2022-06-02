@@ -19,8 +19,9 @@
 package rmproxy
 
 import (
-	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	"sync"
+
+	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 )
 
 // implements RMProxy Event Handler

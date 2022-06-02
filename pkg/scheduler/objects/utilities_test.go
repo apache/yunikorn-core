@@ -19,13 +19,13 @@
 package objects
 
 import (
-	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"strconv"
 	"time"
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 

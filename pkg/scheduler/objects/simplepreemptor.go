@@ -27,17 +27,18 @@ import (
 
 type PreemptionContext struct {
 	Node        *Node
+	requiredAsk *AllocationAsk
 	allocations []*AllocationAsk
 
 	sync.RWMutex
 }
 
-func NewSimplePreemptor(node *Node) *PreemptionContext {
+func NewSimplePreemptor(node *Node, requiredAsk *AllocationAsk) *PreemptionContext {
 	preemptor := &PreemptionContext{
-		Node: node,
+		Node:        node,
+		requiredAsk: requiredAsk,
+		allocations: make([]*AllocationAsk, 0),
 	}
-	preemptor.filterAllocations()
-	preemptor.sortAllocations()
 	return preemptor
 }
 
@@ -49,7 +50,18 @@ func (p *PreemptionContext) filterAllocations() {
 		if allocation.Ask.GetRequiredNode() != "" {
 			continue
 		}
-		p.allocations = append(p.allocations, allocation.Ask)
+
+		// atleast one of the required ask resource should match, otherwise skip
+		includeAllocation := false
+		for k := range p.requiredAsk.GetAllocatedResource().Resources {
+			if _, ok := allocation.Ask.GetAllocatedResource().Resources[k]; ok {
+				includeAllocation = true
+				break
+			}
+		}
+		if includeAllocation {
+			p.allocations = append(p.allocations, allocation.Ask)
+		}
 	}
 }
 
@@ -116,7 +128,7 @@ func (p *PreemptionContext) GetVictims(sourceAsk *AllocationAsk) []*AllocationAs
 	defer p.RUnlock()
 	var victims []*AllocationAsk
 	requiredResource := resources.Multiply(sourceAsk.GetAllocatedResource(), int64(sourceAsk.GetPendingAskRepeat()))
-	currentResource := resources.Zero
+	var currentResource = resources.NewResource()
 	for _, allocation := range p.allocations {
 		if !resources.StrictlyGreaterThanOrEquals(currentResource, requiredResource) {
 			currentResource.AddTo(allocation.GetAllocatedResource())
@@ -132,13 +144,6 @@ func (p *PreemptionContext) GetVictims(sourceAsk *AllocationAsk) []*AllocationAs
 		return victims
 	}
 	return nil
-}
-
-// for test only
-func (p *PreemptionContext) setAllocations(allocations []*AllocationAsk) {
-	p.Lock()
-	defer p.Unlock()
-	p.allocations = allocations
 }
 
 // for test only

@@ -1058,7 +1058,62 @@ func TestTryAllocateWithRequiredNode(t *testing.T) {
 	assert.Equal(t, 1, len(app.GetReservations()), "ask should have been reserved")
 }
 
-// preemption for ds ask request
+// basic ds scheduling on specific node in first allocate run itself (without any need for reservation)
+func TestBasicDSScheduling(t *testing.T) {
+	partition := createQueuesNodes(t)
+	if partition == nil {
+		t.Fatal("partition create failed")
+	}
+	if alloc := partition.tryAllocate(); alloc != nil {
+		t.Fatalf("empty cluster allocate returned allocation: %v", alloc.String())
+	}
+
+	app := newApplication(appID1, "default", "root.parent.sub-leaf")
+	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "4"})
+	assert.NilError(t, err, "failed to create resource")
+
+	// add to the partition
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "failed to add app-1 to partition")
+
+	// normal ask
+	ask := newAllocationAsk("alloc-1", appID1, res)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "failed to add ask alloc-1 to app-1")
+
+	// first allocation should be app-1 and alloc-1
+	alloc := partition.tryAllocate()
+
+	if alloc == nil {
+		t.Fatal("allocation did not return any allocation")
+	}
+	assert.Equal(t, alloc.Result, objects.Allocated, "result is not the expected allocated")
+	assert.Equal(t, len(alloc.Releases), 0, "released allocations should have been 0")
+	assert.Equal(t, alloc.ApplicationID, appID1, "expected application app-1 to be allocated")
+	assert.Equal(t, alloc.AllocationKey, "alloc-1", "expected ask alloc-1 to be allocated")
+
+	res2, err := resources.NewResourceFromConf(map[string]string{"vcore": "4"})
+	assert.NilError(t, err, "failed to create resource")
+
+	// daemon set ask
+	ask2 := newAllocationAsk("alloc-2", appID1, res2)
+	ask2.SetRequiredNode("node-1")
+	err = app.AddAllocationAsk(ask2)
+	assert.NilError(t, err, "failed to add ask alloc-2 to app-1")
+
+	// since node-1 available resource is less, reserved the same for alloc-2 daemon set ask
+	alloc = partition.tryAllocate()
+
+	// ensure there is no reservations
+	assert.Equal(t, 0, len(app.GetReservations()), "ask should not have been reserved")
+	if alloc == nil {
+		t.Fatal("allocation did not return any allocation")
+	}
+	assert.Equal(t, alloc.AllocationKey, "alloc-2", "expected ask alloc-2 to be allocated")
+	assert.Equal(t, alloc.Result, objects.Allocated, "result is not the expected allocated")
+}
+
+// preemption to free up resource on same specific node as a successive step to earlier reservation for ds ask request
 func TestPreemptionForDSAsk(t *testing.T) {
 	partition := createQueuesNodes(t)
 	if partition == nil {
@@ -1101,7 +1156,7 @@ func TestPreemptionForDSAsk(t *testing.T) {
 	err = app.AddAllocationAsk(ask2)
 	assert.NilError(t, err, "failed to add ask alloc-2 to app-1")
 
-	// since node-1 available resource is less, same node reserved for alloc-2 daemon set ask
+	// since node-1 available resource is less, reserved the same for alloc-2 daemon set ask
 	partition.tryAllocate()
 
 	// check if updated (must be after allocate call)

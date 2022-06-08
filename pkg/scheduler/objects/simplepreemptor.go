@@ -26,18 +26,18 @@ import (
 )
 
 type PreemptionContext struct {
-	Node        *Node
+	node        *Node
 	requiredAsk *AllocationAsk
-	allocations []*AllocationAsk
+	allocations []*Allocation
 
 	sync.RWMutex
 }
 
 func NewSimplePreemptor(node *Node, requiredAsk *AllocationAsk) *PreemptionContext {
 	preemptor := &PreemptionContext{
-		Node:        node,
+		node:        node,
 		requiredAsk: requiredAsk,
-		allocations: make([]*AllocationAsk, 0),
+		allocations: make([]*Allocation, 0),
 	}
 	return preemptor
 }
@@ -45,9 +45,9 @@ func NewSimplePreemptor(node *Node, requiredAsk *AllocationAsk) *PreemptionConte
 func (p *PreemptionContext) filterAllocations() {
 	p.Lock()
 	defer p.Unlock()
-	for _, allocation := range p.Node.GetAllAllocations() {
-		// skip daemon set pods
-		if allocation.Ask.GetRequiredNode() != "" {
+	for _, allocation := range p.node.GetAllAllocations() {
+		// skip daemon set pods and higher priority allocation
+		if allocation.Ask.GetRequiredNode() != "" || allocation.Priority > p.requiredAsk.GetPriority() {
 			continue
 		}
 
@@ -60,7 +60,7 @@ func (p *PreemptionContext) filterAllocations() {
 			}
 		}
 		if includeAllocation {
-			p.allocations = append(p.allocations, allocation.Ask)
+			p.allocations = append(p.allocations, allocation)
 		}
 	}
 }
@@ -74,8 +74,8 @@ func (p *PreemptionContext) sortAllocations() {
 	p.Lock()
 	defer p.Unlock()
 	sort.SliceStable(p.allocations, func(i, j int) bool {
-		l := p.allocations[i]
-		r := p.allocations[j]
+		l := p.allocations[i].Ask
+		r := p.allocations[j].Ask
 
 		// sort based on the type
 		lAskType := 1         // regular pod
@@ -123,14 +123,13 @@ func (p *PreemptionContext) sortAllocations() {
 	})
 }
 
-func (p *PreemptionContext) GetVictims(sourceAsk *AllocationAsk) []*AllocationAsk {
+func (p *PreemptionContext) GetVictims() []*Allocation {
 	p.RLock()
 	defer p.RUnlock()
-	var victims []*AllocationAsk
-	requiredResource := resources.Multiply(sourceAsk.GetAllocatedResource(), int64(sourceAsk.GetPendingAskRepeat()))
+	var victims []*Allocation
 	var currentResource = resources.NewResource()
 	for _, allocation := range p.allocations {
-		if !resources.StrictlyGreaterThanOrEquals(currentResource, requiredResource) {
+		if !resources.StrictlyGreaterThanOrEquals(currentResource, p.requiredAsk.GetAllocatedResource()) {
 			currentResource.AddTo(allocation.GetAllocatedResource())
 			victims = append(victims, allocation)
 		} else {
@@ -140,14 +139,14 @@ func (p *PreemptionContext) GetVictims(sourceAsk *AllocationAsk) []*AllocationAs
 
 	// Did we found the useful set of victims?
 	if len(victims) > 0 && resources.StrictlyGreaterThanOrEquals(
-		resources.Add(currentResource, p.Node.GetAvailableResource()), requiredResource) {
+		resources.Add(currentResource, p.node.GetAvailableResource()), p.requiredAsk.GetAllocatedResource()) {
 		return victims
 	}
 	return nil
 }
 
 // for test only
-func (p *PreemptionContext) getAllocations() []*AllocationAsk {
+func (p *PreemptionContext) getAllocations() []*Allocation {
 	p.RLock()
 	defer p.RUnlock()
 	return p.allocations

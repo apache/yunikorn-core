@@ -183,19 +183,13 @@ func TestCanAllocate(t *testing.T) {
 	}
 	// normal alloc
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-	if !node.CanAllocate(res, false) {
+	if !node.CanAllocate(res) {
 		t.Error("node should have accepted allocation")
 	}
 	// check one that pushes node over its size
 	res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11})
-	if node.CanAllocate(res, false) {
+	if node.CanAllocate(res) {
 		t.Error("node should have rejected allocation (oversize)")
-	}
-	// check if preempting adds to available
-	node.IncPreemptingResource(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
-	// preemption alloc
-	if !node.CanAllocate(res, true) {
-		t.Error("resource should have fitted in with preemption set")
 	}
 }
 

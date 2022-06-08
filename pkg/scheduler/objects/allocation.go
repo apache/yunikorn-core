@@ -194,3 +194,9 @@ func (a *Allocation) IsReleased() bool {
 func (a *Allocation) getTaskGroup() string {
 	return a.taskGroupName
 }
+
+func (a *Allocation) GetAllocatedResource() *resources.Resource {
+	a.RLock()
+	defer a.RUnlock()
+	return a.AllocatedResource
+}

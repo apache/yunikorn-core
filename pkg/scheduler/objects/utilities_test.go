@@ -105,7 +105,7 @@ func newApplicationWithTags(appID, partition, queueName string, tags map[string]
 	return NewApplication(siApp, user, nil, "")
 }
 
-func NewApplicationWithHandler(appID, partition, queueName string) (*Application, *rmproxy.MockedRMProxy) {
+func newApplicationWithHandler(appID, partition, queueName string) (*Application, *rmproxy.MockedRMProxy) {
 	return newApplicationWithPlaceholderTimeout(appID, partition, queueName, 0)
 }
 

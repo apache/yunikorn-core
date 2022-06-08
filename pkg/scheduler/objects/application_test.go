@@ -1046,7 +1046,7 @@ func TestGetTag(t *testing.T) {
 }
 
 func TestOnStatusChangeCalled(t *testing.T) {
-	app, testHandler := NewApplicationWithHandler(appID1, "default", "root.a")
+	app, testHandler := newApplicationWithHandler(appID1, "default", "root.a")
 	assert.Equal(t, New.String(), app.CurrentState(), "new app not in New state")
 
 	err := app.HandleApplicationEvent(RunApplication)
@@ -1162,7 +1162,7 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	defaultPlaceholderTimeout = 5 * time.Millisecond
 	defer func() { defaultPlaceholderTimeout = originalPhTimeout }()
 
-	app, testHandler := NewApplicationWithHandler(appID1, "default", "root.a")
+	app, testHandler := newApplicationWithHandler(appID1, "default", "root.a")
 	app.gangSchedulingStyle = gangSchedulingStyle
 	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should be nil on create")
 	// fake the queue assignment (needed with ask)
@@ -1234,7 +1234,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	defaultPlaceholderTimeout = 5 * time.Millisecond
 	defer func() { defaultPlaceholderTimeout = originalPhTimeout }()
 
-	app, testHandler := NewApplicationWithHandler(appID1, "default", "root.a")
+	app, testHandler := newApplicationWithHandler(appID1, "default", "root.a")
 	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should be nil on create")
 	app.SetState(Accepted.String())
 

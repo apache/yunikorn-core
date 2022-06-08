@@ -1169,8 +1169,8 @@ func TestPreemptionForDSAsk(t *testing.T) {
 	events := testHandler.GetEvents()
 	var found bool
 	for _, event := range events {
-		if allocRelease, ok := event.(*rmevent.RMReleaseAllocationAskEvent); ok {
-			assert.Equal(t, allocRelease.ReleasedAllocationAsks[0].AllocationKey, "alloc-1")
+		if allocRelease, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {
+			assert.Equal(t, allocRelease.ReleasedAllocations[0].AllocationKey, "alloc-1")
 			found = true
 		}
 	}

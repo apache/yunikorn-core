@@ -24,8 +24,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 )
 
-// implements RMProxy Event Handler
-// Resetting RM mock handler for the testing
+// MockedRMProxy Implements RMProxy Mock Event Handler for testing
 type MockedRMProxy struct {
 	handled bool
 	events  []interface{}
@@ -36,7 +35,7 @@ func NewMockedRMProxy() *MockedRMProxy {
 	return &MockedRMProxy{}
 }
 
-// handle the RM update event
+// HandleEvent implements event handling for a limited set of events for testing
 func (rmp *MockedRMProxy) HandleEvent(ev interface{}) {
 	rmp.Lock()
 	defer rmp.Unlock()
@@ -60,7 +59,7 @@ func (rmp *MockedRMProxy) HandleEvent(ev interface{}) {
 	}
 }
 
-// return the last action performed by the handler and reset
+// IsHandled return the last action performed by the handler and reset
 func (rmp *MockedRMProxy) IsHandled() bool {
 	rmp.Lock()
 	defer rmp.Unlock()
@@ -69,7 +68,7 @@ func (rmp *MockedRMProxy) IsHandled() bool {
 	return keep
 }
 
-// return the list of events processed by the handler and reset
+// GetEvents return the list of events processed by the handler and reset
 func (rmp *MockedRMProxy) GetEvents() []interface{} {
 	rmp.RLock()
 	defer rmp.RUnlock()

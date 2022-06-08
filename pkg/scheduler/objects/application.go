@@ -863,12 +863,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 					zap.String("allocation key", request.AllocationKey))
 				return alloc
 			}
-
-			alloc = newReservedAllocation(Reserved, node.NodeID, request)
-			if alloc != nil {
-				return alloc
-			}
-			continue
+			return newReservedAllocation(Reserved, node.NodeID, request)
 		}
 
 		iterator := nodeIterator()
@@ -1050,59 +1045,69 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 			return alloc
 		}
 
+		// check if this fits in the queue's head room
+		if !headRoom.FitInMaxUndef(ask.AllocatedResource) {
+			continue
+		}
+
 		// Is it daemon set?
-		if ask.GetRequiredNode() == "" {
-			// check if this fits in the queue's head room
-			if !headRoom.FitInMaxUndef(ask.AllocatedResource) {
+		if ask.GetRequiredNode() != "" {
+			if !reserve.node.CanAllocate(ask.GetAllocatedResource()) {
+				sa.tryPreemption(reserve, ask)
 				continue
 			}
+		}
+		// check allocation possibility
+		alloc := sa.tryNode(reserve.node, ask)
 
-			// check allocation possibility
-			alloc := sa.tryNode(reserve.node, ask)
-
-			// allocation worked fix the result and return
-			if alloc != nil {
-				alloc.Result = AllocatedReserved
-				return alloc
-			}
-		} else if reserve.node.GetCapacity().FitInMaxUndef(ask.GetAllocatedResource()) {
-			log.Logger().Info("Triggering preemption process for daemon set ask",
-				zap.String("ds allocation key", ask.AllocationKey))
-
-			// try preemption and see if we can free up resource
-			preemptor := NewSimplePreemptor(reserve.node, ask)
-			preemptor.filterAllocations()
-			preemptor.sortAllocations()
-
-			// Are there any victims/asks to preempt?
-			victims := preemptor.GetVictims(ask)
-			if len(victims) > 0 {
-				log.Logger().Info("Found victims for daemon set ask preemption ",
-					zap.String("ds allocation key", ask.AllocationKey))
-				zap.Int("no.of victims", len(victims))
-				sa.notifyRMAllocationAskReleased(sa.rmID, victims, si.TerminationType_PREEMPTED_BY_SCHEDULER,
-					"preempting asks to free up resources to run daemon set ask: "+ask.AllocationKey)
-			} else {
-				continue
-			}
+		// allocation worked fix the result and return
+		if alloc != nil {
+			alloc.Result = AllocatedReserved
+			return alloc
 		}
 	}
 
 	// lets try this on all other nodes
 	for _, reserve := range sa.reservations {
+		// Other nodes cannot be tried for daemon set asks
+		if reserve.ask.GetRequiredNode() != "" {
+			continue
+		}
 		iterator := nodeIterator()
 		if iterator != nil {
-			// Other nodes cannot be tried for daemon set asks
-			if reserve.ask.GetRequiredNode() == "" {
-				alloc := sa.tryNodesNoReserve(reserve.ask, iterator, reserve.nodeID)
-				// have a candidate return it, including the node that was reserved
-				if alloc != nil {
-					return alloc
-				}
+			alloc := sa.tryNodesNoReserve(reserve.ask, iterator, reserve.nodeID)
+			// have a candidate return it, including the node that was reserved
+			if alloc != nil {
+				return alloc
 			}
 		}
 	}
 	return nil
+}
+
+func (sa *Application) tryPreemption(reserve *reservation, ask *AllocationAsk) bool {
+	log.Logger().Info("Triggering preemption process for daemon set ask",
+		zap.String("ds allocation key", ask.AllocationKey))
+
+	// try preemption and see if we can free up resource
+	preemptor := NewSimplePreemptor(reserve.node, ask)
+	preemptor.filterAllocations()
+	preemptor.sortAllocations()
+
+	// Are there any victims/asks to preempt?
+	victims := preemptor.GetVictims()
+	if len(victims) > 0 {
+		log.Logger().Info("Found victims for daemon set ask preemption ",
+			zap.String("ds allocation key", ask.AllocationKey))
+		zap.Int("no.of victims", len(victims))
+		sa.notifyRMAllocationReleased(sa.rmID, victims, si.TerminationType_PREEMPTED_BY_SCHEDULER,
+			"preempting allocations to free up resources to run daemon set ask: "+ask.AllocationKey)
+		return true
+	}
+	log.Logger().Warn("Problem in finding the victims for preempting resources to meet required ask requirements",
+		zap.String("ds allocation key", ask.AllocationKey),
+		zap.String("node id", reserve.nodeID))
+	return false
 }
 
 // Try all the nodes for a reserved request that have not been tried yet.

@@ -125,7 +125,7 @@ func TestSortAllocations(t *testing.T) {
 		},
 	})
 
-	requiredAsk := createAllocationAsk("ask", "app1", "true", true, 5,
+	requiredAsk := createAllocationAsk("ask", "app1", "true", true, 20,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	requiredAsk.SetPendingAskRepeat(5)
 
@@ -152,6 +152,47 @@ func TestSortAllocations(t *testing.T) {
 	assert.Equal(t, sortedAsks[9].AllocationKey, "ask9")
 }
 
+func TestFilterAllocations(t *testing.T) {
+	node := NewNode(&si.NodeInfo{
+		NodeID:     "node",
+		Attributes: nil,
+		SchedulableResource: &si.Resource{
+			Resources: map[string]*si.Quantity{"first": {Value: 100}},
+		},
+	})
+
+	// case 1: allocations are available but none of its resources are matching with ds request ask, hence no allocations considered
+	requiredAsk := createAllocationAsk("ask12", "app1", "true", true, 20,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5}))
+	p := NewSimplePreemptor(node, requiredAsk)
+	prepareAllocationAsks(node)
+	p.filterAllocations()
+	filteredAllocations := p.getAllocations()
+
+	// allocations are not even considered as there is no match. of course, no victims
+	assert.Equal(t, len(filteredAllocations), 0)
+
+	// case 2: allocations are available but priority is higher than ds request priority, hence no allocations considered
+	requiredAsk1 := createAllocationAsk("ask12", "app1", "true", true, 1,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	p1 := NewSimplePreemptor(node, requiredAsk1)
+	prepareAllocationAsks(node)
+	p1.filterAllocations()
+	filteredAllocations = p.getAllocations()
+
+	// allocations are not even considered as there is no match. of course, no victims
+	assert.Equal(t, len(filteredAllocations), 0)
+
+	// case 3: victims are available as there are allocations with lower priority and resource match
+	requiredAsk2 := createAllocationAsk("ask12", "app1", "true", true, 20,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	p2 := NewSimplePreemptor(node, requiredAsk2)
+	prepareAllocationAsks(node)
+	p2.filterAllocations()
+	filteredAllocations = p2.getAllocations()
+	assert.Equal(t, len(filteredAllocations), 10)
+}
+
 func TestGetVictims(t *testing.T) {
 	node := NewNode(&si.NodeInfo{
 		NodeID:     "node",
@@ -162,15 +203,14 @@ func TestGetVictims(t *testing.T) {
 	})
 
 	// case 1: victims are available and its resources are matching with ds request ask
-	requiredAsk := createAllocationAsk("ask11", "app1", "true", true, 5,
-		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-	requiredAsk.SetPendingAskRepeat(5)
+	requiredAsk := createAllocationAsk("ask11", "app1", "true", true, 20,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25}))
 
 	p := NewSimplePreemptor(node, requiredAsk)
 	prepareAllocationAsks(node)
 	p.filterAllocations()
 	p.sortAllocations()
-	victims := p.GetVictims(requiredAsk)
+	victims := p.GetVictims()
 	assert.Equal(t, len(victims), 4)
 	assert.Equal(t, victims[0].AllocationKey, "ask5")
 	assert.Equal(t, resources.Equals(victims[0].AllocatedResource, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})), true)
@@ -182,20 +222,18 @@ func TestGetVictims(t *testing.T) {
 	assert.Equal(t, resources.Equals(victims[3].AllocatedResource, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8})), true)
 
 	// case 2: victims are available and its resources are matching with ds request ask (but with different quantity)
-	requiredAsk2 := createAllocationAsk("ask13", "app1", "true", true, 5,
+	requiredAsk2 := createAllocationAsk("ask13", "app1", "true", true, 20,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-	requiredAsk2.SetPendingAskRepeat(1)
 	p2 := NewSimplePreemptor(node, requiredAsk2)
 	prepareAllocationAsks(node)
 	p2.filterAllocations()
 	p2.sortAllocations()
-	victims2 := p2.GetVictims(requiredAsk2)
+	victims2 := p2.GetVictims()
 	assert.Equal(t, len(victims2), 1)
 
 	// case 3: allocations are available and its resources are matching partially with ds request ask (because of different resource types), hence no victims
-	requiredAsk3 := createAllocationAsk("ask13", "app1", "true", true, 5,
+	requiredAsk3 := createAllocationAsk("ask13", "app1", "true", true, 20,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 5}))
-	requiredAsk3.SetPendingAskRepeat(1)
 	p3 := NewSimplePreemptor(node, requiredAsk3)
 	prepareAllocationAsks(node)
 	p3.filterAllocations()
@@ -206,21 +244,6 @@ func TestGetVictims(t *testing.T) {
 	p3.sortAllocations()
 
 	// allocations are available but no exact match for choosing victims
-	victims3 := p3.GetVictims(requiredAsk3)
+	victims3 := p3.GetVictims()
 	assert.Equal(t, len(victims3), 0)
-
-	// case 4: allocations are available but none of its resources are matching with ds request ask, hence no victims
-	requiredAsk4 := createAllocationAsk("ask12", "app1", "true", true, 5,
-		resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5}))
-	requiredAsk4.SetPendingAskRepeat(1)
-	p4 := NewSimplePreemptor(node, requiredAsk4)
-	prepareAllocationAsks(node)
-	p4.filterAllocations()
-	filteredAllocations = p4.getAllocations()
-
-	// allocations are not even considered as there is no match. of course, no victims
-	assert.Equal(t, len(filteredAllocations), 0)
-	p4.sortAllocations()
-	victims4 := p4.GetVictims(requiredAsk4)
-	assert.Equal(t, len(victims4), 0)
 }

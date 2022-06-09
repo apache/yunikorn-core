@@ -31,6 +31,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/handler"
+	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -74,7 +75,7 @@ func TestNewApplication(t *testing.T) {
 		ExecutionTimeoutMilliSeconds: 0,
 		PlaceholderAsk:               &si.Resource{Resources: map[string]*si.Quantity{"first": {Value: 1}}},
 	}
-	app = NewApplication(siApp, user, &appEventHandler{}, "myRM")
+	app = NewApplication(siApp, user, rmproxy.NewMockedRMProxy(), "myRM")
 	assert.Equal(t, app.ApplicationID, "appID", "application ID should not be set to SI value")
 	assert.Equal(t, app.GetQueuePath(), "some.queue", "queue name should not be set to SI value")
 	assert.Equal(t, app.Partition, "AnotherPartition", "partition name should be set to SI value")
@@ -1050,13 +1051,13 @@ func TestOnStatusChangeCalled(t *testing.T) {
 
 	err := app.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "error returned which was not expected")
-	assert.Assert(t, testHandler.isHandled(), "handler did not get called as expected")
+	assert.Assert(t, testHandler.IsHandled(), "handler did not get called as expected")
 
 	// accepted to rejected: error expected
 	err = app.HandleApplicationEvent(RejectApplication)
 	assert.Assert(t, err != nil, "error expected and not seen")
 	assert.Equal(t, app.CurrentState(), Accepted.String(), "application state has been changed unexpectedly")
-	assert.Assert(t, !testHandler.isHandled(), "unexpected event send to the RM")
+	assert.Assert(t, !testHandler.IsHandled(), "unexpected event send to the RM")
 
 	log := app.GetStateLog()
 	assert.Equal(t, len(log), 1, "wrong number of app events")
@@ -1199,7 +1200,7 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	})
 	assert.NilError(t, err, "Placeholder timeout cleanup did not trigger unexpectedly")
 	assert.Equal(t, app.stateMachine.Current(), expectedState, "Application did not progress into expected state")
-	events := testHandler.getEvents()
+	events := testHandler.GetEvents()
 	var found int
 	for _, event := range events {
 		if allocRelease, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {
@@ -1270,7 +1271,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	assert.NilError(t, err, "Placeholder timeout cleanup did not trigger unexpectedly")
 	assert.Assert(t, app.IsStarting(), "App should be in starting state after the first allocation")
 	// two state updates and 1 release event
-	events := testHandler.getEvents()
+	events := testHandler.GetEvents()
 	var found bool
 	for _, event := range events {
 		if allocRelease, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {
@@ -1319,7 +1320,7 @@ func TestTimeoutPlaceholderCompleting(t *testing.T) {
 		return app.placeholderTimer == nil
 	})
 	assert.NilError(t, err, "Placeholder timer did not time out as expected")
-	events := testHandler.getEvents()
+	events := testHandler.GetEvents()
 	var found bool
 	for _, event := range events {
 		if allocRelease, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {

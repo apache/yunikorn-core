@@ -358,9 +358,10 @@ func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation, delta *resou
 // Taking into account resources marked for preemption if applicable.
 // If the proposed allocation does not fit false is returned.
 // TODO: remove when updating preemption
-func (sn *Node) CanAllocate(res *resources.Resource, preemptionPhase bool) bool {
-	err := sn.preAllocateCheck(res, "", preemptionPhase)
-	return err == nil
+func (sn *Node) CanAllocate(res *resources.Resource) bool {
+	sn.RLock()
+	defer sn.RUnlock()
+	return sn.availableResource.FitInMaxUndef(res)
 }
 
 // Checking pre-conditions in the shim for an allocation.

@@ -119,7 +119,7 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 		PartitionName:     alloc.PartitionName,
 		AllocatedResource: resources.NewResourceFromProto(alloc.ResourcePerAlloc),
 		Tags:              alloc.AllocationTags,
-		priority:          alloc.Priority.GetPriorityValue(),
+		priority:          alloc.Priority,
 		pendingRepeatAsk:  0,
 		maxAllocations:    1,
 		taskGroupName:     alloc.TaskGroupName,

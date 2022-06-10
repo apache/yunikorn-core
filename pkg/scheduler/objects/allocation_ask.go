@@ -65,6 +65,7 @@ func NewAllocationAsk(ask *si.AllocationAsk) *AllocationAsk {
 		PartitionName:     ask.PartitionName,
 		Tags:              ask.Tags,
 		createTime:        time.Now(),
+		priority:          ask.Priority,
 		execTimeout:       common.ConvertSITimeout(ask.ExecutionTimeoutMilliSeconds),
 		placeholder:       ask.Placeholder,
 		taskGroupName:     ask.TaskGroupName,
@@ -72,7 +73,6 @@ func NewAllocationAsk(ask *si.AllocationAsk) *AllocationAsk {
 		allowPreemption:   common.GetPreemptionFromTag(ask.Tags),
 		originator:        ask.Originator,
 	}
-	saa.priority = saa.normalizePriority(ask.Priority)
 	// this is a safety check placeholder and task group name must be set as a combo
 	// order is important as task group can be set without placeholder but not the other way around
 	if saa.placeholder && saa.taskGroupName == "" {
@@ -132,20 +132,6 @@ func (aa *AllocationAsk) setQueue(queueName string) {
 	aa.Lock()
 	defer aa.Unlock()
 	aa.QueueName = queueName
-}
-
-// Normalised priority set on create only
-// Currently a direct conversion.
-func (aa *AllocationAsk) normalizePriority(priority *si.Priority) int32 {
-	// TODO, really normalize priority from ask
-	return priority.GetPriorityValue()
-}
-
-// Set the priority after it is created to the application
-func (aa *AllocationAsk) setPriority(prio int32) {
-	aa.Lock()
-	defer aa.Unlock()
-	aa.priority = prio
 }
 
 func (aa *AllocationAsk) isPlaceholder() bool {

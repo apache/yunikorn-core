@@ -246,11 +246,9 @@ func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resou
 		PartitionName:  "test",
 		ResourceAsk:    res.ToProto(),
 		MaxAllocations: repeat,
-		Priority: &si.Priority{
-			Priority: &si.Priority_PriorityValue{PriorityValue: prio},
-		},
-		TaskGroupName: taskGroup,
-		Placeholder:   placeHolder,
+		Priority:       prio,
+		TaskGroupName:  taskGroup,
+		Placeholder:    placeHolder,
 	})
 }
 

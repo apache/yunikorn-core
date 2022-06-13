@@ -322,30 +322,75 @@ func TestGetNodeSortingPolicy(t *testing.T) {
 }
 
 func TestGetNodeIterator(t *testing.T) {
-	// Basic node, allocation and application.
-	node := newNode(nodeID1, map[string]resources.Quantity{"vcore": 10})
-	res := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 5})
-	ask := newAllocationAsk("alloc-01", "app-01", res)
-	app := newApplication("app-01", "default", "root.test")
-
+	// A empty baseCollection belonging to the partition, called "test".
 	bc := initBaseCollection()
 	var nc NodeCollection = bc
-	// Register callback listener.
+	var iter NodeIterator
+
+	// Case 1: There are not any nodes in BC.
+	if iter = nc.GetNodeIterator(); iter != nil {
+		t.Error("There aren't any nodes, BC should return nil")
+	}
+
+	// Case 2: There is a unreserved node in BC
+	node := newNode("node-1", map[string]resources.Quantity{"vcore": 10})
 	node.AddListener(bc)
 	if err := nc.AddNode(node); err != nil {
-		t.Errorf("Adding a node should be worked.")
+		t.Error("Adding a node into BC failed.")
 	}
 
-	if nc.GetNodeIterator() == nil {
-		t.Errorf("Node iterator should not be nil.")
+	if iter = nc.GetNodeIterator(); iter == nil {
+		t.Error("Node iterator should not be nil.")
+	} else {
+		bcIter := iter.(*defaultNodeIterator)
+		if size := bcIter.size; size <= 0 || size > 1 {
+			t.Error("Wrong size of iter elements")
+		}
+
+		tmp := iter.Next()
+		if tmp.NodeID != "node-1" {
+			t.Errorf("A wrong node in node iterator is %s", tmp.NodeID)
+		}
 	}
 
-	// Callback trigger
+	// Case 3: One node is reserved and the other one is not.
+	node2 := newNode("node-2", map[string]resources.Quantity{"vcore": 5})
+	node2.AddListener(bc)
+
+	if err := nc.AddNode(node2); err != nil {
+		t.Error("Adding another node into BC failed.")
+	}
+
+	app := newApplication("app-01", "default", "root.test")
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 5})
+	ask := newAllocationAsk("alloc-01", "app-01", res)
+
 	if err := node.Reserve(app, ask); err != nil {
-		t.Errorf("Reserving should be worked.")
+		t.Error("Reserving failed.")
 	}
 
-	if nc.GetNodeIterator() != nil {
-		t.Errorf("Node iterator should be nil.")
+	if iter = nc.GetNodeIterator(); iter == nil {
+		t.Error("Node iterator should contain a node and it should not be nil")
+	} else {
+		bcIter := iter.(*defaultNodeIterator)
+		if size := bcIter.size; size <= 0 || size > 1 {
+			t.Error("Wrong size of iter elements")
+		}
+
+		tmp := iter.Next()
+		if tmp.NodeID != "node-2" {
+			t.Errorf("A wrong node in node iterator is %s", tmp.NodeID)
+		}
+	}
+
+	// Case 4: All nodes are reserved
+	app2 := newApplication("app-02", "default", "root.test")
+	ask2 := newAllocationAsk("alloc-02", "app-02", res)
+	if err := node2.Reserve(app2, ask2); err != nil {
+		t.Error("Reserving failed.")
+	}
+
+	if iter = nc.GetNodeIterator(); iter != nil {
+		t.Error("All nodes are reserved. Node iterator should be nil")
 	}
 }

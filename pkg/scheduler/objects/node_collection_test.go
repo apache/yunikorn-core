@@ -342,7 +342,11 @@ func TestGetNodeIterator(t *testing.T) {
 	if iter = nc.GetNodeIterator(); iter == nil {
 		t.Error("Node iterator should not be nil.")
 	} else {
-		bcIter := iter.(*defaultNodeIterator)
+		bcIter, ok := iter.(*defaultNodeIterator)
+		if !ok {
+			t.Errorf("Error: Type cast")
+		}
+
 		if size := bcIter.size; size <= 0 || size > 1 {
 			t.Error("Wrong size of iter elements")
 		}
@@ -372,7 +376,10 @@ func TestGetNodeIterator(t *testing.T) {
 	if iter = nc.GetNodeIterator(); iter == nil {
 		t.Error("Node iterator should contain a node and it should not be nil")
 	} else {
-		bcIter := iter.(*defaultNodeIterator)
+		bcIter, ok := iter.(*defaultNodeIterator)
+		if !ok {
+			t.Errorf("Error: Type cast")
+		}
 		if size := bcIter.size; size <= 0 || size > 1 {
 			t.Error("Wrong size of iter elements")
 		}

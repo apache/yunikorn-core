@@ -36,12 +36,10 @@ func createAllocationAsk(allocationKey string, app string, allowPreemption strin
 		AllocationKey: allocationKey,
 		ApplicationID: app,
 		PartitionName: "default",
-		Priority: &si.Priority{
-			Priority: &si.Priority_PriorityValue{PriorityValue: priority},
-		},
-		ResourceAsk: res.ToProto(),
-		Originator:  isOriginator,
-		Tags:        tags,
+		Priority:      priority,
+		ResourceAsk:   res.ToProto(),
+		Originator:    isOriginator,
+		Tags:          tags,
 	}
 	ask := NewAllocationAsk(siAsk)
 	return ask

@@ -25,7 +25,9 @@ import (
 	"github.com/google/uuid"
 	"gotest.tools/assert"
 
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 )
 
 func TestNewNodeCollection(t *testing.T) {
@@ -141,6 +143,7 @@ func TestSetNodeSortingPolicy(t *testing.T) {
 		{"node-03", 750, 500, 500, 200},
 		{"node-04", 1000, 250, 800, 200},
 	}
+
 	/*
 	*  node\policy			fair																		binpacking(1-fair)
 	*	1					[2*(120/250)+3*(530/1000)]/5=(0.96+1.59)/5=2.55/5=0.51		(3)				0.39					(2)
@@ -234,6 +237,50 @@ func TestSetNodeSortingPolicy(t *testing.T) {
 }
 
 func TestGetNodeSortingPolicy(t *testing.T) {
+	var tests = []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"Default policy", "", policies.FairnessPolicy.String()},
+		{"Fair policy", policies.FairnessPolicy.String(), policies.FairnessPolicy.String()},
+		{"Binpacking policy", policies.BinPackingPolicy.String(), policies.BinPackingPolicy.String()},
+	}
+
+	nc := NewNodeCollection("test")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			conf := configs.PartitionConfig{
+				Name: "test",
+				Queues: []configs.QueueConfig{
+					{
+						Name:      "root",
+						Parent:    true,
+						SubmitACL: "*",
+						Queues: []configs.QueueConfig{
+							{
+								Name:   "default",
+								Parent: false,
+								Queues: nil,
+							},
+						},
+					},
+				},
+				PlacementRules: nil,
+				Limits:         nil,
+				Preemption:     configs.PartitionPreemptionConfig{},
+				NodeSortPolicy: configs.NodeSortingPolicy{
+					Type: tt.input,
+				},
+			}
+
+			nc.SetNodeSortingPolicy(NewNodeSortingPolicy(conf.NodeSortPolicy.Type, conf.NodeSortPolicy.ResourceWeights))
+			ans := nc.GetNodeSortingPolicy().PolicyType().String()
+			if ans != tt.want {
+				t.Errorf("got %s, want %s", ans, tt.want)
+			}
+		})
+	}
 }
 
 func TestGetNodeIterator(t *testing.T) {

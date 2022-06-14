@@ -136,6 +136,21 @@ func TestGetRequiredNodeFromAsk(t *testing.T) {
 	assert.Equal(t, nodeName, "Node2")
 }
 
+func TestGetPreemptionFromTagFromAsk(t *testing.T) {
+	tag := make(map[string]string)
+	allowPreemption := GetPreemptionFromTag(tag)
+	assert.Equal(t, allowPreemption, true)
+	tag["TestValue"] = "ERROR"
+	allowPreemption = GetPreemptionFromTag(tag)
+	assert.Equal(t, allowPreemption, true)
+	tag[common.DomainYuniKorn+common.KeyAllowPreemption] = "true"
+	allowPreemption = GetPreemptionFromTag(tag)
+	assert.Equal(t, allowPreemption, true)
+	tag[common.DomainYuniKorn+common.KeyAllowPreemption] = "false"
+	allowPreemption = GetPreemptionFromTag(tag)
+	assert.Equal(t, allowPreemption, false)
+}
+
 func TestConvertSITimeoutWithAdjustment(t *testing.T) {
 	created := time.Now().Unix() - 600
 	defaultTimeout := 15 * time.Minute

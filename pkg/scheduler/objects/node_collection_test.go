@@ -36,7 +36,7 @@ func TestNewNodeCollection(t *testing.T) {
 	assert.Equal(t, "test", bc.Partition, "node collection should have matching partition")
 
 	if nc.GetNodeSortingPolicy().PolicyType().String() != policies.FairSortPolicy.String() {
-		t.Errorf("Not default Policy: want %s, got %s", nc.GetNodeSortingPolicy().PolicyType().String(), policies.FairSortPolicy.String())
+		t.Errorf("Node default Policy: want %s, got %s", nc.GetNodeSortingPolicy().PolicyType().String(), policies.FairSortPolicy.String())
 	}
 }
 

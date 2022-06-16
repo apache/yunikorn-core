@@ -28,6 +28,7 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
+	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 )
 
 type NodeCollection interface {
@@ -228,7 +229,7 @@ func (nc *baseNodeCollection) NodeUpdated(node *Node) {
 func NewNodeCollection(partition string) NodeCollection {
 	return &baseNodeCollection{
 		Partition:   partition,
-		nsp:         nil,
+		nsp:         NewNodeSortingPolicy(policies.FairSortPolicy.String(), nil),
 		nodes:       make(map[string]*nodeRef),
 		sortedNodes: btree.New(7), // Degree=7 here is experimentally the most efficient for up to around 5k nodes
 	}

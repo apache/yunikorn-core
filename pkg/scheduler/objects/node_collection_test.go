@@ -24,6 +24,7 @@ import (
 	"gotest.tools/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 )
 
 func TestNewNodeCollection(t *testing.T) {
@@ -33,6 +34,10 @@ func TestNewNodeCollection(t *testing.T) {
 		t.Fatal("NewNodeCollection should return baseNodeCollection")
 	}
 	assert.Equal(t, "test", bc.Partition, "node collection should have matching partition")
+
+	if nc.GetNodeSortingPolicy().PolicyType().String() != policies.FairSortPolicy.String() {
+		t.Errorf("Not default Policy: want %s, got %s", nc.GetNodeSortingPolicy().PolicyType().String(), policies.FairSortPolicy.String())
+	}
 }
 
 func initBaseCollection() *baseNodeCollection {

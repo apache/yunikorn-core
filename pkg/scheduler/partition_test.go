@@ -1927,6 +1927,95 @@ func TestPlaceholderBiggerThanReal(t *testing.T) {
 	assert.Assert(t, resources.Equals(smallRes, node.GetAllocatedResource()), "real size should be allocated on node")
 }
 
+func TestPlaceholderMatch(t *testing.T) {
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	tgRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 10})
+	phRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2, "second": 2})
+
+	// add node to allow allocation
+	err = partition.AddNode(newNodeMaxResource(nodeID1, tgRes), nil)
+	assert.NilError(t, err, "test node-1 add failed unexpected")
+	node := partition.GetNode(nodeID1)
+	if node == nil {
+		t.Fatal("new node was not found on the partition")
+	}
+
+	// add the app with placeholder request
+	app := newApplicationTG(appID1, "default", "root.default", tgRes)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "app-1 should have been added to the partition")
+	// add an ask for a placeholder and allocate
+	ask := newAllocationAskTG(phID, appID1, taskGroup, phRes, true)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "failed to add placeholder ask ph-1 to app")
+	// try to allocate a placeholder via normal allocate
+	ph := partition.tryAllocate()
+	if ph == nil {
+		t.Fatal("expected placeholder ph-1 to be allocated")
+	}
+	phUUID := ph.UUID
+	assert.Equal(t, phID, ph.AllocationKey, "expected allocation of ph-1 to be returned")
+	assert.Equal(t, 1, len(app.GetAllPlaceholderData()), "placeholder data should be created on allocate")
+
+	// add a new ask with an unknown task group (should allocate directly)
+	ask = newAllocationAskTG(allocID, appID1, "unknown", phRes, false)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "failed to add ask alloc-2 to app")
+	alloc := partition.tryAllocate()
+	if alloc == nil {
+		t.Fatal("expected ask to be allocated (unmatched task group)")
+	}
+	assert.Equal(t, allocID, alloc.AllocationKey, "expected allocation of alloc-1 to be returned")
+	assert.Equal(t, 1, len(app.GetAllPlaceholderData()), "placeholder data should not be updated")
+	assert.Equal(t, int64(1), app.GetAllPlaceholderData()[0].Count, "placeholder data should show 1 available placeholder")
+	assert.Equal(t, int64(0), app.GetAllPlaceholderData()[0].Replaced, "placeholder data should show no replacements")
+
+	// add a new ask the same task group as the placeholder
+	ask = newAllocationAskTG(allocID2, appID1, taskGroup, phRes, false)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "failed to add ask alloc-2 to app")
+	alloc = partition.tryAllocate()
+	if alloc != nil {
+		t.Fatal("expected ask not to be allocated (matched task group)")
+	}
+	assert.Equal(t, 1, len(app.GetAllPlaceholderData()), "placeholder data should not be updated")
+	assert.Equal(t, int64(1), app.GetAllPlaceholderData()[0].Count, "placeholder data should show 1 available placeholder")
+	assert.Equal(t, int64(0), app.GetAllPlaceholderData()[0].Replaced, "placeholder data should show no replacements")
+
+	// replace the placeholder should work
+	alloc = partition.tryPlaceholderAllocate()
+	if alloc == nil {
+		t.Fatal("allocation should have matched placeholder")
+	}
+	assert.Equal(t, allocID2, alloc.AllocationKey, "expected allocation of alloc-2 to be returned")
+	assert.Equal(t, int64(1), app.GetAllPlaceholderData()[0].Count, "placeholder data should show 1 available placeholder")
+	assert.Equal(t, int64(0), app.GetAllPlaceholderData()[0].Replaced, "placeholder data should show no replacements yet")
+	// release placeholder: do what the context would do after the shim processing
+	release := &si.AllocationRelease{
+		PartitionName:   "test",
+		ApplicationID:   appID1,
+		UUID:            phUUID,
+		TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
+	}
+	released, confirmed := partition.removeAllocation(release)
+	assert.Equal(t, len(released), 0, "not expecting any released allocations")
+	if confirmed == nil {
+		t.Fatal("confirmed allocation should not be nil")
+	}
+	assert.Equal(t, int64(1), app.GetAllPlaceholderData()[0].Replaced, "placeholder data should show the replacement")
+
+	// add a new ask the same task group as the placeholder
+	// all placeholders are used so direct allocation is expected
+	ask = newAllocationAskTG("no_ph_used", appID1, taskGroup, phRes, false)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "failed to add ask no_ph_used to app")
+	alloc = partition.tryAllocate()
+	if alloc == nil {
+		t.Fatal("expected ask to be allocated no placeholders left")
+	}
+}
+
 // simple direct replace with one node
 func TestTryPlaceholderAllocate(t *testing.T) {
 	partition, err := newBasePartition()

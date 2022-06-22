@@ -1405,3 +1405,49 @@ func TestFinishedTime(t *testing.T) {
 	assert.Assert(t, !app.finishedTime.IsZero())
 	assert.Assert(t, !app.FinishedTime().IsZero())
 }
+
+func TestCanReplace(t *testing.T) {
+	app := newApplication(appID1, "default", "root.unknown")
+	resMap := map[string]string{"memory": "100", "vcores": "10"}
+	res, err := resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err, "Unexpected error when creating resource from map")
+
+	tg1 := "available"
+	tests := []struct {
+		name string
+		ask  *AllocationAsk
+		want bool
+	}{
+		{"nil", nil, false},
+		{"placeholder", newAllocationAskTG(aKey, appID1, tg1, res, 1), false},
+		{"no TG", newAllocationAsk(aKey, appID1, res), false},
+		{"no placeholder data", newAllocationAskAll(aKey, appID1, tg1, res, 1, false), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, app.canReplace(tt.ask), "unexpected replacement")
+		})
+	}
+	// add the placeholder data
+	// available tg has one replacement open
+	app.addPlaceholderData(newAllocationAskTG(aKey, appID1, tg1, res, 1))
+	// unavailable tg has NO replacement open
+	tg2 := "unavailable"
+	app.addPlaceholderData(newAllocationAskTG(aKey, appID1, tg2, res, 1))
+	app.placeholderData[tg2].Replaced++
+	tests = []struct {
+		name string
+		ask  *AllocationAsk
+		want bool
+	}{
+		{"no TG", newAllocationAsk(aKey, appID1, res), false},
+		{"TG mismatch", newAllocationAskAll(aKey, appID1, "unknown", res, 1, false), false},
+		{"TG placeholders used", newAllocationAskAll(aKey, appID1, tg2, res, 1, false), false},
+		{"TG placeholder available ", newAllocationAskAll(aKey, appID1, tg1, res, 1, false), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, app.canReplace(tt.ask), "unexpected replacement")
+		})
+	}
+}

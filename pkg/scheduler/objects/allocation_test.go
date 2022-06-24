@@ -28,6 +28,7 @@ import (
 	"gotest.tools/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -129,6 +130,8 @@ func TestNewAllocFromNilSI(t *testing.T) {
 func TestNewAllocFromSI(t *testing.T) {
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
 	assert.NilError(t, err, "Resource creation failed")
+	tags := make(map[string]string)
+	tags[siCommon.CreationTime] = "100"
 	allocSI := &si.Allocation{
 		AllocationKey:    "ask-1",
 		UUID:             "test-uuid",
@@ -137,6 +140,7 @@ func TestNewAllocFromSI(t *testing.T) {
 		ResourcePerAlloc: res.ToProto(),
 		TaskGroupName:    "",
 		Placeholder:      true,
+		AllocationTags:   tags,
 	}
 	var nilAlloc *Allocation
 	alloc := NewAllocationFromSI(allocSI)
@@ -146,4 +150,5 @@ func TestNewAllocFromSI(t *testing.T) {
 	assert.Assert(t, alloc != nilAlloc, "placeholder ask creation failed unexpectedly")
 	assert.Assert(t, alloc.IsPlaceholder(), "ask should have been a placeholder")
 	assert.Equal(t, alloc.getTaskGroup(), "testgroup", "TaskGroupName not set as expected")
+	assert.Equal(t, alloc.Ask.createTime, time.Unix(100, 0)) //nolint:staticcheck
 }

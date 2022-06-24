@@ -20,6 +20,7 @@ package objects
 
 import (
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/log"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -113,6 +115,12 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 		return nil
 	}
 
+	creationTime, err := strconv.ParseInt(alloc.AllocationTags[siCommon.CreationTime], 10, 64)
+	if err != nil {
+		log.Logger().Warn("CreationTime is not set on the Allocation object")
+		creationTime = -1
+	}
+
 	ask := &AllocationAsk{
 		AllocationKey:     alloc.AllocationKey,
 		ApplicationID:     alloc.ApplicationID,
@@ -124,6 +132,7 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 		maxAllocations:    1,
 		taskGroupName:     alloc.TaskGroupName,
 		placeholder:       alloc.Placeholder,
+		createTime:        time.Unix(creationTime, 0),
 	}
 	return NewAllocation(alloc.UUID, alloc.NodeID, ask)
 }

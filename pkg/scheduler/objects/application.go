@@ -59,6 +59,7 @@ type PlaceholderData struct {
 	MinResource   *resources.Resource
 	RequiredNode  string
 	Replaced      int64
+	Timedout      int64
 }
 
 type StateLogEntry struct {
@@ -356,6 +357,11 @@ func (sa *Application) clearPlaceholderTimer() {
 		zap.Duration("Timeout", sa.execTimeout))
 }
 
+// timeoutPlaceholderProcessing cleans up all placeholder asks and allocations that are not used after the timeout.
+// If the application has started processing, Starting state or further, the application keeps on processing without
+// being able to use the placeholders.
+// If the application is in New or Accepted state we clean up and take followup action based on the gang scheduling
+// style.
 func (sa *Application) timeoutPlaceholderProcessing() {
 	sa.Lock()
 	defer sa.Unlock()
@@ -372,6 +378,10 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 			}
 			alloc.released = true
 			toRelease = append(toRelease, alloc)
+			// mark as timeout out in the tracking data
+			if _, ok := sa.placeholderData[alloc.taskGroupName]; ok {
+				sa.placeholderData[alloc.taskGroupName].Timedout++
+			}
 		}
 		log.Logger().Info("Placeholder timeout, releasing placeholders",
 			zap.String("AppID", sa.ApplicationID),
@@ -385,7 +395,7 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 			zap.Int("releasing placeholders", len(sa.allocations)),
 			zap.Int("releasing asks", len(sa.requests)),
 			zap.String("gang scheduling style", sa.gangSchedulingStyle))
-		// change the status of the app to Failing. Once all the placeholders are cleaned up, if will be changed to Failed
+		// change the status of the app based on gang style: soft resume normal allocations, hard fail the app
 		event := ResumeApplication
 		if sa.gangSchedulingStyle == Hard {
 			event = FailApplication
@@ -400,11 +410,15 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 		sa.removeAsksInternal("")
 		// all allocations are placeholders but GetAllAllocations is locked and cannot be used
 		sa.notifyRMAllocationReleased(sa.rmID, sa.getPlaceholderAllocations(), si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
+		// we are in an accepted or new state so nothing can be replaced yet: mark everything as timedout
+		for _, phData := range sa.placeholderData {
+			phData.Timedout = phData.Count
+		}
 	}
 	sa.clearPlaceholderTimer()
 }
 
-// Return an array of all reservation keys for the app.
+// GetReservations returns an array of all reservation keys for the application.
 // This will return an empty array if there are no reservations.
 // Visible for tests
 func (sa *Application) GetReservations() []string {
@@ -830,7 +844,7 @@ func (sa *Application) canReplace(request *AllocationAsk) bool {
 	}
 	// get the tracked placeholder data and check if there are still placeholder that can be replaced
 	if phData, ok := sa.placeholderData[request.taskGroupName]; ok {
-		return phData.Count > phData.Replaced
+		return phData.Count > (phData.Replaced + phData.Timedout)
 	}
 	return false
 }

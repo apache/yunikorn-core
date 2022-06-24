@@ -1431,10 +1431,14 @@ func TestCanReplace(t *testing.T) {
 	// add the placeholder data
 	// available tg has one replacement open
 	app.addPlaceholderData(newAllocationAskTG(aKey, appID1, tg1, res, 1))
-	// unavailable tg has NO replacement open
+	// unavailable tg has NO replacement open (replaced)
 	tg2 := "unavailable"
 	app.addPlaceholderData(newAllocationAskTG(aKey, appID1, tg2, res, 1))
 	app.placeholderData[tg2].Replaced++
+	// unavailable tg has NO replacement open (timedout)
+	tg3 := "timedout"
+	app.addPlaceholderData(newAllocationAskTG(aKey, appID1, tg3, res, 1))
+	app.placeholderData[tg3].Timedout++
 	tests = []struct {
 		name string
 		ask  *AllocationAsk
@@ -1442,8 +1446,9 @@ func TestCanReplace(t *testing.T) {
 	}{
 		{"no TG", newAllocationAsk(aKey, appID1, res), false},
 		{"TG mismatch", newAllocationAskAll(aKey, appID1, "unknown", res, 1, false), false},
-		{"TG placeholders used", newAllocationAskAll(aKey, appID1, tg2, res, 1, false), false},
-		{"TG placeholder available ", newAllocationAskAll(aKey, appID1, tg1, res, 1, false), true},
+		{"TG placeholder used", newAllocationAskAll(aKey, appID1, tg2, res, 1, false), false},
+		{"TG placeholder timed out", newAllocationAskAll(aKey, appID1, tg3, res, 1, false), false},
+		{"TG placeholder available", newAllocationAskAll(aKey, appID1, tg1, res, 1, false), true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

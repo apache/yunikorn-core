@@ -338,8 +338,8 @@ func TestGetNodeIterator(t *testing.T) {
 					}
 
 					n := iter.Next()
-					if wantNodeId := fmt.Sprintf("node-%d", tt.wantWithFair[index]); n.NodeID != wantNodeId {
-						t.Errorf("%s with %s, Want %s, got %s.", tt.name, NodeSortingPolicy[0], wantNodeId, n.NodeID)
+					if want := fmt.Sprintf("node-%d", tt.wantWithFair[index]); n.NodeID != want {
+						t.Errorf("%s with %s, Want %s, got %s.", tt.name, NodeSortingPolicy[0], want, n.NodeID)
 					}
 				}
 
@@ -355,10 +355,9 @@ func TestGetNodeIterator(t *testing.T) {
 					if index >= len(tt.wantWithFair) {
 						t.Errorf("Want length of nodes: %d, Get length of nodes: %d", index, len(tt.wantWithFair))
 					}
-
 					n := iter.Next()
-					if wantNodeId := fmt.Sprintf("node-%d", tt.wantWithFair[DescreasingIndex]); n.NodeID != wantNodeId {
-						t.Errorf("%s with %s, want %s, got %s.", tt.name, NodeSortingPolicy[1], wantNodeId, n.NodeID)
+					if want := fmt.Sprintf("node-%d", tt.wantWithFair[DescreasingIndex]); n.NodeID != want {
+						t.Errorf("%s with %s, want %s, got %s.", tt.name, NodeSortingPolicy[1], want, n.NodeID)
 					}
 					DescreasingIndex--
 				}

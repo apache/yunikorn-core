@@ -76,11 +76,17 @@ type Allocation struct {
 }
 
 func NewAllocation(uuid, nodeID string, ask *AllocationAsk) *Allocation {
+	var createTime time.Time
+	if ask.Tags[siCommon.CreationTime] == "" {
+		createTime = time.Now()
+	} else {
+		createTime = ask.createTime
+	}
 	return &Allocation{
 		Ask:               ask,
 		AllocationKey:     ask.AllocationKey,
 		ApplicationID:     ask.ApplicationID,
-		createTime:        time.Now(),
+		createTime:        createTime,
 		QueueName:         ask.QueueName,
 		NodeID:            nodeID,
 		PartitionName:     common.GetPartitionNameWithoutClusterID(ask.PartitionName),
@@ -117,7 +123,8 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 
 	creationTime, err := strconv.ParseInt(alloc.AllocationTags[siCommon.CreationTime], 10, 64)
 	if err != nil {
-		log.Logger().Warn("CreationTime is not set on the Allocation object")
+		log.Logger().Warn("CreationTime is not set on the Allocation object or invalid",
+			zap.String("creationTime", alloc.AllocationTags[siCommon.CreationTime]))
 		creationTime = -1
 	}
 

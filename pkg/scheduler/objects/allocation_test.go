@@ -20,6 +20,7 @@ package objects
 
 import (
 	"fmt"
+	"strconv"
 
 	"testing"
 
@@ -31,6 +32,8 @@ import (
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
+
+const past = 1640995200 // 2022-1-1 00:00:00
 
 func TestAllocToString(t *testing.T) {
 	defer func() {
@@ -55,6 +58,7 @@ func TestNewAlloc(t *testing.T) {
 	assert.Equal(t, alloc.Result, Allocated, "New alloc should default to result Allocated")
 	assert.Assert(t, resources.Equals(alloc.AllocatedResource, res), "Allocated resource not set correctly")
 	assert.Assert(t, !alloc.IsPlaceholder(), "ask should not have been a placeholder")
+	assert.Equal(t, time.Now().Round(time.Second), alloc.GetCreateTime().Round(time.Second))
 	allocStr := alloc.String()
 	expected := "ApplicationID=app-1, UUID=test-uuid, AllocationKey=ask-1, Node=node-1, Result=Allocated"
 	assert.Equal(t, allocStr, expected, "Strings should have been equal")
@@ -66,6 +70,13 @@ func TestNewAlloc(t *testing.T) {
 	if createdNow.Equal(created) {
 		t.Fatal("create time stamp should have been modified")
 	}
+	// check that createTime is properly copied from the ask
+	tags := make(map[string]string)
+	tags[siCommon.CreationTime] = strconv.FormatInt(past, 10)
+	ask.Tags = tags
+	ask.createTime = time.Unix(past, 0)
+	alloc = NewAllocation("test-uuid", "node-1", ask)
+	assert.Equal(t, alloc.createTime, ask.createTime, "createTime was not copied from the ask")
 }
 
 func TestNewReservedAlloc(t *testing.T) {
@@ -131,7 +142,7 @@ func TestNewAllocFromSI(t *testing.T) {
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
 	assert.NilError(t, err, "Resource creation failed")
 	tags := make(map[string]string)
-	tags[siCommon.CreationTime] = "100"
+	tags[siCommon.CreationTime] = strconv.FormatInt(past, 10)
 	allocSI := &si.Allocation{
 		AllocationKey:    "ask-1",
 		UUID:             "test-uuid",
@@ -150,5 +161,9 @@ func TestNewAllocFromSI(t *testing.T) {
 	assert.Assert(t, alloc != nilAlloc, "placeholder ask creation failed unexpectedly")
 	assert.Assert(t, alloc.IsPlaceholder(), "ask should have been a placeholder")
 	assert.Equal(t, alloc.getTaskGroup(), "testgroup", "TaskGroupName not set as expected")
-	assert.Equal(t, alloc.Ask.createTime, time.Unix(100, 0)) //nolint:staticcheck
+	assert.Equal(t, alloc.Ask.createTime, time.Unix(past, 0)) //nolint:staticcheck
+
+	allocSI.AllocationTags[siCommon.CreationTime] = "xyz"
+	alloc = NewAllocationFromSI(allocSI)
+	assert.Equal(t, alloc.Ask.createTime.Unix(), int64(-1)) //nolint:staticcheck
 }

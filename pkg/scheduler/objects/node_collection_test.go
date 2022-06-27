@@ -279,147 +279,90 @@ func TestGetNodeSortingPolicy(t *testing.T) {
 }
 
 func TestGetNodeIterator(t *testing.T) {
-	// A empty baseCollection belonging to the partition, called "test".
-	bc := initBaseCollection()
-	var nc NodeCollection = bc
-	var iter NodeIterator
-
-	// Case 1: There are not any nodes in BC.
-	if iter = nc.GetNodeIterator(); iter != nil {
-		t.Error("There aren't any nodes, BC should return nil")
+	var tests = []struct {
+		name         string
+		reserved     []bool
+		wantWithFair []int
+	}{
+		{"All nodes are available", []bool{false, false, false, false}, []int{1, 2, 3, 4}},
+		{"Some nodes are reserved", []bool{false, true, false, true}, []int{1, 3}},
+		{"All nodes are reserved", []bool{true, true, true, true}, []int{}},
 	}
 
-	// Case 2: There is a unreserved node in BC
-	node := newNode("node-1", map[string]resources.Quantity{"vcore": 10})
-	node.AddListener(bc)
-	if err := nc.AddNode(node); err != nil {
-		t.Error("Adding a node into BC failed.")
-	}
+	for _, tt := range tests {
+		t.Run("There are reserved nodes in an instance of node collection.", func(t *testing.T) {
+			nc := NewNodeCollection("test")
 
-	if iter = nc.GetNodeIterator(); iter == nil {
-		t.Error("Node iterator should not be nil.")
-	} else {
-		bcIter, ok := iter.(*defaultNodeIterator)
-		if !ok {
-			t.Errorf("Error: Type cast")
-		}
+			// Initialization of nodes and application
+			for i := 1; i < len(tt.reserved)+1; i++ {
+				nodeName := fmt.Sprintf("node-%d", i)
+				node := newNode(nodeName, map[string]resources.Quantity{"vcore": resources.Quantity(10)})
+				if tt.reserved[i-1] {
+					appName := fmt.Sprintf("app-%02d", i)
+					allocName := fmt.Sprintf("alloc-%02d", i)
+					app := newApplication(appName, "default", "root.test")
+					ask := newAllocationAsk(allocName, appName, resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(i)}))
+					if err := node.Reserve(app, ask); err != nil {
+						t.Error("Reserving failed.")
+					}
+				} else {
+					res := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(i)})
+					alloc := newAllocation(fmt.Sprintf("test-app-%d", i), uuid.NewString(), fmt.Sprintf("test-%d", i), "root.default", res)
+					if ok := node.AddAllocation(alloc); !ok {
+						t.Error("Allocation error happen in node.")
+					}
+				}
 
-		if size := bcIter.size; size <= 0 || size > 1 {
-			t.Error("Wrong size of iter elements")
-		}
+				if err := nc.AddNode(node); err != nil {
+					t.Error("Adding another node into BC failed.")
+				}
+			}
 
-		tmp := iter.Next()
-		if tmp.NodeID != "node-1" {
-			t.Errorf("A wrong node in node iterator is %s", tmp.NodeID)
-		}
-	}
+			// Check order of avialble nodes
+			if iter := nc.GetNodeIterator(); len(tt.wantWithFair) == 0 {
+				if iter != nil {
+					t.Error("Wrong count of nodes in the node collection instance.")
+				}
+			} else {
+				NodeSortingPolicy := []string{policies.FairnessPolicy.String(), policies.BinPackingPolicy.String()}
 
-	// Case 3: One node is reserved and the other one is not.
-	node2 := newNode("node-2", map[string]resources.Quantity{"vcore": 5})
-	node2.AddListener(bc)
+				// Fair policy
+				nc.SetNodeSortingPolicy(NewNodeSortingPolicy(NodeSortingPolicy[0], nil))
+				if ans := nc.GetNodeSortingPolicy().PolicyType().String(); ans != NodeSortingPolicy[0] {
+					t.Errorf("got %s, want %s", ans, NodeSortingPolicy[0])
+				}
 
-	if err := nc.AddNode(node2); err != nil {
-		t.Error("Adding another node into BC failed.")
-	}
+				for index := 0; iter.HasNext(); index++ {
+					if index >= len(tt.wantWithFair) {
+						t.Errorf("Want length of nodes: %d, Get length of nodes: %d", index, len(tt.wantWithFair))
+					}
 
-	app := newApplication("app-01", "default", "root.test")
-	res := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 5})
-	ask := newAllocationAsk("alloc-01", "app-01", res)
+					n := iter.Next()
+					if wantNodeId := fmt.Sprintf("node-%d", tt.wantWithFair[index]); n.NodeID != wantNodeId {
+						t.Errorf("%s with %s, Want %s, got %s.", tt.name, NodeSortingPolicy[0], wantNodeId, n.NodeID)
+					}
+				}
 
-	if err := node.Reserve(app, ask); err != nil {
-		t.Error("Reserving failed.")
-	}
+				// Binpacking policy
+				nc.SetNodeSortingPolicy(NewNodeSortingPolicy(NodeSortingPolicy[1], nil))
+				if ans := nc.GetNodeSortingPolicy().PolicyType().String(); ans != NodeSortingPolicy[1] {
+					t.Errorf("got %s, want %s", ans, NodeSortingPolicy[1])
+				}
 
-	if iter = nc.GetNodeIterator(); iter == nil {
-		t.Error("Node iterator should contain a node and it should not be nil")
-	} else {
-		bcIter, ok := iter.(*defaultNodeIterator)
-		if !ok {
-			t.Errorf("Error: Type cast")
-		}
-		if size := bcIter.size; size <= 0 || size > 1 {
-			t.Error("Wrong size of iter elements")
-		}
+				iter = nc.GetNodeIterator()
+				DescreasingIndex := len(tt.wantWithFair) - 1
+				for index := 0; iter.HasNext(); index++ {
+					if index >= len(tt.wantWithFair) {
+						t.Errorf("Want length of nodes: %d, Get length of nodes: %d", index, len(tt.wantWithFair))
+					}
 
-		tmp := iter.Next()
-		if tmp.NodeID != "node-2" {
-			t.Errorf("A wrong node in node iterator is %s", tmp.NodeID)
-		}
-	}
-
-	// Case 4: All nodes are reserved
-	app2 := newApplication("app-02", "default", "root.test")
-	ask2 := newAllocationAsk("alloc-02", "app-02", res)
-	if err := node2.Reserve(app2, ask2); err != nil {
-		t.Error("Reserving failed.")
-	}
-
-	if iter = nc.GetNodeIterator(); iter != nil {
-		t.Error("All nodes are reserved. Node iterator should be nil")
-	}
-
-	// Case 5: Setting node policy changes the order of the nodes
-	nodeNames := []string{"node-3", "node-4"}
-	node3 := newNode(nodeNames[0], map[string]resources.Quantity{"vcore": 5})
-	if err := nc.AddNode(node3); err != nil {
-		t.Errorf("AddNode error:%s", err.Error())
-	}
-
-	res = resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(3)})
-	alloc := newAllocation("test-app-1", uuid.NewString(), "test1", "root.default", res)
-	if ok := node3.AddAllocation(alloc); !ok {
-		t.Error("Allocation failed.")
-	}
-
-	node4 := newNode(nodeNames[1], map[string]resources.Quantity{"vcore": 5})
-	if err := nc.AddNode(node4); err != nil {
-		t.Errorf("AddNode error:%s", err.Error())
-	}
-
-	res = resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(2)})
-	alloc = newAllocation("test-app-2", uuid.NewString(), "test2", "root.default", res)
-	if ok := node4.AddAllocation(alloc); !ok {
-		t.Error("Allocation failed.")
-	}
-
-	// Node sorting policy is nil and the order of nodes will be the adding order.
-	index := 0
-	for iter := nc.GetNodeIterator(); iter.HasNext(); index++ {
-		if index > 1 {
-			t.Error("Wrong length of available nodes")
-		}
-
-		n := iter.Next()
-		if n.NodeID != nodeNames[index] {
-			t.Errorf("Want %s, got %s", nodeNames[index], n.NodeID)
-		}
-	}
-
-	// Node sorting policy is set with fair
-	nc.SetNodeSortingPolicy(NewNodeSortingPolicy(policies.FairSortPolicy.String(), nil))
-	index = 1
-	for iter := nc.GetNodeIterator(); iter.HasNext(); index-- {
-		if index < 0 {
-			t.Error("Wrong length of available nodes")
-		}
-
-		n := iter.Next()
-		if n.NodeID != nodeNames[index] {
-			t.Errorf("Want %s, got %s", nodeNames[index], n.NodeID)
-		}
-	}
-
-	// Node sorting policy is set with binpacking
-	nc.SetNodeSortingPolicy(NewNodeSortingPolicy(policies.BinPackingPolicy.String(), nil))
-	index = 0
-	for iter := nc.GetNodeIterator(); iter.HasNext(); index++ {
-		if index > 1 {
-			t.Error("Wrong length of available nodes")
-		}
-
-		n := iter.Next()
-		if n.NodeID != nodeNames[index] {
-			t.Errorf("Want %s, got %s", nodeNames[index], n.NodeID)
-		}
+					n := iter.Next()
+					if wantNodeId := fmt.Sprintf("node-%d", tt.wantWithFair[DescreasingIndex]); n.NodeID != wantNodeId {
+						t.Errorf("%s with %s, want %s, got %s.", tt.name, NodeSortingPolicy[1], wantNodeId, n.NodeID)
+					}
+					DescreasingIndex--
+				}
+			}
+		})
 	}
 }

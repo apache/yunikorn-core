@@ -878,14 +878,32 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 		}
 
 		requiredNode := request.GetRequiredNode()
-		// does request (daemon set pods?) has any constraint to run on specific node?
+		// does request have any constraint to run on specific node?
 		if requiredNode != "" {
+			// the iterator might not have the node we need as it could be reserved, or we have not added it yet
 			node := getNodeFn(requiredNode)
+			if node == nil {
+				log.Logger().Warn("required node is not found (could be transient)",
+					zap.String("application ID", sa.ApplicationID),
+					zap.String("allocationKey", request.AllocationKey),
+					zap.String("required node", requiredNode))
+				return nil
+			}
 			alloc := sa.tryNode(node, request)
 			if alloc != nil {
+				// check if the node was reserved and we allocated after a release
+				if _, ok := sa.reservations[reservationKey(node, nil, request)]; ok {
+					log.Logger().Debug("allocation on required node after release",
+						zap.String("appID", sa.ApplicationID),
+						zap.String("nodeID", requiredNode),
+						zap.String("allocationKey", request.AllocationKey))
+					alloc.Result = AllocatedReserved
+					return alloc
+				}
 				log.Logger().Debug("allocation on required node is completed",
-					zap.String("required node", node.NodeID),
-					zap.String("allocation key", request.AllocationKey))
+					zap.String("nodeID", node.NodeID),
+					zap.String("allocationKey", request.AllocationKey),
+					zap.String("allocationResult", alloc.Result.String()))
 				return alloc
 			}
 			return newReservedAllocation(Reserved, node.NodeID, request)
@@ -1075,7 +1093,7 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 			continue
 		}
 
-		// Is it daemon set?
+		// Do we need a specific node?
 		if ask.GetRequiredNode() != "" {
 			if !reserve.node.CanAllocate(ask.GetAllocatedResource()) {
 				sa.tryPreemption(reserve, ask)
@@ -1094,7 +1112,7 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 
 	// lets try this on all other nodes
 	for _, reserve := range sa.reservations {
-		// Other nodes cannot be tried for daemon set asks
+		// Other nodes cannot be tried if the ask has a required node
 		if reserve.ask.GetRequiredNode() != "" {
 			continue
 		}

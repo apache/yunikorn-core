@@ -59,6 +59,7 @@ type PlaceholderData struct {
 	MinResource   *resources.Resource
 	RequiredNode  string
 	Replaced      int64
+	Timedout      int64
 }
 
 type StateLogEntry struct {
@@ -94,7 +95,7 @@ type Application struct {
 	finishedTime         time.Time                   // the time of finishing this application. the default value is zero time
 	rejectedMessage      string                      // If the application is rejected, save the rejected message
 	stateLog             []*StateLogEntry            // state log for this application
-	placeholderData      map[string]*PlaceholderData // expose gang related info in application REST info
+	placeholderData      map[string]*PlaceholderData // track placeholder and gang related info
 
 	rmEventHandler     handler.EventHandler
 	rmID               string
@@ -356,6 +357,11 @@ func (sa *Application) clearPlaceholderTimer() {
 		zap.Duration("Timeout", sa.execTimeout))
 }
 
+// timeoutPlaceholderProcessing cleans up all placeholder asks and allocations that are not used after the timeout.
+// If the application has started processing, Starting state or further, the application keeps on processing without
+// being able to use the placeholders.
+// If the application is in New or Accepted state we clean up and take followup action based on the gang scheduling
+// style.
 func (sa *Application) timeoutPlaceholderProcessing() {
 	sa.Lock()
 	defer sa.Unlock()
@@ -372,6 +378,10 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 			}
 			alloc.released = true
 			toRelease = append(toRelease, alloc)
+			// mark as timeout out in the tracking data
+			if _, ok := sa.placeholderData[alloc.taskGroupName]; ok {
+				sa.placeholderData[alloc.taskGroupName].Timedout++
+			}
 		}
 		log.Logger().Info("Placeholder timeout, releasing placeholders",
 			zap.String("AppID", sa.ApplicationID),
@@ -385,7 +395,7 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 			zap.Int("releasing placeholders", len(sa.allocations)),
 			zap.Int("releasing asks", len(sa.requests)),
 			zap.String("gang scheduling style", sa.gangSchedulingStyle))
-		// change the status of the app to Failing. Once all the placeholders are cleaned up, if will be changed to Failed
+		// change the status of the app based on gang style: soft resume normal allocations, hard fail the app
 		event := ResumeApplication
 		if sa.gangSchedulingStyle == Hard {
 			event = FailApplication
@@ -400,11 +410,15 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 		sa.removeAsksInternal("")
 		// all allocations are placeholders but GetAllAllocations is locked and cannot be used
 		sa.notifyRMAllocationReleased(sa.rmID, sa.getPlaceholderAllocations(), si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
+		// we are in an accepted or new state so nothing can be replaced yet: mark everything as timedout
+		for _, phData := range sa.placeholderData {
+			phData.Timedout = phData.Count
+		}
 	}
 	sa.clearPlaceholderTimer()
 }
 
-// Return an array of all reservation keys for the app.
+// GetReservations returns an array of all reservation keys for the application.
 // This will return an empty array if there are no reservations.
 // Visible for tests
 func (sa *Application) GetReservations() []string {
@@ -821,8 +835,21 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, tota
 	}
 }
 
-// Try a regular allocation of the pending requests
-// This includes placeholders
+// canReplace returns true if there is a placeholder for the task group available for the request.
+// False for all other cases. Placeholder replacements are handled separately from normal allocations.
+func (sa *Application) canReplace(request *AllocationAsk) bool {
+	// a placeholder or a request without task group can never replace a placeholder
+	if request == nil || request.placeholder || request.taskGroupName == "" {
+		return false
+	}
+	// get the tracked placeholder data and check if there are still placeholder that can be replaced
+	if phData, ok := sa.placeholderData[request.taskGroupName]; ok {
+		return phData.Count > (phData.Replaced + phData.Timedout)
+	}
+	return false
+}
+
+// tryAllocate will perform a regular allocation of a pending request, includes placeholders.
 func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator func() NodeIterator, getNodeFn func(string) *Node) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
@@ -830,10 +857,8 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 	sa.sortRequests(false)
 	// get all the requests from the app sorted in order
 	for _, request := range sa.sortedRequests {
-		// if request is not a placeholder but part of a task group and there are still placeholders allocated we do
-		// them on their own.
-		// the iterator might not have the node we need as it could be reserved
-		if !request.placeholder && request.taskGroupName != "" && !resources.IsZero(sa.allocatedPlaceholder) {
+		// check if there is a replacement possible
+		if sa.canReplace(request) {
 			continue
 		}
 		// resource must fit in headroom otherwise skip the request

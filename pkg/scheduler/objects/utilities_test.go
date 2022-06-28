@@ -198,13 +198,18 @@ func newPlaceholderAlloc(appID, uuid, nodeID, queueName string, res *resources.R
 }
 
 func newAllocationAsk(allocKey, appID string, res *resources.Resource) *AllocationAsk {
-	return newAllocationAskTG(allocKey, appID, "", res, 1)
+	return newAllocationAskAll(allocKey, appID, "", res, 1, false)
 }
 
 func newAllocationAskRepeat(allocKey, appID string, res *resources.Resource, repeat int) *AllocationAsk {
-	return newAllocationAskTG(allocKey, appID, "", res, repeat)
+	return newAllocationAskAll(allocKey, appID, "", res, repeat, false)
 }
+
 func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resource, repeat int) *AllocationAsk {
+	return newAllocationAskAll(allocKey, appID, taskGroup, res, repeat, taskGroup != "")
+}
+
+func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, repeat int, placeholder bool) *AllocationAsk {
 	ask := &si.AllocationAsk{
 		AllocationKey:  allocKey,
 		ApplicationID:  appID,
@@ -212,7 +217,7 @@ func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resour
 		ResourceAsk:    res.ToProto(),
 		MaxAllocations: int32(repeat),
 		TaskGroupName:  taskGroup,
-		Placeholder:    taskGroup != "",
+		Placeholder:    placeholder,
 	}
 	return NewAllocationAsk(ask)
 }

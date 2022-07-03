@@ -378,6 +378,7 @@ func TestAddAllocAsk(t *testing.T) {
 	assert.Equal(t, app.placeholderData[tg1].TaskGroupName, tg1)
 	assert.Equal(t, app.placeholderData[tg1].Count, int64(1))
 	assert.Equal(t, app.placeholderData[tg1].Replaced, int64(0))
+	assert.Equal(t, app.placeholderData[tg1].Timedout, int64(0))
 	assert.DeepEqual(t, app.placeholderData[tg1].MinResource, res)
 
 	ask = newAllocationAskTG(aKey, appID1, tg1, res, 1)
@@ -387,6 +388,7 @@ func TestAddAllocAsk(t *testing.T) {
 	assert.Equal(t, app.placeholderData[tg1].TaskGroupName, tg1)
 	assert.Equal(t, app.placeholderData[tg1].Count, int64(2))
 	assert.Equal(t, app.placeholderData[tg1].Replaced, int64(0))
+	assert.Equal(t, app.placeholderData[tg1].Timedout, int64(0))
 	assert.DeepEqual(t, app.placeholderData[tg1].MinResource, res)
 
 	tg2 := "tg-2"
@@ -397,6 +399,7 @@ func TestAddAllocAsk(t *testing.T) {
 	assert.Equal(t, app.placeholderData[tg2].TaskGroupName, tg2)
 	assert.Equal(t, app.placeholderData[tg2].Count, int64(1))
 	assert.Equal(t, app.placeholderData[tg2].Replaced, int64(0))
+	assert.Equal(t, app.placeholderData[tg2].Timedout, int64(0))
 	assert.DeepEqual(t, app.placeholderData[tg2].MinResource, res)
 }
 
@@ -1081,6 +1084,7 @@ func TestReplaceAllocation(t *testing.T) {
 	assert.Equal(t, app.placeholderData[""].TaskGroupName, "")
 	assert.Equal(t, app.placeholderData[""].Count, int64(1))
 	assert.Equal(t, app.placeholderData[""].Replaced, int64(0))
+	assert.Equal(t, app.placeholderData[""].Timedout, int64(0))
 	assert.DeepEqual(t, app.placeholderData[""].MinResource, res)
 
 	assert.Equal(t, len(app.allocations), 1, "allocation not added as expected")
@@ -1176,6 +1180,7 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	assert.Equal(t, app.placeholderData[tg1].TaskGroupName, tg1)
 	assert.Equal(t, app.placeholderData[tg1].Count, int64(1))
 	assert.Equal(t, app.placeholderData[tg1].Replaced, int64(0))
+	assert.Equal(t, app.placeholderData[tg1].Timedout, int64(0))
 	assert.DeepEqual(t, app.placeholderData[tg1].MinResource, res)
 
 	// add the placeholder to the app
@@ -1190,6 +1195,7 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 		defer app.RUnlock()
 		return app.placeholderTimer == nil
 	})
+	assert.Equal(t, app.placeholderData[tg1].Timedout, app.placeholderData[tg1].Count, "app in an accepted state: timedout should equal to count")
 	assert.NilError(t, err, "Placeholder timeout cleanup did not trigger unexpectedly")
 	assert.Equal(t, app.stateMachine.Current(), expectedState, "Application did not progress into expected state")
 	events := testHandler.GetEvents()
@@ -1243,6 +1249,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	assert.Equal(t, app.placeholderData[""].TaskGroupName, "")
 	assert.Equal(t, app.placeholderData[""].Count, int64(1))
 	assert.Equal(t, app.placeholderData[""].Replaced, int64(0))
+	assert.Equal(t, app.placeholderData[""].Timedout, int64(0))
 	assert.DeepEqual(t, app.placeholderData[""].MinResource, res)
 
 	assert.Assert(t, app.placeholderTimer != nil, "Placeholder timer should be initiated after the first placeholder allocation")
@@ -1280,6 +1287,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	assert.Assert(t, resources.Equals(app.GetPlaceholderResource(), resources.Multiply(res, 2)), "Unexpected placeholder resources for the app")
 	// check if the Replaced of PlaceHolderData is 0
 	assert.Equal(t, app.placeholderData[""].Replaced, int64(0))
+	assert.Equal(t, app.placeholderData[""].Timedout, int64(1), "app in a start state: timedout should equal to real allocation count")
 }
 
 func TestTimeoutPlaceholderCompleting(t *testing.T) {

@@ -1195,7 +1195,7 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 		defer app.RUnlock()
 		return app.placeholderTimer == nil
 	})
-	assert.Equal(t, app.placeholderData[tg1].Timedout, app.placeholderData[tg1].Count, "app in an accepted state: timedout should equal to count")
+	assert.Equal(t, app.placeholderData[tg1].Timedout, app.placeholderData[tg1].Count, "When the app is in an accepted state, timeout should equal to count")
 	assert.NilError(t, err, "Placeholder timeout cleanup did not trigger unexpectedly")
 	assert.Equal(t, app.stateMachine.Current(), expectedState, "Application did not progress into expected state")
 	events := testHandler.GetEvents()
@@ -1285,9 +1285,8 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	assert.Assert(t, resources.Equals(app.GetAllocatedResource(), res), "Unexpected allocated resources for the app")
 	// a released placeholder still holds the resource until release confirmed by the RM
 	assert.Assert(t, resources.Equals(app.GetPlaceholderResource(), resources.Multiply(res, 2)), "Unexpected placeholder resources for the app")
-	// check if the Replaced of PlaceHolderData is 0
 	assert.Equal(t, app.placeholderData[""].Replaced, int64(0))
-	assert.Equal(t, app.placeholderData[""].Timedout, int64(1), "app in a start state: timedout should equal to real allocation count")
+	assert.Equal(t, app.placeholderData[""].Timedout, int64(1))
 }
 
 func TestTimeoutPlaceholderCompleting(t *testing.T) {

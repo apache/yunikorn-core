@@ -368,9 +368,7 @@ func TestAddAllocAsk(t *testing.T) {
 
 	// test PlaceholderData
 	tg1 := "tg-1"
-	requiredNode := "node-1"
 	ask = newAllocationAskTG(aKey, appID1, tg1, res, 1)
-	ask.requiredNode = requiredNode
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been updated on app")
 	clonePlaceholderData := app.GetAllPlaceholderData()
@@ -378,18 +376,15 @@ func TestAddAllocAsk(t *testing.T) {
 	assert.Equal(t, len(app.placeholderData), 1)
 	assert.Equal(t, clonePlaceholderData[0], app.placeholderData[tg1])
 	assert.Equal(t, app.placeholderData[tg1].TaskGroupName, tg1)
-	assert.Equal(t, app.placeholderData[tg1].RequiredNode, requiredNode)
 	assert.Equal(t, app.placeholderData[tg1].Count, int64(1))
 	assert.Equal(t, app.placeholderData[tg1].Replaced, int64(0))
 	assert.DeepEqual(t, app.placeholderData[tg1].MinResource, res)
 
 	ask = newAllocationAskTG(aKey, appID1, tg1, res, 1)
-	ask.requiredNode = requiredNode
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been updated on app")
 	assert.Equal(t, len(app.placeholderData), 1)
 	assert.Equal(t, app.placeholderData[tg1].TaskGroupName, tg1)
-	assert.Equal(t, app.placeholderData[tg1].RequiredNode, requiredNode)
 	assert.Equal(t, app.placeholderData[tg1].Count, int64(2))
 	assert.Equal(t, app.placeholderData[tg1].Replaced, int64(0))
 	assert.DeepEqual(t, app.placeholderData[tg1].MinResource, res)
@@ -400,7 +395,6 @@ func TestAddAllocAsk(t *testing.T) {
 	assert.NilError(t, err, "ask should have been updated on app")
 	assert.Equal(t, len(app.placeholderData), 2)
 	assert.Equal(t, app.placeholderData[tg2].TaskGroupName, tg2)
-	assert.Equal(t, app.placeholderData[tg2].RequiredNode, "")
 	assert.Equal(t, app.placeholderData[tg2].Count, int64(1))
 	assert.Equal(t, app.placeholderData[tg2].Replaced, int64(0))
 	assert.DeepEqual(t, app.placeholderData[tg2].MinResource, res)
@@ -1085,7 +1079,6 @@ func TestReplaceAllocation(t *testing.T) {
 	app.addPlaceholderData(ph.Ask)
 	assert.Equal(t, len(app.placeholderData), 1)
 	assert.Equal(t, app.placeholderData[""].TaskGroupName, "")
-	assert.Equal(t, app.placeholderData[""].RequiredNode, "")
 	assert.Equal(t, app.placeholderData[""].Count, int64(1))
 	assert.Equal(t, app.placeholderData[""].Replaced, int64(0))
 	assert.DeepEqual(t, app.placeholderData[""].MinResource, res)
@@ -1181,7 +1174,6 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	// check PlaceHolderData
 	assert.Equal(t, len(app.placeholderData), 1)
 	assert.Equal(t, app.placeholderData[tg1].TaskGroupName, tg1)
-	assert.Equal(t, app.placeholderData[tg1].RequiredNode, "")
 	assert.Equal(t, app.placeholderData[tg1].Count, int64(1))
 	assert.Equal(t, app.placeholderData[tg1].Replaced, int64(0))
 	assert.DeepEqual(t, app.placeholderData[tg1].MinResource, res)
@@ -1249,7 +1241,6 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	app.addPlaceholderData(ph.Ask)
 	assert.Equal(t, len(app.placeholderData), 1)
 	assert.Equal(t, app.placeholderData[""].TaskGroupName, "")
-	assert.Equal(t, app.placeholderData[""].RequiredNode, "")
 	assert.Equal(t, app.placeholderData[""].Count, int64(1))
 	assert.Equal(t, app.placeholderData[""].Replaced, int64(0))
 	assert.DeepEqual(t, app.placeholderData[""].MinResource, res)

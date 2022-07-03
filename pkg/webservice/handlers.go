@@ -239,7 +239,6 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 			TaskGroupName: taskGroup.TaskGroupName,
 			Count:         taskGroup.Count,
 			MinResource:   taskGroup.MinResource.DAOMap(),
-			RequiredNode:  taskGroup.RequiredNode,
 			Replaced:      taskGroup.Replaced,
 		}
 		placeholderInfo = append(placeholderInfo, phInfo)

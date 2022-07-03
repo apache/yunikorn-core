@@ -47,6 +47,5 @@ type PlaceholderDAOInfo struct {
 	TaskGroupName string           `json:"taskGroupName"`
 	Count         int64            `json:"count"`
 	MinResource   map[string]int64 `json:"minResource"`
-	RequiredNode  string           `json:"requiredNode"`
 	Replaced      int64            `json:"replaced"`
 }

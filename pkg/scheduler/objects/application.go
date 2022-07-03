@@ -57,7 +57,6 @@ type PlaceholderData struct {
 	TaskGroupName string
 	Count         int64
 	MinResource   *resources.Resource
-	RequiredNode  string
 	Replaced      int64
 	Timedout      int64
 }
@@ -1694,7 +1693,6 @@ func (sa *Application) addPlaceholderData(ask *AllocationAsk) {
 		sa.placeholderData[taskGroupName] = &PlaceholderData{
 			TaskGroupName: taskGroupName,
 			MinResource:   ask.AllocatedResource,
-			RequiredNode:  ask.requiredNode,
 		}
 	}
 	sa.placeholderData[taskGroupName].Count++

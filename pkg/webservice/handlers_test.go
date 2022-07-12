@@ -1140,7 +1140,6 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been added to app")
 	app.SetTimedOutPlaceholder(tg, 1)
-	app.SetTimedOutPlaceholder("tg-2", 2)
 
 	NewWebApp(schedulerContext, nil)
 

@@ -371,6 +371,8 @@ func TestAddAllocAsk(t *testing.T) {
 	ask = newAllocationAskTG(aKey, appID1, tg1, res, 1)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been updated on app")
+	app.SetTimedOutPlaceholder(tg1, 1)
+	app.SetTimedOutPlaceholder("tg-2", 1)
 	clonePlaceholderData := app.GetAllPlaceholderData()
 	assert.Equal(t, len(clonePlaceholderData), 1)
 	assert.Equal(t, len(app.placeholderData), 1)
@@ -378,7 +380,7 @@ func TestAddAllocAsk(t *testing.T) {
 	assert.Equal(t, app.placeholderData[tg1].TaskGroupName, tg1)
 	assert.Equal(t, app.placeholderData[tg1].Count, int64(1))
 	assert.Equal(t, app.placeholderData[tg1].Replaced, int64(0))
-	assert.Equal(t, app.placeholderData[tg1].TimedOut, int64(0))
+	assert.Equal(t, app.placeholderData[tg1].TimedOut, int64(1))
 	assert.DeepEqual(t, app.placeholderData[tg1].MinResource, res)
 
 	ask = newAllocationAskTG(aKey, appID1, tg1, res, 1)
@@ -388,7 +390,7 @@ func TestAddAllocAsk(t *testing.T) {
 	assert.Equal(t, app.placeholderData[tg1].TaskGroupName, tg1)
 	assert.Equal(t, app.placeholderData[tg1].Count, int64(2))
 	assert.Equal(t, app.placeholderData[tg1].Replaced, int64(0))
-	assert.Equal(t, app.placeholderData[tg1].TimedOut, int64(0))
+	assert.Equal(t, app.placeholderData[tg1].TimedOut, int64(1))
 	assert.DeepEqual(t, app.placeholderData[tg1].MinResource, res)
 
 	tg2 := "tg-2"

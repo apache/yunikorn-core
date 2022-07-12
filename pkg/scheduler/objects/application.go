@@ -58,7 +58,7 @@ type PlaceholderData struct {
 	Count         int64
 	MinResource   *resources.Resource
 	Replaced      int64
-	Timedout      int64
+	TimedOut      int64
 }
 
 type StateLogEntry struct {
@@ -379,7 +379,7 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 			toRelease = append(toRelease, alloc)
 			// mark as timeout out in the tracking data
 			if _, ok := sa.placeholderData[alloc.taskGroupName]; ok {
-				sa.placeholderData[alloc.taskGroupName].Timedout++
+				sa.placeholderData[alloc.taskGroupName].TimedOut++
 			}
 		}
 		log.Logger().Info("Placeholder timeout, releasing placeholders",
@@ -411,7 +411,7 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 		sa.notifyRMAllocationReleased(sa.rmID, sa.getPlaceholderAllocations(), si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
 		// we are in an accepted or new state so nothing can be replaced yet: mark everything as timedout
 		for _, phData := range sa.placeholderData {
-			phData.Timedout = phData.Count
+			phData.TimedOut = phData.Count
 		}
 	}
 	sa.clearPlaceholderTimer()
@@ -843,7 +843,7 @@ func (sa *Application) canReplace(request *AllocationAsk) bool {
 	}
 	// get the tracked placeholder data and check if there are still placeholder that can be replaced
 	if phData, ok := sa.placeholderData[request.taskGroupName]; ok {
-		return phData.Count > (phData.Replaced + phData.Timedout)
+		return phData.Count > (phData.Replaced + phData.TimedOut)
 	}
 	return false
 }
@@ -1711,4 +1711,16 @@ func (sa *Application) GetAllPlaceholderData() []*PlaceholderData {
 // test only
 func SetCompletingTimeout(duration time.Duration) {
 	completingTimeout = duration
+}
+
+// test only
+func (sa *Application) SetTimedOutPlaceholder(taskGroupName string, timedOut int64) {
+	sa.Lock()
+	sa.Unlock()
+	if sa.placeholderData == nil {
+		return
+	}
+	if _, ok := sa.placeholderData[taskGroupName]; ok {
+		sa.placeholderData[taskGroupName].TimedOut = timedOut
+	}
 }

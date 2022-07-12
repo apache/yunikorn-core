@@ -1139,6 +1139,8 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	ask.SetPendingAskRepeat(1)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been added to app")
+	app.SetTimedOutPlaceholder(tg, 1)
+	app.SetTimedOutPlaceholder("tg-2", 2)
 
 	NewWebApp(schedulerContext, nil)
 
@@ -1163,7 +1165,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	assert.DeepEqual(t, appsDao[0].PlaceholderData[0].MinResource, map[string]int64{"vcore": 1})
 	assert.Equal(t, appsDao[0].PlaceholderData[0].Replaced, int64(0))
 	assert.Equal(t, appsDao[0].PlaceholderData[0].Count, int64(1))
-	assert.Equal(t, appsDao[0].PlaceholderData[0].Timeout, int64(0))
+	assert.Equal(t, appsDao[0].PlaceholderData[0].TimedOut, int64(1))
 
 	// test nonexistent partition
 	var req1 *http.Request

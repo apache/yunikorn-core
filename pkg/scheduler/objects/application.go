@@ -1716,7 +1716,7 @@ func SetCompletingTimeout(duration time.Duration) {
 // test only
 func (sa *Application) SetTimedOutPlaceholder(taskGroupName string, timedOut int64) {
 	sa.Lock()
-	sa.Unlock()
+	defer sa.Unlock()
 	if sa.placeholderData == nil {
 		return
 	}

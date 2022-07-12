@@ -372,7 +372,7 @@ func TestAddAllocAsk(t *testing.T) {
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been updated on app")
 	app.SetTimedOutPlaceholder(tg1, 1)
-	app.SetTimedOutPlaceholder("tg-2", 1)
+	app.SetTimedOutPlaceholder("tg-2", 2)
 	clonePlaceholderData := app.GetAllPlaceholderData()
 	assert.Equal(t, len(clonePlaceholderData), 1)
 	assert.Equal(t, len(app.placeholderData), 1)

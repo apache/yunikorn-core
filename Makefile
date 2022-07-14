@@ -65,7 +65,7 @@ lint: $(LINTBIN)
 	git symbolic-ref -q HEAD && REV="origin/HEAD" || REV="HEAD^" ; \
 	headSHA=$$(git rev-parse --short=12 $${REV}) ; \
 	echo "checking against commit sha $${headSHA}" ; \
-	$${LINTBIN} run --new-from-rev=$${headSHA}
+	${LINTBIN} run --new-from-rev=$${headSHA}
 
 .PHONY: license-check
 # This is a bit convoluted but using a recursive grep on linux fails to write anything when run

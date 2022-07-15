@@ -194,6 +194,8 @@ func getPartitionJSON(partition *scheduler.PartitionContext) *dao.PartitionDAOIn
 }
 
 func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
+	requests := app.GetAllRequests()
+	requestInfo := make([]dao.AllocationAskDAOInfo, 0)
 	allocations := app.GetAllAllocations()
 	allocationInfo := make([]dao.AllocationDAOInfo, 0, len(allocations))
 	placeholders := app.GetAllPlaceholderData()
@@ -224,6 +226,42 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		}
 		allocationInfo = append(allocationInfo, allocInfo)
 	}
+	for _, req := range requests {
+		count := req.GetPendingAskRepeat()
+		if count > 0 {
+			nodeID := req.GetRequiredNode()
+			nodePtr := &nodeID
+			if nodeID == "" {
+				nodePtr = nil
+			}
+			allocLog := req.GetAllocationLog()
+			allocLogInfo := make([]dao.AllocationAskLogDAOInfo, len(allocLog))
+			for i, log := range allocLog {
+				allocLogInfo[i] = dao.AllocationAskLogDAOInfo{
+					Message:   log.Message,
+					Timestamp: log.Timestamp.UnixNano(),
+					Count:     log.Count,
+				}
+			}
+			reqInfo := dao.AllocationAskDAOInfo{
+				AllocationKey:      req.AllocationKey,
+				AllocationTags:     req.Tags,
+				RequestTime:        req.GetCreateTime().UnixNano(),
+				ResourcePerAlloc:   req.AllocatedResource.DAOMap(),
+				PendingCount:       count,
+				Priority:           strconv.Itoa(int(req.GetPriority())),
+				QueueName:          req.QueueName,
+				RequiredNodeID:     nodePtr,
+				ApplicationID:      req.ApplicationID,
+				Partition:          common.GetPartitionNameWithoutClusterID(req.PartitionName),
+				Placeholder:        req.IsPlaceholder(),
+				PlaceholderTimeout: req.GetTimeout().Nanoseconds(),
+				TaskGroupName:      req.GetTaskGroup(),
+				AllocationLog:      allocLogInfo,
+			}
+			requestInfo = append(requestInfo, reqInfo)
+		}
+	}
 	stateLog := app.GetStateLog()
 	stateLogInfo := make([]dao.StateDAOInfo, 0, len(stateLog))
 	for _, state := range stateLog {
@@ -253,6 +291,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		QueueName:       app.GetQueuePath(),
 		SubmissionTime:  app.SubmissionTime.UnixNano(),
 		FinishedTime:    common.ZeroTimeInUnixNano(app.FinishedTime()),
+		Requests:        requestInfo,
 		Allocations:     allocationInfo,
 		State:           app.CurrentState(),
 		User:            app.GetUser().User,

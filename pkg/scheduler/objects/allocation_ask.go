@@ -20,6 +20,7 @@ package objects
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -51,8 +52,15 @@ type AllocationAsk struct {
 	requiredNode     string
 	allowPreemption  bool
 	originator       bool
+	allocLog         map[string]*AllocationLogEntry
 
 	sync.RWMutex
+}
+
+type AllocationLogEntry struct {
+	Message   string
+	Timestamp time.Time
+	Count     int32
 }
 
 func NewAllocationAsk(ask *si.AllocationAsk) *AllocationAsk {
@@ -72,6 +80,7 @@ func NewAllocationAsk(ask *si.AllocationAsk) *AllocationAsk {
 		requiredNode:      common.GetRequiredNodeFromTag(ask.Tags),
 		allowPreemption:   common.GetPreemptionFromTag(ask.Tags),
 		originator:        ask.Originator,
+		allocLog:          make(map[string]*AllocationLogEntry),
 	}
 	// this is a safety check placeholder and task group name must be set as a combo
 	// order is important as task group can be set without placeholder but not the other way around
@@ -134,19 +143,19 @@ func (aa *AllocationAsk) setQueue(queueName string) {
 	aa.QueueName = queueName
 }
 
-func (aa *AllocationAsk) isPlaceholder() bool {
+func (aa *AllocationAsk) IsPlaceholder() bool {
 	aa.RLock()
 	defer aa.RUnlock()
 	return aa.placeholder
 }
 
-func (aa *AllocationAsk) getTaskGroup() string {
+func (aa *AllocationAsk) GetTaskGroup() string {
 	aa.RLock()
 	defer aa.RUnlock()
 	return aa.taskGroupName
 }
 
-func (aa *AllocationAsk) getTimeout() time.Duration {
+func (aa *AllocationAsk) GetTimeout() time.Duration {
 	aa.RLock()
 	defer aa.RUnlock()
 	return aa.execTimeout
@@ -186,6 +195,48 @@ func (aa *AllocationAsk) GetAllocatedResource() *resources.Resource {
 	aa.RLock()
 	defer aa.RUnlock()
 	return aa.AllocatedResource
+}
+
+// LogSchedulingFailure keeps track of preconditions not being met for an allocation
+func (aa *AllocationAsk) LogAllocationFailure(message string, allocate bool) {
+	// for now, don't log reservations
+	if !allocate {
+		return
+	}
+
+	aa.Lock()
+	defer aa.Unlock()
+
+	entry, ok := aa.allocLog[message]
+	if !ok {
+		entry = &AllocationLogEntry{
+			Message: message,
+		}
+		aa.allocLog[message] = entry
+	}
+	entry.Timestamp = time.Now()
+	entry.Count++
+}
+
+// GetSchedulingLog returns a list of log entries corresponding to allocation preconditions not being met
+func (aa *AllocationAsk) GetAllocationLog() []*AllocationLogEntry {
+	aa.RLock()
+	defer aa.RUnlock()
+
+	res := make([]*AllocationLogEntry, len(aa.allocLog))
+	i := 0
+	for _, log := range aa.allocLog {
+		res[i] = &AllocationLogEntry{
+			Message:   log.Message,
+			Timestamp: log.Timestamp,
+			Count:     log.Count,
+		}
+		i++
+	}
+	sort.SliceStable(res, func(i, j int) bool {
+		return res[i].Timestamp.Before(res[j].Timestamp)
+	})
+	return res
 }
 
 // for test only

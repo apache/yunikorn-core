@@ -51,33 +51,31 @@ RACE=-race
 all:
 	$(MAKE) -C $(dir $(BASE_DIR)) build
 
+LINTBASE := $(shell go env GOPATH)/bin
+LINTBIN  := $(LINTBASE)/golangci-lint
+$(LINTBIN):
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(LINTBASE) v1.46.2
+	stat $@ > /dev/null 2>&1
+
 .PHONY: lint
 # Run lint against the previous commit for PR and branch build
 # In dev setup look at all changes on top of master
-lint:
+lint: $(LINTBIN)
 	@echo "running golangci-lint"
-	@lintBin=$$(go env GOPATH)/bin/golangci-lint ; \
-	if [ ! -f "$${lintBin}" ]; then \
-		lintBin=$$(echo ./bin/golangci-lint) ; \
-		if [ ! -f "$${lintBin}" ]; then \
-			echo "golangci-lint executable not found" ; \
-			exit 1; \
-		fi \
-	fi ; \
-        git symbolic-ref -q HEAD && REV="origin/HEAD" || REV="HEAD^" ; \
-        headSHA=$$(git rev-parse --short=12 $${REV}) ; \
-        echo "checking against commit sha $${headSHA}" ; \
-	$${lintBin} run --new-from-rev=$${headSHA}
+	git symbolic-ref -q HEAD && REV="origin/HEAD" || REV="HEAD^" ; \
+	headSHA=$$(git rev-parse --short=12 $${REV}) ; \
+	echo "checking against commit sha $${headSHA}" ; \
+	${LINTBIN} run --new-from-rev=$${headSHA}
 
 .PHONY: license-check
 # This is a bit convoluted but using a recursive grep on linux fails to write anything when run
 # from the Makefile. That caused the pull-request license check run from the github action to
 # always pass. The syntax for find is slightly different too but that at least works in a similar
 # way on both Mac and Linux. Excluding all .git* files from the checks.
-OS := $(shell uname -s)
+OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 license-check:
 	@echo "checking license headers:"
-ifeq (Darwin,$(OS))
+ifeq (darwin,$(OS))
 	$(shell find -E . -not -path "./.git*" -regex ".*\.(go|sh|md|yaml|yml|mod)" -exec grep -L "Licensed to the Apache Software Foundation" {} \; > LICRES)
 else
 	$(shell find . -not -path "./.git*" -regex ".*\.\(go\|sh\|md\|yaml\|yml\|mod\)" -exec grep -L "Licensed to the Apache Software Foundation" {} \; > LICRES)
@@ -89,6 +87,7 @@ endif
 		exit 1; \
 	fi ; \
 	rm -f LICRES
+	@echo "  all OK"
 
 # Build the example binaries for dev and test
 .PHONY: commands

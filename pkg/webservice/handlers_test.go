@@ -1107,7 +1107,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	part := schedulerContext.GetPartition(partitionName)
 	assert.Equal(t, 0, len(part.GetApplications()))
 
-	addApp := func(id string, queueName string, isCompleted bool) {
+	addApp := func(id string, queueName string, isCompleted bool) *objects.Application {
 		initSize := len(part.GetApplications())
 		app := newApplication(id, partitionName, queueName, rmID, security.UserGroup{})
 		err = part.AddApplication(app)
@@ -1118,11 +1118,28 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 			// we don't test partition, so it is fine to skip to update partition
 			app.UnSetQueue()
 		}
+		return app
 	}
 
 	// add two applications
-	addApp("app-1", "root.default", false)
+	app := addApp("app-1", "root.default", false)
 	addApp("app-2", "root.default", true)
+
+	// add placeholder to test PlaceholderDAOInfo
+	tg := "tg-1"
+	res := &si.Resource{
+		Resources: map[string]*si.Quantity{"vcore": {Value: 1}},
+	}
+	ask := objects.NewAllocationAsk(&si.AllocationAsk{
+		ApplicationID: "app-1",
+		PartitionName: partitionName,
+		TaskGroupName: tg,
+		ResourceAsk:   res,
+		Placeholder:   true})
+	ask.SetPendingAskRepeat(1)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+	app.SetTimedOutPlaceholder(tg, 1)
 
 	NewWebApp(schedulerContext, nil)
 
@@ -1140,6 +1157,14 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	err = json.Unmarshal(resp.outputBytes, &appsDao)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
 	assert.Equal(t, len(appsDao), 2)
+
+	// check PlaceholderData
+	assert.Equal(t, len(appsDao[0].PlaceholderData), 1)
+	assert.Equal(t, appsDao[0].PlaceholderData[0].TaskGroupName, tg)
+	assert.DeepEqual(t, appsDao[0].PlaceholderData[0].MinResource, map[string]int64{"vcore": 1})
+	assert.Equal(t, appsDao[0].PlaceholderData[0].Replaced, int64(0))
+	assert.Equal(t, appsDao[0].PlaceholderData[0].Count, int64(1))
+	assert.Equal(t, appsDao[0].PlaceholderData[0].TimedOut, int64(1))
 
 	// test nonexistent partition
 	var req1 *http.Request

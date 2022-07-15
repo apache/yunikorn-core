@@ -240,6 +240,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 			Count:         taskGroup.Count,
 			MinResource:   taskGroup.MinResource.DAOMap(),
 			Replaced:      taskGroup.Replaced,
+			TimedOut:      taskGroup.TimedOut,
 		}
 		placeholderInfo = append(placeholderInfo, phInfo)
 	}

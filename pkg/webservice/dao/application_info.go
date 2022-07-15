@@ -48,4 +48,5 @@ type PlaceholderDAOInfo struct {
 	Count         int64            `json:"count"`
 	MinResource   map[string]int64 `json:"minResource"`
 	Replaced      int64            `json:"replaced"`
+	TimedOut      int64            `json:"timedout"`
 }

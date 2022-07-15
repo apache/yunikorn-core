@@ -2409,33 +2409,53 @@ func TestRemoveAllocationAsk(t *testing.T) {
 
 func TestUpdateNodeSortingPolicy(t *testing.T) {
 	partition, err := newBasePartition()
-	assert.NilError(t, err, "partition create failed")
+	if err != nil {
+		t.Errorf("Partition creation failed: %s", err.Error())
+	}
 
-	assert.Equal(t, partition.nodes.GetNodeSortingPolicy().PolicyType(), policies.FairnessPolicy)
+	if partition.nodes.GetNodeSortingPolicy().PolicyType().String() != policies.FairnessPolicy.String() {
+		t.Error("Node policy is not set with the default policy which is fair policy.")
+	}
 
-	partition.updateNodeSortingPolicy(configs.PartitionConfig{
-		Name: "test",
-		Queues: []configs.QueueConfig{
-			{
-				Name:      "root",
-				Parent:    true,
-				SubmitACL: "*",
+	var tests = []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"Set binpacking policy", policies.BinPackingPolicy.String(), policies.BinPackingPolicy.String()},
+		{"Set fair policy", policies.FairnessPolicy.String(), policies.FairnessPolicy.String()},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			partition.updateNodeSortingPolicy(configs.PartitionConfig{
+				Name: "test",
 				Queues: []configs.QueueConfig{
 					{
-						Name:   "default",
-						Parent: false,
-						Queues: nil,
+						Name:      "root",
+						Parent:    true,
+						SubmitACL: "*",
+						Queues: []configs.QueueConfig{
+							{
+								Name:   "default",
+								Parent: false,
+								Queues: nil,
+							},
+						},
 					},
 				},
-			},
-		},
-		PlacementRules: nil,
-		Limits:         nil,
-		Preemption:     configs.PartitionPreemptionConfig{},
-		NodeSortPolicy: configs.NodeSortingPolicy{Type: policies.BinPackingPolicy.String()},
-	})
+				PlacementRules: nil,
+				Limits:         nil,
+				Preemption:     configs.PartitionPreemptionConfig{},
+				NodeSortPolicy: configs.NodeSortingPolicy{Type: tt.input},
+			})
 
-	assert.Equal(t, partition.nodes.GetNodeSortingPolicy().PolicyType(), policies.BinPackingPolicy)
+			ans := partition.nodes.GetNodeSortingPolicy().PolicyType().String()
+			if ans != tt.want {
+				t.Errorf("got %s, want %s", ans, tt.want)
+			}
+		})
+	}
 }
 
 func TestUpdateStateDumpFilePath(t *testing.T) {
@@ -2471,4 +2491,55 @@ func TestUpdateStateDumpFilePath(t *testing.T) {
 	})
 
 	assert.Equal(t, partition.GetStateDumpFilePath(), stateDumpFilePath)
+}
+
+// A Test Case of get function in object/node_cellection
+func TestGetNodeSortingPolicyWhenNewPartitionFromConfig(t *testing.T) {
+	var tests = []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"Default policy", "", policies.FairnessPolicy.String()},
+		{"Fair policy", policies.FairnessPolicy.String(), policies.FairnessPolicy.String()},
+		{"Binpacking policy", policies.BinPackingPolicy.String(), policies.BinPackingPolicy.String()},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			conf := configs.PartitionConfig{
+				Name: "test",
+				Queues: []configs.QueueConfig{
+					{
+						Name:      "root",
+						Parent:    true,
+						SubmitACL: "*",
+						Queues: []configs.QueueConfig{
+							{
+								Name:   "default",
+								Parent: false,
+								Queues: nil,
+							},
+						},
+					},
+				},
+				PlacementRules: nil,
+				Limits:         nil,
+				Preemption:     configs.PartitionPreemptionConfig{},
+				NodeSortPolicy: configs.NodeSortingPolicy{
+					Type: tt.input,
+				},
+			}
+
+			p, err := newPartitionContext(conf, rmID, nil)
+			if err != nil {
+				t.Errorf("Partition creation fail: %s", err.Error())
+			}
+
+			ans := p.nodes.GetNodeSortingPolicy().PolicyType().String()
+			if ans != tt.want {
+				t.Errorf("got %s, want %s", ans, tt.want)
+			}
+		})
+	}
 }

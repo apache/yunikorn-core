@@ -19,6 +19,7 @@
 package objects
 
 import (
+	"sort"
 	"testing"
 	"time"
 
@@ -168,31 +169,39 @@ func TestAllocationLog(t *testing.T) {
 
 	// log a reservation event
 	ask.LogAllocationFailure("reserve1", false)
-	log := ask.GetAllocationLog()
+	log := sortedLog(ask)
 	assert.Equal(t, 0, len(log), "non-allocation events was logged")
 
 	// log an allocation event
 	ask.LogAllocationFailure("alloc1", true)
-	log = ask.GetAllocationLog()
+	log = sortedLog(ask)
 	assert.Equal(t, 1, len(log), "allocation event should be logged")
 	assert.Equal(t, "alloc1", log[0].Message, "wrong message for event 1")
 	assert.Equal(t, 1, int(log[0].Count), "wrong count for event 1")
 
 	// add a second allocation event
 	ask.LogAllocationFailure("alloc2", true)
-	log = ask.GetAllocationLog()
+	log = sortedLog(ask)
 	assert.Equal(t, 2, len(log), "allocation event 2 should be logged")
-	assert.Equal(t, "alloc1", log[0].Message, "wrong message for event 1")
-	assert.Equal(t, "alloc2", log[1].Message, "wrong message for event 2")
+	assert.Equal(t, "alloc2", log[0].Message, "wrong message for event 1")
+	assert.Equal(t, "alloc1", log[1].Message, "wrong message for event 2")
 	assert.Equal(t, 1, int(log[0].Count), "wrong count for event 1")
 	assert.Equal(t, 1, int(log[1].Count), "wrong count for event 2")
 
 	// duplicate the first one
 	ask.LogAllocationFailure("alloc1", true)
-	log = ask.GetAllocationLog()
+	log = sortedLog(ask)
 	assert.Equal(t, 2, len(log), "allocation event alloc1 (#2) should not create a new event")
-	assert.Equal(t, "alloc2", log[0].Message, "wrong message for event 1")
-	assert.Equal(t, "alloc1", log[1].Message, "wrong message for event 2")
-	assert.Equal(t, 1, int(log[0].Count), "wrong count for event 1")
-	assert.Equal(t, 2, int(log[1].Count), "wrong count for event 2")
+	assert.Equal(t, "alloc1", log[0].Message, "wrong message for event 1")
+	assert.Equal(t, "alloc2", log[1].Message, "wrong message for event 2")
+	assert.Equal(t, 2, int(log[0].Count), "wrong count for event 1")
+	assert.Equal(t, 1, int(log[1].Count), "wrong count for event 2")
+}
+
+func sortedLog(ask *AllocationAsk) []*AllocationLogEntry {
+	log := ask.GetAllocationLog()
+	sort.SliceStable(log, func(i int, j int) bool {
+		return log[i].LastOccurrence.After(log[j].LastOccurrence)
+	})
+	return log
 }

@@ -405,7 +405,7 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))
 		}
-		sa.notifyRMAllocationAskReleased(sa.rmID, sa.getAllRequests(), si.TerminationType_TIMEOUT, "releasing placeholders asks on placeholder timeout")
+		sa.notifyRMAllocationAskReleased(sa.rmID, sa.getAllRequestsInternal(), si.TerminationType_TIMEOUT, "releasing placeholders asks on placeholder timeout")
 		sa.removeAsksInternal("")
 		// all allocations are placeholders but GetAllAllocations is locked and cannot be used
 		sa.notifyRMAllocationReleased(sa.rmID, sa.getPlaceholderAllocations(), si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
@@ -1386,18 +1386,14 @@ func (sa *Application) getPlaceholderAllocations() []*Allocation {
 	return allocations
 }
 
-// get a copy of all requests of the application
+// GetAllRequests returns a copy of all requests of the application
 func (sa *Application) GetAllRequests() []*AllocationAsk {
 	sa.RLock()
 	defer sa.RUnlock()
-	var requests []*AllocationAsk
-	for _, req := range sa.requests {
-		requests = append(requests, req)
-	}
-	return requests
+	return sa.getAllRequestsInternal()
 }
 
-func (sa *Application) getAllRequests() []*AllocationAsk {
+func (sa *Application) getAllRequestsInternal() []*AllocationAsk {
 	var requests []*AllocationAsk
 	for _, req := range sa.requests {
 		requests = append(requests, req)

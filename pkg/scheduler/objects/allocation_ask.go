@@ -20,7 +20,6 @@ package objects
 
 import (
 	"fmt"
-	"sort"
 	"sync"
 	"time"
 
@@ -58,9 +57,9 @@ type AllocationAsk struct {
 }
 
 type AllocationLogEntry struct {
-	Message   string
-	Timestamp time.Time
-	Count     int32
+	Message        string
+	LastOccurrence time.Time
+	Count          int32
 }
 
 func NewAllocationAsk(ask *si.AllocationAsk) *AllocationAsk {
@@ -197,7 +196,7 @@ func (aa *AllocationAsk) GetAllocatedResource() *resources.Resource {
 	return aa.AllocatedResource
 }
 
-// LogSchedulingFailure keeps track of preconditions not being met for an allocation
+// LogAllocationFailure keeps track of preconditions not being met for an allocation
 func (aa *AllocationAsk) LogAllocationFailure(message string, allocate bool) {
 	// for now, don't log reservations
 	if !allocate {
@@ -214,11 +213,11 @@ func (aa *AllocationAsk) LogAllocationFailure(message string, allocate bool) {
 		}
 		aa.allocLog[message] = entry
 	}
-	entry.Timestamp = time.Now()
+	entry.LastOccurrence = time.Now()
 	entry.Count++
 }
 
-// GetSchedulingLog returns a list of log entries corresponding to allocation preconditions not being met
+// GetAllocationLog returns a list of log entries corresponding to allocation preconditions not being met
 func (aa *AllocationAsk) GetAllocationLog() []*AllocationLogEntry {
 	aa.RLock()
 	defer aa.RUnlock()
@@ -227,15 +226,12 @@ func (aa *AllocationAsk) GetAllocationLog() []*AllocationLogEntry {
 	i := 0
 	for _, log := range aa.allocLog {
 		res[i] = &AllocationLogEntry{
-			Message:   log.Message,
-			Timestamp: log.Timestamp,
-			Count:     log.Count,
+			Message:        log.Message,
+			LastOccurrence: log.LastOccurrence,
+			Count:          log.Count,
 		}
 		i++
 	}
-	sort.SliceStable(res, func(i, j int) bool {
-		return res[i].Timestamp.Before(res[j].Timestamp)
-	})
 	return res
 }
 

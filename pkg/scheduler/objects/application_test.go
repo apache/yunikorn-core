@@ -1371,11 +1371,11 @@ func TestGetAllRequests(t *testing.T) {
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
-	assert.Assert(t, len(app.getAllRequests()) == 0, "App should have no requests yet")
+	assert.Assert(t, len(app.getAllRequestsInternal()) == 0, "App should have no requests yet")
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "No error expected when adding an ask")
-	assert.Assert(t, len(app.getAllRequests()) == 1, "App should have only one request")
-	assert.Equal(t, app.getAllRequests()[0], ask, "Unexpected request found in the app")
+	assert.Assert(t, len(app.getAllRequestsInternal()) == 1, "App should have only one request")
+	assert.Equal(t, app.getAllRequestsInternal()[0], ask, "Unexpected request found in the app")
 }
 
 func TestGetQueueNameAfterUnsetQueue(t *testing.T) {

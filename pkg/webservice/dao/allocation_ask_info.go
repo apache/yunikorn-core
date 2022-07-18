@@ -19,9 +19,9 @@
 package dao
 
 type AllocationAskLogDAOInfo struct {
-	Message   string `json:"message"`
-	Timestamp int64  `json:"timestamp"`
-	Count     int32  `json:"count"`
+	Message        string `json:"message"`
+	LastOccurrence int64  `json:"lastOccurrence"`
+	Count          int32  `json:"count"`
 }
 
 type AllocationAskDAOInfo struct {
@@ -32,7 +32,7 @@ type AllocationAskDAOInfo struct {
 	PendingCount       int32                     `json:"pendingCount"`
 	Priority           string                    `json:"priority"`
 	QueueName          string                    `json:"queueName"`
-	RequiredNodeID     *string                   `json:"requiredNodeId"`
+	RequiredNodeID     string                    `json:"requiredNodeId"`
 	ApplicationID      string                    `json:"applicationId"`
 	Partition          string                    `json:"partition"`
 	Placeholder        bool                      `json:"placeholder"`

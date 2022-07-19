@@ -405,7 +405,7 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))
 		}
-		sa.notifyRMAllocationAskReleased(sa.rmID, sa.getAllRequests(), si.TerminationType_TIMEOUT, "releasing placeholders asks on placeholder timeout")
+		sa.notifyRMAllocationAskReleased(sa.rmID, sa.getAllRequestsInternal(), si.TerminationType_TIMEOUT, "releasing placeholders asks on placeholder timeout")
 		sa.removeAsksInternal("")
 		// all allocations are placeholders but GetAllAllocations is locked and cannot be used
 		sa.notifyRMAllocationReleased(sa.rmID, sa.getPlaceholderAllocations(), si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
@@ -986,7 +986,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			node := getNodeFn(ph.NodeID)
 			// got the node run same checks as for reservation (all but fits)
 			// resource usage should not change anyway between placeholder and real one at this point
-			if node != nil && node.preReserveConditions(request.AllocationKey) {
+			if node != nil && node.preReserveConditions(request) {
 				alloc := NewAllocation(common.GetNewUUID(), node.NodeID, request)
 				// double link to make it easier to find
 				// alloc (the real one) releases points to the placeholder in the releases list
@@ -1029,7 +1029,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				continue
 			}
 			// skip the node if conditions can not be satisfied
-			if !node.preAllocateConditions(reqFit.AllocationKey) {
+			if !node.preAllocateConditions(reqFit) {
 				continue
 			}
 			// allocation worked: on a non placeholder node update result and return
@@ -1267,7 +1267,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 			zap.Int("reservations", len(reservedAsks)),
 			zap.Int32("pendingRepeats", ask.pendingRepeatAsk))
 		// skip the node if conditions can not be satisfied
-		if !nodeToReserve.preReserveConditions(allocKey) {
+		if !nodeToReserve.preReserveConditions(ask) {
 			return nil
 		}
 		// return reservation allocation and mark it as a reservation
@@ -1280,7 +1280,6 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 
 // Try allocating on one specific node
 func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
-	allocKey := ask.AllocationKey
 	toAllocate := ask.AllocatedResource
 	// create the key for the reservation
 	if err := node.preAllocateCheck(toAllocate, reservationKey(nil, sa, ask), false); err != nil {
@@ -1288,7 +1287,7 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 		return nil
 	}
 	// skip the node if conditions can not be satisfied
-	if !node.preAllocateConditions(allocKey) {
+	if !node.preAllocateConditions(ask) {
 		return nil
 	}
 	// everything OK really allocate
@@ -1387,7 +1386,14 @@ func (sa *Application) getPlaceholderAllocations() []*Allocation {
 	return allocations
 }
 
-func (sa *Application) getAllRequests() []*AllocationAsk {
+// GetAllRequests returns a copy of all requests of the application
+func (sa *Application) GetAllRequests() []*AllocationAsk {
+	sa.RLock()
+	defer sa.RUnlock()
+	return sa.getAllRequestsInternal()
+}
+
+func (sa *Application) getAllRequestsInternal() []*AllocationAsk {
 	var requests []*AllocationAsk
 	for _, req := range sa.requests {
 		requests = append(requests, req)

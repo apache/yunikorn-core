@@ -19,6 +19,7 @@
 package objects
 
 import (
+	"sort"
 	"testing"
 	"time"
 
@@ -96,8 +97,8 @@ func TestPlaceHolder(t *testing.T) {
 		PartitionName: "default",
 	}
 	ask := NewAllocationAsk(siAsk)
-	assert.Assert(t, !ask.isPlaceholder(), "standard ask should not be a placeholder")
-	assert.Equal(t, ask.getTaskGroup(), "", "standard ask should not have a TaskGroupName")
+	assert.Assert(t, !ask.IsPlaceholder(), "standard ask should not be a placeholder")
+	assert.Equal(t, ask.GetTaskGroup(), "", "standard ask should not have a TaskGroupName")
 	siAsk = &si.AllocationAsk{
 		AllocationKey: "ask1",
 		ApplicationID: "app1",
@@ -111,8 +112,8 @@ func TestPlaceHolder(t *testing.T) {
 	siAsk.TaskGroupName = "testgroup"
 	ask = NewAllocationAsk(siAsk)
 	assert.Assert(t, ask != nilAsk, "placeholder ask creation failed unexpectedly")
-	assert.Assert(t, ask.isPlaceholder(), "ask should have been a placeholder")
-	assert.Equal(t, ask.getTaskGroup(), "testgroup", "TaskGroupName not set as expected")
+	assert.Assert(t, ask.IsPlaceholder(), "ask should have been a placeholder")
+	assert.Equal(t, ask.GetTaskGroup(), "testgroup", "TaskGroupName not set as expected")
 }
 
 func TestGetTimeout(t *testing.T) {
@@ -122,7 +123,7 @@ func TestGetTimeout(t *testing.T) {
 		PartitionName: "default",
 	}
 	ask := NewAllocationAsk(siAsk)
-	assert.Equal(t, ask.getTimeout(), time.Duration(0), "standard ask should not have timeout")
+	assert.Equal(t, ask.GetTimeout(), time.Duration(0), "standard ask should not have timeout")
 	siAsk = &si.AllocationAsk{
 		AllocationKey:                "ask1",
 		ApplicationID:                "app1",
@@ -130,7 +131,7 @@ func TestGetTimeout(t *testing.T) {
 		ExecutionTimeoutMilliSeconds: 10,
 	}
 	ask = NewAllocationAsk(siAsk)
-	assert.Equal(t, ask.getTimeout(), 10*time.Millisecond, "ask timeout not set as expected")
+	assert.Equal(t, ask.GetTimeout(), 10*time.Millisecond, "ask timeout not set as expected")
 }
 
 func TestGetRequiredNode(t *testing.T) {
@@ -154,4 +155,53 @@ func TestGetRequiredNode(t *testing.T) {
 	}
 	ask = NewAllocationAsk(siAsk)
 	assert.Equal(t, ask.GetRequiredNode(), "NodeName", "required node should be NodeName")
+}
+
+func TestAllocationLog(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	siAsk := &si.AllocationAsk{
+		AllocationKey:  "ask-1",
+		ApplicationID:  "app-1",
+		MaxAllocations: 1,
+		ResourceAsk:    res.ToProto(),
+	}
+	ask := NewAllocationAsk(siAsk)
+
+	// log a reservation event
+	ask.LogAllocationFailure("reserve1", false)
+	log := sortedLog(ask)
+	assert.Equal(t, 0, len(log), "non-allocation events was logged")
+
+	// log an allocation event
+	ask.LogAllocationFailure("alloc1", true)
+	log = sortedLog(ask)
+	assert.Equal(t, 1, len(log), "allocation event should be logged")
+	assert.Equal(t, "alloc1", log[0].Message, "wrong message for event 1")
+	assert.Equal(t, 1, int(log[0].Count), "wrong count for event 1")
+
+	// add a second allocation event
+	ask.LogAllocationFailure("alloc2", true)
+	log = sortedLog(ask)
+	assert.Equal(t, 2, len(log), "allocation event 2 should be logged")
+	assert.Equal(t, "alloc2", log[0].Message, "wrong message for event 1")
+	assert.Equal(t, "alloc1", log[1].Message, "wrong message for event 2")
+	assert.Equal(t, 1, int(log[0].Count), "wrong count for event 1")
+	assert.Equal(t, 1, int(log[1].Count), "wrong count for event 2")
+
+	// duplicate the first one
+	ask.LogAllocationFailure("alloc1", true)
+	log = sortedLog(ask)
+	assert.Equal(t, 2, len(log), "allocation event alloc1 (#2) should not create a new event")
+	assert.Equal(t, "alloc1", log[0].Message, "wrong message for event 1")
+	assert.Equal(t, "alloc2", log[1].Message, "wrong message for event 2")
+	assert.Equal(t, 2, int(log[0].Count), "wrong count for event 1")
+	assert.Equal(t, 1, int(log[1].Count), "wrong count for event 2")
+}
+
+func sortedLog(ask *AllocationAsk) []*AllocationLogEntry {
+	log := ask.GetAllocationLog()
+	sort.SliceStable(log, func(i int, j int) bool {
+		return log[i].LastOccurrence.After(log[j].LastOccurrence)
+	})
+	return log
 }

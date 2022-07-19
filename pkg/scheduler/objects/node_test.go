@@ -96,7 +96,9 @@ func TestCheckConditions(t *testing.T) {
 	}
 
 	// Check if we can allocate on scheduling node (no plugins)
-	if !node.preAllocateConditions("test") {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	ask := newAllocationAsk("test", "app001", res)
+	if !node.preAllocateConditions(ask) {
 		t.Error("node with scheduling set to true no plugins should allow allocation")
 	}
 

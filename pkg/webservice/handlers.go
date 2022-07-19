@@ -25,6 +25,7 @@ import (
 	"math"
 	"net/http"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -253,6 +254,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		QueueName:       app.GetQueuePath(),
 		SubmissionTime:  app.SubmissionTime.UnixNano(),
 		FinishedTime:    common.ZeroTimeInUnixNano(app.FinishedTime()),
+		Requests:        getApplicationRequests(app),
 		Allocations:     allocationInfo,
 		State:           app.CurrentState(),
 		User:            app.GetUser().User,
@@ -260,6 +262,46 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		PlaceholderData: placeholderInfo,
 		StateLog:        stateLogInfo,
 	}
+}
+
+func getApplicationRequests(app *objects.Application) []dao.AllocationAskDAOInfo {
+	requests := app.GetAllRequests()
+	requestInfo := make([]dao.AllocationAskDAOInfo, 0)
+	for _, req := range requests {
+		count := req.GetPendingAskRepeat()
+		if count > 0 {
+			allocLog := req.GetAllocationLog()
+			sort.SliceStable(allocLog, func(i, j int) bool {
+				return allocLog[i].LastOccurrence.Before(allocLog[j].LastOccurrence)
+			})
+			allocLogInfo := make([]dao.AllocationAskLogDAOInfo, len(allocLog))
+			for i, log := range allocLog {
+				allocLogInfo[i] = dao.AllocationAskLogDAOInfo{
+					Message:        log.Message,
+					LastOccurrence: log.LastOccurrence.UnixNano(),
+					Count:          log.Count,
+				}
+			}
+			reqInfo := dao.AllocationAskDAOInfo{
+				AllocationKey:      req.AllocationKey,
+				AllocationTags:     req.Tags,
+				RequestTime:        req.GetCreateTime().UnixNano(),
+				ResourcePerAlloc:   req.AllocatedResource.DAOMap(),
+				PendingCount:       count,
+				Priority:           strconv.Itoa(int(req.GetPriority())),
+				QueueName:          req.QueueName,
+				RequiredNodeID:     req.GetRequiredNode(),
+				ApplicationID:      req.ApplicationID,
+				Partition:          common.GetPartitionNameWithoutClusterID(req.PartitionName),
+				Placeholder:        req.IsPlaceholder(),
+				PlaceholderTimeout: req.GetTimeout().Nanoseconds(),
+				TaskGroupName:      req.GetTaskGroup(),
+				AllocationLog:      allocLogInfo,
+			}
+			requestInfo = append(requestInfo, reqInfo)
+		}
+	}
+	return requestInfo
 }
 
 func getNodeJSON(node *objects.Node) *dao.NodeDAOInfo {

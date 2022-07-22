@@ -320,9 +320,7 @@ func (a *Allocation) GetReleasesClone() []*Allocation {
 	a.RLock()
 	defer a.RUnlock()
 	result := make([]*Allocation, len(a.releases))
-	for i, v := range a.releases {
-		result[i] = v
-	}
+	copy(result, a.releases)
 	return result
 }
 

@@ -47,7 +47,7 @@ func newReservation(node *Node, app *Application, ask *AllocationAsk, appBased b
 		return nil
 	}
 	res := &reservation{
-		askKey: ask.AllocationKey,
+		askKey: ask.GetAllocationKey(),
 		ask:    ask,
 		app:    app,
 		node:   node,
@@ -69,9 +69,9 @@ func reservationKey(node *Node, app *Application, ask *AllocationAsk) string {
 		return ""
 	}
 	if node == nil {
-		return app.ApplicationID + "|" + ask.AllocationKey
+		return app.ApplicationID + "|" + ask.GetAllocationKey()
 	}
-	return node.NodeID + "|" + ask.AllocationKey
+	return node.NodeID + "|" + ask.GetAllocationKey()
 }
 
 // Return the reservation key

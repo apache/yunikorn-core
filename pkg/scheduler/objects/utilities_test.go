@@ -184,7 +184,7 @@ func newProto(nodeID string, totalResource, occupiedResource *resources.Resource
 func newAllocation(appID, uuid, nodeID, queueName string, res *resources.Resource) *Allocation {
 	askKey := strconv.FormatInt((time.Now()).UnixNano(), 10)
 	ask := newAllocationAsk(askKey, appID, res)
-	ask.setQueue(queueName)
+	ask.SetQueue(queueName)
 	return NewAllocation(uuid, nodeID, ask)
 }
 
@@ -192,7 +192,7 @@ func newAllocation(appID, uuid, nodeID, queueName string, res *resources.Resourc
 func newPlaceholderAlloc(appID, uuid, nodeID, queueName string, res *resources.Resource) *Allocation {
 	askKey := strconv.FormatInt((time.Now()).UnixNano(), 10)
 	ask := newAllocationAsk(askKey, appID, res)
-	ask.setQueue(queueName)
+	ask.SetQueue(queueName)
 	ask.placeholder = true
 	return NewAllocation(uuid, nodeID, ask)
 }
@@ -219,5 +219,5 @@ func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resou
 		TaskGroupName:  taskGroup,
 		Placeholder:    placeholder,
 	}
-	return NewAllocationAsk(ask)
+	return NewAllocationAskFromSI(ask)
 }

@@ -572,18 +572,10 @@ func TestGetClusterUtilJSON(t *testing.T) {
 
 	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 500, resources.VCORE: 300})
 	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 300, resources.VCORE: 200})
-	ask1 := &objects.AllocationAsk{
-		AllocationKey:     "alloc-1",
-		QueueName:         queueName,
-		ApplicationID:     appID,
-		AllocatedResource: resAlloc1,
-	}
-	ask2 := &objects.AllocationAsk{
-		AllocationKey:     "alloc-2",
-		QueueName:         queueName,
-		ApplicationID:     appID,
-		AllocatedResource: resAlloc2,
-	}
+	ask1 := objects.NewAllocationAsk("alloc-1", appID, resAlloc1)
+	ask1.SetQueue(queueName)
+	ask2 := objects.NewAllocationAsk("alloc-2", appID, resAlloc2)
+	ask2.SetQueue(queueName)
 	alloc1 := objects.NewAllocation("alloc-1-uuid", nodeID, ask1)
 	alloc2 := objects.NewAllocation("alloc-2-uuid", nodeID, ask2)
 	allocs := []*objects.Allocation{alloc1, alloc2}
@@ -652,18 +644,10 @@ func TestGetNodesUtilJSON(t *testing.T) {
 	// create test allocations
 	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 500, resources.VCORE: 300})
 	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 300, resources.VCORE: 500, "GPU": 5})
-	ask1 := &objects.AllocationAsk{
-		AllocationKey:     "alloc-1",
-		QueueName:         queueName,
-		ApplicationID:     appID,
-		AllocatedResource: resAlloc1,
-	}
-	ask2 := &objects.AllocationAsk{
-		AllocationKey:     "alloc-2",
-		QueueName:         queueName,
-		ApplicationID:     appID,
-		AllocatedResource: resAlloc2,
-	}
+	ask1 := objects.NewAllocationAsk("alloc-1", appID, resAlloc1)
+	ask1.SetQueue(queueName)
+	ask2 := objects.NewAllocationAsk("alloc-2", appID, resAlloc2)
+	ask2.SetQueue(queueName)
 	allocs := []*objects.Allocation{objects.NewAllocation("alloc-1-uuid", node1ID, ask1)}
 	err = partition.AddNode(node1, allocs)
 	assert.NilError(t, err, "add node to partition should not have failed")
@@ -766,18 +750,10 @@ func TestPartitions(t *testing.T) {
 	// create test allocations
 	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 100, resources.VCORE: 400})
 	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 200, resources.VCORE: 300})
-	ask1 := &objects.AllocationAsk{
-		AllocationKey:     "alloc-1",
-		QueueName:         queueName,
-		ApplicationID:     app6.ApplicationID,
-		AllocatedResource: resAlloc1,
-	}
-	ask2 := &objects.AllocationAsk{
-		AllocationKey:     "alloc-2",
-		QueueName:         queueName,
-		ApplicationID:     app3.ApplicationID,
-		AllocatedResource: resAlloc2,
-	}
+	ask1 := objects.NewAllocationAsk("alloc-1", app6.ApplicationID, resAlloc1)
+	ask1.SetQueue(queueName)
+	ask2 := objects.NewAllocationAsk("alloc-2", app3.ApplicationID, resAlloc2)
+	ask2.SetQueue(queueName)
 	allocs := []*objects.Allocation{objects.NewAllocation("alloc-1-uuid", node1ID, ask1)}
 	err = defaultPartition.AddNode(node1, allocs)
 	assert.NilError(t, err, "add node to partition should not have failed")
@@ -1033,18 +1009,10 @@ func TestGetPartitionNodes(t *testing.T) {
 	// create test allocations
 	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 500, resources.VCORE: 300})
 	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 300, resources.VCORE: 500})
-	ask1 := &objects.AllocationAsk{
-		AllocationKey:     "alloc-1",
-		QueueName:         queueName,
-		ApplicationID:     appID,
-		AllocatedResource: resAlloc1,
-	}
-	ask2 := &objects.AllocationAsk{
-		AllocationKey:     "alloc-2",
-		QueueName:         queueName,
-		ApplicationID:     appID,
-		AllocatedResource: resAlloc2,
-	}
+	ask1 := objects.NewAllocationAsk("alloc-1", appID, resAlloc1)
+	ask1.SetQueue(queueName)
+	ask2 := objects.NewAllocationAsk("alloc-2", appID, resAlloc2)
+	ask2.SetQueue(queueName)
 	allocs := []*objects.Allocation{objects.NewAllocation("alloc-1-uuid", node1ID, ask1)}
 	err = partition.AddNode(node1, allocs)
 	assert.NilError(t, err, "add node to partition should not have failed")
@@ -1130,13 +1098,13 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	res := &si.Resource{
 		Resources: map[string]*si.Quantity{"vcore": {Value: 1}},
 	}
-	ask := objects.NewAllocationAsk(&si.AllocationAsk{
-		ApplicationID: "app-1",
-		PartitionName: partitionName,
-		TaskGroupName: tg,
-		ResourceAsk:   res,
-		Placeholder:   true})
-	ask.SetPendingAskRepeat(1)
+	ask := objects.NewAllocationAskFromSI(&si.AllocationAsk{
+		ApplicationID:  "app-1",
+		PartitionName:  partitionName,
+		TaskGroupName:  tg,
+		ResourceAsk:    res,
+		Placeholder:    true,
+		MaxAllocations: 1})
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been added to app")
 	app.SetTimedOutPlaceholder(tg, 1)

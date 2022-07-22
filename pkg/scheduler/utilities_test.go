@@ -240,7 +240,7 @@ func newAllocationAskPriority(allocKey, appID string, res *resources.Resource, r
 }
 
 func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, repeat int32, prio int32, placeHolder bool) *objects.AllocationAsk {
-	return objects.NewAllocationAsk(&si.AllocationAsk{
+	return objects.NewAllocationAskFromSI(&si.AllocationAsk{
 		AllocationKey:  allocKey,
 		ApplicationID:  appID,
 		PartitionName:  "test",

@@ -197,7 +197,7 @@ func TestSetNodeSortingPolicy(t *testing.T) {
 			iter := nc.GetNodeIterator()
 			for id := 0; id < len(tt.nodesOrder); id++ {
 				if n := iter.Next(); n.NodeID != tt.nodesOrder[id] {
-					t.Errorf("%s: NodeID wanted %s, but it got %s.", nc.GetNodeSortingPolicy().PolicyType().String(), tt.nodesOrder[id], n.NodeID)
+					t.Errorf("%s: nodeID wanted %s, but it got %s.", nc.GetNodeSortingPolicy().PolicyType().String(), tt.nodesOrder[id], n.NodeID)
 				}
 			}
 		})

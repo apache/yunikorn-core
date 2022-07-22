@@ -401,19 +401,19 @@ func (pc *PartitionContext) removeApplication(appID string) []*objects.Allocatio
 		// track the number of allocations
 		pc.updateAllocationCount(-len(allocations))
 		for _, alloc := range allocations {
-			currentUUID := alloc.UUID
-			node := pc.GetNode(alloc.NodeID)
+			currentUUID := alloc.GetUUID()
+			node := pc.GetNode(alloc.GetNodeID())
 			if node == nil {
 				log.Logger().Warn("unknown node: not found in active node list",
 					zap.String("appID", appID),
-					zap.String("nodeID", alloc.NodeID))
+					zap.String("nodeID", alloc.GetNodeID()))
 				continue
 			}
 			if nodeAlloc := node.RemoveAllocation(currentUUID); nodeAlloc == nil {
 				log.Logger().Warn("unknown allocation: not found on the node",
 					zap.String("appID", appID),
 					zap.String("allocationId", currentUUID),
-					zap.String("nodeID", alloc.NodeID))
+					zap.String("nodeID", alloc.GetNodeID()))
 			}
 		}
 	}
@@ -705,20 +705,20 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 	confirmed := make([]*objects.Allocation, 0)
 	// walk over all allocations still registered for this node
 	for _, alloc := range node.GetAllAllocations() {
-		allocID := alloc.UUID
+		allocID := alloc.GetUUID()
 		// since we are not locking the node and or application we could have had an update while processing
 		// note that we do not return the allocation if the app or allocation is not found and assume that it
 		// was already removed
-		app := pc.getApplication(alloc.ApplicationID)
+		app := pc.getApplication(alloc.GetApplicationID())
 		if app == nil {
 			log.Logger().Info("app is not found, skipping while removing the node",
-				zap.String("appID", alloc.ApplicationID),
+				zap.String("appID", alloc.GetApplicationID()),
 				zap.String("nodeID", node.NodeID))
 			continue
 		}
 		// check for an inflight replacement.
-		if len(alloc.Releases) != 0 {
-			release := alloc.Releases[0]
+		if alloc.GetReleaseCount() != 0 {
+			release := alloc.GetFirstRelease()
 			// allocation to update the ask on: this needs to happen on the real alloc never the placeholder
 			askAlloc := alloc
 			// placeholder gets handled differently from normal
@@ -727,11 +727,11 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 				// the replacement. Trigger the replacement only if it is NOT on the same node.
 				// If it is on the same node we just keep going as the real allocation will be unlinked as a result of
 				// the removal of this placeholder. The ask update will trigger rescheduling later for the real alloc.
-				if alloc.NodeID != release.NodeID {
+				if alloc.GetNodeID() != release.GetNodeID() {
 					// ignore the return as that is the same as alloc, the alloc is gone after this call
 					_ = app.ReplaceAllocation(allocID)
 					// we need to check the resources equality
-					delta := resources.Sub(release.AllocatedResource, alloc.AllocatedResource)
+					delta := resources.Sub(release.GetAllocatedResource(), alloc.GetAllocatedResource())
 					// Any negative value in the delta means that at least one of the requested resource in the
 					// placeholder is larger than the real allocation. The nodes are correct the queue needs adjusting.
 					// The reverse case is handled during allocation.
@@ -741,16 +741,16 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 						// this should not happen as we really decrease the value
 						if err != nil {
 							log.Logger().Warn("unexpected failure during queue update: replacing placeholder",
-								zap.String("appID", alloc.ApplicationID),
-								zap.String("placeholderID", alloc.UUID),
-								zap.String("allocationID", release.UUID),
+								zap.String("appID", alloc.GetApplicationID()),
+								zap.String("placeholderID", alloc.GetUUID()),
+								zap.String("allocationID", release.GetUUID()),
 								zap.Error(err))
 						}
 						log.Logger().Warn("replacing placeholder: placeholder is larger than real allocation",
-							zap.String("allocationID", release.UUID),
-							zap.String("requested resource", release.AllocatedResource.String()),
-							zap.String("placeholderID", alloc.UUID),
-							zap.String("placeholder resource", alloc.AllocatedResource.String()))
+							zap.String("allocationID", release.GetUUID()),
+							zap.String("requested resource", release.GetAllocatedResource().String()),
+							zap.String("placeholderID", alloc.GetUUID()),
+							zap.String("placeholder resource", alloc.GetAllocatedResource().String()))
 					}
 					// track what we confirm on the other node to confirm it in the shim and get is bound
 					confirmed = append(confirmed, release)
@@ -759,27 +759,27 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 					log.Logger().Info("allocation removed from node and replacement confirmed",
 						zap.String("nodeID", node.NodeID),
 						zap.String("allocationId", allocID),
-						zap.String("replacement nodeID", release.NodeID),
-						zap.String("replacement allocationId", release.UUID))
+						zap.String("replacement nodeID", release.GetNodeID()),
+						zap.String("replacement allocationId", release.GetUUID()))
 					continue
 				}
 				askAlloc = release
 			}
 			// unlink the placeholder and allocation
-			release.Releases = nil
-			alloc.Releases = nil
+			release.ClearReleases()
+			alloc.ClearReleases()
 			// update the repeat on the real alloc to get it re-scheduled
-			_, err := app.UpdateAskRepeat(askAlloc.Ask.AllocationKey, 1)
+			_, err := app.UpdateAskRepeat(askAlloc.GetAsk().GetAllocationKey(), 1)
 			if err == nil {
 				log.Logger().Info("inflight placeholder replacement reversed due to node removal",
-					zap.String("appID", askAlloc.ApplicationID),
-					zap.String("allocationKey", askAlloc.Ask.AllocationKey),
+					zap.String("appID", askAlloc.GetApplicationID()),
+					zap.String("allocationKey", askAlloc.GetAsk().GetAllocationKey()),
 					zap.String("nodeID", node.NodeID),
-					zap.String("replacement allocationId", askAlloc.UUID))
+					zap.String("replacement allocationId", askAlloc.GetUUID()))
 			} else {
 				log.Logger().Error("node removal: repeat update failure for inflight replacement",
-					zap.String("appID", askAlloc.ApplicationID),
-					zap.String("allocationKey", askAlloc.Ask.AllocationKey),
+					zap.String("appID", askAlloc.GetApplicationID()),
+					zap.String("allocationKey", askAlloc.GetAsk().GetAllocationKey()),
 					zap.String("nodeID", node.NodeID),
 					zap.Error(err))
 			}
@@ -792,9 +792,9 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 				zap.String("nodeID", node.NodeID))
 			continue
 		}
-		if err := app.GetQueue().DecAllocatedResource(alloc.AllocatedResource); err != nil {
+		if err := app.GetQueue().DecAllocatedResource(alloc.GetAllocatedResource()); err != nil {
 			log.Logger().Warn("failed to release resources from queue",
-				zap.String("appID", alloc.ApplicationID),
+				zap.String("appID", alloc.GetApplicationID()),
 				zap.Error(err))
 		} else {
 			metrics.GetQueueMetrics(app.GetQueuePath()).IncReleasedContainer()
@@ -861,10 +861,10 @@ func (pc *PartitionContext) tryPlaceholderAllocate() *objects.Allocation {
 	alloc := pc.root.TryPlaceholderAllocate(pc.GetNodeIterator, pc.GetNode)
 	if alloc != nil {
 		log.Logger().Info("scheduler replace placeholder processed",
-			zap.String("appID", alloc.ApplicationID),
-			zap.String("allocationKey", alloc.AllocationKey),
-			zap.String("UUID", alloc.UUID),
-			zap.String("placeholder released UUID", alloc.Releases[0].UUID))
+			zap.String("appID", alloc.GetApplicationID()),
+			zap.String("allocationKey", alloc.GetAllocationKey()),
+			zap.String("uuid", alloc.GetUUID()),
+			zap.String("placeholder released uuid", alloc.GetFirstRelease().GetUUID()))
 		// pass the release back to the RM via the cluster context
 		return alloc
 	}
@@ -875,7 +875,7 @@ func (pc *PartitionContext) tryPlaceholderAllocate() *objects.Allocation {
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocation {
 	// find the app make sure it still exists
-	appID := alloc.ApplicationID
+	appID := alloc.GetApplicationID()
 	app := pc.getApplication(appID)
 	if app == nil {
 		log.Logger().Info("Application was removed while allocating",
@@ -886,12 +886,12 @@ func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocat
 	// if the node was passed in use that ID instead of the one from the allocation
 	// the node ID is set when a reservation is allocated on a non-reserved node
 	var nodeID string
-	if alloc.ReservedNodeID == "" {
-		nodeID = alloc.NodeID
+	if alloc.GetReservedNodeID() == "" {
+		nodeID = alloc.GetNodeID()
 	} else {
-		nodeID = alloc.ReservedNodeID
+		nodeID = alloc.GetReservedNodeID()
 		log.Logger().Debug("Reservation allocated on different node",
-			zap.String("current node", alloc.NodeID),
+			zap.String("current node", alloc.GetNodeID()),
 			zap.String("reserved node", nodeID),
 			zap.String("appID", appID))
 	}
@@ -903,30 +903,30 @@ func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocat
 		return nil
 	}
 	// reservation
-	if alloc.Result == objects.Reserved {
-		pc.reserve(app, node, alloc.Ask)
+	if alloc.GetResult() == objects.Reserved {
+		pc.reserve(app, node, alloc.GetAsk())
 		return nil
 	}
 	// unreserve
-	if alloc.Result == objects.Unreserved || alloc.Result == objects.AllocatedReserved {
-		pc.unReserve(app, node, alloc.Ask)
-		if alloc.Result == objects.Unreserved {
+	if alloc.GetResult() == objects.Unreserved || alloc.GetResult() == objects.AllocatedReserved {
+		pc.unReserve(app, node, alloc.GetAsk())
+		if alloc.GetResult() == objects.Unreserved {
 			return nil
 		}
 		// remove the link to the reserved node
-		alloc.ReservedNodeID = ""
+		alloc.SetReservedNodeID("")
 	}
 
 	// track the number of allocations
 	pc.updateAllocationCount(1)
 
 	log.Logger().Info("scheduler allocation processed",
-		zap.String("appID", alloc.ApplicationID),
-		zap.String("allocationKey", alloc.AllocationKey),
-		zap.String("UUID", alloc.UUID),
-		zap.String("allocatedResource", alloc.AllocatedResource.String()),
+		zap.String("appID", alloc.GetApplicationID()),
+		zap.String("allocationKey", alloc.GetAllocationKey()),
+		zap.String("uuid", alloc.GetUUID()),
+		zap.String("allocatedResource", alloc.GetAllocatedResource().String()),
 		zap.Bool("placeholder", alloc.IsPlaceholder()),
-		zap.String("targetNode", alloc.NodeID))
+		zap.String("targetNode", alloc.GetNodeID()))
 	// pass the allocation back to the RM via the cluster context
 	return alloc
 }
@@ -957,7 +957,7 @@ func (pc *PartitionContext) reserve(app *objects.Application, node *objects.Node
 	log.Logger().Info("allocation ask is reserved",
 		zap.String("appID", appID),
 		zap.String("queue", app.GetQueuePath()),
-		zap.String("allocationKey", ask.AllocationKey),
+		zap.String("allocationKey", ask.GetAllocationKey()),
 		zap.String("node", node.NodeID))
 }
 
@@ -986,7 +986,7 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 	log.Logger().Info("allocation ask is unreserved",
 		zap.String("appID", appID),
 		zap.String("queue", app.GetQueuePath()),
-		zap.String("allocationKey", ask.AllocationKey),
+		zap.String("allocationKey", ask.GetAllocationKey()),
 		zap.String("node", node.NodeID),
 		zap.Int("reservationsRemoved", num))
 }
@@ -1155,49 +1155,49 @@ func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
 		return nil
 	}
 	if pc.isStopped() {
-		return fmt.Errorf("partition %s is stopped cannot add new allocation %s", pc.Name, alloc.AllocationKey)
+		return fmt.Errorf("partition %s is stopped cannot add new allocation %s", pc.Name, alloc.GetAllocationKey())
 	}
 
-	// We must not generate a new UUID for it, we directly use the UUID reported by shim
-	// to track this allocation, a missing UUID is a broken allocation
-	if alloc.UUID == "" {
+	// We must not generate a new uuid for it, we directly use the uuid reported by shim
+	// to track this allocation, a missing uuid is a broken allocation
+	if alloc.GetUUID() == "" {
 		metrics.GetSchedulerMetrics().IncSchedulingError()
-		return fmt.Errorf("failing to restore allocation %s for application %s: missing UUID",
-			alloc.AllocationKey, alloc.ApplicationID)
+		return fmt.Errorf("failing to restore allocation %s for application %s: missing uuid",
+			alloc.GetAllocationKey(), alloc.GetApplicationID())
 	}
 
 	log.Logger().Info("adding recovered allocation",
 		zap.String("partitionName", pc.Name),
-		zap.String("appID", alloc.ApplicationID),
-		zap.String("allocKey", alloc.AllocationKey),
-		zap.String("UUID", alloc.UUID))
+		zap.String("appID", alloc.GetApplicationID()),
+		zap.String("allocKey", alloc.GetAllocationKey()),
+		zap.String("uuid", alloc.GetUUID()))
 
 	// Check if allocation violates any resource restriction, or allocate on a
 	// non-existent application or nodes.
-	node := pc.GetNode(alloc.NodeID)
+	node := pc.GetNode(alloc.GetNodeID())
 	if node == nil {
 		metrics.GetSchedulerMetrics().IncSchedulingError()
-		return fmt.Errorf("failed to find node %s", alloc.NodeID)
+		return fmt.Errorf("failed to find node %s", alloc.GetNodeID())
 	}
 
-	app := pc.getApplication(alloc.ApplicationID)
+	app := pc.getApplication(alloc.GetApplicationID())
 	if app == nil {
 		metrics.GetSchedulerMetrics().IncSchedulingError()
-		return fmt.Errorf("failed to find application %s", alloc.ApplicationID)
+		return fmt.Errorf("failed to find application %s", alloc.GetApplicationID())
 	}
 	queue := app.GetQueue()
 
 	// Do not check if the new allocation goes beyond the queue's max resource (recursive).
 	// still handle a returned error but they should never happen.
-	if err := queue.IncAllocatedResource(alloc.AllocatedResource, true); err != nil {
+	if err := queue.IncAllocatedResource(alloc.GetAllocatedResource(), true); err != nil {
 		metrics.GetSchedulerMetrics().IncSchedulingError()
 		return fmt.Errorf("cannot allocate resource from application %s: %v ",
-			alloc.ApplicationID, err)
+			alloc.GetApplicationID(), err)
 	}
 
 	metrics.GetQueueMetrics(queue.GetQueuePath()).IncAllocatedContainer()
 	node.AddAllocation(alloc)
-	app.RecoverAllocationAsk(alloc.Ask)
+	app.RecoverAllocationAsk(alloc.GetAsk())
 	app.AddAllocation(alloc)
 
 	// track the number of allocations
@@ -1205,9 +1205,9 @@ func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
 
 	log.Logger().Info("recovered allocation",
 		zap.String("partitionName", pc.Name),
-		zap.String("appID", alloc.ApplicationID),
-		zap.String("allocKey", alloc.AllocationKey),
-		zap.String("allocationUid", alloc.UUID),
+		zap.String("appID", alloc.GetApplicationID()),
+		zap.String("allocKey", alloc.GetAllocationKey()),
+		zap.String("allocationUid", alloc.GetUUID()),
 		zap.Bool("placeholder", alloc.IsPlaceholder()))
 	return nil
 }
@@ -1264,7 +1264,7 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 		return nil, nil
 	}
 	appID := release.ApplicationID
-	uuid := release.UUID
+	uuid := release.GetUUID()
 	app := pc.getApplication(appID)
 	// no app nothing to do everything should already be clean
 	if app == nil {
@@ -1305,18 +1305,18 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 	// for each allocation to release, update the node and queue.
 	total := resources.NewResource()
 	for _, alloc := range released {
-		node := pc.GetNode(alloc.NodeID)
+		node := pc.GetNode(alloc.GetNodeID())
 		if node == nil {
 			log.Logger().Info("node not found while releasing allocation",
 				zap.String("appID", appID),
-				zap.String("allocationId", alloc.UUID),
-				zap.String("nodeID", alloc.NodeID))
+				zap.String("allocationId", alloc.GetUUID()),
+				zap.String("nodeID", alloc.GetNodeID()))
 			continue
 		}
 		if release.TerminationType == si.TerminationType_PLACEHOLDER_REPLACED {
-			confirmed = alloc.Releases[0]
+			confirmed = alloc.GetFirstRelease()
 			// we need to check the resources equality
-			delta := resources.Sub(confirmed.AllocatedResource, alloc.AllocatedResource)
+			delta := resources.Sub(confirmed.GetAllocatedResource(), alloc.GetAllocatedResource())
 			// Any negative value in the delta means that at least one of the requested resource in the
 			// placeholder is larger than the real allocation. The node and queue need adjusting.
 			// The reverse case is handled during allocation.
@@ -1325,29 +1325,29 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 				// total tracked. The total will later be deducted from the queue usage.
 				total.SubFrom(delta)
 				log.Logger().Warn("replacing placeholder: placeholder is larger than real allocation",
-					zap.String("allocationID", confirmed.UUID),
-					zap.String("requested resource", confirmed.AllocatedResource.String()),
-					zap.String("placeholderID", alloc.UUID),
-					zap.String("placeholder resource", alloc.AllocatedResource.String()))
+					zap.String("allocationID", confirmed.GetUUID()),
+					zap.String("requested resource", confirmed.GetAllocatedResource().String()),
+					zap.String("placeholderID", alloc.GetUUID()),
+					zap.String("placeholder resource", alloc.GetAllocatedResource().String()))
 			}
 			// replacements could be on a different node and different size handle all cases
-			if confirmed.NodeID == alloc.NodeID {
+			if confirmed.GetNodeID() == alloc.GetNodeID() {
 				// this is the real swap on the node, adjust usage if needed
-				node.ReplaceAllocation(alloc.UUID, confirmed, delta)
+				node.ReplaceAllocation(alloc.GetUUID(), confirmed, delta)
 			} else {
 				// we have already added the real allocation to the new node, just remove the placeholder
-				node.RemoveAllocation(alloc.UUID)
+				node.RemoveAllocation(alloc.GetUUID())
 			}
 			log.Logger().Info("replacing placeholder allocation on node",
-				zap.String("nodeID", alloc.NodeID),
-				zap.String("allocationId", alloc.UUID),
-				zap.String("allocation nodeID", confirmed.NodeID))
-		} else if node.RemoveAllocation(alloc.UUID) != nil {
+				zap.String("nodeID", alloc.GetNodeID()),
+				zap.String("allocationId", alloc.GetUUID()),
+				zap.String("allocation nodeID", confirmed.GetNodeID()))
+		} else if node.RemoveAllocation(alloc.GetUUID()) != nil {
 			// all non replacement are real removes: must update the queue usage
-			total.AddTo(alloc.AllocatedResource)
+			total.AddTo(alloc.GetAllocatedResource())
 			log.Logger().Info("removing allocation from node",
-				zap.String("nodeID", alloc.NodeID),
-				zap.String("allocationId", alloc.UUID))
+				zap.String("nodeID", alloc.GetNodeID()),
+				zap.String("allocationId", alloc.GetUUID()))
 		}
 	}
 	if resources.StrictlyGreaterThanZero(total) {
@@ -1378,7 +1378,7 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 	return released, confirmed
 }
 
-// Remove the allocation Ask from the specified application
+// Remove the allocation ask from the specified application
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) removeAllocationAsk(release *si.AllocationAskRelease) {
 	if release == nil {
@@ -1409,7 +1409,7 @@ func (pc *PartitionContext) removeAllocationAsk(release *si.AllocationAskRelease
 	}
 }
 
-// Add the allocation Ask to the specified application
+// Add the allocation ask to the specified application
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) addAllocationAsk(siAsk *si.AllocationAsk) error {
 	if siAsk == nil {
@@ -1420,7 +1420,7 @@ func (pc *PartitionContext) addAllocationAsk(siAsk *si.AllocationAsk) error {
 		return fmt.Errorf("failed to find application %s, for allocation ask %s", siAsk.ApplicationID, siAsk.AllocationKey)
 	}
 	// add the allocation asks to the app
-	return app.AddAllocationAsk(objects.NewAllocationAsk(siAsk))
+	return app.AddAllocationAsk(objects.NewAllocationAskFromSI(siAsk))
 }
 
 func (pc *PartitionContext) cleanupExpiredApps() {

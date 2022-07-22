@@ -50,12 +50,12 @@ func TestNewAsk(t *testing.T) {
 		MaxAllocations: 1,
 		ResourceAsk:    res.ToProto(),
 	}
-	ask := NewAllocationAsk(siAsk)
+	ask := NewAllocationAskFromSI(siAsk)
 	if ask == nil {
-		t.Fatal("NewAllocationAsk create failed while it should not")
+		t.Fatal("NewAllocationAskFromSI create failed while it should not")
 	}
 	askStr := ask.String()
-	expected := "AllocationKey ask-1, ApplicationID app-1, Resource map[first:10], PendingRepeats 1"
+	expected := "allocationKey ask-1, applicationID app-1, Resource map[first:10], PendingRepeats 1"
 	assert.Equal(t, askStr, expected, "Strings should have been equal")
 }
 
@@ -96,7 +96,7 @@ func TestPlaceHolder(t *testing.T) {
 		ApplicationID: "app1",
 		PartitionName: "default",
 	}
-	ask := NewAllocationAsk(siAsk)
+	ask := NewAllocationAskFromSI(siAsk)
 	assert.Assert(t, !ask.IsPlaceholder(), "standard ask should not be a placeholder")
 	assert.Equal(t, ask.GetTaskGroup(), "", "standard ask should not have a TaskGroupName")
 	siAsk = &si.AllocationAsk{
@@ -106,11 +106,11 @@ func TestPlaceHolder(t *testing.T) {
 		TaskGroupName: "",
 		Placeholder:   true,
 	}
-	ask = NewAllocationAsk(siAsk)
+	ask = NewAllocationAskFromSI(siAsk)
 	var nilAsk *AllocationAsk
 	assert.Equal(t, ask, nilAsk, "placeholder ask created without a TaskGroupName")
 	siAsk.TaskGroupName = "testgroup"
-	ask = NewAllocationAsk(siAsk)
+	ask = NewAllocationAskFromSI(siAsk)
 	assert.Assert(t, ask != nilAsk, "placeholder ask creation failed unexpectedly")
 	assert.Assert(t, ask.IsPlaceholder(), "ask should have been a placeholder")
 	assert.Equal(t, ask.GetTaskGroup(), "testgroup", "TaskGroupName not set as expected")
@@ -122,7 +122,7 @@ func TestGetTimeout(t *testing.T) {
 		ApplicationID: "app1",
 		PartitionName: "default",
 	}
-	ask := NewAllocationAsk(siAsk)
+	ask := NewAllocationAskFromSI(siAsk)
 	assert.Equal(t, ask.GetTimeout(), time.Duration(0), "standard ask should not have timeout")
 	siAsk = &si.AllocationAsk{
 		AllocationKey:                "ask1",
@@ -130,7 +130,7 @@ func TestGetTimeout(t *testing.T) {
 		PartitionName:                "default",
 		ExecutionTimeoutMilliSeconds: 10,
 	}
-	ask = NewAllocationAsk(siAsk)
+	ask = NewAllocationAskFromSI(siAsk)
 	assert.Equal(t, ask.GetTimeout(), 10*time.Millisecond, "ask timeout not set as expected")
 }
 
@@ -143,7 +143,7 @@ func TestGetRequiredNode(t *testing.T) {
 		PartitionName: "default",
 		Tags:          tag,
 	}
-	ask := NewAllocationAsk(siAsk)
+	ask := NewAllocationAskFromSI(siAsk)
 	assert.Equal(t, ask.GetRequiredNode(), "", "required node is empty as expected")
 	// set case
 	tag[common.DomainYuniKorn+common.KeyRequiredNode] = "NodeName"
@@ -153,7 +153,7 @@ func TestGetRequiredNode(t *testing.T) {
 		PartitionName: "default",
 		Tags:          tag,
 	}
-	ask = NewAllocationAsk(siAsk)
+	ask = NewAllocationAskFromSI(siAsk)
 	assert.Equal(t, ask.GetRequiredNode(), "NodeName", "required node should be NodeName")
 }
 
@@ -165,7 +165,7 @@ func TestAllocationLog(t *testing.T) {
 		MaxAllocations: 1,
 		ResourceAsk:    res.ToProto(),
 	}
-	ask := NewAllocationAsk(siAsk)
+	ask := NewAllocationAskFromSI(siAsk)
 
 	// log a reservation event
 	ask.LogAllocationFailure("reserve1", false)

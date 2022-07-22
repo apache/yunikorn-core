@@ -130,13 +130,13 @@ func sortAskByPriority(requests []*AllocationAsk, ascending bool) {
 		l := requests[i]
 		r := requests[j]
 
-		if l.priority == r.priority {
-			return l.createTime.Before(r.createTime)
+		if l.GetPriority() == r.GetPriority() {
+			return l.GetCreateTime().Before(r.GetCreateTime())
 		}
 
 		if ascending {
-			return l.priority < r.priority
+			return l.GetPriority() < r.GetPriority()
 		}
-		return l.priority > r.priority
+		return l.GetPriority() > r.GetPriority()
 	})
 }

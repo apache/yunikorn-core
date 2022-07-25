@@ -120,7 +120,7 @@ type singleNodePreemptResult struct {
 func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionContext, preemptorQueue *preemptionQueueContext, node *objects.Node, candidate *objects.AllocationAsk,
 	headroomShortages map[string]*resources.Resource) *singleNodePreemptResult {
 	// If allocated resource can fit in the node, and no headroom shortage of preemptor queue, we can directly get it allocated. (lucky!)
-	if node.CanAllocate(candidate.AllocatedResource) {
+	if node.CanAllocate(candidate.GetAllocatedResource()) {
 		log.Logger().Debug("No preemption needed candidate fits on node",
 			zap.String("nodeID", node.NodeID))
 		return &singleNodePreemptResult{
@@ -134,7 +134,7 @@ func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionCont
 	// ignoring anything below 0 as we have more available than requested
 	// don't count at what is already marked for preemption (that is still used)
 	// the scheduling node's available resource takes into account what is being allocated
-	resourceToPreempt := resources.SubEliminateNegative(candidate.AllocatedResource, node.GetAvailableResource())
+	resourceToPreempt := resources.SubEliminateNegative(candidate.GetAllocatedResource(), node.GetAvailableResource())
 
 	toReleaseAllocations := make(map[string]*objects.Allocation)
 	totalReleasedResource := resources.NewResource()
@@ -142,7 +142,7 @@ func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionCont
 	// Otherwise, try to do preemption, list all allocations on the node.
 	// Fixme: this operation has too many copies, should avoid for better perf
 	for _, alloc := range node.GetAllAllocations() {
-		queueName := alloc.QueueName
+		queueName := alloc.GetQueue()
 		// Try to do preemption.
 		preemptQueue := preemptionPartitionCtx.leafQueues[queueName]
 		if nil == preemptQueue {
@@ -154,7 +154,7 @@ func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionCont
 			continue
 		}
 
-		postPreemption := resources.SubEliminateNegative(preemptQueue.resources.preemptable, candidate.AllocatedResource)
+		postPreemption := resources.SubEliminateNegative(preemptQueue.resources.preemptable, candidate.GetAllocatedResource())
 
 		// Make sure this preemption has positive impact of preemptable values. A corner case is:
 		// A queue has preemptable resource = (memory=0, cpu=0, gpu=2), for this case, we should avoid preempt any allocation w/o gpu resource > 0
@@ -165,11 +165,11 @@ func trySurgicalPreemptionOnNode(preemptionPartitionCtx *preemptionPartitionCont
 		// Add one more check, to make sure that preempted resource will be used by candidate queue.
 		// When this check fails it means preempted container doesn't make a positive contribution towards preemptor queue and its parents' headroom shortages. (
 		// How much headroom needed to allocate candidate).
-		headroomShortageUpdate(preemptorQueue, preemptQueue, alloc.AllocatedResource, headroomShortages)
+		headroomShortageUpdate(preemptorQueue, preemptQueue, alloc.GetAllocatedResource(), headroomShortages)
 
 		// let's preempt the container.
-		toReleaseAllocations[alloc.UUID] = alloc
-		totalReleasedResource.AddTo(alloc.AllocatedResource)
+		toReleaseAllocations[alloc.GetUUID()] = alloc
+		totalReleasedResource.AddTo(alloc.GetAllocatedResource())
 
 		// Check if we preempted enough resources.
 		if resources.StrictlyGreaterThanOrEquals(totalReleasedResource, resourceToPreempt) {
@@ -193,12 +193,13 @@ func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitio
 		return nil
 	}
 
-	preemptorQueue := preemptionPartitionContext.leafQueues[candidate.QueueName]
+	preemptorQueue := preemptionPartitionContext.leafQueues[candidate.GetQueue()]
 	if preemptorQueue == nil {
 		return nil
 	}
 
-	headroomShortages := initHeadroomShortages(preemptorQueue, candidate.AllocatedResource)
+	// this is temporary; all this code will go away in YUNIKORN-1269
+	headroomShortages := initHeadroomShortages(preemptorQueue, candidate.GetAllocatedResource())
 
 	// TODO: do we want to make allocation-within-preemption sorted instead of randomly check nodes one-by-one?
 	// First let's sort nodes by available resource
@@ -238,7 +239,8 @@ func crossQueuePreemptionAllocate(preemptionPartitionContext *preemptionPartitio
 		// allocations, allocation with lower priorities, etc.
 	}
 
-	preemptorQueue.schedulingQueue.IncPreemptingResource(candidate.AllocatedResource)
+	// this is temporary; all this code will go away in YUNIKORN-1269
+	preemptorQueue.schedulingQueue.IncPreemptingResource(candidate.GetAllocatedResource())
 
 	// Finally, let's do preemption proposals
 	return createPreemptionAndAllocationProposal(preemptionPartitionContext, nodeToAllocate, candidate, preemptionResults)
@@ -255,20 +257,20 @@ func createPreemptionAndAllocationProposal(preemptionPartitionContext *preemptio
 	for _, pr := range preemptionResults {
 		// TODO FIX
 		// for uuid, alloc := range pr.toReleaseAllocations {
-		// 	allocation.releases = append(allocation.releases, commonevents.NewReleaseAllocation(uuid, alloc.ApplicationID, nodeToAllocate.nodeInfo.Partition,
-		// 		fmt.Sprintf("Preempt allocation=%s for ask=%s", alloc, candidate.AllocationKey), si.AllocationReleaseResponse_PREEMPTED_BY_SCHEDULER))
+		// 	allocation.releases = append(allocation.releases, commonevents.NewReleaseAllocation(uuid, alloc.applicationID, nodeToAllocate.nodeInfo.Partition,
+		// 		fmt.Sprintf("Preempt allocation=%s for ask=%s", alloc, candidate.allocationKey), si.AllocationReleaseResponse_PREEMPTED_BY_SCHEDULER))
 		//
 		// 	// Update metrics of preempt queue
-		// 	preemptQueue := preemptionPartitionContext.leafQueues[alloc.QueueName]
-		// 	preemptQueue.resources.markedPreemptedResource.AddTo(alloc.AllocatedResource)
-		// 	preemptQueue.resources.preemptable = resources.SubEliminateNegative(preemptQueue.resources.preemptable, alloc.AllocatedResource)
+		// 	preemptQueue := preemptionPartitionContext.leafQueues[alloc.queueName]
+		// 	preemptQueue.resources.markedPreemptedResource.AddTo(alloc.allocatedResource)
+		// 	preemptQueue.resources.preemptable = resources.SubEliminateNegative(preemptQueue.resources.preemptable, alloc.allocatedResource)
 		// }
 		pr.node.IncPreemptingResource(pr.totalReleasedResource)
 	}
 
 	// Update metrics
 	// For node, update allocating and preempting resources
-	// nodeToAllocate.incAllocatingResource(candidate.AllocatedResource)
+	// nodeToAllocate.incAllocatingResource(candidate.allocatedResource)
 
 	return allocation
 }

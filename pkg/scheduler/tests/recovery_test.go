@@ -170,7 +170,7 @@ func TestSchedulerRecovery(t *testing.T) {
 	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
 		[]string{"node-1:1234", "node-2:1234"}, 20, 1000)
 
-	// Ask for two more resources
+	// ask for two more resources
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{

@@ -171,14 +171,14 @@ func (s *Scheduler) inspectOutstandingRequests() {
 		if len(requests) > 0 {
 			for _, ask := range requests {
 				log.Logger().Debug("outstanding request",
-					zap.String("appID", ask.ApplicationID),
-					zap.String("allocationKey", ask.AllocationKey))
+					zap.String("appID", ask.GetApplicationID()),
+					zap.String("allocationKey", ask.GetAllocationKey()))
 				// these asks are queue outstanding requests,
 				// they can fit into the max head room, but they are pending because lack of partition resources
 				if updater := plugins.GetResourceManagerCallbackPlugin(); updater != nil {
 					updater.UpdateContainerSchedulingState(&si.UpdateContainerSchedulingStateRequest{
-						ApplicartionID: ask.ApplicationID,
-						AllocationKey:  ask.AllocationKey,
+						ApplicartionID: ask.GetApplicationID(),
+						AllocationKey:  ask.GetAllocationKey(),
 						State:          si.UpdateContainerSchedulingStateRequest_FAILED,
 						Reason:         "request is waiting for cluster resources become available",
 					})

@@ -41,7 +41,7 @@ func createAllocationAsk(allocationKey string, app string, allowPreemption strin
 		Originator:    isOriginator,
 		Tags:          tags,
 	}
-	ask := NewAllocationAsk(siAsk)
+	ask := NewAllocationAskFromSI(siAsk)
 	return ask
 }
 
@@ -55,7 +55,7 @@ func prepareAllocationAsks(node *Node) {
 
 	ask2 := createAllocationAsk("ask2", "app1", "true", false, 10,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}))
-	ask2.SetCreateTime(createTime)
+	ask2.createTime = createTime
 	node.AddAllocation(NewAllocation("2", node.NodeID, ask2))
 
 	ask3 := createAllocationAsk("ask3", "app1", "true", false, 15,
@@ -64,7 +64,7 @@ func prepareAllocationAsks(node *Node) {
 
 	ask4 := createAllocationAsk("ask4", "app1", "true", false, 10,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-	ask4.SetCreateTime(createTime)
+	ask4.createTime = createTime
 	node.AddAllocation(NewAllocation("4", node.NodeID, ask4))
 
 	ask5 := createAllocationAsk("ask5", "app1", "true", false, 5,
@@ -78,7 +78,7 @@ func prepareAllocationAsks(node *Node) {
 
 	ask7 := createAllocationAsk("ask7", "app1", "false", false, 10,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}))
-	ask7.SetCreateTime(createTime)
+	ask7.createTime = createTime
 	node.AddAllocation(NewAllocation("7", node.NodeID, ask7))
 
 	ask8 := createAllocationAsk("ask8", "app1", "false", false, 15,
@@ -88,7 +88,7 @@ func prepareAllocationAsks(node *Node) {
 	// driver/owner pods
 	ask9 := createAllocationAsk("ask9", "app1", "false", true, 10,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-	ask9.SetCreateTime(createTime)
+	ask9.createTime = createTime
 	node.AddAllocation(NewAllocation("9", node.NodeID, ask9))
 
 	ask10 := createAllocationAsk("ask10", "app1", "true", true, 5,
@@ -125,7 +125,7 @@ func TestSortAllocations(t *testing.T) {
 
 	requiredAsk := createAllocationAsk("ask", "app1", "true", true, 20,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-	requiredAsk.SetPendingAskRepeat(5)
+	requiredAsk.pendingAskRepeat = 5
 
 	p := NewSimplePreemptor(node, requiredAsk)
 	prepareAllocationAsks(node)
@@ -134,20 +134,20 @@ func TestSortAllocations(t *testing.T) {
 	sortedAsks := p.getAllocations()
 
 	// assert regular pods
-	assert.Equal(t, sortedAsks[0].AllocationKey, "ask5")
-	assert.Equal(t, sortedAsks[1].AllocationKey, "ask1")
-	assert.Equal(t, sortedAsks[2].AllocationKey, "ask4")
-	assert.Equal(t, sortedAsks[3].AllocationKey, "ask2")
-	assert.Equal(t, sortedAsks[4].AllocationKey, "ask3")
+	assert.Equal(t, sortedAsks[0].GetAllocationKey(), "ask5")
+	assert.Equal(t, sortedAsks[1].GetAllocationKey(), "ask1")
+	assert.Equal(t, sortedAsks[2].GetAllocationKey(), "ask4")
+	assert.Equal(t, sortedAsks[3].GetAllocationKey(), "ask2")
+	assert.Equal(t, sortedAsks[4].GetAllocationKey(), "ask3")
 
 	// assert opted out pods
-	assert.Equal(t, sortedAsks[5].AllocationKey, "ask6")
-	assert.Equal(t, sortedAsks[6].AllocationKey, "ask7")
-	assert.Equal(t, sortedAsks[7].AllocationKey, "ask8")
+	assert.Equal(t, sortedAsks[5].GetAllocationKey(), "ask6")
+	assert.Equal(t, sortedAsks[6].GetAllocationKey(), "ask7")
+	assert.Equal(t, sortedAsks[7].GetAllocationKey(), "ask8")
 
 	// assert driver/owner pods
-	assert.Equal(t, sortedAsks[8].AllocationKey, "ask10")
-	assert.Equal(t, sortedAsks[9].AllocationKey, "ask9")
+	assert.Equal(t, sortedAsks[8].GetAllocationKey(), "ask10")
+	assert.Equal(t, sortedAsks[9].GetAllocationKey(), "ask9")
 }
 
 func TestFilterAllocations(t *testing.T) {
@@ -210,14 +210,14 @@ func TestGetVictims(t *testing.T) {
 	p.sortAllocations()
 	victims := p.GetVictims()
 	assert.Equal(t, len(victims), 4)
-	assert.Equal(t, victims[0].AllocationKey, "ask5")
-	assert.Equal(t, resources.Equals(victims[0].AllocatedResource, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})), true)
-	assert.Equal(t, victims[1].AllocationKey, "ask1")
-	assert.Equal(t, resources.Equals(victims[1].AllocatedResource, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})), true)
-	assert.Equal(t, victims[2].AllocationKey, "ask4")
-	assert.Equal(t, resources.Equals(victims[2].AllocatedResource, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})), true)
-	assert.Equal(t, victims[3].AllocationKey, "ask2")
-	assert.Equal(t, resources.Equals(victims[3].AllocatedResource, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8})), true)
+	assert.Equal(t, victims[0].GetAllocationKey(), "ask5")
+	assert.Equal(t, resources.Equals(victims[0].GetAllocatedResource(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})), true)
+	assert.Equal(t, victims[1].GetAllocationKey(), "ask1")
+	assert.Equal(t, resources.Equals(victims[1].GetAllocatedResource(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})), true)
+	assert.Equal(t, victims[2].GetAllocationKey(), "ask4")
+	assert.Equal(t, resources.Equals(victims[2].GetAllocatedResource(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})), true)
+	assert.Equal(t, victims[3].GetAllocationKey(), "ask2")
+	assert.Equal(t, resources.Equals(victims[3].GetAllocatedResource(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8})), true)
 
 	// case 2: victims are available and its resources are matching with ds request ask (but with different quantity)
 	requiredAsk2 := createAllocationAsk("ask13", "app1", "true", true, 20,

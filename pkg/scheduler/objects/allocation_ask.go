@@ -32,25 +32,25 @@ import (
 )
 
 type AllocationAsk struct {
-	// Extracted info
-	AllocationKey     string
-	AllocatedResource *resources.Resource
-	ApplicationID     string
-	PartitionName     string
-	QueueName         string // CLEANUP: why do we need this? the app is linked to the queue
-	Tags              map[string]string
+	// Read-only fields
+	allocationKey     string
+	applicationID     string
+	partitionName     string
+	taskGroupName     string        // task group this allocation ask belongs to
+	placeholder       bool          // is this a placeholder allocation ask
+	execTimeout       time.Duration // execTimeout for the allocation ask
+	createTime        time.Time     // the time this ask was created (used in reservations)
+	priority          int32
+	maxAllocations    int32
+	requiredNode      string
+	allowPreemption   bool
+	originator        bool
+	tags              map[string]string
+	allocatedResource *resources.Resource
 
-	// Private fields need protection
-	taskGroupName    string        // task group this allocation ask belongs to
-	placeholder      bool          // is this a placeholder allocation ask
-	execTimeout      time.Duration // execTimeout for the allocation ask
-	pendingRepeatAsk int32
-	createTime       time.Time // the time this ask was created (used in reservations)
-	priority         int32
-	maxAllocations   int32
-	requiredNode     string
-	allowPreemption  bool
-	originator       bool
+	// Mutable fields which need protection
+	pendingAskRepeat int32
+	queueName        string
 	allocLog         map[string]*AllocationLogEntry
 
 	sync.RWMutex
@@ -62,15 +62,24 @@ type AllocationLogEntry struct {
 	Count          int32
 }
 
-func NewAllocationAsk(ask *si.AllocationAsk) *AllocationAsk {
+func NewAllocationAsk(allocationKey string, applicationID string, allocatedResource *resources.Resource) *AllocationAsk {
+	return &AllocationAsk{
+		allocationKey:     allocationKey,
+		applicationID:     applicationID,
+		allocatedResource: allocatedResource,
+		allocLog:          make(map[string]*AllocationLogEntry),
+	}
+}
+
+func NewAllocationAskFromSI(ask *si.AllocationAsk) *AllocationAsk {
 	saa := &AllocationAsk{
-		AllocationKey:     ask.AllocationKey,
-		AllocatedResource: resources.NewResourceFromProto(ask.ResourceAsk),
-		pendingRepeatAsk:  ask.MaxAllocations,
+		allocationKey:     ask.AllocationKey,
+		allocatedResource: resources.NewResourceFromProto(ask.ResourceAsk),
+		pendingAskRepeat:  ask.MaxAllocations,
 		maxAllocations:    ask.MaxAllocations,
-		ApplicationID:     ask.ApplicationID,
-		PartitionName:     ask.PartitionName,
-		Tags:              ask.Tags,
+		applicationID:     ask.ApplicationID,
+		partitionName:     ask.PartitionName,
+		tags:              CloneAllocationTags(ask.Tags),
 		createTime:        time.Now(),
 		priority:          ask.Priority,
 		execTimeout:       common.ConvertSITimeout(ask.ExecutionTimeoutMilliSeconds),
@@ -84,7 +93,7 @@ func NewAllocationAsk(ask *si.AllocationAsk) *AllocationAsk {
 	// this is a safety check placeholder and task group name must be set as a combo
 	// order is important as task group can be set without placeholder but not the other way around
 	if saa.placeholder && saa.taskGroupName == "" {
-		log.Logger().Debug("Ask cannot be a placeholder without a TaskGroupName",
+		log.Logger().Debug("ask cannot be a placeholder without a TaskGroupName",
 			zap.String("SI ask", ask.String()))
 		return nil
 	}
@@ -95,10 +104,25 @@ func (aa *AllocationAsk) String() string {
 	if aa == nil {
 		return "ask is nil"
 	}
-	return fmt.Sprintf("AllocationKey %s, ApplicationID %s, Resource %s, PendingRepeats %d", aa.AllocationKey, aa.ApplicationID, aa.AllocatedResource, aa.pendingRepeatAsk)
+	return fmt.Sprintf("allocationKey %s, applicationID %s, Resource %s, PendingRepeats %d", aa.allocationKey, aa.applicationID, aa.allocatedResource, aa.GetPendingAskRepeat())
 }
 
-// Update pending ask repeat with the delta given.
+// GetAllocationKey returns the allocation key for this ask
+func (aa *AllocationAsk) GetAllocationKey() string {
+	return aa.allocationKey
+}
+
+// GetApplicationID returns the application ID for this ask
+func (aa *AllocationAsk) GetApplicationID() string {
+	return aa.applicationID
+}
+
+// GetPartitionName returns the partition name for this ask
+func (aa *AllocationAsk) GetPartitionName() string {
+	return aa.partitionName
+}
+
+// updatePendingAskRepeat updates the pending ask repeat with the delta given.
 // Update the pending ask repeat counter with the delta (pos or neg). The pending repeat is always 0 or higher.
 // If the update would cause the repeat to go negative the update is discarded and false is returned.
 // In all other cases the repeat is updated and true is returned.
@@ -106,94 +130,96 @@ func (aa *AllocationAsk) updatePendingAskRepeat(delta int32) bool {
 	aa.Lock()
 	defer aa.Unlock()
 
-	if aa.pendingRepeatAsk+delta >= 0 {
-		aa.pendingRepeatAsk += delta
+	if aa.pendingAskRepeat+delta >= 0 {
+		aa.pendingAskRepeat += delta
 		return true
 	}
 	return false
 }
 
-// Get the pending ask repeat
+// GetPendingAskRepeat gets the number of repeat asks remaining
 func (aa *AllocationAsk) GetPendingAskRepeat() int32 {
 	aa.RLock()
 	defer aa.RUnlock()
-	return aa.pendingRepeatAsk
+	return aa.pendingAskRepeat
 }
 
-// test only
-func (aa *AllocationAsk) SetPendingAskRepeat(pendingRepeatAsk int32) {
-	aa.Lock()
-	defer aa.Unlock()
-	aa.pendingRepeatAsk = pendingRepeatAsk
-}
-
-// Return the time this ask was created
-// Should be treated as read only not te be modified
+// GetCreateTime returns the time this ask was created
 func (aa *AllocationAsk) GetCreateTime() time.Time {
-	aa.RLock()
-	defer aa.RUnlock()
 	return aa.createTime
 }
 
-// Set the queue name after it is added to the application
-func (aa *AllocationAsk) setQueue(queueName string) {
-	aa.Lock()
-	defer aa.Unlock()
-	aa.QueueName = queueName
-}
-
-func (aa *AllocationAsk) IsPlaceholder() bool {
+// GetQueue gets the queue name for this ask
+func (aa *AllocationAsk) GetQueue() string {
 	aa.RLock()
 	defer aa.RUnlock()
+	return aa.queueName
+}
+
+// SetQueue sets the queue name after it is added to the application
+func (aa *AllocationAsk) SetQueue(queueName string) {
+	aa.Lock()
+	defer aa.Unlock()
+	aa.queueName = queueName
+}
+
+// IsPlaceholder returns whether this ask represents a placeholder
+func (aa *AllocationAsk) IsPlaceholder() bool {
 	return aa.placeholder
 }
 
+// GetTaskGroup returns the task group name for this ask
 func (aa *AllocationAsk) GetTaskGroup() string {
-	aa.RLock()
-	defer aa.RUnlock()
 	return aa.taskGroupName
 }
 
+// GetTimeout returns the timeout for this ask
 func (aa *AllocationAsk) GetTimeout() time.Duration {
-	aa.RLock()
-	defer aa.RUnlock()
 	return aa.execTimeout
 }
 
+// GetRequiredNode gets the node (if any) required by this ask.
 func (aa *AllocationAsk) GetRequiredNode() string {
-	aa.RLock()
-	defer aa.RUnlock()
 	return aa.requiredNode
 }
 
+// SetRequiredNode sets the required node (used only by testing so lock is not taken)
 func (aa *AllocationAsk) SetRequiredNode(node string) {
-	aa.Lock()
-	defer aa.Unlock()
 	aa.requiredNode = node
 }
 
-func (aa *AllocationAsk) GetAllowPreemption() bool {
-	aa.RLock()
-	defer aa.RUnlock()
+// IsAllowPreemption returns whether preemption is allowed for this ask
+func (aa *AllocationAsk) IsAllowPreemption() bool {
 	return aa.allowPreemption
 }
 
+// IsOriginator returns whether this ask is the originator for the application
 func (aa *AllocationAsk) IsOriginator() bool {
-	aa.RLock()
-	defer aa.RUnlock()
 	return aa.originator
 }
 
+// GetPriority returns the priority of this ask
 func (aa *AllocationAsk) GetPriority() int32 {
-	aa.RLock()
-	defer aa.RUnlock()
 	return aa.priority
 }
 
+// GetAllocatedResource returns a reference to the allocated resources for this ask. This must be treated as read-only.
 func (aa *AllocationAsk) GetAllocatedResource() *resources.Resource {
-	aa.RLock()
-	defer aa.RUnlock()
-	return aa.AllocatedResource
+	return aa.allocatedResource
+}
+
+// GetTag returns the value of a named tag or an empty string if not present
+func (aa *AllocationAsk) GetTag(tagName string) string {
+	result, ok := aa.tags[tagName]
+	if !ok {
+		return ""
+	}
+	return result
+}
+
+// GetTagsClone returns the copy of the tags for this ask
+func (aa *AllocationAsk) GetTagsClone() map[string]string {
+	return CloneAllocationTags(aa.tags)
 }
 
 // LogAllocationFailure keeps track of preconditions not being met for an allocation
@@ -224,20 +250,13 @@ func (aa *AllocationAsk) GetAllocationLog() []*AllocationLogEntry {
 
 	res := make([]*AllocationLogEntry, len(aa.allocLog))
 	i := 0
-	for _, log := range aa.allocLog {
+	for _, entry := range aa.allocLog {
 		res[i] = &AllocationLogEntry{
-			Message:        log.Message,
-			LastOccurrence: log.LastOccurrence,
-			Count:          log.Count,
+			Message:        entry.Message,
+			LastOccurrence: entry.LastOccurrence,
+			Count:          entry.Count,
 		}
 		i++
 	}
 	return res
-}
-
-// for test only
-func (aa *AllocationAsk) SetCreateTime(createTime time.Time) {
-	aa.Lock()
-	defer aa.Unlock()
-	aa.createTime = createTime
 }

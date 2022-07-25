@@ -303,8 +303,8 @@ func (sn *Node) RemoveAllocation(uuid string) *Allocation {
 	alloc := sn.allocations[uuid]
 	if alloc != nil {
 		delete(sn.allocations, uuid)
-		sn.allocatedResource.SubFrom(alloc.AllocatedResource)
-		sn.availableResource.AddTo(alloc.AllocatedResource)
+		sn.allocatedResource.SubFrom(alloc.GetAllocatedResource())
+		sn.availableResource.AddTo(alloc.GetAllocatedResource())
 		return alloc
 	}
 
@@ -322,9 +322,9 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 	sn.Lock()
 	defer sn.Unlock()
 	// check if this still fits: it might have changed since pre check
-	res := alloc.AllocatedResource
+	res := alloc.GetAllocatedResource()
 	if sn.availableResource.FitInMaxUndef(res) {
-		sn.allocations[alloc.UUID] = alloc
+		sn.allocations[alloc.GetUUID()] = alloc
 		sn.allocatedResource.AddTo(res)
 		sn.availableResource.SubFrom(res)
 		return true
@@ -340,16 +340,16 @@ func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation, delta *resou
 	sn.Lock()
 	defer sn.Unlock()
 
-	replace.placeholderCreateTime = sn.allocations[uuid].createTime
+	replace.SetPlaceholderCreateTime(sn.allocations[uuid].GetCreateTime())
 	delete(sn.allocations, uuid)
-	replace.placeholderUsed = true
-	sn.allocations[replace.UUID] = replace
+	replace.SetPlaceholderUsed(true)
+	sn.allocations[replace.GetUUID()] = replace
 	before := sn.allocatedResource.Clone()
 	sn.allocatedResource.AddTo(delta)
 	if !resources.FitIn(before, sn.allocatedResource) {
 		log.Logger().Warn("unexpected increase in node usage after placeholder replacement",
-			zap.String("placeholder UUID", uuid),
-			zap.String("allocation UUID", replace.UUID),
+			zap.String("placeholder uuid", uuid),
+			zap.String("allocation uuid", replace.GetUUID()),
 			zap.String("delta", delta.String()))
 	}
 }
@@ -382,7 +382,7 @@ func (sn *Node) preReserveConditions(ask *AllocationAsk) bool {
 // run at the same time.
 func (sn *Node) preConditions(ask *AllocationAsk, allocate bool) bool {
 	// Check the predicates plugin (k8shim)
-	allocID := ask.AllocationKey
+	allocID := ask.GetAllocationKey()
 	if plugin := plugins.GetResourceManagerCallbackPlugin(); plugin != nil {
 		// checking predicates
 		if err := plugin.Predicates(&si.PredicatesArgs{
@@ -487,13 +487,13 @@ func (sn *Node) Reserve(app *Application, ask *AllocationAsk) error {
 		return fmt.Errorf("reservation creation failed app or ask are nil on nodeID %s", sn.NodeID)
 	}
 	// reservation must fit on the empty node
-	if !resources.FitIn(sn.totalResource, ask.AllocatedResource) {
+	if !resources.FitIn(sn.totalResource, ask.GetAllocatedResource()) {
 		log.Logger().Debug("reservation does not fit on the node",
 			zap.String("nodeID", sn.NodeID),
 			zap.String("appID", app.ApplicationID),
-			zap.String("ask", ask.AllocationKey),
-			zap.String("allocationAsk", ask.AllocatedResource.String()))
-		return fmt.Errorf("reservation does not fit on node %s, appID %s, ask %s", sn.NodeID, app.ApplicationID, ask.AllocatedResource.String())
+			zap.String("ask", ask.GetAllocationKey()),
+			zap.String("allocationAsk", ask.GetAllocatedResource().String()))
+		return fmt.Errorf("reservation does not fit on node %s, appID %s, ask %s", sn.NodeID, app.ApplicationID, ask.GetAllocatedResource().String())
 	}
 	sn.reservations[appReservation.getKey()] = appReservation
 	// reservation added successfully
@@ -523,7 +523,7 @@ func (sn *Node) unReserve(app *Application, ask *AllocationAsk) (int, error) {
 	log.Logger().Debug("reservation not found while removing from node",
 		zap.String("nodeID", sn.NodeID),
 		zap.String("appID", app.ApplicationID),
-		zap.String("ask", ask.AllocationKey))
+		zap.String("ask", ask.GetAllocationKey()))
 	return 0, nil
 }
 

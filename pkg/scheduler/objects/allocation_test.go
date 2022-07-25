@@ -21,9 +21,7 @@ package objects
 import (
 	"fmt"
 	"strconv"
-
 	"testing"
-
 	"time"
 
 	"gotest.tools/assert"
@@ -55,17 +53,17 @@ func TestNewAlloc(t *testing.T) {
 	if alloc == nil {
 		t.Fatal("NewAllocation create failed while it should not")
 	}
-	assert.Equal(t, alloc.Result, Allocated, "New alloc should default to result Allocated")
-	assert.Assert(t, resources.Equals(alloc.AllocatedResource, res), "Allocated resource not set correctly")
+	assert.Equal(t, alloc.GetResult(), Allocated, "New alloc should default to result Allocated")
+	assert.Assert(t, resources.Equals(alloc.GetAllocatedResource(), res), "Allocated resource not set correctly")
 	assert.Assert(t, !alloc.IsPlaceholder(), "ask should not have been a placeholder")
 	assert.Equal(t, time.Now().Round(time.Second), alloc.GetCreateTime().Round(time.Second))
 	allocStr := alloc.String()
-	expected := "ApplicationID=app-1, UUID=test-uuid, AllocationKey=ask-1, Node=node-1, Result=Allocated"
+	expected := "applicationID=app-1, uuid=test-uuid, allocationKey=ask-1, Node=node-1, result=Allocated"
 	assert.Equal(t, allocStr, expected, "Strings should have been equal")
-	assert.Assert(t, !alloc.GetPlaceholderUsed(), fmt.Sprintf("Alloc should not be placeholder replacement by default: got %t, expected %t", alloc.GetPlaceholderUsed(), false))
+	assert.Assert(t, !alloc.IsPlaceholderUsed(), fmt.Sprintf("Alloc should not be placeholder replacement by default: got %t, expected %t", alloc.IsPlaceholderUsed(), false))
 	created := alloc.GetCreateTime()
 	// move time 10 seconds back
-	alloc.createTime = created.Add(time.Second * -10)
+	alloc.SetCreateTime(created.Add(time.Second * -10))
 	createdNow := alloc.GetCreateTime()
 	if createdNow.Equal(created) {
 		t.Fatal("create time stamp should have been modified")
@@ -73,10 +71,10 @@ func TestNewAlloc(t *testing.T) {
 	// check that createTime is properly copied from the ask
 	tags := make(map[string]string)
 	tags[siCommon.CreationTime] = strconv.FormatInt(past, 10)
-	ask.Tags = tags
+	ask.tags = CloneAllocationTags(tags)
 	ask.createTime = time.Unix(past, 0)
 	alloc = NewAllocation("test-uuid", "node-1", ask)
-	assert.Equal(t, alloc.createTime, ask.createTime, "createTime was not copied from the ask")
+	assert.Equal(t, alloc.GetCreateTime(), ask.GetCreateTime(), "createTime was not copied from the ask")
 }
 
 func TestNewReservedAlloc(t *testing.T) {
@@ -87,11 +85,11 @@ func TestNewReservedAlloc(t *testing.T) {
 	if alloc == nil {
 		t.Fatal("NewReservedAllocation create failed while it should not")
 	}
-	assert.Equal(t, alloc.Result, Reserved, "NewReservedAlloc should have Reserved result")
-	assert.Equal(t, alloc.UUID, "", "NewReservedAlloc should not have UUID")
-	assert.Assert(t, resources.Equals(alloc.AllocatedResource, res), "Allocated resource not set correctly")
+	assert.Equal(t, alloc.GetResult(), Reserved, "NewReservedAlloc should have Reserved result")
+	assert.Equal(t, alloc.GetUUID(), "", "NewReservedAlloc should not have uuid")
+	assert.Assert(t, resources.Equals(alloc.GetAllocatedResource(), res), "Allocated resource not set correctly")
 	allocStr := alloc.String()
-	expected := "ApplicationID=app-1, UUID=N/A, AllocationKey=ask-1, Node=node-1, Result=Reserved"
+	expected := "applicationID=app-1, uuid=N/A, allocationKey=ask-1, Node=node-1, result=Reserved"
 	assert.Equal(t, allocStr, expected, "Strings should have been equal")
 }
 
@@ -160,10 +158,10 @@ func TestNewAllocFromSI(t *testing.T) {
 	alloc = NewAllocationFromSI(allocSI)
 	assert.Assert(t, alloc != nilAlloc, "placeholder ask creation failed unexpectedly")
 	assert.Assert(t, alloc.IsPlaceholder(), "ask should have been a placeholder")
-	assert.Equal(t, alloc.getTaskGroup(), "testgroup", "TaskGroupName not set as expected")
-	assert.Equal(t, alloc.Ask.createTime, time.Unix(past, 0)) //nolint:staticcheck
+	assert.Equal(t, alloc.GetTaskGroup(), "testgroup", "TaskGroupName not set as expected")
+	assert.Equal(t, alloc.GetAsk().GetCreateTime(), time.Unix(past, 0)) //nolint:staticcheck
 
 	allocSI.AllocationTags[siCommon.CreationTime] = "xyz"
 	alloc = NewAllocationFromSI(allocSI)
-	assert.Equal(t, alloc.Ask.createTime.Unix(), int64(-1)) //nolint:staticcheck
+	assert.Equal(t, alloc.GetAsk().GetCreateTime().Unix(), int64(-1)) //nolint:staticcheck
 }

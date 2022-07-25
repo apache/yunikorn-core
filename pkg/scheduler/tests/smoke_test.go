@@ -271,7 +271,7 @@ func TestBasicScheduler(t *testing.T) {
 	// Check allocated resources of nodes
 	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), ms.partitionName, []string{"node-1:1234", "node-2:1234"}, 20000000, 1000)
 
-	// Ask for two more resources
+	// ask for two more resources
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
@@ -1406,7 +1406,7 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 				{
 					PartitionName:   "default",
 					ApplicationID:   appID1,
-					UUID:            placeholderAlloc.UUID,
+					UUID:            placeholderAlloc.GetUUID(),
 					TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
 				},
 			},
@@ -1435,7 +1435,7 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 				{
 					PartitionName:   "default",
 					ApplicationID:   appID1,
-					UUID:            placeholderAlloc.UUID,
+					UUID:            placeholderAlloc.GetUUID(),
 					TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
 				},
 			},

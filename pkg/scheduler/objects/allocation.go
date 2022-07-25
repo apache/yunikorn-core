@@ -33,10 +33,10 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-type allocationResult int
+type AllocationResult int
 
 const (
-	None allocationResult = iota
+	None AllocationResult = iota
 	Allocated
 	AllocatedReserved
 	Reserved
@@ -44,65 +44,65 @@ const (
 	Replaced
 )
 
-func (ar allocationResult) String() string {
+func (ar AllocationResult) String() string {
 	return [...]string{"None", "Allocated", "AllocatedReserved", "Reserved", "Unreserved", "Replaced"}[ar]
 }
 
-/* Related to Allocation */
 type Allocation struct {
-	Ask               *AllocationAsk
-	ApplicationID     string
-	AllocationKey     string
-	QueueName         string // CLEANUP: why do we need this? the app is linked to the queue
-	NodeID            string
-	ReservedNodeID    string
-	PartitionName     string
-	UUID              string
-	Tags              map[string]string
-	Priority          int32
-	AllocatedResource *resources.Resource
-	Result            allocationResult
-	Releases          []*Allocation
+	// Read-only fields
+	ask               *AllocationAsk
+	allocationKey     string
+	applicationID     string
+	partitionName     string
+	taskGroupName     string // task group this allocation belongs to
+	placeholder       bool   // is this a placeholder allocation
+	queueName         string
+	nodeID            string
+	uuid              string
+	priority          int32
+	tags              map[string]string
+	allocatedResource *resources.Resource
 
-	// private fields need protection
-	createTime            time.Time // the time this allocation was created
-	placeholder           bool
+	// Mutable fields which need protection
 	placeholderUsed       bool
+	createTime            time.Time // the time this allocation was created
 	placeholderCreateTime time.Time
-	taskGroupName         string
 	released              bool
+	reservedNodeID        string
+	result                AllocationResult
+	releases              []*Allocation
 
 	sync.RWMutex
 }
 
 func NewAllocation(uuid, nodeID string, ask *AllocationAsk) *Allocation {
 	var createTime time.Time
-	if ask.Tags[siCommon.CreationTime] == "" {
+	if ask.GetTag(siCommon.CreationTime) == "" {
 		createTime = time.Now()
 	} else {
-		createTime = ask.createTime
+		createTime = ask.GetCreateTime()
 	}
 	return &Allocation{
-		Ask:               ask,
-		AllocationKey:     ask.AllocationKey,
-		ApplicationID:     ask.ApplicationID,
+		ask:               ask,
+		allocationKey:     ask.GetAllocationKey(),
+		applicationID:     ask.GetApplicationID(),
 		createTime:        createTime,
-		QueueName:         ask.QueueName,
-		NodeID:            nodeID,
-		PartitionName:     common.GetPartitionNameWithoutClusterID(ask.PartitionName),
-		UUID:              uuid,
-		Tags:              ask.Tags,
-		Priority:          ask.priority,
-		AllocatedResource: ask.AllocatedResource.Clone(),
-		taskGroupName:     ask.taskGroupName,
-		placeholder:       ask.placeholder,
-		Result:            Allocated,
+		queueName:         ask.GetQueue(),
+		nodeID:            nodeID,
+		partitionName:     common.GetPartitionNameWithoutClusterID(ask.GetPartitionName()),
+		uuid:              uuid,
+		tags:              ask.GetTagsClone(),
+		priority:          ask.GetPriority(),
+		allocatedResource: ask.GetAllocatedResource().Clone(),
+		taskGroupName:     ask.GetTaskGroup(),
+		placeholder:       ask.IsPlaceholder(),
+		result:            Allocated,
 	}
 }
 
-func newReservedAllocation(result allocationResult, nodeID string, ask *AllocationAsk) *Allocation {
+func newReservedAllocation(result AllocationResult, nodeID string, ask *AllocationAsk) *Allocation {
 	alloc := NewAllocation("", nodeID, ask)
-	alloc.Result = result
+	alloc.SetResult(result)
 	return alloc
 }
 
@@ -129,17 +129,18 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 	}
 
 	ask := &AllocationAsk{
-		AllocationKey:     alloc.AllocationKey,
-		ApplicationID:     alloc.ApplicationID,
-		PartitionName:     alloc.PartitionName,
-		AllocatedResource: resources.NewResourceFromProto(alloc.ResourcePerAlloc),
-		Tags:              alloc.AllocationTags,
+		allocationKey:     alloc.AllocationKey,
+		applicationID:     alloc.ApplicationID,
+		partitionName:     alloc.PartitionName,
+		allocatedResource: resources.NewResourceFromProto(alloc.ResourcePerAlloc),
+		tags:              CloneAllocationTags(alloc.AllocationTags),
 		priority:          alloc.Priority,
-		pendingRepeatAsk:  0,
+		pendingAskRepeat:  0,
 		maxAllocations:    1,
 		taskGroupName:     alloc.TaskGroupName,
 		placeholder:       alloc.Placeholder,
 		createTime:        time.Unix(creationTime, 0),
+		allocLog:          make(map[string]*AllocationLogEntry),
 	}
 	return NewAllocation(alloc.UUID, alloc.NodeID, ask)
 }
@@ -153,13 +154,13 @@ func (a *Allocation) NewSIFromAllocation() *si.Allocation {
 		return nil
 	}
 	return &si.Allocation{
-		NodeID:           a.NodeID,
-		ApplicationID:    a.ApplicationID,
-		AllocationKey:    a.AllocationKey,
-		UUID:             a.UUID,
-		ResourcePerAlloc: a.AllocatedResource.ToProto(), // needed in tests for restore
-		TaskGroupName:    a.taskGroupName,
-		Placeholder:      a.placeholder,
+		NodeID:           a.GetNodeID(),
+		ApplicationID:    a.GetApplicationID(),
+		AllocationKey:    a.GetAllocationKey(),
+		UUID:             a.GetUUID(),
+		ResourcePerAlloc: a.GetAllocatedResource().ToProto(), // needed in tests for restore
+		TaskGroupName:    a.GetTaskGroup(),
+		Placeholder:      a.IsPlaceholder(),
 	}
 }
 
@@ -167,52 +168,206 @@ func (a *Allocation) String() string {
 	if a == nil {
 		return "nil allocation"
 	}
-	uuid := a.UUID
-	if a.Result == Reserved || a.Result == Unreserved {
+	a.RLock()
+	defer a.RUnlock()
+	uuid := a.uuid
+	if a.result == Reserved || a.result == Unreserved {
 		uuid = "N/A"
 	}
-	return fmt.Sprintf("ApplicationID=%s, UUID=%s, AllocationKey=%s, Node=%s, Result=%s", a.ApplicationID, uuid, a.AllocationKey, a.NodeID, a.Result.String())
+	return fmt.Sprintf("applicationID=%s, uuid=%s, allocationKey=%s, Node=%s, result=%s", a.applicationID, uuid, a.allocationKey, a.nodeID, a.result.String())
 }
 
-// Return the time this alloc was created
-// Should be treated as read only not to be modified
+// GetAsk returns the ask associated with this allocation
+func (a *Allocation) GetAsk() *AllocationAsk {
+	return a.ask
+}
+
+// GetAllocationKey returns the allocation key of this allocation
+func (a *Allocation) GetAllocationKey() string {
+	return a.allocationKey
+}
+
+// GetApplicationID returns the application ID for this allocation
+func (a *Allocation) GetApplicationID() string {
+	return a.applicationID
+}
+
+// GetPartitionName returns the partition name for this allocation
+func (a *Allocation) GetPartitionName() string {
+	return a.partitionName
+}
+
+// GetTaskGroup returns the task group name for this allocation
+func (a *Allocation) GetTaskGroup() string {
+	return a.taskGroupName
+}
+
+// GetCreateTime returns the time this allocation was created
 func (a *Allocation) GetCreateTime() time.Time {
 	a.RLock()
 	defer a.RUnlock()
 	return a.createTime
 }
 
-// Return whether this alloc is replacing a placeholder or not
-func (a *Allocation) GetPlaceholderUsed() bool {
+func (a *Allocation) SetCreateTime(createTime time.Time) {
+	a.Lock()
+	defer a.Unlock()
+	a.createTime = createTime
+}
+
+// IsPlaceholderUsed returns whether this alloc is replacing a placeholder
+func (a *Allocation) IsPlaceholderUsed() bool {
 	a.RLock()
 	defer a.RUnlock()
 	return a.placeholderUsed
 }
 
-// Return the placeholder's create time for this alloc, if applicable
+// SetPlaceholderUsed sets whether this alloc is replacing a placeholder
+func (a *Allocation) SetPlaceholderUsed(placeholderUsed bool) {
+	a.Lock()
+	defer a.Unlock()
+	a.placeholderUsed = placeholderUsed
+}
+
+// GetPlaceholderCreateTime returns the placeholder's create time for this alloc, if applicable
 func (a *Allocation) GetPlaceholderCreateTime() time.Time {
 	a.RLock()
 	defer a.RUnlock()
 	return a.placeholderCreateTime
 }
 
-// IsPlaceholder returns true if the allocation is a placeholder, false otherwise.
+// SetPlaceholderCreateTime updates the placeholder's creation time
+func (a *Allocation) SetPlaceholderCreateTime(placeholdereCreateTime time.Time) {
+	a.Lock()
+	defer a.Unlock()
+	a.placeholderCreateTime = placeholdereCreateTime
+}
+
+// IsPlaceholder returns whether the allocation is a placeholder
 func (a *Allocation) IsPlaceholder() bool {
 	return a.placeholder
 }
 
-// IsReleased returns the release status of the allocation.
+// GetQueue gets the queue this allocation is assigned to
+func (a *Allocation) GetQueue() string {
+	return a.queueName
+}
+
+// GetNodeID gets the node this allocation is assigned to
+func (a *Allocation) GetNodeID() string {
+	return a.nodeID
+}
+
+// GetUUID returns the uuid for this allocation
+func (a *Allocation) GetUUID() string {
+	return a.uuid
+}
+
+// GetPriority returns the priority of this allocation
+func (a *Allocation) GetPriority() int32 {
+	return a.priority
+}
+
+// GetReservedNodeID gets the node this allocation is reserved for
+func (a *Allocation) GetReservedNodeID() string {
+	a.RLock()
+	defer a.RUnlock()
+	return a.reservedNodeID
+}
+
+// SetReservedNodeID sets the node this allocation is reserved for
+func (a *Allocation) SetReservedNodeID(reservedNodeID string) {
+	a.Lock()
+	defer a.Unlock()
+	a.reservedNodeID = reservedNodeID
+}
+
+// IsReleased returns the release status of the allocation
 func (a *Allocation) IsReleased() bool {
+	a.RLock()
+	defer a.RUnlock()
 	return a.released
 }
 
-// getTaskGroup returns the task group name if set.
-func (a *Allocation) getTaskGroup() string {
-	return a.taskGroupName
+// SetReleased updates the release status of the allocation
+func (a *Allocation) SetReleased(released bool) {
+	a.Lock()
+	defer a.Unlock()
+	a.released = released
 }
 
-func (a *Allocation) GetAllocatedResource() *resources.Resource {
+// GetTagsClone returns the copy of the tags for this allocation
+func (a *Allocation) GetTagsClone() map[string]string {
+	return CloneAllocationTags(a.tags)
+}
+
+// GetResult gets the result of this allocation
+func (a *Allocation) GetResult() AllocationResult {
 	a.RLock()
 	defer a.RUnlock()
-	return a.AllocatedResource
+	return a.result
+}
+
+// SetResult sets the result of this allocation
+func (a *Allocation) SetResult(result AllocationResult) {
+	a.Lock()
+	defer a.Unlock()
+	a.result = result
+}
+
+// GetReleasesClone returns a clone of the release list
+func (a *Allocation) GetReleasesClone() []*Allocation {
+	a.RLock()
+	defer a.RUnlock()
+	result := make([]*Allocation, len(a.releases))
+	copy(result, a.releases)
+	return result
+}
+
+// GetFirstRelease returns the first release for this allocation
+func (a *Allocation) GetFirstRelease() *Allocation {
+	a.RLock()
+	defer a.RUnlock()
+	return a.releases[0]
+}
+
+// GetReleaseCount gets the number of releases associated with this allocation
+func (a *Allocation) GetReleaseCount() int {
+	a.RLock()
+	defer a.RUnlock()
+	return len(a.releases)
+}
+
+// ClearReleases removes all releases from this allocation
+func (a *Allocation) ClearReleases() {
+	a.Lock()
+	defer a.Unlock()
+	a.releases = nil
+}
+
+// AddRelease adds a new release to this allocation
+func (a *Allocation) AddRelease(release *Allocation) {
+	a.Lock()
+	defer a.Unlock()
+	a.releases = append(a.releases, release)
+}
+
+func (a *Allocation) SetRelease(release *Allocation) {
+	a.Lock()
+	defer a.Unlock()
+	a.releases = []*Allocation{release}
+}
+
+// GetAllocatedResource returns a reference to the allocated resources for this allocation. This must be treated as read-only.
+func (a *Allocation) GetAllocatedResource() *resources.Resource {
+	return a.allocatedResource
+}
+
+// CloneAllocationTags clones a tag map for safe copying
+func CloneAllocationTags(tags map[string]string) map[string]string {
+	result := make(map[string]string)
+	for k, v := range tags {
+		result[k] = v
+	}
+	return result
 }

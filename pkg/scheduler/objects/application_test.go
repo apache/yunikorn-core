@@ -651,13 +651,13 @@ func TestSortRequests(t *testing.T) {
 		num := strconv.Itoa(i)
 		ask := newAllocationAsk("ask-"+num, appID1, res)
 		ask.priority = int32(i)
-		app.requests[ask.AllocationKey] = ask
+		app.requests[ask.GetAllocationKey()] = ask
 	}
 	app.sortRequests(true)
 	if len(app.sortedRequests) != 3 {
 		t.Fatalf("app sorted requests not correct: %v", app.sortedRequests)
 	}
-	allocKey := app.sortedRequests[0].AllocationKey
+	allocKey := app.sortedRequests[0].GetAllocationKey()
 	delete(app.requests, allocKey)
 	app.sortRequests(true)
 	if len(app.sortedRequests) != 2 {
@@ -869,14 +869,14 @@ func TestGangAllocChange(t *testing.T) {
 
 	// add a real alloc this should NOT trigger state update
 	alloc = newAllocation(appID1, "uuid-3", nodeID1, "root.a", res)
-	alloc.Result = Replaced
+	alloc.SetResult(Replaced)
 	app.AddAllocation(alloc)
 	assert.Equal(t, len(app.GetAllAllocations()), 3)
 	assert.Assert(t, app.IsStarting(), "app should still be in starting state")
 
 	// add a second real alloc this should trigger state update
 	alloc = newAllocation(appID1, "uuid-4", nodeID1, "root.a", res)
-	alloc.Result = Replaced
+	alloc.SetResult(Replaced)
 	app.AddAllocation(alloc)
 	assert.Equal(t, len(app.GetAllAllocations()), 4)
 	assert.Assert(t, app.IsRunning(), "app should be in running state")
@@ -1081,7 +1081,7 @@ func TestReplaceAllocation(t *testing.T) {
 	// add the placeholder to the app
 	app.AddAllocation(ph)
 	// add PlaceholderData
-	app.addPlaceholderData(ph.Ask)
+	app.addPlaceholderData(ph.GetAsk())
 	assert.Equal(t, len(app.placeholderData), 1)
 	assert.Equal(t, app.placeholderData[""].TaskGroupName, "")
 	assert.Equal(t, app.placeholderData[""].Count, int64(1))
@@ -1100,13 +1100,13 @@ func TestReplaceAllocation(t *testing.T) {
 	// add the placeholder back to the app, the failure test above changed state and removed the ph
 	app.SetState(Running.String())
 	app.AddAllocation(ph)
-	app.addPlaceholderData(ph.Ask)
+	app.addPlaceholderData(ph.GetAsk())
 	assert.Equal(t, app.placeholderData[""].Count, int64(2))
 
 	// set the real one to replace the placeholder
 	realAlloc := newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
-	realAlloc.Result = Replaced
-	ph.Releases = append(ph.Releases, realAlloc)
+	realAlloc.SetResult(Replaced)
+	ph.AddRelease(realAlloc)
 	alloc = app.ReplaceAllocation("uuid-1")
 	assert.Equal(t, alloc, ph, "returned allocation is not the placeholder")
 	assert.Assert(t, resources.IsZero(app.allocatedPlaceholder), "real allocation counted as placeholder")
@@ -1118,18 +1118,18 @@ func TestReplaceAllocation(t *testing.T) {
 
 	// add the placeholder back to the app, the failure test above changed state and removed the ph
 	app.SetState(Running.String())
-	ph.Releases = nil
+	ph.ClearReleases()
 	app.AddAllocation(ph)
-	app.addPlaceholderData(ph.Ask)
+	app.addPlaceholderData(ph.GetAsk())
 	assert.Equal(t, app.placeholderData[""].Count, int64(3))
 
 	// set multiple real allocations to replace the placeholder
 	realAlloc = newAllocation(appID1, "uuid-3", nodeID1, "root.a", res)
-	realAlloc.Result = Replaced
-	ph.Releases = append(ph.Releases, realAlloc)
+	realAlloc.SetResult(Replaced)
+	ph.AddRelease(realAlloc)
 	realAllocNoAdd := newAllocation(appID1, "not-added", nodeID1, "root.a", res)
-	realAllocNoAdd.Result = Replaced
-	ph.Releases = append(ph.Releases, realAlloc)
+	realAllocNoAdd.SetResult(Replaced)
+	ph.AddRelease(realAlloc)
 	alloc = app.ReplaceAllocation("uuid-1")
 	assert.Equal(t, alloc, ph, "returned allocation is not the placeholder")
 	assert.Assert(t, resources.IsZero(app.allocatedPlaceholder), "real allocation counted as placeholder")
@@ -1243,10 +1243,10 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	assert.NilError(t, err, "Unexpected error when creating resource from map")
 	// add the placeholders to the app: one released, one still available.
 	ph := newPlaceholderAlloc(appID1, "released", nodeID1, "root.a", res)
-	ph.released = true
+	ph.SetReleased(true)
 	app.AddAllocation(ph)
 	// add PlaceholderData
-	app.addPlaceholderData(ph.Ask)
+	app.addPlaceholderData(ph.GetAsk())
 	assert.Equal(t, len(app.placeholderData), 1)
 	assert.Equal(t, app.placeholderData[""].TaskGroupName, "")
 	assert.Equal(t, app.placeholderData[""].Count, int64(1))
@@ -1257,7 +1257,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	assert.Assert(t, app.placeholderTimer != nil, "Placeholder timer should be initiated after the first placeholder allocation")
 	ph = newPlaceholderAlloc(appID1, "waiting", nodeID1, "root.a", res)
 	app.AddAllocation(ph)
-	app.addPlaceholderData(ph.Ask)
+	app.addPlaceholderData(ph.GetAsk())
 	assert.Equal(t, app.placeholderData[""].Count, int64(2))
 
 	alloc := newAllocation(appID1, "real", nodeID1, "root.a", res)

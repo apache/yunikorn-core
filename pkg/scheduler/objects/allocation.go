@@ -56,7 +56,6 @@ type Allocation struct {
 	partitionName     string
 	taskGroupName     string // task group this allocation belongs to
 	placeholder       bool   // is this a placeholder allocation
-	queueName         string
 	nodeID            string
 	uuid              string
 	priority          int32
@@ -87,7 +86,6 @@ func NewAllocation(uuid, nodeID string, ask *AllocationAsk) *Allocation {
 		allocationKey:     ask.GetAllocationKey(),
 		applicationID:     ask.GetApplicationID(),
 		createTime:        createTime,
-		queueName:         ask.GetQueue(),
 		nodeID:            nodeID,
 		partitionName:     common.GetPartitionNameWithoutClusterID(ask.GetPartitionName()),
 		uuid:              uuid,
@@ -246,11 +244,6 @@ func (a *Allocation) SetPlaceholderCreateTime(placeholdereCreateTime time.Time) 
 // IsPlaceholder returns whether the allocation is a placeholder
 func (a *Allocation) IsPlaceholder() bool {
 	return a.placeholder
-}
-
-// GetQueue gets the queue this allocation is assigned to
-func (a *Allocation) GetQueue() string {
-	return a.queueName
 }
 
 // GetNodeID gets the node this allocation is assigned to

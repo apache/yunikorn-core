@@ -43,7 +43,7 @@ func TestQueueBasics(t *testing.T) {
 		t.Error("root queue status is incorrect")
 	}
 	// allocations should be nil
-	if !resources.IsZero(root.preempting) && !resources.IsZero(root.pending) {
+	if !resources.IsZero(root.pending) {
 		t.Error("root queue must not have allocations set on create")
 	}
 }
@@ -400,44 +400,6 @@ func TestQueueStates(t *testing.T) {
 	err = leaf.handleQueueEvent(Start)
 	if err == nil || !leaf.IsDraining() {
 		t.Errorf("leaf queue changed state which should not happen: %v", err)
-	}
-}
-
-func TestPreemptingCalc(t *testing.T) {
-	// create the root
-	root, err := createRootQueue(nil)
-	assert.NilError(t, err, "queue create failed")
-	var leaf *Queue
-	leaf, err = createManagedQueue(root, "leaf", false, nil)
-	assert.NilError(t, err, "failed to create leaf queue")
-
-	res := map[string]string{"first": "1"}
-	var allocRes *resources.Resource
-	allocRes, err = resources.NewResourceFromConf(res)
-	assert.NilError(t, err, "failed to create basic resource")
-	if !resources.IsZero(leaf.preempting) {
-		t.Errorf("leaf queue preempting resources not set as expected 0, got %v", leaf.preempting)
-	}
-	if !resources.IsZero(root.preempting) {
-		t.Errorf("root queue preempting resources not set as expected 0, got %v", root.preempting)
-	}
-	// preempting does not filter up the hierarchy, check that
-	leaf.IncPreemptingResource(allocRes)
-	// using the get function to access the value
-	if !resources.Equals(allocRes, leaf.GetPreemptingResource()) {
-		t.Errorf("queue preempting resources not set as expected %v, got %v", allocRes, leaf.preempting)
-	}
-	if !resources.IsZero(root.GetPreemptingResource()) {
-		t.Errorf("root queue preempting resources not set as expected 0, got %v", root.preempting)
-	}
-	newRes := resources.Multiply(allocRes, 2)
-	leaf.decPreemptingResource(newRes)
-	if !resources.IsZero(leaf.GetPreemptingResource()) {
-		t.Errorf("queue preempting resources not set as expected 0, got %v", leaf.preempting)
-	}
-	leaf.setPreemptingResource(newRes)
-	if !resources.Equals(leaf.GetPreemptingResource(), resources.Multiply(allocRes, 2)) {
-		t.Errorf("queue preempting resources not set as expected %v, got %v", newRes, leaf.preempting)
 	}
 }
 

@@ -53,7 +53,6 @@ type Node struct {
 	schedulable       bool
 	ready             bool
 
-	preempting   *resources.Resource     // resources considered for preemption
 	reservations map[string]*reservation // a map of reservations
 	listeners    []NodeListener          // a list of node listeners
 
@@ -74,7 +73,6 @@ func NewNode(proto *si.NodeInfo) *Node {
 	}
 	sn := &Node{
 		NodeID:            proto.NodeID,
-		preempting:        resources.NewResource(),
 		reservations:      make(map[string]*reservation),
 		totalResource:     resources.NewResourceFromProto(proto.SchedulableResource),
 		allocatedResource: resources.NewResource(),
@@ -261,36 +259,6 @@ func (sn *Node) FitInNode(resRequest *resources.Resource) bool {
 	return sn.totalResource.FitInMaxUndef(resRequest)
 }
 
-// Get the number of resource tagged for preemption on this node
-func (sn *Node) getPreemptingResource() *resources.Resource {
-	sn.RLock()
-	defer sn.RUnlock()
-
-	return sn.preempting
-}
-
-// Update the number of resource tagged for preemption on this node
-func (sn *Node) IncPreemptingResource(preempting *resources.Resource) {
-	defer sn.notifyListeners()
-	sn.Lock()
-	defer sn.Unlock()
-
-	sn.preempting.AddTo(preempting)
-}
-
-func (sn *Node) decPreemptingResource(delta *resources.Resource) {
-	defer sn.notifyListeners()
-	sn.Lock()
-	defer sn.Unlock()
-	var err error
-	sn.preempting, err = resources.SubErrorNegative(sn.preempting, delta)
-	if err != nil {
-		log.Logger().Warn("Preempting resources went negative",
-			zap.String("nodeID", sn.NodeID),
-			zap.Error(err))
-	}
-}
-
 // Remove the allocation to the node.
 // Returns nil if the allocation was not found and no changes are made. If the allocation
 // is found the Allocation removed is returned. Used resources will decrease available
@@ -355,9 +323,7 @@ func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation, delta *resou
 }
 
 // Check if the proposed allocation fits in the available resources.
-// Taking into account resources marked for preemption if applicable.
 // If the proposed allocation does not fit false is returned.
-// TODO: remove when updating preemption
 func (sn *Node) CanAllocate(res *resources.Resource) bool {
 	sn.RLock()
 	defer sn.RUnlock()
@@ -405,9 +371,8 @@ func (sn *Node) preConditions(ask *AllocationAsk, allocate bool) bool {
 }
 
 // Check if the node should be considered as a possible node to allocate on.
-//
 // This is a lock free call. No updates are made this only performs a pre allocate checks
-func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string, preemptionPhase bool) error {
+func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string) error {
 	// cannot allocate zero or negative resource
 	if !resources.StrictlyGreaterThanZero(res) {
 		log.Logger().Debug("pre alloc check: requested resource is zero",
@@ -426,9 +391,6 @@ func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string, preempt
 
 	// check if resources are available
 	available := sn.GetAvailableResource()
-	if preemptionPhase {
-		available.AddTo(sn.getPreemptingResource())
-	}
 	// check the request fits in what we have calculated
 	if !available.FitInMaxUndef(res) {
 		// requested resource is larger than currently available node resources

@@ -147,7 +147,6 @@ func newNodeInternal(nodeID string, total, occupied *resources.Resource) *Node {
 		availableResource: resources.Sub(total, occupied),
 		allocations:       make(map[string]*Allocation),
 		schedulable:       true,
-		preempting:        resources.NewResource(),
 		reservations:      make(map[string]*reservation),
 	}
 }
@@ -184,7 +183,6 @@ func newProto(nodeID string, totalResource, occupiedResource *resources.Resource
 func newAllocation(appID, uuid, nodeID, queueName string, res *resources.Resource) *Allocation {
 	askKey := strconv.FormatInt((time.Now()).UnixNano(), 10)
 	ask := newAllocationAsk(askKey, appID, res)
-	ask.SetQueue(queueName)
 	return NewAllocation(uuid, nodeID, ask)
 }
 
@@ -192,7 +190,6 @@ func newAllocation(appID, uuid, nodeID, queueName string, res *resources.Resourc
 func newPlaceholderAlloc(appID, uuid, nodeID, queueName string, res *resources.Resource) *Allocation {
 	askKey := strconv.FormatInt((time.Now()).UnixNano(), 10)
 	ask := newAllocationAsk(askKey, appID, res)
-	ask.SetQueue(queueName)
 	ask.placeholder = true
 	return NewAllocation(uuid, nodeID, ask)
 }

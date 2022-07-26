@@ -50,7 +50,6 @@ type AllocationAsk struct {
 
 	// Mutable fields which need protection
 	pendingAskRepeat int32
-	queueName        string
 	allocLog         map[string]*AllocationLogEntry
 
 	sync.RWMutex
@@ -147,20 +146,6 @@ func (aa *AllocationAsk) GetPendingAskRepeat() int32 {
 // GetCreateTime returns the time this ask was created
 func (aa *AllocationAsk) GetCreateTime() time.Time {
 	return aa.createTime
-}
-
-// GetQueue gets the queue name for this ask
-func (aa *AllocationAsk) GetQueue() string {
-	aa.RLock()
-	defer aa.RUnlock()
-	return aa.queueName
-}
-
-// SetQueue sets the queue name after it is added to the application
-func (aa *AllocationAsk) SetQueue(queueName string) {
-	aa.Lock()
-	defer aa.Unlock()
-	aa.queueName = queueName
 }
 
 // IsPlaceholder returns whether this ask represents a placeholder

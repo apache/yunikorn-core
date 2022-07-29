@@ -31,7 +31,6 @@ type AllocationAskDAOInfo struct {
 	ResourcePerAlloc   map[string]int64          `json:"resource"`
 	PendingCount       int32                     `json:"pendingCount"`
 	Priority           string                    `json:"priority"`
-	QueueName          string                    `json:"queueName"`
 	RequiredNodeID     string                    `json:"requiredNodeId"`
 	ApplicationID      string                    `json:"applicationId"`
 	Partition          string                    `json:"partition"`

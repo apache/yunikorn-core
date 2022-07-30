@@ -156,5 +156,5 @@ install_shellcheck: $(eval SHELL:=/bin/bash)
 ALLSCRIPTS := $(shell find . -name '*.sh')
 check_scripts: install_shellcheck
 	@echo "running shellcheck"
-	@if ! $(shell which shgellcheck) $(ALLSCRIPTS); then exit 1; fi
+	@if ! $(shell which shellcheck) $(ALLSCRIPTS); then exit 1; fi
 	@if [ -e $(SHELLCHECK_PATH) ]; then rm $(SHELLCHECK_PATH) ; fi

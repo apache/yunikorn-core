@@ -27,6 +27,9 @@ jobs:
       - name: Go lint
         run: make lint
         if: ${{ github.event_name == 'pull_request' }}
+      - name: Run ShellCheck
+        run: make check_scripts
+        if: ${{ github.event_name == 'pull_request' }}
       - name: unit test
         run: make test
       - name: Code coverage

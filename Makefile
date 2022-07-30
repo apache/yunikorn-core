@@ -48,6 +48,10 @@ RACE=-race
 #GOOS=darwin
 #GOARCH=amd64
 
+ifeq ($(HOST_ARCH),)
+HOST_ARCH := $(shell uname -m)
+endif
+
 all:
 	$(MAKE) -C $(dir $(BASE_DIR)) build
 
@@ -120,3 +124,37 @@ clean:
 	@echo "cleaning up caches and output"
 	go clean -cache -testcache -r -x ./... 2>&1 >/dev/null
 	-rm -rf _output
+
+.PHONY: install_shellcheck
+SHELLCHECK_PATH := $(BASE_DIR)scripts/shellcheck
+SHELLCHECK_VERSION := "v0.8.0"
+SHELLCHECK_ARCHIVE := "shellcheck-$(SHELLCHECK_VERSION).$(OS).$(HOST_ARCH).tar.xz"
+install_shellcheck: $(eval SHELL:=/bin/bash)
+	@if [[ ! -f $(SHELLCHECK_PATH) && "$(shell which shellcheck)" == "" ]]; then \
+		echo "shellcheck is not installed"; \
+		if [[ $(HOST_ARCH) == "arm64" ]]; then \
+        	echo "Can't find shellcheck for arm64 from https://github.com/koalaman/shellcheck/releases/$(SHELLCHECK_VERSION)"; \
+			exit 1; \
+		else \
+			echo "Installing shellcheck $(SHELLCHECK_VERSION) ..." \
+			&& set -x \
+			&& wget https://github.com/koalaman/shellcheck/releases/download/$(SHELLCHECK_VERSION)/$(SHELLCHECK_ARCHIVE) \
+			&& tar -xf $(SHELLCHECK_ARCHIVE) shellcheck-$(SHELLCHECK_VERSION)/shellcheck \
+			&& rm $(SHELLCHECK_ARCHIVE) \
+			&& mv shellcheck-$(SHELLCHECK_VERSION)/shellcheck $(SHELLCHECK_PATH) \
+			&& chmod +x $(SHELLCHECK_PATH) \
+			&& rmdir shellcheck-$(SHELLCHECK_VERSION) \
+			&& set +x \
+			&& echo "Shellcheck $(SHELLCHECK_VERSION) has been installed at $(SHELLCHECK_PATH)"; \
+		fi \
+	else \
+		echo "shellcheck has been installed"; \
+	fi
+
+# Check scripts
+.PHONY: check_scripts
+ALLSCRIPTS := $(shell find . -name '*.sh')
+check_scripts: install_shellcheck
+	@echo "running shellcheck"
+	@if ! $(SHELLCHECK_PATH) $(ALLSCRIPTS); then exit 1; fi
+	@if [ -e $(SHELLCHECK_PATH) ]; then rm $(SHELLCHECK_PATH) ; fi

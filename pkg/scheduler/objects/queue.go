@@ -51,7 +51,6 @@ type Queue struct {
 	completedApplications map[string]*Application // completed applications from this leaf queue
 	reservedApps          map[string]int          // applications reserved within this queue, with reservation count
 	parent                *Queue                  // link back to the parent in the scheduler
-	preempting            *resources.Resource     // resource considered for preemption in the queue
 	pending               *resources.Resource     // pending resource for the apps in the queue
 
 	// The queue properties should be treated as immutable the value is a merge of the
@@ -84,7 +83,6 @@ func newBlankQueue() *Queue {
 		properties:            make(map[string]string),
 		stateMachine:          NewObjectState(),
 		allocatedResource:     resources.NewResource(),
-		preempting:            resources.NewResource(),
 		pending:               resources.NewResource(),
 	}
 }
@@ -773,40 +771,6 @@ func (sq *Queue) IsManaged() bool {
 // test only
 func (sq *Queue) isRoot() bool {
 	return sq.parent == nil
-}
-
-// GetPreemptingResource returns the resources marked for preemption in the queue
-func (sq *Queue) GetPreemptingResource() *resources.Resource {
-	sq.RLock()
-	defer sq.RUnlock()
-	return sq.preempting
-}
-
-// IncPreemptingResource increments the number of resource marked for preemption in the queue.
-func (sq *Queue) IncPreemptingResource(newAlloc *resources.Resource) {
-	sq.Lock()
-	defer sq.Unlock()
-	sq.preempting.AddTo(newAlloc)
-}
-
-// decPreemptingResource decrements the number of resource marked for preemption in the queue.
-func (sq *Queue) decPreemptingResource(newAlloc *resources.Resource) {
-	sq.Lock()
-	defer sq.Unlock()
-	var err error
-	sq.preempting, err = resources.SubErrorNegative(sq.preempting, newAlloc)
-	if err != nil {
-		log.Logger().Warn("Preempting resources went negative",
-			zap.String("queueName", sq.QueuePath),
-			zap.Error(err))
-	}
-}
-
-// setPreemptingResource set the preempting resources for the queue to the specified value.
-func (sq *Queue) setPreemptingResource(newAlloc *resources.Resource) {
-	sq.Lock()
-	defer sq.Unlock()
-	sq.preempting = newAlloc
 }
 
 // IncAllocatedResource increments the allocated resources for this queue (recursively).

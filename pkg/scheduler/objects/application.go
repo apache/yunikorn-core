@@ -566,7 +566,6 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 	if ask.GetPendingAskRepeat() == 0 || resources.IsZero(ask.GetAllocatedResource()) {
 		return fmt.Errorf("invalid ask added to app %s: %v", sa.ApplicationID, ask)
 	}
-	ask.SetQueue(sa.queue.QueuePath)
 	delta := resources.Multiply(ask.GetAllocatedResource(), int64(ask.GetPendingAskRepeat()))
 
 	var oldAskResource *resources.Resource = nil
@@ -614,7 +613,6 @@ func (sa *Application) RecoverAllocationAsk(ask *AllocationAsk) {
 	if ask == nil {
 		return
 	}
-	ask.SetQueue(sa.queue.QueuePath)
 	sa.requests[ask.GetAllocationKey()] = ask
 	// progress the application from New to Accepted.
 	if sa.IsNew() {
@@ -1025,7 +1023,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 					zap.String("node", node.NodeID))
 				continue
 			}
-			if err := node.preAllocateCheck(reqFit.GetAllocatedResource(), reservationKey(nil, sa, reqFit), false); err != nil {
+			if err := node.preAllocateCheck(reqFit.GetAllocatedResource(), reservationKey(nil, sa, reqFit)); err != nil {
 				continue
 			}
 			// skip the node if conditions can not be satisfied
@@ -1283,7 +1281,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 	toAllocate := ask.GetAllocatedResource()
 	// create the key for the reservation
-	if err := node.preAllocateCheck(toAllocate, reservationKey(nil, sa, ask), false); err != nil {
+	if err := node.preAllocateCheck(toAllocate, reservationKey(nil, sa, ask)); err != nil {
 		// skip schedule onto node
 		return nil
 	}

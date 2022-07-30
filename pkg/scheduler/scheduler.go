@@ -33,10 +33,9 @@ import (
 
 // Main Scheduler service that starts the needed sub services
 type Scheduler struct {
-	clusterContext    *ClusterContext    // main context
-	preemptionContext *preemptionContext // Preemption context
-	pendingEvents     chan interface{}   // queue for events
-	activityPending   chan bool          // activity pending channel
+	clusterContext  *ClusterContext  // main context
+	pendingEvents   chan interface{} // queue for events
+	activityPending chan bool        // activity pending channel
 }
 
 func NewScheduler() *Scheduler {
@@ -66,7 +65,6 @@ func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 	if !manualSchedule {
 		go s.internalSchedule()
 		go s.internalInspectOutstandingRequests()
-		go s.internalPreemption()
 	}
 }
 
@@ -77,14 +75,6 @@ func (s *Scheduler) internalSchedule() {
 		if s.clusterContext.schedule() {
 			s.registerActivity()
 		}
-	}
-}
-
-// Internal start preemption service
-func (s *Scheduler) internalPreemption() {
-	for {
-		s.SingleStepPreemption()
-		time.Sleep(1000 * time.Millisecond)
 	}
 }
 

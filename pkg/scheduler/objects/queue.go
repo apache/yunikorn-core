@@ -1121,7 +1121,7 @@ func (sq *Queue) TryReservedAllocate(iterator func() NodeIterator) *Allocation {
 						zap.String("appID", appID),
 						zap.Int("reservations", numRes))
 				}
-				app := sq.getApplication(appID)
+				app := sq.GetApplication(appID)
 				if app == nil {
 					log.Logger().Debug("reservation(s) found but application did not exist in queue",
 						zap.String("queueName", sq.QueuePath),
@@ -1191,7 +1191,7 @@ func (sq *Queue) UnReserve(appID string, releases int) {
 }
 
 // getApplication return the Application based on the ID.
-func (sq *Queue) getApplication(appID string) *Application {
+func (sq *Queue) GetApplication(appID string) *Application {
 	sq.RLock()
 	defer sq.RUnlock()
 	return sq.applications[appID]

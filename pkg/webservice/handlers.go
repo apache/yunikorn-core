@@ -677,59 +677,6 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getApplication(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	writeHeaders(w)
-	partition, partitionExists := vars["partition"]
-	if !partitionExists {
-		buildJSONErrorResponse(w, "Partition is missing in URL path. Please check the usage documentation", http.StatusBadRequest)
-		return
-	}
-	queueName, queueNameExists := vars["queue"]
-	if !queueNameExists {
-		buildJSONErrorResponse(w, "Queue is missing in URL path. Please check the usage documentation", http.StatusBadRequest)
-		return
-	}
-
-	application, applicationExists := vars["application"]
-	if !applicationExists {
-		buildJSONErrorResponse(w, "Application Id is missing in URL path. Please check the usage documentation", http.StatusBadRequest)
-		return
-	}
-
-	queueErr := validateQueue(queueName)
-	if queueErr != nil {
-		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
-		return
-	}
-	if len(vars) != 3 {
-		buildJSONErrorResponse(w, "Incorrect URL path. Please check the usage documentation", http.StatusBadRequest)
-		return
-	}
-
-	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
-	if partitionContext == nil {
-		buildJSONErrorResponse(w, "Partition not found", http.StatusBadRequest)
-		return
-	}
-
-	queue := partitionContext.GetQueue(queueName)
-	if queue == nil {
-		buildJSONErrorResponse(w, "Queue not found", http.StatusBadRequest)
-		return
-	}
-
-	app := queue.GetApplication(application)
-	appDao := make([]*dao.ApplicationDAOInfo, 0, 1)
-	if app != nil {
-		appDao = append(appDao, getApplicationJSON(app))
-	}
-
-	if err := json.NewEncoder(w).Encode(appDao); err != nil {
-		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
 func setLogLevel(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	writeHeaders(w)

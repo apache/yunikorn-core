@@ -720,10 +720,13 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app := queue.GetApplication(application)
-	appDao := make([]*dao.ApplicationDAOInfo, 0, 1)
-	if app != nil {
-		appDao = append(appDao, getApplicationJSON(app))
+	if app == nil {
+		buildJSONErrorResponse(w, "Application not found", http.StatusBadRequest)
+		return
 	}
+
+	appDao := make([]*dao.ApplicationDAOInfo, 0, 1)
+	appDao = append(appDao, getApplicationJSON(app))
 
 	if err := json.NewEncoder(w).Encode(appDao); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)

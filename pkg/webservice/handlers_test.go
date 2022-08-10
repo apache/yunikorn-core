@@ -1280,11 +1280,22 @@ func TestGetApplicationHandler(t *testing.T) {
 	req3 = mux.SetURLVars(req3, vars3)
 	assert.NilError(t, err, "Get Application Handler request failed")
 	resp3 := &MockResponseWriter{}
-	var appsDao3 []*dao.ApplicationDAOInfo
 	getApplication(resp3, req3)
-	err = json.Unmarshal(resp3.outputBytes, &appsDao3)
-	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, len(appsDao3), 0)
+	assertApplicationExists(t, resp3)
+
+	// test nonexistent application
+	var req4 *http.Request
+	req4, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-2", strings.NewReader(""))
+	vars4 := map[string]string{
+		"partition":   partitionNameWithoutClusterID,
+		"queue":       "root.default",
+		"application": "app-2",
+	}
+	req4 = mux.SetURLVars(req4, vars4)
+	assert.NilError(t, err, "Get Application Handler request failed")
+	resp4 := &MockResponseWriter{}
+	getApplication(resp4, req4)
+	assertApplicationExists(t, resp4)
 }
 
 func assertPartitionExists(t *testing.T, resp *MockResponseWriter) {
@@ -1302,6 +1313,15 @@ func assertQueueExists(t *testing.T, resp *MockResponseWriter) {
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
 	assert.Equal(t, errInfo.Message, "Queue not found", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+}
+
+func assertApplicationExists(t *testing.T, resp *MockResponseWriter) {
+	var errInfo dao.YAPIError
+	err := json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
+	assert.Equal(t, errInfo.Message, "Application not found", "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 

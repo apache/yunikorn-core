@@ -1196,24 +1196,19 @@ func TestGetApplicationHandler(t *testing.T) {
 		return app
 	}
 
-	// add two applications
+	// add 1 application
 	app := addApp("app-1", "root.default", false)
 
-	// add placeholder to test PlaceholderDAOInfo
-	tg := "tg-1"
 	res := &si.Resource{
 		Resources: map[string]*si.Quantity{"vcore": {Value: 1}},
 	}
 	ask := objects.NewAllocationAskFromSI(&si.AllocationAsk{
 		ApplicationID:  "app-1",
 		PartitionName:  partitionName,
-		TaskGroupName:  tg,
 		ResourceAsk:    res,
-		Placeholder:    true,
 		MaxAllocations: 1})
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been added to app")
-	app.SetTimedOutPlaceholder(tg, 1)
 
 	NewWebApp(schedulerContext, nil)
 
@@ -1232,14 +1227,6 @@ func TestGetApplicationHandler(t *testing.T) {
 	err = json.Unmarshal(resp.outputBytes, &appsDao)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
 	assert.Equal(t, len(appsDao), 1)
-
-	// check PlaceholderData
-	assert.Equal(t, len(appsDao[0].PlaceholderData), 1)
-	assert.Equal(t, appsDao[0].PlaceholderData[0].TaskGroupName, tg)
-	assert.DeepEqual(t, appsDao[0].PlaceholderData[0].MinResource, map[string]int64{"vcore": 1})
-	assert.Equal(t, appsDao[0].PlaceholderData[0].Replaced, int64(0))
-	assert.Equal(t, appsDao[0].PlaceholderData[0].Count, int64(1))
-	assert.Equal(t, appsDao[0].PlaceholderData[0].TimedOut, int64(1))
 
 	// test nonexistent partition
 	var req1 *http.Request
@@ -1269,7 +1256,7 @@ func TestGetApplicationHandler(t *testing.T) {
 	getApplication(resp2, req2)
 	assertQueueExists(t, resp2)
 
-	// test queue without applications
+	// test nonexistent application
 	var req3 *http.Request
 	req3, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.noapps/application/app-1", strings.NewReader(""))
 	vars3 := map[string]string{
@@ -1282,20 +1269,6 @@ func TestGetApplicationHandler(t *testing.T) {
 	resp3 := &MockResponseWriter{}
 	getApplication(resp3, req3)
 	assertApplicationExists(t, resp3)
-
-	// test nonexistent application
-	var req4 *http.Request
-	req4, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-2", strings.NewReader(""))
-	vars4 := map[string]string{
-		"partition":   partitionNameWithoutClusterID,
-		"queue":       "root.default",
-		"application": "app-2",
-	}
-	req4 = mux.SetURLVars(req4, vars4)
-	assert.NilError(t, err, "Get Application Handler request failed")
-	resp4 := &MockResponseWriter{}
-	getApplication(resp4, req4)
-	assertApplicationExists(t, resp4)
 }
 
 func assertPartitionExists(t *testing.T, resp *MockResponseWriter) {

@@ -48,11 +48,8 @@ import (
 	"github.com/gorilla/mux"
 )
 
-const PartitionMissing = "Partition is missing in URL path. Please check the usage documentation"
 const PartitionDoesNotExists = "Partition not found"
-const QueueMissing = "Queue is missing in URL path. Please check the usage documentation"
 const QueueDoesNotExists = "Queue not found"
-const IncorrectRequestParametersCount = "Incorrect URL path. Please check the usage documentation"
 
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
@@ -438,10 +435,6 @@ func createClusterConfig(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, "Invalid \"dry_run\" query param. Currently, only dry_run=1 is supported. Please check the usage documentation", http.StatusBadRequest)
 		return
 	}
-	if len(queryParams) != 1 {
-		buildJSONErrorResponse(w, "Invalid query parameters. Please check the usage documentation", http.StatusBadRequest)
-		return
-	}
 	requestBytes, err := io.ReadAll(r.Body)
 	if err == nil {
 		_, err = configs.LoadSchedulerConfigFromByteArray(requestBytes)
@@ -565,15 +558,7 @@ func getPartitions(w http.ResponseWriter, r *http.Request) {
 func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	writeHeaders(w)
-	partitionName, partitionExists := vars["partition"]
-	if !partitionExists {
-		buildJSONErrorResponse(w, PartitionMissing, http.StatusBadRequest)
-		return
-	}
-	if len(vars) != 1 {
-		buildJSONErrorResponse(w, IncorrectRequestParametersCount, http.StatusBadRequest)
-		return
-	}
+	partitionName := vars["partition"]
 	var partitionQueuesDAOInfo dao.PartitionQueueDAOInfo
 	var partition = schedulerContext.GetPartitionWithoutClusterID(partitionName)
 	if partition != nil {
@@ -590,15 +575,7 @@ func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
 func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	writeHeaders(w)
-	partition, partitionExists := vars["partition"]
-	if !partitionExists {
-		buildJSONErrorResponse(w, PartitionMissing, http.StatusBadRequest)
-		return
-	}
-	if len(vars) != 1 {
-		buildJSONErrorResponse(w, IncorrectRequestParametersCount, http.StatusBadRequest)
-		return
-	}
+	partition := vars["partition"]
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext != nil {
 		ns := partitionContext.GetNodes()
@@ -618,38 +595,23 @@ func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
 func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	writeHeaders(w)
-	partition, partitionExists := vars["partition"]
-	if !partitionExists {
-		buildJSONErrorResponse(w, PartitionMissing, http.StatusBadRequest)
-		return
-	}
-	queueName, queueNameExists := vars["queue"]
-	if !queueNameExists {
-		buildJSONErrorResponse(w, QueueMissing, http.StatusBadRequest)
-		return
-	}
+	partition := vars["partition"]
+	queueName := vars["queue"]
 	queueErr := validateQueue(queueName)
 	if queueErr != nil {
 		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
 		return
 	}
-	if len(vars) != 2 {
-		buildJSONErrorResponse(w, IncorrectRequestParametersCount, http.StatusBadRequest)
-		return
-	}
-
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext == nil {
 		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusBadRequest)
 		return
 	}
-
 	queue := partitionContext.GetQueue(queueName)
 	if queue == nil {
 		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusBadRequest)
 		return
 	}
-
 	apps := queue.GetCopyOfApps()
 	completedApps := queue.GetCopyOfCompletedApps()
 	appsDao := make([]*dao.ApplicationDAOInfo, 0, len(apps)+len(completedApps))
@@ -659,7 +621,6 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 	for _, app := range completedApps {
 		appsDao = append(appsDao, getApplicationJSON(app))
 	}
-
 	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -668,45 +629,24 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 func getApplication(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	writeHeaders(w)
-	partition, partitionExists := vars["partition"]
-	if !partitionExists {
-		buildJSONErrorResponse(w, PartitionMissing, http.StatusBadRequest)
-		return
-	}
-	queueName, queueNameExists := vars["queue"]
-	if !queueNameExists {
-		buildJSONErrorResponse(w, QueueMissing, http.StatusBadRequest)
-		return
-	}
-
-	application, applicationExists := vars["application"]
-	if !applicationExists {
-		buildJSONErrorResponse(w, "Application Id is missing in URL path. Please check the usage documentation", http.StatusBadRequest)
-		return
-	}
-
+	partition := vars["partition"]
+	queueName := vars["queue"]
+	application := vars["application"]
 	queueErr := validateQueue(queueName)
 	if queueErr != nil {
 		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
 		return
 	}
-	if len(vars) != 3 {
-		buildJSONErrorResponse(w, IncorrectRequestParametersCount, http.StatusBadRequest)
-		return
-	}
-
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext == nil {
 		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusBadRequest)
 		return
 	}
-
 	queue := partitionContext.GetQueue(queueName)
 	if queue == nil {
 		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusBadRequest)
 		return
 	}
-
 	app := queue.GetApplication(application)
 	if app == nil {
 		buildJSONErrorResponse(w, "Application not found", http.StatusBadRequest)

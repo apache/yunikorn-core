@@ -921,16 +921,6 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getPartitionQueues(resp, req)
 	assertPartitionExists(t, resp)
-
-	// test missing partition
-	var req2 *http.Request
-	req2, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
-	vars2 := map[string]string{}
-	req2 = mux.SetURLVars(req2, vars2)
-	assert.NilError(t, err, "Get Queues for PartitionQueues Handler request failed")
-	resp2 := &MockResponseWriter{}
-	getPartitionQueues(resp2, req2)
-	assertPartitionMissing(t, resp2)
 }
 
 func TestGetClusterInfo(t *testing.T) {
@@ -1020,16 +1010,6 @@ func TestGetPartitionNodes(t *testing.T) {
 	resp1 := &MockResponseWriter{}
 	getPartitionNodes(resp1, req1)
 	assertPartitionExists(t, resp1)
-
-	// test missing partition
-	var req2 *http.Request
-	req2, err = http.NewRequest("GET", "/ws/v1/partition/default/nodes", strings.NewReader(""))
-	vars2 := map[string]string{}
-	req2 = mux.SetURLVars(req2, vars2)
-	assert.NilError(t, err, "Get Nodes for PartitionNodes Handler request failed")
-	resp2 := &MockResponseWriter{}
-	getPartitionNodes(resp2, req2)
-	assertPartitionMissing(t, resp2)
 }
 
 // addApp Add app to the given partition and assert the app count, state etc
@@ -1136,30 +1116,6 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	err = json.Unmarshal(resp3.outputBytes, &appsDao3)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
 	assert.Equal(t, len(appsDao3), 0)
-
-	// test missing partition
-	var req4 *http.Request
-	req4, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.noapps/applications", strings.NewReader(""))
-	vars4 := map[string]string{
-		"queue": "root.default",
-	}
-	req4 = mux.SetURLVars(req4, vars4)
-	assert.NilError(t, err, "Get Queue Applications Handler request failed")
-	resp4 := &MockResponseWriter{}
-	getQueueApplications(resp4, req4)
-	assertPartitionMissing(t, resp4)
-
-	// test missing queue
-	var req5 *http.Request
-	req5, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.noapps/applications", strings.NewReader(""))
-	vars5 := map[string]string{
-		"partition": partitionNameWithoutClusterID,
-	}
-	req5 = mux.SetURLVars(req5, vars5)
-	assert.NilError(t, err, "Get Queue Applications Handler request failed")
-	resp5 := &MockResponseWriter{}
-	getQueueApplications(resp5, req5)
-	assertQueueMissing(t, resp5)
 }
 
 func TestGetApplicationHandler(t *testing.T) {
@@ -1236,68 +1192,6 @@ func TestGetApplicationHandler(t *testing.T) {
 	resp3 := &MockResponseWriter{}
 	getApplication(resp3, req3)
 	assertApplicationExists(t, resp3)
-
-	// test missing partition
-	var req4 *http.Request
-	req4, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
-	vars4 := map[string]string{
-		"queue":       "root.default",
-		"application": "app-1",
-	}
-	req4 = mux.SetURLVars(req4, vars4)
-	assert.NilError(t, err, "Get Application Handler request failed")
-	resp4 := &MockResponseWriter{}
-	getApplication(resp4, req4)
-	assertPartitionMissing(t, resp4)
-
-	// test missing queue
-	var req5 *http.Request
-	req5, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
-	vars5 := map[string]string{
-		"partition":   partitionNameWithoutClusterID,
-		"application": "app-1",
-	}
-	req5 = mux.SetURLVars(req5, vars5)
-	assert.NilError(t, err, "Get Application Handler request failed")
-	resp5 := &MockResponseWriter{}
-	getApplication(resp5, req5)
-	assertQueueMissing(t, resp5)
-
-	// test missing application
-	var req6 *http.Request
-	req6, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
-	vars6 := map[string]string{
-		"partition": partitionNameWithoutClusterID,
-		"queue":     "root.default",
-	}
-	req6 = mux.SetURLVars(req6, vars6)
-	assert.NilError(t, err, "Get Application Handler request failed")
-	resp6 := &MockResponseWriter{}
-	getApplication(resp6, req6)
-	var errInfo dao.YAPIError
-	err = json.Unmarshal(resp6.outputBytes, &errInfo)
-	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
-	assert.Equal(t, http.StatusBadRequest, resp6.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, "Application Id is missing in URL path. Please check the usage documentation", "JSON error message is incorrect")
-	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
-}
-
-func assertPartitionMissing(t *testing.T, resp *MockResponseWriter) {
-	var errInfo dao.YAPIError
-	err := json.Unmarshal(resp.outputBytes, &errInfo)
-	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
-	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, PartitionMissing, "JSON error message is incorrect")
-	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
-}
-
-func assertQueueMissing(t *testing.T, resp *MockResponseWriter) {
-	var errInfo dao.YAPIError
-	err := json.Unmarshal(resp.outputBytes, &errInfo)
-	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
-	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, QueueMissing, "JSON error message is incorrect")
-	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
 func assertPartitionExists(t *testing.T, resp *MockResponseWriter) {

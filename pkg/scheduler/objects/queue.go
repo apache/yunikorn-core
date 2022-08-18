@@ -266,12 +266,14 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 
 	if resources.StrictlyGreaterThanZero(maxResource) {
 		sq.maxResource = maxResource
+		sq.updateMaxResourceMetrics()
 	} else {
 		log.Logger().Debug("max resources setting ignored: cannot set zero max resources")
 	}
 
 	if resources.StrictlyGreaterThanZero(guaranteedResource) {
 		sq.guaranteedResource = guaranteedResource
+		sq.updateGuaranteedResourceMetrics()
 	} else {
 		log.Logger().Debug("guaranteed resources setting ignored: cannot set zero max resources")
 	}
@@ -1002,7 +1004,7 @@ func (sq *Queue) internalGetMax(parentLimit *resources.Resource) *resources.Reso
 	return resources.ComponentWiseMin(parentLimit, sq.maxResource)
 }
 
-// SetMaxResource sets the max resource for root the queue. Called as part of adding or removing a node.
+// SetMaxResource sets the max resource for the root queue. Called as part of adding or removing a node.
 // Should only happen on the root, all other queues get it from the config via properties.
 func (sq *Queue) SetMaxResource(max *resources.Resource) {
 	sq.Lock()
@@ -1017,6 +1019,7 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 		zap.String("current max", sq.maxResource.String()),
 		zap.String("new max", max.String()))
 	sq.maxResource = max.Clone()
+	sq.updateMaxResourceMetrics()
 }
 
 // TryAllocate tries to allocate a pending requests. This only gets called if there is a pending request
@@ -1216,24 +1219,20 @@ func (sq *Queue) SupportTaskGroup() bool {
 	return sq.sortType == policies.FifoSortPolicy || sq.sortType == policies.StateAwarePolicy
 }
 
-// updateGuaranteedResourceMetrics updates guaranteed resource metrics if this is a leaf queue.
+// updateGuaranteedResourceMetrics updates guaranteed resource metrics.
 func (sq *Queue) updateGuaranteedResourceMetrics() {
-	if sq.isLeaf {
-		if sq.guaranteedResource != nil {
-			for k, v := range sq.guaranteedResource.Resources {
-				metrics.GetQueueMetrics(sq.QueuePath).SetQueueGuaranteedResourceMetrics(k, float64(v))
-			}
+	if sq.guaranteedResource != nil {
+		for k, v := range sq.guaranteedResource.Resources {
+			metrics.GetQueueMetrics(sq.QueuePath).SetQueueGuaranteedResourceMetrics(k, float64(v))
 		}
 	}
 }
 
-// updateMaxResourceMetrics updates max resource metrics if this is a leaf queue.
+// updateMaxResourceMetrics updates max resource metrics.
 func (sq *Queue) updateMaxResourceMetrics() {
-	if sq.isLeaf {
-		if sq.maxResource != nil {
-			for k, v := range sq.maxResource.Resources {
-				metrics.GetQueueMetrics(sq.QueuePath).SetQueueMaxResourceMetrics(k, float64(v))
-			}
+	if sq.maxResource != nil {
+		for k, v := range sq.maxResource.Resources {
+			metrics.GetQueueMetrics(sq.QueuePath).SetQueueMaxResourceMetrics(k, float64(v))
 		}
 	}
 }

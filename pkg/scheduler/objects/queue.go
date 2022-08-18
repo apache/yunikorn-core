@@ -266,17 +266,17 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 
 	if resources.StrictlyGreaterThanZero(maxResource) {
 		sq.maxResource = maxResource
+		sq.updateMaxResourceMetrics()
 	} else {
 		log.Logger().Debug("max resources setting ignored: cannot set zero max resources")
 	}
-	sq.updateMaxResourceMetrics()
 
 	if resources.StrictlyGreaterThanZero(guaranteedResource) {
 		sq.guaranteedResource = guaranteedResource
+		sq.updateGuaranteedResourceMetrics()
 	} else {
 		log.Logger().Debug("guaranteed resources setting ignored: cannot set zero max resources")
 	}
-	sq.updateGuaranteedResourceMetrics()
 
 	return nil
 }
@@ -1019,7 +1019,6 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 		zap.String("current max", sq.maxResource.String()),
 		zap.String("new max", max.String()))
 	sq.maxResource = max.Clone()
-	sq.updateGuaranteedResourceMetrics()
 	sq.updateMaxResourceMetrics()
 }
 

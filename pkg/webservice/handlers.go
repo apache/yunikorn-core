@@ -48,6 +48,9 @@ import (
 	"github.com/gorilla/mux"
 )
 
+const PartitionDoesNotExists = "Partition not found"
+const QueueDoesNotExists = "Queue not found"
+
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	var stack = func() []byte {
@@ -174,24 +177,6 @@ func getClusterUtilJSON(partition *scheduler.PartitionContext) []*dao.ClusterUti
 		utils = append(utils, utilization)
 	}
 	return utils
-}
-
-func getPartitionJSON(partition *scheduler.PartitionContext) *dao.PartitionDAOInfo {
-	partitionInfo := &dao.PartitionDAOInfo{}
-
-	queueDAOInfo := partition.GetQueueInfo()
-
-	partitionInfo.PartitionName = common.GetPartitionNameWithoutClusterID(partition.Name)
-	capacity := partition.GetTotalPartitionResource()
-	usedCapacity := partition.GetAllocatedResource()
-	partitionInfo.Capacity = dao.PartitionCapacity{
-		Capacity:     capacity.DAOMap(),
-		UsedCapacity: usedCapacity.DAOMap(),
-		Utilization:  resources.CalculateAbsUsedCapacity(capacity, usedCapacity).DAOMap(),
-	}
-	partitionInfo.Queues = queueDAOInfo
-
-	return partitionInfo
 }
 
 func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
@@ -450,10 +435,6 @@ func createClusterConfig(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, "Invalid \"dry_run\" query param. Currently, only dry_run=1 is supported. Please check the usage documentation", http.StatusBadRequest)
 		return
 	}
-	if len(queryParams) != 1 {
-		buildJSONErrorResponse(w, "Invalid query parameters. Please check the usage documentation", http.StatusBadRequest)
-		return
-	}
 	requestBytes, err := io.ReadAll(r.Body)
 	if err == nil {
 		_, err = configs.LoadSchedulerConfigFromByteArray(requestBytes)
@@ -577,21 +558,13 @@ func getPartitions(w http.ResponseWriter, r *http.Request) {
 func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	writeHeaders(w)
-	partitionName, partitionExists := vars["partition"]
-	if !partitionExists {
-		buildJSONErrorResponse(w, "Partition is missing in URL path. Please check the usage documentation", http.StatusBadRequest)
-		return
-	}
-	if len(vars) != 1 {
-		buildJSONErrorResponse(w, "Incorrect URL path. Please check the usage documentation", http.StatusBadRequest)
-		return
-	}
+	partitionName := vars["partition"]
 	var partitionQueuesDAOInfo dao.PartitionQueueDAOInfo
 	var partition = schedulerContext.GetPartitionWithoutClusterID(partitionName)
 	if partition != nil {
 		partitionQueuesDAOInfo = partition.GetPartitionQueues()
 	} else {
-		buildJSONErrorResponse(w, "Partition not found", http.StatusBadRequest)
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusBadRequest)
 		return
 	}
 	if err := json.NewEncoder(w).Encode(partitionQueuesDAOInfo); err != nil {
@@ -602,15 +575,7 @@ func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
 func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	writeHeaders(w)
-	partition, partitionExists := vars["partition"]
-	if !partitionExists {
-		buildJSONErrorResponse(w, "Partition is missing in URL path. Please check the usage documentation", http.StatusBadRequest)
-		return
-	}
-	if len(vars) != 1 {
-		buildJSONErrorResponse(w, "Incorrect URL path. Please check the usage documentation", http.StatusBadRequest)
-		return
-	}
+	partition := vars["partition"]
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext != nil {
 		ns := partitionContext.GetNodes()
@@ -623,45 +588,30 @@ func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
 			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		}
 	} else {
-		buildJSONErrorResponse(w, "Partition not found", http.StatusBadRequest)
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusBadRequest)
 	}
 }
 
 func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	writeHeaders(w)
-	partition, partitionExists := vars["partition"]
-	if !partitionExists {
-		buildJSONErrorResponse(w, "Partition is missing in URL path. Please check the usage documentation", http.StatusBadRequest)
-		return
-	}
-	queueName, queueNameExists := vars["queue"]
-	if !queueNameExists {
-		buildJSONErrorResponse(w, "Queue is missing in URL path. Please check the usage documentation", http.StatusBadRequest)
-		return
-	}
+	partition := vars["partition"]
+	queueName := vars["queue"]
 	queueErr := validateQueue(queueName)
 	if queueErr != nil {
 		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
 		return
 	}
-	if len(vars) != 2 {
-		buildJSONErrorResponse(w, "Incorrect URL path. Please check the usage documentation", http.StatusBadRequest)
-		return
-	}
-
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext == nil {
-		buildJSONErrorResponse(w, "Partition not found", http.StatusBadRequest)
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusBadRequest)
 		return
 	}
-
 	queue := partitionContext.GetQueue(queueName)
 	if queue == nil {
-		buildJSONErrorResponse(w, "Queue not found", http.StatusBadRequest)
+		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusBadRequest)
 		return
 	}
-
 	apps := queue.GetCopyOfApps()
 	completedApps := queue.GetCopyOfCompletedApps()
 	appsDao := make([]*dao.ApplicationDAOInfo, 0, len(apps)+len(completedApps))
@@ -671,8 +621,39 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 	for _, app := range completedApps {
 		appsDao = append(appsDao, getApplicationJSON(app))
 	}
-
 	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func getApplication(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	writeHeaders(w)
+	partition := vars["partition"]
+	queueName := vars["queue"]
+	application := vars["application"]
+	queueErr := validateQueue(queueName)
+	if queueErr != nil {
+		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
+		return
+	}
+	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
+	if partitionContext == nil {
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusBadRequest)
+		return
+	}
+	queue := partitionContext.GetQueue(queueName)
+	if queue == nil {
+		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusBadRequest)
+		return
+	}
+	app := queue.GetApplication(application)
+	if app == nil {
+		buildJSONErrorResponse(w, "Application not found", http.StatusBadRequest)
+		return
+	}
+	appDao := getApplicationJSON(app)
+	if err := json.NewEncoder(w).Encode(appDao); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -781,34 +762,6 @@ func getContainerHistoryDAO(records []*history.MetricsRecord) []*dao.ContainerHi
 			TotalContainers: strconv.Itoa(record.TotalContainers),
 		}
 		result = append(result, element)
-	}
-
-	return result
-}
-
-func getClustersUtilDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClustersUtilDAOInfo {
-	var result []*dao.ClustersUtilDAOInfo
-
-	for _, partition := range lists {
-		result = append(result, &dao.ClustersUtilDAOInfo{
-			PartitionName: common.GetPartitionNameWithoutClusterID(partition.Name),
-			ClustersUtil:  getClusterUtilJSON(partition),
-		})
-	}
-
-	return result
-}
-func getNodesUtilDAO(lists map[string]*scheduler.PartitionContext) []*dao.NodesUtilDAOInfo {
-	var result []*dao.NodesUtilDAOInfo
-
-	for _, partition := range lists {
-		partitionResource := partition.GetTotalPartitionResource()
-		// partitionResource can be null if the partition has no node
-		if partitionResource != nil {
-			for name := range partitionResource.Resources {
-				result = append(result, getNodesUtilJSON(partition, name))
-			}
-		}
 	}
 
 	return result

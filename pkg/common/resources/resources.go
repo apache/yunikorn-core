@@ -33,12 +33,6 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-//// const keys
-//const (
-//	MEMORY = "memory"
-//	VCORE  = "vcore"
-//)
-
 type Resource struct {
 	Resources map[string]Quantity
 }

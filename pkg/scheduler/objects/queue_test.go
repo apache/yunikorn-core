@@ -891,7 +891,7 @@ func TestGetApp(t *testing.T) {
 	leaf, err = createManagedQueue(root, "leaf", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	// check for init of the map
-	if unknown := leaf.getApplication("unknown"); unknown != nil {
+	if unknown := leaf.GetApplication("unknown"); unknown != nil {
 		t.Errorf("un registered app found using appID which should not happen: %v", unknown)
 	}
 
@@ -899,10 +899,10 @@ func TestGetApp(t *testing.T) {
 	app := newApplication(appID1, "default", leaf.QueuePath)
 	leaf.AddApplication(app)
 	assert.Equal(t, len(leaf.applications), 1, "queue should have one app registered")
-	if leaf.getApplication(appID1) == nil {
+	if leaf.GetApplication(appID1) == nil {
 		t.Errorf("registered app not found using appID")
 	}
-	if unknown := leaf.getApplication("unknown"); unknown != nil {
+	if unknown := leaf.GetApplication("unknown"); unknown != nil {
 		t.Errorf("un registered app found using appID which should not happen: %v", unknown)
 	}
 }

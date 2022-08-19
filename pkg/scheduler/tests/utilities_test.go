@@ -34,6 +34,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -60,32 +61,32 @@ func caller() string {
 
 func waitForPendingQueueResource(t *testing.T, queue *objects.Queue, memory resources.Quantity, timeoutMs int) {
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
-		return queue.GetPendingResource().Resources[resources.MEMORY] == memory
+		return queue.GetPendingResource().Resources[siCommon.Memory] == memory
 	})
 	if err != nil {
 		log.Logger().Info("queue detail",
 			zap.Any("queue", queue))
-		t.Fatalf("Failed to wait pending resource on queue %s, expected %v, actual %v, called from: %s", queue.QueuePath, memory, queue.GetPendingResource().Resources[resources.MEMORY], caller())
+		t.Fatalf("Failed to wait pending resource on queue %s, expected %v, actual %v, called from: %s", queue.QueuePath, memory, queue.GetPendingResource().Resources[siCommon.Memory], caller())
 	}
 }
 
 func waitForPendingAppResource(t *testing.T, app *objects.Application, memory resources.Quantity, timeoutMs int) {
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
-		return app.GetPendingResource().Resources[resources.MEMORY] == memory
+		return app.GetPendingResource().Resources[siCommon.Memory] == memory
 	})
-	assert.NilError(t, err, "Failed to wait for pending resource, expected %v, actual %v, called from: %s", memory, app.GetPendingResource().Resources[resources.MEMORY], caller())
+	assert.NilError(t, err, "Failed to wait for pending resource, expected %v, actual %v, called from: %s", memory, app.GetPendingResource().Resources[siCommon.Memory], caller())
 }
 
 func waitForAllocatedAppResource(t *testing.T, app *objects.Application, memory resources.Quantity, timeoutMs int) {
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
-		return app.GetAllocatedResource().Resources[resources.MEMORY] == memory
+		return app.GetAllocatedResource().Resources[siCommon.Memory] == memory
 	})
-	assert.NilError(t, err, "Failed to wait for pending resource, expected %v, actual %v, called from: %s", memory, app.GetPendingResource().Resources[resources.MEMORY], caller())
+	assert.NilError(t, err, "Failed to wait for pending resource, expected %v, actual %v, called from: %s", memory, app.GetPendingResource().Resources[siCommon.Memory], caller())
 }
 
 func waitForAllocatedQueueResource(t *testing.T, queue *objects.Queue, memory resources.Quantity, timeoutMs int) {
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
-		return queue.GetAllocatedResource().Resources[resources.MEMORY] == memory
+		return queue.GetAllocatedResource().Resources[siCommon.Memory] == memory
 	})
 	assert.NilError(t, err, "Failed to wait for allocations on queue %s, called from: %s", queue.QueuePath, caller())
 }
@@ -95,7 +96,7 @@ func waitForAllocatedNodeResource(t *testing.T, cc *scheduler.ClusterContext, pa
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		totalNodeResource = 0
 		for _, nodeID := range nodeIDs {
-			totalNodeResource += cc.GetPartition(partitionName).GetNode(nodeID).GetAllocatedResource().Resources[resources.MEMORY]
+			totalNodeResource += cc.GetPartition(partitionName).GetNode(nodeID).GetAllocatedResource().Resources[siCommon.Memory]
 		}
 		return totalNodeResource == allocatedMemory
 	})
@@ -107,7 +108,7 @@ func waitForAvailableNodeResource(t *testing.T, cc *scheduler.ClusterContext, pa
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		totalNodeResource = 0
 		for _, nodeID := range nodeIDs {
-			totalNodeResource += cc.GetPartition(partitionName).GetNode(nodeID).GetAvailableResource().Resources[resources.MEMORY]
+			totalNodeResource += cc.GetPartition(partitionName).GetNode(nodeID).GetAvailableResource().Resources[siCommon.Memory]
 		}
 		return totalNodeResource == availableMemory
 	})

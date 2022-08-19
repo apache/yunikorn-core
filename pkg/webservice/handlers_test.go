@@ -45,6 +45,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/tests"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -576,11 +577,11 @@ func TestGetClusterUtilJSON(t *testing.T) {
 	assert.Equal(t, ContainsObj(result0, utilZero), true)
 
 	// add node to partition with allocations
-	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 1000, resources.VCORE: 1000}).ToProto()
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 1000, siCommon.CPU: 1000}).ToProto()
 	node1 := objects.NewNode(&si.NodeInfo{NodeID: nodeID, SchedulableResource: nodeRes})
 
-	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 500, resources.VCORE: 300})
-	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 300, resources.VCORE: 200})
+	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 500, siCommon.CPU: 300})
+	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 300, siCommon.CPU: 200})
 	ask1 := objects.NewAllocationAsk("alloc-1", appID, resAlloc1)
 	ask2 := objects.NewAllocationAsk("alloc-2", appID, resAlloc2)
 	alloc1 := objects.NewAllocation("alloc-1-uuid", nodeID, ask1)
@@ -591,13 +592,13 @@ func TestGetClusterUtilJSON(t *testing.T) {
 
 	// set expected result
 	utilMem := &dao.ClusterUtilDAOInfo{
-		ResourceType: resources.MEMORY,
+		ResourceType: siCommon.Memory,
 		Total:        int64(1000),
 		Used:         int64(800),
 		Usage:        "80%",
 	}
 	utilCore := &dao.ClusterUtilDAOInfo{
-		ResourceType: resources.VCORE,
+		ResourceType: siCommon.CPU,
 		Total:        int64(1000),
 		Used:         int64(500),
 		Usage:        "50%",
@@ -634,16 +635,16 @@ func TestGetNodesUtilJSON(t *testing.T) {
 	assert.NilError(t, err, "add application to partition should not have failed")
 
 	// create test nodes
-	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 1000, resources.VCORE: 1000}).ToProto()
-	nodeRes2 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 1000, resources.VCORE: 1000, "GPU": 10}).ToProto()
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 1000, siCommon.CPU: 1000}).ToProto()
+	nodeRes2 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 1000, siCommon.CPU: 1000, "GPU": 10}).ToProto()
 	node1ID := "node-1"
 	node1 := objects.NewNode(&si.NodeInfo{NodeID: node1ID, SchedulableResource: nodeRes})
 	node2ID := "node-2"
 	node2 := objects.NewNode(&si.NodeInfo{NodeID: node2ID, SchedulableResource: nodeRes2})
 
 	// create test allocations
-	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 500, resources.VCORE: 300})
-	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 300, resources.VCORE: 500, "GPU": 5})
+	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 500, siCommon.CPU: 300})
+	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 300, siCommon.CPU: 500, "GPU": 5})
 	ask1 := objects.NewAllocationAsk("alloc-1", appID, resAlloc1)
 	ask2 := objects.NewAllocationAsk("alloc-2", appID, resAlloc2)
 	allocs := []*objects.Allocation{objects.NewAllocation("alloc-1-uuid", node1ID, ask1)}
@@ -654,8 +655,8 @@ func TestGetNodesUtilJSON(t *testing.T) {
 	assert.NilError(t, err, "add node to partition should not have failed")
 
 	// get nodes utilization
-	res1 := getNodesUtilJSON(partition, resources.MEMORY)
-	res2 := getNodesUtilJSON(partition, resources.VCORE)
+	res1 := getNodesUtilJSON(partition, siCommon.Memory)
+	res2 := getNodesUtilJSON(partition, siCommon.CPU)
 	res3 := getNodesUtilJSON(partition, "GPU")
 	resNon := getNodesUtilJSON(partition, "non-exist")
 	subres1 := res1.NodesUtil
@@ -663,13 +664,13 @@ func TestGetNodesUtilJSON(t *testing.T) {
 	subres3 := res3.NodesUtil
 	subresNon := resNon.NodesUtil
 
-	assert.Equal(t, res1.ResourceType, resources.MEMORY)
+	assert.Equal(t, res1.ResourceType, siCommon.Memory)
 	assert.Equal(t, subres1[2].NumOfNodes, int64(1))
 	assert.Equal(t, subres1[4].NumOfNodes, int64(1))
 	assert.Equal(t, subres1[2].NodeNames[0], node2ID)
 	assert.Equal(t, subres1[4].NodeNames[0], node1ID)
 
-	assert.Equal(t, res2.ResourceType, resources.VCORE)
+	assert.Equal(t, res2.ResourceType, siCommon.CPU)
 	assert.Equal(t, subres2[2].NumOfNodes, int64(1))
 	assert.Equal(t, subres2[4].NumOfNodes, int64(1))
 	assert.Equal(t, subres2[2].NodeNames[0], node1ID)
@@ -731,15 +732,15 @@ func TestPartitions(t *testing.T) {
 	NewWebApp(schedulerContext, nil)
 
 	// create test nodes
-	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 500, resources.VCORE: 500}).ToProto()
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 500, siCommon.CPU: 500}).ToProto()
 	node1ID := "node-1"
 	node1 := objects.NewNode(&si.NodeInfo{NodeID: node1ID, SchedulableResource: nodeRes})
 	node2ID := "node-2"
 	node2 := objects.NewNode(&si.NodeInfo{NodeID: node2ID, SchedulableResource: nodeRes})
 
 	// create test allocations
-	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 100, resources.VCORE: 400})
-	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 200, resources.VCORE: 300})
+	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 100, siCommon.CPU: 400})
+	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 200, siCommon.CPU: 300})
 	ask1 := objects.NewAllocationAsk("alloc-1", app6.ApplicationID, resAlloc1)
 	ask2 := objects.NewAllocationAsk("alloc-2", app3.ApplicationID, resAlloc2)
 	allocs := []*objects.Allocation{objects.NewAllocation("alloc-1-uuid", node1ID, ask1)}
@@ -952,15 +953,15 @@ func TestGetPartitionNodes(t *testing.T) {
 	assert.NilError(t, err, "add application to partition should not have failed")
 
 	// create test nodes
-	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 1000, resources.VCORE: 1000}).ToProto()
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 1000, siCommon.CPU: 1000}).ToProto()
 	node1ID := "node-1"
 	node1 := objects.NewNode(&si.NodeInfo{NodeID: node1ID, SchedulableResource: nodeRes})
 	node2ID := "node-2"
 	node2 := objects.NewNode(&si.NodeInfo{NodeID: node2ID, SchedulableResource: nodeRes})
 
 	// create test allocations
-	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 500, resources.VCORE: 300})
-	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{resources.MEMORY: 300, resources.VCORE: 500})
+	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 500, siCommon.CPU: 300})
+	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 300, siCommon.CPU: 500})
 	ask1 := objects.NewAllocationAsk("alloc-1", appID, resAlloc1)
 	ask2 := objects.NewAllocationAsk("alloc-2", appID, resAlloc2)
 	allocs := []*objects.Allocation{objects.NewAllocation("alloc-1-uuid", node1ID, ask1)}

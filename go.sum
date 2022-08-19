@@ -7,6 +7,8 @@ github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuy
 github.com/alecthomas/units v0.0.0-20151022065526-2efee857e7cf/go.mod h1:ybxpYRFXyAe+OPACYpWeL0wqObRcbAqCMya13uyzqw0=
 github.com/apache/yunikorn-scheduler-interface v0.0.0-20220610073228-3b5a637363ab h1:8h/meaIa7Ijy3Z1yiwqfoHx9pETZODMsheVqkYH/jXA=
 github.com/apache/yunikorn-scheduler-interface v0.0.0-20220610073228-3b5a637363ab/go.mod h1:Pboapmj82OLjl65yVNaKit1l0Jd1GJrSUaUVr13h68s=
+github.com/apache/yunikorn-scheduler-interface v1.0.1-0.20220818152917-b140f6b90fc4 h1:9xvWRgVHYkDpUq9ZV7einjbdCBPBihFmD0pNyuD70w8=
+github.com/apache/yunikorn-scheduler-interface v1.0.1-0.20220818152917-b140f6b90fc4/go.mod h1:VpJqm5k7wjPvoEdgAVHRU2rlbs3LLGJaz2d9F39hmGs=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
 github.com/beorn7/perks v1.0.0/go.mod h1:KWe93zE9D1o94FZ5RNwFwVgaQK1VOXiVxmqh+CedLV8=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=

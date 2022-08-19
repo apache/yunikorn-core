@@ -27,8 +27,8 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
-	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -81,7 +81,7 @@ partitions:
 
 	// Check the queue root.base
 	queue := part.GetQueue("root.base")
-	assert.Equal(t, int(queue.GetMaxResource().Resources[resources.MEMORY]), 150000000, "max resource on leaf not set correctly")
+	assert.Equal(t, int(queue.GetMaxResource().Resources[siCommon.Memory]), 150000000, "max resource on leaf not set correctly")
 
 	// Check the queue which will be removed
 	queue = part.GetQueue("root.tobedeleted")
@@ -129,8 +129,8 @@ partitions:
 
 	// Check the queue root.base
 	queue = part.GetQueue("root.base")
-	assert.Equal(t, int(queue.GetMaxResource().Resources[resources.MEMORY]), 1000000000, "max resource on leaf not set correctly")
-	assert.Equal(t, int(queue.GetGuaranteedResource().Resources[resources.VCORE]), 250, "guaranteed resource on leaf not set correctly")
+	assert.Equal(t, int(queue.GetMaxResource().Resources[siCommon.Memory]), 1000000000, "max resource on leaf not set correctly")
+	assert.Equal(t, int(queue.GetGuaranteedResource().Resources[siCommon.CPU]), 250, "guaranteed resource on leaf not set correctly")
 
 	queue = part.GetQueue("root.tobeadded")
 	assert.Assert(t, queue != nil, "queue root.tobeadded is not found")
@@ -173,7 +173,7 @@ func TestBasicScheduler(t *testing.T) {
 
 	// Check the queue singleleaf
 	leaf := part.GetQueue(leafName)
-	assert.Equal(t, int(leaf.GetMaxResource().Resources[resources.MEMORY]), 150000000, "%s config not set correct", leafName)
+	assert.Equal(t, int(leaf.GetMaxResource().Resources[siCommon.Memory]), 150000000, "%s config not set correct", leafName)
 
 	// Register a node, and add apps
 	err = ms.proxy.UpdateNode(&si.NodeRequest{
@@ -261,9 +261,9 @@ func TestBasicScheduler(t *testing.T) {
 	waitForPendingAppResource(t, app, 0, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[resources.MEMORY]), 20000000, "leaf allocated memory incorrect")
-	assert.Equal(t, int(root.GetAllocatedResource().Resources[resources.MEMORY]), 20000000, "root allocated memory incorrect")
-	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 20000000, "app allocated memory incorrect")
+	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[siCommon.Memory]), 20000000, "leaf allocated memory incorrect")
+	assert.Equal(t, int(root.GetAllocatedResource().Resources[siCommon.Memory]), 20000000, "root allocated memory incorrect")
+	assert.Equal(t, int(app.GetAllocatedResource().Resources[siCommon.Memory]), 20000000, "app allocated memory incorrect")
 
 	// once we start to process allocation asks from this app, verify the state again
 	assert.Equal(t, app01.CurrentState(), objects.Running.String())
@@ -318,9 +318,9 @@ func TestBasicScheduler(t *testing.T) {
 	waitForPendingAppResource(t, app, 200000000, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[resources.MEMORY]), 120000000, "leaf allocated memory incorrect")
-	assert.Equal(t, int(root.GetAllocatedResource().Resources[resources.MEMORY]), 120000000, "root allocated memory incorrect")
-	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 120000000, "app allocated memory incorrect")
+	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[siCommon.Memory]), 120000000, "leaf allocated memory incorrect")
+	assert.Equal(t, int(root.GetAllocatedResource().Resources[siCommon.Memory]), 120000000, "root allocated memory incorrect")
+	assert.Equal(t, int(app.GetAllocatedResource().Resources[siCommon.Memory]), 120000000, "app allocated memory incorrect")
 
 	// Check allocated resources of nodes
 	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), partition, []string{"node-1:1234", "node-2:1234"}, 120000000, 1000)
@@ -353,9 +353,9 @@ func TestBasicScheduler(t *testing.T) {
 	waitForPendingAppResource(t, app, 200000000, 1000)
 
 	// Check allocated resources of queues, apps should be 0 now
-	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[resources.MEMORY]), 0, "leaf allocated memory incorrect")
-	assert.Equal(t, int(root.GetAllocatedResource().Resources[resources.MEMORY]), 0, "root allocated memory incorrect")
-	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 0, "app allocated memory incorrect")
+	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[siCommon.Memory]), 0, "leaf allocated memory incorrect")
+	assert.Equal(t, int(root.GetAllocatedResource().Resources[siCommon.Memory]), 0, "root allocated memory incorrect")
+	assert.Equal(t, int(app.GetAllocatedResource().Resources[siCommon.Memory]), 0, "app allocated memory incorrect")
 
 	// Release asks
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
@@ -466,9 +466,9 @@ func TestBasicSchedulerAutoAllocation(t *testing.T) {
 	waitForPendingAppResource(t, app, 50000000, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[resources.MEMORY]), 150000000, "leaf allocated memory incorrect")
-	assert.Equal(t, int(root.GetAllocatedResource().Resources[resources.MEMORY]), 150000000, "root allocated memory incorrect")
-	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 150000000, "app allocated memory incorrect")
+	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[siCommon.Memory]), 150000000, "leaf allocated memory incorrect")
+	assert.Equal(t, int(root.GetAllocatedResource().Resources[siCommon.Memory]), 150000000, "root allocated memory incorrect")
+	assert.Equal(t, int(app.GetAllocatedResource().Resources[siCommon.Memory]), 150000000, "app allocated memory incorrect")
 
 	// Check allocated resources of nodes
 	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), partition, []string{"node-1:1234", "node-2:1234"}, 150000000, 1000)
@@ -717,8 +717,8 @@ partitions:
 	waitForPendingAppResource(t, app2, 100000000, 1000)
 
 	// Both apps got 100 resources,
-	assert.Equal(t, int(app1.GetAllocatedResource().Resources[resources.MEMORY]), 100000000, "app1 allocated resource incorrect")
-	assert.Equal(t, int(app2.GetAllocatedResource().Resources[resources.MEMORY]), 100000000, "app2 allocated resource incorrect")
+	assert.Equal(t, int(app1.GetAllocatedResource().Resources[siCommon.Memory]), 100000000, "app1 allocated resource incorrect")
+	assert.Equal(t, int(app2.GetAllocatedResource().Resources[siCommon.Memory]), 100000000, "app2 allocated resource incorrect")
 }
 
 func TestRejectApplications(t *testing.T) {
@@ -893,7 +893,7 @@ partitions:
 			waitForAllocatedAppResource(t, app1, 100000000, 1000)
 
 			assert.Equal(t, len(app1.GetAllAllocations()), 10, "number of app allocations incorrect")
-			assert.Equal(t, int(app1.GetAllocatedResource().Resources[resources.MEMORY]), 100000000, "app allocated resource incorrect")
+			assert.Equal(t, int(app1.GetAllocatedResource().Resources[siCommon.Memory]), 100000000, "app allocated resource incorrect")
 			assert.Equal(t, len(ms.mockRM.getAllocations()), 10, "number of RM allocations incorrect")
 
 			// release all allocated allocations
@@ -1157,8 +1157,8 @@ partitions:
 	ms.scheduler.MultiStepSchedule(9)
 	ms.mockRM.waitForAllocations(t, 9, 1000)
 
-	node1Alloc := ms.scheduler.GetClusterContext().GetPartition(partition).GetNode("node-1:1234").GetAllocatedResource().Resources[resources.MEMORY]
-	node2Alloc := ms.scheduler.GetClusterContext().GetPartition(partition).GetNode("node-2:1234").GetAllocatedResource().Resources[resources.MEMORY]
+	node1Alloc := ms.scheduler.GetClusterContext().GetPartition(partition).GetNode("node-1:1234").GetAllocatedResource().Resources[siCommon.Memory]
+	node2Alloc := ms.scheduler.GetClusterContext().GetPartition(partition).GetNode("node-2:1234").GetAllocatedResource().Resources[siCommon.Memory]
 	// we do not know which node was chosen so we need to check:
 	// node1 == 90 && node2 == 0  || node1 == 0 && node2 == 90
 	if !(node1Alloc == 90000000 && node2Alloc == 0) && !(node1Alloc == 0 && node2Alloc == 90000000) {
@@ -1259,12 +1259,12 @@ partitions:
 	ms.mockRM.waitForAllocations(t, 20, 1000)
 	waitForPendingQueueResource(t, leaf, 0, 1000)
 	waitForPendingAppResource(t, app, 0, 1000)
-	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 200000000)
+	assert.Equal(t, int(app.GetAllocatedResource().Resources[siCommon.Memory]), 200000000)
 
 	// Verify 2 allocations for every node
 	for _, node := range nodes {
 		node := ms.scheduler.GetClusterContext().GetNode(node.NodeID, partition)
-		assert.Equal(t, int(node.GetAllocatedResource().Resources[resources.MEMORY]), 20000000, "node %s did not get 2 allocated", node.NodeID)
+		assert.Equal(t, int(node.GetAllocatedResource().Resources[siCommon.Memory]), 20000000, "node %s did not get 2 allocated", node.NodeID)
 	}
 }
 
@@ -1364,7 +1364,7 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 
 	// verify the placeholder allocation
 	assert.Equal(t, len(app01.GetAllAllocations()), 1)
-	assert.Equal(t, int(app.GetPlaceholderResource().Resources[resources.MEMORY]), 10000000,
+	assert.Equal(t, int(app.GetPlaceholderResource().Resources[siCommon.Memory]), 10000000,
 		"app allocated memory incorrect")
 	placeholderAlloc := app01.GetAllAllocations()[0]
 
@@ -1422,8 +1422,8 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 	// actual request gets allocated
 	// placeholder requests have been all released
 	// and queue has no pending resources
-	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 10000000)
-	assert.Equal(t, int(app.GetPlaceholderResource().Resources[resources.MEMORY]), 0,
+	assert.Equal(t, int(app.GetAllocatedResource().Resources[siCommon.Memory]), 10000000)
+	assert.Equal(t, int(app.GetPlaceholderResource().Resources[siCommon.Memory]), 0,
 		"app allocated memory incorrect")
 	waitForPendingQueueResource(t, leaf, 0, 1000)
 	waitForPendingQueueResource(t, root, 0, 1000)
@@ -1571,9 +1571,9 @@ partitions:
 	waitForPendingAppResource(t, app, 0, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[resources.MEMORY]), 20000000, "leaf allocated memory incorrect")
-	assert.Equal(t, int(root.GetAllocatedResource().Resources[resources.MEMORY]), 20000000, "root allocated memory incorrect")
-	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 20000000, "app allocated memory incorrect")
+	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[siCommon.Memory]), 20000000, "leaf allocated memory incorrect")
+	assert.Equal(t, int(root.GetAllocatedResource().Resources[siCommon.Memory]), 20000000, "root allocated memory incorrect")
+	assert.Equal(t, int(app.GetAllocatedResource().Resources[siCommon.Memory]), 20000000, "app allocated memory incorrect")
 
 	// once we start to process allocation asks from this app, verify the state again
 	assert.Equal(t, app01.CurrentState(), objects.Running.String())
@@ -1608,9 +1608,9 @@ partitions:
 	ms.mockRM.waitForAllocations(t, 0, 1000)
 
 	// Check allocated resources of queues, apps should be 0 now
-	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[resources.MEMORY]), 0, "leaf allocated memory incorrect")
-	assert.Equal(t, int(root.GetAllocatedResource().Resources[resources.MEMORY]), 0, "root allocated memory incorrect")
-	assert.Equal(t, int(app.GetAllocatedResource().Resources[resources.MEMORY]), 0, "app allocated memory incorrect")
+	assert.Equal(t, int(leaf.GetAllocatedResource().Resources[siCommon.Memory]), 0, "leaf allocated memory incorrect")
+	assert.Equal(t, int(root.GetAllocatedResource().Resources[siCommon.Memory]), 0, "root allocated memory incorrect")
+	assert.Equal(t, int(app.GetAllocatedResource().Resources[siCommon.Memory]), 0, "app allocated memory incorrect")
 
 	// Check app to Completing status
 	assert.Equal(t, app01.CurrentState(), objects.Completing.String())

@@ -28,6 +28,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -256,7 +257,7 @@ func newNodeWithResources(nodeID string, max, occupied *resources.Resource) *obj
 	proto := &si.NodeInfo{
 		NodeID: nodeID,
 		Attributes: map[string]string{
-			objects.ReadyFlag: "true",
+			common.NodeReadyAttribute: "true",
 		},
 		SchedulableResource: max.ToProto(),
 		OccupiedResource:    occupied.ToProto(),

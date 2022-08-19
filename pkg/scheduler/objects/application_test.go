@@ -33,6 +33,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/handler"
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -955,7 +956,7 @@ func TestStateTimeOut(t *testing.T) {
 	}
 
 	startingTimeout = time.Minute * 5
-	app = newApplicationWithTags(appID2, "default", "root.a", map[string]string{AppTagStateAwareDisable: "true"})
+	app = newApplicationWithTags(appID2, "default", "root.a", map[string]string{siCommon.AppTagStateAwareDisable: "true"})
 	err = app.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (timeout test)")
 	err = app.HandleApplicationEvent(RunApplication)

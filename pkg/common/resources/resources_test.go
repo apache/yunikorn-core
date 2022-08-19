@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
+
 	"gotest.tools/assert"
 )
 

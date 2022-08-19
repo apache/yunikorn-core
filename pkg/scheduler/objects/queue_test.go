@@ -31,6 +31,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects/template"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 )
 
 // base test for creating a managed queue
@@ -238,7 +239,7 @@ func TestAddApplication(t *testing.T) {
 	assert.NilError(t, err, "failed to create managed leaf queue")
 	pending := resources.NewResourceFromMap(
 		map[string]resources.Quantity{
-			resources.MEMORY: 10,
+			common.Memory: 10,
 		})
 	app := newApplication(appID1, "default", "root.parent.leaf")
 	app.pending = pending
@@ -282,7 +283,7 @@ func TestAddApplicationWithTag(t *testing.T) {
 			"first": 10,
 		})
 	tags := make(map[string]string)
-	tags[AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":10}}}"
+	tags[common.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":10}}}"
 	// add apps again now with the tag set
 	app = newApplicationWithTags("app-3", "default", "root.leaf-man", tags)
 	leaf.AddApplication(app)
@@ -298,7 +299,7 @@ func TestAddApplicationWithTag(t *testing.T) {
 	}
 
 	// set to illegal limit (0 value)
-	tags[AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":0}}}"
+	tags[common.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":0}}}"
 	app = newApplicationWithTags("app-4", "default", "root.leaf-un", tags)
 	leafUn.AddApplication(app)
 	assert.Equal(t, len(leaf.applications), 2, "Application was not added to the Dynamic queue as expected")

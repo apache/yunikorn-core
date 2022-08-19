@@ -23,6 +23,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"gotest.tools/assert"
 )
 
@@ -1645,8 +1646,8 @@ func TestHasNegativeValue(t *testing.T) {
 	}{
 		{"Nil resource", nil, false},
 		{"Empty resource", NewResource(), false},
-		{"Only positive values", NewResourceFromMap(map[string]Quantity{MEMORY: 100}), false},
-		{"Negative value", NewResourceFromMap(map[string]Quantity{MEMORY: -100}), true},
+		{"Only positive values", NewResourceFromMap(map[string]Quantity{common.Memory: 100}), false},
+		{"Negative value", NewResourceFromMap(map[string]Quantity{common.Memory: -100}), true},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {

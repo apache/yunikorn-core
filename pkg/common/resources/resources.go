@@ -29,14 +29,15 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-// const keys
-const (
-	MEMORY = "memory"
-	VCORE  = "vcore"
-)
+//// const keys
+//const (
+//	MEMORY = "memory"
+//	VCORE  = "vcore"
+//)
 
 type Resource struct {
 	Resources map[string]Quantity
@@ -89,7 +90,7 @@ func NewResourceFromConf(configMap map[string]string) (*Resource, error) {
 		var intValue Quantity
 		var err error
 		switch key {
-		case VCORE:
+		case common.CPU:
 			intValue, err = ParseVCore(strVal)
 		default:
 			intValue, err = ParseQuantity(strVal)

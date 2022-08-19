@@ -25,6 +25,7 @@ import (
 	"gotest.tools/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -67,7 +68,7 @@ partitions:
 
 	// Check scheduling queue a
 	queueA := part.GetQueue("root.a")
-	assert.Assert(t, 150000000 == queueA.GetMaxResource().Resources[resources.MEMORY])
+	assert.Assert(t, 150000000 == queueA.GetMaxResource().Resources[common.Memory])
 
 	// Add one application
 	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
@@ -195,7 +196,7 @@ partitions:
 
 	// Check scheduling queue a
 	queueA := part.GetQueue("root.a")
-	assert.Assert(t, 150000000 == queueA.GetMaxResource().Resources[resources.MEMORY])
+	assert.Assert(t, 150000000 == queueA.GetMaxResource().Resources[common.Memory])
 
 	// Add one application
 	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
@@ -364,10 +365,10 @@ partitions:
 	// verify node capacity
 	assert.Equal(t, len(partitionInfo.GetNodes()), 1)
 	node1 := partitionInfo.GetNode("node-1:1234")
-	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.MEMORY]), int64(100000000))
+	assert.Equal(t, int64(node1.GetCapacity().Resources[common.Memory]), int64(100000000))
 	schedulingNode1 := ms.scheduler.GetClusterContext().GetNode("node-1:1234", "[rm:123]default")
-	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[resources.MEMORY]), int64(0))
-	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[resources.MEMORY]), int64(100000000))
+	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[common.Memory]), int64(0))
+	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[common.Memory]), int64(100000000))
 
 	// update node capacity with more mem and less vcores
 	err = ms.proxy.UpdateNode(&si.NodeRequest{
@@ -389,10 +390,10 @@ partitions:
 
 	assert.NilError(t, err, "NodeRequest failed")
 	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default", []string{"node-1:1234"}, 300000000, 1000)
-	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.MEMORY]), int64(300000000))
-	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.VCORE]), int64(10000))
-	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[resources.MEMORY]), int64(0))
-	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[resources.MEMORY]), int64(300000000))
+	assert.Equal(t, int64(node1.GetCapacity().Resources[common.Memory]), int64(300000000))
+	assert.Equal(t, int64(node1.GetCapacity().Resources[common.CPU]), int64(10000))
+	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[common.Memory]), int64(0))
+	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[common.Memory]), int64(300000000))
 	newRes, err := resources.NewResourceFromConf(map[string]string{"memory": "300M", "vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
 	if !resources.Equals(newRes, partitionInfo.GetTotalPartitionResource()) {
@@ -600,11 +601,11 @@ partitions:
 	// verify node capacity
 	assert.Equal(t, len(partitionInfo.GetNodes()), 1)
 	node1 := partitionInfo.GetNode("node-1:1234")
-	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.MEMORY]), int64(100))
+	assert.Equal(t, int64(node1.GetCapacity().Resources[common.Memory]), int64(100))
 	schedulingNode1 := ms.scheduler.GetClusterContext().
 		GetNode("node-1:1234", "[rm:123]default")
-	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[resources.MEMORY]), int64(0))
-	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[resources.MEMORY]), int64(100))
+	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[common.Memory]), int64(0))
+	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[common.Memory]), int64(100))
 
 	// update node capacity
 	err = ms.proxy.UpdateNode(&si.NodeRequest{
@@ -628,10 +629,10 @@ partitions:
 
 	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
 		[]string{"node-1:1234"}, 20, 1000)
-	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.MEMORY]), int64(100))
-	assert.Equal(t, int64(node1.GetCapacity().Resources[resources.VCORE]), int64(10))
-	assert.Equal(t, int64(node1.GetOccupiedResource().Resources[resources.MEMORY]), int64(80))
-	assert.Equal(t, int64(node1.GetOccupiedResource().Resources[resources.VCORE]), int64(5))
-	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[resources.MEMORY]), int64(0))
-	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[resources.MEMORY]), int64(20))
+	assert.Equal(t, int64(node1.GetCapacity().Resources[common.Memory]), int64(100))
+	assert.Equal(t, int64(node1.GetCapacity().Resources[common.CPU]), int64(10))
+	assert.Equal(t, int64(node1.GetOccupiedResource().Resources[common.Memory]), int64(80))
+	assert.Equal(t, int64(node1.GetOccupiedResource().Resources[common.CPU]), int64(5))
+	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[common.Memory]), int64(0))
+	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[common.Memory]), int64(20))
 }

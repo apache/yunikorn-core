@@ -28,6 +28,7 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -115,7 +116,7 @@ func TestBasicReservation(t *testing.T) {
 	ms.mockRM.waitForAllocations(t, 4, 1000)
 
 	// Verify that all 4 requests are satisfied
-	mem := int(app.GetAllocatedResource().Resources[resources.MEMORY])
+	mem := int(app.GetAllocatedResource().Resources[common.Memory])
 	assert.Equal(t, 80000000, mem, "allocated resource after alloc not correct")
 	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), ms.partitionName, nodes, 80000000, 1000)
 
@@ -139,11 +140,11 @@ func TestBasicReservation(t *testing.T) {
 
 	// Check allocated resource of queue, should be 0 now
 	waitForAllocatedQueueResource(t, leafQueue, 0, 1000)
-	mem = int(app.GetAllocatedResource().Resources[resources.MEMORY])
+	mem = int(app.GetAllocatedResource().Resources[common.Memory])
 	assert.Equal(t, 0, mem, "allocated app resource not correct after app removal")
-	mem = int(ms.getNode(nodes[0]).GetAllocatedResource().Resources[resources.MEMORY])
+	mem = int(ms.getNode(nodes[0]).GetAllocatedResource().Resources[common.Memory])
 	assert.Equal(t, 0, mem, "allocated node-1 resource not correct after app removal")
-	mem = int(ms.getNode(nodes[1]).GetAllocatedResource().Resources[resources.MEMORY])
+	mem = int(ms.getNode(nodes[1]).GetAllocatedResource().Resources[common.Memory])
 	assert.Equal(t, 0, mem, "allocated node-2 resource not correct after app removal")
 
 	// App/node should not have reservation now
@@ -210,7 +211,7 @@ func TestReservationForTwoQueues(t *testing.T) {
 	// Allocate for app 1
 	ms.scheduler.MultiStepSchedule(6)
 	ms.mockRM.waitForAllocations(t, 4, 1000)
-	mem := int(app1.GetAllocatedResource().Resources[resources.MEMORY])
+	mem := int(app1.GetAllocatedResource().Resources[common.Memory])
 	assert.Equal(t, 80000000, mem, "allocated resource after alloc not correct")
 	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), ms.partitionName, nodes, 80000000, 1000)
 
@@ -368,7 +369,7 @@ func TestAddNewNode(t *testing.T) {
 	waitForAllocatedAppResource(t, app, 120000000, 1000)
 	waitForPendingQueueResource(t, leafQueue, 0, 1000)
 	waitForPendingAppResource(t, app, 0, 1000)
-	mem := int(ms.getNode(nodes[2]).GetAllocatedResource().Resources[resources.MEMORY])
+	mem := int(ms.getNode(nodes[2]).GetAllocatedResource().Resources[common.Memory])
 	assert.Equal(t, 40000000, mem, "allocated node-3 resource not correct after node set to scheduling")
 
 	// check the cleanup of the reservation

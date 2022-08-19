@@ -36,6 +36,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -1754,7 +1755,7 @@ func TestAddTGAppDynamic(t *testing.T) {
 	assert.Equal(t, app.GetQueuePath(), "root.unlimited", "app-1 not placed in expected queue")
 
 	jsonRes := "{\"resources\":{\"vcore\":{\"value\":10000}}}"
-	tags = map[string]string{"taskqueue": "same", objects.AppTagNamespaceResourceQuota: jsonRes}
+	tags = map[string]string{"taskqueue": "same", siCommon.AppTagNamespaceResourceQuota: jsonRes}
 	app = newApplicationTGTags(appID2, "default", "unknown", tgRes, tags)
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "app-2 should have been added to the partition")
@@ -1762,7 +1763,7 @@ func TestAddTGAppDynamic(t *testing.T) {
 	assert.Equal(t, app.GetQueuePath(), "root.same", "app-2 not placed in expected queue")
 
 	jsonRes = "{\"resources\":{\"vcore\":{\"value\":1000}}}"
-	tags = map[string]string{"taskqueue": "smaller", objects.AppTagNamespaceResourceQuota: jsonRes}
+	tags = map[string]string{"taskqueue": "smaller", siCommon.AppTagNamespaceResourceQuota: jsonRes}
 	app = newApplicationTGTags(appID3, "default", "unknown", tgRes, tags)
 	err = partition.AddApplication(app)
 	if err == nil {

@@ -35,9 +35,8 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects/template"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 )
-
-const AppTagNamespaceResourceQuota = "namespace.resourcequota"
 
 // Queue structure inside Scheduler
 type Queue struct {
@@ -520,7 +519,7 @@ func (sq *Queue) AddApplication(app *Application) {
 	sq.applications[app.ApplicationID] = app
 	// YUNIKORN-199: update the quota from the namespace
 	// get the tag with the quota
-	quota := app.GetTag(AppTagNamespaceResourceQuota)
+	quota := app.GetTag(common.AppTagNamespaceResourceQuota)
 	if quota == "" {
 		return
 	}

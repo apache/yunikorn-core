@@ -33,8 +33,6 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-const ReadyFlag = "ready"
-
 type Node struct {
 	// Fields for fast access These fields are considered read only.
 	// Values should only be set when creating a new node and never changed.
@@ -67,7 +65,7 @@ func NewNode(proto *si.NodeInfo) *Node {
 
 	var ready bool
 	var err error
-	if ready, err = strconv.ParseBool(proto.Attributes[ReadyFlag]); err != nil {
+	if ready, err = strconv.ParseBool(proto.Attributes[common.NodeReadyAttribute]); err != nil {
 		log.Logger().Error("Could not parse ready flag, assuming true")
 		ready = true
 	}

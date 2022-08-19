@@ -36,6 +36,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -48,9 +49,8 @@ var (
 )
 
 const (
-	Soft                    string = "Soft"
-	Hard                    string = "Hard"
-	AppTagStateAwareDisable string = "application.stateaware.disable"
+	Soft string = "Soft"
+	Hard string = "Hard"
 )
 
 type PlaceholderData struct {
@@ -132,7 +132,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	}
 	app.gangSchedulingStyle = gangSchedStyle
 	app.execTimeout = placeholderTimeout
-	if app.GetTag(AppTagStateAwareDisable) != "" {
+	if app.GetTag(siCommon.AppTagStateAwareDisable) != "" {
 		app.startTimeout = 0 // transition immediately to Running
 	} else {
 		app.startTimeout = startingTimeout

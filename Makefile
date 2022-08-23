@@ -110,7 +110,6 @@ check_scripts: install_shellcheck
 # from the Makefile. That caused the pull-request license check run from the github action to
 # always pass. The syntax for find is slightly different too but that at least works in a similar
 # way on both Mac and Linux. Excluding all .git* files from the checks.
-OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 license-check:
 	@echo "checking license headers:"
 ifeq (darwin,$(OS))
@@ -125,6 +124,22 @@ endif
 		exit 1; \
 	fi ; \
 	rm -f LICRES
+	@echo "  all OK"
+
+# Check that we use pseudo versions in master
+.PHONY: pseudo
+BRANCH := $(shell git branch --show-current)
+SI_REF := $(shell go list -m -f '{{ .Version }}' github.com/apache/yunikorn-scheduler-interface)
+SI_MATCH := $(shell expr "${SI_REF}" : "v0.0.0-")
+pseudo:
+	@echo "pseudo version check"
+	@if [ "${BRANCH}" = "master" ]; then \
+		if [ ${SI_MATCH} -ne 7 ]; then \
+			echo "YuniKorn references MUST all be pseudo versions:" ; \
+			echo " SI ref: ${SI_REF}" ; \
+			exit 1; \
+		fi \
+	fi
 	@echo "  all OK"
 
 # Build the example binaries for dev and test

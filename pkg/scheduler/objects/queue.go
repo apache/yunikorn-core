@@ -57,17 +57,20 @@ type Queue struct {
 	// The queue properties should be treated as immutable the value is a merge of the
 	// parent properties with the config for this queue only manipulated during creation
 	// of the queue or via a queue configuration update.
-	properties         map[string]string
-	adminACL           security.ACL        // admin ACL
-	submitACL          security.ACL        // submit ACL
-	maxResource        *resources.Resource // When not set, max = nil
-	guaranteedResource *resources.Resource // When not set, Guaranteed == 0
-	allocatedResource  *resources.Resource // set based on allocation
-	isLeaf             bool                // this is a leaf queue or not (i.e. parent)
-	isManaged          bool                // queue is part of the config, not auto created
-	stateMachine       *fsm.FSM            // the state of the queue for scheduling
-	stateTime          time.Time           // last time the state was updated (needed for cleanup)
-	template           *template.Template
+	properties             map[string]string
+	adminACL               security.ACL        // admin ACL
+	submitACL              security.ACL        // submit ACL
+	maxResource            *resources.Resource // When not set, max = nil
+	guaranteedResource     *resources.Resource // When not set, Guaranteed == 0
+	allocatedResource      *resources.Resource // set based on allocation
+	isLeaf                 bool                // this is a leaf queue or not (i.e. parent)
+	isManaged              bool                // queue is part of the config, not auto created
+	stateMachine           *fsm.FSM            // the state of the queue for scheduling
+	stateTime              time.Time           // last time the state was updated (needed for cleanup)
+	maxRunningApps         uint64
+	runningApps            uint64
+	allocatingAcceptedApps uint64
+	template               *template.Template
 
 	sync.RWMutex
 }
@@ -95,6 +98,7 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 	sq.QueuePath = strings.ToLower(conf.Name)
 	sq.parent = parent
 	sq.isManaged = true
+	sq.maxRunningApps = conf.MaxApplications
 
 	// update the properties
 	if err := sq.applyConf(conf); err != nil {
@@ -657,6 +661,9 @@ func (sq *Queue) addChildQueue(child *Queue) error {
 	if sq.IsDraining() {
 		return fmt.Errorf("cannot add a child queue when queue is marked for deletion: %s", sq.QueuePath)
 	}
+	if sq.maxRunningApps != 0 && sq.maxRunningApps < child.maxRunningApps {
+		return fmt.Errorf("parent maxRunningApps must be larger than child maxRunningApps")
+	}
 
 	// no need to lock child as it is a new queue which cannot be accessed yet
 	sq.children[child.Name] = child
@@ -1067,13 +1074,15 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator) *Allocation {
 		headRoom := sq.getHeadRoom()
 		// process the apps (filters out app without pending requests)
 		for _, app := range sq.sortApplications(true) {
-			alloc := app.tryAllocate(headRoom, iterator)
-			if alloc != nil {
-				log.Logger().Debug("allocation found on queue",
-					zap.String("queueName", sq.QueuePath),
-					zap.String("appID", app.ApplicationID),
-					zap.String("allocation", alloc.String()))
-				return alloc
+			if app.IsStarting() || app.IsRunning() || (app.queue.canRun() && app.IsAccepted()) {
+				alloc := app.tryAllocate(headRoom, iterator)
+				if alloc != nil {
+					log.Logger().Info("allocation found on queue",
+						zap.String("queueName", sq.QueuePath),
+						zap.String("appID", app.ApplicationID),
+						zap.String("allocation", alloc.String()))
+					return alloc
+				}
 			}
 		}
 	} else {
@@ -1291,4 +1300,96 @@ func (sq *Queue) String() string {
 	defer sq.RUnlock()
 	return fmt.Sprintf("{QueuePath: %s, State: %s, StateTime: %x, MaxResource: %s}",
 		sq.QueuePath, sq.stateMachine.Current(), sq.stateTime, sq.maxResource)
+}
+
+func (sq *Queue) incRunningApps() {
+	if sq == nil {
+		return
+	}
+	if sq.parent != nil {
+		sq.parent.incRunningApps()
+	}
+	sq.internalIncRunningApps()
+}
+
+func (sq *Queue) internalIncRunningApps() {
+	sq.Lock()
+	defer sq.Unlock()
+	sq.runningApps++
+}
+
+func (sq *Queue) decRunningApps() {
+	if sq == nil {
+		return
+	}
+	if sq.parent != nil {
+		sq.parent.decRunningApps()
+	}
+	sq.internalDecRunningApps()
+}
+
+func (sq *Queue) internalDecRunningApps() {
+	sq.Lock()
+	defer sq.Unlock()
+	sq.runningApps--
+}
+
+func (sq *Queue) canRun() bool {
+	if sq == nil {
+		return false
+	}
+	ok := true
+	if sq.parent != nil {
+		ok = sq.parent.canRun()
+	}
+	return sq.internalCanRun(ok)
+}
+
+func (sq *Queue) internalCanRun(ok bool) bool {
+	sq.RLock()
+	defer sq.RUnlock()
+	if sq.maxRunningApps == 0 {
+		return true && ok
+	}
+	return ok && sq.runningApps+sq.allocatingAcceptedApps < sq.maxRunningApps
+}
+
+func (sq *Queue) incAllocatingAcceptedAppsIfCanRun() bool {
+	if sq == nil {
+		return false
+	}
+	ok := true
+	if sq.parent != nil {
+		ok = sq.parent.incAllocatingAcceptedAppsIfCanRun()
+	}
+	return sq.InternalIncAllocatingAcceptedAppsIfCanRun(ok)
+}
+
+func (sq *Queue) InternalIncAllocatingAcceptedAppsIfCanRun(ok bool) bool {
+	sq.Lock()
+	defer sq.Unlock()
+	if sq.maxRunningApps == 0 {
+		return true && ok
+	}
+	result := ok && sq.runningApps+sq.allocatingAcceptedApps < sq.maxRunningApps
+	if result {
+		sq.allocatingAcceptedApps++
+	}
+	return result
+}
+
+func (sq *Queue) decAllocatingAcceptedApps() {
+	if sq == nil {
+		return
+	}
+	if sq.parent != nil {
+		sq.parent.decAllocatingAcceptedApps()
+	}
+	sq.internalDecAllocatingAcceptedApps()
+}
+
+func (sq *Queue) internalDecAllocatingAcceptedApps() {
+	sq.Lock()
+	defer sq.Unlock()
+	sq.allocatingAcceptedApps--
 }

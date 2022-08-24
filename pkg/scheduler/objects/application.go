@@ -819,6 +819,14 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, tota
 func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator func() NodeIterator) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
+	//when app is accepted, adding another lock to update allocatingAcceptedApps number.
+	if sa.IsAccepted() {
+		if sa.queue.incAllocatingAcceptedAppsIfCanRun() {
+			defer sa.queue.decAllocatingAcceptedApps()
+		} else {
+			return nil
+		}
+	}
 	// make sure the request are sorted
 	sa.sortRequests(false)
 	// get all the requests from the app sorted in order
@@ -1190,6 +1198,10 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 	if !node.preAllocateConditions(allocKey) {
 		return nil
 	}
+	//adding this check will guarantee runningApps in each queue always be limited (<= maxApplication value)
+	//if sa.IsAccepted() && !sa.queue.canRun() {
+	//	return nil
+	//}
 	// everything OK really allocate
 	alloc := NewAllocation(common.GetNewUUID(), node.NodeID, ask)
 	if node.AddAllocation(alloc) {

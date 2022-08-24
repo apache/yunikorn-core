@@ -1701,3 +1701,21 @@ func TestGetHeadRoomFromThreeQueues(t *testing.T) {
 	assert.Equal(t, resources.Quantity(1000), result.Resources["vcore"])
 	assert.Equal(t, resources.Quantity(1000), result.Resources["memory"])
 }
+
+func TestMaxApps(t *testing.T) {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err)
+	var parent *Queue
+	parent, err = createManagedQueueMaxApps(root, "parent", true, nil, 1)
+	assert.NilError(t, err)
+	var leaf1 *Queue
+	leaf1, err = createManagedQueueMaxApps(nil, "leaf1", false, nil, 1)
+	assert.NilError(t, err)
+	err = parent.addChildQueue(leaf1)
+	assert.NilError(t, err)
+	var leaf2 *Queue
+	leaf2, err = createManagedQueueMaxApps(nil, "leaf1", false, nil, 2)
+	assert.NilError(t, err)
+	err = parent.addChildQueue(leaf2)
+	assert.Error(t, err, "parent maxRunningApps must be larger than child maxRunningApps")
+}

@@ -335,6 +335,10 @@ partitions:
 		t.Errorf("failed to load 2nd partition queues from file %v", conf)
 	}
 
+	if conf.Partitions[1].Queues[0].Queues[0].MaxApplications != 10 {
+		t.Errorf("failed to load 2nd partition queues from file %v", conf)
+	}
+
 	// gpu.production
 	if conf.Partitions[1].Queues[0].Queues[0].AdminACL != "admin admin" {
 		t.Errorf("failed to load admin ACL from file %v", conf)

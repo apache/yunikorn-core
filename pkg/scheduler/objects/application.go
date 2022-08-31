@@ -1205,7 +1205,7 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 	// everything OK really allocate
 	alloc := NewAllocation(common.GetNewUUID(), node.NodeID, ask)
 	if node.AddAllocation(alloc) {
-		if err := sa.queue.IncAllocatedResourceA(alloc.AllocatedResource, false, sa.IsAccepted()); err != nil {
+		if err := sa.queue.IncAllocatedResourceCheckAccepted(alloc.AllocatedResource, false, sa.IsAccepted()); err != nil {
 			log.Logger().Warn("queue update failed unexpectedly",
 				zap.Error(err))
 			// revert the node update

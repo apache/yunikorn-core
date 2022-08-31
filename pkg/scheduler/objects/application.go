@@ -819,13 +819,8 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, tota
 func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator func() NodeIterator) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
-	//when app is accepted, adding another lock to update allocatingAcceptedApps number.
-	if sa.IsAccepted() {
-		if sa.queue.incAllocatingAcceptedAppsIfCanRun() {
-			defer sa.queue.decAllocatingAcceptedApps()
-		} else {
-			return nil
-		}
+	if sa.IsAccepted() && !sa.queue.incAllocatingAcceptedAppsIfCanRun(sa) {
+		return nil
 	}
 	// make sure the request are sorted
 	sa.sortRequests(false)
@@ -862,6 +857,9 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 		}
 	}
 	// no requests fit, skip to next app
+	if sa.IsAccepted() {
+		sa.queue.decAllocatingAcceptedApps(sa)
+	}
 	return nil
 }
 
@@ -1012,6 +1010,9 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIterator func() NodeIterator) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
+	if sa.IsAccepted() && !sa.queue.incAllocatingAcceptedAppsIfCanRun(sa) {
+		return nil
+	}
 	// process all outstanding reservations and pick the first one that fits
 	for _, reserve := range sa.reservations {
 		ask := sa.requests[reserve.askKey]
@@ -1053,6 +1054,9 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 				return alloc
 			}
 		}
+	}
+	if sa.IsAccepted() {
+		sa.queue.decAllocatingAcceptedApps(sa)
 	}
 	return nil
 }
@@ -1198,14 +1202,10 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 	if !node.preAllocateConditions(allocKey) {
 		return nil
 	}
-	//adding this check will guarantee runningApps in each queue always be limited (<= maxApplication value)
-	//if sa.IsAccepted() && !sa.queue.canRun() {
-	//	return nil
-	//}
 	// everything OK really allocate
 	alloc := NewAllocation(common.GetNewUUID(), node.NodeID, ask)
 	if node.AddAllocation(alloc) {
-		if err := sa.queue.IncAllocatedResource(alloc.AllocatedResource, false); err != nil {
+		if err := sa.queue.IncAllocatedResourceA(alloc.AllocatedResource, false, sa.IsAccepted()); err != nil {
 			log.Logger().Warn("queue update failed unexpectedly",
 				zap.Error(err))
 			// revert the node update

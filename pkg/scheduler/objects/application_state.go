@@ -144,6 +144,7 @@ func NewAppState() *fsm.FSM {
 			fmt.Sprintf("enter_%s", Starting.String()): func(event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
 				app.queue.incRunningApps()
+				app.queue.decAllocatingAcceptedApps(app)
 				metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsRunning()
 				metrics.GetSchedulerMetrics().IncTotalApplicationsRunning()
 				app.setStateTimer(app.startTimeout, app.stateMachine.Current(), RunApplication)

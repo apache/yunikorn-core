@@ -69,7 +69,7 @@ type Queue struct {
 	stateTime              time.Time           // last time the state was updated (needed for cleanup)
 	maxRunningApps         uint64
 	runningApps            uint64
-	allocatingAcceptedApps uint64
+	allocatingAcceptedApps map[string]struct{}
 	template               *template.Template
 
 	sync.RWMutex
@@ -78,15 +78,16 @@ type Queue struct {
 // newBlankQueue creates a new empty queue objects with all values initialised.
 func newBlankQueue() *Queue {
 	return &Queue{
-		children:              make(map[string]*Queue),
-		applications:          make(map[string]*Application),
-		completedApplications: make(map[string]*Application),
-		reservedApps:          make(map[string]int),
-		properties:            make(map[string]string),
-		stateMachine:          NewObjectState(),
-		allocatedResource:     resources.NewResource(),
-		preempting:            resources.NewResource(),
-		pending:               resources.NewResource(),
+		children:               make(map[string]*Queue),
+		applications:           make(map[string]*Application),
+		completedApplications:  make(map[string]*Application),
+		reservedApps:           make(map[string]int),
+		allocatingAcceptedApps: make(map[string]struct{}),
+		properties:             make(map[string]string),
+		stateMachine:           NewObjectState(),
+		allocatedResource:      resources.NewResource(),
+		preempting:             resources.NewResource(),
+		pending:                resources.NewResource(),
 	}
 }
 
@@ -810,9 +811,13 @@ func (sq *Queue) setPreemptingResource(newAlloc *resources.Resource) {
 	sq.preempting = newAlloc
 }
 
+func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bool) error {
+	return sq.IncAllocatedResourceCheckAccepted(alloc, nodeReported, false)
+}
+
 // IncAllocatedResource increments the allocated resources for this queue (recursively).
 // Guard against going over max resources if set
-func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bool) error {
+func (sq *Queue) IncAllocatedResourceCheckAccepted(alloc *resources.Resource, nodeReported bool, appIsAccepted bool) error {
 	sq.Lock()
 	defer sq.Unlock()
 
@@ -826,7 +831,7 @@ func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bo
 	}
 	// check the parent: need to pass before updating
 	if sq.parent != nil {
-		if err := sq.parent.IncAllocatedResource(alloc, nodeReported); err != nil {
+		if err := sq.parent.IncAllocatedResourceCheckAccepted(alloc, nodeReported, appIsAccepted); err != nil {
 			// only log the warning if we get to the leaf: otherwise we could spam the log with the same message
 			// each time we return from a recursive call. Worst case (hierarchy depth-1) times.
 			if sq.isLeaf {
@@ -1074,7 +1079,7 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator) *Allocation {
 		headRoom := sq.getHeadRoom()
 		// process the apps (filters out app without pending requests)
 		for _, app := range sq.sortApplications(true) {
-			if app.IsStarting() || app.IsRunning() || (app.queue.canRun() && app.IsAccepted()) {
+			if app.IsStarting() || app.IsRunning() || app.IsAccepted() {
 				alloc := app.tryAllocate(headRoom, iterator)
 				if alloc != nil {
 					log.Logger().Info("allocation found on queue",
@@ -1173,13 +1178,16 @@ func (sq *Queue) TryReservedAllocate(iterator func() NodeIterator) *Allocation {
 						zap.String("appID", appID))
 					return nil
 				}
-				alloc := app.tryReservedAllocate(headRoom, iterator)
-				if alloc != nil {
-					log.Logger().Debug("reservation found for allocation found on queue",
-						zap.String("queueName", sq.QueuePath),
-						zap.String("appID", appID),
-						zap.String("allocation", alloc.String()))
-					return alloc
+				if app.IsStarting() || app.IsRunning() || app.IsAccepted() {
+					alloc := app.tryReservedAllocate(headRoom, iterator)
+					if alloc != nil {
+						log.Logger().Debug("Rainie test accepted apps: reservation found for allocation found on queue",
+							zap.String("queueName", sq.QueuePath),
+							zap.String("appID", appID),
+							zap.String("allocation", alloc.String()),
+							zap.String("appStatus", app.CurrentState()))
+						return alloc
+					}
 				}
 			}
 		}
@@ -1334,62 +1342,50 @@ func (sq *Queue) internalDecRunningApps() {
 	sq.runningApps--
 }
 
-func (sq *Queue) canRun() bool {
+func (sq *Queue) incAllocatingAcceptedAppsIfCanRun(sa *Application) bool {
 	if sq == nil {
 		return false
 	}
 	ok := true
 	if sq.parent != nil {
-		ok = sq.parent.canRun()
+		ok = sq.parent.incAllocatingAcceptedAppsIfCanRun(sa)
 	}
-	return sq.internalCanRun(ok)
+	return sq.InternalIncAllocatingAcceptedAppsIfCanRun(ok, sa)
 }
 
-func (sq *Queue) internalCanRun(ok bool) bool {
-	sq.RLock()
-	defer sq.RUnlock()
-	if sq.maxRunningApps == 0 {
-		return true && ok
-	}
-	return ok && sq.runningApps+sq.allocatingAcceptedApps < sq.maxRunningApps
-}
-
-func (sq *Queue) incAllocatingAcceptedAppsIfCanRun() bool {
-	if sq == nil {
-		return false
-	}
-	ok := true
-	if sq.parent != nil {
-		ok = sq.parent.incAllocatingAcceptedAppsIfCanRun()
-	}
-	return sq.InternalIncAllocatingAcceptedAppsIfCanRun(ok)
-}
-
-func (sq *Queue) InternalIncAllocatingAcceptedAppsIfCanRun(ok bool) bool {
+func (sq *Queue) InternalIncAllocatingAcceptedAppsIfCanRun(ok bool, sa *Application) bool {
 	sq.Lock()
 	defer sq.Unlock()
 	if sq.maxRunningApps == 0 {
 		return true && ok
 	}
-	result := ok && sq.runningApps+sq.allocatingAcceptedApps < sq.maxRunningApps
+	result := ok && (sq.runningApps+uint64(len(sq.allocatingAcceptedApps)) < sq.maxRunningApps)
 	if result {
-		sq.allocatingAcceptedApps++
+		_, contains := sq.allocatingAcceptedApps[sa.ApplicationID]
+		if !contains {
+			sq.allocatingAcceptedApps[sa.ApplicationID] = struct{}{}
+		}
 	}
 	return result
 }
 
-func (sq *Queue) decAllocatingAcceptedApps() {
+func (sq *Queue) decAllocatingAcceptedApps(sa *Application) {
 	if sq == nil {
 		return
 	}
 	if sq.parent != nil {
-		sq.parent.decAllocatingAcceptedApps()
+		sq.parent.decAllocatingAcceptedApps(sa)
 	}
-	sq.internalDecAllocatingAcceptedApps()
+	sq.internalDecAllocatingAcceptedApps(sa)
 }
 
-func (sq *Queue) internalDecAllocatingAcceptedApps() {
+func (sq *Queue) internalDecAllocatingAcceptedApps(sa *Application) {
 	sq.Lock()
 	defer sq.Unlock()
-	sq.allocatingAcceptedApps--
+	if sq.maxRunningApps != 0 {
+		_, contains := sq.allocatingAcceptedApps[sa.ApplicationID]
+		if contains {
+			delete(sq.allocatingAcceptedApps, sa.ApplicationID)
+		}
+	}
 }

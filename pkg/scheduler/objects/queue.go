@@ -662,9 +662,6 @@ func (sq *Queue) addChildQueue(child *Queue) error {
 	if sq.IsDraining() {
 		return fmt.Errorf("cannot add a child queue when queue is marked for deletion: %s", sq.QueuePath)
 	}
-	if sq.maxRunningApps != 0 && sq.maxRunningApps < child.maxRunningApps {
-		return fmt.Errorf("parent maxRunningApps must be larger than child maxRunningApps")
-	}
 
 	// no need to lock child as it is a new queue which cannot be accessed yet
 	sq.children[child.Name] = child

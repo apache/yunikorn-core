@@ -67,8 +67,8 @@ type Queue struct {
 	isManaged              bool                // queue is part of the config, not auto created
 	stateMachine           *fsm.FSM            // the state of the queue for scheduling
 	stateTime              time.Time           // last time the state was updated (needed for cleanup)
-	maxRunningApps         uint64
-	runningApps            uint64
+	maxRunningApps         int64
+	runningApps            int64
 	allocatingAcceptedApps map[string]struct{}
 	template               *template.Template
 
@@ -1343,23 +1343,23 @@ func (sq *Queue) incAllocatingAcceptedAppsIfCanRun(sa *Application) bool {
 	if sq == nil {
 		return false
 	}
-	ok := true
+	success := true
 	if sq.parent != nil {
-		ok = sq.parent.incAllocatingAcceptedAppsIfCanRun(sa)
+		success = sq.parent.incAllocatingAcceptedAppsIfCanRun(sa)
 	}
-	return sq.InternalIncAllocatingAcceptedAppsIfCanRun(ok, sa)
+	return sq.InternalIncAllocatingAcceptedAppsIfCanRun(success, sa)
 }
 
-func (sq *Queue) InternalIncAllocatingAcceptedAppsIfCanRun(ok bool, sa *Application) bool {
+func (sq *Queue) InternalIncAllocatingAcceptedAppsIfCanRun(success bool, sa *Application) bool {
 	sq.Lock()
 	defer sq.Unlock()
 	if sq.maxRunningApps == 0 {
-		return true && ok
+		return success
 	}
-	result := ok && (sq.runningApps+uint64(len(sq.allocatingAcceptedApps)) < sq.maxRunningApps)
+	result := success && (sq.runningApps+int64(len(sq.allocatingAcceptedApps)) < sq.maxRunningApps)
 	if result {
-		_, contains := sq.allocatingAcceptedApps[sa.ApplicationID]
-		if !contains {
+		_, ok := sq.allocatingAcceptedApps[sa.ApplicationID]
+		if !ok {
 			sq.allocatingAcceptedApps[sa.ApplicationID] = struct{}{}
 		}
 	}
@@ -1380,8 +1380,8 @@ func (sq *Queue) internalDecAllocatingAcceptedApps(sa *Application) {
 	sq.Lock()
 	defer sq.Unlock()
 	if sq.maxRunningApps != 0 {
-		_, contains := sq.allocatingAcceptedApps[sa.ApplicationID]
-		if contains {
+		_, ok := sq.allocatingAcceptedApps[sa.ApplicationID]
+		if ok {
 			delete(sq.allocatingAcceptedApps, sa.ApplicationID)
 		}
 	}

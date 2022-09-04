@@ -49,14 +49,14 @@ func createManagedQueue(parentSQ *Queue, name string, parent bool, maxRes map[st
 
 // create managed queue with props set
 func createManagedQueueWithProps(parentSQ *Queue, name string, parent bool, maxRes, props map[string]string) (*Queue, error) {
-	return createManagedQueuePropsMaxApps(parentSQ, name, parent, maxRes, props, uint64(0))
+	return createManagedQueuePropsMaxApps(parentSQ, name, parent, maxRes, props, int64(0))
 }
 
-func createManagedQueueMaxApps(parentSQ *Queue, name string, parent bool, maxRes map[string]string, maxApps uint64) (*Queue, error) {
+func createManagedQueueMaxApps(parentSQ *Queue, name string, parent bool, maxRes map[string]string, maxApps int64) (*Queue, error) {
 	return createManagedQueuePropsMaxApps(parentSQ, name, parent, maxRes, nil, maxApps)
 }
 
-func createManagedQueuePropsMaxApps(parentSQ *Queue, name string, parent bool, maxRes map[string]string, props map[string]string, maxApps uint64) (*Queue, error) {
+func createManagedQueuePropsMaxApps(parentSQ *Queue, name string, parent bool, maxRes map[string]string, props map[string]string, maxApps int64) (*Queue, error) {
 	queueConfig := configs.QueueConfig{
 		Name:            name,
 		Parent:          parent,

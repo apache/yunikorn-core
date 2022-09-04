@@ -70,7 +70,7 @@ type QueueConfig struct {
 	Name            string
 	Parent          bool              `yaml:",omitempty" json:",omitempty"`
 	Resources       Resources         `yaml:",omitempty" json:",omitempty"`
-	MaxApplications uint64            `yaml:",omitempty" json:",omitempty"`
+	MaxApplications int64             `yaml:",omitempty" json:",omitempty"`
 	Properties      map[string]string `yaml:",omitempty" json:",omitempty"`
 	AdminACL        string            `yaml:",omitempty" json:",omitempty"`
 	SubmitACL       string            `yaml:",omitempty" json:",omitempty"`

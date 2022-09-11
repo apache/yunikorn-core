@@ -35,5 +35,5 @@ type NodeDAOInfo struct {
 	Allocations  []*AllocationDAOInfo `json:"allocations"`
 	Schedulable  bool                 `json:"schedulable"`
 	IsReserved   bool                 `json:"isReserved"`
-	Reservations []string             `json:"Reservations"`
+	Reservations []string             `json:"reservations"`
 }

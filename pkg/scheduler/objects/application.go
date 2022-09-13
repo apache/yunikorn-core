@@ -646,8 +646,8 @@ func (sa *Application) updateAskRepeatInternal(ask *AllocationAsk, delta int32) 
 	return deltaPendingResource, nil
 }
 
-// Return if the application has any reservations.
-func (sa *Application) hasReserved() bool {
+// HasReserved returns true if the application has any reservations.
+func (sa *Application) HasReserved() bool {
 	sa.RLock()
 	defer sa.RUnlock()
 	return len(sa.reservations) > 0

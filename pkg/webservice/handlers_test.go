@@ -988,6 +988,12 @@ func TestGetPartitionNodes(t *testing.T) {
 	assert.Equal(t, 1, len(partitionNodesDao[0].Allocations))
 	for _, node := range partitionNodesDao {
 		assert.Equal(t, 1, len(node.Allocations))
+		if !node.IsReserved {
+			assert.Equal(t, len(node.Reservations), 0)
+		} else {
+			assert.Check(t, len(node.Reservations) > 0, "Get wrong reservation info from node dao")
+		}
+
 		if node.NodeID == node1ID {
 			assert.Equal(t, node.NodeID, node1ID)
 			assert.Equal(t, "alloc-1", node.Allocations[0].AllocationKey)

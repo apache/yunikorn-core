@@ -316,16 +316,18 @@ func getNodeJSON(node *objects.Node) *dao.NodeDAOInfo {
 	}
 
 	return &dao.NodeDAOInfo{
-		NodeID:      node.NodeID,
-		HostName:    node.Hostname,
-		RackName:    node.Rackname,
-		Capacity:    node.GetCapacity().DAOMap(),
-		Occupied:    node.GetOccupiedResource().DAOMap(),
-		Allocated:   node.GetAllocatedResource().DAOMap(),
-		Available:   node.GetAvailableResource().DAOMap(),
-		Utilized:    node.GetUtilizedResource().DAOMap(),
-		Allocations: allocations,
-		Schedulable: node.IsSchedulable(),
+		NodeID:       node.NodeID,
+		HostName:     node.Hostname,
+		RackName:     node.Rackname,
+		Capacity:     node.GetCapacity().DAOMap(),
+		Occupied:     node.GetOccupiedResource().DAOMap(),
+		Allocated:    node.GetAllocatedResource().DAOMap(),
+		Available:    node.GetAvailableResource().DAOMap(),
+		Utilized:     node.GetUtilizedResource().DAOMap(),
+		Allocations:  allocations,
+		Schedulable:  node.IsSchedulable(),
+		IsReserved:   node.IsReserved(),
+		Reservations: node.GetReservations(),
 	}
 }
 

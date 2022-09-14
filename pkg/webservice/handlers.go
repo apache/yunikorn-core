@@ -683,6 +683,9 @@ func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.Pa
 		partitionInfo.State = partitionContext.GetCurrentState()
 		partitionInfo.LastStateTransitionTime = partitionContext.GetStateTime().UnixNano()
 
+		rmInfo := schedulerContext.GetRMInfoMapClone()
+		partitionInfo.RMBuildInformation = getRMBuildInformation(rmInfo)
+
 		capacityInfo := dao.PartitionCapacity{}
 		capacity := partitionContext.GetTotalPartitionResource()
 		usedCapacity := partitionContext.GetAllocatedResource()
@@ -695,6 +698,8 @@ func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.Pa
 			ResourceWeights: partitionContext.GetNodeSortingResourceWeights(),
 		}
 
+		partitionInfo.TotalNodes = partitionContext.GetTotalNodeCount()
+
 		appList := partitionContext.GetApplications()
 		appList = append(appList, partitionContext.GetCompletedApplications()...)
 		appList = append(appList, partitionContext.GetRejectedApplications()...)
@@ -706,6 +711,9 @@ func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.Pa
 		}
 		applicationsState["total"] = totalApplications
 		partitionInfo.Applications = applicationsState
+
+		partitionInfo.TotalContainers = partitionContext.GetTotalAllocationCount()
+
 		result = append(result, partitionInfo)
 	}
 

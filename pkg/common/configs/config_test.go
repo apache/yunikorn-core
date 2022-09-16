@@ -26,6 +26,7 @@ import (
 	"path"
 	"strings"
 	"testing"
+	"time"
 
 	"gotest.tools/assert"
 
@@ -446,6 +447,45 @@ partitions:
 	assert.Error(t, err, "duplicate partition name found with name part1")
 	if err == nil {
 		t.Errorf("duplicate partitions parsing should have failed: %v", conf)
+	}
+}
+
+func TestHealthCheck(t *testing.T) {
+	const data = `
+scheduler:
+  healthcheck:
+    enabled: %s
+    interval: 99s
+partitions:
+  - name: default
+    queues:
+      - name: root
+`
+	expectedDuration, err := time.ParseDuration("99s")
+	assert.NilError(t, err, "failed to parse expected interval duration")
+
+	// Tests for enabled health check.
+	conf, err := CreateConfig(fmt.Sprintf(data, "true"))
+	assert.NilError(t, err, "loading config failed for health check enabled")
+
+	if !*conf.Scheduler.HealthCheck.Enabled {
+		t.Errorf("failed to to parse enabled status from %v", conf)
+	}
+
+	if conf.Scheduler.HealthCheck.Interval != expectedDuration {
+		t.Errorf("failed to to parse interval from %v", conf)
+	}
+
+	// Tests for disabled health check.
+	conf, err = CreateConfig(fmt.Sprintf(data, "false"))
+	assert.NilError(t, err, "loading config failed for health check enabled")
+
+	if *conf.Scheduler.HealthCheck.Enabled {
+		t.Errorf("failed to to parse disabled status from %v", conf)
+	}
+
+	if conf.Scheduler.HealthCheck.Interval != expectedDuration {
+		t.Errorf("failed to to parse interval from %v", conf)
 	}
 }
 

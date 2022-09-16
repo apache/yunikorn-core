@@ -24,6 +24,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
@@ -34,8 +35,21 @@ import (
 // The configuration can contain multiple partitions. Each partition contains the queue definition for a logical
 // set of scheduler resources.
 type SchedulerConfig struct {
+	Scheduler  SchedulerGlobalConfig
 	Partitions []PartitionConfig
 	Checksum   string `yaml:",omitempty" json:",omitempty"`
+}
+
+// scheduler specific global configurations:
+// - health checks enabled/disabled as well as interval.
+type SchedulerGlobalConfig struct {
+	HealthCheck HealthCheckConfig `yaml:",omitempty" json:",omitempty"`
+}
+
+// The configurations for health checks.
+type HealthCheckConfig struct {
+	Enabled  *bool
+	Interval time.Duration
 }
 
 // The partition object for each partition:

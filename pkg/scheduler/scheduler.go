@@ -59,7 +59,7 @@ func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 	monitor.start()
 
 	// Start health check periodically
-	c := NewHealthChecker()
+	c := NewHealthChecker(s.clusterContext)
 	c.start(s.clusterContext)
 
 	if !manualSchedule {

@@ -1074,6 +1074,12 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
 	assert.Equal(t, len(appsDao), 2)
 
+	if !appsDao[0].HasReserved {
+		assert.Equal(t, len(appsDao[0].Reservations), 0)
+	} else {
+		assert.Check(t, len(appsDao[0].Reservations) > 0, "app should have at least 1 reservation")
+	}
+
 	// check PlaceholderData
 	assert.Equal(t, len(appsDao[0].PlaceholderData), 1)
 	assert.Equal(t, appsDao[0].PlaceholderData[0].TaskGroupName, tg)
@@ -1157,6 +1163,12 @@ func TestGetApplicationHandler(t *testing.T) {
 	getApplication(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &appsDao)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
+
+	if !appsDao.HasReserved {
+		assert.Equal(t, len(appsDao.Reservations), 0)
+	} else {
+		assert.Check(t, len(appsDao.Reservations) > 0, "app should have at least 1 reservation")
+	}
 
 	// test nonexistent partition
 	var req1 *http.Request

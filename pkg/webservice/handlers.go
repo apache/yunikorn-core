@@ -245,6 +245,8 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		RejectedMessage: app.GetRejectedMessage(),
 		PlaceholderData: placeholderInfo,
 		StateLog:        stateLogInfo,
+		HasReserved:     app.HasReserved(),
+		Reservations:    app.GetReservations(),
 	}
 }
 

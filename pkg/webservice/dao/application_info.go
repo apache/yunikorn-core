@@ -37,6 +37,8 @@ type ApplicationDAOInfo struct {
 	RejectedMessage string                 `json:"rejectedMessage"`
 	StateLog        []StateDAOInfo         `json:"stateLog"`
 	PlaceholderData []PlaceholderDAOInfo   `json:"placeholderData"`
+	HasReserved     bool                   `json:"hasReserved"`
+	Reservations    []string               `json:"reservations"`
 }
 
 type StateDAOInfo struct {

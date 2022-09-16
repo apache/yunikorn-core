@@ -94,7 +94,7 @@ func TestAppReservation(t *testing.T) {
 	if app == nil || app.ApplicationID != appID1 {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
-	if app.hasReserved() {
+	if app.HasReserved() {
 		t.Fatal("new app should not have reservations")
 	}
 	if app.IsReservedOnNode("") {
@@ -139,13 +139,13 @@ func TestAppReservation(t *testing.T) {
 	if app.IsReservedOnNode("unknown") {
 		t.Error("app should not have reservations for unknown node")
 	}
-	if app.hasReserved() && !app.IsReservedOnNode(nodeID1) {
+	if app.HasReserved() && !app.IsReservedOnNode(nodeID1) {
 		t.Errorf("app should have reservations for node %s", nodeID1)
 	}
 
 	// node name similarity check: chop of the last char to make sure we check the full name
 	similar := nodeID1[:len(nodeID1)-1]
-	if app.hasReserved() && app.IsReservedOnNode(similar) {
+	if app.HasReserved() && app.IsReservedOnNode(similar) {
 		t.Errorf("similar app should not have reservations for node %s", similar)
 	}
 
@@ -195,7 +195,7 @@ func TestAppAllocReservation(t *testing.T) {
 	if app == nil || app.ApplicationID != appID1 {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
-	if app.hasReserved() {
+	if app.HasReserved() {
 		t.Fatal("new app should not have reservations")
 	}
 	if len(app.GetAskReservations("")) != 0 {
@@ -249,7 +249,7 @@ func TestAppAllocReservation(t *testing.T) {
 	}
 	// clean up all asks and reservations
 	reservedAsks := app.RemoveAllocationAsk("")
-	if app.hasReserved() || node1.IsReserved() || node2.IsReserved() || reservedAsks != 2 {
+	if app.HasReserved() || node1.IsReserved() || node2.IsReserved() || reservedAsks != 2 {
 		t.Errorf("ask removal did not clean up all reservations, reserved released = %d", reservedAsks)
 	}
 }
@@ -504,7 +504,7 @@ func TestRemoveReservedAllocAsk(t *testing.T) {
 	if !resources.Equals(res, delta) || reservedAsks != 1 {
 		t.Errorf("resource ask2 should have been removed from app: %v, (reserved released = %d)", delta, reservedAsks)
 	}
-	if app.hasReserved() || node.IsReserved() {
+	if app.HasReserved() || node.IsReserved() {
 		t.Fatal("app and node should not have reservations")
 	}
 
@@ -529,7 +529,7 @@ func TestRemoveReservedAllocAsk(t *testing.T) {
 		t.Errorf("resource ask2 should have been removed from app: %v, (reserved released = %d)", delta, reservedAsks)
 	}
 	// app reservation is removed even though the node removal failed
-	if app.hasReserved() || node.IsReserved() {
+	if app.HasReserved() || node.IsReserved() {
 		t.Fatal("app and node should not have reservations")
 	}
 	// add a new reservation: use the existing ask1
@@ -541,7 +541,7 @@ func TestRemoveReservedAllocAsk(t *testing.T) {
 		t.Errorf("all resource asks should have been removed from app: %v, (reserved released = %d)", app.GetPendingResource(), reservedAsks)
 	}
 	// app reservation is removed due to ask removal
-	if app.hasReserved() || node.IsReserved() {
+	if app.HasReserved() || node.IsReserved() {
 		t.Fatal("app and node should not have reservations")
 	}
 }

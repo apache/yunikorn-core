@@ -1071,7 +1071,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	if !appsDao[0].HasReserved {
 		assert.Equal(t, len(appsDao[0].Reservations), 0)
 	} else {
-		assert.Check(t, len(appsDao[0].Reservations) > 0, "Get wrong reservation info from apps dao")
+		assert.Check(t, len(appsDao[0].Reservations) > 0, "app should have at least 1 reservation")
 	}
 
 	// check PlaceholderData
@@ -1161,7 +1161,7 @@ func TestGetApplicationHandler(t *testing.T) {
 	if !appsDao.HasReserved {
 		assert.Equal(t, len(appsDao.Reservations), 0)
 	} else {
-		assert.Check(t, len(appsDao.Reservations) > 0, "Get wrong reservation info from application dao")
+		assert.Check(t, len(appsDao.Reservations) > 0, "app should have at least 1 reservation")
 	}
 
 	// test nonexistent partition

@@ -74,12 +74,6 @@ func getFullStateDump(w http.ResponseWriter, r *http.Request) {
 func handlePeriodicStateDump(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	writeHeaders(w)
-	if len(vars["switch"]) == 0 {
-		buildJSONErrorResponse(w, "required parameter enabled/disabled is missing",
-			http.StatusBadRequest)
-		return
-	}
-
 	enabledSwitch := strings.ToLower(vars["switch"])
 	switch enabledSwitch {
 	case "enable":
@@ -87,7 +81,7 @@ func handlePeriodicStateDump(w http.ResponseWriter, r *http.Request) {
 	case "disable":
 		disablePeriodicStateDump(w, r)
 	default:
-		buildJSONErrorResponse(w, fmt.Sprintf("required parameter enable/disable is illegal: %s", enabledSwitch),
+		buildJSONErrorResponse(w, fmt.Sprintf("required parameter enable/disable is missing or invalid: %s", enabledSwitch),
 			http.StatusBadRequest)
 	}
 }

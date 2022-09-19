@@ -313,10 +313,10 @@ func assertAppList(t *testing.T, list []*Application, place []int, name string) 
 // list of application and the location of the named applications inside that list
 // place[0] defines the location of the app-0 in the list of applications
 func assertAskList(t *testing.T, list []*AllocationAsk, place []int, name string) {
-	assert.Equal(t, "ask-0", list[place[0]].AllocationKey, "test name: %s", name)
-	assert.Equal(t, "ask-1", list[place[1]].AllocationKey, "test name: %s", name)
-	assert.Equal(t, "ask-2", list[place[2]].AllocationKey, "test name: %s", name)
-	assert.Equal(t, "ask-3", list[place[3]].AllocationKey, "test name: %s", name)
+	assert.Equal(t, "ask-0", list[place[0]].GetAllocationKey(), "test name: %s", name)
+	assert.Equal(t, "ask-1", list[place[1]].GetAllocationKey(), "test name: %s", name)
+	assert.Equal(t, "ask-2", list[place[2]].GetAllocationKey(), "test name: %s", name)
+	assert.Equal(t, "ask-3", list[place[3]].GetAllocationKey(), "test name: %s", name)
 }
 
 func assertAppListLength(t *testing.T, list []*Application, apps []string, name string) {

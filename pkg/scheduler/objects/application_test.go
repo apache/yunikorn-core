@@ -33,6 +33,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/handler"
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -93,7 +94,7 @@ func TestAppReservation(t *testing.T) {
 	if app == nil || app.ApplicationID != appID1 {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
-	if app.hasReserved() {
+	if app.HasReserved() {
 		t.Fatal("new app should not have reservations")
 	}
 	if app.IsReservedOnNode("") {
@@ -138,13 +139,13 @@ func TestAppReservation(t *testing.T) {
 	if app.IsReservedOnNode("unknown") {
 		t.Error("app should not have reservations for unknown node")
 	}
-	if app.hasReserved() && !app.IsReservedOnNode(nodeID1) {
+	if app.HasReserved() && !app.IsReservedOnNode(nodeID1) {
 		t.Errorf("app should have reservations for node %s", nodeID1)
 	}
 
 	// node name similarity check: chop of the last char to make sure we check the full name
 	similar := nodeID1[:len(nodeID1)-1]
-	if app.hasReserved() && app.IsReservedOnNode(similar) {
+	if app.HasReserved() && app.IsReservedOnNode(similar) {
 		t.Errorf("similar app should not have reservations for node %s", similar)
 	}
 
@@ -194,7 +195,7 @@ func TestAppAllocReservation(t *testing.T) {
 	if app == nil || app.ApplicationID != appID1 {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
-	if app.hasReserved() {
+	if app.HasReserved() {
 		t.Fatal("new app should not have reservations")
 	}
 	if len(app.GetAskReservations("")) != 0 {
@@ -248,7 +249,7 @@ func TestAppAllocReservation(t *testing.T) {
 	}
 	// clean up all asks and reservations
 	reservedAsks := app.RemoveAllocationAsk("")
-	if app.hasReserved() || node1.IsReserved() || node2.IsReserved() || reservedAsks != 2 {
+	if app.HasReserved() || node1.IsReserved() || node2.IsReserved() || reservedAsks != 2 {
 		t.Errorf("ask removal did not clean up all reservations, reserved released = %d", reservedAsks)
 	}
 }
@@ -368,30 +369,29 @@ func TestAddAllocAsk(t *testing.T) {
 
 	// test PlaceholderData
 	tg1 := "tg-1"
-	requiredNode := "node-1"
 	ask = newAllocationAskTG(aKey, appID1, tg1, res, 1)
-	ask.requiredNode = requiredNode
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been updated on app")
+	app.SetTimedOutPlaceholder(tg1, 1)
+	app.SetTimedOutPlaceholder("tg-2", 2)
 	clonePlaceholderData := app.GetAllPlaceholderData()
 	assert.Equal(t, len(clonePlaceholderData), 1)
 	assert.Equal(t, len(app.placeholderData), 1)
 	assert.Equal(t, clonePlaceholderData[0], app.placeholderData[tg1])
 	assert.Equal(t, app.placeholderData[tg1].TaskGroupName, tg1)
-	assert.Equal(t, app.placeholderData[tg1].RequiredNode, requiredNode)
 	assert.Equal(t, app.placeholderData[tg1].Count, int64(1))
 	assert.Equal(t, app.placeholderData[tg1].Replaced, int64(0))
+	assert.Equal(t, app.placeholderData[tg1].TimedOut, int64(1))
 	assert.DeepEqual(t, app.placeholderData[tg1].MinResource, res)
 
 	ask = newAllocationAskTG(aKey, appID1, tg1, res, 1)
-	ask.requiredNode = requiredNode
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been updated on app")
 	assert.Equal(t, len(app.placeholderData), 1)
 	assert.Equal(t, app.placeholderData[tg1].TaskGroupName, tg1)
-	assert.Equal(t, app.placeholderData[tg1].RequiredNode, requiredNode)
 	assert.Equal(t, app.placeholderData[tg1].Count, int64(2))
 	assert.Equal(t, app.placeholderData[tg1].Replaced, int64(0))
+	assert.Equal(t, app.placeholderData[tg1].TimedOut, int64(1))
 	assert.DeepEqual(t, app.placeholderData[tg1].MinResource, res)
 
 	tg2 := "tg-2"
@@ -400,9 +400,9 @@ func TestAddAllocAsk(t *testing.T) {
 	assert.NilError(t, err, "ask should have been updated on app")
 	assert.Equal(t, len(app.placeholderData), 2)
 	assert.Equal(t, app.placeholderData[tg2].TaskGroupName, tg2)
-	assert.Equal(t, app.placeholderData[tg2].RequiredNode, "")
 	assert.Equal(t, app.placeholderData[tg2].Count, int64(1))
 	assert.Equal(t, app.placeholderData[tg2].Replaced, int64(0))
+	assert.Equal(t, app.placeholderData[tg2].TimedOut, int64(0))
 	assert.DeepEqual(t, app.placeholderData[tg2].MinResource, res)
 }
 
@@ -504,7 +504,7 @@ func TestRemoveReservedAllocAsk(t *testing.T) {
 	if !resources.Equals(res, delta) || reservedAsks != 1 {
 		t.Errorf("resource ask2 should have been removed from app: %v, (reserved released = %d)", delta, reservedAsks)
 	}
-	if app.hasReserved() || node.IsReserved() {
+	if app.HasReserved() || node.IsReserved() {
 		t.Fatal("app and node should not have reservations")
 	}
 
@@ -529,7 +529,7 @@ func TestRemoveReservedAllocAsk(t *testing.T) {
 		t.Errorf("resource ask2 should have been removed from app: %v, (reserved released = %d)", delta, reservedAsks)
 	}
 	// app reservation is removed even though the node removal failed
-	if app.hasReserved() || node.IsReserved() {
+	if app.HasReserved() || node.IsReserved() {
 		t.Fatal("app and node should not have reservations")
 	}
 	// add a new reservation: use the existing ask1
@@ -541,7 +541,7 @@ func TestRemoveReservedAllocAsk(t *testing.T) {
 		t.Errorf("all resource asks should have been removed from app: %v, (reserved released = %d)", app.GetPendingResource(), reservedAsks)
 	}
 	// app reservation is removed due to ask removal
-	if app.hasReserved() || node.IsReserved() {
+	if app.HasReserved() || node.IsReserved() {
 		t.Fatal("app and node should not have reservations")
 	}
 }
@@ -652,13 +652,13 @@ func TestSortRequests(t *testing.T) {
 		num := strconv.Itoa(i)
 		ask := newAllocationAsk("ask-"+num, appID1, res)
 		ask.priority = int32(i)
-		app.requests[ask.AllocationKey] = ask
+		app.requests[ask.GetAllocationKey()] = ask
 	}
 	app.sortRequests(true)
 	if len(app.sortedRequests) != 3 {
 		t.Fatalf("app sorted requests not correct: %v", app.sortedRequests)
 	}
-	allocKey := app.sortedRequests[0].AllocationKey
+	allocKey := app.sortedRequests[0].GetAllocationKey()
 	delete(app.requests, allocKey)
 	app.sortRequests(true)
 	if len(app.sortedRequests) != 2 {
@@ -870,14 +870,14 @@ func TestGangAllocChange(t *testing.T) {
 
 	// add a real alloc this should NOT trigger state update
 	alloc = newAllocation(appID1, "uuid-3", nodeID1, "root.a", res)
-	alloc.Result = Replaced
+	alloc.SetResult(Replaced)
 	app.AddAllocation(alloc)
 	assert.Equal(t, len(app.GetAllAllocations()), 3)
 	assert.Assert(t, app.IsStarting(), "app should still be in starting state")
 
 	// add a second real alloc this should trigger state update
 	alloc = newAllocation(appID1, "uuid-4", nodeID1, "root.a", res)
-	alloc.Result = Replaced
+	alloc.SetResult(Replaced)
 	app.AddAllocation(alloc)
 	assert.Equal(t, len(app.GetAllAllocations()), 4)
 	assert.Assert(t, app.IsRunning(), "app should be in running state")
@@ -956,7 +956,7 @@ func TestStateTimeOut(t *testing.T) {
 	}
 
 	startingTimeout = time.Minute * 5
-	app = newApplicationWithTags(appID2, "default", "root.a", map[string]string{AppTagStateAwareDisable: "true"})
+	app = newApplicationWithTags(appID2, "default", "root.a", map[string]string{siCommon.AppTagStateAwareDisable: "true"})
 	err = app.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (timeout test)")
 	err = app.HandleApplicationEvent(RunApplication)
@@ -1082,12 +1082,12 @@ func TestReplaceAllocation(t *testing.T) {
 	// add the placeholder to the app
 	app.AddAllocation(ph)
 	// add PlaceholderData
-	app.addPlaceholderData(ph.Ask)
+	app.addPlaceholderData(ph.GetAsk())
 	assert.Equal(t, len(app.placeholderData), 1)
 	assert.Equal(t, app.placeholderData[""].TaskGroupName, "")
-	assert.Equal(t, app.placeholderData[""].RequiredNode, "")
 	assert.Equal(t, app.placeholderData[""].Count, int64(1))
 	assert.Equal(t, app.placeholderData[""].Replaced, int64(0))
+	assert.Equal(t, app.placeholderData[""].TimedOut, int64(0))
 	assert.DeepEqual(t, app.placeholderData[""].MinResource, res)
 
 	assert.Equal(t, len(app.allocations), 1, "allocation not added as expected")
@@ -1101,13 +1101,13 @@ func TestReplaceAllocation(t *testing.T) {
 	// add the placeholder back to the app, the failure test above changed state and removed the ph
 	app.SetState(Running.String())
 	app.AddAllocation(ph)
-	app.addPlaceholderData(ph.Ask)
+	app.addPlaceholderData(ph.GetAsk())
 	assert.Equal(t, app.placeholderData[""].Count, int64(2))
 
 	// set the real one to replace the placeholder
 	realAlloc := newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
-	realAlloc.Result = Replaced
-	ph.Releases = append(ph.Releases, realAlloc)
+	realAlloc.SetResult(Replaced)
+	ph.AddRelease(realAlloc)
 	alloc = app.ReplaceAllocation("uuid-1")
 	assert.Equal(t, alloc, ph, "returned allocation is not the placeholder")
 	assert.Assert(t, resources.IsZero(app.allocatedPlaceholder), "real allocation counted as placeholder")
@@ -1119,18 +1119,18 @@ func TestReplaceAllocation(t *testing.T) {
 
 	// add the placeholder back to the app, the failure test above changed state and removed the ph
 	app.SetState(Running.String())
-	ph.Releases = nil
+	ph.ClearReleases()
 	app.AddAllocation(ph)
-	app.addPlaceholderData(ph.Ask)
+	app.addPlaceholderData(ph.GetAsk())
 	assert.Equal(t, app.placeholderData[""].Count, int64(3))
 
 	// set multiple real allocations to replace the placeholder
 	realAlloc = newAllocation(appID1, "uuid-3", nodeID1, "root.a", res)
-	realAlloc.Result = Replaced
-	ph.Releases = append(ph.Releases, realAlloc)
+	realAlloc.SetResult(Replaced)
+	ph.AddRelease(realAlloc)
 	realAllocNoAdd := newAllocation(appID1, "not-added", nodeID1, "root.a", res)
-	realAllocNoAdd.Result = Replaced
-	ph.Releases = append(ph.Releases, realAlloc)
+	realAllocNoAdd.SetResult(Replaced)
+	ph.AddRelease(realAlloc)
 	alloc = app.ReplaceAllocation("uuid-1")
 	assert.Equal(t, alloc, ph, "returned allocation is not the placeholder")
 	assert.Assert(t, resources.IsZero(app.allocatedPlaceholder), "real allocation counted as placeholder")
@@ -1181,9 +1181,9 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	// check PlaceHolderData
 	assert.Equal(t, len(app.placeholderData), 1)
 	assert.Equal(t, app.placeholderData[tg1].TaskGroupName, tg1)
-	assert.Equal(t, app.placeholderData[tg1].RequiredNode, "")
 	assert.Equal(t, app.placeholderData[tg1].Count, int64(1))
 	assert.Equal(t, app.placeholderData[tg1].Replaced, int64(0))
+	assert.Equal(t, app.placeholderData[tg1].TimedOut, int64(0))
 	assert.DeepEqual(t, app.placeholderData[tg1].MinResource, res)
 
 	// add the placeholder to the app
@@ -1198,6 +1198,7 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 		defer app.RUnlock()
 		return app.placeholderTimer == nil
 	})
+	assert.Equal(t, app.placeholderData[tg1].TimedOut, app.placeholderData[tg1].Count, "When the app is in an accepted state, timeout should equal to count")
 	assert.NilError(t, err, "Placeholder timeout cleanup did not trigger unexpectedly")
 	assert.Equal(t, app.stateMachine.Current(), expectedState, "Application did not progress into expected state")
 	events := testHandler.GetEvents()
@@ -1243,21 +1244,21 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	assert.NilError(t, err, "Unexpected error when creating resource from map")
 	// add the placeholders to the app: one released, one still available.
 	ph := newPlaceholderAlloc(appID1, "released", nodeID1, "root.a", res)
-	ph.released = true
+	ph.SetReleased(true)
 	app.AddAllocation(ph)
 	// add PlaceholderData
-	app.addPlaceholderData(ph.Ask)
+	app.addPlaceholderData(ph.GetAsk())
 	assert.Equal(t, len(app.placeholderData), 1)
 	assert.Equal(t, app.placeholderData[""].TaskGroupName, "")
-	assert.Equal(t, app.placeholderData[""].RequiredNode, "")
 	assert.Equal(t, app.placeholderData[""].Count, int64(1))
 	assert.Equal(t, app.placeholderData[""].Replaced, int64(0))
+	assert.Equal(t, app.placeholderData[""].TimedOut, int64(0))
 	assert.DeepEqual(t, app.placeholderData[""].MinResource, res)
 
 	assert.Assert(t, app.placeholderTimer != nil, "Placeholder timer should be initiated after the first placeholder allocation")
 	ph = newPlaceholderAlloc(appID1, "waiting", nodeID1, "root.a", res)
 	app.AddAllocation(ph)
-	app.addPlaceholderData(ph.Ask)
+	app.addPlaceholderData(ph.GetAsk())
 	assert.Equal(t, app.placeholderData[""].Count, int64(2))
 
 	alloc := newAllocation(appID1, "real", nodeID1, "root.a", res)
@@ -1287,8 +1288,8 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	assert.Assert(t, resources.Equals(app.GetAllocatedResource(), res), "Unexpected allocated resources for the app")
 	// a released placeholder still holds the resource until release confirmed by the RM
 	assert.Assert(t, resources.Equals(app.GetPlaceholderResource(), resources.Multiply(res, 2)), "Unexpected placeholder resources for the app")
-	// check if the Replaced of PlaceHolderData is 0
 	assert.Equal(t, app.placeholderData[""].Replaced, int64(0))
+	assert.Equal(t, app.placeholderData[""].TimedOut, int64(1))
 }
 
 func TestTimeoutPlaceholderCompleting(t *testing.T) {
@@ -1371,11 +1372,11 @@ func TestGetAllRequests(t *testing.T) {
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
-	assert.Assert(t, len(app.getAllRequests()) == 0, "App should have no requests yet")
+	assert.Assert(t, len(app.getAllRequestsInternal()) == 0, "App should have no requests yet")
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "No error expected when adding an ask")
-	assert.Assert(t, len(app.getAllRequests()) == 1, "App should have only one request")
-	assert.Equal(t, app.getAllRequests()[0], ask, "Unexpected request found in the app")
+	assert.Assert(t, len(app.getAllRequestsInternal()) == 1, "App should have only one request")
+	assert.Equal(t, app.getAllRequestsInternal()[0], ask, "Unexpected request found in the app")
 }
 
 func TestGetQueueNameAfterUnsetQueue(t *testing.T) {
@@ -1404,4 +1405,55 @@ func TestFinishedTime(t *testing.T) {
 	app1.SetState(Rejected.String())
 	assert.Assert(t, !app.finishedTime.IsZero())
 	assert.Assert(t, !app.FinishedTime().IsZero())
+}
+
+func TestCanReplace(t *testing.T) {
+	app := newApplication(appID1, "default", "root.unknown")
+	resMap := map[string]string{"memory": "100", "vcores": "10"}
+	res, err := resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err, "Unexpected error when creating resource from map")
+
+	tg1 := "available"
+	tests := []struct {
+		name string
+		ask  *AllocationAsk
+		want bool
+	}{
+		{"nil", nil, false},
+		{"placeholder", newAllocationAskTG(aKey, appID1, tg1, res, 1), false},
+		{"no TG", newAllocationAsk(aKey, appID1, res), false},
+		{"no placeholder data", newAllocationAskAll(aKey, appID1, tg1, res, 1, false), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, app.canReplace(tt.ask), "unexpected replacement")
+		})
+	}
+	// add the placeholder data
+	// available tg has one replacement open
+	app.addPlaceholderData(newAllocationAskTG(aKey, appID1, tg1, res, 1))
+	// unavailable tg has NO replacement open (replaced)
+	tg2 := "unavailable"
+	app.addPlaceholderData(newAllocationAskTG(aKey, appID1, tg2, res, 1))
+	app.placeholderData[tg2].Replaced++
+	// unavailable tg has NO replacement open (timedout)
+	tg3 := "timedout"
+	app.addPlaceholderData(newAllocationAskTG(aKey, appID1, tg3, res, 1))
+	app.placeholderData[tg3].TimedOut++
+	tests = []struct {
+		name string
+		ask  *AllocationAsk
+		want bool
+	}{
+		{"no TG", newAllocationAsk(aKey, appID1, res), false},
+		{"TG mismatch", newAllocationAskAll(aKey, appID1, "unknown", res, 1, false), false},
+		{"TG placeholder used", newAllocationAskAll(aKey, appID1, tg2, res, 1, false), false},
+		{"TG placeholder timed out", newAllocationAskAll(aKey, appID1, tg3, res, 1, false), false},
+		{"TG placeholder available", newAllocationAskAll(aKey, appID1, tg1, res, 1, false), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, app.canReplace(tt.ask), "unexpected replacement")
+		})
+	}
 }

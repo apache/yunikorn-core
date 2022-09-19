@@ -47,14 +47,14 @@ func (p *PreemptionContext) filterAllocations() {
 	defer p.Unlock()
 	for _, allocation := range p.node.GetAllAllocations() {
 		// skip daemon set pods and higher priority allocation
-		if allocation.Ask.GetRequiredNode() != "" || allocation.Priority > p.requiredAsk.GetPriority() {
+		if allocation.GetAsk().GetRequiredNode() != "" || allocation.GetPriority() > p.requiredAsk.GetPriority() {
 			continue
 		}
 
 		// atleast one of the required ask resource should match, otherwise skip
 		includeAllocation := false
 		for k := range p.requiredAsk.GetAllocatedResource().Resources {
-			if _, ok := allocation.Ask.GetAllocatedResource().Resources[k]; ok {
+			if _, ok := allocation.GetAsk().GetAllocatedResource().Resources[k]; ok {
 				includeAllocation = true
 				break
 			}
@@ -74,20 +74,20 @@ func (p *PreemptionContext) sortAllocations() {
 	p.Lock()
 	defer p.Unlock()
 	sort.SliceStable(p.allocations, func(i, j int) bool {
-		l := p.allocations[i].Ask
-		r := p.allocations[j].Ask
+		l := p.allocations[i].GetAsk()
+		r := p.allocations[j].GetAsk()
 
 		// sort based on the type
 		lAskType := 1         // regular pod
 		if l.IsOriginator() { // driver/owner pod
 			lAskType = 3
-		} else if !l.GetAllowPreemption() { // opted out pod
+		} else if !l.IsAllowPreemption() { // opted out pod
 			lAskType = 2
 		}
 		rAskType := 1
 		if r.IsOriginator() {
 			rAskType = 3
-		} else if !r.GetAllowPreemption() {
+		} else if !r.IsAllowPreemption() {
 			rAskType = 2
 		}
 		if lAskType < rAskType {

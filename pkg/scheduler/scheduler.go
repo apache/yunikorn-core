@@ -33,10 +33,9 @@ import (
 
 // Main Scheduler service that starts the needed sub services
 type Scheduler struct {
-	clusterContext    *ClusterContext    // main context
-	preemptionContext *preemptionContext // Preemption context
-	pendingEvents     chan interface{}   // queue for events
-	activityPending   chan bool          // activity pending channel
+	clusterContext  *ClusterContext  // main context
+	pendingEvents   chan interface{} // queue for events
+	activityPending chan bool        // activity pending channel
 }
 
 func NewScheduler() *Scheduler {
@@ -66,7 +65,6 @@ func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 	if !manualSchedule {
 		go s.internalSchedule()
 		go s.internalInspectOutstandingRequests()
-		go s.internalPreemption()
 	}
 }
 
@@ -77,14 +75,6 @@ func (s *Scheduler) internalSchedule() {
 		if s.clusterContext.schedule() {
 			s.registerActivity()
 		}
-	}
-}
-
-// Internal start preemption service
-func (s *Scheduler) internalPreemption() {
-	for {
-		s.SingleStepPreemption()
-		time.Sleep(1000 * time.Millisecond)
 	}
 }
 
@@ -171,14 +161,14 @@ func (s *Scheduler) inspectOutstandingRequests() {
 		if len(requests) > 0 {
 			for _, ask := range requests {
 				log.Logger().Debug("outstanding request",
-					zap.String("appID", ask.ApplicationID),
-					zap.String("allocationKey", ask.AllocationKey))
+					zap.String("appID", ask.GetApplicationID()),
+					zap.String("allocationKey", ask.GetAllocationKey()))
 				// these asks are queue outstanding requests,
 				// they can fit into the max head room, but they are pending because lack of partition resources
 				if updater := plugins.GetResourceManagerCallbackPlugin(); updater != nil {
 					updater.UpdateContainerSchedulingState(&si.UpdateContainerSchedulingStateRequest{
-						ApplicartionID: ask.ApplicationID,
-						AllocationKey:  ask.AllocationKey,
+						ApplicartionID: ask.GetApplicationID(),
+						AllocationKey:  ask.GetAllocationKey(),
 						State:          si.UpdateContainerSchedulingStateRequest_FAILED,
 						Reason:         "request is waiting for cluster resources become available",
 					})

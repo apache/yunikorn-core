@@ -244,8 +244,8 @@ func checkSchedulingContext(schedulerContext *ClusterContext) []dao.HealthCheckI
 func checkAppAllocations(app *objects.Application, nodes objects.NodeCollection) []*objects.Allocation {
 	orphanAllocationsOnApp := make([]*objects.Allocation, 0)
 	for _, alloc := range app.GetAllAllocations() {
-		if node := nodes.GetNode(alloc.NodeID); node != nil {
-			if node.GetAllocation(alloc.UUID) == nil {
+		if node := nodes.GetNode(alloc.GetNodeID()); node != nil {
+			if node.GetAllocation(alloc.GetUUID()) == nil {
 				orphanAllocationsOnApp = append(orphanAllocationsOnApp, alloc)
 			}
 		} else {
@@ -258,7 +258,7 @@ func checkAppAllocations(app *objects.Application, nodes objects.NodeCollection)
 func checkNodeAllocations(node *objects.Node, partitionContext *PartitionContext) []*objects.Allocation {
 	orphanAllocationsOnNode := make([]*objects.Allocation, 0)
 	for _, alloc := range node.GetAllAllocations() {
-		if app := partitionContext.getApplication(alloc.ApplicationID); app != nil {
+		if app := partitionContext.getApplication(alloc.GetApplicationID()); app != nil {
 			if !app.IsAllocationAssignedToApp(alloc) {
 				orphanAllocationsOnNode = append(orphanAllocationsOnNode, alloc)
 			}

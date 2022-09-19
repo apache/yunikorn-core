@@ -24,14 +24,16 @@ type NodesDAOInfo struct {
 }
 
 type NodeDAOInfo struct {
-	NodeID      string               `json:"nodeID"`
-	HostName    string               `json:"hostName"`
-	RackName    string               `json:"rackName"`
-	Capacity    map[string]int64     `json:"capacity"`
-	Allocated   map[string]int64     `json:"allocated"`
-	Occupied    map[string]int64     `json:"occupied"`
-	Available   map[string]int64     `json:"available"`
-	Utilized    map[string]int64     `json:"utilized"`
-	Allocations []*AllocationDAOInfo `json:"allocations"`
-	Schedulable bool                 `json:"schedulable"`
+	NodeID       string               `json:"nodeID"`
+	HostName     string               `json:"hostName"`
+	RackName     string               `json:"rackName"`
+	Capacity     map[string]int64     `json:"capacity"`
+	Allocated    map[string]int64     `json:"allocated"`
+	Occupied     map[string]int64     `json:"occupied"`
+	Available    map[string]int64     `json:"available"`
+	Utilized     map[string]int64     `json:"utilized"`
+	Allocations  []*AllocationDAOInfo `json:"allocations"`
+	Schedulable  bool                 `json:"schedulable"`
+	IsReserved   bool                 `json:"isReserved"`
+	Reservations []string             `json:"reservations"`
 }

@@ -31,13 +31,13 @@ output_fsm() {
   tail -n +2 "$1.dot" | \
 	grep -E -v '"(\w+)" -> "\1"' | \
 	grep -v AppAllocationAsk | \
-	sed 's/Application/ App/g'
+	sed "s/Application/ App/g"
 }
 
 cd "${WORKDIR}"
 
 for dot in *.dot; do
-  base=$(echo "${dot}" | sed 's_\.dot$__')
+  base=$(echo "${dot}" | sed "s_\.dot$__")
   
   output_fsm "${base}" | dot -Tpng > "${base}.png"
 done

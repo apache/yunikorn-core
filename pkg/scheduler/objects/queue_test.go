@@ -31,6 +31,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects/template"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 )
 
 // base test for creating a managed queue
@@ -43,7 +44,7 @@ func TestQueueBasics(t *testing.T) {
 		t.Error("root queue status is incorrect")
 	}
 	// allocations should be nil
-	if !resources.IsZero(root.preempting) && !resources.IsZero(root.pending) {
+	if !resources.IsZero(root.pending) {
 		t.Error("root queue must not have allocations set on create")
 	}
 }
@@ -238,7 +239,7 @@ func TestAddApplication(t *testing.T) {
 	assert.NilError(t, err, "failed to create managed leaf queue")
 	pending := resources.NewResourceFromMap(
 		map[string]resources.Quantity{
-			resources.MEMORY: 10,
+			common.Memory: 10,
 		})
 	app := newApplication(appID1, "default", "root.parent.leaf")
 	app.pending = pending
@@ -282,7 +283,7 @@ func TestAddApplicationWithTag(t *testing.T) {
 			"first": 10,
 		})
 	tags := make(map[string]string)
-	tags[AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":10}}}"
+	tags[common.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":10}}}"
 	// add apps again now with the tag set
 	app = newApplicationWithTags("app-3", "default", "root.leaf-man", tags)
 	leaf.AddApplication(app)
@@ -298,7 +299,7 @@ func TestAddApplicationWithTag(t *testing.T) {
 	}
 
 	// set to illegal limit (0 value)
-	tags[AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":0}}}"
+	tags[common.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":0}}}"
 	app = newApplicationWithTags("app-4", "default", "root.leaf-un", tags)
 	leafUn.AddApplication(app)
 	assert.Equal(t, len(leaf.applications), 2, "Application was not added to the Dynamic queue as expected")
@@ -400,44 +401,6 @@ func TestQueueStates(t *testing.T) {
 	err = leaf.handleQueueEvent(Start)
 	if err == nil || !leaf.IsDraining() {
 		t.Errorf("leaf queue changed state which should not happen: %v", err)
-	}
-}
-
-func TestPreemptingCalc(t *testing.T) {
-	// create the root
-	root, err := createRootQueue(nil)
-	assert.NilError(t, err, "queue create failed")
-	var leaf *Queue
-	leaf, err = createManagedQueue(root, "leaf", false, nil)
-	assert.NilError(t, err, "failed to create leaf queue")
-
-	res := map[string]string{"first": "1"}
-	var allocRes *resources.Resource
-	allocRes, err = resources.NewResourceFromConf(res)
-	assert.NilError(t, err, "failed to create basic resource")
-	if !resources.IsZero(leaf.preempting) {
-		t.Errorf("leaf queue preempting resources not set as expected 0, got %v", leaf.preempting)
-	}
-	if !resources.IsZero(root.preempting) {
-		t.Errorf("root queue preempting resources not set as expected 0, got %v", root.preempting)
-	}
-	// preempting does not filter up the hierarchy, check that
-	leaf.IncPreemptingResource(allocRes)
-	// using the get function to access the value
-	if !resources.Equals(allocRes, leaf.GetPreemptingResource()) {
-		t.Errorf("queue preempting resources not set as expected %v, got %v", allocRes, leaf.preempting)
-	}
-	if !resources.IsZero(root.GetPreemptingResource()) {
-		t.Errorf("root queue preempting resources not set as expected 0, got %v", root.preempting)
-	}
-	newRes := resources.Multiply(allocRes, 2)
-	leaf.decPreemptingResource(newRes)
-	if !resources.IsZero(leaf.GetPreemptingResource()) {
-		t.Errorf("queue preempting resources not set as expected 0, got %v", leaf.preempting)
-	}
-	leaf.setPreemptingResource(newRes)
-	if !resources.Equals(leaf.GetPreemptingResource(), resources.Multiply(allocRes, 2)) {
-		t.Errorf("queue preempting resources not set as expected %v, got %v", newRes, leaf.preempting)
 	}
 }
 
@@ -928,7 +891,7 @@ func TestGetApp(t *testing.T) {
 	leaf, err = createManagedQueue(root, "leaf", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	// check for init of the map
-	if unknown := leaf.getApplication("unknown"); unknown != nil {
+	if unknown := leaf.GetApplication("unknown"); unknown != nil {
 		t.Errorf("un registered app found using appID which should not happen: %v", unknown)
 	}
 
@@ -936,10 +899,10 @@ func TestGetApp(t *testing.T) {
 	app := newApplication(appID1, "default", leaf.QueuePath)
 	leaf.AddApplication(app)
 	assert.Equal(t, len(leaf.applications), 1, "queue should have one app registered")
-	if leaf.getApplication(appID1) == nil {
+	if leaf.GetApplication(appID1) == nil {
 		t.Errorf("registered app not found using appID")
 	}
-	if unknown := leaf.getApplication("unknown"); unknown != nil {
+	if unknown := leaf.GetApplication("unknown"); unknown != nil {
 		t.Errorf("un registered app found using appID which should not happen: %v", unknown)
 	}
 }

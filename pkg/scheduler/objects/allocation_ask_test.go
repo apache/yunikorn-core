@@ -19,6 +19,7 @@
 package objects
 
 import (
+	"sort"
 	"testing"
 	"time"
 
@@ -49,12 +50,12 @@ func TestNewAsk(t *testing.T) {
 		MaxAllocations: 1,
 		ResourceAsk:    res.ToProto(),
 	}
-	ask := NewAllocationAsk(siAsk)
+	ask := NewAllocationAskFromSI(siAsk)
 	if ask == nil {
-		t.Fatal("NewAllocationAsk create failed while it should not")
+		t.Fatal("NewAllocationAskFromSI create failed while it should not")
 	}
 	askStr := ask.String()
-	expected := "AllocationKey ask-1, ApplicationID app-1, Resource map[first:10], PendingRepeats 1"
+	expected := "allocationKey ask-1, applicationID app-1, Resource map[first:10], PendingRepeats 1"
 	assert.Equal(t, askStr, expected, "Strings should have been equal")
 }
 
@@ -95,9 +96,9 @@ func TestPlaceHolder(t *testing.T) {
 		ApplicationID: "app1",
 		PartitionName: "default",
 	}
-	ask := NewAllocationAsk(siAsk)
-	assert.Assert(t, !ask.isPlaceholder(), "standard ask should not be a placeholder")
-	assert.Equal(t, ask.getTaskGroup(), "", "standard ask should not have a TaskGroupName")
+	ask := NewAllocationAskFromSI(siAsk)
+	assert.Assert(t, !ask.IsPlaceholder(), "standard ask should not be a placeholder")
+	assert.Equal(t, ask.GetTaskGroup(), "", "standard ask should not have a TaskGroupName")
 	siAsk = &si.AllocationAsk{
 		AllocationKey: "ask1",
 		ApplicationID: "app1",
@@ -105,14 +106,14 @@ func TestPlaceHolder(t *testing.T) {
 		TaskGroupName: "",
 		Placeholder:   true,
 	}
-	ask = NewAllocationAsk(siAsk)
+	ask = NewAllocationAskFromSI(siAsk)
 	var nilAsk *AllocationAsk
 	assert.Equal(t, ask, nilAsk, "placeholder ask created without a TaskGroupName")
 	siAsk.TaskGroupName = "testgroup"
-	ask = NewAllocationAsk(siAsk)
+	ask = NewAllocationAskFromSI(siAsk)
 	assert.Assert(t, ask != nilAsk, "placeholder ask creation failed unexpectedly")
-	assert.Assert(t, ask.isPlaceholder(), "ask should have been a placeholder")
-	assert.Equal(t, ask.getTaskGroup(), "testgroup", "TaskGroupName not set as expected")
+	assert.Assert(t, ask.IsPlaceholder(), "ask should have been a placeholder")
+	assert.Equal(t, ask.GetTaskGroup(), "testgroup", "TaskGroupName not set as expected")
 }
 
 func TestGetTimeout(t *testing.T) {
@@ -121,16 +122,16 @@ func TestGetTimeout(t *testing.T) {
 		ApplicationID: "app1",
 		PartitionName: "default",
 	}
-	ask := NewAllocationAsk(siAsk)
-	assert.Equal(t, ask.getTimeout(), time.Duration(0), "standard ask should not have timeout")
+	ask := NewAllocationAskFromSI(siAsk)
+	assert.Equal(t, ask.GetTimeout(), time.Duration(0), "standard ask should not have timeout")
 	siAsk = &si.AllocationAsk{
 		AllocationKey:                "ask1",
 		ApplicationID:                "app1",
 		PartitionName:                "default",
 		ExecutionTimeoutMilliSeconds: 10,
 	}
-	ask = NewAllocationAsk(siAsk)
-	assert.Equal(t, ask.getTimeout(), 10*time.Millisecond, "ask timeout not set as expected")
+	ask = NewAllocationAskFromSI(siAsk)
+	assert.Equal(t, ask.GetTimeout(), 10*time.Millisecond, "ask timeout not set as expected")
 }
 
 func TestGetRequiredNode(t *testing.T) {
@@ -142,7 +143,7 @@ func TestGetRequiredNode(t *testing.T) {
 		PartitionName: "default",
 		Tags:          tag,
 	}
-	ask := NewAllocationAsk(siAsk)
+	ask := NewAllocationAskFromSI(siAsk)
 	assert.Equal(t, ask.GetRequiredNode(), "", "required node is empty as expected")
 	// set case
 	tag[common.DomainYuniKorn+common.KeyRequiredNode] = "NodeName"
@@ -152,6 +153,55 @@ func TestGetRequiredNode(t *testing.T) {
 		PartitionName: "default",
 		Tags:          tag,
 	}
-	ask = NewAllocationAsk(siAsk)
+	ask = NewAllocationAskFromSI(siAsk)
 	assert.Equal(t, ask.GetRequiredNode(), "NodeName", "required node should be NodeName")
+}
+
+func TestAllocationLog(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	siAsk := &si.AllocationAsk{
+		AllocationKey:  "ask-1",
+		ApplicationID:  "app-1",
+		MaxAllocations: 1,
+		ResourceAsk:    res.ToProto(),
+	}
+	ask := NewAllocationAskFromSI(siAsk)
+
+	// log a reservation event
+	ask.LogAllocationFailure("reserve1", false)
+	log := sortedLog(ask)
+	assert.Equal(t, 0, len(log), "non-allocation events was logged")
+
+	// log an allocation event
+	ask.LogAllocationFailure("alloc1", true)
+	log = sortedLog(ask)
+	assert.Equal(t, 1, len(log), "allocation event should be logged")
+	assert.Equal(t, "alloc1", log[0].Message, "wrong message for event 1")
+	assert.Equal(t, 1, int(log[0].Count), "wrong count for event 1")
+
+	// add a second allocation event
+	ask.LogAllocationFailure("alloc2", true)
+	log = sortedLog(ask)
+	assert.Equal(t, 2, len(log), "allocation event 2 should be logged")
+	assert.Equal(t, "alloc2", log[0].Message, "wrong message for event 1")
+	assert.Equal(t, "alloc1", log[1].Message, "wrong message for event 2")
+	assert.Equal(t, 1, int(log[0].Count), "wrong count for event 1")
+	assert.Equal(t, 1, int(log[1].Count), "wrong count for event 2")
+
+	// duplicate the first one
+	ask.LogAllocationFailure("alloc1", true)
+	log = sortedLog(ask)
+	assert.Equal(t, 2, len(log), "allocation event alloc1 (#2) should not create a new event")
+	assert.Equal(t, "alloc1", log[0].Message, "wrong message for event 1")
+	assert.Equal(t, "alloc2", log[1].Message, "wrong message for event 2")
+	assert.Equal(t, 2, int(log[0].Count), "wrong count for event 1")
+	assert.Equal(t, 1, int(log[1].Count), "wrong count for event 2")
+}
+
+func sortedLog(ask *AllocationAsk) []*AllocationLogEntry {
+	log := ask.GetAllocationLog()
+	sort.SliceStable(log, func(i int, j int) bool {
+		return log[i].LastOccurrence.After(log[j].LastOccurrence)
+	})
+	return log
 }

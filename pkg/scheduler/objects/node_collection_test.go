@@ -19,10 +19,13 @@
 package objects
 
 import (
+	"fmt"
 	"testing"
 
+	"github.com/google/uuid"
 	"gotest.tools/assert"
 
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 )
@@ -124,4 +127,245 @@ func TestNodeCollection_GetNodes(t *testing.T) {
 
 	nodes = nc.GetNodes()
 	assert.Equal(t, 1, len(nodes), "list is missing node")
+}
+
+func TestSetNodeSortingPolicy(t *testing.T) {
+	// vcore, memory
+	defaultCapicity := [2]int64{10, 15}
+	var nodesInfo = []struct {
+		nodeID         string
+		allocatedVcore int64
+		allocatedMem   int64
+	}{
+		{"node-04", 8, 10},
+		{"node-02", 4, 10},
+		{"node-01", 2, 10},
+		{"node-03", 6, 10},
+	}
+
+	order := make(map[string][]string, 2)
+	order[policies.FairnessPolicy.String()] = []string{nodesInfo[2].nodeID, nodesInfo[1].nodeID, nodesInfo[3].nodeID, nodesInfo[0].nodeID}
+	order[policies.BinPackingPolicy.String()] = []string{nodesInfo[0].nodeID, nodesInfo[3].nodeID, nodesInfo[1].nodeID, nodesInfo[2].nodeID}
+	var tests = []struct {
+		name       string
+		input      string
+		nodesOrder []string
+	}{
+		{"Set unkown node sorting policy", "greedy", order[policies.FairnessPolicy.String()]},
+		{"Set default node sorting policy", "", order[policies.FairnessPolicy.String()]},
+		{"Set binpacking node sorting policy", policies.BinPackingPolicy.String(), order[policies.BinPackingPolicy.String()]},
+		{"Set fair node sorting policy", policies.FairnessPolicy.String(), order[policies.FairnessPolicy.String()]},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			nc := NewNodeCollection("test")
+			for id := 0; id < len(nodesInfo); id++ {
+				node := newNode(nodesInfo[id].nodeID, map[string]resources.Quantity{"vcore": resources.Quantity(defaultCapicity[0]), "memory": resources.Quantity(defaultCapicity[1])})
+				res := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(nodesInfo[id].allocatedVcore), "memory": resources.Quantity(nodesInfo[id].allocatedMem)})
+				alloc := newAllocation(fmt.Sprintf("test-app-%d", id+1), uuid.NewString(), fmt.Sprintf("test-%d", id+1), "root.default", res)
+				if ok := node.AddAllocation(alloc); !ok {
+					t.Error("Allocation error happen in node.")
+				}
+
+				if err := nc.AddNode(node); err != nil {
+					t.Errorf("AddNode error:%s", err.Error())
+				}
+			}
+
+			conf := configs.PartitionConfig{
+				Name: "test",
+				Queues: []configs.QueueConfig{
+					{
+						Name:      "root",
+						Parent:    true,
+						SubmitACL: "*",
+						Queues: []configs.QueueConfig{
+							{
+								Name:   "default",
+								Parent: false,
+								Queues: nil,
+							},
+						},
+					},
+				},
+				PlacementRules: nil,
+				Limits:         nil,
+				Preemption:     configs.PartitionPreemptionConfig{},
+				NodeSortPolicy: configs.NodeSortingPolicy{
+					Type: tt.input,
+				},
+			}
+
+			nc.SetNodeSortingPolicy(NewNodeSortingPolicy(conf.NodeSortPolicy.Type, conf.NodeSortPolicy.ResourceWeights))
+			iter := nc.GetNodeIterator()
+			for id := 0; id < len(tt.nodesOrder); id++ {
+				if n := iter.Next(); n.NodeID != tt.nodesOrder[id] {
+					t.Errorf("%s: NodeID wanted %s, but it got %s.", nc.GetNodeSortingPolicy().PolicyType().String(), tt.nodesOrder[id], n.NodeID)
+				}
+			}
+		})
+	}
+}
+
+func TestGetNodeSortingPolicy(t *testing.T) {
+	nodeNames := []string{"node-1", "node-2", "node-3", "node-4"}
+	revertNodeNames := []string{"node-4", "node-3", "node-2", "node-1"}
+
+	var tests = []struct {
+		name            string
+		input           string
+		want            string
+		exceptNodeOrder []string
+	}{
+		{"Default policy", "", policies.FairnessPolicy.String(), nodeNames},
+		{"Binpacking policy", policies.BinPackingPolicy.String(), policies.BinPackingPolicy.String(), revertNodeNames},
+		{"Fair policy", policies.FairnessPolicy.String(), policies.FairnessPolicy.String(), nodeNames},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			nc := NewNodeCollection("test")
+			for id := 1; id < len(nodeNames)+1; id++ {
+				node := newNode(nodeNames[id-1], map[string]resources.Quantity{"vcore": resources.Quantity(6)})
+				res := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(id)})
+				alloc := newAllocation(fmt.Sprintf("test-app-%d", id+1), uuid.NewString(), fmt.Sprintf("test-%d", id), "root.default", res)
+				node.AddAllocation(alloc)
+
+				if err := nc.AddNode(node); err != nil {
+					t.Errorf("AddNode error:%s", err.Error())
+				}
+			}
+
+			conf := configs.PartitionConfig{
+				Name: "test",
+				Queues: []configs.QueueConfig{
+					{
+						Name:      "root",
+						Parent:    true,
+						SubmitACL: "*",
+						Queues: []configs.QueueConfig{
+							{
+								Name:   "default",
+								Parent: false,
+								Queues: nil,
+							},
+						},
+					},
+				},
+				PlacementRules: nil,
+				Limits:         nil,
+				Preemption:     configs.PartitionPreemptionConfig{},
+				NodeSortPolicy: configs.NodeSortingPolicy{
+					Type: tt.input,
+				},
+			}
+
+			nc.SetNodeSortingPolicy(NewNodeSortingPolicy(conf.NodeSortPolicy.Type, conf.NodeSortPolicy.ResourceWeights))
+			if ans := nc.GetNodeSortingPolicy().PolicyType().String(); ans != tt.want {
+				t.Errorf("got %s, want %s", ans, tt.want)
+			}
+
+			// Checking thes nodes order in iterator is after setting node policy with Default weight{vcore:1, memory:1}.
+			iter := nc.GetNodeIterator()
+			for index := 0; iter.HasNext(); index++ {
+				if index >= len(tt.exceptNodeOrder) {
+					t.Error("Wrong length of nodes in node iterator.")
+				}
+
+				n := iter.Next()
+				if n.NodeID != tt.exceptNodeOrder[index] {
+					t.Errorf("Policy: %s, got %s, want %s", nc.GetNodeSortingPolicy().PolicyType().String(), n.NodeID, tt.exceptNodeOrder[index])
+				}
+			}
+		})
+	}
+}
+
+func TestGetNodeIterator(t *testing.T) {
+	var tests = []struct {
+		name         string
+		reserved     []bool
+		wantWithFair []int
+	}{
+		{"All nodes are available", []bool{false, false, false, false}, []int{1, 2, 3, 4}},
+		{"Some nodes are reserved", []bool{false, true, false, true}, []int{1, 3}},
+		{"All nodes are reserved", []bool{true, true, true, true}, []int{}},
+	}
+
+	for _, tt := range tests {
+		t.Run("There are reserved nodes in an instance of node collection.", func(t *testing.T) {
+			nc := NewNodeCollection("test")
+
+			// Initialization of nodes and application
+			for i := 1; i < len(tt.reserved)+1; i++ {
+				nodeName := fmt.Sprintf("node-%d", i)
+				node := newNode(nodeName, map[string]resources.Quantity{"vcore": resources.Quantity(10)})
+				if tt.reserved[i-1] {
+					appName := fmt.Sprintf("app-%02d", i)
+					allocName := fmt.Sprintf("alloc-%02d", i)
+					app := newApplication(appName, "default", "root.test")
+					ask := newAllocationAsk(allocName, appName, resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(i)}))
+					if err := node.Reserve(app, ask); err != nil {
+						t.Error("Reserving failed.")
+					}
+				} else {
+					res := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(i)})
+					alloc := newAllocation(fmt.Sprintf("test-app-%d", i), uuid.NewString(), fmt.Sprintf("test-%d", i), "root.default", res)
+					if ok := node.AddAllocation(alloc); !ok {
+						t.Error("Allocation error happen in node.")
+					}
+				}
+
+				if err := nc.AddNode(node); err != nil {
+					t.Error("Adding another node into BC failed.")
+				}
+			}
+
+			// Check order of avialble nodes
+			if iter := nc.GetNodeIterator(); len(tt.wantWithFair) == 0 {
+				if iter != nil {
+					t.Error("Wrong count of nodes in the node collection instance.")
+				}
+			} else {
+				NodeSortingPolicy := []string{policies.FairnessPolicy.String(), policies.BinPackingPolicy.String()}
+
+				// Fair policy
+				nc.SetNodeSortingPolicy(NewNodeSortingPolicy(NodeSortingPolicy[0], nil))
+				if ans := nc.GetNodeSortingPolicy().PolicyType().String(); ans != NodeSortingPolicy[0] {
+					t.Errorf("got %s, want %s", ans, NodeSortingPolicy[0])
+				}
+
+				for index := 0; iter.HasNext(); index++ {
+					if index >= len(tt.wantWithFair) {
+						t.Errorf("Want length of nodes: %d, Get length of nodes: %d", index, len(tt.wantWithFair))
+					}
+
+					n := iter.Next()
+					if want := fmt.Sprintf("node-%d", tt.wantWithFair[index]); n.NodeID != want {
+						t.Errorf("%s with %s, Want %s, got %s.", tt.name, NodeSortingPolicy[0], want, n.NodeID)
+					}
+				}
+
+				// Binpacking policy
+				nc.SetNodeSortingPolicy(NewNodeSortingPolicy(NodeSortingPolicy[1], nil))
+				if ans := nc.GetNodeSortingPolicy().PolicyType().String(); ans != NodeSortingPolicy[1] {
+					t.Errorf("got %s, want %s", ans, NodeSortingPolicy[1])
+				}
+
+				iter = nc.GetNodeIterator()
+				DescreasingIndex := len(tt.wantWithFair) - 1
+				for index := 0; iter.HasNext(); index++ {
+					if index >= len(tt.wantWithFair) {
+						t.Errorf("Want length of nodes: %d, Get length of nodes: %d", index, len(tt.wantWithFair))
+					}
+					n := iter.Next()
+					if want := fmt.Sprintf("node-%d", tt.wantWithFair[DescreasingIndex]); n.NodeID != want {
+						t.Errorf("%s with %s, want %s, got %s.", tt.name, NodeSortingPolicy[1], want, n.NodeID)
+					}
+					DescreasingIndex--
+				}
+			}
+		})
+	}
 }

@@ -33,8 +33,6 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-const ReadyFlag = "ready"
-
 type Node struct {
 	// Fields for fast access These fields are considered read only.
 	// Values should only be set when creating a new node and never changed.
@@ -53,7 +51,6 @@ type Node struct {
 	schedulable       bool
 	ready             bool
 
-	preempting   *resources.Resource     // resources considered for preemption
 	reservations map[string]*reservation // a map of reservations
 	listeners    []NodeListener          // a list of node listeners
 
@@ -68,13 +65,12 @@ func NewNode(proto *si.NodeInfo) *Node {
 
 	var ready bool
 	var err error
-	if ready, err = strconv.ParseBool(proto.Attributes[ReadyFlag]); err != nil {
+	if ready, err = strconv.ParseBool(proto.Attributes[common.NodeReadyAttribute]); err != nil {
 		log.Logger().Error("Could not parse ready flag, assuming true")
 		ready = true
 	}
 	sn := &Node{
 		NodeID:            proto.NodeID,
-		preempting:        resources.NewResource(),
 		reservations:      make(map[string]*reservation),
 		totalResource:     resources.NewResourceFromProto(proto.SchedulableResource),
 		allocatedResource: resources.NewResource(),
@@ -261,36 +257,6 @@ func (sn *Node) FitInNode(resRequest *resources.Resource) bool {
 	return sn.totalResource.FitInMaxUndef(resRequest)
 }
 
-// Get the number of resource tagged for preemption on this node
-func (sn *Node) getPreemptingResource() *resources.Resource {
-	sn.RLock()
-	defer sn.RUnlock()
-
-	return sn.preempting
-}
-
-// Update the number of resource tagged for preemption on this node
-func (sn *Node) IncPreemptingResource(preempting *resources.Resource) {
-	defer sn.notifyListeners()
-	sn.Lock()
-	defer sn.Unlock()
-
-	sn.preempting.AddTo(preempting)
-}
-
-func (sn *Node) decPreemptingResource(delta *resources.Resource) {
-	defer sn.notifyListeners()
-	sn.Lock()
-	defer sn.Unlock()
-	var err error
-	sn.preempting, err = resources.SubErrorNegative(sn.preempting, delta)
-	if err != nil {
-		log.Logger().Warn("Preempting resources went negative",
-			zap.String("nodeID", sn.NodeID),
-			zap.Error(err))
-	}
-}
-
 // Remove the allocation to the node.
 // Returns nil if the allocation was not found and no changes are made. If the allocation
 // is found the Allocation removed is returned. Used resources will decrease available
@@ -303,8 +269,8 @@ func (sn *Node) RemoveAllocation(uuid string) *Allocation {
 	alloc := sn.allocations[uuid]
 	if alloc != nil {
 		delete(sn.allocations, uuid)
-		sn.allocatedResource.SubFrom(alloc.AllocatedResource)
-		sn.availableResource.AddTo(alloc.AllocatedResource)
+		sn.allocatedResource.SubFrom(alloc.GetAllocatedResource())
+		sn.availableResource.AddTo(alloc.GetAllocatedResource())
 		return alloc
 	}
 
@@ -322,9 +288,9 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 	sn.Lock()
 	defer sn.Unlock()
 	// check if this still fits: it might have changed since pre check
-	res := alloc.AllocatedResource
+	res := alloc.GetAllocatedResource()
 	if sn.availableResource.FitInMaxUndef(res) {
-		sn.allocations[alloc.UUID] = alloc
+		sn.allocations[alloc.GetUUID()] = alloc
 		sn.allocatedResource.AddTo(res)
 		sn.availableResource.SubFrom(res)
 		return true
@@ -340,24 +306,22 @@ func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation, delta *resou
 	sn.Lock()
 	defer sn.Unlock()
 
-	replace.placeholderCreateTime = sn.allocations[uuid].createTime
+	replace.SetPlaceholderCreateTime(sn.allocations[uuid].GetCreateTime())
 	delete(sn.allocations, uuid)
-	replace.placeholderUsed = true
-	sn.allocations[replace.UUID] = replace
+	replace.SetPlaceholderUsed(true)
+	sn.allocations[replace.GetUUID()] = replace
 	before := sn.allocatedResource.Clone()
 	sn.allocatedResource.AddTo(delta)
 	if !resources.FitIn(before, sn.allocatedResource) {
 		log.Logger().Warn("unexpected increase in node usage after placeholder replacement",
-			zap.String("placeholder UUID", uuid),
-			zap.String("allocation UUID", replace.UUID),
+			zap.String("placeholder uuid", uuid),
+			zap.String("allocation uuid", replace.GetUUID()),
 			zap.String("delta", delta.String()))
 	}
 }
 
 // Check if the proposed allocation fits in the available resources.
-// Taking into account resources marked for preemption if applicable.
 // If the proposed allocation does not fit false is returned.
-// TODO: remove when updating preemption
 func (sn *Node) CanAllocate(res *resources.Resource) bool {
 	sn.RLock()
 	defer sn.RUnlock()
@@ -365,13 +329,13 @@ func (sn *Node) CanAllocate(res *resources.Resource) bool {
 }
 
 // Checking pre-conditions in the shim for an allocation.
-func (sn *Node) preAllocateConditions(allocID string) bool {
-	return sn.preConditions(allocID, true)
+func (sn *Node) preAllocateConditions(ask *AllocationAsk) bool {
+	return sn.preConditions(ask, true)
 }
 
 // Checking pre-conditions in the shim for a reservation.
-func (sn *Node) preReserveConditions(allocID string) bool {
-	return sn.preConditions(allocID, false)
+func (sn *Node) preReserveConditions(ask *AllocationAsk) bool {
+	return sn.preConditions(ask, false)
 }
 
 // The pre conditions are implemented via plugins in the shim. If no plugins are implemented then
@@ -380,8 +344,9 @@ func (sn *Node) preReserveConditions(allocID string) bool {
 // The caller must thus not rely on all plugins being executed.
 // This is a lock free call as it does not change the node and multiple predicate checks could be
 // run at the same time.
-func (sn *Node) preConditions(allocID string, allocate bool) bool {
+func (sn *Node) preConditions(ask *AllocationAsk, allocate bool) bool {
 	// Check the predicates plugin (k8shim)
+	allocID := ask.GetAllocationKey()
 	if plugin := plugins.GetResourceManagerCallbackPlugin(); plugin != nil {
 		// checking predicates
 		if err := plugin.Predicates(&si.PredicatesArgs{
@@ -395,6 +360,7 @@ func (sn *Node) preConditions(allocID string, allocate bool) bool {
 				zap.Bool("allocateFlag", allocate),
 				zap.Error(err))
 			// running predicates failed
+			ask.LogAllocationFailure(err.Error(), allocate)
 			return false
 		}
 	}
@@ -403,9 +369,8 @@ func (sn *Node) preConditions(allocID string, allocate bool) bool {
 }
 
 // Check if the node should be considered as a possible node to allocate on.
-//
 // This is a lock free call. No updates are made this only performs a pre allocate checks
-func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string, preemptionPhase bool) error {
+func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string) error {
 	// cannot allocate zero or negative resource
 	if !resources.StrictlyGreaterThanZero(res) {
 		log.Logger().Debug("pre alloc check: requested resource is zero",
@@ -424,9 +389,6 @@ func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string, preempt
 
 	// check if resources are available
 	available := sn.GetAvailableResource()
-	if preemptionPhase {
-		available.AddTo(sn.getPreemptingResource())
-	}
 	// check the request fits in what we have calculated
 	if !available.FitInMaxUndef(res) {
 		// requested resource is larger than currently available node resources
@@ -485,13 +447,13 @@ func (sn *Node) Reserve(app *Application, ask *AllocationAsk) error {
 		return fmt.Errorf("reservation creation failed app or ask are nil on nodeID %s", sn.NodeID)
 	}
 	// reservation must fit on the empty node
-	if !resources.FitIn(sn.totalResource, ask.AllocatedResource) {
+	if !resources.FitIn(sn.totalResource, ask.GetAllocatedResource()) {
 		log.Logger().Debug("reservation does not fit on the node",
 			zap.String("nodeID", sn.NodeID),
 			zap.String("appID", app.ApplicationID),
-			zap.String("ask", ask.AllocationKey),
-			zap.String("allocationAsk", ask.AllocatedResource.String()))
-		return fmt.Errorf("reservation does not fit on node %s, appID %s, ask %s", sn.NodeID, app.ApplicationID, ask.AllocatedResource.String())
+			zap.String("ask", ask.GetAllocationKey()),
+			zap.String("allocationAsk", ask.GetAllocatedResource().String()))
+		return fmt.Errorf("reservation does not fit on node %s, appID %s, ask %s", sn.NodeID, app.ApplicationID, ask.GetAllocatedResource().String())
 	}
 	sn.reservations[appReservation.getKey()] = appReservation
 	// reservation added successfully
@@ -521,7 +483,7 @@ func (sn *Node) unReserve(app *Application, ask *AllocationAsk) (int, error) {
 	log.Logger().Debug("reservation not found while removing from node",
 		zap.String("nodeID", sn.NodeID),
 		zap.String("appID", app.ApplicationID),
-		zap.String("ask", ask.AllocationKey))
+		zap.String("ask", ask.GetAllocationKey()))
 	return 0, nil
 }
 

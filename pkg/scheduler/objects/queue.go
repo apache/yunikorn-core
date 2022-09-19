@@ -35,9 +35,8 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects/template"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 )
-
-const AppTagNamespaceResourceQuota = "namespace.resourcequota"
 
 // Queue structure inside Scheduler
 type Queue struct {
@@ -51,7 +50,6 @@ type Queue struct {
 	completedApplications map[string]*Application // completed applications from this leaf queue
 	reservedApps          map[string]int          // applications reserved within this queue, with reservation count
 	parent                *Queue                  // link back to the parent in the scheduler
-	preempting            *resources.Resource     // resource considered for preemption in the queue
 	pending               *resources.Resource     // pending resource for the apps in the queue
 
 	// The queue properties should be treated as immutable the value is a merge of the
@@ -82,7 +80,6 @@ func newBlankQueue() *Queue {
 		properties:            make(map[string]string),
 		stateMachine:          NewObjectState(),
 		allocatedResource:     resources.NewResource(),
-		preempting:            resources.NewResource(),
 		pending:               resources.NewResource(),
 	}
 }
@@ -268,12 +265,14 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 
 	if resources.StrictlyGreaterThanZero(maxResource) {
 		sq.maxResource = maxResource
+		sq.updateMaxResourceMetrics()
 	} else {
 		log.Logger().Debug("max resources setting ignored: cannot set zero max resources")
 	}
 
 	if resources.StrictlyGreaterThanZero(guaranteedResource) {
 		sq.guaranteedResource = guaranteedResource
+		sq.updateGuaranteedResourceMetrics()
 	} else {
 		log.Logger().Debug("guaranteed resources setting ignored: cannot set zero max resources")
 	}
@@ -520,7 +519,7 @@ func (sq *Queue) AddApplication(app *Application) {
 	sq.applications[app.ApplicationID] = app
 	// YUNIKORN-199: update the quota from the namespace
 	// get the tag with the quota
-	quota := app.GetTag(AppTagNamespaceResourceQuota)
+	quota := app.GetTag(common.AppTagNamespaceResourceQuota)
 	if quota == "" {
 		return
 	}
@@ -769,40 +768,6 @@ func (sq *Queue) isRoot() bool {
 	return sq.parent == nil
 }
 
-// GetPreemptingResource returns the resources marked for preemption in the queue
-func (sq *Queue) GetPreemptingResource() *resources.Resource {
-	sq.RLock()
-	defer sq.RUnlock()
-	return sq.preempting
-}
-
-// IncPreemptingResource increments the number of resource marked for preemption in the queue.
-func (sq *Queue) IncPreemptingResource(newAlloc *resources.Resource) {
-	sq.Lock()
-	defer sq.Unlock()
-	sq.preempting.AddTo(newAlloc)
-}
-
-// decPreemptingResource decrements the number of resource marked for preemption in the queue.
-func (sq *Queue) decPreemptingResource(newAlloc *resources.Resource) {
-	sq.Lock()
-	defer sq.Unlock()
-	var err error
-	sq.preempting, err = resources.SubErrorNegative(sq.preempting, newAlloc)
-	if err != nil {
-		log.Logger().Warn("Preempting resources went negative",
-			zap.String("queueName", sq.QueuePath),
-			zap.Error(err))
-	}
-}
-
-// setPreemptingResource set the preempting resources for the queue to the specified value.
-func (sq *Queue) setPreemptingResource(newAlloc *resources.Resource) {
-	sq.Lock()
-	defer sq.Unlock()
-	sq.preempting = newAlloc
-}
-
 // IncAllocatedResource increments the allocated resources for this queue (recursively).
 // Guard against going over max resources if set
 func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bool) error {
@@ -1038,7 +1003,7 @@ func (sq *Queue) internalGetMax(parentLimit *resources.Resource) *resources.Reso
 	return resources.ComponentWiseMin(parentLimit, sq.maxResource)
 }
 
-// SetMaxResource sets the max resource for root the queue. Called as part of adding or removing a node.
+// SetMaxResource sets the max resource for the root queue. Called as part of adding or removing a node.
 // Should only happen on the root, all other queues get it from the config via properties.
 func (sq *Queue) SetMaxResource(max *resources.Resource) {
 	sq.Lock()
@@ -1053,6 +1018,7 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 		zap.String("current max", sq.maxResource.String()),
 		zap.String("new max", max.String()))
 	sq.maxResource = max.Clone()
+	sq.updateMaxResourceMetrics()
 }
 
 // TryAllocate tries to allocate a pending requests. This only gets called if there is a pending request
@@ -1157,7 +1123,7 @@ func (sq *Queue) TryReservedAllocate(iterator func() NodeIterator) *Allocation {
 						zap.String("appID", appID),
 						zap.Int("reservations", numRes))
 				}
-				app := sq.getApplication(appID)
+				app := sq.GetApplication(appID)
 				if app == nil {
 					log.Logger().Debug("reservation(s) found but application did not exist in queue",
 						zap.String("queueName", sq.QueuePath),
@@ -1227,7 +1193,7 @@ func (sq *Queue) UnReserve(appID string, releases int) {
 }
 
 // getApplication return the Application based on the ID.
-func (sq *Queue) getApplication(appID string) *Application {
+func (sq *Queue) GetApplication(appID string) *Application {
 	sq.RLock()
 	defer sq.RUnlock()
 	return sq.applications[appID]
@@ -1252,24 +1218,20 @@ func (sq *Queue) SupportTaskGroup() bool {
 	return sq.sortType == policies.FifoSortPolicy || sq.sortType == policies.StateAwarePolicy
 }
 
-// updateGuaranteedResourceMetrics updates guaranteed resource metrics if this is a leaf queue.
+// updateGuaranteedResourceMetrics updates guaranteed resource metrics.
 func (sq *Queue) updateGuaranteedResourceMetrics() {
-	if sq.isLeaf {
-		if sq.guaranteedResource != nil {
-			for k, v := range sq.guaranteedResource.Resources {
-				metrics.GetQueueMetrics(sq.QueuePath).SetQueueGuaranteedResourceMetrics(k, float64(v))
-			}
+	if sq.guaranteedResource != nil {
+		for k, v := range sq.guaranteedResource.Resources {
+			metrics.GetQueueMetrics(sq.QueuePath).SetQueueGuaranteedResourceMetrics(k, float64(v))
 		}
 	}
 }
 
-// updateMaxResourceMetrics updates max resource metrics if this is a leaf queue.
+// updateMaxResourceMetrics updates max resource metrics.
 func (sq *Queue) updateMaxResourceMetrics() {
-	if sq.isLeaf {
-		if sq.maxResource != nil {
-			for k, v := range sq.maxResource.Resources {
-				metrics.GetQueueMetrics(sq.QueuePath).SetQueueMaxResourceMetrics(k, float64(v))
-			}
+	if sq.maxResource != nil {
+		for k, v := range sq.maxResource.Resources {
+			metrics.GetQueueMetrics(sq.QueuePath).SetQueueMaxResourceMetrics(k, float64(v))
 		}
 	}
 }

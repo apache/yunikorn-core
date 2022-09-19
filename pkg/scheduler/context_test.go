@@ -31,7 +31,6 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
-	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -304,8 +303,8 @@ func getNodeInfoForAddingNode(ready bool) *si.NodeInfo {
 		Action:              si.NodeInfo_UNKNOWN_ACTION_FROM_RM,
 		SchedulableResource: &si.Resource{Resources: map[string]*si.Quantity{"first": {Value: 10}}},
 		Attributes: map[string]string{
-			siCommon.NodePartition: pName,
-			objects.ReadyFlag:      strconv.FormatBool(ready),
+			siCommon.NodePartition:      pName,
+			siCommon.NodeReadyAttribute: strconv.FormatBool(ready),
 		},
 	}
 
@@ -317,8 +316,8 @@ func getNodeInfoForUpdatingNode(action si.NodeInfo_ActionFromRM, ready bool) *si
 		NodeID: "test-1",
 		Action: action,
 		Attributes: map[string]string{
-			siCommon.NodePartition: pName,
-			objects.ReadyFlag:      strconv.FormatBool(ready),
+			siCommon.NodePartition:      pName,
+			siCommon.NodeReadyAttribute: strconv.FormatBool(ready),
 		},
 	}
 

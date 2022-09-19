@@ -27,6 +27,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/entrypoint"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -71,7 +72,7 @@ func TestSchedulerRecovery(t *testing.T) {
 
 	// Check scheduling queue a
 	queue := part.GetQueue("root.a")
-	assert.Assert(t, 150 == queue.GetMaxResource().Resources[resources.MEMORY])
+	assert.Assert(t, 150 == queue.GetMaxResource().Resources[common.Memory])
 
 	// Register nodes, and add apps
 	err = ms.proxy.UpdateNode(&si.NodeRequest{
@@ -159,9 +160,9 @@ func TestSchedulerRecovery(t *testing.T) {
 	waitForPendingAppResource(t, app, 0, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Equal(t, queue.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(20))
-	assert.Equal(t, rootQ.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(20))
-	assert.Equal(t, app.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(20))
+	assert.Equal(t, queue.GetAllocatedResource().Resources[common.Memory], resources.Quantity(20))
+	assert.Equal(t, rootQ.GetAllocatedResource().Resources[common.Memory], resources.Quantity(20))
+	assert.Equal(t, app.GetAllocatedResource().Resources[common.Memory], resources.Quantity(20))
 
 	// once we start to process allocation asks from this app, verify the state again
 	assert.Equal(t, app01.CurrentState(), objects.Running.String())
@@ -170,7 +171,7 @@ func TestSchedulerRecovery(t *testing.T) {
 	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
 		[]string{"node-1:1234", "node-2:1234"}, 20, 1000)
 
-	// Ask for two more resources
+	// ask for two more resources
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
@@ -218,9 +219,9 @@ func TestSchedulerRecovery(t *testing.T) {
 	waitForPendingAppResource(t, app, 200, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Equal(t, queue.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
-	assert.Equal(t, rootQ.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
-	assert.Equal(t, app.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
+	assert.Equal(t, queue.GetAllocatedResource().Resources[common.Memory], resources.Quantity(120))
+	assert.Equal(t, rootQ.GetAllocatedResource().Resources[common.Memory], resources.Quantity(120))
+	assert.Equal(t, app.GetAllocatedResource().Resources[common.Memory], resources.Quantity(120))
 
 	// Check allocated resources of nodes
 	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
@@ -283,8 +284,8 @@ func TestSchedulerRecovery(t *testing.T) {
 	assert.Equal(t, 1, len(part.GetApplications()))
 	assert.Equal(t, appID1, part.GetApplications()[0].ApplicationID)
 	assert.Equal(t, len(part.GetApplications()[0].GetAllAllocations()), 4)
-	assert.Equal(t, part.GetApplications()[0].GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120))
-	assert.Equal(t, part.GetApplications()[0].GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12))
+	assert.Equal(t, part.GetApplications()[0].GetAllocatedResource().Resources[common.Memory], resources.Quantity(120))
+	assert.Equal(t, part.GetApplications()[0].GetAllocatedResource().Resources[common.CPU], resources.Quantity(12))
 
 	// verify nodes
 	assert.Equal(t, 2, part.GetTotalNodeCount(), "incorrect recovered node count")
@@ -294,10 +295,10 @@ func TestSchedulerRecovery(t *testing.T) {
 	assert.Equal(t, len(node1Allocations), len(part.GetNode("node-1:1234").GetAllAllocations()), "allocations on node-1 not as expected")
 	assert.Equal(t, len(node2Allocations), len(part.GetNode("node-2:1234").GetAllAllocations()), "allocations on node-1 not as expected")
 
-	node1AllocatedMemory := part.GetNode("node-1:1234").GetAllocatedResource().Resources[resources.MEMORY]
-	node2AllocatedMemory := part.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.MEMORY]
-	node1AllocatedCPU := part.GetNode("node-1:1234").GetAllocatedResource().Resources[resources.VCORE]
-	node2AllocatedCPU := part.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.VCORE]
+	node1AllocatedMemory := part.GetNode("node-1:1234").GetAllocatedResource().Resources[common.Memory]
+	node2AllocatedMemory := part.GetNode("node-2:1234").GetAllocatedResource().Resources[common.Memory]
+	node1AllocatedCPU := part.GetNode("node-1:1234").GetAllocatedResource().Resources[common.CPU]
+	node2AllocatedCPU := part.GetNode("node-2:1234").GetAllocatedResource().Resources[common.CPU]
 	assert.Equal(t, node1AllocatedMemory+node2AllocatedMemory, resources.Quantity(120))
 	assert.Equal(t, node1AllocatedCPU+node2AllocatedCPU, resources.Quantity(12))
 
@@ -307,25 +308,25 @@ func TestSchedulerRecovery(t *testing.T) {
 	if rootQ == nil {
 		t.Fatal("root queue not found on partition")
 	}
-	assert.Equal(t, rootQ.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120), "allocated memory on root queue not as expected")
-	assert.Equal(t, rootQ.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12), "allocated vcore on root queue not as expected")
+	assert.Equal(t, rootQ.GetAllocatedResource().Resources[common.Memory], resources.Quantity(120), "allocated memory on root queue not as expected")
+	assert.Equal(t, rootQ.GetAllocatedResource().Resources[common.CPU], resources.Quantity(12), "allocated vcore on root queue not as expected")
 	//  - verify root.a queue
 	childQueues := rootQ.GetCopyOfChildren()
 	queueA := childQueues["a"]
 	assert.Assert(t, queueA != nil, "root.a doesn't exist in partition")
-	assert.Equal(t, queueA.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120), "allocated memory on root.a queue not as expected")
-	assert.Equal(t, queueA.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12), "allocated vcore on root.a queue not as expected")
+	assert.Equal(t, queueA.GetAllocatedResource().Resources[common.Memory], resources.Quantity(120), "allocated memory on root.a queue not as expected")
+	assert.Equal(t, queueA.GetAllocatedResource().Resources[common.CPU], resources.Quantity(12), "allocated vcore on root.a queue not as expected")
 
 	// verify scheduler scheduler.GetClusterContext()
 	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
 	recoveredApp := ms.getApplication(appID1)
 	assert.Assert(t, recoveredApp != nil)
-	assert.Equal(t, recoveredApp.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(120), "allocated memory on app not as expected")
-	assert.Equal(t, recoveredApp.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(12), "allocated vcore on app not as expected")
+	assert.Equal(t, recoveredApp.GetAllocatedResource().Resources[common.Memory], resources.Quantity(120), "allocated memory on app not as expected")
+	assert.Equal(t, recoveredApp.GetAllocatedResource().Resources[common.CPU], resources.Quantity(12), "allocated vcore on app not as expected")
 
 	// there should be no pending resources
-	assert.Equal(t, recoveredApp.GetPendingResource().Resources[resources.MEMORY], resources.Quantity(0), "pending memory on app not as expected")
-	assert.Equal(t, recoveredApp.GetPendingResource().Resources[resources.VCORE], resources.Quantity(0), "pending vcore on app not as expected")
+	assert.Equal(t, recoveredApp.GetPendingResource().Resources[common.Memory], resources.Quantity(0), "pending memory on app not as expected")
+	assert.Equal(t, recoveredApp.GetPendingResource().Resources[common.CPU], resources.Quantity(0), "pending vcore on app not as expected")
 	for _, existingAllocation := range mockRM.Allocations {
 		schedulingAllocation := recoveredApp.GetAllocationAsk(existingAllocation.AllocationKey)
 		assert.Assert(t, schedulingAllocation != nil, "recovered scheduling allocation %s not found on app", existingAllocation.AllocationKey)
@@ -476,14 +477,13 @@ func TestSchedulerRecoveryWithoutAppInfo(t *testing.T) {
 						UUID:          "UUID01",
 						ApplicationID: "app-01",
 						PartitionName: "default",
-						QueueName:     "root.a",
 						NodeID:        "node-1:1234",
 						ResourcePerAlloc: &si.Resource{
 							Resources: map[string]*si.Quantity{
-								resources.MEMORY: {
+								common.Memory: {
 									Value: 1024,
 								},
-								resources.VCORE: {
+								common.CPU: {
 									Value: 1,
 								},
 							},
@@ -517,7 +517,7 @@ func TestSchedulerRecoveryWithoutAppInfo(t *testing.T) {
 	assert.Equal(t, part.GetTotalNodeCount(), 1)
 	assert.Equal(t, part.GetTotalApplicationCount(), 0)
 	assert.Equal(t, part.GetTotalAllocationCount(), 0)
-	assert.Equal(t, part.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.MEMORY],
+	assert.Equal(t, part.GetNode("node-2:1234").GetAllocatedResource().Resources[common.Memory],
 		resources.Quantity(0))
 
 	// register the node again, with application info attached
@@ -546,14 +546,13 @@ func TestSchedulerRecoveryWithoutAppInfo(t *testing.T) {
 						UUID:          "UUID01",
 						ApplicationID: "app-01",
 						PartitionName: "default",
-						QueueName:     "root.a",
 						NodeID:        "node-1:1234",
 						ResourcePerAlloc: &si.Resource{
 							Resources: map[string]*si.Quantity{
-								resources.MEMORY: {
+								common.Memory: {
 									Value: 100,
 								},
-								resources.VCORE: {
+								common.CPU: {
 									Value: 1,
 								},
 							},
@@ -570,18 +569,18 @@ func TestSchedulerRecoveryWithoutAppInfo(t *testing.T) {
 	assert.Equal(t, part.GetTotalNodeCount(), 2)
 	assert.Equal(t, part.GetTotalApplicationCount(), 1)
 	assert.Equal(t, part.GetTotalAllocationCount(), 1)
-	assert.Equal(t, part.GetNode("node-1:1234").GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(100))
-	assert.Equal(t, part.GetNode("node-1:1234").GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(1))
-	assert.Equal(t, part.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(0))
-	assert.Equal(t, part.GetNode("node-2:1234").GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(0))
+	assert.Equal(t, part.GetNode("node-1:1234").GetAllocatedResource().Resources[common.Memory], resources.Quantity(100))
+	assert.Equal(t, part.GetNode("node-1:1234").GetAllocatedResource().Resources[common.CPU], resources.Quantity(1))
+	assert.Equal(t, part.GetNode("node-2:1234").GetAllocatedResource().Resources[common.Memory], resources.Quantity(0))
+	assert.Equal(t, part.GetNode("node-2:1234").GetAllocatedResource().Resources[common.CPU], resources.Quantity(0))
 
 	t.Log("verifying scheduling queues")
 	rootQ := part.GetQueue("root")
 	queueA := part.GetQueue("root.a")
-	assert.Equal(t, queueA.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(100))
-	assert.Equal(t, queueA.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(1))
-	assert.Equal(t, rootQ.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(100))
-	assert.Equal(t, rootQ.GetAllocatedResource().Resources[resources.VCORE], resources.Quantity(1))
+	assert.Equal(t, queueA.GetAllocatedResource().Resources[common.Memory], resources.Quantity(100))
+	assert.Equal(t, queueA.GetAllocatedResource().Resources[common.CPU], resources.Quantity(1))
+	assert.Equal(t, rootQ.GetAllocatedResource().Resources[common.Memory], resources.Quantity(100))
+	assert.Equal(t, rootQ.GetAllocatedResource().Resources[common.CPU], resources.Quantity(1))
 }
 
 // test scheduler recovery that only registers nodes and apps
@@ -829,9 +828,9 @@ partitions:
 	waitForPendingAppResource(t, app, 0, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Equal(t, appQueue.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(20))
-	assert.Equal(t, rootQ.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(20))
-	assert.Equal(t, app.GetAllocatedResource().Resources[resources.MEMORY], resources.Quantity(20))
+	assert.Equal(t, appQueue.GetAllocatedResource().Resources[common.Memory], resources.Quantity(20))
+	assert.Equal(t, rootQ.GetAllocatedResource().Resources[common.Memory], resources.Quantity(20))
+	assert.Equal(t, app.GetAllocatedResource().Resources[common.Memory], resources.Quantity(20))
 
 	// once we start to process allocation asks from this app, verify the state again
 	assert.Equal(t, app.CurrentState(), objects.Running.String())
@@ -850,7 +849,6 @@ partitions:
 				UUID:             alloc.UUID,
 				ResourcePerAlloc: alloc.ResourcePerAlloc,
 				Priority:         alloc.Priority,
-				QueueName:        "root.default",
 				NodeID:           alloc.NodeID,
 				ApplicationID:    alloc.ApplicationID,
 				PartitionName:    alloc.PartitionName,

@@ -96,7 +96,9 @@ func TestCheckConditions(t *testing.T) {
 	}
 
 	// Check if we can allocate on scheduling node (no plugins)
-	if !node.preAllocateConditions("test") {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	ask := newAllocationAsk("test", "app001", res)
+	if !node.preAllocateConditions(ask) {
 		t.Error("node with scheduling set to true no plugins should allow allocation")
 	}
 
@@ -112,40 +114,30 @@ func TestPreAllocateCheck(t *testing.T) {
 	}
 
 	// special cases
-	if err := node.preAllocateCheck(nil, "", false); err == nil {
-		t.Errorf("nil resource should not have fitted on node (no preemption)")
+	if err := node.preAllocateCheck(nil, ""); err == nil {
+		t.Errorf("nil resource should not have fitted on node")
 	}
 	resNeg := resources.NewResourceFromMap(map[string]resources.Quantity{"first": -1})
-	if err := node.preAllocateCheck(resNeg, "", false); err == nil {
-		t.Errorf("negative resource should not have fitted on node (no preemption)")
+	if err := node.preAllocateCheck(resNeg, ""); err == nil {
+		t.Errorf("negative resource should not have fitted on node")
 	}
 	// Check if we can allocate on scheduling node
 	resSmall := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	resLarge := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 15})
-	err := node.preAllocateCheck(resNode, "", false)
-	assert.NilError(t, err, "node resource should have fitted on node (no preemption)")
-	err = node.preAllocateCheck(resSmall, "", false)
-	assert.NilError(t, err, "small resource should have fitted on node (no preemption)")
-	if err = node.preAllocateCheck(resLarge, "", false); err == nil {
-		t.Errorf("too large resource should not have fitted on node (no preemption): %v", err)
+	err := node.preAllocateCheck(resNode, "")
+	assert.NilError(t, err, "node resource should have fitted on node")
+	err = node.preAllocateCheck(resSmall, "")
+	assert.NilError(t, err, "small resource should have fitted on node")
+	if err = node.preAllocateCheck(resLarge, ""); err == nil {
+		t.Errorf("too large resource should not have fitted on node: %v", err)
 	}
 
 	// set allocated resource
 	node.AddAllocation(newAllocation(appID1, "UUID1", nodeID, "root.default", resSmall))
-	err = node.preAllocateCheck(resSmall, "", false)
-	assert.NilError(t, err, "small resource should have fitted in available allocation (no preemption)")
-	if err = node.preAllocateCheck(resNode, "", false); err == nil {
-		t.Errorf("node resource should not have fitted in available allocation (no preemption): %v", err)
-	}
-
-	// set preempting resources
-	node.preempting = resSmall
-	err = node.preAllocateCheck(resSmall, "", true)
-	assert.NilError(t, err, "small resource should have fitted in available allocation (preemption)")
-	err = node.preAllocateCheck(resNode, "", true)
-	assert.NilError(t, err, "node resource should have fitted in available allocation (preemption)")
-	if err = node.preAllocateCheck(resLarge, "", true); err == nil {
-		t.Errorf("too large resource should not have fitted on node (preemption): %v", err)
+	err = node.preAllocateCheck(resSmall, "")
+	assert.NilError(t, err, "small resource should have fitted in available allocation")
+	if err = node.preAllocateCheck(resNode, ""); err == nil {
+		t.Errorf("node resource should not have fitted in available allocation: %v", err)
 	}
 
 	// check if we can allocate on a reserved node
@@ -157,20 +149,20 @@ func TestPreAllocateCheck(t *testing.T) {
 	// standalone reservation unreserve returns false as app is not reserved
 	reserve := newReservation(node, app, ask, false)
 	node.reservations[reserve.getKey()] = reserve
-	if err = node.preAllocateCheck(resSmall, "app-2", true); err == nil {
+	if err = node.preAllocateCheck(resSmall, "app-2"); err == nil {
 		t.Errorf("node was reserved for different app but check passed: %v", err)
 	}
-	if err = node.preAllocateCheck(resSmall, "app-1|alloc-2", true); err == nil {
+	if err = node.preAllocateCheck(resSmall, "app-1|alloc-2"); err == nil {
 		t.Errorf("node was reserved for this app but not the alloc and check passed: %v", err)
 	}
-	err = node.preAllocateCheck(resSmall, appID1, true)
+	err = node.preAllocateCheck(resSmall, appID1)
 	assert.NilError(t, err, "node was reserved for this app but check did not pass check")
-	err = node.preAllocateCheck(resSmall, "app-1|alloc-1", true)
+	err = node.preAllocateCheck(resSmall, "app-1|alloc-1")
 	assert.NilError(t, err, "node was reserved for this app/alloc but check did not pass check")
 
 	// Check if we can allocate on non scheduling node
 	node.SetSchedulable(false)
-	if err = node.preAllocateCheck(resSmall, "", false); err == nil {
+	if err = node.preAllocateCheck(resSmall, ""); err == nil {
 		t.Errorf("node with scheduling set to false should not allow allocation: %v", err)
 	}
 }
@@ -190,40 +182,6 @@ func TestCanAllocate(t *testing.T) {
 	res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11})
 	if node.CanAllocate(res) {
 		t.Error("node should have rejected allocation (oversize)")
-	}
-}
-
-func TestPreemptingResources(t *testing.T) {
-	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
-	if node == nil || node.NodeID != nodeID1 {
-		t.Fatalf("node create failed which should not have %v", node)
-	}
-
-	preemptRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
-	node.IncPreemptingResource(preemptRes)
-	node.IncPreemptingResource(preemptRes)
-	expect := resources.Multiply(preemptRes, 2)
-	nodePreempt := node.getPreemptingResource()
-	if !resources.Equals(nodePreempt, expect) {
-		t.Errorf("preempting resources not set, expected %v got %v", expect, nodePreempt)
-	}
-	// release one preemption
-	node.decPreemptingResource(preemptRes)
-	nodePreempt = node.getPreemptingResource()
-	if !resources.Equals(nodePreempt, preemptRes) {
-		t.Errorf("preempting resources not decremented, expected %v got %v", preemptRes, nodePreempt)
-	}
-	// release preemption: should be back to zero
-	node.decPreemptingResource(preemptRes)
-	nodePreempt = node.getPreemptingResource()
-	if !resources.IsZero(nodePreempt) {
-		t.Errorf("preempting resources not zero but %v", nodePreempt)
-	}
-	// release preemption again: should be zero
-	node.decPreemptingResource(preemptRes)
-	nodePreempt = node.getPreemptingResource()
-	if !resources.IsZero(nodePreempt) {
-		t.Errorf("preempting resources not zero but %v", nodePreempt)
 	}
 }
 

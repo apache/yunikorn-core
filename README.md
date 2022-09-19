@@ -23,10 +23,6 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Repo Size](https://img.shields.io/github/repo-size/apache/yunikorn-core)](https://img.shields.io/github/repo-size/apache/yunikorn-core)
 
-<img src="https://raw.githubusercontent.com/apache/yunikorn-core/master/images/logo/yunikorn-logo-blue.png" width="200">
-
-----
-
 Apache YuniKorn is a light-weight, universal resource scheduler for container orchestrator systems.
 It is created to achieve fine-grained resource sharing for various workloads efficiently on a large scale, multi-tenant,
 and cloud-native environment. YuniKorn brings a unified, cross-platform, scheduling experience for mixed workloads that consist

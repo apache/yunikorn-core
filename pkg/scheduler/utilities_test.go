@@ -28,6 +28,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -240,7 +241,7 @@ func newAllocationAskPriority(allocKey, appID string, res *resources.Resource, r
 }
 
 func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, repeat int32, prio int32, placeHolder bool) *objects.AllocationAsk {
-	return objects.NewAllocationAsk(&si.AllocationAsk{
+	return objects.NewAllocationAskFromSI(&si.AllocationAsk{
 		AllocationKey:  allocKey,
 		ApplicationID:  appID,
 		PartitionName:  "test",
@@ -256,7 +257,7 @@ func newNodeWithResources(nodeID string, max, occupied *resources.Resource) *obj
 	proto := &si.NodeInfo{
 		NodeID: nodeID,
 		Attributes: map[string]string{
-			objects.ReadyFlag: "true",
+			common.NodeReadyAttribute: "true",
 		},
 		SchedulableResource: max.ToProto(),
 		OccupiedResource:    occupied.ToProto(),

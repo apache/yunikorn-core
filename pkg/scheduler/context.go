@@ -139,9 +139,9 @@ func (cc *ClusterContext) schedule() bool {
 		}
 		if alloc != nil {
 			metrics.GetSchedulerMetrics().ObserveSchedulingLatency(schedulingStart)
-			if alloc.Result == objects.Replaced {
+			if alloc.GetResult() == objects.Replaced {
 				// communicate the removal to the RM
-				cc.notifyRMAllocationReleased(psc.RmID, alloc.Releases, si.TerminationType_PLACEHOLDER_REPLACED, "replacing UUID: "+alloc.UUID)
+				cc.notifyRMAllocationReleased(psc.RmID, alloc.GetReleasesClone(), si.TerminationType_PLACEHOLDER_REPLACED, "replacing uuid: "+alloc.GetUUID())
 			} else {
 				cc.notifyRMNewAllocation(psc.RmID, alloc)
 			}
@@ -657,7 +657,7 @@ func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
 	case si.NodeInfo_UPDATE:
 		var newReadyStatus bool
 		var err error
-		if newReadyStatus, err = strconv.ParseBool(nodeInfo.Attributes[objects.ReadyFlag]); err != nil {
+		if newReadyStatus, err = strconv.ParseBool(nodeInfo.Attributes[siCommon.NodeReadyAttribute]); err != nil {
 			log.Logger().Error("Could not parse ready attribute, assuming true", zap.Any("attributes", nodeInfo.Attributes))
 			newReadyStatus = true
 		}
@@ -840,7 +840,7 @@ func (cc *ClusterContext) notifyRMNewAllocation(rmID string, alloc *objects.Allo
 		log.Logger().Debug("Successfully synced shim on new allocation. response: " + result.Reason)
 	} else {
 		log.Logger().Info("failed to sync shim on new allocation",
-			zap.String("Allocation key: ", alloc.AllocationKey))
+			zap.String("Allocation key: ", alloc.GetAllocationKey()))
 	}
 }
 
@@ -855,12 +855,12 @@ func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, released []*ob
 	}
 	for _, alloc := range released {
 		releaseEvent.ReleasedAllocations = append(releaseEvent.ReleasedAllocations, &si.AllocationRelease{
-			ApplicationID:   alloc.ApplicationID,
-			PartitionName:   alloc.PartitionName,
-			UUID:            alloc.UUID,
+			ApplicationID:   alloc.GetApplicationID(),
+			PartitionName:   alloc.GetPartitionName(),
+			UUID:            alloc.GetUUID(),
 			TerminationType: terminationType,
 			Message:         message,
-			AllocationKey:   alloc.AllocationKey,
+			AllocationKey:   alloc.GetAllocationKey(),
 		})
 	}
 

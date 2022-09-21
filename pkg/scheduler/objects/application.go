@@ -1503,6 +1503,8 @@ func (sa *Application) removeAllocationInternal(uuid string) *Allocation {
 		return nil
 	}
 
+	var event applicationEvent = EventNotNeeded
+	var eventWarning string
 	// update correct allocation tracker
 	if alloc.IsPlaceholder() {
 		sa.allocatedPlaceholder = resources.Sub(sa.allocatedPlaceholder, alloc.GetAllocatedResource())
@@ -1510,30 +1512,30 @@ func (sa *Application) removeAllocationInternal(uuid string) *Allocation {
 		if resources.IsZero(sa.allocatedPlaceholder) {
 			sa.clearPlaceholderTimer()
 			if (sa.IsCompleting() && sa.stateTimer == nil) || sa.IsFailing() || sa.IsResuming() || sa.hasZeroAllocations() {
-				event := CompleteApplication
+				event = CompleteApplication
 				if sa.IsFailing() {
 					event = FailApplication
 				}
 				if sa.IsResuming() {
 					event = RunApplication
 				}
-				if err := sa.HandleApplicationEvent(event); err != nil {
-					log.Logger().Warn("Application state not changed while removing a placeholder allocation",
-						zap.String("currentState", sa.CurrentState()),
-						zap.String("event", event.String()),
-						zap.Error(err))
-				}
+				eventWarning = "Application state not changed while removing a placeholder allocation"
 			}
 		}
 	} else {
 		sa.allocatedResource = resources.Sub(sa.allocatedResource, alloc.GetAllocatedResource())
 		// When the resource trackers are zero we should not expect anything to come in later.
 		if sa.hasZeroAllocations() {
-			if err := sa.HandleApplicationEvent(CompleteApplication); err != nil {
-				log.Logger().Warn("Application state not changed to Waiting while removing an allocation",
-					zap.String("currentState", sa.CurrentState()),
-					zap.Error(err))
-			}
+			event = CompleteApplication
+			eventWarning = "Application state not changed to Waiting while removing an allocation"
+		}
+	}
+	if event != EventNotNeeded {
+		if err := sa.HandleApplicationEvent(event); err != nil {
+			log.Logger().Warn(eventWarning,
+				zap.String("currentState", sa.CurrentState()),
+				zap.String("event", event.String()),
+				zap.Error(err))
 		}
 	}
 	delete(sa.allocations, uuid)

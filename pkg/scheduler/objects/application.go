@@ -1503,16 +1503,13 @@ func (sa *Application) removeAllocationInternal(uuid string) *Allocation {
 		return nil
 	}
 
-	// we have to emit a completion event if we have no allocations and placeholders left
-	noAllocations := resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource)
-
 	// update correct allocation tracker
 	if alloc.IsPlaceholder() {
 		sa.allocatedPlaceholder = resources.Sub(sa.allocatedPlaceholder, alloc.GetAllocatedResource())
 		// if all the placeholders are replaced, clear the placeholder timer
 		if resources.IsZero(sa.allocatedPlaceholder) {
 			sa.clearPlaceholderTimer()
-			if (sa.IsCompleting() && sa.stateTimer == nil) || sa.IsFailing() || sa.IsResuming() || noAllocations {
+			if (sa.IsCompleting() && sa.stateTimer == nil) || sa.IsFailing() || sa.IsResuming() || sa.hasZeroAllocations() {
 				event := CompleteApplication
 				if sa.IsFailing() {
 					event = FailApplication
@@ -1531,7 +1528,7 @@ func (sa *Application) removeAllocationInternal(uuid string) *Allocation {
 	} else {
 		sa.allocatedResource = resources.Sub(sa.allocatedResource, alloc.GetAllocatedResource())
 		// When the resource trackers are zero we should not expect anything to come in later.
-		if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) {
+		if sa.hasZeroAllocations() {
 			if err := sa.HandleApplicationEvent(CompleteApplication); err != nil {
 				log.Logger().Warn("Application state not changed to Waiting while removing an allocation",
 					zap.String("currentState", sa.CurrentState()),
@@ -1541,6 +1538,10 @@ func (sa *Application) removeAllocationInternal(uuid string) *Allocation {
 	}
 	delete(sa.allocations, uuid)
 	return alloc
+}
+
+func (sa *Application) hasZeroAllocations() bool {
+	return resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource)
 }
 
 // Remove all allocations from the application.

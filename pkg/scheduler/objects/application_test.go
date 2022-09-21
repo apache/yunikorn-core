@@ -632,6 +632,23 @@ func TestRemoveAllocAskWithPlaceholders(t *testing.T) {
 	assert.Equal(t, Completing.String(), app.stateMachine.Current())
 }
 
+func TestRemovePlaceholderAllocationWithNoRealAllocation(t *testing.T) {
+	app := newApplication(appID1, "default", "root.unknown")
+	if app == nil || app.ApplicationID != appID1 {
+		t.Fatalf("app create failed which should not have %v", app)
+	}
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	ask := newAllocationAskRepeat(aKey, appID1, res, 2)
+	ask.placeholder = true
+	allocInfo := NewAllocation("uuid-1", nodeID1, ask)
+	app.AddAllocation(allocInfo)
+	err := app.HandleApplicationEvent(RunApplication)
+	assert.NilError(t, err, "no error expected new to accepted")
+
+	app.RemoveAllocation("uuid-1")
+	assert.Equal(t, app.stateMachine.Current(), Completing.String())
+}
+
 // This test must not test the sorter that is underlying.
 // It tests the Application specific parts of the code only.
 func TestSortRequests(t *testing.T) {

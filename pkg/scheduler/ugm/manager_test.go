@@ -90,6 +90,7 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage2, err)
 	}
+
 	assert.Equal(t, 2, len(manager.getUserTrackers()), "userTrackers count should be 2")
 	assert.Equal(t, 2, len(manager.getGroupTrackers()), "groupTrackers count should be 2")
 
@@ -105,6 +106,7 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage3, err)
 	}
+
 	assert.Equal(t, 2, len(manager.getUserTrackers()), "userTrackers count should be 2")
 	assert.Equal(t, 2, len(manager.getGroupTrackers()), "groupTrackers count should be 2")
 
@@ -112,6 +114,7 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage3, err)
 	}
+
 	assert.Equal(t, 1, len(manager.getUserTrackers()), "userTrackers count should be 1")
 	assert.Equal(t, 1, len(manager.getGroupTrackers()), "groupTrackers count should be 1")
 
@@ -119,6 +122,7 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage2, err)
 	}
+
 	assert.Equal(t, 0, len(manager.getUserTrackers()), "userTrackers count should be 0")
 	assert.Equal(t, 0, len(manager.getGroupTrackers()), "groupTrackers count should be 0")
 }

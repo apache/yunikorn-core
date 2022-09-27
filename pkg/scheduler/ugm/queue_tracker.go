@@ -33,7 +33,7 @@ type QueueTracker struct {
 	queueName           string
 	resourceUsage       *resources.Resource
 	runningApplications map[string]bool
-	childQueues         map[string]*QueueTracker
+	childQueueTrackers  map[string]*QueueTracker
 }
 
 func NewQueueTracker(queueName string) *QueueTracker {
@@ -41,7 +41,7 @@ func NewQueueTracker(queueName string) *QueueTracker {
 		queueName:           queueName,
 		resourceUsage:       resources.NewResource(),
 		runningApplications: make(map[string]bool),
-		childQueues:         make(map[string]*QueueTracker),
+		childQueueTrackers:  make(map[string]*QueueTracker),
 	}
 	return queueTracker
 }
@@ -65,10 +65,10 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 		immediateChildQueueName = childQueuePath[:childIndex]
 	}
 	if childQueuePath != "" {
-		childQueueTracker := qt.childQueues[immediateChildQueueName]
+		childQueueTracker := qt.childQueueTrackers[immediateChildQueueName]
 		if childQueueTracker == nil {
 			childQueueTracker = NewQueueTracker(immediateChildQueueName)
-			qt.childQueues[immediateChildQueueName] = childQueueTracker
+			qt.childQueueTrackers[immediateChildQueueName] = childQueueTracker
 		}
 		err := childQueueTracker.increaseTrackedResource(childQueuePath, applicationID, usage)
 		if err != nil {
@@ -98,17 +98,17 @@ func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID 
 		immediateChildQueueName = childQueuePath[:childIndex]
 	}
 	if childQueuePath != "" {
-		childQueueTracker := qt.childQueues[immediateChildQueueName]
+		childQueueTracker := qt.childQueueTrackers[immediateChildQueueName]
 		if childQueueTracker != nil {
-			qt.childQueues[immediateChildQueueName] = childQueueTracker
+			qt.childQueueTrackers[immediateChildQueueName] = childQueueTracker
 			err := childQueueTracker.decreaseTrackedResource(childQueuePath, applicationID, usage, removeApp)
 			if err != nil {
 				return err
 			}
 		} else {
-			log.Logger().Info("Child queue tracker must be available in child queues map",
-				zap.String("child queue name", immediateChildQueueName))
-			return fmt.Errorf("child queue tracker for %s is missing in child queues map", immediateChildQueueName)
+			log.Logger().Error("Child queueTracker tracker must be available in child queues map",
+				zap.String("child queueTracker name", immediateChildQueueName))
+			return fmt.Errorf("child queueTracker tracker for %s is missing in child queues map", immediateChildQueueName)
 		}
 	}
 	return nil

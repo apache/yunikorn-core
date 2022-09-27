@@ -26,9 +26,9 @@ import (
 )
 
 type UserTracker struct {
-	userName string
-	group    map[string]*GroupTracker
-	queue    *QueueTracker
+	userName         string
+	appGroupTrackers map[string]*GroupTracker
+	queueTracker     *QueueTracker
 
 	sync.RWMutex
 }
@@ -36,50 +36,50 @@ type UserTracker struct {
 func NewUserTracker(user *security.UserGroup) *UserTracker {
 	queueTracker := NewQueueTracker("root")
 	userTracker := &UserTracker{
-		userName: user.User,
-		group:    make(map[string]*GroupTracker),
-		queue:    queueTracker,
+		userName:         user.User,
+		appGroupTrackers: make(map[string]*GroupTracker),
+		queueTracker:     queueTracker,
 	}
 	return userTracker
 }
 
 func (ut *UserTracker) increaseTrackedResource(queuePath, applicationID string, usage *resources.Resource) error {
-	return ut.queue.increaseTrackedResource(queuePath, applicationID, usage)
+	return ut.queueTracker.increaseTrackedResource(queuePath, applicationID, usage)
 }
 
 func (ut *UserTracker) decreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, removeApp bool) error {
 	if removeApp {
 		ut.Lock()
 		defer ut.Unlock()
-		delete(ut.group, applicationID)
+		delete(ut.appGroupTrackers, applicationID)
 	}
-	return ut.queue.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
+	return ut.queueTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
 }
 
 func (ut *UserTracker) hasGroupForApp(applicationID string) bool {
 	ut.RLock()
 	defer ut.RUnlock()
-	return ut.group[applicationID] != nil
+	return ut.appGroupTrackers[applicationID] != nil
 }
 
 func (ut *UserTracker) setGroupForApp(applicationID string, groupTrack *GroupTracker) {
 	ut.Lock()
 	defer ut.Unlock()
-	if ut.group[applicationID] == nil {
-		ut.group[applicationID] = groupTrack
+	if ut.appGroupTrackers[applicationID] == nil {
+		ut.appGroupTrackers[applicationID] = groupTrack
 	}
 }
 
 func (ut *UserTracker) getTrackedApplications() map[string]*GroupTracker {
 	ut.RLock()
 	defer ut.RUnlock()
-	return ut.group
+	return ut.appGroupTrackers
 }
 
 // GetResource only for tests
 func (ut *UserTracker) GetResource() map[string]*resources.Resource {
 	resources := make(map[string]*resources.Resource)
-	return ut.internalGetResource("root", "root", ut.queue, resources)
+	return ut.internalGetResource("root", "root", ut.queueTracker, resources)
 }
 
 func (ut *UserTracker) internalGetResource(parentQueuePath string, queueName string, queueTracker *QueueTracker, resources map[string]*resources.Resource) map[string]*resources.Resource {
@@ -90,8 +90,8 @@ func (ut *UserTracker) internalGetResource(parentQueuePath string, queueName str
 		fullQueuePath = parentQueuePath + "." + queueTracker.queueName
 	}
 	resources[fullQueuePath] = queueTracker.resourceUsage
-	if len(queueTracker.childQueues) > 0 {
-		for childQueueName, childQueueTracker := range queueTracker.childQueues {
+	if len(queueTracker.childQueueTrackers) > 0 {
+		for childQueueName, childQueueTracker := range queueTracker.childQueueTrackers {
 			ut.internalGetResource(fullQueuePath, childQueueName, childQueueTracker, resources)
 		}
 	}

@@ -27,7 +27,7 @@ import (
 type GroupTracker struct {
 	groupName    string
 	applications map[string]bool
-	queue        *QueueTracker
+	queueTracker *QueueTracker
 
 	sync.RWMutex
 }
@@ -37,7 +37,7 @@ func NewGroupTracker(group string) *GroupTracker {
 	groupTracker := &GroupTracker{
 		groupName:    group,
 		applications: make(map[string]bool),
-		queue:        queueTracker,
+		queueTracker: queueTracker,
 	}
 	return groupTracker
 }
@@ -46,7 +46,7 @@ func (gt *GroupTracker) increaseTrackedResource(queuePath, applicationID string,
 	gt.Lock()
 	defer gt.Unlock()
 	gt.applications[applicationID] = true
-	return gt.queue.increaseTrackedResource(queuePath, applicationID, usage)
+	return gt.queueTracker.increaseTrackedResource(queuePath, applicationID, usage)
 }
 
 func (gt *GroupTracker) decreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, removeApp bool) error {
@@ -55,7 +55,7 @@ func (gt *GroupTracker) decreaseTrackedResource(queuePath, applicationID string,
 		defer gt.Unlock()
 		delete(gt.applications, applicationID)
 	}
-	return gt.queue.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
+	return gt.queueTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
 }
 
 func (gt *GroupTracker) getTrackedApplications() map[string]bool {
@@ -67,7 +67,7 @@ func (gt *GroupTracker) getTrackedApplications() map[string]bool {
 // GetResource only for tests
 func (gt *GroupTracker) GetResource() map[string]*resources.Resource {
 	resources := make(map[string]*resources.Resource)
-	return gt.internalGetResource("root", "root", gt.queue, resources)
+	return gt.internalGetResource("root", "root", gt.queueTracker, resources)
 }
 
 func (gt *GroupTracker) internalGetResource(parentQueuePath string, queueName string, queueTracker *QueueTracker, resources map[string]*resources.Resource) map[string]*resources.Resource {
@@ -78,8 +78,8 @@ func (gt *GroupTracker) internalGetResource(parentQueuePath string, queueName st
 		fullQueuePath = parentQueuePath + "." + queueTracker.queueName
 	}
 	resources[fullQueuePath] = queueTracker.resourceUsage
-	if len(queueTracker.childQueues) > 0 {
-		for childQueueName, childQueueTracker := range queueTracker.childQueues {
+	if len(queueTracker.childQueueTrackers) > 0 {
+		for childQueueName, childQueueTracker := range queueTracker.childQueueTrackers {
 			gt.internalGetResource(fullQueuePath, childQueueName, childQueueTracker, resources)
 		}
 	}

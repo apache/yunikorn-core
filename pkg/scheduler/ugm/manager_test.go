@@ -71,6 +71,7 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 	groupTracker := groupTrackers["test"]
 	assert.Equal(t, false, manager.isUserRemovable(userTracker))
 	assert.Equal(t, false, manager.isGroupRemovable(groupTracker))
+
 	assert.Equal(t, 1, len(manager.getUserTrackers()), "userTrackers count should be 1")
 	assert.Equal(t, 1, len(manager.getGroupTrackers()), "groupTrackers count should be 1")
 

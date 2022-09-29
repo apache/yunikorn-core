@@ -137,18 +137,25 @@ func TestGetRequiredNodeFromAsk(t *testing.T) {
 }
 
 func TestGetPreemptionFromTagFromAsk(t *testing.T) {
-	tag := make(map[string]string)
-	allowPreemption := GetPreemptionFromTag(tag)
-	assert.Equal(t, allowPreemption, true)
-	tag["TestValue"] = "ERROR"
-	allowPreemption = GetPreemptionFromTag(tag)
-	assert.Equal(t, allowPreemption, true)
-	tag[common.DomainYuniKorn+common.KeyAllowPreemption] = "true"
-	allowPreemption = GetPreemptionFromTag(tag)
-	assert.Equal(t, allowPreemption, true)
-	tag[common.DomainYuniKorn+common.KeyAllowPreemption] = "false"
-	allowPreemption = GetPreemptionFromTag(tag)
-	assert.Equal(t, allowPreemption, false)
+    validKey := common.DomainYuniKorn + common.KeyAllowPreemption
+    tests := []struct {
+        testname string
+        tag         map[string]string
+        expected    bool
+    }{
+        {"Tags are empty and preemption is defaultly true", map[string]string{}, true},
+        {"Tags don't contain the revelent tag and perrmption is defaultly true", map[string]string{"TestValue":"ERROR"}, true},
+        {"The preemption is assigned with true", map[string]string{validKey:"true"}, true},
+        {"The preemption is assigned with false", map[string]string{validKey:"false"}, false},
+        {"Unkown value in the correct key", map[string]string{validKey:"unkown"}, true},
+    }
+    for _, tt := range tests {
+        t.Run(tt.testname, func(t *testing.T) {
+            if allowPreemption := GetPreemptionFromTag(tt.tag); allowPreemption != tt.expected {
+                t.Errorf("Got %v, expected %v", allowPreemption, tt.expected)
+            }
+        })
+    }
 }
 
 func TestConvertSITimeoutWithAdjustment(t *testing.T) {
@@ -211,3 +218,35 @@ func TestConvertSITimestamp(t *testing.T) {
 	result = ConvertSITimestamp("")
 	assert.Equal(t, result, time.Time{})
 }
+
+func TestWaitFor(t *testing.T) {
+    var tests = []struct{
+        testname    string
+        bound       int
+        ErrorExist  bool
+    }{
+        {"Timeout case", 10000, true},
+        {"Fullfilling case", 10, false},
+    }
+    for _, tt := range tests {
+        count := 0
+        err := WaitFor(time.Nanosecond, time.Millisecond, func() bool {
+            if count <= tt.bound {
+                count++
+                return false
+            }
+            return true
+        })
+        switch tt.ErrorExist {
+        case true:
+            if errorExist := (err != nil); !errorExist {
+                t.Errorf("ErrorExist: got %v, expected %v", errorExist, tt.ErrorExist)
+            }
+        case false:
+            if errorExist := (err == nil); !errorExist {
+                t.Errorf("ErrorExist: got %v, expected %v", errorExist, tt.ErrorExist)
+            }
+        }
+    }
+}
+

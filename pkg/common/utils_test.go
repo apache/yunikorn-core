@@ -80,26 +80,35 @@ func TestGetPartitionNameWithoutClusterID(t *testing.T) {
 }
 
 func TestGetBoolEnvVar(t *testing.T) {
-	envVarName := "VAR"
-	testCases := []struct {
-		name     string
-		value    string
-		expected bool
+	var tests = []struct {
+        envVarName  string
+        setENV      bool
+		testname    string
+		value       string
+		expected    bool
 	}{
-		{"ENV var not set", "", true},
-		{"ENV var set", "false", false},
-		{"Invalid value", "someValue", true},
+		{"VAR", true, "ENV var not set", "", true},
+		{"VAR", true, "ENV var set", "false", false},
+		{"VAR", true, "Invalid value", "someValue", true},
+        {"UNKOWN", false, "ENV doesn't exist", "", true},
 	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			err := os.Setenv(envVarName, tc.value)
-			assert.NilError(t, err, "setting environment variable failed")
-			val := GetBoolEnvVar(envVarName, true)
-			assert.Equal(t, val, tc.expected, "test case failure: %s", tc.name)
-			err = os.Unsetenv(envVarName)
-			assert.NilError(t, err, "cleaning up environment variable failed")
-		})
-	}
+    for _, tt := range tests {
+        t.Run(tt.testname, func(t *testing.T) {
+            if tt.setENV {
+                if err := os.Setenv(tt.envVarName, tt.value); err != nil {
+                    t.Error("Setting environment variable failed")
+                }
+            }
+            if val := GetBoolEnvVar(tt.envVarName, true); val != tt.expected {
+                    t.Errorf("Got %v, expected %v", val, tt.expected)
+            }
+            if tt.setENV {
+                if err := os.Unsetenv(tt.envVarName); err != nil {
+                    t.Error("Cleaning up environment variable failed")
+                }
+            }
+        })
+    }
 }
 
 func TestConvertSITimeout(t *testing.T) {
@@ -229,24 +238,25 @@ func TestWaitFor(t *testing.T) {
         {"Fullfilling case", 10, false},
     }
     for _, tt := range tests {
-        count := 0
-        err := WaitFor(time.Nanosecond, time.Millisecond, func() bool {
-            if count <= tt.bound {
-                count++
-                return false
+        t.Run(tt.testname, func(t *testing.T) {
+            count := 0
+            err := WaitFor(time.Nanosecond, time.Millisecond, func() bool {
+                if count <= tt.bound {
+                    count++
+                    return false
+                }
+                return true
+            })
+            switch tt.ErrorExist {
+            case true:
+                if errorExist := (err != nil); !errorExist {
+                    t.Errorf("ErrorExist: got %v, expected %v", errorExist, tt.ErrorExist)
+                }
+            case false:
+                if errorExist := (err == nil); !errorExist {
+                    t.Errorf("ErrorExist: got %v, expected %v", errorExist, tt.ErrorExist)
+                }
             }
-            return true
         })
-        switch tt.ErrorExist {
-        case true:
-            if errorExist := (err != nil); !errorExist {
-                t.Errorf("ErrorExist: got %v, expected %v", errorExist, tt.ErrorExist)
-            }
-        case false:
-            if errorExist := (err == nil); !errorExist {
-                t.Errorf("ErrorExist: got %v, expected %v", errorExist, tt.ErrorExist)
-            }
-        }
     }
 }
-

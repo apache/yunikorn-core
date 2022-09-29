@@ -136,7 +136,7 @@ func (m *Manager) getGroup(user *security.UserGroup) string {
 }
 
 // cleaner Auto wakeup go routine to remove the user and group trackers based on applications being tracked upon, its root queueTracker usage etc
-// todo
+// nolint:unused
 func (m *Manager) cleaner() {
 	m.Lock()
 	defer m.Unlock()

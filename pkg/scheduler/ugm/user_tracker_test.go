@@ -98,7 +98,7 @@ func TestIncreaseTrackedResource(t *testing.T) {
 	assert.Equal(t, 4, len(userTracker.getTrackedApplications()))
 }
 
-//todo test cases for different applications each with different group linkage
+//nolint: todo test cases for different applications each with different group linkage
 
 func TestDecreaseTrackedResource(t *testing.T) {
 	// Queue setup:

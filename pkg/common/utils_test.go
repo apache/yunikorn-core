@@ -81,34 +81,34 @@ func TestGetPartitionNameWithoutClusterID(t *testing.T) {
 
 func TestGetBoolEnvVar(t *testing.T) {
 	var tests = []struct {
-        envVarName  string
-        setENV      bool
-		testname    string
-		value       string
-		expected    bool
+        	envVarName	string
+        	setENV		bool
+		testname	string
+		value		string
+		expected	bool
 	}{
 		{"VAR", true, "ENV var not set", "", true},
 		{"VAR", true, "ENV var set", "false", false},
 		{"VAR", true, "Invalid value", "someValue", true},
-        {"UNKOWN", false, "ENV doesn't exist", "", true},
+        	{"UNKOWN", false, "ENV doesn't exist", "", true},
 	}
-    for _, tt := range tests {
-        t.Run(tt.testname, func(t *testing.T) {
-            if tt.setENV {
-                if err := os.Setenv(tt.envVarName, tt.value); err != nil {
-                    t.Error("Setting environment variable failed")
-                }
-            }
-            if val := GetBoolEnvVar(tt.envVarName, true); val != tt.expected {
-                    t.Errorf("Got %v, expected %v", val, tt.expected)
-            }
-            if tt.setENV {
-                if err := os.Unsetenv(tt.envVarName); err != nil {
-                    t.Error("Cleaning up environment variable failed")
-                }
-            }
-        })
-    }
+	for _, tt := range tests {
+		t.Run(tt.testname, func(t *testing.T) {
+			if tt.setENV {
+				if err := os.Setenv(tt.envVarName, tt.value); err != nil {
+					t.Error("Setting environment variable failed")
+				}
+			}
+			if val := GetBoolEnvVar(tt.envVarName, true); val != tt.expected {
+				t.Errorf("Got %v, expected %v", val, tt.expected)
+			}
+			if tt.setENV {
+				if err := os.Unsetenv(tt.envVarName); err != nil {
+					t.Error("Cleaning up environment variable failed")
+				}
+			}
+		})
+	}
 }
 
 func TestConvertSITimeout(t *testing.T) {
@@ -146,25 +146,25 @@ func TestGetRequiredNodeFromAsk(t *testing.T) {
 }
 
 func TestGetPreemptionFromTagFromAsk(t *testing.T) {
-    validKey := common.DomainYuniKorn + common.KeyAllowPreemption
-    tests := []struct {
-        testname string
-        tag         map[string]string
-        expected    bool
-    }{
-        {"Tags are empty and preemption is defaultly true", map[string]string{}, true},
-        {"Tags don't contain the revelent tag and perrmption is defaultly true", map[string]string{"TestValue":"ERROR"}, true},
-        {"The preemption is assigned with true", map[string]string{validKey:"true"}, true},
-        {"The preemption is assigned with false", map[string]string{validKey:"false"}, false},
-        {"Unkown value in the correct key", map[string]string{validKey:"unkown"}, true},
-    }
-    for _, tt := range tests {
-        t.Run(tt.testname, func(t *testing.T) {
-            if allowPreemption := GetPreemptionFromTag(tt.tag); allowPreemption != tt.expected {
-                t.Errorf("Got %v, expected %v", allowPreemption, tt.expected)
-            }
-        })
-    }
+	validKey := common.DomainYuniKorn + common.KeyAllowPreemption
+	tests := []struct {
+		testname	string
+		tag		map[string]string
+        	expected	bool
+	}{
+		{"Tags are empty and preemption is defaultly true", map[string]string{}, true},
+		{"Tags don't contain the revelent tag and perrmption is defaultly true", map[string]string{"TestValue":"ERROR"}, true},
+		{"The preemption is assigned with true", map[string]string{validKey:"true"}, true},
+		{"The preemption is assigned with false", map[string]string{validKey:"false"}, false},
+		{"Unkown value in the correct key", map[string]string{validKey:"unkown"}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.testname, func(t *testing.T) {
+			if allowPreemption := GetPreemptionFromTag(tt.tag); allowPreemption != tt.expected {
+				t.Errorf("Got %v, expected %v", allowPreemption, tt.expected)
+			}
+		})
+	}
 }
 
 func TestConvertSITimeoutWithAdjustment(t *testing.T) {
@@ -229,34 +229,34 @@ func TestConvertSITimestamp(t *testing.T) {
 }
 
 func TestWaitFor(t *testing.T) {
-    var tests = []struct{
-        testname    string
-        bound       int
-        ErrorExist  bool
-    }{
-        {"Timeout case", 10000, true},
-        {"Fullfilling case", 10, false},
-    }
-    for _, tt := range tests {
-        t.Run(tt.testname, func(t *testing.T) {
-            count := 0
-            err := WaitFor(time.Nanosecond, time.Millisecond, func() bool {
-                if count <= tt.bound {
-                    count++
-                    return false
-                }
-                return true
-            })
-            switch tt.ErrorExist {
-            case true:
-                if errorExist := (err != nil); !errorExist {
-                    t.Errorf("ErrorExist: got %v, expected %v", errorExist, tt.ErrorExist)
-                }
-            case false:
-                if errorExist := (err == nil); !errorExist {
-                    t.Errorf("ErrorExist: got %v, expected %v", errorExist, tt.ErrorExist)
-                }
-            }
-        })
-    }
+	var tests = []struct{
+		testname	string
+		bound		int
+		ErrorExist	bool
+	}{
+		{"Timeout case", 10000, true},
+		{"Fullfilling case", 10, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.testname, func(t *testing.T) {
+			count := 0
+			err := WaitFor(time.Nanosecond, time.Millisecond, func() bool {
+				if count <= tt.bound {
+					count++
+					return false
+				}
+				return true
+			})
+			switch tt.ErrorExist {
+				case true:
+				if errorExist := (err != nil); !errorExist {
+					t.Errorf("ErrorExist: got %v, expected %v", errorExist, tt.ErrorExist)
+				}
+				case false:
+				if errorExist := (err == nil); !errorExist {
+					t.Errorf("ErrorExist: got %v, expected %v", errorExist, tt.ErrorExist)
+				}
+			}
+		})
+	}
 }

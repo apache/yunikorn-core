@@ -81,16 +81,16 @@ func TestGetPartitionNameWithoutClusterID(t *testing.T) {
 
 func TestGetBoolEnvVar(t *testing.T) {
 	var tests = []struct {
-        	envVarName	string
-        	setENV		bool
-		testname	string
-		value		string
-		expected	bool
+		envVarName string
+		setENV     bool
+		testname   string
+		value      string
+		expected   bool
 	}{
 		{"VAR", true, "ENV var not set", "", true},
 		{"VAR", true, "ENV var set", "false", false},
 		{"VAR", true, "Invalid value", "someValue", true},
-        	{"UNKOWN", false, "ENV doesn't exist", "", true},
+		{"UNKOWN", false, "ENV doesn't exist", "", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.testname, func(t *testing.T) {
@@ -148,15 +148,15 @@ func TestGetRequiredNodeFromAsk(t *testing.T) {
 func TestGetPreemptionFromTagFromAsk(t *testing.T) {
 	validKey := common.DomainYuniKorn + common.KeyAllowPreemption
 	tests := []struct {
-		testname	string
-		tag		map[string]string
-        	expected	bool
+		testname string
+		tag      map[string]string
+		expected bool
 	}{
 		{"Tags are empty and preemption is defaultly true", map[string]string{}, true},
-		{"Tags don't contain the revelent tag and perrmption is defaultly true", map[string]string{"TestValue":"ERROR"}, true},
-		{"The preemption is assigned with true", map[string]string{validKey:"true"}, true},
-		{"The preemption is assigned with false", map[string]string{validKey:"false"}, false},
-		{"Unkown value in the correct key", map[string]string{validKey:"unkown"}, true},
+		{"Tags don't contain the revelent tag and perrmption is defaultly true", map[string]string{"TestValue": "ERROR"}, true},
+		{"The preemption is assigned with true", map[string]string{validKey: "true"}, true},
+		{"The preemption is assigned with false", map[string]string{validKey: "false"}, false},
+		{"Unkown value in the correct key", map[string]string{validKey: "unkown"}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.testname, func(t *testing.T) {
@@ -229,10 +229,10 @@ func TestConvertSITimestamp(t *testing.T) {
 }
 
 func TestWaitFor(t *testing.T) {
-	var tests = []struct{
-		testname	string
-		bound		int
-		ErrorExist	bool
+	var tests = []struct {
+		testname   string
+		bound      int
+		ErrorExist bool
 	}{
 		{"Timeout case", 10000, true},
 		{"Fullfilling case", 10, false},
@@ -248,11 +248,11 @@ func TestWaitFor(t *testing.T) {
 				return true
 			})
 			switch tt.ErrorExist {
-				case true:
+			case true:
 				if errorExist := (err != nil); !errorExist {
 					t.Errorf("ErrorExist: got %v, expected %v", errorExist, tt.ErrorExist)
 				}
-				case false:
+			case false:
 				if errorExist := (err == nil); !errorExist {
 					t.Errorf("ErrorExist: got %v, expected %v", errorExist, tt.ErrorExist)
 				}

@@ -36,6 +36,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
+	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -1420,8 +1421,11 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 		if resources.IsZero(sa.allocatedPlaceholder) {
 			sa.initPlaceholderTimer()
 		}
+		// User resource usage needs to be updated even during resource allocation happen for ph's itself even though state change would happen only after all ph allocation completes.
+		sa.incUserResourceUsage(info.GetAllocatedResource())
 		sa.allocatedPlaceholder = resources.Add(sa.allocatedPlaceholder, info.GetAllocatedResource())
 		sa.maxAllocatedResource = resources.ComponentWiseMax(sa.allocatedPlaceholder, sa.maxAllocatedResource)
+
 		// If there are no more placeholder to allocate we should move state
 		if resources.Equals(sa.allocatedPlaceholder, sa.placeholderAsk) {
 			if err := sa.HandleApplicationEvent(RunApplication); err != nil {
@@ -1442,10 +1446,31 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 					zap.Error(err))
 			}
 		}
+		sa.incUserResourceUsage(info.GetAllocatedResource())
 		sa.allocatedResource = resources.Add(sa.allocatedResource, info.GetAllocatedResource())
 		sa.maxAllocatedResource = resources.ComponentWiseMax(sa.allocatedResource, sa.maxAllocatedResource)
 	}
 	sa.allocations[info.GetUUID()] = info
+}
+
+func (sa *Application) incUserResourceUsage(resource *resources.Resource) {
+	if err := ugm.GetUserManager().IncreaseTrackedResource(sa.GetQueuePath(), sa.ApplicationID, resource, sa.GetUser()); err != nil {
+		log.Logger().Error("Unable to track the user resource usage",
+			zap.String("application id", sa.ApplicationID),
+			zap.String("user", sa.GetUser().User),
+			zap.String("currentState", sa.stateMachine.Current()),
+			zap.Error(err))
+	}
+}
+
+func (sa *Application) decUserResourceUsage(resource *resources.Resource, removeApp bool) {
+	if err := ugm.GetUserManager().DecreaseTrackedResource(sa.GetQueuePath(), sa.ApplicationID, resource, sa.GetUser(), removeApp); err != nil {
+		log.Logger().Error("Unable to track the user resource usage",
+			zap.String("application id", sa.ApplicationID),
+			zap.String("user", sa.GetUser().User),
+			zap.String("currentState", sa.stateMachine.Current()),
+			zap.Error(err))
+	}
 }
 
 func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
@@ -1529,6 +1554,7 @@ func (sa *Application) removeAllocationInternal(uuid string, releaseType si.Term
 			}
 		}
 	} else {
+		sa.decUserResourceUsage(alloc.GetAllocatedResource(), false)
 		sa.allocatedResource = resources.Sub(sa.allocatedResource, alloc.GetAllocatedResource())
 		// When the resource trackers are zero we should not expect anything to come in later.
 		if sa.hasZeroAllocations() {

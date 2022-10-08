@@ -67,8 +67,8 @@ type Queue struct {
 	isManaged              bool                // queue is part of the config, not auto created
 	stateMachine           *fsm.FSM            // the state of the queue for scheduling
 	stateTime              time.Time           // last time the state was updated (needed for cleanup)
-	maxRunningApps         int64
-	runningApps            int64
+	maxRunningApps         uint64
+	runningApps            uint64
 	allocatingAcceptedApps map[string]struct{}
 	template               *template.Template
 

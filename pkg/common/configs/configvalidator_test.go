@@ -144,16 +144,16 @@ func TestCheckQueueMaxApplicationsForQueue(t *testing.T) {
 		errorExpected bool
 	}{
 		{"Parent maxRunningApps must be larger than child maxRunningApps",
-			createQueueWithMaxApplication([4]int64{1, 2, 3, 4}),
+			createQueueWithMaxApplication([4]uint64{1, 2, 3, 4}),
 			true},
 		{"Valid maxApplication settings: Parent maxRunningApps larger than child maxRunningApps",
-			createQueueWithMaxApplication([4]int64{4, 3, 2, 1}),
+			createQueueWithMaxApplication([4]uint64{4, 3, 2, 1}),
 			false},
 		{"Valid maxApplication settings: Parent maxRunningApps can be 0",
-			createQueueWithMaxApplication([4]int64{0, 3, 2, 1}),
+			createQueueWithMaxApplication([4]uint64{0, 3, 2, 1}),
 			false},
 		{"InValid maxApplication settings: child maxRunningApps cannot be 0",
-			createQueueWithMaxApplication([4]int64{4, 3, 2, 0}),
+			createQueueWithMaxApplication([4]uint64{4, 3, 2, 0}),
 			true},
 	}
 	for _, tc := range testCases {
@@ -260,7 +260,7 @@ func createQueueWithSkippedGuaranteedRes() QueueConfig {
 	return root
 }
 
-func createQueueWithMaxApplication(maxApplication [4]int64) QueueConfig {
+func createQueueWithMaxApplication(maxApplication [4]uint64) QueueConfig {
 	child1MaxMap := map[string]string{"memory": "50"}
 	parentMaxMap := map[string]string{"memory": "100"}
 	child1 := QueueConfig{

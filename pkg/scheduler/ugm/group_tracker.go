@@ -50,9 +50,9 @@ func (gt *GroupTracker) increaseTrackedResource(queuePath, applicationID string,
 }
 
 func (gt *GroupTracker) decreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, removeApp bool) error {
+	gt.Lock()
+	defer gt.Unlock()
 	if removeApp {
-		gt.Lock()
-		defer gt.Unlock()
 		delete(gt.applications, applicationID)
 	}
 	return gt.queueTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)

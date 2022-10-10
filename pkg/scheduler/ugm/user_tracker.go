@@ -59,8 +59,6 @@ func (ut *UserTracker) decreaseTrackedResource(queuePath, applicationID string, 
 	ut.Lock()
 	defer ut.Unlock()
 	if removeApp {
-		ut.Lock()
-		defer ut.Unlock()
 		delete(ut.appGroupTrackers, applicationID)
 	}
 	return ut.queueTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)

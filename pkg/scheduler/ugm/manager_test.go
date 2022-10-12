@@ -65,22 +65,22 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
 	}
 
-	userTrackers := manager.getUserTrackers()
+	userTrackers := manager.GetUserTrackers()
 	userTracker := userTrackers["test"]
-	groupTrackers := manager.getGroupTrackers()
+	groupTrackers := manager.GetGroupTrackers()
 	groupTracker := groupTrackers["test"]
 	assert.Equal(t, false, manager.isUserRemovable(userTracker))
 	assert.Equal(t, false, manager.isGroupRemovable(groupTracker))
 
-	assert.Equal(t, 1, len(manager.getUserTrackers()), "userTrackers count should be 1")
-	assert.Equal(t, 1, len(manager.getGroupTrackers()), "groupTrackers count should be 1")
+	assert.Equal(t, 1, len(manager.GetUserTrackers()), "userTrackers count should be 1")
+	assert.Equal(t, 1, len(manager.GetGroupTrackers()), "groupTrackers count should be 1")
 
 	err = manager.IncreaseTrackedResource(queuePath1, TestApp1, usage1, user)
 	if err != nil {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
 	}
-	assert.Equal(t, 1, len(manager.getUserTrackers()), "userTrackers count should be 1")
-	assert.Equal(t, 1, len(manager.getGroupTrackers()), "groupTrackers count should be 1")
+	assert.Equal(t, 1, len(manager.GetUserTrackers()), "userTrackers count should be 1")
+	assert.Equal(t, 1, len(manager.GetGroupTrackers()), "groupTrackers count should be 1")
 
 	user1 := security.UserGroup{User: "test1", Groups: []string{"test1"}}
 	usage2, err := resources.NewResourceFromConf(map[string]string{"mem": "20M", "vcore": "20"})
@@ -92,8 +92,8 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage2, err)
 	}
 
-	assert.Equal(t, 2, len(manager.getUserTrackers()), "userTrackers count should be 2")
-	assert.Equal(t, 2, len(manager.getGroupTrackers()), "groupTrackers count should be 2")
+	assert.Equal(t, 2, len(manager.GetUserTrackers()), "userTrackers count should be 2")
+	assert.Equal(t, 2, len(manager.GetGroupTrackers()), "groupTrackers count should be 2")
 
 	usage3, err := resources.NewResourceFromConf(map[string]string{"mem": "5M", "vcore": "5"})
 	if err != nil {
@@ -108,22 +108,22 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage3, err)
 	}
 
-	assert.Equal(t, 2, len(manager.getUserTrackers()), "userTrackers count should be 2")
-	assert.Equal(t, 2, len(manager.getGroupTrackers()), "groupTrackers count should be 2")
+	assert.Equal(t, 2, len(manager.GetUserTrackers()), "userTrackers count should be 2")
+	assert.Equal(t, 2, len(manager.GetGroupTrackers()), "groupTrackers count should be 2")
 
 	err = manager.DecreaseTrackedResource(queuePath1, TestApp1, usage3, user, true)
 	if err != nil {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage3, err)
 	}
 
-	assert.Equal(t, 1, len(manager.getUserTrackers()), "userTrackers count should be 1")
-	assert.Equal(t, 1, len(manager.getGroupTrackers()), "groupTrackers count should be 1")
+	assert.Equal(t, 1, len(manager.GetUserTrackers()), "userTrackers count should be 1")
+	assert.Equal(t, 1, len(manager.GetGroupTrackers()), "groupTrackers count should be 1")
 
 	err = manager.DecreaseTrackedResource(queuePath2, TestApp2, usage2, user1, true)
 	if err != nil {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage2, err)
 	}
 
-	assert.Equal(t, 0, len(manager.getUserTrackers()), "userTrackers count should be 0")
-	assert.Equal(t, 0, len(manager.getGroupTrackers()), "groupTrackers count should be 0")
+	assert.Equal(t, 0, len(manager.GetUserTrackers()), "userTrackers count should be 0")
+	assert.Equal(t, 0, len(manager.GetGroupTrackers()), "groupTrackers count should be 0")
 }

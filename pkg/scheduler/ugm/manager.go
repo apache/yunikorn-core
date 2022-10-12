@@ -279,10 +279,10 @@ func (m *Manager) isGroupRemovable(gt *GroupTracker) bool {
 }
 
 // getUserTrackers only for tests
-func (m *Manager) getUserTrackers() map[string]*UserTracker {
+func (m *Manager) GetUserTrackers() map[string]*UserTracker {
 	return m.userTrackers
 }
 
-func (m *Manager) getGroupTrackers() map[string]*GroupTracker {
+func (m *Manager) GetGroupTrackers() map[string]*GroupTracker {
 	return m.groupTrackers
 }

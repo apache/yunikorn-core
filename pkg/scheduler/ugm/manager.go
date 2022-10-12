@@ -101,6 +101,7 @@ func (m *Manager) IncreaseTrackedResource(queuePath string, applicationID string
 		if err != nil {
 			log.Logger().Error("Problem in increasing the group resource usage",
 				zap.String("user", user.User),
+				zap.String("group", m.getGroup(user)),
 				zap.String("queue path", queuePath),
 				zap.String("application", applicationID),
 				zap.String("resource", usage.String()),
@@ -163,6 +164,7 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 		if err != nil {
 			log.Logger().Error("Problem in decreasing the group resource usage",
 				zap.String("user", user.User),
+				zap.String("group", m.getGroup(user)),
 				zap.String("queue path", queuePath),
 				zap.String("application", applicationID),
 				zap.String("resource", usage.String()),
@@ -205,9 +207,19 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID strin
 		var groupTracker *GroupTracker
 		group := m.getGroup(user)
 		if m.groupTrackers[group] == nil {
+			log.Logger().Debug("Group tracker does not exist. Creating group tracker object and linking the same with application",
+				zap.String("application", applicationID),
+				zap.String("queue path", queuePath),
+				zap.String("user", user.User),
+				zap.String("group", group))
 			groupTracker = NewGroupTracker(group)
 			m.groupTrackers[group] = groupTracker
 		} else {
+			log.Logger().Debug("Group tracker already exists and linking (reusing) the same with application",
+				zap.String("application", applicationID),
+				zap.String("queue path", queuePath),
+				zap.String("user", user.User),
+				zap.String("group", group))
 			groupTracker = m.groupTrackers[group]
 		}
 		userTracker.setGroupForApp(applicationID, groupTracker)

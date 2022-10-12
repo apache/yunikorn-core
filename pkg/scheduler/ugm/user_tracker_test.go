@@ -44,7 +44,7 @@ func TestIncreaseTrackedResource(t *testing.T) {
 	// root->parent->child1->child12
 	// root->parent->child2
 	// root->parent->child12 (similar name like above leaf queue, but it is being treated differently as similar names are allowed)
-	user := &security.UserGroup{User: "test"}
+	user := security.UserGroup{User: "test", Groups: []string{"test"}}
 	userTracker := NewUserTracker(user)
 	usage1, err := resources.NewResourceFromConf(map[string]string{"mem": "10M", "vcore": "10"})
 	if err != nil {
@@ -104,7 +104,7 @@ func TestDecreaseTrackedResource(t *testing.T) {
 	// Queue setup:
 	// root->parent->child1
 	// root->parent->child2
-	user := &security.UserGroup{User: "test"}
+	user := security.UserGroup{User: "test", Groups: []string{"test"}}
 	userTracker := NewUserTracker(user)
 
 	usage1, err := resources.NewResourceFromConf(map[string]string{"mem": "70M", "vcore": "70"})

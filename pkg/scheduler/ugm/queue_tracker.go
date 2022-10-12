@@ -27,6 +27,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
 type QueueTracker struct {
@@ -36,7 +37,13 @@ type QueueTracker struct {
 	childQueueTrackers  map[string]*QueueTracker
 }
 
-func NewQueueTracker(queueName string) *QueueTracker {
+func NewQueueTracker() *QueueTracker {
+	return newQueueTracker("root")
+}
+
+func newQueueTracker(queueName string) *QueueTracker {
+	log.Logger().Debug("Creating queue tracker object for queue",
+		zap.String("queue", queueName))
 	queueTracker := &QueueTracker{
 		queueName:           queueName,
 		resourceUsage:       resources.NewResource(),
@@ -47,6 +54,10 @@ func NewQueueTracker(queueName string) *QueueTracker {
 }
 
 func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID string, usage *resources.Resource) error {
+	log.Logger().Debug("Increasing resource usage",
+		zap.String("queue path", queuePath),
+		zap.String("application", applicationID),
+		zap.String("resource", usage.String()))
 	if queuePath == "" || applicationID == "" || usage == nil {
 		return fmt.Errorf("mandatory parameters are missing. queuepath: %s, application id: %s, resource usage: %s",
 			queuePath, applicationID, usage.String())
@@ -65,12 +76,10 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 		immediateChildQueueName = childQueuePath[:childIndex]
 	}
 	if childQueuePath != "" {
-		childQueueTracker := qt.childQueueTrackers[immediateChildQueueName]
-		if childQueueTracker == nil {
-			childQueueTracker = NewQueueTracker(immediateChildQueueName)
-			qt.childQueueTrackers[immediateChildQueueName] = childQueueTracker
+		if qt.childQueueTrackers[immediateChildQueueName] == nil {
+			qt.childQueueTrackers[immediateChildQueueName] = newQueueTracker(immediateChildQueueName)
 		}
-		err := childQueueTracker.increaseTrackedResource(childQueuePath, applicationID, usage)
+		err := qt.childQueueTrackers[immediateChildQueueName].increaseTrackedResource(childQueuePath, applicationID, usage)
 		if err != nil {
 			return err
 		}
@@ -79,6 +88,11 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 }
 
 func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID string, usage *resources.Resource, removeApp bool) error {
+	log.Logger().Debug("Decreasing resource usage",
+		zap.String("queue path", queuePath),
+		zap.String("application", applicationID),
+		zap.String("resource", usage.String()),
+		zap.Bool("removeApp", removeApp))
 	if queuePath == "" || usage == nil {
 		return fmt.Errorf("mandatory parameters are missing. queuepath: %s, application id: %s, resource usage: %s",
 			queuePath, applicationID, usage.String())
@@ -98,10 +112,8 @@ func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID 
 		immediateChildQueueName = childQueuePath[:childIndex]
 	}
 	if childQueuePath != "" {
-		childQueueTracker := qt.childQueueTrackers[immediateChildQueueName]
-		if childQueueTracker != nil {
-			qt.childQueueTrackers[immediateChildQueueName] = childQueueTracker
-			err := childQueueTracker.decreaseTrackedResource(childQueuePath, applicationID, usage, removeApp)
+		if qt.childQueueTrackers[immediateChildQueueName] != nil {
+			err := qt.childQueueTrackers[immediateChildQueueName].decreaseTrackedResource(childQueuePath, applicationID, usage, removeApp)
 			if err != nil {
 				return err
 			}
@@ -112,4 +124,28 @@ func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID 
 		}
 	}
 	return nil
+}
+
+func (qt *QueueTracker) getResourceUsageDAOInfo(parentQueuePath string, queueName string, queueTracker *QueueTracker) *dao.ResourceUsageDAOInfo {
+	usage := &dao.ResourceUsageDAOInfo{}
+	fullQueuePath := ""
+	if queueName == "root" {
+		fullQueuePath = parentQueuePath
+	} else {
+		fullQueuePath = parentQueuePath + "." + queueTracker.queueName
+	}
+	usage.QueueName = fullQueuePath
+	usage.ResourceUsage = queueTracker.resourceUsage
+	for app, active := range queueTracker.runningApplications {
+		if active {
+			usage.RunningApplications = append(usage.RunningApplications, app)
+		}
+	}
+	if len(queueTracker.childQueueTrackers) > 0 {
+		for childQueueName, childQueueTracker := range queueTracker.childQueueTrackers {
+			childUsage := qt.getResourceUsageDAOInfo(fullQueuePath, childQueueName, childQueueTracker)
+			usage.Children = append(usage.Children, childUsage)
+		}
+	}
+	return usage
 }

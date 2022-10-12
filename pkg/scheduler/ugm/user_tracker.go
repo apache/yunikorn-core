@@ -23,18 +23,24 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
 type UserTracker struct {
-	userName         string
+	userName string // Name of the user for which usage is being tracked upon
+
+	// Holds group tracker object for every application user runs.
+	// Group is not fixed for user unlike other systems and would be selected based on queue limit config processing flow and may vary for different applications.
+	// Hence, group tracker object may vary for same user running different applications linked through this map with key as application id
+	// and group tracker object as value.
 	appGroupTrackers map[string]*GroupTracker
-	queueTracker     *QueueTracker
+	queueTracker     *QueueTracker // Holds the actual resource usage of queue path where application runs
 
 	sync.RWMutex
 }
 
-func NewUserTracker(user *security.UserGroup) *UserTracker {
-	queueTracker := NewQueueTracker("root")
+func NewUserTracker(user security.UserGroup) *UserTracker {
+	queueTracker := NewQueueTracker()
 	userTracker := &UserTracker{
 		userName:         user.User,
 		appGroupTrackers: make(map[string]*GroupTracker),
@@ -44,6 +50,8 @@ func NewUserTracker(user *security.UserGroup) *UserTracker {
 }
 
 func (ut *UserTracker) increaseTrackedResource(queuePath, applicationID string, usage *resources.Resource) error {
+	ut.Lock()
+	defer ut.Unlock()
 	return ut.queueTracker.increaseTrackedResource(queuePath, applicationID, usage)
 }
 
@@ -76,23 +84,30 @@ func (ut *UserTracker) getTrackedApplications() map[string]*GroupTracker {
 	return ut.appGroupTrackers
 }
 
+func (ut *UserTracker) getUserResourceUsageDAOInfo(queueTracker *QueueTracker) *dao.UserResourceUsageDAOInfo {
+	userResourceUsage := &dao.UserResourceUsageDAOInfo{
+		Groups: make(map[string]string),
+	}
+	userResourceUsage.UserName = ut.userName
+	for app, gt := range ut.appGroupTrackers {
+		userResourceUsage.Groups[app] = gt.groupName
+	}
+	userResourceUsage.Queues = ut.queueTracker.getResourceUsageDAOInfo("root", "root", ut.queueTracker)
+	return userResourceUsage
+}
+
 // GetResource only for tests
 func (ut *UserTracker) GetResource() map[string]*resources.Resource {
 	resources := make(map[string]*resources.Resource)
-	return ut.internalGetResource("root", "root", ut.queueTracker, resources)
+	usage := ut.getUserResourceUsageDAOInfo(ut.queueTracker)
+	return ut.internalGetResource(usage.Queues, resources)
 }
 
-func (ut *UserTracker) internalGetResource(parentQueuePath string, queueName string, queueTracker *QueueTracker, resources map[string]*resources.Resource) map[string]*resources.Resource {
-	fullQueuePath := ""
-	if queueName == "root" {
-		fullQueuePath = parentQueuePath
-	} else {
-		fullQueuePath = parentQueuePath + "." + queueTracker.queueName
-	}
-	resources[fullQueuePath] = queueTracker.resourceUsage
-	if len(queueTracker.childQueueTrackers) > 0 {
-		for childQueueName, childQueueTracker := range queueTracker.childQueueTrackers {
-			ut.internalGetResource(fullQueuePath, childQueueName, childQueueTracker, resources)
+func (ut *UserTracker) internalGetResource(usage *dao.ResourceUsageDAOInfo, resources map[string]*resources.Resource) map[string]*resources.Resource {
+	resources[usage.QueueName] = usage.ResourceUsage
+	if len(usage.Children) > 0 {
+		for _, resourceUsage := range usage.Children {
+			ut.internalGetResource(resourceUsage, resources)
 		}
 	}
 	return resources

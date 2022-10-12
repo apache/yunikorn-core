@@ -22,18 +22,19 @@ import (
 	"sync"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
 type GroupTracker struct {
-	groupName    string
-	applications map[string]bool
-	queueTracker *QueueTracker
+	groupName    string          // Name of the group for which usage is being tracked upon
+	applications map[string]bool // Hold applications currently run by all users belong to this group
+	queueTracker *QueueTracker   // Holds the actual resource usage of queue path where application run
 
 	sync.RWMutex
 }
 
 func NewGroupTracker(group string) *GroupTracker {
-	queueTracker := NewQueueTracker("root")
+	queueTracker := NewQueueTracker()
 	groupTracker := &GroupTracker{
 		groupName:    group,
 		applications: make(map[string]bool),
@@ -64,23 +65,32 @@ func (gt *GroupTracker) getTrackedApplications() map[string]bool {
 	return gt.applications
 }
 
+func (gt *GroupTracker) getGroupResourceUsageDAOInfo(queueTracker *QueueTracker) *dao.GroupResourceUsageDAOInfo {
+	groupResourceUsage := &dao.GroupResourceUsageDAOInfo{
+		Applications: []string{},
+	}
+	groupResourceUsage.GroupName = gt.groupName
+	for app, active := range gt.applications {
+		if active {
+			groupResourceUsage.Applications = append(groupResourceUsage.Applications, app)
+		}
+	}
+	groupResourceUsage.Queues = gt.queueTracker.getResourceUsageDAOInfo("root", "root", gt.queueTracker)
+	return groupResourceUsage
+}
+
 // GetResource only for tests
 func (gt *GroupTracker) GetResource() map[string]*resources.Resource {
 	resources := make(map[string]*resources.Resource)
-	return gt.internalGetResource("root", "root", gt.queueTracker, resources)
+	usage := gt.getGroupResourceUsageDAOInfo(gt.queueTracker)
+	return gt.internalGetResource(usage.Queues, resources)
 }
 
-func (gt *GroupTracker) internalGetResource(parentQueuePath string, queueName string, queueTracker *QueueTracker, resources map[string]*resources.Resource) map[string]*resources.Resource {
-	fullQueuePath := ""
-	if queueName == "root" {
-		fullQueuePath = parentQueuePath
-	} else {
-		fullQueuePath = parentQueuePath + "." + queueTracker.queueName
-	}
-	resources[fullQueuePath] = queueTracker.resourceUsage
-	if len(queueTracker.childQueueTrackers) > 0 {
-		for childQueueName, childQueueTracker := range queueTracker.childQueueTrackers {
-			gt.internalGetResource(fullQueuePath, childQueueName, childQueueTracker, resources)
+func (gt *GroupTracker) internalGetResource(usage *dao.ResourceUsageDAOInfo, resources map[string]*resources.Resource) map[string]*resources.Resource {
+	resources[usage.QueueName] = usage.ResourceUsage
+	if len(usage.Children) > 0 {
+		for _, resourceUsage := range usage.Children {
+			gt.internalGetResource(resourceUsage, resources)
 		}
 	}
 	return resources

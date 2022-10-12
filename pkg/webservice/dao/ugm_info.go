@@ -16,21 +16,25 @@
  limitations under the License.
 */
 
-package ugm
+package dao
 
-import (
-	"github.com/apache/yunikorn-core/pkg/common/resources"
-	"github.com/apache/yunikorn-core/pkg/common/security"
-)
+import "github.com/apache/yunikorn-core/pkg/common/resources"
 
-// Tracker Defines a set of interfaces to track and retrieve the user group resource usage
-type Tracker interface {
-	GetUserResources(user security.UserGroup) *resources.Resource
-	GetGroupResources(group string) *resources.Resource
+type UserResourceUsageDAOInfo struct {
+	UserName string                `json:"userName"`
+	Groups   map[string]string     `json:"groups"`
+	Queues   *ResourceUsageDAOInfo `json:"queues"`
+}
 
-	GetUsersResources() []*UserTracker
-	GetGroupsResources() []*GroupTracker
+type GroupResourceUsageDAOInfo struct {
+	GroupName    string                `json:"groupName"`
+	Applications []string              `json:"applications"`
+	Queues       *ResourceUsageDAOInfo `json:"queues"`
+}
 
-	IncreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user security.UserGroup) error
-	DecreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user security.UserGroup, removeApp bool) error
+type ResourceUsageDAOInfo struct {
+	QueueName           string                  `json:"queueName"`
+	ResourceUsage       *resources.Resource     `json:"resourceUsage"`
+	RunningApplications []string                `json:"runningApplications"`
+	Children            []*ResourceUsageDAOInfo `json:"children"`
 }

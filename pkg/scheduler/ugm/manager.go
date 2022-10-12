@@ -29,10 +29,21 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 )
 
+var once sync.Once
+var m *Manager
+
+// Manager implements tracker. A User Group Manager to track the usage for both user and groups.
+// Holds object of both user and group trackers
 type Manager struct {
 	userTrackers  map[string]*UserTracker
 	groupTrackers map[string]*GroupTracker
 	sync.RWMutex
+}
+
+func Init() {
+	once.Do(func() {
+		m = NewManager()
+	})
 }
 
 func NewManager() *Manager {
@@ -42,8 +53,25 @@ func NewManager() *Manager {
 	}
 	return manager
 }
-func (m *Manager) IncreaseTrackedResource(queuePath string, applicationID string, usage *resources.Resource, user *security.UserGroup) error {
-	if queuePath == "" || applicationID == "" || usage == nil || user == nil {
+
+func GetUserManager() *Manager {
+	return m
+}
+
+// IncreaseTrackedResource Increase the resource usage for the given user group and queue path combination.
+// As and when every allocation or asks requests fulfilled on application, corresponding user and group
+// resource usage would be increased against specific application.
+func (m *Manager) IncreaseTrackedResource(queuePath string, applicationID string, usage *resources.Resource, user security.UserGroup) error {
+	log.Logger().Debug("Increasing resource usage", zap.String("user", user.User),
+		zap.String("queue path", queuePath),
+		zap.String("application", applicationID),
+		zap.String("resource", usage.String()))
+	if queuePath == "" || applicationID == "" || usage == nil || user.User == "" {
+		log.Logger().Error("Mandatory parameters are missing to increase the resource usage",
+			zap.String("user", user.User),
+			zap.String("queue path", queuePath),
+			zap.String("application", applicationID),
+			zap.String("resource", usage.String()))
 		return fmt.Errorf("mandatory parameters are missing. queuepath: %s, application id: %s, resource usage: %s, user: %s",
 			queuePath, applicationID, usage.String(), user.User)
 	}
@@ -58,21 +86,48 @@ func (m *Manager) IncreaseTrackedResource(queuePath string, applicationID string
 	}
 	err := userTracker.increaseTrackedResource(queuePath, applicationID, usage)
 	if err != nil {
+		log.Logger().Error("Problem in increasing the user resource usage",
+			zap.String("user", user.User),
+			zap.String("queue path", queuePath),
+			zap.String("application", applicationID),
+			zap.String("resource", usage.String()),
+			zap.String("err message", err.Error()))
 		return err
 	}
-	m.ensureGroupTrackerForApp(applicationID, user)
+	m.ensureGroupTrackerForApp(queuePath, applicationID, user)
 	groupTracker := m.groupTrackers[m.getGroup(user)]
 	if groupTracker != nil {
 		err = groupTracker.increaseTrackedResource(queuePath, applicationID, usage)
 		if err != nil {
+			log.Logger().Error("Problem in increasing the group resource usage",
+				zap.String("user", user.User),
+				zap.String("queue path", queuePath),
+				zap.String("application", applicationID),
+				zap.String("resource", usage.String()),
+				zap.String("err message", err.Error()))
 			return err
 		}
 	}
 	return nil
 }
 
-func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string, usage *resources.Resource, user *security.UserGroup, removeApp bool) error {
-	if queuePath == "" || applicationID == "" || usage == nil || user == nil {
+// DecreaseTrackedResource Decrease the resource usage for the given user group and queue path combination.
+// As and when every allocation or asks release happens, corresponding user and group
+// resource usage would be decreased against specific application. When the final asks release happens, removeApp should be set to true and
+// application itself would be removed from the tracker and no more usage would be tracked further for that specific application.
+func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string, usage *resources.Resource, user security.UserGroup, removeApp bool) error {
+	log.Logger().Debug("Decreasing resource usage", zap.String("user", user.User),
+		zap.String("queue path", queuePath),
+		zap.String("application", applicationID),
+		zap.String("resource", usage.String()),
+		zap.Bool("removeApp", removeApp))
+	if queuePath == "" || applicationID == "" || usage == nil || user.User == "" {
+		log.Logger().Error("Mandatory parameters are missing to decrease the resource usage",
+			zap.String("user", user.User),
+			zap.String("queue path", queuePath),
+			zap.String("application", applicationID),
+			zap.String("resource", usage.String()),
+			zap.Bool("removeApp", removeApp))
 		return fmt.Errorf("mandatory parameters are missing. queuepath: %s, application id: %s, resource usage: %s, user: %s",
 			queuePath, applicationID, usage.String(), user.User)
 	}
@@ -82,6 +137,13 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 	if userTracker != nil {
 		err := userTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
 		if err != nil {
+			log.Logger().Error("Problem in decreasing the user resource usage",
+				zap.String("user", user.User),
+				zap.String("queue path", queuePath),
+				zap.String("application", applicationID),
+				zap.String("resource", usage.String()),
+				zap.Bool("removeApp", removeApp),
+				zap.String("err message", err.Error()))
 			return err
 		}
 		if removeApp {
@@ -99,6 +161,13 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 	if groupTracker != nil {
 		err := groupTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
 		if err != nil {
+			log.Logger().Error("Problem in decreasing the group resource usage",
+				zap.String("user", user.User),
+				zap.String("queue path", queuePath),
+				zap.String("application", applicationID),
+				zap.String("resource", usage.String()),
+				zap.Bool("removeApp", removeApp),
+				zap.String("err message", err.Error()))
 			return err
 		}
 		if removeApp {
@@ -114,7 +183,23 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 	return nil
 }
 
-func (m *Manager) ensureGroupTrackerForApp(applicationID string, user *security.UserGroup) {
+func (m *Manager) GetUserResources(user security.UserGroup) *resources.Resource {
+	return nil
+}
+
+func (m *Manager) GetGroupResources(group string) *resources.Resource {
+	return nil
+}
+
+func (m *Manager) GetUsersResources() []*UserTracker {
+	return nil
+}
+
+func (m *Manager) GetGroupsResources() []*GroupTracker {
+	return nil
+}
+
+func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID string, user security.UserGroup) {
 	userTracker := m.userTrackers[user.User]
 	if !userTracker.hasGroupForApp(applicationID) {
 		var groupTracker *GroupTracker
@@ -129,10 +214,10 @@ func (m *Manager) ensureGroupTrackerForApp(applicationID string, user *security.
 	}
 }
 
-// getGroup Based on the current limitations, group name and username is same. hence, using username as group name.
+// getGroup Based on the current limitations, username and group name is same. Groups[0] is always set and same as username.
 // It would be changed in future based on user group resolution, limit configuration processing etc
-func (m *Manager) getGroup(user *security.UserGroup) string {
-	return user.User
+func (m *Manager) getGroup(user security.UserGroup) string {
+	return user.Groups[0]
 }
 
 // cleaner Auto wakeup go routine to remove the user and group trackers based on applications being tracked upon, its root queueTracker usage etc
@@ -166,11 +251,11 @@ func (m *Manager) isGroupRemovable(gt *GroupTracker) bool {
 	return false
 }
 
-// only for tests
-func (m *Manager) getUserTrackers() map[string]*UserTracker {
+// GetUserTrackers only for tests
+func (m *Manager) GetUserTrackers() map[string]*UserTracker {
 	return m.userTrackers
 }
 
-func (m *Manager) getGroupTrackers() map[string]*GroupTracker {
+func (m *Manager) GetGroupTrackers() map[string]*GroupTracker {
 	return m.groupTrackers
 }

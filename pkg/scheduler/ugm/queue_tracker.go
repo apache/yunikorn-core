@@ -136,7 +136,7 @@ func (qt *QueueTracker) getResourceUsageDAOInfo(parentQueuePath string, queueNam
 	}
 	usage.QueuePath = fullQueuePath
 	usage.ResourceUsage = queueTracker.resourceUsage
-	for app, _ := range queueTracker.runningApplications {
+	for app := range queueTracker.runningApplications {
 		usage.RunningApplications = append(usage.RunningApplications, app)
 	}
 	if len(queueTracker.childQueueTrackers) > 0 {

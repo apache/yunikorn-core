@@ -72,7 +72,7 @@ func (gt *GroupTracker) getGroupResourceUsageDAOInfo(queueTracker *QueueTracker)
 		Applications: []string{},
 	}
 	groupResourceUsage.GroupName = gt.groupName
-	for app, _ := range gt.applications {
+	for app := range gt.applications {
 		groupResourceUsage.Applications = append(groupResourceUsage.Applications, app)
 	}
 	groupResourceUsage.Queues = gt.queueTracker.getResourceUsageDAOInfo("root", "root", gt.queueTracker)

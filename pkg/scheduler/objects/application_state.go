@@ -46,6 +46,10 @@ const (
 	ResumeApplication
 )
 
+const (
+	EventNotNeeded = -1
+)
+
 func (ae applicationEvent) String() string {
 	return [...]string{"runApplication", "rejectApplication", "completeApplication", "failApplication", "expireApplication", "resumeApplication"}[ae]
 }

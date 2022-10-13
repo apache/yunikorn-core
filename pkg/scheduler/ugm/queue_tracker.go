@@ -37,7 +37,7 @@ type QueueTracker struct {
 	childQueueTrackers  map[string]*QueueTracker
 }
 
-func NewQueueTracker() *QueueTracker {
+func newRootQueueTracker() *QueueTracker {
 	return newQueueTracker("root")
 }
 
@@ -134,12 +134,10 @@ func (qt *QueueTracker) getResourceUsageDAOInfo(parentQueuePath string, queueNam
 	} else {
 		fullQueuePath = parentQueuePath + "." + queueTracker.queueName
 	}
-	usage.QueueName = fullQueuePath
+	usage.QueuePath = fullQueuePath
 	usage.ResourceUsage = queueTracker.resourceUsage
-	for app, active := range queueTracker.runningApplications {
-		if active {
-			usage.RunningApplications = append(usage.RunningApplications, app)
-		}
+	for app, _ := range queueTracker.runningApplications {
+		usage.RunningApplications = append(usage.RunningApplications, app)
 	}
 	if len(queueTracker.childQueueTrackers) > 0 {
 		for childQueueName, childQueueTracker := range queueTracker.childQueueTrackers {
@@ -148,4 +146,8 @@ func (qt *QueueTracker) getResourceUsageDAOInfo(parentQueuePath string, queueNam
 		}
 	}
 	return usage
+}
+
+func (qt *QueueTracker) getRunningApplications() map[string]bool {
+	return qt.runningApplications
 }

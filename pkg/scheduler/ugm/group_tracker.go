@@ -33,8 +33,8 @@ type GroupTracker struct {
 	sync.RWMutex
 }
 
-func NewGroupTracker(group string) *GroupTracker {
-	queueTracker := NewQueueTracker()
+func newGroupTracker(group string) *GroupTracker {
+	queueTracker := newRootQueueTracker()
 	groupTracker := &GroupTracker{
 		groupName:    group,
 		applications: make(map[string]bool),
@@ -66,32 +66,15 @@ func (gt *GroupTracker) getTrackedApplications() map[string]bool {
 }
 
 func (gt *GroupTracker) getGroupResourceUsageDAOInfo(queueTracker *QueueTracker) *dao.GroupResourceUsageDAOInfo {
+	gt.RLock()
+	defer gt.RUnlock()
 	groupResourceUsage := &dao.GroupResourceUsageDAOInfo{
 		Applications: []string{},
 	}
 	groupResourceUsage.GroupName = gt.groupName
-	for app, active := range gt.applications {
-		if active {
-			groupResourceUsage.Applications = append(groupResourceUsage.Applications, app)
-		}
+	for app, _ := range gt.applications {
+		groupResourceUsage.Applications = append(groupResourceUsage.Applications, app)
 	}
 	groupResourceUsage.Queues = gt.queueTracker.getResourceUsageDAOInfo("root", "root", gt.queueTracker)
 	return groupResourceUsage
-}
-
-// GetResource only for tests
-func (gt *GroupTracker) GetResource() map[string]*resources.Resource {
-	resources := make(map[string]*resources.Resource)
-	usage := gt.getGroupResourceUsageDAOInfo(gt.queueTracker)
-	return gt.internalGetResource(usage.Queues, resources)
-}
-
-func (gt *GroupTracker) internalGetResource(usage *dao.ResourceUsageDAOInfo, resources map[string]*resources.Resource) map[string]*resources.Resource {
-	resources[usage.QueueName] = usage.ResourceUsage
-	if len(usage.Children) > 0 {
-		for _, resourceUsage := range usage.Children {
-			gt.internalGetResource(resourceUsage, resources)
-		}
-	}
-	return resources
 }

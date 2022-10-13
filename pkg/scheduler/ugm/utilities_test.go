@@ -16,25 +16,19 @@
  limitations under the License.
 */
 
-package dao
+package ugm
 
-import "github.com/apache/yunikorn-core/pkg/common/resources"
+import (
+	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
+)
 
-type UserResourceUsageDAOInfo struct {
-	UserName string                `json:"userName"`
-	Groups   map[string]string     `json:"groups"`
-	Queues   *ResourceUsageDAOInfo `json:"queues"`
-}
-
-type GroupResourceUsageDAOInfo struct {
-	GroupName    string                `json:"groupName"`
-	Applications []string              `json:"applications"`
-	Queues       *ResourceUsageDAOInfo `json:"queues"`
-}
-
-type ResourceUsageDAOInfo struct {
-	QueuePath           string                  `json:"queuePath"`
-	ResourceUsage       *resources.Resource     `json:"resourceUsage"`
-	RunningApplications []string                `json:"runningApplications"`
-	Children            []*ResourceUsageDAOInfo `json:"children"`
+func internalGetResource(usage *dao.ResourceUsageDAOInfo, resources map[string]*resources.Resource) map[string]*resources.Resource {
+	resources[usage.QueuePath] = usage.ResourceUsage
+	if len(usage.Children) > 0 {
+		for _, resourceUsage := range usage.Children {
+			internalGetResource(resourceUsage, resources)
+		}
+	}
+	return resources
 }

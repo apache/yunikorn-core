@@ -39,8 +39,8 @@ type UserTracker struct {
 	sync.RWMutex
 }
 
-func NewUserTracker(user security.UserGroup) *UserTracker {
-	queueTracker := NewQueueTracker()
+func newUserTracker(user security.UserGroup) *UserTracker {
+	queueTracker := newRootQueueTracker()
 	userTracker := &UserTracker{
 		userName:         user.User,
 		appGroupTrackers: make(map[string]*GroupTracker),
@@ -85,6 +85,8 @@ func (ut *UserTracker) getTrackedApplications() map[string]*GroupTracker {
 }
 
 func (ut *UserTracker) getUserResourceUsageDAOInfo(queueTracker *QueueTracker) *dao.UserResourceUsageDAOInfo {
+	ut.RLock()
+	defer ut.RUnlock()
 	userResourceUsage := &dao.UserResourceUsageDAOInfo{
 		Groups: make(map[string]string),
 	}
@@ -94,21 +96,4 @@ func (ut *UserTracker) getUserResourceUsageDAOInfo(queueTracker *QueueTracker) *
 	}
 	userResourceUsage.Queues = ut.queueTracker.getResourceUsageDAOInfo("root", "root", ut.queueTracker)
 	return userResourceUsage
-}
-
-// GetResource only for tests
-func (ut *UserTracker) GetResource() map[string]*resources.Resource {
-	resources := make(map[string]*resources.Resource)
-	usage := ut.getUserResourceUsageDAOInfo(ut.queueTracker)
-	return ut.internalGetResource(usage.Queues, resources)
-}
-
-func (ut *UserTracker) internalGetResource(usage *dao.ResourceUsageDAOInfo, resources map[string]*resources.Resource) map[string]*resources.Resource {
-	resources[usage.QueueName] = usage.ResourceUsage
-	if len(usage.Children) > 0 {
-		for _, resourceUsage := range usage.Children {
-			ut.internalGetResource(resourceUsage, resources)
-		}
-	}
-	return resources
 }

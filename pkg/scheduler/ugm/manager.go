@@ -37,19 +37,20 @@ var m *Manager
 type Manager struct {
 	userTrackers  map[string]*UserTracker
 	groupTrackers map[string]*GroupTracker
-	sync.RWMutex
+	lock          sync.RWMutex
 }
 
 func Init() {
 	once.Do(func() {
-		m = NewManager()
+		m = newManager()
 	})
 }
 
-func NewManager() *Manager {
+func newManager() *Manager {
 	manager := &Manager{
 		userTrackers:  make(map[string]*UserTracker),
 		groupTrackers: make(map[string]*GroupTracker),
+		lock:          sync.RWMutex{},
 	}
 	return manager
 }
@@ -75,11 +76,11 @@ func (m *Manager) IncreaseTrackedResource(queuePath string, applicationID string
 		return fmt.Errorf("mandatory parameters are missing. queuepath: %s, application id: %s, resource usage: %s, user: %s",
 			queuePath, applicationID, usage.String(), user.User)
 	}
-	m.Lock()
-	defer m.Unlock()
+	m.lock.Lock()
+	defer m.lock.Unlock()
 	var userTracker *UserTracker
 	if m.userTrackers[user.User] == nil {
-		userTracker = NewUserTracker(user)
+		userTracker = newUserTracker(user)
 		m.userTrackers[user.User] = userTracker
 	} else {
 		userTracker = m.userTrackers[user.User]
@@ -132,8 +133,8 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 		return fmt.Errorf("mandatory parameters are missing. queuepath: %s, application id: %s, resource usage: %s, user: %s",
 			queuePath, applicationID, usage.String(), user.User)
 	}
-	m.Lock()
-	defer m.Unlock()
+	m.lock.Lock()
+	defer m.lock.Unlock()
 	userTracker := m.userTrackers[user.User]
 	if userTracker != nil {
 		err := userTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
@@ -212,7 +213,7 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID strin
 				zap.String("queue path", queuePath),
 				zap.String("user", user.User),
 				zap.String("group", group))
-			groupTracker = NewGroupTracker(group)
+			groupTracker = newGroupTracker(group)
 			m.groupTrackers[group] = groupTracker
 		} else {
 			log.Logger().Debug("Group tracker already exists and linking (reusing) the same with application",
@@ -235,8 +236,8 @@ func (m *Manager) getGroup(user security.UserGroup) string {
 // cleaner Auto wakeup go routine to remove the user and group trackers based on applications being tracked upon, its root queueTracker usage etc
 // nolint:unused
 func (m *Manager) cleaner() {
-	m.Lock()
-	defer m.Unlock()
+	m.lock.Lock()
+	defer m.lock.Unlock()
 	for user, ut := range m.userTrackers {
 		if m.isUserRemovable(ut) {
 			delete(m.userTrackers, user)
@@ -263,11 +264,11 @@ func (m *Manager) isGroupRemovable(gt *GroupTracker) bool {
 	return false
 }
 
-// GetUserTrackers only for tests
-func (m *Manager) GetUserTrackers() map[string]*UserTracker {
+// getUserTrackers only for tests
+func (m *Manager) getUserTrackers() map[string]*UserTracker {
 	return m.userTrackers
 }
 
-func (m *Manager) GetGroupTrackers() map[string]*GroupTracker {
+func (m *Manager) getGroupTrackers() map[string]*GroupTracker {
 	return m.groupTrackers
 }

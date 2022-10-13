@@ -24,21 +24,20 @@ import (
 	"gotest.tools/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
-	"github.com/apache/yunikorn-core/pkg/common/security"
 )
 
-func TestGTIncreaseTrackedResource(t *testing.T) {
+func TestQTIncreaseTrackedResource(t *testing.T) {
 	// Queue setup:
 	// root->parent->child1->child12
 	// root->parent->child2
 	// root->parent->child12 (similar name like above leaf queue, but it is being treated differently as similar names are allowed)
-	user := &security.UserGroup{User: "test", Groups: []string{"test"}}
-	groupTracker := newGroupTracker(user.User)
+	queueTracker := newQueueTracker("root")
 	usage1, err := resources.NewResourceFromConf(map[string]string{"mem": "10M", "vcore": "10"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
-	err = groupTracker.increaseTrackedResource(queuePath1, TestApp1, usage1)
+
+	err = queueTracker.increaseTrackedResource(queuePath1, TestApp1, usage1)
 	if err != nil {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
 	}
@@ -47,7 +46,7 @@ func TestGTIncreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
 	}
-	err = groupTracker.increaseTrackedResource(queuePath2, TestApp2, usage2)
+	err = queueTracker.increaseTrackedResource(queuePath2, TestApp2, usage2)
 	if err != nil {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage2, err)
 	}
@@ -56,7 +55,7 @@ func TestGTIncreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	err = groupTracker.increaseTrackedResource(queuePath3, TestApp3, usage3)
+	err = queueTracker.increaseTrackedResource(queuePath3, TestApp3, usage3)
 	if err != nil {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath3, TestApp3, usage3, err)
 	}
@@ -65,11 +64,11 @@ func TestGTIncreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	err = groupTracker.increaseTrackedResource(queuePath4, TestApp4, usage4)
+	err = queueTracker.increaseTrackedResource(queuePath4, TestApp4, usage4)
 	if err != nil {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath4, TestApp4, usage4, err)
 	}
-	actualResources := getGroupResource(groupTracker)
+	actualResources := getQTResource(queueTracker)
 
 	assert.Equal(t, "map[mem:80000000 vcore:80000]", actualResources["root"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:80000000 vcore:80000]", actualResources["root.parent"].String(), "wrong resource")
@@ -77,36 +76,35 @@ func TestGTIncreaseTrackedResource(t *testing.T) {
 	assert.Equal(t, "map[mem:30000000 vcore:30000]", actualResources["root.parent.child1.child12"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:20000000 vcore:20000]", actualResources["root.parent.child2"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:20000000 vcore:20000]", actualResources["root.parent.child12"].String(), "wrong resource")
-	assert.Equal(t, 4, len(groupTracker.getTrackedApplications()))
+	assert.Equal(t, 4, len(queueTracker.getRunningApplications()))
 }
 
-func TestGTDecreaseTrackedResource(t *testing.T) {
+func TestQTDecreaseTrackedResource(t *testing.T) {
 	// Queue setup:
 	// root->parent->child1
 	// root->parent->child2
-	user := &security.UserGroup{User: "test", Groups: []string{"test"}}
-	groupTracker := newGroupTracker(user.User)
+	queueTracker := newQueueTracker("root")
 	usage1, err := resources.NewResourceFromConf(map[string]string{"mem": "70M", "vcore": "70"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
-	err = groupTracker.increaseTrackedResource(queuePath1, TestApp1, usage1)
+	err = queueTracker.increaseTrackedResource(queuePath1, TestApp1, usage1)
 	if err != nil {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
 	}
-	assert.Equal(t, 1, len(groupTracker.getTrackedApplications()))
+	assert.Equal(t, 1, len(queueTracker.getRunningApplications()))
 
 	usage2, err := resources.NewResourceFromConf(map[string]string{"mem": "20M", "vcore": "20"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
 	}
-	err = groupTracker.increaseTrackedResource(queuePath2, TestApp2, usage2)
+	err = queueTracker.increaseTrackedResource(queuePath2, TestApp2, usage2)
 	if err != nil {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage2, err)
 	}
-	actualResources := getGroupResource(groupTracker)
+	actualResources := getQTResource(queueTracker)
 
-	assert.Equal(t, 2, len(groupTracker.getTrackedApplications()))
+	assert.Equal(t, 2, len(queueTracker.getRunningApplications()))
 	assert.Equal(t, "map[mem:90000000 vcore:90000]", actualResources["root"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:90000000 vcore:90000]", actualResources["root.parent"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:70000000 vcore:70000]", actualResources["root.parent.child1"].String(), "wrong resource")
@@ -116,36 +114,36 @@ func TestGTDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	err = groupTracker.decreaseTrackedResource(queuePath1, TestApp1, usage3, false)
+	err = queueTracker.decreaseTrackedResource(queuePath1, TestApp1, usage3, false)
 	if err != nil {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage3, err)
 	}
-	err = groupTracker.decreaseTrackedResource(queuePath2, TestApp2, usage3, false)
+	err = queueTracker.decreaseTrackedResource(queuePath2, TestApp2, usage3, false)
 	if err != nil {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage3, err)
 	}
-	actualResources1 := getGroupResource(groupTracker)
+	actualResources1 := getQTResource(queueTracker)
 
 	assert.Equal(t, "map[mem:70000000 vcore:70000]", actualResources1["root"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:70000000 vcore:70000]", actualResources1["root.parent"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:60000000 vcore:60000]", actualResources1["root.parent.child1"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:10000000 vcore:10000]", actualResources["root.parent.child2"].String(), "wrong resource")
 
-	err = groupTracker.decreaseTrackedResource(queuePath1, TestApp1, usage1, true)
+	err = queueTracker.decreaseTrackedResource(queuePath1, TestApp1, usage1, true)
 	if err != nil {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
 	}
-	assert.Equal(t, 1, len(groupTracker.getTrackedApplications()))
+	assert.Equal(t, 1, len(queueTracker.getRunningApplications()))
 
-	err = groupTracker.decreaseTrackedResource(queuePath2, TestApp2, usage2, true)
+	err = queueTracker.decreaseTrackedResource(queuePath2, TestApp2, usage2, true)
 	if err != nil {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage2, err)
 	}
-	assert.Equal(t, 0, len(groupTracker.getTrackedApplications()))
+	assert.Equal(t, 0, len(queueTracker.getRunningApplications()))
 }
 
-func getGroupResource(gt *GroupTracker) map[string]*resources.Resource {
+func getQTResource(qt *QueueTracker) map[string]*resources.Resource {
 	resources := make(map[string]*resources.Resource)
-	usage := gt.getGroupResourceUsageDAOInfo(gt.queueTracker)
-	return internalGetResource(usage.Queues, resources)
+	usage := qt.getResourceUsageDAOInfo("root", "root", qt)
+	return internalGetResource(usage, resources)
 }

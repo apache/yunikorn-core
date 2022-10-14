@@ -37,6 +37,9 @@ func TestQTIncreaseTrackedResource(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
 
+	err = queueTracker.increaseTrackedResource("", "", usage1)
+	assert.Error(t, err, "mandatory parameters are missing. queuepath: , application id: , resource usage: "+usage1.String())
+
 	err = queueTracker.increaseTrackedResource(queuePath1, TestApp1, usage1)
 	if err != nil {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
@@ -88,6 +91,7 @@ func TestQTDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
+
 	err = queueTracker.increaseTrackedResource(queuePath1, TestApp1, usage1)
 	if err != nil {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
@@ -114,6 +118,10 @@ func TestQTDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
+
+	err = queueTracker.increaseTrackedResource("", "", usage3)
+	assert.Error(t, err, "mandatory parameters are missing. queuepath: , application id: , resource usage: "+usage3.String())
+
 	err = queueTracker.decreaseTrackedResource(queuePath1, TestApp1, usage3, false)
 	if err != nil {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage3, err)

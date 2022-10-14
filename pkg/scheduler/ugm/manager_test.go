@@ -27,6 +27,25 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/security"
 )
 
+func TestUserManagerOnceInitialization(t *testing.T) {
+	manager := GetUserManager()
+	assert.Equal(t, manager, manager)
+	manager1 := GetUserManager()
+	assert.Equal(t, manager, manager1)
+}
+
+func TestGetGroup(t *testing.T) {
+	user := security.UserGroup{User: "test", Groups: []string{"test", "test1"}}
+	manager := newManager()
+	group, err := manager.getGroup(user)
+	assert.NilError(t, err)
+	assert.Equal(t, group, "test")
+	user = security.UserGroup{User: "test", Groups: []string{}}
+	group, err = manager.getGroup(user)
+	assert.Equal(t, err.Error(), "group is not available in usergroup for user test")
+	assert.Equal(t, group, "")
+}
+
 func TestAddRemoveUserAndGroups(t *testing.T) {
 	// Queue setup:
 	// root->parent->child1
@@ -37,11 +56,21 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
 	manager := newManager()
+
+	err = manager.IncreaseTrackedResource("", "", usage1, user)
+	assert.Error(t, err, "mandatory parameters are missing. queuepath: , application id: , resource usage: "+usage1.String()+", user: "+user.User)
+
 	err = manager.IncreaseTrackedResource(queuePath1, TestApp1, usage1, user)
 	if err != nil {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
 	}
 
+	userTrackers := manager.getUserTrackers()
+	userTracker := userTrackers["test"]
+	groupTrackers := manager.getGroupTrackers()
+	groupTracker := groupTrackers["test"]
+	assert.Equal(t, false, manager.isUserRemovable(userTracker))
+	assert.Equal(t, false, manager.isGroupRemovable(groupTracker))
 	assert.Equal(t, 1, len(manager.getUserTrackers()), "userTrackers count should be 1")
 	assert.Equal(t, 1, len(manager.getGroupTrackers()), "groupTrackers count should be 1")
 
@@ -68,6 +97,10 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
+
+	err = manager.DecreaseTrackedResource("", "", usage1, user, false)
+	assert.Error(t, err, "mandatory parameters are missing. queuepath: , application id: , resource usage: "+usage1.String()+", user: "+user.User)
+
 	err = manager.DecreaseTrackedResource(queuePath1, TestApp1, usage3, user, false)
 	if err != nil {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage3, err)

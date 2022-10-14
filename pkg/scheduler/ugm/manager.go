@@ -40,12 +40,6 @@ type Manager struct {
 	lock          sync.RWMutex
 }
 
-func Init() {
-	once.Do(func() {
-		m = newManager()
-	})
-}
-
 func newManager() *Manager {
 	manager := &Manager{
 		userTrackers:  make(map[string]*UserTracker),
@@ -56,6 +50,9 @@ func newManager() *Manager {
 }
 
 func GetUserManager() *Manager {
+	once.Do(func() {
+		m = newManager()
+	})
 	return m
 }
 
@@ -95,14 +92,20 @@ func (m *Manager) IncreaseTrackedResource(queuePath string, applicationID string
 			zap.String("err message", err.Error()))
 		return err
 	}
-	m.ensureGroupTrackerForApp(queuePath, applicationID, user)
-	groupTracker := m.groupTrackers[m.getGroup(user)]
+	if err = m.ensureGroupTrackerForApp(queuePath, applicationID, user); err != nil {
+		return err
+	}
+	group, err := m.getGroup(user)
+	if err != nil {
+		return err
+	}
+	groupTracker := m.groupTrackers[group]
 	if groupTracker != nil {
 		err = groupTracker.increaseTrackedResource(queuePath, applicationID, usage)
 		if err != nil {
 			log.Logger().Error("Problem in increasing the group resource usage",
 				zap.String("user", user.User),
-				zap.String("group", m.getGroup(user)),
+				zap.String("group", group),
 				zap.String("queue path", queuePath),
 				zap.String("application", applicationID),
 				zap.String("resource", usage.String()),
@@ -159,13 +162,17 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 		return fmt.Errorf("user tracker for %s is missing in userTrackers map", user.User)
 	}
 
-	groupTracker := m.groupTrackers[m.getGroup(user)]
+	group, err := m.getGroup(user)
+	if err != nil {
+		return err
+	}
+	groupTracker := m.groupTrackers[group]
 	if groupTracker != nil {
 		err := groupTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
 		if err != nil {
 			log.Logger().Error("Problem in decreasing the group resource usage",
 				zap.String("user", user.User),
-				zap.String("group", m.getGroup(user)),
+				zap.String("group", group),
 				zap.String("queue path", queuePath),
 				zap.String("application", applicationID),
 				zap.String("resource", usage.String()),
@@ -175,13 +182,13 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 		}
 		if removeApp {
 			if m.isGroupRemovable(groupTracker) {
-				delete(m.groupTrackers, m.getGroup(user))
+				delete(m.groupTrackers, group)
 			}
 		}
 	} else {
 		log.Logger().Error("appGroupTrackers tracker must be available in groupTrackers map",
-			zap.String("appGroupTrackers", m.getGroup(user)))
-		return fmt.Errorf("appGroupTrackers tracker for %s is missing in groupTrackers map", m.getGroup(user))
+			zap.String("appGroupTrackers", group))
+		return fmt.Errorf("appGroupTrackers tracker for %s is missing in groupTrackers map", group)
 	}
 	return nil
 }
@@ -202,11 +209,14 @@ func (m *Manager) GetGroupsResources() []*GroupTracker {
 	return nil
 }
 
-func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID string, user security.UserGroup) {
+func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID string, user security.UserGroup) error {
 	userTracker := m.userTrackers[user.User]
 	if !userTracker.hasGroupForApp(applicationID) {
 		var groupTracker *GroupTracker
-		group := m.getGroup(user)
+		group, err := m.getGroup(user)
+		if err != nil {
+			return err
+		}
 		if m.groupTrackers[group] == nil {
 			log.Logger().Debug("Group tracker does not exist. Creating group tracker object and linking the same with application",
 				zap.String("application", applicationID),
@@ -225,12 +235,16 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID strin
 		}
 		userTracker.setGroupForApp(applicationID, groupTracker)
 	}
+	return nil
 }
 
 // getGroup Based on the current limitations, username and group name is same. Groups[0] is always set and same as username.
 // It would be changed in future based on user group resolution, limit configuration processing etc
-func (m *Manager) getGroup(user security.UserGroup) string {
-	return user.Groups[0]
+func (m *Manager) getGroup(user security.UserGroup) (string, error) {
+	if len(user.Groups) > 0 {
+		return user.Groups[0], nil
+	}
+	return "", fmt.Errorf("group is not available in usergroup for user %s", user.User)
 }
 
 // cleaner Auto wakeup go routine to remove the user and group trackers based on applications being tracked upon, its root queueTracker usage etc

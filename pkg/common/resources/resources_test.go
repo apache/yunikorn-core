@@ -83,40 +83,26 @@ func TestCloneNil(t *testing.T) {
 }
 
 func TestClone(t *testing.T) {
-	// resource without any resource mappings
-	original := NewResourceFromMap(map[string]Quantity{})
-	cloned := original.Clone()
-	// pointer cannot be equal
-	if original == cloned {
-		t.Fatalf("cloned resources pointers are equal, should not be")
-	}
-	// content must be equal
-	if !reflect.DeepEqual(original.Resources, cloned.Resources) {
-		t.Errorf("cloned resources are not equal: %v / %v", original, cloned)
-	}
-
-	original = NewResourceFromMap(map[string]Quantity{"first": 1, "second": -2, "third": 3})
-	cloned = original.Clone()
-	// pointer cannot be equal
-	if original == cloned {
-		t.Fatalf("cloned resources pointers are equal, should not be")
-	}
-	// content must be equal
-	if !reflect.DeepEqual(original.Resources, cloned.Resources) {
-		t.Errorf("cloned resources are not equal: %v / %v", original, cloned)
-	}
-
-	// set a resource value to 0
-	original = NewResourceFromMap(map[string]Quantity{"first": 1, "zero": 0, "third": 3})
-	cloned = original.Clone()
-	// pointer cannot be equal
-	if original == cloned {
-		t.Fatalf("cloned resources pointers are equal, should not be")
-	}
-	// content must be equal
-	if !reflect.DeepEqual(original.Resources, cloned.Resources) {
-		t.Errorf("cloned resources are not equal: %v / %v", original, cloned)
-	}
+    var tests = []struct {
+        caseName string
+        input    map[string]Quantity
+    }{
+        {"resource without any resource mappings", map[string]Quantity{}},
+        {"resource mappings", map[string]Quantity{"first": 1, "second": -2, "third": 3}},
+        {"set a resource value to 0", map[string]Quantity{"first": 1, "zero": 0, "third": 3}},
+    }
+    for _, tt := range tests {
+        t.Run(tt.caseName, func(t *testing.T) {
+            original := NewResourceFromMap(tt.input)
+            cloned := original.Clone()
+            if original == cloned {
+                t.Errorf("cloned resources pointers are equal, should not be")
+            }
+            if !reflect.DeepEqual(original.Resources, cloned.Resources) {
+                t.Errorf("cloned resources are not equal: %v / %v", original, cloned)
+            }
+        })
+    }
 }
 
 func TestEquals(t *testing.T) {

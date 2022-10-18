@@ -193,70 +193,51 @@ func TestStrictlyGreaterThanZero(t *testing.T) {
 }
 
 func TestStrictlyGreaterThan(t *testing.T) {
-	// simple case (nil checks)
-	if StrictlyGreaterThan(nil, nil) {
-		t.Errorf("nil resource should not be greater than other nil")
-	}
-	// zero or empty resource values
-	larger := NewResourceFromMap(map[string]Quantity{})
-	smaller := NewResourceFromMap(map[string]Quantity{})
-	if StrictlyGreaterThan(larger, smaller) {
-		t.Errorf("empty resource entries should not be greater than empty")
-	}
-	larger = NewResourceFromMap(map[string]Quantity{"zero": 0})
-	if StrictlyGreaterThan(larger, smaller) {
-		t.Errorf("only zero resources should not be greater than empty")
-	}
-	smaller = NewResourceFromMap(map[string]Quantity{"other": 0})
-	if StrictlyGreaterThan(larger, smaller) {
-		t.Errorf("only zero resource (both objects) should not be greater than zero")
-	}
-
-	// negative resource values
-	larger = NewResourceFromMap(map[string]Quantity{})
-	smaller = NewResourceFromMap(map[string]Quantity{"first": -1})
-	if !StrictlyGreaterThan(larger, smaller) {
-		t.Errorf("negative resource should not be greater than zero")
-	}
-	if StrictlyGreaterThan(smaller, larger) {
-		t.Errorf("negative resource should be smaller than zero")
-	}
-
-	// set resource values
-	larger = NewResourceFromMap(map[string]Quantity{"first": 10})
-	if StrictlyGreaterThan(larger, larger) {
-		t.Errorf("same resource should not be greater than")
-	}
-	smaller = NewResourceFromMap(map[string]Quantity{"first": 1})
-	if !StrictlyGreaterThan(larger, smaller) {
-		t.Errorf("larger %v returned as smaller compared to %v", larger, smaller)
-	}
-	smaller = NewResourceFromMap(map[string]Quantity{"second": 1})
-	if StrictlyGreaterThan(larger, smaller) {
-		t.Errorf("larger %v returned as smaller compared to %v", larger, smaller)
-	}
-	larger = NewResourceFromMap(map[string]Quantity{"first": 10, "second": 10})
-	smaller = NewResourceFromMap(map[string]Quantity{"first": 1})
-	if !StrictlyGreaterThan(larger, smaller) {
-		t.Errorf("larger %v returned as smaller compared to %v", larger, smaller)
-	}
-	// negative resource is smaller than not set
-	larger = NewResourceFromMap(map[string]Quantity{"first": 10, "second": -1})
-	smaller = NewResourceFromMap(map[string]Quantity{"first": 10})
-	if StrictlyGreaterThan(larger, smaller) {
-		t.Errorf("negative %v returned as larger compared to not set %v", larger, smaller)
-	}
-	if !StrictlyGreaterThan(smaller, larger) {
-		t.Errorf("not set %v returned as larger compared to negative %v", smaller, larger)
-	}
-	larger = NewResourceFromMap(map[string]Quantity{"first": -1})
-	smaller = NewResourceFromMap(map[string]Quantity{})
-	if StrictlyGreaterThan(larger, smaller) {
-		t.Errorf("negative %v returned as larger compared to not set %v", larger, smaller)
-	}
-	if !StrictlyGreaterThan(smaller, larger) {
-		t.Errorf("not set %v returned as larger compared to negative %v", smaller, larger)
-	}
+    type inputs struct {
+        larger  map[string]Quantity
+        smaller map[string]Quantity
+        sameRef bool
+    }
+    type outputs struct {
+        larger  bool
+        smaller bool
+    }
+    var tests = []struct {
+        caseName string
+        input    inputs
+        expected outputs
+    }{
+        {"Nil check", inputs{nil, nil, false}, outputs{false, false}},
+        {"Empty resources", inputs{map[string]Quantity{}, map[string]Quantity{}, false}, outputs{false, false}},
+        {"An empty resource and a zero resource", inputs{map[string]Quantity{"zero": 0}, map[string]Quantity{}, false}, outputs{false, false}},
+        {"Zero resources", inputs{map[string]Quantity{"zero": 0}, map[string]Quantity{"zero": 0}, false}, outputs{false, false}},
+        {"An empty resource and a negative resource", inputs{map[string]Quantity{}, map[string]Quantity{"first": -1}, false}, outputs{true, false}},
+        {"Positive resource and same references", inputs{map[string]Quantity{"first": 10}, nil, true}, outputs{false, false}},
+        {"Positive numbers", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"first": 1}, false}, outputs{true, false}},
+        {"Different resources", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"second": 1}, false}, outputs{false, false}},
+        {"Mutiple resources and a single resource", inputs{map[string]Quantity{"first": 10, "second": 10}, map[string]Quantity{"first": 1}, false}, outputs{true, false}},
+        {"Negative resource is smaller than not set", inputs{map[string]Quantity{"first": 10, "second": -1}, map[string]Quantity{"first": 10}, false}, outputs{false, true}},
+        {"Negative resource is smaller than not set", inputs{map[string]Quantity{"first": -1}, map[string]Quantity{}, false}, outputs{false, true}},
+    }
+    for _, tt := range tests {
+        t.Run(tt.caseName, func(t *testing.T) {
+            var compare, base *Resource
+            if compare = nil; tt.input.larger != nil {
+                compare = NewResourceFromMap(tt.input.larger)
+            }
+            if base = nil; tt.input.sameRef {
+                base = compare
+            } else {
+                base = NewResourceFromMap(tt.input.smaller)
+            }
+            if result := StrictlyGreaterThan(compare, base); result != tt.expected.larger {
+                t.Errorf("comapre %v, base %v, got %v, expeceted %v", compare, base, result, tt.expected.larger)
+            }
+            if result := StrictlyGreaterThan(base, compare); result != tt.expected.smaller {
+                t.Errorf("base %v, compare %v, got %v, expeceted %v", base, compare, result, tt.expected.smaller)
+            }
+        })
+    }
 }
 
 func TestStrictlyGreaterThanOrEquals(t *testing.T) {

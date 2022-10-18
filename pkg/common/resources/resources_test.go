@@ -146,24 +146,30 @@ func TestEquals(t *testing.T) {
 }
 
 func TestIsZero(t *testing.T) {
-	// simple cases (nil checks)
-	if !IsZero(nil) {
-		t.Errorf("nil resource should be zero")
-	}
-	base := NewResourceFromMap(map[string]Quantity{})
-	if !IsZero(base) {
-		t.Errorf("no resource entries should be zero")
-	}
-
-	// set resource values
-	base = NewResourceFromMap(map[string]Quantity{"zero": 0})
-	if !IsZero(base) {
-		t.Errorf("only zero resources should be zero")
-	}
-	base = NewResourceFromMap(map[string]Quantity{"first": 10})
-	if IsZero(base) {
-		t.Errorf("set resource should be non zero")
-	}
+    var tests = []struct {
+        caseName string
+        input map[string]Quantity
+        expected bool
+    }{
+        {"nil checks", nil, true},
+        {"Empty resource value", map[string]Quantity{}, true},
+        {"Zero resource value", map[string]Quantity{"zero": 0}, true},
+        {"Resource value", map[string]Quantity{"first": 10}, false},
+        {"Multiple resource values including zero", map[string]Quantity{"first": 10, "second": 2, "third": 0}, false},
+        {"Multiple resource values are zero", map[string]Quantity{"first": 0, "second": 0, "third": 0}, true},
+        {"Multiple resource values", map[string]Quantity{"first": 10, "second": 2, "third": 4}, false},
+    }
+    for _, tt := range tests {
+        t.Run(tt.caseName, func(t *testing.T){
+            var base *Resource
+            if base = nil; tt.input != nil  {
+                base = NewResourceFromMap(tt.input)
+            }
+            if result := IsZero(base); result != tt.expected {
+                t.Errorf("Is base %v zero?, got %v, expected %v", base, result, tt.expected)
+            }
+        })
+    }
 }
 
 func TestStrictlyGreaterThanZero(t *testing.T) {

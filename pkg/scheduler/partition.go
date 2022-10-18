@@ -38,6 +38,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/placement"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
+	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -63,6 +64,7 @@ type PartitionContext struct {
 	totalPartitionResource *resources.Resource             // Total node resources
 	allocations            int                             // Number of allocations on the partition
 	stateDumpFilePath      string                          // Path of output file for state dumps
+	ugm                    *ugm.Manager                    // User group manager
 
 	// The partition write lock must not be held while manipulating an application.
 	// Scheduling is running continuously as a lock free background task. Scheduling an application
@@ -95,6 +97,7 @@ func newPartitionContext(conf configs.PartitionConfig, rmID string, cc *ClusterC
 		nodes:                 objects.NewNodeCollection(conf.Name),
 	}
 	pc.partitionManager = newPartitionManager(pc, cc)
+	pc.ugm = ugm.GetUserManager()
 	if err := pc.initialPartitionFromConfig(conf); err != nil {
 		return nil, err
 	}

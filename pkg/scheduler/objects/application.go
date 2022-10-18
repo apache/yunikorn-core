@@ -1538,6 +1538,9 @@ func (sa *Application) removeAllocationInternal(uuid string, releaseType si.Term
 				sa.placeholderData[alloc.taskGroupName].TimedOut++
 			}
 		}
+		// as and when every ph gets removed (for replacement), resource usage would be reduced.
+		// When real allocation happens as part of replacement, usage would be increased again with real alloc resource
+		sa.decUserResourceUsage(alloc.GetAllocatedResource(), false)
 		sa.allocatedPlaceholder = resources.Sub(sa.allocatedPlaceholder, alloc.GetAllocatedResource())
 		// if all the placeholders are replaced, clear the placeholder timer
 		if resources.IsZero(sa.allocatedPlaceholder) {

@@ -97,7 +97,6 @@ func newPartitionContext(conf configs.PartitionConfig, rmID string, cc *ClusterC
 		nodes:                 objects.NewNodeCollection(conf.Name),
 	}
 	pc.partitionManager = newPartitionManager(pc, cc)
-	ugm.Init()
 	pc.ugm = ugm.GetUserManager()
 	if err := pc.initialPartitionFromConfig(conf); err != nil {
 		return nil, err

@@ -29,65 +29,44 @@ import (
 )
 
 func TestNewResourceFromConf(t *testing.T) {
-	// resource with nil input
-	original, err := NewResourceFromConf(nil)
-	if err != nil || len(original.Resources) != 0 {
-		t.Fatalf("new resource create from nil returned error or wrong resource: error %t, res %v", err, original)
-	}
-	// resource without any resource mappings
-	original, err = NewResourceFromConf(make(map[string]string))
-	if err != nil || len(original.Resources) != 0 {
-		t.Fatalf("new resource create from empty conf returned error or wrong resource: error %t, res %v", err, original)
-	}
-	original, err = NewResourceFromConf(map[string]string{"zero": "0"})
-	if err != nil || len(original.Resources) != 1 {
-		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, original)
-	}
-
-	// normal multipliers
-	original, err = NewResourceFromConf(map[string]string{"memory": "10M"})
-	if err != nil || len(original.Resources) != 1 {
-		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, original)
-	}
-	assert.Equal(t, "map[memory:10000000]", original.String(), "wrong memory value")
-	original, err = NewResourceFromConf(map[string]string{"memory": "10Mi"})
-	if err != nil || len(original.Resources) != 1 {
-		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, original)
-	}
-	assert.Equal(t, "map[memory:10485760]", original.String(), "wrong memory value")
-
-	// vcore multipliers
-	original, err = NewResourceFromConf(map[string]string{"vcore": "10k"})
-	if err != nil || len(original.Resources) != 1 {
-		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, original)
-	}
-	assert.Equal(t, "map[vcore:10000000]", original.String(), "wrong vcore value")
-	original, err = NewResourceFromConf(map[string]string{"vcore": "10"})
-	if err != nil || len(original.Resources) != 1 {
-		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, original)
-	}
-	assert.Equal(t, "map[vcore:10000]", original.String(), "wrong vcore value")
-	original, err = NewResourceFromConf(map[string]string{"vcore": "10m"})
-	if err != nil || len(original.Resources) != 1 {
-		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, original)
-	}
-	assert.Equal(t, "map[vcore:10]", original.String(), "wrong vcore value")
-
-	// failure case: parse error
-	original, err = NewResourceFromConf(map[string]string{"fail": "xx"})
-	if err == nil || original != nil {
-		t.Fatalf("new resource create should have returned error %v, res %v", err, original)
-	}
-	// negative resource
-	original, err = NewResourceFromConf(map[string]string{"memory": "-15"})
-	if err == nil || original != nil {
-		t.Fatalf("new resource create should have returned error %v, res %v", err, original)
-	}
-	// 'milli' used for anything other than vcore
-	original, err = NewResourceFromConf(map[string]string{"memory": "10m"})
-	if err == nil || original != nil {
-		t.Fatalf("new resource create should have returned error %v, res %v", err, original)
-	}
+    type expectedvalues struct {
+        resourceExist bool
+        resourceTypes int
+        resources     string
+    }
+    var tests = []struct {
+        caseName string
+        input    map[string]string
+        expected expectedvalues
+    }{
+        {"resource with nil input", nil, expectedvalues{true, 0, ""}},
+        {"resource without any resource mappings", make(map[string]string), expectedvalues{true, 0, ""}},
+        {"resource with zero value", map[string]string{"zero": "0"}, expectedvalues{true, 1, "map[zero:0]"}},
+        {"normal multipliers with \"M\"", map[string]string{"memory": "10M"}, expectedvalues{true, 1, "map[memory:10000000]"}},
+        {"normal multipliers with \"Mi\"", map[string]string{"memory": "10Mi"}, expectedvalues{true, 1, "map[memory:10485760]"}},
+        {"vcore multipliers with \"k\"", map[string]string{"vcore": "10k"}, expectedvalues{true, 1, "map[vcore:10000000]"}},
+        {"vcore multipliers", map[string]string{"vcore": "10"}, expectedvalues{true, 1, "map[vcore:10000]"}},
+        {"vcore multipliers with \"m\"", map[string]string{"vcore": "10m"}, expectedvalues{true, 1, "map[vcore:10]"}},
+        {"failure case: parse error", map[string]string{"fail": "xx"}, expectedvalues{false, 0, ""}},
+        {"negative resource", map[string]string{"memory": "-15"}, expectedvalues{false, 0, ""}},
+        {"\"milli\" used for anything other than vcore", map[string]string{"memory": "10m"}, expectedvalues{false, 0, ""}},
+    }
+    for _, tt := range tests {
+        t.Run(tt.caseName, func(t *testing.T) {
+            if original, err := NewResourceFromConf(tt.input); tt.expected.resourceExist {
+                if err != nil || len(original.Resources) != tt.expected.resourceTypes {
+                    t.Errorf("Expected err nil, numbers of resource types %v. Got err %v, numbers of resource types %v", tt.expected.resourceTypes, err, len(original.Resources))
+                }
+                if len(tt.expected.resources) > 0 && tt.expected.resources != original.String() {
+                    t.Errorf("Resource value:got %s, expected %s", original.String(), tt.expected.resources)
+                }
+            } else {
+                if err == nil || original != nil {
+                    t.Errorf("new resource create should have returned error. got err %v, res %v", err, original)
+                }
+            }
+        })
+    }
 }
 
 func TestCloneNil(t *testing.T) {

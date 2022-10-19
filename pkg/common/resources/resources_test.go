@@ -53,16 +53,19 @@ func TestNewResourceFromConf(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.caseName, func(t *testing.T) {
-			if original, err := NewResourceFromConf(tt.input); tt.expected.resourceExist {
+			original, err := NewResourceFromConf(tt.input)
+			if tt.expected.resourceExist {
 				if err != nil || len(original.Resources) != tt.expected.resourceTypes {
 					t.Errorf("Expected err nil, numbers of resource types %v. Got err %v, numbers of resource types %v", tt.expected.resourceTypes, err, len(original.Resources))
 				}
 				if len(tt.expected.resources) > 0 && tt.expected.resources != original.String() {
 					t.Errorf("Resource value:got %s, expected %s", original.String(), tt.expected.resources)
 				}
-			} else {
+			}
+
+			if !tt.expected.resourceExist {
 				if err == nil || original != nil {
-					t.Errorf("new resource create should have returned error. got err %v, res %v", err, original)
+					t.Errorf("new resource is created and the function should have returned error. got err %v, res %v", err, original)
 				}
 			}
 		})
@@ -227,11 +230,12 @@ func TestStrictlyGreaterThan(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.caseName, func(t *testing.T) {
-			var compare, base *Resource
-			if compare = nil; tt.input.larger != nil {
+			var compare *Resource = nil
+			var base *Resource = nil
+			if tt.input.larger != nil {
 				compare = NewResourceFromMap(tt.input.larger)
 			}
-			if base = nil; tt.input.sameRef {
+			if tt.input.sameRef {
 				base = compare
 			} else {
 				base = NewResourceFromMap(tt.input.smaller)
@@ -267,20 +271,23 @@ func TestStrictlyGreaterThanOrEquals(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.caseName, func(t *testing.T) {
-			var compare, base *Resource
-			if compare = nil; tt.input.larger != nil {
+			var compare *Resource = nil
+			var base *Resource = nil
+			if tt.input.larger != nil {
 				compare = NewResourceFromMap(tt.input.larger)
 			}
-			if base = nil; tt.input.sameRef {
+			if tt.input.sameRef {
 				base = compare
 			} else {
 				base = NewResourceFromMap(tt.input.smaller)
 			}
 
-			if result := StrictlyGreaterThanOrEquals(compare, base); result != tt.expected[0] {
+			result := StrictlyGreaterThanOrEquals(compare, base)
+			if result != tt.expected[0] {
 				t.Errorf("comapre %v, base %v, got %v, expeceted %v", compare, base, result, tt.expected[0])
 			}
-			if result := StrictlyGreaterThanOrEquals(base, compare); result != tt.expected[1] {
+			result = StrictlyGreaterThanOrEquals(base, compare)
+			if result != tt.expected[1] {
 				t.Errorf("base %v, compare %v, got %v, expeceted %v", base, compare, result, tt.expected[1])
 			}
 		})
@@ -313,11 +320,12 @@ func TestComponentWiseMin(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.caseName, func(t *testing.T) {
-			var res1, res2 *Resource
-			if res1 = nil; tt.input.res1 != nil {
+			var res1 *Resource = nil
+			var res2 *Resource = nil
+			if tt.input.res1 != nil {
 				res1 = NewResourceFromMap(tt.input.res1)
 			}
-			if res2 = nil; tt.input.sameRef {
+			if tt.input.sameRef {
 				res2 = res1
 			} else if tt.input.res2 != nil {
 				res2 = NewResourceFromMap(tt.input.res2)
@@ -390,11 +398,12 @@ func TestComponentWiseMax(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.caseName, func(t *testing.T) {
-			var res1, res2 *Resource
-			if res1 = nil; tt.input.res1 != nil {
+			var res1 *Resource = nil
+			var res2 *Resource = nil
+			if tt.input.res1 != nil {
 				res1 = NewResourceFromMap(tt.input.res1)
 			}
-			if res2 = nil; tt.input.sameRef {
+			if tt.input.sameRef {
 				res2 = res1
 			} else if tt.input.res2 != nil {
 				res2 = NewResourceFromMap(tt.input.res2)

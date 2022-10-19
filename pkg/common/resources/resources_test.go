@@ -129,12 +129,11 @@ func TestEquals(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.caseName, func(t *testing.T) {
-			var base *Resource
-			var compare *Resource
-			if base = nil; tt.input.base != nil {
+			var base, compare *Resource
+			if tt.input.base != nil {
 				base = NewResourceFromMap(tt.input.base)
 			}
-			if compare = nil; tt.input.compare != nil {
+			if tt.input.compare != nil {
 				compare = NewResourceFromMap(tt.input.compare)
 			}
 
@@ -230,8 +229,7 @@ func TestStrictlyGreaterThan(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.caseName, func(t *testing.T) {
-			var compare *Resource = nil
-			var base *Resource = nil
+			var compare, base *Resource
 			if tt.input.larger != nil {
 				compare = NewResourceFromMap(tt.input.larger)
 			}
@@ -271,8 +269,7 @@ func TestStrictlyGreaterThanOrEquals(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.caseName, func(t *testing.T) {
-			var compare *Resource = nil
-			var base *Resource = nil
+			var compare, base *Resource
 			if tt.input.larger != nil {
 				compare = NewResourceFromMap(tt.input.larger)
 			}
@@ -320,8 +317,7 @@ func TestComponentWiseMin(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.caseName, func(t *testing.T) {
-			var res1 *Resource = nil
-			var res2 *Resource = nil
+			var res1, res2 *Resource
 			if tt.input.res1 != nil {
 				res1 = NewResourceFromMap(tt.input.res1)
 			}
@@ -398,8 +394,7 @@ func TestComponentWiseMax(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.caseName, func(t *testing.T) {
-			var res1 *Resource = nil
-			var res2 *Resource = nil
+			var res1, res2 *Resource
 			if tt.input.res1 != nil {
 				res1 = NewResourceFromMap(tt.input.res1)
 			}

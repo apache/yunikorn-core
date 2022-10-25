@@ -559,6 +559,7 @@ func TestToProto(t *testing.T) {
 			toProto := NewResourceFromMap(tt.input).ToProto()
 			if toProto == nil {
 				t.Error("ToProto should return a empty resource instead of nil")
+				continue
 			}
 			if got := len(toProto.Resources); got != tt.expected {
 				t.Errorf("Number of resource type: got %d, expected %d", got, tt.expected)

@@ -563,6 +563,22 @@ func TestToProto(t *testing.T) {
 			if got := len(toProto.Resources); got != tt.expected {
 				t.Errorf("Number of resource type: got %d, expected %d", got, tt.expected)
 			}
+
+			// Unexpected resource type
+			for key := range toProto.Resources {
+				if _, ok := tt.input[key]; !ok {
+					t.Errorf("Resource type %s is not expected", key)
+				}
+			}
+
+			// Checking the number of the resource
+			for key, expected := range tt.input {
+				if got, ok := toProto.Resources[key]; ok {
+					if int64(expected) != got.Value {
+						t.Errorf("%s value: got %d, expected %d", key, got.Value, int64(expected))
+					}
+				}
+			}
 		})
 	}
 }

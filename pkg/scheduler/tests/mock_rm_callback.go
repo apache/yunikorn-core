@@ -45,10 +45,5 @@ func (f *MockResourceManagerCallback) SendEvent(events []*si.EventRecord) {
 	// do nothing
 }
 
-func (f *MockResourceManagerCallback) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
-	// do nothing
-	return nil
-}
-
 func (f *MockResourceManagerCallback) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
 }

@@ -39,12 +39,9 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 	metrics2 "github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/metrics/history"
-	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
-
 	"github.com/gorilla/mux"
 )
 
@@ -427,80 +424,6 @@ func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func createClusterConfig(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
-	queryParams := r.URL.Query()
-	dryRun, dryRunExists := queryParams["dry_run"]
-	if !dryRunExists {
-		buildJSONErrorResponse(w, "Dry run param is missing. Please check the usage documentation", http.StatusBadRequest)
-		return
-	}
-	if dryRun[0] != "1" {
-		buildJSONErrorResponse(w, "Invalid \"dry_run\" query param. Currently, only dry_run=1 is supported. Please check the usage documentation", http.StatusBadRequest)
-		return
-	}
-	requestBytes, err := io.ReadAll(r.Body)
-	if err == nil {
-		_, err = configs.LoadSchedulerConfigFromByteArray(requestBytes)
-	}
-	var result dao.ValidateConfResponse
-	if err != nil {
-		result.Allowed = false
-		result.Reason = err.Error()
-	} else {
-		result.Allowed = true
-	}
-	if err = json.NewEncoder(w).Encode(result); err != nil {
-		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
-func updateClusterConfig(w http.ResponseWriter, r *http.Request) {
-	lock.Lock()
-	defer lock.Unlock()
-	writeHeaders(w)
-	requestBytes, err := io.ReadAll(r.Body)
-	if err != nil {
-		buildUpdateResponse(err, w)
-		return
-	}
-	newConf, err := configs.ParseAndValidateConfig(requestBytes)
-	if err != nil {
-		buildUpdateResponse(err, w)
-		return
-	}
-	if !isChecksumEqual(newConf.Checksum) {
-		buildUpdateResponse(fmt.Errorf("the base configuration is changed"), w)
-		return
-	}
-	configs.SetChecksum(requestBytes, newConf)
-	newConfStr := configs.GetConfigurationString(requestBytes)
-	// This fails if we have more than 1 RM
-	// Do not think the plugins will even work with multiple RMs
-	var oldConf string
-	oldConf, err = updateConfiguration(newConfStr)
-	if err != nil {
-		buildUpdateResponse(err, w)
-		return
-	}
-	// This fails if we have no RM registered or more than 1 RM
-	err = schedulerContext.UpdateSchedulerConfig(newConf)
-	if err != nil {
-		// revert configmap changes
-		_, err2 := updateConfiguration(oldConf)
-		if err2 != nil {
-			err = fmt.Errorf("update failed: %s\nupdate rollback failed: %s", err.Error(), err2.Error())
-		}
-		buildUpdateResponse(err, w)
-		return
-	}
-	buildUpdateResponse(nil, w)
-}
-
-func isChecksumEqual(checksum string) bool {
-	return configs.ConfigContext.Get(schedulerContext.GetPolicyGroup()).Checksum == checksum
-}
-
 func checkHealthStatus(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
@@ -533,20 +456,6 @@ func buildUpdateResponse(err error, w http.ResponseWriter) {
 			zap.Error(err))
 		buildJSONErrorResponse(w, err.Error(), http.StatusConflict)
 	}
-}
-
-func updateConfiguration(conf string) (string, error) {
-	if plugin := plugins.GetResourceManagerCallbackPlugin(); plugin != nil {
-		// use the plugin to update the configuration in the configMap
-		resp := plugin.UpdateConfiguration(&si.UpdateConfigurationRequest{
-			Configs: conf,
-		})
-		if resp.Success {
-			return resp.OldConfig, nil
-		}
-		return resp.OldConfig, fmt.Errorf(resp.Reason)
-	}
-	return "", fmt.Errorf("config plugin not found")
 }
 
 func getPartitions(w http.ResponseWriter, r *http.Request) {

@@ -23,50 +23,63 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"sync/atomic"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
 var once sync.Once
-var logger *zap.Logger
-var config *zap.Config
+var holderValue atomic.Value
+
+type loggerHolder struct {
+	logger     *zap.Logger
+	zapConfigs *zap.Config
+}
 
 func Logger() *zap.Logger {
-	once.Do(func() {
-		if logger = zap.L(); isNopLogger(logger) {
-			// If a global logger is not found, this could be either scheduler-core
-			// is running as a deployment mode, or running with another non-go code
-			// shim. In this case, we need to create our own logger.
-			// TODO support log options when a global logger is not there
-			config = createConfig()
-			var err error
-			logger, err = config.Build()
-			// this should really not happen so just write to stdout and set a Nop logger
-			if err != nil {
-				fmt.Printf("Logging disabled, logger init failed with error: %v\n", err)
-				logger = zap.NewNop()
-			}
-		}
-	})
+	once.Do(initLogger)
+	return holderValue.Load().(loggerHolder).logger
+}
 
-	return logger
+func GetConfig() *zap.Config {
+	once.Do(initLogger)
+	return holderValue.Load().(loggerHolder).zapConfigs
+}
+
+func initLogger() {
+	var logger *zap.Logger
+	var config *zap.Config
+
+	if logger = zap.L(); isNopLogger(logger) {
+		// If a global logger is not found, this could be either scheduler-core
+		// is running as a deployment mode, or running with another non-go code
+		// shim. In this case, we need to create our own logger.
+		config = createConfig()
+		var err error
+		logger, err = config.Build()
+		// this should really not happen so just write to stdout and set a Nop logger
+		if err != nil {
+			fmt.Printf("Logging disabled, logger init failed with error: %v\n", err)
+			logger = zap.NewNop()
+		}
+	}
+	holderValue.Store(loggerHolder{
+		logger:     logger,
+		zapConfigs: config,
+	})
 }
 
 func InitializeLogger(log *zap.Logger, zapConfig *zap.Config) {
-	once.Do(func() {
-		logger = log
-		config = zapConfig
-		logger.Info("Using an already initialized logger")
+	once.Do(initLogger)
+	holderValue.Store(loggerHolder{
+		logger:     log,
+		zapConfigs: zapConfig,
 	})
 }
 
 func IsDebugEnabled() bool {
-	if logger == nil {
-		// when under development mode
-		return true
-	}
-	return logger.Core().Enabled(zapcore.DebugLevel)
+	return Logger().Core().Enabled(zapcore.DebugLevel)
 }
 
 // Returns true if the logger is a noop.
@@ -80,10 +93,7 @@ func isNopLogger(logger *zap.Logger) bool {
 
 // Visible by tests
 func InitAndSetLevel(level zapcore.Level) {
-	if config == nil {
-		Logger()
-	}
-	config.Level.SetLevel(level)
+	GetConfig().Level.SetLevel(level)
 }
 
 // Create a log config to keep full control over
@@ -116,6 +126,9 @@ func createConfig() *zap.Config {
 }
 
 func SetLogLevel(newLevel string) error {
+	logger := Logger()
+	config := GetConfig()
+
 	oldLevel := config.Level.String()
 
 	// noop if the input is the same as what is set
@@ -123,7 +136,7 @@ func SetLogLevel(newLevel string) error {
 		return nil
 	}
 
-	logger.Info("Updating log level",
+	Logger().Info("Updating log level",
 		zap.String("new level", newLevel))
 	text := []byte(newLevel)
 	if err := config.Level.UnmarshalText(text); err != nil {
@@ -134,8 +147,4 @@ func SetLogLevel(newLevel string) error {
 	logger.Info("Log level updated", zap.String("old level", oldLevel),
 		zap.String("new level", newLevel))
 	return nil
-}
-
-func GetConfig() *zap.Config {
-	return config
 }

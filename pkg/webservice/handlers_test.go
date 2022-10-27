@@ -19,7 +19,6 @@
 package webservice
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -40,10 +39,8 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/metrics/history"
-	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
-	"github.com/apache/yunikorn-core/pkg/scheduler/tests"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
@@ -205,9 +202,8 @@ const nodeID = "node-1"
 
 // setup To take care of setting up config, cluster, partitions etc
 func setup(t *testing.T, config string, partitionCount int) *scheduler.PartitionContext {
-	configs.MockSchedulerConfigByData([]byte(config))
 	var err error
-	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup, []byte(config))
 	assert.NilError(t, err, "Error when load clusterInfo from config")
 
 	assert.Equal(t, partitionCount, len(schedulerContext.GetPartitionMapClone()))
@@ -374,9 +370,8 @@ func TestContainerHistory(t *testing.T) {
 }
 
 func TestGetConfigYAML(t *testing.T) {
-	configs.MockSchedulerConfigByData([]byte(startConf))
 	var err error
-	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup, []byte(startConf))
 	assert.NilError(t, err, "Error when load clusterInfo from config")
 	// No err check: new request always returns correctly
 	//nolint: errcheck
@@ -393,8 +388,7 @@ func TestGetConfigYAML(t *testing.T) {
 	assert.Assert(t, len(startConfSum) > 0, "checksum boundary not found")
 
 	// change the config
-	configs.MockSchedulerConfigByData([]byte(updatedConf))
-	err = schedulerContext.UpdateRMSchedulerConfig(rmID)
+	err = schedulerContext.UpdateRMSchedulerConfig(rmID, []byte(updatedConf))
 	assert.NilError(t, err, "Error when updating clusterInfo from config")
 	// check that we return yaml by default, unmarshal will error when we don't
 	req.Header.Set("Accept", "unknown")
@@ -421,8 +415,7 @@ func TestGetConfigJSON(t *testing.T) {
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "fair", "node sort policy set incorrectly, not fair (json)")
 
 	// change the config
-	configs.MockSchedulerConfigByData([]byte(updatedConf))
-	err = schedulerContext.UpdateRMSchedulerConfig(rmID)
+	err = schedulerContext.UpdateRMSchedulerConfig(rmID, []byte(updatedConf))
 	assert.NilError(t, err, "Error when updating clusterInfo from config")
 
 	getClusterConfig(resp, req)
@@ -430,38 +423,6 @@ func TestGetConfigJSON(t *testing.T) {
 	assert.NilError(t, err, "failed to unmarshal config from response body (json, updated config)")
 	assert.Assert(t, startConfSum != conf.Checksum, "checksums did not change in json output: %s, %s", startConfSum, conf.Checksum)
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "binpacking", "node sort policy not updated (json)")
-}
-
-type FakeConfigPlugin struct {
-	tests.MockResourceManagerCallback
-	generateError bool
-}
-
-func (f FakeConfigPlugin) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
-	if f.generateError {
-		return &si.UpdateConfigurationResponse{
-			Success: false,
-			Reason:  "configuration update error",
-		}
-	}
-	return &si.UpdateConfigurationResponse{
-		Success:   true,
-		OldConfig: startConf,
-	}
-}
-
-func TestSaveConfigMapNoError(t *testing.T) {
-	plugins.RegisterSchedulerPlugin(&FakeConfigPlugin{generateError: false})
-	oldConf, err := updateConfiguration(updatedConf)
-	assert.NilError(t, err, "No error expected")
-	assert.Equal(t, oldConf, startConf, " Wrong returned configuration")
-}
-
-func TestSaveConfigMapErrorExpected(t *testing.T) {
-	plugins.RegisterSchedulerPlugin(&FakeConfigPlugin{generateError: true})
-	oldConf, err := updateConfiguration(updatedConf)
-	assert.Assert(t, err != nil, "Missing expected error")
-	assert.Equal(t, oldConf, "", " Wrong returned configuration")
 }
 
 func TestBuildUpdateResponseSuccess(t *testing.T) {
@@ -481,62 +442,6 @@ func TestBuildUpdateResponseFailure(t *testing.T) {
 	assert.Equal(t, http.StatusConflict, resp.statusCode, "Status code is wrong")
 	assert.Assert(t, strings.Contains(string(errInfo.Message), err.Error()), "Error message should contain the reason")
 	assert.Equal(t, errInfo.StatusCode, http.StatusConflict)
-}
-
-func TestUpdateConfig(t *testing.T) {
-	prepareSchedulerForConfigChange(t)
-	resp := &MockResponseWriter{}
-	baseChecksum := configs.ConfigContext.Get(schedulerContext.GetPolicyGroup()).Checksum
-	conf := appendChecksum(updatedConf, baseChecksum)
-	req, err := http.NewRequest("PUT", "", strings.NewReader(conf))
-	assert.NilError(t, err, "Failed to create the request")
-	updateClusterConfig(resp, req)
-	assert.Equal(t, http.StatusOK, resp.statusCode, "No error expected")
-}
-
-func TestUpdateConfigInvalidConf(t *testing.T) {
-	prepareSchedulerForConfigChange(t)
-	resp := &MockResponseWriter{}
-	req, err := http.NewRequest("PUT", "", strings.NewReader(invalidConf))
-	assert.NilError(t, err, "Failed to create the request")
-	updateClusterConfig(resp, req)
-
-	var errInfo dao.YAPIError
-	err1 := json.Unmarshal(resp.outputBytes, &errInfo)
-	assert.NilError(t, err1, "failed to unmarshal updateconfig dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, http.StatusConflict, resp.statusCode, "Status code is wrong")
-	assert.Assert(t, len(string(errInfo.Message)) > 0, "Error message is expected")
-	assert.Equal(t, errInfo.StatusCode, http.StatusConflict)
-}
-
-func TestUpdateConfigWrongChecksum(t *testing.T) {
-	prepareSchedulerForConfigChange(t)
-	resp := &MockResponseWriter{}
-	baseChecksum := fmt.Sprintf("%X", sha256.Sum256([]byte(updatedConf)))
-	conf := appendChecksum(updatedConf, baseChecksum)
-	req, err := http.NewRequest("PUT", "", strings.NewReader(conf))
-	assert.NilError(t, err, "Failed to create the request")
-	updateClusterConfig(resp, req)
-
-	var errInfo dao.YAPIError
-	err1 := json.Unmarshal(resp.outputBytes, &errInfo)
-	assert.NilError(t, err1, "failed to unmarshal updateconfig dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, http.StatusConflict, resp.statusCode, "Status code is wrong")
-	assert.Assert(t, strings.Contains(string(errInfo.Message), "the base configuration is changed"), "Wrong error message received")
-	assert.Equal(t, errInfo.StatusCode, http.StatusConflict)
-}
-
-func appendChecksum(conf string, checksum string) string {
-	conf += "checksum: " + checksum
-	return conf
-}
-
-func prepareSchedulerForConfigChange(t *testing.T) {
-	plugins.RegisterSchedulerPlugin(&FakeConfigPlugin{generateError: false})
-	configs.MockSchedulerConfigByData([]byte(startConf))
-	var err error
-	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
-	assert.NilError(t, err, "Error when load clusterInfo from config")
 }
 
 func TestGetClusterUtilJSON(t *testing.T) {
@@ -791,78 +696,6 @@ func TestPartitions(t *testing.T) {
 	assert.Equal(t, cs["default"].NodeSortingPolicy.ResourceWeights["vcore"], 1.0)
 	assert.Equal(t, cs["default"].NodeSortingPolicy.ResourceWeights["memory"], 1.0)
 	assert.Equal(t, cs["gpu"].Applications["total"], 0)
-}
-
-func TestCreateClusterConfig(t *testing.T) {
-	confTests := []struct {
-		content          string
-		expectedResponse dao.ValidateConfResponse
-	}{
-		{
-			content: baseConf,
-			expectedResponse: dao.ValidateConfResponse{
-				Allowed: true,
-				Reason:  "",
-			},
-		},
-		{
-			content: invalidConf,
-			expectedResponse: dao.ValidateConfResponse{
-				Allowed: false,
-				Reason:  "undefined policy: invalid",
-			},
-		},
-	}
-
-	configs.MockSchedulerConfigByData([]byte(configDefault))
-	var err error
-	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
-	assert.NilError(t, err, "Error when load clusterInfo from config")
-	for _, test := range confTests {
-		// No err check: new request always returns correctly
-		//nolint: errcheck
-		req, _ := http.NewRequest("POST", "/ws/v1/config?dry_run=1", strings.NewReader(test.content))
-		rr := httptest.NewRecorder()
-		mux := http.HandlerFunc(createClusterConfig)
-		handler := loggingHandler(mux, "/ws/v1/config")
-		handler.ServeHTTP(rr, req)
-		var vcr dao.ValidateConfResponse
-		err = json.Unmarshal(rr.Body.Bytes(), &vcr)
-		assert.Equal(t, http.StatusOK, rr.Result().StatusCode, "Incorrect Status code")
-		assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
-		assert.Equal(t, vcr.Allowed, test.expectedResponse.Allowed, "allowed flag incorrect")
-		assert.Equal(t, vcr.Reason, test.expectedResponse.Reason, "response text not as expected")
-	}
-
-	// When "dry_run" is not passed
-	//nolint: errcheck
-	req, err := http.NewRequest("POST", "/ws/v1/config", nil)
-	assert.NilError(t, err, "Problem in creating the request")
-	rr := httptest.NewRecorder()
-	mux := http.HandlerFunc(createClusterConfig)
-	handler := loggingHandler(mux, "/ws/v1/config")
-	handler.ServeHTTP(rr, req)
-
-	var errInfo dao.YAPIError
-	err = json.Unmarshal(rr.Body.Bytes(), &errInfo)
-	assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
-	assert.Equal(t, http.StatusBadRequest, rr.Result().StatusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, "Dry run param is missing. Please check the usage documentation", "JSON error message is incorrect")
-	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
-
-	// When "dry_run" value is invalid
-	//nolint: errcheck
-	req, err = http.NewRequest("POST", "/ws/v1/config?dry_run=0", nil)
-	assert.NilError(t, err, "Problem in creating the request")
-	rr = httptest.NewRecorder()
-	mux = http.HandlerFunc(createClusterConfig)
-	handler = loggingHandler(mux, "/ws/v1/config?dry_run=0")
-	handler.ServeHTTP(rr, req)
-	err = json.Unmarshal(rr.Body.Bytes(), &errInfo)
-	assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
-	assert.Equal(t, http.StatusBadRequest, rr.Result().StatusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, "Invalid \"dry_run\" query param. Currently, only dry_run=1 is supported. Please check the usage documentation", "JSON error message is incorrect")
-	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
 func TestMetricsNotEmpty(t *testing.T) {
@@ -1435,13 +1268,14 @@ func TestIllegalStateDumpRequests(t *testing.T) {
 }
 
 func prepareSchedulerContext(t *testing.T, stateDumpConf bool) *scheduler.ClusterContext {
+	var config []byte
 	if !stateDumpConf {
-		configs.MockSchedulerConfigByData([]byte(configDefault))
+		config = []byte(configDefault)
 	} else {
-		configs.MockSchedulerConfigByData([]byte(configStateDumpFilePath))
+		config = []byte(configStateDumpFilePath)
 	}
 	var err error
-	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup, config)
 	assert.NilError(t, err, "Error when load clusterInfo from config")
 	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
 

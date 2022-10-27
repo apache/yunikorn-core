@@ -55,6 +55,10 @@ func StartAllServicesWithLogger(logger *zap.Logger, zapConfigs *zap.Config) *Ser
 	return StartAllServices()
 }
 
+func InitializeLogger(logger *zap.Logger, zapConfigs *zap.Config) {
+	log.InitializeLogger(logger, zapConfigs)
+}
+
 // Visible by tests
 func StartAllServicesWithManualScheduler() *ServiceContext {
 	log.Logger().Info("ServiceContext start all services (manual scheduler)")

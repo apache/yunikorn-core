@@ -20,6 +20,7 @@ package log
 
 import (
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"go.uber.org/zap"
@@ -62,8 +63,9 @@ func TestIsDebugEnabled(t *testing.T) {
 		Encoding: "console",
 	}
 	var err error
-	logger, err = zapConfig.Build()
+	logger, err := zapConfig.Build()
 	assert.NilError(t, err, "debug level logger create failed")
+	InitializeLogger(logger, &zapConfig)
 	assert.Equal(t, true, IsDebugEnabled())
 
 	zapConfig = zap.Config{
@@ -72,13 +74,13 @@ func TestIsDebugEnabled(t *testing.T) {
 	}
 	logger, err = zapConfig.Build()
 	assert.NilError(t, err, "info level logger create failed")
+	InitializeLogger(logger, &zapConfig)
 	assert.Equal(t, false, IsDebugEnabled())
 }
 
 // reset the global vars and the global logger in zap
 func resetGlobals() {
-	logger = nil
-	config = nil
+	holderValue = atomic.Value{}
 	once = sync.Once{}
 	zap.ReplaceGlobals(zap.NewNop())
 }
@@ -95,7 +97,7 @@ func TestCreateConfig(t *testing.T) {
 	assert.Equal(t, true, localLogger.Core().Enabled(zap.DebugLevel))
 
 	// indirect call to init logger
-	assert.Assert(t, logger == nil, "global logger should not have been set %v", logger)
+	assert.Assert(t, holderValue.Load() == nil, "global logger should not have been set %v", holderValue.Load())
 	localLogger = Logger()
 	assert.Assert(t, localLogger != nil, "returned logger should have been not nil")
 	// default log level is debug
@@ -119,9 +121,9 @@ func TestInitializeLogger(t *testing.T) {
 
 	InitializeLogger(localLogger, &zapConfig)
 	assert.Equal(t, Logger(), localLogger)
-	// second initialization should not do anything
+	// second initialization should update
 	InitializeLogger(localLogger2, &zapConfig)
-	assert.Equal(t, Logger(), localLogger)
+	assert.Equal(t, Logger(), localLogger2)
 }
 
 func TestChangeValidLogLevel(t *testing.T) {

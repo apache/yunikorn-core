@@ -65,9 +65,9 @@ type RMInformation struct {
 
 // Create a new cluster context to be used outside of the event system.
 // test only
-func NewClusterContext(rmID, policyGroup string) (*ClusterContext, error) {
+func NewClusterContext(rmID, policyGroup string, config []byte) (*ClusterContext, error) {
 	// load the config this returns a validated configuration
-	conf, err := configs.SchedulerConfigLoader(policyGroup)
+	conf, err := configs.LoadSchedulerConfigFromByteArray(config)
 	if err != nil {
 		return nil, err
 	}
@@ -155,6 +155,7 @@ func (cc *ClusterContext) processRMRegistrationEvent(event *rmevent.RMRegistrati
 	cc.Lock()
 	defer cc.Unlock()
 	rmID := event.Registration.RmID
+
 	// we should not have any partitions set at this point
 	if len(cc.partitions) > 0 {
 		event.Channel <- &rmevent.Result{
@@ -164,8 +165,13 @@ func (cc *ClusterContext) processRMRegistrationEvent(event *rmevent.RMRegistrati
 		return
 	}
 	policyGroup := event.Registration.PolicyGroup
+	config := event.Registration.Config
 	// load the config this returns a validated configuration
-	conf, err := configs.SchedulerConfigLoader(policyGroup)
+	if len(config) == 0 {
+		log.Logger().Info("No scheduler configuration supplied, using defaults", zap.String("rmID", rmID))
+		config = configs.DefaultSchedulerConfig
+	}
+	conf, err := configs.LoadSchedulerConfigFromByteArray([]byte(config))
 	if err != nil {
 		event.Channel <- &rmevent.Result{Succeeded: false, Reason: err.Error()}
 		return
@@ -202,11 +208,25 @@ func (cc *ClusterContext) processRMConfigUpdateEvent(event *rmevent.RMConfigUpda
 		return
 	}
 	// load the config this returns a validated configuration
-	conf, err := configs.SchedulerConfigLoader(cc.policyGroup)
+	config := event.Config
+	if len(config) == 0 {
+		log.Logger().Info("No scheduler configuration supplied, using defaults", zap.String("rmID", rmID))
+		config = configs.DefaultSchedulerConfig
+	}
+	conf, err := configs.LoadSchedulerConfigFromByteArray([]byte(config))
 	if err != nil {
 		event.Channel <- &rmevent.Result{Succeeded: false, Reason: err.Error()}
 		return
 	}
+	// skip update if config has not changed
+	oldConf := configs.ConfigContext.Get(cc.policyGroup)
+	if conf.Checksum == oldConf.Checksum {
+		event.Channel <- &rmevent.Result{
+			Succeeded: true,
+		}
+		return
+	}
+	// update scheduler configuration
 	err = cc.updateSchedulerConfig(conf, rmID)
 	if err != nil {
 		event.Channel <- &rmevent.Result{Succeeded: false, Reason: err.Error()}
@@ -313,14 +333,14 @@ func (cc *ClusterContext) UpdateSchedulerConfig(conf *configs.SchedulerConfig) e
 // Locked version of the configuration update called outside of event system.
 // Updates the current config via the config loader.
 // Used in test only, normal updates use the internal call and the webservice must use the UpdateSchedulerConfig
-func (cc *ClusterContext) UpdateRMSchedulerConfig(rmID string) error {
+func (cc *ClusterContext) UpdateRMSchedulerConfig(rmID string, config []byte) error {
 	cc.Lock()
 	defer cc.Unlock()
 	if len(cc.partitions) == 0 {
 		return fmt.Errorf("RM %s has no active partitions, make sure it is registered", rmID)
 	}
 	// load the config this returns a validated configuration
-	conf, err := configs.SchedulerConfigLoader(cc.policyGroup)
+	conf, err := configs.LoadSchedulerConfigFromByteArray(config)
 	if err != nil {
 		return err
 	}

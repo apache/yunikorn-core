@@ -23,7 +23,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path"
 	"strings"
 	"testing"
 
@@ -239,18 +238,7 @@ func SerdeTest(t *testing.T, conf SchedulerConfig, description string) {
 }
 
 func CreateConfig(data string) (*SchedulerConfig, error) {
-	dir, err := os.MkdirTemp("", "test-scheduler-config")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create temp dir: %v", err)
-	}
-
-	err = os.WriteFile(path.Join(dir, "test-scheduler-config.yaml"), []byte(data), 0644)
-	if err != nil {
-		return nil, fmt.Errorf("failed to write config file: %v", err)
-	}
-	// Read the file and build the config
-	ConfigMap[SchedulerConfigPath] = dir
-	return SchedulerConfigLoader("test-scheduler-config")
+	return LoadSchedulerConfigFromByteArray([]byte(data))
 }
 
 func TestLoadQueueConfig(t *testing.T) {

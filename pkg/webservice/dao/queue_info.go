@@ -42,6 +42,7 @@ type PartitionQueueDAOInfo struct {
 	QueueName          string                  `json:"queuename"`
 	Status             string                  `json:"status"`
 	Partition          string                  `json:"partition"`
+	PendingResource    map[string]int64        `json:"pendingResource"`
 	MaxResource        map[string]int64        `json:"maxResource"`
 	GuaranteedResource map[string]int64        `json:"guaranteedResource"`
 	AllocatedResource  map[string]int64        `json:"allocatedResource"`

@@ -29,6 +29,7 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects/template"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
@@ -455,7 +456,7 @@ func TestSortApplicationsWithoutFiltering(t *testing.T) {
 
 	var leaf *Queue
 	properties := map[string]string{configs.ApplicationSortPolicy: "stateaware"}
-	leaf, err = createManagedQueueWithProps(root, "leaf", false, nil, properties)
+	leaf, err = createManagedQueueWithProps(root, "leaf", false, nil, properties, security.UserGroup{})
 	assert.NilError(t, err, "failed to create queue: %v", err)
 
 	// new app does not have pending res, does not get returned
@@ -1117,7 +1118,7 @@ func TestQueueProps(t *testing.T) {
 	assert.NilError(t, err, "failed to create basic root queue")
 	var parent *Queue
 	props := map[string]string{"first": "value", "second": "other value"}
-	parent, err = createManagedQueueWithProps(root, "parent", true, nil, props)
+	parent, err = createManagedQueueWithProps(root, "parent", true, nil, props, security.UserGroup{})
 	assert.NilError(t, err, "failed to create parent queue")
 	assert.Assert(t, !parent.isLeaf, "parent queue is not marked as a parent")
 	assert.Equal(t, len(root.children), 1, "parent queue is not added to the root queue")
@@ -1131,7 +1132,7 @@ func TestQueueProps(t *testing.T) {
 	assert.Equal(t, len(leaf.properties), 2, "leaf queue properties size incorrect")
 
 	props = map[string]string{"first": "not inherited", configs.ApplicationSortPolicy: "stateaware"}
-	parent, err = createManagedQueueWithProps(root, "parent2", true, nil, props)
+	parent, err = createManagedQueueWithProps(root, "parent2", true, nil, props, security.UserGroup{})
 	assert.NilError(t, err, "failed to create parent queue")
 	assert.Equal(t, len(parent.properties), 2, "parent queue properties size incorrect")
 	leaf, err = createDynamicQueue(parent, "leaf", false)
@@ -1218,19 +1219,19 @@ func TestGetQueueInfoPropertiesSet(t *testing.T) {
 	// managed parent queue with property set
 	properties := map[string]string{configs.ApplicationSortPolicy: "fifo"}
 	var parent *Queue
-	parent, err = createManagedQueueWithProps(root, "parent", true, nil, properties)
+	parent, err = createManagedQueueWithProps(root, "parent", true, nil, properties, security.UserGroup{})
 	assert.NilError(t, err, "failed to create queue: %v", err)
 
 	// managed leaf queue with some properties set
 	properties = map[string]string{configs.ApplicationSortPolicy: "fair",
 		"some_property": "some_value"}
 	var _ *Queue
-	_, err = createManagedQueueWithProps(parent, "child1", true, nil, properties)
+	_, err = createManagedQueueWithProps(parent, "child1", true, nil, properties, security.UserGroup{})
 	assert.NilError(t, err, "failed to create queue: %v", err)
 
 	// managed leaf queue with some properties set
 	properties = map[string]string{configs.ApplicationSortPolicy: "state_aware"}
-	_, err = createManagedQueueWithProps(parent, "child2", true, nil, properties)
+	_, err = createManagedQueueWithProps(parent, "child2", true, nil, properties, security.UserGroup{})
 	assert.NilError(t, err, "failed to create child queue: %v", err)
 
 	// dynamic leaf queue picks up from parent
@@ -1288,22 +1289,22 @@ func TestSupportTaskGroup(t *testing.T) {
 	// parent with sort policy set
 	properties := map[string]string{configs.ApplicationSortPolicy: "fifo"}
 	var parent *Queue
-	parent, err = createManagedQueueWithProps(root, "parent", true, nil, properties)
+	parent, err = createManagedQueueWithProps(root, "parent", true, nil, properties, security.UserGroup{})
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	assert.Assert(t, !parent.SupportTaskGroup(), "parent queue (FIFO policy) should not support task group")
 
 	var leaf *Queue
-	leaf, err = createManagedQueueWithProps(parent, "leaf1", false, nil, properties)
+	leaf, err = createManagedQueueWithProps(parent, "leaf1", false, nil, properties, security.UserGroup{})
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	assert.Assert(t, leaf.SupportTaskGroup(), "leaf queue (FIFO policy) should support task group")
 
 	properties = map[string]string{configs.ApplicationSortPolicy: "StateAware"}
-	leaf, err = createManagedQueueWithProps(parent, "leaf2", false, nil, properties)
+	leaf, err = createManagedQueueWithProps(parent, "leaf2", false, nil, properties, security.UserGroup{})
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	assert.Assert(t, leaf.SupportTaskGroup(), "leaf queue (StateAware policy) should support task group")
 
 	properties = map[string]string{configs.ApplicationSortPolicy: "fair"}
-	leaf, err = createManagedQueueWithProps(parent, "leaf3", false, nil, properties)
+	leaf, err = createManagedQueueWithProps(parent, "leaf3", false, nil, properties, security.UserGroup{})
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	assert.Assert(t, !leaf.SupportTaskGroup(), "leaf queue (FAIR policy) should not support task group")
 }
@@ -1362,7 +1363,7 @@ func getProperties() map[string]string {
 }
 
 func TestSetResources(t *testing.T) {
-	queue, err := createManagedQueueWithProps(nil, "tmp", true, nil, nil)
+	queue, err := createManagedQueueWithProps(nil, "tmp", true, nil, nil, security.UserGroup{})
 	assert.NilError(t, err, "failed to create basic queue queue: %v", err)
 
 	guaranteedResource := getResourceConf()
@@ -1403,7 +1404,7 @@ func TestSetResources(t *testing.T) {
 }
 
 func TestSetTemplate(t *testing.T) {
-	queue, err := createManagedQueueWithProps(nil, "tmp", true, nil, nil)
+	queue, err := createManagedQueueWithProps(nil, "tmp", true, nil, nil, security.UserGroup{})
 	assert.NilError(t, err, "failed to create basic queue queue: %v", err)
 
 	properties := getProperties()
@@ -1454,7 +1455,7 @@ func TestApplyTemplate(t *testing.T) {
 	assert.NilError(t, err)
 
 	// case 0: leaf queue can apply template
-	leaf, err := createManagedQueueWithProps(nil, "tmp", false, nil, nil)
+	leaf, err := createManagedQueueWithProps(nil, "tmp", false, nil, nil, security.UserGroup{})
 	assert.NilError(t, err, "failed to create basic queue queue: %v", err)
 	leaf.applyTemplate(childTemplate)
 	assert.Assert(t, leaf.template == nil)
@@ -1463,7 +1464,7 @@ func TestApplyTemplate(t *testing.T) {
 	assert.Assert(t, reflect.DeepEqual(leaf.maxResource, childTemplate.GetMaxResource()))
 
 	// case 1: zero resource template generates nil resource
-	leaf2, err := createManagedQueueWithProps(nil, "tmp", false, nil, nil)
+	leaf2, err := createManagedQueueWithProps(nil, "tmp", false, nil, nil, security.UserGroup{})
 	assert.NilError(t, err, "failed to create basic queue queue: %v", err)
 	zeroTemplate, err := template.FromConf(&configs.ChildTemplate{
 		Properties: getProperties(),
@@ -1497,7 +1498,7 @@ func TestApplyConf(t *testing.T) {
 	}
 
 	// case 0: leaf can't set template
-	leaf, err := createManagedQueueWithProps(nil, "tmp", false, nil, nil)
+	leaf, err := createManagedQueueWithProps(nil, "tmp", false, nil, nil, security.UserGroup{})
 	assert.NilError(t, err, "failed to create basic queue: %v", err)
 
 	validTemplate, err := template.FromConf(&conf.ChildTemplate)
@@ -1512,7 +1513,7 @@ func TestApplyConf(t *testing.T) {
 	assert.Assert(t, leaf.guaranteedResource != nil)
 
 	// case 1: non-leaf queue can have template
-	queue, err := createManagedQueueWithProps(nil, "tmp", true, nil, nil)
+	queue, err := createManagedQueueWithProps(nil, "tmp", true, nil, nil, security.UserGroup{})
 	assert.NilError(t, err, "failed to create basic queue: %v", err)
 
 	conf.Parent = true
@@ -1523,7 +1524,7 @@ func TestApplyConf(t *testing.T) {
 	assert.Assert(t, queue.guaranteedResource != nil)
 
 	// root can't set resources
-	root, err := createManagedQueueWithProps(nil, "root", true, nil, nil)
+	root, err := createManagedQueueWithProps(nil, "root", true, nil, nil, security.UserGroup{})
 	assert.NilError(t, err, "failed to create basic queue: %v", err)
 
 	err = queue.applyConf(conf)
@@ -1533,7 +1534,7 @@ func TestApplyConf(t *testing.T) {
 }
 
 func TestNewDynamicQueue(t *testing.T) {
-	parent, err := createManagedQueueWithProps(nil, "parent", true, nil, nil)
+	parent, err := createManagedQueueWithProps(nil, "parent", true, nil, nil, security.UserGroup{})
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	parent.template, err = template.FromConf(&configs.ChildTemplate{
 		Properties: getProperties(),
@@ -1562,7 +1563,7 @@ func TestNewDynamicQueue(t *testing.T) {
 }
 
 func TestTemplateIsNotOverrideByParent(t *testing.T) {
-	parent, err := createManagedQueueWithProps(nil, "parent", true, nil, nil)
+	parent, err := createManagedQueueWithProps(nil, "parent", true, nil, nil, security.UserGroup{})
 	assert.NilError(t, err)
 	parent.template, err = template.FromConf(&configs.ChildTemplate{
 		Properties: map[string]string{
@@ -1571,7 +1572,7 @@ func TestTemplateIsNotOverrideByParent(t *testing.T) {
 	})
 	assert.NilError(t, err)
 
-	leaf, err := createManagedQueueWithProps(nil, "leaf", false, nil, nil)
+	leaf, err := createManagedQueueWithProps(nil, "leaf", false, nil, nil, security.UserGroup{})
 	assert.NilError(t, err)
 	leaf.template, err = template.FromConf(&configs.ChildTemplate{
 		Properties: map[string]string{
@@ -1594,7 +1595,7 @@ func TestGetHeadRoomFromTwoQueues(t *testing.T) {
 		},
 	}
 
-	parent, err := createManagedQueueWithProps(nil, "parent", true, nil, nil)
+	parent, err := createManagedQueueWithProps(nil, "parent", true, nil, nil, security.UserGroup{})
 	assert.NilError(t, err)
 	parent.maxResource = &resources.Resource{
 		Resources: map[string]resources.Quantity{
@@ -1606,7 +1607,7 @@ func TestGetHeadRoomFromTwoQueues(t *testing.T) {
 	parent.allocatedResource = allocatedResource
 
 	// this child is not set with max memory, so it should follow parent max memory
-	child, err := createManagedQueueWithProps(parent, "child", true, nil, nil)
+	child, err := createManagedQueueWithProps(parent, "child", true, nil, nil, security.UserGroup{})
 	assert.NilError(t, err)
 	child.maxResource = &resources.Resource{
 		Resources: map[string]resources.Quantity{
@@ -1629,7 +1630,7 @@ func TestGetHeadRoomFromThreeQueues(t *testing.T) {
 		},
 	}
 
-	rootQueue, err := createManagedQueueWithProps(nil, "rootQueue", true, nil, nil)
+	rootQueue, err := createManagedQueueWithProps(nil, "rootQueue", true, nil, nil, security.UserGroup{})
 	assert.NilError(t, err)
 	rootQueue.maxResource = &resources.Resource{
 		Resources: map[string]resources.Quantity{
@@ -1640,7 +1641,7 @@ func TestGetHeadRoomFromThreeQueues(t *testing.T) {
 	// make sure rootQueue queue see all allocated resources
 	rootQueue.allocatedResource = allocatedResource
 
-	parent, err := createManagedQueueWithProps(rootQueue, "parent", true, nil, nil)
+	parent, err := createManagedQueueWithProps(rootQueue, "parent", true, nil, nil, security.UserGroup{})
 	assert.NilError(t, err)
 	// this parent has no limit for all resource types
 	parent.maxResource = &resources.Resource{
@@ -1650,7 +1651,7 @@ func TestGetHeadRoomFromThreeQueues(t *testing.T) {
 	parent.allocatedResource = allocatedResource
 
 	// this child is not set with max memory, so it should follow rootQueue max memory
-	child, err := createManagedQueueWithProps(parent, "child", true, nil, nil)
+	child, err := createManagedQueueWithProps(parent, "child", true, nil, nil, security.UserGroup{})
 	assert.NilError(t, err)
 	child.maxResource = &resources.Resource{
 		Resources: map[string]resources.Quantity{

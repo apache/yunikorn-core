@@ -33,6 +33,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/handler"
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
+	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -684,8 +685,9 @@ func TestSortRequests(t *testing.T) {
 }
 
 func TestStateChangeOnUpdate(t *testing.T) {
+	ugm := ugm.GetUserManager()
 	// create a fake queue
-	queue, err := createRootQueue(nil)
+	queue, err := createRootQueueWithUser(nil, security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
 	assert.NilError(t, err, "queue create failed")
 
 	app := newApplication(appID1, "default", "root.unknown")
@@ -726,8 +728,10 @@ func TestStateChangeOnUpdate(t *testing.T) {
 	uuid := "uuid-1"
 	allocInfo := NewAllocation(uuid, nodeID1, ask)
 	app.AddAllocation(allocInfo)
+	userResource := ugm.GetUserResources(security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
 	// app should be starting
 	assert.Assert(t, app.IsStarting(), "Application did not return starting state after alloc: %s", app.CurrentState())
+	assert.Assert(t, userResource.String(), res.String())
 
 	// removing the ask should not move anywhere as there is an allocation
 	released = app.RemoveAllocationAsk(askID)

@@ -29,64 +29,46 @@ import (
 )
 
 func TestNewResourceFromConf(t *testing.T) {
-	// resource with nil input
-	original, err := NewResourceFromConf(nil)
-	if err != nil || len(original.Resources) != 0 {
-		t.Fatalf("new resource create from nil returned error or wrong resource: error %t, res %v", err, original)
+	type expectedvalues struct {
+		resourceExist bool
+		resourceTypes int
+		resources     string
 	}
-	// resource without any resource mappings
-	original, err = NewResourceFromConf(make(map[string]string))
-	if err != nil || len(original.Resources) != 0 {
-		t.Fatalf("new resource create from empty conf returned error or wrong resource: error %t, res %v", err, original)
+	var tests = []struct {
+		caseName string
+		input    map[string]string
+		expected expectedvalues
+	}{
+		{"resource with nil input", nil, expectedvalues{true, 0, ""}},
+		{"resource without any resource mappings", make(map[string]string), expectedvalues{true, 0, ""}},
+		{"resource with zero value", map[string]string{"zero": "0"}, expectedvalues{true, 1, "map[zero:0]"}},
+		{"normal multipliers with \"M\"", map[string]string{"memory": "10M"}, expectedvalues{true, 1, "map[memory:10000000]"}},
+		{"normal multipliers with \"Mi\"", map[string]string{"memory": "10Mi"}, expectedvalues{true, 1, "map[memory:10485760]"}},
+		{"vcore multipliers with \"k\"", map[string]string{"vcore": "10k"}, expectedvalues{true, 1, "map[vcore:10000000]"}},
+		{"vcore multipliers", map[string]string{"vcore": "10"}, expectedvalues{true, 1, "map[vcore:10000]"}},
+		{"vcore multipliers with \"m\"", map[string]string{"vcore": "10m"}, expectedvalues{true, 1, "map[vcore:10]"}},
+		{"failure case: parse error", map[string]string{"fail": "xx"}, expectedvalues{false, 0, ""}},
+		{"negative resource", map[string]string{"memory": "-15"}, expectedvalues{false, 0, ""}},
+		{"\"milli\" used for anything other than vcore", map[string]string{"memory": "10m"}, expectedvalues{false, 0, ""}},
 	}
-	original, err = NewResourceFromConf(map[string]string{"zero": "0"})
-	if err != nil || len(original.Resources) != 1 {
-		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, original)
-	}
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			original, err := NewResourceFromConf(tt.input)
+			if tt.expected.resourceExist {
+				if err != nil || len(original.Resources) != tt.expected.resourceTypes {
+					t.Errorf("Expected err nil, numbers of resource types %v. Got err %v, numbers of resource types %v", tt.expected.resourceTypes, err, len(original.Resources))
+				}
+				if len(tt.expected.resources) > 0 && tt.expected.resources != original.String() {
+					t.Errorf("Resource value:got %s, expected %s", original.String(), tt.expected.resources)
+				}
+			}
 
-	// normal multipliers
-	original, err = NewResourceFromConf(map[string]string{"memory": "10M"})
-	if err != nil || len(original.Resources) != 1 {
-		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, original)
-	}
-	assert.Equal(t, "map[memory:10000000]", original.String(), "wrong memory value")
-	original, err = NewResourceFromConf(map[string]string{"memory": "10Mi"})
-	if err != nil || len(original.Resources) != 1 {
-		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, original)
-	}
-	assert.Equal(t, "map[memory:10485760]", original.String(), "wrong memory value")
-
-	// vcore multipliers
-	original, err = NewResourceFromConf(map[string]string{"vcore": "10k"})
-	if err != nil || len(original.Resources) != 1 {
-		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, original)
-	}
-	assert.Equal(t, "map[vcore:10000000]", original.String(), "wrong vcore value")
-	original, err = NewResourceFromConf(map[string]string{"vcore": "10"})
-	if err != nil || len(original.Resources) != 1 {
-		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, original)
-	}
-	assert.Equal(t, "map[vcore:10000]", original.String(), "wrong vcore value")
-	original, err = NewResourceFromConf(map[string]string{"vcore": "10m"})
-	if err != nil || len(original.Resources) != 1 {
-		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, original)
-	}
-	assert.Equal(t, "map[vcore:10]", original.String(), "wrong vcore value")
-
-	// failure case: parse error
-	original, err = NewResourceFromConf(map[string]string{"fail": "xx"})
-	if err == nil || original != nil {
-		t.Fatalf("new resource create should have returned error %v, res %v", err, original)
-	}
-	// negative resource
-	original, err = NewResourceFromConf(map[string]string{"memory": "-15"})
-	if err == nil || original != nil {
-		t.Fatalf("new resource create should have returned error %v, res %v", err, original)
-	}
-	// 'milli' used for anything other than vcore
-	original, err = NewResourceFromConf(map[string]string{"memory": "10m"})
-	if err == nil || original != nil {
-		t.Fatalf("new resource create should have returned error %v, res %v", err, original)
+			if !tt.expected.resourceExist {
+				if err == nil || original != nil {
+					t.Errorf("new resource is created and the function should have returned error. got err %v, res %v", err, original)
+				}
+			}
+		})
 	}
 }
 
@@ -104,322 +86,264 @@ func TestCloneNil(t *testing.T) {
 }
 
 func TestClone(t *testing.T) {
-	// resource without any resource mappings
-	original := NewResourceFromMap(map[string]Quantity{})
-	cloned := original.Clone()
-	// pointer cannot be equal
-	if original == cloned {
-		t.Fatalf("cloned resources pointers are equal, should not be")
+	var tests = []struct {
+		caseName string
+		input    map[string]Quantity
+	}{
+		{"resource without any resource mappings", map[string]Quantity{}},
+		{"resource mappings", map[string]Quantity{"first": 1, "second": -2, "third": 3}},
+		{"set a resource value to 0", map[string]Quantity{"first": 1, "zero": 0, "third": 3}},
 	}
-	// content must be equal
-	if !reflect.DeepEqual(original.Resources, cloned.Resources) {
-		t.Errorf("cloned resources are not equal: %v / %v", original, cloned)
-	}
-
-	original = NewResourceFromMap(map[string]Quantity{"first": 1, "second": -2, "third": 3})
-	cloned = original.Clone()
-	// pointer cannot be equal
-	if original == cloned {
-		t.Fatalf("cloned resources pointers are equal, should not be")
-	}
-	// content must be equal
-	if !reflect.DeepEqual(original.Resources, cloned.Resources) {
-		t.Errorf("cloned resources are not equal: %v / %v", original, cloned)
-	}
-
-	// set a resource value to 0
-	original = NewResourceFromMap(map[string]Quantity{"first": 1, "zero": 0, "third": 3})
-	cloned = original.Clone()
-	// pointer cannot be equal
-	if original == cloned {
-		t.Fatalf("cloned resources pointers are equal, should not be")
-	}
-	// content must be equal
-	if !reflect.DeepEqual(original.Resources, cloned.Resources) {
-		t.Errorf("cloned resources are not equal: %v / %v", original, cloned)
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			original := NewResourceFromMap(tt.input)
+			cloned := original.Clone()
+			if original == cloned {
+				t.Errorf("cloned resources pointers are equal, should not be")
+			}
+			if !reflect.DeepEqual(original.Resources, cloned.Resources) {
+				t.Errorf("cloned resources are not equal: %v / %v", original, cloned)
+			}
+		})
 	}
 }
 
 func TestEquals(t *testing.T) {
-	// simple cases (nil checks)
-	base := NewResourceFromMap(map[string]Quantity{})
-	if !Equals(nil, nil) {
-		t.Errorf("compared resources should have been equal (both nil)")
+	type inputs struct {
+		base    map[string]Quantity
+		compare map[string]Quantity
 	}
-	if Equals(nil, base) {
-		t.Errorf("compared resources should not have been equal (left nil)")
+	var tests = []struct {
+		caseName string
+		input    inputs
+		expected bool
+	}{
+		{"simple cases (nil checks)", inputs{nil, nil}, true},
+		{"simple cases (nil checks)", inputs{map[string]Quantity{}, nil}, false},
+		{"simple cases (nil checks)", inputs{map[string]Quantity{}, map[string]Quantity{"zero": 0}}, true},
+		{"Empty mapping and resource containing zero value are same", inputs{map[string]Quantity{}, map[string]Quantity{"zero": 0}}, true},
+		{"Same key and different resource value", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"first": 0}}, false},
+		{"Different key and same resource value", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"second": 10}}, false},
+		{"Same key and same resource value", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"first": 10}}, true},
+		{"Different types of keys", inputs{map[string]Quantity{"first": 1}, map[string]Quantity{"first": 1, "second": 1}}, false},
 	}
-	if Equals(base, nil) {
-		t.Errorf("compared resources should not have been equal (right nil)")
-	}
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			var base, compare *Resource
+			if tt.input.base != nil {
+				base = NewResourceFromMap(tt.input.base)
+			}
+			if tt.input.compare != nil {
+				compare = NewResourceFromMap(tt.input.compare)
+			}
 
-	// resource without any resource mappings should be equal to one that has
-	// resources set even if they are 0
-	compare := NewResourceFromMap(map[string]Quantity{"zero": 0})
-	if !Equals(base, compare) {
-		t.Errorf("compared resources are not equal (right has resource), should be: %v / %v", base, compare)
-	}
-	if !Equals(compare, base) {
-		t.Errorf("compared resources are not equal (left has resource), should be: %v / %v", compare, base)
-	}
-
-	// set resources values
-	base = NewResourceFromMap(map[string]Quantity{"first": 10})
-	compare = NewResourceFromMap(map[string]Quantity{"first": 0})
-	if Equals(base, compare) {
-		t.Errorf("compared resources are equal (value diff), should not be: %v / %v", base, compare)
-	}
-	if Equals(compare, base) {
-		t.Errorf("compared resources are equal (value diff), should not be: %v / %v", base, compare)
-	}
-	base = NewResourceFromMap(map[string]Quantity{"first": 10})
-	compare = NewResourceFromMap(map[string]Quantity{"second": 10})
-	if Equals(base, compare) {
-		t.Errorf("compared resources are equal (name diff), should not be: %v / %v", base, compare)
-	}
-	base = NewResourceFromMap(map[string]Quantity{"first": 10})
-	compare = NewResourceFromMap(map[string]Quantity{"first": 10})
-	if !Equals(base, compare) {
-		t.Errorf("compared resources are not equal, should be: %v / %v", base, compare)
-	}
-	base = NewResourceFromMap(map[string]Quantity{"first": 1})
-	compare = NewResourceFromMap(map[string]Quantity{"first": 1, "second": 1})
-	if Equals(base, compare) {
-		t.Errorf("compared resources are equal, should not be: %v / %v", base, compare)
+			if result := Equals(base, compare); result != tt.expected {
+				t.Errorf("Equal result should be %v instead of %v, left %v, right %v", tt.expected, result, base, compare)
+			}
+			if result := Equals(compare, base); result != tt.expected {
+				t.Errorf("Equal result should be %v instead of %v, left %v, right %v", tt.expected, result, compare, base)
+			}
+		})
 	}
 }
 
 func TestIsZero(t *testing.T) {
-	// simple cases (nil checks)
-	if !IsZero(nil) {
-		t.Errorf("nil resource should be zero")
+	var tests = []struct {
+		caseName string
+		input    map[string]Quantity
+		expected bool
+	}{
+		{"nil checks", nil, true},
+		{"Empty resource value", map[string]Quantity{}, true},
+		{"Zero resource value", map[string]Quantity{"zero": 0}, true},
+		{"Resource value", map[string]Quantity{"first": 10}, false},
+		{"Multiple resource values including zero", map[string]Quantity{"first": 10, "second": 2, "third": 0}, false},
+		{"Multiple resource values are zero", map[string]Quantity{"first": 0, "second": 0, "third": 0}, true},
+		{"Multiple resource values", map[string]Quantity{"first": 10, "second": 2, "third": 4}, false},
 	}
-	base := NewResourceFromMap(map[string]Quantity{})
-	if !IsZero(base) {
-		t.Errorf("no resource entries should be zero")
-	}
-
-	// set resource values
-	base = NewResourceFromMap(map[string]Quantity{"zero": 0})
-	if !IsZero(base) {
-		t.Errorf("only zero resources should be zero")
-	}
-	base = NewResourceFromMap(map[string]Quantity{"first": 10})
-	if IsZero(base) {
-		t.Errorf("set resource should be non zero")
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			var base *Resource
+			if base = nil; tt.input != nil {
+				base = NewResourceFromMap(tt.input)
+			}
+			if result := IsZero(base); result != tt.expected {
+				t.Errorf("Is base %v zero?, got %v, expected %v", base, result, tt.expected)
+			}
+		})
 	}
 }
 
 func TestStrictlyGreaterThanZero(t *testing.T) {
-	// simple case (nil checks)
-	if StrictlyGreaterThanZero(nil) {
-		t.Errorf("nil resource should not be greater than zero")
+	var tests = []struct {
+		caseName string
+		input    map[string]Quantity
+		expected bool
+	}{
+		{"nil resource should be smaller than zero", nil, false},
+		{"no resource entries should be smaller than zero", map[string]Quantity{}, false},
+		{"only zero resources should be smaller than zero", map[string]Quantity{"zero": 0}, false},
+		{"only positive resource should be greater than zero", map[string]Quantity{"first": 10}, true},
+		{"negative resource should be smaller than zero", map[string]Quantity{"first": -1}, false},
+		{"multiple resources containing negative resources should be smaller than zero", map[string]Quantity{"first": -1, "second": 1, "third": -1}, false},
 	}
-	base := NewResourceFromMap(map[string]Quantity{})
-	if StrictlyGreaterThanZero(base) {
-		t.Errorf("no resource entries should not be greater than zero")
-	}
-
-	// set resource values
-	base = NewResourceFromMap(map[string]Quantity{"zero": 0})
-	if StrictlyGreaterThanZero(base) {
-		t.Errorf("only zero resources should not be greater than zero")
-	}
-	base = NewResourceFromMap(map[string]Quantity{"first": 10})
-	if !StrictlyGreaterThanZero(base) {
-		t.Errorf("set resource should be greater than zero")
-	}
-	base = NewResourceFromMap(map[string]Quantity{"first": -1})
-	if StrictlyGreaterThanZero(base) {
-		t.Errorf("set negative resource should not be greater than zero")
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			var base *Resource
+			if tt.input != nil {
+				base = NewResourceFromMap(tt.input)
+			}
+			if result := StrictlyGreaterThanZero(base); result != tt.expected {
+				t.Errorf("StrictlyGreaterThanZero: got %v, expected %v", result, tt.expected)
+			}
+		})
 	}
 }
 
 func TestStrictlyGreaterThan(t *testing.T) {
-	// simple case (nil checks)
-	if StrictlyGreaterThan(nil, nil) {
-		t.Errorf("nil resource should not be greater than other nil")
+	type inputs struct {
+		larger  map[string]Quantity
+		smaller map[string]Quantity
+		sameRef bool
 	}
-	// zero or empty resource values
-	larger := NewResourceFromMap(map[string]Quantity{})
-	smaller := NewResourceFromMap(map[string]Quantity{})
-	if StrictlyGreaterThan(larger, smaller) {
-		t.Errorf("empty resource entries should not be greater than empty")
+	type outputs struct {
+		larger  bool
+		smaller bool
 	}
-	larger = NewResourceFromMap(map[string]Quantity{"zero": 0})
-	if StrictlyGreaterThan(larger, smaller) {
-		t.Errorf("only zero resources should not be greater than empty")
+	var tests = []struct {
+		caseName string
+		input    inputs
+		expected outputs
+	}{
+		{"Nil check", inputs{nil, nil, true}, outputs{false, false}},
+		{"Empty resources", inputs{map[string]Quantity{}, map[string]Quantity{}, false}, outputs{false, false}},
+		{"An empty resource and a zero resource", inputs{map[string]Quantity{"zero": 0}, map[string]Quantity{}, false}, outputs{false, false}},
+		{"Zero resources", inputs{map[string]Quantity{"zero": 0}, map[string]Quantity{"zero": 0}, false}, outputs{false, false}},
+		{"An empty resource and a negative resource", inputs{map[string]Quantity{}, map[string]Quantity{"first": -1}, false}, outputs{true, false}},
+		{"Positive resource and same references", inputs{map[string]Quantity{"first": 10}, nil, true}, outputs{false, false}},
+		{"Positive numbers", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"first": 1}, false}, outputs{true, false}},
+		{"Different resources", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"second": 1}, false}, outputs{false, false}},
+		{"Mutiple resources and a single resource", inputs{map[string]Quantity{"first": 10, "second": 10}, map[string]Quantity{"first": 1}, false}, outputs{true, false}},
+		{"Negative resource is smaller than not set", inputs{map[string]Quantity{"first": 10, "second": -1}, map[string]Quantity{"first": 10}, false}, outputs{false, true}},
+		{"Negative resource is smaller than not set", inputs{map[string]Quantity{"first": -1}, map[string]Quantity{}, false}, outputs{false, true}},
 	}
-	smaller = NewResourceFromMap(map[string]Quantity{"other": 0})
-	if StrictlyGreaterThan(larger, smaller) {
-		t.Errorf("only zero resource (both objects) should not be greater than zero")
-	}
-
-	// negative resource values
-	larger = NewResourceFromMap(map[string]Quantity{})
-	smaller = NewResourceFromMap(map[string]Quantity{"first": -1})
-	if !StrictlyGreaterThan(larger, smaller) {
-		t.Errorf("negative resource should not be greater than zero")
-	}
-	if StrictlyGreaterThan(smaller, larger) {
-		t.Errorf("negative resource should be smaller than zero")
-	}
-
-	// set resource values
-	larger = NewResourceFromMap(map[string]Quantity{"first": 10})
-	if StrictlyGreaterThan(larger, larger) {
-		t.Errorf("same resource should not be greater than")
-	}
-	smaller = NewResourceFromMap(map[string]Quantity{"first": 1})
-	if !StrictlyGreaterThan(larger, smaller) {
-		t.Errorf("larger %v returned as smaller compared to %v", larger, smaller)
-	}
-	smaller = NewResourceFromMap(map[string]Quantity{"second": 1})
-	if StrictlyGreaterThan(larger, smaller) {
-		t.Errorf("larger %v returned as smaller compared to %v", larger, smaller)
-	}
-	larger = NewResourceFromMap(map[string]Quantity{"first": 10, "second": 10})
-	smaller = NewResourceFromMap(map[string]Quantity{"first": 1})
-	if !StrictlyGreaterThan(larger, smaller) {
-		t.Errorf("larger %v returned as smaller compared to %v", larger, smaller)
-	}
-	// negative resource is smaller than not set
-	larger = NewResourceFromMap(map[string]Quantity{"first": 10, "second": -1})
-	smaller = NewResourceFromMap(map[string]Quantity{"first": 10})
-	if StrictlyGreaterThan(larger, smaller) {
-		t.Errorf("negative %v returned as larger compared to not set %v", larger, smaller)
-	}
-	if !StrictlyGreaterThan(smaller, larger) {
-		t.Errorf("not set %v returned as larger compared to negative %v", smaller, larger)
-	}
-	larger = NewResourceFromMap(map[string]Quantity{"first": -1})
-	smaller = NewResourceFromMap(map[string]Quantity{})
-	if StrictlyGreaterThan(larger, smaller) {
-		t.Errorf("negative %v returned as larger compared to not set %v", larger, smaller)
-	}
-	if !StrictlyGreaterThan(smaller, larger) {
-		t.Errorf("not set %v returned as larger compared to negative %v", smaller, larger)
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			var compare, base *Resource
+			if tt.input.larger != nil {
+				compare = NewResourceFromMap(tt.input.larger)
+			}
+			if tt.input.sameRef {
+				base = compare
+			} else {
+				base = NewResourceFromMap(tt.input.smaller)
+			}
+			if result := StrictlyGreaterThan(compare, base); result != tt.expected.larger {
+				t.Errorf("comapre %v, base %v, got %v, expeceted %v", compare, base, result, tt.expected.larger)
+			}
+			if result := StrictlyGreaterThan(base, compare); result != tt.expected.smaller {
+				t.Errorf("base %v, compare %v, got %v, expeceted %v", base, compare, result, tt.expected.smaller)
+			}
+		})
 	}
 }
 
 func TestStrictlyGreaterThanOrEquals(t *testing.T) {
-	// simple case (nil checks)
-	if !StrictlyGreaterThanOrEquals(nil, nil) {
-		t.Errorf("nil resources should be greater or equal")
+	type inputs struct {
+		larger  map[string]Quantity
+		smaller map[string]Quantity
+		sameRef bool
 	}
-	// zero or empty resource values
-	larger := NewResourceFromMap(map[string]Quantity{})
-	smaller := NewResourceFromMap(map[string]Quantity{})
-	if !StrictlyGreaterThanOrEquals(larger, smaller) {
-		t.Errorf("no resource entries should be greater or equal")
+	var tests = []struct {
+		caseName string
+		input    inputs
+		expected [2]bool
+	}{
+		{"Nil check", inputs{nil, nil, true}, [2]bool{true, true}},
+		{"Empty resource values", inputs{map[string]Quantity{}, map[string]Quantity{}, false}, [2]bool{true, true}},
+		{"Zero resource value and empty resource value", inputs{map[string]Quantity{"zero": 0}, map[string]Quantity{}, false}, [2]bool{true, true}},
+		{"Zero resource values", inputs{map[string]Quantity{"zero": 0}, map[string]Quantity{"other": 0}, false}, [2]bool{true, true}},
+		{"Positive resource value and empty resource value", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"other": 0}, false}, [2]bool{true, false}},
+		{"Different positive resource values", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"second": 10}, false}, [2]bool{false, false}},
+		{"Negative resource is smaller than not set", inputs{map[string]Quantity{"first": 1, "second": -1}, map[string]Quantity{"first": 1}, false}, [2]bool{false, true}},
 	}
-	larger = NewResourceFromMap(map[string]Quantity{"zero": 0})
-	if !StrictlyGreaterThanOrEquals(larger, smaller) {
-		t.Errorf("zero resources should be greater or equal empty")
-	}
-	smaller = NewResourceFromMap(map[string]Quantity{"other": 0})
-	if !StrictlyGreaterThanOrEquals(larger, smaller) {
-		t.Errorf("only zero resource (both objects) should be greater or equal")
-	}
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			var compare, base *Resource
+			if tt.input.larger != nil {
+				compare = NewResourceFromMap(tt.input.larger)
+			}
+			if tt.input.sameRef {
+				base = compare
+			} else {
+				base = NewResourceFromMap(tt.input.smaller)
+			}
 
-	// set resource values
-	larger = NewResourceFromMap(map[string]Quantity{"first": 10})
-	if !StrictlyGreaterThanOrEquals(larger, smaller) {
-		t.Errorf("set resources %v should be greater than zero %v", larger, smaller)
-	}
-	smaller = NewResourceFromMap(map[string]Quantity{"second": 10})
-	if StrictlyGreaterThanOrEquals(larger, smaller) {
-		t.Errorf("different resource set should be not be greater or equal %v and %v", larger, smaller)
-	}
-	// negative resource is smaller than not set
-	larger = NewResourceFromMap(map[string]Quantity{"first": 1, "second": -1})
-	smaller = NewResourceFromMap(map[string]Quantity{"first": 1})
-	if StrictlyGreaterThanOrEquals(larger, smaller) {
-		t.Errorf("negative %v returned as larger compared to not set %v", larger, smaller)
-	}
-	if !StrictlyGreaterThanOrEquals(smaller, larger) {
-		t.Errorf("negative %v returned as larger compared to not set %v", smaller, larger)
+			result := StrictlyGreaterThanOrEquals(compare, base)
+			if result != tt.expected[0] {
+				t.Errorf("comapre %v, base %v, got %v, expeceted %v", compare, base, result, tt.expected[0])
+			}
+			result = StrictlyGreaterThanOrEquals(base, compare)
+			if result != tt.expected[1] {
+				t.Errorf("base %v, compare %v, got %v, expeceted %v", base, compare, result, tt.expected[1])
+			}
+		})
 	}
 }
 
 func TestComponentWiseMin(t *testing.T) {
-	// simple case (nil checks)
-	result := ComponentWiseMin(nil, Zero)
-	if len(result.Resources) != 0 {
-		t.Errorf("nil resource (left) did not return zero resource: %v", result)
+	type inputs struct {
+		res1    map[string]Quantity
+		res2    map[string]Quantity
+		sameRef bool
 	}
-	result = ComponentWiseMin(Zero, nil)
-	if len(result.Resources) != 0 {
-		t.Errorf("nil resource (right) did not return zero resource: %v", result)
+	var tests = []struct {
+		caseName string
+		input    inputs
+		expected map[string]Quantity
+	}{
+		{"nil case", inputs{nil, nil, false}, make(map[string]Quantity)},
+		{"nil and zero", inputs{nil, map[string]Quantity{}, false}, make(map[string]Quantity)},
+		{"zero and nil", inputs{map[string]Quantity{}, nil, false}, make(map[string]Quantity)},
+		{"zero resource", inputs{map[string]Quantity{}, nil, true}, make(map[string]Quantity)},
+		{"empty resource and zero resource", inputs{map[string]Quantity{}, map[string]Quantity{"zero": 0}, false}, map[string]Quantity{"zero": 0}},
+		{"zero resource and empty resource", inputs{map[string]Quantity{"zero": 0}, map[string]Quantity{}, false}, map[string]Quantity{"zero": 0}},
+		{"no overlapping resources type", inputs{map[string]Quantity{"first": 5}, map[string]Quantity{"second": 10}, false}, map[string]Quantity{"first": 0, "second": 0}},
+		{"no overlapping resources type", inputs{map[string]Quantity{"second": 10}, map[string]Quantity{"first": 5}, false}, map[string]Quantity{"first": 0, "second": 0}},
+		{"overlapping resources type", inputs{map[string]Quantity{"first": 5}, map[string]Quantity{"first": 10}, false}, map[string]Quantity{"first": 5}},
+		{"overlapping resources type", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"first": 5}, false}, map[string]Quantity{"first": 5}},
+		{"negative values", inputs{map[string]Quantity{"first": -5, "second": -5}, map[string]Quantity{"first": 10}, false}, map[string]Quantity{"first": -5, "second": -5}},
+		{"negative values", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"first": -5, "second": -5}, false}, map[string]Quantity{"first": -5, "second": -5}},
 	}
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			var res1, res2 *Resource
+			if tt.input.res1 != nil {
+				res1 = NewResourceFromMap(tt.input.res1)
+			}
+			if tt.input.sameRef {
+				res2 = res1
+			} else if tt.input.res2 != nil {
+				res2 = NewResourceFromMap(tt.input.res2)
+			}
 
-	// empty resources
-	res1 := NewResourceFromMap(map[string]Quantity{})
-	result = ComponentWiseMin(res1, res1)
-	if len(result.Resources) != 0 {
-		t.Errorf("empty resource did not return zero resource: %v", result)
-	}
+			result := ComponentWiseMin(res1, res2)
+			if result == nil {
+				t.Error("Result should be a zero resource instead of nil")
+			} else if len(result.Resources) != len(tt.expected) {
+				t.Errorf("Length got %d, expected %d", len(result.Resources), len(tt.expected))
+			}
 
-	// set resource value in first resource
-	res2 := NewResourceFromMap(map[string]Quantity{"zero": 0})
-	result = ComponentWiseMin(res2, res1)
-	if len(result.Resources) != 1 {
-		t.Errorf("set resource did not return (zero key): %v", result)
-	}
-	if _, ok := result.Resources["zero"]; !ok {
-		t.Errorf("resource key not set (zero): %v", result)
-	}
-	// set resource value in second resource
-	result = ComponentWiseMin(res1, res2)
-	if len(result.Resources) != 1 {
-		t.Errorf("set resource did not return (zero key): %v", result)
-	}
-	if _, ok := result.Resources["zero"]; !ok {
-		t.Errorf("resource key not set (zero): %v", result)
-	}
-
-	// resource with value set: different in each values are wiped
-	res1 = NewResourceFromMap(map[string]Quantity{"first": 5})
-	res2 = NewResourceFromMap(map[string]Quantity{"second": 10})
-	result = ComponentWiseMin(res1, res2)
-	if result == nil || len(result.Resources) != 2 {
-		t.Fatalf("set resource should be greater than zero: %v", result)
-	}
-	if value, ok := result.Resources["first"]; !ok || value != 0 {
-		t.Errorf("resource key not set expected %v got %v", res1, result)
-	}
-	if value, ok := result.Resources["second"]; !ok || value != 0 {
-		t.Errorf("resource key not set expected %v got %v", res2, result)
-	}
-
-	// same resource set value from res1 returned
-	res2 = NewResourceFromMap(map[string]Quantity{"first": 10})
-	result = ComponentWiseMin(res1, res2)
-	if result == nil || len(result.Resources) != 1 {
-		t.Fatalf("set resource should be greater than zero: %v", result)
-	}
-	if value, ok := result.Resources["first"]; !ok || value != 5 {
-		t.Errorf("resource key not set expected %v got %v", res1, result)
-	}
-	result = ComponentWiseMin(res2, res1)
-	if result == nil || len(result.Resources) != 1 {
-		t.Fatalf("set resource should be greater than zero: %v", result)
-	}
-	if value, ok := result.Resources["first"]; !ok || value != 5 {
-		t.Errorf("resource key not set expected %v got %v", res1, result)
-	}
-
-	// negative resources set: one with pos value other not defined
-	res1 = NewResourceFromMap(map[string]Quantity{"first": -5, "second": -5})
-	result = ComponentWiseMin(res1, res2)
-	if result == nil || len(result.Resources) != 2 {
-		t.Fatalf("set resource should be greater than zero: %v", result)
-	}
-	if value, ok := result.Resources["first"]; !ok || value != -5 {
-		t.Errorf("resource key not set expected %v got %v", res1, result)
-	}
-	if value, ok := result.Resources["second"]; !ok || value != -5 {
-		t.Errorf("resource key not set expected %v got %v", res1, result)
+			for expectedKey, expectedValue := range tt.expected {
+				if value, ok := result.Resources[expectedKey]; ok {
+					if value != expectedValue {
+						t.Errorf("Value of %s is wrong, got %d, expected %d", expectedKey, value, expectedValue)
+					}
+				} else {
+					t.Errorf("resource key %v is not set", expectedKey)
+				}
+			}
+		})
 	}
 }
 
@@ -449,83 +373,54 @@ func TestComponentWiseMinPermissive(t *testing.T) {
 }
 
 func TestComponentWiseMax(t *testing.T) {
-	// simple case (nil checks)
-	result := ComponentWiseMax(nil, Zero)
-	if result == nil || len(result.Resources) != 0 {
-		t.Errorf("nil resource (left) did not return zero resource: %v", result)
+	type inputs struct {
+		res1    map[string]Quantity
+		res2    map[string]Quantity
+		sameRef bool
 	}
-	result = ComponentWiseMax(Zero, nil)
-	if result == nil || len(result.Resources) != 0 {
-		t.Errorf("nil resource (right) did not return zero resource: %v", result)
+	var tests = []struct {
+		caseName string
+		input    inputs
+		expected map[string]Quantity
+	}{
+		{"nil check", inputs{nil, make(map[string]Quantity), false}, make(map[string]Quantity)},
+		{"nil check", inputs{make(map[string]Quantity), nil, false}, make(map[string]Quantity)},
+		{"Same reference", inputs{make(map[string]Quantity), nil, true}, make(map[string]Quantity)},
+		{"Empty resource and a resource including zero", inputs{make(map[string]Quantity), map[string]Quantity{"zero": 0}, false}, map[string]Quantity{"zero": 0}},
+		{"Different resource type", inputs{map[string]Quantity{"first": 5}, map[string]Quantity{"second": 10}, false}, map[string]Quantity{"first": 5, "second": 10}},
+		{"Choosing bigger one", inputs{map[string]Quantity{"first": 5}, map[string]Quantity{"first": 10}, false}, map[string]Quantity{"first": 10}},
+		{"Choosing bigger one", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"first": 5}, false}, map[string]Quantity{"first": 10}},
+		{"Negative resource", inputs{map[string]Quantity{"first": -5, "second": -5}, map[string]Quantity{"first": 10}, false}, map[string]Quantity{"first": 10, "second": 0}},
 	}
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			var res1, res2 *Resource
+			if tt.input.res1 != nil {
+				res1 = NewResourceFromMap(tt.input.res1)
+			}
+			if tt.input.sameRef {
+				res2 = res1
+			} else if tt.input.res2 != nil {
+				res2 = NewResourceFromMap(tt.input.res2)
+			}
 
-	// empty resources
-	res1 := NewResourceFromMap(map[string]Quantity{})
-	result = ComponentWiseMax(res1, res1)
-	if result == nil || len(result.Resources) != 0 {
-		t.Errorf("empty resource did not return zero resource: %v", result)
-	}
+			result := ComponentWiseMax(res1, res2)
+			if result == nil {
+				t.Error("Result should be a zero resource instead of nil")
+			} else if len(result.Resources) != len(tt.expected) {
+				t.Errorf("Length got %d, expected %d", len(result.Resources), len(tt.expected))
+			}
 
-	// set resource value in first resource
-	res2 := NewResourceFromMap(map[string]Quantity{"zero": 0})
-	result = ComponentWiseMax(res2, res1)
-	if result == nil || len(result.Resources) != 1 {
-		t.Fatalf("set resource did not return (zero key): %v", result)
-	}
-	if _, ok := result.Resources["zero"]; !ok {
-		t.Errorf("resource key not set (zero): %v", result)
-	}
-	// set resource value in second resource
-	result = ComponentWiseMax(res1, res2)
-	if result == nil || len(result.Resources) != 1 {
-		t.Fatalf("set resource did not return (zero key): %v", result)
-	}
-	if _, ok := result.Resources["zero"]; !ok {
-		t.Errorf("resource key not set (zero) resource: %v", result)
-	}
-
-	// resource with value set: different in each values are merged
-	res1 = NewResourceFromMap(map[string]Quantity{"first": 5})
-	res2 = NewResourceFromMap(map[string]Quantity{"second": 10})
-	result = ComponentWiseMax(res1, res2)
-	if result == nil || len(result.Resources) != 2 {
-		t.Fatalf("set resource should be greater than zero: %v", result)
-	}
-	if value, ok := result.Resources["first"]; !ok || value != 5 {
-		t.Errorf("resource key not set expected %v got %v", res1, result)
-	}
-	if value, ok := result.Resources["second"]; !ok || value != 10 {
-		t.Errorf("resource key not set expected %v got %v", res2, result)
-	}
-
-	// same resource set value from res2 returned
-	res2 = NewResourceFromMap(map[string]Quantity{"first": 10})
-	result = ComponentWiseMax(res1, res2)
-	if result == nil || len(result.Resources) != 1 {
-		t.Fatalf("set resource should be greater than zero: %v", result)
-	}
-	if value, ok := result.Resources["first"]; !ok || value != 10 {
-		t.Errorf("resource key not set expected %v got %v", res2, result)
-	}
-	result = ComponentWiseMax(res2, res1)
-	if result == nil || len(result.Resources) != 1 {
-		t.Fatalf("set resource should be greater than zero: %v", result)
-	}
-	if value, ok := result.Resources["first"]; !ok || value != 10 {
-		t.Errorf("resource key not set expected %v got %v", res2, result)
-	}
-
-	// negative resources set: one with pos value other not defined
-	res1 = NewResourceFromMap(map[string]Quantity{"first": -5, "second": -5})
-	result = ComponentWiseMax(res1, res2)
-	if result == nil || len(result.Resources) != 2 {
-		t.Fatalf("set resource should be greater than zero: %v", result)
-	}
-	if value, ok := result.Resources["first"]; !ok || value != 10 {
-		t.Errorf("resource key not set expected %v got %v", res1, result)
-	}
-	if value, ok := result.Resources["second"]; !ok || value != 0 {
-		t.Errorf("resource key not set expected %v got %v", res1, result)
+			for expectedKey, expectedValue := range tt.expected {
+				if value, ok := result.Resources[expectedKey]; ok {
+					if value != expectedValue {
+						t.Errorf("Value of %s is wrong, got %d, expected %d", expectedKey, value, expectedValue)
+					}
+				} else {
+					t.Errorf("resource key %v is not set", expectedKey)
+				}
+			}
+		})
 	}
 }
 

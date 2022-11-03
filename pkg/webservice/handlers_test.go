@@ -858,8 +858,13 @@ func TestGetPartitionNodes(t *testing.T) {
 
 // addApp Add app to the given partition and assert the app count, state etc
 func addApp(t *testing.T, id string, part *scheduler.PartitionContext, queueName string, isCompleted bool) *objects.Application {
+	return addAppWithUserGroup(t, id, part, queueName, isCompleted, security.UserGroup{})
+}
+
+// addApp Add app to the given partition and assert the app count, state etc
+func addAppWithUserGroup(t *testing.T, id string, part *scheduler.PartitionContext, queueName string, isCompleted bool, userGroup security.UserGroup) *objects.Application {
 	initSize := len(part.GetApplications())
-	app := newApplication(id, part.Name, queueName, rmID, security.UserGroup{})
+	app := newApplication(id, part.Name, queueName, rmID, userGroup)
 	err := part.AddApplication(app)
 	assert.NilError(t, err, "Failed to add Application to Partition.")
 	assert.Equal(t, app.CurrentState(), objects.New.String())

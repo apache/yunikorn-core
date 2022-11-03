@@ -170,6 +170,6 @@ func TestDecreaseTrackedResource(t *testing.T) {
 
 func getUserResource(ut *UserTracker) map[string]*resources.Resource {
 	resources := make(map[string]*resources.Resource)
-	usage := ut.getUserResourceUsageDAOInfo(ut.queueTracker)
+	usage := ut.GetUserResourceUsageDAOInfo(ut.queueTracker)
 	return internalGetResource(usage.Queues, resources)
 }

@@ -146,6 +146,6 @@ func TestGTDecreaseTrackedResource(t *testing.T) {
 
 func getGroupResource(gt *GroupTracker) map[string]*resources.Resource {
 	resources := make(map[string]*resources.Resource)
-	usage := gt.getGroupResourceUsageDAOInfo(gt.queueTracker)
+	usage := gt.GetGroupResourceUsageDAOInfo(gt.queueTracker)
 	return internalGetResource(usage.Queues, resources)
 }

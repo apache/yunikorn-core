@@ -152,14 +152,17 @@ func NewAppState() *fsm.FSM {
 			},
 			fmt.Sprintf("enter_%s", Resuming.String()): func(event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
-				app.decUserResourceUsage(app.GetAllocatedResource(), true)
+				app.decUserResourceUsage(app.allocatedResource, true)
 				metrics.GetQueueMetrics(app.queuePath).DecQueueApplicationsRunning()
 				metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()
 			},
 			fmt.Sprintf("enter_%s", Completing.String()): func(event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
 				app.setStateTimer(completingTimeout, app.stateMachine.Current(), CompleteApplication)
-				app.decUserResourceUsage(app.GetAllocatedResource(), true)
+				previousState := app.stateLog[len(app.stateLog)-1].ApplicationState
+				if previousState != Accepted.String() {
+					app.decUserResourceUsage(app.allocatedResource, true)
+				}
 				metrics.GetQueueMetrics(app.queuePath).DecQueueApplicationsRunning()
 				metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()
 			},
@@ -189,7 +192,7 @@ func NewAppState() *fsm.FSM {
 			},
 			fmt.Sprintf("enter_%s", Failing.String()): func(event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
-				app.decUserResourceUsage(app.GetAllocatedResource(), true)
+				app.decUserResourceUsage(app.allocatedResource, true)
 				metrics.GetQueueMetrics(app.queuePath).DecQueueApplicationsRunning()
 				metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsFailed()
 				metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()

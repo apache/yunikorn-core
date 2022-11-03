@@ -54,6 +54,7 @@ func GetUserManager() *Manager {
 		m = newManager()
 	})
 	return m
+
 }
 
 // IncreaseTrackedResource Increase the resource usage for the given user group and queue path combination.

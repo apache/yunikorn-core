@@ -1454,7 +1454,7 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 }
 
 func (sa *Application) incUserResourceUsage(resource *resources.Resource) {
-	if err := ugm.GetUserManager().IncreaseTrackedResource(sa.GetQueuePath(), sa.ApplicationID, resource, sa.GetUser()); err != nil {
+	if err := ugm.GetUserManager().IncreaseTrackedResource(sa.queuePath, sa.ApplicationID, resource, sa.user); err != nil {
 		log.Logger().Error("Unable to track the user resource usage",
 			zap.String("application id", sa.ApplicationID),
 			zap.String("user", sa.GetUser().User),
@@ -1464,7 +1464,7 @@ func (sa *Application) incUserResourceUsage(resource *resources.Resource) {
 }
 
 func (sa *Application) decUserResourceUsage(resource *resources.Resource, removeApp bool) {
-	if err := ugm.GetUserManager().DecreaseTrackedResource(sa.GetQueuePath(), sa.ApplicationID, resource, sa.GetUser(), removeApp); err != nil {
+	if err := ugm.GetUserManager().DecreaseTrackedResource(sa.queuePath, sa.ApplicationID, resource, sa.user, removeApp); err != nil {
 		log.Logger().Error("Unable to track the user resource usage",
 			zap.String("application id", sa.ApplicationID),
 			zap.String("user", sa.GetUser().User),

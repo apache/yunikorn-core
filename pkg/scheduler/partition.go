@@ -1450,9 +1450,6 @@ func (pc *PartitionContext) GetNodeSortingPolicyType() policies.SortingPolicy {
 	pc.RLock()
 	defer pc.RUnlock()
 	policy := pc.nodes.GetNodeSortingPolicy()
-	if policy == nil {
-		return policies.FairnessPolicy
-	}
 	return policy.PolicyType()
 }
 
@@ -1460,9 +1457,6 @@ func (pc *PartitionContext) GetNodeSortingResourceWeights() map[string]float64 {
 	pc.RLock()
 	defer pc.RUnlock()
 	policy := pc.nodes.GetNodeSortingPolicy()
-	if policy == nil {
-		return make(map[string]float64)
-	}
 	return policy.ResourceWeights()
 }
 

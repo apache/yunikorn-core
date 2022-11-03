@@ -729,9 +729,11 @@ func TestStateChangeOnUpdate(t *testing.T) {
 	allocInfo := NewAllocation(uuid, nodeID1, ask)
 	app.AddAllocation(allocInfo)
 	userResource := ugm.GetUserResources(security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
+	groupResource := ugm.GetGroupResources("testgroup")
 	// app should be starting
 	assert.Assert(t, app.IsStarting(), "Application did not return starting state after alloc: %s", app.CurrentState())
-	assert.Assert(t, userResource.String(), res.String())
+	assert.Equal(t, userResource.String(), res.String())
+	assert.Equal(t, groupResource.String(), res.String())
 
 	// removing the ask should not move anywhere as there is an allocation
 	released = app.RemoveAllocationAsk(askID)

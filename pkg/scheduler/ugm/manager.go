@@ -195,19 +195,19 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 }
 
 func (m *Manager) GetUserResources(user security.UserGroup) *resources.Resource {
-	return nil
+	return m.userTrackers[user.User].queueTracker.resourceUsage
 }
 
 func (m *Manager) GetGroupResources(group string) *resources.Resource {
-	return nil
+	return m.groupTrackers[group].queueTracker.resourceUsage
 }
 
-func (m *Manager) GetUsersResources() []*UserTracker {
-	return nil
+func (m *Manager) GetUsersResources() map[string]*UserTracker {
+	return m.userTrackers
 }
 
-func (m *Manager) GetGroupsResources() []*GroupTracker {
-	return nil
+func (m *Manager) GetGroupsResources() map[string]*GroupTracker {
+	return m.groupTrackers
 }
 
 func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID string, user security.UserGroup) error {

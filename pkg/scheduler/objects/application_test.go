@@ -84,6 +84,7 @@ func TestNewApplication(t *testing.T) {
 	if app.rmEventHandler == nil {
 		t.Fatal("non nil handler was not set in the new app")
 	}
+	assertUserGroupNilResourceWithError(t)
 	assert.Assert(t, app.IsNew(), "new application must be in new state")
 	assert.Equal(t, app.execTimeout, defaultPlaceholderTimeout, "no timeout passed in should be modified default")
 	assert.Assert(t, resources.Equals(app.placeholderAsk, res), "placeholder ask not set as expected")
@@ -442,6 +443,7 @@ func TestAllocAskStateChange(t *testing.T) {
 	assert.Equal(t, log[1].ApplicationState, Completing.String())
 	assert.Equal(t, log[2].ApplicationState, Running.String())
 	assert.Equal(t, log[3].ApplicationState, Completing.String())
+	assertUserGroupNilResourceWithError(t)
 }
 
 // test recover ask
@@ -464,11 +466,13 @@ func TestRecoverAllocAsk(t *testing.T) {
 	app.RecoverAllocationAsk(ask)
 	assert.Equal(t, len(app.requests), 1, "ask should have been added")
 	assert.Assert(t, app.IsAccepted(), "Application should be in accepted state")
+	assertUserGroupNilResourceWithError(t)
 
 	ask = newAllocationAskRepeat("ask-2", appID1, res, 1)
 	app.RecoverAllocationAsk(ask)
 	assert.Equal(t, len(app.requests), 2, "ask should have been added, total should be 2")
 	assert.Assert(t, app.IsAccepted(), "Application should have stayed in accepted state")
+	assertUserGroupNilResourceWithError(t)
 }
 
 // test reservations removal by allocation
@@ -628,9 +632,11 @@ func TestRemoveAllocAskWithPlaceholders(t *testing.T) {
 	reservedAsks := app.RemoveAllocationAsk("alloc-1")
 	assert.Equal(t, 0, reservedAsks)
 	assert.Equal(t, Accepted.String(), app.stateMachine.Current())
+	assertUserGroupNilResourceWithError(t)
 	reservedAsks = app.RemoveAllocationAsk("alloc-2")
 	assert.Equal(t, 0, reservedAsks)
 	assert.Equal(t, Completing.String(), app.stateMachine.Current())
+	assertUserGroupNilResourceWithError(t)
 }
 
 func TestRemovePlaceholderAllocationWithNoRealAllocation(t *testing.T) {
@@ -648,6 +654,7 @@ func TestRemovePlaceholderAllocationWithNoRealAllocation(t *testing.T) {
 
 	app.RemoveAllocation("uuid-1", si.TerminationType_UNKNOWN_TERMINATION_TYPE)
 	assert.Equal(t, app.stateMachine.Current(), Completing.String())
+	assertUserGroupNilResourceWithError(t)
 }
 
 // This test must not test the sorter that is underlying.
@@ -687,7 +694,7 @@ func TestSortRequests(t *testing.T) {
 func TestStateChangeOnUpdate(t *testing.T) {
 	ugm := ugm.GetUserManager()
 	// create a fake queue
-	queue, err := createRootQueueWithUser(nil, security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
+	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 
 	app := newApplication(appID1, "default", "root.unknown")
@@ -728,8 +735,11 @@ func TestStateChangeOnUpdate(t *testing.T) {
 	uuid := "uuid-1"
 	allocInfo := NewAllocation(uuid, nodeID1, ask)
 	app.AddAllocation(allocInfo)
-	userResource := ugm.GetUserResources(security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
-	groupResource := ugm.GetGroupResources("testgroup")
+	userResource, err := ugm.GetUserResources(security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
+	assert.NilError(t, err, "User should have been tracked by this time and available in user trackers map")
+	groupResource, err := ugm.GetGroupResources("testgroup")
+	assert.NilError(t, err, "Group should have been tracked by this time and available in group trackers map")
+
 	// app should be starting
 	assert.Assert(t, app.IsStarting(), "Application did not return starting state after alloc: %s", app.CurrentState())
 	assert.Equal(t, userResource.String(), res.String())
@@ -743,6 +753,7 @@ func TestStateChangeOnUpdate(t *testing.T) {
 	// remove the allocation, ask has been removed so nothing left
 	app.RemoveAllocation(uuid, si.TerminationType_UNKNOWN_TERMINATION_TYPE)
 	assert.Assert(t, app.IsCompleting(), "Application did not change as expected: %s", app.CurrentState())
+	assertUserGroupNilResourceWithError(t)
 
 	log := app.GetStateLog()
 	assert.Equal(t, len(log), 3, "wrong number of app events")
@@ -752,6 +763,7 @@ func TestStateChangeOnUpdate(t *testing.T) {
 }
 
 func TestStateChangeOnPlaceholderAdd(t *testing.T) {
+	ugm := ugm.GetUserManager()
 	// create a fake queue
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
@@ -799,6 +811,13 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	assert.Assert(t, resources.Equals(app.GetPlaceholderResource(), res), "placeholder allocation not set as expected")
 	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()), "allocated resource should have been zero")
 
+	userResource, err := ugm.GetUserResources(security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
+	assert.NilError(t, err, "User should have been tracked by this time and available in user trackers map")
+	groupResource, err := ugm.GetGroupResources("testgroup")
+	assert.NilError(t, err, "Group should have been tracked by this time and available in group trackers map")
+	assert.Equal(t, userResource.String(), res.String())
+	assert.Equal(t, groupResource.String(), res.String())
+
 	// first we have to remove the allocation itself
 	alloc := app.RemoveAllocation(uuid, si.TerminationType_UNKNOWN_TERMINATION_TYPE)
 	assert.Assert(t, alloc != nil, "Nil allocation was returned")
@@ -807,6 +826,7 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	released = app.RemoveAllocationAsk(askID)
 	assert.Equal(t, released, 0, "allocation ask should not have been reserved")
 	assert.Assert(t, app.IsCompleting(), "Application should have stayed same, changed unexpectedly: %s", app.CurrentState())
+	assertUserGroupNilResourceWithError(t)
 
 	log := app.GetStateLog()
 	assert.Equal(t, len(log), 2, "wrong number of app events")
@@ -833,18 +853,24 @@ func TestAllocations(t *testing.T) {
 	allocs := app.GetAllAllocations()
 	assert.Equal(t, len(allocs), 1)
 	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should not be initialized as the allocation is not a placeholder")
+	assertUserGroupResource(t, resources.Multiply(res, 1))
 
 	// add more allocations to test the removals
 	alloc = newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
 	app.AddAllocation(alloc)
+	assertUserGroupResource(t, resources.Multiply(res, 2))
+
 	alloc = newAllocation(appID1, "uuid-3", nodeID1, "root.a", res)
 	app.AddAllocation(alloc)
 	allocs = app.GetAllAllocations()
 	assert.Equal(t, len(allocs), 3)
+	assertUserGroupResource(t, resources.Multiply(res, 3))
+
 	// remove one of the 3
 	if alloc = app.RemoveAllocation("uuid-2", si.TerminationType_UNKNOWN_TERMINATION_TYPE); alloc == nil {
 		t.Error("returned allocations was nil allocation was not removed")
 	}
+	assertUserGroupResource(t, resources.Multiply(res, 2))
 	// try to remove a non existing alloc
 	if alloc = app.RemoveAllocation("does-not-exist", si.TerminationType_UNKNOWN_TERMINATION_TYPE); alloc != nil {
 		t.Errorf("returned allocations was not allocation was incorrectly removed: %v", alloc)
@@ -855,6 +881,7 @@ func TestAllocations(t *testing.T) {
 	}
 	allocs = app.GetAllAllocations()
 	assert.Equal(t, len(allocs), 0)
+	assertUserGroupNilResourceWithError(t)
 }
 
 func TestGangAllocChange(t *testing.T) {
@@ -868,6 +895,7 @@ func TestGangAllocChange(t *testing.T) {
 	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()), "new application has allocated resources")
 	assert.Assert(t, resources.IsZero(app.GetPlaceholderResource()), "new application has placeholder allocated resources")
 	assert.Assert(t, resources.Equals(app.GetPlaceholderAsk(), totalPH), "placeholder ask resource not set as expected")
+	assertUserGroupNilResourceWithError(t)
 
 	// move the app to the accepted state as if we added an ask
 	app.SetState(Accepted.String())
@@ -882,6 +910,7 @@ func TestGangAllocChange(t *testing.T) {
 	assert.Assert(t, resources.Equals(app.allocatedPlaceholder, res), "allocated placeholders resources is not updated correctly: %s", app.allocatedPlaceholder.String())
 	assert.Equal(t, len(app.GetAllAllocations()), 1)
 	assert.Assert(t, app.IsAccepted(), "app should still be in accepted state")
+	assertUserGroupResource(t, res)
 
 	// add second placeholder this should trigger state update
 	alloc = newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
@@ -890,6 +919,7 @@ func TestGangAllocChange(t *testing.T) {
 	assert.Assert(t, resources.Equals(app.allocatedPlaceholder, totalPH), "allocated placeholders resources is not updated correctly: %s", app.allocatedPlaceholder.String())
 	assert.Equal(t, len(app.GetAllAllocations()), 2)
 	assert.Assert(t, app.IsStarting(), "app should have changed to starting state")
+	assertUserGroupResource(t, resources.Multiply(res, 2))
 
 	// add a real alloc this should NOT trigger state update
 	alloc = newAllocation(appID1, "uuid-3", nodeID1, "root.a", res)
@@ -897,6 +927,7 @@ func TestGangAllocChange(t *testing.T) {
 	app.AddAllocation(alloc)
 	assert.Equal(t, len(app.GetAllAllocations()), 3)
 	assert.Assert(t, app.IsStarting(), "app should still be in starting state")
+	assertUserGroupResource(t, resources.Multiply(res, 3))
 
 	// add a second real alloc this should trigger state update
 	alloc = newAllocation(appID1, "uuid-4", nodeID1, "root.a", res)
@@ -904,12 +935,17 @@ func TestGangAllocChange(t *testing.T) {
 	app.AddAllocation(alloc)
 	assert.Equal(t, len(app.GetAllAllocations()), 4)
 	assert.Assert(t, app.IsRunning(), "app should be in running state")
+	assertUserGroupResource(t, resources.Multiply(res, 4))
 }
 
 func TestAllocChange(t *testing.T) {
+	ugm := ugm.GetUserManager()
+	ugm.ClearUserTrackers()
+	ugm.ClearGroupTrackers()
 	app := newApplication(appID1, "default", "root.a")
 	assert.Assert(t, app.IsNew(), "newly created app should be in new state")
 	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()), "new application has allocated resources")
+	assertUserGroupNilResourceWithError(t)
 
 	// move the app to the accepted state as if we added an ask
 	app.SetState(Accepted.String())
@@ -923,12 +959,14 @@ func TestAllocChange(t *testing.T) {
 	assert.Assert(t, resources.Equals(app.allocatedResource, res), "allocated resources is not updated correctly: %s", app.allocatedResource.String())
 	assert.Equal(t, len(app.GetAllAllocations()), 1)
 	assert.Assert(t, app.IsStarting(), "app should be in starting state")
+	assertUserGroupResource(t, res)
 
 	// add a second real alloc this should trigger state update
 	alloc = newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
 	app.AddAllocation(alloc)
 	assert.Equal(t, len(app.GetAllAllocations()), 2)
 	assert.Assert(t, app.IsRunning(), "app should have changed to running` state")
+	assertUserGroupResource(t, resources.Multiply(res, 2))
 }
 
 func TestQueueUpdate(t *testing.T) {
@@ -950,6 +988,7 @@ func TestStateTimeOut(t *testing.T) {
 	assert.NilError(t, err, "no error expected new to accepted (timeout test)")
 	err = app.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected accepted to starting (timeout test)")
+
 	// give it some time to run and progress
 	time.Sleep(time.Millisecond * 100)
 	if app.IsStarting() {
@@ -1088,6 +1127,9 @@ func TestOnStatusChangeCalled(t *testing.T) {
 }
 
 func TestReplaceAllocation(t *testing.T) {
+	ugm := ugm.GetUserManager()
+	ugm.ClearUserTrackers()
+	ugm.ClearGroupTrackers()
 	app := newApplication(appID1, "default", "root.a")
 	assert.Equal(t, New.String(), app.CurrentState(), "new app not in New state")
 	// state changes are not important
@@ -1118,14 +1160,19 @@ func TestReplaceAllocation(t *testing.T) {
 	if !resources.Equals(app.allocatedPlaceholder, res) {
 		t.Fatalf("placeholder allocation not updated as expected: got %s, expected %s", app.allocatedPlaceholder, res)
 	}
+	assertUserGroupResource(t, res)
+
 	alloc = app.ReplaceAllocation("uuid-1")
 	assert.Equal(t, alloc, nilAlloc, "placeholder without releases expected nil to be returned got a real alloc: %s", alloc)
 	assert.Equal(t, app.placeholderData[""].Replaced, int64(0))
+	assertUserGroupNilResourceWithError(t)
+
 	// add the placeholder back to the app, the failure test above changed state and removed the ph
 	app.SetState(Running.String())
 	app.AddAllocation(ph)
 	app.addPlaceholderData(ph.GetAsk())
 	assert.Equal(t, app.placeholderData[""].Count, int64(2))
+	assertUserGroupResource(t, res)
 
 	// set the real one to replace the placeholder
 	realAlloc := newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
@@ -1139,6 +1186,7 @@ func TestReplaceAllocation(t *testing.T) {
 	}
 	assert.Equal(t, app.placeholderData[""].Replaced, int64(1))
 	assert.Equal(t, realAlloc.GetPlaceholderCreateTime(), ph.GetCreateTime(), "real allocation's placeholder create time not updated as expected: got %s, expected %s", realAlloc.GetPlaceholderCreateTime(), ph.GetCreateTime())
+	assertUserGroupResource(t, res)
 
 	// add the placeholder back to the app, the failure test above changed state and removed the ph
 	app.SetState(Running.String())
@@ -1146,6 +1194,7 @@ func TestReplaceAllocation(t *testing.T) {
 	app.AddAllocation(ph)
 	app.addPlaceholderData(ph.GetAsk())
 	assert.Equal(t, app.placeholderData[""].Count, int64(3))
+	assertUserGroupResource(t, resources.Multiply(res, 2))
 
 	// set multiple real allocations to replace the placeholder
 	realAlloc = newAllocation(appID1, "uuid-3", nodeID1, "root.a", res)
@@ -1166,6 +1215,7 @@ func TestReplaceAllocation(t *testing.T) {
 	if _, ok := app.allocations["not-added"]; ok {
 		t.Fatalf("real allocation added which shouldn't have been added")
 	}
+	assertUserGroupResource(t, resources.Multiply(res, 1))
 }
 
 func TestTimeoutPlaceholderSoftStyle(t *testing.T) {
@@ -1177,6 +1227,10 @@ func TestTimeoutPlaceholderAllocAsk(t *testing.T) {
 }
 
 func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulingStyle string) {
+	ugm := ugm.GetUserManager()
+	ugm.ClearUserTrackers()
+	ugm.ClearGroupTrackers()
+
 	// create a fake queue
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
@@ -1212,10 +1266,12 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	// add the placeholder to the app
 	ph := newPlaceholderAlloc(appID1, "uuid-1", nodeID1, "root.a", res)
 	app.AddAllocation(ph)
+	assertUserGroupResource(t, res)
 	assert.Assert(t, app.placeholderTimer != nil, "Placeholder timer should be initiated after the first placeholder allocation")
 	// add a second one to check the filter
 	ph = newPlaceholderAlloc(appID1, "uuid-2", nodeID1, "root.a", res)
 	app.AddAllocation(ph)
+	assertUserGroupResource(t, resources.Multiply(res, 2))
 	err = common.WaitFor(10*time.Millisecond, 1*time.Second, func() bool {
 		app.RLock()
 		defer app.RUnlock()
@@ -1224,6 +1280,8 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	assert.Equal(t, app.placeholderData[tg1].TimedOut, app.placeholderData[tg1].Count, "When the app is in an accepted state, timeout should equal to count")
 	assert.NilError(t, err, "Placeholder timeout cleanup did not trigger unexpectedly")
 	assert.Equal(t, app.stateMachine.Current(), expectedState, "Application did not progress into expected state")
+	assertUserGroupNilResourceWithError(t)
+
 	events := testHandler.GetEvents()
 	var found int
 	for _, event := range events {
@@ -1277,12 +1335,14 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	assert.Equal(t, app.placeholderData[""].Replaced, int64(0))
 	assert.Equal(t, app.placeholderData[""].TimedOut, int64(0))
 	assert.DeepEqual(t, app.placeholderData[""].MinResource, res)
+	assertUserGroupResource(t, resources.Multiply(res, 1))
 
 	assert.Assert(t, app.placeholderTimer != nil, "Placeholder timer should be initiated after the first placeholder allocation")
 	ph = newPlaceholderAlloc(appID1, "waiting", nodeID1, "root.a", res)
 	app.AddAllocation(ph)
 	app.addPlaceholderData(ph.GetAsk())
 	assert.Equal(t, app.placeholderData[""].Count, int64(2))
+	assertUserGroupResource(t, resources.Multiply(res, 2))
 
 	alloc := newAllocation(appID1, "real", nodeID1, "root.a", res)
 	app.AddAllocation(alloc)
@@ -1294,6 +1354,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	})
 	assert.NilError(t, err, "Placeholder timeout cleanup did not trigger unexpectedly")
 	assert.Assert(t, app.IsStarting(), "App should be in starting state after the first allocation")
+	assertUserGroupResource(t, resources.Multiply(res, 3))
 	// two state updates and 1 release event
 	events := testHandler.GetEvents()
 	var found bool
@@ -1313,9 +1374,13 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	assert.Assert(t, resources.Equals(app.GetPlaceholderResource(), resources.Multiply(res, 2)), "Unexpected placeholder resources for the app")
 	assert.Equal(t, app.placeholderData[""].Replaced, int64(0))
 	assert.Equal(t, app.placeholderData[""].TimedOut, int64(1))
+	assertUserGroupResource(t, resources.Multiply(res, 3))
 }
 
 func TestTimeoutPlaceholderCompleting(t *testing.T) {
+	ugm := ugm.GetUserManager()
+	ugm.ClearUserTrackers()
+	ugm.ClearGroupTrackers()
 	phTimeout := common.ConvertSITimeout(5)
 	app, testHandler := newApplicationWithPlaceholderTimeout(appID1, "default", "root.a", 5)
 	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should be nil on create")
@@ -1329,14 +1394,17 @@ func TestTimeoutPlaceholderCompleting(t *testing.T) {
 	ph := newPlaceholderAlloc(appID1, "waiting", nodeID1, "root.a", res)
 	app.AddAllocation(ph)
 	assert.Assert(t, app.placeholderTimer != nil, "Placeholder timer should be initiated after the first placeholder allocation")
+	assertUserGroupResource(t, resources.Multiply(res, 1))
 	// add a real allocation as well
 	alloc := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
 	app.AddAllocation(alloc)
 	// move on to running
 	app.SetState(Running.String())
+	assertUserGroupResource(t, resources.Multiply(res, 2))
 	// remove allocation to trigger state change
 	app.RemoveAllocation("uuid-1", si.TerminationType_UNKNOWN_TERMINATION_TYPE)
 	assert.Assert(t, app.IsCompleting(), "App should be in completing state all allocs have been removed")
+	assertUserGroupNilResourceWithError(t)
 	// make sure the placeholders time out
 	err = common.WaitFor(10*time.Millisecond, 1*time.Second, func() bool {
 		app.RLock()
@@ -1357,6 +1425,7 @@ func TestTimeoutPlaceholderCompleting(t *testing.T) {
 	}
 	assert.Assert(t, found, "release allocation event not found in list")
 	assert.Assert(t, app.IsCompleting(), "App should still be in completing state")
+	assertUserGroupNilResourceWithError(t)
 }
 
 func TestAppTimersAfterAppRemoval(t *testing.T) {
@@ -1373,13 +1442,16 @@ func TestAppTimersAfterAppRemoval(t *testing.T) {
 	ph := newPlaceholderAlloc(appID1, "waiting", nodeID1, "root.a", res)
 	app.AddAllocation(ph)
 	assert.Assert(t, app.placeholderTimer != nil, "Placeholder timer should be initiated after the first placeholder allocation")
+	assertUserGroupResource(t, resources.Multiply(res, 1))
 	// add a real allocation as well
 	alloc := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
 	app.AddAllocation(alloc)
+	assertUserGroupResource(t, resources.Multiply(res, 2))
 	// move on to running
 	app.SetState(Running.String())
 	app.RemoveAllAllocations()
 	assert.Assert(t, app.IsCompleting(), "App should be in completing state all allocs have been removed")
+	assertUserGroupNilResourceWithError(t)
 	if app.placeholderTimer != nil {
 		t.Fatalf("Placeholder timer has not be cleared after app removal as expected, %v", app.placeholderTimer)
 	}
@@ -1479,4 +1551,26 @@ func TestCanReplace(t *testing.T) {
 			assert.Equal(t, tt.want, app.canReplace(tt.ask), "unexpected replacement")
 		})
 	}
+}
+
+func assertUserGroupNilResourceWithError(t *testing.T) {
+	ugm := ugm.GetUserManager()
+	userResource, err := ugm.GetUserResources(security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
+	assert.Error(t, err, "user testuser is not available in user trackers map")
+	groupResource, err := ugm.GetGroupResources("testgroup")
+	assert.Error(t, err, "group testgroup is not available in group trackers map")
+
+	var expected *resources.Resource = nil
+	assert.Equal(t, userResource, expected)
+	assert.Equal(t, groupResource, expected)
+}
+
+func assertUserGroupResource(t *testing.T, expected *resources.Resource) {
+	ugm := ugm.GetUserManager()
+	userResource, err := ugm.GetUserResources(security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
+	assert.NilError(t, err, "User should have been tracked by this time and available in user trackers map")
+	groupResource, err := ugm.GetGroupResources("testgroup")
+	assert.NilError(t, err, "Group should have been tracked by this time and available in group trackers map")
+	assert.Equal(t, userResource.String(), expected.String())
+	assert.Equal(t, groupResource.String(), expected.String())
 }

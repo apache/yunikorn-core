@@ -38,44 +38,21 @@ const (
 
 // Create the root queue, base for all testing
 func createRootQueue(maxRes map[string]string) (*Queue, error) {
-	return createManagedQueueWithProps(nil, "root", true, maxRes, nil, security.UserGroup{})
-}
-
-// Create the root queue with user, base for all testing
-func createRootQueueWithUser(maxRes map[string]string, userGroup security.UserGroup) (*Queue, error) {
-	return createManagedQueueWithProps(nil, "root", true, maxRes, nil, userGroup)
+	return createManagedQueueWithProps(nil, "root", true, maxRes, nil)
 }
 
 // wrapper around the create call using the one syntax for all queue types
 func createManagedQueue(parentSQ *Queue, name string, parent bool, maxRes map[string]string) (*Queue, error) {
-	return createManagedQueueWithProps(parentSQ, name, parent, maxRes, nil, security.UserGroup{})
+	return createManagedQueueWithProps(parentSQ, name, parent, maxRes, nil)
 }
 
 // create managed queue with props set
-func createManagedQueueWithProps(parentSQ *Queue, name string, parent bool, maxRes, props map[string]string, userGroup security.UserGroup) (*Queue, error) {
-	limitConfig := configs.Limit{}
-	if userGroup.User != "" {
-		limitConfig = configs.Limit{
-			Limit: "test queue limit",
-			Users: []string{
-				userGroup.User,
-			},
-			Groups: userGroup.Groups,
-			MaxResources: map[string]string{
-				"memory": "10",
-				"vcores": "10",
-			},
-			MaxApplications: 1,
-		}
-	}
-	var limits []configs.Limit
-	limits = append(limits, limitConfig)
+func createManagedQueueWithProps(parentSQ *Queue, name string, parent bool, maxRes, props map[string]string) (*Queue, error) {
 	queueConfig := configs.QueueConfig{
 		Name:       name,
 		Parent:     parent,
 		Queues:     nil,
 		Properties: props,
-		Limits:     limits,
 	}
 	if maxRes != nil {
 		queueConfig.Resources = configs.Resources{
@@ -135,7 +112,7 @@ func newApplicationWithHandler(appID, partition, queueName string) (*Application
 func newApplicationWithPlaceholderTimeout(appID, partition, queueName string, phTimeout int64) (*Application, *rmproxy.MockedRMProxy) {
 	user := security.UserGroup{
 		User:   "testuser",
-		Groups: []string{},
+		Groups: []string{"testgroup"},
 	}
 	siApp := &si.AddApplicationRequest{
 		ApplicationID:                appID,

@@ -54,7 +54,6 @@ func GetUserManager() *Manager {
 		m = newManager()
 	})
 	return m
-
 }
 
 // IncreaseTrackedResource Increase the resource usage for the given user group and queue path combination.
@@ -153,9 +152,7 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 			return err
 		}
 		if removeApp {
-			if m.isUserRemovable(userTracker) {
-				delete(m.userTrackers, user.User)
-			}
+			delete(m.userTrackers, user.User)
 		}
 	} else {
 		log.Logger().Error("user tracker must be available in userTrackers map",
@@ -182,9 +179,7 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 			return err
 		}
 		if removeApp {
-			if m.isGroupRemovable(groupTracker) {
-				delete(m.groupTrackers, group)
-			}
+			delete(m.groupTrackers, group)
 		}
 	} else {
 		log.Logger().Error("appGroupTrackers tracker must be available in groupTrackers map",
@@ -194,12 +189,18 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 	return nil
 }
 
-func (m *Manager) GetUserResources(user security.UserGroup) *resources.Resource {
-	return m.userTrackers[user.User].queueTracker.resourceUsage
+func (m *Manager) GetUserResources(user security.UserGroup) (*resources.Resource, error) {
+	if m.userTrackers[user.User] != nil {
+		return m.userTrackers[user.User].queueTracker.resourceUsage, nil
+	}
+	return nil, fmt.Errorf("user %s is not available in user trackers map", user.User)
 }
 
-func (m *Manager) GetGroupResources(group string) *resources.Resource {
-	return m.groupTrackers[group].queueTracker.resourceUsage
+func (m *Manager) GetGroupResources(group string) (*resources.Resource, error) {
+	if m.groupTrackers[group] != nil {
+		return m.groupTrackers[group].queueTracker.resourceUsage, nil
+	}
+	return nil, fmt.Errorf("group %s is not available in group trackers map", group)
 }
 
 func (m *Manager) GetUsersResources() map[string]*UserTracker {
@@ -266,6 +267,8 @@ func (m *Manager) cleaner() {
 }
 
 func (m *Manager) isUserRemovable(ut *UserTracker) bool {
+	log.Logger().Debug("step 2", zap.Int("dd", len(ut.getTrackedApplications())))
+	log.Logger().Debug("step 2", zap.String("dd", ut.queueTracker.resourceUsage.String()))
 	if len(ut.getTrackedApplications()) == 0 && resources.IsZero(ut.queueTracker.resourceUsage) {
 		return true
 	}
@@ -286,4 +289,12 @@ func (m *Manager) GetUserTrackers() map[string]*UserTracker {
 
 func (m *Manager) GetGroupTrackers() map[string]*GroupTracker {
 	return m.groupTrackers
+}
+
+func (m *Manager) ClearUserTrackers() {
+	m.userTrackers = make(map[string]*UserTracker)
+}
+
+func (m *Manager) ClearGroupTrackers() {
+	m.groupTrackers = make(map[string]*GroupTracker)
 }

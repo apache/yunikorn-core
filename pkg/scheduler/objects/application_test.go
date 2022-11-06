@@ -692,7 +692,6 @@ func TestSortRequests(t *testing.T) {
 }
 
 func TestStateChangeOnUpdate(t *testing.T) {
-	ugm := ugm.GetUserManager()
 	// create a fake queue
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
@@ -735,15 +734,10 @@ func TestStateChangeOnUpdate(t *testing.T) {
 	uuid := "uuid-1"
 	allocInfo := NewAllocation(uuid, nodeID1, ask)
 	app.AddAllocation(allocInfo)
-	userResource, err := ugm.GetUserResources(security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
-	assert.NilError(t, err, "User should have been tracked by this time and available in user trackers map")
-	groupResource, err := ugm.GetGroupResources("testgroup")
-	assert.NilError(t, err, "Group should have been tracked by this time and available in group trackers map")
 
 	// app should be starting
 	assert.Assert(t, app.IsStarting(), "Application did not return starting state after alloc: %s", app.CurrentState())
-	assert.Equal(t, userResource.String(), res.String())
-	assert.Equal(t, groupResource.String(), res.String())
+	assertUserGroupResource(t, res)
 
 	// removing the ask should not move anywhere as there is an allocation
 	released = app.RemoveAllocationAsk(askID)
@@ -763,7 +757,6 @@ func TestStateChangeOnUpdate(t *testing.T) {
 }
 
 func TestStateChangeOnPlaceholderAdd(t *testing.T) {
-	ugm := ugm.GetUserManager()
 	// create a fake queue
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
@@ -810,13 +803,7 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	assert.Assert(t, app.IsAccepted(), "Application did not return accepted state after alloc: %s", app.CurrentState())
 	assert.Assert(t, resources.Equals(app.GetPlaceholderResource(), res), "placeholder allocation not set as expected")
 	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()), "allocated resource should have been zero")
-
-	userResource, err := ugm.GetUserResources(security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
-	assert.NilError(t, err, "User should have been tracked by this time and available in user trackers map")
-	groupResource, err := ugm.GetGroupResources("testgroup")
-	assert.NilError(t, err, "Group should have been tracked by this time and available in group trackers map")
-	assert.Equal(t, userResource.String(), res.String())
-	assert.Equal(t, groupResource.String(), res.String())
+	assertUserGroupResource(t, res)
 
 	// first we have to remove the allocation itself
 	alloc := app.RemoveAllocation(uuid, si.TerminationType_UNKNOWN_TERMINATION_TYPE)

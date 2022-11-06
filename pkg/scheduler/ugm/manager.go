@@ -267,8 +267,6 @@ func (m *Manager) cleaner() {
 }
 
 func (m *Manager) isUserRemovable(ut *UserTracker) bool {
-	log.Logger().Debug("step 2", zap.Int("dd", len(ut.getTrackedApplications())))
-	log.Logger().Debug("step 2", zap.String("dd", ut.queueTracker.resourceUsage.String()))
 	if len(ut.getTrackedApplications()) == 0 && resources.IsZero(ut.queueTracker.resourceUsage) {
 		return true
 	}

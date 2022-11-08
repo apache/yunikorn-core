@@ -136,7 +136,7 @@ func SetLogLevel(newLevel string) error {
 		return nil
 	}
 
-	Logger().Info("Updating log level",
+	logger.Info("Updating log level",
 		zap.String("new level", newLevel))
 	text := []byte(newLevel)
 	if err := config.Level.UnmarshalText(text); err != nil {

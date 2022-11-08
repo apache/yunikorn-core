@@ -51,9 +51,6 @@ func TestIsNopLogger(t *testing.T) {
 	assert.Equal(t, false, isNopLogger(zap.L()))
 }
 
-// Since we test the function IsDebugEnabled() we set the logger global var.
-// It has not triggered the once.Do() so we just need to make sure we clean up the
-// global var.
 func TestIsDebugEnabled(t *testing.T) {
 	// reset the global vars and zap logger
 	defer resetGlobals()

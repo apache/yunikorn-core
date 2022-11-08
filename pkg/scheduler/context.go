@@ -332,7 +332,7 @@ func (cc *ClusterContext) UpdateSchedulerConfig(conf *configs.SchedulerConfig) e
 
 // Locked version of the configuration update called outside of event system.
 // Updates the current config via the config loader.
-// Used in test only, normal updates use the internal call and the webservice must use the UpdateSchedulerConfig
+// Used in test only, normal updates use the internal call
 func (cc *ClusterContext) UpdateRMSchedulerConfig(rmID string, config []byte) error {
 	cc.Lock()
 	defer cc.Unlock()

@@ -438,48 +438,66 @@ func TestToProtoNil(t *testing.T) {
 	}
 }
 
-func TestResourceProto(t *testing.T) {
-	empty := NewResourceFromProto(nil)
-	if empty == nil || len(empty.Resources) != 0 {
-		t.Errorf("nil proto gave non empty resource: %v", empty)
+func TestToProto(t *testing.T) {
+	var tests = []struct {
+		caseName string
+		input    map[string]Quantity
+		expected int
+	}{
+		{"nil", nil, 0},
+		{"empty resource", map[string]Quantity{}, 0},
+		{"setting resource", map[string]Quantity{"first": 5, "second": -5}, 2},
+		{"resource including 0", map[string]Quantity{"first": 5, "second": 0, "third": -5}, 3},
 	}
-	// simple resource with no values to proto
-	res1 := NewResourceFromMap(map[string]Quantity{})
-	toProto := res1.ToProto()
-	if len(toProto.Resources) != 0 {
-		t.Fatalf("empty resource to proto conversion failed: %v", toProto)
-	}
-	// convert back to resource
-	res2 := NewResourceFromProto(toProto)
-	// res1 and res2 content must be equal
-	if !reflect.DeepEqual(res1.Resources, res2.Resources) {
-		t.Errorf("resource to proto and back to resource does not give same resources: original %v after %v", res1, res2)
-	}
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			toProto := NewResourceFromMap(tt.input).ToProto()
+			if toProto == nil {
+				t.Error("ToProto should return a empty resource instead of nil")
+			} else {
+				if got := len(toProto.Resources); got != tt.expected {
+					t.Errorf("Number of resource type: got %d, expected %d", got, tt.expected)
+				}
 
-	// simple resource with values to proto
-	res1 = NewResourceFromMap(map[string]Quantity{"first": 5, "second": -5})
-	toProto = res1.ToProto()
-	if len(toProto.Resources) != 2 {
-		t.Fatalf("resource to proto conversion failed: %v", toProto)
-	}
-	// convert back to resource
-	res2 = NewResourceFromProto(toProto)
-	// res1 and res2 content must be equal
-	if !reflect.DeepEqual(res1.Resources, res2.Resources) {
-		t.Errorf("resource to proto and back to resource does not give same resources: original %v after %v", res1, res2)
-	}
+				// Unexpected resource type
+				for key := range toProto.Resources {
+					if _, ok := tt.input[key]; !ok {
+						t.Errorf("Resource type %s is not expected", key)
+					}
+				}
 
-	// resource with zero set values to proto
-	res1 = NewResourceFromMap(map[string]Quantity{"first": 5, "second": 0, "third": -5})
-	toProto = res1.ToProto()
-	if len(toProto.Resources) != 3 {
-		t.Fatalf("resource to proto conversion failed: %v", toProto)
+				// Checking the number of the resource
+				for key, expected := range tt.input {
+					if got, ok := toProto.Resources[key]; ok {
+						if int64(expected) != got.Value {
+							t.Errorf("%s value: got %d, expected %d", key, got.Value, int64(expected))
+						}
+					}
+				}
+			}
+		})
 	}
-	// convert back to resource
-	res2 = NewResourceFromProto(toProto)
-	// res1 and res2 content must be equal
-	if !reflect.DeepEqual(res1.Resources, res2.Resources) {
-		t.Errorf("resource to proto and back to resource does not give same resources: original %v after %v", res1, res2)
+}
+
+func TestNewResourceFromProto(t *testing.T) {
+	var tests = []struct {
+		caseName string
+		input    map[string]Quantity
+		expected int
+	}{
+		{"empty resource", map[string]Quantity{}, 0},
+		{"setting resource", map[string]Quantity{"first": 5, "second": -5}, 2},
+		{"resource including 0", map[string]Quantity{"first": 5, "second": 0, "third": -5}, 3},
+	}
+	for _, tt := range tests {
+		res1 := NewResourceFromMap(tt.input)
+		if len(res1.Resources) != tt.expected {
+			t.Errorf("Number of resource type: got %d, expected %d", len(res1.Resources), tt.expected)
+		}
+		res2 := NewResourceFromProto(res1.ToProto())
+		if !reflect.DeepEqual(res1.Resources, res2.Resources) {
+			t.Errorf("resource to proto and back to resource does not give same resources: original %v after %v", res1, res2)
+		}
 	}
 }
 

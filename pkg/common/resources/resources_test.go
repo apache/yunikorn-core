@@ -588,13 +588,17 @@ func TestNewResourceFromProto(t *testing.T) {
 	var tests = []struct {
 		caseName string
 		input    map[string]Quantity
+		expected int
 	}{
-		{"empty resource", map[string]Quantity{}},
-		{"setting resource", map[string]Quantity{"first": 5, "second": -5}},
-		{"resource including 0", map[string]Quantity{"first": 5, "second": 0, "third": -5}},
+		{"empty resource", map[string]Quantity{}, 0},
+		{"setting resource", map[string]Quantity{"first": 5, "second": -5}, 2},
+		{"resource including 0", map[string]Quantity{"first": 5, "second": 0, "third": -5}, 3},
 	}
 	for _, tt := range tests {
 		res1 := NewResourceFromMap(tt.input)
+		if len(res1.Resources) != tt.expected {
+			t.Errorf("Number of resource type: got %d, expected %d", len(res1.Resources), tt.expected)
+		}
 		res2 := NewResourceFromProto(res1.ToProto())
 		if !reflect.DeepEqual(res1.Resources, res2.Resources) {
 			t.Errorf("resource to proto and back to resource does not give same resources: original %v after %v", res1, res2)

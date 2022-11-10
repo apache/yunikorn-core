@@ -785,7 +785,7 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 			}
 		}
 		// check allocations on the app
-		if app.RemoveAllocation(allocID) == nil {
+		if app.RemoveAllocation(allocID, si.TerminationType_UNKNOWN_TERMINATION_TYPE) == nil {
 			log.Logger().Info("allocation is not found, skipping while removing the node",
 				zap.String("allocationId", allocID),
 				zap.String("appID", app.ApplicationID),
@@ -1296,7 +1296,7 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 				zap.String("appID", appID),
 				zap.String("allocationId", uuid),
 				zap.String("terminationType", release.TerminationType.String()))
-			if alloc := app.RemoveAllocation(uuid); alloc != nil {
+			if alloc := app.RemoveAllocation(uuid, release.TerminationType); alloc != nil {
 				released = append(released, alloc)
 			}
 		}

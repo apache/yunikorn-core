@@ -1452,7 +1452,7 @@ func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
 	// remove the placeholder that was just confirmed by the shim
-	ph := sa.removeAllocationInternal(uuid)
+	ph := sa.removeAllocationInternal(uuid, si.TerminationType_PLACEHOLDER_REPLACED)
 	// this has already been replaced or it is a duplicate message from the shim
 	if ph == nil || ph.GetReleaseCount() == 0 {
 		log.Logger().Debug("Unexpected placeholder released",
@@ -1487,15 +1487,15 @@ func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
 
 // Remove the Allocation from the application.
 // Return the allocation that was removed or nil if not found.
-func (sa *Application) RemoveAllocation(uuid string) *Allocation {
+func (sa *Application) RemoveAllocation(uuid string, releaseType si.TerminationType) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
-	return sa.removeAllocationInternal(uuid)
+	return sa.removeAllocationInternal(uuid, releaseType)
 }
 
 // Remove the Allocation from the application
 // No locking must be called while holding the lock
-func (sa *Application) removeAllocationInternal(uuid string) *Allocation {
+func (sa *Application) removeAllocationInternal(uuid string, releaseType si.TerminationType) *Allocation {
 	alloc := sa.allocations[uuid]
 
 	// When app has the allocation, update map, and update allocated resource of the app
@@ -1507,6 +1507,12 @@ func (sa *Application) removeAllocationInternal(uuid string) *Allocation {
 	var eventWarning string
 	// update correct allocation tracker
 	if alloc.IsPlaceholder() {
+		// make sure we account for the placeholders being removed in the tracking data
+		if releaseType == si.TerminationType_STOPPED_BY_RM || releaseType == si.TerminationType_PREEMPTED_BY_SCHEDULER || releaseType == si.TerminationType_UNKNOWN_TERMINATION_TYPE {
+			if _, ok := sa.placeholderData[alloc.taskGroupName]; ok {
+				sa.placeholderData[alloc.taskGroupName].TimedOut++
+			}
+		}
 		sa.allocatedPlaceholder = resources.Sub(sa.allocatedPlaceholder, alloc.GetAllocatedResource())
 		// if all the placeholders are replaced, clear the placeholder timer
 		if resources.IsZero(sa.allocatedPlaceholder) {

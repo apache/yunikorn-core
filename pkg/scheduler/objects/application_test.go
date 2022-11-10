@@ -645,7 +645,7 @@ func TestRemovePlaceholderAllocationWithNoRealAllocation(t *testing.T) {
 	err := app.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted")
 
-	app.RemoveAllocation("uuid-1")
+	app.RemoveAllocation("uuid-1", si.TerminationType_UNKNOWN_TERMINATION_TYPE)
 	assert.Equal(t, app.stateMachine.Current(), Completing.String())
 }
 
@@ -735,7 +735,7 @@ func TestStateChangeOnUpdate(t *testing.T) {
 	assert.Assert(t, app.IsStarting(), "Application should have stayed same, changed unexpectedly: %s", app.CurrentState())
 
 	// remove the allocation, ask has been removed so nothing left
-	app.RemoveAllocation(uuid)
+	app.RemoveAllocation(uuid, si.TerminationType_UNKNOWN_TERMINATION_TYPE)
 	assert.Assert(t, app.IsCompleting(), "Application did not change as expected: %s", app.CurrentState())
 
 	log := app.GetStateLog()
@@ -794,7 +794,7 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()), "allocated resource should have been zero")
 
 	// first we have to remove the allocation itself
-	alloc := app.RemoveAllocation(uuid)
+	alloc := app.RemoveAllocation(uuid, si.TerminationType_UNKNOWN_TERMINATION_TYPE)
 	assert.Assert(t, alloc != nil, "Nil allocation was returned")
 	assert.Assert(t, app.IsAccepted(), "Application should have stayed in Accepted, changed unexpectedly: %s", app.CurrentState())
 	// removing the ask should move the application into the waiting state, because the allocation is only a placeholder allocation
@@ -836,11 +836,11 @@ func TestAllocations(t *testing.T) {
 	allocs = app.GetAllAllocations()
 	assert.Equal(t, len(allocs), 3)
 	// remove one of the 3
-	if alloc = app.RemoveAllocation("uuid-2"); alloc == nil {
+	if alloc = app.RemoveAllocation("uuid-2", si.TerminationType_UNKNOWN_TERMINATION_TYPE); alloc == nil {
 		t.Error("returned allocations was nil allocation was not removed")
 	}
 	// try to remove a non existing alloc
-	if alloc = app.RemoveAllocation("does-not-exist"); alloc != nil {
+	if alloc = app.RemoveAllocation("does-not-exist", si.TerminationType_UNKNOWN_TERMINATION_TYPE); alloc != nil {
 		t.Errorf("returned allocations was not allocation was incorrectly removed: %v", alloc)
 	}
 	// remove all left over allocations
@@ -1329,7 +1329,7 @@ func TestTimeoutPlaceholderCompleting(t *testing.T) {
 	// move on to running
 	app.SetState(Running.String())
 	// remove allocation to trigger state change
-	app.RemoveAllocation("uuid-1")
+	app.RemoveAllocation("uuid-1", si.TerminationType_UNKNOWN_TERMINATION_TYPE)
 	assert.Assert(t, app.IsCompleting(), "App should be in completing state all allocs have been removed")
 	// make sure the placeholders time out
 	err = common.WaitFor(10*time.Millisecond, 1*time.Second, func() bool {

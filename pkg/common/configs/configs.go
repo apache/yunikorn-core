@@ -53,12 +53,14 @@ func (ctx *SchedulerConfigContext) Get(policyGroup string) *SchedulerConfig {
 	return ctx.configs[policyGroup]
 }
 
+// AddConfigMapCallback registers a callback to detect configuration updates 
 func AddConfigMapCallback(id string, callback func()) {
 	configMapLock.Lock()
 	defer configMapLock.Unlock()
 	configMapCallbacks[id] = callback
 }
 
+// RemoveConfigMapCallback removes a previously registered configuration update callback
 func RemoveConfigMapCallback(id string) {
 	configMapLock.Lock()
 	defer configMapLock.Unlock()

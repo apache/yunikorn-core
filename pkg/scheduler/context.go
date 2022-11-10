@@ -166,6 +166,8 @@ func (cc *ClusterContext) processRMRegistrationEvent(event *rmevent.RMRegistrati
 	}
 	policyGroup := event.Registration.PolicyGroup
 	config := event.Registration.Config
+	configs.SetConfigMap(event.Registration.ExtraConfig)
+
 	// load the config this returns a validated configuration
 	if len(config) == 0 {
 		log.Logger().Info("No scheduler configuration supplied, using defaults", zap.String("rmID", rmID))
@@ -207,6 +209,10 @@ func (cc *ClusterContext) processRMConfigUpdateEvent(event *rmevent.RMConfigUpda
 		}
 		return
 	}
+
+	// set extra configuration
+	configs.SetConfigMap(event.ExtraConfig)
+
 	// load the config this returns a validated configuration
 	config := event.Config
 	if len(config) == 0 {

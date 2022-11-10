@@ -373,6 +373,7 @@ func (rmp *RMProxy) UpdateConfiguration(request *si.UpdateConfigurationRequest) 
 			RmID:        request.RmID,
 			PolicyGroup: request.PolicyGroup,
 			Config:      request.Config,
+			ExtraConfig: request.ExtraConfig,
 			Channel:     c,
 		})
 	}()

@@ -20,7 +20,6 @@ package scheduler
 
 import (
 	"fmt"
-	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"strconv"
 	"strings"
 	"testing"
@@ -37,6 +36,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
+	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -1159,7 +1159,6 @@ func TestRequiredNodeNotExist(t *testing.T) {
 		t.Fatal("allocation should not have worked on unknown node")
 	}
 	assertUserGroupNilResourceWithError(t)
-	//assertUserGroupResource(t, resources.Multiply(res, 2))
 }
 
 // basic ds scheduling on specific node in first allocate run itself (without any need for reservation)

@@ -813,8 +813,7 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	released = app.RemoveAllocationAsk(askID)
 	assert.Equal(t, released, 0, "allocation ask should not have been reserved")
 	assert.Assert(t, app.IsCompleting(), "Application should have stayed same, changed unexpectedly: %s", app.CurrentState())
-	//assertUserGroupNilResourceWithError(t)
-	//assertUserGroupResource(t, res)
+	assertUserGroupResource(t, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0}))
 
 	log := app.GetStateLog()
 	assert.Equal(t, len(log), 2, "wrong number of app events")

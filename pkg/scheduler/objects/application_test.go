@@ -813,7 +813,8 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	released = app.RemoveAllocationAsk(askID)
 	assert.Equal(t, released, 0, "allocation ask should not have been reserved")
 	assert.Assert(t, app.IsCompleting(), "Application should have stayed same, changed unexpectedly: %s", app.CurrentState())
-	assertUserGroupNilResourceWithError(t)
+	//assertUserGroupNilResourceWithError(t)
+	//assertUserGroupResource(t, res)
 
 	log := app.GetStateLog()
 	assert.Equal(t, len(log), 2, "wrong number of app events")
@@ -822,6 +823,10 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 }
 
 func TestAllocations(t *testing.T) {
+	ugm := ugm.GetUserManager()
+	ugm.ClearUserTrackers()
+	ugm.ClearGroupTrackers()
+
 	app := newApplication(appID1, "default", "root.a")
 
 	// nothing allocated
@@ -1202,7 +1207,7 @@ func TestReplaceAllocation(t *testing.T) {
 	if _, ok := app.allocations["not-added"]; ok {
 		t.Fatalf("real allocation added which shouldn't have been added")
 	}
-	assertUserGroupResource(t, resources.Multiply(res, 1))
+	assertUserGroupResource(t, resources.Multiply(res, 2))
 }
 
 func TestTimeoutPlaceholderSoftStyle(t *testing.T) {
@@ -1267,7 +1272,7 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	assert.Equal(t, app.placeholderData[tg1].TimedOut, app.placeholderData[tg1].Count, "When the app is in an accepted state, timeout should equal to count")
 	assert.NilError(t, err, "Placeholder timeout cleanup did not trigger unexpectedly")
 	assert.Equal(t, app.stateMachine.Current(), expectedState, "Application did not progress into expected state")
-	assertUserGroupNilResourceWithError(t)
+	assertUserGroupResource(t, resources.Multiply(res, 2))
 
 	events := testHandler.GetEvents()
 	var found int
@@ -1291,6 +1296,7 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "pending placeholder resources should be zero")
 	// a released placeholder still holds the resource until release confirmed by the RM
 	assert.Assert(t, resources.Equals(app.GetPlaceholderResource(), resources.Multiply(res, 2)), "Unexpected placeholder resources for the app")
+	assertUserGroupResource(t, resources.Multiply(res, 2))
 
 	log := app.GetStateLog()
 	assert.Equal(t, len(log), 2, "wrong number of app events")
@@ -1299,6 +1305,10 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 }
 
 func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
+	ugm := ugm.GetUserManager()
+	ugm.ClearUserTrackers()
+	ugm.ClearGroupTrackers()
+
 	originalPhTimeout := defaultPlaceholderTimeout
 	defaultPlaceholderTimeout = 5 * time.Millisecond
 	defer func() { defaultPlaceholderTimeout = originalPhTimeout }()

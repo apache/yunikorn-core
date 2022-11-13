@@ -26,6 +26,7 @@ type ApplicationDAOInfo struct {
 	ApplicationID   string                 `json:"applicationID"`
 	UsedResource    map[string]int64       `json:"usedResource"`
 	MaxUsedResource map[string]int64       `json:"maxUsedResource"`
+	PendingResource map[string]int64       `json:"pendingResource"`
 	Partition       string                 `json:"partition"`
 	QueueName       string                 `json:"queueName"`
 	SubmissionTime  int64                  `json:"submissionTime"`

@@ -234,6 +234,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		ApplicationID:   app.ApplicationID,
 		UsedResource:    app.GetAllocatedResource().DAOMap(),
 		MaxUsedResource: app.GetMaxAllocatedResource().DAOMap(),
+		PendingResource: app.GetPendingResource().DAOMap(),
 		Partition:       common.GetPartitionNameWithoutClusterID(app.Partition),
 		QueueName:       app.GetQueuePath(),
 		SubmissionTime:  app.SubmissionTime.UnixNano(),

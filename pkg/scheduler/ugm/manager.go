@@ -152,7 +152,9 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 			return err
 		}
 		if removeApp {
-			delete(m.userTrackers, user.User)
+			if m.isUserRemovable(userTracker) {
+				delete(m.userTrackers, user.User)
+			}
 		}
 	} else {
 		log.Logger().Error("user tracker must be available in userTrackers map",
@@ -179,7 +181,9 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 			return err
 		}
 		if removeApp {
-			delete(m.groupTrackers, group)
+			if m.isGroupRemovable(groupTracker) {
+				delete(m.groupTrackers, group)
+			}
 		}
 	} else {
 		log.Logger().Error("appGroupTrackers tracker must be available in groupTrackers map",

@@ -38,6 +38,12 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
+func setupUGM() {
+	ugm := ugm.GetUserManager()
+	ugm.ClearUserTrackers()
+	ugm.ClearGroupTrackers()
+}
+
 // basic app creating with timeout checks
 func TestNewApplication(t *testing.T) {
 	user := security.UserGroup{
@@ -822,10 +828,7 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 }
 
 func TestAllocations(t *testing.T) {
-	ugm := ugm.GetUserManager()
-	ugm.ClearUserTrackers()
-	ugm.ClearGroupTrackers()
-
+	setupUGM()
 	app := newApplication(appID1, "default", "root.a")
 
 	// nothing allocated
@@ -930,9 +933,7 @@ func TestGangAllocChange(t *testing.T) {
 }
 
 func TestAllocChange(t *testing.T) {
-	ugm := ugm.GetUserManager()
-	ugm.ClearUserTrackers()
-	ugm.ClearGroupTrackers()
+	setupUGM()
 	app := newApplication(appID1, "default", "root.a")
 	assert.Assert(t, app.IsNew(), "newly created app should be in new state")
 	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()), "new application has allocated resources")
@@ -1118,9 +1119,7 @@ func TestOnStatusChangeCalled(t *testing.T) {
 }
 
 func TestReplaceAllocation(t *testing.T) {
-	ugm := ugm.GetUserManager()
-	ugm.ClearUserTrackers()
-	ugm.ClearGroupTrackers()
+	setupUGM()
 	app := newApplication(appID1, "default", "root.a")
 	assert.Equal(t, New.String(), app.CurrentState(), "new app not in New state")
 	// state changes are not important
@@ -1218,9 +1217,7 @@ func TestTimeoutPlaceholderAllocAsk(t *testing.T) {
 }
 
 func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulingStyle string) {
-	ugm := ugm.GetUserManager()
-	ugm.ClearUserTrackers()
-	ugm.ClearGroupTrackers()
+	setupUGM()
 
 	// create a fake queue
 	queue, err := createRootQueue(nil)
@@ -1304,9 +1301,7 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 }
 
 func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
-	ugm := ugm.GetUserManager()
-	ugm.ClearUserTrackers()
-	ugm.ClearGroupTrackers()
+	setupUGM()
 
 	originalPhTimeout := defaultPlaceholderTimeout
 	defaultPlaceholderTimeout = 5 * time.Millisecond
@@ -1374,9 +1369,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 }
 
 func TestTimeoutPlaceholderCompleting(t *testing.T) {
-	ugm := ugm.GetUserManager()
-	ugm.ClearUserTrackers()
-	ugm.ClearGroupTrackers()
+	setupUGM()
 	phTimeout := common.ConvertSITimeout(5)
 	app, testHandler := newApplicationWithPlaceholderTimeout(appID1, "default", "root.a", 5)
 	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should be nil on create")
@@ -1400,7 +1393,7 @@ func TestTimeoutPlaceholderCompleting(t *testing.T) {
 	// remove allocation to trigger state change
 	app.RemoveAllocation("uuid-1", si.TerminationType_UNKNOWN_TERMINATION_TYPE)
 	assert.Assert(t, app.IsCompleting(), "App should be in completing state all allocs have been removed")
-	assertUserGroupNilResourceWithError(t)
+	assertUserGroupResource(t, resources.Multiply(res, 1))
 	// make sure the placeholders time out
 	err = common.WaitFor(10*time.Millisecond, 1*time.Second, func() bool {
 		app.RLock()
@@ -1421,10 +1414,11 @@ func TestTimeoutPlaceholderCompleting(t *testing.T) {
 	}
 	assert.Assert(t, found, "release allocation event not found in list")
 	assert.Assert(t, app.IsCompleting(), "App should still be in completing state")
-	assertUserGroupNilResourceWithError(t)
+	assertUserGroupResource(t, resources.Multiply(res, 1))
 }
 
 func TestAppTimersAfterAppRemoval(t *testing.T) {
+	setupUGM()
 	phTimeout := common.ConvertSITimeout(50)
 	app, _ := newApplicationWithPlaceholderTimeout(appID1, "default", "root.a", 50)
 	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should be nil on create")

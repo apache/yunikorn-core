@@ -201,6 +201,7 @@ func TestAddNode(t *testing.T) {
 }
 
 func TestAddNodeWithAllocations(t *testing.T) {
+	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
 
@@ -269,6 +270,7 @@ func assertUserGroupNilResourceWithError(t *testing.T) {
 }
 
 func TestRemoveNode(t *testing.T) {
+	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "test partition create failed with error")
 	err = partition.AddNode(newNodeMaxResource("test", resources.NewResource()), nil)
@@ -690,7 +692,7 @@ func TestRemoveApp(t *testing.T) {
 	allocs = partition.removeApplication(appID1)
 	assert.Equal(t, 0, len(allocs), "existing application without allocations returned allocations %v", allocs)
 	assert.Equal(t, 1, len(partition.applications), "existing application was not removed")
-	assertUserGroupNilResourceWithError(t)
+	assertUserGroupResource(t, appRes)
 
 	// add the application again and then an allocation
 	err = partition.AddApplication(app)
@@ -700,7 +702,7 @@ func TestRemoveApp(t *testing.T) {
 	alloc = objects.NewAllocation("alloc-1-uuid", nodeID1, ask)
 	err = partition.addAllocation(alloc)
 	assert.NilError(t, err, "add allocation to partition should not have failed")
-	assertUserGroupResource(t, appRes)
+	assertUserGroupResource(t, resources.Multiply(appRes, 2))
 
 	// remove the newly added app
 	allocs = partition.removeApplication(appID1)
@@ -709,10 +711,15 @@ func TestRemoveApp(t *testing.T) {
 	if partition.GetTotalAllocationCount() != 1 {
 		t.Errorf("allocation that should have been left was removed")
 	}
+	assertUserGroupResource(t, appRes)
+
+	allocs = partition.removeApplication("will_not_remove")
+	assert.Equal(t, 1, len(allocs), "existing application with allocations returned unexpected allocations %v", allocs)
 	assertUserGroupNilResourceWithError(t)
 }
 
 func TestRemoveAppAllocs(t *testing.T) {
+	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
 

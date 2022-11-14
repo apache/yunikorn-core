@@ -398,30 +398,32 @@ func (pc *PartitionContext) removeApplication(appID string) []*objects.Allocatio
 		queue.RemoveApplication(app)
 	}
 	// Remove all allocations
-	allocations := app.RemoveAllAllocations()
-	// Remove all allocations from node(s) (queues have been updated already)
-	if len(allocations) != 0 {
-		// track the number of allocations
-		pc.updateAllocationCount(-len(allocations))
-		for _, alloc := range allocations {
-			currentUUID := alloc.GetUUID()
-			node := pc.GetNode(alloc.GetNodeID())
-			if node == nil {
-				log.Logger().Warn("unknown node: not found in active node list",
-					zap.String("appID", appID),
-					zap.String("nodeID", alloc.GetNodeID()))
-				continue
-			}
-			if nodeAlloc := node.RemoveAllocation(currentUUID); nodeAlloc == nil {
-				log.Logger().Warn("unknown allocation: not found on the node",
-					zap.String("appID", appID),
-					zap.String("allocationId", currentUUID),
-					zap.String("nodeID", alloc.GetNodeID()))
+	if len(app.GetAllAllocations()) > 0 {
+		allocations := app.RemoveAllAllocations()
+		// Remove all allocations from node(s) (queues have been updated already)
+		if len(allocations) != 0 {
+			// track the number of allocations
+			pc.updateAllocationCount(-len(allocations))
+			for _, alloc := range allocations {
+				currentUUID := alloc.GetUUID()
+				node := pc.GetNode(alloc.GetNodeID())
+				if node == nil {
+					log.Logger().Warn("unknown node: not found in active node list",
+						zap.String("appID", appID),
+						zap.String("nodeID", alloc.GetNodeID()))
+					continue
+				}
+				if nodeAlloc := node.RemoveAllocation(currentUUID); nodeAlloc == nil {
+					log.Logger().Warn("unknown allocation: not found on the node",
+						zap.String("appID", appID),
+						zap.String("allocationId", currentUUID),
+						zap.String("nodeID", alloc.GetNodeID()))
+				}
 			}
 		}
+		return allocations
 	}
-
-	return allocations
+	return nil
 }
 
 // Locked updates of the partition tracking info

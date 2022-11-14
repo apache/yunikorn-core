@@ -1598,12 +1598,14 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 		allocationsToRelease = append(allocationsToRelease, alloc)
 	}
 	// cleanup allocated resource for app (placeholders and normal)
+	if resources.IsZero(sa.pending) {
+		sa.decUserResourceUsage(resources.Add(sa.allocatedResource, sa.allocatedPlaceholder), true)
+	}
 	sa.allocatedResource = resources.NewResource()
 	sa.allocatedPlaceholder = resources.NewResource()
 	sa.allocations = make(map[string]*Allocation)
 	// When the resource trackers are zero we should not expect anything to come in later.
 	if resources.IsZero(sa.pending) {
-		sa.decUserResourceUsage(resources.Add(sa.allocatedResource, sa.allocatedPlaceholder), true)
 		if err := sa.HandleApplicationEvent(CompleteApplication); err != nil {
 			log.Logger().Warn("Application state not changed to Waiting while removing all allocations",
 				zap.String("currentState", sa.CurrentState()),

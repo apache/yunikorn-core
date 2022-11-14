@@ -59,8 +59,7 @@ func queueFunc(name string) *objects.Queue {
 
 // Create a queue structure for the placement without the need to create a partition
 func initQueueStructure(data []byte) error {
-	configs.MockSchedulerConfigByData(data)
-	conf, err := configs.SchedulerConfigLoader("default")
+	conf, err := configs.LoadSchedulerConfigFromByteArray(data)
 	if err != nil {
 		return err
 	}

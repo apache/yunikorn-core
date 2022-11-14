@@ -50,8 +50,11 @@ type RMRegistrationEvent struct {
 }
 
 type RMConfigUpdateEvent struct {
-	RmID    string
-	Channel chan *Result `json:"-"`
+	RmID        string
+	PolicyGroup string
+	Config      string
+	ExtraConfig map[string]string
+	Channel     chan *Result `json:"-"`
 }
 
 type RMPartitionsRemoveEvent struct {

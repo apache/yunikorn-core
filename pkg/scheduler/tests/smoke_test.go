@@ -108,9 +108,12 @@ partitions:
         properties:
           gpu: test queue property
 `
-	configs.MockSchedulerConfigByData([]byte(configData))
-	err = ms.proxy.UpdateConfiguration("rm:123")
-
+	request := si.UpdateConfigurationRequest{
+		RmID:        "rm:123",
+		PolicyGroup: "policygroup",
+		Config:      configData,
+	}
+	err = ms.proxy.UpdateConfiguration(&request)
 	assert.NilError(t, err, "configuration reload failed")
 
 	// wait until configuration is reloaded

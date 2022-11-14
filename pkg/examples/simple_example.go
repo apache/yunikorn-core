@@ -21,7 +21,6 @@ package examples
 import (
 	"sync"
 
-	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/entrypoint"
 	"github.com/apache/yunikorn-core/pkg/scheduler/tests"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
@@ -136,9 +135,6 @@ partitions:
 	BuildInfoMap := make(map[string]string)
 	BuildInfoMap["k"] = "v"
 
-	// Existing scheduler already supports read from config file, but to make test easier, you can
-	configs.MockSchedulerConfigByData([]byte(configData))
-
 	// Register RM
 	mockRM := newExampleRMCallback()
 
@@ -148,6 +144,7 @@ partitions:
 			PolicyGroup: "policygroup",
 			Version:     "0.0.2",
 			BuildInfo:   BuildInfoMap,
+			Config:      configData,
 		}, mockRM)
 
 	if err != nil {

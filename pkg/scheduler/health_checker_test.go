@@ -28,7 +28,6 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 )
 
@@ -55,9 +54,8 @@ func TestNewHealthChecker(t *testing.T) {
 }
 
 func TestRunOnce(t *testing.T) {
-	configs.MockSchedulerConfigByData([]byte(configDefault))
 	metrics.Reset()
-	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
+	schedulerContext, err := NewClusterContext("rmID", "policyGroup", []byte(configDefault))
 	assert.NilError(t, err, "Error when load schedulerContext from config")
 	assert.Assert(t, schedulerContext.lastHealthCheckResult == nil, "lastHealthCheckResult should be nil initially")
 
@@ -69,9 +67,8 @@ func TestRunOnce(t *testing.T) {
 
 func TestStartStop(t *testing.T) {
 	partName := "[rmID]default"
-	configs.MockSchedulerConfigByData([]byte(configDefault))
 	metrics.Reset()
-	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
+	schedulerContext, err := NewClusterContext("rmID", "policyGroup", []byte(configDefault))
 	assert.NilError(t, err, "Error when load schedulerContext from config")
 	assert.Assert(t, schedulerContext.lastHealthCheckResult == nil, "lastHealthCheckResult should be nil initially")
 
@@ -87,10 +84,9 @@ func TestStartStop(t *testing.T) {
 }
 
 func TestUpdateSchedulerLastHealthStatus(t *testing.T) {
-	configs.MockSchedulerConfigByData([]byte(configDefault))
 	metrics.Reset()
 	schedulerMetrics := metrics.GetSchedulerMetrics()
-	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
+	schedulerContext, err := NewClusterContext("rmID", "policyGroup", []byte(configDefault))
 	assert.NilError(t, err, "Error when load schedulerContext from config")
 
 	healthInfo := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
@@ -103,10 +99,9 @@ func TestUpdateSchedulerLastHealthStatus(t *testing.T) {
 
 func TestGetSchedulerHealthStatusContext(t *testing.T) {
 	partName := "[rmID]default"
-	configs.MockSchedulerConfigByData([]byte(configDefault))
 	metrics.Reset()
 	schedulerMetrics := metrics.GetSchedulerMetrics()
-	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
+	schedulerContext, err := NewClusterContext("rmID", "policyGroup", []byte(configDefault))
 	assert.NilError(t, err, "Error when load schedulerContext from config")
 	// everything OK
 	healthInfo := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
@@ -163,10 +158,9 @@ func TestGetSchedulerHealthStatusContext(t *testing.T) {
 }
 
 func TestGetSchedulerHealthStatusMetrics(t *testing.T) {
-	configs.MockSchedulerConfigByData([]byte(configDefault))
 	metrics.Reset()
 	schedulerMetrics := metrics.GetSchedulerMetrics()
-	schedulerContext, err := NewClusterContext("rmID", "policyGroup")
+	schedulerContext, err := NewClusterContext("rmID", "policyGroup", []byte(configDefault))
 	assert.NilError(t, err, "Error when load schedulerContext from config")
 	// everything OK
 	healthInfo := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)

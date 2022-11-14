@@ -23,7 +23,7 @@ go 1.16
 
 require (
 	github.com/HdrHistogram/hdrhistogram-go v1.0.1 // indirect
-	github.com/apache/yunikorn-scheduler-interface v0.0.0-20220818152917-b140f6b90fc4
+	github.com/apache/yunikorn-scheduler-interface v0.0.0-20221110194141-115505199f57
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/google/btree v1.0.1
 	github.com/google/uuid v1.2.0
@@ -42,7 +42,6 @@ require (
 	go.uber.org/zap v1.13.0
 	golang.org/x/lint v0.0.0-20200302205851-738671d3881b // indirect
 	golang.org/x/net v0.0.0-20220812174116-3211cb980234
-	golang.org/x/sys v0.0.0-20220817070843-5a390386f1f2 // indirect
 	golang.org/x/tools v0.1.12 // indirect
 	google.golang.org/grpc v1.26.0
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0

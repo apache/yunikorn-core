@@ -203,4 +203,5 @@ partitions:
         create: true
     queues:
       - name: root
+        submitacl: '*'
 `

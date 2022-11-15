@@ -28,6 +28,60 @@ import (
 	"gotest.tools/assert"
 )
 
+func TestNewResourceFromMap(t *testing.T) {
+	type outputs struct {
+		length    int
+		resources map[string]Quantity
+	}
+	var tests = []struct {
+		caseName string
+		input    map[string]Quantity
+		expected outputs
+	}{
+		{
+			"nil",
+			nil,
+			outputs{0, map[string]Quantity{}},
+		},
+		{
+			"empty",
+			map[string]Quantity{},
+			outputs{0, map[string]Quantity{}},
+		},
+		{
+			"one resource",
+			map[string]Quantity{"first": 1},
+			outputs{1, map[string]Quantity{"first": 1}},
+		},
+		{
+			"two resource",
+			map[string]Quantity{"first": 0, "second": -1},
+			outputs{2, map[string]Quantity{"first": 0, "second": -1}},
+		},
+		{
+			"three resource",
+			map[string]Quantity{"first": 1, "second": 2, "third": 0},
+			outputs{3, map[string]Quantity{"first": 1, "second": 2, "third": 0}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			res := NewResourceFromMap(tt.input)
+			if got := len(res.Resources); tt.expected.length == 0 && (res == nil || got != tt.expected.length) {
+				t.Errorf("input with empty and nil should be a empty resource: Expected %d, got %d", tt.expected.length, got)
+			} else if got := len(res.Resources); got != tt.expected.length {
+				t.Errorf("Length of resources is wrong: Expected %d, got %d", tt.expected.length, got)
+			} else {
+				for key, expected := range tt.expected.resources {
+					if got := res.Resources[key]; got != expected {
+						t.Errorf("resource %s, expected %d, got %d", key, expected, got)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestNewResourceFromConf(t *testing.T) {
 	type expectedvalues struct {
 		resourceExist bool

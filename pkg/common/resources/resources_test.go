@@ -19,6 +19,7 @@
 package resources
 
 import (
+	"fmt"
 	"math"
 	"reflect"
 	"testing"
@@ -27,6 +28,24 @@ import (
 
 	"gotest.tools/assert"
 )
+
+func CheckLenOfResource(res *Resource, expected int) (bool, string) {
+	if got := len(res.Resources); expected == 0 && (res == nil || got != expected) {
+		return false, fmt.Sprintf("input with empty and nil should be a empty resource: Expected %d, got %d", expected, got)
+	} else if got := len(res.Resources); got != expected {
+		return false, fmt.Sprintf("Length of resources is wrong: Expected %d, got %d", expected, got)
+	}
+	return true, ""
+}
+
+func ChecResourceValueOfResource(res *Resource, expected map[string]Quantity) (bool, string) {
+	for key, expected := range expected {
+		if got := res.Resources[key]; got != expected {
+			return false, fmt.Sprintf("resource %s, expected %d, got %d", key, expected, got)
+		}
+	}
+	return true, ""
+}
 
 func TestNewResourceFromMap(t *testing.T) {
 	type outputs struct {
@@ -67,15 +86,11 @@ func TestNewResourceFromMap(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.caseName, func(t *testing.T) {
 			res := NewResourceFromMap(tt.input)
-			if got := len(res.Resources); tt.expected.length == 0 && (res == nil || got != tt.expected.length) {
-				t.Errorf("input with empty and nil should be a empty resource: Expected %d, got %d", tt.expected.length, got)
-			} else if got := len(res.Resources); got != tt.expected.length {
-				t.Errorf("Length of resources is wrong: Expected %d, got %d", tt.expected.length, got)
+			if ok, err := CheckLenOfResource(res, tt.expected.length); !ok {
+				t.Error(err)
 			} else {
-				for key, expected := range tt.expected.resources {
-					if got := res.Resources[key]; got != expected {
-						t.Errorf("resource %s, expected %d, got %d", key, expected, got)
-					}
+				if ok, err := ChecResourceValueOfResource(res, tt.expected.resources); !ok {
+					t.Error(err)
 				}
 			}
 		})
@@ -539,19 +554,26 @@ func TestNewResourceFromProto(t *testing.T) {
 		input    map[string]Quantity
 		expected int
 	}{
+		{"nil resource", nil, 0},
 		{"empty resource", map[string]Quantity{}, 0},
 		{"setting resource", map[string]Quantity{"first": 5, "second": -5}, 2},
 		{"resource including 0", map[string]Quantity{"first": 5, "second": 0, "third": -5}, 3},
 	}
 	for _, tt := range tests {
-		res1 := NewResourceFromMap(tt.input)
-		if len(res1.Resources) != tt.expected {
-			t.Errorf("Number of resource type: got %d, expected %d", len(res1.Resources), tt.expected)
-		}
-		res2 := NewResourceFromProto(res1.ToProto())
-		if !reflect.DeepEqual(res1.Resources, res2.Resources) {
-			t.Errorf("resource to proto and back to resource does not give same resources: original %v after %v", res1, res2)
-		}
+        t.Run(tt.caseName, func(t *testing.T) {
+            res1 := NewResourceFromMap(tt.input)
+            if ok, err := CheckLenOfResource(res1, tt.expected); !ok {
+                t.Error(err)
+            }
+        
+            res2 := NewResourceFromProto(res1.ToProto())
+            if ok, err := CheckLenOfResource(res2, tt.expected); !ok {
+                t.Error(err)
+            }
+            if !reflect.DeepEqual(res1.Resources, res2.Resources) {
+                t.Errorf("resource to proto and back to resource does not give same resources: original %v after %v", res1, res2)
+            }
+        })
 	}
 }
 

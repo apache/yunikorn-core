@@ -63,6 +63,9 @@ func NewResourceFromProto(proto *si.Resource) *Resource {
 }
 
 func NewResourceFromMap(m map[string]Quantity) *Resource {
+    if m == nil {
+        return NewResource()
+    }
 	return &Resource{Resources: m}
 }
 

@@ -550,14 +550,16 @@ func TestToProto(t *testing.T) {
 
 func TestNewResourceFromProto(t *testing.T) {
 	var tests = []struct {
-		caseName string
-		input    map[string]Quantity
-		expected int
+		caseName   string
+		input      map[string]Quantity
+		expected   int
+		ProtoIsNil bool
 	}{
-		{"nil resource", nil, 0},
-		{"empty resource", map[string]Quantity{}, 0},
-		{"setting resource", map[string]Quantity{"first": 5, "second": -5}, 2},
-		{"resource including 0", map[string]Quantity{"first": 5, "second": 0, "third": -5}, 3},
+		{"Proto is nil", nil, 0, true},
+		{"nil resource", nil, 0, false},
+		{"empty resource", map[string]Quantity{}, 0, false},
+		{"setting resource", map[string]Quantity{"first": 5, "second": -5}, 2, false},
+		{"resource including 0", map[string]Quantity{"first": 5, "second": 0, "third": -5}, 3, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.caseName, func(t *testing.T) {
@@ -567,6 +569,9 @@ func TestNewResourceFromProto(t *testing.T) {
 			}
 
 			res2 := NewResourceFromProto(res1.ToProto())
+			if tt.ProtoIsNil {
+				res2 = NewResourceFromProto(nil)
+			}
 			if ok, err := CheckLenOfResource(res2, tt.expected); !ok {
 				t.Error(err)
 			}

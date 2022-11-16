@@ -560,20 +560,20 @@ func TestNewResourceFromProto(t *testing.T) {
 		{"resource including 0", map[string]Quantity{"first": 5, "second": 0, "third": -5}, 3},
 	}
 	for _, tt := range tests {
-        t.Run(tt.caseName, func(t *testing.T) {
-            res1 := NewResourceFromMap(tt.input)
-            if ok, err := CheckLenOfResource(res1, tt.expected); !ok {
-                t.Error(err)
-            }
-        
-            res2 := NewResourceFromProto(res1.ToProto())
-            if ok, err := CheckLenOfResource(res2, tt.expected); !ok {
-                t.Error(err)
-            }
-            if !reflect.DeepEqual(res1.Resources, res2.Resources) {
-                t.Errorf("resource to proto and back to resource does not give same resources: original %v after %v", res1, res2)
-            }
-        })
+		t.Run(tt.caseName, func(t *testing.T) {
+			res1 := NewResourceFromMap(tt.input)
+			if ok, err := CheckLenOfResource(res1, tt.expected); !ok {
+				t.Error(err)
+			}
+
+			res2 := NewResourceFromProto(res1.ToProto())
+			if ok, err := CheckLenOfResource(res2, tt.expected); !ok {
+				t.Error(err)
+			}
+			if !reflect.DeepEqual(res1.Resources, res2.Resources) {
+				t.Errorf("resource to proto and back to resource does not give same resources: original %v after %v", res1, res2)
+			}
+		})
 	}
 }
 

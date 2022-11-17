@@ -327,7 +327,7 @@ func getNodeJSON(node *objects.Node) *dao.NodeDAOInfo {
 		Allocations:  allocations,
 		Schedulable:  node.IsSchedulable(),
 		IsReserved:   node.IsReserved(),
-		Reservations: node.GetReservations(),
+		Reservations: node.GetReservationKeys(),
 	}
 }
 

@@ -130,8 +130,8 @@ func TestBasicReservation(t *testing.T) {
 
 	// check objects have reservations assigned,
 	assert.Equal(t, 2, len(app.GetReservations()), "reservations missing from app")
-	assert.Equal(t, 1, len(ms.getNode(nodes[0]).GetReservations()), "reservation missing on %s", nodes[0])
-	assert.Equal(t, 1, len(ms.getNode(nodes[1]).GetReservations()), "reservation missing on %s", nodes[1])
+	assert.Equal(t, 1, len(ms.getNode(nodes[0]).GetReservationKeys()), "reservation missing on %s", nodes[0])
+	assert.Equal(t, 1, len(ms.getNode(nodes[1]).GetReservationKeys()), "reservation missing on %s", nodes[1])
 	assert.Equal(t, 2, ms.getPartitionReservations()[appID1], "reservations missing from partition")
 
 	// Remove app-1
@@ -149,8 +149,8 @@ func TestBasicReservation(t *testing.T) {
 
 	// App/node should not have reservation now
 	assert.Equal(t, 0, len(app.GetReservations()), "reservations missing from app")
-	assert.Equal(t, 0, len(ms.getNode(nodes[0]).GetReservations()), "reservation missing on %s", nodes[0])
-	assert.Equal(t, 0, len(ms.getNode(nodes[1]).GetReservations()), "reservation missing on %s", nodes[1])
+	assert.Equal(t, 0, len(ms.getNode(nodes[0]).GetReservationKeys()), "reservation missing on %s", nodes[0])
+	assert.Equal(t, 0, len(ms.getNode(nodes[1]).GetReservationKeys()), "reservation missing on %s", nodes[1])
 	assert.Equal(t, 0, ms.getPartitionReservations()[appID1], "reservations missing from partition")
 }
 
@@ -303,8 +303,8 @@ func TestRemoveReservedNode(t *testing.T) {
 	waitForPendingAppResource(t, app, 40000000, 1000)
 	// check objects have reservations assigned,
 	assert.Equal(t, 2, len(app.GetReservations()), "reservations missing from app")
-	assert.Equal(t, 1, len(ms.getNode(nodes[0]).GetReservations()), "reservation missing on %s", nodes[0])
-	assert.Equal(t, 1, len(ms.getNode(nodes[1]).GetReservations()), "reservation missing on %s", nodes[1])
+	assert.Equal(t, 1, len(ms.getNode(nodes[0]).GetReservationKeys()), "reservation missing on %s", nodes[0])
+	assert.Equal(t, 1, len(ms.getNode(nodes[1]).GetReservationKeys()), "reservation missing on %s", nodes[1])
 	assert.Equal(t, 2, ms.getPartitionReservations()[appID1], "reservations missing from partition")
 
 	// remove the 2nd node
@@ -315,7 +315,7 @@ func TestRemoveReservedNode(t *testing.T) {
 	waitForAllocatedAppResource(t, app, 40000000, 1000)
 	ms.mockRM.waitForAllocations(t, 2, 1000)
 	assert.Equal(t, 1, len(app.GetReservations()), "reservations missing from app")
-	assert.Equal(t, 1, len(ms.getNode(nodes[0]).GetReservations()), "reservation missing on %s", nodes[0])
+	assert.Equal(t, 1, len(ms.getNode(nodes[0]).GetReservationKeys()), "reservation missing on %s", nodes[0])
 	assert.Equal(t, 1, ms.getPartitionReservations()[appID1], "reservations not removed from partition")
 }
 
@@ -356,8 +356,8 @@ func TestAddNewNode(t *testing.T) {
 	ms.mockRM.waitForAllocations(t, 4, 1000)
 	// check objects have reservations assigned,
 	assert.Equal(t, 2, len(app.GetReservations()), "reservations missing from app")
-	assert.Equal(t, 1, len(ms.getNode(nodes[0]).GetReservations()), "reservation missing on %s", nodes[0])
-	assert.Equal(t, 1, len(ms.getNode(nodes[1]).GetReservations()), "reservation missing on %s", nodes[1])
+	assert.Equal(t, 1, len(ms.getNode(nodes[0]).GetReservationKeys()), "reservation missing on %s", nodes[0])
+	assert.Equal(t, 1, len(ms.getNode(nodes[1]).GetReservationKeys()), "reservation missing on %s", nodes[1])
 	assert.Equal(t, 2, ms.getPartitionReservations()[appID1], "reservations missing from partition")
 
 	// change the third node to scheduling (simulates new node)
@@ -374,8 +374,8 @@ func TestAddNewNode(t *testing.T) {
 
 	// check the cleanup of the reservation
 	assert.Equal(t, 0, len(app.GetReservations()), "reservations found on app")
-	assert.Equal(t, 0, len(ms.getNode(nodes[0]).GetReservations()), "reservation found on %s", nodes[0])
-	assert.Equal(t, 0, len(ms.getNode(nodes[1]).GetReservations()), "reservation found on %s", nodes[1])
+	assert.Equal(t, 0, len(ms.getNode(nodes[0]).GetReservationKeys()), "reservation found on %s", nodes[0])
+	assert.Equal(t, 0, len(ms.getNode(nodes[1]).GetReservationKeys()), "reservation found on %s", nodes[1])
 	assert.Equal(t, 0, ms.getPartitionReservations()[appID1], "reservations not removed from partition")
 }
 
@@ -423,7 +423,7 @@ func TestUnReservationAndDeletion(t *testing.T) {
 	// check objects have reservations assigned,
 	assert.Equal(t, 1, len(app.GetReservations()), "reservations missing from app")
 	assert.Equal(t, 1, ms.getPartitionReservations()[appID1], "reservations missing from partition")
-	numOfReservation := len(ms.getNode(nodes[0]).GetReservations()) + len(ms.getNode(nodes[1]).GetReservations())
+	numOfReservation := len(ms.getNode(nodes[0]).GetReservationKeys()) + len(ms.getNode(nodes[1]).GetReservationKeys())
 	assert.Equal(t, 1, numOfReservation, "reservation missing on nodes")
 	// delete pending asks
 	for _, ask := range app.GetReservations() {
@@ -441,8 +441,8 @@ func TestUnReservationAndDeletion(t *testing.T) {
 	waitForPendingQueueResource(t, leafQueue, 0, 1000)
 	waitForPendingAppResource(t, app, 0, 1000)
 	// there is no reservations anymore
-	assert.Equal(t, len(ms.getNode(nodes[0]).GetReservations()), 0)
-	assert.Equal(t, len(ms.getNode(nodes[1]).GetReservations()), 0)
+	assert.Equal(t, len(ms.getNode(nodes[0]).GetReservationKeys()), 0)
+	assert.Equal(t, len(ms.getNode(nodes[1]).GetReservationKeys()), 0)
 	assert.Equal(t, len(app.GetReservations()), 0)
 	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), ms.partitionName, []string{nodes[0]}, 0, 1000)
 	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), ms.partitionName, []string{nodes[1]}, 0, 1000)

@@ -174,7 +174,7 @@ func checkSchedulingContext(schedulerContext *ClusterContext) []dao.HealthCheckI
 		for _, node := range part.GetNodes() {
 			sumNodeResources.AddTo(node.GetCapacity())
 			sumNodeAllocatedResources.AddTo(node.GetAllocatedResource())
-			sumReservation += len(node.GetReservations())
+			sumReservation += len(node.GetReservationKeys())
 			calculatedTotalNodeRes := resources.Add(node.GetAllocatedResource(), node.GetOccupiedResource())
 			calculatedTotalNodeRes.AddTo(node.GetAvailableResource())
 			if !resources.Equals(node.GetCapacity(), calculatedTotalNodeRes) {

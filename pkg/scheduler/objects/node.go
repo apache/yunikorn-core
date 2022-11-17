@@ -92,6 +92,12 @@ func NewNode(proto *si.NodeInfo) *Node {
 	return sn
 }
 
+func (sn *Node) GetReservations() map[string]*reservation {
+	sn.RLock()
+	defer sn.RUnlock()
+	return sn.reservations
+}
+
 func (sn *Node) String() string {
 	if sn == nil {
 		return "node is nil"
@@ -120,7 +126,7 @@ func (sn *Node) GetAttribute(key string) string {
 // Return an array of all reservation keys for the node.
 // This will return an empty array if there are no reservations.
 // Visible for tests
-func (sn *Node) GetReservations() []string {
+func (sn *Node) GetReservationKeys() []string {
 	sn.RLock()
 	defer sn.RUnlock()
 	keys := make([]string, 0)

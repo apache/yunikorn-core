@@ -891,10 +891,10 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 
 			// Are there any non daemon set reservations on specific required node?
 			// Cancel those reservations to run daemon set pods
-			reservations := node.GetReservations()
+			reservations := node.getReservations()
 			if len(reservations) > 0 {
 				unreserve := true
-				for _, res := range node.GetReservations() {
+				for _, res := range node.getReservations() {
 					// skip the node
 					if res.ask.GetRequiredNode() != "" {
 						unreserve = false
@@ -904,7 +904,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 				if unreserve {
 					// un reserve all the apps that were reserved on the node
 					reservedKeys, releasedAsks := node.UnReserveApps()
-					if len(reservedKeys) <= 0 || len(releasedAsks) <= 0 {
+					if len(reservedKeys) == 0 || len(releasedAsks) == 0 {
 						log.Logger().Warn("Unable to cancel reservations on node",
 							zap.String("application ID", sa.ApplicationID),
 							zap.String("allocationKey", request.GetAllocationKey()),

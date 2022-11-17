@@ -92,10 +92,14 @@ func NewNode(proto *si.NodeInfo) *Node {
 	return sn
 }
 
-func (sn *Node) GetReservations() map[string]*reservation {
+func (sn *Node) getReservations() map[string]*reservation {
 	sn.RLock()
 	defer sn.RUnlock()
-	return sn.reservations
+	reservations := make(map[string]*reservation)
+	for key, res := range sn.reservations {
+		reservations[key] = res
+	}
+	return reservations
 }
 
 func (sn *Node) String() string {

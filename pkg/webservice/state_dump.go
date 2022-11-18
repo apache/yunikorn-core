@@ -61,6 +61,7 @@ type AggregatedStateInfo struct {
 	ClusterInfo      []*dao.ClusterDAOInfo
 	ContainerHistory []*dao.ContainerHistoryDAOInfo
 	Queues           []dao.PartitionQueueDAOInfo
+	RMDiagnostics    map[string]interface{}
 	LogLevel         string
 }
 
@@ -142,6 +143,7 @@ func doStateDump(w io.Writer, periodic bool) error {
 		ClusterInfo:      getClusterDAO(partitionContext),
 		ContainerHistory: getContainerHistoryDAO(records),
 		Queues:           getPartitionQueuesDAO(partitionContext),
+		RMDiagnostics:    getResourceManagerDiagnostics(),
 		LogLevel:         zapConfig.Level.Level().String(),
 	}
 

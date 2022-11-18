@@ -63,6 +63,9 @@ func NewResourceFromProto(proto *si.Resource) *Resource {
 }
 
 func NewResourceFromMap(m map[string]Quantity) *Resource {
+	if m == nil {
+		return NewResource()
+	}
 	return &Resource{Resources: m}
 }
 
@@ -185,17 +188,17 @@ func (r *Resource) MultiplyTo(ratio float64) {
 }
 
 // Calculate how well the receiver fits in "fit"
-// - A score of 0 is a fit (similar to FitIn)
-// - The score is calculated only using resource type defined in the fit resource.
-// - The score has a range between 0..#fit-res (the number of resource types in fit)
-// - Same score means same fit
-// - The lower the score the better the fit (0 is a fit)
-// - Each individual score is calculated as follows: score = (fitVal - resVal) / fitVal
-//   That calculation per type is summed up for all resource types in fit.
-//   example 1: fit memory 1000; resource 100; score = 0.9
-//   example 2: fit memory 150; resource 15; score = 0.9
-//   example 3: fit memory 100, cpu 1; resource memory 10; score = 1.9
-// - A nil receiver gives back the maximum score (number of resources types in fit)
+//   - A score of 0 is a fit (similar to FitIn)
+//   - The score is calculated only using resource type defined in the fit resource.
+//   - The score has a range between 0..#fit-res (the number of resource types in fit)
+//   - Same score means same fit
+//   - The lower the score the better the fit (0 is a fit)
+//   - Each individual score is calculated as follows: score = (fitVal - resVal) / fitVal
+//     That calculation per type is summed up for all resource types in fit.
+//     example 1: fit memory 1000; resource 100; score = 0.9
+//     example 2: fit memory 150; resource 15; score = 0.9
+//     example 3: fit memory 100, cpu 1; resource memory 10; score = 1.9
+//   - A nil receiver gives back the maximum score (number of resources types in fit)
 func (r *Resource) FitInScore(fit *Resource) float64 {
 	var score float64
 	// short cut for a nil receiver and fit

@@ -1314,10 +1314,6 @@ func (sq *Queue) incRunningApps() {
 	if sq.parent != nil {
 		sq.parent.incRunningApps()
 	}
-	sq.internalIncRunningApps()
-}
-
-func (sq *Queue) internalIncRunningApps() {
 	sq.Lock()
 	defer sq.Unlock()
 	sq.runningApps++
@@ -1330,10 +1326,6 @@ func (sq *Queue) decRunningApps() {
 	if sq.parent != nil {
 		sq.parent.decRunningApps()
 	}
-	sq.internalDecRunningApps()
-}
-
-func (sq *Queue) internalDecRunningApps() {
 	sq.Lock()
 	defer sq.Unlock()
 	sq.runningApps--
@@ -1356,7 +1348,7 @@ func (sq *Queue) InternalIncAllocatingAcceptedAppsIfCanRun(success bool, sa *App
 	if sq.maxRunningApps == 0 {
 		return success
 	}
-	result := success && (sq.runningApps+int64(len(sq.allocatingAcceptedApps)) < sq.maxRunningApps)
+	result := success && (sq.runningApps+uint64(len(sq.allocatingAcceptedApps)) < sq.maxRunningApps)
 	if result {
 		_, ok := sq.allocatingAcceptedApps[sa.ApplicationID]
 		if !ok {
@@ -1373,10 +1365,6 @@ func (sq *Queue) decAllocatingAcceptedApps(sa *Application) {
 	if sq.parent != nil {
 		sq.parent.decAllocatingAcceptedApps(sa)
 	}
-	sq.internalDecAllocatingAcceptedApps(sa)
-}
-
-func (sq *Queue) internalDecAllocatingAcceptedApps(sa *Application) {
 	sq.Lock()
 	defer sq.Unlock()
 	if sq.maxRunningApps != 0 {

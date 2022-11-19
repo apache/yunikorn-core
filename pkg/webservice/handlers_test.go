@@ -1267,6 +1267,46 @@ func TestIllegalStateDumpRequests(t *testing.T) {
 	assert.Equal(t, statusCode, http.StatusBadRequest, "response status code")
 }
 
+func TestGetLoggerLevel(t *testing.T) {
+	req, err := http.NewRequest("GET", "/ws/v1/loglevel", strings.NewReader(""))
+	assert.NilError(t, err)
+
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(getLogLevel)
+	handler.ServeHTTP(rr, req)
+
+	expected := "debug"
+	assert.Equal(t, rr.Body.String(), expected,
+		fmt.Sprintf("handler returned unexpected body: got %v want %v", rr.Body.String(), expected))
+	assert.Equal(t, rr.Code, http.StatusOK)
+}
+
+func TestSetLoggerLevel(t *testing.T) {
+	// invalid
+	req, err := http.NewRequest("PUT", "/ws/v1/loglevel", strings.NewReader(""))
+	assert.NilError(t, err)
+
+	vars := map[string]string{
+		"level": "invalid",
+	}
+	req = mux.SetURLVars(req, vars)
+	rr := httptest.NewRecorder()
+
+	handler := http.HandlerFunc(setLogLevel)
+	handler.ServeHTTP(rr, req)
+	assert.Equal(t, rr.Code, http.StatusBadRequest)
+
+	// valid
+	req, err = http.NewRequest("PUT", "/ws/v1/loglevel", strings.NewReader(""))
+	assert.NilError(t, err)
+
+	vars["level"] = "error"
+	req = mux.SetURLVars(req, vars)
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	assert.Equal(t, rr.Code, http.StatusOK)
+}
+
 func prepareSchedulerContext(t *testing.T, stateDumpConf bool) *scheduler.ClusterContext {
 	var config []byte
 	if !stateDumpConf {

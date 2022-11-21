@@ -1178,7 +1178,7 @@ func (sq *Queue) TryReservedAllocate(iterator func() NodeIterator) *Allocation {
 				if app.IsStarting() || app.IsRunning() || app.IsAccepted() {
 					alloc := app.tryReservedAllocate(headRoom, iterator)
 					if alloc != nil {
-						log.Logger().Debug("Rainie test accepted apps: reservation found for allocation found on queue",
+						log.Logger().Debug("reservation found for allocation found on queue",
 							zap.String("queueName", sq.QueuePath),
 							zap.String("appID", appID),
 							zap.String("allocation", alloc.String()),
@@ -1339,10 +1339,6 @@ func (sq *Queue) incAllocatingAcceptedAppsIfCanRun(sa *Application) bool {
 	if sq.parent != nil {
 		success = sq.parent.incAllocatingAcceptedAppsIfCanRun(sa)
 	}
-	return sq.InternalIncAllocatingAcceptedAppsIfCanRun(success, sa)
-}
-
-func (sq *Queue) InternalIncAllocatingAcceptedAppsIfCanRun(success bool, sa *Application) bool {
 	sq.Lock()
 	defer sq.Unlock()
 	if sq.maxRunningApps == 0 {

@@ -468,7 +468,7 @@ func TestGetClusterUtilJSON(t *testing.T) {
 	assert.Equal(t, partitionName, partition.Name)
 	// new app to partition
 	appID := "appID-1"
-	app := newApplication(appID, partitionName, queueName, rmID, security.UserGroup{})
+	app := newApplication(appID, partitionName, queueName, rmID, security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
 	err := partition.AddApplication(app)
 	assert.NilError(t, err, "add application to partition should not have failed")
 	// case of total resource and allocated resource undefined
@@ -535,7 +535,7 @@ func TestGetNodesUtilJSON(t *testing.T) {
 
 	// create test application
 	appID := "app1"
-	app := newApplication(appID, partition.Name, queueName, rmID, security.UserGroup{})
+	app := newApplication(appID, partition.Name, queueName, rmID, security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
 	err := partition.AddApplication(app)
 	assert.NilError(t, err, "add application to partition should not have failed")
 
@@ -592,7 +592,7 @@ func TestGetNodesUtilJSON(t *testing.T) {
 
 func addAndConfirmApplicationExists(t *testing.T, partitionName string, partition *scheduler.PartitionContext, appName string) *objects.Application {
 	// add a new app
-	app := newApplication(appName, partitionName, "root.default", rmID, security.UserGroup{})
+	app := newApplication(appName, partitionName, "root.default", rmID, security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
 	err := partition.AddApplication(app)
 	assert.NilError(t, err, "Failed to add Application to Partition.")
 	assert.Equal(t, app.CurrentState(), objects.New.String())
@@ -781,7 +781,7 @@ func TestGetPartitionNodes(t *testing.T) {
 
 	// create test application
 	appID := "app1"
-	app := newApplication(appID, partition.Name, queueName, rmID, security.UserGroup{})
+	app := newApplication(appID, partition.Name, queueName, rmID, security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
 	err := partition.AddApplication(app)
 	assert.NilError(t, err, "add application to partition should not have failed")
 

@@ -148,7 +148,8 @@ func newAddAppRequest(apps map[string]string) []*si.AddApplicationRequest {
 			QueueName:     queue,
 			PartitionName: "",
 			Ugi: &si.UserGroupInformation{
-				User: "testuser",
+				User:   "testuser",
+				Groups: []string{"testgroup"},
 			},
 		}
 		requests = append(requests, &request)

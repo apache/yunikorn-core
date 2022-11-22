@@ -153,14 +153,12 @@ func NewAppState() *fsm.FSM {
 			},
 			fmt.Sprintf("enter_%s", Resuming.String()): func(event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
-				app.decUserResourceUsage(app.GetAllocatedResource(), true)
 				metrics.GetQueueMetrics(app.queuePath).DecQueueApplicationsRunning()
 				metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()
 			},
 			fmt.Sprintf("enter_%s", Completing.String()): func(event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
 				app.setStateTimer(completingTimeout, app.stateMachine.Current(), CompleteApplication)
-				app.decUserResourceUsage(app.GetAllocatedResource(), true)
 				metrics.GetQueueMetrics(app.queuePath).DecQueueApplicationsRunning()
 				metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()
 			},
@@ -199,13 +197,15 @@ func NewAppState() *fsm.FSM {
 				app.executeTerminatedCallback()
 				app.clearPlaceholderTimer()
 			},
-			fmt.Sprintf("enter_%s", Failed.String()): func(event *fsm.Event) {
+			fmt.Sprintf("enter_%s", Failing.String()): func(event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
-				app.decUserResourceUsage(app.GetAllocatedResource(), true)
 				metrics.GetQueueMetrics(app.queuePath).DecQueueApplicationsRunning()
 				metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsFailed()
 				metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()
 				metrics.GetSchedulerMetrics().IncTotalApplicationsFailed()
+			},
+			fmt.Sprintf("enter_%s", Failed.String()): func(event *fsm.Event) {
+				app := event.Args[0].(*Application) //nolint:errcheck
 				app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
 				app.executeTerminatedCallback()
 			},

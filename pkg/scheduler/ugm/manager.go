@@ -193,20 +193,26 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 	return nil
 }
 
-func (m *Manager) GetUserResources(user security.UserGroup) *resources.Resource {
-	return nil
+func (m *Manager) GetUserResources(user security.UserGroup) (*resources.Resource, error) {
+	if m.userTrackers[user.User] != nil {
+		return m.userTrackers[user.User].queueTracker.resourceUsage, nil
+	}
+	return nil, fmt.Errorf("user %s is not available in user trackers map", user.User)
 }
 
-func (m *Manager) GetGroupResources(group string) *resources.Resource {
-	return nil
+func (m *Manager) GetGroupResources(group string) (*resources.Resource, error) {
+	if m.groupTrackers[group] != nil {
+		return m.groupTrackers[group].queueTracker.resourceUsage, nil
+	}
+	return nil, fmt.Errorf("group %s is not available in group trackers map", group)
 }
 
-func (m *Manager) GetUsersResources() []*UserTracker {
-	return nil
+func (m *Manager) GetUsersResources() map[string]*UserTracker {
+	return m.userTrackers
 }
 
-func (m *Manager) GetGroupsResources() []*GroupTracker {
-	return nil
+func (m *Manager) GetGroupsResources() map[string]*GroupTracker {
+	return m.groupTrackers
 }
 
 func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID string, user security.UserGroup) error {
@@ -285,4 +291,12 @@ func (m *Manager) GetUserTrackers() map[string]*UserTracker {
 
 func (m *Manager) GetGroupTrackers() map[string]*GroupTracker {
 	return m.groupTrackers
+}
+
+func (m *Manager) ClearUserTrackers() {
+	m.userTrackers = make(map[string]*UserTracker)
+}
+
+func (m *Manager) ClearGroupTrackers() {
+	m.groupTrackers = make(map[string]*GroupTracker)
 }

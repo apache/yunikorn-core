@@ -1454,7 +1454,7 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 }
 
 func (sa *Application) incUserResourceUsage(resource *resources.Resource) {
-	if err := ugm.GetUserManager().IncreaseTrackedResource(sa.GetQueuePath(), sa.ApplicationID, resource, sa.GetUser()); err != nil {
+	if err := ugm.GetUserManager().IncreaseTrackedResource(sa.queuePath, sa.ApplicationID, resource, sa.user); err != nil {
 		log.Logger().Error("Unable to track the user resource usage",
 			zap.String("application id", sa.ApplicationID),
 			zap.String("user", sa.GetUser().User),
@@ -1464,7 +1464,7 @@ func (sa *Application) incUserResourceUsage(resource *resources.Resource) {
 }
 
 func (sa *Application) decUserResourceUsage(resource *resources.Resource, removeApp bool) {
-	if err := ugm.GetUserManager().DecreaseTrackedResource(sa.GetQueuePath(), sa.ApplicationID, resource, sa.GetUser(), removeApp); err != nil {
+	if err := ugm.GetUserManager().DecreaseTrackedResource(sa.queuePath, sa.ApplicationID, resource, sa.user, removeApp); err != nil {
 		log.Logger().Error("Unable to track the user resource usage",
 			zap.String("application id", sa.ApplicationID),
 			zap.String("user", sa.GetUser().User),
@@ -1530,6 +1530,7 @@ func (sa *Application) removeAllocationInternal(uuid string, releaseType si.Term
 
 	var event applicationEvent = EventNotNeeded
 	var eventWarning string
+	removeApp := false
 	// update correct allocation tracker
 	if alloc.IsPlaceholder() {
 		// make sure we account for the placeholders being removed in the tracking data
@@ -1538,29 +1539,35 @@ func (sa *Application) removeAllocationInternal(uuid string, releaseType si.Term
 				sa.placeholderData[alloc.taskGroupName].TimedOut++
 			}
 		}
+		// as and when every ph gets removed (for replacement), resource usage would be reduced.
+		// When real allocation happens as part of replacement, usage would be increased again with real alloc resource
 		sa.allocatedPlaceholder = resources.Sub(sa.allocatedPlaceholder, alloc.GetAllocatedResource())
 		// if all the placeholders are replaced, clear the placeholder timer
 		if resources.IsZero(sa.allocatedPlaceholder) {
 			sa.clearPlaceholderTimer()
 			if (sa.IsCompleting() && sa.stateTimer == nil) || sa.IsFailing() || sa.IsResuming() || sa.hasZeroAllocations() {
+				removeApp = true
 				event = CompleteApplication
 				if sa.IsFailing() {
 					event = FailApplication
 				}
 				if sa.IsResuming() {
 					event = RunApplication
+					removeApp = false
 				}
 				eventWarning = "Application state not changed while removing a placeholder allocation"
 			}
 		}
+		sa.decUserResourceUsage(alloc.GetAllocatedResource(), removeApp)
 	} else {
-		sa.decUserResourceUsage(alloc.GetAllocatedResource(), false)
 		sa.allocatedResource = resources.Sub(sa.allocatedResource, alloc.GetAllocatedResource())
 		// When the resource trackers are zero we should not expect anything to come in later.
 		if sa.hasZeroAllocations() {
+			removeApp = true
 			event = CompleteApplication
 			eventWarning = "Application state not changed to Waiting while removing an allocation"
 		}
+		sa.decUserResourceUsage(alloc.GetAllocatedResource(), removeApp)
 	}
 	if event != EventNotNeeded {
 		if err := sa.HandleApplicationEvent(event); err != nil {
@@ -1587,6 +1594,9 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 	allocationsToRelease := make([]*Allocation, 0)
 	for _, alloc := range sa.allocations {
 		allocationsToRelease = append(allocationsToRelease, alloc)
+	}
+	if resources.IsZero(sa.pending) {
+		sa.decUserResourceUsage(resources.Add(sa.allocatedResource, sa.allocatedPlaceholder), true)
 	}
 	// cleanup allocated resource for app (placeholders and normal)
 	sa.allocatedResource = resources.NewResource()

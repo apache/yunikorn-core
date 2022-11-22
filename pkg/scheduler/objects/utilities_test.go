@@ -103,7 +103,7 @@ func newApplication(appID, partition, queueName string) *Application {
 func newApplicationWithTags(appID, partition, queueName string, tags map[string]string) *Application {
 	user := security.UserGroup{
 		User:   "testuser",
-		Groups: []string{},
+		Groups: []string{"testgroup"},
 	}
 	siApp := &si.AddApplicationRequest{
 		ApplicationID: appID,
@@ -121,7 +121,7 @@ func newApplicationWithHandler(appID, partition, queueName string) (*Application
 func newApplicationWithPlaceholderTimeout(appID, partition, queueName string, phTimeout int64) (*Application, *rmproxy.MockedRMProxy) {
 	user := security.UserGroup{
 		User:   "testuser",
-		Groups: []string{},
+		Groups: []string{"testgroup"},
 	}
 	siApp := &si.AddApplicationRequest{
 		ApplicationID:                appID,

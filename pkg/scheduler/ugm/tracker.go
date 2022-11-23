@@ -25,11 +25,11 @@ import (
 
 // Tracker Defines a set of interfaces to track and retrieve the user group resource usage
 type Tracker interface {
-	GetUserResources(user security.UserGroup) *resources.Resource
-	GetGroupResources(group string) *resources.Resource
+	GetUserResources(user security.UserGroup) (*resources.Resource, error)
+	GetGroupResources(group string) (*resources.Resource, error)
 
-	GetUsersResources() map[string]*UserTracker
-	GetGroupsResources() map[string]*GroupTracker
+	GetUsersResources() []*UserTracker
+	GetGroupsResources() []*GroupTracker
 
 	IncreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user security.UserGroup) error
 	DecreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user security.UserGroup, removeApp bool) error

@@ -217,12 +217,16 @@ func setup(t *testing.T, config string, partitionCount int) *scheduler.Partition
 
 // simple wrapper to make creating an app easier
 func newApplication(appID, partitionName, queueName, rmID string, ugi security.UserGroup) *objects.Application {
+	userGroup := ugi
+	if ugi.User == "" {
+		userGroup = security.UserGroup{User: "testuser", Groups: []string{"testgroup"}}
+	}
 	siApp := &si.AddApplicationRequest{
 		ApplicationID: appID,
 		QueueName:     queueName,
 		PartitionName: partitionName,
 	}
-	return objects.NewApplication(siApp, ugi, nil, rmID)
+	return objects.NewApplication(siApp, userGroup, nil, rmID)
 }
 
 func TestValidateConf(t *testing.T) {
@@ -468,7 +472,7 @@ func TestGetClusterUtilJSON(t *testing.T) {
 	assert.Equal(t, partitionName, partition.Name)
 	// new app to partition
 	appID := "appID-1"
-	app := newApplication(appID, partitionName, queueName, rmID, security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
+	app := newApplication(appID, partitionName, queueName, rmID, security.UserGroup{})
 	err := partition.AddApplication(app)
 	assert.NilError(t, err, "add application to partition should not have failed")
 	// case of total resource and allocated resource undefined

@@ -1453,21 +1453,25 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 	sa.allocations[info.GetUUID()] = info
 }
 
+// Increase user resource usage
+// No locking must be called while holding the lock
 func (sa *Application) incUserResourceUsage(resource *resources.Resource) {
 	if err := ugm.GetUserManager().IncreaseTrackedResource(sa.queuePath, sa.ApplicationID, resource, sa.user); err != nil {
 		log.Logger().Error("Unable to track the user resource usage",
 			zap.String("application id", sa.ApplicationID),
-			zap.String("user", sa.GetUser().User),
+			zap.String("user", sa.user.User),
 			zap.String("currentState", sa.stateMachine.Current()),
 			zap.Error(err))
 	}
 }
 
+// Decrease user resource usage
+// No locking must be called while holding the lock
 func (sa *Application) decUserResourceUsage(resource *resources.Resource, removeApp bool) {
 	if err := ugm.GetUserManager().DecreaseTrackedResource(sa.queuePath, sa.ApplicationID, resource, sa.user, removeApp); err != nil {
 		log.Logger().Error("Unable to track the user resource usage",
 			zap.String("application id", sa.ApplicationID),
-			zap.String("user", sa.GetUser().User),
+			zap.String("user", sa.user.User),
 			zap.String("currentState", sa.stateMachine.Current()),
 			zap.Error(err))
 	}

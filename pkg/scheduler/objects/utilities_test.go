@@ -20,12 +20,16 @@ package objects
 
 import (
 	"strconv"
+	"testing"
 	"time"
+
+	"gotest.tools/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
+	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -226,4 +230,30 @@ func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resou
 		Placeholder:    placeholder,
 	}
 	return NewAllocationAskFromSI(ask)
+}
+
+func getTestUserGroup() security.UserGroup {
+	return security.UserGroup{User: "testuser", Groups: []string{"testgroup"}}
+}
+
+func assertUserGroupResource(t *testing.T, userGroup security.UserGroup, expected *resources.Resource) {
+	ugm := ugm.GetUserManager()
+	userResource, err := ugm.GetUserResources(userGroup)
+	assert.NilError(t, err, "User should have been tracked by this time and available in user trackers map")
+	groupResource, err := ugm.GetGroupResources(userGroup.Groups[0])
+	assert.NilError(t, err, "Group should have been tracked by this time and available in group trackers map")
+	assert.Equal(t, userResource.String(), expected.String())
+	assert.Equal(t, groupResource.String(), expected.String())
+}
+
+func assertUserGroupNilResourceWithError(t *testing.T, userGroup security.UserGroup) {
+	userManager := ugm.GetUserManager()
+	userResource, err := userManager.GetUserResources(userGroup)
+	assert.Error(t, err, "user "+userGroup.User+" is not available in user trackers map")
+	groupResource, err := userManager.GetGroupResources(userGroup.Groups[0])
+	assert.Error(t, err, "group "+userGroup.Groups[0]+" is not available in group trackers map")
+
+	var expected *resources.Resource = nil
+	assert.Equal(t, userResource, expected)
+	assert.Equal(t, groupResource, expected)
 }

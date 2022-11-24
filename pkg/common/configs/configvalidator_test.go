@@ -137,6 +137,37 @@ func TestCheckResourceConfigurationsForQueue(t *testing.T) {
 	}
 }
 
+func TestCheckQueueMaxApplicationsForQueue(t *testing.T) {
+	testCases := []struct {
+		name          string
+		current       QueueConfig
+		errorExpected bool
+	}{
+		{"Parent maxRunningApps must be larger than child maxRunningApps",
+			createQueueWithMaxApplication([4]uint64{1, 2, 3, 4}),
+			true},
+		{"Valid maxApplication settings: Parent maxRunningApps larger than child maxRunningApps",
+			createQueueWithMaxApplication([4]uint64{4, 3, 2, 1}),
+			false},
+		{"Valid maxApplication settings: Parent maxRunningApps can be 0",
+			createQueueWithMaxApplication([4]uint64{0, 3, 2, 1}),
+			false},
+		{"InValid maxApplication settings: child maxRunningApps cannot be 0",
+			createQueueWithMaxApplication([4]uint64{4, 3, 2, 0}),
+			true},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkQueueMaxApplications(tc.current)
+			if tc.errorExpected {
+				assert.Assert(t, err != nil, "An error is expected")
+			} else {
+				assert.NilError(t, err, "No error is expected")
+			}
+		})
+	}
+}
+
 func createQueueWithSkippedMaxRes() QueueConfig {
 	child1MaxMap := map[string]string{"memory": "150"}
 	parentMaxMap := map[string]string{"memory": "100"}
@@ -225,6 +256,37 @@ func createQueueWithSkippedGuaranteedRes() QueueConfig {
 	root := QueueConfig{
 		Queues: []QueueConfig{parent},
 		Name:   RootQueue,
+	}
+	return root
+}
+
+func createQueueWithMaxApplication(maxApplication [4]uint64) QueueConfig {
+	child1MaxMap := map[string]string{"memory": "50"}
+	parentMaxMap := map[string]string{"memory": "100"}
+	child1 := QueueConfig{
+		Resources: Resources{
+			Guaranteed: child1MaxMap,
+		},
+		Name:            "child1",
+		MaxApplications: maxApplication[3],
+	}
+	parent1 := QueueConfig{
+		Queues:          []QueueConfig{child1},
+		Name:            "parent1",
+		MaxApplications: maxApplication[2],
+	}
+	parent := QueueConfig{
+		Resources: Resources{
+			Guaranteed: parentMaxMap,
+		},
+		Queues:          []QueueConfig{parent1},
+		Name:            "parent",
+		MaxApplications: maxApplication[1],
+	}
+	root := QueueConfig{
+		Queues:          []QueueConfig{parent},
+		Name:            RootQueue,
+		MaxApplications: maxApplication[0],
 	}
 	return root
 }

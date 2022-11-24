@@ -106,6 +106,20 @@ func checkQueueResource(cur QueueConfig, parentM *resources.Resource) (*resource
 	return curG, nil
 }
 
+func checkQueueMaxApplications(cur QueueConfig) error {
+	var err error
+	for _, child := range cur.Queues {
+		if cur.MaxApplications != 0 && (cur.MaxApplications < child.MaxApplications || child.MaxApplications == 0) {
+			return fmt.Errorf("parent maxRunningApps must be larger than child maxRunningApps")
+		}
+		err = checkQueueMaxApplications(child)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func checkResourceConfig(cur QueueConfig) (*resources.Resource, *resources.Resource, error) {
 	var g, m *resources.Resource
 	var err error
@@ -436,6 +450,10 @@ func Validate(newConfig *SchedulerConfig) error {
 			return err
 		}
 		err = checkStateDumpFilePath(&newConfig.Partitions[i])
+		if err != nil {
+			return err
+		}
+		err = checkQueueMaxApplications(partition.Queues[0])
 		if err != nil {
 			return err
 		}

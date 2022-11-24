@@ -26,11 +26,16 @@ github:
     - universal-resource-scheduler
     - apache-yarn
     - kubernetes
+  notifications:
+    commits:      isseus@yunikorn.apache.org
+    issues:       reviews@yunikorn.apache.org
+    pullrequests: reviews@yunikorn.apache.org
+    jira_options: link label
   enabled_merge_buttons:
-    squash:  true
-    merge:   false
-    rebase:  false
+    squash: true
+    merge:  false
+    rebase: false
   features:
-    wiki: true
-    issues: false
+    wiki:     false
+    issues:   false
     projects: false

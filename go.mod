@@ -24,28 +24,23 @@ go 1.16
 require (
 	github.com/HdrHistogram/hdrhistogram-go v1.0.1 // indirect
 	github.com/apache/yunikorn-scheduler-interface v0.0.0-20221110194141-115505199f57
-	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/google/btree v1.0.1
 	github.com/google/uuid v1.2.0
 	github.com/gorilla/mux v1.7.3
 	github.com/looplab/fsm v0.1.0
 	github.com/opentracing/opentracing-go v1.2.0
-	github.com/pkg/errors v0.9.1 // indirect
-	github.com/prometheus/client_golang v0.9.4
+	github.com/prometheus/client_golang v1.13.1
 	github.com/prometheus/client_model v0.2.0
-	github.com/prometheus/common v0.4.1
-	github.com/prometheus/procfs v0.0.8 // indirect
+	github.com/prometheus/common v0.37.0
 	github.com/uber/jaeger-client-go v2.25.0+incompatible
 	github.com/uber/jaeger-lib v2.4.0+incompatible
 	go.uber.org/atomic v1.5.1 // indirect
 	go.uber.org/multierr v1.4.0 // indirect
 	go.uber.org/zap v1.13.0
-	golang.org/x/lint v0.0.0-20200302205851-738671d3881b // indirect
 	golang.org/x/net v0.0.0-20220812174116-3211cb980234
 	golang.org/x/tools v0.1.12 // indirect
-	google.golang.org/grpc v1.26.0
+	google.golang.org/grpc v1.31.0
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
-	gopkg.in/yaml.v2 v2.2.8
+	gopkg.in/yaml.v2 v2.4.0
 	gotest.tools v2.2.0+incompatible
-	honnef.co/go/tools v0.0.1-2020.1.3 // indirect
 )

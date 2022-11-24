@@ -2563,6 +2563,7 @@ func TestTryAllocateMaxRunning(t *testing.T) {
 
 	// add first app to the partition
 	appRes, err := resources.NewResourceFromConf(map[string]string{resType: "2"})
+	assert.NilError(t, err, "app resource creation failed")
 	app := newApplicationTG(appID1, "default", "root.parent.sub-leaf", appRes)
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "failed to add app-1 to partition")

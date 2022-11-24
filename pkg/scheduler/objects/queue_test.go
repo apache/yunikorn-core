@@ -1667,7 +1667,7 @@ func TestGetHeadRoomFromThreeQueues(t *testing.T) {
 
 func TestQueue_canRunApp(t *testing.T) {
 	// create the root
-	root, err := createRootQueue(nil)
+	root, err := createManagedQueueMaxApps(nil, "root", true, nil, 1)
 	assert.NilError(t, err, "queue create failed")
 	var leaf, leaf2 *Queue
 	leaf, err = createManagedQueue(root, "leaf", false, nil)
@@ -1677,8 +1677,7 @@ func TestQueue_canRunApp(t *testing.T) {
 
 	// ignore allocatingAcceptedApps
 	assert.Assert(t, leaf.canRunApp(""), "unlimited queue should be able to run app")
-	root.maxRunningApps = 1
-	assert.Assert(t, leaf.canRunApp(""), "queue should be able to run app (root max is 1)")
+	assert.Assert(t, root.canRunApp(""), "queue should be able to run app (root max is 1)")
 	root.incRunningApps("")
 	assert.Assert(t, !leaf.canRunApp(""), "running apps max reached on root, should be denied")
 	root.maxRunningApps = 2
@@ -1701,7 +1700,7 @@ func TestQueue_canRunApp(t *testing.T) {
 
 func TestQueue_incRunningApps(t *testing.T) {
 	// create the root
-	root, err := createRootQueue(nil)
+	root, err := createManagedQueueMaxApps(nil, "root", true, nil, 2)
 	assert.NilError(t, err, "queue create failed")
 	var leaf, leaf2 *Queue
 	leaf, err = createManagedQueue(root, "leaf", false, nil)
@@ -1709,7 +1708,6 @@ func TestQueue_incRunningApps(t *testing.T) {
 	leaf2, err = createManagedQueue(root, "leaf2", false, nil)
 	assert.NilError(t, err, "failed to create leaf2 queue")
 
-	root.maxRunningApps = 2
 	assert.Equal(t, leaf.runningApps, uint64(0), "default max running apps is 0")
 	root.incRunningApps("")
 	assert.Equal(t, root.runningApps, uint64(1), "root should have 1 app running")

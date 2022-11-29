@@ -203,6 +203,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 			NodeID:           alloc.GetNodeID(),
 			ApplicationID:    alloc.GetApplicationID(),
 			Partition:        alloc.GetPartitionName(),
+			Preempted:        alloc.IsPreempted(),
 		}
 		allocationInfo = append(allocationInfo, allocInfo)
 	}
@@ -267,19 +268,20 @@ func getApplicationRequests(app *objects.Application) []dao.AllocationAskDAOInfo
 				}
 			}
 			reqInfo := dao.AllocationAskDAOInfo{
-				AllocationKey:      req.GetAllocationKey(),
-				AllocationTags:     req.GetTagsClone(),
-				RequestTime:        req.GetCreateTime().UnixNano(),
-				ResourcePerAlloc:   req.GetAllocatedResource().DAOMap(),
-				PendingCount:       count,
-				Priority:           strconv.Itoa(int(req.GetPriority())),
-				RequiredNodeID:     req.GetRequiredNode(),
-				ApplicationID:      req.GetApplicationID(),
-				Partition:          common.GetPartitionNameWithoutClusterID(req.GetPartitionName()),
-				Placeholder:        req.IsPlaceholder(),
-				PlaceholderTimeout: req.GetTimeout().Nanoseconds(),
-				TaskGroupName:      req.GetTaskGroup(),
-				AllocationLog:      allocLogInfo,
+				AllocationKey:       req.GetAllocationKey(),
+				AllocationTags:      req.GetTagsClone(),
+				RequestTime:         req.GetCreateTime().UnixNano(),
+				ResourcePerAlloc:    req.GetAllocatedResource().DAOMap(),
+				PendingCount:        count,
+				Priority:            strconv.Itoa(int(req.GetPriority())),
+				RequiredNodeID:      req.GetRequiredNode(),
+				ApplicationID:       req.GetApplicationID(),
+				Partition:           common.GetPartitionNameWithoutClusterID(req.GetPartitionName()),
+				Placeholder:         req.IsPlaceholder(),
+				PlaceholderTimeout:  req.GetTimeout().Nanoseconds(),
+				TaskGroupName:       req.GetTaskGroup(),
+				AllocationLog:       allocLogInfo,
+				TriggeredPreemption: req.HasTriggeredPreemption(),
 			}
 			requestInfo = append(requestInfo, reqInfo)
 		}

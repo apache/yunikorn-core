@@ -2544,3 +2544,89 @@ func TestGetNodeSortingPolicyWhenNewPartitionFromConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestTryAllocateMaxRunning(t *testing.T) {
+	const resType = "vcore"
+	partition := createQueuesNodes(t)
+	if partition == nil {
+		t.Fatal("partition create failed")
+	}
+	if alloc := partition.tryAllocate(); alloc != nil {
+		t.Fatalf("empty cluster allocate returned allocation: %v", alloc.String())
+	}
+
+	// set max running apps
+	root := partition.getQueueInternal("root")
+	root.SetMaxRunningApps(2)
+	parent := partition.getQueueInternal("root.parent")
+	parent.SetMaxRunningApps(1)
+
+	// add first app to the partition
+	appRes, err := resources.NewResourceFromConf(map[string]string{resType: "2"})
+	assert.NilError(t, err, "app resource creation failed")
+	app := newApplicationTG(appID1, "default", "root.parent.sub-leaf", appRes)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "failed to add app-1 to partition")
+	var res *resources.Resource
+	res, err = resources.NewResourceFromConf(map[string]string{resType: "1"})
+	assert.NilError(t, err, "failed to create resource")
+	err = app.AddAllocationAsk(newAllocationAskTG(allocID, appID1, "ph1", res, true))
+	assert.NilError(t, err, "failed to add ask alloc-1 to app-1")
+	// first allocation should move the app to accepted
+	assert.Equal(t, app.CurrentState(), objects.Accepted.String(), "application should have moved to accepted state")
+
+	// allocate should work: app stays in accepted state (placeholder!)
+	alloc := partition.tryAllocate()
+	if alloc == nil {
+		t.Fatal("allocation did not return any allocation")
+	}
+	assert.Equal(t, alloc.GetResult(), objects.Allocated, "result is not the expected allocated")
+	assert.Equal(t, alloc.GetReleaseCount(), 0, "released allocations should have been 0")
+	assert.Equal(t, alloc.GetApplicationID(), appID1, "expected application app-1 to be allocated")
+	assert.Equal(t, alloc.GetAllocationKey(), allocID, "expected ask alloc to be allocated")
+	assert.Equal(t, app.CurrentState(), objects.Accepted.String(), "application should have moved to accepted state")
+
+	// add second app to the partition
+	app2 := newApplication(appID2, "default", "root.parent.sub-leaf")
+	err = partition.AddApplication(app2)
+	assert.NilError(t, err, "failed to add app-2 to partition")
+	err = app2.AddAllocationAsk(newAllocationAsk(allocID, appID2, res))
+	assert.NilError(t, err, "failed to add ask alloc-1 to app-2")
+
+	// allocation should fail max running app is reached on parent via accepted allocating
+	alloc = partition.tryAllocate()
+	if alloc != nil {
+		t.Fatal("allocation should not have returned as parent limit is reached")
+	}
+
+	// allocate should work: app moves to Starting all placeholder allocated
+	err = app.AddAllocationAsk(newAllocationAskTG("alloc-2", appID1, "ph1", res, true))
+	assert.NilError(t, err, "failed to add ask alloc-2 to app-1")
+	alloc = partition.tryAllocate()
+	if alloc == nil {
+		t.Fatal("allocation did not return any allocation")
+	}
+	assert.Equal(t, alloc.GetResult(), objects.Allocated, "result is not the expected allocated")
+	assert.Equal(t, alloc.GetReleaseCount(), 0, "released allocations should have been 0")
+	assert.Equal(t, alloc.GetApplicationID(), appID1, "expected application app-1 to be allocated")
+	assert.Equal(t, alloc.GetAllocationKey(), "alloc-2", "expected ask alloc-2 to be allocated")
+	assert.Equal(t, app.CurrentState(), objects.Starting.String(), "application should have moved to starting state")
+
+	// allocation should still fail: max running apps on parent reached
+	alloc = partition.tryAllocate()
+	if alloc != nil {
+		t.Fatal("allocation should not have returned as parent limit is reached")
+	}
+
+	// update the parent queue max running
+	parent.SetMaxRunningApps(2)
+	// allocation works
+	alloc = partition.tryAllocate()
+	if alloc == nil {
+		t.Fatal("allocation did not return any allocation")
+	}
+	assert.Equal(t, alloc.GetResult(), objects.Allocated, "result is not the expected allocated")
+	assert.Equal(t, alloc.GetReleaseCount(), 0, "released allocations should have been 0")
+	assert.Equal(t, alloc.GetApplicationID(), appID2, "expected application app-2 to be allocated")
+	assert.Equal(t, alloc.GetAllocationKey(), allocID, "expected ask alloc-1 to be allocated")
+}

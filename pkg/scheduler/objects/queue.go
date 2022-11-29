@@ -586,6 +586,8 @@ func (sq *Queue) RemoveApplication(app *Application) {
 	defer sq.Unlock()
 
 	delete(sq.applications, appID)
+	// clean up acceptedAllocating list
+	delete(sq.allocatingAcceptedApps, appID)
 	sq.completedApplications[appID] = app
 	log.Logger().Info("Application completed and removed from queue",
 		zap.String("queueName", sq.QueuePath),
@@ -1066,7 +1068,7 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, getnode func(string) 
 			}
 			alloc := app.tryAllocate(headRoom, iterator, getnode)
 			if alloc != nil {
-				log.Logger().Info("allocation found on queue",
+				log.Logger().Debug("allocation found on queue",
 					zap.String("queueName", sq.QueuePath),
 					zap.String("appID", app.ApplicationID),
 					zap.String("allocation", alloc.String()))

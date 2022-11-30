@@ -255,7 +255,7 @@ func TestAddNodeWithAllocations(t *testing.T) {
 		t.Errorf("add node to partition should have failed (uuid missing)")
 	}
 	assert.Equal(t, partition.nodes.GetNodeCount(), 0, "error returned but node still added to the partition (uuid)")
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 
 	// fix the alloc add the node will work now
 	alloc = objects.NewAllocation("alloc-1-uuid", nodeID1, ask)
@@ -331,7 +331,7 @@ func TestRemoveNodeWithAllocations(t *testing.T) {
 	assert.Equal(t, 1, len(released), "node did not release correct allocation")
 	assert.Equal(t, 0, len(confirmed), "node did not confirm correct allocation")
 	assert.Equal(t, released[0].GetUUID(), allocUUID, "uuid returned by release not the same as on allocation")
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 }
 
 // test with a replacement of a placeholder: placeholder and real on the same node that gets removed
@@ -710,7 +710,7 @@ func TestRemoveApp(t *testing.T) {
 
 	allocs = partition.removeApplication("will_not_remove")
 	assert.Equal(t, 1, len(allocs), "existing application with allocations returned unexpected allocations %v", allocs)
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 }
 
 func TestRemoveAppAllocs(t *testing.T) {
@@ -771,7 +771,7 @@ func TestRemoveAppAllocs(t *testing.T) {
 	allocs, _ = partition.removeAllocation(release)
 	assert.Equal(t, 1, len(allocs), "removal request for existing allocation returned wrong allocations: %v", allocs)
 	assert.Equal(t, 0, partition.GetTotalAllocationCount(), "removal requests did not remove all allocations: %v", partition.allocations)
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 }
 
 // Dynamic queue creation based on the name from the rules
@@ -1012,7 +1012,7 @@ func TestTryAllocate(t *testing.T) {
 	assert.NilError(t, err, "failed to add app-2 to partition")
 	err = app.AddAllocationAsk(newAllocationAskPriority(allocID, appID2, res, 1, 2))
 	assert.NilError(t, err, "failed to add ask alloc-1 to app-2")
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 
 	// first allocation should be app-1 and alloc-2
 	alloc := partition.tryAllocate()
@@ -1071,7 +1071,7 @@ func TestRequiredNodeReservation(t *testing.T) {
 	ask.SetRequiredNode(nodeID1)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "failed to add ask alloc-1 to app-1")
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 
 	// first allocation should be app-1 and alloc-1
 	alloc := partition.tryAllocate()
@@ -1150,7 +1150,7 @@ func TestRequiredNodeNotExist(t *testing.T) {
 	if alloc != nil {
 		t.Fatal("allocation should not have worked on unknown node")
 	}
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 }
 
 // basic ds scheduling on specific node in first allocate run itself (without any need for reservation)
@@ -1350,7 +1350,7 @@ func TestTryAllocateLarge(t *testing.T) {
 		t.Fatalf("allocation did return allocation which does not fit: %s", alloc)
 	}
 	assert.Equal(t, 0, len(app.GetReservations()), "ask should not have been reserved")
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 }
 
 func TestAllocReserveNewNode(t *testing.T) {
@@ -2212,7 +2212,7 @@ func TestTryPlaceholderAllocate(t *testing.T) {
 	if alloc != nil {
 		t.Fatalf("placeholder ask should not be allocated: %s", alloc)
 	}
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 	// try to allocate a placeholder via normal allocate
 	alloc = partition.tryAllocate()
 	if alloc == nil {
@@ -2436,7 +2436,7 @@ func TestAddAllocationAsk(t *testing.T) {
 	if !resources.Equals(app.GetPendingResource(), res) {
 		t.Fatal("app not updated by adding ask, no error thrown")
 	}
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 }
 
 func TestRemoveAllocationAsk(t *testing.T) {
@@ -2489,7 +2489,7 @@ func TestRemoveAllocationAsk(t *testing.T) {
 	release.TerminationType = si.TerminationType_STOPPED_BY_RM
 	partition.removeAllocationAsk(release)
 	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "app should not have pending asks")
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 }
 
 func TestUpdateNodeSortingPolicy(t *testing.T) {

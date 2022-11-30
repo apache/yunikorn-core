@@ -90,7 +90,7 @@ func TestNewApplication(t *testing.T) {
 	if app.rmEventHandler == nil {
 		t.Fatal("non nil handler was not set in the new app")
 	}
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 	assert.Assert(t, app.IsNew(), "new application must be in new state")
 	assert.Equal(t, app.execTimeout, defaultPlaceholderTimeout, "no timeout passed in should be modified default")
 	assert.Assert(t, resources.Equals(app.placeholderAsk, res), "placeholder ask not set as expected")
@@ -449,7 +449,7 @@ func TestAllocAskStateChange(t *testing.T) {
 	assert.Equal(t, log[1].ApplicationState, Completing.String())
 	assert.Equal(t, log[2].ApplicationState, Running.String())
 	assert.Equal(t, log[3].ApplicationState, Completing.String())
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 }
 
 // test recover ask
@@ -472,13 +472,13 @@ func TestRecoverAllocAsk(t *testing.T) {
 	app.RecoverAllocationAsk(ask)
 	assert.Equal(t, len(app.requests), 1, "ask should have been added")
 	assert.Assert(t, app.IsAccepted(), "Application should be in accepted state")
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 
 	ask = newAllocationAskRepeat("ask-2", appID1, res, 1)
 	app.RecoverAllocationAsk(ask)
 	assert.Equal(t, len(app.requests), 2, "ask should have been added, total should be 2")
 	assert.Assert(t, app.IsAccepted(), "Application should have stayed in accepted state")
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 }
 
 // test reservations removal by allocation
@@ -638,11 +638,11 @@ func TestRemoveAllocAskWithPlaceholders(t *testing.T) {
 	reservedAsks := app.RemoveAllocationAsk("alloc-1")
 	assert.Equal(t, 0, reservedAsks)
 	assert.Equal(t, Accepted.String(), app.stateMachine.Current())
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 	reservedAsks = app.RemoveAllocationAsk("alloc-2")
 	assert.Equal(t, 0, reservedAsks)
 	assert.Equal(t, Completing.String(), app.stateMachine.Current())
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 }
 
 func TestRemovePlaceholderAllocationWithNoRealAllocation(t *testing.T) {
@@ -660,7 +660,7 @@ func TestRemovePlaceholderAllocationWithNoRealAllocation(t *testing.T) {
 
 	app.RemoveAllocation("uuid-1", si.TerminationType_UNKNOWN_TERMINATION_TYPE)
 	assert.Equal(t, app.stateMachine.Current(), Completing.String())
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 }
 
 // This test must not test the sorter that is underlying.
@@ -752,7 +752,7 @@ func TestStateChangeOnUpdate(t *testing.T) {
 	// remove the allocation, ask has been removed so nothing left
 	app.RemoveAllocation(uuid, si.TerminationType_UNKNOWN_TERMINATION_TYPE)
 	assert.Assert(t, app.IsCompleting(), "Application did not change as expected: %s", app.CurrentState())
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 
 	log := app.GetStateLog()
 	assert.Equal(t, len(log), 3, "wrong number of app events")
@@ -872,7 +872,7 @@ func TestAllocations(t *testing.T) {
 	}
 	allocs = app.GetAllAllocations()
 	assert.Equal(t, len(allocs), 0)
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 }
 
 func TestGangAllocChange(t *testing.T) {
@@ -886,7 +886,7 @@ func TestGangAllocChange(t *testing.T) {
 	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()), "new application has allocated resources")
 	assert.Assert(t, resources.IsZero(app.GetPlaceholderResource()), "new application has placeholder allocated resources")
 	assert.Assert(t, resources.Equals(app.GetPlaceholderAsk(), totalPH), "placeholder ask resource not set as expected")
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 
 	// move the app to the accepted state as if we added an ask
 	app.SetState(Accepted.String())
@@ -934,7 +934,7 @@ func TestAllocChange(t *testing.T) {
 	app := newApplication(appID1, "default", "root.a")
 	assert.Assert(t, app.IsNew(), "newly created app should be in new state")
 	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()), "new application has allocated resources")
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 
 	// move the app to the accepted state as if we added an ask
 	app.SetState(Accepted.String())
@@ -1150,7 +1150,7 @@ func TestReplaceAllocation(t *testing.T) {
 	alloc = app.ReplaceAllocation("uuid-1")
 	assert.Equal(t, alloc, nilAlloc, "placeholder without releases expected nil to be returned got a real alloc: %s", alloc)
 	assert.Equal(t, app.placeholderData[""].Replaced, int64(0))
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 	// add the placeholder back to the app, the failure test above changed state and removed the ph
 	app.SetState(Running.String())
 	app.AddAllocation(ph)
@@ -1432,7 +1432,7 @@ func TestAppTimersAfterAppRemoval(t *testing.T) {
 	app.SetState(Running.String())
 	app.RemoveAllAllocations()
 	assert.Assert(t, app.IsCompleting(), "App should be in completing state all allocs have been removed")
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 	if app.placeholderTimer != nil {
 		t.Fatalf("Placeholder timer has not be cleared after app removal as expected, %v", app.placeholderTimer)
 	}
@@ -1450,9 +1450,9 @@ func TestIncAndDecUserResourceUsage(t *testing.T) {
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 	app.incUserResourceUsage(nil)
-	assertUserGroupNilResourceWithError(t, getTestUserGroup())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 	app.incUserResourceUsage(res)
 	assertUserGroupResource(t, getTestUserGroup(), res)
 	app.incUserResourceUsage(res)

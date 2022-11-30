@@ -193,22 +193,22 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 	return nil
 }
 
-func (m *Manager) GetUserResources(user security.UserGroup) (*resources.Resource, error) {
+func (m *Manager) GetUserResources(user security.UserGroup) *resources.Resource {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 	if m.userTrackers[user.User] != nil {
-		return m.userTrackers[user.User].queueTracker.resourceUsage, nil
+		return m.userTrackers[user.User].queueTracker.resourceUsage
 	}
-	return nil, fmt.Errorf("user %s is not available in user trackers map", user.User)
+	return nil
 }
 
-func (m *Manager) GetGroupResources(group string) (*resources.Resource, error) {
+func (m *Manager) GetGroupResources(group string) *resources.Resource {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 	if m.groupTrackers[group] != nil {
-		return m.groupTrackers[group].queueTracker.resourceUsage, nil
+		return m.groupTrackers[group].queueTracker.resourceUsage
 	}
-	return nil, fmt.Errorf("group %s is not available in group trackers map", group)
+	return nil
 }
 
 func (m *Manager) GetUsersResources() []*UserTracker {

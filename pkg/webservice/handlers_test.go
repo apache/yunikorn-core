@@ -539,7 +539,7 @@ func TestGetNodesUtilJSON(t *testing.T) {
 
 	// create test application
 	appID := "app1"
-	app := newApplication(appID, partition.Name, queueName, rmID, security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
+	app := newApplication(appID, partition.Name, queueName, rmID, security.UserGroup{})
 	err := partition.AddApplication(app)
 	assert.NilError(t, err, "add application to partition should not have failed")
 

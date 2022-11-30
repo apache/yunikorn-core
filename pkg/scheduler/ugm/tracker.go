@@ -25,8 +25,8 @@ import (
 
 // Tracker Defines a set of interfaces to track and retrieve the user group resource usage
 type Tracker interface {
-	GetUserResources(user security.UserGroup) (*resources.Resource, error)
-	GetGroupResources(group string) (*resources.Resource, error)
+	GetUserResources(user security.UserGroup) *resources.Resource
+	GetGroupResources(group string) *resources.Resource
 
 	GetUsersResources() []*UserTracker
 	GetGroupsResources() []*GroupTracker

@@ -78,7 +78,7 @@ func TestCleanQueues(t *testing.T) {
 func TestRemoveAll(t *testing.T) {
 	p := createPartitionContext(t)
 
-	_, err := p.createQueue("root.test", security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
+	_, err := p.createQueue("root.test", security.UserGroup{})
 	assert.NilError(t, err)
 
 	// add new node to partition

@@ -305,22 +305,8 @@ func getTestUserGroup() security.UserGroup {
 
 func assertUserGroupResource(t *testing.T, userGroup security.UserGroup, expected *resources.Resource) {
 	ugm := ugm.GetUserManager()
-	userResource, err := ugm.GetUserResources(userGroup)
-	assert.NilError(t, err, "User should have been tracked by this time and available in user trackers map")
-	groupResource, err := ugm.GetGroupResources(userGroup.Groups[0])
-	assert.NilError(t, err, "Group should have been tracked by this time and available in group trackers map")
-	assert.Equal(t, userResource.String(), expected.String())
-	assert.Equal(t, groupResource.String(), expected.String())
-}
-
-func assertUserGroupNilResourceWithError(t *testing.T, userGroup security.UserGroup) {
-	userManager := ugm.GetUserManager()
-	userResource, err := userManager.GetUserResources(userGroup)
-	assert.Error(t, err, "user "+userGroup.User+" is not available in user trackers map")
-	groupResource, err := userManager.GetGroupResources(userGroup.Groups[0])
-	assert.Error(t, err, "group "+userGroup.Groups[0]+" is not available in group trackers map")
-
-	var expected *resources.Resource = nil
-	assert.Equal(t, userResource, expected)
-	assert.Equal(t, groupResource, expected)
+	userResource := ugm.GetUserResources(userGroup)
+	groupResource := ugm.GetGroupResources(userGroup.Groups[0])
+	assert.Equal(t, resources.Equals(userResource, expected), true)
+	assert.Equal(t, resources.Equals(groupResource, expected), true)
 }

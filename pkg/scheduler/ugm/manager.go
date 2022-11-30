@@ -194,19 +194,41 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 }
 
 func (m *Manager) GetUserResources(user security.UserGroup) *resources.Resource {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+	if m.userTrackers[user.User] != nil {
+		return m.userTrackers[user.User].queueTracker.resourceUsage
+	}
 	return nil
 }
 
 func (m *Manager) GetGroupResources(group string) *resources.Resource {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+	if m.groupTrackers[group] != nil {
+		return m.groupTrackers[group].queueTracker.resourceUsage
+	}
 	return nil
 }
 
 func (m *Manager) GetUsersResources() []*UserTracker {
-	return nil
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+	var userTrackers []*UserTracker
+	for _, tracker := range m.userTrackers {
+		userTrackers = append(userTrackers, tracker)
+	}
+	return userTrackers
 }
 
 func (m *Manager) GetGroupsResources() []*GroupTracker {
-	return nil
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+	var groupTrackers []*GroupTracker
+	for _, tracker := range m.groupTrackers {
+		groupTrackers = append(groupTrackers, tracker)
+	}
+	return groupTrackers
 }
 
 func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID string, user security.UserGroup) error {
@@ -278,11 +300,15 @@ func (m *Manager) isGroupRemovable(gt *GroupTracker) bool {
 	return false
 }
 
-// getUserTrackers only for tests
-func (m *Manager) getUserTrackers() map[string]*UserTracker {
-	return m.userTrackers
+// ClearUserTrackers only for tests
+func (m *Manager) ClearUserTrackers() {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.userTrackers = make(map[string]*UserTracker)
 }
 
-func (m *Manager) getGroupTrackers() map[string]*GroupTracker {
-	return m.groupTrackers
+func (m *Manager) ClearGroupTrackers() {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.groupTrackers = make(map[string]*GroupTracker)
 }

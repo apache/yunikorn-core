@@ -34,6 +34,7 @@ func TestGTIncreaseTrackedResource(t *testing.T) {
 	// root->parent->child12 (similar name like above leaf queue, but it is being treated differently as similar names are allowed)
 	user := &security.UserGroup{User: "test", Groups: []string{"test"}}
 	groupTracker := newGroupTracker(user.User)
+
 	usage1, err := resources.NewResourceFromConf(map[string]string{"mem": "10M", "vcore": "10"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)

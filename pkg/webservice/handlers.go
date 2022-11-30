@@ -29,6 +29,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
@@ -42,7 +43,6 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
-	"github.com/gorilla/mux"
 )
 
 const PartitionDoesNotExists = "Partition not found"

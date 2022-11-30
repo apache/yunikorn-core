@@ -217,12 +217,16 @@ func setup(t *testing.T, config string, partitionCount int) *scheduler.Partition
 
 // simple wrapper to make creating an app easier
 func newApplication(appID, partitionName, queueName, rmID string, ugi security.UserGroup) *objects.Application {
+	userGroup := ugi
+	if ugi.User == "" {
+		userGroup = security.UserGroup{User: "testuser", Groups: []string{"testgroup"}}
+	}
 	siApp := &si.AddApplicationRequest{
 		ApplicationID: appID,
 		QueueName:     queueName,
 		PartitionName: partitionName,
 	}
-	return objects.NewApplication(siApp, ugi, nil, rmID)
+	return objects.NewApplication(siApp, userGroup, nil, rmID)
 }
 
 func TestValidateConf(t *testing.T) {
@@ -592,7 +596,7 @@ func TestGetNodesUtilJSON(t *testing.T) {
 
 func addAndConfirmApplicationExists(t *testing.T, partitionName string, partition *scheduler.PartitionContext, appName string) *objects.Application {
 	// add a new app
-	app := newApplication(appName, partitionName, "root.default", rmID, security.UserGroup{})
+	app := newApplication(appName, partitionName, "root.default", rmID, security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
 	err := partition.AddApplication(app)
 	assert.NilError(t, err, "Failed to add Application to Partition.")
 	assert.Equal(t, app.CurrentState(), objects.New.String())
@@ -781,7 +785,7 @@ func TestGetPartitionNodes(t *testing.T) {
 
 	// create test application
 	appID := "app1"
-	app := newApplication(appID, partition.Name, queueName, rmID, security.UserGroup{})
+	app := newApplication(appID, partition.Name, queueName, rmID, security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
 	err := partition.AddApplication(app)
 	assert.NilError(t, err, "add application to partition should not have failed")
 

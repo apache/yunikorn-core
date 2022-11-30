@@ -41,6 +41,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/metrics/history"
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
@@ -1314,6 +1315,58 @@ func TestSetLoggerLevel(t *testing.T) {
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	assert.Equal(t, rr.Code, http.StatusOK)
+}
+
+func TestUsersAndGroupsResourceUsage(t *testing.T) {
+	part := setup(t, configDefault, 1)
+	userManager := ugm.GetUserManager()
+	userManager.ClearUserTrackers()
+	userManager.ClearGroupTrackers()
+
+	// add 1 application
+	app := addAppWithUserGroup(t, "app-1", part, "root.default", false, security.UserGroup{
+		User:   "testuser",
+		Groups: []string{"testgroup"},
+	})
+	res := &si.Resource{
+		Resources: map[string]*si.Quantity{"vcore": {Value: 1}},
+	}
+	ask := objects.NewAllocationAskFromSI(&si.AllocationAsk{
+		ApplicationID:  "app-1",
+		PartitionName:  part.Name,
+		ResourceAsk:    res,
+		MaxAllocations: 1})
+	err := app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+
+	// add an alloc
+	uuid := "uuid-1"
+	allocInfo := objects.NewAllocation(uuid, "node-1", ask)
+	app.AddAllocation(allocInfo)
+	assert.Assert(t, app.IsStarting(), "Application did not return starting state after alloc: %s", app.CurrentState())
+
+	NewWebApp(schedulerContext, nil)
+
+	var req *http.Request
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/users", strings.NewReader(""))
+	assert.NilError(t, err, "Get Users Resource Usage Handler request failed")
+	resp := &MockResponseWriter{}
+	var usersResourceUsageDao []*dao.UserResourceUsageDAOInfo
+	getUsersResourceUsage(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &usersResourceUsageDao)
+	assert.NilError(t, err, "failed to unmarshal users resource usage dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, usersResourceUsageDao[0].Queues.ResourceUsage.String(),
+		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).String())
+
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/groups", strings.NewReader(""))
+	assert.NilError(t, err, "Get Groups Resource Usage Handler request failed")
+
+	var groupsResourceUsageDao []*dao.GroupResourceUsageDAOInfo
+	getGroupsResourceUsage(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &groupsResourceUsageDao)
+	assert.NilError(t, err, "failed to unmarshal groups resource usage dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, groupsResourceUsageDao[0].Queues.ResourceUsage.String(),
+		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).String())
 }
 
 func prepareSchedulerContext(t *testing.T, stateDumpConf bool) *scheduler.ClusterContext {

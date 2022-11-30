@@ -417,7 +417,6 @@ func (pc *PartitionContext) removeApplication(appID string) []*objects.Allocatio
 			}
 		}
 	}
-
 	return allocations
 }
 

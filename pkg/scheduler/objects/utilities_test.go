@@ -20,12 +20,16 @@ package objects
 
 import (
 	"strconv"
+	"testing"
 	"time"
+
+	"gotest.tools/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
+	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -48,11 +52,20 @@ func createManagedQueue(parentSQ *Queue, name string, parent bool, maxRes map[st
 
 // create managed queue with props set
 func createManagedQueueWithProps(parentSQ *Queue, name string, parent bool, maxRes, props map[string]string) (*Queue, error) {
+	return createManagedQueuePropsMaxApps(parentSQ, name, parent, maxRes, props, uint64(0))
+}
+
+func createManagedQueueMaxApps(parentSQ *Queue, name string, parent bool, maxRes map[string]string, maxApps uint64) (*Queue, error) {
+	return createManagedQueuePropsMaxApps(parentSQ, name, parent, maxRes, nil, maxApps)
+}
+
+func createManagedQueuePropsMaxApps(parentSQ *Queue, name string, parent bool, maxRes map[string]string, props map[string]string, maxApps uint64) (*Queue, error) {
 	queueConfig := configs.QueueConfig{
-		Name:       name,
-		Parent:     parent,
-		Queues:     nil,
-		Properties: props,
+		Name:            name,
+		Parent:          parent,
+		Queues:          nil,
+		Properties:      props,
+		MaxApplications: maxApps,
 	}
 	if maxRes != nil {
 		queueConfig.Resources = configs.Resources{
@@ -92,17 +105,13 @@ func newApplication(appID, partition, queueName string) *Application {
 
 // Create application with tags set
 func newApplicationWithTags(appID, partition, queueName string, tags map[string]string) *Application {
-	user := security.UserGroup{
-		User:   "testuser",
-		Groups: []string{},
-	}
 	siApp := &si.AddApplicationRequest{
 		ApplicationID: appID,
 		QueueName:     queueName,
 		PartitionName: partition,
 		Tags:          tags,
 	}
-	return NewApplication(siApp, user, nil, "")
+	return NewApplication(siApp, getTestUserGroup(), nil, "")
 }
 
 func newApplicationWithHandler(appID, partition, queueName string) (*Application, *rmproxy.MockedRMProxy) {
@@ -110,10 +119,6 @@ func newApplicationWithHandler(appID, partition, queueName string) (*Application
 }
 
 func newApplicationWithPlaceholderTimeout(appID, partition, queueName string, phTimeout int64) (*Application, *rmproxy.MockedRMProxy) {
-	user := security.UserGroup{
-		User:   "testuser",
-		Groups: []string{},
-	}
 	siApp := &si.AddApplicationRequest{
 		ApplicationID:                appID,
 		QueueName:                    queueName,
@@ -121,7 +126,7 @@ func newApplicationWithPlaceholderTimeout(appID, partition, queueName string, ph
 		ExecutionTimeoutMilliSeconds: phTimeout,
 	}
 	mockEventHandler := rmproxy.NewMockedRMProxy()
-	return NewApplication(siApp, user, mockEventHandler, ""), mockEventHandler
+	return NewApplication(siApp, getTestUserGroup(), mockEventHandler, ""), mockEventHandler
 }
 
 // Create node with minimal info
@@ -217,4 +222,16 @@ func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resou
 		Placeholder:    placeholder,
 	}
 	return NewAllocationAskFromSI(ask)
+}
+
+func getTestUserGroup() security.UserGroup {
+	return security.UserGroup{User: "testuser", Groups: []string{"testgroup"}}
+}
+
+func assertUserGroupResource(t *testing.T, userGroup security.UserGroup, expected *resources.Resource) {
+	ugm := ugm.GetUserManager()
+	userResource := ugm.GetUserResources(userGroup)
+	groupResource := ugm.GetGroupResources(userGroup.Groups[0])
+	assert.Equal(t, resources.Equals(userResource, expected), true)
+	assert.Equal(t, resources.Equals(groupResource, expected), true)
 }

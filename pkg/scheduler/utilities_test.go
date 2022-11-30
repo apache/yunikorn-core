@@ -28,6 +28,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -191,22 +192,30 @@ func newStateDumpFilePartition() (*PartitionContext, error) {
 }
 
 func newApplication(appID, partition, queueName string) *objects.Application {
+	user := security.UserGroup{
+		User:   "testuser",
+		Groups: []string{"testgroup"},
+	}
 	siApp := &si.AddApplicationRequest{
 		ApplicationID: appID,
 		QueueName:     queueName,
 		PartitionName: partition,
 	}
-	return objects.NewApplication(siApp, security.UserGroup{}, nil, rmID)
+	return objects.NewApplication(siApp, user, nil, rmID)
 }
 
 func newApplicationWithHandler(appID, partition, queueName string) (*objects.Application, *rmproxy.MockedRMProxy) {
+	user := security.UserGroup{
+		User:   "testuser",
+		Groups: []string{"testgroup"},
+	}
 	siApp := &si.AddApplicationRequest{
 		ApplicationID: appID,
 		QueueName:     queueName,
 		PartitionName: partition,
 	}
 	mockEventHandler := rmproxy.NewMockedRMProxy()
-	return objects.NewApplication(siApp, security.UserGroup{}, mockEventHandler, rmID), mockEventHandler
+	return objects.NewApplication(siApp, user, mockEventHandler, rmID), mockEventHandler
 }
 
 func newApplicationTG(appID, partition, queueName string, task *resources.Resource) *objects.Application {
@@ -214,6 +223,10 @@ func newApplicationTG(appID, partition, queueName string, task *resources.Resour
 }
 
 func newApplicationTGTags(appID, partition, queueName string, task *resources.Resource, tags map[string]string) *objects.Application {
+	user := security.UserGroup{
+		User:   "testuser",
+		Groups: []string{"testgroup"},
+	}
 	siApp := &si.AddApplicationRequest{
 		ApplicationID:  appID,
 		QueueName:      queueName,
@@ -221,7 +234,7 @@ func newApplicationTGTags(appID, partition, queueName string, task *resources.Re
 		PlaceholderAsk: task.ToProto(),
 		Tags:           tags,
 	}
-	return objects.NewApplication(siApp, security.UserGroup{}, nil, rmID)
+	return objects.NewApplication(siApp, user, nil, rmID)
 }
 
 func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resource, placeHolder bool) *objects.AllocationAsk {
@@ -284,4 +297,16 @@ func createQueuesNodes(t *testing.T) *PartitionContext {
 	err = partition.AddNode(newNodeMaxResource("node-2", res), nil)
 	assert.NilError(t, err, "test node2 add failed unexpected")
 	return partition
+}
+
+func getTestUserGroup() security.UserGroup {
+	return security.UserGroup{User: "testuser", Groups: []string{"testgroup"}}
+}
+
+func assertUserGroupResource(t *testing.T, userGroup security.UserGroup, expected *resources.Resource) {
+	ugm := ugm.GetUserManager()
+	userResource := ugm.GetUserResources(userGroup)
+	groupResource := ugm.GetGroupResources(userGroup.Groups[0])
+	assert.Equal(t, resources.Equals(userResource, expected), true)
+	assert.Equal(t, resources.Equals(groupResource, expected), true)
 }

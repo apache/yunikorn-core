@@ -1664,3 +1664,133 @@ func TestGetHeadRoomFromThreeQueues(t *testing.T) {
 	assert.Equal(t, resources.Quantity(1000), result.Resources["vcore"])
 	assert.Equal(t, resources.Quantity(1000), result.Resources["memory"])
 }
+
+func TestQueue_canRunApp(t *testing.T) {
+	// create the root
+	root, err := createManagedQueueMaxApps(nil, "root", true, nil, 1)
+	assert.NilError(t, err, "queue create failed")
+	var leaf, leaf2 *Queue
+	leaf, err = createManagedQueue(root, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	leaf2, err = createManagedQueue(root, "leaf2", false, nil)
+	assert.NilError(t, err, "failed to create leaf2 queue")
+
+	// ignore allocatingAcceptedApps
+	assert.Assert(t, leaf.canRunApp(""), "unlimited queue should be able to run app")
+	assert.Assert(t, root.canRunApp(""), "queue should be able to run app (root max is 1)")
+	root.incRunningApps("")
+	assert.Assert(t, !leaf.canRunApp(""), "running apps max reached on root, should be denied")
+	root.maxRunningApps = 2
+	assert.Assert(t, leaf.canRunApp(""), "root and leave allowed")
+	leaf.maxRunningApps = 1
+	leaf.incRunningApps("")
+	assert.Assert(t, !leaf.canRunApp(""), "leaf should not be able to run an application")
+
+	leaf2.incRunningApps("")
+	assert.Assert(t, !leaf2.canRunApp(""), "leaf2 should not be able to run an application (root max reached)")
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("panic on nil queue canRunApp")
+		}
+	}()
+	var q *Queue
+	q.canRunApp("")
+}
+
+func TestQueue_incRunningApps(t *testing.T) {
+	// create the root
+	root, err := createManagedQueueMaxApps(nil, "root", true, nil, 2)
+	assert.NilError(t, err, "queue create failed")
+	var leaf, leaf2 *Queue
+	leaf, err = createManagedQueue(root, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	leaf2, err = createManagedQueue(root, "leaf2", false, nil)
+	assert.NilError(t, err, "failed to create leaf2 queue")
+
+	assert.Equal(t, leaf.runningApps, uint64(0), "default max running apps is 0")
+	root.incRunningApps("")
+	assert.Equal(t, root.runningApps, uint64(1), "root should have 1 app running")
+	leaf.incRunningApps("")
+	assert.Equal(t, leaf.runningApps, uint64(1), "leaf should have 1 app running")
+	assert.Equal(t, root.runningApps, uint64(2), "root should have 2 apps running")
+	leaf.incRunningApps("")
+	assert.Equal(t, leaf.runningApps, uint64(2), "leaf should have 2 app running")
+	assert.Equal(t, root.runningApps, uint64(2), "root should not have changed")
+
+	leaf2.incRunningApps("")
+	assert.Equal(t, leaf2.runningApps, uint64(1), "leaf2 should have 1 app running")
+	assert.Equal(t, root.runningApps, uint64(2), "root should have 1 app running")
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("panic on nil queue incRunningApps")
+		}
+	}()
+	var q *Queue
+	q.incRunningApps("")
+}
+
+func TestQueue_decRunningApps(t *testing.T) {
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	var leaf *Queue
+	leaf, err = createManagedQueue(root, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+
+	leaf.decRunningApps()
+	assert.Equal(t, leaf.runningApps, uint64(0), "default running apps is 0, should not wrap")
+	assert.Equal(t, root.runningApps, uint64(0), "default running apps is 0, should not wrap")
+	root.runningApps = 2
+	leaf.runningApps = 2
+	leaf.decRunningApps()
+	assert.Equal(t, leaf.runningApps, uint64(1), "leaf should have 1 app running")
+	assert.Equal(t, root.runningApps, uint64(1), "root should have 1 apps running")
+	root.decRunningApps()
+	assert.Equal(t, leaf.runningApps, uint64(1), "leaf should have 1 app running")
+	assert.Equal(t, root.runningApps, uint64(0), "root should have no apps")
+	leaf.decRunningApps()
+	assert.Equal(t, leaf.runningApps, uint64(0), "leaf should have 0 app running")
+	assert.Equal(t, root.runningApps, uint64(0), "root running apps is 0, should not wrap")
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("panic on nil queue decRunningApps")
+		}
+	}()
+	var q *Queue
+	q.decRunningApps()
+}
+
+func TestQueue_setAllocatingAccepted(t *testing.T) {
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	var leaf, leaf2 *Queue
+	leaf, err = createManagedQueue(root, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	leaf2, err = createManagedQueue(root, "leaf2", false, nil)
+	assert.NilError(t, err, "failed to create leaf2 queue")
+
+	leaf.setAllocatingAccepted("test-1")
+	assert.Equal(t, len(leaf.allocatingAcceptedApps), 1, "expected 1 app in leaf list")
+	assert.Equal(t, len(root.allocatingAcceptedApps), 1, "expected 1 app in root list")
+	leaf.setAllocatingAccepted("test-1")
+	assert.Equal(t, len(leaf.allocatingAcceptedApps), 1, "expected no change after adding same app again")
+	leaf.setAllocatingAccepted("test-2")
+	assert.Equal(t, len(leaf.allocatingAcceptedApps), 2, "expected 2 apps in leaf list")
+	assert.Equal(t, len(root.allocatingAcceptedApps), 2, "expected 2 apps in root list")
+
+	leaf2.setAllocatingAccepted("test-3")
+	assert.Equal(t, len(leaf2.allocatingAcceptedApps), 1, "expected 1 app in leaf2 list")
+	assert.Equal(t, len(root.allocatingAcceptedApps), 3, "expected 3 apps in root list")
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("panic on nil queue setAllocatingAccepted")
+		}
+	}()
+	var q *Queue
+	q.setAllocatingAccepted("")
+}

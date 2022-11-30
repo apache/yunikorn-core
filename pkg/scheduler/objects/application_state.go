@@ -159,8 +159,6 @@ func NewAppState() *fsm.FSM {
 			fmt.Sprintf("enter_%s", Completing.String()): func(event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
 				app.setStateTimer(completingTimeout, app.stateMachine.Current(), CompleteApplication)
-				metrics.GetQueueMetrics(app.queuePath).DecQueueApplicationsRunning()
-				metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()
 			},
 			fmt.Sprintf("leave_%s", New.String()): func(event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
@@ -181,6 +179,8 @@ func NewAppState() *fsm.FSM {
 			fmt.Sprintf("leave_%s", Running.String()): func(event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
 				app.queue.decRunningApps()
+				metrics.GetQueueMetrics(app.queuePath).DecQueueApplicationsRunning()
+				metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()
 			},
 			fmt.Sprintf("leave_%s", Completing.String()): func(event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
@@ -199,9 +199,7 @@ func NewAppState() *fsm.FSM {
 			},
 			fmt.Sprintf("enter_%s", Failing.String()): func(event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
-				metrics.GetQueueMetrics(app.queuePath).DecQueueApplicationsRunning()
 				metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsFailed()
-				metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()
 				metrics.GetSchedulerMetrics().IncTotalApplicationsFailed()
 			},
 			fmt.Sprintf("enter_%s", Failed.String()): func(event *fsm.Event) {

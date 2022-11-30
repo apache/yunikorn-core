@@ -121,7 +121,7 @@ func TestQTDecreaseTrackedResource(t *testing.T) {
 
 	err = queueTracker.increaseTrackedResource("", "", usage3)
 	assert.Error(t, err, "mandatory parameters are missing. queuepath: , application id: , resource usage: "+usage3.String())
-	
+
 	err = queueTracker.decreaseTrackedResource(queuePath1, TestApp1, usage3, false)
 	if err != nil {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage3, err)

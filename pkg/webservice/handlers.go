@@ -739,7 +739,7 @@ func getUsersResourceUsage(w http.ResponseWriter, r *http.Request) {
 	usersResources := userManager.GetUsersResources()
 	var result []*dao.UserResourceUsageDAOInfo
 	for _, tracker := range usersResources {
-		result = append(result, tracker.GetUserResourceUsageDAOInfo(tracker.GetUserRootQueueTracker()))
+		result = append(result, tracker.GetUserResourceUsageDAOInfo())
 	}
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
@@ -751,7 +751,7 @@ func getGroupsResourceUsage(w http.ResponseWriter, r *http.Request) {
 	groupsResources := userManager.GetGroupsResources()
 	var result []*dao.GroupResourceUsageDAOInfo
 	for _, tracker := range groupsResources {
-		result = append(result, tracker.GetGroupResourceUsageDAOInfo(tracker.GetGroupRootQueueTracker()))
+		result = append(result, tracker.GetGroupResourceUsageDAOInfo())
 	}
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)

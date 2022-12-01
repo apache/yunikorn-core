@@ -126,24 +126,24 @@ func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID 
 	return nil
 }
 
-func (qt *QueueTracker) getResourceUsageDAOInfo(parentQueuePath string, queueName string, queueTracker *QueueTracker) *dao.ResourceUsageDAOInfo {
-	usage := &dao.ResourceUsageDAOInfo{}
-	fullQueuePath := ""
-	if queueName == "root" {
-		fullQueuePath = parentQueuePath
-	} else {
-		fullQueuePath = parentQueuePath + "." + queueTracker.queueName
+func (qt *QueueTracker) getResourceUsageDAOInfo(parentQueuePath string) *dao.ResourceUsageDAOInfo {
+	if qt == nil {
+		return &dao.ResourceUsageDAOInfo{}
 	}
-	usage.QueuePath = fullQueuePath
-	usage.ResourceUsage = queueTracker.resourceUsage
-	for app := range queueTracker.runningApplications {
+	fullQueuePath := parentQueuePath + "." + qt.queueName
+	if parentQueuePath == "" {
+		fullQueuePath = qt.queueName
+	}
+	usage := &dao.ResourceUsageDAOInfo{
+		QueuePath:     fullQueuePath,
+		ResourceUsage: qt.resourceUsage.Clone(),
+	}
+	for app := range qt.runningApplications {
 		usage.RunningApplications = append(usage.RunningApplications, app)
 	}
-	if len(queueTracker.childQueueTrackers) > 0 {
-		for childQueueName, childQueueTracker := range queueTracker.childQueueTrackers {
-			childUsage := qt.getResourceUsageDAOInfo(fullQueuePath, childQueueName, childQueueTracker)
-			usage.Children = append(usage.Children, childUsage)
-		}
+	for _, cqt := range qt.childQueueTrackers {
+		childUsage := cqt.getResourceUsageDAOInfo(fullQueuePath)
+		usage.Children = append(usage.Children, childUsage)
 	}
 	return usage
 }

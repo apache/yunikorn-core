@@ -130,7 +130,7 @@ func TestGTDecreaseTrackedResource(t *testing.T) {
 	assert.Equal(t, "map[mem:70000000 vcore:70000]", actualResources1["root"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:70000000 vcore:70000]", actualResources1["root.parent"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:60000000 vcore:60000]", actualResources1["root.parent.child1"].String(), "wrong resource")
-	assert.Equal(t, "map[mem:10000000 vcore:10000]", actualResources["root.parent.child2"].String(), "wrong resource")
+	assert.Equal(t, "map[mem:10000000 vcore:10000]", actualResources1["root.parent.child2"].String(), "wrong resource")
 
 	err = groupTracker.decreaseTrackedResource(queuePath1, TestApp1, usage1, true)
 	if err != nil {
@@ -147,6 +147,6 @@ func TestGTDecreaseTrackedResource(t *testing.T) {
 
 func getGroupResource(gt *GroupTracker) map[string]*resources.Resource {
 	resources := make(map[string]*resources.Resource)
-	usage := gt.GetGroupResourceUsageDAOInfo(gt.queueTracker)
+	usage := gt.GetGroupResourceUsageDAOInfo()
 	return internalGetResource(usage.Queues, resources)
 }

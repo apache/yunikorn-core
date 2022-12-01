@@ -90,7 +90,7 @@ func (ut *UserTracker) GetUserRootQueueTracker() *QueueTracker {
 	return ut.queueTracker
 }
 
-func (ut *UserTracker) GetUserResourceUsageDAOInfo(queueTracker *QueueTracker) *dao.UserResourceUsageDAOInfo {
+func (ut *UserTracker) GetUserResourceUsageDAOInfo() *dao.UserResourceUsageDAOInfo {
 	ut.RLock()
 	defer ut.RUnlock()
 	userResourceUsage := &dao.UserResourceUsageDAOInfo{
@@ -100,6 +100,6 @@ func (ut *UserTracker) GetUserResourceUsageDAOInfo(queueTracker *QueueTracker) *
 	for app, gt := range ut.appGroupTrackers {
 		userResourceUsage.Groups[app] = gt.groupName
 	}
-	userResourceUsage.Queues = ut.queueTracker.getResourceUsageDAOInfo("root", "root", ut.queueTracker)
+	userResourceUsage.Queues = ut.queueTracker.getResourceUsageDAOInfo("")
 	return userResourceUsage
 }

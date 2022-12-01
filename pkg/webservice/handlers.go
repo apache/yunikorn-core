@@ -40,6 +40,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 	metrics2 "github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/metrics/history"
+	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	ugm "github.com/apache/yunikorn-core/pkg/scheduler/ugm"
@@ -724,6 +725,29 @@ func getRMBuildInformation(lists map[string]*scheduler.RMInformation) []map[stri
 
 	for _, rmInfo := range lists {
 		result = append(result, rmInfo.RMBuildInformation)
+	}
+
+	return result
+}
+
+func getResourceManagerDiagnostics() map[string]interface{} {
+	result := make(map[string]interface{}, 0)
+
+	plugin := plugins.GetStateDumpPlugin()
+
+	// get state dump from RM
+	dumpStr, err := plugin.GetStateDump()
+	if err != nil {
+		// might be not implemented
+		log.Logger().Debug("Unable to get RM state dump", zap.Error(err))
+		result["Error"] = err.Error()
+		return result
+	}
+
+	// convert to JSON map
+	if err = json.Unmarshal([]byte(dumpStr), &result); err != nil {
+		log.Logger().Warn("Unable to parse RM state dump", zap.Error(err))
+		result["Error"] = err.Error()
 	}
 
 	return result

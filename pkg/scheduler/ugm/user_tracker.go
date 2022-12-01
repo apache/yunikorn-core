@@ -84,12 +84,6 @@ func (ut *UserTracker) getTrackedApplications() map[string]*GroupTracker {
 	return ut.appGroupTrackers
 }
 
-func (ut *UserTracker) GetUserRootQueueTracker() *QueueTracker {
-	ut.RLock()
-	defer ut.RUnlock()
-	return ut.queueTracker
-}
-
 func (ut *UserTracker) GetUserResourceUsageDAOInfo() *dao.UserResourceUsageDAOInfo {
 	ut.RLock()
 	defer ut.RUnlock()

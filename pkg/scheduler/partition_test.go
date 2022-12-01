@@ -1715,6 +1715,7 @@ func TestCleanupCompletedApps(t *testing.T) {
 		defer partition.RUnlock()
 		return len(partition.completedApplications) > 0
 	})
+	assert.NilError(t, err, "the completed application should have been processed")
 
 	// mark the app for removal
 	completedApp.SetState(objects.Expired.String())

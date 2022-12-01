@@ -127,7 +127,7 @@ func TestSortAllocations(t *testing.T) {
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	requiredAsk.pendingAskRepeat = 5
 
-	p := NewSimplePreemptor(node, requiredAsk)
+	p := NewRequiredNodePreemptor(node, requiredAsk)
 	prepareAllocationAsks(node)
 	p.filterAllocations()
 	p.sortAllocations()
@@ -162,7 +162,7 @@ func TestFilterAllocations(t *testing.T) {
 	// case 1: allocations are available but none of its resources are matching with ds request ask, hence no allocations considered
 	requiredAsk := createAllocationAsk("ask12", "app1", "true", true, 20,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5}))
-	p := NewSimplePreemptor(node, requiredAsk)
+	p := NewRequiredNodePreemptor(node, requiredAsk)
 	prepareAllocationAsks(node)
 	p.filterAllocations()
 	filteredAllocations := p.getAllocations()
@@ -173,7 +173,7 @@ func TestFilterAllocations(t *testing.T) {
 	// case 2: allocations are available but priority is higher than ds request priority, hence no allocations considered
 	requiredAsk1 := createAllocationAsk("ask12", "app1", "true", true, 1,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-	p1 := NewSimplePreemptor(node, requiredAsk1)
+	p1 := NewRequiredNodePreemptor(node, requiredAsk1)
 	prepareAllocationAsks(node)
 	p1.filterAllocations()
 	filteredAllocations = p.getAllocations()
@@ -184,7 +184,7 @@ func TestFilterAllocations(t *testing.T) {
 	// case 3: victims are available as there are allocations with lower priority and resource match
 	requiredAsk2 := createAllocationAsk("ask12", "app1", "true", true, 20,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-	p2 := NewSimplePreemptor(node, requiredAsk2)
+	p2 := NewRequiredNodePreemptor(node, requiredAsk2)
 	prepareAllocationAsks(node)
 	p2.filterAllocations()
 	filteredAllocations = p2.getAllocations()
@@ -204,7 +204,7 @@ func TestGetVictims(t *testing.T) {
 	requiredAsk := createAllocationAsk("ask11", "app1", "true", true, 20,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25}))
 
-	p := NewSimplePreemptor(node, requiredAsk)
+	p := NewRequiredNodePreemptor(node, requiredAsk)
 	prepareAllocationAsks(node)
 	p.filterAllocations()
 	p.sortAllocations()
@@ -222,7 +222,7 @@ func TestGetVictims(t *testing.T) {
 	// case 2: victims are available and its resources are matching with ds request ask (but with different quantity)
 	requiredAsk2 := createAllocationAsk("ask13", "app1", "true", true, 20,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-	p2 := NewSimplePreemptor(node, requiredAsk2)
+	p2 := NewRequiredNodePreemptor(node, requiredAsk2)
 	prepareAllocationAsks(node)
 	p2.filterAllocations()
 	p2.sortAllocations()
@@ -232,7 +232,7 @@ func TestGetVictims(t *testing.T) {
 	// case 3: allocations are available and its resources are matching partially with ds request ask (because of different resource types), hence no victims
 	requiredAsk3 := createAllocationAsk("ask13", "app1", "true", true, 20,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 5}))
-	p3 := NewSimplePreemptor(node, requiredAsk3)
+	p3 := NewRequiredNodePreemptor(node, requiredAsk3)
 	prepareAllocationAsks(node)
 	p3.filterAllocations()
 	filteredAllocations := p3.getAllocations()

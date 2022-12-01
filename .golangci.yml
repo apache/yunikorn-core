@@ -29,8 +29,8 @@ linters-settings:
   errcheck:
     check-type-assertions: true
     check-blank: true
-  golint:
-    min-confidence: 0.8
+  revive:
+    confidence: 0.8
   gofmt:
     simplify: true
   goimports:
@@ -64,7 +64,7 @@ linters:
     - ineffassign
     - deadcode
     - funlen
-    - golint
+    - revive
     - gofmt
     - goimports
     - govet

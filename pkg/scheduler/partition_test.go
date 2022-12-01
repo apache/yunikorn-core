@@ -1241,17 +1241,7 @@ func TestPreemptionForRequiredNodeReservedAlloc(t *testing.T) {
 	assertUserGroupResource(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 8000}))
 }
 
-// Two preemption request for the same ask, second is prevented by the HasTriggeredPreemption() logic
-func TestMultiplePreemptionAvoidedByTriggerCheck(t *testing.T) {
-	testMultiplePreemption(t, 0)
-}
-
-// Two preemption request for the same ask, second is prevented by the preemption interval logic
-func TestMultiplePreemptionAvoidedByIntervalCheck(t *testing.T) {
-	testMultiplePreemption(t, 5*time.Second)
-}
-
-func testMultiplePreemption(t *testing.T, interval time.Duration) {
+func TestMultiplePreemptionAttemptAvoided(t *testing.T) {
 	partition := createQueuesNodes(t)
 	if partition == nil {
 		t.Fatal("partition create failed")
@@ -1280,8 +1270,9 @@ func testMultiplePreemption(t *testing.T, interval time.Duration) {
 	assert.NilError(t, err, "failed to add ask alloc-2 to app-1")
 	partition.tryAllocate()
 
-	// try double reserved allocation
-	app.SetPreemptionAttemptInterval(interval)
+	// try multiple reserved allocation
+	partition.tryReservedAllocate()
+	partition.tryReservedAllocate()
 	partition.tryReservedAllocate()
 	partition.tryReservedAllocate()
 
@@ -1373,7 +1364,6 @@ func setupPreemptionForRequiredNode(t *testing.T) (*PartitionContext, *objects.A
 	}
 	releases, _ := partition.removeAllocation(release)
 	assert.Equal(t, 1, len(releases), "unexpected number of allocations released")
-	ask2.SetLastPreemptionAttempt(time.Time{})
 	ask2.SetTriggeredPreemption(false)
 	assertUserGroupResource(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 0}))
 	return partition, app

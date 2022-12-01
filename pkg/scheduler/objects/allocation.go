@@ -357,11 +357,11 @@ func (a *Allocation) GetAllocatedResource() *resources.Resource {
 	return a.allocatedResource
 }
 
-// SetPreempted marks the allocation as preempted.
-func (a *Allocation) SetPreempted(preempted bool) {
+// MarkPreempted marks the allocation as preempted.
+func (a *Allocation) MarkPreempted() {
 	a.Lock()
 	defer a.Unlock()
-	a.preempted = preempted
+	a.preempted = true
 }
 
 // IsPreempted returns whether the allocation has been marked for preemption or not.

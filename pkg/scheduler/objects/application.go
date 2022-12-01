@@ -102,8 +102,6 @@ type Application struct {
 	rmID               string
 	terminatedCallback func(appID string)
 
-	preemptionAttemptInterval time.Duration
-
 	sync.RWMutex
 }
 
@@ -144,7 +142,6 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	app.user = ugi
 	app.rmEventHandler = eventHandler
 	app.rmID = rmID
-	app.preemptionAttemptInterval = DefaultPreemptionAttemptInterval
 	return app
 }
 
@@ -1098,10 +1095,7 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 
 		// Do we need a specific node?
 		if ask.GetRequiredNode() != "" {
-			if ask.HasTriggeredPreemption() || time.Since(ask.GetLastPreemptionAttempt()) < sa.preemptionAttemptInterval {
-				continue
-			}
-			if !reserve.node.CanAllocate(ask.GetAllocatedResource()) {
+			if !reserve.node.CanAllocate(ask.GetAllocatedResource()) && !ask.HasTriggeredPreemption() {
 				sa.tryPreemption(reserve, ask)
 				continue
 			}
@@ -1135,7 +1129,6 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 }
 
 func (sa *Application) tryPreemption(reserve *reservation, ask *AllocationAsk) bool {
-	ask.SetLastPreemptionAttempt(time.Now())
 	log.Logger().Info("Triggering preemption process for daemon set ask",
 		zap.String("ds allocation key", ask.GetAllocationKey()))
 
@@ -1147,13 +1140,13 @@ func (sa *Application) tryPreemption(reserve *reservation, ask *AllocationAsk) b
 	// Are there any victims/asks to preempt?
 	victims := preemptor.GetVictims()
 	if len(victims) > 0 {
-		for _, victim := range victims {
-			victim.SetPreempted(true)
-		}
-		ask.SetTriggeredPreemption(true)
 		log.Logger().Info("Found victims for daemon set ask preemption ",
-			zap.String("ds allocation key", ask.GetAllocationKey()))
-		zap.Int("no.of victims", len(victims))
+			zap.String("ds allocation key", ask.GetAllocationKey()),
+			zap.Int("no.of victims", len(victims)))
+		for _, victim := range victims {
+			victim.MarkPreempted()
+		}
+		ask.MarkTriggeredPreemption()
 		sa.notifyRMAllocationReleased(sa.rmID, victims, si.TerminationType_PREEMPTED_BY_SCHEDULER,
 			"preempting allocations to free up resources to run daemon set ask: "+ask.GetAllocationKey())
 		return true
@@ -1793,11 +1786,4 @@ func (sa *Application) SetTimedOutPlaceholder(taskGroupName string, timedOut int
 	if _, ok := sa.placeholderData[taskGroupName]; ok {
 		sa.placeholderData[taskGroupName].TimedOut = timedOut
 	}
-}
-
-// test only
-func (sa *Application) SetPreemptionAttemptInterval(interval time.Duration) {
-	sa.Lock()
-	defer sa.Unlock()
-	sa.preemptionAttemptInterval = interval
 }

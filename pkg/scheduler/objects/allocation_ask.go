@@ -49,10 +49,9 @@ type AllocationAsk struct {
 	allocatedResource *resources.Resource
 
 	// Mutable fields which need protection
-	pendingAskRepeat      int32
-	allocLog              map[string]*AllocationLogEntry
-	preemptionTriggered   bool
-	lastPreemptionAttempt time.Time
+	pendingAskRepeat    int32
+	allocLog            map[string]*AllocationLogEntry
+	preemptionTriggered bool
 
 	sync.RWMutex
 }
@@ -248,11 +247,11 @@ func (aa *AllocationAsk) GetAllocationLog() []*AllocationLogEntry {
 	return res
 }
 
-// SetTriggeredPreemption sets whether preemption has been triggered for this ask
-func (aa *AllocationAsk) SetTriggeredPreemption(triggered bool) {
+// MarkTriggeredPreemption marks the current ask because it triggered preemption during allocation
+func (aa *AllocationAsk) MarkTriggeredPreemption() {
 	aa.Lock()
 	defer aa.Unlock()
-	aa.preemptionTriggered = triggered
+	aa.preemptionTriggered = true
 }
 
 // HasTriggeredPreemption returns whether this ask has triggered preemption
@@ -262,16 +261,9 @@ func (aa *AllocationAsk) HasTriggeredPreemption() bool {
 	return aa.preemptionTriggered
 }
 
-// SetLastPreemptionAttempt sets the time which tells when the last preemption attempt was performed for this ask.
-func (aa *AllocationAsk) SetLastPreemptionAttempt(attempt time.Time) {
+// test only
+func (aa *AllocationAsk) SetTriggeredPreemption(triggered bool) {
 	aa.Lock()
 	defer aa.Unlock()
-	aa.lastPreemptionAttempt = attempt
-}
-
-// GetLastPreemptionAttempt returns the timestamp of the last preemption attempt for this ask.
-func (aa *AllocationAsk) GetLastPreemptionAttempt() time.Time {
-	aa.RLock()
-	defer aa.RUnlock()
-	return aa.lastPreemptionAttempt
+	aa.preemptionTriggered = triggered
 }

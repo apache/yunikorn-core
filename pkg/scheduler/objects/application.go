@@ -1132,7 +1132,7 @@ func (sa *Application) tryPreemption(reserve *reservation, ask *AllocationAsk) b
 		zap.String("ds allocation key", ask.GetAllocationKey()))
 
 	// try preemption and see if we can free up resource
-	preemptor := NewSimplePreemptor(reserve.node, ask)
+	preemptor := NewRequiredNodePreemptor(reserve.node, ask)
 	preemptor.filterAllocations()
 	preemptor.sortAllocations()
 

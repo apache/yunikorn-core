@@ -42,6 +42,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/metrics/history"
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	ugm "github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
@@ -731,4 +732,28 @@ func getRMBuildInformation(lists map[string]*scheduler.RMInformation) []map[stri
 func getMetrics(w http.ResponseWriter, r *http.Request) {
 	metrics2.GetRuntimeMetrics().Collect()
 	promhttp.Handler().ServeHTTP(w, r)
+}
+
+func getUsersResourceUsage(w http.ResponseWriter, r *http.Request) {
+	userManager := ugm.GetUserManager()
+	usersResources := userManager.GetUsersResources()
+	var result []*dao.UserResourceUsageDAOInfo
+	for _, tracker := range usersResources {
+		result = append(result, tracker.GetUserResourceUsageDAOInfo())
+	}
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func getGroupsResourceUsage(w http.ResponseWriter, r *http.Request) {
+	userManager := ugm.GetUserManager()
+	groupsResources := userManager.GetGroupsResources()
+	var result []*dao.GroupResourceUsageDAOInfo
+	for _, tracker := range groupsResources {
+		result = append(result, tracker.GetGroupResourceUsageDAOInfo())
+	}
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
 }

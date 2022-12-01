@@ -65,7 +65,7 @@ func (gt *GroupTracker) getTrackedApplications() map[string]bool {
 	return gt.applications
 }
 
-func (gt *GroupTracker) getGroupResourceUsageDAOInfo(queueTracker *QueueTracker) *dao.GroupResourceUsageDAOInfo {
+func (gt *GroupTracker) GetGroupResourceUsageDAOInfo() *dao.GroupResourceUsageDAOInfo {
 	gt.RLock()
 	defer gt.RUnlock()
 	groupResourceUsage := &dao.GroupResourceUsageDAOInfo{
@@ -75,6 +75,6 @@ func (gt *GroupTracker) getGroupResourceUsageDAOInfo(queueTracker *QueueTracker)
 	for app := range gt.applications {
 		groupResourceUsage.Applications = append(groupResourceUsage.Applications, app)
 	}
-	groupResourceUsage.Queues = gt.queueTracker.getResourceUsageDAOInfo("root", "root", gt.queueTracker)
+	groupResourceUsage.Queues = gt.queueTracker.getResourceUsageDAOInfo("")
 	return groupResourceUsage
 }

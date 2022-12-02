@@ -1671,6 +1671,23 @@ func TestUpdateRootQueue(t *testing.T) {
 	assert.Equal(t, partition.GetQueue("root.parent").CurrentState(), objects.Draining.String(), "parent queue should have been marked for removal")
 }
 
+// transition an application to completed state and wait for it to be processed into the completedApplications map
+func completeApplicationAndWait(app *objects.Application, pc *PartitionContext) error {
+	currentCount := pc.GetTotalCompletedApplicationCount()
+	err := app.HandleApplicationEvent(objects.CompleteApplication)
+	if err != nil {
+		return err
+	}
+
+	err = common.WaitFor(10*time.Millisecond, time.Duration(1000)*time.Millisecond, func() bool {
+		pc.RLock()
+		defer pc.RUnlock()
+		return pc.GetTotalCompletedApplicationCount() == currentCount+1
+	})
+
+	return err
+}
+
 func TestCompleteApp(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
@@ -1681,13 +1698,7 @@ func TestCompleteApp(t *testing.T) {
 	assert.Assert(t, len(partition.applications) == 1, "the partition should have 1 app")
 	assert.Assert(t, len(partition.completedApplications) == 0, "the partition should not have any completed apps")
 	// complete the application
-	err = app.HandleApplicationEvent(objects.CompleteApplication)
-	assert.NilError(t, err, "no error expected while transitioning the app from waiting to completed state")
-	err = common.WaitFor(10*time.Millisecond, time.Duration(1000)*time.Millisecond, func() bool {
-		partition.RLock()
-		defer partition.RUnlock()
-		return len(partition.completedApplications) > 0
-	})
+	err = completeApplicationAndWait(app, partition)
 	assert.NilError(t, err, "the completed application should have been processed")
 	assert.Assert(t, len(partition.applications) == 0, "the partition should have no active app")
 	assert.Assert(t, len(partition.completedApplications) == 1, "the partition should have 1 completed app")
@@ -1708,13 +1719,7 @@ func TestCleanupCompletedApps(t *testing.T) {
 
 	// complete the application
 	completedApp.SetState(objects.Completing.String())
-	err = completedApp.HandleApplicationEvent(objects.CompleteApplication)
-	assert.NilError(t, err, "no error expected while transitioning the app from completing to completed state")
-	err = common.WaitFor(10*time.Millisecond, time.Duration(1000)*time.Millisecond, func() bool {
-		partition.RLock()
-		defer partition.RUnlock()
-		return len(partition.completedApplications) > 0
-	})
+	err = completeApplicationAndWait(completedApp, partition)
 	assert.NilError(t, err, "the completed application should have been processed")
 
 	// mark the app for removal

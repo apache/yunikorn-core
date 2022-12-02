@@ -1782,10 +1782,3 @@ func (sa *Application) SetTimedOutPlaceholder(taskGroupName string, timedOut int
 		sa.placeholderData[taskGroupName].TimedOut = timedOut
 	}
 }
-
-// test only
-func (sa *Application) addPlaceholderDataWithLocking(ask *AllocationAsk) {
-	sa.Lock()
-	defer sa.Unlock()
-	sa.addPlaceholderData(ask)
-}

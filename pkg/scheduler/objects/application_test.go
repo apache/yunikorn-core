@@ -1557,3 +1557,9 @@ func TestCanReplace(t *testing.T) {
 		})
 	}
 }
+
+func (sa *Application) addPlaceholderDataWithLocking(ask *AllocationAsk) {
+	sa.Lock()
+	defer sa.Unlock()
+	sa.addPlaceholderData(ask)
+}

@@ -1133,7 +1133,7 @@ func TestReplaceAllocation(t *testing.T) {
 	// add the placeholder to the app
 	app.AddAllocation(ph)
 	// add PlaceholderData
-	app.addPlaceholderData(ph.GetAsk())
+	app.addPlaceholderDataWithLocking(ph.GetAsk())
 	assert.Equal(t, len(app.placeholderData), 1)
 	assert.Equal(t, app.placeholderData[""].TaskGroupName, "")
 	assert.Equal(t, app.placeholderData[""].Count, int64(1))
@@ -1154,7 +1154,7 @@ func TestReplaceAllocation(t *testing.T) {
 	// add the placeholder back to the app, the failure test above changed state and removed the ph
 	app.SetState(Running.String())
 	app.AddAllocation(ph)
-	app.addPlaceholderData(ph.GetAsk())
+	app.addPlaceholderDataWithLocking(ph.GetAsk())
 	assert.Equal(t, app.placeholderData[""].Count, int64(2))
 	assertUserGroupResource(t, getTestUserGroup(), res)
 
@@ -1176,7 +1176,7 @@ func TestReplaceAllocation(t *testing.T) {
 	app.SetState(Running.String())
 	ph.ClearReleases()
 	app.AddAllocation(ph)
-	app.addPlaceholderData(ph.GetAsk())
+	app.addPlaceholderDataWithLocking(ph.GetAsk())
 	assert.Equal(t, app.placeholderData[""].Count, int64(3))
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 
@@ -1310,7 +1310,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	ph.SetReleased(true)
 	app.AddAllocation(ph)
 	// add PlaceholderData
-	app.addPlaceholderData(ph.GetAsk())
+	app.addPlaceholderDataWithLocking(ph.GetAsk())
 	assert.Equal(t, len(app.placeholderData), 1)
 	assert.Equal(t, app.placeholderData[""].TaskGroupName, "")
 	assert.Equal(t, app.placeholderData[""].Count, int64(1))
@@ -1322,7 +1322,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	assert.Assert(t, app.placeholderTimer != nil, "Placeholder timer should be initiated after the first placeholder allocation")
 	ph = newPlaceholderAlloc(appID1, "waiting", nodeID1, "root.a", res)
 	app.AddAllocation(ph)
-	app.addPlaceholderData(ph.GetAsk())
+	app.addPlaceholderDataWithLocking(ph.GetAsk())
 	assert.Equal(t, app.placeholderData[""].Count, int64(2))
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 
@@ -1531,14 +1531,14 @@ func TestCanReplace(t *testing.T) {
 	}
 	// add the placeholder data
 	// available tg has one replacement open
-	app.addPlaceholderData(newAllocationAskTG(aKey, appID1, tg1, res, 1))
+	app.addPlaceholderDataWithLocking(newAllocationAskTG(aKey, appID1, tg1, res, 1))
 	// unavailable tg has NO replacement open (replaced)
 	tg2 := "unavailable"
-	app.addPlaceholderData(newAllocationAskTG(aKey, appID1, tg2, res, 1))
+	app.addPlaceholderDataWithLocking(newAllocationAskTG(aKey, appID1, tg2, res, 1))
 	app.placeholderData[tg2].Replaced++
 	// unavailable tg has NO replacement open (timedout)
 	tg3 := "timedout"
-	app.addPlaceholderData(newAllocationAskTG(aKey, appID1, tg3, res, 1))
+	app.addPlaceholderDataWithLocking(newAllocationAskTG(aKey, appID1, tg3, res, 1))
 	app.placeholderData[tg3].TimedOut++
 	tests = []struct {
 		name string
@@ -1556,4 +1556,10 @@ func TestCanReplace(t *testing.T) {
 			assert.Equal(t, tt.want, app.canReplace(tt.ask), "unexpected replacement")
 		})
 	}
+}
+
+func (sa *Application) addPlaceholderDataWithLocking(ask *AllocationAsk) {
+	sa.Lock()
+	defer sa.Unlock()
+	sa.addPlaceholderData(ask)
 }

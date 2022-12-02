@@ -1445,11 +1445,9 @@ func (pc *PartitionContext) cleanupExpiredApps() {
 		delete(pc.rejectedApplications, app.ApplicationID)
 		pc.Unlock()
 	}
-	for k, app := range pc.GetCompletedAppsByState(objects.Expired.String()) {
+	for k := range pc.GetCompletedAppsByState(objects.Expired.String()) {
 		pc.Lock()
-		if app.IsExpired() {
-			delete(pc.completedApplications, k)
-		}
+		delete(pc.completedApplications, k)
 		pc.Unlock()
 	}
 }

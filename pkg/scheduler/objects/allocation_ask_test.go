@@ -205,9 +205,3 @@ func sortedLog(ask *AllocationAsk) []*AllocationLogEntry {
 	})
 	return log
 }
-
-func (aa *AllocationAsk) SetTriggeredPreemption(triggered bool) {
-	aa.Lock()
-	defer aa.Unlock()
-	aa.preemptionTriggered = triggered
-}

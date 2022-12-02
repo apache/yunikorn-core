@@ -1364,7 +1364,6 @@ func setupPreemptionForRequiredNode(t *testing.T) (*PartitionContext, *objects.A
 	}
 	releases, _ := partition.removeAllocation(release)
 	assert.Equal(t, 1, len(releases), "unexpected number of allocations released")
-	ask2.SetTriggeredPreemption(false)
 	assertUserGroupResource(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 0}))
 	return partition, app
 }

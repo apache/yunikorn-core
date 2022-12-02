@@ -1704,7 +1704,7 @@ func TestCompleteApp(t *testing.T) {
 	assert.Assert(t, len(partition.completedApplications) == 1, "the partition should have 1 completed app")
 }
 
-func TestCleanupApp(t *testing.T) {
+func TestCleanupFailedApps(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
 	newApp1 := newApplication("newApp1", "default", defQueue)

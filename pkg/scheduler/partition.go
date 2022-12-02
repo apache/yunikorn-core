@@ -1077,6 +1077,18 @@ func (pc *PartitionContext) GetCompletedApplications() []*objects.Application {
 	return appList
 }
 
+func (pc *PartitionContext) GetCompletedAppsByState(state string) map[string]*objects.Application {
+	pc.RLock()
+	defer pc.RUnlock()
+	appMap := make(map[string]*objects.Application)
+	for k, app := range pc.completedApplications {
+		if app.CurrentState() == state {
+			appMap[k] = app
+		}
+	}
+	return appMap
+}
+
 func (pc *PartitionContext) GetRejectedApplications() []*objects.Application {
 	pc.RLock()
 	defer pc.RUnlock()
@@ -1431,6 +1443,11 @@ func (pc *PartitionContext) cleanupExpiredApps() {
 	for _, app := range pc.GetRejectedAppsByState(objects.Expired.String()) {
 		pc.Lock()
 		delete(pc.rejectedApplications, app.ApplicationID)
+		pc.Unlock()
+	}
+	for k := range pc.GetCompletedAppsByState(objects.Expired.String()) {
+		pc.Lock()
+		delete(pc.completedApplications, k)
 		pc.Unlock()
 	}
 }

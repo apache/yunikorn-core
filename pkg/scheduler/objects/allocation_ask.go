@@ -260,10 +260,3 @@ func (aa *AllocationAsk) HasTriggeredPreemption() bool {
 	defer aa.RUnlock()
 	return aa.preemptionTriggered
 }
-
-// test only
-func (aa *AllocationAsk) SetTriggeredPreemption(triggered bool) {
-	aa.Lock()
-	defer aa.Unlock()
-	aa.preemptionTriggered = triggered
-}

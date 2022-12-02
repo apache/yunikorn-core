@@ -50,9 +50,8 @@ var (
 )
 
 const (
-	Soft                             string = "Soft"
-	Hard                             string = "Hard"
-	DefaultPreemptionAttemptInterval        = 5 * time.Second
+	Soft string = "Soft"
+	Hard string = "Hard"
 )
 
 type PlaceholderData struct {
@@ -1140,7 +1139,7 @@ func (sa *Application) tryPreemption(reserve *reservation, ask *AllocationAsk) b
 	// Are there any victims/asks to preempt?
 	victims := preemptor.GetVictims()
 	if len(victims) > 0 {
-		log.Logger().Info("Found victims for daemon set ask preemption ",
+		log.Logger().Info("Found victims for required node preemption",
 			zap.String("ds allocation key", ask.GetAllocationKey()),
 			zap.Int("no.of victims", len(victims)))
 		for _, victim := range victims {

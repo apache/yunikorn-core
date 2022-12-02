@@ -40,8 +40,10 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 	metrics2 "github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/metrics/history"
+	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	ugm "github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
@@ -730,7 +732,54 @@ func getRMBuildInformation(lists map[string]*scheduler.RMInformation) []map[stri
 	return result
 }
 
+func getResourceManagerDiagnostics() map[string]interface{} {
+	result := make(map[string]interface{}, 0)
+
+	plugin := plugins.GetStateDumpPlugin()
+
+	// get state dump from RM
+	dumpStr, err := plugin.GetStateDump()
+	if err != nil {
+		// might be not implemented
+		log.Logger().Debug("Unable to get RM state dump", zap.Error(err))
+		result["Error"] = err.Error()
+		return result
+	}
+
+	// convert to JSON map
+	if err = json.Unmarshal([]byte(dumpStr), &result); err != nil {
+		log.Logger().Warn("Unable to parse RM state dump", zap.Error(err))
+		result["Error"] = err.Error()
+	}
+
+	return result
+}
+
 func getMetrics(w http.ResponseWriter, r *http.Request) {
 	metrics2.GetRuntimeMetrics().Collect()
 	promhttp.Handler().ServeHTTP(w, r)
+}
+
+func getUsersResourceUsage(w http.ResponseWriter, r *http.Request) {
+	userManager := ugm.GetUserManager()
+	usersResources := userManager.GetUsersResources()
+	var result []*dao.UserResourceUsageDAOInfo
+	for _, tracker := range usersResources {
+		result = append(result, tracker.GetUserResourceUsageDAOInfo())
+	}
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func getGroupsResourceUsage(w http.ResponseWriter, r *http.Request) {
+	userManager := ugm.GetUserManager()
+	groupsResources := userManager.GetGroupsResources()
+	var result []*dao.GroupResourceUsageDAOInfo
+	for _, tracker := range groupsResources {
+		result = append(result, tracker.GetGroupResourceUsageDAOInfo())
+	}
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
 }

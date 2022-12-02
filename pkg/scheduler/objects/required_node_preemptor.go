@@ -33,7 +33,7 @@ type PreemptionContext struct {
 	sync.RWMutex
 }
 
-func NewSimplePreemptor(node *Node, requiredAsk *AllocationAsk) *PreemptionContext {
+func NewRequiredNodePreemptor(node *Node, requiredAsk *AllocationAsk) *PreemptionContext {
 	preemptor := &PreemptionContext{
 		node:        node,
 		requiredAsk: requiredAsk,

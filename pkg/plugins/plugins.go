@@ -26,15 +26,29 @@ import (
 var plugins SchedulerPlugins
 
 func init() {
-	plugins = SchedulerPlugins{}
+	plugins = SchedulerPlugins{
+		StateDumpPlugin: dummyStateDumpPlugin{},
+	}
+}
+
+type dummyStateDumpPlugin struct{}
+
+var _ api.StateDumpPlugin = dummyStateDumpPlugin{}
+
+func (d dummyStateDumpPlugin) GetStateDump() (string, error) {
+	return "{}", nil
 }
 
 func RegisterSchedulerPlugin(plugin interface{}) {
 	plugins.Lock()
 	defer plugins.Unlock()
-	if t, ok := plugin.(api.ResourceManagerCallback); ok {
+	if rmc, ok := plugin.(api.ResourceManagerCallback); ok {
 		log.Logger().Info("register scheduler plugin: ResourceManagerCallback")
-		plugins.ResourceManagerCallbackPlugin = t
+		plugins.ResourceManagerCallbackPlugin = rmc
+	}
+	if sdp, ok := plugin.(api.StateDumpPlugin); ok {
+		log.Logger().Info("register scheduler plugin: StateDumpPlugin")
+		plugins.StateDumpPlugin = sdp
 	}
 }
 
@@ -42,4 +56,10 @@ func GetResourceManagerCallbackPlugin() api.ResourceManagerCallback {
 	plugins.RLock()
 	defer plugins.RUnlock()
 	return plugins.ResourceManagerCallbackPlugin
+}
+
+func GetStateDumpPlugin() api.StateDumpPlugin {
+	plugins.RLock()
+	defer plugins.RUnlock()
+	return plugins.StateDumpPlugin
 }

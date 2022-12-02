@@ -19,6 +19,7 @@
 package ugm
 
 import (
+	"strconv"
 	"testing"
 
 	"gotest.tools/assert"
@@ -108,7 +109,6 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage3, err)
 	}
-
 	assert.Equal(t, 1, len(manager.GetUsersResources()), "userTrackers count should be 1")
 	assert.Equal(t, 1, len(manager.GetGroupsResources()), "groupTrackers count should be 1")
 
@@ -116,19 +116,16 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage2, err)
 	}
-
 	assert.Equal(t, 0, len(manager.GetUsersResources()), "userTrackers count should be 0")
 	assert.Equal(t, 0, len(manager.GetGroupsResources()), "groupTrackers count should be 0")
 }
 
 func assertUGM(t *testing.T, userGroup security.UserGroup, expected *resources.Resource, usersCount int) {
 	manager := GetUserManager()
-	assert.Equal(t, usersCount, len(manager.GetUsersResources()), "userTrackers count should be 2")
-	assert.Equal(t, usersCount, len(manager.GetGroupsResources()), "groupTrackers count should be 2")
+	assert.Equal(t, usersCount, len(manager.GetUsersResources()), "userTrackers count should be "+strconv.Itoa(usersCount))
+	assert.Equal(t, usersCount, len(manager.GetGroupsResources()), "groupTrackers count should be "+strconv.Itoa(usersCount))
 	userRes := manager.GetUserResources(userGroup)
-	assert.Equal(t, userRes.String(), expected.String())
+	assert.Equal(t, resources.Equals(userRes, expected), true)
 	groupRes := manager.GetGroupResources(userGroup.Groups[0])
-	assert.Equal(t, groupRes.String(), expected.String())
-	assert.Equal(t, usersCount, len(manager.GetUsersResources()))
-	assert.Equal(t, usersCount, len(manager.GetGroupsResources()))
+	assert.Equal(t, resources.Equals(groupRes, expected), true)
 }

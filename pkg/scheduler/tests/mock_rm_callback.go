@@ -45,5 +45,9 @@ func (f *MockResourceManagerCallback) SendEvent(events []*si.EventRecord) {
 	// do nothing
 }
 
+func (f *MockResourceManagerCallback) GetStateDump() (string, error) {
+	return "{}", nil
+}
+
 func (f *MockResourceManagerCallback) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
 }

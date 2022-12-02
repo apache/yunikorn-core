@@ -1241,6 +1241,54 @@ func TestPreemptionForRequiredNodeReservedAlloc(t *testing.T) {
 	assertUserGroupResource(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 8000}))
 }
 
+func TestMultiplePreemptionAttemptAvoided(t *testing.T) {
+	partition := createQueuesNodes(t)
+	if partition == nil {
+		t.Fatal("partition create failed")
+	}
+
+	app, testHandler := newApplicationWithHandler(appID1, "default", "root.parent.sub-leaf")
+	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "8"})
+	assert.NilError(t, err, "failed to create resource")
+
+	// add to the partition
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "failed to add app-1 to partition")
+
+	// normal ask
+	ask := newAllocationAsk(allocID, appID1, res)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "failed to add ask alloc-1 to app-1")
+
+	// first allocation should be app-1 and alloc-1
+	alloc := partition.tryAllocate()
+
+	// required node set on ask
+	ask2 := newAllocationAsk(allocID2, appID1, res)
+	ask2.SetRequiredNode(nodeID1)
+	err = app.AddAllocationAsk(ask2)
+	assert.NilError(t, err, "failed to add ask alloc-2 to app-1")
+	partition.tryAllocate()
+
+	// try multiple reserved allocation
+	partition.tryReservedAllocate()
+	partition.tryReservedAllocate()
+	partition.tryReservedAllocate()
+	partition.tryReservedAllocate()
+
+	var eventCount int
+	for _, event := range testHandler.GetEvents() {
+		if allocRelease, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {
+			if allocRelease.ReleasedAllocations[0].AllocationKey == allocID {
+				eventCount++
+			}
+		}
+	}
+	assert.Equal(t, 1, eventCount)
+	assert.Equal(t, true, ask2.HasTriggeredPreemption())
+	assert.Equal(t, true, alloc.IsPreempted())
+}
+
 // setup the partition in a state that we need for multiple tests
 func setupPreemptionForRequiredNode(t *testing.T) (*PartitionContext, *objects.Application) {
 	partition := createQueuesNodes(t)

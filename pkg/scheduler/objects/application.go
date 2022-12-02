@@ -1094,7 +1094,7 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 
 		// Do we need a specific node?
 		if ask.GetRequiredNode() != "" {
-			if !reserve.node.CanAllocate(ask.GetAllocatedResource()) {
+			if !reserve.node.CanAllocate(ask.GetAllocatedResource()) && !ask.HasTriggeredPreemption() {
 				sa.tryPreemption(reserve, ask)
 				continue
 			}
@@ -1139,9 +1139,13 @@ func (sa *Application) tryPreemption(reserve *reservation, ask *AllocationAsk) b
 	// Are there any victims/asks to preempt?
 	victims := preemptor.GetVictims()
 	if len(victims) > 0 {
-		log.Logger().Info("Found victims for daemon set ask preemption ",
-			zap.String("ds allocation key", ask.GetAllocationKey()))
-		zap.Int("no.of victims", len(victims))
+		log.Logger().Info("Found victims for required node preemption",
+			zap.String("ds allocation key", ask.GetAllocationKey()),
+			zap.Int("no.of victims", len(victims)))
+		for _, victim := range victims {
+			victim.MarkPreempted()
+		}
+		ask.MarkTriggeredPreemption()
 		sa.notifyRMAllocationReleased(sa.rmID, victims, si.TerminationType_PREEMPTED_BY_SCHEDULER,
 			"preempting allocations to free up resources to run daemon set ask: "+ask.GetAllocationKey())
 		return true

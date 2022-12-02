@@ -1680,9 +1680,8 @@ func completeApplicationAndWait(app *objects.Application, pc *PartitionContext) 
 	}
 
 	err = common.WaitFor(10*time.Millisecond, time.Duration(1000)*time.Millisecond, func() bool {
-		pc.RLock()
-		defer pc.RUnlock()
-		return pc.GetTotalCompletedApplicationCount() == currentCount+1
+		newCount := pc.GetTotalCompletedApplicationCount()
+		return newCount == currentCount+1
 	})
 
 	return err

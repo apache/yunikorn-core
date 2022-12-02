@@ -137,8 +137,20 @@ var webRoutes = routes{
 	route{
 		"Scheduler",
 		"GET",
+		"/ws/v1/partition/{partition}/usage/user/{user}",
+		getUserResourceUsage,
+	},
+	route{
+		"Scheduler",
+		"GET",
 		"/ws/v1/partition/{partition}/usage/groups",
 		getGroupsResourceUsage,
+	},
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/partition/{partition}/usage/group/{group}",
+		getGroupResourceUsage,
 	},
 	route{
 		"Scheduler",

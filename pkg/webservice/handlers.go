@@ -746,6 +746,17 @@ func getUsersResourceUsage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
+	userManager := ugm.GetUserManager()
+	vars := mux.Vars(r)
+	user := vars["user"]
+	userTracker := userManager.GetUserResourcesByUserName(user)
+	var result = userTracker.GetUserResourceUsageDAOInfo()
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func getGroupsResourceUsage(w http.ResponseWriter, r *http.Request) {
 	userManager := ugm.GetUserManager()
 	groupsResources := userManager.GetGroupsResources()
@@ -753,6 +764,17 @@ func getGroupsResourceUsage(w http.ResponseWriter, r *http.Request) {
 	for _, tracker := range groupsResources {
 		result = append(result, tracker.GetGroupResourceUsageDAOInfo())
 	}
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
+	userManager := ugm.GetUserManager()
+	vars := mux.Vars(r)
+	group := vars["group"]
+	groupTracker := userManager.GetGroupResourcesByGroupName(group)
+	var result = groupTracker.GetGroupResourceUsageDAOInfo()
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}

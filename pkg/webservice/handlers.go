@@ -48,6 +48,8 @@ import (
 
 const PartitionDoesNotExists = "Partition not found"
 const QueueDoesNotExists = "Queue not found"
+const UserDoesNotExists = "User not found"
+const GroupDoesNotExists = "Group not found"
 
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
@@ -751,6 +753,10 @@ func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	user := vars["user"]
 	userTracker := userManager.GetUserResourcesByUserName(user)
+	if userTracker == nil {
+		buildJSONErrorResponse(w, UserDoesNotExists, http.StatusBadRequest)
+		return
+	}
 	var result = userTracker.GetUserResourceUsageDAOInfo()
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
@@ -774,6 +780,10 @@ func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	group := vars["group"]
 	groupTracker := userManager.GetGroupResourcesByGroupName(group)
+	if groupTracker == nil {
+		buildJSONErrorResponse(w, GroupDoesNotExists, http.StatusBadRequest)
+		return
+	}
 	var result = groupTracker.GetGroupResourceUsageDAOInfo()
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)

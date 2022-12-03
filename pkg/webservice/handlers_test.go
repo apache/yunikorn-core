@@ -1438,7 +1438,6 @@ func TestUsersAndGroupsResourceUsage(t *testing.T) {
 	}
 	req = mux.SetURLVars(req, vars)
 	getGroupResourceUsage(resp, req)
-	err = json.Unmarshal(resp.outputBytes, &groupResourceUsageDao)
 	assertGroupExists(t, resp)
 }
 

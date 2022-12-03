@@ -125,8 +125,10 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 	assert.Equal(t, 0, len(manager.GetUsersResources()), "userTrackers count should be 0")
 	assert.Equal(t, 0, len(manager.GetGroupsResources()), "groupTrackers count should be 0")
 
-	assert.Equal(t, nil, manager.GetUserResourcesByUserName(user.User), "userTracker for user: "+user.User+" should be nil")
-	assert.Equal(t, nil, manager.GetGroupResourcesByGroupName(user.Groups[0]).groupName, "groupTracker for group: "+user.Groups[0]+" should be nil")
+	var nilUserTracker *UserTracker
+	var nilGroupTracker *GroupTracker
+	assert.Equal(t, nilUserTracker, manager.GetUserResourcesByUserName(user.User), "userTracker for user: "+user.User+" should be nil")
+	assert.Equal(t, nilGroupTracker, manager.GetGroupResourcesByGroupName(user.Groups[0]), "groupTracker for group: "+user.Groups[0]+" should be nil")
 }
 
 func assertUGM(t *testing.T, userGroup security.UserGroup, expected *resources.Resource, usersCount int) {

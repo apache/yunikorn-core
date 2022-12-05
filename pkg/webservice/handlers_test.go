@@ -1392,10 +1392,10 @@ func TestUsersAndGroupsResourceUsage(t *testing.T) {
 	assert.Equal(t, userResourceUsageDao.Queues.ResourceUsage.String(),
 		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).String())
 
-	// Test not existed user query
-	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/user/testNotExistUser", strings.NewReader(""))
+	// Test non-existing user query
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/user/testNonExistingUser", strings.NewReader(""))
 	vars = map[string]string{
-		"user":  "testNotExistUser",
+		"user":  "testNonExistingUser",
 		"group": "testgroup",
 	}
 	req = mux.SetURLVars(req, vars)
@@ -1429,12 +1429,12 @@ func TestUsersAndGroupsResourceUsage(t *testing.T) {
 	assert.Equal(t, groupResourceUsageDao.Queues.ResourceUsage.String(),
 		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).String())
 
-	// Test not existed group query
-	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/testNotExistedGroup", strings.NewReader(""))
+	// Test non-existing group query
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/testNonExistingGroup", strings.NewReader(""))
 	assert.NilError(t, err, "Get Group Resource Usage Handler request failed")
 	vars = map[string]string{
 		"user":  "testuser",
-		"group": "testNotExistedGroup",
+		"group": "testNonExistingGroup",
 	}
 	req = mux.SetURLVars(req, vars)
 	getGroupResourceUsage(resp, req)

@@ -1039,12 +1039,6 @@ func (pc *PartitionContext) GetTotalApplicationCount() int {
 	return len(pc.applications)
 }
 
-func (pc *PartitionContext) GetTotalCompletedApplicationCount() int {
-	pc.RLock()
-	defer pc.RUnlock()
-	return len(pc.completedApplications)
-}
-
 func (pc *PartitionContext) GetTotalAllocationCount() int {
 	pc.RLock()
 	defer pc.RUnlock()
@@ -1057,6 +1051,7 @@ func (pc *PartitionContext) GetTotalNodeCount() int {
 	return pc.nodes.GetNodeCount()
 }
 
+// GetApplications returns a slice of the current applications tracked by the partition.
 func (pc *PartitionContext) GetApplications() []*objects.Application {
 	pc.RLock()
 	defer pc.RUnlock()
@@ -1067,6 +1062,7 @@ func (pc *PartitionContext) GetApplications() []*objects.Application {
 	return appList
 }
 
+// GetCompletedApplications returns a slice of the completed applications tracked by the partition.
 func (pc *PartitionContext) GetCompletedApplications() []*objects.Application {
 	pc.RLock()
 	defer pc.RUnlock()
@@ -1077,18 +1073,7 @@ func (pc *PartitionContext) GetCompletedApplications() []*objects.Application {
 	return appList
 }
 
-func (pc *PartitionContext) GetCompletedAppsByState(state string) map[string]*objects.Application {
-	pc.RLock()
-	defer pc.RUnlock()
-	appMap := make(map[string]*objects.Application)
-	for k, app := range pc.completedApplications {
-		if app.CurrentState() == state {
-			appMap[k] = app
-		}
-	}
-	return appMap
-}
-
+// GetRejectedApplications returns a slice of the rejected applications tracked by the partition.
 func (pc *PartitionContext) GetRejectedApplications() []*objects.Application {
 	pc.RLock()
 	defer pc.RUnlock()
@@ -1099,57 +1084,66 @@ func (pc *PartitionContext) GetRejectedApplications() []*objects.Application {
 	return appList
 }
 
-func (pc *PartitionContext) GetAppsByState(state string) []*objects.Application {
+// getAppsByState returns a slice of applicationIDs for the current applications filtered by state
+// Completed and Rejected applications are tracked in a separate map and will never be included.
+func (pc *PartitionContext) getAppsByState(state string) []string {
 	pc.RLock()
 	defer pc.RUnlock()
-	var appList []*objects.Application
-	if state == objects.Completed.String() {
-		for _, app := range pc.completedApplications {
-			if app.CurrentState() == state {
-				appList = append(appList, app)
-			}
-		}
-		return appList
-	}
-
-	if state == objects.Rejected.String() {
-		for _, app := range pc.rejectedApplications {
-			if app.CurrentState() == state {
-				appList = append(appList, app)
-			}
-		}
-		return appList
-	}
-
-	for _, app := range pc.applications {
+	var apps []string
+	for appID, app := range pc.applications {
 		if app.CurrentState() == state {
-			appList = append(appList, app)
+			apps = append(apps, appID)
 		}
 	}
-	return appList
+	return apps
 }
 
-// used to find expired apps in rejected applications
-func (pc *PartitionContext) GetRejectedAppsByState(state string) []*objects.Application {
+// getRejectedAppsByState returns a slice of applicationIDs for the rejected applications filtered by state.
+func (pc *PartitionContext) getRejectedAppsByState(state string) []string {
 	pc.RLock()
 	defer pc.RUnlock()
-	var appList []*objects.Application
-	for _, app := range pc.rejectedApplications {
+	var apps []string
+	for appID, app := range pc.rejectedApplications {
 		if app.CurrentState() == state {
-			appList = append(appList, app)
+			apps = append(apps, appID)
 		}
 	}
-	return appList
+	return apps
 }
 
-func (pc *PartitionContext) GetAppsInTerminatedState() []*objects.Application {
+// getCompletedAppsByState returns a slice of applicationIDs for the completed applicationIDs filtered by state.
+func (pc *PartitionContext) getCompletedAppsByState(state string) []string {
 	pc.RLock()
 	defer pc.RUnlock()
-	appList := pc.GetAppsByState(objects.Completed.String())
-	appList = append(appList, pc.GetAppsByState(objects.Failed.String())...)
-	return appList
+	var apps []string
+	for appID, app := range pc.completedApplications {
+		if app.CurrentState() == state {
+			apps = append(apps, appID)
+		}
+	}
+	return apps
 }
 
+// cleanupExpiredApps cleans up applications in the Expired state from the three tracking maps
+func (pc *PartitionContext) cleanupExpiredApps() {
+	for _, appID := range pc.getAppsByState(objects.Expired.String()) {
+		pc.Lock()
+		delete(pc.applications, appID)
+		pc.Unlock()
+	}
+	for _, appID := range pc.getRejectedAppsByState(objects.Expired.String()) {
+		pc.Lock()
+		delete(pc.rejectedApplications, appID)
+		pc.Unlock()
+	}
+	for _, appID := range pc.getCompletedAppsByState(objects.Expired.String()) {
+		pc.Lock()
+		delete(pc.completedApplications, appID)
+		pc.Unlock()
+	}
+}
+
+// GetNodes returns a slice of all nodes unfiltered from the iterator
 func (pc *PartitionContext) GetNodes() []*objects.Node {
 	pc.RLock()
 	defer pc.RUnlock()
@@ -1432,24 +1426,6 @@ func (pc *PartitionContext) addAllocationAsk(siAsk *si.AllocationAsk) error {
 	}
 	// add the allocation asks to the app
 	return app.AddAllocationAsk(objects.NewAllocationAskFromSI(siAsk))
-}
-
-func (pc *PartitionContext) cleanupExpiredApps() {
-	for _, app := range pc.GetAppsByState(objects.Expired.String()) {
-		pc.Lock()
-		delete(pc.applications, app.ApplicationID)
-		pc.Unlock()
-	}
-	for _, app := range pc.GetRejectedAppsByState(objects.Expired.String()) {
-		pc.Lock()
-		delete(pc.rejectedApplications, app.ApplicationID)
-		pc.Unlock()
-	}
-	for k := range pc.GetCompletedAppsByState(objects.Expired.String()) {
-		pc.Lock()
-		delete(pc.completedApplications, k)
-		pc.Unlock()
-	}
 }
 
 func (pc *PartitionContext) GetCurrentState() string {

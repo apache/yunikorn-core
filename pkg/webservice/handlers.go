@@ -50,6 +50,8 @@ const PartitionDoesNotExists = "Partition not found"
 const QueueDoesNotExists = "Queue not found"
 const UserDoesNotExists = "User not found"
 const GroupDoesNotExists = "Group not found"
+const UserNameMissing = "User name is missing"
+const GroupNameMissing = "Group name is missing"
 
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
@@ -752,6 +754,10 @@ func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
 	userManager := ugm.GetUserManager()
 	vars := mux.Vars(r)
 	user := vars["user"]
+	if user == "" {
+		buildJSONErrorResponse(w, UserNameMissing, http.StatusBadRequest)
+		return
+	}
 	userTracker := userManager.GetUserTracker(user)
 	if userTracker == nil {
 		buildJSONErrorResponse(w, UserDoesNotExists, http.StatusBadRequest)
@@ -779,6 +785,10 @@ func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
 	userManager := ugm.GetUserManager()
 	vars := mux.Vars(r)
 	group := vars["group"]
+	if group == "" {
+		buildJSONErrorResponse(w, GroupNameMissing, http.StatusBadRequest)
+		return
+	}
 	groupTracker := userManager.GetGroupTracker(group)
 	if groupTracker == nil {
 		buildJSONErrorResponse(w, GroupDoesNotExists, http.StatusBadRequest)

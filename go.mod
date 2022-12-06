@@ -37,10 +37,18 @@ require (
 	go.uber.org/atomic v1.5.1 // indirect
 	go.uber.org/multierr v1.4.0 // indirect
 	go.uber.org/zap v1.13.0
-	golang.org/x/net v0.0.0-20220812174116-3211cb980234
-	golang.org/x/tools v0.1.12 // indirect
+	golang.org/x/net v0.2.0
 	google.golang.org/grpc v1.31.0
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	gopkg.in/yaml.v2 v2.4.0
 	gotest.tools v2.2.0+incompatible
+)
+
+replace (
+	golang.org/x/crypto => golang.org/x/crypto v0.3.0
+	golang.org/x/lint => golang.org/x/lint v0.0.0-20210508222113-6edffad5e616
+	golang.org/x/net => golang.org/x/net v0.2.0
+	golang.org/x/sys => golang.org/x/sys v0.2.0
+	golang.org/x/text => golang.org/x/text v0.4.0
+	golang.org/x/tools => golang.org/x/tools v0.3.0
 )

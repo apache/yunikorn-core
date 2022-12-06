@@ -193,8 +193,3 @@ func (m *mockScheduler) getPartitionQueue(queueName, partitionName string) *obje
 func (m *mockScheduler) getApplication(appID string) *objects.Application {
 	return m.scheduler.GetClusterContext().GetApplication(appID, m.partitionName)
 }
-
-// simple wrapper to limit the repeating code getting the app
-func (m *mockScheduler) getPartitionReservations() map[string]int {
-	return m.scheduler.GetClusterContext().GetReservations(m.partitionName)
-}

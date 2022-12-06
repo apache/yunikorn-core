@@ -51,7 +51,6 @@ type PartitionContext struct {
 	applications           map[string]*objects.Application // applications assigned to this partition
 	completedApplications  map[string]*objects.Application // completed applications from this partition
 	rejectedApplications   map[string]*objects.Application // rejected applications from this partition
-	reservedApps           map[string]int                  // applications reserved within this partition, with reservation count
 	nodes                  objects.NodeCollection          // nodes assigned to this partition
 	placementManager       *placement.AppPlacementManager  // placement manager for this partition
 	partitionManager       *partitionManager               // manager for this partition
@@ -91,7 +90,6 @@ func newPartitionContext(conf configs.PartitionConfig, rmID string, cc *ClusterC
 		stateTime:             time.Now(),
 		applications:          make(map[string]*objects.Application),
 		completedApplications: make(map[string]*objects.Application),
-		reservedApps:          make(map[string]int),
 		nodes:                 objects.NewNodeCollection(conf.Name),
 	}
 	pc.partitionManager = newPartitionManager(pc, cc)
@@ -432,7 +430,6 @@ func (pc *PartitionContext) removeAppInternal(appID string) *objects.Application
 	}
 	// remove from partition then cleanup underlying objects
 	delete(pc.applications, appID)
-	delete(pc.reservedApps, appID)
 	return app
 }
 
@@ -450,20 +447,7 @@ func (pc *PartitionContext) getRejectedApplication(appID string) *objects.Applic
 	return pc.rejectedApplications[appID]
 }
 
-// Return a copy of the map of all reservations for the partition.
-// This will return an empty map if there are no reservations.
-// Visible for tests
-func (pc *PartitionContext) getReservations() map[string]int {
-	pc.RLock()
-	defer pc.RUnlock()
-	reserve := make(map[string]int)
-	for key, num := range pc.reservedApps {
-		reserve[key] = num
-	}
-	return reserve
-}
-
-// Get the queue from the structure based on the fully qualified name.
+// GetQueue returns queue from the structure based on the fully qualified name.
 // Wrapper around the unlocked version getQueueInternal()
 // Visible by tests
 func (pc *PartitionContext) GetQueue(name string) *objects.Queue {
@@ -683,16 +667,15 @@ func (pc *PartitionContext) removeNode(nodeID string) ([]*objects.Allocation, []
 	if node == nil {
 		return nil, nil
 	}
-	// found the node cleanup the allocations linked to the node
-	released, confirmed := pc.removeNodeAllocations(node)
 
-	// unreserve all the apps that were reserved on the node
-	reservedKeys, releasedAsks := node.UnReserveApps()
-	// update the partition reservations based on the node clean up
-	for i, appID := range reservedKeys {
-		pc.unReserveCount(appID, releasedAsks[i])
+	// unreserve all the apps that were reserved on the node.
+	// The node is not reachable anymore unless you have the pointer.
+	for _, r := range node.GetReservations() {
+		_, app, ask := r.GetObjects()
+		pc.unReserve(app, node, ask)
 	}
-	return released, confirmed
+	// cleanup the allocations linked to the node
+	return pc.removeNodeAllocations(node)
 }
 
 // Remove all allocations that are assigned to a node as part of the node removal. This is not part of the node object
@@ -950,8 +933,6 @@ func (pc *PartitionContext) reserve(app *objects.Application, node *objects.Node
 
 	// add the reservation to the queue list
 	app.GetQueue().Reserve(appID)
-	// increase the number of reservations for this app
-	pc.reservedApps[appID]++
 
 	log.Logger().Info("allocation ask is reserved",
 		zap.String("appID", appID),
@@ -960,16 +941,10 @@ func (pc *PartitionContext) reserve(app *objects.Application, node *objects.Node
 		zap.String("node", node.NodeID))
 }
 
-// Process the unreservation in the scheduler
+// unReserve removes the reservation from the objects in the scheduler
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.Node, ask *objects.AllocationAsk) {
-	appID := app.ApplicationID
-	if pc.reservedApps[appID] == 0 {
-		log.Logger().Info("Application is not reserved in partition",
-			zap.String("appID", appID))
-		return
-	}
-	// all ok, remove the reservation of the app, this will also unReserve the node
+	// remove the reservation of the app, this will also unReserve the node
 	var err error
 	var num int
 	if num, err = app.UnReserve(node, ask); err != nil {
@@ -978,9 +953,8 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 		return
 	}
 	// remove the reservation of the queue
+	appID := app.ApplicationID
 	app.GetQueue().UnReserve(appID, num)
-	// make sure we cannot go below 0
-	pc.unReserveCount(appID, num)
 
 	log.Logger().Info("allocation ask is unreserved",
 		zap.String("appID", appID),
@@ -994,22 +968,6 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 // The iterator is nil if there are no unreserved nodes available.
 func (pc *PartitionContext) GetNodeIterator() objects.NodeIterator {
 	return pc.nodes.GetNodeIterator()
-}
-
-// Update the reservation counter for the app
-// Locked version of unReserveCountInternal
-func (pc *PartitionContext) unReserveCount(appID string, asks int) {
-	pc.Lock()
-	defer pc.Unlock()
-	if num, found := pc.reservedApps[appID]; found {
-		// decrease the number of reservations for this app and cleanup
-		// do not go negative, if it would happen cleanup
-		if asks >= num {
-			delete(pc.reservedApps, appID)
-		} else {
-			pc.reservedApps[appID] -= asks
-		}
-	}
 }
 
 // Updated the allocations counter for the partition
@@ -1407,11 +1365,7 @@ func (pc *PartitionContext) removeAllocationAsk(release *si.AllocationAskRelease
 		return
 	}
 	// remove the allocation asks from the app
-	reservedAsks := app.RemoveAllocationAsk(allocKey)
-	// update the partition if the asks were reserved (clean up)
-	if reservedAsks != 0 {
-		pc.unReserveCount(appID, reservedAsks)
-	}
+	_ = app.RemoveAllocationAsk(allocKey)
 }
 
 // Add the allocation ask to the specified application

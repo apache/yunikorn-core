@@ -88,3 +88,12 @@ func (r *reservation) String() string {
 	}
 	return r.app.ApplicationID + " -> " + r.nodeID + "|" + r.askKey
 }
+
+// GetObjects returns the objects that created the reservation.
+// None of the returned values will be nil unless the reservation itself is nil
+func (r *reservation) GetObjects() (*Node, *Application, *AllocationAsk) {
+	if r != nil {
+		return r.node, r.app, r.ask
+	}
+	return nil, nil, nil
+}

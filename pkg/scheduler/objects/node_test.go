@@ -254,50 +254,6 @@ func TestNodeReservation(t *testing.T) {
 	assert.Equal(t, num, 1, "un-reserve app should have released ")
 }
 
-func TestUnReserveApps(t *testing.T) {
-	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
-	if node == nil || node.NodeID != nodeID1 {
-		t.Fatalf("node create failed which should not have %v", node)
-	}
-	if node.IsReserved() {
-		t.Fatal("new node should not have reservations")
-	}
-	reservedKeys, releasedAsks := node.UnReserveApps()
-	if len(reservedKeys) != 0 || len(releasedAsks) != 0 {
-		t.Fatalf("new node should not fail remove all reservations: asks released = %v, reservation keys = %v", releasedAsks, reservedKeys)
-	}
-
-	// create some reservations and see it clean up via the app
-	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
-	appID := appID1
-	ask := newAllocationAsk(aKey, appID, res)
-	app := newApplication(appID, "default", "root.unknown")
-	queue, err := createRootQueue(nil)
-	assert.NilError(t, err, "queue create failed")
-	app.queue = queue
-	err = app.AddAllocationAsk(ask)
-	assert.NilError(t, err, "ask should have been added to the app")
-	if !resources.Equals(res, app.GetPendingResource()) {
-		t.Fatalf("expected resource delta  %v got %v", res, app.GetPendingResource())
-	}
-	err = app.Reserve(node, ask)
-	assert.NilError(t, err, "reservation should not have failed")
-	assert.Equal(t, 1, len(node.reservations), "node should have reservation")
-	reservedKeys, releasedAsks = node.UnReserveApps()
-	if len(reservedKeys) != 1 || len(releasedAsks) != 1 {
-		t.Fatal("node should have removed reservation")
-	}
-
-	// reserve just the node
-	err = node.Reserve(app, ask)
-	assert.NilError(t, err, "reservation should not have failed")
-	assert.Equal(t, 1, len(node.reservations), "node should have reservation")
-	reservedKeys, releasedAsks = node.UnReserveApps()
-	if len(reservedKeys) != 1 || len(releasedAsks) != 1 {
-		t.Fatalf("node should have removed reservation: asks released = %v, reservation keys = %v", releasedAsks, reservedKeys)
-	}
-}
-
 func TestIsReservedForApp(t *testing.T) {
 	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
 	if node == nil || node.NodeID != nodeID1 {
@@ -305,10 +261,6 @@ func TestIsReservedForApp(t *testing.T) {
 	}
 	if node.IsReserved() {
 		t.Fatal("new node should not have reservations")
-	}
-	reservedKeys, releasedAsks := node.UnReserveApps()
-	if len(reservedKeys) != 0 || len(releasedAsks) != 0 {
-		t.Fatalf("new node should not fail remove all reservations: asks released = %v, reservation keys = %v", releasedAsks, reservedKeys)
 	}
 
 	// check if we can allocate on a reserved node

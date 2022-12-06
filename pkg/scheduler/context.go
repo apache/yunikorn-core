@@ -491,20 +491,6 @@ func (cc *ClusterContext) GetQueue(queueName string, partitionName string) *obje
 	return nil
 }
 
-// Return the list of reservations for the partition.
-// Returns nil if the partition cannot be found or an empty map if there are no reservations
-// Visible for tests
-func (cc *ClusterContext) GetReservations(partitionName string) map[string]int {
-	cc.RLock()
-	defer cc.RUnlock()
-
-	if partition := cc.partitions[partitionName]; partition != nil {
-		return partition.getReservations()
-	}
-
-	return nil
-}
-
 // Process the application update. Add and remove applications from the partitions.
 // Lock free call, all updates occur on the underlying partition which is locked, or via events.
 func (cc *ClusterContext) handleRMUpdateApplicationEvent(event *rmevent.RMUpdateApplicationEvent) {

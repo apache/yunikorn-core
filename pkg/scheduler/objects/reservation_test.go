@@ -88,3 +88,31 @@ func TestReservationKey(t *testing.T) {
 	reserve = reservationKey(nil, app, ask)
 	assert.Equal(t, reserve, "app-1|alloc-1", "incorrect app reservation key")
 }
+
+func TestGetObjects(t *testing.T) {
+	// create the input objects
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	ask := newAllocationAsk("alloc-1", "app-1", res)
+	app := newApplication("app-1", "default", "root.unknown")
+	node := newNodeRes("node-1", res)
+	reserve := newReservation(node, app, ask, true)
+	if reserve == nil {
+		t.Errorf("reservation should have been created")
+	}
+
+	node2, app2, ask2 := reserve.GetObjects()
+	assert.Equal(t, node, node2, "node: expected same object back")
+	assert.Equal(t, app, app2, "app: expected same object back")
+	assert.Equal(t, ask, ask2, "ask: expected same object back")
+
+	var nilReserve *reservation
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("panic on nil reservation in object test")
+		}
+	}()
+	node2, app2, ask2 = nilReserve.GetObjects()
+	if node2 != nil || app2 != nil || ask2 != nil {
+		t.Fatalf("nil reservation should return nil objects")
+	}
+}

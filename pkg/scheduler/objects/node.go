@@ -117,10 +117,10 @@ func (sn *Node) GetAttribute(key string) string {
 	return sn.attributes[key]
 }
 
-// Return an array of all reservation keys for the node.
+// GetReservationKeys Return an array of all reservation keys for the node.
 // This will return an empty array if there are no reservations.
 // Visible for tests
-func (sn *Node) GetReservations() []string {
+func (sn *Node) GetReservationKeys() []string {
 	sn.RLock()
 	defer sn.RUnlock()
 	keys := make([]string, 0)
@@ -487,33 +487,20 @@ func (sn *Node) unReserve(app *Application, ask *AllocationAsk) (int, error) {
 	return 0, nil
 }
 
-// Remove all reservation made on this node from the app.
-// This is an unlocked function, it does not use a copy of the map when calling unReserve. That call will via the app call
-// unReserve on the node which is locked and modifies the original map. However deleting an entry from a map while iterating
-// over the map is perfectly safe based on the Go Specs.
-// It must only be called when removing the node under a partition lock.
-// It returns a list of all apps that have been checked on the node regardless of the result of the app unReserve call.
-// The corresponding integers show the number of reservations removed for each app entry
-func (sn *Node) UnReserveApps() ([]string, []int) {
-	var appReserve []string
-	var askRelease []int
-	for key, res := range sn.reservations {
-		appID := res.appID
-		num, err := res.app.unReserveInternal(res.node, res.ask)
-		if err != nil {
-			log.Logger().Warn("Removal of reservation failed while removing node",
-				zap.String("nodeID", sn.NodeID),
-				zap.String("reservationKey", key),
-				zap.Error(err))
+// GetReservations returns all reservation made on this node
+func (sn *Node) GetReservations() []*reservation {
+	sn.Lock()
+	defer sn.Unlock()
+	var res []*reservation
+	if len(sn.reservations) > 0 {
+		for _, r := range sn.reservations {
+			res = append(res, r)
 		}
-		// pass back the removed asks for each app
-		appReserve = append(appReserve, appID)
-		askRelease = append(askRelease, num)
 	}
-	return appReserve, askRelease
+	return res
 }
 
-// Gets map of name -> resource usages per type in shares (0 to 1). Can return NaN.
+// GetResourceUsageShares gets a map of name -> resource usages per type in shares (0 to 1). Can return NaN.
 func (sn *Node) GetResourceUsageShares() map[string]float64 {
 	sn.RLock()
 	defer sn.RUnlock()

@@ -43,7 +43,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
-	ugm "github.com/apache/yunikorn-core/pkg/scheduler/ugm"
+	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
@@ -331,7 +331,7 @@ func getNodeJSON(node *objects.Node) *dao.NodeDAOInfo {
 		Allocations:  allocations,
 		Schedulable:  node.IsSchedulable(),
 		IsReserved:   node.IsReserved(),
-		Reservations: node.GetReservations(),
+		Reservations: node.GetReservationKeys(),
 	}
 }
 

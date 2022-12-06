@@ -73,8 +73,8 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 	assert.Equal(t, false, manager.isUserRemovable(userTracker))
 	assert.Equal(t, false, manager.isGroupRemovable(groupTracker))
 	assertUGM(t, user, usage1, 1)
-	assert.Equal(t, user.User, manager.GetUserResourcesByUserName(user.User).userName)
-	assert.Equal(t, user.Groups[0], manager.GetGroupResourcesByGroupName(user.Groups[0]).groupName)
+	assert.Equal(t, user.User, manager.GetUserTracker(user.User).userName)
+	assert.Equal(t, user.Groups[0], manager.GetGroupTracker(user.Groups[0]).groupName)
 
 	err = manager.IncreaseTrackedResource(queuePath1, TestApp1, usage1, user)
 	if err != nil {
@@ -92,10 +92,10 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage2, err)
 	}
 	assertUGM(t, user1, usage2, 2)
-	assert.Equal(t, user.User, manager.GetUserResourcesByUserName(user.User).userName)
-	assert.Equal(t, user.Groups[0], manager.GetGroupResourcesByGroupName(user.Groups[0]).groupName)
-	assert.Equal(t, user1.User, manager.GetUserResourcesByUserName(user1.User).userName)
-	assert.Equal(t, user1.Groups[0], manager.GetGroupResourcesByGroupName(user1.Groups[0]).groupName)
+	assert.Equal(t, user.User, manager.GetUserTracker(user.User).userName)
+	assert.Equal(t, user.Groups[0], manager.GetGroupTracker(user.Groups[0]).groupName)
+	assert.Equal(t, user1.User, manager.GetUserTracker(user1.User).userName)
+	assert.Equal(t, user1.Groups[0], manager.GetGroupTracker(user1.Groups[0]).groupName)
 
 	usage3, err := resources.NewResourceFromConf(map[string]string{"mem": "5M", "vcore": "5"})
 	if err != nil {
@@ -125,8 +125,8 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 	assert.Equal(t, 0, len(manager.GetUsersResources()), "userTrackers count should be 0")
 	assert.Equal(t, 0, len(manager.GetGroupsResources()), "groupTrackers count should be 0")
 
-	assert.Assert(t, manager.GetUserResourcesByUserName(user.User) == nil)
-	assert.Assert(t, manager.GetGroupResourcesByGroupName(user.Groups[0]) == nil)
+	assert.Assert(t, manager.GetUserTracker(user.User) == nil)
+	assert.Assert(t, manager.GetGroupTracker(user.Groups[0]) == nil)
 }
 
 func assertUGM(t *testing.T, userGroup security.UserGroup, expected *resources.Resource, usersCount int) {

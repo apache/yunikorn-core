@@ -221,7 +221,7 @@ func (m *Manager) GetUsersResources() []*UserTracker {
 	return userTrackers
 }
 
-func (m *Manager) GetUserResourcesByUserName(user string) *UserTracker {
+func (m *Manager) GetUserTracker(user string) *UserTracker {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 	if m.userTrackers[user] != nil {
@@ -240,7 +240,7 @@ func (m *Manager) GetGroupsResources() []*GroupTracker {
 	return groupTrackers
 }
 
-func (m *Manager) GetGroupResourcesByGroupName(group string) *GroupTracker {
+func (m *Manager) GetGroupTracker(group string) *GroupTracker {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 	if m.groupTrackers[group] != nil {

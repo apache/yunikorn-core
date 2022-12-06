@@ -1335,6 +1335,91 @@ func TestSetLoggerLevel(t *testing.T) {
 	assert.Equal(t, rr.Code, http.StatusOK)
 }
 
+func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
+	part := setup(t, configDefault, 1)
+	userManager := ugm.GetUserManager()
+	userManager.ClearUserTrackers()
+	userManager.ClearGroupTrackers()
+
+	// add 1 application
+	app := addAppWithUserGroup(t, "app-1", part, "root.default", false, security.UserGroup{
+		User:   "testuser",
+		Groups: []string{"testgroup"},
+	})
+	res := &si.Resource{
+		Resources: map[string]*si.Quantity{"vcore": {Value: 1}},
+	}
+	ask := objects.NewAllocationAskFromSI(&si.AllocationAsk{
+		ApplicationID:  "app-1",
+		PartitionName:  part.Name,
+		ResourceAsk:    res,
+		MaxAllocations: 1})
+	err := app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+
+	// add an alloc
+	uuid := "uuid-1"
+	allocInfo := objects.NewAllocation(uuid, "node-1", ask)
+	app.AddAllocation(allocInfo)
+	assert.Assert(t, app.IsStarting(), "Application did not return starting state after alloc: %s", app.CurrentState())
+
+	NewWebApp(schedulerContext, nil)
+
+	// Test existed user query
+	req, err := http.NewRequest("GET", "/ws/v1/partition/default/usage/user/", strings.NewReader(""))
+	vars := map[string]string{
+		"user":  "testuser",
+		"group": "testgroup",
+	}
+	req = mux.SetURLVars(req, vars)
+	assert.NilError(t, err, "Get User Resource Usage Handler request failed")
+	resp := &MockResponseWriter{}
+	var userResourceUsageDao *dao.UserResourceUsageDAOInfo
+	getUserResourceUsage(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &userResourceUsageDao)
+	assert.NilError(t, err, "failed to unmarshal user resource usage dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, userResourceUsageDao.Queues.ResourceUsage.String(),
+		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).String())
+
+	// Test non-existing user query
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/user/", strings.NewReader(""))
+	vars = map[string]string{
+		"user":  "testNonExistingUser",
+		"group": "testgroup",
+	}
+	req = mux.SetURLVars(req, vars)
+	assert.NilError(t, err, "Get User Resource Usage Handler request failed")
+	resp = &MockResponseWriter{}
+	getUserResourceUsage(resp, req)
+	assertUserExists(t, resp)
+
+	// Test existed group query
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/", strings.NewReader(""))
+	assert.NilError(t, err, "Get Group Resource Usage Handler request failed")
+	vars = map[string]string{
+		"user":  "testuser",
+		"group": "testgroup",
+	}
+	req = mux.SetURLVars(req, vars)
+	var groupResourceUsageDao *dao.GroupResourceUsageDAOInfo
+	getGroupResourceUsage(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &groupResourceUsageDao)
+	assert.NilError(t, err, "failed to unmarshal group resource usage dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, groupResourceUsageDao.Queues.ResourceUsage.String(),
+		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).String())
+
+	// Test non-existing group query
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/", strings.NewReader(""))
+	assert.NilError(t, err, "Get Group Resource Usage Handler request failed")
+	vars = map[string]string{
+		"user":  "testuser",
+		"group": "testNonExistingGroup",
+	}
+	req = mux.SetURLVars(req, vars)
+	getGroupResourceUsage(resp, req)
+	assertGroupExists(t, resp)
+}
+
 func TestUsersAndGroupsResourceUsage(t *testing.T) {
 	part := setup(t, configDefault, 1)
 	userManager := ugm.GetUserManager()
@@ -1376,34 +1461,6 @@ func TestUsersAndGroupsResourceUsage(t *testing.T) {
 	assert.Equal(t, usersResourceUsageDao[0].Queues.ResourceUsage.String(),
 		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).String())
 
-	// Test existed user query
-	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/user/testuser", strings.NewReader(""))
-	vars := map[string]string{
-		"user":  "testuser",
-		"group": "testgroup",
-	}
-	req = mux.SetURLVars(req, vars)
-	assert.NilError(t, err, "Get User Resource Usage Handler request failed")
-	resp = &MockResponseWriter{}
-	var userResourceUsageDao *dao.UserResourceUsageDAOInfo
-	getUserResourceUsage(resp, req)
-	err = json.Unmarshal(resp.outputBytes, &userResourceUsageDao)
-	assert.NilError(t, err, "failed to unmarshal user resource usage dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, userResourceUsageDao.Queues.ResourceUsage.String(),
-		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).String())
-
-	// Test non-existing user query
-	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/user/testNonExistingUser", strings.NewReader(""))
-	vars = map[string]string{
-		"user":  "testNonExistingUser",
-		"group": "testgroup",
-	}
-	req = mux.SetURLVars(req, vars)
-	assert.NilError(t, err, "Get User Resource Usage Handler request failed")
-	resp = &MockResponseWriter{}
-	getUserResourceUsage(resp, req)
-	assertUserExists(t, resp)
-
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/groups", strings.NewReader(""))
 	assert.NilError(t, err, "Get Groups Resource Usage Handler request failed")
 
@@ -1413,32 +1470,6 @@ func TestUsersAndGroupsResourceUsage(t *testing.T) {
 	assert.NilError(t, err, "failed to unmarshal groups resource usage dao response from response body: %s", string(resp.outputBytes))
 	assert.Equal(t, groupsResourceUsageDao[0].Queues.ResourceUsage.String(),
 		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).String())
-
-	// Test existed group query
-	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/testgroup", strings.NewReader(""))
-	assert.NilError(t, err, "Get Group Resource Usage Handler request failed")
-	vars = map[string]string{
-		"user":  "testuser",
-		"group": "testgroup",
-	}
-	req = mux.SetURLVars(req, vars)
-	var groupResourceUsageDao *dao.GroupResourceUsageDAOInfo
-	getGroupResourceUsage(resp, req)
-	err = json.Unmarshal(resp.outputBytes, &groupResourceUsageDao)
-	assert.NilError(t, err, "failed to unmarshal group resource usage dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, groupResourceUsageDao.Queues.ResourceUsage.String(),
-		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).String())
-
-	// Test non-existing group query
-	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/testNonExistingGroup", strings.NewReader(""))
-	assert.NilError(t, err, "Get Group Resource Usage Handler request failed")
-	vars = map[string]string{
-		"user":  "testuser",
-		"group": "testNonExistingGroup",
-	}
-	req = mux.SetURLVars(req, vars)
-	getGroupResourceUsage(resp, req)
-	assertGroupExists(t, resp)
 }
 
 func prepareSchedulerContext(t *testing.T, stateDumpConf bool) *scheduler.ClusterContext {

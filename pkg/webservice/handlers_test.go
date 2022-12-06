@@ -1389,10 +1389,9 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 		"user":  "",
 		"group": "testgroup",
 	}
-	resp := &MockResponseWriter{}
 	req = mux.SetURLVars(req, vars)
 	assert.NilError(t, err, "Get User Resource Usage Handler request failed")
-	resp = &MockResponseWriter{}
+	resp := &MockResponseWriter{}
 	getUserResourceUsage(resp, req)
 	assertUserNameExists(t, resp)
 
@@ -1402,7 +1401,6 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 		"user":  "testuser",
 		"group": "",
 	}
-	resp = &MockResponseWriter{}
 	req = mux.SetURLVars(req, vars)
 	assert.NilError(t, err, "Get Group Resource Usage Handler request failed")
 	resp = &MockResponseWriter{}

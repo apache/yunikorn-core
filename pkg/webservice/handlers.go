@@ -751,14 +751,13 @@ func getUsersResourceUsage(w http.ResponseWriter, r *http.Request) {
 }
 
 func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
-	userManager := ugm.GetUserManager()
 	vars := mux.Vars(r)
 	user := vars["user"]
 	if user == "" {
 		buildJSONErrorResponse(w, UserNameMissing, http.StatusBadRequest)
 		return
 	}
-	userTracker := userManager.GetUserTracker(user)
+	userTracker := ugm.GetUserManager().GetUserTracker(user)
 	if userTracker == nil {
 		buildJSONErrorResponse(w, UserDoesNotExists, http.StatusBadRequest)
 		return
@@ -782,14 +781,13 @@ func getGroupsResourceUsage(w http.ResponseWriter, r *http.Request) {
 }
 
 func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
-	userManager := ugm.GetUserManager()
 	vars := mux.Vars(r)
 	group := vars["group"]
 	if group == "" {
 		buildJSONErrorResponse(w, GroupNameMissing, http.StatusBadRequest)
 		return
 	}
-	groupTracker := userManager.GetGroupTracker(group)
+	groupTracker := ugm.GetUserManager().GetGroupTracker(group)
 	if groupTracker == nil {
 		buildJSONErrorResponse(w, GroupDoesNotExists, http.StatusBadRequest)
 		return

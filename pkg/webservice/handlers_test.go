@@ -1354,42 +1354,9 @@ func TestSetLoggerLevel(t *testing.T) {
 }
 
 func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
-	part := setup(t, configDefault, 1)
-	userManager := ugm.GetUserManager()
-	userManager.ClearUserTrackers()
-	userManager.ClearGroupTrackers()
-
-	// add 1 application
-	app := addAppWithUserGroup(t, "app-1", part, "root.default", false, security.UserGroup{
-		User:   "testuser",
-		Groups: []string{"testgroup"},
-	})
-	res := &si.Resource{
-		Resources: map[string]*si.Quantity{"vcore": {Value: 1}},
-	}
-	ask := objects.NewAllocationAskFromSI(&si.AllocationAsk{
-		ApplicationID:  "app-1",
-		PartitionName:  part.Name,
-		ResourceAsk:    res,
-		MaxAllocations: 1})
-	err := app.AddAllocationAsk(ask)
-	assert.NilError(t, err, "ask should have been added to app")
-
-	// add an alloc
-	uuid := "uuid-1"
-	allocInfo := objects.NewAllocation(uuid, "node-1", ask)
-	app.AddAllocation(allocInfo)
-	assert.Assert(t, app.IsStarting(), "Application did not return starting state after alloc: %s", app.CurrentState())
-
-	NewWebApp(schedulerContext, nil)
-
+	prepareUserAndGroupContext(t)
 	// Test user name is missing
 	req, err := http.NewRequest("GET", "/ws/v1/partition/default/usage/user/", strings.NewReader(""))
-	vars := map[string]string{
-		"user":  "",
-		"group": "testgroup",
-	}
-	req = mux.SetURLVars(req, vars)
 	assert.NilError(t, err, "Get User Resource Usage Handler request failed")
 	resp := &MockResponseWriter{}
 	getUserResourceUsage(resp, req)
@@ -1397,7 +1364,7 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 
 	// Test group name is missing
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/", strings.NewReader(""))
-	vars = map[string]string{
+	vars := map[string]string{
 		"user":  "testuser",
 		"group": "",
 	}
@@ -1458,6 +1425,53 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 }
 
 func TestUsersAndGroupsResourceUsage(t *testing.T) {
+	prepareUserAndGroupContext(t)
+	var req *http.Request
+	req, err := http.NewRequest("GET", "/ws/v1/partition/default/usage/users", strings.NewReader(""))
+	assert.NilError(t, err, "Get Users Resource Usage Handler request failed")
+	resp := &MockResponseWriter{}
+	var usersResourceUsageDao []*dao.UserResourceUsageDAOInfo
+	getUsersResourceUsage(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &usersResourceUsageDao)
+	assert.NilError(t, err, "failed to unmarshal users resource usage dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, usersResourceUsageDao[0].Queues.ResourceUsage.String(),
+		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).String())
+
+	// Assert existing users
+	assert.Equal(t, len(usersResourceUsageDao), 1)
+	assert.Equal(t, usersResourceUsageDao[0].UserName, "testuser")
+
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/groups", strings.NewReader(""))
+	assert.NilError(t, err, "Get Groups Resource Usage Handler request failed")
+
+	var groupsResourceUsageDao []*dao.GroupResourceUsageDAOInfo
+	getGroupsResourceUsage(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &groupsResourceUsageDao)
+	assert.NilError(t, err, "failed to unmarshal groups resource usage dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, groupsResourceUsageDao[0].Queues.ResourceUsage.String(),
+		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).String())
+
+	// Assert existing groups
+	assert.Equal(t, len(groupsResourceUsageDao), 1)
+	assert.Equal(t, groupsResourceUsageDao[0].GroupName, "testgroup")
+}
+
+func prepareSchedulerContext(t *testing.T, stateDumpConf bool) *scheduler.ClusterContext {
+	var config []byte
+	if !stateDumpConf {
+		config = []byte(configDefault)
+	} else {
+		config = []byte(configStateDumpFilePath)
+	}
+	var err error
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup, config)
+	assert.NilError(t, err, "Error when load clusterInfo from config")
+	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
+
+	return schedulerContext
+}
+
+func prepareUserAndGroupContext(t *testing.T) {
 	part := setup(t, configDefault, 1)
 	userManager := ugm.GetUserManager()
 	userManager.ClearUserTrackers()
@@ -1465,8 +1479,8 @@ func TestUsersAndGroupsResourceUsage(t *testing.T) {
 
 	// add 1 application
 	app := addAppWithUserGroup(t, "app-1", part, "root.default", false, security.UserGroup{
-		User:   "testuser",
-		Groups: []string{"testgroup"},
+		User:   "",
+		Groups: []string{""},
 	})
 	res := &si.Resource{
 		Resources: map[string]*si.Quantity{"vcore": {Value: 1}},
@@ -1486,42 +1500,6 @@ func TestUsersAndGroupsResourceUsage(t *testing.T) {
 	assert.Assert(t, app.IsStarting(), "Application did not return starting state after alloc: %s", app.CurrentState())
 
 	NewWebApp(schedulerContext, nil)
-
-	var req *http.Request
-	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/users", strings.NewReader(""))
-	assert.NilError(t, err, "Get Users Resource Usage Handler request failed")
-	resp := &MockResponseWriter{}
-	var usersResourceUsageDao []*dao.UserResourceUsageDAOInfo
-	getUsersResourceUsage(resp, req)
-	err = json.Unmarshal(resp.outputBytes, &usersResourceUsageDao)
-	assert.NilError(t, err, "failed to unmarshal users resource usage dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, usersResourceUsageDao[0].Queues.ResourceUsage.String(),
-		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).String())
-
-	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/groups", strings.NewReader(""))
-	assert.NilError(t, err, "Get Groups Resource Usage Handler request failed")
-
-	var groupsResourceUsageDao []*dao.GroupResourceUsageDAOInfo
-	getGroupsResourceUsage(resp, req)
-	err = json.Unmarshal(resp.outputBytes, &groupsResourceUsageDao)
-	assert.NilError(t, err, "failed to unmarshal groups resource usage dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, groupsResourceUsageDao[0].Queues.ResourceUsage.String(),
-		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).String())
-}
-
-func prepareSchedulerContext(t *testing.T, stateDumpConf bool) *scheduler.ClusterContext {
-	var config []byte
-	if !stateDumpConf {
-		config = []byte(configDefault)
-	} else {
-		config = []byte(configStateDumpFilePath)
-	}
-	var err error
-	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup, config)
-	assert.NilError(t, err, "Error when load clusterInfo from config")
-	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
-
-	return schedulerContext
 }
 
 func waitForStateDumpFile(t *testing.T) {

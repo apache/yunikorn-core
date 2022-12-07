@@ -47,7 +47,7 @@ require (
 replace (
 	golang.org/x/crypto => golang.org/x/crypto v0.3.0
 	golang.org/x/lint => golang.org/x/lint v0.0.0-20210508222113-6edffad5e616
-	golang.org/x/net => golang.org/x/net v0.2.0
+	golang.org/x/net => golang.org/x/net v0.3.0
 	golang.org/x/sys => golang.org/x/sys v0.2.0
 	golang.org/x/text => golang.org/x/text v0.4.0
 	golang.org/x/tools => golang.org/x/tools v0.3.0

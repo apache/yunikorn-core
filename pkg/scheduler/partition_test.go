@@ -1116,6 +1116,155 @@ func TestRequiredNodeReservation(t *testing.T) {
 	assertUserGroupResource(t, getTestUserGroup(), res)
 }
 
+// allocate ask request with required node having non daemon set reservations
+func TestRequiredNodeCancelNonDSReservations(t *testing.T) {
+	partition := createQueuesNodes(t)
+	if partition == nil {
+		t.Fatal("partition create failed")
+	}
+	if alloc := partition.tryAllocate(); alloc != nil {
+		t.Fatalf("empty cluster allocate returned allocation: %s", alloc)
+	}
+
+	// override the reservation delay, and cleanup when done
+	objects.SetReservationDelay(10 * time.Nanosecond)
+	defer objects.SetReservationDelay(2 * time.Second)
+
+	// turn off the second node
+	node2 := partition.GetNode(nodeID2)
+	node2.SetSchedulable(false)
+
+	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "7"})
+	assert.NilError(t, err, "failed to create resource")
+
+	// only one resource for alloc fits on a node
+	app := newApplication(appID1, "default", "root.parent.sub-leaf")
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "failed to add app-1 to partition")
+
+	ask := newAllocationAskRepeat("alloc-1", appID1, res, 2)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "failed to add ask to app")
+	// calculate the resource size using the repeat request (reuse is possible using proto conversions in ask)
+	res.MultiplyTo(2)
+	assert.Assert(t, resources.Equals(res, app.GetPendingResource()), "pending resource not set as expected")
+	assert.Assert(t, resources.Equals(res, partition.root.GetPendingResource()), "pending resource not set as expected on root queue")
+
+	// the first one should be allocated
+	alloc := partition.tryAllocate()
+	if alloc == nil {
+		t.Fatal("1st allocation did not return the correct allocation")
+	}
+	assert.Equal(t, objects.Allocated, alloc.GetResult(), "allocation result should have been allocated")
+
+	// the second one should be reserved as the 2nd node is not scheduling
+	alloc = partition.tryAllocate()
+	if alloc != nil {
+		t.Fatal("2nd allocation did not return the correct allocation")
+	}
+	// check if updated (must be after allocate call)
+	assert.Equal(t, 1, len(app.GetReservations()), "ask should have been reserved")
+	assert.Equal(t, 1, len(app.GetQueue().GetReservedApps()), "queue reserved apps should be 1")
+
+	res1, err := resources.NewResourceFromConf(map[string]string{"vcore": "1"})
+	assert.NilError(t, err, "failed to create resource")
+
+	// only one resource for alloc fits on a node
+	app1 := newApplication(appID2, "default", "root.parent.sub-leaf")
+	err = partition.AddApplication(app1)
+	assert.NilError(t, err, "failed to add app-2 to partition")
+
+	// required node set on ask
+	ask2 := newAllocationAsk("alloc-2", appID2, res1)
+	ask2.SetRequiredNode(nodeID1)
+	err = app1.AddAllocationAsk(ask2)
+	assert.NilError(t, err, "failed to add ask alloc-2 to app-1")
+
+	alloc = partition.tryAllocate()
+	if alloc == nil {
+		t.Fatal("1st allocation did not return the correct allocation")
+	}
+	assert.Equal(t, objects.Allocated, alloc.GetResult(), "allocation result should have been allocated")
+
+	// earlier app (app1) reservation count should be zero
+	assert.Equal(t, 0, len(app.GetReservations()), "ask should have been reserved")
+	assert.Equal(t, 0, len(app.GetQueue().GetReservedApps()), "queue reserved apps should be 0")
+}
+
+// allocate ask request with required node having daemon set reservations
+func TestRequiredNodeCancelDSReservations(t *testing.T) {
+	partition := createQueuesNodes(t)
+	if partition == nil {
+		t.Fatal("partition create failed")
+	}
+	if alloc := partition.tryAllocate(); alloc != nil {
+		t.Fatalf("empty cluster allocate returned allocation: %s", alloc)
+	}
+
+	// override the reservation delay, and cleanup when done
+	objects.SetReservationDelay(10 * time.Nanosecond)
+	defer objects.SetReservationDelay(2 * time.Second)
+
+	// turn off the second node
+	node2 := partition.GetNode(nodeID2)
+	node2.SetSchedulable(false)
+
+	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "7"})
+	assert.NilError(t, err, "failed to create resource")
+
+	// only one resource for alloc fits on a node
+	app := newApplication(appID1, "default", "root.parent.sub-leaf")
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "failed to add app-1 to partition")
+
+	ask := newAllocationAskRepeat("alloc-1", appID1, res, 2)
+	ask.SetRequiredNode(nodeID1)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "failed to add ask to app")
+	// calculate the resource size using the repeat request (reuse is possible using proto conversions in ask)
+	res.MultiplyTo(2)
+	assert.Assert(t, resources.Equals(res, app.GetPendingResource()), "pending resource not set as expected")
+	assert.Assert(t, resources.Equals(res, partition.root.GetPendingResource()), "pending resource not set as expected on root queue")
+
+	// the first one should be allocated
+	alloc := partition.tryAllocate()
+	if alloc == nil {
+		t.Fatal("1st allocation did not return the correct allocation")
+	}
+	assert.Equal(t, objects.Allocated, alloc.GetResult(), "allocation result should have been allocated")
+
+	// the second one should be reserved as the 2nd node is not scheduling
+	alloc = partition.tryAllocate()
+	if alloc != nil {
+		t.Fatal("2nd allocation did not return the correct allocation")
+	}
+	// check if updated (must be after allocate call)
+	assert.Equal(t, 1, len(app.GetReservations()), "ask should have been reserved")
+	assert.Equal(t, 1, len(app.GetQueue().GetReservedApps()), "queue reserved apps should be 1")
+
+	res1, err := resources.NewResourceFromConf(map[string]string{"vcore": "1"})
+	assert.NilError(t, err, "failed to create resource")
+
+	// only one resource for alloc fits on a node
+	app1 := newApplication(appID2, "default", "root.parent.sub-leaf")
+	err = partition.AddApplication(app1)
+	assert.NilError(t, err, "failed to add app-2 to partition")
+
+	// required node set on ask
+	ask2 := newAllocationAsk("alloc-2", appID2, res1)
+	ask2.SetRequiredNode(nodeID1)
+	err = app1.AddAllocationAsk(ask2)
+	assert.NilError(t, err, "failed to add ask alloc-2 to app-1")
+
+	alloc = partition.tryAllocate()
+	if alloc != nil {
+		t.Fatal("3rd allocation did not return the correct allocation")
+	}
+	// still reservation count is 1
+	assert.Equal(t, 1, len(app.GetReservations()), "ask should have been reserved")
+	assert.Equal(t, 1, len(app.GetQueue().GetReservedApps()), "queue reserved apps should be 1")
+}
+
 func TestRequiredNodeNotExist(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)

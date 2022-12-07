@@ -117,6 +117,16 @@ func (sn *Node) GetAttribute(key string) string {
 	return sn.attributes[key]
 }
 
+func (sn *Node) getReservations() map[string]*reservation {
+	sn.RLock()
+	defer sn.RUnlock()
+	reservations := make(map[string]*reservation)
+	for key, res := range sn.reservations {
+		reservations[key] = res
+	}
+	return reservations
+}
+
 // GetReservationKeys Return an array of all reservation keys for the node.
 // This will return an empty array if there are no reservations.
 // Visible for tests

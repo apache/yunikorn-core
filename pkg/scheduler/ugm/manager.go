@@ -221,6 +221,15 @@ func (m *Manager) GetUsersResources() []*UserTracker {
 	return userTrackers
 }
 
+func (m *Manager) GetUserTracker(user string) *UserTracker {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+	if m.userTrackers[user] != nil {
+		return m.userTrackers[user]
+	}
+	return nil
+}
+
 func (m *Manager) GetGroupsResources() []*GroupTracker {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
@@ -229,6 +238,15 @@ func (m *Manager) GetGroupsResources() []*GroupTracker {
 		groupTrackers = append(groupTrackers, tracker)
 	}
 	return groupTrackers
+}
+
+func (m *Manager) GetGroupTracker(group string) *GroupTracker {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+	if m.groupTrackers[group] != nil {
+		return m.groupTrackers[group]
+	}
+	return nil
 }
 
 func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID string, user security.UserGroup) error {

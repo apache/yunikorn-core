@@ -49,6 +49,10 @@ import (
 
 const PartitionDoesNotExists = "Partition not found"
 const QueueDoesNotExists = "Queue not found"
+const UserDoesNotExists = "User not found"
+const GroupDoesNotExists = "Group not found"
+const UserNameMissing = "User name is missing"
+const GroupNameMissing = "Group name is missing"
 
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
@@ -772,6 +776,24 @@ func getUsersResourceUsage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	user := vars["user"]
+	if user == "" {
+		buildJSONErrorResponse(w, UserNameMissing, http.StatusBadRequest)
+		return
+	}
+	userTracker := ugm.GetUserManager().GetUserTracker(user)
+	if userTracker == nil {
+		buildJSONErrorResponse(w, UserDoesNotExists, http.StatusBadRequest)
+		return
+	}
+	var result = userTracker.GetUserResourceUsageDAOInfo()
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func getGroupsResourceUsage(w http.ResponseWriter, r *http.Request) {
 	userManager := ugm.GetUserManager()
 	groupsResources := userManager.GetGroupsResources()
@@ -779,6 +801,24 @@ func getGroupsResourceUsage(w http.ResponseWriter, r *http.Request) {
 	for _, tracker := range groupsResources {
 		result = append(result, tracker.GetGroupResourceUsageDAOInfo())
 	}
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	group := vars["group"]
+	if group == "" {
+		buildJSONErrorResponse(w, GroupNameMissing, http.StatusBadRequest)
+		return
+	}
+	groupTracker := ugm.GetUserManager().GetGroupTracker(group)
+	if groupTracker == nil {
+		buildJSONErrorResponse(w, GroupDoesNotExists, http.StatusBadRequest)
+		return
+	}
+	var result = groupTracker.GetGroupResourceUsageDAOInfo()
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}

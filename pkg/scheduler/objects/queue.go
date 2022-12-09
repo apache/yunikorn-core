@@ -594,6 +594,12 @@ func (sq *Queue) RemoveApplication(app *Application) {
 		zap.String("applicationID", appID))
 }
 
+func (sq *Queue) RemoveCompletedApplication(app *Application) {
+	sq.Lock()
+	defer sq.Unlock()
+	delete(sq.completedApplications, app.ApplicationID)
+}
+
 // GetCopyOfApps gets a shallow copy of all non-completed apps holding the lock
 func (sq *Queue) GetCopyOfApps() map[string]*Application {
 	sq.RLock()

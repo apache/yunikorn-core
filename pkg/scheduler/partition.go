@@ -447,6 +447,13 @@ func (pc *PartitionContext) getRejectedApplication(appID string) *objects.Applic
 	return pc.rejectedApplications[appID]
 }
 
+func (pc *PartitionContext) getCompletedApplication(appID string) *objects.Application {
+	pc.RLock()
+	defer pc.RUnlock()
+
+	return pc.completedApplications[appID]
+}
+
 // GetQueue returns queue from the structure based on the fully qualified name.
 // Wrapper around the unlocked version getQueueInternal()
 // Visible by tests
@@ -1083,18 +1090,34 @@ func (pc *PartitionContext) getCompletedAppsByState(state string) []string {
 }
 
 // cleanupExpiredApps cleans up applications in the Expired state from the three tracking maps
+// as well as their respective queues
 func (pc *PartitionContext) cleanupExpiredApps() {
 	for _, appID := range pc.getAppsByState(objects.Expired.String()) {
+
+		app := pc.getApplication(appID)
+		if queue := app.GetQueue(); queue != nil {
+			queue.RemoveApplication(app)
+		}
+
 		pc.Lock()
 		delete(pc.applications, appID)
 		pc.Unlock()
 	}
+
+	// Rejected apps should never be placed in a queue, so we don't have to
+	// check that here
 	for _, appID := range pc.getRejectedAppsByState(objects.Expired.String()) {
 		pc.Lock()
 		delete(pc.rejectedApplications, appID)
 		pc.Unlock()
 	}
 	for _, appID := range pc.getCompletedAppsByState(objects.Expired.String()) {
+
+		app := pc.getCompletedApplication(appID)
+		if queue := pc.GetQueue(app.GetQueuePath()); queue != nil {
+			queue.RemoveCompletedApplication(app)
+		}
+
 		pc.Lock()
 		delete(pc.completedApplications, appID)
 		pc.Unlock()

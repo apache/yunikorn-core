@@ -943,7 +943,7 @@ func (sa *Application) cancelReservations(reservations []*reservation) bool {
 	// un reserve all the apps that were reserved on the node
 	for _, res := range reservations {
 		if res.app.ApplicationID == sa.ApplicationID {
-			num, err = res.app.unReserveInternal(res.node, res.ask)
+			num, err = sa.unReserveInternal(res.node, res.ask)
 		} else {
 			num, err = res.app.UnReserve(res.node, res.ask)
 		}

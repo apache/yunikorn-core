@@ -1236,7 +1236,7 @@ func TestRequiredNodeCancelDSReservations(t *testing.T) {
 	// the second one should be reserved as the 2nd node is not scheduling
 	alloc = partition.tryAllocate()
 	if alloc != nil {
-		t.Fatal("2nd allocation did not return the correct allocation")
+		t.Fatal("2nd allocation should not return allocation")
 	}
 	// check if updated (must be after allocate call)
 	assert.Equal(t, 1, len(app.GetReservations()), "ask should have been reserved")
@@ -1258,7 +1258,7 @@ func TestRequiredNodeCancelDSReservations(t *testing.T) {
 
 	alloc = partition.tryAllocate()
 	if alloc != nil {
-		t.Fatal("3rd allocation did not return the correct allocation")
+		t.Fatal("3rd allocation should not return allocation")
 	}
 	// still reservation count is 1
 	assert.Equal(t, 1, len(app.GetReservations()), "ask should have been reserved")
@@ -1362,10 +1362,10 @@ func TestPreemptionForRequiredNodeNormalAlloc(t *testing.T) {
 	// now try the allocation again: the normal path
 	alloc := partition.tryAllocate()
 	if alloc != nil {
-		t.Fatal("allocation attempt should have returned an allocation")
+		t.Fatal("allocations should not have returned an allocation")
 	}
 	// check if updated (must be after allocate call)
-	assert.Equal(t, 1, len(app.GetReservations()), "ask should have no longer be reserved")
+	assert.Equal(t, 1, len(app.GetReservations()), "ask should have been reserved")
 }
 
 // Preemption followed by a reserved allocation

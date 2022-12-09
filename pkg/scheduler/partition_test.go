@@ -1749,6 +1749,10 @@ func TestCompleteApp(t *testing.T) {
 func TestCleanupFailedApps(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+
+	queue := partition.GetQueue(defQueue)
+	assert.Assert(t, queue != nil, "the queue should not be nil")
+
 	newApp1 := newApplication("newApp1", "default", defQueue)
 	newApp2 := newApplication("newApp2", "default", defQueue)
 
@@ -1758,10 +1762,13 @@ func TestCleanupFailedApps(t *testing.T) {
 	assert.NilError(t, err, "no error expected while adding the app")
 
 	assert.Equal(t, 2, len(partition.GetApplications()), "the partition should have 2 apps")
+	assert.Equal(t, 2, len(queue.GetCopyOfApps()), "the queue should have 2 apps")
+
 	newApp1.SetState(objects.Expired.String())
 	assert.Equal(t, 1, len(partition.getAppsByState(objects.Expired.String())), "the partition should have 1 expired apps")
 
 	partition.cleanupExpiredApps()
+	assert.Equal(t, 1, len(queue.GetCopyOfApps()), "the queue should have 1 app")
 	assert.Equal(t, 1, len(partition.GetApplications()), "the partition should have 1 app")
 	assert.Equal(t, 0, len(partition.getAppsByState(objects.Expired.String())), "the partition should have 0 expired apps")
 }
@@ -1769,6 +1776,10 @@ func TestCleanupFailedApps(t *testing.T) {
 func TestCleanupCompletedApps(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+
+	queue := partition.GetQueue(defQueue)
+	assert.Assert(t, queue != nil, "the queue should not be nil")
+
 	completedApp1 := newApplication("completedApp1", "default", defQueue)
 	completedApp2 := newApplication("completedApp2", "default", defQueue)
 
@@ -1791,6 +1802,7 @@ func TestCleanupCompletedApps(t *testing.T) {
 	assert.Equal(t, 0, len(partition.GetApplications()), "the partition should have 0 apps")
 	assert.Equal(t, 2, len(partition.GetCompletedApplications()), "the partition should have 2 completed apps")
 	assert.Equal(t, 2, len(partition.getCompletedAppsByState(objects.Completed.String())), "the partition should have 2 completed apps")
+	assert.Equal(t, 2, len(queue.GetCopyOfCompletedApps()), "the queue should have 2 completed apps")
 
 	// mark the app for removal
 	completedApp1.SetState(objects.Expired.String())
@@ -1798,6 +1810,7 @@ func TestCleanupCompletedApps(t *testing.T) {
 	assert.Equal(t, 1, len(partition.getCompletedAppsByState(objects.Completed.String())), "the partition should have 1 completed apps")
 
 	partition.cleanupExpiredApps()
+	assert.Equal(t, 1, len(queue.GetCopyOfCompletedApps()), "the queue should have 1 completed app")
 	assert.Equal(t, 1, len(partition.GetCompletedApplications()), "the partition should have 1 completed app")
 	assert.Equal(t, 0, len(partition.getCompletedAppsByState(objects.Expired.String())), "the partition should have 0 expired apps")
 }
@@ -1805,6 +1818,7 @@ func TestCleanupCompletedApps(t *testing.T) {
 func TestCleanupRejectedApps(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+
 	rejectedApp := newApplication("new", "default", defQueue)
 	rejectedMessage := fmt.Sprintf("Failed to place application %s: application rejected: no placement rule matched", rejectedApp.ApplicationID)
 

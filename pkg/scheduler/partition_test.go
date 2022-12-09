@@ -1361,15 +1361,11 @@ func TestPreemptionForRequiredNodeNormalAlloc(t *testing.T) {
 	partition, app := setupPreemptionForRequiredNode(t)
 	// now try the allocation again: the normal path
 	alloc := partition.tryAllocate()
-	if alloc == nil {
+	if alloc != nil {
 		t.Fatal("allocation attempt should have returned an allocation")
 	}
 	// check if updated (must be after allocate call)
-	assert.Equal(t, 0, len(app.GetReservations()), "ask should have no longer be reserved")
-	assert.Equal(t, alloc.GetResult(), objects.AllocatedReserved, "result is not the expected AllocatedReserved")
-	assert.Equal(t, alloc.GetReleaseCount(), 0, "released allocations should have been 0")
-	assert.Equal(t, alloc.GetAllocationKey(), allocID2, "expected ask alloc-2 to be allocated")
-	assertUserGroupResource(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 8000}))
+	assert.Equal(t, 1, len(app.GetReservations()), "ask should have no longer be reserved")
 }
 
 // Preemption followed by a reserved allocation

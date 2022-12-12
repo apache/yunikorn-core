@@ -871,8 +871,9 @@ func addAppWithUserGroup(t *testing.T, id string, part *scheduler.PartitionConte
 	assert.Equal(t, app.CurrentState(), objects.New.String())
 	assert.Equal(t, 1+initSize, len(part.GetApplications()))
 	if isCompleted {
-		// we don't test partition, so it is fine to skip to update partition
-		app.UnSetQueue()
+		app.SetState(objects.Completing.String())
+		err = app.HandleApplicationEvent(objects.CompleteApplication)
+		assert.NilError(t, err, "The app should have completed")
 	}
 	return app
 }

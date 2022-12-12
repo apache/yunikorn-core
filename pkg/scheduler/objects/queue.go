@@ -44,13 +44,12 @@ type Queue struct {
 	Name      string // Queue name as in the config etc.
 
 	// Private fields need protection
-	sortType              policies.SortPolicy     // How applications (leaf) or queues (parents) are sorted
-	children              map[string]*Queue       // Only for direct children, parent queue only
-	applications          map[string]*Application // only for leaf queue
-	completedApplications map[string]*Application // completed applications from this leaf queue
-	reservedApps          map[string]int          // applications reserved within this queue, with reservation count
-	parent                *Queue                  // link back to the parent in the scheduler
-	pending               *resources.Resource     // pending resource for the apps in the queue
+	sortType     policies.SortPolicy     // How applications (leaf) or queues (parents) are sorted
+	children     map[string]*Queue       // Only for direct children, parent queue only
+	applications map[string]*Application // only for leaf queue
+	reservedApps map[string]int          // applications reserved within this queue, with reservation count
+	parent       *Queue                  // link back to the parent in the scheduler
+	pending      *resources.Resource     // pending resource for the apps in the queue
 
 	// The queue properties should be treated as immutable the value is a merge of the
 	// parent properties with the config for this queue only manipulated during creation
@@ -78,7 +77,6 @@ func newBlankQueue() *Queue {
 	return &Queue{
 		children:               make(map[string]*Queue),
 		applications:           make(map[string]*Application),
-		completedApplications:  make(map[string]*Application),
 		reservedApps:           make(map[string]int),
 		allocatingAcceptedApps: make(map[string]bool),
 		properties:             make(map[string]string),
@@ -588,7 +586,6 @@ func (sq *Queue) RemoveApplication(app *Application) {
 	delete(sq.applications, appID)
 	// clean up acceptedAllocating list
 	delete(sq.allocatingAcceptedApps, appID)
-	sq.completedApplications[appID] = app
 	log.Logger().Info("Application completed and removed from queue",
 		zap.String("queueName", sq.QueuePath),
 		zap.String("applicationID", appID))
@@ -603,17 +600,6 @@ func (sq *Queue) GetCopyOfApps() map[string]*Application {
 		appsCopy[appID] = app
 	}
 	return appsCopy
-}
-
-// GetCopyOfCompletedApps returns a shallow copy of all completed apps holding the lock
-func (sq *Queue) GetCopyOfCompletedApps() map[string]*Application {
-	sq.RLock()
-	defer sq.RUnlock()
-	completedAppsCopy := make(map[string]*Application, len(sq.completedApplications))
-	for appID, app := range sq.completedApplications {
-		completedAppsCopy[appID] = app
-	}
-	return completedAppsCopy
 }
 
 // GetCopyOfChildren return a shallow copy of the child queue map.

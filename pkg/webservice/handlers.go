@@ -535,7 +535,14 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apps := queue.GetCopyOfApps()
-	completedApps := queue.GetCopyOfCompletedApps()
+
+	completedApps := make(map[string]*objects.Application)
+	for _, app := range partitionContext.GetCompletedApplications() {
+		if app.GetQueuePath() == queueName {
+			completedApps[app.ApplicationID] = app
+		}
+	}
+
 	appsDao := make([]*dao.ApplicationDAOInfo, 0, len(apps)+len(completedApps))
 	for _, app := range apps {
 		appsDao = append(appsDao, getApplicationJSON(app))

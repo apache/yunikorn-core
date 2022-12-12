@@ -39,18 +39,21 @@ type TemplateInfo struct {
 }
 
 type PartitionQueueDAOInfo struct {
-	QueueName          string                  `json:"queuename"`
-	Status             string                  `json:"status"`
-	Partition          string                  `json:"partition"`
-	PendingResource    map[string]int64        `json:"pendingResource"`
-	MaxResource        map[string]int64        `json:"maxResource"`
-	GuaranteedResource map[string]int64        `json:"guaranteedResource"`
-	AllocatedResource  map[string]int64        `json:"allocatedResource"`
-	IsLeaf             bool                    `json:"isLeaf"`
-	IsManaged          bool                    `json:"isManaged"`
-	Properties         map[string]string       `json:"properties"`
-	Parent             string                  `json:"parent"`
-	TemplateInfo       *TemplateInfo           `json:"template"`
-	Children           []PartitionQueueDAOInfo `json:"children"`
-	AbsUsedCapacity    map[string]int64        `json:"absUsedCapacity"`
+	QueueName              string                  `json:"queuename"`
+	Status                 string                  `json:"status"`
+	Partition              string                  `json:"partition"`
+	PendingResource        map[string]int64        `json:"pendingResource"`
+	MaxResource            map[string]int64        `json:"maxResource"`
+	GuaranteedResource     map[string]int64        `json:"guaranteedResource"`
+	AllocatedResource      map[string]int64        `json:"allocatedResource"`
+	IsLeaf                 bool                    `json:"isLeaf"`
+	IsManaged              bool                    `json:"isManaged"`
+	Properties             map[string]string       `json:"properties"`
+	Parent                 string                  `json:"parent"`
+	TemplateInfo           *TemplateInfo           `json:"template"`
+	Children               []PartitionQueueDAOInfo `json:"children"`
+	AbsUsedCapacity        map[string]int64        `json:"absUsedCapacity"`
+	MaxRunningApps         uint64                  `json:"maxRunningApps"`
+	RunningApps            uint64                  `json:"runningApps"`
+	AllocatingAcceptedApps []string                `json:"allocatingAcceptedApps"`
 }

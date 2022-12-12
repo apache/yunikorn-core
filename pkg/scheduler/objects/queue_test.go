@@ -1334,6 +1334,19 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 	root.guaranteedResource = getResource(t)
 	assert.DeepEqual(t, root.GetMaxResource().DAOMap(), root.GetMaxResource().DAOMap())
 	assert.DeepEqual(t, root.GetGuaranteedResource().DAOMap(), root.GetGuaranteedResource().DAOMap())
+
+	// test allocatingAcceptedApps
+	root.allocatingAcceptedApps = getAllocatingAcceptedApps()
+	assert.Equal(t, len(root.allocatingAcceptedApps), 2, "allocatingAcceptedApps size")
+	assert.Equal(t, len(root.GetPartitionQueueDAOInfo().AllocatingAcceptedApps), 1, "AllocatingAcceptedApps size")
+	assert.Equal(t, root.GetPartitionQueueDAOInfo().AllocatingAcceptedApps[0], appID1)
+}
+
+func getAllocatingAcceptedApps() map[string]bool {
+	allocatingAcceptedApps := make(map[string]bool)
+	allocatingAcceptedApps[appID1] = true
+	allocatingAcceptedApps[appID2] = false
+	return allocatingAcceptedApps
 }
 
 func getResourceConf() map[string]string {

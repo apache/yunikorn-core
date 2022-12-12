@@ -887,6 +887,14 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 					zap.String("required node", requiredNode))
 				return nil
 			}
+			// Are there any non daemon set reservations on specific required node?
+			// Cancel those reservations to run daemon set pods
+			reservations := node.GetReservations()
+			if len(reservations) > 0 {
+				if !sa.cancelReservations(reservations) {
+					return nil
+				}
+			}
 			alloc := sa.tryNode(node, request)
 			if alloc != nil {
 				// check if the node was reserved and we allocated after a release
@@ -918,6 +926,52 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 	}
 	// no requests fit, skip to next app
 	return nil
+}
+
+func (sa *Application) cancelReservations(reservations []*reservation) bool {
+	for _, res := range reservations {
+		// skip the node
+		if res.ask.GetRequiredNode() != "" {
+			log.Logger().Warn("reservation for ask with required node already exists on the node",
+				zap.String("required node", res.node.NodeID),
+				zap.String("existing ask reservation key", res.getKey()))
+			return false
+		}
+	}
+	var err error
+	var num int
+	// un reserve all the apps that were reserved on the node
+	for _, res := range reservations {
+		thisApp := res.app.ApplicationID == sa.ApplicationID
+		if thisApp {
+			num, err = sa.unReserveInternal(res.node, res.ask)
+		} else {
+			num, err = res.app.UnReserve(res.node, res.ask)
+		}
+		if err != nil {
+			log.Logger().Warn("Unable to cancel reservations on node",
+				zap.String("victim application ID", res.app.ApplicationID),
+				zap.String("victim allocationKey", res.getKey()),
+				zap.String("required node", res.node.NodeID),
+				zap.Int("reservations count", num),
+				zap.String("application ID", sa.ApplicationID))
+			return false
+		} else {
+			log.Logger().Info("Cancelled reservation on required node",
+				zap.String("affected application ID", res.app.ApplicationID),
+				zap.String("affected allocationKey", res.getKey()),
+				zap.String("required node", res.node.NodeID),
+				zap.Int("reservations count", num),
+				zap.String("application ID", sa.ApplicationID))
+		}
+		// remove the reservation of the queue
+		if thisApp {
+			sa.queue.UnReserve(sa.ApplicationID, num)
+		} else {
+			res.app.GetQueue().UnReserve(res.app.ApplicationID, num)
+		}
+	}
+	return true
 }
 
 // tryPlaceholderAllocate tries to replace a placeholder that is allocated with a real allocation

@@ -1150,7 +1150,7 @@ func (sq *Queue) GetQueueOutstandingRequests(total *[]*AllocationAsk) {
 func (sq *Queue) TryReservedAllocate(iterator func() NodeIterator) *Allocation {
 	if sq.IsLeafQueue() {
 		// skip if it has no reservations
-		reservedCopy := sq.getReservedApps()
+		reservedCopy := sq.GetReservedApps()
 		if len(reservedCopy) != 0 {
 			// get the headroom
 			headRoom := sq.getHeadRoom()
@@ -1199,9 +1199,9 @@ func (sq *Queue) TryReservedAllocate(iterator func() NodeIterator) *Allocation {
 	return nil
 }
 
-// getReservedApps returns a shallow copy of the reserved app list
+// GetReservedApps returns a shallow copy of the reserved app list
 // locked to prevent race conditions from event updates
-func (sq *Queue) getReservedApps() map[string]int {
+func (sq *Queue) GetReservedApps() map[string]int {
 	sq.RLock()
 	defer sq.RUnlock()
 

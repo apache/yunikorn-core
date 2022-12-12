@@ -534,22 +534,18 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusBadRequest)
 		return
 	}
-	apps := queue.GetCopyOfApps()
 
-	completedApps := make(map[string]*objects.Application)
+	appsDao := make([]*dao.ApplicationDAOInfo, 0)
+	for _, app := range queue.GetCopyOfApps() {
+		appsDao = append(appsDao, getApplicationJSON(app))
+	}
+
 	for _, app := range partitionContext.GetCompletedApplications() {
 		if app.GetQueuePath() == queueName {
-			completedApps[app.ApplicationID] = app
+			appsDao = append(appsDao, getApplicationJSON(app))
 		}
 	}
 
-	appsDao := make([]*dao.ApplicationDAOInfo, 0, len(apps)+len(completedApps))
-	for _, app := range apps {
-		appsDao = append(appsDao, getApplicationJSON(app))
-	}
-	for _, app := range completedApps {
-		appsDao = append(appsDao, getApplicationJSON(app))
-	}
 	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}

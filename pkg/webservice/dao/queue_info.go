@@ -55,5 +55,5 @@ type PartitionQueueDAOInfo struct {
 	AbsUsedCapacity        map[string]int64        `json:"absUsedCapacity"`
 	MaxRunningApps         uint64                  `json:"maxRunningApps"`
 	RunningApps            uint64                  `json:"runningApps"`
-	AllocatingAcceptedApps map[string]bool         `json:"allocatingAcceptedApps"`
+	AllocatingAcceptedApps []string                `json:"allocatingAcceptedApps"`
 }

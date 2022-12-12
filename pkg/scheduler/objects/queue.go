@@ -475,7 +475,12 @@ func (sq *Queue) GetPartitionQueueDAOInfo() dao.PartitionQueueDAOInfo {
 	}
 	queueInfo.MaxRunningApps = sq.maxRunningApps
 	queueInfo.RunningApps = sq.runningApps
-	queueInfo.AllocatingAcceptedApps = make([]string, len(sq.allocatingAcceptedApps))
+	queueInfo.AllocatingAcceptedApps = make([]string, 0)
+	for appID, result := range sq.allocatingAcceptedApps {
+		if result {
+			queueInfo.AllocatingAcceptedApps = append(queueInfo.AllocatingAcceptedApps, appID)
+		}
+	}
 	return queueInfo
 }
 

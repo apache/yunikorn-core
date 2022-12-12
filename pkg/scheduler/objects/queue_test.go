@@ -1337,7 +1337,9 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 
 	// test allocatingAcceptedApps
 	root.allocatingAcceptedApps = getAllocatingAcceptedApps()
-	assert.Assert(t, reflect.DeepEqual(len(root.allocatingAcceptedApps), len(root.GetPartitionQueueDAOInfo().AllocatingAcceptedApps)))
+	assert.Equal(t, len(root.allocatingAcceptedApps), 2, "allocatingAcceptedApps size")
+	assert.Equal(t, len(root.GetPartitionQueueDAOInfo().AllocatingAcceptedApps), 1, "AllocatingAcceptedApps size")
+	assert.Equal(t, root.GetPartitionQueueDAOInfo().AllocatingAcceptedApps[0], appID1)
 }
 
 func getAllocatingAcceptedApps() map[string]bool {

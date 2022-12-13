@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -38,11 +39,20 @@ const (
 	DOT              = "."
 	DotReplace       = "_dot_"
 	DefaultPartition = "default"
-	// How to sort applications in leaf queues, valid options are defined in the scheduler.policies
-	ApplicationSortPolicy = "application.sort.policy"
-	PreemptionPolicy      = "preemption.policy"
-	PreemptionDelay       = "preemption.delay"
+
+	ApplicationSortPolicy   = "application.sort.policy"
+	ApplicationSortPriority = "application.sort.priority"
+	PriorityPolicy          = "priority.policy"
+	PriorityOffset          = "priority.offset"
+	PreemptionPolicy        = "preemption.policy"
+	PreemptionDelay         = "preemption.delay"
+
+	// app sort priority values
+	ApplicationSortPriorityEnabled  = "enabled"
+	ApplicationSortPriorityDisabled = "disabled"
 )
+
+var DefaultPreemptionDelay = 30 * time.Second
 
 // A queue can be a username with the dot replaced. Most systems allow a 32 character user name.
 // The queue name must thus allow for at least that length with the replacement of dots.

@@ -20,6 +20,7 @@ package objects
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -44,14 +45,17 @@ type Queue struct {
 	Name      string // Queue name as in the config etc.
 
 	// Private fields need protection
-	sortType         policies.SortPolicy     // How applications (leaf) or queues (parents) are sorted
-	children         map[string]*Queue       // Only for direct children, parent queue only
-	applications     map[string]*Application // only for leaf queue
-	reservedApps     map[string]int          // applications reserved within this queue, with reservation count
-	parent           *Queue                  // link back to the parent in the scheduler
-	pending          *resources.Resource     // pending resource for the apps in the queue
-	preemptionFenced bool
-	preemptionDelay  time.Duration
+	sortType            policies.SortPolicy       // How applications (leaf) or queues (parents) are sorted
+	children            map[string]*Queue         // Only for direct children, parent queue only
+	applications        map[string]*Application   // only for leaf queue
+	reservedApps        map[string]int            // applications reserved within this queue, with reservation count
+	parent              *Queue                    // link back to the parent in the scheduler
+	pending             *resources.Resource       // pending resource for the apps in the queue
+	prioritySortEnabled bool                      // whether priority is used for request sorting
+	priorityPolicy      policies.PriorityPolicy   // priority policy
+	priorityOffset      int32                     // priority offset for this queue relative to others
+	preemptionPolicy    policies.PreemptionPolicy // preemption policy
+	preemptionDelay     time.Duration             // time before preemption is considered
 
 	// The queue properties should be treated as immutable the value is a merge of the
 	// parent properties with the config for this queue only manipulated during creation
@@ -97,6 +101,8 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 	sq.parent = parent
 	sq.isManaged = true
 	sq.maxRunningApps = conf.MaxApplications
+	sq.prioritySortEnabled = true
+	sq.preemptionDelay = configs.DefaultPreemptionDelay
 
 	// update the properties
 	if err := sq.applyConf(conf); err != nil {
@@ -186,7 +192,7 @@ func (sq *Queue) mergeProperties(parent, config map[string]string) {
 	// Set the parent properties
 	if len(parent) != 0 {
 		for key, value := range parent {
-			sq.properties[key] = value
+			sq.properties[key] = filterParentProperty(key, value)
 		}
 	}
 	// merge the config properties
@@ -195,6 +201,54 @@ func (sq *Queue) mergeProperties(parent, config map[string]string) {
 			sq.properties[key] = value
 		}
 	}
+}
+
+func preemptionDelay(value string) (time.Duration, error) {
+	result, err := time.ParseDuration(value)
+	if err != nil {
+		return configs.DefaultPreemptionDelay, err
+	}
+	if int64(result) <= int64(0) {
+		return configs.DefaultPreemptionDelay, fmt.Errorf("%s must be positive: %s", configs.PreemptionDelay, value)
+	}
+	return result, nil
+}
+
+func priorityOffset(value string) (int32, error) {
+	intValue, err := strconv.ParseInt(value, 10, 32)
+	if err != nil {
+		return 0, err
+	}
+	return int32(intValue), nil
+}
+
+func applicationSortPriorityEnabled(value string) (bool, error) {
+	switch strings.ToLower(value) {
+	case configs.ApplicationSortPriorityEnabled:
+		return true, nil
+	case configs.ApplicationSortPriorityDisabled:
+		return false, nil
+	default:
+		return true, fmt.Errorf("unknown %s value: %s", configs.ApplicationSortPriority, value)
+	}
+}
+
+// filterParentProperty modifies values from parent queues where necessary
+func filterParentProperty(key string, value string) string {
+	switch key {
+	case configs.PriorityPolicy:
+		// default is always used unless explicitly specified
+		return policies.DefaultPriorityPolicy.String()
+	case configs.PriorityOffset:
+		// priority offsets are not inherited as they are additive
+		return "0"
+	case configs.PreemptionPolicy:
+		// only 'disabled' should be allowed to propagate
+		if pol, err := policies.PreemptionPolicyFromString(value); err != nil || pol != policies.DisabledPreemptionPolicy {
+			return policies.DefaultPreemptionPolicy.String()
+		}
+	}
+	return value
 }
 
 // ApplyConf is the locked version of applyConf
@@ -300,13 +354,18 @@ func (sq *Queue) setTemplate(conf configs.ChildTemplate) error {
 func (sq *Queue) UpdateQueueProperties() {
 	sq.Lock()
 	defer sq.Unlock()
-	// set the defaults, override with what is in the configured properties
-	if sq.isLeaf {
-		// walk over all properties and process
-		var err error
-		for key, value := range sq.properties {
-			switch key {
-			case configs.ApplicationSortPolicy:
+
+	if !sq.isLeaf {
+		// set the sorting type for parent queues
+		sq.sortType = policies.FairSortPolicy
+	}
+
+	// walk over all properties and process
+	var err error
+	for key, value := range sq.properties {
+		switch key {
+		case configs.ApplicationSortPolicy:
+			if sq.isLeaf {
 				sq.sortType, err = policies.SortPolicyFromString(value)
 				if err != nil {
 					log.Logger().Debug("application sort property configuration error",
@@ -316,41 +375,45 @@ func (sq *Queue) UpdateQueueProperties() {
 				if sq.sortType == policies.Undefined {
 					sq.sortType = policies.FifoSortPolicy
 				}
-			case configs.PreemptionPolicy:
-				sq.preemptionFenced, err = isFencingEnabled(value)
-				if err != nil {
-					log.Logger().Debug("queue fencing property configuration error",
-						zap.Error(err))
-				}
-			case configs.PreemptionDelay:
-				sq.preemptionDelay, err = time.ParseDuration(value)
+			}
+		case configs.ApplicationSortPriority:
+			sq.prioritySortEnabled, err = applicationSortPriorityEnabled(value)
+			if err != nil {
+				log.Logger().Debug("queue application sort priority configuration error",
+					zap.Error(err))
+			}
+		case configs.PriorityOffset:
+			sq.priorityOffset, err = priorityOffset(value)
+			if err != nil {
+				log.Logger().Debug("queue priority offset configuration error",
+					zap.Error(err))
+			}
+		case configs.PriorityPolicy:
+			sq.priorityPolicy, err = policies.PriorityPolicyFromString(value)
+			if err != nil {
+				log.Logger().Debug("queue priority policy configuration error",
+					zap.Error(err))
+			}
+		case configs.PreemptionPolicy:
+			sq.preemptionPolicy, err = policies.PreemptionPolicyFromString(value)
+			if err != nil {
+				log.Logger().Debug("queue preemption policy configuration error",
+					zap.Error(err))
+			}
+		case configs.PreemptionDelay:
+			if sq.isLeaf {
+				sq.preemptionDelay, err = preemptionDelay(value)
 				if err != nil {
 					log.Logger().Debug("preemption delay property configuration error",
 						zap.Error(err))
 				}
-			default:
-				// skip unknown properties just log them
-				log.Logger().Debug("queue property skipped",
-					zap.String("key", key),
-					zap.String("value", value))
 			}
+		default:
+			// skip unknown properties just log them
+			log.Logger().Debug("queue property skipped",
+				zap.String("key", key),
+				zap.String("value", value))
 		}
-
-		return
-	}
-	// set the sorting type for parent queues
-	sq.sortType = policies.FairSortPolicy
-}
-
-func isFencingEnabled(str string) (bool, error) {
-	switch str {
-	// fifo is the default policy when not set
-	case "default":
-		return false, nil
-	case "fence":
-		return true, nil
-	default:
-		return false, fmt.Errorf("undefined fencing policy: %s", str)
 	}
 }
 

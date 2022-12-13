@@ -540,12 +540,6 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 		appsDao = append(appsDao, getApplicationJSON(app))
 	}
 
-	for _, app := range partitionContext.GetCompletedApplications() {
-		if app.GetQueuePath() == queueName {
-			appsDao = append(appsDao, getApplicationJSON(app))
-		}
-	}
-
 	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}

@@ -881,9 +881,8 @@ func addAppWithUserGroup(t *testing.T, id string, part *scheduler.PartitionConte
 func TestGetQueueApplicationsHandler(t *testing.T) {
 	part := setup(t, configDefault, 1)
 
-	// add two applications
+	// add an application
 	app := addApp(t, "app-1", part, "root.default", false)
-	addApp(t, "app-2", part, "root.default", true)
 
 	// add placeholder to test PlaceholderDAOInfo
 	tg := "tg-1"
@@ -916,7 +915,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	getQueueApplications(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &appsDao)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, len(appsDao), 2)
+	assert.Equal(t, len(appsDao), 1)
 
 	if !appsDao[0].HasReserved {
 		assert.Equal(t, len(appsDao[0].Reservations), 0)

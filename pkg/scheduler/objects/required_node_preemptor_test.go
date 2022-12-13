@@ -205,7 +205,6 @@ func TestFilterAllocations(t *testing.T) {
 	p3.filterAllocations()
 	filteredAllocations = p3.getAllocations()
 	assert.Equal(t, len(filteredAllocations), 19)
-	
 }
 
 func TestGetVictims(t *testing.T) {

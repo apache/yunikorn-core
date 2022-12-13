@@ -191,7 +191,7 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 	if err := root.ApplyConf(queueConf); err != nil {
 		return err
 	}
-	root.UpdateSortType()
+	root.UpdateQueueProperties()
 	// update the rest of the queues recursively
 	return pc.updateQueues(queueConf.Queues, root)
 }
@@ -237,7 +237,7 @@ func (pc *PartitionContext) updateQueues(config []configs.QueueConfig, parent *o
 			return err
 		}
 		// special call to convert to a real policy from the property
-		queue.UpdateSortType()
+		queue.UpdateQueueProperties()
 		if err = pc.updateQueues(queueConfig.Queues, queue); err != nil {
 			return err
 		}

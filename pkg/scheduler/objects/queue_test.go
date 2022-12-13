@@ -1138,6 +1138,23 @@ func TestQueueProps(t *testing.T) {
 	assert.NilError(t, err, "failed to create leaf queue")
 	assert.Assert(t, leaf.isLeaf && !leaf.isManaged, "leaf queue is not marked as unmanaged leaf")
 	assert.Equal(t, leaf.properties[configs.ApplicationSortPolicy], "stateaware", "leaf queue property value not as expected")
+
+	props = map[string]string{"preemption.policy": "default", "preemption.delay": "10s"}
+	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, props)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, leaf.preemptionFenced, false)
+	assert.Equal(t, leaf.preemptionDelay, time.Second*10)
+
+	props = map[string]string{"preemption.policy": "fence", "preemption.delay": "xxxx"}
+	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, props)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, leaf.preemptionFenced, true)
+	assert.Equal(t, leaf.preemptionDelay, time.Duration(0))
+
+	props = map[string]string{"preemption.policy": "invalid"}
+	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, props)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, leaf.preemptionFenced, false)
 }
 
 func TestMaxResource(t *testing.T) {

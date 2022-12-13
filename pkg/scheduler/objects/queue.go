@@ -51,7 +51,8 @@ type Queue struct {
 	reservedApps          map[string]int          // applications reserved within this queue, with reservation count
 	parent                *Queue                  // link back to the parent in the scheduler
 	pending               *resources.Resource     // pending resource for the apps in the queue
-
+	preemptionFenced      bool
+	preemptionDelay       time.Duration
 	// The queue properties should be treated as immutable the value is a merge of the
 	// parent properties with the config for this queue only manipulated during creation
 	// of the queue or via a queue configuration update.
@@ -114,7 +115,7 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 		// pull the properties from the parent that should be set on the child
 		sq.mergeProperties(parent.getProperties(), conf.Properties)
 	}
-	sq.UpdateSortType()
+	sq.UpdateQueueProperties()
 
 	log.Logger().Info("configured queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
@@ -148,7 +149,7 @@ func NewDynamicQueue(name string, leaf bool, parent *Queue) (*Queue, error) {
 		return nil, fmt.Errorf("dynamic queue creation failed: %w", err)
 	}
 
-	sq.UpdateSortType()
+	sq.UpdateQueueProperties()
 	log.Logger().Info("dynamic queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
 
@@ -296,37 +297,62 @@ func (sq *Queue) setTemplate(conf configs.ChildTemplate) error {
 	return nil
 }
 
-// UpdateSortType updates the sortType for the queue based on the current properties.
-func (sq *Queue) UpdateSortType() {
+// UpdateQueueProperties updates the queue properties defined as text
+func (sq *Queue) UpdateQueueProperties() {
 	sq.Lock()
 	defer sq.Unlock()
 	// set the defaults, override with what is in the configured properties
 	if sq.isLeaf {
 		// walk over all properties and process
 		var err error
-		sq.sortType = policies.Undefined
 		for key, value := range sq.properties {
-			if key == configs.ApplicationSortPolicy {
+			switch key {
+			case configs.ApplicationSortPolicy:
 				sq.sortType, err = policies.SortPolicyFromString(value)
 				if err != nil {
 					log.Logger().Debug("application sort property configuration error",
 						zap.Error(err))
 				}
-			} else {
+				// if it is not defined default to fifo
+				if sq.sortType == policies.Undefined {
+					sq.sortType = policies.FifoSortPolicy
+				}
+			case configs.PreemptionPolicy:
+				sq.preemptionFenced, err = isFencingEnabled(value)
+				if err != nil {
+					log.Logger().Debug("queue fencing property configuration error",
+						zap.Error(err))
+				}
+			case configs.PreemptionDelay:
+				sq.preemptionDelay, err = time.ParseDuration(value)
+				if err != nil {
+					log.Logger().Debug("preemption delay property configuration error",
+						zap.Error(err))
+				}
+			default:
 				// skip unknown properties just log them
 				log.Logger().Debug("queue property skipped",
 					zap.String("key", key),
 					zap.String("value", value))
 			}
 		}
-		// if it is not defined default to fifo
-		if sq.sortType == policies.Undefined {
-			sq.sortType = policies.FifoSortPolicy
-		}
+
 		return
 	}
 	// set the sorting type for parent queues
 	sq.sortType = policies.FairSortPolicy
+}
+
+func isFencingEnabled(str string) (bool, error) {
+	switch str {
+	// fifo is the default policy when not set
+	case "default":
+		return false, nil
+	case "fence":
+		return true, nil
+	default:
+		return false, fmt.Errorf("undefined fencing policy: %s", str)
+	}
 }
 
 // GetQueuePath returns the fully qualified path of this queue.

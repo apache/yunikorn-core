@@ -618,7 +618,7 @@ func TestAddAppTaskGroup(t *testing.T) {
 		Properties: map[string]string{configs.ApplicationSortPolicy: "fair"},
 	})
 	assert.NilError(t, err, "updating queue should not have failed")
-	queue.UpdateSortType()
+	queue.UpdateQueueProperties()
 	err = partition.AddApplication(app)
 	if err == nil || partition.getApplication(appID2) != nil {
 		t.Errorf("add application should have failed due to queue sort policy but did not")
@@ -633,7 +633,7 @@ func TestAddAppTaskGroup(t *testing.T) {
 		Resources:  configs.Resources{Max: map[string]string{"vcore": "5"}},
 	})
 	assert.NilError(t, err, "updating queue should not have failed (stateaware & max)")
-	queue.UpdateSortType()
+	queue.UpdateQueueProperties()
 	err = partition.AddApplication(app)
 	if err == nil || partition.getApplication(appID2) != nil {
 		t.Errorf("add application should have failed due to max queue resource but did not")

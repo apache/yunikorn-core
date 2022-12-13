@@ -328,13 +328,9 @@ func TestRemoveApplication(t *testing.T) {
 	leaf.RemoveApplication(nonExist)
 	assert.Equal(t, len(leaf.applications), 1, "Non existing application was removed from the queue")
 	assert.Equal(t, len(leaf.GetCopyOfApps()), 1, "Non existing application was removed from the queue")
-	assert.Equal(t, len(leaf.completedApplications), 0)
-	assert.Equal(t, len(leaf.GetCopyOfCompletedApps()), 0)
 	leaf.RemoveApplication(app)
 	assert.Equal(t, len(leaf.applications), 0, "Application was not removed from the queue as expected")
 	assert.Equal(t, len(leaf.GetCopyOfApps()), 0, "Application was not removed from the queue as expected")
-	assert.Equal(t, len(leaf.completedApplications), 1)
-	assert.Equal(t, len(leaf.GetCopyOfCompletedApps()), 1)
 
 	// try the same again now with pending resources set
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})

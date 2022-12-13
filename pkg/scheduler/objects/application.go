@@ -96,7 +96,8 @@ type Application struct {
 	rejectedMessage      string                      // If the application is rejected, save the rejected message
 	stateLog             []*StateLogEntry            // state log for this application
 	placeholderData      map[string]*PlaceholderData // track placeholder and gang related info
-	allocMinPriority     int32
+	askMaxPriority       int32                       // highest priority value of outstanding asks
+	allocMinPriority     int32                       // lowest priority value of allocations
 
 	rmEventHandler     handler.EventHandler
 	rmID               string
@@ -124,6 +125,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		finishedTime:         time.Time{},
 		rejectedMessage:      "",
 		stateLog:             make([]*StateLogEntry, 0),
+		askMaxPriority:       math.MinInt32,
 		allocMinPriority:     math.MaxInt32,
 	}
 	placeholderTimeout := common.ConvertSITimeoutWithAdjustment(siApp, defaultPlaceholderTimeout)
@@ -512,6 +514,7 @@ func (sa *Application) removeAsksInternal(allocKey string) int {
 		deltaPendingResource = sa.pending
 		sa.pending = resources.NewResource()
 		sa.requests = make(map[string]*AllocationAsk)
+		sa.askMaxPriority = math.MinInt32
 	} else {
 		// cleanup the reservation for this allocation
 		for _, key := range sa.GetAskReservations(allocKey) {
@@ -532,6 +535,9 @@ func (sa *Application) removeAsksInternal(allocKey string) int {
 			deltaPendingResource = resources.MultiplyBy(ask.GetAllocatedResource(), float64(ask.GetPendingAskRepeat()))
 			sa.pending = resources.Sub(sa.pending, deltaPendingResource)
 			delete(sa.requests, allocKey)
+			if priority := ask.GetPriority(); priority >= sa.askMaxPriority {
+				sa.updateAskMaxPriority()
+			}
 		}
 	}
 	// clean up the queue pending resources
@@ -589,6 +595,13 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 	}
 	sa.requests[ask.GetAllocationKey()] = ask
 
+	// update app priority
+	repeat := ask.GetPendingAskRepeat()
+	priority := ask.GetPriority()
+	if repeat > 0 && priority > sa.askMaxPriority {
+		sa.askMaxPriority = priority
+	}
+
 	// Update total pending resource
 	delta.SubFrom(oldAskResource)
 	sa.pending = resources.Add(sa.pending, delta)
@@ -617,6 +630,14 @@ func (sa *Application) RecoverAllocationAsk(ask *AllocationAsk) {
 		return
 	}
 	sa.requests[ask.GetAllocationKey()] = ask
+
+	// update app priority
+	repeat := ask.GetPendingAskRepeat()
+	priority := ask.GetPriority()
+	if repeat > 0 && priority > sa.askMaxPriority {
+		sa.askMaxPriority = priority
+	}
+
 	// progress the application from New to Accepted.
 	if sa.IsNew() {
 		if err := sa.HandleApplicationEvent(RunApplication); err != nil {
@@ -639,6 +660,21 @@ func (sa *Application) updateAskRepeatInternal(ask *AllocationAsk, delta int32) 
 	// updating with delta does error checking internally
 	if !ask.updatePendingAskRepeat(delta) {
 		return nil, fmt.Errorf("ask repaeat not updated resulting repeat less than zero for ask %s on app %s", ask.GetAllocationKey(), sa.ApplicationID)
+	}
+
+	askPriority := ask.GetPriority()
+	if ask.GetPendingAskRepeat() == 0 {
+		// ask removed
+		if askPriority >= sa.askMaxPriority {
+			// recalculate downward
+			sa.updateAskMaxPriority()
+		}
+	} else {
+		// ask added
+		if askPriority > sa.askMaxPriority {
+			// increase app priority
+			sa.askMaxPriority = askPriority
+		}
 	}
 
 	deltaPendingResource := resources.Multiply(ask.GetAllocatedResource(), int64(delta))
@@ -1652,6 +1688,20 @@ func (sa *Application) removeAllocationInternal(uuid string, releaseType si.Term
 	return alloc
 }
 
+func (sa *Application) updateAskMaxPriority() {
+	value := int32(math.MinInt32)
+	for _, v := range sa.requests {
+		if v.GetPendingAskRepeat() == 0 {
+			continue
+		}
+		p := v.GetPriority()
+		if p > value {
+			value = p
+		}
+	}
+	sa.askMaxPriority = value
+}
+
 func (sa *Application) updateAllocationMinPriority() {
 	value := int32(math.MaxInt32)
 	for _, v := range sa.allocations {
@@ -1848,6 +1898,12 @@ func (sa *Application) GetAllocationMinPriority() int32 {
 	sa.RLock()
 	defer sa.RUnlock()
 	return sa.allocMinPriority
+}
+
+func (sa *Application) GetAskMaxPriority() int32 {
+	sa.RLock()
+	defer sa.RUnlock()
+	return sa.askMaxPriority
 }
 
 // test only

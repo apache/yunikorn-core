@@ -40,6 +40,8 @@ const (
 	DefaultPartition = "default"
 	// How to sort applications in leaf queues, valid options are defined in the scheduler.policies
 	ApplicationSortPolicy = "application.sort.policy"
+	PreemptionPolicy      = "preemption.policy"
+	PreemptionDelay       = "preemption.delay"
 )
 
 // A queue can be a username with the dot replaced. Most systems allow a 32 character user name.

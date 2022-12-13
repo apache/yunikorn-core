@@ -50,7 +50,7 @@ func (p *PreemptionContext) filterAllocations() {
 		if allocation.GetAsk().GetRequiredNode() != "" || allocation.GetPriority() > p.requiredAsk.GetPriority() {
 			continue
 		}
-		
+
 		// skip if the allocation is already being preempted
 		if allocation.IsPreempted() {
 			continue

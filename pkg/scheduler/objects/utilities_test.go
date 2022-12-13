@@ -103,6 +103,18 @@ func newApplication(appID, partition, queueName string) *Application {
 	return newApplicationWithTags(appID, partition, queueName, tags)
 }
 
+// Create application with minimal info
+func newApplicationWithUserGroup(appID, partition, queueName string, userName string, groupList []string) *Application {
+	tags := make(map[string]string)
+	siApp := &si.AddApplicationRequest{
+		ApplicationID: appID,
+		QueueName:     queueName,
+		PartitionName: partition,
+		Tags:          tags,
+	}
+	return NewApplication(siApp, getUserGroup(userName, groupList), nil, "")
+}
+
 // Create application with tags set
 func newApplicationWithTags(appID, partition, queueName string, tags map[string]string) *Application {
 	siApp := &si.AddApplicationRequest{
@@ -228,10 +240,22 @@ func getTestUserGroup() security.UserGroup {
 	return security.UserGroup{User: "testuser", Groups: []string{"testgroup"}}
 }
 
+func getUserGroup(userName string, groupNameList []string) security.UserGroup {
+	return security.UserGroup{User: userName, Groups: groupNameList}
+}
+
 func assertUserGroupResource(t *testing.T, userGroup security.UserGroup, expected *resources.Resource) {
 	ugm := ugm.GetUserManager()
 	userResource := ugm.GetUserResources(userGroup)
 	groupResource := ugm.GetGroupResources(userGroup.Groups[0])
 	assert.Equal(t, resources.Equals(userResource, expected), true)
 	assert.Equal(t, resources.Equals(groupResource, expected), true)
+}
+
+func assertUserResourcesAndGroupResources(t *testing.T, userGroup security.UserGroup, expectedUserResources *resources.Resource, expectedGroupResources *resources.Resource, i int) {
+	ugm := ugm.GetUserManager()
+	userResource := ugm.GetUserResources(userGroup)
+	groupResource := ugm.GetGroupResources(userGroup.Groups[i])
+	assert.Equal(t, resources.Equals(userResource, expectedUserResources), true)
+	assert.Equal(t, resources.Equals(groupResource, expectedGroupResources), true)
 }

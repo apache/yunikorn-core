@@ -1510,8 +1510,9 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 		sa.allocatedResource = resources.Add(sa.allocatedResource, info.GetAllocatedResource())
 		sa.maxAllocatedResource = resources.ComponentWiseMax(sa.allocatedResource, sa.maxAllocatedResource)
 	}
-	if info.GetPriority() < sa.allocMinPriority {
-		sa.allocMinPriority = info.GetPriority()
+	priority := info.GetPriority()
+	if priority < sa.allocMinPriority {
+		sa.allocMinPriority = priority
 	}
 	sa.allocations[info.GetUUID()] = info
 }
@@ -1645,30 +1646,21 @@ func (sa *Application) removeAllocationInternal(uuid string, releaseType si.Term
 		}
 	}
 	delete(sa.allocations, uuid)
-	if alloc.GetPriority() == sa.allocMinPriority {
-		sa.updateAllocationMinPriority(alloc.GetPriority())
+	if sa.allocMinPriority == alloc.GetPriority() {
+		sa.updateAllocationMinPriority()
 	}
 	return alloc
 }
 
-func (sa *Application) updateAllocationMinPriority(allocPriority int32) {
-	minPriorityCount := 0
-	var min int32
-	min = math.MaxInt32
+func (sa *Application) updateAllocationMinPriority() {
+	value := int32(math.MaxInt32)
 	for _, v := range sa.allocations {
-		prio := v.GetPriority()
-		if prio == allocPriority {
-			minPriorityCount++
-		}
-		if prio < min {
-			min = prio
+		p := v.GetPriority()
+		if p < value {
+			value = p
 		}
 	}
-	if minPriorityCount == 0 {
-		// "minPriorityCount == 0" means that there are no more allocations with the current minimum
-		// priority, so update it with the value which we just determined
-		sa.allocMinPriority = min
-	}
+	sa.allocMinPriority = value
 }
 
 func (sa *Application) hasZeroAllocations() bool {

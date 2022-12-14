@@ -30,6 +30,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects/template"
+	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 )
@@ -1135,22 +1136,100 @@ func TestQueueProps(t *testing.T) {
 	assert.Assert(t, leaf.isLeaf && !leaf.isManaged, "leaf queue is not marked as unmanaged leaf")
 	assert.Equal(t, leaf.properties[configs.ApplicationSortPolicy], "stateaware", "leaf queue property value not as expected")
 
+	props = map[string]string{}
+	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, props)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, leaf.priorityPolicy, policies.DefaultPriorityPolicy)
+	assert.Equal(t, leaf.priorityOffset, int32(0))
+	assert.Equal(t, leaf.prioritySortEnabled, true)
+
+	props = map[string]string{"priority.policy": "default", "priority.offset": "3", "application.sort.priority": "enabled"}
+	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, props)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, leaf.priorityPolicy, policies.DefaultPriorityPolicy)
+	assert.Equal(t, leaf.priorityOffset, int32(3))
+	assert.Equal(t, leaf.prioritySortEnabled, true)
+
+	props = map[string]string{"priority.policy": "fence", "priority.offset": "-3", "application.sort.priority": "disabled"}
+	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, props)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, leaf.priorityPolicy, policies.FencePriorityPolicy)
+	assert.Equal(t, leaf.priorityOffset, int32(-3))
+	assert.Equal(t, leaf.prioritySortEnabled, false)
+
+	props = map[string]string{"priority.policy": "invalid", "priority.offset": "invalid", "application.sort.priority": "invalid"}
+	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, props)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, leaf.priorityPolicy, policies.DefaultPriorityPolicy)
+	assert.Equal(t, leaf.priorityOffset, int32(0))
+	assert.Equal(t, leaf.prioritySortEnabled, true)
+
 	props = map[string]string{"preemption.policy": "default", "preemption.delay": "10s"}
 	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, props)
 	assert.NilError(t, err, "failed to create leaf queue")
-	assert.Equal(t, leaf.preemptionFenced, false)
+	assert.Equal(t, leaf.preemptionPolicy, policies.DefaultPreemptionPolicy)
 	assert.Equal(t, leaf.preemptionDelay, time.Second*10)
+
+	props = map[string]string{"preemption.policy": "disabled", "preemption.delay": "-1s"}
+	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, props)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, leaf.preemptionPolicy, policies.DisabledPreemptionPolicy)
+	assert.Equal(t, leaf.preemptionDelay, time.Second*30)
 
 	props = map[string]string{"preemption.policy": "fence", "preemption.delay": "xxxx"}
 	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, props)
 	assert.NilError(t, err, "failed to create leaf queue")
-	assert.Equal(t, leaf.preemptionFenced, true)
-	assert.Equal(t, leaf.preemptionDelay, time.Duration(0))
+	assert.Equal(t, leaf.preemptionPolicy, policies.FencePreemptionPolicy)
+	assert.Equal(t, leaf.preemptionDelay, time.Second*30)
 
 	props = map[string]string{"preemption.policy": "invalid"}
 	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, props)
 	assert.NilError(t, err, "failed to create leaf queue")
-	assert.Equal(t, leaf.preemptionFenced, false)
+	assert.Equal(t, leaf.preemptionPolicy, policies.DefaultPreemptionPolicy)
+}
+
+func TestInheritedQueueProps(t *testing.T) {
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "failed to create basic root queue")
+	var parent *Queue
+	props := map[string]string{
+		"key":               "value",
+		"priority.policy":   "fence",
+		"priority.offset":   "100",
+		"preemption.policy": "fence",
+	}
+	parent, err = createManagedQueueWithProps(root, "parent", true, nil, props)
+	assert.NilError(t, err, "failed to create parent queue")
+	assert.Equal(t, parent.properties["key"], "value")
+	assert.Equal(t, parent.properties["priority.policy"], "fence")
+	assert.Equal(t, parent.properties["priority.offset"], "100")
+	assert.Equal(t, parent.properties["preemption.policy"], "fence")
+	assert.Equal(t, parent.priorityPolicy, policies.FencePriorityPolicy)
+	assert.Equal(t, parent.priorityOffset, int32(100))
+	assert.Equal(t, parent.preemptionPolicy, policies.FencePreemptionPolicy)
+
+	var leaf *Queue
+	leaf, err = createManagedQueue(parent, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, leaf.properties["key"], "value")
+	assert.Equal(t, leaf.properties["priority.policy"], "default")
+	assert.Equal(t, leaf.properties["priority.offset"], "0")
+	assert.Equal(t, leaf.priorityPolicy, policies.DefaultPriorityPolicy)
+	assert.Equal(t, leaf.priorityOffset, int32(0))
+	assert.Equal(t, leaf.preemptionPolicy, policies.DefaultPreemptionPolicy)
+
+	props = map[string]string{
+		"preemption.policy": "disabled",
+	}
+
+	parent, err = createManagedQueueWithProps(root, "parent", true, nil, props)
+	assert.NilError(t, err, "failed to create parent queue")
+	assert.Equal(t, parent.preemptionPolicy, policies.DisabledPreemptionPolicy)
+
+	leaf, err = createManagedQueue(parent, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, leaf.preemptionPolicy, policies.DisabledPreemptionPolicy)
 }
 
 func TestMaxResource(t *testing.T) {

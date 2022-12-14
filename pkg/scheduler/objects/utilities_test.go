@@ -36,6 +36,8 @@ import (
 const (
 	appID1  = "app-1"
 	appID2  = "app-2"
+	appID3  = "app-3"
+	appID4  = "app-4"
 	aKey    = "alloc-1"
 	nodeID1 = "node-1"
 )

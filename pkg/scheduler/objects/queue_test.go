@@ -260,6 +260,124 @@ func TestPriorityCalc(t *testing.T) {
 	assert.Equal(t, leaf.GetCurrentPriority(), configs.MinPriority, "final leaf priority wrong")
 }
 
+func TestPreemptionPriorityCalc(t *testing.T) {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	var leaf *Queue
+	leaf, err = createManagedQueue(root, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	resMap := map[string]string{"memory": "100", "vcores": "10"}
+	res, err2 := resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err2, "failed to create resource with error")
+
+	app1 := newApplication(appID1, "default", "root.leaf")
+	app1.SetQueue(leaf)
+	app2 := newApplication(appID2, "default", "root.leaf")
+	app2.SetQueue(leaf)
+	app3 := newApplication(appID3, "default", "root.leaf")
+	app3.SetQueue(leaf)
+	app4 := newApplication(appID4, "default", "root.leaf")
+	app4.SetQueue(leaf)
+
+	leaf.AddApplication(app1)
+	alloc1 := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
+	alloc1.priority = 10
+	app1.AddAllocation(alloc1)
+	assert.Equal(t, int32(10), leaf.GetPreemptionPriority())
+	assert.Equal(t, int32(10), root.GetPreemptionPriority())
+
+	leaf.AddApplication(app2)
+	alloc2 := newAllocation(appID2, "uuid-2", nodeID1, "root.a", res)
+	alloc2.priority = 1
+	app2.AddAllocation(alloc2)
+	assert.Equal(t, int32(1), leaf.GetPreemptionPriority())
+	assert.Equal(t, int32(1), root.GetPreemptionPriority())
+
+	leaf.AddApplication(app3)
+	alloc3 := newAllocation(appID3, "uuid-3", nodeID1, "root.a", res)
+	alloc3.priority = 5
+	app3.AddAllocation(alloc3)
+	assert.Equal(t, int32(1), leaf.GetPreemptionPriority())
+	assert.Equal(t, int32(1), root.GetPreemptionPriority())
+
+	leaf.AddApplication(app4)
+	app4.SetQueue(leaf)
+	alloc4 := newAllocation(appID4, "uuid-4", nodeID1, "root.a", res)
+	alloc4.priority = 1
+	app4.AddAllocation(alloc4)
+	assert.Equal(t, int32(1), leaf.GetPreemptionPriority())
+	assert.Equal(t, int32(1), root.GetPreemptionPriority())
+
+	leaf.RemoveApplication(app3)
+	assert.Equal(t, int32(1), leaf.GetPreemptionPriority())
+	assert.Equal(t, int32(1), root.GetPreemptionPriority())
+	leaf.RemoveApplication(app2)
+	assert.Equal(t, int32(1), leaf.GetPreemptionPriority())
+	assert.Equal(t, int32(1), root.GetPreemptionPriority())
+	leaf.RemoveApplication(app4)
+	assert.Equal(t, int32(10), leaf.GetPreemptionPriority())
+	assert.Equal(t, int32(10), root.GetPreemptionPriority())
+	leaf.RemoveApplication(app1)
+	assert.Equal(t, configs.MaxPriority, leaf.GetPreemptionPriority())
+	assert.Equal(t, configs.MaxPriority, root.GetPreemptionPriority())
+}
+
+func TestPreemptionPriorityCalcWithFencedQueue(t *testing.T) {
+	resMap := map[string]string{"memory": "100", "vcores": "10"}
+	res, err := resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err, "failed to create resource with error")
+
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+
+	// single parent under root
+	var parent *Queue
+	parent, err = createManagedQueueWithProps(root, "parent", true, nil, map[string]string{
+		configs.PriorityOffset: "5",
+	})
+	assert.NilError(t, err, "failed to create parent queue")
+
+	// add a leaf under the parent
+	var leaf *Queue
+	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, map[string]string{
+		configs.PriorityOffset:   "3",
+		configs.PreemptionPolicy: policies.FencePreemptionPolicy.String(),
+	})
+	assert.NilError(t, err, "failed to create leaf queue")
+
+	app1 := newApplication(appID1, "default", "root.leaf")
+	app1.SetQueue(leaf)
+	app2 := newApplication(appID2, "default", "root.leaf")
+	app2.SetQueue(leaf)
+	leaf.AddApplication(app1)
+	leaf.AddApplication(app2)
+
+	alloc1 := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
+	alloc1.priority = 10
+	app1.AddAllocation(alloc1)
+	assert.Equal(t, int32(3), leaf.GetPreemptionPriority())
+	assert.Equal(t, int32(8), parent.GetPreemptionPriority())
+	assert.Equal(t, int32(8), root.GetPreemptionPriority())
+
+	alloc2 := newAllocation(appID2, "uuid-2", nodeID1, "root.a", res)
+	alloc2.priority = 1
+	app2.AddAllocation(alloc2)
+	assert.Equal(t, int32(3), leaf.GetPreemptionPriority())
+	assert.Equal(t, int32(8), parent.GetPreemptionPriority())
+	assert.Equal(t, int32(8), root.GetPreemptionPriority())
+
+	leaf.RemoveApplication(app1)
+	assert.Equal(t, int32(3), leaf.GetPreemptionPriority())
+	assert.Equal(t, int32(8), parent.GetPreemptionPriority())
+	assert.Equal(t, int32(8), root.GetPreemptionPriority())
+
+	leaf.RemoveApplication(app2)
+	assert.Equal(t, configs.MaxPriority, leaf.GetPreemptionPriority())
+	assert.Equal(t, configs.MaxPriority, parent.GetPreemptionPriority())
+	assert.Equal(t, configs.MaxPriority, root.GetPreemptionPriority())
+}
+
 func TestPendingCalc(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)

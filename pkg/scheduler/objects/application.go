@@ -96,6 +96,7 @@ type Application struct {
 	rejectedMessage      string                      // If the application is rejected, save the rejected message
 	stateLog             []*StateLogEntry            // state log for this application
 	placeholderData      map[string]*PlaceholderData // track placeholder and gang related info
+	allocMinPriority     int32
 
 	rmEventHandler     handler.EventHandler
 	rmID               string
@@ -123,6 +124,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		finishedTime:         time.Time{},
 		rejectedMessage:      "",
 		stateLog:             make([]*StateLogEntry, 0),
+		allocMinPriority:     math.MaxInt32,
 	}
 	placeholderTimeout := common.ConvertSITimeoutWithAdjustment(siApp, defaultPlaceholderTimeout)
 	gangSchedStyle := siApp.GetGangSchedulingStyle()
@@ -1508,6 +1510,10 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 		sa.allocatedResource = resources.Add(sa.allocatedResource, info.GetAllocatedResource())
 		sa.maxAllocatedResource = resources.ComponentWiseMax(sa.allocatedResource, sa.maxAllocatedResource)
 	}
+	priority := info.GetPriority()
+	if priority < sa.allocMinPriority {
+		sa.allocMinPriority = priority
+	}
 	sa.allocations[info.GetUUID()] = info
 }
 
@@ -1640,7 +1646,21 @@ func (sa *Application) removeAllocationInternal(uuid string, releaseType si.Term
 		}
 	}
 	delete(sa.allocations, uuid)
+	if sa.allocMinPriority == alloc.GetPriority() {
+		sa.updateAllocationMinPriority()
+	}
 	return alloc
+}
+
+func (sa *Application) updateAllocationMinPriority() {
+	value := int32(math.MaxInt32)
+	for _, v := range sa.allocations {
+		p := v.GetPriority()
+		if p < value {
+			value = p
+		}
+	}
+	sa.allocMinPriority = value
 }
 
 func (sa *Application) hasZeroAllocations() bool {
@@ -1822,6 +1842,12 @@ func (sa *Application) GetAllPlaceholderData() []*PlaceholderData {
 		placeholders = append(placeholders, taskGroup)
 	}
 	return placeholders
+}
+
+func (sa *Application) GetAllocationMinPriority() int32 {
+	sa.RLock()
+	defer sa.RUnlock()
+	return sa.allocMinPriority
 }
 
 // test only

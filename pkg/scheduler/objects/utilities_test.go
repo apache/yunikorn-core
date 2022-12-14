@@ -200,18 +200,22 @@ func newPlaceholderAlloc(appID, uuid, nodeID, queueName string, res *resources.R
 }
 
 func newAllocationAsk(allocKey, appID string, res *resources.Resource) *AllocationAsk {
-	return newAllocationAskAll(allocKey, appID, "", res, 1, false)
+	return newAllocationAskAll(allocKey, appID, "", res, 1, false, 0)
+}
+
+func newAllocationAskPriority(allocKey, appID string, res *resources.Resource, priority int32) *AllocationAsk {
+	return newAllocationAskAll(allocKey, appID, "", res, 1, false, priority)
 }
 
 func newAllocationAskRepeat(allocKey, appID string, res *resources.Resource, repeat int) *AllocationAsk {
-	return newAllocationAskAll(allocKey, appID, "", res, repeat, false)
+	return newAllocationAskAll(allocKey, appID, "", res, repeat, false, 0)
 }
 
 func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resource, repeat int) *AllocationAsk {
-	return newAllocationAskAll(allocKey, appID, taskGroup, res, repeat, taskGroup != "")
+	return newAllocationAskAll(allocKey, appID, taskGroup, res, repeat, taskGroup != "", 0)
 }
 
-func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, repeat int, placeholder bool) *AllocationAsk {
+func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, repeat int, placeholder bool, priority int32) *AllocationAsk {
 	ask := &si.AllocationAsk{
 		AllocationKey:  allocKey,
 		ApplicationID:  appID,
@@ -220,6 +224,7 @@ func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resou
 		MaxAllocations: int32(repeat),
 		TaskGroupName:  taskGroup,
 		Placeholder:    placeholder,
+		Priority:       priority,
 	}
 	return NewAllocationAskFromSI(ask)
 }

@@ -1522,7 +1522,7 @@ func TestCanReplace(t *testing.T) {
 		{"nil", nil, false},
 		{"placeholder", newAllocationAskTG(aKey, appID1, tg1, res, 1), false},
 		{"no TG", newAllocationAsk(aKey, appID1, res), false},
-		{"no placeholder data", newAllocationAskAll(aKey, appID1, tg1, res, 1, false), false},
+		{"no placeholder data", newAllocationAskAll(aKey, appID1, tg1, res, 1, false, 0), false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1546,10 +1546,10 @@ func TestCanReplace(t *testing.T) {
 		want bool
 	}{
 		{"no TG", newAllocationAsk(aKey, appID1, res), false},
-		{"TG mismatch", newAllocationAskAll(aKey, appID1, "unknown", res, 1, false), false},
-		{"TG placeholder used", newAllocationAskAll(aKey, appID1, tg2, res, 1, false), false},
-		{"TG placeholder timed out", newAllocationAskAll(aKey, appID1, tg3, res, 1, false), false},
-		{"TG placeholder available", newAllocationAskAll(aKey, appID1, tg1, res, 1, false), true},
+		{"TG mismatch", newAllocationAskAll(aKey, appID1, "unknown", res, 1, false, 0), false},
+		{"TG placeholder used", newAllocationAskAll(aKey, appID1, tg2, res, 1, false, 0), false},
+		{"TG placeholder timed out", newAllocationAskAll(aKey, appID1, tg3, res, 1, false, 0), false},
+		{"TG placeholder available", newAllocationAskAll(aKey, appID1, tg1, res, 1, false, 0), true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1592,6 +1592,76 @@ func TestAllocationPriorityTracking(t *testing.T) {
 	assert.Equal(t, int32(10), app.GetAllocationMinPriority())
 	app.RemoveAllocation("uuid-1", si.TerminationType_STOPPED_BY_RM)
 	assert.Equal(t, int32(math.MaxInt32), app.GetAllocationMinPriority())
+}
+
+func TestMaxAskPriority(t *testing.T) {
+	app := newApplication(appID1, "default", "root.unknown")
+	if app == nil || app.ApplicationID != appID1 {
+		t.Fatalf("app create failed which should not have %v", app)
+	}
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+
+	// initial state
+	assert.Equal(t, app.GetAskMaxPriority(), int32(math.MinInt32), "wrong default priority")
+
+	// p=10 added
+	ask1 := newAllocationAskPriority("prio-10", appID1, res, 10)
+	err = app.AddAllocationAsk(ask1)
+	assert.NilError(t, err, "ask should have been updated on app")
+	assert.Equal(t, app.GetAskMaxPriority(), int32(10), "wrong priority after adding p=10")
+
+	// p=5 added
+	ask2 := newAllocationAskPriority("prio-5", appID1, res, 5)
+	err = app.AddAllocationAsk(ask2)
+	assert.NilError(t, err, "ask should have been added to app")
+	assert.Equal(t, app.GetAskMaxPriority(), int32(10), "wrong priority after adding p=5")
+
+	// p=15 added
+	ask3 := newAllocationAskPriority("prio-15", appID1, res, 15)
+	err = app.AddAllocationAsk(ask3)
+	assert.NilError(t, err, "ask should have been added to app")
+	assert.Equal(t, app.GetAskMaxPriority(), int32(15), "wrong priority after adding p=15")
+
+	// p=10 removed
+	app.RemoveAllocationAsk(ask1.GetAllocationKey())
+	assert.Equal(t, app.GetAskMaxPriority(), int32(15), "wrong priority after removing p=10")
+
+	// p=15 removed
+	app.RemoveAllocationAsk(ask3.GetAllocationKey())
+	assert.Equal(t, app.GetAskMaxPriority(), int32(5), "wrong priority after removing p=15")
+
+	// re-add removed asks
+	err = app.AddAllocationAsk(ask1)
+	assert.NilError(t, err, "ask should have been added to app")
+	err = app.AddAllocationAsk(ask3)
+	assert.NilError(t, err, "ask should have been added to app")
+
+	assert.Equal(t, app.GetAskMaxPriority(), int32(15), "wrong priority after re-adding asks")
+
+	// update repeat to zero for p=15
+	_, err = app.UpdateAskRepeat(ask3.GetAllocationKey(), -1)
+	assert.NilError(t, err, "ask should have been updated")
+	assert.Equal(t, app.GetAskMaxPriority(), int32(10), "wrong priority after updating p=15 repeat to 0")
+
+	// update repeat to zero for p=5
+	_, err = app.UpdateAskRepeat(ask2.GetAllocationKey(), -1)
+	assert.NilError(t, err, "ask should have been updated")
+	assert.Equal(t, app.GetAskMaxPriority(), int32(10), "wrong priority after updating p=5 repeat to 0")
+
+	// update repeat to 1 for p=5
+	_, err = app.UpdateAskRepeat(ask2.GetAllocationKey(), 1)
+	assert.NilError(t, err, "ask should have been updated")
+	assert.Equal(t, app.GetAskMaxPriority(), int32(10), "wrong priority after updating p=5 repeat to 1")
+
+	// update repeat to 1 for p=15
+	_, err = app.UpdateAskRepeat(ask3.GetAllocationKey(), 1)
+	assert.NilError(t, err, "ask should have been updated")
+	assert.Equal(t, app.GetAskMaxPriority(), int32(15), "wrong priority after updating p=15 repeat to 1")
 }
 
 func (sa *Application) addPlaceholderDataWithLocking(ask *AllocationAsk) {

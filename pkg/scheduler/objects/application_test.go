@@ -1558,6 +1558,42 @@ func TestCanReplace(t *testing.T) {
 	}
 }
 
+func TestAllocationPriorityTracking(t *testing.T) {
+	setupUGM()
+	app := newApplication(appID1, "default", "root.a")
+
+	resMap := map[string]string{"memory": "100", "vcores": "10"}
+	res, err := resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err, "failed to create resource with error")
+
+	alloc1 := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
+	alloc1.priority = 10
+	alloc2 := newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
+	alloc2.priority = 1
+	alloc3 := newAllocation(appID1, "uuid-3", nodeID1, "root.a", res)
+	alloc3.priority = 5
+	alloc4 := newAllocation(appID1, "uuid-4", nodeID1, "root.a", res)
+	alloc4.priority = 1
+
+	app.AddAllocation(alloc1)
+	assert.Equal(t, int32(10), app.GetAllocationMinPriority())
+	app.AddAllocation(alloc2)
+	assert.Equal(t, int32(1), app.GetAllocationMinPriority())
+	app.AddAllocation(alloc3)
+	assert.Equal(t, int32(1), app.GetAllocationMinPriority())
+	app.AddAllocation(alloc4)
+	assert.Equal(t, int32(1), app.GetAllocationMinPriority())
+
+	app.RemoveAllocation("uuid-3", si.TerminationType_STOPPED_BY_RM)
+	assert.Equal(t, int32(1), app.GetAllocationMinPriority())
+	app.RemoveAllocation("uuid-2", si.TerminationType_STOPPED_BY_RM)
+	assert.Equal(t, int32(1), app.GetAllocationMinPriority())
+	app.RemoveAllocation("uuid-4", si.TerminationType_STOPPED_BY_RM)
+	assert.Equal(t, int32(10), app.GetAllocationMinPriority())
+	app.RemoveAllocation("uuid-1", si.TerminationType_STOPPED_BY_RM)
+	assert.Equal(t, int32(math.MaxInt32), app.GetAllocationMinPriority())
+}
+
 func (sa *Application) addPlaceholderDataWithLocking(ask *AllocationAsk) {
 	sa.Lock()
 	defer sa.Unlock()

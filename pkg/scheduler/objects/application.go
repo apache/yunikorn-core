@@ -96,6 +96,7 @@ type Application struct {
 	rejectedMessage      string                      // If the application is rejected, save the rejected message
 	stateLog             []*StateLogEntry            // state log for this application
 	placeholderData      map[string]*PlaceholderData // track placeholder and gang related info
+	allocMinPriority     int32
 
 	rmEventHandler     handler.EventHandler
 	rmID               string
@@ -123,6 +124,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		finishedTime:         time.Time{},
 		rejectedMessage:      "",
 		stateLog:             make([]*StateLogEntry, 0),
+		allocMinPriority:     math.MaxInt32,
 	}
 	placeholderTimeout := common.ConvertSITimeoutWithAdjustment(siApp, defaultPlaceholderTimeout)
 	gangSchedStyle := siApp.GetGangSchedulingStyle()
@@ -1508,6 +1510,9 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 		sa.allocatedResource = resources.Add(sa.allocatedResource, info.GetAllocatedResource())
 		sa.maxAllocatedResource = resources.ComponentWiseMax(sa.allocatedResource, sa.maxAllocatedResource)
 	}
+	if info.GetPriority() < sa.allocMinPriority {
+		sa.allocMinPriority = info.GetPriority()
+	}
 	sa.allocations[info.GetUUID()] = info
 }
 
@@ -1640,7 +1645,30 @@ func (sa *Application) removeAllocationInternal(uuid string, releaseType si.Term
 		}
 	}
 	delete(sa.allocations, uuid)
+	if alloc.GetPriority() == sa.allocMinPriority {
+		sa.updateAllocationMinPriority(alloc.GetPriority())
+	}
 	return alloc
+}
+
+func (sa *Application) updateAllocationMinPriority(allocPriority int32) {
+	minPriorityCount := 0
+	var min int32
+	min = math.MaxInt32
+	for _, v := range sa.allocations {
+		prio := v.GetPriority()
+		if prio == allocPriority {
+			minPriorityCount++
+		}
+		if prio < min {
+			min = prio
+		}
+	}
+	if minPriorityCount == 0 {
+		// "minPriorityCount == 0" means that there are no more allocations with the current minimum
+		// priority, so update it with the value which we just determined
+		sa.allocMinPriority = min
+	}
 }
 
 func (sa *Application) hasZeroAllocations() bool {
@@ -1822,6 +1850,12 @@ func (sa *Application) GetAllPlaceholderData() []*PlaceholderData {
 		placeholders = append(placeholders, taskGroup)
 	}
 	return placeholders
+}
+
+func (sa *Application) GetAllocationMinPriority() int32 {
+	sa.RLock()
+	defer sa.RUnlock()
+	return sa.allocMinPriority
 }
 
 // test only

@@ -29,6 +29,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/events"
@@ -125,8 +126,8 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		finishedTime:         time.Time{},
 		rejectedMessage:      "",
 		stateLog:             make([]*StateLogEntry, 0),
-		askMaxPriority:       math.MinInt32,
-		allocMinPriority:     math.MaxInt32,
+		askMaxPriority:       configs.MinPriority,
+		allocMinPriority:     configs.MaxPriority,
 	}
 	placeholderTimeout := common.ConvertSITimeoutWithAdjustment(siApp, defaultPlaceholderTimeout)
 	gangSchedStyle := siApp.GetGangSchedulingStyle()
@@ -514,7 +515,8 @@ func (sa *Application) removeAsksInternal(allocKey string) int {
 		deltaPendingResource = sa.pending
 		sa.pending = resources.NewResource()
 		sa.requests = make(map[string]*AllocationAsk)
-		sa.askMaxPriority = math.MinInt32
+		sa.askMaxPriority = configs.MinPriority
+		sa.queue.UpdateApplicationPriority(sa.ApplicationID, sa.askMaxPriority)
 	} else {
 		// cleanup the reservation for this allocation
 		for _, key := range sa.GetAskReservations(allocKey) {
@@ -600,6 +602,7 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 	priority := ask.GetPriority()
 	if repeat > 0 && priority > sa.askMaxPriority {
 		sa.askMaxPriority = priority
+		sa.queue.UpdateApplicationPriority(sa.ApplicationID, sa.askMaxPriority)
 	}
 
 	// Update total pending resource
@@ -636,6 +639,7 @@ func (sa *Application) RecoverAllocationAsk(ask *AllocationAsk) {
 	priority := ask.GetPriority()
 	if repeat > 0 && priority > sa.askMaxPriority {
 		sa.askMaxPriority = priority
+		sa.queue.UpdateApplicationPriority(sa.ApplicationID, sa.askMaxPriority)
 	}
 
 	// progress the application from New to Accepted.
@@ -674,6 +678,7 @@ func (sa *Application) updateAskRepeatInternal(ask *AllocationAsk, delta int32) 
 		if askPriority > sa.askMaxPriority {
 			// increase app priority
 			sa.askMaxPriority = askPriority
+			sa.queue.UpdateApplicationPriority(sa.ApplicationID, askPriority)
 		}
 	}
 
@@ -1436,6 +1441,7 @@ func (sa *Application) SetQueue(queue *Queue) {
 	defer sa.Unlock()
 	sa.queuePath = queue.QueuePath
 	sa.queue = queue
+	sa.queue.UpdateApplicationPriority(sa.ApplicationID, sa.askMaxPriority)
 }
 
 // remove the leaf queue the application runs in, used when completing the app
@@ -1689,7 +1695,7 @@ func (sa *Application) removeAllocationInternal(uuid string, releaseType si.Term
 }
 
 func (sa *Application) updateAskMaxPriority() {
-	value := int32(math.MinInt32)
+	value := configs.MinPriority
 	for _, v := range sa.requests {
 		if v.GetPendingAskRepeat() == 0 {
 			continue
@@ -1700,10 +1706,11 @@ func (sa *Application) updateAskMaxPriority() {
 		}
 	}
 	sa.askMaxPriority = value
+	sa.queue.UpdateApplicationPriority(sa.ApplicationID, value)
 }
 
 func (sa *Application) updateAllocationMinPriority() {
-	value := int32(math.MaxInt32)
+	value := configs.MaxPriority
 	for _, v := range sa.allocations {
 		p := v.GetPriority()
 		if p < value {

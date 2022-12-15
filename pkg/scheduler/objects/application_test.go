@@ -28,6 +28,7 @@ import (
 	"gotest.tools/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/handler"
@@ -1591,7 +1592,7 @@ func TestAllocationPriorityTracking(t *testing.T) {
 	app.RemoveAllocation("uuid-4", si.TerminationType_STOPPED_BY_RM)
 	assert.Equal(t, int32(10), app.GetAllocationMinPriority())
 	app.RemoveAllocation("uuid-1", si.TerminationType_STOPPED_BY_RM)
-	assert.Equal(t, int32(math.MaxInt32), app.GetAllocationMinPriority())
+	assert.Equal(t, configs.MaxPriority, app.GetAllocationMinPriority())
 }
 
 func TestMaxAskPriority(t *testing.T) {
@@ -1607,7 +1608,7 @@ func TestMaxAskPriority(t *testing.T) {
 	app.queue = queue
 
 	// initial state
-	assert.Equal(t, app.GetAskMaxPriority(), int32(math.MinInt32), "wrong default priority")
+	assert.Equal(t, app.GetAskMaxPriority(), configs.MinPriority, "wrong default priority")
 
 	// p=10 added
 	ask1 := newAllocationAskPriority("prio-10", appID1, res, 10)

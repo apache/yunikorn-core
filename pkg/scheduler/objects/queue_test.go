@@ -157,6 +157,109 @@ func TestDynamicSubQueues(t *testing.T) {
 	}
 }
 
+func TestPriorityCalcWithFencedQueue(t *testing.T) {
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+
+	// single parent under root
+	var parent *Queue
+	parent, err = createManagedQueueWithProps(root, "parent", true, nil, map[string]string{
+		configs.PriorityOffset: "5",
+	})
+	assert.NilError(t, err, "failed to create parent queue")
+
+	// add a leaf under the parent
+	var leaf *Queue
+	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, map[string]string{
+		configs.PriorityOffset: "3",
+		configs.PriorityPolicy: policies.FencePriorityPolicy.String(),
+	})
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, parent.GetCurrentPriority(), configs.MinPriority, "initial parent priority wrong")
+	assert.Equal(t, leaf.GetCurrentPriority(), configs.MinPriority, "initial leaf priority wrong")
+
+	app := newApplication(appID1, "default", "root.parent.leaf")
+	app.SetQueue(leaf)
+	leaf.AddApplication(app)
+
+	var res *resources.Resource
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "1"})
+	assert.NilError(t, err, "failed to create basic resource")
+
+	err = app.AddAllocationAsk(newAllocationAskPriority("alloc-1", appID1, res, 0))
+	assert.NilError(t, err, "failed to add app")
+	assert.Equal(t, parent.GetCurrentPriority(), int32(8), "parent priority wrong after alloc add")
+	assert.Equal(t, leaf.GetCurrentPriority(), int32(3), "leaf priority wrong after alloc add")
+
+	app2 := newApplication(appID2, "default", "root.parent.leaf")
+	app2.SetQueue(leaf)
+	leaf.AddApplication(app2)
+	err = app2.AddAllocationAsk(newAllocationAskPriority("alloc-2", appID2, res, 5))
+	assert.NilError(t, err, "failed to add app")
+	assert.Equal(t, parent.GetCurrentPriority(), int32(8), "parent priority wrong after alloc add 2")
+	assert.Equal(t, leaf.GetCurrentPriority(), int32(3), "leaf priority wrong after alloc add 2")
+
+	leaf.RemoveApplication(app2)
+	assert.Equal(t, parent.GetCurrentPriority(), int32(8), "parent priority wrong after app 2 removed")
+	assert.Equal(t, leaf.GetCurrentPriority(), int32(3), "leaf priority wrong after app 2 removed")
+
+	leaf.RemoveApplication(app)
+	assert.Equal(t, parent.GetCurrentPriority(), configs.MinPriority, "final parent priority wrong")
+	assert.Equal(t, leaf.GetCurrentPriority(), configs.MinPriority, "final leaf priority wrong")
+}
+
+func TestPriorityCalc(t *testing.T) {
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+
+	// single parent under root
+	var parent *Queue
+	parent, err = createManagedQueueWithProps(root, "parent", true, nil, map[string]string{
+		configs.PriorityOffset: "5",
+	})
+	assert.NilError(t, err, "failed to create parent queue")
+
+	// add a leaf under the parent
+	var leaf *Queue
+	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, map[string]string{
+		configs.PriorityOffset: "3",
+	})
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, parent.GetCurrentPriority(), configs.MinPriority, "initial parent priority wrong")
+	assert.Equal(t, leaf.GetCurrentPriority(), configs.MinPriority, "initial leaf priority wrong")
+
+	app := newApplication(appID1, "default", "root.parent.leaf")
+	app.SetQueue(leaf)
+	leaf.AddApplication(app)
+
+	var res *resources.Resource
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "1"})
+	assert.NilError(t, err, "failed to create basic resource")
+
+	err = app.AddAllocationAsk(newAllocationAskPriority("alloc-1", appID1, res, 0))
+	assert.NilError(t, err, "failed to add app")
+	assert.Equal(t, parent.GetCurrentPriority(), int32(8), "parent priority wrong after alloc add")
+	assert.Equal(t, leaf.GetCurrentPriority(), int32(3), "leaf priority wrong after alloc add")
+
+	app2 := newApplication(appID2, "default", "root.parent.leaf")
+	app2.SetQueue(leaf)
+	leaf.AddApplication(app2)
+	err = app2.AddAllocationAsk(newAllocationAskPriority("alloc-2", appID2, res, 5))
+	assert.NilError(t, err, "failed to add app")
+	assert.Equal(t, parent.GetCurrentPriority(), int32(13), "parent priority wrong after alloc add 2")
+	assert.Equal(t, leaf.GetCurrentPriority(), int32(8), "leaf priority wrong after alloc add 2")
+
+	leaf.RemoveApplication(app2)
+	assert.Equal(t, parent.GetCurrentPriority(), int32(8), "parent priority wrong after app 2 removed")
+	assert.Equal(t, leaf.GetCurrentPriority(), int32(3), "leaf priority wrong after app 2 removed")
+
+	leaf.RemoveApplication(app)
+	assert.Equal(t, parent.GetCurrentPriority(), configs.MinPriority, "final parent priority wrong")
+	assert.Equal(t, leaf.GetCurrentPriority(), configs.MinPriority, "final leaf priority wrong")
+}
+
 func TestPendingCalc(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)

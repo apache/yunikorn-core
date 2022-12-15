@@ -972,7 +972,7 @@ func (sq *Queue) sortApplications(filterApps bool) []*Application {
 		// this is to skip the app filtering in the StateAware policy sorting
 		queueSortType = policies.FifoSortPolicy
 	}
-	return sortApplications(sq.GetCopyOfApps(), queueSortType, sq.GetGuaranteedResource())
+	return sortApplications(sq.GetCopyOfApps(), queueSortType, sq.IsPrioritySortEnabled(), sq.GetGuaranteedResource())
 }
 
 // sortQueues returns a sorted shallow copy of the queues for this parent queue.

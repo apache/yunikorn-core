@@ -150,6 +150,8 @@ func TestNoQueueLimits(t *testing.T) {
 }
 
 func TestSortAppsNoPending(t *testing.T) {
+	var list []*Application
+
 	// stable sort is used so equal values stay where they were
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"vcore": resources.Quantity(100)})
@@ -162,25 +164,43 @@ func TestSortAppsNoPending(t *testing.T) {
 	}
 
 	// no apps with pending resources should come back empty
-	list := sortApplications(input, policies.FairSortPolicy, nil)
+	list = sortApplications(input, policies.FairSortPolicy, false, nil)
 	assertAppListLength(t, list, []string{}, "fair no pending")
-	list = sortApplications(input, policies.FifoSortPolicy, nil)
+	list = sortApplications(input, policies.FairSortPolicy, true, nil)
+	assertAppListLength(t, list, []string{}, "fair no pending - priority")
+
+	list = sortApplications(input, policies.FifoSortPolicy, false, nil)
 	assertAppListLength(t, list, []string{}, "fifo no pending")
-	list = sortApplications(input, policies.StateAwarePolicy, nil)
+	list = sortApplications(input, policies.FifoSortPolicy, true, nil)
+	assertAppListLength(t, list, []string{}, "fifo no pending - priority")
+
+	list = sortApplications(input, policies.StateAwarePolicy, false, nil)
 	assertAppListLength(t, list, []string{}, "state no pending")
+	list = sortApplications(input, policies.StateAwarePolicy, true, nil)
+	assertAppListLength(t, list, []string{}, "state no pending - priority")
 
 	// set one app with pending
 	appID := "app-1"
 	input[appID].pending = res
-	list = sortApplications(input, policies.FairSortPolicy, nil)
+	list = sortApplications(input, policies.FairSortPolicy, false, nil)
 	assertAppListLength(t, list, []string{appID}, "fair one pending")
-	list = sortApplications(input, policies.FifoSortPolicy, nil)
+	list = sortApplications(input, policies.FairSortPolicy, true, nil)
+	assertAppListLength(t, list, []string{appID}, "fair one pending - priority")
+
+	list = sortApplications(input, policies.FifoSortPolicy, false, nil)
 	assertAppListLength(t, list, []string{appID}, "fifo one pending")
-	list = sortApplications(input, policies.StateAwarePolicy, nil)
+	list = sortApplications(input, policies.FifoSortPolicy, true, nil)
+	assertAppListLength(t, list, []string{appID}, "fifo one pending - priority")
+
+	list = sortApplications(input, policies.StateAwarePolicy, false, nil)
 	assertAppListLength(t, list, []string{appID}, "state one pending")
+	list = sortApplications(input, policies.StateAwarePolicy, true, nil)
+	assertAppListLength(t, list, []string{appID}, "state one pending - priority")
 }
 
 func TestSortAppsFifo(t *testing.T) {
+	var list []*Application
+
 	// stable sort is used so equal values stay where they were
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"vcore": resources.Quantity(100)})
@@ -195,10 +215,37 @@ func TestSortAppsFifo(t *testing.T) {
 		// make sure the time stamps differ at least a bit (tracking in nano seconds)
 		time.Sleep(time.Nanosecond * 5)
 	}
-	// map iteration is random so we do not need to check input
-	// apps should come back in order created 0, 1, 2, 3
-	list := sortApplications(input, policies.FifoSortPolicy, nil)
+
+	// fifo - apps should come back in order created 0, 1, 2, 3
+	list = sortApplications(input, policies.FifoSortPolicy, false, nil)
 	assertAppList(t, list, []int{0, 1, 2, 3}, "fifo simple")
+}
+
+func TestSortAppsPriorityFifo(t *testing.T) {
+	var list []*Application
+
+	// stable sort is used so equal values stay where they were
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{
+		"vcore": resources.Quantity(100)})
+	// setup to sort descending: all apps have pending resources
+	input := make(map[string]*Application, 4)
+	for i := 0; i < 4; i++ {
+		num := strconv.Itoa(i)
+		appID := "app-" + num
+		app := newApplication(appID, "partition", "queue")
+		app.pending = res
+		input[appID] = app
+		// make sure the time stamps differ at least a bit (tracking in nano seconds)
+		time.Sleep(time.Nanosecond * 5)
+	}
+
+	// set priorities
+	input["app-1"].askMaxPriority = 5
+	input["app-3"].askMaxPriority = 4
+
+	// priority - apps should come back in order 1, 3, 0, 2
+	list = sortApplications(input, policies.FifoSortPolicy, true, nil)
+	assertAppList(t, list, []int{2, 0, 3, 1}, "fifo simple")
 }
 
 func TestSortAppsFair(t *testing.T) {
@@ -217,28 +264,72 @@ func TestSortAppsFair(t *testing.T) {
 	}
 	// nil resource: usage based sorting
 	// apps should come back in order: 0, 1, 2, 3
-	list := sortApplications(input, policies.FairSortPolicy, nil)
+	list := sortApplications(input, policies.FairSortPolicy, false, nil)
 	assertAppList(t, list, []int{0, 1, 2, 3}, "nil total")
 
 	// apps should come back in order: 0, 1, 2, 3
-	list = sortApplications(input, policies.FairSortPolicy, resources.Multiply(res, 0))
+	list = sortApplications(input, policies.FairSortPolicy, false, resources.Multiply(res, 0))
 	assertAppList(t, list, []int{0, 1, 2, 3}, "zero total")
 
 	// apps should come back in order: 0, 1, 2, 3
-	list = sortApplications(input, policies.FairSortPolicy, resources.Multiply(res, 5))
+	list = sortApplications(input, policies.FairSortPolicy, false, resources.Multiply(res, 5))
 	assertAppList(t, list, []int{0, 1, 2, 3}, "no alloc, set total")
 
 	// update allocated resource for app-1
 	input["app-1"].allocatedResource = resources.Multiply(res, 10)
 	// apps should come back in order: 0, 2, 3, 1
-	list = sortApplications(input, policies.FairSortPolicy, resources.Multiply(res, 5))
+	list = sortApplications(input, policies.FairSortPolicy, false, resources.Multiply(res, 5))
 	assertAppList(t, list, []int{0, 3, 1, 2}, "app-1 allocated")
 
 	// update allocated resource for app-3 to negative (move to head of the list)
 	input["app-3"].allocatedResource = resources.Multiply(res, -10)
 	// apps should come back in order: 3, 0, 2, 1
-	list = sortApplications(input, policies.FairSortPolicy, resources.Multiply(res, 5))
+	list = sortApplications(input, policies.FairSortPolicy, false, resources.Multiply(res, 5))
 	assertAppList(t, list, []int{1, 3, 2, 0}, "app-1 & app-3 allocated")
+}
+
+func TestSortAppsPriorityFair(t *testing.T) {
+	// stable sort is used so equal values stay where they were
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{
+		"vcore": resources.Quantity(100)})
+	// setup to sort descending: all apps have pending resources
+	input := make(map[string]*Application, 4)
+	for i := 0; i < 4; i++ {
+		num := strconv.Itoa(i)
+		appID := "app-" + num
+		app := newApplication(appID, "partition", "queue")
+		app.allocatedResource = resources.Multiply(res, int64(i+1))
+		app.pending = res
+		input[appID] = app
+	}
+
+	// set priorities
+	input["app-1"].askMaxPriority = 5
+
+	// nil resource: priority then usage based sorting
+	// apps should come back in order: 1, 0, 2, 3
+	list := sortApplications(input, policies.FairSortPolicy, true, nil)
+	assertAppList(t, list, []int{1, 0, 2, 3}, "nil total")
+
+	// apps should come back in order: 1, 0, 2, 3
+	list = sortApplications(input, policies.FairSortPolicy, true, resources.Multiply(res, 0))
+	assertAppList(t, list, []int{1, 0, 2, 3}, "zero total")
+
+	// apps should come back in order: 1, 0, 2, 3
+	list = sortApplications(input, policies.FairSortPolicy, true, resources.Multiply(res, 5))
+	assertAppList(t, list, []int{1, 0, 2, 3}, "no alloc, set total")
+
+	// update allocated resource for app-2
+	input["app-2"].allocatedResource = resources.Multiply(res, 10)
+	// apps should come back in order: 1, 0, 3, 2
+	list = sortApplications(input, policies.FairSortPolicy, true, resources.Multiply(res, 5))
+	assertAppList(t, list, []int{1, 0, 3, 2}, "app-1 allocated")
+
+	// update allocated resource for app-3 to negative (move to head of the list within priority 0)
+	input["app-3"].allocatedResource = resources.Multiply(res, -10)
+	// apps should come back in order: 1, 3, 0, 2
+	list = sortApplications(input, policies.FairSortPolicy, true, resources.Multiply(res, 5))
+	assertAppList(t, list, []int{2, 0, 3, 1}, "app-1 & app-3 allocated")
 }
 
 func TestSortAppsStateAware(t *testing.T) {
@@ -259,20 +350,20 @@ func TestSortAppsStateAware(t *testing.T) {
 		time.Sleep(time.Nanosecond * 5)
 	}
 	// only first app should be returned (all in accepted)
-	list := sortApplications(input, policies.StateAwarePolicy, nil)
+	list := sortApplications(input, policies.StateAwarePolicy, false, nil)
 	appID0 := "app-0"
 	assertAppListLength(t, list, []string{appID0}, "state all accepted")
 
 	// set first app pending to zero, should get 2nd app back
 	input[appID0].pending = resources.NewResource()
-	list = sortApplications(input, policies.StateAwarePolicy, nil)
+	list = sortApplications(input, policies.StateAwarePolicy, false, nil)
 	appID1 := "app-1"
 	assertAppListLength(t, list, []string{appID1}, "state no pending")
 
 	// move the first app to starting no pending resource should get nothing
 	err := input[appID0].HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "state change failed for app-0")
-	list = sortApplications(input, policies.StateAwarePolicy, nil)
+	list = sortApplications(input, policies.StateAwarePolicy, false, nil)
 	assertAppListLength(t, list, []string{}, "state starting no pending")
 
 	// move first app to running (no pending resource) and 4th app to starting should get starting app
@@ -281,18 +372,18 @@ func TestSortAppsStateAware(t *testing.T) {
 	appID3 := "app-3"
 	err = input[appID3].HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "state change failed for app-3")
-	list = sortApplications(input, policies.StateAwarePolicy, nil)
+	list = sortApplications(input, policies.StateAwarePolicy, false, nil)
 	assertAppListLength(t, list, []string{appID3}, "state starting")
 
 	// set pending for first app, should get back 1st and 4th in that order
 	input[appID0].pending = res
-	list = sortApplications(input, policies.StateAwarePolicy, nil)
+	list = sortApplications(input, policies.StateAwarePolicy, false, nil)
 	assertAppListLength(t, list, []string{appID0, appID3}, "state first pending")
 
 	// move 4th to running should get back: 1st, 2nd and 4th in that order
 	err = input[appID3].HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "state change failed for app-3")
-	list = sortApplications(input, policies.StateAwarePolicy, nil)
+	list = sortApplications(input, policies.StateAwarePolicy, false, nil)
 	assertAppListLength(t, list, []string{appID0, appID1, appID3}, "state not app-2")
 }
 
@@ -339,14 +430,6 @@ func queueNames(list []*Queue) string {
 		result = append(result, v.Name)
 	}
 	return strings.Join(result, ",")
-}
-
-// list of nodes and the location of the named nodes inside that list
-// place[0] defines the location of the node-0 in the list of nodes
-func assertNodeList(t *testing.T, list []*Node, place []int, name string) {
-	assert.Equal(t, "node-0", list[place[0]].NodeID, "test name: %s", name)
-	assert.Equal(t, "node-1", list[place[1]].NodeID, "test name: %s", name)
-	assert.Equal(t, "node-2", list[place[2]].NodeID, "test name: %s", name)
 }
 
 // list of application and the location of the named applications inside that list

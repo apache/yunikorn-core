@@ -215,7 +215,7 @@ func checkSchedulingContext(schedulerContext *ClusterContext) []dao.HealthCheckI
 		fmt.Sprintf("Partitions with negative resources: %q", partitionsWithNegResources))
 	info[1] = CreateCheckInfo(len(nodesWithNegResources) == 0, "Negative resources",
 		"Check for negative resources in the nodes",
-		fmt.Sprintf("Nodes with negative resources: %q", partitionsWithNegResources))
+		fmt.Sprintf("Nodes with negative resources: %q", nodesWithNegResources))
 	info[2] = CreateCheckInfo(len(allocationMismatch) == 0, "Consistency of data",
 		"Check if a node's allocated resource <= total resource of the node",
 		fmt.Sprintf("Nodes with inconsistent data: %q", allocationMismatch))

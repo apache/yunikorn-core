@@ -20,6 +20,7 @@ package objects
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,41 +35,78 @@ func TestSortQueues(t *testing.T) {
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 
-	var q0, q1, q2 *Queue
+	var q0, q1, q2, q3 *Queue
+	var queues []*Queue
 	q0, err = createManagedQueue(root, "q0", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	q0.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500, "vcore": 500})
 	q0.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300, "vcore": 300})
+	q0.currentPriority = 1
 
 	q1, err = createManagedQueue(root, "q1", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	q1.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300, "vcore": 300})
 	q1.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 200, "vcore": 200})
+	q1.currentPriority = 1
 
 	q2, err = createManagedQueue(root, "q2", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	q2.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 200, "vcore": 200})
 	q2.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 100, "vcore": 100})
+	q2.currentPriority = 1
 
-	// fairness ratios: q0:300/500=0.6, q1:200/300=0.67, q2:100/200=0.5
-	queues := []*Queue{q0, q1, q2}
-	sortQueue(queues, policies.FairSortPolicy)
-	assert.Equal(t, len(queues), 3)
-	assertQueueList(t, queues, []int{1, 2, 0}, "fair first")
+	q3, err = createManagedQueue(root, "q3", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	q3.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 200, "vcore": 200})
+	q3.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 100, "vcore": 100})
+	q3.currentPriority = 3
 
-	// fairness ratios: q0:200/500=0.4, q1:300/300=1, q2:100/200=0.5
+	// fifo
+	queues = []*Queue{q0, q1, q2, q3}
+	sortQueue(queues, policies.FifoSortPolicy, false)
+	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q0, q1, q2, q3}), "fifo first")
+
+	queues = []*Queue{q0, q1, q2, q3}
+	sortQueue(queues, policies.FifoSortPolicy, true)
+	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q0, q1, q2}), "fifo first - priority")
+
+	// fifo - different starting order
+	queues = []*Queue{q1, q3, q0, q2}
+	sortQueue(queues, policies.FifoSortPolicy, false)
+	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q1, q3, q0, q2}), "fifo second")
+
+	queues = []*Queue{q1, q3, q0, q2}
+	sortQueue(queues, policies.FifoSortPolicy, true)
+	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q1, q0, q2}), "fifo second - priority")
+
+	// fairness ratios: q0:300/500=0.6, q1:200/300=0.67, q2:100/200=0.5, q3:100/200=0.5
+	queues = []*Queue{q0, q1, q2, q3}
+	sortQueue(queues, policies.FairSortPolicy, false)
+	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q2, q0, q1}), "fair first")
+
+	queues = []*Queue{q0, q1, q2, q3}
+	sortQueue(queues, policies.FairSortPolicy, true)
+	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q2, q0, q1}), "fair first - priority")
+
+	// fairness ratios: q0:200/500=0.4, q1:300/300=1, q2:100/200=0.5, q3:100/200=0.5
 	q0.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 200, "vcore": 200})
 	q1.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300, "vcore": 300})
-	sortQueue(queues, policies.FairSortPolicy)
-	assert.Equal(t, len(queues), 3)
-	assertQueueList(t, queues, []int{0, 2, 1}, "fair second")
+	queues = []*Queue{q0, q1, q2, q3}
+	sortQueue(queues, policies.FairSortPolicy, false)
+	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q0, q3, q2, q1}), "fair second")
+	queues = []*Queue{q0, q1, q2, q3}
+	sortQueue(queues, policies.FairSortPolicy, true)
+	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q0, q2, q1}), "fair second - priority")
 
-	// fairness ratios: q0:150/500=0.3, q1:120/300=0.4, q2:100/200=0.5
+	// fairness ratios: q0:150/500=0.3, q1:120/300=0.4, q2:100/200=0.5, q3:100/200=0.5
 	q0.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 150, "vcore": 150})
 	q1.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 120, "vcore": 120})
-	sortQueue(queues, policies.FairSortPolicy)
-	assert.Equal(t, len(queues), 3)
-	assertQueueList(t, queues, []int{0, 1, 2}, "fair third")
+	queues = []*Queue{q0, q1, q2, q3}
+	sortQueue(queues, policies.FairSortPolicy, false)
+	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q0, q1, q3, q2}), "fair third")
+	queues = []*Queue{q0, q1, q2, q3}
+	sortQueue(queues, policies.FairSortPolicy, true)
+	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q0, q1, q2}), "fair third - priority")
 }
 
 // queue guaranteed resource is not set (same as a zero resource)
@@ -76,29 +114,39 @@ func TestNoQueueLimits(t *testing.T) {
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 
-	var q0, q1, q2 *Queue
+	var q0, q1, q2, q3 *Queue
 	q0, err = createManagedQueue(root, "q0", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	q0.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300, "vcore": 300})
+	q0.currentPriority = 1
 
 	q1, err = createManagedQueue(root, "q1", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	q1.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 200, "vcore": 200})
+	q1.currentPriority = 0
 
 	q2, err = createManagedQueue(root, "q2", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	q2.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 100, "vcore": 100})
+	q2.currentPriority = 2
 
-	queues := []*Queue{q0, q1, q2}
-	sortQueue(queues, policies.FairSortPolicy)
-	assert.Equal(t, len(queues), 3)
-	assertQueueList(t, queues, []int{2, 1, 0}, "fair no limit first")
+	q3, err = createManagedQueue(root, "q3", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	q3.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 100, "vcore": 100})
+	q3.currentPriority = 3
+
+	queues := []*Queue{q0, q1, q2, q3}
+	sortQueue(queues, policies.FairSortPolicy, false)
+	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q2, q1, q0}), "fair no limit first")
+	sortQueue(queues, policies.FairSortPolicy, true)
+	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q2, q0, q1}), "fair no limit first - priority")
 
 	q0.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 200, "vcore": 200})
 	q1.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300, "vcore": 300})
-	sortQueue(queues, policies.FairSortPolicy)
-	assert.Equal(t, len(queues), 3)
-	assertQueueList(t, queues, []int{1, 2, 0}, "fair no limit second")
+	sortQueue(queues, policies.FairSortPolicy, false)
+	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q2, q0, q1}), "fair no limit second")
+	sortQueue(queues, policies.FairSortPolicy, true)
+	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q2, q0, q1}), "fair no limit second - priority")
 }
 
 func TestSortAppsNoPending(t *testing.T) {
@@ -285,12 +333,12 @@ func TestSortAsks(t *testing.T) {
 	assertAskList(t, list, []int{3, 1, 0, 2}, "descending same prio")
 }
 
-// list of queues and the location of the named queue inside that list
-// place[0] defines the location of the root.q0 in the list of queues
-func assertQueueList(t *testing.T, list []*Queue, place []int, name string) {
-	assert.Equal(t, "root.q0", list[place[0]].QueuePath, "test name: %s", name)
-	assert.Equal(t, "root.q1", list[place[1]].QueuePath, "test name: %s", name)
-	assert.Equal(t, "root.q2", list[place[2]].QueuePath, "test name: %s", name)
+func queueNames(list []*Queue) string {
+	result := make([]string, 0)
+	for _, v := range list {
+		result = append(result, v.Name)
+	}
+	return strings.Join(result, ",")
 }
 
 // list of nodes and the location of the named nodes inside that list

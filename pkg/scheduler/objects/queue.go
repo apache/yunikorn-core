@@ -948,6 +948,12 @@ func (sq *Queue) DecAllocatedResource(alloc *resources.Resource) error {
 	return nil
 }
 
+func (sq *Queue) IsPrioritySortEnabled() bool {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.prioritySortEnabled
+}
+
 // sortApplications returns a sorted shallow copy of the applications in the queue.
 // Applications are sorted using the sorting type of the queue.
 // Only applications with a pending resource request are considered.
@@ -990,7 +996,7 @@ func (sq *Queue) sortQueues() []*Queue {
 		}
 	}
 	// Sort the queues
-	sortQueue(sortedQueues, sq.getSortType())
+	sortQueue(sortedQueues, sq.getSortType(), sq.IsPrioritySortEnabled())
 
 	return sortedQueues
 }

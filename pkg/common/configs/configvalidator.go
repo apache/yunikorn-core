@@ -20,6 +20,7 @@ package configs
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -51,6 +52,10 @@ const (
 	ApplicationSortPriorityEnabled  = "enabled"
 	ApplicationSortPriorityDisabled = "disabled"
 )
+
+// Priority
+var MinPriority int32 = math.MinInt32
+var MaxPriority int32 = math.MaxInt32
 
 var DefaultPreemptionDelay = 30 * time.Second
 

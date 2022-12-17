@@ -20,10 +20,12 @@ package scheduler
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
@@ -34,52 +36,142 @@ import (
 const defaultPeriod = 30 * time.Second
 
 type HealthChecker struct {
+	context       *ClusterContext
+	confWatcherId string
+
+	// mutable values require locking
+	stopChan *chan struct{}
 	period   time.Duration
-	stopChan chan struct{}
+	enabled  bool
+
+	sync.RWMutex
 }
 
-func NewHealthChecker() *HealthChecker {
-	return &HealthChecker{
-		period:   defaultPeriod,
-		stopChan: make(chan struct{}),
+func NewHealthChecker(schedulerContext *ClusterContext) *HealthChecker {
+	checker := &HealthChecker{
+		context: schedulerContext,
 	}
+	checker.confWatcherId = fmt.Sprintf("health-checker-%p", checker)
+
+	return checker
 }
 
-func NewHealthCheckerWithParameters(period time.Duration) *HealthChecker {
-	return &HealthChecker{
-		period:   period,
-		stopChan: make(chan struct{}),
+func (c *HealthChecker) GetPeriod() time.Duration {
+	c.RLock()
+	defer c.RUnlock()
+	return c.period
+}
+
+func (c *HealthChecker) IsEnabled() bool {
+	c.RLock()
+	defer c.RUnlock()
+	return c.enabled
+}
+
+func (c *HealthChecker) readPeriod() time.Duration {
+	value, ok := configs.GetConfigMap()[configs.HealthCheckInterval]
+	if !ok {
+		return configs.DefaultHealthCheckInterval
 	}
+
+	result, err := time.ParseDuration(value)
+	if err != nil {
+		log.Logger().Warn("Failed to parse configuration value",
+			zap.String("key", configs.HealthCheckInterval),
+			zap.String("value", value),
+			zap.Error(err))
+		return configs.DefaultHealthCheckInterval
+	}
+	if result < 0 {
+		result = 0
+	}
+	return result
 }
 
-// start execute healthCheck service in the background,
-func (c *HealthChecker) start(schedulerContext *ClusterContext) {
-	// immediate first tick
-	c.runOnce(schedulerContext)
+// Start executes healthCheck service in the background
+func (c *HealthChecker) Start() {
+	c.startInternal(true)
+}
 
-	go func() {
-		ticker := time.NewTicker(c.period)
-		for {
-			select {
-			case <-c.stopChan:
-				ticker.Stop()
-				return
-			case <-ticker.C:
-				c.runOnce(schedulerContext)
+func (c *HealthChecker) startInternal(runImmediately bool) {
+	if runImmediately {
+		c.runOnce()
+	}
+
+	c.Lock()
+	defer c.Unlock()
+
+	configs.AddConfigMapCallback(c.confWatcherId, func() {
+		go c.reloadConfig()
+	})
+
+	period := c.readPeriod()
+	if period > 0 {
+		stopChan := make(chan struct{})
+		c.stopChan = &stopChan
+		c.period = period
+		c.enabled = true
+
+		log.Logger().Info("Starting periodic health checker", zap.Duration("interval", period))
+
+		go func() {
+			ticker := time.NewTicker(period)
+			for {
+				select {
+				case <-stopChan:
+					ticker.Stop()
+					return
+				case <-ticker.C:
+					c.runOnce()
+				}
 			}
-		}
-	}()
+		}()
+	} else {
+		// disabled
+		c.stopChan = nil
+		c.period = 0
+		c.enabled = false
+		log.Logger().Info("Periodic health checker disabled")
+	}
 }
 
-func (c *HealthChecker) stop() {
-	c.stopChan <- struct{}{}
-	close(c.stopChan)
+func (c *HealthChecker) Stop() {
+	c.Lock()
+	defer c.Unlock()
+
+	configs.RemoveConfigMapCallback(c.confWatcherId)
+
+	if c.stopChan != nil {
+		log.Logger().Info("Stopping periodic health checker")
+		*c.stopChan <- struct{}{}
+		close(*c.stopChan)
+		c.stopChan = nil
+	}
 }
 
-func (c *HealthChecker) runOnce(schedulerContext *ClusterContext) {
+func (c *HealthChecker) Restart() {
+	c.Stop()
+	c.startInternal(false)
+}
+
+func (c *HealthChecker) reloadConfig() {
+	if c.isRestartNeeded() {
+		c.Restart()
+	}
+}
+
+func (c *HealthChecker) isRestartNeeded() bool {
+	c.Lock()
+	defer c.Unlock()
+
+	period := c.readPeriod()
+	return period != c.period
+}
+
+func (c *HealthChecker) runOnce() {
 	schedulerMetrics := metrics.GetSchedulerMetrics()
-	result := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
-	updateSchedulerLastHealthStatus(result, schedulerContext)
+	result := GetSchedulerHealthStatus(schedulerMetrics, c.context)
+	updateSchedulerLastHealthStatus(&result, c.context)
 	if !result.Healthy {
 		log.Logger().Warn("Scheduler is not healthy",
 			zap.Any("health check values", result.HealthChecks))
@@ -89,14 +181,8 @@ func (c *HealthChecker) runOnce(schedulerContext *ClusterContext) {
 	}
 }
 
-func updateSchedulerLastHealthStatus(latest dao.SchedulerHealthDAOInfo, schedulerContext *ClusterContext) {
-	result := schedulerContext.GetLastHealthCheckResult()
-	if result == nil {
-		result = new(dao.SchedulerHealthDAOInfo)
-	}
-	result.Healthy = latest.Healthy
-	result.HealthChecks = latest.HealthChecks
-	schedulerContext.SetLastHealthCheckResult(result)
+func updateSchedulerLastHealthStatus(latest *dao.SchedulerHealthDAOInfo, schedulerContext *ClusterContext) {
+	schedulerContext.SetLastHealthCheckResult(latest)
 }
 
 func GetSchedulerHealthStatus(metrics metrics.CoreSchedulerMetrics, schedulerContext *ClusterContext) dao.SchedulerHealthDAOInfo {

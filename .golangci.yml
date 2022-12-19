@@ -19,6 +19,7 @@
 
 # options for analysis running
 run:
+  go: '1.17'
   issues-exit-code: 1
   skip-dirs-use-default: true
   modules-download-mode: readonly

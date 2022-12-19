@@ -18,7 +18,16 @@
 
 package configs
 
-import "sync"
+import (
+	"sync"
+	"time"
+)
+
+const (
+	HealthCheckInterval = "health.checkInterval"
+)
+
+var DefaultHealthCheckInterval = 30 * time.Second
 
 var ConfigContext *SchedulerConfigContext
 

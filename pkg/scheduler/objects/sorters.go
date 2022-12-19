@@ -27,21 +27,70 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 )
 
-func sortQueue(queues []*Queue, sortType policies.SortPolicy) {
+func sortQueue(queues []*Queue, sortType policies.SortPolicy, considerPriority bool) {
 	sortingStart := time.Now()
 	if sortType == policies.FairSortPolicy {
-		sort.SliceStable(queues, func(i, j int) bool {
-			l := queues[i]
-			r := queues[j]
-			comp := resources.CompUsageRatioSeparately(l.GetAllocatedResource(), l.GetGuaranteedResource(),
-				r.GetAllocatedResource(), r.GetGuaranteedResource())
-			if comp == 0 {
-				return resources.StrictlyGreaterThan(resources.Sub(l.pending, r.pending), resources.Zero)
-			}
-			return comp < 0
-		})
+		if considerPriority {
+			sortQueuesByPriorityAndFairness(queues)
+		} else {
+			sortQueuesByFairnessAndPriority(queues)
+		}
+	} else {
+		if considerPriority {
+			sortQueuesByPriority(queues)
+		}
 	}
 	metrics.GetSchedulerMetrics().ObserveQueueSortingLatency(sortingStart)
+}
+
+func sortQueuesByPriority(queues []*Queue) {
+	sort.SliceStable(queues, func(i, j int) bool {
+		l := queues[i]
+		r := queues[j]
+		lPriority := l.GetCurrentPriority()
+		rPriority := r.GetCurrentPriority()
+		return lPriority > rPriority
+	})
+}
+
+func sortQueuesByPriorityAndFairness(queues []*Queue) {
+	sort.SliceStable(queues, func(i, j int) bool {
+		l := queues[i]
+		r := queues[j]
+		lPriority := l.GetCurrentPriority()
+		rPriority := r.GetCurrentPriority()
+		if lPriority > rPriority {
+			return true
+		} else if lPriority < rPriority {
+			return false
+		}
+		comp := resources.CompUsageRatioSeparately(l.GetAllocatedResource(), l.GetGuaranteedResource(),
+			r.GetAllocatedResource(), r.GetGuaranteedResource())
+		if comp == 0 {
+			return resources.StrictlyGreaterThan(resources.Sub(l.pending, r.pending), resources.Zero)
+		}
+		return comp < 0
+	})
+}
+
+func sortQueuesByFairnessAndPriority(queues []*Queue) {
+	sort.SliceStable(queues, func(i, j int) bool {
+		l := queues[i]
+		r := queues[j]
+		comp := resources.CompUsageRatioSeparately(l.GetAllocatedResource(), l.GetGuaranteedResource(),
+			r.GetAllocatedResource(), r.GetGuaranteedResource())
+		if comp == 0 {
+			lPriority := l.GetCurrentPriority()
+			rPriority := r.GetCurrentPriority()
+			if lPriority > rPriority {
+				return true
+			} else if lPriority < rPriority {
+				return false
+			}
+			return resources.StrictlyGreaterThan(resources.Sub(l.pending, r.pending), resources.Zero)
+		}
+		return comp < 0
+	})
 }
 
 func sortApplications(apps map[string]*Application, sortType policies.SortPolicy, globalResource *resources.Resource) []*Application {

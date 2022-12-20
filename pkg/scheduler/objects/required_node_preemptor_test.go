@@ -189,6 +189,22 @@ func TestFilterAllocations(t *testing.T) {
 	p2.filterAllocations()
 	filteredAllocations = p2.getAllocations()
 	assert.Equal(t, len(filteredAllocations), 10)
+
+	// case 4: allocation has preempted
+	requiredAsk3 := createAllocationAsk("ask12", "app1", "true", true, 20,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	p3 := NewRequiredNodePreemptor(node, requiredAsk3)
+	prepareAllocationAsks(node)
+	p3.filterAllocations()
+	p3.sortAllocations()
+
+	victims := p3.GetVictims()
+	for _, victim := range victims {
+		victim.MarkPreempted()
+	}
+	p3.filterAllocations()
+	filteredAllocations = p3.getAllocations()
+	assert.Equal(t, len(filteredAllocations), 19)
 }
 
 func TestGetVictims(t *testing.T) {

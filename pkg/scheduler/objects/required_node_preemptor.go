@@ -51,6 +51,11 @@ func (p *PreemptionContext) filterAllocations() {
 			continue
 		}
 
+		// skip if the allocation is already being preempted
+		if allocation.IsPreempted() {
+			continue
+		}
+
 		// atleast one of the required ask resource should match, otherwise skip
 		includeAllocation := false
 		for k := range p.requiredAsk.GetAllocatedResource().Resources {

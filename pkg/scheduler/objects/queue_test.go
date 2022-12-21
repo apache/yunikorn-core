@@ -1759,6 +1759,9 @@ func TestNewDynamicQueue(t *testing.T) {
 	assert.Assert(t, reflect.DeepEqual(childLeaf.properties, parent.template.GetProperties()))
 	assert.Assert(t, reflect.DeepEqual(childLeaf.maxResource, parent.template.GetMaxResource()))
 	assert.Assert(t, reflect.DeepEqual(childLeaf.guaranteedResource, parent.template.GetGuaranteedResource()))
+	assert.Assert(t, childLeaf.prioritySortEnabled)
+	assert.Equal(t, childLeaf.priorityPolicy, policies.DefaultPriorityPolicy)
+	assert.Equal(t, childLeaf.preemptionPolicy, policies.DefaultPreemptionPolicy)
 
 	// case 1: non-leaf can't use template but it can inherit template from parent
 	childNonLeaf, err := NewDynamicQueue("nonleaf", false, parent)
@@ -1767,6 +1770,9 @@ func TestNewDynamicQueue(t *testing.T) {
 	assert.Equal(t, len(childNonLeaf.properties), 0)
 	assert.Assert(t, childNonLeaf.guaranteedResource == nil)
 	assert.Assert(t, childNonLeaf.maxResource == nil)
+	assert.Assert(t, childNonLeaf.prioritySortEnabled)
+	assert.Equal(t, childNonLeaf.priorityPolicy, policies.DefaultPriorityPolicy)
+	assert.Equal(t, childNonLeaf.preemptionPolicy, policies.DefaultPreemptionPolicy)
 }
 
 func TestTemplateIsNotOverrideByParent(t *testing.T) {

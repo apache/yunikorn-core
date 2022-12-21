@@ -95,6 +95,9 @@ func newBlankQueue() *Queue {
 		allocatedResource:      resources.NewResource(),
 		pending:                resources.NewResource(),
 		currentPriority:        configs.MinPriority,
+		prioritySortEnabled:    true,
+		preemptionDelay:        configs.DefaultPreemptionDelay,
+		preemptionPolicy:       policies.DefaultPreemptionPolicy,
 	}
 }
 
@@ -107,8 +110,6 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 	sq.parent = parent
 	sq.isManaged = true
 	sq.maxRunningApps = conf.MaxApplications
-	sq.prioritySortEnabled = true
-	sq.preemptionDelay = configs.DefaultPreemptionDelay
 
 	// update the properties
 	if err := sq.applyConf(conf); err != nil {

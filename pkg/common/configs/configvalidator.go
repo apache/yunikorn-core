@@ -400,15 +400,9 @@ func checkQueuesStructure(partition *PartitionConfig) error {
 }
 
 // Check the state dump file path, if configured, is a valid path that can be written to.
-func checkStateDumpFilePath(partition *PartitionConfig) error {
-	fileName := partition.StateDumpFilePath
-	if fileName != "" {
-		if err := ensureDir(fileName); err != nil {
-			return err
-		}
-		if _, cerr := os.Create(fileName); cerr != nil {
-			return cerr
-		}
+func checkDeprecatedStateDumpFilePath(partition *PartitionConfig) error {
+	if partition.StateDumpFilePath != "" {
+		log.Logger().Warn("Ignoring deprecated partition setting 'statedumpfilepath'. This parameter will be removed in a future release.")
 	}
 	return nil
 }
@@ -466,7 +460,7 @@ func Validate(newConfig *SchedulerConfig) error {
 		if err != nil {
 			return err
 		}
-		err = checkStateDumpFilePath(&newConfig.Partitions[i])
+		err = checkDeprecatedStateDumpFilePath(&newConfig.Partitions[i])
 		if err != nil {
 			return err
 		}

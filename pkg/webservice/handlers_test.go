@@ -23,11 +23,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -1156,163 +1154,6 @@ func TestFullStateDumpPath(t *testing.T) {
 	verifyStateDumpJSON(t, &aggregated)
 }
 
-func TestPeriodicStateDumpDefaultPath(t *testing.T) {
-	schedulerContext = prepareSchedulerContext(t, false)
-	defer deleteStateDumpFile(t, schedulerContext)
-
-	partitionContext := schedulerContext.GetPartitionMapClone()
-	context := partitionContext[normalizedPartitionName]
-	app := newApplication("appID", normalizedPartitionName, "root.default", rmID, security.UserGroup{})
-	err := context.AddApplication(app)
-	assert.NilError(t, err, "failed to add Application to partition")
-
-	imHistory = history.NewInternalMetricsHistory(5)
-	file, err := os.OpenFile(defaultStateDumpFilePath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
-	assert.NilError(t, err, "failed to open state dump file")
-
-	err = doStateDump(file, true)
-	assert.NilError(t, err)
-	fi, err := os.Stat(defaultStateDumpFilePath)
-	assert.NilError(t, err)
-	assert.Assert(t, fi.Size() > 0, "json response is empty")
-	var aggregated AggregatedStateInfo
-	receivedBytes, err := os.ReadFile(defaultStateDumpFilePath)
-	assert.NilError(t, err)
-	err = json.Unmarshal(receivedBytes, &aggregated)
-	assert.NilError(t, err)
-	verifyStateDumpJSON(t, &aggregated)
-}
-
-func TestPeriodicStateDumpNonDefaultPath(t *testing.T) {
-	stateDumpFilePath := "tmp/non-default-yunikorn-state.txt"
-	defer deleteStateDumpDir(t)
-	schedulerContext = prepareSchedulerContext(t, true)
-	defer deleteStateDumpFile(t, schedulerContext)
-
-	partitionContext := schedulerContext.GetPartitionMapClone()
-	context := partitionContext[normalizedPartitionName]
-	app := newApplication("appID", normalizedPartitionName, "root.default", rmID, security.UserGroup{})
-	err := context.AddApplication(app)
-	assert.NilError(t, err, "failed to add Application to partition")
-
-	imHistory = history.NewInternalMetricsHistory(5)
-	file, err := os.OpenFile(stateDumpFilePath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
-	assert.NilError(t, err, "failed to open state dump file")
-
-	err = doStateDump(file, true)
-	assert.NilError(t, err)
-	fi, err := os.Stat(stateDumpFilePath)
-	assert.NilError(t, err)
-	assert.Assert(t, fi.Size() > 0, "json response is empty")
-	var aggregated AggregatedStateInfo
-	receivedBytes, err := os.ReadFile(stateDumpFilePath)
-	assert.NilError(t, err)
-	err = json.Unmarshal(receivedBytes, &aggregated)
-	assert.NilError(t, err)
-	verifyStateDumpJSON(t, &aggregated)
-}
-
-func TestEnableDisablePeriodicStateDump(t *testing.T) {
-	schedulerContext = prepareSchedulerContext(t, false)
-	defer deleteStateDumpFile(t, schedulerContext)
-	defer terminateGoroutine()
-
-	imHistory = history.NewInternalMetricsHistory(5)
-	req, err := http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
-	assert.NilError(t, err)
-	vars := map[string]string{
-		"periodSeconds": "3",
-		"switch":        "enable",
-	}
-	req = mux.SetURLVars(req, vars)
-	resp := &MockResponseWriter{}
-
-	// enable state dump, check file contents
-	handlePeriodicStateDump(resp, req)
-	statusCode := resp.statusCode
-	assert.Equal(t, statusCode, 0, "response status code")
-
-	waitForStateDumpFile(t)
-	fileContents, err2 := os.ReadFile(defaultStateDumpFilePath)
-	assert.NilError(t, err2)
-	var aggregated AggregatedStateInfo
-	err3 := json.Unmarshal(fileContents, &aggregated)
-	assert.NilError(t, err3)
-	verifyStateDumpJSON(t, &aggregated)
-
-	// disable
-	req, err = http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
-	assert.NilError(t, err)
-	vars = map[string]string{
-		"switch": "disable",
-	}
-	req = mux.SetURLVars(req, vars)
-	resp = &MockResponseWriter{}
-	handlePeriodicStateDump(resp, req)
-	statusCode = resp.statusCode
-	assert.Equal(t, statusCode, 0, "response status code")
-}
-
-func TestTryEnableStateDumpTwice(t *testing.T) {
-	defer deleteStateDumpFile(t, schedulerContext)
-	defer terminateGoroutine()
-
-	req, err := http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
-	assert.NilError(t, err)
-	vars := map[string]string{
-		"switch": "enable",
-	}
-	req = mux.SetURLVars(req, vars)
-	resp := &MockResponseWriter{}
-
-	// first call - succeeds
-	handlePeriodicStateDump(resp, req)
-	statusCode := resp.statusCode
-	assert.Equal(t, statusCode, 0, "response status code")
-
-	// second call - expected to fail
-	handlePeriodicStateDump(resp, req)
-	statusCode = resp.statusCode
-	assert.Equal(t, statusCode, http.StatusInternalServerError, "response status code")
-}
-
-func TestTryDisableNotRunningStateDump(t *testing.T) {
-	req, err := http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
-	assert.NilError(t, err)
-	vars := map[string]string{
-		"switch": "disable",
-	}
-	req = mux.SetURLVars(req, vars)
-	resp := &MockResponseWriter{}
-
-	handlePeriodicStateDump(resp, req)
-
-	statusCode := resp.statusCode
-	assert.Equal(t, statusCode, http.StatusInternalServerError, "response status code")
-}
-
-func TestIllegalStateDumpRequests(t *testing.T) {
-	// missing
-	req, err := http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
-	assert.NilError(t, err)
-	resp := &MockResponseWriter{}
-	handlePeriodicStateDump(resp, req)
-	statusCode := resp.statusCode
-	assert.Equal(t, statusCode, http.StatusBadRequest, "response status code")
-
-	// illegal
-	req, err = http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
-	assert.NilError(t, err)
-	vars := map[string]string{
-		"switch": "illegal",
-	}
-	req = mux.SetURLVars(req, vars)
-	resp = &MockResponseWriter{}
-	handlePeriodicStateDump(resp, req)
-	statusCode = resp.statusCode
-	assert.Equal(t, statusCode, http.StatusBadRequest, "response status code")
-}
-
 func TestGetLoggerLevel(t *testing.T) {
 	req, err := http.NewRequest("GET", "/ws/v1/loglevel", strings.NewReader(""))
 	assert.NilError(t, err)
@@ -1500,57 +1341,6 @@ func prepareUserAndGroupContext(t *testing.T) {
 	assert.Assert(t, app.IsStarting(), "Application did not return starting state after alloc: %s", app.CurrentState())
 
 	NewWebApp(schedulerContext, nil)
-}
-
-func waitForStateDumpFile(t *testing.T) {
-	var attempts int
-	for {
-		info, err := os.Stat(defaultStateDumpFilePath)
-		// tolerate only "file not found" errors
-		if err != nil && !os.IsNotExist(err) {
-			t.Fatal(err)
-		}
-
-		if info != nil && info.Size() > 0 {
-			break
-		}
-
-		if attempts++; attempts > 10 {
-			t.Fatal("state dump file has not been created or still empty")
-		}
-
-		time.Sleep(1 * time.Second)
-	}
-}
-
-func deleteStateDumpFile(t *testing.T, cc *scheduler.ClusterContext) {
-	stateDumpFilePath := getStateDumpFilePath(cc)
-	if err := os.Remove(stateDumpFilePath); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func deleteStateDumpDir(t *testing.T) {
-	if err := os.Remove("tmp"); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func terminateGoroutine() {
-	if !isAbortClosed() {
-		abort <- struct{}{}
-		close(abort)
-		periodicStateDump = false
-	}
-}
-
-func isAbortClosed() bool {
-	select {
-	case <-abort:
-		return true
-	default:
-	}
-	return false
 }
 
 func verifyStateDumpJSON(t *testing.T, aggregated *AggregatedStateInfo) {

@@ -61,7 +61,6 @@ type PartitionContext struct {
 	userGroupCache         *security.UserGroupCache        // user cache per partition
 	totalPartitionResource *resources.Resource             // Total node resources
 	allocations            int                             // Number of allocations on the partition
-	stateDumpFilePath      string                          // Path of output file for state dumps
 
 	// The partition write lock must not be held while manipulating an application.
 	// Scheduling is running continuously as a lock free background task. Scheduling an application
@@ -132,7 +131,6 @@ func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionCon
 	// TODO get the resolver from the config
 	pc.userGroupCache = security.GetUserGroupCache("")
 	pc.updateNodeSortingPolicy(conf)
-	pc.updateStateDumpFilePath(conf)
 	return nil
 }
 
@@ -149,15 +147,6 @@ func (pc *PartitionContext) updateNodeSortingPolicy(conf configs.PartitionConfig
 			zap.String("policyName", configuredPolicy.String()))
 	}
 	pc.nodes.SetNodeSortingPolicy(objects.NewNodeSortingPolicy(conf.NodeSortPolicy.Type, conf.NodeSortPolicy.ResourceWeights))
-}
-
-// NOTE: this is a lock free call. It should only be called holding the PartitionContext lock.
-func (pc *PartitionContext) updateStateDumpFilePath(conf configs.PartitionConfig) {
-	stateDumpFilePath := pc.GetStateDumpFilePath()
-	if stateDumpFilePath != conf.StateDumpFilePath {
-		log.Logger().Info(fmt.Sprintf("State dump file path was %s, changing to %s", stateDumpFilePath, conf.StateDumpFilePath))
-		pc.stateDumpFilePath = conf.StateDumpFilePath
-	}
 }
 
 func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig) error {
@@ -183,7 +172,6 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 		pc.placementManager = placement.NewPlacementManager(*pc.rules, pc.GetQueue)
 	}
 	pc.updateNodeSortingPolicy(conf)
-	pc.updateStateDumpFilePath(conf)
 	// start at the root: there is only one queue
 	queueConf := conf.Queues[0]
 	root := pc.root
@@ -532,12 +520,6 @@ func (pc *PartitionContext) createQueue(name string, user security.UserGroup) (*
 		}
 	}
 	return queue, nil
-}
-
-// Get the state dump output file path from the partition.
-// NOTE: this is a lock free call. It should only be called holding the PartitionContext lock.
-func (pc *PartitionContext) GetStateDumpFilePath() string {
-	return pc.stateDumpFilePath
 }
 
 // Get a node from the partition by nodeID.

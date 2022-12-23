@@ -164,33 +164,6 @@ func newPlacementPartition() (*PartitionContext, error) {
 	return newPartitionContext(conf, rmID, nil)
 }
 
-func newStateDumpFilePartition() (*PartitionContext, error) {
-	conf := configs.PartitionConfig{
-		Name: "test",
-		Queues: []configs.QueueConfig{
-			{
-				Name:      "root",
-				Parent:    true,
-				SubmitACL: "*",
-				Queues: []configs.QueueConfig{
-					{
-						Name:   "default",
-						Parent: false,
-						Queues: nil,
-					},
-				},
-			},
-		},
-		PlacementRules:    nil,
-		Limits:            nil,
-		Preemption:        configs.PartitionPreemptionConfig{},
-		NodeSortPolicy:    configs.NodeSortingPolicy{},
-		StateDumpFilePath: "yunikorn-state.txt",
-	}
-
-	return newPartitionContext(conf, rmID, nil)
-}
-
 func newApplication(appID, partition, queueName string) *objects.Application {
 	user := security.UserGroup{
 		User:   "testuser",

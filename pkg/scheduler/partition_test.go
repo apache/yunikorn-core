@@ -962,23 +962,6 @@ func TestGetQueue(t *testing.T) {
 	assert.Equal(t, queue, parent, "partition returned nil for existing queue name request")
 }
 
-func TestGetStateDumpFilePath(t *testing.T) {
-	// get the partition
-	partition, err := newBasePartition()
-	partition.RLock()
-	defer partition.RUnlock()
-
-	assert.NilError(t, err, "test partition create failed with error")
-	stateDumpFilePath := partition.GetStateDumpFilePath()
-	assert.Equal(t, stateDumpFilePath, "")
-
-	partition, err = newStateDumpFilePartition()
-	assert.NilError(t, err, "test partition create failed with error")
-	fileName := "yunikorn-state.txt"
-	stateDumpFilePath = partition.GetStateDumpFilePath()
-	assert.Equal(t, stateDumpFilePath, fileName)
-}
-
 func TestTryAllocate(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)
@@ -2770,41 +2753,6 @@ func TestUpdateNodeSortingPolicy(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestUpdateStateDumpFilePath(t *testing.T) {
-	partition, err := newBasePartition()
-	partition.RLock()
-	defer partition.RUnlock()
-	assert.NilError(t, err, "partition create failed")
-
-	assert.Equal(t, partition.GetStateDumpFilePath(), "")
-	stateDumpFilePath := "yunikorn-state.txt"
-
-	partition.updateStateDumpFilePath(configs.PartitionConfig{
-		Name: "test",
-		Queues: []configs.QueueConfig{
-			{
-				Name:      "root",
-				Parent:    true,
-				SubmitACL: "*",
-				Queues: []configs.QueueConfig{
-					{
-						Name:   "default",
-						Parent: false,
-						Queues: nil,
-					},
-				},
-			},
-		},
-		PlacementRules:    nil,
-		Limits:            nil,
-		Preemption:        configs.PartitionPreemptionConfig{},
-		NodeSortPolicy:    configs.NodeSortingPolicy{},
-		StateDumpFilePath: stateDumpFilePath,
-	})
-
-	assert.Equal(t, partition.GetStateDumpFilePath(), stateDumpFilePath)
 }
 
 // A Test Case of get function in object/node_cellection

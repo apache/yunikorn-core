@@ -22,7 +22,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 
@@ -631,41 +630,6 @@ partitions:
 
 	if conf.Partitions[1].Preemption.Enabled {
 		t.Error("partition-0's preemption should NOT be enabled by default")
-	}
-}
-
-func TestPartitionStateDumpFilePathParameter(t *testing.T) {
-	data := `
-partitions:
-  - name: default
-    queues:
-      - name: root
-    statedumpfilepath: "yunikorn-state.txt"
-  - name: "partition-0"
-    queues:
-      - name: root
-`
-	// validate the config and check after the update
-	conf, err := CreateConfig(data)
-	assert.NilError(t, err, "should expect no error")
-	stateDumpFilePath := "yunikorn-state.txt"
-	assert.Equal(t, conf.Partitions[0].StateDumpFilePath, stateDumpFilePath)
-	assert.Equal(t, conf.Partitions[1].StateDumpFilePath, "")
-	defer assert.NilError(t, os.Remove(stateDumpFilePath), "delete yunikorn-state.txt should expect no error")
-}
-
-func TestPartitionStateDumpFilePathParameterFail(t *testing.T) {
-	data := `
-partitions:
-  - name: default
-    queues:
-      - name: root
-    statedumpfilepath: "/yunikorn-state.txt"
-`
-	// validate the config and check after the update
-	conf, err := CreateConfig(data)
-	if err == nil {
-		t.Errorf("stateDumpFilePath field should have failed due to insufficient permissions: %v", conf)
 	}
 }
 

@@ -37,7 +37,6 @@ require (
 	go.uber.org/zap v1.24.0
 	golang.org/x/net v0.2.0
 	google.golang.org/grpc v1.31.0
-	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	gopkg.in/yaml.v2 v2.4.0
 	gotest.tools v2.2.0+incompatible
 )

@@ -61,7 +61,7 @@ all:
 LINTBASE := $(shell go env GOPATH)/bin
 LINTBIN  := $(LINTBASE)/golangci-lint
 $(LINTBIN):
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(LINTBASE) v1.46.2
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(LINTBASE) v1.50.1
 	stat $@ > /dev/null 2>&1
 
 .PHONY: lint

@@ -1549,6 +1549,10 @@ func TestNewConfiguredQueue(t *testing.T) {
 	// check variable assignment
 	properties := getProperties()
 	resourceConf := getResourceConf()
+	// turn resouce config into resource struct
+	resourceStruct, err := resources.NewResourceFromConf(resourceConf)
+	assert.NilError(t, err, "failed to create new resource from config: %v", err)
+
 	parentConfig := configs.QueueConfig{
 		Name:            "PARENT_QUEUE",
 		Parent:          true,
@@ -1568,11 +1572,8 @@ func TestNewConfiguredQueue(t *testing.T) {
 	assert.Equal(t, parent.isManaged, true)
 	assert.Equal(t, parent.maxRunningApps, uint64(32))
 	assert.Assert(t, reflect.DeepEqual(properties, parent.template.GetProperties()))
-	// turn resouce config into resource struct
-	resourceStruct, err := resources.NewResourceFromConf(resourceConf)
-	assert.NilError(t, err, "failed to create new resource from config: %v", err)
-	assert.Assert(t, reflect.DeepEqual(resourceStruct, parent.template.GetMaxResource()))
-	assert.Assert(t, reflect.DeepEqual(resourceStruct, parent.template.GetGuaranteedResource()))
+	assert.Assert(t, resources.Equals(resourceStruct, parent.template.GetMaxResource()))
+	assert.Assert(t, resources.Equals(resourceStruct, parent.template.GetGuaranteedResource()))
 
 	// case 0: leaf can use template
 	leafConfig := configs.QueueConfig{
@@ -1589,8 +1590,8 @@ func TestNewConfiguredQueue(t *testing.T) {
 	assert.Equal(t, childLeaf.QueuePath, "parent_queue.leaf_queue")
 	assert.Assert(t, childLeaf.template == nil)
 	assert.Assert(t, reflect.DeepEqual(childLeaf.properties, parent.template.GetProperties()))
-	assert.Assert(t, reflect.DeepEqual(childLeaf.maxResource, parent.template.GetMaxResource()))
-	assert.Assert(t, reflect.DeepEqual(childLeaf.guaranteedResource, parent.template.GetGuaranteedResource()))
+	assert.Assert(t, resources.Equals(childLeaf.maxResource, parent.template.GetMaxResource()))
+	assert.Assert(t, resources.Equals(childLeaf.guaranteedResource, parent.template.GetGuaranteedResource()))
 
 	// case 1: non-leaf can't use template but it can inherit template from parent
 	NonLeafConfig := configs.QueueConfig{

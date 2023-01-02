@@ -31,11 +31,9 @@ func IsSameACL(got, expected ACL) error {
 	if expected.users != nil && got.users != nil {
 		for username, expectedAllow := range expected.users {
 			if gotAllow, ok := got.users[username]; !ok {
-				return errors.New(fmt.Sprintf("username %s does not exist", username))
-			} else {
-				if expectedAllow != gotAllow {
-					return errors.New(fmt.Sprintf("username %s is not same", username))
-				}
+				return fmt.Errorf("username %s does not exist", username)
+			} else if expectedAllow != gotAllow {
+				return fmt.Errorf("username %s is not same", username)
 			}
 		}
 	} else if (expected.users != nil && got.users == nil) || (expected.users == nil && got.users != nil) {
@@ -45,11 +43,9 @@ func IsSameACL(got, expected ACL) error {
 	if expected.groups != nil && got.groups != nil {
 		for groupname, expectedAllow := range expected.groups {
 			if gotAllow, ok := got.groups[groupname]; !ok {
-				return errors.New(fmt.Sprintf("groupname %s does not exist", groupname))
-			} else {
-				if expectedAllow != gotAllow {
-					return errors.New(fmt.Sprintf("groupname %s is not same", groupname))
-				}
+				return fmt.Errorf("groupname %s does not exist", groupname)
+			} else if expectedAllow != gotAllow {
+				return fmt.Errorf("groupname %s is not same", groupname)
 			}
 		}
 	} else if (expected.groups != nil && got.groups == nil) || (expected.groups == nil && got.groups != nil) {

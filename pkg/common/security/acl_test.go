@@ -165,49 +165,49 @@ func TestACLAccess(t *testing.T) {
 		expected bool
 	}{
 		{
-			acl:      "user1,user2 group1,group2",
-			visitor:  UserGroup{User: "", Groups: nil},
-			expected: false,
+			"user1,user2 group1,group2",
+			UserGroup{User: "", Groups: nil},
+			false,
 		},
 		{
-			acl:      "user1,user2 group1,group2",
-			visitor:  UserGroup{User: "user1", Groups: nil},
-			expected: true,
+			"user1,user2 group1,group2",
+			UserGroup{User: "user1", Groups: nil},
+			true,
 		},
 		{
-			acl:      "user1,user2 group1,group2",
-			visitor:  UserGroup{User: "user3", Groups: []string{"group1"}},
-			expected: true,
+			"user1,user2 group1,group2",
+			UserGroup{User: "user3", Groups: []string{"group1"}},
+			true,
 		},
 		{
-			acl:      "user1,user2 group1,group2",
-			visitor:  UserGroup{User: "user3", Groups: []string{"group3", "group1"}},
-			expected: true,
+			"user1,user2 group1,group2",
+			UserGroup{User: "user3", Groups: []string{"group3", "group1"}},
+			true,
 		},
 		{
-			acl:      "user1,user2 group1,group2",
-			visitor:  UserGroup{User: "user3", Groups: []string{"group3"}},
-			expected: false,
+			"user1,user2 group1,group2",
+			UserGroup{User: "user3", Groups: []string{"group3"}},
+			false,
 		},
 		{
-			acl:      "*",
-			visitor:  UserGroup{User: "", Groups: nil},
-			expected: true,
+			"*",
+			UserGroup{User: "", Groups: nil},
+			true,
 		},
 		{
-			acl:      "*",
-			visitor:  UserGroup{User: "user1", Groups: []string{"group1"}},
-			expected: true,
-		},
-		{
-			acl:      "",
-			visitor:  UserGroup{User: "", Groups: nil},
-			expected: false,
+			"*",
+			UserGroup{User: "user1", Groups: []string{"group1"}},
+			true,
 		},
 		{
 			acl:      "",
-			visitor:  UserGroup{User: "user1", Groups: []string{"group1"}},
+			visitor:  UserGroup{User: "", Groups: nil},
 			expected: false,
+		},
+		{
+			"",
+			UserGroup{User: "user1", Groups: []string{"group1"}},
+			false,
 		},
 	}
 	for _, tt := range tests {

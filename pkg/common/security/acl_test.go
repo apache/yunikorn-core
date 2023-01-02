@@ -19,119 +19,333 @@
 package security
 
 import (
+	"errors"
+	"fmt"
 	"testing"
-
-	"gotest.tools/assert"
 )
 
+func IsSameACL(got, expected ACL) error {
+	if got.allAllowed != expected.allAllowed {
+		return errors.New("allAllowed is not same")
+	}
+	if expected.users != nil && got.users != nil {
+		for username, expectedAllow := range expected.users {
+			if gotAllow, ok := got.users[username]; !ok {
+				return errors.New(fmt.Sprintf("username %s does not exist", username))
+			} else {
+				if expectedAllow != gotAllow {
+					return errors.New(fmt.Sprintf("username %s is not same", username))
+				}
+			}
+		}
+	} else if (expected.users != nil && got.users == nil) || (expected.users == nil && got.users != nil) {
+		return errors.New("users of an acl is not nil, expect one and got one should be same")
+	}
+
+	if expected.groups != nil && got.groups != nil {
+		for groupname, expectedAllow := range expected.groups {
+			if gotAllow, ok := got.groups[groupname]; !ok {
+				return errors.New(fmt.Sprintf("groupname %s does not exist", groupname))
+			} else {
+				if expectedAllow != gotAllow {
+					return errors.New(fmt.Sprintf("groupname %s is not same", groupname))
+				}
+			}
+		}
+	} else if (expected.groups != nil && got.groups == nil) || (expected.groups == nil && got.groups != nil) {
+		return errors.New("groups of an acl is not nil, expect one and got one should be same")
+	}
+	return nil
+}
+
 func TestACLCreate(t *testing.T) {
-	_, err := NewACL("")
-	if err != nil {
-		t.Errorf("parsing failed for string: ''")
+	tests := []struct {
+		caseName string
+		input    string
+		expected ACL
+	}{
+		{
+			"Empty",
+			"",
+			ACL{
+				allAllowed: false,
+			},
+		},
+		{
+			"A space",
+			" ",
+			ACL{
+				users:      make(map[string]bool),
+				groups:     make(map[string]bool),
+				allAllowed: false,
+			},
+		},
+		{
+			"One user",
+			"user1",
+			ACL{
+				users: map[string]bool{
+					"user1": true,
+				},
+				allAllowed: false,
+			},
+		},
+		{
+			"Two users",
+			"user1,user2",
+			ACL{
+				users: map[string]bool{
+					"user1": true,
+					"user2": true,
+				},
+				allAllowed: false,
+			},
+		},
+		{
+			"Two users with addtional space",
+			"user1,user2 ",
+			ACL{
+				users: map[string]bool{
+					"user1": true,
+					"user2": true,
+				},
+				groups:     make(map[string]bool),
+				allAllowed: false,
+			},
+		},
+		{
+			"Two users and a group",
+			"user1,user2 group1",
+			ACL{
+				users: map[string]bool{
+					"user1": true,
+					"user2": true,
+				},
+				groups: map[string]bool{
+					"group1": true,
+				},
+				allAllowed: false,
+			},
+		},
+		{
+			"Two users and two groups",
+			"user1,user2 group1,group2",
+			ACL{
+				users: map[string]bool{
+					"user1": true,
+					"user2": true,
+				},
+				groups: map[string]bool{
+					"group1": true,
+					"group2": true,
+				},
+				allAllowed: false,
+			},
+		},
+		{
+			"One user and two groups",
+			"user2 group1,group2",
+			ACL{
+				users: map[string]bool{
+					"user2": true,
+				},
+				groups: map[string]bool{
+					"group1": true,
+					"group2": true,
+				},
+				allAllowed: false,
+			},
+		},
+		{
+			"Two groups",
+			" group1,group2",
+			ACL{
+				users: make(map[string]bool),
+				groups: map[string]bool{
+					"group1": true,
+					"group2": true,
+				},
+				allAllowed: false,
+			},
+		},
+		{
+			"Wildcard and two groups",
+			"* group1,group2",
+			ACL{
+				users:      make(map[string]bool),
+				groups:     make(map[string]bool),
+				allAllowed: true,
+			},
+		},
+		{
+			"Wildcard and two users",
+			"user1,user2 *",
+			ACL{
+				users:      make(map[string]bool),
+				groups:     make(map[string]bool),
+				allAllowed: true,
+			},
+		},
+		{
+			"wildcard case1",
+			"*",
+			ACL{
+				users:      make(map[string]bool),
+				allAllowed: true,
+			},
+		},
+		{
+			"wildcard case2",
+			"* ",
+			ACL{
+				users:      make(map[string]bool),
+				groups:     make(map[string]bool),
+				allAllowed: true,
+			},
+		},
+		{
+			"wildcard case3",
+			" *",
+			ACL{
+				users:      make(map[string]bool),
+				groups:     make(map[string]bool),
+				allAllowed: true,
+			},
+		},
+		// special cases
+		{
+			"user string with dot symbol and dotted word",
+			"dotted.user",
+			ACL{
+				users: map[string]bool{
+					"dotted.user": true,
+				},
+				allAllowed: false,
+			},
+		},
+		{
+			"duplicate user",
+			"user,user",
+			ACL{
+				users: map[string]bool{
+					"user": true,
+				},
+				allAllowed: false,
+			},
+		},
+		{
+			"group name with dot symbol and \"dotted\" word",
+			" dotted.group",
+			ACL{
+				users:      make(map[string]bool),
+				groups:     make(map[string]bool),
+				allAllowed: false,
+			},
+		},
+		{
+			"duplicate group",
+			" group,group",
+			ACL{
+				users: make(map[string]bool),
+				groups: map[string]bool{
+					"group": true,
+				},
+				allAllowed: false,
+			},
+		},
 	}
-	_, err = NewACL(" ")
-	if err != nil {
-		t.Errorf("parsing failed for string: ' '")
-	}
-	_, err = NewACL("user1")
-	if err != nil {
-		t.Errorf("parsing failed for string: 'user1'")
-	}
-	_, err = NewACL("user1,user2")
-	if err != nil {
-		t.Errorf("parsing failed for string: 'user1,user2'")
-	}
-	_, err = NewACL("user1,user2 ")
-	if err != nil {
-		t.Errorf("parsing failed for string: 'user1,user2 '")
-	}
-	_, err = NewACL("user1,user2 group1")
-	if err != nil {
-		t.Errorf("parsing failed for string: 'user1,user2 group1'")
-	}
-	_, err = NewACL("user1,user2 group1,group2")
-	if err != nil {
-		t.Errorf("parsing failed for string: 'user1,user2 group1,group2'")
-	}
-	_, err = NewACL("user2 group1,group2")
-	if err != nil {
-		t.Errorf("parsing failed for string: 'user2 group1,group2'")
-	}
-	_, err = NewACL(" group1,group2")
-	if err != nil {
-		t.Errorf("parsing failed for string: ' group1,group2'")
-	}
-	_, err = NewACL("* group1,group2")
-	if err != nil {
-		t.Errorf("parsing failed for string: '* group1,group2'")
-	}
-	_, err = NewACL("user1,user2 *")
-	if err != nil {
-		t.Errorf("parsing failed for string: 'user1,user2 *'")
-	}
-	_, err = NewACL("*")
-	if err != nil {
-		t.Errorf("parsing failed for string: '*'")
-	}
-	_, err = NewACL("* ")
-	if err != nil {
-		t.Errorf("parsing failed for string: '* '")
-	}
-	_, err = NewACL(" *")
-	if err != nil {
-		t.Errorf("parsing failed for string: ' *'")
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			got, err := NewACL(tt.input)
+			if err != nil {
+				t.Errorf("parsing failed for string: %s", tt.input)
+			}
+
+			if err = IsSameACL(got, tt.expected); err != nil {
+				t.Error(err.Error())
+			}
+		})
 	}
 }
 
-func TestACLSpecialCase(t *testing.T) {
-	acl, err := NewACL("  ")
-	if err == nil {
-		t.Errorf("parsing passed for string: '  '")
+func TestNewACLErrorCase(t *testing.T) {
+	tests := []struct {
+		caseName string
+		acl      string
+	}{
+		{"spaces", "  "},
+		{"number of spaces is higher than 1 is not allowed", " a b "},
 	}
-
-	acl, err = NewACL("dotted.user")
-	if err != nil || len(acl.users) != 1 {
-		t.Errorf("parsing failed for string: 'dotted.user' acl has incorrect user list: %v", acl)
-	}
-	acl, err = NewACL("user,user")
-	if err != nil || len(acl.users) != 1 {
-		t.Errorf("parsing failed for string: 'user,user' acl has incorrect user list: %v", acl)
-	}
-	acl, err = NewACL(" dotted.group")
-	if err != nil || len(acl.groups) > 0 {
-		t.Errorf("parsing failed for string: ' dotted.group' acl has incorrect group list: %v", acl)
-	}
-	acl, err = NewACL(" group,group")
-	if err != nil || len(acl.groups) != 1 {
-		t.Errorf("parsing failed for string: 'group,group' acl has incorrect group list: %v", acl)
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			if _, err := NewACL(tt.acl); err == nil {
+				t.Errorf("parsing %s string should be failed", tt.acl)
+			}
+		})
 	}
 }
 
 func TestACLAccess(t *testing.T) {
-	acl, err := NewACL("user1,user2 group1,group2")
-	assert.NilError(t, err, "parsing failed for string: 'user1,user2 group1,group2'")
-	user := UserGroup{User: "", Groups: nil}
-	assert.Assert(t, !acl.CheckAccess(user), "no user, should have been denied")
-	user = UserGroup{User: "user1", Groups: nil}
-	assert.Assert(t, acl.CheckAccess(user), "user1 (no groups) should have been allowed")
-	user = UserGroup{User: "user3", Groups: []string{"group1"}}
-	assert.Assert(t, acl.CheckAccess(user), "group1 should have been allowed")
-	user = UserGroup{User: "user3", Groups: []string{"group3", "group1"}}
-	assert.Assert(t, acl.CheckAccess(user), "group1 (2nd group) should have been allowed")
-	user = UserGroup{User: "user3", Groups: []string{"group3"}}
-	assert.Assert(t, !acl.CheckAccess(user), "user3/group3 should have been denied")
-
-	acl, err = NewACL("*")
-	assert.NilError(t, err, "parsing failed for string: '*'")
-	user = UserGroup{User: "", Groups: nil}
-	assert.Assert(t, acl.CheckAccess(user), "no user, wildcard should have been allowed")
-	user = UserGroup{User: "user1", Groups: []string{"group1"}}
-	assert.Assert(t, acl.CheckAccess(user), "user1/group1, wildcard should have been allowed")
-
-	acl, err = NewACL("")
-	assert.NilError(t, err, "parsing failed for string: ''")
-	user = UserGroup{User: "", Groups: nil}
-	assert.Assert(t, !acl.CheckAccess(user), "no user, empty ACL always deny")
-	user = UserGroup{User: "user1", Groups: []string{"group1"}}
-	assert.Assert(t, !acl.CheckAccess(user), "user1/group1, empty ACL always deny")
+	tests := []struct {
+		acl      string
+		visitor  UserGroup
+		expected bool
+	}{
+		{
+			acl:      "user1,user2 group1,group2",
+			visitor:  UserGroup{User: "", Groups: nil},
+			expected: false,
+		},
+		{
+			acl:      "user1,user2 group1,group2",
+			visitor:  UserGroup{User: "user1", Groups: nil},
+			expected: true,
+		},
+		{
+			acl:      "user1,user2 group1,group2",
+			visitor:  UserGroup{User: "user3", Groups: []string{"group1"}},
+			expected: true,
+		},
+		{
+			acl:      "user1,user2 group1,group2",
+			visitor:  UserGroup{User: "user3", Groups: []string{"group3", "group1"}},
+			expected: true,
+		},
+		{
+			acl:      "user1,user2 group1,group2",
+			visitor:  UserGroup{User: "user3", Groups: []string{"group3"}},
+			expected: false,
+		},
+		{
+			acl:      "*",
+			visitor:  UserGroup{User: "", Groups: nil},
+			expected: true,
+		},
+		{
+			acl:      "*",
+			visitor:  UserGroup{User: "user1", Groups: []string{"group1"}},
+			expected: true,
+		},
+		{
+			acl:      "",
+			visitor:  UserGroup{User: "", Groups: nil},
+			expected: false,
+		},
+		{
+			acl:      "",
+			visitor:  UserGroup{User: "user1", Groups: []string{"group1"}},
+			expected: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("vistor %v, acl %s", tt.visitor, tt.acl), func(t *testing.T) {
+			acl, err := NewACL(tt.acl)
+			if err != nil {
+				t.Error(err.Error())
+			}
+			if pass := acl.CheckAccess(tt.visitor); pass != tt.expected {
+				t.Errorf("allow expect:%v, got %v", tt.expected, pass)
+			}
+		})
+	}
 }

@@ -56,202 +56,79 @@ func IsSameACL(got, expected ACL) error {
 
 func TestACLCreate(t *testing.T) {
 	tests := []struct {
-		caseName string
 		input    string
 		expected ACL
 	}{
 		{
-			"Empty",
 			"",
-			ACL{
-				allAllowed: false,
-			},
-		},
+			ACL{allAllowed: false}},
 		{
-			"A space",
 			" ",
-			ACL{
-				users:      make(map[string]bool),
-				groups:     make(map[string]bool),
-				allAllowed: false,
-			},
-		},
+			ACL{users: make(map[string]bool), groups: make(map[string]bool), allAllowed: false}},
 		{
-			"One user",
 			"user1",
-			ACL{
-				users: map[string]bool{
-					"user1": true,
-				},
-				allAllowed: false,
-			},
-		},
+			ACL{users: map[string]bool{"user1": true}, allAllowed: false}},
 		{
-			"Two users",
 			"user1,user2",
-			ACL{
-				users: map[string]bool{
-					"user1": true,
-					"user2": true,
-				},
-				allAllowed: false,
-			},
-		},
+			ACL{users: map[string]bool{"user1": true, "user2": true}, allAllowed: false}},
 		{
-			"Two users with addtional space",
 			"user1,user2 ",
-			ACL{
-				users: map[string]bool{
-					"user1": true,
-					"user2": true,
-				},
-				groups:     make(map[string]bool),
-				allAllowed: false,
-			},
-		},
+			ACL{users: map[string]bool{"user1": true, "user2": true}, groups: make(map[string]bool), allAllowed: false}},
 		{
-			"Two users and a group",
 			"user1,user2 group1",
-			ACL{
-				users: map[string]bool{
-					"user1": true,
-					"user2": true,
-				},
-				groups: map[string]bool{
-					"group1": true,
-				},
-				allAllowed: false,
-			},
+			ACL{users: map[string]bool{"user1": true, "user2": true}, groups: map[string]bool{"group1": true}, allAllowed: false},
 		},
 		{
-			"Two users and two groups",
 			"user1,user2 group1,group2",
-			ACL{
-				users: map[string]bool{
-					"user1": true,
-					"user2": true,
-				},
-				groups: map[string]bool{
-					"group1": true,
-					"group2": true,
-				},
-				allAllowed: false,
-			},
+			ACL{users: map[string]bool{"user1": true, "user2": true}, groups: map[string]bool{"group1": true, "group2": true}, allAllowed: false},
 		},
 		{
-			"One user and two groups",
 			"user2 group1,group2",
-			ACL{
-				users: map[string]bool{
-					"user2": true,
-				},
-				groups: map[string]bool{
-					"group1": true,
-					"group2": true,
-				},
-				allAllowed: false,
-			},
+			ACL{users: map[string]bool{"user2": true}, groups: map[string]bool{"group1": true, "group2": true}, allAllowed: false},
 		},
 		{
-			"Two groups",
 			" group1,group2",
-			ACL{
-				users: make(map[string]bool),
-				groups: map[string]bool{
-					"group1": true,
-					"group2": true,
-				},
-				allAllowed: false,
-			},
+			ACL{users: make(map[string]bool), groups: map[string]bool{"group1": true, "group2": true}, allAllowed: false},
 		},
 		{
-			"Wildcard and two groups",
 			"* group1,group2",
-			ACL{
-				users:      make(map[string]bool),
-				groups:     make(map[string]bool),
-				allAllowed: true,
-			},
+			ACL{users: make(map[string]bool), groups: make(map[string]bool), allAllowed: true},
 		},
 		{
-			"Wildcard and two users",
 			"user1,user2 *",
-			ACL{
-				users:      make(map[string]bool),
-				groups:     make(map[string]bool),
-				allAllowed: true,
-			},
+			ACL{users: make(map[string]bool), groups: make(map[string]bool), allAllowed: true},
 		},
 		{
-			"wildcard case1",
 			"*",
-			ACL{
-				users:      make(map[string]bool),
-				allAllowed: true,
-			},
+			ACL{users: make(map[string]bool), allAllowed: true},
 		},
 		{
-			"wildcard case2",
 			"* ",
-			ACL{
-				users:      make(map[string]bool),
-				groups:     make(map[string]bool),
-				allAllowed: true,
-			},
+			ACL{users: make(map[string]bool), groups: make(map[string]bool), allAllowed: true},
 		},
 		{
-			"wildcard case3",
 			" *",
-			ACL{
-				users:      make(map[string]bool),
-				groups:     make(map[string]bool),
-				allAllowed: true,
-			},
+			ACL{users: make(map[string]bool), groups: make(map[string]bool), allAllowed: true},
 		},
-		// special cases
 		{
-			"user string with dot symbol and dotted word",
 			"dotted.user",
-			ACL{
-				users: map[string]bool{
-					"dotted.user": true,
-				},
-				allAllowed: false,
-			},
+			ACL{users: map[string]bool{"dotted.user": true}, allAllowed: false},
 		},
 		{
-			"duplicate user",
 			"user,user",
-			ACL{
-				users: map[string]bool{
-					"user": true,
-				},
-				allAllowed: false,
-			},
+			ACL{users: map[string]bool{"user": true}, allAllowed: false},
 		},
 		{
-			"group name with dot symbol and \"dotted\" word",
 			" dotted.group",
-			ACL{
-				users:      make(map[string]bool),
-				groups:     make(map[string]bool),
-				allAllowed: false,
-			},
+			ACL{users: make(map[string]bool), groups: make(map[string]bool), allAllowed: false},
 		},
 		{
-			"duplicate group",
 			" group,group",
-			ACL{
-				users: make(map[string]bool),
-				groups: map[string]bool{
-					"group": true,
-				},
-				allAllowed: false,
-			},
+			ACL{users: make(map[string]bool), groups: map[string]bool{"group": true}, allAllowed: false},
 		},
 	}
 	for _, tt := range tests {
-		t.Run(tt.caseName, func(t *testing.T) {
+		t.Run(tt.input, func(t *testing.T) {
 			got, err := NewACL(tt.input)
 			if err != nil {
 				t.Errorf("parsing failed for string: %s", tt.input)

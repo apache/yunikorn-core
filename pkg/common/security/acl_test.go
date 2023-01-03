@@ -232,7 +232,10 @@ func TestACLAccess(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("vistor %v, acl %s", tt.visitor, tt.acl), func(t *testing.T) {
-			acl, _ := NewACL(tt.acl)
+			acl, err := NewACL(tt.acl)
+			if err != nil {
+				t.Error("the number of space should not be more than 2 because the number of categories only include users and groups")
+			}
 			if pass := acl.CheckAccess(tt.visitor); pass != tt.expected {
 				t.Errorf("allow expect:%v, got %v", tt.expected, pass)
 			}

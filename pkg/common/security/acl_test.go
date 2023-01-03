@@ -25,32 +25,52 @@ import (
 )
 
 func IsSameACL(got, expected ACL) error {
+	// checking allAllowed value
 	if got.allAllowed != expected.allAllowed {
 		return errors.New("allAllowed is not same")
 	}
-	if expected.users != nil && got.users != nil {
+
+	// checking length of users
+	errString := ""
+	if len(expected.users) != len(got.users) {
+		errString = fmt.Sprintf("lengths of users are not same: expect %d, got %d", len(expected.users), len(got.users))
+	} else {
 		for username, expectedAllow := range expected.users {
-			if gotAllow, ok := got.users[username]; !ok {
-				return fmt.Errorf("username %s does not exist", username)
-			} else if expectedAllow != gotAllow {
-				return fmt.Errorf("username %s is not same", username)
+			if gotAllow, ok := got.users[username]; !ok || expectedAllow != gotAllow {
+				if errString == "" {
+					errString = fmt.Sprintf("usernames are not the expected usernames and they include %s", username)
+				} else {
+					errString = fmt.Sprintf("%s,%s", errString, username)
+				}
 			}
 		}
-	} else if (expected.users != nil && got.users == nil) || (expected.users == nil && got.users != nil) {
-		return errors.New("users of an acl is not nil, expect one and got one should be same")
 	}
 
-	if expected.groups != nil && got.groups != nil {
+	// return error about checking users
+	if errString != "" {
+		return errors.New(errString)
+	}
+
+	// checking length of groups
+	if errString = ""; len(expected.groups) != len(got.groups) {
+		errString = fmt.Sprintf("lengths of groups are not same: expect %d, got %d", len(expected.users), len(got.users))
+	} else {
 		for groupname, expectedAllow := range expected.groups {
-			if gotAllow, ok := got.groups[groupname]; !ok {
-				return fmt.Errorf("groupname %s does not exist", groupname)
-			} else if expectedAllow != gotAllow {
-				return fmt.Errorf("groupname %s is not same", groupname)
+			if gotAllow, ok := got.groups[groupname]; !ok || expectedAllow != gotAllow {
+				if errString == "" {
+					errString = fmt.Sprintf("groupnames are not the expected groupnames and they include %s", groupname)
+				} else {
+					errString = fmt.Sprintf("%s,%s", errString, groupname)
+				}
 			}
 		}
-	} else if (expected.groups != nil && got.groups == nil) || (expected.groups == nil && got.groups != nil) {
-		return errors.New("groups of an acl is not nil, expect one and got one should be same")
 	}
+
+	// return error about checking groups
+	if errString != "" {
+		return errors.New(errString)
+	}
+
 	return nil
 }
 
@@ -200,9 +220,9 @@ func TestACLAccess(t *testing.T) {
 			true,
 		},
 		{
-			acl:      "",
-			visitor:  UserGroup{User: "", Groups: nil},
-			expected: false,
+			"",
+			UserGroup{User: "", Groups: nil},
+			false,
 		},
 		{
 			"",
@@ -212,10 +232,7 @@ func TestACLAccess(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("vistor %v, acl %s", tt.visitor, tt.acl), func(t *testing.T) {
-			acl, err := NewACL(tt.acl)
-			if err != nil {
-				t.Error(err.Error())
-			}
+			acl, _ := NewACL(tt.acl)
 			if pass := acl.CheckAccess(tt.visitor); pass != tt.expected {
 				t.Errorf("allow expect:%v, got %v", tt.expected, pass)
 			}

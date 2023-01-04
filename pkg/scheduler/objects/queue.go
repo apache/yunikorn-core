@@ -697,21 +697,26 @@ func (sq *Queue) RemoveApplication(app *Application) {
 		}
 	}
 
-	sq.Lock()
-	delete(sq.applications, appID)
-	delete(sq.appPriorities, appID)
-	delete(sq.appPreemptionPriorities, appID)
-	delete(sq.allocatingAcceptedApps, appID)
-	priority := sq.recalculatePriority()
-	preemptionPriority := sq.recalculatePreemptionPriority()
-	sq.Unlock()
-
+	priority, preemptionPriority := sq.internalRemoveApp(appID)
 	sq.parent.UpdateQueuePriority(sq.Name, priority)
 	sq.parent.UpdateQueuePreemptionPriority(sq.Name, preemptionPriority)
 
 	log.Logger().Info("Application completed and removed from queue",
 		zap.String("queueName", sq.QueuePath),
 		zap.String("applicationID", appID))
+}
+
+func (sq *Queue) internalRemoveApp(appID string) (int32, int32) {
+	sq.Lock()
+	defer sq.Unlock()
+	delete(sq.applications, appID)
+	delete(sq.appPriorities, appID)
+	delete(sq.appPreemptionPriorities, appID)
+	delete(sq.allocatingAcceptedApps, appID)
+	priority := sq.recalculatePriority()
+	preemptionPriority := sq.recalculatePreemptionPriority()
+
+	return priority, preemptionPriority
 }
 
 // GetCopyOfApps gets a shallow copy of all non-completed apps holding the lock
@@ -1535,7 +1540,7 @@ func priorityValueByPolicy(policy policies.PriorityPolicy, offset int32, priorit
 }
 
 func (sq *Queue) UpdateApplicationPriority(applicationID string, priority int32) {
-	if sq == nil || !sq.isLeaf {
+	if sq == nil || !sq.IsLeafQueue() {
 		return
 	}
 	value := sq.updateApplicationPriorityInternal(applicationID, priority)
@@ -1556,7 +1561,7 @@ func (sq *Queue) updateApplicationPriorityInternal(applicationID string, priorit
 }
 
 func (sq *Queue) UpdateQueuePriority(queueName string, priority int32) {
-	if sq == nil || sq.isLeaf {
+	if sq == nil || sq.IsLeafQueue() {
 		return
 	}
 	value := sq.updateQueuePriorityInternal(queueName, priority)
@@ -1595,7 +1600,7 @@ func (sq *Queue) recalculatePriority() int32 {
 }
 
 func (sq *Queue) UpdateApplicationPreemptionPriority(applicationID string, priority int32) {
-	if sq == nil || !sq.isLeaf {
+	if sq == nil || !sq.IsLeafQueue() {
 		return
 	}
 	value := sq.updateApplicationPreemptionPriorityInternal(applicationID, priority)
@@ -1603,7 +1608,7 @@ func (sq *Queue) UpdateApplicationPreemptionPriority(applicationID string, prior
 }
 
 func (sq *Queue) UpdateQueuePreemptionPriority(queueName string, priority int32) {
-	if sq == nil || sq.isLeaf {
+	if sq == nil || sq.IsLeafQueue() {
 		return
 	}
 	value := sq.updateQueuePreemptionPriorityInternal(queueName, priority)

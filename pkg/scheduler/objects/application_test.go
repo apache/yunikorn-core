@@ -846,7 +846,7 @@ func TestAllocations(t *testing.T) {
 	}
 	allocs := app.GetAllAllocations()
 	assert.Equal(t, len(allocs), 1)
-	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should not be initialized as the allocation is not a placeholder")
+	assert.Assert(t, app.getPlaceholderTimer() == nil, "Placeholder timer should not be initialized as the allocation is not a placeholder")
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 1))
 
 	// add more allocations to test the removals
@@ -1223,7 +1223,7 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 
 	app, testHandler := newApplicationWithHandler(appID1, "default", "root.a")
 	app.gangSchedulingStyle = gangSchedulingStyle
-	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should be nil on create")
+	assert.Assert(t, app.getPlaceholderTimer() == nil, "Placeholder timer should be nil on create")
 	// fake the queue assignment (needed with ask)
 	app.queue = queue
 
@@ -1249,7 +1249,7 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	ph := newPlaceholderAlloc(appID1, "uuid-1", nodeID1, "root.a", res)
 	app.AddAllocation(ph)
 	assertUserGroupResource(t, getTestUserGroup(), res)
-	assert.Assert(t, app.placeholderTimer != nil, "Placeholder timer should be initiated after the first placeholder allocation")
+	assert.Assert(t, app.getPlaceholderTimer() != nil, "Placeholder timer should be initiated after the first placeholder allocation")
 	// add a second one to check the filter
 	ph = newPlaceholderAlloc(appID1, "uuid-2", nodeID1, "root.a", res)
 	app.AddAllocation(ph)
@@ -1300,7 +1300,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	defer func() { defaultPlaceholderTimeout = originalPhTimeout }()
 
 	app, testHandler := newApplicationWithHandler(appID1, "default", "root.a")
-	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should be nil on create")
+	assert.Assert(t, app.getPlaceholderTimer() == nil, "Placeholder timer should be nil on create")
 	app.SetState(Accepted.String())
 
 	resMap := map[string]string{"memory": "100", "vcores": "10"}
@@ -1320,7 +1320,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	assert.DeepEqual(t, app.placeholderData[""].MinResource, res)
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 1))
 
-	assert.Assert(t, app.placeholderTimer != nil, "Placeholder timer should be initiated after the first placeholder allocation")
+	assert.Assert(t, app.getPlaceholderTimer() != nil, "Placeholder timer should be initiated after the first placeholder allocation")
 	ph = newPlaceholderAlloc(appID1, "waiting", nodeID1, "root.a", res)
 	app.AddAllocation(ph)
 	app.addPlaceholderDataWithLocking(ph.GetAsk())
@@ -1331,9 +1331,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	app.AddAllocation(alloc)
 	assert.Assert(t, app.IsStarting(), "App should be in starting state after the first allocation")
 	err = common.WaitFor(10*time.Millisecond, 1*time.Second, func() bool {
-		app.RLock()
-		defer app.RUnlock()
-		return app.placeholderTimer == nil
+		return app.getPlaceholderTimer() == nil
 	})
 	assert.NilError(t, err, "Placeholder timeout cleanup did not trigger unexpectedly")
 	assert.Assert(t, app.IsStarting(), "App should be in starting state after the first allocation")
@@ -1364,7 +1362,7 @@ func TestTimeoutPlaceholderCompleting(t *testing.T) {
 	setupUGM()
 	phTimeout := common.ConvertSITimeout(5)
 	app, testHandler := newApplicationWithPlaceholderTimeout(appID1, "default", "root.a", 5)
-	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should be nil on create")
+	assert.Assert(t, app.getPlaceholderTimer() == nil, "Placeholder timer should be nil on create")
 	assert.Equal(t, app.execTimeout, phTimeout, "placeholder timeout not initialised correctly")
 	app.SetState(Accepted.String())
 
@@ -1374,7 +1372,7 @@ func TestTimeoutPlaceholderCompleting(t *testing.T) {
 	// add the placeholder to the app
 	ph := newPlaceholderAlloc(appID1, "waiting", nodeID1, "root.a", res)
 	app.AddAllocation(ph)
-	assert.Assert(t, app.placeholderTimer != nil, "Placeholder timer should be initiated after the first placeholder allocation")
+	assert.Assert(t, app.getPlaceholderTimer() != nil, "Placeholder timer should be initiated after the first placeholder allocation")
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 1))
 	// add a real allocation as well
 	alloc := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
@@ -1388,9 +1386,7 @@ func TestTimeoutPlaceholderCompleting(t *testing.T) {
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 1))
 	// make sure the placeholders time out
 	err = common.WaitFor(10*time.Millisecond, 1*time.Second, func() bool {
-		app.RLock()
-		defer app.RUnlock()
-		return app.placeholderTimer == nil
+		return app.getPlaceholderTimer() == nil
 	})
 	assert.NilError(t, err, "Placeholder timer did not time out as expected")
 	events := testHandler.GetEvents()
@@ -1413,7 +1409,7 @@ func TestAppTimersAfterAppRemoval(t *testing.T) {
 	setupUGM()
 	phTimeout := common.ConvertSITimeout(50)
 	app, _ := newApplicationWithPlaceholderTimeout(appID1, "default", "root.a", 50)
-	assert.Assert(t, app.placeholderTimer == nil, "Placeholder timer should be nil on create")
+	assert.Assert(t, app.getPlaceholderTimer() == nil, "Placeholder timer should be nil on create")
 	assert.Equal(t, app.execTimeout, phTimeout, "placeholder timeout not initialised correctly")
 	app.SetState(Accepted.String())
 
@@ -1423,7 +1419,7 @@ func TestAppTimersAfterAppRemoval(t *testing.T) {
 	// add the placeholder to the app
 	ph := newPlaceholderAlloc(appID1, "waiting", nodeID1, "root.a", res)
 	app.AddAllocation(ph)
-	assert.Assert(t, app.placeholderTimer != nil, "Placeholder timer should be initiated after the first placeholder allocation")
+	assert.Assert(t, app.getPlaceholderTimer() != nil, "Placeholder timer should be initiated after the first placeholder allocation")
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 1))
 	// add a real allocation as well
 	alloc := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
@@ -1434,8 +1430,8 @@ func TestAppTimersAfterAppRemoval(t *testing.T) {
 	app.RemoveAllAllocations()
 	assert.Assert(t, app.IsCompleting(), "App should be in completing state all allocs have been removed")
 	assertUserGroupResource(t, getTestUserGroup(), nil)
-	if app.placeholderTimer != nil {
-		t.Fatalf("Placeholder timer has not be cleared after app removal as expected, %v", app.placeholderTimer)
+	if app.getPlaceholderTimer() != nil {
+		t.Fatalf("Placeholder timer has not be cleared after app removal as expected, %v", app.getPlaceholderTimer())
 	}
 	if app.stateTimer != nil {
 		t.Fatalf("State timer has not be cleared after app removal as expected, %v", app.stateTimer)
@@ -1717,4 +1713,10 @@ func (sa *Application) addPlaceholderDataWithLocking(ask *AllocationAsk) {
 	sa.Lock()
 	defer sa.Unlock()
 	sa.addPlaceholderData(ask)
+}
+
+func (sa *Application) getPlaceholderTimer() *time.Timer {
+	sa.RLock()
+	defer sa.RUnlock()
+	return sa.placeholderTimer
 }

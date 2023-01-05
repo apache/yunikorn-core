@@ -1582,15 +1582,15 @@ func (sq *Queue) updateQueuePriorityInternal(queueName string, priority int32) i
 }
 
 func (sq *Queue) recalculatePriority() int32 {
-	var items *map[string]int32
+	var items map[string]int32
 	if sq.isLeaf {
-		items = &sq.appPriorities
+		items = sq.appPriorities
 	} else {
-		items = &sq.childPriorities
+		items = sq.childPriorities
 	}
 
 	curr := configs.MinPriority
-	for _, v := range *items {
+	for _, v := range items {
 		if v > curr {
 			curr = v
 		}
@@ -1642,15 +1642,15 @@ func (sq *Queue) updateApplicationPreemptionPriorityInternal(applicationID strin
 }
 
 func (sq *Queue) recalculatePreemptionPriority() int32 {
-	var items *map[string]int32
+	var items map[string]int32
 	if sq.isLeaf {
-		items = &sq.appPreemptionPriorities
+		items = sq.appPreemptionPriorities
 	} else {
-		items = &sq.childPreemptionPriorities
+		items = sq.childPreemptionPriorities
 	}
 
 	curr := configs.MaxPriority
-	for _, v := range *items {
+	for _, v := range items {
 		if v < curr {
 			curr = v
 		}

@@ -196,6 +196,7 @@ func NewAppState() *fsm.FSM {
 				app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
 				app.executeTerminatedCallback()
 				app.clearPlaceholderTimer()
+				app.cleanupAsks()
 			},
 			fmt.Sprintf("enter_%s", Failing.String()): func(event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck

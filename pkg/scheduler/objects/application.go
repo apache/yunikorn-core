@@ -1555,6 +1555,7 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 	priority := info.GetPriority()
 	if priority < sa.allocMinPriority {
 		sa.allocMinPriority = priority
+		sa.queue.UpdateApplicationPreemptionPriority(sa.ApplicationID, priority)
 	}
 	sa.allocations[info.GetUUID()] = info
 }
@@ -1718,6 +1719,7 @@ func (sa *Application) updateAllocationMinPriority() {
 		}
 	}
 	sa.allocMinPriority = value
+	sa.queue.UpdateApplicationPreemptionPriority(sa.ApplicationID, value)
 }
 
 func (sa *Application) hasZeroAllocations() bool {

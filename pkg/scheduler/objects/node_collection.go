@@ -38,6 +38,7 @@ type NodeCollection interface {
 	GetNodeCount() int
 	GetNodes() []*Node
 	GetNodeIterator() NodeIterator
+	GetFullNodeIterator() NodeIterator
 	SetNodeSortingPolicy(policy NodeSortingPolicy)
 	GetNodeSortingPolicy() NodeSortingPolicy
 }
@@ -150,9 +151,23 @@ func (nc *baseNodeCollection) GetNodes() []*Node {
 	return nodes
 }
 
-// Create an ordered node iterator based on the sort policy set for this collection.
+// Create an ordered node iterator for unreserved nodes based on the sort policy set for this collection.
 // The iterator is nil if there are no unreserved nodes available.
 func (nc *baseNodeCollection) GetNodeIterator() NodeIterator {
+	return nc.getNodeIteratorInternal(func(node *Node) bool {
+		return !node.IsReserved()
+	})
+}
+
+// Create an ordered node iterator for all nodes based on the sort policy set for this collection.
+// The iterator is nil if there are no nodes available.
+func (nc *baseNodeCollection) GetFullNodeIterator() NodeIterator {
+	return nc.getNodeIteratorInternal(func(node *Node) bool {
+		return true
+	})
+}
+
+func (nc *baseNodeCollection) getNodeIteratorInternal(allow func(*Node) bool) NodeIterator {
 	sortingStart := time.Now()
 	tree := nc.cloneSortedNodes()
 
@@ -164,7 +179,7 @@ func (nc *baseNodeCollection) GetNodeIterator() NodeIterator {
 	nodes := make([]*Node, 0, length)
 	tree.Ascend(func(item btree.Item) bool {
 		node := item.(nodeRef).node
-		if !node.IsReserved() {
+		if allow(node) {
 			nodes = append(nodes, node)
 		}
 		return true

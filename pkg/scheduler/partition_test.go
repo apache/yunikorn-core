@@ -123,7 +123,6 @@ func TestNewWithPlacement(t *testing.T) {
 			},
 		},
 		Limits:         nil,
-		Preemption:     configs.PartitionPreemptionConfig{},
 		NodeSortPolicy: configs.NodeSortingPolicy{},
 	}
 	partition, err := newPartitionContext(confWith, rmID, nil)
@@ -2142,7 +2141,6 @@ func TestUpdateRootQueue(t *testing.T) {
 		},
 		PlacementRules: nil,
 		Limits:         nil,
-		Preemption:     configs.PartitionPreemptionConfig{},
 		NodeSortPolicy: configs.NodeSortingPolicy{},
 	}
 
@@ -3057,7 +3055,6 @@ func TestUpdateNodeSortingPolicy(t *testing.T) {
 				},
 				PlacementRules: nil,
 				Limits:         nil,
-				Preemption:     configs.PartitionPreemptionConfig{},
 				NodeSortPolicy: configs.NodeSortingPolicy{Type: tt.input},
 			})
 
@@ -3101,7 +3098,6 @@ func TestGetNodeSortingPolicyWhenNewPartitionFromConfig(t *testing.T) {
 				},
 				PlacementRules: nil,
 				Limits:         nil,
-				Preemption:     configs.PartitionPreemptionConfig{},
 				NodeSortPolicy: configs.NodeSortingPolicy{
 					Type: tt.input,
 				},

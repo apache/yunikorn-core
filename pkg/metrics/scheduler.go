@@ -53,6 +53,7 @@ type SchedulerMetrics struct {
 	schedulingLatency     prometheus.Histogram
 	sortingLatency        *prometheus.HistogramVec
 	tryNodeLatency        prometheus.Histogram
+	tryPreemptionLatency  prometheus.Histogram
 	lock                  sync.RWMutex
 }
 
@@ -124,6 +125,16 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 		},
 	)
 
+	s.tryPreemptionLatency = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: Namespace,
+			Subsystem: SchedulerSubsystem,
+			Name:      "trypreemption_latency_milliseconds",
+			Help:      "Latency of preemption condition checks for container allocations, in milliseconds.",
+			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6),
+		},
+	)
+
 	// Register the metrics
 	var metricsList = []prometheus.Collector{
 		s.containerAllocation,
@@ -133,6 +144,7 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 		s.schedulingLatency,
 		s.sortingLatency,
 		s.tryNodeLatency,
+		s.tryPreemptionLatency,
 	}
 	for _, metric := range metricsList {
 		if err := prometheus.Register(metric); err != nil {
@@ -171,6 +183,10 @@ func (m *SchedulerMetrics) ObserveQueueSortingLatency(start time.Time) {
 
 func (m *SchedulerMetrics) ObserveTryNodeLatency(start time.Time) {
 	m.tryNodeLatency.Observe(SinceInSeconds(start))
+}
+
+func (m *SchedulerMetrics) ObserveTryPreemptionLatency(start time.Time) {
+	m.tryPreemptionLatency.Observe(SinceInSeconds(start))
 }
 
 func (m *SchedulerMetrics) IncAllocatedContainer() {

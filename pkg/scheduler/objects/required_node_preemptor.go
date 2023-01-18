@@ -86,13 +86,13 @@ func (p *PreemptionContext) sortAllocations() {
 		lAskType := 1         // regular pod
 		if l.IsOriginator() { // driver/owner pod
 			lAskType = 3
-		} else if !l.IsAllowPreemption() { // opted out pod
+		} else if !l.IsAllowPreemptSelf() { // opted out pod
 			lAskType = 2
 		}
 		rAskType := 1
 		if r.IsOriginator() {
 			rAskType = 3
-		} else if !r.IsAllowPreemption() {
+		} else if !r.IsAllowPreemptSelf() {
 			rAskType = 2
 		}
 		if lAskType < rAskType {

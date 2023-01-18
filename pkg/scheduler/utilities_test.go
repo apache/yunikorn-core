@@ -66,7 +66,6 @@ func newBasePartition() (*PartitionContext, error) {
 		},
 		PlacementRules: nil,
 		Limits:         nil,
-		Preemption:     configs.PartitionPreemptionConfig{},
 		NodeSortPolicy: configs.NodeSortingPolicy{},
 	}
 
@@ -102,7 +101,6 @@ func newConfiguredPartition() (*PartitionContext, error) {
 		},
 		PlacementRules: nil,
 		Limits:         nil,
-		Preemption:     configs.PartitionPreemptionConfig{},
 		NodeSortPolicy: configs.NodeSortingPolicy{},
 	}
 	return newPartitionContext(conf, rmID, nil)
@@ -130,7 +128,6 @@ func newLimitedPartition(resLimit map[string]string) (*PartitionContext, error) 
 		},
 		PlacementRules: nil,
 		Limits:         nil,
-		Preemption:     configs.PartitionPreemptionConfig{},
 		NodeSortPolicy: configs.NodeSortingPolicy{},
 	}
 
@@ -157,7 +154,6 @@ func newPlacementPartition() (*PartitionContext, error) {
 			},
 		},
 		Limits:         nil,
-		Preemption:     configs.PartitionPreemptionConfig{},
 		NodeSortPolicy: configs.NodeSortingPolicy{},
 	}
 

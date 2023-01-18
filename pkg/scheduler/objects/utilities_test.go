@@ -34,10 +34,9 @@ import (
 )
 
 const (
+	appID0  = "app-0"
 	appID1  = "app-1"
 	appID2  = "app-2"
-	appID3  = "app-3"
-	appID4  = "app-4"
 	aKey    = "alloc-1"
 	nodeID1 = "node-1"
 )
@@ -54,14 +53,18 @@ func createManagedQueue(parentSQ *Queue, name string, parent bool, maxRes map[st
 
 // create managed queue with props set
 func createManagedQueueWithProps(parentSQ *Queue, name string, parent bool, maxRes, props map[string]string) (*Queue, error) {
-	return createManagedQueuePropsMaxApps(parentSQ, name, parent, maxRes, props, uint64(0))
+	return createManagedQueuePropsMaxApps(parentSQ, name, parent, maxRes, nil, props, uint64(0))
 }
 
 func createManagedQueueMaxApps(parentSQ *Queue, name string, parent bool, maxRes map[string]string, maxApps uint64) (*Queue, error) {
-	return createManagedQueuePropsMaxApps(parentSQ, name, parent, maxRes, nil, maxApps)
+	return createManagedQueuePropsMaxApps(parentSQ, name, parent, maxRes, nil, nil, maxApps)
 }
 
-func createManagedQueuePropsMaxApps(parentSQ *Queue, name string, parent bool, maxRes map[string]string, props map[string]string, maxApps uint64) (*Queue, error) {
+func createManagedQueueGuaranteed(parentSQ *Queue, name string, parent bool, maxRes, guarRes map[string]string) (*Queue, error) {
+	return createManagedQueuePropsMaxApps(parentSQ, name, parent, maxRes, guarRes, nil, uint64(0))
+}
+
+func createManagedQueuePropsMaxApps(parentSQ *Queue, name string, parent bool, maxRes map[string]string, guarRes map[string]string, props map[string]string, maxApps uint64) (*Queue, error) {
 	queueConfig := configs.QueueConfig{
 		Name:            name,
 		Parent:          parent,
@@ -69,9 +72,10 @@ func createManagedQueuePropsMaxApps(parentSQ *Queue, name string, parent bool, m
 		Properties:      props,
 		MaxApplications: maxApps,
 	}
-	if maxRes != nil {
+	if maxRes != nil || guarRes != nil {
 		queueConfig.Resources = configs.Resources{
-			Max: maxRes,
+			Max:        maxRes,
+			Guaranteed: guarRes,
 		}
 	}
 	queue, err := NewConfiguredQueue(queueConfig, parentSQ)

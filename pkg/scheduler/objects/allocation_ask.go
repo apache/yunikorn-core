@@ -43,7 +43,8 @@ type AllocationAsk struct {
 	priority          int32
 	maxAllocations    int32
 	requiredNode      string
-	allowPreemption   bool
+	allowPreemptSelf  bool
+	allowPreemptOther bool
 	originator        bool
 	tags              map[string]string
 	allocatedResource *resources.Resource
@@ -52,6 +53,7 @@ type AllocationAsk struct {
 	pendingAskRepeat    int32
 	allocLog            map[string]*AllocationLogEntry
 	preemptionTriggered bool
+	preemptCheckTime    time.Time
 
 	sync.RWMutex
 }
@@ -79,6 +81,7 @@ func NewAllocationAskFromSI(ask *si.AllocationAsk) *AllocationAsk {
 		maxAllocations:    ask.MaxAllocations,
 		applicationID:     ask.ApplicationID,
 		partitionName:     ask.PartitionName,
+
 		tags:              CloneAllocationTags(ask.Tags),
 		createTime:        time.Now(),
 		priority:          ask.Priority,
@@ -86,7 +89,8 @@ func NewAllocationAskFromSI(ask *si.AllocationAsk) *AllocationAsk {
 		placeholder:       ask.Placeholder,
 		taskGroupName:     ask.TaskGroupName,
 		requiredNode:      common.GetRequiredNodeFromTag(ask.Tags),
-		allowPreemption:   common.GetPreemptionFromTag(ask.Tags),
+		allowPreemptSelf:  common.IsAllowPreemptSelf(ask.PreemptionPolicy),
+		allowPreemptOther: common.IsAllowPreemptOther(ask.PreemptionPolicy),
 		originator:        ask.Originator,
 		allocLog:          make(map[string]*AllocationLogEntry),
 	}
@@ -149,6 +153,20 @@ func (aa *AllocationAsk) GetCreateTime() time.Time {
 	return aa.createTime
 }
 
+// GetPreemptCheckTime returns the time this ask was last evaluated for preemption
+func (aa *AllocationAsk) GetPreemptCheckTime() time.Time {
+	aa.RLock()
+	defer aa.RUnlock()
+	return aa.preemptCheckTime
+}
+
+// UpdatePreemptCheckTime is used to mark when this ask is evaluated for preemption
+func (aa *AllocationAsk) UpdatePreemptCheckTime() {
+	aa.Lock()
+	defer aa.Unlock()
+	aa.preemptCheckTime = time.Now()
+}
+
 // IsPlaceholder returns whether this ask represents a placeholder
 func (aa *AllocationAsk) IsPlaceholder() bool {
 	return aa.placeholder
@@ -174,9 +192,14 @@ func (aa *AllocationAsk) SetRequiredNode(node string) {
 	aa.requiredNode = node
 }
 
-// IsAllowPreemption returns whether preemption is allowed for this ask
-func (aa *AllocationAsk) IsAllowPreemption() bool {
-	return aa.allowPreemption
+// IsAllowPreemptSelf returns whether preemption is allowed for this ask
+func (aa *AllocationAsk) IsAllowPreemptSelf() bool {
+	return aa.allowPreemptSelf
+}
+
+// IsAllowPreemptOther returns whether this ask is allowed to preempt others
+func (aa *AllocationAsk) IsAllowPreemptOther() bool {
+	return aa.allowPreemptOther
 }
 
 // IsOriginator returns whether this ask is the originator for the application

@@ -191,7 +191,6 @@ func TestSetNodeSortingPolicy(t *testing.T) {
 				},
 				PlacementRules: nil,
 				Limits:         nil,
-				Preemption:     configs.PartitionPreemptionConfig{},
 				NodeSortPolicy: configs.NodeSortingPolicy{
 					Type: tt.input,
 				},
@@ -255,7 +254,6 @@ func TestGetNodeSortingPolicy(t *testing.T) {
 				},
 				PlacementRules: nil,
 				Limits:         nil,
-				Preemption:     configs.PartitionPreemptionConfig{},
 				NodeSortPolicy: configs.NodeSortingPolicy{
 					Type: tt.input,
 				},
@@ -280,6 +278,41 @@ func TestGetNodeSortingPolicy(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetFullNodeIterator(t *testing.T) {
+	nc := NewNodeCollection("test")
+	for i := 1; i <= 4; i++ {
+		nodeName := fmt.Sprintf("node-%d", i)
+		node := newNode(nodeName, map[string]resources.Quantity{"vcore": resources.Quantity(10)})
+		if i%2 == 0 {
+			appName := fmt.Sprintf("app-%02d", i)
+			allocName := fmt.Sprintf("alloc-%02d", i)
+			app := newApplication(appName, "default", "root.test")
+			ask := newAllocationAsk(allocName, appName, resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(i)}))
+			if err := node.Reserve(app, ask); err != nil {
+				t.Error("Reserving failed.")
+			}
+		} else {
+			res := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(i)})
+			alloc := newAllocation(fmt.Sprintf("test-app-%d", i), uuid.NewString(), fmt.Sprintf("test-%d", i), "root.default", res)
+			if ok := node.AddAllocation(alloc); !ok {
+				t.Error("Allocation error in node.")
+			}
+		}
+		if err := nc.AddNode(node); err != nil {
+			t.Error("Adding another node into BC failed.")
+		}
+	}
+	nodes := make([]*Node, 0)
+	for iterator := nc.GetFullNodeIterator(); iterator.HasNext(); {
+		nodes = append(nodes, iterator.Next())
+	}
+	assert.Equal(t, len(nodes), 4, "wrong length")
+	assert.Equal(t, nodes[0].NodeID, "node-2", "wrong node 0")
+	assert.Equal(t, nodes[1].NodeID, "node-4", "wrong node 1")
+	assert.Equal(t, nodes[2].NodeID, "node-1", "wrong node 2")
+	assert.Equal(t, nodes[3].NodeID, "node-3", "wrong node 3")
 }
 
 func TestGetNodeIterator(t *testing.T) {

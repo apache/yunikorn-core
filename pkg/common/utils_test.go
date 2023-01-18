@@ -27,7 +27,7 @@ import (
 
 	"gotest.tools/v3/assert"
 
-	common "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -145,26 +145,16 @@ func TestGetRequiredNodeFromAsk(t *testing.T) {
 	assert.Equal(t, nodeName, "Node2")
 }
 
-func TestGetPreemptionFromTagFromAsk(t *testing.T) {
-	validKey := common.DomainYuniKorn + common.KeyAllowPreemption
-	tests := []struct {
-		testname string
-		tag      map[string]string
-		expected bool
-	}{
-		{"Tags are empty and preemption is defaultly true", map[string]string{}, true},
-		{"Tags don't contain the revelent tag and perrmption is defaultly true", map[string]string{"TestValue": "ERROR"}, true},
-		{"The preemption is assigned with true", map[string]string{validKey: "true"}, true},
-		{"The preemption is assigned with false", map[string]string{validKey: "false"}, false},
-		{"Unkown value in the correct key", map[string]string{validKey: "unkown"}, true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.testname, func(t *testing.T) {
-			if allowPreemption := GetPreemptionFromTag(tt.tag); allowPreemption != tt.expected {
-				t.Errorf("Got %v, expected %v", allowPreemption, tt.expected)
-			}
-		})
-	}
+func TestIsAllowPreemptSelf(t *testing.T) {
+	assert.Check(t, IsAllowPreemptSelf(nil), "Nil policy should allow preempt of self")
+	assert.Check(t, IsAllowPreemptSelf(&si.PreemptionPolicy{AllowPreemptSelf: true}), "Preempt self should be allowed if policy allows")
+	assert.Check(t, !IsAllowPreemptSelf(&si.PreemptionPolicy{AllowPreemptSelf: false}), "Preempt self should not be allowed if policy does not allow")
+}
+
+func TestAllowPreemptOther(t *testing.T) {
+	assert.Check(t, !IsAllowPreemptOther(nil), "Nil policy should not allow preempt of other")
+	assert.Check(t, IsAllowPreemptOther(&si.PreemptionPolicy{AllowPreemptOther: true}), "Preempt other should be allowed if policy allows")
+	assert.Check(t, !IsAllowPreemptOther(&si.PreemptionPolicy{AllowPreemptOther: false}), "Preempt other should not be allowed if policy does not allow")
 }
 
 func TestConvertSITimeoutWithAdjustment(t *testing.T) {

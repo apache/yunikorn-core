@@ -49,8 +49,9 @@ type AllocationAsk struct {
 	allocatedResource *resources.Resource
 
 	// Mutable fields which need protection
-	pendingAskRepeat int32
-	allocLog         map[string]*AllocationLogEntry
+	pendingAskRepeat    int32
+	allocLog            map[string]*AllocationLogEntry
+	preemptionTriggered bool
 
 	sync.RWMutex
 }
@@ -244,4 +245,18 @@ func (aa *AllocationAsk) GetAllocationLog() []*AllocationLogEntry {
 		i++
 	}
 	return res
+}
+
+// MarkTriggeredPreemption marks the current ask because it triggered preemption during allocation
+func (aa *AllocationAsk) MarkTriggeredPreemption() {
+	aa.Lock()
+	defer aa.Unlock()
+	aa.preemptionTriggered = true
+}
+
+// HasTriggeredPreemption returns whether this ask has triggered preemption
+func (aa *AllocationAsk) HasTriggeredPreemption() bool {
+	aa.RLock()
+	defer aa.RUnlock()
+	return aa.preemptionTriggered
 }

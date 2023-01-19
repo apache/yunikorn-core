@@ -29,6 +29,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/events"
@@ -36,6 +37,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
+	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -95,6 +97,8 @@ type Application struct {
 	rejectedMessage      string                      // If the application is rejected, save the rejected message
 	stateLog             []*StateLogEntry            // state log for this application
 	placeholderData      map[string]*PlaceholderData // track placeholder and gang related info
+	askMaxPriority       int32                       // highest priority value of outstanding asks
+	allocMinPriority     int32                       // lowest priority value of allocations
 
 	rmEventHandler     handler.EventHandler
 	rmID               string
@@ -122,6 +126,8 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		finishedTime:         time.Time{},
 		rejectedMessage:      "",
 		stateLog:             make([]*StateLogEntry, 0),
+		askMaxPriority:       configs.MinPriority,
+		allocMinPriority:     configs.MaxPriority,
 	}
 	placeholderTimeout := common.ConvertSITimeoutWithAdjustment(siApp, defaultPlaceholderTimeout)
 	gangSchedStyle := siApp.GetGangSchedulingStyle()
@@ -509,6 +515,8 @@ func (sa *Application) removeAsksInternal(allocKey string) int {
 		deltaPendingResource = sa.pending
 		sa.pending = resources.NewResource()
 		sa.requests = make(map[string]*AllocationAsk)
+		sa.askMaxPriority = configs.MinPriority
+		sa.queue.UpdateApplicationPriority(sa.ApplicationID, sa.askMaxPriority)
 	} else {
 		// cleanup the reservation for this allocation
 		for _, key := range sa.GetAskReservations(allocKey) {
@@ -529,6 +537,9 @@ func (sa *Application) removeAsksInternal(allocKey string) int {
 			deltaPendingResource = resources.MultiplyBy(ask.GetAllocatedResource(), float64(ask.GetPendingAskRepeat()))
 			sa.pending = resources.Sub(sa.pending, deltaPendingResource)
 			delete(sa.requests, allocKey)
+			if priority := ask.GetPriority(); priority >= sa.askMaxPriority {
+				sa.updateAskMaxPriority()
+			}
 		}
 	}
 	// clean up the queue pending resources
@@ -586,6 +597,14 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 	}
 	sa.requests[ask.GetAllocationKey()] = ask
 
+	// update app priority
+	repeat := ask.GetPendingAskRepeat()
+	priority := ask.GetPriority()
+	if repeat > 0 && priority > sa.askMaxPriority {
+		sa.askMaxPriority = priority
+		sa.queue.UpdateApplicationPriority(sa.ApplicationID, sa.askMaxPriority)
+	}
+
 	// Update total pending resource
 	delta.SubFrom(oldAskResource)
 	sa.pending = resources.Add(sa.pending, delta)
@@ -614,6 +633,15 @@ func (sa *Application) RecoverAllocationAsk(ask *AllocationAsk) {
 		return
 	}
 	sa.requests[ask.GetAllocationKey()] = ask
+
+	// update app priority
+	repeat := ask.GetPendingAskRepeat()
+	priority := ask.GetPriority()
+	if repeat > 0 && priority > sa.askMaxPriority {
+		sa.askMaxPriority = priority
+		sa.queue.UpdateApplicationPriority(sa.ApplicationID, sa.askMaxPriority)
+	}
+
 	// progress the application from New to Accepted.
 	if sa.IsNew() {
 		if err := sa.HandleApplicationEvent(RunApplication); err != nil {
@@ -638,6 +666,22 @@ func (sa *Application) updateAskRepeatInternal(ask *AllocationAsk, delta int32) 
 		return nil, fmt.Errorf("ask repaeat not updated resulting repeat less than zero for ask %s on app %s", ask.GetAllocationKey(), sa.ApplicationID)
 	}
 
+	askPriority := ask.GetPriority()
+	if ask.GetPendingAskRepeat() == 0 {
+		// ask removed
+		if askPriority >= sa.askMaxPriority {
+			// recalculate downward
+			sa.updateAskMaxPriority()
+		}
+	} else {
+		// ask added
+		if askPriority > sa.askMaxPriority {
+			// increase app priority
+			sa.askMaxPriority = askPriority
+			sa.queue.UpdateApplicationPriority(sa.ApplicationID, askPriority)
+		}
+	}
+
 	deltaPendingResource := resources.Multiply(ask.GetAllocatedResource(), int64(delta))
 	sa.pending = resources.Add(sa.pending, deltaPendingResource)
 	// update the pending of the queue with the same delta
@@ -646,8 +690,8 @@ func (sa *Application) updateAskRepeatInternal(ask *AllocationAsk, delta int32) 
 	return deltaPendingResource, nil
 }
 
-// Return if the application has any reservations.
-func (sa *Application) hasReserved() bool {
+// HasReserved returns true if the application has any reservations.
+func (sa *Application) HasReserved() bool {
 	sa.RLock()
 	defer sa.RUnlock()
 	return len(sa.reservations) > 0
@@ -886,6 +930,14 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 					zap.String("required node", requiredNode))
 				return nil
 			}
+			// Are there any non daemon set reservations on specific required node?
+			// Cancel those reservations to run daemon set pods
+			reservations := node.GetReservations()
+			if len(reservations) > 0 {
+				if !sa.cancelReservations(reservations) {
+					return nil
+				}
+			}
 			alloc := sa.tryNode(node, request)
 			if alloc != nil {
 				// check if the node was reserved and we allocated after a release
@@ -917,6 +969,52 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 	}
 	// no requests fit, skip to next app
 	return nil
+}
+
+func (sa *Application) cancelReservations(reservations []*reservation) bool {
+	for _, res := range reservations {
+		// skip the node
+		if res.ask.GetRequiredNode() != "" {
+			log.Logger().Warn("reservation for ask with required node already exists on the node",
+				zap.String("required node", res.node.NodeID),
+				zap.String("existing ask reservation key", res.getKey()))
+			return false
+		}
+	}
+	var err error
+	var num int
+	// un reserve all the apps that were reserved on the node
+	for _, res := range reservations {
+		thisApp := res.app.ApplicationID == sa.ApplicationID
+		if thisApp {
+			num, err = sa.unReserveInternal(res.node, res.ask)
+		} else {
+			num, err = res.app.UnReserve(res.node, res.ask)
+		}
+		if err != nil {
+			log.Logger().Warn("Unable to cancel reservations on node",
+				zap.String("victim application ID", res.app.ApplicationID),
+				zap.String("victim allocationKey", res.getKey()),
+				zap.String("required node", res.node.NodeID),
+				zap.Int("reservations count", num),
+				zap.String("application ID", sa.ApplicationID))
+			return false
+		} else {
+			log.Logger().Info("Cancelled reservation on required node",
+				zap.String("affected application ID", res.app.ApplicationID),
+				zap.String("affected allocationKey", res.getKey()),
+				zap.String("required node", res.node.NodeID),
+				zap.Int("reservations count", num),
+				zap.String("application ID", sa.ApplicationID))
+		}
+		// remove the reservation of the queue
+		if thisApp {
+			sa.queue.UnReserve(sa.ApplicationID, num)
+		} else {
+			res.app.GetQueue().UnReserve(res.app.ApplicationID, num)
+		}
+	}
+	return true
 }
 
 // tryPlaceholderAllocate tries to replace a placeholder that is allocated with a real allocation
@@ -1093,7 +1191,7 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 
 		// Do we need a specific node?
 		if ask.GetRequiredNode() != "" {
-			if !reserve.node.CanAllocate(ask.GetAllocatedResource()) {
+			if !reserve.node.CanAllocate(ask.GetAllocatedResource()) && !ask.HasTriggeredPreemption() {
 				sa.tryPreemption(reserve, ask)
 				continue
 			}
@@ -1131,16 +1229,20 @@ func (sa *Application) tryPreemption(reserve *reservation, ask *AllocationAsk) b
 		zap.String("ds allocation key", ask.GetAllocationKey()))
 
 	// try preemption and see if we can free up resource
-	preemptor := NewSimplePreemptor(reserve.node, ask)
+	preemptor := NewRequiredNodePreemptor(reserve.node, ask)
 	preemptor.filterAllocations()
 	preemptor.sortAllocations()
 
 	// Are there any victims/asks to preempt?
 	victims := preemptor.GetVictims()
 	if len(victims) > 0 {
-		log.Logger().Info("Found victims for daemon set ask preemption ",
-			zap.String("ds allocation key", ask.GetAllocationKey()))
-		zap.Int("no.of victims", len(victims))
+		log.Logger().Info("Found victims for required node preemption",
+			zap.String("ds allocation key", ask.GetAllocationKey()),
+			zap.Int("no.of victims", len(victims)))
+		for _, victim := range victims {
+			victim.MarkPreempted()
+		}
+		ask.MarkTriggeredPreemption()
 		sa.notifyRMAllocationReleased(sa.rmID, victims, si.TerminationType_PREEMPTED_BY_SCHEDULER,
 			"preempting allocations to free up resources to run daemon set ask: "+ask.GetAllocationKey())
 		return true
@@ -1339,6 +1441,7 @@ func (sa *Application) SetQueue(queue *Queue) {
 	defer sa.Unlock()
 	sa.queuePath = queue.QueuePath
 	sa.queue = queue
+	sa.queue.UpdateApplicationPriority(sa.ApplicationID, sa.askMaxPriority)
 }
 
 // remove the leaf queue the application runs in, used when completing the app
@@ -1420,8 +1523,11 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 		if resources.IsZero(sa.allocatedPlaceholder) {
 			sa.initPlaceholderTimer()
 		}
+		// User resource usage needs to be updated even during resource allocation happen for ph's itself even though state change would happen only after all ph allocation completes.
+		sa.incUserResourceUsage(info.GetAllocatedResource())
 		sa.allocatedPlaceholder = resources.Add(sa.allocatedPlaceholder, info.GetAllocatedResource())
 		sa.maxAllocatedResource = resources.ComponentWiseMax(sa.allocatedPlaceholder, sa.maxAllocatedResource)
+
 		// If there are no more placeholder to allocate we should move state
 		if resources.Equals(sa.allocatedPlaceholder, sa.placeholderAsk) {
 			if err := sa.HandleApplicationEvent(RunApplication); err != nil {
@@ -1442,17 +1548,47 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 					zap.Error(err))
 			}
 		}
+		sa.incUserResourceUsage(info.GetAllocatedResource())
 		sa.allocatedResource = resources.Add(sa.allocatedResource, info.GetAllocatedResource())
 		sa.maxAllocatedResource = resources.ComponentWiseMax(sa.allocatedResource, sa.maxAllocatedResource)
 	}
+	priority := info.GetPriority()
+	if priority < sa.allocMinPriority {
+		sa.allocMinPriority = priority
+		sa.queue.UpdateApplicationPreemptionPriority(sa.ApplicationID, priority)
+	}
 	sa.allocations[info.GetUUID()] = info
+}
+
+// Increase user resource usage
+// No locking must be called while holding the lock
+func (sa *Application) incUserResourceUsage(resource *resources.Resource) {
+	if err := ugm.GetUserManager().IncreaseTrackedResource(sa.queuePath, sa.ApplicationID, resource, sa.user); err != nil {
+		log.Logger().Error("Unable to track the user resource usage",
+			zap.String("application id", sa.ApplicationID),
+			zap.String("user", sa.user.User),
+			zap.String("currentState", sa.stateMachine.Current()),
+			zap.Error(err))
+	}
+}
+
+// Decrease user resource usage
+// No locking must be called while holding the lock
+func (sa *Application) decUserResourceUsage(resource *resources.Resource, removeApp bool) {
+	if err := ugm.GetUserManager().DecreaseTrackedResource(sa.queuePath, sa.ApplicationID, resource, sa.user, removeApp); err != nil {
+		log.Logger().Error("Unable to track the user resource usage",
+			zap.String("application id", sa.ApplicationID),
+			zap.String("user", sa.user.User),
+			zap.String("currentState", sa.stateMachine.Current()),
+			zap.Error(err))
+	}
 }
 
 func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
 	// remove the placeholder that was just confirmed by the shim
-	ph := sa.removeAllocationInternal(uuid)
+	ph := sa.removeAllocationInternal(uuid, si.TerminationType_PLACEHOLDER_REPLACED)
 	// this has already been replaced or it is a duplicate message from the shim
 	if ph == nil || ph.GetReleaseCount() == 0 {
 		log.Logger().Debug("Unexpected placeholder released",
@@ -1487,56 +1623,107 @@ func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
 
 // Remove the Allocation from the application.
 // Return the allocation that was removed or nil if not found.
-func (sa *Application) RemoveAllocation(uuid string) *Allocation {
+func (sa *Application) RemoveAllocation(uuid string, releaseType si.TerminationType) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
-	return sa.removeAllocationInternal(uuid)
+	return sa.removeAllocationInternal(uuid, releaseType)
 }
 
 // Remove the Allocation from the application
 // No locking must be called while holding the lock
-func (sa *Application) removeAllocationInternal(uuid string) *Allocation {
+func (sa *Application) removeAllocationInternal(uuid string, releaseType si.TerminationType) *Allocation {
 	alloc := sa.allocations[uuid]
 
 	// When app has the allocation, update map, and update allocated resource of the app
 	if alloc == nil {
 		return nil
 	}
+
+	var event applicationEvent = EventNotNeeded
+	var eventWarning string
+	removeApp := false
 	// update correct allocation tracker
 	if alloc.IsPlaceholder() {
+		// make sure we account for the placeholders being removed in the tracking data
+		if releaseType == si.TerminationType_STOPPED_BY_RM || releaseType == si.TerminationType_PREEMPTED_BY_SCHEDULER || releaseType == si.TerminationType_UNKNOWN_TERMINATION_TYPE {
+			if _, ok := sa.placeholderData[alloc.taskGroupName]; ok {
+				sa.placeholderData[alloc.taskGroupName].TimedOut++
+			}
+		}
+		// as and when every ph gets removed (for replacement), resource usage would be reduced.
+		// When real allocation happens as part of replacement, usage would be increased again with real alloc resource
 		sa.allocatedPlaceholder = resources.Sub(sa.allocatedPlaceholder, alloc.GetAllocatedResource())
 		// if all the placeholders are replaced, clear the placeholder timer
 		if resources.IsZero(sa.allocatedPlaceholder) {
 			sa.clearPlaceholderTimer()
-			if (sa.IsCompleting() && sa.stateTimer == nil) || sa.IsFailing() || sa.IsResuming() {
-				event := CompleteApplication
+			if (sa.IsCompleting() && sa.stateTimer == nil) || sa.IsFailing() || sa.IsResuming() || sa.hasZeroAllocations() {
+				removeApp = true
+				event = CompleteApplication
 				if sa.IsFailing() {
 					event = FailApplication
 				}
 				if sa.IsResuming() {
 					event = RunApplication
+					removeApp = false
 				}
-				if err := sa.HandleApplicationEvent(event); err != nil {
-					log.Logger().Warn("Application state not changed while removing a placeholder allocation",
-						zap.String("currentState", sa.CurrentState()),
-						zap.String("event", event.String()),
-						zap.Error(err))
-				}
+				eventWarning = "Application state not changed while removing a placeholder allocation"
 			}
 		}
+		sa.decUserResourceUsage(alloc.GetAllocatedResource(), removeApp)
 	} else {
 		sa.allocatedResource = resources.Sub(sa.allocatedResource, alloc.GetAllocatedResource())
 		// When the resource trackers are zero we should not expect anything to come in later.
-		if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) {
-			if err := sa.HandleApplicationEvent(CompleteApplication); err != nil {
-				log.Logger().Warn("Application state not changed to Waiting while removing an allocation",
-					zap.String("currentState", sa.CurrentState()),
-					zap.Error(err))
-			}
+		if sa.hasZeroAllocations() {
+			removeApp = true
+			event = CompleteApplication
+			eventWarning = "Application state not changed to Waiting while removing an allocation"
+		}
+		sa.decUserResourceUsage(alloc.GetAllocatedResource(), removeApp)
+	}
+	if event != EventNotNeeded {
+		if err := sa.HandleApplicationEvent(event); err != nil {
+			log.Logger().Warn(eventWarning,
+				zap.String("currentState", sa.CurrentState()),
+				zap.String("event", event.String()),
+				zap.Error(err))
 		}
 	}
 	delete(sa.allocations, uuid)
+	if sa.allocMinPriority == alloc.GetPriority() {
+		sa.updateAllocationMinPriority()
+	}
 	return alloc
+}
+
+func (sa *Application) updateAskMaxPriority() {
+	value := configs.MinPriority
+	for _, v := range sa.requests {
+		if v.GetPendingAskRepeat() == 0 {
+			continue
+		}
+		p := v.GetPriority()
+		if p > value {
+			value = p
+		}
+	}
+	sa.askMaxPriority = value
+	sa.queue.UpdateApplicationPriority(sa.ApplicationID, value)
+}
+
+func (sa *Application) updateAllocationMinPriority() {
+	value := configs.MaxPriority
+	for _, v := range sa.allocations {
+		p := v.GetPriority()
+		if p < value {
+			value = p
+		}
+	}
+	sa.allocMinPriority = value
+	sa.queue.UpdateApplicationPreemptionPriority(sa.ApplicationID, value)
+}
+
+func (sa *Application) hasZeroAllocations() bool {
+	return resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource)
 }
 
 // Remove all allocations from the application.
@@ -1548,6 +1735,9 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 	allocationsToRelease := make([]*Allocation, 0)
 	for _, alloc := range sa.allocations {
 		allocationsToRelease = append(allocationsToRelease, alloc)
+	}
+	if resources.IsZero(sa.pending) {
+		sa.decUserResourceUsage(resources.Add(sa.allocatedResource, sa.allocatedPlaceholder), true)
 	}
 	// cleanup allocated resource for app (placeholders and normal)
 	sa.allocatedResource = resources.NewResource()
@@ -1711,6 +1901,18 @@ func (sa *Application) GetAllPlaceholderData() []*PlaceholderData {
 		placeholders = append(placeholders, taskGroup)
 	}
 	return placeholders
+}
+
+func (sa *Application) GetAllocationMinPriority() int32 {
+	sa.RLock()
+	defer sa.RUnlock()
+	return sa.allocMinPriority
+}
+
+func (sa *Application) GetAskMaxPriority() int32 {
+	sa.RLock()
+	defer sa.RUnlock()
+	return sa.askMaxPriority
 }
 
 // test only

@@ -22,8 +22,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path"
 	"strings"
 	"testing"
 
@@ -239,18 +237,7 @@ func SerdeTest(t *testing.T, conf SchedulerConfig, description string) {
 }
 
 func CreateConfig(data string) (*SchedulerConfig, error) {
-	dir, err := os.MkdirTemp("", "test-scheduler-config")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create temp dir: %v", err)
-	}
-
-	err = os.WriteFile(path.Join(dir, "test-scheduler-config.yaml"), []byte(data), 0644)
-	if err != nil {
-		return nil, fmt.Errorf("failed to write config file: %v", err)
-	}
-	// Read the file and build the config
-	ConfigMap[SchedulerConfigPath] = dir
-	return SchedulerConfigLoader("test-scheduler-config")
+	return LoadSchedulerConfigFromByteArray([]byte(data))
 }
 
 func TestLoadQueueConfig(t *testing.T) {
@@ -332,6 +319,10 @@ partitions:
 
 	// gpu.production
 	if conf.Partitions[1].Queues[0].Queues[0].Name != "production" {
+		t.Errorf("failed to load 2nd partition queues from file %v", conf)
+	}
+
+	if conf.Partitions[1].Queues[0].Queues[0].MaxApplications != 10 {
 		t.Errorf("failed to load 2nd partition queues from file %v", conf)
 	}
 
@@ -639,41 +630,6 @@ partitions:
 
 	if conf.Partitions[1].Preemption.Enabled {
 		t.Error("partition-0's preemption should NOT be enabled by default")
-	}
-}
-
-func TestPartitionStateDumpFilePathParameter(t *testing.T) {
-	data := `
-partitions:
-  - name: default
-    queues:
-      - name: root
-    statedumpfilepath: "yunikorn-state.txt"
-  - name: "partition-0"
-    queues:
-      - name: root
-`
-	// validate the config and check after the update
-	conf, err := CreateConfig(data)
-	assert.NilError(t, err, "should expect no error")
-	stateDumpFilePath := "yunikorn-state.txt"
-	assert.Equal(t, conf.Partitions[0].StateDumpFilePath, stateDumpFilePath)
-	assert.Equal(t, conf.Partitions[1].StateDumpFilePath, "")
-	defer assert.NilError(t, os.Remove(stateDumpFilePath), "delete yunikorn-state.txt should expect no error")
-}
-
-func TestPartitionStateDumpFilePathParameterFail(t *testing.T) {
-	data := `
-partitions:
-  - name: default
-    queues:
-      - name: root
-    statedumpfilepath: "/yunikorn-state.txt"
-`
-	// validate the config and check after the update
-	conf, err := CreateConfig(data)
-	if err == nil {
-		t.Errorf("stateDumpFilePath field should have failed due to insufficient permissions: %v", conf)
 	}
 }
 

@@ -16,10 +16,25 @@
  limitations under the License.
 */
 
-package configs
+package dao
 
-func MockSchedulerConfigByData(data []byte) {
-	SchedulerConfigLoader = func(policyGroup string) (config *SchedulerConfig, e error) {
-		return LoadSchedulerConfigFromByteArray(data)
-	}
+import "github.com/apache/yunikorn-core/pkg/common/resources"
+
+type UserResourceUsageDAOInfo struct {
+	UserName string                `json:"userName"`
+	Groups   map[string]string     `json:"groups"`
+	Queues   *ResourceUsageDAOInfo `json:"queues"`
+}
+
+type GroupResourceUsageDAOInfo struct {
+	GroupName    string                `json:"groupName"`
+	Applications []string              `json:"applications"`
+	Queues       *ResourceUsageDAOInfo `json:"queues"`
+}
+
+type ResourceUsageDAOInfo struct {
+	QueuePath           string                  `json:"queuePath"`
+	ResourceUsage       *resources.Resource     `json:"resourceUsage"`
+	RunningApplications []string                `json:"runningApplications"`
+	Children            []*ResourceUsageDAOInfo `json:"children"`
 }

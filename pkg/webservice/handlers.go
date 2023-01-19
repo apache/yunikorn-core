@@ -29,6 +29,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
@@ -42,14 +43,16 @@ import (
 	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
-
-	"github.com/gorilla/mux"
 )
 
 const PartitionDoesNotExists = "Partition not found"
 const QueueDoesNotExists = "Queue not found"
+const UserDoesNotExists = "User not found"
+const GroupDoesNotExists = "Group not found"
+const UserNameMissing = "User name is missing"
+const GroupNameMissing = "Group name is missing"
 
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
@@ -178,6 +181,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 			NodeID:           alloc.GetNodeID(),
 			ApplicationID:    alloc.GetApplicationID(),
 			Partition:        alloc.GetPartitionName(),
+			Preempted:        alloc.IsPreempted(),
 		}
 		allocationInfo = append(allocationInfo, allocInfo)
 	}
@@ -203,20 +207,25 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 	}
 
 	return &dao.ApplicationDAOInfo{
-		ApplicationID:   app.ApplicationID,
-		UsedResource:    app.GetAllocatedResource().DAOMap(),
-		MaxUsedResource: app.GetMaxAllocatedResource().DAOMap(),
-		Partition:       common.GetPartitionNameWithoutClusterID(app.Partition),
-		QueueName:       app.GetQueuePath(),
-		SubmissionTime:  app.SubmissionTime.UnixNano(),
-		FinishedTime:    common.ZeroTimeInUnixNano(app.FinishedTime()),
-		Requests:        getApplicationRequests(app),
-		Allocations:     allocationInfo,
-		State:           app.CurrentState(),
-		User:            app.GetUser().User,
-		RejectedMessage: app.GetRejectedMessage(),
-		PlaceholderData: placeholderInfo,
-		StateLog:        stateLogInfo,
+		ApplicationID:         app.ApplicationID,
+		UsedResource:          app.GetAllocatedResource().DAOMap(),
+		MaxUsedResource:       app.GetMaxAllocatedResource().DAOMap(),
+		PendingResource:       app.GetPendingResource().DAOMap(),
+		Partition:             common.GetPartitionNameWithoutClusterID(app.Partition),
+		QueueName:             app.GetQueuePath(),
+		SubmissionTime:        app.SubmissionTime.UnixNano(),
+		FinishedTime:          common.ZeroTimeInUnixNano(app.FinishedTime()),
+		Requests:              getApplicationRequests(app),
+		Allocations:           allocationInfo,
+		State:                 app.CurrentState(),
+		User:                  app.GetUser().User,
+		RejectedMessage:       app.GetRejectedMessage(),
+		PlaceholderData:       placeholderInfo,
+		StateLog:              stateLogInfo,
+		HasReserved:           app.HasReserved(),
+		Reservations:          app.GetReservations(),
+		MaxRequestPriority:    app.GetAskMaxPriority(),
+		MinAllocationPriority: app.GetAllocationMinPriority(),
 	}
 }
 
@@ -239,19 +248,20 @@ func getApplicationRequests(app *objects.Application) []dao.AllocationAskDAOInfo
 				}
 			}
 			reqInfo := dao.AllocationAskDAOInfo{
-				AllocationKey:      req.GetAllocationKey(),
-				AllocationTags:     req.GetTagsClone(),
-				RequestTime:        req.GetCreateTime().UnixNano(),
-				ResourcePerAlloc:   req.GetAllocatedResource().DAOMap(),
-				PendingCount:       count,
-				Priority:           strconv.Itoa(int(req.GetPriority())),
-				RequiredNodeID:     req.GetRequiredNode(),
-				ApplicationID:      req.GetApplicationID(),
-				Partition:          common.GetPartitionNameWithoutClusterID(req.GetPartitionName()),
-				Placeholder:        req.IsPlaceholder(),
-				PlaceholderTimeout: req.GetTimeout().Nanoseconds(),
-				TaskGroupName:      req.GetTaskGroup(),
-				AllocationLog:      allocLogInfo,
+				AllocationKey:       req.GetAllocationKey(),
+				AllocationTags:      req.GetTagsClone(),
+				RequestTime:         req.GetCreateTime().UnixNano(),
+				ResourcePerAlloc:    req.GetAllocatedResource().DAOMap(),
+				PendingCount:        count,
+				Priority:            strconv.Itoa(int(req.GetPriority())),
+				RequiredNodeID:      req.GetRequiredNode(),
+				ApplicationID:       req.GetApplicationID(),
+				Partition:           common.GetPartitionNameWithoutClusterID(req.GetPartitionName()),
+				Placeholder:         req.IsPlaceholder(),
+				PlaceholderTimeout:  req.GetTimeout().Nanoseconds(),
+				TaskGroupName:       req.GetTaskGroup(),
+				AllocationLog:       allocLogInfo,
+				TriggeredPreemption: req.HasTriggeredPreemption(),
 			}
 			requestInfo = append(requestInfo, reqInfo)
 		}
@@ -299,7 +309,7 @@ func getNodeJSON(node *objects.Node) *dao.NodeDAOInfo {
 		Allocations:  allocations,
 		Schedulable:  node.IsSchedulable(),
 		IsReserved:   node.IsReserved(),
-		Reservations: node.GetReservations(),
+		Reservations: node.GetReservationKeys(),
 	}
 }
 
@@ -397,80 +407,6 @@ func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func createClusterConfig(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
-	queryParams := r.URL.Query()
-	dryRun, dryRunExists := queryParams["dry_run"]
-	if !dryRunExists {
-		buildJSONErrorResponse(w, "Dry run param is missing. Please check the usage documentation", http.StatusBadRequest)
-		return
-	}
-	if dryRun[0] != "1" {
-		buildJSONErrorResponse(w, "Invalid \"dry_run\" query param. Currently, only dry_run=1 is supported. Please check the usage documentation", http.StatusBadRequest)
-		return
-	}
-	requestBytes, err := io.ReadAll(r.Body)
-	if err == nil {
-		_, err = configs.LoadSchedulerConfigFromByteArray(requestBytes)
-	}
-	var result dao.ValidateConfResponse
-	if err != nil {
-		result.Allowed = false
-		result.Reason = err.Error()
-	} else {
-		result.Allowed = true
-	}
-	if err = json.NewEncoder(w).Encode(result); err != nil {
-		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
-func updateClusterConfig(w http.ResponseWriter, r *http.Request) {
-	lock.Lock()
-	defer lock.Unlock()
-	writeHeaders(w)
-	requestBytes, err := io.ReadAll(r.Body)
-	if err != nil {
-		buildUpdateResponse(err, w)
-		return
-	}
-	newConf, err := configs.ParseAndValidateConfig(requestBytes)
-	if err != nil {
-		buildUpdateResponse(err, w)
-		return
-	}
-	if !isChecksumEqual(newConf.Checksum) {
-		buildUpdateResponse(fmt.Errorf("the base configuration is changed"), w)
-		return
-	}
-	configs.SetChecksum(requestBytes, newConf)
-	newConfStr := configs.GetConfigurationString(requestBytes)
-	// This fails if we have more than 1 RM
-	// Do not think the plugins will even work with multiple RMs
-	var oldConf string
-	oldConf, err = updateConfiguration(newConfStr)
-	if err != nil {
-		buildUpdateResponse(err, w)
-		return
-	}
-	// This fails if we have no RM registered or more than 1 RM
-	err = schedulerContext.UpdateSchedulerConfig(newConf)
-	if err != nil {
-		// revert configmap changes
-		_, err2 := updateConfiguration(oldConf)
-		if err2 != nil {
-			err = fmt.Errorf("update failed: %s\nupdate rollback failed: %s", err.Error(), err2.Error())
-		}
-		buildUpdateResponse(err, w)
-		return
-	}
-	buildUpdateResponse(nil, w)
-}
-
-func isChecksumEqual(checksum string) bool {
-	return configs.ConfigContext.Get(schedulerContext.GetPolicyGroup()).Checksum == checksum
-}
-
 func checkHealthStatus(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
@@ -503,20 +439,6 @@ func buildUpdateResponse(err error, w http.ResponseWriter) {
 			zap.Error(err))
 		buildJSONErrorResponse(w, err.Error(), http.StatusConflict)
 	}
-}
-
-func updateConfiguration(conf string) (string, error) {
-	if plugin := plugins.GetResourceManagerCallbackPlugin(); plugin != nil {
-		// use the plugin to update the configuration in the configMap
-		resp := plugin.UpdateConfiguration(&si.UpdateConfigurationRequest{
-			Configs: conf,
-		})
-		if resp.Success {
-			return resp.OldConfig, nil
-		}
-		return resp.OldConfig, fmt.Errorf(resp.Reason)
-	}
-	return "", fmt.Errorf("config plugin not found")
 }
 
 func getPartitions(w http.ResponseWriter, r *http.Request) {
@@ -586,15 +508,12 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusBadRequest)
 		return
 	}
-	apps := queue.GetCopyOfApps()
-	completedApps := queue.GetCopyOfCompletedApps()
-	appsDao := make([]*dao.ApplicationDAOInfo, 0, len(apps)+len(completedApps))
-	for _, app := range apps {
+
+	appsDao := make([]*dao.ApplicationDAOInfo, 0)
+	for _, app := range queue.GetCopyOfApps() {
 		appsDao = append(appsDao, getApplicationJSON(app))
 	}
-	for _, app := range completedApps {
-		appsDao = append(appsDao, getApplicationJSON(app))
-	}
+
 	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -789,7 +708,90 @@ func getRMBuildInformation(lists map[string]*scheduler.RMInformation) []map[stri
 	return result
 }
 
+func getResourceManagerDiagnostics() map[string]interface{} {
+	result := make(map[string]interface{}, 0)
+
+	plugin := plugins.GetStateDumpPlugin()
+
+	// get state dump from RM
+	dumpStr, err := plugin.GetStateDump()
+	if err != nil {
+		// might be not implemented
+		log.Logger().Debug("Unable to get RM state dump", zap.Error(err))
+		result["Error"] = err.Error()
+		return result
+	}
+
+	// convert to JSON map
+	if err = json.Unmarshal([]byte(dumpStr), &result); err != nil {
+		log.Logger().Warn("Unable to parse RM state dump", zap.Error(err))
+		result["Error"] = err.Error()
+	}
+
+	return result
+}
+
 func getMetrics(w http.ResponseWriter, r *http.Request) {
 	metrics2.GetRuntimeMetrics().Collect()
 	promhttp.Handler().ServeHTTP(w, r)
+}
+
+func getUsersResourceUsage(w http.ResponseWriter, r *http.Request) {
+	userManager := ugm.GetUserManager()
+	usersResources := userManager.GetUsersResources()
+	var result []*dao.UserResourceUsageDAOInfo
+	for _, tracker := range usersResources {
+		result = append(result, tracker.GetUserResourceUsageDAOInfo())
+	}
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	user := vars["user"]
+	if user == "" {
+		buildJSONErrorResponse(w, UserNameMissing, http.StatusBadRequest)
+		return
+	}
+	userTracker := ugm.GetUserManager().GetUserTracker(user)
+	if userTracker == nil {
+		buildJSONErrorResponse(w, UserDoesNotExists, http.StatusBadRequest)
+		return
+	}
+	var result = userTracker.GetUserResourceUsageDAOInfo()
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func getGroupsResourceUsage(w http.ResponseWriter, r *http.Request) {
+	userManager := ugm.GetUserManager()
+	groupsResources := userManager.GetGroupsResources()
+	var result []*dao.GroupResourceUsageDAOInfo
+	for _, tracker := range groupsResources {
+		result = append(result, tracker.GetGroupResourceUsageDAOInfo())
+	}
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	group := vars["group"]
+	if group == "" {
+		buildJSONErrorResponse(w, GroupNameMissing, http.StatusBadRequest)
+		return
+	}
+	groupTracker := ugm.GetUserManager().GetGroupTracker(group)
+	if groupTracker == nil {
+		buildJSONErrorResponse(w, GroupDoesNotExists, http.StatusBadRequest)
+		return
+	}
+	var result = groupTracker.GetGroupResourceUsageDAOInfo()
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
 }

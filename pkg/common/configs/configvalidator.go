@@ -20,10 +20,12 @@ package configs
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -38,9 +40,24 @@ const (
 	DOT              = "."
 	DotReplace       = "_dot_"
 	DefaultPartition = "default"
-	// How to sort applications in leaf queues, valid options are defined in the scheduler.policies
-	ApplicationSortPolicy = "application.sort.policy"
+
+	ApplicationSortPolicy   = "application.sort.policy"
+	ApplicationSortPriority = "application.sort.priority"
+	PriorityPolicy          = "priority.policy"
+	PriorityOffset          = "priority.offset"
+	PreemptionPolicy        = "preemption.policy"
+	PreemptionDelay         = "preemption.delay"
+
+	// app sort priority values
+	ApplicationSortPriorityEnabled  = "enabled"
+	ApplicationSortPriorityDisabled = "disabled"
 )
+
+// Priority
+var MinPriority int32 = math.MinInt32
+var MaxPriority int32 = math.MaxInt32
+
+var DefaultPreemptionDelay = 30 * time.Second
 
 // A queue can be a username with the dot replaced. Most systems allow a 32 character user name.
 // The queue name must thus allow for at least that length with the replacement of dots.
@@ -104,6 +121,20 @@ func checkQueueResource(cur QueueConfig, parentM *resources.Resource) (*resource
 		return sumG, nil
 	}
 	return curG, nil
+}
+
+func checkQueueMaxApplications(cur QueueConfig) error {
+	var err error
+	for _, child := range cur.Queues {
+		if cur.MaxApplications != 0 && (cur.MaxApplications < child.MaxApplications || child.MaxApplications == 0) {
+			return fmt.Errorf("parent maxRunningApps must be larger than child maxRunningApps")
+		}
+		err = checkQueueMaxApplications(child)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func checkResourceConfig(cur QueueConfig) (*resources.Resource, *resources.Resource, error) {
@@ -369,15 +400,9 @@ func checkQueuesStructure(partition *PartitionConfig) error {
 }
 
 // Check the state dump file path, if configured, is a valid path that can be written to.
-func checkStateDumpFilePath(partition *PartitionConfig) error {
-	fileName := partition.StateDumpFilePath
-	if fileName != "" {
-		if err := ensureDir(fileName); err != nil {
-			return err
-		}
-		if _, cerr := os.Create(fileName); cerr != nil {
-			return cerr
-		}
+func checkDeprecatedStateDumpFilePath(partition *PartitionConfig) error {
+	if partition.StateDumpFilePath != "" {
+		log.Logger().Warn("Ignoring deprecated partition setting 'statedumpfilepath'. This parameter will be removed in a future release.")
 	}
 	return nil
 }
@@ -435,7 +460,11 @@ func Validate(newConfig *SchedulerConfig) error {
 		if err != nil {
 			return err
 		}
-		err = checkStateDumpFilePath(&newConfig.Partitions[i])
+		err = checkDeprecatedStateDumpFilePath(&newConfig.Partitions[i])
+		if err != nil {
+			return err
+		}
+		err = checkQueueMaxApplications(partition.Queues[0])
 		if err != nil {
 			return err
 		}

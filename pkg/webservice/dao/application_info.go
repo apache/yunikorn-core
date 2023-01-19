@@ -23,20 +23,25 @@ type ApplicationsDAOInfo struct {
 }
 
 type ApplicationDAOInfo struct {
-	ApplicationID   string                 `json:"applicationID"`
-	UsedResource    map[string]int64       `json:"usedResource"`
-	MaxUsedResource map[string]int64       `json:"maxUsedResource"`
-	Partition       string                 `json:"partition"`
-	QueueName       string                 `json:"queueName"`
-	SubmissionTime  int64                  `json:"submissionTime"`
-	FinishedTime    *int64                 `json:"finishedTime"`
-	Requests        []AllocationAskDAOInfo `json:"requests"`
-	Allocations     []AllocationDAOInfo    `json:"allocations"`
-	State           string                 `json:"applicationState"`
-	User            string                 `json:"user"`
-	RejectedMessage string                 `json:"rejectedMessage"`
-	StateLog        []StateDAOInfo         `json:"stateLog"`
-	PlaceholderData []PlaceholderDAOInfo   `json:"placeholderData"`
+	ApplicationID         string                 `json:"applicationID"`
+	UsedResource          map[string]int64       `json:"usedResource"`
+	MaxUsedResource       map[string]int64       `json:"maxUsedResource"`
+	PendingResource       map[string]int64       `json:"pendingResource"`
+	Partition             string                 `json:"partition"`
+	QueueName             string                 `json:"queueName"`
+	SubmissionTime        int64                  `json:"submissionTime"`
+	FinishedTime          *int64                 `json:"finishedTime"`
+	Requests              []AllocationAskDAOInfo `json:"requests"`
+	Allocations           []AllocationDAOInfo    `json:"allocations"`
+	State                 string                 `json:"applicationState"`
+	User                  string                 `json:"user"`
+	RejectedMessage       string                 `json:"rejectedMessage"`
+	StateLog              []StateDAOInfo         `json:"stateLog"`
+	PlaceholderData       []PlaceholderDAOInfo   `json:"placeholderData"`
+	HasReserved           bool                   `json:"hasReserved"`
+	Reservations          []string               `json:"reservations"`
+	MaxRequestPriority    int32                  `json:"maxRequestPriority"`
+	MinAllocationPriority int32                  `json:"minAllocationPriority"`
 }
 
 type StateDAOInfo struct {

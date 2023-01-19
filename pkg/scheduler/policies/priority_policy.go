@@ -16,17 +16,31 @@
  limitations under the License.
 */
 
-package plugins
+package policies
 
 import (
-	"sync"
-
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/api"
+	"fmt"
+	"strings"
 )
 
-type SchedulerPlugins struct {
-	ResourceManagerCallbackPlugin api.ResourceManagerCallback
-	StateDumpPlugin               api.StateDumpPlugin
+type PriorityPolicy int
 
-	sync.RWMutex
+const (
+	DefaultPriorityPolicy PriorityPolicy = iota // priority propagates upward
+	FencePriorityPolicy                         // priority is not considered outside queue subtree
+)
+
+func (p PriorityPolicy) String() string {
+	return [...]string{"default", "fence"}[p]
+}
+
+func PriorityPolicyFromString(str string) (PriorityPolicy, error) {
+	switch strings.ToLower(str) {
+	case DefaultPriorityPolicy.String(), "":
+		return DefaultPriorityPolicy, nil
+	case FencePriorityPolicy.String():
+		return FencePriorityPolicy, nil
+	default:
+		return DefaultPriorityPolicy, fmt.Errorf("undefined priority.policy: %s", str)
+	}
 }

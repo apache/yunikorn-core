@@ -16,17 +16,19 @@
  limitations under the License.
 */
 
-package plugins
+package ugm
 
 import (
-	"sync"
-
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/api"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
-type SchedulerPlugins struct {
-	ResourceManagerCallbackPlugin api.ResourceManagerCallback
-	StateDumpPlugin               api.StateDumpPlugin
-
-	sync.RWMutex
+func internalGetResource(usage *dao.ResourceUsageDAOInfo, resources map[string]*resources.Resource) map[string]*resources.Resource {
+	resources[usage.QueuePath] = usage.ResourceUsage
+	if len(usage.Children) > 0 {
+		for _, resourceUsage := range usage.Children {
+			internalGetResource(resourceUsage, resources)
+		}
+	}
+	return resources
 }

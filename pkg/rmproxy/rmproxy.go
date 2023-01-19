@@ -27,7 +27,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common"
-	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/handler"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
@@ -46,10 +45,6 @@ type RMProxy struct {
 	pendingRMEvents chan interface{}
 
 	rmIDToCallback map[string]api.ResourceManagerCallback
-
-	// config version is tracked per RM,
-	// it is used to determine if configs need to be reloaded
-	rmIDToConfigWatcher map[string]*configs.ConfigWatcher
 
 	sync.RWMutex
 }
@@ -77,9 +72,8 @@ func (rmp *RMProxy) HandleEvent(ev interface{}) {
 
 func NewRMProxy() *RMProxy {
 	rm := &RMProxy{
-		rmIDToCallback:      make(map[string]api.ResourceManagerCallback),
-		rmIDToConfigWatcher: make(map[string]*configs.ConfigWatcher),
-		pendingRMEvents:     make(chan interface{}, 1024*1024),
+		rmIDToCallback:  make(map[string]api.ResourceManagerCallback),
+		pendingRMEvents: make(chan interface{}, 1024*1024),
 	}
 	return rm
 }
@@ -277,15 +271,6 @@ func (rmp *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerR
 	// Wait from channel
 	result := <-c
 	if result.Succeeded {
-		// create a config watcher for this RM
-		// config watcher will only be started when a reload is triggered
-		// it is configured with a expiration time, and will be auto exit once that reaches
-		configWatcher := configs.CreateConfigWatcher(request.RmID, request.PolicyGroup, configs.DefaultConfigWatcherDuration)
-		configWatcher.RegisterCallback(&configurationReloader{
-			rmID:    request.RmID,
-			rmProxy: rmp,
-		})
-		rmp.rmIDToConfigWatcher[request.RmID] = configWatcher
 		rmp.rmIDToCallback[request.RmID] = callback
 
 		// RM callback can optionally implement one or more scheduler plugin interfaces,
@@ -378,22 +363,26 @@ func (rmp *RMProxy) UpdateNode(request *si.NodeRequest) error {
 }
 
 // Triggers scheduler to reload configuration and apply the changes on-the-fly to the scheduler itself.
-func (rmp *RMProxy) UpdateConfiguration(rmID string) error {
+func (rmp *RMProxy) UpdateConfiguration(request *si.UpdateConfigurationRequest) error {
 	rmp.RLock()
 	defer rmp.RUnlock()
 
-	cw, ok := rmp.rmIDToConfigWatcher[rmID]
-	if !ok {
-		// if configWatcher is not found for this RM
-		return fmt.Errorf("failed to reload configuration, because RM %s is unknown to the scheduler", rmID)
-	}
-	// ensure configWatcher is running
-	// configWatcher is only triggered to run when the reload is called,
-	// it might be stopped when reload is done or expires, so it needs to
-	// be re-triggered when there is new reload call coming. This is a
-	// noop if the config watcher is already running.
-	cw.Run()
+	c := make(chan *rmevent.Result)
+	go func() {
+		rmp.EventHandlers.SchedulerEventHandler.HandleEvent(&rmevent.RMConfigUpdateEvent{
+			RmID:        request.RmID,
+			PolicyGroup: request.PolicyGroup,
+			Config:      request.Config,
+			ExtraConfig: request.ExtraConfig,
+			Channel:     c,
+		})
+	}()
 
+	// Wait from channel
+	result := <-c
+	if !result.Succeeded {
+		return fmt.Errorf("update of configuration failed: %v", result.Reason)
+	}
 	return nil
 }
 

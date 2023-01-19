@@ -70,6 +70,7 @@ type Allocation struct {
 	reservedNodeID        string
 	result                AllocationResult
 	releases              []*Allocation
+	preempted             bool
 
 	sync.RWMutex
 }
@@ -354,6 +355,20 @@ func (a *Allocation) SetRelease(release *Allocation) {
 // GetAllocatedResource returns a reference to the allocated resources for this allocation. This must be treated as read-only.
 func (a *Allocation) GetAllocatedResource() *resources.Resource {
 	return a.allocatedResource
+}
+
+// MarkPreempted marks the allocation as preempted.
+func (a *Allocation) MarkPreempted() {
+	a.Lock()
+	defer a.Unlock()
+	a.preempted = true
+}
+
+// IsPreempted returns whether the allocation has been marked for preemption or not.
+func (a *Allocation) IsPreempted() bool {
+	a.Lock()
+	defer a.Unlock()
+	return a.preempted
 }
 
 // CloneAllocationTags clones a tag map for safe copying

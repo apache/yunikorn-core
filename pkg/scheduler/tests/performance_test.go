@@ -27,7 +27,6 @@ import (
 	"go.uber.org/zap"
 	"gotest.tools/assert"
 
-	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/entrypoint"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
@@ -60,7 +59,6 @@ partitions:
                 memory: 1000000
                 vcore: 10000
 `
-	configs.MockSchedulerConfigByData([]byte(configData))
 	mockRM := newMockRMCallbackHandler()
 
 	BuildInfoMap := make(map[string]string)
@@ -72,6 +70,7 @@ partitions:
 			PolicyGroup: "policygroup",
 			Version:     "0.0.2",
 			BuildInfo:   BuildInfoMap,
+			Config:      configData,
 		}, mockRM)
 
 	assert.NilError(b, err, "RegisterResourceManager failed")

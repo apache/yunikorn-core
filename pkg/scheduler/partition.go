@@ -51,7 +51,6 @@ type PartitionContext struct {
 	applications           map[string]*objects.Application // applications assigned to this partition
 	completedApplications  map[string]*objects.Application // completed applications from this partition
 	rejectedApplications   map[string]*objects.Application // rejected applications from this partition
-	reservedApps           map[string]int                  // applications reserved within this partition, with reservation count
 	nodes                  objects.NodeCollection          // nodes assigned to this partition
 	placementManager       *placement.AppPlacementManager  // placement manager for this partition
 	partitionManager       *partitionManager               // manager for this partition
@@ -62,7 +61,6 @@ type PartitionContext struct {
 	userGroupCache         *security.UserGroupCache        // user cache per partition
 	totalPartitionResource *resources.Resource             // Total node resources
 	allocations            int                             // Number of allocations on the partition
-	stateDumpFilePath      string                          // Path of output file for state dumps
 
 	// The partition write lock must not be held while manipulating an application.
 	// Scheduling is running continuously as a lock free background task. Scheduling an application
@@ -91,7 +89,6 @@ func newPartitionContext(conf configs.PartitionConfig, rmID string, cc *ClusterC
 		stateTime:             time.Now(),
 		applications:          make(map[string]*objects.Application),
 		completedApplications: make(map[string]*objects.Application),
-		reservedApps:          make(map[string]int),
 		nodes:                 objects.NewNodeCollection(conf.Name),
 	}
 	pc.partitionManager = newPartitionManager(pc, cc)
@@ -134,7 +131,6 @@ func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionCon
 	// TODO get the resolver from the config
 	pc.userGroupCache = security.GetUserGroupCache("")
 	pc.updateNodeSortingPolicy(conf)
-	pc.updateStateDumpFilePath(conf)
 	return nil
 }
 
@@ -151,15 +147,6 @@ func (pc *PartitionContext) updateNodeSortingPolicy(conf configs.PartitionConfig
 			zap.String("policyName", configuredPolicy.String()))
 	}
 	pc.nodes.SetNodeSortingPolicy(objects.NewNodeSortingPolicy(conf.NodeSortPolicy.Type, conf.NodeSortPolicy.ResourceWeights))
-}
-
-// NOTE: this is a lock free call. It should only be called holding the PartitionContext lock.
-func (pc *PartitionContext) updateStateDumpFilePath(conf configs.PartitionConfig) {
-	stateDumpFilePath := pc.GetStateDumpFilePath()
-	if stateDumpFilePath != conf.StateDumpFilePath {
-		log.Logger().Info(fmt.Sprintf("State dump file path was %s, changing to %s", stateDumpFilePath, conf.StateDumpFilePath))
-		pc.stateDumpFilePath = conf.StateDumpFilePath
-	}
 }
 
 func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig) error {
@@ -185,7 +172,6 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 		pc.placementManager = placement.NewPlacementManager(*pc.rules, pc.GetQueue)
 	}
 	pc.updateNodeSortingPolicy(conf)
-	pc.updateStateDumpFilePath(conf)
 	// start at the root: there is only one queue
 	queueConf := conf.Queues[0]
 	root := pc.root
@@ -193,7 +179,7 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 	if err := root.ApplyConf(queueConf); err != nil {
 		return err
 	}
-	root.UpdateSortType()
+	root.UpdateQueueProperties()
 	// update the rest of the queues recursively
 	return pc.updateQueues(queueConf.Queues, root)
 }
@@ -239,7 +225,7 @@ func (pc *PartitionContext) updateQueues(config []configs.QueueConfig, parent *o
 			return err
 		}
 		// special call to convert to a real policy from the property
-		queue.UpdateSortType()
+		queue.UpdateQueueProperties()
 		if err = pc.updateQueues(queueConfig.Queues, queue); err != nil {
 			return err
 		}
@@ -417,7 +403,6 @@ func (pc *PartitionContext) removeApplication(appID string) []*objects.Allocatio
 			}
 		}
 	}
-
 	return allocations
 }
 
@@ -433,7 +418,6 @@ func (pc *PartitionContext) removeAppInternal(appID string) *objects.Application
 	}
 	// remove from partition then cleanup underlying objects
 	delete(pc.applications, appID)
-	delete(pc.reservedApps, appID)
 	return app
 }
 
@@ -451,20 +435,7 @@ func (pc *PartitionContext) getRejectedApplication(appID string) *objects.Applic
 	return pc.rejectedApplications[appID]
 }
 
-// Return a copy of the map of all reservations for the partition.
-// This will return an empty map if there are no reservations.
-// Visible for tests
-func (pc *PartitionContext) getReservations() map[string]int {
-	pc.RLock()
-	defer pc.RUnlock()
-	reserve := make(map[string]int)
-	for key, num := range pc.reservedApps {
-		reserve[key] = num
-	}
-	return reserve
-}
-
-// Get the queue from the structure based on the fully qualified name.
+// GetQueue returns queue from the structure based on the fully qualified name.
 // Wrapper around the unlocked version getQueueInternal()
 // Visible by tests
 func (pc *PartitionContext) GetQueue(name string) *objects.Queue {
@@ -549,12 +520,6 @@ func (pc *PartitionContext) createQueue(name string, user security.UserGroup) (*
 		}
 	}
 	return queue, nil
-}
-
-// Get the state dump output file path from the partition.
-// NOTE: this is a lock free call. It should only be called holding the PartitionContext lock.
-func (pc *PartitionContext) GetStateDumpFilePath() string {
-	return pc.stateDumpFilePath
 }
 
 // Get a node from the partition by nodeID.
@@ -684,16 +649,15 @@ func (pc *PartitionContext) removeNode(nodeID string) ([]*objects.Allocation, []
 	if node == nil {
 		return nil, nil
 	}
-	// found the node cleanup the allocations linked to the node
-	released, confirmed := pc.removeNodeAllocations(node)
 
-	// unreserve all the apps that were reserved on the node
-	reservedKeys, releasedAsks := node.UnReserveApps()
-	// update the partition reservations based on the node clean up
-	for i, appID := range reservedKeys {
-		pc.unReserveCount(appID, releasedAsks[i])
+	// unreserve all the apps that were reserved on the node.
+	// The node is not reachable anymore unless you have the pointer.
+	for _, r := range node.GetReservations() {
+		_, app, ask := r.GetObjects()
+		pc.unReserve(app, node, ask)
 	}
-	return released, confirmed
+	// cleanup the allocations linked to the node
+	return pc.removeNodeAllocations(node)
 }
 
 // Remove all allocations that are assigned to a node as part of the node removal. This is not part of the node object
@@ -785,7 +749,7 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 			}
 		}
 		// check allocations on the app
-		if app.RemoveAllocation(allocID) == nil {
+		if app.RemoveAllocation(allocID, si.TerminationType_UNKNOWN_TERMINATION_TYPE) == nil {
 			log.Logger().Info("allocation is not found, skipping while removing the node",
 				zap.String("allocationId", allocID),
 				zap.String("appID", app.ApplicationID),
@@ -951,8 +915,6 @@ func (pc *PartitionContext) reserve(app *objects.Application, node *objects.Node
 
 	// add the reservation to the queue list
 	app.GetQueue().Reserve(appID)
-	// increase the number of reservations for this app
-	pc.reservedApps[appID]++
 
 	log.Logger().Info("allocation ask is reserved",
 		zap.String("appID", appID),
@@ -961,16 +923,10 @@ func (pc *PartitionContext) reserve(app *objects.Application, node *objects.Node
 		zap.String("node", node.NodeID))
 }
 
-// Process the unreservation in the scheduler
+// unReserve removes the reservation from the objects in the scheduler
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.Node, ask *objects.AllocationAsk) {
-	appID := app.ApplicationID
-	if pc.reservedApps[appID] == 0 {
-		log.Logger().Info("Application is not reserved in partition",
-			zap.String("appID", appID))
-		return
-	}
-	// all ok, remove the reservation of the app, this will also unReserve the node
+	// remove the reservation of the app, this will also unReserve the node
 	var err error
 	var num int
 	if num, err = app.UnReserve(node, ask); err != nil {
@@ -979,9 +935,8 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 		return
 	}
 	// remove the reservation of the queue
+	appID := app.ApplicationID
 	app.GetQueue().UnReserve(appID, num)
-	// make sure we cannot go below 0
-	pc.unReserveCount(appID, num)
 
 	log.Logger().Info("allocation ask is unreserved",
 		zap.String("appID", appID),
@@ -995,22 +950,6 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 // The iterator is nil if there are no unreserved nodes available.
 func (pc *PartitionContext) GetNodeIterator() objects.NodeIterator {
 	return pc.nodes.GetNodeIterator()
-}
-
-// Update the reservation counter for the app
-// Locked version of unReserveCountInternal
-func (pc *PartitionContext) unReserveCount(appID string, asks int) {
-	pc.Lock()
-	defer pc.Unlock()
-	if num, found := pc.reservedApps[appID]; found {
-		// decrease the number of reservations for this app and cleanup
-		// do not go negative, if it would happen cleanup
-		if asks >= num {
-			delete(pc.reservedApps, appID)
-		} else {
-			pc.reservedApps[appID] -= asks
-		}
-	}
 }
 
 // Updated the allocations counter for the partition
@@ -1040,12 +979,6 @@ func (pc *PartitionContext) GetTotalApplicationCount() int {
 	return len(pc.applications)
 }
 
-func (pc *PartitionContext) GetTotalCompletedApplicationCount() int {
-	pc.RLock()
-	defer pc.RUnlock()
-	return len(pc.completedApplications)
-}
-
 func (pc *PartitionContext) GetTotalAllocationCount() int {
 	pc.RLock()
 	defer pc.RUnlock()
@@ -1058,6 +991,7 @@ func (pc *PartitionContext) GetTotalNodeCount() int {
 	return pc.nodes.GetNodeCount()
 }
 
+// GetApplications returns a slice of the current applications tracked by the partition.
 func (pc *PartitionContext) GetApplications() []*objects.Application {
 	pc.RLock()
 	defer pc.RUnlock()
@@ -1068,6 +1002,7 @@ func (pc *PartitionContext) GetApplications() []*objects.Application {
 	return appList
 }
 
+// GetCompletedApplications returns a slice of the completed applications tracked by the partition.
 func (pc *PartitionContext) GetCompletedApplications() []*objects.Application {
 	pc.RLock()
 	defer pc.RUnlock()
@@ -1078,6 +1013,7 @@ func (pc *PartitionContext) GetCompletedApplications() []*objects.Application {
 	return appList
 }
 
+// GetRejectedApplications returns a slice of the rejected applications tracked by the partition.
 func (pc *PartitionContext) GetRejectedApplications() []*objects.Application {
 	pc.RLock()
 	defer pc.RUnlock()
@@ -1088,57 +1024,66 @@ func (pc *PartitionContext) GetRejectedApplications() []*objects.Application {
 	return appList
 }
 
-func (pc *PartitionContext) GetAppsByState(state string) []*objects.Application {
+// getAppsByState returns a slice of applicationIDs for the current applications filtered by state
+// Completed and Rejected applications are tracked in a separate map and will never be included.
+func (pc *PartitionContext) getAppsByState(state string) []string {
 	pc.RLock()
 	defer pc.RUnlock()
-	var appList []*objects.Application
-	if state == objects.Completed.String() {
-		for _, app := range pc.completedApplications {
-			if app.CurrentState() == state {
-				appList = append(appList, app)
-			}
-		}
-		return appList
-	}
-
-	if state == objects.Rejected.String() {
-		for _, app := range pc.rejectedApplications {
-			if app.CurrentState() == state {
-				appList = append(appList, app)
-			}
-		}
-		return appList
-	}
-
-	for _, app := range pc.applications {
+	var apps []string
+	for appID, app := range pc.applications {
 		if app.CurrentState() == state {
-			appList = append(appList, app)
+			apps = append(apps, appID)
 		}
 	}
-	return appList
+	return apps
 }
 
-// used to find expired apps in rejected applications
-func (pc *PartitionContext) GetRejectedAppsByState(state string) []*objects.Application {
+// getRejectedAppsByState returns a slice of applicationIDs for the rejected applications filtered by state.
+func (pc *PartitionContext) getRejectedAppsByState(state string) []string {
 	pc.RLock()
 	defer pc.RUnlock()
-	var appList []*objects.Application
-	for _, app := range pc.rejectedApplications {
+	var apps []string
+	for appID, app := range pc.rejectedApplications {
 		if app.CurrentState() == state {
-			appList = append(appList, app)
+			apps = append(apps, appID)
 		}
 	}
-	return appList
+	return apps
 }
 
-func (pc *PartitionContext) GetAppsInTerminatedState() []*objects.Application {
+// getCompletedAppsByState returns a slice of applicationIDs for the completed applicationIDs filtered by state.
+func (pc *PartitionContext) getCompletedAppsByState(state string) []string {
 	pc.RLock()
 	defer pc.RUnlock()
-	appList := pc.GetAppsByState(objects.Completed.String())
-	appList = append(appList, pc.GetAppsByState(objects.Failed.String())...)
-	return appList
+	var apps []string
+	for appID, app := range pc.completedApplications {
+		if app.CurrentState() == state {
+			apps = append(apps, appID)
+		}
+	}
+	return apps
 }
 
+// cleanupExpiredApps cleans up applications in the Expired state from the three tracking maps
+func (pc *PartitionContext) cleanupExpiredApps() {
+	for _, appID := range pc.getAppsByState(objects.Expired.String()) {
+		pc.Lock()
+		delete(pc.applications, appID)
+		pc.Unlock()
+	}
+	for _, appID := range pc.getRejectedAppsByState(objects.Expired.String()) {
+		pc.Lock()
+		delete(pc.rejectedApplications, appID)
+		pc.Unlock()
+	}
+	for _, appID := range pc.getCompletedAppsByState(objects.Expired.String()) {
+		pc.Lock()
+		delete(pc.completedApplications, appID)
+		pc.Unlock()
+	}
+}
+
+// GetNodes returns a slice of all nodes unfiltered from the iterator
 func (pc *PartitionContext) GetNodes() []*objects.Node {
 	pc.RLock()
 	defer pc.RUnlock()
@@ -1296,7 +1241,7 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 				zap.String("appID", appID),
 				zap.String("allocationId", uuid),
 				zap.String("terminationType", release.TerminationType.String()))
-			if alloc := app.RemoveAllocation(uuid); alloc != nil {
+			if alloc := app.RemoveAllocation(uuid, release.TerminationType); alloc != nil {
 				released = append(released, alloc)
 			}
 		}
@@ -1402,11 +1347,7 @@ func (pc *PartitionContext) removeAllocationAsk(release *si.AllocationAskRelease
 		return
 	}
 	// remove the allocation asks from the app
-	reservedAsks := app.RemoveAllocationAsk(allocKey)
-	// update the partition if the asks were reserved (clean up)
-	if reservedAsks != 0 {
-		pc.unReserveCount(appID, reservedAsks)
-	}
+	_ = app.RemoveAllocationAsk(allocKey)
 }
 
 // Add the allocation ask to the specified application
@@ -1423,19 +1364,6 @@ func (pc *PartitionContext) addAllocationAsk(siAsk *si.AllocationAsk) error {
 	return app.AddAllocationAsk(objects.NewAllocationAskFromSI(siAsk))
 }
 
-func (pc *PartitionContext) cleanupExpiredApps() {
-	for _, app := range pc.GetAppsByState(objects.Expired.String()) {
-		pc.Lock()
-		delete(pc.applications, app.ApplicationID)
-		pc.Unlock()
-	}
-	for _, app := range pc.GetRejectedAppsByState(objects.Expired.String()) {
-		pc.Lock()
-		delete(pc.rejectedApplications, app.ApplicationID)
-		pc.Unlock()
-	}
-}
-
 func (pc *PartitionContext) GetCurrentState() string {
 	return pc.stateMachine.Current()
 }
@@ -1450,9 +1378,6 @@ func (pc *PartitionContext) GetNodeSortingPolicyType() policies.SortingPolicy {
 	pc.RLock()
 	defer pc.RUnlock()
 	policy := pc.nodes.GetNodeSortingPolicy()
-	if policy == nil {
-		return policies.FairnessPolicy
-	}
 	return policy.PolicyType()
 }
 
@@ -1460,9 +1385,6 @@ func (pc *PartitionContext) GetNodeSortingResourceWeights() map[string]float64 {
 	pc.RLock()
 	defer pc.RUnlock()
 	policy := pc.nodes.GetNodeSortingPolicy()
-	if policy == nil {
-		return make(map[string]float64)
-	}
 	return policy.ResourceWeights()
 }
 

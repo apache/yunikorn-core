@@ -33,7 +33,7 @@ type PreemptionContext struct {
 	sync.RWMutex
 }
 
-func NewSimplePreemptor(node *Node, requiredAsk *AllocationAsk) *PreemptionContext {
+func NewRequiredNodePreemptor(node *Node, requiredAsk *AllocationAsk) *PreemptionContext {
 	preemptor := &PreemptionContext{
 		node:        node,
 		requiredAsk: requiredAsk,
@@ -48,6 +48,11 @@ func (p *PreemptionContext) filterAllocations() {
 	for _, allocation := range p.node.GetAllAllocations() {
 		// skip daemon set pods and higher priority allocation
 		if allocation.GetAsk().GetRequiredNode() != "" || allocation.GetPriority() > p.requiredAsk.GetPriority() {
+			continue
+		}
+
+		// skip if the allocation is already being preempted
+		if allocation.IsPreempted() {
 			continue
 		}
 

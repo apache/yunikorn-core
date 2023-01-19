@@ -16,17 +16,21 @@
  limitations under the License.
 */
 
-package plugins
+package ugm
 
 import (
-	"sync"
-
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/api"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/common/security"
 )
 
-type SchedulerPlugins struct {
-	ResourceManagerCallbackPlugin api.ResourceManagerCallback
-	StateDumpPlugin               api.StateDumpPlugin
+// Tracker Defines a set of interfaces to track and retrieve the user group resource usage
+type Tracker interface {
+	GetUserResources(user security.UserGroup) *resources.Resource
+	GetGroupResources(group string) *resources.Resource
 
-	sync.RWMutex
+	GetUsersResources() []*UserTracker
+	GetGroupsResources() []*GroupTracker
+
+	IncreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user security.UserGroup) error
+	DecreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user security.UserGroup, removeApp bool) error
 }

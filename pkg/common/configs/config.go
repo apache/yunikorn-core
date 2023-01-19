@@ -21,8 +21,6 @@ package configs
 import (
 	"crypto/sha256"
 	"fmt"
-	"os"
-	"path"
 	"strings"
 
 	"go.uber.org/zap"
@@ -147,8 +145,6 @@ type NodeSortingPolicy struct {
 	ResourceWeights map[string]float64 `yaml:",omitempty" json:",omitempty"`
 }
 
-type LoadSchedulerConfigFunc func(policyGroup string) (*SchedulerConfig, error)
-
 // Visible by tests
 func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) {
 	conf, err := ParseAndValidateConfig(content)
@@ -183,36 +179,6 @@ func ParseAndValidateConfig(content []byte) (*SchedulerConfig, error) {
 	return conf, nil
 }
 
-func loadSchedulerConfigFromFile(policyGroup string) (*SchedulerConfig, error) {
-	filePath := resolveConfigurationFileFunc(policyGroup)
-	buf, err := os.ReadFile(filePath)
-	if err != nil {
-		log.Logger().Error("failed to load configuration",
-			zap.String("configFilePath", filePath),
-			zap.Error(err))
-		return nil, err
-	}
-
-	return LoadSchedulerConfigFromByteArray(buf)
-}
-
-func resolveConfigurationFileFunc(policyGroup string) string {
-	var filePath string
-	if configDir, ok := ConfigMap[SchedulerConfigPath]; ok {
-		// if scheduler config path is explicitly set, load conf from there
-		filePath = path.Join(configDir, fmt.Sprintf("%s.yaml", policyGroup))
-	} else {
-		// if scheduler config path is not explicitly set
-		// first try to load from default dir
-		filePath = path.Join(DefaultSchedulerConfigPath, fmt.Sprintf("%s.yaml", policyGroup))
-		if _, err := os.Stat(filePath); err != nil {
-			// then try to load from current directory
-			filePath = fmt.Sprintf("%s.yaml", policyGroup)
-		}
-	}
-	return filePath
-}
-
 func GetConfigurationString(requestBytes []byte) string {
 	conf := string(requestBytes)
 	checksum := "checksum: "
@@ -227,5 +193,15 @@ func GetConfigurationString(requestBytes []byte) string {
 	return strings.ReplaceAll(conf, checksum, "")
 }
 
-// Default loader, can be updated by tests
-var SchedulerConfigLoader LoadSchedulerConfigFunc = loadSchedulerConfigFromFile
+// DefaultSchedulerConfig contains the default scheduler configuration; used if no other is provided
+var DefaultSchedulerConfig = `
+partitions:
+  - name: default
+    placementrules:
+      - name: tag
+        value: namespace
+        create: true
+    queues:
+      - name: root
+        submitacl: '*'
+`

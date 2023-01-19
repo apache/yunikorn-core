@@ -27,54 +27,154 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 )
 
-func sortQueue(queues []*Queue, sortType policies.SortPolicy) {
+func sortQueue(queues []*Queue, sortType policies.SortPolicy, considerPriority bool) {
 	sortingStart := time.Now()
 	if sortType == policies.FairSortPolicy {
-		sort.SliceStable(queues, func(i, j int) bool {
-			l := queues[i]
-			r := queues[j]
-			comp := resources.CompUsageRatioSeparately(l.GetAllocatedResource(), l.GetGuaranteedResource(),
-				r.GetAllocatedResource(), r.GetGuaranteedResource())
-			if comp == 0 {
-				return resources.StrictlyGreaterThan(resources.Sub(l.pending, r.pending), resources.Zero)
-			}
-			return comp < 0
-		})
+		if considerPriority {
+			sortQueuesByPriorityAndFairness(queues)
+		} else {
+			sortQueuesByFairnessAndPriority(queues)
+		}
+	} else {
+		if considerPriority {
+			sortQueuesByPriority(queues)
+		}
 	}
 	metrics.GetSchedulerMetrics().ObserveQueueSortingLatency(sortingStart)
 }
 
-func sortApplications(apps map[string]*Application, sortType policies.SortPolicy, globalResource *resources.Resource) []*Application {
+func sortQueuesByPriority(queues []*Queue) {
+	sort.SliceStable(queues, func(i, j int) bool {
+		l := queues[i]
+		r := queues[j]
+		lPriority := l.GetCurrentPriority()
+		rPriority := r.GetCurrentPriority()
+		return lPriority > rPriority
+	})
+}
+
+func sortQueuesByPriorityAndFairness(queues []*Queue) {
+	sort.SliceStable(queues, func(i, j int) bool {
+		l := queues[i]
+		r := queues[j]
+		lPriority := l.GetCurrentPriority()
+		rPriority := r.GetCurrentPriority()
+		if lPriority > rPriority {
+			return true
+		} else if lPriority < rPriority {
+			return false
+		}
+		comp := resources.CompUsageRatioSeparately(l.GetAllocatedResource(), l.GetGuaranteedResource(),
+			r.GetAllocatedResource(), r.GetGuaranteedResource())
+		if comp == 0 {
+			return resources.StrictlyGreaterThan(resources.Sub(l.pending, r.pending), resources.Zero)
+		}
+		return comp < 0
+	})
+}
+
+func sortQueuesByFairnessAndPriority(queues []*Queue) {
+	sort.SliceStable(queues, func(i, j int) bool {
+		l := queues[i]
+		r := queues[j]
+		comp := resources.CompUsageRatioSeparately(l.GetAllocatedResource(), l.GetGuaranteedResource(),
+			r.GetAllocatedResource(), r.GetGuaranteedResource())
+		if comp == 0 {
+			lPriority := l.GetCurrentPriority()
+			rPriority := r.GetCurrentPriority()
+			if lPriority > rPriority {
+				return true
+			} else if lPriority < rPriority {
+				return false
+			}
+			return resources.StrictlyGreaterThan(resources.Sub(l.pending, r.pending), resources.Zero)
+		}
+		return comp < 0
+	})
+}
+
+func sortApplications(apps map[string]*Application, sortType policies.SortPolicy, considerPriority bool, globalResource *resources.Resource) []*Application {
 	sortingStart := time.Now()
 	var sortedApps []*Application
 	switch sortType {
 	case policies.FairSortPolicy:
 		sortedApps = filterOnPendingResources(apps)
-		// Sort by usage
-		sort.SliceStable(sortedApps, func(i, j int) bool {
-			l := sortedApps[i]
-			r := sortedApps[j]
-			return resources.CompUsageRatio(l.GetAllocatedResource(), r.GetAllocatedResource(), globalResource) < 0
-		})
+		if considerPriority {
+			sortApplicationsByPriorityAndFairness(sortedApps, globalResource)
+		} else {
+			sortApplicationsByFairnessAndPriority(sortedApps, globalResource)
+		}
 	case policies.FifoSortPolicy:
 		sortedApps = filterOnPendingResources(apps)
-		// Sort by submission time oldest first
-		sort.SliceStable(sortedApps, func(i, j int) bool {
-			l := sortedApps[i]
-			r := sortedApps[j]
-			return l.SubmissionTime.Before(r.SubmissionTime)
-		})
+		if considerPriority {
+			sortApplicationsByPriorityAndSubmissionTime(sortedApps)
+		} else {
+			sortApplicationsBySubmissionTimeAndPriority(sortedApps)
+		}
 	case policies.StateAwarePolicy:
 		sortedApps = stateAwareFilter(apps)
-		// Sort by submission time oldest first
-		sort.SliceStable(sortedApps, func(i, j int) bool {
-			l := sortedApps[i]
-			r := sortedApps[j]
-			return l.SubmissionTime.Before(r.SubmissionTime)
-		})
+		if considerPriority {
+			sortApplicationsByPriorityAndSubmissionTime(sortedApps)
+		} else {
+			sortApplicationsBySubmissionTimeAndPriority(sortedApps)
+		}
 	}
 	metrics.GetSchedulerMetrics().ObserveAppSortingLatency(sortingStart)
 	return sortedApps
+}
+
+func sortApplicationsByFairnessAndPriority(sortedApps []*Application, globalResource *resources.Resource) {
+	sort.SliceStable(sortedApps, func(i, j int) bool {
+		l := sortedApps[i]
+		r := sortedApps[j]
+		if comp := resources.CompUsageRatio(l.GetAllocatedResource(), r.GetAllocatedResource(), globalResource); comp != 0 {
+			return comp < 0
+		}
+		return l.GetAskMaxPriority() > r.GetAskMaxPriority()
+	})
+}
+
+func sortApplicationsByPriorityAndFairness(sortedApps []*Application, globalResource *resources.Resource) {
+	sort.SliceStable(sortedApps, func(i, j int) bool {
+		l := sortedApps[i]
+		r := sortedApps[j]
+		leftPriority := l.GetAskMaxPriority()
+		rightPriority := r.GetAskMaxPriority()
+		if leftPriority > rightPriority {
+			return true
+		} else if leftPriority < rightPriority {
+			return false
+		}
+		return resources.CompUsageRatio(l.GetAllocatedResource(), r.GetAllocatedResource(), globalResource) < 0
+	})
+}
+
+func sortApplicationsBySubmissionTimeAndPriority(sortedApps []*Application) {
+	sort.SliceStable(sortedApps, func(i, j int) bool {
+		l := sortedApps[i]
+		r := sortedApps[j]
+		if l.SubmissionTime.Before(r.SubmissionTime) {
+			return true
+		} else if r.SubmissionTime.Before(r.SubmissionTime) {
+			return false
+		}
+		return l.GetAskMaxPriority() > r.GetAskMaxPriority()
+	})
+}
+
+func sortApplicationsByPriorityAndSubmissionTime(sortedApps []*Application) {
+	sort.SliceStable(sortedApps, func(i, j int) bool {
+		l := sortedApps[i]
+		r := sortedApps[j]
+		leftPriority := l.GetAskMaxPriority()
+		rightPriority := r.GetAskMaxPriority()
+		if leftPriority > rightPriority {
+			return true
+		} else if leftPriority < rightPriority {
+			return false
+		}
+		return l.SubmissionTime.Before(r.SubmissionTime)
+	})
 }
 
 func filterOnPendingResources(apps map[string]*Application) []*Application {

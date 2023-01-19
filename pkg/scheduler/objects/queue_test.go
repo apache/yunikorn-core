@@ -30,6 +30,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects/template"
+	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 )
@@ -154,6 +155,227 @@ func TestDynamicSubQueues(t *testing.T) {
 	if !leaf.RemoveQueue() && len(parent.children) != 0 {
 		t.Error("leaf queue should have been removed and parent updated and was not")
 	}
+}
+
+func TestPriorityCalcWithFencedQueue(t *testing.T) {
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+
+	// single parent under root
+	var parent *Queue
+	parent, err = createManagedQueueWithProps(root, "parent", true, nil, map[string]string{
+		configs.PriorityOffset: "5",
+	})
+	assert.NilError(t, err, "failed to create parent queue")
+
+	// add a leaf under the parent
+	var leaf *Queue
+	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, map[string]string{
+		configs.PriorityOffset: "3",
+		configs.PriorityPolicy: policies.FencePriorityPolicy.String(),
+	})
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, parent.GetCurrentPriority(), configs.MinPriority, "initial parent priority wrong")
+	assert.Equal(t, leaf.GetCurrentPriority(), configs.MinPriority, "initial leaf priority wrong")
+
+	app := newApplication(appID1, "default", "root.parent.leaf")
+	app.SetQueue(leaf)
+	leaf.AddApplication(app)
+
+	var res *resources.Resource
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "1"})
+	assert.NilError(t, err, "failed to create basic resource")
+
+	err = app.AddAllocationAsk(newAllocationAskPriority("alloc-1", appID1, res, 0))
+	assert.NilError(t, err, "failed to add app")
+	assert.Equal(t, parent.GetCurrentPriority(), int32(8), "parent priority wrong after alloc add")
+	assert.Equal(t, leaf.GetCurrentPriority(), int32(3), "leaf priority wrong after alloc add")
+
+	app2 := newApplication(appID2, "default", "root.parent.leaf")
+	app2.SetQueue(leaf)
+	leaf.AddApplication(app2)
+	err = app2.AddAllocationAsk(newAllocationAskPriority("alloc-2", appID2, res, 5))
+	assert.NilError(t, err, "failed to add app")
+	assert.Equal(t, parent.GetCurrentPriority(), int32(8), "parent priority wrong after alloc add 2")
+	assert.Equal(t, leaf.GetCurrentPriority(), int32(3), "leaf priority wrong after alloc add 2")
+
+	leaf.RemoveApplication(app2)
+	assert.Equal(t, parent.GetCurrentPriority(), int32(8), "parent priority wrong after app 2 removed")
+	assert.Equal(t, leaf.GetCurrentPriority(), int32(3), "leaf priority wrong after app 2 removed")
+
+	leaf.RemoveApplication(app)
+	assert.Equal(t, parent.GetCurrentPriority(), configs.MinPriority, "final parent priority wrong")
+	assert.Equal(t, leaf.GetCurrentPriority(), configs.MinPriority, "final leaf priority wrong")
+}
+
+func TestPriorityCalc(t *testing.T) {
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+
+	// single parent under root
+	var parent *Queue
+	parent, err = createManagedQueueWithProps(root, "parent", true, nil, map[string]string{
+		configs.PriorityOffset: "5",
+	})
+	assert.NilError(t, err, "failed to create parent queue")
+
+	// add a leaf under the parent
+	var leaf *Queue
+	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, map[string]string{
+		configs.PriorityOffset: "3",
+	})
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, parent.GetCurrentPriority(), configs.MinPriority, "initial parent priority wrong")
+	assert.Equal(t, leaf.GetCurrentPriority(), configs.MinPriority, "initial leaf priority wrong")
+
+	app := newApplication(appID1, "default", "root.parent.leaf")
+	app.SetQueue(leaf)
+	leaf.AddApplication(app)
+
+	var res *resources.Resource
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "1"})
+	assert.NilError(t, err, "failed to create basic resource")
+
+	err = app.AddAllocationAsk(newAllocationAskPriority("alloc-1", appID1, res, 0))
+	assert.NilError(t, err, "failed to add app")
+	assert.Equal(t, parent.GetCurrentPriority(), int32(8), "parent priority wrong after alloc add")
+	assert.Equal(t, leaf.GetCurrentPriority(), int32(3), "leaf priority wrong after alloc add")
+
+	app2 := newApplication(appID2, "default", "root.parent.leaf")
+	app2.SetQueue(leaf)
+	leaf.AddApplication(app2)
+	err = app2.AddAllocationAsk(newAllocationAskPriority("alloc-2", appID2, res, 5))
+	assert.NilError(t, err, "failed to add app")
+	assert.Equal(t, parent.GetCurrentPriority(), int32(13), "parent priority wrong after alloc add 2")
+	assert.Equal(t, leaf.GetCurrentPriority(), int32(8), "leaf priority wrong after alloc add 2")
+
+	leaf.RemoveApplication(app2)
+	assert.Equal(t, parent.GetCurrentPriority(), int32(8), "parent priority wrong after app 2 removed")
+	assert.Equal(t, leaf.GetCurrentPriority(), int32(3), "leaf priority wrong after app 2 removed")
+
+	leaf.RemoveApplication(app)
+	assert.Equal(t, parent.GetCurrentPriority(), configs.MinPriority, "final parent priority wrong")
+	assert.Equal(t, leaf.GetCurrentPriority(), configs.MinPriority, "final leaf priority wrong")
+}
+
+func TestPreemptionPriorityCalc(t *testing.T) {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	var leaf *Queue
+	leaf, err = createManagedQueue(root, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	resMap := map[string]string{"memory": "100", "vcores": "10"}
+	res, err2 := resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err2, "failed to create resource with error")
+
+	app1 := newApplication(appID1, "default", "root.leaf")
+	app1.SetQueue(leaf)
+	app2 := newApplication(appID2, "default", "root.leaf")
+	app2.SetQueue(leaf)
+	app3 := newApplication(appID3, "default", "root.leaf")
+	app3.SetQueue(leaf)
+	app4 := newApplication(appID4, "default", "root.leaf")
+	app4.SetQueue(leaf)
+
+	leaf.AddApplication(app1)
+	alloc1 := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
+	alloc1.priority = 10
+	app1.AddAllocation(alloc1)
+	assert.Equal(t, int32(10), leaf.GetPreemptionPriority())
+	assert.Equal(t, int32(10), root.GetPreemptionPriority())
+
+	leaf.AddApplication(app2)
+	alloc2 := newAllocation(appID2, "uuid-2", nodeID1, "root.a", res)
+	alloc2.priority = 1
+	app2.AddAllocation(alloc2)
+	assert.Equal(t, int32(1), leaf.GetPreemptionPriority())
+	assert.Equal(t, int32(1), root.GetPreemptionPriority())
+
+	leaf.AddApplication(app3)
+	alloc3 := newAllocation(appID3, "uuid-3", nodeID1, "root.a", res)
+	alloc3.priority = 5
+	app3.AddAllocation(alloc3)
+	assert.Equal(t, int32(1), leaf.GetPreemptionPriority())
+	assert.Equal(t, int32(1), root.GetPreemptionPriority())
+
+	leaf.AddApplication(app4)
+	app4.SetQueue(leaf)
+	alloc4 := newAllocation(appID4, "uuid-4", nodeID1, "root.a", res)
+	alloc4.priority = 1
+	app4.AddAllocation(alloc4)
+	assert.Equal(t, int32(1), leaf.GetPreemptionPriority())
+	assert.Equal(t, int32(1), root.GetPreemptionPriority())
+
+	leaf.RemoveApplication(app3)
+	assert.Equal(t, int32(1), leaf.GetPreemptionPriority())
+	assert.Equal(t, int32(1), root.GetPreemptionPriority())
+	leaf.RemoveApplication(app2)
+	assert.Equal(t, int32(1), leaf.GetPreemptionPriority())
+	assert.Equal(t, int32(1), root.GetPreemptionPriority())
+	leaf.RemoveApplication(app4)
+	assert.Equal(t, int32(10), leaf.GetPreemptionPriority())
+	assert.Equal(t, int32(10), root.GetPreemptionPriority())
+	leaf.RemoveApplication(app1)
+	assert.Equal(t, configs.MaxPriority, leaf.GetPreemptionPriority())
+	assert.Equal(t, configs.MaxPriority, root.GetPreemptionPriority())
+}
+
+func TestPreemptionPriorityCalcWithFencedQueue(t *testing.T) {
+	resMap := map[string]string{"memory": "100", "vcores": "10"}
+	res, err := resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err, "failed to create resource with error")
+
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+
+	// single parent under root
+	var parent *Queue
+	parent, err = createManagedQueueWithProps(root, "parent", true, nil, map[string]string{
+		configs.PriorityOffset: "5",
+	})
+	assert.NilError(t, err, "failed to create parent queue")
+
+	// add a leaf under the parent
+	var leaf *Queue
+	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, map[string]string{
+		configs.PriorityOffset:   "3",
+		configs.PreemptionPolicy: policies.FencePreemptionPolicy.String(),
+	})
+	assert.NilError(t, err, "failed to create leaf queue")
+
+	app1 := newApplication(appID1, "default", "root.leaf")
+	app1.SetQueue(leaf)
+	app2 := newApplication(appID2, "default", "root.leaf")
+	app2.SetQueue(leaf)
+	leaf.AddApplication(app1)
+	leaf.AddApplication(app2)
+
+	alloc1 := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
+	alloc1.priority = 10
+	app1.AddAllocation(alloc1)
+	assert.Equal(t, int32(3), leaf.GetPreemptionPriority())
+	assert.Equal(t, int32(8), parent.GetPreemptionPriority())
+	assert.Equal(t, int32(8), root.GetPreemptionPriority())
+
+	alloc2 := newAllocation(appID2, "uuid-2", nodeID1, "root.a", res)
+	alloc2.priority = 1
+	app2.AddAllocation(alloc2)
+	assert.Equal(t, int32(3), leaf.GetPreemptionPriority())
+	assert.Equal(t, int32(8), parent.GetPreemptionPriority())
+	assert.Equal(t, int32(8), root.GetPreemptionPriority())
+
+	leaf.RemoveApplication(app1)
+	assert.Equal(t, int32(3), leaf.GetPreemptionPriority())
+	assert.Equal(t, int32(8), parent.GetPreemptionPriority())
+	assert.Equal(t, int32(8), root.GetPreemptionPriority())
+
+	leaf.RemoveApplication(app2)
+	assert.Equal(t, configs.MaxPriority, leaf.GetPreemptionPriority())
+	assert.Equal(t, configs.MaxPriority, parent.GetPreemptionPriority())
+	assert.Equal(t, configs.MaxPriority, root.GetPreemptionPriority())
 }
 
 func TestPendingCalc(t *testing.T) {
@@ -328,13 +550,9 @@ func TestRemoveApplication(t *testing.T) {
 	leaf.RemoveApplication(nonExist)
 	assert.Equal(t, len(leaf.applications), 1, "Non existing application was removed from the queue")
 	assert.Equal(t, len(leaf.GetCopyOfApps()), 1, "Non existing application was removed from the queue")
-	assert.Equal(t, len(leaf.completedApplications), 0)
-	assert.Equal(t, len(leaf.GetCopyOfCompletedApps()), 0)
 	leaf.RemoveApplication(app)
 	assert.Equal(t, len(leaf.applications), 0, "Application was not removed from the queue as expected")
 	assert.Equal(t, len(leaf.GetCopyOfApps()), 0, "Application was not removed from the queue as expected")
-	assert.Equal(t, len(leaf.completedApplications), 1)
-	assert.Equal(t, len(leaf.GetCopyOfCompletedApps()), 1)
 
 	// try the same again now with pending resources set
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
@@ -1138,6 +1356,101 @@ func TestQueueProps(t *testing.T) {
 	assert.NilError(t, err, "failed to create leaf queue")
 	assert.Assert(t, leaf.isLeaf && !leaf.isManaged, "leaf queue is not marked as unmanaged leaf")
 	assert.Equal(t, leaf.properties[configs.ApplicationSortPolicy], "stateaware", "leaf queue property value not as expected")
+
+	props = map[string]string{}
+	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, props)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, leaf.priorityPolicy, policies.DefaultPriorityPolicy)
+	assert.Equal(t, leaf.priorityOffset, int32(0))
+	assert.Equal(t, leaf.prioritySortEnabled, true)
+
+	props = map[string]string{"priority.policy": "default", "priority.offset": "3", "application.sort.priority": "enabled"}
+	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, props)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, leaf.priorityPolicy, policies.DefaultPriorityPolicy)
+	assert.Equal(t, leaf.priorityOffset, int32(3))
+	assert.Equal(t, leaf.prioritySortEnabled, true)
+
+	props = map[string]string{"priority.policy": "fence", "priority.offset": "-3", "application.sort.priority": "disabled"}
+	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, props)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, leaf.priorityPolicy, policies.FencePriorityPolicy)
+	assert.Equal(t, leaf.priorityOffset, int32(-3))
+	assert.Equal(t, leaf.prioritySortEnabled, false)
+
+	props = map[string]string{"priority.policy": "invalid", "priority.offset": "invalid", "application.sort.priority": "invalid"}
+	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, props)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, leaf.priorityPolicy, policies.DefaultPriorityPolicy)
+	assert.Equal(t, leaf.priorityOffset, int32(0))
+	assert.Equal(t, leaf.prioritySortEnabled, true)
+
+	props = map[string]string{"preemption.policy": "default", "preemption.delay": "10s"}
+	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, props)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, leaf.preemptionPolicy, policies.DefaultPreemptionPolicy)
+	assert.Equal(t, leaf.preemptionDelay, time.Second*10)
+
+	props = map[string]string{"preemption.policy": "disabled", "preemption.delay": "-1s"}
+	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, props)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, leaf.preemptionPolicy, policies.DisabledPreemptionPolicy)
+	assert.Equal(t, leaf.preemptionDelay, time.Second*30)
+
+	props = map[string]string{"preemption.policy": "fence", "preemption.delay": "xxxx"}
+	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, props)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, leaf.preemptionPolicy, policies.FencePreemptionPolicy)
+	assert.Equal(t, leaf.preemptionDelay, time.Second*30)
+
+	props = map[string]string{"preemption.policy": "invalid"}
+	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, props)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, leaf.preemptionPolicy, policies.DefaultPreemptionPolicy)
+}
+
+func TestInheritedQueueProps(t *testing.T) {
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "failed to create basic root queue")
+	var parent *Queue
+	props := map[string]string{
+		"key":               "value",
+		"priority.policy":   "fence",
+		"priority.offset":   "100",
+		"preemption.policy": "fence",
+	}
+	parent, err = createManagedQueueWithProps(root, "parent", true, nil, props)
+	assert.NilError(t, err, "failed to create parent queue")
+	assert.Equal(t, parent.properties["key"], "value")
+	assert.Equal(t, parent.properties["priority.policy"], "fence")
+	assert.Equal(t, parent.properties["priority.offset"], "100")
+	assert.Equal(t, parent.properties["preemption.policy"], "fence")
+	assert.Equal(t, parent.priorityPolicy, policies.FencePriorityPolicy)
+	assert.Equal(t, parent.priorityOffset, int32(100))
+	assert.Equal(t, parent.preemptionPolicy, policies.FencePreemptionPolicy)
+
+	var leaf *Queue
+	leaf, err = createManagedQueue(parent, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, leaf.properties["key"], "value")
+	assert.Equal(t, leaf.properties["priority.policy"], "default")
+	assert.Equal(t, leaf.properties["priority.offset"], "0")
+	assert.Equal(t, leaf.priorityPolicy, policies.DefaultPriorityPolicy)
+	assert.Equal(t, leaf.priorityOffset, int32(0))
+	assert.Equal(t, leaf.preemptionPolicy, policies.DefaultPreemptionPolicy)
+
+	props = map[string]string{
+		"preemption.policy": "disabled",
+	}
+
+	parent, err = createManagedQueueWithProps(root, "parent", true, nil, props)
+	assert.NilError(t, err, "failed to create parent queue")
+	assert.Equal(t, parent.preemptionPolicy, policies.DisabledPreemptionPolicy)
+
+	leaf, err = createManagedQueue(parent, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, leaf.preemptionPolicy, policies.DisabledPreemptionPolicy)
 }
 
 func TestMaxResource(t *testing.T) {
@@ -1334,6 +1647,19 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 	root.guaranteedResource = getResource(t)
 	assert.DeepEqual(t, root.GetMaxResource().DAOMap(), root.GetMaxResource().DAOMap())
 	assert.DeepEqual(t, root.GetGuaranteedResource().DAOMap(), root.GetGuaranteedResource().DAOMap())
+
+	// test allocatingAcceptedApps
+	root.allocatingAcceptedApps = getAllocatingAcceptedApps()
+	assert.Equal(t, len(root.allocatingAcceptedApps), 2, "allocatingAcceptedApps size")
+	assert.Equal(t, len(root.GetPartitionQueueDAOInfo().AllocatingAcceptedApps), 1, "AllocatingAcceptedApps size")
+	assert.Equal(t, root.GetPartitionQueueDAOInfo().AllocatingAcceptedApps[0], appID1)
+}
+
+func getAllocatingAcceptedApps() map[string]bool {
+	allocatingAcceptedApps := make(map[string]bool)
+	allocatingAcceptedApps[appID1] = true
+	allocatingAcceptedApps[appID2] = false
+	return allocatingAcceptedApps
 }
 
 func getResourceConf() map[string]string {
@@ -1532,6 +1858,68 @@ func TestApplyConf(t *testing.T) {
 	assert.Assert(t, root.guaranteedResource == nil)
 }
 
+func TestNewConfiguredQueue(t *testing.T) {
+	// check variable assignment
+	properties := getProperties()
+	resourceConf := getResourceConf()
+	// turn resouce config into resource struct
+	resourceStruct, err := resources.NewResourceFromConf(resourceConf)
+	assert.NilError(t, err, "failed to create new resource from config: %v", err)
+
+	parentConfig := configs.QueueConfig{
+		Name:            "PARENT_QUEUE",
+		Parent:          true,
+		MaxApplications: uint64(32),
+		ChildTemplate: configs.ChildTemplate{
+			Properties: properties,
+			Resources: configs.Resources{
+				Max:        resourceConf,
+				Guaranteed: resourceConf,
+			},
+		},
+	}
+	parent, err := NewConfiguredQueue(parentConfig, nil)
+	assert.NilError(t, err, "failed to create queue: %v", err)
+	assert.Equal(t, parent.Name, "parent_queue")
+	assert.Equal(t, parent.QueuePath, "parent_queue")
+	assert.Equal(t, parent.isManaged, true)
+	assert.Equal(t, parent.maxRunningApps, uint64(32))
+	assert.Assert(t, reflect.DeepEqual(properties, parent.template.GetProperties()))
+	assert.Assert(t, resources.Equals(resourceStruct, parent.template.GetMaxResource()))
+	assert.Assert(t, resources.Equals(resourceStruct, parent.template.GetGuaranteedResource()))
+
+	// case 0: leaf can use template
+	leafConfig := configs.QueueConfig{
+		Name:       "leaf_queue",
+		Parent:     false,
+		Properties: getProperties(),
+		Resources: configs.Resources{
+			Max:        getResourceConf(),
+			Guaranteed: getResourceConf(),
+		},
+	}
+	childLeaf, err := NewConfiguredQueue(leafConfig, parent)
+	assert.NilError(t, err, "failed to create queue: %v", err)
+	assert.Equal(t, childLeaf.QueuePath, "parent_queue.leaf_queue")
+	assert.Assert(t, childLeaf.template == nil)
+	assert.Assert(t, reflect.DeepEqual(childLeaf.properties, parent.template.GetProperties()))
+	assert.Assert(t, resources.Equals(childLeaf.maxResource, parent.template.GetMaxResource()))
+	assert.Assert(t, resources.Equals(childLeaf.guaranteedResource, parent.template.GetGuaranteedResource()))
+
+	// case 1: non-leaf can't use template but it can inherit template from parent
+	NonLeafConfig := configs.QueueConfig{
+		Name:   "nonleaf_queue",
+		Parent: true,
+	}
+	childNonLeaf, err := NewConfiguredQueue(NonLeafConfig, parent)
+	assert.NilError(t, err, "failed to create queue: %v", err)
+	assert.Equal(t, childNonLeaf.QueuePath, "parent_queue.nonleaf_queue")
+	assert.Assert(t, reflect.DeepEqual(childNonLeaf.template, parent.template))
+	assert.Equal(t, len(childNonLeaf.properties), 0)
+	assert.Assert(t, childNonLeaf.guaranteedResource == nil)
+	assert.Assert(t, childNonLeaf.maxResource == nil)
+}
+
 func TestNewDynamicQueue(t *testing.T) {
 	parent, err := createManagedQueueWithProps(nil, "parent", true, nil, nil)
 	assert.NilError(t, err, "failed to create queue: %v", err)
@@ -1551,6 +1939,9 @@ func TestNewDynamicQueue(t *testing.T) {
 	assert.Assert(t, reflect.DeepEqual(childLeaf.properties, parent.template.GetProperties()))
 	assert.Assert(t, reflect.DeepEqual(childLeaf.maxResource, parent.template.GetMaxResource()))
 	assert.Assert(t, reflect.DeepEqual(childLeaf.guaranteedResource, parent.template.GetGuaranteedResource()))
+	assert.Assert(t, childLeaf.prioritySortEnabled)
+	assert.Equal(t, childLeaf.priorityPolicy, policies.DefaultPriorityPolicy)
+	assert.Equal(t, childLeaf.preemptionPolicy, policies.DefaultPreemptionPolicy)
 
 	// case 1: non-leaf can't use template but it can inherit template from parent
 	childNonLeaf, err := NewDynamicQueue("nonleaf", false, parent)
@@ -1559,6 +1950,9 @@ func TestNewDynamicQueue(t *testing.T) {
 	assert.Equal(t, len(childNonLeaf.properties), 0)
 	assert.Assert(t, childNonLeaf.guaranteedResource == nil)
 	assert.Assert(t, childNonLeaf.maxResource == nil)
+	assert.Assert(t, childNonLeaf.prioritySortEnabled)
+	assert.Equal(t, childNonLeaf.priorityPolicy, policies.DefaultPriorityPolicy)
+	assert.Equal(t, childNonLeaf.preemptionPolicy, policies.DefaultPreemptionPolicy)
 }
 
 func TestTemplateIsNotOverrideByParent(t *testing.T) {
@@ -1663,4 +2057,134 @@ func TestGetHeadRoomFromThreeQueues(t *testing.T) {
 
 	assert.Equal(t, resources.Quantity(1000), result.Resources["vcore"])
 	assert.Equal(t, resources.Quantity(1000), result.Resources["memory"])
+}
+
+func TestQueue_canRunApp(t *testing.T) {
+	// create the root
+	root, err := createManagedQueueMaxApps(nil, "root", true, nil, 1)
+	assert.NilError(t, err, "queue create failed")
+	var leaf, leaf2 *Queue
+	leaf, err = createManagedQueue(root, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	leaf2, err = createManagedQueue(root, "leaf2", false, nil)
+	assert.NilError(t, err, "failed to create leaf2 queue")
+
+	// ignore allocatingAcceptedApps
+	assert.Assert(t, leaf.canRunApp(""), "unlimited queue should be able to run app")
+	assert.Assert(t, root.canRunApp(""), "queue should be able to run app (root max is 1)")
+	root.incRunningApps("")
+	assert.Assert(t, !leaf.canRunApp(""), "running apps max reached on root, should be denied")
+	root.maxRunningApps = 2
+	assert.Assert(t, leaf.canRunApp(""), "root and leave allowed")
+	leaf.maxRunningApps = 1
+	leaf.incRunningApps("")
+	assert.Assert(t, !leaf.canRunApp(""), "leaf should not be able to run an application")
+
+	leaf2.incRunningApps("")
+	assert.Assert(t, !leaf2.canRunApp(""), "leaf2 should not be able to run an application (root max reached)")
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("panic on nil queue canRunApp")
+		}
+	}()
+	var q *Queue
+	q.canRunApp("")
+}
+
+func TestQueue_incRunningApps(t *testing.T) {
+	// create the root
+	root, err := createManagedQueueMaxApps(nil, "root", true, nil, 2)
+	assert.NilError(t, err, "queue create failed")
+	var leaf, leaf2 *Queue
+	leaf, err = createManagedQueue(root, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	leaf2, err = createManagedQueue(root, "leaf2", false, nil)
+	assert.NilError(t, err, "failed to create leaf2 queue")
+
+	assert.Equal(t, leaf.runningApps, uint64(0), "default max running apps is 0")
+	root.incRunningApps("")
+	assert.Equal(t, root.runningApps, uint64(1), "root should have 1 app running")
+	leaf.incRunningApps("")
+	assert.Equal(t, leaf.runningApps, uint64(1), "leaf should have 1 app running")
+	assert.Equal(t, root.runningApps, uint64(2), "root should have 2 apps running")
+	leaf.incRunningApps("")
+	assert.Equal(t, leaf.runningApps, uint64(2), "leaf should have 2 app running")
+	assert.Equal(t, root.runningApps, uint64(2), "root should not have changed")
+
+	leaf2.incRunningApps("")
+	assert.Equal(t, leaf2.runningApps, uint64(1), "leaf2 should have 1 app running")
+	assert.Equal(t, root.runningApps, uint64(2), "root should have 1 app running")
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("panic on nil queue incRunningApps")
+		}
+	}()
+	var q *Queue
+	q.incRunningApps("")
+}
+
+func TestQueue_decRunningApps(t *testing.T) {
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	var leaf *Queue
+	leaf, err = createManagedQueue(root, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+
+	leaf.decRunningApps()
+	assert.Equal(t, leaf.runningApps, uint64(0), "default running apps is 0, should not wrap")
+	assert.Equal(t, root.runningApps, uint64(0), "default running apps is 0, should not wrap")
+	root.runningApps = 2
+	leaf.runningApps = 2
+	leaf.decRunningApps()
+	assert.Equal(t, leaf.runningApps, uint64(1), "leaf should have 1 app running")
+	assert.Equal(t, root.runningApps, uint64(1), "root should have 1 apps running")
+	root.decRunningApps()
+	assert.Equal(t, leaf.runningApps, uint64(1), "leaf should have 1 app running")
+	assert.Equal(t, root.runningApps, uint64(0), "root should have no apps")
+	leaf.decRunningApps()
+	assert.Equal(t, leaf.runningApps, uint64(0), "leaf should have 0 app running")
+	assert.Equal(t, root.runningApps, uint64(0), "root running apps is 0, should not wrap")
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("panic on nil queue decRunningApps")
+		}
+	}()
+	var q *Queue
+	q.decRunningApps()
+}
+
+func TestQueue_setAllocatingAccepted(t *testing.T) {
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	var leaf, leaf2 *Queue
+	leaf, err = createManagedQueue(root, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	leaf2, err = createManagedQueue(root, "leaf2", false, nil)
+	assert.NilError(t, err, "failed to create leaf2 queue")
+
+	leaf.setAllocatingAccepted("test-1")
+	assert.Equal(t, len(leaf.allocatingAcceptedApps), 1, "expected 1 app in leaf list")
+	assert.Equal(t, len(root.allocatingAcceptedApps), 1, "expected 1 app in root list")
+	leaf.setAllocatingAccepted("test-1")
+	assert.Equal(t, len(leaf.allocatingAcceptedApps), 1, "expected no change after adding same app again")
+	leaf.setAllocatingAccepted("test-2")
+	assert.Equal(t, len(leaf.allocatingAcceptedApps), 2, "expected 2 apps in leaf list")
+	assert.Equal(t, len(root.allocatingAcceptedApps), 2, "expected 2 apps in root list")
+
+	leaf2.setAllocatingAccepted("test-3")
+	assert.Equal(t, len(leaf2.allocatingAcceptedApps), 1, "expected 1 app in leaf2 list")
+	assert.Equal(t, len(root.allocatingAcceptedApps), 3, "expected 3 apps in root list")
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("panic on nil queue setAllocatingAccepted")
+		}
+	}()
+	var q *Queue
+	q.setAllocatingAccepted("")
 }

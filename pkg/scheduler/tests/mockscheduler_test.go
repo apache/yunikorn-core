@@ -20,7 +20,6 @@ package tests
 
 import (
 	"github.com/apache/yunikorn-core/pkg/common"
-	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/entrypoint"
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
@@ -58,7 +57,6 @@ func (m *mockScheduler) Init(config string, autoSchedule bool) error {
 	m.proxy = m.serviceContext.RMProxy
 	m.scheduler = m.serviceContext.Scheduler
 
-	configs.MockSchedulerConfigByData([]byte(config))
 	m.mockRM = newMockRMCallbackHandler()
 
 	_, err := m.proxy.RegisterResourceManager(
@@ -67,6 +65,7 @@ func (m *mockScheduler) Init(config string, autoSchedule bool) error {
 			PolicyGroup: "policygroup",
 			Version:     "0.0.2",
 			BuildInfo:   BuildInfoMap,
+			Config:      config,
 		}, m.mockRM)
 	return err
 }
@@ -193,9 +192,4 @@ func (m *mockScheduler) getPartitionQueue(queueName, partitionName string) *obje
 // simple wrapper to limit the repeating code getting the app
 func (m *mockScheduler) getApplication(appID string) *objects.Application {
 	return m.scheduler.GetClusterContext().GetApplication(appID, m.partitionName)
-}
-
-// simple wrapper to limit the repeating code getting the app
-func (m *mockScheduler) getPartitionReservations() map[string]int {
-	return m.scheduler.GetClusterContext().GetReservations(m.partitionName)
 }

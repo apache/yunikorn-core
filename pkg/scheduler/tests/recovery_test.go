@@ -23,7 +23,6 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/entrypoint"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
@@ -592,7 +591,6 @@ func TestAppRecovery(t *testing.T) {
 	BuildInfoMap["k"] = "v"
 
 	// Register RM
-	configs.MockSchedulerConfigByData([]byte(configData))
 	mockRM := newMockRMCallbackHandler()
 
 	_, err := proxy.RegisterResourceManager(
@@ -601,6 +599,7 @@ func TestAppRecovery(t *testing.T) {
 			PolicyGroup: "policygroup",
 			Version:     "0.0.2",
 			BuildInfo:   BuildInfoMap,
+			Config:      configData,
 		}, mockRM)
 
 	assert.NilError(t, err, "RegisterResourceManager failed")
@@ -663,7 +662,6 @@ func TestAppRecoveryAlone(t *testing.T) {
 	BuildInfoMap["k"] = "v"
 
 	// Register RM
-	configs.MockSchedulerConfigByData([]byte(configData))
 	mockRM := newMockRMCallbackHandler()
 
 	_, err := proxy.RegisterResourceManager(
@@ -672,6 +670,7 @@ func TestAppRecoveryAlone(t *testing.T) {
 			PolicyGroup: "policygroup",
 			Version:     "0.0.2",
 			BuildInfo:   BuildInfoMap,
+			Config:      configData,
 		}, mockRM)
 
 	assert.NilError(t, err, "RegisterResourceManager failed")

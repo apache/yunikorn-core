@@ -19,6 +19,7 @@
 
 # options for analysis running
 run:
+  go: '1.17'
   issues-exit-code: 1
   skip-dirs-use-default: true
   modules-download-mode: readonly
@@ -29,8 +30,8 @@ linters-settings:
   errcheck:
     check-type-assertions: true
     check-blank: true
-  golint:
-    min-confidence: 0.8
+  revive:
+    confidence: 0.8
   gofmt:
     simplify: true
   goimports:
@@ -59,12 +60,9 @@ linters:
     - unused
     - staticcheck
     - gosimple
-    - structcheck
-    - varcheck
     - ineffassign
-    - deadcode
     - funlen
-    - golint
+    - revive
     - gofmt
     - goimports
     - govet

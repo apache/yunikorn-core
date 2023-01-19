@@ -19,16 +19,13 @@
 package webservice
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -40,10 +37,9 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/metrics/history"
-	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
-	"github.com/apache/yunikorn-core/pkg/scheduler/tests"
+	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
@@ -205,9 +201,8 @@ const nodeID = "node-1"
 
 // setup To take care of setting up config, cluster, partitions etc
 func setup(t *testing.T, config string, partitionCount int) *scheduler.PartitionContext {
-	configs.MockSchedulerConfigByData([]byte(config))
 	var err error
-	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup, []byte(config))
 	assert.NilError(t, err, "Error when load clusterInfo from config")
 
 	assert.Equal(t, partitionCount, len(schedulerContext.GetPartitionMapClone()))
@@ -221,12 +216,16 @@ func setup(t *testing.T, config string, partitionCount int) *scheduler.Partition
 
 // simple wrapper to make creating an app easier
 func newApplication(appID, partitionName, queueName, rmID string, ugi security.UserGroup) *objects.Application {
+	userGroup := ugi
+	if ugi.User == "" {
+		userGroup = security.UserGroup{User: "testuser", Groups: []string{"testgroup"}}
+	}
 	siApp := &si.AddApplicationRequest{
 		ApplicationID: appID,
 		QueueName:     queueName,
 		PartitionName: partitionName,
 	}
-	return objects.NewApplication(siApp, ugi, nil, rmID)
+	return objects.NewApplication(siApp, userGroup, nil, rmID)
 }
 
 func TestValidateConf(t *testing.T) {
@@ -374,9 +373,8 @@ func TestContainerHistory(t *testing.T) {
 }
 
 func TestGetConfigYAML(t *testing.T) {
-	configs.MockSchedulerConfigByData([]byte(startConf))
 	var err error
-	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup, []byte(startConf))
 	assert.NilError(t, err, "Error when load clusterInfo from config")
 	// No err check: new request always returns correctly
 	//nolint: errcheck
@@ -393,8 +391,7 @@ func TestGetConfigYAML(t *testing.T) {
 	assert.Assert(t, len(startConfSum) > 0, "checksum boundary not found")
 
 	// change the config
-	configs.MockSchedulerConfigByData([]byte(updatedConf))
-	err = schedulerContext.UpdateRMSchedulerConfig(rmID)
+	err = schedulerContext.UpdateRMSchedulerConfig(rmID, []byte(updatedConf))
 	assert.NilError(t, err, "Error when updating clusterInfo from config")
 	// check that we return yaml by default, unmarshal will error when we don't
 	req.Header.Set("Accept", "unknown")
@@ -421,8 +418,7 @@ func TestGetConfigJSON(t *testing.T) {
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "fair", "node sort policy set incorrectly, not fair (json)")
 
 	// change the config
-	configs.MockSchedulerConfigByData([]byte(updatedConf))
-	err = schedulerContext.UpdateRMSchedulerConfig(rmID)
+	err = schedulerContext.UpdateRMSchedulerConfig(rmID, []byte(updatedConf))
 	assert.NilError(t, err, "Error when updating clusterInfo from config")
 
 	getClusterConfig(resp, req)
@@ -430,38 +426,6 @@ func TestGetConfigJSON(t *testing.T) {
 	assert.NilError(t, err, "failed to unmarshal config from response body (json, updated config)")
 	assert.Assert(t, startConfSum != conf.Checksum, "checksums did not change in json output: %s, %s", startConfSum, conf.Checksum)
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "binpacking", "node sort policy not updated (json)")
-}
-
-type FakeConfigPlugin struct {
-	tests.MockResourceManagerCallback
-	generateError bool
-}
-
-func (f FakeConfigPlugin) UpdateConfiguration(args *si.UpdateConfigurationRequest) *si.UpdateConfigurationResponse {
-	if f.generateError {
-		return &si.UpdateConfigurationResponse{
-			Success: false,
-			Reason:  "configuration update error",
-		}
-	}
-	return &si.UpdateConfigurationResponse{
-		Success:   true,
-		OldConfig: startConf,
-	}
-}
-
-func TestSaveConfigMapNoError(t *testing.T) {
-	plugins.RegisterSchedulerPlugin(&FakeConfigPlugin{generateError: false})
-	oldConf, err := updateConfiguration(updatedConf)
-	assert.NilError(t, err, "No error expected")
-	assert.Equal(t, oldConf, startConf, " Wrong returned configuration")
-}
-
-func TestSaveConfigMapErrorExpected(t *testing.T) {
-	plugins.RegisterSchedulerPlugin(&FakeConfigPlugin{generateError: true})
-	oldConf, err := updateConfiguration(updatedConf)
-	assert.Assert(t, err != nil, "Missing expected error")
-	assert.Equal(t, oldConf, "", " Wrong returned configuration")
 }
 
 func TestBuildUpdateResponseSuccess(t *testing.T) {
@@ -481,62 +445,6 @@ func TestBuildUpdateResponseFailure(t *testing.T) {
 	assert.Equal(t, http.StatusConflict, resp.statusCode, "Status code is wrong")
 	assert.Assert(t, strings.Contains(string(errInfo.Message), err.Error()), "Error message should contain the reason")
 	assert.Equal(t, errInfo.StatusCode, http.StatusConflict)
-}
-
-func TestUpdateConfig(t *testing.T) {
-	prepareSchedulerForConfigChange(t)
-	resp := &MockResponseWriter{}
-	baseChecksum := configs.ConfigContext.Get(schedulerContext.GetPolicyGroup()).Checksum
-	conf := appendChecksum(updatedConf, baseChecksum)
-	req, err := http.NewRequest("PUT", "", strings.NewReader(conf))
-	assert.NilError(t, err, "Failed to create the request")
-	updateClusterConfig(resp, req)
-	assert.Equal(t, http.StatusOK, resp.statusCode, "No error expected")
-}
-
-func TestUpdateConfigInvalidConf(t *testing.T) {
-	prepareSchedulerForConfigChange(t)
-	resp := &MockResponseWriter{}
-	req, err := http.NewRequest("PUT", "", strings.NewReader(invalidConf))
-	assert.NilError(t, err, "Failed to create the request")
-	updateClusterConfig(resp, req)
-
-	var errInfo dao.YAPIError
-	err1 := json.Unmarshal(resp.outputBytes, &errInfo)
-	assert.NilError(t, err1, "failed to unmarshal updateconfig dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, http.StatusConflict, resp.statusCode, "Status code is wrong")
-	assert.Assert(t, len(string(errInfo.Message)) > 0, "Error message is expected")
-	assert.Equal(t, errInfo.StatusCode, http.StatusConflict)
-}
-
-func TestUpdateConfigWrongChecksum(t *testing.T) {
-	prepareSchedulerForConfigChange(t)
-	resp := &MockResponseWriter{}
-	baseChecksum := fmt.Sprintf("%X", sha256.Sum256([]byte(updatedConf)))
-	conf := appendChecksum(updatedConf, baseChecksum)
-	req, err := http.NewRequest("PUT", "", strings.NewReader(conf))
-	assert.NilError(t, err, "Failed to create the request")
-	updateClusterConfig(resp, req)
-
-	var errInfo dao.YAPIError
-	err1 := json.Unmarshal(resp.outputBytes, &errInfo)
-	assert.NilError(t, err1, "failed to unmarshal updateconfig dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, http.StatusConflict, resp.statusCode, "Status code is wrong")
-	assert.Assert(t, strings.Contains(string(errInfo.Message), "the base configuration is changed"), "Wrong error message received")
-	assert.Equal(t, errInfo.StatusCode, http.StatusConflict)
-}
-
-func appendChecksum(conf string, checksum string) string {
-	conf += "checksum: " + checksum
-	return conf
-}
-
-func prepareSchedulerForConfigChange(t *testing.T) {
-	plugins.RegisterSchedulerPlugin(&FakeConfigPlugin{generateError: false})
-	configs.MockSchedulerConfigByData([]byte(startConf))
-	var err error
-	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
-	assert.NilError(t, err, "Error when load clusterInfo from config")
 }
 
 func TestGetClusterUtilJSON(t *testing.T) {
@@ -687,7 +595,7 @@ func TestGetNodesUtilJSON(t *testing.T) {
 
 func addAndConfirmApplicationExists(t *testing.T, partitionName string, partition *scheduler.PartitionContext, appName string) *objects.Application {
 	// add a new app
-	app := newApplication(appName, partitionName, "root.default", rmID, security.UserGroup{})
+	app := newApplication(appName, partitionName, "root.default", rmID, security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
 	err := partition.AddApplication(app)
 	assert.NilError(t, err, "Failed to add Application to Partition.")
 	assert.Equal(t, app.CurrentState(), objects.New.String())
@@ -793,78 +701,6 @@ func TestPartitions(t *testing.T) {
 	assert.Equal(t, cs["gpu"].Applications["total"], 0)
 }
 
-func TestCreateClusterConfig(t *testing.T) {
-	confTests := []struct {
-		content          string
-		expectedResponse dao.ValidateConfResponse
-	}{
-		{
-			content: baseConf,
-			expectedResponse: dao.ValidateConfResponse{
-				Allowed: true,
-				Reason:  "",
-			},
-		},
-		{
-			content: invalidConf,
-			expectedResponse: dao.ValidateConfResponse{
-				Allowed: false,
-				Reason:  "undefined policy: invalid",
-			},
-		},
-	}
-
-	configs.MockSchedulerConfigByData([]byte(configDefault))
-	var err error
-	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
-	assert.NilError(t, err, "Error when load clusterInfo from config")
-	for _, test := range confTests {
-		// No err check: new request always returns correctly
-		//nolint: errcheck
-		req, _ := http.NewRequest("POST", "/ws/v1/config?dry_run=1", strings.NewReader(test.content))
-		rr := httptest.NewRecorder()
-		mux := http.HandlerFunc(createClusterConfig)
-		handler := loggingHandler(mux, "/ws/v1/config")
-		handler.ServeHTTP(rr, req)
-		var vcr dao.ValidateConfResponse
-		err = json.Unmarshal(rr.Body.Bytes(), &vcr)
-		assert.Equal(t, http.StatusOK, rr.Result().StatusCode, "Incorrect Status code")
-		assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
-		assert.Equal(t, vcr.Allowed, test.expectedResponse.Allowed, "allowed flag incorrect")
-		assert.Equal(t, vcr.Reason, test.expectedResponse.Reason, "response text not as expected")
-	}
-
-	// When "dry_run" is not passed
-	//nolint: errcheck
-	req, err := http.NewRequest("POST", "/ws/v1/config", nil)
-	assert.NilError(t, err, "Problem in creating the request")
-	rr := httptest.NewRecorder()
-	mux := http.HandlerFunc(createClusterConfig)
-	handler := loggingHandler(mux, "/ws/v1/config")
-	handler.ServeHTTP(rr, req)
-
-	var errInfo dao.YAPIError
-	err = json.Unmarshal(rr.Body.Bytes(), &errInfo)
-	assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
-	assert.Equal(t, http.StatusBadRequest, rr.Result().StatusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, "Dry run param is missing. Please check the usage documentation", "JSON error message is incorrect")
-	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
-
-	// When "dry_run" value is invalid
-	//nolint: errcheck
-	req, err = http.NewRequest("POST", "/ws/v1/config?dry_run=0", nil)
-	assert.NilError(t, err, "Problem in creating the request")
-	rr = httptest.NewRecorder()
-	mux = http.HandlerFunc(createClusterConfig)
-	handler = loggingHandler(mux, "/ws/v1/config?dry_run=0")
-	handler.ServeHTTP(rr, req)
-	err = json.Unmarshal(rr.Body.Bytes(), &errInfo)
-	assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
-	assert.Equal(t, http.StatusBadRequest, rr.Result().StatusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, "Invalid \"dry_run\" query param. Currently, only dry_run=1 is supported. Please check the usage documentation", "JSON error message is incorrect")
-	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
-}
-
 func TestMetricsNotEmpty(t *testing.T) {
 	req, err := http.NewRequest("GET", "/ws/v1/metrics", strings.NewReader(""))
 	assert.NilError(t, err, "Error while creating the request")
@@ -929,7 +765,7 @@ func TestGetPartitionNodes(t *testing.T) {
 
 	// create test application
 	appID := "app1"
-	app := newApplication(appID, partition.Name, queueName, rmID, security.UserGroup{})
+	app := newApplication(appID, partition.Name, queueName, rmID, security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
 	err := partition.AddApplication(app)
 	assert.NilError(t, err, "add application to partition should not have failed")
 
@@ -1002,15 +838,21 @@ func TestGetPartitionNodes(t *testing.T) {
 
 // addApp Add app to the given partition and assert the app count, state etc
 func addApp(t *testing.T, id string, part *scheduler.PartitionContext, queueName string, isCompleted bool) *objects.Application {
+	return addAppWithUserGroup(t, id, part, queueName, isCompleted, security.UserGroup{})
+}
+
+// addApp Add app to the given partition and assert the app count, state etc
+func addAppWithUserGroup(t *testing.T, id string, part *scheduler.PartitionContext, queueName string, isCompleted bool, userGroup security.UserGroup) *objects.Application {
 	initSize := len(part.GetApplications())
-	app := newApplication(id, part.Name, queueName, rmID, security.UserGroup{})
+	app := newApplication(id, part.Name, queueName, rmID, userGroup)
 	err := part.AddApplication(app)
 	assert.NilError(t, err, "Failed to add Application to Partition.")
 	assert.Equal(t, app.CurrentState(), objects.New.String())
 	assert.Equal(t, 1+initSize, len(part.GetApplications()))
 	if isCompleted {
-		// we don't test partition, so it is fine to skip to update partition
-		app.UnSetQueue()
+		app.SetState(objects.Completing.String())
+		err = app.HandleApplicationEvent(objects.CompleteApplication)
+		assert.NilError(t, err, "The app should have completed")
 	}
 	return app
 }
@@ -1018,9 +860,8 @@ func addApp(t *testing.T, id string, part *scheduler.PartitionContext, queueName
 func TestGetQueueApplicationsHandler(t *testing.T) {
 	part := setup(t, configDefault, 1)
 
-	// add two applications
+	// add an application
 	app := addApp(t, "app-1", part, "root.default", false)
-	addApp(t, "app-2", part, "root.default", true)
 
 	// add placeholder to test PlaceholderDAOInfo
 	tg := "tg-1"
@@ -1053,7 +894,13 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	getQueueApplications(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &appsDao)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, len(appsDao), 2)
+	assert.Equal(t, len(appsDao), 1)
+
+	if !appsDao[0].HasReserved {
+		assert.Equal(t, len(appsDao[0].Reservations), 0)
+	} else {
+		assert.Check(t, len(appsDao[0].Reservations) > 0, "app should have at least 1 reservation")
+	}
 
 	// check PlaceholderData
 	assert.Equal(t, len(appsDao[0].PlaceholderData), 1)
@@ -1139,6 +986,12 @@ func TestGetApplicationHandler(t *testing.T) {
 	err = json.Unmarshal(resp.outputBytes, &appsDao)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
 
+	if !appsDao.HasReserved {
+		assert.Equal(t, len(appsDao.Reservations), 0)
+	} else {
+		assert.Check(t, len(appsDao.Reservations) > 0, "app should have at least 1 reservation")
+	}
+
 	// test nonexistent partition
 	var req1 *http.Request
 	req1, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
@@ -1209,6 +1062,42 @@ func assertApplicationExists(t *testing.T, resp *MockResponseWriter) {
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
+func assertUserExists(t *testing.T, resp *MockResponseWriter) {
+	var errInfo dao.YAPIError
+	err := json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
+	assert.Equal(t, errInfo.Message, "User not found", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+}
+
+func assertUserNameExists(t *testing.T, resp *MockResponseWriter) {
+	var errInfo dao.YAPIError
+	err := json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
+	assert.Equal(t, errInfo.Message, "User name is missing", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+}
+
+func assertGroupExists(t *testing.T, resp *MockResponseWriter) {
+	var errInfo dao.YAPIError
+	err := json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
+	assert.Equal(t, errInfo.Message, "Group not found", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+}
+
+func assertGroupNameExists(t *testing.T, resp *MockResponseWriter) {
+	var errInfo dao.YAPIError
+	err := json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
+	assert.Equal(t, errInfo.Message, "Group name is missing", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+}
+
 func TestValidateQueue(t *testing.T) {
 	err := validateQueue("root.test.test123")
 	assert.NilError(t, err, "Queue path is correct but stil throwing error.")
@@ -1246,226 +1135,193 @@ func TestFullStateDumpPath(t *testing.T) {
 	verifyStateDumpJSON(t, &aggregated)
 }
 
-func TestPeriodicStateDumpDefaultPath(t *testing.T) {
-	schedulerContext = prepareSchedulerContext(t, false)
-	defer deleteStateDumpFile(t, schedulerContext)
+func TestGetLoggerLevel(t *testing.T) {
+	req, err := http.NewRequest("GET", "/ws/v1/loglevel", strings.NewReader(""))
+	assert.NilError(t, err)
 
-	partitionContext := schedulerContext.GetPartitionMapClone()
-	context := partitionContext[normalizedPartitionName]
-	app := newApplication("appID", normalizedPartitionName, "root.default", rmID, security.UserGroup{})
-	err := context.AddApplication(app)
-	assert.NilError(t, err, "failed to add Application to partition")
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(getLogLevel)
+	handler.ServeHTTP(rr, req)
 
-	imHistory = history.NewInternalMetricsHistory(5)
-	file, err := os.OpenFile(defaultStateDumpFilePath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
-	assert.NilError(t, err, "failed to open state dump file")
-
-	err = doStateDump(file, true)
-	assert.NilError(t, err)
-	fi, err := os.Stat(defaultStateDumpFilePath)
-	assert.NilError(t, err)
-	assert.Assert(t, fi.Size() > 0, "json response is empty")
-	var aggregated AggregatedStateInfo
-	receivedBytes, err := os.ReadFile(defaultStateDumpFilePath)
-	assert.NilError(t, err)
-	err = json.Unmarshal(receivedBytes, &aggregated)
-	assert.NilError(t, err)
-	verifyStateDumpJSON(t, &aggregated)
+	expected := "debug"
+	assert.Equal(t, rr.Body.String(), expected,
+		fmt.Sprintf("handler returned unexpected body: got %v want %v", rr.Body.String(), expected))
+	assert.Equal(t, rr.Code, http.StatusOK)
 }
 
-func TestPeriodicStateDumpNonDefaultPath(t *testing.T) {
-	stateDumpFilePath := "tmp/non-default-yunikorn-state.txt"
-	defer deleteStateDumpDir(t)
-	schedulerContext = prepareSchedulerContext(t, true)
-	defer deleteStateDumpFile(t, schedulerContext)
-
-	partitionContext := schedulerContext.GetPartitionMapClone()
-	context := partitionContext[normalizedPartitionName]
-	app := newApplication("appID", normalizedPartitionName, "root.default", rmID, security.UserGroup{})
-	err := context.AddApplication(app)
-	assert.NilError(t, err, "failed to add Application to partition")
-
-	imHistory = history.NewInternalMetricsHistory(5)
-	file, err := os.OpenFile(stateDumpFilePath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
-	assert.NilError(t, err, "failed to open state dump file")
-
-	err = doStateDump(file, true)
+func TestSetLoggerLevel(t *testing.T) {
+	// invalid
+	req, err := http.NewRequest("PUT", "/ws/v1/loglevel", strings.NewReader(""))
 	assert.NilError(t, err)
-	fi, err := os.Stat(stateDumpFilePath)
-	assert.NilError(t, err)
-	assert.Assert(t, fi.Size() > 0, "json response is empty")
-	var aggregated AggregatedStateInfo
-	receivedBytes, err := os.ReadFile(stateDumpFilePath)
-	assert.NilError(t, err)
-	err = json.Unmarshal(receivedBytes, &aggregated)
-	assert.NilError(t, err)
-	verifyStateDumpJSON(t, &aggregated)
-}
 
-func TestEnableDisablePeriodicStateDump(t *testing.T) {
-	schedulerContext = prepareSchedulerContext(t, false)
-	defer deleteStateDumpFile(t, schedulerContext)
-	defer terminateGoroutine()
-
-	imHistory = history.NewInternalMetricsHistory(5)
-	req, err := http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
-	assert.NilError(t, err)
 	vars := map[string]string{
-		"periodSeconds": "3",
-		"switch":        "enable",
+		"level": "invalid",
 	}
 	req = mux.SetURLVars(req, vars)
-	resp := &MockResponseWriter{}
+	rr := httptest.NewRecorder()
 
-	// enable state dump, check file contents
-	handlePeriodicStateDump(resp, req)
-	statusCode := resp.statusCode
-	assert.Equal(t, statusCode, 0, "response status code")
+	handler := http.HandlerFunc(setLogLevel)
+	handler.ServeHTTP(rr, req)
+	assert.Equal(t, rr.Code, http.StatusBadRequest)
 
-	waitForStateDumpFile(t)
-	fileContents, err2 := os.ReadFile(defaultStateDumpFilePath)
-	assert.NilError(t, err2)
-	var aggregated AggregatedStateInfo
-	err3 := json.Unmarshal(fileContents, &aggregated)
-	assert.NilError(t, err3)
-	verifyStateDumpJSON(t, &aggregated)
-
-	// disable
-	req, err = http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
+	// valid
+	req, err = http.NewRequest("PUT", "/ws/v1/loglevel", strings.NewReader(""))
 	assert.NilError(t, err)
+
+	vars["level"] = "error"
+	req = mux.SetURLVars(req, vars)
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	assert.Equal(t, rr.Code, http.StatusOK)
+}
+
+func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
+	prepareUserAndGroupContext(t)
+	// Test user name is missing
+	req, err := http.NewRequest("GET", "/ws/v1/partition/default/usage/user/", strings.NewReader(""))
+	assert.NilError(t, err, "Get User Resource Usage Handler request failed")
+	resp := &MockResponseWriter{}
+	getUserResourceUsage(resp, req)
+	assertUserNameExists(t, resp)
+
+	// Test group name is missing
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/", strings.NewReader(""))
+	vars := map[string]string{
+		"user":  "testuser",
+		"group": "",
+	}
+	req = mux.SetURLVars(req, vars)
+	assert.NilError(t, err, "Get Group Resource Usage Handler request failed")
+	resp = &MockResponseWriter{}
+	getGroupResourceUsage(resp, req)
+	assertGroupNameExists(t, resp)
+
+	// Test existed user query
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/user/", strings.NewReader(""))
 	vars = map[string]string{
-		"switch": "disable",
+		"user":  "testuser",
+		"group": "testgroup",
 	}
 	req = mux.SetURLVars(req, vars)
+	assert.NilError(t, err, "Get User Resource Usage Handler request failed")
 	resp = &MockResponseWriter{}
-	handlePeriodicStateDump(resp, req)
-	statusCode = resp.statusCode
-	assert.Equal(t, statusCode, 0, "response status code")
-}
+	getUserResourceUsage(resp, req)
 
-func TestTryEnableStateDumpTwice(t *testing.T) {
-	defer deleteStateDumpFile(t, schedulerContext)
-	defer terminateGoroutine()
-
-	req, err := http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
-	assert.NilError(t, err)
-	vars := map[string]string{
-		"switch": "enable",
+	// Test non-existing user query
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/user/", strings.NewReader(""))
+	vars = map[string]string{
+		"user":  "testNonExistingUser",
+		"group": "testgroup",
 	}
 	req = mux.SetURLVars(req, vars)
-	resp := &MockResponseWriter{}
-
-	// first call - succeeds
-	handlePeriodicStateDump(resp, req)
-	statusCode := resp.statusCode
-	assert.Equal(t, statusCode, 0, "response status code")
-
-	// second call - expected to fail
-	handlePeriodicStateDump(resp, req)
-	statusCode = resp.statusCode
-	assert.Equal(t, statusCode, http.StatusInternalServerError, "response status code")
-}
-
-func TestTryDisableNotRunningStateDump(t *testing.T) {
-	req, err := http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
-	assert.NilError(t, err)
-	vars := map[string]string{
-		"switch": "disable",
-	}
-	req = mux.SetURLVars(req, vars)
-	resp := &MockResponseWriter{}
-
-	handlePeriodicStateDump(resp, req)
-
-	statusCode := resp.statusCode
-	assert.Equal(t, statusCode, http.StatusInternalServerError, "response status code")
-}
-
-func TestIllegalStateDumpRequests(t *testing.T) {
-	// missing
-	req, err := http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
-	assert.NilError(t, err)
-	resp := &MockResponseWriter{}
-	handlePeriodicStateDump(resp, req)
-	statusCode := resp.statusCode
-	assert.Equal(t, statusCode, http.StatusBadRequest, "response status code")
-
-	// illegal
-	req, err = http.NewRequest("PUT", "/ws/v1/periodicstatedump", strings.NewReader(""))
-	assert.NilError(t, err)
-	vars := map[string]string{
-		"switch": "illegal",
-	}
-	req = mux.SetURLVars(req, vars)
+	assert.NilError(t, err, "Get User Resource Usage Handler request failed")
 	resp = &MockResponseWriter{}
-	handlePeriodicStateDump(resp, req)
-	statusCode = resp.statusCode
-	assert.Equal(t, statusCode, http.StatusBadRequest, "response status code")
+	getUserResourceUsage(resp, req)
+	assertUserExists(t, resp)
+
+	// Test existed group query
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/", strings.NewReader(""))
+	assert.NilError(t, err, "Get Group Resource Usage Handler request failed")
+	vars = map[string]string{
+		"user":  "testuser",
+		"group": "testgroup",
+	}
+	req = mux.SetURLVars(req, vars)
+	var groupResourceUsageDao *dao.GroupResourceUsageDAOInfo
+	getGroupResourceUsage(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &groupResourceUsageDao)
+	assert.NilError(t, err, "failed to unmarshal group resource usage dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, groupResourceUsageDao.Queues.ResourceUsage.String(),
+		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).String())
+
+	// Test non-existing group query
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/", strings.NewReader(""))
+	assert.NilError(t, err, "Get Group Resource Usage Handler request failed")
+	vars = map[string]string{
+		"user":  "testuser",
+		"group": "testNonExistingGroup",
+	}
+	req = mux.SetURLVars(req, vars)
+	getGroupResourceUsage(resp, req)
+	assertGroupExists(t, resp)
+}
+
+func TestUsersAndGroupsResourceUsage(t *testing.T) {
+	prepareUserAndGroupContext(t)
+	var req *http.Request
+	req, err := http.NewRequest("GET", "/ws/v1/partition/default/usage/users", strings.NewReader(""))
+	assert.NilError(t, err, "Get Users Resource Usage Handler request failed")
+	resp := &MockResponseWriter{}
+	var usersResourceUsageDao []*dao.UserResourceUsageDAOInfo
+	getUsersResourceUsage(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &usersResourceUsageDao)
+	assert.NilError(t, err, "failed to unmarshal users resource usage dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, usersResourceUsageDao[0].Queues.ResourceUsage.String(),
+		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).String())
+
+	// Assert existing users
+	assert.Equal(t, len(usersResourceUsageDao), 1)
+	assert.Equal(t, usersResourceUsageDao[0].UserName, "testuser")
+
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/groups", strings.NewReader(""))
+	assert.NilError(t, err, "Get Groups Resource Usage Handler request failed")
+
+	var groupsResourceUsageDao []*dao.GroupResourceUsageDAOInfo
+	getGroupsResourceUsage(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &groupsResourceUsageDao)
+	assert.NilError(t, err, "failed to unmarshal groups resource usage dao response from response body: %s", string(resp.outputBytes))
+	assert.Equal(t, groupsResourceUsageDao[0].Queues.ResourceUsage.String(),
+		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).String())
+
+	// Assert existing groups
+	assert.Equal(t, len(groupsResourceUsageDao), 1)
+	assert.Equal(t, groupsResourceUsageDao[0].GroupName, "testgroup")
 }
 
 func prepareSchedulerContext(t *testing.T, stateDumpConf bool) *scheduler.ClusterContext {
+	var config []byte
 	if !stateDumpConf {
-		configs.MockSchedulerConfigByData([]byte(configDefault))
+		config = []byte(configDefault)
 	} else {
-		configs.MockSchedulerConfigByData([]byte(configStateDumpFilePath))
+		config = []byte(configStateDumpFilePath)
 	}
 	var err error
-	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup)
+	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup, config)
 	assert.NilError(t, err, "Error when load clusterInfo from config")
 	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
 
 	return schedulerContext
 }
 
-func waitForStateDumpFile(t *testing.T) {
-	var attempts int
-	for {
-		info, err := os.Stat(defaultStateDumpFilePath)
-		// tolerate only "file not found" errors
-		if err != nil && !os.IsNotExist(err) {
-			t.Fatal(err)
-		}
+func prepareUserAndGroupContext(t *testing.T) {
+	part := setup(t, configDefault, 1)
+	userManager := ugm.GetUserManager()
+	userManager.ClearUserTrackers()
+	userManager.ClearGroupTrackers()
 
-		if info != nil && info.Size() > 0 {
-			break
-		}
-
-		if attempts++; attempts > 10 {
-			t.Fatal("state dump file has not been created or still empty")
-		}
-
-		time.Sleep(1 * time.Second)
+	// add 1 application
+	app := addAppWithUserGroup(t, "app-1", part, "root.default", false, security.UserGroup{
+		User:   "",
+		Groups: []string{""},
+	})
+	res := &si.Resource{
+		Resources: map[string]*si.Quantity{"vcore": {Value: 1}},
 	}
-}
+	ask := objects.NewAllocationAskFromSI(&si.AllocationAsk{
+		ApplicationID:  "app-1",
+		PartitionName:  part.Name,
+		ResourceAsk:    res,
+		MaxAllocations: 1})
+	err := app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
 
-func deleteStateDumpFile(t *testing.T, cc *scheduler.ClusterContext) {
-	stateDumpFilePath := getStateDumpFilePath(cc)
-	if err := os.Remove(stateDumpFilePath); err != nil {
-		t.Fatal(err)
-	}
-}
+	// add an alloc
+	uuid := "uuid-1"
+	allocInfo := objects.NewAllocation(uuid, "node-1", ask)
+	app.AddAllocation(allocInfo)
+	assert.Assert(t, app.IsStarting(), "Application did not return starting state after alloc: %s", app.CurrentState())
 
-func deleteStateDumpDir(t *testing.T) {
-	if err := os.Remove("tmp"); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func terminateGoroutine() {
-	if !isAbortClosed() {
-		abort <- struct{}{}
-		close(abort)
-		periodicStateDump = false
-	}
-}
-
-func isAbortClosed() bool {
-	select {
-	case <-abort:
-		return true
-	default:
-	}
-	return false
+	NewWebApp(schedulerContext, nil)
 }
 
 func verifyStateDumpJSON(t *testing.T, aggregated *AggregatedStateInfo) {

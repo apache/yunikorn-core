@@ -18,18 +18,26 @@
 
 package configs
 
-import "sync"
-
-const (
-	SchedulerConfigPath        = "scheduler-config-path"
-	DefaultSchedulerConfigPath = "/etc/yunikorn"
+import (
+	"sync"
+	"time"
 )
 
-var ConfigMap map[string]string
+const (
+	HealthCheckInterval = "health.checkInterval"
+)
+
+var DefaultHealthCheckInterval = 30 * time.Second
+
 var ConfigContext *SchedulerConfigContext
 
+var configMap map[string]string
+var configMapCallbacks map[string]func()
+var configMapLock sync.RWMutex
+
 func init() {
-	ConfigMap = make(map[string]string)
+	configMap = make(map[string]string)
+	configMapCallbacks = make(map[string]func())
 	ConfigContext = &SchedulerConfigContext{
 		configs: make(map[string]*SchedulerConfig),
 		lock:    &sync.RWMutex{},
@@ -52,4 +60,54 @@ func (ctx *SchedulerConfigContext) Get(policyGroup string) *SchedulerConfig {
 	ctx.lock.RLock()
 	defer ctx.lock.RUnlock()
 	return ctx.configs[policyGroup]
+}
+
+// AddConfigMapCallback registers a callback to detect configuration updates
+func AddConfigMapCallback(id string, callback func()) {
+	configMapLock.Lock()
+	defer configMapLock.Unlock()
+	configMapCallbacks[id] = callback
+}
+
+// RemoveConfigMapCallback removes a previously registered configuration update callback
+func RemoveConfigMapCallback(id string) {
+	configMapLock.Lock()
+	defer configMapLock.Unlock()
+	delete(configMapCallbacks, id)
+}
+
+// Gets the ConfigMap
+func GetConfigMap() map[string]string {
+	configMapLock.RLock()
+	defer configMapLock.RUnlock()
+	return configMap
+}
+
+// Sets the ConfigMap based on configuration refresh
+func SetConfigMap(newConfigMap map[string]string) {
+	defer processConfigMapCallbacks()
+
+	configMapLock.Lock()
+	defer configMapLock.Unlock()
+
+	if newConfigMap == nil {
+		newConfigMap = make(map[string]string)
+	}
+	configMap = newConfigMap
+}
+
+func processConfigMapCallbacks() {
+	for _, callback := range getConfigMapCallbacks() {
+		callback()
+	}
+}
+
+func getConfigMapCallbacks() []func() {
+	configMapLock.RLock()
+	defer configMapLock.RUnlock()
+	result := make([]func(), 0)
+	for _, callback := range configMapCallbacks {
+		result = append(result, callback)
+	}
+	return result
 }

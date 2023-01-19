@@ -20,18 +20,24 @@ package objects
 
 import (
 	"strconv"
+	"testing"
 	"time"
+
+	"gotest.tools/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
+	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 const (
 	appID1  = "app-1"
 	appID2  = "app-2"
+	appID3  = "app-3"
+	appID4  = "app-4"
 	aKey    = "alloc-1"
 	nodeID1 = "node-1"
 )
@@ -48,11 +54,20 @@ func createManagedQueue(parentSQ *Queue, name string, parent bool, maxRes map[st
 
 // create managed queue with props set
 func createManagedQueueWithProps(parentSQ *Queue, name string, parent bool, maxRes, props map[string]string) (*Queue, error) {
+	return createManagedQueuePropsMaxApps(parentSQ, name, parent, maxRes, props, uint64(0))
+}
+
+func createManagedQueueMaxApps(parentSQ *Queue, name string, parent bool, maxRes map[string]string, maxApps uint64) (*Queue, error) {
+	return createManagedQueuePropsMaxApps(parentSQ, name, parent, maxRes, nil, maxApps)
+}
+
+func createManagedQueuePropsMaxApps(parentSQ *Queue, name string, parent bool, maxRes map[string]string, props map[string]string, maxApps uint64) (*Queue, error) {
 	queueConfig := configs.QueueConfig{
-		Name:       name,
-		Parent:     parent,
-		Queues:     nil,
-		Properties: props,
+		Name:            name,
+		Parent:          parent,
+		Queues:          nil,
+		Properties:      props,
+		MaxApplications: maxApps,
 	}
 	if maxRes != nil {
 		queueConfig.Resources = configs.Resources{
@@ -90,19 +105,27 @@ func newApplication(appID, partition, queueName string) *Application {
 	return newApplicationWithTags(appID, partition, queueName, tags)
 }
 
-// Create application with tags set
-func newApplicationWithTags(appID, partition, queueName string, tags map[string]string) *Application {
-	user := security.UserGroup{
-		User:   "testuser",
-		Groups: []string{},
-	}
+// Create application with minimal info
+func newApplicationWithUserGroup(appID, partition, queueName string, userName string, groupList []string) *Application {
+	tags := make(map[string]string)
 	siApp := &si.AddApplicationRequest{
 		ApplicationID: appID,
 		QueueName:     queueName,
 		PartitionName: partition,
 		Tags:          tags,
 	}
-	return NewApplication(siApp, user, nil, "")
+	return NewApplication(siApp, getUserGroup(userName, groupList), nil, "")
+}
+
+// Create application with tags set
+func newApplicationWithTags(appID, partition, queueName string, tags map[string]string) *Application {
+	siApp := &si.AddApplicationRequest{
+		ApplicationID: appID,
+		QueueName:     queueName,
+		PartitionName: partition,
+		Tags:          tags,
+	}
+	return NewApplication(siApp, getTestUserGroup(), nil, "")
 }
 
 func newApplicationWithHandler(appID, partition, queueName string) (*Application, *rmproxy.MockedRMProxy) {
@@ -110,10 +133,6 @@ func newApplicationWithHandler(appID, partition, queueName string) (*Application
 }
 
 func newApplicationWithPlaceholderTimeout(appID, partition, queueName string, phTimeout int64) (*Application, *rmproxy.MockedRMProxy) {
-	user := security.UserGroup{
-		User:   "testuser",
-		Groups: []string{},
-	}
 	siApp := &si.AddApplicationRequest{
 		ApplicationID:                appID,
 		QueueName:                    queueName,
@@ -121,7 +140,7 @@ func newApplicationWithPlaceholderTimeout(appID, partition, queueName string, ph
 		ExecutionTimeoutMilliSeconds: phTimeout,
 	}
 	mockEventHandler := rmproxy.NewMockedRMProxy()
-	return NewApplication(siApp, user, mockEventHandler, ""), mockEventHandler
+	return NewApplication(siApp, getTestUserGroup(), mockEventHandler, ""), mockEventHandler
 }
 
 // Create node with minimal info
@@ -195,18 +214,22 @@ func newPlaceholderAlloc(appID, uuid, nodeID, queueName string, res *resources.R
 }
 
 func newAllocationAsk(allocKey, appID string, res *resources.Resource) *AllocationAsk {
-	return newAllocationAskAll(allocKey, appID, "", res, 1, false)
+	return newAllocationAskAll(allocKey, appID, "", res, 1, false, 0)
+}
+
+func newAllocationAskPriority(allocKey, appID string, res *resources.Resource, priority int32) *AllocationAsk {
+	return newAllocationAskAll(allocKey, appID, "", res, 1, false, priority)
 }
 
 func newAllocationAskRepeat(allocKey, appID string, res *resources.Resource, repeat int) *AllocationAsk {
-	return newAllocationAskAll(allocKey, appID, "", res, repeat, false)
+	return newAllocationAskAll(allocKey, appID, "", res, repeat, false, 0)
 }
 
 func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resource, repeat int) *AllocationAsk {
-	return newAllocationAskAll(allocKey, appID, taskGroup, res, repeat, taskGroup != "")
+	return newAllocationAskAll(allocKey, appID, taskGroup, res, repeat, taskGroup != "", 0)
 }
 
-func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, repeat int, placeholder bool) *AllocationAsk {
+func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, repeat int, placeholder bool, priority int32) *AllocationAsk {
 	ask := &si.AllocationAsk{
 		AllocationKey:  allocKey,
 		ApplicationID:  appID,
@@ -215,6 +238,31 @@ func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resou
 		MaxAllocations: int32(repeat),
 		TaskGroupName:  taskGroup,
 		Placeholder:    placeholder,
+		Priority:       priority,
 	}
 	return NewAllocationAskFromSI(ask)
+}
+
+func getTestUserGroup() security.UserGroup {
+	return security.UserGroup{User: "testuser", Groups: []string{"testgroup"}}
+}
+
+func getUserGroup(userName string, groupNameList []string) security.UserGroup {
+	return security.UserGroup{User: userName, Groups: groupNameList}
+}
+
+func assertUserGroupResource(t *testing.T, userGroup security.UserGroup, expected *resources.Resource) {
+	ugm := ugm.GetUserManager()
+	userResource := ugm.GetUserResources(userGroup)
+	groupResource := ugm.GetGroupResources(userGroup.Groups[0])
+	assert.Equal(t, resources.Equals(userResource, expected), true)
+	assert.Equal(t, resources.Equals(groupResource, expected), true)
+}
+
+func assertUserResourcesAndGroupResources(t *testing.T, userGroup security.UserGroup, expectedUserResources *resources.Resource, expectedGroupResources *resources.Resource, i int) {
+	ugm := ugm.GetUserManager()
+	userResource := ugm.GetUserResources(userGroup)
+	groupResource := ugm.GetGroupResources(userGroup.Groups[i])
+	assert.Equal(t, resources.Equals(userResource, expectedUserResources), true)
+	assert.Equal(t, resources.Equals(groupResource, expectedGroupResources), true)
 }

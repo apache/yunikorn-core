@@ -18,7 +18,7 @@
 # Check if this GO tools version used is at least the version of go specified in
 # the go.mod file. The version in go.mod should be in sync with other repos.
 GO_VERSION := $(shell go version | awk '{print substr($$3, 3, 10)}')
-MOD_VERSION := $(shell awk '/^go/ {print $$2}' go.mod)
+MOD_VERSION := $(shell cat .go_version) 
 
 GM := $(word 1,$(subst ., ,$(GO_VERSION)))
 MM := $(word 1,$(subst ., ,$(MOD_VERSION)))
@@ -61,7 +61,7 @@ all:
 LINTBASE := $(shell go env GOPATH)/bin
 LINTBIN  := $(LINTBASE)/golangci-lint
 $(LINTBIN):
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(LINTBASE) v1.46.2
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(LINTBASE) v1.50.1
 	stat $@ > /dev/null 2>&1
 
 .PHONY: lint

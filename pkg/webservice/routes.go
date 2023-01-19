@@ -65,22 +65,6 @@ var webRoutes = routes{
 		getClusterConfig,
 	},
 
-	// endpoint to update the current conf
-	route{
-		"Scheduler",
-		"PUT",
-		"/ws/v1/config",
-		updateClusterConfig,
-	},
-
-	// endpoint to create the conf, but currently limited for conf validation purpose alone
-	route{
-		"Scheduler",
-		"POST",
-		"/ws/v1/config",
-		createClusterConfig,
-	},
-
 	// endpoint to validate conf
 	route{
 		"Scheduler",
@@ -143,6 +127,30 @@ var webRoutes = routes{
 		"GET",
 		"/ws/v1/partition/{partition}/queue/{queue}/application/{application}",
 		getApplication,
+	},
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/partition/{partition}/usage/users",
+		getUsersResourceUsage,
+	},
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/partition/{partition}/usage/user/{user}",
+		getUserResourceUsage,
+	},
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/partition/{partition}/usage/groups",
+		getGroupsResourceUsage,
+	},
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/partition/{partition}/usage/group/{group}",
+		getGroupResourceUsage,
 	},
 	route{
 		"Scheduler",

@@ -33,14 +33,6 @@ type route struct {
 type routes []route
 
 var webRoutes = routes{
-	// endpoints to retrieve general cluster info
-	route{
-		"Cluster",
-		"GET",
-		"/ws/v1/clusters",
-		getClusterInfo,
-	},
-
 	// endpoint to retrieve goroutines info
 	route{
 		"Scheduler",

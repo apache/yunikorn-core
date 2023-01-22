@@ -42,6 +42,7 @@ type AggregatedStateInfo struct {
 	Applications     []*dao.ApplicationDAOInfo
 	AppHistory       []*dao.ApplicationHistoryDAOInfo
 	Nodes            []*dao.NodesDAOInfo
+	ClusterInfo      []*dao.ClusterDAOInfo
 	ContainerHistory []*dao.ContainerHistoryDAOInfo
 	Queues           []dao.PartitionQueueDAOInfo
 	RMDiagnostics    map[string]interface{}
@@ -74,6 +75,7 @@ func doStateDump(w io.Writer) error {
 		Applications:     getApplicationsDAO(partitionContext),
 		AppHistory:       getAppHistoryDAO(records),
 		Nodes:            getNodesDAO(partitionContext),
+		ClusterInfo:      getClusterDAO(partitionContext),
 		ContainerHistory: getContainerHistoryDAO(records),
 		Queues:           getPartitionQueuesDAO(partitionContext),
 		RMDiagnostics:    getResourceManagerDiagnostics(),

@@ -72,6 +72,16 @@ func getStackInfo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func getClusterInfo(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+
+	lists := schedulerContext.GetPartitionMapClone()
+	clustersInfo := getClusterDAO(lists)
+	if err := json.NewEncoder(w).Encode(clustersInfo); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func validateQueue(queuePath string) error {
 	if queuePath != "" {
 		queueNameArr := strings.Split(queuePath, ".")
@@ -118,6 +128,16 @@ func buildJSONErrorResponse(w http.ResponseWriter, detail string, code int) {
 	if jsonErr := json.NewEncoder(w).Encode(errorInfo); jsonErr != nil {
 		log.Logger().Error(fmt.Sprintf("Problem in sending error response in JSON format. Error response: %s", detail))
 	}
+}
+
+func getClusterJSON(partition *scheduler.PartitionContext) *dao.ClusterDAOInfo {
+	clusterInfo := &dao.ClusterDAOInfo{}
+	clusterInfo.StartTime = schedulerContext.GetStartTime().UnixNano()
+	rmInfo := schedulerContext.GetRMInfoMapClone()
+	clusterInfo.RMBuildInformation = getRMBuildInformation(rmInfo)
+	clusterInfo.PartitionName = common.GetPartitionNameWithoutClusterID(partition.Name)
+	clusterInfo.ClusterName = "kubernetes"
+	return clusterInfo
 }
 
 func getClusterUtilJSON(partition *scheduler.PartitionContext) []*dao.ClusterUtilDAOInfo {
@@ -576,14 +596,8 @@ func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.Pa
 		partitionInfo := &dao.PartitionInfo{}
 		partitionInfo.ClusterID = partitionContext.RmID
 		partitionInfo.Name = common.GetPartitionNameWithoutClusterID(partitionContext.Name)
-
-		partitionInfo.StartTime = schedulerContext.GetStartTime().UnixNano()
-		rmInfo := schedulerContext.GetRMInfoMapClone()
-		partitionInfo.RMBuildInformation = getRMBuildInformation(rmInfo)
-
 		partitionInfo.State = partitionContext.GetCurrentState()
 		partitionInfo.LastStateTransitionTime = partitionContext.GetStateTime().UnixNano()
-
 		capacityInfo := dao.PartitionCapacity{}
 		capacity := partitionContext.GetTotalPartitionResource()
 		usedCapacity := partitionContext.GetAllocatedResource()
@@ -597,7 +611,6 @@ func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.Pa
 		}
 
 		partitionInfo.TotalNodes = partitionContext.GetTotalNodeCount()
-
 		appList := partitionContext.GetApplications()
 		appList = append(appList, partitionContext.GetCompletedApplications()...)
 		appList = append(appList, partitionContext.GetRejectedApplications()...)
@@ -609,9 +622,7 @@ func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.Pa
 		}
 		applicationsState["total"] = totalApplications
 		partitionInfo.Applications = applicationsState
-
 		partitionInfo.TotalContainers = partitionContext.GetTotalAllocationCount()
-
 		result = append(result, partitionInfo)
 	}
 
@@ -693,6 +704,16 @@ func getPartitionQueuesDAO(lists map[string]*scheduler.PartitionContext) []dao.P
 
 	for _, partition := range lists {
 		result = append(result, partition.GetPartitionQueues())
+	}
+
+	return result
+}
+
+func getClusterDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClusterDAOInfo {
+	var result []*dao.ClusterDAOInfo
+
+	for _, partition := range lists {
+		result = append(result, getClusterJSON(partition))
 	}
 
 	return result

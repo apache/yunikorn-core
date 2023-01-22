@@ -19,17 +19,15 @@
 package dao
 
 type PartitionInfo struct {
-	ClusterID               string              `json:"clusterId"`
-	Name                    string              `json:"name"`
-	StartTime               int64               `json:"startTime"`
-	RMBuildInformation      []map[string]string `json:"rmBuildInformation"`
-	Capacity                PartitionCapacity   `json:"capacity"`
-	NodeSortingPolicy       NodeSortingPolicy   `json:"nodeSortingPolicy"`
-	TotalNodes              int                 `json:"totalNodes"`
-	Applications            map[string]int      `json:"applications"`
-	TotalContainers         int                 `json:"totalContainers"`
-	State                   string              `json:"state"`
-	LastStateTransitionTime int64               `json:"lastStateTransitionTime"`
+	ClusterID               string            `json:"clusterId"`
+	Name                    string            `json:"name"`
+	Capacity                PartitionCapacity `json:"capacity"`
+	NodeSortingPolicy       NodeSortingPolicy `json:"nodeSortingPolicy"`
+	TotalNodes              int               `json:"totalNodes"`
+	Applications            map[string]int    `json:"applications"`
+	TotalContainers         int               `json:"totalContainers"`
+	State                   string            `json:"state"`
+	LastStateTransitionTime int64             `json:"lastStateTransitionTime"`
 }
 
 type PartitionCapacity struct {

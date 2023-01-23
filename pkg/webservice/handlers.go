@@ -598,6 +598,7 @@ func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.Pa
 		partitionInfo.Name = common.GetPartitionNameWithoutClusterID(partitionContext.Name)
 		partitionInfo.State = partitionContext.GetCurrentState()
 		partitionInfo.LastStateTransitionTime = partitionContext.GetStateTime().UnixNano()
+
 		capacityInfo := dao.PartitionCapacity{}
 		capacity := partitionContext.GetTotalPartitionResource()
 		usedCapacity := partitionContext.GetAllocatedResource()

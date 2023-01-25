@@ -200,6 +200,7 @@ const rmID = "rm-123"
 const policyGroup = "default-policy-group"
 const queueName = "root.default"
 const nodeID = "node-1"
+const instType = "itype-1"
 
 // setup To take care of setting up config, cluster, partitions etc
 func setup(t *testing.T, config string, partitionCount int) *scheduler.PartitionContext {
@@ -494,8 +495,8 @@ func TestGetClusterUtilJSON(t *testing.T) {
 	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 300, siCommon.CPU: 200})
 	ask1 := objects.NewAllocationAsk("alloc-1", appID, resAlloc1)
 	ask2 := objects.NewAllocationAsk("alloc-2", appID, resAlloc2)
-	alloc1 := objects.NewAllocation("alloc-1-uuid", nodeID, ask1)
-	alloc2 := objects.NewAllocation("alloc-2-uuid", nodeID, ask2)
+	alloc1 := objects.NewAllocation("alloc-1-uuid", nodeID, instType, ask1)
+	alloc2 := objects.NewAllocation("alloc-2-uuid", nodeID, instType, ask2)
 	allocs := []*objects.Allocation{alloc1, alloc2}
 	err = partition.AddNode(node1, allocs)
 	assert.NilError(t, err, "add node to partition should not have failed")
@@ -557,10 +558,10 @@ func TestGetNodesUtilJSON(t *testing.T) {
 	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 300, siCommon.CPU: 500, "GPU": 5})
 	ask1 := objects.NewAllocationAsk("alloc-1", appID, resAlloc1)
 	ask2 := objects.NewAllocationAsk("alloc-2", appID, resAlloc2)
-	allocs := []*objects.Allocation{objects.NewAllocation("alloc-1-uuid", node1ID, ask1)}
+	allocs := []*objects.Allocation{objects.NewAllocation("alloc-1-uuid", node1ID, instType, ask1)}
 	err = partition.AddNode(node1, allocs)
 	assert.NilError(t, err, "add node to partition should not have failed")
-	allocs = []*objects.Allocation{objects.NewAllocation("alloc-2-uuid", node2ID, ask2)}
+	allocs = []*objects.Allocation{objects.NewAllocation("alloc-2-uuid", node2ID, instType, ask2)}
 	err = partition.AddNode(node2, allocs)
 	assert.NilError(t, err, "add node to partition should not have failed")
 
@@ -653,10 +654,10 @@ func TestPartitions(t *testing.T) {
 	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 200, siCommon.CPU: 300})
 	ask1 := objects.NewAllocationAsk("alloc-1", app6.ApplicationID, resAlloc1)
 	ask2 := objects.NewAllocationAsk("alloc-2", app3.ApplicationID, resAlloc2)
-	allocs := []*objects.Allocation{objects.NewAllocation("alloc-1-uuid", node1ID, ask1)}
+	allocs := []*objects.Allocation{objects.NewAllocation("alloc-1-uuid", node1ID, instType, ask1)}
 	err := defaultPartition.AddNode(node1, allocs)
 	assert.NilError(t, err, "add node to partition should not have failed")
-	allocs = []*objects.Allocation{objects.NewAllocation("alloc-2-uuid", node2ID, ask2)}
+	allocs = []*objects.Allocation{objects.NewAllocation("alloc-2-uuid", node2ID, instType, ask2)}
 	err = defaultPartition.AddNode(node2, allocs)
 	assert.NilError(t, err, "add node to partition should not have failed")
 
@@ -804,10 +805,10 @@ func TestGetPartitionNodes(t *testing.T) {
 	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 300, siCommon.CPU: 500})
 	ask1 := objects.NewAllocationAsk("alloc-1", appID, resAlloc1)
 	ask2 := objects.NewAllocationAsk("alloc-2", appID, resAlloc2)
-	allocs := []*objects.Allocation{objects.NewAllocation("alloc-1-uuid", node1ID, ask1)}
+	allocs := []*objects.Allocation{objects.NewAllocation("alloc-1-uuid", node1ID, instType, ask1)}
 	err = partition.AddNode(node1, allocs)
 	assert.NilError(t, err, "add node to partition should not have failed")
-	allocs = []*objects.Allocation{objects.NewAllocation("alloc-2-uuid", node2ID, ask2)}
+	allocs = []*objects.Allocation{objects.NewAllocation("alloc-2-uuid", node2ID, instType, ask2)}
 	err = partition.AddNode(node2, allocs)
 	assert.NilError(t, err, "add node to partition should not have failed")
 
@@ -1384,7 +1385,7 @@ func prepareUserAndGroupContext(t *testing.T) {
 
 	// add an alloc
 	uuid := "uuid-1"
-	allocInfo := objects.NewAllocation(uuid, "node-1", ask)
+	allocInfo := objects.NewAllocation(uuid, "node-1", instType, ask)
 	app.AddAllocation(allocInfo)
 	assert.Assert(t, app.IsStarting(), "Application did not return starting state after alloc: %s", app.CurrentState())
 

@@ -39,6 +39,7 @@ const (
 	appID2  = "app-2"
 	aKey    = "alloc-1"
 	nodeID1 = "node-1"
+	instType1 = "itype-1"
 )
 
 // Create the root queue, base for all testing
@@ -206,7 +207,7 @@ func newProto(nodeID string, totalResource, occupiedResource *resources.Resource
 func newAllocation(appID, uuid, nodeID, queueName string, res *resources.Resource) *Allocation {
 	askKey := strconv.FormatInt((time.Now()).UnixNano(), 10)
 	ask := newAllocationAsk(askKey, appID, res)
-	return NewAllocation(uuid, nodeID, ask)
+	return NewAllocation(uuid, nodeID, instType1, ask)
 }
 
 // Create a new Allocation with a random ask key
@@ -214,7 +215,7 @@ func newPlaceholderAlloc(appID, uuid, nodeID, queueName string, res *resources.R
 	askKey := strconv.FormatInt((time.Now()).UnixNano(), 10)
 	ask := newAllocationAsk(askKey, appID, res)
 	ask.placeholder = true
-	return NewAllocation(uuid, nodeID, ask)
+	return NewAllocation(uuid, nodeID, instType1, ask)
 }
 
 func newAllocationAsk(allocKey, appID string, res *resources.Resource) *AllocationAsk {

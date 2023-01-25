@@ -25,6 +25,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -42,6 +44,55 @@ type Quantity int64
 
 func (q Quantity) string() string {
 	return strconv.FormatInt(int64(q), 10)
+}
+
+// Util struct to keep track of application resource usage
+type UsedResourceTracker struct {
+	// Two level map for aggregated resource usage
+	// With instance type being the top level key, the mapped value is a map:
+	//   resource type (CPU, memory etc) -> the aggregated used time (in seconds) of the resource type
+	//
+	UsedResourceMap map[string]map[string]int64
+
+	sync.RWMutex
+}
+
+// Aggregate the resource usage to UsedResourceMap[instType]
+// The time the given resource used is the delta between the resource createTime and currentTime
+func (urt *UsedResourceTracker) AggregateUsedResource(instType string,
+	resource *Resource, createTime time.Time) {
+	var aggregatedResourceTime map[string]int64
+	var timeDiff int64
+	var releaseTime time.Time
+	var resourceSecondsKey string
+	urt.Lock()
+	defer urt.Unlock()
+
+	releaseTime = time.Now()
+	timeDiff = int64(releaseTime.Sub(createTime).Seconds())
+	aggregatedResourceTime, ok := urt.UsedResourceMap[instType]
+	if !ok {
+		aggregatedResourceTime = map[string]int64{}
+	}
+	for key, element := range resource.Resources {
+		resourceSecondsKey = key + "Seconds"
+		curUsage, ok := aggregatedResourceTime[resourceSecondsKey]
+		if !ok {
+			curUsage = 0
+		}
+		curUsage += int64(element) * timeDiff  //resource size times timeDiff
+		aggregatedResourceTime[resourceSecondsKey] = curUsage
+	}
+	urt.UsedResourceMap[instType] = aggregatedResourceTime
+}
+
+func (urt *UsedResourceTracker) GetResourceUsageSummary() string {
+	jsonStr, err := json.Marshal(urt.UsedResourceMap)
+	if err != nil {
+		return string(err.Error())
+	} else {
+		return string(jsonStr)
+	}
 }
 
 // Never update value of Zero
@@ -101,6 +152,10 @@ func NewResourceFromConf(configMap map[string]string) (*Resource, error) {
 		res.Resources[key] = intValue
 	}
 	return res, nil
+}
+
+func NewUsedResourceTracker() *UsedResourceTracker {
+	return &UsedResourceTracker{UsedResourceMap: make(map[string]map[string]int64)}
 }
 
 func (r *Resource) String() string {

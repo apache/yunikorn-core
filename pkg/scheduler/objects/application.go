@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -84,6 +85,9 @@ type Application struct {
 	user                 security.UserGroup          // owner of the application
 	tags                 map[string]string           // application tags used in scheduling
 	allocatedResource    *resources.Resource         // total allocated resources
+
+	usedResourceTracker  *resources.UsedResourceTracker // resource usage tracker of the application
+
 	maxAllocatedResource *resources.Resource         // max allocated resources
 	allocatedPlaceholder *resources.Resource         // total allocated placeholder resources
 	allocations          map[string]*Allocation      // list of all allocations
@@ -94,6 +98,7 @@ type Application struct {
 	execTimeout          time.Duration               // execTimeout for the application run
 	placeholderTimer     *time.Timer                 // placeholder replace timer
 	gangSchedulingStyle  string                      // gang scheduling style can be hard (after timeout we fail the application), or soft (after timeeout we schedule it as a normal application)
+	startTime            time.Time                   // the time that the application starts running. Default is zero.
 	finishedTime         time.Time                   // the time of finishing this application. the default value is zero time
 	rejectedMessage      string                      // If the application is rejected, save the rejected message
 	stateLog             []*StateLogEntry            // state log for this application
@@ -116,6 +121,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		tags:                 siApp.Tags,
 		pending:              resources.NewResource(),
 		allocatedResource:    resources.NewResource(),
+		usedResourceTracker:  resources.NewUsedResourceTracker(),
 		maxAllocatedResource: resources.NewResource(),
 		allocatedPlaceholder: resources.NewResource(),
 		requests:             make(map[string]*AllocationAsk),
@@ -123,6 +129,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		allocations:          make(map[string]*Allocation),
 		stateMachine:         NewAppState(),
 		placeholderAsk:       resources.NewResourceFromProto(siApp.PlaceholderAsk),
+		startTime:            time.Time{},
 		finishedTime:         time.Time{},
 		rejectedMessage:      "",
 		stateLog:             make([]*StateLogEntry, 0),
@@ -982,7 +989,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, preemptionDelay
 					zap.Stringer("AllocationResult", alloc.GetResult()))
 				return alloc
 			}
-			return newReservedAllocation(Reserved, node.NodeID, request)
+			return newReservedAllocation(Reserved, node.NodeID, node.GetInstType(), request)
 		}
 
 		iterator := nodeIterator()
@@ -1120,7 +1127,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			// got the node run same checks as for reservation (all but fits)
 			// resource usage should not change anyway between placeholder and real one at this point
 			if node != nil && node.preReserveConditions(request) {
-				alloc := NewAllocation(common.GetNewUUID(), node.NodeID, request)
+				alloc := NewAllocation(common.GetNewUUID(), node.NodeID, node.GetInstType(), request)
 				// double link to make it easier to find
 				// alloc (the real one) releases points to the placeholder in the releases list
 				alloc.SetRelease(ph)
@@ -1166,7 +1173,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				continue
 			}
 			// allocation worked: on a non placeholder node update result and return
-			alloc := NewAllocation(common.GetNewUUID(), node.NodeID, reqFit)
+			alloc := NewAllocation(common.GetNewUUID(), node.NodeID, node.GetInstType(), reqFit)
 			// double link to make it easier to find
 			// alloc (the real one) releases points to the placeholder in the releases list
 			alloc.SetRelease(phFit)
@@ -1217,7 +1224,7 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 				unreserveAsk = ask
 			}
 			// remove the reservation as this should not be reserved
-			alloc := newReservedAllocation(Unreserved, reserve.nodeID, unreserveAsk)
+			alloc := newReservedAllocation(Unreserved, reserve.nodeID, reserve.node.GetInstType(), unreserveAsk)
 			return alloc
 		}
 
@@ -1428,7 +1435,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 			return nil
 		}
 		// return reservation allocation and mark it as a reservation
-		alloc := newReservedAllocation(Reserved, nodeToReserve.NodeID, ask)
+		alloc := newReservedAllocation(Reserved, nodeToReserve.NodeID, nodeToReserve.GetInstType(), ask)
 		return alloc
 	}
 	// ask does not fit, skip to next ask
@@ -1448,7 +1455,7 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 		return nil
 	}
 	// everything OK really allocate
-	alloc := NewAllocation(common.GetNewUUID(), node.NodeID, ask)
+	alloc := NewAllocation(common.GetNewUUID(), node.NodeID, node.GetInstType(), ask)
 	if node.AddAllocation(alloc) {
 		if err := sa.queue.IncAllocatedResource(alloc.GetAllocatedResource(), false); err != nil {
 			log.Logger().Warn("queue update failed unexpectedly",
@@ -1509,6 +1516,12 @@ func (sa *Application) UnSetQueue() {
 	defer sa.Unlock()
 	sa.queue = nil
 	sa.finishedTime = time.Now()
+}
+
+func (sa *Application) StartTime() time.Time {
+	sa.RLock()
+	defer sa.RUnlock()
+	return sa.startTime
 }
 
 func (sa *Application) FinishedTime() time.Time {
@@ -1635,6 +1648,13 @@ func (sa *Application) decUserResourceUsage(resource *resources.Resource, remove
 	}
 }
 
+// When the resource allocated with this allocation is to be removed,
+// have the usedResourceTracker to aggregate the resource used by this allocation
+func (sa *Application) updateUsedResource(info *Allocation) {
+	sa.usedResourceTracker.AggregateUsedResource(info.GetInstType(),
+		info.GetAllocatedResource(), info.GetCreateTime())
+}
+
 func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
@@ -1724,6 +1744,10 @@ func (sa *Application) removeAllocationInternal(uuid string, releaseType si.Term
 		sa.decUserResourceUsage(alloc.GetAllocatedResource(), removeApp)
 	} else {
 		sa.allocatedResource = resources.Sub(sa.allocatedResource, alloc.GetAllocatedResource())
+
+		// Aggregate the resources used by this alloc to the application's user resource tracker
+		sa.updateUsedResource(alloc)
+
 		// When the resource trackers are zero we should not expect anything to come in later.
 		if sa.hasZeroAllocations() {
 			removeApp = true
@@ -1772,7 +1796,10 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 	allocationsToRelease := make([]*Allocation, 0)
 	for _, alloc := range sa.allocations {
 		allocationsToRelease = append(allocationsToRelease, alloc)
+		// Aggregate the resources used by this alloc to the application's user resource tracker
+		sa.updateUsedResource(alloc)
 	}
+
 	if resources.IsZero(sa.pending) {
 		sa.decUserResourceUsage(resources.Add(sa.allocatedResource, sa.allocatedPlaceholder), true)
 	}
@@ -1949,6 +1976,26 @@ func (sa *Application) GetAskMaxPriority() int32 {
 func (sa *Application) cleanupAsks() {
 	sa.requests = make(map[string]*AllocationAsk)
 	sa.sortedRequests = nil
+}
+
+func (sa *Application) GetAppSummary(rmID string) string {
+	var res string
+	sa.RLock()
+	defer sa.RUnlock()
+
+	res = "{"
+
+	res += "\"appId\":\"" + sa.ApplicationID + "\","
+	res += "\"submissionTime\":\"" + strconv.FormatInt(sa.SubmissionTime.UnixMilli(), 10) + "\","
+	res += "\"startTime\":\"" + strconv.FormatInt(sa.StartTime().UnixMilli(), 10) + "\","
+	res += "\"finishTime\":\"" + strconv.FormatInt(sa.FinishedTime().UnixMilli(), 10) + "\","
+	res += "\"user\":\"" + sa.GetUser().User + "\","
+	res += "\"queue\":\"" + sa.GetQueuePath() + "\","
+	res += "\"state\":\"" + sa.stateMachine.Current() + "\","
+	res += "\"rmID\":\"" + rmID + "\","
+	res += "\"resourceUsage\":" + sa.usedResourceTracker.GetResourceUsageSummary()
+	res += "}"
+	return res
 }
 
 // test only

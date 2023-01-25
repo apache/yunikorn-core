@@ -1416,6 +1416,7 @@ func (pc *PartitionContext) moveTerminatedApp(appID string) {
 		zap.String("app status", app.CurrentState()))
 	pc.Lock()
 	defer pc.Unlock()
+	metrics.GetMetrics().LogAppSummary(app.GetAppSummary(pc.RmID))
 	delete(pc.applications, appID)
 	pc.completedApplications[newID] = app
 }

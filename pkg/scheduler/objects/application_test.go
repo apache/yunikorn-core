@@ -19,7 +19,10 @@
 package objects
 
 import (
+	"encoding/json"
 	"fmt"
+	"github.com/apache/yunikorn-core/pkg/log"
+	"go.uber.org/zap"
 	"math"
 	"strconv"
 	"testing"
@@ -654,7 +657,7 @@ func TestRemovePlaceholderAllocationWithNoRealAllocation(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	ask := newAllocationAskRepeat(aKey, appID1, res, 2)
 	ask.placeholder = true
-	allocInfo := NewAllocation("uuid-1", nodeID1, ask)
+	allocInfo := NewAllocation("uuid-1", nodeID1, instType1,ask)
 	app.AddAllocation(allocInfo)
 	err := app.handleApplicationEventWithLocking(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted")
@@ -739,7 +742,7 @@ func TestStateChangeOnUpdate(t *testing.T) {
 	assert.Assert(t, app.IsAccepted(), "Application did not change to accepted state: %s", app.CurrentState())
 	// add an alloc
 	uuid := "uuid-1"
-	allocInfo := NewAllocation(uuid, nodeID1, ask)
+	allocInfo := NewAllocation(uuid, nodeID1, instType1,ask)
 	app.AddAllocation(allocInfo)
 	// app should be starting
 	assert.Assert(t, app.IsStarting(), "Application did not return starting state after alloc: %s", app.CurrentState())
@@ -803,7 +806,7 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	assert.Assert(t, app.IsAccepted(), "Application did not change to accepted state: %s", app.CurrentState())
 	// add an alloc based on the placeholder ask
 	uuid := "uuid-1"
-	allocInfo := NewAllocation(uuid, nodeID1, ask)
+	allocInfo := NewAllocation(uuid, nodeID1, instType1, ask)
 	app.AddAllocation(allocInfo)
 	// app should be in the same state as it was before as it is a placeholder allocation
 	assert.Assert(t, app.IsAccepted(), "Application did not return accepted state after alloc: %s", app.CurrentState())
@@ -1059,6 +1062,125 @@ func TestCompleted(t *testing.T) {
 	assert.Equal(t, log[1].ApplicationState, Completing.String())
 	assert.Equal(t, log[2].ApplicationState, Completed.String())
 	assert.Equal(t, log[3].ApplicationState, Expired.String())
+}
+
+func assertResourceUsage(t *testing.T, appSummary string, memorySeconds int64, vcoresSecconds int64) {
+	var jsonMap map[string]interface{}
+	var resource interface{}
+	var detailedResource map[string]interface{}
+
+	json.Unmarshal([]byte(appSummary), &jsonMap)
+
+	resource = jsonMap["resourceUsage"]
+
+	resourceUsageMap := resource.(map[string]interface{})
+	//fmt.Print("resourceMap: ")
+	//fmt.Println(resourceUsageMap)
+
+	itypeResource, ok := resourceUsageMap["itype-1"]
+	if !ok {
+		assert.Assert(t, memorySeconds == -1 || vcoresSecconds == -1, "no resource usage")
+		return
+	}
+
+	//fmt.Print("itypeResource: ")
+	//fmt.Println(itypeResource)
+
+	//detailedResource, ok1 := itypeResource.(map[string]int64)
+	//assert.Assert(t, ok1, "resource need to be a map")
+
+	detailedResource = itypeResource.(map[string]interface{})
+
+	assert.Equal(t, float64(memorySeconds), detailedResource["memorySeconds"].(float64))
+	assert.Equal(t, float64(vcoresSecconds), detailedResource["vcoresSeconds"].(float64))
+}
+
+func TestResourceUsageAggregation(t *testing.T) {
+	setupUGM()
+
+	app := newApplication(appID1, "default", "root.a")
+
+	// nothing allocated
+	if !resources.IsZero(app.GetAllocatedResource()) {
+		t.Error("new application has allocated resources")
+	}
+	// create an allocation and check the assignment
+	resMap := map[string]string{"memory": "100", "vcores": "10"}
+	res, err := resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err, "failed to create resource with error")
+	alloc := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
+	app.AddAllocation(alloc)
+	if !resources.Equals(app.allocatedResource, res) {
+		t.Errorf("allocated resources is not updated correctly: %v", app.allocatedResource)
+	}
+	allocs := app.GetAllAllocations()
+	assert.Equal(t, len(allocs), 1)
+	assert.Assert(t, app.getPlaceholderTimer() == nil, "Placeholder timer should not be initialized as the allocation is not a placeholder")
+	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 1))
+
+	err = app.HandleApplicationEvent(RunApplication)
+	assert.NilError(t, err, "no error expected new to accepted (completed test)")
+
+	time.Sleep(3 * time.Second)
+
+	appSummary := app.GetAppSummary("default")
+	log.Logger().Info("Application Resource Usage1",
+		zap.String("appSummary", appSummary))
+	assertResourceUsage(t, appSummary, -1, -1)
+
+	// add more allocations to test the removals
+	alloc = newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
+	app.AddAllocation(alloc)
+	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
+
+	time.Sleep(3 * time.Second)
+
+	// remove one of the 2
+	if alloc = app.RemoveAllocation("uuid-2", si.TerminationType_UNKNOWN_TERMINATION_TYPE); alloc == nil {
+		t.Error("returned allocations was nil allocation was not removed")
+	}
+	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 1))
+
+	appSummary = app.GetAppSummary("default")
+	log.Logger().Info("Application Resource Usage2",
+		zap.String("appSummary", appSummary))
+	assertResourceUsage(t, appSummary, 300, 30)
+
+	alloc = newAllocation(appID1, "uuid-3", nodeID1, "root.a", res)
+	app.AddAllocation(alloc)
+	allocs = app.GetAllAllocations()
+	assert.Equal(t, len(allocs), 2)
+	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
+
+	time.Sleep(3 * time.Second)
+
+	appSummary = app.GetAppSummary("default")
+	log.Logger().Info("Application Resource Usage3",
+		zap.String("appSummary", appSummary))
+	assertResourceUsage(t, appSummary, 300, 30)
+
+	// try to remove a non existing alloc
+	if alloc = app.RemoveAllocation("does-not-exist", si.TerminationType_UNKNOWN_TERMINATION_TYPE); alloc != nil {
+		t.Errorf("returned allocations was not allocation was incorrectly removed: %v", alloc)
+	}
+
+	time.Sleep(3 * time.Second)
+
+	// remove all left over allocations
+	if allocs = app.RemoveAllAllocations(); allocs == nil || len(allocs) != 2 {
+		t.Errorf("returned number of allocations was incorrect: %v", allocs)
+	}
+	allocs = app.GetAllAllocations()
+	assert.Equal(t, len(allocs), 0)
+	assertUserGroupResource(t, getTestUserGroup(), nil)
+
+	err = app.HandleApplicationEvent(CompleteApplication)
+	assert.NilError(t, err, "no error expected accepted to completing (completed test)")
+
+	appSummary = app.GetAppSummary("default")
+	log.Logger().Info("Application Resource Usage4",
+		zap.String("appSummary", appSummary))
+	assertResourceUsage(t, appSummary, 2100, 210)
 }
 
 func TestRejected(t *testing.T) {

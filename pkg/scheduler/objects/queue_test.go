@@ -1806,6 +1806,54 @@ func TestApplyTemplate(t *testing.T) {
 }
 
 func TestApplyConf(t *testing.T) {
+	// cover error cases
+	errQueue, err := createManagedQueueWithProps(nil, "errConf", true, nil, nil)
+	assert.NilError(t, err, "failed to create basic queue: %v", err)
+
+	// wrong submitACL
+	errConf1 := configs.QueueConfig{
+		SubmitACL: "error Submit ACL",
+	}
+	err = errQueue.ApplyConf(errConf1)
+	assert.ErrorContains(t, err, "multiple spaces found in ACL")
+
+	// wrong AdminACL
+	errConf2 := configs.QueueConfig{
+		AdminACL: "error Admin ACL",
+	}
+	err = errQueue.ApplyConf(errConf2)
+	assert.ErrorContains(t, err, "multiple spaces found in ACL")
+
+	// isManaged is changed from unmanaged to managed
+	childConf := configs.QueueConfig{}
+
+	parent, err := createManagedQueueWithProps(nil, "parent", true, nil, nil)
+	assert.NilError(t, err, "failed to create basic queue: %v", err)
+
+	child, err := NewDynamicQueue("child", true, parent)
+	assert.NilError(t, err, "failed to create basic queue: %v", err)
+
+	err = child.ApplyConf(childConf)
+	assert.NilError(t, err, "failed to parse conf: %v", err)
+	assert.Equal(t, child.IsManaged(), true)
+
+	// isLeaf is set to false while Queues length > 0
+	parentConf := configs.QueueConfig{
+		Queues: []configs.QueueConfig{
+			{
+				Name:   "child",
+				Parent: true,
+				Queues: nil,
+			},
+		},
+	}
+	parent, err = createManagedQueueWithProps(nil, "parent", false, nil, nil)
+	assert.NilError(t, err, "failed to create basic queue: %v", err)
+
+	err = parent.ApplyConf(parentConf)
+	assert.NilError(t, err, "failed to parse conf: %v", err)
+	assert.Equal(t, parent.IsLeafQueue(), false)
+
 	conf := configs.QueueConfig{
 		SubmitACL: "",
 		AdminACL:  "",
@@ -1831,18 +1879,18 @@ func TestApplyConf(t *testing.T) {
 	assert.Assert(t, validTemplate != nil)
 
 	conf.Parent = false
-	err = leaf.applyConf(conf)
+	err = leaf.ApplyConf(conf)
 	assert.NilError(t, err, "failed to apply conf: %v", err)
 	assert.Assert(t, leaf.template == nil)
 	assert.Assert(t, leaf.maxResource != nil)
 	assert.Assert(t, leaf.guaranteedResource != nil)
 
-	// case 1: non-leaf queue can have template
+	// case 1-1: non-leaf queue can have template
 	queue, err := createManagedQueueWithProps(nil, "tmp", true, nil, nil)
 	assert.NilError(t, err, "failed to create basic queue: %v", err)
 
 	conf.Parent = true
-	err = queue.applyConf(conf)
+	err = queue.ApplyConf(conf)
 	assert.NilError(t, err, "failed to apply conf: %v", err)
 	assert.Assert(t, queue.template != nil)
 	assert.Assert(t, queue.maxResource != nil)
@@ -1852,7 +1900,7 @@ func TestApplyConf(t *testing.T) {
 	root, err := createManagedQueueWithProps(nil, "root", true, nil, nil)
 	assert.NilError(t, err, "failed to create basic queue: %v", err)
 
-	err = queue.applyConf(conf)
+	err = queue.ApplyConf(conf)
 	assert.NilError(t, err, "failed to apply conf: %v", err)
 	assert.Assert(t, root.maxResource == nil)
 	assert.Assert(t, root.guaranteedResource == nil)

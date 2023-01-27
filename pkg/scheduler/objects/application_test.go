@@ -1035,6 +1035,10 @@ func TestCompleted(t *testing.T) {
 		terminatedTimeout = 3 * 24 * time.Hour
 	}()
 	app := newApplication(appID1, "default", "root.a")
+	app.requests = map[string]*AllocationAsk{
+		"test": {},
+	}
+	app.sortedRequests = append(app.sortedRequests, &AllocationAsk{})
 	err := app.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (completed test)")
 	err = app.HandleApplicationEvent(CompleteApplication)
@@ -1047,6 +1051,8 @@ func TestCompleted(t *testing.T) {
 	err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, app.IsExpired)
 	assert.NilError(t, err, "Application did not progress into Expired state")
 
+	assert.Assert(t, app.sortedRequests == nil)
+	assert.Equal(t, 0, len(app.requests))
 	log := app.GetStateLog()
 	assert.Equal(t, len(log), 4, "wrong number of app events")
 	assert.Equal(t, log[0].ApplicationState, Accepted.String())

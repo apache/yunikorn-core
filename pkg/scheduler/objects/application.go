@@ -1915,6 +1915,11 @@ func (sa *Application) GetAskMaxPriority() int32 {
 	return sa.askMaxPriority
 }
 
+func (sa *Application) cleanupAsks() {
+	sa.requests = make(map[string]*AllocationAsk)
+	sa.sortedRequests = nil
+}
+
 // test only
 func SetCompletingTimeout(duration time.Duration) {
 	completingTimeout = duration

@@ -24,7 +24,8 @@ import (
 )
 
 const (
-	HealthCheckInterval = "health.checkInterval"
+	HealthCheckInterval      = "health.checkInterval"
+	InstanceTypeNodeLabelKey = "service.instanceTypeNodeLabelKey"
 )
 
 var DefaultHealthCheckInterval = 30 * time.Second

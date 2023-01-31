@@ -19,10 +19,13 @@
 package objects
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 
 	"go.uber.org/zap"
 
@@ -115,6 +118,18 @@ func (sn *Node) initializeAttribute(newAttributes map[string]string) {
 // This is a lock free call. All attributes are considered read only
 func (sn *Node) GetAttribute(key string) string {
 	return sn.attributes[key]
+}
+
+// Get InstanceType of this node.
+// This is a lock free call because all attributes are considered read only
+func (sn *Node) GetInstanceType() (string, error) {
+	instanceTypeNodeLabelKey := configs.GetConfigMap()[configs.InstanceTypeNodeLabelKey]
+	nodeLabels := sn.attributes["si.io/nodelabels"]
+	nodeLabelsMap := make(map[string]string, 0)
+	if err := json.Unmarshal([]byte(nodeLabels), &nodeLabelsMap); err != nil {
+		return "", err
+	}
+	return nodeLabelsMap[instanceTypeNodeLabelKey], nil
 }
 
 // GetReservationKeys Return an array of all reservation keys for the node.

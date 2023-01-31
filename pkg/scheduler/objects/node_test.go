@@ -21,6 +21,8 @@ package objects
 import (
 	"testing"
 
+	"github.com/apache/yunikorn-core/pkg/common/configs"
+
 	"gotest.tools/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
@@ -28,6 +30,7 @@ import (
 )
 
 const testNode = "testnode"
+const nodeLabels = "{\"label1\":\"key1\",\"label2\":\"key2\",\"node.kubernetes.io/instance-type\":\"HighMem\"}"
 
 func TestNewNode(t *testing.T) {
 	// simple nil check
@@ -310,6 +313,29 @@ func TestAttributes(t *testing.T) {
 	assert.Equal(t, "partition1", value, "node attributes not set, expected 'partition1' got '%v'", value)
 	value = node.GetAttribute("something")
 	assert.Equal(t, "just a text", value, "node attributes not set, expected 'just a text' got '%v'", value)
+}
+
+func TestGetInstanceType(t *testing.T) {
+	configs.SetConfigMap(map[string]string{configs.InstanceTypeNodeLabelKey: "node.kubernetes.io/instance-type"})
+	defer configs.SetConfigMap(map[string]string{})
+
+	proto := newProto(testNode, nil, nil, map[string]string{
+		common.NodePartition: "partition1",
+		"si.io/nodelabels":   nodeLabels,
+	})
+
+	node := NewNode(proto)
+	if node == nil || node.NodeID != testNode {
+		t.Fatal("node not returned correctly: node is nul or incorrect name")
+	}
+
+	assert.Equal(t, "", node.Hostname)
+	assert.Equal(t, "", node.Rackname)
+	assert.Equal(t, "partition1", node.Partition)
+
+	value, err := node.GetInstanceType()
+	assert.NilError(t, err)
+	assert.Equal(t, "HighMem", value, "node instanceType not set, expected 'HighMem' got '%v'", value)
 }
 
 func TestAddAllocation(t *testing.T) {

@@ -264,7 +264,7 @@ func (cc *ClusterContext) processNodes(request *si.NodeRequest) {
 			}
 			switch nodeInfo.Action {
 			case si.NodeInfo_CREATE:
-				err := cc.addNode(nodeInfo, nodeCount)
+				err := cc.addNode(nodeInfo)
 				if err == nil {
 					acceptedNodes = append(acceptedNodes, &si.AcceptedNode{
 						NodeID: nodeInfo.NodeID,
@@ -602,7 +602,7 @@ func (cc *ClusterContext) removePartition(partitionName string) {
 
 // addNode adds a new node to the cluster enforcing just one unlimited node in the cluster.
 // nil nodeInfo objects must be filtered out before calling this function
-func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo, nodeCount int) error {
+func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo) error {
 	sn := objects.NewNode(nodeInfo)
 	if !sn.IsReady() {
 		metrics.GetSchedulerMetrics().IncUnhealthyNodes()

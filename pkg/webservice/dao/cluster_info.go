@@ -15,23 +15,12 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 */
+
 package dao
 
 type ClusterDAOInfo struct {
-	StartTime             int64               `json:"startTime"`
-	RMBuildInformation    []map[string]string `json:"rmBuildInformation"`
-	PartitionName         string              `json:"partition"`
-	ClusterName           string              `json:"clusterName"`
-	TotalApplications     string              `json:"totalApplications"`
-	FailedApplications    string              `json:"failedApplications"`
-	PendingApplications   string              `json:"pendingApplications"`
-	RunningApplications   string              `json:"runningApplications"`
-	CompletedApplications string              `json:"completedApplications"`
-	TotalContainers       string              `json:"totalContainers"`
-	FailedContainers      string              `json:"failedContainers"`
-	PendingContainers     string              `json:"pendingContainers"`
-	RunningContainers     string              `json:"runningContainers"`
-	ActiveNodes           string              `json:"activeNodes"`
-	TotalNodes            string              `json:"totalNodes"`
-	FailedNodes           string              `json:"failedNodes"`
+	StartTime          int64               `json:"startTime"`
+	RMBuildInformation []map[string]string `json:"rmBuildInformation"`
+	PartitionName      string              `json:"partition"`
+	ClusterName        string              `json:"clusterName"`
 }

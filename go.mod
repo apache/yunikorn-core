@@ -19,7 +19,7 @@
 
 module github.com/apache/yunikorn-core
 
-go 1.20
+go 1.16
 
 require (
 	github.com/HdrHistogram/hdrhistogram-go v1.0.1 // indirect

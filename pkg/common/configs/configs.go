@@ -29,6 +29,7 @@ const (
 )
 
 var DefaultHealthCheckInterval = 30 * time.Second
+var DefaultInstanceTypeNodeLabelKey = "node.kubernetes.io/instance-type"
 
 var ConfigContext *SchedulerConfigContext
 

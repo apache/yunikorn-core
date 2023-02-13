@@ -19,7 +19,6 @@
 package objects
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -122,14 +121,12 @@ func (sn *Node) GetAttribute(key string) string {
 
 // Get InstanceType of this node.
 // This is a lock free call because all attributes are considered read only
-func (sn *Node) GetInstanceType() (string, error) {
-	instanceTypeNodeLabelKey := configs.GetConfigMap()[configs.InstanceTypeNodeLabelKey]
-	nodeLabels := sn.attributes["si.io/nodelabels"]
-	nodeLabelsMap := make(map[string]string, 0)
-	if err := json.Unmarshal([]byte(nodeLabels), &nodeLabelsMap); err != nil {
-		return "", err
+func (sn *Node) GetInstanceType() string {
+	instanceTypeNodeLabelKey, ok := configs.GetConfigMap()[configs.InstanceTypeNodeLabelKey]
+	if !ok {
+		instanceTypeNodeLabelKey = configs.InstanceTypeNodeLabelKey
 	}
-	return nodeLabelsMap[instanceTypeNodeLabelKey], nil
+	return sn.attributes[instanceTypeNodeLabelKey]
 }
 
 // GetReservationKeys Return an array of all reservation keys for the node.

@@ -30,7 +30,6 @@ import (
 )
 
 const testNode = "testnode"
-const nodeLabels = "{\"label1\":\"key1\",\"label2\":\"key2\",\"node.kubernetes.io/instance-type\":\"HighMem\"}"
 
 func TestNewNode(t *testing.T) {
 	// simple nil check
@@ -320,8 +319,10 @@ func TestGetInstanceType(t *testing.T) {
 	defer configs.SetConfigMap(map[string]string{})
 
 	proto := newProto(testNode, nil, nil, map[string]string{
-		common.NodePartition: "partition1",
-		"si.io/nodelabels":   nodeLabels,
+		common.NodePartition:               "partition1",
+		"label1":                           "key1",
+		"label2":                           "key2",
+		"node.kubernetes.io/instance-type": "HighMem",
 	})
 
 	node := NewNode(proto)
@@ -333,8 +334,7 @@ func TestGetInstanceType(t *testing.T) {
 	assert.Equal(t, "", node.Rackname)
 	assert.Equal(t, "partition1", node.Partition)
 
-	value, err := node.GetInstanceType()
-	assert.NilError(t, err)
+	value := node.GetInstanceType()
 	assert.Equal(t, "HighMem", value, "node instanceType not set, expected 'HighMem' got '%v'", value)
 }
 

@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-core/pkg/scheduler/tests"

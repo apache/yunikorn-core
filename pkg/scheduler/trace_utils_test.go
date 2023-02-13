@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	"github.com/opentracing/opentracing-go"
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/trace"
 )

@@ -49,7 +49,7 @@ linters-settings:
       - github.com/stretchr/testify
     packages-with-error-messages:
       github.com/sirupsen/logrus: "logging is standardised via yunikorn logger and zap"
-      github.com/stretchr/testify: "test assertions must use gotest.tools/assert"
+      github.com/stretchr/testify: "test assertions must use gotest.tools/v3/assert"
 
 # linters to use
 linters:

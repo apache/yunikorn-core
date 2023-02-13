@@ -24,7 +24,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 )
 
 var csm CoreSchedulerMetrics

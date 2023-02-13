@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"

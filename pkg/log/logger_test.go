@@ -24,7 +24,7 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 )
 
 // This test sets the global zap logger. This must be undone to make sure no side

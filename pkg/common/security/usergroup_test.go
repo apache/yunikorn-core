@@ -22,7 +22,7 @@ import (
 	"strings"
 	"testing"
 
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )

@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"testing"
 
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"

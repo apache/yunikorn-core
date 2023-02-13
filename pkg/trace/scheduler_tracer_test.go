@@ -21,7 +21,7 @@ package trace
 import (
 	"testing"
 
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 )
 
 // TestSchedulerTracerImpl tests SetParams and NewTraceContext

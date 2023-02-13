@@ -26,7 +26,7 @@ import (
 	"testing"
 
 	"github.com/looplab/fsm"
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 )
 
 func TestApplicationFsmGraph(t *testing.T) {

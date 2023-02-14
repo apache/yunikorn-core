@@ -21,7 +21,7 @@ package objects
 import (
 	"testing"
 
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 )
 
 func TestStateTransition(t *testing.T) {

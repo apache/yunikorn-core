@@ -21,9 +21,7 @@ package objects
 import (
 	"testing"
 
-	"github.com/apache/yunikorn-core/pkg/common/configs"
-
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
@@ -315,9 +313,6 @@ func TestAttributes(t *testing.T) {
 }
 
 func TestGetInstanceType(t *testing.T) {
-	configs.SetConfigMap(map[string]string{configs.InstanceTypeNodeLabelKey: "node.kubernetes.io/instance-type"})
-	defer configs.SetConfigMap(map[string]string{})
-
 	proto := newProto(testNode, nil, nil, map[string]string{
 		common.NodePartition:               "partition1",
 		"label1":                           "key1",

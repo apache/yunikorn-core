@@ -24,7 +24,7 @@ go 1.16
 require (
 	github.com/HdrHistogram/hdrhistogram-go v1.0.1 // indirect
 	github.com/apache/yunikorn-scheduler-interface v0.0.0-20221130170804-42d2286739d8
-	github.com/google/btree v1.0.1
+	github.com/google/btree v1.1.2
 	github.com/google/uuid v1.2.0
 	github.com/gorilla/mux v1.7.3
 	github.com/looplab/fsm v0.1.0
@@ -38,13 +38,13 @@ require (
 	golang.org/x/net v0.2.0
 	google.golang.org/grpc v1.31.0
 	gopkg.in/yaml.v2 v2.4.0
-	gotest.tools v2.2.0+incompatible
+	gotest.tools/v3 v3.0.3
 )
 
 replace (
 	golang.org/x/crypto => golang.org/x/crypto v0.3.0
 	golang.org/x/lint => golang.org/x/lint v0.0.0-20210508222113-6edffad5e616
-	golang.org/x/net => golang.org/x/net v0.3.0
+	golang.org/x/net => golang.org/x/net v0.4.0
 	golang.org/x/sys => golang.org/x/sys v0.2.0
 	golang.org/x/text => golang.org/x/text v0.4.0
 	golang.org/x/tools => golang.org/x/tools v0.3.0

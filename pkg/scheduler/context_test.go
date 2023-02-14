@@ -25,7 +25,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
@@ -111,7 +111,7 @@ func TestContext_UpdateNode(t *testing.T) {
 	context.updateNode(n)
 	assert.Equal(t, 0, len(partition.GetNodes()), "unexpected node found on partition (correct partition set)")
 	// add the node to the context
-	err := context.addNode(n, 1)
+	err := context.addNode(n)
 	assert.NilError(t, err, "unexpected error returned from addNode")
 	assert.Equal(t, 1, len(partition.GetNodes()), "expected node not found on partition")
 	assert.Assert(t, resources.Equals(full, partition.GetTotalPartitionResource()), "partition resource should be updated")
@@ -154,12 +154,12 @@ func TestContext_AddNode(t *testing.T) {
 		Attributes:          map[string]string{"si/node-partition": "unknown"},
 		SchedulableResource: &si.Resource{Resources: map[string]*si.Quantity{"first": {Value: 10}}},
 	}
-	err := context.addNode(n, 1)
+	err := context.addNode(n)
 	if err == nil {
 		t.Fatalf("unknown node partition should have failed the node add")
 	}
 	n.Attributes = map[string]string{"si/node-partition": pName}
-	err = context.addNode(n, 1)
+	err = context.addNode(n)
 	assert.NilError(t, err, "unexpected error returned adding node")
 	partition := context.GetPartition(pName)
 	if partition == nil {
@@ -167,7 +167,7 @@ func TestContext_AddNode(t *testing.T) {
 	}
 	assert.Equal(t, 1, len(partition.GetNodes()), "expected node not found on partition")
 	// add same node again should show an error
-	err = context.addNode(n, 1)
+	err = context.addNode(n)
 	if err == nil {
 		t.Fatalf("existing node addition should have failed")
 	}
@@ -241,7 +241,7 @@ func TestContextUpdateNodeMetrics(t *testing.T) {
 
 	n := getNodeInfoForAddingNode(true)
 
-	err := context.addNode(n, 1)
+	err := context.addNode(n)
 	assert.NilError(t, err, "unexpected error returned from addNode")
 	verifyMetrics(t, 1, "active")
 
@@ -262,7 +262,7 @@ func TestContextAddUnhealthyNodeMetrics(t *testing.T) {
 
 	n := getNodeInfoForAddingNode(false)
 
-	err := context.addNode(n, 1)
+	err := context.addNode(n)
 	assert.NilError(t, err, "unexpected error returned from addNode")
 	verifyMetrics(t, 1, "active")
 	verifyMetrics(t, 1, "unhealthy")
@@ -273,7 +273,7 @@ func TestContextDrainingNodeMetrics(t *testing.T) {
 	context := createTestContext(t, pName)
 
 	n := getNodeInfoForAddingNode(true)
-	err := context.addNode(n, 1)
+	err := context.addNode(n)
 	assert.NilError(t, err, "unexpected error returned from addNode")
 
 	n = getNodeInfoForUpdatingNode(si.NodeInfo_DRAIN_NODE, true)
@@ -286,7 +286,7 @@ func TestContextDrainingNodeBackToSchedulableMetrics(t *testing.T) {
 	context := createTestContext(t, pName)
 
 	n := getNodeInfoForAddingNode(true)
-	err := context.addNode(n, 1)
+	err := context.addNode(n)
 	assert.NilError(t, err, "unexpected error returned from addNode")
 
 	n = getNodeInfoForUpdatingNode(si.NodeInfo_DRAIN_NODE, true)

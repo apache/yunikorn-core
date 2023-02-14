@@ -973,12 +973,6 @@ func (pc *PartitionContext) GetAllocatedResource() *resources.Resource {
 	return pc.root.GetAllocatedResource()
 }
 
-func (pc *PartitionContext) GetTotalApplicationCount() int {
-	pc.RLock()
-	defer pc.RUnlock()
-	return len(pc.applications)
-}
-
 func (pc *PartitionContext) GetTotalAllocationCount() int {
 	pc.RLock()
 	defer pc.RUnlock()
@@ -1168,10 +1162,12 @@ func (pc *PartitionContext) convertUGI(ugi *si.UserGroupInformation) (security.U
 // which is a slice with 10 elements,
 // each element represents a range of resource usage,
 // such as
-//   0: 0%->10%
-//   1: 10% -> 20%
-//   ...
-//   9: 90% -> 100%
+//
+//	0: 0%->10%
+//	1: 10% -> 20%
+//	...
+//	9: 90% -> 100%
+//
 // the element value represents number of nodes fall into this bucket.
 // if slice[9] = 3, this means there are 3 nodes resource usage is in the range 80% to 90%.
 //

@@ -21,7 +21,7 @@ package tests
 import (
 	"testing"
 
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/entrypoint"
@@ -514,7 +514,6 @@ func TestSchedulerRecoveryWithoutAppInfo(t *testing.T) {
 	// verify partition resources
 	part := ms.scheduler.GetClusterContext().GetPartition("[rm:123]default")
 	assert.Equal(t, part.GetTotalNodeCount(), 1)
-	assert.Equal(t, part.GetTotalApplicationCount(), 0)
 	assert.Equal(t, part.GetTotalAllocationCount(), 0)
 	assert.Equal(t, part.GetNode("node-2:1234").GetAllocatedResource().Resources[common.Memory],
 		resources.Quantity(0))
@@ -566,7 +565,6 @@ func TestSchedulerRecoveryWithoutAppInfo(t *testing.T) {
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 
 	assert.Equal(t, part.GetTotalNodeCount(), 2)
-	assert.Equal(t, part.GetTotalApplicationCount(), 1)
 	assert.Equal(t, part.GetTotalAllocationCount(), 1)
 	assert.Equal(t, part.GetNode("node-1:1234").GetAllocatedResource().Resources[common.Memory], resources.Quantity(100))
 	assert.Equal(t, part.GetNode("node-1:1234").GetAllocatedResource().Resources[common.CPU], resources.Quantity(1))

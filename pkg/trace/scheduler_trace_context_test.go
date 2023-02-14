@@ -24,7 +24,7 @@ import (
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/uber/jaeger-client-go"
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 )
 
 func TestSchedulerTraceContextImpl(t *testing.T) {

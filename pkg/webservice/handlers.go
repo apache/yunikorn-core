@@ -136,15 +136,7 @@ func getClusterJSON(partition *scheduler.PartitionContext) *dao.ClusterDAOInfo {
 	rmInfo := schedulerContext.GetRMInfoMapClone()
 	clusterInfo.RMBuildInformation = getRMBuildInformation(rmInfo)
 	clusterInfo.PartitionName = common.GetPartitionNameWithoutClusterID(partition.Name)
-	clusterInfo.TotalApplications = strconv.Itoa(partition.GetTotalApplicationCount())
-	clusterInfo.TotalContainers = strconv.Itoa(partition.GetTotalAllocationCount())
-	clusterInfo.TotalNodes = strconv.Itoa(partition.GetTotalNodeCount())
 	clusterInfo.ClusterName = "kubernetes"
-
-	clusterInfo.RunningApplications = strconv.Itoa(partition.GetTotalApplicationCount())
-	clusterInfo.RunningContainers = strconv.Itoa(partition.GetTotalAllocationCount())
-	clusterInfo.ActiveNodes = strconv.Itoa(partition.GetTotalNodeCount())
-
 	return clusterInfo
 }
 
@@ -619,8 +611,10 @@ func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.Pa
 			ResourceWeights: partitionContext.GetNodeSortingResourceWeights(),
 		}
 
+		partitionInfo.TotalNodes = partitionContext.GetTotalNodeCount()
 		appList := partitionContext.GetApplications()
 		appList = append(appList, partitionContext.GetCompletedApplications()...)
+		appList = append(appList, partitionContext.GetRejectedApplications()...)
 		applicationsState := make(map[string]int)
 		totalApplications := 0
 		for _, app := range appList {
@@ -629,6 +623,7 @@ func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.Pa
 		}
 		applicationsState["total"] = totalApplications
 		partitionInfo.Applications = applicationsState
+		partitionInfo.TotalContainers = partitionContext.GetTotalAllocationCount()
 		result = append(result, partitionInfo)
 	}
 

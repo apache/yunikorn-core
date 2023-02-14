@@ -15,21 +15,17 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 */
-package dao
 
-type PartitionDAOInfo struct {
-	PartitionName string            `json:"partitionName"`
-	Capacity      PartitionCapacity `json:"capacity"`
-	Nodes         []NodeInfo        `json:"nodes"`
-	Queues        QueueDAOInfo      `json:"queues"`
-}
+package dao
 
 type PartitionInfo struct {
 	ClusterID               string            `json:"clusterId"`
 	Name                    string            `json:"name"`
 	Capacity                PartitionCapacity `json:"capacity"`
 	NodeSortingPolicy       NodeSortingPolicy `json:"nodeSortingPolicy"`
+	TotalNodes              int               `json:"totalNodes"`
 	Applications            map[string]int    `json:"applications"`
+	TotalContainers         int               `json:"totalContainers"`
 	State                   string            `json:"state"`
 	LastStateTransitionTime int64             `json:"lastStateTransitionTime"`
 }
@@ -38,11 +34,6 @@ type PartitionCapacity struct {
 	Capacity     map[string]int64 `json:"capacity"`
 	UsedCapacity map[string]int64 `json:"usedCapacity"`
 	Utilization  map[string]int64 `json:"utilization"`
-}
-
-type NodeInfo struct {
-	NodeID     string `json:"nodeId"`
-	Capability string `json:"capability"`
 }
 
 type NodeSortingPolicy struct {

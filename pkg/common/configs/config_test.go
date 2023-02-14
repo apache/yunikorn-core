@@ -25,7 +25,7 @@ import (
 	"strings"
 	"testing"
 
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 
 	"gopkg.in/yaml.v2"
 )

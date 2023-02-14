@@ -26,7 +26,7 @@ import (
 
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 )
 
 func CheckLenOfResource(res *Resource, expected int) (bool, string) {

@@ -26,7 +26,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/log"

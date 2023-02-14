@@ -21,7 +21,7 @@ package resources
 import (
 	"testing"
 
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 )
 
 func TestParseQuantity(t *testing.T) {

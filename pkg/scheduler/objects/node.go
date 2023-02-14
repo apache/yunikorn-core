@@ -24,8 +24,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/apache/yunikorn-core/pkg/common/configs"
-
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
@@ -122,11 +120,7 @@ func (sn *Node) GetAttribute(key string) string {
 // Get InstanceType of this node.
 // This is a lock free call because all attributes are considered read only
 func (sn *Node) GetInstanceType() string {
-	instanceTypeNodeLabelKey, ok := configs.GetConfigMap()[configs.InstanceTypeNodeLabelKey]
-	if !ok {
-		instanceTypeNodeLabelKey = configs.InstanceTypeNodeLabelKey
-	}
-	return sn.attributes[instanceTypeNodeLabelKey]
+	return sn.GetAttribute(common.InstanceType)
 }
 
 // GetReservationKeys Return an array of all reservation keys for the node.

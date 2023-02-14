@@ -314,10 +314,10 @@ func TestAttributes(t *testing.T) {
 
 func TestGetInstanceType(t *testing.T) {
 	proto := newProto(testNode, nil, nil, map[string]string{
-		common.NodePartition:               "partition1",
-		"label1":                           "key1",
-		"label2":                           "key2",
-		"node.kubernetes.io/instance-type": "HighMem",
+		common.NodePartition: "partition1",
+		"label1":             "key1",
+		"label2":             "key2",
+		common.InstanceType:  "HighMem",
 	})
 
 	node := NewNode(proto)

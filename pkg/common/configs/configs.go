@@ -24,12 +24,10 @@ import (
 )
 
 const (
-	HealthCheckInterval      = "health.checkInterval"
-	InstanceTypeNodeLabelKey = "service.instanceTypeNodeLabelKey"
+	HealthCheckInterval = "health.checkInterval"
 )
 
 var DefaultHealthCheckInterval = 30 * time.Second
-var DefaultInstanceTypeNodeLabelKey = "node.kubernetes.io/instance-type"
 
 var ConfigContext *SchedulerConfigContext
 

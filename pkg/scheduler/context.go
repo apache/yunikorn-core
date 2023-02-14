@@ -44,7 +44,6 @@ const disableReservation = "DISABLE_RESERVATION"
 
 type ClusterContext struct {
 	partitions     map[string]*PartitionContext
-	updateLocks    map[string]*sync.Mutex
 	policyGroup    string
 	rmEventHandler handler.EventHandler
 
@@ -75,7 +74,6 @@ func NewClusterContext(rmID, policyGroup string, config []byte) (*ClusterContext
 	// create the context and set the policyGroup
 	cc := &ClusterContext{
 		partitions:          make(map[string]*PartitionContext),
-		updateLocks:         make(map[string]*sync.Mutex),
 		policyGroup:         policyGroup,
 		reservationDisabled: common.GetBoolEnvVar(disableReservation, false),
 		startTime:           time.Now(),
@@ -97,7 +95,6 @@ func NewClusterContext(rmID, policyGroup string, config []byte) (*ClusterContext
 func newClusterContext() *ClusterContext {
 	cc := &ClusterContext{
 		partitions:          make(map[string]*PartitionContext),
-		updateLocks:         make(map[string]*sync.Mutex),
 		reservationDisabled: common.GetBoolEnvVar(disableReservation, false),
 		startTime:           time.Now(),
 	}
@@ -120,14 +117,13 @@ func (cc *ClusterContext) setEventHandler(rmHandler handler.EventHandler) {
 func (cc *ClusterContext) schedule() bool {
 	// schedule each partition defined in the cluster
 	activity := false
-	updateLocks := cc.GetUpdateLocksClone()
 	for _, psc := range cc.GetPartitionMapClone() {
-		activity = activity || cc.schedulePartition(psc, updateLocks)
+		activity = activity || cc.schedulePartition(psc)
 	}
 	return activity
 }
 
-func (cc *ClusterContext) schedulePartition(psc *PartitionContext, updateLocks map[string]*sync.Mutex) bool {
+func (cc *ClusterContext) schedulePartition(psc *PartitionContext) bool {
 	// if there are no resources in the partition just skip
 	if psc.root.GetMaxResource() == nil {
 		return false
@@ -137,13 +133,8 @@ func (cc *ClusterContext) schedulePartition(psc *PartitionContext, updateLocks m
 		return false
 	}
 
-	pName := psc.Name
-	updateLock, ok := updateLocks[pName]
-	if !ok {
-		panic("BUG: update lock not found for partition " + pName)
-	}
-	updateLock.Lock() // preventing dynamic config update while scheduling
-	defer updateLock.Unlock()
+	psc.updateLock.Lock() // preventing dynamic config update while scheduling
+	defer psc.updateLock.Unlock()
 	// IMPORTANT: after this point, calling ClusterContext.Lock() is prohibited!
 
 	// try reservations first
@@ -407,7 +398,6 @@ func (cc *ClusterContext) updateSchedulerConfig(conf *configs.SchedulerConfig, r
 			}
 			go part.partitionManager.Run()
 			cc.partitions[partitionName] = part
-			cc.updateLocks[partitionName] = &sync.Mutex{}
 		}
 		// add it to the partitions to update
 		visited[p.Name] = true
@@ -427,15 +417,10 @@ func (cc *ClusterContext) updateSchedulerConfig(conf *configs.SchedulerConfig, r
 
 func (cc *ClusterContext) updatePartition(partitionName, rmID string, part *PartitionContext,
 	partitionConfig configs.PartitionConfig) error {
-	updateLock := cc.updateLocks[partitionName]
-	if updateLock == nil {
-		panic("BUG: update lock not found for partition " + partitionName)
-	}
-
 	// Note: holding two locks here. It's fine, as long as it's not called in reverse order.
 	// updateLock should only be called from ClusterContext.schedulePartition().
-	updateLock.Lock()
-	defer updateLock.Unlock()
+	part.updateLock.Lock()
+	defer part.updateLock.Unlock()
 
 	// make sure the new info passes all checks
 	_, err := newPartitionContext(partitionConfig, rmID, nil)
@@ -482,17 +467,6 @@ func (cc *ClusterContext) GetPartitionMapClone() map[string]*PartitionContext {
 
 	newMap := make(map[string]*PartitionContext)
 	for k, v := range cc.partitions {
-		newMap[k] = v
-	}
-	return newMap
-}
-
-func (cc *ClusterContext) GetUpdateLocksClone() map[string]*sync.Mutex {
-	cc.RLock()
-	defer cc.RUnlock()
-
-	newMap := make(map[string]*sync.Mutex)
-	for k, v := range cc.updateLocks {
 		newMap[k] = v
 	}
 	return newMap
@@ -650,7 +624,6 @@ func (cc *ClusterContext) removePartition(partitionName string) {
 	defer cc.Unlock()
 
 	delete(cc.partitions, partitionName)
-	delete(cc.updateLocks, partitionName)
 }
 
 // addNode adds a new node to the cluster enforcing just one unlimited node in the cluster.

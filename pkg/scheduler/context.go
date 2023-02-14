@@ -44,6 +44,7 @@ const disableReservation = "DISABLE_RESERVATION"
 
 type ClusterContext struct {
 	partitions     map[string]*PartitionContext
+	updateLocks    map[string]*sync.Mutex
 	policyGroup    string
 	rmEventHandler handler.EventHandler
 
@@ -74,6 +75,7 @@ func NewClusterContext(rmID, policyGroup string, config []byte) (*ClusterContext
 	// create the context and set the policyGroup
 	cc := &ClusterContext{
 		partitions:          make(map[string]*PartitionContext),
+		updateLocks:         make(map[string]*sync.Mutex),
 		policyGroup:         policyGroup,
 		reservationDisabled: common.GetBoolEnvVar(disableReservation, false),
 		startTime:           time.Now(),
@@ -95,6 +97,7 @@ func NewClusterContext(rmID, policyGroup string, config []byte) (*ClusterContext
 func newClusterContext() *ClusterContext {
 	cc := &ClusterContext{
 		partitions:          make(map[string]*PartitionContext),
+		updateLocks:         make(map[string]*sync.Mutex),
 		reservationDisabled: common.GetBoolEnvVar(disableReservation, false),
 		startTime:           time.Now(),
 	}
@@ -117,38 +120,55 @@ func (cc *ClusterContext) setEventHandler(rmHandler handler.EventHandler) {
 func (cc *ClusterContext) schedule() bool {
 	// schedule each partition defined in the cluster
 	activity := false
+	updateLocks := cc.GetUpdateLocksClone()
 	for _, psc := range cc.GetPartitionMapClone() {
-		// if there are no resources in the partition just skip
-		if psc.root.GetMaxResource() == nil {
-			continue
-		}
-		// a stopped partition does not allocate
-		if psc.isStopped() {
-			continue
-		}
-		// try reservations first
-		schedulingStart := time.Now()
-		alloc := psc.tryReservedAllocate()
-		if alloc == nil {
-			// placeholder replacement second
-			alloc = psc.tryPlaceholderAllocate()
-			// nothing reserved that can be allocated try normal allocate
-			if alloc == nil {
-				alloc = psc.tryAllocate()
-			}
-		}
-		if alloc != nil {
-			metrics.GetSchedulerMetrics().ObserveSchedulingLatency(schedulingStart)
-			if alloc.GetResult() == objects.Replaced {
-				// communicate the removal to the RM
-				cc.notifyRMAllocationReleased(psc.RmID, alloc.GetReleasesClone(), si.TerminationType_PLACEHOLDER_REPLACED, "replacing uuid: "+alloc.GetUUID())
-			} else {
-				cc.notifyRMNewAllocation(psc.RmID, alloc)
-			}
-			activity = true
-		}
+		activity = activity || cc.schedulePartition(psc, updateLocks)
 	}
 	return activity
+}
+
+func (cc *ClusterContext) schedulePartition(psc *PartitionContext, updateLocks map[string]*sync.Mutex) bool {
+	// if there are no resources in the partition just skip
+	if psc.root.GetMaxResource() == nil {
+		return false
+	}
+	// a stopped partition does not allocate
+	if psc.isStopped() {
+		return false
+	}
+
+	pName := psc.Name
+	updateLock, ok := updateLocks[pName]
+	if !ok {
+		panic("BUG: update lock not found for partition " + pName)
+	}
+	updateLock.Lock() // preventing dynamic config update while scheduling
+	defer updateLock.Unlock()
+	// IMPORTANT: after this point, calling ClusterContext.Lock() is prohibited!
+
+	// try reservations first
+	schedulingStart := time.Now()
+	alloc := psc.tryReservedAllocate()
+	if alloc == nil {
+		// placeholder replacement second
+		alloc = psc.tryPlaceholderAllocate()
+		// nothing reserved that can be allocated try normal allocate
+		if alloc == nil {
+			alloc = psc.tryAllocate()
+		}
+	}
+	if alloc != nil {
+		metrics.GetSchedulerMetrics().ObserveSchedulingLatency(schedulingStart)
+		if alloc.GetResult() == objects.Replaced {
+			// communicate the removal to the RM
+			cc.notifyRMAllocationReleased(psc.RmID, alloc.GetReleasesClone(), si.TerminationType_PLACEHOLDER_REPLACED, "replacing uuid: "+alloc.GetUUID())
+		} else {
+			cc.notifyRMNewAllocation(psc.RmID, alloc)
+		}
+		return true
+	}
+
+	return false
 }
 
 func (cc *ClusterContext) processRMRegistrationEvent(event *rmevent.RMRegistrationEvent) {
@@ -373,14 +393,7 @@ func (cc *ClusterContext) updateSchedulerConfig(conf *configs.SchedulerConfig, r
 		p.Name = partitionName
 		part, ok := cc.partitions[p.Name]
 		if ok {
-			// make sure the new info passes all checks
-			_, err = newPartitionContext(p, rmID, nil)
-			if err != nil {
-				return err
-			}
-			// checks passed perform the real update
-			log.Logger().Info("updating partitions", zap.String("partitionName", partitionName))
-			err = part.updatePartitionDetails(p)
+			err = cc.updatePartition(partitionName, rmID, part, p)
 			if err != nil {
 				return err
 			}
@@ -394,6 +407,7 @@ func (cc *ClusterContext) updateSchedulerConfig(conf *configs.SchedulerConfig, r
 			}
 			go part.partitionManager.Run()
 			cc.partitions[partitionName] = part
+			cc.updateLocks[partitionName] = &sync.Mutex{}
 		}
 		// add it to the partitions to update
 		visited[p.Name] = true
@@ -406,6 +420,33 @@ func (cc *ClusterContext) updateSchedulerConfig(conf *configs.SchedulerConfig, r
 			log.Logger().Info("marked partition for removal",
 				zap.String("partitionName", part.Name))
 		}
+	}
+
+	return nil
+}
+
+func (cc *ClusterContext) updatePartition(partitionName, rmID string, part *PartitionContext,
+	partitionConfig configs.PartitionConfig) error {
+	updateLock := cc.updateLocks[partitionName]
+	if updateLock == nil {
+		panic("BUG: update lock not found for partition " + partitionName)
+	}
+
+	// Note: holding two locks here. It's fine, as long as it's not called in reverse order.
+	// updateLock should only be called from ClusterContext.schedulePartition().
+	updateLock.Lock()
+	defer updateLock.Unlock()
+
+	// make sure the new info passes all checks
+	_, err := newPartitionContext(partitionConfig, rmID, nil)
+	if err != nil {
+		return err
+	}
+	// checks passed perform the real update
+	log.Logger().Info("updating partitions", zap.String("partitionName", partitionName))
+	err = part.updatePartitionDetails(partitionConfig)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -441,6 +482,17 @@ func (cc *ClusterContext) GetPartitionMapClone() map[string]*PartitionContext {
 
 	newMap := make(map[string]*PartitionContext)
 	for k, v := range cc.partitions {
+		newMap[k] = v
+	}
+	return newMap
+}
+
+func (cc *ClusterContext) GetUpdateLocksClone() map[string]*sync.Mutex {
+	cc.RLock()
+	defer cc.RUnlock()
+
+	newMap := make(map[string]*sync.Mutex)
+	for k, v := range cc.updateLocks {
 		newMap[k] = v
 	}
 	return newMap
@@ -598,6 +650,7 @@ func (cc *ClusterContext) removePartition(partitionName string) {
 	defer cc.Unlock()
 
 	delete(cc.partitions, partitionName)
+	delete(cc.updateLocks, partitionName)
 }
 
 // addNode adds a new node to the cluster enforcing just one unlimited node in the cluster.

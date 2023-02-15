@@ -94,7 +94,7 @@ func NewAllocationAskFromSI(ask *si.AllocationAsk) *AllocationAsk {
 	// order is important as task group can be set without placeholder but not the other way around
 	if saa.placeholder && saa.taskGroupName == "" {
 		log.Logger().Debug("ask cannot be a placeholder without a TaskGroupName",
-			zap.String("SI ask", ask.String()))
+			zap.Stringer("SI ask", ask))
 		return nil
 	}
 	return saa

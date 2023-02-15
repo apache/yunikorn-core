@@ -134,7 +134,7 @@ func (s *nonBlockingGRPCServer) serve(endpoint string, ss si.SchedulerServer) {
 	}
 
 	log.Logger().Info("listening for connections",
-		zap.String("address", listener.Addr().String()))
+		zap.Stringer("address", listener.Addr()))
 
 	if err = server.Serve(listener); err != nil {
 		log.Logger().Fatal("failed to serve", zap.Error(err))

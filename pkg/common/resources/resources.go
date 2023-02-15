@@ -909,7 +909,7 @@ func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {
 	}
 	if missingResources.Len() != 0 {
 		log.Logger().Debug("Absolute usage result is missing resource information",
-			zap.String("missing resource(s)", missingResources.String()))
+			zap.Stringer("missing resource(s)", &missingResources))
 	}
 	return absResource
 }

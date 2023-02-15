@@ -177,10 +177,10 @@ func (sn *Node) refreshAvailableResource() {
 	// check if any quantity is negative: a nil resource is all 0's
 	if !resources.StrictlyGreaterThanOrEquals(sn.availableResource, nil) {
 		log.Logger().Warn("Node update triggered over allocated node",
-			zap.String("available", sn.availableResource.String()),
-			zap.String("total", sn.totalResource.String()),
-			zap.String("occupied", sn.occupiedResource.String()),
-			zap.String("allocated", sn.allocatedResource.String()))
+			zap.Stringer("available", sn.availableResource),
+			zap.Stringer("total", sn.totalResource),
+			zap.Stringer("occupied", sn.occupiedResource),
+			zap.Stringer("allocated", sn.allocatedResource))
 	}
 }
 
@@ -316,7 +316,7 @@ func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation, delta *resou
 		log.Logger().Warn("unexpected increase in node usage after placeholder replacement",
 			zap.String("placeholder uuid", uuid),
 			zap.String("allocation uuid", replace.GetUUID()),
-			zap.String("delta", delta.String()))
+			zap.Stringer("delta", delta))
 	}
 }
 
@@ -452,7 +452,7 @@ func (sn *Node) Reserve(app *Application, ask *AllocationAsk) error {
 			zap.String("nodeID", sn.NodeID),
 			zap.String("appID", app.ApplicationID),
 			zap.String("ask", ask.GetAllocationKey()),
-			zap.String("allocationAsk", ask.GetAllocatedResource().String()))
+			zap.Stringer("allocationAsk", ask.GetAllocatedResource()))
 		return fmt.Errorf("reservation does not fit on node %s, appID %s, ask %s", sn.NodeID, app.ApplicationID, ask.GetAllocatedResource().String())
 	}
 	sn.reservations[appReservation.getKey()] = appReservation

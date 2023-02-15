@@ -62,7 +62,7 @@ func newPartitionManager(pc *PartitionContext, cc *ClusterContext) *partitionMan
 func (manager *partitionManager) Run() {
 	log.Logger().Info("starting partition manager",
 		zap.String("partition", manager.pc.Name),
-		zap.String("cleanRootInterval", manager.cleanRootInterval.String()))
+		zap.Stringer("cleanRootInterval", manager.cleanRootInterval))
 	go manager.cleanExpiredApps()
 	go manager.cleanRoot()
 }
@@ -81,7 +81,7 @@ func (manager *partitionManager) cleanRoot() {
 			runStart := time.Now()
 			manager.cleanQueues(manager.pc.root)
 			log.Logger().Debug("time consumed for queue cleaner",
-				zap.String("duration", time.Since(runStart).String()))
+				zap.Stringer("duration", time.Since(runStart)))
 		}
 	}
 }

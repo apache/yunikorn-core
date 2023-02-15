@@ -94,12 +94,12 @@ func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
 	select {
 	case queue <- ev:
 		log.Logger().Debug("enqueued event",
-			zap.String("eventType", reflect.TypeOf(ev).String()),
+			zap.Stringer("eventType", reflect.TypeOf(ev)),
 			zap.Any("event", ev),
 			zap.Int("currentQueueSize", len(queue)))
 	default:
 		log.Logger().DPanic("failed to enqueue event",
-			zap.String("event", reflect.TypeOf(ev).String()))
+			zap.Stringer("event", reflect.TypeOf(ev)))
 	}
 }
 
@@ -121,7 +121,7 @@ func (s *Scheduler) handleRMEvent() {
 			s.clusterContext.processRMConfigUpdateEvent(v)
 		default:
 			log.Logger().Error("Received type is not an acceptable type for RM event.",
-				zap.String("received type", reflect.TypeOf(v).String()))
+				zap.Stringer("received type", reflect.TypeOf(v)))
 		}
 		s.registerActivity()
 	}

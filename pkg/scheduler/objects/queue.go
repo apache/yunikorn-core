@@ -653,7 +653,7 @@ func (sq *Queue) AddApplication(app *Application) {
 	}
 	if !resources.StrictlyGreaterThanZero(res) {
 		log.Logger().Warn("application resource quota has at least one 0 value: cannot set queue limit",
-			zap.String("maxResource", res.String()))
+			zap.Stringer("maxResource", res))
 		return
 	}
 	// set the quota
@@ -916,9 +916,9 @@ func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bo
 			if sq.isLeaf {
 				log.Logger().Warn("parent queue exceeds maximum resource",
 					zap.String("leafQueue", sq.QueuePath),
-					zap.String("allocationRequest", alloc.String()),
-					zap.String("queueUsage", sq.allocatedResource.String()),
-					zap.String("maxResource", sq.maxResource.String()),
+					zap.Stringer("allocationRequest", alloc),
+					zap.Stringer("queueUsage", sq.allocatedResource),
+					zap.Stringer("maxResource", sq.maxResource),
 					zap.Error(err))
 			}
 			return err
@@ -952,9 +952,9 @@ func (sq *Queue) DecAllocatedResource(alloc *resources.Resource) error {
 			if sq.isLeaf {
 				log.Logger().Warn("released allocation is larger than parent queue allocated resource",
 					zap.String("leafQueue", sq.QueuePath),
-					zap.String("allocationRequest", alloc.String()),
-					zap.String("queueUsage", sq.allocatedResource.String()),
-					zap.String("maxResource", sq.maxResource.String()),
+					zap.Stringer("allocationRequest", alloc),
+					zap.Stringer("queueUsage", sq.allocatedResource),
+					zap.Stringer("maxResource", sq.maxResource),
 					zap.Error(err))
 			}
 			return err
@@ -1147,8 +1147,8 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 		return
 	}
 	log.Logger().Info("updating root queue max resources",
-		zap.String("current max", sq.maxResource.String()),
-		zap.String("new max", max.String()))
+		zap.Stringer("current max", sq.maxResource),
+		zap.Stringer("new max", max))
 	sq.maxResource = max.Clone()
 	sq.updateMaxResourceMetrics()
 }
@@ -1195,7 +1195,7 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, getnode func(string) 
 				log.Logger().Debug("allocation found on queue",
 					zap.String("queueName", sq.QueuePath),
 					zap.String("appID", app.ApplicationID),
-					zap.String("allocation", alloc.String()))
+					zap.Stringer("allocation", alloc))
 				// if the app is still in Accepted state we're allocating placeholders.
 				// we want to count these apps as running
 				if app.IsAccepted() {
@@ -1231,7 +1231,7 @@ func (sq *Queue) TryPlaceholderAllocate(iterator func() NodeIterator, getnode fu
 				log.Logger().Debug("allocation found on queue",
 					zap.String("queueName", sq.QueuePath),
 					zap.String("appID", app.ApplicationID),
-					zap.String("allocation", alloc.String()))
+					zap.Stringer("allocation", alloc))
 				return alloc
 			}
 		}
@@ -1300,7 +1300,7 @@ func (sq *Queue) TryReservedAllocate(iterator func() NodeIterator) *Allocation {
 					log.Logger().Debug("reservation found for allocation found on queue",
 						zap.String("queueName", sq.QueuePath),
 						zap.String("appID", appID),
-						zap.String("allocation", alloc.String()),
+						zap.Stringer("allocation", alloc),
 						zap.String("appStatus", app.CurrentState()))
 					// if the app is still in Accepted state we're allocating placeholders.
 					// we want to count these apps as running

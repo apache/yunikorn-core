@@ -19,6 +19,7 @@
 package scheduler
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strconv"
@@ -268,7 +269,7 @@ func (pc *PartitionContext) isStopped() bool {
 // Handle the state event for the partition.
 // The state machine handles the locking.
 func (pc *PartitionContext) handlePartitionEvent(event objects.ObjectEvent) error {
-	err := pc.stateMachine.Event(event.String(), pc.Name)
+	err := pc.stateMachine.Event(context.Background(), event.String(), pc.Name)
 	if err == nil {
 		pc.stateTime = time.Now()
 		return nil

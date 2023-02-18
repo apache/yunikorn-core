@@ -19,6 +19,7 @@
 package objects
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strconv"
@@ -464,7 +465,7 @@ func (sq *Queue) CurrentState() string {
 // handleQueueEvent processes the state event for the queue.
 // The state machine handles the locking.
 func (sq *Queue) handleQueueEvent(event ObjectEvent) error {
-	err := sq.stateMachine.Event(event.String(), sq.QueuePath)
+	err := sq.stateMachine.Event(context.Background(), event.String(), sq.QueuePath)
 	// err is nil the state transition was done
 	if err == nil {
 		sq.stateTime = time.Now()

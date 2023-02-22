@@ -19,6 +19,7 @@
 package objects
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strings"
@@ -236,7 +237,7 @@ func (sa *Application) IsResuming() bool {
 // HandleApplicationEvent handles the state event for the application.
 // The application lock is expected to be held.
 func (sa *Application) HandleApplicationEvent(event applicationEvent) error {
-	err := sa.stateMachine.Event(event.String(), sa)
+	err := sa.stateMachine.Event(context.Background(), event.String(), sa)
 	// handle the same state transition not nil error (limit of fsm).
 	if err != nil && err.Error() == noTransition {
 		return nil
@@ -247,7 +248,7 @@ func (sa *Application) HandleApplicationEvent(event applicationEvent) error {
 // HandleApplicationEventWithInfo handles the state event for the application with associated info object.
 // The application lock is expected to be held.
 func (sa *Application) HandleApplicationEventWithInfo(event applicationEvent, eventInfo string) error {
-	err := sa.stateMachine.Event(event.String(), sa, eventInfo)
+	err := sa.stateMachine.Event(context.Background(), event.String(), sa, eventInfo)
 	// handle the same state transition not nil error (limit of fsm).
 	if err != nil && err.Error() == noTransition {
 		return nil

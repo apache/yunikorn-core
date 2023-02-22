@@ -19,6 +19,7 @@
 package objects
 
 import (
+	"context"
 	"testing"
 
 	"gotest.tools/v3/assert"
@@ -30,32 +31,32 @@ func TestStateTransition(t *testing.T) {
 	assert.Equal(t, stateMachine.Current(), Active.String())
 
 	// active to stopped
-	err := stateMachine.Event(Stop.String(), "testobject")
+	err := stateMachine.Event(context.Background(), Stop.String(), "testobject")
 	assert.Assert(t, err == nil)
 	assert.Equal(t, stateMachine.Current(), Stopped.String())
 
 	// remove on stopped not allowed
-	err = stateMachine.Event(Remove.String(), "testobject")
+	err = stateMachine.Event(context.Background(), Remove.String(), "testobject")
 	assert.Assert(t, err != nil)
 	assert.Equal(t, stateMachine.Current(), Stopped.String())
 
 	// stopped to active
-	err = stateMachine.Event(Start.String(), "testobject")
+	err = stateMachine.Event(context.Background(), Start.String(), "testobject")
 	assert.Assert(t, err == nil)
 	assert.Equal(t, stateMachine.Current(), Active.String())
 
 	// active to draining
-	err = stateMachine.Event(Remove.String(), "testobject")
+	err = stateMachine.Event(context.Background(), Remove.String(), "testobject")
 	assert.Assert(t, err == nil)
 	assert.Equal(t, stateMachine.Current(), Draining.String())
 
 	// start on draining not allowed
-	err = stateMachine.Event(Start.String(), "test_object")
+	err = stateMachine.Event(context.Background(), Start.String(), "test_object")
 	assert.Assert(t, err != nil)
 	assert.Equal(t, stateMachine.Current(), Draining.String())
 
 	// stop on draining not allowed
-	err = stateMachine.Event(Stop.String(), "test_object")
+	err = stateMachine.Event(context.Background(), Stop.String(), "test_object")
 	assert.Assert(t, err != nil)
 	assert.Equal(t, stateMachine.Current(), Draining.String())
 }
@@ -65,7 +66,7 @@ func TestTransitionToSelf(t *testing.T) {
 	stateMachine := NewObjectState()
 
 	// start on active
-	err := stateMachine.Event(Start.String(), "testobject")
+	err := stateMachine.Event(context.Background(), Start.String(), "testobject")
 	assert.Assert(t, err != nil)
 	if err != nil && err.Error() != noTransition {
 		t.Errorf("state change failed with error: %v", err)
@@ -74,7 +75,7 @@ func TestTransitionToSelf(t *testing.T) {
 
 	// remove on draining
 	stateMachine.SetState(Draining.String())
-	err = stateMachine.Event(Remove.String(), "testobject")
+	err = stateMachine.Event(context.Background(), Remove.String(), "testobject")
 	assert.Assert(t, err != nil)
 	if err != nil && err.Error() != noTransition {
 		t.Errorf("state change failed with error: %v", err)
@@ -83,7 +84,7 @@ func TestTransitionToSelf(t *testing.T) {
 
 	// stop on stopped
 	stateMachine.SetState(Stopped.String())
-	err = stateMachine.Event(Stop.String(), "testobject")
+	err = stateMachine.Event(context.Background(), Stop.String(), "testobject")
 	assert.Assert(t, err != nil)
 	if err != nil && err.Error() != noTransition {
 		t.Errorf("state change failed with error: %v", err)

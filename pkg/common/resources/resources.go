@@ -870,7 +870,7 @@ func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {
 		log.Logger().Debug("Cannot calculate absolute capacity because of missing capacity or usage")
 		return absResource
 	}
-	var missingResources strings.Builder
+	missingResources := &strings.Builder{}
 	for resourceName, availableResource := range capacity.Resources {
 		var absResValue int64
 		if usedResource, ok := used.Resources[resourceName]; ok {
@@ -909,7 +909,7 @@ func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {
 	}
 	if missingResources.Len() != 0 {
 		log.Logger().Debug("Absolute usage result is missing resource information",
-			zap.String("missing resource(s)", missingResources.String()))
+			zap.Stringer("missing resource(s)", missingResources))
 	}
 	return absResource
 }

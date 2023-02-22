@@ -63,13 +63,13 @@ func (m *Manager) IncreaseTrackedResource(queuePath string, applicationID string
 	log.Logger().Debug("Increasing resource usage", zap.String("user", user.User),
 		zap.String("queue path", queuePath),
 		zap.String("application", applicationID),
-		zap.String("resource", usage.String()))
+		zap.Stringer("resource", usage))
 	if queuePath == "" || applicationID == "" || usage == nil || user.User == "" {
 		log.Logger().Error("Mandatory parameters are missing to increase the resource usage",
 			zap.String("user", user.User),
 			zap.String("queue path", queuePath),
 			zap.String("application", applicationID),
-			zap.String("resource", usage.String()))
+			zap.Stringer("resource", usage))
 		return fmt.Errorf("mandatory parameters are missing. queuepath: %s, application id: %s, resource usage: %s, user: %s",
 			queuePath, applicationID, usage.String(), user.User)
 	}
@@ -88,7 +88,7 @@ func (m *Manager) IncreaseTrackedResource(queuePath string, applicationID string
 			zap.String("user", user.User),
 			zap.String("queue path", queuePath),
 			zap.String("application", applicationID),
-			zap.String("resource", usage.String()),
+			zap.Stringer("resource", usage),
 			zap.String("err message", err.Error()))
 		return err
 	}
@@ -108,7 +108,7 @@ func (m *Manager) IncreaseTrackedResource(queuePath string, applicationID string
 				zap.String("group", group),
 				zap.String("queue path", queuePath),
 				zap.String("application", applicationID),
-				zap.String("resource", usage.String()),
+				zap.Stringer("resource", usage),
 				zap.String("err message", err.Error()))
 			return err
 		}
@@ -124,14 +124,14 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 	log.Logger().Debug("Decreasing resource usage", zap.String("user", user.User),
 		zap.String("queue path", queuePath),
 		zap.String("application", applicationID),
-		zap.String("resource", usage.String()),
+		zap.Stringer("resource", usage),
 		zap.Bool("removeApp", removeApp))
 	if queuePath == "" || applicationID == "" || usage == nil || user.User == "" {
 		log.Logger().Error("Mandatory parameters are missing to decrease the resource usage",
 			zap.String("user", user.User),
 			zap.String("queue path", queuePath),
 			zap.String("application", applicationID),
-			zap.String("resource", usage.String()),
+			zap.Stringer("resource", usage),
 			zap.Bool("removeApp", removeApp))
 		return fmt.Errorf("mandatory parameters are missing. queuepath: %s, application id: %s, resource usage: %s, user: %s",
 			queuePath, applicationID, usage.String(), user.User)
@@ -146,7 +146,7 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 				zap.String("user", user.User),
 				zap.String("queue path", queuePath),
 				zap.String("application", applicationID),
-				zap.String("resource", usage.String()),
+				zap.Stringer("resource", usage),
 				zap.Bool("removeApp", removeApp),
 				zap.String("err message", err.Error()))
 			return err
@@ -175,7 +175,7 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 				zap.String("group", group),
 				zap.String("queue path", queuePath),
 				zap.String("application", applicationID),
-				zap.String("resource", usage.String()),
+				zap.Stringer("resource", usage),
 				zap.Bool("removeApp", removeApp),
 				zap.String("err message", err.Error()))
 			return err

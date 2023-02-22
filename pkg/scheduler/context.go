@@ -644,7 +644,7 @@ func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
 	} else {
 		log.Logger().Error("node partition not specified",
 			zap.String("nodeID", nodeInfo.NodeID),
-			zap.String("nodeAction", nodeInfo.Action.String()))
+			zap.Stringer("nodeAction", nodeInfo.Action))
 		return
 	}
 
@@ -652,7 +652,7 @@ func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
 		log.Logger().Error("Failed to update node on non existing partition",
 			zap.String("nodeID", nodeInfo.NodeID),
 			zap.String("partitionName", nodeInfo.Attributes[siCommon.NodePartition]),
-			zap.String("nodeAction", nodeInfo.Action.String()))
+			zap.Stringer("nodeAction", nodeInfo.Action))
 		return
 	}
 
@@ -661,7 +661,7 @@ func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
 		log.Logger().Error("Failed to update non existing node",
 			zap.String("nodeID", nodeInfo.NodeID),
 			zap.String("partitionName", nodeInfo.Attributes[siCommon.NodePartition]),
-			zap.String("nodeAction", nodeInfo.Action.String()))
+			zap.Stringer("nodeAction", nodeInfo.Action))
 		return
 	}
 
@@ -725,7 +725,7 @@ func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
 		log.Logger().Debug("unknown action for node update",
 			zap.String("nodeID", nodeInfo.NodeID),
 			zap.String("partitionName", nodeInfo.Attributes[siCommon.NodePartition]),
-			zap.String("nodeAction", nodeInfo.Action.String()))
+			zap.Stringer("nodeAction", nodeInfo.Action))
 	}
 }
 

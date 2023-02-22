@@ -562,7 +562,7 @@ func (sa *Application) removeAsksInternal(allocKey string) int {
 	log.Logger().Info("ask removed successfully from application",
 		zap.String("appID", sa.ApplicationID),
 		zap.String("ask", allocKey),
-		zap.String("pendingDelta", deltaPendingResource.String()))
+		zap.Stringer("pendingDelta", deltaPendingResource))
 
 	return toRelease
 }
@@ -619,7 +619,7 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 		zap.String("appID", sa.ApplicationID),
 		zap.String("ask", ask.GetAllocationKey()),
 		zap.Bool("placeholder", ask.IsPlaceholder()),
-		zap.String("pendingDelta", delta.String()))
+		zap.Stringer("pendingDelta", delta))
 
 	return nil
 }
@@ -776,8 +776,8 @@ func (sa *Application) unReserveInternal(node *Node, ask *AllocationAsk) (int, e
 	if resKey == "" {
 		log.Logger().Debug("unreserve reservation key create failed unexpectedly",
 			zap.String("appID", sa.ApplicationID),
-			zap.String("node", node.String()),
-			zap.String("ask", ask.String()))
+			zap.Stringer("node", node),
+			zap.Stringer("ask", ask))
 		return 0, fmt.Errorf("reservation key failed node or ask are nil for appID %s", sa.ApplicationID)
 	}
 	// unReserve the node before removing from the app
@@ -953,7 +953,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 				log.Logger().Debug("allocation on required node is completed",
 					zap.String("nodeID", node.NodeID),
 					zap.String("allocationKey", request.GetAllocationKey()),
-					zap.String("AllocationResult", alloc.GetResult().String()))
+					zap.Stringer("AllocationResult", alloc.GetResult()))
 				return alloc
 			}
 			return newReservedAllocation(Reserved, node.NodeID, request)
@@ -1055,9 +1055,9 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			// All placeholders in the same task group are always the same size.
 			if delta.HasNegativeValue() {
 				log.Logger().Warn("releasing placeholder: real allocation is larger than placeholder",
-					zap.String("requested resource", request.GetAllocatedResource().String()),
+					zap.Stringer("requested resource", request.GetAllocatedResource()),
 					zap.String("placeholderID", ph.GetUUID()),
-					zap.String("placeholder resource", ph.GetAllocatedResource().String()))
+					zap.Stringer("placeholder resource", ph.GetAllocatedResource()))
 				// release the placeholder and tell the RM
 				ph.SetReleased(true)
 				sa.notifyRMAllocationReleased(sa.rmID, []*Allocation{ph}, si.TerminationType_TIMEOUT, "cancel placeholder: resource incompatible")
@@ -1144,8 +1144,8 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			if !node.AddAllocation(alloc) {
 				log.Logger().Debug("Node update failed unexpectedly",
 					zap.String("applicationID", sa.ApplicationID),
-					zap.String("ask", reqFit.String()),
-					zap.String("placeholder", phFit.String()))
+					zap.Stringer("ask", reqFit),
+					zap.Stringer("placeholder", phFit))
 				return nil
 			}
 			_, err := sa.updateAskRepeatInternal(reqFit, -1)
@@ -1594,7 +1594,7 @@ func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
 	if ph == nil || ph.GetReleaseCount() == 0 {
 		log.Logger().Debug("Unexpected placeholder released",
 			zap.String("applicationID", sa.ApplicationID),
-			zap.String("placeholder", ph.String()))
+			zap.Stringer("placeholder", ph))
 		return nil
 	}
 	// weird issue we should never have more than 1 log it for debugging this error
@@ -1685,7 +1685,7 @@ func (sa *Application) removeAllocationInternal(uuid string, releaseType si.Term
 		if err := sa.HandleApplicationEvent(event); err != nil {
 			log.Logger().Warn(eventWarning,
 				zap.String("currentState", sa.CurrentState()),
-				zap.String("event", event.String()),
+				zap.Stringer("event", event),
 				zap.Error(err))
 		}
 	}

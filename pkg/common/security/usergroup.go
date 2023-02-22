@@ -81,7 +81,7 @@ func GetUserGroupCache(resolver string) *UserGroupCache {
 		}
 		instance.ugs = make(map[string]*UserGroup)
 		log.Logger().Info("starting UserGroupCache cleaner",
-			zap.String("cleanerInterval", instance.interval.String()))
+			zap.Stringer("cleanerInterval", instance.interval))
 		go instance.run()
 	})
 	return instance
@@ -94,7 +94,7 @@ func (c *UserGroupCache) run() {
 		runStart := time.Now()
 		c.cleanUpCache()
 		log.Logger().Debug("time consumed cleaning the UserGroupCache",
-			zap.String("duration", time.Since(runStart).String()))
+			zap.Stringer("duration", time.Since(runStart)))
 	}
 }
 

@@ -145,7 +145,7 @@ func (pc *PartitionContext) updateNodeSortingPolicy(conf configs.PartitionConfig
 		log.Logger().Info(fmt.Sprintf("NodeSorting policy not set using '%s' as default", configuredPolicy))
 	} else {
 		log.Logger().Info("NodeSorting policy set from config",
-			zap.String("policyName", configuredPolicy.String()))
+			zap.Stringer("policyName", configuredPolicy))
 	}
 	pc.nodes.SetNodeSortingPolicy(objects.NewNodeSortingPolicy(conf.NodeSortPolicy.Type, conf.NodeSortPolicy.ResourceWeights))
 }
@@ -558,7 +558,7 @@ func (pc *PartitionContext) AddNode(node *objects.Node, existingAllocations []*o
 					zap.Int("existingAllocations", len(existingAllocations)),
 					zap.Int("releasedAllocations", len(released)),
 					zap.Int("processingAlloc", current),
-					zap.String("allocation", alloc.String()),
+					zap.Stringer("allocation", alloc),
 					zap.Error(err))
 				// update failed metric, active metrics are tracked in add/remove from list
 				metrics.GetSchedulerMetrics().IncFailedNodes()
@@ -605,7 +605,7 @@ func (pc *PartitionContext) addNodeToList(node *objects.Node) error {
 	log.Logger().Info("Updated available resources from added node",
 		zap.String("partitionName", pc.Name),
 		zap.String("nodeID", node.NodeID),
-		zap.String("partitionResource", pc.totalPartitionResource.String()))
+		zap.Stringer("partitionResource", pc.totalPartitionResource))
 	return nil
 }
 
@@ -632,7 +632,7 @@ func (pc *PartitionContext) removeNodeFromList(nodeID string) *objects.Node {
 	log.Logger().Info("Updated available resources from removed node",
 		zap.String("partitionName", pc.Name),
 		zap.String("nodeID", node.NodeID),
-		zap.String("partitionResource", pc.totalPartitionResource.String()))
+		zap.Stringer("partitionResource", pc.totalPartitionResource))
 	return node
 }
 
@@ -713,9 +713,9 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 						}
 						log.Logger().Warn("replacing placeholder: placeholder is larger than real allocation",
 							zap.String("allocationID", release.GetUUID()),
-							zap.String("requested resource", release.GetAllocatedResource().String()),
+							zap.Stringer("requested resource", release.GetAllocatedResource()),
 							zap.String("placeholderID", alloc.GetUUID()),
-							zap.String("placeholder resource", alloc.GetAllocatedResource().String()))
+							zap.Stringer("placeholder resource", alloc.GetAllocatedResource()))
 					}
 					// track what we confirm on the other node to confirm it in the shim and get is bound
 					confirmed = append(confirmed, release)
@@ -889,7 +889,7 @@ func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocat
 		zap.String("appID", alloc.GetApplicationID()),
 		zap.String("allocationKey", alloc.GetAllocationKey()),
 		zap.String("uuid", alloc.GetUUID()),
-		zap.String("allocatedResource", alloc.GetAllocatedResource().String()),
+		zap.Stringer("allocatedResource", alloc.GetAllocatedResource()),
 		zap.Bool("placeholder", alloc.IsPlaceholder()),
 		zap.String("targetNode", alloc.GetNodeID()))
 	// pass the allocation back to the RM via the cluster context
@@ -1213,7 +1213,7 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 		log.Logger().Info("Application not found while releasing allocation",
 			zap.String("appID", appID),
 			zap.String("allocationId", uuid),
-			zap.String("terminationType", release.TerminationType.String()))
+			zap.Stringer("terminationType", release.TerminationType))
 		return nil, nil
 	}
 	// temp store for allocations manipulated
@@ -1237,7 +1237,7 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 			log.Logger().Info("removing allocation from application",
 				zap.String("appID", appID),
 				zap.String("allocationId", uuid),
-				zap.String("terminationType", release.TerminationType.String()))
+				zap.Stringer("terminationType", release.TerminationType))
 			if alloc := app.RemoveAllocation(uuid, release.TerminationType); alloc != nil {
 				released = append(released, alloc)
 			}
@@ -1268,9 +1268,9 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 				total.SubFrom(delta)
 				log.Logger().Warn("replacing placeholder: placeholder is larger than real allocation",
 					zap.String("allocationID", confirmed.GetUUID()),
-					zap.String("requested resource", confirmed.GetAllocatedResource().String()),
+					zap.Stringer("requested resource", confirmed.GetAllocatedResource()),
 					zap.String("placeholderID", alloc.GetUUID()),
-					zap.String("placeholder resource", alloc.GetAllocatedResource().String()))
+					zap.Stringer("placeholder resource", alloc.GetAllocatedResource()))
 			}
 			// replacements could be on a different node and different size handle all cases
 			if confirmed.GetNodeID() == alloc.GetNodeID() {
@@ -1340,7 +1340,7 @@ func (pc *PartitionContext) removeAllocationAsk(release *si.AllocationAskRelease
 		log.Logger().Info("Invalid ask release requested by shim",
 			zap.String("appID", appID),
 			zap.String("ask", allocKey),
-			zap.String("terminationType", release.TerminationType.String()))
+			zap.Stringer("terminationType", release.TerminationType))
 		return
 	}
 	// remove the allocation asks from the app

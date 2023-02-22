@@ -57,7 +57,7 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 	log.Logger().Debug("Increasing resource usage",
 		zap.String("queue path", queuePath),
 		zap.String("application", applicationID),
-		zap.String("resource", usage.String()))
+		zap.Stringer("resource", usage))
 	if queuePath == "" || applicationID == "" || usage == nil {
 		return fmt.Errorf("mandatory parameters are missing. queuepath: %s, application id: %s, resource usage: %s",
 			queuePath, applicationID, usage.String())
@@ -91,7 +91,7 @@ func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID 
 	log.Logger().Debug("Decreasing resource usage",
 		zap.String("queue path", queuePath),
 		zap.String("application", applicationID),
-		zap.String("resource", usage.String()),
+		zap.Stringer("resource", usage),
 		zap.Bool("removeApp", removeApp))
 	if queuePath == "" || usage == nil {
 		return fmt.Errorf("mandatory parameters are missing. queuepath: %s, application id: %s, resource usage: %s",

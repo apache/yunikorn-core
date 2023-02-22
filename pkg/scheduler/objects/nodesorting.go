@@ -138,6 +138,6 @@ func NewNodeSortingPolicy(policyType string, resourceWeights map[string]float64)
 	}
 
 	log.Logger().Debug("new node sorting policy added",
-		zap.String("type", pType.String()), zap.Any("resourceWeights", weights))
+		zap.Stringer("type", pType), zap.Any("resourceWeights", weights))
 	return sp
 }

@@ -112,6 +112,50 @@ type Application struct {
 	sync.RWMutex
 }
 
+type ApplicationSummary struct {
+	ApplicationID string
+	SubmissionTime time.Time
+	StartTime time.Time
+	FinishTime time.Time
+	User string
+	Queue string
+	State string
+	RmID string
+	ResourceUsage string
+}
+
+func (as *ApplicationSummary) GetReport() string {
+	res := "{"
+	res += "\"appId\":\"" + as.ApplicationID + "\","
+	res += "\"submissionTime\":\"" + strconv.FormatInt(as.SubmissionTime.UnixMilli(), 10) + "\","
+	res += "\"startTime\":\"" + strconv.FormatInt(as.StartTime.UnixMilli(), 10) + "\","
+	res += "\"finishTime\":\"" + strconv.FormatInt(as.FinishTime.UnixMilli(), 10) + "\","
+	res += "\"user\":\"" + as.User + "\","
+	res += "\"queue\":\"" + as.Queue + "\","
+	res += "\"state\":\"" + as.State + "\","
+	res += "\"rmID\":\"" + as.RmID + "\","
+	res += "\"resourceUsage\":" + as.ResourceUsage
+	res += "}"
+	return res
+}
+
+func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {
+	sa.RLock()
+	defer sa.RUnlock()
+	appSummary := &ApplicationSummary{
+		ApplicationID: sa.ApplicationID,
+		SubmissionTime: sa.SubmissionTime,
+		StartTime: sa.startTime,
+		FinishTime: sa.finishedTime,
+		User: sa.user.User,
+		Queue: sa.queuePath,
+		State: sa.stateMachine.Current(),
+		RmID: rmID,
+		ResourceUsage: sa.usedResourceTracker.GetResourceUsageSummary(),
+	}
+	return appSummary
+}
+
 func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eventHandler handler.EventHandler, rmID string) *Application {
 	app := &Application{
 		ApplicationID:        siApp.ApplicationID,
@@ -1978,24 +2022,13 @@ func (sa *Application) cleanupAsks() {
 	sa.sortedRequests = nil
 }
 
+func (sa *Application) CleanupUsedResourceTracker() {
+	sa.usedResourceTracker = nil
+}
+
 func (sa *Application) GetAppSummary(rmID string) string {
-	var res string
-	sa.RLock()
-	defer sa.RUnlock()
-
-	res = "{"
-
-	res += "\"appId\":\"" + sa.ApplicationID + "\","
-	res += "\"submissionTime\":\"" + strconv.FormatInt(sa.SubmissionTime.UnixMilli(), 10) + "\","
-	res += "\"startTime\":\"" + strconv.FormatInt(sa.StartTime().UnixMilli(), 10) + "\","
-	res += "\"finishTime\":\"" + strconv.FormatInt(sa.FinishedTime().UnixMilli(), 10) + "\","
-	res += "\"user\":\"" + sa.GetUser().User + "\","
-	res += "\"queue\":\"" + sa.GetQueuePath() + "\","
-	res += "\"state\":\"" + sa.stateMachine.Current() + "\","
-	res += "\"rmID\":\"" + rmID + "\","
-	res += "\"resourceUsage\":" + sa.usedResourceTracker.GetResourceUsageSummary()
-	res += "}"
-	return res
+	appSummary := sa.GetApplicationSummary(rmID)
+	return appSummary.GetReport()
 }
 
 // test only

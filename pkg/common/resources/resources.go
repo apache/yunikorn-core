@@ -61,21 +61,17 @@ type UsedResourceTracker struct {
 // The time the given resource used is the delta between the resource createTime and currentTime
 func (urt *UsedResourceTracker) AggregateUsedResource(instType string,
 	resource *Resource, createTime time.Time) {
-	var aggregatedResourceTime map[string]int64
-	var timeDiff int64
-	var releaseTime time.Time
-	var resourceSecondsKey string
 	urt.Lock()
 	defer urt.Unlock()
 
-	releaseTime = time.Now()
-	timeDiff = int64(releaseTime.Sub(createTime).Seconds())
+	releaseTime := time.Now()
+	timeDiff := int64(releaseTime.Sub(createTime).Seconds())
 	aggregatedResourceTime, ok := urt.UsedResourceMap[instType]
 	if !ok {
 		aggregatedResourceTime = map[string]int64{}
 	}
 	for key, element := range resource.Resources {
-		resourceSecondsKey = key + "Seconds"
+		resourceSecondsKey := key + "Seconds"
 		curUsage, ok := aggregatedResourceTime[resourceSecondsKey]
 		if !ok {
 			curUsage = 0
@@ -87,12 +83,13 @@ func (urt *UsedResourceTracker) AggregateUsedResource(instType string,
 }
 
 func (urt *UsedResourceTracker) GetResourceUsageSummary() string {
-	jsonStr, err := json.Marshal(urt.UsedResourceMap)
+	urt.Lock()
+	defer urt.Unlock()
+	urm, err := json.Marshal(urt.UsedResourceMap)
 	if err != nil {
-		return string(err.Error())
-	} else {
-		return string(jsonStr)
+		return err.Error()
 	}
+	return string(urm)
 }
 
 // Never update value of Zero

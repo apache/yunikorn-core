@@ -1070,24 +1070,14 @@ func assertResourceUsage(t *testing.T, appSummary string, memorySeconds int64, v
 	var detailedResource map[string]interface{}
 
 	json.Unmarshal([]byte(appSummary), &jsonMap)
-
 	resource = jsonMap["resourceUsage"]
-
 	resourceUsageMap := resource.(map[string]interface{})
-	//fmt.Print("resourceMap: ")
-	//fmt.Println(resourceUsageMap)
 
 	itypeResource, ok := resourceUsageMap["itype-1"]
 	if !ok {
 		assert.Assert(t, memorySeconds == -1 || vcoresSecconds == -1, "no resource usage")
 		return
 	}
-
-	//fmt.Print("itypeResource: ")
-	//fmt.Println(itypeResource)
-
-	//detailedResource, ok1 := itypeResource.(map[string]int64)
-	//assert.Assert(t, ok1, "resource need to be a map")
 
 	detailedResource = itypeResource.(map[string]interface{})
 

@@ -1204,7 +1204,7 @@ partitions:
       - name: root
 `
 	// validate the config and check after the update
-	conf, err = CreateConfig(data)
+	_, err = CreateConfig(data)
 	assert.ErrorContains(t, err, "should not set no wildcard user user1 after wildcard user limit")
 
 	data = `
@@ -1235,7 +1235,7 @@ partitions:
       - name: root
 `
 	// validate the config and check after the update
-	conf, err = CreateConfig(data)
+	_, err = CreateConfig(data)
 	assert.ErrorContains(t, err, "should not set no wildcard group group1 after wildcard group limit")
 
 	data = `
@@ -1266,7 +1266,7 @@ partitions:
       - name: root
 `
 	// validate the config and check after the update
-	conf, err = CreateConfig(data)
+	_, err = CreateConfig(data)
 	assert.ErrorContains(t, err, "should not set more than one wildcard user")
 
 	data = `
@@ -1297,7 +1297,7 @@ partitions:
       - name: root
 `
 	// validate the config and check after the update
-	conf, err = CreateConfig(data)
+	_, err = CreateConfig(data)
 	assert.ErrorContains(t, err, "should not set more than one wildcard group")
 }
 

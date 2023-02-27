@@ -252,10 +252,8 @@ func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int
 				return fmt.Errorf("should not set more than one wildcard user")
 			}
 			*userWildCardIdx = currIdx
-		} else {
-			if *userWildCardIdx != -1 && currIdx > *userWildCardIdx {
-				return fmt.Errorf("should not set no wildcard user %s after wildcard user limit", name)
-			}
+		} else if *userWildCardIdx != -1 && currIdx > *userWildCardIdx {
+			return fmt.Errorf("should not set no wildcard user %s after wildcard user limit", name)
 		}
 	}
 	for _, name := range limit.Groups {
@@ -270,10 +268,8 @@ func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int
 				return fmt.Errorf("should not set more than one wildcard group")
 			}
 			*groupWildCardIdx = currIdx
-		} else {
-			if *groupWildCardIdx != -1 && currIdx > *groupWildCardIdx {
-				return fmt.Errorf("should not set no wildcard group %s after wildcard group limit", name)
-			}
+		} else if *groupWildCardIdx != -1 && currIdx > *groupWildCardIdx {
+			return fmt.Errorf("should not set no wildcard group %s after wildcard group limit", name)
 		}
 	}
 	var limitResource = resources.NewResource()

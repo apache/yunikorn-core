@@ -210,6 +210,22 @@ func newApplicationTGTags(appID, partition, queueName string, task *resources.Re
 	return objects.NewApplication(siApp, user, nil, rmID)
 }
 
+func newApplicationTGTagsWithPhTimeout(appID, partition, queueName string, task *resources.Resource, tags map[string]string, phTimeout int64) *objects.Application {
+	user := security.UserGroup{
+		User:   "testuser",
+		Groups: []string{"testgroup"},
+	}
+	siApp := &si.AddApplicationRequest{
+		ApplicationID:                appID,
+		QueueName:                    queueName,
+		PartitionName:                partition,
+		PlaceholderAsk:               task.ToProto(),
+		Tags:                         tags,
+		ExecutionTimeoutMilliSeconds: phTimeout,
+	}
+	return objects.NewApplication(siApp, user, nil, rmID)
+}
+
 func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resource, placeHolder bool) *objects.AllocationAsk {
 	return newAllocationAskAll(allocKey, appID, taskGroup, res, 1, 1, placeHolder)
 }
@@ -257,7 +273,9 @@ func newNodeMaxResource(nodeID string, max *resources.Resource) *objects.Node {
 
 // partition with an expected basic queue hierarchy
 // root -> parent -> leaf1
-//      -> leaf2
+//
+//	-> leaf2
+//
 // and 2 nodes: node-1 & node-2
 func createQueuesNodes(t *testing.T) *PartitionContext {
 	partition, err := newConfiguredPartition()

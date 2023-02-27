@@ -35,6 +35,7 @@ type ApplicationDAOInfo struct {
 	Allocations           []AllocationDAOInfo    `json:"allocations"`
 	State                 string                 `json:"applicationState"`
 	User                  string                 `json:"user"`
+	Groups                []string               `json:"groups"`
 	RejectedMessage       string                 `json:"rejectedMessage"`
 	StateLog              []StateDAOInfo         `json:"stateLog"`
 	PlaceholderData       []PlaceholderDAOInfo   `json:"placeholderData"`

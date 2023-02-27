@@ -239,6 +239,7 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		Allocations:           allocationInfo,
 		State:                 app.CurrentState(),
 		User:                  app.GetUser().User,
+		Groups:                app.GetUser().Groups,
 		RejectedMessage:       app.GetRejectedMessage(),
 		PlaceholderData:       placeholderInfo,
 		StateLog:              stateLogInfo,

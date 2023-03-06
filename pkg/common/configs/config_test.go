@@ -994,6 +994,7 @@ partitions:
 	}
 }
 
+//nolint:funlen
 func TestSameLevelQueueLimitsResourceFail(t *testing.T) {
 	// Make sure limit max apps exceed queue max apps will failed
 	data := `

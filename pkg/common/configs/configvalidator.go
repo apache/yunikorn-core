@@ -288,7 +288,7 @@ func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int
 		return fmt.Errorf("invalid resource combination for limit user names '%s' groups %s all resource limits are null", limit.Users, limit.Groups)
 	}
 
-	if limit.MaxApplications > queue.MaxApplications {
+	if queue.MaxApplications != 0 && (limit.MaxApplications > queue.MaxApplications || limit.MaxApplications == 0) {
 		return fmt.Errorf("invalid MaxApplications settings for limit user names '%s' groups %s exeecd current the queue MaxApplications", limit.Users, limit.Groups)
 	}
 

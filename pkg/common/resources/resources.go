@@ -76,7 +76,7 @@ func (urt *UsedResourceTracker) AggregateUsedResource(instType string,
 		if !ok {
 			curUsage = 0
 		}
-		curUsage += int64(element) * timeDiff  //resource size times timeDiff
+		curUsage += int64(element) * timeDiff  // resource size times timeDiff
 		aggregatedResourceTime[resourceSecondsKey] = curUsage
 	}
 	urt.UsedResourceMap[instType] = aggregatedResourceTime

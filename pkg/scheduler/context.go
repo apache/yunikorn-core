@@ -828,8 +828,7 @@ func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRel
 
 // Convert the si allocation to a proposal to add to the node
 func (cc *ClusterContext) convertAllocations(node *objects.Node, allocations []*si.Allocation) []*objects.Allocation {
-	var instType string
-	instType = node.GetInstType()
+	instType := node.GetInstType()
 	convert := make([]*objects.Allocation, len(allocations))
 	for current, allocation := range allocations {
 		convert[current] = objects.NewAllocationFromSI(allocation, instType)

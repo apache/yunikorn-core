@@ -454,7 +454,7 @@ func TestPlaceholderDataWithPlaceholderPreemption(t *testing.T) {
 	phRes.MultiplyTo(7)
 
 	ask := newAllocationAskAll("ask-1", appID1, taskGroup, appRes, 0, 1, false)
-	alloc := objects.NewAllocation(allocID, nodeID1, ask)
+	alloc := objects.NewAllocation(allocID, nodeID1, instType1, ask)
 	allocs := []*objects.Allocation{alloc}
 
 	node1 := newNodeMaxResource(nodeID1, newRes)
@@ -583,7 +583,7 @@ func TestPlaceholderDataWithNodeRemoval(t *testing.T) {
 
 	// add a node with allocation: must have the correct app1 added already
 	ask := newAllocationAskAll("ask-1", appID1, taskGroup, appRes, 0, 1, false)
-	alloc := objects.NewAllocation(allocID, nodeID1, ask)
+	alloc := objects.NewAllocation(allocID, nodeID1, instType1, ask)
 	allocs := []*objects.Allocation{alloc}
 
 	node1 := newNodeMaxResource(nodeID1, newRes)
@@ -666,7 +666,7 @@ func TestPlaceholderDataWithRemoval(t *testing.T) {
 
 	// add a node with allocation: must have the correct app1 added already
 	ask := newAllocationAskAll("ask-1", appID1, taskGroup, appRes, 0, 1, false)
-	alloc := objects.NewAllocation(allocID, nodeID1, ask)
+	alloc := objects.NewAllocation(allocID, nodeID1, instType1, ask)
 	allocs := []*objects.Allocation{alloc}
 
 	node1 := newNodeMaxResource(nodeID1, newRes)

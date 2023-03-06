@@ -1067,19 +1067,23 @@ func TestCompleted(t *testing.T) {
 func assertResourceUsage(t *testing.T, appSummary string, memorySeconds int64, vcoresSecconds int64) {
 	var jsonMap map[string]interface{}
 	var resource interface{}
-	var detailedResource map[string]interface{}
 
-	json.Unmarshal([]byte(appSummary), &jsonMap)
+	if err := json.Unmarshal([]byte(appSummary), &jsonMap); err != nil {
+		assert.NilError(t, err, "Application did not return correct appSummary")
+	}
+
 	resource = jsonMap["resourceUsage"]
-	resourceUsageMap := resource.(map[string]interface{})
+	resourceUsageMap, ok1 := resource.(map[string]interface{})
+	assert.Assert(t, ok1)
 
-	itypeResource, ok := resourceUsageMap["itype-1"]
-	if !ok {
+	itypeResource, ok2 := resourceUsageMap["itype-1"]
+	if !ok2 {
 		assert.Assert(t, memorySeconds == -1 || vcoresSecconds == -1, "no resource usage")
 		return
 	}
 
-	detailedResource = itypeResource.(map[string]interface{})
+	detailedResource, ok3 := itypeResource.(map[string]interface{})
+	assert.Assert(t, ok3)
 
 	assert.Equal(t, float64(memorySeconds), detailedResource["memorySeconds"].(float64))
 	assert.Equal(t, float64(vcoresSecconds), detailedResource["vcoresSeconds"].(float64))

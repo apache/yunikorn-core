@@ -27,6 +27,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
 )
 
 // A rule to place an application based on the user name of the submitting user.
@@ -35,7 +36,7 @@ type userRule struct {
 }
 
 func (ur *userRule) getName() string {
-	return "user"
+	return types.User
 }
 
 func (ur *userRule) initialise(conf configs.PlacementRule) error {

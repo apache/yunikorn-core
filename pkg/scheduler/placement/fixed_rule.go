@@ -27,6 +27,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
 )
 
 type fixedRule struct {
@@ -40,7 +41,7 @@ type fixedRule struct {
 // configured. If the queue is not qualified all "." characters will be replaced and the parent rule run before making
 // the queue name fully qualified.
 func (fr *fixedRule) getName() string {
-	return "fixed"
+	return types.Fixed
 }
 
 func (fr *fixedRule) initialise(conf configs.PlacementRule) error {

@@ -27,6 +27,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
 )
 
 // A rule to place an application based on the queue provided by the user on submission.
@@ -38,7 +39,7 @@ type providedRule struct {
 }
 
 func (pr *providedRule) getName() string {
-	return "provided"
+	return types.Provided
 }
 
 func (pr *providedRule) initialise(conf configs.PlacementRule) error {

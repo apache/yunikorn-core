@@ -23,6 +23,7 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
 )
 
 // A simple test rule to place an application based on a nil application.
@@ -32,7 +33,7 @@ type testRule struct {
 }
 
 func (tr *testRule) getName() string {
-	return "test"
+	return types.Test
 }
 
 // Simple init for the test rule: allow everything as per a normal rule.

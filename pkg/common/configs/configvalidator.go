@@ -32,6 +32,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 )
 
@@ -75,6 +76,21 @@ var SpecialRegExp = regexp.MustCompile(`[\^$*+?()\[{}|]`)
 
 // The rule maps to a go identifier check that regexp only
 var RuleNameRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9_]*$`)
+
+type placementStaticPath struct {
+	path      string
+	ruleChain string
+	create    bool
+	ruleNo    int
+}
+
+type placementPathCheckResult int
+
+const (
+	checkOK placementPathCheckResult = iota
+	nonExistingQueue
+	queueNotParent
+)
 
 // Check the ACL
 func checkACL(acl string) error {
@@ -169,7 +185,63 @@ func checkPlacementRules(partition *PartitionConfig) error {
 			return err
 		}
 	}
+
+	placementStaticPaths := getLongestPlacementPaths(partition.PlacementRules)
+	for _, staticPath := range placementStaticPaths {
+		queuePath := staticPath.path
+		parts := strings.Split(strings.ToLower(queuePath), DOT)
+		result := checkQueueHierarchyForPlacement(parts, staticPath.create, partition.Queues)
+		if result == queueNotParent {
+			return fmt.Errorf("placement rule no. #%d (%s) references a queue (%s) which is a leaf",
+				staticPath.ruleNo, staticPath.ruleChain, queuePath)
+		}
+		if result == nonExistingQueue {
+			return fmt.Errorf("placement rule no. #%d (%s) references non-existing queues (%s) and create is 'false'",
+				staticPath.ruleNo, staticPath.ruleChain, queuePath)
+		}
+	}
+
 	return nil
+}
+
+func checkQueueHierarchyForPlacement(path []string, create bool, conf []QueueConfig) placementPathCheckResult {
+	queueName := path[0]
+
+	// no more queues in the configuration
+	if len(conf) == 0 {
+		if !create {
+			return nonExistingQueue
+		}
+		return checkOK
+	}
+
+	var queueConf *QueueConfig
+	for _, queue := range conf {
+		queue := queue
+		if queue.Name == queueName {
+			queueConf = &queue
+			break
+		}
+	}
+
+	// queue not found on this level
+	if queueConf == nil {
+		if !create {
+			return nonExistingQueue
+		}
+		return checkOK
+	}
+
+	if !queueConf.Parent {
+		return queueNotParent
+	}
+
+	if len(path) == 1 {
+		return checkOK
+	}
+
+	path = path[1:]
+	return checkQueueHierarchyForPlacement(path, create, queueConf.Queues)
 }
 
 // Check the specific rule for syntax.
@@ -472,4 +544,54 @@ func Validate(newConfig *SchedulerConfig) error {
 		newConfig.Partitions[i] = partition
 	}
 	return nil
+}
+
+// returns the longest fixed queue path defined by the placement rule chain
+// e.g. the chain is user->tag->fixed, returns something like "root.users.<tag>.<user>",
+// the longest static part is "root.users"
+func getLongestPlacementPaths(rules []PlacementRule) []placementStaticPath {
+	paths := make([]placementStaticPath, 0)
+
+	for i, rule := range rules {
+		path, ruleChain, _ := getLongestStaticPath(rule)
+		placementPath := placementStaticPath{
+			path:      path,
+			create:    rule.Create,
+			ruleChain: ruleChain,
+			ruleNo:    i,
+		}
+		paths = append(paths, placementPath)
+	}
+
+	return paths
+}
+
+func getLongestStaticPath(rule PlacementRule) (string, string, bool) {
+	var parentPath string
+	var ruleChain string
+	dynamicParent := false
+
+	if rule.Parent != nil {
+		var chain string
+		parentPath, chain, dynamicParent = getLongestStaticPath(*rule.Parent)
+		ruleChain = rule.Name + "->" + chain
+	} else {
+		ruleChain = rule.Name
+		parentPath = RootQueue
+	}
+
+	if rule.Name == types.Fixed {
+		queueName := strings.ToLower(rule.Value)
+		qualified := strings.HasPrefix(queueName, RootQueue)
+		if qualified {
+			return queueName, ruleChain, false
+		}
+		// there is a parent rule other than "fixed", we can't do anything about that
+		if dynamicParent {
+			return RootQueue, ruleChain, true
+		}
+		return parentPath + "." + queueName, ruleChain, false
+	}
+
+	return parentPath, ruleChain, true
 }

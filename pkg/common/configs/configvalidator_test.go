@@ -19,6 +19,7 @@
 package configs
 
 import (
+	"strings"
 	"testing"
 
 	"gotest.tools/v3/assert"
@@ -184,6 +185,25 @@ func TestGetLongestPlacementPath(t *testing.T) {
 	assert.Equal(t, true, path1.create)
 }
 
+func TestCheckQueueHierarchyForPlacement(t *testing.T) {
+	queues := createQueueConfig()
+	parts := strings.Split(strings.ToLower("root.users"), DOT)
+	result := checkQueueHierarchyForPlacement(parts, false, queues)
+	assert.Equal(t, checkOK, result)
+
+	parts = strings.Split(strings.ToLower("root.users.dev"), DOT)
+	result = checkQueueHierarchyForPlacement(parts, true, queues)
+	assert.Equal(t, checkOK, result)
+
+	queues[0].Queues[0].Parent = false
+	result = checkQueueHierarchyForPlacement(parts, false, queues)
+	assert.Equal(t, queueNotParent, result)
+
+	queues[0].Queues[0].Parent = true
+	result = checkQueueHierarchyForPlacement(parts, false, queues)
+	assert.Equal(t, nonExistingQueue, result)
+}
+
 func TestCheckPlacementRules(t *testing.T) {
 	conf := &PartitionConfig{
 		PlacementRules: createPlacementRules(),
@@ -193,26 +213,12 @@ func TestCheckPlacementRules(t *testing.T) {
 	err := checkPlacementRules(conf)
 	assert.NilError(t, err)
 
-	// change "root.users" to leaf
 	conf.Queues[0].Queues[0].Parent = false
 	err = checkPlacementRules(conf)
 	assert.ErrorContains(t, err, "placement rule no. #0 (user->tag->fixed) references a queue (root.users) which is a leaf")
 
-	// disable 'create' flag so that "root.admins.dev" cannot be created
 	conf.Queues[0].Queues[0].Parent = true
 	conf.PlacementRules[1].Create = false
-	err = checkPlacementRules(conf)
-	assert.ErrorContains(t, err, "placement rule no. #1 (fixed->fixed) references non-existing queues (root.admins.dev) and create is 'false'")
-
-	// add extra queue under "root.admins"
-	conf.Queues[0].Queues[1].Queues = []QueueConfig{
-		{
-			Name:   "qa",
-			Parent: true,
-		},
-	}
-
-	// queue "dev" not found under "root.admins"
 	err = checkPlacementRules(conf)
 	assert.ErrorContains(t, err, "placement rule no. #1 (fixed->fixed) references non-existing queues (root.admins.dev) and create is 'false'")
 }

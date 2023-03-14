@@ -27,6 +27,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
 )
 
 // A rule to place an application based on the a tag on the application.
@@ -39,7 +40,7 @@ type tagRule struct {
 }
 
 func (tr *tagRule) getName() string {
-	return "tag"
+	return types.Tag
 }
 
 func (tr *tagRule) initialise(conf configs.PlacementRule) error {

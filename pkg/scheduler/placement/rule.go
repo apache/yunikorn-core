@@ -27,6 +27,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
 )
 
 // Interface that all placement rules need to implement.
@@ -52,6 +53,7 @@ type rule interface {
 // Basic structure that every placement rule uses.
 // The rules themselves should include the basicRule struct.
 // Linter does not pick up on the usage in the implementation(s).
+//
 //nolint:structcheck
 type basicRule struct {
 	create bool
@@ -67,6 +69,7 @@ func (r *basicRule) getParent() rule {
 
 // Return the name if not overwritten by the rule.
 // Marked as nolint as rules should override this.
+//
 //nolint:unused
 func (r *basicRule) getName() string {
 	return "unnamed rule"
@@ -81,19 +84,19 @@ func newRule(conf configs.PlacementRule) (rule, error) {
 	// create the new rule fail if the name is unknown
 	switch normalise(conf.Name) {
 	// rule that uses the user's name as the queue
-	case "user":
+	case types.User:
 		newRule = &userRule{}
 	// rule that uses a fixed queue name
-	case "fixed":
+	case types.Fixed:
 		newRule = &fixedRule{}
 	// rule that uses the queue provided on submit
-	case "provided":
+	case types.Provided:
 		newRule = &providedRule{}
 	// rule that uses a tag from the application (like namespace)
-	case "tag":
+	case types.Tag:
 		newRule = &tagRule{}
 	// test rule not to be used outside of testing code
-	case "test":
+	case types.Test:
 		newRule = &testRule{}
 	default:
 		return nil, fmt.Errorf("unknown rule name specified %s, failing placement rule config", conf.Name)

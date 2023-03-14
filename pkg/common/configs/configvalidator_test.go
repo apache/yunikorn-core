@@ -19,6 +19,7 @@
 package configs
 
 import (
+	"strings"
 	"testing"
 
 	"gotest.tools/v3/assert"
@@ -165,6 +166,104 @@ func TestCheckQueueMaxApplicationsForQueue(t *testing.T) {
 				assert.NilError(t, err, "No error is expected")
 			}
 		})
+	}
+}
+
+func TestGetLongestPlacementPath(t *testing.T) {
+	staticPaths := getLongestPlacementPaths(createPlacementRules())
+	assert.Equal(t, 2, len(staticPaths))
+
+	path0 := staticPaths[0]
+	assert.Equal(t, "root.users", path0.path)
+	assert.Equal(t, 0, path0.ruleNo)
+	assert.Equal(t, "user->tag->fixed", path0.ruleChain)
+	assert.Equal(t, false, path0.create)
+	path1 := staticPaths[1]
+	assert.Equal(t, "root.admins.dev", path1.path)
+	assert.Equal(t, 1, path1.ruleNo)
+	assert.Equal(t, "fixed->fixed", path1.ruleChain)
+	assert.Equal(t, true, path1.create)
+}
+
+func TestCheckQueueHierarchyForPlacement(t *testing.T) {
+	queues := createQueueConfig()
+	parts := strings.Split(strings.ToLower("root.users"), DOT)
+	result := checkQueueHierarchyForPlacement(parts, false, queues)
+	assert.Equal(t, checkOK, result)
+
+	parts = strings.Split(strings.ToLower("root.users.dev"), DOT)
+	result = checkQueueHierarchyForPlacement(parts, true, queues)
+	assert.Equal(t, checkOK, result)
+
+	queues[0].Queues[0].Parent = false
+	result = checkQueueHierarchyForPlacement(parts, false, queues)
+	assert.Equal(t, queueNotParent, result)
+
+	queues[0].Queues[0].Parent = true
+	result = checkQueueHierarchyForPlacement(parts, false, queues)
+	assert.Equal(t, nonExistingQueue, result)
+}
+
+func TestCheckPlacementRules(t *testing.T) {
+	conf := &PartitionConfig{
+		PlacementRules: createPlacementRules(),
+		Queues:         createQueueConfig(),
+	}
+
+	err := checkPlacementRules(conf)
+	assert.NilError(t, err)
+
+	conf.Queues[0].Queues[0].Parent = false
+	err = checkPlacementRules(conf)
+	assert.ErrorContains(t, err, "placement rule no. #0 (user->tag->fixed) references a queue (root.users) which is a leaf")
+
+	conf.Queues[0].Queues[0].Parent = true
+	conf.PlacementRules[1].Create = false
+	err = checkPlacementRules(conf)
+	assert.ErrorContains(t, err, "placement rule no. #1 (fixed->fixed) references non-existing queues (root.admins.dev) and create is 'false'")
+}
+
+func createQueueConfig() []QueueConfig {
+	return []QueueConfig{
+		{
+			Name:   "root",
+			Parent: true,
+			Queues: []QueueConfig{
+				{
+					Name:   "users",
+					Parent: true,
+				},
+				{
+					Name:   "admins",
+					Parent: true,
+				},
+			},
+		},
+	}
+}
+
+func createPlacementRules() []PlacementRule {
+	return []PlacementRule{
+		{
+			Name: "user",
+			Parent: &PlacementRule{
+				Name:  "tag",
+				Value: "namespace",
+				Parent: &PlacementRule{
+					Name:  "fixed",
+					Value: "root.users",
+				},
+			},
+		},
+		{
+			Name:   "fixed",
+			Value:  "dev",
+			Create: true,
+			Parent: &PlacementRule{
+				Name:  "fixed",
+				Value: "admins",
+			},
+		},
 	}
 }
 

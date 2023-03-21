@@ -19,18 +19,14 @@
 package ugm
 
 import (
-	"sync"
-
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
 type GroupTracker struct {
+	BaseTracker
 	groupName    string          // Name of the group for which usage is being tracked upon
 	applications map[string]bool // Hold applications currently run by all users belong to this group
-	queueTracker *QueueTracker   // Holds the actual resource usage of queue path where application run
-
-	sync.RWMutex
 }
 
 func newGroupTracker(group string) *GroupTracker {
@@ -38,25 +34,23 @@ func newGroupTracker(group string) *GroupTracker {
 	groupTracker := &GroupTracker{
 		groupName:    group,
 		applications: make(map[string]bool),
-		queueTracker: queueTracker,
 	}
+	groupTracker.queueTracker = queueTracker
 	return groupTracker
 }
 
 func (gt *GroupTracker) increaseTrackedResource(queuePath, applicationID string, usage *resources.Resource) error {
-	gt.Lock()
-	defer gt.Unlock()
-	gt.applications[applicationID] = true
-	return gt.queueTracker.increaseTrackedResource(queuePath, applicationID, usage)
+	return gt.BaseTracker.increaseTrackedResource(queuePath, applicationID, usage, func() {
+		gt.applications[applicationID] = true
+	})
 }
 
 func (gt *GroupTracker) decreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, removeApp bool) error {
-	gt.Lock()
-	defer gt.Unlock()
-	if removeApp {
-		delete(gt.applications, applicationID)
-	}
-	return gt.queueTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
+	return gt.BaseTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp, func() {
+		if removeApp {
+			delete(gt.applications, applicationID)
+		}
+	})
 }
 
 func (gt *GroupTracker) getTrackedApplications() map[string]bool {

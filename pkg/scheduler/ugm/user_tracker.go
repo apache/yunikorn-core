@@ -19,14 +19,13 @@
 package ugm
 
 import (
-	"sync"
-
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
 type UserTracker struct {
+	BaseTracker
 	userName string // Name of the user for which usage is being tracked upon
 
 	// Holds group tracker object for every application user runs.
@@ -34,9 +33,6 @@ type UserTracker struct {
 	// Hence, group tracker object may vary for same user running different applications linked through this map with key as application id
 	// and group tracker object as value.
 	appGroupTrackers map[string]*GroupTracker
-	queueTracker     *QueueTracker // Holds the actual resource usage of queue path where application runs
-
-	sync.RWMutex
 }
 
 func newUserTracker(user security.UserGroup) *UserTracker {
@@ -44,24 +40,21 @@ func newUserTracker(user security.UserGroup) *UserTracker {
 	userTracker := &UserTracker{
 		userName:         user.User,
 		appGroupTrackers: make(map[string]*GroupTracker),
-		queueTracker:     queueTracker,
 	}
+	userTracker.queueTracker = queueTracker
 	return userTracker
 }
 
 func (ut *UserTracker) increaseTrackedResource(queuePath, applicationID string, usage *resources.Resource) error {
-	ut.Lock()
-	defer ut.Unlock()
-	return ut.queueTracker.increaseTrackedResource(queuePath, applicationID, usage)
+	return ut.BaseTracker.increaseTrackedResource(queuePath, applicationID, usage, func() {})
 }
 
 func (ut *UserTracker) decreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, removeApp bool) error {
-	ut.Lock()
-	defer ut.Unlock()
-	if removeApp {
-		delete(ut.appGroupTrackers, applicationID)
-	}
-	return ut.queueTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
+	return ut.BaseTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp, func() {
+		if removeApp {
+			delete(ut.appGroupTrackers, applicationID)
+		}
+	})
 }
 
 func (ut *UserTracker) hasGroupForApp(applicationID string) bool {

@@ -38,7 +38,7 @@ type QueueTracker struct {
 }
 
 func newRootQueueTracker() *QueueTracker {
-	return newQueueTracker("root")
+	return newQueueTracker(configs.RootQueue)
 }
 
 func newQueueTracker(queueName string) *QueueTracker {
@@ -64,17 +64,8 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 	}
 	qt.resourceUsage.AddTo(usage)
 	qt.runningApplications[applicationID] = true
-	idx := strings.Index(queuePath, configs.DOT)
-	childQueuePath := ""
-	if idx != -1 {
-		childQueuePath = queuePath[idx+1:]
-	}
 
-	childIndex := strings.Index(childQueuePath, configs.DOT)
-	immediateChildQueueName := childQueuePath
-	if childIndex != -1 {
-		immediateChildQueueName = childQueuePath[:childIndex]
-	}
+	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
 	if childQueuePath != "" {
 		if qt.childQueueTrackers[immediateChildQueueName] == nil {
 			qt.childQueueTrackers[immediateChildQueueName] = newQueueTracker(immediateChildQueueName)
@@ -101,16 +92,8 @@ func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID 
 	if removeApp {
 		delete(qt.runningApplications, applicationID)
 	}
-	idx := strings.Index(queuePath, configs.DOT)
-	childQueuePath := ""
-	if idx != -1 {
-		childQueuePath = queuePath[idx+1:]
-	}
-	childIndex := strings.Index(childQueuePath, configs.DOT)
-	immediateChildQueueName := childQueuePath
-	if childIndex != -1 {
-		immediateChildQueueName = childQueuePath[:childIndex]
-	}
+
+	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
 	if childQueuePath != "" {
 		if qt.childQueueTrackers[immediateChildQueueName] != nil {
 			err := qt.childQueueTrackers[immediateChildQueueName].decreaseTrackedResource(childQueuePath, applicationID, usage, removeApp)
@@ -148,6 +131,18 @@ func (qt *QueueTracker) getResourceUsageDAOInfo(parentQueuePath string) *dao.Res
 	return usage
 }
 
-func (qt *QueueTracker) getRunningApplications() map[string]bool {
-	return qt.runningApplications
+func getChildQueuePath(queuePath string) (string, string) {
+	idx := strings.Index(queuePath, configs.DOT)
+	childQueuePath := ""
+	if idx != -1 {
+		childQueuePath = queuePath[idx+1:]
+	}
+
+	childIndex := strings.Index(childQueuePath, configs.DOT)
+	immediateChildQueueName := childQueuePath
+	if childIndex != -1 {
+		immediateChildQueueName = childQueuePath[:childIndex]
+	}
+
+	return childQueuePath, immediateChildQueueName
 }

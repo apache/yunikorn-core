@@ -79,7 +79,7 @@ func TestQTIncreaseTrackedResource(t *testing.T) {
 	assert.Equal(t, "map[mem:30000000 vcore:30000]", actualResources["root.parent.child1.child12"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:20000000 vcore:20000]", actualResources["root.parent.child2"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:20000000 vcore:20000]", actualResources["root.parent.child12"].String(), "wrong resource")
-	assert.Equal(t, 4, len(queueTracker.getRunningApplications()))
+	assert.Equal(t, 4, len(queueTracker.runningApplications))
 }
 
 func TestQTDecreaseTrackedResource(t *testing.T) {
@@ -96,7 +96,7 @@ func TestQTDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
 	}
-	assert.Equal(t, 1, len(queueTracker.getRunningApplications()))
+	assert.Equal(t, 1, len(queueTracker.runningApplications))
 
 	usage2, err := resources.NewResourceFromConf(map[string]string{"mem": "20M", "vcore": "20"})
 	if err != nil {
@@ -108,7 +108,7 @@ func TestQTDecreaseTrackedResource(t *testing.T) {
 	}
 	actualResources := getQTResource(queueTracker)
 
-	assert.Equal(t, 2, len(queueTracker.getRunningApplications()))
+	assert.Equal(t, 2, len(queueTracker.runningApplications))
 	assert.Equal(t, "map[mem:90000000 vcore:90000]", actualResources["root"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:90000000 vcore:90000]", actualResources["root.parent"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:70000000 vcore:70000]", actualResources["root.parent.child1"].String(), "wrong resource")
@@ -141,13 +141,27 @@ func TestQTDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
 	}
-	assert.Equal(t, 1, len(queueTracker.getRunningApplications()))
+	assert.Equal(t, 1, len(queueTracker.runningApplications))
 
 	err = queueTracker.decreaseTrackedResource(queuePath2, TestApp2, usage2, true)
 	if err != nil {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage2, err)
 	}
-	assert.Equal(t, 0, len(queueTracker.getRunningApplications()))
+	assert.Equal(t, 0, len(queueTracker.runningApplications))
+}
+
+func TestGetChildQueuePath(t *testing.T) {
+	childPath, immediateChildName := getChildQueuePath("root.parent.leaf")
+	assert.Equal(t, childPath, "parent.leaf")
+	assert.Equal(t, immediateChildName, "parent")
+
+	childPath, immediateChildName = getChildQueuePath("parent.leaf")
+	assert.Equal(t, childPath, "leaf")
+	assert.Equal(t, immediateChildName, "leaf")
+
+	childPath, immediateChildName = getChildQueuePath("leaf")
+	assert.Equal(t, childPath, "")
+	assert.Equal(t, immediateChildName, "")
 }
 
 func getQTResource(qt *QueueTracker) map[string]*resources.Resource {

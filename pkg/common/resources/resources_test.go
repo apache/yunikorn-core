@@ -889,6 +889,7 @@ func TestSub(t *testing.T) {
 	}
 }
 
+// TODO test `true`
 func TestSubFromNil(t *testing.T) {
 	// make sure we're nil safe IDE will complain about the non nil check
 	defer func() {
@@ -897,20 +898,20 @@ func TestSubFromNil(t *testing.T) {
 		}
 	}()
 	var empty *Resource
-	empty.SubFrom(NewResource())
+	empty.SubFrom(NewResource(), false)
 }
 
 func TestSubFrom(t *testing.T) {
 	// simple case (nil checks) & empty resources
 	base := NewResource()
-	base.SubFrom(nil)
+	base.SubFrom(nil, false)
 	if len(base.Resources) != 0 {
 		t.Errorf("subfrom nil resource modified base resource: %v", base)
 	}
 
 	// simple resources
 	res1 := NewResourceFromMap(map[string]Quantity{"a": 5})
-	base.SubFrom(res1)
+	base.SubFrom(res1, false)
 	if len(base.Resources) != 1 && base.Resources["a"] != -5 {
 		t.Errorf("subfrom simple resource did not return merged input resource: %v", base)
 	}
@@ -918,7 +919,7 @@ func TestSubFrom(t *testing.T) {
 	// complex case: just checking the resource merge, values check is secondary
 	base = &Resource{Resources: map[string]Quantity{"a": 0, "b": 1}}
 	res1 = &Resource{Resources: map[string]Quantity{"a": 1, "c": 0, "d": -1}}
-	base.SubFrom(res1)
+	base.SubFrom(res1, false)
 
 	expected := map[string]Quantity{"a": -1, "b": 1, "c": 0, "d": 1}
 	if !reflect.DeepEqual(base.Resources, expected) {

@@ -166,12 +166,18 @@ func (r *Resource) AddTo(add *Resource) {
 // Should be used by temporary computation only
 // A nil base resource does not change
 // A nil passed in resource is treated as a zero valued resource and leaves the base unchanged.
-func (r *Resource) SubFrom(sub *Resource) {
+func (r *Resource) SubFrom(sub *Resource, skipUndef bool) {
 	if r != nil {
 		if sub == nil {
 			return
 		}
 		for k, v := range sub.Resources {
+			_, ok := r.Resources[k]
+			// skip if not defined (queue quota checks: undefined resources are considered max)
+			if skipUndef && !ok {
+				continue
+			}
+
 			r.Resources[k] = subVal(r.Resources[k], v)
 		}
 	}

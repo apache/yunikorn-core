@@ -547,7 +547,7 @@ func TestUpdateResources(t *testing.T) {
 	if !resources.Equals(occupied, node.GetOccupiedResource()) {
 		t.Errorf("occupied resources should have been updated to: %s, got %s", occupied, node.GetOccupiedResource())
 	}
-	available.SubFrom(occupied)
+	available.SubFrom(occupied, false)
 	if !resources.Equals(available, node.GetAvailableResource()) {
 		t.Errorf("available resources should have been updated to: %s, got %s", available, node.GetAvailableResource())
 	}

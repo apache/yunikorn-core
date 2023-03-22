@@ -627,7 +627,7 @@ func (pc *PartitionContext) removeNodeFromList(nodeID string) *objects.Node {
 	metrics.GetSchedulerMetrics().DecActiveNodes()
 
 	// found the node cleanup the available resources, partition resources cannot be nil at this point
-	pc.totalPartitionResource.SubFrom(node.GetCapacity())
+	pc.totalPartitionResource.SubFrom(node.GetCapacity(), true)
 	pc.root.SetMaxResource(pc.totalPartitionResource)
 	log.Logger().Info("Updated available resources from removed node",
 		zap.String("partitionName", pc.Name),
@@ -1265,7 +1265,7 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 			if delta.HasNegativeValue() {
 				// This looks incorrect but the delta is negative and the result will be an increase of the
 				// total tracked. The total will later be deducted from the queue usage.
-				total.SubFrom(delta)
+				total.SubFrom(delta, false)
 				log.Logger().Warn("replacing placeholder: placeholder is larger than real allocation",
 					zap.String("allocationID", confirmed.GetUUID()),
 					zap.Stringer("requested resource", confirmed.GetAllocatedResource()),

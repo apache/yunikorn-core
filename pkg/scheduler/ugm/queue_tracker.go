@@ -88,7 +88,7 @@ func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID 
 		return fmt.Errorf("mandatory parameters are missing. queuepath: %s, application id: %s, resource usage: %s",
 			queuePath, applicationID, usage.String())
 	}
-	qt.resourceUsage.SubFrom(usage)
+	qt.resourceUsage.SubFrom(usage, true)
 	if removeApp {
 		delete(qt.runningApplications, applicationID)
 	}

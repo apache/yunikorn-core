@@ -1070,7 +1070,7 @@ func (sq *Queue) internalHeadRoom(parentHeadRoom *resources.Resource) *resources
 	}
 
 	// calculate unused
-	headRoom.SubFrom(sq.allocatedResource)
+	headRoom.SubFrom(sq.allocatedResource, true)
 
 	// check the minimum of the two: parentHeadRoom is nil for root
 	if parentHeadRoom == nil {

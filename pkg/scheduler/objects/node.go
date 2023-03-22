@@ -172,8 +172,8 @@ func (sn *Node) SetOccupiedResource(occupiedResource *resources.Resource) {
 // this call assumes the caller already acquires the lock.
 func (sn *Node) refreshAvailableResource() {
 	sn.availableResource = sn.totalResource.Clone()
-	sn.availableResource.SubFrom(sn.allocatedResource)
-	sn.availableResource.SubFrom(sn.occupiedResource)
+	sn.availableResource.SubFrom(sn.allocatedResource, false)
+	sn.availableResource.SubFrom(sn.occupiedResource, false)
 	// check if any quantity is negative: a nil resource is all 0's
 	if !resources.StrictlyGreaterThanOrEquals(sn.availableResource, nil) {
 		log.Logger().Warn("Node update triggered over allocated node",
@@ -269,7 +269,7 @@ func (sn *Node) RemoveAllocation(uuid string) *Allocation {
 	alloc := sn.allocations[uuid]
 	if alloc != nil {
 		delete(sn.allocations, uuid)
-		sn.allocatedResource.SubFrom(alloc.GetAllocatedResource())
+		sn.allocatedResource.SubFrom(alloc.GetAllocatedResource(), false)
 		sn.availableResource.AddTo(alloc.GetAllocatedResource())
 		return alloc
 	}
@@ -292,7 +292,7 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 	if sn.availableResource.FitInMaxUndef(res) {
 		sn.allocations[alloc.GetUUID()] = alloc
 		sn.allocatedResource.AddTo(res)
-		sn.availableResource.SubFrom(res)
+		sn.availableResource.SubFrom(res, false)
 		return true
 	}
 	return false

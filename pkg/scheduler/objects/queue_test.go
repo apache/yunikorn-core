@@ -582,7 +582,7 @@ func TestRemoveApplication(t *testing.T) {
 
 	// remove an application with allocated placeholders
 	app.allocatedPlaceholder.AddTo(res)
-	app.allocatedResource.SubFrom(res)
+	app.allocatedResource.SubFrom(res, true)
 	leaf.AddApplication(app)
 	assert.Equal(t, len(leaf.applications), 1, "Application was not added to the queue as expected")
 	assert.Assert(t, resources.IsZero(leaf.allocatedResource), "leaf queue allocated resource not zero")

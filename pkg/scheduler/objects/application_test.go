@@ -601,7 +601,7 @@ func TestRemoveAllocAsk(t *testing.T) {
 	}
 	delta := app.GetPendingResource().Clone()
 	reservedAsks = app.RemoveAllocationAsk(aKey)
-	delta.SubFrom(app.GetPendingResource())
+	delta.SubFrom(app.GetPendingResource(), true)
 	expected = resources.Multiply(res, 2)
 	if !resources.Equals(delta, expected) || reservedAsks != 0 {
 		t.Errorf("ask should have been removed from app, err %v, expected delta %v but was: %v, (reserved released = %d)", err, expected, delta, reservedAsks)

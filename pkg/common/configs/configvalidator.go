@@ -37,10 +37,12 @@ import (
 )
 
 const (
-	RootQueue        = "root"
-	DOT              = "."
-	DotReplace       = "_dot_"
-	DefaultPartition = "default"
+	RootQueue          = "root"
+	PreservedQueueName = "preserved#"
+	PreservedQueuePath = "root." + PreservedQueueName
+	DOT                = "."
+	DotReplace         = "_dot_"
+	DefaultPartition   = "default"
 
 	ApplicationSortPolicy   = "application.sort.policy"
 	ApplicationSortPriority = "application.sort.priority"
@@ -584,6 +586,13 @@ func Validate(newConfig *SchedulerConfig) error {
 		}
 		if partitionMap[strings.ToLower(partition.Name)] {
 			return fmt.Errorf("duplicate partition name found with name %s", partition.Name)
+		}
+		deletePolicy := strings.ToLower(partition.QueueDeletePolicy)
+		if deletePolicy == "" {
+			deletePolicy = "drain"
+		}
+		if deletePolicy != "drain" && deletePolicy != "preserve" {
+			return fmt.Errorf("unkown queue delete policy: %s", deletePolicy)
 		}
 		partitionMap[strings.ToLower(partition.Name)] = true
 		// check the queue structure

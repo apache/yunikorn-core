@@ -79,7 +79,7 @@ func createManagedQueuePropsMaxApps(parentSQ *Queue, name string, parent bool, m
 			Guaranteed: guarRes,
 		}
 	}
-	queue, err := NewConfiguredQueue(queueConfig, parentSQ)
+	queue, err := NewConfiguredQueue(queueConfig, parentSQ, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func createManagedQueuePropsMaxApps(parentSQ *Queue, name string, parent bool, m
 // wrapper around the create call using the one syntax for all queue types
 // NOTE: test code uses a flag for parent=true, dynamic queues use leaf flag
 func createDynamicQueue(parentSQ *Queue, name string, parent bool) (*Queue, error) {
-	return NewDynamicQueue(name, !parent, parentSQ)
+	return NewDynamicQueue(name, !parent, parentSQ, nil)
 }
 
 // Create application with minimal info

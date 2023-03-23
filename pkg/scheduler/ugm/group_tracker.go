@@ -27,7 +27,7 @@ import (
 
 type GroupTracker struct {
 	groupName    string          // Name of the group for which usage is being tracked upon
-	applications map[string]bool // Hold applications currently run by all users belong to this group
+	applications map[string]bool // Hold applications currently run by all Users belong to this group
 	queueTracker *QueueTracker   // Holds the actual resource usage of queue path where application run
 
 	sync.RWMutex
@@ -38,8 +38,8 @@ func newGroupTracker(group string) *GroupTracker {
 	groupTracker := &GroupTracker{
 		groupName:    group,
 		applications: make(map[string]bool),
-		queueTracker: queueTracker,
 	}
+	groupTracker.queueTracker = queueTracker
 	return groupTracker
 }
 
@@ -47,7 +47,7 @@ func (gt *GroupTracker) increaseTrackedResource(queuePath, applicationID string,
 	gt.Lock()
 	defer gt.Unlock()
 	gt.applications[applicationID] = true
-	return gt.queueTracker.increaseTrackedResource(queuePath, applicationID, usage)
+	return gt.queueTracker.increaseTrackedResource(queuePath, applicationID, true, false, usage)
 }
 
 func (gt *GroupTracker) decreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, removeApp bool) (bool, error) {
@@ -56,7 +56,7 @@ func (gt *GroupTracker) decreaseTrackedResource(queuePath, applicationID string,
 	if removeApp {
 		delete(gt.applications, applicationID)
 	}
-	return gt.queueTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
+	return gt.queueTracker.decreaseTrackedResource(queuePath, applicationID, false, usage, removeApp)
 }
 
 func (gt *GroupTracker) getTrackedApplications() map[string]bool {
@@ -77,4 +77,10 @@ func (gt *GroupTracker) GetGroupResourceUsageDAOInfo() *dao.GroupResourceUsageDA
 	}
 	groupResourceUsage.Queues = gt.queueTracker.getResourceUsageDAOInfo("")
 	return groupResourceUsage
+}
+
+func (gt *GroupTracker) GetResourceUsage(queueName string) (*resources.Resource, bool) {
+	gt.RLock()
+	defer gt.RUnlock()
+	return gt.queueTracker.getResourceUsageForQueue(queueName)
 }

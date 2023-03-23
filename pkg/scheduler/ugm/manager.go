@@ -24,6 +24,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/log"
@@ -38,6 +39,22 @@ type Manager struct {
 	userTrackers  map[string]*UserTracker
 	groupTrackers map[string]*GroupTracker
 	lock          sync.RWMutex
+}
+
+type trackerApplicationMoveResult struct {
+	found         bool
+	resourceUsage *resources.Resource
+	numApps       int
+}
+
+type TrackerMoveResult struct {
+	Error                     error
+	Users                     []string
+	Groups                    []string
+	TotalUserTrackedResource  *resources.Resource
+	TotalGroupTrackedResource *resources.Resource
+	NumAppsForUser            int
+	NumAppsForGroups          int
 }
 
 func newManager() *Manager {
@@ -243,6 +260,85 @@ func (m *Manager) GetGroupTracker(group string) *GroupTracker {
 		return m.groupTrackers[group]
 	}
 	return nil
+}
+
+func (m *Manager) PreserveRunningApplications(srcQueue string) (TrackerMoveResult, error) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	totalGroupApps := 0
+	totalGroupResources := resources.NewResource()
+	groups := make([]string, 0)
+	for group, tracker := range m.groupTrackers {
+		moveResult, err := m.preserveApplicationForTracker(&tracker.RWMutex, srcQueue, tracker.queueTracker)
+		if err != nil {
+			return TrackerMoveResult{Error: err}, err
+		}
+		if moveResult.found {
+			totalGroupApps += moveResult.numApps
+			totalGroupResources = resources.Add(totalGroupResources, moveResult.resourceUsage)
+			groups = append(groups, group)
+		}
+	}
+
+	totalUserApps := 0
+	totalUserResources := resources.NewResource()
+	users := make([]string, 0)
+	for user, tracker := range m.userTrackers {
+		moveResult, err := m.preserveApplicationForTracker(&tracker.RWMutex, srcQueue, tracker.queueTracker)
+		if err != nil {
+			return TrackerMoveResult{Error: err}, err
+		}
+		if moveResult.found {
+			totalUserApps += moveResult.numApps
+			totalUserResources = resources.Add(totalUserResources, moveResult.resourceUsage)
+			users = append(users, user)
+		}
+	}
+
+	if totalUserApps != totalGroupApps {
+		log.Logger().Error("inconsistency detected when moving apps, number of tracked apps are not the same for users/groups",
+			zap.Int("num of apps for users", totalUserApps),
+			zap.Int("num of apps for groups", totalGroupApps))
+	}
+
+	return TrackerMoveResult{
+		Error:                     nil,
+		Groups:                    groups,
+		Users:                     users,
+		NumAppsForUser:            totalUserApps,
+		NumAppsForGroups:          totalGroupApps,
+		TotalGroupTrackedResource: totalGroupResources,
+		TotalUserTrackedResource:  totalUserResources,
+	}, nil
+}
+
+func (m *Manager) preserveApplicationForTracker(trackerLock *sync.RWMutex, srcQueue string, queueTracker *QueueTracker) (trackerApplicationMoveResult, error) {
+	trackerLock.Lock()
+	defer trackerLock.Unlock()
+
+	resourceUsage, found := queueTracker.getResourceUsageForQueue(srcQueue)
+	if found {
+		err := queueTracker.increaseTrackedResource(configs.PreservedQueuePath, "", false, true, resourceUsage)
+		if err != nil {
+			return trackerApplicationMoveResult{}, err
+		}
+		_, err = queueTracker.decreaseTrackedResource(srcQueue, "", true, resourceUsage, false)
+		if err != nil {
+			return trackerApplicationMoveResult{}, err
+		}
+		runningApps := queueTracker.getRunningApplicationsForQueue(srcQueue)
+		queueTracker.removeApplicationIDs(runningApps, srcQueue, true)
+		queueTracker.addApplicationIDs(runningApps, configs.PreservedQueuePath, true)
+
+		return trackerApplicationMoveResult{
+			found:         true,
+			resourceUsage: resourceUsage,
+			numApps:       len(runningApps),
+		}, nil
+	}
+
+	return trackerApplicationMoveResult{found: false}, nil
 }
 
 func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID string, user security.UserGroup) error {

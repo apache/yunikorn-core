@@ -76,37 +76,46 @@ func newBasePartition() (*PartitionContext, error) {
 }
 
 func newConfiguredPartition() (*PartitionContext, error) {
-	conf := configs.PartitionConfig{
-		Name: "test",
-		Queues: []configs.QueueConfig{
-			{
-				Name:      "root",
-				Parent:    true,
-				SubmitACL: "*",
-				Queues: []configs.QueueConfig{
-					{
-						Name:   "leaf",
-						Parent: false,
-						Queues: nil,
-					}, {
-						Name:   "parent",
-						Parent: true,
-						Queues: []configs.QueueConfig{
-							{
-								Name:   "sub-leaf",
-								Parent: false,
-								Queues: nil,
-							},
+	conf := getConfiguredPartitionConfig()
+	return newPartitionContext(conf, rmID, nil)
+}
+
+func getConfiguredPartitionConfig() configs.PartitionConfig {
+	return configs.PartitionConfig{
+		Name:           "test",
+		Queues:         getQueueConfig(),
+		PlacementRules: nil,
+		Limits:         nil,
+		Preemption:     configs.PartitionPreemptionConfig{},
+		NodeSortPolicy: configs.NodeSortingPolicy{},
+	}
+}
+
+func getQueueConfig() []configs.QueueConfig {
+	return []configs.QueueConfig{
+		{
+			Name:      "root",
+			Parent:    true,
+			SubmitACL: "*",
+			Queues: []configs.QueueConfig{
+				{
+					Name:   "leaf",
+					Parent: false,
+					Queues: nil,
+				}, {
+					Name:   "parent",
+					Parent: true,
+					Queues: []configs.QueueConfig{
+						{
+							Name:   "sub-leaf",
+							Parent: false,
+							Queues: nil,
 						},
 					},
 				},
 			},
 		},
-		PlacementRules: nil,
-		Limits:         nil,
-		NodeSortPolicy: configs.NodeSortingPolicy{},
 	}
-	return newPartitionContext(conf, rmID, nil)
 }
 
 func newPreemptionConfiguredPartition(parentLimit map[string]string, leafGuarantees map[string]string) (*PartitionContext, error) {

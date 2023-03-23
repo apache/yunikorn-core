@@ -64,22 +64,22 @@ func initQueueStructure(data []byte) error {
 		return err
 	}
 	rootConf := conf.Partitions[0].Queues[0]
-	root, err = objects.NewConfiguredQueue(rootConf, nil)
+	root, err = objects.NewConfiguredQueue(rootConf, nil, nil)
 	if err != nil {
 		return err
 	}
-	return addQueue(rootConf.Queues, root)
+	return addQueue(rootConf.Queues, root, root)
 }
 
-func addQueue(conf []configs.QueueConfig, parent *objects.Queue) error {
+func addQueue(conf []configs.QueueConfig, parent *objects.Queue, root *objects.Queue) error {
 	for _, queueConf := range conf {
-		thisQueue, err := objects.NewConfiguredQueue(queueConf, parent)
+		thisQueue, err := objects.NewConfiguredQueue(queueConf, parent, root)
 		if err != nil {
 			return err
 		}
 		// recursive create the queues below
 		if len(queueConf.Queues) > 0 {
-			err = addQueue(queueConf.Queues, thisQueue)
+			err = addQueue(queueConf.Queues, thisQueue, root)
 			if err != nil {
 				return err
 			}

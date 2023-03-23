@@ -44,15 +44,15 @@ func newUserTracker(user security.UserGroup) *UserTracker {
 	userTracker := &UserTracker{
 		userName:         user.User,
 		appGroupTrackers: make(map[string]*GroupTracker),
-		queueTracker:     queueTracker,
 	}
+	userTracker.queueTracker = queueTracker
 	return userTracker
 }
 
 func (ut *UserTracker) increaseTrackedResource(queuePath, applicationID string, usage *resources.Resource) error {
 	ut.Lock()
 	defer ut.Unlock()
-	return ut.queueTracker.increaseTrackedResource(queuePath, applicationID, usage)
+	return ut.queueTracker.increaseTrackedResource(queuePath, applicationID, true, false, usage)
 }
 
 func (ut *UserTracker) decreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, removeApp bool) (bool, error) {
@@ -61,7 +61,7 @@ func (ut *UserTracker) decreaseTrackedResource(queuePath, applicationID string, 
 	if removeApp {
 		delete(ut.appGroupTrackers, applicationID)
 	}
-	return ut.queueTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
+	return ut.queueTracker.decreaseTrackedResource(queuePath, applicationID, false, usage, removeApp)
 }
 
 func (ut *UserTracker) hasGroupForApp(applicationID string) bool {
@@ -96,4 +96,10 @@ func (ut *UserTracker) GetUserResourceUsageDAOInfo() *dao.UserResourceUsageDAOIn
 	}
 	userResourceUsage.Queues = ut.queueTracker.getResourceUsageDAOInfo("")
 	return userResourceUsage
+}
+
+func (ut *UserTracker) GetResourceUsage(queueName string) (*resources.Resource, bool) {
+	ut.RLock()
+	defer ut.RUnlock()
+	return ut.queueTracker.getResourceUsageForQueue(queueName)
 }

@@ -109,7 +109,7 @@ func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionCon
 	// Add the rest of the queue structure recursively
 	queueConf := conf.Queues[0]
 	var err error
-	if pc.root, err = objects.NewConfiguredQueue(queueConf, nil); err != nil {
+	if pc.root, err = objects.NewConfiguredQueue(queueConf, nil, nil); err != nil {
 		return err
 	}
 	// recursively add the queues to the root
@@ -169,6 +169,10 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 		pc.placementManager = placement.NewPlacementManager(*pc.rules, pc.GetQueue)
 	}
 	pc.updateNodeSortingPolicy(conf)
+	deletePolicy, err := policies.QueueDeletePolicyFromString(conf.QueueDeletePolicy)
+	if err != nil {
+		log.Logger().Error("Error when retrieving queue delete policy", zap.Error(err))
+	}
 	// start at the root: there is only one queue
 	queueConf := conf.Queues[0]
 	root := pc.root
@@ -178,14 +182,14 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 	}
 	root.UpdateQueueProperties()
 	// update the rest of the queues recursively
-	return pc.updateQueues(queueConf.Queues, root)
+	return pc.updateQueues(queueConf.Queues, root, deletePolicy)
 }
 
 // Process the config structure and create a queue info tree for this partition
 func (pc *PartitionContext) addQueue(conf []configs.QueueConfig, parent *objects.Queue) error {
 	// create the queue at this level
 	for _, queueConf := range conf {
-		thisQueue, err := objects.NewConfiguredQueue(queueConf, parent)
+		thisQueue, err := objects.NewConfiguredQueue(queueConf, parent, pc.root)
 		if err != nil {
 			return err
 		}
@@ -203,18 +207,18 @@ func (pc *PartitionContext) addQueue(conf []configs.QueueConfig, parent *objects
 // Update the passed in queues and then do this recursively for the children
 //
 // NOTE: this is a lock free call. It should only be called holding the PartitionContext lock.
-func (pc *PartitionContext) updateQueues(config []configs.QueueConfig, parent *objects.Queue) error {
+func (pc *PartitionContext) updateQueues(config []configs.QueueConfig, parent *objects.Queue, deletePolicy policies.QueueDeletePolicy) error {
 	// get the name of the passed in queue
 	parentPath := parent.QueuePath + configs.DOT
 	// keep track of which children we have updated
 	visited := map[string]bool{}
 	// walk over the queues recursively
+	var err error
 	for _, queueConfig := range config {
 		pathName := parentPath + queueConfig.Name
 		queue := pc.getQueueInternal(pathName)
-		var err error
 		if queue == nil {
-			queue, err = objects.NewConfiguredQueue(queueConfig, parent)
+			queue, err = objects.NewConfiguredQueue(queueConfig, parent, pc.root)
 		} else {
 			err = queue.ApplyConf(queueConfig)
 		}
@@ -223,15 +227,26 @@ func (pc *PartitionContext) updateQueues(config []configs.QueueConfig, parent *o
 		}
 		// special call to convert to a real policy from the property
 		queue.UpdateQueueProperties()
-		if err = pc.updateQueues(queueConfig.Queues, queue); err != nil {
+		if err = pc.updateQueues(queueConfig.Queues, queue, deletePolicy); err != nil {
 			return err
 		}
 		visited[queue.Name] = true
 	}
 	// remove all children that were not visited
 	for childName, childQueue := range parent.GetCopyOfChildren() {
-		if !visited[childName] {
-			childQueue.MarkQueueForRemoval()
+		if !visited[childName] && childQueue.GetQueuePath() != configs.PreservedQueuePath {
+			if deletePolicy == policies.Drain {
+				childQueue.MarkQueueForRemoval()
+			} else {
+				var stats []objects.ApplicationMoveStat
+				if stats, err = childQueue.PreserveRunningAppsInHierarchy(); err != nil {
+					log.Logger().Error("Could not move running applications", zap.Error(err))
+					return err
+				}
+				for _, stat := range stats {
+					objects.LogMoveStat(stat)
+				}
+			}
 		}
 	}
 	return nil
@@ -508,7 +523,7 @@ func (pc *PartitionContext) createQueue(name string, user security.UserGroup) (*
 	for i := len(toCreate) - 1; i >= 0; i-- {
 		// everything is checked and there should be no errors
 		var err error
-		queue, err = objects.NewDynamicQueue(toCreate[i], i == 0, queue)
+		queue, err = objects.NewDynamicQueue(toCreate[i], i == 0, queue, pc.root)
 		if err != nil {
 			log.Logger().Warn("Queue auto create failed unexpected",
 				zap.String("queueName", toCreate[i]),

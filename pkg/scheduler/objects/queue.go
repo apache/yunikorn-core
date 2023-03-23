@@ -57,6 +57,8 @@ type Queue struct {
 	appPriorities       map[string]int32          // cached priorities for application
 	reservedApps        map[string]int            // applications reserved within this queue, with reservation count
 	parent              *Queue                    // link back to the parent in the scheduler
+	preserved           *Queue                    // only for root - running apps from deleted leafs are moved here
+	root                *Queue                    // root queue
 	pending             *resources.Resource       // pending resource for the apps in the queue
 	allocatedResource   *resources.Resource       // allocated resource for the apps in the queue
 	preemptingResource  *resources.Resource       // preempting resource for the apps in the queue
@@ -110,11 +112,12 @@ func newBlankQueue() *Queue {
 
 // NewConfiguredQueue creates a new queue from scratch based on the configuration
 // lock free as it cannot be referenced yet
-func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error) {
+func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue, root *Queue) (*Queue, error) {
 	sq := newBlankQueue()
 	sq.Name = strings.ToLower(conf.Name)
 	sq.QueuePath = strings.ToLower(conf.Name)
 	sq.parent = parent
+	sq.root = root
 	sq.isManaged = true
 	sq.maxRunningApps = conf.MaxApplications
 
@@ -145,7 +148,7 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 // NewDynamicQueue creates a new queue to be added to the system based on the placement rules
 // A dynamically added queue can never be the root queue so parent must be set
 // lock free as it cannot be referenced yet
-func NewDynamicQueue(name string, leaf bool, parent *Queue) (*Queue, error) {
+func NewDynamicQueue(name string, leaf bool, parent *Queue, root *Queue) (*Queue, error) {
 	// fail without a parent
 	if parent == nil {
 		return nil, fmt.Errorf("dynamic queue can not be added without parent: %s", name)
@@ -158,6 +161,7 @@ func NewDynamicQueue(name string, leaf bool, parent *Queue) (*Queue, error) {
 	sq.Name = strings.ToLower(name)
 	sq.QueuePath = parent.QueuePath + configs.DOT + sq.Name
 	sq.parent = parent
+	sq.root = root
 	sq.isManaged = false
 	sq.isLeaf = leaf
 
@@ -168,6 +172,30 @@ func NewDynamicQueue(name string, leaf bool, parent *Queue) (*Queue, error) {
 		return nil, fmt.Errorf("dynamic queue creation failed: %w", err)
 	}
 
+	sq.UpdateQueueProperties()
+	log.Logger().Info("dynamic queue added to scheduler",
+		zap.String("queueName", sq.QueuePath))
+
+	return sq, nil
+}
+
+func NewPreservedQueue(root *Queue) (*Queue, error) {
+	if !root.isRoot() {
+		return nil, fmt.Errorf("cannot create preserved queue - expected root queue as parent, got"+
+			" %s", root.GetQueuePath())
+	}
+	sq := newBlankQueue()
+	sq.Name = strings.ToLower(configs.PreservedQueueName)
+	sq.QueuePath = configs.PreservedQueuePath
+	sq.parent = root
+	sq.isManaged = false
+	sq.isLeaf = true
+
+	err := root.addChildQueue(sq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create queue: %w", err)
+	}
+	root.setPreservedQueue(sq)
 	sq.UpdateQueueProperties()
 	log.Logger().Info("dynamic queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
@@ -296,6 +324,17 @@ func (sq *Queue) applyConf(conf configs.QueueConfig) error {
 		sq.isManaged = true
 	}
 
+	configLeaf := !conf.Parent
+	if sq.isLeaf && !configLeaf {
+		log.Logger().Info("Leaf queue is becoming a parent, moving running applications",
+			zap.String("queue", sq.QueuePath))
+		var stat ApplicationMoveStat
+		if stat, err = sq.preserveRunningApps(); err != nil {
+			log.Logger().Error("Could not move running applications", zap.Error(err))
+			return err
+		}
+		LogMoveStat(stat)
+	}
 	sq.isLeaf = !conf.Parent
 	// Make sure the parent flag is set correctly: config might expect auto parent type creation
 	if len(conf.Queues) > 0 {
@@ -1405,6 +1444,12 @@ func (sq *Queue) UnReserve(appID string, releases int) {
 			sq.reservedApps[appID] -= releases
 		}
 	}
+}
+
+func (sq *Queue) setReservations(appID string, num int) {
+	sq.Lock()
+	defer sq.Unlock()
+	sq.reservedApps[appID] = num
 }
 
 // getApplication return the Application based on the ID.

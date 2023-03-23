@@ -2046,7 +2046,7 @@ func TestApplyConf(t *testing.T) {
 	parent, err := createManagedQueueWithProps(nil, "parent", true, nil, nil)
 	assert.NilError(t, err, "failed to create basic queue: %v", err)
 
-	child, err := NewDynamicQueue("child", true, parent)
+	child, err := NewDynamicQueue("child", true, parent, nil)
 	assert.NilError(t, err, "failed to create basic queue: %v", err)
 
 	err = child.ApplyConf(childConf)
@@ -2142,7 +2142,7 @@ func TestNewConfiguredQueue(t *testing.T) {
 			},
 		},
 	}
-	parent, err := NewConfiguredQueue(parentConfig, nil)
+	parent, err := NewConfiguredQueue(parentConfig, nil, nil)
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	assert.Equal(t, parent.Name, "parent_queue")
 	assert.Equal(t, parent.QueuePath, "parent_queue")
@@ -2162,7 +2162,7 @@ func TestNewConfiguredQueue(t *testing.T) {
 			Guaranteed: getResourceConf(),
 		},
 	}
-	childLeaf, err := NewConfiguredQueue(leafConfig, parent)
+	childLeaf, err := NewConfiguredQueue(leafConfig, parent, nil)
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	assert.Equal(t, childLeaf.QueuePath, "parent_queue.leaf_queue")
 	assert.Assert(t, childLeaf.template == nil)
@@ -2175,7 +2175,7 @@ func TestNewConfiguredQueue(t *testing.T) {
 		Name:   "nonleaf_queue",
 		Parent: true,
 	}
-	childNonLeaf, err := NewConfiguredQueue(NonLeafConfig, parent)
+	childNonLeaf, err := NewConfiguredQueue(NonLeafConfig, parent, nil)
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	assert.Equal(t, childNonLeaf.QueuePath, "parent_queue.nonleaf_queue")
 	assert.Assert(t, reflect.DeepEqual(childNonLeaf.template, parent.template))
@@ -2197,7 +2197,7 @@ func TestNewDynamicQueue(t *testing.T) {
 	assert.NilError(t, err)
 
 	// case 0: leaf can use template
-	childLeaf, err := NewDynamicQueue("leaf", true, parent)
+	childLeaf, err := NewDynamicQueue("leaf", true, parent, nil)
 	assert.NilError(t, err, "failed to create dynamic queue: %v", err)
 	assert.Assert(t, childLeaf.template == nil)
 	assert.Assert(t, reflect.DeepEqual(childLeaf.properties, parent.template.GetProperties()))
@@ -2208,7 +2208,7 @@ func TestNewDynamicQueue(t *testing.T) {
 	assert.Equal(t, childLeaf.preemptionPolicy, policies.DefaultPreemptionPolicy)
 
 	// case 1: non-leaf can't use template but it can inherit template from parent
-	childNonLeaf, err := NewDynamicQueue("nonleaf", false, parent)
+	childNonLeaf, err := NewDynamicQueue("nonleaf", false, parent, nil)
 	assert.NilError(t, err, "failed to create dynamic queue: %v", err)
 	assert.Assert(t, reflect.DeepEqual(childNonLeaf.template, parent.template))
 	assert.Equal(t, len(childNonLeaf.properties), 0)

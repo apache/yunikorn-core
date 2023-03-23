@@ -50,6 +50,7 @@ type PartitionConfig struct {
 	Preemption        PartitionPreemptionConfig `yaml:",omitempty" json:",omitempty"` // deprecated
 	NodeSortPolicy    NodeSortingPolicy         `yaml:",omitempty" json:",omitempty"`
 	StateDumpFilePath string                    `yaml:",omitempty" json:",omitempty"`
+	QueueDeletePolicy string                    `yaml:",omitempty" json:",omitempty"`
 }
 
 // deprecated

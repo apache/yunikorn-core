@@ -1207,7 +1207,7 @@ func TestUpdateQueues(t *testing.T) {
 	if root == nil {
 		t.Error("root queue not found in partition")
 	}
-	err = partition.updateQueues(conf, root)
+	err = partition.updateQueues(conf, root, policies.Drain)
 	assert.NilError(t, err, "queue update from config failed")
 	def := partition.GetQueue(defQueue)
 	if def == nil {
@@ -1234,7 +1234,7 @@ func TestUpdateQueues(t *testing.T) {
 			},
 		},
 	}
-	err = partition.updateQueues(conf, root)
+	err = partition.updateQueues(conf, root, policies.Drain)
 	assert.NilError(t, err, "queue update from config failed")
 	parent := partition.GetQueue("root.parent")
 	if parent == nil {
@@ -1245,6 +1245,41 @@ func TestUpdateQueues(t *testing.T) {
 	if leaf == nil {
 		t.Fatal("leaf queue should have been created")
 	}
+}
+
+func TestUpdateLeafToParent(t *testing.T) {
+	partition := createQueuesNodes(t)
+	assert.Assert(t, partition != nil, "partition create failed")
+	// There is a queue setup as the config must be valid when we run
+	root := partition.GetQueue("root")
+	assert.Assert(t, root != nil, "root queue not found in partition")
+
+	app := newApplication(appID1, "default", "root.parent.sub-leaf")
+	err := partition.AddApplication(app)
+	assert.NilError(t, err, "add application to partition should not have failed")
+	res, err2 := resources.NewResourceFromConf(map[string]string{"vcore": "1"})
+	assert.NilError(t, err2, "failed to create resource")
+	err = app.AddAllocationAsk(newAllocationAsk(allocID, appID1, res))
+	assert.NilError(t, err, "failed to add ask alloc-1 to app-1")
+	alloc := partition.tryAllocate()
+	assert.Assert(t, alloc != nil, "expected an allocation")
+	partition.tryAllocate()
+	partition.tryReservedAllocate()
+
+	newConf := getConfiguredPartitionConfig()
+	newConf.QueueDeletePolicy = policies.Preserve.String()
+	newConf.Queues[0].Queues[1].Queues[0].Parent = true // change type of "root.parent.sub-leaf"
+
+	err = partition.updatePartitionDetails(newConf)
+	assert.NilError(t, err, "queue update from config failed")
+
+	subleaf := partition.GetQueue("root.parent.sub-leaf")
+	assert.Equal(t, false, subleaf.IsLeafQueue())
+	assert.Equal(t, 0, len(subleaf.GetCopyOfApps()))
+	preserved := partition.GetQueue("root.preserved#")
+	assert.Assert(t, preserved != nil)
+	preservedApps := preserved.GetCopyOfApps()
+	assert.Equal(t, len(preservedApps), 1)
 }
 
 func TestGetQueue(t *testing.T) {
@@ -1267,7 +1302,7 @@ func TestGetQueue(t *testing.T) {
 	}
 	var parent *objects.Queue
 	// manually add the queue in below the root
-	parent, err = objects.NewConfiguredQueue(parentConf, queue)
+	parent, err = objects.NewConfiguredQueue(parentConf, queue, partition.root)
 	assert.NilError(t, err, "failed to create parent queue")
 	queue = partition.GetQueue("root.unknown")
 	assert.Equal(t, queue, nilQueue, "partition returned not nil for non existing queue name request: %v", queue)

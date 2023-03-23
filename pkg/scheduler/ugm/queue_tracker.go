@@ -53,24 +53,29 @@ func newQueueTracker(queueName string) *QueueTracker {
 	return queueTracker
 }
 
-func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID string, usage *resources.Resource) error {
+func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID string, hasApplicationID, skipRoot bool, usage *resources.Resource) error {
 	log.Logger().Debug("Increasing resource usage",
 		zap.String("queue path", queuePath),
 		zap.String("application", applicationID),
 		zap.Stringer("resource", usage))
-	if queuePath == "" || applicationID == "" || usage == nil {
+	if queuePath == "" || (hasApplicationID && applicationID == "") || usage == nil {
 		return fmt.Errorf("mandatory parameters are missing. queuepath: %s, application id: %s, resource usage: %s",
 			queuePath, applicationID, usage.String())
 	}
-	qt.resourceUsage.AddTo(usage)
-	qt.runningApplications[applicationID] = true
+
+	if qt.canUpdate(skipRoot) {
+		qt.resourceUsage.AddTo(usage)
+		if hasApplicationID {
+			qt.runningApplications[applicationID] = true
+		}
+	}
 
 	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
 	if childQueuePath != "" {
 		if qt.childQueueTrackers[immediateChildQueueName] == nil {
 			qt.childQueueTrackers[immediateChildQueueName] = newQueueTracker(immediateChildQueueName)
 		}
-		err := qt.childQueueTrackers[immediateChildQueueName].increaseTrackedResource(childQueuePath, applicationID, usage)
+		err := qt.childQueueTrackers[immediateChildQueueName].increaseTrackedResource(childQueuePath, applicationID, hasApplicationID, skipRoot, usage)
 		if err != nil {
 			return err
 		}
@@ -78,7 +83,7 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 	return nil
 }
 
-func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID string, usage *resources.Resource, removeApp bool) (bool, error) {
+func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID string, skipRoot bool, usage *resources.Resource, removeApp bool) (bool, error) {
 	log.Logger().Debug("Decreasing resource usage",
 		zap.String("queue path", queuePath),
 		zap.String("application", applicationID),
@@ -88,15 +93,17 @@ func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID 
 		return false, fmt.Errorf("mandatory parameters are missing. queuepath: %s, application id: %s, resource usage: %s",
 			queuePath, applicationID, usage.String())
 	}
-	qt.resourceUsage.SubFrom(usage)
-	if removeApp {
-		delete(qt.runningApplications, applicationID)
+	if qt.canUpdate(skipRoot) {
+		qt.resourceUsage.SubFrom(usage)
+		if removeApp {
+			delete(qt.runningApplications, applicationID)
+		}
 	}
 
 	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
 	if childQueuePath != "" {
 		if qt.childQueueTrackers[immediateChildQueueName] != nil {
-			removeQT, err := qt.childQueueTrackers[immediateChildQueueName].decreaseTrackedResource(childQueuePath, applicationID, usage, removeApp)
+			removeQT, err := qt.childQueueTrackers[immediateChildQueueName].decreaseTrackedResource(childQueuePath, applicationID, skipRoot, usage, removeApp)
 			if err != nil {
 				return false, err
 			}
@@ -113,6 +120,36 @@ func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID 
 	// Determine if the queue tracker should be removed
 	removeQT := len(qt.childQueueTrackers) == 0 && len(qt.runningApplications) == 0 && resources.IsZero(qt.resourceUsage)
 	return removeQT, nil
+}
+
+func (qt *QueueTracker) addApplicationIDs(appIDs []string, queuePath string, skipRoot bool) {
+	if qt.canUpdate(skipRoot) {
+		for _, appID := range appIDs {
+			qt.runningApplications[appID] = true
+		}
+	}
+
+	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
+	if childQueuePath != "" {
+		if qt.childQueueTrackers[immediateChildQueueName] != nil {
+			qt.childQueueTrackers[immediateChildQueueName].addApplicationIDs(appIDs, childQueuePath, skipRoot)
+		}
+	}
+}
+
+func (qt *QueueTracker) removeApplicationIDs(appIDs []string, queuePath string, skipRoot bool) {
+	if qt.canUpdate(skipRoot) {
+		for _, appID := range appIDs {
+			delete(qt.runningApplications, appID)
+		}
+	}
+
+	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
+	if childQueuePath != "" {
+		if qt.childQueueTrackers[immediateChildQueueName] != nil {
+			qt.childQueueTrackers[immediateChildQueueName].removeApplicationIDs(appIDs, childQueuePath, skipRoot)
+		}
+	}
 }
 
 func (qt *QueueTracker) getResourceUsageDAOInfo(parentQueuePath string) *dao.ResourceUsageDAOInfo {
@@ -151,4 +188,37 @@ func getChildQueuePath(queuePath string) (string, string) {
 	}
 
 	return childQueuePath, immediateChildQueueName
+}
+
+func (qt *QueueTracker) getRunningApplicationsForQueue(queuePath string) []string {
+	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
+	if childQueuePath != "" {
+		if qt.childQueueTrackers[immediateChildQueueName] != nil {
+			return qt.childQueueTrackers[immediateChildQueueName].getRunningApplicationsForQueue(childQueuePath)
+		}
+		return nil
+	}
+
+	apps := make([]string, 0)
+	for appID := range qt.runningApplications {
+		apps = append(apps, appID)
+	}
+
+	return apps
+}
+
+func (qt *QueueTracker) getResourceUsageForQueue(queuePath string) (*resources.Resource, bool) {
+	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
+	if childQueuePath != "" {
+		if qt.childQueueTrackers[immediateChildQueueName] != nil {
+			return qt.childQueueTrackers[immediateChildQueueName].getResourceUsageForQueue(childQueuePath)
+		}
+		return nil, false
+	}
+
+	return qt.resourceUsage.Clone(), true
+}
+
+func (qt *QueueTracker) canUpdate(skipRoot bool) bool {
+	return (qt.queueName == configs.RootQueue && !skipRoot) || qt.queueName != configs.RootQueue
 }

@@ -171,5 +171,5 @@ fsm_graph: clean
 .PHONY: clean
 clean:
 	@echo "cleaning up caches and output"
-	go clean -cache -testcache -r 2>&1 >/dev/null
+	go clean -cache -testcache -r
 	-rm -rf _output

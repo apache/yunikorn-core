@@ -889,7 +889,6 @@ func TestSub(t *testing.T) {
 	}
 }
 
-// TODO test `true`
 func TestSubFromNil(t *testing.T) {
 	// make sure we're nil safe IDE will complain about the non nil check
 	defer func() {

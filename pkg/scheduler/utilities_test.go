@@ -45,6 +45,7 @@ const (
 	phID      = "ph-1"
 	allocID   = "alloc-1"
 	allocID2  = "alloc-2"
+	allocID3  = "alloc-3"
 )
 
 func newBasePartition() (*PartitionContext, error) {
@@ -93,6 +94,52 @@ func newConfiguredPartition() (*PartitionContext, error) {
 								Name:   "sub-leaf",
 								Parent: false,
 								Queues: nil,
+							},
+						},
+					},
+				},
+			},
+		},
+		PlacementRules: nil,
+		Limits:         nil,
+		NodeSortPolicy: configs.NodeSortingPolicy{},
+	}
+	return newPartitionContext(conf, rmID, nil)
+}
+
+func newPreemptionConfiguredPartition(parentLimit map[string]string, leafGuarantees map[string]string) (*PartitionContext, error) {
+	conf := configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues: []configs.QueueConfig{
+					{
+						Name:   "parent",
+						Parent: true,
+						Resources: configs.Resources{
+							Max: parentLimit,
+						},
+						Queues: []configs.QueueConfig{
+							{
+								Name:   "leaf1",
+								Parent: false,
+								Queues: nil,
+								Resources: configs.Resources{
+									Guaranteed: leafGuarantees,
+								},
+								Properties: map[string]string{configs.PreemptionDelay: "1ms"},
+							},
+							{
+								Name:   "leaf2",
+								Parent: false,
+								Queues: nil,
+								Resources: configs.Resources{
+									Guaranteed: leafGuarantees,
+								},
+								Properties: map[string]string{configs.PreemptionDelay: "1ms"},
 							},
 						},
 					},
@@ -251,6 +298,22 @@ func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resou
 	})
 }
 
+func newAllocationAskPreempt(allocKey, appID string, prio int32, res *resources.Resource) *objects.AllocationAsk {
+	return objects.NewAllocationAskFromSI(&si.AllocationAsk{
+		AllocationKey:  allocKey,
+		ApplicationID:  appID,
+		PartitionName:  "default",
+		ResourceAsk:    res.ToProto(),
+		MaxAllocations: 1,
+		Priority:       prio,
+		TaskGroupName:  taskGroup,
+		Placeholder:    false,
+		PreemptionPolicy: &si.PreemptionPolicy{
+			AllowPreemptSelf:  true,
+			AllowPreemptOther: true,
+		},
+	})
+}
 func newNodeWithResources(nodeID string, max, occupied *resources.Resource) *objects.Node {
 	proto := &si.NodeInfo{
 		NodeID: nodeID,
@@ -278,6 +341,26 @@ func createQueuesNodes(t *testing.T) *PartitionContext {
 	assert.NilError(t, err, "test partition create failed with error")
 	var res *resources.Resource
 	res, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
+	assert.NilError(t, err, "failed to create basic resource")
+	err = partition.AddNode(newNodeMaxResource("node-1", res), nil)
+	assert.NilError(t, err, "test node1 add failed unexpected")
+	err = partition.AddNode(newNodeMaxResource("node-2", res), nil)
+	assert.NilError(t, err, "test node2 add failed unexpected")
+	return partition
+}
+
+// partition with a sibling relationship for testing preemption
+// root -> parent -> {leaf1,leaf2}
+//
+//	parent max: 5 vcore, leaf guarantees: 5 vcore
+//
+// and 2 nodes: node-1 & node-2
+func createPreemptionQueuesNodes(t *testing.T) *PartitionContext {
+	parentLimit := map[string]string{"vcore": "10"}
+	leafGuarantees := map[string]string{"vcore": "5"}
+	partition, err := newPreemptionConfiguredPartition(parentLimit, leafGuarantees)
+	assert.NilError(t, err, "test partition create failed with error")
+	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "10"})
 	assert.NilError(t, err, "failed to create basic resource")
 	err = partition.AddNode(newNodeMaxResource("node-1", res), nil)
 	assert.NilError(t, err, "test node1 add failed unexpected")

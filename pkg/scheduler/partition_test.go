@@ -1650,6 +1650,66 @@ func TestRequiredNodeAllocation(t *testing.T) {
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 }
 
+func TestPreemption(t *testing.T) {
+	setupUGM()
+	partition, _, app2, alloc1, alloc2 := setupPreemption(t)
+
+	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "5"})
+	assert.NilError(t, err, "failed to create resource")
+
+	// ask 3
+	ask3 := newAllocationAskPreempt(allocID3, appID2, 1, res)
+	err = app2.AddAllocationAsk(ask3)
+	assert.NilError(t, err, "failed to add ask alloc-3 to app-2")
+
+	// delay so that preemption delay passes
+	time.Sleep(100 * time.Millisecond)
+
+	// third allocation should not succeed, as we are currently above capacity
+	alloc := partition.tryAllocate()
+	if alloc != nil {
+		t.Fatal("unexpected allocation")
+	}
+
+	// alloc-2 (as it is newer) should now be marked preempted
+	assert.Assert(t, !alloc1.IsPreempted(), "alloc-1 is preempted")
+	assert.Assert(t, alloc2.IsPreempted(), "alloc-2 is not preempted")
+
+	// allocation should still not do anything as we have not yet released the preempted allocation
+	alloc = partition.tryAllocate()
+	if alloc != nil {
+		t.Fatal("unexpected allocation")
+	}
+
+	// currently preempting resources in victim queue should be updated
+	preemptingRes := partition.GetQueue("root.parent.leaf1").GetPreemptingResource()
+	assert.Assert(t, resources.Equals(preemptingRes, res), "incorrect preempting resources")
+
+	// release alloc-2
+	partition.removeAllocation(&si.AllocationRelease{
+		PartitionName:   "default",
+		ApplicationID:   appID1,
+		UUID:            alloc2.GetUUID(),
+		TerminationType: si.TerminationType_STOPPED_BY_RM,
+		Message:         "Preempted",
+		AllocationKey:   allocID2,
+	})
+
+	// currently preempting resources in victim queue should be zero
+	preemptingRes = partition.GetQueue("root.parent.leaf1").GetPreemptingResource()
+	assert.Assert(t, resources.IsZero(preemptingRes), "incorrect preempting resources")
+
+	// allocation should now allocate
+	alloc = partition.tryAllocate()
+	if alloc == nil {
+		t.Fatal("missing allocation")
+	}
+	assert.Equal(t, 0, len(app2.GetReservations()), "ask should not be reserved")
+	assert.Equal(t, alloc.GetResult(), objects.Allocated, "result should be allocated")
+	assert.Equal(t, alloc.GetAllocationKey(), allocID3, "expected ask alloc-3 to be allocated")
+	assertUserGroupResource(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10000}))
+}
+
 // Preemption followed by a normal allocation
 func TestPreemptionForRequiredNodeNormalAlloc(t *testing.T) {
 	setupUGM()
@@ -1682,7 +1742,7 @@ func TestPreemptionForRequiredNodeReservedAlloc(t *testing.T) {
 	assertUserGroupResource(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 8000}))
 }
 
-func TestMultiplePreemptionAttemptAvoided(t *testing.T) {
+func TestPreemptionForRequiredNodeMultipleAttemptsAvoided(t *testing.T) {
 	partition := createQueuesNodes(t)
 	if partition == nil {
 		t.Fatal("partition create failed")
@@ -1728,6 +1788,67 @@ func TestMultiplePreemptionAttemptAvoided(t *testing.T) {
 	assert.Equal(t, 1, eventCount)
 	assert.Equal(t, true, ask2.HasTriggeredPreemption())
 	assert.Equal(t, true, alloc.IsPreempted())
+}
+
+// setup the partition with existing allocations so we can test preemption
+func setupPreemption(t *testing.T) (*PartitionContext, *objects.Application, *objects.Application, *objects.Allocation, *objects.Allocation) {
+	partition := createPreemptionQueuesNodes(t)
+	if partition == nil {
+		t.Fatal("partition create failed")
+	}
+	if alloc := partition.tryAllocate(); alloc != nil {
+		t.Fatalf("empty cluster allocate returned allocation: %v", alloc.String())
+	}
+
+	app1, _ := newApplicationWithHandler(appID1, "default", "root.parent.leaf1")
+	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "5"})
+	assert.NilError(t, err, "failed to create resource")
+
+	// add to the partition
+	err = partition.AddApplication(app1)
+	assert.NilError(t, err, "failed to add app-1 to partition")
+
+	// ask 1
+	ask := newAllocationAskPreempt(allocID, appID1, 2, res)
+	err = app1.AddAllocationAsk(ask)
+	assert.NilError(t, err, "failed to add ask alloc-1 to app-1")
+
+	// first allocation should be app-1 and alloc-1
+	alloc1 := partition.tryAllocate()
+	if alloc1 == nil {
+		t.Fatal("allocation did not return any allocation")
+	}
+	assert.Equal(t, alloc1.GetResult(), objects.Allocated, "result is not the expected allocated")
+	assert.Equal(t, alloc1.GetReleaseCount(), 0, "released allocations should have been 0")
+	assert.Equal(t, alloc1.GetApplicationID(), appID1, "expected application app-1 to be allocated")
+	assert.Equal(t, alloc1.GetAllocationKey(), allocID, "expected ask alloc-1 to be allocated")
+	assert.Equal(t, alloc1.GetNodeID(), nodeID1, "expected alloc-1 on node-1")
+	assertUserGroupResource(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 5000}))
+
+	// ask 2
+	ask2 := newAllocationAskPreempt(allocID2, appID1, 1, res)
+	err = app1.AddAllocationAsk(ask2)
+	assert.NilError(t, err, "failed to add ask alloc-2 to app-1")
+
+	// second allocation should be app-1 and alloc-2
+	alloc2 := partition.tryAllocate()
+	if alloc2 == nil {
+		t.Fatal("allocation did not return any allocation")
+	}
+	assert.Equal(t, alloc2.GetResult(), objects.Allocated, "result is not the expected allocated")
+	assert.Equal(t, alloc2.GetReleaseCount(), 0, "released allocations should have been 0")
+	assert.Equal(t, alloc2.GetApplicationID(), appID1, "expected application app-1 to be allocated")
+	assert.Equal(t, alloc2.GetAllocationKey(), allocID2, "expected ask alloc-2 to be allocated")
+	assert.Equal(t, alloc2.GetNodeID(), nodeID2, "expected alloc-2 on node-2")
+	assertUserGroupResource(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10000}))
+
+	app2, _ := newApplicationWithHandler(appID2, "default", "root.parent.leaf2")
+
+	// add to the partition
+	err = partition.AddApplication(app2)
+	assert.NilError(t, err, "failed to add app-1 to partition")
+
+	return partition, app1, app2, alloc1, alloc2
 }
 
 // setup the partition in a state that we need for multiple tests

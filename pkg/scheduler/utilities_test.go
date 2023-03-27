@@ -352,7 +352,7 @@ func createQueuesNodes(t *testing.T) *PartitionContext {
 // partition with a sibling relationship for testing preemption
 // root -> parent -> {leaf1,leaf2}
 //
-//	parent max: 5 vcore, leaf guarantees: 5 vcore
+//	parent max: 10 vcore, leaf guarantees: 5 vcore
 //
 // and 2 nodes: node-1 & node-2
 func createPreemptionQueuesNodes(t *testing.T) *PartitionContext {

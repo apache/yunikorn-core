@@ -90,6 +90,36 @@ func TestGetCreateTime(t *testing.T) {
 	}
 }
 
+func TestPreemptionPolicy(t *testing.T) {
+	ask1 := NewAllocationAskFromSI(&si.AllocationAsk{
+		AllocationKey:    "allow-self-deny-other",
+		ApplicationID:    "allow-self-deny-other",
+		PreemptionPolicy: &si.PreemptionPolicy{AllowPreemptSelf: true, AllowPreemptOther: false}})
+	assert.Check(t, ask1.IsAllowPreemptSelf(), "preempt self not allowed")
+	assert.Check(t, !ask1.IsAllowPreemptOther(), "preempt other allowed")
+
+	ask2 := NewAllocationAskFromSI(&si.AllocationAsk{
+		AllocationKey:    "deny-self-allow-other",
+		ApplicationID:    "deny-self-allow-other",
+		PreemptionPolicy: &si.PreemptionPolicy{AllowPreemptSelf: false, AllowPreemptOther: true}})
+	assert.Check(t, !ask2.IsAllowPreemptSelf(), "preempt self allowed")
+	assert.Check(t, ask2.IsAllowPreemptOther(), "preempt other not allowed")
+}
+
+func TestPreemptCheckTime(t *testing.T) {
+	siAsk := &si.AllocationAsk{
+		AllocationKey: "ask1",
+		ApplicationID: "app1",
+		PartitionName: "default",
+	}
+	ask := NewAllocationAskFromSI(siAsk)
+	assert.Equal(t, ask.GetPreemptCheckTime(), time.Time{}, "preemptCheckTime was not default")
+
+	now := time.Now().Add(-1 * time.Second)
+	ask.UpdatePreemptCheckTime()
+	assert.Check(t, now.Before(ask.GetPreemptCheckTime()), "preemptCheckTime was not current")
+}
+
 func TestPlaceHolder(t *testing.T) {
 	siAsk := &si.AllocationAsk{
 		AllocationKey: "ask1",

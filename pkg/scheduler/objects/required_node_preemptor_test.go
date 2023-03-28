@@ -25,21 +25,20 @@ import (
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-func createAllocationAsk(allocationKey string, app string, allowPreemption string, isOriginator bool, priority int32, res *resources.Resource) *AllocationAsk {
+func createAllocationAsk(allocationKey string, app string, allowPreemption bool, isOriginator bool, priority int32, res *resources.Resource) *AllocationAsk {
 	tags := map[string]string{}
-	tags[common.DomainYuniKorn+common.KeyAllowPreemption] = allowPreemption
 	siAsk := &si.AllocationAsk{
-		AllocationKey: allocationKey,
-		ApplicationID: app,
-		PartitionName: "default",
-		Priority:      priority,
-		ResourceAsk:   res.ToProto(),
-		Originator:    isOriginator,
-		Tags:          tags,
+		AllocationKey:    allocationKey,
+		ApplicationID:    app,
+		PartitionName:    "default",
+		Priority:         priority,
+		ResourceAsk:      res.ToProto(),
+		Originator:       isOriginator,
+		PreemptionPolicy: &si.PreemptionPolicy{AllowPreemptSelf: allowPreemption, AllowPreemptOther: true},
+		Tags:             tags,
 	}
 	ask := NewAllocationAskFromSI(siAsk)
 	return ask
@@ -49,49 +48,49 @@ func prepareAllocationAsks(node *Node) {
 	createTime := time.Now()
 
 	// regular pods
-	ask1 := createAllocationAsk("ask1", "app1", "true", false, 10,
+	ask1 := createAllocationAsk("ask1", "app1", true, false, 10,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
 	node.AddAllocation(NewAllocation("1", node.NodeID, ask1))
 
-	ask2 := createAllocationAsk("ask2", "app1", "true", false, 10,
+	ask2 := createAllocationAsk("ask2", "app1", true, false, 10,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}))
 	ask2.createTime = createTime
 	node.AddAllocation(NewAllocation("2", node.NodeID, ask2))
 
-	ask3 := createAllocationAsk("ask3", "app1", "true", false, 15,
+	ask3 := createAllocationAsk("ask3", "app1", true, false, 15,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
 	node.AddAllocation(NewAllocation("3", node.NodeID, ask3))
 
-	ask4 := createAllocationAsk("ask4", "app1", "true", false, 10,
+	ask4 := createAllocationAsk("ask4", "app1", true, false, 10,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	ask4.createTime = createTime
 	node.AddAllocation(NewAllocation("4", node.NodeID, ask4))
 
-	ask5 := createAllocationAsk("ask5", "app1", "true", false, 5,
+	ask5 := createAllocationAsk("ask5", "app1", true, false, 5,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	node.AddAllocation(NewAllocation("5", node.NodeID, ask5))
 
 	// opted out pods
-	ask6 := createAllocationAsk("ask6", "app1", "false", false, 10,
+	ask6 := createAllocationAsk("ask6", "app1", false, false, 10,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
 	node.AddAllocation(NewAllocation("6", node.NodeID, ask6))
 
-	ask7 := createAllocationAsk("ask7", "app1", "false", false, 10,
+	ask7 := createAllocationAsk("ask7", "app1", false, false, 10,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}))
 	ask7.createTime = createTime
 	node.AddAllocation(NewAllocation("7", node.NodeID, ask7))
 
-	ask8 := createAllocationAsk("ask8", "app1", "false", false, 15,
+	ask8 := createAllocationAsk("ask8", "app1", false, false, 15,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
 	node.AddAllocation(NewAllocation("8", node.NodeID, ask8))
 
 	// driver/owner pods
-	ask9 := createAllocationAsk("ask9", "app1", "false", true, 10,
+	ask9 := createAllocationAsk("ask9", "app1", false, true, 10,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	ask9.createTime = createTime
 	node.AddAllocation(NewAllocation("9", node.NodeID, ask9))
 
-	ask10 := createAllocationAsk("ask10", "app1", "true", true, 5,
+	ask10 := createAllocationAsk("ask10", "app1", true, true, 5,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	node.AddAllocation(NewAllocation("10", node.NodeID, ask10))
 }
@@ -123,7 +122,7 @@ func TestSortAllocations(t *testing.T) {
 		},
 	})
 
-	requiredAsk := createAllocationAsk("ask", "app1", "true", true, 20,
+	requiredAsk := createAllocationAsk("ask", "app1", true, true, 20,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	requiredAsk.pendingAskRepeat = 5
 
@@ -160,7 +159,7 @@ func TestFilterAllocations(t *testing.T) {
 	})
 
 	// case 1: allocations are available but none of its resources are matching with ds request ask, hence no allocations considered
-	requiredAsk := createAllocationAsk("ask12", "app1", "true", true, 20,
+	requiredAsk := createAllocationAsk("ask12", "app1", true, true, 20,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5}))
 	p := NewRequiredNodePreemptor(node, requiredAsk)
 	prepareAllocationAsks(node)
@@ -171,7 +170,7 @@ func TestFilterAllocations(t *testing.T) {
 	assert.Equal(t, len(filteredAllocations), 0)
 
 	// case 2: allocations are available but priority is higher than ds request priority, hence no allocations considered
-	requiredAsk1 := createAllocationAsk("ask12", "app1", "true", true, 1,
+	requiredAsk1 := createAllocationAsk("ask12", "app1", true, true, 1,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	p1 := NewRequiredNodePreemptor(node, requiredAsk1)
 	prepareAllocationAsks(node)
@@ -182,7 +181,7 @@ func TestFilterAllocations(t *testing.T) {
 	assert.Equal(t, len(filteredAllocations), 0)
 
 	// case 3: victims are available as there are allocations with lower priority and resource match
-	requiredAsk2 := createAllocationAsk("ask12", "app1", "true", true, 20,
+	requiredAsk2 := createAllocationAsk("ask12", "app1", true, true, 20,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	p2 := NewRequiredNodePreemptor(node, requiredAsk2)
 	prepareAllocationAsks(node)
@@ -191,7 +190,7 @@ func TestFilterAllocations(t *testing.T) {
 	assert.Equal(t, len(filteredAllocations), 10)
 
 	// case 4: allocation has preempted
-	requiredAsk3 := createAllocationAsk("ask12", "app1", "true", true, 20,
+	requiredAsk3 := createAllocationAsk("ask12", "app1", true, true, 20,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	p3 := NewRequiredNodePreemptor(node, requiredAsk3)
 	prepareAllocationAsks(node)
@@ -217,7 +216,7 @@ func TestGetVictims(t *testing.T) {
 	})
 
 	// case 1: victims are available and its resources are matching with ds request ask
-	requiredAsk := createAllocationAsk("ask11", "app1", "true", true, 20,
+	requiredAsk := createAllocationAsk("ask11", "app1", true, true, 20,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25}))
 
 	p := NewRequiredNodePreemptor(node, requiredAsk)
@@ -236,7 +235,7 @@ func TestGetVictims(t *testing.T) {
 	assert.Equal(t, resources.Equals(victims[3].GetAllocatedResource(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8})), true)
 
 	// case 2: victims are available and its resources are matching with ds request ask (but with different quantity)
-	requiredAsk2 := createAllocationAsk("ask13", "app1", "true", true, 20,
+	requiredAsk2 := createAllocationAsk("ask13", "app1", true, true, 20,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	p2 := NewRequiredNodePreemptor(node, requiredAsk2)
 	prepareAllocationAsks(node)
@@ -246,7 +245,7 @@ func TestGetVictims(t *testing.T) {
 	assert.Equal(t, len(victims2), 1)
 
 	// case 3: allocations are available and its resources are matching partially with ds request ask (because of different resource types), hence no victims
-	requiredAsk3 := createAllocationAsk("ask13", "app1", "true", true, 20,
+	requiredAsk3 := createAllocationAsk("ask13", "app1", true, true, 20,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 5}))
 	p3 := NewRequiredNodePreemptor(node, requiredAsk3)
 	prepareAllocationAsks(node)

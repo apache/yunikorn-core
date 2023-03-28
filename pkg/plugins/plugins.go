@@ -52,6 +52,14 @@ func RegisterSchedulerPlugin(plugin interface{}) {
 	}
 }
 
+// visible for testing
+func UnregisterSchedulerPlugins() {
+	plugins.Lock()
+	defer plugins.Unlock()
+	plugins.ResourceManagerCallbackPlugin = nil
+	plugins.StateDumpPlugin = nil
+}
+
 func GetResourceManagerCallbackPlugin() api.ResourceManagerCallback {
 	plugins.RLock()
 	defer plugins.RUnlock()

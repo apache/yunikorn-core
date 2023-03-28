@@ -47,11 +47,12 @@ type PartitionConfig struct {
 	Queues            []QueueConfig
 	PlacementRules    []PlacementRule           `yaml:",omitempty" json:",omitempty"`
 	Limits            []Limit                   `yaml:",omitempty" json:",omitempty"`
-	Preemption        PartitionPreemptionConfig `yaml:",omitempty" json:",omitempty"`
+	Preemption        PartitionPreemptionConfig `yaml:",omitempty" json:",omitempty"` // deprecated
 	NodeSortPolicy    NodeSortingPolicy         `yaml:",omitempty" json:",omitempty"`
 	StateDumpFilePath string                    `yaml:",omitempty" json:",omitempty"`
 }
 
+// deprecated
 type PartitionPreemptionConfig struct {
 	Enabled bool
 }

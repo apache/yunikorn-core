@@ -21,6 +21,7 @@ package objects
 import (
 	"fmt"
 	"reflect"
+	"sort"
 	"strconv"
 	"testing"
 	"time"
@@ -258,124 +259,6 @@ func TestPriorityCalc(t *testing.T) {
 	leaf.RemoveApplication(app)
 	assert.Equal(t, parent.GetCurrentPriority(), configs.MinPriority, "final parent priority wrong")
 	assert.Equal(t, leaf.GetCurrentPriority(), configs.MinPriority, "final leaf priority wrong")
-}
-
-func TestPreemptionPriorityCalc(t *testing.T) {
-	root, err := createRootQueue(nil)
-	assert.NilError(t, err, "queue create failed")
-	var leaf *Queue
-	leaf, err = createManagedQueue(root, "leaf", false, nil)
-	assert.NilError(t, err, "failed to create leaf queue")
-	resMap := map[string]string{"memory": "100", "vcores": "10"}
-	res, err2 := resources.NewResourceFromConf(resMap)
-	assert.NilError(t, err2, "failed to create resource with error")
-
-	app1 := newApplication(appID1, "default", "root.leaf")
-	app1.SetQueue(leaf)
-	app2 := newApplication(appID2, "default", "root.leaf")
-	app2.SetQueue(leaf)
-	app3 := newApplication(appID3, "default", "root.leaf")
-	app3.SetQueue(leaf)
-	app4 := newApplication(appID4, "default", "root.leaf")
-	app4.SetQueue(leaf)
-
-	leaf.AddApplication(app1)
-	alloc1 := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
-	alloc1.priority = 10
-	app1.AddAllocation(alloc1)
-	assert.Equal(t, int32(10), leaf.GetPreemptionPriority())
-	assert.Equal(t, int32(10), root.GetPreemptionPriority())
-
-	leaf.AddApplication(app2)
-	alloc2 := newAllocation(appID2, "uuid-2", nodeID1, "root.a", res)
-	alloc2.priority = 1
-	app2.AddAllocation(alloc2)
-	assert.Equal(t, int32(1), leaf.GetPreemptionPriority())
-	assert.Equal(t, int32(1), root.GetPreemptionPriority())
-
-	leaf.AddApplication(app3)
-	alloc3 := newAllocation(appID3, "uuid-3", nodeID1, "root.a", res)
-	alloc3.priority = 5
-	app3.AddAllocation(alloc3)
-	assert.Equal(t, int32(1), leaf.GetPreemptionPriority())
-	assert.Equal(t, int32(1), root.GetPreemptionPriority())
-
-	leaf.AddApplication(app4)
-	app4.SetQueue(leaf)
-	alloc4 := newAllocation(appID4, "uuid-4", nodeID1, "root.a", res)
-	alloc4.priority = 1
-	app4.AddAllocation(alloc4)
-	assert.Equal(t, int32(1), leaf.GetPreemptionPriority())
-	assert.Equal(t, int32(1), root.GetPreemptionPriority())
-
-	leaf.RemoveApplication(app3)
-	assert.Equal(t, int32(1), leaf.GetPreemptionPriority())
-	assert.Equal(t, int32(1), root.GetPreemptionPriority())
-	leaf.RemoveApplication(app2)
-	assert.Equal(t, int32(1), leaf.GetPreemptionPriority())
-	assert.Equal(t, int32(1), root.GetPreemptionPriority())
-	leaf.RemoveApplication(app4)
-	assert.Equal(t, int32(10), leaf.GetPreemptionPriority())
-	assert.Equal(t, int32(10), root.GetPreemptionPriority())
-	leaf.RemoveApplication(app1)
-	assert.Equal(t, configs.MaxPriority, leaf.GetPreemptionPriority())
-	assert.Equal(t, configs.MaxPriority, root.GetPreemptionPriority())
-}
-
-func TestPreemptionPriorityCalcWithFencedQueue(t *testing.T) {
-	resMap := map[string]string{"memory": "100", "vcores": "10"}
-	res, err := resources.NewResourceFromConf(resMap)
-	assert.NilError(t, err, "failed to create resource with error")
-
-	// create the root
-	root, err := createRootQueue(nil)
-	assert.NilError(t, err, "queue create failed")
-
-	// single parent under root
-	var parent *Queue
-	parent, err = createManagedQueueWithProps(root, "parent", true, nil, map[string]string{
-		configs.PriorityOffset: "5",
-	})
-	assert.NilError(t, err, "failed to create parent queue")
-
-	// add a leaf under the parent
-	var leaf *Queue
-	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, map[string]string{
-		configs.PriorityOffset:   "3",
-		configs.PreemptionPolicy: policies.FencePreemptionPolicy.String(),
-	})
-	assert.NilError(t, err, "failed to create leaf queue")
-
-	app1 := newApplication(appID1, "default", "root.leaf")
-	app1.SetQueue(leaf)
-	app2 := newApplication(appID2, "default", "root.leaf")
-	app2.SetQueue(leaf)
-	leaf.AddApplication(app1)
-	leaf.AddApplication(app2)
-
-	alloc1 := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
-	alloc1.priority = 10
-	app1.AddAllocation(alloc1)
-	assert.Equal(t, int32(3), leaf.GetPreemptionPriority())
-	assert.Equal(t, int32(8), parent.GetPreemptionPriority())
-	assert.Equal(t, int32(8), root.GetPreemptionPriority())
-
-	alloc2 := newAllocation(appID2, "uuid-2", nodeID1, "root.a", res)
-	alloc2.priority = 1
-	app2.AddAllocation(alloc2)
-	assert.Equal(t, int32(3), leaf.GetPreemptionPriority())
-	assert.Equal(t, int32(8), parent.GetPreemptionPriority())
-	assert.Equal(t, int32(8), root.GetPreemptionPriority())
-
-	leaf.RemoveApplication(app1)
-	assert.Equal(t, int32(3), leaf.GetPreemptionPriority())
-	assert.Equal(t, int32(8), parent.GetPreemptionPriority())
-	assert.Equal(t, int32(8), root.GetPreemptionPriority())
-
-	leaf.RemoveApplication(app2)
-	assert.Equal(t, configs.MaxPriority, leaf.GetPreemptionPriority())
-	assert.Equal(t, configs.MaxPriority, parent.GetPreemptionPriority())
-	assert.Equal(t, configs.MaxPriority, root.GetPreemptionPriority())
 }
 
 func TestPendingCalc(t *testing.T) {
@@ -1726,6 +1609,216 @@ func TestSetResources(t *testing.T) {
 	assert.NilError(t, err, "failed to set resources: %v", err)
 	assert.Assert(t, reflect.DeepEqual(queue.guaranteedResource, expectedGuaranteedResource))
 	assert.Assert(t, reflect.DeepEqual(queue.maxResource, expectedMaxResource))
+}
+
+func TestPreemptingResource(t *testing.T) {
+	one, err := resources.NewResourceFromConf(map[string]string{"memory": "10000000", "vcores": "1"})
+	assert.NilError(t, err, "failed to create resource")
+	two, err := resources.NewResourceFromConf(map[string]string{"memory": "20000000", "vcores": "2"})
+	assert.NilError(t, err, "failed to create resource")
+	three, err := resources.NewResourceFromConf(map[string]string{"memory": "30000000", "vcores": "3"})
+	assert.NilError(t, err, "failed to create resource")
+
+	queue, err := createManagedQueueWithProps(nil, "tmp", true, nil, nil)
+	assert.NilError(t, err, "failed to create basic queue queue: %v", err)
+
+	assert.Check(t, resources.IsZero(queue.GetPreemptingResource()), "initial value should be zero")
+	queue.IncPreemptingResource(one)
+	assert.Check(t, resources.Equals(one, queue.GetPreemptingResource()), "wrong value after increment")
+	queue.IncPreemptingResource(two)
+	assert.Check(t, resources.Equals(three, queue.GetPreemptingResource()), "wrong value after increment")
+	queue.DecPreemptingResource(one)
+	assert.Check(t, resources.Equals(two, queue.GetPreemptingResource()), "wrong value after decrement")
+	queue.DecPreemptingResource(two)
+	assert.Check(t, resources.IsZero(queue.GetPreemptingResource()), "final value should be zero")
+}
+
+func TestPreemptionDelay(t *testing.T) {
+	queue, err := createManagedQueueWithProps(nil, "tmp", true, nil, nil)
+	assert.NilError(t, err, "failed to create basic queue queue: %v", err)
+
+	assert.Equal(t, configs.DefaultPreemptionDelay, queue.GetPreemptionDelay(), "initial preemption delay incorrect")
+
+	twice := 2 * configs.DefaultPreemptionDelay
+	queue.preemptionDelay = twice
+	assert.Equal(t, twice, queue.GetPreemptionDelay(), "preemption delay not updated correctly")
+}
+
+func TestFindQueueByAppID(t *testing.T) {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "failed to create queue")
+	parent1, err := createManagedQueue(root, "parent1", true, nil)
+	assert.NilError(t, err, "failed to create queue")
+	parent2, err := createManagedQueue(root, "parent2", true, nil)
+	assert.NilError(t, err, "failed to create queue")
+	leaf1, err := createManagedQueue(parent1, "leaf1", false, nil)
+	assert.NilError(t, err, "failed to create queue")
+	leaf2, err := createManagedQueue(parent2, "leaf2", false, nil)
+	assert.NilError(t, err, "failed to create queue")
+
+	app := newApplication(appID1, "default", "root.parent.leaf")
+	app.pending = resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 10})
+	leaf1.AddApplication(app)
+
+	// we should be able to find the queue from any other given the appID
+	assert.Equal(t, leaf1, root.FindQueueByAppID(appID1), "failed to find queue from root")
+	assert.Equal(t, leaf1, parent1.FindQueueByAppID(appID1), "failed to find queue from parent1")
+	assert.Equal(t, leaf1, parent2.FindQueueByAppID(appID1), "failed to find queue from parent2")
+	assert.Equal(t, leaf1, leaf1.FindQueueByAppID(appID1), "failed to find queue from leaf1")
+	assert.Equal(t, leaf1, leaf2.FindQueueByAppID(appID1), "failed to find queue from leaf2")
+
+	// non-existent queue should be nil
+	var none *Queue = nil
+	assert.Equal(t, none, root.FindQueueByAppID("missing"), "found queue reference in root")
+	assert.Equal(t, none, parent1.FindQueueByAppID("missing"), "found queue reference in parent1")
+	assert.Equal(t, none, parent2.FindQueueByAppID("missing"), "found queue reference in parent2")
+	assert.Equal(t, none, leaf1.FindQueueByAppID("missing"), "found queue reference in leaf1")
+	assert.Equal(t, none, leaf2.FindQueueByAppID("missing"), "found queue reference in leaf2")
+}
+
+// nolint: funlen
+func TestFindEligiblePreemptionVictims(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 100})
+	parentMax := map[string]string{common.Memory: "200"}
+	parentGuar := map[string]string{common.Memory: "100"}
+	ask := createAllocationAsk("ask1", appID1, true, true, 0, res)
+	ask.pendingAskRepeat = 1
+	ask2 := createAllocationAsk("ask2", appID2, true, true, -1000, res)
+	ask2.pendingAskRepeat = 1
+	alloc2 := NewAllocation("alloc-2", nodeID1, ask2)
+	ask3 := createAllocationAsk("ask3", appID2, true, true, -1000, res)
+	ask3.pendingAskRepeat = 1
+	alloc3 := NewAllocation("alloc-3", nodeID1, ask3)
+	root, err := createRootQueue(map[string]string{common.Memory: "1000"})
+	assert.NilError(t, err, "failed to create queue")
+	parent1, err := createManagedQueueGuaranteed(root, "parent1", true, parentMax, parentGuar)
+	assert.NilError(t, err, "failed to create queue")
+	parent2, err := createManagedQueueGuaranteed(root, "parent2", true, parentMax, parentGuar)
+	assert.NilError(t, err, "failed to create queue")
+	leaf1, err := createManagedQueueGuaranteed(parent1, "leaf1", false, nil, nil)
+	assert.NilError(t, err, "failed to create queue")
+	leaf2, err := createManagedQueueGuaranteed(parent2, "leaf2", false, nil, nil)
+	assert.NilError(t, err, "failed to create queue")
+
+	// verify no victims when no allocations exist
+	snapshot := leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 3, len(snapshot), "wrong snapshot count") // leaf1, parent1, root
+	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
+
+	// add two lower-priority allocs in leaf2
+	app2 := newApplication(appID2, "default", "root.parent.leaf")
+	app2.pending = res
+	leaf2.AddApplication(app2)
+	app2.SetQueue(leaf2)
+	err = app2.AddAllocationAsk(ask2)
+	assert.NilError(t, err, "failed to add ask")
+	err = app2.AddAllocationAsk(ask3)
+	assert.NilError(t, err, "failed to add ask")
+	app2.AddAllocation(alloc2)
+	app2.AddAllocation(alloc3)
+	err = leaf2.IncAllocatedResource(alloc2.allocatedResource, false)
+	assert.NilError(t, err, "failed to inc allocated resources")
+	err = leaf2.IncAllocatedResource(alloc3.allocatedResource, false)
+	assert.NilError(t, err, "failed to inc allocated resources")
+
+	// verify victims
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 5, len(snapshot), "wrong snapshot count") // leaf1, parent1, root
+	assert.Equal(t, 2, len(victims(snapshot)), "wrong victim count")
+	assert.Equal(t, alloc2.allocationKey, victims(snapshot)[0].allocationKey, "wrong alloc")
+	assert.Equal(t, alloc3.allocationKey, victims(snapshot)[1].allocationKey, "wrong alloc")
+
+	// disabling preemption on victim queue should remove victims from consideration
+	leaf2.preemptionPolicy = policies.DisabledPreemptionPolicy
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
+	leaf2.preemptionPolicy = policies.DefaultPreemptionPolicy
+
+	// fencing parent1 queue should limit scope
+	parent1.preemptionPolicy = policies.FencePreemptionPolicy
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
+	parent1.preemptionPolicy = policies.DefaultPreemptionPolicy
+
+	// fencing leaf1 queue should limit scope
+	leaf1.preemptionPolicy = policies.FencePreemptionPolicy
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
+	leaf1.preemptionPolicy = policies.DefaultPreemptionPolicy
+
+	// fencing parent2 queue should not limit scope
+	parent2.preemptionPolicy = policies.FencePreemptionPolicy
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 2, len(victims(snapshot)), "wrong victim count")
+	parent2.preemptionPolicy = policies.DefaultPreemptionPolicy
+
+	// fencing leaf2 queue should not limit scope
+	leaf2.preemptionPolicy = policies.FencePreemptionPolicy
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 2, len(victims(snapshot)), "wrong victim count")
+	leaf2.preemptionPolicy = policies.DefaultPreemptionPolicy
+
+	// requiring a specific node take alloc out of consideration
+	alloc2.GetAsk().SetRequiredNode(nodeID1)
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 1, len(victims(snapshot)), "wrong victim count")
+	assert.Equal(t, alloc3.allocationKey, victims(snapshot)[0].allocationKey, "wrong alloc")
+	alloc2.GetAsk().SetRequiredNode("")
+
+	// setting priority offset on parent2 queue should remove leaf2 victims
+	parent2.priorityOffset = 1001
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
+	parent2.priorityOffset = 0
+
+	// priority-fencing parent2 with positive offset should remove leaf2 victims
+	parent2.priorityOffset = 1
+	parent2.priorityPolicy = policies.FencePriorityPolicy
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
+	parent2.priorityOffset = 0
+	parent2.priorityPolicy = policies.DefaultPriorityPolicy
+
+	// priority-fencing parent2 with negative offset should not affect leaf2 victims
+	parent2.priorityOffset = -1
+	parent2.priorityPolicy = policies.FencePriorityPolicy
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 2, len(victims(snapshot)), "wrong victim count")
+	parent2.priorityOffset = 0
+	parent2.priorityPolicy = policies.DefaultPriorityPolicy
+
+	// priority-fencing parent1 with small negative offset should not affect leaf2 victims
+	parent1.priorityOffset = -1000
+	parent1.priorityPolicy = policies.FencePriorityPolicy
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 2, len(victims(snapshot)), "wrong victim count")
+	parent1.priorityOffset = 0
+	parent1.priorityPolicy = policies.DefaultPriorityPolicy
+
+	// priority-fencing parent1 with larger negative offset should remove leaf2 victims
+	parent1.priorityOffset = -1001
+	parent1.priorityPolicy = policies.FencePriorityPolicy
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
+	parent1.priorityOffset = 0
+	parent1.priorityPolicy = policies.DefaultPriorityPolicy
+
+	// increasing parent2 guaranteed resources should remove leaf2 victims
+	parent2.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 200})
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
+	parent2.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 100})
+}
+
+func victims(snapshot map[string]*QueuePreemptionSnapshot) []*Allocation {
+	results := make([]*Allocation, 0)
+	for _, entry := range snapshot {
+		results = append(results, entry.PotentialVictims...)
+	}
+	sort.SliceStable(results, func(i, j int) bool {
+		return results[i].allocationKey < results[j].allocationKey
+	})
+	return results
 }
 
 func TestSetTemplate(t *testing.T) {

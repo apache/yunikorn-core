@@ -161,6 +161,26 @@ func TestQTDecreaseTrackedResource(t *testing.T) {
 	assert.Equal(t, 0, len(queueTracker.runningApplications))
 	// Make sure all childQueueTracker cleaned
 	assert.Equal(t, len(queueTracker.childQueueTrackers), 0)
+
+	// Test parent queueTracker has not zero usage, but child queueTrackers has all deleted
+	err = queueTracker.increaseTrackedResource(queuePath1, TestApp1, usage1)
+	if err != nil {
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
+	}
+	assert.Equal(t, 1, len(queueTracker.runningApplications))
+
+	usage2, err = resources.NewResourceFromConf(map[string]string{"mem": "20M", "vcore": "20"})
+	if err != nil {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
+	}
+	err = queueTracker.increaseTrackedResource("root.parent", TestApp2, usage2)
+	if err != nil {
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", "root.parent", TestApp2, usage2, err)
+	}
+
+	// Make sure we will reach the error "no child trackers left, but the resource usage is not zero err"
+	err = queueTracker.decreaseTrackedResource(queuePath1, TestApp1, usage1, true)
+	assert.ErrorContains(t, err, "BUG: no child trackers left, but the resource usage is not zero")
 }
 
 func TestGetChildQueuePath(t *testing.T) {

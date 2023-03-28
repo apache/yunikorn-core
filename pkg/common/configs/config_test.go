@@ -1143,6 +1143,44 @@ partitions:
 	// validate the config and check after the update
 	_, err = CreateConfig(data)
 	assert.ErrorContains(t, err, "invalid MaxResources settings for limit")
+
+	// Make sure queue max resource parse fail will return err
+	data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        maxapplications: 50
+        limits:
+          - limit:
+            users: 
+            - user1
+            maxresources: {memory: 10000, vcore: 10}
+            maxapplications: 5
+          - limit:
+            users:
+            - user2
+            groups:
+            - prod
+            maxapplications: 3
+        queues:
+          - name: level1
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: parseFailed, vcore: 10}
+            limits:
+              - limit:
+                users: 
+                - test
+                maxapplications: 5
+                maxresources: {memory: 100000, vcore: 100}
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.ErrorContains(t, err, "parse queue max resource failed")
 }
 
 func TestComplexUsers(t *testing.T) {

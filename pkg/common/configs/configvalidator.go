@@ -371,7 +371,7 @@ func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int
 		if err != nil {
 			log.Logger().Debug("resource parsing failed",
 				zap.Error(err))
-			return err
+			return fmt.Errorf("parse queue max resource failed: %s", err.Error())
 		}
 		if !queueMaxResource.FitInMaxUndef(limitResource) {
 			return fmt.Errorf("invalid MaxResources settings for limit user names '%s'  groups %s exeecd current the queue MaxResources", limit.Users, limit.Groups)

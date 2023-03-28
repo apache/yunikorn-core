@@ -872,7 +872,7 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, tota
 		if headRoom.FitInMaxUndef(request.GetAllocatedResource()) {
 			// if headroom is still enough for the resources
 			*total = append(*total, request)
-			headRoom.SubFrom(request.GetAllocatedResource())
+			headRoom.SubOnlyExisting(request.GetAllocatedResource())
 		}
 	}
 }
@@ -1019,6 +1019,7 @@ func (sa *Application) cancelReservations(reservations []*reservation) bool {
 }
 
 // tryPlaceholderAllocate tries to replace a placeholder that is allocated with a real allocation
+//
 //nolint:funlen
 func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, getNodeFn func(string) *Node) *Allocation {
 	sa.Lock()

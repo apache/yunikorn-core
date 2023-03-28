@@ -656,7 +656,7 @@ func TestRemovePlaceholderAllocationWithNoRealAllocation(t *testing.T) {
 	ask.placeholder = true
 	allocInfo := NewAllocation("uuid-1", nodeID1, ask)
 	app.AddAllocation(allocInfo)
-	err := app.HandleApplicationEvent(RunApplication)
+	err := app.handleApplicationEventWithLocking(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted")
 
 	app.RemoveAllocation("uuid-1", si.TerminationType_UNKNOWN_TERMINATION_TYPE)
@@ -974,9 +974,9 @@ func TestStateTimeOut(t *testing.T) {
 	startingTimeout = time.Microsecond * 100
 	defer func() { startingTimeout = time.Minute * 5 }()
 	app := newApplication(appID1, "default", "root.a")
-	err := app.HandleApplicationEvent(RunApplication)
+	err := app.handleApplicationEventWithLocking(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (timeout test)")
-	err = app.HandleApplicationEvent(RunApplication)
+	err = app.handleApplicationEventWithLocking(RunApplication)
 	assert.NilError(t, err, "no error expected accepted to starting (timeout test)")
 	// give it some time to run and progress
 	time.Sleep(time.Millisecond * 100)
@@ -989,16 +989,16 @@ func TestStateTimeOut(t *testing.T) {
 
 	startingTimeout = time.Millisecond * 100
 	app = newApplication(appID1, "default", "root.a")
-	err = app.HandleApplicationEvent(RunApplication)
+	err = app.handleApplicationEventWithLocking(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (timeout test2)")
-	err = app.HandleApplicationEvent(RunApplication)
+	err = app.handleApplicationEventWithLocking(RunApplication)
 	assert.NilError(t, err, "no error expected accepted to starting (timeout test2)")
 	// give it some time to run and progress
 	time.Sleep(time.Microsecond * 100)
 	if !app.IsStarting() || app.stateTimer == nil {
 		t.Fatalf("Starting state and timer should not have timed out yet, state: %s", app.stateMachine.Current())
 	}
-	err = app.HandleApplicationEvent(RunApplication)
+	err = app.handleApplicationEventWithLocking(RunApplication)
 	assert.NilError(t, err, "no error expected starting to run (timeout test2)")
 	// give it some time to run and progress
 	time.Sleep(time.Microsecond * 100)
@@ -1008,9 +1008,9 @@ func TestStateTimeOut(t *testing.T) {
 
 	startingTimeout = time.Minute * 5
 	app = newApplicationWithTags(appID2, "default", "root.a", map[string]string{siCommon.AppTagStateAwareDisable: "true"})
-	err = app.HandleApplicationEvent(RunApplication)
+	err = app.handleApplicationEventWithLocking(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (timeout test)")
-	err = app.HandleApplicationEvent(RunApplication)
+	err = app.handleApplicationEventWithLocking(RunApplication)
 	assert.NilError(t, err, "no error expected accepted to starting (timeout test)")
 	// give it some time to run and progress
 	time.Sleep(time.Millisecond * 100)
@@ -1039,9 +1039,9 @@ func TestCompleted(t *testing.T) {
 		"test": {},
 	}
 	app.sortedRequests = append(app.sortedRequests, &AllocationAsk{})
-	err := app.HandleApplicationEvent(RunApplication)
+	err := app.handleApplicationEventWithLocking(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (completed test)")
-	err = app.HandleApplicationEvent(CompleteApplication)
+	err = app.handleApplicationEventWithLocking(CompleteApplication)
 	assert.NilError(t, err, "no error expected accepted to completing (completed test)")
 	assert.Assert(t, app.IsCompleting(), "App should be waiting")
 	// give it some time to run and progress
@@ -1068,7 +1068,7 @@ func TestRejected(t *testing.T) {
 	}()
 	app := newApplication(appID1, "default", "root.a")
 	rejectedMessage := fmt.Sprintf("Failed to place application %s: application rejected: no placement rule matched", app.ApplicationID)
-	err := app.HandleApplicationEventWithInfo(RejectApplication, rejectedMessage)
+	err := app.handleApplicationEventWithInfoLocking(RejectApplication, rejectedMessage)
 	assert.NilError(t, err, "no error expected new to rejected")
 
 	err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, app.IsRejected)
@@ -1106,12 +1106,12 @@ func TestOnStatusChangeCalled(t *testing.T) {
 	app, testHandler := newApplicationWithHandler(appID1, "default", "root.a")
 	assert.Equal(t, New.String(), app.CurrentState(), "new app not in New state")
 
-	err := app.HandleApplicationEvent(RunApplication)
+	err := app.handleApplicationEventWithLocking(RunApplication)
 	assert.NilError(t, err, "error returned which was not expected")
 	assert.Assert(t, testHandler.IsHandled(), "handler did not get called as expected")
 
 	// accepted to rejected: error expected
-	err = app.HandleApplicationEvent(RejectApplication)
+	err = app.handleApplicationEventWithLocking(RejectApplication)
 	assert.Assert(t, err != nil, "error expected and not seen")
 	assert.Equal(t, app.CurrentState(), Accepted.String(), "application state has been changed unexpectedly")
 	assert.Assert(t, !testHandler.IsHandled(), "unexpected event send to the RM")
@@ -1725,4 +1725,16 @@ func (sa *Application) getPlaceholderTimer() *time.Timer {
 	sa.RLock()
 	defer sa.RUnlock()
 	return sa.placeholderTimer
+}
+
+func (sa *Application) handleApplicationEventWithLocking(event applicationEvent) error {
+	sa.Lock()
+	defer sa.Unlock()
+	return sa.HandleApplicationEvent(event)
+}
+
+func (sa *Application) handleApplicationEventWithInfoLocking(event applicationEvent, info string) error {
+	sa.Lock()
+	defer sa.Unlock()
+	return sa.HandleApplicationEventWithInfo(event, info)
 }

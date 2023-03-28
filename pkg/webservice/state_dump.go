@@ -74,7 +74,7 @@ func doStateDump(w io.Writer) error {
 		Partitions:       getPartitionInfoDAO(partitionContext),
 		Applications:     getApplicationsDAO(partitionContext),
 		AppHistory:       getAppHistoryDAO(records),
-		Nodes:            getNodesDAO(partitionContext),
+		Nodes:            getPartitionNodesDAO(partitionContext),
 		ClusterInfo:      getClusterDAO(partitionContext),
 		ContainerHistory: getContainerHistoryDAO(records),
 		Queues:           getPartitionQueuesDAO(partitionContext),

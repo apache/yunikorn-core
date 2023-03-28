@@ -25,18 +25,19 @@ type AllocationAskLogDAOInfo struct {
 }
 
 type AllocationAskDAOInfo struct {
-	AllocationKey       string                    `json:"allocationKey"`
-	AllocationTags      map[string]string         `json:"allocationTags"`
-	RequestTime         int64                     `json:"requestTime"`
-	ResourcePerAlloc    map[string]int64          `json:"resource"`
-	PendingCount        int32                     `json:"pendingCount"`
-	Priority            string                    `json:"priority"`
-	RequiredNodeID      string                    `json:"requiredNodeId"`
-	ApplicationID       string                    `json:"applicationId"`
-	Partition           string                    `json:"partition"`
-	Placeholder         bool                      `json:"placeholder"`
-	PlaceholderTimeout  int64                     `json:"placeholderTimeout"`
-	TaskGroupName       string                    `json:"taskGroupName"`
-	AllocationLog       []AllocationAskLogDAOInfo `json:"allocationLog"`
-	TriggeredPreemption bool                      `json:"triggeredPreemption"`
+	AllocationKey       string                     `json:"allocationKey"`
+	AllocationTags      map[string]string          `json:"allocationTags"`
+	RequestTime         int64                      `json:"requestTime"`
+	ResourcePerAlloc    map[string]int64           `json:"resource"`
+	PendingCount        int32                      `json:"pendingCount"`
+	Priority            string                     `json:"priority"`
+	RequiredNodeID      string                     `json:"requiredNodeId"`
+	ApplicationID       string                     `json:"applicationId"`
+	Partition           string                     `json:"partition"`
+	Placeholder         bool                       `json:"placeholder"`
+	PlaceholderTimeout  int64                      `json:"placeholderTimeout"`
+	TaskGroupName       string                     `json:"taskGroupName"`
+	AllocationLog       []*AllocationAskLogDAOInfo `json:"allocationLog"`
+	TriggeredPreemption bool                       `json:"triggeredPreemption"`
+	Originator          bool                       `json:"originator"`
 }

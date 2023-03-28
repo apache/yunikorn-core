@@ -734,7 +734,7 @@ partitions:
       - name: root
     placementrules:
       - name: fixed
-        value: default
+        value: root
       - name: tag
         value: Just Any value
 `
@@ -844,6 +844,7 @@ partitions:
       - name: user
         parent:
           name: fixed
+          value: test
           parent:
             name: provided
 `

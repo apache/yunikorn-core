@@ -174,56 +174,80 @@ func getClusterUtilJSON(partition *scheduler.PartitionContext) []*dao.ClusterUti
 	return utils
 }
 
-func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
-	allocations := app.GetAllAllocations()
-	allocationInfo := make([]dao.AllocationDAOInfo, 0, len(allocations))
-	placeholders := app.GetAllPlaceholderData()
-	placeholderInfo := make([]dao.PlaceholderDAOInfo, 0, len(placeholders))
+func getAllocationDAO(alloc *objects.Allocation) *dao.AllocationDAOInfo {
 	var requestTime int64
+	if alloc.IsPlaceholderUsed() {
+		requestTime = alloc.GetPlaceholderCreateTime().UnixNano()
+	} else {
+		requestTime = alloc.GetAsk().GetCreateTime().UnixNano()
+	}
+	allocTime := alloc.GetCreateTime().UnixNano()
+	allocDAO := &dao.AllocationDAOInfo{
+		AllocationKey:    alloc.GetAllocationKey(),
+		AllocationTags:   alloc.GetTagsClone(),
+		RequestTime:      requestTime,
+		AllocationTime:   allocTime,
+		AllocationDelay:  allocTime - requestTime,
+		UUID:             alloc.GetUUID(),
+		ResourcePerAlloc: alloc.GetAllocatedResource().DAOMap(),
+		PlaceholderUsed:  alloc.IsPlaceholderUsed(),
+		Placeholder:      alloc.IsPlaceholder(),
+		TaskGroupName:    alloc.GetTaskGroup(),
+		Priority:         strconv.Itoa(int(alloc.GetPriority())),
+		NodeID:           alloc.GetNodeID(),
+		ApplicationID:    alloc.GetApplicationID(),
+		Partition:        alloc.GetPartitionName(),
+		Preempted:        alloc.IsPreempted(),
+	}
+	return allocDAO
+}
 
+func getAllocationsDAO(allocations []*objects.Allocation) []*dao.AllocationDAOInfo {
+	allocsDAO := make([]*dao.AllocationDAOInfo, 0, len(allocations))
 	for _, alloc := range allocations {
-		if alloc.IsPlaceholderUsed() {
-			requestTime = alloc.GetPlaceholderCreateTime().UnixNano()
-		} else {
-			requestTime = alloc.GetAsk().GetCreateTime().UnixNano()
-		}
-		allocTime := alloc.GetCreateTime().UnixNano()
-		allocInfo := dao.AllocationDAOInfo{
-			AllocationKey:    alloc.GetAllocationKey(),
-			AllocationTags:   alloc.GetTagsClone(),
-			RequestTime:      requestTime,
-			AllocationTime:   allocTime,
-			AllocationDelay:  allocTime - requestTime,
-			UUID:             alloc.GetUUID(),
-			ResourcePerAlloc: alloc.GetAllocatedResource().DAOMap(),
-			PlaceholderUsed:  alloc.IsPlaceholderUsed(),
-			Priority:         strconv.Itoa(int(alloc.GetPriority())),
-			NodeID:           alloc.GetNodeID(),
-			ApplicationID:    alloc.GetApplicationID(),
-			Partition:        alloc.GetPartitionName(),
-			Preempted:        alloc.IsPreempted(),
-		}
-		allocationInfo = append(allocationInfo, allocInfo)
+		allocsDAO = append(allocsDAO, getAllocationDAO(alloc))
 	}
-	stateLog := app.GetStateLog()
-	stateLogInfo := make([]dao.StateDAOInfo, 0, len(stateLog))
-	for _, state := range stateLog {
-		stateInfo := dao.StateDAOInfo{
-			Time:             state.Time.UnixNano(),
-			ApplicationState: state.ApplicationState,
-		}
-		stateLogInfo = append(stateLogInfo, stateInfo)
-	}
+	return allocsDAO
+}
 
-	for _, taskGroup := range placeholders {
-		phInfo := dao.PlaceholderDAOInfo{
-			TaskGroupName: taskGroup.TaskGroupName,
-			Count:         taskGroup.Count,
-			MinResource:   taskGroup.MinResource.DAOMap(),
-			Replaced:      taskGroup.Replaced,
-			TimedOut:      taskGroup.TimedOut,
-		}
-		placeholderInfo = append(placeholderInfo, phInfo)
+func getPlaceholderDAO(ph *objects.PlaceholderData) *dao.PlaceholderDAOInfo {
+	phDAO := &dao.PlaceholderDAOInfo{
+		TaskGroupName: ph.TaskGroupName,
+		Count:         ph.Count,
+		MinResource:   ph.MinResource.DAOMap(),
+		Replaced:      ph.Replaced,
+		TimedOut:      ph.TimedOut,
+	}
+	return phDAO
+}
+
+func getPlaceholdersDAO(entries []*objects.PlaceholderData) []*dao.PlaceholderDAOInfo {
+	phsDAO := make([]*dao.PlaceholderDAOInfo, 0, len(entries))
+	for _, entry := range entries {
+		phsDAO = append(phsDAO, getPlaceholderDAO(entry))
+	}
+	return phsDAO
+}
+
+func getStateDAO(entry *objects.StateLogEntry) *dao.StateDAOInfo {
+	state := &dao.StateDAOInfo{
+		Time:             entry.Time.UnixNano(),
+		ApplicationState: entry.ApplicationState,
+	}
+	return state
+}
+
+func getStatesDAO(entries []*objects.StateLogEntry) []*dao.StateDAOInfo {
+	statesDAO := make([]*dao.StateDAOInfo, 0, len(entries))
+	for _, entry := range entries {
+		statesDAO = append(statesDAO, getStateDAO(entry))
+	}
+	return statesDAO
+}
+
+func getApplicationDAO(app *objects.Application) *dao.ApplicationDAOInfo {
+	if app == nil {
+		return &dao.ApplicationDAOInfo{}
 	}
 
 	return &dao.ApplicationDAOInfo{
@@ -235,14 +259,14 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 		QueueName:             app.GetQueuePath(),
 		SubmissionTime:        app.SubmissionTime.UnixNano(),
 		FinishedTime:          common.ZeroTimeInUnixNano(app.FinishedTime()),
-		Requests:              getApplicationRequests(app),
-		Allocations:           allocationInfo,
+		Requests:              getAllocationAsksDAO(app.GetAllRequests()),
+		Allocations:           getAllocationsDAO(app.GetAllAllocations()),
 		State:                 app.CurrentState(),
 		User:                  app.GetUser().User,
 		Groups:                app.GetUser().Groups,
 		RejectedMessage:       app.GetRejectedMessage(),
-		PlaceholderData:       placeholderInfo,
-		StateLog:              stateLogInfo,
+		PlaceholderData:       getPlaceholdersDAO(app.GetAllPlaceholderData()),
+		StateLog:              getStatesDAO(app.GetStateLog()),
 		HasReserved:           app.HasReserved(),
 		Reservations:          app.GetReservations(),
 		MaxRequestPriority:    app.GetAskMaxPriority(),
@@ -250,74 +274,51 @@ func getApplicationJSON(app *objects.Application) *dao.ApplicationDAOInfo {
 	}
 }
 
-func getApplicationRequests(app *objects.Application) []dao.AllocationAskDAOInfo {
-	requests := app.GetAllRequests()
-	requestInfo := make([]dao.AllocationAskDAOInfo, 0)
-	for _, req := range requests {
-		count := req.GetPendingAskRepeat()
-		if count > 0 {
-			allocLog := req.GetAllocationLog()
-			sort.SliceStable(allocLog, func(i, j int) bool {
-				return allocLog[i].LastOccurrence.Before(allocLog[j].LastOccurrence)
-			})
-			allocLogInfo := make([]dao.AllocationAskLogDAOInfo, len(allocLog))
-			for i, log := range allocLog {
-				allocLogInfo[i] = dao.AllocationAskLogDAOInfo{
-					Message:        log.Message,
-					LastOccurrence: log.LastOccurrence.UnixNano(),
-					Count:          log.Count,
-				}
-			}
-			reqInfo := dao.AllocationAskDAOInfo{
-				AllocationKey:       req.GetAllocationKey(),
-				AllocationTags:      req.GetTagsClone(),
-				RequestTime:         req.GetCreateTime().UnixNano(),
-				ResourcePerAlloc:    req.GetAllocatedResource().DAOMap(),
-				PendingCount:        count,
-				Priority:            strconv.Itoa(int(req.GetPriority())),
-				RequiredNodeID:      req.GetRequiredNode(),
-				ApplicationID:       req.GetApplicationID(),
-				Partition:           common.GetPartitionNameWithoutClusterID(req.GetPartitionName()),
-				Placeholder:         req.IsPlaceholder(),
-				PlaceholderTimeout:  req.GetTimeout().Nanoseconds(),
-				TaskGroupName:       req.GetTaskGroup(),
-				AllocationLog:       allocLogInfo,
-				TriggeredPreemption: req.HasTriggeredPreemption(),
-			}
-			requestInfo = append(requestInfo, reqInfo)
+func getAllocationLogsDAO(logEntries []*objects.AllocationLogEntry) []*dao.AllocationAskLogDAOInfo {
+	logsDAO := make([]*dao.AllocationAskLogDAOInfo, len(logEntries))
+	sort.SliceStable(logEntries, func(i, j int) bool {
+		return logEntries[i].LastOccurrence.Before(logEntries[j].LastOccurrence)
+	})
+	for i, entry := range logEntries {
+		logsDAO[i] = &dao.AllocationAskLogDAOInfo{
+			Message:        entry.Message,
+			LastOccurrence: entry.LastOccurrence.UnixNano(),
+			Count:          entry.Count,
 		}
 	}
-	return requestInfo
+	return logsDAO
 }
 
-func getNodeJSON(node *objects.Node) *dao.NodeDAOInfo {
-	apps := node.GetAllAllocations()
-	allocations := make([]*dao.AllocationDAOInfo, 0, len(apps))
-	var requestTime int64
-	for _, alloc := range apps {
-		if alloc.IsPlaceholderUsed() {
-			requestTime = alloc.GetPlaceholderCreateTime().UnixNano()
-		} else {
-			requestTime = alloc.GetAsk().GetCreateTime().UnixNano()
-		}
-		allocTime := alloc.GetCreateTime().UnixNano()
-		allocInfo := &dao.AllocationDAOInfo{
-			AllocationKey:    alloc.GetAllocationKey(),
-			AllocationTags:   alloc.GetTagsClone(),
-			RequestTime:      requestTime,
-			AllocationTime:   allocTime,
-			AllocationDelay:  allocTime - requestTime,
-			UUID:             alloc.GetUUID(),
-			ResourcePerAlloc: alloc.GetAllocatedResource().DAOMap(),
-			Priority:         strconv.Itoa(int(alloc.GetPriority())),
-			NodeID:           alloc.GetNodeID(),
-			ApplicationID:    alloc.GetApplicationID(),
-			PlaceholderUsed:  alloc.IsPlaceholderUsed(),
-			Partition:        alloc.GetPartitionName(),
-		}
-		allocations = append(allocations, allocInfo)
+func getAllocationAskDAO(ask *objects.AllocationAsk) *dao.AllocationAskDAOInfo {
+	return &dao.AllocationAskDAOInfo{
+		AllocationKey:       ask.GetAllocationKey(),
+		AllocationTags:      ask.GetTagsClone(),
+		RequestTime:         ask.GetCreateTime().UnixNano(),
+		ResourcePerAlloc:    ask.GetAllocatedResource().DAOMap(),
+		PendingCount:        ask.GetPendingAskRepeat(),
+		Priority:            strconv.Itoa(int(ask.GetPriority())),
+		RequiredNodeID:      ask.GetRequiredNode(),
+		ApplicationID:       ask.GetApplicationID(),
+		Partition:           common.GetPartitionNameWithoutClusterID(ask.GetPartitionName()),
+		Placeholder:         ask.IsPlaceholder(),
+		PlaceholderTimeout:  ask.GetTimeout().Nanoseconds(),
+		TaskGroupName:       ask.GetTaskGroup(),
+		AllocationLog:       getAllocationLogsDAO(ask.GetAllocationLog()),
+		TriggeredPreemption: ask.HasTriggeredPreemption(),
 	}
+}
 
+func getAllocationAsksDAO(asks []*objects.AllocationAsk) []*dao.AllocationAskDAOInfo {
+	asksDAO := make([]*dao.AllocationAskDAOInfo, 0, len(asks))
+	for _, ask := range asks {
+		if ask.GetPendingAskRepeat() > 0 {
+			asksDAO = append(asksDAO, getAllocationAskDAO(ask))
+		}
+	}
+	return asksDAO
+}
+
+func getNodeDAO(node *objects.Node) *dao.NodeDAOInfo {
 	return &dao.NodeDAOInfo{
 		NodeID:       node.NodeID,
 		HostName:     node.Hostname,
@@ -327,11 +328,19 @@ func getNodeJSON(node *objects.Node) *dao.NodeDAOInfo {
 		Allocated:    node.GetAllocatedResource().DAOMap(),
 		Available:    node.GetAvailableResource().DAOMap(),
 		Utilized:     node.GetUtilizedResource().DAOMap(),
-		Allocations:  allocations,
+		Allocations:  getAllocationsDAO(node.GetAllAllocations()),
 		Schedulable:  node.IsSchedulable(),
 		IsReserved:   node.IsReserved(),
 		Reservations: node.GetReservationKeys(),
 	}
+}
+
+func getNodesDAO(entries []*objects.Node) []*dao.NodeDAOInfo {
+	nodesDAO := make([]*dao.NodeDAOInfo, 0, len(entries))
+	for _, entry := range entries {
+		nodesDAO = append(nodesDAO, getNodeDAO(entry))
+	}
+	return nodesDAO
 }
 
 func getNodesUtilJSON(partition *scheduler.PartitionContext, name string) *dao.NodesUtilDAOInfo {
@@ -495,12 +504,7 @@ func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
 	partition := vars["partition"]
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext != nil {
-		ns := partitionContext.GetNodes()
-		nodesDao := make([]*dao.NodeDAOInfo, 0, len(ns))
-		for _, node := range ns {
-			nodeDao := getNodeJSON(node)
-			nodesDao = append(nodesDao, nodeDao)
-		}
+		nodesDao := getNodesDAO(partitionContext.GetNodes())
 		if err := json.NewEncoder(w).Encode(nodesDao); err != nil {
 			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -532,7 +536,7 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 
 	appsDao := make([]*dao.ApplicationDAOInfo, 0)
 	for _, app := range queue.GetCopyOfApps() {
-		appsDao = append(appsDao, getApplicationJSON(app))
+		appsDao = append(appsDao, getApplicationDAO(app))
 	}
 
 	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
@@ -566,7 +570,7 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, "Application not found", http.StatusBadRequest)
 		return
 	}
-	appDao := getApplicationJSON(app)
+	appDao := getApplicationDAO(app)
 	if err := json.NewEncoder(w).Encode(appDao); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -648,16 +652,11 @@ func getAppHistoryDAO(records []*history.MetricsRecord) []*dao.ApplicationHistor
 	return result
 }
 
-func getNodesDAO(lists map[string]*scheduler.PartitionContext) []*dao.NodesDAOInfo {
+func getPartitionNodesDAO(lists map[string]*scheduler.PartitionContext) []*dao.NodesDAOInfo {
 	var result []*dao.NodesDAOInfo
 
 	for _, partition := range lists {
-		ns := partition.GetNodes()
-		nodesDao := make([]*dao.NodeDAOInfo, 0, len(ns))
-		for _, node := range ns {
-			nodeDao := getNodeJSON(node)
-			nodesDao = append(nodesDao, nodeDao)
-		}
+		nodesDao := getNodesDAO(partition.GetNodes())
 		result = append(result, &dao.NodesDAOInfo{
 			PartitionName: common.GetPartitionNameWithoutClusterID(partition.Name),
 			Nodes:         nodesDao,
@@ -694,7 +693,7 @@ func getApplicationsDAO(lists map[string]*scheduler.PartitionContext) []*dao.App
 		appList = append(appList, partition.GetRejectedApplications()...)
 
 		for _, app := range appList {
-			result = append(result, getApplicationJSON(app))
+			result = append(result, getApplicationDAO(app))
 		}
 	}
 

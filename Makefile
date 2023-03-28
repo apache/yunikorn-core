@@ -61,7 +61,7 @@ all:
 LINTBASE := $(shell go env GOPATH)/bin
 LINTBIN  := $(LINTBASE)/golangci-lint
 $(LINTBIN):
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(LINTBASE) v1.50.1
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(LINTBASE) v1.51.2
 	stat $@ > /dev/null 2>&1
 
 .PHONY: lint
@@ -171,5 +171,5 @@ fsm_graph: clean
 .PHONY: clean
 clean:
 	@echo "cleaning up caches and output"
-	go clean -cache -testcache -r -x ./... 2>&1 >/dev/null
+	go clean -cache -testcache -r
 	-rm -rf _output

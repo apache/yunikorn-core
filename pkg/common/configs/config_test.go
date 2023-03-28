@@ -1176,6 +1176,130 @@ partitions:
 	if err == nil {
 		t.Errorf("limit parsing should have failed group @: %v", conf)
 	}
+
+	data = `
+partitions:
+  - name: default
+    limits:
+      - limit: dot user
+        users:
+        - user.lastname
+        maxapplications: 1
+      - limit: "@ user"
+        users:
+        - user@domain
+        maxapplications: 1
+      - limit: wildcard user
+        users:
+        - "*"
+        maxapplications: 1
+      - limit: wildcard group
+        groups:
+        - "*"
+        maxapplications: 1
+      - limit: error no wildcard user after wildcard user
+        users:
+        - "user1"
+        maxapplications: 1
+    queues:
+      - name: root
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.ErrorContains(t, err, "should not set no wildcard user user1 after wildcard user limit")
+
+	data = `
+partitions:
+  - name: default
+    limits:
+      - limit: dot user
+        users:
+        - user.lastname
+        maxapplications: 1
+      - limit: "@ user"
+        users:
+        - user@domain
+        maxapplications: 1
+      - limit: wildcard user
+        users:
+        - "*"
+        maxapplications: 1
+      - limit: wildcard group
+        groups:
+        - "*"
+        maxapplications: 1
+      - limit: error no wildcard group after wildcard user
+        groups:
+        - "group1"
+        maxapplications: 1
+    queues:
+      - name: root
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.ErrorContains(t, err, "should not set no wildcard group group1 after wildcard group limit")
+
+	data = `
+partitions:
+  - name: default
+    limits:
+      - limit: dot user
+        users:
+        - user.lastname
+        maxapplications: 1
+      - limit: "@ user"
+        users:
+        - user@domain
+        maxapplications: 1
+      - limit: wildcard user
+        users:
+        - "*"
+        maxapplications: 1
+      - limit: wildcard group
+        groups:
+        - "*"
+        maxapplications: 1
+      - limit: more than one wildcard user
+        users:
+        - "*"
+        maxapplications: 2
+    queues:
+      - name: root
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.ErrorContains(t, err, "should not set more than one wildcard user")
+
+	data = `
+partitions:
+  - name: default
+    limits:
+      - limit: dot user
+        users:
+        - user.lastname
+        maxapplications: 1
+      - limit: "@ user"
+        users:
+        - user@domain
+        maxapplications: 1
+      - limit: wildcard user
+        users:
+        - "*"
+        maxapplications: 1
+      - limit: wildcard group
+        groups:
+        - "*"
+        maxapplications: 1
+      - limit: more than one wildcard group
+        groups:
+        - "*"
+        maxapplications: 2
+    queues:
+      - name: root
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.ErrorContains(t, err, "should not set more than one wildcard group")
 }
 
 func TestLoadSchedulerConfigFromByteArray(t *testing.T) {

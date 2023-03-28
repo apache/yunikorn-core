@@ -307,18 +307,41 @@ func checkPlacementFilter(filter Filter) error {
 }
 
 // Check a single limit entry
-func checkLimit(limit Limit) error {
+func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int) error {
 	if len(limit.Users) == 0 && len(limit.Groups) == 0 {
 		return fmt.Errorf("empty user and group lists defined in limit '%v'", limit)
 	}
+
 	for _, name := range limit.Users {
 		if name != "*" && !UserRegExp.MatchString(name) {
 			return fmt.Errorf("invalid limit user name '%s' in limit definition", name)
+		}
+		// The user without wildcard should not happen after the wildcard user
+		// It means the wildcard for user should be the last item for limits object list which including the username,
+		// and we should only set one wildcard user for all limits
+		if name == "*" {
+			if *userWildCardIdx != -1 && currIdx > *userWildCardIdx {
+				return fmt.Errorf("should not set more than one wildcard user")
+			}
+			*userWildCardIdx = currIdx
+		} else if *userWildCardIdx != -1 && currIdx > *userWildCardIdx {
+			return fmt.Errorf("should not set no wildcard user %s after wildcard user limit", name)
 		}
 	}
 	for _, name := range limit.Groups {
 		if name != "*" && !GroupRegExp.MatchString(name) {
 			return fmt.Errorf("invalid limit group name '%s' in limit definition", name)
+		}
+		// The group without wildcard should not happen after the wildcard group
+		// It means the wildcard for group should be the last item for limits object list which including the group name,
+		// and we should only set one wildcard group for all limits
+		if name == "*" {
+			if *groupWildCardIdx != -1 && currIdx > *groupWildCardIdx {
+				return fmt.Errorf("should not set more than one wildcard group")
+			}
+			*groupWildCardIdx = currIdx
+		} else if *groupWildCardIdx != -1 && currIdx > *groupWildCardIdx {
+			return fmt.Errorf("should not set no wildcard group %s after wildcard group limit", name)
 		}
 	}
 	var limitResource = resources.NewResource()
@@ -349,8 +372,11 @@ func checkLimits(limits []Limit, obj string) error {
 	log.Logger().Debug("checking limits configs",
 		zap.String("objName", obj),
 		zap.Int("limitsLength", len(limits)))
-	for _, limit := range limits {
-		if err := checkLimit(limit); err != nil {
+
+	var userWildCardIdx = -1
+	var groupWildCardIdx = -1
+	for index, limit := range limits {
+		if err := checkLimit(limit, index, &userWildCardIdx, &groupWildCardIdx); err != nil {
 			return err
 		}
 	}

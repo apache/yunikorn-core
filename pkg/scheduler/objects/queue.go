@@ -1105,32 +1105,16 @@ func (sq *Queue) internalHeadRoom(parentHeadRoom *resources.Resource) *resources
 		return parentHeadRoom
 	}
 
-	// we will replace all incorrect values, which are caused by undefined resources, by resources of parent headroom later
-	undefinedResources := make(map[string]resources.Quantity)
-	if parentHeadRoom != nil {
-		for k, v := range parentHeadRoom.Resources {
-			if _, ok := headRoom.Resources[k]; !ok {
-				// parent headroom already subtracts the allocated resources, so we can't assign the value to this headroom.
-				// Otherwise, the headroom will subtract the allocated resources twice.
-				undefinedResources[k] = v
-			}
-		}
-	}
-
-	// calculate unused
-	headRoom.SubFrom(sq.allocatedResource)
+	// calculate what we have left over after removing all allocation
+	// ignore unlimited resource types (ie the ones not defined in max)
+	headRoom.SubOnlyExisting(sq.allocatedResource)
 
 	// check the minimum of the two: parentHeadRoom is nil for root
 	if parentHeadRoom == nil {
 		return headRoom
 	}
-
-	// replace the incorrect result by resources of parent headroom
-	for k, v := range undefinedResources {
-		headRoom.Resources[k] = v
-	}
-
-	return resources.ComponentWiseMin(headRoom, parentHeadRoom)
+	// take the minimum value of *all* resource types defined
+	return resources.ComponentWiseMinPermissive(headRoom, parentHeadRoom)
 }
 
 // GetMaxResource returns the max resource for the queue. The max resource should never be larger than the

@@ -132,13 +132,23 @@ func TestGTDecreaseTrackedResource(t *testing.T) {
 	assert.Equal(t, "map[mem:60000000 vcore:60000]", actualResources1["root.parent.child1"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:10000000 vcore:10000]", actualResources1["root.parent.child2"].String(), "wrong resource")
 
-	err = groupTracker.decreaseTrackedResource(queuePath1, TestApp1, usage1, true)
+	usage4, err := resources.NewResourceFromConf(map[string]string{"mem": "60M", "vcore": "60"})
+	if err != nil {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
+	}
+
+	err = groupTracker.decreaseTrackedResource(queuePath1, TestApp1, usage4, true)
 	if err != nil {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
 	}
 	assert.Equal(t, 1, len(groupTracker.getTrackedApplications()))
 
-	err = groupTracker.decreaseTrackedResource(queuePath2, TestApp2, usage2, true)
+	usage5, err := resources.NewResourceFromConf(map[string]string{"mem": "10M", "vcore": "10"})
+	if err != nil {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
+	}
+
+	err = groupTracker.decreaseTrackedResource(queuePath2, TestApp2, usage5, true)
 	if err != nil {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage2, err)
 	}

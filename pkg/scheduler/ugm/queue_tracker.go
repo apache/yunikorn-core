@@ -92,7 +92,6 @@ func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID 
 	if removeApp {
 		delete(qt.runningApplications, applicationID)
 	}
-
 	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
 	if childQueuePath != "" {
 		if qt.childQueueTrackers[immediateChildQueueName] != nil {
@@ -105,6 +104,22 @@ func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID 
 				zap.String("child queueTracker name", immediateChildQueueName))
 			return fmt.Errorf("child queueTracker tracker for %s is missing in child queues map", immediateChildQueueName)
 		}
+	}
+	parent := len(qt.childQueueTrackers) > 0
+	for childQueue, tracker := range qt.childQueueTrackers {
+		if resources.IsZero(tracker.resourceUsage) {
+			log.Logger().Info("Removing child tracker, resource usage is zero",
+				zap.String("this queue", qt.queueName),
+				zap.String("child queue", childQueue))
+			delete(qt.childQueueTrackers, childQueue)
+		}
+	}
+	if parent && len(qt.childQueueTrackers) == 0 && !resources.IsZero(qt.resourceUsage) {
+		// invariant violated
+		log.Logger().Error("No child queue trackers left, but the resource usage is not zero",
+			zap.String("queueTracker name", qt.queueName))
+		return fmt.Errorf("BUG: no child trackers left, but the resource usage is not zero - tracker %s resource %v",
+			qt.queueName, qt.resourceUsage)
 	}
 	return nil
 }

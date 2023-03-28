@@ -21,6 +21,7 @@ package webservice
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/julienschmidt/httprouter"
 	"io"
 	"math"
 	"net/http"
@@ -29,7 +30,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
@@ -482,9 +482,9 @@ func getPartitions(w http.ResponseWriter, r *http.Request) {
 }
 
 func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
+	vars := httprouter.ParamsFromContext(r.Context())
 	writeHeaders(w)
-	partitionName := vars["partition"]
+	partitionName := vars.ByName("partition")
 	var partitionQueuesDAOInfo dao.PartitionQueueDAOInfo
 	var partition = schedulerContext.GetPartitionWithoutClusterID(partitionName)
 	if partition != nil {
@@ -499,9 +499,9 @@ func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
 }
 
 func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
+	vars := httprouter.ParamsFromContext(r.Context())
 	writeHeaders(w)
-	partition := vars["partition"]
+	partition := vars.ByName("partition")
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext != nil {
 		nodesDao := getNodesDAO(partitionContext.GetNodes())
@@ -514,10 +514,10 @@ func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
 }
 
 func getQueueApplications(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
+	vars := httprouter.ParamsFromContext(r.Context())
 	writeHeaders(w)
-	partition := vars["partition"]
-	queueName := vars["queue"]
+	partition := vars.ByName("partition")
+	queueName := vars.ByName("queue")
 	queueErr := validateQueue(queueName)
 	if queueErr != nil {
 		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
@@ -545,11 +545,11 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 }
 
 func getApplication(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
+	vars := httprouter.ParamsFromContext(r.Context())
 	writeHeaders(w)
-	partition := vars["partition"]
-	queueName := vars["queue"]
-	application := vars["application"]
+	partition := vars.ByName("partition")
+	queueName := vars.ByName("queue")
+	application := vars.ByName("application")
 	queueErr := validateQueue(queueName)
 	if queueErr != nil {
 		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
@@ -577,9 +577,9 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 }
 
 func setLogLevel(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
+	vars := httprouter.ParamsFromContext(r.Context())
 	writeHeaders(w)
-	level := vars["level"]
+	level := vars.ByName("level")
 	if err := log.SetLogLevel(level); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 	}
@@ -771,8 +771,8 @@ func getUsersResourceUsage(w http.ResponseWriter, r *http.Request) {
 }
 
 func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	user := vars["user"]
+	vars := httprouter.ParamsFromContext(r.Context())
+	user := vars.ByName("user")
 	if user == "" {
 		buildJSONErrorResponse(w, UserNameMissing, http.StatusBadRequest)
 		return
@@ -801,8 +801,8 @@ func getGroupsResourceUsage(w http.ResponseWriter, r *http.Request) {
 }
 
 func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	group := vars["group"]
+	vars := httprouter.ParamsFromContext(r.Context())
+	group := vars.ByName("group")
 	if group == "" {
 		buildJSONErrorResponse(w, GroupNameMissing, http.StatusBadRequest)
 		return

@@ -19,15 +19,17 @@
 package webservice
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/gorilla/mux"
+	"github.com/julienschmidt/httprouter"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gopkg.in/yaml.v2"
 	"gotest.tools/v3/assert"
@@ -718,10 +720,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 
 	var req *http.Request
 	req, err := http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
-	vars := map[string]string{
-		"partition": partitionNameWithoutClusterID,
-	}
-	req = mux.SetURLVars(req, vars)
+	req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID}}))
 	assert.NilError(t, err, "Get Queues for PartitionQueues Handler request failed")
 	resp := &MockResponseWriter{}
 	var partitionQueuesDao dao.PartitionQueueDAOInfo
@@ -750,10 +749,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 
 	// Partition not exists
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
-	vars = map[string]string{
-		"partition": "notexists",
-	}
-	req = mux.SetURLVars(req, vars)
+	req.WithContext(context.WithValue(req.Context(), "partition", "notexists"))
 	assert.NilError(t, err, "Get Queues for PartitionQueues Handler request failed")
 	resp = &MockResponseWriter{}
 	getPartitionQueues(resp, req)
@@ -811,10 +807,7 @@ func TestGetPartitionNodes(t *testing.T) {
 
 	var req *http.Request
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/nodes", strings.NewReader(""))
-	vars := map[string]string{
-		"partition": partitionNameWithoutClusterID,
-	}
-	req = mux.SetURLVars(req, vars)
+	req.WithContext(context.WithValue(req.Context(), "partition", partitionNameWithoutClusterID))
 	assert.NilError(t, err, "Get Nodes for PartitionNodes Handler request failed")
 	resp := &MockResponseWriter{}
 	var partitionNodesDao []*dao.NodeDAOInfo
@@ -845,10 +838,7 @@ func TestGetPartitionNodes(t *testing.T) {
 
 	var req1 *http.Request
 	req1, err = http.NewRequest("GET", "/ws/v1/partition/default/nodes", strings.NewReader(""))
-	vars1 := map[string]string{
-		"partition": "notexists",
-	}
-	req1 = mux.SetURLVars(req1, vars1)
+	req.WithContext(context.WithValue(req.Context(), "partition", "notexists"))
 	assert.NilError(t, err, "Get Nodes for PartitionNodes Handler request failed")
 	resp1 := &MockResponseWriter{}
 	getPartitionNodes(resp1, req1)

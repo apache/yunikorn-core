@@ -940,6 +940,14 @@ func TestSubOnlyExistingNil(t *testing.T) {
 	}
 }
 
+func TestSubEliminateNegative(t *testing.T) {
+	// simple case (nil checks)
+	result := SubEliminateNegative(nil, nil)
+	if result == nil || len(result.Resources) != 0 {
+		t.Errorf("sub nil resources did not return zero resource: %v", result)
+	}
+}
+
 func TestSubOnlyExisting(t *testing.T) {
 	// remove nil from empty resource
 	left := NewResource()

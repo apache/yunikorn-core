@@ -367,6 +367,14 @@ func (r *Resource) SubOnlyExisting(delta *Resource) {
 	}
 }
 
+// SubEliminateNegative subtracts resource returning a new resource with the result
+// A nil resource is considered an empty resource
+// This will return 0 values for negative values
+func SubEliminateNegative(left, right *Resource) *Resource {
+	res, _ := subNonNegative(left, right)
+	return res
+}
+
 // SubErrorNegative subtracts resource returning a new resource with the result. A nil resource is considered
 // an empty resource. This will return an error if any value in the result is negative.
 // The caller should at least log the error.

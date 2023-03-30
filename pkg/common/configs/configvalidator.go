@@ -86,6 +86,14 @@ type placementStaticPath struct {
 
 type placementPathCheckResult int
 
+type LimitCheckHelper struct {
+	existedUserName  map[string]bool
+	existedGroupName map[string]bool
+	userWildCardIdx  int
+	groupWildCardIdx int
+	groupSpecificIdx int
+}
+
 const (
 	checkOK placementPathCheckResult = iota
 	nonExistingQueue
@@ -307,7 +315,7 @@ func checkPlacementFilter(filter Filter) error {
 }
 
 // Check a single limit entry
-func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int, groupSpecificIdx *int) error {
+func checkLimit(limit Limit, currIdx int, limitCheckHelper *LimitCheckHelper) error {
 	if len(limit.Users) == 0 && len(limit.Groups) == 0 {
 		return fmt.Errorf("empty user and group lists defined in limit '%v'", limit)
 	}
@@ -320,13 +328,17 @@ func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int
 		// It means the wildcard for user should be the last item for limits object list which including the username,
 		// and we should only set one wildcard user for all limits
 		if name == "*" {
-			if *userWildCardIdx != -1 && currIdx > *userWildCardIdx {
+			if limitCheckHelper.userWildCardIdx != -1 && currIdx > limitCheckHelper.userWildCardIdx {
 				return fmt.Errorf("should not set more than one wildcard user")
 			}
-			*userWildCardIdx = currIdx
-		} else if *userWildCardIdx != -1 && currIdx > *userWildCardIdx {
+			limitCheckHelper.userWildCardIdx = currIdx
+		} else if limitCheckHelper.userWildCardIdx != -1 && currIdx > limitCheckHelper.userWildCardIdx {
 			return fmt.Errorf("should not set no wildcard user %s after wildcard user limit", name)
 		}
+		if limitCheckHelper.existedUserName[name] {
+			return fmt.Errorf("duplicated user name %s , already existed", name)
+		}
+		limitCheckHelper.existedUserName[name] = true
 	}
 	for _, name := range limit.Groups {
 		if name != "*" && !GroupRegExp.MatchString(name) {
@@ -336,22 +348,26 @@ func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int
 		// It means the wildcard for group should be the last item for limits object list which including the group name,
 		// and we should only set one wildcard group for all limits
 		if name == "*" {
-			if *groupWildCardIdx != -1 && currIdx > *groupWildCardIdx {
+			if limitCheckHelper.groupWildCardIdx != -1 && currIdx > limitCheckHelper.groupWildCardIdx {
 				return fmt.Errorf("should not set more than one wildcard group")
 			}
-			*groupWildCardIdx = currIdx
-		} else if *groupWildCardIdx != -1 && currIdx > *groupWildCardIdx {
+			limitCheckHelper.groupWildCardIdx = currIdx
+		} else if limitCheckHelper.groupWildCardIdx != -1 && currIdx > limitCheckHelper.groupWildCardIdx {
 			return fmt.Errorf("should not set no wildcard group %s after wildcard group limit", name)
 		} else {
-			*groupSpecificIdx = currIdx
+			limitCheckHelper.groupSpecificIdx = currIdx
 		}
+		if limitCheckHelper.existedGroupName[name] {
+			return fmt.Errorf("duplicated group name %s , already existed", name)
+		}
+		limitCheckHelper.existedGroupName[name] = true
 	}
 
 	// Specifying a wildcard for the group limit sets a cumulative limit for all users in that queue.
 	// If there is no specific group mentioned the wildcard group limit would thus be the same as the queue limit.
 	// For that reason we do not allow specifying only one group limit that is using the wildcard.
 	// There must be at least one limit with a group name defined.
-	if *groupWildCardIdx != -1 && *groupSpecificIdx == -1 {
+	if limitCheckHelper.groupWildCardIdx != -1 && limitCheckHelper.groupSpecificIdx == -1 {
 		return fmt.Errorf("should not specify only one group limit that is using the wildcard. " +
 			"There must be at least one limit with a group name defined ")
 	}
@@ -385,11 +401,15 @@ func checkLimits(limits []Limit, obj string) error {
 		zap.String("objName", obj),
 		zap.Int("limitsLength", len(limits)))
 
-	var userWildCardIdx = -1
-	var groupWildCardIdx = -1
-	var groupSpecificIdx = -1
+	limitCheckHelper := LimitCheckHelper{
+		existedUserName:  make(map[string]bool),
+		existedGroupName: make(map[string]bool),
+		userWildCardIdx:  -1,
+		groupSpecificIdx: -1,
+		groupWildCardIdx: -1,
+	}
 	for index, limit := range limits {
-		if err := checkLimit(limit, index, &userWildCardIdx, &groupWildCardIdx, &groupSpecificIdx); err != nil {
+		if err := checkLimit(limit, index, &limitCheckHelper); err != nil {
 			return err
 		}
 	}

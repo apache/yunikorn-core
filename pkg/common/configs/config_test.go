@@ -1347,6 +1347,76 @@ partitions:
 	// validate the config and check after the update
 	_, err = CreateConfig(data)
 	assert.ErrorContains(t, err, "should not specify only one group limit that is using the wildcard")
+
+	data = `
+partitions:
+  - name: default
+    limits:
+      - limit: dot user
+        users:
+        - user.lastname
+        maxapplications: 1
+      - limit: duplicated user
+        users:
+        - user.lastname
+        maxapplications: 1
+      - limit: "@ user"
+        users:
+        - user@domain
+        maxapplications: 1
+      - limit: wildcard user
+        users:
+        - "*"
+        maxapplications: 1
+      - limit: no wildcard group
+        groups:
+        - "test"
+        maxapplications: 1
+      - limit: wildcard group
+        groups:
+        - "*"
+        maxapplications: 1
+    queues:
+      - name: root
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.ErrorContains(t, err, "duplicated user name user.lastname")
+
+	data = `
+partitions:
+  - name: default
+    limits:
+      - limit: dot user
+        users:
+        - user.lastname
+        maxapplications: 1
+      - limit: "@ user"
+        users:
+        - user@domain
+        maxapplications: 1
+      - limit: wildcard user
+        users:
+        - "*"
+        maxapplications: 1
+      - limit: no wildcard group
+        groups:
+        - "test"
+        maxapplications: 1
+      - limit: duplicated group
+        groups:
+        - "test"
+        maxapplications: 1
+      - limit: wildcard group
+        groups:
+        - "*"
+        maxapplications: 1
+    queues:
+      - name: root
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.ErrorContains(t, err, "duplicated group name test")
 }
 
 func TestLoadSchedulerConfigFromByteArray(t *testing.T) {

@@ -1012,6 +1012,10 @@ partitions:
         users:
         - "*"
         maxapplications: 1
+      - limit: no wildcard group
+        groups:
+        - "test"
+        maxapplications: 1
       - limit: wildcard group
         groups:
         - "*"
@@ -1026,7 +1030,7 @@ partitions:
 	if len(conf.Partitions[0].Queues) != 1 && len(conf.Partitions[0].Queues[0].Limits) != 0 {
 		t.Errorf("failed to load queues from config: %v", conf)
 	}
-	if len(conf.Partitions[0].Limits) != 4 {
+	if len(conf.Partitions[0].Limits) != 5 {
 		t.Errorf("failed to load partition limits from config: %v", conf)
 	}
 

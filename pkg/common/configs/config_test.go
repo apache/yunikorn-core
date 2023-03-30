@@ -1193,6 +1193,10 @@ partitions:
         users:
         - "*"
         maxapplications: 1
+      - limit: no wildcard group
+        groups:
+        - "test"
+        maxapplications: 1
       - limit: wildcard group
         groups:
         - "*"
@@ -1223,6 +1227,10 @@ partitions:
       - limit: wildcard user
         users:
         - "*"
+        maxapplications: 1
+      - limit: no wildcard group
+        groups:
+        - "test"
         maxapplications: 1
       - limit: wildcard group
         groups:
@@ -1255,6 +1263,10 @@ partitions:
         users:
         - "*"
         maxapplications: 1
+      - limit: no wildcard group
+        groups:
+        - "test"
+        maxapplications: 1
       - limit: wildcard group
         groups:
         - "*"
@@ -1286,6 +1298,10 @@ partitions:
         users:
         - "*"
         maxapplications: 1
+      - limit: no wildcard group
+        groups:
+        - "test"
+        maxapplications: 1
       - limit: wildcard group
         groups:
         - "*"
@@ -1300,6 +1316,33 @@ partitions:
 	// validate the config and check after the update
 	_, err = CreateConfig(data)
 	assert.ErrorContains(t, err, "should not set more than one wildcard group")
+
+	data = `
+partitions:
+  - name: default
+    limits:
+      - limit: dot user
+        users:
+        - user.lastname
+        maxapplications: 1
+      - limit: "@ user"
+        users:
+        - user@domain
+        maxapplications: 1
+      - limit: wildcard user
+        users:
+        - "*"
+        maxapplications: 1
+      - limit: wildcard group
+        groups:
+        - "*"
+        maxapplications: 1
+    queues:
+      - name: root
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.ErrorContains(t, err, "should not specify only one group limit that is using the wildcard")
 }
 
 func TestLoadSchedulerConfigFromByteArray(t *testing.T) {

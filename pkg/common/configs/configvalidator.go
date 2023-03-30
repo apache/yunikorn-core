@@ -307,7 +307,7 @@ func checkPlacementFilter(filter Filter) error {
 }
 
 // Check a single limit entry
-func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int) error {
+func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int, groupSpecificIdx *int) error {
 	if len(limit.Users) == 0 && len(limit.Groups) == 0 {
 		return fmt.Errorf("empty user and group lists defined in limit '%v'", limit)
 	}
@@ -342,8 +342,20 @@ func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int
 			*groupWildCardIdx = currIdx
 		} else if *groupWildCardIdx != -1 && currIdx > *groupWildCardIdx {
 			return fmt.Errorf("should not set no wildcard group %s after wildcard group limit", name)
+		} else {
+			*groupSpecificIdx = currIdx
 		}
 	}
+
+	// Specifying a wildcard for the group limit sets a cumulative limit for all users in that queue.
+	// If there is no specific group mentioned the wildcard group limit would thus be the same as the queue limit.
+	// For that reason we do not allow specifying only one group limit that is using the wildcard.
+	// There must be at least one limit with a group name defined.
+	if *groupWildCardIdx != -1 && *groupSpecificIdx == -1 {
+		return fmt.Errorf("should not specify only one group limit that is using the wildcard. " +
+			"There must be at least one limit with a group name defined ")
+	}
+
 	var limitResource = resources.NewResource()
 	var err error
 	// check the resource (if defined)
@@ -375,8 +387,9 @@ func checkLimits(limits []Limit, obj string) error {
 
 	var userWildCardIdx = -1
 	var groupWildCardIdx = -1
+	var groupSpecificIdx = -1
 	for index, limit := range limits {
-		if err := checkLimit(limit, index, &userWildCardIdx, &groupWildCardIdx); err != nil {
+		if err := checkLimit(limit, index, &userWildCardIdx, &groupWildCardIdx, &groupSpecificIdx); err != nil {
 			return err
 		}
 	}

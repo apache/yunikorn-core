@@ -357,11 +357,11 @@ func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int
 	}
 	// at least some resource should be not null
 	if limit.MaxApplications == 0 && resources.IsZero(limitResource) {
-		return fmt.Errorf("invalid resource combination for limit user names '%s' groups %s all resource limits are null", limit.Users, limit.Groups)
+		return fmt.Errorf("invalid resource combination for limit %s all resource limits are null", limit.Limit)
 	}
 
 	if queue.MaxApplications != 0 && (limit.MaxApplications > queue.MaxApplications || limit.MaxApplications == 0) {
-		return fmt.Errorf("invalid MaxApplications settings for limit user names '%s' groups %s exeecd current the queue MaxApplications", limit.Users, limit.Groups)
+		return fmt.Errorf("invalid MaxApplications settings for limit %s exeecd current the queue MaxApplications", limit.Limit)
 	}
 
 	// If queue is RootQueue, the queue.Resources.Max will be null, we don't need to check for root queue
@@ -374,7 +374,7 @@ func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int
 			return fmt.Errorf("parse queue %s max resource failed: %s", queue.Name, err.Error())
 		}
 		if !queueMaxResource.FitInMaxUndef(limitResource) {
-			return fmt.Errorf("invalid MaxResources settings for limit user names '%s'  groups %s exeecd current the queue MaxResources", limit.Users, limit.Groups)
+			return fmt.Errorf("invalid MaxResources settings for limit %s exeecd current the queue MaxResources", limit.Limit)
 		}
 	}
 

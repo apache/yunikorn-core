@@ -1180,7 +1180,7 @@ partitions:
 `
 	// validate the config and check after the update
 	_, err = CreateConfig(data)
-	assert.ErrorContains(t, err, "parse queue max resource failed")
+	assert.ErrorContains(t, err, "parse queue level1 max resource failed")
 }
 
 func TestComplexUsers(t *testing.T) {

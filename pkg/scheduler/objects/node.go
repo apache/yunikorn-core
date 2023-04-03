@@ -117,6 +117,12 @@ func (sn *Node) GetAttribute(key string) string {
 	return sn.attributes[key]
 }
 
+// Get InstanceType of this node.
+// This is a lock free call because all attributes are considered read only
+func (sn *Node) GetInstanceType() string {
+	return sn.GetAttribute(common.InstanceType)
+}
+
 // GetReservationKeys Return an array of all reservation keys for the node.
 // This will return an empty array if there are no reservations.
 // Visible for tests

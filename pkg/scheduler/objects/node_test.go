@@ -312,6 +312,27 @@ func TestAttributes(t *testing.T) {
 	assert.Equal(t, "just a text", value, "node attributes not set, expected 'just a text' got '%v'", value)
 }
 
+func TestGetInstanceType(t *testing.T) {
+	proto := newProto(testNode, nil, nil, map[string]string{
+		common.NodePartition: "partition1",
+		"label1":             "key1",
+		"label2":             "key2",
+		common.InstanceType:  "HighMem",
+	})
+
+	node := NewNode(proto)
+	if node == nil || node.NodeID != testNode {
+		t.Fatal("node not returned correctly: node is nul or incorrect name")
+	}
+
+	assert.Equal(t, "", node.Hostname)
+	assert.Equal(t, "", node.Rackname)
+	assert.Equal(t, "partition1", node.Partition)
+
+	value := node.GetInstanceType()
+	assert.Equal(t, "HighMem", value, "node instanceType not set, expected 'HighMem' got '%v'", value)
+}
+
 func TestAddAllocation(t *testing.T) {
 	node := newNode("node-123", map[string]resources.Quantity{"first": 100, "second": 200})
 	if !resources.IsZero(node.GetAllocatedResource()) {

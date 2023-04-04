@@ -34,7 +34,7 @@ const (
 	// MetricNameInvalidByteReplacement byte used to replace invalid bytes in prometheus metric names
 	MetricNameInvalidByteReplacement = '_'
 	// AppSummary log file name, to be collected from a config file
-	AppSummaryHeader = "APP_SUMMARY: "
+	AppSummaryHeader = "YK_APP_SUMMARY: "
 )
 
 var once sync.Once

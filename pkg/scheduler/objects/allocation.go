@@ -374,7 +374,7 @@ func (a *Allocation) IsPreempted() bool {
 }
 
 // Return the type of the instance used by this allocation
-func (a *Allocation) GetInstType() string {
+func (a *Allocation) GetInstanceType() string {
 	return a.instType
 }
 

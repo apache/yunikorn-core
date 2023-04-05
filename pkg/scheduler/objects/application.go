@@ -1033,7 +1033,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, preemptionDelay
 					zap.Stringer("AllocationResult", alloc.GetResult()))
 				return alloc
 			}
-			return newReservedAllocation(Reserved, node.NodeID, node.GetInstType(), request)
+			return newReservedAllocation(Reserved, node.NodeID, node.GetInstanceType(), request)
 		}
 
 		iterator := nodeIterator()
@@ -1171,7 +1171,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			// got the node run same checks as for reservation (all but fits)
 			// resource usage should not change anyway between placeholder and real one at this point
 			if node != nil && node.preReserveConditions(request) {
-				alloc := NewAllocation(common.GetNewUUID(), node.NodeID, node.GetInstType(), request)
+				alloc := NewAllocation(common.GetNewUUID(), node.NodeID, node.GetInstanceType(), request)
 				// double link to make it easier to find
 				// alloc (the real one) releases points to the placeholder in the releases list
 				alloc.SetRelease(ph)
@@ -1217,7 +1217,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				continue
 			}
 			// allocation worked: on a non placeholder node update result and return
-			alloc := NewAllocation(common.GetNewUUID(), node.NodeID, node.GetInstType(), reqFit)
+			alloc := NewAllocation(common.GetNewUUID(), node.NodeID, node.GetInstanceType(), reqFit)
 			// double link to make it easier to find
 			// alloc (the real one) releases points to the placeholder in the releases list
 			alloc.SetRelease(phFit)
@@ -1268,7 +1268,7 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 				unreserveAsk = ask
 			}
 			// remove the reservation as this should not be reserved
-			alloc := newReservedAllocation(Unreserved, reserve.nodeID, reserve.node.GetInstType(), unreserveAsk)
+			alloc := newReservedAllocation(Unreserved, reserve.nodeID, reserve.node.GetInstanceType(), unreserveAsk)
 			return alloc
 		}
 
@@ -1479,7 +1479,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 			return nil
 		}
 		// return reservation allocation and mark it as a reservation
-		alloc := newReservedAllocation(Reserved, nodeToReserve.NodeID, nodeToReserve.GetInstType(), ask)
+		alloc := newReservedAllocation(Reserved, nodeToReserve.NodeID, nodeToReserve.GetInstanceType(), ask)
 		return alloc
 	}
 	// ask does not fit, skip to next ask
@@ -1499,7 +1499,7 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 		return nil
 	}
 	// everything OK really allocate
-	alloc := NewAllocation(common.GetNewUUID(), node.NodeID, node.GetInstType(), ask)
+	alloc := NewAllocation(common.GetNewUUID(), node.NodeID, node.GetInstanceType(), ask)
 	if node.AddAllocation(alloc) {
 		if err := sa.queue.IncAllocatedResource(alloc.GetAllocatedResource(), false); err != nil {
 			log.Logger().Warn("queue update failed unexpectedly",
@@ -1695,7 +1695,7 @@ func (sa *Application) decUserResourceUsage(resource *resources.Resource, remove
 // When the resource allocated with this allocation is to be removed,
 // have the usedResourceTracker to aggregate the resource used by this allocation
 func (sa *Application) updateUsedResource(info *Allocation) {
-	sa.usedResourceTracker.AggregateUsedResource(info.GetInstType(),
+	sa.usedResourceTracker.AggregateUsedResource(info.GetInstanceType(),
 		info.GetAllocatedResource(), info.GetCreateTime())
 }
 

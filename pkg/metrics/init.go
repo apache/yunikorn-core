@@ -169,6 +169,10 @@ type CoreEventMetrics interface {
 	Reset()
 }
 
+func (m *Metrics) LogAppSummary(appSummary string) {
+	log.Println(AppSummaryHeader + appSummary)
+}
+
 func init() {
 	once.Do(func() {
 		m = &Metrics{
@@ -238,8 +242,4 @@ func formatMetricName(metricName string) string {
 		return string(MetricNameInvalidByteReplacement) + string(newBytes)
 	}
 	return string(newBytes)
-}
-
-func (m *Metrics) LogAppSummary(appSummary string) {
-	log.Println(AppSummaryHeader + appSummary)
 }

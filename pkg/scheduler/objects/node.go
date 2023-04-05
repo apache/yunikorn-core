@@ -34,7 +34,7 @@ import (
 )
 
 const (
-	YunikornInstanceType        = "node.kubernetes.io/instance-type"
+	UnknownInstanceType = "unknown"
 )
 
 type Node struct {
@@ -132,7 +132,7 @@ func (sn *Node) GetInstanceType() string {
 	if itype != "" {
 		return itype
 	}
-	return "unknown"
+	return UnknownInstanceType
 }
 
 // GetReservationKeys Return an array of all reservation keys for the node.

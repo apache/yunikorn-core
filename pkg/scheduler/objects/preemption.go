@@ -349,6 +349,7 @@ func (p *Preemptor) checkPreemptionPredicates(predicateChecks []*si.PreemptionPr
 		result := &predicateCheckResult{
 			allocationKey: check.AllocationKey,
 			nodeID:        check.NodeID,
+			instType:      UnknownInstanceType,
 			success:       true,
 			index:         int(check.StartIndex),
 		}
@@ -473,7 +474,7 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 
 // tryNodes attempts to find potential nodes for scheduling. For each node, potential victims are passed to
 // the shim for evaluation, and the best solution found will be returned.
-func (p *Preemptor) tryNodes() (string, []*Allocation, bool) {
+func (p *Preemptor) tryNodes() (string, string, []*Allocation, bool) {
 	// calculate victim list for each node
 	predicateChecks := make([]*si.PreemptionPredicatesArgs, 0)
 	victimsByNode := make(map[string][]*Allocation)
@@ -504,10 +505,10 @@ func (p *Preemptor) tryNodes() (string, []*Allocation, bool) {
 	// call predicates to evaluate each node
 	result := p.checkPreemptionPredicates(predicateChecks, victimsByNode)
 	if result != nil && result.success {
-		return result.nodeID, result.victims, true
+		return result.nodeID, result.instType, result.victims, true
 	}
 
-	return "", nil, false
+	return "", UnknownInstanceType, nil, false
 }
 
 func (p *Preemptor) TryPreemption() (*Allocation, bool) {
@@ -520,7 +521,7 @@ func (p *Preemptor) TryPreemption() (*Allocation, bool) {
 	p.initWorkingState()
 
 	// try to find a node to schedule on and victims to preempt
-	nodeID, victims, ok := p.tryNodes()
+	nodeID, instType, victims, ok := p.tryNodes()
 	if !ok {
 		// no preemption possible
 		return nil, false
@@ -567,7 +568,7 @@ func (p *Preemptor) TryPreemption() (*Allocation, bool) {
 			zap.String("allocationKey", p.ask.GetAllocationKey()),
 			zap.String("nodeID", nodeID),
 			zap.Int("victimCount", len(victims)))
-		return newReservedAllocation(Reserved, nodeID, p.ask), true
+		return newReservedAllocation(Reserved, nodeID, instType, p.ask), true
 	}
 
 	// can't reserve as queue is still too full, but scheduling should succeed after preemption occurs
@@ -581,6 +582,7 @@ func (p *Preemptor) TryPreemption() (*Allocation, bool) {
 type predicateCheckResult struct {
 	allocationKey string
 	nodeID        string
+	instType      string
 	success       bool
 	index         int
 	victims       []*Allocation
@@ -658,6 +660,10 @@ func (pcr *predicateCheckResult) populateVictims(victimsByNode map[string][]*All
 	for i := 0; i <= pcr.index; i++ {
 		victim := victimList[i]
 		pcr.victims = append(pcr.victims, victim)
+		// Take the instance type info from the first victim Allocation of this given nodeID
+		if i == 0 {
+			pcr.instType = victim.GetInstanceType()
+		}
 	}
 }
 

@@ -53,43 +53,10 @@ func TestStoreAndRetrieve(t *testing.T) {
 	assert.Equal(t, len(records), 0)
 }
 
-// the store should store only one event per ObjectID and
-// that should be the least recently added
-func TestMultiEventsSameObjectID(t *testing.T) {
-	store := newEventStoreImpl()
-	for i := 0; i < 3; i++ {
-		event := &si.EventRecord{
-			Type:     si.EventRecord_REQUEST,
-			ObjectID: "alloc" + strconv.Itoa(i/2),
-			GroupID:  "app" + strconv.Itoa(i/2),
-			Reason:   "reason" + strconv.Itoa(i),
-			Message:  "message" + strconv.Itoa(i),
-		}
-		store.Store(event)
-	}
-	records := store.CollectEvents()
-	assert.Equal(t, len(records), 2)
-	for _, record := range records {
-		assert.Equal(t, record.Type, si.EventRecord_REQUEST)
-		switch {
-		case record.ObjectID == "alloc0":
-			assert.Equal(t, record.GroupID, "app0")
-			assert.Equal(t, record.Reason, "reason1")
-			assert.Equal(t, record.Message, "message1")
-		case record.ObjectID == "alloc1":
-			assert.Equal(t, record.GroupID, "app1")
-			assert.Equal(t, record.Reason, "reason2")
-			assert.Equal(t, record.Message, "message2")
-		default:
-			t.Fatalf("Unexpected allocation found")
-		}
-	}
-}
-
 // if we push more events to the EventStore than its
 // allowed maximum, those that couldn't fit will be omitted
 func TestStoreWithLimitedSize(t *testing.T) {
-	maxEventStoreSize = 3
+	defaultEventStoreSize = 3
 
 	store := newEventStoreImpl()
 	for i := 0; i < 5; i++ {

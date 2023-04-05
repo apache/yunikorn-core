@@ -19,7 +19,6 @@
 package events
 
 import (
-	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -89,54 +88,6 @@ func TestSingleEventStoredCorrectly(t *testing.T) {
 	assert.Equal(t, record.GroupID, "app1")
 	assert.Equal(t, record.Message, "message")
 	assert.Equal(t, record.Reason, "reason")
-}
-
-// this test checks that if we have multiple events
-// stored in the EventStore, for a given ObjectID we
-// only store one event, and it is always the
-// least recently added one
-func TestEventWithMatchingObjectID(t *testing.T) {
-	CreateAndSetEventCache()
-	cache := GetEventCache()
-	cache.StartService()
-
-	for i := 0; i < 3; i++ {
-		event := &si.EventRecord{
-			Type:     si.EventRecord_REQUEST,
-			ObjectID: "alloc" + strconv.Itoa(i/2),
-			GroupID:  "app" + strconv.Itoa(i/2),
-			Reason:   "reason" + strconv.Itoa(i),
-			Message:  "message" + strconv.Itoa(i),
-		}
-		cache.AddEvent(event)
-	}
-
-	// wait for events to be processed
-	err := common.WaitFor(1*time.Millisecond, 100*time.Millisecond, func() bool {
-		return cache.Store.CountStoredEvents() >= 2
-	})
-	assert.NilError(t, err, "the event should have been processed")
-
-	records := cache.Store.CollectEvents()
-	if records == nil {
-		t.Fatal("collecting eventChannel should return something")
-	}
-	assert.Equal(t, len(records), 2)
-	for _, record := range records {
-		assert.Equal(t, record.Type, si.EventRecord_REQUEST)
-		switch {
-		case record.ObjectID == "alloc0":
-			assert.Equal(t, record.GroupID, "app0")
-			assert.Equal(t, record.Message, "message1")
-			assert.Equal(t, record.Reason, "reason1")
-		case record.ObjectID == "alloc1":
-			assert.Equal(t, record.GroupID, "app1")
-			assert.Equal(t, record.Message, "message2")
-			assert.Equal(t, record.Reason, "reason2")
-		default:
-			t.Fatalf("Unexpected allocation found")
-		}
-	}
 }
 
 type slowEventStore struct {

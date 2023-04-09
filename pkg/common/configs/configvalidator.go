@@ -307,7 +307,7 @@ func checkPlacementFilter(filter Filter) error {
 }
 
 // Check a single limit entry
-func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int) error {
+func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int, queue *QueueConfig) error {
 	if len(limit.Users) == 0 && len(limit.Groups) == 0 {
 		return fmt.Errorf("empty user and group lists defined in limit '%v'", limit)
 	}
@@ -357,13 +357,37 @@ func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int
 	}
 	// at least some resource should be not null
 	if limit.MaxApplications == 0 && resources.IsZero(limitResource) {
-		return fmt.Errorf("invalid resource combination for limit names '%s' all resource limits are null", limit.Users)
+		return fmt.Errorf("invalid resource combination for limit %s all resource limits are null", limit.Limit)
 	}
+
+	if queue.MaxApplications != 0 {
+		if limit.MaxApplications > queue.MaxApplications {
+			return fmt.Errorf("invalid MaxApplications settings for limit %s exeecd current the queue MaxApplications", limit.Limit)
+		}
+		if limit.MaxApplications == 0 {
+			return fmt.Errorf("MaxApplications is 0 in limit name %s, it should be 1 ~ %d", limit.Limit, queue.MaxApplications)
+		}
+	}
+
+	// If queue is RootQueue, the queue.Resources.Max will be null, we don't need to check for root queue
+	// But we may need to check the root resource during loading the config and after partition resource loading when update node
+	if queue.Name != RootQueue {
+		queueMaxResource, err := resources.NewResourceFromConf(queue.Resources.Max)
+		if err != nil {
+			log.Logger().Debug("resource parsing failed",
+				zap.Error(err))
+			return fmt.Errorf("parse queue %s max resource failed: %s", queue.Name, err.Error())
+		}
+		if !queueMaxResource.FitInMaxUndef(limitResource) {
+			return fmt.Errorf("invalid MaxResources settings for limit %s exeecd current the queue MaxResources", limit.Limit)
+		}
+	}
+
 	return nil
 }
 
 // Check the defined limits list
-func checkLimits(limits []Limit, obj string) error {
+func checkLimits(limits []Limit, obj string, queue *QueueConfig) error {
 	// return if nothing defined
 	if len(limits) == 0 {
 		return nil
@@ -376,7 +400,7 @@ func checkLimits(limits []Limit, obj string) error {
 	var userWildCardIdx = -1
 	var groupWildCardIdx = -1
 	for index, limit := range limits {
-		if err := checkLimit(limit, index, &userWildCardIdx, &groupWildCardIdx); err != nil {
+		if err := checkLimit(limit, index, &userWildCardIdx, &groupWildCardIdx, queue); err != nil {
 			return err
 		}
 	}
@@ -419,7 +443,7 @@ func checkQueues(queue *QueueConfig, level int) error {
 	}
 
 	// check the limits for this child (if defined)
-	err = checkLimits(queue.Limits, queue.Name)
+	err = checkLimits(queue.Limits, queue.Name, queue)
 	if err != nil {
 		return err
 	}
@@ -550,7 +574,7 @@ func Validate(newConfig *SchedulerConfig) error {
 		if err != nil {
 			return err
 		}
-		err = checkLimits(partition.Limits, partition.Name)
+		err = checkLimits(partition.Limits, partition.Name, &partition.Queues[0])
 		if err != nil {
 			return err
 		}

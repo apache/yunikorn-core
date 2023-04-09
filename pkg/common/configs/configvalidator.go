@@ -360,8 +360,13 @@ func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int
 		return fmt.Errorf("invalid resource combination for limit %s all resource limits are null", limit.Limit)
 	}
 
-	if queue.MaxApplications != 0 && (limit.MaxApplications > queue.MaxApplications || limit.MaxApplications == 0) {
-		return fmt.Errorf("invalid MaxApplications settings for limit %s exeecd current the queue MaxApplications", limit.Limit)
+	if queue.MaxApplications != 0 {
+		if limit.MaxApplications > queue.MaxApplications {
+			return fmt.Errorf("invalid MaxApplications settings for limit %s exeecd current the queue MaxApplications", limit.Limit)
+		}
+		if limit.MaxApplications == 0 {
+			return fmt.Errorf("MaxApplications is 0 in limit name %s, it should be 1 ~ %d", limit.Limit, queue.MaxApplications)
+		}
 	}
 
 	// If queue is RootQueue, the queue.Resources.Max will be null, we don't need to check for root queue

@@ -1068,7 +1068,7 @@ partitions:
 `
 	// validate the config and check after the update
 	_, err = CreateConfig(data)
-	assert.ErrorContains(t, err, "invalid MaxApplications settings for limit")
+	assert.ErrorContains(t, err, "MaxApplications is 0 in limit name")
 
 	// Make sure limit max apps set, but queue limit not set, will not fail.
 	data = `

@@ -418,6 +418,17 @@ func checkLimits(limits []Limit, obj string, queue *QueueConfig) error {
 		existedUserName:  make(map[string]bool),
 		existedGroupName: make(map[string]bool),
 	}
+
+	defer func() {
+		for k, _ := range limitValidator.existedUserName {
+			delete(limitValidator.existedUserName, k)
+		}
+
+		for k, _ := range limitValidator.existedGroupName {
+			delete(limitValidator.existedGroupName, k)
+		}
+	}()
+
 	for _, limit := range limits {
 		if err := checkLimit(limit, &limitValidator, queue); err != nil {
 			return err

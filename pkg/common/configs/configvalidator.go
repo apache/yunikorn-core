@@ -521,6 +521,121 @@ func checkQueuesStructure(partition *PartitionConfig) error {
 	return checkQueues(&rootQueue, 1)
 }
 
+func hierarchicalCheckMaxAppsFail(limitMaxApps uint64, userOrGroup string, parentQueuePath string, currentMaxApps map[string]uint64) (bool, string) {
+	for {
+		if parentQueuePath == "" {
+			break
+		}
+		if limitMaxApps != 0 && currentMaxApps[parentQueuePath+","+userOrGroup] != 0 && currentMaxApps[parentQueuePath+","+userOrGroup] < limitMaxApps {
+			return true, parentQueuePath
+		}
+
+		idx := strings.LastIndex(parentQueuePath, DOT)
+		if idx != -1 {
+			parentQueuePath = parentQueuePath[:idx]
+		} else {
+			break
+		}
+	}
+	return false, ""
+}
+
+func hierarchicalCheckMaxResourcesFail(limitMaxResources *resources.Resource, userOrGroup string, parentQueuePath string, currentMaxResources map[string]*resources.Resource) (bool, string) {
+	for {
+		if parentQueuePath == "" {
+			break
+		}
+		if !resources.IsZero(limitMaxResources) && !resources.IsZero(currentMaxResources[parentQueuePath+","+userOrGroup]) && !resources.FitIn(currentMaxResources[parentQueuePath+","+userOrGroup], limitMaxResources) {
+			return true, parentQueuePath
+		}
+
+		idx := strings.LastIndex(parentQueuePath, DOT)
+		if idx != -1 {
+			parentQueuePath = parentQueuePath[:idx]
+		} else {
+			break
+		}
+	}
+	return false, ""
+}
+
+func CleanUpCurrentResourceMap(currentUserMaxApps map[string]uint64, currentUserMaxResources map[string]*resources.Resource,
+	currentGroupMaxApps map[string]uint64, currentGroupMaxResources map[string]*resources.Resource) {
+	for k, _ := range currentUserMaxResources {
+		delete(currentUserMaxResources, k)
+	}
+
+	for k, _ := range currentUserMaxApps {
+		delete(currentUserMaxApps, k)
+	}
+
+	for k, _ := range currentGroupMaxResources {
+		delete(currentGroupMaxResources, k)
+	}
+	for k, _ := range currentGroupMaxApps {
+		delete(currentGroupMaxApps, k)
+	}
+}
+
+func checkHierarchicalQueueLimits(config []QueueConfig, parentQueuePath string,
+	currentUserMaxApps map[string]uint64, currentUserMaxResources map[string]*resources.Resource,
+	currentGroupMaxApps map[string]uint64, currentGroupMaxResources map[string]*resources.Resource) error {
+	parentPath := parentQueuePath + DOT
+	for _, conf := range config {
+		queuePath := parentPath + conf.Name
+		for _, limit := range conf.Limits {
+			for _, user := range limit.Users {
+				checkFailed, checkFailedQueuePath := hierarchicalCheckMaxAppsFail(limit.MaxApplications, user, parentQueuePath, currentUserMaxApps)
+				if checkFailed {
+					return fmt.Errorf("hierarchical queue %s user max apps should not less than the child queue %s max apps", checkFailedQueuePath, queuePath)
+				}
+
+				max, err := resources.NewResourceFromConf(limit.MaxResources)
+				if err != nil {
+					return err
+				}
+				checkFailed, checkFailedQueuePath = hierarchicalCheckMaxResourcesFail(max, user, parentQueuePath, currentUserMaxResources)
+				if checkFailed {
+					return fmt.Errorf("hierarchical queue %s user max resource should not less than the child queue %s max resource", checkFailedQueuePath, queuePath)
+				}
+				// If this is a parent queue
+				if len(conf.Queues) > 0 {
+					currentUserMaxApps[queuePath+","+user] = limit.MaxApplications
+					currentUserMaxResources[queuePath+","+user] = max
+				}
+			}
+			for _, group := range limit.Groups {
+				checkFailed, checkFailedQueuePath := hierarchicalCheckMaxAppsFail(limit.MaxApplications, group, parentQueuePath, currentGroupMaxApps)
+				if checkFailed {
+					return fmt.Errorf("hierarchical queue %s group max apps should not less than the child queue %s max apps", checkFailedQueuePath, queuePath)
+				}
+				max, err := resources.NewResourceFromConf(limit.MaxResources)
+				if err != nil {
+					return err
+				}
+
+				checkFailed, checkFailedQueuePath = hierarchicalCheckMaxResourcesFail(max, group, parentQueuePath, currentGroupMaxResources)
+				if checkFailed {
+					return fmt.Errorf("hierarchical queue %s group max resource should not less than the child queue %s max resource", checkFailedQueuePath, queuePath)
+				}
+				// If this is a parent queue
+				if len(conf.Queues) > 0 {
+					currentGroupMaxApps[queuePath+","+group] = limit.MaxApplications
+					currentGroupMaxResources[queuePath+","+group] = max
+				}
+			}
+		}
+
+		if len(conf.Queues) > 0 {
+			if err := checkHierarchicalQueueLimits(conf.Queues, queuePath,
+				currentUserMaxApps, currentUserMaxResources, currentGroupMaxApps, currentGroupMaxResources); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // Check the state dump file path, if configured, is a valid path that can be written to.
 func checkDeprecatedStateDumpFilePath(partition *PartitionConfig) error {
 	if partition.StateDumpFilePath != "" {
@@ -590,6 +705,40 @@ func Validate(newConfig *SchedulerConfig) error {
 		if err != nil {
 			return err
 		}
+
+		currentUserMaxApps := map[string]uint64{}
+		currentUserMaxResources := map[string]*resources.Resource{}
+		currentGroupMaxApps := map[string]uint64{}
+		currentGroupMaxResources := map[string]*resources.Resource{}
+
+		for _, limit := range partition.Queues[0].Limits {
+			max, err := resources.NewResourceFromConf(limit.MaxResources)
+			if err != nil {
+				return err
+			}
+			for _, user := range limit.Users {
+				currentUserMaxApps["root"+","+user] = limit.MaxApplications
+				currentUserMaxResources["root"+","+user] = max
+			}
+			for _, group := range limit.Groups {
+				currentUserMaxApps["root"+","+group] = limit.MaxApplications
+				currentUserMaxResources["root"+","+group] = max
+			}
+		}
+
+		err = checkHierarchicalQueueLimits(partition.Queues[0].Queues, "root", currentUserMaxApps,
+			currentUserMaxResources, currentGroupMaxApps, currentGroupMaxResources)
+
+		fmt.Println(currentUserMaxResources)
+		fmt.Println(currentUserMaxApps)
+		fmt.Println(currentGroupMaxResources)
+		fmt.Println(currentGroupMaxApps)
+		CleanUpCurrentResourceMap(currentUserMaxApps, currentUserMaxResources, currentGroupMaxApps, currentGroupMaxResources)
+
+		if err != nil {
+			return err
+		}
+
 		// write back the partition to keep changes
 		newConfig.Partitions[i] = partition
 	}

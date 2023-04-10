@@ -89,8 +89,6 @@ type placementPathCheckResult int
 type LimitValidator struct {
 	existedUserName  map[string]bool
 	existedGroupName map[string]bool
-	userWildCardIdx  int
-	groupWildCardIdx int
 }
 
 const (

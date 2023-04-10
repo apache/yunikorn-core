@@ -995,6 +995,194 @@ partitions:
 	}
 }
 
+//nolint:funlen
+func TestSameLevelQueueLimitsResourceFail(t *testing.T) {
+	// Make sure limit max apps exceed queue max apps will failed
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        limits:
+          - limit:
+            users: 
+            - user1
+            maxresources: {memory: 10000, vcore: 10}
+            maxapplications: 5
+          - limit:
+            users:
+            - user2
+            groups:
+            - prod
+            maxapplications: 10
+        queues:
+          - name: level1
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 10}
+            limits:
+              - limit:
+                users: 
+                - test
+                maxapplications: 1000
+                maxresources: {memory: 10000, vcore: 10}
+`
+	// validate the config and check after the update
+	_, err := CreateConfig(data)
+	assert.ErrorContains(t, err, "invalid MaxApplications settings for limit")
+
+	// Make sure limit max apps not set, but queue limit set, will fail.
+	data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        limits:
+          - limit:
+            users: 
+            - user1
+            maxresources: {memory: 10000, vcore: 10}
+            maxapplications: 5
+          - limit:
+            users:
+            - user2
+            groups:
+            - prod
+            maxapplications: 10
+        queues:
+          - name: level1
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 10}
+            limits:
+              - limit:
+                users: 
+                - test
+                maxresources: {memory: 10000, vcore: 10}
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.ErrorContains(t, err, "MaxApplications is 0 in limit name")
+
+	// Make sure limit max apps set, but queue limit not set, will not fail.
+	data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        limits:
+          - limit:
+            users: 
+            - user1
+            maxresources: {memory: 10000, vcore: 10}
+            maxapplications: 5
+          - limit:
+            users:
+            - user2
+            groups:
+            - prod
+            maxapplications: 10
+        queues:
+          - name: level1
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 10}
+            limits:
+              - limit:
+                users: 
+                - test
+                maxresources: {memory: 10000, vcore: 10}
+                maxapplications: 100
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.NilError(t, err)
+
+	// Make sure limit max resources exceed queue max resources will failed
+	data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        maxapplications: 50
+        limits:
+          - limit:
+            users: 
+            - user1
+            maxresources: {memory: 10000, vcore: 10}
+            maxapplications: 5
+          - limit:
+            users:
+            - user2
+            groups:
+            - prod
+            maxapplications: 3
+        queues:
+          - name: level1
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 10}
+            limits:
+              - limit:
+                users: 
+                - test
+                maxapplications: 5
+                maxresources: {memory: 100000, vcore: 100}
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.ErrorContains(t, err, "invalid MaxResources settings for limit")
+
+	// Make sure queue max resource parse fail will return err
+	data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        maxapplications: 50
+        limits:
+          - limit:
+            users: 
+            - user1
+            maxresources: {memory: 10000, vcore: 10}
+            maxapplications: 5
+          - limit:
+            users:
+            - user2
+            groups:
+            - prod
+            maxapplications: 3
+        queues:
+          - name: level1
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: parseFailed, vcore: 10}
+            limits:
+              - limit:
+                users: 
+                - test
+                maxapplications: 5
+                maxresources: {memory: 100000, vcore: 100}
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.ErrorContains(t, err, "parse queue level1 max resource failed")
+}
+
 func TestComplexUsers(t *testing.T) {
 	data := `
 partitions:
@@ -1284,7 +1472,7 @@ partitions:
 `
 	// validate the config and check after the update
 	_, err = CreateConfig(data)
-	assert.ErrorContains(t, err, "should not set more than one wildcard user")
+	assert.ErrorContains(t, err, "duplicated user name *")
 
 	data = `
 partitions:
@@ -1319,7 +1507,7 @@ partitions:
 `
 	// validate the config and check after the update
 	_, err = CreateConfig(data)
-	assert.ErrorContains(t, err, "should not set more than one wildcard group")
+	assert.ErrorContains(t, err, "duplicated group name *")
 
 	data = `
 partitions:

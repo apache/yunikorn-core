@@ -420,11 +420,11 @@ func checkLimits(limits []Limit, obj string, queue *QueueConfig) error {
 	}
 
 	defer func() {
-		for k, _ := range limitValidator.existedUserName {
+		for k := range limitValidator.existedUserName {
 			delete(limitValidator.existedUserName, k)
 		}
 
-		for k, _ := range limitValidator.existedGroupName {
+		for k := range limitValidator.existedGroupName {
 			delete(limitValidator.existedGroupName, k)
 		}
 	}()

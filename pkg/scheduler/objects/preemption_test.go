@@ -131,10 +131,10 @@ func TestCheckPreemptionQueueGuarantees(t *testing.T) {
 }
 
 func TestTryPreemption(t *testing.T) {
-	node := newNode("node1", map[string]resources.Quantity{"first": 10})
+	node := newNode("node1", map[string]resources.Quantity{"first": 10, "pods": 5})
 	nodes := []*Node{node}
 	iterator := func() NodeIterator { return NewDefaultNodeIterator(nodes) }
-	rootQ, err := createRootQueue(map[string]string{"first": "20"})
+	rootQ, err := createRootQueue(map[string]string{"first": "20", "pods": "5"})
 	assert.NilError(t, err)
 	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20"}, map[string]string{"first": "10"})
 	assert.NilError(t, err)
@@ -145,10 +145,10 @@ func TestTryPreemption(t *testing.T) {
 	app1 := newApplication(appID1, "default", "root.parent.child1")
 	app1.SetQueue(childQ1)
 	childQ1.applications[appID1] = app1
-	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
 	ask1.createTime = time.Now().Add(-1 * time.Minute)
 	assert.NilError(t, app1.AddAllocationAsk(ask1))
-	ask2 := newAllocationAsk("alloc2", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	ask2 := newAllocationAsk("alloc2", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
 	ask2.createTime = time.Now()
 	assert.NilError(t, app1.AddAllocationAsk(ask2))
 	alloc1 := NewAllocation("alloc1", "node1", ask1)
@@ -162,10 +162,10 @@ func TestTryPreemption(t *testing.T) {
 	app2 := newApplication(appID2, "default", "root.parent.child2")
 	app2.SetQueue(childQ2)
 	childQ2.applications[appID2] = app2
-	ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
 	assert.NilError(t, app2.AddAllocationAsk(ask3))
 	childQ2.incPendingResource(ask3.GetAllocatedResource())
-	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
 	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
 
 	// register predicate handler

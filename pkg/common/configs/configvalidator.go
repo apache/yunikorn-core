@@ -86,11 +86,6 @@ type placementStaticPath struct {
 
 type placementPathCheckResult int
 
-type LimitValidator struct {
-	existedUserName  map[string]bool
-	existedGroupName map[string]bool
-}
-
 const (
 	checkOK placementPathCheckResult = iota
 	nonExistingQueue

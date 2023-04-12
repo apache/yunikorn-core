@@ -559,20 +559,20 @@ func hierarchicalCheckMaxResourcesFail(limitMaxResources *resources.Resource, us
 	return false, ""
 }
 
-func CleanUpCurrentResourceMap(currentUserMaxApps map[string]uint64, currentUserMaxResources map[string]*resources.Resource,
+func cleanUpCurrentResourceMap(currentUserMaxApps map[string]uint64, currentUserMaxResources map[string]*resources.Resource,
 	currentGroupMaxApps map[string]uint64, currentGroupMaxResources map[string]*resources.Resource) {
-	for k, _ := range currentUserMaxResources {
+	for k := range currentUserMaxResources {
 		delete(currentUserMaxResources, k)
 	}
 
-	for k, _ := range currentUserMaxApps {
+	for k := range currentUserMaxApps {
 		delete(currentUserMaxApps, k)
 	}
 
-	for k, _ := range currentGroupMaxResources {
+	for k := range currentGroupMaxResources {
 		delete(currentGroupMaxResources, k)
 	}
-	for k, _ := range currentGroupMaxApps {
+	for k := range currentGroupMaxApps {
 		delete(currentGroupMaxApps, k)
 	}
 }
@@ -587,7 +587,7 @@ func checkHierarchicalQueueLimits(config []QueueConfig, parentQueuePath string,
 			for _, user := range limit.Users {
 				checkFailed, checkFailedQueuePath := hierarchicalCheckMaxAppsFail(limit.MaxApplications, user, parentQueuePath, currentUserMaxApps)
 				if checkFailed {
-					return fmt.Errorf("hierarchical queue %s user max apps should not less than the child queue %s max apps", checkFailedQueuePath, queuePath)
+					return fmt.Errorf("hierarchical queue %s user %s max apps should not less than the child queue %s max apps", checkFailedQueuePath, user, queuePath)
 				}
 
 				max, err := resources.NewResourceFromConf(limit.MaxResources)
@@ -596,7 +596,7 @@ func checkHierarchicalQueueLimits(config []QueueConfig, parentQueuePath string,
 				}
 				checkFailed, checkFailedQueuePath = hierarchicalCheckMaxResourcesFail(max, user, parentQueuePath, currentUserMaxResources)
 				if checkFailed {
-					return fmt.Errorf("hierarchical queue %s user max resource should not less than the child queue %s max resource", checkFailedQueuePath, queuePath)
+					return fmt.Errorf("hierarchical queue %s user %s max resource should not less than the child queue %s max resource", checkFailedQueuePath, user, queuePath)
 				}
 				// If this is a parent queue
 				if len(conf.Queues) > 0 {
@@ -607,7 +607,7 @@ func checkHierarchicalQueueLimits(config []QueueConfig, parentQueuePath string,
 			for _, group := range limit.Groups {
 				checkFailed, checkFailedQueuePath := hierarchicalCheckMaxAppsFail(limit.MaxApplications, group, parentQueuePath, currentGroupMaxApps)
 				if checkFailed {
-					return fmt.Errorf("hierarchical queue %s group max apps should not less than the child queue %s max apps", checkFailedQueuePath, queuePath)
+					return fmt.Errorf("hierarchical queue %s group %s max apps should not less than the child queue %s max apps", checkFailedQueuePath, group, queuePath)
 				}
 				max, err := resources.NewResourceFromConf(limit.MaxResources)
 				if err != nil {
@@ -616,7 +616,7 @@ func checkHierarchicalQueueLimits(config []QueueConfig, parentQueuePath string,
 
 				checkFailed, checkFailedQueuePath = hierarchicalCheckMaxResourcesFail(max, group, parentQueuePath, currentGroupMaxResources)
 				if checkFailed {
-					return fmt.Errorf("hierarchical queue %s group max resource should not less than the child queue %s max resource", checkFailedQueuePath, queuePath)
+					return fmt.Errorf("hierarchical queue %s group %s max resource should not less than the child queue %s max resource", checkFailedQueuePath, group, queuePath)
 				}
 				// If this is a parent queue
 				if len(conf.Queues) > 0 {
@@ -706,34 +706,24 @@ func Validate(newConfig *SchedulerConfig) error {
 			return err
 		}
 
+		// The user and queuePath bind to the map key
+		// In order to store and compare Hierarchical Queue limit
 		currentUserMaxApps := map[string]uint64{}
 		currentUserMaxResources := map[string]*resources.Resource{}
 		currentGroupMaxApps := map[string]uint64{}
 		currentGroupMaxResources := map[string]*resources.Resource{}
 
-		for _, limit := range partition.Queues[0].Limits {
-			max, err := resources.NewResourceFromConf(limit.MaxResources)
-			if err != nil {
-				return err
-			}
-			for _, user := range limit.Users {
-				currentUserMaxApps["root"+","+user] = limit.MaxApplications
-				currentUserMaxResources["root"+","+user] = max
-			}
-			for _, group := range limit.Groups {
-				currentUserMaxApps["root"+","+group] = limit.MaxApplications
-				currentUserMaxResources["root"+","+group] = max
-			}
+		err = initCurrentResourceMap(partition.Queues[0], currentUserMaxApps, currentUserMaxResources, currentGroupMaxApps, currentGroupMaxResources)
+		if err != nil {
+			return err
 		}
 
 		err = checkHierarchicalQueueLimits(partition.Queues[0].Queues, "root", currentUserMaxApps,
 			currentUserMaxResources, currentGroupMaxApps, currentGroupMaxResources)
 
-		fmt.Println(currentUserMaxResources)
-		fmt.Println(currentUserMaxApps)
-		fmt.Println(currentGroupMaxResources)
-		fmt.Println(currentGroupMaxApps)
-		CleanUpCurrentResourceMap(currentUserMaxApps, currentUserMaxResources, currentGroupMaxApps, currentGroupMaxResources)
+		// TODO, we need to store it after checkHierarchicalQueueLimits successfully in UGM
+		// This will be done in another jira, here we just call cleanUpCurrentResourceMap
+		cleanUpCurrentResourceMap(currentUserMaxApps, currentUserMaxResources, currentGroupMaxApps, currentGroupMaxResources)
 
 		if err != nil {
 			return err
@@ -741,6 +731,26 @@ func Validate(newConfig *SchedulerConfig) error {
 
 		// write back the partition to keep changes
 		newConfig.Partitions[i] = partition
+	}
+	return nil
+}
+
+func initCurrentResourceMap(rootConfig QueueConfig, currentUserMaxApps map[string]uint64, currentUserMaxResources map[string]*resources.Resource,
+	currentGroupMaxApps map[string]uint64, currentGroupMaxResources map[string]*resources.Resource) error {
+	// Init for root queue limit
+	for _, limit := range rootConfig.Limits {
+		max, err := resources.NewResourceFromConf(limit.MaxResources)
+		if err != nil {
+			return err
+		}
+		for _, user := range limit.Users {
+			currentUserMaxApps["root"+","+user] = limit.MaxApplications
+			currentUserMaxResources["root"+","+user] = max
+		}
+		for _, group := range limit.Groups {
+			currentGroupMaxApps["root"+","+group] = limit.MaxApplications
+			currentGroupMaxResources["root"+","+group] = max
+		}
 	}
 	return nil
 }

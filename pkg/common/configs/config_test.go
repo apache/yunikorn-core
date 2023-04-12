@@ -1184,7 +1184,7 @@ partitions:
 }
 
 //nolint:funlen
-func TestHierarchicalQueueLimitsResourceFail(t *testing.T) {
+func TestUserHierarchicalQueueLimitsResourceFail(t *testing.T) {
 	// Make sure parent queue user max apps should not less than the child queue max apps
 	data := `
 partitions:
@@ -1249,7 +1249,7 @@ partitions:
 `
 	// validate the config and check after the update
 	_, err := CreateConfig(data)
-	assert.ErrorContains(t, err, "hierarchical queue root.level1 user max apps should not less than the child queue root.level1.leaf max apps")
+	assert.ErrorContains(t, err, "hierarchical queue root.level1 user user1 max apps should not less than the child queue root.level1.leaf max apps")
 
 	// Make sure parent queue user max apps should not less than the child queue max resource
 	data = `
@@ -1315,7 +1315,7 @@ partitions:
 `
 	// validate the config and check after the update
 	_, err = CreateConfig(data)
-	assert.ErrorContains(t, err, "hierarchical queue root.level1 user max resource should not less than the child queue root.level1.leaf max resource")
+	assert.ErrorContains(t, err, "hierarchical queue root.level1 user user1 max resource should not less than the child queue root.level1.leaf max resource")
 
 	// (More than one level check)
 	// Make sure hierarchical queue user max apps should not less than the child queue max apps
@@ -1376,7 +1376,7 @@ partitions:
 `
 	// validate the config and check after the update
 	_, err = CreateConfig(data)
-	assert.ErrorContains(t, err, "hierarchical queue root user max apps should not less than the child queue root.level1.leaf max apps")
+	assert.ErrorContains(t, err, "hierarchical queue root user user1 max apps should not less than the child queue root.level1.leaf max apps")
 
 	// (More than one level check)
 	// Make sure hierarchical queue user max resource should not less than the child queue max resource
@@ -1437,7 +1437,385 @@ partitions:
 `
 	// validate the config and check after the update
 	_, err = CreateConfig(data)
-	assert.ErrorContains(t, err, "hierarchical queue root user max resource should not less than the child queue root.level1.leaf max resource")
+	assert.ErrorContains(t, err, "hierarchical queue root user user1 max resource should not less than the child queue root.level1.leaf max resource")
+
+	// Special case: make sure wildcard user with hierarchical queue check
+	data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        maxapplications: 3000
+        limits:
+          - limit:
+            users: 
+            - "*"
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 500
+        queues:
+          - name: level1
+            maxapplications: 900
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 100000, vcore: 1000}
+            queues:
+              - name: leaf
+                maxapplications: 900
+                resources:
+                  guaranteed:
+                    {memory: 1000, vcore: 10}
+                  max:
+                    {memory: 100000, vcore: 1000}
+                limits:
+                  - limit:
+                    users: 
+                    - "*"
+                    maxapplications: 90
+                    maxresources: {memory: 90000, vcore: 100}
+          - name: level2
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                users: 
+                - user1
+                maxapplications: 10
+                maxresources: {memory: 1000, vcore: 100}
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.ErrorContains(t, err, "hierarchical queue root user * max resource should not less than the child queue root.level1.leaf max resource")
+}
+
+//nolint:funlen
+func TestGroupHierarchicalQueueLimitsResourceFail(t *testing.T) {
+	// Make sure parent queue user max apps should not less than the child queue max apps
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        maxapplications: 3000
+        limits:
+          - limit:
+            groups: 
+            - group1
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 500
+          - limit:
+            users:
+            - user2
+            groups:
+            - prod
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 300
+        queues:
+          - name: level1
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                groups: 
+                - group1
+                maxapplications: 50
+                maxresources: {memory: 1000, vcore: 100}
+            queues:
+              - name: leaf
+                maxapplications: 100
+                resources:
+                  guaranteed:
+                    {memory: 1000, vcore: 10}
+                  max:
+                    {memory: 10000, vcore: 1000}
+                limits:
+                  - limit:
+                    groups: 
+                    - group1
+                    maxapplications: 90
+                    maxresources: {memory: 1000, vcore: 100}
+          - name: level2
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                groups: 
+                - group1
+                maxapplications: 10
+                maxresources: {memory: 1000, vcore: 100}
+`
+	// validate the config and check after the update
+	_, err := CreateConfig(data)
+	assert.ErrorContains(t, err, "hierarchical queue root.level1 group group1 max apps should not less than the child queue root.level1.leaf max apps")
+
+	// Make sure parent queue user max apps should not less than the child queue max resource
+	data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        maxapplications: 3000
+        limits:
+          - limit:
+            groups: 
+            - group1
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 500
+          - limit:
+            users:
+            - user2
+            groups:
+            - prod
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 300
+        queues:
+          - name: level1
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                groups: 
+                - group1
+                maxapplications: 50
+                maxresources: {memory: 1000, vcore: 100}
+            queues:
+              - name: leaf
+                maxapplications: 100
+                resources:
+                  guaranteed:
+                    {memory: 1000, vcore: 10}
+                  max:
+                    {memory: 10000, vcore: 1000}
+                limits:
+                  - limit:
+                    groups: 
+                    - group1
+                    maxapplications: 50
+                    maxresources: {memory: 10000, vcore: 100}
+          - name: level2
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                groups: 
+                - group1
+                maxapplications: 10
+                maxresources: {memory: 1000, vcore: 100}
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.ErrorContains(t, err, "hierarchical queue root.level1 group group1 max resource should not less than the child queue root.level1.leaf max resource")
+
+	// (More than one level check)
+	// Make sure hierarchical queue user max apps should not less than the child queue max apps
+	data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        maxapplications: 3000
+        limits:
+          - limit:
+            groups: 
+            - group1
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 500
+          - limit:
+            users:
+            - user2
+            groups:
+            - prod
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 300
+        queues:
+          - name: level1
+            maxapplications: 900
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            queues:
+              - name: leaf
+                maxapplications: 900
+                resources:
+                  guaranteed:
+                    {memory: 1000, vcore: 10}
+                  max:
+                    {memory: 10000, vcore: 1000}
+                limits:
+                  - limit:
+                    groups: 
+                    - group1
+                    maxapplications: 900
+                    maxresources: {memory: 1000, vcore: 100}
+          - name: level2
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                groups: 
+                - group1
+                maxapplications: 10
+                maxresources: {memory: 1000, vcore: 100}
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.ErrorContains(t, err, "hierarchical queue root group group1 max apps should not less than the child queue root.level1.leaf max apps")
+
+	// (More than one level check)
+	// Make sure hierarchical queue user max resource should not less than the child queue max resource
+	data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        maxapplications: 3000
+        limits:
+          - limit:
+            groups: 
+            - group1
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 500
+          - limit:
+            users:
+            - user2
+            groups:
+            - prod
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 300
+        queues:
+          - name: level1
+            maxapplications: 900
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 100000, vcore: 1000}
+            queues:
+              - name: leaf
+                maxapplications: 900
+                resources:
+                  guaranteed:
+                    {memory: 1000, vcore: 10}
+                  max:
+                    {memory: 100000, vcore: 1000}
+                limits:
+                  - limit:
+                    groups: 
+                    - group1
+                    maxapplications: 90
+                    maxresources: {memory: 90000, vcore: 100}
+          - name: level2
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                groups: 
+                - group1
+                maxapplications: 10
+                maxresources: {memory: 1000, vcore: 100}
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.ErrorContains(t, err, "hierarchical queue root group group1 max resource should not less than the child queue root.level1.leaf max resource")
+
+	// Special case: make sure wildcard user with hierarchical queue check
+	data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        maxapplications: 3000
+        limits:
+          - limit:
+            groups: 
+            - test
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 500
+          - limit:
+            groups: 
+            - "*"
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 500
+        queues:
+          - name: level1
+            maxapplications: 900
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 100000, vcore: 1000}
+            queues:
+              - name: leaf
+                maxapplications: 900
+                resources:
+                  guaranteed:
+                    {memory: 1000, vcore: 10}
+                  max:
+                    {memory: 100000, vcore: 1000}
+                limits:
+                  - limit:
+                    groups: 
+                    - "test"
+                    maxapplications: 9
+                    maxresources: {memory: 900, vcore: 100}
+                  - limit:
+                    groups: 
+                    - "*"
+                    maxapplications: 90
+                    maxresources: {memory: 90000, vcore: 100}
+                  - limit:
+                    users: 
+                    - "*"
+                    maxapplications: 9
+                    maxresources: {memory: 900, vcore: 100}
+          - name: level2
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                users: 
+                - user1
+                maxapplications: 10
+                maxresources: {memory: 1000, vcore: 100}
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.ErrorContains(t, err, "hierarchical queue root group * max resource should not less than the child queue root.level1.leaf max resource")
 }
 
 func TestComplexUsers(t *testing.T) {

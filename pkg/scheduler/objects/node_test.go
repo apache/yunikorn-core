@@ -19,6 +19,7 @@
 package objects
 
 import (
+	"fmt"
 	"testing"
 
 	"gotest.tools/v3/assert"
@@ -292,24 +293,61 @@ func TestIsReservedForApp(t *testing.T) {
 }
 
 func TestAttributes(t *testing.T) {
-	proto := newProto(testNode, nil, nil, map[string]string{
-		common.NodePartition: "partition1",
-		"something":          "just a text",
-	})
-
-	node := NewNode(proto)
-	if node == nil || node.NodeID != testNode {
-		t.Fatal("node not returned correctly: node is nul or incorrect name")
+	type outputFormat struct {
+		hostname, rackname, partition string
+		attribites                    map[string]string
 	}
+	attribitesOfNode1 := map[string]string{common.NodePartition: "partition1", "something": "just a text"}
+	attribitesOfNode2 := map[string]string{common.HostName: "test", common.NodePartition: "partition2", "disk": "SSD", "GPU-type": "3090"}
+	var tests = []struct {
+		inputs   map[string]string
+		expected outputFormat
+	}{
+		{
+			attribitesOfNode1,
+			outputFormat{"", "", "partition1", attribitesOfNode1},
+		},
+		{
+			attribitesOfNode2,
+			outputFormat{"test", "", "partition2", attribitesOfNode2},
+		},
+	}
+	for index, tt := range tests {
+		testname := fmt.Sprintf("Attributes in the node %d", index)
+		t.Run(testname, func(t *testing.T) {
+			nodename := fmt.Sprintf("%s-%d", testNode, index)
+			node := NewNode(newProto(nodename, nil, nil, tt.inputs))
+			if node == nil || node.NodeID != nodename {
+				t.Error("node not returned correctly: node is nul or incorrect name")
+			}
 
-	assert.Equal(t, "", node.Hostname)
-	assert.Equal(t, "", node.Rackname)
-	assert.Equal(t, "partition1", node.Partition)
+			if got, expect := node.Hostname, tt.expected.hostname; got != expect {
+				t.Errorf("node hostname: got %s, expected %s", got, expect)
+			}
 
-	value := node.GetAttribute(common.NodePartition)
-	assert.Equal(t, "partition1", value, "node attributes not set, expected 'partition1' got '%v'", value)
-	value = node.GetAttribute("something")
-	assert.Equal(t, "just a text", value, "node attributes not set, expected 'just a text' got '%v'", value)
+			if got, expect := node.Rackname, tt.expected.rackname; got != expect {
+				t.Errorf("node rackname: got %s, expected %s", got, expect)
+			}
+
+			if got, expect := node.Partition, tt.expected.partition; got != expect {
+				t.Errorf("node partition: got %s, expected %s", got, expect)
+			}
+
+			attribites := node.GetAttributes()
+			if got, expect := len(attribites), len(tt.expected.attribites); got != expect {
+				t.Errorf("length of attributes: got %d, expected %d", got, expect)
+			}
+
+			for key, expect := range tt.expected.attribites {
+				if got := node.GetAttribute(key); got != expect {
+					t.Errorf("Attribute %s: got %s, expect %s", key, got, expect)
+				}
+				if got := attribites[key]; got != expect {
+					t.Errorf("Attribute %s: got %s, expect %s", key, got, expect)
+				}
+			}
+		})
+	}
 }
 
 func TestGetInstanceType(t *testing.T) {

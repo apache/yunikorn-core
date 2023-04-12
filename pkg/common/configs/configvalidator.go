@@ -312,7 +312,7 @@ func checkPlacementFilter(filter Filter) error {
 }
 
 // Check a single limit entry
-func checkLimit(limit Limit, limitValidator *LimitValidator, queue *QueueConfig) error {
+func checkLimit(limit Limit, existedUserName map[string]bool, existedGroupName map[string]bool, queue *QueueConfig) error {
 	if len(limit.Users) == 0 && len(limit.Groups) == 0 {
 		return fmt.Errorf("empty user and group lists defined in limit '%v'", limit)
 	}
@@ -322,15 +322,15 @@ func checkLimit(limit Limit, limitValidator *LimitValidator, queue *QueueConfig)
 			return fmt.Errorf("invalid limit user name '%s' in limit definition", name)
 		}
 
-		if limitValidator.existedUserName[name] {
+		if existedUserName[name] {
 			return fmt.Errorf("duplicated user name %s , already existed", name)
 		}
-		limitValidator.existedUserName[name] = true
+		existedUserName[name] = true
 
 		// The user without wildcard should not happen after the wildcard user
 		// It means the wildcard for user should be the last item for limits object list which including the username,
 		// and we should only set one wildcard user for all limits
-		if limitValidator.existedUserName["*"] && name != "*" {
+		if existedUserName["*"] && name != "*" {
 			return fmt.Errorf("should not set no wildcard user %s after wildcard user limit", name)
 		}
 	}
@@ -339,15 +339,15 @@ func checkLimit(limit Limit, limitValidator *LimitValidator, queue *QueueConfig)
 			return fmt.Errorf("invalid limit group name '%s' in limit definition", name)
 		}
 
-		if limitValidator.existedGroupName[name] {
+		if existedGroupName[name] {
 			return fmt.Errorf("duplicated group name %s , already existed", name)
 		}
-		limitValidator.existedGroupName[name] = true
+		existedGroupName[name] = true
 
 		// The group without wildcard should not happen after the wildcard group
 		// It means the wildcard for group should be the last item for limits object list which including the group name,
 		// and we should only set one wildcard group for all limits
-		if limitValidator.existedGroupName["*"] && name != "*" {
+		if existedGroupName["*"] && name != "*" {
 			return fmt.Errorf("should not set no wildcard group %s after wildcard group limit", name)
 		}
 	}
@@ -356,7 +356,7 @@ func checkLimit(limit Limit, limitValidator *LimitValidator, queue *QueueConfig)
 	// If there is no specific group mentioned the wildcard group limit would thus be the same as the queue limit.
 	// For that reason we do not allow specifying only one group limit that is using the wildcard.
 	// There must be at least one limit with a group name defined.
-	if limitValidator.existedGroupName["*"] && len(limitValidator.existedGroupName) == 1 {
+	if existedGroupName["*"] && len(existedGroupName) == 1 {
 		return fmt.Errorf("should not specify only one group limit that is using the wildcard. " +
 			"There must be at least one limit with a group name defined ")
 	}
@@ -414,23 +414,21 @@ func checkLimits(limits []Limit, obj string, queue *QueueConfig) error {
 		zap.String("objName", obj),
 		zap.Int("limitsLength", len(limits)))
 
-	limitValidator := LimitValidator{
-		existedUserName:  make(map[string]bool),
-		existedGroupName: make(map[string]bool),
-	}
+	existedUserName := make(map[string]bool)
+	existedGroupName := make(map[string]bool)
 
 	defer func() {
-		for k := range limitValidator.existedUserName {
-			delete(limitValidator.existedUserName, k)
+		for k := range existedUserName {
+			delete(existedUserName, k)
 		}
 
-		for k := range limitValidator.existedGroupName {
-			delete(limitValidator.existedGroupName, k)
+		for k := range existedGroupName {
+			delete(existedGroupName, k)
 		}
 	}()
 
 	for _, limit := range limits {
-		if err := checkLimit(limit, &limitValidator, queue); err != nil {
+		if err := checkLimit(limit, existedUserName, existedGroupName, queue); err != nil {
 			return err
 		}
 	}

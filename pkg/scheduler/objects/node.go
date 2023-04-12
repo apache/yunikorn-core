@@ -117,6 +117,10 @@ func (sn *Node) GetAttribute(key string) string {
 	return sn.attributes[key]
 }
 
+func (sn *Node) GetAttributes() map[string]string {
+	return sn.attributes
+}
+
 // Get InstanceType of this node.
 // This is a lock free call because all attributes are considered read only
 func (sn *Node) GetInstanceType() string {

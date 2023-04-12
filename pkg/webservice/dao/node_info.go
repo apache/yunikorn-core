@@ -27,6 +27,7 @@ type NodeDAOInfo struct {
 	NodeID       string               `json:"nodeID"`
 	HostName     string               `json:"hostName"`
 	RackName     string               `json:"rackName"`
+	Attributes   map[string]string    `json:"attributes"`
 	Capacity     map[string]int64     `json:"capacity"`
 	Allocated    map[string]int64     `json:"allocated"`
 	Occupied     map[string]int64     `json:"occupied"`

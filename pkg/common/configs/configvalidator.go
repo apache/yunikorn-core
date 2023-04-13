@@ -721,7 +721,8 @@ func Validate(newConfig *SchedulerConfig) error {
 		err = checkHierarchicalQueueLimits(partition.Queues[0].Queues, "root", currentUserMaxApps,
 			currentUserMaxResources, currentGroupMaxApps, currentGroupMaxResources)
 
-		// TODO need to store it after checkHierarchicalQueueLimits successfully in UGM and this will be done in another jira, here we just call cleanUpCurrentResourceMap
+		// Need to store it after checkHierarchicalQueueLimits successfully in UGM and this will be done in another jira YUNIKORN-1608
+		// here we just call cleanUpCurrentResourceMap
 		cleanUpCurrentResourceMap(currentUserMaxApps, currentUserMaxResources, currentGroupMaxApps, currentGroupMaxResources)
 
 		if err != nil {

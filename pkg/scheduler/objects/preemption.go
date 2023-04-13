@@ -465,7 +465,7 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 		}
 	}
 
-	if resources.FitIn(askQueue.GetGuaranteedResource(), p.ask.GetAllocatedResource()) {
+	if askQueue.IsWithinGuaranteedResource() {
 		return victims, true
 	}
 	return nil, false

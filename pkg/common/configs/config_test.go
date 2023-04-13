@@ -1605,6 +1605,46 @@ partitions:
 	// validate the config and check after the update
 	_, err = CreateConfig(data)
 	assert.ErrorContains(t, err, "duplicated group name test")
+
+	// Make sure different queues can support same username or groupname
+	data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        maxapplications: 500
+        limits:
+          - limit:
+            users: 
+            - user1
+            maxresources: {memory: 10000, vcore: 10}
+            maxapplications: 5
+          - limit:
+            users:
+            - user2
+            groups:
+            - prod
+            maxapplications: 3
+        queues:
+          - name: level1
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 10}
+            limits:
+              - limit:
+                users: 
+                - user1
+                groups:
+                - prod
+                maxapplications: 5
+                maxresources: {memory: 10000, vcore: 10}
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.NilError(t, err, "different queues should support same username or groupname")
 }
 
 func TestLoadSchedulerConfigFromByteArray(t *testing.T) {

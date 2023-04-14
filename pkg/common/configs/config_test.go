@@ -2259,7 +2259,7 @@ partitions:
             - user2
             groups:
             - prod
-            maxapplications: 3
+            maxapplications: 30
         queues:
           - name: level1
             maxapplications: 100

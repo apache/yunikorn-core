@@ -706,8 +706,7 @@ func TestMetricsNotEmpty(t *testing.T) {
 	req, err := http.NewRequest("GET", "/ws/v1/metrics", strings.NewReader(""))
 	assert.NilError(t, err, "Error while creating the request")
 	rr := httptest.NewRecorder()
-	mux := http.HandlerFunc(promhttp.Handler().ServeHTTP)
-	handler := loggingHandler(mux, "/ws/v1/metrics")
+	handler := http.HandlerFunc(promhttp.Handler().ServeHTTP)
 	handler.ServeHTTP(rr, req)
 	assert.Assert(t, len(rr.Body.Bytes()) > 0, "Metrics response should not be empty")
 }

@@ -21,10 +21,11 @@ package webservice
 import (
 	"context"
 	"fmt"
-	"github.com/julienschmidt/httprouter"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/julienschmidt/httprouter"
 
 	"go.uber.org/zap"
 

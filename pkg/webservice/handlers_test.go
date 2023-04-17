@@ -22,7 +22,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/gorilla/mux"
 	"github.com/julienschmidt/httprouter"
 	"net/http"
 	"net/http/httptest"
@@ -1124,7 +1123,6 @@ func TestFullStateDumpPath(t *testing.T) {
 	imHistory = history.NewInternalMetricsHistory(5)
 	req, err2 := http.NewRequest("GET", "/ws/v1/getfullstatedump", strings.NewReader(""))
 	assert.NilError(t, err2)
-	req = mux.SetURLVars(req, make(map[string]string))
 	resp := &MockResponseWriter{}
 
 	getFullStateDump(resp, req)

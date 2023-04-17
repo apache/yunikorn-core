@@ -118,6 +118,14 @@ func TestQueuePendingResourceMetrics(t *testing.T) {
 	verifyResourceMetrics(t, "pending", "cpu")
 }
 
+func TestQueuePreemptingResourceMetrics(t *testing.T) {
+	cqm = getQueueMetrics()
+	defer unregisterMetrics(t)
+
+	cqm.SetQueuePreemptingResourceMetrics("cpu", 1)
+	verifyResourceMetrics(t, "preempting", "cpu")
+}
+
 func getQueueMetrics() CoreQueueMetrics {
 	return InitQueueMetrics("root.test")
 }

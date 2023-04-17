@@ -57,7 +57,6 @@ type PartitionContext struct {
 	partitionManager       *partitionManager               // manager for this partition
 	stateMachine           *fsm.FSM                        // the state of the partition for scheduling
 	stateTime              time.Time                       // last time the state was updated (needed for cleanup)
-	isPreemptable          bool                            // can allocations be preempted
 	rules                  *[]configs.PlacementRule        // placement rules to be loaded by the scheduler
 	userGroupCache         *security.UserGroupCache        // user cache per partition
 	totalPartitionResource *resources.Resource             // Total node resources
@@ -120,9 +119,6 @@ func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionCon
 	log.Logger().Info("root queue added",
 		zap.String("partitionName", pc.Name),
 		zap.String("rmID", pc.RmID))
-
-	// set preemption needed flag
-	pc.isPreemptable = conf.Preemption.Enabled
 
 	pc.rules = &conf.PlacementRules
 	// We need to pass in the locked version of the GetQueue function.
@@ -764,6 +760,10 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 		} else {
 			metrics.GetQueueMetrics(app.GetQueuePath()).IncReleasedContainer()
 		}
+		// remove preempted resources
+		if alloc.IsPreempted() {
+			app.GetQueue().DecPreemptingResource(alloc.GetAllocatedResource())
+		}
 
 		// the allocation is removed so add it to the list that we return
 		released = append(released, alloc)
@@ -793,7 +793,7 @@ func (pc *PartitionContext) tryAllocate() *objects.Allocation {
 		return nil
 	}
 	// try allocating from the root down
-	alloc := pc.root.TryAllocate(pc.GetNodeIterator, pc.GetNode)
+	alloc := pc.root.TryAllocate(pc.GetNodeIterator, pc.GetFullNodeIterator, pc.GetNode)
 	if alloc != nil {
 		return pc.allocate(alloc)
 	}
@@ -951,6 +951,12 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 // The iterator is nil if there are no unreserved nodes available.
 func (pc *PartitionContext) GetNodeIterator() objects.NodeIterator {
 	return pc.nodes.GetNodeIterator()
+}
+
+// Create an ordered node iterator based on the node sort policy set for this partition.
+// The iterator is nil if there are no nodes available.
+func (pc *PartitionContext) GetFullNodeIterator() objects.NodeIterator {
+	return pc.nodes.GetFullNodeIterator()
 }
 
 // Updated the allocations counter for the partition
@@ -1246,6 +1252,7 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 
 	// for each allocation to release, update the node and queue.
 	total := resources.NewResource()
+	totalPreempting := resources.NewResource()
 	for _, alloc := range released {
 		node := pc.GetNode(alloc.GetNodeID())
 		if node == nil {
@@ -1291,6 +1298,9 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 				zap.String("nodeID", alloc.GetNodeID()),
 				zap.String("allocationId", alloc.GetUUID()))
 		}
+		if alloc.IsPreempted() {
+			totalPreempting.AddTo(alloc.GetAllocatedResource())
+		}
 	}
 	if resources.StrictlyGreaterThanZero(total) {
 		queue := app.GetQueue()
@@ -1303,9 +1313,12 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 			metrics.GetQueueMetrics(queue.GetQueuePath()).IncReleasedContainer()
 		}
 	}
+	if resources.StrictlyGreaterThanZero(totalPreempting) {
+		app.GetQueue().DecPreemptingResource(totalPreempting)
+	}
+
 	// if confirmed is set we can assume there will just be one alloc in the released
 	// that allocation was already released by the shim, so clean up released
-
 	if confirmed != nil {
 		released = nil
 	}

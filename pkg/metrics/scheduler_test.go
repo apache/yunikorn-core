@@ -19,8 +19,11 @@
 package metrics
 
 import (
+	"fmt"
+	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
@@ -59,9 +62,31 @@ func TestUnhealthyNodes(t *testing.T) {
 	verifyMetric(t, 0, "unhealthy")
 }
 
+func TestTryPreemptionLatency(t *testing.T) {
+	csm = getSchedulerMetrics(t)
+	defer unregisterMetrics(t)
+
+	csm.ObserveTryPreemptionLatency(time.Now().Add(-1 * time.Minute))
+	verifyHistogram(t, "trypreemption_latency_milliseconds", 60, 1)
+}
+
 func getSchedulerMetrics(t *testing.T) *SchedulerMetrics {
 	unregisterMetrics(t)
 	return InitSchedulerMetrics()
+}
+
+func verifyHistogram(t *testing.T, name string, value float64, delta float64) {
+	mfs, err := prometheus.DefaultGatherer.Gather()
+	assert.NilError(t, err)
+	for _, metric := range mfs {
+		if strings.Contains(metric.GetName(), name) {
+			assert.Equal(t, 1, len(metric.Metric))
+			assert.Equal(t, dto.MetricType_HISTOGRAM, metric.GetType())
+			m := metric.Metric[0]
+			realDelta := math.Abs(*m.Histogram.SampleSum - value)
+			assert.Check(t, realDelta < delta, fmt.Sprintf("wrong delta, expected <= %f, was %f", delta, realDelta))
+		}
+	}
 }
 
 func verifyMetric(t *testing.T, expectedCounter float64, expectedState string) {
@@ -100,4 +125,5 @@ func unregisterMetrics(t *testing.T) {
 	prometheus.Unregister(sm.schedulingLatency)
 	prometheus.Unregister(sm.sortingLatency)
 	prometheus.Unregister(sm.tryNodeLatency)
+	prometheus.Unregister(sm.tryPreemptionLatency)
 }

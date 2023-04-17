@@ -21,6 +21,7 @@ package objects
 import (
 	"fmt"
 	"reflect"
+	"sort"
 	"strconv"
 	"testing"
 	"time"
@@ -258,124 +259,6 @@ func TestPriorityCalc(t *testing.T) {
 	leaf.RemoveApplication(app)
 	assert.Equal(t, parent.GetCurrentPriority(), configs.MinPriority, "final parent priority wrong")
 	assert.Equal(t, leaf.GetCurrentPriority(), configs.MinPriority, "final leaf priority wrong")
-}
-
-func TestPreemptionPriorityCalc(t *testing.T) {
-	root, err := createRootQueue(nil)
-	assert.NilError(t, err, "queue create failed")
-	var leaf *Queue
-	leaf, err = createManagedQueue(root, "leaf", false, nil)
-	assert.NilError(t, err, "failed to create leaf queue")
-	resMap := map[string]string{"memory": "100", "vcores": "10"}
-	res, err2 := resources.NewResourceFromConf(resMap)
-	assert.NilError(t, err2, "failed to create resource with error")
-
-	app1 := newApplication(appID1, "default", "root.leaf")
-	app1.SetQueue(leaf)
-	app2 := newApplication(appID2, "default", "root.leaf")
-	app2.SetQueue(leaf)
-	app3 := newApplication(appID3, "default", "root.leaf")
-	app3.SetQueue(leaf)
-	app4 := newApplication(appID4, "default", "root.leaf")
-	app4.SetQueue(leaf)
-
-	leaf.AddApplication(app1)
-	alloc1 := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
-	alloc1.priority = 10
-	app1.AddAllocation(alloc1)
-	assert.Equal(t, int32(10), leaf.GetPreemptionPriority())
-	assert.Equal(t, int32(10), root.GetPreemptionPriority())
-
-	leaf.AddApplication(app2)
-	alloc2 := newAllocation(appID2, "uuid-2", nodeID1, "root.a", res)
-	alloc2.priority = 1
-	app2.AddAllocation(alloc2)
-	assert.Equal(t, int32(1), leaf.GetPreemptionPriority())
-	assert.Equal(t, int32(1), root.GetPreemptionPriority())
-
-	leaf.AddApplication(app3)
-	alloc3 := newAllocation(appID3, "uuid-3", nodeID1, "root.a", res)
-	alloc3.priority = 5
-	app3.AddAllocation(alloc3)
-	assert.Equal(t, int32(1), leaf.GetPreemptionPriority())
-	assert.Equal(t, int32(1), root.GetPreemptionPriority())
-
-	leaf.AddApplication(app4)
-	app4.SetQueue(leaf)
-	alloc4 := newAllocation(appID4, "uuid-4", nodeID1, "root.a", res)
-	alloc4.priority = 1
-	app4.AddAllocation(alloc4)
-	assert.Equal(t, int32(1), leaf.GetPreemptionPriority())
-	assert.Equal(t, int32(1), root.GetPreemptionPriority())
-
-	leaf.RemoveApplication(app3)
-	assert.Equal(t, int32(1), leaf.GetPreemptionPriority())
-	assert.Equal(t, int32(1), root.GetPreemptionPriority())
-	leaf.RemoveApplication(app2)
-	assert.Equal(t, int32(1), leaf.GetPreemptionPriority())
-	assert.Equal(t, int32(1), root.GetPreemptionPriority())
-	leaf.RemoveApplication(app4)
-	assert.Equal(t, int32(10), leaf.GetPreemptionPriority())
-	assert.Equal(t, int32(10), root.GetPreemptionPriority())
-	leaf.RemoveApplication(app1)
-	assert.Equal(t, configs.MaxPriority, leaf.GetPreemptionPriority())
-	assert.Equal(t, configs.MaxPriority, root.GetPreemptionPriority())
-}
-
-func TestPreemptionPriorityCalcWithFencedQueue(t *testing.T) {
-	resMap := map[string]string{"memory": "100", "vcores": "10"}
-	res, err := resources.NewResourceFromConf(resMap)
-	assert.NilError(t, err, "failed to create resource with error")
-
-	// create the root
-	root, err := createRootQueue(nil)
-	assert.NilError(t, err, "queue create failed")
-
-	// single parent under root
-	var parent *Queue
-	parent, err = createManagedQueueWithProps(root, "parent", true, nil, map[string]string{
-		configs.PriorityOffset: "5",
-	})
-	assert.NilError(t, err, "failed to create parent queue")
-
-	// add a leaf under the parent
-	var leaf *Queue
-	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, map[string]string{
-		configs.PriorityOffset:   "3",
-		configs.PreemptionPolicy: policies.FencePreemptionPolicy.String(),
-	})
-	assert.NilError(t, err, "failed to create leaf queue")
-
-	app1 := newApplication(appID1, "default", "root.leaf")
-	app1.SetQueue(leaf)
-	app2 := newApplication(appID2, "default", "root.leaf")
-	app2.SetQueue(leaf)
-	leaf.AddApplication(app1)
-	leaf.AddApplication(app2)
-
-	alloc1 := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
-	alloc1.priority = 10
-	app1.AddAllocation(alloc1)
-	assert.Equal(t, int32(3), leaf.GetPreemptionPriority())
-	assert.Equal(t, int32(8), parent.GetPreemptionPriority())
-	assert.Equal(t, int32(8), root.GetPreemptionPriority())
-
-	alloc2 := newAllocation(appID2, "uuid-2", nodeID1, "root.a", res)
-	alloc2.priority = 1
-	app2.AddAllocation(alloc2)
-	assert.Equal(t, int32(3), leaf.GetPreemptionPriority())
-	assert.Equal(t, int32(8), parent.GetPreemptionPriority())
-	assert.Equal(t, int32(8), root.GetPreemptionPriority())
-
-	leaf.RemoveApplication(app1)
-	assert.Equal(t, int32(3), leaf.GetPreemptionPriority())
-	assert.Equal(t, int32(8), parent.GetPreemptionPriority())
-	assert.Equal(t, int32(8), root.GetPreemptionPriority())
-
-	leaf.RemoveApplication(app2)
-	assert.Equal(t, configs.MaxPriority, leaf.GetPreemptionPriority())
-	assert.Equal(t, configs.MaxPriority, parent.GetPreemptionPriority())
-	assert.Equal(t, configs.MaxPriority, root.GetPreemptionPriority())
 }
 
 func TestPendingCalc(t *testing.T) {
@@ -782,8 +665,8 @@ func TestHeadroom(t *testing.T) {
 	// structure is:
 	// root			max resource 20,10;	alloc 10,6	head 10,4
 	// - parent		max resource 20,8;	alloc 10,6	head 10,2
-	//   - leaf1	max resource ---;	alloc 5,3	head 15,5 * parent used
-	//   - leaf2	max resource ---;	alloc 5,3	head 15,5 * parent used
+	//   - leaf1	max resource ---;	alloc 5,3	head 10,2 * parent headroom used
+	//   - leaf2	max resource ---;	alloc 5,3	head 10,2 * parent headroom used
 	// set the max on the root
 	resMap := map[string]string{"first": "20", "second": "10"}
 	root, err = createRootQueue(resMap)
@@ -809,39 +692,94 @@ func TestHeadroom(t *testing.T) {
 	err = leaf2.IncAllocatedResource(res, true)
 	assert.NilError(t, err, "failed to set allocated resource on leaf2")
 
-	// headRoom root should be this (20-10, 10-6)
+	// headRoom root should be this (max 20-10 - alloc 10-6)
 	res, err = resources.NewResourceFromConf(map[string]string{"first": "10", "second": "4"})
+	assert.NilError(t, err, "failed to create resource")
 	headRoom = root.getHeadRoom()
-	if err != nil || !resources.Equals(res, headRoom) {
-		t.Errorf("root queue head room not as expected %v, got: %v (err %v)", res, headRoom, err)
-	}
+	assert.Assert(t, resources.Equals(res, headRoom), "root queue head room not as expected %v, got: %v", res, headRoom)
 
 	maxHeadRoom := root.getMaxHeadRoom()
 	assert.Assert(t, maxHeadRoom == nil, "root queue max headroom should be nil")
 
-	// headRoom parent should be this (20-10, 8-6)
+	// headRoom parent should be this (max 20-10 - alloc 8-6)
 	res, err = resources.NewResourceFromConf(map[string]string{"first": "10", "second": "2"})
+	assert.NilError(t, err, "failed to create resource")
 	headRoom = parent.getHeadRoom()
+	assert.Assert(t, resources.Equals(res, headRoom), "parent queue head room not as expected %v, got: %v", res, headRoom)
 	maxHeadRoom = parent.getMaxHeadRoom()
-	if err != nil || !resources.Equals(res, headRoom) || !resources.Equals(res, maxHeadRoom) {
-		t.Errorf("parent queue head room not as expected %v, got: %v (err %v)", res, headRoom, err)
-	}
+	assert.Assert(t, resources.Equals(res, maxHeadRoom), "parent queue max head room not as expected %v, got: %v", res, maxHeadRoom)
 
-	// headRoom leaf1 will be smaller of this
-	// leaf1 (20-5, 8-3) & parent (20-10, 8-6)
-	// parent queue has lower head room and leaf1 gets limited to parent headroom
+	// headRoom for any leaves will be at most the parent headroom
+	// since leaf1 does not have a max it will be the same
 	res, err = resources.NewResourceFromConf(map[string]string{"first": "10", "second": "2"})
 	assert.NilError(t, err, "failed to create resource")
 	headRoom = leaf1.getHeadRoom()
+	assert.Assert(t, resources.Equals(res, headRoom), "leaf1 queue head room not as expected %v, got: %v", res, headRoom)
 	maxHeadRoom = leaf1.getMaxHeadRoom()
-	if !resources.Equals(res, headRoom) || !resources.Equals(res, maxHeadRoom) {
-		t.Errorf("leaf1 queue head room not as expected %v, got: %v (err %v)", res, headRoom, err)
-	}
+	assert.Assert(t, resources.Equals(res, maxHeadRoom), "leaf1 queue max head room not as expected %v, got: %v", res, maxHeadRoom)
+	// since leaf2 does not have a max it will be the same
 	headRoom = leaf2.getHeadRoom()
+	assert.Assert(t, resources.Equals(res, headRoom), "leaf2 queue head room not as expected %v, got: %v", res, headRoom)
 	maxHeadRoom = leaf2.getMaxHeadRoom()
-	if !resources.Equals(res, headRoom) || !resources.Equals(res, maxHeadRoom) {
-		t.Errorf("leaf1 queue head room not as expected %v, got: %v (err %v)", res, headRoom, err)
-	}
+	assert.Assert(t, resources.Equals(res, maxHeadRoom), "leaf2 queue max head room not as expected %v, got: %v", res, maxHeadRoom)
+}
+
+func TestHeadroomMerge(t *testing.T) {
+	// recreate the structure, set max capacity in parent and a leaf queue
+	// structure is:
+	// root (max: nil)               (alloc a:5, b:5, c:10, d:5)  (headroom: nil)
+	//   - parent (max: a:20, b:10)  (alloc a:5, b:5, c:10, d:5)  (headroom a:15 b:5)
+	//     - leaf1 (max: a:10, c:10) (alloc a:5, b:5, c:5)        (headroom a:5 b:5 c:5)
+	//     - leaf2 (max: d:10)       (alloc c:5 d:5)              (headroom a:15 b:5 d:5)
+	resMap := map[string]string{"first": "20", "second": "10"}
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "failed to create root queue with limit")
+	var parent, leaf1, leaf2 *Queue
+	parent, err = createManagedQueue(root, "parent", true, resMap)
+	assert.NilError(t, err, "failed to create parent queue")
+	resMap = map[string]string{"first": "10", "third": "10"}
+	leaf1, err = createManagedQueue(parent, "leaf1", false, resMap)
+	assert.NilError(t, err, "failed to create leaf1 queue")
+	resMap = map[string]string{"fourth": "10"}
+	leaf2, err = createManagedQueue(parent, "leaf2", false, resMap)
+	assert.NilError(t, err, "failed to create leaf2 queue")
+
+	var res *resources.Resource
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "5", "second": "5", "third": "5"})
+	assert.NilError(t, err, "failed to create resource")
+	err = leaf1.IncAllocatedResource(res, true)
+	assert.NilError(t, err, "failed to set allocated resource on leaf1")
+	res, err = resources.NewResourceFromConf(map[string]string{"third": "5", "fourth": "5"})
+	assert.NilError(t, err, "failed to create resource")
+	err = leaf2.IncAllocatedResource(res, true)
+	assert.NilError(t, err, "failed to set allocated resource on leaf2")
+
+	// root headroom should be nil
+	headRoom := root.getHeadRoom()
+	assert.Assert(t, headRoom == nil, "headRoom of root should be nil because no max set")
+	maxHeadRoom := root.getMaxHeadRoom()
+	assert.Assert(t, maxHeadRoom == nil, "maxHeadRoom of root should be nil because no max")
+
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "15", "second": "5"})
+	assert.NilError(t, err, "failed to create resource")
+	headRoom = parent.getHeadRoom()
+	assert.Assert(t, resources.Equals(res, headRoom), "parent queue max head room not as expected %v, got: %v", res, headRoom)
+	maxHeadRoom = parent.getMaxHeadRoom()
+	assert.Assert(t, resources.Equals(res, maxHeadRoom), "parent queue max head room not as expected %v, got: %v", res, maxHeadRoom)
+
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "5", "second": "5", "third": "5"})
+	assert.NilError(t, err, "failed to create resource")
+	headRoom = leaf1.getHeadRoom()
+	assert.Assert(t, resources.Equals(res, headRoom), "leaf1 queue head room not as expected %v, got: %v", res, headRoom)
+	maxHeadRoom = leaf1.getMaxHeadRoom()
+	assert.Assert(t, resources.Equals(res, maxHeadRoom), "leaf1 queue max head room not as expected %v, got: %v", res, maxHeadRoom)
+
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "15", "second": "5", "fourth": "5"})
+	assert.NilError(t, err, "failed to create resource")
+	headRoom = leaf2.getHeadRoom()
+	assert.Assert(t, resources.Equals(res, headRoom), "leaf2 queue head room not as expected %v, got: %v", res, headRoom)
+	maxHeadRoom = leaf2.getMaxHeadRoom()
+	assert.Assert(t, resources.Equals(res, maxHeadRoom), "leaf2 queue max head room not as expected %v, got: %v", res, maxHeadRoom)
 }
 
 func TestMaxHeadroomNoMax(t *testing.T) {
@@ -933,25 +871,22 @@ func TestMaxHeadroomMax(t *testing.T) {
 	// parent headroom = parentMax - leaf1Allocated - leaf2Allocated
 	// parent headroom = (20 - 5 - 5, 8 - 3 - 3) = (10, 2)
 	res, err = resources.NewResourceFromConf(map[string]string{"first": "10", "second": "2"})
+	assert.NilError(t, err, "failed to create resource")
 	headRoom = parent.getMaxHeadRoom()
-	if err != nil || !resources.Equals(res, headRoom) {
-		t.Errorf("parent queue head room not as expected %v, got: %v (err %v)", res, headRoom, err)
-	}
+	assert.Assert(t, resources.Equals(res, headRoom), "parent queue head room not as expected %v, got: %v", res, headRoom)
 
 	// leaf1 headroom = MIN(parentHeadRoom, leaf1Max - leaf1Allocated)
 	// leaf1 headroom = MIN((10,2), (10-5, 8-3)) = MIN((10,2), (5,5)) = MIN(5, 2)
 	res, err = resources.NewResourceFromConf(map[string]string{"first": "5", "second": "2"})
+	assert.NilError(t, err, "failed to create resource")
 	headRoom = leaf1.getMaxHeadRoom()
-	if err != nil || !resources.Equals(res, headRoom) {
-		t.Errorf("leaf1 queue head room not as expected %v, got: %v (err %v)", res, headRoom, err)
-	}
+	assert.Assert(t, resources.Equals(res, headRoom), "leaf1 queue head room not as expected %v, got: %v", res, headRoom)
 
 	// leaf2 headroom = parentMax - leaf1Allocated - leaf2Allocated
 	res, err = resources.NewResourceFromConf(map[string]string{"first": "10", "second": "2"})
+	assert.NilError(t, err, "failed to create resource")
 	headRoom = leaf2.getMaxHeadRoom()
-	if err != nil || !resources.Equals(res, headRoom) {
-		t.Errorf("leaf2 queue head room not as expected %v, got: %v (err %v)", res, headRoom, err)
-	}
+	assert.Assert(t, resources.Equals(res, headRoom), "leaf2 queue head room not as expected %v, got: %v", res, headRoom)
 }
 
 func TestGetMaxUsage(t *testing.T) {
@@ -998,27 +933,23 @@ func TestGetMaxUsage(t *testing.T) {
 	res, err = resources.NewResourceFromConf(map[string]string{"first": "5", "second": "5"})
 	assert.NilError(t, err, "failed to create resource")
 	maxUsage = leaf.GetMaxResource()
-	if !resources.Equals(res, maxUsage) {
-		t.Errorf("leaf queue should have merged max set expected %v, got: %v", res, maxUsage)
-	}
+	assert.Assert(t, resources.Equals(res, maxUsage), "leaf queue should have merged max set expected %v, got: %v", res, maxUsage)
 
 	// replace parent with one with limit on different resource
 	resMap = map[string]string{"third": "2"}
 	parent, err = createManagedQueue(root, "parent2", true, resMap)
 	assert.NilError(t, err, "failed to create parent2 queue")
-	maxUsage = parent.GetMaxResource()
 	res, err = resources.NewResourceFromConf(map[string]string{"first": "0", "second": "0", "third": "0"})
-	if err != nil || !resources.Equals(res, maxUsage) {
-		t.Errorf("parent2 queue should have max from root set expected %v, got: %v (err %v)", res, maxUsage, err)
-	}
+	assert.NilError(t, err, "failed to create resource")
+	maxUsage = parent.GetMaxResource()
+	assert.Assert(t, resources.Equals(res, maxUsage), "parent2 queue should have max from root set expected %v, got: %v", res, maxUsage)
 	resMap = map[string]string{"first": "5", "second": "10"}
 	leaf, err = createManagedQueue(parent, "leaf2", false, resMap)
 	assert.NilError(t, err, "failed to create leaf2 queue")
-	maxUsage = leaf.GetMaxResource()
 	res, err = resources.NewResourceFromConf(map[string]string{"first": "0", "second": "0", "third": "0"})
-	if err != nil || !resources.Equals(res, maxUsage) {
-		t.Errorf("leaf2 queue should have reset merged max set expected %v, got: %v (err %v)", res, maxUsage, err)
-	}
+	assert.NilError(t, err, "failed to create resource")
+	maxUsage = leaf.GetMaxResource()
+	assert.Assert(t, resources.Equals(res, maxUsage), "leaf2 queue should have reset merged max set expected %v, got: %v", res, maxUsage)
 }
 
 func TestGetMaxQueueSet(t *testing.T) {
@@ -1054,29 +985,26 @@ func TestGetMaxQueueSet(t *testing.T) {
 	res, err = resources.NewResourceFromConf(resMap)
 	assert.NilError(t, err, "failed to create resource")
 	maxSet := leaf.GetMaxQueueSet()
-	if !resources.Equals(res, maxSet) {
-		t.Errorf("leaf queue should have max set expected %v, got: %v", res, maxSet)
-	}
+	assert.Assert(t, resources.Equals(res, maxSet), "leaf queue should have max set expected %v, got: %v", res, maxSet)
 
 	// replace parent with one with limit on multiple resource
 	resMap = map[string]string{"second": "5", "third": "2"}
 	parent, err = createManagedQueue(root, "parent2", true, resMap)
 	assert.NilError(t, err, "failed to create parent2 queue")
-	maxSet = parent.GetMaxQueueSet()
 	res, err = resources.NewResourceFromConf(resMap)
-	if err != nil || !resources.Equals(res, maxSet) {
-		t.Errorf("parent2 queue should have max exclusing root expected %v, got: %v (err %v)", res, maxSet, err)
-	}
-	// a leaf with max set on different resource than parent
-	// parent has limit and root is ignored: expect the merged parent and leaf to be returned (0 for missing on either)
+	assert.NilError(t, err, "failed to create resource")
+	maxSet = parent.GetMaxQueueSet()
+	assert.Assert(t, resources.Equals(res, maxSet), "parent2 queue should have max excluding root expected %v, got: %v", res, maxSet)
+
+	// a leaf with max set on different resource than the parent.
+	// The parent has limit and root is ignored: expect the merged parent and leaf to be returned (0 for missing on either)
 	resMap = map[string]string{"first": "5", "second": "10"}
 	leaf, err = createManagedQueue(parent, "leaf2", false, resMap)
 	assert.NilError(t, err, "failed to create leaf2 queue")
-	maxSet = leaf.GetMaxQueueSet()
 	res, err = resources.NewResourceFromConf(map[string]string{"first": "0", "second": "5", "third": "0"})
-	if err != nil || !resources.Equals(res, maxSet) {
-		t.Errorf("leaf2 queue should have reset merged max set expected %v, got: %v (err %v)", res, maxSet, err)
-	}
+	assert.NilError(t, err, "failed to create resource")
+	maxSet = leaf.GetMaxQueueSet()
+	assert.Assert(t, resources.Equals(res, maxSet), "leaf2 queue should have reset merged max set expected %v, got: %v", res, maxSet)
 }
 
 func TestReserveApp(t *testing.T) {
@@ -1150,7 +1078,41 @@ func TestGetOutstandingRequestMax(t *testing.T) {
 	//
 	// submit app1 to root.queue1, app2 to root.queue2
 	// app1 asks for 20 1x1CPU requests, app2 asks for 20 1x1CPU requests
-	// verify the outstanding requests for each of the queue is up to its max capacity, 10/5 respectively
+	// verify the outstanding requests for each of the queue is up to its max capacity
+	// root: 15, queue1: 10 and queue2: 5
+	// add an allocation for 5 CPU to queue1 and check the reduced numbers
+	// root: 10, queue1: 5 and queue2: 5
+	alloc, err := resources.NewResourceFromConf(map[string]string{"cpu": "1"})
+	assert.NilError(t, err, "failed to create basic resource")
+	var used *resources.Resource
+	used, err = resources.NewResourceFromConf(map[string]string{"cpu": "5"})
+	assert.NilError(t, err, "failed to create basic resource")
+	testOutstanding(t, alloc, used)
+}
+
+func TestGetOutstandingUntracked(t *testing.T) {
+	// same test as TestGetOutstandingRequestMax but adding an unlimited resource to the
+	// allocations to make sure it does not affect the calculations
+	// queue structure:
+	// root
+	//   - queue1 (max.cpu = 10)
+	//   - queue2 (max.cpu = 5)
+	//
+	// submit app1 to root.queue1, app2 to root.queue2
+	// app1 asks for 20 1x1CPU, 1xPOD requests, app2 asks for 20 1x1CPU, 1xPOD requests
+	// verify the outstanding requests for each of the queue is up to its max capacity
+	// root: 15, queue1: 10 and queue2: 5
+	// add an allocation for 5 CPU to queue1 and check the reduced numbers
+	// root: 10, queue1: 5 and queue2: 5
+	alloc, err := resources.NewResourceFromConf(map[string]string{"cpu": "1", "pods": "2"})
+	assert.NilError(t, err, "failed to create basic resource")
+	var used *resources.Resource
+	used, err = resources.NewResourceFromConf(map[string]string{"cpu": "5", "pods": "10"})
+	assert.NilError(t, err, "failed to create basic resource")
+	testOutstanding(t, alloc, used)
+}
+
+func testOutstanding(t *testing.T, alloc, used *resources.Resource) {
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "failed to create root queue with limit")
 	var queue1, queue2 *Queue
@@ -1162,12 +1124,9 @@ func TestGetOutstandingRequestMax(t *testing.T) {
 	app1 := newApplication(appID1, "default", "root.queue1")
 	app1.queue = queue1
 	queue1.AddApplication(app1)
-	var res *resources.Resource
-	res, err = resources.NewResourceFromConf(map[string]string{"cpu": "1"})
-	assert.NilError(t, err, "failed to create basic resource")
 	for i := 0; i < 20; i++ {
 		err = app1.AddAllocationAsk(
-			newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, res))
+			newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, alloc))
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 
@@ -1176,7 +1135,7 @@ func TestGetOutstandingRequestMax(t *testing.T) {
 	queue2.AddApplication(app2)
 	for i := 0; i < 20; i++ {
 		err = app2.AddAllocationAsk(
-			newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID2, res))
+			newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID2, alloc))
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 
@@ -1195,9 +1154,7 @@ func TestGetOutstandingRequestMax(t *testing.T) {
 
 	// simulate queue1 has some allocated resources
 	// after allocation, the max available becomes to be 5
-	res, err = resources.NewResourceFromConf(map[string]string{"cpu": "5"})
-	assert.NilError(t, err, "failed to create basic resource")
-	err = queue1.IncAllocatedResource(res, false)
+	err = queue1.IncAllocatedResource(used, false)
 	assert.NilError(t, err, "failed to increment allocated resources")
 
 	queue1Total = make([]*AllocationAsk, 0)
@@ -1223,16 +1180,65 @@ func TestGetOutstandingRequestMax(t *testing.T) {
 	assert.Equal(t, len(rootTotal), 5)
 }
 
-func TestGetOutstandingRequestNoMax(t *testing.T) {
+func TestGetOutstandingOnlyUntracked(t *testing.T) {
+	// all outstanding pods use only an unlimited resource type
+	// max is set for a different resource type and fully allocated
 	// queue structure:
 	// root
-	//   - queue1
-	//   - queue2
+	//   - queue1 (max.cpu = 10)
 	//
-	// both queues have no max capacity set
-	// submit app1 to root.queue1, app2 to root.queue2
-	// app1 asks for 10 1x1CPU requests, app2 asks for 20 1x1CPU requests
-	// verify all these requests are outstanding
+	// submit app1 to root.queue1, app1 asks for 20 1xPOD requests
+	// verify the outstanding requests of the queue is all outstanding requests
+	// add an allocation that uses all limited resources
+	// verify the outstanding requests of the queue is still all outstanding requests
+	alloc, err := resources.NewResourceFromConf(map[string]string{"pods": "1"})
+	assert.NilError(t, err, "failed to create basic resource")
+	var used *resources.Resource
+	used, err = resources.NewResourceFromConf(map[string]string{"cpu": "10", "pods": "10"})
+	assert.NilError(t, err, "failed to create basic resource")
+	var root, queue1 *Queue
+	root, err = createRootQueue(nil)
+	assert.NilError(t, err, "failed to create root queue with limit")
+	queue1, err = createManagedQueue(root, "queue1", false, map[string]string{"cpu": "10"})
+	assert.NilError(t, err, "failed to create queue1 queue")
+
+	app1 := newApplication(appID1, "default", "root.queue1")
+	app1.queue = queue1
+	queue1.AddApplication(app1)
+	for i := 0; i < 20; i++ {
+		err = app1.AddAllocationAsk(
+			newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, alloc))
+		assert.NilError(t, err, "failed to add allocation ask")
+	}
+
+	// verify get outstanding requests for root, and child queues
+	rootTotal := make([]*AllocationAsk, 0)
+	root.GetQueueOutstandingRequests(&rootTotal)
+	assert.Equal(t, len(rootTotal), 20)
+
+	queue1Total := make([]*AllocationAsk, 0)
+	queue1.GetQueueOutstandingRequests(&queue1Total)
+	assert.Equal(t, len(queue1Total), 20)
+
+	// simulate queue1 has some allocated resources
+	// after allocation, the max available becomes to be 5
+	err = queue1.IncAllocatedResource(used, false)
+	assert.NilError(t, err, "failed to increment allocated resources")
+
+	queue1Total = make([]*AllocationAsk, 0)
+	queue1.GetQueueOutstandingRequests(&queue1Total)
+	assert.Equal(t, len(queue1Total), 20)
+	headRoom := queue1.getHeadRoom()
+	assert.Assert(t, resources.IsZero(headRoom), "headroom should have been zero")
+
+	rootTotal = make([]*AllocationAsk, 0)
+	root.GetQueueOutstandingRequests(&rootTotal)
+	assert.Equal(t, len(rootTotal), 20)
+	headRoom = root.getHeadRoom()
+	assert.Assert(t, resources.IsZero(headRoom), "headroom should have been zero")
+}
+
+func TestGetOutstandingRequestNoMax(t *testing.T) {
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "failed to create root queue with limit")
 	var queue1, queue2 *Queue
@@ -1728,6 +1734,216 @@ func TestSetResources(t *testing.T) {
 	assert.Assert(t, reflect.DeepEqual(queue.maxResource, expectedMaxResource))
 }
 
+func TestPreemptingResource(t *testing.T) {
+	one, err := resources.NewResourceFromConf(map[string]string{"memory": "10000000", "vcores": "1"})
+	assert.NilError(t, err, "failed to create resource")
+	two, err := resources.NewResourceFromConf(map[string]string{"memory": "20000000", "vcores": "2"})
+	assert.NilError(t, err, "failed to create resource")
+	three, err := resources.NewResourceFromConf(map[string]string{"memory": "30000000", "vcores": "3"})
+	assert.NilError(t, err, "failed to create resource")
+
+	queue, err := createManagedQueueWithProps(nil, "tmp", true, nil, nil)
+	assert.NilError(t, err, "failed to create basic queue queue: %v", err)
+
+	assert.Check(t, resources.IsZero(queue.GetPreemptingResource()), "initial value should be zero")
+	queue.IncPreemptingResource(one)
+	assert.Check(t, resources.Equals(one, queue.GetPreemptingResource()), "wrong value after increment")
+	queue.IncPreemptingResource(two)
+	assert.Check(t, resources.Equals(three, queue.GetPreemptingResource()), "wrong value after increment")
+	queue.DecPreemptingResource(one)
+	assert.Check(t, resources.Equals(two, queue.GetPreemptingResource()), "wrong value after decrement")
+	queue.DecPreemptingResource(two)
+	assert.Check(t, resources.IsZero(queue.GetPreemptingResource()), "final value should be zero")
+}
+
+func TestPreemptionDelay(t *testing.T) {
+	queue, err := createManagedQueueWithProps(nil, "tmp", true, nil, nil)
+	assert.NilError(t, err, "failed to create basic queue queue: %v", err)
+
+	assert.Equal(t, configs.DefaultPreemptionDelay, queue.GetPreemptionDelay(), "initial preemption delay incorrect")
+
+	twice := 2 * configs.DefaultPreemptionDelay
+	queue.preemptionDelay = twice
+	assert.Equal(t, twice, queue.GetPreemptionDelay(), "preemption delay not updated correctly")
+}
+
+func TestFindQueueByAppID(t *testing.T) {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "failed to create queue")
+	parent1, err := createManagedQueue(root, "parent1", true, nil)
+	assert.NilError(t, err, "failed to create queue")
+	parent2, err := createManagedQueue(root, "parent2", true, nil)
+	assert.NilError(t, err, "failed to create queue")
+	leaf1, err := createManagedQueue(parent1, "leaf1", false, nil)
+	assert.NilError(t, err, "failed to create queue")
+	leaf2, err := createManagedQueue(parent2, "leaf2", false, nil)
+	assert.NilError(t, err, "failed to create queue")
+
+	app := newApplication(appID1, "default", "root.parent.leaf")
+	app.pending = resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 10})
+	leaf1.AddApplication(app)
+
+	// we should be able to find the queue from any other given the appID
+	assert.Equal(t, leaf1, root.FindQueueByAppID(appID1), "failed to find queue from root")
+	assert.Equal(t, leaf1, parent1.FindQueueByAppID(appID1), "failed to find queue from parent1")
+	assert.Equal(t, leaf1, parent2.FindQueueByAppID(appID1), "failed to find queue from parent2")
+	assert.Equal(t, leaf1, leaf1.FindQueueByAppID(appID1), "failed to find queue from leaf1")
+	assert.Equal(t, leaf1, leaf2.FindQueueByAppID(appID1), "failed to find queue from leaf2")
+
+	// non-existent queue should be nil
+	var none *Queue = nil
+	assert.Equal(t, none, root.FindQueueByAppID("missing"), "found queue reference in root")
+	assert.Equal(t, none, parent1.FindQueueByAppID("missing"), "found queue reference in parent1")
+	assert.Equal(t, none, parent2.FindQueueByAppID("missing"), "found queue reference in parent2")
+	assert.Equal(t, none, leaf1.FindQueueByAppID("missing"), "found queue reference in leaf1")
+	assert.Equal(t, none, leaf2.FindQueueByAppID("missing"), "found queue reference in leaf2")
+}
+
+// nolint: funlen
+func TestFindEligiblePreemptionVictims(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 100})
+	parentMax := map[string]string{common.Memory: "200"}
+	parentGuar := map[string]string{common.Memory: "100"}
+	ask := createAllocationAsk("ask1", appID1, true, true, 0, res)
+	ask.pendingAskRepeat = 1
+	ask2 := createAllocationAsk("ask2", appID2, true, true, -1000, res)
+	ask2.pendingAskRepeat = 1
+	alloc2 := NewAllocation("alloc-2", nodeID1, ask2)
+	ask3 := createAllocationAsk("ask3", appID2, true, true, -1000, res)
+	ask3.pendingAskRepeat = 1
+	alloc3 := NewAllocation("alloc-3", nodeID1, ask3)
+	root, err := createRootQueue(map[string]string{common.Memory: "1000"})
+	assert.NilError(t, err, "failed to create queue")
+	parent1, err := createManagedQueueGuaranteed(root, "parent1", true, parentMax, parentGuar)
+	assert.NilError(t, err, "failed to create queue")
+	parent2, err := createManagedQueueGuaranteed(root, "parent2", true, parentMax, parentGuar)
+	assert.NilError(t, err, "failed to create queue")
+	leaf1, err := createManagedQueueGuaranteed(parent1, "leaf1", false, nil, nil)
+	assert.NilError(t, err, "failed to create queue")
+	leaf2, err := createManagedQueueGuaranteed(parent2, "leaf2", false, nil, nil)
+	assert.NilError(t, err, "failed to create queue")
+
+	// verify no victims when no allocations exist
+	snapshot := leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 3, len(snapshot), "wrong snapshot count") // leaf1, parent1, root
+	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
+
+	// add two lower-priority allocs in leaf2
+	app2 := newApplication(appID2, "default", "root.parent.leaf")
+	app2.pending = res
+	leaf2.AddApplication(app2)
+	app2.SetQueue(leaf2)
+	err = app2.AddAllocationAsk(ask2)
+	assert.NilError(t, err, "failed to add ask")
+	err = app2.AddAllocationAsk(ask3)
+	assert.NilError(t, err, "failed to add ask")
+	app2.AddAllocation(alloc2)
+	app2.AddAllocation(alloc3)
+	err = leaf2.IncAllocatedResource(alloc2.allocatedResource, false)
+	assert.NilError(t, err, "failed to inc allocated resources")
+	err = leaf2.IncAllocatedResource(alloc3.allocatedResource, false)
+	assert.NilError(t, err, "failed to inc allocated resources")
+
+	// verify victims
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 5, len(snapshot), "wrong snapshot count") // leaf1, parent1, root
+	assert.Equal(t, 2, len(victims(snapshot)), "wrong victim count")
+	assert.Equal(t, alloc2.allocationKey, victims(snapshot)[0].allocationKey, "wrong alloc")
+	assert.Equal(t, alloc3.allocationKey, victims(snapshot)[1].allocationKey, "wrong alloc")
+
+	// disabling preemption on victim queue should remove victims from consideration
+	leaf2.preemptionPolicy = policies.DisabledPreemptionPolicy
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
+	leaf2.preemptionPolicy = policies.DefaultPreemptionPolicy
+
+	// fencing parent1 queue should limit scope
+	parent1.preemptionPolicy = policies.FencePreemptionPolicy
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
+	parent1.preemptionPolicy = policies.DefaultPreemptionPolicy
+
+	// fencing leaf1 queue should limit scope
+	leaf1.preemptionPolicy = policies.FencePreemptionPolicy
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
+	leaf1.preemptionPolicy = policies.DefaultPreemptionPolicy
+
+	// fencing parent2 queue should not limit scope
+	parent2.preemptionPolicy = policies.FencePreemptionPolicy
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 2, len(victims(snapshot)), "wrong victim count")
+	parent2.preemptionPolicy = policies.DefaultPreemptionPolicy
+
+	// fencing leaf2 queue should not limit scope
+	leaf2.preemptionPolicy = policies.FencePreemptionPolicy
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 2, len(victims(snapshot)), "wrong victim count")
+	leaf2.preemptionPolicy = policies.DefaultPreemptionPolicy
+
+	// requiring a specific node take alloc out of consideration
+	alloc2.GetAsk().SetRequiredNode(nodeID1)
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 1, len(victims(snapshot)), "wrong victim count")
+	assert.Equal(t, alloc3.allocationKey, victims(snapshot)[0].allocationKey, "wrong alloc")
+	alloc2.GetAsk().SetRequiredNode("")
+
+	// setting priority offset on parent2 queue should remove leaf2 victims
+	parent2.priorityOffset = 1001
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
+	parent2.priorityOffset = 0
+
+	// priority-fencing parent2 with positive offset should remove leaf2 victims
+	parent2.priorityOffset = 1
+	parent2.priorityPolicy = policies.FencePriorityPolicy
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
+	parent2.priorityOffset = 0
+	parent2.priorityPolicy = policies.DefaultPriorityPolicy
+
+	// priority-fencing parent2 with negative offset should not affect leaf2 victims
+	parent2.priorityOffset = -1
+	parent2.priorityPolicy = policies.FencePriorityPolicy
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 2, len(victims(snapshot)), "wrong victim count")
+	parent2.priorityOffset = 0
+	parent2.priorityPolicy = policies.DefaultPriorityPolicy
+
+	// priority-fencing parent1 with small negative offset should not affect leaf2 victims
+	parent1.priorityOffset = -1000
+	parent1.priorityPolicy = policies.FencePriorityPolicy
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 2, len(victims(snapshot)), "wrong victim count")
+	parent1.priorityOffset = 0
+	parent1.priorityPolicy = policies.DefaultPriorityPolicy
+
+	// priority-fencing parent1 with larger negative offset should remove leaf2 victims
+	parent1.priorityOffset = -1001
+	parent1.priorityPolicy = policies.FencePriorityPolicy
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
+	parent1.priorityOffset = 0
+	parent1.priorityPolicy = policies.DefaultPriorityPolicy
+
+	// increasing parent2 guaranteed resources should remove leaf2 victims
+	parent2.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 200})
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
+	parent2.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 100})
+}
+
+func victims(snapshot map[string]*QueuePreemptionSnapshot) []*Allocation {
+	results := make([]*Allocation, 0)
+	for _, entry := range snapshot {
+		results = append(results, entry.PotentialVictims...)
+	}
+	sort.SliceStable(results, func(i, j int) bool {
+		return results[i].allocationKey < results[j].allocationKey
+	})
+	return results
+}
+
 func TestSetTemplate(t *testing.T) {
 	queue, err := createManagedQueueWithProps(nil, "tmp", true, nil, nil)
 	assert.NilError(t, err, "failed to create basic queue queue: %v", err)
@@ -2052,7 +2268,7 @@ func TestGetHeadRoomFromTwoQueues(t *testing.T) {
 	assert.NilError(t, err)
 	child.maxResource = &resources.Resource{
 		Resources: map[string]resources.Quantity{
-			"vcore": 4000,
+			"vcore": 3000,
 		},
 	}
 	child.allocatedResource = allocatedResource
@@ -2068,6 +2284,8 @@ func TestGetHeadRoomFromThreeQueues(t *testing.T) {
 		Resources: map[string]resources.Quantity{
 			"vcore":  2000,
 			"memory": 2000,
+			"pods":   1,
+			"other":  1,
 		},
 	}
 
@@ -2077,6 +2295,7 @@ func TestGetHeadRoomFromThreeQueues(t *testing.T) {
 		Resources: map[string]resources.Quantity{
 			"vcore":  3000,
 			"memory": 3000,
+			"other":  100,
 		},
 	}
 	// make sure rootQueue queue see all allocated resources
@@ -2084,9 +2303,14 @@ func TestGetHeadRoomFromThreeQueues(t *testing.T) {
 
 	parent, err := createManagedQueueWithProps(rootQueue, "parent", true, nil, nil)
 	assert.NilError(t, err)
-	// this parent has no limit for all resource types
+	// this parent has a limit for one specific resource
 	parent.maxResource = &resources.Resource{
 		Resources: make(map[string]resources.Quantity),
+	}
+	parent.maxResource = &resources.Resource{
+		Resources: map[string]resources.Quantity{
+			"pods": 100,
+		},
 	}
 	// make sure parent queue see all allocated resources
 	parent.allocatedResource = allocatedResource
@@ -2096,7 +2320,7 @@ func TestGetHeadRoomFromThreeQueues(t *testing.T) {
 	assert.NilError(t, err)
 	child.maxResource = &resources.Resource{
 		Resources: map[string]resources.Quantity{
-			"vcore": 4000,
+			"vcore": 3000,
 		},
 	}
 	child.allocatedResource = allocatedResource
@@ -2105,6 +2329,8 @@ func TestGetHeadRoomFromThreeQueues(t *testing.T) {
 
 	assert.Equal(t, resources.Quantity(1000), result.Resources["vcore"])
 	assert.Equal(t, resources.Quantity(1000), result.Resources["memory"])
+	assert.Equal(t, resources.Quantity(99), result.Resources["pods"])
+	assert.Equal(t, resources.Quantity(99), result.Resources["other"])
 }
 
 func TestQueue_canRunApp(t *testing.T) {

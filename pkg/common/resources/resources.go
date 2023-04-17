@@ -353,7 +353,29 @@ func Sub(left, right *Resource) *Resource {
 	return out
 }
 
-// Subtract resource returning a new resource with the result. A nil resource is considered
+// SubOnlyExisting subtract delta from defined resource.
+// Ignore any type not defined in the base resource (ie receiver).
+// Used as part of the headroom updates as undefined resources are unlimited
+func (r *Resource) SubOnlyExisting(delta *Resource) {
+	// check nil inputs and shortcut
+	if r == nil || delta == nil {
+		return
+	}
+	// neither are nil, subtract the delta
+	for k := range r.Resources {
+		r.Resources[k] = subVal(r.Resources[k], delta.Resources[k])
+	}
+}
+
+// SubEliminateNegative subtracts resource returning a new resource with the result
+// A nil resource is considered an empty resource
+// This will return 0 values for negative values
+func SubEliminateNegative(left, right *Resource) *Resource {
+	res, _ := subNonNegative(left, right)
+	return res
+}
+
+// SubErrorNegative subtracts resource returning a new resource with the result. A nil resource is considered
 // an empty resource. This will return an error if any value in the result is negative.
 // The caller should at least log the error.
 // The returned resource is valid and has all negative values reset to 0
@@ -364,14 +386,6 @@ func SubErrorNegative(left, right *Resource) (*Resource, error) {
 		err = fmt.Errorf(message)
 	}
 	return res, err
-}
-
-// Subtract resource returning a new resource with the result
-// A nil resource is considered an empty resource
-// This will return 0 values for negative values
-func SubEliminateNegative(left, right *Resource) *Resource {
-	res, _ := subNonNegative(left, right)
-	return res
 }
 
 // Internal subtract resource returning a new resource with the result and an error message when a

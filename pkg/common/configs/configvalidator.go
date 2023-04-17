@@ -307,7 +307,7 @@ func checkPlacementFilter(filter Filter) error {
 }
 
 // Check a single limit entry
-func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int) error {
+func checkLimit(limit Limit, existedUserName map[string]bool, existedGroupName map[string]bool, queue *QueueConfig) error {
 	if len(limit.Users) == 0 && len(limit.Groups) == 0 {
 		return fmt.Errorf("empty user and group lists defined in limit '%v'", limit)
 	}
@@ -316,15 +316,16 @@ func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int
 		if name != "*" && !UserRegExp.MatchString(name) {
 			return fmt.Errorf("invalid limit user name '%s' in limit definition", name)
 		}
+
+		if existedUserName[name] {
+			return fmt.Errorf("duplicated user name %s , already existed", name)
+		}
+		existedUserName[name] = true
+
 		// The user without wildcard should not happen after the wildcard user
 		// It means the wildcard for user should be the last item for limits object list which including the username,
 		// and we should only set one wildcard user for all limits
-		if name == "*" {
-			if *userWildCardIdx != -1 && currIdx > *userWildCardIdx {
-				return fmt.Errorf("should not set more than one wildcard user")
-			}
-			*userWildCardIdx = currIdx
-		} else if *userWildCardIdx != -1 && currIdx > *userWildCardIdx {
+		if existedUserName["*"] && name != "*" {
 			return fmt.Errorf("should not set no wildcard user %s after wildcard user limit", name)
 		}
 	}
@@ -332,18 +333,29 @@ func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int
 		if name != "*" && !GroupRegExp.MatchString(name) {
 			return fmt.Errorf("invalid limit group name '%s' in limit definition", name)
 		}
+
+		if existedGroupName[name] {
+			return fmt.Errorf("duplicated group name %s , already existed", name)
+		}
+		existedGroupName[name] = true
+
 		// The group without wildcard should not happen after the wildcard group
 		// It means the wildcard for group should be the last item for limits object list which including the group name,
 		// and we should only set one wildcard group for all limits
-		if name == "*" {
-			if *groupWildCardIdx != -1 && currIdx > *groupWildCardIdx {
-				return fmt.Errorf("should not set more than one wildcard group")
-			}
-			*groupWildCardIdx = currIdx
-		} else if *groupWildCardIdx != -1 && currIdx > *groupWildCardIdx {
+		if existedGroupName["*"] && name != "*" {
 			return fmt.Errorf("should not set no wildcard group %s after wildcard group limit", name)
 		}
 	}
+
+	// Specifying a wildcard for the group limit sets a cumulative limit for all users in that queue.
+	// If there is no specific group mentioned the wildcard group limit would thus be the same as the queue limit.
+	// For that reason we do not allow specifying only one group limit that is using the wildcard.
+	// There must be at least one limit with a group name defined.
+	if existedGroupName["*"] && len(existedGroupName) == 1 {
+		return fmt.Errorf("should not specify only one group limit that is using the wildcard. " +
+			"There must be at least one limit with a group name defined ")
+	}
+
 	var limitResource = resources.NewResource()
 	var err error
 	// check the resource (if defined)
@@ -357,13 +369,37 @@ func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int
 	}
 	// at least some resource should be not null
 	if limit.MaxApplications == 0 && resources.IsZero(limitResource) {
-		return fmt.Errorf("invalid resource combination for limit names '%s' all resource limits are null", limit.Users)
+		return fmt.Errorf("invalid resource combination for limit %s all resource limits are null", limit.Limit)
 	}
+
+	if queue.MaxApplications != 0 {
+		if limit.MaxApplications > queue.MaxApplications {
+			return fmt.Errorf("invalid MaxApplications settings for limit %s exeecd current the queue MaxApplications", limit.Limit)
+		}
+		if limit.MaxApplications == 0 {
+			return fmt.Errorf("MaxApplications is 0 in limit name %s, it should be 1 ~ %d", limit.Limit, queue.MaxApplications)
+		}
+	}
+
+	// If queue is RootQueue, the queue.Resources.Max will be null, we don't need to check for root queue
+	// But we may need to check the root resource during loading the config and after partition resource loading when update node
+	if queue.Name != RootQueue {
+		queueMaxResource, err := resources.NewResourceFromConf(queue.Resources.Max)
+		if err != nil {
+			log.Logger().Debug("resource parsing failed",
+				zap.Error(err))
+			return fmt.Errorf("parse queue %s max resource failed: %s", queue.Name, err.Error())
+		}
+		if !queueMaxResource.FitInMaxUndef(limitResource) {
+			return fmt.Errorf("invalid MaxResources settings for limit %s exeecd current the queue MaxResources", limit.Limit)
+		}
+	}
+
 	return nil
 }
 
 // Check the defined limits list
-func checkLimits(limits []Limit, obj string) error {
+func checkLimits(limits []Limit, obj string, queue *QueueConfig) error {
 	// return if nothing defined
 	if len(limits) == 0 {
 		return nil
@@ -373,10 +409,21 @@ func checkLimits(limits []Limit, obj string) error {
 		zap.String("objName", obj),
 		zap.Int("limitsLength", len(limits)))
 
-	var userWildCardIdx = -1
-	var groupWildCardIdx = -1
-	for index, limit := range limits {
-		if err := checkLimit(limit, index, &userWildCardIdx, &groupWildCardIdx); err != nil {
+	existedUserName := make(map[string]bool)
+	existedGroupName := make(map[string]bool)
+
+	defer func() {
+		for k := range existedUserName {
+			delete(existedUserName, k)
+		}
+
+		for k := range existedGroupName {
+			delete(existedGroupName, k)
+		}
+	}()
+
+	for _, limit := range limits {
+		if err := checkLimit(limit, existedUserName, existedGroupName, queue); err != nil {
 			return err
 		}
 	}
@@ -419,7 +466,7 @@ func checkQueues(queue *QueueConfig, level int) error {
 	}
 
 	// check the limits for this child (if defined)
-	err = checkLimits(queue.Limits, queue.Name)
+	err = checkLimits(queue.Limits, queue.Name, queue)
 	if err != nil {
 		return err
 	}
@@ -550,7 +597,7 @@ func Validate(newConfig *SchedulerConfig) error {
 		if err != nil {
 			return err
 		}
-		err = checkLimits(partition.Limits, partition.Name)
+		err = checkLimits(partition.Limits, partition.Name, &partition.Queues[0])
 		if err != nil {
 			return err
 		}

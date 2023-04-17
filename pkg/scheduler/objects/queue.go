@@ -21,7 +21,6 @@ package objects
 import (
 	"context"
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 	"sync"
@@ -41,29 +40,32 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 )
 
+var (
+	maxPreemptionsPerQueue = 10 // maximum number of asks to attempt to preempt for in a single queue
+)
+
 // Queue structure inside Scheduler
 type Queue struct {
 	QueuePath string // Fully qualified path for the queue
 	Name      string // Queue name as in the config etc.
 
 	// Private fields need protection
-	sortType                  policies.SortPolicy       // How applications (leaf) or queues (parents) are sorted
-	children                  map[string]*Queue         // Only for direct children, parent queue only
-	childPriorities           map[string]int32          // cached priorities for child queues
-	childPreemptionPriorities map[string]int32          // cached preemption priorities for child queues
-	applications              map[string]*Application   // only for leaf queue
-	appPriorities             map[string]int32          // cached priorities for application
-	appPreemptionPriorities   map[string]int32          // cached preemption priorities for application
-	reservedApps              map[string]int            // applications reserved within this queue, with reservation count
-	parent                    *Queue                    // link back to the parent in the scheduler
-	pending                   *resources.Resource       // pending resource for the apps in the queue
-	prioritySortEnabled       bool                      // whether priority is used for request sorting
-	priorityPolicy            policies.PriorityPolicy   // priority policy
-	priorityOffset            int32                     // priority offset for this queue relative to others
-	preemptionPolicy          policies.PreemptionPolicy // preemption policy
-	preemptionDelay           time.Duration             // time before preemption is considered
-	currentPriority           int32                     // the current scheduling priority of this queue
-	preemptionPriority        int32                     // the current preemption priority of this queue
+	sortType            policies.SortPolicy       // How applications (leaf) or queues (parents) are sorted
+	children            map[string]*Queue         // Only for direct children, parent queue only
+	childPriorities     map[string]int32          // cached priorities for child queues
+	applications        map[string]*Application   // only for leaf queue
+	appPriorities       map[string]int32          // cached priorities for application
+	reservedApps        map[string]int            // applications reserved within this queue, with reservation count
+	parent              *Queue                    // link back to the parent in the scheduler
+	pending             *resources.Resource       // pending resource for the apps in the queue
+	allocatedResource   *resources.Resource       // allocated resource for the apps in the queue
+	preemptingResource  *resources.Resource       // preempting resource for the apps in the queue
+	prioritySortEnabled bool                      // whether priority is used for request sorting
+	priorityPolicy      policies.PriorityPolicy   // priority policy
+	priorityOffset      int32                     // priority offset for this queue relative to others
+	preemptionPolicy    policies.PreemptionPolicy // preemption policy
+	preemptionDelay     time.Duration             // time before preemption is considered
+	currentPriority     int32                     // the current scheduling priority of this queue
 
 	// The queue properties should be treated as immutable the value is a merge of the
 	// parent properties with the config for this queue only manipulated during creation
@@ -73,7 +75,6 @@ type Queue struct {
 	submitACL              security.ACL        // submit ACL
 	maxResource            *resources.Resource // When not set, max = nil
 	guaranteedResource     *resources.Resource // When not set, Guaranteed == 0
-	allocatedResource      *resources.Resource // set based on allocation
 	isLeaf                 bool                // this is a leaf queue or not (i.e. parent)
 	isManaged              bool                // queue is part of the config, not auto created
 	stateMachine           *fsm.FSM            // the state of the queue for scheduling
@@ -89,22 +90,21 @@ type Queue struct {
 // newBlankQueue creates a new empty queue objects with all values initialised.
 func newBlankQueue() *Queue {
 	return &Queue{
-		children:                  make(map[string]*Queue),
-		childPriorities:           make(map[string]int32),
-		childPreemptionPriorities: make(map[string]int32),
-		applications:              make(map[string]*Application),
-		appPriorities:             make(map[string]int32),
-		appPreemptionPriorities:   make(map[string]int32),
-		reservedApps:              make(map[string]int),
-		allocatingAcceptedApps:    make(map[string]bool),
-		properties:                make(map[string]string),
-		stateMachine:              NewObjectState(),
-		allocatedResource:         resources.NewResource(),
-		pending:                   resources.NewResource(),
-		currentPriority:           configs.MinPriority,
-		prioritySortEnabled:       true,
-		preemptionDelay:           configs.DefaultPreemptionDelay,
-		preemptionPolicy:          policies.DefaultPreemptionPolicy,
+		children:               make(map[string]*Queue),
+		childPriorities:        make(map[string]int32),
+		applications:           make(map[string]*Application),
+		appPriorities:          make(map[string]int32),
+		reservedApps:           make(map[string]int),
+		allocatingAcceptedApps: make(map[string]bool),
+		properties:             make(map[string]string),
+		stateMachine:           NewObjectState(),
+		allocatedResource:      resources.NewResource(),
+		preemptingResource:     resources.NewResource(),
+		pending:                resources.NewResource(),
+		currentPriority:        configs.MinPriority,
+		prioritySortEnabled:    true,
+		preemptionDelay:        configs.DefaultPreemptionDelay,
+		preemptionPolicy:       policies.DefaultPreemptionPolicy,
 	}
 }
 
@@ -135,7 +135,6 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 		sq.mergeProperties(parent.getProperties(), conf.Properties)
 	}
 	sq.UpdateQueueProperties()
-	sq.preemptionPriority = math.MaxInt32
 
 	log.Logger().Info("configured queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
@@ -485,11 +484,35 @@ func (sq *Queue) GetAllocatedResource() *resources.Resource {
 	return sq.allocatedResource.Clone()
 }
 
+// GetPreemptingResource returns a clone of the preempting resources for this queue.
+func (sq *Queue) GetPreemptingResource() *resources.Resource {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.preemptingResource.Clone()
+}
+
 // GetGuaranteedResource returns a clone of the guaranteed resource for the queue.
 func (sq *Queue) GetGuaranteedResource() *resources.Resource {
 	sq.RLock()
 	defer sq.RUnlock()
 	return sq.guaranteedResource
+}
+
+// GetActualGuaranteedResources returns the actual (including parent) guaranteed resources for the queue.
+func (sq *Queue) GetActualGuaranteedResource() *resources.Resource {
+	if sq == nil {
+		return resources.NewResource()
+	}
+	parentGuaranteed := sq.parent.GetActualGuaranteedResource()
+	sq.RLock()
+	defer sq.RUnlock()
+	return resources.ComponentWiseMinPermissive(sq.guaranteedResource, parentGuaranteed)
+}
+
+func (sq *Queue) GetPreemptionDelay() time.Duration {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.preemptionDelay
 }
 
 // CheckSubmitAccess checks if the user has access to the queue to submit an application.
@@ -562,6 +585,7 @@ func (sq *Queue) GetPartitionQueueDAOInfo() dao.PartitionQueueDAOInfo {
 	queueInfo.MaxResource = sq.maxResource.DAOMap()
 	queueInfo.GuaranteedResource = sq.guaranteedResource.DAOMap()
 	queueInfo.AllocatedResource = sq.allocatedResource.DAOMap()
+	queueInfo.PreemptingResource = sq.preemptingResource.DAOMap()
 	queueInfo.IsLeaf = sq.isLeaf
 	queueInfo.IsManaged = sq.isManaged
 	queueInfo.CurrentPriority = sq.getCurrentPriority()
@@ -636,8 +660,6 @@ func (sq *Queue) AddApplication(app *Application) {
 	defer sq.Unlock()
 	sq.applications[app.ApplicationID] = app
 	sq.appPriorities[app.ApplicationID] = app.GetAskMaxPriority()
-	sq.appPreemptionPriorities[app.ApplicationID] = app.GetAllocationMinPriority()
-
 	// YUNIKORN-199: update the quota from the namespace
 	// get the tag with the quota
 	quota := app.GetTag(common.AppTagNamespaceResourceQuota)
@@ -697,27 +719,29 @@ func (sq *Queue) RemoveApplication(app *Application) {
 				zap.Error(err))
 		}
 	}
+	// clean up preempting resources
+	preempting := resources.NewResource()
+	for _, alloc := range app.GetAllAllocations() {
+		if alloc.IsPreempted() {
+			preempting.AddTo(alloc.GetAllocatedResource())
+		}
+	}
+	if !resources.IsZero(preempting) {
+		sq.DecPreemptingResource(preempting)
+	}
 
-	priority, preemptionPriority := sq.internalRemoveApp(appID)
+	sq.Lock()
+	delete(sq.applications, appID)
+	delete(sq.appPriorities, appID)
+	delete(sq.allocatingAcceptedApps, appID)
+	priority := sq.recalculatePriority()
+	sq.Unlock()
+
 	sq.parent.UpdateQueuePriority(sq.Name, priority)
-	sq.parent.UpdateQueuePreemptionPriority(sq.Name, preemptionPriority)
 
 	log.Logger().Info("Application completed and removed from queue",
 		zap.String("queueName", sq.QueuePath),
 		zap.String("applicationID", appID))
-}
-
-func (sq *Queue) internalRemoveApp(appID string) (int32, int32) {
-	sq.Lock()
-	defer sq.Unlock()
-	delete(sq.applications, appID)
-	delete(sq.appPriorities, appID)
-	delete(sq.appPreemptionPriorities, appID)
-	delete(sq.allocatingAcceptedApps, appID)
-	priority := sq.recalculatePriority()
-	preemptionPriority := sq.recalculatePreemptionPriority()
-
-	return priority, preemptionPriority
 }
 
 // GetCopyOfApps gets a shallow copy of all non-completed apps holding the lock
@@ -967,6 +991,30 @@ func (sq *Queue) DecAllocatedResource(alloc *resources.Resource) error {
 	return nil
 }
 
+// IncPreemptingResource increments the preempting resources for this queue (recursively).
+func (sq *Queue) IncPreemptingResource(alloc *resources.Resource) {
+	if sq == nil {
+		return
+	}
+	sq.Lock()
+	defer sq.Unlock()
+	sq.parent.IncPreemptingResource(alloc)
+	sq.preemptingResource = resources.Add(sq.preemptingResource, alloc)
+	sq.updateAllocatedAndPendingResourceMetrics()
+}
+
+// DecPreemptingResource decrements the preempting resources for this queue (recursively).
+func (sq *Queue) DecPreemptingResource(alloc *resources.Resource) {
+	if sq == nil {
+		return
+	}
+	sq.Lock()
+	defer sq.Unlock()
+	sq.parent.DecPreemptingResource(alloc)
+	sq.preemptingResource = resources.Sub(sq.preemptingResource, alloc)
+	sq.updateAllocatedAndPendingResourceMetrics()
+}
+
 func (sq *Queue) IsPrioritySortEnabled() bool {
 	sq.RLock()
 	defer sq.RUnlock()
@@ -1057,32 +1105,16 @@ func (sq *Queue) internalHeadRoom(parentHeadRoom *resources.Resource) *resources
 		return parentHeadRoom
 	}
 
-	// we will replace all incorrect values, which are caused by undefined resources, by resources of parent headroom later
-	undefinedResources := make(map[string]resources.Quantity)
-	if parentHeadRoom != nil {
-		for k, v := range parentHeadRoom.Resources {
-			if _, ok := headRoom.Resources[k]; !ok {
-				// parent headroom already subtracts the allocated resources, so we can't assign the value to this headroom.
-				// Otherwise, the headroom will subtract the allocated resources twice.
-				undefinedResources[k] = v
-			}
-		}
-	}
-
-	// calculate unused
-	headRoom.SubFrom(sq.allocatedResource)
+	// calculate what we have left over after removing all allocation
+	// ignore unlimited resource types (ie the ones not defined in max)
+	headRoom.SubOnlyExisting(sq.allocatedResource)
 
 	// check the minimum of the two: parentHeadRoom is nil for root
 	if parentHeadRoom == nil {
 		return headRoom
 	}
-
-	// replace the incorrect result by resources of parent headroom
-	for k, v := range undefinedResources {
-		headRoom.Resources[k] = v
-	}
-
-	return resources.ComponentWiseMin(headRoom, parentHeadRoom)
+	// take the minimum value of *all* resource types defined
+	return resources.ComponentWiseMinPermissive(headRoom, parentHeadRoom)
 }
 
 // GetMaxResource returns the max resource for the queue. The max resource should never be larger than the
@@ -1182,16 +1214,19 @@ func (sq *Queue) canRunApp(appID string) bool {
 // resources are skipped.
 // Applications are sorted based on the application sortPolicy. Applications without pending resources are skipped.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *Queue) TryAllocate(iterator func() NodeIterator, getnode func(string) *Node) *Allocation {
+func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() NodeIterator, getnode func(string) *Node) *Allocation {
 	if sq.IsLeafQueue() {
 		// get the headroom
 		headRoom := sq.getHeadRoom()
+		preemptionDelay := sq.GetPreemptionDelay()
+		preemptAttemptsRemaining := maxPreemptionsPerQueue
+
 		// process the apps (filters out app without pending requests)
 		for _, app := range sq.sortApplications(true) {
 			if app.IsAccepted() && !sq.canRunApp(app.ApplicationID) {
 				continue
 			}
-			alloc := app.tryAllocate(headRoom, iterator, getnode)
+			alloc := app.tryAllocate(headRoom, preemptionDelay, &preemptAttemptsRemaining, iterator, fullIterator, getnode)
 			if alloc != nil {
 				log.Logger().Debug("allocation found on queue",
 					zap.String("queueName", sq.QueuePath),
@@ -1208,7 +1243,7 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, getnode func(string) 
 	} else {
 		// process the child queues (filters out queues without pending requests)
 		for _, child := range sq.sortQueues() {
-			alloc := child.TryAllocate(iterator, getnode)
+			alloc := child.TryAllocate(iterator, fullIterator, getnode)
 			if alloc != nil {
 				return alloc
 			}
@@ -1371,6 +1406,35 @@ func (sq *Queue) GetApplication(appID string) *Application {
 	return sq.applications[appID]
 }
 
+// FindQueueByAppID searches the queue hierarchy for an application with the given appID and returns the queue it belongs to
+func (sq *Queue) FindQueueByAppID(appID string) *Queue {
+	if sq == nil {
+		return nil
+	}
+	if sq.parent != nil {
+		return sq.parent.FindQueueByAppID(appID)
+	}
+	return sq.findQueueByAppIDInternal(appID)
+}
+
+func (sq *Queue) findQueueByAppIDInternal(appID string) *Queue {
+	if sq == nil {
+		return nil
+	}
+	if sq.IsLeafQueue() {
+		if app := sq.GetApplication(appID); app != nil {
+			return sq
+		}
+		return nil
+	}
+	for _, queue := range sq.GetCopyOfChildren() {
+		if result := queue.findQueueByAppIDInternal(appID); result != nil {
+			return result
+		}
+	}
+	return nil
+}
+
 // getSortType return the queue sort type.
 func (sq *Queue) getSortType() policies.SortPolicy {
 	sq.RLock()
@@ -1416,6 +1480,9 @@ func (sq *Queue) updateAllocatedAndPendingResourceMetrics() {
 		}
 		for k, v := range sq.pending.Resources {
 			metrics.GetQueueMetrics(sq.QueuePath).SetQueuePendingResourceMetrics(k, float64(v))
+		}
+		for k, v := range sq.preemptingResource.Resources {
+			metrics.GetQueueMetrics(sq.QueuePath).SetQueuePreemptingResourceMetrics(k, float64(v))
 		}
 	}
 }
@@ -1485,14 +1552,10 @@ func (sq *Queue) setAllocatingAccepted(appID string) {
 	sq.allocatingAcceptedApps[appID] = true
 }
 
-func (sq *Queue) GetPreemptionPriority() int32 {
+func (sq *Queue) GetPreemptionPolicy() policies.PreemptionPolicy {
 	sq.RLock()
 	defer sq.RUnlock()
-	return sq.getCurrentPreemptionPriority()
-}
-
-func (sq *Queue) getCurrentPreemptionPriority() int32 {
-	return preemptionPriorityValueByPolicy(sq.preemptionPolicy, sq.priorityOffset, sq.preemptionPriority)
+	return sq.preemptionPolicy
 }
 
 // SetMaxRunningApps allows setting the maximum running apps on a queue
@@ -1509,6 +1572,154 @@ func (sq *Queue) SetMaxRunningApps(max int) {
 	sq.maxRunningApps = uint64(max)
 }
 
+// FindEligiblePreemptionVictims is used to locate tasks which may be preempted for the given ask.
+// queuePath is the fully-qualified path of the queue where ask resides
+// ask is the ask we are attempting to preempt for
+// return is a map of potential victims keyed by queue path
+func (sq *Queue) FindEligiblePreemptionVictims(queuePath string, ask *AllocationAsk) map[string]*QueuePreemptionSnapshot {
+	results := make(map[string]*QueuePreemptionSnapshot)
+	priorityMap := make(map[string]int64)
+
+	// get the queue which acts as the fence boundary
+	fence := sq.findPreemptionFenceRoot(priorityMap, int64(ask.priority))
+	if fence == nil {
+		return nil
+	}
+
+	// now, starting from the fence, we travel downward (going depth-first) to find victims of equal or lower priority
+	queuePriority, ok := priorityMap[fence.QueuePath]
+	if !ok {
+		// this shouldn't happen
+		log.Logger().Error("BUG: No computed priority found for queue", zap.String("queue", fence.QueuePath))
+		return nil
+	}
+
+	// walk the subtree contained within the preemption fence and collect potential victims organized by nodeID
+	fence.findEligiblePreemptionVictims(results, queuePath, ask, priorityMap, queuePriority, false)
+
+	return results
+}
+
+// createPreemptionSnapshot is used to create a snapshot of the current queue's resource usage and potential preemption victims
+func (sq *Queue) createPreemptionSnapshot(cache map[string]*QueuePreemptionSnapshot) *QueuePreemptionSnapshot {
+	if sq == nil {
+		return nil
+	}
+	snapshot, ok := cache[sq.QueuePath]
+	if ok {
+		// already built
+		return snapshot
+	}
+
+	parentSnapshot := sq.parent.createPreemptionSnapshot(cache)
+	sq.RLock()
+	defer sq.RUnlock()
+	snapshot = &QueuePreemptionSnapshot{
+		Parent:             parentSnapshot,
+		QueuePath:          sq.QueuePath,
+		AllocatedResource:  sq.allocatedResource.Clone(),
+		PreemptingResource: sq.preemptingResource.Clone(),
+		MaxResource:        sq.maxResource.Clone(),
+		GuaranteedResource: sq.guaranteedResource.Clone(),
+		PotentialVictims:   make([]*Allocation, 0),
+	}
+	cache[sq.QueuePath] = snapshot
+	return snapshot
+}
+
+func (sq *Queue) findEligiblePreemptionVictims(results map[string]*QueuePreemptionSnapshot, queuePath string, ask *AllocationAsk, priorityMap map[string]int64, askPriority int64, fenced bool) {
+	if sq == nil {
+		return
+	}
+
+	// if this is the target queue, return it but with an empty victim list so we can use it in calculations
+	if sq.QueuePath == queuePath {
+		sq.createPreemptionSnapshot(results)
+		return
+	}
+
+	if sq.IsLeafQueue() {
+		// leaf queue, skip queue if preemption is disabled
+		if sq.GetPreemptionPolicy() == policies.DisabledPreemptionPolicy {
+			return
+		}
+
+		// skip this queue if we are within guaranteed limits
+		guaranteed := resources.ComponentWiseMinPermissive(sq.GetActualGuaranteedResource(), sq.GetMaxResource())
+		if guaranteed.FitInMaxUndef(sq.GetAllocatedResource()) {
+			return
+		}
+
+		victims := sq.createPreemptionSnapshot(results)
+
+		// walk allocations and select those that are equal or lower than current priority
+		for _, app := range sq.GetCopyOfApps() {
+			for _, alloc := range app.GetAllAllocations() {
+				// skip tasks which require a specific node
+				if alloc.GetAsk().GetRequiredNode() != "" {
+					continue
+				}
+
+				// if we have encountered a fence then all tasks are eligible for preemption
+				// otherwise the task is a candidate if its priority is less than or equal to the ask priority
+				if fenced || int64(alloc.GetPriority()) <= askPriority {
+					victims.PotentialVictims = append(victims.PotentialVictims, alloc)
+				}
+			}
+		}
+
+		// remove from potential victim list if there are no potential victims
+		if len(victims.PotentialVictims) == 0 {
+			delete(results, sq.QueuePath)
+		}
+	} else {
+		// parent queue, walk child queues and evaluate
+		for _, child := range sq.GetCopyOfChildren() {
+			childFenced := false
+			childPriority, ok := priorityMap[child.QueuePath]
+			if !ok {
+				// we are evaluating a distinct subtree from the one containing the ask, so check policy to compute relative priority
+				policy, offset := child.GetPriorityPolicyAndOffset()
+				if policy == policies.FencePriorityPolicy {
+					// if the queue offset is greater than the ask priority, then none of the child subtasks may be preempted
+					if int64(offset) > askPriority {
+						continue
+					}
+
+					// all tasks in subtree can be preempted, so mark fenced as true
+					childFenced = true
+					childPriority = askPriority
+				} else {
+					// queue is not fenced, evaluate child by subtracting the offset from the ask when traversing downward
+					childPriority = askPriority - int64(offset)
+				}
+			}
+
+			// retrieve candidate tasks from child queue
+			child.findEligiblePreemptionVictims(results, queuePath, ask, priorityMap, childPriority, fenced || childFenced)
+		}
+	}
+}
+
+func (sq *Queue) findPreemptionFenceRoot(priorityMap map[string]int64, currentPriority int64) *Queue {
+	if sq == nil {
+		return nil
+	}
+	policy, offset := sq.GetPriorityPolicyAndOffset()
+	switch policy {
+	case policies.FencePriorityPolicy:
+		currentPriority = int64(offset)
+	default:
+		currentPriority += int64(offset)
+	}
+	priorityMap[sq.QueuePath] = currentPriority
+
+	if sq.parent == nil || sq.GetPreemptionPolicy() == policies.FencePreemptionPolicy {
+		return sq
+	}
+	return sq.parent.findPreemptionFenceRoot(priorityMap, currentPriority)
+}
+
 func (sq *Queue) GetCurrentPriority() int32 {
 	sq.RLock()
 	defer sq.RUnlock()
@@ -1517,6 +1728,12 @@ func (sq *Queue) GetCurrentPriority() int32 {
 
 func (sq *Queue) getCurrentPriority() int32 {
 	return priorityValueByPolicy(sq.priorityPolicy, sq.priorityOffset, sq.currentPriority)
+}
+
+func (sq *Queue) GetPriorityPolicyAndOffset() (policies.PriorityPolicy, int32) {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.priorityPolicy, sq.priorityOffset
 }
 
 func priorityValueByPolicy(policy policies.PriorityPolicy, offset int32, priority int32) int32 {
@@ -1598,85 +1815,4 @@ func (sq *Queue) recalculatePriority() int32 {
 	}
 	sq.currentPriority = curr
 	return priorityValueByPolicy(sq.priorityPolicy, sq.priorityOffset, curr)
-}
-
-func (sq *Queue) UpdateApplicationPreemptionPriority(applicationID string, priority int32) {
-	if sq == nil || !sq.IsLeafQueue() {
-		return
-	}
-	value := sq.updateApplicationPreemptionPriorityInternal(applicationID, priority)
-	sq.parent.UpdateQueuePreemptionPriority(sq.Name, value)
-}
-
-func (sq *Queue) UpdateQueuePreemptionPriority(queueName string, priority int32) {
-	if sq == nil || sq.IsLeafQueue() {
-		return
-	}
-	value := sq.updateQueuePreemptionPriorityInternal(queueName, priority)
-	sq.parent.UpdateQueuePreemptionPriority(sq.Name, value)
-}
-
-func (sq *Queue) updateQueuePreemptionPriorityInternal(queueName string, priority int32) int32 {
-	sq.Lock()
-	defer sq.Unlock()
-
-	if _, ok := sq.children[queueName]; !ok {
-		log.Logger().Debug("Unknown queue", zap.String("queueName", queueName))
-		return sq.preemptionPriority
-	}
-
-	sq.childPreemptionPriorities[queueName] = priority
-	return sq.recalculatePreemptionPriority()
-}
-
-func (sq *Queue) updateApplicationPreemptionPriorityInternal(applicationID string, priority int32) int32 {
-	sq.Lock()
-	defer sq.Unlock()
-
-	if _, ok := sq.applications[applicationID]; !ok {
-		log.Logger().Debug("Unknown application", zap.String("applicationID", applicationID))
-		return sq.preemptionPriority
-	}
-
-	sq.appPreemptionPriorities[applicationID] = priority
-	return sq.recalculatePreemptionPriority()
-}
-
-func (sq *Queue) recalculatePreemptionPriority() int32 {
-	var items map[string]int32
-	if sq.isLeaf {
-		items = sq.appPreemptionPriorities
-	} else {
-		items = sq.childPreemptionPriorities
-	}
-
-	curr := configs.MaxPriority
-	for _, v := range items {
-		if v < curr {
-			curr = v
-		}
-	}
-	sq.preemptionPriority = curr
-	return preemptionPriorityValueByPolicy(sq.preemptionPolicy, sq.priorityOffset, curr)
-}
-
-func preemptionPriorityValueByPolicy(policy policies.PreemptionPolicy, offset int32, priority int32) int32 {
-	// special case - if max, just use that
-	if priority == configs.MaxPriority {
-		return priority
-	}
-
-	switch policy {
-	case policies.FencePreemptionPolicy:
-		return offset
-	default:
-		// add offset to priority, checking for overflow/underflow
-		result := int64(offset) + int64(priority)
-		if result > int64(configs.MaxPriority) {
-			return configs.MaxPriority
-		} else if result < int64(configs.MinPriority) {
-			return configs.MinPriority
-		}
-		return int32(result)
-	}
 }

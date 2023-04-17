@@ -99,7 +99,6 @@ type Application struct {
 	stateLog             []*StateLogEntry            // state log for this application
 	placeholderData      map[string]*PlaceholderData // track placeholder and gang related info
 	askMaxPriority       int32                       // highest priority value of outstanding asks
-	allocMinPriority     int32                       // lowest priority value of allocations
 
 	rmEventHandler     handler.EventHandler
 	rmID               string
@@ -128,7 +127,6 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		rejectedMessage:      "",
 		stateLog:             make([]*StateLogEntry, 0),
 		askMaxPriority:       configs.MinPriority,
-		allocMinPriority:     configs.MaxPriority,
 	}
 	placeholderTimeout := common.ConvertSITimeoutWithAdjustment(siApp, defaultPlaceholderTimeout)
 	gangSchedStyle := siApp.GetGangSchedulingStyle()
@@ -872,7 +870,7 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, tota
 		if headRoom.FitInMaxUndef(request.GetAllocatedResource()) {
 			// if headroom is still enough for the resources
 			*total = append(*total, request)
-			headRoom.SubFrom(request.GetAllocatedResource())
+			headRoom.SubOnlyExisting(request.GetAllocatedResource())
 		}
 	}
 }
@@ -892,7 +890,7 @@ func (sa *Application) canReplace(request *AllocationAsk) bool {
 }
 
 // tryAllocate will perform a regular allocation of a pending request, includes placeholders.
-func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator func() NodeIterator, getNodeFn func(string) *Node) *Allocation {
+func (sa *Application) tryAllocate(headRoom *resources.Resource, preemptionDelay time.Duration, preemptAttemptsRemaining *int, nodeIterator func() NodeIterator, fullNodeIterator func() NodeIterator, getNodeFn func(string) *Node) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
 	// make sure the request are sorted
@@ -903,8 +901,21 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 		if sa.canReplace(request) {
 			continue
 		}
-		// resource must fit in headroom otherwise skip the request
+
+		// resource must fit in headroom otherwise skip the request (unless preemption could help)
 		if !headRoom.FitInMaxUndef(request.GetAllocatedResource()) {
+			// attempt preemption
+			if *preemptAttemptsRemaining > 0 {
+				*preemptAttemptsRemaining--
+				fullIterator := fullNodeIterator()
+				if fullIterator != nil {
+					if alloc, ok := sa.tryPreemption(headRoom, preemptionDelay, request, fullIterator, false); ok {
+						// preemption occurred, and possibly reservation
+						return alloc
+					}
+				}
+			}
+
 			// post scheduling events via the event plugin
 			if eventCache := events.GetEventCache(); eventCache != nil {
 				message := fmt.Sprintf("Application %s does not fit into %s queue", request.GetApplicationID(), sa.queuePath)
@@ -961,10 +972,21 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 
 		iterator := nodeIterator()
 		if iterator != nil {
-			alloc := sa.tryNodes(request, iterator)
-			// have a candidate return it
-			if alloc != nil {
+			if alloc := sa.tryNodes(request, iterator); alloc != nil {
+				// have a candidate return it
 				return alloc
+			}
+
+			// no nodes qualify, attempt preemption
+			if *preemptAttemptsRemaining > 0 {
+				*preemptAttemptsRemaining--
+				fullIterator := fullNodeIterator()
+				if fullIterator != nil {
+					if alloc, ok := sa.tryPreemption(headRoom, preemptionDelay, request, fullIterator, true); ok {
+						// preemption occurred, and possibly reservation
+						return alloc
+					}
+				}
 			}
 		}
 	}
@@ -1019,6 +1041,7 @@ func (sa *Application) cancelReservations(reservations []*reservation) bool {
 }
 
 // tryPlaceholderAllocate tries to replace a placeholder that is allocated with a real allocation
+//
 //nolint:funlen
 func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, getNodeFn func(string) *Node) *Allocation {
 	sa.Lock()
@@ -1193,7 +1216,7 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 		// Do we need a specific node?
 		if ask.GetRequiredNode() != "" {
 			if !reserve.node.CanAllocate(ask.GetAllocatedResource()) && !ask.HasTriggeredPreemption() {
-				sa.tryPreemption(reserve, ask)
+				sa.tryRequiredNodePreemption(reserve, ask)
 				continue
 			}
 		}
@@ -1225,7 +1248,23 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 	return nil
 }
 
-func (sa *Application) tryPreemption(reserve *reservation, ask *AllocationAsk) bool {
+func (sa *Application) tryPreemption(headRoom *resources.Resource, preemptionDelay time.Duration, ask *AllocationAsk, iterator NodeIterator, nodesTried bool) (*Allocation, bool) {
+	preemptor := NewPreemptor(sa, headRoom, preemptionDelay, ask, iterator, nodesTried)
+
+	// validate prerequisites for preemption of an ask and mark ask for preemption if successful
+	if !preemptor.CheckPreconditions() {
+		return nil, false
+	}
+
+	// track time spent trying preemption
+	tryPreemptionStart := time.Now()
+	defer metrics.GetSchedulerMetrics().ObserveTryPreemptionLatency(tryPreemptionStart)
+
+	// attempt preemption
+	return preemptor.TryPreemption()
+}
+
+func (sa *Application) tryRequiredNodePreemption(reserve *reservation, ask *AllocationAsk) bool {
 	log.Logger().Info("Triggering preemption process for daemon set ask",
 		zap.String("ds allocation key", ask.GetAllocationKey()))
 
@@ -1241,6 +1280,9 @@ func (sa *Application) tryPreemption(reserve *reservation, ask *AllocationAsk) b
 			zap.String("ds allocation key", ask.GetAllocationKey()),
 			zap.Int("no.of victims", len(victims)))
 		for _, victim := range victims {
+			if victimQueue := sa.queue.FindQueueByAppID(victim.GetApplicationID()); victimQueue != nil {
+				victimQueue.IncPreemptingResource(victim.GetAllocatedResource())
+			}
 			victim.MarkPreempted()
 		}
 		ask.MarkTriggeredPreemption()
@@ -1553,11 +1595,6 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 		sa.allocatedResource = resources.Add(sa.allocatedResource, info.GetAllocatedResource())
 		sa.maxAllocatedResource = resources.ComponentWiseMax(sa.allocatedResource, sa.maxAllocatedResource)
 	}
-	priority := info.GetPriority()
-	if priority < sa.allocMinPriority {
-		sa.allocMinPriority = priority
-		sa.queue.UpdateApplicationPreemptionPriority(sa.ApplicationID, priority)
-	}
 	sa.allocations[info.GetUUID()] = info
 }
 
@@ -1654,6 +1691,7 @@ func (sa *Application) removeAllocationInternal(uuid string, releaseType si.Term
 		// as and when every ph gets removed (for replacement), resource usage would be reduced.
 		// When real allocation happens as part of replacement, usage would be increased again with real alloc resource
 		sa.allocatedPlaceholder = resources.Sub(sa.allocatedPlaceholder, alloc.GetAllocatedResource())
+
 		// if all the placeholders are replaced, clear the placeholder timer
 		if resources.IsZero(sa.allocatedPlaceholder) {
 			sa.clearPlaceholderTimer()
@@ -1690,9 +1728,6 @@ func (sa *Application) removeAllocationInternal(uuid string, releaseType si.Term
 		}
 	}
 	delete(sa.allocations, uuid)
-	if sa.allocMinPriority == alloc.GetPriority() {
-		sa.updateAllocationMinPriority()
-	}
 	return alloc
 }
 
@@ -1709,18 +1744,6 @@ func (sa *Application) updateAskMaxPriority() {
 	}
 	sa.askMaxPriority = value
 	sa.queue.UpdateApplicationPriority(sa.ApplicationID, value)
-}
-
-func (sa *Application) updateAllocationMinPriority() {
-	value := configs.MaxPriority
-	for _, v := range sa.allocations {
-		p := v.GetPriority()
-		if p < value {
-			value = p
-		}
-	}
-	sa.allocMinPriority = value
-	sa.queue.UpdateApplicationPreemptionPriority(sa.ApplicationID, value)
 }
 
 func (sa *Application) hasZeroAllocations() bool {
@@ -1902,12 +1925,6 @@ func (sa *Application) GetAllPlaceholderData() []*PlaceholderData {
 		placeholders = append(placeholders, taskGroup)
 	}
 	return placeholders
-}
-
-func (sa *Application) GetAllocationMinPriority() int32 {
-	sa.RLock()
-	defer sa.RUnlock()
-	return sa.allocMinPriority
 }
 
 func (sa *Application) GetAskMaxPriority() int32 {

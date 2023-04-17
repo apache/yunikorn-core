@@ -60,6 +60,8 @@ type CoreQueueMetrics interface {
 	AddQueueAllocatedResourceMetrics(resourceName string, value float64)
 	SetQueuePendingResourceMetrics(resourceName string, value float64)
 	AddQueuePendingResourceMetrics(resourceName string, value float64)
+	SetQueuePreemptingResourceMetrics(resourceName string, value float64)
+	AddQueuePreemptingResourceMetrics(resourceName string, value float64)
 	// Reset all metrics that implement the Reset functionality.
 	// should only be used in tests
 	Reset()
@@ -145,6 +147,7 @@ type CoreSchedulerMetrics interface {
 	ObserveAppSortingLatency(start time.Time)
 	ObserveQueueSortingLatency(start time.Time)
 	ObserveTryNodeLatency(start time.Time)
+	ObserveTryPreemptionLatency(start time.Time)
 	// Reset all metrics that implement the Reset functionality.
 	// should only be used in tests
 	Reset()

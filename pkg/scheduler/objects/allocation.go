@@ -366,8 +366,8 @@ func (a *Allocation) MarkPreempted() {
 
 // IsPreempted returns whether the allocation has been marked for preemption or not.
 func (a *Allocation) IsPreempted() bool {
-	a.Lock()
-	defer a.Unlock()
+	a.RLock()
+	defer a.RUnlock()
 	return a.preempted
 }
 

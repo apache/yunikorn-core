@@ -46,6 +46,7 @@ type PartitionQueueDAOInfo struct {
 	MaxResource            map[string]int64        `json:"maxResource"`
 	GuaranteedResource     map[string]int64        `json:"guaranteedResource"`
 	AllocatedResource      map[string]int64        `json:"allocatedResource"`
+	PreemptingResource     map[string]int64        `json:"preemptingResource"`
 	IsLeaf                 bool                    `json:"isLeaf"`
 	IsManaged              bool                    `json:"isManaged"`
 	Properties             map[string]string       `json:"properties"`

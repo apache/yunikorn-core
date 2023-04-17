@@ -41,6 +41,14 @@ func (f *MockResourceManagerCallback) Predicates(args *si.PredicatesArgs) error 
 	return nil
 }
 
+func (f *MockResourceManagerCallback) PreemptionPredicates(args *si.PreemptionPredicatesArgs) *si.PreemptionPredicatesResponse {
+	// simulate "ideal" preemption check
+	return &si.PreemptionPredicatesResponse{
+		Success: true,
+		Index:   args.StartIndex,
+	}
+}
+
 func (f *MockResourceManagerCallback) SendEvent(events []*si.EventRecord) {
 	// do nothing
 }

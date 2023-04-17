@@ -926,35 +926,55 @@ func TestSubFrom(t *testing.T) {
 	}
 }
 
+func TestSubOnlyExistingNil(t *testing.T) {
+	// simple case (nil checks)
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("SubOnlyExisting panic on nil resource")
+		}
+	}()
+	var r *Resource
+	r.SubOnlyExisting(nil)
+	if r != nil {
+		t.Errorf("sub nil resources did not return nil resource: %v", r)
+	}
+}
+
 func TestSubEliminateNegative(t *testing.T) {
 	// simple case (nil checks)
 	result := SubEliminateNegative(nil, nil)
 	if result == nil || len(result.Resources) != 0 {
 		t.Errorf("sub nil resources did not return zero resource: %v", result)
 	}
-	// empty resources
-	left := NewResource()
-	result = SubEliminateNegative(left, nil)
-	if result == nil || len(result.Resources) != 0 || result == left {
-		t.Errorf("sub Zero resource (right) did not return cloned resource: %v", result)
-	}
+}
 
-	// simple empty resources
-	res1 := NewResourceFromMap(map[string]Quantity{"a": 5})
-	result = SubEliminateNegative(left, res1)
-	if result == nil || len(result.Resources) != 1 || result.Resources["a"] != 0 {
-		t.Errorf("sub simple resource did not return correct resource: %v", result)
-	}
+func TestSubOnlyExisting(t *testing.T) {
+	// remove nil from empty resource
+	left := NewResource()
+	left.SubOnlyExisting(nil)
+	assert.Equal(t, len(left.Resources), 0, "sub nil resource did not return unchanged resource")
+
+	// remove from empty resource
+	delta := NewResourceFromMap(map[string]Quantity{"a": 5})
+	left.SubOnlyExisting(delta)
+	assert.Equal(t, len(left.Resources), 0, "sub simple resource did not return unchanged resource")
 
 	// complex case: just checking the resource merge, values check is secondary
-	res1 = &Resource{Resources: map[string]Quantity{"a": 0, "b": 1}}
-	res2 := &Resource{Resources: map[string]Quantity{"a": 1, "c": 0, "d": -1}}
-	res3 := SubEliminateNegative(res1, res2)
+	left = &Resource{Resources: map[string]Quantity{"a": 0}}
+	delta = &Resource{Resources: map[string]Quantity{"a": 1, "b": 0}}
+	left.SubOnlyExisting(delta)
+	expected := &Resource{Resources: map[string]Quantity{"a": -1}}
+	assert.Equal(t, len(left.Resources), 1, "sub with 1 resource returned more or less types")
+	assert.Assert(t, Equals(left, expected), "sub failed expected %v, actual %v", expected, left)
 
-	expected := map[string]Quantity{"a": 0, "b": 1, "c": 0, "d": 1}
-	if !reflect.DeepEqual(res3.Resources, expected) {
-		t.Errorf("sub failed expected %v, actual %v", expected, res3.Resources)
-	}
+	// complex case: just checking the resource merge, values check is secondary
+	left = &Resource{Resources: map[string]Quantity{"a": 1, "b": 0}}
+	delta = &Resource{Resources: map[string]Quantity{"a": 1}}
+	left.SubOnlyExisting(delta)
+	assert.Equal(t, len(left.Resources), 2, "sub with 2 resource returned more or less types")
+
+	expected = &Resource{Resources: map[string]Quantity{"a": 0, "b": 0}}
+	assert.Assert(t, Equals(left, expected), "sub failed expected %v, actual %v", expected, left)
 }
 
 func TestSubErrorNegative(t *testing.T) {

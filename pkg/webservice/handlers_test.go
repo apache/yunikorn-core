@@ -720,7 +720,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 
 	var req *http.Request
 	req, err := http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
-	req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID}}))
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID}}))
 	assert.NilError(t, err, "Get Queues for PartitionQueues Handler request failed")
 	resp := &MockResponseWriter{}
 	var partitionQueuesDao dao.PartitionQueueDAOInfo
@@ -807,7 +807,7 @@ func TestGetPartitionNodes(t *testing.T) {
 
 	var req *http.Request
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/nodes", strings.NewReader(""))
-	req.WithContext(context.WithValue(req.Context(), "partition", partitionNameWithoutClusterID))
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID}}))
 	assert.NilError(t, err, "Get Nodes for PartitionNodes Handler request failed")
 	resp := &MockResponseWriter{}
 	var partitionNodesDao []*dao.NodeDAOInfo
@@ -892,11 +892,10 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 
 	var req *http.Request
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/applications", strings.NewReader(""))
-	vars := map[string]string{
-		"partition": partitionNameWithoutClusterID,
-		"queue":     "root.default",
-	}
-	req = mux.SetURLVars(req, vars)
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "queue", Value: "root.default"},
+	}))
 	assert.NilError(t, err, "Get Queue Applications Handler request failed")
 	resp := &MockResponseWriter{}
 	var appsDao []*dao.ApplicationDAOInfo
@@ -922,11 +921,10 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	// test nonexistent partition
 	var req1 *http.Request
 	req1, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/applications", strings.NewReader(""))
-	vars1 := map[string]string{
-		"partition": "notexists",
-		"queue":     "root.default",
-	}
-	req1 = mux.SetURLVars(req1, vars1)
+	req1 = req1.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: "notexists"},
+		httprouter.Param{Key: "queue", Value: "root.default"},
+	}))
 	assert.NilError(t, err, "Get Queue Applications Handler request failed")
 	resp1 := &MockResponseWriter{}
 	getQueueApplications(resp1, req1)
@@ -935,11 +933,10 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	// test nonexistent queue
 	var req2 *http.Request
 	req2, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/applications", strings.NewReader(""))
-	vars2 := map[string]string{
-		"partition": partitionNameWithoutClusterID,
-		"queue":     "notexists",
-	}
-	req2 = mux.SetURLVars(req2, vars2)
+	req2 = req2.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "queue", Value: "notexists"},
+	}))
 	assert.NilError(t, err, "Get Queue Applications Handler request failed")
 	resp2 := &MockResponseWriter{}
 	getQueueApplications(resp2, req2)
@@ -948,11 +945,10 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	// test queue without applications
 	var req3 *http.Request
 	req3, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.noapps/applications", strings.NewReader(""))
-	vars3 := map[string]string{
-		"partition": partitionNameWithoutClusterID,
-		"queue":     "root.noapps",
-	}
-	req3 = mux.SetURLVars(req3, vars3)
+	req3 = req3.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "queue", Value: "root.noapps"},
+	}))
 	assert.NilError(t, err, "Get Queue Applications Handler request failed")
 	resp3 := &MockResponseWriter{}
 	var appsDao3 []*dao.ApplicationDAOInfo
@@ -982,12 +978,11 @@ func TestGetApplicationHandler(t *testing.T) {
 
 	var req *http.Request
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
-	vars := map[string]string{
-		"partition":   partitionNameWithoutClusterID,
-		"queue":       "root.default",
-		"application": "app-1",
-	}
-	req = mux.SetURLVars(req, vars)
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "queue", Value: "root.default"},
+		httprouter.Param{Key: "application", Value: "app-1"},
+	}))
 	assert.NilError(t, err, "Get Application Handler request failed")
 	resp := &MockResponseWriter{}
 	var appsDao *dao.ApplicationDAOInfo
@@ -1004,12 +999,11 @@ func TestGetApplicationHandler(t *testing.T) {
 	// test nonexistent partition
 	var req1 *http.Request
 	req1, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
-	vars1 := map[string]string{
-		"partition":   "notexists",
-		"queue":       "root.default",
-		"application": "app-1",
-	}
-	req1 = mux.SetURLVars(req1, vars1)
+	req1 = req1.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: "notexists"},
+		httprouter.Param{Key: "queue", Value: "root.default"},
+		httprouter.Param{Key: "application", Value: "app-1"},
+	}))
 	assert.NilError(t, err, "Get Application Handler request failed")
 	resp1 := &MockResponseWriter{}
 	getApplication(resp1, req1)
@@ -1018,12 +1012,11 @@ func TestGetApplicationHandler(t *testing.T) {
 	// test nonexistent queue
 	var req2 *http.Request
 	req2, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
-	vars2 := map[string]string{
-		"partition":   partitionNameWithoutClusterID,
-		"queue":       "notexists",
-		"application": "app-1",
-	}
-	req2 = mux.SetURLVars(req2, vars2)
+	req2 = req2.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "queue", Value: "notexists"},
+		httprouter.Param{Key: "application", Value: "app-1"},
+	}))
 	assert.NilError(t, err, "Get Application Handler request failed")
 	resp2 := &MockResponseWriter{}
 	getApplication(resp2, req2)
@@ -1032,12 +1025,11 @@ func TestGetApplicationHandler(t *testing.T) {
 	// test nonexistent application
 	var req3 *http.Request
 	req3, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.noapps/application/app-1", strings.NewReader(""))
-	vars3 := map[string]string{
-		"partition":   partitionNameWithoutClusterID,
-		"queue":       "root.noapps",
-		"application": "app-1",
-	}
-	req3 = mux.SetURLVars(req3, vars3)
+	req3 = req3.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "queue", Value: "root.noapps"},
+		httprouter.Param{Key: "application", Value: "app-1"},
+	}))
 	assert.NilError(t, err, "Get Application Handler request failed")
 	resp3 := &MockResponseWriter{}
 	getApplication(resp3, req3)
@@ -1162,11 +1154,9 @@ func TestSetLoggerLevel(t *testing.T) {
 	// invalid
 	req, err := http.NewRequest("PUT", "/ws/v1/loglevel", strings.NewReader(""))
 	assert.NilError(t, err)
-
-	vars := map[string]string{
-		"level": "invalid",
-	}
-	req = mux.SetURLVars(req, vars)
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "level", Value: "invalid"},
+	}))
 	rr := httptest.NewRecorder()
 
 	handler := http.HandlerFunc(setLogLevel)
@@ -1177,8 +1167,9 @@ func TestSetLoggerLevel(t *testing.T) {
 	req, err = http.NewRequest("PUT", "/ws/v1/loglevel", strings.NewReader(""))
 	assert.NilError(t, err)
 
-	vars["level"] = "error"
-	req = mux.SetURLVars(req, vars)
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "level", Value: "error"},
+	}))
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	assert.Equal(t, rr.Code, http.StatusOK)
@@ -1195,11 +1186,10 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 
 	// Test group name is missing
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/", strings.NewReader(""))
-	vars := map[string]string{
-		"user":  "testuser",
-		"group": "",
-	}
-	req = mux.SetURLVars(req, vars)
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "user", Value: "testuser"},
+		httprouter.Param{Key: "group", Value: ""},
+	}))
 	assert.NilError(t, err, "Get Group Resource Usage Handler request failed")
 	resp = &MockResponseWriter{}
 	getGroupResourceUsage(resp, req)
@@ -1207,22 +1197,20 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 
 	// Test existed user query
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/user/", strings.NewReader(""))
-	vars = map[string]string{
-		"user":  "testuser",
-		"group": "testgroup",
-	}
-	req = mux.SetURLVars(req, vars)
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "user", Value: "testuser"},
+		httprouter.Param{Key: "group", Value: "testgroup"},
+	}))
 	assert.NilError(t, err, "Get User Resource Usage Handler request failed")
 	resp = &MockResponseWriter{}
 	getUserResourceUsage(resp, req)
 
 	// Test non-existing user query
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/user/", strings.NewReader(""))
-	vars = map[string]string{
-		"user":  "testNonExistingUser",
-		"group": "testgroup",
-	}
-	req = mux.SetURLVars(req, vars)
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "user", Value: "testNonExistingUser"},
+		httprouter.Param{Key: "group", Value: "testgroup"},
+	}))
 	assert.NilError(t, err, "Get User Resource Usage Handler request failed")
 	resp = &MockResponseWriter{}
 	getUserResourceUsage(resp, req)
@@ -1231,11 +1219,10 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 	// Test existed group query
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/", strings.NewReader(""))
 	assert.NilError(t, err, "Get Group Resource Usage Handler request failed")
-	vars = map[string]string{
-		"user":  "testuser",
-		"group": "testgroup",
-	}
-	req = mux.SetURLVars(req, vars)
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "user", Value: "testuser"},
+		httprouter.Param{Key: "group", Value: "testgroup"},
+	}))
 	var groupResourceUsageDao *dao.GroupResourceUsageDAOInfo
 	getGroupResourceUsage(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &groupResourceUsageDao)
@@ -1246,11 +1233,10 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 	// Test non-existing group query
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/", strings.NewReader(""))
 	assert.NilError(t, err, "Get Group Resource Usage Handler request failed")
-	vars = map[string]string{
-		"user":  "testuser",
-		"group": "testNonExistingGroup",
-	}
-	req = mux.SetURLVars(req, vars)
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "user", Value: "testuser"},
+		httprouter.Param{Key: "group", Value: "testNonExistingGroup"},
+	}))
 	getGroupResourceUsage(resp, req)
 	assertGroupExists(t, resp)
 }

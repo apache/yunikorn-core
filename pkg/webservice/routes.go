@@ -95,13 +95,13 @@ var webRoutes = routes{
 	route{
 		"Scheduler",
 		"GET",
-		"/ws/v1/partition/{partition}/queues",
+		"/ws/v1/partition/:partition/queues",
 		getPartitionQueues,
 	},
 	route{
 		"Scheduler",
 		"PUT",
-		"/ws/v1/loglevel/{level}",
+		"/ws/v1/loglevel/:level",
 		setLogLevel,
 	},
 	route{
@@ -119,13 +119,13 @@ var webRoutes = routes{
 	route{
 		"Scheduler",
 		"GET",
-		"/ws/v1/partition/:partition/queue/{queue}/applications",
+		"/ws/v1/partition/:partition/queue/:queue/applications",
 		getQueueApplications,
 	},
 	route{
 		"Scheduler",
 		"GET",
-		"/ws/v1/partition/:partition/queue/{queue}/application/:application",
+		"/ws/v1/partition/:partition/queue/:queue/application/:application",
 		getApplication,
 	},
 	route{

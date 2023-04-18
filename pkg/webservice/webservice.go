@@ -48,18 +48,18 @@ func newRouter() *httprouter.Router {
 		handler := loggingHandler(webRoute.HandlerFunc, webRoute.Name)
 		switch webRoute.Method {
 		case "GET":
-			router.GET(webRoute.Pattern, handler)
+			router.HandlerFunc(http.MethodGet, webRoute.Pattern, handler)
 		case "PUT":
-			router.PUT(webRoute.Pattern, handler)
+			router.HandlerFunc(http.MethodPut, webRoute.Pattern, handler)
 		case "POST":
-			router.POST(webRoute.Pattern, handler)
+			router.HandlerFunc(http.MethodPost, webRoute.Pattern, handler)
 		}
 	}
 	return router
 }
 
-func loggingHandler(inner http.Handler, name string) httprouter.Handle {
-	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+func loggingHandler(inner http.Handler, name string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		inner.ServeHTTP(w, r)
 		log.Logger().Debug(fmt.Sprintf("%s\t%s\t%s\t%s",

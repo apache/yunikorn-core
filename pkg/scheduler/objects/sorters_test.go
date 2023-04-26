@@ -456,3 +456,26 @@ func assertAppListLength(t *testing.T, list []*Application, apps []string, name 
 		assert.Equal(t, apps[i], app.ApplicationID, "test name: %s", name)
 	}
 }
+
+func TestSortBySubmissionTime(t *testing.T) {
+	var list []*Application
+
+	// stable sort is used so equal values stay where they were
+	// let all resource have same resource but submissionTime is different
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(100)})
+	baseline := time.Now()
+	// setup to sort descending: all apps have pending resource
+	input := make(map[string]*Application, 4)
+	for i := 0; i < 4; i++ {
+		num := strconv.Itoa(i)
+		appID := "app-" + num
+		app := newApplication(appID, "partition", "queue")
+		app.pending = res
+		input[appID] = app
+		app.SubmissionTime = baseline.Add(-time.Minute * time.Duration(i))
+		input[appID] = app
+	}
+
+	list = sortApplications(input, policies.FifoSortPolicy, true, nil)
+	assertAppList(t, list, []int{3, 2, 1, 0}, "sort by submission time")
+}

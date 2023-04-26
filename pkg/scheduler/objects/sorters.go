@@ -155,7 +155,7 @@ func sortApplicationsBySubmissionTimeAndPriority(sortedApps []*Application) {
 		r := sortedApps[j]
 		if l.SubmissionTime.Before(r.SubmissionTime) {
 			return true
-		} else if r.SubmissionTime.Before(r.SubmissionTime) {
+		} else if r.SubmissionTime.Before(l.SubmissionTime) {
 			return false
 		}
 		return l.GetAskMaxPriority() > r.GetAskMaxPriority()

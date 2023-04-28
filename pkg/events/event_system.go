@@ -43,6 +43,8 @@ type EventSystem interface {
 	Stop()
 	IsEventTrackingEnabled() bool
 	GetEventsFromID(uint64, uint64) ([]*si.EventRecord, uint64, uint64)
+	CreateEventStream(string, uint64) *EventStream
+	RemoveStream(*EventStream)
 }
 
 type EventSystemImpl struct {
@@ -50,6 +52,7 @@ type EventSystemImpl struct {
 	Store         *EventStore // storing eventChannel
 	publisher     *EventPublisher
 	eventBuffer   *eventRingBuffer
+	streaming     *EventStreaming
 
 	channel chan *si.EventRecord // channelling input eventChannel
 	stop    chan bool            // whether the service is stopped
@@ -60,6 +63,14 @@ type EventSystemImpl struct {
 	ringBufferCapacity uint64
 
 	sync.RWMutex
+}
+
+func (ec *EventSystemImpl) CreateEventStream(name string, count uint64) *EventStream {
+	return ec.streaming.CreateEventStream(name, count)
+}
+
+func (ec *EventSystemImpl) RemoveStream(consumer *EventStream) {
+	ec.streaming.RemoveEventStream(consumer)
 }
 
 func (ec *EventSystemImpl) GetEventsFromID(id, count uint64) ([]*si.EventRecord, uint64, uint64) {
@@ -94,14 +105,16 @@ func (ec *EventSystemImpl) GetRingBufferCapacity() uint64 {
 // VisibleForTesting
 func Init() {
 	store := newEventStore()
+	buffer := newEventRingBuffer(defaultRingBufferSize)
 	ev = &EventSystemImpl{
 		Store:         store,
 		channel:       make(chan *si.EventRecord, defaultEventChannelSize),
 		stop:          make(chan bool),
 		stopped:       false,
 		publisher:     CreateShimPublisher(store),
-		eventBuffer:   newEventRingBuffer(defaultRingBufferSize),
+		eventBuffer:   buffer,
 		eventSystemId: fmt.Sprintf("event-system-%d", time.Now().Unix()),
+		streaming:     NewEventStreaming(buffer),
 	}
 }
 
@@ -133,6 +146,7 @@ func (ec *EventSystemImpl) StartServiceWithPublisher(withPublisher bool) {
 				if event != nil {
 					ec.Store.Store(event)
 					ec.eventBuffer.Add(event)
+					ec.streaming.PublishEvent(event)
 					metrics.GetEventMetrics().IncEventsProcessed()
 				}
 			}
@@ -194,6 +208,15 @@ func (ec *EventSystemImpl) isRestartNeeded() bool {
 func (ec *EventSystemImpl) Restart() {
 	ec.Stop()
 	ec.StartServiceWithPublisher(true)
+}
+
+// VisibleForTesting
+func (ec *EventSystemImpl) CloseAllStreams() {
+	ec.streaming.Lock()
+	defer ec.streaming.Unlock()
+	for consumer := range ec.streaming.eventStreams {
+		ec.streaming.removeEventStream(consumer)
+	}
 }
 
 func (ec *EventSystemImpl) reloadConfig() {

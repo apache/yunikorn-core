@@ -1545,6 +1545,109 @@ func TestGetEventsWhenTrackingDisabled(t *testing.T) {
 	readIllegalRequest(t, req, http.StatusInternalServerError, "Event tracking is disabled")
 }
 
+func TestGetStream(t *testing.T) {
+	events.Init()
+	ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	ev.StartServiceWithPublisher(false)
+
+	var req *http.Request
+	req, err := http.NewRequest("GET", "/ws/v1/events/stream", strings.NewReader(""))
+	assert.NilError(t, err)
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req = req.Clone(cancelCtx)
+
+	resp := httptest.NewRecorder() // MockResponseWriter does not implement http.Flusher
+
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		ev.AddEvent(&si.EventRecord{
+			TimestampNano: 111,
+			ObjectID:      "app-1",
+		})
+		ev.AddEvent(&si.EventRecord{
+			TimestampNano: 222,
+			ObjectID:      "node-1",
+		})
+		ev.AddEvent(&si.EventRecord{
+			TimestampNano: 333,
+			ObjectID:      "app-2",
+		})
+		time.Sleep(200 * time.Millisecond)
+		cancel()
+	}()
+	getStream(resp, req)
+
+	output := make([]byte, 256)
+	n, err := resp.Body.Read(output)
+	assert.NilError(t, err, "cannot read response body")
+
+	lines := strings.Split(string(output[:n]), "\n")
+	var evt si.EventRecord
+	err = json.Unmarshal([]byte(lines[0]), &evt)
+	assert.NilError(t, err)
+	assert.Equal(t, "app-1", evt.ObjectID)
+	assert.Equal(t, int64(111), evt.TimestampNano)
+	err = json.Unmarshal([]byte(lines[1]), &evt)
+	assert.NilError(t, err)
+	assert.Equal(t, "node-1", evt.ObjectID)
+	assert.Equal(t, int64(222), evt.TimestampNano)
+	err = json.Unmarshal([]byte(lines[2]), &evt)
+	assert.NilError(t, err)
+	assert.Equal(t, "app-2", evt.ObjectID)
+	assert.Equal(t, int64(333), evt.TimestampNano)
+}
+
+func TestGetStream_StreamClosedByProducer(t *testing.T) {
+	events.Init()
+	ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	ev.StartServiceWithPublisher(false)
+
+	var req *http.Request
+	req, err := http.NewRequest("GET", "/ws/v1/events/stream", strings.NewReader(""))
+	assert.NilError(t, err)
+	resp := httptest.NewRecorder() // MockResponseWriter does not implement http.Flusher
+
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		ev.AddEvent(&si.EventRecord{
+			TimestampNano: 111,
+			ObjectID:      "app-1",
+		})
+		time.Sleep(100 * time.Millisecond)
+		ev.CloseAllStreams()
+	}()
+
+	getStream(resp, req)
+
+	output := make([]byte, 256)
+	n, err := resp.Body.Read(output)
+	assert.NilError(t, err, "cannot read response body")
+	lines := strings.Split(string(output[:n]), "\n")
+	var evt si.EventRecord
+	err = json.Unmarshal([]byte(lines[0]), &evt)
+	assert.NilError(t, err)
+	assert.Equal(t, "app-1", evt.ObjectID)
+	assert.Equal(t, int64(111), evt.TimestampNano)
+	assert.Equal(t, "Event stream was closed by the producer", lines[1])
+}
+
+func TestGetStream_NotFlusherImpl(t *testing.T) {
+	events.Init()
+	ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	ev.StartServiceWithPublisher(false)
+
+	var req *http.Request
+	req, err := http.NewRequest("GET", "/ws/v1/events/stream", strings.NewReader(""))
+	assert.NilError(t, err)
+	resp := &MockResponseWriter{}
+
+	getStream(resp, req)
+
+	assert.Assert(t, strings.Contains(string(resp.outputBytes), "Writer does not implement http.Flusher"))
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode)
+}
+
 func addEvents(t *testing.T) (appEvent, nodeEvent, queueEvent *si.EventRecord) {
 	t.Helper()
 	events.Init()

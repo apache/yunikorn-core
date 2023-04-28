@@ -934,3 +934,60 @@ func getEvents(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
+
+func getStream(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	eventSystem := events.GetEventSystem()
+	if !eventSystem.IsEventTrackingEnabled() {
+		buildJSONErrorResponse(w, "Event tracking is disabled", http.StatusBadRequest)
+		return
+	}
+
+	f, ok := w.(http.Flusher)
+	if !ok {
+		buildJSONErrorResponse(w, "Writer does not implement http.Flusher", http.StatusBadRequest)
+		return
+	}
+
+	count := uint64(1000)
+	if countStr := r.URL.Query().Get("count"); countStr != "" {
+		c, err := strconv.ParseUint(countStr, 10, 64)
+		if err != nil {
+			buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		count = c
+	}
+
+	enc := json.NewEncoder(w)
+	stream := eventSystem.CreateEventStream(r.Host, count)
+
+	for {
+		select {
+		case <-r.Context().Done():
+			log.Log(log.REST).Info("Connection closed for event stream client",
+				zap.String("host", r.Host))
+			eventSystem.RemoveStream(stream)
+			return
+		case e, ok := <-stream.Events:
+			if !ok {
+				msg := "Event stream was closed by the producer"
+				log.Log(log.REST).Error(msg)
+				_, err := w.Write([]byte(msg))
+				if err != nil {
+					log.Log(log.REST).Error("Could not send message to the client",
+						zap.Error(err))
+				}
+				return
+			}
+
+			if err := enc.Encode(e); err != nil {
+				log.Log(log.REST).Error("Error while sending events",
+					zap.String("host", r.Host))
+				eventSystem.RemoveStream(stream)
+				return
+			}
+			f.Flush()
+		}
+	}
+}

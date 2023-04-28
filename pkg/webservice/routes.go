@@ -176,6 +176,12 @@ var webRoutes = routes{
 		"/ws/v1/events/batch",
 		getEvents,
 	},
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/events/stream",
+		getStream,
+	},
 	// endpoint to retrieve CPU, Memory profiling data,
 	// this works with pprof tool. By default, pprof endpoints
 	// are only registered to http.DefaultServeMux. Here, we

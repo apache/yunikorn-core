@@ -1750,7 +1750,8 @@ func priorityValueByPolicy(policy policies.PriorityPolicy, offset int32, priorit
 		result := int64(offset) + int64(priority)
 		if result > int64(configs.MaxPriority) {
 			return configs.MaxPriority
-		} else if result < int64(configs.MinPriority) {
+		}
+		if result < int64(configs.MinPriority) {
 			return configs.MinPriority
 		}
 		return int32(result)

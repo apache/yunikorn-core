@@ -32,7 +32,8 @@ import (
 func CheckLenOfResource(res *Resource, expected int) (bool, string) {
 	if got := len(res.Resources); expected == 0 && (res == nil || got != expected) {
 		return false, fmt.Sprintf("input with empty and nil should be a empty resource: Expected %d, got %d", expected, got)
-	} else if got := len(res.Resources); got != expected {
+	}
+	if got := len(res.Resources); got != expected {
 		return false, fmt.Sprintf("Length of resources is wrong: Expected %d, got %d", expected, got)
 	}
 	return true, ""

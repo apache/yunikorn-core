@@ -506,6 +506,13 @@ func (sn *Node) GetReservations() []*reservation {
 	return res
 }
 
+func (sn *Node) GetReservationCount() int {
+	sn.Lock()
+	defer sn.Unlock()
+
+	return len(sn.reservations)
+}
+
 // GetResourceUsageShares gets a map of name -> resource usages per type in shares (0 to 1). Can return NaN.
 func (sn *Node) GetResourceUsageShares() map[string]float64 {
 	sn.RLock()

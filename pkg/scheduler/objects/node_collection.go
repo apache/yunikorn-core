@@ -43,6 +43,13 @@ type NodeCollection interface {
 	GetNodeSortingPolicy() NodeSortingPolicy
 }
 
+const (
+	unreserved IteratorType = iota
+	full
+)
+
+type IteratorType int
+
 type nodeRef struct {
 	node      *Node   // node reference
 	nodeScore float64 // node score
@@ -70,6 +77,7 @@ type baseNodeCollection struct {
 	nodes       map[string]*nodeRef // nodes assigned to this collection
 	sortedNodes *btree.BTree        // nodes sorted by score
 
+	iterators *iteratorCache
 	sync.RWMutex
 }
 
@@ -99,6 +107,8 @@ func (nc *baseNodeCollection) AddNode(node *Node) error {
 	}
 	nc.nodes[node.NodeID] = &nref
 	nc.sortedNodes.ReplaceOrInsert(nref)
+	nc.iterators.addNode(nref.node)
+	nc.iterators.clear()
 	return nil
 }
 
@@ -118,6 +128,8 @@ func (nc *baseNodeCollection) RemoveNode(nodeID string) *Node {
 	nc.sortedNodes.Delete(*nref)
 	delete(nc.nodes, nodeID)
 	nref.node.RemoveListener(nc)
+	nc.iterators.clear()
+	nc.iterators.removeNode(nref.node)
 
 	return nref.node
 }
@@ -154,7 +166,11 @@ func (nc *baseNodeCollection) GetNodes() []*Node {
 // Create an ordered node iterator for unreserved nodes based on the sort policy set for this collection.
 // The iterator is nil if there are no unreserved nodes available.
 func (nc *baseNodeCollection) GetNodeIterator() NodeIterator {
-	return nc.getNodeIteratorInternal(func(node *Node) bool {
+	itr, valid := nc.iterators.get(unreserved)
+	if valid {
+		return itr
+	}
+	return nc.getNodeIteratorInternal(unreserved, func(node *Node) bool {
 		return !node.IsReserved()
 	})
 }
@@ -162,12 +178,16 @@ func (nc *baseNodeCollection) GetNodeIterator() NodeIterator {
 // Create an ordered node iterator for all nodes based on the sort policy set for this collection.
 // The iterator is nil if there are no nodes available.
 func (nc *baseNodeCollection) GetFullNodeIterator() NodeIterator {
-	return nc.getNodeIteratorInternal(func(node *Node) bool {
+	itr, valid := nc.iterators.get(full)
+	if valid {
+		return itr
+	}
+	return nc.getNodeIteratorInternal(full, func(node *Node) bool {
 		return true
 	})
 }
 
-func (nc *baseNodeCollection) getNodeIteratorInternal(allow func(*Node) bool) NodeIterator {
+func (nc *baseNodeCollection) getNodeIteratorInternal(itrType IteratorType, allow func(*Node) bool) NodeIterator {
 	sortingStart := time.Now()
 	tree := nc.cloneSortedNodes()
 
@@ -187,10 +207,13 @@ func (nc *baseNodeCollection) getNodeIteratorInternal(allow func(*Node) bool) No
 	metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
 
 	if len(nodes) == 0 {
+		nc.iterators.save(itrType, nil)
 		return nil
 	}
 
-	return NewDefaultNodeIterator(nodes)
+	iterator := NewDefaultNodeIterator(nodes)
+	nc.iterators.save(itrType, iterator)
+	return iterator
 }
 
 func (nc *baseNodeCollection) cloneSortedNodes() *btree.BTree {
@@ -213,6 +236,7 @@ func (nc *baseNodeCollection) SetNodeSortingPolicy(policy NodeSortingPolicy) {
 		nref.nodeScore = nc.scoreNode(node)
 		nc.sortedNodes.ReplaceOrInsert(*nref)
 	}
+	nc.iterators.clear()
 }
 
 // Gets the node sorting policy.
@@ -232,11 +256,14 @@ func (nc *baseNodeCollection) NodeUpdated(node *Node) {
 		return
 	}
 
+	nc.iterators.nodeUpdated(node)
+
 	updatedScore := nc.scoreNode(node)
 	if nref.nodeScore != updatedScore {
 		nc.sortedNodes.Delete(*nref)
 		nref.nodeScore = nc.scoreNode(node)
 		nc.sortedNodes.ReplaceOrInsert(*nref)
+		nc.iterators.clear()
 	}
 }
 
@@ -247,5 +274,74 @@ func NewNodeCollection(partition string) NodeCollection {
 		nsp:         NewNodeSortingPolicy(policies.FairSortPolicy.String(), nil),
 		nodes:       make(map[string]*nodeRef),
 		sortedNodes: btree.New(7), // Degree=7 here is experimentally the most efficient for up to around 5k nodes
+		iterators:   newIteratorCache(),
 	}
+}
+
+type iteratorCache struct {
+	iterators    map[IteratorType]*entry
+	reservations map[*Node]int // need to track reservations because of how normal iterator works
+}
+
+type entry struct {
+	itr   NodeIterator
+	valid bool
+}
+
+func newIteratorCache() *iteratorCache {
+	iterators := make(map[IteratorType]*entry)
+	iterators[unreserved] = &entry{
+		valid: false,
+	}
+	iterators[full] = &entry{
+		valid: false,
+	}
+	cache := &iteratorCache{
+		reservations: make(map[*Node]int),
+		iterators:    iterators,
+	}
+	return cache
+}
+
+func (c *iteratorCache) clear() {
+	c.iterators[full].itr = nil
+	c.iterators[full].valid = false
+	c.iterators[unreserved].itr = nil
+	c.iterators[unreserved].valid = false
+}
+
+func (c *iteratorCache) save(itrType IteratorType, itr NodeIterator) {
+	c.iterators[itrType].itr = itr
+	c.iterators[itrType].valid = true
+}
+
+func (c *iteratorCache) get(itrType IteratorType) (NodeIterator, bool) {
+	valid := c.iterators[itrType].valid
+	if !valid {
+		return nil, false
+	}
+	itr := c.iterators[itrType].itr
+	if itr != nil {
+		itr.Reset()
+	}
+	return itr, true
+}
+
+func (c *iteratorCache) nodeUpdated(node *Node) {
+	numRes := node.GetReservationCount()
+	prev := c.reservations[node]
+	c.reservations[node] = numRes
+	if (numRes > 0 && prev == 0) || (numRes == 0 && prev > 0) {
+		// affects normal iterator
+		c.iterators[unreserved].itr = nil
+		c.iterators[unreserved].valid = false
+	}
+}
+
+func (c *iteratorCache) addNode(node *Node) {
+	c.reservations[node] = node.GetReservationCount()
+}
+
+func (c *iteratorCache) removeNode(node *Node) {
+	delete(c.reservations, node)
 }

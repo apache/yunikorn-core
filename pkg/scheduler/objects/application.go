@@ -1145,7 +1145,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 					zap.String("node", node.NodeID))
 				continue
 			}
-			if node.preAllocateCheck(reqFit.GetAllocatedResource(), reservationKey(nil, sa, reqFit)) {
+			if !node.preAllocateCheck(reqFit.GetAllocatedResource(), reservationKey(nil, sa, reqFit)) {
 				continue
 			}
 			// skip the node if conditions can not be satisfied
@@ -1426,7 +1426,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 	toAllocate := ask.GetAllocatedResource()
 	// create the key for the reservation
-	if node.preAllocateCheck(toAllocate, reservationKey(nil, sa, ask)) {
+	if !node.preAllocateCheck(toAllocate, reservationKey(nil, sa, ask)) {
 		// skip schedule onto node
 		return nil
 	}

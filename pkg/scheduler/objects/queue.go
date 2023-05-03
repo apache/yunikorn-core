@@ -694,7 +694,7 @@ func (sq *Queue) AddApplication(app *Application) {
 func (sq *Queue) RemoveApplication(app *Application) {
 	// clean up any outstanding pending resources
 	appID := app.ApplicationID
-	if _, ok := sq.applications[appID]; !ok {
+	if !sq.appExists(appID) {
 		log.Logger().Debug("Application not found while removing from queue",
 			zap.String("queueName", sq.QueuePath),
 			zap.String("applicationID", appID))
@@ -742,6 +742,14 @@ func (sq *Queue) RemoveApplication(app *Application) {
 	log.Logger().Info("Application completed and removed from queue",
 		zap.String("queueName", sq.QueuePath),
 		zap.String("applicationID", appID))
+}
+
+func (sq *Queue) appExists(appID string) bool {
+	sq.RLock()
+	defer sq.RUnlock()
+
+	_, ok := sq.applications[appID]
+	return ok
 }
 
 // GetCopyOfApps gets a shallow copy of all non-completed apps holding the lock

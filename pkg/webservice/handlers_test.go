@@ -976,7 +976,6 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getQueueApplications(resp, req)
 	assertParamsMissing(t, resp)
-
 }
 
 func TestGetApplicationHandler(t *testing.T) {

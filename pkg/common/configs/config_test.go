@@ -22,6 +22,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -1639,7 +1640,7 @@ partitions:
                 - user1
                 groups:
                 - prod
-                maxapplications: 5
+                maxapplications: 2
                 maxresources: {memory: 10000, vcore: 10}
 `
 	// validate the config and check after the update
@@ -1720,4 +1721,419 @@ func TestGetConfigurationString(t *testing.T) {
 			assert.DeepEqual(t, tc.expectedConfig, GetConfigurationString(tc.requestBytes))
 		})
 	}
+}
+
+func prepareUserLimitsConfig(leafQueueMaxApps uint64, leafQueueMaxResource string) string {
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        maxapplications: 3000
+        limits:
+          - limit:
+            users: 
+            - user1
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 500
+          - limit:
+            users:
+            - user2
+            groups:
+            - prod
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 300
+        queues:
+          - name: level1
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                users: 
+                - user1
+                maxapplications: 50
+                maxresources: {memory: 1000, vcore: 100}
+            queues:
+              - name: leaf
+                maxapplications: 100
+                resources:
+                  guaranteed:
+                    {memory: 1000, vcore: 10}
+                  max:
+                    {memory: 10000, vcore: 1000}
+                limits:
+                  - limit:
+                    users: 
+                    - user1
+                    maxapplications: ` + strconv.Itoa(int(leafQueueMaxApps)) + `
+                    maxresources: ` + leafQueueMaxResource + `
+          - name: level2
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                users: 
+                - user1
+                maxapplications: 10
+                maxresources: {memory: 1000, vcore: 100}
+`
+	return data
+}
+
+func prepareUserLimitsWithTwoLevelsConfig(leafQueueMaxApps uint64, leafQueueMaxResource string, userMaxResource string) string {
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        maxapplications: 3000
+        limits:
+          - limit:
+            users: 
+            - user1
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 500
+          - limit:
+            users:
+            - user2
+            groups:
+            - prod
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 300
+        queues:
+          - name: level1
+            maxapplications: 900
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                ` + leafQueueMaxResource + `
+            queues:
+              - name: leaf
+                maxapplications: 900
+                resources:
+                  guaranteed:
+                    {memory: 1000, vcore: 10}
+                  max:
+                    ` + leafQueueMaxResource + `
+                limits:
+                  - limit:
+                    users: 
+                    - user1
+                    maxapplications: ` + strconv.Itoa(int(leafQueueMaxApps)) + `
+                    maxresources: ` + userMaxResource + `
+          - name: level2
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                users: 
+                - user1
+                maxapplications: 10
+                maxresources: {memory: 1000, vcore: 100}
+`
+	return data
+}
+func TestUserLimitsWithHierarchicalQueue(t *testing.T) {
+	// Make sure parent queue user max apps should not less than the child queue max resource
+	// validate the config and check after the update
+	_, err := CreateConfig(prepareUserLimitsConfig(50, "{memory: 10000, vcore: 100}"))
+	assert.ErrorContains(t, err, "user user1 max resource map[memory:10000 vcore:100000] of queue leaf is greater than immediate or ancestor parent maximum resource map[memory:1000 vcore:100000]")
+
+	// Make sure parent queue user max apps should not less than the child queue max apps
+	// validate the config and check after the update
+	_, err = CreateConfig(prepareUserLimitsConfig(90, "{memory: 1000, vcore: 100}"))
+	assert.ErrorContains(t, err, "user user1 max applications 90 of queue leaf is greater than immediate or ancestor parent max applications 50")
+
+	// (More than one level check)
+	// Make sure hierarchical queue user max resource should not less than the child queue max resource
+	// validate the config and check after the update
+	_, err = CreateConfig(prepareUserLimitsWithTwoLevelsConfig(90, "{memory: 100000, vcore: 100}", "{memory: 90000, vcore: 100}"))
+	assert.ErrorContains(t, err, "user user1 max resource map[memory:90000 vcore:100000] of queue leaf is greater than immediate or ancestor parent maximum resource map[memory:10000 vcore:10000000]")
+
+	// (More than one level check)
+	// Make sure hierarchical queue user max apps should not less than the child queue max apps
+	// validate the config and check after the update
+	_, err = CreateConfig(prepareUserLimitsWithTwoLevelsConfig(900, "{memory: 10000, vcore: 1000}", "{memory: 1000, vcore: 100}"))
+	assert.ErrorContains(t, err, "user user1 max applications 900 of queue leaf is greater than immediate or ancestor parent max applications 500")
+
+	// Special case: make sure wildcard user with hierarchical queue check
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        maxapplications: 3000
+        limits:
+          - limit:
+            users: 
+            - "*"
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 500
+        queues:
+          - name: level1
+            maxapplications: 900
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 100000, vcore: 1000}
+            queues:
+              - name: leaf
+                maxapplications: 900
+                resources:
+                  guaranteed:
+                    {memory: 1000, vcore: 10}
+                  max:
+                    {memory: 100000, vcore: 1000}
+                limits:
+                  - limit:
+                    users: 
+                    - "*"
+                    maxapplications: 90
+                    maxresources: {memory: 90000, vcore: 100}
+          - name: level2
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                users: 
+                - user1
+                maxapplications: 10
+                maxresources: {memory: 1000, vcore: 100}
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.ErrorContains(t, err, "user * max resource map[memory:90000 vcore:100000] of queue leaf is greater than immediate or ancestor parent maximum resource map[memory:10000 vcore:10000000]")
+}
+
+func prepareGroupLimitsConfig(leafQueueMaxApps uint64, leafQueueMaxResource string) string {
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        maxapplications: 3000
+        limits:
+          - limit:
+            groups: 
+            - group1
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 500
+          - limit:
+            users:
+            - user2
+            groups:
+            - prod
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 300
+        queues:
+          - name: level1
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                groups: 
+                - group1
+                maxapplications: 50
+                maxresources: {memory: 1000, vcore: 100}
+            queues:
+              - name: leaf
+                maxapplications: 100
+                resources:
+                  guaranteed:
+                    {memory: 1000, vcore: 10}
+                  max:
+                    {memory: 10000, vcore: 1000}
+                limits:
+                  - limit:
+                    groups: 
+                    - group1
+                    maxapplications: ` + strconv.Itoa(int(leafQueueMaxApps)) + `
+                    maxresources: ` + leafQueueMaxResource + `
+          - name: level2
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                groups: 
+                - group1
+                maxapplications: 10
+                maxresources: {memory: 1000, vcore: 100}
+`
+	return data
+}
+
+func prepareGroupLimitsWithTwoLevelsConfig(leafQueueMaxApps uint64, leafQueueMaxResources string, groupMaxResources string) string {
+	// (More than one level check)
+	// Make sure hierarchical queue user max resource should not less than the child queue max resource
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        maxapplications: 3000
+        limits:
+          - limit:
+            groups: 
+            - group1
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 500
+          - limit:
+            users:
+            - user2
+            groups:
+            - prod
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 300
+        queues:
+          - name: level1
+            maxapplications: 900
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                ` + leafQueueMaxResources + `
+            queues:
+              - name: leaf
+                maxapplications: 900
+                resources:
+                  guaranteed:
+                    {memory: 1000, vcore: 10}
+                  max:
+                    ` + leafQueueMaxResources + `
+                limits:
+                  - limit:
+                    groups: 
+                    - group1
+                    maxapplications: ` + strconv.Itoa(int(leafQueueMaxApps)) + `
+                    maxresources: ` + groupMaxResources + `
+          - name: level2
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                groups: 
+                - group1
+                maxapplications: 10
+                maxresources: {memory: 1000, vcore: 100}
+`
+	return data
+}
+func TestGroupLimitsWithHierarchicalQueue(t *testing.T) {
+	// Make sure parent queue user max apps should not less than the child queue max resource
+	// validate the config and check after the update
+	_, err := CreateConfig(prepareGroupLimitsConfig(50, "{memory: 10000, vcore: 100}"))
+	assert.ErrorContains(t, err, "group group1 max resource map[memory:10000 vcore:100000] of queue leaf is greater than immediate or ancestor parent maximum resource map[memory:1000 vcore:100000]")
+
+	// Make sure parent queue user max apps should not less than the child queue max apps
+	// validate the config and check after the update
+	_, err = CreateConfig(prepareGroupLimitsConfig(90, "{memory: 1000, vcore: 100}"))
+	assert.ErrorContains(t, err, "group group1 max applications 90 of queue leaf is greater than immediate or ancestor parent max applications 50")
+
+	// validate the config and check after the update
+	_, err = CreateConfig(prepareGroupLimitsWithTwoLevelsConfig(90, "{memory: 100000, vcore: 1000}", "{memory: 90000, vcore: 100}"))
+	assert.ErrorContains(t, err, "group group1 max resource map[memory:90000 vcore:100000] of queue leaf is greater than immediate or ancestor parent maximum resource map[memory:10000 vcore:10000000]")
+
+	// (More than one level check)
+	// Make sure hierarchical queue user max apps should not less than the child queue max apps
+	// validate the config and check after the update
+	_, err = CreateConfig(prepareGroupLimitsWithTwoLevelsConfig(900, "{memory: 10000, vcore: 1000}", "{memory: 10000, vcore: 100}"))
+	assert.ErrorContains(t, err, "group group1 max applications 900 of queue leaf is greater than immediate or ancestor parent max applications 500")
+
+	// Special case: make sure wildcard user with hierarchical queue check
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        maxapplications: 3000
+        limits:
+          - limit:
+            groups: 
+            - test
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 500
+          - limit:
+            groups: 
+            - "*"
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 500
+        queues:
+          - name: level1
+            maxapplications: 900
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 100000, vcore: 1000}
+            queues:
+              - name: leaf
+                maxapplications: 900
+                resources:
+                  guaranteed:
+                    {memory: 1000, vcore: 10}
+                  max:
+                    {memory: 100000, vcore: 1000}
+                limits:
+                  - limit:
+                    groups: 
+                    - "test"
+                    maxapplications: 9
+                    maxresources: {memory: 900, vcore: 100}
+                  - limit:
+                    groups: 
+                    - "*"
+                    maxapplications: 90
+                    maxresources: {memory: 90000, vcore: 100}
+                  - limit:
+                    users: 
+                    - "*"
+                    maxapplications: 9
+                    maxresources: {memory: 900, vcore: 100}
+          - name: level2
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                users: 
+                - user1
+                maxapplications: 10
+                maxresources: {memory: 1000, vcore: 100}
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.ErrorContains(t, err, "group * max resource map[memory:90000 vcore:100000] of queue leaf is greater than immediate or ancestor parent maximum resource map[memory:10000 vcore:10000000]")
 }

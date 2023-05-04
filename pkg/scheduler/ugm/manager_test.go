@@ -379,7 +379,7 @@ func TestUpdateConfigClearEarlierSetLimits(t *testing.T) {
 	// root->parent
 	user := security.UserGroup{User: "user1", Groups: []string{"group1"}}
 	conf := createUpdateConfig(user.User, user.Groups[0])
-	
+
 	manager := GetUserManager()
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
 

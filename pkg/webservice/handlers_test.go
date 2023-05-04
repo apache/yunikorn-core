@@ -753,6 +753,13 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getPartitionQueues(resp, req)
 	assertPartitionExists(t, resp)
+
+	// test params name missing
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
+	assert.NilError(t, err, "Get Queues for PartitionQueues Handler request failed")
+	resp = &MockResponseWriter{}
+	getPartitionQueues(resp, req)
+	assertParamsMissing(t, resp)
 }
 
 func TestGetClusterInfo(t *testing.T) {
@@ -842,6 +849,13 @@ func TestGetPartitionNodes(t *testing.T) {
 	resp1 := &MockResponseWriter{}
 	getPartitionNodes(resp1, req1)
 	assertPartitionExists(t, resp1)
+
+	// test params name missing
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/nodes", strings.NewReader(""))
+	assert.NilError(t, err, "Get Nodes for PartitionNodes Handler request failed")
+	resp = &MockResponseWriter{}
+	getPartitionNodes(resp, req)
+	assertParamsMissing(t, resp)
 }
 
 // addApp Add app to the given partition and assert the app count, state etc
@@ -955,6 +969,14 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	err = json.Unmarshal(resp3.outputBytes, &appsDao3)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body: %s", string(resp.outputBytes))
 	assert.Equal(t, len(appsDao3), 0)
+
+	// test missing params name
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/applications", strings.NewReader(""))
+	assert.NilError(t, err, "Get Queue Applications Handler request failed")
+	resp = &MockResponseWriter{}
+	getQueueApplications(resp, req)
+	assertParamsMissing(t, resp)
+
 }
 
 func TestGetApplicationHandler(t *testing.T) {
@@ -1033,6 +1055,22 @@ func TestGetApplicationHandler(t *testing.T) {
 	resp3 := &MockResponseWriter{}
 	getApplication(resp3, req3)
 	assertApplicationExists(t, resp3)
+
+	// test missing params name
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
+	assert.NilError(t, err, "Get Application Handler request failed")
+	resp = &MockResponseWriter{}
+	getApplication(resp, req)
+	assertParamsMissing(t, resp)
+}
+
+func assertParamsMissing(t *testing.T, resp *MockResponseWriter) {
+	var errInfo dao.YAPIError
+	err := json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
+	assert.Equal(t, errInfo.Message, MissingParamsName, "JSON error message is incorrect")
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
 func assertPartitionExists(t *testing.T, resp *MockResponseWriter) {
@@ -1177,6 +1215,9 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 	prepareUserAndGroupContext(t)
 	// Test user name is missing
 	req, err := http.NewRequest("GET", "/ws/v1/partition/default/usage/user/", strings.NewReader(""))
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "group", Value: "testgroup"},
+	}))
 	assert.NilError(t, err, "Get User Resource Usage Handler request failed")
 	resp := &MockResponseWriter{}
 	getUserResourceUsage(resp, req)
@@ -1237,6 +1278,13 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 	}))
 	getGroupResourceUsage(resp, req)
 	assertGroupExists(t, resp)
+
+	// Test params name missing
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/", strings.NewReader(""))
+	assert.NilError(t, err, "Get Group Resource Usage Handler request failed")
+	resp = &MockResponseWriter{}
+	getGroupResourceUsage(resp, req)
+	assertParamsMissing(t, resp)
 }
 
 func TestUsersAndGroupsResourceUsage(t *testing.T) {

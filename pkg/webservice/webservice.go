@@ -20,7 +20,6 @@ package webservice
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -46,14 +45,7 @@ func newRouter() *httprouter.Router {
 	router := httprouter.New()
 	for _, webRoute := range webRoutes {
 		handler := loggingHandler(webRoute.HandlerFunc, webRoute.Name)
-		switch webRoute.Method {
-		case "GET":
-			router.HandlerFunc(http.MethodGet, webRoute.Pattern, handler)
-		case "PUT":
-			router.HandlerFunc(http.MethodPut, webRoute.Pattern, handler)
-		case "POST":
-			router.HandlerFunc(http.MethodPost, webRoute.Pattern, handler)
-		}
+		router.Handler(webRoute.Method, webRoute.Pattern, handler)
 	}
 	return router
 }
@@ -62,8 +54,11 @@ func loggingHandler(inner http.Handler, name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		inner.ServeHTTP(w, r)
-		log.Logger().Debug(fmt.Sprintf("%s\t%s\t%s\t%s",
-			r.Method, r.RequestURI, name, time.Since(start)))
+		log.Logger().Debug("Web router call details",
+			zap.String("name", name),
+			zap.String("method", r.Method),
+			zap.String("uri", r.RequestURI),
+			zap.Duration("duration", time.Since(start)))
 	}
 }
 

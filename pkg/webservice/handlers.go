@@ -49,6 +49,7 @@ import (
 )
 
 const PartitionDoesNotExists = "Partition not found"
+const MissingParamsName = "Params name is not provided"
 const QueueDoesNotExists = "Queue not found"
 const UserDoesNotExists = "User not found"
 const GroupDoesNotExists = "Group not found"
@@ -483,6 +484,10 @@ func getPartitions(w http.ResponseWriter, r *http.Request) {
 
 func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
 	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
 	writeHeaders(w)
 	partitionName := vars.ByName("partition")
 	var partitionQueuesDAOInfo dao.PartitionQueueDAOInfo
@@ -500,6 +505,10 @@ func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
 
 func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
 	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
 	writeHeaders(w)
 	partition := vars.ByName("partition")
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
@@ -515,6 +524,10 @@ func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
 
 func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
 	writeHeaders(w)
 	partition := vars.ByName("partition")
 	queueName := vars.ByName("queue")
@@ -546,6 +559,10 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 
 func getApplication(w http.ResponseWriter, r *http.Request) {
 	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
 	writeHeaders(w)
 	partition := vars.ByName("partition")
 	queueName := vars.ByName("queue")
@@ -578,6 +595,10 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 
 func setLogLevel(w http.ResponseWriter, r *http.Request) {
 	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
 	writeHeaders(w)
 	level := vars.ByName("level")
 	if err := log.SetLogLevel(level); err != nil {
@@ -772,6 +793,10 @@ func getUsersResourceUsage(w http.ResponseWriter, r *http.Request) {
 
 func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
 	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
 	user := vars.ByName("user")
 	if user == "" {
 		buildJSONErrorResponse(w, UserNameMissing, http.StatusBadRequest)
@@ -802,6 +827,10 @@ func getGroupsResourceUsage(w http.ResponseWriter, r *http.Request) {
 
 func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
 	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
 	group := vars.ByName("group")
 	if group == "" {
 		buildJSONErrorResponse(w, GroupNameMissing, http.StatusBadRequest)

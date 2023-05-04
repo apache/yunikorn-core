@@ -114,31 +114,24 @@ func TestPreAllocateCheck(t *testing.T) {
 	}
 
 	// special cases
-	if err := node.preAllocateCheck(nil, ""); err == nil {
+	if node.preAllocateCheck(nil, "") {
 		t.Errorf("nil resource should not have fitted on node")
 	}
 	resNeg := resources.NewResourceFromMap(map[string]resources.Quantity{"first": -1})
-	if err := node.preAllocateCheck(resNeg, ""); err == nil {
+	if node.preAllocateCheck(resNeg, "") {
 		t.Errorf("negative resource should not have fitted on node")
 	}
 	// Check if we can allocate on scheduling node
 	resSmall := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	resLarge := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 15})
-	err := node.preAllocateCheck(resNode, "")
-	assert.NilError(t, err, "node resource should have fitted on node")
-	err = node.preAllocateCheck(resSmall, "")
-	assert.NilError(t, err, "small resource should have fitted on node")
-	if err = node.preAllocateCheck(resLarge, ""); err == nil {
-		t.Errorf("too large resource should not have fitted on node: %v", err)
-	}
+	assert.Assert(t, node.preAllocateCheck(resNode, ""), "node resource should have fitted on node")
+	assert.Assert(t, node.preAllocateCheck(resSmall, ""), "small resource should have fitted on node")
+	assert.Assert(t, !node.preAllocateCheck(resLarge, ""), "too large resource should not have fitted on node")
 
 	// set allocated resource
 	node.AddAllocation(newAllocation(appID1, "UUID1", nodeID, "root.default", resSmall))
-	err = node.preAllocateCheck(resSmall, "")
-	assert.NilError(t, err, "small resource should have fitted in available allocation")
-	if err = node.preAllocateCheck(resNode, ""); err == nil {
-		t.Errorf("node resource should not have fitted in available allocation: %v", err)
-	}
+	assert.Assert(t, node.preAllocateCheck(resSmall, ""), "small resource should have fitted in available allocation")
+	assert.Assert(t, !node.preAllocateCheck(resNode, ""), "node resource should not have fitted in available allocation")
 
 	// check if we can allocate on a reserved node
 	q := map[string]resources.Quantity{"first": 0}
@@ -149,22 +142,14 @@ func TestPreAllocateCheck(t *testing.T) {
 	// standalone reservation unreserve returns false as app is not reserved
 	reserve := newReservation(node, app, ask, false)
 	node.reservations[reserve.getKey()] = reserve
-	if err = node.preAllocateCheck(resSmall, "app-2"); err == nil {
-		t.Errorf("node was reserved for different app but check passed: %v", err)
-	}
-	if err = node.preAllocateCheck(resSmall, "app-1|alloc-2"); err == nil {
-		t.Errorf("node was reserved for this app but not the alloc and check passed: %v", err)
-	}
-	err = node.preAllocateCheck(resSmall, appID1)
-	assert.NilError(t, err, "node was reserved for this app but check did not pass check")
-	err = node.preAllocateCheck(resSmall, "app-1|alloc-1")
-	assert.NilError(t, err, "node was reserved for this app/alloc but check did not pass check")
+	assert.Assert(t, !node.preAllocateCheck(resSmall, "app-2"), "node was reserved for different app but check passed")
+	assert.Assert(t, !node.preAllocateCheck(resSmall, "app-1|alloc-2"), "node was reserved for this app but not the alloc and check passed")
+	assert.Assert(t, node.preAllocateCheck(resSmall, appID1), "node was reserved for this app but check did not pass check")
+	assert.Assert(t, node.preAllocateCheck(resSmall, "app-1|alloc-1"), "node was reserved for this app/alloc but check did not pass check")
 
 	// Check if we can allocate on non scheduling node
 	node.SetSchedulable(false)
-	if err = node.preAllocateCheck(resSmall, ""); err == nil {
-		t.Errorf("node with scheduling set to false should not allow allocation: %v", err)
-	}
+	assert.Assert(t, !node.preAllocateCheck(resSmall, ""), "node with scheduling set to false should not allow allocation")
 }
 
 // Only test the CanAllocate code, the used logic in preAllocateCheck has its own test

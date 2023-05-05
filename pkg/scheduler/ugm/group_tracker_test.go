@@ -117,14 +117,18 @@ func TestGTDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	err = groupTracker.decreaseTrackedResource(queuePath1, TestApp1, usage3, false)
+	removeQT, err := groupTracker.decreaseTrackedResource(queuePath1, TestApp1, usage3, false)
 	if err != nil {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage3, err)
 	}
-	err = groupTracker.decreaseTrackedResource(queuePath2, TestApp2, usage3, false)
+	assert.Equal(t, removeQT, false, "wrong remove queue tracker value")
+
+	removeQT, err = groupTracker.decreaseTrackedResource(queuePath2, TestApp2, usage3, false)
 	if err != nil {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage3, err)
 	}
+	assert.Equal(t, removeQT, false, "wrong remove queue tracker value")
+
 	actualResources1 := getGroupResource(groupTracker)
 
 	assert.Equal(t, "map[mem:70000000 vcore:70000]", actualResources1["root"].String(), "wrong resource")
@@ -137,22 +141,24 @@ func TestGTDecreaseTrackedResource(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
 
-	err = groupTracker.decreaseTrackedResource(queuePath1, TestApp1, usage4, true)
+	removeQT, err = groupTracker.decreaseTrackedResource(queuePath1, TestApp1, usage4, true)
 	if err != nil {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
 	}
 	assert.Equal(t, 1, len(groupTracker.getTrackedApplications()))
+	assert.Equal(t, removeQT, false, "wrong remove queue tracker value")
 
 	usage5, err := resources.NewResourceFromConf(map[string]string{"mem": "10M", "vcore": "10"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
 
-	err = groupTracker.decreaseTrackedResource(queuePath2, TestApp2, usage5, true)
+	removeQT, err = groupTracker.decreaseTrackedResource(queuePath2, TestApp2, usage5, true)
 	if err != nil {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage2, err)
 	}
 	assert.Equal(t, 0, len(groupTracker.getTrackedApplications()))
+	assert.Equal(t, removeQT, true, "wrong remove queue tracker value")
 }
 
 func getGroupResource(gt *GroupTracker) map[string]*resources.Resource {

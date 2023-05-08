@@ -63,16 +63,16 @@ func TestPendingAskRepeat(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
 	ask := newAllocationAsk("alloc-1", "app-1", res)
 	assert.Equal(t, ask.GetPendingAskRepeat(), int32(1), "pending ask repeat should be 1")
-	if !ask.updatePendingAskRepeat(1) {
+	if ok, _, _ := ask.updatePendingAskRepeat(1); !ok {
 		t.Errorf("increase of pending ask with 1 failed, expected repeat 2, current repeat: %d", ask.GetPendingAskRepeat())
 	}
-	if !ask.updatePendingAskRepeat(-1) {
+	if ok, _, _ := ask.updatePendingAskRepeat(-1); !ok {
 		t.Errorf("decrease of pending ask with 1 failed, expected repeat 1, current repeat: %d", ask.GetPendingAskRepeat())
 	}
-	if ask.updatePendingAskRepeat(-2) {
+	if ok, _, _ := ask.updatePendingAskRepeat(-2); ok {
 		t.Errorf("decrease of pending ask with 2 did not fail, expected repeat 1, current repeat: %d", ask.GetPendingAskRepeat())
 	}
-	if !ask.updatePendingAskRepeat(-1) {
+	if ok, _, _ := ask.updatePendingAskRepeat(-1); !ok {
 		t.Errorf("decrease of pending ask with 1 failed, expected repeat 0, current repeat: %d", ask.GetPendingAskRepeat())
 	}
 }

@@ -130,15 +130,16 @@ func (aa *AllocationAsk) GetPartitionName() string {
 // Update the pending ask repeat counter with the delta (pos or neg). The pending repeat is always 0 or higher.
 // If the update would cause the repeat to go negative the update is discarded and false is returned.
 // In all other cases the repeat is updated and true is returned.
-func (aa *AllocationAsk) updatePendingAskRepeat(delta int32) bool {
+func (aa *AllocationAsk) updatePendingAskRepeat(delta int32) (bool, int32, int32) {
 	aa.Lock()
 	defer aa.Unlock()
 
+	prev := aa.pendingAskRepeat
 	if aa.pendingAskRepeat+delta >= 0 {
 		aa.pendingAskRepeat += delta
-		return true
+		return true, prev, aa.pendingAskRepeat
 	}
-	return false
+	return false, prev, aa.pendingAskRepeat
 }
 
 // GetPendingAskRepeat gets the number of repeat asks remaining

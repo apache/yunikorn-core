@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/btree"
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
@@ -69,6 +70,66 @@ type StateLogEntry struct {
 	ApplicationState string
 }
 
+type askRef struct {
+	ask        *AllocationAsk
+	createTime int64
+	priority   int32
+	id         string
+}
+
+func (ar askRef) Less(than btree.Item) bool {
+	other, ok := than.(askRef)
+	if !ok {
+		return false
+	}
+
+	if ar.priority == other.priority {
+		return ar.createTime < other.createTime
+	}
+
+	if ar.priority > other.priority {
+		return true
+	}
+
+	return ar.id < other.id
+}
+
+type sortedRequests struct {
+	tree *btree.BTree
+}
+
+func (s *sortedRequests) forEachAsk(f func(ask *AllocationAsk) bool) {
+	tree := s.tree.Clone()
+	tree.Ascend(func(item btree.Item) bool {
+		ask := item.(askRef).ask
+		return f(ask)
+	})
+}
+
+func (s *sortedRequests) addAsk(ask *AllocationAsk) {
+	s.tree.ReplaceOrInsert(askRef{
+		ask:        ask,
+		createTime: ask.createTime.UnixNano(),
+		priority:   ask.priority,
+		id:         ask.allocationKey,
+	})
+}
+
+func (s *sortedRequests) removeAsk(ask *AllocationAsk) {
+	s.tree.Delete(askRef{
+		ask:        ask,
+		createTime: ask.createTime.UnixNano(),
+		priority:   ask.priority,
+		id:         ask.allocationKey,
+	})
+}
+
+func newSortedRequests() *sortedRequests {
+	return &sortedRequests{
+		tree: btree.New(7),
+	}
+}
+
 type Application struct {
 	ApplicationID  string
 	Partition      string
@@ -104,6 +165,8 @@ type Application struct {
 	rmID               string
 	terminatedCallback func(appID string)
 
+	sorted *sortedRequests
+
 	sync.RWMutex
 }
 
@@ -127,6 +190,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		rejectedMessage:      "",
 		stateLog:             make([]*StateLogEntry, 0),
 		askMaxPriority:       configs.MinPriority,
+		sorted:               newSortedRequests(),
 	}
 	placeholderTimeout := common.ConvertSITimeoutWithAdjustment(siApp, defaultPlaceholderTimeout)
 	gangSchedStyle := siApp.GetGangSchedulingStyle()
@@ -536,6 +600,7 @@ func (sa *Application) removeAsksInternal(allocKey string) int {
 			deltaPendingResource = resources.MultiplyBy(ask.GetAllocatedResource(), float64(ask.GetPendingAskRepeat()))
 			sa.pending = resources.Sub(sa.pending, deltaPendingResource)
 			delete(sa.requests, allocKey)
+			sa.sorted.removeAsk(ask)
 			if priority := ask.GetPriority(); priority >= sa.askMaxPriority {
 				sa.updateAskMaxPriority()
 			}
@@ -619,6 +684,7 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 		zap.Bool("placeholder", ask.IsPlaceholder()),
 		zap.Stringer("pendingDelta", delta))
 
+	sa.sorted.addAsk(ask)
 	return nil
 }
 
@@ -661,8 +727,15 @@ func (sa *Application) UpdateAskRepeat(allocKey string, delta int32) (*resources
 
 func (sa *Application) updateAskRepeatInternal(ask *AllocationAsk, delta int32) (*resources.Resource, error) {
 	// updating with delta does error checking internally
-	if !ask.updatePendingAskRepeat(delta) {
+	positive, prev, val := ask.updatePendingAskRepeat(delta)
+	if !positive {
 		return nil, fmt.Errorf("ask repaeat not updated resulting repeat less than zero for ask %s on app %s", ask.GetAllocationKey(), sa.ApplicationID)
+	}
+	if val == 0 && prev > 0 {
+		sa.sorted.removeAsk(ask)
+	}
+	if val > 0 && prev == 0 {
+		sa.sorted.addAsk(ask)
 	}
 
 	askPriority := ask.GetPriority()
@@ -894,12 +967,15 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, preemptionDelay
 	sa.Lock()
 	defer sa.Unlock()
 	// make sure the request are sorted
-	sa.sortRequests(false)
-	// get all the requests from the app sorted in order
-	for _, request := range sa.sortedRequests {
+	var allocResult *Allocation
+	sa.sorted.forEachAsk(func(request *AllocationAsk) bool {
+		if request.GetPendingAskRepeat() == 0 {
+			return true
+		}
+
 		// check if there is a replacement possible
 		if sa.canReplace(request) {
-			continue
+			return true
 		}
 
 		// resource must fit in headroom otherwise skip the request (unless preemption could help)
@@ -911,7 +987,8 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, preemptionDelay
 				if fullIterator != nil {
 					if alloc, ok := sa.tryPreemption(headRoom, preemptionDelay, request, fullIterator, false); ok {
 						// preemption occurred, and possibly reservation
-						return alloc
+						allocResult = alloc
+						return false
 					}
 				}
 			}
@@ -927,7 +1004,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, preemptionDelay
 					eventCache.AddEvent(event)
 				}
 			}
-			continue
+			return true
 		}
 
 		requiredNode := request.GetRequiredNode()
@@ -940,14 +1017,14 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, preemptionDelay
 					zap.String("application ID", sa.ApplicationID),
 					zap.String("allocationKey", request.GetAllocationKey()),
 					zap.String("required node", requiredNode))
-				return nil
+				return false
 			}
 			// Are there any non daemon set reservations on specific required node?
 			// Cancel those reservations to run daemon set pods
 			reservations := node.GetReservations()
 			if len(reservations) > 0 {
 				if !sa.cancelReservations(reservations) {
-					return nil
+					return false
 				}
 			}
 			alloc := sa.tryNode(node, request)
@@ -959,22 +1036,26 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, preemptionDelay
 						zap.String("nodeID", requiredNode),
 						zap.String("allocationKey", request.GetAllocationKey()))
 					alloc.SetResult(AllocatedReserved)
-					return alloc
+					allocResult = alloc
+					return false
 				}
 				log.Logger().Debug("allocation on required node is completed",
 					zap.String("nodeID", node.NodeID),
 					zap.String("allocationKey", request.GetAllocationKey()),
 					zap.Stringer("AllocationResult", alloc.GetResult()))
-				return alloc
+				allocResult = alloc
+				return false
 			}
-			return newReservedAllocation(Reserved, node.NodeID, request)
+			allocResult = newReservedAllocation(Reserved, node.NodeID, request)
+			return false
 		}
 
 		iterator := nodeIterator()
 		if iterator != nil {
 			if alloc := sa.tryNodes(request, iterator); alloc != nil {
 				// have a candidate return it
-				return alloc
+				allocResult = alloc
+				return false
 			}
 
 			// no nodes qualify, attempt preemption
@@ -984,14 +1065,17 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, preemptionDelay
 				if fullIterator != nil {
 					if alloc, ok := sa.tryPreemption(headRoom, preemptionDelay, request, fullIterator, true); ok {
 						// preemption occurred, and possibly reservation
-						return alloc
+						allocResult = alloc
+						return false
 					}
 				}
 			}
 		}
-	}
-	// no requests fit, skip to next app
-	return nil
+
+		return true
+	})
+
+	return allocResult
 }
 
 func (sa *Application) cancelReservations(reservations []*reservation) bool {

@@ -66,10 +66,10 @@ var QueueNameRegExp = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
 
 // User and group name check: systems allow different things POSIX is the base but we need to be lenient and allow more.
 // allow upper and lower case, add the @ and . (dot) and officially no length.
-var UserRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9_.@-]*[$]?$`)
+var UserRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9:_.@-]*[$]?$`)
 
 // Groups should have a slightly more restrictive regexp (no @ . or $ at the end)
-var GroupRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9_-]*$`)
+var GroupRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9:_.-]*$`)
 
 // all characters that make a name different from a regexp
 var SpecialRegExp = regexp.MustCompile(`[\^$*+?()\[{}|]`)
@@ -284,21 +284,23 @@ func checkPlacementFilter(filter Filter) error {
 	// anything that does not parse in a list of users is ignored (like ACL list)
 	if len(filter.Users) == 1 {
 		// for a length of 1 we could either have regexp or username
-		isUser := UserRegExp.MatchString(filter.Users[0])
+		user := filter.Users[0]
+		isUser := UserRegExp.MatchString(user)
 		// if it is not a user name it must be a regexp
 		// two step check: first compile if that fails it is
 		if !isUser {
-			if _, err := regexp.Compile(filter.Users[0]); err != nil || !SpecialRegExp.MatchString(filter.Users[0]) {
+			if _, err := regexp.Compile(user); err != nil || !SpecialRegExp.MatchString(user) {
 				return fmt.Errorf("invalid rule filter user list is not a proper list or regexp: %v", filter.Users)
 			}
 		}
 	}
 	if len(filter.Groups) == 1 {
 		// for a length of 1 we could either have regexp or groupname
-		isGroup := GroupRegExp.MatchString(filter.Groups[0])
+		group := filter.Groups[0]
+		isGroup := GroupRegExp.MatchString(group)
 		// if it is not a group name it must be a regexp
 		if !isGroup {
-			if _, err := regexp.Compile(filter.Groups[0]); err != nil || !SpecialRegExp.MatchString(filter.Groups[0]) {
+			if _, err := regexp.Compile(group); err != nil || !SpecialRegExp.MatchString(group) {
 				return fmt.Errorf("invalid rule filter group list is not a proper list or regexp: %v", filter.Groups)
 			}
 		}

@@ -19,7 +19,6 @@
 package metrics
 
 import (
-	"log"
 	"sync"
 	"time"
 )
@@ -33,8 +32,6 @@ const (
 	EventSubsystem = "event"
 	// MetricNameInvalidByteReplacement byte used to replace invalid bytes in prometheus metric names
 	MetricNameInvalidByteReplacement = '_'
-	// AppSummary log file name, to be collected from a config file
-	AppSummaryHeader = "YK_APP_SUMMARY: "
 )
 
 var once sync.Once
@@ -169,10 +166,6 @@ type CoreEventMetrics interface {
 	Reset()
 }
 
-func (m *Metrics) LogAppSummary(appSummary string) {
-	log.Println(AppSummaryHeader + appSummary)
-}
-
 func init() {
 	once.Do(func() {
 		m = &Metrics{
@@ -217,10 +210,6 @@ func GetEventMetrics() CoreEventMetrics {
 
 func GetRuntimeMetrics() GoRuntimeMetrics {
 	return m.runtime
-}
-
-func GetMetrics() *Metrics {
-	return m
 }
 
 // Format metric name based on the definition of metric name in prometheus, as per

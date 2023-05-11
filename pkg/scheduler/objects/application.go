@@ -22,7 +22,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -86,7 +85,7 @@ type Application struct {
 	tags                 map[string]string           // application tags used in scheduling
 	allocatedResource    *resources.Resource         // total allocated resources
 
-	usedResourceTracker  *resources.UsedResourceTracker // resource usage tracker of the application
+	usedResource         *resources.UsedResource     // keep track of resource usage of the application
 
 	maxAllocatedResource *resources.Resource         // max allocated resources
 	allocatedPlaceholder *resources.Resource         // total allocated placeholder resources
@@ -121,22 +120,20 @@ type ApplicationSummary struct {
 	Queue string
 	State string
 	RmID string
-	ResourceUsage string
+	ResourceUsage* resources.UsedResource
 }
 
-func (as *ApplicationSummary) GetReport() string {
-	res := "{"
-	res += "\"appId\":\"" + as.ApplicationID + "\","
-	res += "\"submissionTime\":\"" + strconv.FormatInt(as.SubmissionTime.UnixMilli(), 10) + "\","
-	res += "\"startTime\":\"" + strconv.FormatInt(as.StartTime.UnixMilli(), 10) + "\","
-	res += "\"finishTime\":\"" + strconv.FormatInt(as.FinishTime.UnixMilli(), 10) + "\","
-	res += "\"user\":\"" + as.User + "\","
-	res += "\"queue\":\"" + as.Queue + "\","
-	res += "\"state\":\"" + as.State + "\","
-	res += "\"rmID\":\"" + as.RmID + "\","
-	res += "\"resourceUsage\":" + as.ResourceUsage
-	res += "}"
-	return res
+func (as *ApplicationSummary) DoLogging() {
+	log.Logger().Info("YK_APP_SUMMARY:",
+		zap.String("appID", as.ApplicationID),
+		zap.Int64("submissionTime", as.SubmissionTime.UnixMilli()),
+		zap.Int64("startTime", as.StartTime.UnixMilli()),
+		zap.Int64("finishTime", as.FinishTime.UnixMilli()),
+		zap.String("user", as.User),
+		zap.String("queue", as.Queue),
+		zap.String("state", as.State),
+		zap.String("rmID", as.RmID),
+		zap.Any("resourceUsage", as.ResourceUsage.UsedResourceMap))
 }
 
 func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {
@@ -151,7 +148,7 @@ func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {
 		Queue: sa.queuePath,
 		State: sa.stateMachine.Current(),
 		RmID: rmID,
-		ResourceUsage: sa.usedResourceTracker.GetResourceUsageSummary(),
+		ResourceUsage: sa.usedResource.Clone(),
 	}
 	return appSummary
 }
@@ -165,7 +162,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		tags:                 siApp.Tags,
 		pending:              resources.NewResource(),
 		allocatedResource:    resources.NewResource(),
-		usedResourceTracker:  resources.NewUsedResourceTracker(),
+		usedResource:         resources.NewUsedResource(),
 		maxAllocatedResource: resources.NewResource(),
 		allocatedPlaceholder: resources.NewResource(),
 		requests:             make(map[string]*AllocationAsk),
@@ -1693,10 +1690,10 @@ func (sa *Application) decUserResourceUsage(resource *resources.Resource, remove
 }
 
 // When the resource allocated with this allocation is to be removed,
-// have the usedResourceTracker to aggregate the resource used by this allocation
+// have the usedResource to aggregate the resource used by this allocation
 func (sa *Application) updateUsedResource(info *Allocation) {
-	sa.usedResourceTracker.AggregateUsedResource(info.GetInstanceType(),
-		info.GetAllocatedResource(), info.GetCreateTime())
+	sa.usedResource.AggregateUsedResource(info.GetInstanceType(),
+		info.GetAllocatedResource(), info.GetBindTime())
 }
 
 func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
@@ -1725,6 +1722,7 @@ func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
 	alloc.SetPlaceholderUsed(true)
 	alloc.SetPlaceholderCreateTime(ph.GetCreateTime())
 	alloc.SetCreateTime(time.Now())
+	alloc.SetBindTime(time.Now())
 	sa.addAllocationInternal(alloc)
 	// order is important: clean up the allocation after adding it to the app
 	// we need the original Replaced allocation result.
@@ -2022,13 +2020,14 @@ func (sa *Application) cleanupAsks() {
 	sa.sortedRequests = nil
 }
 
-func (sa *Application) CleanupUsedResourceTracker() {
-	sa.usedResourceTracker = nil
+func (sa *Application) CleanupUsedResource() {
+	sa.usedResource = nil
 }
 
-func (sa *Application) GetAppSummary(rmID string) string {
+func (sa *Application) LogAppSummary(rmID string) {
 	appSummary := sa.GetApplicationSummary(rmID)
-	return appSummary.GetReport()
+	appSummary.DoLogging()
+	appSummary.ResourceUsage = nil
 }
 
 // test only

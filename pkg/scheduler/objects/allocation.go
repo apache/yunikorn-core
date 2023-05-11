@@ -66,6 +66,7 @@ type Allocation struct {
 	// Mutable fields which need protection
 	placeholderUsed       bool
 	createTime            time.Time // the time this allocation was created
+	bindTime              time.Time // the time this allocation was bound to a node
 	placeholderCreateTime time.Time
 	released              bool
 	reservedNodeID        string
@@ -88,6 +89,7 @@ func NewAllocation(uuid, nodeID string, instType string, ask *AllocationAsk) *Al
 		allocationKey:     ask.GetAllocationKey(),
 		applicationID:     ask.GetApplicationID(),
 		createTime:        createTime,
+		bindTime:          time.Now(),
 		nodeID:            nodeID,
 		instType:          instType,
 		partitionName:     common.GetPartitionNameWithoutClusterID(ask.GetPartitionName()),
@@ -103,6 +105,7 @@ func NewAllocation(uuid, nodeID string, instType string, ask *AllocationAsk) *Al
 
 func newReservedAllocation(result AllocationResult, nodeID string, instType string, ask *AllocationAsk) *Allocation {
 	alloc := NewAllocation("", nodeID, instType, ask)
+	alloc.SetBindTime(time.Time{})
 	alloc.SetResult(result)
 	return alloc
 }
@@ -216,6 +219,19 @@ func (a *Allocation) SetCreateTime(createTime time.Time) {
 	a.createTime = createTime
 }
 
+// GetBindTime returns the time this allocation was created
+func (a *Allocation) GetBindTime() time.Time {
+	a.RLock()
+	defer a.RUnlock()
+	return a.bindTime
+}
+
+func (a *Allocation) SetBindTime(bindTime time.Time) {
+	a.Lock()
+	defer a.Unlock()
+	a.bindTime = bindTime
+}
+
 // IsPlaceholderUsed returns whether this alloc is replacing a placeholder
 func (a *Allocation) IsPlaceholderUsed() bool {
 	a.RLock()
@@ -252,6 +268,11 @@ func (a *Allocation) IsPlaceholder() bool {
 // GetNodeID gets the node this allocation is assigned to
 func (a *Allocation) GetNodeID() string {
 	return a.nodeID
+}
+
+// GetInstanceType return the type of the instance used by this allocation
+func (a *Allocation) GetInstanceType() string {
+	return a.instType
 }
 
 // GetUUID returns the uuid for this allocation
@@ -371,11 +392,6 @@ func (a *Allocation) IsPreempted() bool {
 	a.RLock()
 	defer a.RUnlock()
 	return a.preempted
-}
-
-// Return the type of the instance used by this allocation
-func (a *Allocation) GetInstanceType() string {
-	return a.instType
 }
 
 // CloneAllocationTags clones a tag map for safe copying

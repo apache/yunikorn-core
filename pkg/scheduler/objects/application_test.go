@@ -19,10 +19,7 @@
 package objects
 
 import (
-	"encoding/json"
 	"fmt"
-	"github.com/apache/yunikorn-core/pkg/log"
-	"go.uber.org/zap"
 	"math"
 	"strconv"
 	"testing"
@@ -1064,29 +1061,10 @@ func TestCompleted(t *testing.T) {
 	assert.Equal(t, log[3].ApplicationState, Expired.String())
 }
 
-func assertResourceUsage(t *testing.T, appSummary string, memorySeconds int64, vcoresSecconds int64) {
-	var jsonMap map[string]interface{}
-	var resource interface{}
-
-	if err := json.Unmarshal([]byte(appSummary), &jsonMap); err != nil {
-		assert.NilError(t, err, "Application did not return correct appSummary")
-	}
-
-	resource = jsonMap["resourceUsage"]
-	resourceUsageMap, ok1 := resource.(map[string]interface{})
-	assert.Assert(t, ok1)
-
-	itypeResource, ok2 := resourceUsageMap["itype-1"]
-	if !ok2 {
-		assert.Assert(t, memorySeconds == -1 || vcoresSecconds == -1, "no resource usage")
-		return
-	}
-
-	detailedResource, ok3 := itypeResource.(map[string]interface{})
-	assert.Assert(t, ok3)
-
-	assert.Equal(t, float64(memorySeconds), detailedResource["memorySeconds"].(float64))
-	assert.Equal(t, float64(vcoresSecconds), detailedResource["vcoresSeconds"].(float64))
+func assertResourceUsage(t *testing.T, appSummary *ApplicationSummary, memorySeconds int64, vcoresSecconds int64) {
+	detailedResource := appSummary.ResourceUsage.UsedResourceMap["itype-1"]
+	assert.Equal(t, memorySeconds, detailedResource["memory"])
+	assert.Equal(t, vcoresSecconds, detailedResource["vcores"])
 }
 
 func TestResourceUsageAggregation(t *testing.T) {
@@ -1117,10 +1095,9 @@ func TestResourceUsageAggregation(t *testing.T) {
 
 	time.Sleep(3 * time.Second)
 
-	appSummary := app.GetAppSummary("default")
-	log.Logger().Info("Application Resource Usage1",
-		zap.String("appSummary", appSummary))
-	assertResourceUsage(t, appSummary, -1, -1)
+	appSummary := app.GetApplicationSummary("default")
+	appSummary.DoLogging()
+	assertResourceUsage(t, appSummary, 0, 0)
 
 	// add more allocations to test the removals
 	alloc = newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
@@ -1135,9 +1112,8 @@ func TestResourceUsageAggregation(t *testing.T) {
 	}
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 1))
 
-	appSummary = app.GetAppSummary("default")
-	log.Logger().Info("Application Resource Usage2",
-		zap.String("appSummary", appSummary))
+	appSummary = app.GetApplicationSummary("default")
+	appSummary.DoLogging()
 	assertResourceUsage(t, appSummary, 300, 30)
 
 	alloc = newAllocation(appID1, "uuid-3", nodeID1, "root.a", res)
@@ -1148,9 +1124,8 @@ func TestResourceUsageAggregation(t *testing.T) {
 
 	time.Sleep(3 * time.Second)
 
-	appSummary = app.GetAppSummary("default")
-	log.Logger().Info("Application Resource Usage3",
-		zap.String("appSummary", appSummary))
+	appSummary = app.GetApplicationSummary("default")
+	appSummary.DoLogging()
 	assertResourceUsage(t, appSummary, 300, 30)
 
 	// try to remove a non existing alloc
@@ -1171,9 +1146,8 @@ func TestResourceUsageAggregation(t *testing.T) {
 	err = app.HandleApplicationEvent(CompleteApplication)
 	assert.NilError(t, err, "no error expected accepted to completing (completed test)")
 
-	appSummary = app.GetAppSummary("default")
-	log.Logger().Info("Application Resource Usage4",
-		zap.String("appSummary", appSummary))
+	appSummary = app.GetApplicationSummary("default")
+	appSummary.DoLogging()
 	assertResourceUsage(t, appSummary, 2100, 210)
 }
 

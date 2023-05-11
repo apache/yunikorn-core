@@ -47,7 +47,7 @@ func (q Quantity) string() string {
 }
 
 // Util struct to keep track of application resource usage
-type UsedResourceTracker struct {
+type UsedResource struct {
 	// Two level map for aggregated resource usage
 	// With instance type being the top level key, the mapped value is a map:
 	//   resource type (CPU, memory etc) -> the aggregated used time (in seconds) of the resource type
@@ -57,39 +57,46 @@ type UsedResourceTracker struct {
 	sync.RWMutex
 }
 
+func (ur *UsedResource) Clone() *UsedResource {
+	if ur == nil {
+		return nil
+	}
+	ret := NewUsedResource()
+	ur.RLock()
+	defer ur.RUnlock()
+	for k, v := range ur.UsedResourceMap {
+		sourceEntry := map[string]int64(v)
+		destEntry := make(map[string]int64)
+		for key, element := range sourceEntry {
+			destEntry[key] = element
+		}
+		ret.UsedResourceMap[k] = destEntry
+	}
+	return ret
+}
+
 // Aggregate the resource usage to UsedResourceMap[instType]
 // The time the given resource used is the delta between the resource createTime and currentTime
-func (urt *UsedResourceTracker) AggregateUsedResource(instType string,
-	resource *Resource, createTime time.Time) {
-	urt.Lock()
-	defer urt.Unlock()
+func (ur *UsedResource) AggregateUsedResource(instType string,
+	resource *Resource, bindTime time.Time) {
+	ur.Lock()
+	defer ur.Unlock()
 
 	releaseTime := time.Now()
-	timeDiff := int64(releaseTime.Sub(createTime).Seconds())
-	aggregatedResourceTime, ok := urt.UsedResourceMap[instType]
+	timeDiff := int64(releaseTime.Sub(bindTime).Seconds())
+	aggregatedResourceTime, ok := ur.UsedResourceMap[instType]
 	if !ok {
 		aggregatedResourceTime = map[string]int64{}
 	}
 	for key, element := range resource.Resources {
-		resourceSecondsKey := key + "Seconds"
-		curUsage, ok := aggregatedResourceTime[resourceSecondsKey]
+		curUsage, ok := aggregatedResourceTime[key]
 		if !ok {
 			curUsage = 0
 		}
 		curUsage += int64(element) * timeDiff  // resource size times timeDiff
-		aggregatedResourceTime[resourceSecondsKey] = curUsage
+		aggregatedResourceTime[key] = curUsage
 	}
-	urt.UsedResourceMap[instType] = aggregatedResourceTime
-}
-
-func (urt *UsedResourceTracker) GetResourceUsageSummary() string {
-	urt.Lock()
-	defer urt.Unlock()
-	urm, err := json.Marshal(urt.UsedResourceMap)
-	if err != nil {
-		return err.Error()
-	}
-	return string(urm)
+	ur.UsedResourceMap[instType] = aggregatedResourceTime
 }
 
 // Never update value of Zero
@@ -151,8 +158,8 @@ func NewResourceFromConf(configMap map[string]string) (*Resource, error) {
 	return res, nil
 }
 
-func NewUsedResourceTracker() *UsedResourceTracker {
-	return &UsedResourceTracker{UsedResourceMap: make(map[string]map[string]int64)}
+func NewUsedResource() *UsedResource {
+	return &UsedResource{UsedResourceMap: make(map[string]map[string]int64)}
 }
 
 func (r *Resource) String() string {

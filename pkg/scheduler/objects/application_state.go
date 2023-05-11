@@ -173,7 +173,7 @@ func NewAppState() *fsm.FSM {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsRejected()
 				app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
 				app.finishedTime = time.Now()
-				app.CleanupUsedResourceTracker()
+				app.CleanupUsedResource()
 				// No rejected message when use app.HandleApplicationEvent(RejectApplication)
 				if len(event.Args) == 2 {
 					app.rejectedMessage = event.Args[1].(string) //nolint:errcheck

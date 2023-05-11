@@ -317,7 +317,9 @@ func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation, delta *resou
 	replace.SetPlaceholderUsed(true)
 	sn.allocations[replace.GetUUID()] = replace
 	before := sn.allocatedResource.Clone()
+	// The allocatedResource and availableResource should be updated in the same way
 	sn.allocatedResource.AddTo(delta)
+	sn.availableResource.SubFrom(delta)
 	if !resources.FitIn(before, sn.allocatedResource) {
 		log.Logger().Warn("unexpected increase in node usage after placeholder replacement",
 			zap.String("placeholder uuid", uuid),

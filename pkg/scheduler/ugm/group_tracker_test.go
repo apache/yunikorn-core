@@ -161,6 +161,50 @@ func TestGTDecreaseTrackedResource(t *testing.T) {
 	assert.Equal(t, removeQT, true, "wrong remove queue tracker value")
 }
 
+func TestGTSetMaxLimits(t *testing.T) {
+	// Queue setup:
+	// root->parent->child1
+	user := security.UserGroup{User: "test", Groups: []string{"test"}}
+	groupTracker := newGroupTracker(user.User)
+	usage1, err := resources.NewResourceFromConf(map[string]string{"mem": "10M", "vcore": "10"})
+	if err != nil {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
+	}
+	err = groupTracker.increaseTrackedResource(queuePath1, TestApp1, usage1)
+	if err != nil {
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
+	}
+
+	setMaxAppsErr := groupTracker.setMaxApplications(1, queuePath1)
+	assert.NilError(t, setMaxAppsErr)
+
+	setMaxResourcesErr := groupTracker.setMaxResources(usage1, queuePath1)
+	assert.NilError(t, setMaxResourcesErr)
+
+	setParentMaxAppsErr := groupTracker.setMaxApplications(1, "root.parent")
+	assert.NilError(t, setParentMaxAppsErr)
+
+	setParentMaxResourcesErr := groupTracker.setMaxResources(usage1, "root.parent")
+	assert.NilError(t, setParentMaxResourcesErr)
+
+	err = groupTracker.increaseTrackedResource(queuePath1, TestApp2, usage1)
+	if err != nil {
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
+	}
+
+	setMaxAppsErr1 := groupTracker.setMaxApplications(1, queuePath1)
+	assert.Error(t, setMaxAppsErr1, "current running applications is greater than config max applications for "+queuePath1)
+
+	setMaxResourcesErr1 := groupTracker.setMaxResources(usage1, queuePath1)
+	assert.Error(t, setMaxResourcesErr1, "current resource usage is greater than config max resource for "+queuePath1)
+
+	setParentMaxAppsErr1 := groupTracker.setMaxApplications(1, "root.parent")
+	assert.Error(t, setParentMaxAppsErr1, "current running applications is greater than config max applications for root.parent")
+
+	setParentMaxResourcesErr1 := groupTracker.setMaxResources(usage1, "root.parent")
+	assert.Error(t, setParentMaxResourcesErr1, "current resource usage is greater than config max resource for root.parent")
+}
+
 func getGroupResource(gt *GroupTracker) map[string]*resources.Resource {
 	resources := make(map[string]*resources.Resource)
 	usage := gt.GetGroupResourceUsageDAOInfo()

@@ -45,7 +45,7 @@ func TestIncreaseTrackedResource(t *testing.T) {
 	// root->parent->child2
 	// root->parent->child12 (similar name like above leaf queue, but it is being treated differently as similar names are allowed)
 	user := security.UserGroup{User: "test", Groups: []string{"test"}}
-	userTracker := newUserTracker(user)
+	userTracker := newUserTracker(user.User)
 	usage1, err := resources.NewResourceFromConf(map[string]string{"mem": "10M", "vcore": "10"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
@@ -105,7 +105,7 @@ func TestDecreaseTrackedResource(t *testing.T) {
 	// root->parent->child1
 	// root->parent->child2
 	user := security.UserGroup{User: "test", Groups: []string{"test"}}
-	userTracker := newUserTracker(user)
+	userTracker := newUserTracker(user.User)
 
 	usage1, err := resources.NewResourceFromConf(map[string]string{"mem": "70M", "vcore": "70"})
 	if err != nil {
@@ -180,6 +180,52 @@ func TestDecreaseTrackedResource(t *testing.T) {
 	}
 	assert.Equal(t, 0, len(userTracker.getTrackedApplications()))
 	assert.Equal(t, removeQT, true, "wrong remove queue tracker value")
+}
+
+func TestSetMaxLimits(t *testing.T) {
+	// Queue setup:
+	// root->parent->child1
+	user := security.UserGroup{User: "test", Groups: []string{"test"}}
+	userTracker := newUserTracker(user.User)
+	usage1, err := resources.NewResourceFromConf(map[string]string{"mem": "10M", "vcore": "10"})
+	if err != nil {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
+	}
+	err = userTracker.increaseTrackedResource(queuePath1, TestApp1, usage1)
+	if err != nil {
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
+	}
+	groupTracker := newGroupTracker(user.User)
+	userTracker.setGroupForApp(TestApp1, groupTracker)
+
+	setMaxAppsErr := userTracker.setMaxApplications(1, queuePath1)
+	assert.NilError(t, setMaxAppsErr)
+
+	setMaxResourcesErr := userTracker.setMaxResources(usage1, queuePath1)
+	assert.NilError(t, setMaxResourcesErr)
+
+	setParentMaxAppsErr := userTracker.setMaxApplications(1, "root.parent")
+	assert.NilError(t, setParentMaxAppsErr)
+
+	setParentMaxResourcesErr := userTracker.setMaxResources(usage1, "root.parent")
+	assert.NilError(t, setParentMaxResourcesErr)
+
+	err = userTracker.increaseTrackedResource(queuePath1, TestApp2, usage1)
+	if err != nil {
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
+	}
+
+	setMaxAppsErr1 := userTracker.setMaxApplications(1, queuePath1)
+	assert.Error(t, setMaxAppsErr1, "current running applications is greater than config max applications for "+queuePath1)
+
+	setMaxResourcesErr1 := userTracker.setMaxResources(usage1, queuePath1)
+	assert.Error(t, setMaxResourcesErr1, "current resource usage is greater than config max resource for "+queuePath1)
+
+	setParentMaxAppsErr1 := userTracker.setMaxApplications(1, "root.parent")
+	assert.Error(t, setParentMaxAppsErr1, "current running applications is greater than config max applications for root.parent")
+
+	setParentMaxResourcesErr1 := userTracker.setMaxResources(usage1, "root.parent")
+	assert.Error(t, setParentMaxResourcesErr1, "current resource usage is greater than config max resource for root.parent")
 }
 
 func getUserResource(ut *UserTracker) map[string]*resources.Resource {

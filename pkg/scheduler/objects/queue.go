@@ -1482,16 +1482,14 @@ func (sq *Queue) updateMaxResourceMetrics() {
 
 // updateAllocatedAndPendingResourceMetrics updates allocated and pending resource metrics if this is a leaf queue.
 func (sq *Queue) updateAllocatedAndPendingResourceMetrics() {
-	if sq.isLeaf {
-		for k, v := range sq.allocatedResource.Resources {
-			metrics.GetQueueMetrics(sq.QueuePath).SetQueueAllocatedResourceMetrics(k, float64(v))
-		}
-		for k, v := range sq.pending.Resources {
-			metrics.GetQueueMetrics(sq.QueuePath).SetQueuePendingResourceMetrics(k, float64(v))
-		}
-		for k, v := range sq.preemptingResource.Resources {
-			metrics.GetQueueMetrics(sq.QueuePath).SetQueuePreemptingResourceMetrics(k, float64(v))
-		}
+	for k, v := range sq.allocatedResource.Resources {
+		metrics.GetQueueMetrics(sq.QueuePath).SetQueueAllocatedResourceMetrics(k, float64(v))
+	}
+	for k, v := range sq.pending.Resources {
+		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePendingResourceMetrics(k, float64(v))
+	}
+	for k, v := range sq.preemptingResource.Resources {
+		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePreemptingResourceMetrics(k, float64(v))
 	}
 }
 

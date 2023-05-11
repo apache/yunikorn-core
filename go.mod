@@ -25,7 +25,7 @@ require (
 	github.com/apache/yunikorn-scheduler-interface v0.0.0-20230328133840-b29b20a234e0
 	github.com/google/btree v1.1.2
 	github.com/google/uuid v1.2.0
-	github.com/gorilla/mux v1.7.3
+	github.com/julienschmidt/httprouter v1.3.0
 	github.com/looplab/fsm v1.0.1
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/prometheus/client_golang v1.13.1

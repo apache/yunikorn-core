@@ -20,12 +20,12 @@ package webservice
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"sync"
 	"time"
 
-	"github.com/gorilla/mux"
+	"github.com/julienschmidt/httprouter"
+
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/log"
@@ -41,26 +41,25 @@ type WebService struct {
 	httpServer *http.Server
 }
 
-func newRouter() *mux.Router {
-	router := mux.NewRouter().StrictSlash(true)
+func newRouter() *httprouter.Router {
+	router := httprouter.New()
 	for _, webRoute := range webRoutes {
 		handler := loggingHandler(webRoute.HandlerFunc, webRoute.Name)
-		router.
-			Methods(webRoute.Method).
-			Path(webRoute.Pattern).
-			Name(webRoute.Name).
-			Handler(handler)
+		router.Handler(webRoute.Method, webRoute.Pattern, handler)
 	}
 	return router
 }
 
-func loggingHandler(inner http.Handler, name string) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func loggingHandler(inner http.Handler, name string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		inner.ServeHTTP(w, r)
-		log.Logger().Debug(fmt.Sprintf("%s\t%s\t%s\t%s",
-			r.Method, r.RequestURI, name, time.Since(start)))
-	})
+		log.Logger().Debug("Web router call details",
+			zap.String("name", name),
+			zap.String("method", r.Method),
+			zap.String("uri", r.RequestURI),
+			zap.Duration("duration", time.Since(start)))
+	}
 }
 
 // TODO we need the port to be configurable

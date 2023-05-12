@@ -78,14 +78,14 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 	return nil
 }
 
-func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID string, usage *resources.Resource, removeApp bool) error {
+func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID string, usage *resources.Resource, removeApp bool) (bool, error) {
 	log.Logger().Debug("Decreasing resource usage",
 		zap.String("queue path", queuePath),
 		zap.String("application", applicationID),
 		zap.Stringer("resource", usage),
 		zap.Bool("removeApp", removeApp))
 	if queuePath == "" || usage == nil {
-		return fmt.Errorf("mandatory parameters are missing. queuepath: %s, application id: %s, resource usage: %s",
+		return false, fmt.Errorf("mandatory parameters are missing. queuepath: %s, application id: %s, resource usage: %s",
 			queuePath, applicationID, usage.String())
 	}
 	qt.resourceUsage.SubFrom(usage)
@@ -96,17 +96,23 @@ func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID 
 	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
 	if childQueuePath != "" {
 		if qt.childQueueTrackers[immediateChildQueueName] != nil {
-			err := qt.childQueueTrackers[immediateChildQueueName].decreaseTrackedResource(childQueuePath, applicationID, usage, removeApp)
+			removeQT, err := qt.childQueueTrackers[immediateChildQueueName].decreaseTrackedResource(childQueuePath, applicationID, usage, removeApp)
 			if err != nil {
-				return err
+				return false, err
+			}
+			if removeQT {
+				delete(qt.childQueueTrackers, immediateChildQueueName)
 			}
 		} else {
 			log.Logger().Error("Child queueTracker tracker must be available in child queues map",
 				zap.String("child queueTracker name", immediateChildQueueName))
-			return fmt.Errorf("child queueTracker tracker for %s is missing in child queues map", immediateChildQueueName)
+			return false, fmt.Errorf("child queueTracker tracker for %s is missing in child queues map", immediateChildQueueName)
 		}
 	}
-	return nil
+
+	// Determine if the queue tracker should be removed
+	removeQT := len(qt.childQueueTrackers) == 0 && len(qt.runningApplications) == 0 && resources.IsZero(qt.resourceUsage)
+	return removeQT, nil
 }
 
 func (qt *QueueTracker) getResourceUsageDAOInfo(parentQueuePath string) *dao.ResourceUsageDAOInfo {

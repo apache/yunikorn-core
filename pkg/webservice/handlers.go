@@ -522,6 +522,26 @@ func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func getNode(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
+	partition := vars.ByName("partition")
+	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
+	if partitionContext != nil {
+		node := vars.ByName("node")
+		nodeDao := getNodeDAO(partitionContext.GetNode(node))
+		if err := json.NewEncoder(w).Encode(nodeDao); err != nil {
+			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		}
+	} else {
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusBadRequest)
+	}
+}
+
 func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 	vars := httprouter.ParamsFromContext(r.Context())
 	if vars == nil {

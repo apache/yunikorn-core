@@ -21,9 +21,10 @@ package ugm
 import (
 	"testing"
 
+	"gotest.tools/v3/assert"
+
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
-	"gotest.tools/v3/assert"
 )
 
 func internalGetResource(usage *dao.ResourceUsageDAOInfo, resources map[string]*resources.Resource) map[string]*resources.Resource {

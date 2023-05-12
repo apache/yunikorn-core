@@ -1480,7 +1480,7 @@ func (sq *Queue) updateMaxResourceMetrics() {
 	}
 }
 
-// updateAllocatedAndPendingResourceMetrics updates allocated and pending resource metrics if this is a leaf queue.
+// updateAllocatedAndPendingResourceMetrics updates allocated and pending resource metrics for all queue types.
 func (sq *Queue) updateAllocatedAndPendingResourceMetrics() {
 	for k, v := range sq.allocatedResource.Resources {
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueueAllocatedResourceMetrics(k, float64(v))

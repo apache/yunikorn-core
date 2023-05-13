@@ -137,6 +137,8 @@ func (as *ApplicationSummary) DoLogging() {
 }
 
 func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {
+	state := sa.stateMachine.Current()
+	ru := sa.usedResource.Clone()
 	sa.RLock()
 	defer sa.RUnlock()
 	appSummary := &ApplicationSummary{
@@ -146,9 +148,9 @@ func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {
 		FinishTime: sa.finishedTime,
 		User: sa.user.User,
 		Queue: sa.queuePath,
-		State: sa.stateMachine.Current(),
+		State: state,
 		RmID: rmID,
-		ResourceUsage: sa.usedResource.Clone(),
+		ResourceUsage: ru,
 	}
 	return appSummary
 }

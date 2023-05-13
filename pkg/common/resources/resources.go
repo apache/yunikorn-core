@@ -65,12 +65,11 @@ func (ur *UsedResource) Clone() *UsedResource {
 	ur.RLock()
 	defer ur.RUnlock()
 	for k, v := range ur.UsedResourceMap {
-		sourceEntry := map[string]int64(v)
-		destEntry := make(map[string]int64)
-		for key, element := range sourceEntry {
-			destEntry[key] = element
+		dest := make(map[string]int64)
+		for key, element := range v {
+			dest[key] = element
 		}
-		ret.UsedResourceMap[k] = destEntry
+		ret.UsedResourceMap[k] = dest
 	}
 	return ret
 }

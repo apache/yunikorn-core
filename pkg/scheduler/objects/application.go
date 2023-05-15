@@ -619,6 +619,8 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 		zap.Bool("placeholder", ask.IsPlaceholder()),
 		zap.Stringer("pendingDelta", delta))
 
+	sa.sortRequests(false)
+
 	return nil
 }
 
@@ -893,10 +895,14 @@ func (sa *Application) canReplace(request *AllocationAsk) bool {
 func (sa *Application) tryAllocate(headRoom *resources.Resource, preemptionDelay time.Duration, preemptAttemptsRemaining *int, nodeIterator func() NodeIterator, fullNodeIterator func() NodeIterator, getNodeFn func(string) *Node) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
-	// make sure the request are sorted
-	sa.sortRequests(false)
+	if sa.sortedRequests == nil {
+		return nil
+	}
 	// get all the requests from the app sorted in order
 	for _, request := range sa.sortedRequests {
+		if request.GetPendingAskRepeat() == 0 {
+			continue
+		}
 		// check if there is a replacement possible
 		if sa.canReplace(request) {
 			continue

@@ -21,6 +21,7 @@ package objects
 import (
 	"fmt"
 	"math"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -1878,4 +1879,243 @@ func (sa *Application) handleApplicationEventWithInfoLocking(event applicationEv
 	sa.Lock()
 	defer sa.Unlock()
 	return sa.HandleApplicationEventWithInfo(event, info)
+}
+
+var removeFreq = 10
+var removeBatch = 1
+
+func BenchmarkIterate_AlwaysSort(b *testing.B) {
+	app := &Application{}
+	requests := make(map[string]*AllocationAsk)
+	for i := int64(0); i < 10000; i++ {
+		key := "alloc-" + strconv.FormatInt(i, 10)
+		requests[key] = &AllocationAsk{
+			priority:         1,
+			allocationKey:    key,
+			createTime:       time.Unix(i, 0),
+			pendingAskRepeat: 1,
+		}
+	}
+	app.requests = requests
+	app.sortRequests(false)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if i%removeFreq == 0 {
+			j := removeBatch
+			for _, val := range app.requests {
+				if j == 0 {
+					break
+				}
+				if val.pendingAskRepeat == 0 {
+					continue
+				}
+				val.pendingAskRepeat = 0
+				j--
+			}
+		}
+
+		app.sortRequests(false)
+
+		for _, r := range app.sortedRequests {
+			runtime.KeepAlive(r)
+		}
+	}
+}
+
+func BenchmarkIterate(b *testing.B) {
+	app := &Application{}
+	requests := make(map[string]*AllocationAsk)
+	for i := int64(0); i < 10000; i++ {
+		key := "alloc-" + strconv.FormatInt(i, 10)
+		requests[key] = &AllocationAsk{
+			priority:         1,
+			allocationKey:    key,
+			createTime:       time.Unix(i, 0),
+			pendingAskRepeat: 1,
+		}
+	}
+	app.requests = requests
+	app.sortRequests(false)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if i%removeFreq == 0 {
+			j := removeBatch
+			for _, val := range app.requests {
+				if j == 0 {
+					break
+				}
+				if val.pendingAskRepeat == 0 {
+					continue
+				}
+				val.pendingAskRepeat = 0
+				j--
+			}
+
+			app.sortRequests(false)
+		}
+
+		for _, r := range app.sortedRequests {
+			runtime.KeepAlive(r)
+		}
+	}
+}
+
+func BenchmarkIterate_DontRemovePendingAskRepeat0(b *testing.B) {
+	app := &Application{}
+	requests := make(map[string]*AllocationAsk)
+	for i := int64(0); i < 10000; i++ {
+		key := "alloc-" + strconv.FormatInt(i, 10)
+		requests[key] = &AllocationAsk{
+			priority:         1,
+			allocationKey:    key,
+			createTime:       time.Unix(i, 0),
+			pendingAskRepeat: 1,
+		}
+	}
+	app.requests = requests
+	app.sortRequests(false)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if i%removeFreq == 0 {
+			j := removeBatch
+			for _, val := range app.requests {
+				if j == 0 {
+					break
+				}
+				if val.pendingAskRepeat == 0 {
+					continue
+				}
+				val.pendingAskRepeat = 0
+				j--
+			}
+		}
+
+		for _, r := range app.sortedRequests {
+			if r.GetPendingAskRepeat() == 0 {
+				continue
+			}
+			runtime.KeepAlive(r)
+		}
+	}
+}
+
+func BenchmarkBtree(b *testing.B) {
+	sr := newSortedRequests()
+	requests := make(map[string]*AllocationAsk)
+	for i := int64(0); i < 10000; i++ {
+		key := "alloc-" + strconv.FormatInt(i, 10)
+		requests[key] = &AllocationAsk{
+			priority:         1,
+			allocationKey:    key,
+			createTime:       time.Unix(i, 0),
+			pendingAskRepeat: 1,
+		}
+		sr.addAsk(requests[key])
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if i%removeFreq == 0 {
+			j := removeBatch
+			for _, ask := range requests {
+				if j == 0 {
+					break
+				}
+				if ask.pendingAskRepeat == 0 {
+					continue
+				}
+				sr.removeAsk(ask)
+				ask.pendingAskRepeat = 0
+				j--
+			}
+		}
+
+		sr.forEachAsk(func(ask *AllocationAsk) bool {
+			return true
+		})
+	}
+}
+
+func BenchmarkBtree_SmallItemCount(b *testing.B) {
+	sr := newSortedRequests()
+	requests := make(map[string]*AllocationAsk)
+	for i := int64(0); i < 10; i++ {
+		key := "alloc-" + strconv.FormatInt(i, 10)
+		requests[key] = &AllocationAsk{
+			priority:         1,
+			allocationKey:    key,
+			createTime:       time.Unix(i, 0),
+			pendingAskRepeat: 1,
+		}
+		sr.addAsk(requests[key])
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		sr.forEachAsk(func(ask *AllocationAsk) bool {
+			runtime.KeepAlive(ask)
+			return true
+		})
+	}
+}
+
+func BenchmarkIteration_DontRemovePendingAskRepeat0(b *testing.B) {
+	app := &Application{}
+	requests := make(map[string]*AllocationAsk)
+	for i := int64(0); i < 100000; i++ {
+		askRep := int32(0)
+		if i < 10 {
+			askRep = 1
+		}
+		key := "alloc-" + strconv.FormatInt(i, 10)
+		requests[key] = &AllocationAsk{
+			priority:         1,
+			allocationKey:    key,
+			createTime:       time.Unix(i, 0),
+			pendingAskRepeat: askRep,
+		}
+	}
+	app.requests = requests
+	app.sortRequests(false)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, r := range app.sortedRequests {
+			if r.GetPendingAskRepeat() == 0 {
+				continue
+			}
+			runtime.KeepAlive(r)
+		}
+	}
+}
+
+func BenchmarkIteration_AlwaysSort(b *testing.B) {
+	app := &Application{}
+	requests := make(map[string]*AllocationAsk)
+	for i := int64(0); i < 10000; i++ {
+		askRep := int32(0)
+		if i < 10 {
+			askRep = 1
+		}
+		key := "alloc-" + strconv.FormatInt(i, 10)
+		requests[key] = &AllocationAsk{
+			priority:         1,
+			allocationKey:    key,
+			createTime:       time.Unix(i, 0),
+			pendingAskRepeat: askRep,
+		}
+	}
+	app.requests = requests
+	app.sortRequests(false)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		app.sortRequests(false)
+		for _, r := range app.sortedRequests {
+			runtime.KeepAlive(r)
+		}
+	}
 }

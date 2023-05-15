@@ -20,6 +20,8 @@ package objects
 
 import (
 	"math/rand"
+
+	"github.com/google/btree"
 )
 
 // NodeIterator iterates over a list of nodes based on the defined policy
@@ -30,6 +32,8 @@ type NodeIterator interface {
 	Next() *Node
 	// reset the iterator to a clean state
 	Reset()
+
+	ForEachNode(func(*Node) bool)
 }
 
 // All iterators extend the base iterator
@@ -75,6 +79,42 @@ func NewDefaultNodeIterator(schedulerNodes []*Node) NodeIterator {
 	it.nodes = schedulerNodes
 	it.size = len(schedulerNodes)
 	return it
+}
+
+type treeIterator struct {
+	accept  func(*Node) bool
+	getTree func() *btree.BTree
+	tree    *btree.BTree
+}
+
+func (ti *treeIterator) Reset() {
+	ti.tree = ti.getTree()
+}
+
+func (ti *treeIterator) HasNext() bool {
+	panic("HasNext() has no implementation")
+}
+
+func (ti *treeIterator) Next() *Node {
+	panic("Next() has no implementation")
+}
+
+func (ti *treeIterator) ForEachNode(f func(*Node) bool) {
+	ti.tree.Ascend(func(item btree.Item) bool {
+		node := item.(nodeRef).node
+		if ti.accept(node) {
+			return f(node)
+		}
+
+		return true
+	})
+}
+
+func NewTreeIterator(accept func(*Node) bool, getTree func() *btree.BTree) *treeIterator {
+	return &treeIterator{
+		getTree: getTree,
+		accept:  accept,
+	}
 }
 
 // Random iterator, wraps the base iterator

@@ -132,8 +132,7 @@ func TestCheckPreemptionQueueGuarantees(t *testing.T) {
 
 func TestTryPreemption(t *testing.T) {
 	node := newNode("node1", map[string]resources.Quantity{"first": 10, "pods": 5})
-	nodes := []*Node{node}
-	iterator := func() NodeIterator { return NewDefaultNodeIterator(nodes) }
+	iterator := getTreeIteratorFunc(node)
 	rootQ, err := createRootQueue(map[string]string{"first": "20", "pods": "5"})
 	assert.NilError(t, err)
 	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20"}, map[string]string{"first": "10"})

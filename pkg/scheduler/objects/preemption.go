@@ -163,8 +163,7 @@ func (p *Preemptor) initWorkingState() {
 	}
 
 	// walk node iterator and track available resources per node
-	for p.iterator.HasNext() {
-		node := p.iterator.Next()
+	p.iterator.ForEachNode(func(node *Node) bool {
 		if !node.IsSchedulable() || (node.IsReserved() && !node.isReservedForApp(reservationKey(nil, p.application, p.ask))) {
 			// node is not available, remove any potential victims from consideration
 			delete(allocationsByNode, node.NodeID)
@@ -172,7 +171,8 @@ func (p *Preemptor) initWorkingState() {
 			// track allocated and available resources
 			nodeAvailableMap[node.NodeID] = node.GetAvailableResource()
 		}
-	}
+		return true
+	})
 
 	// sort the allocations on each node in the order we'd like to try them
 	sortVictimsForPreemption(allocationsByNode)

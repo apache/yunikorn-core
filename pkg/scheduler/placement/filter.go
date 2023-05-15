@@ -99,16 +99,17 @@ func newFilter(conf configs.Filter) Filter {
 	var err error
 	// create the user list or regexp
 	if len(conf.Users) == 1 {
+		user := conf.Users[0]
 		// check for regexp characters that cannot be in a user
-		if configs.SpecialRegExp.MatchString(conf.Users[0]) {
-			filter.userExp, err = regexp.Compile(conf.Users[0])
+		if configs.SpecialRegExp.MatchString(user) {
+			filter.userExp, err = regexp.Compile(user)
 			if err != nil {
 				log.Logger().Debug("Filter user expression does not compile", zap.Any("userFilter", conf.Users))
 			}
-		} else if configs.UserRegExp.MatchString(conf.Users[0]) {
+		} else if configs.UserRegExp.MatchString(user) {
 			// regexp not found consider this a user, sanity check the entry
 			// single entry just a user
-			filter.userList[conf.Users[0]] = true
+			filter.userList[user] = true
 		}
 		filter.empty = false
 	}
@@ -133,16 +134,17 @@ func newFilter(conf configs.Filter) Filter {
 
 	// create the group list or regexp
 	if len(conf.Groups) == 1 {
+		group := conf.Groups[0]
 		// check for regexp characters that cannot be in a group
-		if configs.SpecialRegExp.MatchString(conf.Groups[0]) {
-			filter.groupExp, err = regexp.Compile(conf.Groups[0])
+		if configs.SpecialRegExp.MatchString(group) {
+			filter.groupExp, err = regexp.Compile(group)
 			if err != nil {
 				log.Logger().Debug("Filter group expression does not compile", zap.Any("groupFilter", conf.Groups))
 			}
-		} else if configs.GroupRegExp.MatchString(conf.Groups[0]) {
+		} else if configs.GroupRegExp.MatchString(group) {
 			// regexp not found consider this a group, sanity check the entry
 			// single entry just a group
-			filter.groupList[conf.Groups[0]] = true
+			filter.groupList[group] = true
 		}
 		filter.empty = false
 	}

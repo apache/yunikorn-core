@@ -140,7 +140,7 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 	defer m.lock.Unlock()
 	userTracker := m.userTrackers[user.User]
 	if userTracker != nil {
-		err := userTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
+		removeQT, err := userTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
 		if err != nil {
 			log.Logger().Error("Problem in decreasing the user resource usage",
 				zap.String("user", user.User),
@@ -151,10 +151,8 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 				zap.String("err message", err.Error()))
 			return err
 		}
-		if removeApp {
-			if m.isUserRemovable(userTracker) {
-				delete(m.userTrackers, user.User)
-			}
+		if removeApp && removeQT {
+			delete(m.userTrackers, user.User)
 		}
 	} else {
 		log.Logger().Error("user tracker must be available in userTrackers map",
@@ -168,7 +166,7 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 	}
 	groupTracker := m.groupTrackers[group]
 	if groupTracker != nil {
-		err := groupTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
+		removeQT, err := groupTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
 		if err != nil {
 			log.Logger().Error("Problem in decreasing the group resource usage",
 				zap.String("user", user.User),
@@ -180,10 +178,8 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 				zap.String("err message", err.Error()))
 			return err
 		}
-		if removeApp {
-			if m.isGroupRemovable(groupTracker) {
-				delete(m.groupTrackers, group)
-			}
+		if removeApp && removeQT {
+			delete(m.groupTrackers, group)
 		}
 	} else {
 		log.Logger().Error("appGroupTrackers tracker must be available in groupTrackers map",

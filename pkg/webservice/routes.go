@@ -95,13 +95,13 @@ var webRoutes = routes{
 	route{
 		"Scheduler",
 		"GET",
-		"/ws/v1/partition/{partition}/queues",
+		"/ws/v1/partition/:partition/queues",
 		getPartitionQueues,
 	},
 	route{
 		"Scheduler",
 		"PUT",
-		"/ws/v1/loglevel/{level}",
+		"/ws/v1/loglevel/:level",
 		setLogLevel,
 	},
 	route{
@@ -113,43 +113,43 @@ var webRoutes = routes{
 	route{
 		"Scheduler",
 		"GET",
-		"/ws/v1/partition/{partition}/nodes",
+		"/ws/v1/partition/:partition/nodes",
 		getPartitionNodes,
 	},
 	route{
 		"Scheduler",
 		"GET",
-		"/ws/v1/partition/{partition}/queue/{queue}/applications",
+		"/ws/v1/partition/:partition/queue/:queue/applications",
 		getQueueApplications,
 	},
 	route{
 		"Scheduler",
 		"GET",
-		"/ws/v1/partition/{partition}/queue/{queue}/application/{application}",
+		"/ws/v1/partition/:partition/queue/:queue/application/:application",
 		getApplication,
 	},
 	route{
 		"Scheduler",
 		"GET",
-		"/ws/v1/partition/{partition}/usage/users",
+		"/ws/v1/partition/:partition/usage/users",
 		getUsersResourceUsage,
 	},
 	route{
 		"Scheduler",
 		"GET",
-		"/ws/v1/partition/{partition}/usage/user/{user}",
+		"/ws/v1/partition/:partition/usage/user/:user",
 		getUserResourceUsage,
 	},
 	route{
 		"Scheduler",
 		"GET",
-		"/ws/v1/partition/{partition}/usage/groups",
+		"/ws/v1/partition/:partition/usage/groups",
 		getGroupsResourceUsage,
 	},
 	route{
 		"Scheduler",
 		"GET",
-		"/ws/v1/partition/{partition}/usage/group/{group}",
+		"/ws/v1/partition/:partition/usage/group/:group",
 		getGroupResourceUsage,
 	},
 	route{
@@ -161,13 +161,13 @@ var webRoutes = routes{
 	route{
 		"Scheduler",
 		"PUT",
-		"/ws/v1/periodicstatedump/{switch}/{periodSeconds}",
+		"/ws/v1/periodicstatedump/:switch/:periodSeconds",
 		handlePeriodicStateDump,
 	},
 	route{
 		"Scheduler",
 		"PUT",
-		"/ws/v1/periodicstatedump/{switch}/",
+		"/ws/v1/periodicstatedump/:switch/",
 		handlePeriodicStateDump,
 	},
 	route{

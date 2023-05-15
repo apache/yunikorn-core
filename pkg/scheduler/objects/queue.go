@@ -694,7 +694,7 @@ func (sq *Queue) AddApplication(app *Application) {
 func (sq *Queue) RemoveApplication(app *Application) {
 	// clean up any outstanding pending resources
 	appID := app.ApplicationID
-	if _, ok := sq.applications[appID]; !ok {
+	if !sq.appExists(appID) {
 		log.Logger().Debug("Application not found while removing from queue",
 			zap.String("queueName", sq.QueuePath),
 			zap.String("applicationID", appID))
@@ -742,6 +742,14 @@ func (sq *Queue) RemoveApplication(app *Application) {
 	log.Logger().Info("Application completed and removed from queue",
 		zap.String("queueName", sq.QueuePath),
 		zap.String("applicationID", appID))
+}
+
+func (sq *Queue) appExists(appID string) bool {
+	sq.RLock()
+	defer sq.RUnlock()
+
+	_, ok := sq.applications[appID]
+	return ok
 }
 
 // GetCopyOfApps gets a shallow copy of all non-completed apps holding the lock
@@ -1472,18 +1480,16 @@ func (sq *Queue) updateMaxResourceMetrics() {
 	}
 }
 
-// updateAllocatedAndPendingResourceMetrics updates allocated and pending resource metrics if this is a leaf queue.
+// updateAllocatedAndPendingResourceMetrics updates allocated and pending resource metrics for all queue types.
 func (sq *Queue) updateAllocatedAndPendingResourceMetrics() {
-	if sq.isLeaf {
-		for k, v := range sq.allocatedResource.Resources {
-			metrics.GetQueueMetrics(sq.QueuePath).SetQueueAllocatedResourceMetrics(k, float64(v))
-		}
-		for k, v := range sq.pending.Resources {
-			metrics.GetQueueMetrics(sq.QueuePath).SetQueuePendingResourceMetrics(k, float64(v))
-		}
-		for k, v := range sq.preemptingResource.Resources {
-			metrics.GetQueueMetrics(sq.QueuePath).SetQueuePreemptingResourceMetrics(k, float64(v))
-		}
+	for k, v := range sq.allocatedResource.Resources {
+		metrics.GetQueueMetrics(sq.QueuePath).SetQueueAllocatedResourceMetrics(k, float64(v))
+	}
+	for k, v := range sq.pending.Resources {
+		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePendingResourceMetrics(k, float64(v))
+	}
+	for k, v := range sq.preemptingResource.Resources {
+		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePreemptingResourceMetrics(k, float64(v))
 	}
 }
 
@@ -1750,7 +1756,8 @@ func priorityValueByPolicy(policy policies.PriorityPolicy, offset int32, priorit
 		result := int64(offset) + int64(priority)
 		if result > int64(configs.MaxPriority) {
 			return configs.MaxPriority
-		} else if result < int64(configs.MinPriority) {
+		}
+		if result < int64(configs.MinPriority) {
 			return configs.MinPriority
 		}
 		return int32(result)

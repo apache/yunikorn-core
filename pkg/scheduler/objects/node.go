@@ -321,7 +321,9 @@ func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation, delta *resou
 	replace.SetPlaceholderUsed(true)
 	sn.allocations[replace.GetUUID()] = replace
 	before := sn.allocatedResource.Clone()
+	// The allocatedResource and availableResource should be updated in the same way
 	sn.allocatedResource.AddTo(delta)
+	sn.availableResource.SubFrom(delta)
 	if !resources.FitIn(before, sn.allocatedResource) {
 		log.Logger().Warn("unexpected increase in node usage after placeholder replacement",
 			zap.String("placeholder uuid", uuid),
@@ -380,12 +382,12 @@ func (sn *Node) preConditions(ask *AllocationAsk, allocate bool) bool {
 
 // Check if the node should be considered as a possible node to allocate on.
 // This is a lock free call. No updates are made this only performs a pre allocate checks
-func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string) error {
+func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string) bool {
 	// cannot allocate zero or negative resource
 	if !resources.StrictlyGreaterThanZero(res) {
 		log.Logger().Debug("pre alloc check: requested resource is zero",
 			zap.String("nodeID", sn.NodeID))
-		return fmt.Errorf("pre alloc check: requested resource is zero: %s", sn.NodeID)
+		return false
 	}
 	// check if the node is reserved for this app/alloc
 	if sn.IsReserved() {
@@ -393,19 +395,14 @@ func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string) error {
 			log.Logger().Debug("pre alloc check: node reserved for different app or ask",
 				zap.String("nodeID", sn.NodeID),
 				zap.String("resKey", resKey))
-			return fmt.Errorf("pre alloc check: node %s reserved for different app or ask: %s", sn.NodeID, resKey)
+			return false
 		}
 	}
 
 	// check if resources are available
 	available := sn.GetAvailableResource()
-	// check the request fits in what we have calculated
-	if !available.FitInMaxUndef(res) {
-		// requested resource is larger than currently available node resources
-		return fmt.Errorf("pre alloc check: requested resource %s is larger than currently available %s resource on %s", res.String(), available.String(), sn.NodeID)
-	}
-	// can allocate, based on resource size
-	return nil
+	// returns true/false based on if the request fits in what we have calculated
+	return available.FitInMaxUndef(res)
 }
 
 // Return if the node has been reserved by any application

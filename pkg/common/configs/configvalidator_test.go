@@ -389,3 +389,155 @@ func createQueueWithMaxApplication(maxApplication [4]uint64) QueueConfig {
 	}
 	return root
 }
+
+func TestUserName(t *testing.T) {
+	allowedUserNames := []string{
+		"username-allowed_99",
+		"username",
+		"username*regexp",
+		"user_name",
+		"user@name@",
+		"username$$",
+	}
+	for _, allowed := range allowedUserNames {
+		t.Run(allowed, func(t *testing.T) {
+			filter := Filter{
+				Users:  []string{allowed},
+				Groups: []string{"ok"},
+			}
+			assert.NilError(t, checkPlacementFilter(filter))
+		})
+	}
+
+	rejectedUserNames := []string{
+		"username rejected",
+		"",
+		"rejected#",
+		"rejected!name",
+		"!rejected",
+		" rejected ",
+	}
+	for _, rejected := range rejectedUserNames {
+		t.Run(rejected, func(t *testing.T) {
+			filter := Filter{
+				Users:  []string{rejected},
+				Groups: []string{"ok"},
+			}
+			assert.ErrorContains(t, checkPlacementFilter(filter), "invalid rule filter user list")
+		})
+	}
+}
+
+func TestGroupName(t *testing.T) {
+	allowedGroupNames := []string{
+		"groupname-allowed_99",
+		"groupname",
+		"groupname*regexp",
+		"group_name",
+		"group-name",
+	}
+	for _, allowed := range allowedGroupNames {
+		t.Run(allowed, func(t *testing.T) {
+			filter := Filter{
+				Users:  []string{"ok"},
+				Groups: []string{allowed},
+			}
+			assert.NilError(t, checkPlacementFilter(filter))
+		})
+	}
+
+	rejectedGroupNames := []string{
+		"groupname ",
+		"group@name",
+		"group name",
+		" groupname ",
+		"!groupname",
+	}
+	for _, rejected := range rejectedGroupNames {
+		t.Run(rejected, func(t *testing.T) {
+			filter := Filter{
+				Users:  []string{"ok"},
+				Groups: []string{rejected},
+			}
+			assert.ErrorContains(t, checkPlacementFilter(filter), "invalid rule filter group list")
+		})
+	}
+}
+
+func TestServiceAccountUserName(t *testing.T) {
+	allowedUserNames := []string{
+		"system:serviceaccounts:username:username-77",
+		"system:serviceaccounts:username:regexp*",
+		"system:serviceaccounts:username.12:username-77-11",
+		"system:serviceaccounts:username.12:username-77-11",
+		"system:serviceaccounts:username:username",
+	}
+	for _, allowed := range allowedUserNames {
+		t.Run(allowed, func(t *testing.T) {
+			filter := Filter{
+				Users:  []string{allowed},
+				Groups: []string{"ok"},
+			}
+
+			assert.NilError(t, checkPlacementFilter(filter))
+		})
+	}
+
+	rejectedUserNames := []string{
+		"system:serviceaccounts:username!:username",
+		"system:serviceaccounts:username xyz:username",
+		"system:serviceaccounts: :username",
+		"system:serviceaccounts: username:username",
+		"system:\\:username",
+		" system:serviceaccounts:username:username",
+	}
+	for _, rejected := range rejectedUserNames {
+		t.Run(rejected, func(t *testing.T) {
+			filter := Filter{
+				Users:  []string{rejected},
+				Groups: []string{"ok"},
+			}
+
+			assert.ErrorContains(t, checkPlacementFilter(filter), "invalid rule filter user list")
+		})
+	}
+}
+
+func TestServiceAccountGroupName(t *testing.T) {
+	allowedGroupNames := []string{
+		"system:authenticated",
+		"system:unauthenticated",
+		"system:serviceaccounts:groupname",
+		"system:serviceaccounts:groupname.12",
+		"system:serviceaccounts:groupname.12",
+		"system:serviceaccounts:groupname-1-test.test",
+	}
+	for _, allowed := range allowedGroupNames {
+		t.Run(allowed, func(t *testing.T) {
+			filter := Filter{
+				Users:  []string{"ok"},
+				Groups: []string{allowed},
+			}
+
+			assert.NilError(t, checkPlacementFilter(filter))
+		})
+	}
+
+	rejectedGroupNames := []string{
+		"system:\\:groupname",
+		"system:serviceaccounts: groupname",
+		"system:!:groupname",
+		"system:&:groupname",
+		" system:authenticated",
+	}
+	for _, rejected := range rejectedGroupNames {
+		t.Run(rejected, func(t *testing.T) {
+			filter := Filter{
+				Users:  []string{"ok"},
+				Groups: []string{rejected},
+			}
+
+			assert.ErrorContains(t, checkPlacementFilter(filter), "invalid rule filter group list")
+		})
+	}
+}

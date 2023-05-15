@@ -55,7 +55,7 @@ func (ut *UserTracker) increaseTrackedResource(queuePath, applicationID string, 
 	return ut.queueTracker.increaseTrackedResource(queuePath, applicationID, usage)
 }
 
-func (ut *UserTracker) decreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, removeApp bool) error {
+func (ut *UserTracker) decreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, removeApp bool) (bool, error) {
 	ut.Lock()
 	defer ut.Unlock()
 	if removeApp {

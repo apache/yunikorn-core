@@ -66,10 +66,10 @@ var QueueNameRegExp = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
 
 // User and group name check: systems allow different things POSIX is the base but we need to be lenient and allow more.
 // allow upper and lower case, add the @ and . (dot) and officially no length.
-var UserRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9_.@-]*[$]?$`)
+var UserRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9:_.@-]*[$]?$`)
 
 // Groups should have a slightly more restrictive regexp (no @ . or $ at the end)
-var GroupRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9_-]*$`)
+var GroupRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9:_.-]*$`)
 
 // all characters that make a name different from a regexp
 var SpecialRegExp = regexp.MustCompile(`[\^$*+?()\[{}|]`)
@@ -284,21 +284,23 @@ func checkPlacementFilter(filter Filter) error {
 	// anything that does not parse in a list of users is ignored (like ACL list)
 	if len(filter.Users) == 1 {
 		// for a length of 1 we could either have regexp or username
-		isUser := UserRegExp.MatchString(filter.Users[0])
+		user := filter.Users[0]
+		isUser := UserRegExp.MatchString(user)
 		// if it is not a user name it must be a regexp
 		// two step check: first compile if that fails it is
 		if !isUser {
-			if _, err := regexp.Compile(filter.Users[0]); err != nil || !SpecialRegExp.MatchString(filter.Users[0]) {
+			if _, err := regexp.Compile(user); err != nil || !SpecialRegExp.MatchString(user) {
 				return fmt.Errorf("invalid rule filter user list is not a proper list or regexp: %v", filter.Users)
 			}
 		}
 	}
 	if len(filter.Groups) == 1 {
 		// for a length of 1 we could either have regexp or groupname
-		isGroup := GroupRegExp.MatchString(filter.Groups[0])
+		group := filter.Groups[0]
+		isGroup := GroupRegExp.MatchString(group)
 		// if it is not a group name it must be a regexp
 		if !isGroup {
-			if _, err := regexp.Compile(filter.Groups[0]); err != nil || !SpecialRegExp.MatchString(filter.Groups[0]) {
+			if _, err := regexp.Compile(group); err != nil || !SpecialRegExp.MatchString(group) {
 				return fmt.Errorf("invalid rule filter group list is not a proper list or regexp: %v", filter.Groups)
 			}
 		}
@@ -307,7 +309,7 @@ func checkPlacementFilter(filter Filter) error {
 }
 
 // Check a single limit entry
-func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int, queue *QueueConfig) error {
+func checkLimit(limit Limit, existedUserName map[string]bool, existedGroupName map[string]bool, queue *QueueConfig) error {
 	if len(limit.Users) == 0 && len(limit.Groups) == 0 {
 		return fmt.Errorf("empty user and group lists defined in limit '%v'", limit)
 	}
@@ -316,15 +318,16 @@ func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int
 		if name != "*" && !UserRegExp.MatchString(name) {
 			return fmt.Errorf("invalid limit user name '%s' in limit definition", name)
 		}
+
+		if existedUserName[name] {
+			return fmt.Errorf("duplicated user name %s , already existed", name)
+		}
+		existedUserName[name] = true
+
 		// The user without wildcard should not happen after the wildcard user
 		// It means the wildcard for user should be the last item for limits object list which including the username,
 		// and we should only set one wildcard user for all limits
-		if name == "*" {
-			if *userWildCardIdx != -1 && currIdx > *userWildCardIdx {
-				return fmt.Errorf("should not set more than one wildcard user")
-			}
-			*userWildCardIdx = currIdx
-		} else if *userWildCardIdx != -1 && currIdx > *userWildCardIdx {
+		if existedUserName["*"] && name != "*" {
 			return fmt.Errorf("should not set no wildcard user %s after wildcard user limit", name)
 		}
 	}
@@ -332,18 +335,29 @@ func checkLimit(limit Limit, currIdx int, userWildCardIdx, groupWildCardIdx *int
 		if name != "*" && !GroupRegExp.MatchString(name) {
 			return fmt.Errorf("invalid limit group name '%s' in limit definition", name)
 		}
+
+		if existedGroupName[name] {
+			return fmt.Errorf("duplicated group name %s , already existed", name)
+		}
+		existedGroupName[name] = true
+
 		// The group without wildcard should not happen after the wildcard group
 		// It means the wildcard for group should be the last item for limits object list which including the group name,
 		// and we should only set one wildcard group for all limits
-		if name == "*" {
-			if *groupWildCardIdx != -1 && currIdx > *groupWildCardIdx {
-				return fmt.Errorf("should not set more than one wildcard group")
-			}
-			*groupWildCardIdx = currIdx
-		} else if *groupWildCardIdx != -1 && currIdx > *groupWildCardIdx {
+		if existedGroupName["*"] && name != "*" {
 			return fmt.Errorf("should not set no wildcard group %s after wildcard group limit", name)
 		}
 	}
+
+	// Specifying a wildcard for the group limit sets a cumulative limit for all users in that queue.
+	// If there is no specific group mentioned the wildcard group limit would thus be the same as the queue limit.
+	// For that reason we do not allow specifying only one group limit that is using the wildcard.
+	// There must be at least one limit with a group name defined.
+	if existedGroupName["*"] && len(existedGroupName) == 1 {
+		return fmt.Errorf("should not specify only one group limit that is using the wildcard. " +
+			"There must be at least one limit with a group name defined ")
+	}
+
 	var limitResource = resources.NewResource()
 	var err error
 	// check the resource (if defined)
@@ -397,10 +411,21 @@ func checkLimits(limits []Limit, obj string, queue *QueueConfig) error {
 		zap.String("objName", obj),
 		zap.Int("limitsLength", len(limits)))
 
-	var userWildCardIdx = -1
-	var groupWildCardIdx = -1
-	for index, limit := range limits {
-		if err := checkLimit(limit, index, &userWildCardIdx, &groupWildCardIdx, queue); err != nil {
+	existedUserName := make(map[string]bool)
+	existedGroupName := make(map[string]bool)
+
+	defer func() {
+		for k := range existedUserName {
+			delete(existedUserName, k)
+		}
+
+		for k := range existedGroupName {
+			delete(existedGroupName, k)
+		}
+	}()
+
+	for _, limit := range limits {
+		if err := checkLimit(limit, existedUserName, existedGroupName, queue); err != nil {
 			return err
 		}
 	}

@@ -122,32 +122,66 @@ func TestQTDecreaseTrackedResource(t *testing.T) {
 	err = queueTracker.increaseTrackedResource("", "", usage3)
 	assert.Error(t, err, "mandatory parameters are missing. queuepath: , application id: , resource usage: "+usage3.String())
 
-	err = queueTracker.decreaseTrackedResource(queuePath1, TestApp1, usage3, false)
+	removeQT, err := queueTracker.decreaseTrackedResource(queuePath1, TestApp1, usage3, false)
 	if err != nil {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage3, err)
 	}
-	err = queueTracker.decreaseTrackedResource(queuePath2, TestApp2, usage3, false)
+	assert.Equal(t, removeQT, false, "wrong remove queue tracker value")
+
+	removeQT, err = queueTracker.decreaseTrackedResource(queuePath2, TestApp2, usage3, false)
 	if err != nil {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage3, err)
 	}
 	actualResources1 := getQTResource(queueTracker)
 
+	assert.Equal(t, removeQT, false, "wrong remove queue tracker value")
 	assert.Equal(t, "map[mem:70000000 vcore:70000]", actualResources1["root"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:70000000 vcore:70000]", actualResources1["root.parent"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:60000000 vcore:60000]", actualResources1["root.parent.child1"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:10000000 vcore:10000]", actualResources1["root.parent.child2"].String(), "wrong resource")
+	assert.Equal(t, len(queueTracker.childQueueTrackers["parent"].childQueueTrackers), 2)
 
-	err = queueTracker.decreaseTrackedResource(queuePath1, TestApp1, usage1, true)
+	usage4, err := resources.NewResourceFromConf(map[string]string{"mem": "60M", "vcore": "60"})
+	if err != nil {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
+	}
+	removeQT, err = queueTracker.decreaseTrackedResource(queuePath1, TestApp1, usage4, true)
 	if err != nil {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
 	}
 	assert.Equal(t, 1, len(queueTracker.runningApplications))
+	assert.Equal(t, removeQT, false, "wrong remove queue tracker value")
+	// Make sure childQueueTracker cleaned
+	assert.Equal(t, len(queueTracker.childQueueTrackers["parent"].childQueueTrackers), 1)
 
-	err = queueTracker.decreaseTrackedResource(queuePath2, TestApp2, usage2, true)
+	usage5, err := resources.NewResourceFromConf(map[string]string{"mem": "10M", "vcore": "10"})
+	if err != nil {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage5)
+	}
+	removeQT, err = queueTracker.decreaseTrackedResource(queuePath2, TestApp2, usage5, true)
 	if err != nil {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage2, err)
 	}
 	assert.Equal(t, 0, len(queueTracker.runningApplications))
+	// Make sure all childQueueTracker cleaned
+	assert.Equal(t, len(queueTracker.childQueueTrackers), 0)
+	assert.Equal(t, removeQT, true, "wrong remove queue tracker value")
+
+	// Test parent queueTracker has not zero usage, but child queueTrackers has all deleted
+	err = queueTracker.increaseTrackedResource(queuePath1, TestApp1, usage1)
+	if err != nil {
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
+	}
+	assert.Equal(t, 1, len(queueTracker.runningApplications))
+
+	usage2, err = resources.NewResourceFromConf(map[string]string{"mem": "20M", "vcore": "20"})
+	if err != nil {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
+	}
+	err = queueTracker.increaseTrackedResource("root.parent", TestApp2, usage2)
+	if err != nil {
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", "root.parent", TestApp2, usage2, err)
+	}
 }
 
 func TestGetChildQueuePath(t *testing.T) {

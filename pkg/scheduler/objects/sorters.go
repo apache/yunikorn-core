@@ -61,7 +61,8 @@ func sortQueuesByPriorityAndFairness(queues []*Queue) {
 		rPriority := r.GetCurrentPriority()
 		if lPriority > rPriority {
 			return true
-		} else if lPriority < rPriority {
+		}
+		if lPriority < rPriority {
 			return false
 		}
 		comp := resources.CompUsageRatioSeparately(l.GetAllocatedResource(), l.GetGuaranteedResource(),
@@ -84,7 +85,8 @@ func sortQueuesByFairnessAndPriority(queues []*Queue) {
 			rPriority := r.GetCurrentPriority()
 			if lPriority > rPriority {
 				return true
-			} else if lPriority < rPriority {
+			}
+			if lPriority < rPriority {
 				return false
 			}
 			return resources.StrictlyGreaterThan(resources.Sub(l.pending, r.pending), resources.Zero)
@@ -142,7 +144,8 @@ func sortApplicationsByPriorityAndFairness(sortedApps []*Application, globalReso
 		rightPriority := r.GetAskMaxPriority()
 		if leftPriority > rightPriority {
 			return true
-		} else if leftPriority < rightPriority {
+		}
+		if leftPriority < rightPriority {
 			return false
 		}
 		return resources.CompUsageRatio(l.GetAllocatedResource(), r.GetAllocatedResource(), globalResource) < 0
@@ -155,7 +158,8 @@ func sortApplicationsBySubmissionTimeAndPriority(sortedApps []*Application) {
 		r := sortedApps[j]
 		if l.SubmissionTime.Before(r.SubmissionTime) {
 			return true
-		} else if r.SubmissionTime.Before(r.SubmissionTime) {
+		}
+		if r.SubmissionTime.Before(l.SubmissionTime) {
 			return false
 		}
 		return l.GetAskMaxPriority() > r.GetAskMaxPriority()
@@ -170,7 +174,8 @@ func sortApplicationsByPriorityAndSubmissionTime(sortedApps []*Application) {
 		rightPriority := r.GetAskMaxPriority()
 		if leftPriority > rightPriority {
 			return true
-		} else if leftPriority < rightPriority {
+		}
+		if leftPriority < rightPriority {
 			return false
 		}
 		return l.SubmissionTime.Before(r.SubmissionTime)

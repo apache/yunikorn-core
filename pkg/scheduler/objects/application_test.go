@@ -674,7 +674,7 @@ func TestSortRequests(t *testing.T) {
 	if app.sortedRequests != nil {
 		t.Fatalf("new app create should not have sorted requests: %v", app)
 	}
-	app.sortRequests(true)
+	app.sortRequests()
 	if app.sortedRequests != nil {
 		t.Fatalf("after sort call (no pending resources) list must be nil: %v", app.sortedRequests)
 	}
@@ -686,13 +686,13 @@ func TestSortRequests(t *testing.T) {
 		ask.priority = int32(i)
 		app.requests[ask.GetAllocationKey()] = ask
 	}
-	app.sortRequests(true)
+	app.sortRequests()
 	if len(app.sortedRequests) != 3 {
 		t.Fatalf("app sorted requests not correct: %v", app.sortedRequests)
 	}
 	allocKey := app.sortedRequests[0].GetAllocationKey()
 	delete(app.requests, allocKey)
-	app.sortRequests(true)
+	app.sortRequests()
 	if len(app.sortedRequests) != 2 {
 		t.Fatalf("app sorted requests not correct after removal: %v", app.sortedRequests)
 	}

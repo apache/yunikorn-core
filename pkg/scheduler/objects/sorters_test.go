@@ -402,24 +402,16 @@ func TestSortAsks(t *testing.T) {
 	list[0], list[2] = list[2], list[0]
 	list[1], list[3] = list[3], list[1]
 	assertAskList(t, list, []int{2, 3, 0, 1}, "moved 1")
-	sortAskByPriority(list, true)
-	// asks should come back in order: 0, 1, 2, 3
-	assertAskList(t, list, []int{0, 1, 2, 3}, "ascending")
-	// move things around
-	list[0], list[2] = list[2], list[0]
-	list[1], list[3] = list[3], list[1]
-	assertAskList(t, list, []int{2, 3, 0, 1}, "moved 2")
-	sortAskByPriority(list, false)
+
+	sortAskByPriority(list)
 	// asks should come back in order: 3, 2, 1, 0
 	assertAskList(t, list, []int{3, 2, 1, 0}, "descending")
+
 	// make asks with same priority
 	// ask-3 and ask-1 both with prio 1 do not change order
 	// ask-3 must always be earlier in the list
 	list[0].priority = 1
-	sortAskByPriority(list, true)
-	// asks should come back in order: 0, 2, 3, 1
-	assertAskList(t, list, []int{0, 1, 3, 2}, "ascending same prio")
-	sortAskByPriority(list, false)
+	sortAskByPriority(list)
 	// asks should come back in order: 3, 2, 0, 1
 	assertAskList(t, list, []int{3, 1, 0, 2}, "descending same prio")
 }

@@ -872,6 +872,7 @@ func TestGetPartitionNodes(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "node", Value: ""}}))
 	assert.NilError(t, err, "Get Node for PartitionNode Handler request failed")
 	resp = &MockResponseWriter{}
+	getPartitionNodes(resp, req)
 	assertNodeIDExists(t, resp)
 }
 

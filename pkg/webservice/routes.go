@@ -120,7 +120,7 @@ var webRoutes = routes{
 		"Scheduler",
 		"GET",
 		"/ws/v1/partition/:partition/nodes/:node",
-		getNode,
+		getPartitionNode,
 	},
 	route{
 		"Scheduler",

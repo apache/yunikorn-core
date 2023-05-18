@@ -791,11 +791,13 @@ func TestGetPartitionNodes(t *testing.T) {
 	assert.NilError(t, err, "add application to partition should not have failed")
 
 	// create test nodes
+	attributesOfnode1 := map[string]string{"Disk": "SSD"}
+	attributesOfnode2 := map[string]string{"Devices": "camera"}
 	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 1000, siCommon.CPU: 1000}).ToProto()
 	node1ID := "node-1"
-	node1 := objects.NewNode(&si.NodeInfo{NodeID: node1ID, SchedulableResource: nodeRes})
+	node1 := objects.NewNode(&si.NodeInfo{NodeID: node1ID, Attributes: attributesOfnode1, SchedulableResource: nodeRes})
 	node2ID := "node-2"
-	node2 := objects.NewNode(&si.NodeInfo{NodeID: node2ID, SchedulableResource: nodeRes})
+	node2 := objects.NewNode(&si.NodeInfo{NodeID: node2ID, Attributes: attributesOfnode2, SchedulableResource: nodeRes})
 
 	// create test allocations
 	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 500, siCommon.CPU: 300})
@@ -833,11 +835,13 @@ func TestGetPartitionNodes(t *testing.T) {
 			assert.Equal(t, node.NodeID, node1ID)
 			assert.Equal(t, "alloc-1", node.Allocations[0].AllocationKey)
 			assert.Equal(t, "alloc-1-uuid", node.Allocations[0].UUID)
+			assert.DeepEqual(t, attributesOfnode1, node.Attributes)
 			assert.DeepEqual(t, map[string]int64{"memory": 50, "vcore": 30}, node.Utilized)
 		} else {
 			assert.Equal(t, node.NodeID, node2ID)
 			assert.Equal(t, "alloc-2", node.Allocations[0].AllocationKey)
 			assert.Equal(t, "alloc-2-uuid", node.Allocations[0].UUID)
+			assert.DeepEqual(t, attributesOfnode2, node.Attributes)
 			assert.DeepEqual(t, map[string]int64{"memory": 30, "vcore": 50}, node.Utilized)
 		}
 	}

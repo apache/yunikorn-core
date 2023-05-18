@@ -325,6 +325,7 @@ func getNodeDAO(node *objects.Node) *dao.NodeDAOInfo {
 		NodeID:       node.NodeID,
 		HostName:     node.Hostname,
 		RackName:     node.Rackname,
+		Attributes:   node.GetAttributes(),
 		Capacity:     node.GetCapacity().DAOMap(),
 		Occupied:     node.GetOccupiedResource().DAOMap(),
 		Allocated:    node.GetAllocatedResource().DAOMap(),

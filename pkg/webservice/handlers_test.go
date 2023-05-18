@@ -868,11 +868,11 @@ func TestGetPartitionNodes(t *testing.T) {
 	getPartitionNode(resp, req)
 
 	// Test node id is missing
-	req, err = http.NewRequest("GET", "/ws/v1/partition/default/nodes/node-1", strings.NewReader(""))
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "node", Value: ""}}))
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/node/node-1", strings.NewReader(""))
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"},httprouter.Param{Key: "node", Value: ""}}))
 	assert.NilError(t, err, "Get Node for PartitionNode Handler request failed")
 	resp = &MockResponseWriter{}
-	getPartitionNodes(resp, req)
+	getPartitionNode(resp, req)
 	assertNodeIDExists(t, resp)
 }
 
@@ -1158,7 +1158,7 @@ func assertNodeIDExists(t *testing.T, resp *MockResponseWriter) {
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, "failed to unmarshal node dao response from response body")
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, "node id is missing", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.Message, "Node not found", "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 

@@ -308,6 +308,7 @@ func getAllocationAskDAO(ask *objects.AllocationAsk) *dao.AllocationAskDAOInfo {
 		TaskGroupName:       ask.GetTaskGroup(),
 		AllocationLog:       getAllocationLogsDAO(ask.GetAllocationLog()),
 		TriggeredPreemption: ask.HasTriggeredPreemption(),
+		Originator:          ask.IsOriginator(),
 	}
 }
 
@@ -326,6 +327,7 @@ func getNodeDAO(node *objects.Node) *dao.NodeDAOInfo {
 		NodeID:       node.NodeID,
 		HostName:     node.Hostname,
 		RackName:     node.Rackname,
+		Attributes:   node.GetAttributes(),
 		Capacity:     node.GetCapacity().DAOMap(),
 		Occupied:     node.GetOccupiedResource().DAOMap(),
 		Allocated:    node.GetAllocatedResource().DAOMap(),
@@ -485,12 +487,12 @@ func getPartitions(w http.ResponseWriter, r *http.Request) {
 }
 
 func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
 	vars := httprouter.ParamsFromContext(r.Context())
 	if vars == nil {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
 		return
 	}
-	writeHeaders(w)
 	partitionName := vars.ByName("partition")
 	var partitionQueuesDAOInfo dao.PartitionQueueDAOInfo
 	var partition = schedulerContext.GetPartitionWithoutClusterID(partitionName)
@@ -506,12 +508,12 @@ func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
 }
 
 func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
 	vars := httprouter.ParamsFromContext(r.Context())
 	if vars == nil {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
 		return
 	}
-	writeHeaders(w)
 	partition := vars.ByName("partition")
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext != nil {
@@ -550,12 +552,12 @@ func getNode(w http.ResponseWriter, r *http.Request) {
 }
 
 func getQueueApplications(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
 	vars := httprouter.ParamsFromContext(r.Context())
 	if vars == nil {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
 		return
 	}
-	writeHeaders(w)
 	partition := vars.ByName("partition")
 	queueName := vars.ByName("queue")
 	queueErr := validateQueue(queueName)
@@ -585,12 +587,12 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 }
 
 func getApplication(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
 	vars := httprouter.ParamsFromContext(r.Context())
 	if vars == nil {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
 		return
 	}
-	writeHeaders(w)
 	partition := vars.ByName("partition")
 	queueName := vars.ByName("queue")
 	application := vars.ByName("application")
@@ -621,12 +623,12 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 }
 
 func setLogLevel(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
 	vars := httprouter.ParamsFromContext(r.Context())
 	if vars == nil {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
 		return
 	}
-	writeHeaders(w)
 	level := vars.ByName("level")
 	if err := log.SetLogLevel(level); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
@@ -807,6 +809,7 @@ func getMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func getUsersResourceUsage(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
 	userManager := ugm.GetUserManager()
 	usersResources := userManager.GetUsersResources()
 	var result []*dao.UserResourceUsageDAOInfo
@@ -819,6 +822,7 @@ func getUsersResourceUsage(w http.ResponseWriter, r *http.Request) {
 }
 
 func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
 	vars := httprouter.ParamsFromContext(r.Context())
 	if vars == nil {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
@@ -841,6 +845,7 @@ func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
 }
 
 func getGroupsResourceUsage(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
 	userManager := ugm.GetUserManager()
 	groupsResources := userManager.GetGroupsResources()
 	var result []*dao.GroupResourceUsageDAOInfo
@@ -853,6 +858,7 @@ func getGroupsResourceUsage(w http.ResponseWriter, r *http.Request) {
 }
 
 func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
 	vars := httprouter.ParamsFromContext(r.Context())
 	if vars == nil {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)

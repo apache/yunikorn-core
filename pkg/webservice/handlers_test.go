@@ -860,7 +860,7 @@ func TestGetPartitionNodes(t *testing.T) {
 	getPartitionNodes(resp, req)
 	assertParamsMissing(t, resp)
 
-    // test specific node
+	// Test specific node
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/nodes/node-1", strings.NewReader(""))
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "node", Value: "node-1"}}))
 	assert.NilError(t, err, "Get Node for PartitionNode Handler request failed")
@@ -869,7 +869,7 @@ func TestGetPartitionNodes(t *testing.T) {
 
 	// Test node id is missing
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/node/node-1", strings.NewReader(""))
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"},httprouter.Param{Key: "node", Value: ""}}))
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "node", Value: ""}}))
 	assert.NilError(t, err, "Get Node for PartitionNode Handler request failed")
 	resp = &MockResponseWriter{}
 	getPartitionNode(resp, req)

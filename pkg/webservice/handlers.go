@@ -526,7 +526,7 @@ func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getNode(w http.ResponseWriter, r *http.Request) {
+func getPartitionNode(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	vars := httprouter.ParamsFromContext(r.Context())
 	if vars == nil {

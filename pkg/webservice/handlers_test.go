@@ -846,12 +846,11 @@ func TestGetPartitionNodes(t *testing.T) {
 		}
 	}
 
-	var req1 *http.Request
-	req1, err = http.NewRequest("GET", "/ws/v1/partition/default/nodes", strings.NewReader(""))
-	req1 = req1.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "notexists"}}))
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/nodes", strings.NewReader(""))
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "notexists"}}))
 	assert.NilError(t, err, "Get Nodes for PartitionNodes Handler request failed")
 	resp1 := &MockResponseWriter{}
-	getPartitionNodes(resp1, req1)
+	getPartitionNodes(resp1, req)
 	assertPartitionExists(t, resp1)
 
 	// test params name missing
@@ -860,6 +859,21 @@ func TestGetPartitionNodes(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getPartitionNodes(resp, req)
 	assertParamsMissing(t, resp)
+
+	// Test specific node
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/node/node-1", strings.NewReader(""))
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "node", Value: "node-1"}}))
+	assert.NilError(t, err, "Get Node for PartitionNode Handler request failed")
+	resp = &MockResponseWriter{}
+	getPartitionNode(resp, req)
+
+	// Test node id is missing
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/node/node-1", strings.NewReader(""))
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "node", Value: ""}}))
+	assert.NilError(t, err, "Get Node for PartitionNode Handler request failed")
+	resp = &MockResponseWriter{}
+	getPartitionNode(resp, req)
+	assertNodeIDExists(t, resp)
 }
 
 // addApp Add app to the given partition and assert the app count, state etc
@@ -1136,6 +1150,15 @@ func assertGroupNameExists(t *testing.T, resp *MockResponseWriter) {
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
 	assert.Equal(t, errInfo.Message, "Group name is missing", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+}
+
+func assertNodeIDExists(t *testing.T, resp *MockResponseWriter) {
+	var errInfo dao.YAPIError
+	err := json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, "failed to unmarshal node dao response from response body")
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
+	assert.Equal(t, errInfo.Message, "Node not found", "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 

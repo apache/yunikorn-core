@@ -55,6 +55,8 @@ const UserDoesNotExists = "User not found"
 const GroupDoesNotExists = "Group not found"
 const UserNameMissing = "User name is missing"
 const GroupNameMissing = "Group name is missing"
+const ApplicationDoesNotExists = "Application not found"
+const NodeDoesNotExists = "Node not found"
 
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
@@ -524,6 +526,31 @@ func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func getPartitionNode(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
+	partition := vars.ByName("partition")
+	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
+	if partitionContext != nil {
+		nodeID := vars.ByName("node")
+		node := partitionContext.GetNode(nodeID)
+		if node == nil {
+			buildJSONErrorResponse(w, NodeDoesNotExists, http.StatusBadRequest)
+			return
+		}
+		nodeDao := getNodeDAO(node)
+		if err := json.NewEncoder(w).Encode(nodeDao); err != nil {
+			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		}
+	} else {
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusBadRequest)
+	}
+}
+
 func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	vars := httprouter.ParamsFromContext(r.Context())
@@ -586,7 +613,7 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 	}
 	app := queue.GetApplication(application)
 	if app == nil {
-		buildJSONErrorResponse(w, "Application not found", http.StatusBadRequest)
+		buildJSONErrorResponse(w, ApplicationDoesNotExists, http.StatusBadRequest)
 		return
 	}
 	appDao := getApplicationDAO(app)

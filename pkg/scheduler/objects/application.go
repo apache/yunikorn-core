@@ -75,17 +75,17 @@ type Application struct {
 	SubmissionTime time.Time
 
 	// Private fields need protection
-	queuePath            string
-	queue                *Queue                    // queue the application is running in
-	pending              *resources.Resource       // pending resources from asks for the app
-	reservations         map[string]*reservation   // a map of reservations
-	requests             map[string]*AllocationAsk // a map of asks
-	sortedRequests       []*AllocationAsk
-	user                 security.UserGroup          // owner of the application
-	tags                 map[string]string           // application tags used in scheduling
-	allocatedResource    *resources.Resource         // total allocated resources
+	queuePath         string
+	queue             *Queue                    // queue the application is running in
+	pending           *resources.Resource       // pending resources from asks for the app
+	reservations      map[string]*reservation   // a map of reservations
+	requests          map[string]*AllocationAsk // a map of asks
+	sortedRequests    []*AllocationAsk
+	user              security.UserGroup  // owner of the application
+	tags              map[string]string   // application tags used in scheduling
+	allocatedResource *resources.Resource // total allocated resources
 
-	usedResource         *resources.UsedResource     // keep track of resource usage of the application
+	usedResource *resources.UsedResource // keep track of resource usage of the application
 
 	maxAllocatedResource *resources.Resource         // max allocated resources
 	allocatedPlaceholder *resources.Resource         // total allocated placeholder resources
@@ -112,15 +112,15 @@ type Application struct {
 }
 
 type ApplicationSummary struct {
-	ApplicationID string
+	ApplicationID  string
 	SubmissionTime time.Time
-	StartTime time.Time
-	FinishTime time.Time
-	User string
-	Queue string
-	State string
-	RmID string
-	ResourceUsage* resources.UsedResource
+	StartTime      time.Time
+	FinishTime     time.Time
+	User           string
+	Queue          string
+	State          string
+	RmID           string
+	ResourceUsage  *resources.UsedResource
 }
 
 func (as *ApplicationSummary) DoLogging() {
@@ -142,15 +142,15 @@ func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {
 	sa.RLock()
 	defer sa.RUnlock()
 	appSummary := &ApplicationSummary{
-		ApplicationID: sa.ApplicationID,
+		ApplicationID:  sa.ApplicationID,
 		SubmissionTime: sa.SubmissionTime,
-		StartTime: sa.startTime,
-		FinishTime: sa.finishedTime,
-		User: sa.user.User,
-		Queue: sa.queuePath,
-		State: state,
-		RmID: rmID,
-		ResourceUsage: ru,
+		StartTime:      sa.startTime,
+		FinishTime:     sa.finishedTime,
+		User:           sa.user.User,
+		Queue:          sa.queuePath,
+		State:          state,
+		RmID:           rmID,
+		ResourceUsage:  ru,
 	}
 	return appSummary
 }

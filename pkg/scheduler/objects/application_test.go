@@ -654,7 +654,7 @@ func TestRemovePlaceholderAllocationWithNoRealAllocation(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	ask := newAllocationAskRepeat(aKey, appID1, res, 2)
 	ask.placeholder = true
-	allocInfo := NewAllocation("uuid-1", nodeID1, instType1,ask)
+	allocInfo := NewAllocation("uuid-1", nodeID1, instType1, ask)
 	app.AddAllocation(allocInfo)
 	err := app.handleApplicationEventWithLocking(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted")
@@ -739,7 +739,7 @@ func TestStateChangeOnUpdate(t *testing.T) {
 	assert.Assert(t, app.IsAccepted(), "Application did not change to accepted state: %s", app.CurrentState())
 	// add an alloc
 	uuid := "uuid-1"
-	allocInfo := NewAllocation(uuid, nodeID1, instType1,ask)
+	allocInfo := NewAllocation(uuid, nodeID1, instType1, ask)
 	app.AddAllocation(allocInfo)
 	// app should be starting
 	assert.Assert(t, app.IsStarting(), "Application did not return starting state after alloc: %s", app.CurrentState())

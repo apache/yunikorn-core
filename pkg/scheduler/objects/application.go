@@ -514,6 +514,7 @@ func (sa *Application) removeAsksInternal(allocKey string) int {
 		deltaPendingResource = sa.pending
 		sa.pending = resources.NewResource()
 		sa.requests = make(map[string]*AllocationAsk)
+		sa.sortedRequests = nil
 		sa.askMaxPriority = configs.MinPriority
 		sa.queue.UpdateApplicationPriority(sa.ApplicationID, sa.askMaxPriority)
 	} else {
@@ -536,6 +537,7 @@ func (sa *Application) removeAsksInternal(allocKey string) int {
 			deltaPendingResource = resources.MultiplyBy(ask.GetAllocatedResource(), float64(ask.GetPendingAskRepeat()))
 			sa.pending = resources.Sub(sa.pending, deltaPendingResource)
 			delete(sa.requests, allocKey)
+			sa.sortRequests()
 			if priority := ask.GetPriority(); priority >= sa.askMaxPriority {
 				sa.updateAskMaxPriority()
 			}
@@ -619,6 +621,8 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 		zap.Bool("placeholder", ask.IsPlaceholder()),
 		zap.Stringer("pendingDelta", delta))
 
+	sa.sortRequests()
+
 	return nil
 }
 
@@ -654,6 +658,7 @@ func (sa *Application) UpdateAskRepeat(allocKey string, delta int32) (*resources
 	sa.Lock()
 	defer sa.Unlock()
 	if ask := sa.requests[allocKey]; ask != nil {
+
 		return sa.updateAskRepeatInternal(ask, delta)
 	}
 	return nil, fmt.Errorf("failed to locate ask with key %s", allocKey)
@@ -663,6 +668,11 @@ func (sa *Application) updateAskRepeatInternal(ask *AllocationAsk, delta int32) 
 	// updating with delta does error checking internally
 	if !ask.updatePendingAskRepeat(delta) {
 		return nil, fmt.Errorf("ask repaeat not updated resulting repeat less than zero for ask %s on app %s", ask.GetAllocationKey(), sa.ApplicationID)
+	}
+
+	if delta == 1 {
+		// adding request back, which was filtered out before
+		sa.sortRequests()
 	}
 
 	askPriority := ask.GetPriority()
@@ -842,7 +852,7 @@ func (sa *Application) canAskReserve(ask *AllocationAsk) bool {
 // Sort the request for the app in order based on the priority of the request.
 // The sorted list only contains candidates that have an outstanding repeat.
 // No locking must be called while holding the lock
-func (sa *Application) sortRequests(ascending bool) {
+func (sa *Application) sortRequests() {
 	sa.sortedRequests = nil
 	for _, request := range sa.requests {
 		if request.GetPendingAskRepeat() == 0 {
@@ -852,20 +862,21 @@ func (sa *Application) sortRequests(ascending bool) {
 	}
 	// we might not have any requests
 	if len(sa.sortedRequests) > 0 {
-		sortAskByPriority(sa.sortedRequests, ascending)
+		sortAskByPriority(sa.sortedRequests)
 	}
 }
 
 func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, total *[]*AllocationAsk) {
-	// make sure the request are sorted
-	sa.Lock()
-	sa.sortRequests(false)
-	sa.Unlock()
-
 	sa.RLock()
 	defer sa.RUnlock()
+	if sa.sortedRequests == nil {
+		return
+	}
 
 	for _, request := range sa.sortedRequests {
+		if request.GetPendingAskRepeat() == 0 {
+			continue
+		}
 		// ignore nil checks resource function calls are nil safe
 		if headRoom.FitInMaxUndef(request.GetAllocatedResource()) {
 			// if headroom is still enough for the resources
@@ -893,10 +904,14 @@ func (sa *Application) canReplace(request *AllocationAsk) bool {
 func (sa *Application) tryAllocate(headRoom *resources.Resource, preemptionDelay time.Duration, preemptAttemptsRemaining *int, nodeIterator func() NodeIterator, fullNodeIterator func() NodeIterator, getNodeFn func(string) *Node) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
-	// make sure the request are sorted
-	sa.sortRequests(false)
+	if sa.sortedRequests == nil {
+		return nil
+	}
 	// get all the requests from the app sorted in order
 	for _, request := range sa.sortedRequests {
+		if request.GetPendingAskRepeat() == 0 {
+			continue
+		}
 		// check if there is a replacement possible
 		if sa.canReplace(request) {
 			continue
@@ -1047,11 +1062,9 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 	sa.Lock()
 	defer sa.Unlock()
 	// nothing to do if we have no placeholders allocated
-	if resources.IsZero(sa.allocatedPlaceholder) {
+	if resources.IsZero(sa.allocatedPlaceholder) || sa.sortedRequests == nil {
 		return nil
 	}
-	// make sure the request are sorted
-	sa.sortRequests(false)
 	// keep the first fits for later
 	var phFit *Allocation
 	var reqFit *AllocationAsk
@@ -1059,7 +1072,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 	for _, request := range sa.sortedRequests {
 		// skip placeholders they follow standard allocation
 		// this should also be part of a task group just make sure it is
-		if request.IsPlaceholder() || request.GetTaskGroup() == "" {
+		if request.IsPlaceholder() || request.GetTaskGroup() == "" || request.GetPendingAskRepeat() == 0 {
 			continue
 		}
 		// walk over the placeholders, allow for processing all as we can have multiple task groups

@@ -230,7 +230,7 @@ func stateAwareFilter(apps map[string]*Application) []*Application {
 	return filteredApps
 }
 
-func sortAskByPriority(requests []*AllocationAsk, ascending bool) {
+func sortAskByPriority(requests []*AllocationAsk) {
 	sort.SliceStable(requests, func(i, j int) bool {
 		l := requests[i]
 		r := requests[j]
@@ -239,9 +239,6 @@ func sortAskByPriority(requests []*AllocationAsk, ascending bool) {
 			return l.GetCreateTime().Before(r.GetCreateTime())
 		}
 
-		if ascending {
-			return l.GetPriority() < r.GetPriority()
-		}
 		return l.GetPriority() > r.GetPriority()
 	})
 }

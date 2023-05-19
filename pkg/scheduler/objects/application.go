@@ -658,6 +658,7 @@ func (sa *Application) UpdateAskRepeat(allocKey string, delta int32) (*resources
 	sa.Lock()
 	defer sa.Unlock()
 	if ask := sa.requests[allocKey]; ask != nil {
+
 		return sa.updateAskRepeatInternal(ask, delta)
 	}
 	return nil, fmt.Errorf("failed to locate ask with key %s", allocKey)
@@ -667,6 +668,11 @@ func (sa *Application) updateAskRepeatInternal(ask *AllocationAsk, delta int32) 
 	// updating with delta does error checking internally
 	if !ask.updatePendingAskRepeat(delta) {
 		return nil, fmt.Errorf("ask repaeat not updated resulting repeat less than zero for ask %s on app %s", ask.GetAllocationKey(), sa.ApplicationID)
+	}
+
+	if delta == 1 {
+		// adding request back, which was filtered out before
+		sa.sortRequests()
 	}
 
 	askPriority := ask.GetPriority()

@@ -177,6 +177,20 @@ func (p *Preemptor) initWorkingState() {
 	p.allocationsByNode = allocationsByNode
 	p.queueByAlloc = queueByAlloc
 	p.nodeAvailableMap = nodeAvailableMap
+	p.nodeInstanceTypeMap = nodeInstanceTypeMap
+}
+
+// getInstanceType retrieves instance type from the nodeInstanceTypeMap for given nodeId
+// if not found, issue error log and return UnknownInstanceType
+func (p *Preemptor) getInstanceType(nodeId string) string {
+	val, ok := p.nodeInstanceTypeMap[nodeId]
+	// If the key exists
+	if ok {
+		return val
+	}
+	log.Logger().Error("BUG: Didn't find instance type in the nodeInstanceTypeMap",
+		zap.String("nodeId", nodeId))
+	return UnknownInstanceType
 }
 
 // checkPreemptionQueueGuarantees verifies that it's possible to free enough resources to fit the given ask
@@ -507,7 +521,7 @@ func (p *Preemptor) tryNodes() (string, string, []*Allocation, bool) {
 	// call predicates to evaluate each node
 	result := p.checkPreemptionPredicates(predicateChecks, victimsByNode)
 	if result != nil && result.success {
-		return result.nodeID, p.nodeInstanceTypeMap[result.nodeID], result.victims, true
+		return result.nodeID, p.getInstanceType(result.nodeID), result.victims, true
 	}
 
 	return "", UnknownInstanceType, nil, false

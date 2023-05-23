@@ -34,7 +34,7 @@ import (
 )
 
 const (
-	UnknownInstanceType = "unknown"
+	UnknownInstanceType = "UNKNOWN"
 )
 
 type Node struct {

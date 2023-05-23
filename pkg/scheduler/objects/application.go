@@ -80,7 +80,7 @@ type Application struct {
 	pending           *resources.Resource       // pending resources from asks for the app
 	reservations      map[string]*reservation   // a map of reservations
 	requests          map[string]*AllocationAsk // a map of asks
-	sortedRequests    []*AllocationAsk
+	sortedRequests    sortedRequests
 	user              security.UserGroup  // owner of the application
 	tags              map[string]string   // application tags used in scheduling
 	allocatedResource *resources.Resource // total allocated resources
@@ -177,6 +177,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		rejectedMessage:      "",
 		stateLog:             make([]*StateLogEntry, 0),
 		askMaxPriority:       configs.MinPriority,
+		sortedRequests:       sortedRequests{},
 	}
 	placeholderTimeout := common.ConvertSITimeoutWithAdjustment(siApp, defaultPlaceholderTimeout)
 	gangSchedStyle := siApp.GetGangSchedulingStyle()
@@ -564,7 +565,7 @@ func (sa *Application) removeAsksInternal(allocKey string) int {
 		deltaPendingResource = sa.pending
 		sa.pending = resources.NewResource()
 		sa.requests = make(map[string]*AllocationAsk)
-		sa.sortedRequests = nil
+		sa.sortedRequests = sortedRequests{}
 		sa.askMaxPriority = configs.MinPriority
 		sa.queue.UpdateApplicationPriority(sa.ApplicationID, sa.askMaxPriority)
 	} else {
@@ -587,7 +588,7 @@ func (sa *Application) removeAsksInternal(allocKey string) int {
 			deltaPendingResource = resources.MultiplyBy(ask.GetAllocatedResource(), float64(ask.GetPendingAskRepeat()))
 			sa.pending = resources.Sub(sa.pending, deltaPendingResource)
 			delete(sa.requests, allocKey)
-			sa.sortRequests()
+			sa.sortedRequests.remove(ask)
 			if priority := ask.GetPriority(); priority >= sa.askMaxPriority {
 				sa.updateAskMaxPriority()
 			}
@@ -671,7 +672,7 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 		zap.Bool("placeholder", ask.IsPlaceholder()),
 		zap.Stringer("pendingDelta", delta))
 
-	sa.sortRequests()
+	sa.sortedRequests.insert(ask)
 
 	return nil
 }
@@ -718,11 +719,6 @@ func (sa *Application) updateAskRepeatInternal(ask *AllocationAsk, delta int32) 
 	// updating with delta does error checking internally
 	if !ask.updatePendingAskRepeat(delta) {
 		return nil, fmt.Errorf("ask repaeat not updated resulting repeat less than zero for ask %s on app %s", ask.GetAllocationKey(), sa.ApplicationID)
-	}
-
-	if delta == 1 {
-		// adding request back, which was filtered out before
-		sa.sortRequests()
 	}
 
 	askPriority := ask.GetPriority()
@@ -897,23 +893,6 @@ func (sa *Application) canAskReserve(ask *AllocationAsk) bool {
 			zap.Int("askReserved", len(resNumber)))
 	}
 	return pending > len(resNumber)
-}
-
-// Sort the request for the app in order based on the priority of the request.
-// The sorted list only contains candidates that have an outstanding repeat.
-// No locking must be called while holding the lock
-func (sa *Application) sortRequests() {
-	sa.sortedRequests = nil
-	for _, request := range sa.requests {
-		if request.GetPendingAskRepeat() == 0 {
-			continue
-		}
-		sa.sortedRequests = append(sa.sortedRequests, request)
-	}
-	// we might not have any requests
-	if len(sa.sortedRequests) > 0 {
-		sortAskByPriority(sa.sortedRequests)
-	}
 }
 
 func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, total *[]*AllocationAsk) {

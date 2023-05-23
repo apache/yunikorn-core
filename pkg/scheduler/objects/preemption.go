@@ -53,10 +53,11 @@ type Preemptor struct {
 	nodesTried      bool                // flag indicating that scheduling has already been tried on all nodes
 
 	// lazily-populated work structures
-	allocationsByQueue map[string]*QueuePreemptionSnapshot // map of queue snapshots by queue path
-	queueByAlloc       map[string]*QueuePreemptionSnapshot // map of queue snapshots by allocationID
-	allocationsByNode  map[string][]*Allocation            // map of allocation by nodeID
-	nodeAvailableMap   map[string]*resources.Resource      // map of available resources by nodeID
+	allocationsByQueue  map[string]*QueuePreemptionSnapshot // map of queue snapshots by queue path
+	queueByAlloc        map[string]*QueuePreemptionSnapshot // map of queue snapshots by allocationID
+	allocationsByNode   map[string][]*Allocation            // map of allocation by nodeID
+	nodeAvailableMap    map[string]*resources.Resource      // map of available resources by nodeID
+	nodeInstanceTypeMap map[string]string
 }
 
 // QueuePreemptionSnapshot is used to track a snapshot of a queue for preemption
@@ -142,6 +143,7 @@ func (p *Preemptor) initWorkingState() {
 	allocationsByNode := make(map[string][]*Allocation)
 	queueByAlloc := make(map[string]*QueuePreemptionSnapshot)
 	nodeAvailableMap := make(map[string]*resources.Resource)
+	nodeInstanceTypeMap := make(map[string]string)
 
 	// build a map from NodeID to allocation and from allocationID to queue capacities
 	for _, victims := range p.allocationsByQueue {
@@ -153,6 +155,7 @@ func (p *Preemptor) initWorkingState() {
 			}
 			allocationsByNode[nodeID] = append(allocations, allocation)
 			queueByAlloc[allocation.GetAllocationKey()] = victims
+			nodeInstanceTypeMap[nodeID] = allocation.GetInstanceType()
 		}
 	}
 
@@ -349,7 +352,6 @@ func (p *Preemptor) checkPreemptionPredicates(predicateChecks []*si.PreemptionPr
 		result := &predicateCheckResult{
 			allocationKey: check.AllocationKey,
 			nodeID:        check.NodeID,
-			instType:      UnknownInstanceType,
 			success:       true,
 			index:         int(check.StartIndex),
 		}
@@ -505,7 +507,7 @@ func (p *Preemptor) tryNodes() (string, string, []*Allocation, bool) {
 	// call predicates to evaluate each node
 	result := p.checkPreemptionPredicates(predicateChecks, victimsByNode)
 	if result != nil && result.success {
-		return result.nodeID, result.instType, result.victims, true
+		return result.nodeID, p.nodeInstanceTypeMap[result.nodeID], result.victims, true
 	}
 
 	return "", UnknownInstanceType, nil, false
@@ -582,7 +584,6 @@ func (p *Preemptor) TryPreemption() (*Allocation, bool) {
 type predicateCheckResult struct {
 	allocationKey string
 	nodeID        string
-	instType      string
 	success       bool
 	index         int
 	victims       []*Allocation
@@ -660,10 +661,6 @@ func (pcr *predicateCheckResult) populateVictims(victimsByNode map[string][]*All
 	for i := 0; i <= pcr.index; i++ {
 		victim := victimList[i]
 		pcr.victims = append(pcr.victims, victim)
-		// Take the instance type info from the first victim Allocation of this given nodeID
-		if i == 0 {
-			pcr.instType = victim.GetInstanceType()
-		}
 	}
 }
 

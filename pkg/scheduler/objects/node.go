@@ -399,10 +399,10 @@ func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string) bool {
 		}
 	}
 
-	// check if resources are available
-	available := sn.GetAvailableResource()
+	sn.RLock()
+	defer sn.RUnlock()
 	// returns true/false based on if the request fits in what we have calculated
-	return available.FitInMaxUndef(res)
+	return sn.availableResource.FitInMaxUndef(res)
 }
 
 // Return if the node has been reserved by any application

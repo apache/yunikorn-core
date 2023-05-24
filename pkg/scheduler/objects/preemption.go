@@ -53,10 +53,11 @@ type Preemptor struct {
 	nodesTried      bool                // flag indicating that scheduling has already been tried on all nodes
 
 	// lazily-populated work structures
-	allocationsByQueue map[string]*QueuePreemptionSnapshot // map of queue snapshots by queue path
-	queueByAlloc       map[string]*QueuePreemptionSnapshot // map of queue snapshots by allocationID
-	allocationsByNode  map[string][]*Allocation            // map of allocation by nodeID
-	nodeAvailableMap   map[string]*resources.Resource      // map of available resources by nodeID
+	allocationsByQueue  map[string]*QueuePreemptionSnapshot // map of queue snapshots by queue path
+	queueByAlloc        map[string]*QueuePreemptionSnapshot // map of queue snapshots by allocationID
+	allocationsByNode   map[string][]*Allocation            // map of allocation by nodeID
+	nodeAvailableMap    map[string]*resources.Resource      // map of available resources by nodeID
+	nodeInstanceTypeMap map[string]string
 }
 
 // QueuePreemptionSnapshot is used to track a snapshot of a queue for preemption
@@ -142,6 +143,7 @@ func (p *Preemptor) initWorkingState() {
 	allocationsByNode := make(map[string][]*Allocation)
 	queueByAlloc := make(map[string]*QueuePreemptionSnapshot)
 	nodeAvailableMap := make(map[string]*resources.Resource)
+	nodeInstanceTypeMap := make(map[string]string)
 
 	// build a map from NodeID to allocation and from allocationID to queue capacities
 	for _, victims := range p.allocationsByQueue {
@@ -153,6 +155,10 @@ func (p *Preemptor) initWorkingState() {
 			}
 			allocationsByNode[nodeID] = append(allocations, allocation)
 			queueByAlloc[allocation.GetAllocationKey()] = victims
+			instType := allocation.GetInstanceType()
+			if instType != "" && instType != UnknownInstanceType {
+				nodeInstanceTypeMap[nodeID] = instType
+			}
 		}
 	}
 
@@ -174,6 +180,7 @@ func (p *Preemptor) initWorkingState() {
 	p.allocationsByNode = allocationsByNode
 	p.queueByAlloc = queueByAlloc
 	p.nodeAvailableMap = nodeAvailableMap
+	p.nodeInstanceTypeMap = nodeInstanceTypeMap
 }
 
 // checkPreemptionQueueGuarantees verifies that it's possible to free enough resources to fit the given ask
@@ -473,7 +480,7 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 
 // tryNodes attempts to find potential nodes for scheduling. For each node, potential victims are passed to
 // the shim for evaluation, and the best solution found will be returned.
-func (p *Preemptor) tryNodes() (string, []*Allocation, bool) {
+func (p *Preemptor) tryNodes() (string, string, []*Allocation, bool) {
 	// calculate victim list for each node
 	predicateChecks := make([]*si.PreemptionPredicatesArgs, 0)
 	victimsByNode := make(map[string][]*Allocation)
@@ -504,10 +511,17 @@ func (p *Preemptor) tryNodes() (string, []*Allocation, bool) {
 	// call predicates to evaluate each node
 	result := p.checkPreemptionPredicates(predicateChecks, victimsByNode)
 	if result != nil && result.success {
-		return result.nodeID, result.victims, true
+		instType, ok := p.nodeInstanceTypeMap[result.nodeID]
+		if !ok {
+			// If the key doesn't exist, log error and use UnknownInstanceType
+			log.Logger().Error("BUG: Didn't find instance type in the nodeInstanceTypeMap",
+				zap.String("nodeId", result.nodeID))
+			instType = UnknownInstanceType
+		}
+		return result.nodeID, instType, result.victims, true
 	}
 
-	return "", nil, false
+	return "", UnknownInstanceType, nil, false
 }
 
 func (p *Preemptor) TryPreemption() (*Allocation, bool) {
@@ -520,7 +534,7 @@ func (p *Preemptor) TryPreemption() (*Allocation, bool) {
 	p.initWorkingState()
 
 	// try to find a node to schedule on and victims to preempt
-	nodeID, victims, ok := p.tryNodes()
+	nodeID, instType, victims, ok := p.tryNodes()
 	if !ok {
 		// no preemption possible
 		return nil, false
@@ -567,7 +581,7 @@ func (p *Preemptor) TryPreemption() (*Allocation, bool) {
 			zap.String("allocationKey", p.ask.GetAllocationKey()),
 			zap.String("nodeID", nodeID),
 			zap.Int("victimCount", len(victims)))
-		return newReservedAllocation(Reserved, nodeID, p.ask), true
+		return newReservedAllocation(Reserved, nodeID, instType, p.ask), true
 	}
 
 	// can't reserve as queue is still too full, but scheduling should succeed after preemption occurs

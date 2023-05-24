@@ -49,7 +49,7 @@ func TestNewAlloc(t *testing.T) {
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
 	assert.NilError(t, err, "Resource creation failed")
 	ask := newAllocationAsk("ask-1", "app-1", res)
-	alloc := NewAllocation("test-uuid", "node-1", ask)
+	alloc := NewAllocation("test-uuid", "node-1", "itype1", ask)
 	if alloc == nil {
 		t.Fatal("NewAllocation create failed while it should not")
 	}
@@ -73,7 +73,7 @@ func TestNewAlloc(t *testing.T) {
 	tags[siCommon.CreationTime] = strconv.FormatInt(past, 10)
 	ask.tags = CloneAllocationTags(tags)
 	ask.createTime = time.Unix(past, 0)
-	alloc = NewAllocation("test-uuid", "node-1", ask)
+	alloc = NewAllocation("test-uuid", "node-1", "itype1", ask)
 	assert.Equal(t, alloc.GetCreateTime(), ask.GetCreateTime(), "createTime was not copied from the ask")
 }
 
@@ -81,7 +81,7 @@ func TestNewReservedAlloc(t *testing.T) {
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
 	assert.NilError(t, err, "Resource creation failed")
 	ask := newAllocationAsk("ask-1", "app-1", res)
-	alloc := newReservedAllocation(Reserved, "node-1", ask)
+	alloc := newReservedAllocation(Reserved, "node-1", "instType1", ask)
 	if alloc == nil {
 		t.Fatal("NewReservedAllocation create failed while it should not")
 	}
@@ -117,7 +117,7 @@ func TestSIFromAlloc(t *testing.T) {
 		ResourcePerAlloc: res.ToProto(),
 	}
 	ask := newAllocationAsk("ask-1", "app-1", res)
-	alloc := NewAllocation("test-uuid", "node-1", ask)
+	alloc := NewAllocation("test-uuid", "node-1", "itype1", ask)
 	if alloc == nil {
 		t.Fatal("NewAllocation create failed while it should not")
 	}
@@ -132,7 +132,7 @@ func TestNewAllocFromNilSI(t *testing.T) {
 		}
 	}()
 	var nilAlloc *Allocation
-	alloc := NewAllocationFromSI(nil)
+	alloc := NewAllocationFromSI(nil, "itype1")
 	assert.Equal(t, alloc, nilAlloc, "Expected nil response from nil SI allocation")
 }
 
@@ -152,16 +152,16 @@ func TestNewAllocFromSI(t *testing.T) {
 		AllocationTags:   tags,
 	}
 	var nilAlloc *Allocation
-	alloc := NewAllocationFromSI(allocSI)
+	alloc := NewAllocationFromSI(allocSI, "itype1")
 	assert.Equal(t, alloc, nilAlloc, "placeholder allocation created without a TaskGroupName")
 	allocSI.TaskGroupName = "testgroup"
-	alloc = NewAllocationFromSI(allocSI)
+	alloc = NewAllocationFromSI(allocSI, "itype1")
 	assert.Assert(t, alloc != nilAlloc, "placeholder ask creation failed unexpectedly")
 	assert.Assert(t, alloc.IsPlaceholder(), "ask should have been a placeholder")
 	assert.Equal(t, alloc.GetTaskGroup(), "testgroup", "TaskGroupName not set as expected")
 	assert.Equal(t, alloc.GetAsk().GetCreateTime(), time.Unix(past, 0)) //nolint:staticcheck
 
 	allocSI.AllocationTags[siCommon.CreationTime] = "xyz"
-	alloc = NewAllocationFromSI(allocSI)
+	alloc = NewAllocationFromSI(allocSI, "itype1")
 	assert.Equal(t, alloc.GetAsk().GetCreateTime().Unix(), int64(-1)) //nolint:staticcheck
 }

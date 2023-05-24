@@ -147,6 +147,7 @@ func NewAppState() *fsm.FSM {
 			},
 			fmt.Sprintf("enter_%s", Starting.String()): func(_ context.Context, event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
+				app.startTime = time.Now()
 				app.queue.incRunningApps(app.ApplicationID)
 				app.setStateTimer(app.startTimeout, app.stateMachine.Current(), RunApplication)
 				metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsRunning()
@@ -172,6 +173,7 @@ func NewAppState() *fsm.FSM {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsRejected()
 				app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
 				app.finishedTime = time.Now()
+				app.CleanupUsedResource()
 				// No rejected message when use app.HandleApplicationEvent(RejectApplication)
 				if len(event.Args) == 2 {
 					app.rejectedMessage = event.Args[1].(string) //nolint:errcheck

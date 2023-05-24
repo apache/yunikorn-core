@@ -619,7 +619,7 @@ func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo) error {
 		return err
 	}
 
-	existingAllocations := cc.convertAllocations(nodeInfo.ExistingAllocations)
+	existingAllocations := cc.convertAllocations(sn, nodeInfo.ExistingAllocations)
 	err := partition.AddNode(sn, existingAllocations)
 	if err != nil {
 		wrapped := fmt.Errorf("failure while adding new node, node rejected with error: %w", err)
@@ -827,10 +827,11 @@ func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRel
 }
 
 // Convert the si allocation to a proposal to add to the node
-func (cc *ClusterContext) convertAllocations(allocations []*si.Allocation) []*objects.Allocation {
+func (cc *ClusterContext) convertAllocations(node *objects.Node, allocations []*si.Allocation) []*objects.Allocation {
+	instType := node.GetInstanceType()
 	convert := make([]*objects.Allocation, len(allocations))
 	for current, allocation := range allocations {
-		convert[current] = objects.NewAllocationFromSI(allocation)
+		convert[current] = objects.NewAllocationFromSI(allocation, instType)
 	}
 
 	return convert

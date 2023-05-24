@@ -33,6 +33,10 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
+const (
+	UnknownInstanceType = "UNKNOWN"
+)
+
 type Node struct {
 	// Fields for fast access These fields are considered read only.
 	// Values should only be set when creating a new node and never changed.
@@ -124,7 +128,11 @@ func (sn *Node) GetAttributes() map[string]string {
 // Get InstanceType of this node.
 // This is a lock free call because all attributes are considered read only
 func (sn *Node) GetInstanceType() string {
-	return sn.GetAttribute(common.InstanceType)
+	itype := sn.GetAttribute(common.InstanceType)
+	if itype != "" {
+		return itype
+	}
+	return UnknownInstanceType
 }
 
 // GetReservationKeys Return an array of all reservation keys for the node.

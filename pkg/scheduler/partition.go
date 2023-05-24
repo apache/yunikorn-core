@@ -1414,6 +1414,8 @@ func (pc *PartitionContext) moveTerminatedApp(appID string) {
 	log.Logger().Info("Removing terminated application from the application list",
 		zap.String("appID", appID),
 		zap.String("app status", app.CurrentState()))
+	app.LogAppSummary(pc.RmID)
+	app.CleanupUsedResource()
 	pc.Lock()
 	defer pc.Unlock()
 	delete(pc.applications, appID)

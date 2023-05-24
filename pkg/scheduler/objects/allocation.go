@@ -57,6 +57,7 @@ type Allocation struct {
 	taskGroupName     string // task group this allocation belongs to
 	placeholder       bool   // is this a placeholder allocation
 	nodeID            string
+	instType          string
 	uuid              string
 	priority          int32
 	tags              map[string]string
@@ -65,6 +66,7 @@ type Allocation struct {
 	// Mutable fields which need protection
 	placeholderUsed       bool
 	createTime            time.Time // the time this allocation was created
+	bindTime              time.Time // the time this allocation was bound to a node
 	placeholderCreateTime time.Time
 	released              bool
 	reservedNodeID        string
@@ -75,7 +77,7 @@ type Allocation struct {
 	sync.RWMutex
 }
 
-func NewAllocation(uuid, nodeID string, ask *AllocationAsk) *Allocation {
+func NewAllocation(uuid, nodeID string, instType string, ask *AllocationAsk) *Allocation {
 	var createTime time.Time
 	if ask.GetTag(siCommon.CreationTime) == "" {
 		createTime = time.Now()
@@ -87,7 +89,9 @@ func NewAllocation(uuid, nodeID string, ask *AllocationAsk) *Allocation {
 		allocationKey:     ask.GetAllocationKey(),
 		applicationID:     ask.GetApplicationID(),
 		createTime:        createTime,
+		bindTime:          time.Now(),
 		nodeID:            nodeID,
+		instType:          instType,
 		partitionName:     common.GetPartitionNameWithoutClusterID(ask.GetPartitionName()),
 		uuid:              uuid,
 		tags:              ask.GetTagsClone(),
@@ -99,8 +103,9 @@ func NewAllocation(uuid, nodeID string, ask *AllocationAsk) *Allocation {
 	}
 }
 
-func newReservedAllocation(result AllocationResult, nodeID string, ask *AllocationAsk) *Allocation {
-	alloc := NewAllocation("", nodeID, ask)
+func newReservedAllocation(result AllocationResult, nodeID string, instType string, ask *AllocationAsk) *Allocation {
+	alloc := NewAllocation("", nodeID, instType, ask)
+	alloc.SetBindTime(time.Time{})
 	alloc.SetResult(result)
 	return alloc
 }
@@ -108,7 +113,7 @@ func newReservedAllocation(result AllocationResult, nodeID string, ask *Allocati
 // Create a new Allocation from a node recovered allocation.
 // Also creates an AllocationAsk to maintain backward compatible behaviour
 // This returns a nil Allocation on nil input or errors
-func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
+func NewAllocationFromSI(alloc *si.Allocation, instType string) *Allocation {
 	if alloc == nil {
 		return nil
 	}
@@ -141,7 +146,7 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 		createTime:        time.Unix(creationTime, 0),
 		allocLog:          make(map[string]*AllocationLogEntry),
 	}
-	return NewAllocation(alloc.UUID, alloc.NodeID, ask)
+	return NewAllocation(alloc.UUID, alloc.NodeID, instType, ask)
 }
 
 // Convert the Allocation into a SI object. This is a limited set of values that gets copied into the SI.
@@ -214,6 +219,19 @@ func (a *Allocation) SetCreateTime(createTime time.Time) {
 	a.createTime = createTime
 }
 
+// GetBindTime returns the time this allocation was created
+func (a *Allocation) GetBindTime() time.Time {
+	a.RLock()
+	defer a.RUnlock()
+	return a.bindTime
+}
+
+func (a *Allocation) SetBindTime(bindTime time.Time) {
+	a.Lock()
+	defer a.Unlock()
+	a.bindTime = bindTime
+}
+
 // IsPlaceholderUsed returns whether this alloc is replacing a placeholder
 func (a *Allocation) IsPlaceholderUsed() bool {
 	a.RLock()
@@ -250,6 +268,11 @@ func (a *Allocation) IsPlaceholder() bool {
 // GetNodeID gets the node this allocation is assigned to
 func (a *Allocation) GetNodeID() string {
 	return a.nodeID
+}
+
+// GetInstanceType return the type of the instance used by this allocation
+func (a *Allocation) GetInstanceType() string {
+	return a.instType
 }
 
 // GetUUID returns the uuid for this allocation

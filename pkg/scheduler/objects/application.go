@@ -75,15 +75,18 @@ type Application struct {
 	SubmissionTime time.Time
 
 	// Private fields need protection
-	queuePath            string
-	queue                *Queue                    // queue the application is running in
-	pending              *resources.Resource       // pending resources from asks for the app
-	reservations         map[string]*reservation   // a map of reservations
-	requests             map[string]*AllocationAsk // a map of asks
-	sortedRequests       []*AllocationAsk
-	user                 security.UserGroup          // owner of the application
-	tags                 map[string]string           // application tags used in scheduling
-	allocatedResource    *resources.Resource         // total allocated resources
+	queuePath         string
+	queue             *Queue                    // queue the application is running in
+	pending           *resources.Resource       // pending resources from asks for the app
+	reservations      map[string]*reservation   // a map of reservations
+	requests          map[string]*AllocationAsk // a map of asks
+	sortedRequests    []*AllocationAsk
+	user              security.UserGroup  // owner of the application
+	tags              map[string]string   // application tags used in scheduling
+	allocatedResource *resources.Resource // total allocated resources
+
+	usedResource *resources.UsedResource // keep track of resource usage of the application
+
 	maxAllocatedResource *resources.Resource         // max allocated resources
 	allocatedPlaceholder *resources.Resource         // total allocated placeholder resources
 	allocations          map[string]*Allocation      // list of all allocations
@@ -94,6 +97,7 @@ type Application struct {
 	execTimeout          time.Duration               // execTimeout for the application run
 	placeholderTimer     *time.Timer                 // placeholder replace timer
 	gangSchedulingStyle  string                      // gang scheduling style can be hard (after timeout we fail the application), or soft (after timeeout we schedule it as a normal application)
+	startTime            time.Time                   // the time that the application starts running. Default is zero.
 	finishedTime         time.Time                   // the time of finishing this application. the default value is zero time
 	rejectedMessage      string                      // If the application is rejected, save the rejected message
 	stateLog             []*StateLogEntry            // state log for this application
@@ -107,6 +111,50 @@ type Application struct {
 	sync.RWMutex
 }
 
+type ApplicationSummary struct {
+	ApplicationID  string
+	SubmissionTime time.Time
+	StartTime      time.Time
+	FinishTime     time.Time
+	User           string
+	Queue          string
+	State          string
+	RmID           string
+	ResourceUsage  *resources.UsedResource
+}
+
+func (as *ApplicationSummary) DoLogging() {
+	log.Logger().Info("YK_APP_SUMMARY:",
+		zap.String("appID", as.ApplicationID),
+		zap.Int64("submissionTime", as.SubmissionTime.UnixMilli()),
+		zap.Int64("startTime", as.StartTime.UnixMilli()),
+		zap.Int64("finishTime", as.FinishTime.UnixMilli()),
+		zap.String("user", as.User),
+		zap.String("queue", as.Queue),
+		zap.String("state", as.State),
+		zap.String("rmID", as.RmID),
+		zap.Any("resourceUsage", as.ResourceUsage.UsedResourceMap))
+}
+
+func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {
+	state := sa.stateMachine.Current()
+	ru := sa.usedResource.Clone()
+	sa.RLock()
+	defer sa.RUnlock()
+	appSummary := &ApplicationSummary{
+		ApplicationID:  sa.ApplicationID,
+		SubmissionTime: sa.SubmissionTime,
+		StartTime:      sa.startTime,
+		FinishTime:     sa.finishedTime,
+		User:           sa.user.User,
+		Queue:          sa.queuePath,
+		State:          state,
+		RmID:           rmID,
+		ResourceUsage:  ru,
+	}
+	return appSummary
+}
+
 func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eventHandler handler.EventHandler, rmID string) *Application {
 	app := &Application{
 		ApplicationID:        siApp.ApplicationID,
@@ -116,6 +164,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		tags:                 siApp.Tags,
 		pending:              resources.NewResource(),
 		allocatedResource:    resources.NewResource(),
+		usedResource:         resources.NewUsedResource(),
 		maxAllocatedResource: resources.NewResource(),
 		allocatedPlaceholder: resources.NewResource(),
 		requests:             make(map[string]*AllocationAsk),
@@ -123,6 +172,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		allocations:          make(map[string]*Allocation),
 		stateMachine:         NewAppState(),
 		placeholderAsk:       resources.NewResourceFromProto(siApp.PlaceholderAsk),
+		startTime:            time.Time{},
 		finishedTime:         time.Time{},
 		rejectedMessage:      "",
 		stateLog:             make([]*StateLogEntry, 0),
@@ -982,7 +1032,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, preemptionDelay
 					zap.Stringer("AllocationResult", alloc.GetResult()))
 				return alloc
 			}
-			return newReservedAllocation(Reserved, node.NodeID, request)
+			return newReservedAllocation(Reserved, node.NodeID, node.GetInstanceType(), request)
 		}
 
 		iterator := nodeIterator()
@@ -1120,7 +1170,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			// got the node run same checks as for reservation (all but fits)
 			// resource usage should not change anyway between placeholder and real one at this point
 			if node != nil && node.preReserveConditions(request) {
-				alloc := NewAllocation(common.GetNewUUID(), node.NodeID, request)
+				alloc := NewAllocation(common.GetNewUUID(), node.NodeID, node.GetInstanceType(), request)
 				// double link to make it easier to find
 				// alloc (the real one) releases points to the placeholder in the releases list
 				alloc.SetRelease(ph)
@@ -1166,7 +1216,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				continue
 			}
 			// allocation worked: on a non placeholder node update result and return
-			alloc := NewAllocation(common.GetNewUUID(), node.NodeID, reqFit)
+			alloc := NewAllocation(common.GetNewUUID(), node.NodeID, node.GetInstanceType(), reqFit)
 			// double link to make it easier to find
 			// alloc (the real one) releases points to the placeholder in the releases list
 			alloc.SetRelease(phFit)
@@ -1217,7 +1267,7 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 				unreserveAsk = ask
 			}
 			// remove the reservation as this should not be reserved
-			alloc := newReservedAllocation(Unreserved, reserve.nodeID, unreserveAsk)
+			alloc := newReservedAllocation(Unreserved, reserve.nodeID, reserve.node.GetInstanceType(), unreserveAsk)
 			return alloc
 		}
 
@@ -1428,7 +1478,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 			return nil
 		}
 		// return reservation allocation and mark it as a reservation
-		alloc := newReservedAllocation(Reserved, nodeToReserve.NodeID, ask)
+		alloc := newReservedAllocation(Reserved, nodeToReserve.NodeID, nodeToReserve.GetInstanceType(), ask)
 		return alloc
 	}
 	// ask does not fit, skip to next ask
@@ -1448,7 +1498,7 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 		return nil
 	}
 	// everything OK really allocate
-	alloc := NewAllocation(common.GetNewUUID(), node.NodeID, ask)
+	alloc := NewAllocation(common.GetNewUUID(), node.NodeID, node.GetInstanceType(), ask)
 	if node.AddAllocation(alloc) {
 		if err := sa.queue.IncAllocatedResource(alloc.GetAllocatedResource(), false); err != nil {
 			log.Logger().Warn("queue update failed unexpectedly",
@@ -1509,6 +1559,12 @@ func (sa *Application) UnSetQueue() {
 	defer sa.Unlock()
 	sa.queue = nil
 	sa.finishedTime = time.Now()
+}
+
+func (sa *Application) StartTime() time.Time {
+	sa.RLock()
+	defer sa.RUnlock()
+	return sa.startTime
 }
 
 func (sa *Application) FinishedTime() time.Time {
@@ -1635,6 +1691,13 @@ func (sa *Application) decUserResourceUsage(resource *resources.Resource, remove
 	}
 }
 
+// When the resource allocated with this allocation is to be removed,
+// have the usedResource to aggregate the resource used by this allocation
+func (sa *Application) updateUsedResource(info *Allocation) {
+	sa.usedResource.AggregateUsedResource(info.GetInstanceType(),
+		info.GetAllocatedResource(), info.GetBindTime())
+}
+
 func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
@@ -1661,6 +1724,7 @@ func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
 	alloc.SetPlaceholderUsed(true)
 	alloc.SetPlaceholderCreateTime(ph.GetCreateTime())
 	alloc.SetCreateTime(time.Now())
+	alloc.SetBindTime(time.Now())
 	sa.addAllocationInternal(alloc)
 	// order is important: clean up the allocation after adding it to the app
 	// we need the original Replaced allocation result.
@@ -1724,6 +1788,10 @@ func (sa *Application) removeAllocationInternal(uuid string, releaseType si.Term
 		sa.decUserResourceUsage(alloc.GetAllocatedResource(), removeApp)
 	} else {
 		sa.allocatedResource = resources.Sub(sa.allocatedResource, alloc.GetAllocatedResource())
+
+		// Aggregate the resources used by this alloc to the application's user resource tracker
+		sa.updateUsedResource(alloc)
+
 		// When the resource trackers are zero we should not expect anything to come in later.
 		if sa.hasZeroAllocations() {
 			removeApp = true
@@ -1772,7 +1840,10 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 	allocationsToRelease := make([]*Allocation, 0)
 	for _, alloc := range sa.allocations {
 		allocationsToRelease = append(allocationsToRelease, alloc)
+		// Aggregate the resources used by this alloc to the application's user resource tracker
+		sa.updateUsedResource(alloc)
 	}
+
 	if resources.IsZero(sa.pending) {
 		sa.decUserResourceUsage(resources.Add(sa.allocatedResource, sa.allocatedPlaceholder), true)
 	}
@@ -1949,6 +2020,16 @@ func (sa *Application) GetAskMaxPriority() int32 {
 func (sa *Application) cleanupAsks() {
 	sa.requests = make(map[string]*AllocationAsk)
 	sa.sortedRequests = nil
+}
+
+func (sa *Application) CleanupUsedResource() {
+	sa.usedResource = nil
+}
+
+func (sa *Application) LogAppSummary(rmID string) {
+	appSummary := sa.GetApplicationSummary(rmID)
+	appSummary.DoLogging()
+	appSummary.ResourceUsage = nil
 }
 
 // test only

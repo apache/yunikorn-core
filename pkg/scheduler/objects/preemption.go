@@ -156,7 +156,7 @@ func (p *Preemptor) initWorkingState() {
 			allocationsByNode[nodeID] = append(allocations, allocation)
 			queueByAlloc[allocation.GetAllocationKey()] = victims
 			instType := allocation.GetInstanceType()
-			if instType != UnknownInstanceType {
+			if instType != "" && instType != UnknownInstanceType {
 				nodeInstanceTypeMap[nodeID] = instType
 			}
 		}

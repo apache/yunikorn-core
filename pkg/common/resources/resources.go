@@ -964,6 +964,9 @@ func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {
 			}
 			// protect against negative integer overflow
 			if absResValue > 0 && div < 0 {
+				// do not worry about the code below not being exercised by tests: according to the Go spec, int64(someFloat64)
+				// may not result in a negative overflow even if someFloat64 < Math.MinInt64, so this code may be unreachable
+				// in some versions of Go
 				log.Logger().Warn("Absolute resource value result negative overflow",
 					zap.String("resource", resourceName),
 					zap.Int64("capacity", int64(availableResource)),

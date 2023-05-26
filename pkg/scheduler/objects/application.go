@@ -1456,7 +1456,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 				zap.Time("createTime", ask.GetCreateTime()),
 				zap.Duration("askAge", askAge),
 				zap.Duration("reservationDelay", reservationDelay))
-			score := ask.GetAllocatedResource().FitInScore(node.GetAvailableResource())
+			score := node.GetFitInScoreForAvailableResource(ask.GetAllocatedResource())
 			// Record the so-far best node to reserve
 			if score < scoreReserved {
 				scoreReserved = score

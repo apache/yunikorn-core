@@ -255,6 +255,14 @@ func (sn *Node) GetAvailableResource() *resources.Resource {
 	return sn.availableResource.Clone()
 }
 
+// GetFitInScoreForAvailableResource calculates a fit in score for "res" based on the current
+// available resources, avoiding cloning. The caller must ensure that "res" cannot change while this method is running.
+func (sn *Node) GetFitInScoreForAvailableResource(res *resources.Resource) float64 {
+	sn.RLock()
+	defer sn.RUnlock()
+	return res.FitInScore(sn.availableResource)
+}
+
 // Get the utilized resource on this node.
 func (sn *Node) GetUtilizedResource() *resources.Resource {
 	total := sn.GetCapacity()

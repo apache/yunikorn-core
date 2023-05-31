@@ -31,38 +31,25 @@ import (
 // stores the push event internal
 var defaultPushEventInterval = 2 * time.Second
 
-type EventPublisher interface {
-	StartService()
-	Stop()
-}
-
-type shimPublisher struct {
-	store             EventStore
+type EventPublisher struct {
+	store             *EventStore
 	pushEventInterval time.Duration
-	stop              atomic.Value
+	stop              atomic.Bool
 }
 
-func CreateShimPublisher(store EventStore) EventPublisher {
-	return createShimPublisherInternal(store)
-}
-
-func createShimPublisherInternal(store EventStore) *shimPublisher {
-	return createShimPublisherWithParameters(store, defaultPushEventInterval)
-}
-
-func createShimPublisherWithParameters(store EventStore, pushEventInterval time.Duration) *shimPublisher {
-	publisher := &shimPublisher{
+func CreateShimPublisher(store *EventStore) *EventPublisher {
+	publisher := &EventPublisher{
 		store:             store,
-		pushEventInterval: pushEventInterval,
+		pushEventInterval: defaultPushEventInterval,
 	}
 	publisher.stop.Store(false)
 	return publisher
 }
 
-func (sp *shimPublisher) StartService() {
+func (sp *EventPublisher) StartService() {
 	go func() {
 		for {
-			if sp.stop.Load().(bool) {
+			if sp.stop.Load() {
 				break
 			}
 			messages := sp.store.CollectEvents()
@@ -77,10 +64,10 @@ func (sp *shimPublisher) StartService() {
 	}()
 }
 
-func (sp *shimPublisher) Stop() {
+func (sp *EventPublisher) Stop() {
 	sp.stop.Store(true)
 }
 
-func (sp *shimPublisher) getEventStore() EventStore {
+func (sp *EventPublisher) getEventStore() *EventStore {
 	return sp.store
 }

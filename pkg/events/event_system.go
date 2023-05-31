@@ -29,39 +29,40 @@ import (
 // need to change for testing
 var defaultEventChannelSize = 100000
 
-var cache *EventCache
+var ev *EventSystem
 
-type EventCache struct {
-	Store EventStore // storing eventChannel
+type EventSystem struct {
+	Store     *EventStore // storing eventChannel
+	publisher *EventPublisher
 
 	channel chan *si.EventRecord // channelling input eventChannel
 	stop    chan bool            // whether the service is stop
+	stopped bool
 
 	sync.Mutex
 }
 
-func GetEventCache() *EventCache {
-	return cache
+func GetEventSystem() *EventSystem {
+	return ev
 }
 
-func CreateAndSetEventCache() {
-	cache = createEventStoreAndCache()
-}
-
-func createEventStoreAndCache() *EventCache {
-	store := newEventStoreImpl()
-	return createEventCacheInternal(store)
-}
-
-func createEventCacheInternal(store EventStore) *EventCache {
-	return &EventCache{
-		Store:   store,
-		channel: make(chan *si.EventRecord, defaultEventChannelSize),
-		stop:    make(chan bool),
+func CreateAndSetEventSystem() {
+	store := newEventStore()
+	ev = &EventSystem{
+		Store:     store,
+		channel:   make(chan *si.EventRecord, defaultEventChannelSize),
+		stop:      make(chan bool),
+		stopped:   false,
+		publisher: CreateShimPublisher(store),
 	}
 }
 
-func (ec *EventCache) StartService() {
+func (ec *EventSystem) StartService() {
+	ec.StartServiceWithPublisher(true)
+}
+
+// VisibleForTesting
+func (ec *EventSystem) StartServiceWithPublisher(withPublisher bool) {
 	go func() {
 		for {
 			select {
@@ -78,20 +79,29 @@ func (ec *EventCache) StartService() {
 			}
 		}
 	}()
+	if withPublisher {
+		ec.publisher.StartService()
+	}
 }
 
-func (ec *EventCache) Stop() {
+func (ec *EventSystem) Stop() {
 	ec.Lock()
 	defer ec.Unlock()
+
+	if ec.stopped {
+		return
+	}
 
 	ec.stop <- true
 	if ec.channel != nil {
 		close(ec.channel)
 		ec.channel = nil
 	}
+	ec.publisher.Stop()
+	ec.stopped = true
 }
 
-func (ec *EventCache) AddEvent(event *si.EventRecord) {
+func (ec *EventSystem) AddEvent(event *si.EventRecord) {
 	metrics.GetEventMetrics().IncEventsCreated()
 	select {
 	case ec.channel <- event:

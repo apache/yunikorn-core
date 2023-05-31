@@ -33,7 +33,6 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
-	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/handler"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
@@ -107,6 +106,7 @@ type Application struct {
 	rmEventHandler     handler.EventHandler
 	rmID               string
 	terminatedCallback func(appID string)
+	appEvents          *applicationEvents
 
 	sync.RWMutex
 }
@@ -195,6 +195,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	app.user = ugi
 	app.rmEventHandler = eventHandler
 	app.rmID = rmID
+	app.appEvents = newApplicationEvents(app)
 	return app
 }
 
@@ -981,17 +982,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, preemptionDelay
 				}
 			}
 
-			// post scheduling events via the event plugin
-			if eventCache := events.GetEventCache(); eventCache != nil {
-				message := fmt.Sprintf("Application %s does not fit into %s queue", request.GetApplicationID(), sa.queuePath)
-				if event, err := events.CreateRequestEventRecord(request.GetAllocationKey(), request.GetApplicationID(), "InsufficientQueueResources", message); err != nil {
-					log.Logger().Warn("Event creation failed",
-						zap.String("event message", message),
-						zap.Error(err))
-				} else {
-					eventCache.AddEvent(event)
-				}
-			}
+			sa.appEvents.sendAppDoesNotFitEvent(request)
 			continue
 		}
 
@@ -1147,17 +1138,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				// release the placeholder and tell the RM
 				ph.SetReleased(true)
 				sa.notifyRMAllocationReleased(sa.rmID, []*Allocation{ph}, si.TerminationType_TIMEOUT, "cancel placeholder: resource incompatible")
-				// add an event on the app to show the release
-				if eventCache := events.GetEventCache(); eventCache != nil {
-					message := fmt.Sprintf("Task group '%s' in application '%s': allocation resources '%s' are not matching placeholder '%s' allocation with ID '%s'", ph.GetTaskGroup(), sa.ApplicationID, request.GetAllocatedResource().String(), ph.GetAllocatedResource().String(), ph.GetAllocationKey())
-					if event, err := events.CreateRequestEventRecord(ph.GetAllocationKey(), sa.ApplicationID, "releasing placeholder: real allocation is larger than placeholder", message); err != nil {
-						log.Logger().Warn("Event creation failed",
-							zap.String("event message", message),
-							zap.Error(err))
-					} else {
-						eventCache.AddEvent(event)
-					}
-				}
+				sa.appEvents.sendPlaceholderLargerEvent(ph, request)
 				continue
 			}
 			// placeholder is the same or larger continue processing and difference is handled when the placeholder

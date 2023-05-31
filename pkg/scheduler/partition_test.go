@@ -2508,9 +2508,9 @@ func TestAddTGAppDynamic(t *testing.T) {
 
 func TestPlaceholderSmallerThanReal(t *testing.T) {
 	setupUGM()
-	events.CreateAndSetEventCache()
-	cache := events.GetEventCache()
-	cache.StartService()
+	events.CreateAndSetEventSystem()
+	eventSystem := events.GetEventSystem()
+	eventSystem.StartServiceWithPublisher(false)
 
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
@@ -2553,11 +2553,11 @@ func TestPlaceholderSmallerThanReal(t *testing.T) {
 
 	// wait for events to be processed
 	err = common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
-		return cache.Store.CountStoredEvents() == 1
+		return eventSystem.Store.CountStoredEvents() == 1
 	})
 	assert.NilError(t, err, "the event should have been processed")
 
-	records := cache.Store.CollectEvents()
+	records := eventSystem.Store.CollectEvents()
 	if records == nil {
 		t.Fatal("collecting eventChannel should return something")
 	}
@@ -2587,9 +2587,9 @@ func TestPlaceholderSmallerThanReal(t *testing.T) {
 // one real allocation should trigger cleanup of all placeholders
 func TestPlaceholderSmallerMulti(t *testing.T) {
 	setupUGM()
-	events.CreateAndSetEventCache()
-	cache := events.GetEventCache()
-	cache.StartService()
+	events.CreateAndSetEventSystem()
+	eventSystem := events.GetEventSystem()
+	eventSystem.StartServiceWithPublisher(false)
 
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
@@ -2639,12 +2639,12 @@ func TestPlaceholderSmallerMulti(t *testing.T) {
 
 	// wait for events to be processed
 	err = common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
-		fmt.Printf("checking event length: %d\n", cache.Store.CountStoredEvents())
-		return cache.Store.CountStoredEvents() == phCount
+		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
+		return eventSystem.Store.CountStoredEvents() == phCount
 	})
 	assert.NilError(t, err, "the events should have been processed")
 
-	records := cache.Store.CollectEvents()
+	records := eventSystem.Store.CollectEvents()
 	if records == nil {
 		t.Fatal("collecting eventChannel should return something")
 	}

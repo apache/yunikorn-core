@@ -29,7 +29,7 @@ import (
 
 // the fields of an event should match after stored and retrieved
 func TestStoreAndRetrieve(t *testing.T) {
-	store := newEventStoreImpl()
+	store := newEventStore()
 	event := si.EventRecord{
 		Type:     si.EventRecord_REQUEST,
 		ObjectID: "alloc1",
@@ -58,7 +58,7 @@ func TestStoreAndRetrieve(t *testing.T) {
 func TestStoreWithLimitedSize(t *testing.T) {
 	defaultEventStoreSize = 3
 
-	store := newEventStoreImpl()
+	store := newEventStore()
 	for i := 0; i < 5; i++ {
 		event := &si.EventRecord{
 			Type:     si.EventRecord_REQUEST,

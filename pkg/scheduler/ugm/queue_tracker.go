@@ -49,6 +49,8 @@ func newQueueTracker(queueName string) *QueueTracker {
 		queueName:           queueName,
 		resourceUsage:       resources.NewResource(),
 		runningApplications: make(map[string]bool),
+		maxResourceUsage:    resources.NewResource(),
+		maxRunningApps:      0,
 		childQueueTrackers:  make(map[string]*QueueTracker),
 	}
 	return queueTracker

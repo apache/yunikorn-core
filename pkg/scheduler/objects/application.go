@@ -33,6 +33,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/handler"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
@@ -195,7 +196,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	app.user = ugi
 	app.rmEventHandler = eventHandler
 	app.rmID = rmID
-	app.appEvents = newApplicationEvents(app)
+	app.appEvents = newApplicationEvents(app, events.GetEventSystem())
 	return app
 }
 

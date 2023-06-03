@@ -29,9 +29,15 @@ import (
 // need to change for testing
 var defaultEventChannelSize = 100000
 
-var ev *EventSystem
+var ev EventSystem
 
-type EventSystem struct {
+type EventSystem interface {
+	AddEvent(event *si.EventRecord)
+	StartService()
+	Stop()
+}
+
+type EventSystemImpl struct {
 	Store     *EventStore // storing eventChannel
 	publisher *EventPublisher
 
@@ -42,13 +48,13 @@ type EventSystem struct {
 	sync.Mutex
 }
 
-func GetEventSystem() *EventSystem {
+func GetEventSystem() EventSystem {
 	return ev
 }
 
 func CreateAndSetEventSystem() {
 	store := newEventStore()
-	ev = &EventSystem{
+	ev = &EventSystemImpl{
 		Store:     store,
 		channel:   make(chan *si.EventRecord, defaultEventChannelSize),
 		stop:      make(chan bool),
@@ -57,12 +63,11 @@ func CreateAndSetEventSystem() {
 	}
 }
 
-func (ec *EventSystem) StartService() {
+func (ec *EventSystemImpl) StartService() {
 	ec.StartServiceWithPublisher(true)
 }
 
-// VisibleForTesting
-func (ec *EventSystem) StartServiceWithPublisher(withPublisher bool) {
+func (ec *EventSystemImpl) StartServiceWithPublisher(withPublisher bool) {
 	go func() {
 		for {
 			select {
@@ -84,7 +89,7 @@ func (ec *EventSystem) StartServiceWithPublisher(withPublisher bool) {
 	}
 }
 
-func (ec *EventSystem) Stop() {
+func (ec *EventSystemImpl) Stop() {
 	ec.Lock()
 	defer ec.Unlock()
 
@@ -101,7 +106,7 @@ func (ec *EventSystem) Stop() {
 	ec.stopped = true
 }
 
-func (ec *EventSystem) AddEvent(event *si.EventRecord) {
+func (ec *EventSystemImpl) AddEvent(event *si.EventRecord) {
 	metrics.GetEventMetrics().IncEventsCreated()
 	select {
 	case ec.channel <- event:

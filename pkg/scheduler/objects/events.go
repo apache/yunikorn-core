@@ -29,7 +29,7 @@ import (
 
 type applicationEvents struct {
 	enabled     bool
-	eventSystem *events.EventSystem
+	eventSystem events.EventSystem
 	app         *Application
 }
 
@@ -63,11 +63,10 @@ func (evt *applicationEvents) sendPlaceholderLargerEvent(ph *Allocation, request
 	}
 }
 
-func newApplicationEvents(app *Application) *applicationEvents {
-	eventSystem := events.GetEventSystem()
+func newApplicationEvents(app *Application, evt events.EventSystem) *applicationEvents {
 	return &applicationEvents{
-		eventSystem: eventSystem,
-		enabled:     eventSystem != nil,
+		eventSystem: evt,
+		enabled:     evt != nil,
 		app:         app,
 	}
 }

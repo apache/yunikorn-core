@@ -56,7 +56,7 @@ func TestSimpleStartAndStop(t *testing.T) {
 // should be retrieved from the EventStore
 func TestSingleEventStoredCorrectly(t *testing.T) {
 	CreateAndSetEventSystem()
-	eventSystem := GetEventSystem()
+	eventSystem := GetEventSystem().(*EventSystemImpl) //nolint:errcheck
 	// don't run publisher, because it can collect the event while we're waiting
 	eventSystem.StartServiceWithPublisher(false)
 	defer eventSystem.Stop()

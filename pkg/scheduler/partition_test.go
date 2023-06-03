@@ -2509,7 +2509,7 @@ func TestAddTGAppDynamic(t *testing.T) {
 func TestPlaceholderSmallerThanReal(t *testing.T) {
 	setupUGM()
 	events.CreateAndSetEventSystem()
-	eventSystem := events.GetEventSystem()
+	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
 
 	partition, err := newBasePartition()
@@ -2588,7 +2588,7 @@ func TestPlaceholderSmallerThanReal(t *testing.T) {
 func TestPlaceholderSmallerMulti(t *testing.T) {
 	setupUGM()
 	events.CreateAndSetEventSystem()
-	eventSystem := events.GetEventSystem()
+	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
 
 	partition, err := newBasePartition()

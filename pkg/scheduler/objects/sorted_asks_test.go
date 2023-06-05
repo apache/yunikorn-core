@@ -27,7 +27,7 @@ import (
 	"gotest.tools/v3/assert"
 )
 
-func TestInsert(t *testing.T) {
+func TestInsertRemove(t *testing.T) {
 	sorted := sortedRequests{}
 	// alloc-3 > alloc-2 > alloc-1
 	sorted.insert(&AllocationAsk{
@@ -89,6 +89,12 @@ func TestInsert(t *testing.T) {
 	sorted.remove(ask50)
 	assert.Assert(t, !askPresent(ask50, sorted), "ask was not removed")
 	assert.Assert(t, checkSorted(sorted), "asks are not sorted")
+	assert.Equal(t, 99, len(sorted))
+
+	// remove non-existent
+	sorted.remove(&AllocationAsk{
+		allocationKey: "non-existing",
+	})
 	assert.Equal(t, 99, len(sorted))
 }
 

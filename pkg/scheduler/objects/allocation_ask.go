@@ -20,7 +20,6 @@ package objects
 
 import (
 	"fmt"
-	"sort"
 	"sync"
 	"time"
 
@@ -63,47 +62,6 @@ type AllocationLogEntry struct {
 	Message        string
 	LastOccurrence time.Time
 	Count          int32
-}
-
-type sortedRequests []*AllocationAsk
-
-func (s *sortedRequests) insert(ask *AllocationAsk) {
-	size := len(*s)
-
-	if size > 0 && ask.LessThan((*s)[size-1]) {
-		// fast path, insert at the end (most likely)
-		s.insertAt(size, ask)
-		return
-	}
-
-	idx := sort.Search(size, func(i int) bool {
-		return (*s)[i].LessThan(ask)
-	})
-	s.insertAt(idx, ask)
-}
-
-func (s *sortedRequests) insertAt(index int, ask *AllocationAsk) {
-	*s = append(*s, nil)
-	if index < len(*s) {
-		copy((*s)[index+1:], (*s)[index:])
-	}
-	(*s)[index] = ask
-}
-
-func (s *sortedRequests) remove(ask *AllocationAsk) {
-	idx := sort.Search(len(*s), func(i int) bool {
-		return (*s)[i].LessThan(ask)
-	})
-	if idx == len(*s) || (*s)[idx].allocationKey != ask.allocationKey {
-		return
-	}
-	s.removeAt(idx)
-}
-
-func (s *sortedRequests) removeAt(index int) {
-	copy((*s)[index:], (*s)[index+1:])
-	(*s)[len(*s)-1] = nil
-	*s = (*s)[:len(*s)-1]
 }
 
 func NewAllocationAsk(allocationKey string, applicationID string, allocatedResource *resources.Resource) *AllocationAsk {

@@ -118,37 +118,48 @@ func (cc *ClusterContext) schedule() bool {
 	// schedule each partition defined in the cluster
 	activity := false
 	for _, psc := range cc.GetPartitionMapClone() {
-		// if there are no resources in the partition just skip
-		if psc.root.GetMaxResource() == nil {
-			continue
-		}
-		// a stopped partition does not allocate
-		if psc.isStopped() {
-			continue
-		}
-		// try reservations first
-		schedulingStart := time.Now()
-		alloc := psc.tryReservedAllocate()
-		if alloc == nil {
-			// placeholder replacement second
-			alloc = psc.tryPlaceholderAllocate()
-			// nothing reserved that can be allocated try normal allocate
-			if alloc == nil {
-				alloc = psc.tryAllocate()
-			}
-		}
-		if alloc != nil {
-			metrics.GetSchedulerMetrics().ObserveSchedulingLatency(schedulingStart)
-			if alloc.GetResult() == objects.Replaced {
-				// communicate the removal to the RM
-				cc.notifyRMAllocationReleased(psc.RmID, alloc.GetReleasesClone(), si.TerminationType_PLACEHOLDER_REPLACED, "replacing uuid: "+alloc.GetUUID())
-			} else {
-				cc.notifyRMNewAllocation(psc.RmID, alloc)
-			}
-			activity = true
-		}
+		activity = activity || cc.schedulePartition(psc)
 	}
 	return activity
+}
+
+func (cc *ClusterContext) schedulePartition(psc *PartitionContext) bool {
+	// if there are no resources in the partition just skip
+	if psc.root.GetMaxResource() == nil {
+		return false
+	}
+	// a stopped partition does not allocate
+	if psc.isStopped() {
+		return false
+	}
+
+	psc.updateLock.Lock() // preventing dynamic config update while scheduling
+	defer psc.updateLock.Unlock()
+	// IMPORTANT: after this point, calling ClusterContext.Lock() is prohibited!
+
+	// try reservations first
+	schedulingStart := time.Now()
+	alloc := psc.tryReservedAllocate()
+	if alloc == nil {
+		// placeholder replacement second
+		alloc = psc.tryPlaceholderAllocate()
+		// nothing reserved that can be allocated try normal allocate
+		if alloc == nil {
+			alloc = psc.tryAllocate()
+		}
+	}
+	if alloc != nil {
+		metrics.GetSchedulerMetrics().ObserveSchedulingLatency(schedulingStart)
+		if alloc.GetResult() == objects.Replaced {
+			// communicate the removal to the RM
+			cc.notifyRMAllocationReleased(psc.RmID, alloc.GetReleasesClone(), si.TerminationType_PLACEHOLDER_REPLACED, "replacing uuid: "+alloc.GetUUID())
+		} else {
+			cc.notifyRMNewAllocation(psc.RmID, alloc)
+		}
+		return true
+	}
+
+	return false
 }
 
 func (cc *ClusterContext) processRMRegistrationEvent(event *rmevent.RMRegistrationEvent) {
@@ -373,14 +384,7 @@ func (cc *ClusterContext) updateSchedulerConfig(conf *configs.SchedulerConfig, r
 		p.Name = partitionName
 		part, ok := cc.partitions[p.Name]
 		if ok {
-			// make sure the new info passes all checks
-			_, err = newPartitionContext(p, rmID, nil)
-			if err != nil {
-				return err
-			}
-			// checks passed perform the real update
-			log.Logger().Info("updating partitions", zap.String("partitionName", partitionName))
-			err = part.updatePartitionDetails(p)
+			err = cc.updatePartition(partitionName, rmID, part, p)
 			if err != nil {
 				return err
 			}
@@ -406,6 +410,28 @@ func (cc *ClusterContext) updateSchedulerConfig(conf *configs.SchedulerConfig, r
 			log.Logger().Info("marked partition for removal",
 				zap.String("partitionName", part.Name))
 		}
+	}
+
+	return nil
+}
+
+func (cc *ClusterContext) updatePartition(partitionName, rmID string, part *PartitionContext,
+	partitionConfig configs.PartitionConfig) error {
+	// Note: holding two locks here. It's fine, as long as it's not called in reverse order.
+	// updateLock should only be called from ClusterContext.schedulePartition().
+	part.updateLock.Lock()
+	defer part.updateLock.Unlock()
+
+	// make sure the new info passes all checks
+	_, err := newPartitionContext(partitionConfig, rmID, nil)
+	if err != nil {
+		return err
+	}
+	// checks passed perform the real update
+	log.Logger().Info("updating partitions", zap.String("partitionName", partitionName))
+	err = part.updatePartitionDetails(partitionConfig)
+	if err != nil {
+		return err
 	}
 
 	return nil

@@ -283,3 +283,11 @@ func (aa *AllocationAsk) HasTriggeredPreemption() bool {
 	defer aa.RUnlock()
 	return aa.preemptionTriggered
 }
+
+func (aa *AllocationAsk) LessThan(other *AllocationAsk) bool {
+	if aa.priority == other.priority {
+		return aa.createTime.After(other.createTime) || aa.createTime.Equal(other.createTime)
+	}
+
+	return aa.priority < other.priority
+}

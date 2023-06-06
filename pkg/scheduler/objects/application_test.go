@@ -21,7 +21,6 @@ package objects
 import (
 	"fmt"
 	"math"
-	"strconv"
 	"testing"
 	"time"
 
@@ -662,40 +661,6 @@ func TestRemovePlaceholderAllocationWithNoRealAllocation(t *testing.T) {
 	app.RemoveAllocation("uuid-1", si.TerminationType_UNKNOWN_TERMINATION_TYPE)
 	assert.Equal(t, app.stateMachine.Current(), Completing.String())
 	assertUserGroupResource(t, getTestUserGroup(), nil)
-}
-
-// This test must not test the sorter that is underlying.
-// It tests the Application specific parts of the code only.
-func TestSortRequests(t *testing.T) {
-	app := newApplication(appID1, "default", "root.unknown")
-	if app == nil || app.ApplicationID != appID1 {
-		t.Fatalf("app create failed which should not have %v", app)
-	}
-	if app.sortedRequests != nil {
-		t.Fatalf("new app create should not have sorted requests: %v", app)
-	}
-	app.sortRequests()
-	if app.sortedRequests != nil {
-		t.Fatalf("after sort call (no pending resources) list must be nil: %v", app.sortedRequests)
-	}
-
-	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
-	for i := 1; i < 4; i++ {
-		num := strconv.Itoa(i)
-		ask := newAllocationAsk("ask-"+num, appID1, res)
-		ask.priority = int32(i)
-		app.requests[ask.GetAllocationKey()] = ask
-	}
-	app.sortRequests()
-	if len(app.sortedRequests) != 3 {
-		t.Fatalf("app sorted requests not correct: %v", app.sortedRequests)
-	}
-	allocKey := app.sortedRequests[0].GetAllocationKey()
-	delete(app.requests, allocKey)
-	app.sortRequests()
-	if len(app.sortedRequests) != 2 {
-		t.Fatalf("app sorted requests not correct after removal: %v", app.sortedRequests)
-	}
 }
 
 func TestStateChangeOnUpdate(t *testing.T) {

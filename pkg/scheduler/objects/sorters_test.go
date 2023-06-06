@@ -387,35 +387,6 @@ func TestSortAppsStateAware(t *testing.T) {
 	assertAppListLength(t, list, []string{appID0, appID1, appID3}, "state not app-2")
 }
 
-func TestSortAsks(t *testing.T) {
-	// stable sort is used so equal values stay where they were
-	res := resources.NewResourceFromMap(map[string]resources.Quantity{
-		"vcore": resources.Quantity(1)})
-	list := make([]*AllocationAsk, 4)
-	for i := 0; i < 4; i++ {
-		num := strconv.Itoa(i)
-		ask := newAllocationAsk("ask-"+num, "app-1", res)
-		ask.priority = int32(i)
-		list[i] = ask
-	}
-	// move things around
-	list[0], list[2] = list[2], list[0]
-	list[1], list[3] = list[3], list[1]
-	assertAskList(t, list, []int{2, 3, 0, 1}, "moved 1")
-
-	sortAskByPriority(list)
-	// asks should come back in order: 3, 2, 1, 0
-	assertAskList(t, list, []int{3, 2, 1, 0}, "descending")
-
-	// make asks with same priority
-	// ask-3 and ask-1 both with prio 1 do not change order
-	// ask-3 must always be earlier in the list
-	list[0].priority = 1
-	sortAskByPriority(list)
-	// asks should come back in order: 3, 2, 0, 1
-	assertAskList(t, list, []int{3, 1, 0, 2}, "descending same prio")
-}
-
 func queueNames(list []*Queue) string {
 	result := make([]string, 0)
 	for _, v := range list {

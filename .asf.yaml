@@ -17,6 +17,8 @@
 # under the License.
 #
 
+# https://cwiki.apache.org/confluence/display/INFRA/git+-+.asf.yaml+features
+
 github:
   description: "Apache YuniKorn Core"
   homepage: https://yunikorn.apache.org/
@@ -26,11 +28,6 @@ github:
     - universal-resource-scheduler
     - apache-yarn
     - kubernetes
-  notifications:
-    commits:      issues@yunikorn.apache.org
-    issues:       reviews@yunikorn.apache.org
-    pullrequests: reviews@yunikorn.apache.org
-    jira_options: link label
   enabled_merge_buttons:
     squash: true
     merge:  false
@@ -39,3 +36,9 @@ github:
     wiki:     false
     issues:   false
     projects: false
+
+notifications:
+  commits:      issues@yunikorn.apache.org
+  issues:       reviews@yunikorn.apache.org
+  pullrequests: reviews@yunikorn.apache.org
+  jira_options: link label

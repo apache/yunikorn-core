@@ -79,8 +79,8 @@ func TestCreateShimPublisher(t *testing.T) {
 
 // StartService() and Stop() functions should not cause panic
 func TestServiceStartStopInternal(t *testing.T) {
-	store := newEventStoreImpl()
-	publisher := createShimPublisherInternal(store)
+	store := newEventStore()
+	publisher := CreateShimPublisher(store)
 	publisher.StartService()
 	defer publisher.Stop()
 	assert.Equal(t, publisher.getEventStore(), store)
@@ -89,8 +89,9 @@ func TestServiceStartStopInternal(t *testing.T) {
 func TestNoFillWithoutEventPluginRegistered(t *testing.T) {
 	pushEventInterval := 2 * time.Millisecond
 
-	store := newEventStoreImpl()
-	publisher := createShimPublisherWithParameters(store, pushEventInterval)
+	store := newEventStore()
+	publisher := CreateShimPublisher(store)
+	publisher.pushEventInterval = pushEventInterval
 	publisher.StartService()
 	defer publisher.Stop()
 
@@ -116,8 +117,9 @@ func TestPublisherSendsEvent(t *testing.T) {
 	eventPlugin, err := createEventPluginForTest()
 	assert.NilError(t, err, "could not create event plugin for test")
 
-	store := newEventStoreImpl()
-	publisher := createShimPublisherWithParameters(store, pushEventInterval)
+	store := newEventStore()
+	publisher := CreateShimPublisher(store)
+	publisher.pushEventInterval = pushEventInterval
 	publisher.StartService()
 	defer publisher.Stop()
 

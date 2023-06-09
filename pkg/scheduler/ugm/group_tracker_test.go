@@ -32,6 +32,7 @@ func TestGTIncreaseTrackedResource(t *testing.T) {
 	// root->parent->child1->child12
 	// root->parent->child2
 	// root->parent->child12 (similar name like above leaf queue, but it is being treated differently as similar names are allowed)
+	GetUserManager()
 	user := &security.UserGroup{User: "test", Groups: []string{"test"}}
 	groupTracker := newGroupTracker(user.User)
 
@@ -39,36 +40,36 @@ func TestGTIncreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
-	err = groupTracker.increaseTrackedResource(queuePath1, TestApp1, usage1)
-	if err != nil {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
+	result := groupTracker.increaseTrackedResource(queuePath1, TestApp1, usage1)
+	if !result {
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, usage1)
 	}
 
 	usage2, err := resources.NewResourceFromConf(map[string]string{"mem": "20M", "vcore": "20"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
 	}
-	err = groupTracker.increaseTrackedResource(queuePath2, TestApp2, usage2)
-	if err != nil {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage2, err)
+	result = groupTracker.increaseTrackedResource(queuePath2, TestApp2, usage2)
+	if !result {
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath2, TestApp2, usage2)
 	}
 
 	usage3, err := resources.NewResourceFromConf(map[string]string{"mem": "30M", "vcore": "30"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	err = groupTracker.increaseTrackedResource(queuePath3, TestApp3, usage3)
-	if err != nil {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath3, TestApp3, usage3, err)
+	result = groupTracker.increaseTrackedResource(queuePath3, TestApp3, usage3)
+	if !result {
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath3, TestApp3, usage3)
 	}
 
 	usage4, err := resources.NewResourceFromConf(map[string]string{"mem": "20M", "vcore": "20"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	err = groupTracker.increaseTrackedResource(queuePath4, TestApp4, usage4)
-	if err != nil {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath4, TestApp4, usage4, err)
+	result = groupTracker.increaseTrackedResource(queuePath4, TestApp4, usage4)
+	if !result {
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath4, TestApp4, usage4)
 	}
 	actualResources := getGroupResource(groupTracker)
 
@@ -91,9 +92,9 @@ func TestGTDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
-	err = groupTracker.increaseTrackedResource(queuePath1, TestApp1, usage1)
-	if err != nil {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
+	result := groupTracker.increaseTrackedResource(queuePath1, TestApp1, usage1)
+	if !result {
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, usage1)
 	}
 	assert.Equal(t, 1, len(groupTracker.getTrackedApplications()))
 
@@ -101,9 +102,9 @@ func TestGTDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
 	}
-	err = groupTracker.increaseTrackedResource(queuePath2, TestApp2, usage2)
-	if err != nil {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage2, err)
+	result = groupTracker.increaseTrackedResource(queuePath2, TestApp2, usage2)
+	if !result {
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath2, TestApp2, usage2)
 	}
 	actualResources := getGroupResource(groupTracker)
 
@@ -117,14 +118,14 @@ func TestGTDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	removeQT, err := groupTracker.decreaseTrackedResource(queuePath1, TestApp1, usage3, false)
-	if err != nil {
+	removeQT, decreased := groupTracker.decreaseTrackedResource(queuePath1, TestApp1, usage3, false)
+	if !decreased {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage3, err)
 	}
 	assert.Equal(t, removeQT, false, "wrong remove queue tracker value")
 
-	removeQT, err = groupTracker.decreaseTrackedResource(queuePath2, TestApp2, usage3, false)
-	if err != nil {
+	removeQT, decreased = groupTracker.decreaseTrackedResource(queuePath2, TestApp2, usage3, false)
+	if !decreased {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage3, err)
 	}
 	assert.Equal(t, removeQT, false, "wrong remove queue tracker value")
@@ -141,8 +142,8 @@ func TestGTDecreaseTrackedResource(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
 
-	removeQT, err = groupTracker.decreaseTrackedResource(queuePath1, TestApp1, usage4, true)
-	if err != nil {
+	removeQT, decreased = groupTracker.decreaseTrackedResource(queuePath1, TestApp1, usage4, true)
+	if !decreased {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
 	}
 	assert.Equal(t, 1, len(groupTracker.getTrackedApplications()))
@@ -153,8 +154,8 @@ func TestGTDecreaseTrackedResource(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
 
-	removeQT, err = groupTracker.decreaseTrackedResource(queuePath2, TestApp2, usage5, true)
-	if err != nil {
+	removeQT, decreased = groupTracker.decreaseTrackedResource(queuePath2, TestApp2, usage5, true)
+	if !decreased {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage2, err)
 	}
 	assert.Equal(t, 0, len(groupTracker.getTrackedApplications()))
@@ -170,39 +171,25 @@ func TestGTSetMaxLimits(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
-	err = groupTracker.increaseTrackedResource(queuePath1, TestApp1, usage1)
-	if err != nil {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
+
+	result := groupTracker.increaseTrackedResource(queuePath1, TestApp1, usage1)
+	if !result {
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, usage1)
 	}
 
-	setMaxAppsErr := groupTracker.setMaxApplications(1, queuePath1)
-	assert.NilError(t, setMaxAppsErr)
+	groupTracker.setLimits(queuePath1, resources.Multiply(usage1, 5), 5)
+	groupTracker.setLimits("root.parent", resources.Multiply(usage1, 10), 10)
 
-	setMaxResourcesErr := groupTracker.setMaxResources(usage1, queuePath1)
-	assert.NilError(t, setMaxResourcesErr)
-
-	setParentMaxAppsErr := groupTracker.setMaxApplications(1, "root.parent")
-	assert.NilError(t, setParentMaxAppsErr)
-
-	setParentMaxResourcesErr := groupTracker.setMaxResources(usage1, "root.parent")
-	assert.NilError(t, setParentMaxResourcesErr)
-
-	err = groupTracker.increaseTrackedResource(queuePath1, TestApp2, usage1)
-	if err != nil {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
+	result = groupTracker.increaseTrackedResource(queuePath1, TestApp2, usage1)
+	if !result {
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp2, usage1)
 	}
-
-	setMaxAppsErr1 := groupTracker.setMaxApplications(1, queuePath1)
-	assert.Error(t, setMaxAppsErr1, "current running applications is greater than config max applications for "+queuePath1)
-
-	setMaxResourcesErr1 := groupTracker.setMaxResources(usage1, queuePath1)
-	assert.Error(t, setMaxResourcesErr1, "current resource usage is greater than config max resource for "+queuePath1)
-
-	setParentMaxAppsErr1 := groupTracker.setMaxApplications(1, "root.parent")
-	assert.Error(t, setParentMaxAppsErr1, "current running applications is greater than config max applications for root.parent")
-
-	setParentMaxResourcesErr1 := groupTracker.setMaxResources(usage1, "root.parent")
-	assert.Error(t, setParentMaxResourcesErr1, "current resource usage is greater than config max resource for root.parent")
+	result = groupTracker.increaseTrackedResource(queuePath1, TestApp3, usage1)
+	if !result {
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp2, usage1)
+	}
+	groupTracker.setLimits(queuePath1, usage1, 1)
+	groupTracker.setLimits("root.parent", usage1, 1)
 }
 
 func getGroupResource(gt *GroupTracker) map[string]*resources.Resource {

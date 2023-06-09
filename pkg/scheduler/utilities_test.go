@@ -80,7 +80,7 @@ func newBasePartition() (*PartitionContext, error) {
 									"memory": "5",
 									"vcores": "5",
 								},
-								MaxApplications: 1,
+								MaxApplications: 8,
 							},
 						},
 					},
@@ -98,7 +98,7 @@ func newBasePartition() (*PartitionContext, error) {
 							"memory": "10",
 							"vcores": "10",
 						},
-						MaxApplications: 2,
+						MaxApplications: 10,
 					},
 				},
 			},
@@ -179,7 +179,7 @@ func newConfiguredPartition() (*PartitionContext, error) {
 									"memory": "5",
 									"vcores": "5",
 								},
-								MaxApplications: 2,
+								MaxApplications: 8,
 							},
 						},
 					},
@@ -197,7 +197,7 @@ func newConfiguredPartition() (*PartitionContext, error) {
 							"memory": "10",
 							"vcores": "10",
 						},
-						MaxApplications: 2,
+						MaxApplications: 10,
 					},
 				},
 			},
@@ -246,7 +246,7 @@ func newPreemptionConfiguredPartition(parentLimit map[string]string, leafGuarant
 											"memory": "5",
 											"vcores": "5",
 										},
-										MaxApplications: 1,
+										MaxApplications: 8,
 									},
 								},
 							},
@@ -271,7 +271,7 @@ func newPreemptionConfiguredPartition(parentLimit map[string]string, leafGuarant
 											"memory": "5",
 											"vcores": "5",
 										},
-										MaxApplications: 1,
+										MaxApplications: 6,
 									},
 								},
 							},
@@ -289,7 +289,7 @@ func newPreemptionConfiguredPartition(parentLimit map[string]string, leafGuarant
 									"memory": "5",
 									"vcores": "5",
 								},
-								MaxApplications: 2,
+								MaxApplications: 8,
 							},
 						},
 					},
@@ -307,7 +307,7 @@ func newPreemptionConfiguredPartition(parentLimit map[string]string, leafGuarant
 							"memory": "10",
 							"vcores": "10",
 						},
-						MaxApplications: 2,
+						MaxApplications: 10,
 					},
 				},
 			},
@@ -592,8 +592,8 @@ func assertLimits(t *testing.T, userGroup security.UserGroup, expected *resource
 	expectedQueuesMaxLimits["root.default"] = make(map[string]interface{})
 	expectedQueuesMaxLimits["root"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10, "vcores": 10})
 	expectedQueuesMaxLimits["root.default"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5, "vcores": 5})
-	expectedQueuesMaxLimits["root"][maxapplications] = uint64(2)
-	expectedQueuesMaxLimits["root.default"][maxapplications] = uint64(1)
+	expectedQueuesMaxLimits["root"][maxapplications] = uint64(10)
+	expectedQueuesMaxLimits["root.default"][maxapplications] = uint64(8)
 	assertUserGroupResourceMaxLimits(t, userGroup, expected, expectedQueuesMaxLimits)
 }
 

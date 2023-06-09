@@ -31,7 +31,6 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
-	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
@@ -98,7 +97,7 @@ func checkACL(acl string) error {
 	// trim any white space
 	acl = strings.TrimSpace(acl)
 	// handle special cases: deny and wildcard
-	if len(acl) == 0 || acl == security.WildCard {
+	if len(acl) == 0 || acl == common.Wildcard {
 		return nil
 	}
 

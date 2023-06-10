@@ -26,22 +26,6 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-type EventSystemMock struct {
-	events []*si.EventRecord
-}
-
-func (m *EventSystemMock) AddEvent(event *si.EventRecord) {
-	m.events = append(m.events, event)
-}
-
-func (m *EventSystemMock) StartService() {}
-
-func (m *EventSystemMock) Stop() {}
-
-func newEventSystemMock() *EventSystemMock {
-	return &EventSystemMock{events: make([]*si.EventRecord, 0)}
-}
-
 func TestSendAppDoesNotFitEvent(t *testing.T) {
 	app := &Application{
 		queuePath: "root.test",

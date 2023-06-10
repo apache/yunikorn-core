@@ -355,15 +355,15 @@ func TestRemoveNodeWithAllocations(t *testing.T) {
 	// wait for events to be processed
 	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
-		return eventSystem.Store.CountStoredEvents() == 1
+		return eventSystem.Store.CountStoredEvents() == 4 // 3 node alloc + 1 app event
 	})
 	assert.NilError(t, err, "the event should have been processed")
 	records := eventSystem.Store.CollectEvents()
 	if records == nil {
 		t.Fatal("collecting eventChannel should return something")
 	}
-	assert.Equal(t, 1, len(records), "expecting alloc timeout event")
-	record := records[0]
+	assert.Equal(t, 4, len(records), "expecting alloc timeout event")
+	record := records[3]
 	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
 	assert.Equal(t, appID1, record.ObjectID, "incorrect object ID, expected application ID")
 	assert.Equal(t, allocUUID, record.ReferenceID, "incorrect reference ID, expected alloc ID")
@@ -770,16 +770,16 @@ func TestPlaceholderDataWithRemoval(t *testing.T) {
 	// wait for events to be processed
 	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
-		return eventSystem.Store.CountStoredEvents() == 15
+		return eventSystem.Store.CountStoredEvents() == 23
 	})
 	assert.NilError(t, err, "the event should have been processed")
 	records := eventSystem.Store.CollectEvents()
 	if records == nil {
 		t.Fatal("collecting eventChannel should return something")
 	}
-	assert.Equal(t, 15, len(records), "expecting 15 events: 7 new alloc ask, 7 new alloc, and 1 stopped by rm")
+	assert.Equal(t, 23, len(records), "expecting 15 events: 7 new alloc ask, 7 new alloc, and 1 stopped by rm")
 	// new alloc ask and alloc events are tested in other cases, we only want to test the stopped by rm event
-	record := records[14]
+	record := records[21]
 	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
 	assert.Equal(t, release.ApplicationID, record.ObjectID, "incorrect object ID, expected application ID")
 	assert.Equal(t, release.UUID, record.ReferenceID, "incorrect reference ID, expected alloc ID")
@@ -1751,16 +1751,16 @@ func TestPreemption(t *testing.T) {
 	// wait for events to be processed
 	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
-		return eventSystem.Store.CountStoredEvents() == 6
+		return eventSystem.Store.CountStoredEvents() == 8
 	})
 	assert.NilError(t, err, "the event should have been processed")
 	records := eventSystem.Store.CollectEvents()
 	if records == nil {
 		t.Fatal("collecting eventChannel should return something")
 	}
-	assert.Equal(t, 6, len(records), "expecting 6 events: 3 new alloc ask, 2 new alloc, and 1 alloc preempted event")
+	assert.Equal(t, 8, len(records), "expecting 6 events: 3 new alloc ask, 2 new alloc, and 1 alloc preempted event")
 	// new alloc ask and new alloc events are tested in other cases, we only want to test the alloc preempted event
-	record := records[5]
+	record := records[7]
 	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
 	assert.Equal(t, ask3.GetApplicationID(), record.ObjectID, "incorrect object ID, expected application ID")
 	assert.Equal(t, alloc2.GetUUID(), record.ReferenceID, "incorrect reference ID, expected alloc ID")
@@ -2696,7 +2696,7 @@ func TestPlaceholderSmallerThanReal(t *testing.T) {
 	// wait for events to be processed
 	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
-		return eventSystem.Store.CountStoredEvents() == 4
+		return eventSystem.Store.CountStoredEvents() == 5
 	})
 	assert.NilError(t, err, "the event should have been processed")
 
@@ -2704,26 +2704,26 @@ func TestPlaceholderSmallerThanReal(t *testing.T) {
 	if records == nil {
 		t.Fatal("collecting eventChannel should return something")
 	}
-	assert.Equal(t, 4, len(records), "expecting four events: ph-1 ask, ph-1 allocation, alloc-1 ask and placeholder mismatch")
+	assert.Equal(t, 5, len(records), "expecting four events: ph-1 ask, ph-1 allocation, alloc-1 ask and placeholder mismatch")
 	phAskRecord := records[0]
 	assert.Equal(t, si.EventRecord_APP, phAskRecord.Type, "incorrect event type, expect app")
 	assert.Equal(t, appID1, phAskRecord.ObjectID, "incorrect object ID, expected application ID")
 	assert.Equal(t, phID, phAskRecord.ReferenceID, "incorrect reference ID, expected placeholder alloc ID")
 	assert.Equal(t, si.EventRecord_ADD, phAskRecord.EventChangeType, "incorrect change type, expected add")
 	assert.Equal(t, si.EventRecord_APP_REQUEST, phAskRecord.EventChangeDetail, "incorrect change detail, expected app request")
-	phAllocRecord := records[1]
+	phAllocRecord := records[2]
 	assert.Equal(t, si.EventRecord_APP, phAllocRecord.Type, "incorrect event type, expect app")
 	assert.Equal(t, appID1, phAllocRecord.ObjectID, "incorrect object ID, expected application ID")
 	assert.Equal(t, ph.GetUUID(), phAllocRecord.ReferenceID, "incorrect reference ID, expected placeholder alloc UUID")
 	assert.Equal(t, si.EventRecord_ADD, phAllocRecord.EventChangeType, "incorrect change type, expected add")
 	assert.Equal(t, si.EventRecord_APP_ALLOC, phAllocRecord.EventChangeDetail, "incorrect change detail, expected app alloc")
-	allocAskRecord := records[2]
+	allocAskRecord := records[3]
 	assert.Equal(t, si.EventRecord_APP, allocAskRecord.Type, "incorrect event type, expect app")
 	assert.Equal(t, appID1, allocAskRecord.ObjectID, "incorrect object ID, expected application ID")
 	assert.Equal(t, allocID, allocAskRecord.ReferenceID, "incorrect reference ID, expected alloc ID")
 	assert.Equal(t, si.EventRecord_ADD, allocAskRecord.EventChangeType, "incorrect change type, expected add")
 	assert.Equal(t, si.EventRecord_APP_REQUEST, allocAskRecord.EventChangeDetail, "incorrect change detail, expected app alloc")
-	placeholderMismatchRecord := records[3]
+	placeholderMismatchRecord := records[4]
 	assert.Equal(t, si.EventRecord_REQUEST, placeholderMismatchRecord.Type, "incorrect event type")
 	assert.Equal(t, phID, placeholderMismatchRecord.ObjectID, "incorrect allocation ID, expected placeholder alloc ID")
 	assert.Equal(t, appID1, placeholderMismatchRecord.ReferenceID, "event should reference application ID")
@@ -2801,7 +2801,7 @@ func TestPlaceholderSmallerMulti(t *testing.T) {
 	// wait for events to be processed
 	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
-		return eventSystem.Store.CountStoredEvents() == 16
+		return eventSystem.Store.CountStoredEvents() == 21
 	})
 	assert.NilError(t, err, "the events should have been processed")
 
@@ -2809,7 +2809,7 @@ func TestPlaceholderSmallerMulti(t *testing.T) {
 	if records == nil {
 		t.Fatal("collecting eventChannel should return something")
 	}
-	assert.Equal(t, 16, len(records), "expecting 16 events: 6 alloc ask, 5 alloc, and 5 placeholder mismatch")
+	assert.Equal(t, 21, len(records), "expecting 16 events: 6 alloc ask, 5 alloc, and 5 placeholder mismatch")
 	assertLimits(t, getTestUserGroup(), tgRes)
 
 	// release placeholders: do what the context would do after the shim processing
@@ -2968,16 +2968,16 @@ func TestPlaceholderMatch(t *testing.T) {
 	// wait for events to be processed
 	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
-		return eventSystem.Store.CountStoredEvents() == 6
+		return eventSystem.Store.CountStoredEvents() == 8
 	})
 	assert.NilError(t, err, "the event should have been processed")
 	records := eventSystem.Store.CollectEvents()
 	if records == nil {
 		t.Fatal("collecting eventChannel should return something")
 	}
-	assert.Equal(t, 6, len(records), "expecting 6 events: 3 new alloc ask, 2 new alloc , and 1 alloc replaced")
+	assert.Equal(t, 8, len(records), "expecting 8 events")
 	// new alloc sak and new alloc are tested in other cases, we only test the alloc replaced
-	record := records[5]
+	record := records[7]
 	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
 	assert.Equal(t, alloc.GetApplicationID(), record.ObjectID, "incorrect object ID, expected application ID")
 	assert.Equal(t, phUUID, record.ReferenceID, "incorrect reference ID, expected alloc ID")
@@ -3204,16 +3204,16 @@ func TestFailReplacePlaceholder(t *testing.T) {
 	// wait for events to be processed
 	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
-		return eventSystem.Store.CountStoredEvents() == 4
+		return eventSystem.Store.CountStoredEvents() == 6
 	})
 	assert.NilError(t, err, "the event should have been processed")
 	records := eventSystem.Store.CollectEvents()
 	if records == nil {
 		t.Fatal("collecting eventChannel should return something")
 	}
-	assert.Equal(t, 4, len(records), "expecting 4 events: 2 new alloc ask, 1 new alloc, and 1 alloc replaced")
+	assert.Equal(t, 6, len(records), "expecting 4 events: 2 new alloc ask, 1 new alloc, and 1 alloc replaced")
 	// new alloc ask and new alloc are tested in other cases, we only test alloc replaced here
-	record := records[3]
+	record := records[5]
 	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
 	assert.Equal(t, alloc.GetApplicationID(), record.ObjectID, "incorrect object ID, expected application ID")
 	assert.Equal(t, alloc.GetFirstRelease().GetUUID(), record.ReferenceID, "incorrect reference ID, expected alloc ID")

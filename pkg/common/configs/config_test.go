@@ -1769,7 +1769,7 @@ partitions:
                   - limit:
                     users: 
                     - user1
-                    maxapplications: ` + strconv.Itoa(int(leafQueueMaxApps)) + `
+                    maxapplications: ` + fmt.Sprintf("%d", int(leafQueueMaxApps)) + `
                     maxresources: ` + leafQueueMaxResource + `
           - name: level2
             maxapplications: 100
@@ -1828,7 +1828,7 @@ partitions:
                   - limit:
                     users: 
                     - user1
-                    maxapplications: ` + strconv.Itoa(int(leafQueueMaxApps)) + `
+                    maxapplications: ` + fmt.Sprintf("%d", int(leafQueueMaxApps)) + `
                     maxresources: ` + userMaxResource + `
           - name: level2
             maxapplications: 100
@@ -1969,7 +1969,7 @@ partitions:
                   - limit:
                     groups: 
                     - group1
-                    maxapplications: ` + strconv.Itoa(int(leafQueueMaxApps)) + `
+                    maxapplications: ` + fmt.Sprintf("%d", int(leafQueueMaxApps)) + `
                     maxresources: ` + leafQueueMaxResource + `
           - name: level2
             maxapplications: 100

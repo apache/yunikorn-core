@@ -21,10 +21,7 @@ package objects
 import (
 	"fmt"
 
-	"go.uber.org/zap"
-
 	"github.com/apache/yunikorn-core/pkg/events"
-	"github.com/apache/yunikorn-core/pkg/log"
 )
 
 type applicationEvents struct {
@@ -39,13 +36,8 @@ func (evt *applicationEvents) sendAppDoesNotFitEvent(request *AllocationAsk) {
 	}
 
 	message := fmt.Sprintf("Application %s does not fit into %s queue", request.GetApplicationID(), evt.app.queuePath)
-	if event, err := events.CreateRequestEventRecord(request.GetAllocationKey(), request.GetApplicationID(), "InsufficientQueueResources", message); err != nil {
-		log.Logger().Warn("Event creation failed",
-			zap.String("event message", message),
-			zap.Error(err))
-	} else {
-		evt.eventSystem.AddEvent(event)
-	}
+	event := events.CreateRequestEventRecord(request.GetAllocationKey(), request.GetApplicationID(), "InsufficientQueueResources", message)
+	evt.eventSystem.AddEvent(event)
 }
 
 func (evt *applicationEvents) sendPlaceholderLargerEvent(ph *Allocation, request *AllocationAsk) {
@@ -54,13 +46,8 @@ func (evt *applicationEvents) sendPlaceholderLargerEvent(ph *Allocation, request
 	}
 
 	message := fmt.Sprintf("Task group '%s' in application '%s': allocation resources '%s' are not matching placeholder '%s' allocation with ID '%s'", ph.GetTaskGroup(), evt.app.ApplicationID, request.GetAllocatedResource().String(), ph.GetAllocatedResource().String(), ph.GetAllocationKey())
-	if event, err := events.CreateRequestEventRecord(ph.GetAllocationKey(), evt.app.ApplicationID, "releasing placeholder: real allocation is larger than placeholder", message); err != nil {
-		log.Logger().Warn("Event creation failed",
-			zap.String("event message", message),
-			zap.Error(err))
-	} else {
-		evt.eventSystem.AddEvent(event)
-	}
+	event := events.CreateRequestEventRecord(ph.GetAllocationKey(), evt.app.ApplicationID, "releasing placeholder: real allocation is larger than placeholder", message)
+	evt.eventSystem.AddEvent(event)
 }
 
 func newApplicationEvents(app *Application, evt events.EventSystem) *applicationEvents {

@@ -27,8 +27,7 @@ import (
 )
 
 func TestCreateEventRecord(t *testing.T) {
-	record, err := createEventRecord(si.EventRecord_NODE, "ask", "app", "reason", "message")
-	assert.NilError(t, err, "the error should be nil")
+	record := createEventRecord(si.EventRecord_NODE, "ask", "app", "reason", "message")
 	assert.Equal(t, record.Type, si.EventRecord_NODE)
 	assert.Equal(t, record.ObjectID, "ask")
 	assert.Equal(t, record.GroupID, "app")
@@ -40,31 +39,15 @@ func TestCreateEventRecord(t *testing.T) {
 }
 
 func TestCreateEventRecordTypes(t *testing.T) {
-	record, err := CreateRequestEventRecord("ask", "app", "reason", "message")
-	assert.NilError(t, err, "the error should be nil")
+	record := CreateRequestEventRecord("ask", "app", "reason", "message")
 	assert.Equal(t, record.Type, si.EventRecord_REQUEST)
 
-	record, err = CreateAppEventRecord("ask", "app", "message")
-	assert.NilError(t, err, "the error should be nil")
+	record = CreateAppEventRecord("ask", "app", "message")
 	assert.Equal(t, record.Type, si.EventRecord_APP)
 
-	record, err = CreateNodeEventRecord("ask", "app", "message")
-	assert.NilError(t, err, "the error should be nil")
+	record = CreateNodeEventRecord("ask", "app", "message")
 	assert.Equal(t, record.Type, si.EventRecord_NODE)
 
-	record, err = CreateQueueEventRecord("ask", "app", "reason", "message")
-	assert.NilError(t, err, "the error should be nil")
+	record = CreateQueueEventRecord("ask", "app", "reason", "message")
 	assert.Equal(t, record.Type, si.EventRecord_QUEUE)
-}
-
-func TestEmptyFields(t *testing.T) {
-	record, err := createEventRecord(si.EventRecord_QUEUE, "obj", "group", "reason", "message")
-	assert.NilError(t, err)
-	assert.Assert(t, record != nil, "the EventRecord should be created with a non-empty objectID")
-
-	_, err = createEventRecord(si.EventRecord_QUEUE, "", "group", "reason", "message")
-	assert.Assert(t, err != nil, "the EventRecord should not be created with empty objectID")
-
-	_, err = createEventRecord(si.EventRecord_QUEUE, "obj", "group", "", "message")
-	assert.Assert(t, err != nil, "the EventRecord should not be created with empty reason")
 }

@@ -59,16 +59,6 @@ func TestSendAppDoesNotFitEvent(t *testing.T) {
 		allocationKey: aKey,
 	})
 	assert.Equal(t, 1, len(mock.events), "event was not generated")
-
-	// enabled, ObjectID missing
-	mock = newEventSystemMock()
-	evt = newApplicationEvents(app, mock)
-	assert.Assert(t, evt.eventSystem != nil, "event system should not be nil")
-	assert.Assert(t, evt.enabled, "event system should be enabled")
-	evt.sendAppDoesNotFitEvent(&AllocationAsk{
-		applicationID: appID0,
-	})
-	assert.Equal(t, 0, len(mock.events), "event was generated")
 }
 
 func TestSendPlaceholderLargerEvent(t *testing.T) {
@@ -94,16 +84,6 @@ func TestSendPlaceholderLargerEvent(t *testing.T) {
 		allocationKey: aKey,
 	})
 	assert.Equal(t, 1, len(mock.events), "event was not generated")
-
-	// enabled, ObjectID missing
-	mock = newEventSystemMock()
-	evt = newApplicationEvents(app, mock)
-	assert.Assert(t, evt.eventSystem != nil, "event system should not be nil")
-	assert.Assert(t, evt.enabled, "event system should be enabled")
-	evt.sendPlaceholderLargerEvent(&Allocation{}, &AllocationAsk{
-		applicationID: appID0,
-	})
-	assert.Equal(t, 0, len(mock.events), "event was generated")
 }
 
 func newEventSystemMock() *EventSystemMock {

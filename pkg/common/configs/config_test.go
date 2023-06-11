@@ -22,7 +22,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -1769,8 +1768,8 @@ partitions:
                   - limit:
                     users: 
                     - user1
-                    maxapplications: ` + fmt.Sprintf("%d", int(leafQueueMaxApps)) + `
-                    maxresources: ` + leafQueueMaxResource + `
+                    maxapplications: ` + "%d" + `
+                    maxresources: ` + "%s" + `
           - name: level2
             maxapplications: 100
             resources:
@@ -1785,7 +1784,7 @@ partitions:
                 maxapplications: 10
                 maxresources: {memory: 1000, vcore: 100}
 `
-	return data
+	return fmt.Sprintf(data, leafQueueMaxApps, leafQueueMaxResource)
 }
 
 func prepareUserLimitsWithTwoLevelsConfig(leafQueueMaxApps uint64, leafQueueMaxResource string, userMaxResource string) string {
@@ -1815,7 +1814,7 @@ partitions:
               guaranteed:
                 {memory: 1000, vcore: 10}
               max:
-                ` + leafQueueMaxResource + `
+                ` + "%s" + `
             queues:
               - name: leaf
                 maxapplications: 900
@@ -1823,13 +1822,13 @@ partitions:
                   guaranteed:
                     {memory: 1000, vcore: 10}
                   max:
-                    ` + leafQueueMaxResource + `
+                    ` + "%s" + `
                 limits:
                   - limit:
                     users: 
                     - user1
-                    maxapplications: ` + fmt.Sprintf("%d", int(leafQueueMaxApps)) + `
-                    maxresources: ` + userMaxResource + `
+                    maxapplications: ` + "%d" + `
+                    maxresources: ` + "%s" + `
           - name: level2
             maxapplications: 100
             resources:
@@ -1844,7 +1843,7 @@ partitions:
                 maxapplications: 10
                 maxresources: {memory: 1000, vcore: 100}
 `
-	return data
+	return fmt.Sprintf(data, leafQueueMaxResource, leafQueueMaxResource, leafQueueMaxApps, userMaxResource)
 }
 func TestUserLimitsWithHierarchicalQueue(t *testing.T) {
 	// Make sure parent queue user max apps should not less than the child queue max resource
@@ -1969,8 +1968,8 @@ partitions:
                   - limit:
                     groups: 
                     - group1
-                    maxapplications: ` + fmt.Sprintf("%d", int(leafQueueMaxApps)) + `
-                    maxresources: ` + leafQueueMaxResource + `
+                    maxapplications: ` + "%d" + `
+                    maxresources: ` + "%s" + `
           - name: level2
             maxapplications: 100
             resources:
@@ -1985,7 +1984,7 @@ partitions:
                 maxapplications: 10
                 maxresources: {memory: 1000, vcore: 100}
 `
-	return data
+	return fmt.Sprintf(data, leafQueueMaxApps, leafQueueMaxResource)
 }
 
 func prepareGroupLimitsWithTwoLevelsConfig(leafQueueMaxApps uint64, leafQueueMaxResources string, groupMaxResources string) string {
@@ -2017,7 +2016,7 @@ partitions:
               guaranteed:
                 {memory: 1000, vcore: 10}
               max:
-                ` + leafQueueMaxResources + `
+                ` + "%s" + `
             queues:
               - name: leaf
                 maxapplications: 900
@@ -2025,13 +2024,13 @@ partitions:
                   guaranteed:
                     {memory: 1000, vcore: 10}
                   max:
-                    ` + leafQueueMaxResources + `
+                    ` + "%s" + `
                 limits:
                   - limit:
                     groups: 
                     - group1
-                    maxapplications: ` + strconv.Itoa(int(leafQueueMaxApps)) + `
-                    maxresources: ` + groupMaxResources + `
+                    maxapplications: ` + "%d" + `
+                    maxresources: ` + "%s" + `
           - name: level2
             maxapplications: 100
             resources:
@@ -2046,7 +2045,7 @@ partitions:
                 maxapplications: 10
                 maxresources: {memory: 1000, vcore: 100}
 `
-	return data
+	return fmt.Sprintf(data, leafQueueMaxResources, leafQueueMaxResources, leafQueueMaxApps, groupMaxResources)
 }
 func TestGroupLimitsWithHierarchicalQueue(t *testing.T) {
 	// Make sure parent queue user max apps should not less than the child queue max resource

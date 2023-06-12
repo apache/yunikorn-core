@@ -132,12 +132,14 @@ func TestRingBuffer_GetLatestEntriesCount_WhenFull(t *testing.T) {
 	buffer := newEventRingBuffer(10)
 	populate(buffer, 13)
 
-	records := buffer.GetLatestEntriesCount(3)
+	records := buffer.GetLatestEntriesCount(5)
 
-	assert.Equal(t, 3, len(records))
-	assert.Equal(t, int64(10), records[0].TimestampNano)
-	assert.Equal(t, int64(11), records[1].TimestampNano)
-	assert.Equal(t, int64(12), records[2].TimestampNano)
+	assert.Equal(t, 5, len(records))
+	assert.Equal(t, int64(8), records[0].TimestampNano)
+	assert.Equal(t, int64(9), records[1].TimestampNano)
+	assert.Equal(t, int64(10), records[2].TimestampNano)
+	assert.Equal(t, int64(11), records[3].TimestampNano)
+	assert.Equal(t, int64(12), records[4].TimestampNano)
 }
 
 func TestRingBuffer_GetEventsFromPosition(t *testing.T) {

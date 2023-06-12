@@ -112,39 +112,6 @@ func (e *eventRingBuffer) GetLatestEntries(interval time.Duration) []*si.EventRe
 	return records
 }
 
-// RemoveExpiredEntries discards expired entries from the buffer. Current age of an object depends on the
-// TimestampNano field.
-// This method is expected to be called in regular intervals, which usually runs on a separate goroutine.
-func (e *eventRingBuffer) RemoveExpiredEntries() int {
-	unixNow := now().UnixNano()
-	if e.noElements == 0 {
-		return 0
-	}
-
-	removed := 0
-	for i := e.head; ; {
-		ts := e.events[i].TimestampNano
-
-		if unixNow-ts < e.lifetimeNanos {
-			return removed // remaining events are newer
-		}
-
-		e.events[i] = nil
-		e.noElements--
-		removed++
-
-		next := e.next(i)
-		e.head = next
-		i = next
-
-		if next == e.tail {
-			// no more elements
-			e.latest = latestUnset
-			return removed
-		}
-	}
-}
-
 func (e *eventRingBuffer) prev(i int) int {
 	i--
 	if i == -1 {

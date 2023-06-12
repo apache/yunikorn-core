@@ -143,54 +143,6 @@ func TestRingBuffer_GetLatestEntriesCount_WhenFull(t *testing.T) {
 	assert.Equal(t, int64(12), records[2].TimestampNano)
 }
 
-func TestRingBuffer_RemoveExpiredEntries(t *testing.T) {
-	buffer := newEventRingBuffer(20, 10)
-	now = func() time.Time {
-		return time.Unix(0, 20)
-	}
-	defer func() {
-		now = time.Now
-	}()
-	populate(buffer, 20)
-
-	count := buffer.RemoveExpiredEntries()
-	assert.Equal(t, 11, count)
-	assert.Equal(t, 9, buffer.noElements)
-	assert.Equal(t, 11, buffer.head)
-	assert.Equal(t, 0, buffer.tail)
-}
-
-func TestRingBuffer_RemoveExpiredEntries_WhenAllEntriesExpired(t *testing.T) {
-	buffer := newEventRingBuffer(20, 10)
-	now = func() time.Time {
-		return time.Unix(0, 100)
-	}
-	defer func() {
-		now = time.Now
-	}()
-	populate(buffer, 20)
-
-	count := buffer.RemoveExpiredEntries()
-	assert.Equal(t, 20, count)
-	assert.Equal(t, 0, buffer.noElements)
-	assert.Equal(t, 0, buffer.head)
-	assert.Equal(t, 0, buffer.tail)
-	assert.Equal(t, int64(-1<<63), buffer.latest)
-}
-
-func TestRingBuffer_RemoveExpiredEntries_Empty(t *testing.T) {
-	buffer := newEventRingBuffer(20, 10)
-	now = func() time.Time {
-		return time.Unix(0, 100)
-	}
-	defer func() {
-		now = time.Now
-	}()
-
-	removed := buffer.RemoveExpiredEntries()
-	assert.Equal(t, 0, removed)
-}
-
 func populate(buffer *eventRingBuffer, count int) {
 	for i := 0; i < count; i++ {
 		buffer.Add(&si.EventRecord{

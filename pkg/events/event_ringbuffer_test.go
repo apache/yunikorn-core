@@ -19,6 +19,7 @@
 package events
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -28,36 +29,32 @@ import (
 )
 
 func TestRingBuffer_New(t *testing.T) {
-	buffer := newEventRingBuffer(10, time.Minute)
+	buffer := newEventRingBuffer(10)
 
 	assert.Equal(t, 10, buffer.capacity)
-	assert.Equal(t, 0, buffer.noElements)
-	assert.Equal(t, int64(-1<<63), buffer.latest)
-	assert.Equal(t, int64(time.Minute), buffer.lifetimeNanos)
+	assert.Equal(t, int64(math.MinInt64), buffer.latest)
 }
 
 func TestRingBuffer_Add(t *testing.T) {
-	buffer := newEventRingBuffer(10, time.Minute)
+	buffer := newEventRingBuffer(10)
 	populate(buffer, 4)
 
-	assert.Equal(t, 0, buffer.head)
-	assert.Equal(t, 4, buffer.tail)
-	assert.Equal(t, 4, buffer.noElements)
+	assert.Equal(t, 4, buffer.idx)
+	assert.Equal(t, false, buffer.full)
 	assert.Equal(t, int64(3), buffer.latest)
 }
 
 func TestRingBuffer_Add_WhenFull(t *testing.T) {
-	buffer := newEventRingBuffer(10, time.Minute)
+	buffer := newEventRingBuffer(10)
 	populate(buffer, 13)
 
-	assert.Equal(t, 3, buffer.head)
-	assert.Equal(t, 3, buffer.tail)
-	assert.Equal(t, 10, buffer.noElements)
+	assert.Equal(t, 3, buffer.idx)
+	assert.Equal(t, true, buffer.full)
 	assert.Equal(t, int64(12), buffer.latest)
 }
 
 func TestRingBuffer_GetLatestEntries(t *testing.T) {
-	buffer := newEventRingBuffer(10, time.Minute)
+	buffer := newEventRingBuffer(10)
 	now = func() time.Time {
 		return time.Unix(0, 10)
 	}
@@ -73,7 +70,7 @@ func TestRingBuffer_GetLatestEntries(t *testing.T) {
 }
 
 func TestRingBuffer_GetLatestEntries_WhenFull(t *testing.T) {
-	buffer := newEventRingBuffer(10, time.Minute)
+	buffer := newEventRingBuffer(10)
 	now = func() time.Time {
 		return time.Unix(0, 15)
 	}
@@ -87,7 +84,7 @@ func TestRingBuffer_GetLatestEntries_WhenFull(t *testing.T) {
 }
 
 func TestRingBuffer_GetLatestEntries_WhenEmpty(t *testing.T) {
-	buffer := newEventRingBuffer(10, time.Minute)
+	buffer := newEventRingBuffer(10)
 	now = func() time.Time {
 		return time.Unix(0, 10)
 	}
@@ -97,7 +94,7 @@ func TestRingBuffer_GetLatestEntries_WhenEmpty(t *testing.T) {
 }
 
 func TestRingBuffer_GetLatestEntries_WhenIntervalTooNarrow(t *testing.T) {
-	buffer := newEventRingBuffer(10, time.Minute)
+	buffer := newEventRingBuffer(10)
 	now = func() time.Time {
 		return time.Unix(0, 100)
 	}
@@ -112,7 +109,7 @@ func TestRingBuffer_GetLatestEntries_WhenIntervalTooNarrow(t *testing.T) {
 }
 
 func TestRingBuffer_GetLatestEntriesCount(t *testing.T) {
-	buffer := newEventRingBuffer(10, time.Minute)
+	buffer := newEventRingBuffer(10)
 
 	populate(buffer, 8)
 	records := buffer.GetLatestEntriesCount(3)
@@ -124,7 +121,7 @@ func TestRingBuffer_GetLatestEntriesCount(t *testing.T) {
 }
 
 func TestRingBuffer_GetLatestEntriesCount_WhenEmpty(t *testing.T) {
-	buffer := newEventRingBuffer(10, time.Minute)
+	buffer := newEventRingBuffer(10)
 
 	records := buffer.GetLatestEntriesCount(3)
 
@@ -132,7 +129,7 @@ func TestRingBuffer_GetLatestEntriesCount_WhenEmpty(t *testing.T) {
 }
 
 func TestRingBuffer_GetLatestEntriesCount_WhenFull(t *testing.T) {
-	buffer := newEventRingBuffer(10, time.Minute)
+	buffer := newEventRingBuffer(10)
 	populate(buffer, 13)
 
 	records := buffer.GetLatestEntriesCount(3)
@@ -141,6 +138,42 @@ func TestRingBuffer_GetLatestEntriesCount_WhenFull(t *testing.T) {
 	assert.Equal(t, int64(10), records[0].TimestampNano)
 	assert.Equal(t, int64(11), records[1].TimestampNano)
 	assert.Equal(t, int64(12), records[2].TimestampNano)
+}
+
+func TestRingBuffer_GetEventsFromPosition(t *testing.T) {
+	buffer := newEventRingBuffer(10)
+	populate(buffer, 8)
+
+	records := buffer.GetEventsFromPosition(5)
+	assert.Equal(t, 3, len(records))
+	assert.Equal(t, int64(5), records[0].TimestampNano)
+	assert.Equal(t, int64(6), records[1].TimestampNano)
+	assert.Equal(t, int64(7), records[2].TimestampNano)
+}
+
+func TestRingBuffer_GetEventsFromPosition_WhenFull(t *testing.T) {
+	buffer := newEventRingBuffer(10)
+	populate(buffer, 12)
+
+	records := buffer.GetEventsFromPosition(5)
+	assert.Equal(t, 7, len(records))
+}
+
+func TestRingBuffer_GetEventsFromPosition_WhenEmpty(t *testing.T) {
+	buffer := newEventRingBuffer(10)
+
+	records := buffer.GetEventsFromPosition(5)
+
+	assert.Equal(t, 0, len(records))
+}
+
+func TestRingBuffer_GetEventsFromPosition_InvalidPos(t *testing.T) {
+	buffer := newEventRingBuffer(10)
+	populate(buffer, 5)
+
+	// pos > idx
+	records := buffer.GetEventsFromPosition(8)
+	assert.Equal(t, 0, len(records))
 }
 
 func populate(buffer *eventRingBuffer, count int) {

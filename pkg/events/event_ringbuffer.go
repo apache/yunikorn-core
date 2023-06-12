@@ -20,6 +20,7 @@ package events
 
 import (
 	"math"
+	"sync"
 	"time"
 
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
@@ -32,53 +33,53 @@ var now = time.Now
 
 // eventRingBuffer A specialized circular buffer to store event objects.
 //
-// Unlike to regular circular buffers, new entries can be added if the buffer is full. In this case,
-// the oldest entry is overwritten. This is not a classic enqueue operation, so it's named differently.
+// Unlike to regular circular buffers, existing entries are never directly removed and new entries can be added if the buffer is full.
+// In this case, the oldest entry is overwritten and can be collected by the GC.
 //
-// Retrieving the records can be achieved with GetLatestEntriesCount and GetLatestEntries. Since these do not
-// remove the elements, they are not regular dequeue operations either.
-//
-// Entries have a maximum lifespan defined in nanoseconds. Cleanup of expired objects occurs when a call to
-// RemoveExpiredEntries is made.
+// Retrieving the records can be achieved with GetLatestEntriesCount, GetLatestEntries and GetEventsFromPosition.
 type eventRingBuffer struct {
-	events        []*si.EventRecord
-	capacity      int
-	noElements    int
-	head          int
-	tail          int
-	latest        int64
-	lifetimeNanos int64
+	events   []*si.EventRecord
+	capacity int
+	idx      int
+	latest   int64
+	full     bool
+	sync.RWMutex
 }
 
 // Add adds an event to the ring buffer. If the buffer is full, the oldest element is overwritten.
 // This method never fails.
 func (e *eventRingBuffer) Add(event *si.EventRecord) {
-	full := false
-	if e.noElements == e.capacity {
-		full = true
+	e.Lock()
+	defer e.Unlock()
+
+	e.events[e.idx] = event
+	e.idx = e.next(e.idx)
+	if e.idx == 0 {
+		// wrapped
+		e.full = true
 	}
-	e.events[e.tail] = event
-	e.tail = e.next(e.tail)
 	e.latest = event.TimestampNano
-
-	if full {
-		e.head = e.tail
-		return
-	}
-
-	e.noElements++
 }
 
 // GetLatestEntriesCount returns most recent items. The amount is defined by "count".
 func (e *eventRingBuffer) GetLatestEntriesCount(count int) []*si.EventRecord {
-	if e.noElements == 0 {
+	e.RLock()
+	defer e.RUnlock()
+
+	if !e.full && e.idx == 0 {
 		return nil
 	}
 
-	records := make([]*si.EventRecord, 0)
-	for i := e.prev(e.tail); ; {
+	records := make([]*si.EventRecord, 0, count)
+	var stop int
+	if e.full {
+		stop = e.idx
+	} else {
+		stop = 0
+	}
+	for i := e.prev(e.idx); ; {
 		records = append(records, e.events[i])
-		if len(records) == count || i == e.head {
+		if len(records) == count || i == stop {
 			reverse(records)
 			return records
 		}
@@ -89,24 +90,50 @@ func (e *eventRingBuffer) GetLatestEntriesCount(count int) []*si.EventRecord {
 
 // GetLatestEntries returns the most recent items whose age is younger than the current time minus interval.
 func (e *eventRingBuffer) GetLatestEntries(interval time.Duration) []*si.EventRecord {
+	e.RLock()
+	defer e.RUnlock()
+
 	unixNow := now().UnixNano()
 	startTime := unixNow - interval.Nanoseconds()
 
-	if e.noElements == 0 || startTime > e.latest {
+	if (!e.full && e.idx == 0) || (startTime > e.latest) {
 		return nil
 	}
 
+	var start, count int
+	if e.full {
+		count = e.capacity
+		start = e.idx
+	} else {
+		count = e.idx
+		start = 0
+	}
+
 	records := make([]*si.EventRecord, 0)
-	for i := e.head; ; {
+	for i, c := start, 0; c != count; c++ {
 		if e.events[i].TimestampNano >= startTime {
 			records = append(records, e.events[i])
 		}
 
 		next := e.next(i)
-		if next == e.tail {
-			break
-		}
 		i = next
+	}
+
+	return records
+}
+
+func (e *eventRingBuffer) GetEventsFromPosition(pos int) []*si.EventRecord {
+	e.RLock()
+	defer e.RUnlock()
+
+	if !e.full && pos >= e.idx {
+		// invalid position, "pos" is not in the [0..idx] range
+		return nil
+	}
+
+	records := make([]*si.EventRecord, 0)
+	for i := pos; i != e.idx; i = e.next(i) {
+		records = append(records, e.events[i])
 	}
 
 	return records
@@ -131,11 +158,10 @@ func reverse(r []*si.EventRecord) {
 	}
 }
 
-func newEventRingBuffer(capacity int, eventLifeTime time.Duration) *eventRingBuffer {
+func newEventRingBuffer(capacity int) *eventRingBuffer {
 	return &eventRingBuffer{
-		capacity:      capacity,
-		events:        make([]*si.EventRecord, capacity),
-		lifetimeNanos: eventLifeTime.Nanoseconds(),
-		latest:        latestUnset,
+		capacity: capacity,
+		events:   make([]*si.EventRecord, capacity),
+		latest:   latestUnset,
 	}
 }

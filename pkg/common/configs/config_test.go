@@ -1768,8 +1768,8 @@ partitions:
                   - limit:
                     users: 
                     - user1
-                    maxapplications: ` + "%d" + `
-                    maxresources: ` + "%s" + `
+                    maxapplications: %d
+                    maxresources: %s
           - name: level2
             maxapplications: 100
             resources:
@@ -1814,7 +1814,7 @@ partitions:
               guaranteed:
                 {memory: 1000, vcore: 10}
               max:
-                ` + "%s" + `
+                %s
             queues:
               - name: leaf
                 maxapplications: 900
@@ -1822,13 +1822,13 @@ partitions:
                   guaranteed:
                     {memory: 1000, vcore: 10}
                   max:
-                    ` + "%s" + `
+                    %s
                 limits:
                   - limit:
                     users: 
                     - user1
-                    maxapplications: ` + "%d" + `
-                    maxresources: ` + "%s" + `
+                    maxapplications: %d
+                    maxresources: %s
           - name: level2
             maxapplications: 100
             resources:
@@ -1968,8 +1968,8 @@ partitions:
                   - limit:
                     groups: 
                     - group1
-                    maxapplications: ` + "%d" + `
-                    maxresources: ` + "%s" + `
+                    maxapplications: %d
+                    maxresources: %s
           - name: level2
             maxapplications: 100
             resources:
@@ -2016,7 +2016,7 @@ partitions:
               guaranteed:
                 {memory: 1000, vcore: 10}
               max:
-                ` + "%s" + `
+                %s
             queues:
               - name: leaf
                 maxapplications: 900
@@ -2024,13 +2024,13 @@ partitions:
                   guaranteed:
                     {memory: 1000, vcore: 10}
                   max:
-                    ` + "%s" + `
+                    %s
                 limits:
                   - limit:
                     groups: 
                     - group1
-                    maxapplications: ` + "%d" + `
-                    maxresources: ` + "%s" + `
+                    maxapplications: %d
+                    maxresources: %s
           - name: level2
             maxapplications: 100
             resources:

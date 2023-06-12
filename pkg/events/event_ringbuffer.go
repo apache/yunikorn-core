@@ -19,16 +19,18 @@
 package events
 
 import (
+	"math"
 	"time"
 
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-const latestUnset int64 = -1 << 63
+// default value of "latest" if there are no elements, helps in GetLatestEntries()
+const latestUnset int64 = math.MinInt64
 
 var now = time.Now
 
-// EventRingBuffer A specialized circular buffer to store event objects.
+// eventRingBuffer A specialized circular buffer to store event objects.
 //
 // Unlike to regular circular buffers, new entries can be added if the buffer is full. In this case,
 // the oldest entry is overwritten. This is not a classic enqueue operation, so it's named differently.
@@ -38,7 +40,7 @@ var now = time.Now
 //
 // Entries have a maximum lifespan defined in nanoseconds. Cleanup of expired objects occurs when a call to
 // RemoveExpiredEntries is made.
-type EventRingBuffer struct {
+type eventRingBuffer struct {
 	events        []*si.EventRecord
 	capacity      int
 	noElements    int
@@ -50,7 +52,7 @@ type EventRingBuffer struct {
 
 // Add adds an event to the ring buffer. If the buffer is full, the oldest element is overwritten.
 // This method never fails.
-func (e *EventRingBuffer) Add(event *si.EventRecord) {
+func (e *eventRingBuffer) Add(event *si.EventRecord) {
 	full := false
 	if e.noElements == e.capacity {
 		full = true
@@ -68,7 +70,7 @@ func (e *EventRingBuffer) Add(event *si.EventRecord) {
 }
 
 // GetLatestEntriesCount returns most recent items. The amount is defined by "count".
-func (e *EventRingBuffer) GetLatestEntriesCount(count int) []*si.EventRecord {
+func (e *eventRingBuffer) GetLatestEntriesCount(count int) []*si.EventRecord {
 	if e.noElements == 0 {
 		return nil
 	}
@@ -86,16 +88,15 @@ func (e *EventRingBuffer) GetLatestEntriesCount(count int) []*si.EventRecord {
 }
 
 // GetLatestEntries returns the most recent items whose age is younger than the current time minus interval.
-func (e *EventRingBuffer) GetLatestEntries(interval time.Duration) []*si.EventRecord {
+func (e *eventRingBuffer) GetLatestEntries(interval time.Duration) []*si.EventRecord {
 	unixNow := now().UnixNano()
+	startTime := unixNow - interval.Nanoseconds()
 
-	if e.noElements == 0 || unixNow-int64(interval) > e.latest {
+	if e.noElements == 0 || startTime > e.latest {
 		return nil
 	}
 
-	startTime := unixNow - int64(interval)
 	records := make([]*si.EventRecord, 0)
-
 	for i := e.head; ; {
 		if e.events[i].TimestampNano >= startTime {
 			records = append(records, e.events[i])
@@ -114,7 +115,7 @@ func (e *EventRingBuffer) GetLatestEntries(interval time.Duration) []*si.EventRe
 // RemoveExpiredEntries discards expired entries from the buffer. Current age of an object depends on the
 // TimestampNano field.
 // This method is expected to be called in regular intervals, which usually runs on a separate goroutine.
-func (e *EventRingBuffer) RemoveExpiredEntries() int {
+func (e *eventRingBuffer) RemoveExpiredEntries() int {
 	unixNow := now().UnixNano()
 	if e.noElements == 0 {
 		return 0
@@ -144,7 +145,7 @@ func (e *EventRingBuffer) RemoveExpiredEntries() int {
 	}
 }
 
-func (e *EventRingBuffer) prev(i int) int {
+func (e *eventRingBuffer) prev(i int) int {
 	i--
 	if i == -1 {
 		i = e.capacity - 1
@@ -153,7 +154,7 @@ func (e *EventRingBuffer) prev(i int) int {
 	return i
 }
 
-func (e *EventRingBuffer) next(i int) int {
+func (e *eventRingBuffer) next(i int) int {
 	return (i + 1) % e.capacity
 }
 
@@ -163,11 +164,11 @@ func reverse(r []*si.EventRecord) {
 	}
 }
 
-func NewEventRingBuffer(capacity int, eventLifeTime time.Duration) *EventRingBuffer {
-	return &EventRingBuffer{
+func newEventRingBuffer(capacity int, eventLifeTime time.Duration) *eventRingBuffer {
+	return &eventRingBuffer{
 		capacity:      capacity,
 		events:        make([]*si.EventRecord, capacity),
-		lifetimeNanos: int64(eventLifeTime),
+		lifetimeNanos: eventLifeTime.Nanoseconds(),
 		latest:        latestUnset,
 	}
 }

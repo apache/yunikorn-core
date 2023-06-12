@@ -28,7 +28,7 @@ import (
 )
 
 func TestRingBuffer_New(t *testing.T) {
-	buffer := NewEventRingBuffer(10, time.Minute)
+	buffer := newEventRingBuffer(10, time.Minute)
 
 	assert.Equal(t, 10, buffer.capacity)
 	assert.Equal(t, 0, buffer.noElements)
@@ -37,7 +37,7 @@ func TestRingBuffer_New(t *testing.T) {
 }
 
 func TestRingBuffer_Add(t *testing.T) {
-	buffer := NewEventRingBuffer(10, time.Minute)
+	buffer := newEventRingBuffer(10, time.Minute)
 	populate(buffer, 4)
 
 	assert.Equal(t, 0, buffer.head)
@@ -47,7 +47,7 @@ func TestRingBuffer_Add(t *testing.T) {
 }
 
 func TestRingBuffer_Add_WhenFull(t *testing.T) {
-	buffer := NewEventRingBuffer(10, time.Minute)
+	buffer := newEventRingBuffer(10, time.Minute)
 	populate(buffer, 13)
 
 	assert.Equal(t, 3, buffer.head)
@@ -57,7 +57,7 @@ func TestRingBuffer_Add_WhenFull(t *testing.T) {
 }
 
 func TestRingBuffer_GetLatestEntries(t *testing.T) {
-	buffer := NewEventRingBuffer(10, time.Minute)
+	buffer := newEventRingBuffer(10, time.Minute)
 	now = func() time.Time {
 		return time.Unix(0, 10)
 	}
@@ -73,7 +73,7 @@ func TestRingBuffer_GetLatestEntries(t *testing.T) {
 }
 
 func TestRingBuffer_GetLatestEntries_WhenFull(t *testing.T) {
-	buffer := NewEventRingBuffer(10, time.Minute)
+	buffer := newEventRingBuffer(10, time.Minute)
 	now = func() time.Time {
 		return time.Unix(0, 15)
 	}
@@ -87,7 +87,7 @@ func TestRingBuffer_GetLatestEntries_WhenFull(t *testing.T) {
 }
 
 func TestRingBuffer_GetLatestEntries_WhenEmpty(t *testing.T) {
-	buffer := NewEventRingBuffer(10, time.Minute)
+	buffer := newEventRingBuffer(10, time.Minute)
 	now = func() time.Time {
 		return time.Unix(0, 10)
 	}
@@ -97,7 +97,7 @@ func TestRingBuffer_GetLatestEntries_WhenEmpty(t *testing.T) {
 }
 
 func TestRingBuffer_GetLatestEntries_WhenIntervalTooNarrow(t *testing.T) {
-	buffer := NewEventRingBuffer(10, time.Minute)
+	buffer := newEventRingBuffer(10, time.Minute)
 	now = func() time.Time {
 		return time.Unix(0, 100)
 	}
@@ -112,7 +112,7 @@ func TestRingBuffer_GetLatestEntries_WhenIntervalTooNarrow(t *testing.T) {
 }
 
 func TestRingBuffer_GetLatestEntriesCount(t *testing.T) {
-	buffer := NewEventRingBuffer(10, time.Minute)
+	buffer := newEventRingBuffer(10, time.Minute)
 
 	populate(buffer, 8)
 	records := buffer.GetLatestEntriesCount(3)
@@ -124,7 +124,7 @@ func TestRingBuffer_GetLatestEntriesCount(t *testing.T) {
 }
 
 func TestRingBuffer_GetLatestEntriesCount_WhenEmpty(t *testing.T) {
-	buffer := NewEventRingBuffer(10, time.Minute)
+	buffer := newEventRingBuffer(10, time.Minute)
 
 	records := buffer.GetLatestEntriesCount(3)
 
@@ -132,7 +132,7 @@ func TestRingBuffer_GetLatestEntriesCount_WhenEmpty(t *testing.T) {
 }
 
 func TestRingBuffer_GetLatestEntriesCount_WhenFull(t *testing.T) {
-	buffer := NewEventRingBuffer(10, time.Minute)
+	buffer := newEventRingBuffer(10, time.Minute)
 	populate(buffer, 13)
 
 	records := buffer.GetLatestEntriesCount(3)
@@ -144,7 +144,7 @@ func TestRingBuffer_GetLatestEntriesCount_WhenFull(t *testing.T) {
 }
 
 func TestRingBuffer_RemoveExpiredEntries(t *testing.T) {
-	buffer := NewEventRingBuffer(20, 10)
+	buffer := newEventRingBuffer(20, 10)
 	now = func() time.Time {
 		return time.Unix(0, 20)
 	}
@@ -161,7 +161,7 @@ func TestRingBuffer_RemoveExpiredEntries(t *testing.T) {
 }
 
 func TestRingBuffer_RemoveExpiredEntries_WhenAllEntriesExpired(t *testing.T) {
-	buffer := NewEventRingBuffer(20, 10)
+	buffer := newEventRingBuffer(20, 10)
 	now = func() time.Time {
 		return time.Unix(0, 100)
 	}
@@ -179,7 +179,7 @@ func TestRingBuffer_RemoveExpiredEntries_WhenAllEntriesExpired(t *testing.T) {
 }
 
 func TestRingBuffer_RemoveExpiredEntries_Empty(t *testing.T) {
-	buffer := NewEventRingBuffer(20, 10)
+	buffer := newEventRingBuffer(20, 10)
 	now = func() time.Time {
 		return time.Unix(0, 100)
 	}
@@ -191,7 +191,7 @@ func TestRingBuffer_RemoveExpiredEntries_Empty(t *testing.T) {
 	assert.Equal(t, 0, removed)
 }
 
-func populate(buffer *EventRingBuffer, count int) {
+func populate(buffer *eventRingBuffer, count int) {
 	for i := 0; i < count; i++ {
 		buffer.Add(&si.EventRecord{
 			TimestampNano: int64(i),

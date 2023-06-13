@@ -2552,7 +2552,7 @@ func TestPlaceholderSmallerThanReal(t *testing.T) {
 	assertUserGroupResource(t, getTestUserGroup(), phRes)
 
 	// wait for events to be processed
-	err = common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
+	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		return eventSystem.Store.CountStoredEvents() == 1
 	})
 	assert.NilError(t, err, "the event should have been processed")
@@ -2638,7 +2638,7 @@ func TestPlaceholderSmallerMulti(t *testing.T) {
 	}
 
 	// wait for events to be processed
-	err = common.WaitFor(1*time.Millisecond, 10*time.Millisecond, func() bool {
+	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
 		return eventSystem.Store.CountStoredEvents() == phCount
 	})

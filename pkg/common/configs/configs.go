@@ -21,6 +21,8 @@ package configs
 import (
 	"sync"
 	"time"
+
+	"github.com/apache/yunikorn-core/pkg/log"
 )
 
 const (
@@ -42,6 +44,11 @@ func init() {
 		configs: make(map[string]*SchedulerConfig),
 		lock:    &sync.RWMutex{},
 	}
+
+	// add a callback to reconfigure logging
+	AddConfigMapCallback("logging", func() {
+		log.UpdateLoggingConfig(GetConfigMap())
+	})
 }
 
 // scheduler config context provides thread-safe access for scheduler configurations

@@ -19,13 +19,35 @@
 package log
 
 import (
+	"fmt"
+	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gotest.tools/v3/assert"
 )
+
+var logDir string
+var logFile string
+
+var iterations = 100000
+
+func TestLoggerIds(t *testing.T) {
+	_ = Logger()
+
+	// validate logger count
+	assert.Equal(t, 2, len(loggers), "wrong logger count")
+
+	// validate that all loggers are populated and have sequential ids
+	for i := 0; i < len(loggers); i++ {
+		handle := loggers[i]
+		assert.Assert(t, handle != nil, "nil handle for index", i)
+		assert.Equal(t, handle.id, i+1, "wrong id", handle.name)
+	}
+}
 
 // This test sets the global zap logger. This must be undone to make sure no side
 // effects on other tests are caused by running this test.
@@ -50,35 +72,10 @@ func TestIsNopLogger(t *testing.T) {
 	assert.Equal(t, false, isNopLogger(zap.L()))
 }
 
-// Since we test the function IsDebugEnabled() we set the logger global var.
-// It has not triggered the once.Do() so we just need to make sure we clean up the
-// global var.
-func TestIsDebugEnabled(t *testing.T) {
-	// reset the global vars and zap logger
-	defer resetGlobals()
-
-	zapConfig := zap.Config{
-		Level:    zap.NewAtomicLevelAt(zapcore.DebugLevel),
-		Encoding: "console",
-	}
-	var err error
-	logger, err = zapConfig.Build()
-	assert.NilError(t, err, "debug level logger create failed")
-	assert.Equal(t, true, IsDebugEnabled())
-
-	zapConfig = zap.Config{
-		Level:    zap.NewAtomicLevelAt(zapcore.InfoLevel),
-		Encoding: "console",
-	}
-	logger, err = zapConfig.Build()
-	assert.NilError(t, err, "info level logger create failed")
-	assert.Equal(t, false, IsDebugEnabled())
-}
-
 // reset the global vars and the global logger in zap
 func resetGlobals() {
 	logger = nil
-	config = nil
+	zapConfigs = nil
 	once = sync.Once{}
 	zap.ReplaceGlobals(zap.NewNop())
 }
@@ -98,11 +95,6 @@ func TestCreateConfig(t *testing.T) {
 	assert.Assert(t, logger == nil, "global logger should not have been set %v", logger)
 	localLogger = Logger()
 	assert.Assert(t, localLogger != nil, "returned logger should have been not nil")
-	// default log level is debug
-	assert.Equal(t, true, IsDebugEnabled())
-	// change log level to info
-	InitAndSetLevel(zap.InfoLevel)
-	assert.Equal(t, false, IsDebugEnabled())
 }
 
 func TestInitializeLogger(t *testing.T) {
@@ -118,44 +110,202 @@ func TestInitializeLogger(t *testing.T) {
 	assert.NilError(t, err2, "failed to create local logger")
 
 	InitializeLogger(localLogger, &zapConfig)
-	assert.Equal(t, Logger(), localLogger)
+	assert.Equal(t, RootLogger(), localLogger)
 	// second initialization should not do anything
 	InitializeLogger(localLogger2, &zapConfig)
-	assert.Equal(t, Logger(), localLogger)
+	assert.Equal(t, RootLogger(), localLogger)
+}
+func BenchmarkLegacyLoggerDebug(b *testing.B) {
+	benchmarkLegacyLoggerDebug(b.N)
 }
 
-func TestChangeValidLogLevel(t *testing.T) {
-	defer resetGlobals()
-
-	zapConfig := zap.Config{
-		Level:    zap.NewAtomicLevelAt(zapcore.InfoLevel),
-		Encoding: "console",
-	}
-	localLogger, err := zapConfig.Build()
-	assert.NilError(t, err, "failed to create local logger")
-	InitializeLogger(localLogger, &zapConfig)
-
-	err = SetLogLevel("DEBUG")
-	assert.NilError(t, err, "failed to change log level")
-	assert.Equal(t, zapConfig.Level.Level(), zapcore.DebugLevel)
-
-	// set again to see that we keep DEBUG without issues
-	err = SetLogLevel("DEBUG")
-	assert.NilError(t, err, "failed to change log level")
-	assert.Equal(t, zapConfig.Level.Level(), zapcore.DebugLevel)
+func TestLegacyLoggerDebug(t *testing.T) {
+	nsOp := benchmarkLegacyLoggerDebug(iterations)
+	RootLogger().Info("log.Logger() performance", zap.Int64("debug (ns/op)", nsOp))
 }
 
-func TestChangeInvalidLogLevel(t *testing.T) {
-	defer resetGlobals()
-
-	zapConfig := zap.Config{
-		Level:    zap.NewAtomicLevelAt(zapcore.InfoLevel),
-		Encoding: "console",
+func benchmarkLegacyLoggerDebug(iterations int) int64 {
+	_ = Logger()
+	initTestLogger()
+	defer resetTestLogger()
+	start := time.Now()
+	for i := 0; i < iterations; i++ {
+		RootLogger().Debug("test", zap.String("foo", "bar"))
 	}
-	localLogger, err := zapConfig.Build()
-	assert.NilError(t, err, "default config logger create failed")
-	InitializeLogger(localLogger, &zapConfig)
+	return (time.Since(start).Nanoseconds()) / int64(iterations)
+}
 
-	err = SetLogLevel("INVALID")
-	assert.Error(t, err, "failed to change log level, old level active")
+func BenchmarkLegacyLoggerInfo(b *testing.B) {
+	benchmarkLegacyLoggerInfo(b.N)
+}
+
+func TestLegacyLoggerInfo(t *testing.T) {
+	nsOp := benchmarkLegacyLoggerInfo(iterations)
+	RootLogger().Info("log.Logger() performance", zap.Int64("info (ns/op)", nsOp))
+}
+
+func benchmarkLegacyLoggerInfo(iterations int) int64 {
+	_ = Logger()
+	initTestLogger()
+	defer resetTestLogger()
+	start := time.Now()
+	for i := 0; i < iterations; i++ {
+		RootLogger().Info("test", zap.String("foo", "bar"))
+	}
+	return (time.Since(start).Nanoseconds()) / int64(iterations)
+}
+
+func BenchmarkScopedLoggerDebug(b *testing.B) {
+	benchmarkScopedLoggerDebug(b.N)
+}
+
+func TestScopedLoggerDebug(t *testing.T) {
+	nsOp := benchmarkScopedLoggerDebug(iterations)
+	Log(Test).Info("log.Log(...) performance (root=INFO)", zap.Int64("debug (ns/op)", nsOp))
+}
+
+func benchmarkScopedLoggerDebug(iterations int) int64 {
+	_ = Logger()
+	initTestLogger()
+	defer resetTestLogger()
+	UpdateLoggingConfig(map[string]string{
+		"log.level": "INFO",
+	})
+	start := time.Now()
+	for i := 0; i < iterations; i++ {
+		Log(Core).Debug("test", zap.String("foo", "bar"))
+	}
+	return (time.Since(start).Nanoseconds()) / int64(iterations)
+}
+
+func BenchmarkScopedLoggerInfo(b *testing.B) {
+	benchmarkScopedLoggerInfo(b.N)
+}
+
+func TestScopedLoggerInfo(t *testing.T) {
+	nsOp := benchmarkScopedLoggerInfo(iterations)
+	Log(Test).Info("log.Log(...) performance (root=INFO)", zap.Int64("info (ns/op)", nsOp))
+}
+
+func benchmarkScopedLoggerInfo(iterations int) int64 {
+	_ = Logger()
+	initTestLogger()
+	defer resetTestLogger()
+	UpdateLoggingConfig(map[string]string{
+		"log.level": "INFO",
+	})
+	start := time.Now()
+	for i := 0; i < iterations; i++ {
+		Log(Core).Info("test", zap.String("foo", "bar"))
+	}
+	return (time.Since(start).Nanoseconds()) / int64(iterations)
+}
+
+func BenchmarkScopedLoggerDebugEnabled(b *testing.B) {
+	benchmarkScopedLoggerDebugEnabled(b.N)
+}
+
+func TestScopedLoggerDebugEnabled(t *testing.T) {
+	nsOp := benchmarkScopedLoggerDebugEnabled(iterations)
+	Log(Test).Info("log.Log(...) performance (root=DEBUG)", zap.Int64("debug (ns/op)", nsOp))
+}
+
+func benchmarkScopedLoggerDebugEnabled(iterations int) int64 {
+	_ = Logger()
+	initTestLogger()
+	defer resetTestLogger()
+	UpdateLoggingConfig(map[string]string{
+		"log.test.level": "DEBUG",
+	})
+	start := time.Now()
+	for i := 0; i < iterations; i++ {
+		Log(Test).Debug("test", zap.String("foo", "bar"))
+	}
+	return (time.Since(start).Nanoseconds()) / int64(iterations)
+}
+
+func BenchmarkScopedLoggerInfoFiltered(b *testing.B) {
+	benchmarkScopedLoggerInfoFiltered(b.N)
+}
+
+func TestScopedLoggerInfoFiltered(t *testing.T) {
+	nsOp := benchmarkScopedLoggerInfoFiltered(iterations)
+	Log(Test).Info("log.Log(...) performance (root=DEBUG)", zap.Int64("info (ns/op)", nsOp))
+}
+
+func benchmarkScopedLoggerInfoFiltered(iterations int) int64 {
+	_ = Logger()
+	initTestLogger()
+	defer resetTestLogger()
+	UpdateLoggingConfig(map[string]string{
+		"log.test.level": "DEBUG",
+	})
+	start := time.Now()
+	for i := 0; i < iterations; i++ {
+		Log(Core).Info("test", zap.String("foo", "bar"))
+	}
+	return (time.Since(start).Nanoseconds()) / int64(iterations)
+}
+
+func resetTestLogger() {
+	// flush log
+	logger.Sync() //nolint:errcheck
+
+	// init default logger
+	initLogger()
+
+	// update logger config to defaults
+	UpdateLoggingConfig(map[string]string{})
+
+	if logFile != "" {
+		logFile = ""
+	}
+	if logDir != "" {
+		if err := os.RemoveAll(logDir); err != nil {
+			fmt.Printf("Error removing log dir: %s", err.Error())
+		}
+	}
+}
+
+// initTestLogger is basically the same as the default initLogger() function but uses a temporary file.
+// this ensures that the logging API is actually used, while allowing us to avoid massive log spam to stdout
+func initTestLogger() {
+	path, err := os.MkdirTemp("", "log*")
+	if err != nil {
+		panic(err)
+	}
+	logDir = path
+	logFile = fmt.Sprintf("%s/log.stdout", logDir)
+	outputPaths := []string{logFile}
+	zapConfigs = &zap.Config{
+		Level:             zap.NewAtomicLevelAt(zapcore.Level(0)),
+		Development:       false,
+		DisableCaller:     false,
+		DisableStacktrace: false,
+		Sampling:          nil,
+		Encoding:          "console",
+		EncoderConfig: zapcore.EncoderConfig{
+			MessageKey:    "message",
+			LevelKey:      "level",
+			TimeKey:       "time",
+			NameKey:       "logger",
+			CallerKey:     "caller",
+			StacktraceKey: "stacktrace",
+			LineEnding:    zapcore.DefaultLineEnding,
+			// note: https://godoc.org/go.uber.org/zap/zapcore#EncoderConfig
+			// only EncodeName is optional all others must be set
+			EncodeLevel:    zapcore.CapitalLevelEncoder,
+			EncodeTime:     zapcore.ISO8601TimeEncoder,
+			EncodeDuration: zapcore.StringDurationEncoder,
+			EncodeCaller:   zapcore.ShortCallerEncoder,
+		},
+		OutputPaths:      outputPaths,
+		ErrorOutputPaths: []string{"stderr"},
+	}
+
+	logger, err = zapConfigs.Build()
+	if err != nil {
+		panic(err)
+	}
+	defer logger.Sync() //nolint:errcheck
 }

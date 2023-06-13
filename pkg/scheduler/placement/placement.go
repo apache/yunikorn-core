@@ -102,12 +102,10 @@ func (m *AppPlacementManager) initialise(rules []configs.PlacementRule) error {
 	m.rules = tempRules
 	// all done manager is initialised
 	m.initialised = true
-	if log.IsDebugEnabled() {
-		for rule := range m.rules {
-			log.Logger().Debug("rule set",
-				zap.Int("ruleNumber", rule),
-				zap.String("ruleName", m.rules[rule].getName()))
-		}
+	for rule := range m.rules {
+		log.Logger().Debug("rule set",
+			zap.Int("ruleNumber", rule),
+			zap.String("ruleName", m.rules[rule].getName()))
 	}
 	return nil
 }

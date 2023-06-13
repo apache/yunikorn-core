@@ -19,20 +19,12 @@
 package events
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-func createEventRecord(recordType si.EventRecord_Type, objectID, groupID, reason, message string) (*si.EventRecord, error) {
-	if objectID == "" {
-		return nil, fmt.Errorf("objectID should not be nil")
-	}
-	if reason == "" {
-		return nil, fmt.Errorf("reason should not be nil")
-	}
-
+func createEventRecord(recordType si.EventRecord_Type, objectID, groupID, reason, message string) *si.EventRecord {
 	return &si.EventRecord{
 		Type:          recordType,
 		ObjectID:      objectID,
@@ -40,21 +32,21 @@ func createEventRecord(recordType si.EventRecord_Type, objectID, groupID, reason
 		Reason:        reason,
 		Message:       message,
 		TimestampNano: time.Now().UnixNano(),
-	}, nil
+	}
 }
 
-func CreateRequestEventRecord(objectID, groupID, reason, message string) (*si.EventRecord, error) {
+func CreateRequestEventRecord(objectID, groupID, reason, message string) *si.EventRecord {
 	return createEventRecord(si.EventRecord_REQUEST, objectID, groupID, reason, message)
 }
 
-func CreateAppEventRecord(objectID, reason, message string) (*si.EventRecord, error) {
+func CreateAppEventRecord(objectID, reason, message string) *si.EventRecord {
 	return createEventRecord(si.EventRecord_APP, objectID, "", reason, message)
 }
 
-func CreateNodeEventRecord(objectID, reason, message string) (*si.EventRecord, error) {
+func CreateNodeEventRecord(objectID, reason, message string) *si.EventRecord {
 	return createEventRecord(si.EventRecord_NODE, objectID, "", reason, message)
 }
 
-func CreateQueueEventRecord(objectID, groupID, reason, message string) (*si.EventRecord, error) {
+func CreateQueueEventRecord(objectID, groupID, reason, message string) *si.EventRecord {
 	return createEventRecord(si.EventRecord_QUEUE, objectID, groupID, reason, message)
 }

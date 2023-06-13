@@ -20,6 +20,7 @@ package configs
 
 import (
 	"fmt"
+	"github.com/apache/yunikorn-core/pkg/common"
 	"math"
 	"os"
 	"path/filepath"
@@ -232,9 +233,9 @@ func checkLimitMaxApplications(cur QueueConfig, parent *QueueConfig, users map[s
 			// Is user limit setting exists?
 			if userMaxApplications, ok := users[user]; ok {
 				if userMaxApplications != 0 && (userMaxApplications < limitMaxApplications || limitMaxApplications == 0) {
-					return fmt.Errorf("user %s max applications %v of queue %s is greater than immediate or ancestor parent max applications %v", user, limitMaxApplications, cur.Name, userMaxApplications)
+					return fmt.Errorf("user %s max applications %d of queue %s is greater than immediate or ancestor parent max applications %d", user, limitMaxApplications, cur.Name, userMaxApplications)
 				}
-				users[user] = uint64(math.Min(float64(limitMaxApplications), float64(userMaxApplications)))
+				users[user] = common.Min(limitMaxApplications, userMaxApplications)
 			} else {
 				users[user] = limitMaxApplications
 			}
@@ -243,9 +244,9 @@ func checkLimitMaxApplications(cur QueueConfig, parent *QueueConfig, users map[s
 			// Is group limit setting exists?
 			if groupMaxApplications, ok := groups[group]; ok {
 				if groupMaxApplications != 0 && (groupMaxApplications < limitMaxApplications || limitMaxApplications == 0) {
-					return fmt.Errorf("group %s max applications %v of queue %s is greater than immediate or ancestor parent max applications %v", group, limitMaxApplications, cur.Name, groupMaxApplications)
+					return fmt.Errorf("group %s max applications %d of queue %s is greater than immediate or ancestor parent max applications %d", group, limitMaxApplications, cur.Name, groupMaxApplications)
 				}
-				groups[group] = uint64(math.Min(float64(limitMaxApplications), float64(groupMaxApplications)))
+				groups[group] = common.Min(limitMaxApplications, groupMaxApplications)
 			} else {
 				groups[group] = limitMaxApplications
 			}

@@ -20,7 +20,6 @@ package configs
 
 import (
 	"fmt"
-	"github.com/apache/yunikorn-core/pkg/common"
 	"math"
 	"os"
 	"path/filepath"
@@ -30,6 +29,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/log"

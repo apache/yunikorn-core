@@ -341,6 +341,10 @@ func (p *Preemptor) checkPreemptionPredicates(predicateChecks []*si.PreemptionPr
 
 	// sort predicate checks by number of expected preempted tasks
 	sort.SliceStable(predicateChecks, func(i int, j int) bool {
+		// sort by NodeID if StartIndex are same
+		if predicateChecks[i].StartIndex == predicateChecks[j].StartIndex {
+			return predicateChecks[i].NodeID < predicateChecks[j].NodeID
+		}
 		return predicateChecks[i].StartIndex < predicateChecks[j].StartIndex
 	})
 

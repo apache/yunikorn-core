@@ -1815,18 +1815,18 @@ func TestTryAllocatePreemptNode(t *testing.T) {
 	// consume capacity with 'unlimited' app
 	alloc00 := app0.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 40}), 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
 	assert.Assert(t, alloc00 != nil, "alloc00 expected")
-	alloc01 := app0.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 29}), 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+	alloc01 := app0.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 39}), 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
 	assert.Assert(t, alloc01 != nil, "alloc01 expected")
 
 	// consume remainder of space but not quota
-	alloc1 := app1.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 18}), 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+	alloc1 := app1.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 28}), 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
 	assert.Assert(t, alloc1 != nil, "alloc1 expected")
-	alloc2 := app1.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 13}), 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+	alloc2 := app1.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 23}), 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
 	assert.Assert(t, alloc2 != nil, "alloc2 expected")
 
 	// on first attempt, should see a reservation since we're after the reservation timeout
 	ask3.createTime = ask3.createTime.Add(-10 * time.Second)
-	alloc3 := app2.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}), 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+	alloc3 := app2.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 18}), 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
 	assert.Assert(t, alloc3 != nil, "alloc3 expected")
 	assert.Equal(t, "node1", alloc3.GetNodeID(), "wrong node assignment")
 	assert.Equal(t, Reserved, alloc3.GetResult(), "expected reservation")
@@ -1836,7 +1836,7 @@ func TestTryAllocatePreemptNode(t *testing.T) {
 
 	// pass the time and try again
 	ask3.createTime = ask3.createTime.Add(-30 * time.Second)
-	alloc3 = app2.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}), 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+	alloc3 = app2.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 18}), 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
 	assert.Assert(t, alloc3 != nil, "alloc3 expected")
 	assert.Assert(t, alloc1.IsPreempted(), "alloc1 should have been preempted")
 }

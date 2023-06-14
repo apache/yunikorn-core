@@ -2565,8 +2565,8 @@ func TestPlaceholderSmallerThanReal(t *testing.T) {
 	record := records[0]
 	assert.Equal(t, si.EventRecord_REQUEST, record.Type, "incorrect event type")
 	assert.Equal(t, phID, record.ObjectID, "incorrect allocation ID, expected placeholder alloc ID")
-	assert.Equal(t, appID1, record.GroupID, "event should reference application ID")
-	assert.Assert(t, strings.Contains(record.Reason, "releasing placeholder"), "reason should contain 'releasing placeholder'")
+	assert.Equal(t, appID1, record.ReferenceID, "event should reference application ID")
+	assert.Assert(t, strings.Contains(record.Message, "Task group 'tg-1' in application 'app-1'"), "unexpected message in record")
 	assertUserGroupResource(t, getTestUserGroup(), phRes)
 
 	// release placeholder: do what the context would do after the shim processing

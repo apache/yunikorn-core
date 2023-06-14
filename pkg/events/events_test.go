@@ -23,31 +23,39 @@ import (
 
 	"gotest.tools/v3/assert"
 
+	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 func TestCreateEventRecord(t *testing.T) {
-	record := createEventRecord(si.EventRecord_NODE, "ask", "app", "reason", "message")
+	record := createEventRecord(si.EventRecord_NODE, "ask", "app", "message",
+		si.EventRecord_NONE, si.EventRecord_DETAILS_NONE, resources.NewResourceFromMap(
+			map[string]resources.Quantity{
+				"cpu": 1,
+			},
+		))
 	assert.Equal(t, record.Type, si.EventRecord_NODE)
 	assert.Equal(t, record.ObjectID, "ask")
-	assert.Equal(t, record.GroupID, "app")
-	assert.Equal(t, record.Reason, "reason")
+	assert.Equal(t, record.ReferenceID, "app")
 	assert.Equal(t, record.Message, "message")
+	assert.Equal(t, int64(1), record.Resource.Resources["cpu"].Value)
+	assert.Equal(t, si.EventRecord_NONE, record.EventChangeType)
+	assert.Equal(t, si.EventRecord_DETAILS_NONE, record.EventChangeDetail)
 	if record.TimestampNano == 0 {
 		t.Fatal("the timestamp should have been created")
 	}
 }
 
 func TestCreateEventRecordTypes(t *testing.T) {
-	record := CreateRequestEventRecord("ask", "app", "reason", "message")
+	record := CreateRequestEventRecord("ask", "app", "message", nil)
 	assert.Equal(t, record.Type, si.EventRecord_REQUEST)
 
-	record = CreateAppEventRecord("ask", "app", "message")
+	record = CreateAppEventRecord("app", "message", "ask", si.EventRecord_NONE, si.EventRecord_DETAILS_NONE, nil)
 	assert.Equal(t, record.Type, si.EventRecord_APP)
 
-	record = CreateNodeEventRecord("ask", "app", "message")
+	record = CreateNodeEventRecord("node", "message", "ask", si.EventRecord_NONE, si.EventRecord_DETAILS_NONE, nil)
 	assert.Equal(t, record.Type, si.EventRecord_NODE)
 
-	record = CreateQueueEventRecord("ask", "app", "reason", "message")
+	record = CreateQueueEventRecord("queue", "app", "message", si.EventRecord_NONE, si.EventRecord_DETAILS_NONE, nil)
 	assert.Equal(t, record.Type, si.EventRecord_QUEUE)
 }

@@ -36,7 +36,7 @@ func (evt *applicationEvents) sendAppDoesNotFitEvent(request *AllocationAsk) {
 	}
 
 	message := fmt.Sprintf("Application %s does not fit into %s queue", request.GetApplicationID(), evt.app.queuePath)
-	event := events.CreateRequestEventRecord(request.GetAllocationKey(), request.GetApplicationID(), "InsufficientQueueResources", message)
+	event := events.CreateRequestEventRecord(request.GetAllocationKey(), request.GetApplicationID(), message, request.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 
@@ -46,7 +46,7 @@ func (evt *applicationEvents) sendPlaceholderLargerEvent(ph *Allocation, request
 	}
 
 	message := fmt.Sprintf("Task group '%s' in application '%s': allocation resources '%s' are not matching placeholder '%s' allocation with ID '%s'", ph.GetTaskGroup(), evt.app.ApplicationID, request.GetAllocatedResource().String(), ph.GetAllocatedResource().String(), ph.GetAllocationKey())
-	event := events.CreateRequestEventRecord(ph.GetAllocationKey(), evt.app.ApplicationID, "releasing placeholder: real allocation is larger than placeholder", message)
+	event := events.CreateRequestEventRecord(ph.GetAllocationKey(), evt.app.ApplicationID, message, request.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 

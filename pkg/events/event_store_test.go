@@ -30,23 +30,20 @@ import (
 // the fields of an event should match after stored and retrieved
 func TestStoreAndRetrieve(t *testing.T) {
 	store := newEventStore()
-	event := si.EventRecord{
-		Type:     si.EventRecord_REQUEST,
-		ObjectID: "alloc1",
-		GroupID:  "app1",
-		Reason:   "reason",
-		Message:  "message",
+	event := &si.EventRecord{
+		Type:              si.EventRecord_REQUEST,
+		EventChangeDetail: si.EventRecord_DETAILS_NONE,
+		EventChangeType:   si.EventRecord_NONE,
+		ObjectID:          "alloc1",
+		ReferenceID:       "app1",
+		Message:           "message",
 	}
-	store.Store(&event)
+	store.Store(event)
 
 	records := store.CollectEvents()
 	assert.Equal(t, len(records), 1)
 	record := records[0]
-	assert.Equal(t, record.Type, si.EventRecord_REQUEST)
-	assert.Equal(t, record.ObjectID, "alloc1")
-	assert.Equal(t, record.GroupID, "app1")
-	assert.Equal(t, record.Message, "message")
-	assert.Equal(t, record.Reason, "reason")
+	assert.DeepEqual(t, record, event)
 
 	// calling CollectEvents erases the eventChannel map
 	records = store.CollectEvents()
@@ -61,11 +58,10 @@ func TestStoreWithLimitedSize(t *testing.T) {
 	store := newEventStore()
 	for i := 0; i < 5; i++ {
 		event := &si.EventRecord{
-			Type:     si.EventRecord_REQUEST,
-			ObjectID: "alloc-" + strconv.Itoa(i),
-			GroupID:  "app",
-			Reason:   "reason",
-			Message:  "message",
+			Type:        si.EventRecord_REQUEST,
+			ObjectID:    "alloc-" + strconv.Itoa(i),
+			ReferenceID: "app",
+			Message:     "message",
 		}
 		store.Store(event)
 	}

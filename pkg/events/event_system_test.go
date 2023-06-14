@@ -62,11 +62,10 @@ func TestSingleEventStoredCorrectly(t *testing.T) {
 	defer eventSystem.Stop()
 
 	event := si.EventRecord{
-		Type:     si.EventRecord_REQUEST,
-		ObjectID: "alloc1",
-		GroupID:  "app1",
-		Reason:   "reason",
-		Message:  "message",
+		Type:        si.EventRecord_REQUEST,
+		ObjectID:    "alloc1",
+		ReferenceID: "app1",
+		Message:     "message",
 	}
 	eventSystem.AddEvent(&event)
 
@@ -84,7 +83,6 @@ func TestSingleEventStoredCorrectly(t *testing.T) {
 	record := records[0]
 	assert.Equal(t, record.Type, si.EventRecord_REQUEST)
 	assert.Equal(t, record.ObjectID, "alloc1")
-	assert.Equal(t, record.GroupID, "app1")
+	assert.Equal(t, record.ReferenceID, "app1")
 	assert.Equal(t, record.Message, "message")
-	assert.Equal(t, record.Reason, "reason")
 }

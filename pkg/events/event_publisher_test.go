@@ -98,8 +98,7 @@ func TestNoFillWithoutEventPluginRegistered(t *testing.T) {
 	event := &si.EventRecord{
 		Type:          si.EventRecord_REQUEST,
 		ObjectID:      "ask",
-		GroupID:       "app",
-		Reason:        "reason",
+		ReferenceID:   "app",
 		Message:       "message",
 		TimestampNano: 123456,
 	}
@@ -126,8 +125,7 @@ func TestPublisherSendsEvent(t *testing.T) {
 	event := &si.EventRecord{
 		Type:          si.EventRecord_REQUEST,
 		ObjectID:      "ask",
-		GroupID:       "app",
-		Reason:        "reason",
+		ReferenceID:   "app",
 		Message:       "message",
 		TimestampNano: 123456,
 	}
@@ -139,8 +137,7 @@ func TestPublisherSendsEvent(t *testing.T) {
 		t.Fatal("EventRecord should not be nil!")
 	}
 	assert.Equal(t, eventFromPlugin.ObjectID, "ask")
-	assert.Equal(t, eventFromPlugin.GroupID, "app")
-	assert.Equal(t, eventFromPlugin.Reason, "reason")
+	assert.Equal(t, eventFromPlugin.ReferenceID, "app")
 	assert.Equal(t, eventFromPlugin.Message, "message")
 	assert.Equal(t, eventFromPlugin.TimestampNano, int64(123456))
 }

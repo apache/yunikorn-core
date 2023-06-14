@@ -56,6 +56,6 @@ func TestCreateEventRecordTypes(t *testing.T) {
 	record = CreateNodeEventRecord("node", "message", "ask", si.EventRecord_NONE, si.EventRecord_DETAILS_NONE, nil)
 	assert.Equal(t, record.Type, si.EventRecord_NODE)
 
-	record = CreateQueueEventRecord("queue", "app", "message", si.EventRecord_NONE, si.EventRecord_DETAILS_NONE, nil)
+	record = CreateQueueEventRecord("queue", "message", "app", si.EventRecord_NONE, si.EventRecord_DETAILS_NONE, nil)
 	assert.Equal(t, record.Type, si.EventRecord_QUEUE)
 }

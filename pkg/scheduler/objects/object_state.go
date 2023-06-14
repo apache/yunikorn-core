@@ -78,11 +78,24 @@ func NewObjectState() *fsm.FSM {
 		},
 		fsm.Callbacks{
 			"enter_state": func(_ context.Context, event *fsm.Event) {
+				var object string
+				switch v := event.Args[0].(type) {
+				case *Queue:
+					object = v.QueuePath
+				case string:
+					object = v
+				}
+
 				log.Logger().Info("object transition",
-					zap.Any("object", event.Args[0]),
+					zap.String("object", object),
 					zap.String("source", event.Src),
 					zap.String("destination", event.Dst),
 					zap.String("event", event.Event))
+			},
+			Stopped.String(): func(_ context.Context, event *fsm.Event) {
+				if queue, ok := event.Args[0].(*Queue); ok {
+					queue.parent.clearSortedQueues()
+				}
 			},
 		},
 	)

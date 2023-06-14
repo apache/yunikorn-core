@@ -607,7 +607,7 @@ func TestSortApplicationsWithoutFiltering(t *testing.T) {
 
 // This test must not test the sorter that is underlying.
 // It tests the queue specific parts of the code only.
-func TestSortQueue(t *testing.T) {
+func TestGetSortedQueue(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
@@ -616,29 +616,83 @@ func TestSortQueue(t *testing.T) {
 	// empty parent queue
 	parent, err = createManagedQueue(root, "parent", true, nil)
 	assert.NilError(t, err, "failed to create parent queue")
-	if len(parent.sortQueues()) != 0 {
-		t.Errorf("parent queue should return sorted queues: %v", parent)
+	if len(parent.getSortedQueues()) != 0 {
+		t.Errorf("parent queue shouldn't return sorted queues: %v", parent)
 	}
 
 	// leaf queue must be nil
 	leaf, err = createManagedQueue(parent, "leaf", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
-	if queues := leaf.sortQueues(); queues != nil {
-		t.Errorf("leaf queue should return sorted queues: %v", queues)
+	if queues := leaf.getSortedQueues(); queues != nil {
+		t.Errorf("leaf queue shouldn't return sorted queues: %v", queues)
 	}
-	if queues := parent.sortQueues(); len(queues) != 0 {
+	if queues := parent.getSortedQueues(); len(queues) != 0 {
 		t.Errorf("parent queue with leaf returned unexpectd queues: %v", queues)
 	}
+
+	// increase pending resoruce from 0 to 1
 	var res *resources.Resource
 	res, err = resources.NewResourceFromConf(map[string]string{"first": "1"})
 	assert.NilError(t, err, "failed to create basic resource")
 	leaf.incPendingResource(res)
-	if queues := parent.sortQueues(); len(queues) != 1 {
+	if queues := parent.getSortedQueues(); len(queues) != 1 {
 		t.Errorf("parent queue did not return expected queues: %v", queues)
+	}
+	if !reflect.DeepEqual(parent.sortedQueues, parent.getSortedQueues()) {
+		t.Errorf("parent queue did not use cached sorted queues: %v", parent)
+	}
+
+	// increase pending resoruce from 1 to 2, should not remove cached sorted queues
+	leaf.incPendingResource(res)
+	if len(parent.sortedQueues) == 0 {
+		t.Errorf("parent queue should not remove cached sorted queues: %v", parent)
+	}
+
+	// decrease pending resoruce from 2 to 1, should not remove cached sorted queues
+	leaf.decPendingResource(res)
+	if len(parent.sortedQueues) == 0 {
+		t.Errorf("parent queue should not remove cached sorted queues: %v", parent)
+	}
+
+	// decrease pending resoruce from 1 to 0, should remove the sorted queues
+	leaf.decPendingResource(res)
+	if len(parent.sortedQueues) != 0 {
+		t.Errorf("parent queue should remove cached sorted queues: %v", parent)
+	}
+
+	// increase pending resoruce from 0 to 1, trigger renew cached sorted queues, and add new child queue
+	leaf.incPendingResource(res)
+	parent.getSortedQueues()
+	if len(parent.sortedQueues) == 0 {
+		t.Errorf("parent queue should renew cached sorted queues: %v", parent)
+	}
+	_, err = createManagedQueue(parent, "leaf2", false, nil)
+	assert.NilError(t, err, "failed to create leaf2 queue")
+	if len(parent.sortedQueues) != 0 {
+		t.Errorf("parent queue should remove cached sorted queues: %v", parent)
+	}
+
+	// trigger renew cached sorted queues and remove a child queue
+	parent.getSortedQueues()
+	if len(parent.sortedQueues) == 0 {
+		t.Errorf("parent queue should renew cached sorted queues: %v", parent)
+	}
+	parent.removeChildQueue("leaf2")
+	if len(parent.sortedQueues) != 0 {
+		t.Errorf("parent queue should remove cached sorted queues: %v", parent)
+	}
+
+	// trigger renew cached sorted queues and stop leaf queue
+	parent.getSortedQueues()
+	if len(parent.sortedQueues) == 0 {
+		t.Errorf("parent queue should renew cached sorted queues: %v", parent)
 	}
 	err = leaf.handleQueueEvent(Stop)
 	assert.NilError(t, err, "failed to stop queue")
-	if queues := parent.sortQueues(); len(queues) != 0 {
+	if parent.sortedQueues != nil {
+		t.Errorf("parent queue did not have expected sortedQueues: %v", parent)
+	}
+	if queues := parent.getSortedQueues(); len(queues) != 0 {
 		t.Errorf("parent queue returned stopped queue: %v", queues)
 	}
 }

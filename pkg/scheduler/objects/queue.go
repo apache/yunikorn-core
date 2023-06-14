@@ -66,6 +66,7 @@ type Queue struct {
 	preemptionPolicy    policies.PreemptionPolicy // preemption policy
 	preemptionDelay     time.Duration             // time before preemption is considered
 	currentPriority     int32                     // the current scheduling priority of this queue
+	sortedQueues        []*Queue                  // sorted list of queues
 
 	// The queue properties should be treated as immutable the value is a merge of the
 	// parent properties with the config for this queue only manipulated during creation
@@ -105,6 +106,7 @@ func newBlankQueue() *Queue {
 		prioritySortEnabled:    true,
 		preemptionDelay:        configs.DefaultPreemptionDelay,
 		preemptionPolicy:       policies.DefaultPreemptionPolicy,
+		sortedQueues:           nil,
 	}
 }
 
@@ -316,6 +318,7 @@ func (sq *Queue) applyConf(conf configs.QueueConfig) error {
 	}
 
 	sq.properties = conf.Properties
+	sq.sortedQueues = nil
 	return nil
 }
 
@@ -464,7 +467,7 @@ func (sq *Queue) CurrentState() string {
 // handleQueueEvent processes the state event for the queue.
 // The state machine handles the locking.
 func (sq *Queue) handleQueueEvent(event ObjectEvent) error {
-	err := sq.stateMachine.Event(context.Background(), event.String(), sq.QueuePath)
+	err := sq.stateMachine.Event(context.Background(), event.String(), sq)
 	// err is nil the state transition was done
 	if err == nil {
 		sq.stateTime = time.Now()
@@ -628,6 +631,9 @@ func (sq *Queue) incPendingResource(delta *resources.Resource) {
 	// update this queue
 	sq.Lock()
 	defer sq.Unlock()
+	if resources.IsZero(sq.pending) && !resources.IsZero(delta) {
+		sq.sortedQueues = nil
+	}
 	sq.pending = resources.Add(sq.pending, delta)
 }
 
@@ -644,11 +650,15 @@ func (sq *Queue) decPendingResource(delta *resources.Resource) {
 	sq.Lock()
 	defer sq.Unlock()
 	var err error
+	oldPending := sq.pending.Clone()
 	sq.pending, err = resources.SubErrorNegative(sq.pending, delta)
 	if err != nil {
 		log.Logger().Warn("Pending resources went negative",
 			zap.String("queueName", sq.QueuePath),
 			zap.Error(err))
+	}
+	if !resources.IsZero(oldPending) && resources.IsZero(sq.pending) {
+		sq.sortedQueues = nil
 	}
 }
 
@@ -798,6 +808,7 @@ func (sq *Queue) removeChildQueue(name string) {
 	delete(sq.children, name)
 	delete(sq.childPriorities, name)
 	priority := sq.recalculatePriority()
+	sq.sortedQueues = nil
 	sq.Unlock()
 
 	sq.parent.UpdateQueuePriority(sq.Name, priority)
@@ -814,6 +825,8 @@ func (sq *Queue) addChildQueue(child *Queue) error {
 	if sq.IsDraining() {
 		return fmt.Errorf("cannot add a child queue when queue is marked for deletion: %s", sq.QueuePath)
 	}
+
+	sq.sortedQueues = nil
 
 	// no need to lock child as it is a new queue which cannot be accessed yet
 	sq.children[child.Name] = child
@@ -960,6 +973,9 @@ func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bo
 	// all OK update this queue
 	sq.allocatedResource = newAllocated
 	sq.updateAllocatedAndPendingResourceMetrics()
+	if !resources.IsZero(alloc) {
+		sq.sortedQueues = nil
+	}
 	return nil
 }
 
@@ -996,6 +1012,9 @@ func (sq *Queue) DecAllocatedResource(alloc *resources.Resource) error {
 	// all OK update the queue
 	sq.allocatedResource = resources.Sub(sq.allocatedResource, alloc)
 	sq.updateAllocatedAndPendingResourceMetrics()
+	if !resources.IsZero(alloc) {
+		sq.sortedQueues = nil
+	}
 	return nil
 }
 
@@ -1050,14 +1069,22 @@ func (sq *Queue) sortApplications(filterApps bool) []*Application {
 	return sortApplications(sq.GetCopyOfApps(), queueSortType, sq.IsPrioritySortEnabled(), sq.GetGuaranteedResource())
 }
 
-// sortQueues returns a sorted shallow copy of the queues for this parent queue.
+// getSortedQueues returns a sorted shallow copy of the queues for this parent queue.
 // Only queues with a pending resource request are considered. The queues are sorted using the
 // sorting type for the parent queue.
 // Lock free call all locks are taken when needed in called functions
-func (sq *Queue) sortQueues() []*Queue {
+func (sq *Queue) getSortedQueues() []*Queue {
 	if sq.IsLeafQueue() {
 		return nil
 	}
+
+	sq.RLock()
+	if sq.sortedQueues != nil {
+		defer sq.RUnlock()
+		return sq.sortedQueues
+	}
+	sq.RUnlock()
+
 	// Create a list of the queues with pending resources
 	sortedQueues := make([]*Queue, 0)
 	for _, child := range sq.GetCopyOfChildren() {
@@ -1073,6 +1100,9 @@ func (sq *Queue) sortQueues() []*Queue {
 	// Sort the queues
 	sortQueue(sortedQueues, sq.getSortType(), sq.IsPrioritySortEnabled())
 
+	sq.Lock()
+	defer sq.Unlock()
+	sq.sortedQueues = sortedQueues
 	return sortedQueues
 }
 
@@ -1250,7 +1280,7 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 		}
 	} else {
 		// process the child queues (filters out queues without pending requests)
-		for _, child := range sq.sortQueues() {
+		for _, child := range sq.getSortedQueues() {
 			alloc := child.TryAllocate(iterator, fullIterator, getnode)
 			if alloc != nil {
 				return alloc
@@ -1281,7 +1311,7 @@ func (sq *Queue) TryPlaceholderAllocate(iterator func() NodeIterator, getnode fu
 		}
 	} else {
 		// process the child queues (filters out queues without pending requests)
-		for _, child := range sq.sortQueues() {
+		for _, child := range sq.getSortedQueues() {
 			alloc := child.TryPlaceholderAllocate(iterator, getnode)
 			if alloc != nil {
 				return alloc
@@ -1303,7 +1333,7 @@ func (sq *Queue) GetQueueOutstandingRequests(total *[]*AllocationAsk) {
 			app.getOutstandingRequests(headRoom, total)
 		}
 	} else {
-		for _, child := range sq.sortQueues() {
+		for _, child := range sq.getSortedQueues() {
 			child.GetQueueOutstandingRequests(total)
 		}
 	}
@@ -1357,7 +1387,7 @@ func (sq *Queue) TryReservedAllocate(iterator func() NodeIterator) *Allocation {
 		}
 	} else {
 		// process the child queues (filters out queues that have no pending requests)
-		for _, child := range sq.sortQueues() {
+		for _, child := range sq.getSortedQueues() {
 			alloc := child.TryReservedAllocate(iterator)
 			if alloc != nil {
 				return alloc
@@ -1822,4 +1852,11 @@ func (sq *Queue) recalculatePriority() int32 {
 	}
 	sq.currentPriority = curr
 	return priorityValueByPolicy(sq.priorityPolicy, sq.priorityOffset, curr)
+}
+
+// clearSortedQueues remove sortedQueue property. This is used for child queue get into stopped state.
+func (sq *Queue) clearSortedQueues() {
+	sq.Lock()
+	defer sq.Unlock()
+	sq.sortedQueues = nil
 }

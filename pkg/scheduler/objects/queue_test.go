@@ -387,8 +387,13 @@ func TestAddApplicationWithTag(t *testing.T) {
 		map[string]resources.Quantity{
 			"first": 10,
 		})
+	guaranteedRes := resources.NewResourceFromMap(
+		map[string]resources.Quantity{
+			"first": 5,
+		})
 	tags := make(map[string]string)
 	tags[common.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":10}}}"
+	tags[common.AppTagNamespaceResourceGuaranteed] = "{\"resources\":{\"first\":{\"value\":5}}}"
 	// add apps again now with the tag set
 	app = newApplicationWithTags("app-3", "default", "root.leaf-man", tags)
 	leaf.AddApplication(app)
@@ -396,20 +401,32 @@ func TestAddApplicationWithTag(t *testing.T) {
 	if leaf.GetMaxResource() != nil {
 		t.Errorf("Max resources should not be set on managed queue got: %s", leaf.GetMaxResource().String())
 	}
+	if leaf.GetGuaranteedResource() != nil {
+		t.Errorf("Guaranteed resources should not be set on managed queue got: %s", leaf.GetGuaranteedResource().String())
+	}
 	app = newApplicationWithTags("app-4", "default", "root.leaf-un", tags)
 	leafUn.AddApplication(app)
 	assert.Equal(t, len(leaf.applications), 2, "Application was not added to the Dynamic queue as expected")
 	if !resources.Equals(leafUn.GetMaxResource(), maxRes) {
 		t.Errorf("Max resources not set as expected: %s got: %v", maxRes.String(), leafUn.GetMaxResource())
 	}
+	if !resources.Equals(leafUn.GetGuaranteedResource(), guaranteedRes) {
+		t.Errorf("Guaranteed resources not set as expected: %s got: %v", guaranteedRes.String(), leafUn.GetGuaranteedResource())
+	}
 
 	// set to illegal limit (0 value)
 	tags[common.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":0}}}"
+	// set to illegal guaranteed resource (0 value)
+	tags[common.AppTagNamespaceResourceGuaranteed] = "{\"resources\":{\"first\":{\"value\":0}}}"
+
 	app = newApplicationWithTags("app-4", "default", "root.leaf-un", tags)
 	leafUn.AddApplication(app)
 	assert.Equal(t, len(leaf.applications), 2, "Application was not added to the Dynamic queue as expected")
 	if !resources.Equals(leafUn.GetMaxResource(), maxRes) {
 		t.Errorf("Max resources not set as expected: %s got: %v", maxRes.String(), leafUn.GetMaxResource())
+	}
+	if !resources.Equals(leafUn.GetGuaranteedResource(), guaranteedRes) {
+		t.Errorf("Guaranteed resources not set as expected: %s got: %v", guaranteedRes.String(), leafUn.GetGuaranteedResource())
 	}
 }
 

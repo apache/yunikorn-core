@@ -686,6 +686,27 @@ func (sq *Queue) AddApplication(app *Application) {
 		return
 	}
 	sq.maxResource = res
+
+	// get the tag with the guaranteed resource
+	guaranteed := app.GetTag(common.AppTagNamespaceResourceGuaranteed)
+	if guaranteed == "" {
+		return
+	}
+	// need to set guaranteed resource: convert json string to resource
+	res, err = resources.NewResourceFromString(guaranteed)
+	if err != nil {
+		log.Logger().Warn("application guaranteed resource conversion failure",
+			zap.String("json guaranteed string", guaranteed),
+			zap.Error(err))
+		return
+	}
+	if !resources.StrictlyGreaterThanZero(res) {
+		log.Logger().Warn("application guaranteed resource has at least one 0 value: cannot set queue guaranteed resource",
+			zap.Stringer("guaranteedResource", res))
+		return
+	}
+	// set the guaranteed resource
+	sq.guaranteedResource = res
 }
 
 // RemoveApplication removes the app from the list of tracked applications. Make sure that the app

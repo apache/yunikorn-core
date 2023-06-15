@@ -247,6 +247,34 @@ func benchmarkScopedLoggerInfoFiltered(iterations int) int64 {
 	return (time.Since(start).Nanoseconds()) / int64(iterations)
 }
 
+func TestParseLevel(t *testing.T) {
+	assert.Equal(t, zapcore.DebugLevel, *parseLevel("-2"), "out of range low")
+	assert.Equal(t, zapcore.DebugLevel, *parseLevel("-1"))
+	assert.Equal(t, zapcore.InfoLevel, *parseLevel("0"))
+	assert.Equal(t, zapcore.WarnLevel, *parseLevel("1"))
+	assert.Equal(t, zapcore.ErrorLevel, *parseLevel("2"))
+	assert.Equal(t, zapcore.DPanicLevel, *parseLevel("3"))
+	assert.Equal(t, zapcore.PanicLevel, *parseLevel("4"))
+	assert.Equal(t, zapcore.FatalLevel, *parseLevel("5"))
+	assert.Equal(t, zapcore.FatalLevel, *parseLevel("6"), "out of range high")
+	assert.Assert(t, parseLevel("+2-3") == nil, "parse error")
+	assert.Equal(t, zapcore.DebugLevel, *parseLevel("Debug"))
+	assert.Equal(t, zapcore.InfoLevel, *parseLevel("iNFO"))
+	assert.Equal(t, zapcore.WarnLevel, *parseLevel("WaRn"))
+	assert.Equal(t, zapcore.ErrorLevel, *parseLevel("ERROR"))
+	assert.Equal(t, zapcore.DPanicLevel, *parseLevel("dpanic"))
+	assert.Equal(t, zapcore.PanicLevel, *parseLevel("PAnIC"))
+	assert.Equal(t, zapcore.FatalLevel, *parseLevel("faTal"))
+	assert.Assert(t, parseLevel("x") == nil, "parse error")
+}
+
+func TestParentLogger(t *testing.T) {
+	assert.Equal(t, "", parentLogger(""), "nullLogger")
+	assert.Equal(t, "", parentLogger("a"), "level 1")
+	assert.Equal(t, "a", parentLogger("a.b"), "level 2")
+	assert.Equal(t, "a.b", parentLogger("a.b.c"), "level 3")
+}
+
 func resetTestLogger() {
 	// flush log
 	logger.Sync() //nolint:errcheck

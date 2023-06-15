@@ -65,6 +65,18 @@ func (gt *GroupTracker) getTrackedApplications() map[string]bool {
 	return gt.applications
 }
 
+func (gt *GroupTracker) setMaxApplications(count uint64, queuePath string) error {
+	gt.Lock()
+	defer gt.Unlock()
+	return gt.queueTracker.setMaxApplications(count, queuePath)
+}
+
+func (gt *GroupTracker) setMaxResources(resource *resources.Resource, queuePath string) error {
+	gt.Lock()
+	defer gt.Unlock()
+	return gt.queueTracker.setMaxResources(resource, queuePath)
+}
+
 func (gt *GroupTracker) GetGroupResourceUsageDAOInfo() *dao.GroupResourceUsageDAOInfo {
 	gt.RLock()
 	defer gt.RUnlock()

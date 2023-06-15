@@ -20,7 +20,6 @@ package ugm
 
 import (
 	"fmt"
-	"strings"
 
 	"go.uber.org/zap"
 
@@ -34,6 +33,8 @@ type QueueTracker struct {
 	queueName           string
 	resourceUsage       *resources.Resource
 	runningApplications map[string]bool
+	maxResourceUsage    *resources.Resource
+	maxRunningApps      uint64
 	childQueueTrackers  map[string]*QueueTracker
 }
 
@@ -65,6 +66,13 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 	qt.resourceUsage.AddTo(usage)
 	qt.runningApplications[applicationID] = true
 
+	log.Logger().Debug("Successfully increased resource usage",
+		zap.String("queue path", queuePath),
+		zap.String("application", applicationID),
+		zap.Stringer("resource", usage),
+		zap.Stringer("total resource after increasing", qt.resourceUsage),
+		zap.Int("total applications after increasing", len(qt.runningApplications)))
+
 	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
 	if childQueuePath != "" {
 		if qt.childQueueTrackers[immediateChildQueueName] == nil {
@@ -92,6 +100,12 @@ func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID 
 	if removeApp {
 		delete(qt.runningApplications, applicationID)
 	}
+	log.Logger().Debug("Successfully decreased resource usage",
+		zap.String("queue path", queuePath),
+		zap.String("application", applicationID),
+		zap.Stringer("resource", usage),
+		zap.Stringer("total resource after decreasing", qt.resourceUsage),
+		zap.Int("total applications after decreasing", len(qt.runningApplications)))
 
 	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
 	if childQueuePath != "" {
@@ -115,6 +129,63 @@ func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID 
 	return removeQT, nil
 }
 
+func (qt *QueueTracker) getChildQueueTracker(queuePath string) *QueueTracker {
+	var childQueuePath, immediateChildQueueName string
+	childQueuePath, immediateChildQueueName = getChildQueuePath(queuePath)
+	childQueueTracker := qt
+	if childQueuePath != "" {
+		for childQueuePath != "" {
+			if childQueueTracker != nil {
+				if len(childQueueTracker.childQueueTrackers) == 0 || childQueueTracker.childQueueTrackers[immediateChildQueueName] == nil {
+					newChildQt := newQueueTracker(immediateChildQueueName)
+					childQueueTracker.childQueueTrackers[immediateChildQueueName] = newChildQt
+					childQueueTracker = newChildQt
+				} else {
+					childQueueTracker = childQueueTracker.childQueueTrackers[immediateChildQueueName]
+				}
+			}
+			childQueuePath, immediateChildQueueName = getChildQueuePath(childQueuePath)
+		}
+	}
+	return childQueueTracker
+}
+
+func (qt *QueueTracker) setMaxApplications(count uint64, queuePath string) error {
+	log.Logger().Debug("Setting max applications",
+		zap.String("queue path", queuePath),
+		zap.Uint64("max applications", count))
+	childQueueTracker := qt.getChildQueueTracker(queuePath)
+	if childQueueTracker.maxRunningApps != 0 && count != 0 && len(childQueueTracker.runningApplications) > int(count) {
+		log.Logger().Warn("Current running applications is greater than config max applications",
+			zap.String("queue path", queuePath),
+			zap.Uint64("current max applications", childQueueTracker.maxRunningApps),
+			zap.Int("total running applications", len(childQueueTracker.runningApplications)),
+			zap.Uint64("config max applications", count))
+		return fmt.Errorf("current running applications is greater than config max applications for %s", queuePath)
+	} else {
+		childQueueTracker.maxRunningApps = count
+	}
+	return nil
+}
+
+func (qt *QueueTracker) setMaxResources(resource *resources.Resource, queuePath string) error {
+	log.Logger().Debug("Setting max resources",
+		zap.String("queue path", queuePath),
+		zap.String("max resources", resource.String()))
+	childQueueTracker := qt.getChildQueueTracker(queuePath)
+	if (!resources.Equals(childQueueTracker.maxResourceUsage, resources.NewResource()) && !resources.Equals(resource, resources.NewResource())) && resources.StrictlyGreaterThan(childQueueTracker.resourceUsage, resource) {
+		log.Logger().Warn("Current resource usage is greater than config max resource",
+			zap.String("queue path", queuePath),
+			zap.String("current max resource usage", childQueueTracker.maxResourceUsage.String()),
+			zap.String("total resource usage", childQueueTracker.resourceUsage.String()),
+			zap.String("config max resources", resource.String()))
+		return fmt.Errorf("current resource usage is greater than config max resource for %s", queuePath)
+	} else {
+		childQueueTracker.maxResourceUsage = resource
+	}
+	return nil
+}
+
 func (qt *QueueTracker) getResourceUsageDAOInfo(parentQueuePath string) *dao.ResourceUsageDAOInfo {
 	if qt == nil {
 		return &dao.ResourceUsageDAOInfo{}
@@ -130,25 +201,11 @@ func (qt *QueueTracker) getResourceUsageDAOInfo(parentQueuePath string) *dao.Res
 	for app := range qt.runningApplications {
 		usage.RunningApplications = append(usage.RunningApplications, app)
 	}
+	usage.MaxResources = qt.maxResourceUsage
+	usage.MaxApplications = qt.maxRunningApps
 	for _, cqt := range qt.childQueueTrackers {
 		childUsage := cqt.getResourceUsageDAOInfo(fullQueuePath)
 		usage.Children = append(usage.Children, childUsage)
 	}
 	return usage
-}
-
-func getChildQueuePath(queuePath string) (string, string) {
-	idx := strings.Index(queuePath, configs.DOT)
-	childQueuePath := ""
-	if idx != -1 {
-		childQueuePath = queuePath[idx+1:]
-	}
-
-	childIndex := strings.Index(childQueuePath, configs.DOT)
-	immediateChildQueueName := childQueuePath
-	if childIndex != -1 {
-		immediateChildQueueName = childQueuePath[:childIndex]
-	}
-
-	return childQueuePath, immediateChildQueueName
 }

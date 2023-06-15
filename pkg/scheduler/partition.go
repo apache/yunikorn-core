@@ -39,6 +39,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/placement"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
+	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -128,7 +129,9 @@ func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionCon
 	// TODO get the resolver from the config
 	pc.userGroupCache = security.GetUserGroupCache("")
 	pc.updateNodeSortingPolicy(conf)
-	return nil
+
+	// update limit settings: start at the root
+	return ugm.GetUserManager().UpdateConfig(queueConf, conf.Queues[0].Name)
 }
 
 // NOTE: this is a lock free call. It should only be called holding the PartitionContext lock.
@@ -178,7 +181,11 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 	}
 	root.UpdateQueueProperties()
 	// update the rest of the queues recursively
-	return pc.updateQueues(queueConf.Queues, root)
+	if err := pc.updateQueues(queueConf.Queues, root); err != nil {
+		return err
+	}
+	// update limit settings: start at the root
+	return ugm.GetUserManager().UpdateConfig(queueConf, conf.Queues[0].Name)
 }
 
 // Process the config structure and create a queue info tree for this partition

@@ -184,20 +184,6 @@ func TestQTDecreaseTrackedResource(t *testing.T) {
 	}
 }
 
-func TestGetChildQueuePath(t *testing.T) {
-	childPath, immediateChildName := getChildQueuePath("root.parent.leaf")
-	assert.Equal(t, childPath, "parent.leaf")
-	assert.Equal(t, immediateChildName, "parent")
-
-	childPath, immediateChildName = getChildQueuePath("parent.leaf")
-	assert.Equal(t, childPath, "leaf")
-	assert.Equal(t, immediateChildName, "leaf")
-
-	childPath, immediateChildName = getChildQueuePath("leaf")
-	assert.Equal(t, childPath, "")
-	assert.Equal(t, immediateChildName, "")
-}
-
 func getQTResource(qt *QueueTracker) map[string]*resources.Resource {
 	resources := make(map[string]*resources.Resource)
 	usage := qt.getResourceUsageDAOInfo("")

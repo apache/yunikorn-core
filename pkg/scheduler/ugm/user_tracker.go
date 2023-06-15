@@ -22,7 +22,6 @@ import (
 	"sync"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
-	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
@@ -39,10 +38,10 @@ type UserTracker struct {
 	sync.RWMutex
 }
 
-func newUserTracker(user security.UserGroup) *UserTracker {
+func newUserTracker(user string) *UserTracker {
 	queueTracker := newRootQueueTracker()
 	userTracker := &UserTracker{
-		userName:         user.User,
+		userName:         user,
 		appGroupTrackers: make(map[string]*GroupTracker),
 		queueTracker:     queueTracker,
 	}
@@ -82,6 +81,18 @@ func (ut *UserTracker) getTrackedApplications() map[string]*GroupTracker {
 	ut.RLock()
 	defer ut.RUnlock()
 	return ut.appGroupTrackers
+}
+
+func (ut *UserTracker) setMaxApplications(count uint64, queuePath string) error {
+	ut.Lock()
+	defer ut.Unlock()
+	return ut.queueTracker.setMaxApplications(count, queuePath)
+}
+
+func (ut *UserTracker) setMaxResources(resource *resources.Resource, queuePath string) error {
+	ut.Lock()
+	defer ut.Unlock()
+	return ut.queueTracker.setMaxResources(resource, queuePath)
 }
 
 func (ut *UserTracker) GetUserResourceUsageDAOInfo() *dao.UserResourceUsageDAOInfo {

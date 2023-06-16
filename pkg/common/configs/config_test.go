@@ -732,9 +732,12 @@ partitions:
   - name: default
     queues:
       - name: root
+        queues:
+          - name: default
+            parent: false
     placementrules:
       - name: fixed
-        value: root
+        value: root.default
       - name: tag
         value: Just Any value
 `

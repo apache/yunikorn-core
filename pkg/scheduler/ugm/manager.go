@@ -401,23 +401,6 @@ func (m *Manager) getGroup(user security.UserGroup) (string, error) {
 	return "", fmt.Errorf("group is not available in usergroup for user %s", user.User)
 }
 
-// cleaner Auto wakeup go routine to remove the user and group trackers based on applications being tracked upon, its root queueTracker usage etc
-// nolint:unused
-func (m *Manager) cleaner() {
-	m.Lock()
-	defer m.Unlock()
-	for user, ut := range m.userTrackers {
-		if m.isUserRemovable(ut) {
-			delete(m.userTrackers, user)
-		}
-	}
-	for group, gt := range m.groupTrackers {
-		if m.isGroupRemovable(gt) {
-			delete(m.groupTrackers, group)
-		}
-	}
-}
-
 func (m *Manager) isUserRemovable(ut *UserTracker) bool {
 	if len(ut.getTrackedApplications()) == 0 && resources.IsZero(ut.queueTracker.resourceUsage) {
 		return true

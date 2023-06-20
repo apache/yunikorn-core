@@ -2899,6 +2899,10 @@ func TestPlaceholderBiggerThanReal(t *testing.T) {
 
 func TestPlaceholderMatch(t *testing.T) {
 	setupUGM()
+	events.CreateAndSetEventSystem()
+	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	eventSystem.StartServiceWithPublisher(false)
+
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
 	tgRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 10})
@@ -2960,6 +2964,27 @@ func TestPlaceholderMatch(t *testing.T) {
 	assert.Equal(t, allocID2, alloc.GetAllocationKey(), "expected allocation of alloc-2 to be returned")
 	assert.Equal(t, int64(1), app.GetAllPlaceholderData()[0].Count, "placeholder data should show 1 available placeholder")
 	assert.Equal(t, int64(0), app.GetAllPlaceholderData()[0].Replaced, "placeholder data should show no replacements yet")
+
+	// wait for events to be processed
+	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
+		return eventSystem.Store.CountStoredEvents() == 6
+	})
+	assert.NilError(t, err, "the event should have been processed")
+	records := eventSystem.Store.CollectEvents()
+	if records == nil {
+		t.Fatal("collecting eventChannel should return something")
+	}
+	assert.Equal(t, 6, len(records), "expecting 6 events: 3 new alloc ask, 2 new alloc , and 1 alloc replaced")
+	// new alloc sak and new alloc are tested in other cases, we only test the alloc replaced
+	record := records[5]
+	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
+	assert.Equal(t, alloc.GetApplicationID(), record.ObjectID, "incorrect object ID, expected application ID")
+	assert.Equal(t, phUUID, record.ReferenceID, "incorrect reference ID, expected alloc ID")
+	assert.Equal(t, si.EventRecord_REMOVE, record.EventChangeType, "incorrect change type, expected remove")
+	assert.Equal(t, si.EventRecord_ALLOC_REPLACED, record.EventChangeDetail, "incorrect change detail, expected alloc replaced")
+	eventSystem.Stop()
+
 	// release placeholder: do what the context would do after the shim processing
 	release := &si.AllocationRelease{
 		PartitionName:   "test",
@@ -3107,6 +3132,10 @@ func TestTryPlaceholderAllocate(t *testing.T) {
 // The failure is triggered by the predicate plugin and is hidden in the alloc handling
 func TestFailReplacePlaceholder(t *testing.T) {
 	setupUGM()
+	events.CreateAndSetEventSystem()
+	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	eventSystem.StartServiceWithPublisher(false)
+
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
 	if alloc := partition.tryPlaceholderAllocate(); alloc != nil {
@@ -3171,6 +3200,26 @@ func TestFailReplacePlaceholder(t *testing.T) {
 	if !resources.Equals(node2.GetAllocatedResource(), res) {
 		t.Fatalf("node-2 allocation not updated as expected: got %s, expected %s", node2.GetAllocatedResource(), res)
 	}
+
+	// wait for events to be processed
+	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
+		return eventSystem.Store.CountStoredEvents() == 4
+	})
+	assert.NilError(t, err, "the event should have been processed")
+	records := eventSystem.Store.CollectEvents()
+	if records == nil {
+		t.Fatal("collecting eventChannel should return something")
+	}
+	assert.Equal(t, 4, len(records), "expecting 4 events: 2 new alloc ask, 1 new alloc, and 1 alloc replaced")
+	// new alloc ask and new alloc are tested in other cases, we only test alloc replaced here
+	record := records[3]
+	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
+	assert.Equal(t, alloc.GetApplicationID(), record.ObjectID, "incorrect object ID, expected application ID")
+	assert.Equal(t, alloc.GetFirstRelease().GetUUID(), record.ReferenceID, "incorrect reference ID, expected alloc ID")
+	assert.Equal(t, si.EventRecord_REMOVE, record.EventChangeType, "incorrect change type, expected remove")
+	assert.Equal(t, si.EventRecord_ALLOC_REPLACED, record.EventChangeDetail, "incorrect change detail, expected alloc replaced")
+	eventSystem.Stop()
 
 	phUUID := alloc.GetFirstRelease().GetUUID()
 	// placeholder is not released until confirmed by the shim

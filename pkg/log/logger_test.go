@@ -39,7 +39,7 @@ func TestLoggerIds(t *testing.T) {
 	_ = Logger()
 
 	// validate logger count
-	assert.Equal(t, 2, len(loggers), "wrong logger count")
+	assert.Equal(t, 3, len(loggers), "wrong logger count")
 
 	// validate that all loggers are populated and have sequential ids
 	for i := 0; i < len(loggers); i++ {

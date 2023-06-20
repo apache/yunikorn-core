@@ -125,7 +125,7 @@ type ApplicationSummary struct {
 }
 
 func (as *ApplicationSummary) DoLogging() {
-	log.Logger().Info("YK_APP_SUMMARY:",
+	log.Log(log.AppUsage).Info("YK_APP_SUMMARY:",
 		zap.String("appID", as.ApplicationID),
 		zap.Int64("submissionTime", as.SubmissionTime.UnixMilli()),
 		zap.Int64("startTime", as.StartTime.UnixMilli()),

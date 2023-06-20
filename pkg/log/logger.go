@@ -54,14 +54,16 @@ const (
 
 // Predefined loggers: when adding new loggers, ids must be sequential, and all must be added to the loggers slice in the same order
 var (
-	Core = &LoggerHandle{id: 1, name: "core"}
-	Test = &LoggerHandle{id: 2, name: "test"}
+	Core     = &LoggerHandle{id: 1, name: "core"}
+	Test     = &LoggerHandle{id: 2, name: "test"}
+	AppUsage = &LoggerHandle{id: 3, name: "core.application.usage"}
 )
 
 // this tracks all the known logger handles, used to preallocate the real logger instances when configuration changes
 var loggers = []*LoggerHandle{
 	Core,
 	Test,
+	AppUsage,
 }
 
 // structure to hold all current logger configuration state

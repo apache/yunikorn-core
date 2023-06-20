@@ -85,15 +85,15 @@ func ParseEndpoint(ep string) (string, string, error) {
 
 // Logging unary interceptor function to log every RPC call
 func logGRPC(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-	log.Logger().Debug("GPRC call",
+	log.Log(log.RPC).Debug("GPRC call",
 		zap.String("method", info.FullMethod))
-	log.Logger().Debug("GPRC request",
+	log.Log(log.RPC).Debug("GPRC request",
 		zap.String("request", fmt.Sprintf("%+v", req)))
 	resp, err := handler(ctx, req)
 	if err != nil {
-		log.Logger().Debug("GPRC error", zap.Error(err))
+		log.Log(log.RPC).Debug("GPRC error", zap.Error(err))
 	} else {
-		log.Logger().Debug("GPRC response",
+		log.Log(log.RPC).Debug("GPRC response",
 			zap.String("response", fmt.Sprintf("%+v", resp)))
 	}
 	return resp, err
@@ -107,13 +107,13 @@ func withServerUnaryInterceptor() grpc.ServerOption {
 func (s *nonBlockingGRPCServer) serve(endpoint string, ss si.SchedulerServer) {
 	proto, addr, err := ParseEndpoint(endpoint)
 	if err != nil {
-		log.Logger().Fatal("fatal error", zap.Error(err))
+		log.Log(log.RPC).Fatal("fatal error", zap.Error(err))
 	}
 
 	if proto == "unix" {
 		addr = "/" + addr
 		if err = os.Remove(addr); err != nil && !os.IsNotExist(err) {
-			log.Logger().Fatal("failed to remove unix domain socket",
+			log.Log(log.RPC).Fatal("failed to remove unix domain socket",
 				zap.String("uds", addr),
 				zap.Error(err))
 		}
@@ -122,7 +122,7 @@ func (s *nonBlockingGRPCServer) serve(endpoint string, ss si.SchedulerServer) {
 	var listener net.Listener
 	listener, err = net.Listen(proto, addr)
 	if err != nil {
-		log.Logger().Fatal("failed to listen to address",
+		log.Log(log.RPC).Fatal("failed to listen to address",
 			zap.Error(err))
 	}
 
@@ -133,10 +133,10 @@ func (s *nonBlockingGRPCServer) serve(endpoint string, ss si.SchedulerServer) {
 		si.RegisterSchedulerServer(server, ss)
 	}
 
-	log.Logger().Info("listening for connections",
+	log.Log(log.RPC).Info("listening for connections",
 		zap.Stringer("address", listener.Addr()))
 
 	if err = server.Serve(listener); err != nil {
-		log.Logger().Fatal("failed to serve", zap.Error(err))
+		log.Log(log.RPC).Fatal("failed to serve", zap.Error(err))
 	}
 }

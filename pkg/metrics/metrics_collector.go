@@ -65,24 +65,24 @@ func (u *internalMetricsCollector) StartService() {
 }
 
 func (u *internalMetricsCollector) store() {
-	log.Logger().Debug("Adding current status to historical partition data")
+	log.Log(log.Metrics).Debug("Adding current status to historical partition data")
 
 	totalAppsRunning, err := m.scheduler.getTotalApplicationsRunning()
 	if err != nil {
-		log.Logger().Warn("Could not encode totalApplications metric.", zap.Error(err))
+		log.Log(log.Metrics).Warn("Could not encode totalApplications metric.", zap.Error(err))
 		totalAppsRunning = -1
 	}
 	allocatedContainers, err := m.scheduler.getAllocatedContainers()
 	if err != nil {
-		log.Logger().Warn("Could not encode allocatedContainers metric.", zap.Error(err))
+		log.Log(log.Metrics).Warn("Could not encode allocatedContainers metric.", zap.Error(err))
 	}
 	releasedContainers, err := m.scheduler.getReleasedContainers()
 	if err != nil {
-		log.Logger().Warn("Could not encode releasedContainers metric.", zap.Error(err))
+		log.Log(log.Metrics).Warn("Could not encode releasedContainers metric.", zap.Error(err))
 	}
 	totalContainersRunning := allocatedContainers - releasedContainers
 	if totalContainersRunning < 0 {
-		log.Logger().Warn("Could not calculate the totalContainersRunning.",
+		log.Log(log.Metrics).Warn("Could not calculate the totalContainersRunning.",
 			zap.Int("allocatedContainers", allocatedContainers),
 			zap.Int("releasedContainers", releasedContainers))
 	}

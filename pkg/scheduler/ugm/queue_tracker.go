@@ -43,7 +43,7 @@ func newRootQueueTracker() *QueueTracker {
 }
 
 func newQueueTracker(queueName string) *QueueTracker {
-	log.Logger().Debug("Creating queue tracker object for queue",
+	log.Log(log.SchedUGM).Debug("Creating queue tracker object for queue",
 		zap.String("queue", queueName))
 	queueTracker := &QueueTracker{
 		queueName:           queueName,
@@ -55,7 +55,7 @@ func newQueueTracker(queueName string) *QueueTracker {
 }
 
 func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID string, usage *resources.Resource) error {
-	log.Logger().Debug("Increasing resource usage",
+	log.Log(log.SchedUGM).Debug("Increasing resource usage",
 		zap.String("queue path", queuePath),
 		zap.String("application", applicationID),
 		zap.Stringer("resource", usage))
@@ -66,7 +66,7 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 	qt.resourceUsage.AddTo(usage)
 	qt.runningApplications[applicationID] = true
 
-	log.Logger().Debug("Successfully increased resource usage",
+	log.Log(log.SchedUGM).Debug("Successfully increased resource usage",
 		zap.String("queue path", queuePath),
 		zap.String("application", applicationID),
 		zap.Stringer("resource", usage),
@@ -87,7 +87,7 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 }
 
 func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID string, usage *resources.Resource, removeApp bool) (bool, error) {
-	log.Logger().Debug("Decreasing resource usage",
+	log.Log(log.SchedUGM).Debug("Decreasing resource usage",
 		zap.String("queue path", queuePath),
 		zap.String("application", applicationID),
 		zap.Stringer("resource", usage),
@@ -100,7 +100,7 @@ func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID 
 	if removeApp {
 		delete(qt.runningApplications, applicationID)
 	}
-	log.Logger().Debug("Successfully decreased resource usage",
+	log.Log(log.SchedUGM).Debug("Successfully decreased resource usage",
 		zap.String("queue path", queuePath),
 		zap.String("application", applicationID),
 		zap.Stringer("resource", usage),
@@ -118,7 +118,7 @@ func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID 
 				delete(qt.childQueueTrackers, immediateChildQueueName)
 			}
 		} else {
-			log.Logger().Error("Child queueTracker tracker must be available in child queues map",
+			log.Log(log.SchedUGM).Error("Child queueTracker tracker must be available in child queues map",
 				zap.String("child queueTracker name", immediateChildQueueName))
 			return false, fmt.Errorf("child queueTracker tracker for %s is missing in child queues map", immediateChildQueueName)
 		}
@@ -151,12 +151,12 @@ func (qt *QueueTracker) getChildQueueTracker(queuePath string) *QueueTracker {
 }
 
 func (qt *QueueTracker) setMaxApplications(count uint64, queuePath string) error {
-	log.Logger().Debug("Setting max applications",
+	log.Log(log.SchedUGM).Debug("Setting max applications",
 		zap.String("queue path", queuePath),
 		zap.Uint64("max applications", count))
 	childQueueTracker := qt.getChildQueueTracker(queuePath)
 	if childQueueTracker.maxRunningApps != 0 && count != 0 && len(childQueueTracker.runningApplications) > int(count) {
-		log.Logger().Warn("Current running applications is greater than config max applications",
+		log.Log(log.SchedUGM).Warn("Current running applications is greater than config max applications",
 			zap.String("queue path", queuePath),
 			zap.Uint64("current max applications", childQueueTracker.maxRunningApps),
 			zap.Int("total running applications", len(childQueueTracker.runningApplications)),
@@ -169,12 +169,12 @@ func (qt *QueueTracker) setMaxApplications(count uint64, queuePath string) error
 }
 
 func (qt *QueueTracker) setMaxResources(resource *resources.Resource, queuePath string) error {
-	log.Logger().Debug("Setting max resources",
+	log.Log(log.SchedUGM).Debug("Setting max resources",
 		zap.String("queue path", queuePath),
 		zap.String("max resources", resource.String()))
 	childQueueTracker := qt.getChildQueueTracker(queuePath)
 	if (!resources.Equals(childQueueTracker.maxResourceUsage, resources.NewResource()) && !resources.Equals(resource, resources.NewResource())) && resources.StrictlyGreaterThan(childQueueTracker.resourceUsage, resource) {
-		log.Logger().Warn("Current resource usage is greater than config max resource",
+		log.Log(log.SchedUGM).Warn("Current resource usage is greater than config max resource",
 			zap.String("queue path", queuePath),
 			zap.String("current max resource usage", childQueueTracker.maxResourceUsage.String()),
 			zap.String("total resource usage", childQueueTracker.resourceUsage.String()),

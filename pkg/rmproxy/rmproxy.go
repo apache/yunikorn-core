@@ -56,12 +56,12 @@ func (rmp *RMProxy) GetRMEventHandler() handler.EventHandler {
 func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
 	select {
 	case queue <- ev:
-		log.Logger().Debug("enqueue event",
+		log.Log(log.RMProxy).Debug("enqueue event",
 			zap.Stringer("eventType", reflect.TypeOf(ev)),
 			zap.Any("event", ev),
 			zap.Int("currentQueueSize", len(queue)))
 	default:
-		log.Logger().DPanic("failed to enqueue event",
+		log.Log(log.RMProxy).DPanic("failed to enqueue event",
 			zap.Stringer("event", reflect.TypeOf(ev)))
 	}
 }
@@ -85,7 +85,7 @@ func (rmp *RMProxy) StartService(handlers handler.EventHandlers) {
 }
 
 func (rmp *RMProxy) handleUpdateResponseError(rmID string, err error) {
-	log.Logger().Error("failed to handle response",
+	log.Log(log.RMProxy).Error("failed to handle response",
 		zap.String("rmID", rmID),
 		zap.Error(err))
 }
@@ -124,7 +124,7 @@ func (rmp *RMProxy) processApplicationUpdateEvent(event *rmevent.RMApplicationUp
 			rmp.handleUpdateResponseError(event.RmID, err)
 		}
 	} else {
-		log.Logger().DPanic("RM is not registered",
+		log.Log(log.RMProxy).DPanic("RM is not registered",
 			zap.String("rmID", event.RmID))
 	}
 
@@ -162,7 +162,7 @@ func (rmp *RMProxy) triggerUpdateAllocation(rmID string, response *si.Allocation
 			rmp.handleUpdateResponseError(rmID, err)
 		}
 	} else {
-		log.Logger().DPanic("RM is not registered",
+		log.Log(log.RMProxy).DPanic("RM is not registered",
 			zap.String("rmID", rmID))
 	}
 }
@@ -208,7 +208,7 @@ func (rmp *RMProxy) processRMNodeUpdateEvent(event *rmevent.RMNodeUpdateEvent) {
 			rmp.handleUpdateResponseError(event.RmID, err)
 		}
 	} else {
-		log.Logger().DPanic("RM is not registered",
+		log.Log(log.RMProxy).DPanic("RM is not registered",
 			zap.String("rmID", event.RmID))
 	}
 }

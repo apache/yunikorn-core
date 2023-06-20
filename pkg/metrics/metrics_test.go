@@ -50,7 +50,7 @@ func generateRandomString(len int) string {
 	randomBytes := make([]byte, len)
 	n, err := rand.Read(randomBytes)
 	if err != nil {
-		log.Logger().Warn("Random running low on entropy",
+		log.Log(log.Metrics).Warn("Random running low on entropy",
 			zap.Int("bytesRequested", len),
 			zap.Int("bytesRead", n))
 	}

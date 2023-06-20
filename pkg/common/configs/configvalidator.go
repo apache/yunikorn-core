@@ -286,7 +286,7 @@ func checkPlacementRules(partition *PartitionConfig) error {
 		return nil
 	}
 
-	log.Logger().Debug("checking placement rule config",
+	log.Log(log.Config).Debug("checking placement rule config",
 		zap.String("partitionName", partition.Name))
 	// top level rule checks, parents are called recursively
 	for _, rule := range partition.PlacementRules {
@@ -363,7 +363,7 @@ func checkPlacementRule(rule PlacementRule) error {
 	// check the parent rule
 	if rule.Parent != nil {
 		if err := checkPlacementRule(*rule.Parent); err != nil {
-			log.Logger().Debug("parent placement rule failed",
+			log.Log(log.Config).Debug("parent placement rule failed",
 				zap.String("rule", rule.Name),
 				zap.String("parentRule", rule.Parent.Name))
 			return err
@@ -371,7 +371,7 @@ func checkPlacementRule(rule PlacementRule) error {
 	}
 	// check filter if given
 	if err := checkPlacementFilter(rule.Filter); err != nil {
-		log.Logger().Debug("placement rule filter failed",
+		log.Log(log.Config).Debug("placement rule filter failed",
 			zap.String("rule", rule.Name),
 			zap.Any("filter", rule.Filter))
 		return err
@@ -473,7 +473,7 @@ func checkLimit(limit Limit, existedUserName map[string]bool, existedGroupName m
 	if len(limit.MaxResources) != 0 {
 		limitResource, err = resources.NewResourceFromConf(limit.MaxResources)
 		if err != nil {
-			log.Logger().Debug("resource parsing failed",
+			log.Log(log.Config).Debug("resource parsing failed",
 				zap.Error(err))
 			return err
 		}
@@ -497,7 +497,7 @@ func checkLimit(limit Limit, existedUserName map[string]bool, existedGroupName m
 	if queue.Name != RootQueue {
 		queueMaxResource, err := resources.NewResourceFromConf(queue.Resources.Max)
 		if err != nil {
-			log.Logger().Debug("resource parsing failed",
+			log.Log(log.Config).Debug("resource parsing failed",
 				zap.Error(err))
 			return fmt.Errorf("parse queue %s max resource failed: %s", queue.Name, err.Error())
 		}
@@ -516,7 +516,7 @@ func checkLimits(limits []Limit, obj string, queue *QueueConfig) error {
 		return nil
 	}
 	// walk over the list of limits
-	log.Logger().Debug("checking limits configs",
+	log.Log(log.Config).Debug("checking limits configs",
 		zap.String("objName", obj),
 		zap.Int("limitsLength", len(limits)))
 
@@ -615,7 +615,7 @@ func checkQueuesStructure(partition *PartitionConfig) error {
 		return fmt.Errorf("queue config is not set")
 	}
 
-	log.Logger().Debug("checking partition queue config",
+	log.Log(log.Config).Debug("checking partition queue config",
 		zap.String("partitionName", partition.Name))
 
 	// handle no root queue cases
@@ -635,7 +635,7 @@ func checkQueuesStructure(partition *PartitionConfig) error {
 
 	// insert the root queue if not there
 	if insertRoot {
-		log.Logger().Debug("inserting root queue",
+		log.Log(log.Config).Debug("inserting root queue",
 			zap.Int("numOfQueues", len(partition.Queues)))
 		var rootQueue QueueConfig
 		rootQueue.Name = RootQueue
@@ -658,7 +658,7 @@ func checkQueuesStructure(partition *PartitionConfig) error {
 // Check the state dump file path, if configured, is a valid path that can be written to.
 func checkDeprecatedStateDumpFilePath(partition *PartitionConfig) error {
 	if partition.StateDumpFilePath != "" {
-		log.Logger().Warn("Ignoring deprecated partition setting 'statedumpfilepath'. This parameter will be removed in a future release.")
+		log.Log(log.Deprecation).Warn("Ignoring deprecated partition setting 'statedumpfilepath'. This parameter will be removed in a future release.")
 	}
 	return nil
 }

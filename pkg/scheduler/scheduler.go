@@ -93,12 +93,12 @@ func (s *Scheduler) HandleEvent(ev interface{}) {
 func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
 	select {
 	case queue <- ev:
-		log.Logger().Debug("enqueued event",
+		log.Log(log.Scheduler).Debug("enqueued event",
 			zap.Stringer("eventType", reflect.TypeOf(ev)),
 			zap.Any("event", ev),
 			zap.Int("currentQueueSize", len(queue)))
 	default:
-		log.Logger().DPanic("failed to enqueue event",
+		log.Log(log.Scheduler).DPanic("failed to enqueue event",
 			zap.Stringer("event", reflect.TypeOf(ev)))
 	}
 }
@@ -120,7 +120,7 @@ func (s *Scheduler) handleRMEvent() {
 		case *rmevent.RMConfigUpdateEvent:
 			s.clusterContext.processRMConfigUpdateEvent(v)
 		default:
-			log.Logger().Error("Received type is not an acceptable type for RM event.",
+			log.Log(log.Scheduler).Error("Received type is not an acceptable type for RM event.",
 				zap.Stringer("received type", reflect.TypeOf(v)))
 		}
 		s.registerActivity()
@@ -154,13 +154,13 @@ func (s *Scheduler) awaitActivity() {
 // state through the ContainerSchedulingStateUpdaterPlugin in order
 // to trigger the auto-scaling.
 func (s *Scheduler) inspectOutstandingRequests() {
-	log.Logger().Debug("inspect outstanding requests")
+	log.Log(log.Scheduler).Debug("inspect outstanding requests")
 	// schedule each partition defined in the cluster
 	for _, psc := range s.clusterContext.GetPartitionMapClone() {
 		requests := psc.calculateOutstandingRequests()
 		if len(requests) > 0 {
 			for _, ask := range requests {
-				log.Logger().Debug("outstanding request",
+				log.Log(log.Scheduler).Debug("outstanding request",
 					zap.String("appID", ask.GetApplicationID()),
 					zap.String("allocationKey", ask.GetAllocationKey()))
 				// these asks are queue outstanding requests,
@@ -187,7 +187,7 @@ func (s *Scheduler) GetClusterContext() *ClusterContext {
 // Visible by tests
 func (s *Scheduler) MultiStepSchedule(nAlloc int) {
 	for i := 0; i < nAlloc; i++ {
-		log.Logger().Debug("Scheduler manual stepping",
+		log.Log(log.Scheduler).Debug("Scheduler manual stepping",
 			zap.Int("count", i))
 		s.clusterContext.schedule()
 

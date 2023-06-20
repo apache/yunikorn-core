@@ -54,7 +54,7 @@ func loggingHandler(inner http.Handler, name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		inner.ServeHTTP(w, r)
-		log.Logger().Debug("Web router call details",
+		log.Log(log.REST).Debug("Web router call details",
 			zap.String("name", name),
 			zap.String("method", r.Method),
 			zap.String("uri", r.RequestURI),
@@ -67,11 +67,11 @@ func (m *WebService) StartWebApp() {
 	router := newRouter()
 	m.httpServer = &http.Server{Addr: ":9080", Handler: router}
 
-	log.Logger().Info("web-app started", zap.Int("port", 9080))
+	log.Log(log.REST).Info("web-app started", zap.Int("port", 9080))
 	go func() {
 		httpError := m.httpServer.ListenAndServe()
 		if httpError != nil && httpError != http.ErrServerClosed {
-			log.Logger().Error("HTTP serving error",
+			log.Log(log.REST).Error("HTTP serving error",
 				zap.Error(httpError))
 		}
 	}()

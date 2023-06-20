@@ -52,18 +52,42 @@ const (
 	levelSuffix = ".level"
 )
 
-// Predefined loggers: when adding new loggers, ids must be sequential, and all must be added to the loggers slice in the same order
+// Defined loggers: when adding new loggers, ids must be sequential, and all must be added to the loggers slice in the same order
 var (
-	Core     = &LoggerHandle{id: 1, name: "core"}
-	Test     = &LoggerHandle{id: 2, name: "test"}
-	AppUsage = &LoggerHandle{id: 3, name: "core.application.usage"}
+	Core             = &LoggerHandle{id: 1, name: "core"}
+	Test             = &LoggerHandle{id: 2, name: "test"}
+	Deprecation      = &LoggerHandle{id: 3, name: "deprecation"}
+	Config           = &LoggerHandle{id: 4, name: "core.config"}
+	Entrypoint       = &LoggerHandle{id: 5, name: "core.entrypoint"}
+	Events           = &LoggerHandle{id: 6, name: "core.events"}
+	OpenTracing      = &LoggerHandle{id: 7, name: "core.opentracing"}
+	Resources        = &LoggerHandle{id: 8, name: "core.resources"}
+	REST             = &LoggerHandle{id: 9, name: "core.rest"}
+	RMProxy          = &LoggerHandle{id: 10, name: "core.rmproxy"}
+	RPC              = &LoggerHandle{id: 11, name: "core.rpc"}
+	Metrics          = &LoggerHandle{id: 12, name: "core.metrics"}
+	Scheduler        = &LoggerHandle{id: 13, name: "core.scheduler"}
+	SchedAllocation  = &LoggerHandle{id: 14, name: "core.scheduler.allocation"}
+	SchedApplication = &LoggerHandle{id: 15, name: "core.scheduler.application"}
+	SchedAppUsage    = &LoggerHandle{id: 16, name: "core.scheduler.application.usage"}
+	SchedContext     = &LoggerHandle{id: 17, name: "core.scheduler.context"}
+	SchedFSM         = &LoggerHandle{id: 18, name: "core.scheduler.fsm"}
+	SchedHealth      = &LoggerHandle{id: 19, name: "core.scheduler.health"}
+	SchedNode        = &LoggerHandle{id: 20, name: "core.scheduler.node"}
+	SchedPartition   = &LoggerHandle{id: 21, name: "core.scheduler.partition"}
+	SchedPreemption  = &LoggerHandle{id: 22, name: "core.scheduler.preemption"}
+	SchedQueue       = &LoggerHandle{id: 23, name: "core.scheduler.queue"}
+	SchedReservation = &LoggerHandle{id: 24, name: "core.scheduler.reservation"}
+	SchedUGM         = &LoggerHandle{id: 25, name: "core.scheduler.ugm"}
+	Security         = &LoggerHandle{id: 26, name: "core.security"}
+	Utils            = &LoggerHandle{id: 27, name: "core.utils"}
 )
 
 // this tracks all the known logger handles, used to preallocate the real logger instances when configuration changes
 var loggers = []*LoggerHandle{
-	Core,
-	Test,
-	AppUsage,
+	Core, Test, Deprecation, Config, Entrypoint, Events, OpenTracing, Resources, REST, RMProxy, RPC, Metrics,
+	Scheduler, SchedAllocation, SchedApplication, SchedAppUsage, SchedContext, SchedFSM, SchedHealth, SchedNode,
+	SchedPartition, SchedPreemption, SchedQueue, SchedReservation, SchedUGM, Security, Utils,
 }
 
 // structure to hold all current logger configuration state
@@ -77,17 +101,12 @@ var currentLoggerConfig = atomic.Pointer[loggerConfig]{}
 // tracks the default logger handle, which is used for legacy log.Logger() calls
 var defaultLogger = atomic.Pointer[LoggerHandle]{}
 
-// Logger retrieves the global logger. This is for compatibility with legacy code and
-// should not be used for new log messages; use Log(loggerHandle) instead
+// Logger retrieves the global logger.
+//
+// Deprecated: Use Log(loggerHandle) instead.
 func Logger() *zap.Logger {
 	once.Do(initLogger)
 	return Log(defaultLogger.Load())
-}
-
-// RootLogger retrieves the root logger, visible for testing
-func RootLogger() *zap.Logger {
-	once.Do(initLogger)
-	return logger
 }
 
 // Log retrieves a named logger

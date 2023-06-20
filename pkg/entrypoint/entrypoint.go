@@ -40,7 +40,7 @@ type startupOptions struct {
 }
 
 func StartAllServices() *ServiceContext {
-	log.Logger().Info("ServiceContext start all services")
+	log.Log(log.Entrypoint).Info("ServiceContext start all services")
 	return startAllServicesWithParameters(
 		startupOptions{
 			manualScheduleFlag: false,
@@ -57,7 +57,7 @@ func StartAllServicesWithLogger(logger *zap.Logger, zapConfigs *zap.Config) *Ser
 
 // Visible by tests
 func StartAllServicesWithManualScheduler() *ServiceContext {
-	log.Logger().Info("ServiceContext start all services (manual scheduler)")
+	log.Log(log.Entrypoint).Info("ServiceContext start all services (manual scheduler)")
 	return startAllServicesWithParameters(
 		startupOptions{
 			manualScheduleFlag: true,
@@ -69,7 +69,7 @@ func StartAllServicesWithManualScheduler() *ServiceContext {
 
 func startAllServicesWithParameters(opts startupOptions) *ServiceContext {
 	if opts.eventSystemEnabled {
-		log.Logger().Info("creating and starting event system")
+		log.Log(log.Entrypoint).Info("creating and starting event system")
 		events.CreateAndSetEventSystem()
 		events.GetEventSystem().StartService()
 	}
@@ -83,7 +83,7 @@ func startAllServicesWithParameters(opts startupOptions) *ServiceContext {
 	}
 
 	// start services
-	log.Logger().Info("ServiceContext start scheduling services")
+	log.Log(log.Entrypoint).Info("ServiceContext start scheduling services")
 	sched.StartService(eventHandler, opts.manualScheduleFlag)
 	proxy.StartService(eventHandler)
 
@@ -94,14 +94,14 @@ func startAllServicesWithParameters(opts startupOptions) *ServiceContext {
 
 	var imHistory *history.InternalMetricsHistory
 	if opts.metricsHistorySize != 0 {
-		log.Logger().Info("creating InternalMetricsHistory")
+		log.Log(log.Entrypoint).Info("creating InternalMetricsHistory")
 		imHistory = history.NewInternalMetricsHistory(opts.metricsHistorySize)
 		metricsCollector := metrics.NewInternalMetricsCollector(imHistory)
 		metricsCollector.StartService()
 	}
 
 	if opts.startWebAppFlag {
-		log.Logger().Info("ServiceContext start web application service")
+		log.Log(log.Entrypoint).Info("ServiceContext start web application service")
 		webapp := webservice.NewWebApp(sched.GetClusterContext(), imHistory)
 		webapp.StartWebApp()
 		context.WebApp = webapp

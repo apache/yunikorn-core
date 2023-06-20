@@ -70,7 +70,8 @@ func NewNode(proto *si.NodeInfo) *Node {
 	var ready bool
 	var err error
 	if ready, err = strconv.ParseBool(proto.Attributes[common.NodeReadyAttribute]); err != nil {
-		log.Logger().Error("Could not parse ready flag, assuming true")
+		log.Logger().Debug("Could not parse ready flag, assuming true",
+			zap.String("nodeID", proto.NodeID))
 		ready = true
 	}
 	sn := &Node{

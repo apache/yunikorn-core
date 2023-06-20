@@ -168,25 +168,27 @@ func newFilter(conf configs.Filter) Filter {
 	}
 
 	// log the filter with all details (only at debug)
-	if log.IsDebugEnabled() {
-		var userfilter, groupfilter string
-		if filter.userExp == nil {
-			userfilter = "nil"
-		} else {
-			userfilter = filter.userExp.String()
-		}
-		if filter.groupExp == nil {
-			groupfilter = "nil"
-		} else {
-			groupfilter = filter.groupExp.String()
-		}
-		log.Logger().Debug("Filter creation passed",
-			zap.Bool("allow", filter.allow),
-			zap.Bool("empty", filter.empty),
-			zap.Any("userList", filter.userList),
-			zap.Any("groupList", filter.groupList),
-			zap.String("userFilter", userfilter),
-			zap.String("groupFilter", groupfilter))
-	}
+	logFilter(&filter)
 	return filter
+}
+
+func logFilter(filter *Filter) {
+	var userfilter, groupfilter string
+	if filter.userExp == nil {
+		userfilter = "nil"
+	} else {
+		userfilter = filter.userExp.String()
+	}
+	if filter.groupExp == nil {
+		groupfilter = "nil"
+	} else {
+		groupfilter = filter.groupExp.String()
+	}
+	log.Logger().Debug("Filter creation passed",
+		zap.Bool("allow", filter.allow),
+		zap.Bool("empty", filter.empty),
+		zap.Any("userList", filter.userList),
+		zap.Any("groupList", filter.groupList),
+		zap.String("userFilter", userfilter),
+		zap.String("groupFilter", groupfilter))
 }

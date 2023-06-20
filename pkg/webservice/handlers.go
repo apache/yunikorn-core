@@ -623,22 +623,13 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 
 func setLogLevel(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
-	vars := httprouter.ParamsFromContext(r.Context())
-	if vars == nil {
-		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
-		return
-	}
-	level := vars.ByName("level")
-	if err := log.SetLogLevel(level); err != nil {
-		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
-	}
+	log.Logger().Warn("Setting log levels via the REST API is deprecated. The /ws/v1/loglevel endpoint will be removed in a future release.")
 }
 
 func getLogLevel(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
-	zapConfig := log.GetConfig()
-	if _, err := w.Write([]byte(zapConfig.Level.Level().String())); err != nil {
-		log.Logger().Error("Could not get log level", zap.Error(err))
+	log.Logger().Warn("Getting log levels via the REST API is deprecated. The /ws/v1/loglevel endpoint will be removed in a future release.")
+	if _, err := w.Write([]byte("info")); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }

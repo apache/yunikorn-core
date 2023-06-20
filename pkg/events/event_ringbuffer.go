@@ -19,149 +19,199 @@
 package events
 
 import (
-	"math"
 	"sync"
-	"time"
 
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-// default value of "latest" if there are no elements, helps in GetLatestEntries()
-const latestUnset int64 = math.MinInt64
+type resultState int
 
-var now = time.Now
+const (
+	resultOK resultState = iota
+	bufferEmpty
+	idNotFound
+)
+
+type eventRange struct {
+	start uint64
+	end   uint64
+}
 
 // eventRingBuffer A specialized circular buffer to store event objects.
 //
 // Unlike to regular circular buffers, existing entries are never directly removed and new entries can be added if the buffer is full.
 // In this case, the oldest entry is overwritten and can be collected by the GC.
 //
-// Retrieving the records can be achieved with GetLatestEntriesCount, GetLatestEntries and GetEventsFromPosition.
+// Retrieving the records can be achieved with GetEventsFromID and GetRecentEntries.
 type eventRingBuffer struct {
 	events   []*si.EventRecord
-	capacity int
-	idx      int
-	latest   int64
+	capacity uint64
+	idx      uint64
 	full     bool
+
+	id       uint64 // increasing unique id
+	startId  uint64 // id of the message at index 0
+	lowestId uint64 // the lowest available id in the buffer (e.idx when it becomes full)
+
 	sync.RWMutex
 }
 
 // Add adds an event to the ring buffer. If the buffer is full, the oldest element is overwritten.
 // This method never fails.
+// Each event has an ID, however, this mapping is not stored directly. Instead, we store the starting ID at
+// index 0 and the lowest available ID.
 func (e *eventRingBuffer) Add(event *si.EventRecord) {
 	e.Lock()
 	defer e.Unlock()
 
 	e.events[e.idx] = event
-	e.idx = e.next(e.idx)
 	if e.idx == 0 {
-		// wrapped
+		e.startId = e.id
+	}
+	if e.idx == e.capacity-1 {
 		e.full = true
 	}
-	e.latest = event.TimestampNano
+	e.idx = e.next(e.idx)
+	if e.full {
+		// once the buffer becomes full, we keep incrementing this value
+		// this is the id of the element which is about to be overwritten at the next Add() call
+		e.lowestId++
+	}
+
+	e.id++
 }
 
-// GetLatestEntriesCount returns most recent items. The amount is defined by "count".
-func (e *eventRingBuffer) GetLatestEntriesCount(count int) []*si.EventRecord {
+func (e *eventRingBuffer) GetEventsFromID(id uint64) ([]*si.EventRecord, resultState) {
+	e.RLock()
+	defer e.RUnlock()
+
+	storedId, state := e.id2pos(id)
+	if state != resultOK {
+		return nil, state
+	}
+
+	if e.full {
+		r1 := eventRange{
+			start: storedId,
+			end:   e.capacity,
+		}
+		r2 := eventRange{
+			start: 0,
+			end:   e.idx,
+		}
+		return e.getEntriesFromRanges(r1, r2), resultOK
+	}
+
+	return e.getEntriesFromRanges(eventRange{
+		start: storedId,
+		end:   e.idx,
+	}), resultOK
+}
+
+func (e *eventRingBuffer) GetRecentEntries(count uint64) ([]*si.EventRecord, uint64, resultState) {
 	e.RLock()
 	defer e.RUnlock()
 
 	if !e.full && e.idx == 0 {
-		return nil
+		return nil, 0, bufferEmpty
 	}
 
-	records := make([]*si.EventRecord, 0, count)
-	var stop int
 	if e.full {
-		stop = e.idx
-	} else {
-		stop = 0
-	}
-	for i := e.prev(e.idx); ; {
-		records = append(records, e.events[i])
-		if len(records) == count || i == stop {
-			reverse(records)
-			return records
+		if count > e.capacity {
+			count = e.capacity
+		}
+		if count > e.idx {
+			startPos := e.capacity - count + e.idx
+			r1 := eventRange{
+				start: startPos,
+				end:   e.capacity,
+			}
+			r2 := eventRange{
+				start: 0,
+				end:   e.idx,
+			}
+
+			return e.getEntriesFromRanges(r1, r2), e.pos2id(startPos), resultOK
 		}
 
-		i = e.prev(i)
-	}
-}
-
-// GetLatestEntries returns the most recent items whose age is younger than the current time minus interval.
-func (e *eventRingBuffer) GetLatestEntries(interval time.Duration) []*si.EventRecord {
-	e.RLock()
-	defer e.RUnlock()
-
-	unixNow := now().UnixNano()
-	startTime := unixNow - interval.Nanoseconds()
-
-	if (!e.full && e.idx == 0) || (startTime > e.latest) {
-		return nil
+		startIdx := e.idx - count
+		return e.getEntriesFromRanges(eventRange{
+			start: startIdx,
+			end:   e.idx,
+		}), e.pos2id(startIdx), resultOK
 	}
 
-	var start, count int
-	if e.full {
-		count = e.capacity
-		start = e.idx
-	} else {
+	if count > e.idx {
 		count = e.idx
-		start = 0
+	}
+	startIdx := e.idx - count
+	return e.getEntriesFromRanges(eventRange{
+		start: startIdx,
+		end:   e.idx,
+	}), startIdx, resultOK
+}
+
+func (e *eventRingBuffer) getEntriesFromRanges(ranges ...eventRange) []*si.EventRecord {
+	total := uint64(0)
+	for _, r := range ranges {
+		total += r.end - r.start
 	}
 
-	records := make([]*si.EventRecord, 0)
-	for i, c := start, 0; c != count; c++ {
-		if e.events[i].TimestampNano >= startTime {
-			records = append(records, e.events[i])
+	src := make([]*si.EventRecord, 0)
+	for _, r := range ranges {
+		events := e.events[r.start:r.end]
+		src = append(src, events...)
+	}
+
+	dst := make([]*si.EventRecord, total)
+	copy(dst, src)
+	return dst
+}
+
+// translates slice position to unique id
+func (e *eventRingBuffer) pos2id(pos uint64) uint64 {
+	if e.full && pos > e.idx {
+		return e.id - e.idx - e.capacity + pos
+	}
+
+	return e.id - e.idx + pos
+}
+
+// translates unique id to a slice position (index)
+func (e *eventRingBuffer) id2pos(id uint64) (uint64, resultState) {
+	pos := id % e.capacity
+	calculatedID := uint64(0) // calculated ID based on index values
+	if pos > e.idx {
+		diff := pos - e.idx
+		calculatedID = e.lowestId - 1 + diff
+	} else {
+		calculatedID = e.startId + pos
+	}
+
+	if !e.full {
+		if e.idx == 0 && e.events[0] == nil {
+			return 0, bufferEmpty
 		}
-
-		next := e.next(i)
-		i = next
+		if pos >= e.idx {
+			// "pos" is not in the [0..idx-1] range
+			return 0, idNotFound
+		}
 	}
 
-	return records
+	if calculatedID != id {
+		return calculatedID, idNotFound
+	}
+
+	return pos, resultOK
 }
 
-func (e *eventRingBuffer) GetEventsFromPosition(pos int) []*si.EventRecord {
-	e.RLock()
-	defer e.RUnlock()
-
-	if !e.full && pos >= e.idx {
-		// invalid position, "pos" is not in the [0..idx] range
-		return nil
-	}
-
-	records := make([]*si.EventRecord, 0)
-	for i := pos; i != e.idx; i = e.next(i) {
-		records = append(records, e.events[i])
-	}
-
-	return records
-}
-
-func (e *eventRingBuffer) prev(i int) int {
-	i--
-	if i == -1 {
-		i = e.capacity - 1
-	}
-
-	return i
-}
-
-func (e *eventRingBuffer) next(i int) int {
+func (e *eventRingBuffer) next(i uint64) uint64 {
 	return (i + 1) % e.capacity
 }
 
-func reverse(r []*si.EventRecord) {
-	for i, j := 0, len(r)-1; i < j; i, j = i+1, j-1 {
-		r[i], r[j] = r[j], r[i]
-	}
-}
-
-func newEventRingBuffer(capacity int) *eventRingBuffer {
+func newEventRingBuffer(capacity uint64) *eventRingBuffer {
 	return &eventRingBuffer{
 		capacity: capacity,
 		events:   make([]*si.EventRecord, capacity),
-		latest:   latestUnset,
 	}
 }

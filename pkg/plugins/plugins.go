@@ -43,11 +43,11 @@ func RegisterSchedulerPlugin(plugin interface{}) {
 	plugins.Lock()
 	defer plugins.Unlock()
 	if rmc, ok := plugin.(api.ResourceManagerCallback); ok {
-		log.Logger().Info("register scheduler plugin: ResourceManagerCallback")
+		log.Log(log.RMProxy).Info("register scheduler plugin: ResourceManagerCallback")
 		plugins.ResourceManagerCallbackPlugin = rmc
 	}
 	if sdp, ok := plugin.(api.StateDumpPlugin); ok {
-		log.Logger().Info("register scheduler plugin: StateDumpPlugin")
+		log.Log(log.RMProxy).Info("register scheduler plugin: StateDumpPlugin")
 		plugins.StateDumpPlugin = sdp
 	}
 }

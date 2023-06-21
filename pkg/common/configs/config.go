@@ -166,14 +166,14 @@ func ParseAndValidateConfig(content []byte) (*SchedulerConfig, error) {
 	conf := &SchedulerConfig{}
 	err := yaml.UnmarshalStrict(content, conf)
 	if err != nil {
-		log.Logger().Error("failed to parse queue configuration",
+		log.Log(log.Config).Error("failed to parse queue configuration",
 			zap.Error(err))
 		return nil, err
 	}
 	// validate the config
 	err = Validate(conf)
 	if err != nil {
-		log.Logger().Error("queue configuration validation failed",
+		log.Log(log.Config).Error("queue configuration validation failed",
 			zap.Error(err))
 		return nil, err
 	}

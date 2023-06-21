@@ -64,7 +64,7 @@ func (s *SchedulerTracerImpl) SetParams(params *SchedulerTracerImplParams) {
 		return
 	}
 	if params.Mode == DebugWithFilter && len(params.FilterTags) == 0 {
-		log.Logger().Warn("FilterTags is empty while trying to run in DebugWithFilter mode." +
+		log.Log(log.OpenTracing).Warn("FilterTags is empty while trying to run in DebugWithFilter mode." +
 			" Please use Debug mode instead.")
 	}
 	s.Lock()

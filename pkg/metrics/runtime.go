@@ -239,7 +239,7 @@ func initRuntimeMetrics() *RuntimeMetrics {
 
 	for _, metric := range metricsList {
 		if err := prometheus.Register(metric); err != nil {
-			log.Logger().Warn("failed to register metrics collector", zap.Error(err))
+			log.Log(log.Metrics).Warn("failed to register metrics collector", zap.Error(err))
 		}
 	}
 

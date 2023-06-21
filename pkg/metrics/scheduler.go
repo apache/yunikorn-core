@@ -148,7 +148,7 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 	}
 	for _, metric := range metricsList {
 		if err := prometheus.Register(metric); err != nil {
-			log.Logger().Warn("failed to register metrics collector", zap.Error(err))
+			log.Log(log.Metrics).Warn("failed to register metrics collector", zap.Error(err))
 		}
 	}
 	return s
@@ -380,7 +380,7 @@ func (m *SchedulerMetrics) SetNodeResourceUsage(resourceName string, rangeIdx in
 				Help:      "Total resource usage of node, by resource name.",
 			}, []string{"range"})
 		if err := prometheus.Register(resourceMetrics); err != nil {
-			log.Logger().Warn("failed to register metrics collector", zap.Error(err))
+			log.Log(log.Metrics).Warn("failed to register metrics collector", zap.Error(err))
 			return
 		}
 		m.nodeResourceUsage[resourceName] = resourceMetrics

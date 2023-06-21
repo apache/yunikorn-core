@@ -295,13 +295,13 @@ func addVal(valA, valB Quantity) Quantity {
 	if (result < valA) != (valB < 0) {
 		if valA < 0 {
 			// return the minimum possible
-			log.Logger().Warn("Resource calculation wrapped: returned minimum value possible",
+			log.Log(log.Resources).Warn("Resource calculation wrapped: returned minimum value possible",
 				zap.Int64("valueA", int64(valA)),
 				zap.Int64("valueB", int64(valB)))
 			return math.MinInt64
 		}
 		// return the maximum possible
-		log.Logger().Warn("Resource calculation wrapped: returned maximum value possible",
+		log.Log(log.Resources).Warn("Resource calculation wrapped: returned maximum value possible",
 			zap.Int64("valueA", int64(valA)),
 			zap.Int64("valueB", int64(valB)))
 		return math.MaxInt64
@@ -326,13 +326,13 @@ func mulVal(valA, valB Quantity) Quantity {
 	if (result/valB != valA) || (valA == math.MinInt64 && valB == -1) {
 		if (valA < 0) != (valB < 0) {
 			// return the minimum possible
-			log.Logger().Warn("Resource calculation wrapped: returned minimum value possible",
+			log.Log(log.Resources).Warn("Resource calculation wrapped: returned minimum value possible",
 				zap.Int64("valueA", int64(valA)),
 				zap.Int64("valueB", int64(valB)))
 			return math.MinInt64
 		}
 		// return the maximum possible
-		log.Logger().Warn("Resource calculation wrapped: returned maximum value possible",
+		log.Log(log.Resources).Warn("Resource calculation wrapped: returned maximum value possible",
 			zap.Int64("valueA", int64(valA)),
 			zap.Int64("valueB", int64(valB)))
 		return math.MaxInt64
@@ -349,14 +349,14 @@ func mulValRatio(value Quantity, ratio float64) Quantity {
 	result := float64(value) * ratio
 	// protect against positive integer overflow
 	if result > math.MaxInt64 {
-		log.Logger().Warn("Multiplication result positive overflow",
+		log.Log(log.Resources).Warn("Multiplication result positive overflow",
 			zap.Float64("value", float64(value)),
 			zap.Float64("ratio", ratio))
 		return math.MaxInt64
 	}
 	// protect against negative integer overflow
 	if result < math.MinInt64 {
-		log.Logger().Warn("Multiplication result negative overflow",
+		log.Log(log.Resources).Warn("Multiplication result negative overflow",
 			zap.Float64("value", float64(value)),
 			zap.Float64("ratio", ratio))
 		return math.MinInt64
@@ -541,7 +541,7 @@ func getShares(res, total *Resource) []float64 {
 		if total == nil || total.Resources[k] == 0 {
 			// negative share is logged
 			if v < 0 {
-				log.Logger().Debug("usage is negative no total, share is also negative",
+				log.Log(log.Resources).Debug("usage is negative no total, share is also negative",
 					zap.String("resource key", k),
 					zap.Int64("resource quantity", int64(v)))
 			}
@@ -552,7 +552,7 @@ func getShares(res, total *Resource) []float64 {
 		shares[idx] = float64(v) / float64(total.Resources[k])
 		// negative share is logged
 		if shares[idx] < 0 {
-			log.Logger().Debug("share set is negative",
+			log.Log(log.Resources).Debug("share set is negative",
 				zap.String("resource key", k),
 				zap.Int64("resource quantity", int64(v)),
 				zap.Int64("total quantity", int64(total.Resources[k])))
@@ -939,7 +939,7 @@ func IsZero(zero *Resource) bool {
 func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {
 	absResource := NewResource()
 	if capacity == nil || used == nil {
-		log.Logger().Debug("Cannot calculate absolute capacity because of missing capacity or usage")
+		log.Log(log.Resources).Debug("Cannot calculate absolute capacity because of missing capacity or usage")
 		return absResource
 	}
 	missingResources := &strings.Builder{}
@@ -947,7 +947,7 @@ func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {
 		var absResValue int64
 		if usedResource, ok := used.Resources[resourceName]; ok {
 			if availableResource < usedResource {
-				log.Logger().Warn("Higher usage than max capacity",
+				log.Log(log.Resources).Warn("Higher usage than max capacity",
 					zap.String("resource", resourceName),
 					zap.Int64("capacity", int64(availableResource)),
 					zap.Int64("usage", int64(usedResource)))
@@ -956,7 +956,7 @@ func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {
 			absResValue = int64(div * 100)
 			// protect against positive integer overflow
 			if absResValue < 0 && div > 0 {
-				log.Logger().Warn("Absolute resource value result positive overflow",
+				log.Log(log.Resources).Warn("Absolute resource value result positive overflow",
 					zap.String("resource", resourceName),
 					zap.Int64("capacity", int64(availableResource)),
 					zap.Int64("usage", int64(usedResource)))
@@ -964,7 +964,7 @@ func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {
 			}
 			// protect against negative integer overflow
 			if absResValue > 0 && div < 0 {
-				log.Logger().Warn("Absolute resource value result negative overflow",
+				log.Log(log.Resources).Warn("Absolute resource value result negative overflow",
 					zap.String("resource", resourceName),
 					zap.Int64("capacity", int64(availableResource)),
 					zap.Int64("usage", int64(usedResource)))
@@ -980,7 +980,7 @@ func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {
 		absResource.Resources[resourceName] = Quantity(absResValue)
 	}
 	if missingResources.Len() != 0 {
-		log.Logger().Debug("Absolute usage result is missing resource information",
+		log.Log(log.Resources).Debug("Absolute usage result is missing resource information",
 			zap.Stringer("missing resource(s)", missingResources))
 	}
 	return absResource

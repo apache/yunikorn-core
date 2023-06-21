@@ -105,10 +105,10 @@ func newRule(conf configs.PlacementRule) (rule, error) {
 	// initialise the rule: do not expect the rule to log errors
 	err = newRule.initialise(conf)
 	if err != nil {
-		log.Logger().Error("Rule init failed", zap.Error(err))
+		log.Log(log.Config).Error("Rule init failed", zap.Error(err))
 		return nil, err
 	}
-	log.Logger().Debug("New rule created", zap.Any("ruleConf", conf))
+	log.Log(log.Config).Debug("New rule created", zap.Any("ruleConf", conf))
 	return newRule, nil
 }
 

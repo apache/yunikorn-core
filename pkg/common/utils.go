@@ -86,7 +86,7 @@ func GetBoolEnvVar(key string, defaultVal bool) bool {
 	if value, ok := os.LookupEnv(key); ok {
 		boolValue, err := strconv.ParseBool(value)
 		if err != nil {
-			log.Logger().Debug("Failed to parse environment variable, using default value",
+			log.Log(log.Utils).Debug("Failed to parse environment variable, using default value",
 				zap.String("name", key),
 				zap.String("value", value),
 				zap.Bool("default", defaultVal))
@@ -109,7 +109,7 @@ func ConvertSITimeout(millis int64) time.Duration {
 	// just handle max wrapping, no need to handle min wrapping
 	result := millis * int64(time.Millisecond)
 	if result/millis != int64(time.Millisecond) {
-		log.Logger().Warn("Timeout conversion wrapped: returned no timeout",
+		log.Log(log.Utils).Warn("Timeout conversion wrapped: returned no timeout",
 			zap.Int64("configured timeout in ms", millis))
 		return time.Duration(0)
 	}
@@ -142,14 +142,14 @@ func adjustTimeout(timeout time.Duration, siApp *si.AddApplicationRequest) time.
 	adjusted := time.Until(expectedTimeout)
 
 	if adjusted <= 0 {
-		log.Logger().Info("Placeholder timeout reached - expected timeout is in the past",
+		log.Log(log.Utils).Info("Placeholder timeout reached - expected timeout is in the past",
 			zap.Duration("timeout duration", timeout),
 			zap.Time("creation time", created),
 			zap.Time("expected timeout", expectedTimeout))
 		return time.Millisecond // smallest allowed timeout value
 	}
 
-	log.Logger().Info("Adjusting placeholder timeout",
+	log.Log(log.Utils).Info("Adjusting placeholder timeout",
 		zap.Duration("timeout duration", timeout),
 		zap.Time("creation time", created),
 		zap.Time("expected timeout", expectedTimeout))
@@ -164,7 +164,7 @@ func ConvertSITimestamp(ts string) time.Time {
 
 	tm, err := strconv.ParseInt(ts, 10, 64)
 	if err != nil {
-		log.Logger().Warn("Unable to parse timestamp string", zap.String("timestamp", ts),
+		log.Log(log.Utils).Warn("Unable to parse timestamp string", zap.String("timestamp", ts),
 			zap.Error(err))
 		return time.Time{}
 	}

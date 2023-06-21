@@ -97,7 +97,7 @@ func NewAllocationAskFromSI(ask *si.AllocationAsk) *AllocationAsk {
 	// this is a safety check placeholder and task group name must be set as a combo
 	// order is important as task group can be set without placeholder but not the other way around
 	if saa.placeholder && saa.taskGroupName == "" {
-		log.Logger().Debug("ask cannot be a placeholder without a TaskGroupName",
+		log.Log(log.SchedAllocation).Debug("ask cannot be a placeholder without a TaskGroupName",
 			zap.Stringer("SI ask", ask))
 		return nil
 	}

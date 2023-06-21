@@ -36,10 +36,10 @@ var logFile string
 var iterations = 100000
 
 func TestLoggerIds(t *testing.T) {
-	_ = Logger()
+	_ = Log(Test)
 
 	// validate logger count
-	assert.Equal(t, 3, len(loggers), "wrong logger count")
+	assert.Equal(t, 27, len(loggers), "wrong logger count")
 
 	// validate that all loggers are populated and have sequential ids
 	for i := 0; i < len(loggers); i++ {
@@ -93,7 +93,7 @@ func TestCreateConfig(t *testing.T) {
 
 	// indirect call to init logger
 	assert.Assert(t, logger == nil, "global logger should not have been set %v", logger)
-	localLogger = Logger()
+	localLogger = Log(Test)
 	assert.Assert(t, localLogger != nil, "returned logger should have been not nil")
 }
 
@@ -110,49 +110,10 @@ func TestInitializeLogger(t *testing.T) {
 	assert.NilError(t, err2, "failed to create local logger")
 
 	InitializeLogger(localLogger, &zapConfig)
-	assert.Equal(t, RootLogger(), localLogger)
+	assert.Equal(t, logger, localLogger)
 	// second initialization should not do anything
 	InitializeLogger(localLogger2, &zapConfig)
-	assert.Equal(t, RootLogger(), localLogger)
-}
-func BenchmarkLegacyLoggerDebug(b *testing.B) {
-	benchmarkLegacyLoggerDebug(b.N)
-}
-
-func TestLegacyLoggerDebug(t *testing.T) {
-	nsOp := benchmarkLegacyLoggerDebug(iterations)
-	RootLogger().Info("log.Logger() performance", zap.Int64("debug (ns/op)", nsOp))
-}
-
-func benchmarkLegacyLoggerDebug(iterations int) int64 {
-	_ = Logger()
-	initTestLogger()
-	defer resetTestLogger()
-	start := time.Now()
-	for i := 0; i < iterations; i++ {
-		RootLogger().Debug("test", zap.String("foo", "bar"))
-	}
-	return (time.Since(start).Nanoseconds()) / int64(iterations)
-}
-
-func BenchmarkLegacyLoggerInfo(b *testing.B) {
-	benchmarkLegacyLoggerInfo(b.N)
-}
-
-func TestLegacyLoggerInfo(t *testing.T) {
-	nsOp := benchmarkLegacyLoggerInfo(iterations)
-	RootLogger().Info("log.Logger() performance", zap.Int64("info (ns/op)", nsOp))
-}
-
-func benchmarkLegacyLoggerInfo(iterations int) int64 {
-	_ = Logger()
-	initTestLogger()
-	defer resetTestLogger()
-	start := time.Now()
-	for i := 0; i < iterations; i++ {
-		RootLogger().Info("test", zap.String("foo", "bar"))
-	}
-	return (time.Since(start).Nanoseconds()) / int64(iterations)
+	assert.Equal(t, logger, localLogger)
 }
 
 func BenchmarkScopedLoggerDebug(b *testing.B) {
@@ -165,7 +126,7 @@ func TestScopedLoggerDebug(t *testing.T) {
 }
 
 func benchmarkScopedLoggerDebug(iterations int) int64 {
-	_ = Logger()
+	_ = Log(Test)
 	initTestLogger()
 	defer resetTestLogger()
 	UpdateLoggingConfig(map[string]string{
@@ -188,7 +149,7 @@ func TestScopedLoggerInfo(t *testing.T) {
 }
 
 func benchmarkScopedLoggerInfo(iterations int) int64 {
-	_ = Logger()
+	_ = Log(Test)
 	initTestLogger()
 	defer resetTestLogger()
 	UpdateLoggingConfig(map[string]string{
@@ -211,7 +172,7 @@ func TestScopedLoggerDebugEnabled(t *testing.T) {
 }
 
 func benchmarkScopedLoggerDebugEnabled(iterations int) int64 {
-	_ = Logger()
+	_ = Log(Test)
 	initTestLogger()
 	defer resetTestLogger()
 	UpdateLoggingConfig(map[string]string{
@@ -234,7 +195,7 @@ func TestScopedLoggerInfoFiltered(t *testing.T) {
 }
 
 func benchmarkScopedLoggerInfoFiltered(iterations int) int64 {
-	_ = Logger()
+	_ = Log(Test)
 	initTestLogger()
 	defer resetTestLogger()
 	UpdateLoggingConfig(map[string]string{

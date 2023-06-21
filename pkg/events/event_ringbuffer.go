@@ -71,7 +71,7 @@ func (e *eventRingBuffer) Add(event *si.EventRecord) {
 	if e.idx == e.capacity-1 {
 		e.full = true
 	}
-	e.idx = e.next(e.idx)
+	e.idx = (e.idx + 1) % e.capacity
 	if e.full {
 		// once the buffer becomes full, we keep incrementing this value
 		// this is the id of the element which is about to be overwritten at the next Add() call
@@ -203,10 +203,6 @@ func (e *eventRingBuffer) id2pos(id uint64) (uint64, resultState) {
 	}
 
 	return pos, resultOK
-}
-
-func (e *eventRingBuffer) next(i uint64) uint64 {
-	return (i + 1) % e.capacity
 }
 
 func newEventRingBuffer(capacity uint64) *eventRingBuffer {

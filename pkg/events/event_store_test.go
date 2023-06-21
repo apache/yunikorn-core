@@ -25,6 +25,7 @@ import (
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 // the fields of an event should match after stored and retrieved
@@ -43,7 +44,7 @@ func TestStoreAndRetrieve(t *testing.T) {
 	records := store.CollectEvents()
 	assert.Equal(t, len(records), 1)
 	record := records[0]
-	assert.DeepEqual(t, record, event)
+	assert.DeepEqual(t, record, event, cmpopts.IgnoreUnexported(si.EventRecord{}))
 
 	// calling CollectEvents erases the eventChannel map
 	records = store.CollectEvents()

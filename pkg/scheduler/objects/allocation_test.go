@@ -29,6 +29,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 const past = 1640995200 // 2022-1-1 00:00:00
@@ -122,7 +123,7 @@ func TestSIFromAlloc(t *testing.T) {
 		t.Fatal("NewAllocation create failed while it should not")
 	}
 	allocSI := alloc.NewSIFromAllocation()
-	assert.DeepEqual(t, allocSI, expectedSI)
+	assert.DeepEqual(t, allocSI, expectedSI, cmpopts.IgnoreUnexported(si.Allocation{}, si.Resource{}, si.Quantity{}))
 }
 
 func TestNewAllocFromNilSI(t *testing.T) {

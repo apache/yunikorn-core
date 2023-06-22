@@ -165,7 +165,9 @@ func SetChecksum(content []byte, conf *SchedulerConfig) {
 
 func ParseAndValidateConfig(content []byte) (*SchedulerConfig, error) {
 	conf := &SchedulerConfig{}
-	err := UnmarshalStrict(content, conf)
+	decoder := yaml.NewDecoder(bytes.NewReader(content))
+	decoder.KnownFields(true) // Enable strict unmarshaling behavior
+	err := decoder.Decode(conf)
 	if err != nil {
 		log.Logger().Error("failed to parse queue configuration",
 			zap.Error(err))
@@ -179,12 +181,6 @@ func ParseAndValidateConfig(content []byte) (*SchedulerConfig, error) {
 		return nil, err
 	}
 	return conf, nil
-}
-
-func UnmarshalStrict(data []byte, v interface{}) error {
-	decoder := yaml.NewDecoder(bytes.NewReader(data))
-	decoder.KnownFields(true) // Enable strict unmarshaling behavior
-	return decoder.Decode(v)
 }
 
 func GetConfigurationString(requestBytes []byte) string {

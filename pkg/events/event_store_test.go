@@ -22,10 +22,10 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
-	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 // the fields of an event should match after stored and retrieved

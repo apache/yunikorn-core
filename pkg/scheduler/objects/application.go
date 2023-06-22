@@ -536,6 +536,7 @@ func (sa *Application) GetPendingResource() *resources.Resource {
 func (sa *Application) RemoveAllocationAsk(allocKey string) int {
 	sa.Lock()
 	defer sa.Unlock()
+	sa.sendRemoveAskEvent(allocKey)
 	return sa.removeAsksInternal(allocKey)
 }
 
@@ -675,6 +676,7 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 		zap.Stringer("pendingDelta", delta))
 
 	sa.sortedRequests.insert(ask)
+	sa.appEvents.sendNewAskEvent(ask)
 
 	return nil
 }
@@ -1145,6 +1147,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 					log.Log(log.SchedApplication).Warn("ask repeat update failed unexpectedly",
 						zap.Error(err))
 				}
+				sa.appEvents.sendRemoveAllocationEvent(ph, si.TerminationType_PLACEHOLDER_REPLACED)
 				return alloc
 			}
 		}
@@ -1200,6 +1203,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				log.Log(log.SchedApplication).Warn("ask repeat update failed unexpectedly",
 					zap.Error(err))
 			}
+			sa.appEvents.sendRemoveAllocationEvent(phFit, si.TerminationType_PLACEHOLDER_REPLACED)
 			return alloc
 		}
 	}
@@ -1476,6 +1480,8 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 		}
 		// all is OK, last update for the app
 		sa.addAllocationInternal(alloc)
+
+		sa.appEvents.sendNewAllocationEvent(alloc)
 		// return allocation
 		return alloc
 	}
@@ -1770,6 +1776,11 @@ func (sa *Application) removeAllocationInternal(uuid string, releaseType si.Term
 		}
 	}
 	delete(sa.allocations, uuid)
+	// If release count of placeholder is 0 and termination type is PLACEHOLDER_REPLACED,
+	// the placeholder has already been replaced. No need to send remove event.
+	if !(alloc.IsPlaceholder() && alloc.GetReleaseCount() == 0 && releaseType == si.TerminationType_PLACEHOLDER_REPLACED) {
+		sa.appEvents.sendRemoveAllocationEvent(alloc, releaseType)
+	}
 	return alloc
 }
 
@@ -1900,6 +1911,7 @@ func (sa *Application) notifyRMAllocationReleased(rmID string, released []*Alloc
 			TerminationType: terminationType,
 			Message:         message,
 		})
+		sa.appEvents.sendRemoveAllocationEvent(alloc, terminationType)
 	}
 	sa.rmEventHandler.HandleEvent(releaseEvent)
 	// Wait from channel
@@ -1931,6 +1943,7 @@ func (sa *Application) notifyRMAllocationAskReleased(rmID string, released []*Al
 			TerminationType: terminationType,
 			Message:         message,
 		})
+		sa.appEvents.sendRemoveAskEvent(alloc, terminationType, false)
 	}
 	sa.rmEventHandler.HandleEvent(releaseEvent)
 }
@@ -2007,5 +2020,20 @@ func (sa *Application) SetTimedOutPlaceholder(taskGroupName string, timedOut int
 	}
 	if _, ok := sa.placeholderData[taskGroupName]; ok {
 		sa.placeholderData[taskGroupName].TimedOut = timedOut
+	}
+}
+
+func (sa *Application) sendRemoveAskEvent(allocKey string) {
+	if allocKey != "" {
+		// if allocKey is not empty, it means a specific ask is being terminated
+		if ask := sa.requests[allocKey]; ask != nil {
+			sa.appEvents.sendRemoveAskEvent(ask, si.TerminationType_STOPPED_BY_RM, false)
+		}
+		return
+	}
+
+	// if allocKey is empty, it means application is terminated
+	for _, ask := range sa.requests {
+		sa.appEvents.sendRemoveAskEvent(ask, si.TerminationType_STOPPED_BY_RM, true)
 	}
 }

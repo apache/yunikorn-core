@@ -108,7 +108,7 @@ func (nc *baseNodeCollection) RemoveNode(nodeID string) *Node {
 	defer nc.Unlock()
 	nref := nc.nodes[nodeID]
 	if nref == nil {
-		log.Logger().Debug("node was not found, node already removed",
+		log.Log(log.SchedNode).Debug("node was not found, node already removed",
 			zap.String("nodeID", nodeID),
 			zap.String("partition", nc.Partition))
 		return nil

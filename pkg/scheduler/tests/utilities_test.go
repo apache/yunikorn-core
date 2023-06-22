@@ -64,7 +64,7 @@ func waitForPendingQueueResource(t *testing.T, queue *objects.Queue, memory reso
 		return queue.GetPendingResource().Resources[siCommon.Memory] == memory
 	})
 	if err != nil {
-		log.Logger().Info("queue detail",
+		log.Log(log.Test).Info("queue detail",
 			zap.Any("queue", queue))
 		t.Fatalf("Failed to wait pending resource on queue %s, expected %v, actual %v, called from: %s", queue.QueuePath, memory, queue.GetPendingResource().Resources[siCommon.Memory], caller())
 	}

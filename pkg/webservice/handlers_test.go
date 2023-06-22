@@ -1207,33 +1207,20 @@ func TestGetLoggerLevel(t *testing.T) {
 	handler := http.HandlerFunc(getLogLevel)
 	handler.ServeHTTP(rr, req)
 
-	expected := "debug"
+	expected := "info"
 	assert.Equal(t, rr.Body.String(), expected,
 		fmt.Sprintf("handler returned unexpected body: got %v want %v", rr.Body.String(), expected))
 	assert.Equal(t, rr.Code, http.StatusOK)
 }
 
 func TestSetLoggerLevel(t *testing.T) {
-	// invalid
 	req, err := http.NewRequest("PUT", "/ws/v1/loglevel", strings.NewReader(""))
 	assert.NilError(t, err)
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
-		httprouter.Param{Key: "level", Value: "invalid"},
-	}))
-	rr := httptest.NewRecorder()
-
-	handler := http.HandlerFunc(setLogLevel)
-	handler.ServeHTTP(rr, req)
-	assert.Equal(t, rr.Code, http.StatusBadRequest)
-
-	// valid
-	req, err = http.NewRequest("PUT", "/ws/v1/loglevel", strings.NewReader(""))
-	assert.NilError(t, err)
-
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "level", Value: "error"},
 	}))
-	rr = httptest.NewRecorder()
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(setLogLevel)
 	handler.ServeHTTP(rr, req)
 	assert.Equal(t, rr.Code, http.StatusOK)
 }

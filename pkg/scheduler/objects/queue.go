@@ -136,7 +136,7 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 	}
 	sq.UpdateQueueProperties()
 
-	log.Logger().Info("configured queue added to scheduler",
+	log.Log(log.SchedQueue).Info("configured queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
 
 	return sq, nil
@@ -169,7 +169,7 @@ func NewDynamicQueue(name string, leaf bool, parent *Queue) (*Queue, error) {
 	}
 
 	sq.UpdateQueueProperties()
-	log.Logger().Info("dynamic queue added to scheduler",
+	log.Log(log.SchedQueue).Info("dynamic queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
 
 	return sq, nil
@@ -279,19 +279,19 @@ func (sq *Queue) applyConf(conf configs.QueueConfig) error {
 	var err error
 	sq.submitACL, err = security.NewACL(conf.SubmitACL)
 	if err != nil {
-		log.Logger().Error("parsing submit ACL failed this should not happen",
+		log.Log(log.SchedQueue).Error("parsing submit ACL failed this should not happen",
 			zap.Error(err))
 		return err
 	}
 	sq.adminACL, err = security.NewACL(conf.AdminACL)
 	if err != nil {
-		log.Logger().Error("parsing admin ACL failed this should not happen",
+		log.Log(log.SchedQueue).Error("parsing admin ACL failed this should not happen",
 			zap.Error(err))
 		return err
 	}
 	// Change from unmanaged to managed
 	if !sq.isManaged {
-		log.Logger().Info("changed dynamic queue to managed",
+		log.Log(log.SchedQueue).Info("changed dynamic queue to managed",
 			zap.String("queue", sq.QueuePath))
 		sq.isManaged = true
 	}
@@ -323,7 +323,7 @@ func (sq *Queue) applyConf(conf configs.QueueConfig) error {
 func (sq *Queue) setResources(resource configs.Resources) error {
 	maxResource, err := resources.NewResourceFromConf(resource.Max)
 	if err != nil {
-		log.Logger().Error("parsing failed on max resources this should not happen",
+		log.Log(log.SchedQueue).Error("parsing failed on max resources this should not happen",
 			zap.Error(err))
 		return err
 	}
@@ -331,7 +331,7 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 	var guaranteedResource *resources.Resource
 	guaranteedResource, err = resources.NewResourceFromConf(resource.Guaranteed)
 	if err != nil {
-		log.Logger().Error("parsing failed on guaranteed resources this should not happen",
+		log.Log(log.SchedQueue).Error("parsing failed on guaranteed resources this should not happen",
 			zap.Error(err))
 		return err
 	}
@@ -340,14 +340,14 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 		sq.maxResource = maxResource
 		sq.updateMaxResourceMetrics()
 	} else {
-		log.Logger().Debug("max resources setting ignored: cannot set zero max resources")
+		log.Log(log.SchedQueue).Debug("max resources setting ignored: cannot set zero max resources")
 	}
 
 	if resources.StrictlyGreaterThanZero(guaranteedResource) {
 		sq.guaranteedResource = guaranteedResource
 		sq.updateGuaranteedResourceMetrics()
 	} else {
-		log.Logger().Debug("guaranteed resources setting ignored: cannot set zero max resources")
+		log.Log(log.SchedQueue).Debug("guaranteed resources setting ignored: cannot set zero max resources")
 	}
 
 	return nil
@@ -382,7 +382,7 @@ func (sq *Queue) UpdateQueueProperties() {
 			if sq.isLeaf {
 				sq.sortType, err = policies.SortPolicyFromString(value)
 				if err != nil {
-					log.Logger().Debug("application sort property configuration error",
+					log.Log(log.SchedQueue).Debug("application sort property configuration error",
 						zap.Error(err))
 				}
 				// if it is not defined default to fifo
@@ -393,38 +393,38 @@ func (sq *Queue) UpdateQueueProperties() {
 		case configs.ApplicationSortPriority:
 			sq.prioritySortEnabled, err = applicationSortPriorityEnabled(value)
 			if err != nil {
-				log.Logger().Debug("queue application sort priority configuration error",
+				log.Log(log.SchedQueue).Debug("queue application sort priority configuration error",
 					zap.Error(err))
 			}
 		case configs.PriorityOffset:
 			sq.priorityOffset, err = priorityOffset(value)
 			if err != nil {
-				log.Logger().Debug("queue priority offset configuration error",
+				log.Log(log.SchedQueue).Debug("queue priority offset configuration error",
 					zap.Error(err))
 			}
 		case configs.PriorityPolicy:
 			sq.priorityPolicy, err = policies.PriorityPolicyFromString(value)
 			if err != nil {
-				log.Logger().Debug("queue priority policy configuration error",
+				log.Log(log.SchedQueue).Debug("queue priority policy configuration error",
 					zap.Error(err))
 			}
 		case configs.PreemptionPolicy:
 			sq.preemptionPolicy, err = policies.PreemptionPolicyFromString(value)
 			if err != nil {
-				log.Logger().Debug("queue preemption policy configuration error",
+				log.Log(log.SchedQueue).Debug("queue preemption policy configuration error",
 					zap.Error(err))
 			}
 		case configs.PreemptionDelay:
 			if sq.isLeaf {
 				sq.preemptionDelay, err = preemptionDelay(value)
 				if err != nil {
-					log.Logger().Debug("preemption delay property configuration error",
+					log.Log(log.SchedQueue).Debug("preemption delay property configuration error",
 						zap.Error(err))
 				}
 			}
 		default:
 			// skip unknown properties just log them
-			log.Logger().Debug("queue property skipped",
+			log.Log(log.SchedQueue).Debug("queue property skipped",
 				zap.String("key", key),
 				zap.String("value", value))
 		}
@@ -646,7 +646,7 @@ func (sq *Queue) decPendingResource(delta *resources.Resource) {
 	var err error
 	sq.pending, err = resources.SubErrorNegative(sq.pending, delta)
 	if err != nil {
-		log.Logger().Warn("Pending resources went negative",
+		log.Log(log.SchedQueue).Warn("Pending resources went negative",
 			zap.String("queueName", sq.QueuePath),
 			zap.Error(err))
 	}
@@ -669,19 +669,19 @@ func (sq *Queue) AddApplication(app *Application) {
 	// need to set a quota: convert json string to resource
 	res, err := resources.NewResourceFromString(quota)
 	if err != nil {
-		log.Logger().Warn("application resource quota conversion failure",
+		log.Log(log.SchedQueue).Warn("application resource quota conversion failure",
 			zap.String("json quota string", quota),
 			zap.Error(err))
 		return
 	}
 	if !resources.StrictlyGreaterThanZero(res) {
-		log.Logger().Warn("application resource quota has at least one 0 value: cannot set queue limit",
+		log.Log(log.SchedQueue).Warn("application resource quota has at least one 0 value: cannot set queue limit",
 			zap.Stringer("maxResource", res))
 		return
 	}
 	// set the quota
 	if sq.isManaged {
-		log.Logger().Warn("Trying to set max resources set on a queue that is not an unmanaged leaf",
+		log.Log(log.SchedQueue).Warn("Trying to set max resources set on a queue that is not an unmanaged leaf",
 			zap.String("queueName", sq.QueuePath))
 		return
 	}
@@ -695,7 +695,7 @@ func (sq *Queue) RemoveApplication(app *Application) {
 	// clean up any outstanding pending resources
 	appID := app.ApplicationID
 	if !sq.appExists(appID) {
-		log.Logger().Debug("Application not found while removing from queue",
+		log.Log(log.SchedQueue).Debug("Application not found while removing from queue",
 			zap.String("queueName", sq.QueuePath),
 			zap.String("applicationID", appID))
 		return
@@ -706,7 +706,7 @@ func (sq *Queue) RemoveApplication(app *Application) {
 	// clean up the allocated resource
 	if appAllocated := app.GetAllocatedResource(); !resources.IsZero(appAllocated) {
 		if err := sq.DecAllocatedResource(appAllocated); err != nil {
-			log.Logger().Warn("failed to release allocated resources from queue",
+			log.Log(log.SchedQueue).Warn("failed to release allocated resources from queue",
 				zap.String("appID", appID),
 				zap.Error(err))
 		}
@@ -714,7 +714,7 @@ func (sq *Queue) RemoveApplication(app *Application) {
 	// clean up the allocated placeholder resource
 	if phAllocated := app.GetPlaceholderResource(); !resources.IsZero(phAllocated) {
 		if err := sq.DecAllocatedResource(phAllocated); err != nil {
-			log.Logger().Warn("failed to release placeholder resources from queue",
+			log.Log(log.SchedQueue).Warn("failed to release placeholder resources from queue",
 				zap.String("appID", appID),
 				zap.Error(err))
 		}
@@ -739,7 +739,7 @@ func (sq *Queue) RemoveApplication(app *Application) {
 
 	sq.parent.UpdateQueuePriority(sq.Name, priority)
 
-	log.Logger().Info("Application completed and removed from queue",
+	log.Log(log.SchedQueue).Info("Application completed and removed from queue",
 		zap.String("queueName", sq.QueuePath),
 		zap.String("applicationID", appID))
 }
@@ -828,7 +828,7 @@ func (sq *Queue) addChildQueue(child *Queue) error {
 		// 1) try to use template if it is not nil
 		// 2) otherwise, child leaf copy the configs.ApplicationSortPolicy from parent (old behavior)
 		if sq.template != nil {
-			log.Logger().Debug("applying child template to new leaf queue",
+			log.Log(log.SchedQueue).Debug("applying child template to new leaf queue",
 				zap.String("child queue", child.QueuePath),
 				zap.String("parent queue", sq.QueuePath),
 				zap.Any("template", sq.template))
@@ -836,7 +836,7 @@ func (sq *Queue) addChildQueue(child *Queue) error {
 		} else {
 			policyValue, ok := sq.properties[configs.ApplicationSortPolicy]
 			if ok {
-				log.Logger().Warn("inheriting application sort policy is deprecated, use child templates",
+				log.Log(log.Deprecation).Warn("inheriting application sort policy is deprecated, use child templates",
 					zap.String("child queue", child.QueuePath),
 					zap.String("parent queue", sq.QueuePath))
 				child.properties[configs.ApplicationSortPolicy] = policyValue
@@ -847,7 +847,7 @@ func (sq *Queue) addChildQueue(child *Queue) error {
 	// don't override the template of non-leaf queue
 	if child.template == nil {
 		child.template = sq.template
-		log.Logger().Debug("new parent queue inheriting template from parent queue",
+		log.Log(log.SchedQueue).Debug("new parent queue inheriting template from parent queue",
 			zap.String("child queue", child.QueuePath),
 			zap.String("parent queue", sq.QueuePath))
 	}
@@ -864,10 +864,10 @@ func (sq *Queue) MarkQueueForRemoval() {
 	// Mark the managed queue for deletion: it is removed from the config let it drain.
 	// Also mark all the managed children for deletion.
 	if sq.isManaged {
-		log.Logger().Info("marking managed queue for deletion",
+		log.Log(log.SchedQueue).Info("marking managed queue for deletion",
 			zap.String("queue", sq.QueuePath))
 		if err := sq.handleQueueEvent(Remove); err != nil {
-			log.Logger().Warn("failed to mark managed queue for deletion",
+			log.Log(log.SchedQueue).Warn("failed to mark managed queue for deletion",
 				zap.String("queue", sq.QueuePath),
 				zap.Error(err))
 		}
@@ -902,7 +902,7 @@ func (sq *Queue) RemoveQueue() bool {
 	if len(sq.children) > 0 || len(sq.applications) > 0 {
 		return false
 	}
-	log.Logger().Info("removing queue", zap.String("queue", sq.QueuePath))
+	log.Log(log.SchedQueue).Info("removing queue", zap.String("queue", sq.QueuePath))
 	// root is always managed and is the only queue with a nil parent: no need to guard
 	sq.parent.removeChildQueue(sq.Name)
 	return true
@@ -947,7 +947,7 @@ func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bo
 			// only log the warning if we get to the leaf: otherwise we could spam the log with the same message
 			// each time we return from a recursive call. Worst case (hierarchy depth-1) times.
 			if sq.isLeaf {
-				log.Logger().Warn("parent queue exceeds maximum resource",
+				log.Log(log.SchedQueue).Warn("parent queue exceeds maximum resource",
 					zap.String("leafQueue", sq.QueuePath),
 					zap.Stringer("allocationRequest", alloc),
 					zap.Stringer("queueUsage", sq.allocatedResource),
@@ -983,7 +983,7 @@ func (sq *Queue) DecAllocatedResource(alloc *resources.Resource) error {
 			// only log the warning if we get to the leaf: otherwise we spam the log with the same message
 			// each time we return from a recursive call. Worst case (hierarchy depth-1) times.
 			if sq.isLeaf {
-				log.Logger().Warn("released allocation is larger than parent queue allocated resource",
+				log.Log(log.SchedQueue).Warn("released allocation is larger than parent queue allocated resource",
 					zap.String("leafQueue", sq.QueuePath),
 					zap.Stringer("allocationRequest", alloc),
 					zap.Stringer("queueUsage", sq.allocatedResource),
@@ -1183,11 +1183,11 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 	defer sq.Unlock()
 
 	if sq.parent != nil {
-		log.Logger().Warn("Max resources set on a queue that is not the root",
+		log.Log(log.SchedQueue).Warn("Max resources set on a queue that is not the root",
 			zap.String("queueName", sq.QueuePath))
 		return
 	}
-	log.Logger().Info("updating root queue max resources",
+	log.Log(log.SchedQueue).Info("updating root queue max resources",
 		zap.Stringer("current max", sq.maxResource),
 		zap.Stringer("new max", max))
 	sq.maxResource = max.Clone()
@@ -1236,7 +1236,7 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 			}
 			alloc := app.tryAllocate(headRoom, preemptionDelay, &preemptAttemptsRemaining, iterator, fullIterator, getnode)
 			if alloc != nil {
-				log.Logger().Debug("allocation found on queue",
+				log.Log(log.SchedQueue).Debug("allocation found on queue",
 					zap.String("queueName", sq.QueuePath),
 					zap.String("appID", app.ApplicationID),
 					zap.Stringer("allocation", alloc))
@@ -1272,7 +1272,7 @@ func (sq *Queue) TryPlaceholderAllocate(iterator func() NodeIterator, getnode fu
 		for _, app := range sq.sortApplications(true) {
 			alloc := app.tryPlaceholderAllocate(iterator, getnode)
 			if alloc != nil {
-				log.Logger().Debug("allocation found on queue",
+				log.Log(log.SchedQueue).Debug("allocation found on queue",
 					zap.String("queueName", sq.QueuePath),
 					zap.String("appID", app.ApplicationID),
 					zap.Stringer("allocation", alloc))
@@ -1325,13 +1325,13 @@ func (sq *Queue) TryReservedAllocate(iterator func() NodeIterator) *Allocation {
 			// process the apps
 			for appID, numRes := range reservedCopy {
 				if numRes > 1 {
-					log.Logger().Debug("multiple reservations found for application trying to allocate one",
+					log.Log(log.SchedQueue).Debug("multiple reservations found for application trying to allocate one",
 						zap.String("appID", appID),
 						zap.Int("reservations", numRes))
 				}
 				app := sq.GetApplication(appID)
 				if app == nil {
-					log.Logger().Debug("reservation(s) found but application did not exist in queue",
+					log.Log(log.SchedQueue).Debug("reservation(s) found but application did not exist in queue",
 						zap.String("queueName", sq.QueuePath),
 						zap.String("appID", appID))
 					return nil
@@ -1341,7 +1341,7 @@ func (sq *Queue) TryReservedAllocate(iterator func() NodeIterator) *Allocation {
 				}
 				alloc := app.tryReservedAllocate(headRoom, iterator)
 				if alloc != nil {
-					log.Logger().Debug("reservation found for allocation found on queue",
+					log.Log(log.SchedQueue).Debug("reservation found for allocation found on queue",
 						zap.String("queueName", sq.QueuePath),
 						zap.String("appID", appID),
 						zap.Stringer("allocation", alloc),
@@ -1516,7 +1516,7 @@ func (sq *Queue) incRunningApps(appID string) {
 	sq.runningApps++
 	// sanity check
 	if sq.maxRunningApps > 0 && sq.runningApps > sq.maxRunningApps {
-		log.Logger().Debug("queue running apps went over maximum",
+		log.Log(log.SchedQueue).Debug("queue running apps went over maximum",
 			zap.String("queueName", sq.QueuePath))
 		sq.runningApps = sq.maxRunningApps
 	}
@@ -1538,7 +1538,7 @@ func (sq *Queue) decRunningApps() {
 	if sq.runningApps > 0 {
 		sq.runningApps--
 	} else {
-		log.Logger().Debug("queue running apps went negative",
+		log.Log(log.SchedQueue).Debug("queue running apps went negative",
 			zap.String("queueName", sq.QueuePath))
 	}
 }
@@ -1596,7 +1596,7 @@ func (sq *Queue) FindEligiblePreemptionVictims(queuePath string, ask *Allocation
 	queuePriority, ok := priorityMap[fence.QueuePath]
 	if !ok {
 		// this shouldn't happen
-		log.Logger().Error("BUG: No computed priority found for queue", zap.String("queue", fence.QueuePath))
+		log.Log(log.SchedQueue).Error("BUG: No computed priority found for queue", zap.String("queue", fence.QueuePath))
 		return nil
 	}
 
@@ -1777,7 +1777,7 @@ func (sq *Queue) updateApplicationPriorityInternal(applicationID string, priorit
 	defer sq.Unlock()
 
 	if _, ok := sq.applications[applicationID]; !ok {
-		log.Logger().Debug("Unknown application", zap.String("applicationID", applicationID))
+		log.Log(log.SchedQueue).Debug("Unknown application", zap.String("applicationID", applicationID))
 		return sq.currentPriority
 	}
 
@@ -1798,7 +1798,7 @@ func (sq *Queue) updateQueuePriorityInternal(queueName string, priority int32) i
 	defer sq.Unlock()
 
 	if _, ok := sq.children[queueName]; !ok {
-		log.Logger().Debug("Unknown queue", zap.String("queueName", queueName))
+		log.Log(log.SchedQueue).Debug("Unknown queue", zap.String("queueName", queueName))
 		return sq.currentPriority
 	}
 

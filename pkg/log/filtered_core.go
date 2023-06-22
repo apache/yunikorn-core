@@ -16,30 +16,39 @@
  limitations under the License.
 */
 
-package entrypoint
+package log
 
-import (
-	"go.uber.org/zap"
+import "go.uber.org/zap/zapcore"
 
-	"github.com/apache/yunikorn-core/pkg/log"
-	"github.com/apache/yunikorn-core/pkg/scheduler"
-	"github.com/apache/yunikorn-core/pkg/webservice"
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/api"
-)
-
-type ServiceContext struct {
-	RMProxy   api.SchedulerAPI
-	Scheduler *scheduler.Scheduler
-	WebApp    *webservice.WebService
+type filteredCore struct {
+	level zapcore.Level
+	inner zapcore.Core
 }
 
-func (s *ServiceContext) StopAll() {
-	log.Log(log.Entrypoint).Info("ServiceContext stop all services")
-	// TODO implement stop for services
-	if s.WebApp != nil {
-		if err := s.WebApp.StopWebApp(); err != nil {
-			log.Log(log.Entrypoint).Error("failed to stop web-app",
-				zap.Error(err))
-		}
+var _ zapcore.Core = filteredCore{}
+
+func (f filteredCore) Enabled(level zapcore.Level) bool {
+	if level < f.level {
+		return false
 	}
+	return f.inner.Enabled(level)
+}
+
+func (f filteredCore) With(fields []zapcore.Field) zapcore.Core {
+	return f.inner.With(fields)
+}
+
+func (f filteredCore) Check(entry zapcore.Entry, ce *zapcore.CheckedEntry) *zapcore.CheckedEntry {
+	if entry.Level < f.level {
+		return ce
+	}
+	return f.inner.Check(entry, ce)
+}
+
+func (f filteredCore) Write(entry zapcore.Entry, fields []zapcore.Field) error {
+	return f.inner.Write(entry, fields)
+}
+
+func (f filteredCore) Sync() error {
+	return f.inner.Sync()
 }

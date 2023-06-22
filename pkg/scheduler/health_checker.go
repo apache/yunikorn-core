@@ -76,7 +76,7 @@ func (c *HealthChecker) readPeriod() time.Duration {
 
 	result, err := time.ParseDuration(value)
 	if err != nil {
-		log.Logger().Warn("Failed to parse configuration value",
+		log.Log(log.SchedHealth).Warn("Failed to parse configuration value",
 			zap.String("key", configs.HealthCheckInterval),
 			zap.String("value", value),
 			zap.Error(err))
@@ -112,7 +112,7 @@ func (c *HealthChecker) startInternal(runImmediately bool) {
 		c.period = period
 		c.enabled = true
 
-		log.Logger().Info("Starting periodic health checker", zap.Duration("interval", period))
+		log.Log(log.SchedHealth).Info("Starting periodic health checker", zap.Duration("interval", period))
 
 		go func() {
 			ticker := time.NewTicker(period)
@@ -131,7 +131,7 @@ func (c *HealthChecker) startInternal(runImmediately bool) {
 		c.stopChan = nil
 		c.period = 0
 		c.enabled = false
-		log.Logger().Info("Periodic health checker disabled")
+		log.Log(log.SchedHealth).Info("Periodic health checker disabled")
 	}
 }
 
@@ -142,7 +142,7 @@ func (c *HealthChecker) Stop() {
 	configs.RemoveConfigMapCallback(c.confWatcherId)
 
 	if c.stopChan != nil {
-		log.Logger().Info("Stopping periodic health checker")
+		log.Log(log.SchedHealth).Info("Stopping periodic health checker")
 		*c.stopChan <- struct{}{}
 		close(*c.stopChan)
 		c.stopChan = nil
@@ -173,10 +173,10 @@ func (c *HealthChecker) runOnce() {
 	result := GetSchedulerHealthStatus(schedulerMetrics, c.context)
 	updateSchedulerLastHealthStatus(&result, c.context)
 	if !result.Healthy {
-		log.Logger().Warn("Scheduler is not healthy",
+		log.Log(log.SchedHealth).Warn("Scheduler is not healthy",
 			zap.Any("health check values", result.HealthChecks))
 	} else {
-		log.Logger().Debug("Scheduler is healthy",
+		log.Log(log.SchedHealth).Debug("Scheduler is healthy",
 			zap.Any("health check values", result.HealthChecks))
 	}
 }

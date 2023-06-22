@@ -70,7 +70,8 @@ func NewNode(proto *si.NodeInfo) *Node {
 	var ready bool
 	var err error
 	if ready, err = strconv.ParseBool(proto.Attributes[common.NodeReadyAttribute]); err != nil {
-		log.Logger().Error("Could not parse ready flag, assuming true")
+		log.Log(log.SchedNode).Debug("Could not parse ready flag, assuming true",
+			zap.String("nodeID", proto.NodeID))
 		ready = true
 	}
 	sn := &Node{
@@ -87,7 +88,7 @@ func NewNode(proto *si.NodeInfo) *Node {
 	// initialise available resources
 	sn.availableResource, err = resources.SubErrorNegative(sn.totalResource, sn.occupiedResource)
 	if err != nil {
-		log.Logger().Error("New node created with no available resources",
+		log.Log(log.SchedNode).Error("New node created with no available resources",
 			zap.Error(err))
 	}
 
@@ -159,7 +160,7 @@ func (sn *Node) SetCapacity(newCapacity *resources.Resource) *resources.Resource
 	sn.Lock()
 	defer sn.Unlock()
 	if resources.Equals(sn.totalResource, newCapacity) {
-		log.Logger().Debug("skip updating capacity, not changed")
+		log.Log(log.SchedNode).Debug("skip updating capacity, not changed")
 		return nil
 	}
 	delta := resources.Sub(newCapacity, sn.totalResource)
@@ -179,7 +180,7 @@ func (sn *Node) SetOccupiedResource(occupiedResource *resources.Resource) {
 	sn.Lock()
 	defer sn.Unlock()
 	if resources.Equals(sn.occupiedResource, occupiedResource) {
-		log.Logger().Debug("skip updating occupiedResource, not changed")
+		log.Log(log.SchedNode).Debug("skip updating occupiedResource, not changed")
 		return
 	}
 	sn.occupiedResource = occupiedResource
@@ -194,7 +195,7 @@ func (sn *Node) refreshAvailableResource() {
 	sn.availableResource.SubFrom(sn.occupiedResource)
 	// check if any quantity is negative: a nil resource is all 0's
 	if !resources.StrictlyGreaterThanOrEquals(sn.availableResource, nil) {
-		log.Logger().Warn("Node update triggered over allocated node",
+		log.Log(log.SchedNode).Warn("Node update triggered over allocated node",
 			zap.Stringer("available", sn.availableResource),
 			zap.Stringer("total", sn.totalResource),
 			zap.Stringer("occupied", sn.occupiedResource),
@@ -341,7 +342,7 @@ func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation, delta *resou
 	sn.allocatedResource.AddTo(delta)
 	sn.availableResource.SubFrom(delta)
 	if !resources.FitIn(before, sn.allocatedResource) {
-		log.Logger().Warn("unexpected increase in node usage after placeholder replacement",
+		log.Log(log.SchedNode).Warn("unexpected increase in node usage after placeholder replacement",
 			zap.String("placeholder uuid", uuid),
 			zap.String("allocation uuid", replace.GetUUID()),
 			zap.Stringer("delta", delta))
@@ -382,7 +383,7 @@ func (sn *Node) preConditions(ask *AllocationAsk, allocate bool) bool {
 			NodeID:        sn.NodeID,
 			Allocate:      allocate,
 		}); err != nil {
-			log.Logger().Debug("running predicates failed",
+			log.Log(log.SchedNode).Debug("running predicates failed",
 				zap.String("allocationKey", allocID),
 				zap.String("nodeID", sn.NodeID),
 				zap.Bool("allocateFlag", allocate),
@@ -401,14 +402,14 @@ func (sn *Node) preConditions(ask *AllocationAsk, allocate bool) bool {
 func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string) bool {
 	// cannot allocate zero or negative resource
 	if !resources.StrictlyGreaterThanZero(res) {
-		log.Logger().Debug("pre alloc check: requested resource is zero",
+		log.Log(log.SchedNode).Debug("pre alloc check: requested resource is zero",
 			zap.String("nodeID", sn.NodeID))
 		return false
 	}
 	// check if the node is reserved for this app/alloc
 	if sn.IsReserved() {
 		if !sn.isReservedForApp(resKey) {
-			log.Logger().Debug("pre alloc check: node reserved for different app or ask",
+			log.Log(log.SchedNode).Debug("pre alloc check: node reserved for different app or ask",
 				zap.String("nodeID", sn.NodeID),
 				zap.String("resKey", resKey))
 			return false
@@ -463,7 +464,7 @@ func (sn *Node) Reserve(app *Application, ask *AllocationAsk) error {
 	// this should really not happen just guard against panic
 	// either app or ask are nil
 	if appReservation == nil {
-		log.Logger().Debug("reservation creation failed unexpectedly",
+		log.Log(log.SchedNode).Debug("reservation creation failed unexpectedly",
 			zap.String("nodeID", sn.NodeID),
 			zap.Any("app", app),
 			zap.Any("ask", ask))
@@ -471,7 +472,7 @@ func (sn *Node) Reserve(app *Application, ask *AllocationAsk) error {
 	}
 	// reservation must fit on the empty node
 	if !resources.FitIn(sn.totalResource, ask.GetAllocatedResource()) {
-		log.Logger().Debug("reservation does not fit on the node",
+		log.Log(log.SchedNode).Debug("reservation does not fit on the node",
 			zap.String("nodeID", sn.NodeID),
 			zap.String("appID", app.ApplicationID),
 			zap.String("ask", ask.GetAllocationKey()),
@@ -492,7 +493,7 @@ func (sn *Node) unReserve(app *Application, ask *AllocationAsk) (int, error) {
 	defer sn.Unlock()
 	resKey := reservationKey(nil, app, ask)
 	if resKey == "" {
-		log.Logger().Debug("unreserve reservation key create failed unexpectedly",
+		log.Log(log.SchedNode).Debug("unreserve reservation key create failed unexpectedly",
 			zap.String("nodeID", sn.NodeID),
 			zap.Any("app", app),
 			zap.Any("ask", ask))
@@ -503,7 +504,7 @@ func (sn *Node) unReserve(app *Application, ask *AllocationAsk) (int, error) {
 		return 1, nil
 	}
 	// reservation was not found
-	log.Logger().Debug("reservation not found while removing from node",
+	log.Log(log.SchedNode).Debug("reservation not found while removing from node",
 		zap.String("nodeID", sn.NodeID),
 		zap.String("appID", app.ApplicationID),
 		zap.String("ask", ask.GetAllocationKey()))

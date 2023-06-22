@@ -64,7 +64,7 @@ func InitQueueMetrics(name string) CoreQueueMetrics {
 		// metrics name must be complied with regex: [a-zA-Z_:][a-zA-Z0-9_:]*,
 		// queue name regex: ^[a-zA-Z0-9_-]{1,64}$
 		if err := prometheus.Register(metric); err != nil {
-			log.Logger().Warn("failed to register metrics collector", zap.Error(err))
+			log.Log(log.Metrics).Warn("failed to register metrics collector", zap.Error(err))
 		}
 	}
 

@@ -67,12 +67,12 @@ func GetUserManager() *Manager {
 // As and when every allocation or asks requests fulfilled on application, corresponding user and group
 // resource usage would be increased against specific application.
 func (m *Manager) IncreaseTrackedResource(queuePath string, applicationID string, usage *resources.Resource, user security.UserGroup) error {
-	log.Logger().Debug("Increasing resource usage", zap.String("user", user.User),
+	log.Log(log.SchedUGM).Debug("Increasing resource usage", zap.String("user", user.User),
 		zap.String("queue path", queuePath),
 		zap.String("application", applicationID),
 		zap.Stringer("resource", usage))
 	if queuePath == "" || applicationID == "" || usage == nil || user.User == "" {
-		log.Logger().Error("Mandatory parameters are missing to increase the resource usage",
+		log.Log(log.SchedUGM).Error("Mandatory parameters are missing to increase the resource usage",
 			zap.String("user", user.User),
 			zap.String("queue path", queuePath),
 			zap.String("application", applicationID),
@@ -88,12 +88,12 @@ func (m *Manager) IncreaseTrackedResource(queuePath string, applicationID string
 
 		// Set the limits for all configured queue paths of the user
 		for configQueuePath, config := range m.userLimitsConfig[user.User] {
-			log.Logger().Debug("Setting the limit max applications settings.",
+			log.Log(log.SchedUGM).Debug("Setting the limit max applications settings.",
 				zap.String("user", user.User),
 				zap.String("queue path", configQueuePath))
 			maxApps, ok := config[maxapplications].(uint64)
 			if !ok {
-				log.Logger().Warn("Problem in setting the limit max applications settings. Unable to cast the value from interface to uint64",
+				log.Log(log.SchedUGM).Warn("Problem in setting the limit max applications settings. Unable to cast the value from interface to uint64",
 					zap.String("user", user.User),
 					zap.String("queue path", configQueuePath),
 					zap.Uint64("limit max applications", maxApps))
@@ -102,7 +102,7 @@ func (m *Manager) IncreaseTrackedResource(queuePath string, applicationID string
 			}
 			err := userTracker.setMaxApplications(maxApps, configQueuePath)
 			if err != nil {
-				log.Logger().Warn("Problem in setting the limit max applications settings.",
+				log.Log(log.SchedUGM).Warn("Problem in setting the limit max applications settings.",
 					zap.String("user", user.User),
 					zap.String("queue path", configQueuePath),
 					zap.Uint64("limit max applications", maxApps),
@@ -112,7 +112,7 @@ func (m *Manager) IncreaseTrackedResource(queuePath string, applicationID string
 			}
 			maxResources, ok := config[maxresources].(map[string]string)
 			if !ok {
-				log.Logger().Warn("Problem in setting the limit max resources settings. Unable to cast the value from interface to resource",
+				log.Log(log.SchedUGM).Warn("Problem in setting the limit max resources settings. Unable to cast the value from interface to resource",
 					zap.String("user", user.User),
 					zap.String("queue path", configQueuePath),
 					zap.Any("limit max resources", maxResources))
@@ -121,7 +121,7 @@ func (m *Manager) IncreaseTrackedResource(queuePath string, applicationID string
 			}
 			resource, resourceErr := resources.NewResourceFromConf(maxResources)
 			if resourceErr != nil {
-				log.Logger().Warn("Problem in setting the limit max resources settings.",
+				log.Log(log.SchedUGM).Warn("Problem in setting the limit max resources settings.",
 					zap.String("user", user.User),
 					zap.String("queue path", configQueuePath),
 					zap.Any("limit max resources", maxResources),
@@ -131,7 +131,7 @@ func (m *Manager) IncreaseTrackedResource(queuePath string, applicationID string
 			}
 			setMaxResourcesErr := userTracker.setMaxResources(resource, configQueuePath)
 			if setMaxResourcesErr != nil {
-				log.Logger().Warn("Problem in setting the limit max resources settings.",
+				log.Log(log.SchedUGM).Warn("Problem in setting the limit max resources settings.",
 					zap.String("user", user.User),
 					zap.String("queue path", configQueuePath),
 					zap.Any("limit max resources", maxResources),
@@ -146,7 +146,7 @@ func (m *Manager) IncreaseTrackedResource(queuePath string, applicationID string
 	}
 	err := userTracker.increaseTrackedResource(queuePath, applicationID, usage)
 	if err != nil {
-		log.Logger().Error("Problem in increasing the user resource usage",
+		log.Log(log.SchedUGM).Error("Problem in increasing the user resource usage",
 			zap.String("user", user.User),
 			zap.String("queue path", queuePath),
 			zap.String("application", applicationID),
@@ -165,7 +165,7 @@ func (m *Manager) IncreaseTrackedResource(queuePath string, applicationID string
 	if groupTracker != nil {
 		err = groupTracker.increaseTrackedResource(queuePath, applicationID, usage)
 		if err != nil {
-			log.Logger().Error("Problem in increasing the group resource usage",
+			log.Log(log.SchedUGM).Error("Problem in increasing the group resource usage",
 				zap.String("user", user.User),
 				zap.String("group", group),
 				zap.String("queue path", queuePath),
@@ -183,13 +183,13 @@ func (m *Manager) IncreaseTrackedResource(queuePath string, applicationID string
 // resource usage would be decreased against specific application. When the final asks release happens, removeApp should be set to true and
 // application itself would be removed from the tracker and no more usage would be tracked further for that specific application.
 func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string, usage *resources.Resource, user security.UserGroup, removeApp bool) error {
-	log.Logger().Debug("Decreasing resource usage", zap.String("user", user.User),
+	log.Log(log.SchedUGM).Debug("Decreasing resource usage", zap.String("user", user.User),
 		zap.String("queue path", queuePath),
 		zap.String("application", applicationID),
 		zap.Stringer("resource", usage),
 		zap.Bool("removeApp", removeApp))
 	if queuePath == "" || applicationID == "" || usage == nil || user.User == "" {
-		log.Logger().Error("Mandatory parameters are missing to decrease the resource usage",
+		log.Log(log.SchedUGM).Error("Mandatory parameters are missing to decrease the resource usage",
 			zap.String("user", user.User),
 			zap.String("queue path", queuePath),
 			zap.String("application", applicationID),
@@ -204,7 +204,7 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 	if userTracker != nil {
 		removeQT, err := userTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
 		if err != nil {
-			log.Logger().Error("Problem in decreasing the user resource usage",
+			log.Log(log.SchedUGM).Error("Problem in decreasing the user resource usage",
 				zap.String("user", user.User),
 				zap.String("queue path", queuePath),
 				zap.String("application", applicationID),
@@ -217,7 +217,7 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 			delete(m.userTrackers, user.User)
 		}
 	} else {
-		log.Logger().Error("user tracker must be available in userTrackers map",
+		log.Log(log.SchedUGM).Error("user tracker must be available in userTrackers map",
 			zap.String("user", user.User))
 		return fmt.Errorf("user tracker for %s is missing in userTrackers map", user.User)
 	}
@@ -230,7 +230,7 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 	if groupTracker != nil {
 		removeQT, err := groupTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
 		if err != nil {
-			log.Logger().Error("Problem in decreasing the group resource usage",
+			log.Log(log.SchedUGM).Error("Problem in decreasing the group resource usage",
 				zap.String("user", user.User),
 				zap.String("group", group),
 				zap.String("queue path", queuePath),
@@ -244,7 +244,7 @@ func (m *Manager) DecreaseTrackedResource(queuePath string, applicationID string
 			delete(m.groupTrackers, group)
 		}
 	} else {
-		log.Logger().Error("appGroupTrackers tracker must be available in groupTrackers map",
+		log.Log(log.SchedUGM).Error("appGroupTrackers tracker must be available in groupTrackers map",
 			zap.String("appGroupTrackers", group))
 		return fmt.Errorf("appGroupTrackers tracker for %s is missing in groupTrackers map", group)
 	}
@@ -318,7 +318,7 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID strin
 			return err
 		}
 		if m.groupTrackers[group] == nil {
-			log.Logger().Debug("Group tracker does not exist. Creating group tracker object and linking the same with application",
+			log.Log(log.SchedUGM).Debug("Group tracker does not exist. Creating group tracker object and linking the same with application",
 				zap.String("application", applicationID),
 				zap.String("queue path", queuePath),
 				zap.String("user", user.User),
@@ -327,12 +327,12 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID strin
 
 			// Set the limits for all configured queue paths of the group
 			for configQueuePath, config := range m.groupLimitsConfig[group] {
-				log.Logger().Debug("Setting the limit max applications settings.",
+				log.Log(log.SchedUGM).Debug("Setting the limit max applications settings.",
 					zap.String("group", group),
 					zap.String("queue path", configQueuePath))
 				maxApps, ok := config[maxapplications].(uint64)
 				if !ok {
-					log.Logger().Warn("Problem in setting the limit max applications settings. Unable to cast the value from interface to uint64",
+					log.Log(log.SchedUGM).Warn("Problem in setting the limit max applications settings. Unable to cast the value from interface to uint64",
 						zap.String("group", group),
 						zap.String("queue path", configQueuePath),
 						zap.Uint64("limit max applications", maxApps))
@@ -340,7 +340,7 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID strin
 						group, configQueuePath, applicationID)
 				}
 				if setMaxApplicationsErr := groupTracker.setMaxApplications(maxApps, configQueuePath); setMaxApplicationsErr != nil {
-					log.Logger().Warn("Problem in setting the limit max applications settings.",
+					log.Log(log.SchedUGM).Warn("Problem in setting the limit max applications settings.",
 						zap.String("group", group),
 						zap.String("queue path", configQueuePath),
 						zap.Uint64("limit max applications", maxApps),
@@ -351,7 +351,7 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID strin
 
 				maxResources, ok := config[maxresources].(map[string]string)
 				if !ok {
-					log.Logger().Warn("Problem in setting the limit max resources settings. Unable to cast the value from interface to resource",
+					log.Log(log.SchedUGM).Warn("Problem in setting the limit max resources settings. Unable to cast the value from interface to resource",
 						zap.String("group", group),
 						zap.String("queue path", configQueuePath),
 						zap.Any("limit max resources", maxResources))
@@ -360,7 +360,7 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID strin
 				}
 				resource, resourceErr := resources.NewResourceFromConf(maxResources)
 				if resourceErr != nil {
-					log.Logger().Warn("Problem in setting the limit max resources settings.",
+					log.Log(log.SchedUGM).Warn("Problem in setting the limit max resources settings.",
 						zap.String("group", group),
 						zap.String("queue path", configQueuePath),
 						zap.Any("limit max resources", maxResources),
@@ -369,7 +369,7 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID strin
 						group, configQueuePath, applicationID, resourceErr)
 				}
 				if setMaxResourcesErr := groupTracker.setMaxResources(resource, configQueuePath); setMaxResourcesErr != nil {
-					log.Logger().Warn("Problem in setting the limit max resources settings.",
+					log.Log(log.SchedUGM).Warn("Problem in setting the limit max resources settings.",
 						zap.String("group", group),
 						zap.String("queue path", configQueuePath),
 						zap.Any("limit max resources", maxResources),
@@ -380,7 +380,7 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID strin
 			}
 			m.groupTrackers[group] = groupTracker
 		} else {
-			log.Logger().Debug("Group tracker already exists and linking (reusing) the same with application",
+			log.Log(log.SchedUGM).Debug("Group tracker already exists and linking (reusing) the same with application",
 				zap.String("application", applicationID),
 				zap.String("queue path", queuePath),
 				zap.String("user", user.User),
@@ -434,7 +434,7 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 		tempLimitsMap[maxresources] = limit.MaxResources
 		tempLimitsMap[maxapplications] = limit.MaxApplications
 		for _, user := range limit.Users {
-			log.Logger().Debug("Processing user limits configuration",
+			log.Log(log.SchedUGM).Debug("Processing user limits configuration",
 				zap.String("user", user),
 				zap.String("limit", limit.Limit),
 				zap.String("queue path", queuePath),
@@ -447,7 +447,7 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 			}
 		}
 		for _, group := range limit.Groups {
-			log.Logger().Debug("Processing group limits configuration",
+			log.Log(log.SchedUGM).Debug("Processing group limits configuration",
 				zap.String("group", group),
 				zap.String("limit", limit.Limit),
 				zap.String("queue path", queuePath),
@@ -481,7 +481,7 @@ func (m *Manager) processUserConfig(user string, limit configs.Limit, queuePath 
 		for u, ut := range m.userTrackers {
 			// Is this user already tracked for the queue path?
 			if m.IsQueuePathTrackedCompletely(ut.queueTracker, queuePath) {
-				log.Logger().Debug("Processing wild card user limits configuration for all existing users",
+				log.Log(log.SchedUGM).Debug("Processing wild card user limits configuration for all existing users",
 					zap.String("user", u),
 					zap.String("limit", limit.Limit),
 					zap.String("queue path", queuePath),
@@ -521,7 +521,7 @@ func (m *Manager) processGroupConfig(group string, limit configs.Limit, queuePat
 		for g, gt := range m.groupTrackers {
 			// Is this group already tracked for the queue path?
 			if m.IsQueuePathTrackedCompletely(gt.queueTracker, queuePath) {
-				log.Logger().Debug("Processing wild card user limits configuration for all existing groups",
+				log.Log(log.SchedUGM).Debug("Processing wild card user limits configuration for all existing groups",
 					zap.String("group", g),
 					zap.String("limit", limit.Limit),
 					zap.String("queue path", queuePath),
@@ -590,7 +590,7 @@ func (m *Manager) clearEarlierSetLimits(userGroupLimits map[string]bool, queuePa
 }
 
 func (m *Manager) setUserLimits(user string, limit configs.Limit, queuePath string) error {
-	log.Logger().Debug("Setting user limits",
+	log.Log(log.SchedUGM).Debug("Setting user limits",
 		zap.String("user", user),
 		zap.String("limit", limit.Limit),
 		zap.String("queue path", queuePath),
@@ -598,14 +598,14 @@ func (m *Manager) setUserLimits(user string, limit configs.Limit, queuePath stri
 		zap.Any("max resources", limit.MaxResources))
 	userTracker, ok := m.userTrackers[user]
 	if !ok {
-		log.Logger().Debug("User tracker does not exist. Creating user tracker object to set the limit configuration",
+		log.Log(log.SchedUGM).Debug("User tracker does not exist. Creating user tracker object to set the limit configuration",
 			zap.String("user", user),
 			zap.String("queue path", queuePath))
 		userTracker = newUserTracker(user)
 		m.userTrackers[user] = userTracker
 	}
 	if err := userTracker.setMaxApplications(limit.MaxApplications, queuePath); err != nil {
-		log.Logger().Warn("Problem in setting the limit max applications settings.",
+		log.Log(log.SchedUGM).Warn("Problem in setting the limit max applications settings.",
 			zap.String("user", user),
 			zap.String("queue path", queuePath),
 			zap.Uint64("limit max applications", limit.MaxApplications),
@@ -615,7 +615,7 @@ func (m *Manager) setUserLimits(user string, limit configs.Limit, queuePath stri
 
 	if resource, err := resources.NewResourceFromConf(limit.MaxResources); err == nil {
 		if err = userTracker.setMaxResources(resource, queuePath); err != nil {
-			log.Logger().Warn("Problem in setting the limit max resources settings.",
+			log.Log(log.SchedUGM).Warn("Problem in setting the limit max resources settings.",
 				zap.String("user", user),
 				zap.String("queue path", queuePath),
 				zap.Any("limit max resources", limit.MaxResources),
@@ -623,7 +623,7 @@ func (m *Manager) setUserLimits(user string, limit configs.Limit, queuePath stri
 			return fmt.Errorf("unable to set the limit for user %s because %w", user, err)
 		}
 	} else {
-		log.Logger().Warn("Problem in using the limit max resources settings.",
+		log.Log(log.SchedUGM).Warn("Problem in using the limit max resources settings.",
 			zap.String("user", user),
 			zap.String("queue path", queuePath),
 			zap.Any("limit max resources", limit.MaxResources),
@@ -634,7 +634,7 @@ func (m *Manager) setUserLimits(user string, limit configs.Limit, queuePath stri
 }
 
 func (m *Manager) setGroupLimits(group string, limit configs.Limit, queuePath string) error {
-	log.Logger().Debug("Setting group limits",
+	log.Log(log.SchedUGM).Debug("Setting group limits",
 		zap.String("group", group),
 		zap.String("limit", limit.Limit),
 		zap.String("queue path", queuePath),
@@ -642,14 +642,14 @@ func (m *Manager) setGroupLimits(group string, limit configs.Limit, queuePath st
 		zap.Any("max resources", limit.MaxResources))
 	groupTracker, ok := m.groupTrackers[group]
 	if !ok {
-		log.Logger().Debug("Group tracker does not exist. Creating group tracker object to set the limit configuration",
+		log.Log(log.SchedUGM).Debug("Group tracker does not exist. Creating group tracker object to set the limit configuration",
 			zap.String("group", group),
 			zap.String("queue path", queuePath))
 		groupTracker = newGroupTracker(group)
 		m.groupTrackers[group] = groupTracker
 	}
 	if err := groupTracker.setMaxApplications(limit.MaxApplications, queuePath); err != nil {
-		log.Logger().Warn("Problem in setting the limit max applications settings.",
+		log.Log(log.SchedUGM).Warn("Problem in setting the limit max applications settings.",
 			zap.String("group", group),
 			zap.String("queue path", queuePath),
 			zap.Uint64("limit max applications", limit.MaxApplications),
@@ -659,7 +659,7 @@ func (m *Manager) setGroupLimits(group string, limit configs.Limit, queuePath st
 
 	if resource, err := resources.NewResourceFromConf(limit.MaxResources); err == nil {
 		if err = groupTracker.setMaxResources(resource, queuePath); err != nil {
-			log.Logger().Warn("Problem in setting the limit max resources settings.",
+			log.Log(log.SchedUGM).Warn("Problem in setting the limit max resources settings.",
 				zap.String("group", group),
 				zap.String("queue path", queuePath),
 				zap.Any("limit max resources", limit.MaxResources),
@@ -667,7 +667,7 @@ func (m *Manager) setGroupLimits(group string, limit configs.Limit, queuePath st
 			return fmt.Errorf("unable to set the limit for group %s because %w", group, err)
 		}
 	} else {
-		log.Logger().Warn("Problem in using the limit max resources settings.",
+		log.Log(log.SchedUGM).Warn("Problem in using the limit max resources settings.",
 			zap.String("group", group),
 			zap.String("queue path", queuePath),
 			zap.Any("limit max resources", limit.MaxResources),

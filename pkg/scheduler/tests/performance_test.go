@@ -24,7 +24,6 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/zap"
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/entrypoint"
@@ -33,7 +32,9 @@ import (
 )
 
 func benchmarkScheduling(b *testing.B, numNodes, numPods int) {
-	log.InitAndSetLevel(zap.InfoLevel)
+	log.UpdateLoggingConfig(map[string]string{"log.level": "WARN"})
+	defer log.UpdateLoggingConfig(nil)
+
 	// Start all tests
 	serviceContext := entrypoint.StartAllServices()
 	defer serviceContext.StopAll()
@@ -71,6 +72,9 @@ partitions:
 			Version:     "0.0.2",
 			BuildInfo:   BuildInfoMap,
 			Config:      configData,
+			ExtraConfig: map[string]string{
+				"log.level": "WARN",
+			},
 		}, mockRM)
 
 	assert.NilError(b, err, "RegisterResourceManager failed")

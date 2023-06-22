@@ -55,7 +55,7 @@ func (sp *EventPublisher) StartService() {
 			messages := sp.store.CollectEvents()
 			if len(messages) > 0 {
 				if eventPlugin := plugins.GetResourceManagerCallbackPlugin(); eventPlugin != nil {
-					log.Logger().Debug("Sending eventChannel", zap.Int("number of messages", len(messages)))
+					log.Log(log.Events).Debug("Sending eventChannel", zap.Int("number of messages", len(messages)))
 					eventPlugin.SendEvent(messages)
 				}
 			}

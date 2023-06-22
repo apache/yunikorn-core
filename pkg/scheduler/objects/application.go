@@ -125,7 +125,7 @@ type ApplicationSummary struct {
 }
 
 func (as *ApplicationSummary) DoLogging() {
-	log.Logger().Info("YK_APP_SUMMARY:",
+	log.Log(log.SchedAppUsage).Info("YK_APP_SUMMARY:",
 		zap.String("appID", as.ApplicationID),
 		zap.Int64("submissionTime", as.SubmissionTime.UnixMilli()),
 		zap.Int64("startTime", as.StartTime.UnixMilli()),
@@ -183,7 +183,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	placeholderTimeout := common.ConvertSITimeoutWithAdjustment(siApp, defaultPlaceholderTimeout)
 	gangSchedStyle := siApp.GetGangSchedulingStyle()
 	if gangSchedStyle != Soft && gangSchedStyle != Hard {
-		log.Logger().Info("Unknown gang scheduling style, using soft style as default",
+		log.Log(log.SchedApplication).Info("Unknown gang scheduling style, using soft style as default",
 			zap.String("gang scheduling style", gangSchedStyle))
 		gangSchedStyle = Soft
 	}
@@ -230,7 +230,7 @@ func (sa *Application) GetStateLog() []*StateLogEntry {
 // Set the reservation delay.
 // Set when the cluster context is created to disable reservation.
 func SetReservationDelay(delay time.Duration) {
-	log.Logger().Debug("Set reservation delay",
+	log.Log(log.SchedApplication).Debug("Set reservation delay",
 		zap.Duration("delay", delay))
 	reservationDelay = delay
 }
@@ -339,7 +339,7 @@ func (sa *Application) OnStateChange(event *fsm.Event, eventInfo string) {
 // This prevents an app from not progressing to Running when it only has 1 allocation.
 // Called when entering the Starting state by the state machine.
 func (sa *Application) setStateTimer(timeout time.Duration, currentState string, event applicationEvent) {
-	log.Logger().Debug("Application state timer initiated",
+	log.Log(log.SchedApplication).Debug("Application state timer initiated",
 		zap.String("appID", sa.ApplicationID),
 		zap.String("state", sa.stateMachine.Current()),
 		zap.Duration("timeout", timeout))
@@ -355,7 +355,7 @@ func (sa *Application) timeoutStateTimer(expectedState string, event application
 		// make sure we are still in the right state
 		// we could have been failed or something might have happened while waiting for a lock
 		if expectedState == sa.stateMachine.Current() {
-			log.Logger().Debug("Application state: auto progress",
+			log.Log(log.SchedApplication).Debug("Application state: auto progress",
 				zap.String("applicationID", sa.ApplicationID),
 				zap.String("state", sa.stateMachine.Current()))
 			// if the app is completing, but there are placeholders left, first do the cleanup
@@ -388,7 +388,7 @@ func (sa *Application) clearStateTimer() {
 	}
 	sa.stateTimer.Stop()
 	sa.stateTimer = nil
-	log.Logger().Debug("Application state timer cleared",
+	log.Log(log.SchedApplication).Debug("Application state timer cleared",
 		zap.String("appID", sa.ApplicationID),
 		zap.String("state", sa.stateMachine.Current()))
 }
@@ -397,7 +397,7 @@ func (sa *Application) initPlaceholderTimer() {
 	if sa.placeholderTimer != nil || !sa.IsAccepted() || sa.execTimeout <= 0 {
 		return
 	}
-	log.Logger().Debug("Application placeholder timer initiated",
+	log.Log(log.SchedApplication).Debug("Application placeholder timer initiated",
 		zap.String("AppID", sa.ApplicationID),
 		zap.Duration("Timeout", sa.execTimeout))
 	sa.placeholderTimer = time.AfterFunc(sa.execTimeout, sa.timeoutPlaceholderProcessing)
@@ -409,7 +409,7 @@ func (sa *Application) clearPlaceholderTimer() {
 	}
 	sa.placeholderTimer.Stop()
 	sa.placeholderTimer = nil
-	log.Logger().Debug("Application placeholder timer cleared",
+	log.Log(log.SchedApplication).Debug("Application placeholder timer cleared",
 		zap.String("AppID", sa.ApplicationID),
 		zap.Duration("Timeout", sa.execTimeout))
 }
@@ -440,14 +440,14 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 				sa.placeholderData[alloc.GetTaskGroup()].TimedOut++
 			}
 		}
-		log.Logger().Info("Placeholder timeout, releasing placeholders",
+		log.Log(log.SchedApplication).Info("Placeholder timeout, releasing placeholders",
 			zap.String("AppID", sa.ApplicationID),
 			zap.Int("placeholders being replaced", replacing),
 			zap.Int("releasing placeholders", len(toRelease)))
 		sa.notifyRMAllocationReleased(sa.rmID, toRelease, si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
 	// Case 2: in every other case fail the application, and notify the context about the expired placeholder asks
 	default:
-		log.Logger().Info("Placeholder timeout, releasing asks and placeholders",
+		log.Log(log.SchedApplication).Info("Placeholder timeout, releasing asks and placeholders",
 			zap.String("AppID", sa.ApplicationID),
 			zap.Int("releasing placeholders", len(sa.allocations)),
 			zap.Int("releasing asks", len(sa.requests)),
@@ -458,7 +458,7 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 			event = FailApplication
 		}
 		if err := sa.HandleApplicationEventWithInfo(event, "ResourceReservationTimeout"); err != nil {
-			log.Logger().Debug("Application state change failed when placeholder timed out",
+			log.Log(log.SchedApplication).Debug("Application state change failed when placeholder timed out",
 				zap.String("AppID", sa.ApplicationID),
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))
@@ -536,6 +536,7 @@ func (sa *Application) GetPendingResource() *resources.Resource {
 func (sa *Application) RemoveAllocationAsk(allocKey string) int {
 	sa.Lock()
 	defer sa.Unlock()
+	sa.sendRemoveAskEvent(allocKey)
 	return sa.removeAsksInternal(allocKey)
 }
 
@@ -553,7 +554,7 @@ func (sa *Application) removeAsksInternal(allocKey string) int {
 		for key, reserve := range sa.reservations {
 			releases, err := sa.unReserveInternal(reserve.node, reserve.ask)
 			if err != nil {
-				log.Logger().Warn("Removal of reservation failed while removing all allocation asks",
+				log.Log(log.SchedApplication).Warn("Removal of reservation failed while removing all allocation asks",
 					zap.String("appID", sa.ApplicationID),
 					zap.String("reservationKey", key),
 					zap.Error(err))
@@ -576,7 +577,7 @@ func (sa *Application) removeAsksInternal(allocKey string) int {
 			reserve := sa.reservations[key]
 			releases, err := sa.unReserveInternal(reserve.node, reserve.ask)
 			if err != nil {
-				log.Logger().Warn("Removal of reservation failed while removing allocation ask",
+				log.Log(log.SchedApplication).Warn("Removal of reservation failed while removing allocation ask",
 					zap.String("appID", sa.ApplicationID),
 					zap.String("reservationKey", key),
 					zap.Error(err))
@@ -606,13 +607,13 @@ func (sa *Application) removeAsksInternal(allocKey string) int {
 	hasPlaceHolderAllocations := len(sa.getPlaceholderAllocations()) > 0
 	if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) && !sa.IsFailing() && !sa.IsCompleting() && !hasPlaceHolderAllocations {
 		if err := sa.HandleApplicationEvent(CompleteApplication); err != nil {
-			log.Logger().Warn("Application state not changed to Completing while updating ask(s)",
+			log.Log(log.SchedApplication).Warn("Application state not changed to Completing while updating ask(s)",
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))
 		}
 	}
 
-	log.Logger().Info("ask removed successfully from application",
+	log.Log(log.SchedApplication).Info("ask removed successfully from application",
 		zap.String("appID", sa.ApplicationID),
 		zap.String("ask", allocKey),
 		zap.Stringer("pendingDelta", deltaPendingResource))
@@ -644,7 +645,7 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 	// Move the state and get it scheduling (again)
 	if sa.stateMachine.Is(New.String()) || sa.stateMachine.Is(Completing.String()) {
 		if err := sa.HandleApplicationEvent(RunApplication); err != nil {
-			log.Logger().Debug("Application state change failed while adding new ask",
+			log.Log(log.SchedApplication).Debug("Application state change failed while adding new ask",
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))
 		}
@@ -668,13 +669,14 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 		sa.addPlaceholderData(ask)
 	}
 
-	log.Logger().Info("ask added successfully to application",
+	log.Log(log.SchedApplication).Info("ask added successfully to application",
 		zap.String("appID", sa.ApplicationID),
 		zap.String("ask", ask.GetAllocationKey()),
 		zap.Bool("placeholder", ask.IsPlaceholder()),
 		zap.Stringer("pendingDelta", delta))
 
 	sa.sortedRequests.insert(ask)
+	sa.appEvents.sendNewAskEvent(ask)
 
 	return nil
 }
@@ -701,7 +703,7 @@ func (sa *Application) RecoverAllocationAsk(ask *AllocationAsk) {
 	// progress the application from New to Accepted.
 	if sa.IsNew() {
 		if err := sa.HandleApplicationEvent(RunApplication); err != nil {
-			log.Logger().Debug("Application state change failed while recovering allocation ask",
+			log.Log(log.SchedApplication).Debug("Application state change failed while recovering allocation ask",
 				zap.Error(err))
 		}
 	}
@@ -787,7 +789,7 @@ func (sa *Application) reserveInternal(node *Node, ask *AllocationAsk) error {
 	// create the reservation (includes nil checks)
 	nodeReservation := newReservation(node, sa, ask, true)
 	if nodeReservation == nil {
-		log.Logger().Debug("reservation creation failed unexpectedly",
+		log.Log(log.SchedApplication).Debug("reservation creation failed unexpectedly",
 			zap.String("app", sa.ApplicationID),
 			zap.Any("node", node),
 			zap.Any("ask", ask))
@@ -795,7 +797,7 @@ func (sa *Application) reserveInternal(node *Node, ask *AllocationAsk) error {
 	}
 	allocKey := ask.GetAllocationKey()
 	if sa.requests[allocKey] == nil {
-		log.Logger().Debug("ask is not registered to this app",
+		log.Log(log.SchedApplication).Debug("ask is not registered to this app",
 			zap.String("app", sa.ApplicationID),
 			zap.String("allocKey", allocKey))
 		return fmt.Errorf("reservation creation failed ask %s not found on appID %s", allocKey, sa.ApplicationID)
@@ -808,7 +810,7 @@ func (sa *Application) reserveInternal(node *Node, ask *AllocationAsk) error {
 		return err
 	}
 	sa.reservations[nodeReservation.getKey()] = nodeReservation
-	log.Logger().Info("reservation added successfully",
+	log.Log(log.SchedApplication).Info("reservation added successfully",
 		zap.String("app", sa.ApplicationID),
 		zap.String("node", node.NodeID),
 		zap.String("ask", allocKey))
@@ -830,7 +832,7 @@ func (sa *Application) UnReserve(node *Node, ask *AllocationAsk) (int, error) {
 func (sa *Application) unReserveInternal(node *Node, ask *AllocationAsk) (int, error) {
 	resKey := reservationKey(node, nil, ask)
 	if resKey == "" {
-		log.Logger().Debug("unreserve reservation key create failed unexpectedly",
+		log.Log(log.SchedApplication).Debug("unreserve reservation key create failed unexpectedly",
 			zap.String("appID", sa.ApplicationID),
 			zap.Stringer("node", node),
 			zap.Stringer("ask", ask))
@@ -846,18 +848,18 @@ func (sa *Application) unReserveInternal(node *Node, ask *AllocationAsk) (int, e
 	if _, found := sa.reservations[resKey]; found {
 		// worked on the node means either found or not but no error, log difference here
 		if num == 0 {
-			log.Logger().Info("reservation not found while removing from node, app has reservation",
+			log.Log(log.SchedApplication).Info("reservation not found while removing from node, app has reservation",
 				zap.String("appID", sa.ApplicationID),
 				zap.String("nodeID", node.NodeID),
 				zap.String("ask", ask.GetAllocationKey()))
 		}
 		delete(sa.reservations, resKey)
-		log.Logger().Info("reservation removed successfully", zap.String("node", node.NodeID),
+		log.Log(log.SchedApplication).Info("reservation removed successfully", zap.String("node", node.NodeID),
 			zap.String("app", ask.GetApplicationID()), zap.String("ask", ask.GetAllocationKey()))
 		return 1, nil
 	}
 	// reservation was not found
-	log.Logger().Info("reservation not found while removing from app",
+	log.Log(log.SchedApplication).Info("reservation not found while removing from app",
 		zap.String("appID", sa.ApplicationID),
 		zap.String("nodeID", node.NodeID),
 		zap.String("ask", ask.GetAllocationKey()),
@@ -889,7 +891,7 @@ func (sa *Application) canAskReserve(ask *AllocationAsk) bool {
 	pending := int(ask.GetPendingAskRepeat())
 	resNumber := sa.GetAskReservations(allocKey)
 	if len(resNumber) >= pending {
-		log.Logger().Debug("reservation exceeds repeats",
+		log.Log(log.SchedApplication).Debug("reservation exceeds repeats",
 			zap.String("askKey", allocKey),
 			zap.Int("askPending", pending),
 			zap.Int("askReserved", len(resNumber)))
@@ -972,7 +974,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, preemptionDelay
 			// the iterator might not have the node we need as it could be reserved, or we have not added it yet
 			node := getNodeFn(requiredNode)
 			if node == nil {
-				log.Logger().Warn("required node is not found (could be transient)",
+				log.Log(log.SchedApplication).Warn("required node is not found (could be transient)",
 					zap.String("application ID", sa.ApplicationID),
 					zap.String("allocationKey", request.GetAllocationKey()),
 					zap.String("required node", requiredNode))
@@ -990,14 +992,14 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, preemptionDelay
 			if alloc != nil {
 				// check if the node was reserved and we allocated after a release
 				if _, ok := sa.reservations[reservationKey(node, nil, request)]; ok {
-					log.Logger().Debug("allocation on required node after release",
+					log.Log(log.SchedApplication).Debug("allocation on required node after release",
 						zap.String("appID", sa.ApplicationID),
 						zap.String("nodeID", requiredNode),
 						zap.String("allocationKey", request.GetAllocationKey()))
 					alloc.SetResult(AllocatedReserved)
 					return alloc
 				}
-				log.Logger().Debug("allocation on required node is completed",
+				log.Log(log.SchedApplication).Debug("allocation on required node is completed",
 					zap.String("nodeID", node.NodeID),
 					zap.String("allocationKey", request.GetAllocationKey()),
 					zap.Stringer("AllocationResult", alloc.GetResult()))
@@ -1034,7 +1036,7 @@ func (sa *Application) cancelReservations(reservations []*reservation) bool {
 	for _, res := range reservations {
 		// skip the node
 		if res.ask.GetRequiredNode() != "" {
-			log.Logger().Warn("reservation for ask with required node already exists on the node",
+			log.Log(log.SchedApplication).Warn("reservation for ask with required node already exists on the node",
 				zap.String("required node", res.node.NodeID),
 				zap.String("existing ask reservation key", res.getKey()))
 			return false
@@ -1051,7 +1053,7 @@ func (sa *Application) cancelReservations(reservations []*reservation) bool {
 			num, err = res.app.UnReserve(res.node, res.ask)
 		}
 		if err != nil {
-			log.Logger().Warn("Unable to cancel reservations on node",
+			log.Log(log.SchedApplication).Warn("Unable to cancel reservations on node",
 				zap.String("victim application ID", res.app.ApplicationID),
 				zap.String("victim allocationKey", res.getKey()),
 				zap.String("required node", res.node.NodeID),
@@ -1059,7 +1061,7 @@ func (sa *Application) cancelReservations(reservations []*reservation) bool {
 				zap.String("application ID", sa.ApplicationID))
 			return false
 		} else {
-			log.Logger().Info("Cancelled reservation on required node",
+			log.Log(log.SchedApplication).Info("Cancelled reservation on required node",
 				zap.String("affected application ID", res.app.ApplicationID),
 				zap.String("affected allocationKey", res.getKey()),
 				zap.String("required node", res.node.NodeID),
@@ -1111,7 +1113,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			// placeholder. This should trigger the removal of all the placeholder that are part of this task group.
 			// All placeholders in the same task group are always the same size.
 			if delta.HasNegativeValue() {
-				log.Logger().Warn("releasing placeholder: real allocation is larger than placeholder",
+				log.Log(log.SchedApplication).Warn("releasing placeholder: real allocation is larger than placeholder",
 					zap.Stringer("requested resource", request.GetAllocatedResource()),
 					zap.String("placeholderID", ph.GetUUID()),
 					zap.Stringer("placeholder resource", ph.GetAllocatedResource()))
@@ -1142,9 +1144,10 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				ph.SetReleased(true)
 				_, err := sa.updateAskRepeatInternal(request, -1)
 				if err != nil {
-					log.Logger().Warn("ask repeat update failed unexpectedly",
+					log.Log(log.SchedApplication).Warn("ask repeat update failed unexpectedly",
 						zap.Error(err))
 				}
+				sa.appEvents.sendRemoveAllocationEvent(ph, si.TerminationType_PLACEHOLDER_REPLACED)
 				return alloc
 			}
 		}
@@ -1160,11 +1163,11 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 		for iterator.HasNext() {
 			node := iterator.Next()
 			if node == nil {
-				log.Logger().Warn("Node iterator failed to return a node")
+				log.Log(log.SchedApplication).Warn("Node iterator failed to return a node")
 				return nil
 			}
 			if !node.IsSchedulable() {
-				log.Logger().Debug("skipping node for placeholder ask as state is unschedulable",
+				log.Log(log.SchedApplication).Debug("skipping node for placeholder ask as state is unschedulable",
 					zap.String("allocationKey", reqFit.GetAllocationKey()),
 					zap.String("node", node.NodeID))
 				continue
@@ -1189,7 +1192,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			// update just the node to make sure we keep its spot
 			// no queue update as we're releasing the placeholder and are just temp over the size
 			if !node.AddAllocation(alloc) {
-				log.Logger().Debug("Node update failed unexpectedly",
+				log.Log(log.SchedApplication).Debug("Node update failed unexpectedly",
 					zap.String("applicationID", sa.ApplicationID),
 					zap.Stringer("ask", reqFit),
 					zap.Stringer("placeholder", phFit))
@@ -1197,9 +1200,10 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			}
 			_, err := sa.updateAskRepeatInternal(reqFit, -1)
 			if err != nil {
-				log.Logger().Warn("ask repeat update failed unexpectedly",
+				log.Log(log.SchedApplication).Warn("ask repeat update failed unexpectedly",
 					zap.Error(err))
 			}
+			sa.appEvents.sendRemoveAllocationEvent(phFit, si.TerminationType_PLACEHOLDER_REPLACED)
 			return alloc
 		}
 	}
@@ -1289,7 +1293,7 @@ func (sa *Application) tryPreemption(headRoom *resources.Resource, preemptionDel
 }
 
 func (sa *Application) tryRequiredNodePreemption(reserve *reservation, ask *AllocationAsk) bool {
-	log.Logger().Info("Triggering preemption process for daemon set ask",
+	log.Log(log.SchedApplication).Info("Triggering preemption process for daemon set ask",
 		zap.String("ds allocation key", ask.GetAllocationKey()))
 
 	// try preemption and see if we can free up resource
@@ -1300,7 +1304,7 @@ func (sa *Application) tryRequiredNodePreemption(reserve *reservation, ask *Allo
 	// Are there any victims/asks to preempt?
 	victims := preemptor.GetVictims()
 	if len(victims) > 0 {
-		log.Logger().Info("Found victims for required node preemption",
+		log.Log(log.SchedApplication).Info("Found victims for required node preemption",
 			zap.String("ds allocation key", ask.GetAllocationKey()),
 			zap.Int("no.of victims", len(victims)))
 		for _, victim := range victims {
@@ -1314,7 +1318,7 @@ func (sa *Application) tryRequiredNodePreemption(reserve *reservation, ask *Allo
 			"preempting allocations to free up resources to run daemon set ask: "+ask.GetAllocationKey())
 		return true
 	}
-	log.Logger().Warn("Problem in finding the victims for preempting resources to meet required ask requirements",
+	log.Log(log.SchedApplication).Warn("Problem in finding the victims for preempting resources to meet required ask requirements",
 		zap.String("ds allocation key", ask.GetAllocationKey()),
 		zap.String("node id", reserve.nodeID))
 	return false
@@ -1326,11 +1330,11 @@ func (sa *Application) tryNodesNoReserve(ask *AllocationAsk, iterator NodeIterat
 	for iterator.HasNext() {
 		node := iterator.Next()
 		if node == nil {
-			log.Logger().Warn("Node iterator failed to return a node")
+			log.Log(log.SchedApplication).Warn("Node iterator failed to return a node")
 			return nil
 		}
 		if !node.IsSchedulable() {
-			log.Logger().Debug("skipping node for reserved ask as state is unschedulable",
+			log.Log(log.SchedApplication).Debug("skipping node for reserved ask as state is unschedulable",
 				zap.String("allocationKey", ask.GetAllocationKey()),
 				zap.String("node", node.NodeID))
 			continue
@@ -1363,12 +1367,12 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 	for iterator.HasNext() {
 		node := iterator.Next()
 		if node == nil {
-			log.Logger().Warn("Node iterator failed to return a node")
+			log.Log(log.SchedApplication).Warn("Node iterator failed to return a node")
 			return nil
 		}
 		// skip the node if the node is not valid for the ask
 		if !node.IsSchedulable() {
-			log.Logger().Debug("skipping node for ask as state is unschedulable",
+			log.Log(log.SchedApplication).Debug("skipping node for ask as state is unschedulable",
 				zap.String("allocationKey", allocKey),
 				zap.String("node", node.NodeID))
 			continue
@@ -1386,7 +1390,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 			// NOTE: this is a safeguard as reserved nodes should never be part of the iterator
 			// but we have no locking
 			if _, ok := sa.reservations[reservationKey(node, nil, ask)]; ok {
-				log.Logger().Debug("allocate found reserved ask during non reserved allocate",
+				log.Log(log.SchedApplication).Debug("allocate found reserved ask during non reserved allocate",
 					zap.String("appID", sa.ApplicationID),
 					zap.String("nodeID", node.NodeID),
 					zap.String("allocationKey", allocKey))
@@ -1397,7 +1401,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 			// the reserved nodes to unreserve (first one in the list)
 			if len(reservedAsks) > 0 {
 				nodeID := strings.TrimSuffix(reservedAsks[0], "|"+allocKey)
-				log.Logger().Debug("allocate picking reserved ask during non reserved allocate",
+				log.Log(log.SchedApplication).Debug("allocate picking reserved ask during non reserved allocate",
 					zap.String("appID", sa.ApplicationID),
 					zap.String("nodeID", nodeID),
 					zap.String("allocationKey", allocKey))
@@ -1412,7 +1416,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 		// TODO make this smarter a hardcoded delay is not the right thing
 		askAge := time.Since(ask.GetCreateTime())
 		if allowReserve && askAge > reservationDelay {
-			log.Logger().Debug("app reservation check",
+			log.Log(log.SchedApplication).Debug("app reservation check",
 				zap.String("allocationKey", allocKey),
 				zap.Time("createTime", ask.GetCreateTime()),
 				zap.Duration("askAge", askAge),
@@ -1428,7 +1432,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 	// we have not allocated yet, check if we should reserve
 	// NOTE: the node should not be reserved as the iterator filters them but we do not lock the nodes
 	if nodeToReserve != nil && !nodeToReserve.IsReserved() {
-		log.Logger().Debug("found candidate node for app reservation",
+		log.Log(log.SchedApplication).Debug("found candidate node for app reservation",
 			zap.String("appID", sa.ApplicationID),
 			zap.String("nodeID", nodeToReserve.NodeID),
 			zap.String("allocationKey", allocKey),
@@ -1462,7 +1466,7 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 	alloc := NewAllocation(common.GetNewUUID(), node.NodeID, node.GetInstanceType(), ask)
 	if node.AddAllocation(alloc) {
 		if err := sa.queue.IncAllocatedResource(alloc.GetAllocatedResource(), false); err != nil {
-			log.Logger().Warn("queue update failed unexpectedly",
+			log.Log(log.SchedApplication).Warn("queue update failed unexpectedly",
 				zap.Error(err))
 			// revert the node update
 			node.RemoveAllocation(alloc.GetUUID())
@@ -1471,11 +1475,13 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 		// mark this ask as allocated by lowering the repeat
 		_, err := sa.updateAskRepeatInternal(ask, -1)
 		if err != nil {
-			log.Logger().Warn("ask repeat update failed unexpectedly",
+			log.Log(log.SchedApplication).Warn("ask repeat update failed unexpectedly",
 				zap.Error(err))
 		}
 		// all is OK, last update for the app
 		sa.addAllocationInternal(alloc)
+
+		sa.appEvents.sendNewAllocationEvent(alloc)
 		// return allocation
 		return alloc
 	}
@@ -1604,7 +1610,7 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 		// If there are no more placeholder to allocate we should move state
 		if resources.Equals(sa.allocatedPlaceholder, sa.placeholderAsk) {
 			if err := sa.HandleApplicationEvent(RunApplication); err != nil {
-				log.Logger().Error("Unexpected app state change failure while adding allocation",
+				log.Log(log.SchedApplication).Error("Unexpected app state change failure while adding allocation",
 					zap.String("currentState", sa.stateMachine.Current()),
 					zap.Error(err))
 			}
@@ -1616,7 +1622,7 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 			// progress the state based on where we are, we should never fail in this case
 			// keep track of a failure in log.
 			if err := sa.HandleApplicationEvent(RunApplication); err != nil {
-				log.Logger().Error("Unexpected app state change failure while adding allocation",
+				log.Log(log.SchedApplication).Error("Unexpected app state change failure while adding allocation",
 					zap.String("currentState", sa.stateMachine.Current()),
 					zap.Error(err))
 			}
@@ -1632,7 +1638,7 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 // No locking must be called while holding the lock
 func (sa *Application) incUserResourceUsage(resource *resources.Resource) {
 	if err := ugm.GetUserManager().IncreaseTrackedResource(sa.queuePath, sa.ApplicationID, resource, sa.user); err != nil {
-		log.Logger().Error("Unable to track the user resource usage",
+		log.Log(log.SchedApplication).Error("Unable to track the user resource usage",
 			zap.String("application id", sa.ApplicationID),
 			zap.String("user", sa.user.User),
 			zap.String("currentState", sa.stateMachine.Current()),
@@ -1644,7 +1650,7 @@ func (sa *Application) incUserResourceUsage(resource *resources.Resource) {
 // No locking must be called while holding the lock
 func (sa *Application) decUserResourceUsage(resource *resources.Resource, removeApp bool) {
 	if err := ugm.GetUserManager().DecreaseTrackedResource(sa.queuePath, sa.ApplicationID, resource, sa.user, removeApp); err != nil {
-		log.Logger().Error("Unable to track the user resource usage",
+		log.Log(log.SchedApplication).Error("Unable to track the user resource usage",
 			zap.String("application id", sa.ApplicationID),
 			zap.String("user", sa.user.User),
 			zap.String("currentState", sa.stateMachine.Current()),
@@ -1666,14 +1672,14 @@ func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
 	ph := sa.removeAllocationInternal(uuid, si.TerminationType_PLACEHOLDER_REPLACED)
 	// this has already been replaced or it is a duplicate message from the shim
 	if ph == nil || ph.GetReleaseCount() == 0 {
-		log.Logger().Debug("Unexpected placeholder released",
+		log.Log(log.SchedApplication).Debug("Unexpected placeholder released",
 			zap.String("applicationID", sa.ApplicationID),
 			zap.Stringer("placeholder", ph))
 		return nil
 	}
 	// weird issue we should never have more than 1 log it for debugging this error
 	if ph.GetReleaseCount() > 1 {
-		log.Logger().Error("Unexpected release number, placeholder released, only 1 real allocations processed",
+		log.Log(log.SchedApplication).Error("Unexpected release number, placeholder released, only 1 real allocations processed",
 			zap.String("applicationID", sa.ApplicationID),
 			zap.String("placeholderID", uuid),
 			zap.Int("releases", ph.GetReleaseCount()))
@@ -1763,13 +1769,18 @@ func (sa *Application) removeAllocationInternal(uuid string, releaseType si.Term
 	}
 	if event != EventNotNeeded {
 		if err := sa.HandleApplicationEvent(event); err != nil {
-			log.Logger().Warn(eventWarning,
+			log.Log(log.SchedApplication).Warn(eventWarning,
 				zap.String("currentState", sa.CurrentState()),
 				zap.Stringer("event", event),
 				zap.Error(err))
 		}
 	}
 	delete(sa.allocations, uuid)
+	// If release count of placeholder is 0 and termination type is PLACEHOLDER_REPLACED,
+	// the placeholder has already been replaced. No need to send remove event.
+	if !(alloc.IsPlaceholder() && alloc.GetReleaseCount() == 0 && releaseType == si.TerminationType_PLACEHOLDER_REPLACED) {
+		sa.appEvents.sendRemoveAllocationEvent(alloc, releaseType)
+	}
 	return alloc
 }
 
@@ -1815,7 +1826,7 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 	// When the resource trackers are zero we should not expect anything to come in later.
 	if resources.IsZero(sa.pending) {
 		if err := sa.HandleApplicationEvent(CompleteApplication); err != nil {
-			log.Logger().Warn("Application state not changed to Waiting while removing all allocations",
+			log.Log(log.SchedApplication).Warn("Application state not changed to Waiting while removing all allocations",
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))
 		}
@@ -1900,14 +1911,15 @@ func (sa *Application) notifyRMAllocationReleased(rmID string, released []*Alloc
 			TerminationType: terminationType,
 			Message:         message,
 		})
+		sa.appEvents.sendRemoveAllocationEvent(alloc, terminationType)
 	}
 	sa.rmEventHandler.HandleEvent(releaseEvent)
 	// Wait from channel
 	result := <-c
 	if result.Succeeded {
-		log.Logger().Debug("Successfully synced shim on released allocations. response: " + result.Reason)
+		log.Log(log.SchedApplication).Debug("Successfully synced shim on released allocations. response: " + result.Reason)
 	} else {
-		log.Logger().Info("failed to sync shim on released allocations")
+		log.Log(log.SchedApplication).Info("failed to sync shim on released allocations")
 	}
 }
 
@@ -1931,6 +1943,7 @@ func (sa *Application) notifyRMAllocationAskReleased(rmID string, released []*Al
 			TerminationType: terminationType,
 			Message:         message,
 		})
+		sa.appEvents.sendRemoveAskEvent(alloc, terminationType, false)
 	}
 	sa.rmEventHandler.HandleEvent(releaseEvent)
 }
@@ -2007,5 +2020,20 @@ func (sa *Application) SetTimedOutPlaceholder(taskGroupName string, timedOut int
 	}
 	if _, ok := sa.placeholderData[taskGroupName]; ok {
 		sa.placeholderData[taskGroupName].TimedOut = timedOut
+	}
+}
+
+func (sa *Application) sendRemoveAskEvent(allocKey string) {
+	if allocKey != "" {
+		// if allocKey is not empty, it means a specific ask is being terminated
+		if ask := sa.requests[allocKey]; ask != nil {
+			sa.appEvents.sendRemoveAskEvent(ask, si.TerminationType_STOPPED_BY_RM, false)
+		}
+		return
+	}
+
+	// if allocKey is empty, it means application is terminated
+	for _, ask := range sa.requests {
+		sa.appEvents.sendRemoveAskEvent(ask, si.TerminationType_STOPPED_BY_RM, true)
 	}
 }

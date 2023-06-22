@@ -54,7 +54,7 @@ func NewConstTracer(serviceName string, collect bool) (opentracing.Tracer, io.Cl
 		},
 	}
 	return cfg.NewTracer(
-		jaegercfg.Logger(zap.NewLogger(log.Logger().Named(serviceName))),
+		jaegercfg.Logger(zap.NewLogger(log.Log(log.OpenTracing).Named(serviceName))),
 		jaegercfg.Metrics(metrics.NullFactory),
 	)
 }
@@ -73,7 +73,7 @@ func NewTracerFromEnv(serviceName string) (opentracing.Tracer, io.Closer, error)
 	// frameworks.
 	// Initialize tracer with a logger and a metrics factory
 	return cfg.NewTracer(
-		jaegercfg.Logger(zap.NewLogger(log.Logger().Named(cfg.ServiceName))),
+		jaegercfg.Logger(zap.NewLogger(log.Log(log.OpenTracing).Named(cfg.ServiceName))),
 		jaegercfg.Metrics(metrics.NullFactory),
 	)
 }

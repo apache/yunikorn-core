@@ -30,6 +30,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/handler"
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
@@ -199,6 +200,10 @@ func TestAppReservation(t *testing.T) {
 
 // test multiple reservations from one allocation
 func TestAppAllocReservation(t *testing.T) {
+	events.CreateAndSetEventSystem()
+	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	eventSystem.StartServiceWithPublisher(false)
+
 	app := newApplication(appID1, "default", "root.unknown")
 	if app == nil || app.ApplicationID != appID1 {
 		t.Fatalf("app create failed which should not have %v", app)
@@ -260,6 +265,30 @@ func TestAppAllocReservation(t *testing.T) {
 	if app.HasReserved() || node1.IsReserved() || node2.IsReserved() || reservedAsks != 2 {
 		t.Errorf("ask removal did not clean up all reservations, reserved released = %d", reservedAsks)
 	}
+
+	// wait for events to be processed
+	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
+		return eventSystem.Store.CountStoredEvents() == 2
+	})
+	assert.NilError(t, err, "the event should have been processed")
+	records := eventSystem.Store.CollectEvents()
+	if records == nil {
+		t.Fatal("collecting eventChannel should return something")
+	}
+	assert.Equal(t, 2, len(records), "expecting 2 events: 1 new alloc ask and 1 alloc ask cancel")
+	allocAskRecord := records[0]
+	assert.Equal(t, si.EventRecord_APP, allocAskRecord.Type, "incorrect event type, expect app")
+	assert.Equal(t, ask.applicationID, allocAskRecord.ObjectID, "incorrect object ID, expected application ID")
+	assert.Equal(t, ask.allocationKey, allocAskRecord.ReferenceID, "incorrect reference ID, expected alloc ask ID")
+	assert.Equal(t, si.EventRecord_ADD, allocAskRecord.EventChangeType, "incorrect change type, expected add")
+	assert.Equal(t, si.EventRecord_APP_REQUEST, allocAskRecord.EventChangeDetail, "incorrect change detail, expected new alloc ask")
+	allocAskCancelRecord := records[1]
+	assert.Equal(t, si.EventRecord_APP, allocAskCancelRecord.Type, "incorrect event type, expect app")
+	assert.Equal(t, ask.applicationID, allocAskCancelRecord.ObjectID, "incorrect object ID, expected application ID")
+	assert.Equal(t, ask.allocationKey, allocAskCancelRecord.ReferenceID, "incorrect reference ID, expected alloc ask ID")
+	assert.Equal(t, si.EventRecord_REMOVE, allocAskCancelRecord.EventChangeType, "incorrect change type, expected remove")
+	assert.Equal(t, si.EventRecord_REQUEST_CANCEL, allocAskCancelRecord.EventChangeDetail, "incorrect change detail, expected new alloc ask")
 }
 
 // test update allocation repeat
@@ -311,6 +340,10 @@ func TestUpdateRepeat(t *testing.T) {
 
 // test pending calculation and ask addition
 func TestAddAllocAsk(t *testing.T) {
+	events.CreateAndSetEventSystem()
+	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	eventSystem.StartServiceWithPublisher(false)
+
 	app := newApplication(appID1, "default", "root.unknown")
 	if app == nil || app.ApplicationID != appID1 {
 		t.Fatalf("app create failed which should not have %v", app)
@@ -338,7 +371,7 @@ func TestAddAllocAsk(t *testing.T) {
 		t.Errorf("ask with zero repeat should not have been added to app")
 	}
 
-	// working cases
+	// add alloc ask
 	res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	ask = newAllocationAskRepeat(aKey, appID1, res, 1)
 	err = app.AddAllocationAsk(ask)
@@ -348,6 +381,26 @@ func TestAddAllocAsk(t *testing.T) {
 	if !resources.Equals(res, pending) {
 		t.Errorf("pending resource not updated correctly, expected %v but was: %v", res, pending)
 	}
+
+	// test add alloc ask event
+	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
+		return eventSystem.Store.CountStoredEvents() == 1
+	})
+	assert.NilError(t, err, "the events should have been processed")
+	records := eventSystem.Store.CollectEvents()
+	if records == nil {
+		t.Fatal("collecting eventChannel should return something")
+	}
+	assert.Equal(t, 1, len(records), "expecting add alloc ask event")
+	record := records[0]
+	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
+	assert.Equal(t, appID1, record.ObjectID, "incorrect object ID, expected application ID")
+	assert.Equal(t, aKey, record.ReferenceID, "incorrect reference ID, expected placeholder alloc ID")
+	assert.Equal(t, si.EventRecord_ADD, record.EventChangeType, "incorrect change type, expected add")
+	assert.Equal(t, si.EventRecord_APP_REQUEST, record.EventChangeDetail, "incorrect change detail, expected app request")
+	eventSystem.Stop()
+
 	ask = newAllocationAskRepeat(aKey, appID1, res, 2)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been updated on app")
@@ -1178,6 +1231,10 @@ func TestOnStatusChangeCalled(t *testing.T) {
 
 func TestReplaceAllocation(t *testing.T) {
 	setupUGM()
+	events.CreateAndSetEventSystem()
+	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	eventSystem.StartServiceWithPublisher(false)
+
 	app := newApplication(appID1, "default", "root.a")
 	assert.Equal(t, New.String(), app.CurrentState(), "new app not in New state")
 	// state changes are not important
@@ -1234,6 +1291,25 @@ func TestReplaceAllocation(t *testing.T) {
 	assert.Equal(t, realAlloc.GetPlaceholderCreateTime(), ph.GetCreateTime(), "real allocation's placeholder create time not updated as expected: got %s, expected %s", realAlloc.GetPlaceholderCreateTime(), ph.GetCreateTime())
 	assertUserGroupResource(t, getTestUserGroup(), res)
 
+	// wait for events to be processed
+	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
+		return eventSystem.Store.CountStoredEvents() == 1
+	})
+	assert.NilError(t, err, "the event should have been processed")
+	records := eventSystem.Store.CollectEvents()
+	if records == nil {
+		t.Fatal("collecting eventChannel should return something")
+	}
+	assert.Equal(t, 1, len(records), "expecting alloc replaced event")
+	record := records[0]
+	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
+	assert.Equal(t, alloc.applicationID, record.ObjectID, "incorrect object ID, expected application ID")
+	assert.Equal(t, alloc.GetUUID(), record.ReferenceID, "incorrect reference ID, expected placeholder alloc ID")
+	assert.Equal(t, si.EventRecord_REMOVE, record.EventChangeType, "incorrect change type, expected remove")
+	assert.Equal(t, si.EventRecord_ALLOC_REPLACED, record.EventChangeDetail, "incorrect change detail, expected alloc replaced")
+	eventSystem.Stop()
+
 	// add the placeholder back to the app, the failure test above changed state and removed the ph
 	app.SetState(Running.String())
 	ph.ClearReleases()
@@ -1274,6 +1350,10 @@ func TestTimeoutPlaceholderAllocAsk(t *testing.T) {
 
 func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulingStyle string) {
 	setupUGM()
+	events.CreateAndSetEventSystem()
+	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	eventSystem.StartServiceWithPublisher(false)
+
 	// create a fake queue
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
@@ -1352,10 +1432,33 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	assert.Equal(t, len(log), 2, "wrong number of app events")
 	assert.Equal(t, log[0].ApplicationState, Accepted.String())
 	assert.Equal(t, log[1].ApplicationState, expectedState)
+
+	// wait for events to be processed
+	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
+		return eventSystem.Store.CountStoredEvents() == 4
+	})
+	assert.NilError(t, err, "the event should have been processed")
+	records := eventSystem.Store.CollectEvents()
+	if records == nil {
+		t.Fatal("collecting eventChannel should return something")
+	}
+	assert.Equal(t, 4, len(records), "expecting 4 events: 1 new alloc ask, 1 alloc ask timeout, and 2 alloc timeout")
+	// new alloc sak and alloc timeout are tested in other cases, we only test the alloc ask timeout
+	record := records[1]
+	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
+	assert.Equal(t, phAsk.GetApplicationID(), record.ObjectID, "incorrect object ID, expected application ID")
+	assert.Equal(t, phAsk.GetAllocationKey(), record.ReferenceID, "incorrect reference ID, expected alloc ask ID")
+	assert.Equal(t, si.EventRecord_REMOVE, record.EventChangeType, "incorrect change type, expected remove")
+	assert.Equal(t, si.EventRecord_REQUEST_TIMEOUT, record.EventChangeDetail, "incorrect change detail, expected alloc ask timeout")
 }
 
 func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	setupUGM()
+	events.CreateAndSetEventSystem()
+	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	eventSystem.StartServiceWithPublisher(false)
+
 	originalPhTimeout := defaultPlaceholderTimeout
 	defaultPlaceholderTimeout = 5 * time.Millisecond
 	defer func() { defaultPlaceholderTimeout = originalPhTimeout }()
@@ -1417,6 +1520,24 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	assert.Equal(t, app.placeholderData[""].Replaced, int64(0))
 	assert.Equal(t, app.placeholderData[""].TimedOut, int64(1))
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 3))
+
+	// wait for events to be processed
+	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
+		return eventSystem.Store.CountStoredEvents() == 1
+	})
+	assert.NilError(t, err, "the event should have been processed")
+	records := eventSystem.Store.CollectEvents()
+	if records == nil {
+		t.Fatal("collecting eventChannel should return something")
+	}
+	assert.Equal(t, 1, len(records), "expecting alloc timeout event")
+	record := records[0]
+	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
+	assert.Equal(t, ph.applicationID, record.ObjectID, "incorrect object ID, expected application ID")
+	assert.Equal(t, ph.GetUUID(), record.ReferenceID, "incorrect reference ID, expected alloc ID")
+	assert.Equal(t, si.EventRecord_REMOVE, record.EventChangeType, "incorrect change type, expected remove")
+	assert.Equal(t, si.EventRecord_ALLOC_TIMEOUT, record.EventChangeDetail, "incorrect change detail, expected alloc timeout")
 }
 
 func TestTimeoutPlaceholderCompleting(t *testing.T) {

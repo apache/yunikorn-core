@@ -130,7 +130,7 @@ func NewAppState() *fsm.FSM {
 			// will occur.
 			"enter_state": func(_ context.Context, event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
-				log.Logger().Info("Application state transition",
+				log.Log(log.SchedFSM).Info("Application state transition",
 					zap.String("appID", app.ApplicationID),
 					zap.String("source", event.Src),
 					zap.String("destination", event.Dst),

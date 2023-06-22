@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
@@ -122,7 +123,7 @@ func TestSIFromAlloc(t *testing.T) {
 		t.Fatal("NewAllocation create failed while it should not")
 	}
 	allocSI := alloc.NewSIFromAllocation()
-	assert.DeepEqual(t, allocSI, expectedSI)
+	assert.DeepEqual(t, allocSI, expectedSI, cmpopts.IgnoreUnexported(si.Allocation{}, si.Resource{}, si.Quantity{}))
 }
 
 func TestNewAllocFromNilSI(t *testing.T) {

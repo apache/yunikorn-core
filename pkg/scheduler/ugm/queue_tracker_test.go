@@ -251,7 +251,6 @@ func TestQTQuotaEnforcement(t *testing.T) {
 }
 
 func TestHeadroom(t *testing.T) {
-
 	leafQT := newQueueTracker("leaf")
 
 	leafMaxRes, err := resources.NewResourceFromConf(map[string]string{"mem": "60M", "vcore": "60"})

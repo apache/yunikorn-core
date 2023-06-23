@@ -26,10 +26,29 @@ import (
 )
 
 const (
-	HealthCheckInterval = "health.checkInterval"
-)
+	// prefixes
+	PrefixEvent  = "event."
+	PrefixHealth = "health."
 
-var DefaultHealthCheckInterval = 30 * time.Second
+	HealthCheckInterval = PrefixHealth + "checkInterval"
+
+	// events
+	CMEventTrackingEnabled    = PrefixEvent + "trackingEnabled"    // Application Tracking
+	CMEventRequestCapacity    = PrefixEvent + "requestCapacity"    // Request Capacity
+	CMEventRingBufferCapacity = PrefixEvent + "ringBufferCapacity" // Ring Buffer Capacity
+
+	// defaults
+	DefaultHealthCheckInterval     = 30 * time.Second
+	DefaultEventTrackingEnabled    = true
+	DefaultEventRequestCapacity    = 1000
+	DefaultEventBufferCapacity     = 100000
+	DefaultPartitionName           = "default"
+	DefaultPlacementRuleName       = "tag"
+	DefaultPlacementRuleValue      = "namespace"
+	DefaultPlacementRuleCreateFlag = true
+	DefaultQueueName               = "root"
+	DefaultQueueSubmitAcl          = "*"
+)
 
 var ConfigContext *SchedulerConfigContext
 

@@ -19,11 +19,15 @@
 package events
 
 import (
+	"fmt"
+	"strconv"
 	"sync"
 
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
+	"go.uber.org/zap"
 )
 
 // need to change for testing
@@ -43,12 +47,15 @@ type EventSystemImpl struct {
 	Store       *EventStore // storing eventChannel
 	publisher   *EventPublisher
 	eventBuffer *eventRingBuffer
+	channel     chan *si.EventRecord // channelling input eventChannel
+	stop        chan bool            // whether the service is stopped
+	stopped     bool
 
-	channel chan *si.EventRecord // channelling input eventChannel
-	stop    chan bool            // whether the service is stopped
-	stopped bool
+	trackingEnabled bool
+	requestCapacity int
+	bufferCapacity  int
 
-	sync.Mutex
+	sync.RWMutex
 }
 
 func (ec *EventSystemImpl) GetEventsFromID(id, count uint64) ([]*si.EventRecord, uint64, uint64) {
@@ -57,6 +64,24 @@ func (ec *EventSystemImpl) GetEventsFromID(id, count uint64) ([]*si.EventRecord,
 
 func GetEventSystem() EventSystem {
 	return ev
+}
+
+func (ec *EventSystemImpl) IsEventTrackingEnabled() bool {
+	ec.RLock()
+	defer ec.RUnlock()
+	return ec.trackingEnabled
+}
+
+func (ec *EventSystemImpl) GetRequestCapacity() int {
+	ec.RLock()
+	defer ec.RUnlock()
+	return ec.requestCapacity
+}
+
+func (ec *EventSystemImpl) GetBufferCapacity() int {
+	ec.RLock()
+	defer ec.RUnlock()
+	return ec.bufferCapacity
 }
 
 func CreateAndSetEventSystem() {
@@ -69,13 +94,101 @@ func CreateAndSetEventSystem() {
 		publisher:   CreateShimPublisher(store),
 		eventBuffer: newEventRingBuffer(defaultRingBufferSize),
 	}
+
+	if eventSystemImpl, ok := ev.(*EventSystemImpl); ok {
+		eventSystemImpl.eventSystemId = fmt.Sprintf("event-system-%p", eventSystemImpl)
+		ev = eventSystemImpl
+	}
 }
 
 func (ec *EventSystemImpl) StartService() {
 	ec.StartServiceWithPublisher(true)
 }
 
+func getConfigurationBool(key string, defaultValue bool) bool {
+	value, ok := configs.GetConfigMap()[key]
+	if !ok {
+		return defaultValue
+	}
+	boolValue, err := strconv.ParseBool(value)
+	if err != nil {
+		log.Log(log.Events).Warn("Failed to parse configuration value",
+			zap.String("key", key),
+			zap.String("value", value),
+			zap.Error(err))
+		return defaultValue
+	}
+	return boolValue
+}
+
+func getConfigurationInt(key string, defaultValue int) int {
+	value, ok := configs.GetConfigMap()[key]
+	if !ok {
+		return defaultValue
+	}
+	intVal, err := strconv.ParseInt(value, 10, 32)
+	if err != nil {
+		log.Log(log.Events).Warn("Failed to parse configuration value",
+			zap.String("key", key),
+			zap.String("value", value),
+			zap.Error(err))
+		return defaultValue
+	}
+	return int(intVal)
+}
+
+func (ec *EventSystemImpl) readIsTrackingEnabled() bool {
+	return getConfigurationBool(configs.CMEventTrackingEnabled, configs.DefaultEventTrackingEnabled)
+}
+
+func (ec *EventSystemImpl) readRequestCapacity() int {
+	return getConfigurationInt(configs.CMEventRequestCapacity, configs.DefaultEventRequestCapacity)
+}
+
+func (ec *EventSystemImpl) readBufferCapacity() int {
+	return getConfigurationInt(configs.CMEventRingBufferCapacity, configs.DefaultEventBufferCapacity)
+}
+
+func (ec *EventSystemImpl) isRestartNeeded() bool {
+	ec.Lock()
+	defer ec.Unlock()
+
+	trackingEnabled := ec.readIsTrackingEnabled()
+	requestCapacity := ec.readRequestCapacity()
+	bufferCapacity := ec.readBufferCapacity()
+
+	if trackingEnabled != ec.trackingEnabled ||
+		requestCapacity != ec.requestCapacity ||
+		bufferCapacity != ec.bufferCapacity {
+		return true
+	}
+
+	return false
+}
+
+func (ec *EventSystemImpl) Restart() {
+	ec.Stop()
+	ec.StartServiceWithPublisher(true)
+}
+
+func (ec *EventSystemImpl) reloadConfig() {
+	if ec.isRestartNeeded() {
+		ec.Restart()
+	}
+}
+
 func (ec *EventSystemImpl) StartServiceWithPublisher(withPublisher bool) {
+	ec.Lock()
+	defer ec.Unlock()
+
+	configs.AddConfigMapCallback(ec.eventSystemId, func() {
+		go ec.reloadConfig()
+	})
+
+	ec.trackingEnabled = ec.readIsTrackingEnabled()
+	ec.bufferCapacity = ec.readBufferCapacity()
+	ec.requestCapacity = ec.readRequestCapacity()
+
 	go func() {
 		for {
 			select {
@@ -101,6 +214,8 @@ func (ec *EventSystemImpl) StartServiceWithPublisher(withPublisher bool) {
 func (ec *EventSystemImpl) Stop() {
 	ec.Lock()
 	defer ec.Unlock()
+
+	configs.RemoveConfigMapCallback(ec.eventSystemId)
 
 	if ec.stopped {
 		return

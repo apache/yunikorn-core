@@ -243,6 +243,47 @@ func (qt *QueueTracker) setLimit(queuePath string, maxResource *resources.Resour
 	childQueueTracker.maxResources = maxResource
 }
 
+func (qt *QueueTracker) headroom(queuePath string) *resources.Resource {
+	log.Log(log.SchedUGM).Debug("Calculating headroom",
+		zap.String("queue path", queuePath))
+	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
+	if childQueuePath != "" {
+		if qt.childQueueTrackers[immediateChildQueueName] != nil {
+			log.Log(log.SchedUGM).Debug("Step 1",
+				zap.String("queue path", queuePath),
+				zap.String("queue", qt.queueName),
+				zap.String("max resource", qt.maxResourceUsage.String()))
+
+			headroom := qt.childQueueTrackers[immediateChildQueueName].headroom(childQueuePath)
+			log.Log(log.SchedUGM).Debug("Step 2",
+				zap.String("queue path", queuePath),
+				zap.String("queue", qt.queueName),
+				zap.String("max resource", qt.maxResourceUsage.String()),
+				zap.String("headroom", headroom.String()))
+
+			if headroom != nil {
+				return resources.ComponentWiseMinPermissive(headroom, qt.maxResourceUsage.Clone())
+			}
+		} else {
+			log.Log(log.SchedUGM).Error("Child queueTracker tracker must be available in child queues map",
+				zap.String("child queueTracker name", immediateChildQueueName))
+			return nil
+		}
+	}
+
+	if !resources.Equals(resources.NewResource(), qt.maxResourceUsage) {
+		headroom := qt.maxResourceUsage.Clone()
+		headroom.SubOnlyExisting(qt.resourceUsage)
+		log.Log(log.SchedUGM).Debug("Calculated headroom",
+			zap.String("queue path", queuePath),
+			zap.String("queue", qt.queueName),
+			zap.String("max resource", qt.maxResourceUsage.String()),
+			zap.String("headroom", headroom.String()))
+		return headroom
+	}
+	return nil
+}
+
 func (qt *QueueTracker) getResourceUsageDAOInfo(parentQueuePath string) *dao.ResourceUsageDAOInfo {
 	if qt == nil {
 		return &dao.ResourceUsageDAOInfo{}

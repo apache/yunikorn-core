@@ -250,6 +250,61 @@ func TestQTQuotaEnforcement(t *testing.T) {
 	}
 }
 
+func TestHeadroom(t *testing.T) {
+
+	leafQT := newQueueTracker("leaf")
+
+	leafMaxRes, err := resources.NewResourceFromConf(map[string]string{"mem": "60M", "vcore": "60"})
+	if err != nil {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, leafMaxRes)
+	}
+	leafQT.maxResourceUsage = leafMaxRes
+
+	parentQT := newQueueTracker("parent")
+	parentMaxRes := leafMaxRes.Clone()
+	resources.Multiply(parentMaxRes, 2)
+	parentQT.maxResourceUsage = parentMaxRes
+
+	rootQT := newQueueTracker("root")
+
+	parentQT.childQueueTrackers["leaf"] = leafQT
+	rootQT.childQueueTrackers["parent"] = parentQT
+
+	// headroom should be equal to max cap of leaf queue as there is no usage so far
+	headroom := rootQT.headroom("root.parent.leaf")
+	assert.Equal(t, resources.Equals(headroom, leafMaxRes), true)
+
+	leafResUsage, err := resources.NewResourceFromConf(map[string]string{"mem": "30M", "vcore": "30"})
+	if err != nil {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, leafResUsage)
+	}
+	leafQT.resourceUsage = leafResUsage
+
+	// headroom should be equal to sub(max cap of leaf queue - resource usage) as there is some usage
+	headroom = rootQT.headroom("root.parent.leaf")
+	assert.Equal(t, resources.Equals(headroom, leafResUsage), true)
+
+	leafQT.maxResourceUsage = resources.Multiply(leafMaxRes, 2)
+	parentQT.maxResourceUsage = leafMaxRes
+
+	// headroom should be equal to min (leaf max resources, parent resources)
+	headroom = rootQT.headroom("root.parent.leaf")
+	assert.Equal(t, resources.Equals(headroom, leafMaxRes), true)
+
+	parentQT.maxResourceUsage = resources.NewResource()
+
+	// headroom should be equal to sub(max cap of leaf queue - resource usage) as there is some usage in leaf and max res of both root and parent is nil
+	headroom = rootQT.headroom("root.parent.leaf")
+	assert.Equal(t, resources.Equals(headroom, resources.Add(leafMaxRes, leafResUsage)), true)
+
+	rootQT.maxResourceUsage = leafMaxRes
+
+	// headroom should be equal to min ( (sub(max cap of leaf queue - resource usage), root resources) as there is some usage in leaf
+	// and max res of parent is nil
+	headroom = rootQT.headroom("root.parent.leaf")
+	assert.Equal(t, resources.Equals(headroom, leafMaxRes), true)
+}
+
 func getQTResource(qt *QueueTracker) map[string]*resources.Resource {
 	resources := make(map[string]*resources.Resource)
 	usage := qt.getResourceUsageDAOInfo("")

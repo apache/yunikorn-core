@@ -572,6 +572,29 @@ func (m *Manager) getGroupWildCardLimitsConfig(queuePath string) *LimitConfig {
 	return nil
 }
 
+func (m *Manager) Headroom(queuePath string, user security.UserGroup) *resources.Resource {
+	m.RLock()
+	m.RUnlock()
+	var userHeadroom *resources.Resource
+	var groupHeadroom *resources.Resource
+	if m.userTrackers[user.User] != nil {
+		userHeadroom = m.userTrackers[user.User].headroom(queuePath)
+	}
+	group, err := m.getGroup(user)
+	if err != nil {
+		if m.groupTrackers[group] != nil {
+			groupHeadroom = m.groupTrackers[group].headroom(queuePath)
+		}
+	}
+	if groupHeadroom == nil || resources.Equals(groupHeadroom, resources.NewResource()) {
+		return userHeadroom
+	}
+	if userHeadroom == nil || resources.Equals(userHeadroom, resources.NewResource()) {
+		return groupHeadroom
+	}
+	return resources.ComponentWiseMinPermissive(userHeadroom, groupHeadroom)
+}
+
 // ClearUserTrackers only for tests
 func (m *Manager) ClearUserTrackers() {
 	m.Lock()

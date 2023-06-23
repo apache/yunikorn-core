@@ -71,6 +71,12 @@ func (gt *GroupTracker) setLimits(queuePath string, resource *resources.Resource
 	gt.queueTracker.setLimit(queuePath, resource, maxApps)
 }
 
+func (gt *GroupTracker) headroom(queuePath string) *resources.Resource {
+	gt.Lock()
+	defer gt.Unlock()
+	return gt.queueTracker.headroom(queuePath)
+}
+
 func (gt *GroupTracker) GetGroupResourceUsageDAOInfo() *dao.GroupResourceUsageDAOInfo {
 	gt.RLock()
 	defer gt.RUnlock()

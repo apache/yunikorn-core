@@ -89,6 +89,12 @@ func (ut *UserTracker) setLimits(queuePath string, resource *resources.Resource,
 	ut.queueTracker.setLimit(queuePath, resource, maxApps)
 }
 
+func (ut *UserTracker) headroom(queuePath string) *resources.Resource {
+	ut.Lock()
+	defer ut.Unlock()
+	return ut.queueTracker.headroom(queuePath)
+}
+
 func (ut *UserTracker) GetUserResourceUsageDAOInfo() *dao.UserResourceUsageDAOInfo {
 	ut.RLock()
 	defer ut.RUnlock()

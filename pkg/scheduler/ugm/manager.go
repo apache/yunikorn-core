@@ -574,7 +574,7 @@ func (m *Manager) getGroupWildCardLimitsConfig(queuePath string) *LimitConfig {
 
 func (m *Manager) Headroom(queuePath string, user security.UserGroup) *resources.Resource {
 	m.RLock()
-	m.RUnlock()
+	defer m.RUnlock()
 	var userHeadroom *resources.Resource
 	var groupHeadroom *resources.Resource
 	if m.userTrackers[user.User] != nil {

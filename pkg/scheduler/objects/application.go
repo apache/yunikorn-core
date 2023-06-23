@@ -1469,7 +1469,7 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 			zap.String("headroom", userHeadroom.String()))
 		return nil
 	}
-	
+
 	// everything OK really allocate
 	alloc := NewAllocation(common.GetNewUUID(), node.NodeID, node.GetInstanceType(), ask)
 	if node.AddAllocation(alloc) {

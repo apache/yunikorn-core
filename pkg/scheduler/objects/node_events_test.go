@@ -23,6 +23,7 @@ import (
 
 	"gotest.tools/v3/assert"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -59,8 +60,8 @@ func TestSendNodeAddedEvent(t *testing.T) {
 	assert.Equal(t, 1, len(mock.events), "event was not generated")
 	event := mock.events[0]
 	assert.Equal(t, nodeID1, event.ObjectID)
-	assert.Equal(t, "", event.ReferenceID)
-	assert.Equal(t, "", event.Message)
+	assert.Equal(t, common.Empty, event.ReferenceID)
+	assert.Equal(t, common.Empty, event.Message)
 	assert.Equal(t, si.EventRecord_ADD, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
 	assert.Equal(t, 0, len(event.Resource.Resources))
@@ -82,8 +83,8 @@ func TestSendNodeRemovedEvent(t *testing.T) {
 	assert.Equal(t, 1, len(mock.events), "event was not generated")
 	event := mock.events[0]
 	assert.Equal(t, nodeID1, event.ObjectID)
-	assert.Equal(t, "", event.ReferenceID)
-	assert.Equal(t, "", event.Message)
+	assert.Equal(t, common.Empty, event.ReferenceID)
+	assert.Equal(t, common.Empty, event.Message)
 	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_NODE_DECOMISSION, event.EventChangeDetail)
 	assert.Equal(t, 0, len(event.Resource.Resources))
@@ -107,7 +108,7 @@ func TestSendAllocationAddedEvent(t *testing.T) {
 	event := mock.events[0]
 	assert.Equal(t, nodeID1, event.ObjectID)
 	assert.Equal(t, "alloc-0", event.ReferenceID)
-	assert.Equal(t, "", event.Message)
+	assert.Equal(t, common.Empty, event.Message)
 	assert.Equal(t, si.EventRecord_ADD, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_NODE_ALLOC, event.EventChangeDetail)
 	assert.Equal(t, 1, len(event.Resource.Resources))
@@ -132,7 +133,7 @@ func TestSendAllocationRemovedEvent(t *testing.T) {
 	event := mock.events[0]
 	assert.Equal(t, nodeID1, event.ObjectID)
 	assert.Equal(t, "alloc-0", event.ReferenceID)
-	assert.Equal(t, "", event.Message)
+	assert.Equal(t, common.Empty, event.Message)
 	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_NODE_ALLOC, event.EventChangeDetail)
 	assert.Equal(t, 1, len(event.Resource.Resources))
@@ -182,8 +183,8 @@ func TestSendOccupiedResourceChangedEvent(t *testing.T) {
 	assert.Equal(t, 1, len(mock.events), "event was not generated")
 	event := mock.events[0]
 	assert.Equal(t, nodeID1, event.ObjectID)
-	assert.Equal(t, "", event.ReferenceID)
-	assert.Equal(t, "", event.Message)
+	assert.Equal(t, common.Empty, event.ReferenceID)
+	assert.Equal(t, common.Empty, event.Message)
 	assert.Equal(t, si.EventRecord_SET, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_NODE_OCCUPIED, event.EventChangeDetail)
 	assert.Equal(t, 1, len(event.Resource.Resources))
@@ -209,8 +210,8 @@ func TestSendCapacityChangedEvent(t *testing.T) {
 	assert.Equal(t, 1, len(mock.events), "event was not generated")
 	event := mock.events[0]
 	assert.Equal(t, nodeID1, event.ObjectID)
-	assert.Equal(t, "", event.ReferenceID)
-	assert.Equal(t, "", event.Message)
+	assert.Equal(t, common.Empty, event.ReferenceID)
+	assert.Equal(t, common.Empty, event.Message)
 	assert.Equal(t, si.EventRecord_SET, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_NODE_CAPACITY, event.EventChangeDetail)
 	assert.Equal(t, 1, len(event.Resource.Resources))

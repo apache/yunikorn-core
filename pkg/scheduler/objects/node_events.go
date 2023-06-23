@@ -19,6 +19,7 @@
 package objects
 
 import (
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
@@ -35,7 +36,7 @@ func (n *nodeEvents) sendNodeAddedEvent() {
 		return
 	}
 
-	event := events.CreateNodeEventRecord(n.node.NodeID, events.Empty, events.Empty, si.EventRecord_ADD,
+	event := events.CreateNodeEventRecord(n.node.NodeID, common.Empty, common.Empty, si.EventRecord_ADD,
 		si.EventRecord_DETAILS_NONE, n.node.GetCapacity())
 	n.eventSystem.AddEvent(event)
 }
@@ -45,7 +46,7 @@ func (n *nodeEvents) sendNodeRemovedEvent() {
 		return
 	}
 
-	event := events.CreateNodeEventRecord(n.node.NodeID, events.Empty, events.Empty, si.EventRecord_REMOVE,
+	event := events.CreateNodeEventRecord(n.node.NodeID, common.Empty, common.Empty, si.EventRecord_REMOVE,
 		si.EventRecord_NODE_DECOMISSION, nil)
 	n.eventSystem.AddEvent(event)
 }
@@ -55,7 +56,7 @@ func (n *nodeEvents) sendAllocationAddedEvent(allocID string, res *resources.Res
 		return
 	}
 
-	event := events.CreateNodeEventRecord(n.node.NodeID, events.Empty, allocID, si.EventRecord_ADD,
+	event := events.CreateNodeEventRecord(n.node.NodeID, common.Empty, allocID, si.EventRecord_ADD,
 		si.EventRecord_NODE_ALLOC, res)
 	n.eventSystem.AddEvent(event)
 }
@@ -65,7 +66,7 @@ func (n *nodeEvents) sendAllocationRemovedEvent(allocID string, res *resources.R
 		return
 	}
 
-	event := events.CreateNodeEventRecord(n.node.NodeID, events.Empty, allocID, si.EventRecord_REMOVE,
+	event := events.CreateNodeEventRecord(n.node.NodeID, common.Empty, allocID, si.EventRecord_REMOVE,
 		si.EventRecord_NODE_ALLOC, res)
 	n.eventSystem.AddEvent(event)
 }
@@ -82,7 +83,7 @@ func (n *nodeEvents) sendNodeReadyChangedEvent(ready bool) {
 		reason = "ready: false"
 	}
 
-	event := events.CreateNodeEventRecord(n.node.NodeID, reason, events.Empty, si.EventRecord_SET,
+	event := events.CreateNodeEventRecord(n.node.NodeID, reason, common.Empty, si.EventRecord_SET,
 		si.EventRecord_NODE_READY, nil)
 	n.eventSystem.AddEvent(event)
 }
@@ -99,7 +100,7 @@ func (n *nodeEvents) sendNodeSchedulableChangedEvent(ready bool) {
 		reason = "schedulable: false"
 	}
 
-	event := events.CreateNodeEventRecord(n.node.NodeID, reason, events.Empty, si.EventRecord_SET,
+	event := events.CreateNodeEventRecord(n.node.NodeID, reason, common.Empty, si.EventRecord_SET,
 		si.EventRecord_NODE_SCHEDULABLE, nil)
 	n.eventSystem.AddEvent(event)
 }
@@ -109,7 +110,7 @@ func (n *nodeEvents) sendNodeCapacityChangedEvent() {
 		return
 	}
 
-	event := events.CreateNodeEventRecord(n.node.NodeID, events.Empty, events.Empty, si.EventRecord_SET,
+	event := events.CreateNodeEventRecord(n.node.NodeID, common.Empty, common.Empty, si.EventRecord_SET,
 		si.EventRecord_NODE_CAPACITY, n.node.totalResource)
 	n.eventSystem.AddEvent(event)
 }
@@ -119,7 +120,7 @@ func (n *nodeEvents) sendNodeOccupiedResourceChangedEvent() {
 		return
 	}
 
-	event := events.CreateNodeEventRecord(n.node.NodeID, events.Empty, events.Empty, si.EventRecord_SET,
+	event := events.CreateNodeEventRecord(n.node.NodeID, common.Empty, common.Empty, si.EventRecord_SET,
 		si.EventRecord_NODE_OCCUPIED, n.node.occupiedResource)
 	n.eventSystem.AddEvent(event)
 }

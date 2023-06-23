@@ -25,8 +25,6 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-const Empty = ""
-
 func createEventRecord(recordType si.EventRecord_Type, objectID, referenceID, message string,
 	changeType si.EventRecord_ChangeType, changeDetail si.EventRecord_ChangeDetail, resource *resources.Resource) *si.EventRecord {
 	return &si.EventRecord{

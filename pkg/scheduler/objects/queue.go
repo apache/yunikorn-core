@@ -735,7 +735,7 @@ func (sq *Queue) RemoveApplication(app *Application) {
 	delete(sq.appPriorities, appID)
 	delete(sq.allocatingAcceptedApps, appID)
 	priority := sq.recalculatePriority()
-	app.sendRemoveApplicationEvent()
+	app.appEvents.sendRemoveApplicationEvent()
 	sq.Unlock()
 
 	sq.parent.UpdateQueuePriority(sq.Name, priority)

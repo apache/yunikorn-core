@@ -102,6 +102,38 @@ func (evt *applicationEvents) sendRemoveAskEvent(request *AllocationAsk, detail 
 	evt.eventSystem.AddEvent(event)
 }
 
+func (evt *applicationEvents) sendNewApplicationEvent() {
+	if !evt.enabled {
+		return
+	}
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_ADD, si.EventRecord_DETAILS_NONE, evt.app.GetAllocatedResource())
+	evt.eventSystem.AddEvent(event)
+}
+
+func (evt *applicationEvents) sendRemoveApplicationEvent() {
+	if !evt.enabled {
+		return
+	}
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_REMOVE, si.EventRecord_DETAILS_NONE, evt.app.GetAllocatedResource())
+	evt.eventSystem.AddEvent(event)
+}
+
+func (evt *applicationEvents) sendRejectApplicationEvent(eventInfo string) {
+	if !evt.enabled {
+		return
+	}
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, eventInfo, "", si.EventRecord_REMOVE, si.EventRecord_APP_REJECT, evt.app.GetAllocatedResource())
+	evt.eventSystem.AddEvent(event)
+}
+
+func (evt *applicationEvents) sendStateChangeEvent(changeType si.EventRecord_ChangeType) {
+	if !evt.enabled {
+		return
+	}
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_SET, changeType, evt.app.GetAllocatedResource())
+	evt.eventSystem.AddEvent(event)
+}
+
 func newApplicationEvents(app *Application, evt events.EventSystem) *applicationEvents {
 	return &applicationEvents{
 		eventSystem: evt,

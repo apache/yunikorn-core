@@ -1827,7 +1827,6 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 // RejectApplication rejects this application.
 func (sa *Application) RejectApplication(rejectedMessage string) error {
 	sa.Lock()
-	//todo: add call
 	defer sa.Unlock()
 
 	return sa.HandleApplicationEventWithInfo(RejectApplication, rejectedMessage)

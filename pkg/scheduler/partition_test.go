@@ -107,7 +107,7 @@ func TestNewPartition(t *testing.T) {
 							"memory": "10",
 							"vcores": "10",
 						},
-						MaxApplications: 1,
+						MaxApplications: 2,
 					},
 				},
 			},
@@ -350,7 +350,7 @@ func TestRemoveNodeWithAllocations(t *testing.T) {
 	assert.Equal(t, 1, len(released), "node did not release correct allocation")
 	assert.Equal(t, 0, len(confirmed), "node did not confirm correct allocation")
 	assert.Equal(t, released[0].GetUUID(), allocUUID, "uuid returned by release not the same as on allocation")
-	assertLimits(t, getTestUserGroup(), nil)
+	assertLimits(t, getTestUserGroup(), resources.Zero)
 
 	// wait for events to be processed
 	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
@@ -1084,7 +1084,7 @@ func TestRemoveApp(t *testing.T) {
 
 	allocs = partition.removeApplication("will_not_remove")
 	assert.Equal(t, 1, len(allocs), "existing application with allocations returned unexpected allocations %v", allocs)
-	assertLimits(t, getTestUserGroup(), nil)
+	assertLimits(t, getTestUserGroup(), resources.Zero)
 }
 
 func TestRemoveAppAllocs(t *testing.T) {
@@ -1145,7 +1145,7 @@ func TestRemoveAppAllocs(t *testing.T) {
 	allocs, _ = partition.removeAllocation(release)
 	assert.Equal(t, 1, len(allocs), "removal request for existing allocation returned wrong allocations: %v", allocs)
 	assert.Equal(t, 0, partition.GetTotalAllocationCount(), "removal requests did not remove all allocations: %v", partition.allocations)
-	assertLimits(t, getTestUserGroup(), nil)
+	assertLimits(t, getTestUserGroup(), resources.Zero)
 }
 
 // Dynamic queue creation based on the name from the rules
@@ -1375,7 +1375,7 @@ func TestTryAllocate(t *testing.T) {
 	expectedQueuesMaxLimits["root.leaf"] = make(map[string]interface{})
 	expectedQueuesMaxLimits["root"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10, "vcores": 10})
 	expectedQueuesMaxLimits["root.leaf"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5, "vcores": 5})
-	expectedQueuesMaxLimits["root"][maxapplications] = uint64(2)
+	expectedQueuesMaxLimits["root"][maxapplications] = uint64(10)
 	expectedQueuesMaxLimits["root.leaf"][maxapplications] = uint64(1)
 	assertUserGroupResourceMaxLimits(t, getTestUserGroup(), nil, expectedQueuesMaxLimits)
 
@@ -1891,10 +1891,9 @@ func getExpectedQueuesLimitsForPreemption() map[string]map[string]interface{} {
 	expectedQueuesMaxLimits["root"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10, "vcores": 10})
 	expectedQueuesMaxLimits["root.parent"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5, "vcores": 5})
 	expectedQueuesMaxLimits["root.parent.leaf1"][maxresources] = expectedQueuesMaxLimits["root.parent"][maxresources]
-	expectedQueuesMaxLimits["root"][maxapplications] = uint64(2)
-	expectedQueuesMaxLimits["root.parent"][maxapplications] = uint64(2)
-	expectedQueuesMaxLimits["root.parent.leaf1"][maxapplications] = uint64(1)
-	expectedQueuesMaxLimits["root.parent.leaf1"][maxapplications] = uint64(1)
+	expectedQueuesMaxLimits["root"][maxapplications] = uint64(10)
+	expectedQueuesMaxLimits["root.parent"][maxapplications] = uint64(8)
+	expectedQueuesMaxLimits["root.parent.leaf1"][maxapplications] = uint64(8)
 	return expectedQueuesMaxLimits
 }
 
@@ -1908,9 +1907,9 @@ func getExpectedQueuesLimitsForPreemptionWithRequiredNode() map[string]map[strin
 	expectedQueuesMaxLimits["root.leaf"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5, "vcores": 5})
 	expectedQueuesMaxLimits["root.parent"][maxresources] = expectedQueuesMaxLimits["root.leaf"][maxresources]
 	expectedQueuesMaxLimits["root.parent.sub-leaf"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 3, "vcores": 3})
-	expectedQueuesMaxLimits["root"][maxapplications] = uint64(2)
+	expectedQueuesMaxLimits["root"][maxapplications] = uint64(10)
 	expectedQueuesMaxLimits["root.leaf"][maxapplications] = uint64(1)
-	expectedQueuesMaxLimits["root.parent"][maxapplications] = uint64(2)
+	expectedQueuesMaxLimits["root.parent"][maxapplications] = uint64(8)
 	expectedQueuesMaxLimits["root.parent.sub-leaf"][maxapplications] = uint64(2)
 	return expectedQueuesMaxLimits
 }

@@ -18,4 +18,10 @@
 
 package common
 
-const Empty = ""
+const (
+	Empty = ""
+
+	Wildcard  = "*"
+	Separator = ","
+	Space     = " "
+)

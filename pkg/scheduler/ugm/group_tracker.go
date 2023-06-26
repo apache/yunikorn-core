@@ -43,14 +43,14 @@ func newGroupTracker(group string) *GroupTracker {
 	return groupTracker
 }
 
-func (gt *GroupTracker) increaseTrackedResource(queuePath, applicationID string, usage *resources.Resource) error {
+func (gt *GroupTracker) increaseTrackedResource(queuePath, applicationID string, usage *resources.Resource) bool {
 	gt.Lock()
 	defer gt.Unlock()
 	gt.applications[applicationID] = true
-	return gt.queueTracker.increaseTrackedResource(queuePath, applicationID, usage)
+	return gt.queueTracker.increaseTrackedResource(queuePath, applicationID, group, usage)
 }
 
-func (gt *GroupTracker) decreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, removeApp bool) (bool, error) {
+func (gt *GroupTracker) decreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, removeApp bool) (bool, bool) {
 	gt.Lock()
 	defer gt.Unlock()
 	if removeApp {
@@ -65,16 +65,10 @@ func (gt *GroupTracker) getTrackedApplications() map[string]bool {
 	return gt.applications
 }
 
-func (gt *GroupTracker) setMaxApplications(count uint64, queuePath string) error {
+func (gt *GroupTracker) setLimits(queuePath string, resource *resources.Resource, maxApps uint64) {
 	gt.Lock()
 	defer gt.Unlock()
-	return gt.queueTracker.setMaxApplications(count, queuePath)
-}
-
-func (gt *GroupTracker) setMaxResources(resource *resources.Resource, queuePath string) error {
-	gt.Lock()
-	defer gt.Unlock()
-	return gt.queueTracker.setMaxResources(resource, queuePath)
+	gt.queueTracker.setLimit(queuePath, resource, maxApps)
 }
 
 func (gt *GroupTracker) GetGroupResourceUsageDAOInfo() *dao.GroupResourceUsageDAOInfo {
@@ -89,4 +83,29 @@ func (gt *GroupTracker) GetGroupResourceUsageDAOInfo() *dao.GroupResourceUsageDA
 	}
 	groupResourceUsage.Queues = gt.queueTracker.getResourceUsageDAOInfo("")
 	return groupResourceUsage
+}
+
+func (gt *GroupTracker) IsQueuePathTrackedCompletely(queuePath string) bool {
+	gt.RLock()
+	defer gt.RUnlock()
+	return gt.queueTracker.IsQueuePathTrackedCompletely(queuePath)
+}
+
+func (gt *GroupTracker) IsUnlinkRequired(queuePath string) bool {
+	gt.RLock()
+	defer gt.RUnlock()
+	return gt.queueTracker.IsUnlinkRequired(queuePath)
+}
+
+func (gt *GroupTracker) UnlinkQT(queuePath string) bool {
+	gt.RLock()
+	defer gt.RUnlock()
+	return gt.queueTracker.UnlinkQT(queuePath)
+}
+
+// canBeRemoved Does "root" queue has any child queue trackers? Is there any running applications in "root" qt?
+func (gt *GroupTracker) canBeRemoved() bool {
+	gt.RLock()
+	defer gt.RUnlock()
+	return len(gt.queueTracker.childQueueTrackers) == 0 && len(gt.queueTracker.runningApplications) == 0
 }

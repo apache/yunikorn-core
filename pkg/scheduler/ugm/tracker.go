@@ -31,6 +31,6 @@ type Tracker interface {
 	GetUsersResources() []*UserTracker
 	GetGroupsResources() []*GroupTracker
 
-	IncreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user security.UserGroup) error
-	DecreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user security.UserGroup, removeApp bool) error
+	IncreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user security.UserGroup) bool
+	DecreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user security.UserGroup, removeApp bool) bool
 }

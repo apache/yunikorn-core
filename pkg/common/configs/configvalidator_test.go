@@ -170,38 +170,97 @@ func TestCheckQueueMaxApplicationsForQueue(t *testing.T) {
 }
 
 func TestGetLongestPlacementPath(t *testing.T) {
-	staticPaths := getLongestPlacementPaths(createPlacementRules())
+	staticPaths, err := getLongestPlacementPaths(createPlacementRules())
+	assert.NilError(t, err)
 	assert.Equal(t, 2, len(staticPaths))
 
 	path0 := staticPaths[0]
 	assert.Equal(t, "root.users", path0.path)
 	assert.Equal(t, 0, path0.ruleNo)
-	assert.Equal(t, "user->tag->fixed", path0.ruleChain)
+	assert.Equal(t, "fixed->tag->user", path0.ruleChain)
 	assert.Equal(t, false, path0.create)
 	path1 := staticPaths[1]
 	assert.Equal(t, "root.admins.dev", path1.path)
 	assert.Equal(t, 1, path1.ruleNo)
 	assert.Equal(t, "fixed->fixed", path1.ruleChain)
 	assert.Equal(t, true, path1.create)
+
+	// illegal: two "fixed" with fully qualified path
+	illegal := []PlacementRule{
+		{
+			Name:   "fixed",
+			Value:  "root.dev",
+			Create: true,
+			Parent: &PlacementRule{
+				Name:  "fixed",
+				Value: "root.admins",
+			},
+		},
+	}
+	_, err = getLongestPlacementPaths(illegal)
+	assert.ErrorContains(t, err, "illegal fully qualified 'fixed' rule")
 }
 
 func TestCheckQueueHierarchyForPlacement(t *testing.T) {
 	queues := createQueueConfig()
-	parts := strings.Split(strings.ToLower("root.users"), DOT)
-	result := checkQueueHierarchyForPlacement(parts, false, queues)
-	assert.Equal(t, checkOK, result)
 
-	parts = strings.Split(strings.ToLower("root.users.dev"), DOT)
-	result = checkQueueHierarchyForPlacement(parts, true, queues)
-	assert.Equal(t, checkOK, result)
+	// case #1 - referring to existing queue which is a parent
+	parts := strings.Split("root.users", DOT)
+	result, queueName := checkQueueHierarchyForPlacement(parts, false, false, queues, nil)
+	assert.Equal(t, errQueueNotLeaf, result)
+	assert.Equal(t, "", queueName)
 
+	// case #2 - referring to an existing queue which is a leaf
+	parts = strings.Split("root.default", DOT)
+	result, queueName = checkQueueHierarchyForPlacement(parts, true, false, queues, nil)
+	assert.Equal(t, placementOK, result)
+	assert.Equal(t, "", queueName)
+
+	// case #3 - referring a path which is incomplete in the hierarchy, "users" is parent, create = true
+	parts = strings.Split("root.users.alice", DOT)
+	result, queueName = checkQueueHierarchyForPlacement(parts, true, false, queues, nil)
+	assert.Equal(t, placementOK, result)
+	assert.Equal(t, "", queueName)
+
+	// case #4 - referring a path which is incomplete in the hierarchy, "users" is parent, create = false
+	result, queueName = checkQueueHierarchyForPlacement(parts, false, false, queues, nil)
+	assert.Equal(t, errNonExistingQueue, result)
+	assert.Equal(t, "", queueName)
+
+	// case #5 - referring a path which is incomplete in the hierarchy, "users" is leaf, create = true
 	queues[0].Queues[0].Parent = false
-	result = checkQueueHierarchyForPlacement(parts, false, queues)
-	assert.Equal(t, queueNotParent, result)
+	result, queueName = checkQueueHierarchyForPlacement(parts, true, false, queues, nil)
+	assert.Equal(t, errLastQueueLeaf, result)
+	assert.Equal(t, "users", queueName)
 
+	// case #6 - referring a path which is incomplete in the hierarchy, "users" is leaf, create = false
+	result, queueName = checkQueueHierarchyForPlacement(parts, false, false, queues, nil)
+	assert.Equal(t, errLastQueueLeaf, result)
+	assert.Equal(t, "users", queueName)
+
+	// case #7 - hierarchy is long enough, but no matching queue found, create = true
+	parts = strings.Split("root.devs.test", DOT)
+	result, queueName = checkQueueHierarchyForPlacement(parts, true, false, queues, nil)
+	assert.Equal(t, placementOK, result)
+	assert.Equal(t, "", queueName)
+
+	// case #8 - hierarchy is long enough, but no matching queue found, create = false
+	result, queueName = checkQueueHierarchyForPlacement(parts, false, false, queues, nil)
+	assert.Equal(t, errNonExistingQueue, result)
+	assert.Equal(t, "", queueName)
+
+	// case #9 - rule chain ends with a dynamic part, last queue is a leaf
+	parts = strings.Split("root.users", DOT)
+	result, queueName = checkQueueHierarchyForPlacement(parts, false, true, queues, nil)
+	assert.Equal(t, errQueueNotLeaf, result)
+	assert.Equal(t, "", queueName)
+
+	// case #10 - rule chain ends with a dynamic part, last queue is a parent
 	queues[0].Queues[0].Parent = true
-	result = checkQueueHierarchyForPlacement(parts, false, queues)
-	assert.Equal(t, nonExistingQueue, result)
+	parts = strings.Split("root.users", DOT)
+	result, queueName = checkQueueHierarchyForPlacement(parts, false, true, queues, nil)
+	assert.Equal(t, placementOK, result)
+	assert.Equal(t, "", queueName)
 }
 
 func TestCheckPlacementRules(t *testing.T) {
@@ -210,17 +269,49 @@ func TestCheckPlacementRules(t *testing.T) {
 		Queues:         createQueueConfig(),
 	}
 
+	// default case, no error
 	err := checkPlacementRules(conf)
 	assert.NilError(t, err)
 
-	conf.Queues[0].Queues[0].Parent = false
+	// referencing "root.users", but "users" is a leaf
+	conf.PlacementRules = []PlacementRule{
+		{
+			Name:  "fixed",
+			Value: "root.users",
+		},
+	}
 	err = checkPlacementRules(conf)
-	assert.ErrorContains(t, err, "placement rule no. #0 (user->tag->fixed) references a queue (root.users) which is a leaf")
+	assert.ErrorContains(t, err, "placement rule no. #0 (fixed) references a queue (root.users) which is not a leaf")
 
-	conf.Queues[0].Queues[0].Parent = true
+	// referencing "root.admins.dev" which doesn't exist but 'create' is false
+	conf.PlacementRules = createPlacementRules()
 	conf.PlacementRules[1].Create = false
 	err = checkPlacementRules(conf)
 	assert.ErrorContains(t, err, "placement rule no. #1 (fixed->fixed) references non-existing queues (root.admins.dev) and create is 'false'")
+
+	// referencing "root.default", but queues under "default" cannot be created due to "default" being leaf
+	conf.PlacementRules = []PlacementRule{
+		{
+			Name:  "fixed",
+			Value: "root.default.leaf",
+		},
+	}
+	err = checkPlacementRules(conf)
+	assert.ErrorContains(t, err, "placement rule no. #0 (fixed) references non-existing queues (root.default.leaf) which cannot be created because the last queue (default) in the hierarchy is a leaf")
+
+	// two "fixed" rule in a chain with both having fully qualified queues
+	conf.PlacementRules = []PlacementRule{
+		{
+			Name:  "fixed",
+			Value: "root.default.leaf",
+			Parent: &PlacementRule{
+				Name:  "fixed",
+				Value: "root.default",
+			},
+		},
+	}
+	err = checkPlacementRules(conf)
+	assert.ErrorContains(t, err, "illegal fully qualified 'fixed' rule with value root.default.leaf")
 }
 
 func createQueueConfig() []QueueConfig {
@@ -232,6 +323,20 @@ func createQueueConfig() []QueueConfig {
 				{
 					Name:   "users",
 					Parent: true,
+				},
+				{
+					Name:   "devs",
+					Parent: true,
+					Queues: []QueueConfig{
+						{
+							Name:   "yunikorn",
+							Parent: true,
+						},
+					},
+				},
+				{
+					Name:   "default",
+					Parent: false,
 				},
 				{
 					Name:   "admins",

@@ -952,23 +952,13 @@ func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {
 					zap.Int64("capacity", int64(availableResource)),
 					zap.Int64("usage", int64(usedResource)))
 			}
-			div := float64(usedResource) / float64(availableResource)
-			absResValue = int64(div * 100)
-			// protect against positive integer overflow
-			if absResValue < 0 && div > 0 {
-				log.Log(log.Resources).Warn("Absolute resource value result positive overflow",
+			div := float64(usedResource) * 100 / float64(availableResource)
+			absResValue = int64(div)
+			if ((usedResource >= 0) == (availableResource > 0)) == (absResValue < 0) || (div > math.MaxInt64) || (div < math.MinInt64) {
+				log.Log(log.Resources).Warn("Absolute resource value result wrapped or overflow",
 					zap.String("resource", resourceName),
 					zap.Int64("capacity", int64(availableResource)),
 					zap.Int64("usage", int64(usedResource)))
-				absResValue = math.MaxInt64
-			}
-			// protect against negative integer overflow
-			if absResValue > 0 && div < 0 {
-				log.Log(log.Resources).Warn("Absolute resource value result negative overflow",
-					zap.String("resource", resourceName),
-					zap.Int64("capacity", int64(availableResource)),
-					zap.Int64("usage", int64(usedResource)))
-				absResValue = math.MinInt64
 			}
 		} else {
 			if missingResources.Len() != 0 {

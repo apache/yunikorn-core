@@ -156,7 +156,7 @@ func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {
 	return appSummary
 }
 
-func (sa *Application) NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eventHandler handler.EventHandler, rmID string) *Application {
+func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eventHandler handler.EventHandler, rmID string) *Application {
 	app := &Application{
 		ApplicationID:        siApp.ApplicationID,
 		Partition:            siApp.PartitionName,
@@ -198,7 +198,7 @@ func (sa *Application) NewApplication(siApp *si.AddApplicationRequest, ugi secur
 	app.rmEventHandler = eventHandler
 	app.rmID = rmID
 	app.appEvents = newApplicationEvents(app, events.GetEventSystem())
-	sa.sendNewApplicationEvent()
+	app.appEvents.sendNewApplicationEvent()
 	return app
 }
 
@@ -306,7 +306,7 @@ func (sa *Application) HandleApplicationEventWithInfo(event applicationEvent, ev
 		return nil
 	}
 	if event == RejectApplication {
-		sa.sendRejectApplicationEvent(eventInfo)
+		sa.appEvents.sendRejectApplicationEvent(eventInfo)
 	}
 	return err
 }

@@ -126,11 +126,11 @@ func (evt *applicationEvents) sendRejectApplicationEvent(eventInfo string) {
 	evt.eventSystem.AddEvent(event)
 }
 
-func (evt *applicationEvents) sendStateChangeEvent(changeType si.EventRecord_ChangeType) {
+func (evt *applicationEvents) sendStateChangeEvent(changeDetail si.EventRecord_ChangeDetail) {
 	if !evt.enabled {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_SET, changeType, evt.app.GetAllocatedResource())
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_SET, changeDetail, evt.app.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 

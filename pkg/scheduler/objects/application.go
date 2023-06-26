@@ -156,7 +156,7 @@ func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {
 	return appSummary
 }
 
-func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eventHandler handler.EventHandler, rmID string) *Application {
+func (sa *Application) NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eventHandler handler.EventHandler, rmID string) *Application {
 	app := &Application{
 		ApplicationID:        siApp.ApplicationID,
 		Partition:            siApp.PartitionName,
@@ -198,6 +198,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	app.rmEventHandler = eventHandler
 	app.rmID = rmID
 	app.appEvents = newApplicationEvents(app, events.GetEventSystem())
+	sa.sendNewApplicationEvent()
 	return app
 }
 
@@ -303,6 +304,9 @@ func (sa *Application) HandleApplicationEventWithInfo(event applicationEvent, ev
 	// handle the same state transition not nil error (limit of fsm).
 	if err != nil && err.Error() == noTransition {
 		return nil
+	}
+	if event == RejectApplication {
+		sa.sendRejectApplicationEvent(eventInfo)
 	}
 	return err
 }
@@ -1827,6 +1831,7 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 // RejectApplication rejects this application.
 func (sa *Application) RejectApplication(rejectedMessage string) error {
 	sa.Lock()
+	//todo: add call
 	defer sa.Unlock()
 
 	return sa.HandleApplicationEventWithInfo(RejectApplication, rejectedMessage)

@@ -19,8 +19,6 @@
 package ugm
 
 import (
-	"fmt"
-
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
@@ -31,73 +29,171 @@ import (
 
 type QueueTracker struct {
 	queueName           string
+	queuePath           string
 	resourceUsage       *resources.Resource
 	runningApplications map[string]bool
-	maxResourceUsage    *resources.Resource
+	maxResources        *resources.Resource
 	maxRunningApps      uint64
 	childQueueTrackers  map[string]*QueueTracker
 }
 
 func newRootQueueTracker() *QueueTracker {
-	return newQueueTracker(configs.RootQueue)
+	qt := newQueueTracker("", configs.RootQueue)
+	return qt
 }
 
-func newQueueTracker(queueName string) *QueueTracker {
-	log.Log(log.SchedUGM).Debug("Creating queue tracker object for queue",
-		zap.String("queue", queueName))
+func newQueueTracker(queuePath string, queueName string) *QueueTracker {
+	qp := queueName
+	if queuePath != "" {
+		qp = queuePath + "." + queueName
+	}
 	queueTracker := &QueueTracker{
 		queueName:           queueName,
+		queuePath:           qp,
 		resourceUsage:       resources.NewResource(),
 		runningApplications: make(map[string]bool),
+		maxResources:        resources.NewResource(),
+		maxRunningApps:      0,
 		childQueueTrackers:  make(map[string]*QueueTracker),
 	}
+	log.Log(log.SchedUGM).Debug("Created queue tracker object for queue",
+		zap.String("queue", queueName))
 	return queueTracker
 }
 
-func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID string, usage *resources.Resource) error {
+type trackingType int
+
+const (
+	none trackingType = iota
+	user
+	group
+)
+
+func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID string, trackType trackingType, usage *resources.Resource) bool {
 	log.Log(log.SchedUGM).Debug("Increasing resource usage",
+		zap.Int("tracking type", int(trackType)),
 		zap.String("queue path", queuePath),
 		zap.String("application", applicationID),
 		zap.Stringer("resource", usage))
-	if queuePath == "" || applicationID == "" || usage == nil {
-		return fmt.Errorf("mandatory parameters are missing. queuepath: %s, application id: %s, resource usage: %s",
-			queuePath, applicationID, usage.String())
-	}
-	qt.resourceUsage.AddTo(usage)
-	qt.runningApplications[applicationID] = true
+	finalResourceUsage := qt.resourceUsage.Clone()
+	finalResourceUsage.AddTo(usage)
+	wildCardQuotaExceeded := false
+	existingApp := qt.runningApplications[applicationID]
 
-	log.Log(log.SchedUGM).Debug("Successfully increased resource usage",
-		zap.String("queue path", queuePath),
-		zap.String("application", applicationID),
-		zap.Stringer("resource", usage),
-		zap.Stringer("total resource after increasing", qt.resourceUsage),
-		zap.Int("total applications after increasing", len(qt.runningApplications)))
+	// apply user/group specific limit settings set if configured, otherwise use wild card limit settings
+	if qt.maxRunningApps != 0 && !resources.Equals(resources.NewResource(), qt.maxResources) {
+		log.Log(log.SchedUGM).Debug("applying enforcement checks using limit settings of specific user/group",
+			zap.Int("tracking type", int(trackType)),
+			zap.String("queue path", queuePath),
+			zap.Bool("existing app", existingApp),
+			zap.Uint64("max running apps", qt.maxRunningApps),
+			zap.String("max resources", qt.maxResources.String()))
+		if (!existingApp && len(qt.runningApplications)+1 > int(qt.maxRunningApps)) ||
+			resources.StrictlyGreaterThan(finalResourceUsage, qt.maxResources) {
+			log.Log(log.SchedUGM).Warn("Unable to increase resource usage as allowing new application to run would exceed either configured max applications or max resources limit of specific user/group",
+				zap.Int("tracking type", int(trackType)),
+				zap.String("queue path", queuePath),
+				zap.Bool("existing app", existingApp),
+				zap.Int("current running applications", len(qt.runningApplications)),
+				zap.Uint64("max running applications", qt.maxRunningApps),
+				zap.String("current resource usage", qt.resourceUsage.String()),
+				zap.String("max resource usage", qt.maxResources.String()))
+			return false
+		}
+	}
+
+	// Try wild card settings
+	if qt.maxRunningApps == 0 && resources.Equals(resources.NewResource(), qt.maxResources) {
+		// Is there any wild card settings? Do we need to apply enforcement checks using wild card limit settings?
+		var config *LimitConfig
+		if trackType == user {
+			config = m.getUserWildCardLimitsConfig(qt.queuePath)
+		} else if trackType == group {
+			config = m.getGroupWildCardLimitsConfig(qt.queuePath)
+		}
+		if config != nil {
+			log.Log(log.SchedUGM).Debug("applying enforcement checks using limit settings of wild card user/group",
+				zap.Int("tracking type", int(trackType)),
+				zap.String("queue path", queuePath),
+				zap.Bool("existing app", existingApp),
+				zap.Uint64("wild card max running apps", config.maxApplications),
+				zap.String("wild card max resources", config.maxResources.String()),
+				zap.Bool("wild card quota exceeded", wildCardQuotaExceeded))
+			wildCardQuotaExceeded = (config.maxApplications != 0 && !existingApp && len(qt.runningApplications)+1 > int(config.maxApplications)) ||
+				(!resources.Equals(resources.NewResource(), config.maxResources) && resources.StrictlyGreaterThan(finalResourceUsage, config.maxResources))
+			if wildCardQuotaExceeded {
+				log.Log(log.SchedUGM).Warn("Unable to increase resource usage as allowing new application to run would exceed either configured max applications or max resources limit of wild card user/group",
+					zap.Int("tracking type", int(trackType)),
+					zap.String("queue path", queuePath),
+					zap.Bool("existing app", existingApp),
+					zap.Int("current running applications", len(qt.runningApplications)),
+					zap.Uint64("max running applications", config.maxApplications),
+					zap.String("current resource usage", qt.resourceUsage.String()),
+					zap.String("max resource usage", config.maxResources.String()))
+				return false
+			}
+		}
+	}
 
 	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
 	if childQueuePath != "" {
 		if qt.childQueueTrackers[immediateChildQueueName] == nil {
-			qt.childQueueTrackers[immediateChildQueueName] = newQueueTracker(immediateChildQueueName)
+			qt.childQueueTrackers[immediateChildQueueName] = newQueueTracker(qt.queuePath, immediateChildQueueName)
 		}
-		err := qt.childQueueTrackers[immediateChildQueueName].increaseTrackedResource(childQueuePath, applicationID, usage)
-		if err != nil {
-			return err
+		allowed := qt.childQueueTrackers[immediateChildQueueName].increaseTrackedResource(childQueuePath, applicationID, trackType, usage)
+		if !allowed {
+			return allowed
 		}
 	}
-	return nil
+
+	qt.resourceUsage.AddTo(usage)
+	qt.runningApplications[applicationID] = true
+
+	log.Log(log.SchedUGM).Debug("Successfully increased resource usage",
+		zap.Int("tracking type", int(trackType)),
+		zap.String("queue path", queuePath),
+		zap.String("application", applicationID),
+		zap.Bool("existing app", existingApp),
+		zap.Stringer("resource", usage),
+		zap.Uint64("max running applications", qt.maxRunningApps),
+		zap.String("max resource usage", qt.maxResources.String()),
+		zap.Stringer("total resource after increasing", qt.resourceUsage),
+		zap.Int("total applications after increasing", len(qt.runningApplications)))
+	return true
 }
 
-func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID string, usage *resources.Resource, removeApp bool) (bool, error) {
+func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID string, usage *resources.Resource, removeApp bool) (bool, bool) {
 	log.Log(log.SchedUGM).Debug("Decreasing resource usage",
 		zap.String("queue path", queuePath),
 		zap.String("application", applicationID),
 		zap.Stringer("resource", usage),
 		zap.Bool("removeApp", removeApp))
-	if queuePath == "" || usage == nil {
-		return false, fmt.Errorf("mandatory parameters are missing. queuepath: %s, application id: %s, resource usage: %s",
-			queuePath, applicationID, usage.String())
+	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
+	if childQueuePath != "" {
+		if qt.childQueueTrackers[immediateChildQueueName] == nil {
+			log.Log(log.SchedUGM).Error("Child queueTracker tracker must be available in child queues map",
+				zap.String("child queueTracker name", immediateChildQueueName))
+			return false, false
+		}
+		removeQT, decreased := qt.childQueueTrackers[immediateChildQueueName].decreaseTrackedResource(childQueuePath, applicationID, usage, removeApp)
+		if !decreased {
+			return false, decreased
+		}
+		if removeQT {
+			log.Log(log.SchedUGM).Debug("Removed queue tracker linkage from its parent",
+				zap.String("queue path ", queuePath),
+				zap.String("removed queue name", immediateChildQueueName),
+				zap.String("parent queue", qt.queueName))
+			delete(qt.childQueueTrackers, immediateChildQueueName)
+		}
 	}
+
 	qt.resourceUsage.SubFrom(usage)
 	if removeApp {
+		log.Log(log.SchedUGM).Debug("Removed application from running applications",
+			zap.String("application", applicationID),
+			zap.String("queue path", queuePath),
+			zap.String("queue name", qt.queueName))
 		delete(qt.runningApplications, applicationID)
 	}
 	log.Log(log.SchedUGM).Debug("Successfully decreased resource usage",
@@ -107,26 +203,13 @@ func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID 
 		zap.Stringer("total resource after decreasing", qt.resourceUsage),
 		zap.Int("total applications after decreasing", len(qt.runningApplications)))
 
-	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
-	if childQueuePath != "" {
-		if qt.childQueueTrackers[immediateChildQueueName] != nil {
-			removeQT, err := qt.childQueueTrackers[immediateChildQueueName].decreaseTrackedResource(childQueuePath, applicationID, usage, removeApp)
-			if err != nil {
-				return false, err
-			}
-			if removeQT {
-				delete(qt.childQueueTrackers, immediateChildQueueName)
-			}
-		} else {
-			log.Log(log.SchedUGM).Error("Child queueTracker tracker must be available in child queues map",
-				zap.String("child queueTracker name", immediateChildQueueName))
-			return false, fmt.Errorf("child queueTracker tracker for %s is missing in child queues map", immediateChildQueueName)
-		}
-	}
-
 	// Determine if the queue tracker should be removed
-	removeQT := len(qt.childQueueTrackers) == 0 && len(qt.runningApplications) == 0 && resources.IsZero(qt.resourceUsage)
-	return removeQT, nil
+	removeQT := len(qt.childQueueTrackers) == 0 && len(qt.runningApplications) == 0 && resources.IsZero(qt.resourceUsage) &&
+		qt.maxRunningApps == 0 && resources.Equals(resources.NewResource(), qt.maxResources)
+	log.Log(log.SchedUGM).Debug("Remove queue tracker",
+		zap.String("queue path ", queuePath),
+		zap.Bool("remove QT", removeQT))
+	return removeQT, true
 }
 
 func (qt *QueueTracker) getChildQueueTracker(queuePath string) *QueueTracker {
@@ -137,7 +220,7 @@ func (qt *QueueTracker) getChildQueueTracker(queuePath string) *QueueTracker {
 		for childQueuePath != "" {
 			if childQueueTracker != nil {
 				if len(childQueueTracker.childQueueTrackers) == 0 || childQueueTracker.childQueueTrackers[immediateChildQueueName] == nil {
-					newChildQt := newQueueTracker(immediateChildQueueName)
+					newChildQt := newQueueTracker(qt.queuePath, immediateChildQueueName)
 					childQueueTracker.childQueueTrackers[immediateChildQueueName] = newChildQt
 					childQueueTracker = newChildQt
 				} else {
@@ -150,40 +233,14 @@ func (qt *QueueTracker) getChildQueueTracker(queuePath string) *QueueTracker {
 	return childQueueTracker
 }
 
-func (qt *QueueTracker) setMaxApplications(count uint64, queuePath string) error {
-	log.Log(log.SchedUGM).Debug("Setting max applications",
+func (qt *QueueTracker) setLimit(queuePath string, maxResource *resources.Resource, maxApps uint64) {
+	log.Log(log.SchedUGM).Debug("Setting limits",
 		zap.String("queue path", queuePath),
-		zap.Uint64("max applications", count))
+		zap.Uint64("max applications", maxApps),
+		zap.String("max resources", maxResource.String()))
 	childQueueTracker := qt.getChildQueueTracker(queuePath)
-	if childQueueTracker.maxRunningApps != 0 && count != 0 && len(childQueueTracker.runningApplications) > int(count) {
-		log.Log(log.SchedUGM).Warn("Current running applications is greater than config max applications",
-			zap.String("queue path", queuePath),
-			zap.Uint64("current max applications", childQueueTracker.maxRunningApps),
-			zap.Int("total running applications", len(childQueueTracker.runningApplications)),
-			zap.Uint64("config max applications", count))
-		return fmt.Errorf("current running applications is greater than config max applications for %s", queuePath)
-	} else {
-		childQueueTracker.maxRunningApps = count
-	}
-	return nil
-}
-
-func (qt *QueueTracker) setMaxResources(resource *resources.Resource, queuePath string) error {
-	log.Log(log.SchedUGM).Debug("Setting max resources",
-		zap.String("queue path", queuePath),
-		zap.String("max resources", resource.String()))
-	childQueueTracker := qt.getChildQueueTracker(queuePath)
-	if (!resources.Equals(childQueueTracker.maxResourceUsage, resources.NewResource()) && !resources.Equals(resource, resources.NewResource())) && resources.StrictlyGreaterThan(childQueueTracker.resourceUsage, resource) {
-		log.Log(log.SchedUGM).Warn("Current resource usage is greater than config max resource",
-			zap.String("queue path", queuePath),
-			zap.String("current max resource usage", childQueueTracker.maxResourceUsage.String()),
-			zap.String("total resource usage", childQueueTracker.resourceUsage.String()),
-			zap.String("config max resources", resource.String()))
-		return fmt.Errorf("current resource usage is greater than config max resource for %s", queuePath)
-	} else {
-		childQueueTracker.maxResourceUsage = resource
-	}
-	return nil
+	childQueueTracker.maxRunningApps = maxApps
+	childQueueTracker.maxResources = maxResource
 }
 
 func (qt *QueueTracker) getResourceUsageDAOInfo(parentQueuePath string) *dao.ResourceUsageDAOInfo {
@@ -201,11 +258,77 @@ func (qt *QueueTracker) getResourceUsageDAOInfo(parentQueuePath string) *dao.Res
 	for app := range qt.runningApplications {
 		usage.RunningApplications = append(usage.RunningApplications, app)
 	}
-	usage.MaxResources = qt.maxResourceUsage
+	usage.MaxResources = qt.maxResources
 	usage.MaxApplications = qt.maxRunningApps
 	for _, cqt := range qt.childQueueTrackers {
 		childUsage := cqt.getResourceUsageDAOInfo(fullQueuePath)
 		usage.Children = append(usage.Children, childUsage)
 	}
 	return usage
+}
+
+// IsQueuePathTrackedCompletely Traverse queue path upto the end queue through its linkage
+// to confirm entire queuePath has been tracked completely or not
+func (qt *QueueTracker) IsQueuePathTrackedCompletely(queuePath string) bool {
+	if queuePath == configs.RootQueue || queuePath == qt.queueName {
+		return true
+	}
+	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
+	if immediateChildQueueName != "" {
+		if childUt, ok := qt.childQueueTrackers[immediateChildQueueName]; ok {
+			return childUt.IsQueuePathTrackedCompletely(childQueuePath)
+		}
+	}
+	return false
+}
+
+// IsUnlinkRequired Traverse queue path upto the leaf queue and decide whether
+// linkage needs to be removed or not based on the running applications.
+// If there are any running applications in end leaf queue, we should remove the linkage between
+// the leaf and its parent queue using UnlinkQT method. Otherwise, we should leave as it is.
+func (qt *QueueTracker) IsUnlinkRequired(queuePath string) bool {
+	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
+	if immediateChildQueueName != "" {
+		if childUt, ok := qt.childQueueTrackers[immediateChildQueueName]; ok {
+			return childUt.IsUnlinkRequired(childQueuePath)
+		}
+	}
+	if queuePath == configs.RootQueue || queuePath == qt.queueName {
+		if len(qt.runningApplications) == 0 {
+			log.Log(log.SchedUGM).Debug("Is Unlink Required?",
+				zap.String("queue path", queuePath),
+				zap.Int("no. of applications", len(qt.runningApplications)))
+			return true
+		}
+	}
+	return false
+}
+
+// UnlinkQT Traverse queue path upto the end queue. If end queue has any more child queue trackers,
+// then goes upto each child queue and removes the linkage with its immediate parent
+func (qt *QueueTracker) UnlinkQT(queuePath string) bool {
+	log.Log(log.SchedUGM).Debug("Unlinking current queue tracker from its parent",
+		zap.String("current queue ", qt.queueName),
+		zap.String("queue path", queuePath),
+		zap.Int("no. of child queue trackers", len(qt.childQueueTrackers)))
+	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
+
+	if childQueuePath == "" && len(qt.childQueueTrackers) > 0 {
+		for qName := range qt.childQueueTrackers {
+			qt.UnlinkQT(qt.queueName + configs.DOT + qName)
+		}
+	}
+
+	if childQueuePath != "" {
+		if qt.childQueueTrackers[immediateChildQueueName] != nil {
+			unlink := qt.childQueueTrackers[immediateChildQueueName].UnlinkQT(childQueuePath)
+			if unlink {
+				delete(qt.childQueueTrackers, immediateChildQueueName)
+			}
+		}
+	}
+	if len(qt.runningApplications) == 0 && len(qt.childQueueTrackers) == 0 {
+		return true
+	}
+	return false
 }

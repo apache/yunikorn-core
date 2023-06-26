@@ -48,13 +48,13 @@ func newUserTracker(user string) *UserTracker {
 	return userTracker
 }
 
-func (ut *UserTracker) increaseTrackedResource(queuePath, applicationID string, usage *resources.Resource) error {
+func (ut *UserTracker) increaseTrackedResource(queuePath, applicationID string, usage *resources.Resource) bool {
 	ut.Lock()
 	defer ut.Unlock()
-	return ut.queueTracker.increaseTrackedResource(queuePath, applicationID, usage)
+	return ut.queueTracker.increaseTrackedResource(queuePath, applicationID, user, usage)
 }
 
-func (ut *UserTracker) decreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, removeApp bool) (bool, error) {
+func (ut *UserTracker) decreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, removeApp bool) (bool, bool) {
 	ut.Lock()
 	defer ut.Unlock()
 	if removeApp {
@@ -83,16 +83,10 @@ func (ut *UserTracker) getTrackedApplications() map[string]*GroupTracker {
 	return ut.appGroupTrackers
 }
 
-func (ut *UserTracker) setMaxApplications(count uint64, queuePath string) error {
+func (ut *UserTracker) setLimits(queuePath string, resource *resources.Resource, maxApps uint64) {
 	ut.Lock()
 	defer ut.Unlock()
-	return ut.queueTracker.setMaxApplications(count, queuePath)
-}
-
-func (ut *UserTracker) setMaxResources(resource *resources.Resource, queuePath string) error {
-	ut.Lock()
-	defer ut.Unlock()
-	return ut.queueTracker.setMaxResources(resource, queuePath)
+	ut.queueTracker.setLimit(queuePath, resource, maxApps)
 }
 
 func (ut *UserTracker) GetUserResourceUsageDAOInfo() *dao.UserResourceUsageDAOInfo {
@@ -107,4 +101,29 @@ func (ut *UserTracker) GetUserResourceUsageDAOInfo() *dao.UserResourceUsageDAOIn
 	}
 	userResourceUsage.Queues = ut.queueTracker.getResourceUsageDAOInfo("")
 	return userResourceUsage
+}
+
+func (ut *UserTracker) IsQueuePathTrackedCompletely(queuePath string) bool {
+	ut.RLock()
+	defer ut.RUnlock()
+	return ut.queueTracker.IsQueuePathTrackedCompletely(queuePath)
+}
+
+func (ut *UserTracker) IsUnlinkRequired(queuePath string) bool {
+	ut.RLock()
+	defer ut.RUnlock()
+	return ut.queueTracker.IsUnlinkRequired(queuePath)
+}
+
+func (ut *UserTracker) UnlinkQT(queuePath string) bool {
+	ut.RLock()
+	defer ut.RUnlock()
+	return ut.queueTracker.UnlinkQT(queuePath)
+}
+
+// canBeRemoved Does "root" queue has any child queue trackers? Is there any running applications in "root" qt?
+func (ut *UserTracker) canBeRemoved() bool {
+	ut.RLock()
+	defer ut.RUnlock()
+	return len(ut.queueTracker.childQueueTrackers) == 0 && len(ut.queueTracker.runningApplications) == 0
 }

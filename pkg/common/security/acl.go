@@ -25,13 +25,8 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/log"
-)
-
-const (
-	WildCard  = "*"
-	Separator = ","
-	Space     = " "
 )
 
 // User and group regexp, must allow at least what we allow in the config checks
@@ -48,7 +43,7 @@ type ACL struct {
 // the ACL allows all access, set the flag
 func (a *ACL) setAllAllowed(part string) {
 	part = strings.TrimSpace(part)
-	a.allAllowed = part == WildCard
+	a.allAllowed = part == common.Wildcard
 }
 
 // set the user list in the ACL, invalid user names are ignored
@@ -59,7 +54,7 @@ func (a *ACL) setUsers(userList []string) {
 		return
 	}
 	// special case if the user list is just the wildcard
-	if len(userList) == 1 && userList[0] == WildCard {
+	if len(userList) == 1 && userList[0] == common.Wildcard {
 		log.Log(log.Security).Info("user list is wildcard, allowing all access")
 		a.allAllowed = true
 		return
@@ -92,7 +87,7 @@ func (a *ACL) setGroups(groupList []string) {
 		log.Log(log.Security).Info("ignoring group list in ACL: wildcard set")
 		return
 	}
-	if len(groupList) == 1 && groupList[0] == WildCard {
+	if len(groupList) == 1 && groupList[0] == common.Wildcard {
 		log.Log(log.Security).Info("group list is wildcard, allowing all access")
 		a.users = make(map[string]bool)
 		a.allAllowed = true
@@ -122,7 +117,7 @@ func NewACL(aclStr string) (ACL, error) {
 	}
 	// before trimming check
 	// should have no more than two groups defined
-	fields := strings.Split(aclStr, Space)
+	fields := strings.Split(aclStr, common.Space)
 	if len(fields) > 2 {
 		return acl, fmt.Errorf("multiple spaces found in ACL: '%s'", aclStr)
 	}
@@ -133,9 +128,9 @@ func NewACL(aclStr string) (ACL, error) {
 		return acl, nil
 	}
 	// parse users and groups
-	acl.setUsers(strings.Split(fields[0], Separator))
+	acl.setUsers(strings.Split(fields[0], common.Separator))
 	if len(fields) == 2 {
-		acl.setGroups(strings.Split(fields[1], Separator))
+		acl.setGroups(strings.Split(fields[1], common.Separator))
 	}
 	return acl, nil
 }

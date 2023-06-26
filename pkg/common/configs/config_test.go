@@ -1848,6 +1848,7 @@ partitions:
 `
 	return fmt.Sprintf(data, leafQueueMaxResource, leafQueueMaxResource, leafQueueMaxApps, userMaxResource)
 }
+
 func TestUserLimitsWithHierarchicalQueue(t *testing.T) {
 	// Make sure parent queue user max apps should not less than the child queue max resource
 	// validate the config and check after the update
@@ -2050,6 +2051,7 @@ partitions:
 `
 	return fmt.Sprintf(data, leafQueueMaxResources, leafQueueMaxResources, leafQueueMaxApps, groupMaxResources)
 }
+
 func TestGroupLimitsWithHierarchicalQueue(t *testing.T) {
 	// Make sure parent queue user max apps should not less than the child queue max resource
 	// validate the config and check after the update

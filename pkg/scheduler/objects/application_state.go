@@ -28,6 +28,7 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 const noTransition = "no transition"

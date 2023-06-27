@@ -41,43 +41,31 @@ type eventRange struct {
 //
 // Unlike to regular circular buffers, existing entries are never directly removed and new entries can be added if the buffer is full.
 // In this case, the oldest entry is overwritten and can be collected by the GC.
+// Each event has an ID, however, this mapping is not stored directly. If needed, we calculate the id
+// of the event based on slice positions.
 //
 // Retrieving the records can be achieved with GetEventsFromID and GetRecentEntries.
 type eventRingBuffer struct {
 	events   []*si.EventRecord
 	capacity uint64
-	idx      uint64
+	head     uint64
 	full     bool
-
-	id       uint64 // increasing unique id
-	startId  uint64 // id of the message at index 0
-	lowestId uint64 // the lowest available id in the buffer (pointed at by e.idx when full)
+	id       uint64
 
 	sync.RWMutex
 }
 
 // Add adds an event to the ring buffer. If the buffer is full, the oldest element is overwritten.
 // This method never fails.
-// Each event has an ID, however, this mapping is not stored directly. Instead, we store the starting ID at
-// index 0 and the lowest available ID.
 func (e *eventRingBuffer) Add(event *si.EventRecord) {
 	e.Lock()
 	defer e.Unlock()
 
-	e.events[e.idx] = event
-	if e.idx == 0 {
-		e.startId = e.id
+	e.events[e.head] = event
+	if !e.full {
+		e.full = e.head == e.capacity-1
 	}
-	if e.idx == e.capacity-1 {
-		e.full = true
-	}
-	e.idx = (e.idx + 1) % e.capacity
-	if e.full {
-		// once the buffer becomes full, we keep incrementing this value
-		// this is the id of the element which is about to be overwritten in the next Add() call
-		e.lowestId++
-	}
-
+	e.head = (e.head + 1) % e.capacity
 	e.id++
 }
 
@@ -85,26 +73,33 @@ func (e *eventRingBuffer) GetEventsFromID(id uint64) ([]*si.EventRecord, resultS
 	e.RLock()
 	defer e.RUnlock()
 
-	storedId, state := e.id2pos(id)
+	pos, state := e.id2pos(id)
 	if state != resultOK {
 		return nil, state
 	}
 
-	if e.full {
+	if e.full && pos > e.head {
 		r1 := &eventRange{
-			start: storedId,
+			start: pos,
 			end:   e.capacity,
 		}
 		r2 := &eventRange{
 			start: 0,
-			end:   e.idx,
+			end:   e.head,
 		}
 		return e.getEntriesFromRanges(r1, r2), resultOK
 	}
 
+	end := e.head
+	if e.full && e.head == 0 {
+		// Special case: buffer is full and head is pointing at the beginning.
+		// Need to set explicitly to get [0..capacity] range because e.head
+		// never points to e.capacity.
+		end = e.capacity
+	}
 	return e.getEntriesFromRanges(&eventRange{
-		start: storedId,
-		end:   e.idx,
+		start: pos,
+		end:   end,
 	}, nil), resultOK
 }
 
@@ -112,88 +107,82 @@ func (e *eventRingBuffer) GetRecentEntries(count uint64) ([]*si.EventRecord, uin
 	e.RLock()
 	defer e.RUnlock()
 
-	if !e.full && e.idx == 0 {
+	if !e.full && e.head == 0 {
 		return nil, 0, bufferEmpty
 	}
 
-	if e.full {
+	if e.full && count > e.head {
 		if count > e.capacity {
 			count = e.capacity
 		}
-		if count > e.idx {
-			startPos := e.capacity - count + e.idx
-			r1 := &eventRange{
-				start: startPos,
-				end:   e.capacity,
-			}
-			r2 := &eventRange{
-				start: 0,
-				end:   e.idx,
-			}
 
-			return e.getEntriesFromRanges(r1, r2), e.pos2id(startPos), resultOK
+		startPos := e.capacity - count + e.head
+		r1 := &eventRange{
+			start: startPos,
+			end:   e.capacity,
+		}
+		r2 := &eventRange{
+			start: 0,
+			end:   e.head,
 		}
 
-		startIdx := e.idx - count
-		return e.getEntriesFromRanges(&eventRange{
-			start: startIdx,
-			end:   e.idx,
-		}, nil), e.pos2id(startIdx), resultOK
+		return e.getEntriesFromRanges(r1, r2), e.pos2id(startPos), resultOK
 	}
 
-	if count > e.idx {
-		count = e.idx
+	if count > e.head {
+		count = e.head
 	}
-	startIdx := e.idx - count
+	startIdx := e.head - count
 	return e.getEntriesFromRanges(&eventRange{
 		start: startIdx,
-		end:   e.idx,
-	}, nil), startIdx, resultOK
+		end:   e.head,
+	}, nil), e.pos2id(startIdx), resultOK
 }
 
 func (e *eventRingBuffer) getEntriesFromRanges(r1, r2 *eventRange) []*si.EventRecord {
-	var total uint64
-	var src []*si.EventRecord
 	if r2 == nil {
-		total = r1.end - r1.start
-		src = e.events[r1.start:r1.end]
-	} else {
-		total = (r1.end - r1.start) + (r2.end - r2.start)
-		src = e.events[r1.start:r1.end]
-		src = append(src, e.events[r2.start:r2.end]...)
+		dst := make([]*si.EventRecord, r1.end-r1.start)
+		copy(dst, e.events[r1.start:])
+		return dst
 	}
 
+	total := (r1.end - r1.start) + (r2.end - r2.start)
 	dst := make([]*si.EventRecord, total)
-	copy(dst, src)
+	copy(dst, e.events[r1.start:])
+	nextIdx := r1.end - r1.start
+	copy(dst[nextIdx:], e.events[r2.start:])
 	return dst
 }
 
 // translates slice position to unique id
 func (e *eventRingBuffer) pos2id(pos uint64) uint64 {
-	if e.full && pos > e.idx {
-		return e.id - e.idx - e.capacity + pos
+	if e.full && pos > e.head {
+		return e.id - e.head - e.capacity + pos
 	}
 
-	return e.id - e.idx + pos
+	return e.id - e.head + pos
 }
 
 // translates unique id to a slice position (index)
 func (e *eventRingBuffer) id2pos(id uint64) (uint64, resultState) {
 	pos := id % e.capacity
 	var calculatedID uint64 // calculated ID based on index values
-	if pos > e.idx {
-		diff := pos - e.idx
-		calculatedID = e.lowestId - 1 + diff
+	if pos > e.head {
+		diff := pos - e.head
+		lowestID := e.id - e.capacity
+		calculatedID = lowestID + diff
 	} else {
-		calculatedID = e.startId + pos
+		pId := e.id - 1
+		idAtZero := pId - (pId % e.capacity) // unique id at slice position 0
+		calculatedID = idAtZero + pos
 	}
 
 	if !e.full {
-		if e.idx == 0 && e.events[0] == nil {
+		if e.head == 0 {
 			return 0, bufferEmpty
 		}
-		if pos >= e.idx {
-			// "pos" is not in the [0..idx-1] range
+		if pos >= e.head {
+			// "pos" is not in the [0..head-1] range
 			return 0, idNotFound
 		}
 	}

@@ -30,8 +30,6 @@ func TestRingBuffer_New(t *testing.T) {
 	buffer := newEventRingBuffer(10)
 
 	assert.Equal(t, uint64(10), buffer.capacity)
-	assert.Equal(t, uint64(0), buffer.startId)
-	assert.Equal(t, uint64(0), buffer.lowestId)
 	assert.Equal(t, false, buffer.full)
 }
 
@@ -39,7 +37,7 @@ func TestRingBuffer_Add(t *testing.T) {
 	buffer := newEventRingBuffer(10)
 	populate(buffer, 4)
 
-	assert.Equal(t, uint64(4), buffer.idx)
+	assert.Equal(t, uint64(4), buffer.head)
 	assert.Equal(t, false, buffer.full)
 }
 
@@ -47,10 +45,8 @@ func TestRingBuffer_Add_WhenFull(t *testing.T) {
 	buffer := newEventRingBuffer(10)
 	populate(buffer, 13)
 
-	assert.Equal(t, uint64(3), buffer.idx)
+	assert.Equal(t, uint64(3), buffer.head)
 	assert.Equal(t, true, buffer.full)
-	assert.Equal(t, uint64(10), buffer.startId)
-	assert.Equal(t, uint64(4), buffer.lowestId)
 }
 
 func TestGetRecentEntries(t *testing.T) {
@@ -92,7 +88,7 @@ func TestGetRecentEntries_WhenFull(t *testing.T) {
 	assert.Equal(t, 3, len(records))
 	verifyRecords(t, 17, 19, records)
 
-	// wrapped - count > idx
+	// wrapped - count > head
 	buffer = newEventRingBuffer(20)
 	populate(buffer, 23)
 	records, id, state = buffer.GetRecentEntries(5)
@@ -101,7 +97,7 @@ func TestGetRecentEntries_WhenFull(t *testing.T) {
 	assert.Equal(t, 5, len(records))
 	verifyRecords(t, 18, 22, records)
 
-	// wrapped - count < idx
+	// wrapped - count < head
 	buffer = newEventRingBuffer(20)
 	populate(buffer, 25)
 	records, id, state = buffer.GetRecentEntries(3)
@@ -169,6 +165,14 @@ func TestGetEventsFromId_WhenFull(t *testing.T) {
 	assert.Equal(t, 12, len(records))
 	assert.Equal(t, resultOK, state)
 	verifyRecords(t, 38, 49, records)
+
+	// wrapped twice pos < e.head
+	buffer = newEventRingBuffer(20)
+	populate(buffer, 50)
+	records, state = buffer.GetEventsFromID(42)
+	assert.Equal(t, 8, len(records))
+	assert.Equal(t, resultOK, state)
+	verifyRecords(t, 42, 49, records)
 }
 
 func TestGetEventsFromId_WhenEmpty(t *testing.T) {

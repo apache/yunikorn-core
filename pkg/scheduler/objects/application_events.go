@@ -122,7 +122,7 @@ func (evt *applicationEvents) sendRejectApplicationEvent(eventInfo string) {
 	if !evt.enabled {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, eventInfo, "", si.EventRecord_REMOVE, si.EventRecord_APP_REJECT, evt.app.GetAllocatedResource())
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, eventInfo, "", si.EventRecord_REMOVE, si.EventRecord_APP_REJECT, evt.app.allocatedResource.Clone())
 	evt.eventSystem.AddEvent(event)
 }
 
@@ -130,7 +130,7 @@ func (evt *applicationEvents) sendStateChangeEvent(changeDetail si.EventRecord_C
 	if !evt.enabled {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_SET, changeDetail, evt.app.GetAllocatedResource())
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_SET, changeDetail, evt.app.allocatedResource.Clone())
 	evt.eventSystem.AddEvent(event)
 }
 

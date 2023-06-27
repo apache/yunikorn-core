@@ -202,10 +202,10 @@ func NewAppState() *fsm.FSM {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsCompleted()
 				metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsCompleted()
 				app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
+				app.appEvents.sendStateChangeEvent(si.EventRecord_APP_COMPLETED)
 				app.executeTerminatedCallback()
 				app.clearPlaceholderTimer()
 				app.cleanupAsks()
-				app.appEvents.sendStateChangeEvent(si.EventRecord_APP_COMPLETED)
 			},
 			fmt.Sprintf("enter_%s", Failing.String()): func(_ context.Context, event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
@@ -216,9 +216,9 @@ func NewAppState() *fsm.FSM {
 			fmt.Sprintf("enter_%s", Failed.String()): func(_ context.Context, event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
 				app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
+				app.appEvents.sendStateChangeEvent(si.EventRecord_APP_FAILED)
 				app.executeTerminatedCallback()
 				app.cleanupAsks()
-				app.appEvents.sendStateChangeEvent(si.EventRecord_APP_FAILED)
 			},
 		},
 	)

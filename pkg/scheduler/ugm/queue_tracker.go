@@ -249,20 +249,15 @@ func (qt *QueueTracker) headroom(queuePath string) *resources.Resource {
 	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
 	if childQueuePath != "" {
 		if qt.childQueueTrackers[immediateChildQueueName] != nil {
-			log.Log(log.SchedUGM).Debug("Step 1",
-				zap.String("queue path", queuePath),
-				zap.String("queue", qt.queueName),
-				zap.String("max resource", qt.maxResources.String()))
-
 			headroom := qt.childQueueTrackers[immediateChildQueueName].headroom(childQueuePath)
-			log.Log(log.SchedUGM).Debug("Step 2",
-				zap.String("queue path", queuePath),
-				zap.String("queue", qt.queueName),
-				zap.String("max resource", qt.maxResources.String()),
-				zap.String("headroom", headroom.String()))
-
 			if headroom != nil {
-				return resources.ComponentWiseMinPermissive(headroom, qt.maxResources.Clone())
+				log.Log(log.SchedUGM).Debug("Min of current queue and parent queue headroom",
+					zap.String("queue path", queuePath),
+					zap.String("current queue", qt.queueName),
+					zap.String("current queue max resource", qt.maxResources.String()),
+					zap.String("child's headroom", headroom.String()),
+					zap.String("Min of current queue max resources and child's headroom", resources.ComponentWiseMinPermissive(headroom, qt.maxResources).String()))
+				return resources.ComponentWiseMinPermissive(headroom, qt.maxResources)
 			}
 		} else {
 			log.Log(log.SchedUGM).Error("Child queueTracker tracker must be available in child queues map",

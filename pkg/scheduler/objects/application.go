@@ -1463,7 +1463,7 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 		return nil
 	}
 	userHeadroom := ugm.GetUserManager().Headroom(sa.queuePath, sa.user)
-	if userHeadroom.FitInMaxUndef(ask.GetAllocatedResource()) {
+	if userHeadroom != nil && !userHeadroom.FitInMaxUndef(ask.GetAllocatedResource()) {
 		log.Log(log.SchedApplication).Warn("User doesn't have required resources to accommodate this request",
 			zap.String("required resource", ask.GetAllocatedResource().String()),
 			zap.String("headroom", userHeadroom.String()))

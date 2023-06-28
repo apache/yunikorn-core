@@ -3559,3 +3559,77 @@ func TestTryAllocateMaxRunning(t *testing.T) {
 	assert.Equal(t, alloc.GetApplicationID(), appID2, "expected application app-2 to be allocated")
 	assert.Equal(t, alloc.GetAllocationKey(), allocID, "expected ask alloc-1 to be allocated")
 }
+
+func TestUserHeadroom(t *testing.T) {
+	setupUGM()
+	partition := createQueuesNodes(t)
+	if partition == nil {
+		t.Fatal("partition create failed")
+	}
+	if alloc := partition.tryAllocate(); alloc != nil {
+		t.Fatalf("empty cluster allocate returned allocation: %v", alloc.String())
+	}
+
+	app := newApplication(appID1, "default", "root.parent.sub-leaf")
+
+	res, err := resources.NewResourceFromConf(map[string]string{"memory": "3", "vcores": "3"})
+	assert.NilError(t, err, "failed to create resource")
+
+	// add to the partition
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "failed to add app-1 to partition")
+	err = app.AddAllocationAsk(newAllocationAsk(allocID, appID1, res))
+	assert.NilError(t, err, "failed to add ask alloc-1 to app-1")
+
+	app = newApplication(appID2, "default", "root.parent.sub-leaf")
+	// add to the partition
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "failed to add app-2 to partition")
+	err = app.AddAllocationAsk(newAllocationAsk(allocID, appID2, res))
+	assert.NilError(t, err, "failed to add ask alloc-1 to app-2")
+
+	alloc := partition.tryAllocate()
+	if alloc == nil {
+		t.Fatal("allocation did not return any allocation")
+	}
+	assert.Equal(t, alloc.GetResult(), objects.Allocated, "result is not the expected allocated")
+	assert.Equal(t, alloc.GetReleaseCount(), 0, "released allocations should have been 0")
+	assert.Equal(t, alloc.GetApplicationID(), appID1, "expected application app-1 to be allocated")
+	assert.Equal(t, alloc.GetAllocationKey(), allocID, "expected ask alloc-2 to be allocated")
+
+	alloc = partition.tryAllocate()
+	if alloc != nil {
+		t.Fatal("allocation should not happen")
+	}
+
+	res1, err := resources.NewResourceFromConf(map[string]string{"memory": "5", "vcores": "5"})
+	assert.NilError(t, err, "failed to create resource")
+
+	app = newApplication(appID3, "default", "root.leaf")
+	// add to the partition
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "failed to add app-3 to partition")
+	err = app.AddAllocationAsk(newAllocationAsk(allocID, appID3, res1))
+	assert.NilError(t, err, "failed to add ask alloc-1 to app-3")
+
+	alloc = partition.tryAllocate()
+	if alloc == nil {
+		t.Fatal("allocation did not return any allocation")
+	}
+	assert.Equal(t, alloc.GetResult(), objects.Allocated, "result is not the expected allocated")
+	assert.Equal(t, alloc.GetReleaseCount(), 0, "released allocations should have been 0")
+	assert.Equal(t, alloc.GetApplicationID(), appID3, "expected application app-3 to be allocated")
+	assert.Equal(t, alloc.GetAllocationKey(), allocID, "expected ask alloc-1 to be allocated")
+
+	app = newApplication("app-4", "default", "root.leaf")
+	// add to the partition
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "failed to add app-4 to partition")
+	err = app.AddAllocationAsk(newAllocationAsk(allocID, "app-4", res1))
+	assert.NilError(t, err, "failed to add ask alloc-1 to app-4")
+
+	alloc = partition.tryAllocate()
+	if alloc != nil {
+		t.Fatal("allocation should not happen")
+	}
+}

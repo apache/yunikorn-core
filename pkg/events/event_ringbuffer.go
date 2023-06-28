@@ -19,17 +19,10 @@
 package events
 
 import (
+	"math"
 	"sync"
 
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
-)
-
-type resultState int
-
-const (
-	resultOK resultState = iota
-	bufferEmpty
-	idNotFound
 )
 
 type eventRange struct {
@@ -47,10 +40,10 @@ type eventRange struct {
 // Retrieving the records can be achieved with GetEventsFromID and GetRecentEntries.
 type eventRingBuffer struct {
 	events   []*si.EventRecord
-	capacity uint64
-	head     uint64
-	full     bool
-	id       uint64
+	capacity uint64 // capacity of the buffer, never changes
+	head     uint64 // position of the next element (no tail since we don't remove elements)
+	full     bool   // indicates whether the buffer if full - once it is, it stays full
+	id       uint64 // unique id of an event record
 
 	sync.RWMutex
 }
@@ -69,13 +62,14 @@ func (e *eventRingBuffer) Add(event *si.EventRecord) {
 	e.id++
 }
 
-func (e *eventRingBuffer) GetEventsFromID(id uint64) ([]*si.EventRecord, resultState) {
+func (e *eventRingBuffer) GetEventsFromID(id uint64, count uint64) ([]*si.EventRecord, uint64) {
 	e.RLock()
 	defer e.RUnlock()
+	lowest := e.getLowestId()
 
-	pos, state := e.id2pos(id)
-	if state != resultOK {
-		return nil, state
+	pos, idFound := e.id2pos(id)
+	if !idFound {
+		return nil, lowest
 	}
 
 	if e.full && pos > e.head {
@@ -87,7 +81,7 @@ func (e *eventRingBuffer) GetEventsFromID(id uint64) ([]*si.EventRecord, resultS
 			start: 0,
 			end:   e.head,
 		}
-		return e.getEntriesFromRanges(r1, r2), resultOK
+		return e.getEntriesFromRanges(r1, r2, count), lowest
 	}
 
 	end := e.head
@@ -100,15 +94,15 @@ func (e *eventRingBuffer) GetEventsFromID(id uint64) ([]*si.EventRecord, resultS
 	return e.getEntriesFromRanges(&eventRange{
 		start: pos,
 		end:   end,
-	}, nil), resultOK
+	}, nil, count), lowest
 }
 
-func (e *eventRingBuffer) GetRecentEntries(count uint64) ([]*si.EventRecord, uint64, resultState) {
+func (e *eventRingBuffer) GetRecentEntries(count uint64) ([]*si.EventRecord, uint64) {
 	e.RLock()
 	defer e.RUnlock()
 
 	if !e.full && e.head == 0 {
-		return nil, 0, bufferEmpty
+		return nil, 0
 	}
 
 	if e.full && count > e.head {
@@ -126,7 +120,7 @@ func (e *eventRingBuffer) GetRecentEntries(count uint64) ([]*si.EventRecord, uin
 			end:   e.head,
 		}
 
-		return e.getEntriesFromRanges(r1, r2), e.pos2id(startPos), resultOK
+		return e.getEntriesFromRanges(r1, r2, math.MaxUint64), e.pos2id(startPos)
 	}
 
 	if count > e.head {
@@ -136,21 +130,38 @@ func (e *eventRingBuffer) GetRecentEntries(count uint64) ([]*si.EventRecord, uin
 	return e.getEntriesFromRanges(&eventRange{
 		start: startIdx,
 		end:   e.head,
-	}, nil), e.pos2id(startIdx), resultOK
+	}, nil, math.MaxUint64), e.pos2id(startIdx)
 }
 
-func (e *eventRingBuffer) getEntriesFromRanges(r1, r2 *eventRange) []*si.EventRecord {
-	if r2 == nil {
-		dst := make([]*si.EventRecord, r1.end-r1.start)
-		copy(dst, e.events[r1.start:])
+func (e *eventRingBuffer) GetLastEventID() uint64 {
+	return e.id
+}
+
+func (e *eventRingBuffer) getEntriesFromRanges(r1, r2 *eventRange, count uint64) []*si.EventRecord {
+	r1total := r1.end - r1.start
+
+	if r2 == nil || count <= r1total {
+		total := r1.end - r1.start
+		end := r1.end
+		if count < total {
+			total = count
+			end = r1.start + count
+		}
+		dst := make([]*si.EventRecord, total)
+		copy(dst, e.events[r1.start:end])
 		return dst
 	}
 
-	total := (r1.end - r1.start) + (r2.end - r2.start)
+	r2total := r2.end - r2.start
+	total := r1total + r2total
+	if count < total {
+		r2.end -= total - count
+		total = count
+	}
 	dst := make([]*si.EventRecord, total)
 	copy(dst, e.events[r1.start:])
 	nextIdx := r1.end - r1.start
-	copy(dst[nextIdx:], e.events[r2.start:])
+	copy(dst[nextIdx:], e.events[r2.start:r2.end])
 	return dst
 }
 
@@ -164,13 +175,12 @@ func (e *eventRingBuffer) pos2id(pos uint64) uint64 {
 }
 
 // translates unique id to a slice position (index)
-func (e *eventRingBuffer) id2pos(id uint64) (uint64, resultState) {
+func (e *eventRingBuffer) id2pos(id uint64) (uint64, bool) {
 	pos := id % e.capacity
 	var calculatedID uint64 // calculated ID based on index values
 	if pos > e.head {
 		diff := pos - e.head
-		lowestID := e.id - e.capacity
-		calculatedID = lowestID + diff
+		calculatedID = e.getLowestId() + diff
 	} else {
 		pId := e.id - 1
 		idAtZero := pId - (pId % e.capacity) // unique id at slice position 0
@@ -179,19 +189,27 @@ func (e *eventRingBuffer) id2pos(id uint64) (uint64, resultState) {
 
 	if !e.full {
 		if e.head == 0 {
-			return 0, bufferEmpty
+			return 0, false
 		}
 		if pos >= e.head {
 			// "pos" is not in the [0..head-1] range
-			return 0, idNotFound
+			return 0, false
 		}
 	}
 
 	if calculatedID != id {
-		return calculatedID, idNotFound
+		return calculatedID, false
 	}
 
-	return pos, resultOK
+	return pos, true
+}
+
+func (e *eventRingBuffer) getLowestId() uint64 {
+	if !e.full {
+		return 0
+	}
+
+	return e.id - e.capacity
 }
 
 func newEventRingBuffer(capacity uint64) *eventRingBuffer {

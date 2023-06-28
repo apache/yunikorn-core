@@ -102,6 +102,9 @@ var currentLoggerConfig = atomic.Pointer[loggerConfig]{}
 func Log(handle *LoggerHandle) *zap.Logger {
 	once.Do(initLogger)
 	conf := currentLoggerConfig.Load()
+	if handle == nil {
+		return conf.loggers[0]
+	}
 	return conf.loggers[handle.id]
 }
 

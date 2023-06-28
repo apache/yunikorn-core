@@ -49,6 +49,11 @@ func TestLoggerIds(t *testing.T) {
 	}
 }
 
+func TestNilLogger(t *testing.T) {
+	log := Log(nil)
+	assert.Check(t, log != nil, "nil logger")
+}
+
 // This test sets the global zap logger. This must be undone to make sure no side
 // effects on other tests are caused by running this test.
 func TestIsNopLogger(t *testing.T) {

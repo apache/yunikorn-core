@@ -257,20 +257,25 @@ func TestHeadroom(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, leafMaxRes)
 	}
-	leafQT.maxResources = leafMaxRes
 
 	parentQT := newQueueTracker("root", "parent")
 	parentMaxRes := leafMaxRes.Clone()
 	resources.Multiply(parentMaxRes, 2)
-	parentQT.maxResources = parentMaxRes
 
 	rootQT := newQueueTracker("", "root")
 
 	parentQT.childQueueTrackers["leaf"] = leafQT
 	rootQT.childQueueTrackers["parent"] = parentQT
 
-	// headroom should be equal to max cap of leaf queue as there is no usage so far
+	// Not even a single queue has been configured with max resource
 	headroom := rootQT.headroom("root.parent.leaf")
+	assert.Equal(t, resources.Equals(headroom, nil), true)
+
+	leafQT.maxResources = leafMaxRes
+	parentQT.maxResources = parentMaxRes
+
+	// headroom should be equal to max cap of leaf queue as there is no usage so far
+	headroom = rootQT.headroom("root.parent.leaf")
 	assert.Equal(t, resources.Equals(headroom, leafMaxRes), true)
 
 	leafResUsage, err := resources.NewResourceFromConf(map[string]string{"mem": "30M", "vcore": "30"})

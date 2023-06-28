@@ -92,24 +92,12 @@ func (evt *applicationEvents) sendRemoveAllocationEvent(alloc *Allocation, termi
 	evt.eventSystem.AddEvent(event)
 }
 
-func (evt *applicationEvents) sendRemoveAskEvent(request *AllocationAsk, terminationType si.TerminationType, appRemoved bool) {
+func (evt *applicationEvents) sendRemoveAskEvent(request *AllocationAsk, detail si.EventRecord_ChangeDetail) {
 	if !evt.enabled {
 		return
 	}
 
-	var eventChangeDetail si.EventRecord_ChangeDetail
-	switch terminationType {
-	case si.TerminationType_TIMEOUT:
-		eventChangeDetail = si.EventRecord_REQUEST_TIMEOUT
-	case si.TerminationType_STOPPED_BY_RM:
-		if appRemoved {
-			eventChangeDetail = si.EventRecord_REQUEST_CANCEL
-		} else {
-			eventChangeDetail = si.EventRecord_APP_REQUEST
-		}
-	}
-
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", request.GetAllocationKey(), si.EventRecord_REMOVE, eventChangeDetail, request.GetAllocatedResource())
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", request.GetAllocationKey(), si.EventRecord_REMOVE, detail, request.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 

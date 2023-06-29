@@ -2140,7 +2140,6 @@ func TestAllocationEvents(t *testing.T) { //nolint:funlen
 	assert.Equal(t, si.EventRecord_APP, records[3].Type)
 	assert.Equal(t, si.EventRecord_REMOVE, records[3].EventChangeType)
 	assert.Equal(t, si.EventRecord_ALLOC_CANCEL, records[3].EventChangeDetail)
-	assert.Equal(t, "uuid-2", records[3].ReferenceID)
 	refIdsRemoved[records[3].ReferenceID]++
 	assert.Equal(t, "app-1", records[3].ObjectID)
 	assert.Equal(t, 1, refIdsRemoved["uuid-1"])

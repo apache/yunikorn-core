@@ -140,15 +140,6 @@ func (e *eventRingBuffer) getEntriesFromRanges(r1, r2 *eventRange) []*si.EventRe
 	return dst
 }
 
-// pos2id translates the given position, index in the event slice, to a unique event id
-func (e *eventRingBuffer) pos2id(pos uint64) uint64 {
-	if e.full && pos > e.head {
-		return e.id - e.head - e.capacity + pos
-	}
-
-	return e.id - e.head + pos
-}
-
 // id2pos translates the unique event ID to an index in the event slice.
 // If the event is present the position will be returned and the found flag will be true.
 // In the case that the event ID is not present the position returned is 0 and the flag false.

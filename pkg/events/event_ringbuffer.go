@@ -61,6 +61,11 @@ func (e *eventRingBuffer) Add(event *si.EventRecord) {
 	e.id++
 }
 
+// GetEventsFromID returns "count" number of event records from id if possible. The id can be determined from
+// the first call of the method - if it returns nothing because the id is not in the buffer, the lowest valid
+// identifier is returned which can be used to get the first batch.
+// If the caller does not want to pose limit on the number of events returned, "count" must be set to a high
+// value, e.g. math.MaxUint64.
 func (e *eventRingBuffer) GetEventsFromID(id uint64, count uint64) ([]*si.EventRecord, uint64) {
 	e.RLock()
 	defer e.RUnlock()
@@ -70,65 +75,72 @@ func (e *eventRingBuffer) GetEventsFromID(id uint64, count uint64) ([]*si.EventR
 	if !idFound {
 		return nil, lowest
 	}
-
-	if e.full && pos > e.head {
+	// limit count to the capacity
+	count = min(count, e.capacity)
+	// possible wrap case full buffer and pos after or on the current head
+	if e.full && pos >= e.head {
+		// first range never passes the end of the slice
+		end := min(pos+count, e.capacity)
 		r1 := &eventRange{
 			start: pos,
-			end:   e.capacity,
+			end:   end,
 		}
-		r2 := &eventRange{
-			start: 0,
-			end:   e.head,
+		// second range only if still events left to fetch
+		var r2 *eventRange
+		end = pos + count - e.capacity
+		if end > 0 {
+			// never fetch pass the current head
+			end = min(end, e.head)
+			r2 = &eventRange{
+				start: 0,
+				end:   end,
+			}
 		}
-		return e.getEntriesFromRanges(r1, r2, count), lowest
+		return e.getEntriesFromRanges(r1, r2), lowest
 	}
 
-	end := e.head
-	if e.full && e.head == 0 {
-		// Special case: buffer is full and head is pointing at the beginning.
-		// Need to set explicitly to get [0..capacity] range because e.head
-		// never points to e.capacity.
-		end = e.capacity
-	}
+	// no wrapping: either limited by head position or by the count
+	end := min(pos+count, e.head)
 	return e.getEntriesFromRanges(&eventRange{
 		start: pos,
 		end:   end,
-	}, nil, count), lowest
+	}, nil), lowest
 }
 
+// min a utility function to return the smallest value of two unsigned int
+func min(a, b uint64) uint64 {
+	m := a
+	if b < a {
+		m = b
+	}
+	return m
+}
+
+// GetLastEventID returns the value of the unique id counter
 func (e *eventRingBuffer) GetLastEventID() uint64 {
 	return e.id
 }
 
-func (e *eventRingBuffer) getEntriesFromRanges(r1, r2 *eventRange, count uint64) []*si.EventRecord {
-	r1total := r1.end - r1.start
-
-	if r2 == nil || count <= r1total {
-		total := r1.end - r1.start
-		end := r1.end
-		if count < total {
-			total = count
-			end = r1.start + count
-		}
-		dst := make([]*si.EventRecord, total)
-		copy(dst, e.events[r1.start:end])
+// getEntriesFromRanges retrieves the event records based on pre-calculated ranges. We have two
+// ranges if the buffer is full and the requested start position is behind the current head.
+// Example: a buffer of capacity 20 is wrapped, head is at 10, and we want events from position 15. This means
+// two ranges (15->20, 0->9).
+func (e *eventRingBuffer) getEntriesFromRanges(r1, r2 *eventRange) []*si.EventRecord {
+	if r2 == nil {
+		dst := make([]*si.EventRecord, r1.end-r1.start)
+		copy(dst, e.events[r1.start:])
 		return dst
 	}
 
-	r2total := r2.end - r2.start
-	total := r1total + r2total
-	if count < total {
-		r2.end -= total - count
-		total = count
-	}
+	total := (r1.end - r1.start) + (r2.end - r2.start)
 	dst := make([]*si.EventRecord, total)
 	copy(dst, e.events[r1.start:])
 	nextIdx := r1.end - r1.start
-	copy(dst[nextIdx:], e.events[r2.start:r2.end])
+	copy(dst[nextIdx:], e.events[r2.start:])
 	return dst
 }
 
-// translates slice position to unique id
+// pos2id translates the given position, index in the event slice, to a unique event id
 func (e *eventRingBuffer) pos2id(pos uint64) uint64 {
 	if e.full && pos > e.head {
 		return e.id - e.head - e.capacity + pos
@@ -137,7 +149,9 @@ func (e *eventRingBuffer) pos2id(pos uint64) uint64 {
 	return e.id - e.head + pos
 }
 
-// translates unique id to a slice position (index)
+// id2pos translates the unique event ID to an index in the event slice.
+// If the event is present the position will be returned and the found flag will be true.
+// In the case that the event ID is not present the position returned is 0 and the flag false.
 func (e *eventRingBuffer) id2pos(id uint64) (uint64, bool) {
 	pos := id % e.capacity
 	var calculatedID uint64 // calculated ID based on index values
@@ -152,6 +166,7 @@ func (e *eventRingBuffer) id2pos(id uint64) (uint64, bool) {
 
 	if !e.full {
 		if e.head == 0 {
+			// empty
 			return 0, false
 		}
 		if pos >= e.head {
@@ -167,6 +182,7 @@ func (e *eventRingBuffer) id2pos(id uint64) (uint64, bool) {
 	return pos, true
 }
 
+// getLowestId returns the current lowest available id in the buffer.
 func (e *eventRingBuffer) getLowestId() uint64 {
 	if !e.full {
 		return 0

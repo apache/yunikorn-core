@@ -23,24 +23,9 @@ import (
 
 	"gotest.tools/v3/assert"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
-
-type EventSystemMock struct {
-	events []*si.EventRecord
-}
-
-func (m *EventSystemMock) AddEvent(event *si.EventRecord) {
-	m.events = append(m.events, event)
-}
-
-func (m *EventSystemMock) StartService() {}
-
-func (m *EventSystemMock) Stop() {}
-
-func newEventSystemMock() *EventSystemMock {
-	return &EventSystemMock{events: make([]*si.EventRecord, 0)}
-}
 
 func TestSendAppDoesNotFitEvent(t *testing.T) {
 	app := &Application{
@@ -118,6 +103,7 @@ func TestSendNewAllocationEvent(t *testing.T) {
 	assert.Equal(t, si.EventRecord_APP_ALLOC, mock.events[0].EventChangeDetail, "event change detail is not expected")
 	assert.Equal(t, appID0, mock.events[0].ObjectID, "event object id is not expected")
 	assert.Equal(t, aUUID, mock.events[0].ReferenceID, "event reference id is not expected")
+	assert.Equal(t, common.Empty, mock.events[0].Message, "message is not expected")
 }
 
 func TestSendNewAskEvent(t *testing.T) {
@@ -147,6 +133,7 @@ func TestSendNewAskEvent(t *testing.T) {
 	assert.Equal(t, si.EventRecord_APP_REQUEST, mock.events[0].EventChangeDetail, "event change detail is not expected")
 	assert.Equal(t, appID0, mock.events[0].ObjectID, "event object id is not expected")
 	assert.Equal(t, aKey, mock.events[0].ReferenceID, "event reference id is not expected")
+	assert.Equal(t, common.Empty, mock.events[0].Message, "message is not expected")
 }
 
 func TestSendRemoveAllocationEvent(t *testing.T) {
@@ -252,6 +239,7 @@ func TestSendRemoveAllocationEvent(t *testing.T) {
 				assert.Equal(t, testCase.expectedChangeDetail, testCase.eventSystemMock.events[0].EventChangeDetail, "event change detail is not expected")
 				assert.Equal(t, testCase.expectedObjectID, testCase.eventSystemMock.events[0].ObjectID, "event object id is not expected")
 				assert.Equal(t, testCase.expectedReferenceID, testCase.eventSystemMock.events[0].ReferenceID, "event reference id is not expected")
+				assert.Equal(t, common.Empty, testCase.eventSystemMock.events[0].Message, "message is not expected")
 			}
 		})
 	}

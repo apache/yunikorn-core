@@ -266,12 +266,20 @@ func TestSendRemoveAskEvent(t *testing.T) {
 		ApplicationID: appID0,
 		queuePath:     "root.test",
 	}
-
-	mockEvents := newEventSystemMock()
-	appEvents := newApplicationEvents(app, mockEvents)
 	ask := &AllocationAsk{
 		applicationID: appID0,
 		allocationKey: aKey}
+
+	// not enabled
+	evt := newApplicationEvents(app, nil)
+	assert.Assert(t, evt.eventSystem == nil, "event system should be nil")
+	assert.Assert(t, !evt.enabled, "event system should be disabled")
+	evt.sendRemoveAskEvent(ask, si.EventRecord_REQUEST_CANCEL)
+
+	// enabled
+	mockEvents := newEventSystemMock()
+	appEvents := newApplicationEvents(app, mockEvents)
+
 	appEvents.sendRemoveAskEvent(ask, si.EventRecord_REQUEST_CANCEL)
 	event := mockEvents.events[0]
 	assert.Equal(t, si.EventRecord_APP, event.Type)

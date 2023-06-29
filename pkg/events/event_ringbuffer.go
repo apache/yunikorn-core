@@ -19,7 +19,6 @@
 package events
 
 import (
-	"math"
 	"sync"
 
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
@@ -95,42 +94,6 @@ func (e *eventRingBuffer) GetEventsFromID(id uint64, count uint64) ([]*si.EventR
 		start: pos,
 		end:   end,
 	}, nil, count), lowest
-}
-
-func (e *eventRingBuffer) GetRecentEntries(count uint64) ([]*si.EventRecord, uint64) {
-	e.RLock()
-	defer e.RUnlock()
-
-	if !e.full && e.head == 0 {
-		return nil, 0
-	}
-
-	if e.full && count > e.head {
-		if count > e.capacity {
-			count = e.capacity
-		}
-
-		startPos := e.capacity - count + e.head
-		r1 := &eventRange{
-			start: startPos,
-			end:   e.capacity,
-		}
-		r2 := &eventRange{
-			start: 0,
-			end:   e.head,
-		}
-
-		return e.getEntriesFromRanges(r1, r2, math.MaxUint64), e.pos2id(startPos)
-	}
-
-	if count > e.head {
-		count = e.head
-	}
-	startIdx := e.head - count
-	return e.getEntriesFromRanges(&eventRange{
-		start: startIdx,
-		end:   e.head,
-	}, nil, math.MaxUint64), e.pos2id(startIdx)
 }
 
 func (e *eventRingBuffer) GetLastEventID() uint64 {

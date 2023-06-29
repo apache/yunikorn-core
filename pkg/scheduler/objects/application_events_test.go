@@ -250,84 +250,36 @@ func TestSendRemoveAskEvent(t *testing.T) {
 		ApplicationID: appID0,
 		queuePath:     "root.test",
 	}
+	ask := &AllocationAsk{
+		applicationID: appID0,
+		allocationKey: aKey}
 
-	testCases := []struct {
-		name                 string
-		eventSystemMock      *EventSystemMock
-		terminationType      si.TerminationType
-		appRemoved           bool
-		allocationAsk        *AllocationAsk
-		expectedEventCnt     int
-		expectedType         si.EventRecord_Type
-		expectedChangeType   si.EventRecord_ChangeType
-		expectedChangeDetail si.EventRecord_ChangeDetail
-		expectedObjectID     string
-		expectedReferenceID  string
-	}{
-		{
-			name:            "disabled event system",
-			eventSystemMock: nil,
-			terminationType: si.TerminationType_UNKNOWN_TERMINATION_TYPE,
-			allocationAsk:   &AllocationAsk{},
-		},
-		{
-			name:                 "remove allocation ask cause of resource manager cancel",
-			eventSystemMock:      newEventSystemMock(),
-			terminationType:      si.TerminationType_STOPPED_BY_RM,
-			allocationAsk:        &AllocationAsk{applicationID: appID0, allocationKey: aKey},
-			appRemoved:           false,
-			expectedEventCnt:     1,
-			expectedType:         si.EventRecord_APP,
-			expectedChangeType:   si.EventRecord_REMOVE,
-			expectedChangeDetail: si.EventRecord_APP_REQUEST,
-			expectedObjectID:     appID0,
-			expectedReferenceID:  aKey,
-		},
-		{
-			name:                 "remove allocation ask cause of timeout",
-			eventSystemMock:      newEventSystemMock(),
-			terminationType:      si.TerminationType_TIMEOUT,
-			allocationAsk:        &AllocationAsk{applicationID: appID0, allocationKey: aKey},
-			expectedEventCnt:     1,
-			expectedType:         si.EventRecord_APP,
-			expectedChangeType:   si.EventRecord_REMOVE,
-			expectedChangeDetail: si.EventRecord_REQUEST_TIMEOUT,
-			expectedObjectID:     appID0,
-			expectedReferenceID:  aKey,
-		},
-		{
-			name:                 "remove allocation cause of application removal",
-			eventSystemMock:      newEventSystemMock(),
-			terminationType:      si.TerminationType_STOPPED_BY_RM,
-			allocationAsk:        &AllocationAsk{applicationID: appID0, allocationKey: aKey},
-			appRemoved:           true,
-			expectedEventCnt:     1,
-			expectedType:         si.EventRecord_APP,
-			expectedChangeType:   si.EventRecord_REMOVE,
-			expectedChangeDetail: si.EventRecord_REQUEST_CANCEL,
-			expectedObjectID:     appID0,
-			expectedReferenceID:  aKey,
-		},
-	}
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			if testCase.eventSystemMock == nil {
-				evt := newApplicationEvents(app, nil)
-				assert.Assert(t, evt.eventSystem == nil, "event system should be nil")
-				assert.Assert(t, !evt.enabled, "event system should be disabled")
-				evt.sendRemoveAskEvent(testCase.allocationAsk, testCase.terminationType, testCase.appRemoved)
-			} else {
-				evt := newApplicationEvents(app, testCase.eventSystemMock)
-				assert.Assert(t, evt.eventSystem != nil, "event system should not be nil")
-				assert.Assert(t, evt.enabled, "event system should be enabled")
-				evt.sendRemoveAskEvent(testCase.allocationAsk, testCase.terminationType, testCase.appRemoved)
-				assert.Equal(t, testCase.expectedEventCnt, len(testCase.eventSystemMock.events), "event was not generated")
-				assert.Equal(t, testCase.expectedType, testCase.eventSystemMock.events[0].Type, "event type is not expected")
-				assert.Equal(t, testCase.expectedChangeType, testCase.eventSystemMock.events[0].EventChangeType, "event change type is not expected")
-				assert.Equal(t, testCase.expectedChangeDetail, testCase.eventSystemMock.events[0].EventChangeDetail, "event change detail is not expected")
-				assert.Equal(t, testCase.expectedObjectID, testCase.eventSystemMock.events[0].ObjectID, "event object id is not expected")
-				assert.Equal(t, testCase.expectedReferenceID, testCase.eventSystemMock.events[0].ReferenceID, "event reference id is not expected")
-			}
-		})
-	}
+	// not enabled
+	evt := newApplicationEvents(app, nil)
+	assert.Assert(t, evt.eventSystem == nil, "event system should be nil")
+	assert.Assert(t, !evt.enabled, "event system should be disabled")
+	evt.sendRemoveAskEvent(ask, si.EventRecord_REQUEST_CANCEL)
+
+	// enabled
+	mockEvents := newEventSystemMock()
+	appEvents := newApplicationEvents(app, mockEvents)
+
+	appEvents.sendRemoveAskEvent(ask, si.EventRecord_REQUEST_CANCEL)
+	event := mockEvents.events[0]
+	assert.Equal(t, si.EventRecord_APP, event.Type)
+	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_REQUEST_CANCEL, event.EventChangeDetail)
+	assert.Equal(t, "app-0", event.ObjectID)
+	assert.Equal(t, "alloc-1", event.ReferenceID)
+	assert.Equal(t, "", event.Message)
+
+	mockEvents.Reset()
+	appEvents.sendRemoveAskEvent(ask, si.EventRecord_REQUEST_TIMEOUT)
+	event = mockEvents.events[0]
+	assert.Equal(t, si.EventRecord_APP, event.Type)
+	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_REQUEST_TIMEOUT, event.EventChangeDetail)
+	assert.Equal(t, "app-0", event.ObjectID)
+	assert.Equal(t, "alloc-1", event.ReferenceID)
+	assert.Equal(t, "", event.Message)
 }

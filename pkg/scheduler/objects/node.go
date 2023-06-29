@@ -27,6 +27,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
@@ -57,6 +58,7 @@ type Node struct {
 
 	reservations map[string]*reservation // a map of reservations
 	listeners    []NodeListener          // a list of node listeners
+	nodeEvents   *nodeEvents
 
 	sync.RWMutex
 }
@@ -85,6 +87,7 @@ func NewNode(proto *si.NodeInfo) *Node {
 		listeners:         make([]NodeListener, 0),
 		ready:             ready,
 	}
+	sn.nodeEvents = newNodeEvents(sn, events.GetEventSystem())
 	// initialise available resources
 	sn.availableResource, err = resources.SubErrorNegative(sn.totalResource, sn.occupiedResource)
 	if err != nil {
@@ -166,6 +169,7 @@ func (sn *Node) SetCapacity(newCapacity *resources.Resource) *resources.Resource
 	delta := resources.Sub(newCapacity, sn.totalResource)
 	sn.totalResource = newCapacity
 	sn.refreshAvailableResource()
+	sn.nodeEvents.sendNodeCapacityChangedEvent()
 	return delta
 }
 
@@ -184,6 +188,7 @@ func (sn *Node) SetOccupiedResource(occupiedResource *resources.Resource) {
 		return
 	}
 	sn.occupiedResource = occupiedResource
+	sn.nodeEvents.sendNodeOccupiedResourceChangedEvent()
 	sn.refreshAvailableResource()
 }
 
@@ -233,6 +238,7 @@ func (sn *Node) SetSchedulable(schedulable bool) {
 	sn.Lock()
 	defer sn.Unlock()
 	sn.schedulable = schedulable
+	sn.nodeEvents.sendNodeSchedulableChangedEvent(sn.schedulable)
 }
 
 // Can this node be used in scheduling.
@@ -298,6 +304,7 @@ func (sn *Node) RemoveAllocation(uuid string) *Allocation {
 		delete(sn.allocations, uuid)
 		sn.allocatedResource.SubFrom(alloc.GetAllocatedResource())
 		sn.availableResource.AddTo(alloc.GetAllocatedResource())
+		sn.nodeEvents.sendAllocationRemovedEvent(alloc.allocationKey, alloc.allocatedResource)
 		return alloc
 	}
 
@@ -320,6 +327,7 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 		sn.allocations[alloc.GetUUID()] = alloc
 		sn.allocatedResource.AddTo(res)
 		sn.availableResource.SubFrom(res)
+		sn.nodeEvents.sendAllocationAddedEvent(alloc.allocationKey, res)
 		return true
 	}
 	return false
@@ -584,4 +592,13 @@ func (sn *Node) SetReady(ready bool) {
 	sn.Lock()
 	defer sn.Unlock()
 	sn.ready = ready
+	sn.nodeEvents.sendNodeReadyChangedEvent(sn.ready)
+}
+
+func (sn *Node) SendNodeAddedEvent() {
+	sn.nodeEvents.sendNodeAddedEvent()
+}
+
+func (sn *Node) SendNodeRemovedEvent() {
+	sn.nodeEvents.sendNodeRemovedEvent()
 }

@@ -26,6 +26,7 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 const testNode = "testnode"
@@ -650,4 +651,80 @@ func TestReadyAttribute(t *testing.T) {
 	proto = newProto(testNode, nil, nil, attr)
 	node = NewNode(proto)
 	assert.Equal(t, false, node.ready, "Node should not be in ready state")
+}
+
+func TestNodeEvents(t *testing.T) {
+	mockEvents := newEventSystemMock()
+	total := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 100, "memory": 100})
+	occupied := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 10, "memory": 10})
+	proto := newProto(testNode, total, occupied, map[string]string{
+		"ready": "true",
+	})
+	node := NewNode(proto)
+	node.nodeEvents = newNodeEvents(node, mockEvents)
+
+	node.SendNodeAddedEvent()
+	assert.Equal(t, 1, len(mockEvents.events))
+	event := mockEvents.events[0]
+	assert.Equal(t, si.EventRecord_NODE, event.Type)
+	assert.Equal(t, si.EventRecord_ADD, event.EventChangeType)
+
+	mockEvents.Reset()
+	node.SendNodeRemovedEvent()
+	assert.Equal(t, 1, len(mockEvents.events))
+	event = mockEvents.events[0]
+	assert.Equal(t, si.EventRecord_NODE, event.Type)
+	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)
+
+	mockEvents.Reset()
+	node.SetReady(false)
+	assert.Equal(t, 1, len(mockEvents.events))
+	event = mockEvents.events[0]
+	assert.Equal(t, si.EventRecord_NODE, event.Type)
+	assert.Equal(t, si.EventRecord_SET, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_NODE_READY, event.EventChangeDetail)
+
+	mockEvents.Reset()
+	node.AddAllocation(&Allocation{
+		allocatedResource: resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 1, "memory": 1}),
+		allocationKey:     aKey,
+		uuid:              "uuid-0",
+	})
+	assert.Equal(t, 1, len(mockEvents.events))
+	event = mockEvents.events[0]
+	assert.Equal(t, si.EventRecord_NODE, event.Type)
+	assert.Equal(t, si.EventRecord_ADD, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_NODE_ALLOC, event.EventChangeDetail)
+
+	mockEvents.Reset()
+	node.RemoveAllocation("uuid-0")
+	event = mockEvents.events[0]
+	assert.Equal(t, si.EventRecord_NODE, event.Type)
+	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_NODE_ALLOC, event.EventChangeDetail)
+
+	mockEvents.Reset()
+	node.SetOccupiedResource(resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 20, "memory": 20}))
+	event = mockEvents.events[0]
+	assert.Equal(t, si.EventRecord_NODE, event.Type)
+	assert.Equal(t, si.EventRecord_SET, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_NODE_OCCUPIED, event.EventChangeDetail)
+	assert.Equal(t, int64(20), event.Resource.Resources["cpu"].Value)
+	assert.Equal(t, int64(20), event.Resource.Resources["memory"].Value)
+
+	mockEvents.Reset()
+	node.SetCapacity(resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 90, "memory": 90}))
+	event = mockEvents.events[0]
+	assert.Equal(t, si.EventRecord_NODE, event.Type)
+	assert.Equal(t, si.EventRecord_SET, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_NODE_CAPACITY, event.EventChangeDetail)
+	assert.Equal(t, int64(90), event.Resource.Resources["cpu"].Value)
+	assert.Equal(t, int64(90), event.Resource.Resources["memory"].Value)
+
+	mockEvents.Reset()
+	node.SetSchedulable(false)
+	event = mockEvents.events[0]
+	assert.Equal(t, si.EventRecord_NODE, event.Type)
+	assert.Equal(t, si.EventRecord_SET, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_NODE_SCHEDULABLE, event.EventChangeDetail)
 }

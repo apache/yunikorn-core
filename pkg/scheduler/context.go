@@ -621,6 +621,7 @@ func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo) error {
 
 	existingAllocations := cc.convertAllocations(sn, nodeInfo.ExistingAllocations)
 	err := partition.AddNode(sn, existingAllocations)
+	sn.SendNodeAddedEvent()
 	if err != nil {
 		wrapped := fmt.Errorf("failure while adding new node, node rejected with error: %w", err)
 		log.Log(log.SchedContext).Error("Failed to add node to partition (rejected)",
@@ -677,12 +678,13 @@ func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
 		if node.IsReady() && !newReadyStatus {
 			log.Log(log.SchedContext).Info("Node has become unhealthy", zap.String("Node ID", node.NodeID))
 			metrics.GetSchedulerMetrics().IncUnhealthyNodes()
+			node.SetReady(newReadyStatus)
 		}
 		if !node.IsReady() && newReadyStatus {
 			log.Log(log.SchedContext).Info("Node has become healthy", zap.String("Node ID", node.NodeID))
 			metrics.GetSchedulerMetrics().DecUnhealthyNodes()
+			node.SetReady(newReadyStatus)
 		}
-		node.SetReady(newReadyStatus)
 
 		if sr := nodeInfo.SchedulableResource; sr != nil {
 			partition.updatePartitionResource(node.SetCapacity(resources.NewResourceFromProto(sr)))
@@ -713,6 +715,7 @@ func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
 		// set the state to not schedulable then tell the partition to clean up
 		node.SetSchedulable(false)
 		released, confirmed := partition.removeNode(node.NodeID)
+		node.SendNodeRemovedEvent()
 		// notify the shim allocations have been released from node
 		if len(released) != 0 {
 			cc.notifyRMAllocationReleased(partition.RmID, released, si.TerminationType_STOPPED_BY_RM,

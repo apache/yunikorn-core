@@ -21,6 +21,7 @@ package objects
 import (
 	"fmt"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -56,7 +57,7 @@ func (evt *applicationEvents) sendNewAllocationEvent(alloc *Allocation) {
 		return
 	}
 
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", alloc.GetUUID(), si.EventRecord_ADD, si.EventRecord_APP_ALLOC, alloc.GetAllocatedResource())
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, alloc.GetUUID(), si.EventRecord_ADD, si.EventRecord_APP_ALLOC, alloc.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 
@@ -65,7 +66,7 @@ func (evt *applicationEvents) sendNewAskEvent(request *AllocationAsk) {
 		return
 	}
 
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", request.GetAllocationKey(), si.EventRecord_ADD, si.EventRecord_APP_REQUEST, request.GetAllocatedResource())
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, request.GetAllocationKey(), si.EventRecord_ADD, si.EventRecord_APP_REQUEST, request.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 
@@ -88,7 +89,7 @@ func (evt *applicationEvents) sendRemoveAllocationEvent(alloc *Allocation, termi
 		eventChangeDetail = si.EventRecord_ALLOC_REPLACED
 	}
 
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", alloc.GetUUID(), si.EventRecord_REMOVE, eventChangeDetail, alloc.GetAllocatedResource())
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, alloc.GetUUID(), si.EventRecord_REMOVE, eventChangeDetail, alloc.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 

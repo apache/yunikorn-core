@@ -21,7 +21,6 @@ package objects
 import (
 	"context"
 	"fmt"
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,6 +37,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects/template"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 )
 
 var (

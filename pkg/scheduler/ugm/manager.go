@@ -600,17 +600,7 @@ func (m *Manager) Headroom(queuePath string, user security.UserGroup) *resources
 				zap.String("group headroom", groupHeadroom.String()))
 		}
 	}
-
-	switch {
-	case userHeadroom != nil && groupHeadroom != nil:
-		return resources.ComponentWiseMinPermissive(userHeadroom, groupHeadroom)
-	case userHeadroom != nil && groupHeadroom == nil:
-		return userHeadroom
-	case userHeadroom == nil && groupHeadroom != nil:
-		return groupHeadroom
-	default:
-		return nil
-	}
+	return resources.ComponentWiseMinPermissive(userHeadroom, groupHeadroom)
 }
 
 // ClearUserTrackers only for tests

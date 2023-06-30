@@ -37,6 +37,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/log"
 	metrics2 "github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/metrics/history"
@@ -45,6 +46,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 const PartitionDoesNotExists = "Partition not found"
@@ -56,6 +58,26 @@ const UserNameMissing = "User name is missing"
 const GroupNameMissing = "Group name is missing"
 const ApplicationDoesNotExists = "Application not found"
 const NodeDoesNotExists = "Node not found"
+
+type eventType int
+
+const (
+	appEvents eventType = iota
+	nodeEvents
+	queueEvents
+)
+
+var eventFilters = map[eventType]func(record *si.EventRecord) bool{
+	queueEvents: func(record *si.EventRecord) bool {
+		return record.Type == si.EventRecord_QUEUE
+	},
+	appEvents: func(record *si.EventRecord) bool {
+		return record.Type == si.EventRecord_APP
+	},
+	nodeEvents: func(record *si.EventRecord) bool {
+		return record.Type == si.EventRecord_NODE
+	},
+}
 
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
@@ -866,6 +888,93 @@ func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
 	}
 	var result = groupTracker.GetGroupResourceUsageDAOInfo()
 	if err := json.NewEncoder(w).Encode(result); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func getEventsByType(w http.ResponseWriter, r *http.Request) {
+	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		getEvents(w, r, nil)
+		return
+	}
+	evtType := strings.ToLower(vars.ByName("type"))
+	if evtType == "" {
+		getEvents(w, r, nil)
+		return
+	}
+	switch evtType {
+	case "node":
+		getEvents(w, r, eventFilters[nodeEvents])
+	case "app":
+		getEvents(w, r, eventFilters[appEvents])
+	case "queue":
+		getEvents(w, r, eventFilters[queueEvents])
+	default:
+		buildJSONErrorResponse(w, "Illegal event type: "+evtType, http.StatusBadRequest)
+	}
+}
+
+func getAllEvents(w http.ResponseWriter, r *http.Request) {
+	getEvents(w, r, nil)
+}
+
+func getEvents(w http.ResponseWriter, r *http.Request, filter func(record *si.EventRecord) bool) {
+	writeHeaders(w)
+	eventSystem := events.GetEventSystem()
+	if eventSystem == nil {
+		buildJSONErrorResponse(w, "Event system is disabled", http.StatusBadRequest)
+		return
+	}
+
+	count := uint64(10000)
+	var fromId uint64
+	vars := httprouter.ParamsFromContext(r.Context())
+	if vars != nil {
+		if countStr := vars.ByName("count"); countStr != "" {
+			c, err := strconv.ParseInt(countStr, 10, 64)
+			if err != nil {
+				buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if c <= 0 {
+				buildJSONErrorResponse(w, fmt.Sprintf("Illegal number of events: %d", c), http.StatusBadRequest)
+				return
+			}
+			count = uint64(c)
+		}
+
+		if fromIdStr := vars.ByName("fromId"); fromIdStr != "" {
+			i, err := strconv.ParseInt(fromIdStr, 10, 64)
+			if err != nil {
+				buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if i < 0 {
+				buildJSONErrorResponse(w, fmt.Sprintf("Illegal id: %d", i), http.StatusBadRequest)
+				return
+			}
+			fromId = uint64(i)
+		}
+	}
+
+	records, lowestId := eventSystem.GetEventsFromId(fromId, count)
+
+	if filter != nil {
+		var filtered []*si.EventRecord
+		for _, e := range records {
+			if filter(e) {
+				filtered = append(filtered, e)
+			}
+		}
+		records = filtered
+	}
+
+	eventDao := dao.EventRecordDAO{
+		StartID:      lowestId,
+		EventRecords: records,
+	}
+	if err := json.NewEncoder(w).Encode(eventDao); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }

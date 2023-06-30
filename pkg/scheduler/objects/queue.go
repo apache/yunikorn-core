@@ -21,6 +21,7 @@ package objects
 import (
 	"context"
 	"fmt"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"strconv"
 	"strings"
 	"sync"
@@ -37,7 +38,6 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects/template"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 )
 
 var (
@@ -663,50 +663,61 @@ func (sq *Queue) AddApplication(app *Application) {
 	// YUNIKORN-199: update the quota from the namespace
 	// get the tag with the quota
 	quota := app.GetTag(common.AppTagNamespaceResourceQuota)
-	if quota == "" {
+	// get the tag with the guaranteed resource
+	guaranteed := app.GetTag(common.AppTagNamespaceResourceGuaranteed)
+	if quota == "" && guaranteed == "" {
 		return
 	}
+
+	var quotaRes, guaranteedRes *resources.Resource
+	var quotaErr, guaranteedErr error
+
 	// need to set a quota: convert json string to resource
-	res, err := resources.NewResourceFromString(quota)
-	if err != nil {
-		log.Logger().Warn("application resource quota conversion failure",
-			zap.String("json quota string", quota),
-			zap.Error(err))
+	if quota != "" {
+		quotaRes, quotaErr = resources.NewResourceFromString(quota)
+		if quotaErr != nil {
+			log.Logger().Warn("application resource quota conversion failure",
+				zap.String("json quota string", quota),
+				zap.Error(quotaErr))
+		} else if !resources.StrictlyGreaterThanZero(quotaRes) {
+			log.Logger().Warn("application resource quota has at least one 0 value: cannot set queue limit",
+				zap.Stringer("maxResource", quotaRes))
+			quotaRes = nil // Skip setting quota if it has a value <= 0
+		}
+	}
+
+	// need to set guaranteed resource: convert json string to resource
+	if guaranteed != "" {
+		guaranteedRes, guaranteedErr = resources.NewResourceFromString(guaranteed)
+		if guaranteedErr != nil {
+			log.Logger().Warn("application guaranteed resource conversion failure",
+				zap.String("json guaranteed string", guaranteed),
+				zap.Error(guaranteedErr))
+		} else if !resources.StrictlyGreaterThanZero(guaranteedRes) {
+			log.Logger().Warn("application guaranteed resource has at least one 0 value: cannot set queue guaranteed resource",
+				zap.Stringer("guaranteedResource", guaranteedRes))
+			guaranteedRes = nil // Skip setting guaranteed resource if it has a value <= 0
+		}
+	}
+
+	if quotaErr != nil && guaranteedErr != nil {
 		return
 	}
-	if !resources.StrictlyGreaterThanZero(res) {
-		log.Logger().Warn("application resource quota has at least one 0 value: cannot set queue limit",
-			zap.Stringer("maxResource", res))
-		return
-	}
+
 	// set the quota
 	if sq.isManaged {
-		log.Logger().Warn("Trying to set max resources set on a queue that is not an unmanaged leaf",
+		log.Logger().Warn("Trying to set max resources on a queue that is not an unmanaged leaf",
 			zap.String("queueName", sq.QueuePath))
 		return
 	}
-	sq.maxResource = res
 
-	// get the tag with the guaranteed resource
-	guaranteed := app.GetTag(common.AppTagNamespaceResourceGuaranteed)
-	if guaranteed == "" {
-		return
+	if quotaRes != nil {
+		sq.maxResource = quotaRes
 	}
-	// need to set guaranteed resource: convert json string to resource
-	res, err = resources.NewResourceFromString(guaranteed)
-	if err != nil {
-		log.Logger().Warn("application guaranteed resource conversion failure",
-			zap.String("json guaranteed string", guaranteed),
-			zap.Error(err))
-		return
+
+	if guaranteedRes != nil {
+		sq.guaranteedResource = guaranteedRes
 	}
-	if !resources.StrictlyGreaterThanZero(res) {
-		log.Logger().Warn("application guaranteed resource has at least one 0 value: cannot set queue guaranteed resource",
-			zap.Stringer("guaranteedResource", res))
-		return
-	}
-	// set the guaranteed resource
-	sq.guaranteedResource = res
 }
 
 // RemoveApplication removes the app from the list of tracked applications. Make sure that the app
